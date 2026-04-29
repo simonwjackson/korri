@@ -6,9 +6,9 @@ import {
 import {
   apiBaseUrl,
   apiPort,
+  PROJECT_ROOT,
   portalBaseUrl,
   portalPort,
-  PROJECT_ROOT,
   useExistingStack,
 } from "./e2e-env"
 

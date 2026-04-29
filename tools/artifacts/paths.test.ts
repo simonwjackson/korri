@@ -15,6 +15,11 @@ describe("artifact layout", () => {
       },
       reports: {
         coverage: "out/reports/coverage",
+        playwright: "out/reports/playwright",
+      },
+      testResults: {
+        e2e: "out/test-results/e2e",
+        component: "out/test-results/component",
       },
       tmp: "out/tmp",
     })

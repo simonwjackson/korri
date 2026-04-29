@@ -4,6 +4,9 @@ import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import appRouterConfig from "./korri/deploy/portal/tsr.config.ts"
 
+const apiProxyTarget =
+  process.env.KORRI_API_PROXY_TARGET ?? "http://localhost:3001"
+
 export default defineConfig({
   root: new URL("./korri/deploy/portal", import.meta.url).pathname,
   publicDir: false,
@@ -13,7 +16,7 @@ export default defineConfig({
     host: true,
     allowedHosts: true,
     proxy: {
-      "/api": { target: "http://localhost:3001", changeOrigin: true },
+      "/api": { target: apiProxyTarget, changeOrigin: true },
     },
     watch: {
       ignored: ["**/out/**", "**/node_modules/**", "**/.git/**"],

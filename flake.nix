@@ -37,6 +37,9 @@
           mkdir -p "$repo_root/.nix-bin"
 
           export PATH="$repo_root/.nix-bin:$PATH:$repo_root/node_modules/.bin"
+          export PW_TEST_HTML_REPORT_OPEN="never"
+          export PLAYWRIGHT_BROWSERS_PATH=${pkgs.playwright-driver.browsers}
+          export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
 
         '';
       in {
@@ -58,6 +61,8 @@
               watchexec
               lsof
               curl
+              nodejs_20
+              playwright-driver.browsers
             ]);
 
           shellHook = commonShellHook;

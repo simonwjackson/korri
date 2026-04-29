@@ -47,6 +47,7 @@ Behavioral changes must be verified with a real command or test.
 ```bash
 just dev | just dev-web | just dev-api
 just test-unit
+just test-e2e
 just format
 just lint
 just typecheck

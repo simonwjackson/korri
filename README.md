@@ -21,9 +21,11 @@ just dev-web
 just dev-api
 just check
 just test-unit
+just test-e2e
 just build
 just format
 just lint
 just typecheck
 just generate-gates
+just generate-bdd
 ```

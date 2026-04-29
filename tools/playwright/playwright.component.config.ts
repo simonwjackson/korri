@@ -1,5 +1,8 @@
 import { defineConfig, devices } from "@playwright/test"
-import { reportArtifactPaths, testResultArtifactPaths } from "../artifacts/paths"
+import {
+  reportArtifactPaths,
+  testResultArtifactPaths,
+} from "../artifacts/paths"
 import { PROJECT_ROOT, portalPort } from "./e2e-env"
 
 export default defineConfig({

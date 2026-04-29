@@ -19,3 +19,4 @@ CLAUDE.local.md
 .DS_Store
 
 /korri/deploy/portal/routeTree.gen.ts
+/korri/products/*/features/**/e2e/generated/

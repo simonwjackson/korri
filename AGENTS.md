@@ -61,7 +61,8 @@ Rules:
 ## Testing
 
 - Prefer pure unit tests for logic and RPC handlers.
-- Add browser/E2E infrastructure only when the product needs it.
+- Browser E2E tests use authored `.feature` files plus generated Playwright wrappers.
+- Generated E2E wrappers under `e2e/generated/` are read-only and regenerated with `just generate-bdd`.
 - Generated files are read-only.
 
 ## Verification
@@ -71,6 +72,7 @@ Behavioral changes must be verified with a real command or test.
 ```bash
 just dev | just dev-web | just dev-api
 just test-unit
+just test-e2e
 just format
 just lint
 just typecheck

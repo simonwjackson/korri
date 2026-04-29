@@ -40,6 +40,22 @@ test-unit:
 # Alias for test-unit.
 test: test-unit
 
+# Generate BDD Playwright wrappers from .feature files.
+generate-bdd *args:
+  bun run tools/scripts/generate-bdd-playwright-tests.ts {{args}}
+
+# Run browser E2E tests.
+test-e2e *args: generate-bdd
+  playwright test --config tools/playwright/playwright.e2e.config.ts {{args}}
+
+# Run browser E2E tests in Playwright UI mode.
+test-e2e-ui *args: generate-bdd
+  playwright test --ui --config tools/playwright/playwright.e2e.config.ts {{args}}
+
+# Run Playwright component specs.
+test-component *args:
+  playwright test --config tools/playwright/playwright.component.config.ts {{args}}
+
 # Run TypeScript checks.
 typecheck:
   tsc --noEmit
@@ -79,3 +95,4 @@ setup-hooks:
 # Remove generated artifacts.
 clean:
   rm -rf out dist coverage test-results .tmp
+  bun run tools/scripts/generate-bdd-playwright-tests.ts --clean
