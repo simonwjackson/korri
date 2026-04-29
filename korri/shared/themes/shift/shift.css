@@ -1,0 +1,123 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+	--color-background: rgb(255 255 255);
+	--color-foreground: rgb(23 23 23);
+	--color-foreground-muted: rgb(82 82 82);
+	--color-border: rgb(212 212 212);
+}
+
+@layer base {
+	.dark {
+		--color-background: rgb(23 23 23);
+		--color-foreground: rgb(255 255 255);
+		--color-foreground-muted: rgb(163 163 163);
+		--color-border: rgb(38 38 38);
+	}
+
+	body {
+		background-color: var(--color-background);
+		color: var(--color-foreground);
+		-webkit-font-smoothing: antialiased;
+	}
+}
+
+@layer components {
+	.shift-card {
+		cursor: pointer;
+		position: relative;
+		border-radius: 0.5rem;
+		overflow: hidden;
+		background-color: rgb(245 245 245);
+		border: 1px solid var(--color-border);
+		aspect-ratio: 1 / 1;
+		transition:
+			border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+			transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	.shift-card:hover {
+		border-color: rgb(56 189 248);
+	}
+
+	.dark .shift-card {
+		background-color: rgb(38 38 38 / 0.5);
+		border-color: rgb(255 255 255 / 0.1);
+	}
+
+	.shift-nav-tab {
+		flex: 1 1 0%;
+		padding-top: 0.5rem;
+		padding-bottom: 0.5rem;
+		text-align: center;
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: rgb(82 82 82);
+		transition: color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	.dark .shift-nav-tab {
+		color: rgb(163 163 163);
+	}
+
+	.shift-nav-tab[data-active="true"] {
+		color: rgb(23 23 23);
+	}
+
+	.dark .shift-nav-tab[data-active="true"] {
+		color: rgb(255 255 255);
+	}
+}
+
+@layer utilities {
+	.shift-aspect-card {
+		aspect-ratio: 3 / 4;
+	}
+
+	.shift-scrollbar-hide {
+		-ms-overflow-style: none;
+		scrollbar-width: none;
+	}
+
+	.shift-scrollbar-hide::-webkit-scrollbar {
+		display: none;
+	}
+
+	.shift-transition-theme {
+		transition-property: background-color, border-color, color, fill, stroke;
+		transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+		transition-duration: 200ms;
+	}
+}
+
+@keyframes shift-slide-in-right {
+	from {
+		transform: translateX(100%);
+		opacity: 0;
+	}
+	to {
+		transform: translateX(0);
+		opacity: 1;
+	}
+}
+
+@keyframes shift-slide-in-left {
+	from {
+		transform: translateX(-100%);
+		opacity: 0;
+	}
+	to {
+		transform: translateX(0);
+		opacity: 1;
+	}
+}
+
+.shift-animate-slide-in-right {
+	animation: shift-slide-in-right 0.3s ease-out;
+}
+
+.shift-animate-slide-in-left {
+	animation: shift-slide-in-left 0.3s ease-out;
+}
