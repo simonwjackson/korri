@@ -1,0 +1,34 @@
+import { describe, expect, test } from "bun:test"
+import {
+  artifactLayout,
+  supportedArtifactPaths,
+  tempArtifactPath,
+} from "./paths"
+
+describe("artifact layout", () => {
+  test("defines the canonical out/ directory structure", () => {
+    expect(artifactLayout).toEqual({
+      root: "out",
+      build: {
+        portal: "out/build/portal",
+        api: "out/build/api",
+      },
+      reports: {
+        coverage: "out/reports/coverage",
+      },
+      tmp: "out/tmp",
+    })
+  })
+
+  test("treats out/ as the only supported generated-output namespace", () => {
+    expect(
+      supportedArtifactPaths.every(
+        path => path === "out" || path.startsWith("out/"),
+      ),
+    ).toBe(true)
+    expect(new Set(supportedArtifactPaths).size).toBe(
+      supportedArtifactPaths.length,
+    )
+    expect(tempArtifactPath).toBe("out/tmp")
+  })
+})

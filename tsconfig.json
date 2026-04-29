@@ -1,0 +1,27 @@
+{
+	"compilerOptions": {
+		"strict": true,
+		"esModuleInterop": true,
+		"jsx": "react-jsx",
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"noEmit": true,
+		"allowImportingTsExtensions": true,
+		"lib": ["DOM", "DOM.Iterable", "ES2022"],
+		"paths": {
+			"@app/*": ["./korri/products/app/*"],
+			"@shared/*": ["./korri/shared/*"],
+			"@korri/*": ["./korri/*"],
+			"@deploy/*": ["./korri/deploy/*"]
+		},
+		"skipLibCheck": true,
+		"types": ["react", "react-dom", "node", "bun"]
+	},
+	"include": ["korri/**/*", "tools/**/*"],
+	"exclude": [
+		"node_modules",
+		"korri/deploy/portal/routeTree.gen.ts",
+		"tools/patches/**/files/**/*"
+	]
+}

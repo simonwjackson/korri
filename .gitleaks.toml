@@ -1,0 +1,14 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist for known safe patterns"
+paths = [
+  '''.*fixtures\.ts$''',
+  '''.*mocks/.*\.ts$''',
+  '''.*/test/.*''',
+]
+regexTarget = "match"
+regexes = [
+  '''nix-combined-v3''',
+]

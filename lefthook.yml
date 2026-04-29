@@ -1,0 +1,21 @@
+pre-push:
+  commands:
+    build:
+      run: just build
+pre-commit:
+  parallel: true
+  commands:
+    gitleaks:
+      glob: '*'
+      run: gitleaks protect --staged --verbose
+      fail_text: Secrets detected! Remove them before committing.
+    biome:
+      glob: '*.{ts,tsx,js,jsx,json}'
+      exclude:
+        - 'generated/**'
+      run: biome check --write --no-errors-on-unmatched {staged_files} || true
+      stage_fixed: true
+    nixfmt:
+      glob: '*.nix'
+      run: nixfmt {staged_files}
+      stage_fixed: true

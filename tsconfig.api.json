@@ -1,0 +1,11 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"noEmit": false,
+		"outDir": "./out/build/api",
+		"rootDir": ".",
+		"allowImportingTsExtensions": false
+	},
+	"include": [],
+	"files": ["tools/http/server.ts"]
+}
