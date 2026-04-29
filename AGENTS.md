@@ -70,7 +70,7 @@ Rules:
 Behavioral changes must be verified with a real command or test.
 
 ```bash
-just dev | just dev-web | just dev-api
+just dev | just dev-web | just dev-api | just dev-playwright | just dev-storybook
 just test-unit
 just test-e2e
 just format

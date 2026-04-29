@@ -34,6 +34,7 @@ export default defineConfig({
   globalTimeout: 10 * 60_000,
   use: {
     baseURL: portalBaseUrl,
+    ignoreHTTPSErrors: true,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },

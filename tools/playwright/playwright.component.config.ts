@@ -23,6 +23,7 @@ export default defineConfig({
   ],
   use: {
     baseURL: `http://localhost:${portalPort}`,
+    ignoreHTTPSErrors: true,
     trace: "on-first-retry",
   },
   projects: [

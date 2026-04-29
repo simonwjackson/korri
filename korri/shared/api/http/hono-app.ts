@@ -10,6 +10,17 @@ const isDev = process.env.NODE_ENV === "development"
 export function createHonoApp() {
   const app = new Hono()
 
+  app.get("/api", c =>
+    c.json({
+      name: "Korri API",
+      status: "ok",
+      endpoints: {
+        health: "/api/health",
+        rpc: "/api/rpc",
+      },
+    }),
+  )
+
   app.get("/api/health", c =>
     c.json({ status: "ok", timestamp: new Date().toISOString() }),
   )

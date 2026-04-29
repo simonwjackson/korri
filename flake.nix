@@ -6,13 +6,15 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = {
-    nixpkgs,
-    flake-utils,
-    ...
-  }:
+  outputs =
+    {
+      nixpkgs,
+      flake-utils,
+      ...
+    }:
     flake-utils.lib.eachDefaultSystem (
-      system: let
+      system:
+      let
         pkgs = import nixpkgs {
           inherit system;
           config.allowUnfree = true;
@@ -29,6 +31,7 @@
           bun
           just
           ripgrep
+          caddy
         ];
 
         commonShellHook = ''
@@ -42,14 +45,13 @@
           export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
 
         '';
-      in {
+      in
+      {
         devShells.ci = pkgs.mkShell {
           buildInputs = commonPackages;
-          shellHook =
-            commonShellHook
-            + ''
-              export CI=true
-            '';
+          shellHook = commonShellHook + ''
+            export CI=true
+          '';
         };
 
         devShells.default = pkgs.mkShell {
@@ -58,6 +60,7 @@
             ++ (with pkgs; [
               gum
               concurrently
+              hivemind
               watchexec
               lsof
               curl

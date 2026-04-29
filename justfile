@@ -3,22 +3,25 @@ set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 default:
   @just --list
 
-# Start API and web dev servers.
-dev:
-  @just dev-api & \
-    api_pid=$$!; \
-    just dev-web & \
-    web_pid=$$!; \
-    trap 'kill $$api_pid $$web_pid >/dev/null 2>&1 || true' EXIT INT TERM; \
-    wait -n $$api_pid $$web_pid
+# Start web, API, Playwright UI, and Storybook.
+dev portal_port="${PORTAL_PORT:-3000}" api_port="${API_PORT:-3001}" pw_port="${PW_PORT:-9876}" storybook_port="${STORYBOOK_PORT:-6006}" host="${APP_HOST:-localhost}":
+  PORTAL_PORT={{portal_port}} API_PORT={{api_port}} PW_PORT={{pw_port}} STORYBOOK_PORT={{storybook_port}} APP_HOST={{host}} tools/scripts/serve-dev-stack.sh
 
 # Start the Vite dev server.
-dev-web:
-  bun run vite --mode development --port 3000 --clearScreen false
+dev-web port="${PORTAL_PORT:-3000}" api_port="${API_PORT:-3001}":
+  KORRI_API_PROXY_TARGET=http://localhost:{{api_port}} bun run vite --mode development --host 0.0.0.0 --port {{port}} --clearScreen false
 
 # Start the local API server.
-dev-api:
-  NODE_ENV=development bun x tsx --tsconfig tsconfig.server.json tools/http/server.ts
+dev-api port="${API_PORT:-3001}":
+  PORT={{port}} NODE_ENV=development bun x tsx --tsconfig tsconfig.server.json tools/http/server.ts
+
+# Start Playwright UI over ephemeral HTTPS against an existing dev stack.
+dev-playwright port="${PW_PORT:-9876}" portal_port="${PORTAL_PORT:-3000}" api_port="${API_PORT:-3001}" host="${APP_HOST:-localhost}":
+  PW_PORT={{port}} PORTAL_PORT={{portal_port}} API_PORT={{api_port}} APP_HOST={{host}} PLAYWRIGHT_TEST_BASE_URL=http://{{host}}:{{portal_port}} tools/scripts/serve-playwright-ui.sh
+
+# Start Storybook.
+dev-storybook port="${STORYBOOK_PORT:-6006}":
+  bun x storybook dev -c korri/deploy/storybook -p {{port}} --host 0.0.0.0 --no-open
 
 # Build web and API outputs.
 build: build-web build-api
@@ -48,9 +51,9 @@ generate-bdd *args:
 test-e2e *args: generate-bdd
   playwright test --config tools/playwright/playwright.e2e.config.ts {{args}}
 
-# Run browser E2E tests in Playwright UI mode.
-test-e2e-ui *args: generate-bdd
-  playwright test --ui --config tools/playwright/playwright.e2e.config.ts {{args}}
+# Run Playwright UI over ephemeral HTTPS against an existing dev stack.
+test-e2e-ui *args:
+  tools/scripts/serve-playwright-ui.sh {{args}}
 
 # Run Playwright component specs.
 test-component *args:
