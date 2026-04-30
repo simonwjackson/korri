@@ -1,8 +1,11 @@
 import * as Dialog from "@radix-ui/react-dialog"
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { useFeatureMap } from "../../hooks/useFeatureMap"
+import { useGraphKeyboardNav } from "../../hooks/useGraphKeyboardNav"
 import { useRegenerate } from "../../hooks/useRegenerate"
+import { useTheme } from "../../hooks/useTheme"
 import type { FeatureMap, SelectedNode } from "../../types"
+import { CommandPalette } from "../palette/CommandPalette"
 import { AppShellProvider } from "./AppShell.context"
 
 /*
@@ -26,8 +29,10 @@ const INSPECTOR_WIDTH = "360px"
 export function AppShell({ children }: { children: ReactNode }) {
   const featureMap = useFeatureMap()
   const regenerate = useRegenerate(featureMap.setMap)
+  const themeApi = useTheme()
   const [selected, setSelectedRaw] = useState<SelectedNode | null>(null)
   const [isDirty, setIsDirty] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const [leftRailOpen, setLeftRailOpen] = useState(() =>
     readBoolean(LEFT_RAIL_KEY, true),
   )
@@ -54,6 +59,25 @@ export function AppShell({ children }: { children: ReactNode }) {
   const toggleInspector = useCallback(() => {
     setInspectorOpen(prev => !prev)
   }, [])
+
+  // Global cmd+k / ctrl+k toggles the command palette regardless of
+  // focus; Escape closes it. Both bail when an editable target is
+  // focused so palette typing isn't double-handled.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "k" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault()
+        setPaletteOpen(prev => !prev)
+        return
+      }
+      if (event.key === "Escape" && paletteOpen) {
+        event.preventDefault()
+        setPaletteOpen(false)
+      }
+    }
+    document.addEventListener("keydown", onKeyDown)
+    return () => document.removeEventListener("keydown", onKeyDown)
+  }, [paletteOpen])
 
   useEffect(() => {
     if (!selected || !featureMap.map) return
@@ -83,6 +107,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const cancelDiscard = useCallback(() => setPending(null), [])
 
+  // Arrow-key navigation across graph nodes. Bound at the AppShell
+  // level so it works regardless of where focus lives — except when
+  // the editor or palette captures the keystroke (the hook bails on
+  // editable targets and modifier keys).
+  useGraphKeyboardNav(featureMap.map, selected, setSelected)
+
   return (
     <AppShellProvider
       value={{
@@ -99,6 +129,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         toggleLeftRail,
         toggleInspector,
         regenerate,
+        paletteOpen,
+        setPaletteOpen,
+        theme: themeApi.theme,
+        setTheme: themeApi.setTheme,
+        toggleTheme: themeApi.toggleTheme,
       }}
     >
       <div
@@ -118,6 +153,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         onConfirm={confirmDiscard}
         onCancel={cancelDiscard}
       />
+      <CommandPalette />
     </AppShellProvider>
   )
 }

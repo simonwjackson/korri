@@ -26,6 +26,7 @@ export function AppShellTopBar() {
     toggleLeftRail,
     toggleInspector,
     regenerate,
+    setPaletteOpen,
   } = useAppShell()
 
   const regenStatus = regenerate.status
@@ -60,8 +61,8 @@ export function AppShellTopBar() {
       <div className="ml-auto flex items-center gap-2">
         <button
           type="button"
-          disabled
-          className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-surface px-2 text-text-muted text-xs disabled:opacity-60"
+          onClick={() => setPaletteOpen(true)}
+          className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-surface px-2 text-text-muted text-xs hover:bg-surface-elevated hover:text-text"
           aria-label="Open command palette"
         >
           <Command size={12} aria-hidden="true" />

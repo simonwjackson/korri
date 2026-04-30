@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react"
 import type { UseRegenerate } from "../../hooks/useRegenerate"
+import type { Theme } from "../../hooks/useTheme"
 import type { FeatureMap, SelectedNode } from "../../types"
 
 /*
@@ -32,6 +33,11 @@ export type AppShellContextValue = {
   toggleLeftRail: () => void
   toggleInspector: () => void
   regenerate: UseRegenerate
+  paletteOpen: boolean
+  setPaletteOpen: (next: boolean) => void
+  theme: Theme
+  setTheme: (next: Theme) => void
+  toggleTheme: () => void
 }
 
 const AppShellCtx = createContext<AppShellContextValue | null>(null)

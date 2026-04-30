@@ -509,7 +509,7 @@ Phased delivery: Phase 1 (Units 1–4) lands the visible loop with read-only ins
 - Triggering "Regenerate" in the UI runs the generator, refreshes the graph, and updates diagnostics.
 - A deliberate error (e.g., temporarily renaming a brief's `id`) appears as an error diagnostic with the right path and is removed on the next successful regenerate.
 
-- [ ] **Unit 8: Command palette, keyboard navigation, and optional Tiptap rich editor**
+- [/] **Unit 8: Command palette, keyboard navigation, and optional Tiptap rich editor** (palette + nav + theme done; Tiptap pending decision)
 
 **Goal:** Add `cmd+k` palette via `cmdk` for jumping to any node, regenerating, toggling theme, and opening the editor. Wire arrow-key graph navigation. Land the Tiptap rich editor as an opt-in body editor behind a tab in the editor panel; keep raw editor as the always-available fallback.
 
