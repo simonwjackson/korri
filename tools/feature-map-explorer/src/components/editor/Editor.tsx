@@ -130,14 +130,14 @@ export function Editor({ path, kind }: { path: string; kind: NodeKind }) {
 }
 
 /*
- * Tab seam for Raw vs. Rich body editing. The Rich tab is wired up
- * for future Tiptap (or similar) integration but currently shows a
- * deferral note: the existing brief.md content includes GFM tables,
+ * Tab seam for Rich vs. Raw body editing. Rich is the default surface
+ * because that is the intended editor experience. It currently shows
+ * a deferral note: the existing brief.md content includes GFM tables,
  * which are the canonical case where ProseMirror -> Markdown round-
  * trip drifts (alignment + cell whitespace). Until a serializer is
- * proven to round-trip our real content losslessly, Raw is the only
- * way to edit the body. The seam stays so that a follow-up can drop
- * the Rich implementation in without touching this file's API.
+ * proven to round-trip our real content losslessly, Raw remains the
+ * working fallback. The seam stays so that a follow-up can drop the
+ * Rich implementation in without touching this file's API.
  */
 function BodyEditor({
   body,
@@ -146,7 +146,7 @@ function BodyEditor({
   body: string
   onChange: (next: string) => void
 }) {
-  const [mode, setMode] = useState<"raw" | "rich">("raw")
+  const [mode, setMode] = useState<"raw" | "rich">("rich")
 
   return (
     <div className="flex min-h-[240px] flex-1 flex-col gap-2">
@@ -156,15 +156,15 @@ function BodyEditor({
         className="flex items-center gap-1"
       >
         <BodyTab
-          active={mode === "raw"}
-          onClick={() => setMode("raw")}
-          label="Raw"
-        />
-        <BodyTab
           active={mode === "rich"}
           onClick={() => setMode("rich")}
           label="Rich"
           icon={<Sparkles size={11} aria-hidden="true" />}
+        />
+        <BodyTab
+          active={mode === "raw"}
+          onClick={() => setMode("raw")}
+          label="Raw"
         />
       </div>
       {mode === "raw" ? (

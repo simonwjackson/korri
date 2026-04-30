@@ -109,7 +109,7 @@ The fear is documentation drift and disconnect at scale (20+ vertical slices). A
 
 - **Exact Tailwind v4 `@theme` integration shape inside `tools/feature-map-explorer/`.** Needs a small spike against current Tailwind v4 behavior; mirror Shift's approach but scope CSS to the explorer root.
 - **Whether to add a watch on `out/generated/feature-map/feature-map.json` and auto-refresh the UI**, or require explicit "Regenerate" clicks. Default is explicit; auto-refresh is a polish if cheap.
-- **Tiptap Markdown round-trip fidelity for our specific frontmatter + tables + Gherkin-adjacent content.** _Resolved during Unit 8 implementation:_ deferred. Inspecting `korri/products/app/features/resume/brief.md` showed real GFM tables (the SGR-O… outcome map). ProseMirror ↔ Markdown serializers drift on cell whitespace + alignment, which would surface as silent diff churn on every save. Editor.tsx ships the Raw / Rich tab seam; Rich tab renders a deferral note and points back to Raw. Adopting Tiptap stays a follow-up gated on a serializer that round-trips the live `brief.md` losslessly.
+- **Tiptap Markdown round-trip fidelity for our specific frontmatter + tables + Gherkin-adjacent content.** _Resolved during Unit 8 implementation:_ deferred. Inspecting `korri/products/app/features/resume/brief.md` showed real GFM tables (the SGR-O… outcome map). ProseMirror ↔ Markdown serializers drift on cell whitespace + alignment, which would surface as silent diff churn on every save. Editor.tsx ships the Rich / Raw tab seam; Rich is the default tab, renders a deferral note, and points back to Raw. Adopting Tiptap stays a follow-up gated on a serializer that round-trips the live `brief.md` losslessly.
 - **Whether the regenerate endpoint should stream output progressively** or return only on completion. Default is "return on completion"; streaming is a polish.
 
 ## Output Structure
@@ -509,7 +509,7 @@ Phased delivery: Phase 1 (Units 1–4) lands the visible loop with read-only ins
 - Triggering "Regenerate" in the UI runs the generator, refreshes the graph, and updates diagnostics.
 - A deliberate error (e.g., temporarily renaming a brief's `id`) appears as an error diagnostic with the right path and is removed on the next successful regenerate.
 
-- [x] **Unit 8: Command palette, keyboard navigation, and optional Tiptap rich editor** (Tiptap deferred per contingency — seam shipped)
+- [x] **Unit 8: Command palette, keyboard navigation, and optional Tiptap rich editor** (Tiptap deferred per contingency — Rich-default seam shipped)
 
 **Goal:** Add `cmd+k` palette via `cmdk` for jumping to any node, regenerating, toggling theme, and opening the editor. Wire arrow-key graph navigation. Land the Tiptap rich editor as an opt-in body editor behind a tab in the editor panel; keep raw editor as the always-available fallback.
 
