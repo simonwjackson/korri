@@ -12,6 +12,7 @@ import type { NodeKind } from "../../types"
 import { useAppShell } from "../AppShell/AppShell.context"
 import { FrontmatterForm } from "./FrontmatterForm"
 import { RawEditor } from "./RawEditor"
+import { RichEditor } from "./RichEditor"
 
 /*
  * Editor pane. Loads a markdown file by path, renders the structured
@@ -130,14 +131,10 @@ export function Editor({ path, kind }: { path: string; kind: NodeKind }) {
 }
 
 /*
- * Tab seam for Rich vs. Raw body editing. Rich is the default surface
- * because that is the intended editor experience. It currently shows
- * a deferral note: the existing brief.md content includes GFM tables,
- * which are the canonical case where ProseMirror -> Markdown round-
- * trip drifts (alignment + cell whitespace). Until a serializer is
- * proven to round-trip our real content losslessly, Raw remains the
- * working fallback. The seam stays so that a follow-up can drop the
- * Rich implementation in without touching this file's API.
+ * Rich vs. Raw body editing. Rich is the default working surface and
+ * Raw remains the exact Markdown fallback. Both modes share the same
+ * controlled body contract so save/revert/dirty state continue to live
+ * in useFile.
  */
 function BodyEditor({
   body,
@@ -170,7 +167,7 @@ function BodyEditor({
       {mode === "raw" ? (
         <RawEditor value={body} onChange={onChange} />
       ) : (
-        <RichDeferred />
+        <RichEditor value={body} onChange={onChange} />
       )}
     </div>
   )
@@ -202,31 +199,6 @@ function BodyTab({
       {icon}
       <span>{label}</span>
     </button>
-  )
-}
-
-function RichDeferred() {
-  return (
-    <div className="flex flex-1 flex-col items-start gap-2 rounded-md border border-border bg-surface p-3 text-text-muted text-xs">
-      <p className="text-text">
-        <Sparkles
-          size={12}
-          aria-hidden="true"
-          className="mr-1 inline align-[-1px] text-accent"
-        />
-        Rich editor deferred
-      </p>
-      <p>
-        The repo's current brief content includes GFM tables, where Markdown{" "}
-        <span className="font-mono">↔</span> ProseMirror round- trips drift on
-        cell whitespace and alignment. Until a serializer is proven to
-        round-trip the real content losslessly, edits go through the Raw tab.
-      </p>
-      <p>
-        Switching back to Raw is non-destructive — you have not made any edits
-        in this view.
-      </p>
-    </div>
   )
 }
 

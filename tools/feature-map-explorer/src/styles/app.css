@@ -24,3 +24,115 @@
 		scroll-behavior: auto;
 	}
 }
+
+/* Rich Markdown editor (Tiptap / ProseMirror). */
+.feature-map-rich-editor {
+	min-height: 100%;
+	padding: 12px;
+	font-size: 13px;
+	line-height: 1.65;
+	color: var(--color-text);
+}
+
+.feature-map-rich-editor:focus {
+	outline: none;
+}
+
+.feature-map-rich-editor :where(h1, h2, h3) {
+	margin: 0.9em 0 0.35em;
+	font-weight: 650;
+	line-height: 1.2;
+}
+
+.feature-map-rich-editor h1 {
+	font-size: 1.25rem;
+}
+
+.feature-map-rich-editor h2 {
+	font-size: 1rem;
+}
+
+.feature-map-rich-editor h3 {
+	font-size: 0.9rem;
+}
+
+.feature-map-rich-editor p {
+	margin: 0.55em 0;
+}
+
+.feature-map-rich-editor :where(ul, ol) {
+	margin: 0.55em 0;
+	padding-left: 1.35rem;
+}
+
+.feature-map-rich-editor ul {
+	list-style: disc;
+}
+
+.feature-map-rich-editor ol {
+	list-style: decimal;
+}
+
+.feature-map-rich-editor blockquote {
+	margin: 0.8em 0;
+	border-left: 2px solid var(--color-border-strong);
+	padding-left: 0.85rem;
+	color: var(--color-text-muted);
+}
+
+.feature-map-rich-editor :where(code, pre) {
+	font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.feature-map-rich-editor code {
+	border: 1px solid var(--color-border);
+	border-radius: 4px;
+	background: var(--color-surface);
+	padding: 0.05rem 0.25rem;
+}
+
+.feature-map-rich-editor pre {
+	overflow: auto;
+	border: 1px solid var(--color-border);
+	border-radius: 6px;
+	background: var(--color-surface);
+	padding: 0.75rem;
+}
+
+.feature-map-rich-editor pre code {
+	border: 0;
+	background: transparent;
+	padding: 0;
+}
+
+.feature-map-rich-editor hr {
+	margin: 1rem 0;
+	border: 0;
+	border-top: 1px solid var(--color-border);
+}
+
+.feature-map-rich-editor table {
+	margin: 0.8rem 0;
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12px;
+}
+
+.feature-map-rich-editor :where(th, td) {
+	border: 1px solid var(--color-border);
+	padding: 0.35rem 0.45rem;
+	vertical-align: top;
+}
+
+.feature-map-rich-editor th {
+	background: var(--color-surface);
+	font-weight: 600;
+}
+
+.feature-map-rich-editor .selectedCell::after {
+	pointer-events: none;
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+}

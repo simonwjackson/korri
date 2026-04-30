@@ -231,7 +231,7 @@ The adapter is the only place that knows the Tiptap extension set. `RichEditor` 
 - The detector does not block the current editable corpus.
 - Unsupported fixtures produce actionable messages that can be shown in the Rich tab.
 
-- [ ] **Unit 3: Implement the RichEditor component and toolbar**
+- [x] **Unit 3: Implement the RichEditor component and toolbar**
 
 **Goal:** Replace the Rich-tab deferral panel with a working Tiptap editor that edits Markdown body text and emits serialized Markdown after real user changes.
 

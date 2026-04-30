@@ -6,7 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from "@tiptap/extension-table"
-import { MarkdownManager } from "@tiptap/markdown"
+import { Markdown, MarkdownManager } from "@tiptap/markdown"
 import { StarterKit } from "@tiptap/starter-kit"
 
 /*
@@ -35,6 +35,15 @@ export function createMarkdownExtensions(): AnyExtension[] {
     TableRow,
     TableHeader,
     TableCell,
+  ]
+}
+
+export function createTiptapEditorExtensions(): AnyExtension[] {
+  return [
+    ...createMarkdownExtensions(),
+    Markdown.configure({
+      indentation: { style: "space", size: 2 },
+    }),
   ]
 }
 
