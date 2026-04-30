@@ -85,6 +85,14 @@ validate-router:
 generate-gates:
   bun run tools/generators/gates/generate-gate-registry.ts
 
+# Generate the product feature map for dev tooling.
+generate-feature-map:
+  bun run tools/generators/feature-map/generate-feature-map.ts
+
+# Validate that the generated product feature map is current and internally linked.
+check-feature-map:
+  bun run tools/generators/feature-map/generate-feature-map.ts --check
+
 # Preview the built web app.
 preview:
   bun run vite preview --port 4173
