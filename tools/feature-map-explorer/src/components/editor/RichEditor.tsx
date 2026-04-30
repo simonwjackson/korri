@@ -13,6 +13,21 @@ export function RichEditor({
   onChange: (next: string) => void
 }) {
   const support = analyzeMarkdownSupport(value)
+
+  if (support.level === "raw-only") {
+    return <RichUnsupported reasons={support.reasons} />
+  }
+
+  return <RichEditorActive value={value} onChange={onChange} />
+}
+
+function RichEditorActive({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (next: string) => void
+}) {
   const onChangeRef = useRef(onChange)
   const valueRef = useRef(value)
   const suppressUpdateRef = useRef(false)
@@ -42,16 +57,15 @@ export function RichEditor({
     const current = editor.getMarkdown()
     if (current === value) return
     suppressUpdateRef.current = true
-    editor.commands.setContent(value, {
-      contentType: "markdown",
-      emitUpdate: false,
-    })
-    suppressUpdateRef.current = false
+    try {
+      editor.commands.setContent(value, {
+        contentType: "markdown",
+        emitUpdate: false,
+      })
+    } finally {
+      suppressUpdateRef.current = false
+    }
   }, [editor, value])
-
-  if (support.level === "raw-only") {
-    return <RichUnsupported reasons={support.reasons} />
-  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
