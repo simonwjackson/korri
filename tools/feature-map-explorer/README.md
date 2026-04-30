@@ -11,17 +11,33 @@ is purely a viewer/editor on top of that JSON.
 just dev-feature-map
 ```
 
-This starts two processes on localhost:
+This starts two processes:
 
 - Vite SPA on `FEATURE_MAP_PORT` (default `4317`)
 - Hono dev API on `FEATURE_MAP_API_PORT` (default `4318`)
 
-The Vite server proxies `/api/*` to the Hono server. Override either port via
-environment variable:
+Both bind to `0.0.0.0` by default so the tool is reachable from any
+host or IP on the local network. The Vite server proxies `/api/*` to the
+Hono server. Override either port via environment variable:
 
 ```bash
 FEATURE_MAP_PORT=4400 FEATURE_MAP_API_PORT=4401 just dev-feature-map
 ```
+
+Restrict to localhost-only when needed:
+
+```bash
+FEATURE_MAP_HOST=127.0.0.1 FEATURE_MAP_API_HOST=127.0.0.1 just dev-feature-map
+```
+
+## Security posture
+
+The dev API has no authentication. Once Units 3+ land file-write routes,
+any host on the local network with access to the API port can edit
+`docs/jobs/*.md` and `korri/products/*/features/*/brief.md` (within the
+allowlist). Treat any network with access to this port as trusted. Use
+`FEATURE_MAP_API_HOST=127.0.0.1` to restrict the API to localhost when
+the network is not trusted.
 
 ## What it edits
 
