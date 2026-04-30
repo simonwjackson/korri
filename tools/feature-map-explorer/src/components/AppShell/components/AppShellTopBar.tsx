@@ -12,10 +12,9 @@ import {
 import { useAppShell } from "../AppShell.context"
 
 /*
- * Top bar — brand mark, generated-at timestamp, and (placeholder)
- * regenerate / palette buttons. Reads status + generatedAt from the
- * AppShell context so the header reflects the current load. Buttons
- * become functional in Units 7 (regenerate) and 8 (palette).
+ * Top bar — brand mark, generated-at timestamp, and the live
+ * Regenerate action (Unit 7). Palette button is a placeholder until
+ * Unit 8.
  */
 export function AppShellTopBar() {
   const {
@@ -26,7 +25,17 @@ export function AppShellTopBar() {
     inspectorOpen,
     toggleLeftRail,
     toggleInspector,
+    regenerate,
   } = useAppShell()
+
+  const regenStatus = regenerate.status
+  const isRunning = regenStatus === "running"
+  const hasError = regenStatus === "error"
+  const buttonLabel = isRunning
+    ? "Regenerating…"
+    : hasError
+      ? "Regenerate failed"
+      : "Regenerate"
 
   return (
     <header className="col-span-3 row-start-1 flex items-center gap-2 border-border border-b bg-surface px-3">
@@ -60,11 +69,27 @@ export function AppShellTopBar() {
         </button>
         <button
           type="button"
-          disabled
-          className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-text-muted text-xs disabled:opacity-60"
+          onClick={() => {
+            void regenerate.run()
+          }}
+          disabled={isRunning}
+          aria-busy={isRunning}
+          className={`flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs disabled:opacity-70 ${
+            hasError
+              ? "border-status-error bg-surface text-status-error hover:bg-surface-elevated"
+              : "border-border bg-surface text-text hover:bg-surface-elevated"
+          }`}
         >
-          <RefreshCw size={12} aria-hidden="true" />
-          <span>Regenerate</span>
+          {isRunning ? (
+            <Loader2
+              size={12}
+              aria-hidden="true"
+              className="animate-spin motion-reduce:animate-none"
+            />
+          ) : (
+            <RefreshCw size={12} aria-hidden="true" />
+          )}
+          <span>{buttonLabel}</span>
         </button>
 
         <PanelToggle

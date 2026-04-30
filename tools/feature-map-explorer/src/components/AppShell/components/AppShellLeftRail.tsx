@@ -32,7 +32,7 @@ export function AppShellLeftRail() {
   return (
     <aside
       aria-hidden={!leftRailOpen}
-      className={`col-start-1 row-start-2 flex min-w-0 flex-col overflow-hidden bg-surface ${
+      className={`col-start-1 row-start-3 flex min-w-0 flex-col overflow-hidden bg-surface ${
         leftRailOpen
           ? "border-border border-r"
           : "pointer-events-none border-r-0"

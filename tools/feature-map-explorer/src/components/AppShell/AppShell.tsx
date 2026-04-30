@@ -1,6 +1,7 @@
 import * as Dialog from "@radix-ui/react-dialog"
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { useFeatureMap } from "../../hooks/useFeatureMap"
+import { useRegenerate } from "../../hooks/useRegenerate"
 import type { FeatureMap, SelectedNode } from "../../types"
 import { AppShellProvider } from "./AppShell.context"
 
@@ -24,6 +25,7 @@ const INSPECTOR_WIDTH = "360px"
 
 export function AppShell({ children }: { children: ReactNode }) {
   const featureMap = useFeatureMap()
+  const regenerate = useRegenerate(featureMap.setMap)
   const [selected, setSelectedRaw] = useState<SelectedNode | null>(null)
   const [isDirty, setIsDirty] = useState(false)
   const [leftRailOpen, setLeftRailOpen] = useState(() =>
@@ -96,6 +98,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         inspectorOpen,
         toggleLeftRail,
         toggleInspector,
+        regenerate,
       }}
     >
       <div
@@ -104,7 +107,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           gridTemplateColumns: `${
             leftRailOpen ? LEFT_RAIL_WIDTH : "0px"
           } minmax(0, 1fr) ${inspectorOpen ? INSPECTOR_WIDTH : "0px"}`,
-          gridTemplateRows: "48px minmax(0, 1fr)",
+          gridTemplateRows: "48px auto minmax(0, 1fr)",
         }}
       >
         {children}

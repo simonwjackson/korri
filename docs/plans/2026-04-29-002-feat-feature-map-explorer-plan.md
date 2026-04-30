@@ -480,7 +480,7 @@ Phased delivery: Phase 1 (Units 1–4) lands the visible loop with read-only ins
 - Attempting to write a non-allowlisted path through any UI route is impossible.
 - Closing or selecting a different node while dirty triggers the confirm dialog.
 
-- [ ] **Unit 7: Regenerate flow and diagnostics surface**
+- [x] **Unit 7: Regenerate flow and diagnostics surface**
 
 **Goal:** Top bar gains a "Regenerate" action that calls the dev API. Diagnostics drawer/panel surfaces all warnings/errors with links to the relevant node. The UI handles loading, success, and failure clearly.
 

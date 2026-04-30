@@ -14,7 +14,7 @@ export function AppShellCanvas() {
   const { status, map, error } = useAppShell()
 
   return (
-    <section className="col-start-2 row-start-2 min-w-0 bg-bg">
+    <section className="col-start-2 row-start-3 min-w-0 bg-bg">
       {status === "loading" && (
         <CanvasMessage icon={<Loader2 size={18} className="animate-spin" />}>
           <Heading>Loading feature map…</Heading>

@@ -48,7 +48,7 @@ export function AppShellInspector() {
   return (
     <aside
       aria-hidden={!inspectorOpen}
-      className={`col-start-3 row-start-2 flex min-w-0 flex-col overflow-hidden bg-surface ${
+      className={`col-start-3 row-start-3 flex min-w-0 flex-col overflow-hidden bg-surface ${
         inspectorOpen
           ? "border-border border-l"
           : "pointer-events-none border-l-0"
