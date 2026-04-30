@@ -58,6 +58,23 @@ Rules:
 - Local UI behavior should use local React state/hooks.
 - Forms should use React Hook Form with Effect Schema validation if forms are introduced.
 
+## Product Documentation Shape
+
+- Durable user intent lives in `docs/jobs/*.md` and must include `id`, `title`, and `status` frontmatter.
+- Feature briefs are colocated with vertical slices at `korri/products/app/features/<feature>/brief.md` and must include `id`, `title`, `status`, and `jobs` frontmatter.
+- BDD feature files are colocated with the feature at `korri/products/app/features/<feature>/e2e/*.feature`.
+- The traceability index is generated to `out/generated/feature-map/feature-map.json` with `just generate-feature-map`; validate it with `just check-feature-map`.
+- Generated BDD wrappers under `e2e/generated/` are read-only.
+
+Artifact responsibilities:
+
+- Job docs explain why the user cares and should remain stable across implementation changes.
+- Feature briefs define the product promise, scope, and acceptance for one vertical slice.
+- BDD files capture executable observable behavior and should trace to brief acceptance or job outcome IDs.
+- The generated feature map links jobs, feature briefs, BDD files, scenarios, graph edges, diagnostics, and status.
+
+When adding or changing a feature, update the colocated `brief.md`, related BDD feature files, and run `just generate-feature-map`. Only create or update a job doc when the work reveals a new durable user job.
+
 ## Testing
 
 - Prefer pure unit tests for logic and RPC handlers.
