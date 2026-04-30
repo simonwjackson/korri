@@ -1,5 +1,12 @@
-import { CircleAlert, Loader2, RefreshCw, Save, Undo2 } from "lucide-react"
-import { useEffect } from "react"
+import {
+  CircleAlert,
+  Loader2,
+  RefreshCw,
+  Save,
+  Sparkles,
+  Undo2,
+} from "lucide-react"
+import { useEffect, useState } from "react"
 import { useFile } from "../../hooks/useFile"
 import type { NodeKind } from "../../types"
 import { useAppShell } from "../AppShell/AppShell.context"
@@ -117,9 +124,108 @@ export function Editor({ path, kind }: { path: string; kind: NodeKind }) {
         onChange={file.setFrontmatter}
       />
 
-      <div className="flex min-h-[240px] flex-1 flex-col">
-        <RawEditor value={file.draft.body} onChange={file.setBody} />
+      <BodyEditor body={file.draft.body} onChange={file.setBody} />
+    </div>
+  )
+}
+
+/*
+ * Tab seam for Raw vs. Rich body editing. The Rich tab is wired up
+ * for future Tiptap (or similar) integration but currently shows a
+ * deferral note: the existing brief.md content includes GFM tables,
+ * which are the canonical case where ProseMirror -> Markdown round-
+ * trip drifts (alignment + cell whitespace). Until a serializer is
+ * proven to round-trip our real content losslessly, Raw is the only
+ * way to edit the body. The seam stays so that a follow-up can drop
+ * the Rich implementation in without touching this file's API.
+ */
+function BodyEditor({
+  body,
+  onChange,
+}: {
+  body: string
+  onChange: (next: string) => void
+}) {
+  const [mode, setMode] = useState<"raw" | "rich">("raw")
+
+  return (
+    <div className="flex min-h-[240px] flex-1 flex-col gap-2">
+      <div
+        role="tablist"
+        aria-label="Body editor mode"
+        className="flex items-center gap-1"
+      >
+        <BodyTab
+          active={mode === "raw"}
+          onClick={() => setMode("raw")}
+          label="Raw"
+        />
+        <BodyTab
+          active={mode === "rich"}
+          onClick={() => setMode("rich")}
+          label="Rich"
+          icon={<Sparkles size={11} aria-hidden="true" />}
+        />
       </div>
+      {mode === "raw" ? (
+        <RawEditor value={body} onChange={onChange} />
+      ) : (
+        <RichDeferred />
+      )}
+    </div>
+  )
+}
+
+function BodyTab({
+  active,
+  onClick,
+  label,
+  icon,
+}: {
+  active: boolean
+  onClick: () => void
+  label: string
+  icon?: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={`flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs ${
+        active
+          ? "border-border-strong bg-surface-elevated text-text"
+          : "border-border bg-surface text-text-muted hover:bg-surface-elevated hover:text-text"
+      }`}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  )
+}
+
+function RichDeferred() {
+  return (
+    <div className="flex flex-1 flex-col items-start gap-2 rounded-md border border-border bg-surface p-3 text-text-muted text-xs">
+      <p className="text-text">
+        <Sparkles
+          size={12}
+          aria-hidden="true"
+          className="mr-1 inline align-[-1px] text-accent"
+        />
+        Rich editor deferred
+      </p>
+      <p>
+        The repo's current brief content includes GFM tables, where Markdown{" "}
+        <span className="font-mono">↔</span> ProseMirror round- trips drift on
+        cell whitespace and alignment. Until a serializer is proven to
+        round-trip the real content losslessly, edits go through the Raw tab.
+      </p>
+      <p>
+        Switching back to Raw is non-destructive — you have not made any edits
+        in this view.
+      </p>
     </div>
   )
 }
