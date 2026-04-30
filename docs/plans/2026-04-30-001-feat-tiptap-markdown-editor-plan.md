@@ -154,7 +154,7 @@ The adapter is the only place that knows the Tiptap extension set. `RichEditor` 
 
 ## Implementation Units
 
-- [ ] **Unit 1: Add Tiptap dependencies and serializer test harness**
+- [x] **Unit 1: Add Tiptap dependencies and serializer test harness**
 
 **Goal:** Add the Tiptap dependency set and create a pure Markdown adapter with tests before touching the editor UI.
 
