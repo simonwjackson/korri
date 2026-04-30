@@ -1,6 +1,6 @@
 # Construct Coverage
 
-Paragraph with **bold**, *italic*, and `inline code`.  
+Paragraph with **bold**, *italic*, and `inline code`.
 Hard break stays visible.
 
 ---

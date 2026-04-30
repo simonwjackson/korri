@@ -3,7 +3,7 @@
 
 ---
 
-**Source job**: `docs/jobs/safe-game-resume.md`  
+**Source job**: `docs/jobs/safe-game-resume.md`
 **BDD spec**: `korri/products/app/features/resume/e2e/safe-game-resume.feature`
 
 ---

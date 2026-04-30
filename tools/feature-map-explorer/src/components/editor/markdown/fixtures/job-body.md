@@ -63,19 +63,19 @@ The positive emotional outcome is safe continuity. The player feels that the lau
 
 ## 6. Obstacles
 
-**Progress state may be unknowable** — The launcher may not know whether the latest progress is local, synced, remote, emulator-managed, or hidden behind a source launcher. Not all games support cloud sync or save states.  
+**Progress state may be unknowable** — The launcher may not know whether the latest progress is local, synced, remote, emulator-managed, or hidden behind a source launcher. Not all games support cloud sync or save states.
 *Product status*: Must be handled honestly. The launcher should not imply certainty without evidence.
 
-**The last-played device may differ from the current device** — If the player last played on another device where this launcher is installed, the current device may not have the latest safe progress.  
+**The last-played device may differ from the current device** — If the player last played on another device where this launcher is installed, the current device may not have the latest safe progress.
 *Product status*: This is the primary confirmation trigger. Sync/check should happen automatically when supported; if safety cannot be verified, the player must explicitly accept the risk or cancel.
 
-**Resume can become accidental auto-launch** — A launcher that immediately starts the last game may be fast but unsafe or surprising.  
+**Resume can become accidental auto-launch** — A launcher that immediately starts the last game may be fast but unsafe or surprising.
 *Product status*: Avoided by requiring an explicit player action before launch.
 
-**Command handoff has limited visibility** — The launcher executes configured terminal commands. In the core model, command success means launcher handoff succeeded, even if the game later fails internally.  
+**Command handoff has limited visibility** — The launcher executes configured terminal commands. In the core model, command success means launcher handoff succeeded, even if the game later fails internally.
 *Product status*: The launcher should clearly report command failure and offer retry. Future process or log watching can improve observability, but the job should not depend on universal playable-state detection.
 
-**Different devices and input contexts need different surfaces** — Handheld resume may need one dominant thumb-friendly action; TV/couch may need a controller-friendly row or dashboard.  
+**Different devices and input contexts need different surfaces** — Handheld resume may need one dominant thumb-friendly action; TV/couch may need a controller-friendly row or dashboard.
 *Product status*: The resume surface should adapt by context while preserving the same job outcome.
 
 ---
@@ -113,20 +113,20 @@ Future persona variants to document separately or reference from persona files:
 
 ## 9. Design Implications
 
-**Job map: Locate**  
+**Job map: Locate**
 Provide a context-adaptive resume surface that makes the previous game visually dominant without forcing full-library browsing. Handheld and TV/couch layouts may differ, but both should preserve a clear Continue path.
 
-**Obstacle: Progress state may be unknowable**  
+**Obstacle: Progress state may be unknowable**
 Represent progress safety as a confidence problem, not a universal sync feature. The product should distinguish between known-safe, known-risk, and unknown states internally, but only interrupt the player when the uncertainty creates plausible progress risk.
 
-**Obstacle: Last-played device may differ from current device**  
+**Obstacle: Last-played device may differ from current device**
 Track enough device/source context to know when a previous session occurred on another installed device. When supported, sync/check automatically before launch. If unable to verify safety, require confirmation before continuing.
 
-**Functional outcome: Preserve user control over launch**  
+**Functional outcome: Preserve user control over launch**
 Do not auto-launch the previous game. Resume should be a prominent, low-friction action that the player chooses.
 
-**Obstacle: Command handoff has limited visibility**  
+**Obstacle: Command handoff has limited visibility**
 Treat configured command success/failure as the baseline launch result. On failure, keep the player anchored to the same resume context and provide an immediate retry action.
 
-**Related jobs intentionally out of scope**  
+**Related jobs intentionally out of scope**
 Choosing what to play from the broader library, installing/updating/repairing games, deep save-version management, household profile switching, and emulator-specific save-state management should be documented as separate jobs rather than folded into this one.
