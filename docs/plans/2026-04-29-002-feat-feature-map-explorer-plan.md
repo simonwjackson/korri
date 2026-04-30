@@ -274,7 +274,7 @@ Phased delivery: Phase 1 (Units 1–4) lands the visible loop with read-only ins
 - `just typecheck` and `just lint` pass on new files.
 - No new files exist outside `tools/feature-map-explorer/` except the `justfile`, `package.json`, and `AGENTS.md` edits listed above.
 
-- [ ] **Unit 2: Design tokens and shell layout**
+- [x] **Unit 2: Design tokens and shell layout**
 
 **Goal:** Define the explorer's design tokens (color, type, spacing, radius, motion) and implement the static shell: top bar, left rail, canvas area, inspector panel. The shell is content-empty but visually correct in light and dark mode.
 

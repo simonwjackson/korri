@@ -1,36 +1,49 @@
 /*
  * Feature Map Explorer dev API.
  *
- * Placeholder for Unit 1 — only `/api/health` is wired. Units 3+ add
- * /api/feature-map, /api/file (read/write under an allowlist), and
- * /api/regenerate.
+ * Mounts:
+ *   GET    /api/health        — liveness check
+ *   GET    /api/feature-map   — read the generated feature-map JSON
+ *   GET    /api/file?path=…   — read a repo-relative markdown file
+ *   PUT    /api/file          — write an allowlisted markdown file
+ *   POST   /api/regenerate    — shell out to the generator and return the
+ *                                fresh map alongside stdout/stderr
  *
- * Binding: defaults to 0.0.0.0 so the dev tool is reachable from any
- * host/IP on the local network. Set HOST=127.0.0.1 to restrict to
- * localhost only. There is no auth; once write routes land, treat any
- * network with access to this port as trusted.
+ * The server binds to 127.0.0.1 by default; it must never be exposed
+ * beyond localhost.
  */
 
 import { serve } from "@hono/node-server"
 import { logger as appLogger } from "@shared/logger"
 import { Hono } from "hono"
+import { featureMapRoute } from "./routes/feature-map.route"
+import { filesRoute } from "./routes/files.route"
+import { regenerateRoute } from "./routes/regenerate.route"
 
 const log = appLogger.child({ service: "feature-map-explorer" })
 
-const app = new Hono()
+export function createApp(): Hono {
+  const app = new Hono()
 
-app.get("/api/health", c =>
-  c.json({
-    status: "ok",
-    service: "feature-map-explorer",
-    timestamp: new Date().toISOString(),
-  }),
-)
+  app.get("/api/health", c =>
+    c.json({
+      status: "ok",
+      service: "feature-map-explorer",
+      timestamp: new Date().toISOString(),
+    }),
+  )
+
+  app.route("/api", featureMapRoute())
+  app.route("/api", filesRoute())
+  app.route("/api", regenerateRoute())
+
+  return app
+}
 
 const port = Number.parseInt(process.env.PORT ?? "4318", 10)
-const hostname = process.env.HOST ?? "0.0.0.0"
+const hostname = process.env.HOST ?? "127.0.0.1"
 
-const server = serve({ fetch: app.fetch, port, hostname }, info => {
+const server = serve({ fetch: createApp().fetch, port, hostname }, info => {
   log.info(`api listening on http://${info.address}:${info.port}`)
 })
 
