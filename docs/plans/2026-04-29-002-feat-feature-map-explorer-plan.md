@@ -233,7 +233,7 @@ sequenceDiagram
 
 Phased delivery: Phase 1 (Units 1–4) lands the visible loop with read-only inspector. Phase 2 (Units 5–6) lands the graph and editing. Phase 3 (Units 7–8) lands polish (regenerate UX, command palette, optional Tiptap).
 
-- [ ] **Unit 1: Scaffold the explorer app shell**
+- [x] **Unit 1: Scaffold the explorer app shell**
 
 **Goal:** Stand up `tools/feature-map-explorer/` with a Vite + React + TypeScript shell, Tailwind v4 wired, Geist + Lucide available, and a `just dev-feature-map` recipe that boots the SPA and a placeholder Hono server on configurable ports. No feature data yet — a styled "Hello, Feature Map" page proves the pipeline.
 

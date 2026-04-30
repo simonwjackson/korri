@@ -75,6 +75,8 @@ Artifact responsibilities:
 
 When adding or changing a feature, update the colocated `brief.md`, related BDD feature files, and run `just generate-feature-map`. Only create or update a job doc when the work reveals a new durable user job.
 
+The `tools/feature-map-explorer/` app (run with `just dev-feature-map`) is the canonical UI for inspecting and editing this map locally. It is dev-only — it is never bundled with `korri/products/*`.
+
 ## Testing
 
 - Prefer pure unit tests for logic and RPC handlers.

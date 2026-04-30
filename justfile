@@ -93,6 +93,10 @@ generate-feature-map:
 check-feature-map:
   bun run tools/generators/feature-map/generate-feature-map.ts --check
 
+# Start the Feature Map Explorer dev tool (Vite SPA + Hono dev API).
+dev-feature-map port="${FEATURE_MAP_PORT:-4317}" api_port="${FEATURE_MAP_API_PORT:-4318}":
+  FEATURE_MAP_PORT={{port}} FEATURE_MAP_API_PORT={{api_port}} tools/feature-map-explorer/dev.sh
+
 # Preview the built web app.
 preview:
   bun run vite preview --port 4173

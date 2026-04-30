@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+/*
+ * Aesthetic guardrails (apply to every component and view in this app):
+ *
+ * - One sans family (Geist Variable), one mono family (Geist Mono Variable).
+ *   Never mix display fonts. Maximum two type weights visible at once.
+ * - Six-step neutral scale, single accent, semantic statuses. No ad-hoc
+ *   colors in components — pull from these tokens.
+ * - No drop shadows on flat content surfaces. One subtle elevation only.
+ * - No layout-shifting hovers. Hover changes color/opacity, not size.
+ * - Maximum three accent colors visible in any single view.
+ * - Honour `prefers-reduced-motion`; durations stay between 120–200ms.
+ *
+ * Source roots — the @tailwindcss/vite plugin scans these for utility
+ * classes used inside this app. Paths are relative to this file.
+ */
+@source "../../../**/*.{ts,tsx,html}";
+@source "../../index.html";
+
+@custom-variant dark (&:where(.theme-dark, .theme-dark *));
+
+@theme {
+	/* Typography */
+	--font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+
+	/* Neutral scale (dark-first; light values live under .theme-light below). */
+	--color-bg: oklch(0.18 0 0);
+	--color-surface: oklch(0.21 0 0);
+	--color-surface-elevated: oklch(0.24 0 0);
+	--color-border: oklch(0.3 0 0);
+	--color-text-muted: oklch(0.62 0 0);
+	--color-text: oklch(0.94 0 0);
+
+	/* Accent */
+	--color-accent: oklch(0.74 0.14 240);
+	--color-accent-muted: oklch(0.55 0.1 240);
+
+	/* Status (kept minimal for Unit 1; expanded in Unit 2). */
+	--color-status-active: oklch(0.74 0.14 150);
+	--color-status-warning: oklch(0.78 0.16 80);
+	--color-status-error: oklch(0.66 0.2 25);
+}
+
+/* Light variant tokens — toggle by swapping `.theme-dark` for `.theme-light`
+ * on the <html> element. Unit 2 wires the toggle UI. */
+:where(.theme-light) {
+	--color-bg: oklch(0.99 0 0);
+	--color-surface: oklch(0.97 0 0);
+	--color-surface-elevated: oklch(0.94 0 0);
+	--color-border: oklch(0.88 0 0);
+	--color-text-muted: oklch(0.5 0 0);
+	--color-text: oklch(0.18 0 0);
+	--color-accent: oklch(0.55 0.16 240);
+	--color-accent-muted: oklch(0.7 0.1 240);
+}
+
+html,
+body,
+#root {
+	height: 100%;
+}
+
+body {
+	margin: 0;
+	font-family: var(--font-sans);
+	background: var(--color-bg);
+	color: var(--color-text);
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+}
