@@ -43,7 +43,7 @@ The fear is documentation drift and disconnect at scale (20+ vertical slices). A
 
 ### Deferred to Separate Tasks
 
-- Tiptap-based rich Markdown editing for jobs/briefs (Unit 8 lands the seam; the rich editor itself is deferred behind a feature toggle if it slips this slice).
+- Tiptap-based rich Markdown editing for jobs/briefs shipped in follow-up plan `docs/plans/2026-04-30-001-feat-tiptap-markdown-editor-plan.md`; Raw remains the fallback.
 - QA-facing build output (read-only static export, auth, share links): future iteration once the dev tool stabilizes.
 - Wiring real Playwright/test status into BDD scenario nodes ("did this scenario pass last run?"): future iteration once test reporting lands in `out/`.
 - Editing BDD `.feature` files in the explorer.
@@ -109,7 +109,7 @@ The fear is documentation drift and disconnect at scale (20+ vertical slices). A
 
 - **Exact Tailwind v4 `@theme` integration shape inside `tools/feature-map-explorer/`.** Needs a small spike against current Tailwind v4 behavior; mirror Shift's approach but scope CSS to the explorer root.
 - **Whether to add a watch on `out/generated/feature-map/feature-map.json` and auto-refresh the UI**, or require explicit "Regenerate" clicks. Default is explicit; auto-refresh is a polish if cheap.
-- **Tiptap Markdown round-trip fidelity for our specific frontmatter + tables + Gherkin-adjacent content.** _Resolved during Unit 8 implementation:_ deferred. Inspecting `korri/products/app/features/resume/brief.md` showed real GFM tables (the SGR-O… outcome map). ProseMirror ↔ Markdown serializers drift on cell whitespace + alignment, which would surface as silent diff churn on every save. Editor.tsx ships the Rich / Raw tab seam; Rich is the default tab, renders a deferral note, and points back to Raw. Adopting Tiptap stays a follow-up gated on a serializer that round-trips the live `brief.md` losslessly.
+- **Tiptap Markdown round-trip fidelity for our specific frontmatter + tables + Gherkin-adjacent content.** _Resolved during Unit 8 implementation:_ deferred. Inspecting `korri/products/app/features/resume/brief.md` showed real GFM tables (the SGR-O… outcome map). ProseMirror ↔ Markdown serializers drift on cell whitespace + alignment, which would surface as silent diff churn on every save. Editor.tsx ships the Rich / Raw tab seam; Rich is the default tab, renders a deferral note, and points back to Raw. The follow-up plan `docs/plans/2026-04-30-001-feat-tiptap-markdown-editor-plan.md` adds Tiptap with serializer tests and Raw fallback safeguards.
 - **Whether the regenerate endpoint should stream output progressively** or return only on completion. Default is "return on completion"; streaming is a polish.
 
 ## Output Structure

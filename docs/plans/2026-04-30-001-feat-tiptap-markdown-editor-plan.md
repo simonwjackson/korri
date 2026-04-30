@@ -1,7 +1,7 @@
 ---
 title: "feat: Add Tiptap Markdown editor"
 type: feat
-status: active
+status: complete
 date: 2026-04-30
 origin: docs/plans/2026-04-29-002-feat-feature-map-explorer-plan.md
 ---
@@ -310,7 +310,7 @@ The adapter is the only place that knows the Tiptap extension set. `RichEditor` 
 - New serializer regression tests protect the current corpus.
 - No API route contract changes are required.
 
-- [ ] **Unit 5: Update docs and interactive verification notes**
+- [x] **Unit 5: Update docs and interactive verification notes**
 
 **Goal:** Document the final Rich/Raw editing contract and the known Markdown support boundary.
 

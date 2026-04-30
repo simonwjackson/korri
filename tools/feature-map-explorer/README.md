@@ -39,6 +39,22 @@ allowlist). Treat any network with access to this port as trusted. Use
 `FEATURE_MAP_API_HOST=127.0.0.1` to restrict the API to localhost when
 the network is not trusted.
 
+## Rich and Raw Markdown editing
+
+The editor defaults to **Rich** mode, powered by Tiptap. Rich mode edits the
+Markdown body while the structured frontmatter form edits known frontmatter
+fields (`id`, `title`, `status`, `jobs`). **Raw** mode remains available for
+exact source editing through CodeMirror.
+
+Rich mode supports the Markdown constructs currently used by Jobs and Briefs:
+headings, paragraphs, thematic breaks, bullet and ordered lists, blockquotes,
+bold, italic, inline code, fenced code blocks, hard breaks, links, and GFM
+tables. After a rich edit, Markdown is serialized into a stable canonical form;
+use Raw mode when exact Markdown formatting is important.
+
+If a file contains unsupported syntax such as raw HTML blocks, MDX/JSX tags,
+footnotes, definition lists, Mermaid fences, or images, Rich mode shows a
+warning and directs you to Raw mode instead of silently converting the content.
 ## What it edits
 
 The dev API only accepts writes to:
