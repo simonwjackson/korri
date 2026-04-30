@@ -272,7 +272,7 @@ The adapter is the only place that knows the Tiptap extension set. `RichEditor` 
 - Opening the editor and doing nothing leaves `file.isDirty` false.
 - Raw fallback behavior is unchanged.
 
-- [ ] **Unit 4: Wire save-flow safeguards and corpus regression coverage**
+- [x] **Unit 4: Wire save-flow safeguards and corpus regression coverage**
 
 **Goal:** Ensure Rich editing integrates safely with existing save/reload/revert behavior and catches future serializer drift.
 

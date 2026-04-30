@@ -16,6 +16,13 @@ function fixture(name: string): string {
   return readFileSync(path.join(FIXTURE_DIR, name), "utf-8")
 }
 
+function markdownBody(repoRelativePath: string): string {
+  return readFileSync(
+    path.join(process.cwd(), repoRelativePath),
+    "utf-8",
+  ).replace(/^---\n[\s\S]*?\n---\n?/, "")
+}
+
 function tableRows(markdown: string): string[] {
   return markdown
     .split("\n")
@@ -71,6 +78,17 @@ describe("markdownSerializer", () => {
   it("reaches stable canonical Markdown after one serialization", () => {
     for (const name of ["job-body.md", "brief-body.md", "constructs.md"]) {
       const once = canonicalizeMarkdown(fixture(name))
+      const twice = canonicalizeMarkdown(once)
+      expect(twice).toBe(once)
+    }
+  })
+
+  it("keeps the live editable corpus canonically stable", () => {
+    for (const repoRelativePath of [
+      "docs/jobs/safe-game-resume.md",
+      "korri/products/app/features/resume/brief.md",
+    ]) {
+      const once = canonicalizeMarkdown(markdownBody(repoRelativePath))
       const twice = canonicalizeMarkdown(once)
       expect(twice).toBe(once)
     }
