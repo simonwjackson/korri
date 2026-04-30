@@ -26,6 +26,10 @@ export type AppShellContextValue = {
   reload: () => Promise<void>
   isDirty: boolean
   setIsDirty: (next: boolean) => void
+  leftRailOpen: boolean
+  inspectorOpen: boolean
+  toggleLeftRail: () => void
+  toggleInspector: () => void
 }
 
 const AppShellCtx = createContext<AppShellContextValue | null>(null)

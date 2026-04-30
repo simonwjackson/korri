@@ -17,15 +17,41 @@ import { AppShellProvider } from "./AppShell.context"
  * AlertDialog at the root that intercepts navigation away from a dirty
  * editor.
  */
+const LEFT_RAIL_KEY = "feature-map-explorer:leftRailOpen"
+const INSPECTOR_KEY = "feature-map-explorer:inspectorOpen"
+const LEFT_RAIL_WIDTH = "280px"
+const INSPECTOR_WIDTH = "360px"
+
 export function AppShell({ children }: { children: ReactNode }) {
   const featureMap = useFeatureMap()
   const [selected, setSelectedRaw] = useState<SelectedNode | null>(null)
   const [isDirty, setIsDirty] = useState(false)
+  const [leftRailOpen, setLeftRailOpen] = useState(() =>
+    readBoolean(LEFT_RAIL_KEY, true),
+  )
+  const [inspectorOpen, setInspectorOpen] = useState(() =>
+    readBoolean(INSPECTOR_KEY, true),
+  )
   const [pending, setPending] = useState<{
     next: SelectedNode | null
   } | null>(null)
   const isDirtyRef = useRef(isDirty)
   isDirtyRef.current = isDirty
+
+  useEffect(() => {
+    writeBoolean(LEFT_RAIL_KEY, leftRailOpen)
+  }, [leftRailOpen])
+
+  useEffect(() => {
+    writeBoolean(INSPECTOR_KEY, inspectorOpen)
+  }, [inspectorOpen])
+
+  const toggleLeftRail = useCallback(() => {
+    setLeftRailOpen(prev => !prev)
+  }, [])
+  const toggleInspector = useCallback(() => {
+    setInspectorOpen(prev => !prev)
+  }, [])
 
   useEffect(() => {
     if (!selected || !featureMap.map) return
@@ -66,12 +92,18 @@ export function AppShell({ children }: { children: ReactNode }) {
         reload: featureMap.reload,
         isDirty,
         setIsDirty,
+        leftRailOpen,
+        inspectorOpen,
+        toggleLeftRail,
+        toggleInspector,
       }}
     >
       <div
         className="grid h-dvh w-dvw bg-bg text-text"
         style={{
-          gridTemplateColumns: "280px minmax(0, 1fr) 360px",
+          gridTemplateColumns: `${
+            leftRailOpen ? LEFT_RAIL_WIDTH : "0px"
+          } minmax(0, 1fr) ${inspectorOpen ? INSPECTOR_WIDTH : "0px"}`,
           gridTemplateRows: "48px minmax(0, 1fr)",
         }}
       >
@@ -133,6 +165,18 @@ function DiscardDialog({
       </Dialog.Portal>
     </Dialog.Root>
   )
+}
+
+function readBoolean(key: string, fallback: boolean): boolean {
+  if (typeof window === "undefined") return fallback
+  const raw = window.localStorage.getItem(key)
+  if (raw === null) return fallback
+  return raw === "true"
+}
+
+function writeBoolean(key: string, value: boolean): void {
+  if (typeof window === "undefined") return
+  window.localStorage.setItem(key, value ? "true" : "false")
 }
 
 function nodeExists(map: FeatureMap, ref: SelectedNode): boolean {

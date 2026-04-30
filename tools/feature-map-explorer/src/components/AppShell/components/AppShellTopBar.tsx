@@ -2,6 +2,10 @@ import {
   Command,
   Loader2,
   Network,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   RefreshCw,
   TriangleAlert,
 } from "lucide-react"
@@ -14,10 +18,25 @@ import { useAppShell } from "../AppShell.context"
  * become functional in Units 7 (regenerate) and 8 (palette).
  */
 export function AppShellTopBar() {
-  const { status, map, error } = useAppShell()
+  const {
+    status,
+    map,
+    error,
+    leftRailOpen,
+    inspectorOpen,
+    toggleLeftRail,
+    toggleInspector,
+  } = useAppShell()
 
   return (
-    <header className="col-span-3 row-start-1 flex items-center gap-3 border-border border-b bg-surface px-4">
+    <header className="col-span-3 row-start-1 flex items-center gap-2 border-border border-b bg-surface px-3">
+      <PanelToggle
+        open={leftRailOpen}
+        onClick={toggleLeftRail}
+        side="left"
+        label="Toggle navigation rail"
+      />
+
       <div className="flex items-center gap-2">
         <span className="flex h-6 w-6 items-center justify-center rounded-md bg-surface-elevated text-accent">
           <Network size={14} aria-hidden="true" />
@@ -47,8 +66,47 @@ export function AppShellTopBar() {
           <RefreshCw size={12} aria-hidden="true" />
           <span>Regenerate</span>
         </button>
+
+        <PanelToggle
+          open={inspectorOpen}
+          onClick={toggleInspector}
+          side="right"
+          label="Toggle inspector"
+        />
       </div>
     </header>
+  )
+}
+
+function PanelToggle({
+  open,
+  onClick,
+  side,
+  label,
+}: {
+  open: boolean
+  onClick: () => void
+  side: "left" | "right"
+  label: string
+}) {
+  const Icon =
+    side === "left"
+      ? open
+        ? PanelLeftClose
+        : PanelLeftOpen
+      : open
+        ? PanelRightClose
+        : PanelRightOpen
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={open}
+      aria-label={label}
+      className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-surface text-text-muted hover:bg-surface-elevated hover:text-text"
+    >
+      <Icon size={14} aria-hidden="true" />
+    </button>
   )
 }
 

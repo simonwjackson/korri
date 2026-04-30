@@ -34,7 +34,7 @@ type InspectorMode = "inspect" | "edit"
 const EDITABLE_KINDS: ReadonlySet<NodeKind> = new Set(["job", "brief"])
 
 export function AppShellInspector() {
-  const { status, map, selected } = useAppShell()
+  const { status, map, selected, inspectorOpen } = useAppShell()
   const [mode, setMode] = useState<InspectorMode>("inspect")
   const editable = selected ? EDITABLE_KINDS.has(selected.kind) : false
 
@@ -46,7 +46,14 @@ export function AppShellInspector() {
   }, [editable])
 
   return (
-    <aside className="col-start-3 row-start-2 flex min-w-0 flex-col border-border border-l bg-surface">
+    <aside
+      aria-hidden={!inspectorOpen}
+      className={`col-start-3 row-start-2 flex min-w-0 flex-col overflow-hidden bg-surface ${
+        inspectorOpen
+          ? "border-border border-l"
+          : "pointer-events-none border-l-0"
+      }`}
+    >
       <InspectorHeader mode={mode} editable={editable} onChangeMode={setMode} />
       <div className="flex flex-1 flex-col overflow-y-auto">
         {status !== "ready" && <InspectorPlaceholder status={status} />}

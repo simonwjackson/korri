@@ -26,11 +26,18 @@ import { useAppShell } from "../AppShell.context"
  * context, lets the user filter by title, and groups rows by node kind.
  */
 export function AppShellLeftRail() {
-  const { status, map, selected, setSelected } = useAppShell()
+  const { status, map, selected, setSelected, leftRailOpen } = useAppShell()
   const [filter, setFilter] = useState("")
 
   return (
-    <aside className="col-start-1 row-start-2 flex min-w-0 flex-col border-border border-r bg-surface">
+    <aside
+      aria-hidden={!leftRailOpen}
+      className={`col-start-1 row-start-2 flex min-w-0 flex-col overflow-hidden bg-surface ${
+        leftRailOpen
+          ? "border-border border-r"
+          : "pointer-events-none border-r-0"
+      }`}
+    >
       <div className="border-border border-b p-3">
         <label className="flex h-8 items-center gap-2 rounded-md border border-border bg-bg px-2 text-text-muted focus-within:border-accent">
           <Search size={12} aria-hidden="true" />
