@@ -1,4 +1,5 @@
-import { type ReactNode, useCallback, useEffect, useState } from "react"
+import * as Dialog from "@radix-ui/react-dialog"
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { useFeatureMap } from "../../hooks/useFeatureMap"
 import type { FeatureMap, SelectedNode } from "../../types"
 import { AppShellProvider } from "./AppShell.context"
@@ -9,35 +10,50 @@ import { AppShellProvider } from "./AppShell.context"
  * Owns:
  * - the GET /api/feature-map round-trip (via useFeatureMap)
  * - the currently-selected node reference
+ * - the dirty bit lifted from the Editor and the discard dialog that
+ *   gates selection changes when there are unsaved edits
  *
- * Renders the Provider plus the three-column grid frame:
- *
- *   ┌──────────────────────────────────────────────┐
- *   │ TopBar (full width)                          │  48px row
- *   ├───────────┬──────────────────────┬───────────┤
- *   │ LeftRail  │ Canvas               │ Inspector │  flex row
- *   │ 280px     │ flex                 │ 360px     │
- *   └───────────┴──────────────────────┴───────────┘
- *
- * Compounds (TopBar / LeftRail / Canvas / Inspector / Diagnostics) read
- * via `useAppShell()` and place themselves into the grid via Tailwind
- * `col-start-*` / `row-start-*` utilities.
+ * Renders the Provider plus the three-column grid frame and a single
+ * AlertDialog at the root that intercepts navigation away from a dirty
+ * editor.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const featureMap = useFeatureMap()
   const [selected, setSelectedRaw] = useState<SelectedNode | null>(null)
+  const [isDirty, setIsDirty] = useState(false)
+  const [pending, setPending] = useState<{
+    next: SelectedNode | null
+  } | null>(null)
+  const isDirtyRef = useRef(isDirty)
+  isDirtyRef.current = isDirty
 
-  // Clear selection when the selected node disappears after a reload.
   useEffect(() => {
     if (!selected || !featureMap.map) return
     if (!nodeExists(featureMap.map, selected)) {
       setSelectedRaw(null)
+      setIsDirty(false)
     }
   }, [featureMap.map, selected])
 
-  const setSelected = useCallback((next: SelectedNode | null) => {
-    setSelectedRaw(next)
-  }, [])
+  const setSelected = useCallback(
+    (next: SelectedNode | null) => {
+      if (isDirtyRef.current && !sameRef(next, selected)) {
+        setPending({ next })
+        return
+      }
+      setSelectedRaw(next)
+    },
+    [selected],
+  )
+
+  const confirmDiscard = useCallback(() => {
+    if (!pending) return
+    setIsDirty(false)
+    setSelectedRaw(pending.next)
+    setPending(null)
+  }, [pending])
+
+  const cancelDiscard = useCallback(() => setPending(null), [])
 
   return (
     <AppShellProvider
@@ -48,6 +64,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         selected,
         setSelected,
         reload: featureMap.reload,
+        isDirty,
+        setIsDirty,
       }}
     >
       <div
@@ -59,7 +77,61 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         {children}
       </div>
+
+      <DiscardDialog
+        open={pending !== null}
+        onConfirm={confirmDiscard}
+        onCancel={cancelDiscard}
+      />
     </AppShellProvider>
+  )
+}
+
+function DiscardDialog({
+  open,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <Dialog.Root
+      open={open}
+      onOpenChange={next => {
+        if (!next) onCancel()
+      }}
+    >
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 bg-bg/70 backdrop-blur-sm" />
+        <Dialog.Content className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 flex w-[360px] flex-col gap-3 rounded-lg border border-border bg-surface p-4">
+          <Dialog.Title className="font-semibold text-base text-text">
+            Discard unsaved changes?
+          </Dialog.Title>
+          <Dialog.Description className="text-text-muted text-sm">
+            Switching nodes will lose your unsaved edits. Save first or confirm
+            to discard.
+          </Dialog.Description>
+          <div className="mt-1 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="h-8 rounded-md border border-border bg-bg px-3 text-sm text-text hover:bg-surface-elevated"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              className="h-8 rounded-md border border-status-error bg-status-error px-3 text-bg text-sm"
+            >
+              Discard
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   )
 }
 
@@ -74,4 +146,10 @@ function nodeExists(map: FeatureMap, ref: SelectedNode): boolean {
     case "bdd":
       return map.bdd.some(n => n.id === ref.id)
   }
+}
+
+function sameRef(a: SelectedNode | null, b: SelectedNode | null): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return a.kind === b.kind && a.id === b.id
 }

@@ -1,5 +1,5 @@
-import { Copy, ExternalLink, PanelRight } from "lucide-react"
-import type { ReactNode } from "react"
+import { Copy, ExternalLink, PanelRight, Pencil } from "lucide-react"
+import { type ReactNode, useEffect, useState } from "react"
 import type {
   BddNode,
   BriefNode,
@@ -8,45 +8,141 @@ import type {
   FeatureNode,
   GraphEdge,
   JobNode,
+  NodeKind,
   ScenarioStatus,
   SelectedNode,
   Status,
 } from "../../../types"
 import { nodeKey, parseEdgeEndpoint } from "../../../types"
+import { Editor } from "../../editor/Editor"
 import { useAppShell } from "../AppShell.context"
 import { AppShellDiagnostics } from "./AppShellDiagnostics"
 
 /*
- * Inspector — read-only metadata view for the currently selected node.
+ * Inspector — metadata view plus optional editor for the selected
+ * node.
  *
- * Branches on map status first (loading / missing / error / no
- * selection), then on selected.kind. Edits land in Unit 6 behind an
- * "Edit" affordance added here.
+ * Branches first on map status (loading / missing / error / no
+ * selection), then on a local mode ("inspect" | "edit"). The edit mode
+ * is only available for Job and Brief nodes (the kinds whose source
+ * markdown the dev API allowlists). Switching to a different node
+ * resets the mode back to "inspect".
  */
+
+type InspectorMode = "inspect" | "edit"
+
+const EDITABLE_KINDS: ReadonlySet<NodeKind> = new Set(["job", "brief"])
+
 export function AppShellInspector() {
   const { status, map, selected } = useAppShell()
+  const [mode, setMode] = useState<InspectorMode>("inspect")
+  const editable = selected ? EDITABLE_KINDS.has(selected.kind) : false
+
+  // Force "inspect" mode when the new selection isn't editable.
+  // (Switching between two editable nodes preserves edit mode; the
+  // Editor remounts via its `key={node.path}` so drafts don't leak.)
+  useEffect(() => {
+    if (!editable) setMode("inspect")
+  }, [editable])
 
   return (
     <aside className="col-start-3 row-start-2 flex min-w-0 flex-col border-border border-l bg-surface">
-      <InspectorHeader />
+      <InspectorHeader mode={mode} editable={editable} onChangeMode={setMode} />
       <div className="flex flex-1 flex-col overflow-y-auto">
         {status !== "ready" && <InspectorPlaceholder status={status} />}
         {status === "ready" && !selected && <InspectorEmpty />}
-        {status === "ready" && selected && map && (
+        {status === "ready" && selected && map && mode === "inspect" && (
           <InspectorBody map={map} selected={selected} />
+        )}
+        {status === "ready" && selected && mode === "edit" && (
+          <InspectorEditPane selected={selected} map={map} />
         )}
       </div>
     </aside>
   )
 }
 
-function InspectorHeader() {
+function InspectorHeader({
+  mode,
+  editable,
+  onChangeMode,
+}: {
+  mode: InspectorMode
+  editable: boolean
+  onChangeMode: (next: InspectorMode) => void
+}) {
   return (
     <div className="flex h-10 items-center gap-2 border-border border-b px-3 text-text-muted">
       <PanelRight size={14} aria-hidden="true" />
       <span className="text-xs uppercase tracking-wide">Inspector</span>
+      {editable && (
+        <div className="ml-auto flex items-center gap-1">
+          <ModeButton
+            active={mode === "inspect"}
+            onClick={() => onChangeMode("inspect")}
+          >
+            Inspect
+          </ModeButton>
+          <ModeButton
+            active={mode === "edit"}
+            onClick={() => onChangeMode("edit")}
+          >
+            <Pencil size={11} aria-hidden="true" /> Edit
+          </ModeButton>
+        </div>
+      )}
     </div>
   )
+}
+
+function ModeButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex h-6 items-center gap-1 rounded px-2 text-[11px] uppercase tracking-wide ${
+        active
+          ? "bg-surface-elevated text-text"
+          : "text-text-muted hover:text-text"
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function InspectorEditPane({
+  selected,
+  map,
+}: {
+  selected: SelectedNode
+  map: FeatureMap | null
+}) {
+  if (!map) return null
+  if (selected.kind !== "job" && selected.kind !== "brief") return null
+  const node =
+    selected.kind === "job"
+      ? map.jobs.find(n => n.id === selected.id)
+      : map.briefs.find(n => n.id === selected.id)
+  if (!node) {
+    return (
+      <div className="grid flex-1 place-items-center px-6 text-center">
+        <p className="text-text-muted text-sm">
+          Selected node was removed in the latest map.
+        </p>
+      </div>
+    )
+  }
+  return <Editor key={node.path} path={node.path} kind={selected.kind} />
 }
 
 function InspectorPlaceholder({

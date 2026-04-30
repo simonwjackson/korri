@@ -6,12 +6,13 @@ import type { FeatureMap, SelectedNode } from "../../types"
  *
  * Per the React compound-component pattern, the Root (AppShell) creates
  * state and renders this Provider; every other compound (TopBar,
- * LeftRail, Canvas, Inspector, Diagnostics) reads via `useAppShell()`.
+ * LeftRail, Canvas, Inspector, Diagnostics, Editor) reads via
+ * `useAppShell()`.
  *
- * Selection lives in the contract because LeftRail (and later Graph,
- * Inspector, Editor) all read or mutate it. Transient widget-local UI
- * state (filter input, scroll position, hover) stays inside individual
- * components.
+ * Selection lives here because LeftRail / Graph / Inspector / Editor
+ * all read or mutate it. The dirty flag lives here so AppShell can
+ * intercept selection changes that would discard unsaved editor state
+ * — Editor lifts its dirty bit up via setIsDirty.
  */
 
 export type AppShellStatus = "loading" | "ready" | "missing" | "error"
@@ -23,6 +24,8 @@ export type AppShellContextValue = {
   selected: SelectedNode | null
   setSelected: (next: SelectedNode | null) => void
   reload: () => Promise<void>
+  isDirty: boolean
+  setIsDirty: (next: boolean) => void
 }
 
 const AppShellCtx = createContext<AppShellContextValue | null>(null)
