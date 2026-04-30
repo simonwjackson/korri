@@ -196,7 +196,7 @@ The adapter is the only place that knows the Tiptap extension set. `RichEditor` 
 - The adapter can round-trip the current editable corpus without dropping supported content.
 - Tests document the canonical Markdown output that Rich mode will emit after actual edits.
 
-- [ ] **Unit 2: Detect unsupported Markdown and protect Rich mode**
+- [x] **Unit 2: Detect unsupported Markdown and protect Rich mode**
 
 **Goal:** Add a small support-detection layer so Rich mode can warn or block when a body contains syntax outside the tested serializer contract.
 
