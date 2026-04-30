@@ -4,13 +4,21 @@
  * Aesthetic guardrails (apply to every component and view in this app):
  *
  * - One sans family (Geist Variable), one mono family (Geist Mono Variable).
- *   Never mix display fonts. Maximum two type weights visible at once.
+ *   Maximum two type weights visible at once.
  * - Six-step neutral scale, single accent, semantic statuses. No ad-hoc
  *   colors in components — pull from these tokens.
- * - No drop shadows on flat content surfaces. One subtle elevation only.
+ * - No drop shadows on flat content surfaces. Use a 1px border on
+ *   elevated surfaces instead. (Tailwind: `border border-border bg-surface-elevated`.)
  * - No layout-shifting hovers. Hover changes color/opacity, not size.
  * - Maximum three accent colors visible in any single view.
  * - Honour `prefers-reduced-motion`; durations stay between 120–200ms.
+ *
+ * Type scale used in this app (Tailwind defaults):
+ *   text-xs   12px — chips, secondary metadata
+ *   text-sm   14px — body, controls, list rows
+ *   text-base 16px — primary body, inspector copy
+ *   text-lg   18px — section titles
+ *   text-2xl  24px — view titles
  *
  * Source roots — the @tailwindcss/vite plugin scans these for utility
  * classes used inside this app. Paths are relative to this file.
@@ -30,30 +38,45 @@
 	--color-surface: oklch(0.21 0 0);
 	--color-surface-elevated: oklch(0.24 0 0);
 	--color-border: oklch(0.3 0 0);
+	--color-border-strong: oklch(0.36 0 0);
 	--color-text-muted: oklch(0.62 0 0);
 	--color-text: oklch(0.94 0 0);
 
-	/* Accent */
+	/* Accent (single hue, low chroma, dev-tool calm). */
 	--color-accent: oklch(0.74 0.14 240);
 	--color-accent-muted: oklch(0.55 0.1 240);
 
-	/* Status (kept minimal for Unit 1; expanded in Unit 2). */
-	--color-status-active: oklch(0.74 0.14 150);
-	--color-status-warning: oklch(0.78 0.16 80);
-	--color-status-error: oklch(0.66 0.2 25);
+	/* Semantic statuses — each maps to a node/scenario state in the feature map. */
+	--color-status-draft: oklch(0.62 0 0); /* same as text-muted; "no signal" */
+	--color-status-planned: oklch(0.74 0.14 240); /* accent; "scheduled" */
+	--color-status-active: oklch(0.74 0.14 150); /* green; "in progress" */
+	--color-status-implemented: oklch(0.66 0.13 160); /* deeper green; "done" */
+	--color-status-fixme: oklch(0.78 0.16 80); /* amber; "pending behavior" */
+	--color-status-skip: oklch(0.55 0 0); /* mid grey; "intentionally off" */
+	--color-status-error: oklch(0.66 0.2 25); /* red; diagnostic errors */
+	--color-status-warning: oklch(0.78 0.16 80); /* amber; diagnostic warnings */
 }
 
-/* Light variant tokens — toggle by swapping `.theme-dark` for `.theme-light`
- * on the <html> element. Unit 2 wires the toggle UI. */
+/* Light variant — toggle by swapping `.theme-dark` for `.theme-light`
+ * on the <html> element. Unit 8 wires the toggle via the command palette. */
 :where(.theme-light) {
 	--color-bg: oklch(0.99 0 0);
 	--color-surface: oklch(0.97 0 0);
 	--color-surface-elevated: oklch(0.94 0 0);
 	--color-border: oklch(0.88 0 0);
+	--color-border-strong: oklch(0.82 0 0);
 	--color-text-muted: oklch(0.5 0 0);
 	--color-text: oklch(0.18 0 0);
 	--color-accent: oklch(0.55 0.16 240);
 	--color-accent-muted: oklch(0.7 0.1 240);
+	--color-status-draft: oklch(0.5 0 0);
+	--color-status-planned: oklch(0.55 0.16 240);
+	--color-status-active: oklch(0.55 0.14 150);
+	--color-status-implemented: oklch(0.48 0.13 160);
+	--color-status-fixme: oklch(0.62 0.16 80);
+	--color-status-skip: oklch(0.62 0 0);
+	--color-status-error: oklch(0.55 0.2 25);
+	--color-status-warning: oklch(0.62 0.16 80);
 }
 
 html,
