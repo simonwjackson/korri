@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+/*
+ * Source roots that contain Shift-themed components and any consumer routes.
+ * `@import "tailwindcss"` makes this file Tailwind-aware so its `@theme` and
+ * `@custom-variant` blocks merge into the bundle's compiled theme; the Vite
+ * plugin dedupes Tailwind's base across files in the same bundle.
+ */
+@source "../../../products/**/*.{ts,tsx}";
+@source "../../../shared/**/*.{ts,tsx}";
+@source "../../../deploy/**/*.{ts,tsx,html}";
+
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {

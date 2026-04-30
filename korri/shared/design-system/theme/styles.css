@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/*
+ * Explicit source roots so Tailwind v4 scans the whole korri tree regardless
+ * of which CSS file is the entry point. Paths are relative to this file.
+ */
+@source "../../../products/**/*.{ts,tsx}";
+@source "../../../shared/**/*.{ts,tsx}";
+@source "../../../deploy/**/*.{ts,tsx,html}";
+
 @theme {
 	--font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
 }
