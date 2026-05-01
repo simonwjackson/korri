@@ -250,8 +250,8 @@ function StatusCluster() {
       aria-hidden
       className="sunlit-status-cluster flex shrink-0 items-center gap-6 text-lg text-[color:var(--ink-dim)]"
     >
-      <Sun className="sunlit-status-icon" strokeWidth={2} />
       <span className="text-xl font-bold tabular-nums">4:24 PM</span>
+      <Sun className="sunlit-status-icon" strokeWidth={2} />
       <Wifi className="sunlit-status-icon" strokeWidth={2} />
       <Battery className="sunlit-status-icon" strokeWidth={2} />
       <img
@@ -270,7 +270,7 @@ function StatusCluster() {
 
 function BottomBar() {
   return (
-    <div className="sunlit-bottom-bar flex shrink-0 items-center justify-between gap-6 px-12 py-5">
+    <div className="sunlit-bottom-bar flex shrink-0 items-center justify-between gap-8 px-12 py-5">
       <MenuButton />
       <HudCluster />
     </div>
@@ -421,22 +421,21 @@ function SunlitStyles() {
         --surface: #E8E6E1;
         --surface-raised: #F2F0EB;
         --surface-sunk: #DDDAD4;
-        /* Ink palette is the theme's closest warm equivalent to #444
-           (stone-700, #44403C). Dim/faint/rule share the same RGB at
-           lower alpha so the secondary < primary contrast relationship
-           holds when blended over --surface. */
+        /* Ink palette: stone-700 (#44403C) base for primary text; the
+           dim/faint/rule tokens are pre-blended-over-surface solids so
+           the entire palette is fully opaque. Order of dimness:
+           --ink (#44403C) < --ink-dim (#827F7B) < --ink-faint (#A6A49F)
+           < --rule (#D4D2CD). */
         --ink: #44403C;
-        --ink-dim: rgba(68, 64, 60, 0.62);
-        --ink-faint: rgba(68, 64, 60, 0.40);
-        --rule: rgba(68, 64, 60, 0.12);
+        --ink-dim: #827F7B;
+        --ink-faint: #A6A49F;
+        --rule: #D4D2CD;
 
         --focus-glow: hsl(252, 75%, 70%);
-        --focus-glow-soft: hsla(252, 75%, 70%, 0.45);
         --last-played-eyebrow: #4FAE3E;
 
         --pill-bg: #FFFFFF;
         --pill-fg: #44403C;
-        --pill-shadow: 0 1px 2px rgba(68, 64, 60, 0.06);
 
         /* Glyph background tracks --ink-dim so the chip badge sits at
            the same visual weight as its label, instead of reading as a
@@ -475,17 +474,15 @@ function SunlitStyles() {
         --surface-raised: #161D2F;
         --surface-sunk: #0A0E1A;
         --ink: #ECE7DE;
-        --ink-dim: rgba(236, 231, 222, 0.62);
-        --ink-faint: rgba(236, 231, 222, 0.34);
-        --rule: rgba(236, 231, 222, 0.12);
+        --ink-dim: #989797;
+        --ink-faint: #5A5C62;
+        --rule: #2A2D38;
 
         --focus-glow: hsl(252, 80%, 75%);
-        --focus-glow-soft: hsla(252, 80%, 75%, 0.55);
         --last-played-eyebrow: #6FCD5C;
 
         --pill-bg: #1A2238;
         --pill-fg: #ECE7DE;
-        --pill-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 
         --hud-glyph-bg: var(--ink-dim);
         --hud-glyph-fg: #0F1422;
@@ -566,7 +563,6 @@ function SunlitStyles() {
         border-radius: 9999px;
         background: var(--pill-bg);
         color: var(--pill-fg);
-        box-shadow: var(--pill-shadow);
         cursor: pointer;
         transition:
           background 180ms ease,
@@ -574,10 +570,7 @@ function SunlitStyles() {
           transform 180ms ease;
       }
       [data-exploration="sunlit"] .sunlit-pill:focus-visible {
-        box-shadow:
-          0 0 0 3px var(--focus-glow),
-          0 0 16px 3px var(--focus-glow-soft),
-          var(--pill-shadow);
+        box-shadow: 0 0 0 3px var(--focus-glow);
         transform: translateY(-1px);
       }
       [data-exploration="sunlit"] .sunlit-pill-icon {
@@ -647,7 +640,6 @@ function SunlitStyles() {
         padding: calc(4 * var(--spacing)) calc(6 * var(--spacing));
         gap: calc(4 * var(--spacing));
         background: var(--pill-bg);
-        box-shadow: var(--pill-shadow);
       }
       [data-exploration="sunlit"] .sunlit-search-pill:focus-visible .sunlit-search-placeholder {
         max-width: 40cqi;
@@ -676,9 +668,7 @@ function SunlitStyles() {
         border-radius: 9999px;
       }
       [data-exploration="sunlit"] .sunlit-menu-button:focus-visible .hud-glyph {
-        box-shadow:
-          0 0 0 3px var(--focus-glow),
-          0 0 14px 3px var(--focus-glow-soft);
+        box-shadow: 0 0 0 3px var(--focus-glow);
         transform: scale(1.05);
       }
       [data-exploration="sunlit"] .sunlit-menu-glyph-icon {
