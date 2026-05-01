@@ -15,6 +15,13 @@ export const testResultArtifactPaths = {
   component: `${artifactRoot}/test-results/component`,
 } as const
 
+export const demoVideoArtifactPath = `${artifactRoot}/demo-videos` as const
+
+export const generatedArtifactPaths = {
+  bddPlaywright: `${artifactRoot}/generated/bdd/playwright`,
+  bddArgo: `${artifactRoot}/generated/bdd/argo`,
+} as const
+
 export const tempArtifactPath = `${artifactRoot}/tmp` as const
 
 export const artifactLayout = {
@@ -22,6 +29,8 @@ export const artifactLayout = {
   build: buildArtifactPaths,
   reports: reportArtifactPaths,
   testResults: testResultArtifactPaths,
+  demoVideos: demoVideoArtifactPath,
+  generated: generatedArtifactPaths,
   tmp: tempArtifactPath,
 } as const
 
@@ -30,5 +39,7 @@ export const supportedArtifactPaths = [
   ...Object.values(artifactLayout.build),
   ...Object.values(artifactLayout.reports),
   ...Object.values(artifactLayout.testResults),
+  artifactLayout.demoVideos,
+  ...Object.values(artifactLayout.generated),
   artifactLayout.tmp,
 ] as const

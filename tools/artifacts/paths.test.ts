@@ -21,6 +21,11 @@ describe("artifact layout", () => {
         e2e: "out/test-results/e2e",
         component: "out/test-results/component",
       },
+      demoVideos: "out/demo-videos",
+      generated: {
+        bddPlaywright: "out/generated/bdd/playwright",
+        bddArgo: "out/generated/bdd/argo",
+      },
       tmp: "out/tmp",
     })
   })

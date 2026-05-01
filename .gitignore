@@ -21,4 +21,5 @@ CLAUDE.local.md
 
 /korri/deploy/portal/routeTree.gen.ts
 /korri/products/*/features/**/e2e/generated/
+/.argo/
 /old-ui
