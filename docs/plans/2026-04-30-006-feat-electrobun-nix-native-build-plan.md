@@ -101,7 +101,7 @@ Stable IDs carried from `docs/brainstorms/2026-04-30-electrobun-nix-native-build
 | Stage 1 runtime check evolves from probe-only into patch-then-probe; the existing `nix-ld` recommendation is preserved as fallback advice when patching itself fails | Existing tests document a contract; refactor preserves observable behavior on the success path while silently fixing what was previously a hard fail. | Test file under `tools/desktop/electrobun-runtime-check.test.ts` needs material rewriting; care needed to keep coverage of the non-NixOS-Linux failure modes. |
 | Stage 2 hermetic build via fixed-output `bun install --ignore-scripts` + per-platform fixed-output fetches of upstream Electrobun CLI and core tarballs, pre-staged into `node_modules/electrobun/{bin,dist-${OS}-${ARCH}}/` before invoking `electrobun build` inside the sandbox | The Electrobun CLI's `ensureCoreDependencies` skips network fetch if the platform `dist-` tree exists; pre-staging neutralizes its network requirement without patching upstream code. | Three fixed-output fetches per supported platform (npm deps + CLI + core); each requires a hash entry in the repo. |
 | Stage 2 expressed as a chain of small derivations: `bun-deps` (FOD) → `electrobun-binaries-<system>` (FOD per platform) → `korri-portal` (Vite build) → `korri-desktop` (composes them, runs `electrobun build`, patches, wraps) | Each step caches independently; portal rebuilds don't redo the npm fetch; bumping Electrobun only invalidates the binaries node. | More files in the flake than a single monolithic derivation. |
-| Stage 2 wraps the launcher with `wrapProgram --prefix LD_LIBRARY_PATH` rather than only setting RPATH | WebKitGTK loads GIO modules and gdk-pixbuf loaders at runtime that RPATH alone does not cover; explicit `LD_LIBRARY_PATH` plus `XDG_DATA_DIRS` and `GIO_EXTRA_MODULES` is the established pattern for GTK apps in Nixpkgs. | Slightly larger runtime closure; correct GTK behavior end-to-end. |
+| Stage 2 wraps the launcher with `wrapProgram --prefix LD_LIBRARY_PATH` rather than only setting executable RPATH | WebKitGTK loads GIO modules and gdk-pixbuf loaders at runtime that RPATH alone does not cover; explicit `LD_LIBRARY_PATH` plus `XDG_DATA_DIRS` and `GIO_EXTRA_MODULES` is the established pattern for GTK apps in Nixpkgs. During implementation, setting RPATH on Electrobun/Bun executables caused a segfault; executables are patched with interpreter only, while shared objects receive RPATH. | Slightly larger runtime closure; correct GTK behavior end-to-end. |
 | `apps.<system>.default` and `apps.<system>.korri-desktop` both point at the same wrapper, so `nix run github:<acct>/<repo>` works without a fragment | Smallest UX for users; the named alias supports future siblings (e.g., `feature-map-explorer`) without breaking the default. | Default alias adds a forward-compat constraint; if a future Korri default app diverges, this becomes a renaming task. |
 | Hermetic Bun install via a hand-rolled FOD derivation around `bun install --ignore-scripts` keyed on `bun.lock`, rather than `bun2nix` or `buildNpmPackage` | No third-party dependency; Bun's frozen-lockfile install is reproducible enough; `--ignore-scripts` defeats Electrobun's network postinstall, which is solved separately by the binaries derivation. | If Bun's lockfile format or hashing semantics change, the FOD hash format must follow; documented in the bump runbook. |
 | aarch64-linux verification in CI uses QEMU emulation by default with a self-hosted ARM runner as an opt-in upgrade | Lowest-friction path until org-level ARM runners exist; QEMU-emulated builds are slow but acceptable for a per-PR check. | Slower CI; future swap when ARM runners are available is a one-line change. |
@@ -335,7 +335,7 @@ flowchart LR
 **Verification:**
 - Combined with Unit 1, `just desktop-runtime-check` resolves a NixOS dynamic-linker failure to "ready" inside `nix develop`.
 
-- [ ] **Unit 5: Hermetic `bun-deps` fixed-output derivation**
+- [x] **Unit 5: Hermetic `bun-deps` fixed-output derivation**
 
 **Goal:** Produce `node_modules` reproducibly inside the Nix sandbox by running `bun install --ignore-scripts` against the locked `bun.lock`. `--ignore-scripts` neutralizes Electrobun's network postinstall; the binaries derivation (Unit 6) handles that separately.
 
@@ -360,7 +360,7 @@ flowchart LR
 **Verification:**
 - `nix build .#bun-deps` is reproducible across two clean machines (same hash).
 
-- [ ] **Unit 6: Fixed-output Electrobun CLI + core fetches and version pinning**
+- [x] **Unit 6: Fixed-output Electrobun CLI + core fetches and version pinning**
 
 **Goal:** Per platform (`x86_64-linux`, `aarch64-linux`), fetch and extract the upstream CLI tarball and the core tarball as fixed-output derivations, plus a small bumper script that updates the pinned hashes when Electrobun is upgraded.
 
@@ -390,7 +390,7 @@ flowchart LR
 - The four binary derivations build offline once their hashes are set.
 - Bumping Electrobun is a single file diff in `nix/versions.nix` plus a `bun.lock` change.
 
-- [ ] **Unit 7: Hermetic `korri-portal` and `korri-desktop` derivations**
+- [x] **Unit 7: Hermetic `korri-portal` and `korri-desktop` derivations**
 
 **Goal:** Compose the Vite portal build, the bun-deps tree, and the Electrobun CLI/core into a single derivation that produces a wrapped `bin/korri-desktop` launcher with all GTK/WebKit runtime libraries available.
 
@@ -418,7 +418,7 @@ flowchart LR
 
 **Test scenarios:**
 - Verification: `nix build .#korri-desktop` on `x86_64-linux` produces `result/bin/korri-desktop`.
-- Verification: `result/bin/korri-desktop` is the wrapper, and the inner unwrapped launcher under `result/share/korri-desktop/` has its interpreter set to the Nix-store dynamic loader (verifiable via `patchelf --print-interpreter`).
+- Verification: `result/bin/korri-desktop` is the wrapper, and ELF files under `result/share/korri-desktop/` are either static launchers or patched with Nix-store interpreter/RPATH as appropriate (verifiable with `file` and `patchelf --print-interpreter` where an `.interp` section exists).
 - Verification: same on `aarch64-linux` (build under emulation acceptable for CI).
 - Edge case: bun-deps hash mismatched → derivation fails before reaching `electrobun build`, with a hash error rather than a runtime crash.
 - Integration verification (manual or scripted): `nix run .#korri-desktop` on a NixOS host with a working GUI opens a window that loads `127.0.0.1:<port>/`, calls `/api/health`, and renders the Korri portal. Same-origin loopback invariant from `docs/solutions/best-practices/electrobun-desktop-wrapper-loopback-2026-05-01.md` holds inside the wrapped binary.
@@ -427,7 +427,7 @@ flowchart LR
 - `nix build .#korri-desktop` succeeds for both supported systems.
 - The wrapped launcher runs on a clean NixOS host with only `nix` installed.
 
-- [ ] **Unit 8: Flake `apps` outputs and named alias**
+- [x] **Unit 8: Flake `apps` outputs and named alias**
 
 **Goal:** Expose `apps.<system>.default` and `apps.<system>.korri-desktop` so `nix run github:<acct>/<repo>` and `nix run github:<acct>/<repo>#korri-desktop` both launch the wrapped binary.
 
@@ -452,7 +452,7 @@ flowchart LR
 **Verification:**
 - `nix run github:<acct>/<repo>` on a clean Linux box opens the desktop app once Stage 2 CI uploads/promotes the trunk commit.
 
-- [ ] **Unit 9: Stage 1 CI workflow**
+- [x] **Unit 9: Stage 1 CI workflow**
 
 **Goal:** Prove on every PR that the `nix develop` desktop dev loop works on Linux.
 
@@ -476,7 +476,7 @@ flowchart LR
 **Verification:**
 - A PR touching nothing relevant skips the job (path filter); a PR touching desktop code runs it; both states are correct in CI.
 
-- [ ] **Unit 10: Stage 2 CI workflow**
+- [x] **Unit 10: Stage 2 CI workflow**
 
 **Goal:** Prove on every PR that `nix build .#korri-desktop` succeeds for both architectures, and on trunk that `nix run github:<acct>/<repo>` works for a remote consumer.
 

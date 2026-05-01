@@ -8,6 +8,7 @@
 
   outputs =
     {
+      self,
       nixpkgs,
       flake-utils,
       ...
@@ -19,6 +20,13 @@
           inherit system;
           config.allowUnfree = true;
         };
+
+        versions = import ./nix/versions.nix;
+        supportedDesktopSystems = [
+          "x86_64-linux"
+          "aarch64-linux"
+        ];
+        isSupportedDesktopSystem = builtins.elem system supportedDesktopSystems;
 
         commonPackages = with pkgs; [
           bash
@@ -34,19 +42,23 @@
           caddy
         ];
 
-        linuxDesktopRuntimeLibraries = pkgs.lib.optionals pkgs.stdenv.isLinux (with pkgs; [
-          gtk3
-          webkitgtk_4_1
-          libayatana-appindicator
-          librsvg
-          glib
-          glibc
-          gdk-pixbuf
-          at-spi2-core
-          pango
-          cairo
-          gsettings-desktop-schemas
-        ]);
+        linuxDesktopRuntimeLibraries = pkgs.lib.optionals pkgs.stdenv.isLinux (
+          with pkgs;
+          [
+            gtk3
+            webkitgtk_4_1
+            libayatana-appindicator
+            librsvg
+            glib
+            glibc
+            gdk-pixbuf
+            at-spi2-core
+            pango
+            cairo
+            gsettings-desktop-schemas
+            glib-networking
+          ]
+        );
 
         linuxDesktopPackages = pkgs.lib.optionals pkgs.stdenv.isLinux (
           (with pkgs; [
@@ -74,8 +86,73 @@
           export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
 
         '';
+
+        bunDepsSrc = pkgs.lib.fileset.toSource {
+          root = ./.;
+          fileset = pkgs.lib.fileset.unions [
+            ./package.json
+            ./bun.lock
+          ];
+        };
+
+        bunDeps = import ./nix/bun-deps.nix {
+          inherit pkgs;
+          lib = pkgs.lib;
+          src = bunDepsSrc;
+          outputHash = versions.bunDepsHash;
+        };
+
+        korriPortal = import ./nix/korri-portal.nix {
+          inherit pkgs;
+          src = self;
+          inherit bunDeps;
+        };
+
+        electrobunBinaries =
+          if isSupportedDesktopSystem then
+            import ./nix/electrobun-binaries.nix {
+              inherit pkgs system versions;
+              lib = pkgs.lib;
+            }
+          else
+            null;
+
+        korriDesktop =
+          if isSupportedDesktopSystem then
+            import ./nix/korri-desktop.nix {
+              inherit pkgs system bunDeps;
+              lib = pkgs.lib;
+              src = self;
+              electrobunBinaries = electrobunBinaries;
+              portal = korriPortal;
+              runtimeLibraries = linuxDesktopRuntimeLibraries;
+            }
+          else
+            null;
       in
       {
+        packages = {
+          bun-deps = bunDeps;
+          korri-portal = korriPortal;
+        }
+        // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
+          electrobun-cli = electrobunBinaries.cli;
+          electrobun-core = electrobunBinaries.core;
+          korri-desktop = korriDesktop;
+          default = korriDesktop;
+        };
+
+        apps = pkgs.lib.optionalAttrs isSupportedDesktopSystem {
+          default = {
+            type = "app";
+            program = "${korriDesktop}/bin/korri-desktop";
+          };
+          korri-desktop = {
+            type = "app";
+            program = "${korriDesktop}/bin/korri-desktop";
+          };
+        };
+
         devShells.ci = pkgs.mkShell {
           buildInputs = commonPackages;
           shellHook = commonShellHook + ''

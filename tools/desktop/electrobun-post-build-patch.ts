@@ -1,14 +1,20 @@
-import { existsSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs"
-import { dirname, join, relative, sep } from "node:path"
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs"
+import { join, relative, sep } from "node:path"
 import { logger } from "@shared/logger"
 import { buildArtifactPaths } from "../artifacts/paths"
 import {
   applyPatchPlan,
   hashBuffer,
   isElfBuffer,
-  planPatch,
   type PatchDeps,
   type PatchMarker,
+  planPatch,
 } from "./electrobun-patcher"
 
 interface ManifestEntry extends PatchMarker {}
@@ -47,7 +53,9 @@ function readManifest(manifestPath: string): PatchManifest {
   }
 
   try {
-    const parsed = JSON.parse(readFileSync(manifestPath, "utf8")) as Partial<PatchManifest>
+    const parsed = JSON.parse(
+      readFileSync(manifestPath, "utf8"),
+    ) as Partial<PatchManifest>
     if (parsed.files && typeof parsed.files === "object") {
       return { files: parsed.files as Record<string, ManifestEntry> }
     }
@@ -72,7 +80,11 @@ function findFiles(directory: string): string[] {
     const entryPath = join(directory, entry.name)
     if (entry.isDirectory()) {
       files.push(...findFiles(entryPath))
-    } else if (entry.isFile() && entry.name !== manifestFileName && !entry.name.endsWith(".patched")) {
+    } else if (
+      entry.isFile() &&
+      entry.name !== manifestFileName &&
+      !entry.name.endsWith(".patched")
+    ) {
       files.push(entryPath)
     }
   }
@@ -85,8 +97,10 @@ export function runPostBuildPatch(
   deps: PatchDeps = {},
 ): PostBuildPatchReport {
   const buildRoot = options.buildRoot ?? buildArtifactPaths.electrobun
-  const interpreter = options.interpreter ?? process.env.KORRI_NIX_LD_INTERPRETER
-  const libraryPath = options.libraryPath ?? process.env.KORRI_NIX_LD_LIBRARY_PATH
+  const interpreter =
+    options.interpreter ?? process.env.KORRI_NIX_LD_INTERPRETER
+  const libraryPath =
+    options.libraryPath ?? process.env.KORRI_NIX_LD_LIBRARY_PATH
   const messages: string[] = []
   const files: PostBuildPatchedFile[] = []
 
@@ -108,7 +122,11 @@ export function runPostBuildPatch(
     const fileSha = hashBuffer(buffer)
     const manifestEntry = manifest.files[relativePath]
     if (manifestEntry?.sha === fileSha) {
-      files.push({ path: filePath, status: "skipped", message: "already patched" })
+      files.push({
+        path: filePath,
+        status: "skipped",
+        message: "already patched",
+      })
       continue
     }
 
@@ -120,6 +138,10 @@ export function runPostBuildPatch(
       marker: manifestEntry,
       interpreter,
       libraryPath,
+      elfKind:
+        filePath.endsWith(".so") || filePath.includes(".so.")
+          ? "shared-object"
+          : "executable",
     })
     const result = applyPatchPlan(patchPlan, deps)
 
@@ -173,7 +195,9 @@ if (import.meta.main) {
     process.stderr.write(`${message}\n`)
   }
   for (const file of report.files) {
-    process.stderr.write(`${file.status.toUpperCase()} ${file.path}: ${file.message}\n`)
+    process.stderr.write(
+      `${file.status.toUpperCase()} ${file.path}: ${file.message}\n`,
+    )
   }
 
   process.exit(report.ok ? 0 : 1)

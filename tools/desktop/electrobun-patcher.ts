@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { createHash } from "node:crypto"
+import { existsSync, readFileSync, writeFileSync } from "node:fs"
 
 export interface PatchMarker {
   sha: string
@@ -16,6 +16,7 @@ export interface PatchInput {
   marker?: PatchMarker | null
   interpreter?: string
   libraryPath?: string
+  elfKind?: "executable" | "shared-object"
 }
 
 export type PatchPlan =
@@ -98,7 +99,9 @@ export function readPatchMarker(markerPath: string): PatchMarker | null {
   }
 
   try {
-    const parsed = JSON.parse(readFileSync(markerPath, "utf8")) as Partial<PatchMarker>
+    const parsed = JSON.parse(
+      readFileSync(markerPath, "utf8"),
+    ) as Partial<PatchMarker>
     if (
       typeof parsed.sha === "string" &&
       typeof parsed.patchedAt === "string" &&
@@ -140,6 +143,10 @@ export function buildPatchInputFromFile(
     filePath,
     fileExists: true,
     isElf: isElfBuffer(buffer),
+    elfKind:
+      filePath.endsWith(".so") || filePath.includes(".so.")
+        ? "shared-object"
+        : "executable",
     fileSha: hashBuffer(buffer),
     marker: readPatchMarker(markerPath),
     interpreter: options.interpreter ?? process.env.KORRI_NIX_LD_INTERPRETER,
@@ -193,6 +200,11 @@ export function planPatch(input: PatchInput): PatchPlan {
     ? "binary changed since last patch"
     : "binary has not been patched"
   const markerPath = `${input.filePath}.patched`
+  const elfKind = input.elfKind ?? "executable"
+  const args =
+    elfKind === "shared-object"
+      ? ["--set-rpath", input.libraryPath, input.filePath]
+      : ["--set-interpreter", input.interpreter, input.filePath]
 
   return {
     status: "patch",
@@ -200,13 +212,7 @@ export function planPatch(input: PatchInput): PatchPlan {
     reason,
     interpreter: input.interpreter,
     rpath: input.libraryPath,
-    args: [
-      "--set-interpreter",
-      input.interpreter,
-      "--set-rpath",
-      input.libraryPath,
-      input.filePath,
-    ],
+    args,
     markerPath,
   }
 }
@@ -274,5 +280,8 @@ export function patchFile(
   options: BuildPatchInputOptions = {},
   deps: PatchDeps = {},
 ): PatchResult {
-  return applyPatchPlan(planPatch(buildPatchInputFromFile(filePath, options)), deps)
+  return applyPatchPlan(
+    planPatch(buildPatchInputFromFile(filePath, options)),
+    deps,
+  )
 }

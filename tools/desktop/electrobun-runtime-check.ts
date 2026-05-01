@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { logger } from "@shared/logger"
-import { patchFile, type PatchResult } from "./electrobun-patcher"
+import { type PatchResult, patchFile } from "./electrobun-patcher"
 
 export interface ElectrobunProbeResult {
   exitCode: number
@@ -41,7 +41,9 @@ function probeOutput(probe: ElectrobunProbeResult): string {
   return `${probe.stdout}\n${probe.stderr}`
 }
 
-function failedProbeReport(probe: ElectrobunProbeResult): ElectrobunRuntimeReport {
+function failedProbeReport(
+  probe: ElectrobunProbeResult,
+): ElectrobunRuntimeReport {
   const output = probeOutput(probe)
   const messages: string[] = []
   const recommendations: string[] = []

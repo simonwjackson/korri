@@ -1,7 +1,7 @@
+import { describe, expect, test } from "bun:test"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { describe, expect, test } from "bun:test"
 import {
   applyPatchPlan,
   buildPatchInputFromFile,
@@ -15,7 +15,10 @@ function makeTempDir() {
 }
 
 function writeElf(path: string, body = "original") {
-  writeFileSync(path, Buffer.concat([Buffer.from([0x7f, 0x45, 0x4c, 0x46]), Buffer.from(body)]))
+  writeFileSync(
+    path,
+    Buffer.concat([Buffer.from([0x7f, 0x45, 0x4c, 0x46]), Buffer.from(body)]),
+  )
 }
 
 describe("electrobun patcher", () => {
@@ -36,8 +39,6 @@ describe("electrobun patcher", () => {
     expect(plan.args).toEqual([
       "--set-interpreter",
       "/nix/store/ld-linux-x86-64.so.2",
-      "--set-rpath",
-      "/nix/store/gtk/lib:/nix/store/webkit/lib",
       "/repo/node_modules/electrobun/bin/electrobun",
     ])
   })
@@ -59,6 +60,9 @@ describe("electrobun patcher", () => {
     })
 
     expect(plan.status).toBe("skip")
+    if (plan.status !== "skip") {
+      throw new Error("expected skip plan")
+    }
     expect(plan.reason).toBe("already patched")
   })
 
@@ -79,6 +83,9 @@ describe("electrobun patcher", () => {
     })
 
     expect(plan.status).toBe("patch")
+    if (plan.status !== "patch") {
+      throw new Error("expected patch plan")
+    }
     expect(plan.reason).toBe("binary changed since last patch")
   })
 
@@ -116,6 +123,9 @@ describe("electrobun patcher", () => {
     })
 
     expect(plan.status).toBe("error")
+    if (plan.status !== "error") {
+      throw new Error("expected error plan")
+    }
     expect(plan.recommendations).toContain(
       "Run inside nix develop; the dev shell exposes patchelf inputs.",
     )
@@ -144,7 +154,7 @@ describe("electrobun patcher", () => {
 
       expect(result.ok).toBe(true)
       expect(calls).toEqual([
-        ["patchelf", "--set-interpreter", "/ld", "--set-rpath", "/lib", filePath],
+        ["patchelf", "--set-interpreter", "/ld", filePath],
       ])
       const marker = readPatchMarker(`${filePath}.patched`)
       expect(marker?.sha).toBe(
@@ -181,6 +191,28 @@ describe("electrobun patcher", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+
+  test("plans rpath-only patches for shared objects", () => {
+    const plan = planPatch({
+      filePath: "/repo/out/build/electrobun/libNativeWrapper.so",
+      fileExists: true,
+      isElf: true,
+      elfKind: "shared-object",
+      fileSha: "before",
+      interpreter: "/ld",
+      libraryPath: "/lib",
+    })
+
+    expect(plan.status).toBe("patch")
+    if (plan.status !== "patch") {
+      throw new Error("expected patch plan")
+    }
+    expect(plan.args).toEqual([
+      "--set-rpath",
+      "/lib",
+      "/repo/out/build/electrobun/libNativeWrapper.so",
+    ])
   })
 
   test("builds file input from ELF and non-ELF files", () => {

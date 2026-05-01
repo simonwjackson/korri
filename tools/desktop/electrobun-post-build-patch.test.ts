@@ -1,19 +1,31 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { describe, expect, test } from "bun:test"
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { describe, expect, test } from "bun:test"
-import { runPostBuildPatch } from "./electrobun-post-build-patch"
 import type { PatchDeps } from "./electrobun-patcher"
+import { runPostBuildPatch } from "./electrobun-post-build-patch"
 
 function makeTempDir() {
   return mkdtempSync(join(tmpdir(), "korri-electrobun-post-build-"))
 }
 
 function writeElf(path: string, body = "original") {
-  writeFileSync(path, Buffer.concat([Buffer.from([0x7f, 0x45, 0x4c, 0x46]), Buffer.from(body)]))
+  writeFileSync(
+    path,
+    Buffer.concat([Buffer.from([0x7f, 0x45, 0x4c, 0x46]), Buffer.from(body)]),
+  )
 }
 
-function depsForMutatingPatch(filesToMutate: string[], calls: string[][] = []): PatchDeps {
+function depsForMutatingPatch(
+  filesToMutate: string[],
+  calls: string[][] = [],
+): PatchDeps {
   return {
     spawnSync(command, args) {
       calls.push([command, ...args])
@@ -45,10 +57,19 @@ describe("post-build electrobun patch", () => {
 
       expect(report.ok).toBe(true)
       expect(calls).toHaveLength(2)
-      expect(report.files.filter(file => file.status === "applied")).toHaveLength(2)
-      expect(report.files.some(file => file.path.endsWith("electrobun.cjs"))).toBe(false)
-      const manifest = JSON.parse(readFileSync(join(dir, ".patched-manifest.json"), "utf8"))
-      expect(Object.keys(manifest.files).sort()).toEqual(["app", "nested-helper"])
+      expect(
+        report.files.filter(file => file.status === "applied"),
+      ).toHaveLength(2)
+      expect(
+        report.files.some(file => file.path.endsWith("electrobun.cjs")),
+      ).toBe(false)
+      const manifest = JSON.parse(
+        readFileSync(join(dir, ".patched-manifest.json"), "utf8"),
+      )
+      expect(Object.keys(manifest.files).sort()).toEqual([
+        "app",
+        "nested-helper",
+      ])
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -112,7 +133,11 @@ describe("post-build electrobun patch", () => {
 
   test("treats a missing build root as a successful no-op", () => {
     const dir = join(makeTempDir(), "missing")
-    const report = runPostBuildPatch({ buildRoot: dir, interpreter: "/ld", libraryPath: "/lib" })
+    const report = runPostBuildPatch({
+      buildRoot: dir,
+      interpreter: "/ld",
+      libraryPath: "/lib",
+    })
 
     expect(report.ok).toBe(true)
     expect(report.files).toEqual([])
@@ -146,8 +171,12 @@ describe("post-build electrobun patch", () => {
 
       expect(report.ok).toBe(false)
       expect(calls).toHaveLength(2)
-      expect(report.files.find(file => file.path === bad)?.status).toBe("failed")
-      expect(report.files.find(file => file.path === good)?.status).toBe("applied")
+      expect(report.files.find(file => file.path === bad)?.status).toBe(
+        "failed",
+      )
+      expect(report.files.find(file => file.path === good)?.status).toBe(
+        "applied",
+      )
       expect(existsSync(join(dir, ".patched-manifest.json"))).toBe(true)
     } finally {
       rmSync(dir, { recursive: true, force: true })

@@ -21,7 +21,9 @@ describe("electrobun runtime check", () => {
 
     expect(report.ok).toBe(true)
     expect(report.status).toBe("ready")
-    expect(report.messages).toContain("Electrobun native binary probe succeeded.")
+    expect(report.messages).toContain(
+      "Electrobun native binary probe succeeded.",
+    )
   })
 
   test("skips Linux native probing on non-Linux platforms", () => {

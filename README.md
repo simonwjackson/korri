@@ -54,4 +54,13 @@ just desktop-build
 
 `desktop-smoke`, `desktop-dev`, and `desktop-build` run the portal build first so `out/build/portal` exists. Desktop packaging is intentionally not part of `just build` or `just check` because Electrobun can download and execute platform-native binaries.
 
-On NixOS, run `just desktop-runtime-check` before native launch or packaging. If Electrobun's downloaded Linux binary hits the NixOS dynamic linker stub, enable `nix-ld` for local development or add a wrapper/patchelf/Nix derivation before treating desktop packaging as supported on that machine.
+On NixOS, run desktop commands inside `nix develop`. `just desktop-runtime-check` self-heals Electrobun's downloaded Linux binary by patching it with the dev shell's dynamic linker before re-probing. `nix-ld` is only a fallback if in-flake patching is unavailable.
+
+Remote Linux users can run the desktop app directly with Nix:
+
+```bash
+nix run github:<acct>/<repo>
+nix run github:<acct>/<repo>#korri-desktop
+```
+
+The first run downloads the Nix GTK/WebKit runtime closure, so it can be large. Current `nix run` support targets `x86_64-linux` and `aarch64-linux`.
