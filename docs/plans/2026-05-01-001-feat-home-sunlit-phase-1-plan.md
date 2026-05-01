@@ -1,7 +1,7 @@
 ---
 title: "feat: HomeSunlit exploration — Phase 1 (home rail)"
 type: feat
-status: active
+status: shipped
 date: 2026-05-01
 origin: docs/brainstorms/2026-04-30-shift-home-screen-visual-language-requirements.md
 ---
@@ -181,7 +181,7 @@ Implementation should subscribe via `useInputAction` only for actions present in
 
 ## Implementation Units
 
-- [ ] **Unit 1: Extend `HudButtons` with action selection + glyph characters**
+- [x] **Unit 1: Extend `HudButtons` with action selection + glyph characters** — commit `1996623`
 
 **Goal:** Make `HudButtons` configurable enough that Sunlit can render `+ Options` and `A Continue` (omitting `B Back`) while Hero and Mosaic continue to render `A Continue · B Back · Y Options` byte-identically. Lock the public API so Phases 2 and 3 can extend it without churn.
 
@@ -220,7 +220,7 @@ Implementation should subscribe via `useInputAction` only for actions present in
 
 ---
 
-- [ ] **Unit 2: Scaffold `HomeSunlit.stories.tsx` (root, tokens, viewport presets)**
+- [x] **Unit 2: Scaffold `HomeSunlit.stories.tsx` (root, tokens, viewport presets)** — commit `b841bb4`
 
 **Goal:** Create the file, the `data-exploration="sunlit"` root, both color-mode token blocks, the `container-type: inline-size` declaration, and the Storybook meta with viewport presets. The story renders an empty surface with the cream-grey light background (or deep dark counterpart) — no rail, no chrome yet. This makes Units 3 and 4 purely additive.
 
@@ -252,7 +252,7 @@ Test expectation: none — story scaffold has no behavioral surface; correctness
 
 ---
 
-- [ ] **Unit 3: Heterogeneous rail with feature tile + posters + focus-driven caption**
+- [x] **Unit 3: Heterogeneous rail with feature tile + posters + focus-driven caption** — commit `570fead`
 
 **Goal:** Land the visual centerpiece: a `TilegridRailRoot`-driven row of one wide landscape feature tile (the resume target with cinematic 16:9 art) followed by vertical 2:3 cover posters, all sharing row height. Lavender focus halo on the focused tile. Initial focus on the resume target. A caption region below the rail mirrors focus, showing a green "LAST PLAYED" eyebrow + name when the resume target is focused, name only otherwise.
 
@@ -289,7 +289,7 @@ Test expectation: none — visual exploration; the established pattern (Hero, Mo
 
 ---
 
-- [ ] **Unit 4: Chrome — top bar (search + status), bottom bar (Menu pill + HUD)**
+- [x] **Unit 4: Chrome — top bar (search + status), bottom bar (Menu pill + HUD)** — commit `feb1867`
 
 **Goal:** Surround the rail and caption with the faithful Switch-style chrome. Top bar carries a focusable decorative search pill on the left and a 5-element status cluster on the right. Bottom bar carries a focusable decorative Menu pill on the left and a HUD on the right composed of two `HudButtons` instances bracketing a story-local static `Ⓧ Close Software` chip.
 
