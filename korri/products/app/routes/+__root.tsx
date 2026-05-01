@@ -1,3 +1,4 @@
+import { createFocusRestore } from "@shared/navigation/focus-restore"
 import { useInputAction } from "@shared/navigation/use-input-action"
 import {
   createRootRoute,
@@ -5,7 +6,7 @@ import {
   useCanGoBack,
   useRouter,
 } from "@tanstack/react-router"
-import { Suspense } from "react"
+import { Suspense, useEffect, useMemo } from "react"
 
 export const Route = createRootRoute({
   component: RootComponent,
@@ -14,10 +15,28 @@ export const Route = createRootRoute({
 function RootComponent() {
   const router = useRouter()
   const canGoBack = useCanGoBack()
+  const focusRestore = useMemo(() => createFocusRestore(), [])
 
   useInputAction("back", () => {
     if (canGoBack) router.history.back()
   })
+
+  useEffect(() => {
+    const stopBeforeNavigate = router.subscribe("onBeforeNavigate", event => {
+      if (event.pathChanged && event.fromLocation) {
+        focusRestore.capture(event.fromLocation.pathname)
+      }
+    })
+    const stopRendered = router.subscribe("onRendered", event => {
+      if (event.pathChanged) focusRestore.restore(event.toLocation.pathname)
+    })
+
+    return () => {
+      stopBeforeNavigate()
+      stopRendered()
+      focusRestore.clear()
+    }
+  }, [focusRestore, router])
 
   return (
     <Suspense

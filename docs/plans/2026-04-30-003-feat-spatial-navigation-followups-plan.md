@@ -225,7 +225,7 @@ None required. LRUD's API and the Standard Gamepad layout are already wired. Tan
 
 ---
 
-- [ ] **Unit 4: Focus restore across DOM remounts**
+- [x] **Unit 4: Focus restore across DOM remounts**
 
 **Goal:** When the DOM mounting around the focused element re-renders (route change, Suspense resolution, modal close), focus returns to the originating element on next paint instead of falling to `<body>`.
 
