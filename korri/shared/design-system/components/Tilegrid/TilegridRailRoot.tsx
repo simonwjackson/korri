@@ -217,6 +217,11 @@ export function TilegridRailRoot<T extends GridItemShape>({
 
   return (
     <div
+      // Opt this rail into wheel-as-direction with horizontal axis mapping.
+      // Vertical wheel motion (deltaY) translates to left/right — desktop
+      // carousel convention so a horizontal rail does not require
+      // shift+scroll to navigate via the wheel.
+      data-pointer-wheel="horizontal"
       style={{
         width: "100%",
         height: "100%",

@@ -147,6 +147,13 @@ export function TilegridScrollRoot<T extends GridItemShape>({
   return (
     <div
       ref={ref}
+      // Opt this scroll-mode tilegrid into wheel-as-direction. Inside this
+      // container the wheel adapter consumes wheel events, accumulates delta,
+      // and emits direction actions so the wheel cycles focus tile-by-tile
+      // instead of scrolling the page. "2d" means deltaY drives up/down and
+      // deltaX drives left/right; horizontal rails (TilegridRailRoot) opt in
+      // with "horizontal" instead so vertical wheel motion still moves focus.
+      data-pointer-wheel="2d"
       style={{
         width: "100%",
         height: "100%",
