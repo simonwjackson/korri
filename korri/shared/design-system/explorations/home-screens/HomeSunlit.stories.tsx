@@ -62,10 +62,18 @@ import { HudButtons } from "./HudButtons"
 /**
  * Story-local convention shared with Hero and Mosaic: the first fixture is
  * the resume target. In Sunlit it occupies a wide column-only span so the
- * leading cell renders at landscape proportions while sharing row height
- * with the trailing 2:3 portrait posters.
+ * leading cell lands at the requested 92:43 aspect ratio while the
+ * trailing tiles render as 1:1 squares.
+ *
+ * Cell sizing math: with square cells of side S and gap G, the feature
+ * tile's visible width across span N is N·S + (N-1)·G. Holding cells
+ * square forces (N·S + (N-1)·G) / S = 92/43, i.e. G/S = 6/43 ≈ 0.1395
+ * for N = 2. Picking S = 200 and G = 28 lands the feature at
+ * (2·200 + 28) / 200 = 2.14, identical to 92/43 within rounding.
  */
-const RESUME_SPAN = 3
+const RESUME_SPAN = 2
+const CELL_SIZE_PX = 200
+const RAIL_GAP_PX = 28
 const items: ReadonlyArray<GameRecord> = games
 
 /* -------------------------------------------------------------------------- */
@@ -154,11 +162,11 @@ function HomeSunlit() {
       <div className="flex min-h-0 flex-1 flex-col justify-center gap-3">
         {/* Rail region. The focusin handler delegates to whichever cell
             received focus. */}
-        <div ref={railRef} className="sunlit-rail-region h-[260px] px-12">
+        <div ref={railRef} className="sunlit-rail-region h-[240px] px-12">
           <TilegridRailRoot<GameRecord>
             items={items}
-            cellSize={{ width: 155, height: 220 }}
-            gap={8}
+            cellSize={{ width: CELL_SIZE_PX, height: CELL_SIZE_PX }}
+            gap={RAIL_GAP_PX}
             getKey={g => g.id}
             getSpan={g => (g.id === resumeTarget.id ? RESUME_SPAN : 1)}
             getAriaLabel={g => getGameDisplayName(g)}
