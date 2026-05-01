@@ -3,11 +3,11 @@ import { expect, test } from "@playwright/test"
 /**
  * Spatial navigation E2E demo for the Tilegrid primitive.
  *
- * Drives the Tilegrid scroll story with synthetic arrow keys and asserts
+ * Drives the Tilegrid Playground story with synthetic arrow keys and asserts
  * focus moves across native <button> elements. Proves the navigation layer
  * works without any per-component coupling — the cells in this story are
- * plain <button>s emitted by TilegridCells with no useFocusable, no refs,
- * no provider.
+ * plain <button>s rendered by the consumer through TilegridCells cellProps
+ * with no useFocusable, no refs, no provider.
  *
  * Storybook's preview wires startSpatialNavigation() once at module scope,
  * so every story inherits keyboard + gamepad-driven focus for free.
@@ -16,11 +16,14 @@ import { expect, test } from "@playwright/test"
  * during the Tilegrid consolidation.
  */
 
-const STORY_ID = "design-system-tilegrid--scroll"
-const STORY_ID_HERO = "design-system-tilegrid--scroll-with-hero"
+const PLAYGROUND_STORY_ID = "design-system-tilegrid--playground"
+const VIEW_TRANSITIONS_STORY_ID = "design-system-tilegrid--view-transitions"
 
-const iframePath = (storyId: string) =>
-  `/iframe.html?id=${storyId}&viewMode=story`
+const iframePath = (storyId: string, args?: string) => {
+  const query = new URLSearchParams({ id: storyId, viewMode: "story" })
+  if (args) query.set("args", args)
+  return `/iframe.html?${query.toString()}`
+}
 
 const focusedAriaLabel = async (page: import("@playwright/test").Page) => {
   return page.evaluate(
@@ -28,9 +31,11 @@ const focusedAriaLabel = async (page: import("@playwright/test").Page) => {
   )
 }
 
-test.describe("spatial navigation: Tilegrid scroll story", () => {
+test.describe("spatial navigation: Tilegrid scroll playground", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto(iframePath(STORY_ID))
+    await page.goto(
+      iframePath(PLAYGROUND_STORY_ID, "mode:scroll;dataset:basic"),
+    )
     // Cells render as <button aria-label="...">. Wait for at least one.
     await page.locator("button[aria-label]").first().waitFor()
   })
@@ -100,9 +105,9 @@ test.describe("spatial navigation: Tilegrid scroll story", () => {
   })
 })
 
-test.describe("spatial navigation: Tilegrid scroll-with-hero story", () => {
+test.describe("spatial navigation: Tilegrid scroll hero playground", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto(iframePath(STORY_ID_HERO))
+    await page.goto(iframePath(PLAYGROUND_STORY_ID, "mode:scroll;dataset:hero"))
     await page.locator("button[aria-label]").first().waitFor()
   })
 
@@ -120,5 +125,41 @@ test.describe("spatial navigation: Tilegrid scroll-with-hero story", () => {
     const after = await focusedAriaLabel(page)
     expect(after).not.toBeNull()
     expect(after).not.toBe("tile-0")
+  })
+})
+
+test.describe("Tilegrid paged playground", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto(
+      iframePath(
+        PLAYGROUND_STORY_ID,
+        "mode:paged;dataset:manyHeroes;cellSize:90",
+      ),
+    )
+    await page.locator("button[aria-label]").first().waitFor()
+  })
+
+  test("Next and Prev controls switch pages without unmounting the grid", async ({
+    page,
+  }) => {
+    await expect(page.getByText("1 /", { exact: false })).toBeVisible()
+
+    await page.getByRole("button", { name: "Next →" }).click()
+    await expect(page.getByText("2 /", { exact: false })).toBeVisible()
+
+    await page.getByRole("button", { name: "← Prev" }).click()
+    await expect(page.getByText("1 /", { exact: false })).toBeVisible()
+  })
+})
+
+test.describe("Tilegrid View Transitions story", () => {
+  test("publishes stable view-transition-name styles on cells", async ({
+    page,
+  }) => {
+    await page.goto(iframePath(VIEW_TRANSITIONS_STORY_ID, "dataset:manyHeroes"))
+    const firstCell = page.locator('button[aria-label="tile-0"]')
+    await firstCell.waitFor()
+
+    await expect(firstCell).toHaveCSS("view-transition-name", "tile-tile-0")
   })
 })

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import { motion } from "framer-motion"
-import { useState } from "react"
+import { motion, type Variants } from "framer-motion"
+import { useEffect, useState } from "react"
 import {
   type TilegridCellProps,
   TilegridCells,
@@ -14,6 +14,22 @@ interface Tile extends GridItemShape {
   id: string
   image: string
   span?: number
+}
+
+type TilegridStoryMode = "scroll" | "paged"
+type TilegridDataset = "basic" | "hero" | "empty" | "manyHeroes" | "mixedSpans"
+type MotionPreset = "layout" | "stagger" | "hoverTap"
+
+/**
+ * Args shared by every story so the Storybook Controls panel can drive
+ * the layout, dataset, and animation knobs these demos expose.
+ */
+interface StoryArgs {
+  cellSize: number
+  gap: number
+  mode: TilegridStoryMode
+  dataset: TilegridDataset
+  motionPreset: MotionPreset
 }
 
 const tiles: Tile[] = Array.from({ length: 24 }, (_, i) => ({
@@ -46,6 +62,14 @@ const mixedSpans: Tile[] = Array.from({ length: 28 }, (_, i) => {
   }
 })
 
+const datasets: Record<TilegridDataset, ReadonlyArray<Tile>> = {
+  basic: tiles,
+  hero: tilesWithHero,
+  empty: [],
+  manyHeroes,
+  mixedSpans,
+}
+
 function TileVisual({ tile }: { tile: Tile }) {
   return (
     <img
@@ -76,7 +100,27 @@ function renderTileCell({
   )
 }
 
-function renderMotionTileCell({
+const staggerContainerVariants: Variants = {
+  hidden: {},
+  show: {
+    transition: {
+      staggerChildren: 0.035,
+      delayChildren: 0.04,
+    },
+  },
+}
+
+const staggerTileVariants: Variants = {
+  hidden: { opacity: 0, scale: 0.82, y: 18 },
+  show: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: { type: "spring", stiffness: 460, damping: 32 },
+  },
+}
+
+function renderLayoutMotionTileCell({
   cellProps,
   item,
 }: {
@@ -92,6 +136,53 @@ function renderMotionTileCell({
       <TileVisual tile={item} />
     </motion.button>
   )
+}
+
+function renderStaggeredMotionTileCell({
+  cellProps,
+  item,
+}: {
+  cellProps: TilegridCellProps
+  item: Tile
+}) {
+  return (
+    <motion.button {...cellProps} variants={staggerTileVariants}>
+      <TileVisual tile={item} />
+    </motion.button>
+  )
+}
+
+function renderHoverTapMotionTileCell({
+  cellProps,
+  item,
+}: {
+  cellProps: TilegridCellProps
+  item: Tile
+}) {
+  return (
+    <motion.button
+      {...cellProps}
+      whileHover={{ scale: 1.05, y: -4, zIndex: 1 }}
+      whileTap={{ scale: 0.96 }}
+      whileFocus={{ scale: 1.04, boxShadow: "0 0 0 3px #facc15" }}
+      transition={{ type: "spring", stiffness: 520, damping: 30 }}
+      style={{
+        ...cellProps.style,
+        borderRadius: 10,
+        overflow: "hidden",
+      }}
+    >
+      <TileVisual tile={item} />
+    </motion.button>
+  )
+}
+
+function renderMotionTileCell(
+  preset: MotionPreset,
+): (args: { cellProps: TilegridCellProps; item: Tile }) => React.ReactNode {
+  if (preset === "stagger") return renderStaggeredMotionTileCell
+  if (preset === "hoverTap") return renderHoverTapMotionTileCell
+  return renderLayoutMotionTileCell
 }
 
 function rotateTiles<T>(items: ReadonlyArray<T>): T[] {
@@ -139,169 +230,6 @@ function startViewTransition(update: () => void) {
   update()
 }
 
-function ScrollWithMotionDemo({ cellSize, gap }: StoryArgs) {
-  const [items, setItems] = useState<ReadonlyArray<Tile>>(manyHeroes)
-
-  return (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <StoryControlButton
-        onClick={() => setItems(current => rotateTiles(current))}
-      >
-        Shuffle
-      </StoryControlButton>
-      <TilegridScrollRoot<Tile> items={items} cellSize={cellSize} gap={gap}>
-        <TilegridCells<Tile> renderCell={renderMotionTileCell} />
-      </TilegridScrollRoot>
-    </div>
-  )
-}
-
-function ScrollWithViewTransitionsDemo({ cellSize, gap }: StoryArgs) {
-  const [items, setItems] = useState<ReadonlyArray<Tile>>(manyHeroes)
-
-  return (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <StoryControlButton
-        onClick={() =>
-          startViewTransition(() => setItems(current => rotateTiles(current)))
-        }
-      >
-        Shuffle
-      </StoryControlButton>
-      <TilegridScrollRoot<Tile>
-        items={items}
-        cellSize={cellSize}
-        gap={gap}
-        getViewTransitionName={item => `tile-${item.id}`}
-      >
-        <TilegridCells<Tile> renderCell={renderTileCell} />
-      </TilegridScrollRoot>
-    </div>
-  )
-}
-
-/**
- * Args shared by every story so the Storybook Controls panel can drive
- * the two layout knobs the Tilegrid Roots expose.
- */
-interface StoryArgs {
-  cellSize: number
-  gap: number
-}
-
-const meta = {
-  title: "Design System/Tilegrid",
-  parameters: { layout: "fullscreen" },
-  // Meta-level defaults so the Controls panel always shows initial
-  // values, and stories only override when the demo needs different
-  // proportions (smaller cells to fit a 3x3 hero, larger cells for the
-  // headline scroll demos, etc.).
-  args: { cellSize: 100, gap: 8 },
-  argTypes: {
-    cellSize: {
-      control: { type: "range", min: 40, max: 240, step: 10 },
-      description: "Side length of one grid cell in pixels (cells are square).",
-    },
-    gap: {
-      control: { type: "range", min: 0, max: 32, step: 2 },
-      description: "Px gap between cells.",
-    },
-  },
-  decorators: [
-    Story => (
-      <div
-        style={{
-          width: "900px",
-          height: "560px",
-          padding: 16,
-          background: "#0a0a0a",
-        }}
-      >
-        <Story />
-      </div>
-    ),
-  ],
-} satisfies Meta<StoryArgs>
-
-export default meta
-type Story = StoryObj<StoryArgs>
-
-export const Scroll: Story = {
-  args: { cellSize: 120 },
-  render: ({ cellSize, gap }) => (
-    <TilegridScrollRoot<Tile> items={tiles} cellSize={cellSize} gap={gap}>
-      <TilegridCells<Tile> renderCell={renderTileCell} />
-    </TilegridScrollRoot>
-  ),
-}
-
-export const ScrollWithHero: Story = {
-  args: { cellSize: 120 },
-  render: ({ cellSize, gap }) => (
-    <TilegridScrollRoot<Tile>
-      items={tilesWithHero}
-      cellSize={cellSize}
-      gap={gap}
-    >
-      <TilegridCells<Tile> renderCell={renderTileCell} />
-    </TilegridScrollRoot>
-  ),
-}
-
-export const ScrollEmpty: Story = {
-  args: { cellSize: 120 },
-  render: ({ cellSize, gap }) => (
-    <TilegridScrollRoot<Tile> items={[]} cellSize={cellSize} gap={gap}>
-      <TilegridCells<Tile> renderCell={renderTileCell} />
-    </TilegridScrollRoot>
-  ),
-}
-
-/**
- * Six 2x2 heroes interspersed with 30 single-cell tiles. CSS
- * grid-auto-flow:dense packs the singles into the holes around each
- * hero in source order — no JS bin-packer involved in scroll mode.
- */
-export const ScrollManyHeroes: Story = {
-  render: ({ cellSize, gap }) => (
-    <TilegridScrollRoot<Tile> items={manyHeroes} cellSize={cellSize} gap={gap}>
-      <TilegridCells<Tile> renderCell={renderTileCell} />
-    </TilegridScrollRoot>
-  ),
-}
-
-/**
- * Mixed spans: one 3x3 leader, two 2x2 heroes, the rest single cells.
- * Scroll mode allows arbitrary row depth so span:3 renders unclamped.
- */
-export const ScrollMixedSpans: Story = {
-  args: { cellSize: 90 },
-  render: ({ cellSize, gap }) => (
-    <TilegridScrollRoot<Tile> items={mixedSpans} cellSize={cellSize} gap={gap}>
-      <TilegridCells<Tile> renderCell={renderTileCell} />
-    </TilegridScrollRoot>
-  ),
-}
-
-/**
- * Uses renderCell to spread Tilegrid's cellProps onto motion.button.
- * The primitive still imports no motion library; this story is just a
- * consumer demonstrating the seam.
- */
-export const ScrollWithMotion: Story = {
-  render: args => <ScrollWithMotionDemo {...args} />,
-}
-
-/**
- * Uses getViewTransitionName to attach stable browser View Transition
- * names to each cell. The story triggers document.startViewTransition
- * itself; Tilegrid only emits the names. Animation is visible in
- * Chromium-based browsers (including Electrobun).
- */
-export const ScrollWithViewTransitions: Story = {
-  render: args => <ScrollWithViewTransitionsDemo {...args} />,
-}
-
 /**
  * Inline page controls. The atoms shipped with the primitive are deferred
  * (see plan); the story authors its own controls against the paged context.
@@ -337,72 +265,224 @@ function InlinePagedControls() {
   )
 }
 
-export const Paged: Story = {
-  render: ({ cellSize, gap }) => (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <TilegridPagedRoot<Tile> items={tiles} cellSize={cellSize} gap={gap}>
-        <TilegridCells<Tile> renderCell={renderTileCell} />
-        <InlinePagedControls />
-      </TilegridPagedRoot>
-    </div>
-  ),
+function PlaygroundDemo({ cellSize, gap, mode, dataset }: StoryArgs) {
+  const items = datasets[dataset]
+
+  if (mode === "paged") {
+    return (
+      <div style={{ position: "relative", width: "100%", height: "100%" }}>
+        <TilegridPagedRoot<Tile> items={items} cellSize={cellSize} gap={gap}>
+          <TilegridCells<Tile> renderCell={renderTileCell} />
+          <InlinePagedControls />
+        </TilegridPagedRoot>
+      </div>
+    )
+  }
+
+  return (
+    <TilegridScrollRoot<Tile> items={items} cellSize={cellSize} gap={gap}>
+      <TilegridCells<Tile> renderCell={renderTileCell} />
+    </TilegridScrollRoot>
+  )
 }
 
-export const PagedWithHero: Story = {
-  render: ({ cellSize, gap }) => (
+function FramerMotionDemo({
+  cellSize,
+  gap,
+  mode,
+  dataset,
+  motionPreset,
+}: StoryArgs) {
+  const initialItems = datasets[dataset]
+  const [items, setItems] = useState<ReadonlyArray<Tile>>(initialItems)
+  const [animationKey, setAnimationKey] = useState(0)
+
+  useEffect(() => {
+    setItems(initialItems)
+    setAnimationKey(current => current + 1)
+  }, [initialItems])
+
+  const renderCell = renderMotionTileCell(motionPreset)
+  const usesSlottedMotionGrid = motionPreset === "stagger" || mode === "paged"
+
+  const shuffle = () => {
+    setItems(current => rotateTiles(current))
+    setAnimationKey(current => current + 1)
+  }
+
+  const cells = <TilegridCells<Tile> renderCell={renderCell} />
+
+  if (mode === "paged") {
+    return (
+      <div style={{ position: "relative", width: "100%", height: "100%" }}>
+        <StoryControlButton onClick={shuffle}>Shuffle</StoryControlButton>
+        <TilegridPagedRoot<Tile>
+          items={items}
+          cellSize={cellSize}
+          gap={gap}
+          asChild={usesSlottedMotionGrid}
+        >
+          <motion.div
+            key={motionPreset === "stagger" ? animationKey : undefined}
+            layout
+            variants={
+              motionPreset === "stagger" ? staggerContainerVariants : undefined
+            }
+            initial={motionPreset === "stagger" ? "hidden" : undefined}
+            animate={motionPreset === "stagger" ? "show" : undefined}
+            transition={{ type: "spring", stiffness: 360 }}
+          >
+            {cells}
+            <InlinePagedControls />
+          </motion.div>
+        </TilegridPagedRoot>
+      </div>
+    )
+  }
+
+  return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <TilegridPagedRoot<Tile>
-        items={tilesWithHero}
+      <StoryControlButton onClick={shuffle}>Shuffle</StoryControlButton>
+      <TilegridScrollRoot<Tile>
+        items={items}
         cellSize={cellSize}
         gap={gap}
+        asChild={usesSlottedMotionGrid}
+      >
+        {usesSlottedMotionGrid ? (
+          <motion.div
+            key={motionPreset === "stagger" ? animationKey : undefined}
+            layout={motionPreset === "layout"}
+            variants={
+              motionPreset === "stagger" ? staggerContainerVariants : undefined
+            }
+            initial={motionPreset === "stagger" ? "hidden" : undefined}
+            animate={motionPreset === "stagger" ? "show" : undefined}
+          >
+            {cells}
+          </motion.div>
+        ) : (
+          cells
+        )}
+      </TilegridScrollRoot>
+    </div>
+  )
+}
+
+function ViewTransitionsDemo({ cellSize, gap, dataset }: StoryArgs) {
+  const initialItems = datasets[dataset]
+  const [items, setItems] = useState<ReadonlyArray<Tile>>(initialItems)
+
+  useEffect(() => {
+    setItems(initialItems)
+  }, [initialItems])
+
+  return (
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      <StoryControlButton
+        onClick={() =>
+          startViewTransition(() => setItems(current => rotateTiles(current)))
+        }
+      >
+        Shuffle
+      </StoryControlButton>
+      <TilegridScrollRoot<Tile>
+        items={items}
+        cellSize={cellSize}
+        gap={gap}
+        getViewTransitionName={item => `tile-${item.id}`}
       >
         <TilegridCells<Tile> renderCell={renderTileCell} />
-        <InlinePagedControls />
-      </TilegridPagedRoot>
+      </TilegridScrollRoot>
     </div>
-  ),
+  )
 }
 
-export const PagedEmpty: Story = {
-  render: ({ cellSize, gap }) => (
-    <TilegridPagedRoot<Tile> items={[]} cellSize={cellSize} gap={gap}>
-      <TilegridCells<Tile> renderCell={renderTileCell} />
-    </TilegridPagedRoot>
-  ),
+const meta = {
+  title: "Design System/Tilegrid",
+  parameters: { layout: "fullscreen" },
+  // Meta-level defaults so the Controls panel always shows initial values.
+  args: {
+    cellSize: 100,
+    gap: 8,
+    mode: "scroll",
+    dataset: "basic",
+    motionPreset: "layout",
+  },
+  argTypes: {
+    cellSize: {
+      control: { type: "range", min: 40, max: 240, step: 10 },
+      description: "Side length of one grid cell in pixels (cells are square).",
+    },
+    gap: {
+      control: { type: "range", min: 0, max: 32, step: 2 },
+      description: "Px gap between cells.",
+    },
+    mode: {
+      control: "inline-radio",
+      options: ["scroll", "paged"],
+      description:
+        "Tilegrid Root to compose: continuous CSS dense grid or paged bin-packed grid.",
+    },
+    dataset: {
+      control: "select",
+      options: ["basic", "hero", "empty", "manyHeroes", "mixedSpans"],
+      description: "Fixture shape rendered by the selected Root.",
+    },
+    motionPreset: {
+      control: "inline-radio",
+      options: ["layout", "stagger", "hoverTap"],
+      description: "Framer Motion behavior for the FramerMotion story.",
+    },
+  },
+  decorators: [
+    Story => (
+      <div
+        style={{
+          width: "900px",
+          height: "560px",
+          padding: 16,
+          background: "#0a0a0a",
+        }}
+      >
+        <Story />
+      </div>
+    ),
+  ],
+} satisfies Meta<StoryArgs>
+
+export default meta
+type Story = StoryObj<StoryArgs>
+
+/**
+ * One layout playground for the core Tilegrid contract: choose scroll vs paged
+ * Roots, then switch among basic, hero, empty, many-hero, and mixed-span data.
+ */
+export const Playground: Story = {
+  argTypes: {
+    motionPreset: { control: false, table: { disable: true } },
+  },
+  render: args => <PlaygroundDemo {...args} />,
 }
 
 /**
- * Paged variant of the many-heroes layout. The bin-packer distributes
- * heroes and singles into pages, starting a new page when an item won't
- * fit the remaining cells. Click Prev/Next to step through pages.
+ * One Framer Motion playground covering the primitive's animation seams:
+ * renderCell for motion.button cells and Root asChild for a motion.div grid.
  */
-export const PagedManyHeroes: Story = {
-  args: { cellSize: 90 },
-  render: ({ cellSize, gap }) => (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <TilegridPagedRoot<Tile> items={manyHeroes} cellSize={cellSize} gap={gap}>
-        <TilegridCells<Tile> renderCell={renderTileCell} />
-        <InlinePagedControls />
-      </TilegridPagedRoot>
-    </div>
-  ),
+export const FramerMotion: Story = {
+  args: { dataset: "manyHeroes", cellSize: 90 },
+  render: args => <FramerMotionDemo {...args} />,
 }
 
 /**
- * Paged + mixed spans. Note: in paged mode the bin-packer clamps spans
- * to min(columns, rows). With cellSize:90 and gap:8 over the decorator's
- * 868x528 inner area, the 3x3 leader is clamped to fit whichever
- * dimension is smaller — typically rows, since paged mode bounds row
- * count to what the container can show.
+ * Browser View Transitions seam. Tilegrid only applies stable names via
+ * getViewTransitionName; the consumer owns document.startViewTransition.
  */
-export const PagedMixedSpans: Story = {
-  args: { cellSize: 90 },
-  render: ({ cellSize, gap }) => (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <TilegridPagedRoot<Tile> items={mixedSpans} cellSize={cellSize} gap={gap}>
-        <TilegridCells<Tile> renderCell={renderTileCell} />
-        <InlinePagedControls />
-      </TilegridPagedRoot>
-    </div>
-  ),
+export const ViewTransitions: Story = {
+  args: { dataset: "manyHeroes" },
+  argTypes: {
+    mode: { control: false, table: { disable: true } },
+    motionPreset: { control: false, table: { disable: true } },
+  },
+  render: args => <ViewTransitionsDemo {...args} />,
 }

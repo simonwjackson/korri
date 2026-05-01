@@ -13,8 +13,8 @@ import { expect, test } from "@playwright/test"
  * during the Tilegrid consolidation.
  */
 
-const STORY_ID = "design-system-tilegrid--scroll"
-const IFRAME_PATH = `/iframe.html?id=${STORY_ID}&viewMode=story`
+const PLAYGROUND_STORY_ID = "design-system-tilegrid--playground"
+const IFRAME_PATH = `/iframe.html?id=${PLAYGROUND_STORY_ID}&viewMode=story&args=mode:scroll;dataset:basic`
 
 const GAMEPAD_BUTTON = {
   confirm: 0,
