@@ -48,7 +48,8 @@ interface PointerEventLike {
 export function createPointerAdapter(
   options: PointerAdapterOptions = {},
 ): InputAdapter {
-  const target = options.target ?? (typeof window !== "undefined" ? window : null)
+  const target =
+    options.target ?? (typeof window !== "undefined" ? window : null)
   const threshold = options.movementThresholdPx ?? 1
   const preserveEditable = options.preserveEditableFocus ?? true
 

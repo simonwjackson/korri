@@ -74,9 +74,11 @@ function matchAction(key: string, keymap: KeyboardKeyMap): InputAction | null {
     if (keymap.direction[direction].includes(key))
       return { type: "direction", direction, source: "keyboard" }
   }
-  if (keymap.confirm.includes(key)) return { type: "confirm", source: "keyboard" }
+  if (keymap.confirm.includes(key))
+    return { type: "confirm", source: "keyboard" }
   if (keymap.back.includes(key)) return { type: "back", source: "keyboard" }
-  if (keymap.options.includes(key)) return { type: "options", source: "keyboard" }
+  if (keymap.options.includes(key))
+    return { type: "options", source: "keyboard" }
   if (keymap.menu.includes(key)) return { type: "menu", source: "keyboard" }
   return null
 }

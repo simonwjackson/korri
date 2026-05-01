@@ -61,10 +61,7 @@ export function createWheelAdapter(
       // One accumulator pair per container element. Map keyed by the
       // container element itself so leaving and re-entering does not bleed
       // across containers.
-      const accumulators = new WeakMap<
-        Element,
-        { x: number; y: number }
-      >()
+      const accumulators = new WeakMap<Element, { x: number; y: number }>()
 
       const handler = (rawEvent: Event) => {
         const event = rawEvent as unknown as WheelEventLike & Event

@@ -225,9 +225,7 @@ describe("input-mode dispatch", () => {
 
     handle.dispose()
 
-    expect(document.documentElement.hasAttribute("data-input-mode")).toBe(
-      false,
-    )
+    expect(document.documentElement.hasAttribute("data-input-mode")).toBe(false)
   })
 
   it("omits the input-mode store when inputMode: false", () => {
@@ -241,9 +239,7 @@ describe("input-mode dispatch", () => {
     })
 
     expect(handle.inputMode).toBeNull()
-    expect(document.documentElement.hasAttribute("data-input-mode")).toBe(
-      false,
-    )
+    expect(document.documentElement.hasAttribute("data-input-mode")).toBe(false)
 
     handle.bus.emit({
       type: "direction",
@@ -251,8 +247,6 @@ describe("input-mode dispatch", () => {
       source: "keyboard",
     })
 
-    expect(document.documentElement.hasAttribute("data-input-mode")).toBe(
-      false,
-    )
+    expect(document.documentElement.hasAttribute("data-input-mode")).toBe(false)
   })
 })

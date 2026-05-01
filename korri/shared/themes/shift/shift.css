@@ -26,15 +26,41 @@
 	}
 
 	/*
-	 * Spatial navigation focus ring. Applied via :focus-visible so it shows for
-	 * keyboard, gamepad, and TV remote (which all use programmatic focus), but
-	 * not for plain mouse clicks. Components stay native — no per-component
-	 * focus styling needed.
+	 * Unified spatial-navigation focus ring. Applied via :focus (not
+	 * :focus-visible) so the ring fires for both keyboard/gamepad-induced
+	 * focus and pointer-induced focus. The pointer adapter calls .focus()
+	 * on hover, so this rule is what makes a hovered tile look identical
+	 * to a keyboard-focused tile — the product behavior of
+	 * `[data-input-mode]` last-input-wins navigation.
+	 *
+	 * Per-component overrides (e.g., the home-screen explorations that
+	 * suppress the global ring on themed surfaces) can keep using
+	 * `:focus { outline: none }` — same selector, same specificity rules.
+	 *
+	 * Components stay native HTML; no per-component focus styling needed.
 	 */
-	:focus-visible {
+	:focus {
 		outline: 3px solid var(--ring, #3b82f6);
 		outline-offset: 2px;
 		border-radius: 4px;
+	}
+}
+
+@layer utilities {
+	/*
+	 * Hide the OS cursor while the user is driving the UI with directional
+	 * input (keyboard / gamepad). The descendant-and-self selector form is
+	 * required because per-element `cursor: pointer` declarations on buttons,
+	 * shift-cards, etc. live in @layer components and would otherwise win on
+	 * specificity. Placing this rule in @layer utilities (which cascades after
+	 * @layer components in Tailwind v4) lets it override component-level
+	 * cursor declarations. The rule auto-disables itself when the user moves
+	 * the mouse — the pointer adapter flips `data-input-mode` back to
+	 * "pointer" and the cursor reappears.
+	 */
+	[data-input-mode="directional"],
+	[data-input-mode="directional"] * {
+		cursor: none;
 	}
 }
 
@@ -53,11 +79,11 @@
 	}
 
 	.shift-card:hover,
-	.shift-card:focus-visible {
+	.shift-card:focus {
 		border-color: rgb(56 189 248);
 	}
 
-	.shift-card:focus-visible {
+	.shift-card:focus {
 		outline: 3px solid var(--ring, #38bdf8);
 		outline-offset: 3px;
 	}

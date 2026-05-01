@@ -122,8 +122,7 @@ export function startSpatialNavigation(
   //
   // The store owns the [data-input-mode] DOM attribute. When disabled
   // (inputMode: false in tests), no listener is attached.
-  const inputMode =
-    options.inputMode === false ? null : createInputModeStore()
+  const inputMode = options.inputMode === false ? null : createInputModeStore()
   if (inputMode) {
     const store = inputMode
     bus.on(action => {
