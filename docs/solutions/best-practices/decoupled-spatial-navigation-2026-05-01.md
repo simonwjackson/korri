@@ -1,6 +1,7 @@
 ---
 title: Device-agnostic spatial navigation without coupling components
 date: 2026-05-01
+last_updated: 2026-05-01
 category: best-practices
 module: shared/input + shared/navigation
 problem_type: best_practice
@@ -202,6 +203,18 @@ function GridItemTile({ item, onItemClick }) {
 
 No nav imports. No refs. No `focused` state. The `:focus-visible` ring comes from theme CSS. Spatial nav comes from the global engine reading the live DOM.
 
+### React consumers subscribe to a restart-aware singleton
+
+Route code should subscribe to semantic actions through `useInputAction`, not by capturing a one-off bus reference:
+
+```tsx
+useInputAction("back", () => {
+  if (canGoBack) router.history.back()
+})
+```
+
+The hook is backed by `useSyncExternalStore`, so if `startSpatialNavigation()` restarts during HMR or any future runtime reinitialization, mounted route handlers unsubscribe from the disposed bus and resubscribe to the new one. Without this, product code can silently stop receiving `back`, `menu`, or `options` after a navigation-layer restart.
+
 ### Storybook integration
 
 ```tsx
@@ -235,13 +248,17 @@ test("ArrowDown / ArrowRight move focus across cards", async ({ page }) => {
 
 1. **Bun and Playwright collide on `*.spec.ts`.** Bun's test discovery hardcodes `.test`, `_test_`, `.spec`, `_spec_` substring matching and runs anything matching as a unit test — Playwright's `test.describe()` then crashes with "did not expect test.describe() to be called here". The fix is to give Storybook-driven Playwright specs a suffix Bun won't match. This repo uses `*.story.e2e.ts`. The Playwright component config matches `korri/**/*.story.e2e.ts`; the e2e config's separate `testDir` keeps the two from cross-loading.
 2. **HMR re-evaluates `preview.tsx`.** Without disposal, every hot reload adds another keyboard listener and another `requestAnimationFrame` polling loop. Stash the handle on `window` and dispose before re-init.
-3. **`preventDefault` should be conditional.** The keyboard adapter must skip when the focused element is editable (`<input>`, `<textarea>`, `[contenteditable]`), or arrow keys break text editing.
-4. **`Tab` and `options` are different verbs.** Don't map `Tab` to `options` — Tab is critical for accessibility. Leave `options` and `menu` unmapped on keyboard by default; let gamepad cover them.
-5. **`:focus-visible` is the right hook.** It triggers for keyboard / gamepad / programmatic focus but not mouse clicks, which is exactly the desired UX.
+3. **Disposing the old singleton is not enough.** If React consumers subscribe to `getInputBus()` once, they stay attached to the old, disposed bus after `startSpatialNavigation()` replaces it. Expose singleton changes as an external store and build hooks with `useSyncExternalStore` so consumers resubscribe after restarts.
+4. **Focus restore should not interpolate arbitrary attributes into CSS selectors.** `aria-label` and `id` values can contain quotes, newlines, or other selector-hostile characters. Prefer direct attribute comparison over constructing selectors like `[aria-label="..."]`; it is safer and can also match the scope element itself.
+5. **`preventDefault` should be conditional.** The keyboard adapter must skip when the focused element is editable (`<input>`, `<textarea>`, `[contenteditable]`), or arrow keys break text editing.
+6. **`Tab` and `options` are different verbs.** Don't map `Tab` to `options` — Tab is critical for accessibility. Leave `options` and `menu` unmapped on keyboard by default; let gamepad cover them.
+7. **`:focus-visible` is the right hook.** It triggers for keyboard / gamepad / programmatic focus but not mouse clicks, which is exactly the desired UX.
 
 ## Related
 
 - `@bbc/tv-lrud-spatial` — chosen for its DOM-driven, component-agnostic API. Alternatives evaluated: `@noriginmedia/norigin-spatial-navigation` (couples components via hooks), `WICG/spatial-navigation` polyfill (archived), `bamlab/react-tv-space-navigation` (React Native only).
 - `korri/shared/input/` and `korri/shared/navigation/` — the implementation referenced here.
+- `korri/shared/navigation/use-input-action.ts` — restart-aware React subscription hook for semantic actions.
+- `korri/shared/navigation/focus-restore.ts` — focus restoration across remounts; uses direct attribute matching for `id` / `aria-label` identities.
 - `korri/deploy/storybook/preview.tsx` — Storybook integration, the canonical demo surface.
 - `tools/playwright/playwright.component.config.ts` — Storybook-driven Playwright runner.
