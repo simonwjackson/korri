@@ -14,7 +14,9 @@ import { expect, test } from "@playwright/test"
  */
 
 const PLAYGROUND_STORY_ID = "design-system-tilegrid--playground"
-const IFRAME_PATH = `/iframe.html?id=${PLAYGROUND_STORY_ID}&viewMode=story&args=mode:scroll;dataset:basic`
+// The Tilegrid stories default to a parent-filling canvas; pin the size for
+// deterministic spatial-nav coverage regardless of Playwright viewport.
+const IFRAME_PATH = `/iframe.html?id=${PLAYGROUND_STORY_ID}&viewMode=story&args=mode:scroll;dataset:basic;containerWidth:900px;containerHeight:560px`
 
 const GAMEPAD_BUTTON = {
   confirm: 0,

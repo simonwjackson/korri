@@ -454,8 +454,11 @@ const meta = {
     mode: "scroll",
     dataset: "basic",
     motionPreset: "layout",
-    containerWidth: "900px",
-    containerHeight: "560px",
+    // Empty by default so the canvas fills its parent and Storybook's
+    // viewport / measure addons can drive the size fluidly. Type a CSS
+    // length into either control to pin a fixed canvas size.
+    containerWidth: "",
+    containerHeight: "",
   },
   argTypes: {
     cellSize: {

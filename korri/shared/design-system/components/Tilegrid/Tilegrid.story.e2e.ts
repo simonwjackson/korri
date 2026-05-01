@@ -19,9 +19,15 @@ import { expect, test } from "@playwright/test"
 const PLAYGROUND_STORY_ID = "design-system-tilegrid--playground"
 const VIEW_TRANSITIONS_STORY_ID = "design-system-tilegrid--view-transitions"
 
+// The Tilegrid stories now default to a parent-filling canvas so Storybook's
+// viewport addon can drive size fluidly. E2E specs pin the canvas at
+// 900x560 (the previous fixed decorator size) so spatial-nav assertions
+// remain deterministic regardless of the Playwright viewport.
+const PINNED_CANVAS = "containerWidth:900px;containerHeight:560px"
+
 const iframePath = (storyId: string, args?: string) => {
   const query = new URLSearchParams({ id: storyId, viewMode: "story" })
-  if (args) query.set("args", args)
+  query.set("args", args ? `${args};${PINNED_CANVAS}` : PINNED_CANVAS)
   return `/iframe.html?${query.toString()}`
 }
 
