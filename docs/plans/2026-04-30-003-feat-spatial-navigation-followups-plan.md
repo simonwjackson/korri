@@ -283,7 +283,7 @@ Backward navigation:
 
 ---
 
-- [ ] **Unit 5: Gamepad-driven Playwright spec with a fake-gamepad shim**
+- [x] **Unit 5: Gamepad-driven Playwright spec with a fake-gamepad shim**
 
 **Goal:** Prove end-to-end that the gamepad adapter's polling, hold/repeat state machine, and bus emission produce focus changes in a real browser.
 
