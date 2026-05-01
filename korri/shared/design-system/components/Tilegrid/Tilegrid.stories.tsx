@@ -56,6 +56,25 @@ interface StoryArgs {
    */
   containerHeight: string
   /**
+   * Per-axis cell width for the heterogeneous rail story (column width
+   * applied to every single-cell tile). Independent from `cellSize` so the
+   * rectangular-cell controls don't collide with the square-cell ones used
+   * by the other stories.
+   */
+  cellWidth: number
+  /**
+   * Per-axis cell height for the heterogeneous rail story (the row height
+   * shared by every tile, including the multi-span feature tile).
+   */
+  cellHeight: number
+  /**
+   * Column-span applied to the leading "feature" tile in the heterogeneous
+   * rail. The feature tile occupies featureSpan column-widths plus
+   * (featureSpan - 1) gap-widths, sharing the row height with the
+   * surrounding single-cell tiles.
+   */
+  featureSpan: number
+  /**
    * Wired to the Storybook Actions panel via `argTypes.onItemClick.action`.
    * Each cell click is logged there, so consumers see real interaction
    * feedback without an in-canvas overlay button.
@@ -409,6 +428,45 @@ function FramerMotionDemo(args: StoryArgs) {
   )
 }
 
+// Heterogeneous-rail fixture: one wide "feature" tile (intended for a
+// landscape key-art crop) followed by several portrait covers. The Storybook
+// control overrides the feature tile's span; the surrounding tiles stay at
+// span:1. Image seeds use deterministic IDs so reload doesn't reshuffle the
+// row.
+const railHeterogeneousFixture: ReadonlyArray<Tile> = [
+  {
+    id: "feature",
+    image: "https://picsum.photos/seed/tilegrid-rail-feature/960/540",
+  },
+  ...Array.from({ length: 9 }, (_, i) => ({
+    id: `cover-${i}`,
+    image: `https://picsum.photos/seed/tilegrid-rail-cover-${i}/320/440`,
+  })),
+]
+
+function RailHeterogeneousDemo(args: StoryArgs) {
+  const { cellWidth, cellHeight, gap, featureSpan, onItemClick } = args
+
+  // Resolve the feature tile's span from the live control. Other tiles fall
+  // back to span:1 — the rail Root reads item.span ?? 1 by default.
+  const items: ReadonlyArray<Tile> = railHeterogeneousFixture.map(tile =>
+    tile.id === "feature" ? { ...tile, span: featureSpan } : tile,
+  )
+
+  return (
+    <TilegridRailRoot<Tile>
+      items={items}
+      cellSize={{ width: cellWidth, height: cellHeight }}
+      gap={gap}
+    >
+      <TilegridCells<Tile>
+        renderCell={renderTileCell}
+        onItemClick={onItemClick}
+      />
+    </TilegridRailRoot>
+  )
+}
+
 function ViewTransitionsDemo(args: StoryArgs) {
   const { dataset, onItemClick } = args
   const initialItems = datasets[dataset]
@@ -459,6 +517,12 @@ const meta = {
     // length into either control to pin a fixed canvas size.
     containerWidth: "",
     containerHeight: "",
+    // Switch-style rail defaults: portrait-cover-shaped single cells
+    // (155×220 ~= 2:3) with a featureSpan of 3 so the leading tile lands
+    // near a 16:9 landscape footprint at the same row height.
+    cellWidth: 155,
+    cellHeight: 220,
+    featureSpan: 3,
   },
   argTypes: {
     cellSize: {
@@ -510,6 +574,21 @@ const meta = {
       control: "text",
       description:
         "Outer canvas height. Empty = fill the parent. Accepts any CSS length.",
+    },
+    cellWidth: {
+      control: { type: "range", min: 80, max: 320, step: 5 },
+      description:
+        "Heterogeneous-rail only: column width (px) applied to every single-cell tile. The leading feature tile spans `featureSpan` of these widths plus the gaps between them.",
+    },
+    cellHeight: {
+      control: { type: "range", min: 120, max: 400, step: 10 },
+      description:
+        "Heterogeneous-rail only: row height (px) shared by every tile in the rail, including the multi-span feature tile.",
+    },
+    featureSpan: {
+      control: { type: "range", min: 1, max: 6, step: 1 },
+      description:
+        "Heterogeneous-rail only: column-span of the leading feature tile. With cellWidth×cellHeight defaults of 155×220, featureSpan: 3 yields ~480×220 — close to a 16:9 landscape crop sharing the row height with 2:3 portrait covers.",
     },
   },
   decorators: [
@@ -572,4 +651,24 @@ export const ViewTransitions: Story = {
     motionPreset: { control: false, table: { disable: true } },
   },
   render: args => <ViewTransitionsDemo {...args} />,
+}
+
+/**
+ * Switch-style heterogeneous rail: one wide landscape "feature" tile sharing
+ * its row with several portrait covers, all the same height, scrolling
+ * horizontally as one unit. Demonstrates rectangular `cellSize` and per-item
+ * column spans on `TilegridRailRoot`.
+ */
+export const RailHeterogeneous: Story = {
+  name: "Rail / Heterogeneous (Switch-style)",
+  argTypes: {
+    // The square cellSize controls don't apply to the rectangular rail; hide
+    // them in this story to keep the Controls panel honest.
+    cellSize: { control: false, table: { disable: true } },
+    cellSizeCSS: { control: false, table: { disable: true } },
+    mode: { control: false, table: { disable: true } },
+    dataset: { control: false, table: { disable: true } },
+    motionPreset: { control: false, table: { disable: true } },
+  },
+  render: args => <RailHeterogeneousDemo {...args} />,
 }

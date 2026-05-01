@@ -339,36 +339,34 @@ describe("TilegridRailRoot", () => {
   })
 
   it("per-item span: a span:4 tile in a 4-item rail clamps to 4", () => {
-    const items = [tile("hero", 4), tile("a"), tile("b"), tile("c")]
+    const [hero, ...rest] = [tile("hero", 4), tile("a"), tile("b"), tile("c")]
+    const items = [hero, ...rest]
     const { result } = renderHook(() => useTilegrid<Tile>(), {
       wrapper: wrap(items),
     })
     const { base } = result.current
-    const rawSpan = base.getSpan(items[0]!)
+    const rawSpan = base.getSpan(hero)
     expect(rawSpan).toBe(4)
-    expect(
-      Math.min(rawSpan, base.maxSpan.columns, base.maxSpan.rows),
-    ).toBe(4)
+    expect(Math.min(rawSpan, base.maxSpan.columns, base.maxSpan.rows)).toBe(4)
   })
 
   it("per-item span: a span:99 tile in a 3-item rail clamps to items.length (3)", () => {
-    const items = [tile("oversize", 99), tile("a"), tile("b")]
+    const oversize = tile("oversize", 99)
+    const items = [oversize, tile("a"), tile("b")]
     const { result } = renderHook(() => useTilegrid<Tile>(), {
       wrapper: wrap(items),
     })
     const { base } = result.current
-    expect(base.getSpan(items[0]!)).toBe(99)
+    expect(base.getSpan(oversize)).toBe(99)
     // clampSpan would clip to maxSpan.columns (= items.length).
     expect(base.maxSpan.columns).toBe(items.length)
   })
 
   it("consumer-supplied getSpan overrides item.span", () => {
-    const items = [tile("hero", 1), tile("a")]
-    const wrapWithGetSpan = ({
-      children,
-    }: {
-      children: React.ReactNode
-    }) => (
+    const hero = tile("hero", 1)
+    const sibling = tile("a")
+    const items = [hero, sibling]
+    const wrapWithGetSpan = ({ children }: { children: React.ReactNode }) => (
       <TilegridRailRoot<Tile>
         items={items}
         cellSize={120}
@@ -381,8 +379,8 @@ describe("TilegridRailRoot", () => {
     const { result } = renderHook(() => useTilegrid<Tile>(), {
       wrapper: wrapWithGetSpan,
     })
-    expect(result.current.base.getSpan(items[0]!)).toBe(4)
-    expect(result.current.base.getSpan(items[1]!)).toBe(1)
+    expect(result.current.base.getSpan(hero)).toBe(4)
+    expect(result.current.base.getSpan(sibling)).toBe(1)
   })
 
   it("sets position: relative on the outer wrapper so percent-sized sentinels resolve against the rail", () => {

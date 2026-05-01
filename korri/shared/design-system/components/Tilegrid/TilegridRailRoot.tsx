@@ -126,11 +126,8 @@ export function TilegridRailRoot<T extends GridItemShape>({
   // Rectangular cellSize is the discriminated object form. Resolve each axis
   // independently so numeric dimensions stay zero-cost while string dimensions
   // each get their own sentinel + ResizeObserver.
-  const isRectCellSize =
-    typeof cellSize === "object" && cellSize !== null
-  const widthInput: number | string = isRectCellSize
-    ? cellSize.width
-    : cellSize
+  const isRectCellSize = typeof cellSize === "object" && cellSize !== null
+  const widthInput: number | string = isRectCellSize ? cellSize.width : cellSize
   const heightInput: number | string = isRectCellSize
     ? cellSize.height
     : cellSize
@@ -146,11 +143,9 @@ export function TilegridRailRoot<T extends GridItemShape>({
   // For square inputs (number/string), width and height share one resolution
   // and one sentinel; only the rectangular path emits two sentinels.
   const widthCss = widthMeasure.cssValue
-  const heightCss = isRectCellSize ? heightMeasure.cssValue : widthMeasure.cssValue
-
-  const cellSizeRect = isRectCellSize
-    ? { width: widthPx, height: heightPx }
-    : undefined
+  const heightCss = isRectCellSize
+    ? heightMeasure.cssValue
+    : widthMeasure.cssValue
 
   const base = useMemo<TilegridBaseContext<T>>(
     () => ({
@@ -163,7 +158,12 @@ export function TilegridRailRoot<T extends GridItemShape>({
       // mode (where `cellSizeRect.width === cellSize`) so legacy consumers
       // reading the scalar field keep working.
       cellSize: widthPx,
-      cellSizeRect,
+      // Construct cellSizeRect inside the memo so the dependency list stays
+      // primitive (widthPx, heightPx, isRectCellSize) — building it outside
+      // would force a new object on every render and re-trigger the memo.
+      cellSizeRect: isRectCellSize
+        ? { width: widthPx, height: heightPx }
+        : undefined,
       gap: gapPx,
       // `columns` is informational in rail mode; the row simply grows with
       // the number of items. Use items.length so consumers reading context
@@ -189,7 +189,7 @@ export function TilegridRailRoot<T extends GridItemShape>({
       widthPx,
       heightPx,
       gapPx,
-      cellSizeRect,
+      isRectCellSize,
     ],
   )
 
