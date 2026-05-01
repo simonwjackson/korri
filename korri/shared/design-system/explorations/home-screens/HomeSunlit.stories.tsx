@@ -471,6 +471,22 @@ function SunlitStyles() {
       [data-exploration="sunlit"] :focus { outline: none; }
       [data-exploration="sunlit"] :focus-visible { outline: none; }
 
+      /* --- Hide scrollbars on the rail's horizontal scroll container.
+             TilegridRailRoot's outer div is overflowX: auto; the visual
+             language has no place for a chrome scrollbar. Cross-browser
+             selectors cover Firefox, legacy IE/Edge, and WebKit. */
+      [data-exploration="sunlit"] .sunlit-rail-region,
+      [data-exploration="sunlit"] .sunlit-rail-region * {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      [data-exploration="sunlit"] .sunlit-rail-region::-webkit-scrollbar,
+      [data-exploration="sunlit"] .sunlit-rail-region *::-webkit-scrollbar {
+        display: none;
+        width: 0;
+        height: 0;
+      }
+
       /* --- Tile (rounded corners, lavender ring on focus).
              The focus indicator uses a negative-offset outline so the
              ring renders INSIDE the tile box. TilegridRailRoot's outer
