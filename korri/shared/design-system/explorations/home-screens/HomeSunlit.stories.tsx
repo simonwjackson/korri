@@ -1,7 +1,7 @@
 /**
  * Visual exploration: "Sunlit" home screen — friendly, soft, family-arcade.
  *
- * Decoupled from the `shift` theme on purpose. This is a clone of the
+ * Visual world is defined inline. This is a clone of the
  * Nintendo Switch 2 home cluster, used as a calibration anchor between
  * Hero (cinematic) and Mosaic (minimal). Sunlit imports a known-good
  * visual language wholesale — bright cream surface, soft rounding, a
@@ -21,8 +21,10 @@
  *     color later without touching JSX.
  *   - Heterogeneous rail via TilegridRailRoot's rectangular cellSize
  *     plus per-item column-only span (the leading tile is wider).
- *   - Caption below the rail: green "LAST PLAYED" eyebrow + name when
- *     the resume target is focused; name only otherwise.
+ *   - Caption below the rail: focused tile's name, with relative
+ *     last-played time appended when the resume target is focused.
+ *     Caption tracks the focused tile's x-position so the title sits
+ *     under whichever tile has focus, including after the rail scrolls.
  *   - HUD at bottom-right reads `+ Options · X Close · A Continue`
  *     (Switch home convention; no `B Back` because home has nowhere to
  *     go back to). The X chip is decorative; `+` and `A` are wired to
@@ -44,12 +46,12 @@ import "@fontsource-variable/nunito"
 
 import { TilegridCells } from "@shared/design-system/components/Tilegrid/components/TilegridCells"
 import { TilegridRailRoot } from "@shared/design-system/components/Tilegrid/TilegridRailRoot"
-import { games } from "@shared/themes/shift/fixtures/games"
 import {
   type GameRecord,
   getGameDisplayName,
   getGameImageUrl,
-} from "@shared/themes/shift/schemas/game"
+} from "@shared/fixtures/games/game"
+import { games } from "@shared/fixtures/games/games"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { Battery, Menu, Search, Sun, Wifi } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
@@ -112,6 +114,7 @@ function HomeSunlit() {
   const resumeTarget = items[0]
 
   const [focusedId, setFocusedId] = useState<string>(resumeTarget.id)
+  const [captionX, setCaptionX] = useState(0)
   const railRef = useRef<HTMLDivElement | null>(null)
 
   /**
@@ -143,6 +146,46 @@ function HomeSunlit() {
     target?.focus()
     // resumeTarget is module-scope (items[0]); deliberately runs once on mount.
   }, [])
+
+  /**
+   * Track the focused tile's x-position relative to the rail-region's
+   * inner content-edge (which equals the caption's natural left, since
+   * the caption shares px-12 with the rail-region). The caption applies
+   * the result as translateX so its left edge sits under whichever tile
+   * has focus.
+   *
+   * Recomputed on focus change, on rail scroll (capture phase — scroll
+   * does not bubble), and on window resize. Rounded to whole pixels to
+   * avoid subpixel text blur on Chromium.
+   */
+  useEffect(() => {
+    const region = railRef.current
+    if (!region) return
+
+    const compute = () => {
+      const tile = region.querySelector<HTMLElement>(
+        `[data-tile-id="${CSS.escape(focusedId)}"]`,
+      )
+      if (!tile) return
+      const tileRect = tile.getBoundingClientRect()
+      const regionRect = region.getBoundingClientRect()
+      const paddingLeft =
+        Number.parseFloat(getComputedStyle(region).paddingLeft) || 0
+      setCaptionX(Math.round(tileRect.left - regionRect.left - paddingLeft))
+    }
+
+    compute()
+
+    region.addEventListener("scroll", compute, {
+      capture: true,
+      passive: true,
+    })
+    window.addEventListener("resize", compute)
+    return () => {
+      region.removeEventListener("scroll", compute, true)
+      window.removeEventListener("resize", compute)
+    }
+  }, [focusedId])
 
   const focused = items.find(g => g.id === focusedId) ?? resumeTarget
   const isResumeFocused = focused.id === resumeTarget.id
@@ -198,12 +241,14 @@ function HomeSunlit() {
           </TilegridRailRoot>
         </div>
 
-        {/* Caption below the rail. Re-mounted via key={focused.id} so the
-            crossfade animation runs on every focus change. */}
+        {/* Caption below the rail. Outer block snaps its transform to
+            the focused tile's x-position on focus / scroll (no transition).
+            Title text updates synchronously on focus change — no
+            crossfade, no remount, no re-keyed animation. */}
         <Caption
-          key={focused.id}
           game={focused}
-          showEyebrow={isResumeFocused}
+          isResumeFocused={isResumeFocused}
+          captionX={captionX}
         />
       </div>
 
@@ -373,36 +418,37 @@ function PosterTileArt({ game }: { game: GameRecord }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Caption — focus-driven, green eyebrow when resume target is focused        */
+/* Caption — focused tile's name + relative time when resume is focused       */
 /* -------------------------------------------------------------------------- */
 
 function Caption({
   game,
-  showEyebrow,
+  isResumeFocused,
+  captionX,
 }: {
   game: GameRecord
-  showEyebrow: boolean
+  isResumeFocused: boolean
+  captionX: number
 }) {
-  const name = getGameDisplayName(game)
   const lastPlayed = game.userData?.lastPlayed
-  const lastPlayedLabel =
-    showEyebrow && lastPlayed ? formatRelative(lastPlayed) : undefined
+  const relativeLabel =
+    isResumeFocused && lastPlayed ? formatRelative(lastPlayed) : undefined
 
   return (
-    <div className="sunlit-caption flex shrink-0 items-baseline gap-4 px-12 pb-3 pt-2">
-      {showEyebrow ? (
-        <span className="text-sm font-bold uppercase tracking-widest text-[color:var(--last-played-eyebrow)]">
-          Last played
+    <div
+      className="sunlit-caption shrink-0 px-12 pb-3 pt-2"
+      style={{ transform: `translateX(${captionX}px)` }}
+    >
+      <div className="sunlit-caption-text flex items-baseline gap-4">
+        <span className="text-3xl font-semibold text-[color:var(--ink)]">
+          {getGameDisplayName(game)}
         </span>
-      ) : null}
-      <span className="text-lg font-semibold text-[color:var(--ink)]">
-        {name}
-      </span>
-      {lastPlayedLabel ? (
-        <span className="text-sm font-medium uppercase tracking-widest text-[color:var(--ink-faint)]">
-          {lastPlayedLabel}
-        </span>
-      ) : null}
+        {relativeLabel ? (
+          <span className="text-sm font-medium uppercase tracking-widest text-[color:var(--ink-faint)]">
+            {relativeLabel}
+          </span>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -436,7 +482,6 @@ function SunlitStyles() {
         --rule: #D4D2CD;
 
         --focus-glow: hsl(252, 75%, 70%);
-        --last-played-eyebrow: #4FAE3E;
 
         --pill-bg: #FFFFFF;
         --pill-fg: #1B1814;
@@ -491,7 +536,6 @@ function SunlitStyles() {
         --rule: #2A2D38;
 
         --focus-glow: hsl(252, 80%, 75%);
-        --last-played-eyebrow: #6FCD5C;
 
         --pill-bg: #1A2238;
         --pill-fg: #ECE7DE;
@@ -615,7 +659,7 @@ function SunlitStyles() {
         /* Collapsed: button is exactly the icon's width. The icon's
            left edge sits at the button's left edge, which sits at the
            parent's px-12 boundary — visually flush with the Menu glyph
-           circle and the 'LAST PLAYED' eyebrow on the rows below. */
+           circle and the caption on the rows below. */
         width: 1.4em;
         height: 3.4em;
         padding: 0;
@@ -755,21 +799,21 @@ function SunlitStyles() {
         color: var(--ink-dim);
       }
 
-      /* --- Caption crossfade on focus change.
-             The Caption is re-mounted via key={focused.id}, so the keyframe
-             runs each time focus moves. */
-      @keyframes sunlit-caption-cross {
-        from { opacity: 0; transform: translateY(2px); }
-        to   { opacity: 1; transform: translateY(0); }
-      }
-      [data-exploration="sunlit"] .sunlit-caption {
-        animation: sunlit-caption-cross 220ms ease-out;
-      }
+      /* --- Caption motion.
+             Outer .sunlit-caption snaps instantly to the focused tile's
+             x-position (transform set inline from JS, no transition).
+             A smooth horizontal slide read as awkward when crossing
+             irregular tile widths and especially during continuous
+             scroll — instant snap lets the caption read as 'belonging
+             to' the focused tile rather than chasing it.
+
+             Title text updates instantly on focus change. An earlier
+             revision crossfaded the text via a re-keyed remount, but
+             the fade read as latency rather than feedback once the
+             rail itself centers — the rail motion is the focus signal
+             and a competing fade muddied it. */
 
       @media (prefers-reduced-motion: reduce) {
-        [data-exploration="sunlit"] .sunlit-caption {
-          animation: none !important;
-        }
         [data-exploration="sunlit"] .sunlit-tile {
           transition: none;
         }
