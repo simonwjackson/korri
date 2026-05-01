@@ -10,7 +10,7 @@ export function FeatureGatesPanel() {
     return null
   }
 
-  const enabledCount = gateNames.filter(name => resolved[name].enabled).length
+  const enabledCount = gateNames.filter(name => resolved[name]?.enabled).length
 
   return (
     <div className="fixed right-4 bottom-4 z-50 text-sm">
@@ -47,7 +47,7 @@ export function FeatureGatesPanel() {
                   </span>
                   <input
                     type="checkbox"
-                    checked={gate.requested}
+                    checked={gate?.requested ?? false}
                     onChange={() => toggleGate(name)}
                   />
                 </label>

@@ -49,6 +49,7 @@ function main() {
   const gateLines = entries
     .map(entry => `  "${entry.name}": true, // ${entry.source}`)
     .join("\n")
+  const registryLiteral = entries.length === 0 ? "{}" : `{\n${gateLines}\n}`
 
   const output = `/**
  * Gate Registry — auto-generated from co-located gate.ts files.
@@ -57,9 +58,7 @@ function main() {
  * Regenerate: just generate-gates
  */
 
-export const GATE_REGISTRY = {
-${gateLines}
-} as const satisfies Record<string, true>
+export const GATE_REGISTRY = ${registryLiteral} as const satisfies Record<string, true>
 
 export type GateName = keyof typeof GATE_REGISTRY
 

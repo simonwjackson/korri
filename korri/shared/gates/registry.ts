@@ -5,9 +5,7 @@
  * Regenerate: just generate-gates
  */
 
-export const GATE_REGISTRY = {
-  "welcome.example": true, // korri/products/app/features/welcome/gate.ts
-} as const satisfies Record<string, true>
+export const GATE_REGISTRY = {} as const satisfies Record<string, true>
 
 export type GateName = keyof typeof GATE_REGISTRY
 

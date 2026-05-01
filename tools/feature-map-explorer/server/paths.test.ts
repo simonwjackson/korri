@@ -73,7 +73,9 @@ describe("assertWritablePath", () => {
       assertWritablePath("korri/products/app/features/resume/brief.md"),
     ).not.toThrow()
     expect(() =>
-      assertWritablePath("korri/products/app/features/welcome/brief.md"),
+      assertWritablePath(
+        "korri/products/app/features/another-feature/brief.md",
+      ),
     ).not.toThrow()
   })
 

@@ -1,14 +1,14 @@
 import { RpcMiddleware } from "@effect/rpc"
 import { type Environment, getEnvironment } from "@shared/config/environment"
 import { GATES_HEADER, parseGatesHeader } from "@shared/gates/header"
-import { GATE_REGISTRY, type GateName } from "@shared/gates/registry"
+import { GATE_REGISTRY } from "@shared/gates/registry"
 import { resolveGates } from "@shared/gates/resolver"
-import type { ResolvedGates } from "@shared/gates/types"
+import type { ResolvedGate } from "@shared/gates/types"
 import { logger } from "@shared/logger"
 import { Context, Effect, Layer } from "effect"
 
 export interface FeatureGatesInfo {
-  readonly gates: ResolvedGates<GateName>
+  readonly gates: Readonly<Record<string, ResolvedGate | undefined>>
   readonly environment: Environment
 }
 

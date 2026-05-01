@@ -1,5 +1,5 @@
 import { type Environment, getEnvironment } from "@shared/config/environment"
-import { GATE_NAMES, type GateName, isKnownGate } from "@shared/gates/registry"
+import { GATE_NAMES, isKnownGate } from "@shared/gates/registry"
 import { logger } from "@shared/logger"
 import {
   createContext,
@@ -16,12 +16,12 @@ import {
   readGateStorage,
   writeGateStorage,
 } from "./storage"
-import type { ResolvedGate, ResolvedGates } from "./types"
+import type { ResolvedGate } from "./types"
 
 interface FeatureGatesContextValue {
-  readonly resolved: ResolvedGates<GateName>
+  readonly resolved: Readonly<Record<string, ResolvedGate | undefined>>
   readonly requestedGates: ReadonlySet<string>
-  readonly toggleGate: (name: GateName) => void
+  readonly toggleGate: (name: string) => void
   readonly environment: Environment
   readonly canToggle: boolean
 }
@@ -64,14 +64,19 @@ export function FeatureGatesProvider({
   const canToggle = isToggleableEnvironment(environment)
 
   const toggleGate = useMemo(
-    () => (name: GateName) => {
+    () => (name: string) => {
       if (!canToggle) {
         logger.warn({ gate: name }, "Cannot toggle feature gates here")
         return
       }
 
+      if (!isKnownGate(name)) {
+        logger.warn({ gate: name }, "Cannot toggle an unknown feature gate")
+        return
+      }
+
       setRequestedGateIds(current => {
-        const next = new Set(current)
+        const next = new Set<string>(current)
         if (next.has(name)) {
           next.delete(name)
         } else {
@@ -132,7 +137,13 @@ export function useFeatureGate(name: string): ResolvedGate {
     }
   }
 
-  return ctx.resolved[name]
+  return (
+    ctx.resolved[name] ?? {
+      enabled: false,
+      requested: false,
+      reason: "not-requested",
+    }
+  )
 }
 
 export function useFeatureGates() {
@@ -143,6 +154,6 @@ export function useFeatureGates() {
     toggleGate: ctx.toggleGate,
     environment: ctx.environment,
     canToggle: ctx.canToggle,
-    gateNames: GATE_NAMES,
+    gateNames: GATE_NAMES as readonly string[],
   }
 }
