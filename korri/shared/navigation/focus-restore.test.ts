@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
+import { __resetCenterScrollState } from "./center-scroll"
 import { createFocusRestore } from "./focus-restore"
 
 describe("createFocusRestore", () => {
@@ -12,10 +13,12 @@ describe("createFocusRestore", () => {
   beforeEach(() => {
     document.body.innerHTML = ""
     scheduled = []
+    __resetCenterScrollState()
   })
 
   afterEach(() => {
     document.body.innerHTML = ""
+    __resetCenterScrollState()
   })
 
   it("restores focus by aria-label after remount", () => {
@@ -164,6 +167,152 @@ describe("createFocusRestore", () => {
     flushScheduled()
 
     expect(document.activeElement).toBe(document.body)
+  })
+
+  describe("Mario-camera integration", () => {
+    it("snaps the rail to centered when the restored target lives inside a Mario surface", () => {
+      // Build a horizontal Mario rail: 1000px viewport, 1500px content,
+      // tile #2 starts at x=500 with width 200 → center 600 → needs
+      // scrollLeft = 100 to align with viewport center 500.
+      document.body.innerHTML = `
+        <div id="rail" data-mario-camera="inline">
+          <button id="a" aria-label="A">A</button>
+          <button id="b" aria-label="B">B</button>
+          <button id="c" aria-label="C">C</button>
+        </div>
+      `
+      const rail = document.getElementById("rail") as HTMLElement
+      Object.defineProperty(rail, "clientWidth", {
+        configurable: true,
+        get: () => 1000,
+      })
+      Object.defineProperty(rail, "scrollWidth", {
+        configurable: true,
+        get: () => 1500,
+      })
+      ;(rail as unknown as { getBoundingClientRect: () => DOMRect }).getBoundingClientRect =
+        () =>
+          ({
+            x: 0,
+            y: 0,
+            left: 0,
+            top: 0,
+            right: 1000,
+            bottom: 100,
+            width: 1000,
+            height: 100,
+            toJSON: () => ({}),
+          }) as DOMRect
+      rail.scrollLeft = 0
+
+      const tileB = document.getElementById("b") as HTMLButtonElement
+      ;(tileB as unknown as { getBoundingClientRect: () => DOMRect }).getBoundingClientRect =
+        () =>
+          ({
+            x: 500,
+            y: 0,
+            left: 500,
+            top: 0,
+            right: 700,
+            bottom: 100,
+            width: 200,
+            height: 100,
+            toJSON: () => ({}),
+          }) as DOMRect
+
+      const restore = createFocusRestore({
+        schedule: callback => scheduled.push(callback),
+      })
+      tileB.focus()
+      restore.capture("/")
+
+      // Simulate a remount that re-creates the same DOM. We don't actually
+      // teardown / reattach — the elements still exist with the captured
+      // identity. (Equivalent to a route round-trip with the same scope.)
+      // Reset scrollLeft to prove the snap re-establishes centered.
+      rail.scrollLeft = 0
+      ;(document.activeElement as HTMLElement | null)?.blur()
+
+      restore.restore("/")
+      flushScheduled()
+
+      expect(document.activeElement).toBe(tileB)
+      expect(rail.scrollLeft).toBe(100)
+    })
+
+    it("does not change scrollLeft for non-Mario restore targets (regression guard)", () => {
+      // Plain DOM with no data-mario-camera anywhere. Restore should focus
+      // the target via focus({preventScroll:true}) and the centering util
+      // should be a no-op.
+      document.body.innerHTML = `
+        <div id="plain">
+          <button aria-label="Hades">Hades</button>
+        </div>
+      `
+      const wrapper = document.getElementById("plain") as HTMLElement
+      wrapper.scrollLeft = 42 // arbitrary non-zero starting value
+      const button = document.querySelector<HTMLButtonElement>("button")!
+      button.focus()
+
+      const restore = createFocusRestore({
+        schedule: callback => scheduled.push(callback),
+      })
+      restore.capture("/")
+      ;(document.activeElement as HTMLElement | null)?.blur()
+
+      restore.restore("/")
+      flushScheduled()
+
+      expect(document.activeElement).toBe(button)
+      // No data-mario-camera → util walks up, finds nothing, returns. The
+      // wrapper's pre-existing scrollLeft is untouched.
+      expect(wrapper.scrollLeft).toBe(42)
+    })
+
+    it("calls focus with preventScroll: true", () => {
+      document.body.innerHTML = `<button aria-label="Hades">Hades</button>`
+      const button = document.querySelector<HTMLButtonElement>("button")!
+      const focusOptions: Array<FocusOptions | undefined> = []
+      const originalFocus = button.focus.bind(button)
+      button.focus = ((options?: FocusOptions) => {
+        focusOptions.push(options)
+        return originalFocus(options)
+      }) as HTMLElement["focus"]
+
+      const restore = createFocusRestore({
+        schedule: callback => scheduled.push(callback),
+      })
+      // Capture via a different focused element first to avoid catching
+      // the spy call from `button.focus()` during capture phase.
+      button.focus({ preventScroll: true })
+      restore.capture("/")
+      focusOptions.length = 0
+      ;(document.activeElement as HTMLElement | null)?.blur()
+
+      restore.restore("/")
+      flushScheduled()
+
+      expect(focusOptions).toHaveLength(1)
+      expect(focusOptions[0]?.preventScroll).toBe(true)
+    })
+
+    it("does not throw when the captured target no longer exists in the DOM", () => {
+      document.body.innerHTML = `<button aria-label="Gone">Gone</button>`
+      const button = document.querySelector<HTMLButtonElement>("button")!
+      button.focus()
+
+      const restore = createFocusRestore({
+        schedule: callback => scheduled.push(callback),
+      })
+      restore.capture("/")
+
+      document.body.innerHTML = "" // Element is gone after "remount".
+
+      expect(() => {
+        restore.restore("/")
+        flushScheduled()
+      }).not.toThrow()
+    })
   })
 
   it("clear forgets captured focus", () => {

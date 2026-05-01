@@ -1,3 +1,5 @@
+import { centerScrollableAncestors } from "./center-scroll"
+
 export interface FocusRestoreOptions {
   /** Scope focus capture/restore to a subtree. Defaults to document.body. */
   readonly scope?: () => HTMLElement | null | undefined
@@ -49,7 +51,17 @@ export function createFocusRestore(
         const scope = getScope()
         if (!scope) return
         const target = findByIdentity(identity, scope)
-        target?.focus()
+        if (!target) return
+        // preventScroll: true suppresses the browser's default focus-scroll
+        // so the Mario snap below (or any consumer-driven scroll) is the
+        // sole owner of post-focus scroll position. Safe for non-Mario
+        // surfaces too — nothing else relies on focus-scroll here.
+        target.focus({ preventScroll: true })
+        // Mario surfaces: snap to centered immediately. The util is a
+        // no-op when target has no data-mario-camera ancestor, so this is
+        // safe to call unconditionally on every restore. Snap (no
+        // animation) because restore is a teleport, not a camera move.
+        centerScrollableAncestors(target, { animate: false })
       })
     },
     clear() {
