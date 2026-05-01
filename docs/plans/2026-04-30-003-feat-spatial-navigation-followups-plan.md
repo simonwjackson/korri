@@ -1,7 +1,7 @@
 ---
 title: "feat: Spatial navigation follow-ups (bus access, tests, router integration, focus restore)"
 type: feat
-status: active
+status: completed
 date: 2026-04-30
 ---
 
