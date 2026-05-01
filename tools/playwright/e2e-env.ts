@@ -27,5 +27,7 @@ function resolvePort(...envKeys: string[]): number {
 
 export const portalPort = resolvePort("KORRI_PORT_PORTAL")
 export const apiPort = resolvePort("KORRI_PORT_API")
+export const storybookPort = resolvePort("KORRI_PORT_STORYBOOK")
 export const portalBaseUrl = `http://localhost:${portalPort}`
 export const apiBaseUrl = `http://localhost:${apiPort}`
+export const storybookBaseUrl = `http://localhost:${storybookPort}`

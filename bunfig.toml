@@ -3,7 +3,7 @@
 
 [test]
 root = "./"
-pattern = ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
+pattern = ["**/*.test.ts", "**/*.test.tsx"]
 preload = ["./tools/testing/mock-import-meta.ts", "./tools/testing/happydom.ts", "./tools/testing/testing-library.ts", "./tools/testing/setup-global.ts"]
 smol = true
 bail = 0
