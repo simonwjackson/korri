@@ -1,7 +1,7 @@
 ---
 title: "feat: Port BDD Argo Playwright demo tooling"
 type: feat
-status: active
+status: completed
 date: 2026-04-30
 deepened: 2026-04-30
 ---
@@ -212,7 +212,7 @@ flowchart TB
   U7 --> U8
 ```
 
-- [ ] **Unit 1: Dependencies and artifact paths**
+- [x] **Unit 1: Dependencies and artifact paths**
 
 **Goal:** Add the external tooling and artifact-path foundations needed for BDD-generated Argo demos.
 
@@ -247,7 +247,7 @@ flowchart TB
 **Verification:**
 - Tooling dependencies are available to Bun scripts, and all new generated/video paths are represented in the canonical artifact layout.
 
-- [ ] **Unit 2: BDD output relocation and generation check mode**
+- [x] **Unit 2: BDD output relocation and generation check mode**
 
 **Goal:** Move generated BDD wrappers from feature source folders to `out/generated/bdd/playwright/`, adopt flat feature step files, and add a non-mutating stale-output check.
 
@@ -291,7 +291,7 @@ flowchart TB
 **Verification:**
 - BDD generation no longer writes source-tree generated wrappers, and E2E runs consume generated wrappers from `out/generated/bdd/playwright/`.
 
-- [ ] **Unit 3: Storyboard YAML parser and validation**
+- [x] **Unit 3: Storyboard YAML parser and validation**
 
 **Goal:** Add typed parsing and validation for optional `.demo.yaml` storyboards co-located with feature E2E files.
 
@@ -326,7 +326,7 @@ flowchart TB
 **Verification:**
 - Storyboard validation is pure and unit-testable without Playwright, Argo, Vite, or API processes.
 
-- [ ] **Unit 4: BDD runtime seams for Argo instrumentation**
+- [x] **Unit 4: BDD runtime seams for Argo instrumentation**
 
 **Goal:** Extend the BDD runtime so Argo adapters can run existing steps on Argo's page and mark scenes before/after steps.
 
@@ -364,7 +364,7 @@ flowchart TB
 **Verification:**
 - Normal BDD E2E wrappers keep their current behavior, while generated Argo adapters can instrument steps without owning browser behavior.
 
-- [ ] **Unit 5: BDD generator emits Argo demo adapters**
+- [x] **Unit 5: BDD generator emits Argo demo adapters**
 
 **Goal:** Extend BDD generation so `@demo(<name>)` scenarios produce generated Argo `.demo.ts` adapters and `.scenes.json` manifests under `out/generated/bdd/argo/`.
 
@@ -406,7 +406,7 @@ flowchart TB
 **Verification:**
 - `just generate-bdd` can regenerate both Playwright and Argo outputs deterministically, and `just check-bdd` or equivalent can detect stale generated artifacts without mutation.
 
-- [ ] **Unit 6: Demo video runner and Argo Playwright config**
+- [x] **Unit 6: Demo video runner and Argo Playwright config**
 
 **Goal:** Add the local demo-video pipeline that records generated Argo adapters with Korri's Playwright settings and exports final videos under `out/demo-videos/`.
 
@@ -451,7 +451,7 @@ flowchart TB
 **Verification:**
 - Demo recording has a deterministic plan and a local-safe execution boundary even when no product demo is currently authored.
 
-- [ ] **Unit 7: Command surface and Playwright config parity**
+- [x] **Unit 7: Command surface and Playwright config parity**
 
 **Goal:** Expose the ported tooling through Korri's normal commands and bring Playwright config behavior in line with the source repo improvements.
 
@@ -489,7 +489,7 @@ flowchart TB
 **Verification:**
 - Developers can discover and run the new BDD/Argo workflow from `just --list` and package scripts without memorizing low-level commands.
 
-- [ ] **Unit 8: Contracts, documentation, and cleanup**
+- [x] **Unit 8: Contracts, documentation, and cleanup**
 
 **Goal:** Lock in the generated-file boundaries and document how future Korri product demos should be authored.
 
