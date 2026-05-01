@@ -47,10 +47,12 @@ desktop-smoke: build-web
 # Start the Electrobun desktop app after building portal assets.
 desktop-dev: build-web desktop-runtime-check
   bun x electrobun dev
+  bun run tools/desktop/electrobun-post-build-patch.ts
 
 # Package the Electrobun desktop app after building portal assets.
 desktop-build: build-web desktop-runtime-check
   bun x electrobun build
+  bun run tools/desktop/electrobun-post-build-patch.ts
 
 # Run unit tests.
 test-unit:

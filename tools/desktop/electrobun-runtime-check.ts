@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { logger } from "@shared/logger"
+import { patchFile, type PatchResult } from "./electrobun-patcher"
 
 export interface ElectrobunProbeResult {
   exitCode: number
@@ -13,6 +14,8 @@ export interface ElectrobunRuntimeInput {
   packageJsonExists: boolean
   cliShimExists: boolean
   probe?: ElectrobunProbeResult
+  cliPatchAttempt?: PatchResult
+  reprobe?: ElectrobunProbeResult
 }
 
 export interface ElectrobunRuntimeReport {
@@ -32,6 +35,37 @@ export function hasNixDynamicLinkerFailure(output: string): boolean {
   return nixDynamicLinkerFailurePatterns.some(pattern =>
     output.includes(pattern),
   )
+}
+
+function probeOutput(probe: ElectrobunProbeResult): string {
+  return `${probe.stdout}\n${probe.stderr}`
+}
+
+function failedProbeReport(probe: ElectrobunProbeResult): ElectrobunRuntimeReport {
+  const output = probeOutput(probe)
+  const messages: string[] = []
+  const recommendations: string[] = []
+
+  if (hasNixDynamicLinkerFailure(output)) {
+    messages.push(
+      "Electrobun's Linux binary failed under the NixOS dynamic linker stub.",
+    )
+    recommendations.push(
+      "Run inside nix develop so the desktop runtime check can patch Electrobun's Linux binary, enable nix-ld for local development, or add a wrapper/patchelf/Nix derivation before treating desktop packaging as supported on NixOS.",
+    )
+  } else {
+    messages.push(
+      `Electrobun native binary probe failed with exit code ${probe.exitCode}.`,
+    )
+    if (output.trim().length > 0) {
+      messages.push(output.trim())
+    }
+    recommendations.push(
+      "Inspect the probe output and verify GTK/WebKitGTK/AppIndicator runtime libraries are available in the dev shell.",
+    )
+  }
+
+  return { ok: false, status: "failed", messages, recommendations }
 }
 
 export function classifyElectrobunRuntime(
@@ -73,29 +107,53 @@ export function classifyElectrobunRuntime(
     return { ok: false, status: "failed", messages, recommendations }
   }
 
-  const probeOutput = `${input.probe.stdout}\n${input.probe.stderr}`
   if (input.probe.exitCode === 0) {
     messages.push("Electrobun native binary probe succeeded.")
     return { ok: true, status: "ready", messages, recommendations }
   }
 
-  if (hasNixDynamicLinkerFailure(probeOutput)) {
-    messages.push(
-      "Electrobun's Linux binary failed under the NixOS dynamic linker stub.",
-    )
-    recommendations.push(
-      "Enable nix-ld for local development, or add a wrapper/patchelf/Nix derivation before treating desktop packaging as supported on NixOS.",
-    )
-  } else {
-    messages.push(
-      `Electrobun native binary probe failed with exit code ${input.probe.exitCode}.`,
-    )
-    recommendations.push(
-      "Inspect the probe output and verify GTK/WebKitGTK/AppIndicator runtime libraries are available in the dev shell.",
-    )
+  const firstProbeOutput = probeOutput(input.probe)
+  if (!hasNixDynamicLinkerFailure(firstProbeOutput)) {
+    return failedProbeReport(input.probe)
   }
 
-  return { ok: false, status: "failed", messages, recommendations }
+  if (!input.cliPatchAttempt) {
+    return failedProbeReport(input.probe)
+  }
+
+  messages.push(...input.cliPatchAttempt.messages)
+  recommendations.push(...input.cliPatchAttempt.recommendations)
+
+  if (!input.cliPatchAttempt.ok) {
+    messages.push(
+      "Electrobun auto-patch failed after the NixOS dynamic linker probe failure.",
+    )
+    recommendations.push(
+      "Enable nix-ld for local development if in-flake patching is not available on this machine.",
+    )
+    return { ok: false, status: "failed", messages, recommendations }
+  }
+
+  if (!input.reprobe) {
+    messages.push("Electrobun was patched, but no native re-probe was run.")
+    recommendations.push(
+      "Run the desktop runtime check recipe again to verify the patched binary.",
+    )
+    return { ok: false, status: "failed", messages, recommendations }
+  }
+
+  if (input.reprobe.exitCode === 0) {
+    messages.push("Electrobun native binary probe succeeded after auto-patch.")
+    return { ok: true, status: "ready", messages, recommendations }
+  }
+
+  const reprobeReport = failedProbeReport(input.reprobe)
+  return {
+    ok: false,
+    status: "failed",
+    messages: [...messages, ...reprobeReport.messages],
+    recommendations: [...recommendations, ...reprobeReport.recommendations],
+  }
 }
 
 function runNativeProbe(): ElectrobunProbeResult {
@@ -120,12 +178,31 @@ export function runElectrobunRuntimeCheck(): ElectrobunRuntimeReport {
   )
 
   const shouldProbe = process.platform === "linux" && packageJsonExists
+  const firstProbe = shouldProbe ? runNativeProbe() : undefined
+  let cliPatchAttempt: PatchResult | undefined
+  let reprobe: ElectrobunProbeResult | undefined
+
+  if (
+    shouldProbe &&
+    firstProbe &&
+    firstProbe.exitCode !== 0 &&
+    hasNixDynamicLinkerFailure(probeOutput(firstProbe))
+  ) {
+    cliPatchAttempt = patchFile(
+      join(process.cwd(), "node_modules/electrobun/bin/electrobun"),
+    )
+    if (cliPatchAttempt.ok) {
+      reprobe = runNativeProbe()
+    }
+  }
 
   return classifyElectrobunRuntime({
     platform: process.platform,
     packageJsonExists,
     cliShimExists,
-    probe: shouldProbe ? runNativeProbe() : undefined,
+    probe: firstProbe,
+    cliPatchAttempt,
+    reprobe,
   })
 }
 

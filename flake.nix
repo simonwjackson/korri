@@ -34,6 +34,35 @@
           caddy
         ];
 
+        linuxDesktopRuntimeLibraries = pkgs.lib.optionals pkgs.stdenv.isLinux (with pkgs; [
+          gtk3
+          webkitgtk_4_1
+          libayatana-appindicator
+          librsvg
+          glib
+          glibc
+          gdk-pixbuf
+          at-spi2-core
+          pango
+          cairo
+          gsettings-desktop-schemas
+        ]);
+
+        linuxDesktopPackages = pkgs.lib.optionals pkgs.stdenv.isLinux (
+          (with pkgs; [
+            pkg-config
+            cmake
+            gcc
+            patchelf
+          ])
+          ++ linuxDesktopRuntimeLibraries
+        );
+
+        linuxDesktopShellHook = pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+          export KORRI_NIX_LD_INTERPRETER=${pkgs.stdenv.cc.bintools.dynamicLinker}
+          export KORRI_NIX_LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath linuxDesktopRuntimeLibraries}
+        '';
+
         commonShellHook = ''
           repo_root="$PWD"
 
@@ -67,18 +96,9 @@
               nodejs_20
               playwright-driver.browsers
             ])
-            ++ pkgs.lib.optionals pkgs.stdenv.isLinux (with pkgs; [
-              pkg-config
-              cmake
-              gcc
-              gtk3
-              webkitgtk_4_1
-              libayatana-appindicator
-              librsvg
-              patchelf
-            ]);
+            ++ linuxDesktopPackages;
 
-          shellHook = commonShellHook;
+          shellHook = commonShellHook + linuxDesktopShellHook;
         };
       }
     );

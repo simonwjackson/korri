@@ -192,7 +192,7 @@ flowchart LR
 
 ## Implementation Units
 
-- [ ] **Unit 1: Stage 1 patcher module**
+- [x] **Unit 1: Stage 1 patcher module**
 
 **Goal:** A pure-by-default patcher that knows how to make a downloaded ELF runnable under the Nix dev shell, with idempotent caching and clear failure classification. Building block for both the runtime check and the post-build pass.
 
@@ -232,7 +232,7 @@ flowchart LR
 - All test scenarios pass under `bun test`.
 - The patcher refuses to mutate files outside the directory it was given a path inside, and never writes a marker for a `skip` or `error` outcome.
 
-- [ ] **Unit 2: Refactor `desktop-runtime-check` to patch-then-probe**
+- [x] **Unit 2: Refactor `desktop-runtime-check` to patch-then-probe**
 
 **Goal:** Replace the current fail-loud-on-NixOS branch with: (a) try CLI patch via Unit 1, (b) re-probe, (c) classify the new probe result. Preserve the existing non-NixOS-Linux failure paths and the non-Linux skip path.
 
@@ -268,7 +268,7 @@ flowchart LR
 - `bun test tools/desktop/electrobun-runtime-check.test.ts` passes.
 - `just desktop-runtime-check` exits 0 on a NixOS dev shell with patchelf and the GTK stack present, and exits non-zero with a clear message outside `nix develop`.
 
-- [ ] **Unit 3: Post-build patch pass and recipe wiring**
+- [x] **Unit 3: Post-build patch pass and recipe wiring**
 
 **Goal:** After `electrobun dev` or `electrobun build` emits artifacts under `out/build/electrobun/**`, walk that tree, patchelf any new or changed ELFs via Unit 1, and record results in a manifest so re-runs only patch what changed. Wire the pass into `just desktop-dev` and `just desktop-build`.
 
@@ -305,7 +305,7 @@ flowchart LR
 - After `just desktop-build`, every ELF under `out/build/electrobun/**` has a corresponding manifest entry whose SHA matches the file on disk.
 - Re-running `just desktop-build` immediately after a successful build does not re-invoke patchelf for already-patched outputs (verifiable via verbose logging).
 
-- [ ] **Unit 4: Flake env vars for Stage 1 patcher**
+- [x] **Unit 4: Flake env vars for Stage 1 patcher**
 
 **Goal:** The dev shell exposes the interpreter and library paths the Stage 1 patcher needs, scoped to Linux, with no impact on macOS or CI shells.
 
