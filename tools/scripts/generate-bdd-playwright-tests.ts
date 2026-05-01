@@ -6,6 +6,11 @@
  * `out/generated/bdd/playwright/`. Each wrapper imports shared steps and any
  * flat feature-local `<name>.steps.ts` files beside the feature.
  *
+ * Scenarios tagged with `@demo(<name>)` also emit generated Argo demo
+ * adapters under `out/generated/bdd/argo/`. The `.feature` file remains the
+ * behavioral source of truth; optional `e2e/<demo-name>.demo.yaml` files
+ * provide narration and overlay metadata only.
+ *
  * Generated files are disposable adapters — never hand-edit them.
  * See `tools/testing/bdd/architecture.ts` for the architecture contract.
  *
@@ -30,7 +35,15 @@ import {
 import { tmpdir } from "node:os"
 import { basename, dirname, join, relative } from "node:path"
 import { globSync } from "fast-glob"
+import { generatedArtifactPaths } from "../artifacts/paths"
 import { BDD_FOLDER_CONVENTION } from "../testing/bdd/architecture"
+import {
+  type DemoSceneAnchor,
+  type DemoStoryboard,
+  demoSceneAnchorStepNumber,
+  demoSceneAnchorTiming,
+  loadDemoStoryboard,
+} from "../testing/bdd/demo-storyboard"
 import {
   type ParsedFeature,
   type ParsedScenario,
@@ -45,11 +58,25 @@ import {
 const GENERATED_WRAPPER_ROOT = BDD_FOLDER_CONVENTION.generatedWrapperRoot
 const FEATURE_GLOB = BDD_FOLDER_CONVENTION.featureGlob
 const LEGACY_GENERATED_GLOB = BDD_FOLDER_CONVENTION.legacyGeneratedWrapperGlob
+const DEMO_STORYBOARD_GLOB = BDD_FOLDER_CONVENTION.demoStoryboardGlob
+const DEMO_DUMPS_DIR = generatedArtifactPaths.bddArgo
+const DEFAULT_DEMO_SCENE_DURATION_MS = 4_000
 
 const GENERATED_HEADER = `/**
  * AUTO-GENERATED — DO NOT EDIT
  *
  * Source of truth: {{SOURCE_FEATURE}}
+ * Generator:       tools/scripts/generate-bdd-playwright-tests.ts
+ *
+ * Re-generate:     just generate-bdd
+ */
+`
+
+const GENERATED_DEMO_HEADER = `/**
+ * AUTO-GENERATED — DO NOT EDIT
+ *
+ * Source feature:  {{SOURCE_FEATURE}}
+ * Source story:    {{SOURCE_STORYBOARD}}
  * Generator:       tools/scripts/generate-bdd-playwright-tests.ts
  *
  * Re-generate:     just generate-bdd
@@ -64,6 +91,30 @@ export type FeatureGenerationInput = {
   scenarioIndices: number[]
   stepDefFiles: string[]
   generatedFilePath: string
+}
+
+type DemoScenarioInput = {
+  demoName: string
+  featurePath: string
+  feature: ParsedFeature
+  scenario: ParsedScenario
+  scenarioIndex: number
+  stepDefFiles: string[]
+  storyboardPath: string
+}
+
+export type GeneratedDemoScene = {
+  anchor: `before-step-${number}` | `after-step-${number}`
+  scene: string
+  text: string
+  durationMs: number
+  overlay: Record<string, unknown>
+}
+
+export type DemoAdapterSources = {
+  scriptSource: string
+  scenesJson: string
+  scenes: GeneratedDemoScene[]
 }
 
 type GeneratedFile = {
@@ -276,6 +327,7 @@ function collectFeatureGenerationInputs(
 
 function buildGeneratedFiles(
   features: ReadonlyArray<FeatureGenerationInput>,
+  demoScenarios: ReadonlyArray<DemoScenarioInput>,
 ): GeneratedFile[] {
   const files: GeneratedFile[] = []
 
@@ -295,7 +347,389 @@ function buildGeneratedFiles(
     })
   }
 
+  for (const demoScenario of demoScenarios) {
+    const storyboard = loadDemoStoryboard(
+      demoScenario.storyboardPath,
+      demoScenario.demoName,
+    )
+    const generatedFilePath = join(
+      DEMO_DUMPS_DIR,
+      `${demoScenario.demoName}.demo.ts`,
+    )
+    const scenesFilePath = join(
+      DEMO_DUMPS_DIR,
+      `${demoScenario.demoName}.scenes.json`,
+    )
+    const sources = generateDemoAdapterSources({
+      demoName: demoScenario.demoName,
+      feature: demoScenario.feature,
+      scenarioIndex: demoScenario.scenarioIndex,
+      generatedFilePath,
+      stepDefFiles: demoScenario.stepDefFiles,
+      storyboard,
+    })
+
+    files.push({
+      path: generatedFilePath,
+      source: formatGeneratedSource(generatedFilePath, sources.scriptSource),
+    })
+    files.push({
+      path: scenesFilePath,
+      source: formatGeneratedSource(scenesFilePath, sources.scenesJson),
+    })
+  }
+
   return files
+}
+
+// ── Argo demo adapter generation ─────────────────────────────────────
+
+function findDemoTags(tags: ReadonlyArray<string>): string[] {
+  return tags
+    .map(tag => tag.match(/^@demo\(([^)]+)\)$/i)?.[1])
+    .filter((tag): tag is string => Boolean(tag))
+}
+
+function validateDemoName(demoName: string, sourcePath: string): void {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(demoName)) {
+    throw new Error(
+      `Invalid @demo name "${demoName}" in ${sourcePath}: only letters, numbers, hyphens, and underscores are allowed.`,
+    )
+  }
+}
+
+export function collectDemoScenarios(
+  features: ReadonlyArray<FeatureGenerationInput>,
+): DemoScenarioInput[] {
+  const demoScenarios: DemoScenarioInput[] = []
+  const seen = new Map<string, DemoScenarioInput>()
+
+  for (const input of features) {
+    for (const scenarioIndex of input.scenarioIndices) {
+      const scenario = input.feature.scenarios[scenarioIndex]
+      const demoTags = findDemoTags(scenario.tags)
+      if (demoTags.length === 0) continue
+      if (demoTags.length > 1) {
+        throw new Error(
+          `Scenario "${scenario.name}" in ${input.featurePath} has multiple @demo tags: ${demoTags.join(", ")}`,
+        )
+      }
+
+      const demoName = demoTags[0]
+      validateDemoName(demoName, input.featurePath)
+      const storyboardPath = join(
+        dirname(input.featurePath),
+        `${demoName}.demo.yaml`,
+      )
+      const demoScenario: DemoScenarioInput = {
+        demoName,
+        featurePath: input.featurePath,
+        feature: input.feature,
+        scenario,
+        scenarioIndex,
+        stepDefFiles: input.stepDefFiles,
+        storyboardPath,
+      }
+
+      const duplicate = seen.get(demoName)
+      if (duplicate) {
+        throw new Error(
+          `Duplicate @demo(${demoName}) scenarios found:\n` +
+            `- ${duplicate.featurePath}: ${duplicate.scenario.name}\n` +
+            `- ${input.featurePath}: ${scenario.name}`,
+        )
+      }
+
+      seen.set(demoName, demoScenario)
+      demoScenarios.push(demoScenario)
+    }
+  }
+
+  return demoScenarios
+}
+
+export function findUnmatchedDemoStoryboards(
+  storyboardPaths: ReadonlyArray<string>,
+  expectedStoryboardPaths: ReadonlyArray<string>,
+): string[] {
+  const expected = new Set(expectedStoryboardPaths.map(toPosix))
+  return storyboardPaths.map(toPosix).filter(path => !expected.has(path))
+}
+
+function normalizeAnchor(
+  anchor: DemoSceneAnchor,
+): GeneratedDemoScene["anchor"] {
+  const stepNumber = demoSceneAnchorStepNumber(anchor)
+  const timing = demoSceneAnchorTiming(anchor)
+  return `${timing}-step-${stepNumber}`
+}
+
+function buildDefaultOverlay(text: string): Record<string, unknown> {
+  return {
+    type: "callout",
+    text,
+    placement: "bottom-center",
+    motion: "fade-in",
+    autoBackground: true,
+  }
+}
+
+function buildDemoScenes(
+  scenario: ParsedScenario,
+  storyboard: DemoStoryboard,
+): GeneratedDemoScene[] {
+  if (storyboard.scenes.length === 0) {
+    return [
+      {
+        anchor: "before-step-1",
+        scene: "scenario",
+        text: scenario.name,
+        durationMs: DEFAULT_DEMO_SCENE_DURATION_MS,
+        overlay: buildDefaultOverlay(scenario.name),
+      },
+    ]
+  }
+
+  const scenes = storyboard.scenes.map(scene => ({
+    anchor: normalizeAnchor(scene.anchor),
+    scene: scene.scene,
+    text: scene.text,
+    durationMs: scene.durationMs ?? DEFAULT_DEMO_SCENE_DURATION_MS,
+    overlay: scene.overlay ?? buildDefaultOverlay(scene.text),
+  }))
+
+  scenes.sort((left, right) => {
+    const leftStep = demoSceneAnchorStepNumber(left.anchor)
+    const rightStep = demoSceneAnchorStepNumber(right.anchor)
+    if (leftStep !== rightStep) return leftStep - rightStep
+    if (
+      left.anchor.startsWith("before-") &&
+      right.anchor.startsWith("after-")
+    ) {
+      return -1
+    }
+    if (
+      left.anchor.startsWith("after-") &&
+      right.anchor.startsWith("before-")
+    ) {
+      return 1
+    }
+    return left.scene.localeCompare(right.scene)
+  })
+
+  return scenes
+}
+
+function validateDemoScenes(
+  demoName: string,
+  scenario: ParsedScenario,
+  storyboard: DemoStoryboard,
+  scenes: ReadonlyArray<GeneratedDemoScene>,
+): void {
+  const sceneNames = new Set<string>()
+  const anchors = new Set<string>()
+
+  const validateAnchor = (anchor: DemoSceneAnchor, label: string) => {
+    const stepNumber = demoSceneAnchorStepNumber(anchor)
+    if (stepNumber < 1 || stepNumber > scenario.steps.length) {
+      throw new Error(
+        `Demo ${demoName} ${label} references ${anchor}, but scenario "${scenario.name}" has ${scenario.steps.length} step(s).`,
+      )
+    }
+  }
+
+  if (storyboard.recording.start) {
+    validateAnchor(storyboard.recording.start, "recording.start")
+  }
+
+  for (const scene of scenes) {
+    validateAnchor(scene.anchor, `scene "${scene.scene}"`)
+    if (sceneNames.has(scene.scene)) {
+      throw new Error(`Demo ${demoName} has duplicate scene "${scene.scene}".`)
+    }
+    if (anchors.has(scene.anchor)) {
+      throw new Error(
+        `Demo ${demoName} has duplicate scene anchor ${scene.anchor}.`,
+      )
+    }
+    sceneNames.add(scene.scene)
+    anchors.add(scene.anchor)
+  }
+}
+
+function defaultRecordingStartAnchor(
+  storyboard: DemoStoryboard,
+): GeneratedDemoScene["anchor"] {
+  return storyboard.recording.start
+    ? normalizeAnchor(storyboard.recording.start)
+    : "before-step-1"
+}
+
+export function generateDemoAdapterSources(options: {
+  demoName: string
+  feature: ParsedFeature
+  scenarioIndex: number
+  generatedFilePath: string
+  stepDefFiles: string[]
+  storyboard: DemoStoryboard
+}): DemoAdapterSources {
+  const scenario = options.feature.scenarios[options.scenarioIndex]
+  const scenes = buildDemoScenes(scenario, options.storyboard)
+  validateDemoScenes(options.demoName, scenario, options.storyboard, scenes)
+
+  const bddDir = join("tools", "testing", "bdd")
+  const worldImport = relativeImport(
+    options.generatedFilePath,
+    join(bddDir, "world"),
+  )
+  const resolverImport = relativeImport(
+    options.generatedFilePath,
+    join(bddDir, "resolver"),
+  )
+  const parserImport = relativeImport(
+    options.generatedFilePath,
+    join(bddDir, "parser"),
+  )
+  const sharedStepsImport = relativeImport(
+    options.generatedFilePath,
+    join(bddDir, "shared-steps"),
+  )
+
+  const header = GENERATED_DEMO_HEADER.replace(
+    "{{SOURCE_FEATURE}}",
+    toPosix(options.feature.sourcePath),
+  ).replace(
+    "{{SOURCE_STORYBOARD}}",
+    options.storyboard.sourcePath
+      ? toPosix(options.storyboard.sourcePath)
+      : "none (generated defaults)",
+  )
+
+  const stepImports = options.stepDefFiles
+    .map(file => {
+      const imp = relativeImport(
+        options.generatedFilePath,
+        file.replace(/\.ts$/, ""),
+      )
+      return `import ${JSON.stringify(imp)}`
+    })
+    .join("\n")
+
+  const scriptScenes = Object.fromEntries(
+    scenes.map(scene => [
+      scene.anchor,
+      { scene: scene.scene, durationMs: scene.durationMs },
+    ]),
+  )
+  const manifest = scenes.map(scene => ({
+    scene: scene.scene,
+    text: scene.text,
+    overlay: scene.overlay,
+  }))
+
+  const scriptSource = `${header}
+import type { Page } from "@playwright/test"
+import { cursorHighlight, showOverlay, test, type NarrationTimeline } from "@argo-video/cli"
+import { parseFeatureFile } from ${JSON.stringify(parserImport)}
+import { executeScenarioWithCallbacks } from ${JSON.stringify(resolverImport)}
+import { BddWorld } from ${JSON.stringify(worldImport)}
+
+import ${JSON.stringify(sharedStepsImport)}
+${stepImports ? `${stepImports}\n` : ""}
+const feature = parseFeatureFile(${JSON.stringify(toPosix(options.feature.sourcePath))})
+const scenesByAnchor: Record<string, { scene: string; durationMs: number }> = ${JSON.stringify(scriptScenes, null, 2)}
+const recordingStartAnchor = ${JSON.stringify(defaultRecordingStartAnchor(options.storyboard))}
+
+async function maybeShowScene(
+  page: Page,
+  narration: NarrationTimeline,
+  anchor: string,
+  recordingStarted: { value: boolean },
+): Promise<void> {
+  if (!recordingStarted.value && anchor === recordingStartAnchor) {
+    await narration.startRecording(page)
+    recordingStarted.value = true
+  }
+
+  if (recordingStarted.value) {
+    await cursorHighlight(page, {
+      color: "#2563eb",
+      radius: 18,
+      opacity: 0.55,
+      clickRipple: true,
+    })
+  }
+
+  const scene = scenesByAnchor[anchor]
+  if (!scene) return
+
+  narration.mark(scene.scene)
+  await showOverlay(page, scene.scene, scene.durationMs)
+}
+
+test(${JSON.stringify(options.demoName)}, async ({ page, narration }) => {
+  const world = new BddWorld()
+  world.resetState()
+  world.attachToPage(page)
+  const recordingStarted = { value: false }
+
+  try {
+    await executeScenarioWithCallbacks(
+      world,
+      feature.scenarios[${options.scenarioIndex}],
+      {
+        beforeStep: async ({ stepIndex }) => {
+          await maybeShowScene(
+            page,
+            narration,
+            \`before-step-\${stepIndex + 1}\`,
+            recordingStarted,
+          )
+        },
+        afterStep: async ({ stepIndex, error }) => {
+          if (error) return
+          await maybeShowScene(
+            page,
+            narration,
+            \`after-step-\${stepIndex + 1}\`,
+            recordingStarted,
+          )
+        },
+      },
+    )
+  } finally {
+    await world.teardown()
+  }
+})
+`
+
+  return {
+    scriptSource,
+    scenesJson: `${JSON.stringify(manifest, null, 2)}\n`,
+    scenes,
+  }
+}
+
+function validateDemoStoryboardCoverage(
+  demoScenarios: ReadonlyArray<DemoScenarioInput>,
+  tagFilter: string | undefined,
+): void {
+  if (tagFilter) return
+
+  const unmatchedStoryboards = findUnmatchedDemoStoryboards(
+    globSync(DEMO_STORYBOARD_GLOB).sort(),
+    demoScenarios.map(scenario => scenario.storyboardPath),
+  )
+
+  if (unmatchedStoryboards.length === 0) return
+
+  throw new Error(
+    [
+      "Found demo storyboard YAML without a matching @demo(...) scenario:",
+      ...unmatchedStoryboards.map(path => `- ${path}`),
+      "Add a matching @demo(<name>) tag or remove the stale storyboard.",
+    ].join("\n"),
+  )
 }
 
 // ── Cleanup ──────────────────────────────────────────────────────────
@@ -306,6 +740,32 @@ function cleanGeneratedWrappers(): number {
     rmSync(GENERATED_WRAPPER_ROOT, { recursive: true, force: true })
   }
   return generatedFiles.length
+}
+
+function cleanGeneratedDemoArtifacts(): number {
+  const demoFiles = globSync(`${DEMO_DUMPS_DIR}/*.demo.ts`)
+  let removed = 0
+
+  for (const demoFile of demoFiles) {
+    const source = readFileSync(demoFile, "utf8")
+    if (
+      !source.includes("AUTO-GENERATED") ||
+      !source.includes("generate-bdd-playwright-tests.ts")
+    ) {
+      continue
+    }
+
+    rmSync(demoFile)
+    removed++
+
+    const manifestPath = demoFile.replace(/\.demo\.ts$/, ".scenes.json")
+    if (existsSync(manifestPath)) {
+      rmSync(manifestPath)
+      removed++
+    }
+  }
+
+  return removed
 }
 
 function cleanLegacyCoLocatedWrappers(): number {
@@ -370,7 +830,11 @@ function checkGeneratedFiles(
   }
 
   if (!options.allowExtra) {
-    const generatedFiles = globSync(`${GENERATED_WRAPPER_ROOT}/**/*.e2e.ts`)
+    const generatedFiles = [
+      ...globSync(`${GENERATED_WRAPPER_ROOT}/**/*.e2e.ts`),
+      ...globSync(`${DEMO_DUMPS_DIR}/*.demo.ts`),
+      ...globSync(`${DEMO_DUMPS_DIR}/*.scenes.json`),
+    ]
     for (const generatedFile of generatedFiles) {
       if (!expectedPaths.has(toPosix(generatedFile))) {
         result.extra.push(toPosix(generatedFile))
@@ -438,7 +902,10 @@ export function main() {
   if (cleanOnly) {
     const wrappers = cleanGeneratedWrappers()
     const legacy = cleanLegacyCoLocatedWrappers()
-    console.log(`Cleaned all generated wrappers (${wrappers + legacy} files).`)
+    const demoArtifacts = cleanGeneratedDemoArtifacts()
+    console.log(
+      `Cleaned all generated wrappers and BDD demo adapters (${wrappers + legacy + demoArtifacts} files).`,
+    )
     return
   }
 
@@ -457,7 +924,24 @@ export function main() {
     featureFiles,
     tagFilter,
   )
-  const expectedFiles = buildGeneratedFiles(features)
+  const demoScenarios = collectDemoScenarios(features)
+  validateDemoStoryboardCoverage(demoScenarios, tagFilter)
+
+  for (const demoScenario of demoScenarios) {
+    const storyboard = loadDemoStoryboard(
+      demoScenario.storyboardPath,
+      demoScenario.demoName,
+    )
+    const scenes = buildDemoScenes(demoScenario.scenario, storyboard)
+    validateDemoScenes(
+      demoScenario.demoName,
+      demoScenario.scenario,
+      storyboard,
+      scenes,
+    )
+  }
+
+  const expectedFiles = buildGeneratedFiles(features, demoScenarios)
 
   if (checkOnly) {
     reportGeneratedFileCheck(
@@ -471,6 +955,7 @@ export function main() {
 
   const wrappersCleaned = cleanGeneratedWrappers()
   const legacyCleaned = cleanLegacyCoLocatedWrappers()
+  const demoArtifactsCleaned = cleanGeneratedDemoArtifacts()
   const generated = writeGeneratedFiles(expectedFiles)
 
   for (const file of expectedFiles) {
@@ -478,9 +963,9 @@ export function main() {
   }
 
   console.log("")
-  const totalCleaned = wrappersCleaned + legacyCleaned
+  const totalCleaned = wrappersCleaned + legacyCleaned + demoArtifactsCleaned
   const parts = [
-    `Generated ${generated} wrapper(s)`,
+    `Generated ${generated} file(s) (${expectedFiles.length - demoScenarios.length * 2} wrapper(s), ${demoScenarios.length} demo adapter(s))`,
     `cleaned ${totalCleaned} stale file(s)`,
   ]
   if (skippedByTags > 0) {
