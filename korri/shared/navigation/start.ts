@@ -65,6 +65,8 @@ export function getInputBus(): InputBus {
 export function startSpatialNavigation(
   options: StartSpatialNavigationOptions = {},
 ): SpatialNavigationHandle {
+  currentHandle?.dispose()
+
   const bus = createInputBus()
   const engine = createFocusEngine({
     nextFocus: options.nextFocus ?? lrudNextFocus,

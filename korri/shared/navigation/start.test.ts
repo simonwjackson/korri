@@ -33,6 +33,30 @@ describe("spatial navigation singleton", () => {
     expect(() => getSpatialNavigation()).toThrow(/startSpatialNavigation/)
   })
 
+  it("disposes the previous singleton before replacing it", () => {
+    let disposed = false
+    const first = startSpatialNavigation({
+      keyboard: false,
+      gamepad: false,
+      nextFocus: () => null,
+    })
+    first.bus.use({
+      name: "test-adapter",
+      start() {
+        return () => {
+          disposed = true
+        }
+      },
+    })
+
+    const second = startWithoutDeviceAdapters()
+
+    expect(disposed).toBe(true)
+    expect(getSpatialNavigation()).toBe(second)
+
+    second.dispose()
+  })
+
   it("does not let an old handle clear a newer one", () => {
     const first = startWithoutDeviceAdapters()
     const second = startWithoutDeviceAdapters()
