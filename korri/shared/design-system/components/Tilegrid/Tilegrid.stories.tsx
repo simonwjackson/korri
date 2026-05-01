@@ -27,7 +27,20 @@ type MotionPreset = "layout" | "stagger" | "hoverTap"
  */
 interface StoryArgs {
   cellSize: number
+  /**
+   * Optional CSS-length override for `cellSize` (e.g. `"6rem"`,
+   * `"var(--tile-size)"`, `"calc(8vw + 1rem)"`). When non-empty, this takes
+   * precedence over the numeric `cellSize` and is forwarded as-is to the
+   * Root, exercising the string-input path. Useful for demonstrating live
+   * resolution via root font-size, theme variables, or viewport units.
+   */
+  cellSizeCSS?: string
   gap: number
+  /**
+   * Optional CSS-length override for `gap`. Same semantics as
+   * `cellSizeCSS`.
+   */
+  gapCSS?: string
   mode: TilegridStoryMode
   dataset: TilegridDataset
   motionPreset: MotionPreset
@@ -37,6 +50,20 @@ interface StoryArgs {
    * feedback without an in-canvas overlay button.
    */
   onItemClick?: (item: Tile) => void
+}
+
+/**
+ * Resolve the effective cellSize to forward to the Root: prefer the
+ * non-empty CSS-length override; otherwise fall back to the numeric arg.
+ */
+function effectiveCellSize(args: StoryArgs): number | string {
+  return args.cellSizeCSS && args.cellSizeCSS.trim() !== ""
+    ? args.cellSizeCSS
+    : args.cellSize
+}
+
+function effectiveGap(args: StoryArgs): number | string {
+  return args.gapCSS && args.gapCSS.trim() !== "" ? args.gapCSS : args.gap
 }
 
 const tiles: Tile[] = Array.from({ length: 24 }, (_, i) => ({
@@ -235,14 +262,11 @@ function InlinePagedControls() {
   )
 }
 
-function PlaygroundDemo({
-  cellSize,
-  gap,
-  mode,
-  dataset,
-  onItemClick,
-}: StoryArgs) {
+function PlaygroundDemo(args: StoryArgs) {
+  const { mode, dataset, onItemClick } = args
   const items = datasets[dataset]
+  const cellSize = effectiveCellSize(args)
+  const gap = effectiveGap(args)
 
   if (mode === "paged") {
     return (
@@ -279,15 +303,11 @@ function PlaygroundDemo({
   )
 }
 
-function FramerMotionDemo({
-  cellSize,
-  gap,
-  mode,
-  dataset,
-  motionPreset,
-  onItemClick,
-}: StoryArgs) {
+function FramerMotionDemo(args: StoryArgs) {
+  const { mode, dataset, motionPreset, onItemClick } = args
   const items = datasets[dataset]
+  const cellSize = effectiveCellSize(args)
+  const gap = effectiveGap(args)
   const renderCell = renderMotionTileCell(motionPreset)
   const usesSlottedMotionGrid =
     motionPreset === "stagger" || mode === "paged" || mode === "rail"
@@ -378,13 +398,11 @@ function FramerMotionDemo({
   )
 }
 
-function ViewTransitionsDemo({
-  cellSize,
-  gap,
-  dataset,
-  onItemClick,
-}: StoryArgs) {
+function ViewTransitionsDemo(args: StoryArgs) {
+  const { dataset, onItemClick } = args
   const initialItems = datasets[dataset]
+  const cellSize = effectiveCellSize(args)
+  const gap = effectiveGap(args)
   const [items, setItems] = useState<ReadonlyArray<Tile>>(initialItems)
   const isFirstRender = useRef(true)
 
@@ -429,11 +447,22 @@ const meta = {
   argTypes: {
     cellSize: {
       control: { type: "range", min: 40, max: 240, step: 10 },
-      description: "Side length of one grid cell in pixels (cells are square).",
+      description:
+        "Side length of one grid cell in pixels (cells are square). Ignored when cellSizeCSS is set.",
+    },
+    cellSizeCSS: {
+      control: "text",
+      description:
+        'Optional CSS-length cellSize (e.g. "6rem", "var(--tile-size)", "calc(8vw + 1rem)"). When non-empty, takes precedence over the numeric cellSize and exercises the string-input path with live ResizeObserver-driven resolution.',
     },
     gap: {
       control: { type: "range", min: 0, max: 32, step: 2 },
-      description: "Px gap between cells.",
+      description: "Px gap between cells. Ignored when gapCSS is set.",
+    },
+    gapCSS: {
+      control: "text",
+      description:
+        'Optional CSS-length gap (e.g. "0.5rem"). Same semantics as cellSizeCSS.',
     },
     mode: {
       control: "inline-radio",

@@ -48,9 +48,17 @@ export interface TilegridBaseContext<T extends GridItemShape> {
    * `document.startViewTransition`; Tilegrid only publishes the stable names.
    */
   readonly getViewTransitionName?: (item: T) => string
-  /** Cell base size in CSS pixels. */
+  /**
+   * Cell base size as resolved CSS pixels. The Root prop accepts either a
+   * number or any CSS `<length>` string; this context field is always the
+   * runtime-resolved pixel value (or `0` while a string input is still
+   * being measured).
+   */
   readonly cellSize: number
-  /** Gap between cells in CSS pixels. */
+  /**
+   * Gap between cells as resolved CSS pixels. Same resolution semantics as
+   * `cellSize`.
+   */
   readonly gap: number
   /** Number of columns the layout currently has (derived from container). */
   readonly columns: number
