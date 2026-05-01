@@ -24,6 +24,18 @@
 	body {
 		-webkit-font-smoothing: antialiased;
 	}
+
+	/*
+	 * Spatial navigation focus ring. Applied via :focus-visible so it shows for
+	 * keyboard, gamepad, and TV remote (which all use programmatic focus), but
+	 * not for plain mouse clicks. Components stay native — no per-component
+	 * focus styling needed.
+	 */
+	:focus-visible {
+		outline: 3px solid var(--ring, #3b82f6);
+		outline-offset: 2px;
+		border-radius: 4px;
+	}
 }
 
 @layer components {
@@ -40,8 +52,14 @@
 			transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
 	}
 
-	.shift-card:hover {
+	.shift-card:hover,
+	.shift-card:focus-visible {
 		border-color: rgb(56 189 248);
+	}
+
+	.shift-card:focus-visible {
+		outline: 3px solid var(--ring, #38bdf8);
+		outline-offset: 3px;
 	}
 
 	.dark .shift-card {

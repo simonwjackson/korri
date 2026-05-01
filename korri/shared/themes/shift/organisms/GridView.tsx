@@ -1,8 +1,6 @@
-import { useFocusable } from "@noriginmedia/norigin-spatial-navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import {
   forwardRef,
-  useCallback,
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
@@ -67,27 +65,6 @@ export const GridView = forwardRef<GridViewHandle, GridViewProps>(
 
     const effectiveItemSize = minItemSize * itemScale
     const containerRef = useRef<HTMLDivElement | null>(null)
-    const { ref: focusableRef } = useFocusable<HTMLDivElement>({
-      focusKey: "GRID_CONTAINER",
-      trackChildren: true,
-      preferredChildFocusKey: "grid-item-0",
-    })
-
-    const setRefs = useCallback(
-      (node: HTMLDivElement | null) => {
-        containerRef.current = node
-        if (
-          focusableRef &&
-          typeof focusableRef === "object" &&
-          "current" in focusableRef
-        ) {
-          ;(
-            focusableRef as React.MutableRefObject<HTMLDivElement | null>
-          ).current = node
-        }
-      },
-      [focusableRef],
-    )
 
     const [dimensions, setDimensions] = useState({ columns: 0, rows: 0 })
     const [currentPage, setCurrentPage] = useState(0)
@@ -172,7 +149,7 @@ export const GridView = forwardRef<GridViewHandle, GridViewProps>(
 
     return (
       <div
-        ref={setRefs}
+        ref={containerRef}
         className={className}
         style={{
           width: "100%",
@@ -202,7 +179,7 @@ export const GridView = forwardRef<GridViewHandle, GridViewProps>(
               const span = Math.max(1, Math.floor(item.span ?? 1))
               const itemSize = effectiveItemSize * span + gap * (span - 1)
               return (
-                <FocusableGridItem
+                <GridItemTile
                   key={item.id}
                   item={item}
                   index={index}
@@ -220,7 +197,7 @@ export const GridView = forwardRef<GridViewHandle, GridViewProps>(
   },
 )
 
-interface FocusableGridItemProps {
+interface GridItemTileProps {
   item: GridItem
   index: number
   itemSize: number
@@ -229,19 +206,20 @@ interface FocusableGridItemProps {
   onItemClick?: (item: GridItem) => void
 }
 
-function FocusableGridItem({
+/**
+ * Native <button> tile. Spatial navigation is handled by the global focus
+ * engine reading the live DOM — no useFocusable, no refs, no provider here.
+ * The :focus-visible ring comes from shift.css and applies for keyboard,
+ * gamepad, and remote input alike.
+ */
+function GridItemTile({
   item,
   index,
   itemSize,
   span,
   transitionType,
   onItemClick,
-}: FocusableGridItemProps) {
-  const { ref: focusRef, focused } = useFocusable<HTMLDivElement>({
-    onEnterPress: () => onItemClick?.(item),
-    focusKey: `grid-item-${item.id}`,
-  })
-
+}: GridItemTileProps) {
   const initial =
     transitionType === "fade"
       ? { opacity: 0, scale: 0.8 }
@@ -272,8 +250,9 @@ function FocusableGridItem({
       : { opacity: 0, x: -100 }
 
   return (
-    <motion.div
-      ref={focusRef}
+    <motion.button
+      type="button"
+      aria-label={typeof item.id === "string" ? item.id : undefined}
       initial={initial}
       animate={animate}
       exit={exit}
@@ -290,9 +269,8 @@ function FocusableGridItem({
         borderRadius: "8px",
         backgroundColor: "#f0f0f0",
         position: "relative",
-        outline: focused ? "3px solid #3b82f6" : "none",
-        outlineOffset: "2px",
-        transition: "outline 0.2s ease-in-out",
+        padding: 0,
+        border: "none",
       }}
     >
       <img
@@ -301,6 +279,6 @@ function FocusableGridItem({
         loading="lazy"
         style={{ width: "100%", height: "100%", objectFit: "cover" }}
       />
-    </motion.div>
+    </motion.button>
   )
 }

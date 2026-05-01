@@ -1,0 +1,109 @@
+import type { Direction, InputAction } from "@shared/input/types"
+
+/**
+ * Focus engine: turns InputActions into DOM focus changes.
+ *
+ * Coupling boundaries:
+ *   - The engine knows about the DOM. (It calls .focus() and .click().)
+ *   - The engine does NOT know about React, the router, or any component.
+ *   - The engine does NOT know about LRUD specifically; the spatial algorithm
+ *     is injected as `nextFocus`. Swap implementations freely.
+ *
+ * Components stay native: <a>, <button>, <input>, [tabindex]. No imports here
+ * touch component code.
+ */
+
+export type NextFocusFn = (
+  current: Element | null,
+  direction: Direction,
+  scope?: HTMLElement,
+) => HTMLElement | null
+
+export interface FocusEngineOptions {
+  /** Spatial-navigation algorithm. Required. */
+  readonly nextFocus: NextFocusFn
+  /** Optional dynamic scope (e.g. modal root, current route container). */
+  readonly scope?: () => HTMLElement | null | undefined
+  /** Override "confirm". Default: invoke .click() on the focused element. */
+  readonly onConfirm?: (target: HTMLElement | null) => void
+  /** Handle "back". Default: no-op (consumers usually wire this to router). */
+  readonly onBack?: () => void
+  /** Handle "options". Default: no-op. */
+  readonly onOptions?: (target: HTMLElement | null) => void
+  /** Handle "menu". Default: no-op. */
+  readonly onMenu?: () => void
+  /**
+   * Selector for the initial focus when nothing is focused yet. Defaults to
+   * the first native focusable inside the scope.
+   */
+  readonly initialFocusSelector?: string
+}
+
+const DEFAULT_INITIAL_FOCUS_SELECTOR =
+  "a, button, input, select, textarea, [tabindex]:not([tabindex='-1'])"
+
+export interface FocusEngine {
+  handle(action: InputAction): void
+}
+
+export function createFocusEngine(opts: FocusEngineOptions): FocusEngine {
+  const initialSelector =
+    opts.initialFocusSelector ?? DEFAULT_INITIAL_FOCUS_SELECTOR
+
+  const resolveScope = (): HTMLElement | undefined => {
+    const scope = opts.scope?.()
+    return scope ?? undefined
+  }
+
+  const focusInitial = (scope: HTMLElement | undefined) => {
+    const root: ParentNode = scope ?? document
+    const initial = root.querySelector<HTMLElement>(initialSelector)
+    initial?.focus()
+  }
+
+  return {
+    handle(action) {
+      const active = document.activeElement as HTMLElement | null
+
+      switch (action.type) {
+        case "direction": {
+          const scope = resolveScope()
+          if (!active || !isInsideScope(active, scope)) {
+            focusInitial(scope)
+            return
+          }
+          const next = opts.nextFocus(active, action.direction, scope)
+          if (!next) return
+          next.focus()
+          next.scrollIntoView({ block: "nearest", inline: "nearest" })
+          return
+        }
+        case "confirm": {
+          if (opts.onConfirm) {
+            opts.onConfirm(active)
+            return
+          }
+          if (active && typeof active.click === "function") active.click()
+          return
+        }
+        case "back": {
+          opts.onBack?.()
+          return
+        }
+        case "options": {
+          opts.onOptions?.(active)
+          return
+        }
+        case "menu": {
+          opts.onMenu?.()
+          return
+        }
+      }
+    },
+  }
+}
+
+function isInsideScope(el: Element, scope: HTMLElement | undefined): boolean {
+  if (!scope) return true
+  return scope === el || scope.contains(el)
+}

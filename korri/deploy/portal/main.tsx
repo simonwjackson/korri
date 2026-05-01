@@ -1,3 +1,4 @@
+import { startSpatialNavigation } from "@shared/navigation/start"
 import { createRouter, RouterProvider } from "@tanstack/react-router"
 import ReactDOM from "react-dom/client"
 import { routeTree } from "./routeTree.gen"
@@ -18,3 +19,7 @@ if (!rootElement) {
 }
 
 ReactDOM.createRoot(rootElement).render(<RouterProvider router={router} />)
+
+// Device-agnostic spatial navigation. Listens to keyboard + gamepad and
+// drives focus through the live DOM via LRUD. Components stay native HTML.
+startSpatialNavigation()
