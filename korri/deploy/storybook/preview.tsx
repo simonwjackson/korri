@@ -6,7 +6,6 @@ import type { Decorator, Preview } from "@storybook/react-vite"
 import { useEffect } from "react"
 import "@fontsource-variable/geist"
 import "@shared/design-system/theme/styles.css"
-import "@shared/themes/shift/shift.css"
 
 // Spatial nav is global; initialize once per iframe load. HMR may re-evaluate
 // this module, so we stash the handle on window and dispose the prior

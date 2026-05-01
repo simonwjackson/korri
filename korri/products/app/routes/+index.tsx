@@ -1,10 +1,7 @@
 import { TilegridCells } from "@shared/design-system/components/Tilegrid/components/TilegridCells"
 import { TilegridScrollRoot } from "@shared/design-system/components/Tilegrid/TilegridScrollRoot"
-import { games } from "@shared/themes/shift/fixtures/games"
-import {
-  type GameRecord,
-  getGameImageUrl,
-} from "@shared/themes/shift/schemas/game"
+import { type GameRecord, getGameImageUrl } from "@shared/fixtures/games/game"
+import { games } from "@shared/fixtures/games/games"
 import { createFileRoute } from "@tanstack/react-router"
 
 export const Route = createFileRoute("/")({
@@ -41,7 +38,7 @@ function GameTileVisual({ game }: { game: GameRecord }) {
   const image = getGameImageUrl(game)
   const name = game.metadata?.name ?? game.id
   return (
-    <div className="shift-card block h-full w-full">
+    <div className="relative block aspect-square h-full w-full overflow-hidden rounded-lg border border-border bg-neutral-100 dark:bg-neutral-800/50">
       {image ? (
         <img
           src={image}

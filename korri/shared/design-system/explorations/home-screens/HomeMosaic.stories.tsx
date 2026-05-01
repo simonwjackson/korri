@@ -1,7 +1,7 @@
 /**
  * Visual exploration: "Mosaic" home screen — Rams/minimal, art whispers.
  *
- * Decoupled from the `shift` theme on purpose. This is the deliberate visual
+ * Visual world is defined inline. This is the deliberate visual
  * opposite of HomeHero: a contact-sheet grid where the resume target is
  * larger only by *size* (no badge, no label, no "Continue" affordance). Type
  * lives only at the screen's edges — wordmark above, museum-label placard
@@ -32,12 +32,12 @@
 
 import { TilegridCells } from "@shared/design-system/components/Tilegrid/components/TilegridCells"
 import { TilegridScrollRoot } from "@shared/design-system/components/Tilegrid/TilegridScrollRoot"
-import { games } from "@shared/themes/shift/fixtures/games"
 import {
   type GameRecord,
   getGameDisplayName,
   getGameImageUrl,
-} from "@shared/themes/shift/schemas/game"
+} from "@shared/fixtures/games/game"
+import { games } from "@shared/fixtures/games/games"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { useEffect, useRef, useState } from "react"
 import { HudButtons } from "./HudButtons"

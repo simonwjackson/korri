@@ -1,7 +1,7 @@
 /**
  * Visual exploration: "Hero" home screen — cinematic, lean-back, art-roars.
  *
- * Decoupled from the `shift` theme on purpose. Defines its own visual world
+ * Visual world is defined inline. Defines its own visual world
  * inline so the comparison against HomeMosaic is honest. The only project
  * dependencies are the domain-agnostic Tilegrid primitive, the input bus
  * (for the HUD), and the games fixtures (content, not theme).
@@ -32,12 +32,12 @@
 
 import { TilegridCells } from "@shared/design-system/components/Tilegrid/components/TilegridCells"
 import { TilegridRailRoot } from "@shared/design-system/components/Tilegrid/TilegridRailRoot"
-import { games } from "@shared/themes/shift/fixtures/games"
 import {
   type GameRecord,
   getGameDisplayName,
   getGameImageUrl,
-} from "@shared/themes/shift/schemas/game"
+} from "@shared/fixtures/games/game"
+import { games } from "@shared/fixtures/games/games"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { type ReactNode, useEffect, useRef, useState } from "react"
 import { HudButtons } from "./HudButtons"
