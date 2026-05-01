@@ -40,6 +40,8 @@
  * boolean variants here — a different visual world is a different file.
  */
 
+import "@fontsource-variable/nunito"
+
 import { TilegridCells } from "@shared/design-system/components/Tilegrid/components/TilegridCells"
 import { TilegridRailRoot } from "@shared/design-system/components/Tilegrid/TilegridRailRoot"
 import { games } from "@shared/themes/shift/fixtures/games"
@@ -232,7 +234,7 @@ function StatusCluster() {
       className="sunlit-status-cluster flex shrink-0 items-center gap-6 text-lg text-[color:var(--ink-dim)]"
     >
       <Sun className="sunlit-status-icon" strokeWidth={2} />
-      <span className="text-xl font-semibold tabular-nums tracking-tight text-[color:var(--ink)]">
+      <span className="text-xl font-bold tabular-nums text-[color:var(--ink)]">
         16:24
       </span>
       <Wifi className="sunlit-status-icon" strokeWidth={2} />
@@ -369,15 +371,15 @@ function Caption({
   return (
     <div className="sunlit-caption flex shrink-0 items-baseline gap-4 px-12 pb-3 pt-4">
       {showEyebrow ? (
-        <span className="text-sm font-semibold uppercase tracking-[0.18em] text-[color:var(--last-played-eyebrow)]">
+        <span className="text-sm font-bold uppercase tracking-[0.10em] text-[color:var(--last-played-eyebrow)]">
           Last played
         </span>
       ) : null}
-      <span className="text-base font-medium tracking-[0.01em] text-[color:var(--ink)]">
+      <span className="text-lg font-semibold text-[color:var(--ink)]">
         {name}
       </span>
       {lastPlayedLabel ? (
-        <span className="text-sm uppercase tracking-[0.16em] text-[color:var(--ink-faint)]">
+        <span className="text-sm font-medium uppercase tracking-[0.10em] text-[color:var(--ink-faint)]">
           {lastPlayedLabel}
         </span>
       ) : null}
@@ -428,6 +430,19 @@ function SunlitStyles() {
         );
 
         --tile-radius: 14px;
+
+        /* --- Type voice. Sunlit overrides the design-system default
+               (Geist, sharp/technical) with Nunito, a rounded friendly
+               sans that matches the Switch tone. Falls back to the
+               platform's rounded sans (SF Pro Rounded on Apple,
+               ui-rounded generic) before defaulting to system sans. */
+        font-family:
+          "Nunito Variable",
+          ui-rounded,
+          "SF Pro Rounded",
+          "Segoe UI Variable",
+          system-ui,
+          sans-serif;
       }
 
       /* --- Dark mode counterpart (Switch night blue) --- */
@@ -663,7 +678,7 @@ function SunlitStyles() {
         background: var(--hud-glyph-bg);
         color: var(--hud-glyph-fg);
         font-size: var(--text-sm);
-        font-weight: 700;
+        font-weight: 800;
         line-height: 1;
         transition:
           background 160ms ease,
@@ -677,7 +692,8 @@ function SunlitStyles() {
       }
       [data-exploration="sunlit"] .hud-label {
         font-size: var(--text-sm);
-        letter-spacing: 0.04em;
+        font-weight: 600;
+        letter-spacing: 0;
         color: var(--ink-dim);
       }
 
