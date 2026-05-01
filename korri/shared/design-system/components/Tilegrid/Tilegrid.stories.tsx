@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { motion, type Variants } from "framer-motion"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   type TilegridCellProps,
   TilegridCells,
@@ -8,6 +8,7 @@ import {
 import type { GridItemShape } from "./Tilegrid.context"
 import { useTilegrid } from "./Tilegrid.context"
 import { TilegridPagedRoot } from "./TilegridPagedRoot"
+import { TilegridRailRoot } from "./TilegridRailRoot"
 import { TilegridScrollRoot } from "./TilegridScrollRoot"
 
 interface Tile extends GridItemShape {
@@ -16,7 +17,7 @@ interface Tile extends GridItemShape {
   span?: number
 }
 
-type TilegridStoryMode = "scroll" | "paged"
+type TilegridStoryMode = "scroll" | "paged" | "rail"
 type TilegridDataset = "basic" | "hero" | "empty" | "manyHeroes" | "mixedSpans"
 type MotionPreset = "layout" | "stagger" | "hoverTap"
 
@@ -30,6 +31,12 @@ interface StoryArgs {
   mode: TilegridStoryMode
   dataset: TilegridDataset
   motionPreset: MotionPreset
+  /**
+   * Wired to the Storybook Actions panel via `argTypes.onItemClick.action`.
+   * Each cell click is logged there, so consumers see real interaction
+   * feedback without an in-canvas overlay button.
+   */
+  onItemClick?: (item: Tile) => void
 }
 
 const tiles: Tile[] = Array.from({ length: 24 }, (_, i) => ({
@@ -185,43 +192,6 @@ function renderMotionTileCell(
   return renderLayoutMotionTileCell
 }
 
-function rotateTiles<T>(items: ReadonlyArray<T>): T[] {
-  if (items.length <= 1) return [...items]
-  const offset = Math.min(5, items.length - 1)
-  return [...items.slice(offset), ...items.slice(0, offset)]
-}
-
-function StoryControlButton({
-  children,
-  onClick,
-}: {
-  children: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        position: "absolute",
-        top: 16,
-        right: 16,
-        zIndex: 2,
-        border: "1px solid rgba(255,255,255,0.32)",
-        borderRadius: 999,
-        padding: "6px 12px",
-        background: "rgba(10,10,10,0.82)",
-        color: "white",
-        fontFamily: "system-ui",
-        fontSize: 12,
-        cursor: "pointer",
-      }}
-    >
-      {children}
-    </button>
-  )
-}
-
 function startViewTransition(update: () => void) {
   if (typeof document.startViewTransition === "function") {
     document.startViewTransition(update)
@@ -265,23 +235,46 @@ function InlinePagedControls() {
   )
 }
 
-function PlaygroundDemo({ cellSize, gap, mode, dataset }: StoryArgs) {
+function PlaygroundDemo({
+  cellSize,
+  gap,
+  mode,
+  dataset,
+  onItemClick,
+}: StoryArgs) {
   const items = datasets[dataset]
 
   if (mode === "paged") {
     return (
       <div style={{ position: "relative", width: "100%", height: "100%" }}>
         <TilegridPagedRoot<Tile> items={items} cellSize={cellSize} gap={gap}>
-          <TilegridCells<Tile> renderCell={renderTileCell} />
+          <TilegridCells<Tile>
+            renderCell={renderTileCell}
+            onItemClick={onItemClick}
+          />
           <InlinePagedControls />
         </TilegridPagedRoot>
       </div>
     )
   }
 
+  if (mode === "rail") {
+    return (
+      <TilegridRailRoot<Tile> items={items} cellSize={cellSize} gap={gap}>
+        <TilegridCells<Tile>
+          renderCell={renderTileCell}
+          onItemClick={onItemClick}
+        />
+      </TilegridRailRoot>
+    )
+  }
+
   return (
     <TilegridScrollRoot<Tile> items={items} cellSize={cellSize} gap={gap}>
-      <TilegridCells<Tile> renderCell={renderTileCell} />
+      <TilegridCells<Tile>
+        renderCell={renderTileCell}
+        onItemClick={onItemClick}
+      />
     </TilegridScrollRoot>
   )
 }
@@ -292,30 +285,49 @@ function FramerMotionDemo({
   mode,
   dataset,
   motionPreset,
+  onItemClick,
 }: StoryArgs) {
-  const initialItems = datasets[dataset]
-  const [items, setItems] = useState<ReadonlyArray<Tile>>(initialItems)
-  const [animationKey, setAnimationKey] = useState(0)
-
-  useEffect(() => {
-    setItems(initialItems)
-    setAnimationKey(current => current + 1)
-  }, [initialItems])
-
+  const items = datasets[dataset]
   const renderCell = renderMotionTileCell(motionPreset)
-  const usesSlottedMotionGrid = motionPreset === "stagger" || mode === "paged"
+  const usesSlottedMotionGrid =
+    motionPreset === "stagger" || mode === "paged" || mode === "rail"
 
-  const shuffle = () => {
-    setItems(current => rotateTiles(current))
-    setAnimationKey(current => current + 1)
+  // Stagger animation replays whenever the motion.div remounts. Keying it
+  // on `dataset` makes "switch dataset in Controls" the trigger that the
+  // explicit Shuffle button used to be.
+  const staggerKey = motionPreset === "stagger" ? dataset : undefined
+
+  const cells = (
+    <TilegridCells<Tile> renderCell={renderCell} onItemClick={onItemClick} />
+  )
+
+  if (mode === "rail") {
+    return (
+      <TilegridRailRoot<Tile>
+        items={items}
+        cellSize={cellSize}
+        gap={gap}
+        asChild
+      >
+        <motion.div
+          key={staggerKey}
+          layout
+          variants={
+            motionPreset === "stagger" ? staggerContainerVariants : undefined
+          }
+          initial={motionPreset === "stagger" ? "hidden" : undefined}
+          animate={motionPreset === "stagger" ? "show" : undefined}
+          transition={{ type: "spring", stiffness: 360 }}
+        >
+          {cells}
+        </motion.div>
+      </TilegridRailRoot>
+    )
   }
-
-  const cells = <TilegridCells<Tile> renderCell={renderCell} />
 
   if (mode === "paged") {
     return (
       <div style={{ position: "relative", width: "100%", height: "100%" }}>
-        <StoryControlButton onClick={shuffle}>Shuffle</StoryControlButton>
         <TilegridPagedRoot<Tile>
           items={items}
           cellSize={cellSize}
@@ -323,7 +335,7 @@ function FramerMotionDemo({
           asChild={usesSlottedMotionGrid}
         >
           <motion.div
-            key={motionPreset === "stagger" ? animationKey : undefined}
+            key={staggerKey}
             layout
             variants={
               motionPreset === "stagger" ? staggerContainerVariants : undefined
@@ -341,60 +353,65 @@ function FramerMotionDemo({
   }
 
   return (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <StoryControlButton onClick={shuffle}>Shuffle</StoryControlButton>
-      <TilegridScrollRoot<Tile>
-        items={items}
-        cellSize={cellSize}
-        gap={gap}
-        asChild={usesSlottedMotionGrid}
-      >
-        {usesSlottedMotionGrid ? (
-          <motion.div
-            key={motionPreset === "stagger" ? animationKey : undefined}
-            layout={motionPreset === "layout"}
-            variants={
-              motionPreset === "stagger" ? staggerContainerVariants : undefined
-            }
-            initial={motionPreset === "stagger" ? "hidden" : undefined}
-            animate={motionPreset === "stagger" ? "show" : undefined}
-          >
-            {cells}
-          </motion.div>
-        ) : (
-          cells
-        )}
-      </TilegridScrollRoot>
-    </div>
+    <TilegridScrollRoot<Tile>
+      items={items}
+      cellSize={cellSize}
+      gap={gap}
+      asChild={usesSlottedMotionGrid}
+    >
+      {usesSlottedMotionGrid ? (
+        <motion.div
+          key={staggerKey}
+          layout={motionPreset === "layout"}
+          variants={
+            motionPreset === "stagger" ? staggerContainerVariants : undefined
+          }
+          initial={motionPreset === "stagger" ? "hidden" : undefined}
+          animate={motionPreset === "stagger" ? "show" : undefined}
+        >
+          {cells}
+        </motion.div>
+      ) : (
+        cells
+      )}
+    </TilegridScrollRoot>
   )
 }
 
-function ViewTransitionsDemo({ cellSize, gap, dataset }: StoryArgs) {
+function ViewTransitionsDemo({
+  cellSize,
+  gap,
+  dataset,
+  onItemClick,
+}: StoryArgs) {
   const initialItems = datasets[dataset]
   const [items, setItems] = useState<ReadonlyArray<Tile>>(initialItems)
+  const isFirstRender = useRef(true)
 
+  // The View Transitions API only animates state updates that happen inside
+  // `document.startViewTransition`. Switching datasets via Controls becomes
+  // the trigger: we wrap the resulting items update so the browser animates
+  // matching `view-transition-name` cells across the change.
   useEffect(() => {
-    setItems(initialItems)
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
+    startViewTransition(() => setItems(initialItems))
   }, [initialItems])
 
   return (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <StoryControlButton
-        onClick={() =>
-          startViewTransition(() => setItems(current => rotateTiles(current)))
-        }
-      >
-        Shuffle
-      </StoryControlButton>
-      <TilegridScrollRoot<Tile>
-        items={items}
-        cellSize={cellSize}
-        gap={gap}
-        getViewTransitionName={item => `tile-${item.id}`}
-      >
-        <TilegridCells<Tile> renderCell={renderTileCell} />
-      </TilegridScrollRoot>
-    </div>
+    <TilegridScrollRoot<Tile>
+      items={items}
+      cellSize={cellSize}
+      gap={gap}
+      getViewTransitionName={item => `tile-${item.id}`}
+    >
+      <TilegridCells<Tile>
+        renderCell={renderTileCell}
+        onItemClick={onItemClick}
+      />
+    </TilegridScrollRoot>
   )
 }
 
@@ -420,9 +437,9 @@ const meta = {
     },
     mode: {
       control: "inline-radio",
-      options: ["scroll", "paged"],
+      options: ["scroll", "paged", "rail"],
       description:
-        "Tilegrid Root to compose: continuous CSS dense grid or paged bin-packed grid.",
+        "Tilegrid Root to compose: continuous CSS dense grid, paged bin-packed grid, or single-row horizontal rail (Switch / Apple TV style).",
     },
     dataset: {
       control: "select",
@@ -433,6 +450,11 @@ const meta = {
       control: "inline-radio",
       options: ["layout", "stagger", "hoverTap"],
       description: "Framer Motion behavior for the FramerMotion story.",
+    },
+    onItemClick: {
+      action: "tile clicked",
+      description:
+        "Cell click handler. Each invocation is logged in the Storybook Actions panel.",
     },
   },
   decorators: [
