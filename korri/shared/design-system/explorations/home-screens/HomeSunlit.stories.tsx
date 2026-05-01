@@ -630,9 +630,10 @@ function SunlitStyles() {
           box-shadow 180ms ease,
           transform 180ms ease;
       }
-      [data-exploration="sunlit"] .sunlit-search-pill .sunlit-pill-icon {
-        color: var(--ink);
-      }
+      /* Search icon falls through to the generic .sunlit-pill-icon
+         rule above (color: var(--ink-dim)) so it sits at the same
+         tone as the rest of the header text — status cluster, time,
+         day, etc. No search-pill-specific override. */
 
       /* The placeholder text is always rendered (so screen readers see
          it via the surrounding aria-label) but visually collapsed at
