@@ -481,8 +481,12 @@ function SunlitStyles() {
         --surface: #000000;
         --surface-raised: #000000;
         --surface-sunk: #000000;
+        /* Dark-mode ink palette — fully opaque, no alpha.
+           --ink-dim is the flattened equivalent of #ffffff8a over
+           pitch black: header/footer text in the top and bottom bars
+           lands on #8A8A8A. */
         --ink: #ECE7DE;
-        --ink-dim: #989797;
+        --ink-dim: #8A8A8A;
         --ink-faint: #5A5C62;
         --rule: #2A2D38;
 
@@ -492,8 +496,13 @@ function SunlitStyles() {
         --pill-bg: #1A2238;
         --pill-fg: #ECE7DE;
 
-        --hud-glyph-bg: var(--ink-dim);
-        --hud-glyph-fg: #0F1422;
+        /* Dark-mode HUD glyph: badge background is the flattened
+           equivalent of #ffffff17 over pitch black (#171717), a
+           quiet elevation tone. The glyph character matches the
+           label color (--ink-dim, #8A8A8A) so each chip reads as
+           one cohesive tone with a subtle darker badge behind it. */
+        --hud-glyph-bg: #171717;
+        --hud-glyph-fg: #8A8A8A;
         --hud-glyph-active-bg: var(--focus-glow);
         --hud-glyph-active-fg: #0F1422;
 
