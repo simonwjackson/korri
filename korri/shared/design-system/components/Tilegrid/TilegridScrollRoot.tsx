@@ -1,11 +1,15 @@
 import { useContainerSize } from "@shared/design-system/lib/useContainerSize"
 import { useResolvedCSSLength } from "@shared/design-system/lib/useResolvedCSSLength"
+import { centerScrollableAncestors } from "@shared/navigation/center-scroll"
 import { Slot } from "radix-ui"
 import {
   type CSSProperties,
   type ReactNode,
   type RefObject,
+  useEffect,
+  useLayoutEffect,
   useMemo,
+  useState,
 } from "react"
 import {
   type GridItemShape,
@@ -91,7 +95,7 @@ export function TilegridScrollRoot<T extends GridItemShape>({
   asChild = false,
   children,
 }: TilegridScrollRootProps<T>) {
-  const { ref, width } = useContainerSize<HTMLDivElement>()
+  const { ref, width, height } = useContainerSize<HTMLDivElement>()
   const cellSizeMeasure = useResolvedCSSLength(cellSize)
   const gapMeasure = useResolvedCSSLength(gap)
 
@@ -104,6 +108,67 @@ export function TilegridScrollRoot<T extends GridItemShape>({
     const raw = Math.floor((width + gapPx) / (cellSizePx + gapPx))
     return Math.max(1, raw)
   }, [width, cellSizePx, gapPx])
+
+  // Approximate natural content height from items + cellSize + gap +
+  // columns. Square span (TilegridScrollRoot uses non-rail span semantics)
+  // means each item occupies span×span cells; rows = ceil(totalCells /
+  // columns). Slight overestimation is fine — this is only an overflow
+  // gate, not a layout calculation.
+  const getSpanFn = getSpan ?? ((item: T) => item.span ?? 1)
+  const naturalHeightPx = useMemo(() => {
+    if (
+      cellSizePx === null ||
+      cellSizePx <= 0 ||
+      gapPx === null ||
+      items.length === 0 ||
+      columns === 0
+    )
+      return 0
+    const totalCells = items.reduce((acc, item) => {
+      const span = Math.max(1, getSpanFn(item))
+      return acc + span * span
+    }, 0)
+    const rows = Math.max(1, Math.ceil(totalCells / columns))
+    return rows * cellSizePx + Math.max(0, rows - 1) * gapPx
+  }, [items, cellSizePx, gapPx, columns, getSpanFn])
+
+  const [overflows, setOverflows] = useState(false)
+
+  // Block-axis overflow gate: compare natural content height against the
+  // measured client height (from useContainerSize). Padding-block only
+  // applies when this is true so non-overflowing grids do not gain
+  // spurious scroll room (R3).
+  useLayoutEffect(() => {
+    const next = naturalHeightPx > 0 && height > 0 && naturalHeightPx > height
+    setOverflows(prev => (prev === next ? prev : next))
+  }, [naturalHeightPx, height])
+
+  // Snap-to-centered when the overflow flag changes (window resize, item
+  // count change, theme switch). Synchronous so the user does not see a
+  // mid-flight scroll between "padding off" and "padding on".
+  useLayoutEffect(() => {
+    const node = ref.current
+    if (!node) return
+    const active = document.activeElement
+    if (active instanceof HTMLElement && node.contains(active)) {
+      centerScrollableAncestors(active, { animate: false })
+    }
+  }, [overflows, ref])
+
+  // Initial-focus snap (R13): consumer's mount-time `.focus()` calls run in
+  // their own useEffect, which fires AFTER this Root's useEffect. Defer one
+  // frame so we observe document.activeElement after the consumer's call.
+  useEffect(() => {
+    const node = ref.current
+    if (!node) return
+    const handle = requestAnimationFrame(() => {
+      const active = document.activeElement
+      if (active instanceof HTMLElement && node.contains(active)) {
+        centerScrollableAncestors(active, { animate: false })
+      }
+    })
+    return () => cancelAnimationFrame(handle)
+  }, [ref])
 
   const base = useMemo<TilegridBaseContext<T>>(
     () => ({
@@ -154,15 +219,27 @@ export function TilegridScrollRoot<T extends GridItemShape>({
       // deltaX drives left/right; horizontal rails (TilegridRailRoot) opt in
       // with "horizontal" instead so vertical wheel motion still moves focus.
       data-pointer-wheel="2d"
+      // Opt into Mario-camera scrolling on the block axis: focused row
+      // centers vertically when content overflows.
+      data-mario-camera="block"
+      data-mario-overflows={overflows ? "true" : undefined}
       style={{
         width: "100%",
         height: "100%",
         overflowY: "auto",
         overflowX: "hidden",
         // Establishes a containing block so percent-sized sentinels resolve
-        // against the scroll container rather than the viewport.
+        // against the scroll container rather than the viewport. Also
+        // doubles as the container-query containment context: cqb resolves
+        // against this element's block size. container-type: size enables
+        // both cqi and cqb so future inline-axis Mario behavior is
+        // available without revisiting the type.
         position: "relative",
-      }}
+        containerType: "size",
+        // Mario edge padding reads this custom property so the same CSS
+        // expression works for numeric and string cellSize inputs alike.
+        ["--mario-cell-size" as string]: cellSizeMeasure.cssValue,
+      } as CSSProperties}
     >
       {cellSizeIsString && (
         <span
@@ -191,6 +268,13 @@ export function TilegridScrollRoot<T extends GridItemShape>({
             gridAutoFlow: "row dense",
             justifyContent: "start",
             alignContent: "start",
+            // Block-axis edge padding allows row #1 and row #N to
+            // scroll-center. Only applied when natural content overflows
+            // the container, so non-overflowing grids do not gain spurious
+            // scroll room and do not trigger focus-driven scroll.
+            paddingBlock: overflows
+              ? "max(0px, calc(50cqb - var(--mario-cell-size) / 2))"
+              : 0,
           }}
         >
           {children}

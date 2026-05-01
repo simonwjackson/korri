@@ -158,4 +158,90 @@ describe("TilegridScrollRoot", () => {
     const outer = container.firstElementChild as HTMLElement
     expect(outer.style.position).toBe("relative")
   })
+
+  describe("Mario-camera opt-in", () => {
+    it("sets data-mario-camera=\"block\" on the outer scroll container", () => {
+      const { container } = render(
+        <TilegridScrollRoot<Tile> items={items} cellSize={100} gap={8}>
+          <span>child</span>
+        </TilegridScrollRoot>,
+      )
+      const outer = container.firstElementChild as HTMLElement
+      expect(outer.getAttribute("data-mario-camera")).toBe("block")
+    })
+
+    it("preserves the existing data-pointer-wheel=\"2d\" attribute alongside data-mario-camera", () => {
+      const { container } = render(
+        <TilegridScrollRoot<Tile> items={items} cellSize={100} gap={8}>
+          <span>child</span>
+        </TilegridScrollRoot>,
+      )
+      const outer = container.firstElementChild as HTMLElement
+      expect(outer.getAttribute("data-pointer-wheel")).toBe("2d")
+      expect(outer.getAttribute("data-mario-camera")).toBe("block")
+    })
+
+    it("sets container-type: size on the outer scroll container so cqb resolves correctly inside the grid", () => {
+      const { container } = render(
+        <TilegridScrollRoot<Tile> items={items} cellSize={100} gap={8}>
+          <span>child</span>
+        </TilegridScrollRoot>,
+      )
+      const outer = container.firstElementChild as HTMLElement
+      expect(outer.style.containerType).toBe("size")
+    })
+
+    it("exposes --mario-cell-size with the resolved numeric cell size", () => {
+      const { container } = render(
+        <TilegridScrollRoot<Tile> items={items} cellSize={100} gap={8}>
+          <span>child</span>
+        </TilegridScrollRoot>,
+      )
+      const outer = container.firstElementChild as HTMLElement
+      expect(outer.style.getPropertyValue("--mario-cell-size")).toBe("100px")
+    })
+
+    it("exposes --mario-cell-size verbatim when cellSize is a CSS expression", () => {
+      const { container } = render(
+        <TilegridScrollRoot<Tile> items={items} cellSize="6rem" gap={8}>
+          <span>child</span>
+        </TilegridScrollRoot>,
+      )
+      const outer = container.firstElementChild as HTMLElement
+      expect(outer.style.getPropertyValue("--mario-cell-size")).toBe("6rem")
+    })
+
+    it("keeps overflow-x: hidden so Mario only operates on the block axis", () => {
+      const { container } = render(
+        <TilegridScrollRoot<Tile> items={items} cellSize={100} gap={8}>
+          <span>child</span>
+        </TilegridScrollRoot>,
+      )
+      const outer = container.firstElementChild as HTMLElement
+      expect(outer.style.overflowY).toBe("auto")
+      expect(outer.style.overflowX).toBe("hidden")
+    })
+
+    it("defaults to overflows=false (paddingBlock unset) when the container has no measured size", () => {
+      // happy-dom + mocked ResizeObserver: useContainerSize observes nothing
+      // and width/height stay at 0 → overflow gate stays false → padding 0.
+      // This is the regression guard for R3 in the test environment.
+      const { container } = render(
+        <TilegridScrollRoot<Tile>
+          items={items}
+          cellSize={100}
+          gap={8}
+        >
+          <span>child</span>
+        </TilegridScrollRoot>,
+      )
+      const outer = container.firstElementChild as HTMLElement
+      const grid = outer.firstElementChild?.nextElementSibling
+        ? (outer.firstElementChild?.nextElementSibling as HTMLElement)
+        : (outer.firstElementChild as HTMLElement)
+      // Padding is `0` (unitless) when overflows=false.
+      expect(grid.style.paddingBlock).toBe("0")
+      expect(outer.getAttribute("data-mario-overflows")).toBeNull()
+    })
+  })
 })
