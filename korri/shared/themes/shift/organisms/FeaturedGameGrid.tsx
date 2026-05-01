@@ -1,7 +1,6 @@
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { useScale } from "../context/ScaleContext"
 import { useContainerSize } from "../hooks/useContainerSize"
-import { PageDots } from "../molecules/PageDots"
 import { type GameRecord, getGameImageUrl } from "../schemas/game"
 import {
   type FeaturedGridPage,
@@ -38,8 +37,6 @@ export function FeaturedGameGrid({
   onGameClick,
   gapPx = 6,
 }: FeaturedGameGridProps) {
-  const [currentPage, setCurrentPage] = useState(0)
-  const [previousPage, setPreviousPage] = useState(0)
   const { currentScale } = useScale()
   const {
     ref: containerRef,
@@ -51,10 +48,8 @@ export function FeaturedGameGrid({
     if (!containerWidth || !containerHeight) return DEFAULT_LAYOUT
     const cardW = currentScale.width
     const cardH = currentScale.height
-    // Reserve ~28px for pagination dots when there are likely more pages.
-    const reservedHeight = games.length > 8 ? 28 : 0
     const columns = calcCount(containerWidth, cardW, gapPx, 2, 8)
-    const rows = calcCount(containerHeight - reservedHeight, cardH, gapPx, 2, 6)
+    const rows = calcCount(containerHeight, cardH, gapPx, 2, 6)
     return { columns, rows }
   }, [
     containerWidth,
@@ -62,7 +57,6 @@ export function FeaturedGameGrid({
     currentScale.width,
     currentScale.height,
     gapPx,
-    games.length,
   ])
 
   const pagination = useMemo(
@@ -70,19 +64,9 @@ export function FeaturedGameGrid({
     [games.length, layout],
   )
 
-  const safePage = Math.min(currentPage, pagination.totalPages - 1)
-  const page: FeaturedGridPage = pagination.pages[safePage] ?? {
+  const page: FeaturedGridPage = pagination.pages[0] ?? {
     featuredIndex: null,
     otherIndices: [],
-  }
-  const isMovingForward = safePage > previousPage
-  const animationClass = isMovingForward
-    ? "shift-animate-slide-in-right"
-    : "shift-animate-slide-in-left"
-
-  const handlePageChange = (next: number) => {
-    setPreviousPage(safePage)
-    setCurrentPage(next)
   }
 
   const featured =
@@ -94,8 +78,7 @@ export function FeaturedGameGrid({
       className="flex h-full w-full flex-col overflow-hidden"
     >
       <div
-        key={safePage}
-        className={`grid w-full min-h-0 flex-1 gap-1.5 overflow-hidden ${animationClass}`}
+        className="grid w-full min-h-0 flex-1 gap-1.5 overflow-hidden"
         style={{
           gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))`,
           gridTemplateRows: `repeat(${layout.rows}, minmax(0, 1fr))`,
@@ -120,14 +103,6 @@ export function FeaturedGameGrid({
           )
         })}
       </div>
-      {pagination.totalPages > 1 ? (
-        <PageDots
-          total={pagination.totalPages}
-          active={safePage}
-          onSelect={handlePageChange}
-          ariaLabel="Featured grid pages"
-        />
-      ) : null}
     </div>
   )
 }

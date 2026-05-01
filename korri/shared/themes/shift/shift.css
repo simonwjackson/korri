@@ -3,33 +3,25 @@
 /*
  * Source roots that contain Shift-themed components and any consumer routes.
  * `@import "tailwindcss"` makes this file Tailwind-aware so its `@theme` and
- * `@custom-variant` blocks merge into the bundle's compiled theme; the Vite
- * plugin dedupes Tailwind's base across files in the same bundle.
+ * `@layer` blocks merge into the bundle's compiled theme; the Vite plugin
+ * dedupes Tailwind's base across files in the same bundle.
+ *
+ * Shift consumes shadcn's color tokens from
+ * `@shared/design-system/theme/styles.css`. Only shift-specific extensions
+ * are declared here.
  */
 @source "../../../products/**/*.{ts,tsx}";
 @source "../../../shared/**/*.{ts,tsx}";
 @source "../../../deploy/**/*.{ts,tsx,html}";
 
-@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant dark (&:is(.dark *));
 
-@theme {
-	--color-background: rgb(255 255 255);
-	--color-foreground: rgb(23 23 23);
-	--color-foreground-muted: rgb(82 82 82);
-	--color-border: rgb(212 212 212);
+@theme inline {
+	--color-foreground-muted: var(--muted-foreground);
 }
 
 @layer base {
-	.dark {
-		--color-background: rgb(23 23 23);
-		--color-foreground: rgb(255 255 255);
-		--color-foreground-muted: rgb(163 163 163);
-		--color-border: rgb(38 38 38);
-	}
-
 	body {
-		background-color: var(--color-background);
-		color: var(--color-foreground);
 		-webkit-font-smoothing: antialiased;
 	}
 }
