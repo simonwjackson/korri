@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react"
-import { useContainerSize } from "@shared/themes/shift/hooks/useContainerSize"
+import { useContainerSize } from "@shared/design-system/lib/useContainerSize"
 import { paginateItems } from "./layout/bin-pack"
 import {
   type GridItemShape,
