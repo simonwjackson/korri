@@ -1,7 +1,7 @@
 ---
 title: "feat: Electrobun Nix-native build (staged dev loop + hermetic nix run)"
 type: feat
-status: active
+status: completed
 date: 2026-04-30
 origin: docs/brainstorms/2026-04-30-electrobun-nix-native-build-requirements.md
 ---
