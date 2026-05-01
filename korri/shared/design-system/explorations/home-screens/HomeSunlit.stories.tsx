@@ -520,6 +520,7 @@ function SunlitStyles() {
         box-shadow: var(--pill-shadow);
         cursor: pointer;
         transition:
+          background 180ms ease,
           box-shadow 180ms ease,
           transform 180ms ease;
       }
@@ -535,7 +536,24 @@ function SunlitStyles() {
         height: 1.4em;
         color: var(--ink-dim);
       }
+
+      /* --- Search pill rest state: subtler than the default pill.
+             At rest, the search reads as a quiet placeholder shaped like
+             an input — not an active, currently-open search field. The
+             rest state uses the surface-raised tone with no elevation
+             shadow; the focused state inherits the full pill treatment
+             above (white + shadow + lavender halo). */
+      [data-exploration="sunlit"] .sunlit-search-pill {
+        background: var(--surface-raised);
+        box-shadow: none;
+      }
       [data-exploration="sunlit"] .sunlit-search-pill .sunlit-pill-icon {
+        color: var(--ink-faint);
+      }
+      [data-exploration="sunlit"] .sunlit-search-pill:focus-visible {
+        background: var(--pill-bg);
+      }
+      [data-exploration="sunlit"] .sunlit-search-pill:focus-visible .sunlit-pill-icon {
         color: var(--ink);
       }
 
