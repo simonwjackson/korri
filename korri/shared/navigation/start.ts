@@ -2,12 +2,15 @@ import { getNextFocus } from "@bbc/tv-lrud-spatial"
 import { createInputBus, type InputBus } from "@shared/input/bus"
 import { createGamepadAdapter } from "@shared/input/gamepad-adapter"
 import { createKeyboardAdapter } from "@shared/input/keyboard-adapter"
+import { createPointerAdapter } from "@shared/input/pointer-adapter"
 import type { Direction } from "@shared/input/types"
+import { createWheelAdapter } from "@shared/input/wheel-adapter"
 import {
   createFocusEngine,
   type FocusEngineOptions,
   type NextFocusFn,
 } from "./focus-engine"
+import { createInputModeStore, type InputModeStore } from "./input-mode"
 
 /**
  * One-shot wiring: input bus + adapters + focus engine.
@@ -39,10 +42,17 @@ export interface StartSpatialNavigationOptions
   readonly keyboard?: false | Parameters<typeof createKeyboardAdapter>[0]
   /** Disable the gamepad adapter. */
   readonly gamepad?: false | Parameters<typeof createGamepadAdapter>[0]
+  /** Disable the pointer adapter. */
+  readonly pointer?: false | Parameters<typeof createPointerAdapter>[0]
+  /** Disable the wheel adapter. */
+  readonly wheel?: false | Parameters<typeof createWheelAdapter>[0]
+  /** Disable the input-mode store + DOM-attribute side effect. */
+  readonly inputMode?: false
 }
 
 export interface SpatialNavigationHandle {
   readonly bus: InputBus
+  readonly inputMode: InputModeStore | null
   dispose(): void
 }
 
@@ -103,17 +113,53 @@ export function startSpatialNavigation(
 
   bus.on(engine.handle)
 
+  // Input-mode store + dispatch matrix. Subscribes to the bus once and maps
+  // source-tagged actions to mode flips. See plan unit 5 dispatch matrix:
+  //
+  //   source=pointer|wheel              -> setPointerMode
+  //   source=keyboard|gamepad + direction -> setDirectionalMode
+  //   anything else (untagged, confirm/back/options/menu) -> no change
+  //
+  // The store owns the [data-input-mode] DOM attribute. When disabled
+  // (inputMode: false in tests), no listener is attached.
+  const inputMode =
+    options.inputMode === false ? null : createInputModeStore()
+  if (inputMode) {
+    const store = inputMode
+    bus.on(action => {
+      const source = action.source
+      if (source === "pointer" || source === "wheel") {
+        store.setPointerMode()
+        return
+      }
+      if (
+        (source === "keyboard" || source === "gamepad") &&
+        action.type === "direction"
+      ) {
+        store.setDirectionalMode()
+      }
+    })
+  }
+
   if (options.keyboard !== false) {
     bus.use(createKeyboardAdapter(options.keyboard ?? undefined))
   }
   if (options.gamepad !== false) {
     bus.use(createGamepadAdapter(options.gamepad ?? undefined))
   }
+  if (options.pointer !== false) {
+    bus.use(createPointerAdapter(options.pointer ?? undefined))
+  }
+  if (options.wheel !== false) {
+    bus.use(createWheelAdapter(options.wheel ?? undefined))
+  }
 
   const handle: SpatialNavigationHandle = {
     bus,
+    inputMode,
     dispose: () => {
       bus.dispose()
+      inputMode?.dispose()
       if (currentHandle === handle) setCurrentHandle(null)
     },
   }
