@@ -1,9 +1,5 @@
 import type { ReactNode } from "react"
-import {
-  clampSpan,
-  type GridItemShape,
-  useTilegrid,
-} from "../Tilegrid.context"
+import { clampSpan, type GridItemShape, useTilegrid } from "../Tilegrid.context"
 
 export interface TilegridCellsProps<T extends GridItemShape> {
   /**
@@ -44,7 +40,7 @@ export function TilegridCells<T extends GridItemShape>({
 
   return (
     <>
-      {items.map((item) => {
+      {items.map(item => {
         const span = clampSpan(getSpan(item), maxSpan)
         return (
           <button

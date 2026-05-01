@@ -1,16 +1,12 @@
 import { describe, expect, it } from "bun:test"
 import { renderHook } from "@testing-library/react"
-import {
-  clampSpan,
-  type GridItemShape,
-  useTilegrid,
-} from "./Tilegrid.context"
+import { clampSpan, type GridItemShape, useTilegrid } from "./Tilegrid.context"
 
 describe("useTilegrid", () => {
   it("throws when used outside a Tilegrid Root", () => {
-    expect(() =>
-      renderHook(() => useTilegrid<GridItemShape>()),
-    ).toThrow(/must be used within a TilegridScrollRoot or TilegridPagedRoot/)
+    expect(() => renderHook(() => useTilegrid<GridItemShape>())).toThrow(
+      /must be used within a TilegridScrollRoot or TilegridPagedRoot/,
+    )
   })
 })
 

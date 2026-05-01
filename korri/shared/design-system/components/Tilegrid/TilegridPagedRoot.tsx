@@ -1,5 +1,11 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react"
 import { useContainerSize } from "@shared/design-system/lib/useContainerSize"
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react"
 import { paginateItems } from "./layout/bin-pack"
 import {
   type GridItemShape,
@@ -97,11 +103,11 @@ export function TilegridPagedRoot<T extends GridItemShape>({
   }, [currentPage, totalPages])
 
   const next = useCallback(() => {
-    setCurrentPage((p) => Math.min(p + 1, Math.max(0, totalPages - 1)))
+    setCurrentPage(p => Math.min(p + 1, Math.max(0, totalPages - 1)))
   }, [totalPages])
 
   const prev = useCallback(() => {
-    setCurrentPage((p) => Math.max(0, p - 1))
+    setCurrentPage(p => Math.max(0, p - 1))
   }, [])
 
   const goToPage = useCallback(
@@ -111,7 +117,10 @@ export function TilegridPagedRoot<T extends GridItemShape>({
     [totalPages],
   )
 
-  const visibleItems = useMemo(() => pages[currentPage] ?? [], [pages, currentPage])
+  const visibleItems = useMemo(
+    () => pages[currentPage] ?? [],
+    [pages, currentPage],
+  )
 
   const base = useMemo<TilegridBaseContext<T>>(
     () => ({

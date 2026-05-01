@@ -1,9 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import { act, renderHook } from "@testing-library/react"
-import {
-  type GridItemShape,
-  useTilegrid,
-} from "./Tilegrid.context"
+import { type GridItemShape, useTilegrid } from "./Tilegrid.context"
 import { TilegridPagedRoot } from "./TilegridPagedRoot"
 
 interface Tile extends GridItemShape {
@@ -105,7 +102,10 @@ describe("TilegridPagedRoot", () => {
   })
 
   it("places a 2x2 hero on page 1 and packs 8 single tiles around it", () => {
-    const items = [tile("hero", 2), ...Array.from({ length: 8 }, (_, i) => tile(`s-${i}`))]
+    const items = [
+      tile("hero", 2),
+      ...Array.from({ length: 8 }, (_, i) => tile(`s-${i}`)),
+    ]
     const { result } = renderHook(() => useTilegrid<Tile>(), {
       wrapper: wrapWithLayout(items, 4, 3),
     })

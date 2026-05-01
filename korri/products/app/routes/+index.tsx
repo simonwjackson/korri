@@ -1,10 +1,10 @@
+import { TilegridCells } from "@shared/design-system/components/Tilegrid/components/TilegridCells"
+import { TilegridScrollRoot } from "@shared/design-system/components/Tilegrid/TilegridScrollRoot"
 import { games } from "@shared/themes/shift/fixtures/games"
 import {
   type GameRecord,
   getGameImageUrl,
 } from "@shared/themes/shift/schemas/game"
-import { TilegridCells } from "@shared/design-system/components/Tilegrid/components/TilegridCells"
-import { TilegridScrollRoot } from "@shared/design-system/components/Tilegrid/TilegridScrollRoot"
 import { createFileRoute } from "@tanstack/react-router"
 
 export const Route = createFileRoute("/")({
@@ -18,10 +18,10 @@ function HomePage() {
         items={games}
         cellSize={140}
         gap={8}
-        getKey={(g) => g.id}
-        getAriaLabel={(g) => g.metadata?.name ?? g.id}
+        getKey={g => g.id}
+        getAriaLabel={g => g.metadata?.name ?? g.id}
       >
-        <TilegridCells<GameRecord> render={(g) => <GameTileVisual game={g} />} />
+        <TilegridCells<GameRecord> render={g => <GameTileVisual game={g} />} />
       </TilegridScrollRoot>
     </div>
   )

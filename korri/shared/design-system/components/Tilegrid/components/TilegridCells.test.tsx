@@ -16,9 +16,9 @@ const baseCtx = (
   overrides: Partial<TilegridBaseContext<Tile>> = {},
 ): TilegridBaseContext<Tile> => ({
   items: [],
-  getKey: (t) => t.id,
-  getSpan: (t) => t.span ?? 1,
-  getAriaLabel: (t) => t.id,
+  getKey: t => t.id,
+  getSpan: t => t.span ?? 1,
+  getAriaLabel: t => t.id,
   cellSize: 100,
   gap: 8,
   columns: 4,
@@ -39,15 +39,13 @@ const wrap = (ctx: TilegridBaseContext<Tile>, ui: React.ReactElement) => (
 
 describe("TilegridCells", () => {
   it("renders one button per item with the consumer's render output as children", () => {
-    const items: Tile[] = [
-      { id: "a" },
-      { id: "b" },
-      { id: "c" },
-    ]
+    const items: Tile[] = [{ id: "a" }, { id: "b" }, { id: "c" }]
     const { container } = render(
       wrap(
         baseCtx({ items }),
-        <TilegridCells<Tile> render={(t) => <span data-testid={`vis-${t.id}`}>{t.id}</span>} />,
+        <TilegridCells<Tile>
+          render={t => <span data-testid={`vis-${t.id}`}>{t.id}</span>}
+        />,
       ),
     )
     const buttons = container.querySelectorAll("button")
@@ -59,10 +57,7 @@ describe("TilegridCells", () => {
   it("applies span styles for span:1 by default", () => {
     const items: Tile[] = [{ id: "x" }]
     const { container } = render(
-      wrap(
-        baseCtx({ items }),
-        <TilegridCells<Tile> render={(t) => t.id} />,
-      ),
+      wrap(baseCtx({ items }), <TilegridCells<Tile> render={t => t.id} />),
     )
     const button = container.querySelector("button")
     expect(button?.style.gridColumn).toBe("span 1")
@@ -72,10 +67,7 @@ describe("TilegridCells", () => {
   it("applies span styles for span:2 items", () => {
     const items: Tile[] = [{ id: "hero", span: 2 }]
     const { container } = render(
-      wrap(
-        baseCtx({ items }),
-        <TilegridCells<Tile> render={(t) => t.id} />,
-      ),
+      wrap(baseCtx({ items }), <TilegridCells<Tile> render={t => t.id} />),
     )
     const button = container.querySelector("button")
     expect(button?.style.gridColumn).toBe("span 2")
@@ -87,7 +79,7 @@ describe("TilegridCells", () => {
     const { container } = render(
       wrap(
         baseCtx({ items, columns: 4, maxSpan: { columns: 4, rows: Infinity } }),
-        <TilegridCells<Tile> render={(t) => t.id} />,
+        <TilegridCells<Tile> render={t => t.id} />,
       ),
     )
     const button = container.querySelector("button")
@@ -100,7 +92,7 @@ describe("TilegridCells", () => {
     const { container } = render(
       wrap(
         baseCtx({ items, columns: 8, maxSpan: { columns: 8, rows: 2 } }),
-        <TilegridCells<Tile> render={(t) => t.id} />,
+        <TilegridCells<Tile> render={t => t.id} />,
       ),
     )
     const button = container.querySelector("button")
@@ -110,10 +102,7 @@ describe("TilegridCells", () => {
 
   it("renders zero buttons for an empty items array", () => {
     const { container } = render(
-      wrap(
-        baseCtx({ items: [] }),
-        <TilegridCells<Tile> render={(t) => t.id} />,
-      ),
+      wrap(baseCtx({ items: [] }), <TilegridCells<Tile> render={t => t.id} />),
     )
     expect(container.querySelectorAll("button").length).toBe(0)
   })
@@ -129,9 +118,9 @@ describe("TilegridCells", () => {
     ]
     const namedCtx: TilegridBaseContext<NamedTile> = {
       items,
-      getKey: (t) => t.id,
+      getKey: t => t.id,
       getSpan: () => 1,
-      getAriaLabel: (t) => t.label,
+      getAriaLabel: t => t.label,
       cellSize: 100,
       gap: 8,
       columns: 2,
@@ -144,7 +133,7 @@ describe("TilegridCells", () => {
           paged: undefined,
         }}
       >
-        <TilegridCells<NamedTile> render={(t) => t.label} />
+        <TilegridCells<NamedTile> render={t => t.label} />
       </TilegridProvider>,
     )
     const buttons = container.querySelectorAll("button")
@@ -153,8 +142,8 @@ describe("TilegridCells", () => {
   })
 
   it("throws when rendered outside a Tilegrid Root", () => {
-    expect(() =>
-      render(<TilegridCells<Tile> render={(t) => t.id} />),
-    ).toThrow(/must be used within a TilegridScrollRoot or TilegridPagedRoot/)
+    expect(() => render(<TilegridCells<Tile> render={t => t.id} />)).toThrow(
+      /must be used within a TilegridScrollRoot or TilegridPagedRoot/,
+    )
   })
 })
