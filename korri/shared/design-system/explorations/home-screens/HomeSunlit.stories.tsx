@@ -162,7 +162,15 @@ function HomeSunlit() {
       <div className="flex min-h-0 flex-1 flex-col justify-center gap-2">
         {/* Rail region. The focusin handler delegates to whichever cell
             received focus. */}
-        <div ref={railRef} className="sunlit-rail-region h-[172px] px-12">
+        {/* Rail wrapper height mirrors CELL_SIZE_PX so the row sits flush
+            against its bottom edge — caption-to-rail proximity depends on
+            this. The inline style is the single derived link from the TS
+            constant; no other px values escape the theme system. */}
+        <div
+          ref={railRef}
+          className="sunlit-rail-region px-12"
+          style={{ height: CELL_SIZE_PX }}
+        >
           <TilegridRailRoot<GameRecord>
             items={items}
             cellSize={{ width: CELL_SIZE_PX, height: CELL_SIZE_PX }}
@@ -175,7 +183,7 @@ function HomeSunlit() {
               renderCell={({ cellProps, item }) => (
                 <button
                   {...cellProps}
-                  className="sunlit-tile relative cursor-pointer overflow-hidden border-0 bg-[color:var(--surface-sunk)] p-0"
+                  className="sunlit-tile relative cursor-pointer overflow-hidden rounded-[var(--radius-tile)] border-0 bg-[color:var(--surface-sunk)] p-0"
                   style={cellProps.style}
                 >
                   {item.id === resumeTarget.id ? (
@@ -348,7 +356,7 @@ function PosterTileArt({ game }: { game: GameRecord }) {
   const url = getGameImageUrl(game)
   if (!url) {
     return (
-      <div className="flex h-full w-full items-center justify-center p-3 text-center text-sm uppercase tracking-[0.18em] text-[color:var(--ink-faint)]">
+      <div className="flex h-full w-full items-center justify-center p-3 text-center text-sm uppercase tracking-widest text-[color:var(--ink-faint)]">
         {getGameDisplayName(game)}
       </div>
     )
@@ -382,7 +390,7 @@ function Caption({
   return (
     <div className="sunlit-caption flex shrink-0 items-baseline gap-4 px-12 pb-3 pt-2">
       {showEyebrow ? (
-        <span className="text-sm font-bold uppercase tracking-[0.10em] text-[color:var(--last-played-eyebrow)]">
+        <span className="text-sm font-bold uppercase tracking-widest text-[color:var(--last-played-eyebrow)]">
           Last played
         </span>
       ) : null}
@@ -390,7 +398,7 @@ function Caption({
         {name}
       </span>
       {lastPlayedLabel ? (
-        <span className="text-sm font-medium uppercase tracking-[0.10em] text-[color:var(--ink-faint)]">
+        <span className="text-sm font-medium uppercase tracking-widest text-[color:var(--ink-faint)]">
           {lastPlayedLabel}
         </span>
       ) : null}
@@ -430,7 +438,14 @@ function SunlitStyles() {
         --hud-glyph-active-bg: var(--focus-glow);
         --hud-glyph-active-fg: #FFFFFF;
 
-        --tile-radius: 4px;
+        /* --- Static-by-design values.
+
+               --radius-tile: small fixed corner per design call. 4px
+               doesn't scale because it's a hairline-class decoration
+               (Tailwind's rounded-sm would be ~6px). Used via the
+               rounded-[var(--radius-tile)] arbitrary value on tiles
+               so consumers stay in the Tailwind utility system. */
+        --radius-tile: 4px;
 
         /* --- Type voice. Sunlit overrides the design-system default
                (Geist, sharp/technical) with Nunito, a rounded friendly
@@ -499,16 +514,16 @@ function SunlitStyles() {
         height: 0;
       }
 
-      /* --- Tile (rounded corners, lavender ring on focus).
+      /* --- Tile focus state.
              The focus indicator uses a negative-offset outline so the
              ring renders INSIDE the tile box. TilegridRailRoot's outer
              scroll container has overflowY: hidden, which would clip an
              outer box-shadow halo. An inset outline is guaranteed
              visible at the tile's bounds without depending on ancestor
-             overflow behavior. */
+             overflow behavior. The 4px thickness is hairline-class —
+             intentionally static, not derived from --spacing. */
       [data-exploration="sunlit"] .sunlit-tile {
         outline: none;
-        border-radius: var(--tile-radius);
         transition:
           outline-color 180ms ease,
           transform 180ms ease;
@@ -550,10 +565,16 @@ function SunlitStyles() {
       }
 
       /* --- Search pill: icon-only at rest, expands to full pill on focus.
-             At rest the search is a quiet circular icon embedded in the
-             surface — not an open input field. Focus is the affordance
-             that opens the field; the transition (background + width +
-             placeholder fade-in) is the visual signal of 'now searching.' */
+             At rest the search is a quiet icon embedded in the surface —
+             not an open input field. Focus is the affordance that opens
+             the field; the transition (background + width + placeholder
+             fade-in) is the visual signal of 'now searching.'
+
+             em-relative dimensions (1.4em, 3.4em) scale implicitly via
+             the button's text-lg font-size, which is itself fluid via
+             --text-lg. Padding and gap on the focused state derive from
+             --spacing so they scale with the container, matching the
+             rest of the surface. */
       [data-exploration="sunlit"] .sunlit-search-pill {
         display: inline-flex;
         align-items: center;
@@ -595,13 +616,14 @@ function SunlitStyles() {
           opacity 180ms ease;
       }
 
-      /* Active state: expand into a full pill. */
+      /* Active state: expand into a full pill. Padding and gap derive
+         from --spacing so they breathe with the container. */
       [data-exploration="sunlit"] .sunlit-search-pill:focus-visible {
         justify-content: flex-start;
         width: 40cqi;
         height: auto;
-        padding: 1rem 1.5rem;
-        gap: 1rem;
+        padding: calc(4 * var(--spacing)) calc(6 * var(--spacing));
+        gap: calc(4 * var(--spacing));
         background: var(--pill-bg);
         box-shadow: var(--pill-shadow);
       }
@@ -614,11 +636,15 @@ function SunlitStyles() {
              Reuses the .hud-glyph and .hud-label class hooks so it sits
              visually in the same row as + Options / X Close / A Continue.
              Unlike the HUD chips, this button is focusable; the focus
-             halo lights the glyph circle, not the whole row. */
+             halo lights the glyph circle, not the whole row.
+
+             Gap derives from --spacing so it scales with the container,
+             same as the .hud-hint gap below — the menu button reads as
+             one of the chips, not a special case. */
       [data-exploration="sunlit"] .sunlit-menu-button {
         display: inline-flex;
         align-items: center;
-        gap: 0.6rem;
+        gap: calc(3 * var(--spacing));
         outline: none;
         border: 0;
         background: transparent;
@@ -655,16 +681,20 @@ function SunlitStyles() {
       /* --- HUD glyph treatment.
              Class hooks .hud, .hud-hint, .hud-glyph, and .hud-label are
              contributed by both HudButtons and the story-local static
-             chip below; one rule set covers all three. */
+             chip below; one rule set covers all three.
+
+             Gaps derive from --spacing so they scale with the container.
+             em-relative widths on the glyph circle scale implicitly via
+             the chip's font-size (text-base, fluid). */
       [data-exploration="sunlit"] .hud {
         display: inline-flex;
         align-items: center;
-        gap: 1.25rem;
+        gap: calc(5 * var(--spacing));
       }
       [data-exploration="sunlit"] .hud-hint {
         display: inline-flex;
         align-items: center;
-        gap: 0.6rem;
+        gap: calc(3 * var(--spacing));
       }
       [data-exploration="sunlit"] .hud-glyph {
         display: inline-flex;
