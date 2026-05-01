@@ -23,6 +23,5 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const Grid: Story = { args: { viewMode: "grid" } }
-export const List: Story = { args: { viewMode: "list" } }
 export const Featured: Story = { args: { viewMode: "featured" } }
 export const Empty: Story = { args: { games: [] } }

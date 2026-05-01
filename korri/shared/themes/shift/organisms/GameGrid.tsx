@@ -10,37 +10,6 @@ export interface GameGridProps {
 }
 
 export function GameGrid({ games, viewMode, onGameClick }: GameGridProps) {
-  if (viewMode === "list") {
-    return (
-      <ul className="flex-1 divide-y divide-neutral-300 overflow-y-auto dark:divide-white/10">
-        {games.map(game => {
-          const name = game.metadata?.name ?? game.id
-          const image = getGameImageUrl(game)
-          return (
-            <li key={game.id}>
-              <button
-                type="button"
-                onClick={() => onGameClick?.(game)}
-                className="flex w-full cursor-pointer items-center gap-3 px-3 py-2 text-left hover:bg-neutral-200 dark:hover:bg-white/5"
-              >
-                <span className="block h-10 w-10 overflow-hidden rounded bg-neutral-200 dark:bg-neutral-800">
-                  {image ? (
-                    <img
-                      src={image}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  ) : null}
-                </span>
-                <span className="text-sm">{name}</span>
-              </button>
-            </li>
-          )
-        })}
-      </ul>
-    )
-  }
-
   if (viewMode === "featured") {
     return (
       <div className="flex flex-1 flex-col justify-center overflow-hidden px-6 py-4">

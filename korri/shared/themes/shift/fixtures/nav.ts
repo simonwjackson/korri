@@ -1,1 +1,1 @@
-export type ViewMode = "grid" | "list" | "featured"
+export type ViewMode = "grid" | "featured"
