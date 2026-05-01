@@ -72,8 +72,8 @@ import { HudButtons } from "./HudButtons"
  * (2·200 + 28) / 200 = 2.14, identical to 92/43 within rounding.
  */
 const RESUME_SPAN = 2
-const CELL_SIZE_PX = 200
-const RAIL_GAP_PX = 28
+const CELL_SIZE_PX = 172
+const RAIL_GAP_PX = 24
 const items: ReadonlyArray<GameRecord> = games
 
 /* -------------------------------------------------------------------------- */
@@ -159,10 +159,10 @@ function HomeSunlit() {
           centered vertically by the column's justify-center. The rail
           wrapper has an explicit height because TilegridRailRoot's outer
           container is height:100% and would collapse without one. */}
-      <div className="flex min-h-0 flex-1 flex-col justify-center gap-3">
+      <div className="flex min-h-0 flex-1 flex-col justify-center gap-2">
         {/* Rail region. The focusin handler delegates to whichever cell
             received focus. */}
-        <div ref={railRef} className="sunlit-rail-region h-[240px] px-12">
+        <div ref={railRef} className="sunlit-rail-region h-[172px] px-12">
           <TilegridRailRoot<GameRecord>
             items={items}
             cellSize={{ width: CELL_SIZE_PX, height: CELL_SIZE_PX }}
@@ -242,7 +242,7 @@ function StatusCluster() {
       className="sunlit-status-cluster flex shrink-0 items-center gap-6 text-lg text-[color:var(--ink-dim)]"
     >
       <Sun className="sunlit-status-icon" strokeWidth={2} />
-      <span className="text-xl font-bold tabular-nums">16:24</span>
+      <span className="text-xl font-bold tabular-nums">4:24 PM</span>
       <Wifi className="sunlit-status-icon" strokeWidth={2} />
       <Battery className="sunlit-status-icon" strokeWidth={2} />
       <img
@@ -380,7 +380,7 @@ function Caption({
     showEyebrow && lastPlayed ? formatRelative(lastPlayed) : undefined
 
   return (
-    <div className="sunlit-caption flex shrink-0 items-baseline gap-4 px-12 pb-3 pt-4">
+    <div className="sunlit-caption flex shrink-0 items-baseline gap-4 px-12 pb-3 pt-2">
       {showEyebrow ? (
         <span className="text-sm font-bold uppercase tracking-[0.10em] text-[color:var(--last-played-eyebrow)]">
           Last played
@@ -557,10 +557,13 @@ function SunlitStyles() {
       [data-exploration="sunlit"] .sunlit-search-pill {
         display: inline-flex;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-start;
         gap: 0;
-        /* Collapsed: circle just big enough to hold the icon. */
-        width: 3.4em;
+        /* Collapsed: button is exactly the icon's width. The icon's
+           left edge sits at the button's left edge, which sits at the
+           parent's px-12 boundary — visually flush with the Menu glyph
+           circle and the 'LAST PLAYED' eyebrow on the rows below. */
+        width: 1.4em;
         height: 3.4em;
         padding: 0;
         background: transparent;
@@ -667,12 +670,12 @@ function SunlitStyles() {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 1.75em;
-        height: 1.75em;
+        width: 2em;
+        height: 2em;
         border-radius: 9999px;
         background: var(--hud-glyph-bg);
         color: var(--hud-glyph-fg);
-        font-size: var(--text-sm);
+        font-size: var(--text-base);
         font-weight: 800;
         line-height: 1;
         transition:
@@ -686,7 +689,7 @@ function SunlitStyles() {
         transform: scale(1.1);
       }
       [data-exploration="sunlit"] .hud-label {
-        font-size: var(--text-sm);
+        font-size: var(--text-base);
         font-weight: 600;
         letter-spacing: 0;
         color: var(--ink-dim);
