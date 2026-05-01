@@ -225,7 +225,7 @@ The architectural answer is **slot composition**: let the consumer control which
 
 ---
 
-- [ ] **Unit 4: Demonstrate seams in Storybook**
+- [x] **Unit 4: Demonstrate seams in Storybook**
 
 **Goal:** Storybook gains two new stories under `Design System / Tilegrid` that demonstrate each seam in action: one using `motion.button` via `renderCell` to show the cell wrapper slot, and one using `getViewTransitionName` + a "shuffle" button to show layout/reorder morphing via the View Transitions API. These serve as living docs and a smoke test that the seams compose with real motion code.
 

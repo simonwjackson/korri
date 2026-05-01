@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
+import { motion } from "framer-motion"
+import { useState } from "react"
 import {
   type TilegridCellProps,
   TilegridCells,
@@ -71,6 +73,110 @@ function renderTileCell({
     <button {...cellProps}>
       <TileVisual tile={item} />
     </button>
+  )
+}
+
+function renderMotionTileCell({
+  cellProps,
+  item,
+}: {
+  cellProps: TilegridCellProps
+  item: Tile
+}) {
+  return (
+    <motion.button
+      {...cellProps}
+      layout
+      transition={{ type: "spring", stiffness: 380, damping: 34 }}
+    >
+      <TileVisual tile={item} />
+    </motion.button>
+  )
+}
+
+function rotateTiles<T>(items: ReadonlyArray<T>): T[] {
+  if (items.length <= 1) return [...items]
+  const offset = Math.min(5, items.length - 1)
+  return [...items.slice(offset), ...items.slice(0, offset)]
+}
+
+function StoryControlButton({
+  children,
+  onClick,
+}: {
+  children: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        position: "absolute",
+        top: 16,
+        right: 16,
+        zIndex: 2,
+        border: "1px solid rgba(255,255,255,0.32)",
+        borderRadius: 999,
+        padding: "6px 12px",
+        background: "rgba(10,10,10,0.82)",
+        color: "white",
+        fontFamily: "system-ui",
+        fontSize: 12,
+        cursor: "pointer",
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+function startViewTransition(update: () => void) {
+  if (typeof document.startViewTransition === "function") {
+    document.startViewTransition(update)
+    return
+  }
+  update()
+}
+
+function ScrollWithMotionDemo({ cellSize, gap }: StoryArgs) {
+  const [items, setItems] = useState<ReadonlyArray<Tile>>(manyHeroes)
+
+  return (
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      <StoryControlButton
+        onClick={() => setItems(current => rotateTiles(current))}
+      >
+        Shuffle
+      </StoryControlButton>
+      <TilegridScrollRoot<Tile> items={items} cellSize={cellSize} gap={gap}>
+        <TilegridCells<Tile> renderCell={renderMotionTileCell} />
+      </TilegridScrollRoot>
+    </div>
+  )
+}
+
+function ScrollWithViewTransitionsDemo({ cellSize, gap }: StoryArgs) {
+  const [items, setItems] = useState<ReadonlyArray<Tile>>(manyHeroes)
+
+  return (
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      <StoryControlButton
+        onClick={() =>
+          startViewTransition(() => setItems(current => rotateTiles(current)))
+        }
+      >
+        Shuffle
+      </StoryControlButton>
+      <TilegridScrollRoot<Tile>
+        items={items}
+        cellSize={cellSize}
+        gap={gap}
+        getViewTransitionName={item => `tile-${item.id}`}
+      >
+        <TilegridCells<Tile> renderCell={renderTileCell} />
+      </TilegridScrollRoot>
+    </div>
   )
 }
 
@@ -175,6 +281,25 @@ export const ScrollMixedSpans: Story = {
       <TilegridCells<Tile> renderCell={renderTileCell} />
     </TilegridScrollRoot>
   ),
+}
+
+/**
+ * Uses renderCell to spread Tilegrid's cellProps onto motion.button.
+ * The primitive still imports no motion library; this story is just a
+ * consumer demonstrating the seam.
+ */
+export const ScrollWithMotion: Story = {
+  render: args => <ScrollWithMotionDemo {...args} />,
+}
+
+/**
+ * Uses getViewTransitionName to attach stable browser View Transition
+ * names to each cell. The story triggers document.startViewTransition
+ * itself; Tilegrid only emits the names. Animation is visible in
+ * Chromium-based browsers (including Electrobun).
+ */
+export const ScrollWithViewTransitions: Story = {
+  render: args => <ScrollWithViewTransitionsDemo {...args} />,
 }
 
 /**
