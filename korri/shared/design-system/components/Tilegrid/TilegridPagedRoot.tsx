@@ -1,4 +1,5 @@
 import { useContainerSize } from "@shared/design-system/lib/useContainerSize"
+import { Slot } from "radix-ui"
 import {
   type ReactNode,
   useCallback,
@@ -29,6 +30,12 @@ export interface TilegridPagedRootProps<T extends GridItemShape> {
   getAriaLabel?: (item: T) => string
   /** Optional className applied to the inner grid container. */
   className?: string
+  /**
+   * When true, the inner grid container is rendered via Radix Slot so a
+   * consumer-provided single child element receives the grid styles. The
+   * outer measurement container remains owned by the Root.
+   */
+  asChild?: boolean
   /**
    * Children typically include a `<TilegridCells render={...} />` plus any
    * sibling page indicators or controls the consumer authors against the
@@ -69,6 +76,7 @@ export function TilegridPagedRoot<T extends GridItemShape>({
   getSpan,
   getAriaLabel,
   className,
+  asChild = false,
   children,
   _testColumns,
   _testRows,
@@ -149,27 +157,31 @@ export function TilegridPagedRoot<T extends GridItemShape>({
     [base, paged],
   )
 
+  const GridComp = asChild ? Slot.Root : "div"
+
   return (
     <div
       ref={ref}
-      className={className}
       style={{ width: "100%", height: "100%", overflow: "hidden" }}
     >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: `repeat(${columns}, ${cellSize}px)`,
-          gridTemplateRows: `repeat(${rows}, ${cellSize}px)`,
-          gap: `${gap}px`,
-          gridAutoFlow: "row dense",
-          justifyContent: "center",
-          alignContent: "center",
-          width: "100%",
-          height: "100%",
-        }}
-      >
-        <TilegridProvider value={value}>{children}</TilegridProvider>
-      </div>
+      <TilegridProvider value={value}>
+        <GridComp
+          className={className}
+          style={{
+            display: "grid",
+            gridTemplateColumns: `repeat(${columns}, ${cellSize}px)`,
+            gridTemplateRows: `repeat(${rows}, ${cellSize}px)`,
+            gap: `${gap}px`,
+            gridAutoFlow: "row dense",
+            justifyContent: "center",
+            alignContent: "center",
+            width: "100%",
+            height: "100%",
+          }}
+        >
+          {children}
+        </GridComp>
+      </TilegridProvider>
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { act, renderHook } from "@testing-library/react"
+import { act, render, renderHook } from "@testing-library/react"
 import { type GridItemShape, useTilegrid } from "./Tilegrid.context"
 import { TilegridPagedRoot } from "./TilegridPagedRoot"
 
@@ -112,5 +112,80 @@ describe("TilegridPagedRoot", () => {
     expect(result.current.paged?.totalPages).toBe(1)
     expect(result.current.base.items.length).toBe(9)
     expect(result.current.base.items[0]?.id).toBe("hero")
+  })
+
+  it("renders an inner grid div by default", () => {
+    const { container } = render(
+      <TilegridPagedRoot<Tile>
+        items={[tile("a")]}
+        cellSize={100}
+        gap={8}
+        _testColumns={4}
+        _testRows={3}
+      >
+        <span>child</span>
+      </TilegridPagedRoot>,
+    )
+
+    const outer = container.firstElementChild as HTMLElement | null
+    const grid = outer?.firstElementChild as HTMLElement | null
+
+    expect(outer?.tagName).toBe("DIV")
+    expect(outer?.style.overflow).toBe("hidden")
+    expect(grid?.tagName).toBe("DIV")
+    expect(grid?.style.display).toBe("grid")
+    expect(grid?.style.gridTemplateColumns).toBe("repeat(4, 100px)")
+    expect(grid?.style.gridTemplateRows).toBe("repeat(3, 100px)")
+  })
+
+  it("slots grid styles onto a single child when asChild is true", () => {
+    const { getByTestId } = render(
+      <TilegridPagedRoot<Tile>
+        items={[tile("a")]}
+        cellSize={90}
+        gap={6}
+        className="root-grid"
+        asChild
+        _testColumns={5}
+        _testRows={4}
+      >
+        <section data-testid="grid" className="child-grid">
+          child
+        </section>
+      </TilegridPagedRoot>,
+    )
+
+    const grid = getByTestId("grid")
+    expect(grid.tagName).toBe("SECTION")
+    expect(grid.classList.contains("root-grid")).toBe(true)
+    expect(grid.classList.contains("child-grid")).toBe(true)
+    expect(grid.style.display).toBe("grid")
+    expect(grid.style.gridTemplateColumns).toBe("repeat(5, 90px)")
+    expect(grid.style.gridTemplateRows).toBe("repeat(4, 90px)")
+    expect(grid.style.gap).toBe("6px")
+  })
+
+  it("keeps publishing paged context inside an asChild grid", () => {
+    function Probe() {
+      const { paged } = useTilegrid<Tile>()
+      return <span data-testid="pages">{paged?.totalPages}</span>
+    }
+
+    const { getByTestId } = render(
+      <TilegridPagedRoot<Tile>
+        items={Array.from({ length: 13 }, (_, i) => tile(`g-${i}`))}
+        cellSize={100}
+        gap={0}
+        asChild
+        _testColumns={4}
+        _testRows={3}
+      >
+        <section data-testid="grid">
+          <Probe />
+        </section>
+      </TilegridPagedRoot>,
+    )
+
+    expect(getByTestId("pages").textContent).toBe("2")
   })
 })

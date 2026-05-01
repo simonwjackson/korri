@@ -100,7 +100,7 @@ The architectural answer is **slot composition**: let the consumer control which
 
 ## Implementation Units
 
-- [ ] **Unit 1: Add `asChild` support to the Root atoms (grid container slot)**
+- [x] **Unit 1: Add `asChild` support to the Root atoms (grid container slot)**
 
 **Goal:** Both `TilegridScrollRoot` and `TilegridPagedRoot` accept an optional `asChild?: boolean`. When true, the inner grid div is replaced via Radix `Slot`, with grid styles and any consumer-supplied props merged onto the consumer's child element. The outer scroll container, measurement ref, and Provider placement remain unchanged.
 
