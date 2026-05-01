@@ -66,9 +66,7 @@ interface Tween {
 // Module-private state. One tween per surface; new calls replace prior tweens.
 const activeTweens = new Map<Element, Tween>()
 let rafHandle: number | null = null
-let rafSchedule:
-  | ((cb: FrameRequestCallback) => number)
-  | null = null
+let rafSchedule: ((cb: FrameRequestCallback) => number) | null = null
 let rafCancel: ((handle: number) => void) | null = null
 
 /**
@@ -106,7 +104,8 @@ export function centerScrollableAncestors(
     options.cancel ?? ((handle: number) => cancelAnimationFrame(handle))
   const now =
     options.now ??
-    (() => (typeof performance !== "undefined" ? performance.now() : Date.now()))
+    (() =>
+      typeof performance !== "undefined" ? performance.now() : Date.now())
   const prefersReducedMotion =
     options.prefersReducedMotion ??
     (() => {

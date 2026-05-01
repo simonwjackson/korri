@@ -143,42 +143,40 @@ describe("createFocusEngine", () => {
         configurable: true,
         get: () => 1500,
       })
-      ;(surface as unknown as { getBoundingClientRect: () => DOMRect }).getBoundingClientRect =
-        () =>
-          ({
-            x: 0,
-            y: 0,
-            left: 0,
-            top: 0,
-            right: 1000,
-            bottom: 100,
-            width: 1000,
-            height: 100,
-            toJSON: () => ({}),
-          }) as DOMRect
+      ;(
+        surface as unknown as { getBoundingClientRect: () => DOMRect }
+      ).getBoundingClientRect = () =>
+        ({
+          x: 0,
+          y: 0,
+          left: 0,
+          top: 0,
+          right: 1000,
+          bottom: 100,
+          width: 1000,
+          height: 100,
+          toJSON: () => ({}),
+        }) as DOMRect
       surface.scrollLeft = 0
 
       const first = document.getElementById("first") as HTMLButtonElement
       const second = document.getElementById("second") as HTMLButtonElement
       const third = document.getElementById("third") as HTMLButtonElement
-      const stub = (
-        el: HTMLElement,
-        left: number,
-        width: number,
-      ) => {
-        ;(el as unknown as { getBoundingClientRect: () => DOMRect }).getBoundingClientRect =
-          () =>
-            ({
-              x: left,
-              y: 0,
-              left,
-              top: 0,
-              right: left + width,
-              bottom: 100,
-              width,
-              height: 100,
-              toJSON: () => ({}),
-            }) as DOMRect
+      const stub = (el: HTMLElement, left: number, width: number) => {
+        ;(
+          el as unknown as { getBoundingClientRect: () => DOMRect }
+        ).getBoundingClientRect = () =>
+          ({
+            x: left,
+            y: 0,
+            left,
+            top: 0,
+            right: left + width,
+            bottom: 100,
+            width,
+            height: 100,
+            toJSON: () => ({}),
+          }) as DOMRect
       }
       stub(first, 0, 200)
       stub(second, 500, 200)

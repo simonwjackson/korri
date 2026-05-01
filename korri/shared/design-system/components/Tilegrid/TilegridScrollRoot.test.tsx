@@ -160,7 +160,7 @@ describe("TilegridScrollRoot", () => {
   })
 
   describe("Mario-camera opt-in", () => {
-    it("sets data-mario-camera=\"block\" on the outer scroll container", () => {
+    it('sets data-mario-camera="block" on the outer scroll container', () => {
       const { container } = render(
         <TilegridScrollRoot<Tile> items={items} cellSize={100} gap={8}>
           <span>child</span>
@@ -170,7 +170,7 @@ describe("TilegridScrollRoot", () => {
       expect(outer.getAttribute("data-mario-camera")).toBe("block")
     })
 
-    it("preserves the existing data-pointer-wheel=\"2d\" attribute alongside data-mario-camera", () => {
+    it('preserves the existing data-pointer-wheel="2d" attribute alongside data-mario-camera', () => {
       const { container } = render(
         <TilegridScrollRoot<Tile> items={items} cellSize={100} gap={8}>
           <span>child</span>
@@ -227,11 +227,7 @@ describe("TilegridScrollRoot", () => {
       // and width/height stay at 0 → overflow gate stays false → padding 0.
       // This is the regression guard for R3 in the test environment.
       const { container } = render(
-        <TilegridScrollRoot<Tile>
-          items={items}
-          cellSize={100}
-          gap={8}
-        >
+        <TilegridScrollRoot<Tile> items={items} cellSize={100} gap={8}>
           <span>child</span>
         </TilegridScrollRoot>,
       )

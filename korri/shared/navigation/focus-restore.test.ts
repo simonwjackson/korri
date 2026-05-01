@@ -190,35 +190,37 @@ describe("createFocusRestore", () => {
         configurable: true,
         get: () => 1500,
       })
-      ;(rail as unknown as { getBoundingClientRect: () => DOMRect }).getBoundingClientRect =
-        () =>
-          ({
-            x: 0,
-            y: 0,
-            left: 0,
-            top: 0,
-            right: 1000,
-            bottom: 100,
-            width: 1000,
-            height: 100,
-            toJSON: () => ({}),
-          }) as DOMRect
+      ;(
+        rail as unknown as { getBoundingClientRect: () => DOMRect }
+      ).getBoundingClientRect = () =>
+        ({
+          x: 0,
+          y: 0,
+          left: 0,
+          top: 0,
+          right: 1000,
+          bottom: 100,
+          width: 1000,
+          height: 100,
+          toJSON: () => ({}),
+        }) as DOMRect
       rail.scrollLeft = 0
 
       const tileB = document.getElementById("b") as HTMLButtonElement
-      ;(tileB as unknown as { getBoundingClientRect: () => DOMRect }).getBoundingClientRect =
-        () =>
-          ({
-            x: 500,
-            y: 0,
-            left: 500,
-            top: 0,
-            right: 700,
-            bottom: 100,
-            width: 200,
-            height: 100,
-            toJSON: () => ({}),
-          }) as DOMRect
+      ;(
+        tileB as unknown as { getBoundingClientRect: () => DOMRect }
+      ).getBoundingClientRect = () =>
+        ({
+          x: 500,
+          y: 0,
+          left: 500,
+          top: 0,
+          right: 700,
+          bottom: 100,
+          width: 200,
+          height: 100,
+          toJSON: () => ({}),
+        }) as DOMRect
 
       const restore = createFocusRestore({
         schedule: callback => scheduled.push(callback),
@@ -251,7 +253,8 @@ describe("createFocusRestore", () => {
       `
       const wrapper = document.getElementById("plain") as HTMLElement
       wrapper.scrollLeft = 42 // arbitrary non-zero starting value
-      const button = document.querySelector<HTMLButtonElement>("button")!
+      const button = document.querySelector<HTMLButtonElement>("button")
+      if (!button) throw new Error("setup failed: missing button")
       button.focus()
 
       const restore = createFocusRestore({
@@ -271,7 +274,8 @@ describe("createFocusRestore", () => {
 
     it("calls focus with preventScroll: true", () => {
       document.body.innerHTML = `<button aria-label="Hades">Hades</button>`
-      const button = document.querySelector<HTMLButtonElement>("button")!
+      const button = document.querySelector<HTMLButtonElement>("button")
+      if (!button) throw new Error("setup failed: missing button")
       const focusOptions: Array<FocusOptions | undefined> = []
       const originalFocus = button.focus.bind(button)
       button.focus = ((options?: FocusOptions) => {
@@ -298,7 +302,8 @@ describe("createFocusRestore", () => {
 
     it("does not throw when the captured target no longer exists in the DOM", () => {
       document.body.innerHTML = `<button aria-label="Gone">Gone</button>`
-      const button = document.querySelector<HTMLButtonElement>("button")!
+      const button = document.querySelector<HTMLButtonElement>("button")
+      if (!button) throw new Error("setup failed: missing button")
       button.focus()
 
       const restore = createFocusRestore({

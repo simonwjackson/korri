@@ -51,8 +51,9 @@ function stubRect(element: Element, rect: Partial<DOMRect>): void {
     height: rect.height ?? 0,
     toJSON: () => ({}),
   }
-  ;(element as unknown as { getBoundingClientRect: () => DOMRect }).getBoundingClientRect =
-    () => full
+  ;(
+    element as unknown as { getBoundingClientRect: () => DOMRect }
+  ).getBoundingClientRect = () => full
 }
 
 function setSize(
@@ -261,7 +262,12 @@ describe("centerScrollableAncestors", () => {
       })
       // Tile at y=400, height 100 → tile center 450, surface center 300.
       // Delta = 150 → scrollTop = 150.
-      const tile = makeTile({ width: 100, height: 100, rectLeft: 0, rectTop: 400 })
+      const tile = makeTile({
+        width: 100,
+        height: 100,
+        rectLeft: 0,
+        rectTop: 400,
+      })
       surface.appendChild(tile)
       document.body.appendChild(surface)
 

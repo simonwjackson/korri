@@ -384,7 +384,7 @@ describe("TilegridRailRoot", () => {
   })
 
   describe("Mario-camera opt-in", () => {
-    it("sets data-mario-camera=\"inline\" on the outer scroll container", () => {
+    it('sets data-mario-camera="inline" on the outer scroll container', () => {
       const { container } = render(
         <TilegridRailRoot<Tile>
           items={[tile("a"), tile("b")]}
@@ -398,7 +398,7 @@ describe("TilegridRailRoot", () => {
       expect(outer.getAttribute("data-mario-camera")).toBe("inline")
     })
 
-    it("preserves the existing data-pointer-wheel=\"horizontal\" attribute alongside data-mario-camera", () => {
+    it('preserves the existing data-pointer-wheel="horizontal" attribute alongside data-mario-camera', () => {
       const { container } = render(
         <TilegridRailRoot<Tile>
           items={[tile("a"), tile("b")]}

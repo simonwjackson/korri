@@ -145,8 +145,13 @@ export function TilegridScrollRoot<T extends GridItemShape>({
 
   // Snap-to-centered when the overflow flag changes (window resize, item
   // count change, theme switch). Synchronous so the user does not see a
-  // mid-flight scroll between "padding off" and "padding on".
+  // mid-flight scroll between "padding off" and "padding on". The early
+  // return on !overflows is also what reads `overflows` in the body so
+  // exhaustive-deps treats it as a real dependency rather than a re-run
+  // trigger — calling the util when the surface is not overflowing would
+  // be a no-op anyway.
   useLayoutEffect(() => {
+    if (!overflows) return
     const node = ref.current
     if (!node) return
     const active = document.activeElement
@@ -223,23 +228,25 @@ export function TilegridScrollRoot<T extends GridItemShape>({
       // centers vertically when content overflows.
       data-mario-camera="block"
       data-mario-overflows={overflows ? "true" : undefined}
-      style={{
-        width: "100%",
-        height: "100%",
-        overflowY: "auto",
-        overflowX: "hidden",
-        // Establishes a containing block so percent-sized sentinels resolve
-        // against the scroll container rather than the viewport. Also
-        // doubles as the container-query containment context: cqb resolves
-        // against this element's block size. container-type: size enables
-        // both cqi and cqb so future inline-axis Mario behavior is
-        // available without revisiting the type.
-        position: "relative",
-        containerType: "size",
-        // Mario edge padding reads this custom property so the same CSS
-        // expression works for numeric and string cellSize inputs alike.
-        ["--mario-cell-size" as string]: cellSizeMeasure.cssValue,
-      } as CSSProperties}
+      style={
+        {
+          width: "100%",
+          height: "100%",
+          overflowY: "auto",
+          overflowX: "hidden",
+          // Establishes a containing block so percent-sized sentinels resolve
+          // against the scroll container rather than the viewport. Also
+          // doubles as the container-query containment context: cqb resolves
+          // against this element's block size. container-type: size enables
+          // both cqi and cqb so future inline-axis Mario behavior is
+          // available without revisiting the type.
+          position: "relative",
+          containerType: "size",
+          // Mario edge padding reads this custom property so the same CSS
+          // expression works for numeric and string cellSize inputs alike.
+          ["--mario-cell-size" as string]: cellSizeMeasure.cssValue,
+        } as CSSProperties
+      }
     >
       {cellSizeIsString && (
         <span

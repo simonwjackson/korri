@@ -186,8 +186,13 @@ export function TilegridRailRoot<T extends GridItemShape>({
 
   // Snap-to-centered when the overflow flag changes (window resize, item
   // count change, theme switch). Synchronous so the user does not see a
-  // mid-flight scroll between "padding off" and "padding on".
+  // mid-flight scroll between "padding off" and "padding on". The early
+  // return on !overflows is also what reads `overflows` in the body so the
+  // exhaustive-deps rule treats it as a real dependency rather than a
+  // re-run trigger — either way, calling the util when the surface is not
+  // overflowing would be a no-op.
   useLayoutEffect(() => {
+    if (!overflows) return
     const node = outerRef.current
     if (!node) return
     const active = document.activeElement
@@ -303,21 +308,23 @@ export function TilegridRailRoot<T extends GridItemShape>({
       // data-mario-overflows mirrors the overflow flag so CSS / tests can
       // assert layout state without measuring scrollWidth.
       data-mario-overflows={overflows ? "true" : undefined}
-      style={{
-        width: "100%",
-        height: "100%",
-        overflowX: "auto",
-        overflowY: "hidden",
-        // Establishes a containing block so percent-sized sentinels resolve
-        // against the rail rather than the viewport. Also doubles as the
-        // container-query containment context: cqi inside the inner grid
-        // resolves against this element's inline size.
-        position: "relative",
-        containerType: "inline-size",
-        // Mario edge padding reads this custom property so the same CSS
-        // expression works for both numeric and CSS-string cellSize inputs.
-        ["--mario-cell-size" as string]: widthCss,
-      } as CSSProperties}
+      style={
+        {
+          width: "100%",
+          height: "100%",
+          overflowX: "auto",
+          overflowY: "hidden",
+          // Establishes a containing block so percent-sized sentinels resolve
+          // against the rail rather than the viewport. Also doubles as the
+          // container-query containment context: cqi inside the inner grid
+          // resolves against this element's inline size.
+          position: "relative",
+          containerType: "inline-size",
+          // Mario edge padding reads this custom property so the same CSS
+          // expression works for both numeric and CSS-string cellSize inputs.
+          ["--mario-cell-size" as string]: widthCss,
+        } as CSSProperties
+      }
     >
       {showSquareSentinel && (
         <span
