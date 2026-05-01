@@ -77,16 +77,26 @@ function findByIdentity(
 ): HTMLElement | null {
   switch (identity.kind) {
     case "id":
-      return scope.querySelector<HTMLElement>(
-        `[id="${escapeAttribute(identity.value)}"]`,
-      )
+      return findElementByAttribute(scope, "id", identity.value)
     case "aria-label":
-      return scope.querySelector<HTMLElement>(
-        `[aria-label="${escapeAttribute(identity.value)}"]`,
-      )
+      return findElementByAttribute(scope, "aria-label", identity.value)
     case "path":
       return scope.querySelector<HTMLElement>(identity.value)
   }
+}
+
+function findElementByAttribute(
+  scope: HTMLElement,
+  attribute: "id" | "aria-label",
+  value: string,
+): HTMLElement | null {
+  if (scope.getAttribute(attribute) === value) return scope
+
+  for (const element of scope.querySelectorAll<HTMLElement>(`[${attribute}]`)) {
+    if (element.getAttribute(attribute) === value) return element
+  }
+
+  return null
 }
 
 function getStructuralPath(
@@ -110,10 +120,6 @@ function getStructuralPath(
   }
 
   return segments.length > 0 ? segments.join(" > ") : null
-}
-
-function escapeAttribute(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
 }
 
 function isMeaningfulFocusTarget(el: HTMLElement | null): el is HTMLElement {

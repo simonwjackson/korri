@@ -46,7 +46,30 @@ export interface SpatialNavigationHandle {
   dispose(): void
 }
 
+type SpatialNavigationListener = (
+  handle: SpatialNavigationHandle | null,
+) => void
+
 let currentHandle: SpatialNavigationHandle | null = null
+const listeners = new Set<SpatialNavigationListener>()
+
+export function getSpatialNavigationSnapshot(): SpatialNavigationHandle | null {
+  return currentHandle
+}
+
+export function subscribeSpatialNavigation(
+  listener: SpatialNavigationListener,
+): () => void {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+function setCurrentHandle(handle: SpatialNavigationHandle | null): void {
+  currentHandle = handle
+  for (const listener of [...listeners]) listener(currentHandle)
+}
 
 export function getSpatialNavigation(): SpatialNavigationHandle {
   if (!currentHandle) {
@@ -91,10 +114,10 @@ export function startSpatialNavigation(
     bus,
     dispose: () => {
       bus.dispose()
-      if (currentHandle === handle) currentHandle = null
+      if (currentHandle === handle) setCurrentHandle(null)
     },
   }
 
-  currentHandle = handle
+  setCurrentHandle(handle)
   return handle
 }

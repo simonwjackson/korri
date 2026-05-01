@@ -1,8 +1,10 @@
-import { describe, expect, it } from "bun:test"
+import { afterEach, describe, expect, it } from "bun:test"
 import {
   getInputBus,
   getSpatialNavigation,
+  getSpatialNavigationSnapshot,
   startSpatialNavigation,
+  subscribeSpatialNavigation,
 } from "./start"
 
 const startWithoutDeviceAdapters = () =>
@@ -13,6 +15,10 @@ const startWithoutDeviceAdapters = () =>
   })
 
 describe("spatial navigation singleton", () => {
+  afterEach(() => {
+    getSpatialNavigationSnapshot()?.dispose()
+  })
+
   it("throws when read before initialization", () => {
     expect(() => getSpatialNavigation()).toThrow(/startSpatialNavigation/)
   })
@@ -31,6 +37,20 @@ describe("spatial navigation singleton", () => {
     handle.dispose()
 
     expect(() => getSpatialNavigation()).toThrow(/startSpatialNavigation/)
+    expect(getSpatialNavigationSnapshot()).toBeNull()
+  })
+
+  it("notifies subscribers when the singleton changes", () => {
+    const seen: Array<boolean> = []
+    const unsubscribe = subscribeSpatialNavigation(handle => {
+      seen.push(!!handle)
+    })
+
+    const handle = startWithoutDeviceAdapters()
+    handle.dispose()
+    unsubscribe()
+
+    expect(seen).toEqual([true, false])
   })
 
   it("disposes the previous singleton before replacing it", () => {

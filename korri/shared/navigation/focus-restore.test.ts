@@ -53,6 +53,31 @@ describe("createFocusRestore", () => {
     expect(document.activeElement?.textContent).toBe("Right")
   })
 
+  it("restores attribute values that are unsafe to interpolate into selectors", () => {
+    const label = 'Quote " and newline\n label'
+    const restore = createFocusRestore({
+      schedule: callback => scheduled.push(callback),
+    })
+
+    const initial = document.createElement("button")
+    initial.setAttribute("aria-label", label)
+    initial.textContent = "Initial"
+    document.body.append(initial)
+    initial.focus()
+    restore.capture("/")
+
+    document.body.innerHTML = ""
+    const remounted = document.createElement("button")
+    remounted.setAttribute("aria-label", label)
+    remounted.textContent = "Remounted"
+    document.body.append(remounted)
+
+    restore.restore("/")
+    flushScheduled()
+
+    expect(document.activeElement?.textContent).toBe("Remounted")
+  })
+
   it("falls back to a structural path when no accessible key exists", () => {
     document.body.innerHTML = `
       <section>

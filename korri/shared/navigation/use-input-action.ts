@@ -1,6 +1,9 @@
 import type { InputAction } from "@shared/input/types"
-import { useEffect, useRef } from "react"
-import { getInputBus } from "./start"
+import { useEffect, useRef, useSyncExternalStore } from "react"
+import {
+  getSpatialNavigationSnapshot,
+  subscribeSpatialNavigation,
+} from "./start"
 
 /**
  * Subscribe React code to the device-agnostic input bus.
@@ -14,12 +17,18 @@ export function useInputAction<T extends InputAction["type"]>(
   handler: (action: Extract<InputAction, { type: T }>) => void,
 ): void {
   const handlerRef = useRef(handler)
+  const handle = useSyncExternalStore(
+    subscribeSpatialNavigation,
+    getSpatialNavigationSnapshot,
+    () => null,
+  )
 
   useEffect(() => {
     handlerRef.current = handler
   }, [handler])
 
   useEffect(() => {
-    return getInputBus().onAction(type, action => handlerRef.current(action))
-  }, [type])
+    if (!handle) return
+    return handle.bus.onAction(type, action => handlerRef.current(action))
+  }, [handle, type])
 }

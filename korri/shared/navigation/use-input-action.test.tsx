@@ -1,6 +1,6 @@
-import { describe, expect, it } from "bun:test"
+import { afterEach, describe, expect, it } from "bun:test"
 import { act, renderHook } from "@testing-library/react"
-import { startSpatialNavigation } from "./start"
+import { getSpatialNavigationSnapshot, startSpatialNavigation } from "./start"
 import { useInputAction } from "./use-input-action"
 
 const startWithoutDeviceAdapters = () =>
@@ -10,9 +10,23 @@ const startWithoutDeviceAdapters = () =>
     nextFocus: () => null,
   })
 
+const startInAct = (): ReturnType<typeof startSpatialNavigation> => {
+  let handle!: ReturnType<typeof startSpatialNavigation>
+  act(() => {
+    handle = startWithoutDeviceAdapters()
+  })
+  return handle
+}
+
 describe("useInputAction", () => {
+  afterEach(() => {
+    act(() => {
+      getSpatialNavigationSnapshot()?.dispose()
+    })
+  })
+
   it("subscribes to the requested action type", () => {
-    const handle = startWithoutDeviceAdapters()
+    const handle = startInAct()
     const seen: string[] = []
 
     renderHook(() =>
@@ -25,11 +39,11 @@ describe("useInputAction", () => {
     act(() => handle.bus.emit({ type: "back" }))
 
     expect(seen).toEqual(["back"])
-    handle.dispose()
+    act(() => handle.dispose())
   })
 
   it("unsubscribes on unmount", () => {
-    const handle = startWithoutDeviceAdapters()
+    const handle = startInAct()
     let count = 0
 
     const hook = renderHook(() =>
@@ -42,11 +56,11 @@ describe("useInputAction", () => {
     act(() => handle.bus.emit({ type: "back" }))
 
     expect(count).toBe(0)
-    handle.dispose()
+    act(() => handle.dispose())
   })
 
   it("uses the latest handler after rerender", () => {
-    const handle = startWithoutDeviceAdapters()
+    const handle = startInAct()
     const seen: string[] = []
 
     const hook = renderHook(
@@ -61,6 +75,41 @@ describe("useInputAction", () => {
     act(() => handle.bus.emit({ type: "back" }))
 
     expect(seen).toEqual(["second"])
-    handle.dispose()
+    act(() => handle.dispose())
+  })
+
+  it("resubscribes when spatial navigation restarts", () => {
+    const first = startInAct()
+    const seen: string[] = []
+
+    renderHook(() =>
+      useInputAction("back", () => {
+        seen.push("back")
+      }),
+    )
+
+    act(() => first.bus.emit({ type: "back" }))
+    const second = startInAct()
+    act(() => first.bus.emit({ type: "back" }))
+    act(() => second.bus.emit({ type: "back" }))
+
+    expect(seen).toEqual(["back", "back"])
+    act(() => second.dispose())
+  })
+
+  it("can mount before spatial navigation starts", () => {
+    const seen: string[] = []
+
+    renderHook(() =>
+      useInputAction("back", () => {
+        seen.push("back")
+      }),
+    )
+
+    const handle = startInAct()
+    act(() => handle.bus.emit({ type: "back" }))
+
+    expect(seen).toEqual(["back"])
+    act(() => handle.dispose())
   })
 })
