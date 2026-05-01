@@ -295,7 +295,7 @@ function HudCluster() {
         optionsGlyph="+"
         optionsLabel="Options"
       />
-      <StaticHudChip glyph="X" label="Close Software" />
+      <StaticHudChip glyph="X" label="Close" />
       <HudButtons
         actions={["confirm"]}
         confirmGlyph="A"
