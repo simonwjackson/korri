@@ -71,20 +71,29 @@ describe("TilegridRailRoot", () => {
     expect(rail.style.gap).toBe("12px")
   })
 
-  it("publishes maxSpan as { columns: 1, rows: 1 } so spans clamp to 1", () => {
+  it("publishes maxSpan as { columns: items.length, rows: Infinity } for column spans", () => {
+    const items = [tile("hero", 3), tile("a"), tile("b")]
     const { result } = renderHook(() => useTilegrid<Tile>(), {
-      wrapper: wrap([tile("hero", 3), tile("a"), tile("b")]),
+      wrapper: wrap(items),
     })
-    expect(result.current.base.maxSpan.columns).toBe(1)
-    expect(result.current.base.maxSpan.rows).toBe(1)
+    expect(result.current.base.maxSpan.columns).toBe(items.length)
+    expect(result.current.base.maxSpan.rows).toBe(Number.POSITIVE_INFINITY)
   })
 
-  it("forces every item's effective span to 1 via getSpan", () => {
+  it("resolves getSpan from item.span by default (no longer hardcoded to 1)", () => {
     const { result } = renderHook(() => useTilegrid<Tile>(), {
       wrapper: wrap([tile("hero", 3), tile("a", 2), tile("b")]),
     })
-    expect(result.current.base.getSpan(tile("hero", 3))).toBe(1)
-    expect(result.current.base.getSpan(tile("a", 2))).toBe(1)
+    expect(result.current.base.getSpan(tile("hero", 3))).toBe(3)
+    expect(result.current.base.getSpan(tile("a", 2))).toBe(2)
+    expect(result.current.base.getSpan(tile("b"))).toBe(1)
+  })
+
+  it("publishes spanAxis: 'column-only' so multi-column tiles stay in one row", () => {
+    const { result } = renderHook(() => useTilegrid<Tile>(), {
+      wrapper: wrap([tile("hero", 4), tile("a")]),
+    })
+    expect(result.current.base.spanAxis).toBe("column-only")
   })
 
   it("publishes columns equal to items.length for downstream consumers", () => {
@@ -101,6 +110,8 @@ describe("TilegridRailRoot", () => {
     })
     expect(result.current.base.columns).toBe(1)
     expect(result.current.base.items.length).toBe(0)
+    expect(result.current.base.maxSpan.columns).toBe(1)
+    expect(result.current.base.maxSpan.rows).toBe(Number.POSITIVE_INFINITY)
   })
 
   it("does not publish a paged extension", () => {
@@ -187,6 +198,191 @@ describe("TilegridRailRoot", () => {
     expect(
       container.querySelector('[data-tilegrid-sentinel="gap"]'),
     ).not.toBeNull()
+  })
+
+  it("backward-compat: numeric cellSize publishes cellSizeRect as undefined", () => {
+    const { result } = renderHook(() => useTilegrid<Tile>(), {
+      wrapper: wrap([tile("a")]),
+    })
+    expect(result.current.base.cellSizeRect).toBeUndefined()
+  })
+
+  it("backward-compat: numeric cellSize renders no rectangular sentinels", () => {
+    const { container } = render(
+      <TilegridRailRoot<Tile> items={[tile("a")]} cellSize={120} gap={8}>
+        <span>child</span>
+      </TilegridRailRoot>,
+    )
+    expect(
+      container.querySelector('[data-tilegrid-sentinel="cell-size-width"]'),
+    ).toBeNull()
+    expect(
+      container.querySelector('[data-tilegrid-sentinel="cell-size-height"]'),
+    ).toBeNull()
+  })
+
+  it("rectangular cellSize uses width for gridAutoColumns and height for gridTemplateRows", () => {
+    const { container } = render(
+      <TilegridRailRoot<Tile>
+        items={[tile("a")]}
+        cellSize={{ width: 240, height: 340 }}
+        gap={8}
+      >
+        <span>child</span>
+      </TilegridRailRoot>,
+    )
+    const grid = container.querySelector<HTMLElement>(
+      "div[style*='display: grid']",
+    )
+    expect(grid?.style.gridAutoColumns).toBe("240px")
+    expect(grid?.style.gridTemplateRows).toBe("340px")
+  })
+
+  it("rectangular cellSize publishes cellSizeRect with resolved pixels", () => {
+    const wrapRect =
+      (items: Tile[]) =>
+      ({ children }: { children: React.ReactNode }) => (
+        <TilegridRailRoot<Tile>
+          items={items}
+          cellSize={{ width: 240, height: 340 }}
+          gap={8}
+        >
+          {children}
+        </TilegridRailRoot>
+      )
+    const { result } = renderHook(() => useTilegrid<Tile>(), {
+      wrapper: wrapRect([tile("a")]),
+    })
+    expect(result.current.base.cellSizeRect).toEqual({
+      width: 240,
+      height: 340,
+    })
+    // cellSize stays populated as the width for backward read-compat.
+    expect(result.current.base.cellSize).toBe(240)
+  })
+
+  it("rectangular cellSize with string dimensions renders separate sentinels", () => {
+    const { container } = render(
+      <TilegridRailRoot<Tile>
+        items={[tile("a")]}
+        cellSize={{ width: "16rem", height: "9rem" }}
+        gap={8}
+      >
+        <span>child</span>
+      </TilegridRailRoot>,
+    )
+    const widthSentinel = container.querySelector<HTMLElement>(
+      '[data-tilegrid-sentinel="cell-size-width"]',
+    )
+    const heightSentinel = container.querySelector<HTMLElement>(
+      '[data-tilegrid-sentinel="cell-size-height"]',
+    )
+    expect(widthSentinel).not.toBeNull()
+    expect(heightSentinel).not.toBeNull()
+    expect(widthSentinel?.style.width).toBe("16rem")
+    // The height sentinel measures its own width (sized to the height value)
+    // so the ResizeObserver picks up the same length resolution path.
+    expect(heightSentinel?.style.width).toBe("9rem")
+  })
+
+  it("rectangular cellSize with string dimensions uses verbatim CSS in the grid", () => {
+    const { container } = render(
+      <TilegridRailRoot<Tile>
+        items={[tile("a")]}
+        cellSize={{ width: "16rem", height: "9rem" }}
+        gap={8}
+      >
+        <span>child</span>
+      </TilegridRailRoot>,
+    )
+    const grid = container.querySelector<HTMLElement>(
+      "div[style*='display: grid']",
+    )
+    expect(grid?.style.gridAutoColumns).toBe("16rem")
+    expect(grid?.style.gridTemplateRows).toBe("9rem")
+  })
+
+  it("rectangular cellSize with mixed numeric + string dimensions renders only the string sentinel", () => {
+    const { container } = render(
+      <TilegridRailRoot<Tile>
+        items={[tile("a")]}
+        cellSize={{ width: 240, height: "9rem" }}
+        gap={8}
+      >
+        <span>child</span>
+      </TilegridRailRoot>,
+    )
+    expect(
+      container.querySelector('[data-tilegrid-sentinel="cell-size-width"]'),
+    ).toBeNull()
+    expect(
+      container.querySelector('[data-tilegrid-sentinel="cell-size-height"]'),
+    ).not.toBeNull()
+  })
+
+  it("rectangular cellSize plus asChild slots grid styles onto the consumer's element", () => {
+    const { getByTestId } = render(
+      <TilegridRailRoot<Tile>
+        items={[tile("a")]}
+        cellSize={{ width: 240, height: 340 }}
+        gap={8}
+        asChild
+      >
+        <section data-testid="rail">child</section>
+      </TilegridRailRoot>,
+    )
+    const rail = getByTestId("rail")
+    expect(rail.tagName).toBe("SECTION")
+    expect(rail.style.display).toBe("grid")
+    expect(rail.style.gridAutoColumns).toBe("240px")
+    expect(rail.style.gridTemplateRows).toBe("340px")
+  })
+
+  it("per-item span: a span:4 tile in a 4-item rail clamps to 4", () => {
+    const items = [tile("hero", 4), tile("a"), tile("b"), tile("c")]
+    const { result } = renderHook(() => useTilegrid<Tile>(), {
+      wrapper: wrap(items),
+    })
+    const { base } = result.current
+    const rawSpan = base.getSpan(items[0]!)
+    expect(rawSpan).toBe(4)
+    expect(
+      Math.min(rawSpan, base.maxSpan.columns, base.maxSpan.rows),
+    ).toBe(4)
+  })
+
+  it("per-item span: a span:99 tile in a 3-item rail clamps to items.length (3)", () => {
+    const items = [tile("oversize", 99), tile("a"), tile("b")]
+    const { result } = renderHook(() => useTilegrid<Tile>(), {
+      wrapper: wrap(items),
+    })
+    const { base } = result.current
+    expect(base.getSpan(items[0]!)).toBe(99)
+    // clampSpan would clip to maxSpan.columns (= items.length).
+    expect(base.maxSpan.columns).toBe(items.length)
+  })
+
+  it("consumer-supplied getSpan overrides item.span", () => {
+    const items = [tile("hero", 1), tile("a")]
+    const wrapWithGetSpan = ({
+      children,
+    }: {
+      children: React.ReactNode
+    }) => (
+      <TilegridRailRoot<Tile>
+        items={items}
+        cellSize={120}
+        gap={8}
+        getSpan={item => (item.id === "hero" ? 4 : 1)}
+      >
+        {children}
+      </TilegridRailRoot>
+    )
+    const { result } = renderHook(() => useTilegrid<Tile>(), {
+      wrapper: wrapWithGetSpan,
+    })
+    expect(result.current.base.getSpan(items[0]!)).toBe(4)
+    expect(result.current.base.getSpan(items[1]!)).toBe(1)
   })
 
   it("sets position: relative on the outer wrapper so percent-sized sentinels resolve against the rail", () => {
