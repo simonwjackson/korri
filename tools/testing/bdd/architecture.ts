@@ -57,12 +57,13 @@ export const BDD_RUNNER_ARCHITECTURE = {
 export const BDD_FOLDER_CONVENTION = {
   featureGlob: "korri/products/*/features/**/e2e/*.feature",
   stepDefinitionGlob: "korri/products/*/features/**/e2e/*.steps.ts",
+  demoStoryboardGlob: "korri/products/*/features/**/e2e/*.demo.yaml",
   generatedWrapperRoot: "out/generated/bdd/playwright",
   generatedWrapperGlob:
     "out/generated/bdd/playwright/korri/products/*/features/**/e2e/*.e2e.ts",
   legacyGeneratedWrapperGlob:
     "korri/products/*/features/**/e2e/generated/*.e2e.ts",
-  authored: ["*.feature", "*.steps.ts"],
+  authored: ["*.feature", "*.steps.ts", "*.demo.yaml"],
   generated: ["out/generated/bdd/playwright/**/*.e2e.ts"],
 } as const
 
