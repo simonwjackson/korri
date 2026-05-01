@@ -62,6 +62,7 @@ export function TilegridCells<T extends GridItemShape>({
     getAriaLabel,
     getViewTransitionName,
     maxSpan,
+    spanAxis,
   } = base
 
   return (
@@ -69,9 +70,13 @@ export function TilegridCells<T extends GridItemShape>({
       {items.map(item => {
         const key = getKey(item)
         const span = clampSpan(getSpan(item), maxSpan)
+        // Rail mode publishes spanAxis: "column-only" so a multi-column tile
+        // stays in the rail's single row. Scroll/paged Roots leave spanAxis
+        // undefined (default "both"), preserving square N×N spans.
+        const rowSpan = spanAxis === "column-only" ? 1 : span
         const style: CSSProperties = {
           gridColumn: `span ${span}`,
-          gridRow: `span ${span}`,
+          gridRow: `span ${rowSpan}`,
           padding: 0,
           border: "none",
           background: "transparent",

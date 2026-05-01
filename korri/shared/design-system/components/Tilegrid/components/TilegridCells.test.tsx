@@ -165,6 +165,94 @@ describe("TilegridCells", () => {
     expect(button?.style.gridRow).toBe("span 4")
   })
 
+  it("emits gridRow: span 1 when spanAxis is 'column-only' (rail-mode case)", () => {
+    const items: Tile[] = [{ id: "feature", span: 4 }]
+    const { container } = render(
+      wrap(
+        baseCtx({
+          items,
+          columns: 8,
+          maxSpan: { columns: 8, rows: Infinity },
+          spanAxis: "column-only",
+        }),
+        <TilegridCells<Tile>
+          renderCell={({ cellProps, item }) => (
+            <button {...cellProps}>{item.id}</button>
+          )}
+        />,
+      ),
+    )
+    const button = container.querySelector("button")
+    expect(button?.style.gridColumn).toBe("span 4")
+    expect(button?.style.gridRow).toBe("span 1")
+  })
+
+  it("emits gridRow: span 1 for span:1 items in column-only mode", () => {
+    const items: Tile[] = [{ id: "poster" }]
+    const { container } = render(
+      wrap(
+        baseCtx({
+          items,
+          columns: 4,
+          maxSpan: { columns: 4, rows: Infinity },
+          spanAxis: "column-only",
+        }),
+        <TilegridCells<Tile>
+          renderCell={({ cellProps, item }) => (
+            <button {...cellProps}>{item.id}</button>
+          )}
+        />,
+      ),
+    )
+    const button = container.querySelector("button")
+    expect(button?.style.gridColumn).toBe("span 1")
+    expect(button?.style.gridRow).toBe("span 1")
+  })
+
+  it("clamps the column span but pins the row span at 1 in column-only mode", () => {
+    const items: Tile[] = [{ id: "oversize", span: 99 }]
+    const { container } = render(
+      wrap(
+        baseCtx({
+          items,
+          columns: 4,
+          maxSpan: { columns: 4, rows: Infinity },
+          spanAxis: "column-only",
+        }),
+        <TilegridCells<Tile>
+          renderCell={({ cellProps, item }) => (
+            <button {...cellProps}>{item.id}</button>
+          )}
+        />,
+      ),
+    )
+    const button = container.querySelector("button")
+    expect(button?.style.gridColumn).toBe("span 4")
+    expect(button?.style.gridRow).toBe("span 1")
+  })
+
+  it("applies span to both axes when spanAxis is explicitly 'both'", () => {
+    const items: Tile[] = [{ id: "hero", span: 2 }]
+    const { container } = render(
+      wrap(
+        baseCtx({
+          items,
+          columns: 4,
+          maxSpan: { columns: 4, rows: Infinity },
+          spanAxis: "both",
+        }),
+        <TilegridCells<Tile>
+          renderCell={({ cellProps, item }) => (
+            <button {...cellProps}>{item.id}</button>
+          )}
+        />,
+      ),
+    )
+    const button = container.querySelector("button")
+    expect(button?.style.gridColumn).toBe("span 2")
+    expect(button?.style.gridRow).toBe("span 2")
+  })
+
   it("clamps spans larger than maxSpan.rows (paged-mode case)", () => {
     const items: Tile[] = [{ id: "huge", span: 99 }]
     const { container } = render(
