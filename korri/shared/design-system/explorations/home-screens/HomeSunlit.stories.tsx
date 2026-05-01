@@ -421,21 +421,25 @@ function SunlitStyles() {
         --surface: #E8E6E1;
         --surface-raised: #F2F0EB;
         --surface-sunk: #DDDAD4;
-        /* Ink palette: stone-700 (#44403C) base for primary text; the
-           dim/faint/rule tokens are pre-blended-over-surface solids so
-           the entire palette is fully opaque. Order of dimness:
-           --ink (#44403C) < --ink-dim (#827F7B) < --ink-faint (#A6A49F)
-           < --rule (#D4D2CD). */
-        --ink: #44403C;
-        --ink-dim: #827F7B;
-        --ink-faint: #A6A49F;
+        /* Ink palette — fully opaque, no alpha.
+           - --ink (#1B1814) is deep warm black, used for primary text
+             (game titles, captions, pill text).
+           - --ink-dim (#44403C, stone-700) is the theme's closest value
+             to #444. Used for header/footer secondary text — status
+             cluster, time, HUD labels — and as the HUD glyph badge bg.
+           - --ink-faint (#827F7B) is a step lighter than --ink-dim so
+             dim < faint contrast holds for placeholder text.
+           - --rule (#D4D2CD) is the hairline dividing tone. */
+        --ink: #1B1814;
+        --ink-dim: #44403C;
+        --ink-faint: #827F7B;
         --rule: #D4D2CD;
 
         --focus-glow: hsl(252, 75%, 70%);
         --last-played-eyebrow: #4FAE3E;
 
         --pill-bg: #FFFFFF;
-        --pill-fg: #44403C;
+        --pill-fg: #1B1814;
 
         /* Glyph background tracks --ink-dim so the chip badge sits at
            the same visual weight as its label, instead of reading as a
