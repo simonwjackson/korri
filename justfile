@@ -47,6 +47,10 @@ test: test-unit
 generate-bdd *args:
   bun run tools/scripts/generate-bdd-playwright-tests.ts {{args}}
 
+# Validate that generated BDD wrappers are current without rewriting them.
+check-bdd:
+  bun run tools/scripts/generate-bdd-playwright-tests.ts --check
+
 # Run browser E2E tests.
 test-e2e *args: generate-bdd
   playwright test --config tools/playwright/playwright.e2e.config.ts {{args}}

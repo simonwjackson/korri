@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test"
 import {
+  generatedArtifactPaths,
   reportArtifactPaths,
   testResultArtifactPaths,
 } from "../artifacts/paths"
@@ -12,13 +13,15 @@ import {
   useExistingStack,
 } from "./e2e-env"
 
+const chromiumExecutablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+
 process.env.KORRI_PORT_PORTAL = String(portalPort)
 process.env.KORRI_PORT_API = String(apiPort)
 process.env.PLAYWRIGHT_TEST_BASE_URL = portalBaseUrl
 
 export default defineConfig({
-  testDir: "../../korri/products",
-  testMatch: "**/*.e2e.ts",
+  testDir: `../../${generatedArtifactPaths.bddPlaywright}`,
+  testMatch: "korri/products/**/*.e2e.ts",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -37,6 +40,9 @@ export default defineConfig({
     ignoreHTTPSErrors: true,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
+    ...(chromiumExecutablePath
+      ? { launchOptions: { executablePath: chromiumExecutablePath } }
+      : {}),
   },
   projects: [
     {
