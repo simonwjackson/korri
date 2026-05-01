@@ -11,7 +11,7 @@ export default {
     buildFolder: "out/build/electrobun",
     artifactFolder: "out/artifacts/electrobun",
     bun: {
-      entrypoint: "korri/deploy/desktop/main.ts",
+      entrypoint: "korri/deploy/desktop/index.ts",
     },
     copy: {
       "out/build/portal/index.html": "views/mainview/index.html",

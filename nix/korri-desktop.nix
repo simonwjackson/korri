@@ -95,6 +95,20 @@ pkgs.stdenv.mkDerivation {
       fi
     }
 
+    app_bundle="$(find out/build/electrobun -path '*/Korri-dev' -type d | head -n 1)"
+    if [ -z "$app_bundle" ]; then
+      echo "Could not find unpacked Electrobun app bundle" >&2
+      find out/build/electrobun -maxdepth 4 -type d | sort >&2
+      exit 1
+    fi
+
+    if [ ! -f "$app_bundle/Resources/app/bun/index.js" ]; then
+      echo "Electrobun did not emit flat app code; building Resources/app/bun/index.js directly" >&2
+      mkdir -p "$app_bundle/Resources/app/bun" "$app_bundle/Resources/app/views/mainview"
+      bun build korri/deploy/desktop/index.ts --target bun --outdir "$app_bundle/Resources/app/bun"
+      cp -R out/build/portal/. "$app_bundle/Resources/app/views/mainview/"
+    fi
+
     patch_elf_tree out/build/electrobun
 
     runHook postBuild
