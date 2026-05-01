@@ -49,7 +49,9 @@ import {
   getGameImageUrl,
 } from "@shared/themes/shift/schemas/game"
 import type { Meta, StoryObj } from "@storybook/react-vite"
+import { Battery, Menu, Search, Sun, Wifi } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import { HudButtons } from "./HudButtons"
 
 /* -------------------------------------------------------------------------- */
 /* Resume convention                                                          */
@@ -141,9 +143,7 @@ function HomeSunlit() {
     >
       <SunlitStyles />
 
-      {/* Top bar lands in Unit 4 (chrome). Slot reserved here so the
-          surface holds shape during scaffolding. */}
-      <div className="sunlit-top-bar shrink-0" />
+      <TopBar />
 
       {/* Rail region. The focusin handler delegates to whichever cell
           received focus. */}
@@ -181,8 +181,120 @@ function HomeSunlit() {
           crossfade animation runs on every focus change. */}
       <Caption key={focused.id} game={focused} showEyebrow={isResumeFocused} />
 
-      {/* Bottom bar lands in Unit 4 (Menu pill + HUD). */}
-      <div className="sunlit-bottom-bar shrink-0" />
+      <BottomBar />
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Top bar — search pill (focusable, decorative) + status cluster             */
+/* -------------------------------------------------------------------------- */
+
+function TopBar() {
+  return (
+    <div className="sunlit-top-bar flex shrink-0 items-center justify-between gap-6 px-12 pb-4 pt-6">
+      <SearchPill />
+      <StatusCluster />
+    </div>
+  )
+}
+
+function SearchPill() {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        // Decorative in Phase 1; focusable so the spatial-nav graph reflects
+        // the real surface. Wiring lands later if needed.
+      }}
+      className="sunlit-pill sunlit-search-pill flex min-w-0 max-w-[40cqi] flex-1 items-center gap-3 px-5 py-3"
+    >
+      <Search className="sunlit-pill-icon shrink-0" strokeWidth={2.25} />
+      <span className="truncate text-base text-[color:var(--ink-faint)]">
+        Search for games, genres, or tags…
+      </span>
+    </button>
+  )
+}
+
+function StatusCluster() {
+  return (
+    <div
+      aria-hidden
+      className="sunlit-status-cluster flex shrink-0 items-center gap-5 text-[color:var(--ink-dim)]"
+    >
+      <Sun className="sunlit-status-icon" strokeWidth={2} />
+      <span className="text-base font-medium tabular-nums tracking-tight text-[color:var(--ink)]">
+        16:24
+      </span>
+      <Wifi className="sunlit-status-icon" strokeWidth={2} />
+      <Battery className="sunlit-status-icon" strokeWidth={2} />
+      <span className="sunlit-avatar" />
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Bottom bar — Menu pill + HUD                                              */
+/* -------------------------------------------------------------------------- */
+
+function BottomBar() {
+  return (
+    <div className="sunlit-bottom-bar flex shrink-0 items-center justify-between gap-6 px-12 pb-5 pt-3">
+      <MenuPill />
+      <HudCluster />
+    </div>
+  )
+}
+
+function MenuPill() {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        // Decorative in Phase 1; focusable so the spatial-nav graph reflects
+        // the real surface. Phase 3 wires this to open the side drawer.
+      }}
+      className="sunlit-pill sunlit-menu-pill flex shrink-0 items-center gap-2 px-5 py-3"
+    >
+      <Menu className="sunlit-pill-icon" strokeWidth={2.5} />
+      <span className="text-base font-medium">Menu</span>
+    </button>
+  )
+}
+
+/**
+ * The Switch home HUD reads `+ Options · X Close Software · A Continue`
+ * left-to-right. We compose this as two HudButtons instances bracketing a
+ * story-local static `<StaticHudChip>` so the order matches the source
+ * exactly. Two siblings + a presentational chip beats inflating HudButtons
+ * with a generic chip array; the static chip has no input-bus subscription.
+ */
+function HudCluster() {
+  return (
+    <div className="sunlit-hud-cluster flex items-center gap-6">
+      <HudButtons
+        actions={["options"]}
+        optionsGlyph="+"
+        optionsLabel="Options"
+      />
+      <StaticHudChip glyph="X" label="Close Software" />
+      <HudButtons
+        actions={["confirm"]}
+        confirmGlyph="A"
+        confirmLabel="Continue"
+      />
+    </div>
+  )
+}
+
+function StaticHudChip({ glyph, label }: { glyph: string; label: string }) {
+  return (
+    <div className="hud" aria-hidden>
+      <div className="hud-hint">
+        <span className="hud-glyph">{glyph}</span>
+        <span className="hud-label">{label}</span>
+      </div>
     </div>
   )
 }
@@ -288,7 +400,7 @@ function SunlitStyles() {
         --hud-glyph-active-bg: var(--focus-glow);
         --hud-glyph-active-fg: #FFFFFF;
 
-        --avatar-bg: #F2C9D8;
+        --avatar-bg: #C7BFAF;
 
         --tile-radius: 14px;
       }
@@ -316,7 +428,7 @@ function SunlitStyles() {
         --hud-glyph-active-bg: var(--focus-glow);
         --hud-glyph-active-fg: #0F1422;
 
-        --avatar-bg: #5C7DAE;
+        --avatar-bg: #4A5575;
       }
 
       /* --- Container declaration so child cqi/cqh units resolve against
@@ -347,6 +459,94 @@ function SunlitStyles() {
         z-index: 1;
       }
 
+      /* --- Pill (search + menu) shared treatment --- */
+      [data-exploration="sunlit"] .sunlit-pill {
+        outline: none;
+        border: 0;
+        border-radius: 9999px;
+        background: var(--pill-bg);
+        color: var(--pill-fg);
+        box-shadow: var(--pill-shadow);
+        cursor: pointer;
+        transition:
+          box-shadow 180ms ease,
+          transform 180ms ease;
+      }
+      [data-exploration="sunlit"] .sunlit-pill:focus-visible {
+        box-shadow:
+          0 0 0 3px var(--focus-glow),
+          0 0 16px 3px var(--focus-glow-soft),
+          var(--pill-shadow);
+        transform: translateY(-1px);
+      }
+      [data-exploration="sunlit"] .sunlit-pill-icon {
+        width: 1.25em;
+        height: 1.25em;
+        color: var(--ink-dim);
+      }
+      [data-exploration="sunlit"] .sunlit-search-pill .sunlit-pill-icon {
+        color: var(--ink);
+      }
+      [data-exploration="sunlit"] .sunlit-menu-pill .sunlit-pill-icon {
+        color: var(--pill-fg);
+      }
+
+      /* --- Status cluster (decorative, aria-hidden) --- */
+      [data-exploration="sunlit"] .sunlit-status-icon {
+        width: 1.25em;
+        height: 1.25em;
+      }
+      [data-exploration="sunlit"] .sunlit-avatar {
+        display: inline-block;
+        width: 1.75em;
+        height: 1.75em;
+        border-radius: 9999px;
+        background: var(--avatar-bg);
+        box-shadow: 0 0 0 2px var(--surface);
+      }
+
+      /* --- HUD glyph treatment.
+             Class hooks .hud, .hud-hint, .hud-glyph, and .hud-label are
+             contributed by both HudButtons and the story-local static
+             chip below; one rule set covers all three. */
+      [data-exploration="sunlit"] .hud {
+        display: inline-flex;
+        align-items: center;
+        gap: 1.25rem;
+      }
+      [data-exploration="sunlit"] .hud-hint {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+      }
+      [data-exploration="sunlit"] .hud-glyph {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.75em;
+        height: 1.75em;
+        border-radius: 9999px;
+        background: var(--hud-glyph-bg);
+        color: var(--hud-glyph-fg);
+        font-size: var(--text-sm);
+        font-weight: 700;
+        line-height: 1;
+        transition:
+          background 160ms ease,
+          color 160ms ease,
+          transform 160ms ease;
+      }
+      [data-exploration="sunlit"] .hud-hint[data-active] .hud-glyph {
+        background: var(--hud-glyph-active-bg);
+        color: var(--hud-glyph-active-fg);
+        transform: scale(1.1);
+      }
+      [data-exploration="sunlit"] .hud-label {
+        font-size: var(--text-sm);
+        letter-spacing: 0.04em;
+        color: var(--ink-dim);
+      }
+
       /* --- Caption crossfade on focus change.
              The Caption is re-mounted via key={focused.id}, so the keyframe
              runs each time focus moves. */
@@ -363,6 +563,12 @@ function SunlitStyles() {
           animation: none !important;
         }
         [data-exploration="sunlit"] .sunlit-tile {
+          transition: none;
+        }
+        [data-exploration="sunlit"] .sunlit-pill {
+          transition: none;
+        }
+        [data-exploration="sunlit"] .hud-glyph {
           transition: none;
         }
       }
