@@ -46,6 +46,22 @@ export interface SpatialNavigationHandle {
   dispose(): void
 }
 
+let currentHandle: SpatialNavigationHandle | null = null
+
+export function getSpatialNavigation(): SpatialNavigationHandle {
+  if (!currentHandle) {
+    throw new Error(
+      "startSpatialNavigation() has not been called — initialize it in your app entrypoint before reading the spatial navigation bus",
+    )
+  }
+
+  return currentHandle
+}
+
+export function getInputBus(): InputBus {
+  return getSpatialNavigation().bus
+}
+
 export function startSpatialNavigation(
   options: StartSpatialNavigationOptions = {},
 ): SpatialNavigationHandle {
@@ -69,8 +85,14 @@ export function startSpatialNavigation(
     bus.use(createGamepadAdapter(options.gamepad ?? undefined))
   }
 
-  return {
+  const handle: SpatialNavigationHandle = {
     bus,
-    dispose: () => bus.dispose(),
+    dispose: () => {
+      bus.dispose()
+      if (currentHandle === handle) currentHandle = null
+    },
   }
+
+  currentHandle = handle
+  return handle
 }

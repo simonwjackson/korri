@@ -64,15 +64,16 @@ export function createFocusEngine(opts: FocusEngineOptions): FocusEngine {
   return {
     handle(action) {
       const active = document.activeElement as HTMLElement | null
+      const focused = isMeaningfulFocusTarget(active) ? active : null
 
       switch (action.type) {
         case "direction": {
           const scope = resolveScope()
-          if (!active || !isInsideScope(active, scope)) {
+          if (!focused || !isInsideScope(focused, scope)) {
             focusInitial(scope)
             return
           }
-          const next = opts.nextFocus(active, action.direction, scope)
+          const next = opts.nextFocus(focused, action.direction, scope)
           if (!next) return
           next.focus()
           next.scrollIntoView({ block: "nearest", inline: "nearest" })
@@ -80,10 +81,10 @@ export function createFocusEngine(opts: FocusEngineOptions): FocusEngine {
         }
         case "confirm": {
           if (opts.onConfirm) {
-            opts.onConfirm(active)
+            opts.onConfirm(focused)
             return
           }
-          if (active && typeof active.click === "function") active.click()
+          if (focused && typeof focused.click === "function") focused.click()
           return
         }
         case "back": {
@@ -91,7 +92,7 @@ export function createFocusEngine(opts: FocusEngineOptions): FocusEngine {
           return
         }
         case "options": {
-          opts.onOptions?.(active)
+          opts.onOptions?.(focused)
           return
         }
         case "menu": {
@@ -106,4 +107,8 @@ export function createFocusEngine(opts: FocusEngineOptions): FocusEngine {
 function isInsideScope(el: Element, scope: HTMLElement | undefined): boolean {
   if (!scope) return true
   return scope === el || scope.contains(el)
+}
+
+function isMeaningfulFocusTarget(el: HTMLElement | null): el is HTMLElement {
+  return !!el && el !== document.body && el !== document.documentElement
 }

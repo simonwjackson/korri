@@ -101,7 +101,7 @@ None required. LRUD's API and the Standard Gamepad layout are already wired. Tan
 
 ## Implementation Units
 
-- [ ] **Unit 1: Module-level bus singleton + React subscription hook**
+- [x] **Unit 1: Module-level bus singleton + React subscription hook**
 
 **Goal:** Make the input bus reachable from product code without window globals or prop drilling.
 
@@ -141,7 +141,7 @@ None required. LRUD's API and the Standard Gamepad layout are already wired. Tan
 
 ---
 
-- [ ] **Unit 2: Unit coverage for input bus, keyboard adapter, gamepad adapter, and focus engine**
+- [x] **Unit 2: Unit coverage for input bus, keyboard adapter, gamepad adapter, and focus engine**
 
 **Goal:** Lock the behavior of the new shared modules so future changes can't silently regress them.
 
