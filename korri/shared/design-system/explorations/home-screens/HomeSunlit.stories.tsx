@@ -73,8 +73,8 @@ import { HudButtons } from "./HudButtons"
  * within 3% of 92:43 (2.14) — imperceptible at TV viewing distance.
  */
 const RESUME_SPAN = 2
-const CELL_SIZE_PX = 172
-const RAIL_GAP_PX = 12
+const CELL_SIZE_PX = 258
+const RAIL_GAP_PX = 18
 const items: ReadonlyArray<GameRecord> = games
 
 /* -------------------------------------------------------------------------- */
@@ -434,7 +434,10 @@ function SunlitStyles() {
         --pill-fg: #1B1814;
         --pill-shadow: 0 1px 2px rgba(27, 24, 20, 0.06);
 
-        --hud-glyph-bg: #2A2622;
+        /* Glyph background tracks --ink-dim so the chip badge sits at
+           the same visual weight as its label, instead of reading as a
+           heavier dark blob next to muted text. */
+        --hud-glyph-bg: var(--ink-dim);
         --hud-glyph-fg: #F2F0EB;
         --hud-glyph-active-bg: var(--focus-glow);
         --hud-glyph-active-fg: #FFFFFF;
@@ -480,7 +483,7 @@ function SunlitStyles() {
         --pill-fg: #ECE7DE;
         --pill-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 
-        --hud-glyph-bg: #ECE7DE;
+        --hud-glyph-bg: var(--ink-dim);
         --hud-glyph-fg: #0F1422;
         --hud-glyph-active-bg: var(--focus-glow);
         --hud-glyph-active-fg: #0F1422;
