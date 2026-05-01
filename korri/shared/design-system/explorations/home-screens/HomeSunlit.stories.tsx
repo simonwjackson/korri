@@ -66,14 +66,15 @@ import { HudButtons } from "./HudButtons"
  * trailing tiles render as 1:1 squares.
  *
  * Cell sizing math: with square cells of side S and gap G, the feature
- * tile's visible width across span N is N·S + (N-1)·G. Holding cells
- * square forces (N·S + (N-1)·G) / S = 92/43, i.e. G/S = 6/43 ≈ 0.1395
- * for N = 2. Picking S = 200 and G = 28 lands the feature at
- * (2·200 + 28) / 200 = 2.14, identical to 92/43 within rounding.
+ * tile's visible width across span N is N·S + (N-1)·G. The strict
+ * 92:43 ratio requires G/S = 6/43 ≈ 0.1395; current values relax that
+ * slightly to S = 172, G = 12 so the rail reads tighter without
+ * shrinking the cells. Feature ratio is (2·172 + 12) / 172 ≈ 2.07,
+ * within 3% of 92:43 (2.14) — imperceptible at TV viewing distance.
  */
 const RESUME_SPAN = 2
 const CELL_SIZE_PX = 172
-const RAIL_GAP_PX = 24
+const RAIL_GAP_PX = 12
 const items: ReadonlyArray<GameRecord> = games
 
 /* -------------------------------------------------------------------------- */
@@ -705,7 +706,7 @@ function SunlitStyles() {
         border-radius: 9999px;
         background: var(--hud-glyph-bg);
         color: var(--hud-glyph-fg);
-        font-size: var(--text-base);
+        font-size: var(--text-lg);
         font-weight: 800;
         line-height: 1;
         transition:
@@ -719,7 +720,7 @@ function SunlitStyles() {
         transform: scale(1.1);
       }
       [data-exploration="sunlit"] .hud-label {
-        font-size: var(--text-base);
+        font-size: var(--text-lg);
         font-weight: 600;
         letter-spacing: 0;
         color: var(--ink-dim);
