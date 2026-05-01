@@ -474,9 +474,13 @@ function SunlitStyles() {
 
       /* --- Dark mode counterpart (Switch night blue) --- */
       :root.dark [data-exploration="sunlit"] {
-        --surface: #0F1422;
-        --surface-raised: #161D2F;
-        --surface-sunk: #0A0E1A;
+        /* Pitch black surface stack — OLED-style. Raised and sunk
+           collapse to the same value as --surface; rule, ink-dim and
+           pill-bg carry the elevation/edge cues that surface contrast
+           used to provide. */
+        --surface: #000000;
+        --surface-raised: #000000;
+        --surface-sunk: #000000;
         --ink: #ECE7DE;
         --ink-dim: #989797;
         --ink-faint: #5A5C62;
