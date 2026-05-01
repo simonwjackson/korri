@@ -2,6 +2,10 @@
 title: Device-agnostic spatial navigation without coupling components
 date: 2026-05-01
 last_updated: 2026-05-01
+# Refreshed 2026-05-01: Mario-camera scrolling for opt-in scrollables.
+# Adds the data-mario-camera attribute, the centerScrollableAncestors
+# util, the focus-source matrix, and the engine-vs-pointer-hover gating
+# rule that keeps hover from triggering centering.
 category: best-practices
 module: shared/input + shared/navigation
 problem_type: best_practice
@@ -244,6 +248,63 @@ test("ArrowDown / ArrowRight move focus across cards", async ({ page }) => {
 })
 ```
 
+## Mario-camera scrolling for opt-in scrollable surfaces
+
+When a scrollable surface should keep the *focused* element near its visual center as focus moves through the content (Switch / Apple TV / Mario-platformer camera feel), opt in via a single DOM attribute. The focus engine and a small DOM helper handle the rest — components remain native HTML, and the navigation library / surface contract stays stable.
+
+### The opt-in attribute
+
+Declare `data-mario-camera` on the scroll container with one of three values:
+
+- `"inline"` — center the focused element on the inline (column) axis. Horizontal rails (`TilegridRailRoot`).
+- `"block"` — center on the block (row) axis. Vertical scroll grids (`TilegridScrollRoot`).
+- `"both"` — center on both axes. Rare — surfaces that overflow on both axes.
+
+The focus engine walks up from the focused element on every directional move and, if any ancestor carries `data-mario-camera`, calls `centerScrollableAncestors(target, { animate: true })` from `korri/shared/navigation/center-scroll.ts` instead of the default `scrollIntoView({block:"nearest", inline:"nearest"})`.
+
+### Edge padding for first / last reachability
+
+For item #1 and item #N to each reach the centered position, the scroll content needs leading / trailing space equal to `(containerSize − cellSize) / 2`. The Tilegrid Roots compute this in CSS using container queries:
+
+```css
+/* Outer scroll container */
+container-type: inline-size;     /* or `size` for block-axis surfaces */
+--mario-cell-size: <resolved>;   /* CSS custom property */
+
+/* Inner grid, only when natural content overflows */
+padding-inline: max(0px, calc(50cqi - var(--mario-cell-size) / 2));
+```
+
+The overflow gate is JS-driven: a ResizeObserver compares the natural content size (computed from items + cellSize + gap, **not** from `scrollWidth`/`scrollHeight` to avoid feedback with the padding it conditionally adds) against the container's measured client size. When natural <= client, padding is `0` so non-overflowing surfaces don't gain spurious scroll room (R3 of the brainstorm: non-overflowing tilegrids do not scroll on focus moves).
+
+### Animation
+
+`centerScrollableAncestors` drives a single shared rAF loop with a ~150ms cubic ease-out tween. New calls cancel and restart from the current scroll position so held direction input doesn't restart from origin. `prefers-reduced-motion: reduce` and `{ animate: false }` both bypass the rAF loop and set scroll positions synchronously.
+
+### Focus-source matrix
+
+Different focus paths trigger different scroll behavior. Memorize this table when adding new surfaces:
+
+| Focus source | Path | Triggers Mario centering? | Rationale |
+|---|---|---|---|
+| Keyboard arrow / gamepad d-pad | engine `case "direction"` | **Yes (animated)** | Standard path. Directional cursor is hidden so cursor-content mismatch is impossible. |
+| Wheel inside `data-pointer-wheel` | engine `case "direction"` (`source: "wheel"`) | **Yes (animated)** | Each tick advances and centers one tile. Cursor stays where it was; per the pointer adapter contract, content motion under a stationary cursor does not re-fire hover-focus, so no feedback loop. |
+| Mouse hover (`pointermove`) | `pointer-adapter` calls `.focus({preventScroll:true})` directly, **bypassing the engine** | **No** | Hover-focus must not center: if it did, the rail would slide under a stationary cursor, immediately re-firing hover-focus on whatever tile was now under the cursor. |
+| Right-click | `pointer-adapter` emits `options` | **No** | Not a focus move. |
+| Initial focus on mount inside a Mario surface | Tilegrid Root's rAF-deferred useEffect calls `centerScrollableAncestors(active, { animate: false })` | **Yes (snap)** | R13 of the brainstorm: initial focus must center without animation. |
+| Focus restore (`focus-restore.ts`) | `restore()` callback calls `target.focus({preventScroll:true})` then the centering util with `{animate:false}` | **Yes (snap)** | Restore is a teleport — the rail returns to its centered position so the user does not see a one-frame jump on the next direction press. |
+| Programmatic `.focus()` from product code | Direct DOM call | **No** | The util is the public mechanism; ad-hoc `.focus()` does not opt in. Product code that wants centering imports and calls the util explicitly. |
+
+The key invariant: **Mario centering is engine-gated, not focusin-gated.** Any code path that wants centering either goes through the focus engine or calls `centerScrollableAncestors` explicitly. Adding a focusin listener on a Mario surface to catch hover-focus would re-introduce the feedback loop documented in the matrix.
+
+### Multi-ancestor centering
+
+The util walks up from the target collecting every ancestor with `data-mario-camera` and animates them all in one rAF tick on their declared axes. This is the natural extension for an Apple-TV-shape (vertical Mario grid containing horizontal Mario rails) but is not exercised by any shipped composition today — verify the feel when such a composition exists.
+
+### Coexistence with `data-pointer-wheel`
+
+`data-mario-camera` and `data-pointer-wheel` will both end up on the same outer scroll container in any Tilegrid Root that opts into both. They are read by different modules (`center-scroll.ts` and `wheel-adapter.ts` respectively) and must not be consolidated. One controls scroll alignment; the other controls whether the wheel emits direction actions.
+
 ## Implementation gotchas worth flagging
 
 1. **Bun and Playwright collide on `*.spec.ts`.** Bun's test discovery hardcodes `.test`, `_test_`, `.spec`, `_spec_` substring matching and runs anything matching as a unit test — Playwright's `test.describe()` then crashes with "did not expect test.describe() to be called here". The fix is to give Storybook-driven Playwright specs a suffix Bun won't match. This repo uses `*.story.e2e.ts`. The Playwright component config matches `korri/**/*.story.e2e.ts`; the e2e config's separate `testDir` keeps the two from cross-loading.
@@ -252,13 +313,16 @@ test("ArrowDown / ArrowRight move focus across cards", async ({ page }) => {
 4. **Focus restore should not interpolate arbitrary attributes into CSS selectors.** `aria-label` and `id` values can contain quotes, newlines, or other selector-hostile characters. Prefer direct attribute comparison over constructing selectors like `[aria-label="..."]`; it is safer and can also match the scope element itself.
 5. **`preventDefault` should be conditional.** The keyboard adapter must skip when the focused element is editable (`<input>`, `<textarea>`, `[contenteditable]`), or arrow keys break text editing.
 6. **`Tab` and `options` are different verbs.** Don't map `Tab` to `options` — Tab is critical for accessibility. Leave `options` and `menu` unmapped on keyboard by default; let gamepad cover them.
-7. **`:focus-visible` is the right hook.** It triggers for keyboard / gamepad / programmatic focus but not mouse clicks, which is exactly the desired UX.
+7. **`:focus-visible` is the right hook for non-spatial focus.** It triggers for keyboard / gamepad / programmatic focus but not mouse clicks, which is exactly the desired UX. (Spatial-nav focusables use the `[data-input-mode]` + `:focus` rule instead per the pointer-aware navigation work; see `korri/shared/themes/shift/shift.css`.)
+8. **Mario centering is engine-gated, not focusin-gated.** A surface-level focusin listener that calls the centering util would catch pointer-hover focus and slide the rail under a stationary cursor, re-firing hover-focus and looping. The engine's `case "direction"` is the only place that triggers animated centering; surfaces handle their own initial-focus snap via a deferred-rAF useEffect.
+9. **Conditional Mario edge padding compares natural size, not `scrollWidth`/`scrollHeight`.** Reading scrollWidth to decide whether to apply padding-inline creates a feedback loop with the padding itself. Compute natural size from items + cellSize + gap (already known) and compare against `clientWidth`/`clientHeight`.
 
 ## Related
 
 - `@bbc/tv-lrud-spatial` — chosen for its DOM-driven, component-agnostic API. Alternatives evaluated: `@noriginmedia/norigin-spatial-navigation` (couples components via hooks), `WICG/spatial-navigation` polyfill (archived), `bamlab/react-tv-space-navigation` (React Native only).
 - `korri/shared/input/` and `korri/shared/navigation/` — the implementation referenced here.
 - `korri/shared/navigation/use-input-action.ts` — restart-aware React subscription hook for semantic actions.
-- `korri/shared/navigation/focus-restore.ts` — focus restoration across remounts; uses direct attribute matching for `id` / `aria-label` identities.
+- `korri/shared/navigation/focus-restore.ts` — focus restoration across remounts; uses direct attribute matching for `id` / `aria-label` identities. Snaps Mario surfaces to centered on restore.
+- `korri/shared/navigation/center-scroll.ts` — the Mario-camera centering util. Pure DOM helper called by the focus engine on directional moves and by surfaces on initial-focus snap.
 - `korri/deploy/storybook/preview.tsx` — Storybook integration, the canonical demo surface.
 - `tools/playwright/playwright.component.config.ts` — Storybook-driven Playwright runner.
