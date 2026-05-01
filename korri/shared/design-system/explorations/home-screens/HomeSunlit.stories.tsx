@@ -145,41 +145,48 @@ function HomeSunlit() {
 
       <TopBar />
 
-      {/* Rail region. The focusin handler delegates to whichever cell
-          received focus. */}
-      <div
-        ref={railRef}
-        className="sunlit-rail-region flex min-h-0 flex-1 items-center px-12"
-      >
-        <TilegridRailRoot<GameRecord>
-          items={items}
-          cellSize={{ width: 155, height: 220 }}
-          gap={8}
-          getKey={g => g.id}
-          getSpan={g => (g.id === resumeTarget.id ? RESUME_SPAN : 1)}
-          getAriaLabel={g => getGameDisplayName(g)}
-        >
-          <TilegridCells<GameRecord>
-            renderCell={({ cellProps, item }) => (
-              <button
-                {...cellProps}
-                className="sunlit-tile relative cursor-pointer overflow-hidden border-0 bg-[color:var(--surface-sunk)] p-0"
-                style={cellProps.style}
-              >
-                {item.id === resumeTarget.id ? (
-                  <FeatureTileArt game={item} />
-                ) : (
-                  <PosterTileArt game={item} />
-                )}
-              </button>
-            )}
-          />
-        </TilegridRailRoot>
-      </div>
+      {/* Middle region: rail + caption are visually a single block,
+          centered vertically by the column's justify-center. The rail
+          wrapper has an explicit height because TilegridRailRoot's outer
+          container is height:100% and would collapse without one. */}
+      <div className="flex min-h-0 flex-1 flex-col justify-center gap-3">
+        {/* Rail region. The focusin handler delegates to whichever cell
+            received focus. */}
+        <div ref={railRef} className="sunlit-rail-region h-[260px] px-12">
+          <TilegridRailRoot<GameRecord>
+            items={items}
+            cellSize={{ width: 155, height: 220 }}
+            gap={8}
+            getKey={g => g.id}
+            getSpan={g => (g.id === resumeTarget.id ? RESUME_SPAN : 1)}
+            getAriaLabel={g => getGameDisplayName(g)}
+          >
+            <TilegridCells<GameRecord>
+              renderCell={({ cellProps, item }) => (
+                <button
+                  {...cellProps}
+                  className="sunlit-tile relative cursor-pointer overflow-hidden border-0 bg-[color:var(--surface-sunk)] p-0"
+                  style={cellProps.style}
+                >
+                  {item.id === resumeTarget.id ? (
+                    <FeatureTileArt game={item} />
+                  ) : (
+                    <PosterTileArt game={item} />
+                  )}
+                </button>
+              )}
+            />
+          </TilegridRailRoot>
+        </div>
 
-      {/* Caption below the rail. Re-mounted via key={focused.id} so the
-          crossfade animation runs on every focus change. */}
-      <Caption key={focused.id} game={focused} showEyebrow={isResumeFocused} />
+        {/* Caption below the rail. Re-mounted via key={focused.id} so the
+            crossfade animation runs on every focus change. */}
+        <Caption
+          key={focused.id}
+          game={focused}
+          showEyebrow={isResumeFocused}
+        />
+      </div>
 
       <BottomBar />
     </div>
@@ -207,10 +214,10 @@ function SearchPill() {
         // Decorative in Phase 1; focusable so the spatial-nav graph reflects
         // the real surface. Wiring lands later if needed.
       }}
-      className="sunlit-pill sunlit-search-pill flex min-w-0 max-w-[40cqi] flex-1 items-center gap-3 px-5 py-3"
+      className="sunlit-pill sunlit-search-pill flex min-w-0 max-w-[40cqi] flex-1 items-center gap-4 px-6 py-4 text-lg"
     >
       <Search className="sunlit-pill-icon shrink-0" strokeWidth={2.25} />
-      <span className="truncate text-base text-[color:var(--ink-faint)]">
+      <span className="truncate text-[color:var(--ink-faint)]">
         Search for games, genres, or tags…
       </span>
     </button>
@@ -221,10 +228,10 @@ function StatusCluster() {
   return (
     <div
       aria-hidden
-      className="sunlit-status-cluster flex shrink-0 items-center gap-5 text-[color:var(--ink-dim)]"
+      className="sunlit-status-cluster flex shrink-0 items-center gap-6 text-lg text-[color:var(--ink-dim)]"
     >
       <Sun className="sunlit-status-icon" strokeWidth={2} />
-      <span className="text-base font-medium tabular-nums tracking-tight text-[color:var(--ink)]">
+      <span className="text-xl font-semibold tabular-nums tracking-tight text-[color:var(--ink)]">
         16:24
       </span>
       <Wifi className="sunlit-status-icon" strokeWidth={2} />
@@ -255,10 +262,10 @@ function MenuPill() {
         // Decorative in Phase 1; focusable so the spatial-nav graph reflects
         // the real surface. Phase 3 wires this to open the side drawer.
       }}
-      className="sunlit-pill sunlit-menu-pill flex shrink-0 items-center gap-2 px-5 py-3"
+      className="sunlit-pill sunlit-menu-pill flex shrink-0 items-center gap-2 px-6 py-4 text-lg"
     >
       <Menu className="sunlit-pill-icon" strokeWidth={2.5} />
-      <span className="text-base font-medium">Menu</span>
+      <span className="font-medium">Menu</span>
     </button>
   )
 }
@@ -395,12 +402,25 @@ function SunlitStyles() {
         --pill-fg: #1B1814;
         --pill-shadow: 0 1px 2px rgba(27, 24, 20, 0.06);
 
+        /* The Menu pill is a system-style colored chip, not a neutral
+           input. Sky blue per the Switch source. */
+        --menu-pill-bg: #5DC1F0;
+        --menu-pill-fg: #FFFFFF;
+
         --hud-glyph-bg: #2A2622;
         --hud-glyph-fg: #F2F0EB;
         --hud-glyph-active-bg: var(--focus-glow);
         --hud-glyph-active-fg: #FFFFFF;
 
-        --avatar-bg: #C7BFAF;
+        /* Avatar reads as a real avatar via a soft radial gradient —
+           neutral colors, no branded mark, but enough internal structure
+           to read as more than an empty fill. */
+        --avatar-bg: radial-gradient(
+          circle at 35% 35%,
+          #F2EDE2 0%,
+          #C7BFAF 55%,
+          #9C9486 100%
+        );
 
         --tile-radius: 14px;
       }
@@ -423,12 +443,20 @@ function SunlitStyles() {
         --pill-fg: #ECE7DE;
         --pill-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 
+        --menu-pill-bg: #4AA8D8;
+        --menu-pill-fg: #0A1426;
+
         --hud-glyph-bg: #ECE7DE;
         --hud-glyph-fg: #0F1422;
         --hud-glyph-active-bg: var(--focus-glow);
         --hud-glyph-active-fg: #0F1422;
 
-        --avatar-bg: #4A5575;
+        --avatar-bg: radial-gradient(
+          circle at 35% 35%,
+          #8BA3CC 0%,
+          #4A5575 55%,
+          #2A3148 100%
+        );
       }
 
       /* --- Container declaration so child cqi/cqh units resolve against
@@ -443,23 +471,30 @@ function SunlitStyles() {
       [data-exploration="sunlit"] :focus { outline: none; }
       [data-exploration="sunlit"] :focus-visible { outline: none; }
 
-      /* --- Tile (rounded corners, lavender halo on focus) --- */
+      /* --- Tile (rounded corners, lavender ring on focus).
+             The focus indicator uses a negative-offset outline so the
+             ring renders INSIDE the tile box. TilegridRailRoot's outer
+             scroll container has overflowY: hidden, which would clip an
+             outer box-shadow halo. An inset outline is guaranteed
+             visible at the tile's bounds without depending on ancestor
+             overflow behavior. */
       [data-exploration="sunlit"] .sunlit-tile {
         outline: none;
         border-radius: var(--tile-radius);
         transition:
-          box-shadow 180ms ease,
+          outline-color 180ms ease,
           transform 180ms ease;
       }
       [data-exploration="sunlit"] .sunlit-tile:focus-visible {
-        box-shadow:
-          0 0 0 3px var(--focus-glow),
-          0 0 18px 4px var(--focus-glow-soft);
+        outline: 4px solid var(--focus-glow);
+        outline-offset: -4px;
         transform: translateY(-1px);
         z-index: 1;
       }
 
-      /* --- Pill (search + menu) shared treatment --- */
+      /* --- Pill (search + menu) shared treatment.
+             Pills sit outside the rail's clipped scroll container, so an
+             outer box-shadow halo is fine here — nothing clips it. */
       [data-exploration="sunlit"] .sunlit-pill {
         outline: none;
         border: 0;
@@ -480,26 +515,35 @@ function SunlitStyles() {
         transform: translateY(-1px);
       }
       [data-exploration="sunlit"] .sunlit-pill-icon {
-        width: 1.25em;
-        height: 1.25em;
+        width: 1.4em;
+        height: 1.4em;
         color: var(--ink-dim);
       }
       [data-exploration="sunlit"] .sunlit-search-pill .sunlit-pill-icon {
         color: var(--ink);
       }
+
+      /* --- Menu pill: system-blue chip, not a neutral input. --- */
+      [data-exploration="sunlit"] .sunlit-menu-pill {
+        background: var(--menu-pill-bg);
+        color: var(--menu-pill-fg);
+        box-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.08),
+          0 4px 10px rgba(93, 193, 240, 0.18);
+      }
       [data-exploration="sunlit"] .sunlit-menu-pill .sunlit-pill-icon {
-        color: var(--pill-fg);
+        color: var(--menu-pill-fg);
       }
 
       /* --- Status cluster (decorative, aria-hidden) --- */
       [data-exploration="sunlit"] .sunlit-status-icon {
-        width: 1.25em;
-        height: 1.25em;
+        width: 1.4em;
+        height: 1.4em;
       }
       [data-exploration="sunlit"] .sunlit-avatar {
         display: inline-block;
-        width: 1.75em;
-        height: 1.75em;
+        width: 2.2em;
+        height: 2.2em;
         border-radius: 9999px;
         background: var(--avatar-bg);
         box-shadow: 0 0 0 2px var(--surface);
