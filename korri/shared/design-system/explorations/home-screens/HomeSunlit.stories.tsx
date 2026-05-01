@@ -249,13 +249,20 @@ function StatusCluster() {
 function BottomBar() {
   return (
     <div className="sunlit-bottom-bar flex shrink-0 items-center justify-between gap-6 px-12 pb-5 pt-3">
-      <MenuPill />
+      <MenuButton />
       <HudCluster />
     </div>
   )
 }
 
-function MenuPill() {
+/**
+ * MenuButton matches the HUD chip vocabulary on the right (dark circular
+ * glyph + ink-dim label) so the bottom bar reads as one cohesive row of
+ * chips rather than a primary CTA on the left and meta hints on the right.
+ * Unlike the HUD chips, the Menu button is focusable (Phase 3 wires the
+ * drawer); the lavender halo on the glyph circle is the focus signal.
+ */
+function MenuButton() {
   return (
     <button
       type="button"
@@ -263,10 +270,12 @@ function MenuPill() {
         // Decorative in Phase 1; focusable so the spatial-nav graph reflects
         // the real surface. Phase 3 wires this to open the side drawer.
       }}
-      className="sunlit-pill sunlit-menu-pill flex shrink-0 items-center gap-2 px-6 py-4 text-lg"
+      className="sunlit-menu-button"
     >
-      <Menu className="sunlit-pill-icon" strokeWidth={2.5} />
-      <span className="font-medium">Menu</span>
+      <span aria-hidden className="hud-glyph">
+        <Menu strokeWidth={2.5} className="sunlit-menu-glyph-icon" />
+      </span>
+      <span className="hud-label">Menu</span>
     </button>
   )
 }
@@ -403,11 +412,6 @@ function SunlitStyles() {
         --pill-fg: #1B1814;
         --pill-shadow: 0 1px 2px rgba(27, 24, 20, 0.06);
 
-        /* The Menu pill is a system-style colored chip, not a neutral
-           input. Sky blue per the Switch source. */
-        --menu-pill-bg: #5DC1F0;
-        --menu-pill-fg: #FFFFFF;
-
         --hud-glyph-bg: #2A2622;
         --hud-glyph-fg: #F2F0EB;
         --hud-glyph-active-bg: var(--focus-glow);
@@ -443,9 +447,6 @@ function SunlitStyles() {
         --pill-bg: #1A2238;
         --pill-fg: #ECE7DE;
         --pill-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-
-        --menu-pill-bg: #4AA8D8;
-        --menu-pill-fg: #0A1426;
 
         --hud-glyph-bg: #ECE7DE;
         --hud-glyph-fg: #0F1422;
@@ -596,16 +597,32 @@ function SunlitStyles() {
         opacity: 1;
       }
 
-      /* --- Menu pill: system-blue chip, not a neutral input. --- */
-      [data-exploration="sunlit"] .sunlit-menu-pill {
-        background: var(--menu-pill-bg);
-        color: var(--menu-pill-fg);
-        box-shadow:
-          0 1px 2px rgba(0, 0, 0, 0.08),
-          0 4px 10px rgba(93, 193, 240, 0.18);
+      /* --- Menu button: matches the HUD chip vocabulary on the right.
+             Reuses the .hud-glyph and .hud-label class hooks so it sits
+             visually in the same row as + Options / X Close / A Continue.
+             Unlike the HUD chips, this button is focusable; the focus
+             halo lights the glyph circle, not the whole row. */
+      [data-exploration="sunlit"] .sunlit-menu-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        outline: none;
+        border: 0;
+        background: transparent;
+        padding: 0;
+        cursor: pointer;
+        color: inherit;
+        border-radius: 9999px;
       }
-      [data-exploration="sunlit"] .sunlit-menu-pill .sunlit-pill-icon {
-        color: var(--menu-pill-fg);
+      [data-exploration="sunlit"] .sunlit-menu-button:focus-visible .hud-glyph {
+        box-shadow:
+          0 0 0 3px var(--focus-glow),
+          0 0 14px 3px var(--focus-glow-soft);
+        transform: scale(1.05);
+      }
+      [data-exploration="sunlit"] .sunlit-menu-glyph-icon {
+        width: 1em;
+        height: 1em;
       }
 
       /* --- Status cluster (decorative, aria-hidden) --- */
