@@ -66,6 +66,16 @@
               curl
               nodejs_20
               playwright-driver.browsers
+            ])
+            ++ pkgs.lib.optionals pkgs.stdenv.isLinux (with pkgs; [
+              pkg-config
+              cmake
+              gcc
+              gtk3
+              webkitgtk_4_1
+              libayatana-appindicator
+              librsvg
+              patchelf
             ]);
 
           shellHook = commonShellHook;

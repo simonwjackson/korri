@@ -38,3 +38,20 @@ just typecheck
 just generate-gates
 just generate-bdd
 ```
+
+## Desktop
+
+Electrobun desktop support is additive to the web/API stack. The desktop app builds the Vite portal assets, serves them from the Electrobun Bun main process alongside the existing Hono/Effect API, and opens the UI in a native window.
+
+Useful desktop commands:
+
+```bash
+just desktop-runtime-check
+just desktop-smoke
+just desktop-dev
+just desktop-build
+```
+
+`desktop-smoke`, `desktop-dev`, and `desktop-build` run the portal build first so `out/build/portal` exists. Desktop packaging is intentionally not part of `just build` or `just check` because Electrobun can download and execute platform-native binaries.
+
+On NixOS, run `just desktop-runtime-check` before native launch or packaging. If Electrobun's downloaded Linux binary hits the NixOS dynamic linker stub, enable `nix-ld` for local development or add a wrapper/patchelf/Nix derivation before treating desktop packaging as supported on that machine.

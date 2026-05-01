@@ -20,7 +20,11 @@
 		"test:component": "just test-component",
 		"demo-video": "just demo-video",
 		"demo-video:dry-run": "just demo-video-dry-run",
-		"demo-video:check": "just demo-video-check"
+		"demo-video:check": "just demo-video-check",
+		"desktop:runtime-check": "just desktop-runtime-check",
+		"desktop:smoke": "just desktop-smoke",
+		"desktop:dev": "just desktop-dev",
+		"desktop:build": "just desktop-build"
 	},
 	"dependencies": {
 		"@bbc/tv-lrud-spatial": "^0.0.16",
@@ -35,6 +39,7 @@
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
 		"effect": "^3.20.0",
+		"electrobun": "1.16.0",
 		"fast-glob": "^3.3.3",
 		"framer-motion": "^12.38.0",
 		"hono": "^4.10.1",

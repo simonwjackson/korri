@@ -12,6 +12,7 @@ describe("artifact layout", () => {
       build: {
         portal: "out/build/portal",
         api: "out/build/api",
+        electrobun: "out/build/electrobun",
       },
       reports: {
         coverage: "out/reports/coverage",
@@ -22,6 +23,7 @@ describe("artifact layout", () => {
         component: "out/test-results/component",
       },
       demoVideos: "out/demo-videos",
+      desktopArtifacts: "out/artifacts/electrobun",
       generated: {
         bddPlaywright: "out/generated/bdd/playwright",
         bddArgo: "out/generated/bdd/argo",

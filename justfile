@@ -36,6 +36,22 @@ build-api:
   tsc --project tsconfig.api.json
   bun x tsc-alias -p tsconfig.api.json --resolve-full-paths --resolve-full-extension .js
 
+# Check whether Electrobun's native runtime can run on this machine.
+desktop-runtime-check:
+  bun run tools/desktop/electrobun-runtime-check.ts
+
+# Smoke-test the desktop HTTP composition against the built portal output.
+desktop-smoke: build-web
+  bun run tools/desktop/desktop-smoke.ts
+
+# Start the Electrobun desktop app after building portal assets.
+desktop-dev: build-web desktop-runtime-check
+  bun x electrobun dev
+
+# Package the Electrobun desktop app after building portal assets.
+desktop-build: build-web desktop-runtime-check
+  bun x electrobun build
+
 # Run unit tests.
 test-unit:
   bun test
