@@ -185,7 +185,7 @@ The architectural answer is **slot composition**: let the consumer control which
 
 ---
 
-- [ ] **Unit 3: Add `getViewTransitionName` prop and propagate to cells**
+- [x] **Unit 3: Add `getViewTransitionName` prop and propagate to cells**
 
 **Goal:** Both Roots accept an optional `getViewTransitionName?: (item: T) => string`. When provided, the value is published on the base context and `TilegridCells` applies `viewTransitionName: getViewTransitionName(item)` to each cell's `cellProps.style`. When absent, no `viewTransitionName` is set (the property is omitted from the style object).
 

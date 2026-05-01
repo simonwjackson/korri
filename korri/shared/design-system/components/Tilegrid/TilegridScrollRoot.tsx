@@ -18,8 +18,13 @@ export interface TilegridScrollRootProps<T extends GridItemShape> {
   getKey?: (item: T) => string
   /** Span resolver. Default: `item.span ?? 1`. */
   getSpan?: (item: T) => number
-  /** Aria-label resolver for the cell button. Default: `item.id`. */
+  /** Aria-label resolver for the cell element. Default: `item.id`. */
   getAriaLabel?: (item: T) => string
+  /**
+   * Optional View Transitions API name resolver. Tilegrid applies the
+   * returned name to each cell; consumers own document.startViewTransition.
+   */
+  getViewTransitionName?: (item: T) => string
   /** Optional className applied to the inner grid container. */
   className?: string
   /**
@@ -52,6 +57,7 @@ export function TilegridScrollRoot<T extends GridItemShape>({
   getKey,
   getSpan,
   getAriaLabel,
+  getViewTransitionName,
   className,
   asChild = false,
   children,
@@ -70,12 +76,22 @@ export function TilegridScrollRoot<T extends GridItemShape>({
       getKey: getKey ?? ((item: T) => item.id),
       getSpan: getSpan ?? ((item: T) => item.span ?? 1),
       getAriaLabel: getAriaLabel ?? ((item: T) => item.id),
+      getViewTransitionName,
       cellSize,
       gap,
       columns,
       maxSpan: { columns, rows: Infinity },
     }),
-    [items, getKey, getSpan, getAriaLabel, cellSize, gap, columns],
+    [
+      items,
+      getKey,
+      getSpan,
+      getAriaLabel,
+      getViewTransitionName,
+      cellSize,
+      gap,
+      columns,
+    ],
   )
 
   // Cast the typed context to the unknown-itemed shape the React context

@@ -55,27 +55,40 @@ export function TilegridCells<T extends GridItemShape>({
   buttonClassName,
 }: TilegridCellsProps<T>) {
   const { base } = useTilegrid<T>()
-  const { items, getKey, getSpan, getAriaLabel, maxSpan } = base
+  const {
+    items,
+    getKey,
+    getSpan,
+    getAriaLabel,
+    getViewTransitionName,
+    maxSpan,
+  } = base
 
   return (
     <>
       {items.map(item => {
         const key = getKey(item)
         const span = clampSpan(getSpan(item), maxSpan)
+        const style: CSSProperties = {
+          gridColumn: `span ${span}`,
+          gridRow: `span ${span}`,
+          padding: 0,
+          border: "none",
+          background: "transparent",
+          cursor: onItemClick ? "pointer" : undefined,
+        }
+        const viewTransitionName = getViewTransitionName?.(item)
+        if (viewTransitionName !== undefined) {
+          style.viewTransitionName = viewTransitionName
+        }
+
         const cellProps: TilegridCellProps = {
           type: "button",
           "aria-label": getAriaLabel(item),
           "data-tile-id": key,
           className: buttonClassName,
           onClick: onItemClick ? () => onItemClick(item) : undefined,
-          style: {
-            gridColumn: `span ${span}`,
-            gridRow: `span ${span}`,
-            padding: 0,
-            border: "none",
-            background: "transparent",
-            cursor: onItemClick ? "pointer" : undefined,
-          },
+          style,
         }
 
         return <Fragment key={key}>{renderCell({ item, cellProps })}</Fragment>

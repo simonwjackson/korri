@@ -28,6 +28,11 @@ export interface TilegridPagedRootProps<T extends GridItemShape> {
   getSpan?: (item: T) => number
   /** Aria-label resolver. Default: `item.id`. */
   getAriaLabel?: (item: T) => string
+  /**
+   * Optional View Transitions API name resolver. Tilegrid applies the
+   * returned name to each cell; consumers own document.startViewTransition.
+   */
+  getViewTransitionName?: (item: T) => string
   /** Optional className applied to the inner grid container. */
   className?: string
   /**
@@ -75,6 +80,7 @@ export function TilegridPagedRoot<T extends GridItemShape>({
   getKey,
   getSpan,
   getAriaLabel,
+  getViewTransitionName,
   className,
   asChild = false,
   children,
@@ -136,12 +142,23 @@ export function TilegridPagedRoot<T extends GridItemShape>({
       getKey: getKey ?? ((item: T) => item.id),
       getSpan: getSpan ?? ((item: T) => item.span ?? 1),
       getAriaLabel: getAriaLabel ?? ((item: T) => item.id),
+      getViewTransitionName,
       cellSize,
       gap,
       columns,
       maxSpan: { columns, rows },
     }),
-    [visibleItems, getKey, getSpan, getAriaLabel, cellSize, gap, columns, rows],
+    [
+      visibleItems,
+      getKey,
+      getSpan,
+      getAriaLabel,
+      getViewTransitionName,
+      cellSize,
+      gap,
+      columns,
+      rows,
+    ],
   )
 
   const paged = useMemo<TilegridPagedExtension>(

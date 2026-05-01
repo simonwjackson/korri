@@ -8,8 +8,8 @@ import { createContext, useContext } from "react"
  *       TilegridScrollRoot   → publishes BaseContext (no extension).
  *       TilegridPagedRoot    → publishes BaseContext + PagedExtension.
  *   - Cells render through a single atom (TilegridCells) that consumes the
- *     context and renders native <button aria-label> elements with consumer-
- *     supplied visual children.
+ *     context and passes layout/accessibility props to a consumer-supplied
+ *     cell element.
  *   - There is no boolean prop selecting mode. Mode is a composition choice.
  *   - This context owns no state. Roots create their own state and publish it.
  *
@@ -41,8 +41,13 @@ export interface TilegridBaseContext<T extends GridItemShape> {
    * Defaults to `item.span ?? 1`.
    */
   readonly getSpan: (item: T) => number
-  /** Aria-label resolver for the cell button. Defaults to `item.id`. */
+  /** Aria-label resolver for the cell element. Defaults to `item.id`. */
   readonly getAriaLabel: (item: T) => string
+  /**
+   * Optional View Transitions API name resolver. Consumers trigger
+   * `document.startViewTransition`; Tilegrid only publishes the stable names.
+   */
+  readonly getViewTransitionName?: (item: T) => string
   /** Cell base size in CSS pixels. */
   readonly cellSize: number
   /** Gap between cells in CSS pixels. */

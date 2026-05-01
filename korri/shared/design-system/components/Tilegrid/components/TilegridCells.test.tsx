@@ -213,6 +213,65 @@ describe("TilegridCells", () => {
     expect(buttons[0]?.textContent).toBe("b")
   })
 
+  it("omits view-transition-name when no resolver is provided", () => {
+    const items: Tile[] = [{ id: "a" }]
+    const { container } = render(
+      wrap(
+        baseCtx({ items }),
+        <TilegridCells<Tile>
+          renderCell={({ cellProps, item }) => (
+            <button {...cellProps}>{item.id}</button>
+          )}
+        />,
+      ),
+    )
+
+    const button = container.querySelector("button")
+    expect(button?.style.viewTransitionName).toBeUndefined()
+  })
+
+  it("applies view-transition-name from context per item", () => {
+    const items: Tile[] = [{ id: "a" }, { id: "b" }]
+    const { container } = render(
+      wrap(
+        baseCtx({
+          items,
+          getViewTransitionName: item => `tile-${item.id}`,
+        }),
+        <TilegridCells<Tile>
+          renderCell={({ cellProps, item }) => (
+            <button {...cellProps}>{item.id}</button>
+          )}
+        />,
+      ),
+    )
+
+    const buttons = container.querySelectorAll("button")
+    expect(buttons[0]?.style.viewTransitionName).toBe("tile-a")
+    expect(buttons[1]?.style.viewTransitionName).toBe("tile-b")
+  })
+
+  it("passes view-transition-name through renderCell cellProps", () => {
+    const items: Tile[] = [{ id: "a" }]
+    let viewTransitionName: string | undefined
+    render(
+      wrap(
+        baseCtx({
+          items,
+          getViewTransitionName: item => `tile-${item.id}`,
+        }),
+        <TilegridCells<Tile>
+          renderCell={({ cellProps, item }) => {
+            viewTransitionName = cellProps.style.viewTransitionName
+            return <button {...cellProps}>{item.id}</button>
+          }}
+        />,
+      ),
+    )
+
+    expect(viewTransitionName).toBe("tile-a")
+  })
+
   it("uses getAriaLabel from context to label each cell", () => {
     interface NamedTile extends GridItemShape {
       id: string
