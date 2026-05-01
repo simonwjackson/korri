@@ -45,6 +45,17 @@ interface StoryArgs {
   dataset: TilegridDataset
   motionPreset: MotionPreset
   /**
+   * Outer canvas width forwarded to the story decorator. Empty string =
+   * fill the parent (use Storybook's viewport / measure addon to resize).
+   * Accepts any CSS length.
+   */
+  containerWidth: string
+  /**
+   * Outer canvas height. Empty string = fill the parent. Accepts any CSS
+   * length.
+   */
+  containerHeight: string
+  /**
    * Wired to the Storybook Actions panel via `argTypes.onItemClick.action`.
    * Each cell click is logged there, so consumers see real interaction
    * feedback without an in-canvas overlay button.
@@ -443,6 +454,8 @@ const meta = {
     mode: "scroll",
     dataset: "basic",
     motionPreset: "layout",
+    containerWidth: "900px",
+    containerHeight: "560px",
   },
   argTypes: {
     cellSize: {
@@ -485,20 +498,40 @@ const meta = {
       description:
         "Cell click handler. Each invocation is logged in the Storybook Actions panel.",
     },
+    containerWidth: {
+      control: "text",
+      description:
+        'Outer canvas width. Empty = fill the parent so Storybook\'s viewport / measure addons drive the size. Accepts any CSS length (e.g. "900px", "100%", "60vw").',
+    },
+    containerHeight: {
+      control: "text",
+      description:
+        "Outer canvas height. Empty = fill the parent. Accepts any CSS length.",
+    },
   },
   decorators: [
-    Story => (
-      <div
-        style={{
-          width: "900px",
-          height: "560px",
-          padding: 16,
-          background: "#0a0a0a",
-        }}
-      >
-        <Story />
-      </div>
-    ),
+    (Story, context) => {
+      const { containerWidth, containerHeight } = context.args as StoryArgs
+      const width =
+        containerWidth && containerWidth.trim() !== "" ? containerWidth : "100%"
+      const height =
+        containerHeight && containerHeight.trim() !== ""
+          ? containerHeight
+          : "100%"
+      return (
+        <div
+          style={{
+            width,
+            height,
+            padding: 16,
+            background: "#0a0a0a",
+            boxSizing: "border-box",
+          }}
+        >
+          <Story />
+        </div>
+      )
+    },
   ],
 } satisfies Meta<StoryArgs>
 
