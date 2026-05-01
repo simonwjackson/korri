@@ -421,18 +421,22 @@ function SunlitStyles() {
         --surface: #E8E6E1;
         --surface-raised: #F2F0EB;
         --surface-sunk: #DDDAD4;
-        --ink: #1B1814;
-        --ink-dim: rgba(27, 24, 20, 0.55);
-        --ink-faint: rgba(27, 24, 20, 0.32);
-        --rule: rgba(27, 24, 20, 0.10);
+        /* Ink palette is the theme's closest warm equivalent to #444
+           (stone-700, #44403C). Dim/faint/rule share the same RGB at
+           lower alpha so the secondary < primary contrast relationship
+           holds when blended over --surface. */
+        --ink: #44403C;
+        --ink-dim: rgba(68, 64, 60, 0.62);
+        --ink-faint: rgba(68, 64, 60, 0.40);
+        --rule: rgba(68, 64, 60, 0.12);
 
         --focus-glow: hsl(252, 75%, 70%);
         --focus-glow-soft: hsla(252, 75%, 70%, 0.45);
         --last-played-eyebrow: #4FAE3E;
 
         --pill-bg: #FFFFFF;
-        --pill-fg: #1B1814;
-        --pill-shadow: 0 1px 2px rgba(27, 24, 20, 0.06);
+        --pill-fg: #44403C;
+        --pill-shadow: 0 1px 2px rgba(68, 64, 60, 0.06);
 
         /* Glyph background tracks --ink-dim so the chip badge sits at
            the same visual weight as its label, instead of reading as a
@@ -723,7 +727,7 @@ function SunlitStyles() {
         border-radius: 9999px;
         background: var(--hud-glyph-bg);
         color: var(--hud-glyph-fg);
-        font-size: var(--text-base);
+        font-size: var(--text-sm);
         font-weight: 800;
         line-height: 1;
         transition:
@@ -737,7 +741,7 @@ function SunlitStyles() {
         transform: scale(1.1);
       }
       [data-exploration="sunlit"] .hud-label {
-        font-size: var(--text-lg);
+        font-size: var(--text-base);
         font-weight: 600;
         letter-spacing: 0;
         color: var(--ink-dim);
