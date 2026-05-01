@@ -1,4 +1,8 @@
 import type { Direction, InputAction } from "@shared/input/types"
+import {
+  centerScrollableAncestors,
+  hasMarioCameraAncestor,
+} from "./center-scroll"
 
 /**
  * Focus engine: turns InputActions into DOM focus changes.
@@ -75,8 +79,16 @@ export function createFocusEngine(opts: FocusEngineOptions): FocusEngine {
           }
           const next = opts.nextFocus(focused, action.direction, scope)
           if (!next) return
-          next.focus()
-          next.scrollIntoView({ block: "nearest", inline: "nearest" })
+          // preventScroll: true so the browser's default focus-scroll cannot
+          // race the rAF tween (Mario surfaces) or layer over the explicit
+          // scrollIntoView (non-Mario surfaces). The engine is the sole
+          // owner of post-focus scroll behavior.
+          next.focus({ preventScroll: true })
+          if (hasMarioCameraAncestor(next)) {
+            centerScrollableAncestors(next, { animate: true })
+          } else {
+            next.scrollIntoView({ block: "nearest", inline: "nearest" })
+          }
           return
         }
         case "confirm": {

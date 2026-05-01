@@ -72,6 +72,20 @@ let rafSchedule:
 let rafCancel: ((handle: number) => void) | null = null
 
 /**
+ * Returns true when `target` has any ancestor carrying `data-mario-camera`
+ * with a recognized axis value. Used by the focus engine to branch on whether
+ * to call {@link centerScrollableAncestors} or fall back to `scrollIntoView`.
+ */
+export function hasMarioCameraAncestor(target: HTMLElement): boolean {
+  let node: Element | null = target.parentElement
+  while (node && node !== document.documentElement) {
+    if (parseAxis(node.getAttribute(ATTRIBUTE)) !== null) return true
+    node = node.parentElement
+  }
+  return false
+}
+
+/**
  * Center every Mario-camera ancestor of `target` so the target sits at the
  * surface's center on the surface's declared axis (or axes).
  *
