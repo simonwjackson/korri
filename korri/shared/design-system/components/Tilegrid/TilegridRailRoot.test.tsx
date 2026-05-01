@@ -109,4 +109,93 @@ describe("TilegridRailRoot", () => {
     })
     expect(result.current.paged).toBeUndefined()
   })
+
+  it("renders no measurement sentinels when cellSize and gap are numbers", () => {
+    const { container } = render(
+      <TilegridRailRoot<Tile> items={[tile("a")]} cellSize={120} gap={8}>
+        <span>child</span>
+      </TilegridRailRoot>,
+    )
+    expect(container.querySelectorAll("[data-tilegrid-sentinel]").length).toBe(
+      0,
+    )
+  })
+
+  it("renders a cellSize sentinel with the verbatim CSS expression when cellSize is a string", () => {
+    const { container } = render(
+      <TilegridRailRoot<Tile> items={[tile("a")]} cellSize="6rem" gap={8}>
+        <span>child</span>
+      </TilegridRailRoot>,
+    )
+    const sentinel = container.querySelector<HTMLElement>(
+      '[data-tilegrid-sentinel="cell-size"]',
+    )
+    expect(sentinel).not.toBeNull()
+    expect(sentinel?.style.width).toBe("6rem")
+    expect(sentinel?.style.position).toBe("absolute")
+    expect(sentinel?.style.visibility).toBe("hidden")
+    expect(sentinel?.getAttribute("aria-hidden")).toBe("true")
+  })
+
+  it("uses the verbatim string in gridAutoColumns and gridTemplateRows when cellSize is a string", () => {
+    const { container } = render(
+      <TilegridRailRoot<Tile> items={[tile("a")]} cellSize="6rem" gap={8}>
+        <span>child</span>
+      </TilegridRailRoot>,
+    )
+    const outer = container.firstElementChild as HTMLElement
+    const grid = outer.querySelector<HTMLElement>("div[style*='display: grid']")
+    expect(grid?.style.gridAutoColumns).toBe("6rem")
+    expect(grid?.style.gridTemplateRows).toBe("6rem")
+    expect(grid?.style.gap).toBe("8px")
+  })
+
+  it("renders a gap sentinel with the verbatim CSS expression when gap is a string", () => {
+    const { container } = render(
+      <TilegridRailRoot<Tile> items={[tile("a")]} cellSize={120} gap="0.5rem">
+        <span>child</span>
+      </TilegridRailRoot>,
+    )
+    const sentinel = container.querySelector<HTMLElement>(
+      '[data-tilegrid-sentinel="gap"]',
+    )
+    expect(sentinel).not.toBeNull()
+    expect(sentinel?.style.width).toBe("0.5rem")
+  })
+
+  it("uses the verbatim string in the gap CSS when gap is a string", () => {
+    const { container } = render(
+      <TilegridRailRoot<Tile> items={[tile("a")]} cellSize={120} gap="0.5rem">
+        <span>child</span>
+      </TilegridRailRoot>,
+    )
+    const grid = container.querySelector<HTMLElement>(
+      "div[style*='display: grid']",
+    )
+    expect(grid?.style.gap).toBe("0.5rem")
+  })
+
+  it("renders both sentinels when cellSize and gap are both strings", () => {
+    const { container } = render(
+      <TilegridRailRoot<Tile> items={[tile("a")]} cellSize="6rem" gap="0.5rem">
+        <span>child</span>
+      </TilegridRailRoot>,
+    )
+    expect(
+      container.querySelector('[data-tilegrid-sentinel="cell-size"]'),
+    ).not.toBeNull()
+    expect(
+      container.querySelector('[data-tilegrid-sentinel="gap"]'),
+    ).not.toBeNull()
+  })
+
+  it("sets position: relative on the outer wrapper so percent-sized sentinels resolve against the rail", () => {
+    const { container } = render(
+      <TilegridRailRoot<Tile> items={[tile("a")]} cellSize={120} gap={8}>
+        <span>child</span>
+      </TilegridRailRoot>,
+    )
+    const outer = container.firstElementChild as HTMLElement
+    expect(outer.style.position).toBe("relative")
+  })
 })
