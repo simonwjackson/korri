@@ -1,10 +1,15 @@
 import { useResolvedCSSLength } from "@shared/design-system/lib/useResolvedCSSLength"
+import { centerScrollableAncestors } from "@shared/navigation/center-scroll"
 import { Slot } from "radix-ui"
 import {
   type CSSProperties,
   type ReactNode,
   type RefObject,
+  useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
+  useState,
 } from "react"
 import {
   type GridItemShape,
@@ -140,6 +145,74 @@ export function TilegridRailRoot<T extends GridItemShape>({
   const heightPx = heightMeasure.resolvedPx ?? 0
   const gapPx = gapMeasure.resolvedPx ?? 0
 
+  // Natural width = sum of cell widths * effective span + gaps. Effective
+  // span mirrors clampSpan in rail mode: span > items.length is impossible
+  // so any item's effective span is min(items.length, max(1, span)). We
+  // compute this from items + spans + cellSize + gap (all already known)
+  // rather than reading scrollWidth, which would double-count once the
+  // overflow padding gets applied.
+  const getSpanFn = getSpan ?? ((item: T) => item.span ?? 1)
+  const naturalWidthPx = useMemo(() => {
+    if (widthPx <= 0 || items.length === 0) return 0
+    const ceiling = Math.max(1, items.length)
+    const sumSpans = items.reduce((acc, item) => {
+      const raw = Math.max(1, getSpanFn(item))
+      return acc + Math.min(raw, ceiling)
+    }, 0)
+    return sumSpans * widthPx + Math.max(0, sumSpans - 1) * gapPx
+  }, [items, widthPx, gapPx, getSpanFn])
+
+  // Outer scroll container ref. Used to measure clientWidth (overflow check)
+  // and as the focus-containment scope for initial-focus snap.
+  const outerRef = useRef<HTMLDivElement | null>(null)
+  const [overflows, setOverflows] = useState(false)
+
+  // ResizeObserver: toggle overflow flag. Runs in useLayoutEffect so the
+  // first measurement applies before paint, avoiding a one-frame layout
+  // flicker between "no padding" and "padding".
+  useLayoutEffect(() => {
+    const node = outerRef.current
+    if (!node) return
+    const update = () => {
+      const next = naturalWidthPx > 0 && naturalWidthPx > node.clientWidth
+      setOverflows(prev => (prev === next ? prev : next))
+    }
+    update()
+    if (typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(update)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [naturalWidthPx])
+
+  // Snap-to-centered when the overflow flag changes (window resize, item
+  // count change, theme switch). Synchronous so the user does not see a
+  // mid-flight scroll between "padding off" and "padding on".
+  useLayoutEffect(() => {
+    const node = outerRef.current
+    if (!node) return
+    const active = document.activeElement
+    if (active instanceof HTMLElement && node.contains(active)) {
+      centerScrollableAncestors(active, { animate: false })
+    }
+  }, [overflows])
+
+  // Initial-focus snap (R13): consumer's mount-time `.focus()` calls run in
+  // their own useEffect, which fires AFTER this Root's useEffect. Defer one
+  // frame so we observe document.activeElement after the consumer's call.
+  // Idempotent with the overflow-change snap above; the util collapses
+  // duplicate calls to a single sync write.
+  useEffect(() => {
+    const node = outerRef.current
+    if (!node) return
+    const handle = requestAnimationFrame(() => {
+      const active = document.activeElement
+      if (active instanceof HTMLElement && node.contains(active)) {
+        centerScrollableAncestors(active, { animate: false })
+      }
+    })
+    return () => cancelAnimationFrame(handle)
+  }, [])
+
   // For square inputs (number/string), width and height share one resolution
   // and one sentinel; only the rectangular path emits two sentinels.
   const widthCss = widthMeasure.cssValue
@@ -217,20 +290,34 @@ export function TilegridRailRoot<T extends GridItemShape>({
 
   return (
     <div
+      ref={outerRef}
       // Opt this rail into wheel-as-direction with horizontal axis mapping.
       // Vertical wheel motion (deltaY) translates to left/right — desktop
       // carousel convention so a horizontal rail does not require
       // shift+scroll to navigate via the wheel.
       data-pointer-wheel="horizontal"
+      // Opt into Mario-camera scrolling: focused tile centers on the
+      // inline axis when content overflows. The focus engine and the
+      // centering util both walk up looking for this attribute.
+      data-mario-camera="inline"
+      // data-mario-overflows mirrors the overflow flag so CSS / tests can
+      // assert layout state without measuring scrollWidth.
+      data-mario-overflows={overflows ? "true" : undefined}
       style={{
         width: "100%",
         height: "100%",
         overflowX: "auto",
         overflowY: "hidden",
         // Establishes a containing block so percent-sized sentinels resolve
-        // against the rail rather than the viewport.
+        // against the rail rather than the viewport. Also doubles as the
+        // container-query containment context: cqi inside the inner grid
+        // resolves against this element's inline size.
         position: "relative",
-      }}
+        containerType: "inline-size",
+        // Mario edge padding reads this custom property so the same CSS
+        // expression works for both numeric and CSS-string cellSize inputs.
+        ["--mario-cell-size" as string]: widthCss,
+      } as CSSProperties}
     >
       {showSquareSentinel && (
         <span
@@ -279,6 +366,13 @@ export function TilegridRailRoot<T extends GridItemShape>({
             alignContent: "center",
             justifyContent: "start",
             width: "fit-content",
+            // Edge padding allows tile #1 and tile #N to scroll-center.
+            // Only applied when natural content overflows the container,
+            // so non-overflowing rails do not gain spurious scroll room
+            // and never trigger focus-driven scroll on direction moves.
+            paddingInline: overflows
+              ? "max(0px, calc(50cqi - var(--mario-cell-size) / 2))"
+              : 0,
           }}
         >
           {children}

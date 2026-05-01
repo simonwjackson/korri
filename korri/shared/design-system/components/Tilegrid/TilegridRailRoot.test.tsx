@@ -383,6 +383,130 @@ describe("TilegridRailRoot", () => {
     expect(result.current.base.getSpan(sibling)).toBe(1)
   })
 
+  describe("Mario-camera opt-in", () => {
+    it("sets data-mario-camera=\"inline\" on the outer scroll container", () => {
+      const { container } = render(
+        <TilegridRailRoot<Tile>
+          items={[tile("a"), tile("b")]}
+          cellSize={120}
+          gap={8}
+        >
+          <span>child</span>
+        </TilegridRailRoot>,
+      )
+      const outer = container.firstElementChild as HTMLElement
+      expect(outer.getAttribute("data-mario-camera")).toBe("inline")
+    })
+
+    it("preserves the existing data-pointer-wheel=\"horizontal\" attribute alongside data-mario-camera", () => {
+      const { container } = render(
+        <TilegridRailRoot<Tile>
+          items={[tile("a"), tile("b")]}
+          cellSize={120}
+          gap={8}
+        >
+          <span>child</span>
+        </TilegridRailRoot>,
+      )
+      const outer = container.firstElementChild as HTMLElement
+      expect(outer.getAttribute("data-pointer-wheel")).toBe("horizontal")
+      expect(outer.getAttribute("data-mario-camera")).toBe("inline")
+    })
+
+    it("sets container-type: inline-size on the outer scroll container so cqi resolves correctly inside the grid", () => {
+      const { container } = render(
+        <TilegridRailRoot<Tile>
+          items={[tile("a"), tile("b")]}
+          cellSize={120}
+          gap={8}
+        >
+          <span>child</span>
+        </TilegridRailRoot>,
+      )
+      const outer = container.firstElementChild as HTMLElement
+      expect(outer.style.containerType).toBe("inline-size")
+    })
+
+    it("exposes --mario-cell-size as a CSS custom property with the resolved cell width (numeric)", () => {
+      const { container } = render(
+        <TilegridRailRoot<Tile>
+          items={[tile("a"), tile("b")]}
+          cellSize={120}
+          gap={8}
+        >
+          <span>child</span>
+        </TilegridRailRoot>,
+      )
+      const outer = container.firstElementChild as HTMLElement
+      expect(outer.style.getPropertyValue("--mario-cell-size")).toBe("120px")
+    })
+
+    it("exposes --mario-cell-size with the verbatim string when cellSize is a CSS expression", () => {
+      const { container } = render(
+        <TilegridRailRoot<Tile>
+          items={[tile("a"), tile("b")]}
+          cellSize="6rem"
+          gap={8}
+        >
+          <span>child</span>
+        </TilegridRailRoot>,
+      )
+      const outer = container.firstElementChild as HTMLElement
+      expect(outer.style.getPropertyValue("--mario-cell-size")).toBe("6rem")
+    })
+
+    it("exposes --mario-cell-size with the WIDTH dimension on rectangular cellSize", () => {
+      const { container } = render(
+        <TilegridRailRoot<Tile>
+          items={[tile("a"), tile("b")]}
+          cellSize={{ width: 200, height: 120 }}
+          gap={8}
+        >
+          <span>child</span>
+        </TilegridRailRoot>,
+      )
+      const outer = container.firstElementChild as HTMLElement
+      // Edge padding centers on the inline (column) axis only — width is
+      // the meaningful dimension. height does not influence cqi padding.
+      expect(outer.style.getPropertyValue("--mario-cell-size")).toBe("200px")
+    })
+
+    it("applies the cqi-based edge padding on the inner grid when content overflows the container", () => {
+      // happy-dom returns clientWidth 0 by default, so any positive
+      // naturalWidth (items * cellSize + gaps) > 0 means overflow=true and
+      // the padding-inline calc expression is applied.
+      const { container } = render(
+        <TilegridRailRoot<Tile>
+          items={[tile("a"), tile("b"), tile("c"), tile("d")]}
+          cellSize={200}
+          gap={10}
+        >
+          <span>child</span>
+        </TilegridRailRoot>,
+      )
+      const outer = container.firstElementChild as HTMLElement
+      const grid = outer.firstElementChild as HTMLElement
+      expect(grid.style.paddingInline).toBe(
+        "max(0px, calc(50cqi - var(--mario-cell-size) / 2))",
+      )
+      expect(outer.getAttribute("data-mario-overflows")).toBe("true")
+    })
+
+    it("does NOT apply edge padding when items array is empty (naturalWidth is zero)", () => {
+      const { container } = render(
+        <TilegridRailRoot<Tile> items={[]} cellSize={120} gap={8}>
+          <span>child</span>
+        </TilegridRailRoot>,
+      )
+      const outer = container.firstElementChild as HTMLElement
+      const grid = outer.firstElementChild as HTMLElement
+      // Empty rail: naturalWidth = 0, overflows stays false, paddingInline = 0.
+      // happy-dom keeps the unit-less "0" we emit; no normalization to "0px".
+      expect(grid.style.paddingInline).toBe("0")
+      expect(outer.getAttribute("data-mario-overflows")).toBeNull()
+    })
+  })
+
   it("sets position: relative on the outer wrapper so percent-sized sentinels resolve against the rail", () => {
     const { container } = render(
       <TilegridRailRoot<Tile> items={[tile("a")]} cellSize={120} gap={8}>
