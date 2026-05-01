@@ -214,10 +214,11 @@ function SearchPill() {
         // Decorative in Phase 1; focusable so the spatial-nav graph reflects
         // the real surface. Wiring lands later if needed.
       }}
-      className="sunlit-pill sunlit-search-pill flex min-w-0 max-w-[40cqi] flex-1 items-center gap-4 px-6 py-4 text-lg"
+      aria-label="Search for games, genres, or tags"
+      className="sunlit-pill sunlit-search-pill text-lg"
     >
       <Search className="sunlit-pill-icon shrink-0" strokeWidth={2.25} />
-      <span className="truncate text-[color:var(--ink-faint)]">
+      <span className="sunlit-search-placeholder">
         Search for games, genres, or tags…
       </span>
     </button>
@@ -537,24 +538,62 @@ function SunlitStyles() {
         color: var(--ink-dim);
       }
 
-      /* --- Search pill rest state: subtler than the default pill.
-             At rest, the search reads as a quiet placeholder shaped like
-             an input — not an active, currently-open search field. The
-             rest state uses the surface-raised tone with no elevation
-             shadow; the focused state inherits the full pill treatment
-             above (white + shadow + lavender halo). */
+      /* --- Search pill: icon-only at rest, expands to full pill on focus.
+             At rest the search is a quiet circular icon embedded in the
+             surface — not an open input field. Focus is the affordance
+             that opens the field; the transition (background + width +
+             placeholder fade-in) is the visual signal of 'now searching.' */
       [data-exploration="sunlit"] .sunlit-search-pill {
-        background: var(--surface-raised);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0;
+        /* Collapsed: circle just big enough to hold the icon. */
+        width: 3.4em;
+        height: 3.4em;
+        padding: 0;
+        background: transparent;
         box-shadow: none;
+        flex: 0 0 auto;
+        transition:
+          width 220ms ease,
+          gap 180ms ease,
+          padding 220ms ease,
+          background 180ms ease,
+          box-shadow 180ms ease,
+          transform 180ms ease;
       }
       [data-exploration="sunlit"] .sunlit-search-pill .sunlit-pill-icon {
-        color: var(--ink-faint);
-      }
-      [data-exploration="sunlit"] .sunlit-search-pill:focus-visible {
-        background: var(--pill-bg);
-      }
-      [data-exploration="sunlit"] .sunlit-search-pill:focus-visible .sunlit-pill-icon {
         color: var(--ink);
+      }
+
+      /* The placeholder text is always rendered (so screen readers see
+         it via the surrounding aria-label) but visually collapsed at
+         rest via max-width + opacity, then revealed on focus. */
+      [data-exploration="sunlit"] .sunlit-search-placeholder {
+        max-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        opacity: 0;
+        color: var(--ink-faint);
+        transition:
+          max-width 240ms ease,
+          opacity 180ms ease;
+      }
+
+      /* Active state: expand into a full pill. */
+      [data-exploration="sunlit"] .sunlit-search-pill:focus-visible {
+        justify-content: flex-start;
+        width: 40cqi;
+        height: auto;
+        padding: 1rem 1.5rem;
+        gap: 1rem;
+        background: var(--pill-bg);
+        box-shadow: var(--pill-shadow);
+      }
+      [data-exploration="sunlit"] .sunlit-search-pill:focus-visible .sunlit-search-placeholder {
+        max-width: 40cqi;
+        opacity: 1;
       }
 
       /* --- Menu pill: system-blue chip, not a neutral input. --- */
