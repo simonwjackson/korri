@@ -519,22 +519,36 @@ function SunlitStyles() {
       }
 
       /* --- Tile focus state.
-             The focus indicator uses a negative-offset outline so the
-             ring renders INSIDE the tile box. TilegridRailRoot's outer
-             scroll container has overflowY: hidden, which would clip an
-             outer box-shadow halo. An inset outline is guaranteed
-             visible at the tile's bounds without depending on ancestor
-             overflow behavior. The 4px thickness is hairline-class —
-             intentionally static, not derived from --spacing. */
+             Rendered via an ::after pseudo-element rather than CSS
+             outline. The tile has overflow:hidden (needed to clip the
+             image to the rounded corners), and Chromium clips
+             negative-offset outlines against the element's own
+             overflow box — the top edge of the ring gets eaten.
+
+             A pseudo-element with inset:0 sits at the tile's inner
+             edge, paints above the static <img> child, and is part of
+             the tile's painting box rather than its overflow-clipped
+             content, so it renders fully on all four edges regardless
+             of parent or self overflow. The 4px thickness is
+             hairline-class — intentionally static, not from --spacing. */
       [data-exploration="sunlit"] .sunlit-tile {
+        position: relative;
         outline: none;
-        transition:
-          outline-color 180ms ease,
-          transform 180ms ease;
+        transition: transform 180ms ease;
+      }
+      [data-exploration="sunlit"] .sunlit-tile::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border: 4px solid transparent;
+        border-radius: var(--radius-tile);
+        pointer-events: none;
+        transition: border-color 180ms ease;
+      }
+      [data-exploration="sunlit"] .sunlit-tile:focus-visible::after {
+        border-color: var(--focus-glow);
       }
       [data-exploration="sunlit"] .sunlit-tile:focus-visible {
-        outline: 4px solid var(--focus-glow);
-        outline-offset: -4px;
         transform: translateY(-1px);
         z-index: 1;
       }
