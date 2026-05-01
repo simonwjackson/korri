@@ -188,4 +188,137 @@ describe("TilegridPagedRoot", () => {
 
     expect(getByTestId("pages").textContent).toBe("2")
   })
+
+  it("renders no measurement sentinels when cellSize and gap are numbers", () => {
+    const { container } = render(
+      <TilegridPagedRoot<Tile>
+        items={[tile("a")]}
+        cellSize={100}
+        gap={8}
+        _testColumns={4}
+        _testRows={3}
+      >
+        <span>child</span>
+      </TilegridPagedRoot>,
+    )
+    expect(container.querySelectorAll("[data-tilegrid-sentinel]").length).toBe(
+      0,
+    )
+  })
+
+  it("renders a cellSize sentinel with the verbatim CSS expression when cellSize is a string", () => {
+    const { container } = render(
+      <TilegridPagedRoot<Tile>
+        items={[tile("a")]}
+        cellSize="6rem"
+        gap={8}
+        _testColumns={4}
+        _testRows={3}
+      >
+        <span>child</span>
+      </TilegridPagedRoot>,
+    )
+    const sentinel = container.querySelector<HTMLElement>(
+      '[data-tilegrid-sentinel="cell-size"]',
+    )
+    expect(sentinel).not.toBeNull()
+    expect(sentinel?.style.width).toBe("6rem")
+    expect(sentinel?.style.position).toBe("absolute")
+    expect(sentinel?.style.visibility).toBe("hidden")
+    expect(sentinel?.getAttribute("aria-hidden")).toBe("true")
+  })
+
+  it("uses the verbatim string in gridTemplateColumns and gridTemplateRows when cellSize is a string", () => {
+    const { container } = render(
+      <TilegridPagedRoot<Tile>
+        items={[tile("a")]}
+        cellSize="6rem"
+        gap={8}
+        _testColumns={3}
+        _testRows={2}
+      >
+        <span>child</span>
+      </TilegridPagedRoot>,
+    )
+    const grid = container.querySelector<HTMLElement>(
+      "div[style*='display: grid']",
+    )
+    expect(grid?.style.gridTemplateColumns).toBe("repeat(3, 6rem)")
+    expect(grid?.style.gridTemplateRows).toBe("repeat(2, 6rem)")
+    expect(grid?.style.gap).toBe("8px")
+  })
+
+  it("renders a gap sentinel with the verbatim CSS expression when gap is a string", () => {
+    const { container } = render(
+      <TilegridPagedRoot<Tile>
+        items={[tile("a")]}
+        cellSize={100}
+        gap="0.5rem"
+        _testColumns={4}
+        _testRows={3}
+      >
+        <span>child</span>
+      </TilegridPagedRoot>,
+    )
+    const sentinel = container.querySelector<HTMLElement>(
+      '[data-tilegrid-sentinel="gap"]',
+    )
+    expect(sentinel).not.toBeNull()
+    expect(sentinel?.style.width).toBe("0.5rem")
+  })
+
+  it("_testColumns and _testRows continue to bypass measurement when cellSize is a string", () => {
+    // Pinning columns/rows via the test escape hatch keeps pagination
+    // deterministic even though happy-dom never resolves the rem sentinel.
+    const items = Array.from({ length: 25 }, (_, i) => tile(`g-${i}`))
+    const { result } = renderHook(() => useTilegrid<Tile>(), {
+      wrapper: ({ children }) => (
+        <TilegridPagedRoot<Tile>
+          items={items}
+          cellSize="6rem"
+          gap={8}
+          _testColumns={4}
+          _testRows={3}
+        >
+          {children}
+        </TilegridPagedRoot>
+      ),
+    })
+    expect(result.current.paged?.totalPages).toBe(3)
+    expect(result.current.base.maxSpan.columns).toBe(4)
+    expect(result.current.base.maxSpan.rows).toBe(3)
+  })
+
+  it("falls back to columns/rows of 1 while a string cellSize is unresolved and no test override is provided", () => {
+    const { result } = renderHook(() => useTilegrid<Tile>(), {
+      wrapper: ({ children }) => (
+        <TilegridPagedRoot<Tile>
+          items={[tile("a"), tile("b")]}
+          cellSize="6rem"
+          gap={8}
+        >
+          {children}
+        </TilegridPagedRoot>
+      ),
+    })
+    expect(result.current.base.columns).toBe(1)
+    expect(result.current.base.maxSpan.columns).toBe(1)
+    expect(result.current.base.maxSpan.rows).toBe(1)
+  })
+
+  it("sets position: relative on the outer wrapper so percent-sized sentinels resolve against the paged container", () => {
+    const { container } = render(
+      <TilegridPagedRoot<Tile>
+        items={[tile("a")]}
+        cellSize={100}
+        gap={8}
+        _testColumns={4}
+        _testRows={3}
+      >
+        <span>child</span>
+      </TilegridPagedRoot>,
+    )
+    const outer = container.firstElementChild as HTMLElement
+    expect(outer.style.position).toBe("relative")
+  })
 })
