@@ -122,6 +122,11 @@ just typecheck
 - Do exactly what was asked. No bonus refactors.
 - Read before you touch. Do not propose changes to code you have not read.
 - Use `@shared/logger`, not `console.log` in runtime code.
+- Use design tokens — Tailwind theme utilities and CSS theme variables — for type, spacing, color, and radius. Hardcoded values (e.g., `font-size: 14px`, `padding: 24px`, `#1B1714`) are a last resort and must be justified by an inline comment explaining why no token fits. Add the missing token to the theme instead whenever the value will recur.
+- Theme tokens for size and spacing must be **fluid by default** — `clamp(min, fluid, max)` calibrated so a single token is sensible from a small handheld up to a TV. Static pixel values in the theme are reserved for things that genuinely should not scale (e.g., a 1px hairline border).
+- Components should respond to their **container**, not the viewport, for type and spacing. Use container query units (`cqi`, `cqh`, `cqw`) and `@container` queries; declare `container-type: inline-size` (or `size`) on the appropriate ancestor. Reserve `@media` and viewport units for page-frame decisions where the layout itself fundamentally rearranges.
+- Grids should add cells when space allows (`grid-template-columns: repeat(auto-fit, minmax(MIN, 1fr))` or equivalent), not scale a fixed number of cells up. The number of visible items is a side effect of container width × cell minimum, not a hardcoded column count. Designs should look denser on a TV, not zoomed in.
+- Inline `style={{ … }}` and raw CSS values inside scoped `<style>` blocks bypass the theme's scales and constraints. Prefer Tailwind utilities or theme-variable references so project-wide rules actually apply; reach for inline values only when no theme token applies.
 - Do not store sensitive data in `localStorage`.
 - When extracting date parts from ISO strings, UTC methods must be used.
 
