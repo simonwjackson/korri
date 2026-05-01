@@ -57,9 +57,28 @@ function TileVisual({ tile }: { tile: Tile }) {
   )
 }
 
+/**
+ * Args shared by every story so the Storybook Controls panel can drive
+ * the two layout knobs the Tilegrid Roots expose.
+ */
+interface StoryArgs {
+  cellSize: number
+  gap: number
+}
+
 const meta = {
   title: "Design System/Tilegrid",
   parameters: { layout: "fullscreen" },
+  argTypes: {
+    cellSize: {
+      control: { type: "range", min: 40, max: 240, step: 10 },
+      description: "Side length of one grid cell in pixels (cells are square).",
+    },
+    gap: {
+      control: { type: "range", min: 0, max: 32, step: 2 },
+      description: "Px gap between cells.",
+    },
+  },
   decorators: [
     Story => (
       <div
@@ -74,30 +93,37 @@ const meta = {
       </div>
     ),
   ],
-} satisfies Meta
+} satisfies Meta<StoryArgs>
 
 export default meta
-type Story = StoryObj
+type Story = StoryObj<StoryArgs>
 
 export const Scroll: Story = {
-  render: () => (
-    <TilegridScrollRoot<Tile> items={tiles} cellSize={120} gap={8}>
+  args: { cellSize: 120, gap: 8 },
+  render: ({ cellSize, gap }) => (
+    <TilegridScrollRoot<Tile> items={tiles} cellSize={cellSize} gap={gap}>
       <TilegridCells<Tile> render={t => <TileVisual tile={t} />} />
     </TilegridScrollRoot>
   ),
 }
 
 export const ScrollWithHero: Story = {
-  render: () => (
-    <TilegridScrollRoot<Tile> items={tilesWithHero} cellSize={120} gap={8}>
+  args: { cellSize: 120, gap: 8 },
+  render: ({ cellSize, gap }) => (
+    <TilegridScrollRoot<Tile>
+      items={tilesWithHero}
+      cellSize={cellSize}
+      gap={gap}
+    >
       <TilegridCells<Tile> render={t => <TileVisual tile={t} />} />
     </TilegridScrollRoot>
   ),
 }
 
 export const ScrollEmpty: Story = {
-  render: () => (
-    <TilegridScrollRoot<Tile> items={[]} cellSize={120} gap={8}>
+  args: { cellSize: 120, gap: 8 },
+  render: ({ cellSize, gap }) => (
+    <TilegridScrollRoot<Tile> items={[]} cellSize={cellSize} gap={gap}>
       <TilegridCells<Tile> render={t => <TileVisual tile={t} />} />
     </TilegridScrollRoot>
   ),
@@ -109,8 +135,9 @@ export const ScrollEmpty: Story = {
  * hero in source order — no JS bin-packer involved in scroll mode.
  */
 export const ScrollManyHeroes: Story = {
-  render: () => (
-    <TilegridScrollRoot<Tile> items={manyHeroes} cellSize={100} gap={8}>
+  args: { cellSize: 100, gap: 8 },
+  render: ({ cellSize, gap }) => (
+    <TilegridScrollRoot<Tile> items={manyHeroes} cellSize={cellSize} gap={gap}>
       <TilegridCells<Tile> render={t => <TileVisual tile={t} />} />
     </TilegridScrollRoot>
   ),
@@ -121,8 +148,9 @@ export const ScrollManyHeroes: Story = {
  * Scroll mode allows arbitrary row depth so span:3 renders unclamped.
  */
 export const ScrollMixedSpans: Story = {
-  render: () => (
-    <TilegridScrollRoot<Tile> items={mixedSpans} cellSize={90} gap={8}>
+  args: { cellSize: 90, gap: 8 },
+  render: ({ cellSize, gap }) => (
+    <TilegridScrollRoot<Tile> items={mixedSpans} cellSize={cellSize} gap={gap}>
       <TilegridCells<Tile> render={t => <TileVisual tile={t} />} />
     </TilegridScrollRoot>
   ),
@@ -164,9 +192,10 @@ function InlinePagedControls() {
 }
 
 export const Paged: Story = {
-  render: () => (
+  args: { cellSize: 100, gap: 8 },
+  render: ({ cellSize, gap }) => (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <TilegridPagedRoot<Tile> items={tiles} cellSize={100} gap={8}>
+      <TilegridPagedRoot<Tile> items={tiles} cellSize={cellSize} gap={gap}>
         <TilegridCells<Tile> render={t => <TileVisual tile={t} />} />
         <InlinePagedControls />
       </TilegridPagedRoot>
@@ -175,9 +204,14 @@ export const Paged: Story = {
 }
 
 export const PagedWithHero: Story = {
-  render: () => (
+  args: { cellSize: 100, gap: 8 },
+  render: ({ cellSize, gap }) => (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <TilegridPagedRoot<Tile> items={tilesWithHero} cellSize={100} gap={8}>
+      <TilegridPagedRoot<Tile>
+        items={tilesWithHero}
+        cellSize={cellSize}
+        gap={gap}
+      >
         <TilegridCells<Tile> render={t => <TileVisual tile={t} />} />
         <InlinePagedControls />
       </TilegridPagedRoot>
@@ -186,8 +220,9 @@ export const PagedWithHero: Story = {
 }
 
 export const PagedEmpty: Story = {
-  render: () => (
-    <TilegridPagedRoot<Tile> items={[]} cellSize={100} gap={8}>
+  args: { cellSize: 100, gap: 8 },
+  render: ({ cellSize, gap }) => (
+    <TilegridPagedRoot<Tile> items={[]} cellSize={cellSize} gap={gap}>
       <TilegridCells<Tile> render={t => <TileVisual tile={t} />} />
     </TilegridPagedRoot>
   ),
@@ -199,9 +234,10 @@ export const PagedEmpty: Story = {
  * fit the remaining cells. Click Prev/Next to step through pages.
  */
 export const PagedManyHeroes: Story = {
-  render: () => (
+  args: { cellSize: 90, gap: 8 },
+  render: ({ cellSize, gap }) => (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <TilegridPagedRoot<Tile> items={manyHeroes} cellSize={90} gap={8}>
+      <TilegridPagedRoot<Tile> items={manyHeroes} cellSize={cellSize} gap={gap}>
         <TilegridCells<Tile> render={t => <TileVisual tile={t} />} />
         <InlinePagedControls />
       </TilegridPagedRoot>
@@ -217,9 +253,10 @@ export const PagedManyHeroes: Story = {
  * count to what the container can show.
  */
 export const PagedMixedSpans: Story = {
-  render: () => (
+  args: { cellSize: 90, gap: 8 },
+  render: ({ cellSize, gap }) => (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <TilegridPagedRoot<Tile> items={mixedSpans} cellSize={90} gap={8}>
+      <TilegridPagedRoot<Tile> items={mixedSpans} cellSize={cellSize} gap={gap}>
         <TilegridCells<Tile> render={t => <TileVisual tile={t} />} />
         <InlinePagedControls />
       </TilegridPagedRoot>
