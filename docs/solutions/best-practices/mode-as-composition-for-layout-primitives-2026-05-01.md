@@ -52,18 +52,26 @@ Each mode is a separate Root. Both publish a **base context** describing what to
 ```tsx
 // Same atoms work under both Roots; mode is a composition choice.
 <TilegridScrollRoot items={items} cellSize={120} gap={8}>
-  <TilegridCells render={(t) => <Tile item={t} />} />
+  <TilegridCells
+    renderCell={({ cellProps, item }) => (
+      <button {...cellProps}><Tile item={item} /></button>
+    )}
+  />
 </TilegridScrollRoot>
 
 <TilegridPagedRoot items={items} cellSize={100} gap={8}>
-  <TilegridCells render={(t) => <Tile item={t} />} />
+  <TilegridCells
+    renderCell={({ cellProps, item }) => (
+      <button {...cellProps}><Tile item={item} /></button>
+    )}
+  />
   <PageControls />   {/* sibling, reads paged extension via useTilegrid() */}
 </TilegridPagedRoot>
 ```
 
-### 2. Cell visuals via function-as-prop on the Cells atom, not on the Root
+### 2. Cells via function-as-prop on the Cells atom, not on the Root
 
-The atom owns the `<button>` wrapper, span styling, and aria-label. The consumer's `render(item)` returns the visual children that go inside the button. This keeps the Root's contract minimal and lets sibling atoms (page indicators, controls, overlays) compose against the same context.
+The atom owns the layout/accessibility prop contract (`cellProps`), and the consumer owns the actual element. The canonical path is `<button {...cellProps}>...</button>`, but consumers can spread the same props onto `motion.button`, a custom focusable element, or any other wrapper. This keeps the Root's contract minimal, lets sibling atoms compose against the same context, and gives animation libraries the DOM element they need without coupling Tilegrid to them.
 
 ### 3. CSS first, JS only where it has to be
 
@@ -110,7 +118,7 @@ The plan called for `TilegridPagedControls` and `TilegridPageIndicator` reusable
 - **Boolean props create combinatorial state spaces.** `mode: "paged" | "scroll"` plus a future `mode: "virtualized"` becomes three branches inside one component. Two Roots stay readable; three Roots stay readable; a Root per mode scales linearly with no internal conditional sprawl.
 - **New modes drop in behind the same context.** A future `TilegridVirtualScrollRoot` is one new file; `TilegridCells` works under it unchanged. There's no refactor to an existing component.
 - **CSS-first scroll mode is faster and smaller.** Letting the browser do dense packing eliminates a layout pass in JS, a state update, and a code path that has to be tested. The JS bin-packer remains for paged mode where it earns its keep.
-- **Animation in the consumer keeps the primitive light.** No `framer-motion` peer dependency means the primitive ships in any project, motion-preference handling stays the consumer's concern, and removing animation later is delete-don't-untangle.
+- **Animation in the consumer keeps the primitive light.** No `framer-motion` import in the primitive means Tilegrid ships in any project, motion-preference handling stays the consumer's concern, and removing animation later is delete-don't-untangle. The `renderCell`, Root `asChild`, and `getViewTransitionName` seams give consumers the hooks they need without an animation prop forest.
 - **The test-only escape hatch is honest.** `_testColumns` is more honest than mocking ResizeObserver globally and is cheaper than test-rendering inside a virtual-DOM viewport. The underscore prefix prevents the prop from accidentally becoming part of the production contract.
 - **Verifying geometric focus before adopting `dense` is a pattern, not a one-off.** Any time a future layout primitive uses CSS reordering (`flex-direction: row-reverse`, `order:`, `dense`, masonry), this same verification applies.
 
@@ -158,7 +166,11 @@ export function HomePage() {
     <TilegridScrollRoot<GameRecord> items={games} cellSize={140} gap={8}
       getKey={(g) => g.id}
       getAriaLabel={(g) => g.metadata?.name ?? g.id}>
-      <TilegridCells<GameRecord> render={(g) => <GameTileVisual game={g} />} />
+      <TilegridCells<GameRecord>
+        renderCell={({ cellProps, item }) => (
+          <button {...cellProps}><GameTileVisual game={item} /></button>
+        )}
+      />
     </TilegridScrollRoot>
   )
 }
@@ -168,7 +180,11 @@ const itemsWithHero = games.map((g, i) => i === 0 ? { ...g, span: 2 } : g)
 
 // Paged variant? Different Root, same children:
 <TilegridPagedRoot<GameRecord> items={games} cellSize={100} gap={8}>
-  <TilegridCells<GameRecord> render={(g) => <GameTileVisual game={g} />} />
+  <TilegridCells<GameRecord>
+    renderCell={({ cellProps, item }) => (
+      <button {...cellProps}><GameTileVisual game={item} /></button>
+    )}
+  />
   <PageControls />   // siblings reach paged context via useTilegrid()
 </TilegridPagedRoot>
 ```
@@ -181,6 +197,7 @@ export interface TilegridBaseContext<T extends GridItemShape> {
   readonly getKey: (item: T) => string
   readonly getSpan: (item: T) => number
   readonly getAriaLabel: (item: T) => string
+  readonly getViewTransitionName?: (item: T) => string
   readonly cellSize: number
   readonly gap: number
   readonly columns: number
@@ -211,10 +228,56 @@ This is the strongest regression guard available for porting tested pure-math mo
 
 React's `createContext` is invariant in its value type. To carry a generic item type through context, the runtime stores `TilegridBaseContext<GridItemShape>` and the `useTilegrid<T>()` hook re-asserts the generic on read with `as unknown as ...`. This is a pragmatic cast, not a type hole — it just acknowledges that the hook caller is responsible for picking `T` compatibly with how the Root was instantiated. Document the cast clearly.
 
+## Animation seams (added 2026-05-01)
+
+Decouple animation through **structural slots**, not animation props. Tilegrid should never grow `transition="fade"`, `animationDuration`, or a direct motion-library import. Instead, consumers choose the element at each structural point and bring whatever animation system they want.
+
+### Cell wrapper via `renderCell`
+
+`TilegridCells` passes a complete `cellProps` bag to the consumer. Spread it onto the actual cell element. A plain consumer uses a native button; an animated consumer can use a motion component without Tilegrid importing that library.
+
+```tsx
+<TilegridCells
+  renderCell={({ cellProps, item }) => (
+    <motion.button {...cellProps} layout>
+      <TileVisual item={item} />
+    </motion.button>
+  )}
+/>
+```
+
+### Grid container via Root `asChild`
+
+Both Roots accept `asChild` to slot the inner grid container. The outer measurement/scroll wrapper stays owned by Tilegrid; the consumer-provided child receives the grid styles.
+
+```tsx
+<TilegridScrollRoot items={items} cellSize={120} gap={8} asChild>
+  <motion.div layout>
+    <TilegridCells renderCell={renderCell} />
+  </motion.div>
+</TilegridScrollRoot>
+```
+
+### Browser View Transitions via `getViewTransitionName`
+
+Roots accept `getViewTransitionName={(item) => ...}` and cells apply the returned name to their inline style. Tilegrid does not call `document.startViewTransition`; the consumer wraps the data update because it owns when animation should happen. This is especially attractive for Electrobun/Chromium targets.
+
+```tsx
+<TilegridScrollRoot
+  items={items}
+  cellSize={120}
+  gap={8}
+  getViewTransitionName={(item) => `tile-${item.id}`}
+>
+  <TilegridCells renderCell={renderCell} />
+</TilegridScrollRoot>
+```
+
 ## Related
 
 - `~/.pi/packages/react/skills/react/SKILL.md` — the in-repo React skill that codifies compound components, Provider-driven data strategy, and the no-boolean-controls-subtree rule. The Tilegrid pattern is a textbook application.
 - `docs/solutions/best-practices/decoupled-spatial-navigation-2026-05-01.md` — geometric LRUD focus engine that makes CSS dense packing safe for spatial nav.
 - `docs/brainstorms/2026-04-30-grid-primitive-consolidation-requirements.md` — origin requirements doc.
 - `docs/plans/2026-04-30-005-refactor-tilegrid-primitive-consolidation-plan.md` — implementation plan with all six units.
+- `docs/plans/2026-04-30-007-feat-tilegrid-animation-seams-plan.md` — follow-up plan that added `renderCell`, Root `asChild`, and `getViewTransitionName` animation seams.
 - Tilegrid file family: `korri/shared/design-system/components/Tilegrid/`

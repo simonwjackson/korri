@@ -264,7 +264,7 @@ The architectural answer is **slot composition**: let the consumer control which
 
 ---
 
-- [ ] **Unit 5: Cross-link the mode-as-composition learning doc**
+- [x] **Unit 5: Cross-link the mode-as-composition learning doc**
 
 **Goal:** The existing best-practice doc `docs/solutions/best-practices/mode-as-composition-for-layout-primitives-2026-05-01.md` gains a brief "Animation seams" section that points to this plan's seams (asChild + getViewTransitionName) and re-states the principle ("decouple via structural slots, not animation props"). Future readers searching `docs/solutions/` for animation guidance land on the right pattern.
 
