@@ -116,7 +116,11 @@ pkgs.stdenv.mkDerivation {
     makeWrapper "$launcher" "$out/bin/korri-desktop" \
       --prefix LD_LIBRARY_PATH : ${runtimeLibraryPath} \
       --prefix XDG_DATA_DIRS : ${pkgs.gsettings-desktop-schemas}/share:${pkgs.gtk3}/share \
-      --prefix GIO_EXTRA_MODULES : ${pkgs.glib-networking}/lib/gio/modules
+      --prefix GIO_EXTRA_MODULES : ${pkgs.glib-networking}/lib/gio/modules \
+      --set-default GDK_BACKEND x11 \
+      --set-default GSK_RENDERER cairo \
+      --set-default WEBKIT_DISABLE_DMABUF_RENDERER 1 \
+      --set-default WEBKIT_DISABLE_COMPOSITING_MODE 1
 
     runHook postInstall
   '';
