@@ -136,10 +136,15 @@ import { startSpatialNavigation } from "@shared/navigation/start"
 startSpatialNavigation()
 ```
 
-Routes that need `back` or `menu` subscribe to the bus rather than reaching into components:
+Routes that need `back` or `menu` subscribe to semantic actions rather than reaching into components:
 
-```ts
-nav.bus.onAction("back", () => router.history.back())
+```tsx
+const router = useRouter()
+const canGoBack = useCanGoBack()
+
+useInputAction("back", () => {
+  if (canGoBack) router.history.back()
+})
 ```
 
 ## Why This Matters

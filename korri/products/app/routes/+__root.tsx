@@ -1,4 +1,10 @@
-import { createRootRoute, Outlet } from "@tanstack/react-router"
+import { useInputAction } from "@shared/navigation/use-input-action"
+import {
+  createRootRoute,
+  Outlet,
+  useCanGoBack,
+  useRouter,
+} from "@tanstack/react-router"
 import { Suspense } from "react"
 
 export const Route = createRootRoute({
@@ -6,6 +12,13 @@ export const Route = createRootRoute({
 })
 
 function RootComponent() {
+  const router = useRouter()
+  const canGoBack = useCanGoBack()
+
+  useInputAction("back", () => {
+    if (canGoBack) router.history.back()
+  })
+
   return (
     <Suspense
       fallback={

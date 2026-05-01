@@ -195,7 +195,7 @@ None required. LRUD's API and the Standard Gamepad layout are already wired. Tan
 
 ---
 
-- [ ] **Unit 3: Wire `back` (and `menu`) actions to the router**
+- [x] **Unit 3: Wire `back` (and `menu`) actions to the router**
 
 **Goal:** Pressing the `back` action navigates the router back. `menu` is wired to a no-op route placeholder so the pattern is established for future consumers.
 
