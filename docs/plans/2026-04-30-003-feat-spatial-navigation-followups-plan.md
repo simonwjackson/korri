@@ -318,7 +318,7 @@ Backward navigation:
 
 ---
 
-- [ ] **Unit 6: Working-agreement updates**
+- [x] **Unit 6: Working-agreement updates**
 
 **Goal:** Make the navigation policy and institutional learnings discoverable from `AGENTS.md` so the next contributor follows the pattern instead of re-introducing per-component coupling.
 

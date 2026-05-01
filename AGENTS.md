@@ -58,6 +58,15 @@ Rules:
 - Local UI behavior should use local React state/hooks.
 - Forms should use React Hook Form with Effect Schema validation if forms are introduced.
 
+### Spatial navigation
+
+- The app must remain navigable through device-agnostic directional input and semantic action keys.
+- Components stay native HTML (`button`, `a`, `input`, `[tabindex]`) and must not import navigation libraries or focus hooks.
+- Navigation-library and device-adapter code belongs under `korri/shared/input/*` and `korri/shared/navigation/*` only.
+- Subscribe to semantic actions (`back`, `menu`, `options`, `confirm`, `direction`) with `useInputAction` from `@shared/navigation/use-input-action`; do not reach into `window.__korriSpatialNav` from product code.
+- Use LRUD's DOM hints (`lrud-container`, `lrud-ignore`, `data-block-exit`, `data-lrud-overlap-threshold`) when needed; do not create component-level navigation APIs.
+- Follow the rationale and gotchas in `docs/solutions/best-practices/decoupled-spatial-navigation-2026-05-01.md` before changing the navigation architecture.
+
 ## Product Documentation Shape
 
 - Durable user intent lives in `docs/jobs/*.md` and must include `id`, `title`, and `status` frontmatter.
@@ -76,6 +85,12 @@ Artifact responsibilities:
 When adding or changing a feature, update the colocated `brief.md`, related BDD feature files, and run `just generate-feature-map`. Only create or update a job doc when the work reveals a new durable user job.
 
 The `tools/feature-map-explorer/` app (run with `just dev-feature-map`) is the canonical UI for inspecting and editing this map locally. It is dev-only — it is never bundled with `korri/products/*`.
+
+### Institutional learnings
+
+- Reusable implementation patterns, post-mortems, and best-practice writeups live under `docs/solutions/`.
+- Read relevant `docs/solutions/best-practices/*.md` files before introducing or revising architecture in an already-documented area.
+- Add or update a solution document only when explicitly requested or when running the compounding workflow.
 
 ## Testing
 
