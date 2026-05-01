@@ -311,7 +311,7 @@ function MenuButton() {
  */
 function HudCluster() {
   return (
-    <div className="sunlit-hud-cluster flex items-center gap-6">
+    <div className="sunlit-hud-cluster flex items-center gap-10">
       <HudButtons
         actions={["options"]}
         optionsGlyph="+"
@@ -706,7 +706,7 @@ function SunlitStyles() {
         border-radius: 9999px;
         background: var(--hud-glyph-bg);
         color: var(--hud-glyph-fg);
-        font-size: var(--text-lg);
+        font-size: var(--text-base);
         font-weight: 800;
         line-height: 1;
         transition:
