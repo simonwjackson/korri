@@ -20,6 +20,21 @@ interface ResolvedStep {
   args: unknown[]
 }
 
+export type StepExecutionEvent = {
+  scenario: ParsedScenario
+  step: ParsedStep
+  stepIndex: number
+}
+
+export type AfterStepExecutionEvent = StepExecutionEvent & {
+  error: unknown | undefined
+}
+
+export type ScenarioExecutionCallbacks = {
+  beforeStep?: (event: StepExecutionEvent) => void | Promise<void>
+  afterStep?: (event: AfterStepExecutionEvent) => void | Promise<void>
+}
+
 const parameterTypeRegistry = new ParameterTypeRegistry()
 const expressionCache = new WeakMap<StepDefinition, CompiledExpression>()
 
@@ -92,21 +107,46 @@ export async function executeStep(
   await definition.fn.apply(world, callArgs)
 }
 
-export async function executeScenario(
+export async function executeScenarioWithCallbacks(
   world: BddWorld,
   scenario: ParsedScenario,
+  callbacks: ScenarioExecutionCallbacks = {},
 ): Promise<void> {
   for (const hook of getBeforeHooks()) {
     await hook.call(world)
   }
 
   try {
-    for (const step of scenario.steps) {
-      await executeStep(world, step)
+    for (let stepIndex = 0; stepIndex < scenario.steps.length; stepIndex++) {
+      const step = scenario.steps[stepIndex]
+      await callbacks.beforeStep?.({ scenario, step, stepIndex })
+
+      let stepError: unknown
+      try {
+        await executeStep(world, step)
+      } catch (error) {
+        stepError = error
+      }
+
+      await callbacks.afterStep?.({
+        scenario,
+        step,
+        stepIndex,
+        error: stepError,
+      })
+
+      if (stepError) throw stepError
     }
   } finally {
     for (const hook of getAfterHooks()) {
       await hook.call(world)
     }
   }
+}
+
+export async function executeScenario(
+  world: BddWorld,
+  scenario: ParsedScenario,
+): Promise<void> {
+  await executeScenarioWithCallbacks(world, scenario)
 }
