@@ -29,7 +29,7 @@ export interface TilegridScrollRootProps<T extends GridItemShape> {
    */
   asChild?: boolean
   /**
-   * Children are typically a `<TilegridCells render={...} />` plus any
+   * Children are typically a `<TilegridCells renderCell={...} />` plus any
    * sibling overlays the consumer wants composed alongside the cells.
    */
   children: ReactNode

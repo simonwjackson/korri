@@ -21,16 +21,21 @@ function HomePage() {
         getKey={g => g.id}
         getAriaLabel={g => g.metadata?.name ?? g.id}
       >
-        <TilegridCells<GameRecord> render={g => <GameTileVisual game={g} />} />
+        <TilegridCells<GameRecord>
+          renderCell={({ cellProps, item }) => (
+            <button {...cellProps}>
+              <GameTileVisual game={item} />
+            </button>
+          )}
+        />
       </TilegridScrollRoot>
     </div>
   )
 }
 
 /**
- * The visual children of one game cell. The Tilegrid primitive owns the
- * <button> wrapper, span styling, and aria-label. This component renders
- * what goes inside the button.
+ * The visual children of one game cell. TilegridCells provides the cell
+ * wrapper props; this component renders what goes inside the button.
  */
 function GameTileVisual({ game }: { game: GameRecord }) {
   const image = getGameImageUrl(game)

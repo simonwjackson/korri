@@ -138,7 +138,7 @@ The architectural answer is **slot composition**: let the consumer control which
 
 ---
 
-- [ ] **Unit 2: Replace `render` with `renderCell` on `TilegridCells` and migrate all consumers**
+- [x] **Unit 2: Replace `render` with `renderCell` on `TilegridCells` and migrate all consumers**
 
 **Goal:** `TilegridCells`'s `render(item) => ReactNode` prop is renamed and reshaped to `renderCell({ cellProps, item }) => ReactNode`. The primitive provides a complete `cellProps` bag; consumers always render the cell element themselves and spread `cellProps` onto it. The home route and all 10 existing stories migrate in the same unit so no intermediate broken state exists. Visual DOM output of every cell, when the consumer uses the canonical `<button {...cellProps}>` pattern, is byte-identical to the current implementation.
 

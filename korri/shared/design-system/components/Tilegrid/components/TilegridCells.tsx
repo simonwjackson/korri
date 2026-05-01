@@ -1,13 +1,32 @@
-import type { ReactNode } from "react"
+import {
+  type CSSProperties,
+  Fragment,
+  type MouseEventHandler,
+  type ReactNode,
+} from "react"
 import { clampSpan, type GridItemShape, useTilegrid } from "../Tilegrid.context"
+
+export interface TilegridCellProps {
+  "aria-label": string
+  "data-tile-id": string
+  type: "button"
+  className?: string
+  onClick?: MouseEventHandler<HTMLElement>
+  style: CSSProperties
+}
+
+export interface TilegridRenderCellArgs<T extends GridItemShape> {
+  item: T
+  cellProps: TilegridCellProps
+}
 
 export interface TilegridCellsProps<T extends GridItemShape> {
   /**
-   * Function the consumer supplies to produce each cell's visual children.
-   * The atom owns the <button> wrapper, span styling, and aria-label; the
-   * consumer's render output goes inside the button.
+   * Function the consumer supplies to render the full cell element. Spread
+   * `cellProps` onto a focusable element (typically `<button>`) so spatial
+   * navigation, accessibility, click handling, and span styling keep working.
    */
-  render: (item: T) => ReactNode
+  renderCell: (args: TilegridRenderCellArgs<T>) => ReactNode
   /**
    * Optional click handler. Receives the item, not the DOM event, because
    * spatial-nav engines drive .click() programmatically and consumers care
@@ -15,7 +34,7 @@ export interface TilegridCellsProps<T extends GridItemShape> {
    */
   onItemClick?: (item: T) => void
   /**
-   * Optional className applied to every button. Keep visual concerns in the
+   * Optional className applied to every cell. Keep visual concerns in the
    * consumer's render output; this is for layout-affecting classes only.
    */
   buttonClassName?: string
@@ -23,15 +42,15 @@ export interface TilegridCellsProps<T extends GridItemShape> {
 
 /**
  * The single cell atom for both Tilegrid Roots. Reads items, span resolver,
- * and span limits from context, and renders one native <button aria-label>
- * per item with span styles applied for CSS Grid's `grid-auto-flow: dense`
- * (scroll mode) or fixed-track grid (paged mode) to consume.
+ * and span limits from context, then asks the consumer to render one cell
+ * element per item using the provided cellProps.
  *
- * Spatial navigation reads these buttons from the live DOM via LRUD; no
- * focus hooks, refs, or providers are needed here.
+ * Spatial navigation reads the rendered cells from the live DOM via LRUD; no
+ * focus hooks, refs, or providers are needed here. Consumers should spread
+ * cellProps onto a focusable element (typically a native button).
  */
 export function TilegridCells<T extends GridItemShape>({
-  render,
+  renderCell,
   onItemClick,
   buttonClassName,
 }: TilegridCellsProps<T>) {
@@ -41,26 +60,25 @@ export function TilegridCells<T extends GridItemShape>({
   return (
     <>
       {items.map(item => {
+        const key = getKey(item)
         const span = clampSpan(getSpan(item), maxSpan)
-        return (
-          <button
-            key={getKey(item)}
-            type="button"
-            aria-label={getAriaLabel(item)}
-            className={buttonClassName}
-            onClick={onItemClick ? () => onItemClick(item) : undefined}
-            style={{
-              gridColumn: `span ${span}`,
-              gridRow: `span ${span}`,
-              padding: 0,
-              border: "none",
-              background: "transparent",
-              cursor: onItemClick ? "pointer" : undefined,
-            }}
-          >
-            {render(item)}
-          </button>
-        )
+        const cellProps: TilegridCellProps = {
+          type: "button",
+          "aria-label": getAriaLabel(item),
+          "data-tile-id": key,
+          className: buttonClassName,
+          onClick: onItemClick ? () => onItemClick(item) : undefined,
+          style: {
+            gridColumn: `span ${span}`,
+            gridRow: `span ${span}`,
+            padding: 0,
+            border: "none",
+            background: "transparent",
+            cursor: onItemClick ? "pointer" : undefined,
+          },
+        }
+
+        return <Fragment key={key}>{renderCell({ item, cellProps })}</Fragment>
       })}
     </>
   )

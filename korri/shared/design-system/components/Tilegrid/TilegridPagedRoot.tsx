@@ -37,7 +37,7 @@ export interface TilegridPagedRootProps<T extends GridItemShape> {
    */
   asChild?: boolean
   /**
-   * Children typically include a `<TilegridCells render={...} />` plus any
+   * Children typically include a `<TilegridCells renderCell={...} />` plus any
    * sibling page indicators or controls the consumer authors against the
    * paged context (currentPage, totalPages, next, prev, goToPage).
    */
