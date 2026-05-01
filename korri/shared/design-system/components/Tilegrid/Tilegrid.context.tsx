@@ -53,8 +53,22 @@ export interface TilegridBaseContext<T extends GridItemShape> {
    * number or any CSS `<length>` string; this context field is always the
    * runtime-resolved pixel value (or `0` while a string input is still
    * being measured).
+   *
+   * When `cellSizeRect` is published (rail rectangular mode), prefer reading
+   * from it; `cellSize` is its `width` for backward read-compat.
    */
   readonly cellSize: number
+  /**
+   * Optional rectangular cell size as resolved CSS pixels.
+   *
+   * Published only by Roots that lay out non-square cells (today: rail mode
+   * with `cellSize: { width, height }`). Square Roots (scroll, paged, and
+   * the square-cellSize rail path) leave this undefined; consumers should
+   * fall back to `cellSize` when this field is absent. When present,
+   * `cellSizeRect.width === cellSize` (the `cellSize` field stays populated
+   * for backward read-compat).
+   */
+  readonly cellSizeRect?: { width: number; height: number }
   /**
    * Gap between cells as resolved CSS pixels. Same resolution semantics as
    * `cellSize`.
@@ -68,6 +82,19 @@ export interface TilegridBaseContext<T extends GridItemShape> {
    * derived `{ columns, rows }`.
    */
   readonly maxSpan: { columns: number; rows: number }
+  /**
+   * Optional span-axis hint for cell rendering.
+   *
+   * Defaults to `"both"` when undefined: an item with span N occupies N
+   * columns AND N rows (square scroll/paged behavior).
+   *
+   * `"column-only"` is published by rail Roots: the row axis is clamped to
+   * 1 by `TilegridCells` regardless of the resolved column span. This lets
+   * a rail tile span multiple columns while staying in the rail's single
+   * row, without changing the scalar `clampSpan` contract (rail mode pairs
+   * this flag with `maxSpan.rows: Infinity`).
+   */
+  readonly spanAxis?: "both" | "column-only"
 }
 
 /** Paged Root extension. Scroll Root does not publish these fields. */
