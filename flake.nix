@@ -43,12 +43,12 @@
         ];
 
         linuxDesktopRuntimeLibraries = pkgs.lib.optionals pkgs.stdenv.isLinux (
-          with pkgs;
-          [
+          (with pkgs; [
             gtk3
             webkitgtk_4_1
             libayatana-appindicator
             librsvg
+            libsoup_3
             glib
             glibc
             gdk-pixbuf
@@ -57,7 +57,8 @@
             cairo
             gsettings-desktop-schemas
             glib-networking
-          ]
+          ])
+          ++ [ pkgs.stdenv.cc.cc.lib ]
         );
 
         linuxDesktopPackages = pkgs.lib.optionals pkgs.stdenv.isLinux (

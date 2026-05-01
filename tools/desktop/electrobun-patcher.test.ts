@@ -210,7 +210,7 @@ describe("electrobun patcher", () => {
     }
     expect(plan.args).toEqual([
       "--set-rpath",
-      "/lib",
+      "$ORIGIN:/lib",
       "/repo/out/build/electrobun/libNativeWrapper.so",
     ])
   })

@@ -201,9 +201,13 @@ export function planPatch(input: PatchInput): PatchPlan {
     : "binary has not been patched"
   const markerPath = `${input.filePath}.patched`
   const elfKind = input.elfKind ?? "executable"
+  const rpath =
+    elfKind === "shared-object"
+      ? `$ORIGIN:${input.libraryPath}`
+      : input.libraryPath
   const args =
     elfKind === "shared-object"
-      ? ["--set-rpath", input.libraryPath, input.filePath]
+      ? ["--set-rpath", rpath, input.filePath]
       : ["--set-interpreter", input.interpreter, input.filePath]
 
   return {

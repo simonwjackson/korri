@@ -77,7 +77,7 @@ pkgs.stdenv.mkDerivation {
               "$file"
           elif echo "$file_type" | grep -q 'shared object'; then
             ${pkgs.patchelf}/bin/patchelf \
-              --set-rpath ${runtimeLibraryPath} \
+              --set-rpath "\$ORIGIN:${runtimeLibraryPath}" \
               "$file"
           fi
         fi
