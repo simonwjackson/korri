@@ -1,6 +1,12 @@
 import { useContainerSize } from "@shared/design-system/lib/useContainerSize"
+import { useResolvedCSSLength } from "@shared/design-system/lib/useResolvedCSSLength"
 import { Slot } from "radix-ui"
-import { type ReactNode, useMemo } from "react"
+import {
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+  useMemo,
+} from "react"
 import {
   type GridItemShape,
   type TilegridBaseContext,
@@ -10,10 +16,17 @@ import {
 export interface TilegridScrollRootProps<T extends GridItemShape> {
   /** The full list of items to render. */
   items: ReadonlyArray<T>
-  /** Cell base size in CSS pixels. Every cell occupies an integer multiple of this. */
-  cellSize: number
-  /** Gap between cells in CSS pixels. Default: 8. */
-  gap?: number
+  /**
+   * Cell base size in CSS pixels (number) or any CSS `<length>` string
+   * (`"6rem"`, `"var(--tile-size)"`, `"calc(...)"`, etc.). Every cell
+   * occupies an integer multiple of this base size.
+   */
+  cellSize: number | string
+  /**
+   * Gap between cells in CSS pixels (number) or any CSS `<length>` string.
+   * Default: `8`.
+   */
+  gap?: number | string
   /** Stable React key extractor. Default: `item.id`. */
   getKey?: (item: T) => string
   /** Span resolver. Default: `item.span ?? 1`. */
@@ -40,6 +53,16 @@ export interface TilegridScrollRootProps<T extends GridItemShape> {
   children: ReactNode
 }
 
+/** Sentinel style: invisible, zero-height, no pointer interaction. */
+const SENTINEL_STYLE: CSSProperties = {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  height: 0,
+  visibility: "hidden",
+  pointerEvents: "none",
+}
+
 /**
  * Tilegrid Root for continuous scroll layout.
  *
@@ -47,6 +70,12 @@ export interface TilegridScrollRootProps<T extends GridItemShape> {
  * publishes a base context. Layout is delegated entirely to CSS:
  * `grid-auto-flow: dense` packs span-marked items first-fit around their
  * neighbors; rows extend as needed by item count.
+ *
+ * `cellSize` and `gap` accept numbers (CSS pixels) or any CSS `<length>`
+ * string. String inputs are resolved to pixels live via a hidden sentinel +
+ * ResizeObserver, so theme switches, accessibility zoom, and viewport-driven
+ * units stay correct without remounting. Numeric inputs are zero-cost — no
+ * sentinel, no observer.
  *
  * The Root owns no pagination state — for that, use TilegridPagedRoot.
  */
@@ -63,12 +92,18 @@ export function TilegridScrollRoot<T extends GridItemShape>({
   children,
 }: TilegridScrollRootProps<T>) {
   const { ref, width } = useContainerSize<HTMLDivElement>()
+  const cellSizeMeasure = useResolvedCSSLength(cellSize)
+  const gapMeasure = useResolvedCSSLength(gap)
+
+  const cellSizePx = cellSizeMeasure.resolvedPx
+  const gapPx = gapMeasure.resolvedPx
 
   const columns = useMemo(() => {
-    if (!width || cellSize <= 0) return 1
-    const raw = Math.floor((width + gap) / (cellSize + gap))
+    if (!width || cellSizePx === null || gapPx === null) return 1
+    if (cellSizePx <= 0) return 1
+    const raw = Math.floor((width + gapPx) / (cellSizePx + gapPx))
     return Math.max(1, raw)
-  }, [width, cellSize, gap])
+  }, [width, cellSizePx, gapPx])
 
   const base = useMemo<TilegridBaseContext<T>>(
     () => ({
@@ -77,8 +112,8 @@ export function TilegridScrollRoot<T extends GridItemShape>({
       getSpan: getSpan ?? ((item: T) => item.span ?? 1),
       getAriaLabel: getAriaLabel ?? ((item: T) => item.id),
       getViewTransitionName,
-      cellSize,
-      gap,
+      cellSize: cellSizePx ?? 0,
+      gap: gapPx ?? 0,
       columns,
       maxSpan: { columns, rows: Infinity },
     }),
@@ -88,8 +123,8 @@ export function TilegridScrollRoot<T extends GridItemShape>({
       getSpan,
       getAriaLabel,
       getViewTransitionName,
-      cellSize,
-      gap,
+      cellSizePx,
+      gapPx,
       columns,
     ],
   )
@@ -106,6 +141,9 @@ export function TilegridScrollRoot<T extends GridItemShape>({
 
   const GridComp = asChild ? Slot.Root : "div"
 
+  const cellSizeIsString = typeof cellSize === "string"
+  const gapIsString = typeof gap === "string"
+
   return (
     <div
       ref={ref}
@@ -114,16 +152,35 @@ export function TilegridScrollRoot<T extends GridItemShape>({
         height: "100%",
         overflowY: "auto",
         overflowX: "hidden",
+        // Establishes a containing block so percent-sized sentinels resolve
+        // against the scroll container rather than the viewport.
+        position: "relative",
       }}
     >
+      {cellSizeIsString && (
+        <span
+          ref={cellSizeMeasure.ref as RefObject<HTMLSpanElement>}
+          aria-hidden="true"
+          data-tilegrid-sentinel="cell-size"
+          style={{ ...SENTINEL_STYLE, width: cellSizeMeasure.cssValue }}
+        />
+      )}
+      {gapIsString && (
+        <span
+          ref={gapMeasure.ref as RefObject<HTMLSpanElement>}
+          aria-hidden="true"
+          data-tilegrid-sentinel="gap"
+          style={{ ...SENTINEL_STYLE, width: gapMeasure.cssValue }}
+        />
+      )}
       <TilegridProvider value={value}>
         <GridComp
           className={className}
           style={{
             display: "grid",
-            gridTemplateColumns: `repeat(${columns}, ${cellSize}px)`,
-            gridAutoRows: `${cellSize}px`,
-            gap: `${gap}px`,
+            gridTemplateColumns: `repeat(${columns}, ${cellSizeMeasure.cssValue})`,
+            gridAutoRows: cellSizeMeasure.cssValue,
+            gap: gapMeasure.cssValue,
             gridAutoFlow: "row dense",
             justifyContent: "start",
             alignContent: "start",

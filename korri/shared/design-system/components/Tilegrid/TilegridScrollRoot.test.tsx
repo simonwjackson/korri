@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
-import { render } from "@testing-library/react"
-import type { GridItemShape } from "./Tilegrid.context"
+import { render, renderHook } from "@testing-library/react"
+import { type GridItemShape, useTilegrid } from "./Tilegrid.context"
 import { TilegridScrollRoot } from "./TilegridScrollRoot"
 
 interface Tile extends GridItemShape {
@@ -63,6 +63,99 @@ describe("TilegridScrollRoot", () => {
     const outer = container.firstElementChild as HTMLElement | null
     expect(outer?.tagName).toBe("DIV")
     expect(outer?.style.overflowY).toBe("auto")
-    expect(outer?.firstElementChild?.tagName).toBe("SECTION")
+    // The slotted grid is the last child after any (unused) sentinels.
+    expect(outer?.lastElementChild?.tagName).toBe("SECTION")
+  })
+
+  it("renders no measurement sentinels when cellSize and gap are numbers", () => {
+    const { container } = render(
+      <TilegridScrollRoot<Tile> items={items} cellSize={100} gap={8}>
+        <span>child</span>
+      </TilegridScrollRoot>,
+    )
+    expect(container.querySelectorAll("[data-tilegrid-sentinel]").length).toBe(
+      0,
+    )
+  })
+
+  it("renders a cellSize sentinel with the verbatim CSS expression when cellSize is a string", () => {
+    const { container } = render(
+      <TilegridScrollRoot<Tile> items={items} cellSize="6rem" gap={8}>
+        <span>child</span>
+      </TilegridScrollRoot>,
+    )
+    const sentinel = container.querySelector<HTMLElement>(
+      '[data-tilegrid-sentinel="cell-size"]',
+    )
+    expect(sentinel).not.toBeNull()
+    expect(sentinel?.style.width).toBe("6rem")
+    expect(sentinel?.style.position).toBe("absolute")
+    expect(sentinel?.style.visibility).toBe("hidden")
+    expect(sentinel?.getAttribute("aria-hidden")).toBe("true")
+  })
+
+  it("uses the verbatim string in gridTemplateColumns and gridAutoRows when cellSize is a string", () => {
+    const { container } = render(
+      <TilegridScrollRoot<Tile> items={items} cellSize="6rem" gap={8}>
+        <span>child</span>
+      </TilegridScrollRoot>,
+    )
+    const grid = container.querySelector<HTMLElement>(
+      "div[style*='display: grid']",
+    )
+    expect(grid?.style.gridTemplateColumns).toBe("repeat(1, 6rem)")
+    expect(grid?.style.gridAutoRows).toBe("6rem")
+    expect(grid?.style.gap).toBe("8px")
+  })
+
+  it("renders a gap sentinel with the verbatim CSS expression when gap is a string", () => {
+    const { container } = render(
+      <TilegridScrollRoot<Tile> items={items} cellSize={100} gap="0.5rem">
+        <span>child</span>
+      </TilegridScrollRoot>,
+    )
+    const sentinel = container.querySelector<HTMLElement>(
+      '[data-tilegrid-sentinel="gap"]',
+    )
+    expect(sentinel).not.toBeNull()
+    expect(sentinel?.style.width).toBe("0.5rem")
+  })
+
+  it("falls back to columns: 1 and clamps spans to 1 while a string cellSize is unresolved", () => {
+    // happy-dom does not drive ResizeObserver, so the sentinel never reports
+    // a measurement and resolvedPx stays null. The Root must publish
+    // columns: 1 so spans clamp to 1 rather than rendering at column 0.
+    const item: Tile = { id: "hero", span: 3 }
+    const { result } = renderHook(() => useTilegrid<Tile>(), {
+      wrapper: ({ children }) => (
+        <TilegridScrollRoot<Tile> items={[item]} cellSize="6rem" gap={8}>
+          {children}
+        </TilegridScrollRoot>
+      ),
+    })
+    expect(result.current.base.columns).toBe(1)
+    expect(result.current.base.maxSpan.columns).toBe(1)
+  })
+
+  it("publishes resolved cellSize and gap as 0 in context while strings are unresolved", () => {
+    const { result } = renderHook(() => useTilegrid<Tile>(), {
+      wrapper: ({ children }) => (
+        <TilegridScrollRoot<Tile> items={items} cellSize="6rem" gap="0.5rem">
+          {children}
+        </TilegridScrollRoot>
+      ),
+    })
+    expect(result.current.base.cellSize).toBe(0)
+    expect(result.current.base.gap).toBe(0)
+  })
+
+  it("sets position: relative on the outer wrapper so percent-sized sentinels resolve against the scroll container", () => {
+    const { container } = render(
+      <TilegridScrollRoot<Tile> items={items} cellSize={100} gap={8}>
+        <span>child</span>
+      </TilegridScrollRoot>,
+    )
+    const outer = container.firstElementChild as HTMLElement
+    expect(outer.style.position).toBe("relative")
   })
 })
