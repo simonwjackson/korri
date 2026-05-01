@@ -1,7 +1,7 @@
 ---
 title: "feat: Tilegrid rail mode supports rectangular cells and per-item column spans"
 type: feat
-status: active
+status: shipped
 date: 2026-04-30
 origin: docs/brainstorms/2026-04-30-shift-home-screen-visual-language-requirements.md
 ---
@@ -131,7 +131,7 @@ The square-rail row gets `spanAxis: "column-only"` even in backward-compat mode 
 
 ## Implementation Units
 
-- [ ] **Unit 1: Extend `Tilegrid.context.tsx` to express rectangular cells and column-only span axis**
+- [x] **Unit 1: Extend `Tilegrid.context.tsx` to express rectangular cells and column-only span axis**
 
 **Goal:** Add the two new optional fields (`cellSizeRect`, `spanAxis`) to `TilegridBaseContext<T>` so Roots can publish heterogeneous-cell and column-only-span information without breaking existing consumers.
 
@@ -165,7 +165,7 @@ The square-rail row gets `spanAxis: "column-only"` even in backward-compat mode 
 
 ---
 
-- [ ] **Unit 2: Update `TilegridCells` to honor `spanAxis === "column-only"`**
+- [x] **Unit 2: Update `TilegridCells` to honor `spanAxis === "column-only"`**
 
 **Goal:** When the published context's `spanAxis` is `"column-only"`, emit `gridRow: span 1` instead of `gridRow: span ${span}` so a multi-column rail tile occupies exactly one row regardless of its column span.
 
@@ -197,7 +197,7 @@ The square-rail row gets `spanAxis: "column-only"` even in backward-compat mode 
 
 ---
 
-- [ ] **Unit 3: Extend `TilegridRailRoot` to accept rectangular `cellSize` and per-item column spans**
+- [x] **Unit 3: Extend `TilegridRailRoot` to accept rectangular `cellSize` and per-item column spans**
 
 **Goal:** Make `TilegridRailRoot` accept `cellSize: number | string | { width: ..., height: ... }`, use the consumer-supplied `getSpan` (defaulting to `item.span ?? 1`), publish `cellSizeRect` and `spanAxis: "column-only"` in the base context, and apply `gridAutoColumns: width` / `gridTemplateRows: height` when rectangular.
 
@@ -251,7 +251,7 @@ These three assertions in the existing test file should be revised to reflect th
 
 ---
 
-- [ ] **Unit 4: Add a Storybook story for "Rail / Heterogeneous (Switch-style)"**
+- [x] **Unit 4: Add a Storybook story for "Rail / Heterogeneous (Switch-style)"**
 
 **Goal:** Add a controllable Storybook story to `Tilegrid.stories.tsx` that demonstrates the heterogeneous rail visually — one wide landscape "feature" tile next to several portrait covers, all in one horizontally scrolling row at the same height.
 
