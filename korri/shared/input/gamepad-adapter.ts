@@ -93,7 +93,7 @@ export function createGamepadAdapter(
       }
 
       const fireDirection = (direction: Direction) =>
-        emit({ type: "direction", direction })
+        emit({ type: "direction", direction, source: "gamepad" })
 
       const poll = () => {
         const now = performance.now()
@@ -134,10 +134,10 @@ export function createGamepadAdapter(
             now,
             "confirm",
             STANDARD_BUTTONS.confirm,
-            () => emit({ type: "confirm" }),
+            () => emit({ type: "confirm", source: "gamepad" }),
           )
           tickButton(i, pad, holds, now, "back", STANDARD_BUTTONS.back, () =>
-            emit({ type: "back" }),
+            emit({ type: "back", source: "gamepad" }),
           )
           tickButton(
             i,
@@ -146,10 +146,10 @@ export function createGamepadAdapter(
             now,
             "options",
             STANDARD_BUTTONS.options,
-            () => emit({ type: "options" }),
+            () => emit({ type: "options", source: "gamepad" }),
           )
           tickButton(i, pad, holds, now, "menu", STANDARD_BUTTONS.menu, () =>
-            emit({ type: "menu" }),
+            emit({ type: "menu", source: "gamepad" }),
           )
         }
 

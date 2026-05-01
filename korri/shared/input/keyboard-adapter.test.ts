@@ -28,7 +28,9 @@ describe("createKeyboardAdapter", () => {
     })
     target.dispatchEvent(event)
 
-    expect(emitted).toEqual([{ type: "direction", direction: "up" }])
+    expect(emitted).toEqual([
+      { type: "direction", direction: "up", source: "keyboard" },
+    ])
     expect(event.defaultPrevented).toBe(true)
 
     stop()
@@ -44,7 +46,10 @@ describe("createKeyboardAdapter", () => {
     target.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }))
     target.dispatchEvent(new KeyboardEvent("keydown", { key: " " }))
 
-    expect(emitted).toEqual([{ type: "confirm" }, { type: "confirm" }])
+    expect(emitted).toEqual([
+      { type: "confirm", source: "keyboard" },
+      { type: "confirm", source: "keyboard" },
+    ])
 
     stop()
   })
@@ -59,7 +64,10 @@ describe("createKeyboardAdapter", () => {
     target.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))
     target.dispatchEvent(new KeyboardEvent("keydown", { key: "Backspace" }))
 
-    expect(emitted).toEqual([{ type: "back" }, { type: "back" }])
+    expect(emitted).toEqual([
+      { type: "back", source: "keyboard" },
+      { type: "back", source: "keyboard" },
+    ])
 
     stop()
   })
@@ -118,8 +126,8 @@ describe("createKeyboardAdapter", () => {
     target.dispatchEvent(new KeyboardEvent("keydown", { key: "KeyO" }))
 
     expect(emitted).toEqual([
-      { type: "direction", direction: "up" },
-      { type: "options" },
+      { type: "direction", direction: "up", source: "keyboard" },
+      { type: "options", source: "keyboard" },
     ])
 
     stop()

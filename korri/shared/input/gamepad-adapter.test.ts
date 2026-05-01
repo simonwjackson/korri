@@ -119,7 +119,10 @@ describe("createGamepadAdapter", () => {
     pad.buttons[0].pressed = true
     flushFrame(80)
 
-    expect(emitted).toEqual([{ type: "confirm" }, { type: "confirm" }])
+    expect(emitted).toEqual([
+      { type: "confirm", source: "gamepad" },
+      { type: "confirm", source: "gamepad" },
+    ])
 
     stop()
   })
@@ -142,9 +145,9 @@ describe("createGamepadAdapter", () => {
     flushFrame(150)
 
     expect(emitted).toEqual([
-      { type: "direction", direction: "up" },
-      { type: "direction", direction: "up" },
-      { type: "direction", direction: "up" },
+      { type: "direction", direction: "up", source: "gamepad" },
+      { type: "direction", direction: "up", source: "gamepad" },
+      { type: "direction", direction: "up", source: "gamepad" },
     ])
 
     pad.buttons[12].pressed = false
@@ -170,7 +173,9 @@ describe("createGamepadAdapter", () => {
     pad.axes[1] = 0.4
     flushFrame(0)
 
-    expect(emitted).toEqual([{ type: "direction", direction: "right" }])
+    expect(emitted).toEqual([
+      { type: "direction", direction: "right", source: "gamepad" },
+    ])
 
     stop()
   })
@@ -189,7 +194,9 @@ describe("createGamepadAdapter", () => {
     pad.axes[0] = 0.6
     flushFrame(20)
 
-    expect(emitted).toEqual([{ type: "direction", direction: "right" }])
+    expect(emitted).toEqual([
+      { type: "direction", direction: "right", source: "gamepad" },
+    ])
 
     stop()
   })
