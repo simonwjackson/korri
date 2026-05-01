@@ -201,7 +201,7 @@ function HomeSunlit() {
 
 function TopBar() {
   return (
-    <div className="sunlit-top-bar flex shrink-0 items-center justify-between gap-6 px-12 pb-4 pt-6">
+    <div className="sunlit-top-bar flex shrink-0 items-center justify-between gap-6 px-12 py-5">
       <SearchPill />
       <StatusCluster />
     </div>
@@ -234,12 +234,15 @@ function StatusCluster() {
       className="sunlit-status-cluster flex shrink-0 items-center gap-6 text-lg text-[color:var(--ink-dim)]"
     >
       <Sun className="sunlit-status-icon" strokeWidth={2} />
-      <span className="text-xl font-bold tabular-nums text-[color:var(--ink)]">
-        16:24
-      </span>
+      <span className="text-xl font-bold tabular-nums">16:24</span>
       <Wifi className="sunlit-status-icon" strokeWidth={2} />
       <Battery className="sunlit-status-icon" strokeWidth={2} />
-      <span className="sunlit-avatar" />
+      <img
+        src="https://i.pravatar.cc/96?u=korri-sunlit-user"
+        alt=""
+        className="sunlit-avatar"
+        loading="lazy"
+      />
     </div>
   )
 }
@@ -250,7 +253,7 @@ function StatusCluster() {
 
 function BottomBar() {
   return (
-    <div className="sunlit-bottom-bar flex shrink-0 items-center justify-between gap-6 px-12 pb-5 pt-3">
+    <div className="sunlit-bottom-bar flex shrink-0 items-center justify-between gap-6 px-12 py-5">
       <MenuButton />
       <HudCluster />
     </div>
@@ -419,17 +422,7 @@ function SunlitStyles() {
         --hud-glyph-active-bg: var(--focus-glow);
         --hud-glyph-active-fg: #FFFFFF;
 
-        /* Avatar reads as a real avatar via a soft radial gradient —
-           neutral colors, no branded mark, but enough internal structure
-           to read as more than an empty fill. */
-        --avatar-bg: radial-gradient(
-          circle at 35% 35%,
-          #F2EDE2 0%,
-          #C7BFAF 55%,
-          #9C9486 100%
-        );
-
-        --tile-radius: 14px;
+        --tile-radius: 4px;
 
         /* --- Type voice. Sunlit overrides the design-system default
                (Geist, sharp/technical) with Nunito, a rounded friendly
@@ -468,12 +461,6 @@ function SunlitStyles() {
         --hud-glyph-active-bg: var(--focus-glow);
         --hud-glyph-active-fg: #0F1422;
 
-        --avatar-bg: radial-gradient(
-          circle at 35% 35%,
-          #8BA3CC 0%,
-          #4A5575 55%,
-          #2A3148 100%
-        );
       }
 
       /* --- Container declaration so child cqi/cqh units resolve against
@@ -650,7 +637,7 @@ function SunlitStyles() {
         width: 2.2em;
         height: 2.2em;
         border-radius: 9999px;
-        background: var(--avatar-bg);
+        object-fit: cover;
         box-shadow: 0 0 0 2px var(--surface);
       }
 
