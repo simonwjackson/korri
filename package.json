@@ -14,9 +14,13 @@
 		"generate:bdd": "just generate-bdd",
 		"generate:gates": "just generate-gates",
 		"generate:feature-map": "just generate-feature-map",
+		"check:bdd": "just check-bdd",
 		"dev:feature-map": "just dev-feature-map",
 		"test:e2e": "just test-e2e",
-		"test:component": "just test-component"
+		"test:component": "just test-component",
+		"demo-video": "just demo-video",
+		"demo-video:dry-run": "just demo-video-dry-run",
+		"demo-video:check": "just demo-video-check"
 	},
 	"dependencies": {
 		"@effect/platform": "^0.95.0",

@@ -5,6 +5,8 @@ import {
 } from "../artifacts/paths"
 import { PROJECT_ROOT, portalPort } from "./e2e-env"
 
+const chromiumExecutablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+
 export default defineConfig({
   testDir: "../..",
   testMatch: "**/*.component.spec.ts",
@@ -25,6 +27,9 @@ export default defineConfig({
     baseURL: `http://localhost:${portalPort}`,
     ignoreHTTPSErrors: true,
     trace: "on-first-retry",
+    ...(chromiumExecutablePath
+      ? { launchOptions: { executablePath: chromiumExecutablePath } }
+      : {}),
   },
   projects: [
     {

@@ -51,6 +51,18 @@ generate-bdd *args:
 check-bdd:
   bun run tools/scripts/generate-bdd-playwright-tests.ts --check
 
+# Record an Argo demo video against the local stack (full render, opt-in).
+demo-video demo="":
+  bun run tools/demo-video/smoke.ts {{demo}}
+
+# Plan an Argo demo video without recording (no ffmpeg required).
+demo-video-dry-run demo="":
+  bun run tools/demo-video/smoke.ts --dry-run {{demo}}
+
+# Verify ffmpeg/ffprobe and demo-video tooling are ready.
+demo-video-check:
+  bun run tools/demo-video/smoke.ts --check-only
+
 # Run browser E2E tests.
 test-e2e *args: generate-bdd
   playwright test --config tools/playwright/playwright.e2e.config.ts {{args}}
@@ -76,7 +88,7 @@ format:
   biome format --write tools korri
 
 # Run the standard validation suite.
-check: validate-router lint typecheck test-unit
+check: validate-router lint typecheck test-unit check-bdd
 
 # Run validation plus a production build.
 check-full: check build
