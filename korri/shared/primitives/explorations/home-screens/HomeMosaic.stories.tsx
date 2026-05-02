@@ -30,14 +30,14 @@
  * (HomeHero.stories.tsx).
  */
 
-import { TilegridCells } from "@shared/design-system/components/Tilegrid/components/TilegridCells"
-import { TilegridScrollRoot } from "@shared/design-system/components/Tilegrid/TilegridScrollRoot"
 import {
   type GameRecord,
   getGameDisplayName,
   getGameImageUrl,
 } from "@shared/fixtures/games/game"
 import { games } from "@shared/fixtures/games/games"
+import { TilegridCells } from "@shared/primitives/components/Tilegrid/components/TilegridCells"
+import { TilegridScrollRoot } from "@shared/primitives/components/Tilegrid/TilegridScrollRoot"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { useEffect, useRef, useState } from "react"
 import { HudButtons } from "./HudButtons"

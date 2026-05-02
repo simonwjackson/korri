@@ -30,14 +30,14 @@
  * (HomeMosaic.stories.tsx).
  */
 
-import { TilegridCells } from "@shared/design-system/components/Tilegrid/components/TilegridCells"
-import { TilegridRailRoot } from "@shared/design-system/components/Tilegrid/TilegridRailRoot"
 import {
   type GameRecord,
   getGameDisplayName,
   getGameImageUrl,
 } from "@shared/fixtures/games/game"
 import { games } from "@shared/fixtures/games/games"
+import { TilegridCells } from "@shared/primitives/components/Tilegrid/components/TilegridCells"
+import { TilegridRailRoot } from "@shared/primitives/components/Tilegrid/TilegridRailRoot"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { type ReactNode, useEffect, useRef, useState } from "react"
 import { HudButtons } from "./HudButtons"

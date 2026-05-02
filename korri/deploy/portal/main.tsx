@@ -2,7 +2,7 @@ import { startSpatialNavigation } from "@shared/navigation/start"
 import { createRouter, RouterProvider } from "@tanstack/react-router"
 import ReactDOM from "react-dom/client"
 import { routeTree } from "./routeTree.gen"
-import "@shared/design-system/theme/styles.css"
+import "@shared/primitives/theme/styles.css"
 import "@fontsource-variable/geist"
 
 const router = createRouter({

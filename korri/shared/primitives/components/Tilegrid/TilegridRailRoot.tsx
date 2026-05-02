@@ -1,5 +1,5 @@
-import { useResolvedCSSLength } from "@shared/design-system/lib/useResolvedCSSLength"
 import { centerScrollableAncestors } from "@shared/navigation/center-scroll"
+import { useResolvedCSSLength } from "@shared/primitives/lib/useResolvedCSSLength"
 import { Slot } from "radix-ui"
 import {
   type CSSProperties,

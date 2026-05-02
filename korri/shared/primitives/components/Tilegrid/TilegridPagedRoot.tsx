@@ -1,5 +1,5 @@
-import { useContainerSize } from "@shared/design-system/lib/useContainerSize"
-import { useResolvedCSSLength } from "@shared/design-system/lib/useResolvedCSSLength"
+import { useContainerSize } from "@shared/primitives/lib/useContainerSize"
+import { useResolvedCSSLength } from "@shared/primitives/lib/useResolvedCSSLength"
 import { Slot } from "radix-ui"
 import {
   type CSSProperties,

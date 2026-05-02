@@ -5,17 +5,17 @@
   "tsx": true,
   "tailwind": {
     "config": "",
-    "css": "korri/shared/design-system/theme/styles.css",
+    "css": "korri/shared/primitives/theme/styles.css",
     "baseColor": "neutral",
     "cssVariables": true,
     "prefix": ""
   },
   "aliases": {
-    "components": "@shared/design-system/components",
-    "utils": "@shared/design-system/lib/utils",
-    "ui": "@shared/design-system/components/ui",
-    "lib": "@shared/design-system/lib",
-    "hooks": "@shared/design-system/hooks"
+    "components": "@shared/primitives/components",
+    "utils": "@shared/primitives/lib/utils",
+    "ui": "@shared/primitives/components/ui",
+    "lib": "@shared/primitives/lib",
+    "hooks": "@shared/primitives/hooks"
   },
   "iconLibrary": "lucide"
 }
