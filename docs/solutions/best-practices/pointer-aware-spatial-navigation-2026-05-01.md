@@ -151,12 +151,12 @@ The replacement rule:
 The wheel adapter is opt-in per container via `data-pointer-wheel="vertical" | "horizontal" | "2d"`:
 
 ```tsx
-// korri/shared/design-system/components/Tilegrid/TilegridScrollRoot.tsx
+// korri/shared/primitives/components/Tilegrid/TilegridScrollRoot.tsx
 <div ref={ref} data-pointer-wheel="2d" style={{ /* ... */ }}>
   {children}
 </div>
 
-// korri/shared/design-system/components/Tilegrid/TilegridRailRoot.tsx
+// korri/shared/primitives/components/Tilegrid/TilegridRailRoot.tsx
 <div data-pointer-wheel="horizontal" style={{ /* ... */ }}>
   {children}
 </div>
@@ -267,6 +267,6 @@ bus.on(action => {
 - `korri/shared/navigation/input-mode.ts` — the cross-cutting state store driven by source-tagged actions.
 - `korri/shared/navigation/start.ts` — the dispatch-matrix wiring point.
 - `korri/shared/themes/shift/shift.css` — the `:focus` and `[data-input-mode="directional"]` CSS rules.
-- `korri/shared/design-system/components/Tilegrid/TilegridScrollRoot.tsx`, `TilegridRailRoot.tsx` — canonical opt-in consumers of `data-pointer-wheel`.
-- `korri/shared/design-system/components/Tilegrid/Tilegrid.pointer.story.e2e.ts`, `Tilegrid.wheel.story.e2e.ts` — story-driven Playwright coverage of the end-to-end behavior.
+- `korri/shared/primitives/components/Tilegrid/TilegridScrollRoot.tsx`, `TilegridRailRoot.tsx` — canonical opt-in consumers of `data-pointer-wheel`.
+- `korri/shared/primitives/components/Tilegrid/Tilegrid.pointer.story.e2e.ts`, `Tilegrid.wheel.story.e2e.ts` — story-driven Playwright coverage of the end-to-end behavior.
 - Origin brainstorm and plan: `docs/brainstorms/2026-05-01-pointer-aware-spatial-navigation-requirements.md`, `docs/plans/2026-05-01-001-feat-pointer-aware-spatial-navigation-plan.md`.

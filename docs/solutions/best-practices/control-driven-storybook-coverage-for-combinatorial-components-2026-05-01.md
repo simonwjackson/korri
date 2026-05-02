@@ -200,6 +200,6 @@ Prefer not to assert Framer Motion frame-by-frame in E2E. Keep animation behavio
 
 - `docs/solutions/best-practices/mode-as-composition-for-layout-primitives-2026-05-01.md` — the Tilegrid primitive pattern and animation seams (`renderCell`, Root `asChild`, `getViewTransitionName`).
 - `docs/solutions/best-practices/decoupled-spatial-navigation-2026-05-01.md` — Storybook-driven Playwright tests for keyboard/gamepad focus behavior.
-- `korri/shared/design-system/components/Tilegrid/Tilegrid.stories.tsx` — consolidated Storybook examples.
-- `korri/shared/design-system/components/Tilegrid/Tilegrid.story.e2e.ts` — keyboard, paged, and View Transition story E2E coverage.
-- `korri/shared/design-system/components/Tilegrid/Tilegrid.gamepad.story.e2e.ts` — gamepad story E2E coverage.
+- `korri/shared/primitives/components/Tilegrid/Tilegrid.stories.tsx` — consolidated Storybook examples.
+- `korri/shared/primitives/components/Tilegrid/Tilegrid.story.e2e.ts` — keyboard, paged, and View Transition story E2E coverage.
+- `korri/shared/primitives/components/Tilegrid/Tilegrid.gamepad.story.e2e.ts` — gamepad story E2E coverage.

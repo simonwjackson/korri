@@ -43,7 +43,7 @@ The plan was to consolidate them into one **flexible, performant, theme- and dom
 
 ## Guidance
 
-The shape that fell out of the constraints, codified as **Tilegrid** under `korri/shared/design-system/components/Tilegrid/`:
+The shape that fell out of the constraints, codified as **Tilegrid** under `korri/shared/primitives/components/Tilegrid/`:
 
 ### 1. Two Roots, shared base context, mode-specific extensions
 
@@ -280,4 +280,4 @@ Roots accept `getViewTransitionName={(item) => ...}` and cells apply the returne
 - `docs/brainstorms/2026-04-30-grid-primitive-consolidation-requirements.md` — origin requirements doc.
 - `docs/plans/2026-04-30-005-refactor-tilegrid-primitive-consolidation-plan.md` — implementation plan with all six units.
 - `docs/plans/2026-04-30-007-feat-tilegrid-animation-seams-plan.md` — follow-up plan that added `renderCell`, Root `asChild`, and `getViewTransitionName` animation seams.
-- Tilegrid file family: `korri/shared/design-system/components/Tilegrid/`
+- Tilegrid file family: `korri/shared/primitives/components/Tilegrid/`

@@ -47,7 +47,7 @@ Accept `number | string`. Resolve string inputs to pixels via a hidden DOM senti
 A small shared hook returns three things: the resolved pixel value (or `null` until first measurement on the string path), the original CSS expression to embed in inline styles, and a ref the caller binds to the sentinel.
 
 ```ts
-// korri/shared/design-system/lib/useResolvedCSSLength.ts
+// korri/shared/primitives/lib/useResolvedCSSLength.ts
 export function useResolvedCSSLength(value: number | string) {
   const ref = useRef<HTMLElement | null>(null)
   const isNumber = typeof value === "number"
@@ -269,8 +269,8 @@ const cellSize = useThemedPixelValue("--cell-min")  // bespoke hook, brittle
 - `docs/solutions/best-practices/fluid-theme-tokens-and-container-queries-2026-05-01.md` — the broader fluid-design discipline this pattern enables in JS-bound primitives. Specifically resolves the "Tilegrid still takes a fixed pixel `cellSize`" follow-up captured there.
 - `docs/solutions/best-practices/mode-as-composition-for-layout-primitives-2026-05-01.md` — the Tilegrid mode-as-composition shape that hosts this pattern in three sibling Roots.
 - `docs/solutions/best-practices/control-driven-storybook-coverage-for-combinatorial-components-2026-05-01.md` — the controlled-stories discipline the Storybook companion pattern extends.
-- `korri/shared/design-system/lib/useResolvedCSSLength.ts` — canonical implementation of the hook.
-- `korri/shared/design-system/lib/useContainerSize.ts` — sister hook the implementation mirrors in lifecycle shape.
-- `korri/shared/design-system/components/Tilegrid/` — the three Roots that consume the hook.
+- `korri/shared/primitives/lib/useResolvedCSSLength.ts` — canonical implementation of the hook.
+- `korri/shared/primitives/lib/useContainerSize.ts` — sister hook the implementation mirrors in lifecycle shape.
+- `korri/shared/primitives/components/Tilegrid/` — the three Roots that consume the hook.
 - `docs/plans/2026-04-30-008-feat-tilegrid-css-length-cellsize-plan.md` — the implementation plan, including unit decomposition and decisions.
 - `docs/brainstorms/2026-04-30-tilegrid-css-length-cellsize-requirements.md` — the requirements brainstorm where the design space was scoped.

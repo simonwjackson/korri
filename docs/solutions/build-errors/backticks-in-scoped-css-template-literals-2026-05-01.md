@@ -114,5 +114,5 @@ The fix is to never put a backtick in the template literal that wasn't intended 
 ## Related
 
 - `docs/solutions/best-practices/fluid-theme-tokens-and-container-queries-2026-05-01.md` — establishes scoped `<style>` blocks as the project pattern for variant-specific tokens (where this bug is most likely to bite).
-- `korri/shared/design-system/explorations/home-screens/HomeSunlit.stories.tsx` — the canonical example of the scoped-style pattern; this file hit the bug twice in one session, once in a comment referencing `<HudButtons>` and once in a comment referencing `` `rounded-sm` ``.
-- `korri/shared/design-system/explorations/home-screens/HomeHero.stories.tsx`, `HomeMosaic.stories.tsx` — same scoped-style pattern, same risk surface.
+- `korri/shared/primitives/explorations/home-screens/HomeHero.stories.tsx` and `korri/shared/primitives/explorations/home-screens/HomeMosaic.stories.tsx` — the remaining canonical examples of the scoped-style pattern in this repo. The original `HomeSunlit.stories.tsx` (now deleted) hit this bug twice in one session, once in a comment referencing `<HudButtons>` and once in a comment referencing `` `rounded-sm` ``. The graduated Shift theme moved its scoped CSS into `korri/shared/themes/shift/shift.css`, sidestepping the foot-gun entirely; this is the recommended path for any block of scoped styles large enough to attract comments.
+- `korri/shared/primitives/explorations/home-screens/HomeHero.stories.tsx`, `HomeMosaic.stories.tsx` — same scoped-style pattern, same risk surface.

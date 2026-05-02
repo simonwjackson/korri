@@ -129,7 +129,9 @@ Net result: the focus indicator renders as intended in every browser, including 
 
 ## Related
 
-- `korri/shared/design-system/explorations/home-screens/HomeSunlit.stories.tsx` — the file where this bug was discovered and fixed.
-- `korri/shared/design-system/components/Tilegrid/TilegridRailRoot.tsx` — the rail container with `overflowY: hidden` that motivated the inset focus ring in the first place. An outer halo on the tile would be clipped by the rail; the pseudo-element approach is robust to both the tile's own `overflow: hidden` and the rail's.
+- `korri/shared/themes/shift/shift.css` — the canonical home of the `.shift-tile::after` pseudo-element focus ring after the Shift atomic-decomposition graduation.
+- `korri/shared/themes/shift/atoms/ShiftTile.tsx` — the atom that consumes that class hook.
+- The bug was originally discovered in `korri/shared/design-system/explorations/home-screens/HomeSunlit.stories.tsx` (now deleted; preserved in git history). The fix landed in the same file before being lifted into `shift.css`.
+- `korri/shared/primitives/components/Tilegrid/TilegridRailRoot.tsx` — the rail container with `overflowY: hidden` that motivated the inset focus ring in the first place. An outer halo on the tile would be clipped by the rail; the pseudo-element approach is robust to both the tile's own `overflow: hidden` and the rail's.
 - `docs/solutions/best-practices/backticks-in-scoped-css-template-literals-2026-05-01.md` — separate scoped-CSS foot-gun in the same exploration files; both bugs surface during design-system iteration on TSX-scoped styles.
 - Chromium issue tracker has multiple reports of this clipping behavior; the spec ambiguity around outline rendering at negative offsets has not been resolved at the time of writing (2026-05).

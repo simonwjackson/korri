@@ -252,4 +252,4 @@ Future readers searching `useTilegrid().base.cellSize` land on the warning befor
 - `docs/solutions/best-practices/fluid-theme-tokens-and-container-queries-2026-05-01.md` — relevant background for the container-query-driven sizing the rectangular-cell API enables.
 - `docs/plans/2026-04-30-009-feat-tilegrid-rail-heterogeneous-plan.md` — the plan and four-commit landing of the change this doc generalizes from.
 - `~/.pi/packages/react/skills/react/SKILL.md` — the React skill that codifies the Provider-driven, no-boolean-controls-subtree pattern this evolution stays inside.
-- Tilegrid file family: `korri/shared/design-system/components/Tilegrid/`
+- Tilegrid file family: `korri/shared/primitives/components/Tilegrid/`

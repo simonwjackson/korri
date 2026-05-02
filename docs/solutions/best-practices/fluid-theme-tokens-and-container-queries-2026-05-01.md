@@ -6,7 +6,7 @@ last_updated: 2026-05-01
 # follow-up in Caveats has been updated and now links to the sentinel-
 # resolution learning that resolves it.
 category: best-practices
-module: korri/shared/design-system/theme + AGENTS.md
+module: korri/shared/primitives/theme + AGENTS.md
 problem_type: best_practice
 component: tooling
 severity: medium
@@ -14,7 +14,7 @@ applies_when:
   - Building UI that runs across handheld, desktop, and TV with the same components
   - Tempted to write `font-size: 14px` or `padding: 24px` directly in JSX or a `<style>` block
   - Designing a grid that should hold more items on a larger surface, not bigger items
-  - Adding new theme tokens to `korri/shared/design-system/theme/`
+  - Adding new theme tokens to `korri/shared/primitives/theme/`
   - Reviewing a refactor that introduces device-specific layouts or per-breakpoint screens
 related_components:
   - frontend_stimulus
@@ -50,7 +50,7 @@ Three layered moves, with project-instruction rules behind them so the disciplin
 
 ### 1. Make Tailwind's standard tokens fluid in `@theme`
 
-Redefine Tailwind v4's default type and spacing tokens in `korri/shared/design-system/theme/styles.css` so a single utility name (`text-base`, `p-4`) is sensible across handheld → desktop → TV. Standard Tailwind vocabulary; only the values are project-specific.
+Redefine Tailwind v4's default type and spacing tokens in `korri/shared/primitives/theme/styles.css` so a single utility name (`text-base`, `p-4`) is sensible across handheld → desktop → TV. Standard Tailwind vocabulary; only the values are project-specific.
 
 ```css
 @theme {
@@ -136,7 +136,7 @@ Add these to `AGENTS.md` so the rules are part of the working agreement, not jus
 
 ## When to Apply
 
-- Any new UI surface in `korri/products/**` or `korri/shared/design-system/**`.
+- Any new UI surface in `korri/products/**` or `korri/shared/primitives/**`.
 - Whenever adding a token to the design-system theme.
 - Whenever tempted to write `font-size: 14px`, `padding: 24px`, or any pixel-locked size.
 - Designing tile/card/list grids of repeating items.
@@ -231,7 +231,7 @@ Result: a 420px container shows ~3 tiles; a 1920px container shows ~13. The cell
 - `docs/solutions/best-practices/decoupled-spatial-navigation-2026-05-01.md` — same project, same surfaces; spatial navigation is the input model these visuals are designed for.
 - `docs/solutions/best-practices/css-length-props-with-sentinel-resolution-2026-05-01.md` — the implementation pattern that lets Tilegrid (and other JS-bound primitives) consume the fluid tokens defined here.
 - `docs/solutions/best-practices/mode-as-composition-for-layout-primitives-2026-05-01.md` — the Tilegrid primitive that consumes these tokens.
-- `korri/shared/design-system/theme/styles.css` — canonical implementation of the fluid token scale.
-- `korri/shared/design-system/explorations/home-screens/HomeHero.stories.tsx` and `HomeMosaic.stories.tsx` — the two reference compositions that exercise the scale; useful as worked examples.
+- `korri/shared/primitives/theme/styles.css` — canonical implementation of the fluid token scale.
+- `korri/shared/primitives/explorations/home-screens/HomeHero.stories.tsx` and `HomeMosaic.stories.tsx` — the two reference compositions that exercise the scale; useful as worked examples.
 - `docs/brainstorms/2026-04-30-shift-home-screen-visual-language-requirements.md` — the visual-language exploration that surfaced this practice.
 - `AGENTS.md` — Rules of Engagement section carries the project rules that protect this approach from regression.
