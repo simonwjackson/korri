@@ -199,6 +199,12 @@
 
 [data-shift-home] .shift-tile {
 	position: relative;
+	cursor: pointer;
+	overflow: hidden;
+	border: 0;
+	border-radius: var(--shift-radius-tile);
+	background-color: var(--shift-surface-sunk);
+	padding: 0;
 	outline: none;
 	transition: transform 180ms ease;
 }
