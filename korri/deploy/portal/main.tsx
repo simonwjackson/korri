@@ -3,7 +3,9 @@ import { createRouter, RouterProvider } from "@tanstack/react-router"
 import ReactDOM from "react-dom/client"
 import { routeTree } from "./routeTree.gen"
 import "@shared/primitives/theme/styles.css"
+import "@shared/themes/shift/shift.css"
 import "@fontsource-variable/geist"
+import "@fontsource-variable/nunito"
 
 const router = createRouter({
   routeTree,

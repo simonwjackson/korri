@@ -1,0 +1,463 @@
+/*
+ * Shift theme — token values + class-hook styles for the Shift visual
+ * identity. This file is the entire visual-identity layer for Shift; the
+ * rest of themes/shift/ contains atoms, molecules, organisms, templates,
+ * and pages that consume the class hooks below.
+ *
+ * Boundary contract (see commit 85ce4f5 "drop the shift theme"):
+ *   - This file is identity-bearing only. It must not contain generic
+ *     project infra (focus ring, cursor-none, fluid scale tokens, font
+ *     family default). Those live in primitives/theme/styles.css.
+ *   - This file imports nothing from products/app/ or fixtures/. Themes
+ *     are independent of product wiring.
+ *
+ * Scoping strategy:
+ *   - Every Shift token and class-hook rule is scoped under
+ *     [data-shift-home] so loading this stylesheet outside a Shift
+ *     surface is a no-op. The home is the only Shift surface today; a
+ *     future ShiftLibrary surface adds its own [data-shift-library]
+ *     scope (or this becomes [data-shift-*]) without breaking the home.
+ *   - Single-theme app: tokens are not yet scoped under
+ *     [data-theme="shift"]. That is a cheap retrofit if a second theme
+ *     arrives.
+ *
+ * Authored, not generated. Do not move comments referencing class hooks
+ * back into a JSX <style>{`...`}</style> block — backticks inside such
+ * templates terminate the template literal early (TS1381). See
+ * docs/solutions/build-errors/backticks-in-scoped-css-template-literals-2026-05-01.md.
+ */
+
+/* -------------------------------------------------------------------------- *
+ * Tokens — light mode (primary intent)
+ *
+ * Calibrated against the Switch 2 home screenshots in /tmp/clone-ui/.
+ * Hex values are stable starting points; iterate during visual review.
+ * -------------------------------------------------------------------------- */
+
+[data-shift-home] {
+	--shift-surface: #e8e6e1;
+	--shift-surface-raised: #f2f0eb;
+	--shift-surface-sunk: #ddd5d4;
+
+	/*
+   * Ink palette — fully opaque, no alpha.
+   *   --shift-ink (#1B1814) is deep warm black, used for primary text
+   *     (game titles, captions, pill text).
+   *   --shift-ink-dim (#44403C, stone-700) is the closest theme value to
+   *     #444. Used for header/footer secondary text (status cluster,
+   *     time, day, HUD labels) and as the HUD glyph badge background.
+   *   --shift-ink-faint (#827F7B) is one step lighter than --shift-ink-dim
+   *     so the dim < faint contrast holds for placeholder text.
+   *   --shift-rule (#D4D2CD) is the hairline dividing tone.
+   */
+	--shift-ink: #1b1814;
+	--shift-ink-dim: #44403c;
+	--shift-ink-faint: #827f7b;
+	--shift-rule: #d4d2cd;
+
+	--shift-focus-glow: hsl(252, 75%, 70%);
+
+	--shift-pill-bg: #ffffff;
+	--shift-pill-fg: #1b1814;
+
+	/*
+   * Glyph background tracks --shift-ink-dim so the chip badge sits at
+   * the same visual weight as its label, instead of reading as a heavier
+   * dark blob next to muted text.
+   */
+	--shift-hud-glyph-bg: var(--shift-ink-dim);
+	--shift-hud-glyph-fg: #f2f0eb;
+	--shift-hud-glyph-active-bg: var(--shift-focus-glow);
+	--shift-hud-glyph-active-fg: #ffffff;
+
+	/*
+   * Static-by-design tile radius. 4px doesn't scale because it's a
+   * hairline-class decoration (Tailwind's rounded-sm would be ~6px).
+   * Used via the rounded-[var(--shift-radius-tile)] arbitrary value on
+   * tiles so consumers stay in the Tailwind utility system.
+   */
+	--shift-radius-tile: 4px;
+
+	/*
+   * Type voice. Shift overrides the project default (Geist, sharp /
+   * technical) with Nunito, a rounded friendly sans that matches the
+   * Switch tone. Falls back to the platform's rounded sans (SF Pro
+   * Rounded on Apple, ui-rounded generic) before defaulting to system
+   * sans. Scoped to [data-shift-home] so it does not affect non-Shift
+   * surfaces during the transition.
+   */
+	font-family:
+		"Nunito Variable", ui-rounded, "SF Pro Rounded", "Segoe UI Variable",
+		system-ui, sans-serif;
+}
+
+/* -------------------------------------------------------------------------- *
+ * Tokens — dark mode (Switch night blue / OLED black)
+ * -------------------------------------------------------------------------- */
+
+:root.dark [data-shift-home] {
+	/*
+   * Pitch-black surface stack — OLED-style. Raised and sunk collapse to
+   * the same value as --shift-surface; --shift-rule, --shift-ink-dim,
+   * and --shift-pill-bg carry the elevation/edge cues that surface
+   * contrast used to provide.
+   */
+	--shift-surface: #000000;
+	--shift-surface-raised: #000000;
+	--shift-surface-sunk: #000000;
+
+	/*
+   * Dark-mode ink palette — fully opaque, no alpha. --shift-ink-dim is
+   * the flattened equivalent of #ffffff8a over pitch black: header /
+   * footer text in the top and bottom bars lands on #8A8A8A.
+   */
+	--shift-ink: #ece7de;
+	--shift-ink-dim: #8a8a8a;
+	--shift-ink-faint: #5a5c62;
+	--shift-rule: #2a2d38;
+
+	--shift-focus-glow: hsl(252, 80%, 75%);
+
+	--shift-pill-bg: #1a2238;
+	--shift-pill-fg: #ece7de;
+
+	/*
+   * Dark-mode HUD glyph: badge background is the flattened equivalent of
+   * #ffffff17 over pitch black (#171717), a quiet elevation tone. The
+   * glyph character matches the label color (--shift-ink-dim, #8A8A8A)
+   * so each chip reads as one cohesive tone with a subtle darker badge
+   * behind it.
+   */
+	--shift-hud-glyph-bg: #171717;
+	--shift-hud-glyph-fg: #8a8a8a;
+	--shift-hud-glyph-active-bg: var(--shift-focus-glow);
+	--shift-hud-glyph-active-fg: #0f1422;
+}
+
+/* -------------------------------------------------------------------------- *
+ * Surface scaffolding
+ *
+ * The home root is a container query container so child cqi/cqh utilities
+ * resolve against the surface, not the viewport. The surface bg is set
+ * here (not on body) so non-Shift routes/stories stay on the project
+ * baseline.
+ * -------------------------------------------------------------------------- */
+
+[data-shift-home] {
+	container-type: inline-size;
+	background-color: var(--shift-surface);
+}
+
+/*
+ * Suppress the project-wide :focus / :focus-visible ring on this
+ * surface; each Shift atom defines its own focus treatment (lavender
+ * halo via box-shadow on pills, ::after border on tiles, glyph halo on
+ * the menu button).
+ */
+[data-shift-home] :focus,
+[data-shift-home] :focus-visible {
+	outline: none;
+}
+
+/* -------------------------------------------------------------------------- *
+ * Rail region — hide horizontal scrollbar
+ *
+ * TilegridRailRoot's outer div is overflowX: auto. The visual language has
+ * no place for a chrome scrollbar. Cross-browser selectors cover Firefox,
+ * legacy IE/Edge, and WebKit.
+ * -------------------------------------------------------------------------- */
+
+[data-shift-home] .shift-home-rail-region,
+[data-shift-home] .shift-home-rail-region * {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+
+[data-shift-home] .shift-home-rail-region::-webkit-scrollbar,
+[data-shift-home] .shift-home-rail-region *::-webkit-scrollbar {
+	display: none;
+	width: 0;
+	height: 0;
+}
+
+/* -------------------------------------------------------------------------- *
+ * Tile (atom) — focus state via ::after pseudo-element
+ *
+ * Rendered as ::after rather than CSS outline because the tile has
+ * overflow:hidden (needed to clip the <img> to rounded corners), and
+ * Chromium clips negative-offset outlines against the element's own
+ * overflow box, eating the top edge of the ring.
+ *
+ * A pseudo-element with inset:0 sits at the tile's inner edge, paints
+ * above the static <img> child, and is part of the tile's painting box
+ * rather than its overflow-clipped content, so it renders fully on all
+ * four edges regardless of parent or self overflow. The 4px thickness is
+ * hairline-class — intentionally static, not from --spacing.
+ *
+ * See docs/solutions/ui-bugs/inset-outline-clipped-by-overflow-hidden-2026-05-01.md.
+ * -------------------------------------------------------------------------- */
+
+[data-shift-home] .shift-tile {
+	position: relative;
+	outline: none;
+	transition: transform 180ms ease;
+}
+
+[data-shift-home] .shift-tile::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	border: 4px solid transparent;
+	border-radius: var(--shift-radius-tile);
+	pointer-events: none;
+	transition: border-color 180ms ease;
+}
+
+[data-shift-home] .shift-tile:focus-visible::after {
+	border-color: var(--shift-focus-glow);
+}
+
+[data-shift-home] .shift-tile:focus-visible {
+	transform: translateY(-1px);
+	z-index: 1;
+}
+
+/* -------------------------------------------------------------------------- *
+ * Pill (atom) — shared search/menu treatment
+ *
+ * Pills sit outside the rail's clipped scroll container, so an outer
+ * box-shadow halo is fine here — nothing clips it.
+ * -------------------------------------------------------------------------- */
+
+[data-shift-home] .shift-pill {
+	outline: none;
+	border: 0;
+	border-radius: 9999px;
+	background: var(--shift-pill-bg);
+	color: var(--shift-pill-fg);
+	cursor: pointer;
+	transition:
+		background 180ms ease,
+		box-shadow 180ms ease,
+		transform 180ms ease;
+}
+
+[data-shift-home] .shift-pill:focus-visible {
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+	transform: translateY(-1px);
+}
+
+[data-shift-home] .shift-pill-icon {
+	width: 1.4em;
+	height: 1.4em;
+	color: var(--shift-ink-dim);
+}
+
+/* -------------------------------------------------------------------------- *
+ * Search pill (molecule) — icon-only at rest, expands to full pill on focus
+ *
+ * At rest the search is a quiet icon embedded in the surface — not an
+ * open input field. Focus is the affordance that opens the field; the
+ * transition (background + width + placeholder fade-in) is the visual
+ * signal of 'now searching'.
+ *
+ * em-relative dimensions (1.4em, 3.4em) scale implicitly via the
+ * button's text-lg font-size, which is itself fluid via --text-lg.
+ * Padding and gap on the focused state derive from --spacing so they
+ * scale with the container, matching the rest of the surface.
+ * -------------------------------------------------------------------------- */
+
+[data-shift-home] .shift-search-pill {
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 0;
+	/* Collapsed: button is exactly the icon's width. The icon's left edge
+     sits at the button's left edge, which sits at the parent's px-12
+     boundary — visually flush with the Menu glyph circle and the caption
+     on the rows below. */
+	width: 1.4em;
+	height: 3.4em;
+	padding: 0;
+	background: transparent;
+	box-shadow: none;
+	flex: 0 0 auto;
+	transition:
+		width 220ms ease,
+		gap 180ms ease,
+		padding 220ms ease,
+		background 180ms ease,
+		box-shadow 180ms ease,
+		transform 180ms ease;
+}
+
+/*
+ * The placeholder text is always rendered (so screen readers see it via
+ * the surrounding aria-label) but visually collapsed at rest via
+ * max-width + opacity, then revealed on focus.
+ */
+[data-shift-home] .shift-search-placeholder {
+	max-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	opacity: 0;
+	color: var(--shift-ink-faint);
+	transition:
+		max-width 240ms ease,
+		opacity 180ms ease;
+}
+
+/*
+ * Active state: expand into a full pill. Padding and gap derive from
+ * --spacing so they breathe with the container.
+ */
+[data-shift-home] .shift-search-pill:focus-visible {
+	justify-content: flex-start;
+	width: 40cqi;
+	height: auto;
+	padding: calc(4 * var(--spacing)) calc(6 * var(--spacing));
+	gap: calc(4 * var(--spacing));
+	background: var(--shift-pill-bg);
+}
+
+[data-shift-home] .shift-search-pill:focus-visible .shift-search-placeholder {
+	max-width: 40cqi;
+	opacity: 1;
+}
+
+/* -------------------------------------------------------------------------- *
+ * Status cluster atoms — decorative, aria-hidden
+ * -------------------------------------------------------------------------- */
+
+[data-shift-home] .shift-status-icon {
+	width: 1.4em;
+	height: 1.4em;
+}
+
+[data-shift-home] .shift-avatar {
+	display: inline-block;
+	width: 2.2em;
+	height: 2.2em;
+	border-radius: 9999px;
+	object-fit: cover;
+	box-shadow: 0 0 0 2px var(--shift-surface);
+}
+
+/* -------------------------------------------------------------------------- *
+ * HUD vocabulary
+ *
+ * Class hooks .shift-hud, .shift-hud-hint, .shift-hud-glyph, and
+ * .shift-hud-label are contributed by both ShiftHudButton and
+ * ShiftHudChip; one rule set covers all three.
+ *
+ * Gaps derive from --spacing so they scale with the container.
+ * em-relative widths on the glyph circle scale implicitly via the
+ * chip's font-size (text-base, fluid).
+ * -------------------------------------------------------------------------- */
+
+[data-shift-home] .shift-hud {
+	display: inline-flex;
+	align-items: center;
+	gap: calc(5 * var(--spacing));
+}
+
+[data-shift-home] .shift-hud-hint {
+	display: inline-flex;
+	align-items: center;
+	gap: calc(3 * var(--spacing));
+}
+
+[data-shift-home] .shift-hud-glyph {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2em;
+	height: 2em;
+	border-radius: 9999px;
+	background: var(--shift-hud-glyph-bg);
+	color: var(--shift-hud-glyph-fg);
+	font-size: var(--text-sm);
+	font-weight: 800;
+	line-height: 1;
+	transition:
+		background 160ms ease,
+		color 160ms ease,
+		transform 160ms ease;
+}
+
+[data-shift-home] .shift-hud-hint[data-active] .shift-hud-glyph {
+	background: var(--shift-hud-glyph-active-bg);
+	color: var(--shift-hud-glyph-active-fg);
+	transform: scale(1.1);
+}
+
+[data-shift-home] .shift-hud-label {
+	font-size: var(--text-base);
+	font-weight: 600;
+	letter-spacing: 0;
+	color: var(--shift-ink-dim);
+}
+
+/* -------------------------------------------------------------------------- *
+ * Menu button (molecule) — matches HUD chip vocabulary on the right
+ *
+ * Reuses the .shift-hud-glyph and .shift-hud-label class hooks so it
+ * sits visually in the same row as `+ Options / X Close / A Continue`.
+ * Unlike the HUD chips this button is focusable; the focus halo lights
+ * the glyph circle, not the whole row.
+ *
+ * Declared after the .shift-hud-glyph atom so the cascade reads in
+ * descending specificity — the focus override layers on top of the
+ * atom's base styles.
+ * -------------------------------------------------------------------------- */
+
+[data-shift-home] .shift-menu-button {
+	display: inline-flex;
+	align-items: center;
+	gap: calc(3 * var(--spacing));
+	outline: none;
+	border: 0;
+	background: transparent;
+	padding: 0;
+	cursor: pointer;
+	color: inherit;
+	border-radius: 9999px;
+}
+
+[data-shift-home] .shift-menu-button:focus-visible .shift-hud-glyph {
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+	transform: scale(1.05);
+}
+
+[data-shift-home] .shift-menu-glyph-icon {
+	width: 1em;
+	height: 1em;
+}
+
+/* -------------------------------------------------------------------------- *
+ * Caption motion notes (no rules, just intent)
+ *
+ * The .shift-home-caption block snaps instantly to the focused tile's
+ * x-position (transform set inline from JS, no transition). A smooth
+ * horizontal slide read as awkward when crossing irregular tile widths
+ * and especially during continuous scroll — instant snap lets the
+ * caption read as 'belonging to' the focused tile rather than chasing
+ * it. See docs/solutions/best-practices/attached-ui-snaps-not-slides-2026-05-01.md.
+ *
+ * Title text updates instantly on focus change. An earlier revision
+ * crossfaded the text via a re-keyed remount, but the fade read as
+ * latency rather than feedback once the rail itself centers — the rail
+ * motion is the focus signal and a competing fade muddied it.
+ * -------------------------------------------------------------------------- */
+
+/* -------------------------------------------------------------------------- *
+ * Reduced-motion preference — drop transitions on interactive surfaces
+ * -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+	[data-shift-home] .shift-tile,
+	[data-shift-home] .shift-pill,
+	[data-shift-home] .shift-hud-glyph {
+		transition: none;
+	}
+}
