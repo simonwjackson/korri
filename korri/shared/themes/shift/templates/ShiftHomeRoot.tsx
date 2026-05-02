@@ -17,10 +17,13 @@
  *     docs/solutions/best-practices/attached-ui-snaps-not-slides-2026-05-01.md.
  *
  * Layout shape:
- *   - Wraps children in a `[data-shift-home]` host. That single
- *     attribute scopes every Shift CSS rule, declares the container
- *     query container, and applies the Shift surface background and
- *     ink color. Without `data-shift-home`, none of shift.css applies.
+ *   - Wraps children in a `<main data-shift-home>` host. The `main`
+ *     role makes the home the page's main region (so BDD shared steps
+ *     and assistive tech can reach it semantically); the
+ *     `data-shift-home` attribute scopes every Shift CSS rule,
+ *     declares the container query container, and applies the Shift
+ *     surface background and ink color. Without `data-shift-home`,
+ *     none of shift.css applies.
  *   - The page composes top bar, middle (rail + caption), and bottom
  *     bar regions as children. The Root does not impose a slot layout
  *     so a future variant of the home (drawer-open, search-open) is a
@@ -136,12 +139,12 @@ export function ShiftHomeRoot({
 
   return (
     <ShiftHomeCtx.Provider value={value}>
-      <div
+      <main
         data-shift-home
         className="relative flex h-screen w-full flex-col overflow-hidden text-[color:var(--shift-ink)]"
       >
         {children}
-      </div>
+      </main>
     </ShiftHomeCtx.Provider>
   )
 }
