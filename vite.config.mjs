@@ -38,9 +38,6 @@ export default defineConfig({
   optimizeDeps: {
     include: [
       "effect",
-      "@effect/rpc",
-      "@effect/platform",
-      "@effect/platform/FetchHttpClient",
       "@tanstack/react-router",
       "react",
       "react-dom",
