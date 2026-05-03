@@ -41,6 +41,18 @@ Effect is the unifying runtime model on the frontend.
 - Avoid hand-rolling query stores, transport hooks, or request caches once Effect is on the critical path. Atoms and layers replace them.
 - Effect v4 is the target. New code is written so the path from any Provider/hook scaffolding to v4 atoms is mechanical.
 
+## UI state modeling
+
+React composes views; functional data models state.
+
+- Convert async/runtime primitives into domain-specific ADTs before rendering. Examples: `LibraryListState.fromResult(result)`, `LaunchState.fromExit(id, exit)`.
+- ADTs use explicit tags for every meaningful state: `Loading`, `Ready`, `LoadError`, `Defect`, `Launching`, `Failed`, etc.
+- Do not expose boolean forests such as `loading`, `error`, `empty`, `failed`, plus nullable payloads as the primary UI contract.
+- State-specific components self-select from context or an atom-derived ADT and return `null` when inactive.
+- Selection helpers return `Option` (or an equivalent explicit maybe type), not `undefined` payloads.
+- Keep conversion and selection helpers pure and covered by unit tests.
+- JSX should not be dominated by render props, `Result.builder` chains, or presenter-level `switch` statements. Those belong behind a domain component boundary when needed.
+
 ## API contracts
 
 - Effect Schema is the source of truth for wire payloads, responses, and typed errors.

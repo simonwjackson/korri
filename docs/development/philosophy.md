@@ -43,6 +43,16 @@ Build for composability.
 - Clean boundaries between product code and shared code.
 - Pure domain logic, infrastructure at the edges.
 
+## React at the boundary, functional core underneath
+
+UI should read like React composition; state should behave like functional data.
+
+- Model feature state as small discriminated unions, not bags of booleans and nullable fields.
+- Convert infrastructure primitives (`Result`, `Exit`, RPC responses, process outcomes) into domain ADTs at the seam.
+- Components compose visual states; pure adapters select and transform state.
+- Prefer self-selecting state components over render props, fluent builders in JSX, or imperative presenter switches.
+- Keep state conversion functions pure and directly testable.
+
 ## Reusable code is product-agnostic, today
 
 Shared code does not reach into product code. Reusability is a property right now or never.

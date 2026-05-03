@@ -52,17 +52,80 @@ Use Biome (or the equivalent) consistently.
 
 ## Branching on async state
 
-- Use a single status-discriminated render: `Result.builder(...).onInitial(...).onFailure(...).onSuccess(...)` or an equivalent exhaustive shape.
-- Status (`loading | ready | error | empty`) is part of the contract, not a boolean check scattered across components.
+- Prefer a domain ADT plus self-selecting state components over inline control flow.
+- Convert raw async primitives once: `Result -> FeatureState`, `Exit -> CommandState`, RPC payload -> view model.
+- Status (`Loading | Ready | LoadError | Defect | Empty`) is part of the contract, not a boolean check scattered across components.
 - Loading, error, empty, and ready are different views of the same data, not different data flows.
+- `Result.builder` and `Result.match*` are useful in pure adapters, but avoid fluent builder chains in JSX.
+- Avoid render props for state branching. Prefer compound children that read state from context/atoms and self-select.
 
 ## Effect-flavored React
 
 - Service: `Context.Service<Self, Shape>()("ID")`.
 - Layer: `Layer.effect(Service, makeEffect)` for live; `Layer.succeed(Service, value)` for in-memory.
 - Runtime: `Atom.runtime((get) => get(layerAtom))` so the layer is swappable per harness.
-- Read: `useAtomValue(resultAtom)` + `Result.builder`.
-- Write: `useAtomSet(fnAtom, { mode: "promiseExit" })`.
+- Read: `useAtomValue(resultAtom)`, then adapt the result into a domain ADT before rendering.
+- Write: `useAtomSet(fnAtom, { mode: "promiseExit" })`, then adapt the exit into a command ADT.
+- Render: compose state-specific components (`<FeatureLoading />`, `<FeatureError />`, `<FeatureReady />`) under a state provider.
+
+## Functional state component pattern
+
+Use this shape for behavior-bearing React state:
+
+```tsx
+<LibraryListStateRoot result={items}>
+  <LibraryListLoading />
+  <LibraryListLoadError onRetry={refreshItems} />
+  <LibraryListDefect />
+  <LibraryListReady launch={launch} />
+</LibraryListStateRoot>
+```
+
+Under the hood:
+
+```ts
+type LibraryListState =
+  | { readonly _tag: "Loading" }
+  | { readonly _tag: "Ready"; readonly games: readonly GameRecord[] }
+  | { readonly _tag: "LoadError"; readonly error: LibraryError }
+  | { readonly _tag: "Defect"; readonly defect: unknown }
+
+const LibraryListState = {
+  fromResult: (result: Result.Result<readonly GameRecord[], LibraryError>) =>
+    Result.matchWithWaiting(result, {
+      onWaiting: () => ({ _tag: "Loading" }),
+      onError: error => ({ _tag: "LoadError", error }),
+      onDefect: defect => ({ _tag: "Defect", defect }),
+      onSuccess: success => ({ _tag: "Ready", games: success.value }),
+    }),
+
+  select:
+    <Tag extends LibraryListState["_tag"]>(tag: Tag) =>
+    (state: LibraryListState) =>
+      state._tag === tag ? Option.some(state) : Option.none(),
+}
+```
+
+State components consume selected cases:
+
+```tsx
+function LibraryListReady() {
+  const ready = useLibraryListCase("Ready")
+
+  return Option.match(ready, {
+    onNone: () => null,
+    onSome: ({ games }) => <LibraryListReadyView games={games} />,
+  })
+}
+```
+
+Guidelines:
+
+- The Root/provider converts raw runtime state into the ADT.
+- ADT conversion and selectors are pure and unit-tested.
+- Components do not inspect raw `Result` / `Exit` values.
+- Success views receive already-valid case data.
+- Keep this domain-specific first; do not introduce a generic result-boundary framework until multiple features force it.
 
 ## Real-implementation conventions
 
