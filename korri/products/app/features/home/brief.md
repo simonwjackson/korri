@@ -16,6 +16,22 @@ jobs:
 
 ---
 
+## MVP scope (personal device only)
+
+For the personal MVP (`docs/brainstorms/2026-05-02-personal-mvp-scope-requirements.md`):
+
+- The rail is sourced from the `app.library.list` RPC and ordered by
+  `lastPlayed` desc — the leftmost tile is the resume target.
+- The home does not own launch behavior. It composes the resume
+  feature's `useGameLaunch` controller (`korri/products/app/features/resume/launch-controller.ts`)
+  and the `ShiftLaunchFailureBanner` molecule, but the launch contract
+  itself is owned by the resume brief (SGR-R6 / SGR-R7).
+- HOME-R1, HOME-R2, HOME-R3 are unchanged in shape — the rail and
+  initial-focus invariants now resolve against real data instead of
+  the in-repo fixture.
+
+---
+
 ## Purpose
 
 Translate the home-surface portion of the Safe Game Resume JTBD into product-level behavior the page can be planned, implemented, and tested against without re-deciding the visual language for every feature.

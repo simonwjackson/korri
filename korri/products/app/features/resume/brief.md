@@ -15,6 +15,25 @@ jobs:
 
 ---
 
+## MVP scope (personal device only)
+
+For the personal MVP defined in `docs/brainstorms/2026-05-02-personal-mvp-scope-requirements.md`,
+this brief is implemented end-to-end against a single ROCKNIX device:
+
+- **SGR-R6** — implemented. The launch command is `runemu.sh` (resolved
+  from `es_systems.cfg`); success is the spawned process's exit code.
+  See `korri/products/app/features/resume/launch-controller.ts`.
+- **SGR-R7** — implemented. Failed launches surface
+  `ShiftLaunchFailureBanner` above the rail; the banner's retry button
+  re-fires the launch with the *originally failed id* even if the player
+  has since moved focus.
+- **SGR-R3, SGR-R4, SGR-R5** — vacuously satisfied for the personal MVP.
+  There is no second device, so cross-device sync, progress-risk
+  confirmation, and last-played-on-other-device are all `@fixme`-tagged
+  in the BDD feature file until that scope returns.
+
+---
+
 ## Purpose
 
 Translate the Safe Game Resume JTBD into product-level behavior that can be planned, implemented, and tested without duplicating the full user research narrative.
