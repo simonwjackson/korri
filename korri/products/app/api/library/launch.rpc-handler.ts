@@ -5,10 +5,14 @@ import { Effect } from "effect"
 
 import type { LaunchLibraryPayload, LaunchLibraryResponse } from "./launch.rpc"
 
-export const handleLaunchLibrary = (payload: typeof LaunchLibraryPayload.Type) =>
+export const handleLaunchLibrary = (
+  payload: typeof LaunchLibraryPayload.Type,
+) =>
   Effect.gen(function* () {
     const ctx = getLibraryContext()
-    const spec = yield* Effect.promise(() => ctx.source.launchSpecFor(payload.id))
+    const spec = yield* Effect.promise(() =>
+      ctx.source.launchSpecFor(payload.id),
+    )
 
     if (!spec) {
       logger.warn(

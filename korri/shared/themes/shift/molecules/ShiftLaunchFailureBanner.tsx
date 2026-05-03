@@ -45,8 +45,7 @@ export function ShiftLaunchFailureBanner({
     retryRef.current?.focus()
   }, [])
 
-  const exitDetail =
-    exitCode !== undefined ? ` (exit ${exitCode})` : ""
+  const exitDetail = exitCode !== undefined ? ` (exit ${exitCode})` : ""
 
   return (
     <div

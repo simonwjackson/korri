@@ -128,9 +128,11 @@ describe("library-context", () => {
 
     const ctx = getLibraryContext()
     const games = await ctx.source.list()
-    const spec = await ctx.source.launchSpecFor(games[0]!.id)
-    expect(spec).toBeDefined()
-    const result = await ctx.launcher.run(spec!)
+    const firstGame = games[0]
+    if (!firstGame) throw new Error("expected at least one game")
+    const spec = await ctx.source.launchSpecFor(firstGame.id)
+    if (!spec) throw new Error("expected a launch spec")
+    const result = await ctx.launcher.run(spec)
     expect(result.status).toBe("launched")
   })
 

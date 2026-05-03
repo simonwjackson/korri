@@ -123,10 +123,7 @@ function decodeEntities(s: string): string {
 function parseRocknixDate(value: string): Date | undefined {
   const m = value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/)
   if (!m) {
-    logger.warn(
-      { value },
-      "rocknix.gamelist: ignored unrecognized date value",
-    )
+    logger.warn({ value }, "rocknix.gamelist: ignored unrecognized date value")
     return undefined
   }
   const [, y, mo, d, h, mi, s] = m

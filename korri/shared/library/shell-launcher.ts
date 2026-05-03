@@ -23,7 +23,7 @@
 
 import { logger } from "@shared/logger/logger"
 
-import type { LaunchResult, Launcher, LaunchSpec } from "./launcher"
+import type { Launcher, LaunchResult, LaunchSpec } from "./launcher"
 
 const STDERR_TAIL_BYTES = 4 * 1024
 
@@ -54,8 +54,7 @@ export function createShellLauncher(): Launcher {
           stdout: "ignore",
         })
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : String(error)
+        const message = error instanceof Error ? error.message : String(error)
         const code =
           error instanceof Error
             ? (error as NodeJS.ErrnoException).code
@@ -90,10 +89,7 @@ export function createShellLauncher(): Launcher {
         return { status: "launched" }
       }
 
-      logger.warn(
-        { command: spec.command, exitCode },
-        "shell-launcher: failed",
-      )
+      logger.warn({ command: spec.command, exitCode }, "shell-launcher: failed")
 
       return stderrTail
         ? { status: "failed", exitCode, stderrTail }

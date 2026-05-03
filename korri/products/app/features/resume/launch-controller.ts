@@ -101,10 +101,7 @@ export function useGameLaunch(
       // the same `failed` state. Synthetic exit code so the banner has
       // something to show.
       const message = error instanceof Error ? error.message : String(error)
-      logger.warn(
-        { id, error: message },
-        "useGameLaunch: launch RPC threw",
-      )
+      logger.warn({ id, error: message }, "useGameLaunch: launch RPC threw")
       failedIdRef.current = id
       setFailedId(id)
       statusRef.current = "failed"

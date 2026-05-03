@@ -88,9 +88,7 @@ function parseExtensions(raw: string | undefined): readonly string[] {
  * when the system has no emulators block (e.g., a direct shell script).
  */
 function extractEmulatorsBlock(systemBlock: string): string | undefined {
-  const m = systemBlock.match(
-    /<emulators\b[^>]*>([\s\S]*?)<\/emulators>/i,
-  )
+  const m = systemBlock.match(/<emulators\b[^>]*>([\s\S]*?)<\/emulators>/i)
   return m?.[1]
 }
 

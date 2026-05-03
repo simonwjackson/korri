@@ -1,19 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
-import { act, renderHook, waitFor } from "@testing-library/react"
-
-import { withRpcServer } from "../../../../../tools/testing/library/with-rpc-server"
-import { withTempLibrary } from "../../../../../tools/testing/library/with-temp-library"
+import type { LaunchSpec } from "@shared/library/launcher"
 import {
   configureLibraryContextForTesting,
   resetLibraryContextForTesting,
 } from "@shared/library/library-context"
-import type { LaunchSpec } from "@shared/library/launcher"
 import { createRocknixSource } from "@shared/library/rocknix/rocknix-source"
 import { createShellLauncher } from "@shared/library/shell-launcher"
 import {
   getSpatialNavigationSnapshot,
   startSpatialNavigation,
 } from "@shared/navigation/start"
+import { act, renderHook, waitFor } from "@testing-library/react"
+import { withRpcServer } from "../../../../../tools/testing/library/with-rpc-server"
+import { withTempLibrary } from "../../../../../tools/testing/library/with-temp-library"
 
 import { useGameLaunch } from "./launch-controller"
 

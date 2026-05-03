@@ -5,9 +5,7 @@ import { ShiftLaunchFailureBanner } from "./ShiftLaunchFailureBanner"
 
 describe("ShiftLaunchFailureBanner", () => {
   it("renders the supplied gameTitle", () => {
-    render(
-      <ShiftLaunchFailureBanner gameTitle="Hades" onRetry={() => {}} />,
-    )
+    render(<ShiftLaunchFailureBanner gameTitle="Hades" onRetry={() => {}} />)
     expect(screen.getByRole("alert").textContent).toContain("Hades")
   })
 
@@ -23,9 +21,7 @@ describe("ShiftLaunchFailureBanner", () => {
   })
 
   it("omits the exit-code suffix when exitCode is undefined", () => {
-    render(
-      <ShiftLaunchFailureBanner gameTitle="Hades" onRetry={() => {}} />,
-    )
+    render(<ShiftLaunchFailureBanner gameTitle="Hades" onRetry={() => {}} />)
     expect(screen.getByRole("alert").textContent).not.toMatch(/exit\s+\d+/)
   })
 
@@ -44,9 +40,7 @@ describe("ShiftLaunchFailureBanner", () => {
   })
 
   it("moves focus to the retry button on first render", () => {
-    render(
-      <ShiftLaunchFailureBanner gameTitle="Hades" onRetry={() => {}} />,
-    )
+    render(<ShiftLaunchFailureBanner gameTitle="Hades" onRetry={() => {}} />)
     expect(document.activeElement).toBe(
       screen.getByRole("button", { name: /retry/i }),
     )
@@ -68,9 +62,7 @@ describe("ShiftLaunchFailureBanner", () => {
   })
 
   it("does not render a Dismiss button when onDismiss is omitted", () => {
-    render(
-      <ShiftLaunchFailureBanner gameTitle="Hades" onRetry={() => {}} />,
-    )
+    render(<ShiftLaunchFailureBanner gameTitle="Hades" onRetry={() => {}} />)
     expect(screen.queryByRole("button", { name: /dismiss/i })).toBeNull()
   })
 

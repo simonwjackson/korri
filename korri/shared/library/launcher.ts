@@ -31,7 +31,9 @@ export const LaunchSpec = Schema.Struct({
     }),
   ),
   args: Schema.Array(Schema.String),
-  env: Schema.optional(Schema.Record({ key: Schema.String, value: Schema.String })),
+  env: Schema.optional(
+    Schema.Record({ key: Schema.String, value: Schema.String }),
+  ),
   cwd: Schema.optional(Schema.String),
 })
 export type LaunchSpec = Schema.Schema.Type<typeof LaunchSpec>

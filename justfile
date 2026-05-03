@@ -115,6 +115,10 @@ check-full: check build
 validate-router:
   bun run tools/scripts/validate-router-config.ts
 
+# List all Jobs to be Done declared under docs/jobs/.
+list-jobs *args:
+  bun run tools/scripts/list-jobs.ts {{args}}
+
 # Regenerate the feature gate registry.
 generate-gates:
   bun run tools/generators/gates/generate-gate-registry.ts

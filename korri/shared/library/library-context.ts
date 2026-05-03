@@ -83,10 +83,7 @@ function buildFromEnv(): LibraryContext {
   const source = createRocknixSource(buildRocknixConfigFromEnv())
   const launcher = createShellLauncher()
 
-  logger.info(
-    { sourceKind, launcherKind },
-    "library-context: built from env",
-  )
+  logger.info({ sourceKind, launcherKind }, "library-context: built from env")
   return { source, launcher }
 }
 

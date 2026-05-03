@@ -47,7 +47,10 @@ export type RocknixConfig = {
 }
 
 const DEFAULT_CONFIG: RocknixConfig = {
-  gamelistRoots: ["/storage/games-internal/roms", "/storage/games-external/roms"],
+  gamelistRoots: [
+    "/storage/games-internal/roms",
+    "/storage/games-external/roms",
+  ],
   esSystemsPath: "/storage/.config/emulationstation/es_systems.cfg",
 }
 
@@ -129,7 +132,9 @@ export function createRocknixSource(
   }
 }
 
-async function loadSystems(esSystemsPath: string): Promise<readonly EsSystem[]> {
+async function loadSystems(
+  esSystemsPath: string,
+): Promise<readonly EsSystem[]> {
   const text = await readTextFileSafe(esSystemsPath)
   if (text === null) {
     logger.error(

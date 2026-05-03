@@ -1,7 +1,4 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { Cause, Effect, Exit } from "effect"
-
-import { withTempLibrary } from "../../../../../tools/testing/library/with-temp-library"
 import { appRpcGroup } from "@shared/api/rpc/app-rpc-group"
 import { NotFoundError } from "@shared/api/rpc/errors"
 import {
@@ -10,14 +7,12 @@ import {
 } from "@shared/library/library-context"
 import { createRocknixSource } from "@shared/library/rocknix/rocknix-source"
 import { createShellLauncher } from "@shared/library/shell-launcher"
+import { Cause, Effect, Exit } from "effect"
+import { withTempLibrary } from "../../../../../tools/testing/library/with-temp-library"
 
 import { handleLaunchLibrary } from "./launch.rpc-handler"
 
 const cleanups: Array<() => Promise<void>> = []
-function track<T extends { cleanup: () => Promise<void> }>(lib: T): T {
-  cleanups.push(lib.cleanup)
-  return lib
-}
 
 afterEach(async () => {
   resetLibraryContextForTesting()

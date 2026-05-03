@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test"
 
 import type { GameRecord } from "@shared/fixtures/games/game"
-import type { LaunchSpec, Launcher, LaunchResult } from "./launcher"
+import type { Launcher, LaunchResult, LaunchSpec } from "./launcher"
 import type { LibrarySource } from "./library-source"
 
 /**
@@ -18,9 +18,7 @@ describe("LibrarySource + Launcher seams", () => {
     const source: LibrarySource = {
       list: async () => [game] as const,
       launchSpecFor: async id =>
-        id === game.id
-          ? { command: "/bin/true", args: [] }
-          : undefined,
+        id === game.id ? { command: "/bin/true", args: [] } : undefined,
     }
 
     const launcher: Launcher = {

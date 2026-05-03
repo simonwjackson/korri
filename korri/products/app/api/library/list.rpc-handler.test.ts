@@ -1,8 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { rm } from "node:fs/promises"
-import { Cause, Effect, Exit } from "effect"
-
-import { withTempLibrary } from "../../../../../tools/testing/library/with-temp-library"
 import { appRpcGroup } from "@shared/api/rpc/app-rpc-group"
 import { DataError } from "@shared/api/rpc/errors"
 import {
@@ -11,6 +8,8 @@ import {
 } from "@shared/library/library-context"
 import { createRocknixSource } from "@shared/library/rocknix/rocknix-source"
 import { createShellLauncher } from "@shared/library/shell-launcher"
+import { Cause, Effect, Exit } from "effect"
+import { withTempLibrary } from "../../../../../tools/testing/library/with-temp-library"
 
 import { handleListLibrary } from "./list.rpc-handler"
 
