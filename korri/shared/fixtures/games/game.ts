@@ -50,6 +50,32 @@ export function getGameImageUrl(game: GameRecord): string | undefined {
 }
 
 /**
+ * Returns wide/landscape art for feature surfaces when available.
+ *
+ * Temporary ROCKNIX sidecar media exposes role through stable filenames until
+ * the real media pipeline can add typed roles. Keep the convention here so UI
+ * components consume a semantic helper instead of knowing folder details.
+ */
+export function getGameWideImageUrl(game: GameRecord): string | undefined {
+  const images = game.metadata?.media?.filter(m => m.type === "image") ?? []
+  return (
+    images.find(m => isWideImageUri(m.uri))?.uri ??
+    images.find(m => isCoverImageUri(m.uri))?.uri ??
+    images[0]?.uri
+  )
+}
+
+function isWideImageUri(uri: string): boolean {
+  const fileName = decodeURIComponent(uri.split("/").pop() ?? "")
+  return fileName.startsWith("hero-") || fileName.startsWith("banner-")
+}
+
+function isCoverImageUri(uri: string): boolean {
+  const fileName = decodeURIComponent(uri.split("/").pop() ?? "")
+  return fileName.startsWith("cover-")
+}
+
+/**
  * Display name with id fallback.
  */
 export function getGameDisplayName(game: GameRecord): string {

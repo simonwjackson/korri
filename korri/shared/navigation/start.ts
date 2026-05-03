@@ -6,6 +6,10 @@ import { createPointerAdapter } from "@shared/input/pointer-adapter"
 import type { Direction } from "@shared/input/types"
 import { createWheelAdapter } from "@shared/input/wheel-adapter"
 import {
+  installNavigationDiagnostics,
+  type NavigationDiagnosticsOptions,
+} from "./diagnostics"
+import {
   createFocusEngine,
   type FocusEngineOptions,
   type NextFocusFn,
@@ -48,6 +52,8 @@ export interface StartSpatialNavigationOptions
   readonly wheel?: false | Parameters<typeof createWheelAdapter>[0]
   /** Disable the input-mode store + DOM-attribute side effect. */
   readonly inputMode?: false
+  /** Log navigation input actions and focus changes to the browser console. */
+  readonly diagnostics?: boolean | NavigationDiagnosticsOptions
 }
 
 export interface SpatialNavigationHandle {
@@ -101,6 +107,13 @@ export function startSpatialNavigation(
   currentHandle?.dispose()
 
   const bus = createInputBus()
+  const disposeDiagnostics =
+    options.diagnostics === true
+      ? installNavigationDiagnostics(bus)
+      : options.diagnostics
+        ? installNavigationDiagnostics(bus, options.diagnostics)
+        : () => {}
+
   const engine = createFocusEngine({
     nextFocus: options.nextFocus ?? lrudNextFocus,
     scope: options.scope,
@@ -157,6 +170,7 @@ export function startSpatialNavigation(
     bus,
     inputMode,
     dispose: () => {
+      disposeDiagnostics()
       bus.dispose()
       inputMode?.dispose()
       if (currentHandle === handle) setCurrentHandle(null)

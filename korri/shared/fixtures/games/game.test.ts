@@ -5,6 +5,7 @@ import {
   GameRecord,
   getGameDisplayName,
   getGameImageUrl,
+  getGameWideImageUrl,
 } from "./game"
 
 describe("GameRecord schema", () => {
@@ -74,6 +75,37 @@ describe("game helpers", () => {
       metadata: { media: [{ type: "video", uri: "/v.mp4" }] },
     }
     expect(getGameImageUrl(game)).toBeUndefined()
+  })
+
+  it("getGameWideImageUrl prefers wide image media", () => {
+    const game: GameRecord = {
+      id: "g",
+      metadata: {
+        media: [
+          { type: "image", uri: "/api/media/games/wii/g/cover-1024.jpg" },
+          { type: "image", uri: "/api/media/games/wii/g/poster-600x900.png" },
+          { type: "image", uri: "/api/media/games/wii/g/banner-460x215.png" },
+        ],
+      },
+    }
+    expect(getGameWideImageUrl(game)).toBe(
+      "/api/media/games/wii/g/banner-460x215.png",
+    )
+  })
+
+  it("getGameWideImageUrl falls back to cover image media", () => {
+    const game: GameRecord = {
+      id: "g",
+      metadata: {
+        media: [
+          { type: "image", uri: "/api/media/games/wii/g/poster-600x900.png" },
+          { type: "image", uri: "/api/media/games/wii/g/cover-1024.jpg" },
+        ],
+      },
+    }
+    expect(getGameWideImageUrl(game)).toBe(
+      "/api/media/games/wii/g/cover-1024.jpg",
+    )
   })
 
   it("getGameDisplayName falls back to id when name is absent", () => {
