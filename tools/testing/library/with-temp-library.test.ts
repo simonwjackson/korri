@@ -62,8 +62,13 @@ describe("tools/testing/library/with-temp-library", () => {
       expect(cfg).toContain("<fullname>Super Nintendo</fullname>")
       expect(cfg).toContain("<extension>.smc .sfc</extension>")
       expect(cfg).toContain(`<path>${systemDir}</path>`)
-      expect(cfg).toContain("--core=snes9x")
-      expect(cfg).toContain("--emulator=retroarch")
+      // Real ROCKNIX format: defaults live in the nested <emulators>
+      // block, not in the <command> template. The <command> keeps the
+      // %CORE% / %EMULATOR% placeholders intact.
+      expect(cfg).toContain("--core=%CORE%")
+      expect(cfg).toContain("--emulator=%EMULATOR%")
+      expect(cfg).toContain('<emulator name="retroarch">')
+      expect(cfg).toContain('<core default="true">snes9x</core>')
       // Default launchCommand is the repo's fake-game.sh, embedded in <command>.
       expect(cfg).toContain("tools/testing/fake-game.sh")
       expect(lib.launchCommand).toMatch(/tools\/testing\/fake-game\.sh$/)
@@ -98,8 +103,8 @@ describe("tools/testing/library/with-temp-library", () => {
       const cfg = await readFile(lib.esSystemsPath, "utf8")
       expect(cfg).toContain("<name>snes</name>")
       expect(cfg).toContain("<name>nes</name>")
-      expect(cfg).toContain("--core=snes9x")
-      expect(cfg).toContain("--core=nestopia")
+      expect(cfg).toContain('<core default="true">snes9x</core>')
+      expect(cfg).toContain('<core default="true">nestopia</core>')
     } finally {
       await lib.cleanup()
     }

@@ -161,12 +161,12 @@ function renderEsSystemsCfg(args: {
       const ext = (system.extension ?? [".rom"]).join(" ")
       const fullname = system.fullname ?? system.name
       const systemPath = join(args.rootDir, system.name)
-      // Mirrors the real ROCKNIX command-template shape: emulator and core are
-      // embedded as `--emulator=` / `--core=` flags so a parser can recover the
-      // system defaults from the template if it chooses to.
-      const command = `${args.launchCommand} %ROM% -P%SYSTEM% --core=${escapeXml(
-        system.defaultCore,
-      )} --emulator=${escapeXml(system.defaultEmulator)}`
+      // Match the real ROCKNIX command template shape probed live from the
+      // developer's Odin: placeholders for ROM/SYSTEM/CORE/EMULATOR plus a
+      // `--controllers="%CONTROLLERSCONFIG%"` token. Defaults are sourced
+      // from the nested <emulators> block below, not baked into the
+      // template.
+      const command = `${args.launchCommand} %ROM% -P%SYSTEM% --core=%CORE% --emulator=%EMULATOR% --controllers="%CONTROLLERSCONFIG%"`
       return [
         "  <system>",
         `    <name>${escapeXml(system.name)}</name>`,
@@ -176,6 +176,13 @@ function renderEsSystemsCfg(args: {
         `    <command>${command}</command>`,
         `    <platform>${escapeXml(system.name)}</platform>`,
         `    <theme>${escapeXml(system.name)}</theme>`,
+        "    <emulators>",
+        `      <emulator name="${escapeXml(system.defaultEmulator)}">`,
+        "        <cores>",
+        `          <core default="true">${escapeXml(system.defaultCore)}</core>`,
+        "        </cores>",
+        "      </emulator>",
+        "    </emulators>",
         "  </system>",
       ].join("\n")
     })
