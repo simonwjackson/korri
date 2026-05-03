@@ -5,6 +5,7 @@ const config: StorybookConfig = {
   stories: [
     "../../shared/**/*.stories.@(ts|tsx|mdx)",
     "../../products/**/*.stories.@(ts|tsx|mdx)",
+    "../../../tools/spike-effect-atoms/**/*.stories.@(ts|tsx|mdx)",
   ],
   framework: {
     name: "@storybook/react-vite",

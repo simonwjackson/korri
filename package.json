@@ -28,6 +28,7 @@
 	},
 	"dependencies": {
 		"@bbc/tv-lrud-spatial": "^0.0.16",
+		"@effect-atom/atom-react": "^0.5.0",
 		"@effect/platform": "^0.95.0",
 		"@effect/rpc": "^0.74.0",
 		"@fontsource-variable/geist": "^5.2.8",
