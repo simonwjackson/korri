@@ -1,24 +1,40 @@
 #!/usr/bin/env bash
-# Iteration loop: rsync project to the Odin, restart the API as a
-# detached `setsid` background process on the device (logs to
-# /storage/korri-api.log), and start the local Vite dev server pointed
-# directly at the Odin API over Tailscale.
+# Iteration loop: rsync project to the Odin, refresh device dependencies,
+# restart the API as a detached `setsid` background process on the device
+# (logs to /storage/korri-api.log), reverse-forward the local Vite port to
+# the Odin, and start the same local services as `just dev` except for the
+# API: Vite, Playwright UI, and Storybook.
 #
-# Ctrl-C stops local Vite. The remote API process survives because it's
-# in its own session with no controlling terminal.
+# Ctrl-C stops local services and the reverse SSH tunnel. The remote API process
+# survives because it's in its own session with no controlling terminal.
 
 set -euo pipefail
 
 ODIN_HOST="${ODIN_HOST:-root@sm8550}"
 ODIN_PROJECT="${ODIN_PROJECT:-/storage/korri}"
 ODIN_API_PORT="${ODIN_API_PORT:-3001}"
-PORTAL_PORT="${PORTAL_PORT:-3000}"
+PORTAL_PORT="${PORTAL_PORT:-3100}"
+PW_PORT="${PW_PORT:-9876}"
+STORYBOOK_PORT="${STORYBOOK_PORT:-6006}"
+APP_HOST="${APP_HOST:-localhost}"
 REMOTE_LOG="/storage/korri-api.log"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 
 log()  { printf '\033[0;36m[odin-dev]\033[0m %s\n' "$*" >&2; }
 fail() { printf '\033[0;31m[odin-dev]\033[0m %s\n' "$*" >&2; exit 1; }
+
+read -r -a SSH_EXTRA_OPTS <<< "${ODIN_SSH_OPTS:-}"
+
+ssh_odin() {
+  ssh \
+    -o ConnectTimeout=5 \
+    -o BatchMode=yes \
+    -o StrictHostKeyChecking=accept-new \
+    "${SSH_EXTRA_OPTS[@]}" \
+    "$ODIN_HOST" "$@"
+}
 
 ssh_host_from_target() {
   local target="$1"
@@ -45,14 +61,17 @@ fi
 ODIN_API_BASE_URL="${ODIN_API_BASE_URL:-http://$(ssh_host_from_target "$ODIN_HOST"):$ODIN_API_PORT}"
 
 # Refuse to start if bootstrap hasn't run.
-ssh -o ConnectTimeout=5 -o BatchMode=yes "$ODIN_HOST" "test -x /storage/bin/bun && test -f '$ODIN_PROJECT/.env'" \
+ssh_odin "test -x /storage/bin/bun && test -f '$ODIN_PROJECT/.env'" \
   || fail "Device not bootstrapped (missing /storage/bin/bun or $ODIN_PROJECT/.env). Run: just bootstrap-odin"
 
 log "Syncing project..."
 "$HERE/odin-sync.sh"
 
+log "Refreshing remote dependencies..."
+ssh_odin "cd '$ODIN_PROJECT' && /storage/bin/bun install"
+
 log "Restarting remote API process (logs: $REMOTE_LOG)..."
-ssh "$ODIN_HOST" "ODIN_PROJECT='$ODIN_PROJECT' PORT='$ODIN_API_PORT' bash -s" <<REMOTE_SH
+ssh_odin "ODIN_PROJECT='$ODIN_PROJECT' PORT='$ODIN_API_PORT' bash -s" <<REMOTE_SH
 set -euo pipefail
 pkill -f 'bun run tools/http/server.ts' 2>/dev/null || true
 # Briefly let the old listener release the port.
@@ -78,14 +97,46 @@ done
 
 if [ "$ready" != "1" ]; then
   log "API never responded. Last 60 lines of $REMOTE_LOG:"
-  ssh "$ODIN_HOST" "tail -60 '$REMOTE_LOG' 2>/dev/null" || true
+  ssh_odin "tail -60 '$REMOTE_LOG' 2>/dev/null" || true
   fail "API did not become ready at $ODIN_API_BASE_URL. Verify the Odin's Tailscale name/IP is in ODIN_HOST or set ODIN_API_BASE_URL explicitly."
 fi
 
-log "API ready. Renderer logs follow."
-log "→ Renderer:  http://localhost:$PORTAL_PORT"
-log "→ API target: $ODIN_API_BASE_URL"
-log "→ Remote logs: ssh $ODIN_HOST tail -f $REMOTE_LOG"
+PROCFILE_DIR="$REPO_ROOT/out/tmp"
+mkdir -p "$PROCFILE_DIR"
+PROCFILE="$PROCFILE_DIR/Procfile.dev-odin-$$"
 
-KORRI_API_PROXY_TARGET="$ODIN_API_BASE_URL" \
-  exec bun run vite --mode development --strictPort --host 0.0.0.0 --port "$PORTAL_PORT" --clearScreen false
+log "Generating BDD Playwright wrappers..."
+bun run "$REPO_ROOT/tools/scripts/generate-bdd-playwright-tests.ts"
+
+cat > "$PROCFILE" <<PROCEOF
+tunnel: ssh -N -o ExitOnForwardFailure=yes -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=accept-new ${ODIN_SSH_OPTS:-} -R 127.0.0.1:${PORTAL_PORT}:127.0.0.1:${PORTAL_PORT} ${ODIN_HOST}
+web: cd '${REPO_ROOT}' && KORRI_API_PROXY_TARGET=${ODIN_API_BASE_URL} bun run vite --mode development --strictPort --host 127.0.0.1 --port ${PORTAL_PORT} --clearScreen false
+playwright: cd '${REPO_ROOT}' && PORTAL_PORT=${PORTAL_PORT} API_PORT=${ODIN_API_PORT} PW_PORT=${PW_PORT} APP_HOST=${APP_HOST} PLAYWRIGHT_TEST_BASE_URL=http://${APP_HOST}:${PORTAL_PORT} tools/scripts/serve-playwright-ui.sh
+storybook: cd '${REPO_ROOT}' && bun x storybook dev -c korri/deploy/storybook -p ${STORYBOOK_PORT} --host 0.0.0.0 --no-open
+PROCEOF
+
+if command -v gum >/dev/null 2>&1; then
+  gum style \
+    --border rounded \
+    --border-foreground 39 \
+    --padding "0 1" \
+    --bold \
+    "  Web         http://${APP_HOST}:${PORTAL_PORT}" \
+    "  Odin Web    http://127.0.0.1:${PORTAL_PORT} forwarded on device" \
+    "  Odin API    ${ODIN_API_BASE_URL}/api" \
+    "  Playwright  https://${APP_HOST}:${PW_PORT}" \
+    "  Storybook   http://${APP_HOST}:${STORYBOOK_PORT}"
+else
+  echo "Web         http://${APP_HOST}:${PORTAL_PORT}"
+  echo "Odin Web    http://127.0.0.1:${PORTAL_PORT} forwarded on device"
+  echo "Odin API    ${ODIN_API_BASE_URL}/api"
+  echo "Playwright  https://${APP_HOST}:${PW_PORT}"
+  echo "Storybook   http://${APP_HOST}:${STORYBOOK_PORT}"
+fi
+
+echo ""
+log "Starting reverse tunnel + Vite + Playwright UI + Storybook..."
+log "Remote API logs: ssh $ODIN_HOST tail -f $REMOTE_LOG"
+echo ""
+
+exec hivemind "$PROCFILE"

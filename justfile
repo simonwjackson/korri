@@ -56,9 +56,9 @@ bootstrap-odin:
 sync-odin:
   tools/scripts/odin-sync.sh
 
-# Iteration loop: sync project, restart remote API, direct Tailscale API proxy + local Vite.
-dev-odin:
-  tools/scripts/odin-dev.sh
+# Iteration loop: sync project, refresh device deps, restart Odin API, reverse-forward local Vite, Playwright UI, and Storybook.
+dev-odin portal_port="${PORTAL_PORT:-3100}" api_port="${ODIN_API_PORT:-3001}" pw_port="${PW_PORT:-9876}" storybook_port="${STORYBOOK_PORT:-6006}" host="${APP_HOST:-localhost}":
+  PORTAL_PORT={{portal_port}} ODIN_API_PORT={{api_port}} PW_PORT={{pw_port}} STORYBOOK_PORT={{storybook_port}} APP_HOST={{host}} tools/scripts/odin-dev.sh
 
 # Smoke-test the Odin API stack end-to-end (health + app.library.list).
 check-odin:

@@ -13,7 +13,11 @@ ODIN_PROJECT="${ODIN_PROJECT:-/storage/korri}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
+read -r -a SSH_EXTRA_OPTS <<< "${ODIN_SSH_OPTS:-}"
+RSYNC_SSH=(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new "${SSH_EXTRA_OPTS[@]}")
+
 rsync -az --delete \
+  -e "${RSYNC_SSH[*]}" \
   --exclude=node_modules \
   --exclude=out \
   --exclude=.worktrees \
