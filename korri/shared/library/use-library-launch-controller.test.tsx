@@ -2,7 +2,10 @@ import { describe, expect, it } from "bun:test"
 import { useAtomSet } from "@effect/atom-react"
 import { games } from "@shared/fixtures/games/games"
 import { makeInMemoryLauncherLayer } from "@shared/library/launcher-layer-memory"
-import { makeInMemoryLibrarySourceLayer } from "@shared/library/library-source-layer-memory"
+import {
+  loadingForeverLibrarySourceLayer,
+  makeInMemoryLibrarySourceLayer,
+} from "@shared/library/library-source-layer-memory"
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { type ReactNode, useLayoutEffect } from "react"
 import { launcherLayerAtom, librarySourceLayerAtom } from "./library-atoms"
@@ -29,6 +32,12 @@ function withLayers({ exitCode }: { readonly exitCode?: number } = {}) {
               : { kind: "fail", exitCode, delayMs: 1 },
         }),
       )
+      return () => {
+        setSourceLayer(loadingForeverLibrarySourceLayer)
+        setLauncherLayer(
+          makeInMemoryLauncherLayer({ behavior: { kind: "succeed" } }),
+        )
+      }
     }, [setSourceLayer, setLauncherLayer])
 
     return <>{children}</>

@@ -59,10 +59,12 @@ function ShiftHomeLaunchSurface({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col justify-center gap-2">
-      {launch.state._tag === "Failed" && failedGame ? (
+      {shouldShowLaunchFailure(launch.state) && failedGame ? (
         <ShiftLaunchFailureBanner
           gameTitle={getGameDisplayName(failedGame)}
-          exitCode={launch.state.exitCode}
+          exitCode={
+            launch.state._tag === "Failed" ? launch.state.exitCode : undefined
+          }
           onRetry={launch.retry}
         />
       ) : null}
@@ -76,6 +78,15 @@ function failedGameFor(
   items: readonly GameRecord[],
   state: LaunchController["state"],
 ): GameRecord | undefined {
-  if (state._tag !== "Failed") return undefined
+  if (!shouldShowLaunchFailure(state)) return undefined
   return items.find(game => game.id === state.gameId) ?? { id: state.gameId }
+}
+
+function shouldShowLaunchFailure(
+  state: LaunchController["state"],
+): state is Extract<
+  LaunchController["state"],
+  { readonly _tag: "Failed" | "Defect" }
+> {
+  return state._tag === "Failed" || state._tag === "Defect"
 }

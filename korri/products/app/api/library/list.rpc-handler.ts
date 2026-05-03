@@ -6,13 +6,13 @@ import {
 import { logger } from "@shared/logger/logger"
 import { Effect } from "effect"
 
-import type { ListLibraryPayload } from "./list.rpc"
+import { type ListLibraryPayload, ListLibraryResponse } from "./list.rpc"
 
 export const handleListLibrary = (_payload: typeof ListLibraryPayload.Type) =>
   Effect.gen(function* () {
     const source = yield* LibrarySource
     const games = yield* source.list().pipe(Effect.mapError(toDataError))
-    return { games }
+    return new ListLibraryResponse({ games })
   })
 
 function toDataError(error: LibraryError): DataError {

@@ -636,8 +636,8 @@ docs/development/standards.md              # MODIFIED: package name + AsyncResul
 **Dependencies:** Unit 9
 
 **Files:**
-- Create: `korri/products/app/features/library/library-source-layer-rpc.ts` (`LibrarySourceLayerRpc` — uses v4 RPC client to call `app.library.list`)
-- Create: `korri/products/app/features/library/launcher-layer-rpc.ts` (`LauncherLayerRpc` — uses v4 RPC client to call `app.library.launch`)
+- Create: `korri/products/app/features/home/library-source-layer-rpc.ts` (`LibrarySourceLayerRpc` — uses v4 RPC client to call `app.library.list`)
+- Create: `korri/products/app/features/home/launcher-layer-rpc.ts` (`LauncherLayerRpc` — uses v4 RPC client to call `app.library.launch`)
 - Create: `korri/products/app/features/home/HomeServerRoot.tsx` (composition root that sets layer atoms = RPC layers, then renders children)
 - Modify: `korri/products/app/routes/+index.tsx` (mounts `<HomeServerRoot>...children...</HomeServerRoot>`)
 

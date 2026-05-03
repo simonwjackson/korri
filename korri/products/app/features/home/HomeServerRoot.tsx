@@ -1,5 +1,5 @@
-import { LauncherLayerRpc } from "@app/features/library/launcher-layer-rpc"
-import { LibrarySourceLayerRpc } from "@app/features/library/library-source-layer-rpc"
+import { LauncherLayerRpc } from "@app/features/home/launcher-layer-rpc"
+import { LibrarySourceLayerRpc } from "@app/features/home/library-source-layer-rpc"
 import { useAtomSet } from "@effect/atom-react"
 import {
   launcherLayerAtom,
