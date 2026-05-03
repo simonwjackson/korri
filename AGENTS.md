@@ -1,19 +1,53 @@
-# Working Agreement
+<!-- BEGIN COMPOUND PI TOOL MAP -->
+## Compound Engineering (Pi compatibility)
 
-## Placement and Ownership
+This block is managed by compound-plugin.
 
-- Runtime app code lives under `korri/products/*`.
-- Shared runtime code lives under `korri/shared/*`.
-- Deployment/bootstrap entrypoints live under `korri/deploy/*`.
-- Repo tooling, generators, test infrastructure, and scripts live under `tools/*`.
-- Use product aliases for cross-folder imports inside a product.
-- Use `@shared/*` only for genuinely shared runtime code.
-- Do not introduce `~/*`, `#/*`, `$/*`, or `@/*`.
-- Do not create barrel exports.
+Compatibility notes:
+- Claude Task(agent, args) maps to the subagent extension tool
+- For parallel agent runs, batch multiple subagent calls with multi_tool_use.parallel
+- AskUserQuestion maps to the ask_user_question extension tool
+- MCP access uses MCPorter via mcporter_list and mcporter_call extension tools
+- MCPorter config path: .pi/compound-engineering/mcporter.json (project) or ~/.pi/agent/compound-engineering/mcporter.json (global)
+<!-- END COMPOUND PI TOOL MAP -->
 
-## Implementation Patterns
+# AGENTS.md — Korri
 
-### API
+This file holds what's specific to running inside an agent harness, and what's specific to this project. **The canonical engineering rulebook is `docs/development/`** — read those first.
+
+## Read first
+
+Substantive rules — philosophy, layering, testing posture, component architecture, frontend runtime stack, visual design — live in:
+
+- `docs/development/philosophy.md`
+- `docs/development/standards.md`
+- `docs/development/style-guide.md`
+
+This file does not duplicate those rules. It carries:
+
+1. Agent-harness compatibility (the Compound Pi tool map above).
+2. Project-specific layout, path aliases, and conventions.
+3. Project-specific tooling commands.
+4. Agent rules of engagement that govern *how* agents work, not *what* they should build.
+
+## Project layout
+
+- Runtime app code: `korri/products/*`
+- Shared runtime code: `korri/shared/*`
+- Deployment/bootstrap entrypoints: `korri/deploy/*`
+- Repo tooling, generators, test infrastructure, scripts: `tools/*`
+
+## Path aliases
+
+- `@app/*` → `korri/products/app/*`
+- `@shared/*` → `korri/shared/*`
+
+Layering rule from `docs/development/standards.md`, instantiated for this repo:
+
+- Code under `korri/shared/themes/*`, `korri/shared/ui/*`, and other reusable shared layers MUST NOT import from `@app/*` or from product-specific transport (`@shared/api/rpc/runRpc`, `@shared/api/rpc/useRpcQuery`).
+- Pages and templates in `korri/shared/themes/*` compose Roots; the route in `korri/products/app/routes/*` is the composition root that picks one.
+
+## RPC conventions
 
 RPC folders are organized by domain concept, not HTTP verb.
 
@@ -35,75 +69,46 @@ Multi RPC:
   save.rpc-handler.ts
 ```
 
-Rules:
-
-- Contracts must be defined with Effect Schema in `rpc.ts` / `*.rpc.ts`.
-- Handlers live in `rpc-handler.ts` / `*.rpc-handler.ts`.
+- Contracts defined with Effect Schema in `rpc.ts` / `*.rpc.ts`.
+- Handlers in `rpc-handler.ts` / `*.rpc-handler.ts`.
 - RPC tags follow `entity.concept.action`.
-- Reuse shared helpers from `@shared/api/rpc/*` where possible.
-- Typed API errors come from `@shared/api/rpc/errors` and are discriminated on `_tag`.
-- Generated files must not be edited manually.
-
-### Feature gates
-
-- Gate declarations live next to the feature in `gate.ts`.
-- Regenerate the registry with `just generate-gates` after adding/removing gates.
-- Use `<FeatureGate gate="..." current={...} next={...} />` for UI branching.
-- Use `requireGate` or `branchOnGate` for API branching.
-- Gates are temporary and should be removed when the feature ships.
-
-### State and forms
-
-- Server state should use the shared Effect RPC client/query infrastructure, typically `useRpcQuery`.
-- Local UI behavior should use local React state/hooks.
-- Forms should use React Hook Form with Effect Schema validation if forms are introduced.
-
-### Spatial navigation
-
-- The app must remain navigable through device-agnostic directional input and semantic action keys.
-- Components stay native HTML (`button`, `a`, `input`, `[tabindex]`) and must not import navigation libraries or focus hooks.
-- Navigation-library and device-adapter code belongs under `korri/shared/input/*` and `korri/shared/navigation/*` only.
-- Subscribe to semantic actions (`back`, `menu`, `options`, `confirm`, `direction`) with `useInputAction` from `@shared/navigation/use-input-action`; do not reach into `window.__korriSpatialNav` from product code.
-- Use LRUD's DOM hints (`lrud-container`, `lrud-ignore`, `data-block-exit`, `data-lrud-overlap-threshold`) when needed; do not create component-level navigation APIs.
-- Follow the rationale and gotchas in `docs/solutions/best-practices/decoupled-spatial-navigation-2026-05-01.md` before changing the navigation architecture.
-
-## Product Documentation Shape
-
-- Durable user intent lives in `docs/jobs/*.md` and must include `id`, `title`, and `status` frontmatter.
-- Feature briefs are colocated with vertical slices at `korri/products/app/features/<feature>/brief.md` and must include `id`, `title`, `status`, and `jobs` frontmatter.
-- BDD feature files, flat `<name>.steps.ts` step bindings, and optional `<demo-name>.demo.yaml` storyboards are colocated with the feature at `korri/products/app/features/<feature>/e2e/`.
-- The traceability index is generated to `out/generated/feature-map/feature-map.json` with `just generate-feature-map`; validate it with `just check-feature-map`.
-- Generated BDD Playwright wrappers live under `out/generated/bdd/playwright/` and generated Argo demo adapters live under `out/generated/bdd/argo/`. Both are read-only and regenerated by `just generate-bdd`.
-
-Artifact responsibilities:
-
-- Job docs explain why the user cares and should remain stable across implementation changes.
-- Feature briefs define the product promise, scope, and acceptance for one vertical slice.
-- BDD files capture executable observable behavior and should trace to brief acceptance or job outcome IDs.
-- The generated feature map links jobs, feature briefs, BDD files, scenarios, graph edges, diagnostics, and status.
-
-When adding or changing a feature, update the colocated `brief.md`, related BDD feature files, and run `just generate-feature-map`. Only create or update a job doc when the work reveals a new durable user job.
-
-The `tools/feature-map-explorer/` app (run with `just dev-feature-map`) is the canonical UI for inspecting and editing this map locally. It is dev-only — it is never bundled with `korri/products/*`.
-
-### Institutional learnings
-
-- Reusable implementation patterns, post-mortems, and best-practice writeups live under `docs/solutions/`.
-- Read relevant `docs/solutions/best-practices/*.md` files before introducing or revising architecture in an already-documented area.
-- Add or update a solution document only when explicitly requested or when running the compounding workflow.
-
-## Testing
-
-- Prefer pure unit tests for logic and RPC handlers.
-- Browser E2E tests use authored `.feature` files plus generated Playwright wrappers under `out/generated/bdd/playwright/`.
-- `just generate-bdd` regenerates wrappers and BDD-derived Argo demo adapters; `just check-bdd` validates them without rewriting.
-- Argo demo videos are recorded with `just demo-video <name>`; `just demo-video-dry-run <name>` prints a plan without ffmpeg, and `just demo-video-check` verifies prerequisites.
-- See `tools/testing/bdd/AUTHORING.md` for the BDD authoring contract.
+- Reuse helpers from `@shared/api/rpc/*` where possible.
+- Typed errors come from `@shared/api/rpc/errors`, discriminated on `_tag`.
 - Generated files are read-only.
 
-## Verification
+## Feature gates
 
-Behavioral changes must be verified with a real command or test.
+- Gate declarations live next to the feature in `gate.ts`.
+- Regenerate the registry with `just generate-gates`.
+- Use `<FeatureGate gate="..." current={...} next={...} />` for UI branching.
+- Use `requireGate` or `branchOnGate` for API branching.
+- Gates are temporary; remove when the feature ships.
+
+## Spatial navigation
+
+- The app must remain navigable via device-agnostic directional input and semantic action keys.
+- Components stay native HTML (`button`, `a`, `input`, `[tabindex]`); do not import navigation libraries or focus hooks at the component level.
+- Navigation-library and device-adapter code lives only under `korri/shared/input/*` and `korri/shared/navigation/*`.
+- Subscribe to semantic actions (`back`, `menu`, `options`, `confirm`, `direction`) with `useInputAction` from `@shared/navigation/use-input-action`. Do not reach into `window.__korriSpatialNav` from product code.
+- Use LRUD's DOM hints (`lrud-container`, `lrud-ignore`, `data-block-exit`, `data-lrud-overlap-threshold`) when needed; do not create component-level navigation APIs.
+- See `docs/solutions/best-practices/decoupled-spatial-navigation-2026-05-01.md` before changing the navigation architecture.
+
+## Product documentation shape
+
+- Job docs in `docs/jobs/*.md` with `id`, `title`, `status` frontmatter.
+- Feature briefs at `korri/products/app/features/<feature>/brief.md` with `id`, `title`, `status`, `jobs` frontmatter.
+- BDD `.feature` files, flat `<name>.steps.ts` step bindings, and optional `<demo-name>.demo.yaml` storyboards colocated at `korri/products/app/features/<feature>/e2e/`.
+- Generated traceability index: `out/generated/feature-map/feature-map.json` via `just generate-feature-map`; validate with `just check-feature-map`.
+- Generated BDD Playwright wrappers: `out/generated/bdd/playwright/`. Generated Argo demo adapters: `out/generated/bdd/argo/`. Both read-only; regenerate with `just generate-bdd`.
+- See `tools/testing/bdd/AUTHORING.md` for the BDD authoring contract.
+
+The `tools/feature-map-explorer/` app (run with `just dev-feature-map`) is the canonical UI for inspecting and editing the map locally. Dev-only — never bundled with `korri/products/*`.
+
+## Institutional learnings
+
+`docs/solutions/` holds reusable patterns, post-mortems, and best-practice writeups. Read relevant entries before introducing or revising architecture in an already-documented area. Add or update solutions only when explicitly requested or as part of the compounding workflow.
+
+## Tooling commands
 
 ```bash
 just dev | just dev-web | just dev-api | just dev-playwright | just dev-storybook
@@ -111,25 +116,29 @@ just test-unit
 just test-e2e
 just format
 just lint
-just typecheck
+just typecheck                # whole-repo only because of path aliases
+just generate-gates
+just generate-bdd
+just generate-feature-map
 ```
 
-## Rules of Engagement
+## Project-specific quirks
+
+- TypeScript typechecking is whole-repo only because of path aliases — always run `just typecheck`, not per-file `tsc`.
+- Use `@shared/logger`, not `console.log`, in runtime code.
+
+## Rules of engagement
 
 - Never create documentation, report, or summary Markdown files unless explicitly requested.
-- Before changing code, read a nearby similar feature/domain first and follow the local pattern.
-- TypeScript typechecking is whole-repo only because of path aliases. Run `just typecheck`.
-- Do exactly what was asked. No bonus refactors.
 - Read before you touch. Do not propose changes to code you have not read.
-- Use `@shared/logger`, not `console.log` in runtime code.
-- Use design tokens — Tailwind theme utilities and CSS theme variables — for type, spacing, color, and radius. Hardcoded values (e.g., `font-size: 14px`, `padding: 24px`, `#1B1714`) are a last resort and must be justified by an inline comment explaining why no token fits. Add the missing token to the theme instead whenever the value will recur.
-- Theme tokens for size and spacing must be **fluid by default** — `clamp(min, fluid, max)` calibrated so a single token is sensible from a small handheld up to a TV. Static pixel values in the theme are reserved for things that genuinely should not scale (e.g., a 1px hairline border).
-- Components should respond to their **container**, not the viewport, for type and spacing. Use container query units (`cqi`, `cqh`, `cqw`) and `@container` queries; declare `container-type: inline-size` (or `size`) on the appropriate ancestor. Reserve `@media` and viewport units for page-frame decisions where the layout itself fundamentally rearranges.
-- Grids should add cells when space allows (`grid-template-columns: repeat(auto-fit, minmax(MIN, 1fr))` or equivalent), not scale a fixed number of cells up. The number of visible items is a side effect of container width × cell minimum, not a hardcoded column count. Designs should look denser on a TV, not zoomed in.
-- Inline `style={{ … }}` and raw CSS values inside scoped `<style>` blocks bypass the theme's scales and constraints. Prefer Tailwind utilities or theme-variable references so project-wide rules actually apply; reach for inline values only when no theme token applies.
-- Do not store sensitive data in `localStorage`.
-- When extracting date parts from ISO strings, UTC methods must be used.
+- Before changing code, read a nearby similar feature/domain first and follow the local pattern.
+- Do exactly what was asked. No bonus refactors.
 
-## Irreversible Actions
+## Irreversible actions
 
-Freely take local, reversible actions. Confirm first for destructive actions, visible shared-state changes, force pushes, or dependency removals with unclear impact.
+Freely take local, reversible actions. Confirm first for:
+
+- Destructive operations
+- Visible shared-state changes
+- Force pushes
+- Dependency removals with unclear impact
