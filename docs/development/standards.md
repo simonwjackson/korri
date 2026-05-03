@@ -36,7 +36,7 @@ Effect is the unifying runtime model on the frontend.
 
 - Services declared with `Context.Service<Self, Shape>()("ID")`.
 - Wiring is explicit: `Layer.effect(Service, makeEffect)` for production, `Layer.succeed(Service, value)` for harnesses and tests.
-- Reactive state uses `@effect-atom/atom-react` — atoms over `Atom.runtime(layer)`.
+- Reactive state uses `@effect/atom-react` — atoms over `Atom.runtime(layer)`.
 - The harness seam is a `layerAtom` holding the current `Layer<Service>`. Stories and tests override; production leaves it default.
 - Avoid hand-rolling query stores, transport hooks, or request caches once Effect is on the critical path. Atoms and layers replace them.
 - Effect v4 is the target. New code is written so the path from any Provider/hook scaffolding to v4 atoms is mechanical.
@@ -51,7 +51,7 @@ React composes views; functional data models state.
 - State-specific components self-select from context or an atom-derived ADT and return `null` when inactive.
 - Selection helpers return `Option` (or an equivalent explicit maybe type), not `undefined` payloads.
 - Keep conversion and selection helpers pure and covered by unit tests.
-- JSX should not be dominated by render props, `Result.builder` chains, or presenter-level `switch` statements. Those belong behind a domain component boundary when needed.
+- JSX should not be dominated by render props, async-state builder chains, or presenter-level `switch` statements. Those belong behind a domain component boundary when needed.
 
 ## API contracts
 

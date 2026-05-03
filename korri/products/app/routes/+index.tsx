@@ -1,3 +1,4 @@
+import { HomeServerRoot } from "@app/features/home/HomeServerRoot"
 import { ShiftHomePage } from "@shared/themes/shift/pages/ShiftHomePage"
 import { createFileRoute } from "@tanstack/react-router"
 
@@ -10,5 +11,9 @@ export const Route = createFileRoute("/")({
  * this file only chooses which page to render at `/`.
  */
 function HomeRoute() {
-  return <ShiftHomePage />
+  return (
+    <HomeServerRoot>
+      <ShiftHomePage />
+    </HomeServerRoot>
+  )
 }

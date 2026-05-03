@@ -2,12 +2,13 @@ import { afterEach, describe, expect, it } from "bun:test"
 import { appRpcGroup } from "@shared/api/rpc/app-rpc-group"
 import { NotFoundError } from "@shared/api/rpc/errors"
 import {
-  configureLibraryContextForTesting,
-  resetLibraryContextForTesting,
-} from "@shared/library/library-context"
+  Launcher,
+  LibraryError,
+  LibrarySource,
+} from "@shared/library/library-services"
 import { createRocknixSource } from "@shared/library/rocknix/rocknix-source"
 import { createShellLauncher } from "@shared/library/shell-launcher"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Effect, Exit, Layer } from "effect"
 import { withTempLibrary } from "../../../../../tools/testing/library/with-temp-library"
 
 import { handleLaunchLibrary } from "./launch.rpc-handler"
@@ -15,16 +16,14 @@ import { handleLaunchLibrary } from "./launch.rpc-handler"
 const cleanups: Array<() => Promise<void>> = []
 
 afterEach(async () => {
-  resetLibraryContextForTesting()
   while (cleanups.length > 0) {
     const c = cleanups.pop()
     if (c) await c()
   }
 })
 
-async function configureForFakeGame(exitCode: number): Promise<{
-  rootDir: string
-  cleanup: () => Promise<void>
+async function layerForFakeGame(exitCode: number): Promise<{
+  layer: Layer.Layer<LibrarySource | Launcher>
 }> {
   const lib = await withTempLibrary({
     systems: [
@@ -39,48 +38,56 @@ async function configureForFakeGame(exitCode: number): Promise<{
   })
   cleanups.push(lib.cleanup)
 
-  // Wrap the real launcher so we can inject KORRI_FAKE_GAME_EXIT into the
-  // env on every spawn, without touching process.env globally.
-  const realLauncher = createShellLauncher()
-  const launcher = {
-    run: (spec: Parameters<typeof realLauncher.run>[0]) =>
-      realLauncher.run({
-        ...spec,
-        env: { ...(spec.env ?? {}), KORRI_FAKE_GAME_EXIT: String(exitCode) },
-      }),
-  }
-
-  configureLibraryContextForTesting({
-    source: createRocknixSource({
-      gamelistRoots: [lib.rootDir],
-      esSystemsPath: lib.esSystemsPath,
-      launchCommand: lib.launchCommand,
-    }),
-    launcher,
+  const source = createRocknixSource({
+    gamelistRoots: [lib.rootDir],
+    esSystemsPath: lib.esSystemsPath,
+    launchCommand: lib.launchCommand,
   })
-  return { rootDir: lib.rootDir, cleanup: lib.cleanup }
+
+  const realLauncher = createShellLauncher()
+  const sourceLayer = Layer.succeed(LibrarySource)({
+    list: () => Effect.tryPromise(() => source.list()),
+    launchSpecFor: id => Effect.tryPromise(() => source.launchSpecFor(id)),
+  })
+  const launcherLayer = Layer.succeed(Launcher)({
+    run: spec =>
+      Effect.tryPromise({
+        try: () =>
+          realLauncher.run({
+            ...spec,
+            env: {
+              ...(spec.env ?? {}),
+              KORRI_FAKE_GAME_EXIT: String(exitCode),
+            },
+          }),
+        catch: error =>
+          new LibraryError({
+            reason: "io",
+            message: error instanceof Error ? error.message : String(error),
+          }),
+      }),
+  })
+
+  return { layer: Layer.merge(sourceLayer, launcherLayer) }
 }
 
 describe("app.library.launch handler (configured-real launcher + fake-game.sh)", () => {
   it("returns { status: 'launched' } for a known id with KORRI_FAKE_GAME_EXIT=0", async () => {
-    await configureForFakeGame(0)
+    const { layer } = await layerForFakeGame(0)
     const result = await Effect.runPromise(
-      handleLaunchLibrary({ id: "snes/echo.smc" }),
+      handleLaunchLibrary({ id: "snes/echo.smc" }).pipe(Effect.provide(layer)),
     )
     expect(result).toEqual({ status: "launched" })
   })
 
   it("returns { status: 'failed', exitCode } and includes argv echoed by fake-game.sh in stderrTail", async () => {
-    await configureForFakeGame(7)
+    const { layer } = await layerForFakeGame(7)
     const result = await Effect.runPromise(
-      handleLaunchLibrary({ id: "snes/echo.smc" }),
+      handleLaunchLibrary({ id: "snes/echo.smc" }).pipe(Effect.provide(layer)),
     )
     expect(result.status).toBe("failed")
     if (result.status === "failed") {
       expect(result.exitCode).toBe(7)
-      // fake-game.sh writes "argv: <token>" lines for each argv element.
-      // The launcher is real; the spec composer is real; the script is
-      // real. If any of the three regresses, this assertion catches it.
       expect(result.stderrTail).toContain("-Psnes")
       expect(result.stderrTail).toContain("--core=snes9x")
       expect(result.stderrTail).toContain("--emulator=retroarch")
@@ -88,9 +95,11 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
   })
 
   it("fails with NotFoundError for unknown id (no spawn)", async () => {
-    await configureForFakeGame(0)
+    const { layer } = await layerForFakeGame(0)
     const exit = await Effect.runPromiseExit(
-      handleLaunchLibrary({ id: "snes/does-not-exist.smc" }),
+      handleLaunchLibrary({ id: "snes/does-not-exist.smc" }).pipe(
+        Effect.provide(layer),
+      ),
     )
     expect(Exit.isFailure(exit)).toBe(true)
     if (Exit.isFailure(exit)) {

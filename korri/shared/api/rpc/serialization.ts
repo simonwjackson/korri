@@ -1,5 +1,5 @@
-import { RpcSerialization } from "effect/unstable/rpc"
 import { Layer } from "effect"
+import { RpcSerialization } from "effect/unstable/rpc"
 
 const decoder = new TextDecoder()
 

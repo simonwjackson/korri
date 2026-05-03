@@ -1,10 +1,10 @@
+import { BatchJsonSerializationLive } from "@shared/api/rpc/serialization"
+import { GATES_HEADER, serializeGatesHeader } from "@shared/gates/header"
+import { Layer } from "effect"
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient"
 import * as HttpClient from "effect/unstable/http/HttpClient"
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
 import { RpcClient } from "effect/unstable/rpc"
-import { BatchJsonSerializationLive } from "@shared/api/rpc/serialization"
-import { GATES_HEADER, serializeGatesHeader } from "@shared/gates/header"
-import { Layer } from "effect"
 
 function getCurrentGatesHeader(): string {
   if (typeof localStorage === "undefined") {

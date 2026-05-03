@@ -53,10 +53,10 @@ Use Biome (or the equivalent) consistently.
 ## Branching on async state
 
 - Prefer a domain ADT plus self-selecting state components over inline control flow.
-- Convert raw async primitives once: `Result -> FeatureState`, `Exit -> CommandState`, RPC payload -> view model.
+- Convert raw async primitives once: `AsyncResult -> FeatureState`, `Exit -> CommandState`, RPC payload -> view model.
 - Status (`Loading | Ready | LoadError | Defect | Empty`) is part of the contract, not a boolean check scattered across components.
 - Loading, error, empty, and ready are different views of the same data, not different data flows.
-- `Result.builder` and `Result.match*` are useful in pure adapters, but avoid fluent builder chains in JSX.
+- `AsyncResult.match*` helpers are useful in pure adapters, but avoid fluent async-state branching in JSX.
 - Avoid render props for state branching. Prefer compound children that read state from context/atoms and self-select.
 
 ## Effect-flavored React
@@ -91,8 +91,10 @@ type LibraryListState =
   | { readonly _tag: "Defect"; readonly defect: unknown }
 
 const LibraryListState = {
-  fromResult: (result: Result.Result<readonly GameRecord[], LibraryError>) =>
-    Result.matchWithWaiting(result, {
+  fromResult: (
+    result: AsyncResult.AsyncResult<readonly GameRecord[], LibraryError>,
+  ) =>
+    AsyncResult.matchWithWaiting(result, {
       onWaiting: () => ({ _tag: "Loading" }),
       onError: error => ({ _tag: "LoadError", error }),
       onDefect: defect => ({ _tag: "Defect", defect }),
@@ -123,7 +125,7 @@ Guidelines:
 
 - The Root/provider converts raw runtime state into the ADT.
 - ADT conversion and selectors are pure and unit-tested.
-- Components do not inspect raw `Result` / `Exit` values.
+- Components do not inspect raw `AsyncResult` / `Exit` values.
 - Success views receive already-valid case data.
 - Keep this domain-specific first; do not introduce a generic result-boundary framework until multiple features force it.
 

@@ -6,7 +6,7 @@
  * confirm without thumbstick travel.
  *
  * Composition responsibilities:
- *   - The banner is shown only when `useGameLaunch().status === "failed"`;
+ *   - The banner is shown only when `LaunchState._tag === "Failed"`;
  *     that gating happens at the composition site (`ShiftHomePage`).
  *   - The banner does not own retry state; `onRetry` is wired to the
  *     hook's `retry()`.

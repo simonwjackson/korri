@@ -436,7 +436,7 @@ docs/development/standards.md              # MODIFIED: package name + AsyncResul
 
 ### Phase 2 — Architectural adoption (atoms, ADTs, layer-swap)
 
-- [ ] **Unit 6: Promote Library services and in-memory layers**
+- [x] **Unit 6: Promote Library services and in-memory layers**
 
 **Goal:** Create `LibrarySource` and `Launcher` as `Context.Service`s in shared, with both Live (filesystem/subprocess) and InMemory (configurable) layer implementations.
 
@@ -488,7 +488,7 @@ docs/development/standards.md              # MODIFIED: package name + AsyncResul
 
 ---
 
-- [ ] **Unit 7: Wire Layers into RPC handlers; delete `LibraryContext`**
+- [x] **Unit 7: Wire Layers into RPC handlers; delete `LibraryContext`**
 
 **Goal:** Replace the singleton `getLibraryContext()` with Layer-injected services. Handlers consume `LibrarySource` and `Launcher` via `Effect.gen`.
 
@@ -556,7 +556,7 @@ docs/development/standards.md              # MODIFIED: package name + AsyncResul
 
 ---
 
-- [ ] **Unit 8: Promote ADTs (`LibraryListState`, `LaunchState`) to shared**
+- [x] **Unit 8: Promote ADTs (`LibraryListState`, `LaunchState`) to shared**
 
 **Goal:** Move the validated state ADTs from spike to shared, adjust for v4 (`Result` → `AsyncResult`).
 
@@ -596,7 +596,7 @@ docs/development/standards.md              # MODIFIED: package name + AsyncResul
 
 ---
 
-- [ ] **Unit 9: Atoms — items atom, launch atom, layer atoms**
+- [x] **Unit 9: Atoms — items atom, launch atom, layer atoms**
 
 **Goal:** Create the production atom layer that components consume.
 
@@ -627,7 +627,7 @@ docs/development/standards.md              # MODIFIED: package name + AsyncResul
 
 ---
 
-- [ ] **Unit 10: Production layers — RPC-backed `LibrarySource` and `Launcher`**
+- [x] **Unit 10: Production layers — RPC-backed `LibrarySource` and `Launcher`**
 
 **Goal:** Create the layers that production composition uses to wire the frontend atoms to the v4 RPC client.
 
@@ -661,7 +661,7 @@ docs/development/standards.md              # MODIFIED: package name + AsyncResul
 
 ---
 
-- [ ] **Unit 11: Refactor `ShiftHomePage` — state-root + self-selecting children**
+- [x] **Unit 11: Refactor `ShiftHomePage` — state-root + self-selecting children**
 
 **Goal:** `ShiftHomePage` becomes a pure composition under `LibraryListStateRoot`, with self-selecting body components per state. No `useRpcQuery`, no `useGameLaunch`, no `@app/*` imports.
 
@@ -718,7 +718,7 @@ docs/development/standards.md              # MODIFIED: package name + AsyncResul
 
 ---
 
-- [ ] **Unit 12: Replace `useGameLaunch` with `useLibraryLaunchController`**
+- [x] **Unit 12: Replace `useGameLaunch` with `useLibraryLaunchController`**
 
 **Goal:** The launch controller is an atom-driven hook that returns `{ state: LaunchState, start: (game) => void }`.
 
@@ -773,7 +773,7 @@ docs/development/standards.md              # MODIFIED: package name + AsyncResul
 
 ---
 
-- [ ] **Unit 13: Delete legacy frontend transport (`runRpc`, `useRpcQuery`, `rpcQueryStore`, `rx/`)**
+- [x] **Unit 13: Delete legacy frontend transport (`runRpc`, `useRpcQuery`, `rpcQueryStore`, `rx/`)**
 
 **Goal:** Remove the homegrown query infrastructure now that atoms drive all reads.
 
@@ -803,7 +803,7 @@ docs/development/standards.md              # MODIFIED: package name + AsyncResul
 
 ---
 
-- [ ] **Unit 14: Refactor `ShiftHomePage.stories.tsx` — five layer-swap stories**
+- [x] **Unit 14: Refactor `ShiftHomePage.stories.tsx` — five layer-swap stories**
 
 **Goal:** Replace the single broken `Default` story with five stories (Default, Loading, LoadError, Empty, FailedLaunch) that render via layer-swap decorators against in-memory implementations.
 
@@ -841,7 +841,7 @@ docs/development/standards.md              # MODIFIED: package name + AsyncResul
 
 ---
 
-- [ ] **Unit 15: Cleanup — delete spike, update Storybook glob, update standards**
+- [x] **Unit 15: Cleanup — delete spike, update Storybook glob, update standards**
 
 **Goal:** Remove the spike folder; update tooling references; update the standards doc to reflect the actual v4 package name and `AsyncResult` rename.
 

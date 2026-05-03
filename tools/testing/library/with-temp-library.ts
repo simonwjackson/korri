@@ -5,7 +5,7 @@ import { join, resolve } from "node:path"
 /**
  * Writes a real ROCKNIX-style on-disk library into a tmpdir for tests.
  *
- * Used by RocknixSource tests, library-context tests, and RPC handler tests
+ * Used by RocknixSource tests, Effect layer tests, and RPC handler tests
  * that want to exercise the real filesystem reader against known-shape inputs.
  * No mocked `fs`, no mocked XML parser — everything below the helper is the
  * production code path.

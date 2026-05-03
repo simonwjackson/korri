@@ -1,5 +1,5 @@
 ---
-title: React state components over Result render props for Effect atoms
+title: React state components over async-state render props for Effect atoms
 date: 2026-05-03
 category: best-practices
 module: korri/frontend-runtime + react-component-architecture
@@ -7,8 +7,8 @@ problem_type: best_practice
 component: tooling
 severity: medium
 applies_when:
-  - Building React components on top of Effect atoms or Result-shaped async state
-  - A fluent Result.builder chain makes JSX feel imperative or render-prop-like
+  - Building React components on top of Effect atoms or AsyncResult-shaped async state
+  - Direct async-state matching makes JSX feel imperative or render-prop-like
   - You want Storybook states driven by real Effect layers without mocking transport
   - Async state needs both React composition and pure FP testability
 related_components:
@@ -24,26 +24,28 @@ tags:
   - storybook
 ---
 
-# React state components over Result render props for Effect atoms
+# React state components over async-state render props for Effect atoms
 
 ## Context
 
-The Effect atoms spike started with the technically correct shape: `libraryItemsAtom` returned a `Result`, `LibraryList` consumed it with `useAtomValue`, and JSX branched with `Result.builder(...)`. That validated the atom runtime path, but the component still read like control flow embedded in React:
+The Effect atoms spike started with the technically correct shape: `libraryItemsAtom` returned async runtime state, `LibraryList` consumed it with `useAtomValue`, and JSX branched directly on that value. That validated the atom runtime path, but the component still read like control flow embedded in React:
 
 ```tsx
-{Result.builder(items)
-  .onInitialOrWaiting(() => <LibraryListLoading />)
-  .onError(error => <LibraryListError error={error} />)
-  .onSuccess(games => <LibraryListReady games={games} />)
-  .render()}
+const result = useAtomValue(libraryItemsAtom)
+return AsyncResult.matchWithWaiting(result, {
+  onWaiting: () => <LibraryListLoading />,
+  onError: error => <LibraryListError error={error} />,
+  onSuccess: success => <LibraryListReady games={success.value} />,
+  onDefect: defect => <LibraryListDefect defect={defect} />,
+})
 ```
 
-The problem was not `Result` itself. The problem was letting raw async primitives drive the JSX shape. It felt too close to render props: success/error/loading branches were passed into a controller instead of appearing as ordinary React composition.
+The problem was not `AsyncResult` itself. The problem was letting raw async primitives drive the JSX shape. It felt too close to render props: success/error/loading branches were passed into a controller instead of appearing as ordinary React composition.
 
 The spike settled on a better separation:
 
-1. Effect atoms produce `Result` values.
-2. Pure FP adapters convert `Result` / `Exit` into domain ADTs.
+1. Effect atoms produce `AsyncResult` values.
+2. Pure FP adapters convert `AsyncResult` / `Exit` into domain ADTs.
 3. A small React Root provides the ADT through context.
 4. State-specific child components self-select their case with `Option`.
 5. Views receive already-valid case data.
@@ -54,7 +56,7 @@ Use **React composition at the boundary** and **FP state algebra underneath**.
 
 ### 1. Convert infrastructure state into a domain ADT
 
-Do not make components pattern-match `Result.Result<readonly GameRecord[], LibraryError>` directly. Convert it once into a UI-domain state:
+Do not make components pattern-match `AsyncResult.AsyncResult<readonly GameRecord[], LibraryError>` directly. Convert it once into a UI-domain state:
 
 ```ts
 type LibraryListState =
@@ -65,9 +67,9 @@ type LibraryListState =
 
 const LibraryListState = {
   fromResult: (
-    result: Result.Result<readonly GameRecord[], LibraryError>,
+    result: AsyncResult.AsyncResult<readonly GameRecord[], LibraryError>,
   ): LibraryListState =>
-    Result.matchWithWaiting(result, {
+    AsyncResult.matchWithWaiting(result, {
       onWaiting: () => ({ _tag: "Loading" }),
       onError: error => ({ _tag: "LoadError", error }),
       onDefect: defect => ({ _tag: "Defect", defect }),
@@ -76,7 +78,7 @@ const LibraryListState = {
 }
 ```
 
-The ADT is the contract the UI actually understands. `Result` remains the atom/runtime contract.
+The ADT is the contract the UI actually understands. `AsyncResult` remains the atom/runtime contract.
 
 ### 2. Add typed selectors that return `Option`
 
@@ -219,8 +221,8 @@ function useLibraryLaunchController(): LaunchController {
 
 ## When to Apply
 
-- A component consumes an Effect atom, async query atom, or any `Result`-shaped state.
-- JSX starts accumulating `Result.builder`, `match`, `switch`, or `if` branches for loading/error/success.
+- A component consumes an Effect atom, async query atom, or any `AsyncResult`-shaped state.
+- JSX starts accumulating async-state `match`, `switch`, or `if` branches for loading/error/success.
 - Success/error/loading states are meaningful visual components worth naming.
 - The same state surface needs Storybook stories, unit tests for state semantics, and future production wiring.
 - A mutation has more states than “pending or not pending”.
@@ -229,17 +231,18 @@ Do **not** extract a generic result framework first. Start with a domain-specifi
 
 ## Examples
 
-### Before: builder chain in JSX
+### Before: async-state branching in JSX
 
 ```tsx
 function LibraryList() {
   const items = useAtomValue(libraryItemsAtom)
 
-  return Result.builder(items)
-    .onInitialOrWaiting(() => <LibraryListLoading />)
-    .onError(error => <LibraryListError error={error} />)
-    .onSuccess(games => <LibraryListReady games={games} />)
-    .render()
+  return AsyncResult.matchWithWaiting(items, {
+    onWaiting: () => <LibraryListLoading />,
+    onError: error => <LibraryListError error={error} />,
+    onDefect: defect => <LibraryListDefect defect={defect} />,
+    onSuccess: success => <LibraryListReady games={success.value} />,
+  })
 }
 ```
 
@@ -302,4 +305,4 @@ The component does not know whether it received a loading-forever layer, an in-m
 - `docs/solutions/best-practices/evolving-shared-context-layout-primitives-2026-05-01.md` — guidance for evolving context-based compound primitives without widening the blast radius.
 - `docs/solutions/best-practices/prefer-real-implementations-over-mocks-2026-05-02.md` — testing posture that the layer-swapped Storybook stories preserve.
 - `docs/solutions/best-practices/per-level-storybook-coverage-for-atomic-themes-2026-05-01.md` — related Storybook discipline for making visual states reviewable.
-- `tools/spike-effect-atoms/` — current spike that validated this pattern in place.
+- Historical spike: `tools/spike-effect-atoms/` validated this pattern before it was promoted into `korri/shared/library/*` and then deleted.

@@ -22,7 +22,7 @@ this brief is implemented end-to-end against a single ROCKNIX device:
 
 - **SGR-R6** — implemented. The launch command is `runemu.sh` (resolved
   from `es_systems.cfg`); success is the spawned process's exit code.
-  See `korri/products/app/features/resume/launch-controller.ts`.
+  See `korri/shared/library/use-library-launch-controller.ts`.
 - **SGR-R7** — implemented. Failed launches surface
   `ShiftLaunchFailureBanner` above the rail; the banner's retry button
   re-fires the launch with the *originally failed id* even if the player

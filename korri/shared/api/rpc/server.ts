@@ -1,13 +1,20 @@
+import { FeatureGatesMiddlewareLive } from "@shared/gates/middleware"
+import { LauncherLayerLive } from "@shared/library/launcher-layer-live"
+import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
 import { Effect, Exit, Layer, Scope } from "effect"
 import * as HttpEffect from "effect/unstable/http/HttpEffect"
 import { RpcServer } from "effect/unstable/rpc"
-import { FeatureGatesMiddlewareLive } from "@shared/gates/middleware"
 import { appRpcGroup } from "./app-rpc-group"
 import { HandlersLive } from "./handlers"
 import { BatchJsonSerializationLive } from "./serialization"
 
+const LibraryInfrastructureLive = Layer.merge(
+  LibrarySourceLayerLive,
+  LauncherLayerLive,
+)
+
 const ServerLive = Layer.mergeAll(
-  HandlersLive,
+  HandlersLive.pipe(Layer.provide(LibraryInfrastructureLive)),
   FeatureGatesMiddlewareLive,
   BatchJsonSerializationLive,
 )

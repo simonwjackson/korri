@@ -14,10 +14,9 @@
  * future product surface — e.g., Korri OS — may resolve `launchSpecFor`
  * very differently without changing the renderer).
  *
- * The interface is a plain TS interface, not an Effect Service: the brainstorm
- * favored simplicity over premature DI for the personal MVP. RPC handlers
- * compose a source from `getLibraryContext()` and call its async methods
- * directly.
+ * Runtime composition wraps this plain TS interface in the Effect Service
+ * declared in `library-services.ts`, letting RPC handlers and stories share
+ * the same layer-swap seam while keeping implementations simple.
  *
  * See docs/plans/2026-05-02-001-feat-personal-mvp-rocknix-launch-plan.md (Unit 1).
  */

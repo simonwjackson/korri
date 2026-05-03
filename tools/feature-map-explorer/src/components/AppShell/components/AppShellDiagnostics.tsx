@@ -19,9 +19,9 @@ export function AppShellDiagnostics({
 
   return (
     <ul className="flex flex-col gap-1.5">
-      {diagnostics.map((diag, idx) => (
+      {diagnostics.map(diag => (
         <li
-          key={`${diag.severity}-${diag.path ?? "global"}-${idx}`}
+          key={`${diag.severity}-${diag.path ?? "global"}-${diag.message}`}
           className="flex items-start gap-2 rounded-md border border-border bg-surface px-2 py-1.5"
         >
           <span

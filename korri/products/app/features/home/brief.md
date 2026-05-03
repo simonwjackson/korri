@@ -23,7 +23,7 @@ For the personal MVP (`docs/brainstorms/2026-05-02-personal-mvp-scope-requiremen
 - The rail is sourced from the `app.library.list` RPC and ordered by
   `lastPlayed` desc — the leftmost tile is the resume target.
 - The home does not own launch behavior. It composes the resume
-  feature's `useGameLaunch` controller (`korri/products/app/features/resume/launch-controller.ts`)
+  shared `useLibraryLaunchController` controller (`korri/shared/library/use-library-launch-controller.ts`)
   and the `ShiftLaunchFailureBanner` molecule, but the launch contract
   itself is owned by the resume brief (SGR-R6 / SGR-R7).
 - HOME-R1, HOME-R2, HOME-R3 are unchanged in shape — the rail and

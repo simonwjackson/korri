@@ -15,7 +15,7 @@
 #   The home's data flow (RPC → render → loading/error/empty/populated) is
 #   covered by real-implementation unit + handler tests; the launch
 #   composition (focus → confirm → spawn → failure banner → retry) is
-#   covered by useGameLaunch.test.tsx running over a real Hono server.
+#   covered by use-library-launch-controller.test.tsx.
 
 @home @shift
 @fixme(MVP-bdd-fixture-deferred)

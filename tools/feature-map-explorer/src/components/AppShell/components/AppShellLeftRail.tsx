@@ -248,13 +248,13 @@ function DiagnosticsRailList({
 }) {
   return (
     <div className="flex flex-col gap-px">
-      {map.diagnostics.map((diag, idx) => {
+      {map.diagnostics.map(diag => {
         const ref = diagnosticTarget(diag, map)
         const token: StatusToken =
           diag.severity === "error" ? "error" : "warning"
         return (
           <button
-            key={`${diag.severity}-${diag.path ?? "global"}-${idx}`}
+            key={`${diag.severity}-${diag.path ?? "global"}-${diag.message}`}
             type="button"
             onClick={() => onSelect(ref)}
             disabled={!ref}

@@ -1,7 +1,7 @@
-import { Rpc } from "effect/unstable/rpc"
 import { ApiError } from "@shared/api/rpc/errors"
 import { GameRecord } from "@shared/fixtures/games/game"
 import { Schema } from "effect"
+import { Rpc } from "effect/unstable/rpc"
 
 export class ListLibraryPayload extends Schema.Class<ListLibraryPayload>(
   "ListLibraryPayload",

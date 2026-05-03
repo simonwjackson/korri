@@ -483,9 +483,9 @@ function ScenarioList({
   }
   return (
     <ul className="flex flex-col gap-1">
-      {scenarios.map((scenario, idx) => (
+      {scenarios.map(scenario => (
         <li
-          key={`${scenario.name}-${idx}`}
+          key={`${scenario.name}-${scenario.status}`}
           className="flex items-center gap-2 rounded-md border border-border bg-bg px-2 py-1.5 text-sm"
         >
           <StatusDot token={scenarioStatusToken(scenario.status)} />

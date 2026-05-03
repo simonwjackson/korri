@@ -1,5 +1,9 @@
-import { NotFoundError } from "@shared/api/rpc/errors"
-import { getLibraryContext } from "@shared/library/library-context"
+import { DataError, NotFoundError } from "@shared/api/rpc/errors"
+import {
+  Launcher,
+  type LibraryError,
+  LibrarySource,
+} from "@shared/library/library-services"
 import { logger } from "@shared/logger/logger"
 import { Effect } from "effect"
 
@@ -9,10 +13,11 @@ export const handleLaunchLibrary = (
   payload: typeof LaunchLibraryPayload.Type,
 ) =>
   Effect.gen(function* () {
-    const ctx = getLibraryContext()
-    const spec = yield* Effect.promise(() =>
-      ctx.source.launchSpecFor(payload.id),
-    )
+    const source = yield* LibrarySource
+    const launcher = yield* Launcher
+    const spec = yield* source
+      .launchSpecFor(payload.id)
+      .pipe(Effect.mapError(toDataError))
 
     if (!spec) {
       logger.warn(
@@ -24,7 +29,7 @@ export const handleLaunchLibrary = (
       )
     }
 
-    const result = yield* Effect.promise(() => ctx.launcher.run(spec))
+    const result = yield* launcher.run(spec).pipe(Effect.mapError(toDataError))
 
     if (result.status === "launched") {
       logger.info(
@@ -49,3 +54,11 @@ export const handleLaunchLibrary = (
           exitCode: result.exitCode,
         } satisfies LaunchLibraryResponse)
   })
+
+function toDataError(error: LibraryError): DataError {
+  const message = error.message ?? "library launch failed"
+  return new DataError({
+    reason: "Unavailable",
+    message,
+  })
+}

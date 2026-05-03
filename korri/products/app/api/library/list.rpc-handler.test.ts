@@ -2,13 +2,10 @@ import { afterEach, describe, expect, it } from "bun:test"
 import { rm } from "node:fs/promises"
 import { appRpcGroup } from "@shared/api/rpc/app-rpc-group"
 import { DataError } from "@shared/api/rpc/errors"
-import {
-  configureLibraryContextForTesting,
-  resetLibraryContextForTesting,
-} from "@shared/library/library-context"
+import { LibraryError, LibrarySource } from "@shared/library/library-services"
+import { makeFailingLibrarySourceLayer } from "@shared/library/library-source-layer-memory"
 import { createRocknixSource } from "@shared/library/rocknix/rocknix-source"
-import { createShellLauncher } from "@shared/library/shell-launcher"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Effect, Exit, Layer } from "effect"
 import { withTempLibrary } from "../../../../../tools/testing/library/with-temp-library"
 
 import { handleListLibrary } from "./list.rpc-handler"
@@ -20,7 +17,6 @@ function track<T extends { cleanup: () => Promise<void> }>(lib: T): T {
 }
 
 afterEach(async () => {
-  resetLibraryContextForTesting()
   while (cleanups.length > 0) {
     const c = cleanups.pop()
     if (c) await c()
@@ -45,16 +41,10 @@ describe("app.library.list handler (configured-real source)", () => {
         ],
       }),
     )
-    configureLibraryContextForTesting({
-      source: createRocknixSource({
-        gamelistRoots: [lib.rootDir],
-        esSystemsPath: lib.esSystemsPath,
-        launchCommand: lib.launchCommand,
-      }),
-      launcher: createShellLauncher(),
-    })
 
-    const result = await Effect.runPromise(handleListLibrary({}))
+    const result = await Effect.runPromise(
+      handleListLibrary({}).pipe(Effect.provide(rocknixSourceLayer(lib))),
+    )
     expect(result.games.map(g => g.metadata?.name)).toEqual(["New", "Old"])
   })
 
@@ -72,33 +62,22 @@ describe("app.library.list handler (configured-real source)", () => {
         ],
       }),
     )
-    configureLibraryContextForTesting({
-      source: createRocknixSource({
-        gamelistRoots: [lib.rootDir],
-        esSystemsPath: lib.esSystemsPath,
-        launchCommand: lib.launchCommand,
-      }),
-      launcher: createShellLauncher(),
-    })
-    const result = await Effect.runPromise(handleListLibrary({}))
+    const result = await Effect.runPromise(
+      handleListLibrary({}).pipe(Effect.provide(rocknixSourceLayer(lib))),
+    )
     expect(result.games).toEqual([])
   })
 
-  it("fails with DataError(ReadFailed) when the source's list() throws", async () => {
-    // Build a source that will throw — not a Stub, just a real object whose
-    // list() rejects. This exercises the handler's error mapping path.
-    const failing = {
-      list: async (): Promise<never> => {
-        throw new Error("disk on fire")
-      },
-      launchSpecFor: async () => undefined,
-    }
-    configureLibraryContextForTesting({
-      source: failing,
-      launcher: createShellLauncher(),
-    })
-
-    const exit = await Effect.runPromiseExit(handleListLibrary({}))
+  it("fails with DataError(ReadFailed) when the source's list() fails", async () => {
+    const exit = await Effect.runPromiseExit(
+      handleListLibrary({}).pipe(
+        Effect.provide(
+          makeFailingLibrarySourceLayer(
+            new LibraryError({ reason: "io", message: "disk on fire" }),
+          ),
+        ),
+      ),
+    )
     expect(Exit.isFailure(exit)).toBe(true)
     if (Exit.isFailure(exit)) {
       const error = Cause.squash(exit.cause)
@@ -125,15 +104,9 @@ describe("app.library.list handler (configured-real source)", () => {
       }),
     )
     await rm(lib.esSystemsPath, { force: true })
-    configureLibraryContextForTesting({
-      source: createRocknixSource({
-        gamelistRoots: [lib.rootDir],
-        esSystemsPath: lib.esSystemsPath,
-        launchCommand: lib.launchCommand,
-      }),
-      launcher: createShellLauncher(),
-    })
-    const result = await Effect.runPromise(handleListLibrary({}))
+    const result = await Effect.runPromise(
+      handleListLibrary({}).pipe(Effect.provide(rocknixSourceLayer(lib))),
+    )
     // RocknixSource degrades gracefully — empty list, not a DataError.
     expect(result.games).toEqual([])
   })
@@ -143,3 +116,36 @@ describe("app.library.list handler (configured-real source)", () => {
     expect(tags).toContain("app.library.list")
   })
 })
+
+function rocknixSourceLayer(lib: {
+  readonly rootDir: string
+  readonly esSystemsPath: string
+  readonly launchCommand: string
+}) {
+  const source = createRocknixSource({
+    gamelistRoots: [lib.rootDir],
+    esSystemsPath: lib.esSystemsPath,
+    launchCommand: lib.launchCommand,
+  })
+
+  return Layer.succeed(LibrarySource)({
+    list: () =>
+      Effect.tryPromise({
+        try: () => source.list(),
+        catch: error =>
+          new LibraryError({
+            reason: "io",
+            message: error instanceof Error ? error.message : String(error),
+          }),
+      }),
+    launchSpecFor: id =>
+      Effect.tryPromise({
+        try: () => source.launchSpecFor(id),
+        catch: error =>
+          new LibraryError({
+            reason: "io",
+            message: error instanceof Error ? error.message : String(error),
+          }),
+      }),
+  })
+}
