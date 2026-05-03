@@ -1,8 +1,4 @@
-import {
-  useAtomRefresh,
-  useAtomSet,
-  useAtomValue,
-} from "@effect-atom/atom-react"
+import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react"
 import type { GameRecord } from "@shared/fixtures/games/game"
 import { getGameDisplayName } from "@shared/fixtures/games/game"
 import { Option } from "effect"

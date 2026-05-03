@@ -44,7 +44,7 @@ const PLACEHOLDER_AVATAR_SRC = "https://i.pravatar.cc/96?u=korri-shift-user"
 
 export function ShiftHomePage() {
   const { data, isPending, isError, refetch } = useRpcQuery(client =>
-    client.app["library.list"]({}),
+    client["app.library.list"]({}),
   )
 
   // Loading: nothing decoded yet.

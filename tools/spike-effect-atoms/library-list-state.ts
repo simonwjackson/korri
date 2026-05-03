@@ -1,4 +1,4 @@
-import { Result } from "@effect-atom/atom-react"
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 import type { GameRecord } from "@shared/fixtures/games/game"
 import { Cause, Exit, Option } from "effect"
 import type { LaunchResult, LibraryError } from "./library-service"
@@ -11,9 +11,9 @@ export type LibraryListState =
 
 export const LibraryListState = {
   fromResult: (
-    result: Result.Result<readonly GameRecord[], LibraryError>,
+    result: AsyncResult.AsyncResult<readonly GameRecord[], LibraryError>,
   ): LibraryListState =>
-    Result.matchWithWaiting(result, {
+    AsyncResult.matchWithWaiting(result, {
       onWaiting: () => ({ _tag: "Loading" }),
       onError: error => ({ _tag: "LoadError", error }),
       onDefect: defect => ({ _tag: "Defect", defect }),

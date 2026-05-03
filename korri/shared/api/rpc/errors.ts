@@ -1,19 +1,22 @@
 import { Schema } from "effect"
 
-export class DataError extends Schema.TaggedError<DataError>()("DataError", {
-  reason: Schema.Literal("ReadFailed", "WriteFailed", "Unavailable"),
-  message: Schema.String,
-  code: Schema.optional(Schema.String),
-}) {}
+export class DataError extends Schema.TaggedErrorClass<DataError>()(
+  "DataError",
+  {
+    reason: Schema.Literals(["ReadFailed", "WriteFailed", "Unavailable"]),
+    message: Schema.String,
+    code: Schema.optional(Schema.String),
+  },
+) {}
 
-export class NotFoundError extends Schema.TaggedError<NotFoundError>()(
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()(
   "NotFoundError",
   {
     message: Schema.String,
   },
 ) {}
 
-export class ValidationError extends Schema.TaggedError<ValidationError>()(
+export class ValidationError extends Schema.TaggedErrorClass<ValidationError>()(
   "ValidationError",
   {
     message: Schema.String,
@@ -21,7 +24,11 @@ export class ValidationError extends Schema.TaggedError<ValidationError>()(
   },
 ) {}
 
-export const ApiError = Schema.Union(DataError, NotFoundError, ValidationError)
+export const ApiError = Schema.Union([
+  DataError,
+  NotFoundError,
+  ValidationError,
+])
 
 export type ApiError = DataError | NotFoundError | ValidationError
 

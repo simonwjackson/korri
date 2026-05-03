@@ -234,7 +234,7 @@ docs/development/standards.md              # MODIFIED: package name + AsyncResul
 
 ### Phase 1 — v4 foundation (test infra + backend on v4)
 
-- [ ] **Unit 1: Bump dependencies and remove v3 packages**
+- [x] **Unit 1: Bump dependencies and remove v3 packages**
 
 **Goal:** Replace v3 Effect packages with v4 beta pinned-exact, verify install.
 
@@ -265,7 +265,7 @@ docs/development/standards.md              # MODIFIED: package name + AsyncResul
 
 ---
 
-- [ ] **Unit 2: Schema v4 mechanical rename pass**
+- [x] **Unit 2: Schema v4 mechanical rename pass**
 
 **Goal:** Update every file using `Schema.*` v3 APIs to v4 names per the official migration table.
 
@@ -309,7 +309,7 @@ docs/development/standards.md              # MODIFIED: package name + AsyncResul
 
 ---
 
-- [ ] **Unit 3: Service / Tag / Layer rename pass**
+- [x] **Unit 3: Service / Tag / Layer rename pass**
 
 **Goal:** Migrate all `Context.Tag`, `Effect.Service`, and Layer-naming conventions to v4.
 
@@ -346,7 +346,7 @@ docs/development/standards.md              # MODIFIED: package name + AsyncResul
 
 ---
 
-- [ ] **Unit 4: Import path migration `@effect/*` → `effect/unstable/*`**
+- [x] **Unit 4: Import path migration `@effect/*` → `effect/unstable/*`**
 
 **Goal:** Move all imports from `@effect/platform`, `@effect/rpc` into the v4 unstable namespace.
 
@@ -389,7 +389,7 @@ docs/development/standards.md              # MODIFIED: package name + AsyncResul
 
 ---
 
-- [ ] **Unit 5: Test infrastructure migration**
+- [x] **Unit 5: Test infrastructure migration**
 
 **Goal:** Update all test harnesses (`with-rpc-server`, RPC handler tests, runRpc test paths) for v4 RPC. End of this unit: full test suite green on v4 with the existing architecture preserved.
 

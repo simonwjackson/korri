@@ -1,4 +1,4 @@
-import { useAtomSet } from "@effect-atom/atom-react"
+import { useAtomSet } from "@effect/atom-react"
 import { games } from "@shared/fixtures/games/games"
 import type { Decorator, Meta, StoryObj } from "@storybook/react-vite"
 import type { Layer } from "effect"

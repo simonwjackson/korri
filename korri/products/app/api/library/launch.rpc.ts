@@ -1,4 +1,4 @@
-import { Rpc } from "@effect/rpc"
+import { Rpc } from "effect/unstable/rpc"
 import { ApiError } from "@shared/api/rpc/errors"
 import { Schema } from "effect"
 
@@ -18,7 +18,10 @@ const FailedResult = Schema.Struct({
   stderrTail: Schema.optional(Schema.String),
 })
 
-export const LaunchLibraryResponse = Schema.Union(LaunchedResult, FailedResult)
+export const LaunchLibraryResponse = Schema.Union([
+  LaunchedResult,
+  FailedResult,
+])
 export type LaunchLibraryResponse = Schema.Schema.Type<
   typeof LaunchLibraryResponse
 >

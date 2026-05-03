@@ -7,10 +7,10 @@ export type LaunchResult =
   | { readonly status: "launched" }
   | { readonly status: "failed"; readonly exitCode: number }
 
-export class LibraryError extends Schema.TaggedError<LibraryError>()(
+export class LibraryError extends Schema.TaggedErrorClass<LibraryError>()(
   "LibraryError",
   {
-    reason: Schema.Literal("io", "unavailable"),
+    reason: Schema.Literals(["io", "unavailable"]),
     message: Schema.optional(Schema.String),
   },
 ) {}
@@ -20,7 +20,6 @@ export interface LibraryService {
   readonly launch: (id: string) => Effect.Effect<LaunchResult, never>
 }
 
-export class Library extends Context.Tag("SpikeEffectAtomsLibrary")<
-  Library,
-  LibraryService
->() {}
+export class Library extends Context.Service<Library, LibraryService>()(
+  "SpikeEffectAtomsLibrary",
+) {}

@@ -1,4 +1,4 @@
-import { Atom } from "@effect-atom/atom-react"
+import * as Atom from "effect/unstable/reactivity/Atom"
 import { Effect } from "effect"
 import { loadingForeverLayer } from "./library-layer-memory"
 import { Library } from "./library-service"

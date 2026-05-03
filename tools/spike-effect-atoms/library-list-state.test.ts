@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { Result } from "@effect-atom/atom-react"
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 import { games } from "@shared/fixtures/games/games"
 import { Cause, Exit, Option } from "effect"
 import { LaunchState, LibraryListState } from "./library-list-state"
@@ -9,22 +9,24 @@ const seedGames = games.slice(0, 3)
 
 describe("LibraryListState", () => {
   it("maps waiting results to Loading", () => {
-    expect(LibraryListState.fromResult(Result.initial(true))).toEqual({
+    expect(LibraryListState.fromResult(AsyncResult.initial(true))).toEqual({
       _tag: "Loading",
     })
   })
 
   it("maps successful results to Ready", () => {
-    expect(LibraryListState.fromResult(Result.success(seedGames))).toEqual({
-      _tag: "Ready",
-      games: seedGames,
-    })
+    expect(LibraryListState.fromResult(AsyncResult.success(seedGames))).toEqual(
+      {
+        _tag: "Ready",
+        games: seedGames,
+      },
+    )
   })
 
   it("maps typed failures to LoadError", () => {
     const error = new LibraryError({ reason: "io", message: "disk" })
 
-    expect(LibraryListState.fromResult(Result.fail(error))).toEqual({
+    expect(LibraryListState.fromResult(AsyncResult.fail(error))).toEqual({
       _tag: "LoadError",
       error,
     })
@@ -32,12 +34,12 @@ describe("LibraryListState", () => {
 
   it("maps defects to Defect", () => {
     expect(
-      LibraryListState.fromResult(Result.failure(Cause.die("boom"))),
+      LibraryListState.fromResult(AsyncResult.failure(Cause.die("boom"))),
     ).toEqual({ _tag: "Defect", defect: "boom" })
   })
 
   it("selects a state case as an Option", () => {
-    const state = LibraryListState.fromResult(Result.success(seedGames))
+    const state = LibraryListState.fromResult(AsyncResult.success(seedGames))
 
     expect(Option.isSome(LibraryListState.select("Ready")(state))).toBe(true)
     expect(Option.isNone(LibraryListState.select("LoadError")(state))).toBe(

@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 
-export const MediaType = Schema.Literal("image", "video", "audio")
+export const MediaType = Schema.Literals(["image", "video", "audio"])
 export type MediaType = Schema.Schema.Type<typeof MediaType>
 
 export const Media = Schema.Struct({
@@ -23,7 +23,7 @@ export type GameMetadata = Schema.Schema.Type<typeof GameMetadata>
 
 export const GameUserData = Schema.Struct({
   lastPlayed: Schema.optional(
-    Schema.Union(Schema.DateFromSelf, Schema.DateFromString),
+    Schema.Union([Schema.Date, Schema.DateFromString]),
   ),
   playtime: Schema.optional(Schema.Number),
   favorite: Schema.optional(Schema.Boolean),

@@ -31,7 +31,7 @@ export const TimestampMeta = Schema.Struct({
  */
 export const CountMeta = Schema.Struct({
   timestamp: Schema.String,
-  count: Schema.Number.pipe(Schema.int()),
+  count: Schema.Int,
 })
 
 /**
@@ -40,5 +40,5 @@ export const CountMeta = Schema.Struct({
  */
 export const TotalCountMeta = Schema.Struct({
   timestamp: Schema.String,
-  totalCount: Schema.Number.pipe(Schema.int()),
+  totalCount: Schema.Int,
 })

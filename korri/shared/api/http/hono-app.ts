@@ -56,6 +56,7 @@ export function createHonoApp() {
   app.use("/api/*", compress({ threshold: 1024 }))
   app.options("/api/*", c => c.body(null, 204))
   app.post("/api/rpc", async c => rpcHandler(c.req.raw))
+  app.post("/api/rpc/", async c => rpcHandler(c.req.raw))
 
   return app
 }

@@ -1,4 +1,4 @@
-import { RpcSerialization } from "@effect/rpc"
+import { RpcSerialization } from "effect/unstable/rpc"
 import { Layer } from "effect"
 
 const decoder = new TextDecoder()
@@ -11,21 +11,20 @@ const decoder = new TextDecoder()
  * bodies need the array elements returned individually so the server can route
  * each request.
  */
-export const batchJson = RpcSerialization.RpcSerialization.of({
+export const batchJson: RpcSerialization.RpcSerialization["Service"] = {
   contentType: "application/json",
   includesFraming: false,
-  unsafeMake: () => ({
-    decode: data => {
+  makeUnsafe: () => ({
+    decode: (data: Uint8Array | string) => {
       const parsed = JSON.parse(
         typeof data === "string" ? data : decoder.decode(data),
       )
       return Array.isArray(parsed) ? parsed : [parsed]
     },
-    encode: response => JSON.stringify(response),
+    encode: (response: unknown) => JSON.stringify(response),
   }),
-})
+}
 
 export const BatchJsonSerializationLive = Layer.succeed(
   RpcSerialization.RpcSerialization,
-  batchJson,
-)
+)(batchJson)

@@ -15,7 +15,7 @@ export interface InMemoryLibraryConfig {
 }
 
 export function makeInMemoryLibraryLayer(config: InMemoryLibraryConfig) {
-  return Layer.succeed(Library, {
+  return Layer.succeed(Library)({
     list: () => Effect.succeed(config.games),
     launch: () =>
       delayIfConfigured(
@@ -26,13 +26,13 @@ export function makeInMemoryLibraryLayer(config: InMemoryLibraryConfig) {
 }
 
 export function makeFailingListLayer(error: LibraryError) {
-  return Layer.succeed(Library, {
+  return Layer.succeed(Library)({
     list: () => Effect.fail(error),
     launch: () => Effect.never,
   })
 }
 
-export const loadingForeverLayer = Layer.succeed(Library, {
+export const loadingForeverLayer = Layer.succeed(Library)({
   list: () => Effect.never,
   launch: () => Effect.never,
 })

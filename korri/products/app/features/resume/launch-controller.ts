@@ -79,7 +79,7 @@ export function useGameLaunch(
     setLastError(undefined)
 
     try {
-      const result = await runRpc(c => c.app["library.launch"]({ id }))
+      const result = await runRpc(c => c["app.library.launch"]({ id }))
       if (result.status === "launched") {
         failedIdRef.current = undefined
         setFailedId(undefined)

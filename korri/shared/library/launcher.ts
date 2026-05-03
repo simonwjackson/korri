@@ -26,14 +26,14 @@ import { Schema } from "effect"
  */
 export const LaunchSpec = Schema.Struct({
   command: Schema.String.pipe(
-    Schema.filter(s => s.length > 0, {
-      message: () => "LaunchSpec.command must be non-empty",
-    }),
+    Schema.check(
+      Schema.isMinLength(1, {
+        message: "LaunchSpec.command must be non-empty",
+      }),
+    ),
   ),
   args: Schema.Array(Schema.String),
-  env: Schema.optional(
-    Schema.Record({ key: Schema.String, value: Schema.String }),
-  ),
+  env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   cwd: Schema.optional(Schema.String),
 })
 export type LaunchSpec = Schema.Schema.Type<typeof LaunchSpec>
