@@ -1,5 +1,9 @@
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
+export ODIN_HOST     := env_var_or_default("ODIN_HOST", "root@sm8550")
+export ODIN_PROJECT  := env_var_or_default("ODIN_PROJECT", "/storage/korri")
+export ODIN_API_PORT := env_var_or_default("ODIN_API_PORT", "3001")
+
 default:
   @just --list
 
@@ -43,6 +47,22 @@ desktop-runtime-check:
 # Smoke-test the desktop HTTP composition against the built portal output.
 desktop-smoke: build-web
   bun run tools/desktop/desktop-smoke.ts
+
+# One-time bootstrap of the AYN Odin 2 Portal (Bun, tmux, project sync, Wayland env).
+bootstrap-odin:
+  tools/scripts/odin-bootstrap.sh
+
+# Incremental rsync of the project to the Odin (no install, no env rewrite).
+sync-odin:
+  tools/scripts/odin-sync.sh
+
+# Iteration loop: sync project, restart remote API, direct Tailscale API proxy + local Vite.
+dev-odin:
+  tools/scripts/odin-dev.sh
+
+# Smoke-test the Odin API stack end-to-end (health + app.library.list).
+check-odin:
+  tools/scripts/odin-smoke.sh
 
 # Start the Electrobun desktop app after building portal assets.
 desktop-dev: build-web desktop-runtime-check

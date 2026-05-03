@@ -169,6 +169,22 @@ describe("useGameLaunch (real RPC roundtrip + real fake-game.sh)", () => {
     expect(spawnCalls[0]?.args).toContain("-Psnes")
   })
 
+  it("launch(id) starts a launch without a confirm action", async () => {
+    await setupRealStack()
+    nextExitCode = 0
+
+    const { result } = renderHook(() => useGameLaunch("snes/echo.smc"))
+
+    act(() => result.current.launch("snes/echo.smc"))
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("idle")
+      expect(result.current.lastError).toBeUndefined()
+    })
+    expect(spawnCalls).toHaveLength(1)
+    expect(spawnCalls[0]?.args).toContain("-Psnes")
+  })
+
   it("transitions to failed with exitCode when the launch returns non-zero", async () => {
     await setupRealStack()
     nextExitCode = 2

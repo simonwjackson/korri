@@ -44,6 +44,7 @@ export interface UseGameLaunchResult {
    * banner's contract.
    */
   readonly failedId?: string
+  launch: (id: string | undefined) => void
   retry: () => void
 }
 
@@ -112,16 +113,22 @@ export function useGameLaunch(
     }
   }, [])
 
+  const launch = useCallback(
+    (id: string | undefined) => {
+      if (statusRef.current === "launching") return
+      if (!id) return
+      // Fire and forget; we manage state via setState calls inside.
+      void performLaunch(id)
+    },
+    [performLaunch],
+  )
+
   // Confirm: launch the focused game if we're idle.
   useInputAction(
     "confirm",
     useCallback(() => {
-      if (statusRef.current === "launching") return
-      const id = focusedId
-      if (!id) return
-      // Fire and forget; we manage state via setState calls inside.
-      void performLaunch(id)
-    }, [focusedId, performLaunch]),
+      launch(focusedId)
+    }, [focusedId, launch]),
   )
 
   const retry = useCallback(() => {
@@ -135,6 +142,7 @@ export function useGameLaunch(
     status,
     lastError,
     failedId,
+    launch,
     retry,
   }
 }

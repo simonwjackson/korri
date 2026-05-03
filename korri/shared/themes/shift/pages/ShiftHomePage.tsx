@@ -100,10 +100,7 @@ export function ShiftHomePage() {
         time={PLACEHOLDER_TIME}
         avatarSrc={PLACEHOLDER_AVATAR_SRC}
       />
-      <ShiftHomeLaunchSurface>
-        <ShiftHomeRail />
-        <ShiftHomeCaption />
-      </ShiftHomeLaunchSurface>
+      <ShiftHomeLaunchSurface />
       <ShiftHomeBottomBar />
     </ShiftHomeRoot>
   )
@@ -116,9 +113,11 @@ export function ShiftHomePage() {
  * composition between ShiftHomeRoot, useGameLaunch, and the failure
  * banner — not a reusable molecule.
  */
-function ShiftHomeLaunchSurface({ children }: { children: React.ReactNode }) {
+function ShiftHomeLaunchSurface() {
   const { items, focused } = useShiftHome()
-  const { status, lastError, failedId, retry } = useGameLaunch(focused.id)
+  const { status, lastError, failedId, launch, retry } = useGameLaunch(
+    focused.id,
+  )
 
   // Title resolution: per SGR-R7, the banner identifies the *failed*
   // game even if the player has since moved focus. Look up the failed id
@@ -137,7 +136,8 @@ function ShiftHomeLaunchSurface({ children }: { children: React.ReactNode }) {
           onRetry={retry}
         />
       ) : null}
-      {children}
+      <ShiftHomeRail onItemClick={game => launch(game.id)} />
+      <ShiftHomeCaption />
     </div>
   )
 }

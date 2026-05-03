@@ -3,8 +3,10 @@ import { Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { compress } from "hono/compress"
 import { cors } from "hono/cors"
+import { serveMediaAsset } from "./media-assets"
 
 const MAX_BODY_SIZE = 10 * 1024 * 1024
+const DEFAULT_MEDIA_ROOT = "/storage/korri/media"
 const isDev = process.env.NODE_ENV === "development"
 
 export function createHonoApp() {
@@ -23,6 +25,12 @@ export function createHonoApp() {
 
   app.get("/api/health", c =>
     c.json({ status: "ok", timestamp: new Date().toISOString() }),
+  )
+
+  app.get("/api/media/*", c =>
+    serveMediaAsset(c.req.raw, {
+      mediaRoot: process.env.KORRI_MEDIA_ROOT ?? DEFAULT_MEDIA_ROOT,
+    }),
   )
 
   app.use(

@@ -23,7 +23,7 @@
  */
 
 import { readdir } from "node:fs/promises"
-import { basename, join } from "node:path"
+import { basename, join, parse as parsePath } from "node:path"
 
 import type { GameRecord } from "@shared/fixtures/games/game"
 import { logger } from "@shared/logger/logger"
@@ -44,7 +44,19 @@ export type RocknixConfig = {
    * which uses the command actually written in `es_systems.cfg`.
    */
   readonly launchCommand?: string
+  /** Korri-owned sidecar art root: `<root>/<system>/<rom-stem>/<image>`. */
+  readonly mediaRoot?: string
 }
+
+const DEFAULT_MEDIA_ROOT = "/storage/korri/media/games"
+
+const SIDECAR_MEDIA_FILES = [
+  "cover-1024.jpg",
+  "cover-512.webp",
+  "poster-600x900.png",
+  "hero-1280x720.webp",
+  "banner-460x215.png",
+] as const
 
 const DEFAULT_CONFIG: RocknixConfig = {
   gamelistRoots: [
@@ -52,6 +64,7 @@ const DEFAULT_CONFIG: RocknixConfig = {
     "/storage/games-external/roms",
   ],
   esSystemsPath: "/storage/.config/emulationstation/es_systems.cfg",
+  mediaRoot: DEFAULT_MEDIA_ROOT,
 }
 
 export function defaultRocknixConfig(): RocknixConfig {
@@ -91,10 +104,11 @@ export function createRocknixSource(
           continue
         }
         for (const entry of entries) {
-          const { record, spec } = composeRecordAndSpec({
+          const { record, spec } = await composeRecordAndSpec({
             entry,
             system: sys,
             systemRoot,
+            mediaRoot: config.mediaRoot ?? DEFAULT_MEDIA_ROOT,
             launchCommandOverride: config.launchCommand,
           })
           if (specs.has(record.id)) {
@@ -202,17 +216,23 @@ async function readTextFileSafe(path: string): Promise<string | null> {
   }
 }
 
-function composeRecordAndSpec(args: {
+async function composeRecordAndSpec(args: {
   entry: GamelistEntry
   system: EsSystem
   systemRoot: string
+  mediaRoot: string
   launchCommandOverride: string | undefined
-}): { record: GameRecord; spec: LaunchSpec } {
-  const { entry, system, systemRoot, launchCommandOverride } = args
+}): Promise<{ record: GameRecord; spec: LaunchSpec }> {
+  const { entry, system, systemRoot, mediaRoot, launchCommandOverride } = args
   const absRomPath = resolveRomPath(systemRoot, entry.path)
   const id = `${system.name}/${basename(absRomPath)}`
+  const media = await findSidecarMedia({
+    mediaRoot,
+    systemName: system.name,
+    romPath: absRomPath,
+  })
 
-  const record = composeGameRecord(id, entry)
+  const record = composeGameRecord(id, entry, media)
   const spec = composeLaunchSpec({
     template: system.commandTemplate,
     launchCommandOverride,
@@ -233,7 +253,31 @@ function resolveRomPath(systemRoot: string, rawPath: string): string {
   return join(systemRoot, stripped)
 }
 
-function composeGameRecord(id: string, entry: GamelistEntry): GameRecord {
+async function findSidecarMedia(args: {
+  mediaRoot: string
+  systemName: string
+  romPath: string
+}): Promise<ReadonlyArray<{ type: "image"; uri: string }>> {
+  const romStem = parsePath(args.romPath).name
+  const found: Array<{ type: "image"; uri: string }> = []
+
+  for (const fileName of SIDECAR_MEDIA_FILES) {
+    const path = join(args.mediaRoot, args.systemName, romStem, fileName)
+    if (!(await Bun.file(path).exists())) continue
+    found.push({
+      type: "image",
+      uri: `/api/media/games/${encodeURIComponent(args.systemName)}/${encodeURIComponent(romStem)}/${encodeURIComponent(fileName)}`,
+    })
+  }
+
+  return found
+}
+
+function composeGameRecord(
+  id: string,
+  entry: GamelistEntry,
+  media: ReadonlyArray<{ type: "image"; uri: string }>,
+): GameRecord {
   const metadata = stripUndefined({
     name: entry.name,
     description: entry.desc,
@@ -241,6 +285,7 @@ function composeGameRecord(id: string, entry: GamelistEntry): GameRecord {
     publisher: entry.publisher,
     releaseDate: entry.releaseDate?.toISOString(),
     genre: entry.genre ? [entry.genre] : undefined,
+    media: media.length > 0 ? media : undefined,
   })
   const userData = stripUndefined({
     lastPlayed: entry.lastPlayed,

@@ -108,6 +108,7 @@ function pickLauncherKind(raw: string | undefined): "shell" {
 function buildRocknixConfigFromEnv(): RocknixConfig {
   const rootsRaw = process.env.KORRI_ROCKNIX_GAMELIST_ROOTS
   const esSystemsPathRaw = process.env.KORRI_ROCKNIX_ES_SYSTEMS
+  const mediaRootRaw = process.env.KORRI_ROCKNIX_MEDIA_ROOT
 
   const defaults = defaultRocknixConfig()
   const gamelistRoots =
@@ -122,5 +123,10 @@ function buildRocknixConfigFromEnv(): RocknixConfig {
       ? esSystemsPathRaw.trim()
       : defaults.esSystemsPath
 
-  return { gamelistRoots, esSystemsPath }
+  const mediaRoot =
+    mediaRootRaw && mediaRootRaw.trim() !== ""
+      ? mediaRootRaw.trim()
+      : defaults.mediaRoot
+
+  return { gamelistRoots, esSystemsPath, mediaRoot }
 }

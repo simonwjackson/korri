@@ -22,7 +22,9 @@ export const GameMetadata = Schema.Struct({
 export type GameMetadata = Schema.Schema.Type<typeof GameMetadata>
 
 export const GameUserData = Schema.Struct({
-  lastPlayed: Schema.optional(Schema.DateFromSelf),
+  lastPlayed: Schema.optional(
+    Schema.Union(Schema.DateFromSelf, Schema.DateFromString),
+  ),
   playtime: Schema.optional(Schema.Number),
   favorite: Schema.optional(Schema.Boolean),
 })

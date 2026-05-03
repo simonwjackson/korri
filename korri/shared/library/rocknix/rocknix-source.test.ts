@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { rm } from "node:fs/promises"
+import { mkdir, mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 import { withTempLibrary } from "../../../../tools/testing/library/with-temp-library"
@@ -17,6 +18,12 @@ afterEach(async () => {
     if (c) await c()
   }
 })
+
+async function withTempDir(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "korri-rocknix-media-"))
+  cleanups.push(() => rm(dir, { recursive: true, force: true }))
+  return dir
+}
 
 describe("createRocknixSource (real filesystem via withTempLibrary)", () => {
   it("list() returns games sorted by lastPlayed desc with undefined last", async () => {
@@ -67,6 +74,63 @@ describe("createRocknixSource (real filesystem via withTempLibrary)", () => {
     })
     const games = await source.list()
     expect(games[0]?.id).toBe("snes/zelda.smc")
+  })
+
+  it("attaches Korri sidecar media without reading or editing gamelist media fields", async () => {
+    const lib = track(
+      await withTempLibrary({
+        systems: [
+          {
+            name: "wii",
+            defaultEmulator: "dolphin-sa",
+            defaultCore: "dolphin-sa",
+            extension: [".rvz"],
+            games: [
+              {
+                path: "mario-kart-wii-usa-en-fr-es.rvz",
+                name: "mario-kart-wii-usa-en-fr-es",
+              },
+            ],
+          },
+        ],
+      }),
+    )
+    const mediaRoot = await withTempDir()
+    await mkdir(join(mediaRoot, "wii", "mario-kart-wii-usa-en-fr-es"), {
+      recursive: true,
+    })
+    await Bun.write(
+      join(mediaRoot, "wii", "mario-kart-wii-usa-en-fr-es", "cover-1024.jpg"),
+      "cover",
+    )
+    await Bun.write(
+      join(
+        mediaRoot,
+        "wii",
+        "mario-kart-wii-usa-en-fr-es",
+        "banner-460x215.png",
+      ),
+      "banner",
+    )
+
+    const source = createRocknixSource({
+      gamelistRoots: [lib.rootDir],
+      esSystemsPath: lib.esSystemsPath,
+      launchCommand: lib.launchCommand,
+      mediaRoot,
+    })
+
+    const games = await source.list()
+    expect(games[0]?.metadata?.media).toEqual([
+      {
+        type: "image",
+        uri: "/api/media/games/wii/mario-kart-wii-usa-en-fr-es/cover-1024.jpg",
+      },
+      {
+        type: "image",
+        uri: "/api/media/games/wii/mario-kart-wii-usa-en-fr-es/banner-460x215.png",
+      },
+    ])
   })
 
   it("launchSpecFor returns a fully-resolved spec with ROCKNIX argv (controllers omitted)", async () => {

@@ -40,7 +40,11 @@ const RESUME_SPAN = 2
 const CELL_SIZE_PX = 258
 const RAIL_GAP_PX = 18
 
-export function ShiftHomeRail() {
+export interface ShiftHomeRailProps {
+  readonly onItemClick?: (game: GameRecord) => void
+}
+
+export function ShiftHomeRail({ onItemClick }: ShiftHomeRailProps = {}) {
   const { items, resumeTarget, railRef, focusTile } = useShiftHome()
 
   // Delegated focus tracking: a single capture-style focusin listener
@@ -76,6 +80,7 @@ export function ShiftHomeRail() {
         getAriaLabel={g => getGameDisplayName(g)}
       >
         <TilegridCells<GameRecord>
+          onItemClick={onItemClick}
           renderCell={({ cellProps, item }) => (
             <ShiftTile {...cellProps} style={cellProps.style}>
               {item.id === resumeTarget.id ? (
