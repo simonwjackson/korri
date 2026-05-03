@@ -25,7 +25,7 @@ describe("desktop app composition", () => {
     await rm(assetRoot, { recursive: true, force: true })
   })
 
-  test("delegates API health requests to the shared Hono API", async () => {
+  test("delegates API health requests to the app Hono API", async () => {
     await writeFixture("index.html", "<html>Portal</html>")
     const app = createDesktopApp({ assetRoot })
 
@@ -79,7 +79,7 @@ describe("desktop app composition", () => {
     expect(await response.text()).toBe("Not Found")
   })
 
-  test("keeps RPC posts on the shared API path instead of static fallback", async () => {
+  test("keeps RPC posts on the app API path instead of static fallback", async () => {
     await writeFixture("index.html", "<html>Route Shell</html>")
     const app = createDesktopApp({ assetRoot })
 

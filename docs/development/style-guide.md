@@ -48,7 +48,7 @@ Use Biome (or the equivalent) consistently.
 - No boolean prop forests. Compose distinct trees per use case rather than toggling shared subtrees with flags.
 - Atoms read state from context (or atoms), not from props drilled through every parent.
 - One state owner per Root. Lift the Root when siblings need shared state; do not duplicate.
-- No barrel exports.
+- No barrel exports, except documented module entrypoints that intentionally define a public import surface.
 
 ## Branching on async state
 

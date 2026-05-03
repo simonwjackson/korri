@@ -7,7 +7,7 @@ import {
 } from "./center-scroll"
 
 /**
- * Tests stub `getBoundingClientRect` on each element so the centering math
+ * Tests configure `getBoundingClientRect` on each element so the centering math
  * has real coordinates to work with — happy-dom returns all-zero rects for
  * unlaid-out elements. Scroll properties are real DOM properties on
  * HTMLElement, set/read directly.
@@ -39,7 +39,7 @@ interface TileShape {
   readonly rectTop?: number
 }
 
-function stubRect(element: Element, rect: Partial<DOMRect>): void {
+function setElementRect(element: Element, rect: Partial<DOMRect>): void {
   const full: DOMRect = {
     x: rect.x ?? rect.left ?? 0,
     y: rect.y ?? rect.top ?? 0,
@@ -86,7 +86,7 @@ function makeSurface(
     clientHeight: shape.clientHeight ?? 0,
     scrollHeight: shape.scrollHeight ?? 0,
   })
-  stubRect(surface, {
+  setElementRect(surface, {
     left: shape.rectLeft,
     top: shape.rectTop ?? 0,
     width: shape.clientWidth,
@@ -99,7 +99,7 @@ function makeSurface(
 
 function makeTile(shape: TileShape): HTMLElement {
   const tile = document.createElement("button")
-  stubRect(tile, {
+  setElementRect(tile, {
     left: shape.rectLeft,
     top: shape.rectTop ?? 0,
     width: shape.width,
@@ -108,7 +108,7 @@ function makeTile(shape: TileShape): HTMLElement {
   return tile
 }
 
-interface FakeClock {
+interface ControlledClock {
   schedule: (cb: FrameRequestCallback) => number
   cancel: (handle: number) => void
   now: () => number
@@ -117,7 +117,7 @@ interface FakeClock {
   pendingCount: () => number
 }
 
-function makeFakeClock(): FakeClock {
+function makeControlledClock(): ControlledClock {
   let current = 0
   const pending = new Map<number, FrameRequestCallback>()
   let nextHandle = 1
@@ -375,7 +375,7 @@ describe("centerScrollableAncestors", () => {
       const tile = makeTile({ width: 200, rectLeft: 600 })
       surface.appendChild(tile)
       document.body.appendChild(surface)
-      const clock = makeFakeClock()
+      const clock = makeControlledClock()
 
       centerScrollableAncestors(tile, {
         animate: true,
@@ -401,7 +401,7 @@ describe("centerScrollableAncestors", () => {
       const tile = makeTile({ width: 200, rectLeft: 600 })
       surface.appendChild(tile)
       document.body.appendChild(surface)
-      const clock = makeFakeClock()
+      const clock = makeControlledClock()
 
       centerScrollableAncestors(tile, {
         animate: true,
@@ -431,7 +431,7 @@ describe("centerScrollableAncestors", () => {
       const tile = makeTile({ width: 200, rectLeft: 600 })
       surface.appendChild(tile)
       document.body.appendChild(surface)
-      const clock = makeFakeClock()
+      const clock = makeControlledClock()
 
       centerScrollableAncestors(tile, {
         animate: true,
@@ -461,7 +461,7 @@ describe("centerScrollableAncestors", () => {
       const tile = makeTile({ width: 200, rectLeft: 600 })
       surface.appendChild(tile)
       document.body.appendChild(surface)
-      const clock = makeFakeClock()
+      const clock = makeControlledClock()
 
       centerScrollableAncestors(tile, {
         animate: true,
@@ -481,7 +481,7 @@ describe("centerScrollableAncestors", () => {
 
       // Move the tile to a new position — second call should target a new value
       // and start its tween from `midway`, not from 0.
-      stubRect(tile, { left: 1500, top: 0, width: 200, height: 0 })
+      setElementRect(tile, { left: 1500, top: 0, width: 200, height: 0 })
       // New tile center 1600, surface center 500, delta = 1100.
       // surface.scrollLeft is currently `midway`. Desired = midway + 1100. Clamped to 1000.
 

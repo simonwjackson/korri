@@ -12,7 +12,7 @@ import { LibrarySourceLayerRpc } from "./library-source-layer-rpc"
 const originalEnv = {
   roots: process.env.KORRI_ROCKNIX_GAMELIST_ROOTS,
   esSystems: process.env.KORRI_ROCKNIX_ES_SYSTEMS,
-  fakeGameExit: process.env.KORRI_FAKE_GAME_EXIT,
+  launchExitEnvValue: process.env.KORRI_FAKE_GAME_EXIT,
 }
 const originalLocation = {
   origin: window.location.origin,
@@ -125,7 +125,7 @@ function configureLibraryEnv(lib: TempLibrary): void {
 function restoreEnv(): void {
   setOptionalEnv("KORRI_ROCKNIX_GAMELIST_ROOTS", originalEnv.roots)
   setOptionalEnv("KORRI_ROCKNIX_ES_SYSTEMS", originalEnv.esSystems)
-  setOptionalEnv("KORRI_FAKE_GAME_EXIT", originalEnv.fakeGameExit)
+  setOptionalEnv("KORRI_FAKE_GAME_EXIT", originalEnv.launchExitEnvValue)
 }
 
 function setOptionalEnv(key: string, value: string | undefined): void {

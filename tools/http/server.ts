@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
+import { honoApp } from "@app/api/hono-app"
 import { createAdaptorServer } from "@hono/node-server"
-import { honoApp } from "@shared/api/http/hono-app"
 import { logger } from "@shared/logger"
 
 function getConfig() {

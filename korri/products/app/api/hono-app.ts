@@ -1,9 +1,9 @@
-import { rpcHandler } from "@shared/api/rpc/server"
+import { serveMediaAsset } from "@shared/api/http/media-assets"
 import { Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { compress } from "hono/compress"
 import { cors } from "hono/cors"
-import { serveMediaAsset } from "./media-assets"
+import { rpcHandler } from "./rpc-server"
 
 const MAX_BODY_SIZE = 10 * 1024 * 1024
 const DEFAULT_MEDIA_ROOT = "/storage/korri/media"

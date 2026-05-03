@@ -79,6 +79,15 @@
 	--shift-radius-tile: 4px;
 
 	/*
+   * Rail geometry tokens. The values are static by design because this
+   * surface matches a fixed console-home composition; keeping them as
+   * tokens prevents component-local pixel constants while preserving the
+   * measured Switch-like tile ratio.
+   */
+	--shift-home-rail-cell-size: 258px;
+	--shift-home-rail-gap: 18px;
+
+	/*
    * Type voice. Shift overrides the project default (Geist, sharp /
    * technical) with Nunito, a rounded friendly sans that matches the
    * Switch tone. Falls back to the platform's rounded sans (SF Pro
@@ -166,6 +175,10 @@
  * no place for a chrome scrollbar. Cross-browser selectors cover Firefox,
  * legacy IE/Edge, and WebKit.
  * -------------------------------------------------------------------------- */
+
+[data-shift-home] .shift-home-rail-region {
+	height: var(--shift-home-rail-cell-size);
+}
 
 [data-shift-home] .shift-home-rail-region,
 [data-shift-home] .shift-home-rail-region * {

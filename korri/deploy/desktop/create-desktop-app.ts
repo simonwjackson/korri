@@ -1,4 +1,4 @@
-import { honoApp } from "@shared/api/http/hono-app"
+import { honoApp } from "@app/api/hono-app"
 import { Hono } from "hono"
 import { serveStaticAsset } from "./static-assets"
 

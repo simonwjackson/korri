@@ -51,8 +51,8 @@ if (!import.meta.glob) {
   })
 }
 
-const createMockLogger = (): unknown => {
-  const mockLogger: Record<string, unknown> = {
+const createTestLogger = (): unknown => {
+  const testLogger: Record<string, unknown> = {
     debug: () => {},
     info: () => {},
     warn: () => {},
@@ -60,8 +60,8 @@ const createMockLogger = (): unknown => {
     fatal: () => {},
     trace: () => {},
   }
-  mockLogger.child = () => mockLogger
-  return mockLogger
+  testLogger.child = () => testLogger
+  return testLogger
 }
 
-global.logger = createMockLogger()
+global.logger = createTestLogger()

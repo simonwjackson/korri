@@ -6,11 +6,11 @@
  * cell to either the feature tile (resume target) or the poster tile.
  *
  * Cell-size math:
- *   The square cell is 258px and rail gap is 18px. The feature tile
- *   spans 2 columns, so its visible width is 2*258 + 18 = 534px,
- *   yielding an aspect ratio of 534:258 ≈ 2.07:1. That is within ~3%
- *   of the strict 92:43 (2.14) Switch hero proportion at the same row
- *   height — imperceptible at TV viewing distance.
+ *   Rail dimensions are Shift theme tokens, not component-local pixels.
+ *   The feature tile spans two columns, so its visible width is
+ *   2*cell + gap. The current token calibration preserves the Switch-like
+ *   landscape-to-poster proportion while letting the theme own the raw
+ *   numeric values.
  *
  * Focus tracking is a single delegated React `onFocus` listener at
  * the rail wrapper. Cell buttons emit `data-tile-id` (added by
@@ -18,10 +18,10 @@
  * the id off the focused element and calling `focusTile(id)` keeps
  * the home's focused state in sync without per-cell hooks.
  *
- * The rail wrapper carries an explicit `height: CELL_SIZE_PX` because
- * `TilegridRailRoot`'s outer container is `height: 100%` and would
- * collapse without one. The inline style is the single derived link
- * from the TS constant; no other px values escape the theme system.
+ * The rail wrapper height lives in shift.css because `TilegridRailRoot`'s
+ * outer container is `height: 100%` and would collapse without an owning
+ * block size. Tilegrid receives the same token through its CSS-length prop
+ * path, so JS layout math and CSS layout share one source of truth.
  */
 
 import {
@@ -37,8 +37,8 @@ import { ShiftHomePosterTile } from "../molecules/ShiftHomePosterTile"
 import { useShiftHome } from "../templates/ShiftHome.context"
 
 const RESUME_SPAN = 2
-const CELL_SIZE_PX = 258
-const RAIL_GAP_PX = 18
+const RAIL_CELL_SIZE = "var(--shift-home-rail-cell-size)"
+const RAIL_GAP = "var(--shift-home-rail-gap)"
 
 export interface ShiftHomeRailProps {
   readonly onItemClick?: (game: GameRecord) => void
@@ -66,15 +66,11 @@ export function ShiftHomeRail({ onItemClick }: ShiftHomeRailProps = {}) {
   }, [railRef, focusTile])
 
   return (
-    <div
-      ref={railRef}
-      className="shift-home-rail-region px-12"
-      style={{ height: CELL_SIZE_PX }}
-    >
+    <div ref={railRef} className="shift-home-rail-region px-12">
       <TilegridRailRoot<GameRecord>
         items={items}
-        cellSize={{ width: CELL_SIZE_PX, height: CELL_SIZE_PX }}
-        gap={RAIL_GAP_PX}
+        cellSize={{ width: RAIL_CELL_SIZE, height: RAIL_CELL_SIZE }}
+        gap={RAIL_GAP}
         getKey={g => g.id}
         getSpan={g => (g.id === resumeTarget.id ? RESUME_SPAN : 1)}
         getAriaLabel={g => getGameDisplayName(g)}

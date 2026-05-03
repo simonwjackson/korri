@@ -14,7 +14,7 @@ Reusable layers must not depend on product-specific code.
 
 - Use product aliases for cross-folder imports inside a product.
 - Use shared aliases only for genuinely shared runtime code.
-- No barrel exports.
+- No barrel exports, except explicitly documented package/module entrypoints that define a public import surface.
 - One project alias per layer. Do not introduce ad-hoc aliases (`~/*`, `#/*`, `$/*`, `@/*`).
 
 ## Testing posture
@@ -61,7 +61,7 @@ React composes views; functional data models state.
 
 ## Cross-cutting rules
 
-- Sensitive data is never stored in `localStorage`.
+- Sensitive data is never stored in `localStorage`; non-sensitive local preferences such as feature-gate ids may use it when documented at the storage seam.
 - When extracting parts from ISO date strings, use UTC methods. Local-time methods produce locale-dependent results.
 - Use the project logger, not `console.log`, in runtime code.
 

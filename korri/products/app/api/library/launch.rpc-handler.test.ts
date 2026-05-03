@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { appRpcGroup } from "@shared/api/rpc/app-rpc-group"
+import { appRpcGroup } from "@app/api/app-rpc-group"
 import { NotFoundError } from "@shared/api/rpc/errors"
 import {
   Launcher,

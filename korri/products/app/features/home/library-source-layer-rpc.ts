@@ -1,4 +1,4 @@
-import { appRpcGroup } from "@shared/api/rpc/app-rpc-group"
+import { appRpcGroup } from "@app/api/app-rpc-group"
 import { RpcClientLive } from "@shared/api/rpc/client"
 import type { LaunchSpec } from "@shared/library/launcher"
 import { LibraryError, LibrarySource } from "@shared/library/library-services"

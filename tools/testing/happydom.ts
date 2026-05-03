@@ -41,13 +41,13 @@ if (
 }
 
 if (typeof global.window !== "undefined" && !global.window.ResizeObserver) {
-  class MockResizeObserver {
+  class ResizeObserverShim {
     observe() {}
     unobserve() {}
     disconnect() {}
   }
   global.window.ResizeObserver =
-    MockResizeObserver as unknown as typeof ResizeObserver
+    ResizeObserverShim as unknown as typeof ResizeObserver
 }
 
 if (typeof global.window !== "undefined" && !global.window.matchMedia) {

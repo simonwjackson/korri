@@ -1,7 +1,7 @@
-import { handleGetHello } from "@app/api/hello/rpc-handler"
-import { handleLaunchLibrary } from "@app/api/library/launch.rpc-handler"
-import { handleListLibrary } from "@app/api/library/list.rpc-handler"
 import { appRpcGroup } from "./app-rpc-group"
+import { handleGetHello } from "./hello/rpc-handler"
+import { handleLaunchLibrary } from "./library/launch.rpc-handler"
+import { handleListLibrary } from "./library/list.rpc-handler"
 
 export const HandlersLive = appRpcGroup.toLayer(
   appRpcGroup.of({

@@ -22,6 +22,8 @@ export function computeEffectiveGates(
 }
 
 export function readGateStorage(storageKey: string): readonly string[] {
+  // Feature-gate ids are non-sensitive local developer/user preferences.
+  // Do not expand this storage seam to credentials, tokens, or private data.
   if (typeof localStorage === "undefined") {
     return []
   }

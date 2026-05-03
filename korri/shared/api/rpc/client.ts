@@ -7,6 +7,8 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
 import { RpcClient } from "effect/unstable/rpc"
 
 function getCurrentGatesHeader(): string {
+  // Reads only non-sensitive feature-gate ids to forward the current local
+  // development/user preference state across the RPC boundary.
   if (typeof localStorage === "undefined") {
     return ""
   }

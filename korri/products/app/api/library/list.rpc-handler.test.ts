@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { rm } from "node:fs/promises"
-import { appRpcGroup } from "@shared/api/rpc/app-rpc-group"
+import { appRpcGroup } from "@app/api/app-rpc-group"
 import { DataError } from "@shared/api/rpc/errors"
 import { LibraryError, LibrarySource } from "@shared/library/library-services"
 import { makeFailingLibrarySourceLayer } from "@shared/library/library-source-layer-memory"

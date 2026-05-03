@@ -125,7 +125,7 @@ just generate-feature-map
 ## Project-specific quirks
 
 - TypeScript typechecking is whole-repo only because of path aliases — always run `just typecheck`, not per-file `tsc`.
-- Use `@shared/logger`, not `console.log`, in runtime code.
+- Use `@shared/logger`, not `console.log`, in runtime code. `@shared/logger` is an intentional shared module entrypoint exception to the no-barrels default.
 
 ## Rules of engagement
 
