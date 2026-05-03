@@ -20,7 +20,7 @@ declare global {
 }
 
 window.__korriSpatialNav?.dispose()
-window.__korriSpatialNav = startSpatialNavigation()
+window.__korriSpatialNav = startSpatialNavigation({ diagnostics: true })
 
 const withColorMode: Decorator = (Story, context) => {
   const mode = (context.globals.colorMode as "light" | "dark") ?? "dark"

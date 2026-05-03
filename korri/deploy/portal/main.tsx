@@ -23,4 +23,6 @@ ReactDOM.createRoot(rootElement).render(<RouterProvider router={router} />)
 
 // Device-agnostic spatial navigation. Listens to keyboard + gamepad and
 // drives focus through the live DOM via LRUD. Components stay native HTML.
-startSpatialNavigation()
+// Diagnostics logs input actions + focus changes in the browser console so
+// device/controller navigation can be verified on hardware.
+startSpatialNavigation({ diagnostics: true })
