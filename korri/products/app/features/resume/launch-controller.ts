@@ -36,6 +36,14 @@ export type LaunchError = {
 export interface UseGameLaunchResult {
   readonly status: LaunchStatus
   readonly lastError?: LaunchError
+  /**
+   * The id whose launch most recently failed (and which `retry()` will
+   * re-fire). `undefined` while idle / launching, or after a successful
+   * launch resets the state. Composition sites use this to resolve a
+   * display title for the failure banner without leaking ids into the
+   * banner's contract.
+   */
+  readonly failedId?: string
   retry: () => void
 }
 
@@ -44,6 +52,7 @@ export function useGameLaunch(
 ): UseGameLaunchResult {
   const [status, setStatus] = useState<LaunchStatus>("idle")
   const [lastError, setLastError] = useState<LaunchError | undefined>(undefined)
+  const [failedId, setFailedId] = useState<string | undefined>(undefined)
 
   // Ref-tracked status mirror so the input handler reads the latest value
   // without the cost of a fresh subscription every state change.
@@ -72,12 +81,14 @@ export function useGameLaunch(
       const result = await runRpc(c => c.app["library.launch"]({ id }))
       if (result.status === "launched") {
         failedIdRef.current = undefined
+        setFailedId(undefined)
         statusRef.current = "idle"
         setStatus("idle")
         return
       }
       // result.status === "failed"
       failedIdRef.current = id
+      setFailedId(id)
       statusRef.current = "failed"
       setStatus("failed")
       setLastError(
@@ -95,6 +106,7 @@ export function useGameLaunch(
         "useGameLaunch: launch RPC threw",
       )
       failedIdRef.current = id
+      setFailedId(id)
       statusRef.current = "failed"
       setStatus("failed")
       setLastError({ exitCode: -1, stderrTail: message })
@@ -125,6 +137,7 @@ export function useGameLaunch(
   return {
     status,
     lastError,
+    failedId,
     retry,
   }
 }

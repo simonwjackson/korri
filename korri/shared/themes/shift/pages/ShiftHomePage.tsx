@@ -12,6 +12,12 @@
  * for those states; observable behavior is covered by BDD against
  * the real dev stack.
  *
+ * Launch: `<ShiftHomeLaunchSurface>` lives inside the ShiftHomeRoot
+ * tree so it can read `useShiftHome().focused`, drive `useGameLaunch`
+ * off the focused id, and render `ShiftLaunchFailureBanner` when a
+ * launch fails. The rail keeps its tile / focus / position behind
+ * the banner — SGR-R7 "anchored to the same game/context".
+ *
  * Time and avatar are placeholder values for now. They are accepted
  * as composition arguments rather than read from a global so a
  * future variant of the home (with a real clock or a sign-in
@@ -19,12 +25,18 @@
  * than a config flag here.
  */
 
+import { useGameLaunch } from "@app/features/resume/launch-controller"
 import { useRpcQuery } from "@shared/api/rpc/useRpcQuery"
-import type { GameRecord } from "@shared/fixtures/games/game"
+import {
+  type GameRecord,
+  getGameDisplayName,
+} from "@shared/fixtures/games/game"
 import { ShiftHomeCaption } from "../molecules/ShiftHomeCaption"
+import { ShiftLaunchFailureBanner } from "../molecules/ShiftLaunchFailureBanner"
 import { ShiftHomeBottomBar } from "../organisms/ShiftHomeBottomBar"
 import { ShiftHomeRail } from "../organisms/ShiftHomeRail"
 import { ShiftHomeTopBar } from "../organisms/ShiftHomeTopBar"
+import { useShiftHome } from "../templates/ShiftHome.context"
 import { ShiftHomeRoot } from "../templates/ShiftHomeRoot"
 
 const PLACEHOLDER_TIME = "4:24 PM"
@@ -88,11 +100,44 @@ export function ShiftHomePage() {
         time={PLACEHOLDER_TIME}
         avatarSrc={PLACEHOLDER_AVATAR_SRC}
       />
-      <div className="flex min-h-0 flex-1 flex-col justify-center gap-2">
+      <ShiftHomeLaunchSurface>
         <ShiftHomeRail />
         <ShiftHomeCaption />
-      </div>
+      </ShiftHomeLaunchSurface>
       <ShiftHomeBottomBar />
     </ShiftHomeRoot>
+  )
+}
+
+/**
+ * Mid-region wrapper that drives the launch state machine off the
+ * currently-focused tile and renders the failure banner above the rail
+ * when a launch fails. Lives inside this file because it is a one-off
+ * composition between ShiftHomeRoot, useGameLaunch, and the failure
+ * banner — not a reusable molecule.
+ */
+function ShiftHomeLaunchSurface({ children }: { children: React.ReactNode }) {
+  const { items, focused } = useShiftHome()
+  const { status, lastError, failedId, retry } = useGameLaunch(focused.id)
+
+  // Title resolution: per SGR-R7, the banner identifies the *failed*
+  // game even if the player has since moved focus. Look up the failed id
+  // in the loaded items; fall back to the id itself when nothing matches.
+  const failedGame =
+    failedId !== undefined
+      ? (items.find(g => g.id === failedId) ?? { id: failedId })
+      : undefined
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col justify-center gap-2">
+      {status === "failed" && failedGame ? (
+        <ShiftLaunchFailureBanner
+          gameTitle={getGameDisplayName(failedGame)}
+          exitCode={lastError?.exitCode}
+          onRetry={retry}
+        />
+      ) : null}
+      {children}
+    </div>
   )
 }
