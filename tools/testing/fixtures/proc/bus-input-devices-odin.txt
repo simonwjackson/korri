@@ -1,0 +1,29 @@
+I: Bus=0003 Vendor=045e Product=028e Version=0114
+N: Name="InputPlumber Virtual Xbox 360 Controller"
+P: Phys=inputplumber/virtual-xbox360
+S: Sysfs=/devices/virtual/input/input9
+U: Uniq=inputplumber-virtual-xbox360
+H: Handlers=event9 
+B: PROP=0
+B: EV=20001b
+B: KEY=1000000000000 0 0 0 0
+B: ABS=30027
+
+I: Bus=0003 Vendor=0001 Product=0001 Version=0001
+N: Name="Controller With Keyboard Range"
+P: Phys=usb-gamepad-with-keyboard-range
+S: Sysfs=/devices/virtual/input/input10
+U: Uniq=
+H: Handlers=event10 
+B: EV=1b
+B: KEY=1000000000000 0 0 0 40000000
+B: ABS=3
+
+I: Bus=0019 Vendor=0000 Product=0000 Version=0000
+N: Name="Mystery Device"
+P: Phys=
+S: Sysfs=/devices/virtual/input/input0
+U: Uniq=
+H: Handlers=event0 
+B: EV=1
+B: KEY=nothex

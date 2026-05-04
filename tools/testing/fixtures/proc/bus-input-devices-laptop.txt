@@ -1,0 +1,28 @@
+I: Bus=0003 Vendor=046d Product=c31c Version=0111
+N: Name="USB Keyboard"
+P: Phys=usb-0000:00:14.0-1/input0
+S: Sysfs=/devices/pci0000:00/input/input3
+U: Uniq=
+H: Handlers=sysrq kbd event3 leds 
+B: EV=120013
+B: KEY=40000000
+
+I: Bus=0003 Vendor=046d Product=c077 Version=0111
+N: Name="USB Optical Mouse"
+P: Phys=usb-0000:00:14.0-2/input0
+S: Sysfs=/devices/pci0000:00/input/input4
+U: Uniq=
+H: Handlers=mouse0 event4 
+B: EV=17
+B: KEY=0
+B: REL=3
+
+I: Bus=0018 Vendor=0000 Product=0000 Version=0000
+N: Name="Touchscreen"
+P: Phys=i2c-touch/input0
+S: Sysfs=/devices/platform/touch/input/input5
+U: Uniq=touch-serial
+H: Handlers=event5 
+B: EV=b
+B: KEY=400 0 0 0 0 0
+B: ABS=20000000000000
