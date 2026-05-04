@@ -16,11 +16,17 @@ import "@shared/themes/shift/shift.css"
 declare global {
   interface Window {
     __korriSpatialNav?: SpatialNavigationHandle
+    __korriStorybookNativeBridgeUrl?: string
   }
 }
 
 window.__korriSpatialNav?.dispose()
-window.__korriSpatialNav = startSpatialNavigation({ diagnostics: true })
+window.__korriSpatialNav = startSpatialNavigation({
+  diagnostics: true,
+  native: window.__korriStorybookNativeBridgeUrl
+    ? { url: window.__korriStorybookNativeBridgeUrl }
+    : false,
+})
 
 const withColorMode: Decorator = (Story, context) => {
   const mode = (context.globals.colorMode as "light" | "dark") ?? "dark"
