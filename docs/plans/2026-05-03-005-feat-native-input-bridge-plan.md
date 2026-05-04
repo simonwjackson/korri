@@ -405,7 +405,7 @@ all other codes → ignored for MVP (carried on the wire, dropped by the adapter
 
 ---
 
-- [ ] **Unit 5: Device supervision and bootstrap integration**
+- [x] **Unit 5: Device supervision and bootstrap integration**
 
 **Goal:** Install scripts and `just` recipes that start, stop, log, and restart the bridge on the Odin alongside the existing API server.
 

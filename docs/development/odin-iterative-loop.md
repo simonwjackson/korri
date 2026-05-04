@@ -7,9 +7,9 @@ module: tools/scripts/odin-*
 
 ## What this is
 
-A two-machine dev loop where Korri's API server runs on the AYN Odin 2 Portal
+A two-machine dev loop where Korri's API server and native input bridge run on the AYN Odin 2 Portal
 (so real `runemu.sh` launches against the real ROCKNIX library on the
-handheld screen) and the renderer runs on the dev machine under Vite (for
+handheld screen, and controller input is read from `/dev/input/event*`) and the renderer runs on the dev machine under Vite (for
 instant HMR). Vite proxies `/api/*` directly to the device over Tailscale.
 
 This is "Level 2" of the deployment ladder. Level 3 (renderer also running
@@ -22,8 +22,8 @@ on the Odin under a kiosk browser) is intentionally out of scope here.
 - EmulationStation **must be running** on the device when you bootstrap so
   the Wayland session env can be harvested from its `/proc/<pid>/environ`.
 - `rsync`, `ssh`, `curl`, and `bun` on the dev machine.
-- The Odin doesn't need `tmux` or any other supervisor: the API runs as
-  a detached `setsid` process that survives SSH disconnects.
+- The Odin doesn't need `tmux` or any other supervisor: the API and native input bridge run as
+  detached `setsid` processes that survive SSH disconnects.
 
 Optional overrides (all read by the recipes):
 
@@ -32,7 +32,9 @@ Optional overrides (all read by the recipes):
 | `ODIN_HOST` | `root@sm8550` |
 | `ODIN_PROJECT` | `/storage/korri` |
 | `ODIN_API_PORT` | `3001` |
+| `ODIN_INPUT_BRIDGE_PORT` | `3002` |
 | `ODIN_API_BASE_URL` | derived from `ODIN_HOST` + `ODIN_API_PORT` |
+| `ODIN_INPUT_BRIDGE_URL` | derived from `ODIN_HOST` + `ODIN_INPUT_BRIDGE_PORT` |
 
 ## Setup (run once)
 
@@ -78,14 +80,14 @@ What you should see:
 - Pressing **confirm** on a tile spawns the real `runemu.sh` and the
   game appears on the handheld screen.
 
-Ctrl-C stops local Vite. The remote API process keeps running (it's in its own `setsid` session, detached from the SSH channel), so the next `just dev-odin` simply replaces it in place.
+Ctrl-C stops local Vite. The remote API and native input bridge processes keep running (they are in their own `setsid` sessions, detached from the SSH channel), so the next `just dev-odin` simply replaces them in place.
 
 ## Editing server code
 
 Save the file, then either:
 
 - run `just dev-odin` again (it always re-syncs and replaces the remote
-  API process), or
+  API and native input bridge processes), or
 - run `just sync-odin` and then restart the API in place:
 
   ```bash
@@ -107,12 +109,19 @@ Save and Vite HMRs the dev machine browser. No remote action required.
   ssh "$ODIN_HOST" tail -f /storage/korri-api.log
   ```
 
+- Native input bridge stdout/stderr: appended to `/storage/korri-input-bridge.log` on
+  the device.
+
+  ```bash
+  ssh "$ODIN_HOST" tail -f /storage/korri-input-bridge.log
+  ```
+
 - Vite dev server: in the foreground terminal running `just dev-odin`.
 
 ## Tearing down
 
 - Local side only: Ctrl-C the foreground recipe. Vite stops; the device keeps serving.
-- Whole loop: also `ssh "$ODIN_HOST" "pkill -f 'bun run tools/http/server.ts'"`.
+- Whole loop: also `ssh "$ODIN_HOST" "pkill -f 'bun run tools/http/server.ts'; pkill -f 'bun run tools/odin/input-bridge.ts'"`.
 
 ## Smoke check
 
@@ -120,7 +129,7 @@ Save and Vite HMRs the dev machine browser. No remote action required.
 just check-odin
 ```
 
-Hits the device directly at `ODIN_API_BASE_URL`, checks `/api/health` and `/api/rpc` `app.library.list`, and exits non-zero with a clear log line if either breaks. Equivalent to `just desktop-runtime-check` for this loop.
+Hits the device directly at `ODIN_API_BASE_URL` and `ODIN_INPUT_BRIDGE_URL`, checks `/api/health`, `/api/rpc` `app.library.list`, and the native input bridge's gamepad subscription path, then exits non-zero with a clear log line if any check breaks. Equivalent to `just desktop-runtime-check` for this loop.
 
 ## Known limitations
 

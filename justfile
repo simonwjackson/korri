@@ -3,6 +3,7 @@ set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 export ODIN_HOST     := env_var_or_default("ODIN_HOST", "root@sm8550")
 export ODIN_PROJECT  := env_var_or_default("ODIN_PROJECT", "/storage/korri")
 export ODIN_API_PORT := env_var_or_default("ODIN_API_PORT", "3001")
+export ODIN_INPUT_BRIDGE_PORT := env_var_or_default("ODIN_INPUT_BRIDGE_PORT", "3002")
 
 default:
   @just --list
@@ -57,10 +58,10 @@ sync-odin:
   tools/scripts/odin-sync.sh
 
 # Iteration loop: sync project, refresh device deps, restart Odin API, reverse-forward local Vite, Playwright UI, and Storybook.
-dev-odin portal_port="${PORTAL_PORT:-3100}" api_port="${ODIN_API_PORT:-3001}" pw_port="${PW_PORT:-9876}" storybook_port="${STORYBOOK_PORT:-6006}" host="${APP_HOST:-localhost}":
-  PORTAL_PORT={{portal_port}} ODIN_API_PORT={{api_port}} PW_PORT={{pw_port}} STORYBOOK_PORT={{storybook_port}} APP_HOST={{host}} tools/scripts/odin-dev.sh
+dev-odin portal_port="${PORTAL_PORT:-3100}" api_port="${ODIN_API_PORT:-3001}" bridge_port="${ODIN_INPUT_BRIDGE_PORT:-3002}" pw_port="${PW_PORT:-9876}" storybook_port="${STORYBOOK_PORT:-6006}" host="${APP_HOST:-localhost}":
+  PORTAL_PORT={{portal_port}} ODIN_API_PORT={{api_port}} ODIN_INPUT_BRIDGE_PORT={{bridge_port}} PW_PORT={{pw_port}} STORYBOOK_PORT={{storybook_port}} APP_HOST={{host}} tools/scripts/odin-dev.sh
 
-# Smoke-test the Odin API stack end-to-end (health + app.library.list).
+# Smoke-test the Odin API + native input stack end-to-end (health + app.library.list + input bridge).
 check-odin:
   tools/scripts/odin-smoke.sh
 
