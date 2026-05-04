@@ -4,9 +4,10 @@
  * The contract every Shift home child can read. Per the React skill,
  * the contract is small and intentionally domain-shaped: data
  * (`items`, `resumeTarget`, `focused`, `isResumeFocused`,
- * `captionAnchorX`), a focus mutation (`focusTile`), and one
- * infrastructure ref (`railRef`) that the rail organism attaches and
- * the Root reads to drive measurement / initial focus.
+ * `captionAnchorX`, Labs state, UI scale), domain mutations
+ * (`focusTile`, Labs open/close, scale changes), and one infrastructure
+ * ref (`railRef`) that the rail organism attaches and the Root reads to
+ * drive measurement / initial focus.
  *
  * Not in the contract:
  *   - Raw React state setters. Mutations are domain-level.
@@ -30,7 +31,13 @@ export interface ShiftHomeContextValue {
   readonly isResumeFocused: boolean
   readonly captionAnchorX: number
   readonly railRef: RefObject<HTMLDivElement | null>
+  readonly isLabsOpen: boolean
+  readonly uiScale: number
   readonly focusTile: (id: string) => void
+  readonly openLabs: () => void
+  readonly closeLabs: () => void
+  readonly changeUiScale: (scale: number) => void
+  readonly resetUiScale: () => void
 }
 
 export const ShiftHomeCtx = createContext<ShiftHomeContextValue | null>(null)

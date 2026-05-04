@@ -8,10 +8,13 @@ import { useInputAction } from "@shared/navigation/use-input-action"
 import { Option } from "effect"
 import { useCallback } from "react"
 import { ShiftHomeCaption } from "../molecules/ShiftHomeCaption"
+import { ShiftLabsButton } from "../molecules/ShiftLabsButton"
 import { ShiftLaunchFailureBanner } from "../molecules/ShiftLaunchFailureBanner"
+import { ShiftUiScaleControl } from "../molecules/ShiftUiScaleControl"
 import { ShiftHomeBottomBar } from "../organisms/ShiftHomeBottomBar"
 import { ShiftHomeRail } from "../organisms/ShiftHomeRail"
 import { ShiftHomeTopBar } from "../organisms/ShiftHomeTopBar"
+import { ShiftLabsPanel } from "../organisms/ShiftLabsPanel"
 import { useShiftHome } from "../templates/ShiftHome.context"
 import { ShiftHomeRoot } from "../templates/ShiftHomeRoot"
 
@@ -33,7 +36,9 @@ export function ShiftHomeReadyBody({
           <ShiftHomeTopBar
             time={PLACEHOLDER_TIME}
             avatarSrc={PLACEHOLDER_AVATAR_SRC}
+            trailingActions={<ShiftHomeLabsButton />}
           />
+          <ShiftHomeLabsPanel />
           <ShiftHomeLaunchSurface launch={launch} />
           <ShiftHomeBottomBar />
         </ShiftHomeRoot>
@@ -41,17 +46,37 @@ export function ShiftHomeReadyBody({
   })
 }
 
+function ShiftHomeLabsButton() {
+  const { openLabs } = useShiftHome()
+  return <ShiftLabsButton onActivate={openLabs} />
+}
+
+function ShiftHomeLabsPanel() {
+  const { uiScale, changeUiScale, resetUiScale } = useShiftHome()
+
+  return (
+    <ShiftLabsPanel>
+      <ShiftUiScaleControl
+        value={uiScale}
+        onChange={changeUiScale}
+        onReset={resetUiScale}
+      />
+    </ShiftLabsPanel>
+  )
+}
+
 function ShiftHomeLaunchSurface({
   launch,
 }: {
   readonly launch: LaunchController
 }) {
-  const { items, focused } = useShiftHome()
+  const { items, focused, isLabsOpen } = useShiftHome()
 
   const launchFocused = useCallback(() => {
+    if (isLabsOpen) return
     const focusedGame = items.find(game => game.id === focused.id)
     if (focusedGame) launch.start(focusedGame)
-  }, [focused.id, items, launch])
+  }, [focused.id, isLabsOpen, items, launch])
 
   useInputAction("confirm", launchFocused)
 

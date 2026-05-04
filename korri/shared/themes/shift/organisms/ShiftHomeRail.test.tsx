@@ -23,7 +23,13 @@ describe("ShiftHomeRail", () => {
           isResumeFocused: true,
           captionAnchorX: 0,
           railRef: createRef<HTMLDivElement>(),
+          isLabsOpen: false,
+          uiScale: 1,
           focusTile: () => {},
+          openLabs: () => {},
+          closeLabs: () => {},
+          changeUiScale: () => {},
+          resetUiScale: () => {},
         }}
       >
         <ShiftHomeRail />

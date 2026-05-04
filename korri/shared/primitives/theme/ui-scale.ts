@@ -9,7 +9,9 @@ export function clampUiScale(value: number): number {
   return roundUiScale(Math.min(MAX_UI_SCALE, Math.max(MIN_UI_SCALE, value)))
 }
 
-export function parseUiScale(value: string | number | null | undefined): number {
+export function parseUiScale(
+  value: string | number | null | undefined,
+): number {
   if (typeof value === "number") return clampUiScale(value)
   if (typeof value !== "string") return DEFAULT_UI_SCALE
 

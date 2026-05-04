@@ -8,7 +8,7 @@ describe("ShiftLabsButton", () => {
   it("renders a native Labs button and calls onActivate when clicked", () => {
     let activations = 0
 
-    render(<ShiftLabsButton onActivate={() => activations += 1} />)
+    render(<ShiftLabsButton onActivate={() => (activations += 1)} />)
 
     const button = screen.getByRole("button", { name: "Labs" })
     expect(button.tagName).toBe("BUTTON")

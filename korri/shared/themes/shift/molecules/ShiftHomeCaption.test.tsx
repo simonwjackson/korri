@@ -24,7 +24,13 @@ describe("ShiftHomeCaption", () => {
           isResumeFocused: true,
           captionAnchorX: 42,
           railRef: createRef<HTMLDivElement>(),
+          isLabsOpen: false,
+          uiScale: 1,
           focusTile: () => {},
+          openLabs: () => {},
+          closeLabs: () => {},
+          changeUiScale: () => {},
+          resetUiScale: () => {},
         }}
       >
         <ShiftHomeCaption />

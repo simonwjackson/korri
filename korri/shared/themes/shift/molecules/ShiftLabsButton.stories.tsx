@@ -24,6 +24,7 @@ const meta = {
   ],
   args: {
     label: "Labs",
+    onActivate: () => {},
   },
   argTypes: {
     label: { control: "text" },

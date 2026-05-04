@@ -32,6 +32,12 @@
 
 import type { GameRecord } from "@shared/fixtures/games/game"
 import {
+  DEFAULT_UI_SCALE,
+  UI_SCALE_CSS_VARIABLE,
+  clampUiScale,
+  serializeUiScale,
+} from "@shared/primitives/theme/ui-scale"
+import {
   type ReactNode,
   useCallback,
   useEffect,
@@ -66,6 +72,8 @@ export function ShiftHomeRoot({
 
   const [focusedId, setFocusedId] = useState<string>(resumeTarget.id)
   const [captionAnchorX, setCaptionAnchorX] = useState(0)
+  const [isLabsOpen, setIsLabsOpen] = useState(false)
+  const [uiScale, setUiScale] = useState(DEFAULT_UI_SCALE)
   const railRef = useRef<HTMLDivElement | null>(null)
 
   // Place initial focus on the resume target so spatial navigation has
@@ -124,6 +132,33 @@ export function ShiftHomeRoot({
     setFocusedId(id)
   }, [])
 
+  const openLabs = useCallback(() => {
+    setIsLabsOpen(true)
+  }, [])
+
+  const closeLabs = useCallback(() => {
+    setIsLabsOpen(false)
+  }, [])
+
+  const changeUiScale = useCallback((scale: number) => {
+    setUiScale(clampUiScale(scale))
+  }, [])
+
+  const resetUiScale = useCallback(() => {
+    setUiScale(DEFAULT_UI_SCALE)
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      UI_SCALE_CSS_VARIABLE,
+      serializeUiScale(uiScale),
+    )
+
+    return () => {
+      document.documentElement.style.removeProperty(UI_SCALE_CSS_VARIABLE)
+    }
+  }, [uiScale])
+
   const value: ShiftHomeContextValue = useMemo(
     () => ({
       items,
@@ -132,9 +167,27 @@ export function ShiftHomeRoot({
       isResumeFocused: focused.id === resumeTarget.id,
       captionAnchorX,
       railRef,
+      isLabsOpen,
+      uiScale,
       focusTile,
+      openLabs,
+      closeLabs,
+      changeUiScale,
+      resetUiScale,
     }),
-    [items, resumeTarget, focused, captionAnchorX, focusTile],
+    [
+      items,
+      resumeTarget,
+      focused,
+      captionAnchorX,
+      isLabsOpen,
+      uiScale,
+      focusTile,
+      openLabs,
+      closeLabs,
+      changeUiScale,
+      resetUiScale,
+    ],
   )
 
   return (
