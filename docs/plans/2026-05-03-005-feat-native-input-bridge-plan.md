@@ -361,7 +361,7 @@ all other codes → ignored for MVP (carried on the wire, dropped by the adapter
 
 ### Phase 2: Device-side bridge (on Odin)
 
-- [ ] **Unit 4: Device-side bridge process**
+- [x] **Unit 4: Device-side bridge process**
 
 **Goal:** A Bun process running on the Odin that opens `/dev/input/event*`, pipes parsed events through, hosts a WebSocket server on port 3002, fans events out to subscribed clients, and survives device hot-plug.
 

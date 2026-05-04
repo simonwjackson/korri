@@ -15,10 +15,12 @@ export interface EvdevEvent {
 
 export interface ParseEvdevBytesResult {
   readonly events: readonly EvdevEvent[]
-  readonly remainder: Uint8Array
+  readonly remainder: Uint8Array<ArrayBufferLike>
 }
 
-export function parseEvdevBytes(bytes: Uint8Array): ParseEvdevBytesResult {
+export function parseEvdevBytes(
+  bytes: Uint8Array<ArrayBufferLike>,
+): ParseEvdevBytesResult {
   const eventCount = Math.floor(bytes.byteLength / INPUT_EVENT_BYTE_LENGTH)
   const events: EvdevEvent[] = []
 
