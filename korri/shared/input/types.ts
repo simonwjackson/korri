@@ -18,7 +18,12 @@ export type Direction = "up" | "down" | "left" | "right"
  * every emission; synthetic / test emits may omit it (no mode change occurs
  * for untagged actions).
  */
-export type InputSource = "keyboard" | "gamepad" | "pointer" | "wheel"
+export type InputSource =
+  | "keyboard"
+  | "gamepad"
+  | "pointer"
+  | "wheel"
+  | "native"
 
 export type InputAction =
   | {

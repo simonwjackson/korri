@@ -443,7 +443,7 @@ all other codes → ignored for MVP (carried on the wire, dropped by the adapter
 
 ### Phase 3: Renderer integration
 
-- [ ] **Unit 6: Renderer-side native adapter**
+- [x] **Unit 6: Renderer-side native adapter**
 
 **Goal:** A new `InputAdapter` that opens the WS to the bridge, decodes wire events via Unit 3's schema, applies the gamepad hold/repeat state machine, and emits `InputAction`s onto the bus with `source: "native"`. Survives WS drops.
 
