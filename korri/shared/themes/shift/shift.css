@@ -79,13 +79,12 @@
 	--shift-radius-tile: 4px;
 
 	/*
-   * Rail geometry tokens. The values are static by design because this
-   * surface matches a fixed console-home composition; keeping them as
-   * tokens prevents component-local pixel constants while preserving the
-   * measured Switch-like tile ratio.
+   * Rail geometry tokens. The values preserve the measured Switch-like
+   * tile ratio, but are expressed in rem so the kiosk-wide --ui-scale can
+   * resize the home composition without component-local scaling hooks.
    */
-	--shift-home-rail-cell-size: 258px;
-	--shift-home-rail-gap: 18px;
+	--shift-home-rail-cell-size: 16.125rem;
+	--shift-home-rail-gap: 1.125rem;
 
 	/*
    * Home bar content height. Drives both the top bar (search pill
