@@ -1,7 +1,7 @@
 ---
 title: "feat: Native input bridge for Korri"
 type: feat
-status: active
+status: completed
 date: 2026-05-03
 origin: docs/brainstorms/2026-05-03-native-input-bridge-requirements.md
 ---
@@ -549,7 +549,7 @@ all other codes → ignored for MVP (carried on the wire, dropped by the adapter
 
 ---
 
-- [ ] **Unit 8: Story-driven E2E + on-device kiosk smoke**
+- [x] **Unit 8: Story-driven E2E + on-device kiosk smoke**
 
 **Goal:** Two complementary verification surfaces. (1) A Playwright story-driven spec proves the renderer adapter wires through to focus changes via a fake WS server in the page. (2) An on-device smoke run verifies R11/R12 — the developer's actual kiosk round-trip works with a real controller.
 
@@ -601,6 +601,7 @@ all other codes → ignored for MVP (carried on the wire, dropped by the adapter
 - `just test-e2e Tilegrid.native.story` reports all scenarios green (or whatever the project's Playwright-by-name selector is — check `tools/playwright/playwright.component.config.ts`).
 - `just check-odin-input` (or `just check-odin` if folded) reports green.
 - The manual R12 round-trip succeeds and is recorded in the plan's `Verification` section as a checkbox during execution.
+- Validated on hardware by the user on 2026-05-04.
 
 ---
 
