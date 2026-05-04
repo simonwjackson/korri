@@ -289,6 +289,56 @@ describe("input bridge", () => {
     client.close()
   })
 
+  it("reopens gamepad streams when the same device id moves to a new event node", async () => {
+    let proc = `
+I: Bus=0003 Vendor=045e Product=028e Version=0114
+N: Name="InputPlumber Virtual Xbox 360 Controller"
+P: Phys=inputplumber/virtual-xbox360
+S: Sysfs=/devices/virtual/input/input9
+U: Uniq=inputplumber-virtual-xbox360
+H: Handlers=event9
+B: EV=20001b
+B: KEY=1000000000000 0 0 0 0
+B: ABS=30027
+`
+    const openedNodes: string[] = []
+    const sources: ReturnType<typeof createControllableEventSource>[] = []
+    const handle = await startBridge({
+      readProcDevices: async () => proc,
+      openEventSource: device => {
+        openedNodes.push(device.eventNode)
+        const source = createControllableEventSource()
+        sources.push(source)
+        return source.open()
+      },
+    })
+
+    const client = connectClient(handle.port)
+    await client.open()
+    client.ws.send(JSON.stringify({ classes: ["gamepad"] }))
+    await client.nextMessage()
+
+    proc = proc.replace("event9", "event12")
+    await handle.refreshDevices()
+
+    await waitFor(
+      () => openedNodes.includes("event12"),
+      "new event node stream",
+    )
+    sources[1]?.push(loadEvdevFixture("xbox-press-a.bin"))
+    await waitFor(
+      () =>
+        client.messages
+          .map(message => decodeNativeInputEvent(message))
+          .some(message => message.kind === "input"),
+      "input event from moved event node",
+    )
+
+    expect(openedNodes).toEqual(["event9", "event12"])
+
+    client.close()
+  })
+
   it("emits device-removed and device-added during proc refreshes", async () => {
     const odin = await loadProcFixture("bus-input-devices-odin.txt")
     const laptop = await loadProcFixture("bus-input-devices-laptop.txt")

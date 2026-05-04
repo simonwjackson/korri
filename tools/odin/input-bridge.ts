@@ -85,7 +85,25 @@ export async function startInputBridge(
     }
 
     for (const [deviceId, nextDevice] of nextDevices) {
-      if (devices.has(deviceId)) continue
+      const currentDevice = devices.get(deviceId)
+      if (currentDevice) {
+        if (!sameDevice(currentDevice, nextDevice)) {
+          closeDeviceStream(deviceId)
+          devices.set(deviceId, nextDevice)
+          broadcast({ kind: "device-removed", deviceId }, currentDevice.class)
+          if (nextDevice.class === "gamepad") {
+            openDeviceStream(nextDevice)
+          }
+          broadcast(
+            {
+              kind: "device-added",
+              device: toWireDevice(nextDevice),
+            },
+            nextDevice.class,
+          )
+        }
+        continue
+      }
 
       devices.set(deviceId, nextDevice)
       if (nextDevice.class === "gamepad") {
@@ -108,7 +126,9 @@ export async function startInputBridge(
     const done = runDeviceStream(device, source).finally(() => {
       streams.delete(device.deviceId)
       if (!stopped && devices.has(device.deviceId)) {
-        setTimeout(() => openDeviceStream(device), 250)
+        setTimeout(() => {
+          if (!stopped && devices.has(device.deviceId)) openDeviceStream(device)
+        }, 250)
       }
     })
     streams.set(device.deviceId, { source, done })
@@ -278,6 +298,18 @@ function openRealEventSource(device: DiscoveredDevice): InputBridgeEventSource {
     },
     close: () => stream.destroy(),
   }
+}
+
+function sameDevice(a: DiscoveredDevice, b: DiscoveredDevice): boolean {
+  return (
+    a.eventNode === b.eventNode &&
+    a.class === b.class &&
+    a.name === b.name &&
+    a.capabilities.length === b.capabilities.length &&
+    a.capabilities.every(
+      (capability, index) => capability === b.capabilities[index],
+    )
+  )
 }
 
 function toWireDevice(device: DiscoveredDevice) {
