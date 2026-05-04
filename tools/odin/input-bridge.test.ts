@@ -254,6 +254,41 @@ describe("input bridge", () => {
     client.close()
   })
 
+  it("reopens gamepad streams that end while the device remains present", async () => {
+    const proc = (await loadProcFixture("bus-input-devices-odin.txt")).split(
+      /\n\s*\n/,
+    )[0] as string
+    const sources: ReturnType<typeof createControllableEventSource>[] = []
+    const handle = await startBridge({
+      readProcDevices: async () => proc,
+      openEventSource: () => {
+        const source = createControllableEventSource()
+        sources.push(source)
+        return source.open()
+      },
+    })
+
+    const client = connectClient(handle.port)
+    await client.open()
+    client.ws.send(JSON.stringify({ classes: ["gamepad"] }))
+    await client.nextMessage()
+
+    sources[0]?.push(loadEvdevFixture("xbox-press-a.bin"))
+    await waitFor(() => client.messages.length >= 2, "first input event")
+    sources[0]?.close()
+    await waitFor(() => sources.length >= 2, "stream reopen")
+
+    sources[1]?.push(loadEvdevFixture("xbox-press-a.bin"))
+    await waitFor(() => client.messages.length >= 3, "second input event")
+
+    const inputEvents = client.messages
+      .map(message => decodeNativeInputEvent(message))
+      .filter(message => message.kind === "input")
+    expect(inputEvents).toHaveLength(2)
+
+    client.close()
+  })
+
   it("emits device-removed and device-added during proc refreshes", async () => {
     const odin = await loadProcFixture("bus-input-devices-odin.txt")
     const laptop = await loadProcFixture("bus-input-devices-laptop.txt")

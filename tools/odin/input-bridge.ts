@@ -107,6 +107,9 @@ export async function startInputBridge(
     const source = openEventSource(device)
     const done = runDeviceStream(device, source).finally(() => {
       streams.delete(device.deviceId)
+      if (!stopped && devices.has(device.deviceId)) {
+        setTimeout(() => openDeviceStream(device), 250)
+      }
     })
     streams.set(device.deviceId, { source, done })
   }
@@ -249,12 +252,13 @@ export async function startInputBridge(
       clearInterval(pollTimer)
       clients.clear()
 
+      const pendingStreams = [...streams.values()]
       for (const deviceId of [...streams.keys()]) {
         closeDeviceStream(deviceId)
       }
 
       server.stop(true)
-      await Promise.allSettled([...streams.values()].map(stream => stream.done))
+      await Promise.allSettled(pendingStreams.map(stream => stream.done))
     },
   }
 }
