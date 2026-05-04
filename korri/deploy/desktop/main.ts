@@ -2,13 +2,17 @@ import { join } from "node:path"
 import { logger } from "@shared/logger"
 import { ApplicationMenu, BrowserWindow, PATHS } from "electrobun/bun"
 import { createDesktopApp } from "./create-desktop-app"
-import { createDesktopWindowOptions } from "./window-options"
+import {
+  createDesktopDualScreenWindowOptions,
+  createDesktopWindowOptions,
+  type DesktopServerAddress,
+} from "./window-options"
 
 const DESKTOP_HOST = "127.0.0.1"
 const assetRoot = join(PATHS.VIEWS_FOLDER, "mainview")
 
 let server: ReturnType<typeof Bun.serve> | null = null
-let mainWindow: BrowserWindow | null = null
+let windows: BrowserWindow[] = []
 
 function installApplicationMenu() {
   ApplicationMenu.setApplicationMenu([
@@ -70,21 +74,26 @@ async function main() {
     throw new Error("Desktop server did not bind to a port")
   }
 
-  const windowOptions = createDesktopWindowOptions({
-    host: DESKTOP_HOST,
-    port,
-  })
-
-  mainWindow = new BrowserWindow(windowOptions)
+  const windowOptions = createDesktopWindows({ host: DESKTOP_HOST, port })
+  windows = windowOptions.map(options => new BrowserWindow(options))
 
   logger.info(
     {
-      url: windowOptions.url,
+      urls: windowOptions.map(options => options.url),
       assetRoot,
-      windowTitle: mainWindow.title,
+      windowTitles: windows.map(window => window.title),
     },
     "Korri desktop app started",
   )
+}
+
+function createDesktopWindows(address: DesktopServerAddress) {
+  if (process.env.KORRI_DESKTOP_DUAL_SCREEN === "1") {
+    const dual = createDesktopDualScreenWindowOptions(address)
+    return [dual.primary, dual.companion]
+  }
+
+  return [createDesktopWindowOptions(address)]
 }
 
 main().catch(error => {

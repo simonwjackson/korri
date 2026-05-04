@@ -15,12 +15,20 @@ export interface DesktopWindowOptions {
   titleBarStyle: "default" | "hidden" | "hiddenInset"
 }
 
-export function buildDesktopUrl(address: DesktopServerAddress): string {
+export interface DesktopDualScreenWindowOptions {
+  primary: DesktopWindowOptions
+  companion: DesktopWindowOptions
+}
+
+export function buildDesktopUrl(
+  address: DesktopServerAddress,
+  path = "/",
+): string {
   if (!Number.isInteger(address.port) || address.port <= 0) {
     throw new Error("Desktop server port must be a positive integer")
   }
 
-  return `http://${address.host}:${address.port}/`
+  return new URL(path, `http://${address.host}:${address.port}/`).toString()
 }
 
 export function createDesktopWindowOptions(
@@ -36,5 +44,34 @@ export function createDesktopWindowOptions(
       height: 800,
     },
     titleBarStyle: "default",
+  }
+}
+
+export function createDesktopDualScreenWindowOptions(
+  address: DesktopServerAddress,
+): DesktopDualScreenWindowOptions {
+  return {
+    primary: {
+      title: "Korri Primary",
+      url: buildDesktopUrl(address, "/screen?role=primary"),
+      frame: {
+        x: 120,
+        y: 80,
+        width: 1280,
+        height: 720,
+      },
+      titleBarStyle: "default",
+    },
+    companion: {
+      title: "Korri Companion",
+      url: buildDesktopUrl(address, "/screen?role=companion"),
+      frame: {
+        x: 160,
+        y: 840,
+        width: 800,
+        height: 700,
+      },
+      titleBarStyle: "default",
+    },
   }
 }
