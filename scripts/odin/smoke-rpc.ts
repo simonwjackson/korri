@@ -1,5 +1,5 @@
 /**
- * RPC sidecar for `tools/scripts/odin-smoke.sh`.
+ * RPC sidecar for `scripts/odin/smoke.sh`.
  *
  * Speaks the @effect/rpc batch-JSON wire format directly (a single-element
  * array of `RequestEncoded` envelopes; response is an array including an

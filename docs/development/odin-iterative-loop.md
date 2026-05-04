@@ -2,7 +2,7 @@
 title: Odin iterative validation loop
 date: 2026-05-02
 category: development
-module: tools/scripts/odin-*
+module: scripts/odin/*
 ---
 
 ## What this is
@@ -36,16 +36,16 @@ Optional overrides (all read by the recipes):
 | `ODIN_API_BASE_URL` | derived from `ODIN_HOST` + `ODIN_API_PORT` |
 | `ODIN_INPUT_BRIDGE_URL` | derived from `ODIN_HOST` + `ODIN_INPUT_BRIDGE_PORT` |
 
-## Setup (run once)
+## Install/update
 
 ```bash
-just bootstrap-odin
+just install-odin
 ```
 
-What it does, idempotently:
+What it ensures, idempotently:
 
 1. Verifies SSH reachability.
-2. Installs `/storage/bin/bun` (aarch64) if missing or broken.
+2. Installs the latest aarch64 Bun to `/storage/bin/bun`.
 3. Adds `/storage/bin` and `/storage/.nix-profile/bin` to PATH via
    `/storage/.profile`.
 4. `rsync`s the project to `$ODIN_PROJECT`, excluding `node_modules`,
@@ -58,6 +58,10 @@ What it does, idempotently:
    `emulationstation` process and writes them plus
    `KORRI_ROCKNIX_GAMELIST_ROOTS=/storage/roms` to
    `$ODIN_PROJECT/.env`.
+7. Installs or updates the temporary Korri session toggle scripts under
+   `/storage/bin` and restarts the toggle daemon.
+
+Run this on first setup and any time the Odin-installed tooling should be refreshed.
 
 If step 6 fails because EmulationStation isn't running, boot ROCKNIX so
 its Sway session is alive, then re-run the recipe. As a fallback you can
@@ -92,7 +96,7 @@ Save the file, then either:
 
   ```bash
   ssh "$ODIN_HOST" "pkill -f 'bun run tools/http/server.ts'; \
-    setsid bash -c 'exec /storage/korri/tools/scripts/odin-run-api.sh \
+    setsid bash -c 'exec /storage/korri/scripts/odin/run-api.sh \
       >> /storage/korri-api.log 2>&1 < /dev/null' & disown"
   ```
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# One-time bootstrap of the AYN Odin 2 Portal for the Korri iterative loop.
+# Idempotently install/update everything Korri needs on the AYN Odin 2 Portal.
 #
-# Idempotent: re-running upgrades Bun, re-syncs the project, and refreshes
-# /storage/korri/.env from the live EmulationStation environment without
-# disturbing a running tmux session.
+# Re-running this script ensures Bun, PATH setup, the synced project,
+# aarch64-native dependencies, Wayland runtime env, and the temporary Korri
+# session toggle are present and current.
 #
 # See docs/development/odin-iterative-loop.md.
 
@@ -12,47 +12,51 @@ set -euo pipefail
 ODIN_HOST="${ODIN_HOST:-root@sm8550}"
 ODIN_PROJECT="${ODIN_PROJECT:-/storage/korri}"
 
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-log()  { printf '\033[0;36m[odin-bootstrap]\033[0m %s\n' "$*" >&2; }
-fail() { printf '\033[0;31m[odin-bootstrap]\033[0m %s\n' "$*" >&2; exit 1; }
+log()  { printf '\033[0;36m[odin-install]\033[0m %s\n' "$*" >&2; }
+fail() { printf '\033[0;31m[odin-install]\033[0m %s\n' "$*" >&2; exit 1; }
+
+read -r -a SSH_EXTRA_OPTS <<< "${ODIN_SSH_OPTS:-}"
+RSYNC_SSH=(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new "${SSH_EXTRA_OPTS[@]}")
+
+ssh_odin() {
+  ssh \
+    -o ConnectTimeout=5 \
+    -o BatchMode=yes \
+    -o StrictHostKeyChecking=accept-new \
+    "${SSH_EXTRA_OPTS[@]}" \
+    "$ODIN_HOST" "$@"
+}
 
 # 1. Reachability ------------------------------------------------------------
 log "Probing $ODIN_HOST..."
-ssh -o ConnectTimeout=5 -o BatchMode=yes "$ODIN_HOST" 'echo ok' >/dev/null \
+ssh_odin 'echo ok' >/dev/null \
   || fail "Cannot reach $ODIN_HOST. Check SSH key auth and Tailscale connectivity."
 
 # 2. Bun ---------------------------------------------------------------------
-log "Ensuring Bun under /storage/bin/bun..."
-ssh "$ODIN_HOST" 'bash -s' <<'REMOTE'
+log "Installing latest Bun under /storage/bin/bun..."
+ssh_odin 'bash -s' <<'REMOTE'
 set -euo pipefail
 mkdir -p /storage/bin
-need_install=1
-if [ -x /storage/bin/bun ]; then
-  if /storage/bin/bun --version >/dev/null 2>&1; then
-    need_install=0
-  fi
+cd /tmp
+rm -rf bun-linux-aarch64 bun-linux-aarch64.zip
+curl -fsSL -o bun-linux-aarch64.zip \
+  https://github.com/oven-sh/bun/releases/latest/download/bun-linux-aarch64.zip
+if command -v unzip >/dev/null 2>&1; then
+  unzip -q bun-linux-aarch64.zip
+else
+  busybox unzip -q bun-linux-aarch64.zip
 fi
-if [ "$need_install" = "1" ]; then
-  echo "Downloading Bun aarch64..."
-  cd /tmp
-  rm -rf bun-linux-aarch64 bun-linux-aarch64.zip
-  curl -fsSL -o bun-linux-aarch64.zip \
-    https://github.com/oven-sh/bun/releases/latest/download/bun-linux-aarch64.zip
-  if command -v unzip >/dev/null 2>&1; then
-    unzip -q bun-linux-aarch64.zip
-  else
-    busybox unzip -q bun-linux-aarch64.zip
-  fi
-  install -m 0755 bun-linux-aarch64/bun /storage/bin/bun
-  rm -rf bun-linux-aarch64 bun-linux-aarch64.zip
-fi
+install -m 0755 bun-linux-aarch64/bun /storage/bin/bun
+rm -rf bun-linux-aarch64 bun-linux-aarch64.zip
 echo "bun: $(/storage/bin/bun --version)"
 REMOTE
 
 # 3. /storage/.profile PATH --------------------------------------------------
 log "Ensuring /storage/.profile puts /storage/bin and nix on PATH..."
-ssh "$ODIN_HOST" 'bash -s' <<'REMOTE'
+ssh_odin 'bash -s' <<'REMOTE'
 set -euo pipefail
 profile=/storage/.profile
 marker='# korri:bin-path'
@@ -68,8 +72,9 @@ REMOTE
 
 # 4. Project rsync -----------------------------------------------------------
 log "Syncing project to $ODIN_HOST:$ODIN_PROJECT..."
-ssh "$ODIN_HOST" "mkdir -p '$ODIN_PROJECT'"
+ssh_odin "mkdir -p '$ODIN_PROJECT'"
 rsync -az --delete \
+  -e "${RSYNC_SSH[*]}" \
   --exclude=node_modules \
   --exclude=out \
   --exclude=.worktrees \
@@ -83,11 +88,11 @@ rsync -az --delete \
 
 # 5. bun install -------------------------------------------------------------
 log "Running bun install on the device (aarch64-native dependencies)..."
-ssh "$ODIN_HOST" "cd '$ODIN_PROJECT' && /storage/bin/bun install"
+ssh_odin "cd '$ODIN_PROJECT' && /storage/bin/bun install"
 
 # 6. Harvest Wayland env from running emulationstation -----------------------
 log "Harvesting Wayland session env from emulationstation..."
-es_env="$(ssh "$ODIN_HOST" 'bash -s' <<'REMOTE'
+es_env="$(ssh_odin 'bash -s' <<'REMOTE'
 set -euo pipefail
 es_pid="$(pgrep -f emulationstation | head -1 || true)"
 if [ -z "$es_pid" ]; then
@@ -98,15 +103,15 @@ cat "/proc/$es_pid/environ" \
   | tr '\0' '\n' \
   | grep -E '^(WAYLAND_DISPLAY|XDG_RUNTIME_DIR|DISPLAY|DBUS_SESSION_BUS_ADDRESS|XDG_SESSION_TYPE)='
 REMOTE
-)" || fail "EmulationStation is not running on the device. Boot ROCKNIX so its Wayland session is alive, then re-run \`just bootstrap-odin\`. Or hand-write $ODIN_PROJECT/.env with WAYLAND_DISPLAY/XDG_RUNTIME_DIR before continuing."
+)" || fail "EmulationStation is not running on the device. Boot ROCKNIX so its Wayland session is alive, then re-run \`just install-odin\`. Or hand-write $ODIN_PROJECT/.env with WAYLAND_DISPLAY/XDG_RUNTIME_DIR before continuing."
 
 if [ -z "$es_env" ]; then
   fail "Could not read Wayland env from emulationstation (/proc env empty). Restart ES and retry."
 fi
 
 log "Writing $ODIN_PROJECT/.env..."
-ssh "$ODIN_HOST" "cat > '$ODIN_PROJECT/.env'" <<EOF
-# Generated by tools/scripts/odin-bootstrap.sh on $(date -u +%FT%TZ).
+ssh_odin "cat > '$ODIN_PROJECT/.env'" <<EOF
+# Generated by scripts/odin/install.sh on $(date -u +%FT%TZ).
 # Wayland session env harvested from the live emulationstation process so
 # children of \`runemu.sh\` (the actual emulators) render to the handheld
 # screen instead of the SSH session's nowhere-display.
@@ -119,5 +124,9 @@ $es_env
 KORRI_ROCKNIX_GAMELIST_ROOTS=/storage/roms
 EOF
 
-log "Bootstrap complete."
+# 7. Temporary Korri session toggle -----------------------------------------
+log "Ensuring Korri session toggle scripts are installed..."
+"$SCRIPT_DIR/install-korri-toggle.sh" install
+
+log "Odin install/update complete."
 log "Next: \`just dev-odin\`."

@@ -64,12 +64,12 @@ ODIN_HOST_NAME="$(ssh_host_from_target "$ODIN_HOST")"
 ODIN_API_BASE_URL="${ODIN_API_BASE_URL:-http://$ODIN_HOST_NAME:$ODIN_API_PORT}"
 ODIN_INPUT_BRIDGE_URL="${ODIN_INPUT_BRIDGE_URL:-ws://$ODIN_HOST_NAME:$ODIN_INPUT_BRIDGE_PORT}"
 
-# Refuse to start if bootstrap hasn't run.
+# Refuse to start if install hasn't run.
 ssh_odin "test -x /storage/bin/bun && test -f '$ODIN_PROJECT/.env'" \
-  || fail "Device not bootstrapped (missing /storage/bin/bun or $ODIN_PROJECT/.env). Run: just bootstrap-odin"
+  || fail "Device not installed (missing /storage/bin/bun or $ODIN_PROJECT/.env). Run: just install-odin"
 
 log "Syncing project..."
-"$HERE/odin-sync.sh"
+"$HERE/sync.sh"
 
 log "Refreshing remote dependencies..."
 ssh_odin "cd '$ODIN_PROJECT' && /storage/bin/bun install"
@@ -84,7 +84,7 @@ for _ in 1 2 3 4 5; do
   sleep 0.2
 done
 : > '$REMOTE_LOG'
-setsid bash -c "exec '$ODIN_PROJECT/tools/scripts/odin-run-api.sh' >> '$REMOTE_LOG' 2>&1 < /dev/null" &
+setsid bash -c "exec '$ODIN_PROJECT/scripts/odin/run-api.sh' >> '$REMOTE_LOG' 2>&1 < /dev/null" &
 disown || true
 REMOTE_SH
 
@@ -98,7 +98,7 @@ for _ in 1 2 3 4 5; do
   sleep 0.2
 done
 : > '$REMOTE_INPUT_BRIDGE_LOG'
-setsid bash -c "exec '$ODIN_PROJECT/tools/scripts/odin-run-input-bridge.sh' >> '$REMOTE_INPUT_BRIDGE_LOG' 2>&1 < /dev/null" &
+setsid bash -c "exec '$ODIN_PROJECT/scripts/odin/run-input-bridge.sh' >> '$REMOTE_INPUT_BRIDGE_LOG' 2>&1 < /dev/null" &
 disown || true
 REMOTE_SH
 

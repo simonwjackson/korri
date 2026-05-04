@@ -49,21 +49,24 @@ desktop-runtime-check:
 desktop-smoke: build-web
   bun run tools/desktop/desktop-smoke.ts
 
-# One-time bootstrap of the AYN Odin 2 Portal (Bun, tmux, project sync, Wayland env).
-bootstrap-odin:
-  tools/scripts/odin-bootstrap.sh
+# Ensure all Odin-installed items are present and up to date.
+install-odin:
+  scripts/odin/install.sh
+
+# Backward-compatible name for the Odin install/update step.
+bootstrap-odin: install-odin
 
 # Incremental rsync of the project to the Odin (no install, no env rewrite).
 sync-odin:
-  tools/scripts/odin-sync.sh
+  scripts/odin/sync.sh
 
 # Iteration loop: sync project, refresh device deps, restart Odin API, reverse-forward local Vite, Playwright UI, and Storybook.
 dev-odin portal_port="${PORTAL_PORT:-3100}" api_port="${ODIN_API_PORT:-3001}" bridge_port="${ODIN_INPUT_BRIDGE_PORT:-3002}" pw_port="${PW_PORT:-9876}" storybook_port="${STORYBOOK_PORT:-6006}" host="${APP_HOST:-localhost}":
-  PORTAL_PORT={{portal_port}} ODIN_API_PORT={{api_port}} ODIN_INPUT_BRIDGE_PORT={{bridge_port}} PW_PORT={{pw_port}} STORYBOOK_PORT={{storybook_port}} APP_HOST={{host}} tools/scripts/odin-dev.sh
+  PORTAL_PORT={{portal_port}} ODIN_API_PORT={{api_port}} ODIN_INPUT_BRIDGE_PORT={{bridge_port}} PW_PORT={{pw_port}} STORYBOOK_PORT={{storybook_port}} APP_HOST={{host}} scripts/odin/dev.sh
 
 # Smoke-test the Odin API + native input stack end-to-end (health + app.library.list + input bridge).
 check-odin:
-  tools/scripts/odin-smoke.sh
+  scripts/odin/smoke.sh
 
 # Start the Electrobun desktop app after building portal assets.
 desktop-dev: build-web desktop-runtime-check
@@ -120,11 +123,11 @@ typecheck:
 
 # Run Biome checks.
 lint:
-  biome check tools korri
+  biome check tools korri scripts
 
 # Format source files.
 format:
-  biome format --write tools korri
+  biome format --write tools korri scripts
 
 # Run the standard validation suite.
 check: validate-router lint typecheck test-unit check-bdd

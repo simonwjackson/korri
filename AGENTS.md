@@ -35,7 +35,8 @@ This file does not duplicate those rules. It carries:
 - Runtime app code: `korri/products/*`
 - Shared runtime code: `korri/shared/*`
 - Deployment/bootstrap entrypoints: `korri/deploy/*`
-- Repo tooling, generators, test infrastructure, scripts: `tools/*`
+- Repo tooling, generators, and test infrastructure: `tools/*`
+- Operational scripts: `scripts/*`
 
 ## Path aliases
 
@@ -112,6 +113,7 @@ The `tools/feature-map-explorer/` app (run with `just dev-feature-map`) is the c
 
 ```bash
 just dev | just dev-web | just dev-api | just dev-playwright | just dev-storybook
+just install-odin | just sync-odin | just dev-odin | just check-odin
 just test-unit
 just test-e2e
 just format

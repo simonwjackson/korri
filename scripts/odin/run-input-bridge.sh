@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Launcher for the Korri native input bridge on the Odin.
 #
-# Run on the device (not the dev machine) — invoked by tools/scripts/odin-dev.sh.
+# Run on the device (not the dev machine) — invoked by scripts/odin/dev.sh.
 
 set -euo pipefail
 

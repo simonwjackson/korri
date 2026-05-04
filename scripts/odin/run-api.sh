@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Launcher for the Korri API server inside the Odin's tmux session.
+# Launcher for the Korri API server on the Odin.
 #
 # Ensures the Wayland env from /storage/korri/.env is loaded before bun
 # spawns runemu.sh children, so emulators render to the handheld screen.
 #
-# Run on the device (not the dev machine) — invoked by tools/scripts/odin-dev.sh.
+# Run on the device (not the dev machine) — invoked by scripts/odin/dev.sh.
 
 set -euo pipefail
 

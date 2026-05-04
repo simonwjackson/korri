@@ -41,7 +41,7 @@ ODIN_INPUT_BRIDGE_URL="${ODIN_INPUT_BRIDGE_URL:-ws://$ODIN_HOST_NAME:$ODIN_INPUT
 log "1/4 Verifying Bun on $ODIN_HOST..."
 ssh -o ConnectTimeout=5 -o BatchMode=yes "$ODIN_HOST" \
   'test -x /storage/bin/bun && /storage/bin/bun --version' >/dev/null \
-  || fail "Bun not installed at /storage/bin/bun. Run: just bootstrap-odin"
+  || fail "Bun not installed at /storage/bin/bun. Run: just install-odin"
 ok "  bun on PATH"
 
 # Wait for remote /api/health directly.
@@ -67,10 +67,10 @@ esac
 
 log "3/4 Hitting /api/rpc app.library.list..."
 LOCAL_BASE="$ODIN_API_BASE_URL" \
-  bun run "$HERE/odin-smoke-rpc.ts"
+  bun run "$HERE/smoke-rpc.ts"
 
 log "4/4 Checking native input bridge on $ODIN_INPUT_BRIDGE_URL..."
 ODIN_INPUT_BRIDGE_URL="$ODIN_INPUT_BRIDGE_URL" \
-  bun run "$HERE/odin-smoke-input.ts"
+  bun run "$HERE/smoke-input.ts"
 
 ok "All checks passed."
