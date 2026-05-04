@@ -1,11 +1,11 @@
 import {
+  clampUiScale,
   DEFAULT_UI_SCALE,
+  formatUiScalePercent,
   MAX_UI_SCALE,
   MIN_UI_SCALE,
-  UI_SCALE_STEP,
-  clampUiScale,
-  formatUiScalePercent,
   parseUiScale,
+  UI_SCALE_STEP,
 } from "@shared/primitives/theme/ui-scale"
 import { useId } from "react"
 

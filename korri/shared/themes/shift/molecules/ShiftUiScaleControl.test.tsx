@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { MAX_UI_SCALE } from "@shared/primitives/theme/ui-scale"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { ShiftUiScaleControl } from "./ShiftUiScaleControl"
 
 afterEach(() => cleanup())

@@ -32,10 +32,10 @@
 
 import type { GameRecord } from "@shared/fixtures/games/game"
 import {
-  DEFAULT_UI_SCALE,
-  UI_SCALE_CSS_VARIABLE,
   clampUiScale,
+  DEFAULT_UI_SCALE,
   serializeUiScale,
+  UI_SCALE_CSS_VARIABLE,
 } from "@shared/primitives/theme/ui-scale"
 import {
   type ReactNode,

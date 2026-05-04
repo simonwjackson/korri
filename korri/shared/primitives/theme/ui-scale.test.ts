@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test"
 import {
+  clampUiScale,
   DEFAULT_UI_SCALE,
+  formatUiScalePercent,
   MAX_UI_SCALE,
   MIN_UI_SCALE,
-  clampUiScale,
-  formatUiScalePercent,
   parseUiScale,
   serializeUiScale,
 } from "./ui-scale"
