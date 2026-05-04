@@ -6,7 +6,7 @@ import { ShiftHomeTopBar } from "./ShiftHomeTopBar"
 afterEach(() => cleanup())
 
 describe("ShiftHomeTopBar", () => {
-  it("places trailing actions before the decorative status cluster", () => {
+  it("places trailing actions to the right of the clock", () => {
     render(
       <ShiftHomeTopBar
         time="9:41"
@@ -19,7 +19,7 @@ describe("ShiftHomeTopBar", () => {
     const time = screen.getByText("9:41")
 
     expect(
-      labs.compareDocumentPosition(time) & Node.DOCUMENT_POSITION_FOLLOWING,
+      time.compareDocumentPosition(labs) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
   })
 

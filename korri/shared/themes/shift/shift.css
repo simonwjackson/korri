@@ -292,8 +292,8 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: var(--shift-home-bar-content-h);
-	height: var(--shift-home-bar-content-h);
+	width: 1.4em;
+	height: 1.4em;
 	padding: 0;
 	background: transparent;
 	box-shadow: none;
@@ -301,7 +301,13 @@
 }
 
 [data-shift-home] .shift-labs-button:focus-visible {
-	background: var(--shift-pill-bg);
+	background: transparent;
+	box-shadow: none;
+	transform: none;
+}
+
+[data-shift-home] .shift-labs-button:focus-visible .shift-pill-icon {
+	color: var(--shift-focus-glow);
 }
 
 /* -------------------------------------------------------------------------- *

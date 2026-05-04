@@ -46,10 +46,11 @@ export function ShiftHomeTopBar({
           ariaLabel={searchAriaLabel}
           onActivate={onSearchActivate}
         />
-        <div className="flex shrink-0 items-center gap-6">
-          {trailingActions}
-          <ShiftStatusCluster time={time} avatarSrc={avatarSrc} />
-        </div>
+        <ShiftStatusCluster
+          time={time}
+          avatarSrc={avatarSrc}
+          iconActions={trailingActions}
+        />
       </div>
     </div>
   )
