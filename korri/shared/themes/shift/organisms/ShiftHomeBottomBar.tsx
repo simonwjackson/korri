@@ -5,6 +5,13 @@
  * Menu activation is delegated through `onMenuActivate` so a future
  * drawer overlay (out of scope here) plugs in at the page level
  * rather than inside the organism.
+ *
+ * Vertical sizing mirrors the home top bar: same outer `px-12 py-5`,
+ * plus an inner content row with `min-h-[var(--shift-home-bar-content-h)]`.
+ * The same token drives the search pill height on the top bar, so the
+ * two bars total the same height (padding + bar-content-h) by contract,
+ * not by parallel magic numbers. Edit `--shift-home-bar-content-h` in
+ * shift.css to retune both bars in one place.
  */
 
 import { ShiftMenuButton } from "../molecules/ShiftMenuButton"
@@ -20,9 +27,11 @@ export function ShiftHomeBottomBar({
   onMenuActivate,
 }: ShiftHomeBottomBarProps) {
   return (
-    <div className="flex shrink-0 items-center justify-between gap-8 px-12 py-5">
-      <ShiftMenuButton label={menuLabel} onActivate={onMenuActivate} />
-      <ShiftHomeHudCluster />
+    <div className="flex shrink-0 flex-col px-12 py-5">
+      <div className="flex min-h-[var(--shift-home-bar-content-h)] items-center justify-between gap-8">
+        <ShiftMenuButton label={menuLabel} onActivate={onMenuActivate} />
+        <ShiftHomeHudCluster />
+      </div>
     </div>
   )
 }

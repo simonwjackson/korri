@@ -88,6 +88,15 @@
 	--shift-home-rail-gap: 18px;
 
 	/*
+   * Home bar content height. Drives both the top bar (search pill
+   * intrinsic height) and the bottom bar (inner row min-height) so
+   * the two bars stay vertically synced as --text-lg flexes. Express
+   * any future bar-internal sizing in terms of this token, not
+   * 3.4em, so a single edit here keeps both bars aligned.
+   */
+	--shift-home-bar-content-h: calc(3.4 * var(--text-lg));
+
+	/*
    * Type voice. Shift overrides the project default (Geist, sharp /
    * technical) with Nunito, a rounded friendly sans that matches the
    * Switch tone. Falls back to the platform's rounded sans (SF Pro
@@ -294,9 +303,10 @@
 	/* Collapsed: button is exactly the icon's width. The icon's left edge
      sits at the button's left edge, which sits at the parent's px-12
      boundary — visually flush with the Menu glyph circle and the caption
-     on the rows below. */
+     on the rows below. Height is the shared bar-content token so the
+     bottom bar can mirror it without copying 3.4em. */
 	width: 1.4em;
-	height: 3.4em;
+	height: var(--shift-home-bar-content-h);
 	padding: 0;
 	background: transparent;
 	box-shadow: none;

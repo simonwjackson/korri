@@ -10,6 +10,11 @@
  * Storybook stories and product routes can supply deterministic
  * values without touching a context. The home page composes them
  * from whatever data source it owns.
+ *
+ * Vertical sizing: outer wrapper owns `px-12 py-5`; inner row reserves
+ * `--shift-home-bar-content-h` so the bar's height is
+ * padding + bar-content-h. The same contract applies to ShiftHomeBottomBar
+ * so the two bars total the same height regardless of what they hold.
  */
 
 import { ShiftSearchPill } from "../molecules/ShiftSearchPill"
@@ -31,13 +36,15 @@ export function ShiftHomeTopBar({
   onSearchActivate,
 }: ShiftHomeTopBarProps) {
   return (
-    <div className="flex shrink-0 items-center justify-between gap-6 px-12 py-5">
-      <ShiftSearchPill
-        placeholder={searchPlaceholder}
-        ariaLabel={searchAriaLabel}
-        onActivate={onSearchActivate}
-      />
-      <ShiftStatusCluster time={time} avatarSrc={avatarSrc} />
+    <div className="flex shrink-0 flex-col px-12 py-5">
+      <div className="flex min-h-[var(--shift-home-bar-content-h)] items-center justify-between gap-6">
+        <ShiftSearchPill
+          placeholder={searchPlaceholder}
+          ariaLabel={searchAriaLabel}
+          onActivate={onSearchActivate}
+        />
+        <ShiftStatusCluster time={time} avatarSrc={avatarSrc} />
+      </div>
     </div>
   )
 }
