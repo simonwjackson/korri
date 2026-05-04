@@ -25,4 +25,8 @@ ReactDOM.createRoot(rootElement).render(<RouterProvider router={router} />)
 // drives focus through the live DOM via LRUD. Components stay native HTML.
 // Diagnostics logs input actions + focus changes in the browser console so
 // device/controller navigation can be verified on hardware.
-startSpatialNavigation({ diagnostics: true })
+const nativeBridgeUrl = import.meta.env.VITE_KORRI_NATIVE_BRIDGE_URL
+startSpatialNavigation({
+  diagnostics: true,
+  native: nativeBridgeUrl ? { url: nativeBridgeUrl } : false,
+})

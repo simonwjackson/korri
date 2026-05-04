@@ -494,7 +494,7 @@ all other codes → ignored for MVP (carried on the wire, dropped by the adapter
 
 ---
 
-- [ ] **Unit 7: Wire-up in start.ts, types, and composition root**
+- [x] **Unit 7: Wire-up in start.ts, types, and composition root**
 
 **Goal:** Plug the native adapter into `startSpatialNavigation`, add `"native"` to `InputSource`, update the input-mode dispatch matrix, and enable the adapter in the portal entry when the bridge URL env var is set.
 

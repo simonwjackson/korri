@@ -2,6 +2,10 @@ import { getNextFocus } from "@bbc/tv-lrud-spatial"
 import { createInputBus, type InputBus } from "@shared/input/bus"
 import { createGamepadAdapter } from "@shared/input/gamepad-adapter"
 import { createKeyboardAdapter } from "@shared/input/keyboard-adapter"
+import {
+  createNativeInputAdapter,
+  type NativeInputAdapterOptions,
+} from "@shared/input/native-adapter"
 import { createPointerAdapter } from "@shared/input/pointer-adapter"
 import type { Direction } from "@shared/input/types"
 import { createWheelAdapter } from "@shared/input/wheel-adapter"
@@ -50,6 +54,8 @@ export interface StartSpatialNavigationOptions
   readonly pointer?: false | Parameters<typeof createPointerAdapter>[0]
   /** Disable the wheel adapter. */
   readonly wheel?: false | Parameters<typeof createWheelAdapter>[0]
+  /** Enable the native input bridge adapter. Omitted by default. */
+  readonly native?: false | NativeInputAdapterOptions
   /** Disable the input-mode store + DOM-attribute side effect. */
   readonly inputMode?: false
   /** Log navigation input actions and focus changes to the browser console. */
@@ -129,8 +135,8 @@ export function startSpatialNavigation(
   // Input-mode store + dispatch matrix. Subscribes to the bus once and maps
   // source-tagged actions to mode flips. See plan unit 5 dispatch matrix:
   //
-  //   source=pointer|wheel              -> setPointerMode
-  //   source=keyboard|gamepad + direction -> setDirectionalMode
+  //   source=pointer|wheel                     -> setPointerMode
+  //   source=keyboard|gamepad|native + direction -> setDirectionalMode
   //   anything else (untagged, confirm/back/options/menu) -> no change
   //
   // The store owns the [data-input-mode] DOM attribute. When disabled
@@ -145,7 +151,9 @@ export function startSpatialNavigation(
         return
       }
       if (
-        (source === "keyboard" || source === "gamepad") &&
+        (source === "keyboard" ||
+          source === "gamepad" ||
+          source === "native") &&
         action.type === "direction"
       ) {
         store.setDirectionalMode()
@@ -164,6 +172,9 @@ export function startSpatialNavigation(
   }
   if (options.wheel !== false) {
     bus.use(createWheelAdapter(options.wheel ?? undefined))
+  }
+  if (options.native !== false && options.native) {
+    bus.use(createNativeInputAdapter(options.native))
   }
 
   const handle: SpatialNavigationHandle = {

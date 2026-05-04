@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import type { InputAction } from "@shared/input/types"
 import {
   getInputBus,
   getSpatialNavigation,
@@ -13,6 +14,7 @@ const startWithoutDeviceAdapters = () =>
     gamepad: false,
     pointer: false,
     wheel: false,
+    native: false,
     inputMode: false,
     nextFocus: () => null,
   })
@@ -63,6 +65,7 @@ describe("spatial navigation singleton", () => {
       gamepad: false,
       pointer: false,
       wheel: false,
+      native: false,
       inputMode: false,
       nextFocus: () => null,
     })
@@ -106,6 +109,7 @@ describe("input-mode dispatch", () => {
       gamepad: false,
       pointer: false,
       wheel: false,
+      native: false,
       nextFocus: () => null,
     })
 
@@ -142,12 +146,27 @@ describe("input-mode dispatch", () => {
     )
   })
 
+  it("flips to directional mode on a native direction action", () => {
+    const handle = startWithInputMode()
+
+    handle.bus.emit({
+      type: "direction",
+      direction: "right",
+      source: "native",
+    })
+
+    expect(document.documentElement.getAttribute("data-input-mode")).toBe(
+      "directional",
+    )
+  })
+
   it("flips to pointer mode on pointer-activity", () => {
     const handle = startSpatialNavigation({
       keyboard: false,
       gamepad: false,
       pointer: false,
       wheel: false,
+      native: false,
       nextFocus: () => null,
     })
 
@@ -188,7 +207,7 @@ describe("input-mode dispatch", () => {
     )
   })
 
-  it("does not change mode on confirm/back/options/menu from keyboard or gamepad", () => {
+  it("does not change mode on confirm/back/options/menu from directional sources", () => {
     const handle = startWithInputMode()
 
     // Force pointer mode first.
@@ -200,7 +219,7 @@ describe("input-mode dispatch", () => {
     handle.bus.emit({ type: "confirm", source: "keyboard" })
     handle.bus.emit({ type: "back", source: "keyboard" })
     handle.bus.emit({ type: "options", source: "gamepad" })
-    handle.bus.emit({ type: "menu", source: "gamepad" })
+    handle.bus.emit({ type: "menu", source: "native" })
 
     expect(document.documentElement.getAttribute("data-input-mode")).toBe(
       "pointer",
@@ -234,6 +253,7 @@ describe("input-mode dispatch", () => {
       gamepad: false,
       pointer: false,
       wheel: false,
+      native: false,
       inputMode: false,
       nextFocus: () => null,
     })
@@ -250,3 +270,130 @@ describe("input-mode dispatch", () => {
     expect(document.documentElement.hasAttribute("data-input-mode")).toBe(false)
   })
 })
+
+describe("native adapter wiring", () => {
+  afterEach(() => {
+    getSpatialNavigationSnapshot()?.dispose()
+  })
+
+  it("attaches the native adapter when native options are provided", async () => {
+    const server = createInputServer()
+    const seen: InputAction[] = []
+    const handle = startSpatialNavigation({
+      keyboard: false,
+      gamepad: false,
+      pointer: false,
+      wheel: false,
+      inputMode: false,
+      native: { url: `ws://127.0.0.1:${server.port}` },
+      nextFocus: () => null,
+    })
+    handle.bus.on(action => seen.push(action))
+
+    await waitFor(() => server.messages.length > 0, "native subscription")
+    server.send({
+      kind: "input",
+      deviceId: "inputplumber-virtual-xbox360",
+      class: "gamepad",
+      type: 1,
+      code: 304,
+      value: 1,
+      timestamp: Date.now(),
+    })
+
+    await waitFor(() => seen.length === 1, "native confirm action")
+    expect(seen).toEqual([{ type: "confirm", source: "native" }])
+
+    server.stop()
+  })
+
+  it("does not attach the native adapter when native is false", async () => {
+    const server = createInputServer()
+    startSpatialNavigation({
+      keyboard: false,
+      gamepad: false,
+      pointer: false,
+      wheel: false,
+      native: false,
+      inputMode: false,
+      nextFocus: () => null,
+    })
+
+    await Bun.sleep(30)
+
+    expect(server.messages).toEqual([])
+    server.stop()
+  })
+
+  it("does not attach the native adapter when native is omitted", async () => {
+    const server = createInputServer()
+    startSpatialNavigation({
+      keyboard: false,
+      gamepad: false,
+      pointer: false,
+      wheel: false,
+      inputMode: false,
+      nextFocus: () => null,
+    })
+
+    await Bun.sleep(30)
+
+    expect(server.messages).toEqual([])
+    server.stop()
+  })
+})
+
+type InputServer = {
+  readonly port: number
+  readonly messages: unknown[]
+  readonly send: (message: unknown) => void
+  readonly stop: () => void
+}
+
+function createInputServer(): InputServer {
+  const sockets = new Set<Bun.ServerWebSocket<{ readonly id: string }>>()
+  const messages: unknown[] = []
+  const server = Bun.serve<{ readonly id: string }>({
+    port: 0,
+    fetch(request, server) {
+      if (server.upgrade(request, { data: { id: crypto.randomUUID() } }))
+        return undefined
+      return new Response("native input test server\n")
+    },
+    websocket: {
+      open(socket) {
+        sockets.add(socket)
+      },
+      message(_socket, message) {
+        messages.push(JSON.parse(String(message)))
+      },
+      close(socket) {
+        sockets.delete(socket)
+      },
+    },
+  })
+
+  return {
+    port: server.port ?? 0,
+    messages,
+    send(message) {
+      const payload = JSON.stringify(message)
+      for (const socket of sockets) socket.send(payload)
+    },
+    stop() {
+      server.stop(true)
+    },
+  }
+}
+
+async function waitFor(
+  predicate: () => boolean,
+  description: string,
+): Promise<void> {
+  const deadline = Date.now() + 1_000
+  while (Date.now() < deadline) {
+    if (predicate()) return
+    await Bun.sleep(5)
+  }
+  throw new Error(`timed out waiting for ${description}`)
+}
