@@ -280,6 +280,22 @@
 	color: var(--shift-ink-dim);
 }
 
+[data-shift-home] .shift-labs-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--shift-home-bar-content-h);
+	height: var(--shift-home-bar-content-h);
+	padding: 0;
+	background: transparent;
+	box-shadow: none;
+	flex: 0 0 auto;
+}
+
+[data-shift-home] .shift-labs-button:focus-visible {
+	background: var(--shift-pill-bg);
+}
+
 /* -------------------------------------------------------------------------- *
  * Search pill (molecule) — icon-only at rest, expands to full pill on focus
  *

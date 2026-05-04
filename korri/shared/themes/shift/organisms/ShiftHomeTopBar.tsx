@@ -17,6 +17,7 @@
  * so the two bars total the same height regardless of what they hold.
  */
 
+import type { ReactNode } from "react"
 import { ShiftSearchPill } from "../molecules/ShiftSearchPill"
 import { ShiftStatusCluster } from "../molecules/ShiftStatusCluster"
 
@@ -26,6 +27,7 @@ export interface ShiftHomeTopBarProps {
   readonly searchPlaceholder?: string
   readonly searchAriaLabel?: string
   readonly onSearchActivate?: () => void
+  readonly trailingActions?: ReactNode
 }
 
 export function ShiftHomeTopBar({
@@ -34,6 +36,7 @@ export function ShiftHomeTopBar({
   searchPlaceholder = "Search for games, genres, or tags…",
   searchAriaLabel = "Search for games, genres, or tags",
   onSearchActivate,
+  trailingActions,
 }: ShiftHomeTopBarProps) {
   return (
     <div className="flex shrink-0 flex-col px-12 py-5">
@@ -43,7 +46,10 @@ export function ShiftHomeTopBar({
           ariaLabel={searchAriaLabel}
           onActivate={onSearchActivate}
         />
-        <ShiftStatusCluster time={time} avatarSrc={avatarSrc} />
+        <div className="flex shrink-0 items-center gap-6">
+          {trailingActions}
+          <ShiftStatusCluster time={time} avatarSrc={avatarSrc} />
+        </div>
       </div>
     </div>
   )

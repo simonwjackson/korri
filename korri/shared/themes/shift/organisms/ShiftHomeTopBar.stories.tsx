@@ -6,6 +6,7 @@
  */
 
 import type { Meta, StoryObj } from "@storybook/react-vite"
+import { ShiftLabsButton } from "../molecules/ShiftLabsButton"
 import { ShiftHomeTopBar } from "./ShiftHomeTopBar"
 
 const meta = {
@@ -46,3 +47,12 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const Default: Story = {}
+
+export const WithLabs: Story = {
+  render: args => (
+    <ShiftHomeTopBar
+      {...args}
+      trailingActions={<ShiftLabsButton onActivate={() => {}} />}
+    />
+  ),
+}
