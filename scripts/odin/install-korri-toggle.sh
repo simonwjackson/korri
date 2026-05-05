@@ -109,18 +109,180 @@ case "${1:-toggle}" in
 esac
 REMOTE_SCRIPT
 
-  chmod 0755 "$tmpdir/korri-session-toggle"
+  cat > "$tmpdir/korri-electrobun-control-lib" <<'REMOTE_SCRIPT'
+# shellcheck shell=bash
 
-  log "Installing session toggle command on $ODIN_HOST:/storage/bin"
+korri_wayland_env() {
+  local project="${ODIN_PROJECT:-/storage/korri}"
+  if [ -f "$project/.env" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$project/.env"
+    set +a
+  fi
+
+  export DISPLAY="${DISPLAY:-:0}"
+  export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/var/run/0-runtime-dir}"
+  export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
+  export SWAYSOCK="${SWAYSOCK:-$XDG_RUNTIME_DIR/sway-ipc.0.sock}"
+  export PATH="/storage/bin:/storage/.nix-profile/bin:$PATH"
+}
+
+korri_electrobun_pids() {
+  local p pid exe
+  for p in /proc/[0-9]*; do
+    [ -r "$p/exe" ] || continue
+    pid="${p##*/}"
+    exe="$(readlink "$p/exe" 2>/dev/null || true)"
+    case "$exe" in
+      */share/korri-desktop/*/Korri-dev/bin/launcher|*/share/korri-desktop/*/Korri-dev/bin/bun)
+        printf '%s\n' "$pid"
+        ;;
+    esac
+  done
+}
+
+korri_stop_electrobun() {
+  local pids alive pid
+  pids="$(korri_electrobun_pids | tr '\n' ' ')"
+  [ -n "${pids// }" ] || return 0
+
+  kill -TERM $pids 2>/dev/null || true
+  for _ in $(seq 1 30); do
+    alive=""
+    for pid in $pids; do
+      [ -d "/proc/$pid" ] && alive="$alive $pid"
+    done
+    [ -z "$alive" ] && return 0
+    sleep 0.1
+  done
+
+  kill -KILL $alive 2>/dev/null || true
+}
+
+korri_start_electrobun() {
+  korri_wayland_env
+  local app="${KORRI_ELECTROBUN_APP:-korri-desktop-odin}"
+  local log="${KORRI_ELECTROBUN_LOG:-/storage/korri-electrobun-profile-hermetic.log}"
+
+  : > "$log"
+  nohup "$app" >> "$log" 2>&1 &
+  echo $! > /storage/korri-electrobun-profile-hermetic.pid
+}
+
+korri_restart_electrobun() {
+  korri_stop_electrobun
+  sleep 0.5
+  korri_start_electrobun
+}
+REMOTE_SCRIPT
+
+  cat > "$tmpdir/korri-kill-active-application" <<'REMOTE_SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source /storage/bin/korri-electrobun-control-lib
+korri_wayland_env
+
+log() { printf '%s [korri-active-app] %s\n' "$(date -Is)" "$*" >&2; }
+
+focused_json="$({ swaymsg -t get_tree 2>/dev/null || true; } | /storage/bin/bun -e '
+const raw = await new Response(Bun.stdin.stream()).text()
+if (!raw.trim()) process.exit(2)
+const tree = JSON.parse(raw)
+let focused
+function walk(node) {
+  if (node.focused) focused = node
+  for (const child of [...(node.nodes ?? []), ...(node.floating_nodes ?? [])]) walk(child)
+}
+walk(tree)
+if (!focused) process.exit(3)
+console.log(JSON.stringify({
+  pid: focused.pid ?? null,
+  name: focused.name ?? null,
+  appId: focused.app_id ?? null,
+  windowClass: focused.window_properties?.class ?? null,
+}))
+' 2>/dev/null || true)"
+
+if [ -z "$focused_json" ]; then
+  log "no focused sway window found"
+  exit 0
+fi
+
+pid="$(printf '%s' "$focused_json" | /storage/bin/bun -e 'const f=JSON.parse(await new Response(Bun.stdin.stream()).text()); if (f.pid) console.log(f.pid)' 2>/dev/null || true)"
+name="$(printf '%s' "$focused_json" | /storage/bin/bun -e 'const f=JSON.parse(await new Response(Bun.stdin.stream()).text()); if (f.name) console.log(f.name)' 2>/dev/null || true)"
+window_class="$(printf '%s' "$focused_json" | /storage/bin/bun -e 'const f=JSON.parse(await new Response(Bun.stdin.stream()).text()); if (f.windowClass) console.log(f.windowClass)' 2>/dev/null || true)"
+exe=""
+if [ -n "$pid" ] && [ -r "/proc/$pid/exe" ]; then
+  exe="$(readlink "/proc/$pid/exe" 2>/dev/null || true)"
+fi
+
+case "$exe $window_class $name" in
+  *'/share/korri-desktop/'*'/Korri-dev/bin/bun'*|*'ElectrobunKitchenSink-dev'*|*' Korri')
+    log "focused app is Korri Electrobun; restarting"
+    korri_restart_electrobun
+    exit 0
+    ;;
+esac
+
+if [ -z "$pid" ]; then
+  log "focused window has no pid: $focused_json"
+  exit 0
+fi
+
+log "killing focused app pid=$pid name=$name class=$window_class exe=$exe"
+kill -TERM "$pid" 2>/dev/null || true
+for _ in $(seq 1 30); do
+  [ ! -d "/proc/$pid" ] && exit 0
+  sleep 0.1
+done
+kill -KILL "$pid" 2>/dev/null || true
+REMOTE_SCRIPT
+
+  cat > "$tmpdir/korri-go-chromium" <<'REMOTE_SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source /storage/bin/korri-electrobun-control-lib
+
+log() { printf '%s [korri-go-chromium] %s\n' "$(date -Is)" "$*" >&2; }
+
+log "stopping Electrobun and starting supervised Chromium"
+korri_stop_electrobun
+exec /storage/bin/korri-session-toggle start
+REMOTE_SCRIPT
+
+  chmod 0755 "$tmpdir/korri-session-toggle" "$tmpdir/korri-kill-active-application" "$tmpdir/korri-go-chromium"
+  chmod 0644 "$tmpdir/korri-electrobun-control-lib"
+
+  log "Installing session/input action commands on $ODIN_HOST:/storage/bin"
   ssh_odin 'mkdir -p /storage/bin'
-  scp_odin "$tmpdir/korri-session-toggle" "$ODIN_HOST:/storage/bin/"
+  scp_odin \
+    "$tmpdir/korri-session-toggle" \
+    "$tmpdir/korri-electrobun-control-lib" \
+    "$tmpdir/korri-kill-active-application" \
+    "$tmpdir/korri-go-chromium" \
+    "$ODIN_HOST:/storage/bin/"
 
   ssh_odin "KORRI_SESSIOND_URL='$KORRI_SESSIOND_URL' KORRI_SESSIOND_TOKEN_FILE='$KORRI_SESSIOND_TOKEN_FILE' bash -s" <<'REMOTE'
 set -euo pipefail
-chmod 0755 /storage/bin/korri-session-toggle
-pkill -f '[k]orri-toggle-daemon' 2>/dev/null || true
+chmod 0755 /storage/bin/korri-session-toggle /storage/bin/korri-kill-active-application /storage/bin/korri-go-chromium
+chmod 0644 /storage/bin/korri-electrobun-control-lib
+legacy_pids=""
+for p in /proc/[0-9]*; do
+  [ -r "$p/exe" ] || continue
+  pid="${p##*/}"
+  exe="$(readlink "$p/exe" 2>/dev/null || true)"
+  [ "$exe" = "/storage/bin/korri-toggle-daemon" ] && legacy_pids="$legacy_pids $pid"
+done
+[ -z "$legacy_pids" ] || kill -TERM $legacy_pids 2>/dev/null || true
 rm -f /storage/bin/korri-toggle-daemon /storage/korri-toggle-daemon.pid
 bash -n /storage/bin/korri-session-toggle
+bash -n /storage/bin/korri-kill-active-application
+bash -n /storage/bin/korri-go-chromium
 /storage/bin/korri-session-toggle status || true
 REMOTE
 
@@ -131,8 +293,15 @@ remove_toggle() {
   log "Removing session toggle command and legacy toggle daemon from $ODIN_HOST"
   ssh_odin 'bash -s' <<'REMOTE'
 set -euo pipefail
-pkill -f '[k]orri-toggle-daemon' 2>/dev/null || true
-rm -f /storage/bin/korri-session-toggle /storage/bin/korri-toggle-daemon /storage/korri-toggle-daemon.pid
+legacy_pids=""
+for p in /proc/[0-9]*; do
+  [ -r "$p/exe" ] || continue
+  pid="${p##*/}"
+  exe="$(readlink "$p/exe" 2>/dev/null || true)"
+  [ "$exe" = "/storage/bin/korri-toggle-daemon" ] && legacy_pids="$legacy_pids $pid"
+done
+[ -z "$legacy_pids" ] || kill -TERM $legacy_pids 2>/dev/null || true
+rm -f /storage/bin/korri-session-toggle /storage/bin/korri-electrobun-control-lib /storage/bin/korri-kill-active-application /storage/bin/korri-go-chromium /storage/bin/korri-toggle-daemon /storage/korri-toggle-daemon.pid
 REMOTE
 }
 

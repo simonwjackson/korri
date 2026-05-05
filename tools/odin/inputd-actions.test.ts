@@ -4,6 +4,7 @@ import { join } from "node:path"
 import {
   createInputdActionDispatcher,
   type InputdActionCommand,
+  type InputdActionCommands,
   KORRI_INPUTD_ACTION_IDS,
 } from "./inputd-actions"
 
@@ -26,10 +27,13 @@ async function tempDir() {
   return path
 }
 
-function createHarness() {
+function createHarness(
+  options: { readonly commands?: InputdActionCommands } = {},
+) {
   const commands: InputdActionCommand[] = []
   const warnings: unknown[] = []
   const dispatcher = createInputdActionDispatcher({
+    commands: options.commands,
     runner: async command => {
       commands.push(command)
       if (command.command === "fail") throw new Error("runner failed")
@@ -45,11 +49,23 @@ function createHarness() {
 }
 
 describe("inputd actions", () => {
-  it("kills targets named by the ROCKNIX process-kill-data file", async () => {
+  it("runs the active application kill/restart command by default", async () => {
+    const { dispatcher, commands } = createHarness()
+
+    await dispatcher.dispatch("kill-current-game")
+
+    expect(commands).toEqual([
+      { command: "/storage/bin/korri-kill-active-application", args: [] },
+    ])
+  })
+
+  it("can still fall back to the ROCKNIX process-kill-data file", async () => {
     const dir = await tempDir()
     const killFilePath = join(dir, "process-kill-data")
     await writeFile(killFilePath, "retroarch retroarch32\n")
-    const { dispatcher, commands } = createHarness()
+    const { dispatcher, commands } = createHarness({
+      commands: { killCurrentGame: undefined },
+    })
 
     await dispatcher.dispatch("kill-current-game", { killFilePath })
 
@@ -59,7 +75,9 @@ describe("inputd actions", () => {
   })
 
   it("no-ops and warns when the kill file is missing", async () => {
-    const { dispatcher, commands, warnings } = createHarness()
+    const { dispatcher, commands, warnings } = createHarness({
+      commands: { killCurrentGame: undefined },
+    })
 
     await dispatcher.dispatch("kill-current-game", {
       killFilePath: "/tmp/korri-missing-process-kill-data",
@@ -73,7 +91,9 @@ describe("inputd actions", () => {
     const dir = await tempDir()
     const killFilePath = join(dir, "process-kill-data")
     await writeFile(killFilePath, " \n\t ")
-    const { dispatcher, commands, warnings } = createHarness()
+    const { dispatcher, commands, warnings } = createHarness({
+      commands: { killCurrentGame: undefined },
+    })
 
     await dispatcher.dispatch("kill-current-game", { killFilePath })
 
@@ -88,6 +108,7 @@ describe("inputd actions", () => {
     const commands: InputdActionCommand[] = []
     const warnings: unknown[] = []
     const dispatcher = createInputdActionDispatcher({
+      commands: { killCurrentGame: undefined },
       runner: async command => {
         commands.push(command)
         throw new Error("runner failed")
@@ -105,6 +126,16 @@ describe("inputd actions", () => {
     ).resolves.toBeUndefined()
     expect(commands).toHaveLength(1)
     expect(warnings).toHaveLength(1)
+  })
+
+  it("routes the session chord to Chromium by default", async () => {
+    const { dispatcher, commands } = createHarness()
+
+    await dispatcher.dispatch("korri-session-toggle")
+
+    expect(commands).toEqual([
+      { command: "/storage/bin/korri-go-chromium", args: [] },
+    ])
   })
 
   it("runs the configured screen switch command", async () => {

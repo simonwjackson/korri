@@ -31,6 +31,7 @@ export interface InputdActionLogger {
 }
 
 export interface InputdActionCommands {
+  readonly killCurrentGame?: InputdActionCommand
   readonly sessionToggle?: InputdActionCommand
   readonly volumeUp?: InputdActionCommand
   readonly volumeDown?: InputdActionCommand
@@ -91,6 +92,10 @@ export function createInputdActionDispatcher(
     async dispatch(actionId, context = {}) {
       switch (actionId) {
         case "kill-current-game":
+          if (commands.killCurrentGame) {
+            await runNamedCommand(actionId, commands.killCurrentGame)
+            return
+          }
           await dispatchKillCurrentGame({
             killFilePath: context.killFilePath ?? defaultKillFilePath,
             logger,
@@ -167,9 +172,13 @@ async function dispatchKillCurrentGame(options: {
 
 function defaultCommands(): Required<InputdActionCommands> {
   return {
+    killCurrentGame: {
+      command: "/storage/bin/korri-kill-active-application",
+      args: [],
+    },
     sessionToggle: {
-      command: "/storage/bin/korri-session-toggle",
-      args: ["toggle"],
+      command: "/storage/bin/korri-go-chromium",
+      args: [],
     },
     volumeUp: commandFromEnv("KORRI_INPUTD_VOLUME_UP", "bash", [
       "-lc",
