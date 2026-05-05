@@ -255,9 +255,11 @@ describe("input bridge", () => {
   })
 
   it("reopens gamepad streams that end while the device remains present", async () => {
-    const proc = (await loadProcFixture("bus-input-devices-odin.txt")).split(
-      /\n\s*\n/,
-    )[0] as string
+    const proc = (await loadProcFixture("bus-input-devices-odin.txt"))
+      .split(/\n\s*\n/)
+      .find(block =>
+        block.includes("InputPlumber Virtual Xbox 360 Controller"),
+      ) as string
     const sources: ReturnType<typeof createControllableEventSource>[] = []
     const handle = await startBridge({
       readProcDevices: async () => proc,
