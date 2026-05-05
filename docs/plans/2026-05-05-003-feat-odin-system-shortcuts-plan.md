@@ -1,7 +1,7 @@
 ---
 title: "feat: Add Odin System shortcut map"
 type: feat
-status: active
+status: implemented
 date: 2026-05-05
 origin: docs/brainstorms/2026-05-03-native-input-bridge-requirements.md
 deepened: 2026-05-05
@@ -214,7 +214,7 @@ flowchart TB
 
 ## Implementation Units
 
-- [ ] **Unit 1: Normalize observed Odin controls and fixtures**
+- [x] **Unit 1: Normalize observed Odin controls and fixtures**
 
 **Goal:** Capture the physical controls used by the shortcut map as named constants and deterministic fixtures, including System, Home/Guide, volume, D-pad hat axes, shoulders, X, and Back/display-switch candidates.
 
@@ -250,7 +250,7 @@ flowchart TB
 **Verification:**
 - The shortcut map has stable named constants for every physical control it references, and tests prove System and Home/Guide are distinct.
 
-- [ ] **Unit 2: Add a cross-device System shortcut engine**
+- [x] **Unit 2: Add a cross-device System shortcut engine**
 
 **Goal:** Replace same-device-only button chord assumptions for system shortcuts with a pure engine that can combine controls across `gpio-keys`, gamepad buttons, hat axes, and system keys.
 
@@ -294,7 +294,7 @@ flowchart TB
 **Verification:**
 - The complete requested shortcut map can be expressed as data and proven with pure event sequences before inputd side effects are involved.
 
-- [ ] **Unit 3: Add action ids and Sway/bottom-screen command builders**
+- [x] **Unit 3: Add action ids and Sway/bottom-screen command builders**
 
 **Goal:** Extend the inputd action registry with the requested system actions and centralize Sway/keyboard command construction behind testable helpers.
 
@@ -344,7 +344,7 @@ flowchart TB
 **Verification:**
 - All requested non-renderer side effects are reachable through explicit action ids and deterministic command-building tests.
 
-- [ ] **Unit 4: Wire the new shortcut map into inputd**
+- [x] **Unit 4: Wire the new shortcut map into inputd**
 
 **Goal:** Feed normalized controls into the System shortcut engine, dispatch the new action ids, preserve existing raw event broadcasting, and replace the old kill chord with `System + L1 + R1` as the primary configured shortcut.
 
@@ -400,7 +400,7 @@ flowchart TB
 **Verification:**
 - The shortcut map works as a daemon policy layer without regressing renderer navigation or session toggle behavior.
 
-- [ ] **Unit 5: Add renderer semantic `system` action and Korri System panel**
+- [x] **Unit 5: Add renderer semantic `system` action and Korri System panel**
 
 **Goal:** Let a plain System press open a Korri system overlay/control panel when the renderer is active, while keeping React components decoupled from raw evdev and inputd internals.
 
@@ -454,7 +454,7 @@ flowchart TB
 **Verification:**
 - Product/theme code responds to `System` through the semantic input bus only, and the panel can be opened without device-specific imports in React components.
 
-- [ ] **Unit 6: Implement bottom-screen keyboard toggle action**
+- [x] **Unit 6: Implement bottom-screen keyboard toggle action**
 
 **Goal:** Add the `System + X` action seam for toggling an on-screen keyboard on the bottom output, with safe fallback behavior when the target keyboard tool is absent.
 
@@ -494,7 +494,7 @@ flowchart TB
 **Verification:**
 - `System + X` has a safe first implementation path even before the final bottom-screen keyboard UX is polished.
 
-- [ ] **Unit 7: Deploy/install wiring and device validation**
+- [x] **Unit 7: Deploy/install wiring and device validation**
 
 **Goal:** Make the new shortcut map survive Odin install/sync cycles and provide enough smoke coverage to verify the map on device without relying on process/window liveness alone.
 
