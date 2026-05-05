@@ -20,6 +20,8 @@ ssh -o ConnectTimeout=5 -o BatchMode=yes "$ODIN_HOST" \
   || fail "Electrobun Layer 8 proof smoke failed"
 set -euo pipefail
 
+export PATH="/storage/.nix-profile/bin:/storage/bin:$PATH"
+
 if [ -f .env ]; then
   set -a
   # shellcheck disable=SC1091
