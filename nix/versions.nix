@@ -13,5 +13,5 @@
     };
   };
 
-  bunDepsHash = "sha256-OJu2DsZ/aidrnBB+23S6yrRiSiUaBDdtBS22a/UlURo=";
+  bunDepsHash = "sha256-gQHTC04SuEPlkVFrjctgz1HJLI5ORmer1kFs9/zhGxk=";
 }
