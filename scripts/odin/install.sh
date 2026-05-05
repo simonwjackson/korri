@@ -91,23 +91,29 @@ rsync -az --delete \
 log "Running bun install on the device (aarch64-native dependencies)..."
 ssh_odin "cd '$ODIN_PROJECT' && /storage/bin/bun install"
 
-# 6. Harvest Wayland env from running emulationstation -----------------------
-log "Harvesting Wayland session env from emulationstation..."
+# 6. Harvest Wayland env from the live session -------------------------------
+log "Harvesting Wayland session env from emulationstation or sway..."
 es_env="$(ssh_odin 'bash -s' <<'REMOTE'
 set -euo pipefail
-es_pid="$(pgrep -f emulationstation | head -1 || true)"
-if [ -z "$es_pid" ]; then
-  echo "ES_NOT_RUNNING" >&2
+session_pid="$(pgrep -f emulationstation | head -1 || true)"
+if [ -z "$session_pid" ]; then
+  session_pid="$(pgrep -x sway | head -1 || true)"
+fi
+if [ -z "$session_pid" ]; then
+  session_pid="$(pgrep -f '/usr/bin/sway -V|/usr/bin/sway$|sway.sh' | head -1 || true)"
+fi
+if [ -z "$session_pid" ]; then
+  echo "WAYLAND_SESSION_NOT_RUNNING" >&2
   exit 2
 fi
-cat "/proc/$es_pid/environ" \
+cat "/proc/$session_pid/environ" \
   | tr '\0' '\n' \
   | grep -E '^(WAYLAND_DISPLAY|XDG_RUNTIME_DIR|DISPLAY|DBUS_SESSION_BUS_ADDRESS|XDG_SESSION_TYPE)='
 REMOTE
-)" || fail "EmulationStation is not running on the device. Boot ROCKNIX so its Wayland session is alive, then re-run \`just install-odin\`. Or hand-write $ODIN_PROJECT/.env with WAYLAND_DISPLAY/XDG_RUNTIME_DIR before continuing."
+)" || fail "No live ROCKNIX Wayland/Sway session env found. Start sway/EmulationStation or hand-write $ODIN_PROJECT/.env with WAYLAND_DISPLAY/XDG_RUNTIME_DIR before continuing."
 
 if [ -z "$es_env" ]; then
-  fail "Could not read Wayland env from emulationstation (/proc env empty). Restart ES and retry."
+  fail "Could not read Wayland env from the live session (/proc env empty). Restart Sway/ES and retry."
 fi
 
 log "Writing $ODIN_PROJECT/.env..."
