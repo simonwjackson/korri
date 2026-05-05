@@ -32,7 +32,10 @@ window.__korriSpatialNav = startSpatialNavigation({
   controller: {
     profile: readStorybookControllerProfile(),
     native: window.__korriStorybookNativeBridgeUrl
-      ? { url: window.__korriStorybookNativeBridgeUrl }
+      ? {
+          url: window.__korriStorybookNativeBridgeUrl,
+          subscribe: ["gamepad", "system"],
+        }
       : undefined,
   },
 })

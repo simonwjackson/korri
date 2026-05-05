@@ -167,6 +167,16 @@ export function createNativeInputAdapter(
             const decoded = decodeNativeInputEvent(
               JSON.parse(String(event.data)),
             )
+            if (decoded.kind === "action") {
+              if (decoded.action === "system") {
+                reportNativeInputDiagnostic("emit", {
+                  action: "system",
+                  source: "native",
+                })
+                emit({ type: "system", source: "native" })
+              }
+              return
+            }
             if (decoded.kind !== "input") return
             if (decoded.class !== "gamepad") return
             handleGamepadInput(decoded, emit, {

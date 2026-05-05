@@ -24,10 +24,13 @@ describe("ShiftHomeRail", () => {
           captionAnchorX: 0,
           railRef: createRef<HTMLDivElement>(),
           isLabsOpen: false,
+          isSystemPanelOpen: false,
           uiScale: 1,
           focusTile: () => {},
           openLabs: () => {},
           closeLabs: () => {},
+          openSystemPanel: () => {},
+          closeSystemPanel: () => {},
           changeUiScale: () => {},
           resetUiScale: () => {},
         }}

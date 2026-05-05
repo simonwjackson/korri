@@ -35,6 +35,7 @@ export type InputAction =
   | { readonly type: "back"; readonly source?: InputSource }
   | { readonly type: "options"; readonly source?: InputSource }
   | { readonly type: "menu"; readonly source?: InputSource }
+  | { readonly type: "system"; readonly source?: InputSource }
   /**
    * Internal coordination action emitted by the pointer adapter on every
    * qualifying mousemove. Reserved for the input-mode store — product code

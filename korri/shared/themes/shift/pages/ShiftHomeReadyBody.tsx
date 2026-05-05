@@ -15,6 +15,7 @@ import { ShiftHomeBottomBar } from "../organisms/ShiftHomeBottomBar"
 import { ShiftHomeRail } from "../organisms/ShiftHomeRail"
 import { ShiftHomeTopBar } from "../organisms/ShiftHomeTopBar"
 import { ShiftLabsPanel } from "../organisms/ShiftLabsPanel"
+import { ShiftSystemPanel } from "../organisms/ShiftSystemPanel"
 import { useShiftHome } from "../templates/ShiftHome.context"
 import { ShiftHomeRoot } from "../templates/ShiftHomeRoot"
 
@@ -39,6 +40,8 @@ export function ShiftHomeReadyBody({
             trailingActions={<ShiftHomeLabsButton />}
           />
           <ShiftHomeLabsPanel />
+          <ShiftHomeSystemPanel />
+          <ShiftSystemActionBridge />
           <ShiftHomeLaunchSurface launch={launch} />
           <ShiftHomeBottomBar />
         </ShiftHomeRoot>
@@ -49,6 +52,12 @@ export function ShiftHomeReadyBody({
 function ShiftHomeLabsButton() {
   const { openLabs } = useShiftHome()
   return <ShiftLabsButton onActivate={openLabs} />
+}
+
+function ShiftSystemActionBridge() {
+  const { openSystemPanel } = useShiftHome()
+  useInputAction("system", openSystemPanel)
+  return null
 }
 
 function ShiftHomeLabsPanel() {
@@ -63,6 +72,10 @@ function ShiftHomeLabsPanel() {
       />
     </ShiftLabsPanel>
   )
+}
+
+function ShiftHomeSystemPanel() {
+  return <ShiftSystemPanel />
 }
 
 function ShiftHomeLaunchSurface({

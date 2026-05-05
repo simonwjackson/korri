@@ -32,10 +32,13 @@ export interface ShiftHomeContextValue {
   readonly captionAnchorX: number
   readonly railRef: RefObject<HTMLDivElement | null>
   readonly isLabsOpen: boolean
+  readonly isSystemPanelOpen: boolean
   readonly uiScale: number
   readonly focusTile: (id: string) => void
   readonly openLabs: () => void
   readonly closeLabs: () => void
+  readonly openSystemPanel: () => void
+  readonly closeSystemPanel: () => void
   readonly changeUiScale: (scale: number) => void
   readonly resetUiScale: () => void
 }

@@ -73,6 +73,7 @@ export function ShiftHomeRoot({
   const [focusedId, setFocusedId] = useState<string>(resumeTarget.id)
   const [captionAnchorX, setCaptionAnchorX] = useState(0)
   const [isLabsOpen, setIsLabsOpen] = useState(false)
+  const [isSystemPanelOpen, setIsSystemPanelOpen] = useState(false)
   const [uiScale, setUiScale] = useState(DEFAULT_UI_SCALE)
   const railRef = useRef<HTMLDivElement | null>(null)
 
@@ -140,6 +141,14 @@ export function ShiftHomeRoot({
     setIsLabsOpen(false)
   }, [])
 
+  const openSystemPanel = useCallback(() => {
+    setIsSystemPanelOpen(true)
+  }, [])
+
+  const closeSystemPanel = useCallback(() => {
+    setIsSystemPanelOpen(false)
+  }, [])
+
   const changeUiScale = useCallback((scale: number) => {
     setUiScale(clampUiScale(scale))
   }, [])
@@ -168,10 +177,13 @@ export function ShiftHomeRoot({
       captionAnchorX,
       railRef,
       isLabsOpen,
+      isSystemPanelOpen,
       uiScale,
       focusTile,
       openLabs,
       closeLabs,
+      openSystemPanel,
+      closeSystemPanel,
       changeUiScale,
       resetUiScale,
     }),
@@ -181,10 +193,13 @@ export function ShiftHomeRoot({
       focused,
       captionAnchorX,
       isLabsOpen,
+      isSystemPanelOpen,
       uiScale,
       focusTile,
       openLabs,
       closeLabs,
+      openSystemPanel,
+      closeSystemPanel,
       changeUiScale,
       resetUiScale,
     ],

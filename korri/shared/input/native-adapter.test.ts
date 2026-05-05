@@ -200,6 +200,22 @@ describe("createNativeInputAdapter", () => {
     ])
   })
 
+  it("emits system actions from inputd action frames", async () => {
+    const server = createInputServer()
+    const emitted = startAdapter(server, { subscribe: ["gamepad", "system"] })
+    await waitForSubscription(server)
+
+    server.send({
+      kind: "action",
+      class: "system",
+      action: "system",
+      timestamp: Date.now(),
+    })
+
+    await waitFor(() => emitted.length === 1, "system action")
+    expect(emitted).toEqual([{ type: "system", source: "native" }])
+  })
+
   it("ignores non-gamepad input events and device lifecycle events", async () => {
     const server = createInputServer()
     const emitted = startAdapter(server)
@@ -272,7 +288,7 @@ function inputEvent(
   overrides: Partial<{
     kind: "input"
     deviceId: string
-    class: "gamepad" | "keyboard" | "mouse" | "touch" | "unknown"
+    class: "gamepad" | "keyboard" | "mouse" | "touch" | "system" | "unknown"
     type: number
     code: number
     value: number
