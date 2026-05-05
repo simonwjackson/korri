@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises"
 import { logger as defaultLogger } from "@shared/logger"
+import { buildBottomKeyboardCommand } from "./bottom-keyboard"
+import { buildSwayShortcutCommand } from "./sway-actions"
 
 export const KORRI_INPUTD_ACTION_IDS = [
+  "system-panel",
   "kill-current-game",
   "korri-session-toggle",
   "volume-up",
@@ -12,6 +15,11 @@ export const KORRI_INPUTD_ACTION_IDS = [
   "lid-closed",
   "lid-opened",
   "screen-switch",
+  "workspace-prev",
+  "workspace-next",
+  "move-output-up",
+  "move-output-down",
+  "toggle-bottom-keyboard",
 ] as const
 
 export type KorriInputdActionId = (typeof KORRI_INPUTD_ACTION_IDS)[number]
@@ -31,6 +39,7 @@ export interface InputdActionLogger {
 }
 
 export interface InputdActionCommands {
+  readonly systemPanel?: InputdActionCommand
   readonly killCurrentGame?: InputdActionCommand
   readonly sessionToggle?: InputdActionCommand
   readonly volumeUp?: InputdActionCommand
@@ -41,6 +50,11 @@ export interface InputdActionCommands {
   readonly lidClosed?: InputdActionCommand
   readonly lidOpened?: InputdActionCommand
   readonly screenSwitch?: InputdActionCommand
+  readonly workspacePrev?: InputdActionCommand
+  readonly workspaceNext?: InputdActionCommand
+  readonly moveOutputUp?: InputdActionCommand
+  readonly moveOutputDown?: InputdActionCommand
+  readonly toggleBottomKeyboard?: InputdActionCommand
 }
 
 export interface InputdActionContext {
@@ -91,6 +105,9 @@ export function createInputdActionDispatcher(
   return {
     async dispatch(actionId, context = {}) {
       switch (actionId) {
+        case "system-panel":
+          await runNamedCommand(actionId, commands.systemPanel)
+          return
         case "kill-current-game":
           if (commands.killCurrentGame) {
             await runNamedCommand(actionId, commands.killCurrentGame)
@@ -128,6 +145,21 @@ export function createInputdActionDispatcher(
           return
         case "screen-switch":
           await runNamedCommand(actionId, commands.screenSwitch)
+          return
+        case "workspace-prev":
+          await runNamedCommand(actionId, commands.workspacePrev)
+          return
+        case "workspace-next":
+          await runNamedCommand(actionId, commands.workspaceNext)
+          return
+        case "move-output-up":
+          await runNamedCommand(actionId, commands.moveOutputUp)
+          return
+        case "move-output-down":
+          await runNamedCommand(actionId, commands.moveOutputDown)
+          return
+        case "toggle-bottom-keyboard":
+          await runNamedCommand(actionId, commands.toggleBottomKeyboard)
           return
       }
     },
@@ -171,7 +203,16 @@ async function dispatchKillCurrentGame(options: {
 }
 
 function defaultCommands(): Required<InputdActionCommands> {
+  const bottomKeyboardCommand = buildBottomKeyboardCommand({
+    configuredCommand: process.env.KORRI_INPUTD_BOTTOM_KEYBOARD,
+    configuredOutput: process.env.KORRI_INPUTD_BOTTOM_KEYBOARD_OUTPUT,
+  })
+
   return {
+    systemPanel: {
+      command: "/storage/bin/korri-session-toggle",
+      args: ["start"],
+    },
     killCurrentGame: {
       command: "/storage/bin/korri-kill-active-application",
       args: [],
@@ -204,6 +245,14 @@ function defaultCommands(): Required<InputdActionCommands> {
     ]),
     lidOpened: commandFromEnv("KORRI_INPUTD_LID_OPENED", "true", []),
     screenSwitch: { command: "/usr/bin/screen_switch", args: [] },
+    workspacePrev: buildSwayShortcutCommand("workspace-prev"),
+    workspaceNext: buildSwayShortcutCommand("workspace-next"),
+    moveOutputUp: buildSwayShortcutCommand("move-output-up"),
+    moveOutputDown: buildSwayShortcutCommand("move-output-down"),
+    toggleBottomKeyboard: bottomKeyboardCommand.command ?? {
+      command: "bash",
+      args: ["-lc", `echo '${bottomKeyboardCommand.warning}' >&2`],
+    },
   }
 }
 

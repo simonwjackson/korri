@@ -128,6 +128,16 @@ describe("inputd actions", () => {
     expect(warnings).toHaveLength(1)
   })
 
+  it("routes System panel to the session start command by default", async () => {
+    const { dispatcher, commands } = createHarness()
+
+    await dispatcher.dispatch("system-panel")
+
+    expect(commands).toEqual([
+      { command: "/storage/bin/korri-session-toggle", args: ["start"] },
+    ])
+  })
+
   it("routes the session chord to the ES/Korri toggle by default", async () => {
     const { dispatcher, commands } = createHarness()
 
@@ -153,6 +163,45 @@ describe("inputd actions", () => {
     await dispatcher.dispatch("screen-switch")
 
     expect(commands).toEqual([{ command: "/custom/screen_switch", args: [] }])
+  })
+
+  it("runs configured Sway workspace and output commands", async () => {
+    const commands: InputdActionCommand[] = []
+    const dispatcher = createInputdActionDispatcher({
+      runner: async command => {
+        commands.push(command)
+      },
+      logger: silentLogger,
+    })
+
+    await dispatcher.dispatch("workspace-prev")
+    await dispatcher.dispatch("workspace-next")
+    await dispatcher.dispatch("move-output-up")
+    await dispatcher.dispatch("move-output-down")
+
+    expect(commands).toEqual([
+      { command: "swaymsg", args: ["workspace prev_on_output"] },
+      { command: "swaymsg", args: ["workspace next_on_output"] },
+      { command: "swaymsg", args: ["move container to output up"] },
+      { command: "swaymsg", args: ["move container to output down"] },
+    ])
+  })
+
+  it("runs configured bottom keyboard command", async () => {
+    const commands: InputdActionCommand[] = []
+    const dispatcher = createInputdActionDispatcher({
+      commands: {
+        toggleBottomKeyboard: { command: "osk", args: ["toggle"] },
+      },
+      runner: async command => {
+        commands.push(command)
+      },
+      logger: silentLogger,
+    })
+
+    await dispatcher.dispatch("toggle-bottom-keyboard")
+
+    expect(commands).toEqual([{ command: "osk", args: ["toggle"] }])
   })
 
   it("runs configured volume and brightness commands", async () => {
