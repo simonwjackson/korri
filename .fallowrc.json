@@ -1,0 +1,67 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "entry": [
+    "electrobun.config.ts",
+    "korri/deploy/portal/main.tsx",
+    "korri/deploy/desktop/main.ts",
+    "korri/deploy/storybook/main.ts",
+    "tools/http/server.ts",
+    "tools/scripts/**/*.ts",
+    "tools/generators/**/*.ts",
+    "tools/desktop/**/*.ts",
+    "tools/odin/**/*.ts",
+    "scripts/**/*.ts"
+  ],
+  "ignorePatterns": [
+    "old-ui/**",
+    "out/**",
+    "dist/**",
+    "coverage/**",
+    "test-results/**",
+    ".tmp/**",
+    ".tanstack/**",
+    ".pi/**",
+    "korri/deploy/portal/routeTree.gen.ts",
+    "korri/products/*/features/**/e2e/generated/**",
+    "tools/patches/**/files/**/*",
+    "**/*.d.ts"
+  ],
+  "ignoreDependencies": ["bun:test"],
+  "rules": {
+    "unresolved-imports": "error",
+    "unlisted-dependencies": "error",
+    "boundary-violation": "error",
+    "unused-files": "warn",
+    "unused-exports": "warn",
+    "unused-types": "warn",
+    "unused-dependencies": "warn",
+    "unused-dev-dependencies": "warn"
+  },
+  "audit": {
+    "gate": "new-only"
+  },
+  "boundaries": {
+    "zones": [
+      {
+        "name": "tests",
+        "patterns": [
+          "**/*.test.ts",
+          "**/*.test.tsx",
+          "**/*.steps.ts",
+          "**/*.story.e2e.ts"
+        ]
+      },
+      { "name": "deploy", "patterns": ["korri/deploy/**"] },
+      { "name": "app", "patterns": ["korri/products/app/**"] },
+      { "name": "shared", "patterns": ["korri/shared/**"] },
+      { "name": "repo-tools", "patterns": ["tools/**", "scripts/**"] }
+    ],
+    "rules": [
+      { "from": "tests", "allow": ["app", "shared", "repo-tools", "deploy"] },
+      { "from": "deploy", "allow": ["app", "shared"] },
+      { "from": "app", "allow": ["shared"] },
+      { "from": "shared", "allow": [] },
+      { "from": "repo-tools", "allow": ["app", "shared", "deploy"] }
+    ]
+  }
+}

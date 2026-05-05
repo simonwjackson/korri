@@ -1,0 +1,40 @@
+name: Fallow
+
+on:
+  pull_request:
+    paths:
+      - "package.json"
+      - "bun.lock"
+      - ".fallowrc.json"
+      - "justfile"
+      - "korri/**"
+      - "tools/**"
+      - "scripts/**"
+      - ".github/workflows/fallow.yml"
+  push:
+    branches: [trunk]
+    paths:
+      - "package.json"
+      - "bun.lock"
+      - ".fallowrc.json"
+      - "justfile"
+      - "korri/**"
+      - "tools/**"
+      - "scripts/**"
+      - ".github/workflows/fallow.yml"
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Audit changed files
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD~1' }}
+        run: nix develop .#ci --command bash -lc 'bun install --frozen-lockfile && just fallow-audit --base "$BASE_REF"'

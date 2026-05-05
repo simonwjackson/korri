@@ -24,7 +24,9 @@
 		"desktop:runtime-check": "just desktop-runtime-check",
 		"desktop:smoke": "just desktop-smoke",
 		"desktop:dev": "just desktop-dev",
-		"desktop:build": "just desktop-build"
+		"desktop:build": "just desktop-build",
+		"fallow": "just fallow",
+		"fallow:audit": "just fallow-audit"
 	},
 	"dependencies": {
 		"@bbc/tv-lrud-spatial": "^0.0.16",
@@ -93,6 +95,7 @@
 		"chokidar": "^4.0.3",
 		"cmdk": "^1.1.1",
 		"dagre": "^0.8.5",
+		"fallow": "^2.64.0",
 		"gray-matter": "^4.0.3",
 		"storybook": "^10.3.4",
 		"tsc-alias": "^1.8.16",

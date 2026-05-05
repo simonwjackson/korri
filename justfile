@@ -141,6 +141,14 @@ typecheck:
 lint:
   biome check tools korri scripts
 
+# Run Fallow codebase intelligence. Pass subcommands or flags after the recipe name.
+fallow *args:
+  tools/scripts/fallow.sh {{args}}
+
+# Audit changed files for dead code, complexity, duplication, and boundary drift.
+fallow-audit *args:
+  tools/scripts/fallow.sh audit {{args}}
+
 # Format source files.
 format:
   biome format --write tools korri scripts
