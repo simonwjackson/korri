@@ -128,13 +128,13 @@ describe("inputd actions", () => {
     expect(warnings).toHaveLength(1)
   })
 
-  it("routes the session chord to Chromium by default", async () => {
+  it("routes the session chord to the ES/Korri toggle by default", async () => {
     const { dispatcher, commands } = createHarness()
 
     await dispatcher.dispatch("korri-session-toggle")
 
     expect(commands).toEqual([
-      { command: "/storage/bin/korri-go-chromium", args: [] },
+      { command: "/storage/bin/korri-session-toggle", args: ["toggle"] },
     ])
   })
 

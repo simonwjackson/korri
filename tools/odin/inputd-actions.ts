@@ -177,8 +177,8 @@ function defaultCommands(): Required<InputdActionCommands> {
       args: [],
     },
     sessionToggle: {
-      command: "/storage/bin/korri-go-chromium",
-      args: [],
+      command: "/storage/bin/korri-session-toggle",
+      args: ["toggle"],
     },
     volumeUp: commandFromEnv("KORRI_INPUTD_VOLUME_UP", "bash", [
       "-lc",
