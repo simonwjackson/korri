@@ -1,4 +1,5 @@
 export const EV_KEY = 1
+export const EV_ABS = 3
 export const EV_SW = 5
 
 export const BTN_A = 0x130
@@ -9,6 +10,7 @@ export const BTN_TL = 0x136
 export const BTN_TR = 0x137
 export const BTN_SELECT = 0x13a
 export const BTN_START = 0x13b
+export const BTN_MODE = 0x13c
 export const BTN_THUMBL = 0x13d
 export const BTN_THUMBR = 0x13e
 export const BTN_DPAD_UP = 0x220
@@ -17,6 +19,11 @@ export const BTN_DPAD_LEFT = 0x222
 export const BTN_DPAD_RIGHT = 0x223
 export const BTN_BACK = 0x116
 
+export const ABS_HAT0X = 0x10
+export const ABS_HAT0Y = 0x11
+
+/** Odin physical AYN button. Linux exposes it as KEY_F24 on gpio-keys. */
+export const KEY_SYSTEM = 0xc2
 export const KEY_VOLUMEUP = 0x73
 export const KEY_VOLUMEDOWN = 0x72
 export const KEY_BRIGHTNESSUP = 0xe1

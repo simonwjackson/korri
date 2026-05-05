@@ -5,6 +5,7 @@ export const NativeInputDeviceClass = Schema.Literals([
   "keyboard",
   "mouse",
   "touch",
+  "system",
   "unknown",
 ])
 export type NativeInputDeviceClass = Schema.Schema.Type<

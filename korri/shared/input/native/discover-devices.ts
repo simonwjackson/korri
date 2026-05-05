@@ -3,6 +3,7 @@ export type NativeInputDeviceClass =
   | "keyboard"
   | "mouse"
   | "touch"
+  | "system"
   | "unknown"
 
 export interface DiscoveredDevice {
@@ -26,6 +27,12 @@ const BITS_PER_PROC_WORD = 64
 const BTN_JOYSTICK = 0x120
 const BTN_GAMEPAD = 0x130
 const KEY_A = 0x1e
+const KEY_SYSTEM = 0xc2
+const KEY_VOLUMEUP = 0x73
+const KEY_VOLUMEDOWN = 0x72
+const KEY_BRIGHTNESSUP = 0xe1
+const KEY_BRIGHTNESSDOWN = 0xe0
+const KEY_POWER = 0x74
 const REL_X = 0x00
 const REL_Y = 0x01
 const BTN_TOUCH = 0x14a
@@ -135,6 +142,10 @@ function classifyDevice(
     return "touch"
   }
 
+  if (hasSystemKeyBit(capabilities)) {
+    return "system"
+  }
+
   if (hasRelBit(capabilities, REL_X) && hasRelBit(capabilities, REL_Y)) {
     return "mouse"
   }
@@ -157,12 +168,26 @@ function summarizeCapabilities(
   if (hasKeyBit(capabilities, BTN_GAMEPAD)) out.push("BTN_GAMEPAD")
   if (hasKeyBit(capabilities, BTN_JOYSTICK)) out.push("BTN_JOYSTICK")
   if (hasKeyBit(capabilities, KEY_A)) out.push("KEY_A")
+  if (hasSystemKeyBit(capabilities)) out.push("SYSTEM_KEYS")
   if (hasKeyBit(capabilities, BTN_TOUCH)) out.push("BTN_TOUCH")
   if (hasAbsMultiTouchBit(capabilities)) out.push("ABS_MT")
   if (hasRelBit(capabilities, REL_X)) out.push("REL_X")
   if (hasRelBit(capabilities, REL_Y)) out.push("REL_Y")
 
   return out
+}
+
+function hasSystemKeyBit(
+  capabilities: ReadonlyMap<string, readonly string[]>,
+): boolean {
+  return [
+    KEY_SYSTEM,
+    KEY_VOLUMEUP,
+    KEY_VOLUMEDOWN,
+    KEY_BRIGHTNESSUP,
+    KEY_BRIGHTNESSDOWN,
+    KEY_POWER,
+  ].some(bit => hasKeyBit(capabilities, bit))
 }
 
 function hasKeyBit(
