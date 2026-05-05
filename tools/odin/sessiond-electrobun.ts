@@ -134,7 +134,7 @@ export const realElectrobunRunner: ElectrobunProcessRunner = {
   spawn: async command => {
     const proc = Bun.spawn([command.command, ...command.args], {
       stdout: "ignore",
-      stderr: "pipe",
+      stderr: "ignore",
       env: { ...process.env, ...command.env },
     })
     return { pid: proc.pid }
