@@ -74,7 +74,7 @@ ODIN_INPUT_BRIDGE_URL="$ODIN_INPUT_BRIDGE_URL" \
   bun run "$HERE/smoke-input.ts"
 
 if [ "${KORRI_SMOKE_SESSIOND:-0}" = "1" ]; then
-  log "Checking supervised Chromium sessiond..."
+  log "Checking supervised renderer sessiond..."
   "$HERE/smoke-sessiond.sh"
 fi
 

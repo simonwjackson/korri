@@ -257,7 +257,7 @@ korri_wayland_env
 
 log() { printf '%s [korri-keyboard] %s\n' "$(date -Is)" "$*" >&2; }
 
-keyboard_command="${KORRI_BOTTOM_KEYBOARD_COMMAND:-}"
+keyboard_command="${KORRI_BOTTOM_KEYBOARD_COMMAND:-${KORRI_INPUTD_BOTTOM_KEYBOARD:-}}"
 if [ -z "${keyboard_command// }" ]; then
   for candidate in wvkbd-mobintl wvkbd squeekboard maliit-keyboard; do
     if command -v "$candidate" >/dev/null 2>&1; then
@@ -288,7 +288,7 @@ if [ -n "${running// }" ]; then
   exit 0
 fi
 
-bottom_output="${KORRI_BOTTOM_KEYBOARD_OUTPUT:-}"
+bottom_output="${KORRI_BOTTOM_KEYBOARD_OUTPUT:-${KORRI_INPUTD_BOTTOM_KEYBOARD_OUTPUT:-}}"
 if [ -z "$bottom_output" ] && command -v swaymsg >/dev/null 2>&1; then
   bottom_output="$(swaymsg -t get_outputs 2>/dev/null | /storage/bin/bun -e '
 const raw = await new Response(Bun.stdin.stream()).text()
