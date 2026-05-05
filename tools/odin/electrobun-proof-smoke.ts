@@ -14,6 +14,7 @@ export interface ElectrobunProofInput {
   readonly webkitProcessAlive: boolean
   readonly korriWindowCount: number
   readonly focusedFullscreenWindow: boolean
+  readonly rendererFatalLogLines: readonly string[]
   readonly forbiddenFallbackFlags: readonly string[]
   readonly positiveGpuEvidence: boolean
 }
@@ -55,6 +56,10 @@ export function evaluateElectrobunProof(
     issues.push("Korri Electrobun window is not focused and fullscreen")
   }
 
+  for (const line of input.rendererFatalLogLines) {
+    issues.push(`Electrobun renderer fatal log: ${line}`)
+  }
+
   if (input.forbiddenFallbackFlags.length > 0) {
     warnings.push(
       `GPU acceptance blocked by fallback flags: ${input.forbiddenFallbackFlags.join(", ")}`,
@@ -88,6 +93,9 @@ async function main() {
     korriWindowCount: windows.length,
     focusedFullscreenWindow: windows.some(
       window => window.focused && window.fullscreen,
+    ),
+    rendererFatalLogLines: await rendererFatalLogLines(
+      process.env.KORRI_ELECTROBUN_LOG,
     ),
     forbiddenFallbackFlags: forbiddenFallbackFlags(process.env),
     positiveGpuEvidence: process.env.KORRI_ELECTROBUN_GPU_EVIDENCE === "1",
@@ -143,6 +151,24 @@ async function processAlive(): Promise<boolean> {
     },
   )
   return (await proc.exited) === 0
+}
+
+async function rendererFatalLogLines(
+  path: string | undefined,
+): Promise<readonly string[]> {
+  if (!path) return []
+  try {
+    const log = await readFile(path, "utf8")
+    return log
+      .split("\n")
+      .filter(
+        line =>
+          line.includes("Could not create default EGL display") ||
+          line.includes("cannot open display"),
+      )
+  } catch {
+    return []
+  }
 }
 
 export function forbiddenFallbackFlags(

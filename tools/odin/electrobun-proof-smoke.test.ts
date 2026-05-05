@@ -14,6 +14,7 @@ const readyInput = {
   webkitProcessAlive: true,
   korriWindowCount: 1,
   focusedFullscreenWindow: true,
+  rendererFatalLogLines: [],
   forbiddenFallbackFlags: [],
   positiveGpuEvidence: true,
 }
@@ -78,6 +79,19 @@ describe("Electrobun proof smoke evaluation", () => {
 
     expect(report.ok).toBe(false)
     expect(report.issues.join("\n")).toContain("not loopback")
+  })
+
+  it("rejects fatal renderer log evidence even when liveness checks pass", () => {
+    const report = evaluateElectrobunProof({
+      ...readyInput,
+      rendererFatalLogLines: [
+        "Could not create default EGL display: EGL_BAD_PARAMETER. Aborting...",
+      ],
+    })
+
+    expect(report.ok).toBe(false)
+    expect(report.gpuAccepted).toBe(false)
+    expect(report.issues.join("\n")).toContain("EGL_BAD_PARAMETER")
   })
 
   it("blocks GPU acceptance for known fallback flags", () => {
