@@ -1,4 +1,5 @@
-import { join } from "node:path"
+import { mkdir, stat, unlink } from "node:fs/promises"
+import { dirname, join } from "node:path"
 import type { KorriRendererController } from "./sessiond-renderer"
 
 export interface ElectrobunLaunchConfig {
@@ -8,6 +9,7 @@ export interface ElectrobunLaunchConfig {
   readonly logPath?: string
   readonly sessiondUrl?: string
   readonly sessiondTokenFile?: string
+  readonly readinessTimeoutMs?: number
   readonly extraEnv?: Readonly<Record<string, string | undefined>>
 }
 
@@ -15,6 +17,7 @@ export interface ElectrobunCommand {
   readonly command: string
   readonly args: readonly string[]
   readonly env: Readonly<Record<string, string | undefined>>
+  readonly logPath?: string
 }
 
 export interface ElectrobunProcessRunner {
@@ -38,6 +41,7 @@ export function buildElectrobunCommand(
   return {
     command: config.executablePath ?? DEFAULT_ELECTROBUN_EXECUTABLE,
     args: [],
+    logPath: config.logPath,
     env: {
       ...config.extraEnv,
       KORRI_DESKTOP_PROFILE: "odin",
@@ -102,7 +106,12 @@ export function createElectrobunController(options: {
         )
       }
 
+      await removeStaleStatusFile(command.env.KORRI_DESKTOP_STATUS_FILE)
       const process = await options.runner.spawn(command)
+      await waitForStatusFile(
+        command.env.KORRI_DESKTOP_STATUS_FILE,
+        options.config?.readinessTimeoutMs ?? 0,
+      )
       return {
         pid: process.pid,
         command: { command: resolved ?? command.command, args: command.args },
@@ -120,6 +129,35 @@ export function createElectrobunController(options: {
   }
 }
 
+async function removeStaleStatusFile(path: string | undefined): Promise<void> {
+  if (!path) return
+  try {
+    await unlink(path)
+  } catch {
+    // Missing stale status files are expected.
+  }
+}
+
+async function waitForStatusFile(
+  path: string | undefined,
+  timeoutMs: number,
+): Promise<void> {
+  if (!path || timeoutMs <= 0) return
+
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      const status = await stat(path)
+      if (status.size > 0) return
+    } catch {
+      // Not ready yet.
+    }
+    await Bun.sleep(100)
+  }
+
+  throw new Error(`Electrobun did not write status file: ${path}`)
+}
+
 export const realElectrobunRunner: ElectrobunProcessRunner = {
   resolve: async command => {
     if (command.startsWith("/")) return command
@@ -132,18 +170,27 @@ export const realElectrobunRunner: ElectrobunProcessRunner = {
     return exitCode === 0 && stdout ? stdout : undefined
   },
   spawn: async command => {
+    const stdio = command.logPath ? Bun.file(command.logPath) : "ignore"
+    if (command.logPath) {
+      await mkdir(dirname(command.logPath), { recursive: true })
+    }
     const proc = Bun.spawn([command.command, ...command.args], {
-      stdout: "ignore",
-      stderr: "ignore",
+      stdout: stdio,
+      stderr: stdio,
       env: { ...process.env, ...command.env },
+      detached: true,
     })
     return { pid: proc.pid }
   },
   kill: async pid => {
     try {
-      process.kill(pid, "SIGTERM")
+      process.kill(-pid, "SIGTERM")
     } catch {
-      // Already gone.
+      try {
+        process.kill(pid, "SIGTERM")
+      } catch {
+        // Already gone.
+      }
     }
   },
 }

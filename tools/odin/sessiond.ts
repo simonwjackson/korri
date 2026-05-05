@@ -262,8 +262,12 @@ function realRendererController(): KorriRendererController {
         executablePath: process.env.KORRI_ELECTROBUN_APP,
         stateRoot: process.env.KORRI_ELECTROBUN_STATE_ROOT,
         statusFile: process.env.KORRI_ELECTROBUN_STATUS_FILE,
+        logPath: process.env.KORRI_ELECTROBUN_LOG,
         sessiondUrl: process.env.KORRI_SESSIOND_URL,
         sessiondTokenFile: process.env.KORRI_SESSIOND_TOKEN_FILE,
+        readinessTimeoutMs: process.env.KORRI_ELECTROBUN_READY_TIMEOUT_MS
+          ? Number.parseInt(process.env.KORRI_ELECTROBUN_READY_TIMEOUT_MS, 10)
+          : 10_000,
       },
       runner: realElectrobunRunner,
     })

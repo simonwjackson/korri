@@ -33,6 +33,7 @@ export KORRI_CHROMIUM_PROFILE_DIR="${KORRI_CHROMIUM_PROFILE_DIR:-/storage/apps/c
 export KORRI_ELECTROBUN_APP="${KORRI_ELECTROBUN_APP:-korri-desktop-odin}"
 export KORRI_ELECTROBUN_STATE_ROOT="${KORRI_ELECTROBUN_STATE_ROOT:-/storage/.local/share/nix-apps/korri-electrobun}"
 export KORRI_ELECTROBUN_STATUS_FILE="${KORRI_ELECTROBUN_STATUS_FILE:-$KORRI_ELECTROBUN_STATE_ROOT/status.json}"
+export KORRI_ELECTROBUN_LOG="${KORRI_ELECTROBUN_LOG:-/storage/korri-electrobun-sessiond.log}"
 export NODE_ENV="${NODE_ENV:-development}"
 export PATH="/storage/bin:/storage/.nix-profile/bin:$PATH"
 
