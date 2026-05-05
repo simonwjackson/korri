@@ -279,7 +279,7 @@ flowchart TB
 **Verification:**
 - Electrobun smoke tooling can discover the actual loopback URL through the status file instead of scraping logs or assuming a fixed port.
 
-- [ ] **Unit 3: Add a minimal Electrobun/WebKit proof smoke**
+- [x] **Unit 3: Add a minimal Electrobun/WebKit proof smoke**
 
 **Goal:** Provide a narrow, opt-in smoke path that proves or rejects the real-Nix Electrobun/WebKit runtime before sessiond integration is blamed for failures.
 

@@ -68,6 +68,22 @@ dev-odin portal_port="${PORTAL_PORT:-3100}" api_port="${ODIN_API_PORT:-3001}" br
 check-odin:
   scripts/odin/smoke.sh
 
+# Check/manage the supervised Chromium session on the Odin.
+odin-sessiond-status:
+  ssh {{ODIN_HOST}} 'cd {{ODIN_PROJECT}} && scripts/odin/install-sessiond-service.sh status'
+
+# Smoke-test the supervised Chromium session on the Odin.
+check-odin-sessiond:
+  scripts/odin/smoke-sessiond.sh
+
+# Check whether the Odin can host the Electrobun/Nix desktop runtime.
+odin-desktop-preflight:
+  scripts/odin/desktop-preflight.sh
+
+# Smoke-test the opt-in Electrobun Layer 8 renderer candidate on the Odin.
+check-odin-electrobun:
+  scripts/odin/smoke-electrobun.sh
+
 # Start the Electrobun desktop app after building portal assets.
 desktop-dev: build-web desktop-runtime-check
   bun x electrobun dev
