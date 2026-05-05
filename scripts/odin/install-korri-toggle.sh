@@ -247,7 +247,65 @@ done
 kill -KILL "$pid" 2>/dev/null || true
 REMOTE_SCRIPT
 
-  chmod 0755 "$tmpdir/korri-session-toggle" "$tmpdir/korri-kill-active-application"
+  cat > "$tmpdir/korri-toggle-bottom-keyboard" <<'REMOTE_SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source /storage/bin/korri-electrobun-control-lib
+korri_wayland_env
+
+log() { printf '%s [korri-keyboard] %s\n' "$(date -Is)" "$*" >&2; }
+
+keyboard_command="${KORRI_BOTTOM_KEYBOARD_COMMAND:-}"
+if [ -z "${keyboard_command// }" ]; then
+  for candidate in wvkbd-mobintl wvkbd squeekboard maliit-keyboard; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      keyboard_command="$candidate"
+      break
+    fi
+  done
+fi
+
+if [ -z "${keyboard_command// }" ]; then
+  log "no on-screen keyboard command found; set KORRI_BOTTOM_KEYBOARD_COMMAND"
+  exit 0
+fi
+
+keyboard_exe="${keyboard_command%% *}"
+keyboard_base="${keyboard_exe##*/}"
+running=""
+for p in /proc/[0-9]*; do
+  [ -r "$p/exe" ] || continue
+  pid="${p##*/}"
+  exe="$(readlink "$p/exe" 2>/dev/null || true)"
+  [ "${exe##*/}" = "$keyboard_base" ] && running="$running $pid"
+done
+
+if [ -n "${running// }" ]; then
+  log "stopping bottom keyboard:$running"
+  kill -TERM $running 2>/dev/null || true
+  exit 0
+fi
+
+bottom_output="${KORRI_BOTTOM_KEYBOARD_OUTPUT:-}"
+if [ -z "$bottom_output" ] && command -v swaymsg >/dev/null 2>&1; then
+  bottom_output="$(swaymsg -t get_outputs 2>/dev/null | /storage/bin/bun -e '
+const raw = await new Response(Bun.stdin.stream()).text()
+const outputs = JSON.parse(raw || "[]")
+const enabled = outputs.filter(o => o.active !== false && o.rect)
+enabled.sort((a, b) => (b.rect?.y ?? 0) - (a.rect?.y ?? 0))
+if (enabled[0]?.name) console.log(enabled[0].name)
+' 2>/dev/null || true)"
+fi
+
+keyboard_command="${keyboard_command//\{output\}/$bottom_output}"
+log "starting bottom keyboard: $keyboard_command"
+nohup sh -c "$keyboard_command" >> /storage/korri-bottom-keyboard.log 2>&1 &
+echo $! > /storage/korri-bottom-keyboard.pid
+REMOTE_SCRIPT
+
+  chmod 0755 "$tmpdir/korri-session-toggle" "$tmpdir/korri-kill-active-application" "$tmpdir/korri-toggle-bottom-keyboard"
   chmod 0644 "$tmpdir/korri-electrobun-control-lib"
 
   log "Installing session/input action commands on $ODIN_HOST:/storage/bin"
@@ -256,11 +314,12 @@ REMOTE_SCRIPT
     "$tmpdir/korri-session-toggle" \
     "$tmpdir/korri-electrobun-control-lib" \
     "$tmpdir/korri-kill-active-application" \
+    "$tmpdir/korri-toggle-bottom-keyboard" \
     "$ODIN_HOST:/storage/bin/"
 
   ssh_odin "KORRI_SESSIOND_URL='$KORRI_SESSIOND_URL' KORRI_SESSIOND_TOKEN_FILE='$KORRI_SESSIOND_TOKEN_FILE' bash -s" <<'REMOTE'
 set -euo pipefail
-chmod 0755 /storage/bin/korri-session-toggle /storage/bin/korri-kill-active-application
+chmod 0755 /storage/bin/korri-session-toggle /storage/bin/korri-kill-active-application /storage/bin/korri-toggle-bottom-keyboard
 chmod 0644 /storage/bin/korri-electrobun-control-lib
 legacy_pids=""
 for p in /proc/[0-9]*; do
@@ -273,6 +332,7 @@ done
 rm -f /storage/bin/korri-toggle-daemon /storage/bin/korri-go-chromium /storage/korri-toggle-daemon.pid
 bash -n /storage/bin/korri-session-toggle
 bash -n /storage/bin/korri-kill-active-application
+bash -n /storage/bin/korri-toggle-bottom-keyboard
 /storage/bin/korri-session-toggle status || true
 REMOTE
 
@@ -291,7 +351,7 @@ for p in /proc/[0-9]*; do
   [ "$exe" = "/storage/bin/korri-toggle-daemon" ] && legacy_pids="$legacy_pids $pid"
 done
 [ -z "$legacy_pids" ] || kill -TERM $legacy_pids 2>/dev/null || true
-rm -f /storage/bin/korri-session-toggle /storage/bin/korri-electrobun-control-lib /storage/bin/korri-kill-active-application /storage/bin/korri-go-chromium /storage/bin/korri-toggle-daemon /storage/korri-toggle-daemon.pid
+rm -f /storage/bin/korri-session-toggle /storage/bin/korri-electrobun-control-lib /storage/bin/korri-kill-active-application /storage/bin/korri-toggle-bottom-keyboard /storage/bin/korri-go-chromium /storage/bin/korri-toggle-daemon /storage/korri-toggle-daemon.pid
 REMOTE
 }
 

@@ -187,6 +187,16 @@ describe("inputd actions", () => {
     ])
   })
 
+  it("runs the installed bottom keyboard helper by default", async () => {
+    const { dispatcher, commands } = createHarness()
+
+    await dispatcher.dispatch("toggle-bottom-keyboard")
+
+    expect(commands).toEqual([
+      { command: "/storage/bin/korri-toggle-bottom-keyboard", args: [] },
+    ])
+  })
+
   it("runs configured bottom keyboard command", async () => {
     const commands: InputdActionCommand[] = []
     const dispatcher = createInputdActionDispatcher({

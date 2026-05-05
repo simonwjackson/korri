@@ -250,8 +250,8 @@ function defaultCommands(): Required<InputdActionCommands> {
     moveOutputUp: buildSwayShortcutCommand("move-output-up"),
     moveOutputDown: buildSwayShortcutCommand("move-output-down"),
     toggleBottomKeyboard: bottomKeyboardCommand.command ?? {
-      command: "bash",
-      args: ["-lc", `echo '${bottomKeyboardCommand.warning}' >&2`],
+      command: "/storage/bin/korri-toggle-bottom-keyboard",
+      args: [],
     },
   }
 }
