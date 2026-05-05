@@ -150,21 +150,26 @@ pkgs.stdenv.mkDerivation {
     fi
     chmod +x "$launcher"
 
-    makeWrapper "$launcher" "$out/bin/korri-desktop" \
-      --prefix LD_LIBRARY_PATH : ${runtimeLibraryPath} \
-      --prefix XDG_DATA_DIRS : ${pkgs.gsettings-desktop-schemas}/share:${pkgs.gtk3}/share \
-      --prefix GIO_EXTRA_MODULES : ${pkgs.glib-networking}/lib/gio/modules \
-      --set-default GDK_BACKEND x11 \
-      --set-default GSK_RENDERER cairo \
-      --set-default WEBKIT_DISABLE_DMABUF_RENDERER 1 \
-      --set-default WEBKIT_DISABLE_COMPOSITING_MODE 1
+    write_wrapper() {
+      local target="$1"
+      local gdk_backend="$2"
+      local profile="$3"
+      cat > "$target" <<EOF
+#!${pkgs.bash}/bin/bash
+export LD_LIBRARY_PATH="${runtimeLibraryPath}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export XDG_DATA_DIRS="${pkgs.gsettings-desktop-schemas}/share:${pkgs.gtk3}/share''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
+export GIO_EXTRA_MODULES="${pkgs.glib-networking}/lib/gio/modules''${GIO_EXTRA_MODULES:+:$GIO_EXTRA_MODULES}"
+export GDK_BACKEND="''${GDK_BACKEND:-$gdk_backend}"
+if [ -n "$profile" ]; then
+  export KORRI_DESKTOP_PROFILE="''${KORRI_DESKTOP_PROFILE:-$profile}"
+fi
+exec "$launcher" "$@"
+EOF
+      chmod +x "$target"
+    }
 
-    makeWrapper "$launcher" "$out/bin/korri-desktop-odin" \
-      --prefix LD_LIBRARY_PATH : ${runtimeLibraryPath} \
-      --prefix XDG_DATA_DIRS : ${pkgs.gsettings-desktop-schemas}/share:${pkgs.gtk3}/share \
-      --prefix GIO_EXTRA_MODULES : ${pkgs.glib-networking}/lib/gio/modules \
-      --set-default GDK_BACKEND wayland \
-      --set-default KORRI_DESKTOP_PROFILE odin
+    write_wrapper "$out/bin/korri-desktop" x11 ""
+    write_wrapper "$out/bin/korri-desktop-odin" wayland odin
 
     runHook postInstall
   '';
