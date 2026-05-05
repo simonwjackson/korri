@@ -17,6 +17,15 @@ pkgs.stdenv.mkDerivation {
 
   dontConfigure = true;
 
+  unpackPhase = ''
+    runHook preUnpack
+
+    cp -R "$src"/. .
+    chmod -R u+w .
+
+    runHook postUnpack
+  '';
+
   buildPhase = ''
     runHook preBuild
 
