@@ -60,7 +60,8 @@ pkgs.stdenv.mkDerivation {
         mkdir -p "$HOME"
 
         rm -rf node_modules out
-        cp -R ${bunDeps} node_modules
+        mkdir -p node_modules
+        cp -R ${bunDeps}/. node_modules/
         chmod -R u+w node_modules
 
         mkdir -p node_modules/electrobun/bin

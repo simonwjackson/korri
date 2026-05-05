@@ -29,7 +29,9 @@ pkgs.stdenv.mkDerivation {
   buildPhase = ''
     runHook preBuild
 
-    cp -R ${bunDeps} node_modules
+    rm -rf node_modules
+    mkdir -p node_modules
+    cp -R ${bunDeps}/. node_modules/
     chmod -R u+w node_modules
     export HOME="$TMPDIR/home"
     mkdir -p "$HOME"
