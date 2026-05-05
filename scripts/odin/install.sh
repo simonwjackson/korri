@@ -2,8 +2,8 @@
 # Idempotently install/update everything Korri needs on the AYN Odin 2 Portal.
 #
 # Re-running this script ensures Bun, PATH setup, the synced project,
-# aarch64-native dependencies, Wayland runtime env, and the temporary Korri
-# session toggle are present and current.
+# aarch64-native dependencies, Wayland runtime env, the Korri session toggle
+# command, and the Korri input daemon service are present and current.
 #
 # See docs/development/odin-iterative-loop.md.
 
@@ -11,6 +11,7 @@ set -euo pipefail
 
 ODIN_HOST="${ODIN_HOST:-root@sm8550}"
 ODIN_PROJECT="${ODIN_PROJECT:-/storage/korri}"
+ODIN_INPUT_BRIDGE_PORT="${ODIN_INPUT_BRIDGE_PORT:-3002}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -124,9 +125,18 @@ $es_env
 KORRI_ROCKNIX_GAMELIST_ROOTS=/storage/roms
 EOF
 
-# 7. Temporary Korri session toggle -----------------------------------------
-log "Ensuring Korri session toggle scripts are installed..."
+# 7. Korri session toggle command -------------------------------------------
+log "Ensuring Korri session toggle command is installed..."
 "$SCRIPT_DIR/install-korri-toggle.sh" install
 
+# 8. Korri input daemon ------------------------------------------------------
+log "Installing/restarting Korri input daemon service..."
+ssh_odin "cd '$ODIN_PROJECT' && ODIN_PROJECT='$ODIN_PROJECT' ODIN_INPUT_BRIDGE_PORT='$ODIN_INPUT_BRIDGE_PORT' scripts/odin/install-inputd-service.sh install-start-mask"
+
+# 9. Korri session supervisor ------------------------------------------------
+log "Installing/restarting Korri session supervisor service..."
+ssh_odin "cd '$ODIN_PROJECT' && ODIN_PROJECT='$ODIN_PROJECT' scripts/odin/install-sessiond-service.sh install-start"
+
 log "Odin install/update complete."
-log "Next: \`just dev-odin\`."
+log "Next: \`just dev-odin\`. Roll back input ownership with: ssh $ODIN_HOST '$ODIN_PROJECT/scripts/odin/install-inputd-service.sh rollback'"
+log "Roll back Korri session supervision with: ssh $ODIN_HOST '$ODIN_PROJECT/scripts/odin/install-sessiond-service.sh rollback'"

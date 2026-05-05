@@ -8,6 +8,10 @@ import {
   createChromiumController,
 } from "./sessiond-chromium"
 import {
+  createElectrobunController,
+  realElectrobunRunner,
+} from "./sessiond-electrobun"
+import {
   type KorriRendererController,
   rendererStatus,
 } from "./sessiond-renderer"
@@ -87,7 +91,7 @@ export function createKorriSessiondCore(
 ): KorriSessiondCore {
   const logger = options.logger ?? defaultLogger
   const renderer =
-    options.renderer ?? options.chromium ?? realChromiumController()
+    options.renderer ?? options.chromium ?? realRendererController()
   const sway = options.sway ?? realSwayController()
   const serviceManager = options.serviceManager ?? realServiceManager()
   const launcher = options.launcher ?? createShellLauncher()
@@ -249,6 +253,23 @@ function json(value: unknown): Response {
   return new Response(JSON.stringify(value), {
     headers: { "content-type": "application/json" },
   })
+}
+
+function realRendererController(): KorriRendererController {
+  if (process.env.KORRI_SESSION_RENDERER === "electrobun") {
+    return createElectrobunController({
+      config: {
+        executablePath: process.env.KORRI_ELECTROBUN_APP,
+        stateRoot: process.env.KORRI_ELECTROBUN_STATE_ROOT,
+        statusFile: process.env.KORRI_ELECTROBUN_STATUS_FILE,
+        sessiondUrl: process.env.KORRI_SESSIOND_URL,
+        sessiondTokenFile: process.env.KORRI_SESSIOND_TOKEN_FILE,
+      },
+      runner: realElectrobunRunner,
+    })
+  }
+
+  return realChromiumController()
 }
 
 function realChromiumController(): ChromiumController {

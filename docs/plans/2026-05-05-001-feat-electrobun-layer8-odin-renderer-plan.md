@@ -393,7 +393,7 @@ flowchart TB
 **Verification:**
 - Sessiond can supervise Electrobun through the same renderer contract without weakening the Chromium path.
 
-- [ ] **Unit 6: Wire renderer selection through Odin services and install scripts**
+- [x] **Unit 6: Wire renderer selection through Odin services and install scripts**
 
 **Goal:** Make Electrobun selectable on `thor` without making it the default or breaking Chromium sessiond installs.
 
