@@ -355,7 +355,7 @@ flowchart TB
 **Verification:**
 - Sessiond can run all existing Chromium lifecycle tests through the renderer abstraction with no regression in security or game-launch behavior.
 
-- [ ] **Unit 5: Add the Electrobun renderer controller**
+- [x] **Unit 5: Add the Electrobun renderer controller**
 
 **Goal:** Let sessiond launch, stop, and identify Korri Electrobun as a supervised renderer candidate.
 
