@@ -121,6 +121,13 @@
           inherit bunDeps;
         };
 
+        korriPortalOdin = import ./nix/korri-portal.nix {
+          inherit pkgs;
+          src = self;
+          inherit bunDeps;
+          nativeBridgeUrl = "ws://127.0.0.1:3002";
+        };
+
         electrobunBinaries =
           if isSupportedDesktopSystem then
             import ./nix/electrobun-binaries.nix {
@@ -150,7 +157,7 @@
               lib = pkgs.lib;
               src = self;
               electrobunBinaries = electrobunBinaries;
-              portal = korriPortal;
+              portal = korriPortalOdin;
               runtimeLibraries = linuxDesktopRuntimeLibraries;
               odinRuntimeLibraries = odinDesktopRuntimeLibraries;
             }

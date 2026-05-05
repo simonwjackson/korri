@@ -33,7 +33,7 @@ await new Promise<void>((resolve, reject) => {
 
       logger.info(
         { deviceId: decoded.device.deviceId, name: decoded.device.name },
-        "  native input bridge ok",
+        "  korri input daemon ok",
       )
       clearTimeout(timeout)
       ws.close()
@@ -44,6 +44,6 @@ await new Promise<void>((resolve, reject) => {
   })
 
   ws.addEventListener("error", () => {
-    reject(new Error(`failed to connect to native input bridge at ${url}`))
+    reject(new Error(`failed to connect to Korri input daemon at ${url}`))
   })
 })

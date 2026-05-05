@@ -1,0 +1,226 @@
+import { readFile } from "node:fs/promises"
+import { logger as defaultLogger } from "@shared/logger"
+
+export const KORRI_INPUTD_ACTION_IDS = [
+  "kill-current-game",
+  "korri-session-toggle",
+  "volume-up",
+  "volume-down",
+  "brightness-up",
+  "brightness-down",
+  "power-suspend",
+  "lid-closed",
+  "lid-opened",
+  "screen-switch",
+] as const
+
+export type KorriInputdActionId = (typeof KORRI_INPUTD_ACTION_IDS)[number]
+
+export interface InputdActionCommand {
+  readonly command: string
+  readonly args: readonly string[]
+}
+
+export type InputdActionRunner = (command: InputdActionCommand) => Promise<void>
+
+export interface InputdActionLogger {
+  debug: (input: unknown, message?: string) => void
+  info: (input: unknown, message?: string) => void
+  warn: (input: unknown, message?: string) => void
+  error: (input: unknown, message?: string) => void
+}
+
+export interface InputdActionCommands {
+  readonly sessionToggle?: InputdActionCommand
+  readonly volumeUp?: InputdActionCommand
+  readonly volumeDown?: InputdActionCommand
+  readonly brightnessUp?: InputdActionCommand
+  readonly brightnessDown?: InputdActionCommand
+  readonly powerSuspend?: InputdActionCommand
+  readonly lidClosed?: InputdActionCommand
+  readonly lidOpened?: InputdActionCommand
+  readonly screenSwitch?: InputdActionCommand
+}
+
+export interface InputdActionContext {
+  readonly killFilePath?: string
+}
+
+export interface InputdActionDispatcher {
+  readonly dispatch: (
+    actionId: KorriInputdActionId,
+    context?: InputdActionContext,
+  ) => Promise<void>
+}
+
+export interface InputdActionDispatcherOptions {
+  readonly runner?: InputdActionRunner
+  readonly logger?: InputdActionLogger
+  readonly commands?: InputdActionCommands
+  readonly defaultKillFilePath?: string
+}
+
+const DEFAULT_KILL_FILE_PATH = "/tmp/.process-kill-data"
+
+export function createInputdActionDispatcher(
+  options: InputdActionDispatcherOptions = {},
+): InputdActionDispatcher {
+  const runner = options.runner ?? runCommand
+  const logger = options.logger ?? defaultLogger
+  const commands = { ...defaultCommands(), ...options.commands }
+  const defaultKillFilePath =
+    options.defaultKillFilePath ?? DEFAULT_KILL_FILE_PATH
+
+  async function runNamedCommand(
+    actionId: KorriInputdActionId,
+    command: InputdActionCommand | undefined,
+  ) {
+    if (!command) {
+      logger.warn({ actionId }, "inputd action has no configured command")
+      return
+    }
+
+    try {
+      await runner(command)
+    } catch (error) {
+      logger.warn({ err: error, actionId, command }, "inputd action failed")
+    }
+  }
+
+  return {
+    async dispatch(actionId, context = {}) {
+      switch (actionId) {
+        case "kill-current-game":
+          await dispatchKillCurrentGame({
+            killFilePath: context.killFilePath ?? defaultKillFilePath,
+            logger,
+            runner,
+          })
+          return
+        case "korri-session-toggle":
+          await runNamedCommand(actionId, commands.sessionToggle)
+          return
+        case "volume-up":
+          await runNamedCommand(actionId, commands.volumeUp)
+          return
+        case "volume-down":
+          await runNamedCommand(actionId, commands.volumeDown)
+          return
+        case "brightness-up":
+          await runNamedCommand(actionId, commands.brightnessUp)
+          return
+        case "brightness-down":
+          await runNamedCommand(actionId, commands.brightnessDown)
+          return
+        case "power-suspend":
+          await runNamedCommand(actionId, commands.powerSuspend)
+          return
+        case "lid-closed":
+          await runNamedCommand(actionId, commands.lidClosed)
+          return
+        case "lid-opened":
+          await runNamedCommand(actionId, commands.lidOpened)
+          return
+        case "screen-switch":
+          await runNamedCommand(actionId, commands.screenSwitch)
+          return
+      }
+    },
+  }
+}
+
+async function dispatchKillCurrentGame(options: {
+  readonly killFilePath: string
+  readonly logger: InputdActionLogger
+  readonly runner: InputdActionRunner
+}) {
+  let raw: string
+  try {
+    raw = await readFile(options.killFilePath, "utf8")
+  } catch (error) {
+    options.logger.warn(
+      { err: error, killFilePath: options.killFilePath },
+      "inputd kill-current-game skipped; kill file missing",
+    )
+    return
+  }
+
+  const targets = raw.trim().split(/\s+/).filter(Boolean)
+  if (targets.length === 0) {
+    options.logger.warn(
+      { killFilePath: options.killFilePath },
+      "inputd kill-current-game skipped; kill file empty",
+    )
+    return
+  }
+
+  try {
+    options.logger.info({ targets }, "inputd killing current game")
+    await options.runner({ command: "killall", args: targets })
+  } catch (error) {
+    options.logger.warn(
+      { err: error, targets },
+      "inputd kill-current-game failed",
+    )
+  }
+}
+
+function defaultCommands(): Required<InputdActionCommands> {
+  return {
+    sessionToggle: {
+      command: "/storage/bin/korri-session-toggle",
+      args: ["toggle"],
+    },
+    volumeUp: commandFromEnv("KORRI_INPUTD_VOLUME_UP", "bash", [
+      "-lc",
+      "if command -v volume >/dev/null 2>&1; then volume up; elif command -v pactl >/dev/null 2>&1; then pactl set-sink-volume @DEFAULT_SINK@ +5%; fi",
+    ]),
+    volumeDown: commandFromEnv("KORRI_INPUTD_VOLUME_DOWN", "bash", [
+      "-lc",
+      "if command -v volume >/dev/null 2>&1; then volume down; elif command -v pactl >/dev/null 2>&1; then pactl set-sink-volume @DEFAULT_SINK@ -5%; fi",
+    ]),
+    brightnessUp: commandFromEnv("KORRI_INPUTD_BRIGHTNESS_UP", "bash", [
+      "-lc",
+      "if command -v brightness >/dev/null 2>&1; then brightness up; elif command -v brightnessctl >/dev/null 2>&1; then brightnessctl set +5%; fi",
+    ]),
+    brightnessDown: commandFromEnv("KORRI_INPUTD_BRIGHTNESS_DOWN", "bash", [
+      "-lc",
+      "if command -v brightness >/dev/null 2>&1; then brightness down; elif command -v brightnessctl >/dev/null 2>&1; then brightnessctl set 5%-; fi",
+    ]),
+    powerSuspend: commandFromEnv("KORRI_INPUTD_POWER_SUSPEND", "systemctl", [
+      "suspend",
+    ]),
+    lidClosed: commandFromEnv("KORRI_INPUTD_LID_CLOSED", "systemctl", [
+      "suspend",
+    ]),
+    lidOpened: commandFromEnv("KORRI_INPUTD_LID_OPENED", "true", []),
+    screenSwitch: { command: "/usr/bin/screen_switch", args: [] },
+  }
+}
+
+function commandFromEnv(
+  envName: string,
+  fallbackCommand: string,
+  fallbackArgs: readonly string[],
+): InputdActionCommand {
+  const raw = process.env[envName]
+  if (!raw?.trim()) return { command: fallbackCommand, args: fallbackArgs }
+
+  const [command, ...args] = raw.trim().split(/\s+/)
+  return { command: command ?? fallbackCommand, args }
+}
+
+async function runCommand(command: InputdActionCommand): Promise<void> {
+  const proc = Bun.spawn({
+    cmd: [command.command, ...command.args],
+    stdout: "ignore",
+    stderr: "pipe",
+  })
+  const exitCode = await proc.exited
+  if (exitCode === 0) return
+
+  const stderr = await new Response(proc.stderr).text()
+  throw new Error(
+    `command failed (${exitCode}): ${command.command} ${command.args.join(" ")} ${stderr}`,
+  )
+}

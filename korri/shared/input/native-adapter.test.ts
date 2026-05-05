@@ -152,6 +152,24 @@ describe("createNativeInputAdapter", () => {
     ])
   })
 
+  it("stops a held direction if the bridge misses a release event", async () => {
+    const server = createInputServer()
+    const emitted = startAdapter(server, {
+      staleReleaseMs: 35,
+      repeatDelayMs: 100,
+      repeatIntervalMs: 10,
+    })
+    await waitForSubscription(server)
+
+    server.send(inputEvent({ type: 3, code: 16, value: 1 }))
+    await waitFor(() => emitted.length === 1, "initial direction")
+    await Bun.sleep(120)
+
+    expect(emitted).toEqual([
+      { type: "direction", direction: "right", source: "native" },
+    ])
+  })
+
   it("maps analog axes through dominant-axis selection", async () => {
     const server = createInputServer()
     const emitted = startAdapter(server, { axisThreshold: 16_000 })

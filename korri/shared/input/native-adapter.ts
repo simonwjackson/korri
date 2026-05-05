@@ -15,7 +15,9 @@ const EV_ABS = 3
 const BTN_A = 304
 const BTN_B = 305
 const BTN_Y = 308
+const BTN_SELECT = 314
 const BTN_START = 315
+const BTN_MODE = 316
 const BTN_DPAD_UP = 544
 const BTN_DPAD_DOWN = 545
 const BTN_DPAD_LEFT = 546
@@ -29,6 +31,7 @@ const ABS_HAT0Y = 17
 const DEFAULT_AXIS_THRESHOLD = 16_000
 const DEFAULT_REPEAT_DELAY_MS = 400
 const DEFAULT_REPEAT_INTERVAL_MS = 100
+const DEFAULT_STALE_RELEASE_MS = 250
 const DEFAULT_RECONNECT_INITIAL_DELAY_MS = 250
 const DEFAULT_RECONNECT_MAX_DELAY_MS = 5_000
 const DEFAULT_RECONNECT_FACTOR = 2
@@ -36,6 +39,7 @@ const DEFAULT_RECONNECT_FACTOR = 2
 interface HoldState {
   readonly direction: Direction
   readonly timeout: ReturnType<typeof setTimeout>
+  readonly staleTimeout: ReturnType<typeof setTimeout>
   readonly interval?: ReturnType<typeof setInterval>
 }
 
@@ -52,6 +56,8 @@ export interface NativeInputAdapterOptions {
   readonly axisThreshold?: number
   readonly repeatDelayMs?: number
   readonly repeatIntervalMs?: number
+  /** Safety valve: stop a held direction if no refresh/release arrives. */
+  readonly staleReleaseMs?: number
 }
 
 export function createNativeInputAdapter(
@@ -62,6 +68,7 @@ export function createNativeInputAdapter(
   const repeatDelayMs = options.repeatDelayMs ?? DEFAULT_REPEAT_DELAY_MS
   const repeatIntervalMs =
     options.repeatIntervalMs ?? DEFAULT_REPEAT_INTERVAL_MS
+  const staleReleaseMs = options.staleReleaseMs ?? DEFAULT_STALE_RELEASE_MS
   const reconnectInitialDelayMs =
     options.reconnect?.initialDelayMs ?? DEFAULT_RECONNECT_INITIAL_DELAY_MS
   const reconnectMaxDelayMs =
@@ -71,7 +78,13 @@ export function createNativeInputAdapter(
   return {
     name: "native",
     start(emit) {
-      if (typeof WebSocket === "undefined") return () => {}
+      reportNativeInputDiagnostic("start", { url: options.url })
+      if (typeof WebSocket === "undefined") {
+        reportNativeInputDiagnostic("websocket-unavailable", {
+          url: options.url,
+        })
+        return () => {}
+      }
 
       const holds = new Map<string, HoldState>()
       const pressedButtons = new Set<string>()
@@ -82,27 +95,51 @@ export function createNativeInputAdapter(
       let nextReconnectDelayMs = reconnectInitialDelayMs
 
       const fireDirection = (direction: Direction) => {
+        reportNativeInputDiagnostic("emit", {
+          action: "direction",
+          direction,
+          source: "native",
+        })
         emit({ type: "direction", direction, source: "native" })
       }
 
+      const scheduleStaleRelease = (key: string) =>
+        setTimeout(() => stopHold(key), staleReleaseMs)
+
       const startHold = (key: string, direction: Direction) => {
-        if (holds.has(key)) return
+        const current = holds.get(key)
+        if (current) {
+          clearTimeout(current.staleTimeout)
+          holds.set(key, {
+            ...current,
+            staleTimeout: scheduleStaleRelease(key),
+          })
+          return
+        }
 
         fireDirection(direction)
         const timeout = setTimeout(() => {
+          const current = holds.get(key)
+          if (!current) return
+
           const interval = setInterval(
             () => fireDirection(direction),
             repeatIntervalMs,
           )
-          holds.set(key, { direction, timeout, interval })
+          holds.set(key, { ...current, interval })
         }, repeatDelayMs)
-        holds.set(key, { direction, timeout })
+        holds.set(key, {
+          direction,
+          timeout,
+          staleTimeout: scheduleStaleRelease(key),
+        })
       }
 
       const stopHold = (key: string) => {
         const hold = holds.get(key)
         if (!hold) return
         clearTimeout(hold.timeout)
+        clearTimeout(hold.staleTimeout)
         if (hold.interval) clearInterval(hold.interval)
         holds.delete(key)
       }
@@ -116,9 +153,11 @@ export function createNativeInputAdapter(
       const connect = () => {
         if (disposed) return
 
+        reportNativeInputDiagnostic("connect", { url: options.url })
         socket = new WebSocket(options.url)
 
         socket.addEventListener("open", () => {
+          reportNativeInputDiagnostic("open", { url: options.url })
           nextReconnectDelayMs = reconnectInitialDelayMs
           socket?.send(encodeSubscription(subscribe))
         })
@@ -142,8 +181,12 @@ export function createNativeInputAdapter(
           }
         })
 
-        socket.addEventListener("error", () => scheduleReconnect())
+        socket.addEventListener("error", () => {
+          reportNativeInputDiagnostic("error", { url: options.url })
+          scheduleReconnect()
+        })
         socket.addEventListener("close", () => {
+          reportNativeInputDiagnostic("close", { url: options.url })
           resetState()
           scheduleReconnect()
         })
@@ -214,6 +257,7 @@ function handleGamepadKey(
   if (action) {
     if (down && !state.pressedButtons.has(buttonKey)) {
       state.pressedButtons.add(buttonKey)
+      reportNativeInputDiagnostic("emit", { action, source: "native" })
       emit({ type: action, source: "native" })
     } else if (!down) {
       state.pressedButtons.delete(buttonKey)
@@ -301,8 +345,10 @@ function buttonAction(
 ): "confirm" | "back" | "options" | "menu" | null {
   if (code === BTN_A) return "confirm"
   if (code === BTN_B) return "back"
+  if (code === BTN_SELECT) return "back"
   if (code === BTN_Y) return "options"
   if (code === BTN_START) return "menu"
+  if (code === BTN_MODE) return "menu"
   return null
 }
 
@@ -327,6 +373,19 @@ function stickToDirection(
     if (y < -threshold) return "up"
   }
   return null
+}
+
+function reportNativeInputDiagnostic(
+  event: string,
+  fields: Readonly<Record<string, unknown>>,
+) {
+  if (typeof fetch === "undefined") return
+
+  fetch("/__korri/native-input-diagnostic", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ event, ...fields }),
+  }).catch(() => {})
 }
 
 function encodeSubscription(

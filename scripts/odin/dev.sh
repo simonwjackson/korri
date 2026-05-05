@@ -19,7 +19,7 @@ PW_PORT="${PW_PORT:-9876}"
 STORYBOOK_PORT="${STORYBOOK_PORT:-6006}"
 APP_HOST="${APP_HOST:-localhost}"
 REMOTE_LOG="/storage/korri-api.log"
-REMOTE_INPUT_BRIDGE_LOG="/storage/korri-input-bridge.log"
+REMOTE_INPUTD_LOG="/storage/korri-inputd.log"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
@@ -75,7 +75,7 @@ log "Refreshing remote dependencies..."
 ssh_odin "cd '$ODIN_PROJECT' && /storage/bin/bun install"
 
 log "Restarting remote API process (logs: $REMOTE_LOG)..."
-ssh_odin "ODIN_PROJECT='$ODIN_PROJECT' PORT='$ODIN_API_PORT' bash -s" <<REMOTE_SH
+ssh_odin "ODIN_PROJECT='$ODIN_PROJECT' PORT='$ODIN_API_PORT' KORRI_ENABLE_SESSIOND_LAUNCHER='${KORRI_ENABLE_SESSIOND_LAUNCHER:-0}' KORRI_SESSIOND_URL='${KORRI_SESSIOND_URL:-http://127.0.0.1:3003}' KORRI_SESSIOND_TOKEN_FILE='${KORRI_SESSIOND_TOKEN_FILE:-$ODIN_PROJECT/sessiond.token}' bash -s" <<REMOTE_SH
 set -euo pipefail
 pkill -f 'bun run tools/http/server.ts' 2>/dev/null || true
 # Briefly let the old listener release the port.
@@ -88,17 +88,19 @@ setsid bash -c "exec '$ODIN_PROJECT/scripts/odin/run-api.sh' >> '$REMOTE_LOG' 2>
 disown || true
 REMOTE_SH
 
-log "Restarting remote input bridge process (logs: $REMOTE_INPUT_BRIDGE_LOG)..."
+log "Restarting remote input daemon process (logs: $REMOTE_INPUTD_LOG)..."
 ssh_odin "ODIN_PROJECT='$ODIN_PROJECT' KORRI_INPUT_BRIDGE_PORT='$ODIN_INPUT_BRIDGE_PORT' bash -s" <<REMOTE_SH
 set -euo pipefail
 pkill -f 'bun run tools/odin/input-bridge.ts' 2>/dev/null || true
+pkill -f 'bun run tools/odin/inputd.ts' 2>/dev/null || true
+pkill -f '[k]orri-toggle-daemon' 2>/dev/null || true
 # Briefly let the old listener release the port.
 for _ in 1 2 3 4 5; do
   if ! (echo > /dev/tcp/127.0.0.1/$ODIN_INPUT_BRIDGE_PORT) >/dev/null 2>&1; then break; fi
   sleep 0.2
 done
-: > '$REMOTE_INPUT_BRIDGE_LOG'
-setsid bash -c "exec '$ODIN_PROJECT/scripts/odin/run-input-bridge.sh' >> '$REMOTE_INPUT_BRIDGE_LOG' 2>&1 < /dev/null" &
+: > '$REMOTE_INPUTD_LOG'
+setsid bash -c "exec '$ODIN_PROJECT/scripts/odin/run-inputd.sh' >> '$REMOTE_INPUTD_LOG' 2>&1 < /dev/null" &
 disown || true
 REMOTE_SH
 
@@ -119,7 +121,7 @@ if [ "$ready" != "1" ]; then
   fail "API did not become ready at $ODIN_API_BASE_URL. Verify the Odin's Tailscale name/IP is in ODIN_HOST or set ODIN_API_BASE_URL explicitly."
 fi
 
-log "Waiting for native input bridge on $ODIN_INPUT_BRIDGE_URL..."
+log "Waiting for Korri input daemon on $ODIN_INPUT_BRIDGE_URL..."
 ready=0
 for _ in $(seq 1 30); do
   if ssh_odin "(echo > /dev/tcp/127.0.0.1/$ODIN_INPUT_BRIDGE_PORT) >/dev/null 2>&1"; then
@@ -130,9 +132,9 @@ for _ in $(seq 1 30); do
 done
 
 if [ "$ready" != "1" ]; then
-  log "Input bridge never responded. Last 60 lines of $REMOTE_INPUT_BRIDGE_LOG:"
-  ssh_odin "tail -60 '$REMOTE_INPUT_BRIDGE_LOG' 2>/dev/null" || true
-  fail "Input bridge did not become ready at $ODIN_INPUT_BRIDGE_URL."
+  log "Input daemon never responded. Last 60 lines of $REMOTE_INPUTD_LOG:"
+  ssh_odin "tail -60 '$REMOTE_INPUTD_LOG' 2>/dev/null" || true
+  fail "Input daemon did not become ready at $ODIN_INPUT_BRIDGE_URL."
 fi
 
 PROCFILE_DIR="$REPO_ROOT/out/tmp"
@@ -173,7 +175,7 @@ fi
 echo ""
 log "Starting reverse tunnel + Vite + Playwright UI + Storybook..."
 log "Remote API logs: ssh $ODIN_HOST tail -f $REMOTE_LOG"
-log "Remote input bridge logs: ssh $ODIN_HOST tail -f $REMOTE_INPUT_BRIDGE_LOG"
+log "Remote input daemon logs: ssh $ODIN_HOST tail -f $REMOTE_INPUTD_LOG"
 echo ""
 
 exec hivemind "$PROCFILE"

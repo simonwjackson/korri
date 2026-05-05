@@ -5,7 +5,7 @@
 # 2. Hit /api/health directly over Tailscale.
 # 3. Hit /api/rpc with `app.library.list` (delegated to the Bun TS sidecar
 #    so the wire format stays in sync with @effect/rpc).
-# 4. Subscribe to the native input bridge and expect a gamepad device.
+# 4. Subscribe to Korri inputd's native input endpoint and expect a gamepad.
 # 5. Print a summary.
 #
 # This is the equivalent of `just desktop-runtime-check` for the Odin loop.
@@ -69,8 +69,13 @@ log "3/4 Hitting /api/rpc app.library.list..."
 LOCAL_BASE="$ODIN_API_BASE_URL" \
   bun run "$HERE/smoke-rpc.ts"
 
-log "4/4 Checking native input bridge on $ODIN_INPUT_BRIDGE_URL..."
+log "4/4 Checking Korri input daemon on $ODIN_INPUT_BRIDGE_URL..."
 ODIN_INPUT_BRIDGE_URL="$ODIN_INPUT_BRIDGE_URL" \
   bun run "$HERE/smoke-input.ts"
+
+if [ "${KORRI_SMOKE_SESSIOND:-0}" = "1" ]; then
+  log "Checking supervised Chromium sessiond..."
+  "$HERE/smoke-sessiond.sh"
+fi
 
 ok "All checks passed."

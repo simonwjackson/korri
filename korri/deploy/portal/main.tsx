@@ -21,12 +21,13 @@ if (!rootElement) {
 
 ReactDOM.createRoot(rootElement).render(<RouterProvider router={router} />)
 
-// Device-agnostic spatial navigation. Listens to keyboard + gamepad and
-// drives focus through the live DOM via LRUD. Components stay native HTML.
-// Diagnostics logs input actions + focus changes in the browser console so
-// device/controller navigation can be verified on hardware.
+// Device-agnostic spatial navigation. Listens to keyboard plus the native
+// input bridge and drives focus through the live DOM via LRUD. Components stay
+// native HTML. The browser Gamepad API adapter is disabled so controller input
+// has one authoritative path on device.
 const nativeBridgeUrl = import.meta.env.VITE_KORRI_NATIVE_BRIDGE_URL
 startSpatialNavigation({
   diagnostics: true,
+  gamepad: false,
   native: nativeBridgeUrl ? { url: nativeBridgeUrl } : false,
 })

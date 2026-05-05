@@ -11,8 +11,8 @@ import "@shared/themes/shift/shift.css"
 
 // Spatial nav is global; initialize once per iframe load. HMR may re-evaluate
 // this module, so we stash the handle on window and dispose the prior
-// instance before creating a new one. Otherwise listeners and the gamepad
-// rAF loop pile up across hot reloads.
+// instance before creating a new one. Controller input uses the native bridge
+// only; the browser Gamepad API adapter is disabled.
 declare global {
   interface Window {
     __korriSpatialNav?: SpatialNavigationHandle
@@ -23,6 +23,7 @@ declare global {
 window.__korriSpatialNav?.dispose()
 window.__korriSpatialNav = startSpatialNavigation({
   diagnostics: true,
+  gamepad: false,
   native: window.__korriStorybookNativeBridgeUrl
     ? { url: window.__korriStorybookNativeBridgeUrl }
     : false,

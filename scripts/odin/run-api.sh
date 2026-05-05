@@ -24,4 +24,9 @@ export PORT
 export NODE_ENV="${NODE_ENV:-development}"
 export PATH="/storage/bin:/storage/.nix-profile/bin:$PATH"
 
+if [ "${KORRI_ENABLE_SESSIOND_LAUNCHER:-0}" = "1" ]; then
+  export KORRI_SESSIOND_URL="${KORRI_SESSIOND_URL:-http://127.0.0.1:3003}"
+  export KORRI_SESSIOND_TOKEN_FILE="${KORRI_SESSIOND_TOKEN_FILE:-$PROJECT/sessiond.token}"
+fi
+
 exec /storage/bin/bun run tools/http/server.ts

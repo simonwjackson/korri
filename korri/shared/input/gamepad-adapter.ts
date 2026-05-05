@@ -29,9 +29,23 @@ const STANDARD_BUTTONS = {
 const AXIS_LEFT_X = 0
 const AXIS_LEFT_Y = 1
 
+const DEFAULT_DPAD_AXIS_PAIRS: readonly DpadAxisPair[] = [
+  // Linux/WebKit can expose evdev ABS_HAT0X/ABS_HAT0Y as Gamepad axes
+  // instead of standard buttons 12-15. On Xbox-style devices those hats
+  // commonly appear after stick/trigger axes.
+  { x: 6, y: 7 },
+]
+
+export interface DpadAxisPair {
+  readonly x: number
+  readonly y: number
+}
+
 export interface GamepadAdapterOptions {
   /** Magnitude above which a stick axis counts as a directional press. 0..1 */
   readonly axisThreshold?: number
+  /** Axis pairs that represent digital d-pad hats on non-standard mappings. */
+  readonly dpadAxisPairs?: readonly DpadAxisPair[]
   /** Initial delay before a held direction repeats, in ms. */
   readonly repeatDelayMs?: number
   /** Interval between repeats while a direction is held, in ms. */
@@ -50,6 +64,7 @@ export function createGamepadAdapter(
   options: GamepadAdapterOptions = {},
 ): InputAdapter {
   const axisThreshold = options.axisThreshold ?? 0.5
+  const dpadAxisPairs = options.dpadAxisPairs ?? DEFAULT_DPAD_AXIS_PAIRS
   const repeatDelayMs = options.repeatDelayMs ?? 400
   const repeatIntervalMs = options.repeatIntervalMs ?? 100
 
@@ -126,6 +141,31 @@ export function createGamepadAdapter(
             )
           }
 
+          // Non-standard Linux/WebKit mappings can expose d-pad hats as axes
+          // rather than buttons 12-15.
+          for (const pair of dpadAxisPairs) {
+            tickDigitalAxis(
+              i,
+              holds,
+              now,
+              `hat:${pair.x}:${pair.y}:x`,
+              pad.axes[pair.x] ?? 0,
+              { negative: "left", positive: "right" },
+              fireDirection,
+              tickHold,
+            )
+            tickDigitalAxis(
+              i,
+              holds,
+              now,
+              `hat:${pair.x}:${pair.y}:y`,
+              pad.axes[pair.y] ?? 0,
+              { negative: "up", positive: "down" },
+              fireDirection,
+              tickHold,
+            )
+          }
+
           // Buttons (no repeat — single press semantics).
           tickButton(
             i,
@@ -181,6 +221,38 @@ function stickToDirection(
     if (y < -threshold) return "up"
   }
   return null
+}
+
+function tickDigitalAxis(
+  padIndex: number,
+  holds: Map<string, HoldState>,
+  now: number,
+  name: string,
+  value: number,
+  directions: { readonly negative: Direction; readonly positive: Direction },
+  fireDirection: (direction: Direction) => void,
+  tickHold: (
+    key: string,
+    active: boolean,
+    now: number,
+    fire: () => void,
+  ) => void,
+) {
+  const negativeActive = value < -0.5
+  const positiveActive = value > 0.5
+
+  tickHold(
+    `${padIndex}:${name}:${directions.negative}`,
+    negativeActive,
+    now,
+    () => fireDirection(directions.negative),
+  )
+  tickHold(
+    `${padIndex}:${name}:${directions.positive}`,
+    positiveActive,
+    now,
+    () => fireDirection(directions.positive),
+  )
 }
 
 function tickButton(

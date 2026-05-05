@@ -160,6 +160,34 @@ describe("createGamepadAdapter", () => {
     stop()
   })
 
+  it("repeats d-pad directions exposed as non-standard hat axes", () => {
+    const pad = createPad()
+    const emitted: InputAction[] = []
+    installGamepads(pad)
+
+    const stop = createGamepadAdapter({
+      repeatDelayMs: 100,
+      repeatIntervalMs: 50,
+    }).start(action => emitted.push(action))
+
+    pad.axes[6] = -1
+    flushFrame(0)
+    flushFrame(99)
+    flushFrame(100)
+    pad.axes[6] = 0
+    flushFrame(120)
+    pad.axes[7] = 1
+    flushFrame(140)
+
+    expect(emitted).toEqual([
+      { type: "direction", direction: "left", source: "gamepad" },
+      { type: "direction", direction: "left", source: "gamepad" },
+      { type: "direction", direction: "down", source: "gamepad" },
+    ])
+
+    stop()
+  })
+
   it("uses the dominant stick axis", () => {
     const pad = createPad()
     const emitted: InputAction[] = []
