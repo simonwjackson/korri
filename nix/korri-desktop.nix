@@ -169,7 +169,7 @@ EOF
     }
 
     write_wrapper "$out/bin/korri-desktop" x11 ""
-    write_wrapper "$out/bin/korri-desktop-odin" wayland odin
+    write_wrapper "$out/bin/korri-desktop-odin" x11 odin
 
     runHook postInstall
   '';
