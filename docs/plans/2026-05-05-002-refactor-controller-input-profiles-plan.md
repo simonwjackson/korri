@@ -138,7 +138,7 @@ Profile matrix:
 
 ## Implementation Units
 
-- [ ] **Unit 1: Introduce a pure controller profile resolver**
+- [x] **Unit 1: Introduce a pure controller profile resolver**
 
 **Goal:** Define the controller backend selection matrix independently of DOM, WebSocket, LRUD, and adapter lifecycle code.
 
@@ -171,7 +171,7 @@ Profile matrix:
 **Verification:**
 - The resolver documents the intended environment matrix and all branches are covered by unit tests.
 
-- [ ] **Unit 2: Wire controller profiles into spatial navigation startup**
+- [x] **Unit 2: Wire controller profiles into spatial navigation startup**
 
 **Goal:** Let `startSpatialNavigation()` attach controller adapters through one high-level controller decision while preserving keyboard, pointer, wheel, input-mode, diagnostics, and focus-retention behavior.
 
@@ -206,7 +206,7 @@ Profile matrix:
 **Verification:**
 - `startSpatialNavigation()` has one controller selection path and tests prove the adapter lifecycle matrix.
 
-- [ ] **Unit 3: Restore dev-machine controller behavior in app entrypoints**
+- [x] **Unit 3: Restore dev-machine controller behavior in app entrypoints**
 
 **Goal:** Update runtime composition roots so normal dev-web and Storybook use web gamepad by default, while Odin/Electrobun uses native inputd when a native bridge URL is configured.
 
@@ -243,7 +243,7 @@ Profile matrix:
 - A dev-machine browser session has controller navigation again without requiring inputd.
 - An Odin portal build still connects to `ws://127.0.0.1:3002` and does not wire browser gamepad by default.
 
-- [ ] **Unit 4: Preserve and clarify adapter-level tests**
+- [x] **Unit 4: Preserve and clarify adapter-level tests**
 
 **Goal:** Keep browser and native controller adapters independently tested so profile selection only decides which backend starts, not how each backend maps input.
 
@@ -275,7 +275,7 @@ Profile matrix:
 **Verification:**
 - Adapter behavior remains stable while controller-profile tests cover backend selection.
 
-- [ ] **Unit 5: Document the environment model near the wiring**
+- [x] **Unit 5: Document the environment model near the wiring**
 
 **Goal:** Make the coexistence model obvious to future maintainers so a device-specific fix does not again disable dev-machine controller navigation globally.
 
