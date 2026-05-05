@@ -44,7 +44,9 @@ export function buildElectrobunCommand(
     logPath: config.logPath,
     env: {
       ...config.extraEnv,
+      NODE: undefined,
       NODE_ENV: "production",
+      PATH: sanitizeElectrobunPath(process.env.PATH),
       KORRI_DESKTOP_PROFILE: "odin",
       KORRI_DESKTOP_STATUS_FILE:
         config.statusFile ?? DEFAULT_ELECTROBUN_STATUS_FILE,
@@ -67,6 +69,19 @@ export function classifyElectrobunBinaryOrigin(
     resolvedPath.startsWith("/storage/.nix-profile/")
     ? "nix"
     : "non-nix"
+}
+
+export function sanitizeElectrobunPath(path: string | undefined): string {
+  const entries = (path ?? "").split(":").filter(Boolean)
+  const sanitized = entries.filter(
+    entry => !entry.includes("/node_modules/.bin") && !entry.startsWith("/tmp/bun-node"),
+  )
+
+  for (const required of ["/storage/.nix-profile/bin", "/storage/bin"]) {
+    if (!sanitized.includes(required)) sanitized.unshift(required)
+  }
+
+  return sanitized.join(":")
 }
 
 export function forbiddenElectrobunProductionEnv(

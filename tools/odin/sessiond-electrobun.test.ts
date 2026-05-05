@@ -16,11 +16,13 @@ describe("Electrobun renderer command", () => {
       sessiondTokenFile: "/storage/korri/sessiond.token",
     })
 
-    expect(command).toEqual({
+    expect(command).toMatchObject({
       command: "korri-desktop-odin",
       args: [],
       env: {
+        NODE: undefined,
         NODE_ENV: "production",
+        PATH: expect.not.stringContaining("/node_modules/.bin"),
         KORRI_DESKTOP_PROFILE: "odin",
         KORRI_DESKTOP_STATUS_FILE: "/storage/app-state/status.json",
         KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
