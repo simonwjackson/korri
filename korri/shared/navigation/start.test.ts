@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test"
+import { afterEach, beforeEach, describe, expect, it } from "bun:test"
 import type { InputAction } from "@shared/input/types"
 import {
   getInputBus,
@@ -385,6 +385,145 @@ describe("focus retention wiring", () => {
   })
 })
 
+describe("controller profile wiring", () => {
+  let frameMocks: FrameMocks
+
+  beforeEach(() => {
+    frameMocks = installFrameMocks()
+  })
+
+  afterEach(() => {
+    getSpatialNavigationSnapshot()?.dispose()
+    frameMocks.restore()
+  })
+
+  it("uses browser gamepad for controller auto mode without native input", () => {
+    const pad = createPad()
+    const seen: InputAction[] = []
+    installGamepads(pad)
+
+    const handle = startSpatialNavigation({
+      keyboard: false,
+      pointer: false,
+      wheel: false,
+      native: false,
+      inputMode: false,
+      controller: "auto",
+      nextFocus: () => null,
+    })
+    handle.bus.on(action => seen.push(action))
+
+    pad.buttons[0].pressed = true
+    frameMocks.flush(0)
+
+    expect(seen).toEqual([{ type: "confirm", source: "gamepad" }])
+  })
+
+  it("uses native input only for controller auto mode with native input", async () => {
+    const pad = createPad()
+    const server = createInputServer()
+    const seen: InputAction[] = []
+    installGamepads(pad)
+
+    const handle = startSpatialNavigation({
+      keyboard: false,
+      pointer: false,
+      wheel: false,
+      inputMode: false,
+      controller: {
+        profile: "auto",
+        native: { url: `ws://127.0.0.1:${server.port}` },
+      },
+      nextFocus: () => null,
+    })
+    handle.bus.on(action => seen.push(action))
+
+    pad.buttons[0].pressed = true
+    frameMocks.flush(0)
+    expect(seen).toEqual([])
+
+    await waitFor(() => server.messages.length > 0, "native subscription")
+    server.send({
+      kind: "input",
+      deviceId: "inputplumber-virtual-xbox360",
+      class: "gamepad",
+      type: 1,
+      code: 304,
+      value: 1,
+      timestamp: Date.now(),
+    })
+
+    await waitFor(() => seen.length === 1, "native confirm action")
+    expect(seen).toEqual([{ type: "confirm", source: "native" }])
+
+    server.stop()
+  })
+
+  it("can explicitly disable controller input while keeping keyboard enabled", () => {
+    const pad = createPad()
+    const seen: InputAction[] = []
+    installGamepads(pad)
+
+    const handle = startSpatialNavigation({
+      pointer: false,
+      wheel: false,
+      native: false,
+      inputMode: false,
+      controller: false,
+      nextFocus: () => null,
+    })
+    handle.bus.on(action => seen.push(action))
+
+    pad.buttons[0].pressed = true
+    frameMocks.flush(0)
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }))
+
+    expect(seen).toEqual([{ type: "confirm", source: "keyboard" }])
+  })
+
+  it("supports explicit debug-both mode", async () => {
+    const pad = createPad()
+    const server = createInputServer()
+    const seen: InputAction[] = []
+    installGamepads(pad)
+
+    const handle = startSpatialNavigation({
+      keyboard: false,
+      pointer: false,
+      wheel: false,
+      inputMode: false,
+      controller: {
+        profile: "debug-both",
+        native: { url: `ws://127.0.0.1:${server.port}` },
+      },
+      nextFocus: () => null,
+    })
+    handle.bus.on(action => seen.push(action))
+
+    pad.buttons[0].pressed = true
+    frameMocks.flush(0)
+
+    await waitFor(() => server.messages.length > 0, "native subscription")
+    server.send({
+      kind: "input",
+      deviceId: "inputplumber-virtual-xbox360",
+      class: "gamepad",
+      type: 1,
+      code: 304,
+      value: 1,
+      timestamp: Date.now(),
+    })
+
+    await waitFor(() => seen.length === 2, "both controller actions")
+    expect(seen).toEqual([
+      { type: "confirm", source: "gamepad" },
+      { type: "confirm", source: "native" },
+    ])
+
+    server.stop()
+  })
+})
+
 describe("native adapter wiring", () => {
   afterEach(() => {
     getSpatialNavigationSnapshot()?.dispose()
@@ -456,6 +595,99 @@ describe("native adapter wiring", () => {
     server.stop()
   })
 })
+
+type MutableGamepadButton = GamepadButton & {
+  pressed: boolean
+  value: number
+}
+
+type MutableGamepad = Gamepad & {
+  buttons: MutableGamepadButton[]
+  axes: number[]
+}
+
+type FrameMocks = {
+  flush: (time: number) => void
+  restore: () => void
+}
+
+function createPad(): MutableGamepad {
+  return {
+    id: "fake-pad",
+    index: 0,
+    connected: true,
+    mapping: "standard",
+    timestamp: 0,
+    axes: [0, 0, 0, 0, 0, 0, 0, 0],
+    buttons: Array.from({ length: 16 }, () => ({
+      pressed: false,
+      touched: false,
+      value: 0,
+    })),
+    vibrationActuator: null,
+  } as unknown as MutableGamepad
+}
+
+function installGamepads(pad: MutableGamepad | null) {
+  Object.defineProperty(navigator, "getGamepads", {
+    value: () => (pad ? [pad] : []),
+    configurable: true,
+  })
+}
+
+function installFrameMocks(): FrameMocks {
+  let currentTime = 0
+  let nextRafId = 1
+  let callbacks = new Map<number, FrameRequestCallback>()
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame
+  const originalCancelAnimationFrame = globalThis.cancelAnimationFrame
+  const originalNavigatorGetGamepads = Object.getOwnPropertyDescriptor(
+    navigator,
+    "getGamepads",
+  )
+  const originalPerformanceNow = Object.getOwnPropertyDescriptor(
+    performance,
+    "now",
+  )
+
+  globalThis.requestAnimationFrame = (callback: FrameRequestCallback) => {
+    const id = nextRafId++
+    callbacks.set(id, callback)
+    return id
+  }
+  globalThis.cancelAnimationFrame = (id: number) => {
+    callbacks.delete(id)
+  }
+  Object.defineProperty(performance, "now", {
+    value: () => currentTime,
+    configurable: true,
+  })
+
+  return {
+    flush(time) {
+      currentTime = time
+      const pending = [...callbacks.values()]
+      callbacks = new Map()
+      for (const callback of pending) callback(time)
+    },
+    restore() {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame
+      globalThis.cancelAnimationFrame = originalCancelAnimationFrame
+      if (originalNavigatorGetGamepads) {
+        Object.defineProperty(
+          navigator,
+          "getGamepads",
+          originalNavigatorGetGamepads,
+        )
+      } else {
+        Reflect.deleteProperty(navigator, "getGamepads")
+      }
+      if (originalPerformanceNow) {
+        Object.defineProperty(performance, "now", originalPerformanceNow)
+      }
+    },
+  }
+}
 
 type InputServer = {
   readonly port: number

@@ -10,6 +10,11 @@ import { createPointerAdapter } from "@shared/input/pointer-adapter"
 import type { Direction } from "@shared/input/types"
 import { createWheelAdapter } from "@shared/input/wheel-adapter"
 import {
+  type ControllerInputOptions,
+  type ResolvedControllerInput,
+  resolveControllerInput,
+} from "./controller-profile"
+import {
   installNavigationDiagnostics,
   type NavigationDiagnosticsOptions,
 } from "./diagnostics"
@@ -52,13 +57,15 @@ export interface StartSpatialNavigationOptions
   readonly nextFocus?: NextFocusFn
   /** Disable the keyboard adapter. */
   readonly keyboard?: false | Parameters<typeof createKeyboardAdapter>[0]
-  /** Disable the gamepad adapter. */
+  /** Select controller backend(s). Defaults to browser gamepad unless native input is configured here. */
+  readonly controller?: ControllerInputOptions
+  /** Disable the gamepad adapter. Prefer `controller` for app entrypoints. */
   readonly gamepad?: false | Parameters<typeof createGamepadAdapter>[0]
   /** Disable the pointer adapter. */
   readonly pointer?: false | Parameters<typeof createPointerAdapter>[0]
   /** Disable the wheel adapter. */
   readonly wheel?: false | Parameters<typeof createWheelAdapter>[0]
-  /** Enable the native input bridge adapter. Omitted by default. */
+  /** Enable the native input bridge adapter. Prefer `controller` for app entrypoints. */
   readonly native?: false | NativeInputAdapterOptions
   /** Disable the input-mode store + DOM-attribute side effect. */
   readonly inputMode?: false
@@ -111,6 +118,22 @@ export function getSpatialNavigation(): SpatialNavigationHandle {
 
 export function getInputBus(): InputBus {
   return getSpatialNavigation().bus
+}
+
+function resolveSpatialNavigationControllerInput(
+  options: StartSpatialNavigationOptions,
+): ResolvedControllerInput {
+  if (options.controller !== undefined) {
+    return resolveControllerInput(options.controller)
+  }
+
+  return {
+    gamepad: options.gamepad === false ? false : options.gamepad,
+    native:
+      options.native !== false && options.native !== undefined
+        ? options.native
+        : false,
+  }
 }
 
 export function startSpatialNavigation(
@@ -170,17 +193,20 @@ export function startSpatialNavigation(
   if (options.keyboard !== false) {
     bus.use(createKeyboardAdapter(options.keyboard ?? undefined))
   }
-  if (options.gamepad !== false) {
-    bus.use(createGamepadAdapter(options.gamepad ?? undefined))
+
+  const controller = resolveSpatialNavigationControllerInput(options)
+  if (controller.gamepad !== false) {
+    bus.use(createGamepadAdapter(controller.gamepad))
   }
+  if (controller.native !== false) {
+    bus.use(createNativeInputAdapter(controller.native))
+  }
+
   if (options.pointer !== false) {
     bus.use(createPointerAdapter(options.pointer ?? undefined))
   }
   if (options.wheel !== false) {
     bus.use(createWheelAdapter(options.wheel ?? undefined))
-  }
-  if (options.native !== false && options.native) {
-    bus.use(createNativeInputAdapter(options.native))
   }
 
   const focusRetention =

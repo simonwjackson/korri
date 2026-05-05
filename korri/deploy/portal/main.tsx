@@ -1,3 +1,7 @@
+import {
+  isControllerInputProfile,
+  type ControllerInputProfile,
+} from "@shared/navigation/controller-profile"
 import { startSpatialNavigation } from "@shared/navigation/start"
 import { createRouter, RouterProvider } from "@tanstack/react-router"
 import ReactDOM from "react-dom/client"
@@ -21,13 +25,22 @@ if (!rootElement) {
 
 ReactDOM.createRoot(rootElement).render(<RouterProvider router={router} />)
 
-// Device-agnostic spatial navigation. Listens to keyboard plus the native
-// input bridge and drives focus through the live DOM via LRUD. Components stay
-// native HTML. The browser Gamepad API adapter is disabled so controller input
-// has one authoritative path on device.
+// Device-agnostic spatial navigation. Controller input is profile-selected:
+// dev web defaults to browser Gamepad API, while Odin builds provide a native
+// bridge URL and therefore use inputd as the single authoritative controller
+// backend. Components stay native HTML either way.
 const nativeBridgeUrl = import.meta.env.VITE_KORRI_NATIVE_BRIDGE_URL
+const controllerProfile = readControllerInputProfile(
+  import.meta.env.VITE_KORRI_CONTROLLER_PROFILE,
+)
 startSpatialNavigation({
   diagnostics: true,
-  gamepad: false,
-  native: nativeBridgeUrl ? { url: nativeBridgeUrl } : false,
+  controller: {
+    profile: controllerProfile,
+    native: nativeBridgeUrl ? { url: nativeBridgeUrl } : undefined,
+  },
 })
+
+function readControllerInputProfile(value: unknown): ControllerInputProfile {
+  return isControllerInputProfile(value) ? value : "auto"
+}
