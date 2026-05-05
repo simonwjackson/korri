@@ -140,6 +140,7 @@
           electrobun-cli = electrobunBinaries.cli;
           electrobun-core = electrobunBinaries.core;
           korri-desktop = korriDesktop;
+          korri-desktop-odin = korriDesktop;
           default = korriDesktop;
         };
 
@@ -151,6 +152,10 @@
           korri-desktop = {
             type = "app";
             program = "${korriDesktop}/bin/korri-desktop";
+          };
+          korri-desktop-odin = {
+            type = "app";
+            program = "${korriDesktop}/bin/korri-desktop-odin";
           };
         };
 

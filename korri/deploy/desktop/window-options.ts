@@ -1,3 +1,5 @@
+export type DesktopProfile = "default" | "odin"
+
 export interface DesktopServerAddress {
   host: string
   port: number
@@ -31,9 +33,30 @@ export function buildDesktopUrl(
   return new URL(path, `http://${address.host}:${address.port}/`).toString()
 }
 
+export function desktopProfileFromEnv(
+  value = process.env.KORRI_DESKTOP_PROFILE,
+): DesktopProfile {
+  return value === "odin" ? "odin" : "default"
+}
+
 export function createDesktopWindowOptions(
   address: DesktopServerAddress,
+  profile: DesktopProfile = "default",
 ): DesktopWindowOptions {
+  if (profile === "odin") {
+    return {
+      title: "Korri",
+      url: buildDesktopUrl(address),
+      frame: {
+        x: 0,
+        y: 0,
+        width: 1920,
+        height: 1080,
+      },
+      titleBarStyle: "hidden",
+    }
+  }
+
   return {
     title: "Korri",
     url: buildDesktopUrl(address),

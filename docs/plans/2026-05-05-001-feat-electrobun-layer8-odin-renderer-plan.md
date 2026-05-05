@@ -240,7 +240,7 @@ flowchart TB
 **Verification:**
 - The preflight distinguishes Layer 8-ready, Chromium-fallback, and blocked states without modifying the device.
 
-- [ ] **Unit 2: Add an Odin Electrobun desktop profile and status file**
+- [x] **Unit 2: Add an Odin Electrobun desktop profile and status file**
 
 **Goal:** Make the Electrobun desktop runtime observable and device-shaped without changing Korri product behavior.
 

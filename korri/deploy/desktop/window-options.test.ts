@@ -3,6 +3,7 @@ import {
   buildDesktopUrl,
   createDesktopDualScreenWindowOptions,
   createDesktopWindowOptions,
+  desktopProfileFromEnv,
 } from "./window-options"
 
 describe("desktop window options", () => {
@@ -24,6 +25,12 @@ describe("desktop window options", () => {
     )
   })
 
+  test("reads only the supported desktop profile values", () => {
+    expect(desktopProfileFromEnv("odin")).toBe("odin")
+    expect(desktopProfileFromEnv("unknown")).toBe("default")
+    expect(desktopProfileFromEnv(undefined)).toBe("default")
+  })
+
   test("uses deterministic window defaults", () => {
     const options = createDesktopWindowOptions({
       host: "127.0.0.1",
@@ -40,6 +47,28 @@ describe("desktop window options", () => {
         height: 800,
       },
       titleBarStyle: "default",
+    })
+  })
+
+  test("uses handheld-shaped Odin window options", () => {
+    const options = createDesktopWindowOptions(
+      {
+        host: "127.0.0.1",
+        port: 4321,
+      },
+      "odin",
+    )
+
+    expect(options).toEqual({
+      title: "Korri",
+      url: "http://127.0.0.1:4321/",
+      frame: {
+        x: 0,
+        y: 0,
+        width: 1920,
+        height: 1080,
+      },
+      titleBarStyle: "hidden",
     })
   })
 

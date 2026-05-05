@@ -2,10 +2,13 @@ import { join } from "node:path"
 import { logger } from "@shared/logger"
 import { ApplicationMenu, BrowserWindow, PATHS } from "electrobun/bun"
 import { createDesktopApp } from "./create-desktop-app"
+import { writeDesktopStatusFile } from "./status-file"
 import {
   createDesktopDualScreenWindowOptions,
   createDesktopWindowOptions,
+  type DesktopProfile,
   type DesktopServerAddress,
+  desktopProfileFromEnv,
 } from "./window-options"
 
 const DESKTOP_HOST = "127.0.0.1"
@@ -74,26 +77,44 @@ async function main() {
     throw new Error("Desktop server did not bind to a port")
   }
 
-  const windowOptions = createDesktopWindows({ host: DESKTOP_HOST, port })
+  const profile = desktopProfileFromEnv()
+  const windowOptions = createDesktopWindows(
+    { host: DESKTOP_HOST, port },
+    profile,
+  )
   windows = windowOptions.map(options => new BrowserWindow(options))
+
+  if (process.env.KORRI_DESKTOP_STATUS_FILE) {
+    await writeDesktopStatusFile({
+      path: process.env.KORRI_DESKTOP_STATUS_FILE,
+      url: windowOptions[0]?.url ?? `http://${DESKTOP_HOST}:${port}/`,
+      pid: process.pid,
+      profile,
+    })
+  }
 
   logger.info(
     {
       urls: windowOptions.map(options => options.url),
       assetRoot,
       windowTitles: windows.map(window => window.title),
+      profile,
+      statusFile: process.env.KORRI_DESKTOP_STATUS_FILE,
     },
     "Korri desktop app started",
   )
 }
 
-function createDesktopWindows(address: DesktopServerAddress) {
+function createDesktopWindows(
+  address: DesktopServerAddress,
+  profile: DesktopProfile,
+) {
   if (process.env.KORRI_DESKTOP_DUAL_SCREEN === "1") {
     const dual = createDesktopDualScreenWindowOptions(address)
     return [dual.primary, dual.companion]
   }
 
-  return [createDesktopWindowOptions(address)]
+  return [createDesktopWindowOptions(address, profile)]
 }
 
 main().catch(error => {
