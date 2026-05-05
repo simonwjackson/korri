@@ -148,6 +148,7 @@ pkgs.stdenv.mkDerivation {
       find "$out/share/korri-desktop" -maxdepth 4 -type f | sort >&2
       exit 1
     fi
+    chmod +x "$launcher"
 
     makeWrapper "$launcher" "$out/bin/korri-desktop" \
       --prefix LD_LIBRARY_PATH : ${runtimeLibraryPath} \
