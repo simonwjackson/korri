@@ -2,15 +2,20 @@ import { afterEach, describe, expect, it } from "bun:test"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import {
+  ABS_HAT0X,
+  ABS_HAT0Y,
   BTN_A,
   BTN_BACK,
-  BTN_SELECT,
   BTN_START,
+  BTN_THUMBL,
+  BTN_THUMBR,
   BTN_TL,
   BTN_TR,
   KEY_BRIGHTNESSUP,
   KEY_POWER,
   KEY_RECORD,
+  KEY_SYSTEM,
+  KEY_VOLUMEDOWN,
   KEY_VOLUMEUP,
   SW_LID,
 } from "@shared/input/native/button-codes"
@@ -170,16 +175,19 @@ describe("korri inputd", () => {
     client.close()
   })
 
-  it("dispatches the exact kill-game chord once while still streaming input", async () => {
+  it("dispatches System+L1+R1 kill once while still streaming gamepad input", async () => {
     const proc = await loadProcFixture("bus-input-devices-odin.txt")
-    const source = createControllableEventSource()
+    const systemSource = createControllableEventSource()
+    const gamepadSource = createControllableEventSource()
     const actions: KorriInputdActionId[] = []
     const handle = await startInputd({
       readProcDevices: async () => proc,
       openEventSource: device =>
-        device.eventNode === "event9"
-          ? source.open()
-          : createControllableEventSource().open(),
+        device.eventNode === "event6"
+          ? systemSource.open()
+          : device.eventNode === "event9"
+            ? gamepadSource.open()
+            : createControllableEventSource().open(),
       actionDispatcher: {
         dispatch: async actionId => {
           actions.push(actionId)
@@ -192,11 +200,10 @@ describe("korri inputd", () => {
     client.ws.send(JSON.stringify({ classes: ["gamepad"] }))
     await client.nextMessage()
 
-    source.push(evdevKey(BTN_TL, 1))
-    source.push(evdevKey(BTN_TR, 1))
-    source.push(evdevKey(BTN_SELECT, 1))
-    source.push(evdevKey(BTN_START, 1))
-    source.push(evdevKey(BTN_START, 2))
+    systemSource.push(evdevKey(KEY_SYSTEM, 1))
+    gamepadSource.push(evdevKey(BTN_TL, 1))
+    gamepadSource.push(evdevKey(BTN_TR, 1))
+    gamepadSource.push(evdevKey(BTN_TR, 2))
 
     await waitFor(() => actions.length === 1, "kill action")
     expect(actions).toEqual(["kill-current-game"])
@@ -204,11 +211,129 @@ describe("korri inputd", () => {
       () =>
         client.messages
           .map(message => decodeNativeInputEvent(message))
-          .filter(message => message.kind === "input").length >= 4,
+          .filter(message => message.kind === "input").length >= 2,
       "streamed chord events",
     )
 
     client.close()
+  })
+
+  it("keeps L3+R3+Start as the session toggle shortcut", async () => {
+    const proc = await loadProcFixture("bus-input-devices-odin.txt")
+    const source = createControllableEventSource()
+    const actions: KorriInputdActionId[] = []
+    await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: device =>
+        device.eventNode === "event9"
+          ? source.open()
+          : createControllableEventSource().open(),
+      actionDispatcher: {
+        dispatch: async actionId => {
+          actions.push(actionId)
+        },
+      },
+    })
+
+    source.push(evdevKey(BTN_THUMBL, 1))
+    source.push(evdevKey(BTN_THUMBR, 1))
+    source.push(evdevKey(BTN_START, 1))
+
+    await waitFor(
+      () => actions.includes("korri-session-toggle"),
+      "session toggle",
+    )
+    expect(actions).toEqual(["korri-session-toggle"])
+  })
+
+  it("dispatches plain System as a panel action", async () => {
+    const proc = await loadProcFixture("bus-input-devices-odin.txt")
+    const source = createControllableEventSource()
+    const actions: KorriInputdActionId[] = []
+    await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: device =>
+        device.eventNode === "event6"
+          ? source.open()
+          : createControllableEventSource().open(),
+      actionDispatcher: {
+        dispatch: async actionId => {
+          actions.push(actionId)
+        },
+      },
+    })
+
+    source.push(evdevKey(KEY_SYSTEM, 1))
+    source.push(evdevKey(KEY_SYSTEM, 0))
+
+    await waitFor(() => actions.includes("system-panel"), "system panel")
+    expect(actions).toEqual(["system-panel"])
+  })
+
+  it("routes System+D-pad to Sway workspace and output actions", async () => {
+    const proc = await loadProcFixture("bus-input-devices-odin.txt")
+    const systemSource = createControllableEventSource()
+    const gamepadSource = createControllableEventSource()
+    const actions: KorriInputdActionId[] = []
+    await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: device =>
+        device.eventNode === "event6"
+          ? systemSource.open()
+          : device.eventNode === "event9"
+            ? gamepadSource.open()
+            : createControllableEventSource().open(),
+      actionDispatcher: {
+        dispatch: async actionId => {
+          actions.push(actionId)
+        },
+      },
+    })
+
+    systemSource.push(evdevKey(KEY_SYSTEM, 1))
+    gamepadSource.push(evdevEvent(3, ABS_HAT0X, -1))
+    gamepadSource.push(evdevEvent(3, ABS_HAT0X, 0))
+    gamepadSource.push(evdevEvent(3, ABS_HAT0X, 1))
+    gamepadSource.push(evdevEvent(3, ABS_HAT0X, 0))
+    gamepadSource.push(evdevEvent(3, ABS_HAT0Y, -1))
+    gamepadSource.push(evdevEvent(3, ABS_HAT0Y, 0))
+    gamepadSource.push(evdevEvent(3, ABS_HAT0Y, 1))
+
+    await waitFor(() => actions.length === 4, "sway actions")
+    expect(actions).toEqual([
+      "workspace-prev",
+      "workspace-next",
+      "move-output-up",
+      "move-output-down",
+    ])
+  })
+
+  it("maps System+Volume to brightness while preserving Volume alone", async () => {
+    const proc = await loadProcFixture("bus-input-devices-odin.txt")
+    const source = createControllableEventSource()
+    const actions: KorriInputdActionId[] = []
+    await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: device =>
+        device.eventNode === "event6"
+          ? source.open()
+          : createControllableEventSource().open(),
+      actionDispatcher: {
+        dispatch: async actionId => {
+          actions.push(actionId)
+        },
+      },
+    })
+
+    source.push(evdevKey(KEY_VOLUMEUP, 1))
+    source.push(evdevKey(KEY_VOLUMEUP, 0))
+    source.push(evdevKey(KEY_SYSTEM, 1))
+    source.push(evdevKey(KEY_VOLUMEUP, 1))
+    source.push(evdevKey(KEY_VOLUMEUP, 0))
+    source.push(evdevKey(KEY_VOLUMEDOWN, 1))
+
+    await waitFor(() => actions.length === 3, "volume/brightness actions")
+    expect(actions).toEqual(["volume-up", "brightness-up", "brightness-down"])
   })
 
   it("maps retained system keys, switch events, and screen-switch shortcuts to actions", async () => {
@@ -272,16 +397,19 @@ describe("korri inputd", () => {
     expect(actions).toEqual([])
   })
 
-  it("dispatches screen-switch from the retained gamepad screen shortcut", async () => {
+  it("dispatches screen-switch from System+Back", async () => {
     const proc = await loadProcFixture("bus-input-devices-odin.txt")
-    const source = createControllableEventSource()
+    const systemSource = createControllableEventSource()
+    const gamepadSource = createControllableEventSource()
     const actions: KorriInputdActionId[] = []
     await startInputd({
       readProcDevices: async () => proc,
       openEventSource: device =>
-        device.eventNode === "event9"
-          ? source.open()
-          : createControllableEventSource().open(),
+        device.eventNode === "event6"
+          ? systemSource.open()
+          : device.eventNode === "event9"
+            ? gamepadSource.open()
+            : createControllableEventSource().open(),
       actionDispatcher: {
         dispatch: async actionId => {
           actions.push(actionId)
@@ -289,8 +417,8 @@ describe("korri inputd", () => {
       },
     })
 
-    source.push(evdevKey(BTN_TL, 1))
-    source.push(evdevKey(BTN_BACK, 1))
+    systemSource.push(evdevKey(KEY_SYSTEM, 1))
+    gamepadSource.push(evdevKey(BTN_BACK, 1))
 
     await waitFor(() => actions.includes("screen-switch"), "screen-switch")
     expect(actions).toEqual(["screen-switch"])
@@ -356,17 +484,20 @@ describe("korri inputd", () => {
     client.close()
   })
 
-  it("clears chord state when a device is removed", async () => {
+  it("clears shortcut state when a device is removed", async () => {
     const odin = await loadProcFixture("bus-input-devices-odin.txt")
     let proc = odin
-    const source = createControllableEventSource()
+    const systemSource = createControllableEventSource()
+    const gamepadSource = createControllableEventSource()
     const actions: KorriInputdActionId[] = []
     const handle = await startInputd({
       readProcDevices: async () => proc,
       openEventSource: device =>
-        device.eventNode === "event9"
-          ? source.open()
-          : createControllableEventSource().open(),
+        device.eventNode === "event6"
+          ? systemSource.open()
+          : device.eventNode === "event9"
+            ? gamepadSource.open()
+            : createControllableEventSource().open(),
       actionDispatcher: {
         dispatch: async actionId => {
           actions.push(actionId)
@@ -374,16 +505,15 @@ describe("korri inputd", () => {
       },
     })
 
-    source.push(evdevKey(BTN_TL, 1))
-    source.push(evdevKey(BTN_TR, 1))
-    source.push(evdevKey(BTN_SELECT, 1))
+    systemSource.push(evdevKey(KEY_SYSTEM, 1))
     await Bun.sleep(20)
 
     proc = ""
     await handle.refreshDevices()
     proc = odin
     await handle.refreshDevices()
-    source.push(evdevKey(BTN_START, 1))
+    gamepadSource.push(evdevKey(BTN_TL, 1))
+    gamepadSource.push(evdevKey(BTN_TR, 1))
     await Bun.sleep(30)
 
     expect(actions).toEqual([])

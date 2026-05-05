@@ -3,6 +3,7 @@ import { Schema } from "effect"
 import {
   decodeNativeInputEvent,
   decodeNativeInputSubscription,
+  NativeInputAction,
   NativeInputDeviceAdded,
   NativeInputDeviceClass,
   NativeInputDeviceInfo,
@@ -21,6 +22,8 @@ function assertExhaustive(event: NativeInputEventType): string {
       return event.device.deviceId
     case "device-removed":
       return event.deviceId
+    case "action":
+      return `${event.class}:${event.action}`
     default: {
       const neverEvent: never = event
       return neverEvent
@@ -56,6 +59,21 @@ describe("native input wire schema", () => {
         name: "InputPlumber Virtual Xbox 360 Controller",
         capabilities: ["EV_KEY", "EV_ABS", "BTN_GAMEPAD"],
       },
+    } as const
+
+    const decoded = decodeNativeInputEvent(input)
+    const encoded = Schema.encodeSync(NativeInputEvent)(decoded)
+
+    expect(decoded).toEqual(input)
+    expect(encoded).toEqual(input)
+  })
+
+  it("round-trips a native action event", () => {
+    const input = {
+      kind: "action",
+      class: "system",
+      action: "system",
+      timestamp: 1710000000123,
     } as const
 
     const decoded = decodeNativeInputEvent(input)
@@ -183,6 +201,7 @@ describe("native input wire schema", () => {
     expect(NativeInputInput).toBeDefined()
     expect(NativeInputDeviceAdded).toBeDefined()
     expect(NativeInputDeviceRemoved).toBeDefined()
+    expect(NativeInputAction).toBeDefined()
     expect(NativeInputSubscription).toBeDefined()
   })
 })

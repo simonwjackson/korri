@@ -39,7 +39,13 @@ const shortcuts = [
 const taps = [{ id: "system-panel", control: "system" }] as const
 
 function input(code: number, value: number, deviceId = "gamepad") {
-  return { deviceId, deviceClass: "gamepad" as const, type: EV_KEY, code, value }
+  return {
+    deviceId,
+    deviceClass: "gamepad" as const,
+    type: EV_KEY,
+    code,
+    value,
+  }
 }
 
 function system(value: number) {

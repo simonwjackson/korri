@@ -1,3 +1,14 @@
+I: Bus=0019 Vendor=0001 Product=0001 Version=0100
+N: Name="gpio-keys"
+P: Phys=gpio-keys/input0
+S: Sysfs=/devices/platform/gpio-keys/input/input7
+U: Uniq=
+H: Handlers=kbd event6 
+B: PROP=0
+B: EV=23
+B: KEY=4 0 8000000000000 0
+B: SW=1
+
 I: Bus=0003 Vendor=045e Product=028e Version=0114
 N: Name="InputPlumber Virtual Xbox 360 Controller"
 P: Phys=inputplumber/virtual-xbox360

@@ -47,10 +47,20 @@ export class NativeInputDeviceRemoved extends Schema.Class<NativeInputDeviceRemo
   deviceId: Schema.String,
 }) {}
 
+export class NativeInputAction extends Schema.Class<NativeInputAction>(
+  "NativeInputAction",
+)({
+  kind: Schema.Literal("action"),
+  class: NativeInputDeviceClass,
+  action: Schema.Literal("system"),
+  timestamp: Schema.Number,
+}) {}
+
 export const NativeInputEvent = Schema.Union([
   NativeInputInput,
   NativeInputDeviceAdded,
   NativeInputDeviceRemoved,
+  NativeInputAction,
 ])
 export type NativeInputEvent = Schema.Schema.Type<typeof NativeInputEvent>
 

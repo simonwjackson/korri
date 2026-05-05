@@ -1,8 +1,15 @@
 import { describe, expect, it } from "bun:test"
-import { buildBottomKeyboardCommand, selectBottomOutput } from "./bottom-keyboard"
+import {
+  buildBottomKeyboardCommand,
+  selectBottomOutput,
+} from "./bottom-keyboard"
 
 const outputs = [
-  { name: "top", active: true, rect: { x: 0, y: 0, width: 1920, height: 1080 } },
+  {
+    name: "top",
+    active: true,
+    rect: { x: 0, y: 0, width: 1920, height: 1080 },
+  },
   {
     name: "bottom",
     active: true,

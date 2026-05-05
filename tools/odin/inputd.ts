@@ -1,8 +1,6 @@
 import { appendFileSync, existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import {
-  BTN_BACK,
-  BTN_TL,
   EV_KEY,
   EV_SW,
   KEY_BRIGHTNESSDOWN,
@@ -11,14 +9,8 @@ import {
   KEY_RECORD,
   KEY_VOLUMEDOWN,
   KEY_VOLUMEUP,
-  KORRI_KILL_GAME_BUTTONS,
-  KORRI_SESSION_TOGGLE_BUTTONS,
   SW_LID,
 } from "@shared/input/native/button-codes"
-import {
-  type ButtonChordDefinition,
-  createButtonChordEngine,
-} from "@shared/input/native/chord-engine"
 import {
   type DiscoveredDevice,
   type NativeInputDeviceClass,
@@ -28,6 +20,11 @@ import {
   type EvdevEvent,
   parseEvdevBytes,
 } from "@shared/input/native/parse-evdev"
+import {
+  createSystemShortcutEngine,
+  type SystemShortcutDefinition,
+  type SystemTapDefinition,
+} from "@shared/input/native/system-shortcut-engine"
 import {
   decodeNativeInputEvent,
   decodeNativeInputSubscription,
@@ -63,7 +60,8 @@ export interface KorriInputdOptions {
   readonly nowMs?: () => number
   readonly logger?: KorriInputdLogger
   readonly actionDispatcher?: InputdActionDispatcher
-  readonly chords?: readonly ButtonChordDefinition<KorriInputdActionId>[]
+  readonly shortcuts?: readonly SystemShortcutDefinition<KorriInputdActionId>[]
+  readonly systemTaps?: readonly SystemTapDefinition<KorriInputdActionId>[]
   readonly eventNodeExists?: (eventNode: string) => boolean
 }
 
@@ -87,25 +85,30 @@ const DEFAULT_HOSTNAME = "0.0.0.0"
 const DEFAULT_POLL_INTERVAL_MS = 1_000
 const DEFAULT_GAMEPAD_STREAM_RECYCLE_MS = 30_000
 
-const DEFAULT_CHORDS: readonly ButtonChordDefinition<KorriInputdActionId>[] = [
-  {
-    id: "kill-current-game",
-    requiredCodes: KORRI_KILL_GAME_BUTTONS,
-    exact: true,
-    deviceClass: "gamepad",
-  },
-  {
-    id: "korri-session-toggle",
-    requiredCodes: KORRI_SESSION_TOGGLE_BUTTONS,
-    exact: true,
-    deviceClass: "gamepad",
-  },
-  {
-    id: "screen-switch",
-    requiredCodes: [BTN_TL, BTN_BACK],
-    deviceClass: "gamepad",
-  },
-]
+const DEFAULT_SHORTCUTS: readonly SystemShortcutDefinition<KorriInputdActionId>[] =
+  [
+    {
+      id: "kill-current-game",
+      requiredControls: ["system", "l1", "r1"],
+      exact: true,
+    },
+    {
+      id: "korri-session-toggle",
+      requiredControls: ["l3", "r3", "start"],
+      exact: true,
+    },
+    { id: "brightness-up", requiredControls: ["system", "volume-up"] },
+    { id: "brightness-down", requiredControls: ["system", "volume-down"] },
+    { id: "workspace-prev", requiredControls: ["system", "dpad-left"] },
+    { id: "workspace-next", requiredControls: ["system", "dpad-right"] },
+    { id: "move-output-up", requiredControls: ["system", "dpad-up"] },
+    { id: "move-output-down", requiredControls: ["system", "dpad-down"] },
+    { id: "screen-switch", requiredControls: ["system", "back"] },
+    { id: "toggle-bottom-keyboard", requiredControls: ["system", "x"] },
+  ]
+
+const DEFAULT_SYSTEM_TAPS: readonly SystemTapDefinition<KorriInputdActionId>[] =
+  [{ id: "system-panel", control: "system" }]
 
 export async function startKorriInputd(
   options: KorriInputdOptions = {},
@@ -120,12 +123,14 @@ export async function startKorriInputd(
   const eventNodeExists =
     options.eventNodeExists ??
     (options.openEventSource ? alwaysEventNodeExists : realEventNodeExists)
-  const chordEngine = createButtonChordEngine({
-    chords: options.chords ?? DEFAULT_CHORDS,
+  const shortcutEngine = createSystemShortcutEngine({
+    shortcuts: options.shortcuts ?? DEFAULT_SHORTCUTS,
+    taps: options.systemTaps ?? DEFAULT_SYSTEM_TAPS,
   })
   const clients = new Map<InputdSocket, Set<NativeInputDeviceClass>>()
   const devices = new Map<string, DiscoveredDevice>()
   const streams = new Map<string, DeviceStream>()
+  let pendingSystemAction = false
   let stopped = false
 
   async function refreshDevices() {
@@ -140,7 +145,7 @@ export async function startKorriInputd(
 
       devices.delete(deviceId)
       closeDeviceStream(deviceId)
-      chordEngine.clearDevice(deviceId)
+      shortcutEngine.clearDevice(deviceId)
       broadcast({ kind: "device-removed", deviceId }, currentDevice.class)
     }
 
@@ -149,7 +154,7 @@ export async function startKorriInputd(
       if (currentDevice) {
         if (!sameDevice(currentDevice, nextDevice)) {
           closeDeviceStream(deviceId)
-          chordEngine.clearDevice(deviceId)
+          shortcutEngine.clearDevice(deviceId)
           devices.set(deviceId, nextDevice)
           broadcast({ kind: "device-removed", deviceId }, currentDevice.class)
           openDeviceStream(nextDevice)
@@ -186,7 +191,7 @@ export async function startKorriInputd(
 
       if (stream.recycleTimer) clearInterval(stream.recycleTimer)
       streams.delete(device.deviceId)
-      chordEngine.clearDevice(device.deviceId)
+      shortcutEngine.clearDevice(device.deviceId)
       if (!stopped && devices.has(device.deviceId)) {
         setTimeout(() => {
           if (!stopped && devices.has(device.deviceId)) openDeviceStream(device)
@@ -265,16 +270,20 @@ export async function startKorriInputd(
   }
 
   function handlePolicyEvent(device: DiscoveredDevice, event: EvdevEvent) {
+    const matches = shortcutEngine.handleEvent({
+      deviceId: device.deviceId,
+      deviceClass: device.class,
+      type: event.type,
+      code: event.code,
+      value: event.value,
+    })
+
+    for (const match of matches) {
+      dispatchAction(match.id)
+    }
+
     if (event.type === EV_KEY) {
-      for (const match of chordEngine.handleEvent({
-        deviceId: device.deviceId,
-        deviceClass: device.class,
-        type: event.type,
-        code: event.code,
-        value: event.value,
-      })) {
-        dispatchAction(match.id)
-      }
+      if (matches.length > 0 || shortcutEngine.isPressed("system")) return
 
       const systemAction = systemKeyAction(event.code, event.value)
       if (systemAction) dispatchAction(systemAction)
@@ -287,6 +296,10 @@ export async function startKorriInputd(
   }
 
   function dispatchAction(actionId: KorriInputdActionId) {
+    if (actionId === "system-panel") {
+      broadcastSystemAction()
+    }
+
     void actionDispatcher.dispatch(actionId).catch(error => {
       logger.warn({ err: error, actionId }, "inputd: action dispatch failed")
     })
@@ -303,13 +316,24 @@ export async function startKorriInputd(
   function broadcast(
     event: NativeInputEvent,
     deviceClass: NativeInputDeviceClass,
-  ) {
+  ): boolean {
     const payload = encodeEventPayload(event)
+    let delivered = false
 
     for (const [client, classes] of clients) {
       if (!classes.has(deviceClass)) continue
       client.send(payload)
+      delivered = true
     }
+
+    return delivered
+  }
+
+  function broadcastSystemAction() {
+    pendingSystemAction = !broadcast(
+      { kind: "action", class: "system", action: "system", timestamp: nowMs() },
+      "system",
+    )
   }
 
   function sendCurrentDevices(client: InputdSocket) {
@@ -322,6 +346,16 @@ export async function startKorriInputd(
         kind: "device-added",
         device: toWireDevice(device),
       })
+    }
+
+    if (pendingSystemAction && classes.has("system")) {
+      sendToClient(client, {
+        kind: "action",
+        class: "system",
+        action: "system",
+        timestamp: nowMs(),
+      })
+      pendingSystemAction = false
     }
   }
 
@@ -389,7 +423,7 @@ export async function startKorriInputd(
       stopped = true
       clearInterval(pollTimer)
       clients.clear()
-      chordEngine.reset()
+      shortcutEngine.reset()
 
       const pendingStreams = [...streams.values()]
       for (const deviceId of [...streams.keys()]) {
