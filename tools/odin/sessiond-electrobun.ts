@@ -44,6 +44,7 @@ export function buildElectrobunCommand(
     logPath: config.logPath,
     env: {
       ...config.extraEnv,
+      NODE_ENV: "production",
       KORRI_DESKTOP_PROFILE: "odin",
       KORRI_DESKTOP_STATUS_FILE:
         config.statusFile ?? DEFAULT_ELECTROBUN_STATUS_FILE,

@@ -20,6 +20,7 @@ describe("Electrobun renderer command", () => {
       command: "korri-desktop-odin",
       args: [],
       env: {
+        NODE_ENV: "production",
         KORRI_DESKTOP_PROFILE: "odin",
         KORRI_DESKTOP_STATUS_FILE: "/storage/app-state/status.json",
         KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
