@@ -21,7 +21,7 @@ describe("Electrobun renderer command", () => {
       args: [],
       env: {
         NODE: undefined,
-        NODE_ENV: "production",
+        NODE_ENV: undefined,
         PATH: expect.not.stringContaining("/node_modules/.bin"),
         KORRI_DESKTOP_PROFILE: "odin",
         KORRI_DESKTOP_STATUS_FILE: "/storage/app-state/status.json",

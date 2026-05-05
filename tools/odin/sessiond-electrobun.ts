@@ -45,7 +45,7 @@ export function buildElectrobunCommand(
     env: {
       ...config.extraEnv,
       NODE: undefined,
-      NODE_ENV: "production",
+      NODE_ENV: undefined,
       PATH: sanitizeElectrobunPath(process.env.PATH),
       KORRI_DESKTOP_PROFILE: "odin",
       KORRI_DESKTOP_STATUS_FILE:
