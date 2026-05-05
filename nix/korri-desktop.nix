@@ -163,7 +163,7 @@ export GDK_BACKEND="''${GDK_BACKEND:-$gdk_backend}"
 if [ -n "$profile" ]; then
   export KORRI_DESKTOP_PROFILE="''${KORRI_DESKTOP_PROFILE:-$profile}"
 fi
-exec "$launcher" "$@"
+exec "$launcher" "\$@"
 EOF
       chmod +x "$target"
     }
