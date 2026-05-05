@@ -1,4 +1,4 @@
-import { appendFileSync } from "node:fs"
+import { appendFileSync, existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import {
   BTN_BACK,
@@ -64,6 +64,7 @@ export interface KorriInputdOptions {
   readonly logger?: KorriInputdLogger
   readonly actionDispatcher?: InputdActionDispatcher
   readonly chords?: readonly ButtonChordDefinition<KorriInputdActionId>[]
+  readonly eventNodeExists?: (eventNode: string) => boolean
 }
 
 export interface KorriInputdHandle {
@@ -116,6 +117,9 @@ export async function startKorriInputd(
   const hostname = options.hostname ?? DEFAULT_HOSTNAME
   const actionDispatcher =
     options.actionDispatcher ?? createInputdActionDispatcher({ logger })
+  const eventNodeExists =
+    options.eventNodeExists ??
+    (options.openEventSource ? alwaysEventNodeExists : realEventNodeExists)
   const chordEngine = createButtonChordEngine({
     chords: options.chords ?? DEFAULT_CHORDS,
   })
@@ -126,10 +130,9 @@ export async function startKorriInputd(
 
   async function refreshDevices() {
     const nextDevices = new Map(
-      parseProcBusInputDevices(await readProcDevices()).map(device => [
-        device.deviceId,
-        device,
-      ]),
+      parseProcBusInputDevices(await readProcDevices())
+        .filter(device => eventNodeExists(device.eventNode))
+        .map(device => [device.deviceId, device]),
     )
 
     for (const [deviceId, currentDevice] of devices) {
@@ -414,6 +417,14 @@ function appendInputdDiagnostic(
   } catch {
     // Diagnostic-only; never let logging break input handling.
   }
+}
+
+function alwaysEventNodeExists(): boolean {
+  return true
+}
+
+function realEventNodeExists(eventNode: string): boolean {
+  return existsSync(`/dev/input/${eventNode}`)
 }
 
 function systemKeyAction(

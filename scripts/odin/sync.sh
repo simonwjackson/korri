@@ -26,5 +26,6 @@ rsync -az --delete \
   --exclude=.git \
   --exclude=.nix-bin \
   --exclude=.env \
+  --exclude=sessiond.token \
   --exclude=media \
   "$REPO_ROOT/" "$ODIN_HOST:$ODIN_PROJECT/"

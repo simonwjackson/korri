@@ -330,6 +330,32 @@ describe("korri inputd", () => {
     client.close()
   })
 
+  it("skips stale proc devices whose event node is missing", async () => {
+    const proc = await loadProcFixture("bus-input-devices-odin.txt")
+    const opened: string[] = []
+    const handle = await startInputd({
+      readProcDevices: async () => proc,
+      eventNodeExists: eventNode => eventNode !== "event3",
+      openEventSource: device => {
+        opened.push(device.eventNode)
+        return createControllableEventSource().open()
+      },
+    })
+
+    const client = connectClient(handle.port)
+    await client.open()
+    client.ws.send(JSON.stringify({ classes: ["gamepad"] }))
+    const deviceAdded = decodeNativeInputEvent(await client.nextMessage())
+
+    expect(opened).not.toContain("event3")
+    expect(deviceAdded).toMatchObject({
+      kind: "device-added",
+      device: { deviceId: "inputplumber-virtual-xbox360" },
+    })
+
+    client.close()
+  })
+
   it("clears chord state when a device is removed", async () => {
     const odin = await loadProcFixture("bus-input-devices-odin.txt")
     let proc = odin
