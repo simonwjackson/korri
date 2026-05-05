@@ -7,13 +7,14 @@ module: scripts/odin/*
 
 ## What this is
 
-A two-machine dev loop where Korri's API server and native input bridge run on the AYN Odin 2 Portal
+A two-machine dev loop where Korri's API server and input daemon run on the AYN Odin 2 Portal
 (so real `runemu.sh` launches against the real ROCKNIX library on the
-handheld screen, and controller input is read from `/dev/input/event*`) and the renderer runs on the dev machine under Vite (for
+handheld screen, controller/system input is read from `/dev/input/event*`, and the renderer still consumes the native input WebSocket endpoint) and the renderer runs on the dev machine under Vite (for
 instant HMR). Vite proxies `/api/*` directly to the device over Tailscale.
 
-This is "Level 2" of the deployment ladder. Level 3 (renderer also running
-on the Odin under a kiosk browser) is intentionally out of scope here.
+This is "Level 2" of the deployment ladder.
+
+Level 3 is the supervised Chromium session: the renderer runs on the Odin in ROCKNIX-native Chromium for GPU acceleration, while `korri-sessiond` owns the Sway/Chromium/emulator lifecycle so Chromium returns as the focused fullscreen Korri surface after a game exits.
 
 ## Prerequisites
 
@@ -22,8 +23,8 @@ on the Odin under a kiosk browser) is intentionally out of scope here.
 - EmulationStation **must be running** on the device when you bootstrap so
   the Wayland session env can be harvested from its `/proc/<pid>/environ`.
 - `rsync`, `ssh`, `curl`, and `bun` on the dev machine.
-- The Odin doesn't need `tmux` or any other supervisor: the API and native input bridge run as
-  detached `setsid` processes that survive SSH disconnects.
+- The Odin doesn't need `tmux` for the dev loop: the API and Korri input daemon run as
+  detached `setsid` processes that survive SSH disconnects. `just install-odin` also installs `korri-inputd.service` so input ownership survives reboot before ROCKNIX `input.service` is masked.
 
 Optional overrides (all read by the recipes):
 
@@ -58,8 +59,8 @@ What it ensures, idempotently:
    `emulationstation` process and writes them plus
    `KORRI_ROCKNIX_GAMELIST_ROOTS=/storage/roms` to
    `$ODIN_PROJECT/.env`.
-7. Installs or updates the temporary Korri session toggle scripts under
-   `/storage/bin` and restarts the toggle daemon.
+7. Installs or updates `/storage/bin/korri-session-toggle`. The old standalone `korri-toggle-daemon` is removed; the `L3+R3+Start` toggle chord is owned by Korri inputd.
+8. Installs/restarts `korri-inputd.service`, checks its native input endpoint, then stops/masks ROCKNIX `input.service` so there is only one input policy owner. `inputplumber.service` remains required for controller normalization.
 
 Run this on first setup and any time the Odin-installed tooling should be refreshed.
 
@@ -84,14 +85,14 @@ What you should see:
 - Pressing **confirm** on a tile spawns the real `runemu.sh` and the
   game appears on the handheld screen.
 
-Ctrl-C stops local Vite. The remote API and native input bridge processes keep running (they are in their own `setsid` sessions, detached from the SSH channel), so the next `just dev-odin` simply replaces them in place.
+Ctrl-C stops local Vite. The remote API and Korri input daemon processes keep running (they are in their own `setsid` sessions, detached from the SSH channel), so the next `just dev-odin` simply replaces them in place.
 
 ## Editing server code
 
 Save the file, then either:
 
 - run `just dev-odin` again (it always re-syncs and replaces the remote
-  API and native input bridge processes), or
+  API and Korri input daemon processes), or
 - run `just sync-odin` and then restart the API in place:
 
   ```bash
@@ -113,11 +114,11 @@ Save and Vite HMRs the dev machine browser. No remote action required.
   ssh "$ODIN_HOST" tail -f /storage/korri-api.log
   ```
 
-- Native input bridge stdout/stderr: appended to `/storage/korri-input-bridge.log` on
+- Korri input daemon stdout/stderr: appended to `/storage/korri-inputd.log` on
   the device.
 
   ```bash
-  ssh "$ODIN_HOST" tail -f /storage/korri-input-bridge.log
+  ssh "$ODIN_HOST" tail -f /storage/korri-inputd.log
   ```
 
 - Vite dev server: in the foreground terminal running `just dev-odin`.
@@ -125,7 +126,8 @@ Save and Vite HMRs the dev machine browser. No remote action required.
 ## Tearing down
 
 - Local side only: Ctrl-C the foreground recipe. Vite stops; the device keeps serving.
-- Whole loop: also `ssh "$ODIN_HOST" "pkill -f 'bun run tools/http/server.ts'; pkill -f 'bun run tools/odin/input-bridge.ts'"`.
+- Whole loop: also `ssh "$ODIN_HOST" "pkill -f 'bun run tools/http/server.ts'; pkill -f 'bun run tools/odin/inputd.ts'"`.
+- Roll back input ownership: `ssh "$ODIN_HOST" "/storage/korri/scripts/odin/install-inputd-service.sh rollback"` restores ROCKNIX `input.service` and stops `korri-inputd`.
 
 ## Smoke check
 
@@ -133,14 +135,56 @@ Save and Vite HMRs the dev machine browser. No remote action required.
 just check-odin
 ```
 
-Hits the device directly at `ODIN_API_BASE_URL` and `ODIN_INPUT_BRIDGE_URL`, checks `/api/health`, `/api/rpc` `app.library.list`, and the native input bridge's gamepad subscription path, then exits non-zero with a clear log line if any check breaks. Equivalent to `just desktop-runtime-check` for this loop.
+Hits the device directly at `ODIN_API_BASE_URL` and `ODIN_INPUT_BRIDGE_URL`, checks `/api/health`, `/api/rpc` `app.library.list`, and Korri inputd's gamepad subscription path, then exits non-zero with a clear log line if any check breaks. Equivalent to `just desktop-runtime-check` for this loop.
+
+## Supervised renderer session (Level 3 + Layer 8 Electrobun candidate)
+
+`korri-sessiond` is installed by `just install-odin` and managed by `/storage/bin/korri-session-toggle`.
+
+- `L3+R3+Start` still toggles Korri mode through `korri-inputd`.
+- The toggle command talks to `korri-sessiond`; it no longer launches a renderer directly.
+- `korri-sessiond` starts the configured renderer, repairs Sway fullscreen/focus while Korri is home, and runtime-masks `essway.service` only while Korri mode is active.
+- The default renderer remains ROCKNIX-native Chromium because it is the current smooth GPU path.
+- `KORRI_SESSION_RENDERER=electrobun` opts into the Layer 8 Electrobun candidate. That path must use real `/nix` / a Nix-managed `korri-desktop-odin` app and pass `just check-odin-electrobun`; the old portable/proot WebKit path is diagnostic-only.
+- During a game launch, sessiond suspends renderer focus repair until the launch process exits, then relaunches the renderer fresh and reapplies the Sway invariant.
+- The sessiond control API is loopback-only and guarded by `/storage/korri/sessiond.token`.
+
+Useful commands:
+
+```bash
+just odin-sessiond-status
+just check-odin-sessiond
+just odin-desktop-preflight
+KORRI_SESSION_RENDERER=electrobun just check-odin-electrobun
+ssh "$ODIN_HOST" "/storage/bin/korri-session-toggle start"
+ssh "$ODIN_HOST" "/storage/bin/korri-session-toggle stop"
+```
+
+Recovery if Korri mode gets stuck:
+
+```bash
+ssh "$ODIN_HOST" "cd /storage/korri && scripts/odin/install-sessiond-service.sh rollback"
+```
+
+Electrobun remains an opt-in renderer candidate until it passes GPU acceptance on-device without cairo/compositing-disabled fallback flags. If it fails at WebKit/EGL/GBM under real `/nix`, the next fix belongs in the ROCKNIX/WebKit runtime layer rather than Korri launch-script tuning.
+
+## Input ownership
+
+Korri inputd owns:
+
+- renderer native input streaming over the existing WebSocket contract
+- kill-current-game (`L1+R1+Select+Start`) through `/tmp/.process-kill-data`
+- Korri session toggle (`L3+R3+Start`) through `/storage/bin/korri-session-toggle`
+- retained system actions: volume, brightness, power/lid, and screen switch via `/usr/bin/screen_switch`
+
+Korri intentionally does not carry forward `input_sense` screenshots, game guide, MangoHud toggle, or touchscreen-keyboard shortcuts.
+
+ROCKNIX still provides launcher scripts and `/tmp/.process-kill-data`, `/usr/bin/screen_switch`, and `inputplumber.service`.
 
 ## Known limitations
 
-- Level 3 (renderer on the device's screen under a kiosk browser) is not
-  implemented here.
-- The renderer still runs on the dev machine; cross-arch packaging is
-  deferred.
+- Level 3 supervised rendering depends on the configured renderer path and Sway window identity; both are configurable because ROCKNIX updates may change them.
+- The default daily loop still runs the renderer on the dev machine; Level 3 is an explicit supervised session path.
 - `runemu.sh` blocks until the game exits, so the launching RPC sits open
   for the duration of gameplay. Documented in
   `korri/shared/library/shell-launcher.ts`.

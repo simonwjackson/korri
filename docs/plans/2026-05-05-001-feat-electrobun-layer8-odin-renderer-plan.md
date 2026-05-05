@@ -436,7 +436,7 @@ flowchart TB
 **Verification:**
 - Existing Chromium sessiond recipes still work by default, and Electrobun requires explicit opt-in configuration.
 
-- [ ] **Unit 7: Update renderer-aware smoke coverage and documentation**
+- [x] **Unit 7: Update renderer-aware smoke coverage and documentation**
 
 **Goal:** Make the new Layer 8 Electrobun path understandable, testable, and hard to confuse with the deprecated portable/proot path.
 
