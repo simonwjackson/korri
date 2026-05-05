@@ -22,8 +22,8 @@ export interface KorriSessiondServiceConfig {
 export function parseKorriSessionRenderer(
   value: string | undefined,
 ): KorriSessionRendererMode {
-  if (!value || value === "chromium") return "chromium"
-  if (value === "electrobun") return "electrobun"
+  if (!value || value === "electrobun") return "electrobun"
+  if (value === "chromium") return "chromium"
   throw new Error(`Unsupported Korri session renderer: ${value}`)
 }
 

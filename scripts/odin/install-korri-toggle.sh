@@ -241,21 +241,7 @@ done
 kill -KILL "$pid" 2>/dev/null || true
 REMOTE_SCRIPT
 
-  cat > "$tmpdir/korri-go-chromium" <<'REMOTE_SCRIPT'
-#!/usr/bin/env bash
-set -euo pipefail
-
-# shellcheck disable=SC1091
-source /storage/bin/korri-electrobun-control-lib
-
-log() { printf '%s [korri-go-chromium] %s\n' "$(date -Is)" "$*" >&2; }
-
-log "stopping Electrobun and starting supervised Chromium"
-korri_stop_electrobun
-exec /storage/bin/korri-session-toggle start
-REMOTE_SCRIPT
-
-  chmod 0755 "$tmpdir/korri-session-toggle" "$tmpdir/korri-kill-active-application" "$tmpdir/korri-go-chromium"
+  chmod 0755 "$tmpdir/korri-session-toggle" "$tmpdir/korri-kill-active-application"
   chmod 0644 "$tmpdir/korri-electrobun-control-lib"
 
   log "Installing session/input action commands on $ODIN_HOST:/storage/bin"
@@ -264,12 +250,11 @@ REMOTE_SCRIPT
     "$tmpdir/korri-session-toggle" \
     "$tmpdir/korri-electrobun-control-lib" \
     "$tmpdir/korri-kill-active-application" \
-    "$tmpdir/korri-go-chromium" \
     "$ODIN_HOST:/storage/bin/"
 
   ssh_odin "KORRI_SESSIOND_URL='$KORRI_SESSIOND_URL' KORRI_SESSIOND_TOKEN_FILE='$KORRI_SESSIOND_TOKEN_FILE' bash -s" <<'REMOTE'
 set -euo pipefail
-chmod 0755 /storage/bin/korri-session-toggle /storage/bin/korri-kill-active-application /storage/bin/korri-go-chromium
+chmod 0755 /storage/bin/korri-session-toggle /storage/bin/korri-kill-active-application
 chmod 0644 /storage/bin/korri-electrobun-control-lib
 legacy_pids=""
 for p in /proc/[0-9]*; do
@@ -279,10 +264,9 @@ for p in /proc/[0-9]*; do
   [ "$exe" = "/storage/bin/korri-toggle-daemon" ] && legacy_pids="$legacy_pids $pid"
 done
 [ -z "$legacy_pids" ] || kill -TERM $legacy_pids 2>/dev/null || true
-rm -f /storage/bin/korri-toggle-daemon /storage/korri-toggle-daemon.pid
+rm -f /storage/bin/korri-toggle-daemon /storage/bin/korri-go-chromium /storage/korri-toggle-daemon.pid
 bash -n /storage/bin/korri-session-toggle
 bash -n /storage/bin/korri-kill-active-application
-bash -n /storage/bin/korri-go-chromium
 /storage/bin/korri-session-toggle status || true
 REMOTE
 

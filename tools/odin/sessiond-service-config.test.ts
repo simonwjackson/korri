@@ -15,11 +15,14 @@ const base = {
 }
 
 describe("sessiond service config", () => {
-  it("defaults to the Chromium renderer", () => {
-    const config = buildKorriSessiondServiceConfig(base)
+  it("defaults to the Electrobun renderer", () => {
+    const config = buildKorriSessiondServiceConfig({
+      ...base,
+      electrobunApp: "korri-desktop-odin",
+    })
 
-    expect(config.renderer).toBe("chromium")
-    expect(config.environment.KORRI_SESSION_RENDERER).toBe("chromium")
+    expect(config.renderer).toBe("electrobun")
+    expect(config.environment.KORRI_SESSION_RENDERER).toBe("electrobun")
     expect(config.environment.KORRI_SESSIOND_TOKEN_FILE).toBe(
       "/storage/korri/sessiond.token",
     )
@@ -47,9 +50,9 @@ describe("sessiond service config", () => {
     expect(() => parseKorriSessionRenderer("webkit")).toThrow("Unsupported")
   })
 
-  it("rejects Electrobun mode without an app binary", () => {
-    expect(() =>
-      buildKorriSessiondServiceConfig({ ...base, renderer: "electrobun" }),
-    ).toThrow("KORRI_ELECTROBUN_APP")
+  it("rejects default Electrobun mode without an app binary", () => {
+    expect(() => buildKorriSessiondServiceConfig(base)).toThrow(
+      "KORRI_ELECTROBUN_APP",
+    )
   })
 })
