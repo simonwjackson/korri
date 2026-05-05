@@ -248,11 +248,11 @@
 	transition: border-color 180ms ease;
 }
 
-[data-shift-home] .shift-tile:focus-visible::after {
+[data-shift-home] .shift-tile:focus::after {
 	border-color: var(--shift-focus-glow);
 }
 
-[data-shift-home] .shift-tile:focus-visible {
+[data-shift-home] .shift-tile:focus {
 	transform: translateY(-1px);
 	z-index: 1;
 }

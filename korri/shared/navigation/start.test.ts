@@ -271,6 +271,120 @@ describe("input-mode dispatch", () => {
   })
 })
 
+describe("focus retention wiring", () => {
+  afterEach(() => {
+    getSpatialNavigationSnapshot()?.dispose()
+    document.body.innerHTML = ""
+    document.documentElement.removeAttribute("data-input-mode")
+  })
+
+  const setupButtons = () => {
+    document.body.innerHTML = `
+      <button id="first">First</button>
+      <button id="second">Second</button>
+    `
+    return {
+      first: document.getElementById("first") as HTMLButtonElement,
+      second: document.getElementById("second") as HTMLButtonElement,
+    }
+  }
+
+  const startForFocusRetention = (
+    options: Parameters<typeof startSpatialNavigation>[0] = {},
+  ) =>
+    startSpatialNavigation({
+      keyboard: false,
+      gamepad: false,
+      pointer: false,
+      wheel: false,
+      native: false,
+      inputMode: false,
+      nextFocus: () => null,
+      ...options,
+    })
+
+  it("installs focus retention by default", async () => {
+    const { first } = setupButtons()
+    startForFocusRetention()
+
+    first.focus()
+    first.blur()
+    await Promise.resolve()
+
+    expect(document.activeElement).toBe(first)
+  })
+
+  it("does not install focus retention when focusRetention is false", async () => {
+    const { first } = setupButtons()
+    startForFocusRetention({ focusRetention: false })
+
+    first.focus()
+    first.blur()
+    await Promise.resolve()
+
+    expect(document.activeElement).toBe(document.body)
+  })
+
+  it("disposes focus retention with the spatial navigation handle", async () => {
+    const { first } = setupButtons()
+    const handle = startForFocusRetention()
+
+    first.focus()
+    handle.dispose()
+    first.blur()
+    await Promise.resolve()
+
+    expect(document.activeElement).toBe(document.body)
+  })
+
+  it("uses the restored element as the next direction origin", async () => {
+    const { first, second } = setupButtons()
+    const origins: string[] = []
+    const handle = startForFocusRetention({
+      nextFocus: current => {
+        origins.push((current as HTMLElement | null)?.id ?? "none")
+        return second
+      },
+    })
+
+    first.focus()
+    first.blur()
+    await Promise.resolve()
+
+    handle.bus.emit({ type: "direction", direction: "right" })
+
+    expect(origins).toEqual(["first"])
+    expect(document.activeElement).toBe(second)
+  })
+
+  it("does not emit input actions or change input mode when restoring focus", async () => {
+    const { first } = setupButtons()
+    const seen: InputAction[] = []
+    const handle = startSpatialNavigation({
+      keyboard: false,
+      gamepad: false,
+      pointer: false,
+      wheel: false,
+      native: false,
+      nextFocus: () => null,
+    })
+    handle.bus.on(action => seen.push(action))
+
+    handle.bus.emit({ type: "direction", direction: "up", source: "keyboard" })
+    first.focus()
+    first.blur()
+    await Promise.resolve()
+
+    expect(document.activeElement).toBe(first)
+    expect(document.documentElement.getAttribute("data-input-mode")).toBe(
+      "directional",
+    )
+    expect(seen).toEqual([
+      { type: "direction", direction: "up", source: "keyboard" },
+    ])
+  })
+})
+
 describe("native adapter wiring", () => {
   afterEach(() => {
     getSpatialNavigationSnapshot()?.dispose()

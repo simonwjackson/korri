@@ -90,6 +90,109 @@ test.describe("spatial navigation: Tilegrid story via pointer", () => {
     await expect.poll(() => inputMode(page)).toBe("pointer")
   })
 
+  test("clicking non-focusable canvas space does not clear the active tile", async ({
+    page,
+  }) => {
+    const target = page.locator("button[aria-label]").nth(2)
+    const targetLabel = await target.getAttribute("aria-label")
+    const box = await target.boundingBox()
+    if (!box) throw new Error("expected bounding box")
+
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await expect.poll(() => focusedAriaLabel(page)).toBe(targetLabel)
+
+    // The Storybook decorator leaves non-focusable canvas/background space
+    // at the top-left of the iframe. Clicking there used to let the browser
+    // fall back to body/html focus, visually leaving no active tile.
+    await page.mouse.click(4, 4)
+
+    await expect.poll(() => focusedAriaLabel(page)).toBe(targetLabel)
+  })
+
+  test("arrow navigation after attempted deselection continues from the retained tile", async ({
+    page,
+  }) => {
+    const target = page.locator("button[aria-label]").nth(2)
+    const targetLabel = await target.getAttribute("aria-label")
+    const box = await target.boundingBox()
+    if (!box) throw new Error("expected bounding box")
+
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await expect.poll(() => focusedAriaLabel(page)).toBe(targetLabel)
+
+    // Capture the exact LRUD neighbor for this tile so the regression proves
+    // navigation resumes from the retained focus target, not from a fallback
+    // first tile or another arbitrary origin.
+    await page.keyboard.press("ArrowRight")
+    const expectedRightNeighbor = await focusedAriaLabel(page)
+    expect(expectedRightNeighbor).not.toBeNull()
+    expect(expectedRightNeighbor).not.toBe(targetLabel)
+
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await expect.poll(() => focusedAriaLabel(page)).toBe(targetLabel)
+
+    await page.mouse.click(4, 4)
+    await expect.poll(() => focusedAriaLabel(page)).toBe(targetLabel)
+
+    await page.keyboard.press("ArrowRight")
+
+    await expect.poll(() => focusedAriaLabel(page)).toBe(expectedRightNeighbor)
+  })
+
+  test("clicking another tile still changes focus normally", async ({
+    page,
+  }) => {
+    const first = page.locator("button[aria-label]").nth(2)
+    const second = page.locator("button[aria-label]").nth(4)
+    const secondLabel = await second.getAttribute("aria-label")
+    const firstBox = await first.boundingBox()
+    const secondBox = await second.boundingBox()
+    if (!firstBox || !secondBox) throw new Error("expected bounding boxes")
+
+    await page.mouse.move(
+      firstBox.x + firstBox.width / 2,
+      firstBox.y + firstBox.height / 2,
+    )
+    await expect.poll(() => focusedAriaLabel(page)).not.toBe(secondLabel)
+
+    await page.mouse.click(
+      secondBox.x + secondBox.width / 2,
+      secondBox.y + secondBox.height / 2,
+    )
+
+    await expect.poll(() => focusedAriaLabel(page)).toBe(secondLabel)
+  })
+
+  test("right-click on non-focusable canvas space preserves the native context menu", async ({
+    page,
+  }) => {
+    await page.evaluate(() => {
+      const w = window as Window & { __ctxPrevented?: boolean[] }
+      w.__ctxPrevented = []
+      document.addEventListener(
+        "contextmenu",
+        ev => {
+          queueMicrotask(() => {
+            w.__ctxPrevented?.push(ev.defaultPrevented)
+          })
+        },
+        false,
+      )
+    })
+
+    await page.mouse.click(4, 4, { button: "right" })
+
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (window as Window & { __ctxPrevented?: boolean[] })
+              .__ctxPrevented ?? [],
+        ),
+      )
+      .toContain(false)
+  })
+
   test("right-click on a tile fires a click event without showing native menu", async ({
     page,
   }) => {

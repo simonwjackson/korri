@@ -18,6 +18,10 @@ import {
   type FocusEngineOptions,
   type NextFocusFn,
 } from "./focus-engine"
+import {
+  createFocusRetention,
+  type FocusRetentionOptions,
+} from "./focus-retention"
 import { createInputModeStore, type InputModeStore } from "./input-mode"
 
 /**
@@ -58,6 +62,8 @@ export interface StartSpatialNavigationOptions
   readonly native?: false | NativeInputAdapterOptions
   /** Disable the input-mode store + DOM-attribute side effect. */
   readonly inputMode?: false
+  /** Disable focus retention that restores spatial focus from body/html. */
+  readonly focusRetention?: false | FocusRetentionOptions
   /** Log navigation input actions and focus changes to the browser console. */
   readonly diagnostics?: boolean | NavigationDiagnosticsOptions
 }
@@ -177,11 +183,17 @@ export function startSpatialNavigation(
     bus.use(createNativeInputAdapter(options.native))
   }
 
+  const focusRetention =
+    options.focusRetention === false
+      ? null
+      : createFocusRetention(options.focusRetention ?? undefined)
+
   const handle: SpatialNavigationHandle = {
     bus,
     inputMode,
     dispose: () => {
       disposeDiagnostics()
+      focusRetention?.dispose()
       bus.dispose()
       inputMode?.dispose()
       if (currentHandle === handle) setCurrentHandle(null)
