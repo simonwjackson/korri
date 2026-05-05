@@ -104,8 +104,13 @@ case "${1:-toggle}" in
     esac
     status
     ;;
+  reconcile)
+    log "Reconciling supervised Korri session"
+    post /control/reconcile >/dev/null
+    status
+    ;;
   status) status ;;
-  *) echo "usage: $0 {start|stop|toggle|status}" >&2; exit 64 ;;
+  *) echo "usage: $0 {start|stop|toggle|reconcile|status}" >&2; exit 64 ;;
 esac
 REMOTE_SCRIPT
 
@@ -221,8 +226,9 @@ fi
 
 case "$exe $window_class $name" in
   *'/share/korri-desktop/'*'/Korri-dev/bin/bun'*|*'ElectrobunKitchenSink-dev'*|*' Korri')
-    log "focused app is Korri Electrobun; restarting"
-    korri_restart_electrobun
+    log "focused app is Korri Electrobun; restarting through sessiond"
+    korri_stop_electrobun
+    /storage/bin/korri-session-toggle reconcile >/dev/null
     exit 0
     ;;
 esac
