@@ -1,6 +1,6 @@
 import {
-  isControllerInputProfile,
   type ControllerInputProfile,
+  isControllerInputProfile,
 } from "@shared/navigation/controller-profile"
 import {
   type SpatialNavigationHandle,

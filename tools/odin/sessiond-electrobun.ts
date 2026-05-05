@@ -74,7 +74,9 @@ export function classifyElectrobunBinaryOrigin(
 export function sanitizeElectrobunPath(path: string | undefined): string {
   const entries = (path ?? "").split(":").filter(Boolean)
   const sanitized = entries.filter(
-    entry => !entry.includes("/node_modules/.bin") && !entry.startsWith("/tmp/bun-node"),
+    entry =>
+      !entry.includes("/node_modules/.bin") &&
+      !entry.startsWith("/tmp/bun-node"),
   )
 
   for (const required of ["/storage/.nix-profile/bin", "/storage/bin"]) {

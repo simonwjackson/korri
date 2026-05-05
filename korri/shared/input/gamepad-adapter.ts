@@ -146,7 +146,6 @@ export function createGamepadAdapter(
           for (const pair of dpadAxisPairs) {
             tickDigitalAxis(
               i,
-              holds,
               now,
               `hat:${pair.x}:${pair.y}:x`,
               pad.axes[pair.x] ?? 0,
@@ -156,7 +155,6 @@ export function createGamepadAdapter(
             )
             tickDigitalAxis(
               i,
-              holds,
               now,
               `hat:${pair.x}:${pair.y}:y`,
               pad.axes[pair.y] ?? 0,
@@ -225,7 +223,6 @@ function stickToDirection(
 
 function tickDigitalAxis(
   padIndex: number,
-  holds: Map<string, HoldState>,
   now: number,
   name: string,
   value: number,

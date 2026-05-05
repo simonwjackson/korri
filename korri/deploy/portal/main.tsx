@@ -1,6 +1,6 @@
 import {
-  isControllerInputProfile,
   type ControllerInputProfile,
+  isControllerInputProfile,
 } from "@shared/navigation/controller-profile"
 import { startSpatialNavigation } from "@shared/navigation/start"
 import { createRouter, RouterProvider } from "@tanstack/react-router"
