@@ -28,6 +28,8 @@ facts="$(
   if ssh_odin "ODIN_PROJECT='$ODIN_PROJECT' KORRI_ELECTROBUN_APP='$KORRI_ELECTROBUN_APP' KORRI_ELECTROBUN_STATE_ROOT='$KORRI_ELECTROBUN_STATE_ROOT' bash -s" <<'REMOTE'
 set -euo pipefail
 
+export PATH="/storage/bin:/storage/.nix-profile/bin:$PATH"
+
 yes_no_path() {
   if [ -e "$1" ]; then printf 'yes'; else printf 'no'; fi
 }
