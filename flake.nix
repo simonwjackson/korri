@@ -3,6 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    nixpkgs-2405.url = "github:NixOS/nixpkgs/nixos-24.05";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -10,6 +11,7 @@
     {
       self,
       nixpkgs,
+      nixpkgs-2405,
       flake-utils,
       ...
     }:
@@ -17,6 +19,11 @@
       system:
       let
         pkgs = import nixpkgs {
+          inherit system;
+          config.allowUnfree = true;
+        };
+
+        pkgs2405 = import nixpkgs-2405 {
           inherit system;
           config.allowUnfree = true;
         };
@@ -60,6 +67,11 @@
           ])
           ++ [ pkgs.stdenv.cc.cc.lib ]
         );
+
+        odinDesktopRuntimeLibraries = pkgs.lib.optionals pkgs.stdenv.isLinux [
+          pkgs2405.webkitgtk_4_1
+          pkgs2405.gtk3
+        ];
 
         linuxDesktopPackages = pkgs.lib.optionals pkgs.stdenv.isLinux (
           (with pkgs; [
@@ -130,6 +142,20 @@
             }
           else
             null;
+
+        korriDesktopOdin =
+          if isSupportedDesktopSystem then
+            import ./nix/korri-desktop.nix {
+              inherit pkgs system bunDeps;
+              lib = pkgs.lib;
+              src = self;
+              electrobunBinaries = electrobunBinaries;
+              portal = korriPortal;
+              runtimeLibraries = linuxDesktopRuntimeLibraries;
+              odinRuntimeLibraries = odinDesktopRuntimeLibraries;
+            }
+          else
+            null;
       in
       {
         packages = {
@@ -140,7 +166,7 @@
           electrobun-cli = electrobunBinaries.cli;
           electrobun-core = electrobunBinaries.core;
           korri-desktop = korriDesktop;
-          korri-desktop-odin = korriDesktop;
+          korri-desktop-odin = korriDesktopOdin;
           default = korriDesktop;
         };
 
@@ -155,7 +181,7 @@
           };
           korri-desktop-odin = {
             type = "app";
-            program = "${korriDesktop}/bin/korri-desktop-odin";
+            program = "${korriDesktopOdin}/bin/korri-desktop-odin";
           };
         };
 

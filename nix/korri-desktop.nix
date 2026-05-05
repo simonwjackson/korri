@@ -7,6 +7,7 @@
   electrobunBinaries,
   portal,
   runtimeLibraries,
+  odinRuntimeLibraries ? runtimeLibraries,
 }:
 
 let
@@ -25,6 +26,7 @@ let
     platformBySystem.${system}
       or (throw "korri-desktop is only supported on x86_64-linux and aarch64-linux");
   runtimeLibraryPath = lib.makeLibraryPath runtimeLibraries;
+  odinRuntimeLibraryPath = lib.makeLibraryPath odinRuntimeLibraries;
 in
 pkgs.stdenv.mkDerivation {
   pname = "korri-desktop";
@@ -137,41 +139,44 @@ pkgs.stdenv.mkDerivation {
   '';
 
   installPhase = ''
-    runHook preInstall
+        runHook preInstall
 
-    mkdir -p "$out/share/korri-desktop" "$out/bin"
-    cp -R out/build/electrobun/. "$out/share/korri-desktop/"
+        mkdir -p "$out/share/korri-desktop" "$out/bin"
+        cp -R out/build/electrobun/. "$out/share/korri-desktop/"
 
-    launcher="$(find "$out/share/korri-desktop" -path '*/bin/launcher' -type f -perm -0100 | head -n 1)"
-    if [ -z "$launcher" ]; then
-      echo "Could not find Electrobun launcher in built desktop output" >&2
-      find "$out/share/korri-desktop" -maxdepth 4 -type f | sort >&2
-      exit 1
+        launcher="$(find "$out/share/korri-desktop" -path '*/bin/launcher' -type f -perm -0100 | head -n 1)"
+        if [ -z "$launcher" ]; then
+          echo "Could not find Electrobun launcher in built desktop output" >&2
+          find "$out/share/korri-desktop" -maxdepth 4 -type f | sort >&2
+          exit 1
+        fi
+        chmod +x "$launcher"
+
+        write_wrapper() {
+          local target="$1"
+          local gdk_backend="$2"
+          local profile="$3"
+          local library_path="$4"
+          cat > "$target" <<EOF
+    #!${pkgs.bash}/bin/bash
+    export LD_LIBRARY_PATH="$library_path''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    export XDG_DATA_DIRS="${pkgs.gsettings-desktop-schemas}/share:${pkgs.gtk3}/share''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
+    export GIO_EXTRA_MODULES="${pkgs.glib-networking}/lib/gio/modules''${GIO_EXTRA_MODULES:+:$GIO_EXTRA_MODULES}"
+    if [ -n "$gdk_backend" ]; then
+      export GDK_BACKEND="''${GDK_BACKEND:-$gdk_backend}"
     fi
-    chmod +x "$launcher"
+    if [ -n "$profile" ]; then
+      export KORRI_DESKTOP_PROFILE="''${KORRI_DESKTOP_PROFILE:-$profile}"
+    fi
+    exec "$launcher" "\$@"
+    EOF
+          chmod +x "$target"
+        }
 
-    write_wrapper() {
-      local target="$1"
-      local gdk_backend="$2"
-      local profile="$3"
-      cat > "$target" <<EOF
-#!${pkgs.bash}/bin/bash
-export LD_LIBRARY_PATH="${runtimeLibraryPath}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export XDG_DATA_DIRS="${pkgs.gsettings-desktop-schemas}/share:${pkgs.gtk3}/share''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
-export GIO_EXTRA_MODULES="${pkgs.glib-networking}/lib/gio/modules''${GIO_EXTRA_MODULES:+:$GIO_EXTRA_MODULES}"
-export GDK_BACKEND="''${GDK_BACKEND:-$gdk_backend}"
-if [ -n "$profile" ]; then
-  export KORRI_DESKTOP_PROFILE="''${KORRI_DESKTOP_PROFILE:-$profile}"
-fi
-exec "$launcher" "\$@"
-EOF
-      chmod +x "$target"
-    }
+        write_wrapper "$out/bin/korri-desktop" x11 "" "${runtimeLibraryPath}"
+        write_wrapper "$out/bin/korri-desktop-odin" "" odin "${odinRuntimeLibraryPath}"
 
-    write_wrapper "$out/bin/korri-desktop" x11 ""
-    write_wrapper "$out/bin/korri-desktop-odin" x11 odin
-
-    runHook postInstall
+        runHook postInstall
   '';
 
   meta = {
