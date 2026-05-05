@@ -315,7 +315,7 @@ flowchart TB
 **Verification:**
 - A failure report points to one layer: Nix/app resolution, bundle/server, WebKit process, GPU acceptance, or Sway visibility.
 
-- [ ] **Unit 4: Generalize sessiond around a renderer controller**
+- [x] **Unit 4: Generalize sessiond around a renderer controller**
 
 **Goal:** Make sessiond renderer-agnostic while preserving the current Chromium behavior and control API security.
 
