@@ -451,9 +451,12 @@ function openRealEventSource(device: DiscoveredDevice): KorriInputdEventSource {
 
   return {
     async *[Symbol.asyncIterator]() {
+      const reader = proc.stdout.getReader()
       try {
-        for await (const chunk of proc.stdout) {
-          yield chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk)
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          yield value
         }
 
         const exitCode = await proc.exited
@@ -463,6 +466,7 @@ function openRealEventSource(device: DiscoveredDevice): KorriInputdEventSource {
           )
         }
       } finally {
+        reader.releaseLock()
         close()
       }
     },
