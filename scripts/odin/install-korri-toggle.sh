@@ -332,21 +332,6 @@ fi
 
 keyboard_exe="${keyboard_command%% *}"
 keyboard_base="${keyboard_exe##*/}"
-keyboard_height="${KORRI_BOTTOM_KEYBOARD_HEIGHT:-${KORRI_INPUTD_BOTTOM_KEYBOARD_HEIGHT:-360}}"
-if [ -n "${keyboard_height// }" ]; then
-  case "$keyboard_base" in
-    wvkbd|wvkbd-mobintl)
-      case " $keyboard_command " in
-        *' -H '*) ;;
-        *) keyboard_command="$keyboard_command -H $keyboard_height" ;;
-      esac
-      case " $keyboard_command " in
-        *' -L '*) ;;
-        *) keyboard_command="$keyboard_command -L $keyboard_height" ;;
-      esac
-      ;;
-  esac
-fi
 running=""
 for p in /proc/[0-9]*; do
   [ -r "$p/exe" ] || continue
@@ -374,6 +359,37 @@ enabled.sort((a, b) => {
 })
 if (enabled[0]?.name) console.log(enabled[0].name)
 ' 2>/dev/null || true)"
+fi
+
+keyboard_height="${KORRI_BOTTOM_KEYBOARD_HEIGHT:-${KORRI_INPUTD_BOTTOM_KEYBOARD_HEIGHT:-}}"
+if [ -z "${keyboard_height// }" ] && command -v swaymsg >/dev/null 2>&1; then
+  keyboard_height="$(BOTTOM_OUTPUT="$bottom_output" swaymsg -t get_outputs 2>/dev/null | /storage/bin/bun -e '
+const raw = await new Response(Bun.stdin.stream()).text()
+const outputs = JSON.parse(raw || "[]")
+const enabled = outputs.filter(o => o.active !== false && o.rect)
+enabled.sort((a, b) => {
+  const yDelta = (b.rect?.y ?? 0) - (a.rect?.y ?? 0)
+  if (yDelta !== 0) return yDelta
+  return (b.rect?.x ?? 0) - (a.rect?.x ?? 0)
+})
+const selected = enabled.find(o => o.name === process.env.BOTTOM_OUTPUT) ?? enabled[0]
+if (selected?.rect?.height) console.log(Math.floor(selected.rect.height / 2))
+' 2>/dev/null || true)"
+fi
+keyboard_height="${keyboard_height:-540}"
+if [ -n "${keyboard_height// }" ]; then
+  case "$keyboard_base" in
+    wvkbd|wvkbd-mobintl)
+      case " $keyboard_command " in
+        *' -H '*) ;;
+        *) keyboard_command="$keyboard_command -H $keyboard_height" ;;
+      esac
+      case " $keyboard_command " in
+        *' -L '*) ;;
+        *) keyboard_command="$keyboard_command -L $keyboard_height" ;;
+      esac
+      ;;
+  esac
 fi
 
 quote_for_shell() {
