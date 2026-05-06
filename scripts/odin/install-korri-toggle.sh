@@ -247,6 +247,64 @@ done
 kill -KILL "$pid" 2>/dev/null || true
 REMOTE_SCRIPT
 
+  cat > "$tmpdir/korri-swap-screens" <<'REMOTE_SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source /storage/bin/korri-electrobun-control-lib
+korri_wayland_env
+
+log() { printf '%s [korri-screens] %s\n' "$(date -Is)" "$*" >&2; }
+
+if ! command -v swaymsg >/dev/null 2>&1; then
+  log "swaymsg not found; cannot swap screens"
+  exit 0
+fi
+
+commands="$(swaymsg -t get_outputs 2>/dev/null | /storage/bin/bun -e '
+const raw = await new Response(Bun.stdin.stream()).text()
+const outputs = JSON.parse(raw || "[]")
+const byName = new Map(outputs.filter(o => o.active !== false && o.rect).map(o => [o.name, o]))
+const dsi1 = byName.get("DSI-1")
+const dsi2 = byName.get("DSI-2")
+if (!dsi1 || !dsi2) process.exit(0)
+const dx = Math.abs(dsi1.rect.x - dsi2.rect.x)
+const dy = Math.abs(dsi1.rect.y - dsi2.rect.y)
+const minX = Math.min(dsi1.rect.x, dsi2.rect.x)
+const minY = Math.min(dsi1.rect.y, dsi2.rect.y)
+const quote = value => String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"")
+if (dx >= dy) {
+  const dsi1First = dsi1.rect.x <= dsi2.rect.x
+  const left = dsi1First ? dsi2 : dsi1
+  const right = dsi1First ? dsi1 : dsi2
+  console.log(`output "${quote(left.name)}" pos ${minX} ${minY}`)
+  console.log(`output "${quote(right.name)}" pos ${minX + left.rect.width} ${minY}`)
+} else {
+  const dsi1First = dsi1.rect.y <= dsi2.rect.y
+  const top = dsi1First ? dsi2 : dsi1
+  const bottom = dsi1First ? dsi1 : dsi2
+  console.log(`output "${quote(top.name)}" pos ${minX} ${minY}`)
+  console.log(`output "${quote(bottom.name)}" pos ${minX} ${minY + top.rect.height}`)
+}
+' 2>/dev/null || true)"
+
+if [ -z "${commands// }" ]; then
+  log "DSI-1 and DSI-2 are not both active; falling back to screen_switch"
+  if command -v screen_switch >/dev/null 2>&1; then
+    screen_switch
+  fi
+  exit 0
+fi
+
+log "swapping DSI-1 and DSI-2"
+printf '%s\n' "$commands" | while IFS= read -r command; do
+  [ -n "$command" ] || continue
+  swaymsg "$command" >/dev/null
+  log "swaymsg $command"
+done
+REMOTE_SCRIPT
+
   cat > "$tmpdir/korri-toggle-bottom-keyboard" <<'REMOTE_SCRIPT'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -294,18 +352,36 @@ if [ -z "$bottom_output" ] && command -v swaymsg >/dev/null 2>&1; then
 const raw = await new Response(Bun.stdin.stream()).text()
 const outputs = JSON.parse(raw || "[]")
 const enabled = outputs.filter(o => o.active !== false && o.rect)
-enabled.sort((a, b) => (b.rect?.y ?? 0) - (a.rect?.y ?? 0))
+enabled.sort((a, b) => {
+  const yDelta = (b.rect?.y ?? 0) - (a.rect?.y ?? 0)
+  if (yDelta !== 0) return yDelta
+  return (b.rect?.x ?? 0) - (a.rect?.x ?? 0)
+})
 if (enabled[0]?.name) console.log(enabled[0].name)
 ' 2>/dev/null || true)"
 fi
 
-keyboard_command="${keyboard_command//\{output\}/$bottom_output}"
+quote_for_shell() {
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+if [[ "$keyboard_command" == *'{output}'* ]]; then
+  bottom_output_quoted="$(quote_for_shell "$bottom_output")"
+  keyboard_command="${keyboard_command//\{output\}/$bottom_output_quoted}"
+elif [ -n "$bottom_output" ]; then
+  case "$keyboard_base" in
+    wvkbd|wvkbd-mobintl)
+      keyboard_command="$keyboard_command --output $(quote_for_shell "$bottom_output")"
+      ;;
+  esac
+fi
+
 log "starting bottom keyboard: $keyboard_command"
 nohup sh -c "$keyboard_command" >> /storage/korri-bottom-keyboard.log 2>&1 &
 echo $! > /storage/korri-bottom-keyboard.pid
 REMOTE_SCRIPT
 
-  chmod 0755 "$tmpdir/korri-session-toggle" "$tmpdir/korri-kill-active-application" "$tmpdir/korri-toggle-bottom-keyboard"
+  chmod 0755 "$tmpdir/korri-session-toggle" "$tmpdir/korri-kill-active-application" "$tmpdir/korri-swap-screens" "$tmpdir/korri-toggle-bottom-keyboard"
   chmod 0644 "$tmpdir/korri-electrobun-control-lib"
 
   log "Installing session/input action commands on $ODIN_HOST:/storage/bin"
@@ -314,12 +390,13 @@ REMOTE_SCRIPT
     "$tmpdir/korri-session-toggle" \
     "$tmpdir/korri-electrobun-control-lib" \
     "$tmpdir/korri-kill-active-application" \
+    "$tmpdir/korri-swap-screens" \
     "$tmpdir/korri-toggle-bottom-keyboard" \
     "$ODIN_HOST:/storage/bin/"
 
   ssh_odin "KORRI_SESSIOND_URL='$KORRI_SESSIOND_URL' KORRI_SESSIOND_TOKEN_FILE='$KORRI_SESSIOND_TOKEN_FILE' bash -s" <<'REMOTE'
 set -euo pipefail
-chmod 0755 /storage/bin/korri-session-toggle /storage/bin/korri-kill-active-application /storage/bin/korri-toggle-bottom-keyboard
+chmod 0755 /storage/bin/korri-session-toggle /storage/bin/korri-kill-active-application /storage/bin/korri-swap-screens /storage/bin/korri-toggle-bottom-keyboard
 chmod 0644 /storage/bin/korri-electrobun-control-lib
 legacy_pids=""
 for p in /proc/[0-9]*; do
@@ -332,6 +409,7 @@ done
 rm -f /storage/bin/korri-toggle-daemon /storage/bin/korri-go-chromium /storage/korri-toggle-daemon.pid
 bash -n /storage/bin/korri-session-toggle
 bash -n /storage/bin/korri-kill-active-application
+bash -n /storage/bin/korri-swap-screens
 bash -n /storage/bin/korri-toggle-bottom-keyboard
 /storage/bin/korri-session-toggle status || true
 REMOTE
@@ -351,7 +429,7 @@ for p in /proc/[0-9]*; do
   [ "$exe" = "/storage/bin/korri-toggle-daemon" ] && legacy_pids="$legacy_pids $pid"
 done
 [ -z "$legacy_pids" ] || kill -TERM $legacy_pids 2>/dev/null || true
-rm -f /storage/bin/korri-session-toggle /storage/bin/korri-electrobun-control-lib /storage/bin/korri-kill-active-application /storage/bin/korri-toggle-bottom-keyboard /storage/bin/korri-go-chromium /storage/bin/korri-toggle-daemon /storage/korri-toggle-daemon.pid
+rm -f /storage/bin/korri-session-toggle /storage/bin/korri-electrobun-control-lib /storage/bin/korri-kill-active-application /storage/bin/korri-swap-screens /storage/bin/korri-toggle-bottom-keyboard /storage/bin/korri-go-chromium /storage/bin/korri-toggle-daemon /storage/korri-toggle-daemon.pid
 REMOTE
 }
 

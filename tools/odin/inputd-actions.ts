@@ -244,7 +244,7 @@ function defaultCommands(): Required<InputdActionCommands> {
       "suspend",
     ]),
     lidOpened: commandFromEnv("KORRI_INPUTD_LID_OPENED", "true", []),
-    screenSwitch: { command: "/usr/bin/screen_switch", args: [] },
+    screenSwitch: { command: "/storage/bin/korri-swap-screens", args: [] },
     workspacePrev: buildSwayShortcutCommand("workspace-prev"),
     workspaceNext: buildSwayShortcutCommand("workspace-next"),
     moveOutputUp: buildSwayShortcutCommand("move-output-up"),

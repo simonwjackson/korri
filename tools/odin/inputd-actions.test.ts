@@ -148,6 +148,16 @@ describe("inputd actions", () => {
     ])
   })
 
+  it("runs the Odin screen swap helper by default", async () => {
+    const { dispatcher, commands } = createHarness()
+
+    await dispatcher.dispatch("screen-switch")
+
+    expect(commands).toEqual([
+      { command: "/storage/bin/korri-swap-screens", args: [] },
+    ])
+  })
+
   it("runs the configured screen switch command", async () => {
     const commands: InputdActionCommand[] = []
     const dispatcher = createInputdActionDispatcher({

@@ -27,7 +27,12 @@ export function selectBottomOutput(
 ): SwayOutputSnapshot | undefined {
   return [...outputs]
     .filter(output => output.active !== false && output.rect)
-    .sort((a, b) => (b.rect?.y ?? 0) - (a.rect?.y ?? 0))[0]
+    .sort((a, b) => {
+      const yDelta = (b.rect?.y ?? 0) - (a.rect?.y ?? 0)
+      if (yDelta !== 0) return yDelta
+
+      return (b.rect?.x ?? 0) - (a.rect?.x ?? 0)
+    })[0]
 }
 
 export function buildBottomKeyboardCommand(
@@ -45,7 +50,12 @@ export function buildBottomKeyboardCommand(
     options.configuredOutput?.trim() ||
     selectBottomOutput(options.outputs ?? [])?.name ||
     ""
-  const expanded = raw.replaceAll("{output}", shellQuote(output))
+  const hasOutputPlaceholder = raw.includes("{output}")
+  const expanded = hasOutputPlaceholder
+    ? raw.replaceAll("{output}", output)
+    : output && isWvkbdCommand(raw)
+      ? `${raw} --output ${output}`
+      : raw
   const [command, ...args] = expanded.split(/\s+/).filter(Boolean)
   if (!command) {
     return { warning: "bottom keyboard command resolved to an empty command" }
@@ -54,7 +64,8 @@ export function buildBottomKeyboardCommand(
   return { command: { command, args } }
 }
 
-function shellQuote(value: string): string {
-  if (!value) return ""
-  return `'${value.replaceAll("'", "'\\''")}'`
+function isWvkbdCommand(raw: string): boolean {
+  const [command] = raw.trim().split(/\s+/)
+  const commandBase = command?.split("/").pop()
+  return commandBase === "wvkbd" || commandBase === "wvkbd-mobintl"
 }
