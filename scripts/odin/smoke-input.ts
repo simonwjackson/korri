@@ -98,20 +98,23 @@ async function expectInactiveSubscriptionQuiet(): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     let settled = false
     let sawDevice = false
-    const timeout = setTimeout(() => {
-      if (settled) return
-      settled = true
-      ws.close()
-      if (!sawDevice) {
-        reject(
-          new Error(
-            `timed out waiting for inactive subscription device frame from ${url}`,
-          ),
-        )
-        return
-      }
-      resolve()
-    }, Math.max(timeoutMs, inactiveWindowMs))
+    const timeout = setTimeout(
+      () => {
+        if (settled) return
+        settled = true
+        ws.close()
+        if (!sawDevice) {
+          reject(
+            new Error(
+              `timed out waiting for inactive subscription device frame from ${url}`,
+            ),
+          )
+          return
+        }
+        resolve()
+      },
+      Math.max(timeoutMs, inactiveWindowMs),
+    )
 
     const quietTimer = setTimeout(() => {
       if (settled || !sawDevice) return

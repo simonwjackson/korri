@@ -493,7 +493,10 @@ describe("korri inputd", () => {
     const client = connectClient(handle.port)
     await client.open()
     client.ws.send(
-      JSON.stringify({ classes: ["gamepad", "system"], standardInputActive: false }),
+      JSON.stringify({
+        classes: ["gamepad", "system"],
+        standardInputActive: false,
+      }),
     )
     await client.nextMessage()
 
