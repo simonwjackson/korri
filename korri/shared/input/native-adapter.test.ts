@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import type { NativeInputActivityListener } from "./native-activity"
 import { createNativeInputAdapter } from "./native-adapter"
 import type { InputAction } from "./types"
 
@@ -84,6 +85,7 @@ function startAdapter(server: InputServer, options = {}) {
     reconnect: { initialDelayMs: 20, maxDelayMs: 20, factor: 1 },
     repeatDelayMs: 20,
     repeatIntervalMs: 10,
+    activity: false,
     ...options,
   }).start(action => emitted.push(action))
   disposers.push(dispose)
@@ -94,6 +96,22 @@ async function waitForSubscription(server: InputServer) {
   await waitFor(() => server.messages.length > 0, "subscription frame")
 }
 
+function createControllableActivity(initial: boolean) {
+  let active = initial
+  const listeners = new Set<NativeInputActivityListener>()
+  return {
+    current: () => active,
+    subscribe(listener: NativeInputActivityListener) {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    setActive(next: boolean) {
+      active = next
+      for (const listener of [...listeners]) listener(active)
+    },
+  }
+}
+
 describe("createNativeInputAdapter", () => {
   it("subscribes to gamepad-class bridge events on connect", async () => {
     const server = createInputServer()
@@ -101,7 +119,10 @@ describe("createNativeInputAdapter", () => {
 
     await waitForSubscription(server)
 
-    expect(server.messages[0]).toEqual({ classes: ["gamepad"] })
+    expect(server.messages[0]).toEqual({
+      classes: ["gamepad"],
+      standardInputActive: true,
+    })
   })
 
   it("maps gamepad button presses to semantic actions", async () => {
@@ -214,6 +235,107 @@ describe("createNativeInputAdapter", () => {
 
     await waitFor(() => emitted.length === 1, "system action")
     expect(emitted).toEqual([{ type: "system", source: "native" }])
+  })
+
+  it("suppresses standard semantic actions while inactive", async () => {
+    const server = createInputServer()
+    const activity = createControllableActivity(false)
+    const emitted = startAdapter(server, { activity })
+    await waitForSubscription(server)
+
+    expect(server.messages[0]).toEqual({
+      classes: ["gamepad"],
+      standardInputActive: false,
+    })
+
+    server.send(inputEvent({ code: 304, value: 1 }))
+    server.send(inputEvent({ type: 3, code: 16, value: 1 }))
+    await Bun.sleep(30)
+
+    expect(emitted).toEqual([])
+  })
+
+  it("resubscribes and resumes standard input after becoming active", async () => {
+    const server = createInputServer()
+    const activity = createControllableActivity(false)
+    const emitted = startAdapter(server, { activity })
+    await waitForSubscription(server)
+
+    activity.setActive(true)
+    await waitFor(
+      () =>
+        server.messages.some(
+          message =>
+            JSON.stringify(message) ===
+            JSON.stringify({
+              classes: ["gamepad"],
+              standardInputActive: true,
+            }),
+        ),
+      "active resubscription",
+    )
+
+    server.send(inputEvent({ code: 304, value: 1 }))
+
+    await waitFor(() => emitted.length === 1, "input after activity resumes")
+    expect(emitted).toEqual([{ type: "confirm", source: "native" }])
+  })
+
+  it("clears held direction state when becoming inactive", async () => {
+    const server = createInputServer()
+    const activity = createControllableActivity(true)
+    const emitted = startAdapter(server, {
+      activity,
+      repeatDelayMs: 20,
+      repeatIntervalMs: 10,
+    })
+    await waitForSubscription(server)
+
+    server.send(inputEvent({ code: 547, value: 1 }))
+    await waitFor(() => emitted.length >= 1, "initial held direction")
+    activity.setActive(false)
+    const countAfterInactive = emitted.length
+    await Bun.sleep(50)
+
+    expect(emitted).toHaveLength(countAfterInactive)
+  })
+
+  it("allows explicit inactive action frames only when configured", async () => {
+    const blockedServer = createInputServer()
+    const blockedActivity = createControllableActivity(false)
+    const blocked = startAdapter(blockedServer, {
+      activity: blockedActivity,
+      subscribe: ["gamepad", "system"],
+    })
+    await waitForSubscription(blockedServer)
+
+    blockedServer.send({
+      kind: "action",
+      class: "system",
+      action: "system",
+      timestamp: Date.now(),
+    })
+    await Bun.sleep(20)
+    expect(blocked).toEqual([])
+
+    const allowedServer = createInputServer()
+    const allowedActivity = createControllableActivity(false)
+    const allowed = startAdapter(allowedServer, {
+      activity: allowedActivity,
+      subscribe: ["gamepad", "system"],
+      inactiveActions: ["system"],
+    })
+    await waitForSubscription(allowedServer)
+
+    allowedServer.send({
+      kind: "action",
+      class: "system",
+      action: "system",
+      timestamp: Date.now(),
+    })
+
+    await waitFor(() => allowed.length === 1, "inactive system action")
+    expect(allowed).toEqual([{ type: "system", source: "native" }])
   })
 
   it("ignores non-gamepad input events and device lifecycle events", async () => {

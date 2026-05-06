@@ -1,5 +1,10 @@
 import { createLogger } from "@shared/logger"
 import {
+  alwaysActiveNativeInputActivitySource,
+  createBrowserNativeInputActivitySource,
+  type NativeInputActivitySource,
+} from "./native-activity"
+import {
   decodeNativeInputEvent,
   decodeNativeInputSubscription,
   encodeNativeInputSubscription,
@@ -49,6 +54,8 @@ export interface NativeInputReconnectOptions {
   readonly factor?: number
 }
 
+export type NativeInputInactiveAction = "system"
+
 export interface NativeInputAdapterOptions {
   readonly url: string
   readonly subscribe?: readonly NativeInputDeviceClass[]
@@ -58,6 +65,10 @@ export interface NativeInputAdapterOptions {
   readonly repeatIntervalMs?: number
   /** Safety valve: stop a held direction if no refresh/release arrives. */
   readonly staleReleaseMs?: number
+  /** Gate standard input by renderer activity. Defaults to browser focus/visibility. */
+  readonly activity?: false | NativeInputActivitySource
+  /** Explicit daemon action frames that may emit while standard input is inactive. */
+  readonly inactiveActions?: readonly NativeInputInactiveAction[]
 }
 
 export function createNativeInputAdapter(
@@ -74,6 +85,11 @@ export function createNativeInputAdapter(
   const reconnectMaxDelayMs =
     options.reconnect?.maxDelayMs ?? DEFAULT_RECONNECT_MAX_DELAY_MS
   const reconnectFactor = options.reconnect?.factor ?? DEFAULT_RECONNECT_FACTOR
+  const activitySource =
+    options.activity === false
+      ? alwaysActiveNativeInputActivitySource
+      : (options.activity ?? createBrowserNativeInputActivitySource())
+  const inactiveActions = new Set(options.inactiveActions ?? [])
 
   return {
     name: "native",
@@ -91,6 +107,7 @@ export function createNativeInputAdapter(
       const axes = new Map<string, { x: number; y: number }>()
       let socket: WebSocket | undefined
       let disposed = false
+      let standardInputActive = activitySource.current()
       let reconnectTimer: ReturnType<typeof setTimeout> | undefined
       let nextReconnectDelayMs = reconnectInitialDelayMs
 
@@ -150,6 +167,18 @@ export function createNativeInputAdapter(
         axes.clear()
       }
 
+      const sendSubscription = () => {
+        if (!socket || socket.readyState !== WebSocket.OPEN) return
+        socket.send(encodeSubscription(subscribe, standardInputActive))
+      }
+
+      const disposeActivity = activitySource.subscribe(active => {
+        if (standardInputActive === active) return
+        standardInputActive = active
+        if (!standardInputActive) resetState()
+        sendSubscription()
+      })
+
       const connect = () => {
         if (disposed) return
 
@@ -159,7 +188,7 @@ export function createNativeInputAdapter(
         socket.addEventListener("open", () => {
           reportNativeInputDiagnostic("open", { url: options.url })
           nextReconnectDelayMs = reconnectInitialDelayMs
-          socket?.send(encodeSubscription(subscribe))
+          sendSubscription()
         })
 
         socket.addEventListener("message", event => {
@@ -168,7 +197,10 @@ export function createNativeInputAdapter(
               JSON.parse(String(event.data)),
             )
             if (decoded.kind === "action") {
-              if (decoded.action === "system") {
+              if (
+                decoded.action === "system" &&
+                (standardInputActive || inactiveActions.has("system"))
+              ) {
                 reportNativeInputDiagnostic("emit", {
                   action: "system",
                   source: "native",
@@ -178,6 +210,7 @@ export function createNativeInputAdapter(
               return
             }
             if (decoded.kind !== "input") return
+            if (!standardInputActive) return
             if (decoded.class !== "gamepad") return
             handleGamepadInput(decoded, emit, {
               startHold,
@@ -219,6 +252,7 @@ export function createNativeInputAdapter(
 
       return () => {
         disposed = true
+        disposeActivity()
         if (reconnectTimer) clearTimeout(reconnectTimer)
         resetState()
         socket?.close()
@@ -400,10 +434,14 @@ function reportNativeInputDiagnostic(
 
 function encodeSubscription(
   classes: readonly NativeInputDeviceClass[],
+  standardInputActive: boolean,
 ): string {
   return JSON.stringify(
     encodeNativeInputSubscription(
-      decodeNativeInputSubscription({ classes: [...classes] }),
+      decodeNativeInputSubscription({
+        classes: [...classes],
+        standardInputActive,
+      }),
     ),
   )
 }

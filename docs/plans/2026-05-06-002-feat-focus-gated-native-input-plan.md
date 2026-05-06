@@ -167,7 +167,7 @@ sequenceDiagram
 **Verification:**
 - Inputd can distinguish standard raw input delivery from explicit app-directed action delivery while keeping old clients working.
 
-- [ ] **Unit 2: Add a renderer activity provider and adapter-side semantic gate**
+- [x] **Unit 2: Add a renderer activity provider and adapter-side semantic gate**
 
 **Goal:** Teach the native adapter to track renderer focus/visibility, update inputd subscriptions when activity changes, and suppress standard semantic emissions while inactive.
 
