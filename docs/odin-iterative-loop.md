@@ -135,7 +135,7 @@ Save and Vite HMRs the dev machine browser. No remote action required.
 just check-odin
 ```
 
-Hits the device directly at `ODIN_API_BASE_URL` and `ODIN_INPUT_BRIDGE_URL`, checks `/api/health`, `/api/rpc` `app.library.list`, and Korri inputd's gamepad subscription path, then exits non-zero with a clear log line if any check breaks. Equivalent to `just desktop-runtime-check` for this loop.
+Hits the device directly at `ODIN_API_BASE_URL` and `ODIN_INPUT_BRIDGE_URL`, checks `/api/health`, `/api/rpc` `app.library.list`, Korri inputd's device subscription path, and the focus gate for inactive standard input subscriptions, then exits non-zero with a clear log line if any check breaks. Equivalent to `just desktop-runtime-check` for this loop.
 
 ## Supervised renderer session (Level 3 + Layer 8 Electrobun candidate)
 
@@ -173,9 +173,15 @@ Electrobun remains an opt-in renderer candidate until it passes GPU acceptance o
 Korri inputd owns:
 
 - renderer native input streaming over the existing WebSocket contract
+- per-client standard input activity: focused Korri receives raw gamepad/system frames; unfocused or parked Korri clients keep device/action subscriptions but do not receive standard `input` frames
+- app-directed action exceptions, such as the semantic `system` action, as explicit `action` frames rather than raw input passthrough
 - kill-current-game (`L1+R1+Select+Start`) through `/tmp/.process-kill-data`
 - Korri session toggle (`L3+R3+Start`) through `/storage/bin/korri-session-toggle`
 - retained system actions: volume, brightness, power/lid, and screen switch via `/usr/bin/screen_switch`
+
+Renderer code also gates standard native input by browser focus/visibility before emitting semantic actions. This is defense-in-depth: current inputd suppresses inactive standard frames, and current renderers still ignore them if an older daemon sends them.
+
+Global inputd shortcuts remain global and focus-independent. Standard renderer actions (`direction`, `confirm`, `back`, `menu`, `options`) are active-window scoped. Any future in-game Korri overlay signal should be added as an explicit schema-backed action exception instead of widening raw input delivery.
 
 Korri intentionally does not carry forward `input_sense` screenshots, game guide, MangoHud toggle, or touchscreen-keyboard shortcuts.
 

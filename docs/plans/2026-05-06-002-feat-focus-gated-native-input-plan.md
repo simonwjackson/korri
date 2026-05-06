@@ -278,7 +278,7 @@ sequenceDiagram
 **Verification:**
 - The focus gate narrows renderer standard input without weakening global device policy.
 
-- [ ] **Unit 5: Add on-device smoke diagnostics and operator documentation**
+- [x] **Unit 5: Add on-device smoke diagnostics and operator documentation**
 
 **Goal:** Make the new behavior verifiable on Thor/Odin and document the active/inactive input ownership model.
 
