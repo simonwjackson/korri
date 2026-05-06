@@ -1,35 +1,3 @@
-<!-- BEGIN COMPOUND PI TOOL MAP -->
-## Compound Engineering (Pi compatibility)
-
-This block is managed by compound-plugin.
-
-Compatibility notes:
-- Claude Task(agent, args) maps to the subagent extension tool
-- For parallel agent runs, batch multiple subagent calls with multi_tool_use.parallel
-- AskUserQuestion maps to the ask_user_question extension tool
-- MCP access uses MCPorter via mcporter_list and mcporter_call extension tools
-- MCPorter config path: .pi/compound-engineering/mcporter.json (project) or ~/.pi/agent/compound-engineering/mcporter.json (global)
-<!-- END COMPOUND PI TOOL MAP -->
-
-# AGENTS.md — Korri
-
-This file holds what's specific to running inside an agent harness, and what's specific to this project. **The canonical engineering rulebook is `docs/development/`** — read those first.
-
-## Read first
-
-Substantive rules — philosophy, layering, testing posture, component architecture, frontend runtime stack, visual design — live in:
-
-- `docs/development/philosophy.md`
-- `docs/development/standards.md`
-- `docs/development/style-guide.md`
-
-This file does not duplicate those rules. It carries:
-
-1. Agent-harness compatibility (the Compound Pi tool map above).
-2. Project-specific layout, path aliases, and conventions.
-3. Project-specific tooling commands.
-4. Agent rules of engagement that govern *how* agents work, not *what* they should build.
-
 ## Project layout
 
 - Runtime app code: `korri/products/*`
@@ -43,10 +11,7 @@ This file does not duplicate those rules. It carries:
 - `@app/*` → `korri/products/app/*`
 - `@shared/*` → `korri/shared/*`
 
-Layering rule from `docs/development/standards.md`, instantiated for this repo:
-
-- Code under `korri/shared/themes/*`, `korri/shared/ui/*`, and other reusable shared layers MUST NOT import from `@app/*` or from product-specific transport (`@shared/api/rpc/runRpc`, `@shared/api/rpc/useRpcQuery`).
-- Pages and templates in `korri/shared/themes/*` compose Roots; the route in `korri/products/app/routes/*` is the composition root that picks one.
+The reusable shared layers covered by the no-product-imports rule include `korri/shared/themes/*` and `korri/shared/ui/*`. Pages and templates in `korri/shared/themes/*` compose Roots; the route in `korri/products/app/routes/*` is the composition root that picks one.
 
 ## RPC conventions
 
@@ -70,12 +35,8 @@ Multi RPC:
   save.rpc-handler.ts
 ```
 
-- Contracts defined with Effect Schema in `rpc.ts` / `*.rpc.ts`.
-- Handlers in `rpc-handler.ts` / `*.rpc-handler.ts`.
-- RPC tags follow `entity.concept.action`.
 - Reuse helpers from `@shared/api/rpc/*` where possible.
-- Typed errors come from `@shared/api/rpc/errors`, discriminated on `_tag`.
-- Generated files are read-only.
+- Typed errors come from `@shared/api/rpc/errors`.
 
 ## Feature gates
 
@@ -123,11 +84,6 @@ just generate-gates
 just generate-bdd
 just generate-feature-map
 ```
-
-## Project-specific quirks
-
-- TypeScript typechecking is whole-repo only because of path aliases — always run `just typecheck`, not per-file `tsc`.
-- Use `@shared/logger`, not `console.log`, in runtime code. `@shared/logger` is an intentional shared module entrypoint exception to the no-barrels default.
 
 ## Rules of engagement
 
