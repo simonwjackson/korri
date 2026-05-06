@@ -1,17 +1,17 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join, resolve } from "node:path"
 import { Launcher, LibrarySource } from "@shared/library/library-services"
+import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
+import { createLibraryRepository } from "@shared/library/proseql/library-repository"
 import { Effect } from "effect"
 import { withRpcServer } from "../../../../../tools/testing/library/with-rpc-server"
-import {
-  type TempLibrary,
-  withTempLibrary,
-} from "../../../../../tools/testing/library/with-temp-library"
 import { LauncherLayerRpc } from "./launcher-layer-rpc"
 import { LibrarySourceLayerRpc } from "./library-source-layer-rpc"
 
 const originalEnv = {
-  roots: process.env.KORRI_ROCKNIX_GAMELIST_ROOTS,
-  esSystems: process.env.KORRI_ROCKNIX_ES_SYSTEMS,
+  libraryRoot: process.env.KORRI_LIBRARY_ROOT,
   launchExitEnvValue: process.env.KORRI_FAKE_GAME_EXIT,
 }
 const originalLocation = {
@@ -20,6 +20,8 @@ const originalLocation = {
   hostname: window.location.hostname,
   pathname: window.location.pathname,
 }
+const REPO_ROOT = resolve(import.meta.dir, "../../../../..")
+const FAKE_GAME = join(REPO_ROOT, "tools", "testing", "fake-game.sh")
 
 afterEach(() => {
   restoreEnv()
@@ -65,18 +67,59 @@ describe("RPC-backed library layers", () => {
   })
 })
 
-async function seedLibrary(): Promise<TempLibrary> {
-  return withTempLibrary({
-    systems: [
-      {
-        name: "snes",
-        defaultEmulator: "retroarch",
-        defaultCore: "snes9x",
-        extension: [".smc"],
-        games: [{ path: "echo.smc", name: "RPC Echo" }],
-      },
-    ],
-  })
+type TempProseqlLibrary = {
+  readonly root: string
+  readonly cleanup: () => Promise<void>
+  readonly [Symbol.asyncDispose]: () => Promise<void>
+}
+
+async function seedLibrary(): Promise<TempProseqlLibrary> {
+  const root = await mkdtemp(join(tmpdir(), "korri-proseql-rpc-test-"))
+  let success = false
+  try {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+          const repository = createLibraryRepository(db)
+          yield* repository.upsertImportedGame({
+            game: {
+              id: "snes/echo.smc",
+              metadata: { name: "RPC Echo" },
+              userData: { lastPlayed: new Date("2026-05-01T00:00:00.000Z") },
+            },
+            launchTarget: {
+              id: "launch:snes/echo.smc",
+              gameId: "snes/echo.smc",
+              spec: {
+                command: FAKE_GAME,
+                args: [
+                  "/tmp/roms/snes/echo.smc",
+                  "-Psnes",
+                  "--core=snes9x",
+                  "--emulator=retroarch",
+                ],
+              },
+            },
+          })
+          yield* Effect.promise(() => db.flush())
+        }),
+      ),
+    )
+    success = true
+  } finally {
+    if (!success) await rm(root, { recursive: true, force: true })
+  }
+
+  const cleanup = async () => {
+    await rm(root, { recursive: true, force: true })
+  }
+
+  return {
+    root,
+    cleanup,
+    [Symbol.asyncDispose]: cleanup,
+  }
 }
 
 function pointWindowAt(baseUrl: string): void {
@@ -117,14 +160,12 @@ function setWindowLocation(location: {
   })
 }
 
-function configureLibraryEnv(lib: TempLibrary): void {
-  process.env.KORRI_ROCKNIX_GAMELIST_ROOTS = lib.rootDir
-  process.env.KORRI_ROCKNIX_ES_SYSTEMS = lib.esSystemsPath
+function configureLibraryEnv(lib: TempProseqlLibrary): void {
+  process.env.KORRI_LIBRARY_ROOT = lib.root
 }
 
 function restoreEnv(): void {
-  setOptionalEnv("KORRI_ROCKNIX_GAMELIST_ROOTS", originalEnv.roots)
-  setOptionalEnv("KORRI_ROCKNIX_ES_SYSTEMS", originalEnv.esSystems)
+  setOptionalEnv("KORRI_LIBRARY_ROOT", originalEnv.libraryRoot)
   setOptionalEnv("KORRI_FAKE_GAME_EXIT", originalEnv.launchExitEnvValue)
 }
 

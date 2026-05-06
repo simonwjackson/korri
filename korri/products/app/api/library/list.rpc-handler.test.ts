@@ -1,22 +1,26 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { rm } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { appRpcGroup } from "@app/api/app-rpc-group"
 import { DataError } from "@shared/api/rpc/errors"
-import { LibraryError, LibrarySource } from "@shared/library/library-services"
-import { makeFailingLibrarySourceLayer } from "@shared/library/library-source-layer-memory"
-import { createRocknixSource } from "@shared/library/rocknix/rocknix-source"
-import { Cause, Effect, Exit, Layer } from "effect"
-import { withTempLibrary } from "../../../../../tools/testing/library/with-temp-library"
+import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
+import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
+import { createLibraryRepository } from "@shared/library/proseql/library-repository"
+import { Cause, Effect, Exit } from "effect"
 
 import { handleListLibrary } from "./list.rpc-handler"
 
+const originalLibraryRoot = process.env.KORRI_LIBRARY_ROOT
 const cleanups: Array<() => Promise<void>> = []
+
 function track<T extends { cleanup: () => Promise<void> }>(lib: T): T {
   cleanups.push(lib.cleanup)
   return lib
 }
 
 afterEach(async () => {
+  setOptionalEnv("KORRI_LIBRARY_ROOT", originalLibraryRoot)
   while (cleanups.length > 0) {
     const c = cleanups.pop()
     if (c) await c()
@@ -26,57 +30,45 @@ afterEach(async () => {
 describe("app.library.list handler (configured-real source)", () => {
   it("returns { games } sorted by lastPlayed desc", async () => {
     const lib = track(
-      await withTempLibrary({
-        systems: [
+      await withTempProseqlLibrary({
+        games: [
           {
-            name: "snes",
-            defaultEmulator: "retroarch",
-            defaultCore: "snes9x",
-            extension: [".smc"],
-            games: [
-              { path: "old.smc", name: "Old", lastPlayed: "20240101T000000" },
-              { path: "new.smc", name: "New", lastPlayed: "20260501T000000" },
-            ],
+            id: "snes/old.smc",
+            metadata: { name: "Old" },
+            userData: { lastPlayed: new Date("2024-01-01T00:00:00.000Z") },
+          },
+          {
+            id: "snes/new.smc",
+            metadata: { name: "New" },
+            userData: { lastPlayed: new Date("2026-05-01T00:00:00.000Z") },
           },
         ],
       }),
     )
+    process.env.KORRI_LIBRARY_ROOT = lib.root
 
     const result = await Effect.runPromise(
-      handleListLibrary({}).pipe(Effect.provide(rocknixSourceLayer(lib))),
+      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
     )
     expect(result.games.map(g => g.metadata?.name)).toEqual(["New", "Old"])
   })
 
-  it("returns { games: [] } for an empty library (es_systems.cfg present, no game entries)", async () => {
-    const lib = track(
-      await withTempLibrary({
-        systems: [
-          {
-            name: "snes",
-            defaultEmulator: "retroarch",
-            defaultCore: "snes9x",
-            extension: [".smc"],
-            games: [],
-          },
-        ],
-      }),
-    )
+  it("returns { games: [] } for an empty ProseQL library", async () => {
+    const lib = track(await withTempProseqlLibrary({ games: [] }))
+    process.env.KORRI_LIBRARY_ROOT = lib.root
+
     const result = await Effect.runPromise(
-      handleListLibrary({}).pipe(Effect.provide(rocknixSourceLayer(lib))),
+      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
     )
     expect(result.games).toEqual([])
   })
 
-  it("fails with DataError(ReadFailed) when the source's list() fails", async () => {
+  it("fails with DataError(ReadFailed) when ProseQL data is invalid", async () => {
+    const lib = track(await withInvalidProseqlLibrary())
+    process.env.KORRI_LIBRARY_ROOT = lib.root
+
     const exit = await Effect.runPromiseExit(
-      handleListLibrary({}).pipe(
-        Effect.provide(
-          makeFailingLibrarySourceLayer(
-            new LibraryError({ reason: "io", message: "disk on fire" }),
-          ),
-        ),
-      ),
+      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
     )
     expect(Exit.isFailure(exit)).toBe(true)
     if (Exit.isFailure(exit)) {
@@ -84,31 +76,8 @@ describe("app.library.list handler (configured-real source)", () => {
       expect(error).toBeInstanceOf(DataError)
       if (error instanceof DataError) {
         expect(error.reason).toBe("ReadFailed")
-        expect(error.message).toContain("disk on fire")
       }
     }
-  })
-
-  it("integration: also reflects unlinking es_systems.cfg between configure and call", async () => {
-    const lib = track(
-      await withTempLibrary({
-        systems: [
-          {
-            name: "snes",
-            defaultEmulator: "retroarch",
-            defaultCore: "snes9x",
-            extension: [".smc"],
-            games: [{ path: "a.smc", name: "A" }],
-          },
-        ],
-      }),
-    )
-    await rm(lib.esSystemsPath, { force: true })
-    const result = await Effect.runPromise(
-      handleListLibrary({}).pipe(Effect.provide(rocknixSourceLayer(lib))),
-    )
-    // RocknixSource degrades gracefully — empty list, not a DataError.
-    expect(result.games).toEqual([])
   })
 
   it("integration: app.library.list is registered on appRpcGroup", () => {
@@ -117,35 +86,70 @@ describe("app.library.list handler (configured-real source)", () => {
   })
 })
 
-function rocknixSourceLayer(lib: {
-  readonly rootDir: string
-  readonly esSystemsPath: string
-  readonly launchCommand: string
-}) {
-  const source = createRocknixSource({
-    gamelistRoots: [lib.rootDir],
-    esSystemsPath: lib.esSystemsPath,
-    launchCommand: lib.launchCommand,
-  })
+type TempProseqlLibrary = {
+  readonly root: string
+  readonly cleanup: () => Promise<void>
+}
 
-  return Layer.succeed(LibrarySource)({
-    list: () =>
-      Effect.tryPromise({
-        try: () => source.list(),
-        catch: error =>
-          new LibraryError({
-            reason: "io",
-            message: error instanceof Error ? error.message : String(error),
-          }),
-      }),
-    launchSpecFor: id =>
-      Effect.tryPromise({
-        try: () => source.launchSpecFor(id),
-        catch: error =>
-          new LibraryError({
-            reason: "io",
-            message: error instanceof Error ? error.message : String(error),
-          }),
-      }),
-  })
+async function withTempProseqlLibrary(options: {
+  readonly games: readonly {
+    readonly id: string
+    readonly metadata?: { readonly name?: string }
+    readonly userData?: { readonly lastPlayed?: Date }
+  }[]
+}): Promise<TempProseqlLibrary> {
+  const root = await mkdtemp(join(tmpdir(), "korri-proseql-list-test-"))
+  let success = false
+  try {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+          const repository = createLibraryRepository(db)
+          for (const game of options.games) {
+            yield* repository.upsertGame(game)
+          }
+          yield* Effect.promise(() => db.flush())
+        }),
+      ),
+    )
+    success = true
+  } finally {
+    if (!success) await rm(root, { recursive: true, force: true })
+  }
+
+  return {
+    root,
+    cleanup: () => rm(root, { recursive: true, force: true }),
+  }
+}
+
+async function withInvalidProseqlLibrary(): Promise<TempProseqlLibrary> {
+  const root = await mkdtemp(join(tmpdir(), "korri-proseql-invalid-test-"))
+  let success = false
+  try {
+    await mkdir(root, { recursive: true })
+    await writeFile(
+      join(root, "games.yaml"),
+      ["bad:", "  id: 123", "_version: 1", ""].join("\n"),
+      "utf8",
+    )
+    success = true
+  } finally {
+    if (!success) await rm(root, { recursive: true, force: true })
+  }
+
+  return {
+    root,
+    cleanup: () => rm(root, { recursive: true, force: true }),
+  }
+}
+
+function setOptionalEnv(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key]
+    return
+  }
+
+  process.env[key] = value
 }

@@ -1,60 +1,51 @@
-import { logger } from "@shared/logger/logger"
+import { logger } from "@shared/logger"
 import { Effect, Layer } from "effect"
 import { LibraryError, LibrarySource } from "./library-services"
+import { openKorriLibraryDb } from "./proseql/library-db"
 import {
-  createRocknixSource,
-  defaultRocknixConfig,
-  type RocknixConfig,
-} from "./rocknix/rocknix-source"
+  createLibraryRepository,
+  type LibraryRepository,
+} from "./proseql/library-repository"
+
+const DEFAULT_LIBRARY_ROOT = "/storage/korri/library"
 
 export const LibrarySourceLayerLive = Layer.succeed(LibrarySource)({
   list: () =>
-    Effect.tryPromise({
-      try: () => createRocknixSource(buildRocknixConfigFromEnv()).list(),
-      catch: error =>
-        new LibraryError({
-          reason: "io",
-          message: error instanceof Error ? error.message : String(error),
-        }),
-    }),
+    withLibraryRepository(repository => repository.listGames(), "list"),
   launchSpecFor: id =>
-    Effect.tryPromise({
-      try: () =>
-        createRocknixSource(buildRocknixConfigFromEnv()).launchSpecFor(id),
-      catch: error =>
-        new LibraryError({
-          reason: "io",
-          message: error instanceof Error ? error.message : String(error),
-        }),
-    }),
+    withLibraryRepository(
+      repository => repository.launchSpecForGame(id),
+      "launchSpecFor",
+    ),
 })
 
-function buildRocknixConfigFromEnv(): RocknixConfig {
-  const rootsRaw = process.env.KORRI_ROCKNIX_GAMELIST_ROOTS
-  const esSystemsPathRaw = process.env.KORRI_ROCKNIX_ES_SYSTEMS
-  const mediaRootRaw = process.env.KORRI_ROCKNIX_MEDIA_ROOT
+function withLibraryRepository<T>(
+  useRepository: (repository: LibraryRepository) => Effect.Effect<T, unknown>,
+  operation: string,
+): Effect.Effect<T, LibraryError> {
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const root = buildLibraryRootFromEnv()
+      logger.info(
+        { sourceKind: "proseql", operation, root },
+        "library-source-layer-live: opening ProseQL library",
+      )
+      const db = yield* openKorriLibraryDb({ root })
+      return yield* useRepository(createLibraryRepository(db))
+    }),
+  ).pipe(Effect.mapError(toLibraryError))
+}
 
-  const defaults = defaultRocknixConfig()
-  const gamelistRoots =
-    rootsRaw && rootsRaw.trim() !== ""
-      ? rootsRaw
-          .split(":")
-          .map(s => s.trim())
-          .filter(s => s.length > 0)
-      : defaults.gamelistRoots
-  const esSystemsPath =
-    esSystemsPathRaw && esSystemsPathRaw.trim() !== ""
-      ? esSystemsPathRaw.trim()
-      : defaults.esSystemsPath
+function buildLibraryRootFromEnv(): string {
+  const rootRaw = process.env.KORRI_LIBRARY_ROOT
+  return rootRaw && rootRaw.trim() !== ""
+    ? rootRaw.trim()
+    : DEFAULT_LIBRARY_ROOT
+}
 
-  const mediaRoot =
-    mediaRootRaw && mediaRootRaw.trim() !== ""
-      ? mediaRootRaw.trim()
-      : defaults.mediaRoot
-
-  logger.info(
-    { sourceKind: "rocknix" },
-    "library-source-layer-live: built from env",
-  )
-  return { gamelistRoots, esSystemsPath, mediaRoot }
+function toLibraryError(error: unknown): LibraryError {
+  return new LibraryError({
+    reason: "io",
+    message: error instanceof Error ? error.message : String(error),
+  })
 }

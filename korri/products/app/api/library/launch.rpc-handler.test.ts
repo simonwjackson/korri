@@ -1,21 +1,29 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join, resolve } from "node:path"
 import { appRpcGroup } from "@app/api/app-rpc-group"
 import { NotFoundError } from "@shared/api/rpc/errors"
 import {
   Launcher,
   LibraryError,
-  LibrarySource,
+  type LibrarySource,
 } from "@shared/library/library-services"
-import { createRocknixSource } from "@shared/library/rocknix/rocknix-source"
+import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
+import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
+import { createLibraryRepository } from "@shared/library/proseql/library-repository"
 import { createShellLauncher } from "@shared/library/shell-launcher"
 import { Cause, Effect, Exit, Layer } from "effect"
-import { withTempLibrary } from "../../../../../tools/testing/library/with-temp-library"
 
 import { handleLaunchLibrary } from "./launch.rpc-handler"
 
+const originalLibraryRoot = process.env.KORRI_LIBRARY_ROOT
 const cleanups: Array<() => Promise<void>> = []
+const REPO_ROOT = resolve(import.meta.dir, "../../../../..")
+const FAKE_GAME = join(REPO_ROOT, "tools", "testing", "fake-game.sh")
 
 afterEach(async () => {
+  setOptionalEnv("KORRI_LIBRARY_ROOT", originalLibraryRoot)
   while (cleanups.length > 0) {
     const c = cleanups.pop()
     if (c) await c()
@@ -25,30 +33,11 @@ afterEach(async () => {
 async function layerForFakeGame(exitCode: number): Promise<{
   layer: Layer.Layer<LibrarySource | Launcher>
 }> {
-  const lib = await withTempLibrary({
-    systems: [
-      {
-        name: "snes",
-        defaultEmulator: "retroarch",
-        defaultCore: "snes9x",
-        extension: [".smc"],
-        games: [{ path: "echo.smc", name: "Echo" }],
-      },
-    ],
-  })
+  const lib = await withTempProseqlLibrary()
   cleanups.push(lib.cleanup)
-
-  const source = createRocknixSource({
-    gamelistRoots: [lib.rootDir],
-    esSystemsPath: lib.esSystemsPath,
-    launchCommand: lib.launchCommand,
-  })
+  process.env.KORRI_LIBRARY_ROOT = lib.root
 
   const realLauncher = createShellLauncher()
-  const sourceLayer = Layer.succeed(LibrarySource)({
-    list: () => Effect.tryPromise(() => source.list()),
-    launchSpecFor: id => Effect.tryPromise(() => source.launchSpecFor(id)),
-  })
   const launcherLayer = Layer.succeed(Launcher)({
     run: spec =>
       Effect.tryPromise({
@@ -68,11 +57,11 @@ async function layerForFakeGame(exitCode: number): Promise<{
       }),
   })
 
-  return { layer: Layer.merge(sourceLayer, launcherLayer) }
+  return { layer: Layer.merge(LibrarySourceLayerLive, launcherLayer) }
 }
 
 describe("app.library.launch handler (configured-real launcher + fake-game.sh)", () => {
-  it("returns { status: 'launched' } for a known id with KORRI_FAKE_GAME_EXIT=0", async () => {
+  it("returns { status: 'launched' } for a known ProseQL-backed id with KORRI_FAKE_GAME_EXIT=0", async () => {
     const { layer } = await layerForFakeGame(0)
     const result = await Effect.runPromise(
       handleLaunchLibrary({ id: "snes/echo.smc" }).pipe(Effect.provide(layer)),
@@ -113,3 +102,61 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     expect(tags).toContain("app.library.launch")
   })
 })
+
+type TempProseqlLibrary = {
+  readonly root: string
+  readonly cleanup: () => Promise<void>
+}
+
+async function withTempProseqlLibrary(): Promise<TempProseqlLibrary> {
+  const root = await mkdtemp(join(tmpdir(), "korri-proseql-launch-test-"))
+  let success = false
+  try {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+          const repository = createLibraryRepository(db)
+          yield* repository.upsertImportedGame({
+            game: {
+              id: "snes/echo.smc",
+              metadata: { name: "Echo" },
+              userData: { lastPlayed: new Date("2026-05-01T00:00:00.000Z") },
+            },
+            launchTarget: {
+              id: "launch:snes/echo.smc",
+              gameId: "snes/echo.smc",
+              spec: {
+                command: FAKE_GAME,
+                args: [
+                  "/tmp/roms/snes/echo.smc",
+                  "-Psnes",
+                  "--core=snes9x",
+                  "--emulator=retroarch",
+                ],
+              },
+            },
+          })
+          yield* Effect.promise(() => db.flush())
+        }),
+      ),
+    )
+    success = true
+  } finally {
+    if (!success) await rm(root, { recursive: true, force: true })
+  }
+
+  return {
+    root,
+    cleanup: () => rm(root, { recursive: true, force: true }),
+  }
+}
+
+function setOptionalEnv(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key]
+    return
+  }
+
+  process.env[key] = value
+}
