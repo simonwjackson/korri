@@ -3,6 +3,7 @@
   src,
   bunDeps,
   nativeBridgeUrl ? null,
+  nativeActivityUrl ? null,
 }:
 
 pkgs.stdenv.mkDerivation {
@@ -39,6 +40,9 @@ pkgs.stdenv.mkDerivation {
 
     ${pkgs.lib.optionalString (nativeBridgeUrl != null) ''
       export VITE_KORRI_NATIVE_BRIDGE_URL=${pkgs.lib.escapeShellArg nativeBridgeUrl}
+    ''}
+    ${pkgs.lib.optionalString (nativeActivityUrl != null) ''
+      export VITE_KORRI_NATIVE_ACTIVITY_URL=${pkgs.lib.escapeShellArg nativeActivityUrl}
     ''}
     node node_modules/vite/bin/vite.js build --mode production
 

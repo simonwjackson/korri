@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test"
-import { createBrowserNativeInputActivitySource } from "./native-activity"
+import {
+  createBrowserNativeInputActivitySource,
+  createHttpNativeInputActivitySource,
+} from "./native-activity"
 
 class EventTargetLike extends EventTarget {
   addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
@@ -95,3 +98,46 @@ describe("browser native input activity source", () => {
     expect(states).toEqual([])
   })
 })
+
+describe("HTTP native input activity source", () => {
+  it("polls activity from an endpoint and notifies on changes", async () => {
+    const responses = [true, false]
+    const source = createHttpNativeInputActivitySource({
+      url: "/__korri/native-input-active",
+      intervalMs: 10_000,
+      fetchImpl: async () =>
+        Response.json({ active: responses.shift() ?? false }),
+    })
+    const states: boolean[] = []
+
+    const unsubscribe = source.subscribe(active => states.push(active))
+    await tick()
+    expect(source.current()).toBe(true)
+
+    unsubscribe()
+    expect(states).toEqual([true])
+  })
+
+  it("treats request failures as inactive", async () => {
+    const source = createHttpNativeInputActivitySource({
+      url: "/__korri/native-input-active",
+      initialActive: true,
+      intervalMs: 10_000,
+      fetchImpl: async () => {
+        throw new Error("network unavailable")
+      },
+    })
+    const states: boolean[] = []
+
+    const unsubscribe = source.subscribe(active => states.push(active))
+    await tick()
+    unsubscribe()
+
+    expect(source.current()).toBe(false)
+    expect(states).toEqual([false])
+  })
+})
+
+function tick(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 0))
+}

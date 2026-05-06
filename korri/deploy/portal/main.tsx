@@ -1,3 +1,4 @@
+import { createHttpNativeInputActivitySource } from "@shared/input/native-activity"
 import {
   type ControllerInputProfile,
   isControllerInputProfile,
@@ -30,6 +31,7 @@ ReactDOM.createRoot(rootElement).render(<RouterProvider router={router} />)
 // bridge URL and therefore use inputd as the single authoritative controller
 // backend. Components stay native HTML either way.
 const nativeBridgeUrl = import.meta.env.VITE_KORRI_NATIVE_BRIDGE_URL
+const nativeActivityUrl = import.meta.env.VITE_KORRI_NATIVE_ACTIVITY_URL
 const controllerProfile = readControllerInputProfile(
   import.meta.env.VITE_KORRI_CONTROLLER_PROFILE,
 )
@@ -41,6 +43,9 @@ startSpatialNavigation({
       ? {
           url: nativeBridgeUrl,
           subscribe: ["gamepad", "system"],
+          activity: nativeActivityUrl
+            ? createHttpNativeInputActivitySource({ url: nativeActivityUrl })
+            : undefined,
           inactiveActions: ["system"],
         }
       : undefined,

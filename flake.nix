@@ -130,6 +130,7 @@
           src = self;
           inherit bunDeps;
           nativeBridgeUrl = "ws://127.0.0.1:3002";
+          nativeActivityUrl = "/__korri/native-input-active";
         };
 
         electrobunBinaries =
