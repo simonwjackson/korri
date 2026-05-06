@@ -10,6 +10,10 @@ import { createPointerAdapter } from "@shared/input/pointer-adapter"
 import type { Direction } from "@shared/input/types"
 import { createWheelAdapter } from "@shared/input/wheel-adapter"
 import {
+  type ActiveFocusAttributeOptions,
+  createActiveFocusAttribute,
+} from "./active-focus-attribute"
+import {
   type ControllerInputOptions,
   type ResolvedControllerInput,
   resolveControllerInput,
@@ -69,6 +73,8 @@ export interface StartSpatialNavigationOptions
   readonly native?: false | NativeInputAdapterOptions
   /** Disable the input-mode store + DOM-attribute side effect. */
   readonly inputMode?: false
+  /** Disable the active focus attribute mirrored onto the focused element. */
+  readonly activeFocusAttribute?: false | ActiveFocusAttributeOptions
   /** Disable focus retention that restores spatial focus from body/html. */
   readonly focusRetention?: false | FocusRetentionOptions
   /** Log navigation input actions and focus changes to the browser console. */
@@ -209,6 +215,11 @@ export function startSpatialNavigation(
     bus.use(createWheelAdapter(options.wheel ?? undefined))
   }
 
+  const activeFocusAttribute =
+    options.activeFocusAttribute === false
+      ? null
+      : createActiveFocusAttribute(options.activeFocusAttribute ?? undefined)
+
   const focusRetention =
     options.focusRetention === false
       ? null
@@ -220,6 +231,7 @@ export function startSpatialNavigation(
     dispose: () => {
       disposeDiagnostics()
       focusRetention?.dispose()
+      activeFocusAttribute?.dispose()
       bus.dispose()
       inputMode?.dispose()
       if (currentHandle === handle) setCurrentHandle(null)

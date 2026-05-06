@@ -248,11 +248,11 @@
 	transition: border-color 180ms ease;
 }
 
-[data-shift-home] .shift-tile:focus::after {
+[data-shift-home] .shift-tile:is(:focus, [data-korri-active-focus])::after {
 	border-color: var(--shift-focus-glow);
 }
 
-[data-shift-home] .shift-tile:focus {
+[data-shift-home] .shift-tile:is(:focus, [data-korri-active-focus]) {
 	transform: translateY(-1px);
 	z-index: 1;
 }
@@ -277,7 +277,7 @@
 		transform 180ms ease;
 }
 
-[data-shift-home] .shift-pill:focus-visible {
+[data-shift-home] .shift-pill:is(:focus, [data-korri-active-focus]) {
 	box-shadow: 0 0 0 3px var(--shift-focus-glow);
 	transform: translateY(-1px);
 }
@@ -292,21 +292,23 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 1.4em;
-	height: 1.4em;
+	width: var(--shift-home-bar-content-h);
+	height: var(--shift-home-bar-content-h);
 	padding: 0;
 	background: transparent;
 	box-shadow: none;
 	flex: 0 0 auto;
 }
 
-[data-shift-home] .shift-labs-button:focus-visible {
+[data-shift-home] .shift-labs-button:is(:focus, [data-korri-active-focus]) {
 	background: transparent;
-	box-shadow: none;
-	transform: none;
+	box-shadow: 0 0 0 3px var(--shift-focus-glow);
+	transform: translateY(-1px);
 }
 
-[data-shift-home] .shift-labs-button:focus-visible .shift-pill-icon {
+[data-shift-home]
+	.shift-labs-button:is(:focus, [data-korri-active-focus])
+	.shift-pill-icon {
 	color: var(--shift-focus-glow);
 }
 
@@ -369,7 +371,7 @@
  * Active state: expand into a full pill. Padding and gap derive from
  * --spacing so they breathe with the container.
  */
-[data-shift-home] .shift-search-pill:focus-visible {
+[data-shift-home] .shift-search-pill:is(:focus, [data-korri-active-focus]) {
 	justify-content: flex-start;
 	width: 40cqi;
 	height: auto;
@@ -378,7 +380,9 @@
 	background: var(--shift-pill-bg);
 }
 
-[data-shift-home] .shift-search-pill:focus-visible .shift-search-placeholder {
+[data-shift-home]
+	.shift-search-pill:is(:focus, [data-korri-active-focus])
+	.shift-search-placeholder {
 	max-width: 40cqi;
 	opacity: 1;
 }
@@ -482,7 +486,9 @@
 	border-radius: 9999px;
 }
 
-[data-shift-home] .shift-menu-button:focus-visible .shift-hud-glyph {
+[data-shift-home]
+	.shift-menu-button:is(:focus, [data-korri-active-focus])
+	.shift-hud-glyph {
 	box-shadow: 0 0 0 3px var(--shift-focus-glow);
 	transform: scale(1.05);
 }
@@ -589,9 +595,11 @@
 	opacity: 0.42;
 }
 
-[data-shift-home] .shift-labs-close-button:focus-visible,
-[data-shift-home] .shift-labs-reset-button:focus-visible,
-[data-shift-home] .shift-labs-slider:focus-visible {
+[data-shift-home]
+	.shift-labs-close-button:is(:focus, [data-korri-active-focus]),
+[data-shift-home]
+	.shift-labs-reset-button:is(:focus, [data-korri-active-focus]),
+[data-shift-home] .shift-labs-slider:is(:focus, [data-korri-active-focus]) {
 	outline: none;
 	box-shadow: 0 0 0 3px var(--shift-focus-glow);
 	transform: translateY(-1px);

@@ -271,6 +271,66 @@ describe("input-mode dispatch", () => {
   })
 })
 
+describe("active focus attribute wiring", () => {
+  afterEach(() => {
+    getSpatialNavigationSnapshot()?.dispose()
+    document.body.innerHTML = ""
+    document.documentElement.removeAttribute("data-input-mode")
+  })
+
+  const startForActiveFocus = (
+    options: Parameters<typeof startSpatialNavigation>[0] = {},
+  ) =>
+    startSpatialNavigation({
+      keyboard: false,
+      gamepad: false,
+      pointer: false,
+      wheel: false,
+      native: false,
+      inputMode: false,
+      nextFocus: () => null,
+      ...options,
+    })
+
+  it("marks the focused element with a data attribute", () => {
+    document.body.innerHTML = `
+      <button id="first">First</button>
+      <button id="second">Second</button>
+    `
+    const first = document.getElementById("first") as HTMLButtonElement
+    const second = document.getElementById("second") as HTMLButtonElement
+    startForActiveFocus()
+
+    first.focus()
+    expect(first.hasAttribute("data-korri-active-focus")).toBe(true)
+
+    second.focus()
+    expect(first.hasAttribute("data-korri-active-focus")).toBe(false)
+    expect(second.hasAttribute("data-korri-active-focus")).toBe(true)
+  })
+
+  it("removes the active focus attribute on dispose", () => {
+    document.body.innerHTML = `<button id="first">First</button>`
+    const first = document.getElementById("first") as HTMLButtonElement
+    const handle = startForActiveFocus()
+
+    first.focus()
+    handle.dispose()
+
+    expect(first.hasAttribute("data-korri-active-focus")).toBe(false)
+  })
+
+  it("can disable active focus attribute mirroring", () => {
+    document.body.innerHTML = `<button id="first">First</button>`
+    const first = document.getElementById("first") as HTMLButtonElement
+    startForActiveFocus({ activeFocusAttribute: false })
+
+    first.focus()
+
+    expect(first.hasAttribute("data-korri-active-focus")).toBe(false)
+  })
+})
+
 describe("focus retention wiring", () => {
   afterEach(() => {
     getSpatialNavigationSnapshot()?.dispose()

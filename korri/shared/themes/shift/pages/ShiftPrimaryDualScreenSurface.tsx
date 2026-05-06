@@ -4,8 +4,7 @@ import {
   getGameDisplayName,
 } from "@shared/fixtures/games/game"
 import type { LaunchController } from "@shared/library/launch-state"
-import { useInputAction } from "@shared/navigation/use-input-action"
-import { useCallback, useEffect } from "react"
+import { useEffect } from "react"
 import { ShiftHomeCaption } from "../molecules/ShiftHomeCaption"
 import { ShiftLaunchFailureBanner } from "../molecules/ShiftLaunchFailureBanner"
 import { ShiftHomeBottomBar } from "../organisms/ShiftHomeBottomBar"
@@ -55,15 +54,7 @@ function ShiftPrimaryLaunchSurface({
 }: {
   readonly launch: LaunchController
 }) {
-  const { items, focused, isLabsOpen } = useShiftHome()
-
-  const launchFocused = useCallback(() => {
-    if (isLabsOpen) return
-    const focusedGame = items.find(game => game.id === focused.id)
-    if (focusedGame) launch.start(focusedGame)
-  }, [focused.id, isLabsOpen, items, launch])
-
-  useInputAction("confirm", launchFocused)
+  const { items } = useShiftHome()
 
   const failedGame = failedGameFor(items, launch.state)
 
