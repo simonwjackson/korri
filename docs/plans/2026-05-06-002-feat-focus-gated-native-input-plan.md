@@ -244,7 +244,7 @@ sequenceDiagram
 **Verification:**
 - Runtime entrypoints select focus-aware native input at the boundary without leaking device policy into React components.
 
-- [ ] **Unit 4: Preserve global shortcut behavior while inactive**
+- [x] **Unit 4: Preserve global shortcut behavior while inactive**
 
 **Goal:** Ensure focus gating does not accidentally suppress inputd-owned global chords and does not turn normal raw input into app exceptions.
 
