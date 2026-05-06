@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Smoke test the supervised Chromium session daemon on the Odin.
+# Smoke test the supervised Korri renderer session daemon on the Odin.
 
 set -euo pipefail
 
@@ -13,6 +13,6 @@ fail() { printf '\033[0;31m[sessiond-smoke]\033[0m %s\n' "$*" >&2; exit 1; }
 log "Checking korri-sessiond on $ODIN_HOST..."
 ssh -o ConnectTimeout=5 -o BatchMode=yes "$ODIN_HOST" \
   "cd '$ODIN_PROJECT' && KORRI_SESSIOND_URL='$KORRI_SESSIOND_URL' /storage/bin/bun run tools/odin/sessiond-smoke.ts" \
-  || fail "supervised Chromium session smoke failed"
+  || fail "supervised Korri renderer session smoke failed"
 
 log "sessiond smoke passed"

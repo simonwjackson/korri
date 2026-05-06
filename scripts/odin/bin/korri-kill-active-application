@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source /storage/bin/korri-electrobun-control-lib
+korri_wayland_env
+
+log() { printf '%s [korri-active-app] %s\n' "$(date -Is)" "$*" >&2; }
+
+focused_json="$({ swaymsg -t get_tree 2>/dev/null || true; } | /storage/bin/bun -e '
+const raw = await new Response(Bun.stdin.stream()).text()
+if (!raw.trim()) process.exit(2)
+const tree = JSON.parse(raw)
+let focused
+function walk(node) {
+  if (node.focused) focused = node
+  for (const child of [...(node.nodes ?? []), ...(node.floating_nodes ?? [])]) walk(child)
+}
+walk(tree)
+if (!focused) process.exit(3)
+console.log(JSON.stringify({
+  pid: focused.pid ?? null,
+  name: focused.name ?? null,
+  appId: focused.app_id ?? null,
+  windowClass: focused.window_properties?.class ?? null,
+}))
+' 2>/dev/null || true)"
+
+if [ -z "$focused_json" ]; then
+  log "no focused sway window found"
+  exit 0
+fi
+
+pid="$(printf '%s' "$focused_json" | /storage/bin/bun -e 'const f=JSON.parse(await new Response(Bun.stdin.stream()).text()); if (f.pid) console.log(f.pid)' 2>/dev/null || true)"
+name="$(printf '%s' "$focused_json" | /storage/bin/bun -e 'const f=JSON.parse(await new Response(Bun.stdin.stream()).text()); if (f.name) console.log(f.name)' 2>/dev/null || true)"
+window_class="$(printf '%s' "$focused_json" | /storage/bin/bun -e 'const f=JSON.parse(await new Response(Bun.stdin.stream()).text()); if (f.windowClass) console.log(f.windowClass)' 2>/dev/null || true)"
+exe=""
+if [ -n "$pid" ] && [ -r "/proc/$pid/exe" ]; then
+  exe="$(readlink "/proc/$pid/exe" 2>/dev/null || true)"
+fi
+
+case "$exe $window_class $name" in
+  *'/share/korri-desktop/'*'/Korri-dev/bin/bun'*|*'ElectrobunKitchenSink-dev'*|*' Korri')
+    log "focused app is Korri Electrobun; restarting through sessiond"
+    korri_stop_electrobun
+    /storage/bin/korri-session-toggle reconcile >/dev/null
+    exit 0
+    ;;
+esac
+
+if [ -z "$pid" ]; then
+  log "focused window has no pid: $focused_json"
+  exit 0
+fi
+
+log "killing focused app pid=$pid name=$name class=$window_class exe=$exe"
+kill -TERM "$pid" 2>/dev/null || true
+for _ in $(seq 1 30); do
+  [ ! -d "/proc/$pid" ] && exit 0
+  sleep 0.1
+done
+kill -KILL "$pid" 2>/dev/null || true

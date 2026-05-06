@@ -22,14 +22,14 @@ if [ ! -f "$KORRI_SESSIOND_TOKEN_FILE" ]; then
   head -c 32 /dev/urandom | base64 > "$KORRI_SESSIOND_TOKEN_FILE"
 fi
 
+export DISPLAY="${DISPLAY:-:0}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/var/run/0-runtime-dir}"
+export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
+export SWAYSOCK="${SWAYSOCK:-$XDG_RUNTIME_DIR/sway-ipc.0.sock}"
 export KORRI_SESSIOND_PORT
 export KORRI_SESSIOND_TOKEN_FILE
 export KORRI_SESSIOND_TOKEN="$(tr -d '\n' < "$KORRI_SESSIOND_TOKEN_FILE")"
 export KORRI_SESSIOND_URL="${KORRI_SESSIOND_URL:-http://127.0.0.1:$KORRI_SESSIOND_PORT}"
-export KORRI_URL="${KORRI_URL:-http://127.0.0.1:3100}"
-export KORRI_SESSION_RENDERER="${KORRI_SESSION_RENDERER:-electrobun}"
-export KORRI_CHROMIUM_PATH="${KORRI_CHROMIUM_PATH:-/storage/apps/chromium/squashfs-root/AppRun}"
-export KORRI_CHROMIUM_PROFILE_DIR="${KORRI_CHROMIUM_PROFILE_DIR:-/storage/apps/chromium/korri-profile}"
 export KORRI_ELECTROBUN_APP="${KORRI_ELECTROBUN_APP:-/storage/.nix-profile/bin/korri-desktop-odin}"
 export KORRI_ELECTROBUN_STATE_ROOT="${KORRI_ELECTROBUN_STATE_ROOT:-/storage/.local/share/nix-apps/korri-electrobun}"
 export KORRI_ELECTROBUN_STATUS_FILE="${KORRI_ELECTROBUN_STATUS_FILE:-$KORRI_ELECTROBUN_STATE_ROOT/status.json}"

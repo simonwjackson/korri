@@ -3,7 +3,6 @@ import { findKorriWindows, type SwayNode } from "./sessiond-sway"
 
 export interface SessiondSmokeStatus {
   readonly state?: { readonly mode?: string }
-  readonly chromiumPid?: number
   readonly renderer?: { readonly kind?: string; readonly pid?: number }
 }
 
@@ -18,7 +17,7 @@ export function evaluateSessiondSmoke(input: {
 }): SessiondSmokeReport {
   const issues: string[] = []
   const mode = input.status.state?.mode
-  const rendererKind = input.status.renderer?.kind ?? "chromium"
+  const rendererKind = input.status.renderer?.kind ?? "unknown"
 
   if (!input.status.renderer?.kind) {
     issues.push("sessiond status did not include a renderer kind")

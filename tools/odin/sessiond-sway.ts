@@ -35,15 +35,9 @@ export interface SwayController {
 }
 
 export const DEFAULT_SWAY_SELECTOR: Required<SwayWindowSelector> = {
-  appIds: [
-    "chromium",
-    "chromium-browser",
-    "org.chromium.Chromium",
-    "korri-desktop",
-    "dev.korri.desktop",
-  ],
-  titles: ["Korri"],
-  classes: ["Chromium", "chromium", "chromium-browser", "Korri", "Electrobun"],
+  appIds: ["korri-desktop", "dev.korri.desktop"],
+  titles: [],
+  classes: ["Korri", "Electrobun", "ElectrobunKitchenSink-dev"],
 }
 
 export function findKorriWindows(
@@ -74,7 +68,7 @@ export function buildSwayCommandsForDecisions(
   for (const decision of decisions) {
     switch (decision.kind) {
       case "noop":
-      case "relaunch-chromium":
+      case "relaunch-renderer":
         break
       case "close-duplicate-windows":
         for (const windowId of decision.duplicateWindowIds) {

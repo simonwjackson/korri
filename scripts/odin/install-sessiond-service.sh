@@ -7,10 +7,6 @@ PROJECT="${ODIN_PROJECT:-/storage/korri}"
 PORT="${KORRI_SESSIOND_PORT:-3003}"
 LOG="${KORRI_SESSIOND_LOG:-/storage/korri-sessiond.log}"
 TOKEN_FILE="${KORRI_SESSIOND_TOKEN_FILE:-$PROJECT/sessiond.token}"
-KORRI_URL="${KORRI_URL:-http://127.0.0.1:3100}"
-SESSION_RENDERER="${KORRI_SESSION_RENDERER:-electrobun}"
-CHROMIUM_PATH="${KORRI_CHROMIUM_PATH:-/storage/apps/chromium/squashfs-root/AppRun}"
-CHROMIUM_PROFILE_DIR="${KORRI_CHROMIUM_PROFILE_DIR:-/storage/apps/chromium/korri-profile}"
 ELECTROBUN_APP="${KORRI_ELECTROBUN_APP:-/storage/.nix-profile/bin/korri-desktop-odin}"
 ELECTROBUN_STATE_ROOT="${KORRI_ELECTROBUN_STATE_ROOT:-/storage/.local/share/nix-apps/korri-electrobun}"
 ELECTROBUN_STATUS_FILE="${KORRI_ELECTROBUN_STATUS_FILE:-$ELECTROBUN_STATE_ROOT/status.json}"
@@ -46,10 +42,6 @@ Environment=KORRI_SESSIOND_PORT=$PORT
 Environment=KORRI_SESSIOND_LOG=$LOG
 Environment=KORRI_SESSIOND_TOKEN_FILE=$TOKEN_FILE
 Environment=KORRI_SESSIOND_URL=http://127.0.0.1:$PORT
-Environment=KORRI_URL=$KORRI_URL
-Environment=KORRI_SESSION_RENDERER=$SESSION_RENDERER
-Environment=KORRI_CHROMIUM_PATH=$CHROMIUM_PATH
-Environment=KORRI_CHROMIUM_PROFILE_DIR=$CHROMIUM_PROFILE_DIR
 Environment=KORRI_ELECTROBUN_APP=$ELECTROBUN_APP
 Environment=KORRI_ELECTROBUN_STATE_ROOT=$ELECTROBUN_STATE_ROOT
 Environment=KORRI_ELECTROBUN_STATUS_FILE=$ELECTROBUN_STATUS_FILE
@@ -88,15 +80,9 @@ wait_ready() {
 install_service() {
   [ -x /storage/bin/bun ] || fail "missing /storage/bin/bun"
   [ -x "$PROJECT/scripts/odin/run-sessiond.sh" ] || fail "missing $PROJECT/scripts/odin/run-sessiond.sh"
-  case "$SESSION_RENDERER" in
-    chromium) ;;
-    electrobun)
-      if ! command -v "$ELECTROBUN_APP" >/dev/null 2>&1 && [ ! -x "$ELECTROBUN_APP" ]; then
-        fail "missing Electrobun app for renderer mode: $ELECTROBUN_APP"
-      fi
-      ;;
-    *) fail "unsupported KORRI_SESSION_RENDERER=$SESSION_RENDERER" ;;
-  esac
+  if ! command -v "$ELECTROBUN_APP" >/dev/null 2>&1 && [ ! -x "$ELECTROBUN_APP" ]; then
+    fail "missing Electrobun app: $ELECTROBUN_APP"
+  fi
   ensure_token
   log "Writing $UNIT_PATH"
   write_unit
@@ -126,7 +112,7 @@ rollback() {
 
 status() {
   echo "unit=$UNIT_PATH"
-  echo "renderer=$SESSION_RENDERER"
+  echo "renderer=electrobun"
   echo "electrobun_app=$ELECTROBUN_APP"
   systemctl --no-pager --full status "$UNIT_NAME" 2>/dev/null || true
   echo ""

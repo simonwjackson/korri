@@ -16,11 +16,11 @@ const tree: SwayNode = {
       nodes: [
         {
           id: 10,
-          app_id: "chromium",
+          app_id: "korri-desktop",
           name: "Korri",
           focused: false,
           fullscreen_mode: 0,
-          window_properties: { title: "Korri", class: "Chromium" },
+          window_properties: { title: "Korri", class: "Electrobun" },
         },
         {
           id: 11,
@@ -36,28 +36,31 @@ const tree: SwayNode = {
 }
 
 describe("sway window discovery", () => {
-  it("finds Korri Chromium windows by app id/title/class", () => {
+  it("finds Korri Electrobun windows by app id/class", () => {
     expect(findKorriWindows(tree)).toEqual([
       {
         id: 10,
         focused: false,
         fullscreen: false,
-        appId: "chromium",
+        appId: "korri-desktop",
         title: "Korri",
       },
     ])
   })
 
-  it("finds Korri Electrobun windows by app id/class", () => {
+  it("finds Korri Electrobun windows by Electrobun runtime class", () => {
     const windows = findKorriWindows({
       id: 1,
       nodes: [
         {
           id: 20,
-          app_id: "korri-desktop",
+          app_id: null,
           focused: true,
           fullscreen_mode: 1,
-          window_properties: { title: "Korri", class: "Electrobun" },
+          window_properties: {
+            title: "Korri",
+            class: "ElectrobunKitchenSink-dev",
+          },
         },
       ],
     })
@@ -67,16 +70,33 @@ describe("sway window discovery", () => {
         id: 20,
         focused: true,
         fullscreen: true,
-        appId: "korri-desktop",
+        appId: null,
         title: "Korri",
       },
     ])
   })
 
+  it("does not match legacy Chromium windows by default", () => {
+    const windows = findKorriWindows({
+      id: 1,
+      nodes: [
+        {
+          id: 20,
+          app_id: "chromium",
+          focused: true,
+          fullscreen_mode: 1,
+          window_properties: { title: "Korri", class: "Chromium" },
+        },
+      ],
+    })
+
+    expect(windows).toEqual([])
+  })
+
   it("returns no windows when selectors do not match", () => {
     expect(
       findKorriWindows(tree, {
-        appIds: ["not-chromium"],
+        appIds: ["not-electrobun"],
         titles: ["Not Korri"],
         classes: ["Other"],
       }),
@@ -125,7 +145,7 @@ describe("sway repair commands", () => {
     expect(
       buildSwayCommandsForDecisions([
         { kind: "noop", primaryWindowId: 10 },
-        { kind: "relaunch-chromium", reason: "missing-window" },
+        { kind: "relaunch-renderer", reason: "missing-window" },
       ]),
     ).toEqual([])
   })

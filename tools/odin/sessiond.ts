@@ -2,12 +2,6 @@ import type { LaunchResult, LaunchSpec } from "@shared/library/launcher"
 import { createShellLauncher } from "@shared/library/shell-launcher"
 import { logger as defaultLogger } from "@shared/logger"
 import {
-  type ChromiumController,
-  type ChromiumLaunchConfig,
-  type ChromiumProcessRunner,
-  createChromiumController,
-} from "./sessiond-chromium"
-import {
   createElectrobunController,
   realElectrobunRunner,
 } from "./sessiond-electrobun"
@@ -56,7 +50,6 @@ export interface KorriSessiondOptions {
   readonly port?: number
   readonly hostname?: string
   readonly token: string
-  readonly chromium?: ChromiumController
   readonly renderer?: KorriRendererController
   readonly sway?: SwayController
   readonly serviceManager?: KorriSessiondServiceManager
@@ -73,7 +66,6 @@ export interface KorriSessiondHandle {
 
 export interface KorriSessiondStatus {
   readonly state: KorriSessionState
-  readonly chromiumPid?: number
   readonly renderer: ReturnType<typeof rendererStatus>
 }
 
@@ -90,8 +82,7 @@ export function createKorriSessiondCore(
   options: Omit<KorriSessiondOptions, "port" | "hostname">,
 ): KorriSessiondCore {
   const logger = options.logger ?? defaultLogger
-  const renderer =
-    options.renderer ?? options.chromium ?? realRendererController()
+  const renderer = options.renderer ?? realRendererController()
   const sway = options.sway ?? realSwayController()
   const serviceManager = options.serviceManager ?? realServiceManager()
   const launcher = options.launcher ?? createShellLauncher()
@@ -101,7 +92,6 @@ export function createKorriSessiondCore(
   function status(): KorriSessiondStatus {
     return {
       state,
-      chromiumPid: renderer.kind === "chromium" ? rendererPid : undefined,
       renderer: rendererStatus(renderer, rendererPid),
     }
   }
@@ -125,12 +115,12 @@ export function createKorriSessiondCore(
   async function reconcileHome() {
     const windows = await sway.getKorriWindows()
     const decisions = evaluateHomeInvariant({ windows })
-    if (decisions.some(decision => decision.kind === "relaunch-chromium")) {
+    if (decisions.some(decision => decision.kind === "relaunch-renderer")) {
       const launched = await renderer.launch()
       rendererPid = launched.pid
     }
     await sway.applyDecisions(
-      decisions.filter(decision => decision.kind !== "relaunch-chromium"),
+      decisions.filter(decision => decision.kind !== "relaunch-renderer"),
     )
   }
 
@@ -256,56 +246,20 @@ function json(value: unknown): Response {
 }
 
 function realRendererController(): KorriRendererController {
-  if (process.env.KORRI_SESSION_RENDERER === "electrobun") {
-    return createElectrobunController({
-      config: {
-        executablePath: process.env.KORRI_ELECTROBUN_APP,
-        stateRoot: process.env.KORRI_ELECTROBUN_STATE_ROOT,
-        statusFile: process.env.KORRI_ELECTROBUN_STATUS_FILE,
-        logPath: process.env.KORRI_ELECTROBUN_LOG,
-        sessiondUrl: process.env.KORRI_SESSIOND_URL,
-        sessiondTokenFile: process.env.KORRI_SESSIOND_TOKEN_FILE,
-        readinessTimeoutMs: process.env.KORRI_ELECTROBUN_READY_TIMEOUT_MS
-          ? Number.parseInt(process.env.KORRI_ELECTROBUN_READY_TIMEOUT_MS, 10)
-          : 10_000,
-      },
-      runner: realElectrobunRunner,
-    })
-  }
-
-  return realChromiumController()
-}
-
-function realChromiumController(): ChromiumController {
-  const config: ChromiumLaunchConfig = {
-    executablePath: process.env.KORRI_CHROMIUM_PATH,
-    profileDir: process.env.KORRI_CHROMIUM_PROFILE_DIR,
-    url: process.env.KORRI_URL,
-    logPath: process.env.KORRI_CHROMIUM_LOG,
-    remoteDebuggingPort: process.env.KORRI_CHROMIUM_REMOTE_DEBUGGING_PORT
-      ? Number.parseInt(process.env.KORRI_CHROMIUM_REMOTE_DEBUGGING_PORT, 10)
-      : undefined,
-  }
-
-  const runner: ChromiumProcessRunner = {
-    spawn: async command => {
-      const proc = Bun.spawn([command.command, ...command.args], {
-        stdout: "ignore",
-        stderr: "pipe",
-        env: { ...process.env },
-      })
-      return { pid: proc.pid }
+  return createElectrobunController({
+    config: {
+      executablePath: process.env.KORRI_ELECTROBUN_APP,
+      stateRoot: process.env.KORRI_ELECTROBUN_STATE_ROOT,
+      statusFile: process.env.KORRI_ELECTROBUN_STATUS_FILE,
+      logPath: process.env.KORRI_ELECTROBUN_LOG,
+      sessiondUrl: process.env.KORRI_SESSIOND_URL,
+      sessiondTokenFile: process.env.KORRI_SESSIOND_TOKEN_FILE,
+      readinessTimeoutMs: process.env.KORRI_ELECTROBUN_READY_TIMEOUT_MS
+        ? Number.parseInt(process.env.KORRI_ELECTROBUN_READY_TIMEOUT_MS, 10)
+        : 10_000,
     },
-    kill: async pid => {
-      try {
-        process.kill(pid, "SIGTERM")
-      } catch {
-        // Already gone.
-      }
-    },
-  }
-
-  return createChromiumController({ config, runner })
+    runner: realElectrobunRunner,
+  })
 }
 
 function realSwayController(): SwayController {

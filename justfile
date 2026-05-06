@@ -53,6 +53,10 @@ desktop-smoke: build-web
 install-odin:
   scripts/odin/install.sh
 
+# Deploy the current repo, Electrobun app, and supervised Odin services for testing.
+deploy-odin:
+  scripts/odin/deploy.sh
+
 # Backward-compatible name for the Odin install/update step.
 bootstrap-odin: install-odin
 
@@ -68,11 +72,11 @@ dev-odin portal_port="${PORTAL_PORT:-3100}" api_port="${ODIN_API_PORT:-3001}" br
 check-odin:
   scripts/odin/smoke.sh
 
-# Check/manage the supervised Chromium session on the Odin.
+# Check/manage the supervised Korri renderer session on the Odin.
 odin-sessiond-status:
   ssh {{ODIN_HOST}} 'cd {{ODIN_PROJECT}} && scripts/odin/install-sessiond-service.sh status'
 
-# Smoke-test the supervised Chromium session on the Odin.
+# Smoke-test the supervised Korri renderer session on the Odin.
 check-odin-sessiond:
   scripts/odin/smoke-sessiond.sh
 

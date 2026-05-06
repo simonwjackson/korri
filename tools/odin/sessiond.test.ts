@@ -10,12 +10,11 @@ function startHarness(
   options: {
     readonly windows?: readonly KorriWindowSnapshot[]
     readonly launchResult?: LaunchResult
-    readonly failChromiumLaunch?: boolean
-    readonly rendererKind?: string
+    readonly failRendererLaunch?: boolean
   } = {},
 ) {
   const events: string[] = []
-  let chromiumPid = 100
+  let rendererPid = 100
   let windows = [...(options.windows ?? [])]
   const core = createKorriSessiondCore({
     token,
@@ -29,21 +28,19 @@ function startHarness(
       },
     },
     renderer: {
-      kind: options.rendererKind ?? "chromium",
+      kind: "electrobun",
       launch: async () => {
-        events.push(`launch-${options.rendererKind ?? "chromium"}`)
-        if (options.failChromiumLaunch) throw new Error("chromium failed")
-        chromiumPid += 1
-        windows = [{ id: chromiumPid, focused: true, fullscreen: true }]
+        events.push("launch-electrobun")
+        if (options.failRendererLaunch) throw new Error("renderer failed")
+        rendererPid += 1
+        windows = [{ id: rendererPid, focused: true, fullscreen: true }]
         return {
-          pid: chromiumPid,
-          command: { command: options.rendererKind ?? "chromium", args: [] },
+          pid: rendererPid,
+          command: { command: "electrobun", args: [] },
         }
       },
       stop: async pid => {
-        events.push(
-          `stop-${options.rendererKind ?? "chromium"}:${pid ?? "none"}`,
-        )
+        events.push(`stop-electrobun:${pid ?? "none"}`)
         windows = []
       },
     },
@@ -83,7 +80,7 @@ function authorized(init: RequestInit = {}): RequestInit {
 }
 
 describe("korri sessiond", () => {
-  it("starts Korri mode by masking ES, launching Chromium, and entering home", async () => {
+  it("starts Korri mode by masking ES, launching Electrobun, and entering home", async () => {
     const { core, events } = startHarness()
 
     const response = await request(
@@ -96,7 +93,7 @@ describe("korri sessiond", () => {
 
     expect(body.state.mode).toBe("home")
     expect(events).toContain("mask-es")
-    expect(events).toContain("launch-chromium")
+    expect(events).toContain("launch-electrobun")
   })
 
   it("rejects unauthenticated control requests without changing state", async () => {
@@ -109,7 +106,7 @@ describe("korri sessiond", () => {
     expect(core.status().state.mode).toBe("stopped")
   })
 
-  it("launches a game under session control and restores Chromium afterward", async () => {
+  it("launches a game under session control and restores Electrobun afterward", async () => {
     const { core, events } = startHarness()
     await request(core, "/control/start", authorized({ method: "POST" }))
 
@@ -126,13 +123,15 @@ describe("korri sessiond", () => {
 
     expect(body.result).toEqual({ status: "launched" })
     expect(body.state.mode).toBe("home")
-    expect(body.renderer).toEqual({ kind: "chromium", pid: 102 })
-    expect(events).toContain("stop-chromium:101")
+    expect(body.renderer).toEqual({ kind: "electrobun", pid: 102 })
+    expect(events).toContain("stop-electrobun:101")
     expect(events).toContain("launch-game:/bin/game")
-    expect(events.filter(event => event === "launch-chromium")).toHaveLength(2)
+    expect(events.filter(event => event === "launch-electrobun")).toHaveLength(
+      2,
+    )
   })
 
-  it("restores Chromium even when the game exits non-zero", async () => {
+  it("restores Electrobun even when the game exits non-zero", async () => {
     const { core, events } = startHarness({
       launchResult: { status: "failed", exitCode: 7, stderrTail: "boom" },
     })
@@ -155,7 +154,9 @@ describe("korri sessiond", () => {
       stderrTail: "boom",
     })
     expect(body.state.mode).toBe("home")
-    expect(events.filter(event => event === "launch-chromium")).toHaveLength(2)
+    expect(events.filter(event => event === "launch-electrobun")).toHaveLength(
+      2,
+    )
   })
 
   it("rejects launches when the session is not in home mode", async () => {
@@ -176,22 +177,7 @@ describe("korri sessiond", () => {
     expect(events).not.toContain("launch-game:/bin/game")
   })
 
-  it("supports a non-Chromium renderer without exposing chromiumPid", async () => {
-    const { core, events } = startHarness({ rendererKind: "electrobun" })
-
-    const response = await request(
-      core,
-      "/control/start",
-      authorized({ method: "POST" }),
-    )
-    const body = await response.json()
-
-    expect(body.renderer).toEqual({ kind: "electrobun", pid: 101 })
-    expect(body.chromiumPid).toBeUndefined()
-    expect(events).toContain("launch-electrobun")
-  })
-
-  it("stops Korri mode by stopping Chromium and restoring ES", async () => {
+  it("stops Korri mode by stopping Electrobun and restoring ES", async () => {
     const { core, events } = startHarness()
     await request(core, "/control/start", authorized({ method: "POST" }))
 
@@ -204,7 +190,7 @@ describe("korri sessiond", () => {
 
     expect(body.state.mode).toBe("stopped")
     expect(events).toContain("restore-es")
-    expect(events).toContain("stop-chromium:101")
+    expect(events).toContain("stop-electrobun:101")
   })
 })
 

@@ -76,7 +76,9 @@ describe("Odin desktop preflight", () => {
     expect(report.messages).toContain(
       "Odin does not expose a real mounted /nix store.",
     )
-    expect(report.recommendations.join("\n")).toContain("portable/proot")
+    expect(report.recommendations.join("\n")).toContain(
+      "Chromium renderer fallback has been removed",
+    )
   })
 
   test("blocks when nix commands are absent", () => {

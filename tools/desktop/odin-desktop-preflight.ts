@@ -153,7 +153,7 @@ export function classifyOdinDesktopPreflight(
   if (facts.sshReachable && (!facts.nixStoreExists || !facts.nixStoreMounted)) {
     block(
       "Odin does not expose a real mounted /nix store.",
-      "Use the Chromium renderer until ROCKNIX Layer 4+ real /nix support is healthy; do not use the old portable/proot staged closure path as the Electrobun substrate.",
+      "Repair ROCKNIX Layer 4+ real /nix support before launching Korri; the Chromium renderer fallback has been removed.",
     )
   }
 
@@ -167,7 +167,7 @@ export function classifyOdinDesktopPreflight(
   if (facts.sshReachable && facts.portableNixExists && !facts.nixStoreMounted) {
     block(
       "Only portable/proot Nix appears to be available on the Odin.",
-      "Do not stage Electrobun closures through /storage/.nix-portable; use Chromium or boot a ROCKNIX image with real /nix support.",
+      "Do not stage Electrobun closures through /storage/.nix-portable; boot a ROCKNIX image with real /nix support.",
     )
   }
 

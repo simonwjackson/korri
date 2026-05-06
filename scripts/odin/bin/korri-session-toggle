@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+KORRI_SESSIOND_URL="${KORRI_SESSIOND_URL:-http://127.0.0.1:3003}"
+KORRI_SESSIOND_TOKEN_FILE="${KORRI_SESSIOND_TOKEN_FILE:-/storage/korri/sessiond.token}"
+
+log() { printf '%s [korri-session] %s\n' "$(date -Is)" "$*" >&2; }
+
+token() {
+  if [ ! -f "$KORRI_SESSIOND_TOKEN_FILE" ]; then
+    log "sessiond token file missing: $KORRI_SESSIOND_TOKEN_FILE"
+    exit 1
+  fi
+  tr -d '\n' < "$KORRI_SESSIOND_TOKEN_FILE"
+}
+
+post() {
+  local path="$1"
+  curl -fsS \
+    -X POST \
+    -H "x-korri-sessiond-token: $(token)" \
+    "$KORRI_SESSIOND_URL$path"
+}
+
+status() {
+  curl -fsS --max-time 2 "$KORRI_SESSIOND_URL/status" 2>/dev/null || echo '{"state":{"mode":"unknown"}}'
+}
+
+case "${1:-toggle}" in
+  start)
+    log "Starting supervised Korri Electrobun session"
+    post /control/start >/dev/null
+    status
+    ;;
+  stop)
+    log "Stopping supervised Korri Electrobun session and restoring EmulationStation"
+    post /control/stop >/dev/null
+    status
+    ;;
+  toggle)
+    current="$(status)"
+    case "$current" in
+      *'"mode":"home"'*|*'"mode":"starting"'*|*'"mode":"launching"'*|*'"mode":"game"'*|*'"mode":"restoring"'*|*'"mode":"recovering"'*)
+        log "Korri appears active; stopping"
+        post /control/stop >/dev/null
+        ;;
+      *)
+        log "Korri appears stopped; starting"
+        post /control/start >/dev/null
+        ;;
+    esac
+    status
+    ;;
+  reconcile)
+    log "Reconciling supervised Korri session"
+    post /control/reconcile >/dev/null
+    status
+    ;;
+  status) status ;;
+  *) echo "usage: $0 {start|stop|toggle|reconcile|status}" >&2; exit 64 ;;
+esac

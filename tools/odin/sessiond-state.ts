@@ -28,7 +28,7 @@ export interface HomeInvariantSnapshot {
 
 export type HomeInvariantDecision =
   | { readonly kind: "noop"; readonly primaryWindowId: number }
-  | { readonly kind: "relaunch-chromium"; readonly reason: "missing-window" }
+  | { readonly kind: "relaunch-renderer"; readonly reason: "missing-window" }
   | {
       readonly kind: "repair-window"
       readonly windowId: number
@@ -129,7 +129,7 @@ export function evaluateHomeInvariant(
 ): readonly HomeInvariantDecision[] {
   const windows = [...snapshot.windows].sort((a, b) => a.id - b.id)
   if (windows.length === 0) {
-    return [{ kind: "relaunch-chromium", reason: "missing-window" }]
+    return [{ kind: "relaunch-renderer", reason: "missing-window" }]
   }
 
   const focused = windows.find(window => window.focused)

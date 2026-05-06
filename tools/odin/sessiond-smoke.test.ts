@@ -11,10 +11,10 @@ const compliantTree: SwayNode = {
         {
           id: 10,
           name: "Korri",
-          app_id: "chromium",
+          app_id: "korri-desktop",
           focused: true,
           fullscreen_mode: 1,
-          window_properties: { title: "Korri", class: "Chromium" },
+          window_properties: { title: "Korri", class: "Electrobun" },
         },
       ],
     },
@@ -27,47 +27,22 @@ describe("sessiond smoke evaluation", () => {
       evaluateSessiondSmoke({
         status: {
           state: { mode: "home" },
-          chromiumPid: 123,
-          renderer: { kind: "chromium", pid: 123 },
+          renderer: { kind: "electrobun", pid: 123 },
         },
         swayTree: compliantTree,
       }),
     ).toEqual({ ok: true, issues: [] })
   })
 
-  it("passes for Electrobun when the same home invariant holds", () => {
-    expect(
-      evaluateSessiondSmoke({
-        status: {
-          state: { mode: "home" },
-          renderer: { kind: "electrobun", pid: 123 },
-        },
-        swayTree: {
-          id: 1,
-          nodes: [
-            {
-              id: 10,
-              name: "Korri",
-              app_id: "korri-desktop",
-              focused: true,
-              fullscreen_mode: 1,
-              window_properties: { title: "Korri", class: "Electrobun" },
-            },
-          ],
-        },
-      }),
-    ).toEqual({ ok: true, issues: [] })
-  })
-
   it("fails when sessiond is not home", () => {
     const report = evaluateSessiondSmoke({
-      status: { state: { mode: "game" }, renderer: { kind: "chromium" } },
+      status: { state: { mode: "game" }, renderer: { kind: "electrobun" } },
       swayTree: compliantTree,
     })
 
     expect(report.ok).toBe(false)
     expect(report.issues).toContain(
-      "sessiond chromium renderer is game, not home",
+      "sessiond electrobun renderer is game, not home",
     )
   })
 
@@ -78,7 +53,7 @@ describe("sessiond smoke evaluation", () => {
     })
 
     expect(report.ok).toBe(false)
-    expect(report.issues.join("\n")).toContain("relaunch-chromium")
+    expect(report.issues.join("\n")).toContain("relaunch-renderer")
     expect(report.issues.join("\n")).toContain("electrobun renderer")
   })
 })

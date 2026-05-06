@@ -53,16 +53,16 @@ describe("korri session state", () => {
       ),
     )
 
-    state = failKorriRestore(state, "chromium missing")
+    state = failKorriRestore(state, "renderer missing")
     expect(state).toMatchObject({
       mode: "recovering",
       restoreAttempts: 1,
-      failureReason: "chromium missing",
+      failureReason: "renderer missing",
     })
     expect(shouldStopAfterRestoreFailure(state)).toBe(false)
 
-    state = failKorriRestore(state, "chromium missing")
-    state = failKorriRestore(state, "chromium missing")
+    state = failKorriRestore(state, "renderer missing")
+    state = failKorriRestore(state, "renderer missing")
     expect(shouldStopAfterRestoreFailure(state)).toBe(true)
   })
 
@@ -75,9 +75,9 @@ describe("korri session state", () => {
 })
 
 describe("home invariant evaluation", () => {
-  it("asks to relaunch Chromium when no Korri window exists", () => {
+  it("asks to relaunch the renderer when no Korri window exists", () => {
     expect(evaluateHomeInvariant({ windows: [] })).toEqual([
-      { kind: "relaunch-chromium", reason: "missing-window" },
+      { kind: "relaunch-renderer", reason: "missing-window" },
     ])
   })
 
