@@ -15,6 +15,8 @@ export const KORRI_INPUTD_ACTION_IDS = [
   "lid-closed",
   "lid-opened",
   "screen-switch",
+  "toggle-bottom-screen",
+  "toggle-top-screen",
   "workspace-prev",
   "workspace-next",
   "move-output-up",
@@ -50,6 +52,8 @@ export interface InputdActionCommands {
   readonly lidClosed?: InputdActionCommand
   readonly lidOpened?: InputdActionCommand
   readonly screenSwitch?: InputdActionCommand
+  readonly toggleBottomScreen?: InputdActionCommand
+  readonly toggleTopScreen?: InputdActionCommand
   readonly workspacePrev?: InputdActionCommand
   readonly workspaceNext?: InputdActionCommand
   readonly moveOutputUp?: InputdActionCommand
@@ -145,6 +149,12 @@ export function createInputdActionDispatcher(
           return
         case "screen-switch":
           await runNamedCommand(actionId, commands.screenSwitch)
+          return
+        case "toggle-bottom-screen":
+          await runNamedCommand(actionId, commands.toggleBottomScreen)
+          return
+        case "toggle-top-screen":
+          await runNamedCommand(actionId, commands.toggleTopScreen)
           return
         case "workspace-prev":
           await runNamedCommand(actionId, commands.workspacePrev)
@@ -245,6 +255,14 @@ function defaultCommands(): Required<InputdActionCommands> {
     ]),
     lidOpened: commandFromEnv("KORRI_INPUTD_LID_OPENED", "true", []),
     screenSwitch: { command: "/storage/bin/korri-swap-screens", args: [] },
+    toggleBottomScreen: {
+      command: "/storage/bin/korri-toggle-screen",
+      args: ["bottom"],
+    },
+    toggleTopScreen: {
+      command: "/storage/bin/korri-toggle-screen",
+      args: ["top"],
+    },
     workspacePrev: buildSwayShortcutCommand("workspace-prev"),
     workspaceNext: buildSwayShortcutCommand("workspace-next"),
     moveOutputUp: buildSwayShortcutCommand("move-output-up"),

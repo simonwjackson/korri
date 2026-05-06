@@ -158,6 +158,18 @@ describe("inputd actions", () => {
     ])
   })
 
+  it("runs the safe screen power toggle commands by default", async () => {
+    const { dispatcher, commands } = createHarness()
+
+    await dispatcher.dispatch("toggle-bottom-screen")
+    await dispatcher.dispatch("toggle-top-screen")
+
+    expect(commands).toEqual([
+      { command: "/storage/bin/korri-toggle-screen", args: ["bottom"] },
+      { command: "/storage/bin/korri-toggle-screen", args: ["top"] },
+    ])
+  })
+
   it("runs the configured screen switch command", async () => {
     const commands: InputdActionCommand[] = []
     const dispatcher = createInputdActionDispatcher({

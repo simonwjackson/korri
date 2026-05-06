@@ -308,6 +308,114 @@ printf '%s\n' "$commands" | while IFS= read -r command; do
 done
 REMOTE_SCRIPT
 
+  cat > "$tmpdir/korri-toggle-screen" <<'REMOTE_SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source /storage/bin/korri-electrobun-control-lib
+korri_wayland_env
+
+log() { printf '%s [korri-screen-power] %s\n' "$(date -Is)" "$*" >&2; }
+
+if ! command -v swaymsg >/dev/null 2>&1; then
+  log "swaymsg not found; cannot change screen power"
+  exit 0
+fi
+
+is_active() {
+  local output="$1"
+  swaymsg -t get_outputs 2>/dev/null | OUTPUT="$output" /storage/bin/bun -e '
+const raw = await new Response(Bun.stdin.stream()).text()
+const outputs = JSON.parse(raw || "[]")
+const output = outputs.find(o => o.name === process.env.OUTPUT)
+process.exit(output?.active === true ? 0 : 1)
+' >/dev/null 2>&1
+}
+
+restore_both() {
+  log "restoring stacked dual-screen layout"
+  if [ -x /storage/bin/korri-apply-sway-layout ]; then
+    /storage/bin/korri-apply-sway-layout >/dev/null 2>&1 || true
+  else
+    swaymsg 'output DSI-2 enable transform 90 pos 0 0 bg #000000 solid_color' >/dev/null 2>&1 || true
+    swaymsg 'output DSI-1 enable transform 90 pos 340 1080 bg #000000 solid_color' >/dev/null 2>&1 || true
+  fi
+}
+
+move_workspaces() {
+  local from="$1"
+  local to="$2"
+  swaymsg -t get_workspaces 2>/dev/null | FROM_OUTPUT="$from" TO_OUTPUT="$to" /storage/bin/bun -e '
+const raw = await new Response(Bun.stdin.stream()).text()
+const workspaces = JSON.parse(raw || "[]")
+for (const workspace of workspaces) {
+  if (workspace.output !== process.env.FROM_OUTPUT) continue
+  console.log(`workspace ${JSON.stringify(workspace.name)}; move workspace to output ${process.env.TO_OUTPUT}`)
+}
+' 2>/dev/null | while IFS= read -r command; do
+    [ -n "$command" ] || continue
+    swaymsg "$command" >/dev/null 2>&1 || true
+  done
+}
+
+top_only() {
+  log "switching to top screen only"
+  swaymsg 'output DSI-2 enable transform 90 pos 0 0 bg #000000 solid_color' >/dev/null 2>&1 || true
+  sleep 0.2
+  if ! is_active DSI-2; then
+    log "top screen did not become active; refusing to disable bottom"
+    restore_both
+    return 0
+  fi
+  swaymsg 'focus output DSI-2' >/dev/null 2>&1 || true
+  move_workspaces DSI-1 DSI-2
+  swaymsg 'output DSI-1 disable' >/dev/null 2>&1 || true
+  if ! is_active DSI-2; then
+    log "top screen inactive after toggle; restoring both"
+    restore_both
+  fi
+}
+
+bottom_only() {
+  log "switching to bottom screen only"
+  swaymsg 'output DSI-1 enable transform 90 pos 0 0 bg #000000 solid_color' >/dev/null 2>&1 || true
+  sleep 0.2
+  if ! is_active DSI-1; then
+    log "bottom screen did not become active; refusing to disable top"
+    restore_both
+    return 0
+  fi
+  swaymsg 'focus output DSI-1' >/dev/null 2>&1 || true
+  move_workspaces DSI-2 DSI-1
+  swaymsg 'output DSI-2 disable' >/dev/null 2>&1 || true
+  if ! is_active DSI-1; then
+    log "bottom screen inactive after toggle; restoring both"
+    restore_both
+  fi
+}
+
+mode="${1:-bottom}"
+case "$mode" in
+  bottom)
+    if is_active DSI-1 && is_active DSI-2; then
+      top_only
+    else
+      restore_both
+    fi
+    ;;
+  top)
+    if is_active DSI-1 && is_active DSI-2; then
+      bottom_only
+    else
+      restore_both
+    fi
+    ;;
+  restore|both) restore_both ;;
+  *) echo "usage: $0 {bottom|top|restore|both}" >&2; exit 64 ;;
+esac
+REMOTE_SCRIPT
+
   cat > "$tmpdir/korri-toggle-bottom-keyboard" <<'REMOTE_SCRIPT'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -366,7 +474,7 @@ fi
 
 keyboard_height="${KORRI_BOTTOM_KEYBOARD_HEIGHT:-${KORRI_INPUTD_BOTTOM_KEYBOARD_HEIGHT:-}}"
 if [ -z "${keyboard_height// }" ] && command -v swaymsg >/dev/null 2>&1; then
-  keyboard_height="$(BOTTOM_OUTPUT="$bottom_output" swaymsg -t get_outputs 2>/dev/null | /storage/bin/bun -e '
+  keyboard_height="$(swaymsg -t get_outputs 2>/dev/null | BOTTOM_OUTPUT="$bottom_output" /storage/bin/bun -e '
 const raw = await new Response(Bun.stdin.stream()).text()
 const outputs = JSON.parse(raw || "[]")
 const enabled = outputs.filter(o => o.active !== false && o.rect)
@@ -415,7 +523,7 @@ nohup sh -c "$keyboard_command" >> /storage/korri-bottom-keyboard.log 2>&1 &
 echo $! > /storage/korri-bottom-keyboard.pid
 REMOTE_SCRIPT
 
-  chmod 0755 "$tmpdir/korri-session-toggle" "$tmpdir/korri-kill-active-application" "$tmpdir/korri-swap-screens" "$tmpdir/korri-toggle-bottom-keyboard"
+  chmod 0755 "$tmpdir/korri-session-toggle" "$tmpdir/korri-kill-active-application" "$tmpdir/korri-swap-screens" "$tmpdir/korri-toggle-screen" "$tmpdir/korri-toggle-bottom-keyboard"
   chmod 0644 "$tmpdir/korri-electrobun-control-lib"
 
   log "Installing session/input action commands on $ODIN_HOST:/storage/bin"
@@ -425,12 +533,13 @@ REMOTE_SCRIPT
     "$tmpdir/korri-electrobun-control-lib" \
     "$tmpdir/korri-kill-active-application" \
     "$tmpdir/korri-swap-screens" \
+    "$tmpdir/korri-toggle-screen" \
     "$tmpdir/korri-toggle-bottom-keyboard" \
     "$ODIN_HOST:/storage/bin/"
 
   ssh_odin "KORRI_SESSIOND_URL='$KORRI_SESSIOND_URL' KORRI_SESSIOND_TOKEN_FILE='$KORRI_SESSIOND_TOKEN_FILE' bash -s" <<'REMOTE'
 set -euo pipefail
-chmod 0755 /storage/bin/korri-session-toggle /storage/bin/korri-kill-active-application /storage/bin/korri-swap-screens /storage/bin/korri-toggle-bottom-keyboard
+chmod 0755 /storage/bin/korri-session-toggle /storage/bin/korri-kill-active-application /storage/bin/korri-swap-screens /storage/bin/korri-toggle-screen /storage/bin/korri-toggle-bottom-keyboard
 chmod 0644 /storage/bin/korri-electrobun-control-lib
 legacy_pids=""
 for p in /proc/[0-9]*; do
@@ -444,6 +553,7 @@ rm -f /storage/bin/korri-toggle-daemon /storage/bin/korri-go-chromium /storage/k
 bash -n /storage/bin/korri-session-toggle
 bash -n /storage/bin/korri-kill-active-application
 bash -n /storage/bin/korri-swap-screens
+bash -n /storage/bin/korri-toggle-screen
 bash -n /storage/bin/korri-toggle-bottom-keyboard
 /storage/bin/korri-session-toggle status || true
 REMOTE

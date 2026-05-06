@@ -397,6 +397,37 @@ describe("korri inputd", () => {
     expect(actions).toEqual([])
   })
 
+  it("dispatches screen power toggles from System+stick clicks", async () => {
+    const proc = await loadProcFixture("bus-input-devices-odin.txt")
+    const systemSource = createControllableEventSource()
+    const gamepadSource = createControllableEventSource()
+    const actions: KorriInputdActionId[] = []
+    await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: device =>
+        device.eventNode === "event6"
+          ? systemSource.open()
+          : device.eventNode === "event9"
+            ? gamepadSource.open()
+            : createControllableEventSource().open(),
+      actionDispatcher: {
+        dispatch: async actionId => {
+          actions.push(actionId)
+        },
+      },
+    })
+
+    systemSource.push(evdevKey(KEY_SYSTEM, 1))
+    gamepadSource.push(evdevKey(BTN_THUMBL, 1))
+    gamepadSource.push(evdevKey(BTN_THUMBL, 0))
+    systemSource.push(evdevKey(KEY_SYSTEM, 0))
+    systemSource.push(evdevKey(KEY_SYSTEM, 1))
+    gamepadSource.push(evdevKey(BTN_THUMBR, 1))
+
+    await waitFor(() => actions.length === 2, "screen power toggles")
+    expect(actions).toEqual(["toggle-bottom-screen", "toggle-top-screen"])
+  })
+
   it("dispatches screen-switch from System+Back", async () => {
     const proc = await loadProcFixture("bus-input-devices-odin.txt")
     const systemSource = createControllableEventSource()

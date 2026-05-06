@@ -104,6 +104,16 @@ const DEFAULT_SHORTCUTS: readonly SystemShortcutDefinition<KorriInputdActionId>[
     { id: "move-output-up", requiredControls: ["system", "dpad-up"] },
     { id: "move-output-down", requiredControls: ["system", "dpad-down"] },
     { id: "screen-switch", requiredControls: ["system", "back"] },
+    {
+      id: "toggle-bottom-screen",
+      requiredControls: ["system", "l3"],
+      exact: true,
+    },
+    {
+      id: "toggle-top-screen",
+      requiredControls: ["system", "r3"],
+      exact: true,
+    },
     { id: "toggle-bottom-keyboard", requiredControls: ["system", "x"] },
   ]
 
