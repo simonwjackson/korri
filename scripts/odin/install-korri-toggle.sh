@@ -332,6 +332,21 @@ fi
 
 keyboard_exe="${keyboard_command%% *}"
 keyboard_base="${keyboard_exe##*/}"
+keyboard_height="${KORRI_BOTTOM_KEYBOARD_HEIGHT:-${KORRI_INPUTD_BOTTOM_KEYBOARD_HEIGHT:-360}}"
+if [ -n "${keyboard_height// }" ]; then
+  case "$keyboard_base" in
+    wvkbd|wvkbd-mobintl)
+      case " $keyboard_command " in
+        *' -H '*) ;;
+        *) keyboard_command="$keyboard_command -H $keyboard_height" ;;
+      esac
+      case " $keyboard_command " in
+        *' -L '*) ;;
+        *) keyboard_command="$keyboard_command -L $keyboard_height" ;;
+      esac
+      ;;
+  esac
+fi
 running=""
 for p in /proc/[0-9]*; do
   [ -r "$p/exe" ] || continue
