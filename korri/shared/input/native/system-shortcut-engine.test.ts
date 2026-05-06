@@ -10,6 +10,7 @@ import {
   BTN_TR,
   EV_ABS,
   EV_KEY,
+  KEY_RECORD,
   KEY_SYSTEM,
   KEY_VOLUMEDOWN,
   KEY_VOLUMEUP,
@@ -29,6 +30,10 @@ const shortcuts = [
   {
     id: "move-output-down",
     requiredControls: ["system", "dpad-down"],
+  },
+  {
+    id: "screen-switch",
+    requiredControls: ["system", "back"],
   },
   {
     id: "brightness-up",
@@ -107,6 +112,15 @@ describe("system shortcut engine", () => {
     expect(engine.handleEvent(abs(ABS_HAT0X, 0))).toEqual([])
     expect(engine.handleEvent(abs(ABS_HAT0Y, 1))).toEqual([
       { id: "move-output-down" },
+    ])
+  })
+
+  it("maps the Odin physical Back key to the screen-switch chord", () => {
+    const engine = createSystemShortcutEngine({ shortcuts, taps })
+
+    engine.handleEvent(system(1))
+    expect(engine.handleEvent(input(KEY_RECORD, 1))).toEqual([
+      { id: "screen-switch" },
     ])
   })
 
