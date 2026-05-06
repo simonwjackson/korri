@@ -1,7 +1,7 @@
 ---
 title: "feat: Gate native input by Korri focus"
 type: feat
-status: active
+status: completed
 date: 2026-05-06
 origin: docs/brainstorms/2026-05-03-native-input-bridge-requirements.md
 ---
