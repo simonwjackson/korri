@@ -68,6 +68,7 @@ export class NativeInputSubscription extends Schema.Class<NativeInputSubscriptio
   "NativeInputSubscription",
 )({
   classes: Schema.Array(NativeInputDeviceClass),
+  standardInputActive: Schema.optional(Schema.Boolean),
 }) {}
 
 export const decodeNativeInputEvent = Schema.decodeUnknownSync(NativeInputEvent)

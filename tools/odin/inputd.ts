@@ -74,6 +74,11 @@ export interface KorriInputdHandle {
 
 type InputdSocket = Bun.ServerWebSocket<{ readonly id: string }>
 
+type ClientSubscription = {
+  readonly classes: Set<NativeInputDeviceClass>
+  readonly standardInputActive: boolean
+}
+
 type DeviceStream = {
   readonly source: KorriInputdEventSource
   readonly done: Promise<void>
@@ -137,7 +142,7 @@ export async function startKorriInputd(
     shortcuts: options.shortcuts ?? DEFAULT_SHORTCUTS,
     taps: options.systemTaps ?? DEFAULT_SYSTEM_TAPS,
   })
-  const clients = new Map<InputdSocket, Set<NativeInputDeviceClass>>()
+  const clients = new Map<InputdSocket, ClientSubscription>()
   const devices = new Map<string, DiscoveredDevice>()
   const streams = new Map<string, DeviceStream>()
   let pendingSystemAction = false
@@ -330,8 +335,11 @@ export async function startKorriInputd(
     const payload = encodeEventPayload(event)
     let delivered = false
 
-    for (const [client, classes] of clients) {
-      if (!classes.has(deviceClass)) continue
+    for (const [client, subscription] of clients) {
+      if (!subscription.classes.has(deviceClass)) continue
+      if (event.kind === "input" && !subscription.standardInputActive) {
+        continue
+      }
       client.send(payload)
       delivered = true
     }
@@ -347,18 +355,18 @@ export async function startKorriInputd(
   }
 
   function sendCurrentDevices(client: InputdSocket) {
-    const classes = clients.get(client)
-    if (!classes) return
+    const subscription = clients.get(client)
+    if (!subscription) return
 
     for (const device of devices.values()) {
-      if (!classes.has(device.class)) continue
+      if (!subscription.classes.has(device.class)) continue
       sendToClient(client, {
         kind: "device-added",
         device: toWireDevice(device),
       })
     }
 
-    if (pendingSystemAction && classes.has("system")) {
+    if (pendingSystemAction && subscription.classes.has("system")) {
       sendToClient(client, {
         kind: "action",
         class: "system",
@@ -386,7 +394,10 @@ export async function startKorriInputd(
     websocket: {
       open(socket) {
         appendInputdDiagnostic("websocket opened", { id: socket.data.id })
-        clients.set(socket, new Set())
+        clients.set(socket, {
+          classes: new Set(),
+          standardInputActive: true,
+        })
       },
       message(socket, message) {
         try {
@@ -394,10 +405,17 @@ export async function startKorriInputd(
             id: socket.data.id,
             message: parseSocketMessage(message),
           })
+          const current = clients.get(socket)
           const subscription = decodeNativeInputSubscription(
             parseSocketMessage(message),
           )
-          clients.set(socket, new Set(subscription.classes))
+          clients.set(socket, {
+            classes: new Set(subscription.classes),
+            standardInputActive:
+              subscription.standardInputActive ??
+              current?.standardInputActive ??
+              true,
+          })
           sendCurrentDevices(socket)
         } catch (error) {
           logger.warn(

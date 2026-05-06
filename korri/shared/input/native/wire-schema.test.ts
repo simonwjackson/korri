@@ -102,6 +102,17 @@ describe("native input wire schema", () => {
     })
 
     expect(decoded.classes).toEqual(["gamepad", "keyboard"])
+    expect(decoded.standardInputActive).toBeUndefined()
+  })
+
+  it("decodes focus-aware subscription frames", () => {
+    const decoded = decodeNativeInputSubscription({
+      classes: ["gamepad", "system"],
+      standardInputActive: false,
+    })
+
+    expect(decoded.classes).toEqual(["gamepad", "system"])
+    expect(decoded.standardInputActive).toBe(false)
   })
 
   it("rejects unknown event kinds", () => {

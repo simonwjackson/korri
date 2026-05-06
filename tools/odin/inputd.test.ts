@@ -175,6 +175,186 @@ describe("korri inputd", () => {
     client.close()
   })
 
+  it("suppresses standard input frames for inactive subscribers", async () => {
+    const proc = await loadProcFixture("bus-input-devices-odin.txt")
+    const source = createControllableEventSource()
+    const handle = await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: device =>
+        device.eventNode === "event9"
+          ? source.open()
+          : createControllableEventSource().open(),
+    })
+
+    const client = connectClient(handle.port)
+    await client.open()
+    client.ws.send(
+      JSON.stringify({ classes: ["gamepad"], standardInputActive: false }),
+    )
+
+    const deviceAdded = decodeNativeInputEvent(await client.nextMessage())
+    expect(deviceAdded.kind).toBe("device-added")
+
+    source.push(evdevKey(BTN_TL, 1))
+    await Bun.sleep(30)
+
+    expect(
+      client.messages
+        .map(message => decodeNativeInputEvent(message))
+        .some(message => message.kind === "input"),
+    ).toBe(false)
+
+    client.close()
+  })
+
+  it("defaults old subscription frames to active standard input", async () => {
+    const proc = await loadProcFixture("bus-input-devices-odin.txt")
+    const source = createControllableEventSource()
+    const handle = await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: device =>
+        device.eventNode === "event9"
+          ? source.open()
+          : createControllableEventSource().open(),
+    })
+
+    const client = connectClient(handle.port)
+    await client.open()
+    client.ws.send(JSON.stringify({ classes: ["gamepad"] }))
+    await client.nextMessage()
+
+    source.push(evdevKey(BTN_TL, 1))
+    await waitFor(
+      () =>
+        client.messages
+          .map(message => decodeNativeInputEvent(message))
+          .some(message => message.kind === "input"),
+      "backward-compatible input event",
+    )
+
+    client.close()
+  })
+
+  it("updates standard input activity on later subscription frames", async () => {
+    const proc = await loadProcFixture("bus-input-devices-odin.txt")
+    const source = createControllableEventSource()
+    const handle = await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: device =>
+        device.eventNode === "event9"
+          ? source.open()
+          : createControllableEventSource().open(),
+    })
+
+    const client = connectClient(handle.port)
+    await client.open()
+    client.ws.send(
+      JSON.stringify({ classes: ["gamepad"], standardInputActive: false }),
+    )
+    await client.nextMessage()
+
+    expect(
+      client.messages
+        .map(message => decodeNativeInputEvent(message))
+        .some(message => message.kind === "input"),
+    ).toBe(false)
+
+    client.ws.send(
+      JSON.stringify({ classes: ["gamepad"], standardInputActive: true }),
+    )
+    await waitFor(
+      () =>
+        client.messages
+          .map(message => decodeNativeInputEvent(message))
+          .filter(message => message.kind === "device-added").length >= 2,
+      "reactivated subscription",
+    )
+    source.push(evdevKey(BTN_TR, 1))
+
+    await waitFor(
+      () =>
+        client.messages
+          .map(message => decodeNativeInputEvent(message))
+          .some(message => message.kind === "input" && message.code === BTN_TR),
+      "reactivated input event",
+    )
+
+    client.close()
+  })
+
+  it("delivers explicit system action frames to inactive subscribers", async () => {
+    const proc = await loadProcFixture("bus-input-devices-odin.txt")
+    const source = createControllableEventSource()
+    const handle = await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: device =>
+        device.eventNode === "event6"
+          ? source.open()
+          : createControllableEventSource().open(),
+      actionDispatcher: {
+        dispatch: async () => {},
+      },
+    })
+
+    const client = connectClient(handle.port)
+    await client.open()
+    client.ws.send(
+      JSON.stringify({ classes: ["system"], standardInputActive: false }),
+    )
+    await client.nextMessage()
+
+    source.push(evdevKey(KEY_SYSTEM, 1))
+    source.push(evdevKey(KEY_SYSTEM, 0))
+
+    await waitFor(
+      () =>
+        client.messages
+          .map(message => decodeNativeInputEvent(message))
+          .some(
+            message => message.kind === "action" && message.action === "system",
+          ),
+      "inactive system action",
+    )
+    expect(
+      client.messages
+        .map(message => decodeNativeInputEvent(message))
+        .some(message => message.kind === "input"),
+    ).toBe(false)
+
+    client.close()
+  })
+
+  it("keeps the previous subscription when malformed frames arrive", async () => {
+    const proc = await loadProcFixture("bus-input-devices-odin.txt")
+    const source = createControllableEventSource()
+    const handle = await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: device =>
+        device.eventNode === "event9"
+          ? source.open()
+          : createControllableEventSource().open(),
+    })
+
+    const client = connectClient(handle.port)
+    await client.open()
+    client.ws.send(
+      JSON.stringify({ classes: ["gamepad"], standardInputActive: false }),
+    )
+    await client.nextMessage()
+    client.ws.send(JSON.stringify({ classes: ["lava-lamp"] }))
+
+    source.push(evdevKey(BTN_TL, 1))
+    await Bun.sleep(30)
+
+    expect(
+      client.messages
+        .map(message => decodeNativeInputEvent(message))
+        .some(message => message.kind === "input"),
+    ).toBe(false)
+
+    client.close()
+  })
+
   it("dispatches System+L1+R1 kill once while still streaming gamepad input", async () => {
     const proc = await loadProcFixture("bus-input-devices-odin.txt")
     const systemSource = createControllableEventSource()
