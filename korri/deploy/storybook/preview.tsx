@@ -35,6 +35,7 @@ window.__korriSpatialNav = startSpatialNavigation({
       ? {
           url: window.__korriStorybookNativeBridgeUrl,
           subscribe: ["gamepad", "system"],
+          inactiveActions: ["system"],
         }
       : undefined,
   },

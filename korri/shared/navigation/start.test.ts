@@ -620,6 +620,57 @@ describe("native adapter wiring", () => {
     server.stop()
   })
 
+  it("passes focus-aware inactive action options to the native adapter", async () => {
+    const server = createInputServer()
+    const seen: InputAction[] = []
+    const activity = {
+      current: () => false,
+      subscribe: () => () => {},
+    }
+    const handle = startSpatialNavigation({
+      keyboard: false,
+      gamepad: false,
+      pointer: false,
+      wheel: false,
+      inputMode: false,
+      native: {
+        url: `ws://127.0.0.1:${server.port}`,
+        subscribe: ["gamepad", "system"],
+        activity,
+        inactiveActions: ["system"],
+      },
+      nextFocus: () => null,
+    })
+    handle.bus.on(action => seen.push(action))
+
+    await waitFor(() => server.messages.length > 0, "native subscription")
+    expect(server.messages[0]).toEqual({
+      classes: ["gamepad", "system"],
+      standardInputActive: false,
+    })
+
+    server.send({
+      kind: "input",
+      deviceId: "inputplumber-virtual-xbox360",
+      class: "gamepad",
+      type: 1,
+      code: 304,
+      value: 1,
+      timestamp: Date.now(),
+    })
+    server.send({
+      kind: "action",
+      class: "system",
+      action: "system",
+      timestamp: Date.now(),
+    })
+
+    await waitFor(() => seen.length === 1, "inactive system action")
+    expect(seen).toEqual([{ type: "system", source: "native" }])
+
+    server.stop()
+  })
+
   it("does not attach the native adapter when native is false", async () => {
     const server = createInputServer()
     startSpatialNavigation({
