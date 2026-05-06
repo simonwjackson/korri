@@ -26,10 +26,30 @@ install_layout() {
 set -euo pipefail
 
 config=/storage/.config/sway/config
+helper=/storage/bin/korri-apply-sway-layout
 marker_begin='# korri:dual-screen-layout begin'
 marker_end='# korri:dual-screen-layout end'
-mkdir -p "$(dirname "$config")"
+mkdir -p "$(dirname "$config")" /storage/bin
 touch "$config"
+
+cat > "$helper" <<'HELPER'
+#!/usr/bin/env bash
+set -euo pipefail
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/var/run/0-runtime-dir}"
+export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
+export SWAYSOCK="${SWAYSOCK:-$XDG_RUNTIME_DIR/sway-ipc.0.sock}"
+
+for _ in $(seq 1 20); do
+  if swaymsg -t get_outputs 2>/dev/null | grep -q '"name": "DSI-1"'; then
+    break
+  fi
+  sleep 0.5
+done
+
+swaymsg 'output DSI-2 enable transform 90 pos 0 0 bg #000000 solid_color' >/dev/null 2>&1 || true
+swaymsg 'output DSI-1 enable transform 90 pos 340 1080 bg #000000 solid_color' >/dev/null 2>&1 || true
+HELPER
+chmod 0755 "$helper"
 
 tmp="$(mktemp)"
 awk -v begin="$marker_begin" -v end="$marker_end" '
@@ -45,16 +65,13 @@ output DSI-2 transform 90
 output DSI-2 pos 0 0
 output DSI-1 transform 90
 output DSI-1 pos 340 1080
+exec_always /storage/bin/korri-apply-sway-layout
 # korri:dual-screen-layout end
 CONFIG
 mv "$tmp" "$config"
 
 if command -v swaymsg >/dev/null 2>&1; then
-  export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/var/run/0-runtime-dir}"
-  export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
-  export SWAYSOCK="${SWAYSOCK:-$XDG_RUNTIME_DIR/sway-ipc.0.sock}"
-  swaymsg 'output DSI-2 transform 90 pos 0 0' >/dev/null 2>&1 || true
-  swaymsg 'output DSI-1 transform 90 pos 340 1080' >/dev/null 2>&1 || true
+  "$helper" >/dev/null 2>&1 || true
 fi
 REMOTE
 }
