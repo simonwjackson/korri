@@ -66,6 +66,18 @@ pkgs.stdenv.mkDerivation {
         cp -R ${bunDeps}/. node_modules/
         chmod -R u+w node_modules
 
+        # @proseql/core@0.11.0 ships default imports for a few CommonJS
+        # serializer dependencies. Bun can run them directly, but Bun's bundler
+        # rejects the default export while building the Electrobun native bundle.
+        # Patch the installed build output until the upstream package publishes
+        # namespace imports.
+        for codec in hjson json5 jsonc; do
+          file="node_modules/@proseql/core/dist/serializers/codecs/$codec.js"
+          if [ -f "$file" ]; then
+            sed -i 's/^import pkg from /import * as pkg from /' "$file"
+          fi
+        done
+
         mkdir -p node_modules/electrobun/bin
         cp ${electrobunBinaries.cli}/electrobun node_modules/electrobun/bin/electrobun
         chmod +x node_modules/electrobun/bin/electrobun

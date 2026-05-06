@@ -13,5 +13,8 @@
     };
   };
 
-  bunDepsHash = "sha256-gQHTC04SuEPlkVFrjctgz1HJLI5ORmer1kFs9/zhGxk=";
+  bunDepsHash = {
+    x86_64-linux = "sha256-ArW5VbUPROBtziiKkNvpKyQAVTW5zj1nev7fSlaELps=";
+    aarch64-linux = "sha256-SHbFSaALpiopZmibT5iT/fQAWKcTSVisWlM6t+SDXqc=";
+  };
 }

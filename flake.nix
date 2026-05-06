@@ -112,7 +112,11 @@
           inherit pkgs;
           lib = pkgs.lib;
           src = bunDepsSrc;
-          outputHash = versions.bunDepsHash;
+          outputHash =
+            if builtins.isAttrs versions.bunDepsHash then
+              versions.bunDepsHash.${system}
+            else
+              versions.bunDepsHash;
         };
 
         korriPortal = import ./nix/korri-portal.nix {
