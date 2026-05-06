@@ -284,8 +284,11 @@ if (dx >= dy) {
   const dsi1First = dsi1.rect.y <= dsi2.rect.y
   const top = dsi1First ? dsi2 : dsi1
   const bottom = dsi1First ? dsi1 : dsi2
-  console.log(`output "${quote(top.name)}" pos ${minX} ${minY}`)
-  console.log(`output "${quote(bottom.name)}" pos ${minX} ${minY + top.rect.height}`)
+  const width = Math.max(top.rect.width, bottom.rect.width)
+  const topX = minX + Math.floor((width - top.rect.width) / 2)
+  const bottomX = minX + Math.floor((width - bottom.rect.width) / 2)
+  console.log(`output "${quote(top.name)}" pos ${topX} ${minY}`)
+  console.log(`output "${quote(bottom.name)}" pos ${bottomX} ${minY + top.rect.height}`)
 }
 ' 2>/dev/null || true)"
 

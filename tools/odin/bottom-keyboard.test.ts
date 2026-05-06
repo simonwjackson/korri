@@ -26,7 +26,7 @@ const thorOutputs = [
   {
     name: "DSI-1",
     active: true,
-    rect: { x: 1920, y: 0, width: 1240, height: 1080 },
+    rect: { x: 340, y: 1080, width: 1240, height: 1080 },
   },
 ]
 
@@ -35,7 +35,7 @@ describe("bottom keyboard command", () => {
     expect(selectBottomOutput(outputs)?.name).toBe("bottom")
   })
 
-  it("selects the right-hand output when rotated Odin screens share a y coordinate", () => {
+  it("selects the lower output when Odin screens are stacked", () => {
     expect(selectBottomOutput(thorOutputs)?.name).toBe("DSI-1")
   })
 

@@ -155,15 +155,19 @@ $es_env
 KORRI_ROCKNIX_GAMELIST_ROOTS=/storage/roms
 EOF
 
-# 7. Korri session toggle command -------------------------------------------
+# 7. Odin Sway dual-screen layout -------------------------------------------
+log "Ensuring Odin screens are stacked in Sway..."
+"$SCRIPT_DIR/install-sway-layout.sh" install
+
+# 8. Korri session toggle command -------------------------------------------
 log "Ensuring Korri session toggle command is installed..."
 "$SCRIPT_DIR/install-korri-toggle.sh" install
 
-# 8. Korri input daemon ------------------------------------------------------
+# 9. Korri input daemon ------------------------------------------------------
 log "Installing/restarting Korri input daemon service..."
 ssh_odin "cd '$ODIN_PROJECT' && ODIN_PROJECT='$ODIN_PROJECT' ODIN_INPUT_BRIDGE_PORT='$ODIN_INPUT_BRIDGE_PORT' scripts/odin/install-inputd-service.sh install-start-mask"
 
-# 9. Korri session supervisor ------------------------------------------------
+# 10. Korri session supervisor -----------------------------------------------
 log "Installing/restarting Korri session supervisor service..."
 ssh_odin "cd '$ODIN_PROJECT' && ODIN_PROJECT='$ODIN_PROJECT' scripts/odin/install-sessiond-service.sh install-start"
 
