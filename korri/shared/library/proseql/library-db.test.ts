@@ -51,8 +51,17 @@ describe("openKorriLibraryDb", () => {
       )
 
       const gamesFile = await readFile(join(root, "games.yaml"), "utf8")
+      const launchTargetsFile = await readFile(
+        join(root, "launch-targets.yaml"),
+        "utf8",
+      )
       expect(gamesFile).toContain(`_version: ${KORRI_LIBRARY_SCHEMA_VERSION}`)
+      expect(gamesFile).toContain("snes/f-zero.smc:")
       expect(gamesFile).toContain("F-Zero")
+      expect(gamesFile).not.toContain("  id: snes/f-zero.smc")
+      expect(launchTargetsFile).toContain("launch:snes/f-zero.smc:")
+      expect(launchTargetsFile).toContain("gameId: snes/f-zero.smc")
+      expect(launchTargetsFile).not.toContain("  id: launch:snes/f-zero.smc")
 
       const reopened = await Effect.runPromise(
         Effect.scoped(
@@ -94,9 +103,8 @@ describe("openKorriLibraryDb", () => {
         join(root, "games.yaml"),
         [
           "bad:",
-          "  id: 123",
           "  metadata:",
-          "    name: Broken",
+          "    name: 123",
           `_version: ${KORRI_LIBRARY_SCHEMA_VERSION}`,
           "",
         ].join("\n"),
@@ -115,8 +123,13 @@ describe("openKorriLibraryDb", () => {
     const config = makeKorriLibraryDbConfig("/tmp/korri-library")
 
     expect(config.games.file).toBe("/tmp/korri-library/games.yaml")
+    expect(config.games.id).toEqual({ kind: "derivedFromKey", field: "id" })
     expect(config.launchTargets.file).toBe(
       "/tmp/korri-library/launch-targets.yaml",
     )
+    expect(config.launchTargets.id).toEqual({
+      kind: "derivedFromKey",
+      field: "id",
+    })
   })
 })

@@ -3,7 +3,7 @@ import {
   createNodeDatabase,
   type GenerateDatabaseWithPersistence,
 } from "@proseql/node"
-import { GameRecord } from "@shared/fixtures/games/game"
+import { GameMetadata, GameUserData } from "@shared/fixtures/games/game"
 import { LaunchSpec } from "@shared/library/launcher"
 import { Effect, Schema } from "effect"
 
@@ -14,6 +14,20 @@ const initialMigration = {
   to: KORRI_LIBRARY_SCHEMA_VERSION,
   transform: (record: Record<string, unknown>) => record,
 } as const
+
+export const GamePayloadRecord = Schema.Struct({
+  metadata: Schema.optional(GameMetadata),
+  userData: Schema.optional(GameUserData),
+})
+export type GamePayloadRecord = Schema.Schema.Type<typeof GamePayloadRecord>
+
+export const LaunchTargetPayloadRecord = Schema.Struct({
+  gameId: Schema.String,
+  spec: LaunchSpec,
+})
+export type LaunchTargetPayloadRecord = Schema.Schema.Type<
+  typeof LaunchTargetPayloadRecord
+>
 
 export const LaunchTargetRecord = Schema.Struct({
   id: Schema.String,
@@ -30,14 +44,16 @@ export interface KorriLibraryDbOptions {
 export function makeKorriLibraryDbConfig(root: string) {
   return {
     games: {
-      schema: GameRecord,
+      schema: GamePayloadRecord,
+      id: { kind: "derivedFromKey", field: "id" },
       file: join(root, "games.yaml"),
       version: KORRI_LIBRARY_SCHEMA_VERSION,
       migrations: [initialMigration],
       relationships: {},
     },
     launchTargets: {
-      schema: LaunchTargetRecord,
+      schema: LaunchTargetPayloadRecord,
+      id: { kind: "derivedFromKey", field: "id" },
       file: join(root, "launch-targets.yaml"),
       version: KORRI_LIBRARY_SCHEMA_VERSION,
       migrations: [initialMigration],
