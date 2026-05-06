@@ -1,13 +1,14 @@
 import { decodeNativeInputEvent } from "@shared/input/native/wire-schema"
 import { logger } from "@shared/logger"
 
-const url = process.env.ODIN_INPUT_BRIDGE_URL
-if (!url) {
+const inputBridgeUrl = process.env.ODIN_INPUT_BRIDGE_URL
+if (!inputBridgeUrl) {
   logger.error(
     "ODIN_INPUT_BRIDGE_URL env var is required (e.g. ws://sm8550:3002)",
   )
   process.exit(2)
 }
+const url = inputBridgeUrl
 
 const timeoutMs = Number.parseInt(
   process.env.ODIN_INPUT_BRIDGE_TIMEOUT_MS ?? "2000",
