@@ -208,7 +208,7 @@ sequenceDiagram
 **Verification:**
 - The renderer cannot drive Korri navigation from standard native input while inactive, even if raw frames are delivered unexpectedly.
 
-- [x] **Unit 3: Wire focus-aware native input in portal and Storybook composition roots**
+- [ ] **Unit 3: Wire focus-aware native input in portal and Storybook composition roots**
 
 **Goal:** Configure the Odin portal and Storybook native-input setup to use focus-aware standard input and an explicit inactive action exception for the System-panel path.
 

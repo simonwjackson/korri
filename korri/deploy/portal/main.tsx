@@ -38,11 +38,7 @@ startSpatialNavigation({
   controller: {
     profile: controllerProfile,
     native: nativeBridgeUrl
-      ? {
-          url: nativeBridgeUrl,
-          subscribe: ["gamepad", "system"],
-          inactiveActions: ["system"],
-        }
+      ? { url: nativeBridgeUrl, subscribe: ["gamepad", "system"] }
       : undefined,
   },
 })
