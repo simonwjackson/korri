@@ -129,7 +129,7 @@ sequenceDiagram
 
 ## Implementation Units
 
-- [x] **Unit 1: Extend the native input subscription contract with renderer activity**
+- [ ] **Unit 1: Extend the native input subscription contract with renderer activity**
 
 **Goal:** Add a backward-compatible way for renderer clients to tell inputd whether they should receive standard raw input frames.
 
