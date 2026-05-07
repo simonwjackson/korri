@@ -1,15 +1,15 @@
 import { createLogger } from "@shared/logger"
 import {
+  alwaysActiveNativeInputActivitySource,
+  createBrowserNativeInputActivitySource,
+  type NativeInputActivitySource,
+} from "./native-activity"
+import {
   decodeNativeInputEvent,
   decodeNativeInputSubscription,
   encodeNativeInputSubscription,
   type NativeInputDeviceClass,
 } from "./native/wire-schema"
-import {
-  alwaysActiveNativeInputActivitySource,
-  createBrowserNativeInputActivitySource,
-  type NativeInputActivitySource,
-} from "./native-activity"
 import type { Direction, InputAdapter, InputListener } from "./types"
 
 const logger = createLogger("native-input-adapter")
