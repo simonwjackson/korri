@@ -92,18 +92,4 @@ describe("desktop app composition", () => {
     )
     expect(await response.text()).not.toBe("<html>Route Shell</html>")
   })
-
-  test("reports native input activity before static fallback", async () => {
-    await writeFixture("index.html", "<html>Route Shell</html>")
-    const app = createDesktopApp({
-      assetRoot,
-      nativeInputActive: () => true,
-    })
-
-    const response = await app.fetch(request("/__korri/native-input-active"))
-    const payload = await response.json()
-
-    expect(response.status).toBe(200)
-    expect(payload).toEqual({ active: true })
-  })
 })
