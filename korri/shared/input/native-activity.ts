@@ -9,7 +9,10 @@ export interface BrowserNativeInputActivityOptions {
   readonly windowRef?: Pick<Window, "addEventListener" | "removeEventListener">
   readonly documentRef?: Pick<
     Document,
-    "addEventListener" | "removeEventListener" | "visibilityState" | "hasFocus"
+    | "addEventListener"
+    | "removeEventListener"
+    | "visibilityState"
+    | "hasFocus"
   >
 }
 
@@ -41,8 +44,7 @@ export function createBrowserNativeInputActivitySource(
   }
 }
 
-export const alwaysActiveNativeInputActivitySource: NativeInputActivitySource =
-  {
-    current: () => true,
-    subscribe: () => () => {},
-  }
+export const alwaysActiveNativeInputActivitySource: NativeInputActivitySource = {
+  current: () => true,
+  subscribe: () => () => {},
+}
