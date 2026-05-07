@@ -5,8 +5,7 @@
 # 2. Hit /api/health directly over Tailscale.
 # 3. Hit /api/rpc with `app.library.list` (delegated to the Bun TS sidecar
 #    so the wire format stays in sync with @effect/rpc).
-# 4. Subscribe to Korri inputd's native input endpoint, expect device frames,
-#    and verify inactive clients do not receive standard input frames.
+# 4. Subscribe to Korri inputd's native input endpoint and expect a gamepad.
 # 5. Print a summary.
 #
 # This is the equivalent of `just desktop-runtime-check` for the Odin loop.
