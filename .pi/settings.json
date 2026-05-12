@@ -1,3 +1,6 @@
 {
-	"packages": ["./packages/feature-gates"]
+	"packages": [
+		"./packages/feature-gates",
+		"git:github.com/simonwjackson/pi-lattice-stack"
+	]
 }

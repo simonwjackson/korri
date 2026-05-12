@@ -6,6 +6,7 @@ test-results/
 .tmp/
 .tanstack/
 .fallow/
+.pi/git/
 
 .env
 .env.*
