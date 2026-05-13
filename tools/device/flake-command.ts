@@ -384,7 +384,32 @@ async function defaultExecute(
     stdout: "inherit",
     stderr: "inherit",
   })
-  return await proc.exited
+
+  let interrupted: NodeJS.Signals | undefined
+  let escalation: Timer | undefined
+  const forwardSignal = (signal: NodeJS.Signals) => {
+    interrupted = signal
+    proc.kill(signal)
+    escalation = setTimeout(() => proc.kill("SIGTERM"), 2000)
+  }
+  process.once("SIGINT", forwardSignal)
+  process.once("SIGTERM", forwardSignal)
+
+  try {
+    const exitCode = await proc.exited
+    if (interrupted && exitCode === 0) return signalExitCode(interrupted)
+    return exitCode
+  } finally {
+    process.off("SIGINT", forwardSignal)
+    process.off("SIGTERM", forwardSignal)
+    if (escalation) clearTimeout(escalation)
+  }
+}
+
+function signalExitCode(signal: NodeJS.Signals): number {
+  if (signal === "SIGINT") return 130
+  if (signal === "SIGTERM") return 143
+  return 1
 }
 
 async function promptYesNo(message: string): Promise<boolean> {
