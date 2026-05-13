@@ -5,6 +5,7 @@ import {
   DeviceFlakeCommandError,
   isCommittedStateFlakeRef,
   parseShellWords,
+  renderRemoteCleanupCommand,
   runDeviceFlakeCommandCli,
 } from "./flake-command"
 
@@ -36,13 +37,14 @@ describe("buildDeviceFlakeExecutionPlan", () => {
       flakeRef: "git+ssh://source.example/home/me/code/korri",
       app: "korri-desktop-device",
       command: "ssh",
-      args: [
-        "root@example-device",
-        "nix run git+ssh://source.example/home/me/code/korri#korri-desktop-device",
-      ],
-      remoteCommand:
-        "nix run git+ssh://source.example/home/me/code/korri#korri-desktop-device",
     })
+    if (plan.mode !== "ssh") throw new Error("expected ssh plan")
+    expect(plan.args[0]).toBe("root@example-device")
+    expect(plan.args[1]).toContain("setsid")
+    expect(plan.args[1]).toContain(
+      "git+ssh://source.example/home/me/code/korri#korri-desktop-device",
+    )
+    expect(plan.remoteCommand).toBe(plan.args[1])
   })
 
   it("uses KORRI_SOURCE_HOST for inferred remote flake refs", () => {
@@ -71,8 +73,9 @@ describe("buildDeviceFlakeExecutionPlan", () => {
       mode: "ssh",
       flakeRef: "github:example/korri",
       app: "custom-app",
-      args: ["root@example-device", "nix run github:example/korri#custom-app"],
     })
+    expect(plan.args[0]).toBe("root@example-device")
+    expect(plan.args[1]).toContain("github:example/korri#custom-app")
   })
 
   it("omits builder flags unless raw Nix builder env is present", () => {
@@ -121,11 +124,13 @@ describe("buildDeviceFlakeExecutionPlan", () => {
       KORRI_FLAKE_REF: "git+ssh://source.example/repo/korri",
     })
 
-    expect(remotePlan).toMatchObject({
-      mode: "ssh",
-      remoteCommand:
-        "env WAYLAND_DISPLAY=wayland-1 nix run git+ssh://source.example/repo/korri#korri-desktop-device",
-    })
+    if (remotePlan.mode !== "ssh") throw new Error("expected ssh plan")
+    expect(remotePlan).toMatchObject({ mode: "ssh" })
+    expect(remotePlan.remoteCommand).toContain("env")
+    expect(remotePlan.remoteCommand).toContain("WAYLAND_DISPLAY=wayland-1")
+    expect(remotePlan.remoteCommand).toContain(
+      "git+ssh://source.example/repo/korri#korri-desktop-device",
+    )
   })
 
   it("rejects run env values that are not assignments", () => {
@@ -161,14 +166,16 @@ describe("buildDeviceFlakeExecutionPlan", () => {
       KORRI_FLAKE_REF: "git+ssh://source.example/repo/korri",
     })
 
-    expect(plan.args).toEqual([
+    expect(plan.args.slice(0, 5)).toEqual([
       "-p",
       "2222",
       "-o",
       "UserKnownHostsFile=/tmp/known hosts",
       "root@example-device",
-      "nix run git+ssh://source.example/repo/korri#korri-desktop-device",
     ])
+    expect(plan.args[5]).toContain(
+      "git+ssh://source.example/repo/korri#korri-desktop-device",
+    )
   })
 
   it("fails clearly when remote inference lacks a repo root", () => {
@@ -281,6 +288,17 @@ describe("checkDirtyFlakeRun", () => {
         confirm: async () => false,
       }),
     ).rejects.toThrow("Aborted")
+  })
+})
+
+describe("renderRemoteCleanupCommand", () => {
+  it("wraps remote runs so disconnects and interrupts clean up the child process group", () => {
+    const command = renderRemoteCleanupCommand(["nix", "run", ".#app"])
+
+    expect(command).toContain("trap cleanup INT TERM HUP EXIT")
+    expect(command).toContain('setsid "$@" &')
+    expect(command).toContain('kill -TERM "-$child"')
+    expect(command).toContain("korri-device-run nix run .#app")
   })
 })
 

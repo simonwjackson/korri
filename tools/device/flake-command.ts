@@ -102,27 +102,28 @@ export function buildDeviceFlakeExecutionPlan(
 
   const nixArgs = buildNixRunArgs({ flakeRef, app, env })
   const runEnv = parseRunEnv(optionalEnv(env.DEVICE_RUN_ENV) ?? "")
+  const runCommand =
+    runEnv.length > 0
+      ? ["env", ...runEnv, "nix", ...nixArgs]
+      : ["nix", ...nixArgs]
 
   if (!destinationHost) {
     return {
       mode: "local",
       flakeRef,
       app,
-      command: runEnv.length > 0 ? "env" : "nix",
-      args: runEnv.length > 0 ? [...runEnv, "nix", ...nixArgs] : nixArgs,
-      displayCommand:
-        runEnv.length > 0
-          ? renderCommand("env", [...runEnv, "nix", ...nixArgs])
-          : renderCommand("nix", nixArgs),
+      command: runCommand[0] === "env" ? "env" : "nix",
+      args: runCommand.slice(1),
+      displayCommand: renderCommand(
+        runCommand[0] ?? "nix",
+        runCommand.slice(1),
+      ),
     }
   }
 
   assertSingleShellWord(destinationHost, "DEVICE_HOST")
   const sshOptions = parseShellWords(optionalEnv(env.DEVICE_SSH_OPTS) ?? "")
-  const remoteCommand =
-    runEnv.length > 0
-      ? renderCommand("env", [...runEnv, "nix", ...nixArgs])
-      : renderCommand("nix", nixArgs)
+  const remoteCommand = renderRemoteCleanupCommand(runCommand)
   const args = [...sshOptions, destinationHost, remoteCommand]
   return {
     mode: "ssh",
@@ -184,6 +185,30 @@ export function renderCommand(
   args: readonly string[],
 ): string {
   return [command, ...args].map(shellQuote).join(" ")
+}
+
+export function renderRemoteCleanupCommand(command: readonly string[]): string {
+  const script = [
+    "child=",
+    "cleanup() {",
+    "status=$?",
+    "trap - INT TERM HUP EXIT",
+    'if [ -n "${' + 'child:-}" ] && kill -0 "$child" 2>/dev/null; then',
+    'kill -TERM "-$child" 2>/dev/null || kill -TERM "$child" 2>/dev/null || true',
+    'wait "$child" 2>/dev/null || true',
+    "fi",
+    'exit "$status"',
+    "}",
+    "trap cleanup INT TERM HUP EXIT",
+    'setsid "$@" &',
+    "child=$!",
+    'wait "$child"',
+    "status=$?",
+    "trap - INT TERM HUP EXIT",
+    'exit "$status"',
+  ].join("; ")
+
+  return renderCommand("sh", ["-lc", script, "korri-device-run", ...command])
 }
 
 export async function runDeviceFlakeCommandCli(

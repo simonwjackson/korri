@@ -18,7 +18,7 @@ just device-print-run-command
 just device-run
 ```
 
-`device-print-run-command` prints the selected command without executing it. `device-run` executes it.
+`device-print-run-command` prints the selected command without executing it. `device-run` executes it. For SSH destinations, the remote command is wrapped so `Ctrl-C` or an SSH disconnect terminates the launched process group.
 
 By default, with no local topology configured, Korri runs the device app from the current checkout on the current machine:
 
