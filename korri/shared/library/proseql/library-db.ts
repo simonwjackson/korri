@@ -4,7 +4,8 @@ import {
   type GenerateDatabaseWithPersistence,
 } from "@proseql/node"
 import { GameMetadata, GameUserData } from "@shared/fixtures/games/game"
-import { LaunchSpec } from "@shared/library/launcher"
+import { LaunchTargetPayloadRecord } from "@shared/library/launcher-config/launch-target"
+import { LauncherProfilePayloadRecord } from "@shared/library/launcher-config/launcher-profile"
 import { Effect, Schema } from "effect"
 
 export const KORRI_LIBRARY_SCHEMA_VERSION = 1
@@ -21,20 +22,7 @@ export const GamePayloadRecord = Schema.Struct({
 })
 export type GamePayloadRecord = Schema.Schema.Type<typeof GamePayloadRecord>
 
-export const LaunchTargetPayloadRecord = Schema.Struct({
-  gameId: Schema.String,
-  spec: LaunchSpec,
-})
-export type LaunchTargetPayloadRecord = Schema.Schema.Type<
-  typeof LaunchTargetPayloadRecord
->
-
-export const LaunchTargetRecord = Schema.Struct({
-  id: Schema.String,
-  gameId: Schema.String,
-  spec: LaunchSpec,
-})
-export type LaunchTargetRecord = Schema.Schema.Type<typeof LaunchTargetRecord>
+export type { LauncherProfilePayloadRecord, LaunchTargetPayloadRecord }
 
 export interface KorriLibraryDbOptions {
   readonly root: string
@@ -51,16 +39,24 @@ export function makeKorriLibraryDbConfig(root: string) {
       migrations: [initialMigration],
       relationships: {},
     },
+    launcherProfiles: {
+      schema: LauncherProfilePayloadRecord,
+      id: { kind: "derivedFromKey", field: "id" },
+      file: join(root, "launcher-profiles.yaml"),
+      version: KORRI_LIBRARY_SCHEMA_VERSION,
+      migrations: [initialMigration],
+      relationships: {},
+    },
     launchTargets: {
       schema: LaunchTargetPayloadRecord,
       id: { kind: "derivedFromKey", field: "id" },
       file: join(root, "launch-targets.yaml"),
       version: KORRI_LIBRARY_SCHEMA_VERSION,
       migrations: [initialMigration],
-      relationships: {
-        game: { type: "ref", target: "games", foreignKey: "gameId" },
-      },
-      uniqueFields: ["gameId"],
+      // Launch targets intentionally validate references during resolution
+      // rather than at database-open/write time so legacy resolved-spec rows
+      // do not prevent the library from listing games.
+      relationships: {},
     },
   } as const
 }

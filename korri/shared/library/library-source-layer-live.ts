@@ -1,11 +1,11 @@
 import { logger } from "@shared/logger"
 import { Effect, Layer } from "effect"
-import type { LibrarySource as PlainLibrarySource } from "./library-source"
 import {
   LibraryError,
   LibrarySource,
   type LibrarySourceService,
 } from "./library-services"
+import type { LibrarySource as PlainLibrarySource } from "./library-source"
 import { openKorriLibraryDb } from "./proseql/library-db"
 import {
   createLibraryRepository,
@@ -136,6 +136,8 @@ function buildLibraryRootFromEnv(): string {
 }
 
 function toLibraryError(error: unknown): LibraryError {
+  if (error instanceof LibraryError) return error
+
   return new LibraryError({
     reason: "io",
     message: error instanceof Error ? error.message : String(error),

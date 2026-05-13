@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto"
 import { readdir } from "node:fs/promises"
 import { join, parse as parsePath } from "node:path"
 import type { GameRecord } from "@shared/fixtures/games/game"
-import type { LaunchSpec } from "@shared/library/launcher"
+import type { ProfileBackedLaunchTargetRecord } from "@shared/library/launcher-config/launch-target"
+import type { LauncherProfileRecord } from "@shared/library/launcher-config/launcher-profile"
 import type { LibraryRepository } from "@shared/library/proseql/library-repository"
 import { logger } from "@shared/logger"
 import { Effect } from "effect"
@@ -196,7 +197,8 @@ async function composeImportedRecord(args: {
   launchCommandOverride: string | undefined
 }): Promise<{
   game: GameRecord
-  launchTarget: { id: string; gameId: string; spec: LaunchSpec }
+  launcherProfile: LauncherProfileRecord
+  launchTarget: ProfileBackedLaunchTargetRecord
 }> {
   const media = await findSidecarMedia({
     mediaRoot: args.mediaRoot,
@@ -205,18 +207,19 @@ async function composeImportedRecord(args: {
   })
 
   const game = composeGameRecord(args.gameId, args.entry, media)
-  const spec = composeLaunchSpec({
-    template: args.system.commandTemplate,
+  const launcherProfile = composeLauncherProfile({
+    system: args.system,
     launchCommandOverride: args.launchCommandOverride,
-    romPath: args.romPath,
-    systemName: args.system.name,
-    coreName: args.system.defaultCore,
-    emulatorName: args.system.defaultEmulator,
   })
 
   return {
     game,
-    launchTarget: { id: `launch:${args.gameId}`, gameId: args.gameId, spec },
+    launcherProfile,
+    launchTarget: {
+      id: args.gameId,
+      profile: launcherProfile.id,
+      contentPath: args.romPath,
+    },
   }
 }
 
@@ -283,27 +286,52 @@ function composeGameRecord(
   return record
 }
 
-function composeLaunchSpec(args: {
-  template: string
+function composeLauncherProfile(args: {
+  system: EsSystem
   launchCommandOverride: string | undefined
-  romPath: string
-  systemName: string
-  coreName: string | undefined
-  emulatorName: string | undefined
-}): LaunchSpec {
-  const substituted = args.template
-    .replaceAll("%SYSTEM%", args.systemName)
-    .replaceAll("%CORE%", args.coreName ?? "")
-    .replaceAll("%EMULATOR%", args.emulatorName ?? "")
+}): LauncherProfileRecord {
+  const tokens = args.system.commandTemplate
     .replaceAll("%CONTROLLERSCONFIG%", "")
+    .split(/\s+/)
+    .filter(token => token.length > 0)
+    .filter(token => !token.startsWith("--controllers="))
 
-  const tokens = substituted.split(/\s+/).filter(t => t.length > 0)
-  const filtered = tokens.filter(t => !t.startsWith("--controllers="))
-  const final = filtered.map(t => (t === "%ROM%" ? args.romPath : t))
-  const [first, ...rest] = final
+  const [first, ...rest] = tokens
   const command = args.launchCommandOverride ?? first ?? ""
 
-  return { command, args: rest }
+  return {
+    id: launcherProfileId(args.system),
+    command: translateEsPlaceholders(command),
+    args: rest.map(translateEsPlaceholders),
+    defaults: stripUndefined({
+      system: args.system.name,
+      core: args.system.defaultCore,
+      emulator: args.system.defaultEmulator,
+    }),
+  }
+}
+
+function translateEsPlaceholders(token: string): string {
+  return token
+    .replaceAll("%ROM%", "{contentPath}")
+    .replaceAll("%SYSTEM%", "{system}")
+    .replaceAll("%CORE%", "{core}")
+    .replaceAll("%EMULATOR%", "{emulator}")
+}
+
+function launcherProfileId(system: EsSystem): string {
+  return ["rocknix", system.defaultEmulator, system.name, system.defaultCore]
+    .filter((part): part is string => Boolean(part && part.length > 0))
+    .map(sanitizeProfileIdPart)
+    .join(".")
+}
+
+function sanitizeProfileIdPart(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "")
 }
 
 function stripUndefined<T extends Record<string, unknown>>(

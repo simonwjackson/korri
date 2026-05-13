@@ -83,6 +83,33 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     }
   })
 
+  it("returns failed launch diagnostics for a misconfigured profile (no spawn)", async () => {
+    const lib = await withTempProseqlLibrary({ missingProfile: true })
+    cleanups.push(lib.cleanup)
+    process.env.KORRI_LIBRARY_ROOT = lib.root
+    const launcherLayer = Layer.succeed(Launcher)({
+      run: () =>
+        Effect.fail(
+          new LibraryError({
+            reason: "io",
+            message: "launcher should not run for configuration failures",
+          }),
+        ),
+    })
+
+    const result = await Effect.runPromise(
+      handleLaunchLibrary({ id: "snes/echo.smc" }).pipe(
+        Effect.provide(Layer.merge(LibrarySourceLayerLive, launcherLayer)),
+      ),
+    )
+
+    expect(result.status).toBe("failed")
+    if (result.status === "failed") {
+      expect(result.exitCode).toBe(124)
+      expect(result.stderrTail).toContain("missing launcher profile")
+    }
+  })
+
   it("fails with NotFoundError for unknown id (no spawn)", async () => {
     const { layer } = await layerForFakeGame(0)
     const exit = await Effect.runPromiseExit(
@@ -108,7 +135,9 @@ type TempProseqlLibrary = {
   readonly cleanup: () => Promise<void>
 }
 
-async function withTempProseqlLibrary(): Promise<TempProseqlLibrary> {
+async function withTempProseqlLibrary(
+  options: { readonly missingProfile?: boolean } = {},
+): Promise<TempProseqlLibrary> {
   const root = await mkdtemp(join(tmpdir(), "korri-proseql-launch-test-"))
   let success = false
   try {
@@ -117,25 +146,32 @@ async function withTempProseqlLibrary(): Promise<TempProseqlLibrary> {
         Effect.gen(function* () {
           const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
           const repository = createLibraryRepository(db)
-          yield* repository.upsertImportedGame({
-            game: {
-              id: "snes/echo.smc",
-              metadata: { name: "Echo" },
-              userData: { lastPlayed: new Date("2026-05-01T00:00:00.000Z") },
-            },
-            launchTarget: {
-              id: "launch:snes/echo.smc",
-              gameId: "snes/echo.smc",
-              spec: {
-                command: FAKE_GAME,
-                args: [
-                  "/tmp/roms/snes/echo.smc",
-                  "-Psnes",
-                  "--core=snes9x",
-                  "--emulator=retroarch",
-                ],
+          yield* repository.upsertGame({
+            id: "snes/echo.smc",
+            metadata: { name: "Echo" },
+            userData: { lastPlayed: new Date("2026-05-01T00:00:00.000Z") },
+          })
+          if (!options.missingProfile) {
+            yield* repository.upsertLauncherProfile({
+              id: "rocknix.retroarch.snes",
+              command: FAKE_GAME,
+              args: [
+                "{contentPath}",
+                "-P{system}",
+                "--core={core}",
+                "--emulator={emulator}",
+              ],
+              defaults: {
+                system: "snes",
+                core: "snes9x",
+                emulator: "retroarch",
               },
-            },
+            })
+          }
+          yield* repository.upsertLaunchTarget({
+            id: "snes/echo.smc",
+            profile: "rocknix.retroarch.snes",
+            contentPath: "/tmp/roms/snes/echo.smc",
           })
           yield* Effect.promise(() => db.flush())
         }),

@@ -139,7 +139,12 @@ describe("importRocknixLibrary", () => {
       expect(result.second._tag).toBe("Failure")
       expect(result.games.map(game => game.id)).toEqual(["game-1"])
       expect(result.specs).toHaveLength(1)
-      expect(result.specs[0]?.gameId).toBe("game-1")
+      const launchTarget = result.specs[0]
+      expect(launchTarget?.id).toBe("game-1")
+      expect(launchTarget && "profile" in launchTarget).toBe(true)
+      if (launchTarget && "profile" in launchTarget) {
+        expect(launchTarget.profile).toBe("rocknix.retroarch.snes.snes9x")
+      }
     })
   })
 

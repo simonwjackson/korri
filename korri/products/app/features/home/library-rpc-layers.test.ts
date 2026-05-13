@@ -88,18 +88,25 @@ async function seedLibrary(): Promise<TempProseqlLibrary> {
               metadata: { name: "RPC Echo" },
               userData: { lastPlayed: new Date("2026-05-01T00:00:00.000Z") },
             },
-            launchTarget: {
-              id: "launch:snes/echo.smc",
-              gameId: "snes/echo.smc",
-              spec: {
-                command: FAKE_GAME,
-                args: [
-                  "/tmp/roms/snes/echo.smc",
-                  "-Psnes",
-                  "--core=snes9x",
-                  "--emulator=retroarch",
-                ],
+            launcherProfile: {
+              id: "rocknix.retroarch.snes",
+              command: FAKE_GAME,
+              args: [
+                "{contentPath}",
+                "-P{system}",
+                "--core={core}",
+                "--emulator={emulator}",
+              ],
+              defaults: {
+                system: "snes",
+                core: "snes9x",
+                emulator: "retroarch",
               },
+            },
+            launchTarget: {
+              id: "snes/echo.smc",
+              profile: "rocknix.retroarch.snes",
+              contentPath: "/tmp/roms/snes/echo.smc",
             },
           })
           yield* Effect.promise(() => db.flush())

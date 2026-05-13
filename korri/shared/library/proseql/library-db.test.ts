@@ -19,7 +19,7 @@ async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
   }
 }
 
-function seedGame(id = "snes/f-zero.smc") {
+function seedGame(id = "25afeac6-f68c-4d44-b42e-87ec4c0a436b") {
   return {
     id,
     metadata: { name: "F-Zero" },
@@ -27,8 +27,15 @@ function seedGame(id = "snes/f-zero.smc") {
   }
 }
 
+const launcherProfile = {
+  id: "rocknix.retroarch.snes",
+  command: "/usr/bin/runemu.sh",
+  args: ["{contentPath}", "-P{system}"],
+  defaults: { system: "snes" },
+}
+
 describe("openKorriLibraryDb", () => {
-  it("writes, flushes, and reopens a game with a launch target", async () => {
+  it("writes, flushes, and reopens a game with a profile-backed launch target", async () => {
     await withTempRoot(async root => {
       await Effect.runPromise(
         Effect.scoped(
@@ -37,47 +44,59 @@ describe("openKorriLibraryDb", () => {
             const game = seedGame()
 
             yield* db.games.create(game)
-            yield* db.launchTargets.create({
-              id: `launch:${game.id}`,
-              gameId: game.id,
-              spec: {
-                command: "/usr/bin/runemu.sh",
-                args: ["/storage/roms/snes/f-zero.smc", "-Psnes"],
-              },
-            })
+            yield* db.launcherProfiles.create(launcherProfile)
+            const launchTarget = {
+              id: game.id,
+              profile: launcherProfile.id,
+              contentPath: "/storage/roms/snes/f-zero.smc",
+            }
+            yield* db.launchTargets.create(launchTarget as never)
             yield* Effect.promise(() => db.flush())
           }),
         ),
       )
 
       const gamesFile = await readFile(join(root, "games.yaml"), "utf8")
+      const profilesFile = await readFile(
+        join(root, "launcher-profiles.yaml"),
+        "utf8",
+      )
       const launchTargetsFile = await readFile(
         join(root, "launch-targets.yaml"),
         "utf8",
       )
       expect(gamesFile).toContain(`_version: ${KORRI_LIBRARY_SCHEMA_VERSION}`)
-      expect(gamesFile).toContain("snes/f-zero.smc:")
+      expect(gamesFile).toContain(`${seedGame().id}:`)
       expect(gamesFile).toContain("F-Zero")
-      expect(gamesFile).not.toContain("  id: snes/f-zero.smc")
-      expect(launchTargetsFile).toContain("launch:snes/f-zero.smc:")
-      expect(launchTargetsFile).toContain("gameId: snes/f-zero.smc")
-      expect(launchTargetsFile).not.toContain("  id: launch:snes/f-zero.smc")
+      expect(gamesFile).not.toContain(`  id: ${seedGame().id}`)
+      expect(profilesFile).toContain("rocknix.retroarch.snes:")
+      expect(launchTargetsFile).toContain(`${seedGame().id}:`)
+      expect(launchTargetsFile).toContain("profile: rocknix.retroarch.snes")
+      expect(launchTargetsFile).toContain(
+        "contentPath: /storage/roms/snes/f-zero.smc",
+      )
+      expect(launchTargetsFile).not.toContain(`  id: ${seedGame().id}`)
 
       const reopened = await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
             const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
-            const game = yield* db.games.findById("snes/f-zero.smc")
-            const launchTarget = yield* db.launchTargets.findById(
-              "launch:snes/f-zero.smc",
+            const game = yield* db.games.findById(seedGame().id)
+            const profile = yield* db.launcherProfiles.findById(
+              launcherProfile.id,
             )
-            return { game, launchTarget }
+            const launchTarget = yield* db.launchTargets.findById(seedGame().id)
+            return { game, profile, launchTarget }
           }),
         ),
       )
 
       expect(reopened.game.metadata?.name).toBe("F-Zero")
-      expect(reopened.launchTarget.spec.command).toBe("/usr/bin/runemu.sh")
+      expect(reopened.profile.command).toBe("/usr/bin/runemu.sh")
+      expect("profile" in reopened.launchTarget).toBe(true)
+      if ("profile" in reopened.launchTarget) {
+        expect(reopened.launchTarget.profile).toBe("rocknix.retroarch.snes")
+      }
     })
   })
 
@@ -119,11 +138,18 @@ describe("openKorriLibraryDb", () => {
     })
   })
 
-  it("declares the expected collection files", () => {
+  it("declares the expected default collection files", () => {
     const config = makeKorriLibraryDbConfig("/tmp/korri-library")
 
     expect(config.games.file).toBe("/tmp/korri-library/games.yaml")
     expect(config.games.id).toEqual({ kind: "derivedFromKey", field: "id" })
+    expect(config.launcherProfiles.file).toBe(
+      "/tmp/korri-library/launcher-profiles.yaml",
+    )
+    expect(config.launcherProfiles.id).toEqual({
+      kind: "derivedFromKey",
+      field: "id",
+    })
     expect(config.launchTargets.file).toBe(
       "/tmp/korri-library/launch-targets.yaml",
     )

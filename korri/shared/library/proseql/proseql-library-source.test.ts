@@ -33,10 +33,15 @@ describe("createProseqlLibrarySource", () => {
                   lastPlayed: new Date("2026-01-01T00:00:00.000Z"),
                 },
               },
+              launcherProfile: {
+                id: "echo.snes",
+                command: "/bin/echo",
+                args: ["{contentPath}"],
+              },
               launchTarget: {
-                id: "launch:snes/f-zero.smc",
-                gameId: "snes/f-zero.smc",
-                spec: { command: "/bin/echo", args: ["f-zero"] },
+                id: "snes/f-zero.smc",
+                profile: "echo.snes",
+                contentPath: "f-zero",
               },
             })
             yield* Effect.promise(() => db.flush())

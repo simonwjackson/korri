@@ -5,8 +5,9 @@ import { Context, type Effect, Schema } from "effect"
 export class LibraryError extends Schema.TaggedErrorClass<LibraryError>()(
   "LibraryError",
   {
-    reason: Schema.Literals(["io", "unavailable"]),
+    reason: Schema.Literals(["io", "unavailable", "config"]),
     message: Schema.optional(Schema.String),
+    diagnostic: Schema.optional(Schema.String),
   },
 ) {}
 
