@@ -240,6 +240,50 @@ describe("createRocknixSource (real filesystem via withTempLibrary)", () => {
     expect(games).toEqual([])
   })
 
+  it("falls back to gamelist-only records when es_systems.cfg is missing and fallback is enabled", async () => {
+    const lib = track(
+      await withTempLibrary({
+        systems: [
+          {
+            name: "ports",
+            defaultEmulator: "native",
+            defaultCore: "native",
+            extension: [".sh"],
+            games: [{ path: "Steam Desktop UI.sh", name: "Steam Desktop UI" }],
+          },
+          {
+            name: "wii",
+            defaultEmulator: "dolphin-sa",
+            defaultCore: "dolphin-sa",
+            extension: [".wbfs"],
+            games: [{ path: "mario.wbfs", name: "Mario" }],
+          },
+        ],
+      }),
+    )
+    await rm(lib.esSystemsPath, { force: true })
+
+    const source = createRocknixSource({
+      gamelistRoots: [lib.rootDir],
+      esSystemsPath: lib.esSystemsPath,
+      allowMissingEsSystems: true,
+    })
+
+    const games = await source.list()
+    expect(games.map(game => game.metadata?.name)).toEqual([
+      "Steam Desktop UI",
+      "Mario",
+    ])
+    expect(await source.launchSpecFor("ports/Steam Desktop UI.sh")).toEqual({
+      command: join(lib.rootDir, "ports", "Steam Desktop UI.sh"),
+      args: [],
+    })
+    expect(await source.launchSpecFor("wii/mario.wbfs")).toEqual({
+      command: "false",
+      args: [],
+    })
+  })
+
   it("drops games whose system is absent from es_systems.cfg", async () => {
     // Write a library with one system, then remove that system from
     // es_systems.cfg by overwriting it with an empty <systemList/>.

@@ -46,6 +46,11 @@ export type RocknixConfig = {
   readonly launchCommand?: string
   /** Korri-owned sidecar art root: `<root>/<system>/<rom-stem>/<image>`. */
   readonly mediaRoot?: string
+  /**
+   * Permit a display-only fallback when the guest can see gamelists but not
+   * ROCKNIX's `es_systems.cfg`.
+   */
+  readonly allowMissingEsSystems?: boolean
 }
 
 const DEFAULT_MEDIA_ROOT = "/storage/korri/media/games"
@@ -60,6 +65,7 @@ const SIDECAR_MEDIA_FILES = [
 
 const DEFAULT_CONFIG: RocknixConfig = {
   gamelistRoots: [
+    "/storage/roms",
     "/storage/games-internal/roms",
     "/storage/games-external/roms",
   ],
@@ -86,8 +92,13 @@ export function createRocknixSource(
       return { records: cachedRecords, specs: cachedSpecs }
     }
 
-    const systems = await loadSystems(config.esSystemsPath)
-    const systemByName = new Map(systems.map(s => [s.name, s] as const))
+    const systems = await loadSystems({
+      esSystemsPath: config.esSystemsPath,
+      allowMissingEsSystems: config.allowMissingEsSystems === true,
+    })
+    const allowGamelistOnlyFallback =
+      systems === undefined && config.allowMissingEsSystems === true
+    const systemByName = new Map((systems ?? []).map(s => [s.name, s] as const))
 
     const records: GameRecord[] = []
     const specs = new Map<string, LaunchSpec>()
@@ -96,7 +107,7 @@ export function createRocknixSource(
       const found = await scanGamelistRoot(root)
       for (const { systemName, systemRoot, entries } of found) {
         const sys = systemByName.get(systemName)
-        if (!sys) {
+        if (!sys && !allowGamelistOnlyFallback) {
           logger.warn(
             { systemName, gamelistRoot: root },
             "rocknix-source: dropping games for system not in es_systems.cfg",
@@ -104,13 +115,21 @@ export function createRocknixSource(
           continue
         }
         for (const entry of entries) {
-          const { record, spec } = await composeRecordAndSpec({
-            entry,
-            system: sys,
-            systemRoot,
-            mediaRoot: config.mediaRoot ?? DEFAULT_MEDIA_ROOT,
-            launchCommandOverride: config.launchCommand,
-          })
+          const { record, spec } = sys
+            ? await composeRecordAndSpec({
+                entry,
+                system: sys,
+                systemRoot,
+                mediaRoot: config.mediaRoot ?? DEFAULT_MEDIA_ROOT,
+                launchCommandOverride: config.launchCommand,
+              })
+            : await composeFallbackRecordAndSpec({
+                entry,
+                systemName,
+                systemRoot,
+                mediaRoot: config.mediaRoot ?? DEFAULT_MEDIA_ROOT,
+                launchCommandOverride: config.launchCommand,
+              })
           if (specs.has(record.id)) {
             // Two games on disk with the same composed id (rare — same
             // basename in two roots). Keep the first; log the second.
@@ -146,16 +165,24 @@ export function createRocknixSource(
   }
 }
 
-async function loadSystems(
-  esSystemsPath: string,
-): Promise<readonly EsSystem[]> {
-  const text = await readTextFileSafe(esSystemsPath)
+async function loadSystems(args: {
+  esSystemsPath: string
+  allowMissingEsSystems: boolean
+}): Promise<readonly EsSystem[] | undefined> {
+  const text = await readTextFileSafe(args.esSystemsPath)
   if (text === null) {
-    logger.error(
-      { esSystemsPath },
-      "rocknix-source: es_systems.cfg unreadable; library will be empty",
-    )
-    return []
+    if (args.allowMissingEsSystems) {
+      logger.warn(
+        { esSystemsPath: args.esSystemsPath },
+        "rocknix-source: es_systems.cfg unreadable; using gamelist-only fallback",
+      )
+    } else {
+      logger.error(
+        { esSystemsPath: args.esSystemsPath },
+        "rocknix-source: es_systems.cfg unreadable; library will be empty",
+      )
+    }
+    return undefined
   }
   return parseEsSystems(text)
 }
@@ -214,6 +241,32 @@ async function readTextFileSafe(path: string): Promise<string | null> {
     )
     return null
   }
+}
+
+async function composeFallbackRecordAndSpec(args: {
+  entry: GamelistEntry
+  systemName: string
+  systemRoot: string
+  mediaRoot: string
+  launchCommandOverride: string | undefined
+}): Promise<{ record: GameRecord; spec: LaunchSpec }> {
+  const { entry, systemName, systemRoot, mediaRoot, launchCommandOverride } =
+    args
+  const absRomPath = resolveRomPath(systemRoot, entry.path)
+  const id = `${systemName}/${basename(absRomPath)}`
+  const media = await findSidecarMedia({
+    mediaRoot,
+    systemName,
+    romPath: absRomPath,
+  })
+
+  const record = composeGameRecord(id, entry, media)
+  const spec = composeFallbackLaunchSpec({
+    launchCommandOverride,
+    romPath: absRomPath,
+  })
+
+  return { record, spec }
 }
 
 async function composeRecordAndSpec(args: {
@@ -321,6 +374,21 @@ function composeGameRecord(
  * binary path) regardless of what `<command>` declares. Used by tests to
  * redirect launches at `tools/testing/fake-game.sh`.
  */
+function composeFallbackLaunchSpec(args: {
+  launchCommandOverride: string | undefined
+  romPath: string
+}): LaunchSpec {
+  if (args.launchCommandOverride) {
+    return { command: args.launchCommandOverride, args: [args.romPath] }
+  }
+
+  if (args.romPath.endsWith(".sh")) {
+    return { command: args.romPath, args: [] }
+  }
+
+  return { command: "false", args: [] }
+}
+
 function composeLaunchSpec(args: {
   template: string
   launchCommandOverride: string | undefined
