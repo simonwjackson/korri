@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process"
 import { createInterface } from "node:readline/promises"
 
 const DEFAULT_APP = "korri-desktop-device"
+const REMOTE_PID_FILE = "/tmp/korri-device-run.pid"
 
 export class DeviceFlakeCommandError extends Error {
   constructor(
@@ -46,6 +47,8 @@ export type DeviceFlakeExecutionPlan =
       readonly command: "ssh"
       readonly args: readonly string[]
       readonly remoteCommand: string
+      readonly cleanupCommand: "ssh"
+      readonly cleanupArgs: readonly string[]
       readonly displayCommand: string
     }
 
@@ -74,6 +77,7 @@ export interface RunCliDeps extends DeviceFlakeCommandDeps {
   readonly execute?: (
     command: string,
     args: readonly string[],
+    plan: DeviceFlakeExecutionPlan,
   ) => Promise<number>
 }
 
@@ -124,7 +128,9 @@ export function buildDeviceFlakeExecutionPlan(
   assertSingleShellWord(destinationHost, "DEVICE_HOST")
   const sshOptions = parseShellWords(optionalEnv(env.DEVICE_SSH_OPTS) ?? "")
   const remoteCommand = renderRemoteCleanupCommand(runCommand)
+  const cleanupCommand = renderRemotePidCleanupCommand(REMOTE_PID_FILE)
   const args = [...sshOptions, destinationHost, remoteCommand]
+  const cleanupArgs = [...sshOptions, destinationHost, cleanupCommand]
   return {
     mode: "ssh",
     flakeRef,
@@ -132,6 +138,8 @@ export function buildDeviceFlakeExecutionPlan(
     command: "ssh",
     args,
     remoteCommand,
+    cleanupCommand: "ssh",
+    cleanupArgs,
     displayCommand: renderCommand("ssh", args),
   }
 }
@@ -196,21 +204,43 @@ export function renderRemoteCleanupCommand(command: readonly string[]): string {
     `${cleanupCondition}; then kill -TERM "-$child" 2>/dev/null || kill -TERM "$child" 2>/dev/null || true`,
     'wait "$child" 2>/dev/null || true',
     "fi",
+    'rm -f "$pidfile"',
     'exit "$status"',
     "}",
   ].join("; ")
   const script = [
+    'pidfile="$1"',
+    "shift",
     "child=",
     cleanup,
     "trap cleanup INT TERM HUP EXIT",
     'setsid "$@" & child=$!',
+    'printf "%s\\n" "$child" > "$pidfile"',
     'wait "$child"',
     "status=$?",
+    'rm -f "$pidfile"',
     "trap - INT TERM HUP EXIT",
     'exit "$status"',
   ].join("; ")
 
-  return renderCommand("sh", ["-lc", script, "korri-device-run", ...command])
+  return renderCommand("sh", [
+    "-lc",
+    script,
+    "korri-device-run",
+    REMOTE_PID_FILE,
+    ...command,
+  ])
+}
+
+export function renderRemotePidCleanupCommand(pidFile: string): string {
+  const script = [
+    'pidfile="$1"',
+    'if [ ! -f "$pidfile" ]; then exit 0; fi',
+    'child="$(cat "$pidfile" 2>/dev/null || true)"',
+    'rm -f "$pidfile"',
+    'if [ -n "$child" ]; then kill -TERM "-$child" 2>/dev/null || kill -TERM "$child" 2>/dev/null || true; fi',
+  ].join("; ")
+  return renderCommand("sh", ["-lc", script, "korri-device-cleanup", pidFile])
 }
 
 export async function runDeviceFlakeCommandCli(
@@ -257,7 +287,7 @@ export async function runDeviceFlakeCommandCli(
     if (parsed.print) return 0
 
     const execute = deps.execute ?? defaultExecute
-    return await execute(plan.command, plan.args)
+    return await execute(plan.command, plan.args, plan)
   } catch (errorValue) {
     if (errorValue instanceof DeviceFlakeCommandError) {
       error(`error: ${errorValue.message}`)
@@ -378,6 +408,7 @@ function runText(
 async function defaultExecute(
   command: string,
   args: readonly string[],
+  plan: DeviceFlakeExecutionPlan,
 ): Promise<number> {
   const proc = Bun.spawn([command, ...args], {
     stdin: "inherit",
@@ -389,6 +420,9 @@ async function defaultExecute(
   let escalation: Timer | undefined
   const forwardSignal = (signal: NodeJS.Signals) => {
     interrupted = signal
+    if (plan.mode === "ssh") {
+      void runDetached(plan.cleanupCommand, plan.cleanupArgs)
+    }
     proc.kill(signal)
     escalation = setTimeout(() => proc.kill("SIGTERM"), 2000)
   }
@@ -404,6 +438,18 @@ async function defaultExecute(
     process.off("SIGTERM", forwardSignal)
     if (escalation) clearTimeout(escalation)
   }
+}
+
+async function runDetached(
+  command: string,
+  args: readonly string[],
+): Promise<void> {
+  const proc = Bun.spawn([command, ...args], {
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "inherit",
+  })
+  await proc.exited
 }
 
 function signalExitCode(signal: NodeJS.Signals): number {

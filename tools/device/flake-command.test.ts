@@ -298,7 +298,9 @@ describe("renderRemoteCleanupCommand", () => {
     expect(command).toContain("trap cleanup INT TERM HUP EXIT")
     expect(command).toContain('setsid "$@" & child=$!')
     expect(command).toContain('kill -TERM "-$child"')
-    expect(command).toContain("korri-device-run nix run .#app")
+    expect(command).toContain(
+      "korri-device-run /tmp/korri-device-run.pid nix run .#app",
+    )
   })
 
   it("produces shell syntax that can execute a wrapped command", () => {
