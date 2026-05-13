@@ -296,9 +296,19 @@ describe("renderRemoteCleanupCommand", () => {
     const command = renderRemoteCleanupCommand(["nix", "run", ".#app"])
 
     expect(command).toContain("trap cleanup INT TERM HUP EXIT")
-    expect(command).toContain('setsid "$@" &')
+    expect(command).toContain('setsid "$@" & child=$!')
     expect(command).toContain('kill -TERM "-$child"')
     expect(command).toContain("korri-device-run nix run .#app")
+  })
+
+  it("produces shell syntax that can execute a wrapped command", () => {
+    const result = Bun.spawnSync([
+      "sh",
+      "-lc",
+      renderRemoteCleanupCommand(["true"]),
+    ])
+
+    expect(result.exitCode).toBe(0)
   })
 })
 

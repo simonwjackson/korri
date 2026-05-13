@@ -188,20 +188,22 @@ export function renderCommand(
 }
 
 export function renderRemoteCleanupCommand(command: readonly string[]): string {
-  const script = [
-    "child=",
-    "cleanup() {",
-    "status=$?",
+  const cleanupCondition =
+    'if [ -n "${' + 'child:-}" ] && kill -0 "$child" 2>/dev/null'
+  const cleanup = [
+    "cleanup() { status=$?",
     "trap - INT TERM HUP EXIT",
-    'if [ -n "${' + 'child:-}" ] && kill -0 "$child" 2>/dev/null; then',
-    'kill -TERM "-$child" 2>/dev/null || kill -TERM "$child" 2>/dev/null || true',
+    `${cleanupCondition}; then kill -TERM "-$child" 2>/dev/null || kill -TERM "$child" 2>/dev/null || true`,
     'wait "$child" 2>/dev/null || true',
     "fi",
     'exit "$status"',
     "}",
+  ].join("; ")
+  const script = [
+    "child=",
+    cleanup,
     "trap cleanup INT TERM HUP EXIT",
-    'setsid "$@" &',
-    "child=$!",
+    'setsid "$@" & child=$!',
     'wait "$child"',
     "status=$?",
     "trap - INT TERM HUP EXIT",
