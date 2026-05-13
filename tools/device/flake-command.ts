@@ -16,6 +16,7 @@ export class DeviceFlakeCommandError extends Error {
 export interface DeviceFlakeCommandEnv {
   readonly DEVICE_HOST?: string
   readonly DEVICE_SSH_OPTS?: string
+  readonly DEVICE_RUN_ENV?: string
   readonly KORRI_FLAKE_REF?: string
   readonly KORRI_SOURCE_HOST?: string
   readonly KORRI_APP?: string
@@ -34,7 +35,7 @@ export type DeviceFlakeExecutionPlan =
       readonly mode: "local"
       readonly flakeRef: string
       readonly app: string
-      readonly command: "nix"
+      readonly command: "env" | "nix"
       readonly args: readonly string[]
       readonly displayCommand: string
     }
@@ -100,21 +101,28 @@ export function buildDeviceFlakeExecutionPlan(
   assertNoWhitespace(flakeRef, "KORRI_FLAKE_REF")
 
   const nixArgs = buildNixRunArgs({ flakeRef, app, env })
+  const runEnv = parseRunEnv(optionalEnv(env.DEVICE_RUN_ENV) ?? "")
 
   if (!destinationHost) {
     return {
       mode: "local",
       flakeRef,
       app,
-      command: "nix",
-      args: nixArgs,
-      displayCommand: renderCommand("nix", nixArgs),
+      command: runEnv.length > 0 ? "env" : "nix",
+      args: runEnv.length > 0 ? [...runEnv, "nix", ...nixArgs] : nixArgs,
+      displayCommand:
+        runEnv.length > 0
+          ? renderCommand("env", [...runEnv, "nix", ...nixArgs])
+          : renderCommand("nix", nixArgs),
     }
   }
 
   assertSingleShellWord(destinationHost, "DEVICE_HOST")
   const sshOptions = parseShellWords(optionalEnv(env.DEVICE_SSH_OPTS) ?? "")
-  const remoteCommand = renderCommand("nix", nixArgs)
+  const remoteCommand =
+    runEnv.length > 0
+      ? renderCommand("env", [...runEnv, "nix", ...nixArgs])
+      : renderCommand("nix", nixArgs)
   const args = [...sshOptions, destinationHost, remoteCommand]
   return {
     mode: "ssh",
@@ -279,6 +287,7 @@ function readProcessEnv(): DeviceFlakeCommandEnv {
   return {
     DEVICE_HOST: process.env.DEVICE_HOST,
     DEVICE_SSH_OPTS: process.env.DEVICE_SSH_OPTS,
+    DEVICE_RUN_ENV: process.env.DEVICE_RUN_ENV,
     KORRI_FLAKE_REF: process.env.KORRI_FLAKE_REF,
     KORRI_SOURCE_HOST: process.env.KORRI_SOURCE_HOST,
     KORRI_APP: process.env.KORRI_APP,
@@ -382,6 +391,19 @@ function assertNoWhitespace(value: string, name: string): void {
       `${name} must not contain whitespace.`,
     )
   }
+}
+
+function parseRunEnv(input: string): readonly string[] {
+  const assignments = parseShellWords(input)
+  for (const assignment of assignments) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*=/.test(assignment)) {
+      throw new DeviceFlakeCommandError(
+        "InvalidRunEnv",
+        "DEVICE_RUN_ENV must contain only KEY=value assignments.",
+      )
+    }
+  }
+  return assignments
 }
 
 export function parseShellWords(input: string): readonly string[] {

@@ -89,6 +89,12 @@ DEVICE_SSH_OPTS="-p 2222" \
 just device-run
 ```
 
+GUI apps launched from SSH may also need the active compositor environment. Put explicit assignments in `DEVICE_RUN_ENV` rather than harvesting host session state in Korri tooling:
+
+```bash
+DEVICE_RUN_ENV="XDG_RUNTIME_DIR=/run/user/0 WAYLAND_DISPLAY=wayland-1 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/0/bus DISPLAY=:0"
+```
+
 ## Builder selection
 
 Korri does not model the Nix builder matrix. By default it passes no `--builders` flag, so the machine running Nix uses its own Nix configuration.

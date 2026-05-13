@@ -96,9 +96,50 @@ describe("buildDeviceFlakeExecutionPlan", () => {
     ])
   })
 
+  it("prefixes the run with explicit env assignments", () => {
+    const localPlan = buildDeviceFlakeExecutionPlan({
+      DEVICE_RUN_ENV:
+        "XDG_RUNTIME_DIR=/run/user/0 WAYLAND_DISPLAY=wayland-1 DISPLAY=:0",
+    })
+
+    expect(localPlan).toMatchObject({
+      mode: "local",
+      command: "env",
+      args: [
+        "XDG_RUNTIME_DIR=/run/user/0",
+        "WAYLAND_DISPLAY=wayland-1",
+        "DISPLAY=:0",
+        "nix",
+        "run",
+        ".#korri-desktop-device",
+      ],
+    })
+
+    const remotePlan = buildDeviceFlakeExecutionPlan({
+      DEVICE_HOST: "root@example-device",
+      DEVICE_RUN_ENV: "WAYLAND_DISPLAY=wayland-1",
+      KORRI_FLAKE_REF: "git+ssh://source.example/repo/korri",
+    })
+
+    expect(remotePlan).toMatchObject({
+      mode: "ssh",
+      remoteCommand:
+        "env WAYLAND_DISPLAY=wayland-1 nix run git+ssh://source.example/repo/korri#korri-desktop-device",
+    })
+  })
+
+  it("rejects run env values that are not assignments", () => {
+    expect(() =>
+      buildDeviceFlakeExecutionPlan({
+        DEVICE_RUN_ENV: "WAYLAND_DISPLAY=wayland-1 rm",
+      }),
+    ).toThrow("DEVICE_RUN_ENV")
+  })
+
   it("treats empty env values as absent", () => {
     const plan = buildDeviceFlakeExecutionPlan({
       DEVICE_HOST: " ",
+      DEVICE_RUN_ENV: " ",
       KORRI_FLAKE_REF: " ",
       KORRI_APP: " ",
       NIX_BUILDERS: " ",
