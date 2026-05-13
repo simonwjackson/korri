@@ -109,7 +109,7 @@ typecheck:
 
 # Run Biome checks.
 lint:
-  biome check tools korri scripts
+  biome check tools korri
 
 # Run Fallow codebase intelligence. Pass subcommands or flags after the recipe name.
 fallow *args:
@@ -121,7 +121,7 @@ fallow-audit *args:
 
 # Format source files.
 format:
-  biome format --write tools korri scripts
+  biome format --write tools korri
 
 # Run the standard validation suite.
 check: validate-router lint typecheck test-unit check-bdd

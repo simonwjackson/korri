@@ -5,6 +5,7 @@ import {
   DeviceFlakeCommandError,
   isCommittedStateFlakeRef,
   parseShellWords,
+  runDeviceFlakeCommandCli,
 } from "./flake-command"
 
 describe("buildDeviceFlakeExecutionPlan", () => {
@@ -165,6 +166,16 @@ describe("buildDeviceFlakeExecutionPlan", () => {
       }),
     ).toThrow("unclosed quote")
   })
+
+  it("rejects whitespace in app and flake selectors", () => {
+    expect(() =>
+      buildDeviceFlakeExecutionPlan({ KORRI_APP: "bad app" }),
+    ).toThrow("KORRI_APP")
+
+    expect(() =>
+      buildDeviceFlakeExecutionPlan({ KORRI_FLAKE_REF: "bad ref" }),
+    ).toThrow("KORRI_FLAKE_REF")
+  })
 })
 
 describe("checkDirtyFlakeRun", () => {
@@ -237,6 +248,65 @@ describe("parseShellWords", () => {
     expect(parseShellWords("-p 2222 -o UserKnownHostsFile=/tmp/a\\ b")).toEqual(
       ["-p", "2222", "-o", "UserKnownHostsFile=/tmp/a b"],
     )
+  })
+
+  it("preserves backslashes inside single quotes", () => {
+    expect(parseShellWords("-o 'IdentityFile=C:\\keys\\device'")).toEqual([
+      "-o",
+      "IdentityFile=C:\\keys\\device",
+    ])
+  })
+})
+
+describe("runDeviceFlakeCommandCli", () => {
+  it("prints the command without executing it", async () => {
+    const lines: string[] = []
+    let executed = false
+
+    const exitCode = await runDeviceFlakeCommandCli(["--print"], {
+      env: {},
+      repoRoot: () => "/repo/korri",
+      isDirty: () => false,
+      output: line => lines.push(line),
+      execute: async () => {
+        executed = true
+        return 0
+      },
+    })
+
+    expect(exitCode).toBe(0)
+    expect(executed).toBe(false)
+    expect(lines).toContain("mode=local")
+    expect(lines).toContain("command=nix run .#korri-desktop-device")
+  })
+
+  it("maps usage requests to exit code 0 and bad args to exit code 2", async () => {
+    const helpLines: string[] = []
+    const helpExit = await runDeviceFlakeCommandCli(["--help"], {
+      output: line => helpLines.push(line),
+    })
+    expect(helpExit).toBe(0)
+    expect(helpLines[0]).toContain("--dry-run")
+
+    const errors: string[] = []
+    const badExit = await runDeviceFlakeCommandCli(["--unknown"], {
+      error: line => errors.push(line),
+    })
+    expect(badExit).toBe(2)
+    expect(errors[0]).toContain("Usage")
+  })
+
+  it("does not invent dirty state when no repository root exists", async () => {
+    const lines: string[] = []
+
+    const exitCode = await runDeviceFlakeCommandCli(["--print"], {
+      env: { KORRI_FLAKE_REF: "github:example/korri" },
+      repoRoot: () => undefined,
+      output: line => lines.push(line),
+    })
+
+    expect(exitCode).toBe(0)
+    expect(lines).toContain("flake=github:example/korri")
   })
 })
 

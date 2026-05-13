@@ -88,6 +88,7 @@ export function buildDeviceFlakeExecutionPlan(
       "KORRI_APP must be an app name, not a flake selector containing '#'.",
     )
   }
+  assertSingleShellWord(app, "KORRI_APP")
 
   const flakeRef = resolveFlakeRef(env, destinationHost, deps)
   if (flakeRef.includes("#")) {
@@ -96,6 +97,7 @@ export function buildDeviceFlakeExecutionPlan(
       "KORRI_FLAKE_REF must not include an app selector; set KORRI_APP instead.",
     )
   }
+  assertNoWhitespace(flakeRef, "KORRI_FLAKE_REF")
 
   const nixArgs = buildNixRunArgs({ flakeRef, app, env })
 
@@ -186,8 +188,13 @@ export async function runDeviceFlakeCommandCli(
   const parsed = parseCliArgs(deps.argv ?? argv)
 
   if (!parsed) {
-    error("Usage: bun run tools/device/flake-command.ts [--print]")
+    error("Usage: bun run tools/device/flake-command.ts [--print|--dry-run]")
     return 2
+  }
+
+  if (parsed.help) {
+    output("Usage: bun run tools/device/flake-command.ts [--print|--dry-run]")
+    return 0
   }
 
   try {
@@ -197,9 +204,7 @@ export async function runDeviceFlakeCommandCli(
       sourceHost: deps.sourceHost ?? defaultSourceHost,
     })
     const root = repoRoot()
-    const isDirty = root
-      ? (deps.isDirty ?? defaultIsDirty)(root)
-      : isCommittedStateFlakeRef(plan.flakeRef)
+    const isDirty = root ? (deps.isDirty ?? defaultIsDirty)(root) : false
 
     await checkDirtyFlakeRun({
       flakeRef: plan.flakeRef,
@@ -285,17 +290,17 @@ function readProcessEnv(): DeviceFlakeCommandEnv {
 
 function parseCliArgs(
   argv: readonly string[],
-): { readonly print: boolean } | undefined {
+): { readonly print: boolean; readonly help: boolean } | undefined {
   let print = false
   for (const arg of argv) {
     if (arg === "--print" || arg === "--dry-run") {
       print = true
       continue
     }
-    if (arg === "--help" || arg === "-h") return undefined
+    if (arg === "--help" || arg === "-h") return { print: false, help: true }
     return undefined
   }
-  return { print }
+  return { print, help: false }
 }
 
 function defaultRepoRoot(): string | undefined {
@@ -370,6 +375,15 @@ function assertSingleShellWord(value: string, name: string): void {
   }
 }
 
+function assertNoWhitespace(value: string, name: string): void {
+  if (/\s/.test(value)) {
+    throw new DeviceFlakeCommandError(
+      "InvalidWhitespace",
+      `${name} must not contain whitespace.`,
+    )
+  }
+}
+
 export function parseShellWords(input: string): readonly string[] {
   const words: string[] = []
   let current = ""
@@ -385,18 +399,20 @@ export function parseShellWords(input: string): readonly string[] {
       continue
     }
 
-    if (char === "\\") {
-      escaped = true
+    if (quote) {
+      if (char === quote) {
+        quote = undefined
+      } else if (char === "\\" && quote === '"') {
+        escaped = true
+      } else {
+        current += char
+      }
       active = true
       continue
     }
 
-    if (quote) {
-      if (char === quote) {
-        quote = undefined
-      } else {
-        current += char
-      }
+    if (char === "\\") {
+      escaped = true
       active = true
       continue
     }

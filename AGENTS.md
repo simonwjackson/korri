@@ -4,7 +4,6 @@
 - Shared runtime code: `korri/shared/*`
 - Deployment/bootstrap entrypoints: `korri/deploy/*`
 - Repo tooling, generators, and test infrastructure: `tools/*`
-- Operational scripts: `scripts/*`
 
 ## Path aliases
 
