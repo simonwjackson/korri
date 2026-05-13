@@ -1,7 +1,7 @@
 ---
 title: Refactor Device Tooling Around Optional Flake Runs
 type: refactor
-status: active
+status: completed
 date: 2026-05-13
 verify_command: "just lint && just typecheck && just test-unit"
 ---
