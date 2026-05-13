@@ -8,6 +8,13 @@
   portal,
   runtimeLibraries,
   odinRuntimeLibraries ? runtimeLibraries,
+  desktopDataDirs ? [
+    pkgs.gsettings-desktop-schemas
+    pkgs.gtk3
+  ],
+  odinDesktopDataDirs ? desktopDataDirs,
+  gioExtraModules ? pkgs.glib-networking,
+  odinGioExtraModules ? gioExtraModules,
 }:
 
 let
@@ -27,6 +34,10 @@ let
       or (throw "korri-desktop is only supported on x86_64-linux and aarch64-linux");
   runtimeLibraryPath = lib.makeLibraryPath runtimeLibraries;
   odinRuntimeLibraryPath = lib.makeLibraryPath odinRuntimeLibraries;
+  desktopDataPath = lib.makeSearchPath "share" desktopDataDirs;
+  odinDesktopDataPath = lib.makeSearchPath "share" odinDesktopDataDirs;
+  gioExtraModulesPath = "${gioExtraModules}/lib/gio/modules";
+  odinGioExtraModulesPath = "${odinGioExtraModules}/lib/gio/modules";
 in
 pkgs.stdenv.mkDerivation {
   pname = "korri-desktop";
@@ -169,11 +180,13 @@ pkgs.stdenv.mkDerivation {
           local gdk_backend="$2"
           local profile="$3"
           local library_path="$4"
+          local data_dirs="$5"
+          local gio_modules="$6"
           cat > "$target" <<EOF
     #!${pkgs.bash}/bin/bash
-    export LD_LIBRARY_PATH="$library_path''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-    export XDG_DATA_DIRS="${pkgs.gsettings-desktop-schemas}/share:${pkgs.gtk3}/share''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
-    export GIO_EXTRA_MODULES="${pkgs.glib-networking}/lib/gio/modules''${GIO_EXTRA_MODULES:+:$GIO_EXTRA_MODULES}"
+    export LD_LIBRARY_PATH="$library_path\''${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+    export XDG_DATA_DIRS="$data_dirs\''${XDG_DATA_DIRS:+:\$XDG_DATA_DIRS}"
+    export GIO_EXTRA_MODULES="$gio_modules\''${GIO_EXTRA_MODULES:+:\$GIO_EXTRA_MODULES}"
     if [ -n "$gdk_backend" ]; then
       export GDK_BACKEND="''${GDK_BACKEND:-$gdk_backend}"
     fi
@@ -185,8 +198,8 @@ pkgs.stdenv.mkDerivation {
           chmod +x "$target"
         }
 
-        write_wrapper "$out/bin/korri-desktop" x11 "" "${runtimeLibraryPath}"
-        write_wrapper "$out/bin/korri-desktop-odin" "" odin "${odinRuntimeLibraryPath}"
+        write_wrapper "$out/bin/korri-desktop" x11 "" "${runtimeLibraryPath}" "${desktopDataPath}" "${gioExtraModulesPath}"
+        write_wrapper "$out/bin/korri-desktop-odin" "" odin "${odinRuntimeLibraryPath}" "${odinDesktopDataPath}" "${odinGioExtraModulesPath}"
 
         runHook postInstall
   '';

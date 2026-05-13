@@ -73,6 +73,11 @@
           pkgs2405.gtk3
         ];
 
+        odinDesktopDataDirs = pkgs.lib.optionals pkgs.stdenv.isLinux [
+          pkgs2405.gsettings-desktop-schemas
+          pkgs2405.gtk3
+        ];
+
         linuxDesktopPackages = pkgs.lib.optionals pkgs.stdenv.isLinux (
           (with pkgs; [
             pkg-config
@@ -164,6 +169,8 @@
               portal = korriPortalOdin;
               runtimeLibraries = linuxDesktopRuntimeLibraries;
               odinRuntimeLibraries = odinDesktopRuntimeLibraries;
+              odinDesktopDataDirs = odinDesktopDataDirs;
+              odinGioExtraModules = pkgs2405.glib-networking;
             }
           else
             null;

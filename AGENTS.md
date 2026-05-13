@@ -87,6 +87,7 @@ just generate-feature-map
 
 ## Rules of engagement
 
+- All ARM builds must use the host `fuji`.
 - Never create documentation, report, or summary Markdown files unless explicitly requested.
 - Read before you touch. Do not propose changes to code you have not read.
 - Before changing code, read a nearby similar feature/domain first and follow the local pattern.
