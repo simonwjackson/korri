@@ -74,7 +74,7 @@ The `tools/feature-map-explorer/` app (run with `just dev-feature-map`) is the c
 
 ```bash
 just dev | just dev-web | just dev-api | just dev-playwright | just dev-storybook
-just install-device | just sync-device | just dev-device | just check-device
+just device-run | just device-print-run-command
 just test-unit
 just test-e2e
 just format
@@ -87,7 +87,7 @@ just generate-feature-map
 
 ## Rules of engagement
 
-- All ARM builds must use the host `fuji`.
+- Do not hard-code ARM builder hosts in committed Korri tooling; builder selection belongs in local Nix configuration or ignored local env overrides.
 - Never create documentation, report, or summary Markdown files unless explicitly requested.
 - Read before you touch. Do not propose changes to code you have not read.
 - Before changing code, read a nearby similar feature/domain first and follow the local pattern.
