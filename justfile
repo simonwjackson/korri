@@ -1,9 +1,6 @@
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
-
-export DEVICE_HOST     := env_var_or_default("DEVICE_HOST", "root@sm8550")
-export DEVICE_APP_ROOT  := env_var_or_default("DEVICE_APP_ROOT", "/storage/.guest/korri/app")
-export DEVICE_API_PORT := env_var_or_default("DEVICE_API_PORT", "3001")
-export DEVICE_INPUT_BRIDGE_PORT := env_var_or_default("DEVICE_INPUT_BRIDGE_PORT", "3002")
+set dotenv-load := true
+set dotenv-filename := "local.env"
 
 default:
   @just --list
@@ -49,44 +46,13 @@ desktop-runtime-check:
 desktop-smoke: build-web
   bun run tools/desktop/desktop-smoke.ts
 
-# Ensure all Device-installed items are present and up to date.
-install-device:
-  scripts/device/install.sh
+# Run the selected Korri flake app locally, or on DEVICE_HOST when set.
+device-run *args:
+  bun run tools/device/flake-command.ts {{args}}
 
-# Deploy the current repo, Electrobun app, and supervised Device services for testing.
-deploy-device:
-  scripts/device/deploy.sh
-
-# Backward-compatible name for the Device install/update step.
-bootstrap-device: install-device
-
-# Incremental rsync of the project to the Device (no install, no env rewrite).
-sync-device:
-  scripts/device/sync.sh
-
-# Iteration loop: sync project, refresh device deps, restart Device API, reverse-forward local Vite, Playwright UI, and Storybook.
-dev-device portal_port="${PORTAL_PORT:-3100}" api_port="${DEVICE_API_PORT:-3001}" bridge_port="${DEVICE_INPUT_BRIDGE_PORT:-3002}" pw_port="${PW_PORT:-9876}" storybook_port="${STORYBOOK_PORT:-6006}" host="${APP_HOST:-localhost}":
-  PORTAL_PORT={{portal_port}} DEVICE_API_PORT={{api_port}} DEVICE_INPUT_BRIDGE_PORT={{bridge_port}} PW_PORT={{pw_port}} STORYBOOK_PORT={{storybook_port}} APP_HOST={{host}} scripts/device/dev.sh
-
-# Smoke-test the Device API + native input stack end-to-end (health + app.library.list + input bridge).
-check-device:
-  scripts/device/smoke.sh
-
-# Check/manage the supervised Korri renderer session on the Device.
-device-sessiond-status:
-  ssh {{DEVICE_HOST}} 'cd {{DEVICE_APP_ROOT}} && scripts/device/install-sessiond-service.sh status'
-
-# Smoke-test the supervised Korri renderer session on the Device.
-check-device-sessiond:
-  scripts/device/smoke-sessiond.sh
-
-# Check whether the Device can host the Electrobun/Nix desktop runtime.
-device-desktop-preflight:
-  scripts/device/desktop-preflight.sh
-
-# Smoke-test the opt-in Electrobun Layer 8 renderer candidate on the Device.
-check-device-electrobun:
-  scripts/device/smoke-electrobun.sh
+# Print the selected Device flake run command without executing it.
+device-print-run-command:
+  bun run tools/device/flake-command.ts --print
 
 # Start the Electrobun desktop app after building portal assets.
 desktop-dev: build-web desktop-runtime-check
