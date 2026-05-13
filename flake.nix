@@ -228,5 +228,11 @@
           shellHook = commonShellHook + linuxDesktopShellHook;
         };
       }
-    );
+    )
+    // {
+      nixosModules = rec {
+        korri-frontend = import ./nix/modules/korri-frontend.nix { korri = self; };
+        default = korri-frontend;
+      };
+    };
 }
