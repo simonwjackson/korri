@@ -115,7 +115,7 @@ describe("system shortcut engine", () => {
     ])
   })
 
-  it("maps the Odin physical Back key to the screen-switch chord", () => {
+  it("maps the AYN physical Back key to the screen-switch chord", () => {
     const engine = createSystemShortcutEngine({ shortcuts, taps })
 
     engine.handleEvent(system(1))

@@ -1,9 +1,9 @@
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
-export ODIN_HOST     := env_var_or_default("ODIN_HOST", "root@sm8550")
-export ODIN_PROJECT  := env_var_or_default("ODIN_PROJECT", "/storage/korri")
-export ODIN_API_PORT := env_var_or_default("ODIN_API_PORT", "3001")
-export ODIN_INPUT_BRIDGE_PORT := env_var_or_default("ODIN_INPUT_BRIDGE_PORT", "3002")
+export DEVICE_HOST     := env_var_or_default("DEVICE_HOST", "root@sm8550")
+export DEVICE_APP_ROOT  := env_var_or_default("DEVICE_APP_ROOT", "/storage/.guest/korri/app")
+export DEVICE_API_PORT := env_var_or_default("DEVICE_API_PORT", "3001")
+export DEVICE_INPUT_BRIDGE_PORT := env_var_or_default("DEVICE_INPUT_BRIDGE_PORT", "3002")
 
 default:
   @just --list
@@ -49,44 +49,44 @@ desktop-runtime-check:
 desktop-smoke: build-web
   bun run tools/desktop/desktop-smoke.ts
 
-# Ensure all Odin-installed items are present and up to date.
-install-odin:
-  scripts/odin/install.sh
+# Ensure all Device-installed items are present and up to date.
+install-device:
+  scripts/device/install.sh
 
-# Deploy the current repo, Electrobun app, and supervised Odin services for testing.
-deploy-odin:
-  scripts/odin/deploy.sh
+# Deploy the current repo, Electrobun app, and supervised Device services for testing.
+deploy-device:
+  scripts/device/deploy.sh
 
-# Backward-compatible name for the Odin install/update step.
-bootstrap-odin: install-odin
+# Backward-compatible name for the Device install/update step.
+bootstrap-device: install-device
 
-# Incremental rsync of the project to the Odin (no install, no env rewrite).
-sync-odin:
-  scripts/odin/sync.sh
+# Incremental rsync of the project to the Device (no install, no env rewrite).
+sync-device:
+  scripts/device/sync.sh
 
-# Iteration loop: sync project, refresh device deps, restart Odin API, reverse-forward local Vite, Playwright UI, and Storybook.
-dev-odin portal_port="${PORTAL_PORT:-3100}" api_port="${ODIN_API_PORT:-3001}" bridge_port="${ODIN_INPUT_BRIDGE_PORT:-3002}" pw_port="${PW_PORT:-9876}" storybook_port="${STORYBOOK_PORT:-6006}" host="${APP_HOST:-localhost}":
-  PORTAL_PORT={{portal_port}} ODIN_API_PORT={{api_port}} ODIN_INPUT_BRIDGE_PORT={{bridge_port}} PW_PORT={{pw_port}} STORYBOOK_PORT={{storybook_port}} APP_HOST={{host}} scripts/odin/dev.sh
+# Iteration loop: sync project, refresh device deps, restart Device API, reverse-forward local Vite, Playwright UI, and Storybook.
+dev-device portal_port="${PORTAL_PORT:-3100}" api_port="${DEVICE_API_PORT:-3001}" bridge_port="${DEVICE_INPUT_BRIDGE_PORT:-3002}" pw_port="${PW_PORT:-9876}" storybook_port="${STORYBOOK_PORT:-6006}" host="${APP_HOST:-localhost}":
+  PORTAL_PORT={{portal_port}} DEVICE_API_PORT={{api_port}} DEVICE_INPUT_BRIDGE_PORT={{bridge_port}} PW_PORT={{pw_port}} STORYBOOK_PORT={{storybook_port}} APP_HOST={{host}} scripts/device/dev.sh
 
-# Smoke-test the Odin API + native input stack end-to-end (health + app.library.list + input bridge).
-check-odin:
-  scripts/odin/smoke.sh
+# Smoke-test the Device API + native input stack end-to-end (health + app.library.list + input bridge).
+check-device:
+  scripts/device/smoke.sh
 
-# Check/manage the supervised Korri renderer session on the Odin.
-odin-sessiond-status:
-  ssh {{ODIN_HOST}} 'cd {{ODIN_PROJECT}} && scripts/odin/install-sessiond-service.sh status'
+# Check/manage the supervised Korri renderer session on the Device.
+device-sessiond-status:
+  ssh {{DEVICE_HOST}} 'cd {{DEVICE_APP_ROOT}} && scripts/device/install-sessiond-service.sh status'
 
-# Smoke-test the supervised Korri renderer session on the Odin.
-check-odin-sessiond:
-  scripts/odin/smoke-sessiond.sh
+# Smoke-test the supervised Korri renderer session on the Device.
+check-device-sessiond:
+  scripts/device/smoke-sessiond.sh
 
-# Check whether the Odin can host the Electrobun/Nix desktop runtime.
-odin-desktop-preflight:
-  scripts/odin/desktop-preflight.sh
+# Check whether the Device can host the Electrobun/Nix desktop runtime.
+device-desktop-preflight:
+  scripts/device/desktop-preflight.sh
 
-# Smoke-test the opt-in Electrobun Layer 8 renderer candidate on the Odin.
-check-odin-electrobun:
-  scripts/odin/smoke-electrobun.sh
+# Smoke-test the opt-in Electrobun Layer 8 renderer candidate on the Device.
+check-device-electrobun:
+  scripts/device/smoke-electrobun.sh
 
 # Start the Electrobun desktop app after building portal assets.
 desktop-dev: build-web desktop-runtime-check

@@ -9,7 +9,7 @@
     "tools/scripts/**/*.ts",
     "tools/generators/**/*.ts",
     "tools/desktop/**/*.ts",
-    "tools/odin/**/*.ts",
+    "tools/device/**/*.ts",
     "scripts/**/*.ts"
   ],
   "ignorePatterns": [

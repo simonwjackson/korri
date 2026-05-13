@@ -36,7 +36,7 @@ export interface RocknixImportSummary {
   readonly warnings: readonly RocknixImportWarning[]
 }
 
-const DEFAULT_MEDIA_ROOT = "/storage/korri/media/games"
+const DEFAULT_MEDIA_ROOT = "/storage/.guest/korri/media/games"
 
 const SIDECAR_MEDIA_FILES = [
   "cover-1024.jpg",

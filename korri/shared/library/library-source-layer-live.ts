@@ -17,7 +17,7 @@ import {
   type RocknixConfig,
 } from "./rocknix/rocknix-source"
 
-const DEFAULT_LIBRARY_ROOT = "/storage/korri/library"
+const DEFAULT_LIBRARY_ROOT = "/storage/.guest/korri/library"
 
 type LibrarySourceMode = "proseql" | "rocknix"
 
@@ -85,11 +85,6 @@ function selectedLibrarySourceMode(): LibrarySourceMode {
   const explicit = process.env.KORRI_LIBRARY_SOURCE?.trim().toLowerCase()
   if (explicit === "rocknix" || explicit === "proseql") return explicit
 
-  // The Odin package runs inside the ROCKNIX guest, where the persistent
-  // source of truth is `/storage/roms/*/gamelist.xml` rather than Korri's
-  // optional ProseQL import cache.
-  if (process.env.KORRI_DESKTOP_PROFILE === "odin") return "rocknix"
-
   return "proseql"
 }
 
@@ -130,9 +125,9 @@ function optionalEnv(value: string | undefined): string | undefined {
 
 function buildLibraryRootFromEnv(): string {
   const rootRaw = process.env.KORRI_LIBRARY_ROOT
-  return rootRaw && rootRaw.trim() !== ""
-    ? rootRaw.trim()
-    : DEFAULT_LIBRARY_ROOT
+  if (rootRaw && rootRaw.trim() !== "") return rootRaw.trim()
+
+  return DEFAULT_LIBRARY_ROOT
 }
 
 function toLibraryError(error: unknown): LibraryError {

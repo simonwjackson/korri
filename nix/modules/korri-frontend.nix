@@ -27,7 +27,7 @@ in
         Korri desktop package to install on the system.
 
         Consumers such as ROCKNIX should select the package variant that owns
-        its build-time frontend configuration, for example korri-desktop-odin.
+        its build-time frontend configuration, for example korri-desktop-device.
       '';
     };
   };

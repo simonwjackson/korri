@@ -40,7 +40,7 @@ describe("ShiftSystemPanel", () => {
     const dialog = await screen.findByRole("dialog", { name: "System" })
     expect(dialog).toBeTruthy()
     expect(
-      screen.getByText("Device controls for the Odin session."),
+      screen.getByText("Device controls for the active session."),
     ).toBeTruthy()
   })
 

@@ -5,7 +5,7 @@ import { logger } from "@shared/logger"
 import { Effect } from "effect"
 import { importRocknixLibrary } from "./rocknix-importer"
 
-const DEFAULT_LIBRARY_ROOT = "/storage/korri/library"
+const DEFAULT_LIBRARY_ROOT = "/storage/.guest/korri/library"
 const DEFAULT_GAMELIST_ROOTS = "/storage/roms"
 const DEFAULT_ES_SYSTEMS = "/storage/.config/emulationstation/es_systems.cfg"
 

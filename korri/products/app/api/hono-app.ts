@@ -6,7 +6,7 @@ import { cors } from "hono/cors"
 import { rpcHandler } from "./rpc-server"
 
 const MAX_BODY_SIZE = 10 * 1024 * 1024
-const DEFAULT_MEDIA_ROOT = "/storage/korri/media"
+const DEFAULT_MEDIA_ROOT = "/storage/.guest/korri/media"
 const isDev = process.env.NODE_ENV === "development"
 
 export function createHonoApp() {

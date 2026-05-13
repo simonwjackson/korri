@@ -10,8 +10,8 @@ async function loadFixture(name: string): Promise<string> {
 }
 
 describe("parseProcBusInputDevices", () => {
-  it("identifies the Odin InputPlumber virtual controller as a gamepad", async () => {
-    const content = await loadFixture("bus-input-devices-odin.txt")
+  it("identifies the AYN InputPlumber virtual controller as a gamepad", async () => {
+    const content = await loadFixture("bus-input-devices-device.txt")
 
     const devices = parseProcBusInputDevices(content)
     const gamepad = devices.find(device => device.eventNode === "event9")
@@ -38,7 +38,7 @@ describe("parseProcBusInputDevices", () => {
   })
 
   it("falls back from empty uniq to phys for deviceId", async () => {
-    const content = await loadFixture("bus-input-devices-odin.txt")
+    const content = await loadFixture("bus-input-devices-device.txt")
 
     const devices = parseProcBusInputDevices(content)
     const gamepad = devices.find(
@@ -49,7 +49,7 @@ describe("parseProcBusInputDevices", () => {
   })
 
   it("falls back to event node when uniq and phys are empty", async () => {
-    const content = await loadFixture("bus-input-devices-odin.txt")
+    const content = await loadFixture("bus-input-devices-device.txt")
 
     const devices = parseProcBusInputDevices(content)
     const unknown = devices.find(device => device.name === "Mystery Device")
@@ -58,7 +58,7 @@ describe("parseProcBusInputDevices", () => {
   })
 
   it("prefers gamepad classification over keyboard range markers", async () => {
-    const content = await loadFixture("bus-input-devices-odin.txt")
+    const content = await loadFixture("bus-input-devices-device.txt")
 
     const devices = parseProcBusInputDevices(content)
     const gamepad = devices.find(
@@ -70,7 +70,7 @@ describe("parseProcBusInputDevices", () => {
   })
 
   it("classifies devices with no recognized marker bits as unknown", async () => {
-    const content = await loadFixture("bus-input-devices-odin.txt")
+    const content = await loadFixture("bus-input-devices-device.txt")
 
     const devices = parseProcBusInputDevices(content)
     const unknown = devices.find(device => device.name === "Mystery Device")

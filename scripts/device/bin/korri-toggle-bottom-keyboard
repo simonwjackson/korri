@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source /storage/bin/korri-electrobun-control-lib
+korri_wayland_env
+
+log() { printf '%s [korri-keyboard] %s\n' "$(date -Is)" "$*" >&2; }
+
+keyboard_command="${KORRI_BOTTOM_KEYBOARD_COMMAND:-${KORRI_INPUTD_BOTTOM_KEYBOARD:-}}"
+if [ -z "${keyboard_command// }" ]; then
+  for candidate in wvkbd-mobintl wvkbd squeekboard maliit-keyboard; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      keyboard_command="$candidate"
+      break
+    fi
+  done
+fi
+
+if [ -z "${keyboard_command// }" ]; then
+  log "no on-screen keyboard command found; set KORRI_BOTTOM_KEYBOARD_COMMAND"
+  exit 0
+fi
+
+keyboard_exe="${keyboard_command%% *}"
+keyboard_base="${keyboard_exe##*/}"
+running=""
+for p in /proc/[0-9]*; do
+  [ -r "$p/exe" ] || continue
+  pid="${p##*/}"
+  exe="$(readlink "$p/exe" 2>/dev/null || true)"
+  [ "${exe##*/}" = "$keyboard_base" ] && running="$running $pid"
+done
+
+if [ -n "${running// }" ]; then
+  log "stopping bottom keyboard:$running"
+  kill -TERM $running 2>/dev/null || true
+  exit 0
+fi
+
+bottom_output="${KORRI_BOTTOM_KEYBOARD_OUTPUT:-${KORRI_INPUTD_BOTTOM_KEYBOARD_OUTPUT:-}}"
+if [ -z "$bottom_output" ] && command -v swaymsg >/dev/null 2>&1; then
+  bottom_output="$(swaymsg -t get_outputs 2>/dev/null | /storage/bin/bun -e '
+const raw = await new Response(Bun.stdin.stream()).text()
+const outputs = JSON.parse(raw || "[]")
+const enabled = outputs.filter(o => o.active !== false && o.rect)
+enabled.sort((a, b) => {
+  const yDelta = (b.rect?.y ?? 0) - (a.rect?.y ?? 0)
+  if (yDelta !== 0) return yDelta
+  return (b.rect?.x ?? 0) - (a.rect?.x ?? 0)
+})
+if (enabled[0]?.name) console.log(enabled[0].name)
+' 2>/dev/null || true)"
+fi
+
+keyboard_height="${KORRI_BOTTOM_KEYBOARD_HEIGHT:-${KORRI_INPUTD_BOTTOM_KEYBOARD_HEIGHT:-}}"
+if [ -z "${keyboard_height// }" ] && command -v swaymsg >/dev/null 2>&1; then
+  keyboard_height="$(swaymsg -t get_outputs 2>/dev/null | BOTTOM_OUTPUT="$bottom_output" /storage/bin/bun -e '
+const raw = await new Response(Bun.stdin.stream()).text()
+const outputs = JSON.parse(raw || "[]")
+const enabled = outputs.filter(o => o.active !== false && o.rect)
+enabled.sort((a, b) => {
+  const yDelta = (b.rect?.y ?? 0) - (a.rect?.y ?? 0)
+  if (yDelta !== 0) return yDelta
+  return (b.rect?.x ?? 0) - (a.rect?.x ?? 0)
+})
+const selected = enabled.find(o => o.name === process.env.BOTTOM_OUTPUT) ?? enabled[0]
+if (selected?.rect?.height) console.log(Math.floor(selected.rect.height / 2))
+' 2>/dev/null || true)"
+fi
+keyboard_height="${keyboard_height:-540}"
+if [ -n "${keyboard_height// }" ]; then
+  case "$keyboard_base" in
+    wvkbd|wvkbd-mobintl)
+      case " $keyboard_command " in
+        *' -H '*) ;;
+        *) keyboard_command="$keyboard_command -H $keyboard_height" ;;
+      esac
+      case " $keyboard_command " in
+        *' -L '*) ;;
+        *) keyboard_command="$keyboard_command -L $keyboard_height" ;;
+      esac
+      ;;
+  esac
+fi
+
+quote_for_shell() {
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+if [[ "$keyboard_command" == *'{output}'* ]]; then
+  bottom_output_quoted="$(quote_for_shell "$bottom_output")"
+  keyboard_command="${keyboard_command//\{output\}/$bottom_output_quoted}"
+elif [ -n "$bottom_output" ]; then
+  case "$keyboard_base" in
+    wvkbd|wvkbd-mobintl)
+      keyboard_command="$keyboard_command --output $(quote_for_shell "$bottom_output")"
+      ;;
+  esac
+fi
+
+log "starting bottom keyboard: $keyboard_command"
+mkdir -p /storage/.guest/korri/logs /storage/.guest/korri/run
+nohup sh -c "$keyboard_command" >> /storage/.guest/korri/logs/bottom-keyboard.log 2>&1 &
+echo $! > /storage/.guest/korri/run/bottom-keyboard.pid

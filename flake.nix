@@ -68,12 +68,12 @@
           ++ [ pkgs.stdenv.cc.cc.lib ]
         );
 
-        odinDesktopRuntimeLibraries = pkgs.lib.optionals pkgs.stdenv.isLinux [
+        deviceDesktopRuntimeLibraries = pkgs.lib.optionals pkgs.stdenv.isLinux [
           pkgs2405.webkitgtk_4_1
           pkgs2405.gtk3
         ];
 
-        odinDesktopDataDirs = pkgs.lib.optionals pkgs.stdenv.isLinux [
+        deviceDesktopDataDirs = pkgs.lib.optionals pkgs.stdenv.isLinux [
           pkgs2405.gsettings-desktop-schemas
           pkgs2405.gtk3
         ];
@@ -130,7 +130,7 @@
           inherit bunDeps;
         };
 
-        korriPortalOdin = import ./nix/korri-portal.nix {
+        korriPortalDevice = import ./nix/korri-portal.nix {
           inherit pkgs;
           src = self;
           inherit bunDeps;
@@ -159,18 +159,18 @@
           else
             null;
 
-        korriDesktopOdin =
+        korriDesktopDevice =
           if isSupportedDesktopSystem then
             import ./nix/korri-desktop.nix {
               inherit pkgs system bunDeps;
               lib = pkgs.lib;
               src = self;
               electrobunBinaries = electrobunBinaries;
-              portal = korriPortalOdin;
+              portal = korriPortalDevice;
               runtimeLibraries = linuxDesktopRuntimeLibraries;
-              odinRuntimeLibraries = odinDesktopRuntimeLibraries;
-              odinDesktopDataDirs = odinDesktopDataDirs;
-              odinGioExtraModules = pkgs2405.glib-networking;
+              deviceRuntimeLibraries = deviceDesktopRuntimeLibraries;
+              deviceDesktopDataDirs = deviceDesktopDataDirs;
+              deviceGioExtraModules = pkgs2405.glib-networking;
             }
           else
             null;
@@ -184,7 +184,7 @@
           electrobun-cli = electrobunBinaries.cli;
           electrobun-core = electrobunBinaries.core;
           korri-desktop = korriDesktop;
-          korri-desktop-odin = korriDesktopOdin;
+          korri-desktop-device = korriDesktopDevice;
           default = korriDesktop;
         };
 
@@ -197,9 +197,9 @@
             type = "app";
             program = "${korriDesktop}/bin/korri-desktop";
           };
-          korri-desktop-odin = {
+          korri-desktop-device = {
             type = "app";
-            program = "${korriDesktopOdin}/bin/korri-desktop-odin";
+            program = "${korriDesktopDevice}/bin/korri-desktop-device";
           };
         };
 

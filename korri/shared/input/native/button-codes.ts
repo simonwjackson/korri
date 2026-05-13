@@ -22,7 +22,7 @@ export const BTN_BACK = 0x116
 export const ABS_HAT0X = 0x10
 export const ABS_HAT0Y = 0x11
 
-/** Odin physical AYN button. Linux exposes it as KEY_F24 on gpio-keys. */
+/** AYN physical AYN button. Linux exposes it as KEY_F24 on gpio-keys. */
 export const KEY_SYSTEM = 0xc2
 export const KEY_VOLUMEUP = 0x73
 export const KEY_VOLUMEDOWN = 0x72

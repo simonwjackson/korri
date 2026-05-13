@@ -26,7 +26,7 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(<RouterProvider router={router} />)
 
 // Device-agnostic spatial navigation. Controller input is profile-selected:
-// dev web defaults to browser Gamepad API, while Odin builds provide a native
+// dev web defaults to browser Gamepad API, while device builds provide a native
 // bridge URL and therefore use inputd as the single authoritative controller
 // backend. Components stay native HTML either way.
 const nativeBridgeUrl = import.meta.env.VITE_KORRI_NATIVE_BRIDGE_URL

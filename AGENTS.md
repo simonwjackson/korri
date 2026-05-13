@@ -74,7 +74,7 @@ The `tools/feature-map-explorer/` app (run with `just dev-feature-map`) is the c
 
 ```bash
 just dev | just dev-web | just dev-api | just dev-playwright | just dev-storybook
-just install-odin | just sync-odin | just dev-odin | just check-odin
+just install-device | just sync-device | just dev-device | just check-device
 just test-unit
 just test-e2e
 just format

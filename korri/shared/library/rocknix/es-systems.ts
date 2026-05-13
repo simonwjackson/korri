@@ -7,7 +7,7 @@
  * emulator + core extracted from the nested `<emulators>` structure.
  *
  * Default-resolution rules — derived from real ROCKNIX layouts on the
- * developer's Odin (probed live):
+ * live ROCKNIX device (probed live):
  *   - The default core is the `<core>` carrying `default="true"`.
  *   - The default emulator is the `<emulator>` that contains that default
  *     core. Falls back to the first emulator and its first core when no

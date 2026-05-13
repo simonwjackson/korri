@@ -7,14 +7,14 @@
   electrobunBinaries,
   portal,
   runtimeLibraries,
-  odinRuntimeLibraries ? runtimeLibraries,
+  deviceRuntimeLibraries ? runtimeLibraries,
   desktopDataDirs ? [
     pkgs.gsettings-desktop-schemas
     pkgs.gtk3
   ],
-  odinDesktopDataDirs ? desktopDataDirs,
+  deviceDesktopDataDirs ? desktopDataDirs,
   gioExtraModules ? pkgs.glib-networking,
-  odinGioExtraModules ? gioExtraModules,
+  deviceGioExtraModules ? gioExtraModules,
 }:
 
 let
@@ -33,11 +33,11 @@ let
     platformBySystem.${system}
       or (throw "korri-desktop is only supported on x86_64-linux and aarch64-linux");
   runtimeLibraryPath = lib.makeLibraryPath runtimeLibraries;
-  odinRuntimeLibraryPath = lib.makeLibraryPath odinRuntimeLibraries;
+  deviceRuntimeLibraryPath = lib.makeLibraryPath deviceRuntimeLibraries;
   desktopDataPath = lib.makeSearchPath "share" desktopDataDirs;
-  odinDesktopDataPath = lib.makeSearchPath "share" odinDesktopDataDirs;
+  deviceDesktopDataPath = lib.makeSearchPath "share" deviceDesktopDataDirs;
   gioExtraModulesPath = "${gioExtraModules}/lib/gio/modules";
-  odinGioExtraModulesPath = "${odinGioExtraModules}/lib/gio/modules";
+  deviceGioExtraModulesPath = "${deviceGioExtraModules}/lib/gio/modules";
 in
 pkgs.stdenv.mkDerivation {
   pname = "korri-desktop";
@@ -191,7 +191,13 @@ pkgs.stdenv.mkDerivation {
       export GDK_BACKEND="''${GDK_BACKEND:-$gdk_backend}"
     fi
     if [ -n "$profile" ]; then
-      export KORRI_DESKTOP_PROFILE="''${KORRI_DESKTOP_PROFILE:-$profile}"
+      export KORRI_DESKTOP_PROFILE="$profile"
+      export KORRI_DEVICE_STATE_ROOT="''${KORRI_DEVICE_STATE_ROOT:-/storage/.guest/korri}"
+      export KORRI_LIBRARY_ROOT="''${KORRI_LIBRARY_ROOT:-$KORRI_DEVICE_STATE_ROOT/library}"
+      export XDG_DATA_HOME="''${XDG_DATA_HOME:-$KORRI_DEVICE_STATE_ROOT/data}"
+      export XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$KORRI_DEVICE_STATE_ROOT/config}"
+      export XDG_CACHE_HOME="''${XDG_CACHE_HOME:-$KORRI_DEVICE_STATE_ROOT/cache}"
+      export CHROME_CONFIG_HOME="''${CHROME_CONFIG_HOME:-$KORRI_DEVICE_STATE_ROOT/config}"
     fi
     exec "$launcher" "\$@"
     EOF
@@ -199,7 +205,7 @@ pkgs.stdenv.mkDerivation {
         }
 
         write_wrapper "$out/bin/korri-desktop" x11 "" "${runtimeLibraryPath}" "${desktopDataPath}" "${gioExtraModulesPath}"
-        write_wrapper "$out/bin/korri-desktop-odin" "" odin "${odinRuntimeLibraryPath}" "${odinDesktopDataPath}" "${odinGioExtraModulesPath}"
+        write_wrapper "$out/bin/korri-desktop-device" "" device "${deviceRuntimeLibraryPath}" "${deviceDesktopDataPath}" "${deviceGioExtraModulesPath}"
 
         runHook postInstall
   '';

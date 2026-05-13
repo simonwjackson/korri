@@ -50,7 +50,7 @@ export function ShiftSystemPanel({ children }: ShiftSystemPanelProps) {
                     System
                   </Dialog.Title>
                   <Dialog.Description className="shift-labs-description">
-                    Device controls for the Odin session.
+                    Device controls for the active session.
                   </Dialog.Description>
                 </div>
               </div>

@@ -8,7 +8,7 @@
  * Field mapping is intentionally minimal — only what a player-facing rail
  * needs and what the LaunchSpec composer (Unit 3) consumes downstream.
  *
- * Real ROCKNIX format (probed live from the developer's Odin):
+ * Real ROCKNIX format (probed live from the live ROCKNIX device):
  *   - Element name is `<gameList>` (camelCase). The opening `<?xml ?>`
  *     prologue is sometimes absent (e.g., the ports gamelist).
  *   - `<path>` is relative, prefixed with `./`.

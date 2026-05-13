@@ -12,13 +12,13 @@ describe("desktop status file", () => {
       buildDesktopStatusFileContent({
         url: "http://127.0.0.1:4321/",
         pid: 123,
-        profile: "odin",
+        profile: "device",
         timestamp: new Date("2026-05-05T12:00:00.000Z"),
       }),
     ).toEqual({
       url: "http://127.0.0.1:4321/",
       pid: 123,
-      profile: "odin",
+      profile: "device",
       timestamp: "2026-05-05T12:00:00.000Z",
     })
   })
@@ -31,14 +31,14 @@ describe("desktop status file", () => {
       path,
       url: "http://127.0.0.1:4321/",
       pid: 123,
-      profile: "odin",
+      profile: "device",
       timestamp: new Date("2026-05-05T12:00:00.000Z"),
     })
 
     expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
       url: "http://127.0.0.1:4321/",
       pid: 123,
-      profile: "odin",
+      profile: "device",
       timestamp: "2026-05-05T12:00:00.000Z",
     })
 
@@ -56,7 +56,7 @@ describe("desktop status file", () => {
         path: join(parentFile, "status.json"),
         url: "http://127.0.0.1:4321/",
         pid: 123,
-        profile: "odin",
+        profile: "device",
       }),
     ).rejects.toThrow()
 

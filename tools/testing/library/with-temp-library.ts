@@ -162,7 +162,7 @@ function renderEsSystemsCfg(args: {
       const fullname = system.fullname ?? system.name
       const systemPath = join(args.rootDir, system.name)
       // Match the real ROCKNIX command template shape probed live from the
-      // developer's Odin: placeholders for ROM/SYSTEM/CORE/EMULATOR plus a
+      // live ROCKNIX device: placeholders for ROM/SYSTEM/CORE/EMULATOR plus a
       // `--controllers="%CONTROLLERSCONFIG%"` token. Defaults are sourced
       // from the nested <emulators> block below, not baked into the
       // template.

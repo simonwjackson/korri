@@ -26,7 +26,8 @@ describe("desktop window options", () => {
   })
 
   test("reads only the supported desktop profile values", () => {
-    expect(desktopProfileFromEnv("odin")).toBe("odin")
+    expect(desktopProfileFromEnv("device")).toBe("device")
+    expect(desktopProfileFromEnv("legacy-device")).toBe("default")
     expect(desktopProfileFromEnv("unknown")).toBe("default")
     expect(desktopProfileFromEnv(undefined)).toBe("default")
   })
@@ -50,13 +51,13 @@ describe("desktop window options", () => {
     })
   })
 
-  test("uses handheld-shaped Odin window options", () => {
+  test("uses device window options", () => {
     const options = createDesktopWindowOptions(
       {
         host: "127.0.0.1",
         port: 4321,
       },
-      "odin",
+      "device",
     )
 
     expect(options).toEqual({

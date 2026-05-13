@@ -1,14 +1,18 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { rm } from "node:fs/promises"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Effect } from "effect"
 import { withTempLibrary } from "../../../tools/testing/library/with-temp-library"
 import { LibrarySource } from "./library-services"
 import { LibrarySourceLayerLive } from "./library-source-layer-live"
+import { openKorriLibraryDb } from "./proseql/library-db"
+import { createLibraryRepository } from "./proseql/library-repository"
 
 const originalEnv = {
   desktopProfile: process.env.KORRI_DESKTOP_PROFILE,
   librarySource: process.env.KORRI_LIBRARY_SOURCE,
+  libraryRoot: process.env.KORRI_LIBRARY_ROOT,
   rocknixGamelistRoots: process.env.KORRI_ROCKNIX_GAMELIST_ROOTS,
   rocknixEsSystemsPath: process.env.KORRI_ROCKNIX_ES_SYSTEMS_PATH,
 }
@@ -37,9 +41,11 @@ describe("LibrarySourceLayerLive", () => {
     expect(games.map(game => game.metadata?.name)).toEqual(["Layer Echo"])
   })
 
-  it("defaults the Odin desktop profile to ROCKNIX gamelists", async () => {
+  it("defaults the device desktop profile to ProseQL", async () => {
+    const root = await seedProseqlLibrary("Device Echo")
     const lib = await seedRocknixGamelists()
-    process.env.KORRI_DESKTOP_PROFILE = "odin"
+    process.env.KORRI_DESKTOP_PROFILE = "device"
+    process.env.KORRI_LIBRARY_ROOT = root
     process.env.KORRI_ROCKNIX_GAMELIST_ROOTS = lib.rootDir
     process.env.KORRI_ROCKNIX_ES_SYSTEMS_PATH = join(
       lib.rootDir,
@@ -48,7 +54,23 @@ describe("LibrarySourceLayerLive", () => {
 
     const games = await listGames()
 
-    expect(games.map(game => game.metadata?.name)).toEqual(["Layer Echo"])
+    expect(games.map(game => game.metadata?.name)).toEqual(["Device Echo"])
+  })
+
+  it("does not treat an unsupported desktop profile as a live gamelist selector", async () => {
+    const root = await seedProseqlLibrary("Generic Echo")
+    const lib = await seedRocknixGamelists()
+    process.env.KORRI_DESKTOP_PROFILE = "legacy-device"
+    process.env.KORRI_LIBRARY_ROOT = root
+    process.env.KORRI_ROCKNIX_GAMELIST_ROOTS = lib.rootDir
+    process.env.KORRI_ROCKNIX_ES_SYSTEMS_PATH = join(
+      lib.rootDir,
+      "missing-es-systems.cfg",
+    )
+
+    const games = await listGames()
+
+    expect(games.map(game => game.metadata?.name)).toEqual(["Generic Echo"])
   })
 })
 
@@ -69,6 +91,22 @@ async function seedRocknixGamelists() {
   return lib
 }
 
+async function seedProseqlLibrary(name: string): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), "korri-library-source-live-"))
+  cleanups.push(() => rm(root, { recursive: true, force: true }))
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+        const repository = createLibraryRepository(db)
+        yield* repository.upsertGame({ id: "game-1", metadata: { name } })
+        yield* Effect.promise(() => db.flush())
+      }),
+    ),
+  )
+  return root
+}
+
 async function listGames() {
   return Effect.runPromise(
     Effect.gen(function* () {
@@ -81,6 +119,7 @@ async function listGames() {
 function restoreEnv(): void {
   setOptionalEnv("KORRI_DESKTOP_PROFILE", originalEnv.desktopProfile)
   setOptionalEnv("KORRI_LIBRARY_SOURCE", originalEnv.librarySource)
+  setOptionalEnv("KORRI_LIBRARY_ROOT", originalEnv.libraryRoot)
   setOptionalEnv(
     "KORRI_ROCKNIX_GAMELIST_ROOTS",
     originalEnv.rocknixGamelistRoots,
