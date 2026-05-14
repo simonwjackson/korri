@@ -13,6 +13,7 @@
     pkgs.gtk3
   ],
   deviceDesktopDataDirs ? desktopDataDirs,
+  deviceBinaryAliases ? [ ],
   gioExtraModules ? pkgs.glib-networking,
   deviceGioExtraModules ? gioExtraModules,
 }:
@@ -206,6 +207,9 @@ pkgs.stdenv.mkDerivation {
 
         write_wrapper "$out/bin/korri-desktop" x11 "" "${runtimeLibraryPath}" "${desktopDataPath}" "${gioExtraModulesPath}"
         write_wrapper "$out/bin/korri-desktop-device" "" device "${deviceRuntimeLibraryPath}" "${deviceDesktopDataPath}" "${deviceGioExtraModulesPath}"
+        for alias in ${lib.escapeShellArgs deviceBinaryAliases}; do
+          write_wrapper "$out/bin/$alias" "" device "${deviceRuntimeLibraryPath}" "${deviceDesktopDataPath}" "${deviceGioExtraModulesPath}"
+        done
 
         runHook postInstall
   '';
