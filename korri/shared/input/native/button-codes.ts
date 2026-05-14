@@ -38,9 +38,3 @@ export const KORRI_KILL_GAME_BUTTONS = [
   BTN_SELECT,
   BTN_START,
 ] as const
-
-export const KORRI_SESSION_TOGGLE_BUTTONS = [
-  BTN_THUMBL,
-  BTN_THUMBR,
-  BTN_START,
-] as const
