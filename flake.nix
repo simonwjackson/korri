@@ -137,6 +137,13 @@
           nativeBridgeUrl = "ws://127.0.0.1:3002";
         };
 
+        korriInputd = import ./nix/korri-inputd.nix {
+          inherit pkgs;
+          lib = pkgs.lib;
+          src = self;
+          inherit bunDeps;
+        };
+
         electrobunBinaries =
           if isSupportedDesktopSystem then
             import ./nix/electrobun-binaries.nix {
@@ -170,6 +177,7 @@
               runtimeLibraries = linuxDesktopRuntimeLibraries;
               deviceRuntimeLibraries = deviceDesktopRuntimeLibraries;
               deviceDesktopDataDirs = deviceDesktopDataDirs;
+              deviceBinaryAliases = [ "korri-desktop-odin" ];
               deviceGioExtraModules = pkgs2405.glib-networking;
             }
           else
@@ -180,15 +188,24 @@
           bun-deps = bunDeps;
           korri-portal = korriPortal;
         }
+        // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+          korri-inputd = korriInputd;
+        }
         // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
           electrobun-cli = electrobunBinaries.cli;
           electrobun-core = electrobunBinaries.core;
           korri-desktop = korriDesktop;
           korri-desktop-device = korriDesktopDevice;
+          korri-desktop-odin = korriDesktopDevice;
           default = korriDesktop;
         };
 
-        apps = pkgs.lib.optionalAttrs isSupportedDesktopSystem {
+        apps = pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+          korri-inputd = {
+            type = "app";
+            program = "${korriInputd}/bin/korri-inputd";
+          };
+        } // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
           default = {
             type = "app";
             program = "${korriDesktop}/bin/korri-desktop";
@@ -200,6 +217,10 @@
           korri-desktop-device = {
             type = "app";
             program = "${korriDesktopDevice}/bin/korri-desktop-device";
+          };
+          korri-desktop-odin = {
+            type = "app";
+            program = "${korriDesktopDevice}/bin/korri-desktop-odin";
           };
         };
 
@@ -232,7 +253,14 @@
     // {
       nixosModules = rec {
         korri-frontend = import ./nix/modules/korri-frontend.nix { korri = self; };
-        default = korri-frontend;
+        korri-inputd = import ./nix/modules/korri-inputd.nix { korri = self; };
+        korri = {
+          imports = [
+            korri-frontend
+            korri-inputd
+          ];
+        };
+        default = korri;
       };
     };
 }
