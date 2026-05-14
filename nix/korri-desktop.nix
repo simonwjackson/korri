@@ -192,12 +192,12 @@ pkgs.stdenv.mkDerivation {
     fi
     if [ -n "$profile" ]; then
       export KORRI_DESKTOP_PROFILE="$profile"
-      export KORRI_DEVICE_STATE_ROOT="''${KORRI_DEVICE_STATE_ROOT:-/storage/.guest/korri}"
-      export KORRI_LIBRARY_ROOT="''${KORRI_LIBRARY_ROOT:-$KORRI_DEVICE_STATE_ROOT/library}"
-      export XDG_DATA_HOME="''${XDG_DATA_HOME:-$KORRI_DEVICE_STATE_ROOT/data}"
-      export XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$KORRI_DEVICE_STATE_ROOT/config}"
-      export XDG_CACHE_HOME="''${XDG_CACHE_HOME:-$KORRI_DEVICE_STATE_ROOT/cache}"
-      export CHROME_CONFIG_HOME="''${CHROME_CONFIG_HOME:-$KORRI_DEVICE_STATE_ROOT/config}"
+      export KORRI_DEVICE_STATE_ROOT="\''${KORRI_DEVICE_STATE_ROOT:-/storage/.guest/korri}"
+      export KORRI_LIBRARY_ROOT="\''${KORRI_LIBRARY_ROOT:-\$KORRI_DEVICE_STATE_ROOT/library}"
+      export XDG_DATA_HOME="\''${XDG_DATA_HOME:-\$KORRI_DEVICE_STATE_ROOT/data}"
+      export XDG_CONFIG_HOME="\''${XDG_CONFIG_HOME:-\$KORRI_DEVICE_STATE_ROOT/config}"
+      export XDG_CACHE_HOME="\''${XDG_CACHE_HOME:-\$KORRI_DEVICE_STATE_ROOT/cache}"
+      export CHROME_CONFIG_HOME="\''${CHROME_CONFIG_HOME:-\$KORRI_DEVICE_STATE_ROOT/config}"
     fi
     exec "$launcher" "\$@"
     EOF
