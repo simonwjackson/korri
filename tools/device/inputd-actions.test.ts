@@ -49,14 +49,12 @@ function createHarness(
 }
 
 describe("inputd actions", () => {
-  it("runs the active application kill/restart command by default", async () => {
+  it("closes the focused Sway window by default", async () => {
     const { dispatcher, commands } = createHarness()
 
     await dispatcher.dispatch("kill-current-game")
 
-    expect(commands).toEqual([
-      { command: "/storage/bin/korri-kill-active-application", args: [] },
-    ])
+    expect(commands).toEqual([{ command: "swaymsg", args: ["kill"] }])
   })
 
   it("can still fall back to the ROCKNIX process-kill-data file", async () => {
@@ -128,45 +126,35 @@ describe("inputd actions", () => {
     expect(warnings).toHaveLength(1)
   })
 
-  it("routes System panel to the session start command by default", async () => {
+  it("routes Home panel to direct Sway Korri launch by default", async () => {
     const { dispatcher, commands } = createHarness()
 
     await dispatcher.dispatch("system-panel")
 
     expect(commands).toEqual([
-      { command: "/storage/bin/korri-session-toggle", args: ["start"] },
+      { command: "swaymsg", args: ["exec", "korri-desktop-odin"] },
     ])
   })
 
-  it("routes the session chord to the ES/Korri toggle by default", async () => {
-    const { dispatcher, commands } = createHarness()
-
-    await dispatcher.dispatch("korri-session-toggle")
-
-    expect(commands).toEqual([
-      { command: "/storage/bin/korri-session-toggle", args: ["toggle"] },
-    ])
-  })
-
-  it("runs the Device screen swap helper by default", async () => {
+  it("runs direct Sway screen focus by default", async () => {
     const { dispatcher, commands } = createHarness()
 
     await dispatcher.dispatch("screen-switch")
 
     expect(commands).toEqual([
-      { command: "/storage/bin/korri-swap-screens", args: [] },
+      { command: "swaymsg", args: ["focus", "output", "down"] },
     ])
   })
 
-  it("runs the safe screen power toggle commands by default", async () => {
+  it("runs direct Sway screen power toggle commands by default", async () => {
     const { dispatcher, commands } = createHarness()
 
     await dispatcher.dispatch("toggle-bottom-screen")
     await dispatcher.dispatch("toggle-top-screen")
 
     expect(commands).toEqual([
-      { command: "/storage/bin/korri-toggle-screen", args: ["bottom"] },
-      { command: "/storage/bin/korri-toggle-screen", args: ["top"] },
+      { command: "swaymsg", args: ["output", "DSI-1", "power", "toggle"] },
+      { command: "swaymsg", args: ["output", "DSI-2", "power", "toggle"] },
     ])
   })
 
@@ -209,14 +197,13 @@ describe("inputd actions", () => {
     ])
   })
 
-  it("runs the installed bottom keyboard helper by default", async () => {
-    const { dispatcher, commands } = createHarness()
+  it("does not run a bottom keyboard command until configured", async () => {
+    const { dispatcher, commands, warnings } = createHarness()
 
     await dispatcher.dispatch("toggle-bottom-keyboard")
 
-    expect(commands).toEqual([
-      { command: "/storage/bin/korri-toggle-bottom-keyboard", args: [] },
-    ])
+    expect(commands).toEqual([])
+    expect(warnings).toHaveLength(1)
   })
 
   it("runs configured bottom keyboard command", async () => {
@@ -288,6 +275,7 @@ describe("inputd actions", () => {
     expect(KORRI_INPUTD_ACTION_IDS).not.toContain("game-guide")
     expect(KORRI_INPUTD_ACTION_IDS).not.toContain("mangohud-toggle")
     expect(KORRI_INPUTD_ACTION_IDS).not.toContain("touch-keyboard")
+    expect(KORRI_INPUTD_ACTION_IDS).not.toContain("korri-session-toggle")
   })
 })
 
