@@ -3,9 +3,8 @@ import {
   ABS_HAT0X,
   ABS_HAT0Y,
   BTN_MODE,
+  BTN_SELECT,
   BTN_START,
-  BTN_THUMBL,
-  BTN_THUMBR,
   BTN_TL,
   BTN_TR,
   EV_ABS,
@@ -20,28 +19,28 @@ import { createSystemShortcutEngine } from "./system-shortcut-engine"
 const shortcuts = [
   {
     id: "kill-current-game",
-    requiredControls: ["system", "l1", "r1"],
+    requiredControls: ["l1", "r1", "start", "select"],
     exact: true,
   },
   {
     id: "workspace-prev",
-    requiredControls: ["system", "dpad-left"],
+    requiredControls: ["home", "dpad-left"],
   },
   {
     id: "move-output-down",
-    requiredControls: ["system", "dpad-down"],
+    requiredControls: ["home", "dpad-down"],
   },
   {
     id: "screen-switch",
-    requiredControls: ["system", "back"],
+    requiredControls: ["home", "back"],
   },
   {
     id: "brightness-up",
-    requiredControls: ["system", "volume-up"],
+    requiredControls: ["home", "volume-up"],
   },
 ] as const
 
-const taps = [{ id: "system-panel", control: "system" }] as const
+const taps = [{ id: "system-panel", control: "home" }] as const
 
 function input(code: number, value: number, deviceId = "gamepad") {
   return {
@@ -53,7 +52,7 @@ function input(code: number, value: number, deviceId = "gamepad") {
   }
 }
 
-function system(value: number) {
+function home(value: number) {
   return {
     deviceId: "gpio-keys",
     deviceClass: "system" as const,
@@ -74,38 +73,38 @@ function abs(code: number, value: number) {
 }
 
 describe("system shortcut engine", () => {
-  it("matches System plus shoulders across devices", () => {
+  it("matches gamepad-only kill chord", () => {
     const engine = createSystemShortcutEngine({ shortcuts, taps })
 
-    expect(engine.handleEvent(system(1))).toEqual([])
     expect(engine.handleEvent(input(BTN_TL, 1))).toEqual([])
-    expect(engine.handleEvent(input(BTN_TR, 1))).toEqual([
+    expect(engine.handleEvent(input(BTN_TR, 1))).toEqual([])
+    expect(engine.handleEvent(input(BTN_START, 1))).toEqual([])
+    expect(engine.handleEvent(input(BTN_SELECT, 1))).toEqual([
       { id: "kill-current-game" },
     ])
   })
 
-  it("fires a plain System tap on release when no chord consumed it", () => {
+  it("fires a plain Home tap on release when no chord consumed it", () => {
     const engine = createSystemShortcutEngine({ shortcuts, taps })
 
-    expect(engine.handleEvent(system(1))).toEqual([])
-    expect(engine.handleEvent(system(0))).toEqual([{ id: "system-panel" }])
+    expect(engine.handleEvent(home(1))).toEqual([])
+    expect(engine.handleEvent(home(0))).toEqual([{ id: "system-panel" }])
   })
 
-  it("does not also fire System tap after a System chord", () => {
+  it("does not fire Home tap after a Home chord", () => {
     const engine = createSystemShortcutEngine({ shortcuts, taps })
 
-    engine.handleEvent(system(1))
-    engine.handleEvent(input(BTN_TL, 1))
-    expect(engine.handleEvent(input(BTN_TR, 1))).toEqual([
-      { id: "kill-current-game" },
+    engine.handleEvent(home(1))
+    expect(engine.handleEvent(abs(ABS_HAT0X, -1))).toEqual([
+      { id: "workspace-prev" },
     ])
-    expect(engine.handleEvent(system(0))).toEqual([])
+    expect(engine.handleEvent(home(0))).toEqual([])
   })
 
-  it("maps hat directions while System is held", () => {
+  it("maps hat directions while Home is held", () => {
     const engine = createSystemShortcutEngine({ shortcuts, taps })
 
-    engine.handleEvent(system(1))
+    engine.handleEvent(home(1))
     expect(engine.handleEvent(abs(ABS_HAT0X, -1))).toEqual([
       { id: "workspace-prev" },
     ])
@@ -118,18 +117,18 @@ describe("system shortcut engine", () => {
   it("maps the AYN physical Back key to the screen-switch chord", () => {
     const engine = createSystemShortcutEngine({ shortcuts, taps })
 
-    engine.handleEvent(system(1))
+    engine.handleEvent(home(1))
     expect(engine.handleEvent(input(KEY_RECORD, 1))).toEqual([
       { id: "screen-switch" },
     ])
   })
 
-  it("maps System plus volume to brightness without firing on volume alone", () => {
+  it("maps Home plus volume to brightness without firing on volume alone", () => {
     const engine = createSystemShortcutEngine({ shortcuts, taps })
 
     expect(engine.handleEvent(input(KEY_VOLUMEUP, 1, "gpio-keys"))).toEqual([])
     engine.handleEvent(input(KEY_VOLUMEUP, 0, "gpio-keys"))
-    engine.handleEvent(system(1))
+    engine.handleEvent(home(1))
     expect(engine.handleEvent(input(KEY_VOLUMEUP, 1, "gpio-keys"))).toEqual([
       { id: "brightness-up" },
     ])
@@ -138,47 +137,30 @@ describe("system shortcut engine", () => {
     )
   })
 
-  it("does not treat Home/Guide as System", () => {
+  it("does not treat Home/Guide as the physical Home key", () => {
     const engine = createSystemShortcutEngine({ shortcuts, taps })
 
     engine.handleEvent(input(BTN_MODE, 1))
-    engine.handleEvent(input(BTN_TL, 1))
-    expect(engine.handleEvent(input(BTN_TR, 1))).toEqual([])
+    expect(engine.handleEvent(abs(ABS_HAT0X, -1))).toEqual([])
   })
 
   it("ignores held repeats for one-shot chords", () => {
     const engine = createSystemShortcutEngine({ shortcuts, taps })
 
-    engine.handleEvent(system(1))
     engine.handleEvent(input(BTN_TL, 1))
-    expect(engine.handleEvent(input(BTN_TR, 1))).toHaveLength(1)
-    expect(engine.handleEvent(input(BTN_TR, 2))).toEqual([])
+    engine.handleEvent(input(BTN_TR, 1))
+    engine.handleEvent(input(BTN_START, 1))
+    expect(engine.handleEvent(input(BTN_SELECT, 1))).toHaveLength(1)
+    expect(engine.handleEvent(input(BTN_SELECT, 2))).toEqual([])
   })
 
   it("clears controls for removed devices", () => {
     const engine = createSystemShortcutEngine({ shortcuts, taps })
 
-    engine.handleEvent(system(1))
-    engine.clearDevice("gpio-keys")
     engine.handleEvent(input(BTN_TL, 1))
-    expect(engine.handleEvent(input(BTN_TR, 1))).toEqual([])
-  })
-
-  it("keeps the existing session chord expressible as a gamepad-only shortcut", () => {
-    const engine = createSystemShortcutEngine({
-      shortcuts: [
-        {
-          id: "korri-session-toggle",
-          requiredControls: ["l3", "r3", "start"],
-          exact: true,
-        },
-      ],
-    })
-
-    engine.handleEvent(input(BTN_THUMBL, 1))
-    engine.handleEvent(input(BTN_THUMBR, 1))
-    expect(engine.handleEvent(input(BTN_START, 1))).toEqual([
-      { id: "korri-session-toggle" },
-    ])
+    engine.clearDevice("gamepad")
+    engine.handleEvent(input(BTN_TR, 1))
+    engine.handleEvent(input(BTN_START, 1))
+    expect(engine.handleEvent(input(BTN_SELECT, 1))).toEqual([])
   })
 })
