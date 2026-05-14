@@ -6,6 +6,7 @@ import {
   ABS_HAT0Y,
   BTN_A,
   BTN_BACK,
+  BTN_SELECT,
   BTN_START,
   BTN_THUMBL,
   BTN_THUMBR,
@@ -175,7 +176,7 @@ describe("korri inputd", () => {
     client.close()
   })
 
-  it("dispatches System+L1+R1 kill once while still streaming gamepad input", async () => {
+  it("dispatches L1+R1+Start+Select kill once while still streaming gamepad input", async () => {
     const proc = await loadProcFixture("bus-input-devices-device.txt")
     const systemSource = createControllableEventSource()
     const gamepadSource = createControllableEventSource()
@@ -200,10 +201,11 @@ describe("korri inputd", () => {
     client.ws.send(JSON.stringify({ classes: ["gamepad"] }))
     await client.nextMessage()
 
-    systemSource.push(evdevKey(KEY_SYSTEM, 1))
     gamepadSource.push(evdevKey(BTN_TL, 1))
     gamepadSource.push(evdevKey(BTN_TR, 1))
-    gamepadSource.push(evdevKey(BTN_TR, 2))
+    gamepadSource.push(evdevKey(BTN_START, 1))
+    gamepadSource.push(evdevKey(BTN_SELECT, 1))
+    gamepadSource.push(evdevKey(BTN_SELECT, 2))
 
     await waitFor(() => actions.length === 1, "kill action")
     expect(actions).toEqual(["kill-current-game"])
@@ -218,7 +220,7 @@ describe("korri inputd", () => {
     client.close()
   })
 
-  it("keeps L3+R3+Start as the session toggle shortcut", async () => {
+  it("does not keep L3+R3+Start as a session toggle shortcut", async () => {
     const proc = await loadProcFixture("bus-input-devices-device.txt")
     const source = createControllableEventSource()
     const actions: KorriInputdActionId[] = []
@@ -238,15 +240,12 @@ describe("korri inputd", () => {
     source.push(evdevKey(BTN_THUMBL, 1))
     source.push(evdevKey(BTN_THUMBR, 1))
     source.push(evdevKey(BTN_START, 1))
+    await Bun.sleep(30)
 
-    await waitFor(
-      () => actions.includes("korri-session-toggle"),
-      "session toggle",
-    )
-    expect(actions).toEqual(["korri-session-toggle"])
+    expect(actions).toEqual([])
   })
 
-  it("dispatches plain System as a panel action", async () => {
+  it("dispatches plain Home as a panel action", async () => {
     const proc = await loadProcFixture("bus-input-devices-device.txt")
     const source = createControllableEventSource()
     const actions: KorriInputdActionId[] = []
@@ -266,11 +265,11 @@ describe("korri inputd", () => {
     source.push(evdevKey(KEY_SYSTEM, 1))
     source.push(evdevKey(KEY_SYSTEM, 0))
 
-    await waitFor(() => actions.includes("system-panel"), "system panel")
+    await waitFor(() => actions.includes("system-panel"), "home panel")
     expect(actions).toEqual(["system-panel"])
   })
 
-  it("routes System+D-pad to Sway workspace and output actions", async () => {
+  it("routes Home+D-pad to Sway workspace and output actions", async () => {
     const proc = await loadProcFixture("bus-input-devices-device.txt")
     const systemSource = createControllableEventSource()
     const gamepadSource = createControllableEventSource()
@@ -308,7 +307,7 @@ describe("korri inputd", () => {
     ])
   })
 
-  it("maps System+Volume to brightness while preserving Volume alone", async () => {
+  it("maps Home+Volume to brightness while preserving Volume alone", async () => {
     const proc = await loadProcFixture("bus-input-devices-device.txt")
     const source = createControllableEventSource()
     const actions: KorriInputdActionId[] = []
@@ -397,7 +396,7 @@ describe("korri inputd", () => {
     expect(actions).toEqual([])
   })
 
-  it("dispatches screen power toggles from System+stick clicks", async () => {
+  it("dispatches screen power toggles from Home+stick clicks", async () => {
     const proc = await loadProcFixture("bus-input-devices-device.txt")
     const systemSource = createControllableEventSource()
     const gamepadSource = createControllableEventSource()
@@ -428,7 +427,7 @@ describe("korri inputd", () => {
     expect(actions).toEqual(["toggle-bottom-screen", "toggle-top-screen"])
   })
 
-  it("dispatches screen-switch from System+Back", async () => {
+  it("dispatches screen-switch from Home+Back", async () => {
     const proc = await loadProcFixture("bus-input-devices-device.txt")
     const systemSource = createControllableEventSource()
     const gamepadSource = createControllableEventSource()
