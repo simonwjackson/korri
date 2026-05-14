@@ -6,7 +6,6 @@ import { buildSwayShortcutCommand } from "./sway-actions"
 export const KORRI_INPUTD_ACTION_IDS = [
   "system-panel",
   "kill-current-game",
-  "korri-session-toggle",
   "volume-up",
   "volume-down",
   "brightness-up",
@@ -43,7 +42,6 @@ export interface InputdActionLogger {
 export interface InputdActionCommands {
   readonly systemPanel?: InputdActionCommand
   readonly killCurrentGame?: InputdActionCommand
-  readonly sessionToggle?: InputdActionCommand
   readonly volumeUp?: InputdActionCommand
   readonly volumeDown?: InputdActionCommand
   readonly brightnessUp?: InputdActionCommand
@@ -122,9 +120,6 @@ export function createInputdActionDispatcher(
             logger,
             runner,
           })
-          return
-        case "korri-session-toggle":
-          await runNamedCommand(actionId, commands.sessionToggle)
           return
         case "volume-up":
           await runNamedCommand(actionId, commands.volumeUp)
@@ -212,40 +207,37 @@ async function dispatchKillCurrentGame(options: {
   }
 }
 
-function defaultCommands(): Required<InputdActionCommands> {
+function defaultCommands(): InputdActionCommands {
   const bottomKeyboardCommand = buildBottomKeyboardCommand({
     configuredCommand: process.env.KORRI_INPUTD_BOTTOM_KEYBOARD,
     configuredOutput: process.env.KORRI_INPUTD_BOTTOM_KEYBOARD_OUTPUT,
   })
 
   return {
-    systemPanel: {
-      command: "/storage/bin/korri-session-toggle",
-      args: ["start"],
-    },
-    killCurrentGame: {
-      command: "/storage/bin/korri-kill-active-application",
-      args: [],
-    },
-    sessionToggle: {
-      command: "/storage/bin/korri-session-toggle",
-      args: ["toggle"],
-    },
-    volumeUp: commandFromEnv("KORRI_INPUTD_VOLUME_UP", "bash", [
-      "-lc",
-      "if command -v volume >/dev/null 2>&1; then volume up; elif command -v pactl >/dev/null 2>&1; then pactl set-sink-volume @DEFAULT_SINK@ +5%; fi",
+    systemPanel: commandFromEnv("KORRI_INPUTD_SYSTEM_PANEL", "swaymsg", [
+      "exec",
+      "korri-desktop-odin",
     ]),
-    volumeDown: commandFromEnv("KORRI_INPUTD_VOLUME_DOWN", "bash", [
-      "-lc",
-      "if command -v volume >/dev/null 2>&1; then volume down; elif command -v pactl >/dev/null 2>&1; then pactl set-sink-volume @DEFAULT_SINK@ -5%; fi",
+    killCurrentGame: commandFromEnv("KORRI_INPUTD_KILL_CURRENT_GAME", "swaymsg", [
+      "kill",
     ]),
-    brightnessUp: commandFromEnv("KORRI_INPUTD_BRIGHTNESS_UP", "bash", [
-      "-lc",
-      "if command -v brightness >/dev/null 2>&1; then brightness up; elif command -v brightnessctl >/dev/null 2>&1; then brightnessctl set +5%; fi",
+    volumeUp: commandFromEnv("KORRI_INPUTD_VOLUME_UP", "pactl", [
+      "set-sink-volume",
+      "@DEFAULT_SINK@",
+      "+5%",
     ]),
-    brightnessDown: commandFromEnv("KORRI_INPUTD_BRIGHTNESS_DOWN", "bash", [
-      "-lc",
-      "if command -v brightness >/dev/null 2>&1; then brightness down; elif command -v brightnessctl >/dev/null 2>&1; then brightnessctl set 5%-; fi",
+    volumeDown: commandFromEnv("KORRI_INPUTD_VOLUME_DOWN", "pactl", [
+      "set-sink-volume",
+      "@DEFAULT_SINK@",
+      "-5%",
+    ]),
+    brightnessUp: commandFromEnv("KORRI_INPUTD_BRIGHTNESS_UP", "brightnessctl", [
+      "set",
+      "+5%",
+    ]),
+    brightnessDown: commandFromEnv("KORRI_INPUTD_BRIGHTNESS_DOWN", "brightnessctl", [
+      "set",
+      "5%-",
     ]),
     powerSuspend: commandFromEnv("KORRI_INPUTD_POWER_SUSPEND", "systemctl", [
       "suspend",
@@ -254,23 +246,26 @@ function defaultCommands(): Required<InputdActionCommands> {
       "suspend",
     ]),
     lidOpened: commandFromEnv("KORRI_INPUTD_LID_OPENED", "true", []),
-    screenSwitch: { command: "/storage/bin/korri-swap-screens", args: [] },
-    toggleBottomScreen: {
-      command: "/storage/bin/korri-toggle-screen",
-      args: ["bottom"],
-    },
-    toggleTopScreen: {
-      command: "/storage/bin/korri-toggle-screen",
-      args: ["top"],
-    },
+    screenSwitch: commandFromEnv("KORRI_INPUTD_SCREEN_SWITCH", "swaymsg", [
+      "focus",
+      "output",
+      "down",
+    ]),
+    toggleBottomScreen: commandFromEnv(
+      "KORRI_INPUTD_TOGGLE_BOTTOM_SCREEN",
+      "swaymsg",
+      ["output", "DSI-1", "power", "toggle"],
+    ),
+    toggleTopScreen: commandFromEnv(
+      "KORRI_INPUTD_TOGGLE_TOP_SCREEN",
+      "swaymsg",
+      ["output", "DSI-2", "power", "toggle"],
+    ),
     workspacePrev: buildSwayShortcutCommand("workspace-prev"),
     workspaceNext: buildSwayShortcutCommand("workspace-next"),
     moveOutputUp: buildSwayShortcutCommand("move-output-up"),
     moveOutputDown: buildSwayShortcutCommand("move-output-down"),
-    toggleBottomKeyboard: bottomKeyboardCommand.command ?? {
-      command: "/storage/bin/korri-toggle-bottom-keyboard",
-      args: [],
-    },
+    toggleBottomKeyboard: bottomKeyboardCommand.command,
   }
 }
 
