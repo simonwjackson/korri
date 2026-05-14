@@ -89,36 +89,31 @@ const DEFAULT_SHORTCUTS: readonly SystemShortcutDefinition<KorriInputdActionId>[
   [
     {
       id: "kill-current-game",
-      requiredControls: ["system", "l1", "r1"],
+      requiredControls: ["l1", "r1", "start", "select"],
       exact: true,
     },
-    {
-      id: "korri-session-toggle",
-      requiredControls: ["l3", "r3", "start"],
-      exact: true,
-    },
-    { id: "brightness-up", requiredControls: ["system", "volume-up"] },
-    { id: "brightness-down", requiredControls: ["system", "volume-down"] },
-    { id: "workspace-prev", requiredControls: ["system", "dpad-left"] },
-    { id: "workspace-next", requiredControls: ["system", "dpad-right"] },
-    { id: "move-output-up", requiredControls: ["system", "dpad-up"] },
-    { id: "move-output-down", requiredControls: ["system", "dpad-down"] },
-    { id: "screen-switch", requiredControls: ["system", "back"] },
+    { id: "brightness-up", requiredControls: ["home", "volume-up"] },
+    { id: "brightness-down", requiredControls: ["home", "volume-down"] },
+    { id: "workspace-prev", requiredControls: ["home", "dpad-left"] },
+    { id: "workspace-next", requiredControls: ["home", "dpad-right"] },
+    { id: "move-output-up", requiredControls: ["home", "dpad-up"] },
+    { id: "move-output-down", requiredControls: ["home", "dpad-down"] },
+    { id: "screen-switch", requiredControls: ["home", "back"] },
     {
       id: "toggle-bottom-screen",
-      requiredControls: ["system", "l3"],
+      requiredControls: ["home", "l3"],
       exact: true,
     },
     {
       id: "toggle-top-screen",
-      requiredControls: ["system", "r3"],
+      requiredControls: ["home", "r3"],
       exact: true,
     },
-    { id: "toggle-bottom-keyboard", requiredControls: ["system", "x"] },
+    { id: "toggle-bottom-keyboard", requiredControls: ["home", "x"] },
   ]
 
 const DEFAULT_SYSTEM_TAPS: readonly SystemTapDefinition<KorriInputdActionId>[] =
-  [{ id: "system-panel", control: "system" }]
+  [{ id: "system-panel", control: "home" }]
 
 export async function startKorriInputd(
   options: KorriInputdOptions = {},
@@ -127,7 +122,8 @@ export async function startKorriInputd(
   const readProcDevices = options.readProcDevices ?? readRealProcDevices
   const openEventSource = options.openEventSource ?? openRealEventSource
   const nowMs = options.nowMs ?? Date.now
-  const hostname = options.hostname ?? DEFAULT_HOSTNAME
+  const hostname =
+    options.hostname ?? process.env.KORRI_INPUT_BRIDGE_HOSTNAME ?? DEFAULT_HOSTNAME
   const actionDispatcher =
     options.actionDispatcher ?? createInputdActionDispatcher({ logger })
   const eventNodeExists =
@@ -293,7 +289,7 @@ export async function startKorriInputd(
     }
 
     if (event.type === EV_KEY) {
-      if (matches.length > 0 || shortcutEngine.isPressed("system")) return
+      if (matches.length > 0 || shortcutEngine.isPressed("home")) return
 
       const systemAction = systemKeyAction(event.code, event.value)
       if (systemAction) dispatchAction(systemAction)
@@ -492,7 +488,7 @@ async function readRealProcDevices(): Promise<string> {
 function openRealEventSource(device: DiscoveredDevice): KorriInputdEventSource {
   const path = `/dev/input/${device.eventNode}`
   const proc = Bun.spawn({
-    cmd: ["/usr/bin/cat", path],
+    cmd: ["cat", path],
     stdout: "pipe",
     stderr: "ignore",
   })
