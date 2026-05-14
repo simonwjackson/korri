@@ -20,7 +20,7 @@ import {
 import type { NativeInputDeviceClass } from "./discover-devices"
 
 export type SystemShortcutControl =
-  | "system"
+  | "home"
   | "l1"
   | "r1"
   | "start"
@@ -239,7 +239,7 @@ function dpadVertical(value: number): SystemShortcutControl | undefined {
 }
 
 function controlForKeyCode(code: number): SystemShortcutControl | null {
-  if (code === KEY_SYSTEM) return "system"
+  if (code === KEY_SYSTEM) return "home"
   if (code === BTN_TL) return "l1"
   if (code === BTN_TR) return "r1"
   if (code === BTN_START) return "start"
