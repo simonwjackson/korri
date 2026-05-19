@@ -265,6 +265,68 @@ describe("game stream runner", () => {
     expect(specs).toHaveLength(0)
   })
 
+  it("does not spawn when stop is requested during startup", async () => {
+    const controlled = createControlledChild(210)
+    const { spawner, specs } = createControlledSpawner(controlled.child)
+    let releaseSnapshot: (value: string) => void = () => undefined
+    let markSnapshotStarted: () => void = () => undefined
+    const snapshotStarted = new Promise<void>(resolve => {
+      markSnapshotStarted = resolve
+    })
+    const runner = createGameStreamRunner({
+      game,
+      spawner,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      processEnv: sessionEnv,
+      fullscreen: {
+        selector: { appIds: ["gamescope"] },
+        runner: {
+          run: async () => {
+            markSnapshotStarted()
+            return new Promise<string>(resolve => {
+              releaseSnapshot = resolve
+            })
+          },
+        },
+      },
+    })
+
+    const run = runner.run()
+    await snapshotStarted
+    await runner.stop()
+    releaseSnapshot(JSON.stringify({ id: 1, nodes: [] }))
+
+    await expect(run).resolves.toMatchObject({
+      status: "failed",
+      stage: "cleanup",
+    })
+    expect(specs).toHaveLength(0)
+  })
+
+  it("records lock acquisition failures", async () => {
+    const controlled = createControlledChild(211)
+    const { spawner, specs } = createControlledSpawner(controlled.child)
+    const runner = createGameStreamRunner({
+      game,
+      spawner,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      lockManager: {
+        acquire: async () => {
+          throw new Error("lock denied")
+        },
+      },
+    })
+
+    await expect(runner.run()).resolves.toMatchObject({
+      status: "failed",
+      stage: "lock",
+      exitCode: 125,
+    })
+    expect(specs).toHaveLength(0)
+  })
+
   it("records spawn failure and non-zero game exit", async () => {
     const spawnFailure = createGameStreamRunner({
       game,

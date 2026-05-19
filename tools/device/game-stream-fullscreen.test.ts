@@ -145,6 +145,39 @@ describe("stream surface discovery and repair", () => {
     expect(calls).toContainEqual(["[con_id=42] fullscreen enable"])
   })
 
+  it("ignores pre-existing stream surfaces while waiting for a new one", async () => {
+    const calls: string[][] = []
+    const treeWithOldAndNew: SwayNode = {
+      id: 1,
+      nodes: [
+        {
+          id: 2,
+          nodes: [
+            { id: 42, app_id: "gamescope", focused: true, fullscreen_mode: 1 },
+            { id: 43, app_id: "gamescope", focused: false, fullscreen_mode: 0 },
+          ],
+        },
+      ],
+    }
+
+    const result = await repairStreamSurface({
+      selector: { appIds: ["gamescope"] },
+      ignoredWindowIds: new Set([42]),
+      runner: {
+        run: async args => {
+          calls.push([...args])
+          if (args.includes("get_tree"))
+            return JSON.stringify(treeWithOldAndNew)
+          return ""
+        },
+      },
+    })
+
+    expect(result.windowId).toBe(43)
+    expect(calls).toContainEqual(["[con_id=43] fullscreen enable"])
+    expect(calls).not.toContainEqual(["[con_id=42] focus"])
+  })
+
   it("times out when no stream surface appears", async () => {
     let time = 0
 

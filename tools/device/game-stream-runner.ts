@@ -104,6 +104,7 @@ export function createGameStreamRunner(
     options.terminateGraceMs ?? DEFAULT_TERMINATE_GRACE_MS
   let state: GameStreamState = initialGameStreamState
   let activeChild: ManagedChild | undefined
+  let stopRequested = false
 
   async function writeStatus() {
     if (!options.statusPath) return
@@ -125,9 +126,10 @@ export function createGameStreamRunner(
   }
 
   async function stop() {
-    if (!activeChild) return
+    stopRequested = true
     state = beginGameStreamStopping(state)
     await writeStatus()
+    if (!activeChild) return
     await terminateChild(activeChild, "SIGTERM", terminateGraceMs)
   }
 
@@ -146,6 +148,7 @@ export function createGameStreamRunner(
     stop,
     async run() {
       if (!canStartGameStream(state)) return { status: "already-running" }
+      stopRequested = false
 
       const runId = crypto.randomUUID()
       state = beginGameStreamStart(state, runId)
@@ -168,7 +171,16 @@ export function createGameStreamRunner(
         return fail("preflight", steamBoundary.reason, 126)
       }
 
-      const lockResult = await lockManager.acquire()
+      if (stopRequested) {
+        return fail("cleanup", "game stream stopped before launch", 143)
+      }
+
+      let lockResult: Awaited<ReturnType<GameStreamRunLockManager["acquire"]>>
+      try {
+        lockResult = await lockManager.acquire()
+      } catch (error) {
+        return fail("lock", errorMessage(error), 125)
+      }
       if (!lockResult.acquired) {
         state = failGameStream(state, {
           stage: "lock",
@@ -191,6 +203,10 @@ export function createGameStreamRunner(
           }
         }
 
+        if (stopRequested) {
+          return await fail("cleanup", "game stream stopped before launch", 143)
+        }
+
         const spec = composeGamescopeLaunchSpec(
           options.game,
           options.gamescope ?? { enabled: false },
@@ -204,6 +220,11 @@ export function createGameStreamRunner(
           activeChild = await spawner.spawn(spec)
         } catch (error) {
           return await fail("spawn", errorMessage(error), 127)
+        }
+
+        if (stopRequested) {
+          await terminateChild(activeChild, "SIGTERM", terminateGraceMs)
+          return await fail("cleanup", "game stream stopped during launch", 143)
         }
 
         state = markGameStreamRunning(state, activeChild.pid)
@@ -321,29 +342,31 @@ export function createFileGameStreamRunLock(
   return {
     async acquire() {
       await mkdir(dirname(lockPath), { recursive: true, mode: 0o700 })
-      try {
-        const handle = await open(lockPath, "wx")
-        await handle.writeFile(lockContents)
-        await handle.close()
-        return {
-          acquired: true,
-          lock: {
-            async release() {
-              await removeLockIfUnchanged(lockPath, lockContents)
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const handle = await open(lockPath, "wx")
+          await handle.writeFile(lockContents)
+          await handle.close()
+          return {
+            acquired: true,
+            lock: {
+              async release() {
+                await removeLockIfUnchanged(lockPath, lockContents)
+              },
             },
-          },
-        }
-      } catch (error) {
-        if (!isFileExistsError(error)) throw error
-        const existing = await readExistingLock(lockPath)
-        if (existing.pid === undefined || !isProcessAlive(existing.pid)) {
-          if (await removeLockIfUnchanged(lockPath, existing.raw)) {
-            return this.acquire()
           }
-          return this.acquire()
+        } catch (error) {
+          if (!isFileExistsError(error)) throw error
+          const existing = await readExistingLock(lockPath)
+          if (existing.pid !== undefined && isProcessAlive(existing.pid)) {
+            return { acquired: false, reason: "already-running" }
+          }
+          if (!(await removeLockIfUnchanged(lockPath, existing.raw))) {
+            return { acquired: false, reason: "already-running" }
+          }
         }
-        return { acquired: false, reason: "already-running" }
       }
+      return { acquired: false, reason: "already-running" }
     },
   }
 }
@@ -434,8 +457,12 @@ async function removeLockIfUnchanged(
 ): Promise<boolean> {
   const currentRaw = await readFile(lockPath, "utf8").catch(() => undefined)
   if (currentRaw !== expectedRaw) return false
-  await unlink(lockPath).catch(() => undefined)
-  return true
+  try {
+    await unlink(lockPath)
+    return true
+  } catch {
+    return false
+  }
 }
 
 function isFileExistsError(error: unknown): boolean {
