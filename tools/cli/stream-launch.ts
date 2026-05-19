@@ -45,6 +45,26 @@ export interface PrepareStreamLaunchOptions {
   readonly stdinIsTty?: boolean
 }
 
+export interface RunStreamLaunchCommandOptions
+  extends PrepareStreamLaunchOptions {
+  readonly intentPath?: string
+  readonly output?: (line: string) => void
+  readonly errorOutput?: (line: string) => void
+}
+
+export async function runStreamLaunchCommand(
+  options: RunStreamLaunchCommandOptions,
+): Promise<number> {
+  const result = await prepareStreamLaunch(options)
+  if (result.status === "prepared") {
+    ;(options.output ?? console.log)(successMessage(result, options.intentPath))
+    return 0
+  }
+
+  ;(options.errorOutput ?? console.error)(failureMessage(result))
+  return exitCodeForFailure(result.category)
+}
+
 export async function prepareStreamLaunch(
   options: PrepareStreamLaunchOptions,
 ): Promise<StreamLaunchPrepareResult> {
@@ -147,6 +167,40 @@ function usageFailure(message: string): StreamLaunchPrepareFailure {
     category: "usage",
     gameId: "",
     message,
+  }
+}
+
+function successMessage(
+  result: Extract<StreamLaunchPrepareResult, { readonly status: "prepared" }>,
+  intentPath: string | undefined,
+): string {
+  const location = intentPath ? `\nIntent: ${intentPath}` : ""
+  return (
+    [
+      `Prepared ${result.displayName} (${result.game.id}) for Korri Stream.`,
+      "Next: connect to the Korri Stream app from Moonlight.",
+      "This is a one-shot launch intent; rerun this command before a later stream attempt.",
+    ].join("\n") + location
+  )
+}
+
+function failureMessage(failure: StreamLaunchPrepareFailure): string {
+  const diagnostic = failure.diagnostic ? `\n${failure.diagnostic}` : ""
+  return `${failure.message}${diagnostic}`
+}
+
+function exitCodeForFailure(category: StreamLaunchFailureCategory): number {
+  switch (category) {
+    case "usage":
+      return 2
+    case "no-such-game":
+      return 3
+    case "library-config":
+      return 5
+    case "prepare-failed":
+      return 6
+    case "cancelled":
+      return 130
   }
 }
 

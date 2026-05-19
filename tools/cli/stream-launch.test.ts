@@ -3,12 +3,15 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, it } from "bun:test"
 import type { GameRecord } from "@shared/fixtures/games/game"
+import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
 import {
   LibraryError,
+  LibrarySource,
   type LibrarySourceService,
 } from "@shared/library/library-services"
 import type { LaunchSpec } from "@shared/library/launcher"
 import { Effect } from "effect"
+import { withTempProseqlLibrary } from "../testing/library/with-temp-proseql-library"
 import {
   createFileGameStreamLaunchIntentStore,
   decodeLaunchIntent,
@@ -17,10 +20,108 @@ import { createStaticGamePicker } from "./game-picker"
 import {
   prepareStreamLaunch,
   prepareStreamLaunchForGame,
+  runStreamLaunchCommand,
 } from "./stream-launch"
 
 const game: GameRecord = { id: "snes/f-zero.smc", metadata: { name: "F-Zero" } }
 const launchSpec: LaunchSpec = { command: "/bin/echo", args: ["race"] }
+
+describe("runStreamLaunchCommand", () => {
+  it("prints the next step after preparing a known game", async () => {
+    const intentPath = await tempIntentPath()
+    const output: string[] = []
+    const exitCode = await runStreamLaunchCommand({
+      gameId: game.id,
+      librarySource: librarySource({
+        games: [game],
+        launchSpecs: new Map([[game.id, launchSpec]]),
+      }),
+      intentStore: createFileGameStreamLaunchIntentStore(intentPath),
+      intentPath,
+      output: line => output.push(line),
+      errorOutput: line => output.push(line),
+    })
+
+    expect(exitCode).toBe(0)
+    expect(output.join("\n")).toContain(
+      "Prepared F-Zero (snes/f-zero.smc) for Korri Stream",
+    )
+    expect(output.join("\n")).toContain("connect to the Korri Stream app")
+    expect(output.join("\n")).toContain(intentPath)
+  })
+
+  it("prints categorized failures without writing an intent", async () => {
+    const intentPath = await tempIntentPath()
+    const errors: string[] = []
+    const exitCode = await runStreamLaunchCommand({
+      gameId: "missing",
+      librarySource: librarySource({
+        games: [game],
+        launchSpecs: new Map([[game.id, launchSpec]]),
+      }),
+      intentStore: createFileGameStreamLaunchIntentStore(intentPath),
+      errorOutput: line => errors.push(line),
+    })
+
+    expect(exitCode).toBe(3)
+    expect(errors.join("\n")).toContain("No game exists with id missing")
+    await expect(readFile(intentPath, "utf8")).rejects.toThrow()
+  })
+
+  it("uses the live library source configuration with a temp ProseQL library", async () => {
+    await using library = await withTempProseqlLibrary({
+      games: [game],
+      launcherProfiles: [
+        {
+          id: "echo.profile",
+          command: "/bin/echo",
+          args: ["{contentPath}"],
+        },
+      ],
+      launchTargets: [
+        {
+          id: game.id,
+          profile: "echo.profile",
+          contentPath: "content.smc",
+        },
+      ],
+    })
+    const previousRoot = process.env.KORRI_LIBRARY_ROOT
+    const previousSource = process.env.KORRI_LIBRARY_SOURCE
+    process.env.KORRI_LIBRARY_ROOT = library.root
+    process.env.KORRI_LIBRARY_SOURCE = "proseql"
+    try {
+      const source = await Effect.runPromise(
+        Effect.gen(function* () {
+          return yield* LibrarySource
+        }).pipe(Effect.provide(LibrarySourceLayerLive)),
+      )
+      const intentPath = await tempIntentPath()
+      const output: string[] = []
+      const exitCode = await runStreamLaunchCommand({
+        gameId: game.id,
+        librarySource: source,
+        intentStore: createFileGameStreamLaunchIntentStore(intentPath),
+        output: line => output.push(line),
+      })
+
+      expect(exitCode).toBe(0)
+      const intent = decodeLaunchIntent(
+        JSON.parse(await readFile(intentPath, "utf8")) as unknown,
+      )
+      expect(intent.launch).toEqual({
+        command: "/bin/echo",
+        args: ["content.smc"],
+      })
+      expect(output.join("\n")).toContain("Korri Stream")
+    } finally {
+      if (previousRoot === undefined) delete process.env.KORRI_LIBRARY_ROOT
+      else process.env.KORRI_LIBRARY_ROOT = previousRoot
+      if (previousSource === undefined) delete process.env.KORRI_LIBRARY_SOURCE
+      else process.env.KORRI_LIBRARY_SOURCE = previousSource
+    }
+  })
+})
 
 describe("prepareStreamLaunch", () => {
   it("prepares the selected game from the interactive picker", async () => {
