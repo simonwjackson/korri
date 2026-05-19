@@ -4,6 +4,7 @@ import type { LaunchSpec } from "@shared/library/launcher"
 import { logger as defaultLogger } from "@shared/logger"
 import {
   composeGamescopeLaunchSpec,
+  DEFAULT_GAMESCOPE_SELECTOR,
   repairStreamSurface,
   type GamescopeOptions,
   type RepairStreamSurfaceOptions,
@@ -228,6 +229,23 @@ export function createBunManagedChildSpawner(options: {
   }
 }
 
+export function createSwayCommandRunner(command = "swaymsg") {
+  return {
+    async run(args: readonly string[]): Promise<string> {
+      const proc = Bun.spawn([command, ...args], {
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      const stdout = await new Response(proc.stdout).text()
+      const stderr = await new Response(proc.stderr).text()
+      const exitCode = await proc.exited
+      if (exitCode !== 0) throw new Error(stderr || `swaymsg exited ${exitCode}`)
+      return stdout
+    },
+  }
+}
+
 export function createFileGameStreamRunLock(
   lockPath: string,
   options: {
@@ -323,6 +341,7 @@ if (import.meta.main) {
   const lockPath = process.env.KORRI_GAME_STREAM_LOCK_PATH ?? DEFAULT_LOCK_PATH
   const statusPath = process.env.KORRI_GAME_STREAM_STATUS_PATH
   const useGamescope = process.env.KORRI_GAME_STREAM_USE_GAMESCOPE === "1"
+  const repairSway = process.env.KORRI_GAME_STREAM_SWAY_REPAIR !== "0"
   const runner = createGameStreamRunner({
     game,
     statusPath,
@@ -331,6 +350,12 @@ if (import.meta.main) {
       enabled: useGamescope,
       command: process.env.KORRI_GAME_STREAM_GAMESCOPE,
     },
+    fullscreen: repairSway
+      ? {
+          runner: createSwayCommandRunner(process.env.KORRI_GAME_STREAM_SWAYMSG),
+          selector: DEFAULT_GAMESCOPE_SELECTOR,
+        }
+      : undefined,
   })
 
   const stop = () => {
