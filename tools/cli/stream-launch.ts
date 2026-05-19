@@ -11,6 +11,7 @@ import {
   type GameStreamLaunchIntent,
   type GameStreamLaunchIntentStore,
 } from "../device/game-stream-launch-intent"
+import type { GamePicker } from "./game-picker"
 
 export type StreamLaunchPrepareResult =
   | {
@@ -30,18 +31,68 @@ export type StreamLaunchPrepareFailure = {
 }
 
 export type StreamLaunchFailureCategory =
+  | "usage"
   | "no-such-game"
   | "library-config"
   | "prepare-failed"
+  | "cancelled"
 
 export interface PrepareStreamLaunchOptions {
-  readonly gameId: string
+  readonly gameId?: string
   readonly librarySource: LibrarySourceService
   readonly intentStore: GameStreamLaunchIntentStore
+  readonly gamePicker?: GamePicker
+  readonly stdinIsTty?: boolean
+}
+
+export async function prepareStreamLaunch(
+  options: PrepareStreamLaunchOptions,
+): Promise<StreamLaunchPrepareResult> {
+  const gameId = options.gameId?.trim()
+  if (gameId !== undefined) {
+    if (gameId.length === 0) return usageFailure("Game id must not be empty")
+    return await prepareStreamLaunchForGame({ ...options, gameId })
+  }
+
+  if (options.stdinIsTty === false) {
+    return usageFailure(
+      "Pass a game id when running without an interactive terminal",
+    )
+  }
+  if (!options.gamePicker) {
+    return usageFailure("Interactive game selection is unavailable")
+  }
+
+  const gamesResult = await runLibraryEffect(options.librarySource.list())
+  if (!gamesResult.ok) return libraryFailure("", gamesResult.error)
+  if (gamesResult.value.length === 0) {
+    return {
+      status: "failed",
+      category: "library-config",
+      gameId: "",
+      message: "The configured Korri library has no games",
+    }
+  }
+
+  const game = await options.gamePicker(gamesResult.value)
+  if (!game) {
+    return {
+      status: "failed",
+      category: "cancelled",
+      gameId: "",
+      message: "Stream launch preparation cancelled",
+    }
+  }
+
+  return await prepareKnownGameStreamLaunch({
+    game,
+    librarySource: options.librarySource,
+    intentStore: options.intentStore,
+  })
 }
 
 export async function prepareStreamLaunchForGame(
-  options: PrepareStreamLaunchOptions,
+  options: PrepareStreamLaunchOptions & { readonly gameId: string },
 ): Promise<StreamLaunchPrepareResult> {
   const gameId = options.gameId.trim()
   const gamesResult = await runLibraryEffect(options.librarySource.list())
@@ -57,25 +108,46 @@ export async function prepareStreamLaunchForGame(
     }
   }
 
+  return await prepareKnownGameStreamLaunch({
+    game,
+    librarySource: options.librarySource,
+    intentStore: options.intentStore,
+  })
+}
+
+async function prepareKnownGameStreamLaunch(options: {
+  readonly game: GameRecord
+  readonly librarySource: LibrarySourceService
+  readonly intentStore: GameStreamLaunchIntentStore
+}): Promise<StreamLaunchPrepareResult> {
   const specResult = await runLibraryEffect(
-    options.librarySource.launchSpecFor(gameId),
+    options.librarySource.launchSpecFor(options.game.id),
   )
-  if (!specResult.ok) return libraryFailure(gameId, specResult.error)
+  if (!specResult.ok) return libraryFailure(options.game.id, specResult.error)
   if (!specResult.value) {
     return {
       status: "failed",
       category: "library-config",
-      gameId,
-      message: `Game ${gameId} does not have a launch target`,
+      gameId: options.game.id,
+      message: `Game ${options.game.id} does not have a launch target`,
     }
   }
 
   return await enqueueLaunchIntent({
-    game,
-    gameId,
+    game: options.game,
+    gameId: options.game.id,
     spec: specResult.value,
     intentStore: options.intentStore,
   })
+}
+
+function usageFailure(message: string): StreamLaunchPrepareFailure {
+  return {
+    status: "failed",
+    category: "usage",
+    gameId: "",
+    message,
+  }
 }
 
 async function enqueueLaunchIntent(options: {

@@ -13,10 +13,104 @@ import {
   createFileGameStreamLaunchIntentStore,
   decodeLaunchIntent,
 } from "../device/game-stream-launch-intent"
-import { prepareStreamLaunchForGame } from "./stream-launch"
+import { createStaticGamePicker } from "./game-picker"
+import {
+  prepareStreamLaunch,
+  prepareStreamLaunchForGame,
+} from "./stream-launch"
 
 const game: GameRecord = { id: "snes/f-zero.smc", metadata: { name: "F-Zero" } }
 const launchSpec: LaunchSpec = { command: "/bin/echo", args: ["race"] }
+
+describe("prepareStreamLaunch", () => {
+  it("prepares the selected game from the interactive picker", async () => {
+    const intentPath = await tempIntentPath()
+    const otherGame: GameRecord = {
+      id: "snes/other.smc",
+      metadata: { name: "Other" },
+    }
+    const result = await prepareStreamLaunch({
+      librarySource: librarySource({
+        games: [otherGame, game],
+        launchSpecs: new Map([[game.id, launchSpec]]),
+      }),
+      intentStore: createFileGameStreamLaunchIntentStore(intentPath),
+      gamePicker: createStaticGamePicker(game.id),
+      stdinIsTty: true,
+    })
+
+    expect(result.status).toBe("prepared")
+    const intent = decodeLaunchIntent(
+      JSON.parse(await readFile(intentPath, "utf8")) as unknown,
+    )
+    expect(intent.launch).toEqual(launchSpec)
+  })
+
+  it("does not invoke the picker when an explicit game id is supplied", async () => {
+    const intentPath = await tempIntentPath()
+    const result = await prepareStreamLaunch({
+      gameId: game.id,
+      librarySource: librarySource({
+        games: [game],
+        launchSpecs: new Map([[game.id, launchSpec]]),
+      }),
+      intentStore: createFileGameStreamLaunchIntentStore(intentPath),
+      gamePicker: async () => {
+        throw new Error("picker should not run")
+      },
+      stdinIsTty: false,
+    })
+
+    expect(result.status).toBe("prepared")
+  })
+
+  it("fails without writing an intent when no terminal is available", async () => {
+    const intentPath = await tempIntentPath()
+    const result = await prepareStreamLaunch({
+      librarySource: librarySource({
+        games: [game],
+        launchSpecs: new Map([[game.id, launchSpec]]),
+      }),
+      intentStore: createFileGameStreamLaunchIntentStore(intentPath),
+      stdinIsTty: false,
+    })
+
+    expect(result).toMatchObject({ status: "failed", category: "usage" })
+    await expect(readFile(intentPath, "utf8")).rejects.toThrow()
+  })
+
+  it("fails without writing an intent when the configured library is empty", async () => {
+    const intentPath = await tempIntentPath()
+    const result = await prepareStreamLaunch({
+      librarySource: librarySource({ games: [], launchSpecs: new Map() }),
+      intentStore: createFileGameStreamLaunchIntentStore(intentPath),
+      gamePicker: createStaticGamePicker(game.id),
+      stdinIsTty: true,
+    })
+
+    expect(result).toMatchObject({
+      status: "failed",
+      category: "library-config",
+    })
+    await expect(readFile(intentPath, "utf8")).rejects.toThrow()
+  })
+
+  it("treats picker cancellation as a no-write cancellation", async () => {
+    const intentPath = await tempIntentPath()
+    const result = await prepareStreamLaunch({
+      librarySource: librarySource({
+        games: [game],
+        launchSpecs: new Map([[game.id, launchSpec]]),
+      }),
+      intentStore: createFileGameStreamLaunchIntentStore(intentPath),
+      gamePicker: async () => undefined,
+      stdinIsTty: true,
+    })
+
+    expect(result).toMatchObject({ status: "failed", category: "cancelled" })
+    await expect(readFile(intentPath, "utf8")).rejects.toThrow()
+  })
+})
 
 describe("prepareStreamLaunchForGame", () => {
   it("writes a foreground launch intent for a known game id", async () => {
