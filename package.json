@@ -31,6 +31,7 @@
 	"dependencies": {
 		"@bbc/tv-lrud-spatial": "^0.0.16",
 		"@effect/atom-react": "4.0.0-beta.60",
+		"@effect/platform-bun": "4.0.0-beta.60",
 		"@fontsource-variable/geist": "^5.2.8",
 		"@fontsource-variable/nunito": "^5.2.7",
 		"@hono/node-server": "^1.19.14",
