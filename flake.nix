@@ -151,6 +151,13 @@
           inherit bunDeps;
         };
 
+        korriCli = import ./nix/korri-cli.nix {
+          inherit pkgs;
+          lib = pkgs.lib;
+          src = self;
+          inherit bunDeps;
+        };
+
         electrobunBinaries =
           if isSupportedDesktopSystem then
             import ./nix/electrobun-binaries.nix {
@@ -198,6 +205,7 @@
         // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
           korri-inputd = korriInputd;
           korri-game-stream-runner = korriGameStreamRunner;
+          korri-cli = korriCli;
         }
         // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
           electrobun-cli = electrobunBinaries.cli;
@@ -217,6 +225,10 @@
             korri-game-stream-runner = {
               type = "app";
               program = "${korriGameStreamRunner}/bin/korri-game-stream-runner";
+            };
+            korri-cli = {
+              type = "app";
+              program = "${korriCli}/bin/korri";
             };
           }
           // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
