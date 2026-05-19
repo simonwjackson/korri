@@ -3,12 +3,12 @@ import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { LaunchSpec } from "@shared/library/launcher"
+import { createStaticGameStreamLaunchIntentStore } from "./game-stream-launch-intent"
 import {
   createFileGameStreamRunLock,
   createGameStreamRunner,
   type ManagedChild,
   type ManagedChildSpawner,
-  validateSteamFreeCommand,
 } from "./game-stream-runner"
 
 const game: LaunchSpec = {
@@ -77,7 +77,7 @@ describe("game stream runner", () => {
     const controlled = createControlledChild(200)
     const { spawner } = createControlledSpawner(controlled.child)
     const runner = createGameStreamRunner({
-      game,
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
       spawner,
       statusPath,
       logger: quietLogger(),
@@ -104,7 +104,7 @@ describe("game stream runner", () => {
     const nextChild = createControlledChild(206)
     const nextSpawner = createControlledSpawner(nextChild.child)
     const nextRunner = createGameStreamRunner({
-      game,
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
       spawner: nextSpawner.spawner,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
@@ -128,14 +128,14 @@ describe("game stream runner", () => {
     const secondSpawner = createControlledSpawner(secondChild.child)
     const lockOptions = { pid: 10, isProcessAlive: (pid: number) => pid === 10 }
     const first = createGameStreamRunner({
-      game,
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
       spawner: firstSpawner.spawner,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
       lockManager: createFileGameStreamRunLock(lockPath, lockOptions),
     })
     const second = createGameStreamRunner({
-      game,
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
       spawner: secondSpawner.spawner,
       logger: quietLogger(),
       processInfo: { pid: 11, uid: 1000 },
@@ -185,7 +185,7 @@ describe("game stream runner", () => {
     const controlled = createControlledChild(203)
     const { spawner } = createControlledSpawner(controlled.child)
     const runner = createGameStreamRunner({
-      game,
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
       spawner,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
@@ -216,7 +216,7 @@ describe("game stream runner", () => {
     const controlled = createControlledChild(204)
     const { spawner, specs } = createControlledSpawner(controlled.child)
     const runner = createGameStreamRunner({
-      game,
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
       spawner,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
@@ -246,7 +246,7 @@ describe("game stream runner", () => {
     const controlled = createControlledChild(207)
     const { spawner, specs } = createControlledSpawner(controlled.child)
     const runner = createGameStreamRunner({
-      game,
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
       spawner,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
@@ -274,7 +274,7 @@ describe("game stream runner", () => {
       markSnapshotStarted = resolve
     })
     const runner = createGameStreamRunner({
-      game,
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
       spawner,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
@@ -308,7 +308,7 @@ describe("game stream runner", () => {
     const controlled = createControlledChild(211)
     const { spawner, specs } = createControlledSpawner(controlled.child)
     const runner = createGameStreamRunner({
-      game,
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
       spawner,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
@@ -329,7 +329,7 @@ describe("game stream runner", () => {
 
   it("records spawn failure and non-zero game exit", async () => {
     const spawnFailure = createGameStreamRunner({
-      game,
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
       spawner: {
         spawn: async () => {
           throw new Error("missing game")
@@ -347,7 +347,7 @@ describe("game stream runner", () => {
     const controlled = createControlledChild(208)
     const { spawner } = createControlledSpawner(controlled.child)
     const nonZero = createGameStreamRunner({
-      game,
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
       spawner,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
@@ -378,7 +378,7 @@ describe("game stream runner", () => {
     }
     const { spawner } = createControlledSpawner(child)
     const runner = createGameStreamRunner({
-      game,
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
       spawner,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
@@ -404,7 +404,7 @@ describe("game stream runner", () => {
     const controlled = createControlledChild(205)
     const { spawner, specs } = createControlledSpawner(controlled.child)
     const runner = createGameStreamRunner({
-      game,
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
       spawner,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 0 },
@@ -418,29 +418,53 @@ describe("game stream runner", () => {
     expect(specs).toHaveLength(0)
   })
 
-  it("rejects Steam commands and fullscreen UI flags", () => {
-    expect(
-      validateSteamFreeCommand({ command: "/usr/bin/steam", args: [] }),
-    ).toEqual({
-      ok: false,
-      reason: "Steam command is out of scope: /usr/bin/steam",
+  it("fails without consuming spawn when no launch intent is pending", async () => {
+    const controlled = createControlledChild(212)
+    const { spawner, specs } = createControlledSpawner(controlled.child)
+    const runner = createGameStreamRunner({
+      launchIntentStore: {
+        enqueue: async () => undefined,
+        consume: async () => undefined,
+      },
+      spawner,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
     })
-    expect(
-      validateSteamFreeCommand({ command: "/bin/game", args: ["-gamepadui"] }),
-    ).toEqual({
-      ok: false,
-      reason: "Steam fullscreen UI is out of scope: -gamepadui",
+
+    await expect(runner.run()).resolves.toMatchObject({
+      status: "failed",
+      stage: "preflight",
+      exitCode: 125,
     })
-    expect(
-      validateSteamFreeCommand({
-        command: "/usr/bin/flatpak",
-        args: ["run", "com.valvesoftware.Steam"],
-      }),
-    ).toEqual({
-      ok: false,
-      reason: "Steam command is out of scope: com.valvesoftware.Steam",
-    })
-    expect(validateSteamFreeCommand(game)).toEqual({ ok: true })
+    expect(specs).toHaveLength(0)
+  })
+
+  it("accepts arbitrary launch intents including Steam and browsers", async () => {
+    const steam: LaunchSpec = {
+      command: "/usr/bin/steam",
+      args: ["steam://rungameid/123"],
+    }
+    const browser: LaunchSpec = {
+      command: "/nix/store/firefox/bin/firefox",
+      args: ["https://korri.local"],
+    }
+
+    for (const launch of [steam, browser]) {
+      const controlled = createControlledChild(213)
+      const { spawner, specs } = createControlledSpawner(controlled.child)
+      const runner = createGameStreamRunner({
+        launchIntentStore: createStaticGameStreamLaunchIntentStore(launch),
+        spawner,
+        logger: quietLogger(),
+        processInfo: { pid: 10, uid: 1000 },
+      })
+
+      const run = runner.run()
+      await waitFor(() => runner.status().mode === "running")
+      controlled.exit(0)
+      await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
+      expect(specs[0]).toEqual(launch)
+    }
   })
 })
 

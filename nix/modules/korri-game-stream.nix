@@ -21,6 +21,12 @@ let
     optionalString
     ;
 
+  intentPathExpression =
+    if cfg.intentPath != null then
+      lib.escapeShellArg cfg.intentPath
+    else
+      ''"$runtime_dir/next-launch.json"'';
+
   runnerCommand = pkgs.writeShellScript "korri-game-stream-sunshine-app" ''
     set -eu
 
@@ -41,8 +47,7 @@ let
     mkdir -p "$runtime_dir"
 
     export PATH=${lib.escapeShellArg (lib.makeBinPath cfg.path)}:$PATH
-    export KORRI_GAME_STREAM_COMMAND=${lib.escapeShellArg cfg.game.command}
-    export KORRI_GAME_STREAM_ARGS_JSON=${lib.escapeShellArg (builtins.toJSON cfg.game.args)}
+    export KORRI_GAME_STREAM_INTENT_PATH=${intentPathExpression}
     export KORRI_GAME_STREAM_USE_GAMESCOPE=${if cfg.gamescope.enable then "1" else "0"}
     export KORRI_GAME_STREAM_GAMESCOPE=${lib.escapeShellArg "${cfg.gamescope.package}/bin/gamescope"}
     export KORRI_GAME_STREAM_SWAYMSG=${lib.escapeShellArg "${cfg.sway.package}/bin/swaymsg"}
@@ -66,8 +71,8 @@ in
 
     appName = mkOption {
       type = types.str;
-      default = "Korri Demo";
-      description = "Sunshine application name used by Moonlight clients.";
+      default = "Korri Stream";
+      description = "Generic Sunshine application name used by Moonlight clients.";
     };
 
     sessionEnvFile = mkOption {
@@ -92,33 +97,24 @@ in
       description = "Packages added to PATH for the Sunshine app wrapper.";
     };
 
-    game = {
-      package = mkOption {
-        type = types.package;
-        default = pkgs.neverball;
-        defaultText = lib.literalExpression "pkgs.neverball";
-        description = "Simple non-Steam game package used for the validation run.";
-      };
-
-      command = mkOption {
-        type = types.str;
-        default = "${cfg.game.package}/bin/neverball";
-        defaultText = lib.literalExpression ''"\${config.services.korri.gameStream.game.package}/bin/neverball"'';
-        description = "Absolute command launched by the runner.";
-      };
-
-      args = mkOption {
-        type = types.listOf types.str;
-        default = [ ];
-        description = "Arguments passed to the configured game command.";
-      };
+    intentPath = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "/run/user/1000/korri-game-stream/next-launch.json";
+      description = ''
+        Trusted pending launch-intent path consumed by the generic Sunshine app.
+        When null, the wrapper uses $KORRI_GAME_STREAM_RUNTIME_DIR/next-launch.json,
+        or $XDG_RUNTIME_DIR/korri-game-stream/next-launch.json. Enqueue a launch
+        with `korri-game-stream-enqueue -- /absolute/command args...` while setting
+        KORRI_GAME_STREAM_INTENT_PATH to the same path when needed.
+      '';
     };
 
     gamescope = {
       enable = mkOption {
         type = types.bool;
         default = true;
-        description = "Wrap the validation game with Gamescope for v1 fullscreen containment.";
+        description = "Wrap the pending launch intent with Gamescope for fullscreen containment.";
       };
 
       package = mkOption {
@@ -149,11 +145,12 @@ in
         type = types.bool;
         default = true;
         description = ''
-          Add the Korri Demo application to services.sunshine.applications.
-          The app is launched through Sunshine's existing pairing/authentication
-          model; this module does not add a Korri TCP listener or arbitrary remote
-          command endpoint. Restrict Sunshine exposure to trusted networks or VPN.
-          Disable this when the host wants to wire Sunshine applications itself.
+          Add the generic Korri Stream application to services.sunshine.applications.
+          Sunshine launches only this stable foreground runner; the actual process
+          comes from the trusted pending launch intent consumed at session start.
+          This module does not add a Korri TCP listener or arbitrary remote command
+          endpoint. Restrict Sunshine exposure to trusted networks or VPN. Disable
+          this when the host wants to wire Sunshine applications itself.
         '';
       };
 
@@ -168,7 +165,6 @@ in
   config = mkIf cfg.enable {
     environment.systemPackages = [
       cfg.package
-      cfg.game.package
     ]
     ++ cfg.path
     ++ lib.optionals cfg.gamescope.enable [ cfg.gamescope.package ];

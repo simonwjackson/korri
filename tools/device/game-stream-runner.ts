@@ -11,6 +11,11 @@ import {
   snapshotStreamSurfaceIds,
 } from "./game-stream-fullscreen"
 import {
+  createFileGameStreamLaunchIntentStore,
+  createLaunchIntent,
+  type GameStreamLaunchIntentStore,
+} from "./game-stream-launch-intent"
+import {
   beginGameStreamStart,
   beginGameStreamStopping,
   canStartGameStream,
@@ -61,7 +66,7 @@ export interface GameStreamRunnerLogger {
 }
 
 export interface GameStreamRunnerOptions {
-  readonly game: LaunchSpec
+  readonly launchIntentStore: GameStreamLaunchIntentStore
   readonly spawner?: ManagedChildSpawner
   readonly lockManager?: GameStreamRunLockManager
   readonly gamescope?: GamescopeOptions
@@ -84,6 +89,7 @@ export interface GameStreamRunner {
 }
 
 const DEFAULT_LOCK_PATH = "/tmp/korri-game-stream-runner.lock"
+const DEFAULT_INTENT_PATH = "/tmp/korri-game-stream-next-launch.json"
 const DEFAULT_TERMINATE_GRACE_MS = 2_000
 const DEFAULT_SWAY_COMMAND_TIMEOUT_MS = 2_000
 
@@ -166,11 +172,6 @@ export function createGameStreamRunner(
       })
       if (!preflight.ok) return fail("preflight", preflight.reason, 126)
 
-      const steamBoundary = validateSteamFreeCommand(options.game)
-      if (!steamBoundary.ok) {
-        return fail("preflight", steamBoundary.reason, 126)
-      }
-
       if (stopRequested) {
         return fail("cleanup", "game stream stopped before launch", 143)
       }
@@ -207,8 +208,20 @@ export function createGameStreamRunner(
           return await fail("cleanup", "game stream stopped before launch", 143)
         }
 
+        let launchIntent: Awaited<
+          ReturnType<GameStreamLaunchIntentStore["consume"]>
+        >
+        try {
+          launchIntent = await options.launchIntentStore.consume()
+        } catch (error) {
+          return await fail("preflight", errorMessage(error), 126)
+        }
+        if (!launchIntent) {
+          return await fail("preflight", "no pending launch intent", 125)
+        }
+
         const spec = composeGamescopeLaunchSpec(
-          options.game,
+          launchIntent.launch,
           options.gamescope ?? { enabled: false },
         )
         logger.info(
@@ -371,26 +384,6 @@ export function createFileGameStreamRunLock(
   }
 }
 
-export function validateSteamFreeCommand(
-  spec: LaunchSpec,
-): { readonly ok: true } | { readonly ok: false; readonly reason: string } {
-  const values = [spec.command, ...spec.args]
-  const steamLike = values.find(value =>
-    /steam|com\.valvesoftware\.Steam/i.test(value),
-  )
-  if (steamLike) {
-    return { ok: false, reason: `Steam command is out of scope: ${steamLike}` }
-  }
-  const gamepadUi = values.find(value => /gamepadui|bigpicture/i.test(value))
-  if (gamepadUi) {
-    return {
-      ok: false,
-      reason: `Steam fullscreen UI is out of scope: ${gamepadUi}`,
-    }
-  }
-  return { ok: true }
-}
-
 function preflightSessionEnvironment(input: {
   readonly env: NodeJS.ProcessEnv
   readonly gamescopeEnabled: boolean
@@ -475,41 +468,59 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function launchSpecFromEnv(env: NodeJS.ProcessEnv): LaunchSpec {
-  const command = env.KORRI_GAME_STREAM_COMMAND
-  if (!command) throw new Error("KORRI_GAME_STREAM_COMMAND is required")
-  const args = env.KORRI_GAME_STREAM_ARGS_JSON
-    ? parseArgsJson(env.KORRI_GAME_STREAM_ARGS_JSON)
-    : []
+function launchSpecFromCli(args: readonly string[]): LaunchSpec {
+  const separator = args.indexOf("--")
+  const optionArgs = separator === -1 ? [] : args.slice(0, separator)
+  const commandArgs = separator === -1 ? args : args.slice(separator + 1)
+  const env: Record<string, string> = {}
+  let cwd: string | undefined
+
+  for (let index = 0; index < optionArgs.length; index += 1) {
+    const arg = optionArgs[index]
+    if (arg === "--cwd") {
+      cwd = optionArgs[index + 1]
+      index += 1
+      continue
+    }
+    if (arg === "--env") {
+      const entry = optionArgs[index + 1]
+      if (!entry?.includes("=")) throw new Error("--env requires KEY=VALUE")
+      const equalsIndex = entry.indexOf("=")
+      env[entry.slice(0, equalsIndex)] = entry.slice(equalsIndex + 1)
+      index += 1
+      continue
+    }
+    throw new Error(`unknown enqueue option: ${arg}`)
+  }
+
+  const [command, ...launchArgs] = commandArgs
+  if (!command) throw new Error("enqueue requires a command")
   return {
     command,
-    args,
-    cwd: env.KORRI_GAME_STREAM_CWD,
+    args: launchArgs,
+    ...(cwd ? { cwd } : {}),
+    ...(Object.keys(env).length > 0 ? { env } : {}),
   }
-}
-
-function parseArgsJson(raw: string): readonly string[] {
-  const parsed = JSON.parse(raw) as unknown
-  if (
-    !Array.isArray(parsed) ||
-    !parsed.every(value => typeof value === "string")
-  ) {
-    throw new Error(
-      "KORRI_GAME_STREAM_ARGS_JSON must be a JSON array of strings",
-    )
-  }
-  return parsed
 }
 
 if (import.meta.main) {
-  const game = launchSpecFromEnv(process.env)
   const lockPath = process.env.KORRI_GAME_STREAM_LOCK_PATH ?? DEFAULT_LOCK_PATH
+  const intentPath =
+    process.env.KORRI_GAME_STREAM_INTENT_PATH ?? DEFAULT_INTENT_PATH
   const statusPath = process.env.KORRI_GAME_STREAM_STATUS_PATH
   const useGamescope = process.env.KORRI_GAME_STREAM_USE_GAMESCOPE === "1"
   const repairSway =
     process.env.KORRI_GAME_STREAM_SWAY_REPAIR !== "0" && useGamescope
+  if (Bun.argv[2] === "enqueue") {
+    const store = createFileGameStreamLaunchIntentStore(intentPath)
+    await store.enqueue(
+      createLaunchIntent(launchSpecFromCli(Bun.argv.slice(3))),
+    )
+    process.exit(0)
+  }
+
   const runner = createGameStreamRunner({
-    game,
+    launchIntentStore: createFileGameStreamLaunchIntentStore(intentPath),
     statusPath,
     lockManager: createFileGameStreamRunLock(lockPath),
     gamescope: {

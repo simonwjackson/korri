@@ -53,6 +53,10 @@ pkgs.stdenv.mkDerivation {
     makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korri-game-stream-runner" \
       --add-flags "$out/share/korri-game-stream-runner/korri-game-stream-runner.js"
 
+    makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korri-game-stream-enqueue" \
+      --add-flags "$out/share/korri-game-stream-runner/korri-game-stream-runner.js" \
+      --add-flags enqueue
+
     runHook postInstall
   '';
 
