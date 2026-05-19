@@ -30,6 +30,7 @@ export interface WaitForStreamSurfaceOptions {
   readonly selector: SwayWindowSelector
   readonly timeoutMs?: number
   readonly pollMs?: number
+  readonly ignoredWindowIds?: ReadonlySet<number>
   readonly sleep?: (durationMs: number) => Promise<void>
   readonly now?: () => number
 }
@@ -111,7 +112,10 @@ export async function waitForStreamSurface(
 
   while (true) {
     const raw = await options.runner.run(["-t", "get_tree"])
-    const surfaces = findStreamSurfaceWindows(JSON.parse(raw), options.selector)
+    const surfaces = findStreamSurfaceWindows(
+      JSON.parse(raw),
+      options.selector,
+    ).filter(surface => !options.ignoredWindowIds?.has(surface.id))
     if (surfaces.length > 0) return selectPrimarySurface(surfaces)
 
     if (now() >= deadline) {
@@ -119,6 +123,17 @@ export async function waitForStreamSurface(
     }
     await sleep(pollMs)
   }
+}
+
+export async function snapshotStreamSurfaceIds(
+  options: Pick<WaitForStreamSurfaceOptions, "runner" | "selector">,
+): Promise<ReadonlySet<number>> {
+  const raw = await options.runner.run(["-t", "get_tree"])
+  return new Set(
+    findStreamSurfaceWindows(JSON.parse(raw), options.selector).map(
+      surface => surface.id,
+    ),
+  )
 }
 
 export async function repairStreamSurface(

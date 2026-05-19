@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { mkdtemp, readFile, writeFile } from "node:fs/promises"
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { LaunchSpec } from "@shared/library/launcher"
@@ -14,6 +14,12 @@ import {
 const game: LaunchSpec = {
   command: "/nix/store/neverball/bin/neverball",
   args: [],
+}
+
+const sessionEnv = {
+  XDG_RUNTIME_DIR: "/run/user/1000",
+  WAYLAND_DISPLAY: "wayland-1",
+  SWAYSOCK: "/run/user/1000/sway-ipc.sock",
 }
 
 function createControlledChild(pid: number): {
@@ -93,6 +99,24 @@ describe("game stream runner", () => {
       mode: "exited",
       exitCode: 0,
     })
+    expect((await stat(statusPath)).mode & 0o777).toBe(0o600)
+
+    const nextChild = createControlledChild(206)
+    const nextSpawner = createControlledSpawner(nextChild.child)
+    const nextRunner = createGameStreamRunner({
+      game,
+      spawner: nextSpawner.spawner,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
+        pid: 10,
+        isProcessAlive: pid => pid === 10,
+      }),
+    })
+    const nextRun = nextRunner.run()
+    await waitFor(() => nextRunner.status().mode === "running")
+    nextChild.exit(0)
+    await expect(nextRun).resolves.toEqual({ status: "launched", exitCode: 0 })
   })
 
   it("rejects a second runner process while the first lock owner is active", async () => {
@@ -131,19 +155,29 @@ describe("game stream runner", () => {
     await firstRun
   })
 
-  it("recovers a stale lock whose process is no longer alive", async () => {
+  it("recovers stale and malformed locks", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
-    const lockPath = join(dir, "run.lock")
-    await writeFile(lockPath, "999999\n")
-    const lock = createFileGameStreamRunLock(lockPath, {
+    const stalePath = join(dir, "stale.lock")
+    await writeFile(stalePath, "999999\n")
+    const staleLock = createFileGameStreamRunLock(stalePath, {
       pid: 10,
       isProcessAlive: () => false,
     })
 
-    const acquired = await lock.acquire()
+    const stale = await staleLock.acquire()
+    expect(stale.acquired).toBe(true)
+    if (stale.acquired) await stale.lock.release()
 
-    expect(acquired.acquired).toBe(true)
-    if (acquired.acquired) await acquired.lock.release()
+    const malformedPath = join(dir, "malformed.lock")
+    await writeFile(malformedPath, "not-a-pid\n")
+    const malformedLock = createFileGameStreamRunLock(malformedPath, {
+      pid: 10,
+      isProcessAlive: () => true,
+    })
+
+    const malformed = await malformedLock.acquire()
+    expect(malformed.acquired).toBe(true)
+    if (malformed.acquired) await malformed.lock.release()
   })
 
   it("cleans up the child when fullscreen repair fails", async () => {
@@ -159,6 +193,7 @@ describe("game stream runner", () => {
         pid: 10,
         isProcessAlive: pid => pid === 10,
       }),
+      processEnv: sessionEnv,
       fullscreen: {
         selector: { appIds: ["gamescope"] },
         timeoutMs: 0,
@@ -189,6 +224,7 @@ describe("game stream runner", () => {
         pid: 10,
         isProcessAlive: pid => pid === 10,
       }),
+      processEnv: sessionEnv,
       gamescope: {
         enabled: true,
         command: "/nix/store/gamescope/bin/gamescope",
@@ -204,6 +240,102 @@ describe("game stream runner", () => {
       command: "/nix/store/gamescope/bin/gamescope",
       args: ["-f", "-b", "--", "/nix/store/neverball/bin/neverball"],
     })
+  })
+
+  it("fails before spawn when Sway repair lacks session environment", async () => {
+    const controlled = createControlledChild(207)
+    const { spawner, specs } = createControlledSpawner(controlled.child)
+    const runner = createGameStreamRunner({
+      game,
+      spawner,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      processEnv: {},
+      fullscreen: {
+        selector: { appIds: ["gamescope"] },
+        runner: { run: async () => JSON.stringify({ id: 1, nodes: [] }) },
+      },
+    })
+
+    await expect(runner.run()).resolves.toMatchObject({
+      status: "failed",
+      stage: "preflight",
+      exitCode: 126,
+    })
+    expect(specs).toHaveLength(0)
+  })
+
+  it("records spawn failure and non-zero game exit", async () => {
+    const spawnFailure = createGameStreamRunner({
+      game,
+      spawner: {
+        spawn: async () => {
+          throw new Error("missing game")
+        },
+      },
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+    })
+    await expect(spawnFailure.run()).resolves.toMatchObject({
+      status: "failed",
+      stage: "spawn",
+      exitCode: 127,
+    })
+
+    const controlled = createControlledChild(208)
+    const { spawner } = createControlledSpawner(controlled.child)
+    const nonZero = createGameStreamRunner({
+      game,
+      spawner,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+    })
+    const run = nonZero.run()
+    await waitFor(() => nonZero.status().mode === "running")
+    controlled.exit(7)
+    await expect(run).resolves.toEqual({
+      status: "failed",
+      stage: "game",
+      exitCode: 7,
+    })
+  })
+
+  it("escalates stop cleanup to SIGKILL when the child ignores SIGTERM", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
+    const terminations: NodeJS.Signals[] = []
+    let exit: (exitCode: number) => void = () => undefined
+    const child: ManagedChild = {
+      pid: 209,
+      exited: new Promise(resolve => {
+        exit = resolve
+      }),
+      terminate: async signal => {
+        terminations.push(signal ?? "SIGTERM")
+        if (signal === "SIGKILL") exit(137)
+      },
+    }
+    const { spawner } = createControlledSpawner(child)
+    const runner = createGameStreamRunner({
+      game,
+      spawner,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      terminateGraceMs: 1,
+      lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
+        pid: 10,
+        isProcessAlive: pid => pid === 10,
+      }),
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    await runner.stop()
+    await expect(run).resolves.toEqual({
+      status: "failed",
+      stage: "game",
+      exitCode: 137,
+    })
+    expect(terminations).toEqual(["SIGTERM", "SIGKILL"])
   })
 
   it("refuses root execution unless explicitly allowed", async () => {
@@ -236,6 +368,15 @@ describe("game stream runner", () => {
     ).toEqual({
       ok: false,
       reason: "Steam fullscreen UI is out of scope: -gamepadui",
+    })
+    expect(
+      validateSteamFreeCommand({
+        command: "/usr/bin/flatpak",
+        args: ["run", "com.valvesoftware.Steam"],
+      }),
+    ).toEqual({
+      ok: false,
+      reason: "Steam command is out of scope: com.valvesoftware.Steam",
     })
     expect(validateSteamFreeCommand(game)).toEqual({ ok: true })
   })

@@ -24,6 +24,11 @@ let
   runnerCommand = pkgs.writeShellScript "korri-game-stream-sunshine-app" ''
     set -eu
 
+    if [ "$(id -u)" = "0" ]; then
+      echo "korri-game-stream: refusing to run as root" >&2
+      exit 126
+    fi
+
     ${optionalString (cfg.sessionEnvFile != null) ''
       if [ -f ${lib.escapeShellArg cfg.sessionEnvFile} ]; then
         set -a
@@ -70,10 +75,11 @@ in
       default = null;
       example = "%h/.config/korri/game-stream.env";
       description = ''
-        Optional runtime environment file sourced before launching the runner.
-        Use this to provide fresh Sway/Wayland session values such as
-        WAYLAND_DISPLAY, XDG_RUNTIME_DIR, and SWAYSOCK without baking volatile
-        socket paths into the NixOS configuration.
+        Optional trusted runtime environment file sourced before launching the
+        runner as the non-root Sunshine/session user. Use this to provide fresh
+        Sway/Wayland session values such as WAYLAND_DISPLAY, XDG_RUNTIME_DIR,
+        and SWAYSOCK without baking volatile socket paths into the NixOS
+        configuration.
       '';
     };
 
@@ -144,6 +150,9 @@ in
         default = true;
         description = ''
           Add the Korri Demo application to services.sunshine.applications.
+          The app is launched through Sunshine's existing pairing/authentication
+          model; this module does not add a Korri TCP listener or arbitrary remote
+          command endpoint. Restrict Sunshine exposure to trusted networks or VPN.
           Disable this when the host wants to wire Sunshine applications itself.
         '';
       };

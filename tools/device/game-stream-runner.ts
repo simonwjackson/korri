@@ -8,10 +8,12 @@ import {
   type GamescopeOptions,
   type RepairStreamSurfaceOptions,
   repairStreamSurface,
+  snapshotStreamSurfaceIds,
 } from "./game-stream-fullscreen"
 import {
   beginGameStreamStart,
   beginGameStreamStopping,
+  canStartGameStream,
   completeGameStreamExit,
   failGameStream,
   type GameStreamFailureStage,
@@ -70,7 +72,9 @@ export interface GameStreamRunnerOptions {
     readonly pid: number
     readonly uid?: number
   }
+  readonly processEnv?: NodeJS.ProcessEnv
   readonly allowRoot?: boolean
+  readonly terminateGraceMs?: number
 }
 
 export interface GameStreamRunner {
@@ -80,34 +84,51 @@ export interface GameStreamRunner {
 }
 
 const DEFAULT_LOCK_PATH = "/tmp/korri-game-stream-runner.lock"
+const DEFAULT_TERMINATE_GRACE_MS = 2_000
+const DEFAULT_SWAY_COMMAND_TIMEOUT_MS = 2_000
 
 export function createGameStreamRunner(
   options: GameStreamRunnerOptions,
 ): GameStreamRunner {
   const logger = options.logger ?? defaultLogger
   const spawner = options.spawner ?? createBunManagedChildSpawner()
-  const lockManager =
-    options.lockManager ?? createFileGameStreamRunLock(DEFAULT_LOCK_PATH)
   const processInfo = options.processInfo ?? {
     pid: process.pid,
     uid: typeof process.getuid === "function" ? process.getuid() : undefined,
   }
+  const lockManager =
+    options.lockManager ??
+    createFileGameStreamRunLock(DEFAULT_LOCK_PATH, { pid: processInfo.pid })
+  const processEnv = options.processEnv ?? process.env
+  const terminateGraceMs =
+    options.terminateGraceMs ?? DEFAULT_TERMINATE_GRACE_MS
   let state: GameStreamState = initialGameStreamState
   let activeChild: ManagedChild | undefined
 
   async function writeStatus() {
     if (!options.statusPath) return
-    await mkdir(dirname(options.statusPath), { recursive: true, mode: 0o700 })
-    await writeFile(options.statusPath, `${JSON.stringify(state, null, 2)}\n`, {
-      mode: 0o600,
-    })
+    try {
+      await mkdir(dirname(options.statusPath), { recursive: true, mode: 0o700 })
+      await writeFile(
+        options.statusPath,
+        `${JSON.stringify(state, null, 2)}\n`,
+        {
+          mode: 0o600,
+        },
+      )
+    } catch (error) {
+      logger.warn(
+        { err: error, statusPath: options.statusPath },
+        "game-stream-runner: status write failed",
+      )
+    }
   }
 
   async function stop() {
     if (!activeChild) return
     state = beginGameStreamStopping(state)
     await writeStatus()
-    await activeChild.terminate("SIGTERM")
+    await terminateChild(activeChild, "SIGTERM", terminateGraceMs)
   }
 
   async function fail(
@@ -124,13 +145,23 @@ export function createGameStreamRunner(
     status: () => state,
     stop,
     async run() {
+      if (!canStartGameStream(state)) return { status: "already-running" }
+
       const runId = crypto.randomUUID()
       state = beginGameStreamStart(state, runId)
-      await writeStatus()
 
       if (!options.allowRoot && processInfo.uid === 0) {
         return fail("preflight", "refusing to run game stream as root", 126)
       }
+
+      await writeStatus()
+
+      const preflight = preflightSessionEnvironment({
+        env: processEnv,
+        gamescopeEnabled: options.gamescope?.enabled === true,
+        repairEnabled: options.fullscreen !== undefined,
+      })
+      if (!preflight.ok) return fail("preflight", preflight.reason, 126)
 
       const steamBoundary = validateSteamFreeCommand(options.game)
       if (!steamBoundary.ok) {
@@ -148,8 +179,18 @@ export function createGameStreamRunner(
         return { status: "already-running" }
       }
 
-      let releaseLock = true
+      let ignoredWindowIds: ReadonlySet<number> | undefined
       try {
+        if (options.fullscreen) {
+          try {
+            ignoredWindowIds = await snapshotStreamSurfaceIds(
+              options.fullscreen,
+            )
+          } catch (error) {
+            return await fail("preflight", errorMessage(error), 126)
+          }
+        }
+
         const spec = composeGamescopeLaunchSpec(
           options.game,
           options.gamescope ?? { enabled: false },
@@ -170,12 +211,14 @@ export function createGameStreamRunner(
 
         if (options.fullscreen) {
           try {
-            await repairStreamSurface(options.fullscreen)
+            await repairStreamSurface({
+              ...options.fullscreen,
+              ignoredWindowIds,
+            })
             state = markGameStreamFullscreenRepaired(state)
             await writeStatus()
           } catch (error) {
-            await activeChild.terminate("SIGTERM")
-            await activeChild.exited.catch(() => undefined)
+            await terminateChild(activeChild, "SIGTERM", terminateGraceMs)
             return await fail("fullscreen", errorMessage(error), 1)
           }
         }
@@ -188,8 +231,7 @@ export function createGameStreamRunner(
         if (exitCode === 0) return { status: "launched", exitCode: 0 }
         return { status: "failed", stage: "game", exitCode }
       } finally {
-        if (releaseLock) await lockResult.lock.release()
-        releaseLock = false
+        await lockResult.lock.release()
         activeChild = undefined
       }
     },
@@ -234,7 +276,10 @@ export function createBunManagedChildSpawner(
   }
 }
 
-export function createSwayCommandRunner(command = "swaymsg") {
+export function createSwayCommandRunner(
+  command = "swaymsg",
+  timeoutMs = DEFAULT_SWAY_COMMAND_TIMEOUT_MS,
+) {
   return {
     async run(args: readonly string[]): Promise<string> {
       const proc = Bun.spawn([command, ...args], {
@@ -242,11 +287,19 @@ export function createSwayCommandRunner(command = "swaymsg") {
         stdout: "pipe",
         stderr: "pipe",
       })
+      const timedOut = Symbol("timedOut")
+      const timeout = new Promise<typeof timedOut>(resolve => {
+        setTimeout(() => resolve(timedOut), timeoutMs)
+      })
+      const exit = await Promise.race([proc.exited, timeout])
+      if (exit === timedOut) {
+        proc.kill("SIGKILL")
+        throw new Error(`swaymsg timed out after ${timeoutMs}ms`)
+      }
+
       const stdout = await new Response(proc.stdout).text()
       const stderr = await new Response(proc.stderr).text()
-      const exitCode = await proc.exited
-      if (exitCode !== 0)
-        throw new Error(stderr || `swaymsg exited ${exitCode}`)
+      if (exit !== 0) throw new Error(stderr || `swaymsg exited ${exit}`)
       return stdout
     },
   }
@@ -257,9 +310,12 @@ export function createFileGameStreamRunLock(
   options: {
     readonly pid?: number
     readonly isProcessAlive?: (pid: number) => boolean
+    readonly token?: string
   } = {},
 ): GameStreamRunLockManager {
   const pid = options.pid ?? process.pid
+  const token = options.token ?? crypto.randomUUID()
+  const lockContents = `${pid}:${token}\n`
   const isProcessAlive = options.isProcessAlive ?? defaultIsProcessAlive
 
   return {
@@ -267,21 +323,23 @@ export function createFileGameStreamRunLock(
       await mkdir(dirname(lockPath), { recursive: true, mode: 0o700 })
       try {
         const handle = await open(lockPath, "wx")
-        await handle.writeFile(`${pid}\n`)
+        await handle.writeFile(lockContents)
         await handle.close()
         return {
           acquired: true,
           lock: {
             async release() {
-              await unlink(lockPath).catch(() => undefined)
+              await removeLockIfUnchanged(lockPath, lockContents)
             },
           },
         }
       } catch (error) {
         if (!isFileExistsError(error)) throw error
-        const existingPid = await readExistingLockPid(lockPath)
-        if (existingPid !== undefined && !isProcessAlive(existingPid)) {
-          await unlink(lockPath).catch(() => undefined)
+        const existing = await readExistingLock(lockPath)
+        if (existing.pid === undefined || !isProcessAlive(existing.pid)) {
+          if (await removeLockIfUnchanged(lockPath, existing.raw)) {
+            return this.acquire()
+          }
           return this.acquire()
         }
         return { acquired: false, reason: "already-running" }
@@ -294,7 +352,9 @@ export function validateSteamFreeCommand(
   spec: LaunchSpec,
 ): { readonly ok: true } | { readonly ok: false; readonly reason: string } {
   const values = [spec.command, ...spec.args]
-  const steamLike = values.find(value => /(^|\/)steam$|steam:\/\//i.test(value))
+  const steamLike = values.find(value =>
+    /steam|com\.valvesoftware\.Steam/i.test(value),
+  )
   if (steamLike) {
     return { ok: false, reason: `Steam command is out of scope: ${steamLike}` }
   }
@@ -308,6 +368,47 @@ export function validateSteamFreeCommand(
   return { ok: true }
 }
 
+function preflightSessionEnvironment(input: {
+  readonly env: NodeJS.ProcessEnv
+  readonly gamescopeEnabled: boolean
+  readonly repairEnabled: boolean
+}): { readonly ok: true } | { readonly ok: false; readonly reason: string } {
+  if (input.gamescopeEnabled) {
+    if (!input.env.XDG_RUNTIME_DIR) {
+      return { ok: false, reason: "XDG_RUNTIME_DIR is required for Gamescope" }
+    }
+    if (!input.env.WAYLAND_DISPLAY) {
+      return { ok: false, reason: "WAYLAND_DISPLAY is required for Gamescope" }
+    }
+  }
+  if (input.repairEnabled && !input.env.SWAYSOCK) {
+    return { ok: false, reason: "SWAYSOCK is required for Sway repair" }
+  }
+  return { ok: true }
+}
+
+async function terminateChild(
+  child: ManagedChild,
+  signal: NodeJS.Signals,
+  graceMs: number,
+): Promise<void> {
+  await child.terminate(signal)
+  if (await exitsWithin(child, graceMs)) return
+  await child.terminate("SIGKILL")
+  await exitsWithin(child, graceMs)
+}
+
+async function exitsWithin(
+  child: ManagedChild,
+  durationMs: number,
+): Promise<boolean> {
+  const timeout = new Promise<false>(resolve => {
+    setTimeout(() => resolve(false), durationMs)
+  })
+  const result = await Promise.race([child.exited.then(() => true), timeout])
+  return result === true
+}
+
 function defaultIsProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0)
@@ -317,13 +418,24 @@ function defaultIsProcessAlive(pid: number): boolean {
   }
 }
 
-async function readExistingLockPid(
-  lockPath: string,
-): Promise<number | undefined> {
+async function readExistingLock(lockPath: string): Promise<{
+  readonly raw: string | undefined
+  readonly pid: number | undefined
+}> {
   const raw = await readFile(lockPath, "utf8").catch(() => undefined)
-  if (!raw) return undefined
-  const parsed = Number.parseInt(raw.trim(), 10)
-  return Number.isFinite(parsed) ? parsed : undefined
+  if (!raw) return { raw, pid: undefined }
+  const parsed = Number.parseInt(raw.trim().split(":")[0] ?? "", 10)
+  return { raw, pid: Number.isFinite(parsed) ? parsed : undefined }
+}
+
+async function removeLockIfUnchanged(
+  lockPath: string,
+  expectedRaw: string | undefined,
+): Promise<boolean> {
+  const currentRaw = await readFile(lockPath, "utf8").catch(() => undefined)
+  if (currentRaw !== expectedRaw) return false
+  await unlink(lockPath).catch(() => undefined)
+  return true
 }
 
 function isFileExistsError(error: unknown): boolean {
@@ -340,7 +452,7 @@ function launchSpecFromEnv(env: NodeJS.ProcessEnv): LaunchSpec {
   const command = env.KORRI_GAME_STREAM_COMMAND
   if (!command) throw new Error("KORRI_GAME_STREAM_COMMAND is required")
   const args = env.KORRI_GAME_STREAM_ARGS_JSON
-    ? (JSON.parse(env.KORRI_GAME_STREAM_ARGS_JSON) as string[])
+    ? parseArgsJson(env.KORRI_GAME_STREAM_ARGS_JSON)
     : []
   return {
     command,
@@ -349,12 +461,26 @@ function launchSpecFromEnv(env: NodeJS.ProcessEnv): LaunchSpec {
   }
 }
 
+function parseArgsJson(raw: string): readonly string[] {
+  const parsed = JSON.parse(raw) as unknown
+  if (
+    !Array.isArray(parsed) ||
+    !parsed.every(value => typeof value === "string")
+  ) {
+    throw new Error(
+      "KORRI_GAME_STREAM_ARGS_JSON must be a JSON array of strings",
+    )
+  }
+  return parsed
+}
+
 if (import.meta.main) {
   const game = launchSpecFromEnv(process.env)
   const lockPath = process.env.KORRI_GAME_STREAM_LOCK_PATH ?? DEFAULT_LOCK_PATH
   const statusPath = process.env.KORRI_GAME_STREAM_STATUS_PATH
   const useGamescope = process.env.KORRI_GAME_STREAM_USE_GAMESCOPE === "1"
-  const repairSway = process.env.KORRI_GAME_STREAM_SWAY_REPAIR !== "0"
+  const repairSway =
+    process.env.KORRI_GAME_STREAM_SWAY_REPAIR !== "0" && useGamescope
   const runner = createGameStreamRunner({
     game,
     statusPath,
