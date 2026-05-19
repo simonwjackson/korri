@@ -1,69 +1,166 @@
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises"
-import { dirname } from "node:path"
+import { constants } from "node:fs"
+import {
+  link,
+  lstat,
+  mkdir,
+  open,
+  rename,
+  unlink,
+  writeFile,
+} from "node:fs/promises"
+import { dirname, join } from "node:path"
 import { decodeLaunchSpec, type LaunchSpec } from "@shared/library/launcher"
+
+export type GameStreamLaunchLifecycle = "foreground" | "session"
 
 export interface GameStreamLaunchIntent {
   readonly version: 1
   readonly id: string
   readonly createdAt: string
+  readonly lifecycle: GameStreamLaunchLifecycle
   readonly launch: LaunchSpec
+  readonly wait?: LaunchSpec
+}
+
+export interface ClaimedGameStreamLaunchIntent {
+  readonly intent: GameStreamLaunchIntent
+  complete: () => Promise<void>
+  requeue: () => Promise<void>
+  quarantine: (reason: string) => Promise<void>
 }
 
 export interface GameStreamLaunchIntentStore {
   enqueue: (intent: GameStreamLaunchIntent) => Promise<void>
-  consume: () => Promise<GameStreamLaunchIntent | undefined>
+  claim: () => Promise<ClaimedGameStreamLaunchIntent | undefined>
 }
 
-export function createLaunchIntent(launch: LaunchSpec): GameStreamLaunchIntent {
+const DEFAULT_INTENT_MAX_AGE_MS = 5 * 60 * 1000
+const PRIVATE_FILE_MODE = 0o600
+const PRIVATE_DIRECTORY_MODE = 0o700
+
+export function defaultGameStreamIntentPath(env: NodeJS.ProcessEnv): string {
+  if (env.KORRI_GAME_STREAM_INTENT_PATH)
+    return env.KORRI_GAME_STREAM_INTENT_PATH
+  if (env.XDG_RUNTIME_DIR) {
+    return join(env.XDG_RUNTIME_DIR, "korri-game-stream", "next-launch.json")
+  }
+  throw new Error(
+    "KORRI_GAME_STREAM_INTENT_PATH or XDG_RUNTIME_DIR is required for launch intents",
+  )
+}
+
+export function createLaunchIntent(
+  launch: LaunchSpec,
+  options: {
+    readonly lifecycle?: GameStreamLaunchLifecycle
+    readonly wait?: LaunchSpec
+  } = {},
+): GameStreamLaunchIntent {
   return {
     version: 1,
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
+    lifecycle: options.lifecycle ?? "foreground",
     launch,
+    ...(options.wait ? { wait: options.wait } : {}),
   }
 }
 
 export function createStaticGameStreamLaunchIntentStore(
   launch: LaunchSpec,
+  options: {
+    readonly lifecycle?: GameStreamLaunchLifecycle
+    readonly wait?: LaunchSpec
+  } = {},
 ): GameStreamLaunchIntentStore {
   let consumed = false
   return {
     enqueue: async () => {
       throw new Error("static launch intent store does not support enqueue")
     },
-    consume: async () => {
+    claim: async () => {
       if (consumed) return undefined
       consumed = true
-      return createLaunchIntent(launch)
+      return {
+        intent: createLaunchIntent(launch, options),
+        complete: async () => undefined,
+        requeue: async () => {
+          consumed = false
+        },
+        quarantine: async () => undefined,
+      }
     },
   }
 }
 
 export function createFileGameStreamLaunchIntentStore(
   intentPath: string,
+  options: {
+    readonly uid?: number
+    readonly maxAgeMs?: number
+  } = {},
 ): GameStreamLaunchIntentStore {
+  const uid = options.uid ?? currentUid()
+  const maxAgeMs = options.maxAgeMs ?? DEFAULT_INTENT_MAX_AGE_MS
+
   return {
     async enqueue(intent) {
-      await mkdir(dirname(intentPath), { recursive: true, mode: 0o700 })
+      await mkdir(dirname(intentPath), {
+        recursive: true,
+        mode: PRIVATE_DIRECTORY_MODE,
+      })
+      await assertTrustedParentDirectory(intentPath, uid)
       const temporaryPath = `${intentPath}.${process.pid}.${crypto.randomUUID()}.tmp`
       await writeFile(temporaryPath, `${JSON.stringify(intent, null, 2)}\n`, {
-        mode: 0o600,
+        mode: PRIVATE_FILE_MODE,
       })
+      await assertTrustedIntentFile(temporaryPath, uid)
       await rename(temporaryPath, intentPath)
     },
 
-    async consume() {
-      const raw = await readFile(intentPath, "utf8").catch(error => {
+    async claim() {
+      await assertTrustedParentDirectory(intentPath, uid)
+      const claimedPath = `${intentPath}.claimed.${process.pid}.${crypto.randomUUID()}`
+      try {
+        await rename(intentPath, claimedPath)
+      } catch (error) {
         if (isFileNotFoundError(error)) return undefined
         throw error
-      })
-      if (raw === undefined) return undefined
+      }
 
-      const intent = decodeLaunchIntent(JSON.parse(raw) as unknown)
-      await unlink(intentPath).catch(error => {
-        if (!isFileNotFoundError(error)) throw error
-      })
-      return intent
+      try {
+        await assertTrustedIntentFile(claimedPath, uid)
+        const raw = await readTrustedFile(claimedPath)
+        const intent = decodeLaunchIntent(JSON.parse(raw) as unknown)
+        assertIntentFresh(intent, maxAgeMs)
+        return {
+          intent,
+          complete: async () => {
+            await unlinkIfExists(claimedPath)
+          },
+          requeue: async () => {
+            try {
+              await link(claimedPath, intentPath)
+              await unlinkIfExists(claimedPath)
+            } catch (error) {
+              if (isFileExistsError(error)) {
+                await quarantineClaimedPath(
+                  claimedPath,
+                  "pending launch intent already exists during requeue",
+                )
+                return
+              }
+              if (!isFileNotFoundError(error)) throw error
+            }
+          },
+          quarantine: async reason => {
+            await quarantineClaimedPath(claimedPath, reason)
+          },
+        }
+      } catch (error) {
+        await quarantineClaimedPath(claimedPath, errorMessage(error))
+        throw error
+      }
     },
   }
 }
@@ -77,13 +174,101 @@ export function decodeLaunchIntent(value: unknown): GameStreamLaunchIntent {
   if (typeof value.createdAt !== "string" || value.createdAt.length === 0) {
     throw new Error("launch intent createdAt must be a non-empty string")
   }
+  if (
+    value.lifecycle !== undefined &&
+    value.lifecycle !== "foreground" &&
+    value.lifecycle !== "session"
+  ) {
+    throw new Error("launch intent lifecycle must be foreground or session")
+  }
 
   return {
     version: 1,
     id: value.id,
     createdAt: value.createdAt,
+    lifecycle: value.lifecycle ?? "foreground",
     launch: decodeLaunchSpec(value.launch),
+    ...(value.wait ? { wait: decodeLaunchSpec(value.wait) } : {}),
   }
+}
+
+async function assertTrustedParentDirectory(
+  intentPath: string,
+  uid: number | undefined,
+): Promise<void> {
+  const info = await lstat(dirname(intentPath))
+  if (!info.isDirectory())
+    throw new Error("launch intent parent is not a directory")
+  if (uid !== undefined && info.uid !== uid) {
+    throw new Error("launch intent parent must be owned by the runner user")
+  }
+  if ((info.mode & 0o077) !== 0) {
+    throw new Error("launch intent parent must not be group/world accessible")
+  }
+}
+
+async function assertTrustedIntentFile(
+  path: string,
+  uid: number | undefined,
+): Promise<void> {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW)
+  try {
+    const info = await handle.stat()
+    if (!info.isFile()) throw new Error("launch intent must be a regular file")
+    if (uid !== undefined && info.uid !== uid) {
+      throw new Error("launch intent must be owned by the runner user")
+    }
+    if ((info.mode & 0o777) !== PRIVATE_FILE_MODE) {
+      throw new Error("launch intent mode must be 0600")
+    }
+  } finally {
+    await handle.close()
+  }
+}
+
+async function readTrustedFile(path: string): Promise<string> {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW)
+  try {
+    return await handle.readFile("utf8")
+  } finally {
+    await handle.close()
+  }
+}
+
+function assertIntentFresh(
+  intent: GameStreamLaunchIntent,
+  maxAgeMs: number,
+): void {
+  const createdAtMs = Date.parse(intent.createdAt)
+  if (!Number.isFinite(createdAtMs)) {
+    throw new Error("launch intent createdAt must be a valid timestamp")
+  }
+  if (Date.now() - createdAtMs > maxAgeMs) {
+    throw new Error("launch intent expired")
+  }
+}
+
+async function quarantineClaimedPath(
+  path: string,
+  reason: string,
+): Promise<void> {
+  const quarantinePath = `${path}.bad`
+  await writeFile(`${quarantinePath}.reason`, `${reason}\n`, {
+    mode: 0o600,
+  }).catch(() => undefined)
+  await rename(path, quarantinePath).catch(error => {
+    if (!isFileNotFoundError(error)) throw error
+  })
+}
+
+async function unlinkIfExists(path: string): Promise<void> {
+  await unlink(path).catch(error => {
+    if (!isFileNotFoundError(error)) throw error
+  })
+}
+
+function currentUid(): number | undefined {
+  return typeof process.getuid === "function" ? process.getuid() : undefined
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -94,4 +279,14 @@ function isFileNotFoundError(error: unknown): boolean {
   return (
     error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOENT"
   )
+}
+
+function isFileExistsError(error: unknown): boolean {
+  return (
+    error instanceof Error && (error as NodeJS.ErrnoException).code === "EEXIST"
+  )
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }

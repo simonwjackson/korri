@@ -43,11 +43,21 @@ let
       fi
     ''}
 
-    runtime_dir="''${KORRI_GAME_STREAM_RUNTIME_DIR:-''${XDG_RUNTIME_DIR:-/tmp}/korri-game-stream}"
-    mkdir -p "$runtime_dir"
+    if [ -n "''${KORRI_GAME_STREAM_RUNTIME_DIR:-}" ]; then
+      runtime_dir="$KORRI_GAME_STREAM_RUNTIME_DIR"
+    else
+      if [ -z "''${XDG_RUNTIME_DIR:-}" ]; then
+        echo "korri-game-stream: XDG_RUNTIME_DIR is required unless KORRI_GAME_STREAM_RUNTIME_DIR is set" >&2
+        exit 126
+      fi
+      runtime_dir="$XDG_RUNTIME_DIR/korri-game-stream"
+    fi
+    mkdir -p -m 700 "$runtime_dir"
+    chmod 700 "$runtime_dir"
 
     export PATH=${lib.escapeShellArg (lib.makeBinPath cfg.path)}:$PATH
     export KORRI_GAME_STREAM_INTENT_PATH=${intentPathExpression}
+    export KORRI_GAME_STREAM_INTENT_MAX_AGE_MS=${toString (cfg.intentMaxAgeSeconds * 1000)}
     export KORRI_GAME_STREAM_USE_GAMESCOPE=${if cfg.gamescope.enable then "1" else "0"}
     export KORRI_GAME_STREAM_GAMESCOPE=${lib.escapeShellArg "${cfg.gamescope.package}/bin/gamescope"}
     export KORRI_GAME_STREAM_SWAYMSG=${lib.escapeShellArg "${cfg.sway.package}/bin/swaymsg"}
@@ -108,6 +118,12 @@ in
         with `korri-game-stream-enqueue -- /absolute/command args...` while setting
         KORRI_GAME_STREAM_INTENT_PATH to the same path when needed.
       '';
+    };
+
+    intentMaxAgeSeconds = mkOption {
+      type = types.ints.positive;
+      default = 300;
+      description = "Maximum age of a pending launch intent before the runner rejects and quarantines it.";
     };
 
     gamescope = {

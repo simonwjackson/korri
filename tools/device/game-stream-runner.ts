@@ -1,6 +1,6 @@
 import { mkdir, open, readFile, unlink, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
-import type { LaunchSpec } from "@shared/library/launcher"
+import { decodeLaunchSpec, type LaunchSpec } from "@shared/library/launcher"
 import { logger as defaultLogger } from "@shared/logger"
 import {
   composeGamescopeLaunchSpec,
@@ -11,8 +11,10 @@ import {
   snapshotStreamSurfaceIds,
 } from "./game-stream-fullscreen"
 import {
+  type ClaimedGameStreamLaunchIntent,
   createFileGameStreamLaunchIntentStore,
   createLaunchIntent,
+  defaultGameStreamIntentPath,
   type GameStreamLaunchIntentStore,
 } from "./game-stream-launch-intent"
 import {
@@ -89,7 +91,6 @@ export interface GameStreamRunner {
 }
 
 const DEFAULT_LOCK_PATH = "/tmp/korri-game-stream-runner.lock"
-const DEFAULT_INTENT_PATH = "/tmp/korri-game-stream-next-launch.json"
 const DEFAULT_TERMINATE_GRACE_MS = 2_000
 const DEFAULT_SWAY_COMMAND_TIMEOUT_MS = 2_000
 
@@ -111,6 +112,7 @@ export function createGameStreamRunner(
   let state: GameStreamState = initialGameStreamState
   let activeChild: ManagedChild | undefined
   let stopRequested = false
+  const stopWaiters: Array<() => void> = []
 
   async function writeStatus() {
     if (!options.statusPath) return
@@ -133,10 +135,45 @@ export function createGameStreamRunner(
 
   async function stop() {
     stopRequested = true
+    while (stopWaiters.length > 0) stopWaiters.pop()?.()
     state = beginGameStreamStopping(state)
     await writeStatus()
     if (!activeChild) return
     await terminateChild(activeChild, "SIGTERM", terminateGraceMs)
+  }
+
+  async function waitForStopRequest(): Promise<void> {
+    if (stopRequested) return
+    await new Promise<void>(resolve => {
+      stopWaiters.push(resolve)
+    })
+  }
+
+  async function requeueLaunchClaim(
+    launchClaim: ClaimedGameStreamLaunchIntent,
+    reason: string,
+  ): Promise<void> {
+    try {
+      await launchClaim.requeue()
+    } catch (error) {
+      logger.warn(
+        { err: error, launchId: launchClaim.intent.id, reason },
+        "game-stream-runner: launch intent requeue failed",
+      )
+    }
+  }
+
+  async function completeLaunchClaim(
+    launchClaim: ClaimedGameStreamLaunchIntent,
+  ): Promise<void> {
+    try {
+      await launchClaim.complete()
+    } catch (error) {
+      logger.warn(
+        { err: error, launchId: launchClaim.intent.id },
+        "game-stream-runner: launch intent completion failed",
+      )
+    }
   }
 
   async function fail(
@@ -208,20 +245,24 @@ export function createGameStreamRunner(
           return await fail("cleanup", "game stream stopped before launch", 143)
         }
 
-        let launchIntent: Awaited<
-          ReturnType<GameStreamLaunchIntentStore["consume"]>
+        let launchClaim: Awaited<
+          ReturnType<GameStreamLaunchIntentStore["claim"]>
         >
         try {
-          launchIntent = await options.launchIntentStore.consume()
+          launchClaim = await options.launchIntentStore.claim()
         } catch (error) {
           return await fail("preflight", errorMessage(error), 126)
         }
-        if (!launchIntent) {
+        if (!launchClaim) {
           return await fail("preflight", "no pending launch intent", 125)
+        }
+        if (stopRequested) {
+          await requeueLaunchClaim(launchClaim, "startup cancellation")
+          return await fail("cleanup", "game stream stopped before launch", 143)
         }
 
         const spec = composeGamescopeLaunchSpec(
-          launchIntent.launch,
+          launchClaim.intent.launch,
           options.gamescope ?? { enabled: false },
         )
         logger.info(
@@ -232,11 +273,13 @@ export function createGameStreamRunner(
         try {
           activeChild = await spawner.spawn(spec)
         } catch (error) {
+          await requeueLaunchClaim(launchClaim, "spawn failure")
           return await fail("spawn", errorMessage(error), 127)
         }
 
         if (stopRequested) {
           await terminateChild(activeChild, "SIGTERM", terminateGraceMs)
+          await requeueLaunchClaim(launchClaim, "startup cancellation")
           return await fail("cleanup", "game stream stopped during launch", 143)
         }
 
@@ -253,12 +296,64 @@ export function createGameStreamRunner(
             await writeStatus()
           } catch (error) {
             await terminateChild(activeChild, "SIGTERM", terminateGraceMs)
+            await requeueLaunchClaim(launchClaim, "fullscreen failure")
             return await fail("fullscreen", errorMessage(error), 1)
           }
         }
 
-        const exitCode = await activeChild.exited
+        const shouldDelayIntentCompletion =
+          launchClaim.intent.lifecycle === "session" && launchClaim.intent.wait
+        if (!shouldDelayIntentCompletion) {
+          await completeLaunchClaim(launchClaim)
+        }
+
+        let exitCode = await activeChild.exited
         activeChild = undefined
+        if (
+          launchClaim.intent.lifecycle === "session" &&
+          exitCode === 0 &&
+          !stopRequested
+        ) {
+          if (launchClaim.intent.wait) {
+            logger.info(
+              { launchId: launchClaim.intent.id },
+              "game-stream-runner: launch process exited; waiting for session monitor",
+            )
+            try {
+              activeChild = await spawner.spawn(launchClaim.intent.wait)
+            } catch (error) {
+              logger.warn(
+                { err: error, launchId: launchClaim.intent.id },
+                "game-stream-runner: session monitor spawn failed; anchoring session",
+              )
+              await completeLaunchClaim(launchClaim)
+              await waitForStopRequest()
+              state = completeGameStreamExit(state, exitCode)
+              await writeStatus()
+              return { status: "launched", exitCode: 0 }
+            }
+            if (stopRequested) {
+              await terminateChild(activeChild, "SIGTERM", terminateGraceMs)
+              await completeLaunchClaim(launchClaim)
+              return await fail(
+                "cleanup",
+                "game stream stopped during launch",
+                143,
+              )
+            }
+            await completeLaunchClaim(launchClaim)
+            state = markGameStreamRunning(state, activeChild.pid)
+            await writeStatus()
+            exitCode = await activeChild.exited
+            activeChild = undefined
+          } else {
+            logger.info(
+              { launchId: launchClaim.intent.id },
+              "game-stream-runner: launch process exited; anchoring session",
+            )
+            await waitForStopRequest()
+          }
+        }
         state = completeGameStreamExit(state, exitCode)
         await writeStatus()
 
@@ -468,12 +563,30 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function launchSpecFromCli(args: readonly string[]): LaunchSpec {
+function parseOptionalPositiveInteger(
+  raw: string | undefined,
+  name: string,
+): number | undefined {
+  if (!raw) return undefined
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer`)
+  }
+  return parsed
+}
+
+function launchSpecFromCli(args: readonly string[]): {
+  readonly launch: LaunchSpec
+  readonly lifecycle: "foreground" | "session"
+  readonly wait?: LaunchSpec
+} {
   const separator = args.indexOf("--")
   const optionArgs = separator === -1 ? [] : args.slice(0, separator)
   const commandArgs = separator === -1 ? args : args.slice(separator + 1)
   const env: Record<string, string> = {}
   let cwd: string | undefined
+  let lifecycle: "foreground" | "session" = "foreground"
+  let wait: LaunchSpec | undefined
 
   for (let index = 0; index < optionArgs.length; index += 1) {
     const arg = optionArgs[index]
@@ -490,37 +603,68 @@ function launchSpecFromCli(args: readonly string[]): LaunchSpec {
       index += 1
       continue
     }
+    if (arg === "--lifecycle") {
+      const value = optionArgs[index + 1]
+      if (value !== "foreground" && value !== "session") {
+        throw new Error("--lifecycle must be foreground or session")
+      }
+      lifecycle = value
+      index += 1
+      continue
+    }
+    if (arg === "--wait-json") {
+      const value = optionArgs[index + 1]
+      if (!value)
+        throw new Error("--wait-json requires a LaunchSpec JSON value")
+      wait = decodeLaunchSpec(JSON.parse(value) as unknown)
+      index += 1
+      continue
+    }
     throw new Error(`unknown enqueue option: ${arg}`)
   }
 
   const [command, ...launchArgs] = commandArgs
   if (!command) throw new Error("enqueue requires a command")
   return {
-    command,
-    args: launchArgs,
-    ...(cwd ? { cwd } : {}),
-    ...(Object.keys(env).length > 0 ? { env } : {}),
+    lifecycle,
+    ...(wait ? { wait } : {}),
+    launch: {
+      command,
+      args: launchArgs,
+      ...(cwd ? { cwd } : {}),
+      ...(Object.keys(env).length > 0 ? { env } : {}),
+    },
   }
 }
 
 if (import.meta.main) {
   const lockPath = process.env.KORRI_GAME_STREAM_LOCK_PATH ?? DEFAULT_LOCK_PATH
-  const intentPath =
-    process.env.KORRI_GAME_STREAM_INTENT_PATH ?? DEFAULT_INTENT_PATH
+  const intentPath = defaultGameStreamIntentPath(process.env)
   const statusPath = process.env.KORRI_GAME_STREAM_STATUS_PATH
+  const intentStoreOptions = {
+    maxAgeMs: parseOptionalPositiveInteger(
+      process.env.KORRI_GAME_STREAM_INTENT_MAX_AGE_MS,
+      "KORRI_GAME_STREAM_INTENT_MAX_AGE_MS",
+    ),
+  }
   const useGamescope = process.env.KORRI_GAME_STREAM_USE_GAMESCOPE === "1"
   const repairSway =
     process.env.KORRI_GAME_STREAM_SWAY_REPAIR !== "0" && useGamescope
   if (Bun.argv[2] === "enqueue") {
-    const store = createFileGameStreamLaunchIntentStore(intentPath)
-    await store.enqueue(
-      createLaunchIntent(launchSpecFromCli(Bun.argv.slice(3))),
+    const store = createFileGameStreamLaunchIntentStore(
+      intentPath,
+      intentStoreOptions,
     )
+    const { launch, lifecycle, wait } = launchSpecFromCli(Bun.argv.slice(3))
+    await store.enqueue(createLaunchIntent(launch, { lifecycle, wait }))
     process.exit(0)
   }
 
   const runner = createGameStreamRunner({
-    launchIntentStore: createFileGameStreamLaunchIntentStore(intentPath),
+    launchIntentStore: createFileGameStreamLaunchIntentStore(
+      intentPath,
+      intentStoreOptions,
+    ),
     statusPath,
     lockManager: createFileGameStreamRunLock(lockPath),
     gamescope: {

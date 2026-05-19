@@ -3,7 +3,11 @@ import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { LaunchSpec } from "@shared/library/launcher"
-import { createStaticGameStreamLaunchIntentStore } from "./game-stream-launch-intent"
+import {
+  createFileGameStreamLaunchIntentStore,
+  createLaunchIntent,
+  createStaticGameStreamLaunchIntentStore,
+} from "./game-stream-launch-intent"
 import {
   createFileGameStreamRunLock,
   createGameStreamRunner,
@@ -180,12 +184,23 @@ describe("game stream runner", () => {
     if (malformed.acquired) await malformed.lock.release()
   })
 
-  it("cleans up the child when fullscreen repair fails", async () => {
+  it("cleans up the child and requeues when fullscreen repair fails", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
+    let requeued = false
     const controlled = createControlledChild(203)
     const { spawner } = createControlledSpawner(controlled.child)
     const runner = createGameStreamRunner({
-      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
+      launchIntentStore: {
+        enqueue: async () => undefined,
+        claim: async () => ({
+          intent: createLaunchIntent(game),
+          complete: async () => undefined,
+          requeue: async () => {
+            requeued = true
+          },
+          quarantine: async () => undefined,
+        }),
+      },
       spawner,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
@@ -205,6 +220,7 @@ describe("game stream runner", () => {
 
     expect(result).toMatchObject({ status: "failed", stage: "fullscreen" })
     expect(controlled.terminations).toEqual(["SIGTERM"])
+    expect(requeued).toBe(true)
     expect(runner.status()).toMatchObject({
       mode: "failed",
       failureStage: "fullscreen",
@@ -304,6 +320,33 @@ describe("game stream runner", () => {
     expect(specs).toHaveLength(0)
   })
 
+  it("keeps supervising the child if launch intent completion fails", async () => {
+    const controlled = createControlledChild(216)
+    const { spawner } = createControlledSpawner(controlled.child)
+    const runner = createGameStreamRunner({
+      launchIntentStore: {
+        enqueue: async () => undefined,
+        claim: async () => ({
+          intent: createLaunchIntent(game),
+          complete: async () => {
+            throw new Error("unlink failed")
+          },
+          requeue: async () => undefined,
+          quarantine: async () => undefined,
+        }),
+      },
+      spawner,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    controlled.exit(0)
+
+    await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
+  })
+
   it("records lock acquisition failures", async () => {
     const controlled = createControlledChild(211)
     const { spawner, specs } = createControlledSpawner(controlled.child)
@@ -328,8 +371,12 @@ describe("game stream runner", () => {
   })
 
   it("records spawn failure and non-zero game exit", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
+    const intentPath = join(dir, "next-launch.json")
+    const intentStore = createFileGameStreamLaunchIntentStore(intentPath)
+    await intentStore.enqueue(createLaunchIntent(game))
     const spawnFailure = createGameStreamRunner({
-      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
+      launchIntentStore: intentStore,
       spawner: {
         spawn: async () => {
           throw new Error("missing game")
@@ -342,6 +389,9 @@ describe("game stream runner", () => {
       status: "failed",
       stage: "spawn",
       exitCode: 127,
+    })
+    await expect(intentStore.claim()).resolves.toMatchObject({
+      intent: expect.objectContaining({ launch: game }),
     })
 
     const controlled = createControlledChild(208)
@@ -418,13 +468,58 @@ describe("game stream runner", () => {
     expect(specs).toHaveLength(0)
   })
 
+  it("does not spawn when stop is requested during intent claim", async () => {
+    const controlled = createControlledChild(214)
+    const { spawner, specs } = createControlledSpawner(controlled.child)
+    let releaseClaim: () => void = () => undefined
+    let markClaimStarted: () => void = () => undefined
+    const claimStarted = new Promise<void>(resolve => {
+      markClaimStarted = resolve
+    })
+    let requeued = false
+    const runner = createGameStreamRunner({
+      launchIntentStore: {
+        enqueue: async () => undefined,
+        claim: async () => {
+          markClaimStarted()
+          await new Promise<void>(resolve => {
+            releaseClaim = resolve
+          })
+          return {
+            intent: createLaunchIntent(game),
+            complete: async () => undefined,
+            requeue: async () => {
+              requeued = true
+            },
+            quarantine: async () => undefined,
+          }
+        },
+      },
+      spawner,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+    })
+
+    const run = runner.run()
+    await claimStarted
+    await runner.stop()
+    releaseClaim()
+
+    await expect(run).resolves.toMatchObject({
+      status: "failed",
+      stage: "cleanup",
+    })
+    expect(specs).toHaveLength(0)
+    expect(requeued).toBe(true)
+  })
+
   it("fails without consuming spawn when no launch intent is pending", async () => {
     const controlled = createControlledChild(212)
     const { spawner, specs } = createControlledSpawner(controlled.child)
     const runner = createGameStreamRunner({
       launchIntentStore: {
         enqueue: async () => undefined,
-        consume: async () => undefined,
+        claim: async () => undefined,
       },
       spawner,
       logger: quietLogger(),
@@ -437,6 +532,129 @@ describe("game stream runner", () => {
       exitCode: 125,
     })
     expect(specs).toHaveLength(0)
+  })
+
+  it("waits for a session monitor intent after a launcher process exits", async () => {
+    const launcher = createControlledChild(217)
+    const monitor = createControlledChild(218)
+    const specs: LaunchSpec[] = []
+    const children = [launcher.child, monitor.child]
+    const wait: LaunchSpec = { command: "/bin/wait-for-game", args: [] }
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
+        lifecycle: "session",
+        wait,
+      }),
+      spawner: {
+        spawn: async spec => {
+          specs.push(spec)
+          const child = children.shift()
+          if (!child) throw new Error("unexpected spawn")
+          return child
+        },
+      },
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    launcher.exit(0)
+    await waitFor(() => runner.status().childPid === 218)
+    monitor.exit(0)
+
+    await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
+    expect(specs).toEqual([game, wait])
+  })
+
+  it("anchors the session if the wait monitor cannot start", async () => {
+    const launcher = createControlledChild(219)
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
+        lifecycle: "session",
+        wait: { command: "/bin/missing-monitor", args: [] },
+      }),
+      spawner: {
+        spawn: async spec => {
+          if (spec.command === game.command) return launcher.child
+          throw new Error("missing monitor")
+        },
+      },
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    launcher.exit(0)
+    await new Promise(resolve => setTimeout(resolve, 5))
+    expect(runner.status().mode).toBe("running")
+
+    await runner.stop()
+    await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
+  })
+
+  it("terminates a wait monitor spawned after stop was requested", async () => {
+    const launcher = createControlledChild(220)
+    const monitor = createControlledChild(221)
+    let releaseMonitorSpawn: () => void = () => undefined
+    let markMonitorSpawnStarted: () => void = () => undefined
+    const monitorSpawnStarted = new Promise<void>(resolve => {
+      markMonitorSpawnStarted = resolve
+    })
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
+        lifecycle: "session",
+        wait: { command: "/bin/wait-for-game", args: [] },
+      }),
+      spawner: {
+        spawn: async spec => {
+          if (spec.command === game.command) return launcher.child
+          markMonitorSpawnStarted()
+          await new Promise<void>(resolve => {
+            releaseMonitorSpawn = resolve
+          })
+          return monitor.child
+        },
+      },
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    launcher.exit(0)
+    await monitorSpawnStarted
+    await runner.stop()
+    releaseMonitorSpawn()
+
+    await expect(run).resolves.toMatchObject({
+      status: "failed",
+      stage: "cleanup",
+    })
+    expect(monitor.terminations).toEqual(["SIGTERM"])
+  })
+
+  it("keeps launcher-style session intents alive after the initial process exits", async () => {
+    const controlled = createControlledChild(215)
+    const { spawner } = createControlledSpawner(controlled.child)
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
+        lifecycle: "session",
+      }),
+      spawner,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    controlled.exit(0)
+    await new Promise(resolve => setTimeout(resolve, 5))
+    expect(runner.status().mode).toBe("running")
+
+    await runner.stop()
+    await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
   })
 
   it("accepts arbitrary launch intents including Steam and browsers", async () => {
