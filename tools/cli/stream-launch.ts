@@ -25,7 +25,7 @@ export type StreamLaunchPrepareResult =
 export type StreamLaunchPrepareFailure = {
   readonly status: "failed"
   readonly category: StreamLaunchFailureCategory
-  readonly gameId: string
+  readonly gameId?: string
   readonly message: string
   readonly diagnostic?: string
 }
@@ -57,11 +57,14 @@ export async function runStreamLaunchCommand(
 ): Promise<number> {
   const result = await prepareStreamLaunch(options)
   if (result.status === "prepared") {
-    ;(options.output ?? console.log)(successMessage(result, options.intentPath))
+    writeLines(
+      options.output ?? console.log,
+      successMessage(result, options.intentPath),
+    )
     return 0
   }
 
-  ;(options.errorOutput ?? console.error)(failureMessage(result))
+  writeLines(options.errorOutput ?? console.error, failureMessage(result))
   return exitCodeForFailure(result.category)
 }
 
@@ -84,22 +87,30 @@ export async function prepareStreamLaunch(
   }
 
   const gamesResult = await runLibraryEffect(options.librarySource.list())
-  if (!gamesResult.ok) return libraryFailure("", gamesResult.error)
+  if (!gamesResult.ok) return libraryFailure(undefined, gamesResult.error)
   if (gamesResult.value.length === 0) {
     return {
       status: "failed",
       category: "library-config",
-      gameId: "",
       message: "The configured Korri library has no games",
     }
   }
 
-  const game = await options.gamePicker(gamesResult.value)
+  let game: GameRecord | undefined
+  try {
+    game = await options.gamePicker(gamesResult.value)
+  } catch (error) {
+    return {
+      status: "failed",
+      category: "prepare-failed",
+      message: "Interactive game selection failed",
+      diagnostic: errorMessage(error),
+    }
+  }
   if (!game) {
     return {
       status: "failed",
       category: "cancelled",
-      gameId: "",
       message: "Stream launch preparation cancelled",
     }
   }
@@ -165,7 +176,6 @@ function usageFailure(message: string): StreamLaunchPrepareFailure {
   return {
     status: "failed",
     category: "usage",
-    gameId: "",
     message,
   }
 }
@@ -173,20 +183,26 @@ function usageFailure(message: string): StreamLaunchPrepareFailure {
 function successMessage(
   result: Extract<StreamLaunchPrepareResult, { readonly status: "prepared" }>,
   intentPath: string | undefined,
-): string {
-  const location = intentPath ? `\nIntent: ${intentPath}` : ""
-  return (
-    [
-      `Prepared ${result.displayName} (${result.game.id}) for Korri Stream.`,
-      "Next: connect to the Korri Stream app from Moonlight.",
-      "This is a one-shot launch intent; rerun this command before a later stream attempt.",
-    ].join("\n") + location
-  )
+): readonly string[] {
+  return [
+    `Prepared ${result.displayName} (${result.game.id}) for Korri Stream.`,
+    "Next: connect to the Korri Stream app from Moonlight.",
+    "This is a one-shot launch intent; rerun this command before a later stream attempt.",
+    ...(intentPath ? [`Intent: ${intentPath}`] : []),
+  ]
 }
 
-function failureMessage(failure: StreamLaunchPrepareFailure): string {
-  const diagnostic = failure.diagnostic ? `\n${failure.diagnostic}` : ""
-  return `${failure.message}${diagnostic}`
+function failureMessage(
+  failure: StreamLaunchPrepareFailure,
+): readonly string[] {
+  return [failure.message, ...(failure.diagnostic ? [failure.diagnostic] : [])]
+}
+
+function writeLines(
+  output: (line: string) => void,
+  lines: readonly string[],
+): void {
+  for (const line of lines) output(line)
 }
 
 function exitCodeForFailure(category: StreamLaunchFailureCategory): number {
@@ -255,7 +271,7 @@ async function runLibraryEffect<T>(
 }
 
 function libraryFailure(
-  gameId: string,
+  gameId: string | undefined,
   error: unknown,
 ): StreamLaunchPrepareFailure {
   if (error instanceof LibraryError) {

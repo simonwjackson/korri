@@ -68,6 +68,49 @@ describe("runStreamLaunchCommand", () => {
     await expect(readFile(intentPath, "utf8")).rejects.toThrow()
   })
 
+  it("maps usage, config, prepare, and cancellation failures to stable exit codes", async () => {
+    const intentPath = await tempIntentPath()
+    const base = {
+      librarySource: librarySource({
+        games: [game],
+        launchSpecs: new Map([[game.id, launchSpec]]),
+      }),
+      intentStore: createFileGameStreamLaunchIntentStore(intentPath),
+      errorOutput: () => undefined,
+    }
+
+    await expect(
+      runStreamLaunchCommand({ ...base, gameId: "   " }),
+    ).resolves.toBe(2)
+    await expect(
+      runStreamLaunchCommand({
+        ...base,
+        gameId: game.id,
+        librarySource: librarySource({ games: [game], launchSpecs: new Map() }),
+      }),
+    ).resolves.toBe(5)
+
+    const untrustedDir = await mkdtemp(join(tmpdir(), "korri-cli-exit-code-"))
+    await chmod(untrustedDir, 0o755)
+    await expect(
+      runStreamLaunchCommand({
+        ...base,
+        gameId: game.id,
+        intentStore: createFileGameStreamLaunchIntentStore(
+          join(untrustedDir, "next-launch.json"),
+        ),
+      }),
+    ).resolves.toBe(6)
+
+    await expect(
+      runStreamLaunchCommand({
+        ...base,
+        gamePicker: async () => undefined,
+        stdinIsTty: true,
+      }),
+    ).resolves.toBe(130)
+  })
+
   it("uses the live library source configuration with a temp ProseQL library", async () => {
     await using library = await withTempProseqlLibrary({
       games: [game],
@@ -147,6 +190,21 @@ describe("prepareStreamLaunch", () => {
     expect(intent.launch).toEqual(launchSpec)
   })
 
+  it("reports whitespace-only game ids as usage failures", async () => {
+    const intentPath = await tempIntentPath()
+    const result = await prepareStreamLaunch({
+      gameId: "   ",
+      librarySource: librarySource({
+        games: [game],
+        launchSpecs: new Map([[game.id, launchSpec]]),
+      }),
+      intentStore: createFileGameStreamLaunchIntentStore(intentPath),
+    })
+
+    expect(result).toMatchObject({ status: "failed", category: "usage" })
+    await expect(readFile(intentPath, "utf8")).rejects.toThrow()
+  })
+
   it("does not invoke the picker when an explicit game id is supplied", async () => {
     const intentPath = await tempIntentPath()
     const result = await prepareStreamLaunch({
@@ -209,6 +267,29 @@ describe("prepareStreamLaunch", () => {
     })
 
     expect(result).toMatchObject({ status: "failed", category: "cancelled" })
+    await expect(readFile(intentPath, "utf8")).rejects.toThrow()
+  })
+
+  it("converts picker failures to prepare-failed without writing an intent", async () => {
+    const intentPath = await tempIntentPath()
+    const result = await prepareStreamLaunch({
+      librarySource: librarySource({
+        games: [game],
+        launchSpecs: new Map([[game.id, launchSpec]]),
+      }),
+      intentStore: createFileGameStreamLaunchIntentStore(intentPath),
+      gamePicker: async () => {
+        throw new Error("terminal unavailable")
+      },
+      stdinIsTty: true,
+    })
+
+    expect(result).toMatchObject({
+      status: "failed",
+      category: "prepare-failed",
+      message: "Interactive game selection failed",
+      diagnostic: "terminal unavailable",
+    })
     await expect(readFile(intentPath, "utf8")).rejects.toThrow()
   })
 })
@@ -328,6 +409,28 @@ describe("prepareStreamLaunchForGame", () => {
       status: "failed",
       category: "library-config",
       message: "disk missing",
+    })
+  })
+
+  it.each([
+    ["config", "Library configuration problem"],
+    ["io", "Could not read the configured library"],
+    ["unavailable", "Library source is unavailable"],
+  ] as const)("maps message-less %s library errors to actionable messages", async (reason, message) => {
+    const intentPath = await tempIntentPath()
+    const result = await prepareStreamLaunchForGame({
+      gameId: game.id,
+      librarySource: {
+        list: () => Effect.fail(new LibraryError({ reason })),
+        launchSpecFor: () => Effect.succeed(undefined),
+      },
+      intentStore: createFileGameStreamLaunchIntentStore(intentPath),
+    })
+
+    expect(result).toMatchObject({
+      status: "failed",
+      category: "library-config",
+      message,
     })
   })
 })
