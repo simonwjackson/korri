@@ -14,6 +14,7 @@ applies_when:
 related_components:
   - "nix/modules/korri-game-stream.nix"
   - "nix/korri-game-stream-runner.nix"
+  - "nix/korri-cli.nix"
   - "External NixOS host configuration"
   - "Sunshine user service"
 tags:
@@ -24,6 +25,7 @@ tags:
   - nix-flake
   - gamescope
   - validation
+  - cli
 ---
 
 # Validate the generic game stream runner with a fresh launch intent per session
@@ -127,6 +129,19 @@ The intent is one-shot after a successful session launch. Recoverable startup fa
 
 For that no-intent case, the runner returns a preflight failure to Moonlight but intentionally does not overwrite the previous runtime status file. If `status.json` still shows the prior clean exit, that means the stream app is wired correctly enough to run the runner, but the controller step was skipped.
 
+### Prefer the Korri CLI for known library games
+
+For a known Korri library game, the human-facing local controller is now the Korri CLI:
+
+```bash
+korri stream launch
+korri stream launch <game-id>
+```
+
+Run it in the same user/session context that owns the stream runner runtime directory. The command prepares a fresh one-shot foreground launch intent from the existing Korri library and then stops; the next manual step is still launching `Korri Stream` from Moonlight.
+
+Use the lower-level `korri-game-stream-enqueue` path for raw command validation, non-library targets, per-game display environment experiments, and lifecycle/wait-monitor validation. The product CLI intentionally does not expose session lifecycle flags in its first slice.
+
 ### Keep the validation target generic
 
 Do not validate the generic runner by turning Sunshine into a per-game launcher, and do not enqueue Steam unless the explicit test is Steam. The point of this path is that Sunshine knows only about one stable foreground app and the runner launches an arbitrary structured `LaunchSpec`.
@@ -182,7 +197,7 @@ The generic stream runner is deliberately not a remote arbitrary command listene
 
 If validation skips the enqueue step, inspects the wrong Sunshine service scope, or launches the profile app instead of the runner app, the failures look like stream or runner defects even though the contract is working. Capturing the exact workflow keeps future validation focused on real integration gaps rather than re-debugging expected one-shot behavior.
 
-The one-shot behavior also clarifies the next product gap: repeated Moonlight-only launches require a controller that enqueues before each launch, or an explicit development-only replay helper. Replaying stale intents by default would weaken the trusted-intent model.
+The one-shot behavior also explains why the Korri CLI exists: repeated Moonlight-only launches need a controller that prepares a fresh intent before each launch. Replaying stale intents by default would weaken the trusted-intent model.
 
 ## When to Apply
 
@@ -200,12 +215,8 @@ The one-shot behavior also clarifies the next product gap: repeated Moonlight-on
 # 1. Confirm Sunshine user service is running.
 ssh <host> 'systemctl --user status sunshine --no-pager'
 
-# 2. Enqueue a fresh arbitrary LaunchSpec intent.
-ssh <host> '
-  cmd=$(nix build nixpkgs#supertux --no-link --print-out-paths)/bin/supertux2
-  KORRI_GAME_STREAM_INTENT_PATH="$XDG_RUNTIME_DIR/korri-game-stream/next-launch.json" \
-    korri-game-stream-enqueue -- "$cmd"
-'
+# 2. Prepare a fresh intent for a known Korri library game.
+ssh <host> 'korri stream launch <game-id>'
 
 # 3. Launch the Sunshine app named "Korri Stream" from Moonlight.
 # 4. Quit the game.
@@ -249,5 +260,6 @@ If the consuming repo wraps `nixie`, prefer a generic `--override-input` pass-th
 
 - `docs/brainstorms/2026-05-18-headless-game-stream-orchestration-requirements.md` — original requirements for the headless game stream proof.
 - `docs/plans/2026-05-18-001-feat-headless-game-stream-runner-plan.md` — implementation plan for the runner and NixOS module. Some details in the plan refer to a configured fixed game; the validated prototype now uses a trusted one-shot launch-intent file for arbitrary `LaunchSpec`s.
+- `docs/brainstorms/2026-05-19-korri-cli-stream-launch-requirements.md` — requirements for the first product-shaped local CLI that prepares known Korri library games for streaming.
 - `docs/solutions/integration-issues/supervise-chromium-kiosk-session-after-game-exit-2026-05-04.md` — related session-lifecycle lesson for Odin Chromium; similar concern, different runtime owner.
 - `docs/solutions/best-practices/prefer-real-implementations-over-mocks-2026-05-02.md` — supports using a real Nixpkgs game/store path for smoke validation rather than mocked launcher behavior.
