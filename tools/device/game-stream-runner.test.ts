@@ -451,11 +451,14 @@ describe("game stream runner", () => {
   })
 
   it("refuses root execution unless explicitly allowed", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
+    const statusPath = join(dir, "status.json")
     const controlled = createControlledChild(205)
     const { spawner, specs } = createControlledSpawner(controlled.child)
     const runner = createGameStreamRunner({
       launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
       spawner,
+      statusPath,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 0 },
     })
@@ -466,6 +469,11 @@ describe("game stream runner", () => {
       exitCode: 126,
     })
     expect(specs).toHaveLength(0)
+    expect(JSON.parse(await readFile(statusPath, "utf8"))).toMatchObject({
+      mode: "failed",
+      failureStage: "preflight",
+      exitCode: 126,
+    })
   })
 
   it("does not spawn when stop is requested during intent claim", async () => {
@@ -514,6 +522,8 @@ describe("game stream runner", () => {
   })
 
   it("fails without consuming spawn when no launch intent is pending", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
+    const statusPath = join(dir, "status.json")
     const controlled = createControlledChild(212)
     const { spawner, specs } = createControlledSpawner(controlled.child)
     const runner = createGameStreamRunner({
@@ -522,6 +532,7 @@ describe("game stream runner", () => {
         claim: async () => undefined,
       },
       spawner,
+      statusPath,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
     })
@@ -531,7 +542,129 @@ describe("game stream runner", () => {
       stage: "preflight",
       exitCode: 125,
     })
+    expect(runner.status()).toEqual({ mode: "idle" })
     expect(specs).toHaveLength(0)
+    await expect(readFile(statusPath, "utf8")).rejects.toThrow()
+  })
+
+  it("preserves the last clean exit status when launched without a pending intent", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
+    const statusPath = join(dir, "status.json")
+    const lastCleanExit = {
+      mode: "exited",
+      runId: "previous-run",
+      exitCode: 0,
+    }
+    const statusBytes = Buffer.from(
+      `${JSON.stringify(lastCleanExit, null, 2)}\n`,
+    )
+    await writeFile(statusPath, statusBytes)
+    const controlled = createControlledChild(213)
+    const { spawner, specs } = createControlledSpawner(controlled.child)
+    const runner = createGameStreamRunner({
+      launchIntentStore: {
+        enqueue: async () => undefined,
+        claim: async () => undefined,
+      },
+      spawner,
+      statusPath,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
+        pid: 10,
+        isProcessAlive: pid => pid === 10,
+      }),
+    })
+
+    await expect(runner.run()).resolves.toMatchObject({
+      status: "failed",
+      stage: "preflight",
+      exitCode: 125,
+      message: "no pending launch intent",
+    })
+    expect(runner.status()).toEqual({ mode: "idle" })
+    expect(specs).toHaveLength(0)
+    expect(Buffer.compare(await readFile(statusPath), statusBytes)).toBe(0)
+  })
+
+  it("preserves a previous failed status when launched without a pending intent", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
+    const statusPath = join(dir, "status.json")
+    const lastFailure = {
+      mode: "failed",
+      runId: "previous-run",
+      exitCode: 1,
+      failureStage: "spawn",
+      failureReason: "previous failure",
+    }
+    const statusBytes = Buffer.from(`${JSON.stringify(lastFailure, null, 2)}\n`)
+    await writeFile(statusPath, statusBytes)
+    const controlled = createControlledChild(213)
+    const { spawner, specs } = createControlledSpawner(controlled.child)
+    const runner = createGameStreamRunner({
+      launchIntentStore: {
+        enqueue: async () => undefined,
+        claim: async () => undefined,
+      },
+      spawner,
+      statusPath,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
+        pid: 10,
+        isProcessAlive: pid => pid === 10,
+      }),
+    })
+
+    await expect(runner.run()).resolves.toMatchObject({
+      status: "failed",
+      stage: "preflight",
+      exitCode: 125,
+      message: "no pending launch intent",
+    })
+    expect(runner.status()).toEqual({ mode: "idle" })
+    expect(specs).toHaveLength(0)
+    expect(Buffer.compare(await readFile(statusPath), statusBytes)).toBe(0)
+  })
+
+  it("does not leave a session monitor intent claimed when the launcher fails", async () => {
+    const launcher = createControlledChild(216)
+    const wait: LaunchSpec = { command: "/bin/wait-for-game", args: [] }
+    const specs: LaunchSpec[] = []
+    let completed = false
+    const runner = createGameStreamRunner({
+      launchIntentStore: {
+        enqueue: async () => undefined,
+        claim: async () => ({
+          intent: createLaunchIntent(game, { lifecycle: "session", wait }),
+          complete: async () => {
+            completed = true
+          },
+          requeue: async () => undefined,
+          quarantine: async () => undefined,
+        }),
+      },
+      spawner: {
+        spawn: async spec => {
+          specs.push(spec)
+          return launcher.child
+        },
+      },
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    launcher.exit(7)
+
+    await expect(run).resolves.toEqual({
+      status: "failed",
+      stage: "game",
+      exitCode: 7,
+    })
+    expect(completed).toBe(true)
+    expect(specs).toEqual([game])
   })
 
   it("waits for a session monitor intent after a launcher process exits", async () => {
@@ -657,7 +790,7 @@ describe("game stream runner", () => {
     await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
   })
 
-  it("accepts arbitrary launch intents including Steam and browsers", async () => {
+  it("accepts arbitrary launch intents including Steam, browsers, and env overrides", async () => {
     const steam: LaunchSpec = {
       command: "/usr/bin/steam",
       args: ["steam://rungameid/123"],
@@ -666,14 +799,24 @@ describe("game stream runner", () => {
       command: "/nix/store/firefox/bin/firefox",
       args: ["https://korri.local"],
     }
+    const waylandGame: LaunchSpec = {
+      command: "/nix/store/supertux/bin/supertux2",
+      args: ["--fullscreen"],
+      env: { SDL_VIDEODRIVER: "wayland" },
+    }
 
-    for (const launch of [steam, browser]) {
+    for (const launch of [steam, browser, waylandGame]) {
       const controlled = createControlledChild(213)
       const { spawner, specs } = createControlledSpawner(controlled.child)
+      const logRecords: unknown[] = []
       const runner = createGameStreamRunner({
         launchIntentStore: createStaticGameStreamLaunchIntentStore(launch),
         spawner,
-        logger: quietLogger(),
+        logger: {
+          info: input => logRecords.push(input),
+          warn: input => logRecords.push(input),
+          error: input => logRecords.push(input),
+        },
         processInfo: { pid: 10, uid: 1000 },
       })
 
@@ -682,6 +825,7 @@ describe("game stream runner", () => {
       controlled.exit(0)
       await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
       expect(specs[0]).toEqual(launch)
+      expect(JSON.stringify(logRecords)).not.toContain("wayland")
     }
   })
 })

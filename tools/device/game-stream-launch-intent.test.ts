@@ -67,6 +67,76 @@ describe("game stream launch intent store", () => {
     expect(secondClaim?.intent).toEqual(second)
   })
 
+  it("uses latest enqueue wins semantics for a single pending intent", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-intent-"))
+    const intentPath = join(dir, "next-launch.json")
+    const store = createFileGameStreamLaunchIntentStore(intentPath)
+    const first = createLaunchIntent({ command: "/bin/first", args: [] })
+    const second = createLaunchIntent({ command: "/bin/second", args: [] })
+
+    await store.enqueue(first)
+    await store.enqueue(second)
+
+    const claim = await store.claim()
+    expect(claim?.intent).toEqual(second)
+    await claim?.complete()
+    await expect(store.claim()).resolves.toBeUndefined()
+  })
+
+  it("rejects relative launch intent commands", async () => {
+    expect(() => createLaunchIntent({ command: "nix", args: ["run"] })).toThrow(
+      "LaunchSpec.command must be absolute",
+    )
+
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-intent-"))
+    const intentPath = join(dir, "next-launch.json")
+    const store = createFileGameStreamLaunchIntentStore(intentPath)
+    await writeFile(
+      intentPath,
+      JSON.stringify({
+        version: 1,
+        id: "relative-command",
+        createdAt: new Date().toISOString(),
+        lifecycle: "foreground",
+        launch: { command: "nix", args: ["run"] },
+      }),
+      { mode: 0o600 },
+    )
+
+    await expect(store.claim()).rejects.toThrow(
+      "LaunchSpec.command must be absolute",
+    )
+  })
+
+  it("rejects relative wait intent commands", async () => {
+    expect(() =>
+      createLaunchIntent(launch, {
+        lifecycle: "session",
+        wait: { command: "steam", args: [] },
+      }),
+    ).toThrow("LaunchSpec.command must be absolute")
+
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-intent-"))
+    const intentPath = join(dir, "next-launch.json")
+    const store = createFileGameStreamLaunchIntentStore(intentPath)
+    await writeFile(
+      intentPath,
+      JSON.stringify({
+        version: 1,
+        id: "relative-wait-command",
+        createdAt: new Date().toISOString(),
+        lifecycle: "session",
+        launch,
+        wait: { command: "steam", args: [] },
+      }),
+      { mode: 0o600 },
+    )
+
+    await expect(store.claim()).rejects.toThrow(
+      "LaunchSpec.command must be absolute",
+    )
+  })
+
   it("quarantines malformed launch intents instead of wedging future launches", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-intent-"))
     const intentPath = join(dir, "next-launch.json")

@@ -56,6 +56,9 @@ export function createLaunchIntent(
     readonly wait?: LaunchSpec
   } = {},
 ): GameStreamLaunchIntent {
+  assertAbsoluteLaunchSpec(launch)
+  if (options.wait) assertAbsoluteLaunchSpec(options.wait)
+
   return {
     version: 1,
     id: crypto.randomUUID(),
@@ -182,13 +185,24 @@ export function decodeLaunchIntent(value: unknown): GameStreamLaunchIntent {
     throw new Error("launch intent lifecycle must be foreground or session")
   }
 
+  const launch = decodeLaunchSpec(value.launch)
+  const wait = value.wait ? decodeLaunchSpec(value.wait) : undefined
+  assertAbsoluteLaunchSpec(launch)
+  if (wait) assertAbsoluteLaunchSpec(wait)
+
   return {
     version: 1,
     id: value.id,
     createdAt: value.createdAt,
     lifecycle: value.lifecycle ?? "foreground",
-    launch: decodeLaunchSpec(value.launch),
-    ...(value.wait ? { wait: decodeLaunchSpec(value.wait) } : {}),
+    launch,
+    ...(wait ? { wait } : {}),
+  }
+}
+
+function assertAbsoluteLaunchSpec(spec: LaunchSpec): void {
+  if (!spec.command.startsWith("/")) {
+    throw new Error("LaunchSpec.command must be absolute")
   }
 }
 

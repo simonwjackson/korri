@@ -30,16 +30,38 @@ let
   runnerCommand = pkgs.writeShellScript "korri-game-stream-sunshine-app" ''
     set -eu
 
+    export PATH=${lib.escapeShellArg (lib.makeBinPath cfg.path)}:$PATH
+
     if [ "$(id -u)" = "0" ]; then
       echo "korri-game-stream: refusing to run as root" >&2
       exit 126
     fi
 
     ${optionalString (cfg.sessionEnvFile != null) ''
-      if [ -f ${lib.escapeShellArg cfg.sessionEnvFile} ]; then
+      env_file=${lib.escapeShellArg cfg.sessionEnvFile}
+      if [ -e "$env_file" ]; then
+        if [ -L "$env_file" ] || [ ! -f "$env_file" ]; then
+          echo "korri-game-stream: session env file must be a regular non-symlink file" >&2
+          exit 126
+        fi
+
+        env_file_uid="$(stat -c '%u' "$env_file")"
+        current_uid="$(id -u)"
+        if [ "$env_file_uid" != "$current_uid" ] && [ "$env_file_uid" != "0" ]; then
+          echo "korri-game-stream: session env file must be owned by root or the runner user" >&2
+          exit 126
+        fi
+
+        env_file_mode="$(stat -c '%a' "$env_file")"
+        if (( (8#$env_file_mode & 0022) != 0 )); then
+          echo "korri-game-stream: session env file must not be group/world writable" >&2
+          exit 126
+        fi
+
         set -a
-        . ${lib.escapeShellArg cfg.sessionEnvFile}
+        . "$env_file"
         set +a
+        export PATH=${lib.escapeShellArg (lib.makeBinPath cfg.path)}:$PATH
       fi
     ''}
 
@@ -55,7 +77,6 @@ let
     mkdir -p -m 700 "$runtime_dir"
     chmod 700 "$runtime_dir"
 
-    export PATH=${lib.escapeShellArg (lib.makeBinPath cfg.path)}:$PATH
     export KORRI_GAME_STREAM_INTENT_PATH=${intentPathExpression}
     export KORRI_GAME_STREAM_INTENT_MAX_AGE_MS=${toString (cfg.intentMaxAgeSeconds * 1000)}
     export KORRI_GAME_STREAM_USE_GAMESCOPE=${if cfg.gamescope.enable then "1" else "0"}
@@ -91,10 +112,12 @@ in
       example = "%h/.config/korri/game-stream.env";
       description = ''
         Optional trusted runtime environment file sourced before launching the
-        runner as the non-root Sunshine/session user. Use this to provide fresh
-        Sway/Wayland session values such as WAYLAND_DISPLAY, XDG_RUNTIME_DIR,
-        and SWAYSOCK without baking volatile socket paths into the NixOS
-        configuration.
+        runner as the non-root Sunshine/session user. The wrapper rejects
+        symlinks, non-regular files, files not owned by root or the runner user,
+        and files writable by group/other before sourcing. Use this to provide
+        fresh Sway/Wayland session values such as WAYLAND_DISPLAY,
+        XDG_RUNTIME_DIR, and SWAYSOCK without baking volatile socket paths into
+        the NixOS configuration.
       '';
     };
 
@@ -116,7 +139,9 @@ in
         When null, the wrapper uses $KORRI_GAME_STREAM_RUNTIME_DIR/next-launch.json,
         or $XDG_RUNTIME_DIR/korri-game-stream/next-launch.json. Enqueue a launch
         with `korri-game-stream-enqueue -- /absolute/command args...` while setting
-        KORRI_GAME_STREAM_INTENT_PATH to the same path when needed.
+        KORRI_GAME_STREAM_INTENT_PATH to the same path when needed. Launch intent
+        commands must be absolute executable paths; PATH is for wrapper tooling,
+        not game command resolution.
       '';
     };
 
@@ -165,8 +190,10 @@ in
           Sunshine launches only this stable foreground runner; the actual process
           comes from the trusted pending launch intent consumed at session start.
           This module does not add a Korri TCP listener or arbitrary remote command
-          endpoint. Restrict Sunshine exposure to trusted networks or VPN. Disable
-          this when the host wants to wire Sunshine applications itself.
+          endpoint. Restrict Sunshine exposure to Sunshine-paired clients on
+          trusted networks or VPN; public/untrusted Sunshine exposure is not
+          supported for arbitrary launch intents. Disable this when the host wants
+          to wire Sunshine applications itself.
         '';
       };
 

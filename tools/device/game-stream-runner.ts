@@ -186,6 +186,19 @@ export function createGameStreamRunner(
     return { status: "failed", stage, exitCode, message: reason }
   }
 
+  function resetForNoPendingLaunchIntent(): GameStreamRunResult {
+    // A missing one-shot intent is not a new runner observation: return a
+    // failure to Sunshine/Moonlight, but do not write status over the last
+    // useful session result. Reset in-memory state so this runner can retry.
+    state = initialGameStreamState
+    return {
+      status: "failed",
+      stage: "preflight",
+      exitCode: 125,
+      message: "no pending launch intent",
+    }
+  }
+
   return {
     status: () => state,
     stop,
@@ -199,8 +212,6 @@ export function createGameStreamRunner(
       if (!options.allowRoot && processInfo.uid === 0) {
         return fail("preflight", "refusing to run game stream as root", 126)
       }
-
-      await writeStatus()
 
       const preflight = preflightSessionEnvironment({
         env: processEnv,
@@ -254,7 +265,7 @@ export function createGameStreamRunner(
           return await fail("preflight", errorMessage(error), 126)
         }
         if (!launchClaim) {
-          return await fail("preflight", "no pending launch intent", 125)
+          return resetForNoPendingLaunchIntent()
         }
         if (stopRequested) {
           await requeueLaunchClaim(launchClaim, "startup cancellation")
@@ -353,6 +364,8 @@ export function createGameStreamRunner(
             )
             await waitForStopRequest()
           }
+        } else if (shouldDelayIntentCompletion) {
+          await completeLaunchClaim(launchClaim)
         }
         state = completeGameStreamExit(state, exitCode)
         await writeStatus()
