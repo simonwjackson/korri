@@ -1,5 +1,9 @@
 import type { LaunchSpec } from "@shared/library/launcher"
-import type { SwayCommandRunner, SwayNode, SwayWindowSelector } from "./sessiond-sway"
+import type {
+  SwayCommandRunner,
+  SwayNode,
+  SwayWindowSelector,
+} from "./sessiond-sway"
 
 export interface GamescopeOptions {
   readonly enabled: boolean
@@ -30,7 +34,8 @@ export interface WaitForStreamSurfaceOptions {
   readonly now?: () => number
 }
 
-export interface RepairStreamSurfaceOptions extends WaitForStreamSurfaceOptions {}
+export interface RepairStreamSurfaceOptions
+  extends WaitForStreamSurfaceOptions {}
 
 const DEFAULT_GAMESCOPE_COMMAND = "gamescope"
 const DEFAULT_SURFACE_TIMEOUT_MS = 5_000
@@ -50,7 +55,14 @@ export function composeGamescopeLaunchSpec(
 
   return {
     command: options.command ?? DEFAULT_GAMESCOPE_COMMAND,
-    args: ["-f", "-b", ...(options.args ?? []), "--", game.command, ...game.args],
+    args: [
+      "-f",
+      "-b",
+      ...(options.args ?? []),
+      "--",
+      game.command,
+      ...game.args,
+    ],
     env: game.env,
     cwd: game.cwd,
   }
@@ -82,7 +94,8 @@ export function buildStreamSurfaceRepairCommands(
 ): readonly string[] {
   const commands: string[] = []
   if (!surface.focused) commands.push(`[con_id=${surface.id}] focus`)
-  if (!surface.fullscreen) commands.push(`[con_id=${surface.id}] fullscreen enable`)
+  if (!surface.fullscreen)
+    commands.push(`[con_id=${surface.id}] fullscreen enable`)
   commands.push(`[con_id=${surface.id}] border none`)
   return commands
 }

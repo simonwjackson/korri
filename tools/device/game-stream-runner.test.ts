@@ -1,14 +1,14 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises"
-import { join } from "node:path"
-import { tmpdir } from "node:os"
 import { describe, expect, it } from "bun:test"
+import { mkdtemp, readFile, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import type { LaunchSpec } from "@shared/library/launcher"
 import {
   createFileGameStreamRunLock,
   createGameStreamRunner,
-  validateSteamFreeCommand,
   type ManagedChild,
   type ManagedChildSpawner,
+  validateSteamFreeCommand,
 } from "./game-stream-runner"
 
 const game: LaunchSpec = {
@@ -170,7 +170,10 @@ describe("game stream runner", () => {
 
     expect(result).toMatchObject({ status: "failed", stage: "fullscreen" })
     expect(controlled.terminations).toEqual(["SIGTERM"])
-    expect(runner.status()).toMatchObject({ mode: "failed", failureStage: "fullscreen" })
+    expect(runner.status()).toMatchObject({
+      mode: "failed",
+      failureStage: "fullscreen",
+    })
   })
 
   it("uses Gamescope around the configured command when enabled", async () => {
@@ -186,7 +189,10 @@ describe("game stream runner", () => {
         pid: 10,
         isProcessAlive: pid => pid === 10,
       }),
-      gamescope: { enabled: true, command: "/nix/store/gamescope/bin/gamescope" },
+      gamescope: {
+        enabled: true,
+        command: "/nix/store/gamescope/bin/gamescope",
+      },
     })
 
     const run = runner.run()
@@ -221,10 +227,16 @@ describe("game stream runner", () => {
   it("rejects Steam commands and fullscreen UI flags", () => {
     expect(
       validateSteamFreeCommand({ command: "/usr/bin/steam", args: [] }),
-    ).toEqual({ ok: false, reason: "Steam command is out of scope: /usr/bin/steam" })
+    ).toEqual({
+      ok: false,
+      reason: "Steam command is out of scope: /usr/bin/steam",
+    })
     expect(
       validateSteamFreeCommand({ command: "/bin/game", args: ["-gamepadui"] }),
-    ).toEqual({ ok: false, reason: "Steam fullscreen UI is out of scope: -gamepadui" })
+    ).toEqual({
+      ok: false,
+      reason: "Steam fullscreen UI is out of scope: -gamepadui",
+    })
     expect(validateSteamFreeCommand(game)).toEqual({ ok: true })
   })
 })

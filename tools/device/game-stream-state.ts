@@ -26,7 +26,9 @@ export type GameStreamFailureStage =
 export const initialGameStreamState: GameStreamState = { mode: "idle" }
 
 export function canStartGameStream(state: GameStreamState): boolean {
-  return state.mode === "idle" || state.mode === "exited" || state.mode === "failed"
+  return (
+    state.mode === "idle" || state.mode === "exited" || state.mode === "failed"
+  )
 }
 
 export function beginGameStreamStart(
@@ -56,7 +58,9 @@ export function markGameStreamFullscreenRepaired(
   return { ...state, fullscreenRepaired: true }
 }
 
-export function beginGameStreamStopping(state: GameStreamState): GameStreamState {
+export function beginGameStreamStopping(
+  state: GameStreamState,
+): GameStreamState {
   if (state.mode !== "running" && state.mode !== "starting") return state
   return { ...state, mode: "stopping" }
 }

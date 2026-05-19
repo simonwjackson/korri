@@ -48,7 +48,14 @@ describe("gamescope launch composition", () => {
       }),
     ).toEqual({
       command: "/nix/store/gamescope/bin/gamescope",
-      args: ["-f", "-b", "--", "/nix/store/demo/bin/neverball", "--level", "one"],
+      args: [
+        "-f",
+        "-b",
+        "--",
+        "/nix/store/demo/bin/neverball",
+        "--level",
+        "one",
+      ],
       env: { DEMO: "1" },
       cwd: "/tmp",
     })

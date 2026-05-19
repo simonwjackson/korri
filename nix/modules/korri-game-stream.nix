@@ -14,7 +14,12 @@ let
   defaultPackage =
     packagesForSystem.korri-game-stream-runner
       or (throw "Korri game stream runner package is not available for system `${system}`. Set services.korri.gameStream.package explicitly.");
-  inherit (lib) mkIf mkOption types optionalString;
+  inherit (lib)
+    mkIf
+    mkOption
+    types
+    optionalString
+    ;
 
   runnerCommand = pkgs.writeShellScript "korri-game-stream-sunshine-app" ''
     set -eu
@@ -155,7 +160,9 @@ in
     environment.systemPackages = [
       cfg.package
       cfg.game.package
-    ] ++ cfg.path ++ lib.optionals cfg.gamescope.enable [ cfg.gamescope.package ];
+    ]
+    ++ cfg.path
+    ++ lib.optionals cfg.gamescope.enable [ cfg.gamescope.package ];
 
     services.sunshine.applications = mkIf cfg.sunshine.enableApp {
       apps = [

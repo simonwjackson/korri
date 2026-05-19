@@ -208,33 +208,35 @@
           default = korriDesktop;
         };
 
-        apps = pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-          korri-inputd = {
-            type = "app";
-            program = "${korriInputd}/bin/korri-inputd";
+        apps =
+          pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+            korri-inputd = {
+              type = "app";
+              program = "${korriInputd}/bin/korri-inputd";
+            };
+            korri-game-stream-runner = {
+              type = "app";
+              program = "${korriGameStreamRunner}/bin/korri-game-stream-runner";
+            };
+          }
+          // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
+            default = {
+              type = "app";
+              program = "${korriDesktop}/bin/korri-desktop";
+            };
+            korri-desktop = {
+              type = "app";
+              program = "${korriDesktop}/bin/korri-desktop";
+            };
+            korri-desktop-device = {
+              type = "app";
+              program = "${korriDesktopDevice}/bin/korri-desktop-device";
+            };
+            korri-desktop-odin = {
+              type = "app";
+              program = "${korriDesktopDevice}/bin/korri-desktop-odin";
+            };
           };
-          korri-game-stream-runner = {
-            type = "app";
-            program = "${korriGameStreamRunner}/bin/korri-game-stream-runner";
-          };
-        } // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
-          default = {
-            type = "app";
-            program = "${korriDesktop}/bin/korri-desktop";
-          };
-          korri-desktop = {
-            type = "app";
-            program = "${korriDesktop}/bin/korri-desktop";
-          };
-          korri-desktop-device = {
-            type = "app";
-            program = "${korriDesktopDevice}/bin/korri-desktop-device";
-          };
-          korri-desktop-odin = {
-            type = "app";
-            program = "${korriDesktopDevice}/bin/korri-desktop-odin";
-          };
-        };
 
         devShells.ci = pkgs.mkShell {
           buildInputs = commonPackages;

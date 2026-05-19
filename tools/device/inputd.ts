@@ -123,7 +123,9 @@ export async function startKorriInputd(
   const openEventSource = options.openEventSource ?? openRealEventSource
   const nowMs = options.nowMs ?? Date.now
   const hostname =
-    options.hostname ?? process.env.KORRI_INPUT_BRIDGE_HOSTNAME ?? DEFAULT_HOSTNAME
+    options.hostname ??
+    process.env.KORRI_INPUT_BRIDGE_HOSTNAME ??
+    DEFAULT_HOSTNAME
   const actionDispatcher =
     options.actionDispatcher ?? createInputdActionDispatcher({ logger })
   const eventNodeExists =

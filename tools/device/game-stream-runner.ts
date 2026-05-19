@@ -5,20 +5,20 @@ import { logger as defaultLogger } from "@shared/logger"
 import {
   composeGamescopeLaunchSpec,
   DEFAULT_GAMESCOPE_SELECTOR,
-  repairStreamSurface,
   type GamescopeOptions,
   type RepairStreamSurfaceOptions,
+  repairStreamSurface,
 } from "./game-stream-fullscreen"
 import {
   beginGameStreamStart,
   beginGameStreamStopping,
   completeGameStreamExit,
   failGameStream,
+  type GameStreamFailureStage,
+  type GameStreamState,
   initialGameStreamState,
   markGameStreamFullscreenRepaired,
   markGameStreamRunning,
-  type GameStreamFailureStage,
-  type GameStreamState,
 } from "./game-stream-state"
 
 export type GameStreamRunResult =
@@ -196,23 +196,28 @@ export function createGameStreamRunner(
   }
 }
 
-export function createBunManagedChildSpawner(options: {
-  readonly setsidCommand?: string
-  readonly env?: NodeJS.ProcessEnv
-} = {}): ManagedChildSpawner {
+export function createBunManagedChildSpawner(
+  options: {
+    readonly setsidCommand?: string
+    readonly env?: NodeJS.ProcessEnv
+  } = {},
+): ManagedChildSpawner {
   const setsidCommand = options.setsidCommand ?? "setsid"
   return {
     async spawn(spec) {
       const env = spec.env
         ? { ...(options.env ?? process.env), ...spec.env }
         : { ...(options.env ?? process.env) }
-      const proc = Bun.spawn([setsidCommand, "--", spec.command, ...spec.args], {
-        cwd: spec.cwd,
-        env: env as Record<string, string>,
-        stdin: "ignore",
-        stdout: "inherit",
-        stderr: "inherit",
-      })
+      const proc = Bun.spawn(
+        [setsidCommand, "--", spec.command, ...spec.args],
+        {
+          cwd: spec.cwd,
+          env: env as Record<string, string>,
+          stdin: "ignore",
+          stdout: "inherit",
+          stderr: "inherit",
+        },
+      )
 
       return {
         pid: proc.pid,
@@ -240,7 +245,8 @@ export function createSwayCommandRunner(command = "swaymsg") {
       const stdout = await new Response(proc.stdout).text()
       const stderr = await new Response(proc.stderr).text()
       const exitCode = await proc.exited
-      if (exitCode !== 0) throw new Error(stderr || `swaymsg exited ${exitCode}`)
+      if (exitCode !== 0)
+        throw new Error(stderr || `swaymsg exited ${exitCode}`)
       return stdout
     },
   }
@@ -294,7 +300,10 @@ export function validateSteamFreeCommand(
   }
   const gamepadUi = values.find(value => /gamepadui|bigpicture/i.test(value))
   if (gamepadUi) {
-    return { ok: false, reason: `Steam fullscreen UI is out of scope: ${gamepadUi}` }
+    return {
+      ok: false,
+      reason: `Steam fullscreen UI is out of scope: ${gamepadUi}`,
+    }
   }
   return { ok: true }
 }
@@ -308,7 +317,9 @@ function defaultIsProcessAlive(pid: number): boolean {
   }
 }
 
-async function readExistingLockPid(lockPath: string): Promise<number | undefined> {
+async function readExistingLockPid(
+  lockPath: string,
+): Promise<number | undefined> {
   const raw = await readFile(lockPath, "utf8").catch(() => undefined)
   if (!raw) return undefined
   const parsed = Number.parseInt(raw.trim(), 10)
@@ -316,7 +327,9 @@ async function readExistingLockPid(lockPath: string): Promise<number | undefined
 }
 
 function isFileExistsError(error: unknown): boolean {
-  return error instanceof Error && (error as NodeJS.ErrnoException).code === "EEXIST"
+  return (
+    error instanceof Error && (error as NodeJS.ErrnoException).code === "EEXIST"
+  )
 }
 
 function errorMessage(error: unknown): string {
@@ -352,7 +365,9 @@ if (import.meta.main) {
     },
     fullscreen: repairSway
       ? {
-          runner: createSwayCommandRunner(process.env.KORRI_GAME_STREAM_SWAYMSG),
+          runner: createSwayCommandRunner(
+            process.env.KORRI_GAME_STREAM_SWAYMSG,
+          ),
           selector: DEFAULT_GAMESCOPE_SELECTOR,
         }
       : undefined,

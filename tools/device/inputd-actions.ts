@@ -218,9 +218,11 @@ function defaultCommands(): InputdActionCommands {
       "exec",
       "korri-desktop-odin",
     ]),
-    killCurrentGame: commandFromEnv("KORRI_INPUTD_KILL_CURRENT_GAME", "swaymsg", [
-      "kill",
-    ]),
+    killCurrentGame: commandFromEnv(
+      "KORRI_INPUTD_KILL_CURRENT_GAME",
+      "swaymsg",
+      ["kill"],
+    ),
     volumeUp: commandFromEnv("KORRI_INPUTD_VOLUME_UP", "pactl", [
       "set-sink-volume",
       "@DEFAULT_SINK@",
@@ -231,14 +233,16 @@ function defaultCommands(): InputdActionCommands {
       "@DEFAULT_SINK@",
       "-5%",
     ]),
-    brightnessUp: commandFromEnv("KORRI_INPUTD_BRIGHTNESS_UP", "brightnessctl", [
-      "set",
-      "+5%",
-    ]),
-    brightnessDown: commandFromEnv("KORRI_INPUTD_BRIGHTNESS_DOWN", "brightnessctl", [
-      "set",
-      "5%-",
-    ]),
+    brightnessUp: commandFromEnv(
+      "KORRI_INPUTD_BRIGHTNESS_UP",
+      "brightnessctl",
+      ["set", "+5%"],
+    ),
+    brightnessDown: commandFromEnv(
+      "KORRI_INPUTD_BRIGHTNESS_DOWN",
+      "brightnessctl",
+      ["set", "5%-"],
+    ),
     powerSuspend: commandFromEnv("KORRI_INPUTD_POWER_SUSPEND", "systemctl", [
       "suspend",
     ]),
