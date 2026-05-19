@@ -1,21 +1,21 @@
+import { describe, expect, it } from "bun:test"
 import { chmod, mkdtemp, readFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { describe, expect, it } from "bun:test"
 import type { GameRecord } from "@shared/fixtures/games/game"
-import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
+import type { LaunchSpec } from "@shared/library/launcher"
 import {
   LibraryError,
   LibrarySource,
   type LibrarySourceService,
 } from "@shared/library/library-services"
-import type { LaunchSpec } from "@shared/library/launcher"
+import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
 import { Effect } from "effect"
-import { withTempProseqlLibrary } from "../testing/library/with-temp-proseql-library"
 import {
   createFileGameStreamLaunchIntentStore,
   decodeLaunchIntent,
 } from "../device/game-stream-launch-intent"
+import { withTempProseqlLibrary } from "../testing/library/with-temp-proseql-library"
 import { createStaticGamePicker } from "./game-picker"
 import {
   prepareStreamLaunch,
