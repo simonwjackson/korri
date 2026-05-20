@@ -1,5 +1,6 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun"
-import { LibrarySource } from "@shared/library/library-services"
+import { LauncherLayerLive } from "@shared/library/launcher-layer-live"
+import { Launcher, LibrarySource } from "@shared/library/library-services"
 import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
 import { Effect, Layer, Option } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
@@ -9,6 +10,7 @@ import {
 } from "../device/game-stream-launch-intent"
 import { createEffectGamePicker } from "./game-picker"
 import { runRemoteStreamLaunchCommand } from "./remote-stream-launch"
+import { runSourceAwarePlayCommand } from "./source-aware-play"
 import { runStreamLaunchCommand } from "./stream-launch"
 
 const VERSION = "1.0.0"
@@ -71,12 +73,42 @@ const streamCommand = Command.make("stream").pipe(
   Command.withSubcommands([streamLaunchCommand, streamRemoteLaunchCommand]),
 )
 
-export const korriCommand = Command.make("korri").pipe(
-  Command.withDescription("Korri command line interface."),
-  Command.withSubcommands([streamCommand]),
+const playCommand = Command.make(
+  "play",
+  {
+    host: Flag.string("host").pipe(Flag.optional),
+  },
+  ({ host }) =>
+    Effect.gen(function* () {
+      const librarySource = yield* LibrarySource
+      const launcher = yield* Launcher
+      const exitCode = yield* Effect.promise(() =>
+        runSourceAwarePlayCommand({
+          host: Option.getOrUndefined(host),
+          librarySource,
+          launcher,
+          gamePicker: createEffectGamePicker(),
+          stdinIsTty: process.stdin.isTTY === true,
+        }),
+      )
+      process.exitCode = exitCode
+    }),
+).pipe(
+  Command.withDescription(
+    "Choose a local or remote Korri game, then launch locally or stream remotely.",
+  ),
 )
 
-const runtimeLayer = Layer.mergeAll(BunServices.layer, LibrarySourceLayerLive)
+export const korriCommand = Command.make("korri").pipe(
+  Command.withDescription("Korri command line interface."),
+  Command.withSubcommands([playCommand, streamCommand]),
+)
+
+const runtimeLayer = Layer.mergeAll(
+  BunServices.layer,
+  LibrarySourceLayerLive,
+  LauncherLayerLive,
+)
 
 export function runKorriCli(argv: readonly string[]) {
   return Command.runWith(korriCommand, { version: VERSION })(argv).pipe(

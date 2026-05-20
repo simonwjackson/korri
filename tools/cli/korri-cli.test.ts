@@ -9,6 +9,12 @@ describe("korri CLI", () => {
     expect(Exit.isSuccess(exit)).toBe(true)
   })
 
+  it("renders help for the play command", async () => {
+    const exit = await Effect.runPromiseExit(runKorriCli(["play", "--help"]))
+
+    expect(Exit.isSuccess(exit)).toBe(true)
+  })
+
   it("renders help for the stream launch command", async () => {
     const exit = await Effect.runPromiseExit(
       runKorriCli(["stream", "launch", "--help"]),

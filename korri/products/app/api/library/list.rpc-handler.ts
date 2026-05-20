@@ -1,4 +1,4 @@
-import { DataError } from "@shared/api/rpc/errors"
+import { DataError, ValidationError } from "@shared/api/rpc/errors"
 import {
   type LibraryError,
   LibrarySource,
@@ -6,10 +6,20 @@ import {
 import { logger } from "@shared/logger/logger"
 import { Effect } from "effect"
 
+import { isHeadlessSourceOnlyEnabled } from "../stream/control-mode"
 import { type ListLibraryPayload, ListLibraryResponse } from "./list.rpc"
 
 export const handleListLibrary = (_payload: typeof ListLibraryPayload.Type) =>
   Effect.gen(function* () {
+    if (isHeadlessSourceOnlyEnabled(process.env)) {
+      return yield* Effect.fail(
+        new ValidationError({
+          message:
+            "Full library listing is unavailable in headless source mode",
+        }),
+      )
+    }
+
     const source = yield* LibrarySource
     const games = yield* source.list().pipe(Effect.mapError(toDataError))
     return new ListLibraryResponse({ games })

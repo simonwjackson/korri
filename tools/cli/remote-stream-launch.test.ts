@@ -132,6 +132,17 @@ function client(options: {
 }): RemoteStreamControlClient {
   return {
     listGames: async () => options.games,
+    listSourceGames: async () =>
+      options.games.map(game => ({
+        id: game.id,
+        displayName: game.metadata?.name ?? game.id,
+        streamable: true,
+      })),
+    sourceStatus: async () => ({
+      status: "available",
+      streamControl: "enabled",
+      catalog: "available",
+    }),
     prepareGame: async gameId => {
       options.prepared?.push(gameId)
       return (

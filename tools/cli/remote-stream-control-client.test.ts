@@ -18,6 +18,7 @@ const originalEnv = {
   intentPath: process.env.KORRI_GAME_STREAM_INTENT_PATH,
   streamControl: process.env.KORRI_STREAM_CONTROL_ENABLED,
   runtimeDir: process.env.XDG_RUNTIME_DIR,
+  headlessSourceOnly: process.env.KORRI_HEADLESS_SOURCE_ONLY,
 }
 const cleanups: Array<() => Promise<void>> = []
 
@@ -27,6 +28,7 @@ afterEach(async () => {
   setOptionalEnv("KORRI_GAME_STREAM_INTENT_PATH", originalEnv.intentPath)
   setOptionalEnv("KORRI_STREAM_CONTROL_ENABLED", originalEnv.streamControl)
   setOptionalEnv("XDG_RUNTIME_DIR", originalEnv.runtimeDir)
+  setOptionalEnv("KORRI_HEADLESS_SOURCE_ONLY", originalEnv.headlessSourceOnly)
   while (cleanups.length > 0) {
     const cleanup = cleanups.pop()
     if (cleanup) await cleanup()
@@ -40,8 +42,17 @@ describe("remote stream control client", () => {
     pointWindowAt(server.url)
     const client = createRemoteStreamControlClient(server.url)
 
-    const games = await client.listGames()
-    expect(games.map(game => game.id)).toEqual(["gba/wario-land-4"])
+    const status = await client.sourceStatus()
+    expect(status).toMatchObject({
+      status: "available",
+      streamControl: "enabled",
+      catalog: "available",
+    })
+
+    const games = await client.listSourceGames()
+    expect(games).toEqual([
+      { id: "gba/wario-land-4", displayName: "Wario Land 4", streamable: true },
+    ])
 
     const prepared = await client.prepareGame("gba/wario-land-4")
     expect(prepared).toMatchObject({
@@ -55,6 +66,11 @@ describe("remote stream control client", () => {
     expect(intent.launch.args).toContain("/srv/games/wl4.gba")
 
     process.env.KORRI_STREAM_CONTROL_ENABLED = "0"
+    const disabledStatus = await client.sourceStatus()
+    expect(disabledStatus).toMatchObject({
+      status: "stream-unavailable",
+      streamControl: "disabled",
+    })
     const disabled = await client.prepareGame("gba/wario-land-4")
     expect(disabled).toMatchObject({
       status: "failed",
@@ -94,6 +110,7 @@ async function setupRemoteLibrary(options: { readonly enabled: boolean }) {
   )
   process.env.KORRI_STREAM_CONTROL_ENABLED = options.enabled ? "1" : "0"
   delete process.env.XDG_RUNTIME_DIR
+  delete process.env.KORRI_HEADLESS_SOURCE_ONLY
 
   return { intentPath: process.env.KORRI_GAME_STREAM_INTENT_PATH }
 }
