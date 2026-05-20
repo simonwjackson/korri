@@ -1,4 +1,4 @@
-import { stat, readFile } from "node:fs/promises"
+import { readFile, stat } from "node:fs/promises"
 import { hostname } from "node:os"
 import { join } from "node:path"
 import { DataError } from "@shared/api/rpc/errors"

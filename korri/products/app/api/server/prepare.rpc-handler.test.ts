@@ -2,11 +2,11 @@ import { afterEach, describe, expect, it } from "bun:test"
 import { chmod, mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
+import { Effect } from "effect"
 import { decodeLaunchIntent } from "../../../../../tools/device/game-stream-launch-intent"
 import { withTempProseqlLibrary } from "../../../../../tools/testing/library/with-temp-proseql-library"
 import { handleServerPrepareStream } from "./prepare.rpc-handler"
-import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
-import { Effect } from "effect"
 
 const originalEnv = {
   libraryRoot: process.env.KORRI_LIBRARY_ROOT,
