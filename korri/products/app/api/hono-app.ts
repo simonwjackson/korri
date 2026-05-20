@@ -5,12 +5,20 @@ import { bodyLimit } from "hono/body-limit"
 import { compress } from "hono/compress"
 import { cors } from "hono/cors"
 import { rpcHandler } from "./rpc-server"
+import { serverRpcHandler } from "./server/rpc-server"
 
 const MAX_BODY_SIZE = 10 * 1024 * 1024
 const isDev = process.env.NODE_ENV === "development"
 
-export function createHonoApp() {
+export interface CreateHonoAppOptions {
+  readonly rpcHandler?: (request: Request) => Promise<Response>
+}
+
+export function createHonoApp(options: CreateHonoAppOptions = {}) {
   const app = new Hono()
+  const selectedRpcHandler =
+    options.rpcHandler ??
+    (process.env.KORRI_RPC_SURFACE === "server" ? serverRpcHandler : rpcHandler)
 
   app.get("/api", c =>
     c.json({
@@ -56,8 +64,8 @@ export function createHonoApp() {
 
   app.use("/api/*", compress({ threshold: 1024 }))
   app.options("/api/*", c => c.body(null, 204))
-  app.post("/api/rpc", async c => rpcHandler(c.req.raw))
-  app.post("/api/rpc/", async c => rpcHandler(c.req.raw))
+  app.post("/api/rpc", async c => selectedRpcHandler(c.req.raw))
+  app.post("/api/rpc/", async c => selectedRpcHandler(c.req.raw))
 
   return app
 }

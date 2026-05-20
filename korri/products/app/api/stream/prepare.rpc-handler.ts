@@ -12,14 +12,37 @@ import {
   createLaunchIntent,
   defaultGameStreamIntentPath,
 } from "../../../../../tools/device/game-stream-launch-intent"
+import { isStreamControlEnabled } from "./control-mode"
 import { type PrepareStreamPayload, PrepareStreamResponse } from "./prepare.rpc"
 
-const ENABLED_VALUES = new Set(["1", "true", "yes"])
+export interface PreparedStreamLaunch {
+  readonly gameId: string
+  readonly sessionId: string
+  readonly intentPath: string
+}
 
 export const handlePrepareStream = (
   payload: typeof PrepareStreamPayload.Type,
 ) =>
-  Effect.gen(function* () {
+  prepareStreamLaunch(payload.id).pipe(
+    Effect.map(
+      prepared =>
+        new PrepareStreamResponse({
+          status: "prepared",
+          gameId: prepared.gameId,
+          intentPath: prepared.intentPath,
+        }),
+    ),
+  )
+
+export function prepareStreamLaunch(
+  gameId: string,
+): Effect.Effect<
+  PreparedStreamLaunch,
+  DataError | NotFoundError | ValidationError,
+  LibrarySource
+> {
+  return Effect.gen(function* () {
     if (!isStreamControlEnabled(process.env)) {
       return yield* Effect.fail(
         new ValidationError({ message: "Korri stream control is not enabled" }),
@@ -28,15 +51,15 @@ export const handlePrepareStream = (
 
     const source = yield* LibrarySource
     const spec = yield* source
-      .launchSpecFor(payload.id)
+      .launchSpecFor(gameId)
       .pipe(
         Effect.mapError(error => toDataError(error, "library prepare failed")),
       )
 
     if (!spec) {
-      logger.warn({ id: payload.id }, "app.stream.prepare: unknown id")
+      logger.warn({ id: gameId }, "app.stream.prepare: unknown id")
       return yield* Effect.fail(
-        new NotFoundError({ message: `Unknown game id: ${payload.id}` }),
+        new NotFoundError({ message: `Unknown game id: ${gameId}` }),
       )
     }
 
@@ -56,20 +79,15 @@ export const handlePrepareStream = (
     })
 
     logger.info(
-      { id: payload.id, intentPath },
+      { id: gameId, intentPath, sessionId: intent.id },
       "app.stream.prepare: prepared stream launch",
     )
-    return new PrepareStreamResponse({
-      status: "prepared",
-      gameId: payload.id,
+    return {
+      gameId,
+      sessionId: intent.id,
       intentPath,
-    })
+    }
   })
-
-function isStreamControlEnabled(env: NodeJS.ProcessEnv): boolean {
-  return ENABLED_VALUES.has(
-    (env.KORRI_STREAM_CONTROL_ENABLED ?? "").trim().toLowerCase(),
-  )
 }
 
 function toDataError(error: unknown, fallback: string): DataError {
