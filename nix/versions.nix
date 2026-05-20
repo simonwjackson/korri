@@ -14,7 +14,7 @@
   };
 
   bunDepsHash = {
-    x86_64-linux = "sha256-Xzdq+HTNja/ieBq3fWXPw0GziGLjilLrGGpmfW6zI/E=";
+    x86_64-linux = "sha256-TDvNOGhftTOPgmMXffn8YM66drZ01/F0CItqaqAWUtQ=";
     aarch64-linux = "sha256-Y5e3MOp/FYacoWLsoO04a8DdvJHgEqSwSNNYi3CFxCA=";
   };
 }

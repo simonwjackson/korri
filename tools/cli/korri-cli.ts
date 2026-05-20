@@ -2,12 +2,13 @@ import { BunRuntime, BunServices } from "@effect/platform-bun"
 import { LibrarySource } from "@shared/library/library-services"
 import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
 import { Effect, Layer, Option } from "effect"
-import { Argument, Command } from "effect/unstable/cli"
+import { Argument, Command, Flag } from "effect/unstable/cli"
 import {
   createFileGameStreamLaunchIntentStore,
   defaultGameStreamIntentPath,
 } from "../device/game-stream-launch-intent"
 import { createEffectGamePicker } from "./game-picker"
+import { runRemoteStreamLaunchCommand } from "./remote-stream-launch"
 import { runStreamLaunchCommand } from "./stream-launch"
 
 const VERSION = "1.0.0"
@@ -43,9 +44,31 @@ const streamLaunchCommand = Command.make(
     }),
 ).pipe(Command.withDescription("Prepare a Korri library game for streaming."))
 
+const streamRemoteLaunchCommand = Command.make(
+  "remote-launch",
+  {
+    host: Flag.string("host").pipe(Flag.optional),
+  },
+  ({ host }) =>
+    Effect.gen(function* () {
+      const exitCode = yield* Effect.promise(() =>
+        runRemoteStreamLaunchCommand({
+          host: Option.getOrUndefined(host),
+          gamePicker: createEffectGamePicker(),
+          stdinIsTty: process.stdin.isTTY === true,
+        }),
+      )
+      process.exitCode = exitCode
+    }),
+).pipe(
+  Command.withDescription(
+    "Discover a remote Korri stream host, prepare a game, and open Moonlight.",
+  ),
+)
+
 const streamCommand = Command.make("stream").pipe(
   Command.withDescription("Manage Korri game streaming."),
-  Command.withSubcommands([streamLaunchCommand]),
+  Command.withSubcommands([streamLaunchCommand, streamRemoteLaunchCommand]),
 )
 
 export const korriCommand = Command.make("korri").pipe(

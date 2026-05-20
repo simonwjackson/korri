@@ -17,6 +17,14 @@ describe("korri CLI", () => {
     expect(Exit.isSuccess(exit)).toBe(true)
   })
 
+  it("renders help for the stream remote-launch command", async () => {
+    const exit = await Effect.runPromiseExit(
+      runKorriCli(["stream", "remote-launch", "--help"]),
+    )
+
+    expect(Exit.isSuccess(exit)).toBe(true)
+  })
+
   it("fails through the CLI framework for an unknown subcommand", async () => {
     const exit = await Effect.runPromiseExit(runKorriCli(["does-not-exist"]))
 
