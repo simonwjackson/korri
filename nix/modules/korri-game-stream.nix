@@ -28,6 +28,12 @@ let
     else
       lib.escapeShellArg path;
 
+  runtimeDirExpression =
+    if cfg.runtimeDir != null then
+      shellPathExpression cfg.runtimeDir
+    else
+      null;
+
   intentPathExpression =
     if cfg.intentPath != null then
       shellPathExpression cfg.intentPath
@@ -78,6 +84,11 @@ let
       fi
     ''}
 
+    ${optionalString (runtimeDirExpression != null) ''
+      : "''${KORRI_GAME_STREAM_RUNTIME_DIR:=${runtimeDirExpression}}"
+      export KORRI_GAME_STREAM_RUNTIME_DIR
+    ''}
+
     if [ -n "''${KORRI_GAME_STREAM_RUNTIME_DIR:-}" ]; then
       runtime_dir="$KORRI_GAME_STREAM_RUNTIME_DIR"
     else
@@ -87,7 +98,9 @@ let
       fi
       runtime_dir="$XDG_RUNTIME_DIR/korri-game-stream"
     fi
-    mkdir -p -m 700 "$runtime_dir"
+    if [ ! -d "$runtime_dir" ]; then
+      mkdir -p -m 700 "$runtime_dir"
+    fi
     chmod 700 "$runtime_dir"
 
     export KORRI_GAME_STREAM_INTENT_PATH=${intentPathExpression}
@@ -141,6 +154,19 @@ in
         util-linux
       ];
       description = "Packages added to PATH for the Sunshine app wrapper.";
+    };
+
+    runtimeDir = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "/run/korri-game-stream";
+      description = ''
+        Private runtime directory the Sunshine app wrapper exports as
+        KORRI_GAME_STREAM_RUNTIME_DIR. The runner derives the trusted intent,
+        status, and lock paths from this directory unless intentPath/statusPath
+        are overridden. When null, the wrapper falls back to
+        $XDG_RUNTIME_DIR/korri-game-stream.
+      '';
     };
 
     intentPath = mkOption {
