@@ -27,6 +27,12 @@ let
     else
       ''"$runtime_dir/next-launch.json"'';
 
+  statusPathExpression =
+    if cfg.statusPath != null then
+      lib.escapeShellArg cfg.statusPath
+    else
+      ''"''${KORRI_GAME_STREAM_STATUS_PATH:-$runtime_dir/status.json}"'';
+
   runnerCommand = pkgs.writeShellScript "korri-game-stream-sunshine-app" ''
     set -eu
 
@@ -84,7 +90,7 @@ let
     export KORRI_GAME_STREAM_SWAYMSG=${lib.escapeShellArg "${cfg.sway.package}/bin/swaymsg"}
     export KORRI_GAME_STREAM_SWAY_REPAIR=${if cfg.sway.repair then "1" else "0"}
     export KORRI_GAME_STREAM_LOCK_PATH="''${KORRI_GAME_STREAM_LOCK_PATH:-$runtime_dir/run.lock}"
-    export KORRI_GAME_STREAM_STATUS_PATH="''${KORRI_GAME_STREAM_STATUS_PATH:-$runtime_dir/status.json}"
+    export KORRI_GAME_STREAM_STATUS_PATH=${statusPathExpression}
 
     exec ${cfg.package}/bin/korri-game-stream-runner
   '';
@@ -143,6 +149,13 @@ in
         commands must be absolute executable paths; PATH is for wrapper tooling,
         not game command resolution.
       '';
+    };
+
+    statusPath = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "/run/user/1000/korri-game-stream/status.json";
+      description = "Runner status path written by the generic Sunshine app and read by the Korri server.";
     };
 
     intentMaxAgeSeconds = mkOption {
