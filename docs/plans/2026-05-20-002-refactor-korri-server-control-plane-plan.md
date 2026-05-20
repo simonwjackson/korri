@@ -1,7 +1,7 @@
 ---
 title: Refactor Korri Server Control Plane
 type: refactor
-status: active
+status: completed
 date: 2026-05-20
 origin: docs/brainstorms/2026-05-20-korri-headless-source-aware-server-requirements.md
 verify_command: "just format && just lint && just typecheck && just test-unit && nix build .#korri-server --no-link && nix build .#korri-cli --no-link && nix build .#korri-game-stream-runner --no-link && nix eval .#nixosModules.korri-server >/dev/null"
