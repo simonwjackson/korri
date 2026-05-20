@@ -197,28 +197,28 @@ in
     systemd.user.services.korri-server = {
       description = "Korri headless server control plane";
       wantedBy = [ "default.target" ];
+      environment = {
+        HOST = cfg.host;
+        PORT = toString cfg.port;
+        KORRI_SERVER_ID = serverId;
+        KORRI_SERVER_NAME = advertiseName;
+        KORRI_SERVER_ADVERTISE_ENABLED = if cfg.advertise.enable then "1" else "0";
+        KORRI_STREAM_ADVERTISE_NAME = advertiseName;
+        KORRI_STREAM_ADVERTISE_HOST_ID = serverId;
+        KORRI_STREAM_ADVERTISE_PORT = toString cfg.port;
+        KORRI_STREAM_ADVERTISE_CAPABILITIES = lib.concatStringsSep "," cfg.advertise.capabilities;
+        KORRI_STREAM_CONTROL_ENABLED = if cfg.streamControl.enable then "1" else "0";
+        KORRI_HEADLESS_SOURCE_ONLY = if cfg.sourceOnly then "1" else "0";
+        KORRI_LIBRARY_SOURCE = cfg.library.source;
+        KORRI_LIBRARY_ROOT = cfg.library.root;
+        KORRI_GAME_STREAM_INTENT_PATH = intentPath;
+        KORRI_GAME_STREAM_STATUS_PATH = statusPath;
+      };
       serviceConfig = {
         ExecStartPre = "${pkgs.coreutils}/bin/install -d -m 700 ${runtimeDir}";
         ExecStart = "${cfg.package}/bin/korri-server";
         Restart = "on-failure";
         RestartSec = 2;
-        Environment = [
-          "HOST=${cfg.host}"
-          "PORT=${toString cfg.port}"
-          "KORRI_SERVER_ID=${serverId}"
-          "KORRI_SERVER_NAME=${advertiseName}"
-          "KORRI_SERVER_ADVERTISE_ENABLED=${if cfg.advertise.enable then "1" else "0"}"
-          "KORRI_STREAM_ADVERTISE_NAME=${advertiseName}"
-          "KORRI_STREAM_ADVERTISE_HOST_ID=${serverId}"
-          "KORRI_STREAM_ADVERTISE_PORT=${toString cfg.port}"
-          "KORRI_STREAM_ADVERTISE_CAPABILITIES=${lib.concatStringsSep "," cfg.advertise.capabilities}"
-          "KORRI_STREAM_CONTROL_ENABLED=${if cfg.streamControl.enable then "1" else "0"}"
-          "KORRI_HEADLESS_SOURCE_ONLY=${if cfg.sourceOnly then "1" else "0"}"
-          "KORRI_LIBRARY_SOURCE=${cfg.library.source}"
-          "KORRI_LIBRARY_ROOT=${cfg.library.root}"
-          "KORRI_GAME_STREAM_INTENT_PATH=${intentPath}"
-          "KORRI_GAME_STREAM_STATUS_PATH=${statusPath}"
-        ];
       };
     };
   };

@@ -128,19 +128,19 @@ in
     systemd.user.services.korri-api = {
       description = "Korri headless source RPC API";
       wantedBy = [ "default.target" ];
+      environment = {
+        HOST = cfg.host;
+        PORT = toString cfg.port;
+        KORRI_STREAM_CONTROL_ENABLED = if cfg.streamControl.enable then "1" else "0";
+        KORRI_HEADLESS_SOURCE_ONLY = if cfg.sourceOnly then "1" else "0";
+        KORRI_LIBRARY_SOURCE = cfg.librarySource;
+        KORRI_LIBRARY_ROOT = cfg.libraryRoot;
+      };
       serviceConfig = {
         ExecStartPre = "${pkgs.coreutils}/bin/install -d -m 700 ${cfg.libraryRoot}";
         ExecStart = "${cfg.package}/bin/korri-api";
         Restart = "on-failure";
         RestartSec = 2;
-        Environment = [
-          "HOST=${cfg.host}"
-          "PORT=${toString cfg.port}"
-          "KORRI_STREAM_CONTROL_ENABLED=${if cfg.streamControl.enable then "1" else "0"}"
-          "KORRI_HEADLESS_SOURCE_ONLY=${if cfg.sourceOnly then "1" else "0"}"
-          "KORRI_LIBRARY_SOURCE=${cfg.librarySource}"
-          "KORRI_LIBRARY_ROOT=${cfg.libraryRoot}"
-        ];
       };
     };
 
@@ -149,16 +149,16 @@ in
       after = [ "korri-api.service" ];
       wants = [ "korri-api.service" ];
       wantedBy = [ "default.target" ];
+      environment = {
+        KORRI_STREAM_ADVERTISE_NAME = advertiseName;
+        KORRI_STREAM_ADVERTISE_HOST_ID = advertiseHostId;
+        KORRI_STREAM_ADVERTISE_PORT = toString cfg.port;
+        KORRI_STREAM_ADVERTISE_CAPABILITIES = lib.concatStringsSep "," cfg.advertise.capabilities;
+      };
       serviceConfig = {
         ExecStart = "${cfg.package}/bin/korri-lan-stream-advertise";
         Restart = "on-failure";
         RestartSec = 2;
-        Environment = [
-          "KORRI_STREAM_ADVERTISE_NAME=${advertiseName}"
-          "KORRI_STREAM_ADVERTISE_HOST_ID=${advertiseHostId}"
-          "KORRI_STREAM_ADVERTISE_PORT=${toString cfg.port}"
-          "KORRI_STREAM_ADVERTISE_CAPABILITIES=${lib.concatStringsSep "," cfg.advertise.capabilities}"
-        ];
       };
     };
   };
