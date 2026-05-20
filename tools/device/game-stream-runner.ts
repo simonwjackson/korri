@@ -1,5 +1,6 @@
 import { mkdir, open, readFile, unlink, writeFile } from "node:fs/promises"
-import { dirname } from "node:path"
+import { dirname, join } from "node:path"
+import { xdgRuntimeDir } from "@shared/config/xdg-paths"
 import { decodeLaunchSpec, type LaunchSpec } from "@shared/library/launcher"
 import { logger as defaultLogger } from "@shared/logger"
 import {
@@ -90,7 +91,7 @@ export interface GameStreamRunner {
   status: () => GameStreamState
 }
 
-const DEFAULT_LOCK_PATH = "/tmp/korri-game-stream-runner.lock"
+const FALLBACK_LOCK_PATH = "/tmp/korri-game-stream-runner.lock"
 const DEFAULT_TERMINATE_GRACE_MS = 2_000
 const DEFAULT_SWAY_COMMAND_TIMEOUT_MS = 2_000
 
@@ -103,10 +104,12 @@ export function createGameStreamRunner(
     pid: process.pid,
     uid: typeof process.getuid === "function" ? process.getuid() : undefined,
   }
+  const processEnv = options.processEnv ?? process.env
   const lockManager =
     options.lockManager ??
-    createFileGameStreamRunLock(DEFAULT_LOCK_PATH, { pid: processInfo.pid })
-  const processEnv = options.processEnv ?? process.env
+    createFileGameStreamRunLock(defaultGameStreamLockPath(processEnv), {
+      pid: processInfo.pid,
+    })
   const terminateGraceMs =
     options.terminateGraceMs ?? DEFAULT_TERMINATE_GRACE_MS
   let state: GameStreamState = initialGameStreamState
@@ -650,8 +653,17 @@ function launchSpecFromCli(args: readonly string[]): {
   }
 }
 
+function defaultGameStreamLockPath(env: NodeJS.ProcessEnv): string {
+  const runtimeDir = xdgRuntimeDir(env)
+  return runtimeDir
+    ? join(runtimeDir, "korri-game-stream", "run.lock")
+    : FALLBACK_LOCK_PATH
+}
+
 if (import.meta.main) {
-  const lockPath = process.env.KORRI_GAME_STREAM_LOCK_PATH ?? DEFAULT_LOCK_PATH
+  const lockPath =
+    process.env.KORRI_GAME_STREAM_LOCK_PATH ??
+    defaultGameStreamLockPath(process.env)
   const intentPath = defaultGameStreamIntentPath(process.env)
   const statusPath = process.env.KORRI_GAME_STREAM_STATUS_PATH
   const intentStoreOptions = {

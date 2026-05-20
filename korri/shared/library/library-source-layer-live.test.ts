@@ -13,6 +13,8 @@ const originalEnv = {
   desktopProfile: process.env.KORRI_DESKTOP_PROFILE,
   librarySource: process.env.KORRI_LIBRARY_SOURCE,
   libraryRoot: process.env.KORRI_LIBRARY_ROOT,
+  home: process.env.HOME,
+  xdgDataHome: process.env.XDG_DATA_HOME,
   rocknixGamelistRoots: process.env.KORRI_ROCKNIX_GAMELIST_ROOTS,
   rocknixEsSystemsPath: process.env.KORRI_ROCKNIX_ES_SYSTEMS_PATH,
 }
@@ -73,8 +75,28 @@ describe("LibrarySourceLayerLive", () => {
     expect(games.map(game => game.metadata?.name)).toEqual(["Generic Echo"])
   })
 
-  it("fails clearly when proseql is selected without an explicit library root", async () => {
+  it("defaults ProseQL storage to the XDG data root", async () => {
+    const home = await mkdtemp(join(tmpdir(), "korri-library-source-home-"))
+    cleanups.push(() => rm(home, { recursive: true, force: true }))
     delete process.env.KORRI_LIBRARY_ROOT
+    delete process.env.XDG_DATA_HOME
+    process.env.HOME = home
+    process.env.KORRI_LIBRARY_SOURCE = "proseql"
+
+    await seedProseqlLibraryAt(
+      join(home, ".local", "share", "korri", "library"),
+      "XDG Echo",
+    )
+
+    const games = await listGames()
+
+    expect(games.map(game => game.metadata?.name)).toEqual(["XDG Echo"])
+  })
+
+  it("fails clearly when proseql has no explicit or XDG-derived library root", async () => {
+    delete process.env.KORRI_LIBRARY_ROOT
+    delete process.env.XDG_DATA_HOME
+    delete process.env.HOME
     process.env.KORRI_LIBRARY_SOURCE = "proseql"
 
     const exit = await Effect.runPromiseExit(
@@ -88,7 +110,7 @@ describe("LibrarySourceLayerLive", () => {
     if (Exit.isSuccess(exit)) throw new Error("expected failure")
     expect(Cause.squash(exit.cause)).toMatchObject({
       message:
-        "KORRI_LIBRARY_ROOT is required when KORRI_LIBRARY_SOURCE is proseql",
+        "KORRI_LIBRARY_ROOT, XDG_DATA_HOME, or HOME is required when KORRI_LIBRARY_SOURCE is proseql",
     })
   })
 })
@@ -113,6 +135,11 @@ async function seedRocknixGamelists() {
 async function seedProseqlLibrary(name: string): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "korri-library-source-live-"))
   cleanups.push(() => rm(root, { recursive: true, force: true }))
+  await seedProseqlLibraryAt(root, name)
+  return root
+}
+
+async function seedProseqlLibraryAt(root: string, name: string): Promise<void> {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -123,7 +150,6 @@ async function seedProseqlLibrary(name: string): Promise<string> {
       }),
     ),
   )
-  return root
 }
 
 async function listGames() {
@@ -139,6 +165,8 @@ function restoreEnv(): void {
   setOptionalEnv("KORRI_DESKTOP_PROFILE", originalEnv.desktopProfile)
   setOptionalEnv("KORRI_LIBRARY_SOURCE", originalEnv.librarySource)
   setOptionalEnv("KORRI_LIBRARY_ROOT", originalEnv.libraryRoot)
+  setOptionalEnv("HOME", originalEnv.home)
+  setOptionalEnv("XDG_DATA_HOME", originalEnv.xdgDataHome)
   setOptionalEnv(
     "KORRI_ROCKNIX_GAMELIST_ROOTS",
     originalEnv.rocknixGamelistRoots,

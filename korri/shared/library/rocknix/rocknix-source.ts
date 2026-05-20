@@ -25,6 +25,7 @@
 import { readdir } from "node:fs/promises"
 import { basename, join, parse as parsePath } from "node:path"
 
+import { korriDataPath, type XdgPathEnv } from "@shared/config/xdg-paths"
 import type { GameRecord } from "@shared/fixtures/games/game"
 import { logger } from "@shared/logger/logger"
 
@@ -53,8 +54,6 @@ export type RocknixConfig = {
   readonly allowMissingEsSystems?: boolean
 }
 
-const DEFAULT_MEDIA_ROOT = "/storage/.guest/korri/media/games"
-
 const SIDECAR_MEDIA_FILES = [
   "cover-1024.jpg",
   "cover-512.webp",
@@ -63,22 +62,26 @@ const SIDECAR_MEDIA_FILES = [
   "banner-460x215.png",
 ] as const
 
-const DEFAULT_CONFIG: RocknixConfig = {
-  gamelistRoots: [
-    "/storage/roms",
-    "/storage/games-internal/roms",
-    "/storage/games-external/roms",
-  ],
-  esSystemsPath: "/storage/.config/emulationstation/es_systems.cfg",
-  mediaRoot: DEFAULT_MEDIA_ROOT,
+function defaultRocknixMediaRoot(env: XdgPathEnv = process.env): string {
+  return korriDataPath(env, "media", "games")
 }
 
-export function defaultRocknixConfig(): RocknixConfig {
-  return DEFAULT_CONFIG
+export function defaultRocknixConfig(
+  env: XdgPathEnv = process.env,
+): RocknixConfig {
+  return {
+    gamelistRoots: [
+      "/storage/roms",
+      "/storage/games-internal/roms",
+      "/storage/games-external/roms",
+    ],
+    esSystemsPath: "/storage/.config/emulationstation/es_systems.cfg",
+    mediaRoot: defaultRocknixMediaRoot(env),
+  }
 }
 
 export function createRocknixSource(
-  config: RocknixConfig = DEFAULT_CONFIG,
+  config: RocknixConfig = defaultRocknixConfig(),
 ): LibrarySource {
   // Cached on first list(); shared with launchSpecFor(id).
   let cachedRecords: readonly GameRecord[] | null = null
@@ -120,14 +123,14 @@ export function createRocknixSource(
                 entry,
                 system: sys,
                 systemRoot,
-                mediaRoot: config.mediaRoot ?? DEFAULT_MEDIA_ROOT,
+                mediaRoot: config.mediaRoot ?? defaultRocknixMediaRoot(),
                 launchCommandOverride: config.launchCommand,
               })
             : await composeFallbackRecordAndSpec({
                 entry,
                 systemName,
                 systemRoot,
-                mediaRoot: config.mediaRoot ?? DEFAULT_MEDIA_ROOT,
+                mediaRoot: config.mediaRoot ?? defaultRocknixMediaRoot(),
                 launchCommandOverride: config.launchCommand,
               })
           if (specs.has(record.id)) {

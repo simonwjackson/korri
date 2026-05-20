@@ -193,12 +193,16 @@ pkgs.stdenv.mkDerivation {
     fi
     if [ -n "$profile" ]; then
       export KORRI_DESKTOP_PROFILE="$profile"
-      export KORRI_DEVICE_STATE_ROOT="\''${KORRI_DEVICE_STATE_ROOT:-/storage/.guest/korri}"
-      export KORRI_LIBRARY_ROOT="\''${KORRI_LIBRARY_ROOT:-\$KORRI_DEVICE_STATE_ROOT/library}"
-      export XDG_DATA_HOME="\''${XDG_DATA_HOME:-\$KORRI_DEVICE_STATE_ROOT/data}"
-      export XDG_CONFIG_HOME="\''${XDG_CONFIG_HOME:-\$KORRI_DEVICE_STATE_ROOT/config}"
-      export XDG_CACHE_HOME="\''${XDG_CACHE_HOME:-\$KORRI_DEVICE_STATE_ROOT/cache}"
-      export CHROME_CONFIG_HOME="\''${CHROME_CONFIG_HOME:-\$KORRI_DEVICE_STATE_ROOT/config}"
+      if [ -z "\''${HOME:-}" ] && { [ -z "\''${XDG_DATA_HOME:-}" ] || [ -z "\''${XDG_CONFIG_HOME:-}" ] || [ -z "\''${XDG_CACHE_HOME:-}" ]; }; then
+        echo "korri-desktop: HOME is required when XDG home directories are not set" >&2
+        exit 126
+      fi
+      export XDG_DATA_HOME="\''${XDG_DATA_HOME:-\$HOME/.local/share}"
+      export XDG_CONFIG_HOME="\''${XDG_CONFIG_HOME:-\$HOME/.config}"
+      export XDG_CACHE_HOME="\''${XDG_CACHE_HOME:-\$HOME/.cache}"
+      export KORRI_DEVICE_STATE_ROOT="\''${KORRI_DEVICE_STATE_ROOT:-\$XDG_DATA_HOME/korri}"
+      export KORRI_LIBRARY_ROOT="\''${KORRI_LIBRARY_ROOT:-\$XDG_DATA_HOME/korri/library}"
+      export CHROME_CONFIG_HOME="\''${CHROME_CONFIG_HOME:-\$XDG_CONFIG_HOME}"
     fi
     exec "$launcher" "\$@"
     EOF

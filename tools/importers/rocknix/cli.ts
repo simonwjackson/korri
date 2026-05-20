@@ -1,18 +1,20 @@
 #!/usr/bin/env bun
+import { korriDataPath } from "@shared/config/xdg-paths"
 import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
 import { createLibraryRepository } from "@shared/library/proseql/library-repository"
 import { logger } from "@shared/logger"
 import { Effect } from "effect"
 import { importRocknixLibrary } from "./rocknix-importer"
 
-const DEFAULT_LIBRARY_ROOT = "/storage/.guest/korri/library"
 const DEFAULT_GAMELIST_ROOTS = "/storage/roms"
 const DEFAULT_ES_SYSTEMS = "/storage/.config/emulationstation/es_systems.cfg"
 
 const program = Effect.scoped(
   Effect.gen(function* () {
     const libraryRoot =
-      process.env.KORRI_LIBRARY_ROOT ?? process.argv[2] ?? DEFAULT_LIBRARY_ROOT
+      process.env.KORRI_LIBRARY_ROOT ??
+      process.argv[2] ??
+      korriDataPath(process.env, "library")
     const gamelistRoots = (
       process.env.KORRI_ROCKNIX_GAMELIST_ROOTS ?? DEFAULT_GAMELIST_ROOTS
     )

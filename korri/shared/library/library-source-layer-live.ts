@@ -1,3 +1,4 @@
+import { korriDataPath } from "@shared/config/xdg-paths"
 import { logger } from "@shared/logger"
 import { Effect, Layer } from "effect"
 import {
@@ -126,15 +127,17 @@ function buildLibraryRootFromEnv(): Effect.Effect<string, LibraryError> {
     Effect.flatMap(root => {
       if (root && root.length > 0) return Effect.succeed(root)
 
-      return Effect.fail(
-        new LibraryError({
-          reason: "config",
-          message:
-            "KORRI_LIBRARY_ROOT is required when KORRI_LIBRARY_SOURCE is proseql",
-          diagnostic:
-            "Set KORRI_LIBRARY_ROOT to the configured Korri library directory, or set KORRI_LIBRARY_SOURCE=rocknix with ROCKNIX source paths.",
-        }),
-      )
+      return Effect.try({
+        try: () => korriDataPath(process.env, "library"),
+        catch: () =>
+          new LibraryError({
+            reason: "config",
+            message:
+              "KORRI_LIBRARY_ROOT, XDG_DATA_HOME, or HOME is required when KORRI_LIBRARY_SOURCE is proseql",
+            diagnostic:
+              "Set KORRI_LIBRARY_ROOT to the configured Korri library directory, or provide XDG_DATA_HOME/HOME so Korri can use the XDG data root.",
+          }),
+      })
     }),
   )
 }

@@ -1,5 +1,6 @@
 import { mkdir, stat, unlink } from "node:fs/promises"
 import { dirname, join } from "node:path"
+import { korriDataPath, korriStatePath } from "@shared/config/xdg-paths"
 import type { KorriRendererController } from "./sessiond-renderer"
 
 export interface ElectrobunLaunchConfig {
@@ -27,37 +28,49 @@ export interface ElectrobunProcessRunner {
 }
 
 export const DEFAULT_ELECTROBUN_EXECUTABLE = "korri-desktop-device"
-export const DEFAULT_ELECTROBUN_STATE_ROOT = "/storage/.guest/korri/electrobun"
-export const DEFAULT_ELECTROBUN_STATUS_FILE = join(
-  DEFAULT_ELECTROBUN_STATE_ROOT,
-  "status.json",
-)
+
+export function defaultElectrobunStateRoot(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string {
+  return korriStatePath(env, "electrobun")
+}
+
+export function defaultElectrobunStatusFile(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string {
+  return join(defaultElectrobunStateRoot(env), "status.json")
+}
 
 export function buildElectrobunCommand(
   config: ElectrobunLaunchConfig = {},
 ): ElectrobunCommand {
-  const stateRoot = config.stateRoot ?? DEFAULT_ELECTROBUN_STATE_ROOT
+  const envSource = { ...process.env, ...config.extraEnv }
+  const stateRoot = config.stateRoot ?? defaultElectrobunStateRoot(envSource)
+  const xdgConfigHome = join(stateRoot, "config")
   return {
     command: config.executablePath ?? DEFAULT_ELECTROBUN_EXECUTABLE,
     args: [],
     logPath: config.logPath,
     env: {
-      ...config.extraEnv,
       NODE: undefined,
       NODE_ENV: undefined,
       PATH: sanitizeElectrobunPath(process.env.PATH),
       KORRI_DESKTOP_PROFILE: "device",
-      KORRI_DEVICE_STATE_ROOT: "/storage/.guest/korri",
-      KORRI_LIBRARY_ROOT: "/storage/.guest/korri/library",
+      KORRI_DEVICE_STATE_ROOT: korriDataPath(envSource),
+      KORRI_LIBRARY_ROOT:
+        envSource.KORRI_LIBRARY_ROOT ?? korriDataPath(envSource, "library"),
       KORRI_DESKTOP_STATUS_FILE:
-        config.statusFile ?? DEFAULT_ELECTROBUN_STATUS_FILE,
+        config.statusFile ?? join(stateRoot, "status.json"),
       KORRI_SESSIOND_URL: config.sessiondUrl ?? process.env.KORRI_SESSIOND_URL,
       KORRI_SESSIOND_TOKEN_FILE:
-        config.sessiondTokenFile ?? process.env.KORRI_SESSIOND_TOKEN_FILE,
+        config.sessiondTokenFile ??
+        envSource.KORRI_SESSIOND_TOKEN_FILE ??
+        korriStatePath(envSource, "sessiond.token"),
       XDG_DATA_HOME: join(stateRoot, "data"),
-      XDG_CONFIG_HOME: join(stateRoot, "config"),
+      XDG_CONFIG_HOME: xdgConfigHome,
       XDG_CACHE_HOME: join(stateRoot, "cache"),
-      CHROME_CONFIG_HOME: join(stateRoot, "config"),
+      CHROME_CONFIG_HOME: xdgConfigHome,
+      ...config.extraEnv,
     },
   }
 }
@@ -126,17 +139,22 @@ export function createElectrobunController(options: {
       }
 
       await removeStaleStatusFile(command.env.KORRI_DESKTOP_STATUS_FILE)
-      const process = await options.runner.spawn(command)
+      const childProcess = await options.runner.spawn(command)
       await waitForStatusFile(
         command.env.KORRI_DESKTOP_STATUS_FILE,
         options.config?.readinessTimeoutMs ?? 0,
       )
       return {
-        pid: process.pid,
+        pid: childProcess.pid,
         command: { command: resolved ?? command.command, args: command.args },
         metadata: {
           statusFile: command.env.KORRI_DESKTOP_STATUS_FILE,
-          stateRoot: options.config?.stateRoot ?? DEFAULT_ELECTROBUN_STATE_ROOT,
+          stateRoot:
+            options.config?.stateRoot ??
+            defaultElectrobunStateRoot({
+              ...process.env,
+              ...options.config?.extraEnv,
+            }),
         },
       }
     },

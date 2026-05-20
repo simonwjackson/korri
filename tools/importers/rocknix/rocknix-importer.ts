@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { readdir } from "node:fs/promises"
 import { join, parse as parsePath } from "node:path"
+import { korriDataPath } from "@shared/config/xdg-paths"
 import type { GameRecord } from "@shared/fixtures/games/game"
 import type { ProfileBackedLaunchTargetRecord } from "@shared/library/launcher-config/launch-target"
 import type { LauncherProfileRecord } from "@shared/library/launcher-config/launcher-profile"
@@ -35,8 +36,6 @@ export interface RocknixImportSummary {
   readonly skipped: number
   readonly warnings: readonly RocknixImportWarning[]
 }
-
-const DEFAULT_MEDIA_ROOT = "/storage/.guest/korri/media/games"
 
 const SIDECAR_MEDIA_FILES = [
   "cover-1024.jpg",
@@ -114,7 +113,8 @@ export async function importRocknixLibrary(
           system,
           romPath,
           gameId,
-          mediaRoot: config.mediaRoot ?? DEFAULT_MEDIA_ROOT,
+          mediaRoot:
+            config.mediaRoot ?? korriDataPath(process.env, "media", "games"),
           launchCommandOverride: config.launchCommand,
         })
 

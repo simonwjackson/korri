@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises"
+import { korriStatePath } from "@shared/config/xdg-paths"
 import { findKorriWindows, type SwayNode } from "./sessiond-sway"
 
 export interface ElectrobunProofStatus {
@@ -81,7 +82,7 @@ export function evaluateElectrobunProof(
 async function main() {
   const statusPath =
     process.env.KORRI_DESKTOP_STATUS_FILE ??
-    "/storage/.local/share/nix-apps/korri-electrobun/status.json"
+    korriStatePath(process.env, "electrobun", "status.json")
   const status = await readStatus(statusPath)
   const healthOk = status ? await probeHealth(status.url) : false
   const tree = await readSwayTreeIfAvailable()

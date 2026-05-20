@@ -1,4 +1,5 @@
 import { serveMediaAsset } from "@shared/api/http/media-assets"
+import { korriDataPath } from "@shared/config/xdg-paths"
 import { Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { compress } from "hono/compress"
@@ -6,7 +7,6 @@ import { cors } from "hono/cors"
 import { rpcHandler } from "./rpc-server"
 
 const MAX_BODY_SIZE = 10 * 1024 * 1024
-const DEFAULT_MEDIA_ROOT = "/storage/.guest/korri/media"
 const isDev = process.env.NODE_ENV === "development"
 
 export function createHonoApp() {
@@ -29,7 +29,8 @@ export function createHonoApp() {
 
   app.get("/api/media/*", c =>
     serveMediaAsset(c.req.raw, {
-      mediaRoot: process.env.KORRI_MEDIA_ROOT ?? DEFAULT_MEDIA_ROOT,
+      mediaRoot:
+        process.env.KORRI_MEDIA_ROOT ?? korriDataPath(process.env, "media"),
     }),
   )
 

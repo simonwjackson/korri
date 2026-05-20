@@ -1,4 +1,6 @@
 import { readFile } from "node:fs/promises"
+import { join } from "node:path"
+import { xdgRuntimeDir } from "@shared/config/xdg-paths"
 import { logger as defaultLogger } from "@shared/logger"
 import { buildBottomKeyboardCommand } from "./bottom-keyboard"
 import { buildSwayShortcutCommand } from "./sway-actions"
@@ -77,7 +79,14 @@ export interface InputdActionDispatcherOptions {
   readonly defaultKillFilePath?: string
 }
 
-const DEFAULT_KILL_FILE_PATH = "/tmp/.process-kill-data"
+const FALLBACK_KILL_FILE_PATH = "/tmp/.process-kill-data"
+
+export function defaultKillFilePathFromEnv(env: NodeJS.ProcessEnv): string {
+  const runtimeDir = xdgRuntimeDir(env)
+  return runtimeDir
+    ? join(runtimeDir, "korri-inputd", "process-kill-data")
+    : FALLBACK_KILL_FILE_PATH
+}
 
 export function createInputdActionDispatcher(
   options: InputdActionDispatcherOptions = {},
@@ -86,7 +95,7 @@ export function createInputdActionDispatcher(
   const logger = options.logger ?? defaultLogger
   const commands = { ...defaultCommands(), ...options.commands }
   const defaultKillFilePath =
-    options.defaultKillFilePath ?? DEFAULT_KILL_FILE_PATH
+    options.defaultKillFilePath ?? defaultKillFilePathFromEnv(process.env)
 
   async function runNamedCommand(
     actionId: KorriInputdActionId,

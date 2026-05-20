@@ -14,6 +14,7 @@ describe("Electrobun renderer command", () => {
       statusFile: "/storage/app-state/status.json",
       sessiondUrl: "http://127.0.0.1:3003",
       sessiondTokenFile: "/storage/.guest/korri/sessiond.token",
+      extraEnv: { KORRI_LIBRARY_ROOT: "/xdg-data/korri/library" },
     })
 
     expect(command).toMatchObject({
@@ -24,8 +25,8 @@ describe("Electrobun renderer command", () => {
         NODE_ENV: undefined,
         PATH: expect.not.stringContaining("/node_modules/.bin"),
         KORRI_DESKTOP_PROFILE: "device",
-        KORRI_DEVICE_STATE_ROOT: "/storage/.guest/korri",
-        KORRI_LIBRARY_ROOT: "/storage/.guest/korri/library",
+        KORRI_DEVICE_STATE_ROOT: expect.stringContaining("/korri"),
+        KORRI_LIBRARY_ROOT: "/xdg-data/korri/library",
         KORRI_DESKTOP_STATUS_FILE: "/storage/app-state/status.json",
         KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
         KORRI_SESSIOND_TOKEN_FILE: "/storage/.guest/korri/sessiond.token",
