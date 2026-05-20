@@ -58,8 +58,7 @@ in
     eval.config.systemd.services.korri-server.serviceConfig.RuntimeDirectoryMode or null;
   systemNoNewPrivileges =
     eval.config.systemd.services.korri-server.serviceConfig.NoNewPrivileges or null;
-  systemProtectSystem =
-    eval.config.systemd.services.korri-server.serviceConfig.ProtectSystem or null;
+  systemProtectSystem = eval.config.systemd.services.korri-server.serviceConfig.ProtectSystem or null;
   systemRestart = eval.config.systemd.services.korri-server.serviceConfig.Restart or null;
 
   userServiceEnv =
@@ -79,6 +78,16 @@ in
   gameStreamRuntimeDir = eval.config.services.korri.gameStream.runtimeDir or null;
   gameStreamIntentPath = eval.config.services.korri.gameStream.intentPath or null;
   gameStreamStatusPath = eval.config.services.korri.gameStream.statusPath or null;
+
+  gameStreamDisplayCompatEnable = eval.config.services.korri.gameStream.displayCompat.enable or null;
+  gameStreamDisplayCompatDefaults =
+    eval.config.services.korri.gameStream.displayCompat.defaults or null;
+  gameStreamDisplayCompatExtra = eval.config.services.korri.gameStream.displayCompat.extraEnv or null;
+  gameStreamWrapperScript =
+    let
+      apps = eval.config.services.sunshine.applications.apps or [ ];
+    in
+    if apps == [ ] then null else builtins.readFile (builtins.elemAt apps 0).cmd;
 
   firewallTcpPorts = eval.config.networking.firewall.allowedTCPPorts or [ ];
   firewallInterfaceNames = builtins.attrNames (eval.config.networking.firewall.interfaces or { });

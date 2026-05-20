@@ -28,11 +28,7 @@ let
     else
       lib.escapeShellArg path;
 
-  runtimeDirExpression =
-    if cfg.runtimeDir != null then
-      shellPathExpression cfg.runtimeDir
-    else
-      null;
+  runtimeDirExpression = if cfg.runtimeDir != null then shellPathExpression cfg.runtimeDir else null;
 
   intentPathExpression =
     if cfg.intentPath != null then
@@ -45,6 +41,17 @@ let
       shellPathExpression cfg.statusPath
     else
       ''"''${KORRI_GAME_STREAM_STATUS_PATH:-$runtime_dir/status.json}"'';
+
+  displayCompatEnv = cfg.displayCompat.defaults // cfg.displayCompat.extraEnv;
+  displayCompatExports = lib.concatMapStringsSep "\n" (
+    name:
+    let
+      value = displayCompatEnv.${name};
+    in
+    ''
+      : "''${${name}:=${lib.escapeShellArg value}}"
+      export ${name}''
+  ) (lib.attrNames displayCompatEnv);
 
   runnerCommand = pkgs.writeShellScript "korri-game-stream-sunshine-app" ''
     set -eu
@@ -82,6 +89,14 @@ let
         set +a
         export PATH=${lib.escapeShellArg (lib.makeBinPath cfg.path)}:$PATH
       fi
+    ''}
+
+    ${optionalString (cfg.displayCompat.enable && displayCompatEnv != { }) ''
+            # Display/input compatibility defaults for graphical games launched via
+            # Sunshine. Each variable is only set if not already present, so trusted
+            # session env files (services.korri.gameStream.sessionEnvFile) and the
+            # caller environment continue to win.
+      ${displayCompatExports}
     ''}
 
     ${optionalString (runtimeDirExpression != null) ''
@@ -195,6 +210,91 @@ in
       type = types.ints.positive;
       default = 300;
       description = "Maximum age of a pending launch intent before the runner rejects and quarantines it.";
+    };
+
+    displayCompat = {
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Export sensible Wayland/X11/SDL/Qt/GTK/Java environment defaults to
+          launched games before exec'ing the runner. Hosts running Korri inside
+          a Wayland compositor (sway, wlroots-based) almost always want this on;
+          set to false only if you provide every value via
+          services.korri.gameStream.sessionEnvFile or expect games to manage
+          their own backend selection.
+
+          Each variable is set via `''${VAR:=value}` so anything already exported
+          by the inherited environment or by sessionEnvFile wins. Per-game
+          overrides in the launcher-profile `env` block also continue to win
+          because they are applied by the runner after this wrapper.
+        '';
+      };
+
+      defaults = mkOption {
+        type = types.attrsOf types.str;
+        default = {
+          SDL_VIDEODRIVER = "wayland,x11";
+          QT_QPA_PLATFORM = "wayland;xcb";
+          GDK_BACKEND = "wayland,x11";
+          CLUTTER_BACKEND = "wayland";
+          WINIT_UNIX_BACKEND = "wayland";
+          XDG_SESSION_TYPE = "wayland";
+          _JAVA_AWT_WM_NONREPARENTING = "1";
+          DISPLAY = ":0";
+        };
+        defaultText = lib.literalExpression ''
+          {
+            SDL_VIDEODRIVER = "wayland,x11";
+            QT_QPA_PLATFORM = "wayland;xcb";
+            GDK_BACKEND = "wayland,x11";
+            CLUTTER_BACKEND = "wayland";
+            WINIT_UNIX_BACKEND = "wayland";
+            XDG_SESSION_TYPE = "wayland";
+            _JAVA_AWT_WM_NONREPARENTING = "1";
+            DISPLAY = ":0";
+          }
+        '';
+        description = ''
+          Curated default environment exported into every game launched through
+          the Korri Sunshine wrapper:
+
+          - `SDL_VIDEODRIVER=wayland,x11`: SDL2 games try Wayland first, fall
+            back to Xwayland.
+          - `QT_QPA_PLATFORM=wayland;xcb`: Qt apps try the Wayland platform
+            plugin first, fall back to xcb.
+          - `GDK_BACKEND=wayland,x11`: GTK apps prefer Wayland.
+          - `CLUTTER_BACKEND=wayland`: Clutter-based apps use Wayland.
+          - `WINIT_UNIX_BACKEND=wayland`: Rust/winit apps target Wayland.
+          - `XDG_SESSION_TYPE=wayland`: Session-type hint for libraries that
+            sniff it.
+          - `_JAVA_AWT_WM_NONREPARENTING=1`: Java AWT compatibility hint for
+            tiling/Wayland compositors.
+          - `DISPLAY=:0`: Xwayland fallback target so Sway lazy-starts
+            Xwayland on first X11 connect.
+
+          Replace this attrset wholesale to customize. Use
+          `services.korri.gameStream.displayCompat.extraEnv` to add or override
+          individual entries without restating the curated set.
+        '';
+      };
+
+      extraEnv = mkOption {
+        type = types.attrsOf types.str;
+        default = { };
+        example = lib.literalExpression ''
+          {
+            MESA_GL_VERSION_OVERRIDE = "4.5";
+            __GL_THREADED_OPTIMIZATIONS = "1";
+          }
+        '';
+        description = ''
+          Additional environment variables merged on top of
+          `services.korri.gameStream.displayCompat.defaults`. Use this for host-
+          specific tuning (GPU hints, locale, audio, etc.) without restating
+          the curated defaults.
+        '';
+      };
     };
 
     gamescope = {

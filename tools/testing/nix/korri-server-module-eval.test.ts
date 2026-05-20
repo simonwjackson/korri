@@ -29,6 +29,10 @@ type EvalResult = {
   gameStreamRuntimeDir: string | null
   gameStreamIntentPath: string | null
   gameStreamStatusPath: string | null
+  gameStreamDisplayCompatEnable: boolean | null
+  gameStreamDisplayCompatDefaults: Record<string, string> | null
+  gameStreamDisplayCompatExtra: Record<string, string> | null
+  gameStreamWrapperScript: string | null
   firewallTcpPorts: number[]
   firewallInterfaceNames: string[]
 }
@@ -352,6 +356,95 @@ describe("services.korri.server NixOS module evaluation", () => {
       expect(conflictingHeadlessSource.warnings.join("\n")).toContain(
         "port 3001",
       )
+    })
+  })
+
+  describe("display environment compatibility defaults", () => {
+    const defaults = expectOk(
+      evalFixture(`{
+        services.korri.server = {
+          enable = true;
+          serviceMode = "system";
+          user = "testuser";
+          streamHost.enable = true;
+        };
+      }`),
+    )
+
+    it("enables displayCompat by default with curated defaults", () => {
+      expect(defaults.gameStreamDisplayCompatEnable).toBe(true)
+      const env = defaults.gameStreamDisplayCompatDefaults!
+      expect(env.SDL_VIDEODRIVER).toBe("wayland,x11")
+      expect(env.QT_QPA_PLATFORM).toBe("wayland;xcb")
+      expect(env.GDK_BACKEND).toBe("wayland,x11")
+      expect(env.CLUTTER_BACKEND).toBe("wayland")
+      expect(env.WINIT_UNIX_BACKEND).toBe("wayland")
+      expect(env.XDG_SESSION_TYPE).toBe("wayland")
+      expect(env._JAVA_AWT_WM_NONREPARENTING).toBe("1")
+      expect(env.DISPLAY).toBe(":0")
+    })
+
+    it("bakes display compat exports into the Sunshine wrapper script", () => {
+      const script = defaults.gameStreamWrapperScript!
+      expect(script).toContain('"${SDL_VIDEODRIVER:=wayland,x11}"')
+      expect(script).toContain("export SDL_VIDEODRIVER")
+      // Special characters get shell-escaped (semicolon, colon)
+      expect(script).toMatch(/QT_QPA_PLATFORM:=['"]wayland;xcb['"]/)
+      expect(script).toMatch(/DISPLAY:=['"]?:0['"]?/)
+    })
+
+    it("uses ${VAR:=value} so sessionEnvFile values still win", () => {
+      const script = defaults.gameStreamWrapperScript!
+      // Defensive form preserves anything inherited or sourced
+      expect(script).not.toMatch(/^export SDL_VIDEODRIVER=wayland/m)
+      expect(script).toMatch(/:\s"\$\{SDL_VIDEODRIVER:=/)
+    })
+  })
+
+  describe("display environment compatibility — disabled", () => {
+    const disabled = expectOk(
+      evalFixture(`{
+        services.korri.server = {
+          enable = true;
+          serviceMode = "system";
+          user = "testuser";
+          streamHost.enable = true;
+        };
+        services.korri.gameStream.displayCompat.enable = false;
+      }`),
+    )
+
+    it("omits display compat exports when disabled", () => {
+      expect(disabled.gameStreamDisplayCompatEnable).toBe(false)
+      const script = disabled.gameStreamWrapperScript!
+      expect(script).not.toContain("SDL_VIDEODRIVER")
+      expect(script).not.toContain("QT_QPA_PLATFORM")
+    })
+  })
+
+  describe("display environment compatibility — extraEnv", () => {
+    const extra = expectOk(
+      evalFixture(`{
+        services.korri.server = {
+          enable = true;
+          serviceMode = "system";
+          user = "testuser";
+          streamHost.enable = true;
+        };
+        services.korri.gameStream.displayCompat.extraEnv = {
+          MESA_GL_VERSION_OVERRIDE = "4.5";
+          SDL_VIDEODRIVER = "x11";
+        };
+      }`),
+    )
+
+    it("merges extraEnv on top of defaults", () => {
+      const script = extra.gameStreamWrapperScript!
+      expect(script).toContain("MESA_GL_VERSION_OVERRIDE")
+      expect(script).toContain("export MESA_GL_VERSION_OVERRIDE")
+      // extraEnv override wins over defaults for SDL_VIDEODRIVER
+      expect(script).toMatch(/SDL_VIDEODRIVER:=x11/)
+      expect(script).not.toMatch(/SDL_VIDEODRIVER:=wayland,x11/)
     })
   })
 
