@@ -1,6 +1,7 @@
 ---
 title: Validate the generic game stream runner with a fresh launch intent per session
 date: 2026-05-19
+last_updated: 2026-05-19
 category: workflow-issues
 module: Korri generic game stream runner
 problem_type: workflow_issue
@@ -70,7 +71,7 @@ export NIXIE_EXTRA_ARGS="--override-input korri path:<path/to/local/korri>"
 
 The committed flake can then keep using GitHub while one developer's machine uses the local checkout.
 
-### Check Sunshine as a user service
+### Check Sunshine as a user service, and `korri-server` in its configured scope
 
 On the validated NixOS host, Sunshine was installed as a systemd user service. This command failed with exit code `4` because there was no system unit:
 
@@ -91,6 +92,13 @@ When checking remotely:
 ssh <host> 'systemctl --user status sunshine --no-pager'
 ```
 
+Note: Sunshine remains a user service in both `services.korri.server.serviceMode` modes. `korri-server` itself depends on the configured scope:
+
+- `serviceMode = "user"` (default) -> `systemctl --user status korri-server`
+- `serviceMode = "system"` (e.g. headless stream hosts) -> `systemctl status korri-server`
+
+See the pattern doc [boot-scoped control plane with session-scoped runner via shared private runtime dir](../architecture-patterns/boot-scoped-control-plane-with-session-scoped-runner-2026-05-19.md) for the lifecycle split.
+
 ### Trust the generated Sunshine app file, not stale user app JSON
 
 The active Sunshine configuration pointed at a generated Nix apps file:
@@ -108,18 +116,26 @@ The generated app list contained two different entries with different meanings:
 
 ### Enqueue first; launch second
 
-The runner expects a pending intent at the configured path, for example:
+The runner expects a pending intent at the configured path. The exact path depends on which `services.korri.server.serviceMode` the host is using:
 
-```text
-$XDG_RUNTIME_DIR/korri-game-stream/next-launch.json
-```
+- **User mode** (default): `$XDG_RUNTIME_DIR/korri-game-stream/next-launch.json`
+- **System mode** (headless stream hosts): `/run/korri-game-stream/next-launch.json`
 
-A valid test sequence is:
+The runner wrapper exports `KORRI_GAME_STREAM_RUNTIME_DIR`, `KORRI_GAME_STREAM_INTENT_PATH`, and `KORRI_GAME_STREAM_STATUS_PATH` baked in by the module so the runner converges on the same directory the server uses. When enqueuing manually, set `KORRI_GAME_STREAM_INTENT_PATH` to match the host's effective path.
+
+A valid test sequence (user mode):
 
 ```bash
 cmd=$(nix build nixpkgs#supertux --no-link --print-out-paths)/bin/supertux2
 
 KORRI_GAME_STREAM_INTENT_PATH="$XDG_RUNTIME_DIR/korri-game-stream/next-launch.json" \
+  korri-game-stream-enqueue -- "$cmd"
+```
+
+System-mode hosts use the absolute path instead:
+
+```bash
+KORRI_GAME_STREAM_INTENT_PATH="/run/korri-game-stream/next-launch.json" \
   korri-game-stream-enqueue -- "$cmd"
 ```
 
@@ -131,14 +147,15 @@ For that no-intent case, the runner returns a preflight failure to Moonlight but
 
 ### Prefer the Korri CLI for known library games
 
-For a known Korri library game, the human-facing local controller is now the Korri CLI:
+For a known Korri library game, the human-facing controller is the Korri CLI:
 
 ```bash
 korri stream launch
 korri stream launch <game-id>
+korri play --host http://<host>:3001
 ```
 
-Run it in the same user/session context that owns the stream runner runtime directory. The command prepares a fresh one-shot foreground launch intent from the existing Korri library and then stops; the next manual step is still launching `Korri Stream` from Moonlight.
+The CLI talks to the `korri-server` RPC; the server is the component that writes the launch intent and that may run as either a user service or a system service. The Sunshine-launched runner still needs to share file ownership with the server (same Unix user), which the NixOS module enforces. The command prepares a fresh one-shot foreground launch intent from the existing Korri library and then stops; the next manual step is still launching `Korri Stream` from Moonlight.
 
 Use the lower-level `korri-game-stream-enqueue` path for raw command validation, non-library targets, per-game display environment experiments, and lifecycle/wait-monitor validation. The product CLI intentionally does not expose session lifecycle flags in its first slice.
 
@@ -178,10 +195,14 @@ The module config may set Sunshine app output to:
 $HOME/.local/state/korri/game-stream-runner.log
 ```
 
-During validation, that file did not exist even though the runner was executing and status was being written. Use the runtime status file as the primary low-friction diagnostic:
+During validation, that file did not exist even though the runner was executing and status was being written. Use the runtime status file as the primary low-friction diagnostic. The path depends on `serviceMode`:
 
 ```bash
+# user mode
 cat "$XDG_RUNTIME_DIR/korri-game-stream/status.json"
+
+# system mode
+cat /run/korri-game-stream/status.json
 ```
 
 Sunshine's user journal remains useful for confirming whether the app command started, whether the client connected, and whether the foreground command exited.
@@ -263,3 +284,4 @@ If the consuming repo wraps `nixie`, prefer a generic `--override-input` pass-th
 - `docs/brainstorms/2026-05-19-korri-cli-stream-launch-requirements.md` — requirements for the first product-shaped local CLI that prepares known Korri library games for streaming.
 - `docs/solutions/integration-issues/supervise-chromium-kiosk-session-after-game-exit-2026-05-04.md` — related session-lifecycle lesson for Odin Chromium; similar concern, different runtime owner.
 - `docs/solutions/best-practices/prefer-real-implementations-over-mocks-2026-05-02.md` — supports using a real Nixpkgs game/store path for smoke validation rather than mocked launcher behavior.
+- `docs/solutions/architecture-patterns/boot-scoped-control-plane-with-session-scoped-runner-2026-05-19.md` — pattern doc covering the lifecycle split between the boot-scoped `korri-server` control plane and the session-scoped Sunshine runner that this validation contract preserves.
