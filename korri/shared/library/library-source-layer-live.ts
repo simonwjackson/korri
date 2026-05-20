@@ -17,8 +17,6 @@ import {
   type RocknixConfig,
 } from "./rocknix/rocknix-source"
 
-const DEFAULT_LIBRARY_ROOT = "/storage/.guest/korri/library"
-
 type LibrarySourceMode = "proseql" | "rocknix"
 
 export const LibrarySourceLayerLive = Layer.succeed(
@@ -70,7 +68,7 @@ function withLibraryRepository<T>(
 ): Effect.Effect<T, LibraryError> {
   return Effect.scoped(
     Effect.gen(function* () {
-      const root = buildLibraryRootFromEnv()
+      const root = yield* buildLibraryRootFromEnv()
       logger.info(
         { sourceKind: "proseql", operation, root },
         "library-source-layer-live: opening ProseQL library",
@@ -123,11 +121,22 @@ function optionalEnv(value: string | undefined): string | undefined {
   return trimmed && trimmed.length > 0 ? trimmed : undefined
 }
 
-function buildLibraryRootFromEnv(): string {
-  const rootRaw = process.env.KORRI_LIBRARY_ROOT
-  if (rootRaw && rootRaw.trim() !== "") return rootRaw.trim()
+function buildLibraryRootFromEnv(): Effect.Effect<string, LibraryError> {
+  return Effect.sync(() => process.env.KORRI_LIBRARY_ROOT?.trim()).pipe(
+    Effect.flatMap(root => {
+      if (root && root.length > 0) return Effect.succeed(root)
 
-  return DEFAULT_LIBRARY_ROOT
+      return Effect.fail(
+        new LibraryError({
+          reason: "config",
+          message:
+            "KORRI_LIBRARY_ROOT is required when KORRI_LIBRARY_SOURCE is proseql",
+          diagnostic:
+            "Set KORRI_LIBRARY_ROOT to the configured Korri library directory, or set KORRI_LIBRARY_SOURCE=rocknix with ROCKNIX source paths.",
+        }),
+      )
+    }),
+  )
 }
 
 function toLibraryError(error: unknown): LibraryError {

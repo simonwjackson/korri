@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { Effect } from "effect"
+import { Cause, Effect, Exit } from "effect"
 import { withTempLibrary } from "../../../tools/testing/library/with-temp-library"
 import { LibrarySource } from "./library-services"
 import { LibrarySourceLayerLive } from "./library-source-layer-live"
@@ -71,6 +71,25 @@ describe("LibrarySourceLayerLive", () => {
     const games = await listGames()
 
     expect(games.map(game => game.metadata?.name)).toEqual(["Generic Echo"])
+  })
+
+  it("fails clearly when proseql is selected without an explicit library root", async () => {
+    delete process.env.KORRI_LIBRARY_ROOT
+    process.env.KORRI_LIBRARY_SOURCE = "proseql"
+
+    const exit = await Effect.runPromiseExit(
+      Effect.gen(function* () {
+        const source = yield* LibrarySource
+        return yield* source.list()
+      }).pipe(Effect.provide(LibrarySourceLayerLive)),
+    )
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isSuccess(exit)) throw new Error("expected failure")
+    expect(Cause.squash(exit.cause)).toMatchObject({
+      message:
+        "KORRI_LIBRARY_ROOT is required when KORRI_LIBRARY_SOURCE is proseql",
+    })
   })
 })
 
