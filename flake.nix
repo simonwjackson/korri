@@ -195,6 +195,13 @@
           inherit bunDeps;
         };
 
+        korriHeadlessTools = import ./nix/korri-headless-tools.nix {
+          inherit pkgs;
+          lib = pkgs.lib;
+          src = self;
+          inherit bunDeps;
+        };
+
         electrobunBinaries =
           if isSupportedDesktopSystem then
             import ./nix/electrobun-binaries.nix {
@@ -243,6 +250,7 @@
           korri-inputd = korriInputd;
           korri-game-stream-runner = korriGameStreamRunner;
           korri-cli = korriCli;
+          korri-headless-tools = korriHeadlessTools;
         }
         // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
           electrobun-cli = electrobunBinaries.cli;
@@ -266,6 +274,14 @@
             korri-cli = {
               type = "app";
               program = "${korriCli}/bin/korri";
+            };
+            korri-api = {
+              type = "app";
+              program = "${korriHeadlessTools}/bin/korri-api";
+            };
+            korri-lan-stream-advertise = {
+              type = "app";
+              program = "${korriHeadlessTools}/bin/korri-lan-stream-advertise";
             };
           }
           // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
@@ -318,11 +334,13 @@
         korri-frontend = import ./nix/modules/korri-frontend.nix { korri = self; };
         korri-inputd = import ./nix/modules/korri-inputd.nix { korri = self; };
         korri-game-stream = import ./nix/modules/korri-game-stream.nix { korri = self; };
+        korri-headless-source = import ./nix/modules/korri-headless-source.nix { korri = self; };
         korri = {
           imports = [
             korri-frontend
             korri-inputd
             korri-game-stream
+            korri-headless-source
           ];
         };
         default = korri;
