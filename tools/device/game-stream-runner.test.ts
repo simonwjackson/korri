@@ -11,6 +11,7 @@ import {
 import {
   createFileGameStreamRunLock,
   createGameStreamRunner,
+  defaultGameStreamLockPath,
   type ManagedChild,
   type ManagedChildSpawner,
 } from "./game-stream-runner"
@@ -75,6 +76,17 @@ function quietLogger() {
 }
 
 describe("game stream runner", () => {
+  it("derives the default run lock from XDG_RUNTIME_DIR", () => {
+    expect(
+      defaultGameStreamLockPath({
+        XDG_RUNTIME_DIR: "/run/user/1000",
+      } as NodeJS.ProcessEnv),
+    ).toBe("/run/user/1000/korri-game-stream/run.lock")
+    expect(defaultGameStreamLockPath({} as NodeJS.ProcessEnv)).toBe(
+      "/tmp/korri-game-stream-runner.lock",
+    )
+  })
+
   it("runs one configured command, records status, and becomes rerunnable", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
     const statusPath = join(dir, "status.json")

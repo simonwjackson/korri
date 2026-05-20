@@ -52,11 +52,13 @@ export function buildElectrobunCommand(
     args: [],
     logPath: config.logPath,
     env: {
+      ...config.extraEnv,
       NODE: undefined,
       NODE_ENV: undefined,
       PATH: sanitizeElectrobunPath(process.env.PATH),
       KORRI_DESKTOP_PROFILE: "device",
-      KORRI_DEVICE_STATE_ROOT: korriDataPath(envSource),
+      KORRI_DEVICE_STATE_ROOT:
+        envSource.KORRI_DEVICE_STATE_ROOT ?? korriDataPath(envSource),
       KORRI_LIBRARY_ROOT:
         envSource.KORRI_LIBRARY_ROOT ?? korriDataPath(envSource, "library"),
       KORRI_DESKTOP_STATUS_FILE:
@@ -70,7 +72,6 @@ export function buildElectrobunCommand(
       XDG_CONFIG_HOME: xdgConfigHome,
       XDG_CACHE_HOME: join(stateRoot, "cache"),
       CHROME_CONFIG_HOME: xdgConfigHome,
-      ...config.extraEnv,
     },
   }
 }

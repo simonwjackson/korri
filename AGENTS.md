@@ -86,6 +86,7 @@ just generate-feature-map
 
 ## Rules of engagement
 
+- Android is not a current target platform for Korri implementation work. Prototype client/device flows on Linux first unless the user explicitly reopens Android targeting.
 - Do not hard-code ARM builder hosts in committed Korri tooling; builder selection belongs in local Nix configuration or ignored local env overrides.
 - Never create documentation, report, or summary Markdown files unless explicitly requested.
 - Read before you touch. Do not propose changes to code you have not read.

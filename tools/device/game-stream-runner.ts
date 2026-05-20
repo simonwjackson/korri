@@ -653,7 +653,7 @@ function launchSpecFromCli(args: readonly string[]): {
   }
 }
 
-function defaultGameStreamLockPath(env: NodeJS.ProcessEnv): string {
+export function defaultGameStreamLockPath(env: NodeJS.ProcessEnv): string {
   const runtimeDir = xdgRuntimeDir(env)
   return runtimeDir
     ? join(runtimeDir, "korri-game-stream", "run.lock")

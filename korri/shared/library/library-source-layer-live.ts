@@ -14,7 +14,9 @@ import {
 } from "./proseql/library-repository"
 import {
   createRocknixSource,
-  defaultRocknixConfig,
+  DEFAULT_ROCKNIX_ES_SYSTEMS_PATH,
+  DEFAULT_ROCKNIX_GAMELIST_ROOTS,
+  defaultRocknixMediaRoot,
   type RocknixConfig,
 } from "./rocknix/rocknix-source"
 
@@ -45,22 +47,28 @@ function withRocknixSource<T>(
   useSource: (source: PlainLibrarySource) => Promise<T>,
   operation: string,
 ): Effect.Effect<T, LibraryError> {
-  const config = buildRocknixConfigFromEnv()
-  logger.info(
-    {
-      sourceKind: "rocknix",
-      operation,
-      gamelistRoots: config.gamelistRoots,
-      esSystemsPath: config.esSystemsPath,
-      allowMissingEsSystems: config.allowMissingEsSystems,
-    },
-    "library-source-layer-live: opening ROCKNIX gamelists",
-  )
-
-  return Effect.tryPromise({
-    try: () => useSource(createRocknixSource(config)),
+  return Effect.try({
+    try: buildRocknixConfigFromEnv,
     catch: toLibraryError,
-  })
+  }).pipe(
+    Effect.flatMap(config => {
+      logger.info(
+        {
+          sourceKind: "rocknix",
+          operation,
+          gamelistRoots: config.gamelistRoots,
+          esSystemsPath: config.esSystemsPath,
+          allowMissingEsSystems: config.allowMissingEsSystems,
+        },
+        "library-source-layer-live: opening ROCKNIX gamelists",
+      )
+
+      return Effect.tryPromise({
+        try: () => useSource(createRocknixSource(config)),
+        catch: toLibraryError,
+      })
+    }),
+  )
 }
 
 function withLibraryRepository<T>(
@@ -88,21 +96,17 @@ function selectedLibrarySourceMode(): LibrarySourceMode {
 }
 
 function buildRocknixConfigFromEnv(): RocknixConfig {
-  const defaults = defaultRocknixConfig()
-
   return {
-    ...defaults,
     gamelistRoots:
       parseListEnv(process.env.KORRI_ROCKNIX_GAMELIST_ROOTS) ??
-      defaults.gamelistRoots,
+      DEFAULT_ROCKNIX_GAMELIST_ROOTS,
     esSystemsPath:
       optionalEnv(process.env.KORRI_ROCKNIX_ES_SYSTEMS_PATH) ??
-      defaults.esSystemsPath,
-    launchCommand:
-      optionalEnv(process.env.KORRI_ROCKNIX_LAUNCH_COMMAND) ??
-      defaults.launchCommand,
+      DEFAULT_ROCKNIX_ES_SYSTEMS_PATH,
+    launchCommand: optionalEnv(process.env.KORRI_ROCKNIX_LAUNCH_COMMAND),
     mediaRoot:
-      optionalEnv(process.env.KORRI_ROCKNIX_MEDIA_ROOT) ?? defaults.mediaRoot,
+      optionalEnv(process.env.KORRI_ROCKNIX_MEDIA_ROOT) ??
+      defaultRocknixMediaRoot(process.env),
     allowMissingEsSystems: true,
   }
 }

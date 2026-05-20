@@ -95,8 +95,45 @@
 
         commonShellHook = ''
           repo_root="$PWD"
+          fallow_bin="$repo_root/.nix-bin/fallow"
+          fallow_detect_libc_hook="$repo_root/.nix-bin/fallow-detect-libc-musl.cjs"
 
           mkdir -p "$repo_root/.nix-bin"
+
+          cat > "$fallow_detect_libc_hook" <<'EOF'
+          const Module = require("module");
+          const originalLoad = Module._load;
+
+          Module._load = function loadWithFallowMusl(request, parent, isMain) {
+            if (request === "detect-libc") {
+              return { familySync: () => "musl" };
+            }
+
+            return originalLoad.apply(this, arguments);
+          };
+          EOF
+
+          cat > "$fallow_bin" <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          script_dir="$(cd "$(dirname "''${BASH_SOURCE[0]}")" && pwd)"
+          path_without_script_dir="$(printf '%s' "$PATH" | tr ':' '\n' | grep -vxF "$script_dir" | paste -sd ':' - || true)"
+          export PATH="$path_without_script_dir"
+
+          if [[ "$(uname -s)" == "Linux" && -f /etc/NIXOS ]]; then
+            fallow_detect_libc_hook="$script_dir/fallow-detect-libc-musl.cjs"
+
+            if [[ -n "''${NODE_OPTIONS:-}" ]]; then
+              export NODE_OPTIONS="--require $fallow_detect_libc_hook $NODE_OPTIONS"
+            else
+              export NODE_OPTIONS="--require $fallow_detect_libc_hook"
+            fi
+          fi
+
+          exec bun x fallow "$@"
+          EOF
+          chmod +x "$fallow_bin"
 
           export PATH="$repo_root/.nix-bin:$PATH:$repo_root/node_modules/.bin"
           export PW_TEST_HTML_REPORT_OPEN="never"

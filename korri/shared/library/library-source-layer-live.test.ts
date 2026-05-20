@@ -17,6 +17,7 @@ const originalEnv = {
   xdgDataHome: process.env.XDG_DATA_HOME,
   rocknixGamelistRoots: process.env.KORRI_ROCKNIX_GAMELIST_ROOTS,
   rocknixEsSystemsPath: process.env.KORRI_ROCKNIX_ES_SYSTEMS_PATH,
+  rocknixMediaRoot: process.env.KORRI_ROCKNIX_MEDIA_ROOT,
 }
 const cleanups: Array<() => Promise<void>> = []
 
@@ -41,6 +42,42 @@ describe("LibrarySourceLayerLive", () => {
     const games = await listGames()
 
     expect(games.map(game => game.metadata?.name)).toEqual(["Layer Echo"])
+  })
+
+  it("lets explicit ROCKNIX media root avoid an XDG data requirement", async () => {
+    const lib = await seedRocknixGamelists()
+    delete process.env.HOME
+    delete process.env.XDG_DATA_HOME
+    process.env.KORRI_LIBRARY_SOURCE = "rocknix"
+    process.env.KORRI_ROCKNIX_GAMELIST_ROOTS = lib.rootDir
+    process.env.KORRI_ROCKNIX_ES_SYSTEMS_PATH = join(
+      lib.rootDir,
+      "missing-es-systems.cfg",
+    )
+    process.env.KORRI_ROCKNIX_MEDIA_ROOT = join(lib.rootDir, "media")
+
+    const games = await listGames()
+
+    expect(games.map(game => game.metadata?.name)).toEqual(["Layer Echo"])
+  })
+
+  it("maps missing ROCKNIX media XDG root to a library config error", async () => {
+    delete process.env.HOME
+    delete process.env.XDG_DATA_HOME
+    process.env.KORRI_LIBRARY_SOURCE = "rocknix"
+
+    const exit = await Effect.runPromiseExit(
+      Effect.gen(function* () {
+        const source = yield* LibrarySource
+        return yield* source.list()
+      }).pipe(Effect.provide(LibrarySourceLayerLive)),
+    )
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isSuccess(exit)) throw new Error("expected failure")
+    expect(Cause.squash(exit.cause)).toMatchObject({
+      message: "XDG_DATA_HOME or HOME is required",
+    })
   })
 
   it("defaults the device desktop profile to ProseQL", async () => {
@@ -175,6 +212,7 @@ function restoreEnv(): void {
     "KORRI_ROCKNIX_ES_SYSTEMS_PATH",
     originalEnv.rocknixEsSystemsPath,
   )
+  setOptionalEnv("KORRI_ROCKNIX_MEDIA_ROOT", originalEnv.rocknixMediaRoot)
 }
 
 function setOptionalEnv(key: string, value: string | undefined): void {

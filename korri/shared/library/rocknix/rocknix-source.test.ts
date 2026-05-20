@@ -5,7 +5,7 @@ import { join } from "node:path"
 
 import { withTempLibrary } from "../../../../tools/testing/library/with-temp-library"
 
-import { createRocknixSource } from "./rocknix-source"
+import { createRocknixSource, defaultRocknixConfig } from "./rocknix-source"
 
 const cleanups: Array<() => Promise<void>> = []
 function track<T extends { cleanup: () => Promise<void> }>(lib: T): T {
@@ -26,6 +26,15 @@ async function withTempDir(): Promise<string> {
 }
 
 describe("createRocknixSource (real filesystem via withTempLibrary)", () => {
+  it("defaults Korri-owned media to the XDG data root", () => {
+    expect(defaultRocknixConfig({ HOME: "/home/test" }).mediaRoot).toBe(
+      "/home/test/.local/share/korri/media/games",
+    )
+    expect(defaultRocknixConfig({ XDG_DATA_HOME: "/xdg-data" }).mediaRoot).toBe(
+      "/xdg-data/korri/media/games",
+    )
+  })
+
   it("list() returns games sorted by lastPlayed desc with undefined last", async () => {
     const lib = track(
       await withTempLibrary({

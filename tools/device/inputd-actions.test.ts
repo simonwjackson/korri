@@ -3,6 +3,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import {
   createInputdActionDispatcher,
+  defaultKillFilePathFromEnv,
   type InputdActionCommand,
   type InputdActionCommands,
   KORRI_INPUTD_ACTION_IDS,
@@ -49,6 +50,23 @@ function createHarness(
 }
 
 describe("inputd actions", () => {
+  it("uses the ROCKNIX kill file by default unless explicitly overridden", () => {
+    expect(defaultKillFilePathFromEnv({} as NodeJS.ProcessEnv)).toBe(
+      "/tmp/.process-kill-data",
+    )
+    expect(
+      defaultKillFilePathFromEnv({
+        XDG_RUNTIME_DIR: "/run/user/1000",
+      } as NodeJS.ProcessEnv),
+    ).toBe("/tmp/.process-kill-data")
+    expect(
+      defaultKillFilePathFromEnv({
+        KORRI_INPUTD_KILL_FILE_PATH:
+          "/run/user/1000/korri-inputd/process-kill-data",
+      } as NodeJS.ProcessEnv),
+    ).toBe("/run/user/1000/korri-inputd/process-kill-data")
+  })
+
   it("closes the focused Sway window by default", async () => {
     const { dispatcher, commands } = createHarness()
 

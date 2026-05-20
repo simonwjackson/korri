@@ -62,20 +62,25 @@ const SIDECAR_MEDIA_FILES = [
   "banner-460x215.png",
 ] as const
 
-function defaultRocknixMediaRoot(env: XdgPathEnv = process.env): string {
+export function defaultRocknixMediaRoot(env: XdgPathEnv = process.env): string {
   return korriDataPath(env, "media", "games")
 }
+
+export const DEFAULT_ROCKNIX_GAMELIST_ROOTS = [
+  "/storage/roms",
+  "/storage/games-internal/roms",
+  "/storage/games-external/roms",
+] as const
+
+export const DEFAULT_ROCKNIX_ES_SYSTEMS_PATH =
+  "/storage/.config/emulationstation/es_systems.cfg"
 
 export function defaultRocknixConfig(
   env: XdgPathEnv = process.env,
 ): RocknixConfig {
   return {
-    gamelistRoots: [
-      "/storage/roms",
-      "/storage/games-internal/roms",
-      "/storage/games-external/roms",
-    ],
-    esSystemsPath: "/storage/.config/emulationstation/es_systems.cfg",
+    gamelistRoots: DEFAULT_ROCKNIX_GAMELIST_ROOTS,
+    esSystemsPath: DEFAULT_ROCKNIX_ES_SYSTEMS_PATH,
     mediaRoot: defaultRocknixMediaRoot(env),
   }
 }

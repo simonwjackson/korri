@@ -14,7 +14,10 @@ describe("Electrobun renderer command", () => {
       statusFile: "/storage/app-state/status.json",
       sessiondUrl: "http://127.0.0.1:3003",
       sessiondTokenFile: "/storage/.guest/korri/sessiond.token",
-      extraEnv: { KORRI_LIBRARY_ROOT: "/xdg-data/korri/library" },
+      extraEnv: {
+        XDG_DATA_HOME: "/xdg-data",
+        KORRI_LIBRARY_ROOT: "/xdg-data/korri/library",
+      },
     })
 
     expect(command).toMatchObject({
@@ -25,7 +28,7 @@ describe("Electrobun renderer command", () => {
         NODE_ENV: undefined,
         PATH: expect.not.stringContaining("/node_modules/.bin"),
         KORRI_DESKTOP_PROFILE: "device",
-        KORRI_DEVICE_STATE_ROOT: expect.stringContaining("/korri"),
+        KORRI_DEVICE_STATE_ROOT: "/xdg-data/korri",
         KORRI_LIBRARY_ROOT: "/xdg-data/korri/library",
         KORRI_DESKTOP_STATUS_FILE: "/storage/app-state/status.json",
         KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
@@ -36,6 +39,24 @@ describe("Electrobun renderer command", () => {
         CHROME_CONFIG_HOME: "/storage/app-state/config",
       },
     })
+  })
+
+  it("preserves hardened child env when extra env tries to override it", () => {
+    const command = buildElectrobunCommand({
+      extraEnv: {
+        HOME: "/home/test",
+        NODE_ENV: "development",
+        PATH: "/tmp/bun-node/bin:/custom/bin",
+        KORRI_DESKTOP_PROFILE: "debug",
+      },
+    })
+
+    expect(command.env.NODE_ENV).toBeUndefined()
+    expect(command.env.PATH).not.toContain("/tmp/bun-node")
+    expect(command.env.KORRI_DESKTOP_PROFILE).toBe("device")
+    expect(command.env.KORRI_LIBRARY_ROOT).toBe(
+      "/home/test/.local/share/korri/library",
+    )
   })
 
   it("classifies Nix-managed binary origins", () => {
