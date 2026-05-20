@@ -107,8 +107,11 @@ test-component *args:
 typecheck:
   tsc --noEmit
 
+# Run lint checks.
+lint: lint-biome fallow-audit
+
 # Run Biome checks.
-lint:
+lint-biome:
   biome check tools korri
 
 # Run Fallow codebase intelligence. Pass subcommands or flags after the recipe name.
