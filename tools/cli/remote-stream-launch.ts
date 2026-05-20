@@ -1,5 +1,4 @@
 import type { GameRecord } from "@shared/fixtures/games/game"
-import { getGameDisplayName } from "@shared/fixtures/games/game"
 import type { GamePicker } from "./game-picker"
 import {
   type DiscoverStreamHostsOptions,
@@ -13,6 +12,7 @@ import {
 import {
   createRemoteStreamControlClient,
   type RemotePrepareResult,
+  type RemoteSourceGame,
   type RemoteStreamControlClient,
 } from "./remote-stream-control-client"
 
@@ -35,7 +35,7 @@ export interface RunRemoteStreamLaunchCommandOptions {
 
 interface RemoteGameChoice {
   readonly choice: GameRecord
-  readonly game: GameRecord
+  readonly game: RemoteSourceGame
   readonly host: StreamHostCandidate
 }
 
@@ -54,16 +54,24 @@ export async function runRemoteStreamLaunchCommand(
   const choices: RemoteGameChoice[] = []
   for (const host of hosts) {
     const client = clientFor(options, host)
-    let games: readonly GameRecord[]
+    const status = await client.sourceStatus()
+    if (status.status !== "available") {
+      errorOutput(
+        `${host.name}: ${status.message ?? "Korri stream source is unavailable"}`,
+      )
+      continue
+    }
+    let games: readonly RemoteSourceGame[]
     try {
-      games = await client.listGames()
+      games = await client.listSourceGames()
     } catch (error) {
       errorOutput(
         `Could not list games from ${host.name}: ${errorMessage(error)}`,
       )
       continue
     }
-    for (const game of games) choices.push(remoteChoice(host, game))
+    for (const game of games.filter(game => game.streamable))
+      choices.push(remoteChoice(host, game))
   }
 
   if (choices.length === 0) {
@@ -101,7 +109,7 @@ export async function runRemoteStreamLaunchCommand(
   }
 
   output(
-    `Prepared ${getGameDisplayName(remote.game)} from ${remote.host.name} for Korri Stream.`,
+    `Prepared ${remote.game.displayName} from ${remote.host.name} for Korri Stream.`,
   )
   output("Attempting to open Moonlight locally...")
   const moonlight = await (options.launchMoonlight ?? launchMoonlight)({
@@ -131,17 +139,16 @@ function clientFor(
 
 function remoteChoice(
   host: StreamHostCandidate,
-  game: GameRecord,
+  game: RemoteSourceGame,
 ): RemoteGameChoice {
   return {
     host,
     game,
     choice: {
-      ...game,
       id: `${host.id}:${game.id}`,
       metadata: {
-        ...(game.metadata ?? {}),
-        name: `${getGameDisplayName(game)} · ${host.name}`,
+        name: `${game.displayName} · ${host.name}`,
+        description: game.id,
       },
     },
   }

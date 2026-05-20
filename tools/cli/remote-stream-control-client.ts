@@ -1,4 +1,5 @@
 import { appRpcGroup } from "@app/api/app-rpc-group"
+import { serverRpcGroup } from "@app/api/server/rpc-group"
 import { BatchJsonSerializationLive } from "@shared/api/rpc/serialization"
 import type { GameRecord } from "@shared/fixtures/games/game"
 import { Cause, Effect, Exit, Layer, type Scope } from "effect"
@@ -17,7 +18,8 @@ export type RemotePrepareResult =
   | {
       readonly status: "prepared"
       readonly gameId: string
-      readonly intentPath: string
+      readonly sessionId?: string
+      readonly intentPath?: string
     }
   | {
       readonly status: "failed"
@@ -112,7 +114,7 @@ export function createRemoteStreamControlClient(
 
     listSourceGames: async () =>
       await runRpc(
-        RpcClient.make(appRpcGroup).pipe(
+        RpcClient.make(serverRpcGroup).pipe(
           Effect.flatMap(client => client["app.source.list"]({})),
           Effect.map(response => response.games),
           Effect.mapError(toHostUnavailable),
@@ -122,12 +124,12 @@ export function createRemoteStreamControlClient(
     sourceStatus: async () => {
       try {
         return await runRpc(
-          RpcClient.make(appRpcGroup).pipe(
-            Effect.flatMap(client => client["app.source.status"]({})),
+          RpcClient.make(serverRpcGroup).pipe(
+            Effect.flatMap(client => client["app.server.status"]({})),
             Effect.map(response => {
               const extras = {
-                ...(response.runnerMode
-                  ? { runnerMode: response.runnerMode }
+                ...(response.runner?.mode
+                  ? { runnerMode: response.runner.mode }
                   : {}),
                 ...(response.message ? { message: response.message } : {}),
               }
@@ -157,22 +159,25 @@ export function createRemoteStreamControlClient(
     },
 
     prepareGame: async gameId => {
-      const exit = await Effect.runPromiseExit(
-        Effect.scoped(
-          RpcClient.make(appRpcGroup).pipe(
-            Effect.flatMap(client =>
-              client["app.stream.prepare"]({ id: gameId }),
+      const exit = await withTimeout(
+        Effect.runPromiseExit(
+          Effect.scoped(
+            RpcClient.make(serverRpcGroup).pipe(
+              Effect.flatMap(client =>
+                client["app.server.stream.prepare"]({ id: gameId }),
+              ),
+              Effect.provide(layer),
             ),
-            Effect.provide(layer),
           ),
         ),
+        options.timeoutMs,
       )
 
       if (Exit.isSuccess(exit)) {
         return {
           status: "prepared",
           gameId: exit.value.gameId,
-          intentPath: exit.value.intentPath,
+          sessionId: exit.value.sessionId,
         }
       }
 

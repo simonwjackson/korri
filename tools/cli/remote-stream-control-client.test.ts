@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import { createHonoApp } from "@app/api/hono-app"
+import { serverRpcHandler } from "@app/api/server/rpc-server"
 import { chmod, mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -38,7 +40,9 @@ afterEach(async () => {
 describe("remote stream control client", () => {
   it("lists games, prepares known games, and reports disabled host control through the real RPC server", async () => {
     const { intentPath } = await setupRemoteLibrary({ enabled: true })
-    await using server = await withRpcServer()
+    await using server = await withRpcServer({
+      fetch: createHonoApp({ rpcHandler: serverRpcHandler }).fetch,
+    })
     pointWindowAt(server.url)
     const client = createRemoteStreamControlClient(server.url)
 
@@ -58,11 +62,16 @@ describe("remote stream control client", () => {
     expect(prepared).toMatchObject({
       status: "prepared",
       gameId: "gba/wario-land-4",
-      intentPath,
     })
+    expect(prepared.status).toBe("prepared")
+    if (prepared.status !== "prepared") throw new Error("prepare failed")
+    expect(prepared.sessionId).toBeString()
+    if (!prepared.sessionId) throw new Error("missing session id")
+    expect(prepared.intentPath).toBeUndefined()
     const intent = decodeLaunchIntent(
       JSON.parse(await readFile(intentPath, "utf8")),
     )
+    expect(intent.id).toBe(prepared.sessionId)
     expect(intent.launch.args).toContain("/srv/games/wl4.gba")
 
     process.env.KORRI_STREAM_CONTROL_ENABLED = "0"

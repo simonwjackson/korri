@@ -32,8 +32,10 @@ export type RpcServerHarness = {
 
 const LOOPBACK_HOST = "127.0.0.1"
 
-export async function withRpcServer(): Promise<RpcServerHarness> {
-  const server = createAdaptorServer({ fetch: honoApp.fetch })
+export async function withRpcServer(
+  options: { readonly fetch?: typeof honoApp.fetch } = {},
+): Promise<RpcServerHarness> {
+  const server = createAdaptorServer({ fetch: options.fetch ?? honoApp.fetch })
 
   let port: number
   try {
