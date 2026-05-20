@@ -195,12 +195,14 @@
           inherit bunDeps;
         };
 
-        korriHeadlessTools = import ./nix/korri-headless-tools.nix {
+        korriServer = import ./nix/korri-server.nix {
           inherit pkgs;
           lib = pkgs.lib;
           src = self;
           inherit bunDeps;
         };
+
+        korriHeadlessTools = korriServer;
 
         electrobunBinaries =
           if isSupportedDesktopSystem then
@@ -250,6 +252,7 @@
           korri-inputd = korriInputd;
           korri-game-stream-runner = korriGameStreamRunner;
           korri-cli = korriCli;
+          korri-server = korriServer;
           korri-headless-tools = korriHeadlessTools;
         }
         // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
@@ -274,6 +277,10 @@
             korri-cli = {
               type = "app";
               program = "${korriCli}/bin/korri";
+            };
+            korri-server = {
+              type = "app";
+              program = "${korriServer}/bin/korri-server";
             };
             korri-api = {
               type = "app";
