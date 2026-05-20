@@ -123,67 +123,137 @@ export function createRemoteStreamControlClient(
 
     sourceStatus: async () => {
       try {
-        return await runRpc(
-          RpcClient.make(serverRpcGroup).pipe(
-            Effect.flatMap(client => client["app.server.status"]({})),
-            Effect.map(response => {
-              const extras = {
-                ...(response.runner?.mode
-                  ? { runnerMode: response.runner.mode }
-                  : {}),
-                ...(response.message ? { message: response.message } : {}),
-              }
-              return response.status === "available"
-                ? {
-                    status: "available" as const,
-                    streamControl: "enabled" as const,
-                    catalog: "available" as const,
-                    ...extras,
-                  }
-                : {
-                    status: "stream-unavailable" as const,
-                    streamControl: "disabled" as const,
-                    catalog: "unavailable" as const,
-                    ...extras,
-                  }
-            }),
-            Effect.mapError(toHostUnavailable),
-          ),
-        )
-      } catch (error) {
-        return {
-          status: "unavailable",
-          message: errorMessage(error) ?? "Korri stream host is unavailable",
+        return await runRpc(serverStatusEffect())
+      } catch {
+        try {
+          return await runRpc(sourceStatusEffect())
+        } catch (error) {
+          return {
+            status: "unavailable",
+            message: errorMessage(error) ?? "Korri stream host is unavailable",
+          }
         }
       }
     },
 
     prepareGame: async gameId => {
-      const exit = await withTimeout(
-        Effect.runPromiseExit(
-          Effect.scoped(
-            RpcClient.make(serverRpcGroup).pipe(
-              Effect.flatMap(client =>
-                client["app.server.stream.prepare"]({ id: gameId }),
-              ),
-              Effect.provide(layer),
-            ),
-          ),
-        ),
-        options.timeoutMs,
-      )
-
-      if (Exit.isSuccess(exit)) {
+      const serverExit = await runPrepareExit(layer, gameId, options.timeoutMs)
+      if (Exit.isSuccess(serverExit)) {
         return {
           status: "prepared",
-          gameId: exit.value.gameId,
-          sessionId: exit.value.sessionId,
+          gameId: serverExit.value.gameId,
+          sessionId: serverExit.value.sessionId,
         }
       }
 
-      return failedFromUnknown(Cause.squash(exit.cause))
+      const legacyExit = await runLegacyPrepareExit(
+        layer,
+        gameId,
+        options.timeoutMs,
+      )
+      if (Exit.isSuccess(legacyExit)) {
+        return {
+          status: "prepared",
+          gameId: legacyExit.value.gameId,
+          intentPath: legacyExit.value.intentPath,
+        }
+      }
+
+      return failedFromUnknown(Cause.squash(legacyExit.cause))
     },
   }
+}
+
+function serverStatusEffect() {
+  return RpcClient.make(serverRpcGroup).pipe(
+    Effect.flatMap(client => client["app.server.status"]({})),
+    Effect.map(response => {
+      const extras = {
+        ...(response.runner?.mode ? { runnerMode: response.runner.mode } : {}),
+        ...(response.message ? { message: response.message } : {}),
+      }
+      return response.status === "available"
+        ? {
+            status: "available" as const,
+            streamControl: "enabled" as const,
+            catalog: "available" as const,
+            ...extras,
+          }
+        : {
+            status: "stream-unavailable" as const,
+            streamControl: "disabled" as const,
+            catalog: "unavailable" as const,
+            ...extras,
+          }
+    }),
+    Effect.mapError(toHostUnavailable),
+  )
+}
+
+function sourceStatusEffect() {
+  return RpcClient.make(appRpcGroup).pipe(
+    Effect.flatMap(client => client["app.source.status"]({})),
+    Effect.map(response => {
+      const extras = {
+        ...(response.runnerMode ? { runnerMode: response.runnerMode } : {}),
+        ...(response.message ? { message: response.message } : {}),
+      }
+      return response.status === "available"
+        ? {
+            status: "available" as const,
+            streamControl: "enabled" as const,
+            catalog: "available" as const,
+            ...extras,
+          }
+        : {
+            status: "stream-unavailable" as const,
+            streamControl: "disabled" as const,
+            catalog: "unavailable" as const,
+            ...extras,
+          }
+    }),
+    Effect.mapError(toHostUnavailable),
+  )
+}
+
+function runPrepareExit(
+  layer: Layer.Layer<RpcClient.Protocol>,
+  gameId: string,
+  timeoutMs: number | undefined,
+) {
+  return withTimeout(
+    Effect.runPromiseExit(
+      Effect.scoped(
+        RpcClient.make(serverRpcGroup).pipe(
+          Effect.flatMap(client =>
+            client["app.server.stream.prepare"]({ id: gameId }),
+          ),
+          Effect.provide(layer),
+        ),
+      ),
+    ),
+    timeoutMs,
+  )
+}
+
+function runLegacyPrepareExit(
+  layer: Layer.Layer<RpcClient.Protocol>,
+  gameId: string,
+  timeoutMs: number | undefined,
+) {
+  return withTimeout(
+    Effect.runPromiseExit(
+      Effect.scoped(
+        RpcClient.make(appRpcGroup).pipe(
+          Effect.flatMap(client =>
+            client["app.stream.prepare"]({ id: gameId }),
+          ),
+          Effect.provide(layer),
+        ),
+      ),
+    ),
+    timeoutMs,
+  )
 }
 
 function rpcUrlForBase(baseUrl: string): string {

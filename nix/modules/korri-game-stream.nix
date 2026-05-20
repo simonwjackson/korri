@@ -21,15 +21,22 @@ let
     optionalString
     ;
 
+  shellPathExpression =
+    path:
+    if lib.hasPrefix "%t/" path then
+      ''"$XDG_RUNTIME_DIR/${lib.removePrefix "%t/" path}"''
+    else
+      lib.escapeShellArg path;
+
   intentPathExpression =
     if cfg.intentPath != null then
-      lib.escapeShellArg cfg.intentPath
+      shellPathExpression cfg.intentPath
     else
       ''"$runtime_dir/next-launch.json"'';
 
   statusPathExpression =
     if cfg.statusPath != null then
-      lib.escapeShellArg cfg.statusPath
+      shellPathExpression cfg.statusPath
     else
       ''"''${KORRI_GAME_STREAM_STATUS_PATH:-$runtime_dir/status.json}"'';
 

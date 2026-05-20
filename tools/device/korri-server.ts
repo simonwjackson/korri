@@ -57,7 +57,10 @@ export function createKorriServer(
   options: CreateKorriServerOptions = {},
 ): KorriServerHandle {
   const config = options.config ?? getKorriServerConfig()
-  const app = createHonoApp({ rpcHandler: serverRpcHandler })
+  const app = createHonoApp({
+    rpcHandler: serverRpcHandler,
+    rpcSurface: "server",
+  })
   const server = createAdaptorServer({ fetch: app.fetch })
   const advertise = options.advertise ?? advertiseStreamHost
   let advertisement: StreamAdvertisement | undefined

@@ -8,6 +8,7 @@ import { RpcServer } from "effect/unstable/rpc"
 import { handleGetHello } from "../hello/rpc-handler"
 import { handleListSource } from "../source/list.rpc-handler"
 import { handleSourceStatus } from "../source/status.rpc-handler"
+import { handlePrepareStream } from "../stream/prepare.rpc-handler"
 import { handleServerPrepareStream } from "./prepare.rpc-handler"
 import { serverRpcGroup } from "./rpc-group"
 import { handleServerStatus } from "./status.rpc-handler"
@@ -24,6 +25,7 @@ const ServerHandlersLive = serverRpcGroup.toLayer(
     "app.source.status": handleSourceStatus,
     "app.server.status": handleServerStatus,
     "app.server.stream.prepare": handleServerPrepareStream,
+    "app.stream.prepare": handlePrepareStream,
   }),
 )
 

@@ -12,13 +12,17 @@ const isDev = process.env.NODE_ENV === "development"
 
 export interface CreateHonoAppOptions {
   readonly rpcHandler?: (request: Request) => Promise<Response>
+  readonly rpcSurface?: "app" | "server"
 }
 
 export function createHonoApp(options: CreateHonoAppOptions = {}) {
   const app = new Hono()
+  const rpcSurface =
+    options.rpcSurface ??
+    (process.env.KORRI_RPC_SURFACE === "server" ? "server" : "app")
   const selectedRpcHandler =
     options.rpcHandler ??
-    (process.env.KORRI_RPC_SURFACE === "server" ? serverRpcHandler : rpcHandler)
+    (rpcSurface === "server" ? serverRpcHandler : rpcHandler)
 
   app.get("/api", c =>
     c.json({
@@ -64,10 +68,26 @@ export function createHonoApp(options: CreateHonoAppOptions = {}) {
 
   app.use("/api/*", compress({ threshold: 1024 }))
   app.options("/api/*", c => c.body(null, 204))
-  app.post("/api/rpc", async c => selectedRpcHandler(c.req.raw))
-  app.post("/api/rpc/", async c => selectedRpcHandler(c.req.raw))
+  const handleRpc = async (request: Request) => {
+    if (rpcSurface === "server" && !isJsonRequest(request)) {
+      return new Response("Unsupported Media Type", { status: 415 })
+    }
+    return selectedRpcHandler(request)
+  }
+
+  app.post("/api/rpc", async c => handleRpc(c.req.raw))
+  app.post("/api/rpc/", async c => handleRpc(c.req.raw))
 
   return app
+}
+
+function isJsonRequest(request: Request): boolean {
+  return (
+    request.headers
+      .get("content-type")
+      ?.toLowerCase()
+      .startsWith("application/json") ?? false
+  )
 }
 
 export const honoApp = createHonoApp()
