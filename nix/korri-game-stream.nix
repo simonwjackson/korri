@@ -6,7 +6,7 @@
 }:
 
 pkgs.stdenv.mkDerivation {
-  pname = "korri-game-stream-runner";
+  pname = "korri-game-stream";
   version = "1.0.0";
 
   inherit src;
@@ -47,14 +47,14 @@ pkgs.stdenv.mkDerivation {
   installPhase = ''
     runHook preInstall
 
-    mkdir -p "$out/share/korri-game-stream-runner" "$out/bin"
-    cp korri-game-stream-runner.js "$out/share/korri-game-stream-runner/korri-game-stream-runner.js"
+    mkdir -p "$out/share/korri-game-stream" "$out/bin"
+    cp korri-game-stream-runner.js "$out/share/korri-game-stream/korri-game-stream-runner.js"
 
     makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korri-game-stream-runner" \
-      --add-flags "$out/share/korri-game-stream-runner/korri-game-stream-runner.js"
+      --add-flags "$out/share/korri-game-stream/korri-game-stream-runner.js"
 
     makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korri-game-stream-enqueue" \
-      --add-flags "$out/share/korri-game-stream-runner/korri-game-stream-runner.js" \
+      --add-flags "$out/share/korri-game-stream/korri-game-stream-runner.js" \
       --add-flags enqueue
 
     runHook postInstall

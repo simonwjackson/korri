@@ -181,7 +181,7 @@
           inherit bunDeps;
         };
 
-        korriGameStreamRunner = import ./nix/korri-game-stream-runner.nix {
+        korriGameStream = import ./nix/korri-game-stream.nix {
           inherit pkgs;
           lib = pkgs.lib;
           src = self;
@@ -202,7 +202,13 @@
           inherit bunDeps;
         };
 
-        korriHeadlessTools = korriServer;
+        # korri-server bundles the headless source binaries (korri-api,
+        # korri-lan-stream-advertise) alongside its main server binary, so the
+        # headless-source package output is satisfied by the same derivation.
+        # The dedicated slim package was removed when the server absorbed those
+        # binaries; resurrect a slim variant only if downstream consumers need
+        # to avoid the server closure.
+        korriHeadlessSource = korriServer;
 
         electrobunBinaries =
           if isSupportedDesktopSystem then
@@ -237,7 +243,6 @@
               runtimeLibraries = linuxDesktopRuntimeLibraries;
               deviceRuntimeLibraries = deviceDesktopRuntimeLibraries;
               deviceDesktopDataDirs = deviceDesktopDataDirs;
-              deviceBinaryAliases = [ "korri-desktop-odin" ];
               deviceGioExtraModules = pkgs2405.glib-networking;
             }
           else
@@ -250,17 +255,16 @@
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
           korri-inputd = korriInputd;
-          korri-game-stream-runner = korriGameStreamRunner;
+          korri-game-stream = korriGameStream;
           korri-cli = korriCli;
           korri-server = korriServer;
-          korri-headless-tools = korriHeadlessTools;
+          korri-headless-source = korriHeadlessSource;
         }
         // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
           electrobun-cli = electrobunBinaries.cli;
           electrobun-core = electrobunBinaries.core;
           korri-desktop = korriDesktop;
           korri-desktop-device = korriDesktopDevice;
-          korri-desktop-odin = korriDesktopDevice;
           default = korriDesktop;
         };
 
@@ -270,9 +274,9 @@
               type = "app";
               program = "${korriInputd}/bin/korri-inputd";
             };
-            korri-game-stream-runner = {
+            korri-game-stream = {
               type = "app";
-              program = "${korriGameStreamRunner}/bin/korri-game-stream-runner";
+              program = "${korriGameStream}/bin/korri-game-stream-runner";
             };
             korri-cli = {
               type = "app";
@@ -284,11 +288,11 @@
             };
             korri-api = {
               type = "app";
-              program = "${korriHeadlessTools}/bin/korri-api";
+              program = "${korriHeadlessSource}/bin/korri-api";
             };
             korri-lan-stream-advertise = {
               type = "app";
-              program = "${korriHeadlessTools}/bin/korri-lan-stream-advertise";
+              program = "${korriHeadlessSource}/bin/korri-lan-stream-advertise";
             };
           }
           // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
@@ -303,10 +307,6 @@
             korri-desktop-device = {
               type = "app";
               program = "${korriDesktopDevice}/bin/korri-desktop-device";
-            };
-            korri-desktop-odin = {
-              type = "app";
-              program = "${korriDesktopDevice}/bin/korri-desktop-odin";
             };
           };
 
