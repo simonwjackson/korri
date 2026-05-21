@@ -62,7 +62,10 @@ export function makeConnectionController(
   const helpDelayMs = deps.helpDelayMs ?? DEFAULT_HELP_DELAY_MS
 
   return Effect.gen(function* () {
-    const config = (yield* Effect.orElseSucceed(deps.loadConfig, () => ({}) as DesktopConfig)) as DesktopConfig
+    const config = (yield* Effect.orElseSucceed(
+      deps.loadConfig,
+      () => ({}) as DesktopConfig,
+    )) as DesktopConfig
     const remembered = config.lastConnectedServer
     const now = yield* nowDate
     const helpAfter = new Date(now.getTime() + helpDelayMs)
@@ -75,7 +78,8 @@ export function makeConnectionController(
         }
       : { status: "searching", since: now, helpAfter }
 
-    const state = yield* SubscriptionRef.make(initialState)
+    const state: SubscriptionRef.SubscriptionRef<ConnectionState> =
+      yield* SubscriptionRef.make<ConnectionState>(initialState)
 
     yield* Effect.forkScoped(
       runController({

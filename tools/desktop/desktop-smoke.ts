@@ -98,7 +98,11 @@ export async function runDesktopSmoke(
     }
   }
 
-  const app = createDesktopApp({ assetRoot })
+  // The desktop no longer mounts the API — it forwards to a connected
+  // korri-server. With no upstream the forwarder returns 503. The smoke
+  // check exercises the composition wiring (static assets, SPA fallback,
+  // and the /api/* forwarder mount), not the API itself.
+  const app = createDesktopApp({ assetRoot, getUpstream: () => undefined })
 
   checks.push(
     await checkResponse(
@@ -108,23 +112,25 @@ export async function runDesktopSmoke(
     ),
   )
 
-  const healthResponse = await app.fetch(
+  const forwarderResponse = await app.fetch(
     new Request("http://desktop.local/api/health"),
   )
-  if (healthResponse.ok) {
-    const payload = await healthResponse.json()
+  if (forwarderResponse.status === 503) {
+    const payload = (await forwarderResponse.json()) as { error?: string }
     checks.push({
-      name: "API health",
-      status: payload.status === "ok" ? "pass" : "fail",
+      name: "API forwarder mounted",
+      status: payload.error === "no upstream" ? "pass" : "fail",
       message:
-        payload.status === "ok"
-          ? "GET /api/health returned ok"
-          : `GET /api/health returned unexpected status ${String(payload.status)}`,
+        payload.error === "no upstream"
+          ? "GET /api/health returned 503 { error: 'no upstream' }"
+          : `GET /api/health returned 503 with unexpected body ${JSON.stringify(payload)}`,
     })
   } else {
-    checks.push(
-      await checkResponse("API health", healthResponse, "unreachable"),
-    )
+    checks.push({
+      name: "API forwarder mounted",
+      status: "fail",
+      message: `GET /api/health returned ${forwarderResponse.status}, expected 503`,
+    })
   }
 
   const representativeAsset = await findRepresentativeAsset(assetRoot)

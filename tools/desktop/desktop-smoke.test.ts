@@ -27,7 +27,7 @@ describe("desktop smoke", () => {
     expect(await findRepresentativeAsset(assetRoot)).toBe("/assets/app.js")
   })
 
-  test("verifies root, API health, and a representative asset", async () => {
+  test("verifies root, the API forwarder mount, and a representative asset", async () => {
     await writeFixture("index.html", "<html>Portal</html>")
     await writeFixture("assets/app.js", "globalThis.app = true")
 
@@ -37,9 +37,9 @@ describe("desktop smoke", () => {
     expect(report.checks).toEqual([
       { name: "portal root", status: "pass", message: "GET / returned 200" },
       {
-        name: "API health",
+        name: "API forwarder mounted",
         status: "pass",
-        message: "GET /api/health returned ok",
+        message: "GET /api/health returned 503 { error: 'no upstream' }",
       },
       {
         name: "representative asset",

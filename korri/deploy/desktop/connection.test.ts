@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { Effect, Queue, Stream, SubscriptionRef } from "effect"
+import { Effect, Queue, type Scope, Stream, SubscriptionRef } from "effect"
 import { TestClock } from "effect/testing"
 import type { DesktopConfig } from "./desktop-config"
 import {
@@ -83,9 +83,13 @@ function makeProbe(
     })
 }
 
-async function runTest<A>(effect: Effect.Effect<A, unknown, never>): Promise<A> {
+async function runTest<A>(
+  effect: Effect.Effect<A, never, Scope.Scope>,
+): Promise<A> {
   return Effect.runPromise(
-    Effect.scoped(effect).pipe(Effect.provide(TestClock.layer())) as Effect.Effect<A, unknown, never>,
+    Effect.scoped(effect).pipe(
+      Effect.provide(TestClock.layer()),
+    ) as Effect.Effect<A, never, never>,
   )
 }
 

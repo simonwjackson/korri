@@ -1,7 +1,14 @@
 import { join } from "node:path"
 import { logger } from "@shared/logger"
+import { Effect, Exit, Scope, Stream, SubscriptionRef } from "effect"
 import { ApplicationMenu, BrowserWindow, PATHS } from "electrobun/bun"
+import { watchStreamHosts } from "../../../tools/cli/lan-stream-discovery"
+import {
+  type ConnectionState,
+  makeConnectionController,
+} from "./connection"
 import { createDesktopApp } from "./create-desktop-app"
+import { loadDesktopConfig, saveDesktopConfig } from "./desktop-config"
 import { writeDesktopStatusFile } from "./status-file"
 import {
   createDesktopDualScreenWindowOptions,
@@ -16,6 +23,7 @@ const assetRoot = join(PATHS.VIEWS_FOLDER, "mainview")
 
 let server: ReturnType<typeof Bun.serve> | null = null
 let windows: BrowserWindow[] = []
+let controllerScope: Scope.Closeable | null = null
 
 function installApplicationMenu() {
   ApplicationMenu.setApplicationMenu([
@@ -40,12 +48,14 @@ function installApplicationMenu() {
 }
 
 function stopDesktopServer() {
-  if (!server) {
-    return
+  if (server) {
+    server.stop(true)
+    server = null
   }
-
-  server.stop(true)
-  server = null
+  if (controllerScope) {
+    Effect.runFork(Scope.close(controllerScope, Exit.succeed(undefined)))
+    controllerScope = null
+  }
 }
 
 function registerProcessShutdown() {
@@ -61,13 +71,50 @@ function registerProcessShutdown() {
 }
 
 async function main() {
-  const app = createDesktopApp({ assetRoot })
+  const scope = Scope.makeUnsafe()
+  controllerScope = scope
+  const controller = await Effect.runPromise(
+    Effect.provideService(
+      makeConnectionController({
+        watcher: watchStreamHosts(),
+        loadConfig: Effect.tryPromise({
+          try: () => loadDesktopConfig(),
+          catch: error => error,
+        }),
+        saveConfig: partial =>
+          Effect.tryPromise({
+            try: () => saveDesktopConfig(process.env, partial),
+            catch: error => error,
+          }),
+        httpProbe: probeUpstream,
+      }),
+      Scope.Scope,
+      scope,
+    ),
+  )
+
+  const getUpstream = () => {
+    const state = SubscriptionRef.getUnsafe(controller.state)
+    return state.status === "connected" ? state.server.controlUrl : undefined
+  }
+
+  const app = createDesktopApp({ assetRoot, getUpstream })
 
   server = Bun.serve({
     hostname: DESKTOP_HOST,
     port: 0,
     fetch: app.fetch,
   })
+
+  // For now we only log connection-state transitions; U5 wires the push
+  // into BrowserWindows.
+  Effect.runFork(
+    Effect.provideService(
+      logConnectionStateChanges(controller.state),
+      Scope.Scope,
+      scope,
+    ),
+  )
 
   installApplicationMenu()
   registerProcessShutdown()
@@ -122,3 +169,27 @@ main().catch(error => {
   stopDesktopServer()
   process.exit(1)
 })
+
+function logConnectionStateChanges(
+  state: SubscriptionRef.SubscriptionRef<ConnectionState>,
+) {
+  return SubscriptionRef.changes(state).pipe(
+    Stream.runForEach(snapshot =>
+      Effect.sync(() =>
+        logger.info({ status: snapshot.status }, "connection state"),
+      ),
+    ),
+  )
+}
+
+function probeUpstream(controlUrl: string): Effect.Effect<boolean> {
+  return Effect.tryPromise({
+    try: async () => {
+      const response = await fetch(`${controlUrl}/api/health`, {
+        signal: AbortSignal.timeout(500),
+      })
+      return response.ok
+    },
+    catch: () => false,
+  }).pipe(Effect.orElseSucceed(() => false))
+}
