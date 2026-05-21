@@ -289,62 +289,127 @@ async function collectAndLogMoonlightOutput(
   command: string,
   args: readonly string[],
 ): Promise<void> {
-  const LIMIT_BYTES = 4 * 1024
-  const TIMEOUT_MS = 4_000
+  // We must drain stdout/stderr *continuously* for as long as moonlight
+  // runs. If we only read the first N bytes and stop, the kernel pipe
+  // buffer (~64KB) fills and moonlight's next write blocks, freezing
+  // it. That bug bit the first version of this diagnostic.
+  //
+  // Strategy:
+  //   - Drain both streams forever in the background.
+  //   - Buffer only the first SNAPSHOT_BYTES bytes per stream; discard
+  //     the rest. This bounds memory while keeping the pipe drained.
+  //   - After SNAPSHOT_DELAY_MS, log the snapshot + early exit code
+  //     (if any). The continued drain keeps moonlight alive afterward.
+  //   - When the child exits, log a final line with the real exit code.
 
-  const drain = async (
-    stream: ReadableStream<Uint8Array> | undefined,
-    label: "stdout" | "stderr",
-  ): Promise<string> => {
-    if (!stream) return ""
-    const reader = stream.getReader()
-    const chunks: Uint8Array[] = []
-    let total = 0
-    const deadline = setTimeout(() => {
-      void reader.cancel().catch(() => undefined)
-    }, TIMEOUT_MS)
-    try {
-      while (total < LIMIT_BYTES) {
-        const { value, done } = await reader.read()
-        if (done) break
-        if (value) {
-          chunks.push(value)
-          total += value.byteLength
-        }
-      }
-    } catch {
-      // expected when timeout fires or process exits
-    } finally {
-      clearTimeout(deadline)
-      reader.releaseLock()
+  const SNAPSHOT_BYTES = 4 * 1024
+  const SNAPSHOT_DELAY_MS = 4_000
+
+  const snapshotOf = (stream: ReadableStream<Uint8Array> | undefined) => {
+    const snapshotChunks: Uint8Array[] = []
+    let bytesKept = 0
+    let snapshotReady = false
+    const snapshotReadyResolvers: Array<() => void> = []
+    const onSnapshotReady = () =>
+      new Promise<void>(resolve => {
+        if (snapshotReady) resolve()
+        else snapshotReadyResolvers.push(resolve)
+      })
+    const markSnapshotReady = () => {
+      if (snapshotReady) return
+      snapshotReady = true
+      for (const resolve of snapshotReadyResolvers) resolve()
     }
-    return new TextDecoder().decode(Buffer.concat(chunks.map(c => Buffer.from(c)))).slice(0, LIMIT_BYTES)
+    const consume = async () => {
+      if (!stream) return
+      const reader = stream.getReader()
+      try {
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          if (!value || !snapshotReady) {
+            const room = SNAPSHOT_BYTES - bytesKept
+            if (room > 0 && value) {
+              const take = value.byteLength > room ? value.slice(0, room) : value
+              snapshotChunks.push(take)
+              bytesKept += take.byteLength
+              if (bytesKept >= SNAPSHOT_BYTES) markSnapshotReady()
+            }
+          }
+          // Otherwise discard the chunk; we just need the pipe drained.
+        }
+      } catch {
+        // Reader cancelled or process exited; nothing to do.
+      } finally {
+        markSnapshotReady()
+        reader.releaseLock()
+      }
+    }
+    void consume()
+    return {
+      onSnapshotReady,
+      text: () =>
+        new TextDecoder()
+          .decode(
+            Buffer.concat(
+              snapshotChunks.map(c => Buffer.from(c)),
+            ),
+          )
+          .slice(0, SNAPSHOT_BYTES),
+    }
   }
 
+  const stdoutCollector = snapshotOf(
+    child.stdout as ReadableStream<Uint8Array> | undefined,
+  )
+  const stderrCollector = snapshotOf(
+    child.stderr as ReadableStream<Uint8Array> | undefined,
+  )
+
+  // Log a snapshot after the delay (or sooner if both snapshots are
+  // already full).
   try {
-    const [stdout, stderr] = await Promise.all([
-      drain(child.stdout as ReadableStream<Uint8Array> | undefined, "stdout"),
-      drain(child.stderr as ReadableStream<Uint8Array> | undefined, "stderr"),
+    await Promise.race([
+      Promise.all([
+        stdoutCollector.onSnapshotReady(),
+        stderrCollector.onSnapshotReady(),
+      ]),
+      new Promise(resolve => setTimeout(resolve, SNAPSHOT_DELAY_MS)),
     ])
-    const exited = await Promise.race([
+    const earlyExit = await Promise.race([
       child.exited,
-      new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), 100)),
+      new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), 50)),
     ])
     logger.info(
       {
         command,
         args,
         pid: child.pid,
-        exitCode: typeof exited === "number" ? exited : null,
-        stdout: stdout.trim() || null,
-        stderr: stderr.trim() || null,
+        earlyExitCode: typeof earlyExit === "number" ? earlyExit : null,
+        stdoutSnapshot: stdoutCollector.text().trim() || null,
+        stderrSnapshot: stderrCollector.text().trim() || null,
       },
-      "moonlight-diagnostic: process output",
+      "moonlight-diagnostic: snapshot",
     )
   } catch (error) {
     logger.warn(
       { err: error, command, args },
-      "moonlight-diagnostic: failed to capture output",
+      "moonlight-diagnostic: snapshot failed",
+    )
+  }
+
+  // Log final exit. The continued background drain in `consume()`
+  // keeps the pipes from filling while we wait.
+  try {
+    const exitCode = await child.exited
+    logger.info(
+      { command, args, pid: child.pid, exitCode },
+      "moonlight-diagnostic: process exited",
+    )
+  } catch (error) {
+    logger.warn(
+      { err: error, command, args, pid: child.pid },
+      "moonlight-diagnostic: failed to observe exit",
     )
   }
 }
