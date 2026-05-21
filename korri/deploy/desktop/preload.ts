@@ -17,6 +17,12 @@
  */
 
 import {
+  type DesktopInputAction,
+  type DesktopInputStatus,
+  isDesktopInputActionBridgePayload,
+  isDesktopInputStatusBridgePayload,
+} from "@shared/input/desktop-bridge-wire"
+import {
   type ConnectionStateBridgeState,
   isConnectionStateBridgeState,
 } from "./connection-state-bridge"
@@ -29,6 +35,7 @@ declare global {
   interface Window {
     __korriConnection?: KorriConnectionBridge
     __korriRuntime?: KorriRuntimeBridge
+    __korriInput?: KorriInputBridge
     __electrobun?: {
       receiveMessageFromBun?: (msg: unknown) => void
       [extension: string]: unknown
@@ -52,6 +59,15 @@ export interface KorriRuntimeBridge {
 
 export type RuntimeConfigListener = (state: RuntimeConfigBridgeState) => void
 
+export interface KorriInputBridge {
+  subscribeAction(listener: InputActionListener): () => void
+  getStatus(): DesktopInputStatus
+  subscribeStatus(listener: InputStatusListener): () => void
+}
+
+export type InputActionListener = (action: DesktopInputAction) => void
+export type InputStatusListener = (status: DesktopInputStatus) => void
+
 const INITIAL_STATE: ConnectionStateBridgeState = {
   status: "searching",
   since: new Date(0).toISOString(),
@@ -60,6 +76,16 @@ const INITIAL_STATE: ConnectionStateBridgeState = {
 
 const INITIAL_RUNTIME_STATE: RuntimeConfigBridgeState = {
   nativeBridgeUrl: null,
+}
+
+const INITIAL_INPUT_STATUS: DesktopInputStatus = {
+  inputd: "disabled",
+  active: false,
+  decodedFrames: 0,
+  emittedActions: 0,
+  droppedActions: 0,
+  pushFailures: 0,
+  lastError: null,
 }
 
 /**
@@ -157,6 +183,55 @@ export function installRuntimeBridge(
   }
 
   target.__korriRuntime = bridge
+  chainAcceptor(target, acceptIncoming)
+
+  return bridge
+}
+
+/**
+ * Install the desktop-input bridge on the given window object. Actions are
+ * edge-triggered and not replayed; status is a replayable snapshot.
+ */
+export function installDesktopInputBridge(
+  target: Window & typeof globalThis,
+): KorriInputBridge {
+  const actionListeners = new Set<InputActionListener>()
+  const statusListeners = new Set<InputStatusListener>()
+  let currentStatus: DesktopInputStatus = INITIAL_INPUT_STATUS
+
+  const bridge: KorriInputBridge = {
+    subscribeAction: listener => {
+      actionListeners.add(listener)
+      return () => {
+        actionListeners.delete(listener)
+      }
+    },
+    getStatus: () => currentStatus,
+    subscribeStatus: listener => {
+      statusListeners.add(listener)
+      return () => {
+        statusListeners.delete(listener)
+      }
+    },
+  }
+
+  const acceptIncoming = (incoming: unknown): void => {
+    if (isDesktopInputActionBridgePayload(incoming)) {
+      for (const listener of actionListeners) {
+        listener(incoming.action)
+      }
+      return
+    }
+
+    if (isDesktopInputStatusBridgePayload(incoming)) {
+      currentStatus = incoming.status
+      for (const listener of statusListeners) {
+        listener(incoming.status)
+      }
+    }
+  }
+
+  target.__korriInput = bridge
   chainAcceptor(target, acceptIncoming)
 
   return bridge
