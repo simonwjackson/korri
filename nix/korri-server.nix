@@ -62,12 +62,21 @@ pkgs.stdenv.mkDerivation {
     find "$out/share/korri-server/node_modules/.bin" -maxdepth 1 -type l \
       -lname '*/electrobun/*' -delete 2>/dev/null || true
 
+    # When `avahi-daemon` is running on the host, the server spawns
+    # `avahi-publish-service` rather than embedding its own bonjour-service
+    # publisher (which would race-NXDOMAIN against the daemon). Bake the
+    # avahi CLI directory onto the wrapper's PATH so the server is
+    # self-contained — consumers don't have to remember to add
+    # `pkgs.avahi` to the systemd unit's path. Same trick for the
+    # standalone lan-stream-advertise CLI.
     makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korri-server" \
-      --add-flags "$out/share/korri-server/korri-server.js"
+      --add-flags "$out/share/korri-server/korri-server.js" \
+      --prefix PATH : "${pkgs.avahi}/bin"
     makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korri-api" \
       --add-flags "$out/share/korri-server/korri-api.js"
     makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korri-lan-stream-advertise" \
-      --add-flags "$out/share/korri-server/korri-lan-stream-advertise.js"
+      --add-flags "$out/share/korri-server/korri-lan-stream-advertise.js" \
+      --prefix PATH : "${pkgs.avahi}/bin"
 
     runHook postInstall
   '';
@@ -87,6 +96,13 @@ pkgs.stdenv.mkDerivation {
     if find "$out/share/korri-server/node_modules" -xtype l 2>/dev/null | grep -q .; then
       echo "korri-server install contains dangling symlinks:" >&2
       find "$out/share/korri-server/node_modules" -xtype l >&2
+      exit 1
+    fi
+
+    # avahi-publish-service must be reachable from the wrapper's PATH so
+    # the server can advertise without external setup.
+    if ! grep -q 'avahi' "$out/bin/korri-server" 2>/dev/null; then
+      echo "korri-server wrapper does not reference avahi on its PATH" >&2
       exit 1
     fi
 
