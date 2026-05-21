@@ -3,7 +3,7 @@ import type { ConnectionStateBridgeState } from "./connection-state-bridge"
 import { isConnectionStateBridgeState } from "./connection-state-bridge"
 import { installConnectionStateBridge } from "./preload"
 
-interface FakeWindow {
+interface WindowDouble {
   __korriConnection?: unknown
   __electrobun?: {
     receiveMessageFromBun?: (msg: unknown) => void
@@ -11,7 +11,7 @@ interface FakeWindow {
   }
 }
 
-function makeWindow(): FakeWindow {
+function makeWindow(): WindowDouble {
   return {}
 }
 
@@ -127,7 +127,7 @@ describe("installConnectionStateBridge", () => {
   })
 
   it("preserves any other electrobun keys when overriding receiveMessageFromBun", () => {
-    const w: FakeWindow = {
+    const w: WindowDouble = {
       __electrobun: {
         receiveInternalMessageFromBun: () => {},
       },

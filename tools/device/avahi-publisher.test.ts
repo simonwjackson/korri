@@ -9,7 +9,7 @@ import {
 describe("publishViaAvahi", () => {
   it("spawns avahi-publish-service with the resolved service type and txt args", () => {
     let spawnedArgv: readonly string[] | undefined
-    const fakeChild: AvahiSubprocess = {
+    const childDouble: AvahiSubprocess = {
       exited: Promise.resolve(0),
       kill: () => {},
     }
@@ -22,7 +22,7 @@ describe("publishViaAvahi", () => {
       txt: { proto: "1", hostId: "aka", caps: "stream,source" },
       spawn: argv => {
         spawnedArgv = argv
-        return fakeChild
+        return childDouble
       },
     })
 

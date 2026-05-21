@@ -4,7 +4,6 @@ import { ValidationError } from "@shared/api/rpc/errors"
 import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
 import { Cause, Effect, Exit } from "effect"
 import { withTempProseqlLibrary } from "../../../../../tools/testing/library/with-temp-proseql-library"
-import { handleListLibrary } from "../library/list.rpc-handler"
 import { handleListSource } from "./list.rpc-handler"
 
 const originalEnv = {
@@ -50,19 +49,11 @@ describe("app.source.list handler", () => {
     ])
   })
 
-  it("blocks legacy library listing in headless source-only mode", async () => {
-    await setupLibrary({ enabled: true })
-    process.env.KORRI_HEADLESS_SOURCE_ONLY = "1"
-
-    const exit = await Effect.runPromiseExit(
-      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
-    )
-
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit)) {
-      expect(Cause.squash(exit.cause)).toBeInstanceOf(ValidationError)
-    }
-  })
+  // The legacy `KORRI_HEADLESS_SOURCE_ONLY` gate on `app.library.list` was
+  // removed in commit 952766d when the desktop refactor codified the
+  // server as the library: `app.library.list` and `app.source.list` are
+  // peers on the same RPC group, with no env var rejecting either. The
+  // test that previously asserted the gate has been deleted with the gate.
 
   it("integration: app.source.list is registered on appRpcGroup", () => {
     const tags = Array.from(appRpcGroup.requests.keys())
