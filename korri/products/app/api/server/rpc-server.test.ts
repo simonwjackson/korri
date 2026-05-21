@@ -5,11 +5,13 @@ import { serverRpcGroup } from "./rpc-group"
 import { serverRpcHandler } from "./rpc-server"
 
 describe("headless server RPC group", () => {
-  it("exposes the reduced headless control-plane surface", () => {
+  it("exposes the headless control-plane surface including library methods the renderer calls", () => {
     const tags = Array.from(serverRpcGroup.requests.keys()).sort()
 
     expect(tags).toEqual([
       "app.hello.get",
+      "app.library.launch",
+      "app.library.list",
       "app.server.status",
       "app.server.stream.prepare",
       "app.source.list",
@@ -33,13 +35,13 @@ describe("headless server RPC group", () => {
     expect(response.status).toBe(415)
   })
 
-  it("does not expose app-local full library or local launch RPCs", () => {
+  it("exposes library methods on both surfaces so the desktop client can drive them via the system server", () => {
     const serverTags = Array.from(serverRpcGroup.requests.keys())
     const appTags = Array.from(appRpcGroup.requests.keys())
 
     expect(appTags).toContain("app.library.list")
     expect(appTags).toContain("app.library.launch")
-    expect(serverTags).not.toContain("app.library.list")
-    expect(serverTags).not.toContain("app.library.launch")
+    expect(serverTags).toContain("app.library.list")
+    expect(serverTags).toContain("app.library.launch")
   })
 })

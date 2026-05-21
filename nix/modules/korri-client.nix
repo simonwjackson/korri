@@ -8,16 +8,16 @@
 }:
 
 let
-  cfg = config.services.korri;
+  cfg = config.services.korri.client;
   system = pkgs.stdenv.hostPlatform.system;
   packagesForSystem = korri.packages.${system} or { };
   defaultPackage =
     packagesForSystem.korri-desktop
-      or (throw "Korri desktop package is not available for system `${system}`. Set services.korri.package explicitly.");
+      or (throw "Korri desktop package is not available for system `${system}`. Set services.korri.client.package explicitly.");
 in
 {
-  options.services.korri = {
-    enable = lib.mkEnableOption "Korri frontend";
+  options.services.korri.client = {
+    enable = lib.mkEnableOption "Korri client (desktop frontend)";
 
     package = lib.mkOption {
       type = lib.types.package;

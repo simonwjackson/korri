@@ -338,14 +338,14 @@
     )
     // {
       nixosModules = rec {
-        korri-frontend = import ./nix/modules/korri-frontend.nix { korri = self; };
+        korri-client = import ./nix/modules/korri-client.nix { korri = self; };
         korri-inputd = import ./nix/modules/korri-inputd.nix { korri = self; };
         korri-game-stream = import ./nix/modules/korri-game-stream.nix { korri = self; };
         korri-headless-source = import ./nix/modules/korri-headless-source.nix { korri = self; };
         korri-server = import ./nix/modules/korri-server.nix { korri = self; };
         korri = {
           imports = [
-            korri-frontend
+            korri-client
             korri-inputd
             korri-headless-source
             korri-server

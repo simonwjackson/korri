@@ -6,6 +6,8 @@ import { Effect, Exit, Layer, Scope } from "effect"
 import * as HttpEffect from "effect/unstable/http/HttpEffect"
 import { RpcServer } from "effect/unstable/rpc"
 import { handleGetHello } from "../hello/rpc-handler"
+import { handleLaunchLibrary } from "../library/launch.rpc-handler"
+import { handleListLibrary } from "../library/list.rpc-handler"
 import { handleListSource } from "../source/list.rpc-handler"
 import { handleSourceStatus } from "../source/status.rpc-handler"
 import { handlePrepareStream } from "../stream/prepare.rpc-handler"
@@ -21,6 +23,8 @@ const LibraryInfrastructureLive = Layer.merge(
 const ServerHandlersLive = serverRpcGroup.toLayer(
   serverRpcGroup.of({
     "app.hello.get": handleGetHello,
+    "app.library.list": handleListLibrary,
+    "app.library.launch": handleLaunchLibrary,
     "app.source.list": handleListSource,
     "app.source.status": handleSourceStatus,
     "app.server.status": handleServerStatus,
