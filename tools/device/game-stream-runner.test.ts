@@ -12,6 +12,8 @@ import {
   createFileGameStreamRunLock,
   createGameStreamRunner,
   defaultGameStreamLockPath,
+  superviseGameStreamRunner,
+  type GameStreamRunResult,
   type ManagedChild,
   type ManagedChildSpawner,
 } from "./game-stream-runner"
@@ -462,6 +464,57 @@ describe("game stream runner", () => {
     expect(terminations).toEqual(["SIGTERM", "SIGKILL"])
   })
 
+  it("classifies a stop that ends with a clean child exit as stopped, not launched", async () => {
+    // Regression: when sunshine sends SIGTERM to the runner and the child
+    // (e.g. SDL2 game) catches it and exits with code 0, the runner used to
+    // report { status: "launched", exitCode: 0 } and the status file said
+    // mode="exited", exitCode=0 — indistinguishable from a clean game exit.
+    // After the fix, an explicit stop classifies as a stopped run
+    // (exit code 143 — the SIGTERM convention) regardless of what the
+    // child reported on its way out.
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
+    const statusPath = join(dir, "status.json")
+    const terminations: NodeJS.Signals[] = []
+    let exit: (exitCode: number) => void = () => undefined
+    const child: ManagedChild = {
+      pid: 215,
+      exited: new Promise(resolve => {
+        exit = resolve
+      }),
+      terminate: async signal => {
+        terminations.push(signal ?? "SIGTERM")
+        // Game catches SIGTERM and exits gracefully with code 0.
+        if (signal !== "SIGKILL") exit(0)
+      },
+    }
+    const { spawner } = createControlledSpawner(child)
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
+      spawner,
+      statusPath,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
+        pid: 10,
+        isProcessAlive: pid => pid === 10,
+      }),
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    await runner.stop()
+    await expect(run).resolves.toEqual({
+      status: "failed",
+      stage: "game",
+      exitCode: 143,
+    })
+    expect(terminations).toEqual(["SIGTERM"])
+    expect(JSON.parse(await readFile(statusPath, "utf8"))).toMatchObject({
+      mode: "exited",
+      exitCode: 143,
+    })
+  })
+
   it("refuses root execution unless explicitly allowed", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
     const statusPath = join(dir, "status.json")
@@ -839,6 +892,165 @@ describe("game stream runner", () => {
       expect(specs[0]).toEqual(launch)
       expect(JSON.stringify(logRecords)).not.toContain("wayland")
     }
+  })
+})
+
+describe("superviseGameStreamRunner", () => {
+  function createRecordingSignalSource() {
+    const handlers = new Map<NodeJS.Signals, () => void>()
+    return {
+      listenSignal: (signal: NodeJS.Signals, handler: () => void) => {
+        handlers.set(signal, handler)
+      },
+      deliver: (signal: NodeJS.Signals) => {
+        const handler = handlers.get(signal)
+        if (!handler) throw new Error(`no handler for ${signal}`)
+        handler()
+      },
+    }
+  }
+
+  function createRunnerStub(result: Promise<GameStreamRunResult>): {
+    readonly runner: {
+      readonly run: () => Promise<GameStreamRunResult>
+      readonly stop: () => Promise<void>
+    }
+    readonly stopCount: () => number
+  } {
+    let stopCalls = 0
+    return {
+      stopCount: () => stopCalls,
+      runner: {
+        run: () => result,
+        stop: async () => {
+          stopCalls += 1
+        },
+      },
+    }
+  }
+
+  it("exits 0 when the runner reports launched", async () => {
+    const exits: number[] = []
+    const signals = createRecordingSignalSource()
+    const { runner } = createRunnerStub(
+      Promise.resolve<GameStreamRunResult>({
+        status: "launched",
+        exitCode: 0,
+      }),
+    )
+
+    await superviseGameStreamRunner(runner, {
+      listenSignal: signals.listenSignal,
+      exit: code => exits.push(code),
+    })
+
+    expect(exits).toEqual([0])
+  })
+
+  it("exits 125 when the runner reports already-running", async () => {
+    const exits: number[] = []
+    const signals = createRecordingSignalSource()
+    const { runner } = createRunnerStub(
+      Promise.resolve<GameStreamRunResult>({ status: "already-running" }),
+    )
+
+    await superviseGameStreamRunner(runner, {
+      listenSignal: signals.listenSignal,
+      exit: code => exits.push(code),
+    })
+
+    expect(exits).toEqual([125])
+  })
+
+  it("exits with the failure exit code when the runner reports failed", async () => {
+    const exits: number[] = []
+    const signals = createRecordingSignalSource()
+    const { runner } = createRunnerStub(
+      Promise.resolve<GameStreamRunResult>({
+        status: "failed",
+        stage: "game",
+        exitCode: 7,
+      }),
+    )
+
+    await superviseGameStreamRunner(runner, {
+      listenSignal: signals.listenSignal,
+      exit: code => exits.push(code),
+    })
+
+    expect(exits).toEqual([7])
+  })
+
+  it("calls runner.stop and exits 143 on SIGTERM, even if run() never resolves", async () => {
+    // Reproduces the leak we saw on aka: bun runner stayed alive after
+    // killing its child because await runner.run() didn't actually
+    // resolve in time — process.exit was never called from the natural
+    // path. The signal handler must self-exit after stop() finishes.
+    const exits: number[] = []
+    const signals = createRecordingSignalSource()
+    const neverResolves = new Promise<GameStreamRunResult>(() => undefined)
+    const { runner, stopCount } = createRunnerStub(neverResolves)
+
+    const supervised = superviseGameStreamRunner(runner, {
+      listenSignal: signals.listenSignal,
+      exit: code => exits.push(code),
+    })
+
+    signals.deliver("SIGTERM")
+    // Yield twice so stop()'s microtask + the subsequent exit can run.
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(stopCount()).toBe(1)
+    expect(exits).toEqual([143])
+    // supervised is still pending because run() never resolves — but the
+    // exit was already requested. In production, process.exit would have
+    // terminated the process by now.
+    void supervised
+  })
+
+  it("calls runner.stop and exits 130 on SIGINT", async () => {
+    const exits: number[] = []
+    const signals = createRecordingSignalSource()
+    const neverResolves = new Promise<GameStreamRunResult>(() => undefined)
+    const { runner, stopCount } = createRunnerStub(neverResolves)
+
+    void superviseGameStreamRunner(runner, {
+      listenSignal: signals.listenSignal,
+      exit: code => exits.push(code),
+    })
+
+    signals.deliver("SIGINT")
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(stopCount()).toBe(1)
+    expect(exits).toEqual([130])
+  })
+
+  it("does not double-exit when the signal arrives after run() resolves", async () => {
+    const exits: number[] = []
+    const signals = createRecordingSignalSource()
+    const { runner } = createRunnerStub(
+      Promise.resolve<GameStreamRunResult>({
+        status: "launched",
+        exitCode: 0,
+      }),
+    )
+
+    await superviseGameStreamRunner(runner, {
+      listenSignal: signals.listenSignal,
+      exit: code => exits.push(code),
+    })
+
+    // Late signal after the supervisor already exited (production:
+    // process.exit would have terminated the process). The handler must
+    // not call exit a second time.
+    signals.deliver("SIGTERM")
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(exits).toEqual([0])
   })
 })
 

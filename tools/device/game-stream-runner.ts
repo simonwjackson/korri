@@ -370,9 +370,28 @@ export function createGameStreamRunner(
         } else if (shouldDelayIntentCompletion) {
           await completeLaunchClaim(launchClaim)
         }
-        state = completeGameStreamExit(state, exitCode)
+        // If stop was requested while a child was still being supervised,
+        // classify as a stopped run regardless of how the child exited.
+        // Games (especially SDL2 ones) often catch SIGTERM and exit
+        // cleanly with code 0 — we still want to record this as a stop
+        // (143, the SIGTERM convention), not a clean launch.
+        //
+        // Launcher-style session anchors (lifecycle="session" without
+        // wait) are excluded: their launcher already exited cleanly
+        // before stop arrived and stop just tears down the anchor, so
+        // reporting "launched" is correct.
+        const isLauncherAnchor =
+          launchClaim.intent.lifecycle === "session" &&
+          !launchClaim.intent.wait
+        const stoppedMidRun = stopRequested && !isLauncherAnchor
+        const reportedExitCode =
+          stoppedMidRun && exitCode === 0 ? 143 : exitCode
+        state = completeGameStreamExit(state, reportedExitCode)
         await writeStatus()
 
+        if (stoppedMidRun) {
+          return { status: "failed", stage: "game", exitCode: reportedExitCode }
+        }
         if (exitCode === 0) return { status: "launched", exitCode: 0 }
         return { status: "failed", stage: "game", exitCode }
       } finally {
@@ -660,6 +679,59 @@ export function defaultGameStreamLockPath(env: NodeJS.ProcessEnv): string {
     : FALLBACK_LOCK_PATH
 }
 
+export interface SuperviseSignalSource {
+  readonly listenSignal: (
+    signal: NodeJS.Signals,
+    handler: () => void,
+  ) => void
+  readonly exit: (code: number) => void
+}
+
+/**
+ * Drives a runner to completion and maps signals + result to a process
+ * exit code. Extracted from the main entry so it can be unit-tested
+ * without touching the real process.
+ *
+ * On SIGTERM / SIGINT the supervisor calls runner.stop() and exits with
+ * 143 / 130 respectively as soon as stop() resolves, without waiting for
+ * runner.run() to fall through naturally. This prevents the runner from
+ * outliving its terminated child if run() is held up for any reason.
+ */
+export async function superviseGameStreamRunner(
+  runner: {
+    readonly run: () => Promise<GameStreamRunResult>
+    readonly stop: () => Promise<void>
+  },
+  source: SuperviseSignalSource,
+): Promise<void> {
+  let exited = false
+  const requestExit = (code: number) => {
+    if (exited) return
+    exited = true
+    source.exit(code)
+  }
+
+  const handleSignal = (code: number) => () => {
+    if (exited) return
+    runner.stop().finally(() => requestExit(code))
+  }
+
+  source.listenSignal("SIGTERM", handleSignal(143))
+  source.listenSignal("SIGINT", handleSignal(130))
+
+  const result = await runner.run()
+  if (exited) return
+  if (result.status === "launched") {
+    requestExit(0)
+    return
+  }
+  if (result.status === "already-running") {
+    requestExit(125)
+    return
+  }
+  requestExit(result.exitCode)
+}
+
 if (import.meta.main) {
   const lockPath =
     process.env.KORRI_GAME_STREAM_LOCK_PATH ??
@@ -706,14 +778,10 @@ if (import.meta.main) {
       : undefined,
   })
 
-  const stop = () => {
-    runner.stop().finally(() => undefined)
-  }
-  process.once("SIGTERM", stop)
-  process.once("SIGINT", stop)
-
-  const result = await runner.run()
-  if (result.status === "launched") process.exit(0)
-  if (result.status === "already-running") process.exit(125)
-  process.exit(result.exitCode)
+  await superviseGameStreamRunner(runner, {
+    listenSignal: (signal, handler) => {
+      process.once(signal, handler)
+    },
+    exit: code => process.exit(code),
+  })
 }
