@@ -269,6 +269,47 @@ describe("korri inputd", () => {
     expect(actions).toEqual(["system-panel"])
   })
 
+  it("suppresses Home+D-pad shortcut frames from gamepad subscribers", async () => {
+    const proc = await loadProcFixture("bus-input-devices-device.txt")
+    const systemSource = createControllableEventSource()
+    const gamepadSource = createControllableEventSource()
+    const actions: KorriInputdActionId[] = []
+    const handle = await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: device =>
+        device.eventNode === "event6"
+          ? systemSource.open()
+          : device.eventNode === "event9"
+            ? gamepadSource.open()
+            : createControllableEventSource().open(),
+      actionDispatcher: {
+        dispatch: async actionId => {
+          actions.push(actionId)
+        },
+      },
+    })
+
+    const client = connectClient(handle.port)
+    await client.open()
+    client.ws.send(JSON.stringify({ classes: ["gamepad"] }))
+    await client.nextMessage()
+
+    systemSource.push(evdevKey(KEY_SYSTEM, 1))
+    gamepadSource.push(evdevEvent(3, ABS_HAT0X, -1))
+    gamepadSource.push(evdevEvent(3, ABS_HAT0X, 0))
+
+    await waitFor(() => actions.includes("workspace-prev"), "workspace-prev")
+    await Bun.sleep(30)
+
+    expect(
+      client.messages
+        .map(message => decodeNativeInputEvent(message))
+        .filter(message => message.kind === "input"),
+    ).toEqual([])
+
+    client.close()
+  })
+
   it("routes Home+D-pad to Sway workspace and output actions", async () => {
     const proc = await loadProcFixture("bus-input-devices-device.txt")
     const systemSource = createControllableEventSource()

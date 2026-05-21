@@ -248,19 +248,22 @@ export async function startKorriInputd(
               value: event.value,
             })
           }
-          handlePolicyEvent(device, event)
-          broadcast(
-            {
-              kind: "input",
-              deviceId: device.deviceId,
-              class: device.class,
-              type: event.type,
-              code: event.code,
-              value: event.value,
-              timestamp: event.tvSec * 1_000 + Math.floor(event.tvUsec / 1_000),
-            },
-            device.class,
-          )
+          const consumedByPolicy = handlePolicyEvent(device, event)
+          if (!consumedByPolicy) {
+            broadcast(
+              {
+                kind: "input",
+                deviceId: device.deviceId,
+                class: device.class,
+                type: event.type,
+                code: event.code,
+                value: event.value,
+                timestamp:
+                  event.tvSec * 1_000 + Math.floor(event.tvUsec / 1_000),
+              },
+              device.class,
+            )
+          }
         }
       }
     } catch (error) {
@@ -277,7 +280,10 @@ export async function startKorriInputd(
     }
   }
 
-  function handlePolicyEvent(device: DiscoveredDevice, event: EvdevEvent) {
+  function handlePolicyEvent(
+    device: DiscoveredDevice,
+    event: EvdevEvent,
+  ): boolean {
     const matches = shortcutEngine.handleEvent({
       deviceId: device.deviceId,
       deviceClass: device.class,
@@ -290,17 +296,25 @@ export async function startKorriInputd(
       dispatchAction(match.id)
     }
 
-    if (event.type === EV_KEY) {
-      if (matches.length > 0 || shortcutEngine.isPressed("home")) return
+    if (matches.length > 0 || shortcutEngine.isPressed("home")) {
+      return true
+    }
 
+    if (event.type === EV_KEY) {
       const systemAction = systemKeyAction(event.code, event.value)
-      if (systemAction) dispatchAction(systemAction)
-      return
+      if (systemAction) {
+        dispatchAction(systemAction)
+        return true
+      }
+      return false
     }
 
     if (event.type === EV_SW && event.code === SW_LID) {
       dispatchAction(event.value === 0 ? "lid-opened" : "lid-closed")
+      return true
     }
+
+    return false
   }
 
   function dispatchAction(actionId: KorriInputdActionId) {
