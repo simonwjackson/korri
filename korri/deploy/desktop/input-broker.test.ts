@@ -1,5 +1,6 @@
 import type { ServerWebSocket } from "bun"
 import { afterEach, describe, expect, it } from "bun:test"
+import { readFile } from "node:fs/promises"
 import { ABS_HAT0X } from "@shared/input/native/button-codes"
 import { decodeDesktopInputBridgePayload } from "@shared/input/desktop-bridge-wire"
 import { Effect, Fiber } from "effect"
@@ -24,6 +25,7 @@ describe("createDesktopInputBroker", () => {
     const window = createWindowDouble()
     await runBrokerUntil(server, {
       getActiveWindow: () => window,
+      getWindows: () => [window],
     })
 
     server.send({
@@ -36,10 +38,21 @@ describe("createDesktopInputBroker", () => {
       timestamp: Date.now(),
     })
 
-    await waitFor(() => window.payloads.length === 1, "input action")
-    expect(decodeDesktopInputBridgePayload(window.payloads[0])).toMatchObject({
+    await waitFor(() => actionPayloads(window).length === 1, "input action")
+    expect(
+      decodeDesktopInputBridgePayload(actionPayloads(window)[0]),
+    ).toMatchObject({
       kind: "korri.input.action",
       action: { type: "direction", direction: "right", source: "native" },
+    })
+    expect(statusPayloads(window).at(-1)).toMatchObject({
+      status: {
+        inputd: "connected",
+        active: true,
+        decodedFrames: 1,
+        emittedActions: 1,
+        droppedActions: 0,
+      },
     })
   })
 
@@ -62,13 +75,16 @@ describe("createDesktopInputBroker", () => {
     })
 
     await Bun.sleep(30)
-    expect(
-      window.payloads.filter(
-        payload =>
-          decodeDesktopInputBridgePayload(payload).kind ===
-          "korri.input.action",
-      ),
-    ).toEqual([])
+    expect(actionPayloads(window)).toEqual([])
+    expect(statusPayloads(window).at(-1)).toMatchObject({
+      status: {
+        inputd: "connected",
+        active: false,
+        decodedFrames: 1,
+        emittedActions: 0,
+        droppedActions: 1,
+      },
+    })
   })
 
   it("pushes status snapshots to all windows and re-pushes them on dom-ready", async () => {
@@ -105,6 +121,17 @@ describe("createDesktopInputBroker", () => {
       "dom-ready status",
     )
   })
+
+  it("does not invoke OS keyboard injection tools", async () => {
+    const source = await readFile(
+      new URL("./input-broker.ts", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).not.toContain("ydotool")
+    expect(source).not.toContain("wtype")
+    expect(source).not.toContain("uinput")
+  })
 })
 
 async function runBrokerUntil(
@@ -122,6 +149,19 @@ async function runBrokerUntil(
   )
   await waitFor(() => server.messages.length > 0, "subscription")
   return () => Effect.runPromise(Fiber.interrupt(fiber))
+}
+
+function actionPayloads(window: ReturnType<typeof createWindowDouble>) {
+  return window.payloads.filter(
+    payload =>
+      decodeDesktopInputBridgePayload(payload).kind === "korri.input.action",
+  )
+}
+
+function statusPayloads(window: ReturnType<typeof createWindowDouble>) {
+  return window.payloads
+    .map(payload => decodeDesktopInputBridgePayload(payload))
+    .filter(payload => payload.kind === "korri.input.status")
 }
 
 function createWindowDouble() {
