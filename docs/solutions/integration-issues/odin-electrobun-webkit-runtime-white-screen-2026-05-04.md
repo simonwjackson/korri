@@ -291,19 +291,20 @@ The `pkgs2405` WebKitGTK 2.44.3 pin survives the migration off `proot`/portable-
 
 - **The pin is performance-critical, not just correctness-critical.** Current nixpkgs WebKitGTK 2.52.3 *does* render cleanly through RPATH on real NixOS — no EGL abort, no white-screen. The original symptom this doc was named after has been resolved by the broader NixOS-26.05/Mesa stack on sobo. The reason to *still* prefer 2.44.3 is on-device responsiveness during scroll/transition.
 - **The `pkgs2405` closure is cohesive, not piecemeal.** WebKit 2.44.3 cannot be substituted in isolation; it must move together with the matching Pango/GTK/glib because of inter-library ABI dependencies. Splitting the pin breaks the loader before the UI starts.
-- **Wrapper env exports must move as a set.** `LD_LIBRARY_PATH` alone (WebKit only) breaks. The production wrapper's three exports (`LD_LIBRARY_PATH` + `XDG_DATA_DIRS` + `GIO_EXTRA_MODULES`) are the minimum coherent group on this device.
+- **The closure can be baked into RPATH instead of `LD_LIBRARY_PATH`.** Originally `korri-desktop`'s wrapper exported three env vars to layer the pkgs2405 closure over the build-time RPATH (`LD_LIBRARY_PATH` + `XDG_DATA_DIRS` + `GIO_EXTRA_MODULES`). Of these, only `LD_LIBRARY_PATH` is a library-search path that the dynamic linker honors; the other two are *runtime-discovery* paths that GLib/GIO read directly. Putting the full pkgs2405 closure (WebKit + GTK + libsoup + glib + cairo + gdk-pixbuf + pango + libayatana-appindicator) in `libNativeWrapper.so`'s RPATH at build time eliminates the need for `LD_LIBRARY_PATH` at runtime. `XDG_DATA_DIRS` and `GIO_EXTRA_MODULES` still have to be set — they cannot be expressed as RPATH.
 - **Build-time `patchelf` on `node_modules` ELFs is still required.** `/lib/ld-linux-aarch64.so.1` on sobo is a NixOS stub-ld that refuses to load generic ELFs; `nix-ld.service` does not exist. Upstream Electrobun's `bun` binary fails immediately without patchelf. This part of the original solution is unchanged by the new topology.
 
 ### What is now safe to drop
 
 - Anything `proot`-related: `/storage/.nix-portable` staging, `nix-portable` symlinks, `proot -b` bindings. Replaced by real `/nix/store`.
-- Process-wide `LD_LIBRARY_PATH` worries: the patched wrapper only exports inside its own process tree, and Bun no longer segfaults because the closure is consistent.
+- Process-wide `LD_LIBRARY_PATH` worries: the wrapper no longer exports it; the closure is in RPATH.
 - `GSK_RENDERER=cairo`, `WEBKIT_DISABLE_COMPOSITING_MODE=1`, `WEBKIT_DISABLE_DMABUF_RENDERER=1` from the launch profile. None are set in the current wrapper and the app renders correctly; current nixpkgs Mesa/GBM on sobo is coherent.
 - `essway.service` runtime-mask dance: sobo runs sway via `rocknix-sway-kiosk.service` directly, no EmulationStation in the picture.
 
 ### What stays
 
-- `pkgs2405` flake input + the four wrapper env exports + WebKitGTK 2.44.3 + matching pkgs2405 GTK/gsettings/glib-networking pins, all moving together.
+- `pkgs2405` flake input + WebKitGTK 2.44.3 + matching pkgs2405 GTK / libsoup / glib / cairo / gdk-pixbuf / pango / libayatana-appindicator pins, all moving together. Baked into `libNativeWrapper.so`'s RPATH at build time (no runtime `LD_LIBRARY_PATH`).
+- Wrapper still sets `XDG_DATA_DIRS` (for compiled `.gschema` lookup) and `GIO_EXTRA_MODULES` (for `glib-networking` TLS/HTTP module discovery). Both are runtime-discovery paths that RPATH cannot replace.
 - Build-time `patchelf` of `node_modules` ELFs (interpreter + RPATH set during the Nix build of `korri-desktop`).
 - `KORRI_DESKTOP_PROFILE=device` + XDG home defaults in the wrapper.
 
@@ -312,7 +313,8 @@ The `pkgs2405` WebKitGTK 2.44.3 pin survives the migration off `proot`/portable-
 During the May 2026 sobo session the validation artifacts were:
 
 - `/nix/store/zv62rx70y3jqyh4b9balks7l6y5c0kjj-korri-desktop-1.0.0` — raw variant (no wrapper env exports, RPATH-resolved WebKit 2.52.3).
-- `/nix/store/c1ircpv2iz2i9jn9bjg3yvflj2jhd2ii-korri-desktop-1.0.0` — patched variant (production-equivalent).
-- `/tmp/korri-webkit-only-wrap.sh` (ad-hoc, on sobo) — WebKit-only experiment that failed with the Pango symbol error.
+- `/nix/store/c1ircpv2iz2i9jn9bjg3yvflj2jhd2ii-korri-desktop-1.0.0` — LD_LIBRARY_PATH-overridden variant (the original "patched" build).
+- `/tmp/korri-webkit-only-wrap.sh` (ad-hoc, on sobo) — WebKit-only experiment that failed with the Pango symbol error and proved the pkgs2405 closure must move as a unit.
+- `/nix/store/vyiwhkp7a5lfrxci8d195a4rr8h4gxay-korri-desktop-1.0.0` — RPATH-only variant (production-equivalent; pkgs2405 closure baked into libNativeWrapper.so's RPATH, no LD_LIBRARY_PATH).
 
-These were ephemeral; the durable artifact is this update.
+These were ephemeral; the durable artifact is this update and the corresponding refactor commit in `nix/korri-desktop.nix` + `flake.nix`.
