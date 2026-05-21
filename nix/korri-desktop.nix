@@ -207,6 +207,11 @@ pkgs.stdenv.mkDerivation {
     ''}
     ${lib.optionalString (desktopProfileEnv != "") ''
     export KORRI_DESKTOP_PROFILE="${desktopProfileEnv}"
+    # Inputd lives behind a local-loopback WebSocket; the desktop preload
+    # surfaces it via window.__korriRuntime and the portal switches the
+    # spatial-nav controller backend at runtime. (Previously baked into
+    # the portal bundle as VITE_KORRI_NATIVE_BRIDGE_URL.)
+    export KORRI_NATIVE_BRIDGE_URL="\''${KORRI_NATIVE_BRIDGE_URL:-ws://127.0.0.1:3002}"
     if [ -z "\''${HOME:-}" ] && { [ -z "\''${XDG_DATA_HOME:-}" ] || [ -z "\''${XDG_CONFIG_HOME:-}" ] || [ -z "\''${XDG_CACHE_HOME:-}" ]; }; then
       echo "korri-desktop: HOME is required when XDG home directories are not set" >&2
       exit 126

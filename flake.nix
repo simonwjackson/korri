@@ -181,17 +181,13 @@
               versions.bunDepsHash;
         };
 
+        # Single portal build for every desktop variant. The native input-bridge
+        # URL is now pushed at runtime via window.__korriRuntime (see
+        # korri/deploy/portal/main.tsx and korri/deploy/desktop/runtime-config.ts).
         korriPortal = import ./nix/korri-portal.nix {
           inherit pkgs;
           src = self;
           inherit bunDeps;
-        };
-
-        korriPortalDevice = import ./nix/korri-portal.nix {
-          inherit pkgs;
-          src = self;
-          inherit bunDeps;
-          nativeBridgeUrl = "ws://127.0.0.1:3002";
         };
 
         korriInputd = import ./nix/korri-inputd.nix {
@@ -266,7 +262,7 @@
               lib = pkgs.lib;
               src = self;
               electrobunBinaries = electrobunBinaries;
-              portal = korriPortalDevice;
+              portal = korriPortal;
               runtimeLibraries = deviceDesktopRuntimeLibraries;
               desktopDataDirs = deviceDesktopDataDirs;
               gioExtraModules = pkgs2405.glib-networking;

@@ -2,9 +2,12 @@
   pkgs,
   src,
   bunDeps,
-  nativeBridgeUrl ? null,
 }:
 
+# Single portal build for every desktop variant. The native input-bridge
+# URL is no longer a Vite-baked constant — the desktop preload installs
+# `window.__korriRuntime` and the bun side pushes the URL on dom-ready,
+# so the same bundle ships to host and device.
 pkgs.stdenv.mkDerivation {
   pname = "korri-portal";
   version = "1.0.0";
@@ -37,9 +40,6 @@ pkgs.stdenv.mkDerivation {
     export HOME="$TMPDIR/home"
     mkdir -p "$HOME"
 
-    ${pkgs.lib.optionalString (nativeBridgeUrl != null) ''
-      export VITE_KORRI_NATIVE_BRIDGE_URL=${pkgs.lib.escapeShellArg nativeBridgeUrl}
-    ''}
     node node_modules/vite/bin/vite.js build --mode production
 
     runHook postBuild
