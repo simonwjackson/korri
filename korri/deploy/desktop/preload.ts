@@ -87,9 +87,16 @@ export function installConnectionStateBridge(
   return bridge
 }
 
-// In test contexts importers want a fresh bridge; in production the module
-// runs as a side-effecting preload, installing once into the host window.
-if (typeof window !== "undefined" && typeof document !== "undefined") {
+// Auto-install only when running inside the desktop's electrobun webview —
+// signalled by the presence of `window.__electrobun`, which electrobun's
+// internal preload installs before this script runs. In test contexts
+// (happy-dom, no electrobun), importing this module must not mutate the
+// global window; tests call `installConnectionStateBridge` explicitly.
+if (
+  typeof window !== "undefined" &&
+  typeof document !== "undefined" &&
+  typeof (window as { __electrobun?: unknown }).__electrobun !== "undefined"
+) {
   try {
     installConnectionStateBridge(window as Window & typeof globalThis)
   } catch (error) {
