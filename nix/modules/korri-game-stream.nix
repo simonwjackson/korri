@@ -12,7 +12,7 @@ let
   system = pkgs.stdenv.hostPlatform.system;
   packagesForSystem = korri.packages.${system} or { };
   defaultPackage =
-    packagesForSystem.korri-game-stream-runner
+    packagesForSystem.korri-game-stream
       or (throw "Korri game stream runner package is not available for system `${system}`. Set services.korri.gameStream.package explicitly.");
   inherit (lib)
     mkIf
@@ -137,7 +137,7 @@ in
     package = mkOption {
       type = types.package;
       default = defaultPackage;
-      defaultText = lib.literalExpression "inputs.korri.packages.\${pkgs.stdenv.hostPlatform.system}.korri-game-stream-runner";
+      defaultText = lib.literalExpression "inputs.korri.packages.\${pkgs.stdenv.hostPlatform.system}.korri-game-stream";
       description = "Korri game stream runner package to run as a Sunshine application.";
     };
 

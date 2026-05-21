@@ -17,7 +17,7 @@ let
 in
 {
   options.services.korri.client = {
-    enable = lib.mkEnableOption "Korri client (desktop frontend)";
+    enable = lib.mkEnableOption "Korri client";
 
     package = lib.mkOption {
       type = lib.types.package;

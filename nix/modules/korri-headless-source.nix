@@ -12,8 +12,8 @@ let
   system = pkgs.stdenv.hostPlatform.system;
   packagesForSystem = korri.packages.${system} or { };
   defaultPackage =
-    packagesForSystem.korri-headless-tools
-      or (throw "Korri headless tools package is not available for system `${system}`. Set services.korri.headlessSource.package explicitly.");
+    packagesForSystem.korri-headless-source
+      or (throw "Korri headless source package is not available for system `${system}`. Set services.korri.headlessSource.package explicitly.");
 
   inherit (lib)
     mkIf
@@ -36,7 +36,7 @@ in
     package = mkOption {
       type = types.package;
       default = defaultPackage;
-      defaultText = lib.literalExpression "inputs.korri.packages.\${pkgs.stdenv.hostPlatform.system}.korri-headless-tools";
+      defaultText = lib.literalExpression "inputs.korri.packages.\${pkgs.stdenv.hostPlatform.system}.korri-headless-source";
       description = "Korri package that provides the headless RPC API and LAN advertiser.";
     };
 
