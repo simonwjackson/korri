@@ -14,9 +14,11 @@ import {
 } from "./connection"
 import { createDesktopApp } from "./create-desktop-app"
 import { loadDesktopConfig, saveDesktopConfig } from "./desktop-config"
+import { readRuntimeConfigFromEnv } from "./runtime-config"
 import { writeDesktopStatusFile } from "./status-file"
 import { toBridgeState } from "./to-bridge-state"
 import type { ConnectionServerRecord } from "./connection-state-bridge"
+import type { RuntimeConfigBridgeState } from "./runtime-config-bridge"
 import {
   createDesktopDualScreenWindowOptions,
   createDesktopWindowOptions,
@@ -180,10 +182,19 @@ async function main() {
   )
   windows = windowOptions.map(options => new BrowserWindow(options))
 
+  // Runtime config is set once at startup from the wrap step's env vars
+  // (the device wrap exports KORRI_NATIVE_BRIDGE_URL; the host wrap does
+  // not). Snapshot once and push to every window on dom-ready alongside
+  // the connection state.
+  const runtimeConfig: RuntimeConfigBridgeState = readRuntimeConfigFromEnv(
+    process.env,
+  )
+
   // Re-push the latest connection state once each webview's DOM is ready.
   // This closes the race where the bun-side push happens before the
   // renderer's preload has installed `window.__korriConnection` (and
   // therefore before the override on `receiveMessageFromBun` exists).
+  // The runtime-config push uses the same close-the-race window.
   for (const window of windows) {
     window.webview.on("dom-ready", () => {
       const snapshot = SubscriptionRef.getUnsafe(controller.state)
@@ -193,6 +204,14 @@ async function main() {
         logger.warn(
           { err: error, windowTitle: window.title },
           "failed to push initial connection state on dom-ready",
+        )
+      }
+      try {
+        window.webview.sendMessageToWebviewViaExecute(runtimeConfig)
+      } catch (error) {
+        logger.warn(
+          { err: error, windowTitle: window.title },
+          "failed to push runtime config on dom-ready",
         )
       }
     })
@@ -227,6 +246,7 @@ async function main() {
       windowTitles: windows.map(window => window.title),
       profile,
       statusFile: process.env.KORRI_DESKTOP_STATUS_FILE,
+      runtimeConfig,
     },
     "Korri desktop app started",
   )
