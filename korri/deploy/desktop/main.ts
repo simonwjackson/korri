@@ -1,6 +1,9 @@
 import { join } from "node:path"
 import { logger } from "@shared/logger"
-import { launchMoonlight } from "@app/stream/moonlight-launcher"
+import {
+  type CommandRunner,
+  launchMoonlight,
+} from "@app/stream/moonlight-launcher"
 import { createRemoteStreamControlClient } from "@app/stream/remote-stream-client"
 import { Effect, Exit, Scope, Stream, SubscriptionRef } from "effect"
 import { ApplicationMenu, BrowserWindow, PATHS } from "electrobun/bun"
@@ -149,7 +152,8 @@ async function main() {
         })
         return await client.prepareGame(id)
       },
-      launchMoonlight: opts => launchMoonlight({ host: opts.host }),
+      launchMoonlight: opts =>
+        launchMoonlight({ host: opts.host, runner: diagnosticMoonlightRunner }),
     },
   })
 
@@ -245,6 +249,104 @@ function resolvePreloadPath(): string | undefined {
   // electrobun.config.ts copies the preload bundle into views/mainview/.
   const preload = join(PATHS.VIEWS_FOLDER, "mainview", "preload.js")
   return preload
+}
+
+// Diagnostic runner: spawns moonlight with piped stderr, logs the first
+// 4KB of output that arrives within 4s of the spawn. This is how we
+// learn *why* moonlight bails (display missing, host unpaired, etc.)
+// when the desktop bridge spawns it. The CLI variant of the launch
+// flow inherits the user's interactive shell stdio so any complaint
+// surfaces in the terminal; the desktop bridge's Bun.spawn previously
+// piped everything to /dev/null, which is why crashes here were
+// invisible. The child is still unref'd — the desktop process never
+// waits for moonlight.
+const diagnosticMoonlightRunner: CommandRunner = {
+  run: async (command, args) => {
+    try {
+      const child = Bun.spawn([command, ...args], {
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      child.unref?.()
+      // Fire-and-forget: drain the first 4KB from each stream within
+      // 4 seconds, log it, then drop the reader (the process keeps
+      // running). We don't await this — the bridge handler must return
+      // quickly so the renderer's launch state can settle.
+      void collectAndLogMoonlightOutput(child, command, args)
+      return { status: "started" }
+    } catch (error) {
+      return {
+        status: "failed",
+        message: error instanceof Error ? error.message : String(error),
+      }
+    }
+  },
+}
+
+async function collectAndLogMoonlightOutput(
+  child: ReturnType<typeof Bun.spawn>,
+  command: string,
+  args: readonly string[],
+): Promise<void> {
+  const LIMIT_BYTES = 4 * 1024
+  const TIMEOUT_MS = 4_000
+
+  const drain = async (
+    stream: ReadableStream<Uint8Array> | undefined,
+    label: "stdout" | "stderr",
+  ): Promise<string> => {
+    if (!stream) return ""
+    const reader = stream.getReader()
+    const chunks: Uint8Array[] = []
+    let total = 0
+    const deadline = setTimeout(() => {
+      void reader.cancel().catch(() => undefined)
+    }, TIMEOUT_MS)
+    try {
+      while (total < LIMIT_BYTES) {
+        const { value, done } = await reader.read()
+        if (done) break
+        if (value) {
+          chunks.push(value)
+          total += value.byteLength
+        }
+      }
+    } catch {
+      // expected when timeout fires or process exits
+    } finally {
+      clearTimeout(deadline)
+      reader.releaseLock()
+    }
+    return new TextDecoder().decode(Buffer.concat(chunks.map(c => Buffer.from(c)))).slice(0, LIMIT_BYTES)
+  }
+
+  try {
+    const [stdout, stderr] = await Promise.all([
+      drain(child.stdout as ReadableStream<Uint8Array> | undefined, "stdout"),
+      drain(child.stderr as ReadableStream<Uint8Array> | undefined, "stderr"),
+    ])
+    const exited = await Promise.race([
+      child.exited,
+      new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), 100)),
+    ])
+    logger.info(
+      {
+        command,
+        args,
+        pid: child.pid,
+        exitCode: typeof exited === "number" ? exited : null,
+        stdout: stdout.trim() || null,
+        stderr: stderr.trim() || null,
+      },
+      "moonlight-diagnostic: process output",
+    )
+  } catch (error) {
+    logger.warn(
+      { err: error, command, args },
+      "moonlight-diagnostic: failed to capture output",
+    )
+  }
 }
 
 main().catch(error => {
