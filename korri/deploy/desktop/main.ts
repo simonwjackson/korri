@@ -5,14 +5,16 @@ import {
   launchMoonlight,
 } from "@app/stream/moonlight-launcher"
 import { createRemoteStreamControlClient } from "@app/stream/remote-stream-client"
-import { Effect, Exit, Scope, Stream, SubscriptionRef } from "effect"
-import { ApplicationMenu, BrowserWindow, PATHS } from "electrobun/bun"
+import { Effect, Exit, Fiber, Scope, Stream, SubscriptionRef } from "effect"
+import Electrobun, {
+  ApplicationMenu,
+  BrowserWindow,
+  PATHS,
+} from "electrobun/bun"
 import { watchStreamHosts } from "../../../tools/cli/lan-stream-discovery"
-import {
-  type ConnectionState,
-  makeConnectionController,
-} from "./connection"
+import { type ConnectionState, makeConnectionController } from "./connection"
 import { createDesktopApp } from "./create-desktop-app"
+import { createDesktopInputBroker } from "./input-broker"
 import { loadDesktopConfig, saveDesktopConfig } from "./desktop-config"
 import { readRuntimeConfigFromEnv } from "./runtime-config"
 import { writeDesktopStatusFile } from "./status-file"
@@ -33,6 +35,7 @@ const assetRoot = join(PATHS.VIEWS_FOLDER, "mainview")
 let server: ReturnType<typeof Bun.serve> | null = null
 let windows: BrowserWindow[] = []
 let controllerScope: Scope.Closeable | null = null
+let inputBrokerFiber: Fiber.Fiber<never, never> | null = null
 
 function installApplicationMenu() {
   ApplicationMenu.setApplicationMenu([
@@ -64,6 +67,10 @@ function stopDesktopServer() {
   if (controllerScope) {
     Effect.runFork(Scope.close(controllerScope, Exit.succeed(undefined)))
     controllerScope = null
+  }
+  if (inputBrokerFiber) {
+    Effect.runFork(Fiber.interrupt(inputBrokerFiber))
+    inputBrokerFiber = null
   }
 }
 
@@ -181,6 +188,14 @@ async function main() {
     { preload: preloadPath },
   )
   windows = windowOptions.map(options => new BrowserWindow(options))
+  const activeWindowProvider = createActiveWindowProvider(windows)
+  inputBrokerFiber = Effect.runFork(
+    createDesktopInputBroker({
+      inputdUrl: desktopInputdUrlFromEnv(process.env),
+      getWindows: () => windows,
+      getActiveWindow: activeWindowProvider.getActiveWindow,
+    }),
+  )
 
   // Runtime config is set once at startup from the wrap step's env vars
   // (the device wrap exports KORRI_NATIVE_BRIDGE_URL; the host wrap does
@@ -263,6 +278,30 @@ function createDesktopWindows(
   }
 
   return [createDesktopWindowOptions(address, profile, options)]
+}
+
+function createActiveWindowProvider(allWindows: readonly BrowserWindow[]) {
+  let activeWindowId: number | null = null
+
+  Electrobun.events.on("focus", event => {
+    activeWindowId = event.data.id
+  })
+  Electrobun.events.on("blur", event => {
+    if (activeWindowId === event.data.id) activeWindowId = null
+  })
+
+  return {
+    getActiveWindow: () =>
+      allWindows.find(window => window.id === activeWindowId) ?? null,
+  }
+}
+
+function desktopInputdUrlFromEnv(env: NodeJS.ProcessEnv): string | undefined {
+  return (
+    env.KORRI_DESKTOP_INPUTD_URL ??
+    env.KORRI_INPUT_BRIDGE_URL ??
+    env.KORRI_NATIVE_BRIDGE_URL
+  )
 }
 
 function resolvePreloadPath(): string | undefined {
@@ -350,7 +389,8 @@ async function collectAndLogMoonlightOutput(
           if (!value || !snapshotReady) {
             const room = SNAPSHOT_BYTES - bytesKept
             if (room > 0 && value) {
-              const take = value.byteLength > room ? value.slice(0, room) : value
+              const take =
+                value.byteLength > room ? value.slice(0, room) : value
               snapshotChunks.push(take)
               bytesKept += take.byteLength
               if (bytesKept >= SNAPSHOT_BYTES) markSnapshotReady()
@@ -370,11 +410,7 @@ async function collectAndLogMoonlightOutput(
       onSnapshotReady,
       text: () =>
         new TextDecoder()
-          .decode(
-            Buffer.concat(
-              snapshotChunks.map(c => Buffer.from(c)),
-            ),
-          )
+          .decode(Buffer.concat(snapshotChunks.map(c => Buffer.from(c))))
           .slice(0, SNAPSHOT_BYTES),
     }
   }
@@ -398,7 +434,9 @@ async function collectAndLogMoonlightOutput(
     ])
     const earlyExit = await Promise.race([
       child.exited,
-      new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), 50)),
+      new Promise<undefined>(resolve =>
+        setTimeout(() => resolve(undefined), 50),
+      ),
     ])
     logger.info(
       {
