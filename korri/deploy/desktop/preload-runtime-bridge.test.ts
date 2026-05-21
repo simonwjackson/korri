@@ -170,4 +170,33 @@ describe("installRuntimeBridge composed with installConnectionStateBridge", () =
     expect(connectionEvents).toEqual([CONNECTED])
     expect(runtimeEvents).toEqual([RUNTIME_WITH_URL])
   })
+
+  it("a throwing subscriber in one bridge does not poison the chain for the other", () => {
+    const w = makeWindow()
+    const connection = installConnectionStateBridge(
+      w as unknown as Window & typeof globalThis,
+    )
+    const runtime = installRuntimeBridge(
+      w as unknown as Window & typeof globalThis,
+    )
+
+    // Connection subscriber throws on every push.
+    connection.subscribe(() => {
+      throw new Error("connection subscriber blew up")
+    })
+
+    const runtimeEvents: RuntimeConfigBridgeState[] = []
+    runtime.subscribe(s => runtimeEvents.push(s))
+
+    // Push something that matches the connection bridge — the throwing
+    // subscriber fires, but the chain must continue running the runtime
+    // acceptor so a later runtime push still reaches its subscribers.
+    expect(() =>
+      w.__electrobun?.receiveMessageFromBun?.(CONNECTED),
+    ).not.toThrow()
+
+    w.__electrobun?.receiveMessageFromBun?.(RUNTIME_WITH_URL)
+
+    expect(runtimeEvents).toEqual([RUNTIME_WITH_URL])
+  })
 })

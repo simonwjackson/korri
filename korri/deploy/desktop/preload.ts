@@ -66,6 +66,9 @@ const INITIAL_RUNTIME_STATE: RuntimeConfigBridgeState = {
  * Chain a new acceptor onto `target.__electrobun.receiveMessageFromBun`,
  * preserving any previously-installed handler. Both run for every message;
  * each is responsible for filtering by its own type guard.
+ *
+ * Each handler is isolated by try/catch so a throw from one bridge (e.g.,
+ * a subscriber raising) does not poison the chain for the next bridge.
  */
 function chainAcceptor(
   target: Window & typeof globalThis,
@@ -77,9 +80,17 @@ function chainAcceptor(
   const previous = target.__electrobun.receiveMessageFromBun
   target.__electrobun.receiveMessageFromBun = (incoming: unknown): void => {
     if (typeof previous === "function") {
-      previous(incoming)
+      try {
+        previous(incoming)
+      } catch (error) {
+        console.warn("[korri] prior bridge acceptor threw", error)
+      }
     }
-    accept(incoming)
+    try {
+      accept(incoming)
+    } catch (error) {
+      console.warn("[korri] bridge acceptor threw", error)
+    }
   }
 }
 
