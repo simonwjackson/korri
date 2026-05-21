@@ -187,8 +187,8 @@ async function main() {
     profile,
     { preload: preloadPath },
   )
+  const activeWindowProvider = createActiveWindowProvider(() => windows)
   windows = windowOptions.map(options => new BrowserWindow(options))
-  const activeWindowProvider = createActiveWindowProvider(windows)
   inputBrokerFiber = Effect.runFork(
     createDesktopInputBroker({
       inputdUrl: desktopInputdUrlFromEnv(process.env),
@@ -279,7 +279,9 @@ function createDesktopWindows(
   return [createDesktopWindowOptions(address, profile, options)]
 }
 
-function createActiveWindowProvider(allWindows: readonly BrowserWindow[]) {
+function createActiveWindowProvider(
+  getWindows: () => readonly BrowserWindow[],
+) {
   let activeWindowId: number | null = null
 
   Electrobun.events.on("focus", event => {
@@ -291,7 +293,7 @@ function createActiveWindowProvider(allWindows: readonly BrowserWindow[]) {
 
   return {
     getActiveWindow: () =>
-      allWindows.find(window => window.id === activeWindowId) ?? null,
+      getWindows().find(window => window.id === activeWindowId) ?? null,
   }
 }
 
