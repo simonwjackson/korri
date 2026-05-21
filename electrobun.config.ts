@@ -16,6 +16,7 @@ export default {
     copy: {
       "out/build/portal/index.html": "views/mainview/index.html",
       "out/build/portal/assets": "views/mainview/assets",
+      "out/build/desktop-preload/preload.js": "views/mainview/preload.js",
     },
     watchIgnore: ["out/**", "node_modules/**"],
     mac: {

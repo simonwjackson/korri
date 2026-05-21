@@ -15,6 +15,7 @@ export interface DesktopWindowOptions {
     height: number
   }
   titleBarStyle: "default" | "hidden" | "hiddenInset"
+  preload?: string
 }
 
 export interface DesktopDualScreenWindowOptions {
@@ -42,7 +43,9 @@ export function desktopProfileFromEnv(
 export function createDesktopWindowOptions(
   address: DesktopServerAddress,
   profile: DesktopProfile = "default",
+  options: { readonly preload?: string } = {},
 ): DesktopWindowOptions {
+  const preload = options.preload
   if (profile === "device") {
     return {
       title: "Korri",
@@ -54,6 +57,7 @@ export function createDesktopWindowOptions(
         height: 1080,
       },
       titleBarStyle: "hidden",
+      preload,
     }
   }
 
@@ -67,12 +71,15 @@ export function createDesktopWindowOptions(
       height: 800,
     },
     titleBarStyle: "default",
+    preload,
   }
 }
 
 export function createDesktopDualScreenWindowOptions(
   address: DesktopServerAddress,
+  options: { readonly preload?: string } = {},
 ): DesktopDualScreenWindowOptions {
+  const preload = options.preload
   return {
     primary: {
       title: "Korri Primary",
@@ -84,6 +91,7 @@ export function createDesktopDualScreenWindowOptions(
         height: 720,
       },
       titleBarStyle: "default",
+      preload,
     },
     companion: {
       title: "Korri Companion",
@@ -95,6 +103,7 @@ export function createDesktopDualScreenWindowOptions(
         height: 700,
       },
       titleBarStyle: "default",
+      preload,
     },
   }
 }

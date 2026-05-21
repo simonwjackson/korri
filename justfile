@@ -54,13 +54,17 @@ device-run *args:
 device-print-run-command:
   bun run tools/device/flake-command.ts --print
 
+# Bundle the desktop preload script as a separate browser target.
+desktop-preload-build:
+  bun build korri/deploy/desktop/preload.ts --target=browser --outfile=out/build/desktop-preload/preload.js
+
 # Start the Electrobun desktop app after building portal assets.
-desktop-dev: build-web desktop-runtime-check
+desktop-dev: build-web desktop-preload-build desktop-runtime-check
   bun x electrobun dev
   bun run tools/desktop/electrobun-post-build-patch.ts
 
 # Package the Electrobun desktop app after building portal assets.
-desktop-build: build-web desktop-runtime-check
+desktop-build: build-web desktop-preload-build desktop-runtime-check
   bun x electrobun build
   bun run tools/desktop/electrobun-post-build-patch.ts
 

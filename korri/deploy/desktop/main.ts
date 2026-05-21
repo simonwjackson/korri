@@ -125,9 +125,11 @@ async function main() {
   }
 
   const profile = desktopProfileFromEnv()
+  const preloadPath = resolvePreloadPath()
   const windowOptions = createDesktopWindows(
     { host: DESKTOP_HOST, port },
     profile,
+    { preload: preloadPath },
   )
   windows = windowOptions.map(options => new BrowserWindow(options))
 
@@ -155,13 +157,20 @@ async function main() {
 function createDesktopWindows(
   address: DesktopServerAddress,
   profile: DesktopProfile,
+  options: { readonly preload?: string } = {},
 ) {
   if (process.env.KORRI_DESKTOP_DUAL_SCREEN === "1") {
-    const dual = createDesktopDualScreenWindowOptions(address)
+    const dual = createDesktopDualScreenWindowOptions(address, options)
     return [dual.primary, dual.companion]
   }
 
-  return [createDesktopWindowOptions(address, profile)]
+  return [createDesktopWindowOptions(address, profile, options)]
+}
+
+function resolvePreloadPath(): string | undefined {
+  // electrobun.config.ts copies the preload bundle into views/mainview/.
+  const preload = join(PATHS.VIEWS_FOLDER, "mainview", "preload.js")
+  return preload
 }
 
 main().catch(error => {
