@@ -11,11 +11,15 @@
  * (`./preload.ts`) without triggering side effects on the global window.
  */
 
-import { installConnectionStateBridge } from "./preload.ts"
+import {
+  installConnectionStateBridge,
+  installRuntimeBridge,
+} from "./preload.ts"
 
 if (typeof window !== "undefined" && typeof document !== "undefined") {
   try {
     installConnectionStateBridge(window as Window & typeof globalThis)
+    installRuntimeBridge(window as Window & typeof globalThis)
   } catch (error) {
     // Preload is best-effort; renderer falls back to a stub when missing.
     console.warn("[korri] preload bridge install failed", error)
