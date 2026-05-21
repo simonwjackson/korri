@@ -5,13 +5,15 @@ import {
 } from "./controller-profile"
 
 const native = { url: "ws://127.0.0.1:3002" }
+const desktop = {}
 const gamepad = { axisThreshold: 0.4 }
 
 describe("resolveControllerInput", () => {
-  it("uses browser gamepad for the default auto profile without native input", () => {
+  it("uses browser gamepad for the default auto profile without native or desktop input", () => {
     expect(resolveControllerInput()).toEqual({
       gamepad: undefined,
       native: false,
+      desktop: false,
     })
   })
 
@@ -19,22 +21,33 @@ describe("resolveControllerInput", () => {
     expect(resolveControllerInput({ native })).toEqual({
       gamepad: false,
       native,
+      desktop: false,
     })
   })
 
-  it("lets the web profile override native options", () => {
-    expect(resolveControllerInput({ profile: "web", native, gamepad })).toEqual(
-      {
-        gamepad,
-        native: false,
-      },
-    )
+  it("prefers desktop bridge input for the auto profile when desktop options exist", () => {
+    expect(resolveControllerInput({ desktop, native })).toEqual({
+      gamepad: false,
+      native: false,
+      desktop,
+    })
+  })
+
+  it("lets the web profile override native and desktop options", () => {
+    expect(
+      resolveControllerInput({ profile: "web", native, desktop, gamepad }),
+    ).toEqual({
+      gamepad,
+      native: false,
+      desktop: false,
+    })
   })
 
   it("uses native-only when the native profile has native options", () => {
     expect(resolveControllerInput({ profile: "native", native })).toEqual({
       gamepad: false,
       native,
+      desktop: false,
     })
   })
 
@@ -42,6 +55,7 @@ describe("resolveControllerInput", () => {
     expect(resolveControllerInput("native")).toEqual({
       gamepad: false,
       native: false,
+      desktop: false,
       warning: "controller profile 'native' requires native options",
     })
   })
@@ -52,6 +66,7 @@ describe("resolveControllerInput", () => {
     ).toEqual({
       gamepad,
       native,
+      desktop: false,
     })
   })
 
@@ -59,6 +74,7 @@ describe("resolveControllerInput", () => {
     expect(resolveControllerInput("debug-both")).toEqual({
       gamepad: undefined,
       native: false,
+      desktop: false,
       warning:
         "controller profile 'debug-both' requires native options for native input",
     })
@@ -68,6 +84,7 @@ describe("resolveControllerInput", () => {
     expect(resolveControllerInput(false)).toEqual({
       gamepad: false,
       native: false,
+      desktop: false,
     })
   })
 })

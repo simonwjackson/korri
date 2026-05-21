@@ -1,5 +1,6 @@
 import { getNextFocus } from "@bbc/tv-lrud-spatial"
 import { createInputBus, type InputBus } from "@shared/input/bus"
+import { createDesktopBridgeAdapter } from "@shared/input/desktop-bridge-adapter"
 import { createGamepadAdapter } from "@shared/input/gamepad-adapter"
 import { createKeyboardAdapter } from "@shared/input/keyboard-adapter"
 import {
@@ -139,6 +140,7 @@ function resolveSpatialNavigationControllerInput(
       options.native !== false && options.native !== undefined
         ? options.native
         : false,
+    desktop: false,
   }
 }
 
@@ -206,6 +208,9 @@ export function startSpatialNavigation(
   }
   if (controller.native !== false) {
     bus.use(createNativeInputAdapter(controller.native))
+  }
+  if (controller.desktop !== false) {
+    bus.use(createDesktopBridgeAdapter(controller.desktop))
   }
 
   if (options.pointer !== false) {

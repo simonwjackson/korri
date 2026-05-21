@@ -541,6 +541,35 @@ describe("controller profile wiring", () => {
     expect(seen).toEqual([{ type: "confirm", source: "keyboard" }])
   })
 
+  it("uses desktop bridge input for controller auto mode with desktop input", () => {
+    const seen: InputAction[] = []
+    let listener: ((action: InputAction) => void) | undefined
+    const handle = startSpatialNavigation({
+      keyboard: false,
+      pointer: false,
+      wheel: false,
+      native: false,
+      inputMode: false,
+      controller: {
+        profile: "auto",
+        desktop: {
+          bridge: {
+            subscribeAction(next) {
+              listener = next
+              return () => {}
+            },
+          },
+        },
+      },
+      nextFocus: () => null,
+    })
+    handle.bus.on(action => seen.push(action))
+
+    listener?.({ type: "confirm", source: "native" })
+
+    expect(seen).toEqual([{ type: "confirm", source: "native" }])
+  })
+
   it("supports explicit debug-both mode", async () => {
     const pad = createPad()
     const server = createInputServer()
