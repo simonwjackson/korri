@@ -74,10 +74,37 @@ function registerProcessShutdown() {
 async function main() {
   const scope = Scope.makeUnsafe()
   controllerScope = scope
+
+  // Tee the mDNS event stream so we can log each candidate as it appears
+  // — the controller alone is silent and a slow probe / mismatched URL
+  // would otherwise be invisible.
+  const rawWatcher = watchStreamHosts()
+  const watcher = rawWatcher.pipe(
+    Stream.tap(event =>
+      Effect.sync(() => {
+        if (event.kind === "appear") {
+          logger.info(
+            {
+              controlUrl: event.candidate.controlUrl,
+              hostId: event.candidate.id,
+              capabilities: event.candidate.capabilities,
+            },
+            "mdns: stream host appeared",
+          )
+        } else {
+          logger.info(
+            { controlUrl: event.controlUrl },
+            "mdns: stream host disappeared",
+          )
+        }
+      }),
+    ),
+  )
+
   const controller = await Effect.runPromise(
     Effect.provideService(
       makeConnectionController({
-        watcher: watchStreamHosts(),
+        watcher,
         loadConfig: Effect.tryPromise({
           try: () => loadDesktopConfig(),
           catch: error => error,
@@ -232,13 +259,31 @@ function pushConnectionStateToWebviews(
   )
 }
 
+const PROBE_TIMEOUT_MS = 3000
+
 function probeUpstream(controlUrl: string): Effect.Effect<boolean> {
+  const url = `${controlUrl}/api/health`
   return Effect.tryPromise({
     try: async () => {
-      const response = await fetch(`${controlUrl}/api/health`, {
-        signal: AbortSignal.timeout(500),
-      })
-      return response.ok
+      const start = performance.now()
+      try {
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+        })
+        const elapsedMs = Math.round(performance.now() - start)
+        logger.info(
+          { controlUrl, status: response.status, elapsedMs },
+          "probeUpstream: response",
+        )
+        return response.ok
+      } catch (error) {
+        const elapsedMs = Math.round(performance.now() - start)
+        logger.warn(
+          { controlUrl, elapsedMs, err: error },
+          "probeUpstream: fetch failed",
+        )
+        throw error
+      }
     },
     catch: () => false,
   }).pipe(Effect.orElseSucceed(() => false))
