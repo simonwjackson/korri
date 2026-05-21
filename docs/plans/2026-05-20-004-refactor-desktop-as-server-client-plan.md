@@ -1,7 +1,7 @@
 ---
 title: "refactor: Make the desktop a pure korri-server client"
 type: refactor
-status: active
+status: completed
 date: 2026-05-20
 deepened: 2026-05-20
 origin: docs/brainstorms/2026-05-20-desktop-as-server-client-requirements.md
