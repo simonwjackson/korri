@@ -235,15 +235,29 @@
           else
             null;
 
+        # Heavy build runs once and is shared between every variant. The wrap
+        # step below re-RPATHs shared objects per variant and writes the wrapper
+        # script; the unwrapped output's executables (bun, launcher) already
+        # have their interpreter set and are left alone by wrap.
+        korriDesktopUnwrapped =
+          if isSupportedDesktopSystem then
+            pkgs.callPackage ./nix/korri-desktop/unwrapped.nix {
+              inherit system bunDeps;
+              src = self;
+              inherit electrobunBinaries;
+              portal = korriPortal;
+              buildtimeLibraries = linuxDesktopRuntimeLibraries;
+            }
+          else
+            null;
+
+        # Host variant: current nixpkgs libraries throughout (callPackage
+        # auto-fills each named arg from `pkgs`).
         korriDesktop =
           if isSupportedDesktopSystem then
-            import ./nix/korri-desktop.nix {
-              inherit pkgs system bunDeps;
-              lib = pkgs.lib;
-              src = self;
-              electrobunBinaries = electrobunBinaries;
-              portal = korriPortal;
-              runtimeLibraries = linuxDesktopRuntimeLibraries;
+            pkgs.callPackage ./nix/korri-desktop/wrap.nix {
+              korri-desktop-unwrapped = korriDesktopUnwrapped;
+              stdenvCcLib = pkgs.stdenv.cc.cc.lib;
               profile = "host";
             }
           else
@@ -255,17 +269,27 @@
         # current nixpkgs ships, so the closure cannot be split. The paths are baked
         # into libNativeWrapper.so's RPATH at build time (no runtime LD_LIBRARY_PATH).
         # See docs/solutions/integration-issues/odin-electrobun-webkit-runtime-white-screen-2026-05-04.md.
+        #
+        # Every pkgs2405 entry from deviceDesktopRuntimeLibraries must appear here
+        # as a callPackage override. Missing entries would silently auto-fill from
+        # current nixpkgs and break the cohesive closure invariant.
         korriDesktopDevice =
           if isSupportedDesktopSystem then
-            import ./nix/korri-desktop.nix {
-              inherit pkgs system bunDeps;
-              lib = pkgs.lib;
-              src = self;
-              electrobunBinaries = electrobunBinaries;
-              portal = korriPortal;
-              runtimeLibraries = deviceDesktopRuntimeLibraries;
-              desktopDataDirs = deviceDesktopDataDirs;
-              gioExtraModules = pkgs2405.glib-networking;
+            pkgs.callPackage ./nix/korri-desktop/wrap.nix {
+              korri-desktop-unwrapped = korriDesktopUnwrapped;
+              webkitgtk_4_1 = pkgs2405.webkitgtk_4_1;
+              gtk3 = pkgs2405.gtk3;
+              libsoup_3 = pkgs2405.libsoup_3;
+              glib = pkgs2405.glib;
+              gdk-pixbuf = pkgs2405.gdk-pixbuf;
+              cairo = pkgs2405.cairo;
+              pango = pkgs2405.pango;
+              libayatana-appindicator = pkgs2405.libayatana-appindicator;
+              librsvg = pkgs2405.librsvg;
+              at-spi2-core = pkgs2405.at-spi2-core;
+              glib-networking = pkgs2405.glib-networking;
+              gsettings-desktop-schemas = pkgs2405.gsettings-desktop-schemas;
+              stdenvCcLib = pkgs.stdenv.cc.cc.lib;
               profile = "device";
             }
           else
@@ -286,9 +310,23 @@
         // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
           electrobun-cli = electrobunBinaries.cli;
           electrobun-core = electrobunBinaries.core;
+          korri-desktop-unwrapped = korriDesktopUnwrapped;
           korri-desktop = korriDesktop;
           korri-desktop-device = korriDesktopDevice;
           default = korriDesktop;
+        };
+
+        lib = pkgs.lib.optionalAttrs isSupportedDesktopSystem {
+          # Downstream consumers (mountainous, future device profiles) can
+          # build their own variants without vendoring build logic:
+          #   inputs.korri.lib.${system}.wrapKorriDesktop {
+          #     korri-desktop-unwrapped =
+          #       inputs.korri.packages.${system}.korri-desktop-unwrapped;
+          #     webkitgtk_4_1 = customPkgs.webkitgtk_4_1;
+          #     ...
+          #     profile = "steamdeck";
+          #   }
+          wrapKorriDesktop = args: pkgs.callPackage ./nix/korri-desktop/wrap.nix args;
         };
 
         apps =
