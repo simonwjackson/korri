@@ -1,3 +1,4 @@
+import { ConnectionGate } from "@app/features/connection/ConnectionGate"
 import { createFocusRestore } from "@shared/navigation/focus-restore"
 import { useInputAction } from "@shared/navigation/use-input-action"
 import {
@@ -39,14 +40,16 @@ function RootComponent() {
   }, [focusRestore, router])
 
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
-          Loading...
-        </div>
-      }
-    >
-      <Outlet />
-    </Suspense>
+    <ConnectionGate>
+      <Suspense
+        fallback={
+          <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
+            Loading...
+          </div>
+        }
+      >
+        <Outlet />
+      </Suspense>
+    </ConnectionGate>
   )
 }
