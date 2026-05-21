@@ -144,6 +144,18 @@ pkgs.stdenv.mkDerivation {
           cp -R out/build/portal/. "$app_bundle/Resources/app/views/mainview/"
         fi
 
+        # Compile the renderer-side preload that installs the
+        # connection-state bridge. `main.ts` pushes connection-state
+        # transitions via `window.__electrobun.receiveMessageFromBun`; the
+        # preload overrides the default stub to fan out validated state to
+        # `useConnectionState` subscribers. Without this file the React
+        # shell falls back to a 'connected' stub and the ConnectionGate
+        # opens before the desktop has actually connected to a server.
+        mkdir -p "$app_bundle/Resources/app/views/mainview"
+        bun build korri/deploy/desktop/preload-entry.ts \
+          --target=browser \
+          --outfile="$app_bundle/Resources/app/views/mainview/preload.js"
+
         if [ ! -f "$app_bundle/Resources/version.json" ]; then
           cat > "$app_bundle/Resources/version.json" <<'EOF'
     {"version":"1.0.0","hash":"dev","channel":"dev","baseUrl":"","name":"Korri","identifier":"dev.korri.desktop"}

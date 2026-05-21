@@ -87,20 +87,8 @@ export function installConnectionStateBridge(
   return bridge
 }
 
-// Auto-install only when running inside the desktop's electrobun webview —
-// signalled by the presence of `window.__electrobun`, which electrobun's
-// internal preload installs before this script runs. In test contexts
-// (happy-dom, no electrobun), importing this module must not mutate the
-// global window; tests call `installConnectionStateBridge` explicitly.
-if (
-  typeof window !== "undefined" &&
-  typeof document !== "undefined" &&
-  typeof (window as { __electrobun?: unknown }).__electrobun !== "undefined"
-) {
-  try {
-    installConnectionStateBridge(window as Window & typeof globalThis)
-  } catch (error) {
-    // Preload is best-effort; renderer falls back to a stub when missing.
-    console.warn("[korri] preload bridge install failed", error)
-  }
-}
+// No auto-install side effect: tests import this file directly and must
+// not mutate the global window on import. The desktop's compiled preload
+// entry point lives in `preload-entry.ts` and calls
+// `installConnectionStateBridge` explicitly when bundled for the
+// browser target.

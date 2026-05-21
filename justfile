@@ -56,7 +56,7 @@ device-print-run-command:
 
 # Bundle the desktop preload script as a separate browser target.
 desktop-preload-build:
-  bun build korri/deploy/desktop/preload.ts --target=browser --outfile=out/build/desktop-preload/preload.js
+  bun build korri/deploy/desktop/preload-entry.ts --target=browser --outfile=out/build/desktop-preload/preload.js
 
 # Start the Electrobun desktop app after building portal assets.
 desktop-dev: build-web desktop-preload-build desktop-runtime-check

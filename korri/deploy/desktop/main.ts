@@ -10,6 +10,7 @@ import {
 import { createDesktopApp } from "./create-desktop-app"
 import { loadDesktopConfig, saveDesktopConfig } from "./desktop-config"
 import { writeDesktopStatusFile } from "./status-file"
+import { toBridgeState } from "./to-bridge-state"
 import {
   createDesktopDualScreenWindowOptions,
   createDesktopWindowOptions,
@@ -106,16 +107,6 @@ async function main() {
     fetch: app.fetch,
   })
 
-  // For now we only log connection-state transitions; U5 wires the push
-  // into BrowserWindows.
-  Effect.runFork(
-    Effect.provideService(
-      logConnectionStateChanges(controller.state),
-      Scope.Scope,
-      scope,
-    ),
-  )
-
   installApplicationMenu()
   registerProcessShutdown()
 
@@ -132,6 +123,37 @@ async function main() {
     { preload: preloadPath },
   )
   windows = windowOptions.map(options => new BrowserWindow(options))
+
+  // Re-push the latest connection state once each webview's DOM is ready.
+  // This closes the race where the bun-side push happens before the
+  // renderer's preload has installed `window.__korriConnection` (and
+  // therefore before the override on `receiveMessageFromBun` exists).
+  for (const window of windows) {
+    window.webview.on("dom-ready", () => {
+      const snapshot = SubscriptionRef.getUnsafe(controller.state)
+      try {
+        window.webview.sendMessageToWebviewViaExecute(toBridgeState(snapshot))
+      } catch (error) {
+        logger.warn(
+          { err: error, windowTitle: window.title },
+          "failed to push initial connection state on dom-ready",
+        )
+      }
+    })
+  }
+
+  // Push every connection-state transition (including the initial value,
+  // which `SubscriptionRef.changes` re-emits to fresh subscribers) into
+  // each open webview. The preload installs `window.__korriConnection`
+  // and overrides `window.__electrobun.receiveMessageFromBun`, so this
+  // payload reaches `useConnectionState` subscribers in the React shell.
+  Effect.runFork(
+    Effect.provideService(
+      pushConnectionStateToWebviews(controller.state, () => windows),
+      Scope.Scope,
+      scope,
+    ),
+  )
 
   if (process.env.KORRI_DESKTOP_STATUS_FILE) {
     await writeDesktopStatusFile({
@@ -179,14 +201,33 @@ main().catch(error => {
   process.exit(1)
 })
 
-function logConnectionStateChanges(
+function pushConnectionStateToWebviews(
   state: SubscriptionRef.SubscriptionRef<ConnectionState>,
+  getWindows: () => readonly BrowserWindow[],
 ) {
   return SubscriptionRef.changes(state).pipe(
     Stream.runForEach(snapshot =>
-      Effect.sync(() =>
-        logger.info({ status: snapshot.status }, "connection state"),
-      ),
+      Effect.sync(() => {
+        const wire = toBridgeState(snapshot)
+        logger.info({ status: snapshot.status }, "connection state")
+        for (const window of getWindows()) {
+          // `BrowserWindow.webview` is a getter that resolves the
+          // associated BrowserView. `sendMessageToWebviewViaExecute`
+          // wraps the payload in a call to
+          // `window.__electrobun.receiveMessageFromBun(...)` and
+          // executeJavascript-injects it. Failures here are not fatal
+          // — the renderer falls back to `getState()` on the bridge
+          // when the next event fires.
+          try {
+            window.webview.sendMessageToWebviewViaExecute(wire)
+          } catch (error) {
+            logger.warn(
+              { err: error, windowTitle: window.title },
+              "failed to push connection state to webview",
+            )
+          }
+        }
+      }),
     ),
   )
 }
