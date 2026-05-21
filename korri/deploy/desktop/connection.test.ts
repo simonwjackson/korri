@@ -269,6 +269,38 @@ describe("connection controller", () => {
     expect(result.saved).toEqual([{ lastConnectedServer: SERVER_A }])
   })
 
+  it("keeps the connected state when the window expires after a direct-probe success and mDNS is silent", async () => {
+    // Regression: the direct-probe fiber set state to "connected", but
+    // the controller's separate fiber kept `local.connected = undefined`
+    // and, when its 1.5s window expired with no mDNS candidates, stomped
+    // the SubscriptionRef back to "searching". `getConnection()` in the
+    // launch bridge then refused press-A with "no connected upstream".
+    const result = await runTest(
+      Effect.gen(function* () {
+        const rig = yield* makeRig()
+        const config = makeConfigRig({ lastConnectedServer: SERVER_A })
+        const controller = yield* makeConnectionController({
+          watcher: rig.stream,
+          loadConfig: config.loadConfig,
+          saveConfig: config.saveConfig,
+          httpProbe: makeProbe(new Map([[SERVER_A.controlUrl, true]])),
+        })
+        // Direct probe fires immediately. Then we let the window expire
+        // with no mDNS events. State must stay "connected" — the
+        // controller must observe the SubscriptionRef before deciding to
+        // downgrade.
+        yield* TestClock.adjust("2 seconds")
+        const state = yield* SubscriptionRef.get(controller.state)
+        return state
+      }),
+    )
+
+    expect(result.status).toBe("connected")
+    if (result.status === "connected") {
+      expect(result.server).toEqual(SERVER_A)
+    }
+  })
+
   it("connects to a later remembered server after the window expires", async () => {
     const result = await runTest(
       Effect.gen(function* () {

@@ -168,11 +168,27 @@ function runController(ctx: ControllerContext): Effect.Effect<void> {
     connected: undefined as ServerRecord | undefined,
   }
 
+  // Sync `local.connected` from the shared SubscriptionRef. The
+  // direct-probe fiber (see `probeRememberedDirect`) sets the ref to
+  // `connected` without touching this fiber's `local` map, so without
+  // this hand-off the controller would keep thinking it's still
+  // pre-connected and could (a) downgrade to searching when its 1.5s
+  // window expires, or (b) duplicate-probe the same candidate.
+  const syncConnectedFromRef = Effect.gen(function* () {
+    if (local.connected) return true
+    const current = yield* SubscriptionRef.get(ctx.state)
+    if (current.status === "connected") {
+      local.connected = current.server
+      return true
+    }
+    return false
+  })
+
   const handleEvent = (event: ControllerEvent): Effect.Effect<void> =>
     Effect.gen(function* () {
       if (event.kind === "windowExpired") {
         local.windowExpired = true
-        if (local.connected) return
+        if (yield* syncConnectedFromRef) return
         // Promote first queued candidate, preferring remembered if present.
         const preferred = ctx.remembered
           ? local.queued.get(ctx.remembered.controlUrl)
@@ -220,8 +236,9 @@ function runController(ctx: ControllerContext): Effect.Effect<void> {
 
       // host.kind === "appear"
       const candidate = host.candidate
-      if (local.connected) {
-        // Already connected; ignore (federation will revisit this).
+      if (yield* syncConnectedFromRef) {
+        // Already connected (possibly via the direct-probe fiber);
+        // ignore (federation will revisit this).
         return
       }
       if (
