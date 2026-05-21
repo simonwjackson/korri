@@ -220,7 +220,7 @@ function defaultCommands(): InputdActionCommands {
   return {
     systemPanel: commandFromEnv("KORRI_INPUTD_SYSTEM_PANEL", "swaymsg", [
       "exec",
-      "korri-desktop-odin",
+      "korri-desktop-device",
     ]),
     killCurrentGame: commandFromEnv(
       "KORRI_INPUTD_KILL_CURRENT_GAME",
