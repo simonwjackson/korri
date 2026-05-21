@@ -1,4 +1,4 @@
-import { DataError, ValidationError } from "@shared/api/rpc/errors"
+import { DataError } from "@shared/api/rpc/errors"
 import {
   type LibraryError,
   LibrarySource,
@@ -6,20 +6,21 @@ import {
 import { logger } from "@shared/logger/logger"
 import { Effect } from "effect"
 
-import { isHeadlessSourceOnlyEnabled } from "../stream/control-mode"
 import { type ListLibraryPayload, ListLibraryResponse } from "./list.rpc"
 
+/**
+ * Returns the full library from whatever LibrarySource is provided by
+ * the host (proseql, manual, etc.).
+ *
+ * The legacy `KORRI_HEADLESS_SOURCE_ONLY` gate that used to reject this
+ * RPC has been retired: the desktop-as-server-client refactor exposes
+ * `app.library.list` from the unified server RPC group, so a deployment
+ * that runs the server is meant to BE the library. Source-only deploys
+ * still expose `app.source.list` separately, but they're no longer
+ * special-cased here.
+ */
 export const handleListLibrary = (_payload: typeof ListLibraryPayload.Type) =>
   Effect.gen(function* () {
-    if (isHeadlessSourceOnlyEnabled(process.env)) {
-      return yield* Effect.fail(
-        new ValidationError({
-          message:
-            "Full library listing is unavailable in headless source mode",
-        }),
-      )
-    }
-
     const source = yield* LibrarySource
     const games = yield* source.list().pipe(Effect.mapError(toDataError))
     return new ListLibraryResponse({ games })

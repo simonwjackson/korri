@@ -27,3 +27,4 @@ CLAUDE.local.md
 /korri/products/*/features/**/e2e/generated/
 /.argo/
 /old-ui
+/result
