@@ -14,7 +14,7 @@ applies_when:
   - "Consuming a local Korri checkout from an external NixOS flake during development"
 related_components:
   - "nix/modules/korri-game-stream.nix"
-  - "nix/korri-game-stream-runner.nix"
+  - "nix/korri-game-stream.nix"
   - "nix/korri-cli.nix"
   - "External NixOS host configuration"
   - "Sunshine user service"
