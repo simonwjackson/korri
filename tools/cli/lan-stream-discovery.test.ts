@@ -108,6 +108,10 @@ interface ControllableBonjour extends BonjourLike {
   readonly destroyed: boolean
 }
 
+/**
+ * Bonjour fake that buffers up/down emissions until a handler is registered
+ * via `find()` + `browser.on("down", ...)`, then flushes them synchronously.
+ */
 function createControllableBonjour(): ControllableBonjour {
   const state = {
     started: 0,
@@ -115,6 +119,16 @@ function createControllableBonjour(): ControllableBonjour {
     destroyed: false,
     upHandler: undefined as ((service: Service) => void) | undefined,
     downHandler: undefined as ((service: Service) => void) | undefined,
+    pending: [] as Array<{ kind: "up" | "down"; service: Service }>,
+  }
+  const flush = () => {
+    if (!state.upHandler) return
+    const queue = state.pending
+    state.pending = []
+    for (const event of queue) {
+      if (event.kind === "up") state.upHandler?.(event.service)
+      else state.downHandler?.(event.service)
+    }
   }
   const bonjour: ControllableBonjour = {
     get started() {
@@ -127,23 +141,28 @@ function createControllableBonjour(): ControllableBonjour {
       return state.destroyed
     },
     emitUp(service) {
-      state.upHandler?.(service)
+      if (state.upHandler) state.upHandler(service)
+      else state.pending.push({ kind: "up", service })
     },
     emitDown(service) {
-      state.downHandler?.(service)
+      if (state.downHandler) state.downHandler(service)
+      else state.pending.push({ kind: "down", service })
     },
     find: (_options, onup): BrowserLike => {
       state.upHandler = onup
       const browser: BrowserLike = {
         start: () => {
           state.started += 1
+          flush()
         },
         stop: () => {
           state.stopped = true
         },
         on: (event, handler) => {
-          if (event === "down")
+          if (event === "down") {
             state.downHandler = handler as (service: Service) => void
+            flush()
+          }
           return browser
         },
         off: (event, _handler) => {
@@ -161,21 +180,28 @@ function createControllableBonjour(): ControllableBonjour {
   return bonjour
 }
 
+function collectStream<A>(
+  stream: Stream.Stream<A>,
+  take: number,
+  timeoutMs = 200,
+): Effect.Effect<readonly A[]> {
+  return stream.pipe(
+    Stream.take(take),
+    Stream.interruptWhen(Effect.sleep(`${timeoutMs} millis`)),
+    Stream.runCollect,
+    Effect.scoped,
+  )
+}
+
 describe("watchStreamHosts", () => {
   it("emits an appear event when a service becomes available", async () => {
     const bonjour = createControllableBonjour()
+    bonjour.emitUp(service("Korri A", "192.168.1.50", 3010))
+
     const events = await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const stream = watchStreamHosts({ bonjourFactory: () => bonjour })
-          const fiber = yield* Effect.forkChild(
-            stream.pipe(Stream.take(1), Stream.runCollect),
-          )
-          yield* Effect.sync(() => {
-            bonjour.emitUp(service("Korri A", "192.168.1.50", 3010))
-          })
-          return yield* fiber
-        }),
+      collectStream(
+        watchStreamHosts({ bonjourFactory: () => bonjour }),
+        1,
       ),
     )
 
@@ -192,19 +218,13 @@ describe("watchStreamHosts", () => {
   it("emits appear then disappear for the same service", async () => {
     const bonjour = createControllableBonjour()
     const target = service("Korri A", "192.168.1.50", 3010)
-    const events: StreamHostEvent[] = await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const stream = watchStreamHosts({ bonjourFactory: () => bonjour })
-          const fiber = yield* Effect.forkChild(
-            stream.pipe(Stream.take(2), Stream.runCollect),
-          )
-          yield* Effect.sync(() => {
-            bonjour.emitUp(target)
-            bonjour.emitDown(target)
-          })
-          return yield* fiber
-        }),
+    bonjour.emitUp(target)
+    bonjour.emitDown(target)
+
+    const events = await Effect.runPromise(
+      collectStream(
+        watchStreamHosts({ bonjourFactory: () => bonjour }),
+        2,
       ),
     )
 
@@ -217,24 +237,21 @@ describe("watchStreamHosts", () => {
 
   it("emits appear events for two distinct services", async () => {
     const bonjour = createControllableBonjour()
+    bonjour.emitUp(service("Korri A", "192.168.1.50", 3010))
+    bonjour.emitUp(service("Korri B", "192.168.1.51", 3010))
+
     const events = await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const stream = watchStreamHosts({ bonjourFactory: () => bonjour })
-          const fiber = yield* Effect.forkChild(
-            stream.pipe(Stream.take(2), Stream.runCollect),
-          )
-          yield* Effect.sync(() => {
-            bonjour.emitUp(service("Korri A", "192.168.1.50", 3010))
-            bonjour.emitUp(service("Korri B", "192.168.1.51", 3010))
-          })
-          return yield* fiber
-        }),
+      collectStream(
+        watchStreamHosts({ bonjourFactory: () => bonjour }),
+        2,
       ),
     )
 
     const urls = events
-      .filter((e): e is Extract<StreamHostEvent, { kind: "appear" }> => e.kind === "appear")
+      .filter(
+        (e): e is Extract<StreamHostEvent, { kind: "appear" }> =>
+          e.kind === "appear",
+      )
       .map(e => e.candidate.controlUrl)
     expect(urls.sort()).toEqual([
       "http://192.168.1.50:3010",
@@ -245,26 +262,14 @@ describe("watchStreamHosts", () => {
   it("deduplicates appear events for the same controlUrl (TTL refresh)", async () => {
     const bonjour = createControllableBonjour()
     const target = service("Korri A", "192.168.1.50", 3010)
+    bonjour.emitUp(target)
+    bonjour.emitUp(target)
+
     const events = await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const stream = watchStreamHosts({ bonjourFactory: () => bonjour })
-          const fiber = yield* Effect.forkChild(
-            stream.pipe(
-              Stream.take(2),
-              Stream.runCollect,
-              Effect.timeout("100 millis"),
-              Effect.orElse(() =>
-                stream.pipe(Stream.take(1), Stream.runCollect),
-              ),
-            ),
-          )
-          yield* Effect.sync(() => {
-            bonjour.emitUp(target)
-            bonjour.emitUp(target)
-          })
-          return yield* fiber
-        }),
+      collectStream(
+        watchStreamHosts({ bonjourFactory: () => bonjour }),
+        2,
+        100,
       ),
     )
 
@@ -273,24 +278,14 @@ describe("watchStreamHosts", () => {
 
   it("does not emit disappear when no prior appear was emitted", async () => {
     const bonjour = createControllableBonjour()
-    const target = service("Korri Ghost", "192.168.1.99", 3010)
+    const ghost = service("Korri Ghost", "192.168.1.99", 3010)
+    bonjour.emitDown(ghost)
+
     const events = await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const stream = watchStreamHosts({ bonjourFactory: () => bonjour })
-          const fiber = yield* Effect.forkChild(
-            stream.pipe(
-              Stream.take(1),
-              Stream.runCollect,
-              Effect.timeout("50 millis"),
-              Effect.orElseSucceed(() => [] as readonly StreamHostEvent[]),
-            ),
-          )
-          yield* Effect.sync(() => {
-            bonjour.emitDown(target)
-          })
-          return yield* fiber
-        }),
+      collectStream(
+        watchStreamHosts({ bonjourFactory: () => bonjour }),
+        1,
+        50,
       ),
     )
 
@@ -299,29 +294,19 @@ describe("watchStreamHosts", () => {
 
   it("filters services with malformed TXT records", async () => {
     const bonjour = createControllableBonjour()
+    bonjour.emitUp({
+      name: "Bad service",
+      host: "bad.local",
+      port: 3010,
+      addresses: ["8.8.8.8"],
+      txt: { proto: "1" },
+    } as Service)
+
     const events = await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const stream = watchStreamHosts({ bonjourFactory: () => bonjour })
-          const fiber = yield* Effect.forkChild(
-            stream.pipe(
-              Stream.take(1),
-              Stream.runCollect,
-              Effect.timeout("100 millis"),
-              Effect.orElseSucceed(() => [] as readonly StreamHostEvent[]),
-            ),
-          )
-          yield* Effect.sync(() => {
-            bonjour.emitUp({
-              name: "Bad service",
-              host: "bad.local",
-              port: 3010,
-              addresses: ["8.8.8.8"],
-              txt: { proto: "1" },
-            } as Service)
-          })
-          return yield* fiber
-        }),
+      collectStream(
+        watchStreamHosts({ bonjourFactory: () => bonjour }),
+        1,
+        100,
       ),
     )
 
@@ -331,19 +316,10 @@ describe("watchStreamHosts", () => {
   it("cleans up the bonjour browser on scope close", async () => {
     const bonjour = createControllableBonjour()
     await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const stream = watchStreamHosts({ bonjourFactory: () => bonjour })
-          const fiber = yield* Effect.forkChild(
-            stream.pipe(
-              Stream.take(1),
-              Stream.runCollect,
-              Effect.timeout("50 millis"),
-              Effect.orElseSucceed(() => [] as readonly StreamHostEvent[]),
-            ),
-          )
-          yield* fiber
-        }),
+      collectStream(
+        watchStreamHosts({ bonjourFactory: () => bonjour }),
+        1,
+        50,
       ),
     )
 
