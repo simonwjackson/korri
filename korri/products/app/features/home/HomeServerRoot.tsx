@@ -1,4 +1,4 @@
-import { LauncherLayerRpc } from "@app/features/home/launcher-layer-rpc"
+import { LauncherLayerBridge } from "@app/features/home/launcher-layer-bridge"
 import { LibrarySourceLayerRpc } from "@app/features/home/library-source-layer-rpc"
 import { useAtomSet } from "@effect/atom-react"
 import {
@@ -13,7 +13,13 @@ export function HomeServerRoot({ children }: { readonly children: ReactNode }) {
 
   useLayoutEffect(() => {
     setLibrarySourceLayer(LibrarySourceLayerRpc)
-    setLauncherLayer(LauncherLayerRpc)
+    // Launch path goes through the desktop's bun-side bridge
+    // (prepare-stream RPC → local Moonlight). See
+    // `korri/deploy/desktop/launch-bridge.ts` for the bun handler
+    // and `launcher-layer-bridge.ts` for the renderer-side fetch.
+    // `LauncherLayerRpc` is still available for environments where the
+    // server should directly spawn the game (CLI / non-streaming hosts).
+    setLauncherLayer(LauncherLayerBridge)
   }, [setLibrarySourceLayer, setLauncherLayer])
 
   return <>{children}</>

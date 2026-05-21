@@ -1,5 +1,7 @@
 import { join } from "node:path"
 import { logger } from "@shared/logger"
+import { launchMoonlight } from "@app/stream/moonlight-launcher"
+import { createRemoteStreamControlClient } from "@app/stream/remote-stream-client"
 import { Effect, Exit, Scope, Stream, SubscriptionRef } from "effect"
 import { ApplicationMenu, BrowserWindow, PATHS } from "electrobun/bun"
 import { watchStreamHosts } from "../../../tools/cli/lan-stream-discovery"
@@ -11,6 +13,7 @@ import { createDesktopApp } from "./create-desktop-app"
 import { loadDesktopConfig, saveDesktopConfig } from "./desktop-config"
 import { writeDesktopStatusFile } from "./status-file"
 import { toBridgeState } from "./to-bridge-state"
+import type { ConnectionServerRecord } from "./connection-state-bridge"
 import {
   createDesktopDualScreenWindowOptions,
   createDesktopWindowOptions,
@@ -126,7 +129,29 @@ async function main() {
     return state.status === "connected" ? state.server.controlUrl : undefined
   }
 
-  const app = createDesktopApp({ assetRoot, getUpstream })
+  const getConnection = (): ConnectionServerRecord | undefined => {
+    const state = SubscriptionRef.getUnsafe(controller.state)
+    return state.status === "connected" ? state.server : undefined
+  }
+
+  const app = createDesktopApp({
+    assetRoot,
+    getUpstream,
+    launchBridge: {
+      getConnection,
+      // Construct a one-shot RemoteStreamControlClient per request so
+      // a reconnection between launches uses fresh wiring. The client is
+      // cheap to build; the underlying RPC layer is a stateless
+      // FetchHttpClient with serializer.
+      prepareGame: async (controlUrl, id) => {
+        const client = createRemoteStreamControlClient(controlUrl, {
+          timeoutMs: 5_000,
+        })
+        return await client.prepareGame(id)
+      },
+      launchMoonlight: opts => launchMoonlight({ host: opts.host }),
+    },
+  })
 
   server = Bun.serve({
     hostname: DESKTOP_HOST,
