@@ -2,7 +2,7 @@
 title: Odin Electrobun needs a compatible WebKitGTK runtime, not just the arm64 launcher
 module: Korri Odin Electrobun deployment
 date: 2026-05-04
-last_updated: 2026-05-04
+last_updated: 2026-05-20
 category: docs/solutions/integration-issues
 problem_type: integration_issue
 component: tooling
@@ -268,3 +268,51 @@ The follow-up GPU experiments showed that the next performance boundary is archi
 - `docs/solutions/best-practices/electrobun-desktop-wrapper-loopback-2026-05-01.md` — explains why the desktop app serves portal assets and RPC through one loopback HTTP origin.
 - `docs/solutions/integration-issues/runtime-mask-essway-to-stop-emulationstation-relaunching-during-odin-kiosk-sessions-2026-05-03.md` — documents the reversible `essway.service` runtime-mask pattern used before launching Korri.
 - `docs/plans/2026-05-03-001-feat-odin-electrobun-build-plan.md` — original plan for the Odin Electrobun launch path; this solution documents what the implementation discovered about portable Nix, WebKitGTK, and rendering.
+
+## Update 2026-05-20 — perf dimension validated post-proot
+
+The `pkgs2405` WebKitGTK 2.44.3 pin survives the migration off `proot`/portable-Nix onto real NixOS 26.05 aarch64 — but for a *different* reason than this doc originally captured.
+
+### Setup at validation time
+
+- Sobo is a Snapdragon 8 Gen 2 / Odin 2 Portal running NixOS 26.05 aarch64 with a real `/nix/store` and `services.korri.client` from `nixosModules.korri-client`.
+- No `proot`, no `LD_PRELOAD`, no `essway`. `rocknix-sway-kiosk.service` runs sway as root; Korri launches from the canonical Nix-built wrapper.
+- `LD_LIBRARY_PATH` / `XDG_DATA_DIRS` / `GIO_EXTRA_MODULES` exports are confined to the wrapper script, not process-wide.
+
+### Three A/B variants were built and run on sobo
+
+| Variant | Wrapper env exports | WebKit resolved at runtime | Result |
+|---|---|---|---|
+| Raw (`korri-desktop-device-raw`) | none beyond `KORRI_DESKTOP_PROFILE` + XDG defaults | 2.52.3 from current nixpkgs via RPATH | Renders, no white-screen, but **subjectively less responsive** during scroll. GPU DVFS scaled 220→475 MHz. |
+| Patched (`korri-desktop-device`, production) | `LD_LIBRARY_PATH` + `XDG_DATA_DIRS` + `GIO_EXTRA_MODULES` all pointing at `pkgs2405` (WebKit 2.44.3, GTK 3.24.43, gsettings-desktop-schemas 46.0, glib-networking 2.80.0) | 2.44.3 from pkgs2405 via LD_LIBRARY_PATH | Renders, **clearly more responsive** during scroll. |
+| WebKit-only experiment | `LD_LIBRARY_PATH` = pkgs2405 WebKit *only*; XDG_DATA_DIRS / GIO_EXTRA_MODULES unset | Would have been 2.44.3 | **Fails at startup.** `libNativeWrapper.so` → WebKit 2.44.3 → `libpangoft2-1.0.so.0`: `undefined symbol: pango_font_description_set_features`. WebKit 2.44.3 expects an older Pango ABI than current nixpkgs Pango 1.57.0. |
+
+### What this changes
+
+- **The pin is performance-critical, not just correctness-critical.** Current nixpkgs WebKitGTK 2.52.3 *does* render cleanly through RPATH on real NixOS — no EGL abort, no white-screen. The original symptom this doc was named after has been resolved by the broader NixOS-26.05/Mesa stack on sobo. The reason to *still* prefer 2.44.3 is on-device responsiveness during scroll/transition.
+- **The `pkgs2405` closure is cohesive, not piecemeal.** WebKit 2.44.3 cannot be substituted in isolation; it must move together with the matching Pango/GTK/glib because of inter-library ABI dependencies. Splitting the pin breaks the loader before the UI starts.
+- **Wrapper env exports must move as a set.** `LD_LIBRARY_PATH` alone (WebKit only) breaks. The production wrapper's three exports (`LD_LIBRARY_PATH` + `XDG_DATA_DIRS` + `GIO_EXTRA_MODULES`) are the minimum coherent group on this device.
+- **Build-time `patchelf` on `node_modules` ELFs is still required.** `/lib/ld-linux-aarch64.so.1` on sobo is a NixOS stub-ld that refuses to load generic ELFs; `nix-ld.service` does not exist. Upstream Electrobun's `bun` binary fails immediately without patchelf. This part of the original solution is unchanged by the new topology.
+
+### What is now safe to drop
+
+- Anything `proot`-related: `/storage/.nix-portable` staging, `nix-portable` symlinks, `proot -b` bindings. Replaced by real `/nix/store`.
+- Process-wide `LD_LIBRARY_PATH` worries: the patched wrapper only exports inside its own process tree, and Bun no longer segfaults because the closure is consistent.
+- `GSK_RENDERER=cairo`, `WEBKIT_DISABLE_COMPOSITING_MODE=1`, `WEBKIT_DISABLE_DMABUF_RENDERER=1` from the launch profile. None are set in the current wrapper and the app renders correctly; current nixpkgs Mesa/GBM on sobo is coherent.
+- `essway.service` runtime-mask dance: sobo runs sway via `rocknix-sway-kiosk.service` directly, no EmulationStation in the picture.
+
+### What stays
+
+- `pkgs2405` flake input + the four wrapper env exports + WebKitGTK 2.44.3 + matching pkgs2405 GTK/gsettings/glib-networking pins, all moving together.
+- Build-time `patchelf` of `node_modules` ELFs (interpreter + RPATH set during the Nix build of `korri-desktop`).
+- `KORRI_DESKTOP_PROFILE=device` + XDG home defaults in the wrapper.
+
+### Validation log location
+
+During the May 2026 sobo session the validation artifacts were:
+
+- `/nix/store/zv62rx70y3jqyh4b9balks7l6y5c0kjj-korri-desktop-1.0.0` — raw variant (no wrapper env exports, RPATH-resolved WebKit 2.52.3).
+- `/nix/store/c1ircpv2iz2i9jn9bjg3yvflj2jhd2ii-korri-desktop-1.0.0` — patched variant (production-equivalent).
+- `/tmp/korri-webkit-only-wrap.sh` (ad-hoc, on sobo) — WebKit-only experiment that failed with the Pango symbol error.
+
+These were ephemeral; the durable artifact is this update.
