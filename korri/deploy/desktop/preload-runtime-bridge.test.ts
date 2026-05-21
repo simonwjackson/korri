@@ -1,10 +1,7 @@
 import { describe, expect, it } from "bun:test"
 
 import type { ConnectionStateBridgeState } from "./connection-state-bridge"
-import {
-  installConnectionStateBridge,
-  installRuntimeBridge,
-} from "./preload"
+import { installConnectionStateBridge, installRuntimeBridge } from "./preload"
 import type { RuntimeConfigBridgeState } from "./runtime-config-bridge"
 
 interface WindowDouble {
@@ -36,7 +33,9 @@ const RUNTIME_WITHOUT_URL: RuntimeConfigBridgeState = {
 describe("installRuntimeBridge", () => {
   it("installs window.__korriRuntime with getState() and subscribe()", () => {
     const w = makeWindow()
-    const bridge = installRuntimeBridge(w as unknown as Window & typeof globalThis)
+    const bridge = installRuntimeBridge(
+      w as unknown as Window & typeof globalThis,
+    )
     expect(w.__korriRuntime).toBe(bridge)
     expect(typeof bridge.getState).toBe("function")
     expect(typeof bridge.subscribe).toBe("function")
@@ -44,13 +43,17 @@ describe("installRuntimeBridge", () => {
 
   it("returns an initial state with null nativeBridgeUrl before any push", () => {
     const w = makeWindow()
-    const bridge = installRuntimeBridge(w as unknown as Window & typeof globalThis)
+    const bridge = installRuntimeBridge(
+      w as unknown as Window & typeof globalThis,
+    )
     expect(bridge.getState()).toEqual({ nativeBridgeUrl: null })
   })
 
   it("delivers incoming state to subscribers and updates getState()", () => {
     const w = makeWindow()
-    const bridge = installRuntimeBridge(w as unknown as Window & typeof globalThis)
+    const bridge = installRuntimeBridge(
+      w as unknown as Window & typeof globalThis,
+    )
     const received: RuntimeConfigBridgeState[] = []
     bridge.subscribe(state => received.push(state))
 
@@ -62,7 +65,9 @@ describe("installRuntimeBridge", () => {
 
   it("accepts an explicit-null payload", () => {
     const w = makeWindow()
-    const bridge = installRuntimeBridge(w as unknown as Window & typeof globalThis)
+    const bridge = installRuntimeBridge(
+      w as unknown as Window & typeof globalThis,
+    )
     const received: RuntimeConfigBridgeState[] = []
     bridge.subscribe(state => received.push(state))
 
@@ -73,7 +78,9 @@ describe("installRuntimeBridge", () => {
 
   it("ignores malformed payloads without throwing", () => {
     const w = makeWindow()
-    const bridge = installRuntimeBridge(w as unknown as Window & typeof globalThis)
+    const bridge = installRuntimeBridge(
+      w as unknown as Window & typeof globalThis,
+    )
     const received: RuntimeConfigBridgeState[] = []
     bridge.subscribe(state => received.push(state))
 
@@ -88,7 +95,9 @@ describe("installRuntimeBridge", () => {
 
   it("unsubscribe stops delivering to that listener only", () => {
     const w = makeWindow()
-    const bridge = installRuntimeBridge(w as unknown as Window & typeof globalThis)
+    const bridge = installRuntimeBridge(
+      w as unknown as Window & typeof globalThis,
+    )
     const a: RuntimeConfigBridgeState[] = []
     const b: RuntimeConfigBridgeState[] = []
     const unsubA = bridge.subscribe(state => a.push(state))

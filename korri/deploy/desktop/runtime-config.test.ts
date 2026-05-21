@@ -16,9 +16,9 @@ describe("readRuntimeConfigFromEnv", () => {
   })
 
   it("treats an empty-string env var as unset", () => {
-    expect(
-      readRuntimeConfigFromEnv({ KORRI_NATIVE_BRIDGE_URL: "" }),
-    ).toEqual({ nativeBridgeUrl: null })
+    expect(readRuntimeConfigFromEnv({ KORRI_NATIVE_BRIDGE_URL: "" })).toEqual({
+      nativeBridgeUrl: null,
+    })
   })
 
   it("trims whitespace and treats whitespace-only as unset", () => {

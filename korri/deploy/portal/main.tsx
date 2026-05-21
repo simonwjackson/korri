@@ -9,8 +9,8 @@ import {
   isRuntimeConfigBridgeState,
   type RuntimeConfigBridgeState,
 } from "../desktop/runtime-config-bridge"
-import { buildSpatialNavigationConfig } from "./spatial-navigation-config"
 import { routeTree } from "./routeTree.gen"
+import { buildSpatialNavigationConfig } from "./spatial-navigation-config"
 import "@shared/primitives/theme/styles.css"
 import "@shared/themes/shift/shift.css"
 import "@fontsource-variable/geist"
@@ -77,9 +77,7 @@ function getInitialRuntimeConfig(): RuntimeConfigBridgeState {
   const bridge = window.__korriRuntime
   if (!bridge) return { nativeBridgeUrl: null }
   const value = bridge.getState()
-  return isRuntimeConfigBridgeState(value)
-    ? value
-    : { nativeBridgeUrl: null }
+  return isRuntimeConfigBridgeState(value) ? value : { nativeBridgeUrl: null }
 }
 
 function readControllerInputProfile(value: unknown): ControllerInputProfile {

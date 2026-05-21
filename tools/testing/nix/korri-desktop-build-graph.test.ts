@@ -46,9 +46,7 @@ function evalBuildGraph(): BuildGraphEval {
   )
 
   if (child.status !== 0) {
-    throw new Error(
-      `nix eval failed (exit ${child.status}):\n${child.stderr}`,
-    )
+    throw new Error(`nix eval failed (exit ${child.status}):\n${child.stderr}`)
   }
 
   return JSON.parse(child.stdout) as BuildGraphEval

@@ -12,7 +12,10 @@ describe("buildSpatialNavigationConfig", () => {
       diagnostics: true,
       controller: {
         profile: "auto",
-        native: { url: "ws://127.0.0.1:3002", subscribe: ["gamepad", "system"] },
+        native: {
+          url: "ws://127.0.0.1:3002",
+          subscribe: ["gamepad", "system"],
+        },
       },
     })
   })
@@ -31,9 +34,10 @@ describe("buildSpatialNavigationConfig", () => {
       profile: "web",
       native: undefined,
     })
-    expect(buildSpatialNavigationConfig(runtime, "native").controller).toEqual(
-      { profile: "native", native: undefined },
-    )
+    expect(buildSpatialNavigationConfig(runtime, "native").controller).toEqual({
+      profile: "native",
+      native: undefined,
+    })
     expect(
       buildSpatialNavigationConfig(runtime, "debug-both").controller,
     ).toEqual({ profile: "debug-both", native: undefined })

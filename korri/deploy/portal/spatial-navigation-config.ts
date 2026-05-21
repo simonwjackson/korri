@@ -1,6 +1,6 @@
-import type { RuntimeConfigBridgeState } from "../desktop/runtime-config-bridge"
 import type { ControllerInputProfile } from "@shared/navigation/controller-profile"
 import type { StartSpatialNavigationOptions } from "@shared/navigation/start"
+import type { RuntimeConfigBridgeState } from "../desktop/runtime-config-bridge"
 
 /**
  * Build the spatial-navigation start options from the runtime config
