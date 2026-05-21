@@ -55,8 +55,12 @@ pkgs.stdenv.mkDerivation {
 
     # The headless server runtime never imports electrobun — it ships in
     # bunDeps because the desktop derivation needs it. Drop the npm files
-    # from the server output so the closure doesn't carry them.
+    # from the server output so the closure doesn't carry them, along
+    # with any .bin symlinks that point into the deleted tree (otherwise
+    # nixpkgs' noBrokenSymlinks check fails the build).
     rm -rf "$out/share/korri-server/node_modules/electrobun"
+    find "$out/share/korri-server/node_modules/.bin" -maxdepth 1 -type l \
+      -lname '*/electrobun/*' -delete 2>/dev/null || true
 
     makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korri-server" \
       --add-flags "$out/share/korri-server/korri-server.js"
@@ -75,6 +79,14 @@ pkgs.stdenv.mkDerivation {
 
     if [ -d "$out/share/korri-server/node_modules/electrobun" ]; then
       echo "korri-server install closure must not contain electrobun npm files" >&2
+      exit 1
+    fi
+
+    # Catch dangling symlinks early — if we delete a node_modules tree we
+    # have to delete any .bin entries that pointed into it.
+    if find "$out/share/korri-server/node_modules" -xtype l 2>/dev/null | grep -q .; then
+      echo "korri-server install contains dangling symlinks:" >&2
+      find "$out/share/korri-server/node_modules" -xtype l >&2
       exit 1
     fi
 

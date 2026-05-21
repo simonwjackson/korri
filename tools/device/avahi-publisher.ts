@@ -20,6 +20,21 @@ const DEFAULT_AVAHI_SOCKETS = [
 
 const DEFAULT_AVAHI_CLI = "avahi-publish-service"
 
+/**
+ * Thrown when `avahi-publish-service` cannot be found on `$PATH`. Surfaced
+ * as a distinct error so callers can fall back to a no-op publisher
+ * instead of crashing the host process. Common on hardened systemd units
+ * that don't have `pkgs.avahi` in their `path`.
+ */
+export class AvahiCliNotFoundError extends Error {
+  readonly cli: string
+  constructor(cli: string) {
+    super(`avahi-publish-service not found on $PATH (looked for "${cli}")`)
+    this.name = "AvahiCliNotFoundError"
+    this.cli = cli
+  }
+}
+
 export interface AvahiPublishOptions {
   readonly name: string
   /** Service type without the `_` prefix or `._tcp/._udp` suffix. */
@@ -70,9 +85,27 @@ export function publishViaAvahi(
     ...txtArgs,
   ]
 
-  const child: AvahiSubprocess = options.spawn
-    ? options.spawn(argv)
-    : (Bun.spawn(argv, { stdout: "ignore", stderr: "ignore" }) as AvahiSubprocess)
+  let child: AvahiSubprocess
+  if (options.spawn) {
+    child = options.spawn(argv)
+  } else {
+    // Pre-flight the CLI so missing binaries surface a typed error
+    // before we try to spawn (Bun.spawn throws synchronously on ENOENT,
+    // but we want the caller to be able to catch a specific class).
+    if (!Bun.which(cli)) {
+      throw new AvahiCliNotFoundError(cli)
+    }
+    try {
+      child = Bun.spawn(argv, {
+        stdout: "ignore",
+        stderr: "ignore",
+      }) as AvahiSubprocess
+    } catch (error) {
+      const code = (error as { code?: string } | null)?.code
+      if (code === "ENOENT") throw new AvahiCliNotFoundError(cli)
+      throw error
+    }
+  }
 
   return {
     stop: async () => {

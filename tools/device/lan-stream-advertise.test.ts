@@ -119,6 +119,20 @@ describe("LAN stream advertisement", () => {
       expect(published).toBe(true)
     })
 
+    it("falls back to a no-op when the avahi CLI is missing on $PATH", async () => {
+      const { AvahiCliNotFoundError } = await import("./avahi-publisher")
+      const advertisement = advertiseStreamHost({
+        hostId: "aka",
+        port: 3001,
+        backend: "avahi",
+        publishAvahi: () => {
+          throw new AvahiCliNotFoundError("avahi-publish-service")
+        },
+      })
+      // No throw, stop() resolves cleanly.
+      await advertisement.stop()
+    })
+
     it("stops the avahi publisher when the advertisement stops", async () => {
       let stopped = false
       const advertisement = advertiseStreamHost({

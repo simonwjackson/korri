@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import {
+  AvahiCliNotFoundError,
   isAvahiDaemonRunning,
   publishViaAvahi,
   type AvahiSubprocess,
@@ -89,6 +90,22 @@ describe("publishViaAvahi", () => {
 
     await advertisement.stop()
     expect(killed).toBe(true)
+  })
+
+  it("throws AvahiCliNotFoundError when the CLI is missing on $PATH", () => {
+    // Force the real spawn path by not passing options.spawn, and point
+    // the cli at something nonexistent. Bun.which returns null — we
+    // never reach Bun.spawn.
+    expect(() =>
+      publishViaAvahi({
+        name: "x",
+        type: "korri-stream",
+        protocol: "tcp",
+        port: 3001,
+        txt: {},
+        cli: "/nonexistent/path/to/avahi-publish-service-does-not-exist",
+      }),
+    ).toThrow(AvahiCliNotFoundError)
   })
 
   it("does not hang stop() when the child never exits", async () => {

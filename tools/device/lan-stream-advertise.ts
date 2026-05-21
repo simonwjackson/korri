@@ -1,5 +1,6 @@
 import { hostname } from "node:os"
 import { Bonjour, type Service } from "bonjour-service"
+import { logger } from "@shared/logger"
 import {
   type BonjourLike,
   KORRI_STREAM_PROTOCOL_VERSION,
@@ -8,6 +9,7 @@ import {
 } from "../cli/lan-stream-discovery"
 import {
   type AvahiAdvertisement,
+  AvahiCliNotFoundError,
   type AvahiSubprocess,
   isAvahiDaemonRunning,
   publishViaAvahi,
@@ -59,13 +61,29 @@ export function advertiseStreamHost(
     options.backend ?? (detectAvahi() ? "avahi" : "bonjour")
 
   if (backend === "avahi") {
-    return publishViaAvahiBackend({
-      name,
-      port: options.port,
-      txt,
-      publish: options.publishAvahi ?? publishViaAvahi,
-      spawn: options.spawnAvahi,
-    })
+    try {
+      return publishViaAvahiBackend({
+        name,
+        port: options.port,
+        txt,
+        publish: options.publishAvahi ?? publishViaAvahi,
+        spawn: options.spawnAvahi,
+      })
+    } catch (error) {
+      if (error instanceof AvahiCliNotFoundError) {
+        // avahi-daemon is running but its CLI isn't on $PATH — typical on
+        // hardened systemd units that haven't added `pkgs.avahi` to the
+        // unit's path. Falling back to bonjour-service would race against
+        // the running daemon and produce NXDOMAIN, so the safer move is
+        // to no-op the advertisement and let the operator fix PATH.
+        logger.warn(
+          { cli: error.cli },
+          "avahi-publish-service not on PATH; mDNS advertise disabled (add pkgs.avahi to the unit's path to fix)",
+        )
+        return { stop: async () => {} }
+      }
+      throw error
+    }
   }
 
   const bonjour: BonjourLike =
