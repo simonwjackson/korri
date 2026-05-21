@@ -21,6 +21,8 @@ interface BuildGraphEval {
   deviceHasPkgs2405AtSpi: boolean
   hostHasPkgs2405Webkit: boolean
   hostHasPkgs2405Gtk: boolean
+  hostHasMoonlight: boolean
+  deviceHasMoonlight: boolean
 }
 
 function evalBuildGraph(): BuildGraphEval {
@@ -109,6 +111,16 @@ describe("korri-desktop build graph", () => {
 
     it("host wrap contains no pkgs2405 gtk3 (no closure leak)", () => {
       expect(result.hostHasPkgs2405Gtk).toBe(false)
+    })
+  })
+
+  describe("stream client runtime", () => {
+    it("host wrap provides Moonlight on PATH", () => {
+      expect(result.hostHasMoonlight).toBe(true)
+    })
+
+    it("device wrap provides Moonlight on PATH", () => {
+      expect(result.deviceHasMoonlight).toBe(true)
     })
   })
 })

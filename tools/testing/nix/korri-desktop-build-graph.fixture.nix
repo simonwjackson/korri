@@ -4,6 +4,10 @@
 }:
 let
   flake = builtins.getFlake (toString flakeRoot);
+  pkgs = import flake.inputs.nixpkgs.outPath {
+    inherit system;
+    config.allowUnfree = true;
+  };
   pkgs2405 = import flake.inputs.nixpkgs-2405.outPath {
     inherit system;
     config.allowUnfree = true;
@@ -46,6 +50,10 @@ let
     containsStorePath hostInstall pkgs2405.webkitgtk_4_1.outPath;
   hasPkgs2405GtkInHost =
     containsStorePath hostInstall pkgs2405.gtk3.outPath;
+
+  hostHasMoonlight = containsStorePath hostInstall pkgs.moonlight-qt.outPath;
+  deviceHasMoonlight =
+    containsStorePath deviceInstall pkgs.moonlight-qt.outPath;
 in
 {
   # Build-graph invariants: both variants must derive from the same
@@ -72,4 +80,6 @@ in
   # leak from copy-paste between variants).
   hostHasPkgs2405Webkit = hasPkgs2405WebkitInHost;
   hostHasPkgs2405Gtk = hasPkgs2405GtkInHost;
+
+  inherit hostHasMoonlight deviceHasMoonlight;
 }

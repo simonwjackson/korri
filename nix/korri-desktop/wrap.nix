@@ -24,6 +24,7 @@
   gsettings-desktop-schemas,
   glibc,
   stdenvCcLib,
+  moonlightQt ? pkgs.moonlight-qt,
   profile ? "host",
 }:
 
@@ -111,6 +112,7 @@ pkgs.stdenv.mkDerivation {
     #!${bash}/bin/bash
     export XDG_DATA_DIRS="${desktopDataPath}\''${XDG_DATA_DIRS:+:\$XDG_DATA_DIRS}"
     export GIO_EXTRA_MODULES="${gioExtraModulesPath}\''${GIO_EXTRA_MODULES:+:\$GIO_EXTRA_MODULES}"
+    export PATH="${moonlightQt}/bin\''${PATH:+:\$PATH}"
     ${lib.optionalString (gdkBackend != "") ''
     export GDK_BACKEND="\''${GDK_BACKEND:-${gdkBackend}}"
     ''}
