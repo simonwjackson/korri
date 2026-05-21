@@ -75,7 +75,7 @@ const INITIAL_STATE: ConnectionStateBridgeState = {
 }
 
 const INITIAL_RUNTIME_STATE: RuntimeConfigBridgeState = {
-  nativeBridgeUrl: null,
+  desktopInput: false,
 }
 
 const INITIAL_INPUT_STATUS: DesktopInputStatus = {

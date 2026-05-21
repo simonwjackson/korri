@@ -54,7 +54,7 @@ const CONNECTED: ConnectionStateBridgeState = {
   server: { hostId: "aka", controlUrl: "http://aka:3010" },
 }
 
-const RUNTIME = { nativeBridgeUrl: "ws://127.0.0.1:3002" }
+const RUNTIME = { desktopInput: true }
 
 describe("installDesktopInputBridge", () => {
   it("installs window.__korriInput with action and status subscriptions", () => {

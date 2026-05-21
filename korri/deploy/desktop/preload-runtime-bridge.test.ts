@@ -22,13 +22,8 @@ const CONNECTED: ConnectionStateBridgeState = {
   server: { hostId: "aka", controlUrl: "http://aka:3010" },
 }
 
-const RUNTIME_WITH_URL: RuntimeConfigBridgeState = {
-  nativeBridgeUrl: "ws://127.0.0.1:3002",
-}
-
-const RUNTIME_WITHOUT_URL: RuntimeConfigBridgeState = {
-  nativeBridgeUrl: null,
-}
+const RUNTIME_ENABLED: RuntimeConfigBridgeState = { desktopInput: true }
+const RUNTIME_DISABLED: RuntimeConfigBridgeState = { desktopInput: false }
 
 describe("installRuntimeBridge", () => {
   it("installs window.__korriRuntime with getState() and subscribe()", () => {
@@ -41,12 +36,12 @@ describe("installRuntimeBridge", () => {
     expect(typeof bridge.subscribe).toBe("function")
   })
 
-  it("returns an initial state with null nativeBridgeUrl before any push", () => {
+  it("returns an initial state with desktop input disabled before any push", () => {
     const w = makeWindow()
     const bridge = installRuntimeBridge(
       w as unknown as Window & typeof globalThis,
     )
-    expect(bridge.getState()).toEqual({ nativeBridgeUrl: null })
+    expect(bridge.getState()).toEqual({ desktopInput: false })
   })
 
   it("delivers incoming state to subscribers and updates getState()", () => {
@@ -57,13 +52,13 @@ describe("installRuntimeBridge", () => {
     const received: RuntimeConfigBridgeState[] = []
     bridge.subscribe(state => received.push(state))
 
-    w.__electrobun?.receiveMessageFromBun?.(RUNTIME_WITH_URL)
+    w.__electrobun?.receiveMessageFromBun?.(RUNTIME_ENABLED)
 
-    expect(received).toEqual([RUNTIME_WITH_URL])
-    expect(bridge.getState()).toEqual(RUNTIME_WITH_URL)
+    expect(received).toEqual([RUNTIME_ENABLED])
+    expect(bridge.getState()).toEqual(RUNTIME_ENABLED)
   })
 
-  it("accepts an explicit-null payload", () => {
+  it("accepts an explicit-disabled payload", () => {
     const w = makeWindow()
     const bridge = installRuntimeBridge(
       w as unknown as Window & typeof globalThis,
@@ -71,9 +66,9 @@ describe("installRuntimeBridge", () => {
     const received: RuntimeConfigBridgeState[] = []
     bridge.subscribe(state => received.push(state))
 
-    w.__electrobun?.receiveMessageFromBun?.(RUNTIME_WITHOUT_URL)
+    w.__electrobun?.receiveMessageFromBun?.(RUNTIME_DISABLED)
 
-    expect(received).toEqual([RUNTIME_WITHOUT_URL])
+    expect(received).toEqual([RUNTIME_DISABLED])
   })
 
   it("ignores malformed payloads without throwing", () => {
@@ -84,13 +79,13 @@ describe("installRuntimeBridge", () => {
     const received: RuntimeConfigBridgeState[] = []
     bridge.subscribe(state => received.push(state))
 
-    w.__electrobun?.receiveMessageFromBun?.({ nativeBridgeUrl: 42 })
-    w.__electrobun?.receiveMessageFromBun?.({ nativeBridgeUrl: undefined })
+    w.__electrobun?.receiveMessageFromBun?.({ nativeBridgeUrl: "ws://x" })
+    w.__electrobun?.receiveMessageFromBun?.({ desktopInput: "true" })
     w.__electrobun?.receiveMessageFromBun?.(null)
     w.__electrobun?.receiveMessageFromBun?.("hello")
 
     expect(received).toEqual([])
-    expect(bridge.getState()).toEqual({ nativeBridgeUrl: null })
+    expect(bridge.getState()).toEqual({ desktopInput: false })
   })
 
   it("unsubscribe stops delivering to that listener only", () => {
@@ -103,12 +98,12 @@ describe("installRuntimeBridge", () => {
     const unsubA = bridge.subscribe(state => a.push(state))
     bridge.subscribe(state => b.push(state))
 
-    w.__electrobun?.receiveMessageFromBun?.(RUNTIME_WITHOUT_URL)
+    w.__electrobun?.receiveMessageFromBun?.(RUNTIME_DISABLED)
     unsubA()
-    w.__electrobun?.receiveMessageFromBun?.(RUNTIME_WITH_URL)
+    w.__electrobun?.receiveMessageFromBun?.(RUNTIME_ENABLED)
 
-    expect(a).toEqual([RUNTIME_WITHOUT_URL])
-    expect(b).toEqual([RUNTIME_WITHOUT_URL, RUNTIME_WITH_URL])
+    expect(a).toEqual([RUNTIME_DISABLED])
+    expect(b).toEqual([RUNTIME_DISABLED, RUNTIME_ENABLED])
   })
 
   it("creates __electrobun when missing", () => {
@@ -153,10 +148,10 @@ describe("installRuntimeBridge composed with installConnectionStateBridge", () =
     connection.subscribe(s => connectionEvents.push(s))
     runtime.subscribe(s => runtimeEvents.push(s))
 
-    w.__electrobun?.receiveMessageFromBun?.(RUNTIME_WITH_URL)
+    w.__electrobun?.receiveMessageFromBun?.(RUNTIME_ENABLED)
 
     expect(connectionEvents).toEqual([])
-    expect(runtimeEvents).toEqual([RUNTIME_WITH_URL])
+    expect(runtimeEvents).toEqual([RUNTIME_ENABLED])
   })
 
   it("install order does not matter — runtime first then connection", () => {
@@ -174,10 +169,10 @@ describe("installRuntimeBridge composed with installConnectionStateBridge", () =
     runtime.subscribe(s => runtimeEvents.push(s))
 
     w.__electrobun?.receiveMessageFromBun?.(CONNECTED)
-    w.__electrobun?.receiveMessageFromBun?.(RUNTIME_WITH_URL)
+    w.__electrobun?.receiveMessageFromBun?.(RUNTIME_ENABLED)
 
     expect(connectionEvents).toEqual([CONNECTED])
-    expect(runtimeEvents).toEqual([RUNTIME_WITH_URL])
+    expect(runtimeEvents).toEqual([RUNTIME_ENABLED])
   })
 
   it("a throwing subscriber in one bridge does not poison the chain for the other", () => {
@@ -189,7 +184,6 @@ describe("installRuntimeBridge composed with installConnectionStateBridge", () =
       w as unknown as Window & typeof globalThis,
     )
 
-    // Connection subscriber throws on every push.
     connection.subscribe(() => {
       throw new Error("connection subscriber blew up")
     })
@@ -197,15 +191,12 @@ describe("installRuntimeBridge composed with installConnectionStateBridge", () =
     const runtimeEvents: RuntimeConfigBridgeState[] = []
     runtime.subscribe(s => runtimeEvents.push(s))
 
-    // Push something that matches the connection bridge — the throwing
-    // subscriber fires, but the chain must continue running the runtime
-    // acceptor so a later runtime push still reaches its subscribers.
     expect(() =>
       w.__electrobun?.receiveMessageFromBun?.(CONNECTED),
     ).not.toThrow()
 
-    w.__electrobun?.receiveMessageFromBun?.(RUNTIME_WITH_URL)
+    w.__electrobun?.receiveMessageFromBun?.(RUNTIME_ENABLED)
 
-    expect(runtimeEvents).toEqual([RUNTIME_WITH_URL])
+    expect(runtimeEvents).toEqual([RUNTIME_ENABLED])
   })
 })

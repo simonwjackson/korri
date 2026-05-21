@@ -42,26 +42,24 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(<RouterProvider router={router} />)
 
 // Device-agnostic spatial navigation. Controller backend is now runtime-
-// configured (was Vite-baked): the desktop preload installs a bridge on
-// `window.__korriRuntime` and the bun side pushes `{ nativeBridgeUrl }`
-// once on dom-ready. On host variants and non-desktop deploys (dev web,
-// Storybook), the bridge is absent or reports `nativeBridgeUrl: null` and
-// the gamepad adapter handles controller input.
+// configured (was Vite-baked): the desktop preload installs bridges on
+// `window.__korriRuntime` and `window.__korriInput`, and the bun side pushes
+// `{ desktopInput: true }` once on dom-ready. On non-desktop deploys (dev web,
+// Storybook), the runtime bridge is absent and the gamepad adapter handles
+// controller input.
 const controllerProfile = readControllerInputProfile(
   import.meta.env.VITE_KORRI_CONTROLLER_PROFILE,
 )
 
-let lastNativeBridgeUrl: string | null = null
+let lastDesktopInput: boolean | null = null
 startWithRuntimeConfig(getInitialRuntimeConfig(), controllerProfile)
 
-// Subscribe to runtime-config changes so the device variant's dom-ready
-// push reconfigures spatial navigation with the native bridge. Re-calls
-// to `startSpatialNavigation` dispose the previous handle and rebuild;
+// Subscribe to runtime-config changes so the desktop dom-ready push
+// reconfigures spatial navigation with the desktop input bridge. Re-calls to
+// `startSpatialNavigation` dispose the previous handle and rebuild;
 // `useInputAction` consumers re-subscribe via `subscribeSpatialNavigation`.
-// Skip the rebuild when the URL hasn't changed (e.g. the host variant's
-// push of `{ nativeBridgeUrl: null }` matches the initial state).
 window.__korriRuntime?.subscribe(state => {
-  if (state.nativeBridgeUrl === lastNativeBridgeUrl) return
+  if (state.desktopInput === lastDesktopInput) return
   startWithRuntimeConfig(state, controllerProfile)
 })
 
@@ -69,15 +67,15 @@ function startWithRuntimeConfig(
   runtime: RuntimeConfigBridgeState,
   profile: ControllerInputProfile,
 ): void {
-  lastNativeBridgeUrl = runtime.nativeBridgeUrl
+  lastDesktopInput = runtime.desktopInput
   startSpatialNavigation(buildSpatialNavigationConfig(runtime, profile))
 }
 
 function getInitialRuntimeConfig(): RuntimeConfigBridgeState {
   const bridge = window.__korriRuntime
-  if (!bridge) return { nativeBridgeUrl: null }
+  if (!bridge) return { desktopInput: false }
   const value = bridge.getState()
-  return isRuntimeConfigBridgeState(value) ? value : { nativeBridgeUrl: null }
+  return isRuntimeConfigBridgeState(value) ? value : { desktopInput: false }
 }
 
 function readControllerInputProfile(value: unknown): ControllerInputProfile {

@@ -54,6 +54,11 @@ let
   hostHasMoonlight = containsStorePath hostInstall pkgs.moonlight-qt.outPath;
   deviceHasMoonlight =
     containsStorePath deviceInstall pkgs.moonlight-qt.outPath;
+
+  deviceExportsDesktopInputdUrl =
+    builtins.match ".*KORRI_DESKTOP_INPUTD_URL.*" deviceInstall != null;
+  deviceLeaksNativeBridgeUrl =
+    builtins.match ".*KORRI_NATIVE_BRIDGE_URL.*" deviceInstall != null;
 in
 {
   # Build-graph invariants: both variants must derive from the same
@@ -82,4 +87,5 @@ in
   hostHasPkgs2405Gtk = hasPkgs2405GtkInHost;
 
   inherit hostHasMoonlight deviceHasMoonlight;
+  inherit deviceExportsDesktopInputdUrl deviceLeaksNativeBridgeUrl;
 }

@@ -197,10 +197,9 @@ async function main() {
     }),
   )
 
-  // Runtime config is set once at startup from the wrap step's env vars
-  // (the device wrap exports KORRI_NATIVE_BRIDGE_URL; the host wrap does
-  // not). Snapshot once and push to every window on dom-ready alongside
-  // the connection state.
+  // Runtime config is set once at startup from the wrap step's env vars.
+  // The raw inputd URL stays in Electrobun main; the renderer only learns
+  // whether desktop broker input is enabled.
   const runtimeConfig: RuntimeConfigBridgeState = readRuntimeConfigFromEnv(
     process.env,
   )
@@ -297,11 +296,7 @@ function createActiveWindowProvider(allWindows: readonly BrowserWindow[]) {
 }
 
 function desktopInputdUrlFromEnv(env: NodeJS.ProcessEnv): string | undefined {
-  return (
-    env.KORRI_DESKTOP_INPUTD_URL ??
-    env.KORRI_INPUT_BRIDGE_URL ??
-    env.KORRI_NATIVE_BRIDGE_URL
-  )
+  return env.KORRI_DESKTOP_INPUTD_URL ?? env.KORRI_INPUT_BRIDGE_URL
 }
 
 function resolvePreloadPath(): string | undefined {

@@ -23,6 +23,8 @@ interface BuildGraphEval {
   hostHasPkgs2405Gtk: boolean
   hostHasMoonlight: boolean
   deviceHasMoonlight: boolean
+  deviceExportsDesktopInputdUrl: boolean
+  deviceLeaksNativeBridgeUrl: boolean
 }
 
 function evalBuildGraph(): BuildGraphEval {
@@ -111,6 +113,16 @@ describe("korri-desktop build graph", () => {
 
     it("host wrap contains no pkgs2405 gtk3 (no closure leak)", () => {
       expect(result.hostHasPkgs2405Gtk).toBe(false)
+    })
+  })
+
+  describe("desktop input runtime", () => {
+    it("device wrap exports the broker-only inputd URL for Electrobun main", () => {
+      expect(result.deviceExportsDesktopInputdUrl).toBe(true)
+    })
+
+    it("device wrap does not expose the raw native bridge URL to the renderer", () => {
+      expect(result.deviceLeaksNativeBridgeUrl).toBe(false)
     })
   })
 
