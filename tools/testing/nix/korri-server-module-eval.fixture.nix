@@ -12,6 +12,7 @@ let
     modules = [
       flake.nixosModules.korri-server
       flake.nixosModules.korri-headless-source
+      flake.nixosModules.korri-inputd
       (
         { ... }:
         {
@@ -83,6 +84,14 @@ in
   gameStreamDisplayCompatDefaults =
     eval.config.services.korri.gameStream.displayCompat.defaults or null;
   gameStreamDisplayCompatExtra = eval.config.services.korri.gameStream.displayCompat.extraEnv or null;
+  bootKernelModules = eval.config.boot.kernelModules or [ ];
+  udevExtraRules = eval.config.services.udev.extraRules or "";
+  inputdServiceEnv =
+    if eval.config.systemd.services ? korri-inputd then
+      eval.config.systemd.services.korri-inputd.environment
+    else
+      null;
+
   gameStreamWrapperScript =
     let
       apps = eval.config.services.sunshine.applications.apps or [ ];

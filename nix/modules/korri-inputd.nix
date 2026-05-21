@@ -34,8 +34,13 @@ in
 
     hostname = lib.mkOption {
       type = lib.types.str;
-      default = "0.0.0.0";
-      description = "Address for the Korri native input WebSocket bridge to bind.";
+      default = "127.0.0.1";
+      description = ''
+        Address for the Korri native input WebSocket bridge to bind. The
+        default is loopback-only because production desktop input is brokered
+        locally by the desktop process. Override deliberately for remote inputd
+        debugging.
+      '';
     };
 
     environment = lib.mkOption {

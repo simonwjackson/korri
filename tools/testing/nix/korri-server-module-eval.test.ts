@@ -25,6 +25,7 @@ type EvalResult = {
   systemRestart: string | null
   userServiceEnv: Record<string, string> | null
   systemServiceEnv: Record<string, string> | null
+  inputdServiceEnv: Record<string, string> | null
   tmpfilesRunDir: { user?: string; group?: string; mode?: string } | null
   gameStreamRuntimeDir: string | null
   gameStreamIntentPath: string | null
@@ -32,6 +33,8 @@ type EvalResult = {
   gameStreamDisplayCompatEnable: boolean | null
   gameStreamDisplayCompatDefaults: Record<string, string> | null
   gameStreamDisplayCompatExtra: Record<string, string> | null
+  bootKernelModules: string[]
+  udevExtraRules: string
   gameStreamWrapperScript: string | null
   firewallTcpPorts: number[]
   firewallInterfaceNames: string[]
@@ -193,9 +196,42 @@ describe("services.korri.server NixOS module evaluation", () => {
       )
     })
 
+    it("enables uinput access for Sunshine-streamed sessions", () => {
+      expect(result.bootKernelModules).toContain("uinput")
+      expect(result.udevExtraRules).toContain('KERNEL=="uinput"')
+      expect(result.udevExtraRules).toContain('GROUP="input"')
+      expect(result.udevExtraRules).toContain('TAG+="uaccess"')
+    })
+
     it("has no failing assertions", () => {
       expect(result.assertionsPassed).toBe(true)
       expect(result.assertionMessages).toEqual([])
+    })
+  })
+
+  describe("inputd module defaults", () => {
+    const defaultInputd = expectOk(
+      evalFixture(`{ services.korri.inputd.enable = true; }`),
+    )
+    const remoteDebugInputd = expectOk(
+      evalFixture(`{
+        services.korri.inputd = {
+          enable = true;
+          hostname = "0.0.0.0";
+        };
+      }`),
+    )
+
+    it("binds the native input bridge to loopback by default", () => {
+      expect(defaultInputd.inputdServiceEnv).not.toBeNull()
+      const env = defaultInputd.inputdServiceEnv as Record<string, string>
+      expect(env.KORRI_INPUT_BRIDGE_HOSTNAME).toBe("127.0.0.1")
+      expect(env.KORRI_INPUT_BRIDGE_PORT).toBe("3002")
+    })
+
+    it("allows deliberate remote debugging by overriding the bind hostname", () => {
+      const env = remoteDebugInputd.inputdServiceEnv as Record<string, string>
+      expect(env.KORRI_INPUT_BRIDGE_HOSTNAME).toBe("0.0.0.0")
     })
   })
 
@@ -356,6 +392,25 @@ describe("services.korri.server NixOS module evaluation", () => {
       expect(conflictingHeadlessSource.warnings.join("\n")).toContain(
         "port 3001",
       )
+    })
+  })
+
+  describe("uinput defaults", () => {
+    const disabled = expectOk(
+      evalFixture(`{
+        services.korri.server = {
+          enable = true;
+          serviceMode = "system";
+          user = "testuser";
+          streamHost.enable = true;
+        };
+        services.korri.gameStream.uinput.enable = false;
+      }`),
+    )
+
+    it("can opt out when the host provides uinput permissions elsewhere", () => {
+      expect(disabled.bootKernelModules).not.toContain("uinput")
+      expect(disabled.udevExtraRules).not.toContain('KERNEL=="uinput"')
     })
   })
 
