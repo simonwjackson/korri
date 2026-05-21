@@ -1,7 +1,7 @@
 ---
 title: "refactor: Split korri-desktop into unwrapped+wrap and unify the portal"
 type: refactor
-status: active
+status: completed
 date: 2026-05-20
 ---
 
