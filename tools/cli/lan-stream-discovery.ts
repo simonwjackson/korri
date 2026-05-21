@@ -1,4 +1,5 @@
 import { Bonjour, type Service } from "bonjour-service"
+import { Effect, Queue, Stream } from "effect"
 
 export const KORRI_STREAM_SERVICE_TYPE = "korri-stream"
 export const KORRI_STREAM_SERVICE_PROTOCOL = "tcp" as const
@@ -31,6 +32,92 @@ export interface BonjourLike {
 export interface BrowserLike {
   start?: () => void
   stop: () => void
+  on?: (event: "down" | "up", handler: (service: Service) => void) => BrowserLike
+  off?: (event: "down" | "up", handler: (service: Service) => void) => BrowserLike
+}
+
+export type StreamHostEvent =
+  | { readonly kind: "appear"; readonly candidate: StreamHostCandidate }
+  | { readonly kind: "disappear"; readonly controlUrl: string }
+
+export interface WatchStreamHostsOptions {
+  readonly bonjourFactory?: () => BonjourLike
+}
+
+/**
+ * Always-on mDNS browse stream for `_korri-stream._tcp` services.
+ *
+ * Emits `appear` once per distinct `controlUrl` (TTL refreshes are
+ * deduplicated) and `disappear` only when a prior `appear` was emitted for
+ * the same `controlUrl`. The bonjour browser is started when the stream is
+ * pulled and destroyed when the surrounding scope closes.
+ */
+export function watchStreamHosts(
+  options: WatchStreamHostsOptions = {},
+): Stream.Stream<StreamHostEvent> {
+  return Stream.callback<StreamHostEvent>(queue =>
+    Effect.gen(function* () {
+      const bonjour = options.bonjourFactory?.() ?? new Bonjour()
+      const known = new Map<string, string>()
+
+      const onUp = (service: Service) => {
+        const candidate = candidateFromMdnsService(service)
+        if (!candidate) return
+        if (known.has(candidate.controlUrl)) return
+        known.set(candidate.controlUrl, hostKeyForService(service))
+        Queue.offerUnsafe(queue, {
+          kind: "appear",
+          candidate,
+        })
+      }
+
+      const onDown = (service: Service) => {
+        const candidate = candidateFromMdnsService(service)
+        const controlUrl = candidate?.controlUrl ?? findControlUrlByService(known, service)
+        if (!controlUrl) return
+        if (!known.has(controlUrl)) return
+        known.delete(controlUrl)
+        Queue.offerUnsafe(queue, {
+          kind: "disappear",
+          controlUrl,
+        })
+      }
+
+      const browser = bonjour.find(
+        {
+          type: KORRI_STREAM_SERVICE_TYPE,
+          protocol: KORRI_STREAM_SERVICE_PROTOCOL,
+        },
+        onUp,
+      )
+      browser.on?.("down", onDown)
+      browser.start?.()
+
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          browser.off?.("down", onDown)
+          browser.stop()
+          bonjour.destroy()
+        }),
+      )
+    }),
+  )
+}
+
+function hostKeyForService(service: Service): string {
+  return service.name ?? service.host ?? ""
+}
+
+function findControlUrlByService(
+  known: ReadonlyMap<string, string>,
+  service: Service,
+): string | undefined {
+  const key = hostKeyForService(service)
+  if (!key) return undefined
+  for (const [controlUrl, recordedKey] of known.entries()) {
+    if (recordedKey === key) return controlUrl
+  }
+  return undefined
 }
 
 export async function discoverStreamHosts(
