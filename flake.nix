@@ -68,10 +68,30 @@
           ++ [ pkgs.stdenv.cc.cc.lib ]
         );
 
-        deviceDesktopRuntimeLibraries = pkgs.lib.optionals pkgs.stdenv.isLinux [
-          pkgs2405.webkitgtk_4_1
-          pkgs2405.gtk3
-        ];
+        # Full pkgs2405 closure mirroring `linuxDesktopRuntimeLibraries` for the
+        # libraries libNativeWrapper.so directly NEEDs. Order matters: pkgs2405
+        # entries come first so the loader prefers them; current-nixpkgs glibc
+        # / gcc-lib fall in at the end because that is what bun + the launcher's
+        # interpreter were patchelfed to use.
+        deviceDesktopRuntimeLibraries = pkgs.lib.optionals pkgs.stdenv.isLinux (
+          (with pkgs2405; [
+            webkitgtk_4_1
+            gtk3
+            libayatana-appindicator
+            librsvg
+            libsoup_3
+            glib
+            gdk-pixbuf
+            at-spi2-core
+            pango
+            cairo
+            glib-networking
+          ])
+          ++ [
+            pkgs.glibc
+            pkgs.stdenv.cc.cc.lib
+          ]
+        );
 
         deviceDesktopDataDirs = pkgs.lib.optionals pkgs.stdenv.isLinux [
           pkgs2405.gsettings-desktop-schemas
@@ -228,10 +248,17 @@
               electrobunBinaries = electrobunBinaries;
               portal = korriPortal;
               runtimeLibraries = linuxDesktopRuntimeLibraries;
+              profile = "host";
             }
           else
             null;
 
+        # Device variant uses the pkgs2405 closure as a *cohesive* set: WebKitGTK
+        # 2.44.3 + matching GTK 3.24.43 + gsettings-desktop-schemas + glib-networking
+        # all move together. WebKit 2.44.3 was built against an older Pango ABI than
+        # current nixpkgs ships, so the closure cannot be split. The paths are baked
+        # into libNativeWrapper.so's RPATH at build time (no runtime LD_LIBRARY_PATH).
+        # See docs/solutions/integration-issues/odin-electrobun-webkit-runtime-white-screen-2026-05-04.md.
         korriDesktopDevice =
           if isSupportedDesktopSystem then
             import ./nix/korri-desktop.nix {
@@ -240,10 +267,10 @@
               src = self;
               electrobunBinaries = electrobunBinaries;
               portal = korriPortalDevice;
-              runtimeLibraries = linuxDesktopRuntimeLibraries;
-              deviceRuntimeLibraries = deviceDesktopRuntimeLibraries;
-              deviceDesktopDataDirs = deviceDesktopDataDirs;
-              deviceGioExtraModules = pkgs2405.glib-networking;
+              runtimeLibraries = deviceDesktopRuntimeLibraries;
+              desktopDataDirs = deviceDesktopDataDirs;
+              gioExtraModules = pkgs2405.glib-networking;
+              profile = "device";
             }
           else
             null;

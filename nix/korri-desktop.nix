@@ -7,14 +7,15 @@
   electrobunBinaries,
   portal,
   runtimeLibraries,
-  deviceRuntimeLibraries ? runtimeLibraries,
   desktopDataDirs ? [
     pkgs.gsettings-desktop-schemas
     pkgs.gtk3
   ],
-  deviceDesktopDataDirs ? desktopDataDirs,
   gioExtraModules ? pkgs.glib-networking,
-  deviceGioExtraModules ? gioExtraModules,
+  # "host" emits `bin/korri-desktop` with `GDK_BACKEND=x11` defaults;
+  # "device" emits `bin/korri-desktop-device` with `KORRI_DESKTOP_PROFILE=device`
+  # and the XDG-home defaulting block for kiosk environments.
+  profile ? "host",
 }:
 
 let
@@ -32,12 +33,15 @@ let
   platform =
     platformBySystem.${system}
       or (throw "korri-desktop is only supported on x86_64-linux and aarch64-linux");
+
+  isDevice = profile == "device";
+  binName = if isDevice then "korri-desktop-device" else "korri-desktop";
+  gdkBackend = if isDevice then "" else "x11";
+  desktopProfileEnv = if isDevice then "device" else "";
+
   runtimeLibraryPath = lib.makeLibraryPath runtimeLibraries;
-  deviceRuntimeLibraryPath = lib.makeLibraryPath deviceRuntimeLibraries;
   desktopDataPath = lib.makeSearchPath "share" desktopDataDirs;
-  deviceDesktopDataPath = lib.makeSearchPath "share" deviceDesktopDataDirs;
   gioExtraModulesPath = "${gioExtraModules}/lib/gio/modules";
-  deviceGioExtraModulesPath = "${deviceGioExtraModules}/lib/gio/modules";
 in
 pkgs.stdenv.mkDerivation {
   pname = "korri-desktop";
@@ -187,41 +191,36 @@ pkgs.stdenv.mkDerivation {
         fi
         chmod +x "$launcher"
 
-        write_wrapper() {
-          local target="$1"
-          local gdk_backend="$2"
-          local profile="$3"
-          local library_path="$4"
-          local data_dirs="$5"
-          local gio_modules="$6"
-          cat > "$target" <<EOF
+        # libNativeWrapper.so's RPATH already points at the closure's WebKitGTK
+        # + GTK chain via patch_elf_tree above, so the wrapper does NOT export
+        # LD_LIBRARY_PATH. The two env vars that still need to be set are
+        # *runtime-discovery* paths the dynamic linker does not honor:
+        # GLib reads XDG_DATA_DIRS to find compiled .gschema schemas, and
+        # GIO reads GIO_EXTRA_MODULES to find the TLS/HTTP module set
+        # (glib-networking). RPATH alone cannot replace these.
+        cat > "$out/bin/${binName}" <<EOF
     #!${pkgs.bash}/bin/bash
-    export LD_LIBRARY_PATH="$library_path\''${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
-    export XDG_DATA_DIRS="$data_dirs\''${XDG_DATA_DIRS:+:\$XDG_DATA_DIRS}"
-    export GIO_EXTRA_MODULES="$gio_modules\''${GIO_EXTRA_MODULES:+:\$GIO_EXTRA_MODULES}"
-    if [ -n "$gdk_backend" ]; then
-      export GDK_BACKEND="''${GDK_BACKEND:-$gdk_backend}"
+    export XDG_DATA_DIRS="${desktopDataPath}\''${XDG_DATA_DIRS:+:\$XDG_DATA_DIRS}"
+    export GIO_EXTRA_MODULES="${gioExtraModulesPath}\''${GIO_EXTRA_MODULES:+:\$GIO_EXTRA_MODULES}"
+    ${lib.optionalString (gdkBackend != "") ''
+    export GDK_BACKEND="\''${GDK_BACKEND:-${gdkBackend}}"
+    ''}
+    ${lib.optionalString (desktopProfileEnv != "") ''
+    export KORRI_DESKTOP_PROFILE="${desktopProfileEnv}"
+    if [ -z "\''${HOME:-}" ] && { [ -z "\''${XDG_DATA_HOME:-}" ] || [ -z "\''${XDG_CONFIG_HOME:-}" ] || [ -z "\''${XDG_CACHE_HOME:-}" ]; }; then
+      echo "korri-desktop: HOME is required when XDG home directories are not set" >&2
+      exit 126
     fi
-    if [ -n "$profile" ]; then
-      export KORRI_DESKTOP_PROFILE="$profile"
-      if [ -z "\''${HOME:-}" ] && { [ -z "\''${XDG_DATA_HOME:-}" ] || [ -z "\''${XDG_CONFIG_HOME:-}" ] || [ -z "\''${XDG_CACHE_HOME:-}" ]; }; then
-        echo "korri-desktop: HOME is required when XDG home directories are not set" >&2
-        exit 126
-      fi
-      export XDG_DATA_HOME="\''${XDG_DATA_HOME:-\$HOME/.local/share}"
-      export XDG_CONFIG_HOME="\''${XDG_CONFIG_HOME:-\$HOME/.config}"
-      export XDG_CACHE_HOME="\''${XDG_CACHE_HOME:-\$HOME/.cache}"
-      export KORRI_DEVICE_STATE_ROOT="\''${KORRI_DEVICE_STATE_ROOT:-\$XDG_DATA_HOME/korri}"
-      export KORRI_LIBRARY_ROOT="\''${KORRI_LIBRARY_ROOT:-\$XDG_DATA_HOME/korri/library}"
-      export CHROME_CONFIG_HOME="\''${CHROME_CONFIG_HOME:-\$XDG_CONFIG_HOME}"
-    fi
+    export XDG_DATA_HOME="\''${XDG_DATA_HOME:-\$HOME/.local/share}"
+    export XDG_CONFIG_HOME="\''${XDG_CONFIG_HOME:-\$HOME/.config}"
+    export XDG_CACHE_HOME="\''${XDG_CACHE_HOME:-\$HOME/.cache}"
+    export KORRI_DEVICE_STATE_ROOT="\''${KORRI_DEVICE_STATE_ROOT:-\$XDG_DATA_HOME/korri}"
+    export KORRI_LIBRARY_ROOT="\''${KORRI_LIBRARY_ROOT:-\$XDG_DATA_HOME/korri/library}"
+    export CHROME_CONFIG_HOME="\''${CHROME_CONFIG_HOME:-\$XDG_CONFIG_HOME}"
+    ''}
     exec "$launcher" "\$@"
     EOF
-          chmod +x "$target"
-        }
-
-        write_wrapper "$out/bin/korri-desktop" x11 "" "${runtimeLibraryPath}" "${desktopDataPath}" "${gioExtraModulesPath}"
-        write_wrapper "$out/bin/korri-desktop-device" "" device "${deviceRuntimeLibraryPath}" "${deviceDesktopDataPath}" "${deviceGioExtraModulesPath}"
+        chmod +x "$out/bin/${binName}"
 
         runHook postInstall
   '';
