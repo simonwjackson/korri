@@ -198,7 +198,13 @@ describe("connection controller", () => {
           watcher: rig.stream,
           loadConfig: config.loadConfig,
           saveConfig: config.saveConfig,
-          httpProbe: makeProbe(new Map([[SERVER_B.controlUrl, true]])),
+          // Remembered SERVER_A is unreachable; SERVER_B is reachable.
+          httpProbe: makeProbe(
+            new Map([
+              [SERVER_A.controlUrl, false],
+              [SERVER_B.controlUrl, true],
+            ]),
+          ),
         })
         yield* rig.emit({ kind: "appear", candidate: candidate(SERVER_B) })
         yield* TestClock.adjust("2 seconds")
@@ -222,8 +228,9 @@ describe("connection controller", () => {
         const controller = yield* makeConnectionController({
           watcher: rig.stream,
           loadConfig: config.loadConfig,
+          // SERVER_A unreachable, no mDNS candidates.
           saveConfig: config.saveConfig,
-          httpProbe: makeProbe(new Map()),
+          httpProbe: makeProbe(new Map([[SERVER_A.controlUrl, false]])),
         })
         yield* TestClock.adjust("2 seconds")
         return yield* SubscriptionRef.get(controller.state)
@@ -231,6 +238,35 @@ describe("connection controller", () => {
     )
 
     expect(result.status).toBe("searching")
+  })
+
+  it("connects to the remembered server via direct probe without waiting for mDNS", async () => {
+    // Slow mDNS (no candidates emitted) but the remembered URL responds
+    // to /api/health. The direct-probe shortcut should connect within
+    // the first reconcile, before the 1.5s window even expires.
+    const result = await runTest(
+      Effect.gen(function* () {
+        const rig = yield* makeRig()
+        const config = makeConfigRig({ lastConnectedServer: SERVER_A })
+        const controller = yield* makeConnectionController({
+          watcher: rig.stream,
+          loadConfig: config.loadConfig,
+          saveConfig: config.saveConfig,
+          httpProbe: makeProbe(new Map([[SERVER_A.controlUrl, true]])),
+        })
+        // No mDNS events, no clock advance — the direct probe should
+        // resolve synchronously through the Effect.sync probe.
+        yield* TestClock.adjust("10 millis")
+        const state = yield* SubscriptionRef.get(controller.state)
+        return { state, saved: config.saved() }
+      }),
+    )
+
+    expect(result.state.status).toBe("connected")
+    if (result.state.status === "connected") {
+      expect(result.state.server).toEqual(SERVER_A)
+    }
+    expect(result.saved).toEqual([{ lastConnectedServer: SERVER_A }])
   })
 
   it("connects to a later remembered server after the window expires", async () => {

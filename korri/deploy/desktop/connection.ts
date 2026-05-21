@@ -81,6 +81,24 @@ export function makeConnectionController(
     const state: SubscriptionRef.SubscriptionRef<ConnectionState> =
       yield* SubscriptionRef.make<ConnectionState>(initialState)
 
+    // If we have a remembered server, fire a direct probe in parallel
+    // with mDNS discovery. mDNS via bonjour-service can take seconds to
+    // return its first candidate (slow on wifi or behind avahi-daemon);
+    // a direct probe of the cached URL skips that delay when the server
+    // is reachable at the same address it was last time. If the probe
+    // fails we leave it to the mDNS-driven controller to find an
+    // alternative.
+    if (remembered) {
+      yield* Effect.forkScoped(
+        probeRememberedDirect({
+          state,
+          httpProbe: deps.httpProbe,
+          saveConfig: deps.saveConfig,
+          remembered,
+        }),
+      )
+    }
+
     yield* Effect.forkScoped(
       runController({
         state,
@@ -94,6 +112,35 @@ export function makeConnectionController(
     )
 
     return { state }
+  })
+}
+
+/**
+ * Probe the remembered server's `/api/health` directly, bypassing mDNS.
+ * On success, transition to `connected` and persist. Skips silently if
+ * the controller has already connected via another path.
+ */
+function probeRememberedDirect(input: {
+  readonly state: SubscriptionRef.SubscriptionRef<ConnectionState>
+  readonly httpProbe: (controlUrl: string) => Effect.Effect<boolean>
+  readonly saveConfig: (
+    partial: Partial<DesktopConfig>,
+  ) => Effect.Effect<void, unknown>
+  readonly remembered: ServerRecord
+}): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    const ok = yield* input.httpProbe(input.remembered.controlUrl)
+    if (!ok) return
+    const current = yield* SubscriptionRef.get(input.state)
+    if (current.status === "connected") return
+    yield* SubscriptionRef.set(input.state, {
+      status: "connected",
+      server: input.remembered,
+    })
+    yield* Effect.orElseSucceed(
+      input.saveConfig({ lastConnectedServer: input.remembered }),
+      () => undefined,
+    )
   })
 }
 
