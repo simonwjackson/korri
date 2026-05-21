@@ -53,6 +53,11 @@ pkgs.stdenv.mkDerivation {
     cp korri-server.js korri-api.js korri-lan-stream-advertise.js "$out/share/korri-server/"
     cp -R node_modules "$out/share/korri-server/node_modules"
 
+    # The headless server runtime never imports electrobun — it ships in
+    # bunDeps because the desktop derivation needs it. Drop the npm files
+    # from the server output so the closure doesn't carry them.
+    rm -rf "$out/share/korri-server/node_modules/electrobun"
+
     makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korri-server" \
       --add-flags "$out/share/korri-server/korri-server.js"
     makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korri-api" \
@@ -61,6 +66,19 @@ pkgs.stdenv.mkDerivation {
       --add-flags "$out/share/korri-server/korri-lan-stream-advertise.js"
 
     runHook postInstall
+  '';
+
+  doInstallCheck = true;
+
+  installCheckPhase = ''
+    runHook preInstallCheck
+
+    if [ -d "$out/share/korri-server/node_modules/electrobun" ]; then
+      echo "korri-server install closure must not contain electrobun npm files" >&2
+      exit 1
+    fi
+
+    runHook postInstallCheck
   '';
 
   meta = {
