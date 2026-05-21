@@ -19,6 +19,8 @@ export const BTN_DPAD_LEFT = 0x222
 export const BTN_DPAD_RIGHT = 0x223
 export const BTN_BACK = 0x116
 
+export const ABS_X = 0x00
+export const ABS_Y = 0x01
 export const ABS_HAT0X = 0x10
 export const ABS_HAT0Y = 0x11
 
