@@ -273,7 +273,7 @@ function tryFindById<T>(
 ): Effect.Effect<T | undefined, never> {
   return collection.findById(id).pipe(
     Effect.match({
-      onSuccess: (record: T) => record as T | undefined,
+      onSuccess: (record: T) => record,
       onFailure: () => undefined,
     }),
   )

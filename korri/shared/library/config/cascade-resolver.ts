@@ -506,7 +506,10 @@ export const resolveLaunchContext = (
     // cascade must have produced one (game.core, system.cores[L], or
     // similar).
     const core = game.core ?? sys?.cores?.[launcherId] ?? undefined
-    if (referencesPlaceholder(lncher.args, "core") && core === undefined) {
+    if (
+      referencesPlaceholder([lncher.command, ...lncher.args], "core") &&
+      core === undefined
+    ) {
       return yield* Effect.fail(
         new CoreNotConfigured({
           gameId: inputs.gameId,
