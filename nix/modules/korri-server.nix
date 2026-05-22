@@ -290,11 +290,6 @@ in
         description = "Shared runner status path read by the server and written by the stream runner.";
       };
 
-      intentMaxAgeSeconds = mkOption {
-        type = types.ints.positive;
-        default = 300;
-        description = "Maximum age of a pending launch intent before the runner rejects and quarantines it.";
-      };
     };
   };
 
@@ -429,7 +424,6 @@ in
       runtimeDir = runtimeDir;
       intentPath = intentPath;
       statusPath = statusPath;
-      intentMaxAgeSeconds = cfg.streamHost.intentMaxAgeSeconds;
     };
 
     systemd.tmpfiles.settings = mkIf (isSystemMode && cfg.streamHost.enable && isDefaultSystemRuntimeDir) {

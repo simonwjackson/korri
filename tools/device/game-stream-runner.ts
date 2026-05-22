@@ -611,18 +611,6 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function parseOptionalPositiveInteger(
-  raw: string | undefined,
-  name: string,
-): number | undefined {
-  if (!raw) return undefined
-  const parsed = Number.parseInt(raw, 10)
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error(`${name} must be a positive integer`)
-  }
-  return parsed
-}
-
 function launchSpecFromCli(args: readonly string[]): {
   readonly launch: LaunchSpec
   readonly lifecycle: "foreground" | "session"
@@ -748,27 +736,15 @@ if (import.meta.main) {
     defaultGameStreamLockPath(process.env)
   const intentPath = defaultGameStreamIntentPath(process.env)
   const statusPath = process.env.KORRI_GAME_STREAM_STATUS_PATH
-  const intentStoreOptions = {
-    maxAgeMs: parseOptionalPositiveInteger(
-      process.env.KORRI_GAME_STREAM_INTENT_MAX_AGE_MS,
-      "KORRI_GAME_STREAM_INTENT_MAX_AGE_MS",
-    ),
-  }
   if (Bun.argv[2] === "enqueue") {
-    const store = createFileGameStreamLaunchIntentStore(
-      intentPath,
-      intentStoreOptions,
-    )
+    const store = createFileGameStreamLaunchIntentStore(intentPath)
     const { launch, lifecycle, wait } = launchSpecFromCli(Bun.argv.slice(3))
     await store.enqueue(createLaunchIntent(launch, { lifecycle, wait }))
     process.exit(0)
   }
 
   const runner = createGameStreamRunner({
-    launchIntentStore: createFileGameStreamLaunchIntentStore(
-      intentPath,
-      intentStoreOptions,
-    ),
+    launchIntentStore: createFileGameStreamLaunchIntentStore(intentPath),
     statusPath,
     lockManager: createFileGameStreamRunLock(lockPath),
     fullscreen: {

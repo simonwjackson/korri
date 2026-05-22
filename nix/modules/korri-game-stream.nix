@@ -119,11 +119,6 @@ let
     chmod 700 "$runtime_dir"
 
     export KORRI_GAME_STREAM_INTENT_PATH=${intentPathExpression}
-    export KORRI_GAME_STREAM_INTENT_MAX_AGE_MS=${toString (cfg.intentMaxAgeSeconds * 1000)}
-    export KORRI_GAME_STREAM_USE_GAMESCOPE=${if cfg.gamescope.enable then "1" else "0"}
-    export KORRI_GAME_STREAM_GAMESCOPE=${lib.escapeShellArg "${cfg.gamescope.package}/bin/gamescope"}
-    export KORRI_GAME_STREAM_SWAYMSG=${lib.escapeShellArg "${cfg.sway.package}/bin/swaymsg"}
-    export KORRI_GAME_STREAM_SWAY_REPAIR=${if cfg.sway.repair then "1" else "0"}
     export KORRI_GAME_STREAM_LOCK_PATH="''${KORRI_GAME_STREAM_LOCK_PATH:-$runtime_dir/run.lock}"
     export KORRI_GAME_STREAM_STATUS_PATH=${statusPathExpression}
 
@@ -204,12 +199,6 @@ in
       default = null;
       example = "/run/user/1000/korri-game-stream/status.json";
       description = "Runner status path written by the generic Sunshine app and read by the Korri server.";
-    };
-
-    intentMaxAgeSeconds = mkOption {
-      type = types.ints.positive;
-      default = 300;
-      description = "Maximum age of a pending launch intent before the runner rejects and quarantines it.";
     };
 
     displayCompat = {
@@ -298,12 +287,6 @@ in
     };
 
     gamescope = {
-      enable = mkOption {
-        type = types.bool;
-        default = true;
-        description = "Wrap the pending launch intent with Gamescope for fullscreen containment.";
-      };
-
       package = mkOption {
         type = types.package;
         default = pkgs.gamescope;
@@ -313,12 +296,6 @@ in
     };
 
     sway = {
-      repair = mkOption {
-        type = types.bool;
-        default = true;
-        description = "Use swaymsg to wait for and repair the stream-surface fullscreen state.";
-      };
-
       package = mkOption {
         type = types.package;
         default = pkgs.sway;
@@ -354,9 +331,10 @@ in
   config = mkIf cfg.enable {
     environment.systemPackages = [
       cfg.package
+      cfg.gamescope.package
+      cfg.sway.package
     ]
-    ++ cfg.path
-    ++ lib.optionals cfg.gamescope.enable [ cfg.gamescope.package ];
+    ++ cfg.path;
 
     services.sunshine.applications = mkIf cfg.sunshine.enableApp {
       apps = [
