@@ -9,6 +9,10 @@ import {
   writeFile,
 } from "node:fs/promises"
 import { dirname, join } from "node:path"
+import {
+  decodeGamescopePolicy,
+  type GamescopePolicy,
+} from "@shared/library/config/inheritable-fields"
 import { decodeLaunchSpec, type LaunchSpec } from "@shared/library/launcher"
 
 export type GameStreamLaunchLifecycle = "foreground" | "session"
@@ -19,6 +23,7 @@ export interface GameStreamLaunchIntent {
   readonly createdAt: string
   readonly lifecycle: GameStreamLaunchLifecycle
   readonly launch: LaunchSpec
+  readonly gamescope?: GamescopePolicy
   readonly wait?: LaunchSpec
 }
 
@@ -53,6 +58,7 @@ export function createLaunchIntent(
   launch: LaunchSpec,
   options: {
     readonly lifecycle?: GameStreamLaunchLifecycle
+    readonly gamescope?: GamescopePolicy
     readonly wait?: LaunchSpec
   } = {},
 ): GameStreamLaunchIntent {
@@ -65,6 +71,9 @@ export function createLaunchIntent(
     createdAt: new Date().toISOString(),
     lifecycle: options.lifecycle ?? "foreground",
     launch,
+    ...(hasGamescopeOpinion(options.gamescope)
+      ? { gamescope: options.gamescope }
+      : {}),
     ...(options.wait ? { wait: options.wait } : {}),
   }
 }
@@ -73,6 +82,7 @@ export function createStaticGameStreamLaunchIntentStore(
   launch: LaunchSpec,
   options: {
     readonly lifecycle?: GameStreamLaunchLifecycle
+    readonly gamescope?: GamescopePolicy
     readonly wait?: LaunchSpec
   } = {},
 ): GameStreamLaunchIntentStore {
@@ -187,6 +197,10 @@ export function decodeLaunchIntent(value: unknown): GameStreamLaunchIntent {
 
   const launch = decodeLaunchSpec(value.launch)
   const wait = value.wait ? decodeLaunchSpec(value.wait) : undefined
+  const gamescope =
+    value.gamescope !== undefined
+      ? decodeGamescopePolicy(value.gamescope)
+      : undefined
   assertAbsoluteLaunchSpec(launch)
   if (wait) assertAbsoluteLaunchSpec(wait)
 
@@ -196,8 +210,19 @@ export function decodeLaunchIntent(value: unknown): GameStreamLaunchIntent {
     createdAt: value.createdAt,
     lifecycle: value.lifecycle ?? "foreground",
     launch,
+    ...(hasGamescopeOpinion(gamescope) ? { gamescope } : {}),
     ...(wait ? { wait } : {}),
   }
+}
+
+function hasGamescopeOpinion(
+  gamescope: GamescopePolicy | undefined,
+): gamescope is GamescopePolicy {
+  return (
+    gamescope !== undefined &&
+    (gamescope.enabled !== undefined ||
+      (gamescope.args !== undefined && gamescope.args.length > 0))
+  )
 }
 
 function assertAbsoluteLaunchSpec(spec: LaunchSpec): void {

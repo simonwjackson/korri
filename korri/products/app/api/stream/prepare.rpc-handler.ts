@@ -1,8 +1,10 @@
+import { join } from "node:path"
 import {
   DataError,
   NotFoundError,
   ValidationError,
 } from "@shared/api/rpc/errors"
+import type { EphemeralOverride } from "@shared/library/config/ephemeral-override"
 import { LibrarySource } from "@shared/library/library-services"
 import { logger } from "@shared/logger/logger"
 import { Effect } from "effect"
@@ -10,7 +12,6 @@ import { Effect } from "effect"
 import {
   createFileGameStreamLaunchIntentStore,
   createLaunchIntent,
-  defaultGameStreamIntentPath,
 } from "../../../../../tools/device/game-stream-launch-intent"
 import { isStreamControlEnabled } from "./control-mode"
 import { type PrepareStreamPayload, PrepareStreamResponse } from "./prepare.rpc"
@@ -24,7 +25,11 @@ export interface PreparedStreamLaunch {
 export const handlePrepareStream = (
   payload: typeof PrepareStreamPayload.Type,
 ) =>
-  prepareStreamLaunch(payload.id).pipe(
+  prepareStreamLaunch(payload.id, {
+    userId: payload.userId,
+    presetId: payload.presetId ?? undefined,
+    override: payload.override,
+  }).pipe(
     Effect.map(
       prepared =>
         new PrepareStreamResponse({
@@ -35,8 +40,16 @@ export const handlePrepareStream = (
     ),
   )
 
+export interface PrepareStreamLaunchOptions {
+  readonly userId?: string
+  readonly presetId?: string
+  readonly override?: EphemeralOverride
+  readonly runtimeDir?: string
+}
+
 export function prepareStreamLaunch(
   gameId: string,
+  options: PrepareStreamLaunchOptions = {},
 ): Effect.Effect<
   PreparedStreamLaunch,
   DataError | NotFoundError | ValidationError,
@@ -50,25 +63,35 @@ export function prepareStreamLaunch(
     }
 
     const source = yield* LibrarySource
-    const spec = yield* source
-      .launchSpecFor(gameId)
+    const games = yield* source
+      .list()
       .pipe(
         Effect.mapError(error => toDataError(error, "library prepare failed")),
       )
-
-    if (!spec) {
+    if (!games.some(game => game.id === gameId)) {
       logger.warn({ id: gameId }, "app.stream.prepare: unknown id")
       return yield* Effect.fail(
         new NotFoundError({ message: `Unknown game id: ${gameId}` }),
       )
     }
 
+    const resolved = yield* source
+      .resolveLaunchForGame(gameId, {
+        userId: options.userId,
+        presetId: options.presetId,
+        override: options.override,
+      })
+      .pipe(
+        Effect.mapError(error => toDataError(error, "library prepare failed")),
+      )
+
     const intentPath = yield* Effect.try({
-      try: () => defaultGameStreamIntentPath(process.env),
+      try: () => intentPathForOptions(options),
       catch: error => toWriteError(error),
     })
     const intent = yield* Effect.try({
-      try: () => createLaunchIntent(spec),
+      try: () =>
+        createLaunchIntent(resolved.spec, { gamescope: resolved.gamescope }),
       catch: error => toDataError(error, "invalid stream launch target"),
     })
 
@@ -88,6 +111,23 @@ export function prepareStreamLaunch(
       intentPath,
     }
   })
+}
+
+function intentPathForOptions(options: PrepareStreamLaunchOptions): string {
+  if (options.runtimeDir) return join(options.runtimeDir, "next-launch.json")
+  if (process.env.KORRI_GAME_STREAM_INTENT_PATH) {
+    return process.env.KORRI_GAME_STREAM_INTENT_PATH
+  }
+  if (process.env.XDG_RUNTIME_DIR) {
+    return join(
+      process.env.XDG_RUNTIME_DIR,
+      "korri-game-stream",
+      "next-launch.json",
+    )
+  }
+  throw new Error(
+    "runtimeDir, KORRI_GAME_STREAM_INTENT_PATH, or XDG_RUNTIME_DIR is required for launch intents",
+  )
 }
 
 function toDataError(error: unknown, fallback: string): DataError {

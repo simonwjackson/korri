@@ -63,7 +63,16 @@ function createLiveLibrarySourceService(): LibrarySourceService {
             "resolveLaunchForGame",
           )
         : withLibraryRepository(
-            repository => repository.resolveLaunchForGame(id, inputs),
+            repository =>
+              repository.resolveLaunchForGame(id, inputs).pipe(
+                Effect.mapError(
+                  error =>
+                    new LibraryError({
+                      reason: "config",
+                      message: cascadeErrorMessage(error),
+                    }),
+                ),
+              ),
             "resolveLaunchForGame",
           ),
   }
@@ -175,6 +184,7 @@ function buildLibraryRootFromEnv(): Effect.Effect<string, LibraryError> {
 function cascadeErrorMessage(error: unknown): string {
   if (typeof error === "object" && error && "_tag" in error) {
     const tag = (error as { _tag: string })._tag
+    if (tag === "GameNotFound") return "GameNotFound"
     if (tag === "LauncherUnresolvable")
       return "missing launcher profile for game"
     if (tag === "CoreNotConfigured") return "missing required core for game"

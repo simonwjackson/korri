@@ -68,6 +68,7 @@ describe("app.stream.prepare handler", () => {
     expect(intent.lifecycle).toBe("foreground")
     expect(intent.launch.command).toBe(FAKE_GAME)
     expect(intent.launch.args).toContain("/storage/roms/snes/echo.smc")
+    expect(intent.gamescope).toEqual({ enabled: true, args: ["-f"] })
   })
 
   it("fails for unknown ids without writing an intent", async () => {
@@ -125,6 +126,7 @@ async function withTempProseqlLibrary(): Promise<{
           yield* repository.upsertSystem({
             id: "snes",
             launcher: "rocknix-retroarch",
+            gamescope: { enabled: true, args: ["-f"] },
           })
           yield* repository.upsertLauncher({
             id: "rocknix-retroarch",
