@@ -286,6 +286,19 @@ in
       };
     };
 
+    uinput = {
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Enable the Linux uinput device and udev access rules needed by
+          Sunshine to synthesize mouse, keyboard, and touch input for streamed
+          sessions. Disable only if the host provides equivalent /dev/uinput
+          permissions elsewhere.
+        '';
+      };
+    };
+
     gamescope = {
       package = mkOption {
         type = types.package;
@@ -335,6 +348,14 @@ in
       cfg.sway.package
     ]
     ++ cfg.path;
+
+    boot.kernelModules = mkIf cfg.uinput.enable [ "uinput" ];
+
+    services.udev.extraRules = mkIf cfg.uinput.enable ''
+      # Uinput for Sunshine virtual mouse/keyboard/touch input.
+      KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"
+      KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", TAG+="uaccess"
+    '';
 
     services.sunshine.applications = mkIf cfg.sunshine.enableApp {
       apps = [
