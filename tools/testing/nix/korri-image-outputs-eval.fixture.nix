@@ -37,7 +37,10 @@ let
       (
         { ... }:
         {
-          services.korri.kiosk.input.provider.services = [ "external-normalized-input.service" ];
+          services.korri.kiosk.input.provider = {
+            name = "external-normalized-input";
+            services = [ "external-normalized-input.service" ];
+          };
         }
       )
     ];
@@ -47,6 +50,10 @@ let
 in
 {
   packageAttrs = builtins.attrNames (flake.packages.${system} or { });
+  packageDrvPaths = {
+    headless = (flake.packages.${system}.korri-headless-system or null).drvPath or null;
+    kiosk = (flake.packages.${system}.korri-kiosk-system or null).drvPath or null;
+  };
   headless = summarize headless;
   kiosk = summarize kiosk;
   kioskWithExternalPlatform = summarize kioskWithExternalPlatform;

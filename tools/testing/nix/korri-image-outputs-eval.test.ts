@@ -30,6 +30,10 @@ type ImageSummary = {
 
 type EvalResult = {
   packageAttrs: string[]
+  packageDrvPaths: {
+    headless: string | null
+    kiosk: string | null
+  }
   headless: ImageSummary
   kiosk: ImageSummary
   kioskWithExternalPlatform: ImageSummary
@@ -72,6 +76,8 @@ describe("Korri Nix image output evaluation", () => {
     expect(result.packageAttrs).toEqual(
       expect.arrayContaining(["korri-headless-system", "korri-kiosk-system"]),
     )
+    expect(result.packageDrvPaths.headless).toContain(".drv")
+    expect(result.packageDrvPaths.kiosk).toContain(".drv")
   })
 
   it("headless composition enables the server without GUI or appliance services", () => {

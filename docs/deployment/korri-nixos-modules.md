@@ -47,6 +47,7 @@ Appliance kiosk with platform-provided normalized input:
       required = true;
       provider = {
         enable = true;
+        name = "platform-input";
         services = [ "platform-input.service" ];
       };
     };

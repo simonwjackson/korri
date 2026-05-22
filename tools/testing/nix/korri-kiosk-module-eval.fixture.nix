@@ -35,6 +35,7 @@ let
   kioskUnit = eval.config.systemd.services."korri-kiosk" or { };
   inputdUnit = eval.config.systemd.services."korri-inputd" or { };
   swayConfigPath = eval.config.services.korri.kiosk.sway.configFile or null;
+  clientLauncherPath = eval.config.services.korri.kiosk.client.launcher or null;
 in
 {
   assertionsPassed = korriFailedAssertions == [ ];
@@ -57,6 +58,7 @@ in
   kioskUnitExists = eval.config.systemd.services ? "korri-kiosk";
   kioskWantedBy = kioskUnit.wantedBy or [ ];
   kioskWants = kioskUnit.wants or [ ];
+  kioskRequires = kioskUnit.requires or [ ];
   kioskAfter = kioskUnit.after or [ ];
   kioskServiceUser = kioskUnit.serviceConfig.User or null;
   kioskServiceGroup = kioskUnit.serviceConfig.Group or null;
@@ -68,4 +70,5 @@ in
   inputdWants = inputdUnit.wants or [ ];
 
   swayConfig = if swayConfigPath == null then null else builtins.readFile swayConfigPath;
+  clientLauncher = if clientLauncherPath == null then null else builtins.readFile clientLauncherPath;
 }

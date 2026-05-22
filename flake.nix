@@ -428,6 +428,8 @@
         korri-kiosk = import ./nix/modules/korri-kiosk.nix { korri = self; };
         korri = {
           imports = [
+            korri-client
+            korri-inputd
             korri-headless-source
             korri-server
             korri-kiosk

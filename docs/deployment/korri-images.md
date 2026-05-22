@@ -37,6 +37,7 @@ inputs.korri.lib.${system}.korriImages.mkKioskSystem {
     ({ ... }: {
       services.korri.kiosk.input.provider = {
         enable = true;
+        name = "platform-input";
         services = [ "platform-input.service" ];
       };
     })

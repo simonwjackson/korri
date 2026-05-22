@@ -25,6 +25,7 @@ type EvalResult = {
   kioskUnitExists: boolean
   kioskWantedBy: string[]
   kioskWants: string[]
+  kioskRequires: string[]
   kioskAfter: string[]
   kioskServiceUser: string | null
   kioskServiceGroup: string | null
@@ -34,6 +35,7 @@ type EvalResult = {
   inputdAfter: string[]
   inputdWants: string[]
   swayConfig: string | null
+  clientLauncher: string | null
 }
 
 type EvalOutcome =
@@ -134,6 +136,9 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
     expect(result.kioskServiceUser).toBe("root")
     expect(result.kioskExecStart).toContain("sway")
     expect(result.swayConfig).toContain("korri-kiosk-client")
+    expect(result.kioskEnvironment.KORRI_NATIVE_BRIDGE_URL).toBe(
+      "ws://127.0.0.1:3002",
+    )
   })
 
   it("accepts platform Sway fragments while keeping Korri client autostart product-owned", () => {
@@ -154,7 +159,7 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
     expect(result.swayConfig).not.toBeNull()
     const config = result.swayConfig as string
     expect(config).toContain("exec --no-startup-id")
-    expect(config).toContain("device-korri")
+    expect(result.clientLauncher).toContain("device-korri")
     expect(config).toContain("output DEVICE-PANEL transform 90")
   })
 
@@ -170,6 +175,7 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
             required = true;
             provider = {
               enable = true;
+              name = "platform-input";
               services = [ "platform-input.service" ];
             };
           };
@@ -186,6 +192,12 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
       ]),
     )
     expect(result.kioskAfter).toEqual(
+      expect.arrayContaining([
+        "korri-inputd.service",
+        "platform-input.service",
+      ]),
+    )
+    expect(result.kioskRequires).toEqual(
       expect.arrayContaining([
         "korri-inputd.service",
         "platform-input.service",
@@ -250,6 +262,91 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
 
     expect(result.assertionsPassed).toBe(false)
     expect(result.assertionMessages.join("\n")).toContain("createUser")
+  })
+
+  it("preserves client command arguments through the generated launcher", () => {
+    const result = expectOk(
+      evalFixture(`({ pkgs, ... }: {
+        services.korri.kiosk = {
+          enable = true;
+          user = "root";
+          createUser = false;
+          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client --profile kiosk";
+        };
+      })`),
+    )
+
+    expect(result.swayConfig).toContain("korri-kiosk-client")
+    expect(result.clientLauncher).toContain(
+      "korri-kiosk-client --profile kiosk",
+    )
+  })
+
+  it("omits Group when a platform supplies an existing user without an explicit group", () => {
+    const result = expectOk(
+      evalFixture(`({ pkgs, ... }: {
+        users.users.platform-user = {
+          isNormalUser = true;
+          group = "users";
+        };
+        services.korri.kiosk = {
+          enable = true;
+          user = "platform-user";
+          createUser = false;
+          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
+        };
+      })`),
+    )
+
+    expect(result.assertionsPassed).toBe(true)
+    expect(result.kioskServiceUser).toBe("platform-user")
+    expect(result.kioskServiceGroup).toBeNull()
+  })
+
+  it("rejects empty and non-/run kiosk runtime directories", () => {
+    const emptyUser = expectOk(
+      evalFixture(`({ pkgs, ... }: {
+        services.korri.kiosk = {
+          enable = true;
+          user = "";
+          createUser = false;
+          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
+        };
+      })`),
+    )
+    const relativeRuntime = expectOk(
+      evalFixture(`({ pkgs, ... }: {
+        services.korri.kiosk = {
+          enable = true;
+          user = "root";
+          createUser = false;
+          runtimeDir = "korri-kiosk";
+          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
+        };
+      })`),
+    )
+    const outsideRun = expectOk(
+      evalFixture(`({ pkgs, ... }: {
+        services.korri.kiosk = {
+          enable = true;
+          user = "root";
+          createUser = false;
+          runtimeDir = "/tmp/korri-kiosk";
+          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
+        };
+      })`),
+    )
+
+    expect(emptyUser.assertionsPassed).toBe(false)
+    expect(emptyUser.assertionMessages.join("\n")).toContain(
+      "must not be empty",
+    )
+    expect(relativeRuntime.assertionsPassed).toBe(false)
+    expect(relativeRuntime.assertionMessages.join("\n")).toContain(
+      "absolute path",
+    )
+    expect(outsideRun.assertionsPassed).toBe(false)
+    expect(outsideRun.assertionMessages.join("\n")).toContain("under /run")
   })
 
   it("keeps device-specific facts out of generic defaults", () => {
