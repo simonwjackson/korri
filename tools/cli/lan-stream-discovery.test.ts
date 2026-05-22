@@ -23,6 +23,32 @@ describe("LAN stream discovery", () => {
     })
   })
 
+  it("defaults the manual host port to the Korri stream port when none is given", () => {
+    // Without an explicit port the CLI would otherwise build
+    // `http://aka` (port 80) and hit whatever runs there, surfacing a
+    // confusing `HttpError:` with an empty body. Default to 3001 so a
+    // bare `--host aka` works the same as `--host aka:3001` and matches
+    // what mDNS advertises.
+    expect(candidateFromManualHost("aka")).toMatchObject({
+      id: "aka",
+      name: "aka",
+      controlUrl: "http://aka:3001",
+      source: "manual",
+    })
+    expect(candidateFromManualHost("http://aka")).toMatchObject({
+      controlUrl: "http://aka:3001",
+    })
+    expect(candidateFromManualHost("https://aka.example.com")).toMatchObject({
+      controlUrl: "https://aka.example.com:3001",
+    })
+  })
+
+  it("keeps an explicit manual-host port untouched", () => {
+    expect(candidateFromManualHost("aka:9999")).toMatchObject({
+      controlUrl: "http://aka:9999",
+    })
+  })
+
   it("derives mDNS control URL from service address and port", () => {
     const candidate = candidateFromMdnsService({
       name: "Korri on aka",

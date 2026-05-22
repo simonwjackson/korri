@@ -4,6 +4,7 @@ import { Effect, Queue, Stream } from "effect"
 export const KORRI_STREAM_SERVICE_TYPE = "korri-stream"
 export const KORRI_STREAM_SERVICE_PROTOCOL = "tcp" as const
 export const KORRI_STREAM_PROTOCOL_VERSION = "1"
+export const KORRI_STREAM_DEFAULT_PORT = 3001
 
 export interface StreamHostCandidate {
   readonly id: string
@@ -198,6 +199,13 @@ export function normalizeControlUrl(value: string): URL {
   const url = new URL(withProtocol)
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("Korri stream host must use http or https")
+  }
+  // The server (and mDNS advert) defaults to 3001. URL parsing drops an
+  // unspecified port to the protocol default (80/443), which then sends
+  // the CLI at a port nothing is listening on; default it back to the
+  // Korri stream port so `--host aka` is shorthand for `--host aka:3001`.
+  if (url.port === "") {
+    url.port = String(KORRI_STREAM_DEFAULT_PORT)
   }
   return url
 }
