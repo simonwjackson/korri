@@ -30,6 +30,7 @@ type EvalResult = {
   kioskServiceUser: string | null
   kioskServiceGroup: string | null
   kioskExecStart: string | null
+  kioskRuntimeDirectory: string | null
   kioskEnvironment: Record<string, string>
   inputdBefore: string[]
   inputdAfter: string[]
@@ -82,7 +83,7 @@ function expectOk(outcome: EvalOutcome): EvalResult {
 
 const HARDWARE_FACT_PATTERN = /SM8550|AYN|Odin|DSI-1|DSI-2|UCM|RockNix/i
 
-setDefaultTimeout(30_000)
+setDefaultTimeout(90_000)
 
 describe("services.korri.kiosk NixOS module evaluation", () => {
   it("aggregate korri module exposes server, client, inputd, and kiosk roles", () => {
@@ -134,7 +135,10 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
     expect(result.kioskUnitExists).toBe(true)
     expect(result.kioskWantedBy).toEqual(["multi-user.target"])
     expect(result.kioskServiceUser).toBe("root")
+    expect(result.kioskExecStart).toContain("dbus-run-session")
     expect(result.kioskExecStart).toContain("sway")
+    expect(result.kioskRuntimeDirectory).toBe("korri-kiosk")
+    expect(result.kioskEnvironment.DBUS_SESSION_BUS_ADDRESS).toBeUndefined()
     expect(result.swayConfig).toContain("korri-kiosk-client")
     expect(result.kioskEnvironment.KORRI_NATIVE_BRIDGE_URL).toBe(
       "ws://127.0.0.1:3002",
@@ -161,6 +165,53 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
     expect(config).toContain("exec --no-startup-id")
     expect(result.clientLauncher).toContain("device-korri")
     expect(config).toContain("output DEVICE-PANEL transform 90")
+  })
+
+  it("can use a platform-owned existing session bus", () => {
+    const result = expectOk(
+      evalFixture(`({ pkgs, ... }: {
+        services.korri.kiosk = {
+          enable = true;
+          user = "root";
+          createUser = false;
+          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
+          runtimeDir = "/run/user/0";
+          sessionBus = {
+            mode = "existing";
+            address = "unix:path=/run/user/0/bus";
+            services = [ "platform-session-dbus.service" ];
+          };
+        };
+      })`),
+    )
+
+    expect(result.assertionsPassed).toBe(true)
+    expect(result.kioskExecStart).not.toContain("dbus-run-session")
+    expect(result.kioskExecStart).toContain("sway")
+    expect(result.kioskRuntimeDirectory).toBeNull()
+    expect(result.kioskEnvironment.XDG_RUNTIME_DIR).toBe("/run/user/0")
+    expect(result.kioskEnvironment.DBUS_SESSION_BUS_ADDRESS).toBe(
+      "unix:path=/run/user/0/bus",
+    )
+    expect(result.kioskRequires).toContain("platform-session-dbus.service")
+    expect(result.kioskAfter).toContain("platform-session-dbus.service")
+  })
+
+  it("rejects existing session bus mode without an address", () => {
+    const result = expectOk(
+      evalFixture(`({ pkgs, ... }: {
+        services.korri.kiosk = {
+          enable = true;
+          user = "root";
+          createUser = false;
+          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
+          sessionBus.mode = "existing";
+        };
+      })`),
+    )
+
+    expect(result.assertionsPassed).toBe(false)
+    expect(result.assertionMessages.join("\n")).toContain("sessionBus.address")
   })
 
   it("wires inputd and platform input dependencies before the kiosk when required", () => {

@@ -63,6 +63,7 @@ in
   kioskServiceUser = kioskUnit.serviceConfig.User or null;
   kioskServiceGroup = kioskUnit.serviceConfig.Group or null;
   kioskExecStart = kioskUnit.serviceConfig.ExecStart or null;
+  kioskRuntimeDirectory = kioskUnit.serviceConfig.RuntimeDirectory or null;
   kioskEnvironment = kioskUnit.environment or { };
 
   inputdBefore = inputdUnit.before or [ ];

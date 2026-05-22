@@ -18,6 +18,8 @@ let
       null;
   runtimeDirectoryName = lib.removePrefix "/run/" cfg.runtimeDir;
   providerServices = cfg.input.provider.services;
+  sessionBusServices = lib.optionals (cfg.sessionBus.mode == "existing") cfg.sessionBus.services;
+  ownsRuntimeDir = cfg.sessionBus.mode == "private";
   requiredInputServices = lib.optional cfg.input.enable "korri-inputd.service" ++ providerServices;
   inputRequiredWithoutProvider =
     cfg.input.required
@@ -34,6 +36,12 @@ let
     ;
 
   clientCommand = cfg.client.command;
+  swayCommand = "${cfg.sway.package}/bin/sway --config ${swayConfig}";
+  sessionCommand =
+    if cfg.sessionBus.mode == "private" then
+      "${pkgs.dbus}/bin/dbus-run-session -- ${swayCommand}"
+    else
+      swayCommand;
   clientLauncher = pkgs.writeShellScript "korri-kiosk-client" ''
     set +e
     ${clientCommand}
@@ -62,6 +70,9 @@ let
     }
     // lib.optionalAttrs cfg.input.enable {
       KORRI_NATIVE_BRIDGE_URL = "ws://127.0.0.1:${toString config.services.korri.inputd.port}";
+    }
+    // lib.optionalAttrs (cfg.sessionBus.mode == "existing" && cfg.sessionBus.address != null) {
+      DBUS_SESSION_BUS_ADDRESS = cfg.sessionBus.address;
     };
 in
 {
@@ -137,6 +148,42 @@ in
         dbus
       ];
       description = "Packages added to PATH for the kiosk session service.";
+    };
+
+    sessionBus = {
+      mode = mkOption {
+        type = types.enum [
+          "private"
+          "existing"
+        ];
+        default = "private";
+        description = ''
+          D-Bus session bus strategy for the kiosk compositor.
+
+          `private` starts Sway with dbus-run-session and lets Korri own the
+          runtime directory. `existing` starts Sway directly with a
+          platform-owned DBUS_SESSION_BUS_ADDRESS; platform modules use this
+          when a constrained guest or device substrate must own the bus.
+        '';
+      };
+
+      address = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "unix:path=/run/user/0/bus";
+        description = "Existing session bus address used when sessionBus.mode = \"existing\".";
+      };
+
+      services = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        example = [ "platform-session-dbus.service" ];
+        description = ''
+          Platform-owned service units that provide the existing session bus.
+          These units are wanted, required, and ordered before korri-kiosk when
+          sessionBus.mode = "existing".
+        '';
+      };
     };
 
     wants = mkOption {
@@ -278,6 +325,15 @@ in
         '';
       }
       {
+        assertion =
+          cfg.sessionBus.mode != "existing"
+          || (cfg.sessionBus.address != null && cfg.sessionBus.address != "");
+        message = ''
+          services.korri.kiosk.sessionBus.address must be set when
+          sessionBus.mode = "existing".
+        '';
+      }
+      {
         assertion = !inputRequiredWithoutProvider;
         message = ''
           services.korri.kiosk.input.required is true, but no named normalized
@@ -323,17 +379,19 @@ in
     systemd.services."korri-kiosk" = {
       description = "Korri appliance kiosk session";
       wantedBy = [ "multi-user.target" ];
-      wants = cfg.wants ++ requiredInputServices;
-      requires = lib.optionals cfg.input.required requiredInputServices;
-      after = cfg.after ++ requiredInputServices;
+      wants = cfg.wants ++ requiredInputServices ++ sessionBusServices;
+      requires = lib.optionals cfg.input.required requiredInputServices ++ sessionBusServices;
+      after = cfg.after ++ requiredInputServices ++ sessionBusServices;
       environment = sessionEnvironment;
       path = cfg.path ++ [ cfg.sway.package ] ++ cfg.sway.extraPackages;
       serviceConfig = {
-        ExecStart = "${pkgs.dbus}/bin/dbus-run-session -- ${cfg.sway.package}/bin/sway --config ${swayConfig}";
+        ExecStart = sessionCommand;
         Restart = "always";
         RestartSec = 2;
         User = cfg.user;
         WorkingDirectory = cfg.home;
+      }
+      // lib.optionalAttrs ownsRuntimeDir {
         RuntimeDirectory = runtimeDirectoryName;
         RuntimeDirectoryMode = "0700";
       }
