@@ -58,4 +58,19 @@ Appliance kiosk with platform-provided normalized input:
 }
 ```
 
-For constrained guests that must run as root, platform modules may set `services.korri.kiosk.user = "root"` and `createUser = false`. Generic Korri modules do not encode device-specific hardware strings.
+For constrained guests that must run as root, platform modules may set `services.korri.kiosk.user = "root"` and `createUser = false`. If the platform already owns a stable session bus, configure:
+
+```nix
+{
+  services.korri.kiosk = {
+    runtimeDir = "/run/user/0";
+    sessionBus = {
+      mode = "existing";
+      address = "unix:path=/run/user/0/bus";
+      services = [ "platform-session-dbus.service" ];
+    };
+  };
+}
+```
+
+Generic Korri modules do not encode device-specific hardware strings.
