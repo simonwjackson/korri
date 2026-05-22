@@ -425,11 +425,15 @@
         korri-game-stream = import ./nix/modules/korri-game-stream.nix { korri = self; };
         korri-headless-source = import ./nix/modules/korri-headless-source.nix { korri = self; };
         korri-server = import ./nix/modules/korri-server.nix { korri = self; };
-        korri-kiosk = import ./nix/modules/korri-kiosk.nix { korri = self; };
-        korri = {
+        korri-kiosk = {
           imports = [
             korri-client
             korri-inputd
+            (import ./nix/modules/korri-kiosk.nix { korri = self; })
+          ];
+        };
+        korri = {
+          imports = [
             korri-headless-source
             korri-server
             korri-kiosk

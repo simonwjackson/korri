@@ -25,6 +25,8 @@ type ImageSummary = {
   kioskUnitExists: boolean
   inputProviderEnabled: boolean
   kioskAfter: string[]
+  kioskUser: string | null
+  kioskUserExtraGroups: string[]
   systemName: string
 }
 
@@ -100,6 +102,10 @@ describe("Korri Nix image output evaluation", () => {
     expect(result.kiosk.clientEnabled).toBe(true)
     expect(result.kiosk.inputdEnabled).toBe(true)
     expect(result.kiosk.inputProviderEnabled).toBe(true)
+    expect(result.kiosk.kioskUser).toBe("korri-kiosk")
+    expect(result.kiosk.kioskUserExtraGroups).toEqual(
+      expect.arrayContaining(["input", "render", "seat", "video"]),
+    )
   })
 
   it("accepts externally supplied platform adapter modules at the image boundary", () => {

@@ -4,7 +4,7 @@
   config = lib.mkIf (config.services.korri.kiosk.enable or false) {
     services.seatd.enable = lib.mkDefault true;
 
-    users.users.korri-kiosk.extraGroups = lib.mkDefault [
+    users.users.${config.services.korri.kiosk.user}.extraGroups = lib.mkDefault [
       "input"
       "render"
       "seat"

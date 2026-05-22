@@ -248,6 +248,51 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
     )
   })
 
+  it("rejects provider service ordering when the provider is disabled", () => {
+    const result = expectOk(
+      evalFixture(`({ pkgs, ... }: {
+        services.korri.kiosk = {
+          enable = true;
+          user = "root";
+          createUser = false;
+          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
+          input.provider = {
+            enable = false;
+            services = [ "platform-input.service" ];
+          };
+        };
+      })`),
+    )
+
+    expect(result.assertionsPassed).toBe(false)
+    expect(result.assertionMessages.join("\n")).toContain(
+      "provider service ordering",
+    )
+  })
+
+  it("can deliberately disable kiosk input integration", () => {
+    const result = expectOk(
+      evalFixture(`({ pkgs, ... }: {
+        services.korri.kiosk = {
+          enable = true;
+          user = "root";
+          createUser = false;
+          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
+          input = {
+            enable = false;
+            optOutReason = "non-interactive display fixture";
+          };
+        };
+      })`),
+    )
+
+    expect(result.assertionsPassed).toBe(true)
+    expect(result.inputdEnabled).toBe(false)
+    expect(result.kioskEnvironment.KORRI_NATIVE_BRIDGE_URL).toBeUndefined()
+    expect(result.kioskWants).not.toContain("korri-inputd.service")
+    expect(result.kioskAfter).not.toContain("korri-inputd.service")
+  })
+
   it("rejects creating a managed root kiosk user", () => {
     const result = expectOk(
       evalFixture(`({ pkgs, ... }: {

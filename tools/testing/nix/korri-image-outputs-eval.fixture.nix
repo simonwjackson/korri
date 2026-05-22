@@ -20,6 +20,12 @@ let
     kioskUnitExists = eval.config.systemd.services ? "korri-kiosk";
     inputProviderEnabled = eval.config.services.korri.kiosk.input.provider.enable or false;
     kioskAfter = eval.config.systemd.services."korri-kiosk".after or [ ];
+    kioskUser = eval.config.services.korri.kiosk.user or null;
+    kioskUserExtraGroups =
+      let
+        user = eval.config.services.korri.kiosk.user or null;
+      in
+      if user == null then [ ] else eval.config.users.users.${user}.extraGroups or [ ];
     systemName = eval.config.system.name;
   };
 
