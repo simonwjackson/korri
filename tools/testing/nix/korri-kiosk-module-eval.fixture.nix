@@ -64,6 +64,8 @@ in
   kioskServiceGroup = kioskUnit.serviceConfig.Group or null;
   kioskExecStart = kioskUnit.serviceConfig.ExecStart or null;
   kioskRuntimeDirectory = kioskUnit.serviceConfig.RuntimeDirectory or null;
+  kioskStartLimitBurst = kioskUnit.unitConfig.StartLimitBurst or null;
+  kioskStartLimitIntervalSec = kioskUnit.unitConfig.StartLimitIntervalSec or null;
   kioskEnvironment = kioskUnit.environment or { };
 
   inputdBefore = inputdUnit.before or [ ];

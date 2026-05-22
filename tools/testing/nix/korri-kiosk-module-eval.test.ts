@@ -31,6 +31,8 @@ type EvalResult = {
   kioskServiceGroup: string | null
   kioskExecStart: string | null
   kioskRuntimeDirectory: string | null
+  kioskStartLimitBurst: number | null
+  kioskStartLimitIntervalSec: number | null
   kioskEnvironment: Record<string, string>
   inputdBefore: string[]
   inputdAfter: string[]
@@ -138,6 +140,8 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
     expect(result.kioskExecStart).toContain("dbus-run-session")
     expect(result.kioskExecStart).toContain("sway")
     expect(result.kioskRuntimeDirectory).toBe("korri-kiosk")
+    expect(result.kioskStartLimitBurst).toBe(5)
+    expect(result.kioskStartLimitIntervalSec).toBe(60)
     expect(result.kioskEnvironment.DBUS_SESSION_BUS_ADDRESS).toBeUndefined()
     expect(result.swayConfig).toContain("korri-kiosk-client")
     expect(result.kioskEnvironment.KORRI_NATIVE_BRIDGE_URL).toBe(

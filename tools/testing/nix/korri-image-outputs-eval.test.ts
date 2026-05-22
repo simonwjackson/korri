@@ -39,6 +39,7 @@ type EvalResult = {
   headless: ImageSummary
   kiosk: ImageSummary
   kioskWithExternalPlatform: ImageSummary
+  kioskWithPlatformManagedUser: ImageSummary
   kioskWithoutPlatform: ImageSummary
 }
 
@@ -113,6 +114,12 @@ describe("Korri Nix image output evaluation", () => {
     expect(result.kioskWithExternalPlatform.kioskAfter).toContain(
       "external-normalized-input.service",
     )
+  })
+
+  it("leaves platform-managed kiosk users under platform ownership", () => {
+    expect(result.kioskWithPlatformManagedUser.assertionsPassed).toBe(true)
+    expect(result.kioskWithPlatformManagedUser.kioskUser).toBe("platform-kiosk")
+    expect(result.kioskWithPlatformManagedUser.kioskUserExtraGroups).toEqual([])
   })
 
   it("fails clearly when a kiosk image is requested without a platform input adapter", () => {

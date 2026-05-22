@@ -4,12 +4,12 @@
   config = lib.mkIf (config.services.korri.kiosk.enable or false) {
     services.seatd.enable = lib.mkDefault true;
 
-    users.users.${config.services.korri.kiosk.user}.extraGroups = lib.mkDefault [
+    users.users.${config.services.korri.kiosk.user}.extraGroups = lib.mkIf config.services.korri.kiosk.createUser (lib.mkDefault [
       "input"
       "render"
       "seat"
       "video"
-    ];
+    ]);
 
     services.korri.kiosk = {
       wants = lib.mkDefault [ "seatd.service" ];

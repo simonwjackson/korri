@@ -52,6 +52,26 @@ let
     ];
   };
 
+  kioskWithPlatformManagedUser = imageLib.mkKioskSystem {
+    platformModules = [
+      x86Platform
+      (
+        { ... }:
+        {
+          services.korri.kiosk = {
+            user = "platform-kiosk";
+            createUser = false;
+          };
+          users.users.platform-kiosk = {
+            isSystemUser = true;
+            group = "platform-kiosk";
+          };
+          users.groups.platform-kiosk = { };
+        }
+      )
+    ];
+  };
+
   kioskWithoutPlatform = imageLib.mkKioskSystem { };
 in
 {
@@ -63,5 +83,6 @@ in
   headless = summarize headless;
   kiosk = summarize kiosk;
   kioskWithExternalPlatform = summarize kioskWithExternalPlatform;
+  kioskWithPlatformManagedUser = summarize kioskWithPlatformManagedUser;
   kioskWithoutPlatform = summarize kioskWithoutPlatform;
 }

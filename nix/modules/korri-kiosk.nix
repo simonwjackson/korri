@@ -384,6 +384,10 @@ in
       after = cfg.after ++ requiredInputServices ++ sessionBusServices;
       environment = sessionEnvironment;
       path = cfg.path ++ [ cfg.sway.package ] ++ cfg.sway.extraPackages;
+      unitConfig = {
+        StartLimitBurst = 5;
+        StartLimitIntervalSec = 60;
+      };
       serviceConfig = {
         ExecStart = sessionCommand;
         Restart = "always";
