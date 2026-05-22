@@ -9,7 +9,7 @@ module: tools/device/flake-command.ts
 
 A small operator workflow for running the current Korri flake app locally or on a destination device for real-device testing.
 
-Korri owns this command surface only. Durable device upgrades, rollback, NixOS modules, service declarations, Sway/session/input policy, and host-specific substrate concerns belong to the device/guest flake.
+Korri owns this command surface for ad-hoc `nix run` testing. Korri now also owns product NixOS roles and baseline product system outputs: `services.korri.server`, `services.korri.client`, `services.korri.kiosk`, `packages.x86_64-linux.korri-headless-system`, and `packages.x86_64-linux.korri-kiosk-system`. Hardware substrate, device-specific display/input/audio quirks, secrets, builder topology, and live host rollout policy still belong to the device/guest or deployment flake.
 
 ## Commands
 
@@ -129,4 +129,4 @@ Use that override only when you intentionally want to run the committed state wh
 
 The old Korri-owned mutable deployment loop is gone. Korri no longer rsyncs a source checkout to a device, installs Bun on the target, writes target systemd units, harvests a host session environment, masks host services, or treats a checked-out app directory as the runtime root.
 
-If the target device needs durable service installation, rollback, Sway/session/input policy, or upgrade orchestration, implement that in the device/guest flake.
+If the target device needs hardware-specific service installation, rollback orchestration, display/input/audio substrate, or update policy, implement that in the device/guest flake. Product kiosk behavior should compose `services.korri.kiosk`; downstream Sobo/Mountainous cutover should import the platform hardware quirks module plus Korri modules, then remove hand-owned product kiosk autostart/session mutations in the same deployment change.

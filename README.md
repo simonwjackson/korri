@@ -64,3 +64,13 @@ nix run github:<acct>/<repo>#korri-desktop
 ```
 
 The first run downloads the Nix GTK/WebKit runtime closure, so it can be large. Current `nix run` support targets `x86_64-linux` and `aarch64-linux`.
+
+## NixOS roles and product systems
+
+Korri exposes three product-facing NixOS roles:
+
+- `services.korri.server` — headless/control-plane server role.
+- `services.korri.client` — GUI package/runtime role only; it does not own autostart or a compositor session.
+- `services.korri.kiosk` — appliance session role that owns the Sway kiosk service, Korri client autostart, and input lifecycle coordination.
+
+Lower-level `services.korri.inputd`, `services.korri.gameStream`, and legacy `services.korri.headlessSource` remain available for advanced composition. Baseline x86 product systems are exposed as `packages.x86_64-linux.korri-headless-system` and `packages.x86_64-linux.korri-kiosk-system`; external platform adapters supply hardware quirks at the image boundary.
