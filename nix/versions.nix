@@ -15,6 +15,6 @@
 
   bunDepsHash = {
     x86_64-linux = "sha256-TH647iMvQ7azn306ItmV/J+gHGFS8B65z8KYlalmIT0=";
-    aarch64-linux = "sha256-Tsg7HM8JYpi2T0vRLUy7cOMP/ubKFe+4AvhIcDFY6O8=";
+    aarch64-linux = "sha256-R+WVjfvmQyqWieQdXHKhsGxCBlL+IUMwt2Uf5XaXbok=";
   };
 }
