@@ -108,7 +108,13 @@ function failedGameFor(
   state: LaunchController["state"],
 ): GameRecord | undefined {
   if (!shouldShowLaunchFailure(state)) return undefined
-  return items.find(game => game.id === state.gameId) ?? { id: state.gameId }
+  return (
+    items.find(game => game.id === state.gameId) ?? {
+      id: state.gameId,
+      system: "unknown",
+      contentPath: "",
+    }
+  )
 }
 
 function shouldShowLaunchFailure(

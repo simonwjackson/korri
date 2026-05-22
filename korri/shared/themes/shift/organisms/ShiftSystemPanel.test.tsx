@@ -16,7 +16,14 @@ import { useShiftHome } from "../templates/ShiftHome.context"
 import { ShiftHomeRoot } from "../templates/ShiftHomeRoot"
 import { ShiftSystemPanel } from "./ShiftSystemPanel"
 
-const games = [{ id: "resume", metadata: { name: "Resume" } }]
+const games = [
+  {
+    id: "resume",
+    system: "fixture",
+    contentPath: "/storage/fixtures/resume.rom",
+    metadata: { name: "Resume" },
+  },
+]
 
 let handle: SpatialNavigationHandle
 

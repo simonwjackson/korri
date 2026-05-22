@@ -11,8 +11,18 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 import { ShiftHomeReadyBody } from "./ShiftHomeReadyBody"
 
 const games = [
-  { id: "resume", metadata: { name: "Resume" } },
-  { id: "second", metadata: { name: "Second" } },
+  {
+    id: "resume",
+    system: "fixture",
+    contentPath: "/storage/fixtures/resume.rom",
+    metadata: { name: "Resume" },
+  },
+  {
+    id: "second",
+    system: "fixture",
+    contentPath: "/storage/fixtures/second.rom",
+    metadata: { name: "Second" },
+  },
 ]
 
 let handle: SpatialNavigationHandle

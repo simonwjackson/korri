@@ -212,6 +212,8 @@ function choiceGame(
 ): GameRecord {
   return {
     id,
+    system: "remote",
+    contentPath: sourceGameId,
     metadata: {
       name,
       description: sourceGameId,

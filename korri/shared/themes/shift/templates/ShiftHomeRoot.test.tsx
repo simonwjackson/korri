@@ -10,7 +10,14 @@ import {
 import { useShiftHome } from "./ShiftHome.context"
 import { ShiftHomeRoot } from "./ShiftHomeRoot"
 
-const games = [{ id: "resume", metadata: { name: "Resume" } }]
+const games = [
+  {
+    id: "resume",
+    system: "fixture",
+    contentPath: "/storage/fixtures/resume.rom",
+    metadata: { name: "Resume" },
+  },
+]
 
 afterEach(() => {
   cleanup()

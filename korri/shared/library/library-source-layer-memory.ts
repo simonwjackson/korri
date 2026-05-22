@@ -1,7 +1,11 @@
-import type { GameRecord } from "@shared/fixtures/games/game"
+import type { GameRecord } from "@shared/library/config/records/game"
 import type { LaunchSpec } from "@shared/library/launcher"
 import { Effect, Layer } from "effect"
-import { type LibraryError, LibrarySource } from "./library-services"
+import {
+  LibraryError,
+  LibrarySource,
+  type ResolvedLaunch,
+} from "./library-services"
 
 export type InMemoryLibrarySourceBehavior =
   | { readonly kind: "ready" }
@@ -12,6 +16,7 @@ export interface InMemoryLibrarySourceConfig {
   readonly games: readonly GameRecord[]
   readonly behavior?: InMemoryLibrarySourceBehavior
   readonly launchSpecsById?: ReadonlyMap<string, LaunchSpec>
+  readonly resolvedLaunchById?: ReadonlyMap<string, ResolvedLaunch>
 }
 
 export function makeInMemoryLibrarySourceLayer(
@@ -27,10 +32,28 @@ export function makeInMemoryLibrarySourceLayer(
     launchSpecFor: id =>
       Effect.succeed(
         config.launchSpecsById?.get(id) ??
+          config.resolvedLaunchById?.get(id)?.spec ??
           (config.games.some(game => game.id === id)
             ? defaultLaunchSpecFor(id)
             : undefined),
       ),
+    resolveLaunchForGame: id => {
+      const resolved = config.resolvedLaunchById?.get(id)
+      if (resolved) return Effect.succeed(resolved)
+      const spec = config.launchSpecsById?.get(id)
+      if (spec) return Effect.succeed({ spec } satisfies ResolvedLaunch)
+      if (config.games.some(g => g.id === id)) {
+        return Effect.succeed({
+          spec: defaultLaunchSpecFor(id),
+        } satisfies ResolvedLaunch)
+      }
+      return Effect.fail(
+        new LibraryError({
+          reason: "config",
+          message: `In-memory library has no resolution for game ${id}`,
+        }),
+      )
+    },
   })
 }
 

@@ -14,6 +14,8 @@ const host: StreamHostCandidate = {
 }
 const game: GameRecord = {
   id: "gba/wario-land-4",
+  system: "gba",
+  contentPath: "/storage/roms/gba/wario-land-4.gba",
   metadata: { name: "Wario Land 4" },
 }
 

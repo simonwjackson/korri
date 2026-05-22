@@ -4,11 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Effect } from "effect"
 
-import {
-  KORRI_LIBRARY_SCHEMA_VERSION,
-  makeKorriLibraryDbConfig,
-  openKorriLibraryDb,
-} from "./library-db"
+import { makeKorriLibraryDbConfig, openKorriLibraryDb } from "./library-db"
 
 async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
   const root = await mkdtemp(join(tmpdir(), "korri-proseql-library-"))
@@ -19,143 +15,215 @@ async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
   }
 }
 
-function seedGame(id = "25afeac6-f68c-4d44-b42e-87ec4c0a436b") {
-  return {
-    id,
-    metadata: { name: "F-Zero" },
-    userData: { lastPlayed: new Date("2026-01-02T03:04:05.000Z") },
-  }
-}
+describe("makeKorriLibraryDbConfig", () => {
+  it("declares the six collections expected by the cascade model", () => {
+    const config = makeKorriLibraryDbConfig("/tmp/x")
+    const names = Object.keys(config.collections).sort()
+    expect(names).toEqual([
+      "collections",
+      "config",
+      "games",
+      "launchers",
+      "systems",
+      "users",
+    ])
+  })
 
-const launcherProfile = {
-  id: "rocknix.retroarch.snes",
-  command: "/usr/bin/runemu.sh",
-  args: ["{contentPath}", "-P{system}"],
-  defaults: { system: "snes" },
-}
+  it("declares a single 'documents' source rooted at the library directory", () => {
+    const config = makeKorriLibraryDbConfig("/tmp/x")
+    expect(config.sources.length).toBe(1)
+    const src = config.sources[0]
+    expect(src?.kind).toBe("documents")
+    expect(src?.root).toBe("/tmp/x")
+    expect(src?.collections).toBe("all")
+    expect(src?.outbox).toBe("library.yaml")
+  })
 
-describe("openKorriLibraryDb", () => {
-  it("writes, flushes, and reopens a game with a profile-backed launch target", async () => {
+  it("uses derivedFromKey for every collection", () => {
+    const config = makeKorriLibraryDbConfig("/tmp/x")
+    for (const [name, col] of Object.entries(config.collections)) {
+      expect(col.id, name).toEqual({ kind: "derivedFromKey", field: "id" })
+    }
+  })
+})
+
+describe("openKorriLibraryDb — empty root", () => {
+  it("opens an empty root as six empty collections", async () => {
+    await withTempRoot(async root => {
+      const counts = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            return {
+              config: (yield* Effect.promise(
+                () => db.config.query().runPromise,
+              )).length,
+              users: (yield* Effect.promise(() => db.users.query().runPromise))
+                .length,
+              systems: (yield* Effect.promise(
+                () => db.systems.query().runPromise,
+              )).length,
+              launchers: (yield* Effect.promise(
+                () => db.launchers.query().runPromise,
+              )).length,
+              games: (yield* Effect.promise(() => db.games.query().runPromise))
+                .length,
+              collections: (yield* Effect.promise(
+                () => db.collections.query().runPromise,
+              )).length,
+            }
+          }),
+        ),
+      )
+      expect(counts).toEqual({
+        config: 0,
+        users: 0,
+        systems: 0,
+        launchers: 0,
+        games: 0,
+        collections: 0,
+      })
+    })
+  })
+})
+
+describe("openKorriLibraryDb — single-file multi-collection round-trip", () => {
+  it("persists multiple collections into one outbox YAML file (round-trip)", async () => {
     await withTempRoot(async root => {
       await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
             const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
-            const game = seedGame()
-
-            yield* db.games.create(game)
-            yield* db.launcherProfiles.create(launcherProfile)
-            const launchTarget = {
-              id: game.id,
-              profile: launcherProfile.id,
+            yield* db.games.create({
+              id: "fzero",
+              system: "snes",
               contentPath: "/storage/roms/snes/f-zero.smc",
-            }
-            yield* db.launchTargets.create(launchTarget as never)
+              metadata: { name: "F-Zero" },
+            })
+            yield* db.systems.create({ id: "snes", name: "Super Nintendo" })
+            yield* db.launchers.create({
+              id: "retroarch",
+              command: "/usr/bin/retroarch",
+              args: ["{contentPath}"],
+              systems: ["snes"],
+            })
             yield* Effect.promise(() => db.flush())
           }),
         ),
       )
 
-      const gamesFile = await readFile(join(root, "games.yaml"), "utf8")
-      const profilesFile = await readFile(
-        join(root, "launcher-profiles.yaml"),
-        "utf8",
-      )
-      const launchTargetsFile = await readFile(
-        join(root, "launch-targets.yaml"),
-        "utf8",
-      )
-      expect(gamesFile).toContain(`_version: ${KORRI_LIBRARY_SCHEMA_VERSION}`)
-      expect(gamesFile).toContain(`${seedGame().id}:`)
-      expect(gamesFile).toContain("F-Zero")
-      expect(gamesFile).not.toContain(`  id: ${seedGame().id}`)
-      expect(profilesFile).toContain("rocknix.retroarch.snes:")
-      expect(launchTargetsFile).toContain(`${seedGame().id}:`)
-      expect(launchTargetsFile).toContain("profile: rocknix.retroarch.snes")
-      expect(launchTargetsFile).toContain(
-        "contentPath: /storage/roms/snes/f-zero.smc",
-      )
-      expect(launchTargetsFile).not.toContain(`  id: ${seedGame().id}`)
+      const outbox = await readFile(join(root, "library.yaml"), "utf8")
+      expect(outbox).toContain("games:")
+      expect(outbox).toContain("systems:")
+      expect(outbox).toContain("launchers:")
+      expect(outbox).toContain("fzero:")
+      expect(outbox).toContain("snes:")
+      expect(outbox).toContain("retroarch:")
+      // Key-derived id rule: no nested `id:` field for each record.
+      expect(outbox).not.toContain("  id: fzero")
 
+      // Reopen and read.
       const reopened = await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
             const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
-            const game = yield* db.games.findById(seedGame().id)
-            const profile = yield* db.launcherProfiles.findById(
-              launcherProfile.id,
-            )
-            const launchTarget = yield* db.launchTargets.findById(seedGame().id)
-            return { game, profile, launchTarget }
+            return {
+              game: yield* db.games.findById("fzero"),
+              system: yield* db.systems.findById("snes"),
+              launcher: yield* db.launchers.findById("retroarch"),
+            }
           }),
         ),
       )
-
-      expect(reopened.game.metadata?.name).toBe("F-Zero")
-      expect(reopened.profile.command).toBe("/usr/bin/runemu.sh")
-      expect("profile" in reopened.launchTarget).toBe(true)
-      if ("profile" in reopened.launchTarget) {
-        expect(reopened.launchTarget.profile).toBe("rocknix.retroarch.snes")
-      }
+      expect(reopened.game.system).toBe("snes")
+      expect(reopened.game.contentPath).toBe("/storage/roms/snes/f-zero.smc")
+      expect(reopened.system.name).toBe("Super Nintendo")
+      expect(reopened.launcher.systems).toEqual(["snes"])
     })
   })
 
-  it("opens an empty root as empty collections", async () => {
+  it("merges two files contributing to the same collection", async () => {
     await withTempRoot(async root => {
-      const games = await Effect.runPromise(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
-            return yield* Effect.promise(() => db.games.query().runPromise)
-          }),
-        ),
-      )
-
-      expect(games).toEqual([])
-    })
-  })
-
-  it("rejects invalid persisted records through the ProseQL open effect", async () => {
-    await withTempRoot(async root => {
-      await mkdir(root, { recursive: true })
       await writeFile(
-        join(root, "games.yaml"),
+        join(root, "snes.yaml"),
         [
-          "bad:",
-          "  metadata:",
-          "    name: 123",
-          `_version: ${KORRI_LIBRARY_SCHEMA_VERSION}`,
+          "systems:",
+          "  snes:",
+          "    name: Super Nintendo",
+          "games:",
+          "  fzero:",
+          "    system: snes",
+          "    contentPath: /storage/roms/snes/f-zero.smc",
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+      await writeFile(
+        join(root, "psx.yaml"),
+        [
+          "systems:",
+          "  psx:",
+          "    name: PlayStation",
+          "games:",
+          "  ridge-racer:",
+          "    system: psx",
+          "    contentPath: /storage/roms/psx/ridge-racer.bin",
           "",
         ].join("\n"),
         "utf8",
       )
 
+      const counts = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            return {
+              games: (yield* Effect.promise(() => db.games.query().runPromise))
+                .length,
+              systems: (yield* Effect.promise(
+                () => db.systems.query().runPromise,
+              )).length,
+            }
+          }),
+        ),
+      )
+      expect(counts).toEqual({ games: 2, systems: 2 })
+    })
+  })
+})
+
+describe("openKorriLibraryDb — strict-mode rejections", () => {
+  it("rejects a YAML file with an unknown top-level collection key", async () => {
+    await withTempRoot(async root => {
+      await mkdir(root, { recursive: true })
+      await writeFile(
+        join(root, "library.yaml"),
+        ["launchTargets:", "  legacy-key:", "    gameId: x", ""].join("\n"),
+        "utf8",
+      )
       const exit = await Effect.runPromiseExit(
         Effect.scoped(openKorriLibraryDb({ root, writeDebounce: 1 })),
       )
-
       expect(exit._tag).toBe("Failure")
     })
   })
 
-  it("declares the expected default collection files", () => {
-    const config = makeKorriLibraryDbConfig("/tmp/korri-library")
-
-    expect(config.games.file).toBe("/tmp/korri-library/games.yaml")
-    expect(config.games.id).toEqual({ kind: "derivedFromKey", field: "id" })
-    expect(config.launcherProfiles.file).toBe(
-      "/tmp/korri-library/launcher-profiles.yaml",
-    )
-    expect(config.launcherProfiles.id).toEqual({
-      kind: "derivedFromKey",
-      field: "id",
-    })
-    expect(config.launchTargets.file).toBe(
-      "/tmp/korri-library/launch-targets.yaml",
-    )
-    expect(config.launchTargets.id).toEqual({
-      kind: "derivedFromKey",
-      field: "id",
+  it("rejects a config: section containing any key other than 'global'", async () => {
+    await withTempRoot(async root => {
+      await writeFile(
+        join(root, "library.yaml"),
+        ["config:", "  notglobal:", "    launcher: retroarch", ""].join("\n"),
+        "utf8",
+      )
+      const exit = await Effect.runPromiseExit(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            return yield* Effect.promise(() => db.config.query().runPromise)
+          }),
+        ),
+      )
+      expect(exit._tag).toBe("Failure")
     })
   })
 })

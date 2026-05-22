@@ -1,9 +1,10 @@
 import { describe, expect, it } from "bun:test"
 import type { GameRecord } from "@shared/fixtures/games/game"
 import type { LaunchResult, LaunchSpec } from "@shared/library/launcher"
-import type {
-  LauncherService,
-  LibrarySourceService,
+import {
+  type LauncherService,
+  LibraryError,
+  type LibrarySourceService,
 } from "@shared/library/library-services"
 import { Effect } from "effect"
 import type { StreamHostCandidate } from "./lan-stream-discovery"
@@ -12,6 +13,8 @@ import { runSourceAwarePlayCommand } from "./source-aware-play"
 
 const localGame: GameRecord = {
   id: "nixpkgs/neverball",
+  system: "fixture",
+  contentPath: "/storage/fixtures/nixpkgs/neverball.rom",
   metadata: { name: "Neverball" },
 }
 const remoteGame = {
@@ -153,6 +156,15 @@ function localSource(
       Effect.succeed(
         games.some(game => game.id === id) ? launchSpec : undefined,
       ),
+    resolveLaunchForGame: id =>
+      games.some(game => game.id === id) && launchSpec
+        ? Effect.succeed({ spec: launchSpec })
+        : Effect.fail(
+            new LibraryError({
+              reason: "config",
+              message: "no spec configured",
+            }),
+          ),
   }
 }
 

@@ -16,8 +16,8 @@
  * carries the resolved gamescope policy separately, and the runner
  * applies it around the spec at execution time.
  *
- * Mirrors the existing launcher-config/launch-resolver.ts substitution
- * logic but uses Effect for error flow and consumes the new resolved-
+ * Replaces the retired launcher-config substitution logic with Effect
+ * error flow and consumes the new resolved-
  * context shape instead of profile + target.
  */
 

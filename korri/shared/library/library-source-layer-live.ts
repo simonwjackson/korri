@@ -1,4 +1,5 @@
 import { korriDataPath } from "@shared/config/xdg-paths"
+import type { LaunchSpec } from "@shared/library/launcher"
 import { logger } from "@shared/logger"
 import { Effect, Layer } from "effect"
 import {
@@ -37,8 +38,33 @@ function createLiveLibrarySourceService(): LibrarySourceService {
       selectedLibrarySourceMode() === "rocknix"
         ? withRocknixSource(source => source.launchSpecFor(id), "launchSpecFor")
         : withLibraryRepository(
-            repository => repository.launchSpecForGame(id),
+            repository =>
+              repository.resolveLaunchForGame(id).pipe(
+                Effect.matchEffect({
+                  onSuccess: out =>
+                    Effect.succeed(out.spec as LaunchSpec | undefined),
+                  onFailure: error =>
+                    "_tag" in error && error._tag === "GameNotFound"
+                      ? Effect.succeed(undefined as LaunchSpec | undefined)
+                      : Effect.fail(
+                          new LibraryError({
+                            reason: "config",
+                            message: cascadeErrorMessage(error),
+                          }),
+                        ),
+                }),
+              ),
             "launchSpecFor",
+          ),
+    resolveLaunchForGame: (id, inputs) =>
+      selectedLibrarySourceMode() === "rocknix"
+        ? withRocknixSource(
+            source => source.resolveLaunchForGame(id, inputs),
+            "resolveLaunchForGame",
+          )
+        : withLibraryRepository(
+            repository => repository.resolveLaunchForGame(id, inputs),
+            "resolveLaunchForGame",
           ),
   }
 }
@@ -144,6 +170,24 @@ function buildLibraryRootFromEnv(): Effect.Effect<string, LibraryError> {
       })
     }),
   )
+}
+
+function cascadeErrorMessage(error: unknown): string {
+  if (typeof error === "object" && error && "_tag" in error) {
+    const tag = (error as { _tag: string })._tag
+    if (tag === "LauncherUnresolvable")
+      return "missing launcher profile for game"
+    if (tag === "CoreNotConfigured") return "missing required core for game"
+    if (tag === "PresetNotFound") return "unknown preset for game"
+    if (tag === "UserNotFound") return "unknown user"
+    if (tag === "MissingRequiredValue")
+      return "launch template references missing value"
+    if (tag === "UnresolvedPlaceholder")
+      return "launch template references an unsupported placeholder"
+    if (tag === "DisallowedCommand") return "launch command not allowed"
+    return `cascade error: ${tag}`
+  }
+  return error instanceof Error ? error.message : String(error)
 }
 
 function toLibraryError(error: unknown): LibraryError {

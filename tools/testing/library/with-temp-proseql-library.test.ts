@@ -5,21 +5,30 @@ import { Effect } from "effect"
 import { withTempProseqlLibrary } from "./with-temp-proseql-library"
 
 describe("withTempProseqlLibrary", () => {
-  it("seeds games, launcher profiles, and launch targets in a real ProseQL root", async () => {
+  it("seeds the six collections through real ProseQL + real disk", async () => {
     await using library = await withTempProseqlLibrary({
-      games: [{ id: "game-1", metadata: { name: "Game 1" } }],
-      launcherProfiles: [
+      global: { gamescope: { enabled: false } },
+      systems: [
         {
-          id: "echo.profile",
-          command: "/bin/echo",
-          args: ["{contentPath}"],
+          id: "snes",
+          launcher: "echo",
+          cores: { echo: "snes9x_libretro.so" },
         },
       ],
-      launchTargets: [
+      launchers: [
+        {
+          id: "echo",
+          command: "/bin/echo",
+          args: ["-L", "{core}", "{contentPath}"],
+          systems: ["snes"],
+        },
+      ],
+      games: [
         {
           id: "game-1",
-          profile: "echo.profile",
-          contentPath: "content with spaces.smc",
+          system: "snes",
+          contentPath: "/storage/roms/snes/game-1.smc",
+          metadata: { name: "Game 1" },
         },
       ],
     })
@@ -34,16 +43,18 @@ describe("withTempProseqlLibrary", () => {
           const repository = createLibraryRepository(db)
           return {
             games: yield* repository.listGames(),
-            spec: yield* repository.launchSpecForGame("game-1"),
+            resolved: yield* repository.resolveLaunchForGame("game-1"),
           }
         }),
       ),
     )
 
-    expect(result.games.map(game => game.id)).toEqual(["game-1"])
-    expect(result.spec).toEqual({
-      command: "/bin/echo",
-      args: ["content with spaces.smc"],
-    })
+    expect(result.games.map(g => g.id)).toEqual(["game-1"])
+    expect(result.resolved.spec.args).toEqual([
+      "-L",
+      "snes9x_libretro.so",
+      "/storage/roms/snes/game-1.smc",
+    ])
+    expect(result.resolved.gamescope?.enabled).toBe(false)
   })
 })

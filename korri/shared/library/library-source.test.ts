@@ -13,12 +13,20 @@ import type { LibrarySource } from "./library-source"
 
 describe("LibrarySource + Launcher seams", () => {
   it("can be implemented by a literal that satisfies the interface", async () => {
-    const game: GameRecord = { id: "snes/zelda" }
+    const game: GameRecord = {
+      id: "snes/zelda",
+      system: "snes",
+      contentPath: "/storage/roms/snes/zelda.smc",
+    }
 
     const source: LibrarySource = {
       list: async () => [game] as const,
       launchSpecFor: async id =>
         id === game.id ? { command: "/bin/true", args: [] } : undefined,
+      resolveLaunchForGame: async id => {
+        if (id !== game.id) throw new Error("unknown id")
+        return { spec: { command: "/bin/true", args: [] } }
+      },
     }
 
     const launcher: Launcher = {

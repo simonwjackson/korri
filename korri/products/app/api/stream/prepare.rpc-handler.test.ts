@@ -122,19 +122,21 @@ async function withTempProseqlLibrary(): Promise<{
         Effect.gen(function* () {
           const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
           const repository = createLibraryRepository(db)
-          yield* repository.upsertGame({
-            id: "snes/echo.smc",
-            metadata: { name: "Echo" },
+          yield* repository.upsertSystem({
+            id: "snes",
+            launcher: "rocknix-retroarch",
           })
-          yield* repository.upsertLauncherProfile({
-            id: "rocknix.retroarch.snes",
+          yield* repository.upsertLauncher({
+            id: "rocknix-retroarch",
             command: FAKE_GAME,
             args: ["{contentPath}"],
+            systems: ["snes"],
           })
-          yield* repository.upsertLaunchTarget({
+          yield* repository.upsertGame({
             id: "snes/echo.smc",
-            profile: "rocknix.retroarch.snes",
+            system: "snes",
             contentPath: "/storage/roms/snes/echo.smc",
+            metadata: { name: "Echo" },
           })
           yield* Effect.promise(() => db.flush())
         }),

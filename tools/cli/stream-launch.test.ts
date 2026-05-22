@@ -23,7 +23,12 @@ import {
   runStreamLaunchCommand,
 } from "./stream-launch"
 
-const game: GameRecord = { id: "snes/f-zero.smc", metadata: { name: "F-Zero" } }
+const game: GameRecord = {
+  id: "snes/f-zero.smc",
+  system: "fixture",
+  contentPath: "/storage/fixtures/snes/f-zero.smc.rom",
+  metadata: { name: "F-Zero" },
+}
 const launchSpec: LaunchSpec = { command: "/bin/echo", args: ["race"] }
 
 describe("runStreamLaunchCommand", () => {
@@ -113,21 +118,16 @@ describe("runStreamLaunchCommand", () => {
 
   it("uses the live library source configuration with a temp ProseQL library", async () => {
     await using library = await withTempProseqlLibrary({
-      games: [game],
-      launcherProfiles: [
+      systems: [{ id: game.system, launcher: "echo" }],
+      launchers: [
         {
-          id: "echo.profile",
+          id: "echo",
           command: "/bin/echo",
           args: ["{contentPath}"],
+          systems: [game.system],
         },
       ],
-      launchTargets: [
-        {
-          id: game.id,
-          profile: "echo.profile",
-          contentPath: "content.smc",
-        },
-      ],
+      games: [{ ...game, contentPath: "content.smc" }],
     })
     const previousRoot = process.env.KORRI_LIBRARY_ROOT
     const previousSource = process.env.KORRI_LIBRARY_SOURCE
@@ -171,6 +171,8 @@ describe("prepareStreamLaunch", () => {
     const intentPath = await tempIntentPath()
     const otherGame: GameRecord = {
       id: "snes/other.smc",
+      system: "fixture",
+      contentPath: "/storage/fixtures/snes/other.smc.rom",
       metadata: { name: "Other" },
     }
     const result = await prepareStreamLaunch({
@@ -401,6 +403,10 @@ describe("prepareStreamLaunchForGame", () => {
             new LibraryError({ reason: "io", message: "disk missing" }),
           ),
         launchSpecFor: () => Effect.succeed(undefined),
+        resolveLaunchForGame: () =>
+          Effect.fail(
+            new LibraryError({ reason: "config", message: "not implemented" }),
+          ),
       },
       intentStore: createFileGameStreamLaunchIntentStore(intentPath),
     })
@@ -423,6 +429,10 @@ describe("prepareStreamLaunchForGame", () => {
       librarySource: {
         list: () => Effect.fail(new LibraryError({ reason })),
         launchSpecFor: () => Effect.succeed(undefined),
+        resolveLaunchForGame: () =>
+          Effect.fail(
+            new LibraryError({ reason: "config", message: "not implemented" }),
+          ),
       },
       intentStore: createFileGameStreamLaunchIntentStore(intentPath),
     })
@@ -447,5 +457,13 @@ function librarySource(options: {
   return {
     list: () => Effect.succeed(options.games),
     launchSpecFor: id => Effect.succeed(options.launchSpecs.get(id)),
+    resolveLaunchForGame: id => {
+      const spec = options.launchSpecs.get(id)
+      return spec
+        ? Effect.succeed({ spec })
+        : Effect.fail(
+            new LibraryError({ reason: "config", message: "no spec" }),
+          )
+    },
   }
 }

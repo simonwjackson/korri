@@ -12,6 +12,8 @@ describe("GameRecord schema", () => {
   it("accepts a fully populated record", () => {
     const input = {
       id: "g-001",
+      system: "fixture",
+      contentPath: "/storage/fixtures/g-001.rom",
       metadata: {
         name: "Crystalline Drift",
         description: "Lorem ipsum.",
@@ -36,13 +38,21 @@ describe("GameRecord schema", () => {
   })
 
   it("accepts a record with only an id", () => {
-    expect(() => decodeGameRecord({ id: "minimal" })).not.toThrow()
+    expect(() =>
+      decodeGameRecord({
+        id: "minimal",
+        system: "fixture",
+        contentPath: "/storage/fixtures/minimal.rom",
+      }),
+    ).not.toThrow()
   })
 
   it("rejects a record with an unknown media type", () => {
     expect(() =>
       decodeGameRecord({
         id: "bad",
+        system: "fixture",
+        contentPath: "/storage/fixtures/bad.rom",
         metadata: {
           media: [{ type: "hologram", uri: "/x" }],
         },
@@ -59,6 +69,8 @@ describe("game helpers", () => {
   it("getGameImageUrl returns the first image URI", () => {
     const game: GameRecord = {
       id: "g",
+      system: "fixture",
+      contentPath: "/storage/fixtures/g.rom",
       metadata: {
         media: [
           { type: "video", uri: "/v.mp4" },
@@ -72,6 +84,8 @@ describe("game helpers", () => {
   it("getGameImageUrl returns undefined when no image media exists", () => {
     const game: GameRecord = {
       id: "g",
+      system: "fixture",
+      contentPath: "/storage/fixtures/g.rom",
       metadata: { media: [{ type: "video", uri: "/v.mp4" }] },
     }
     expect(getGameImageUrl(game)).toBeUndefined()
@@ -80,6 +94,8 @@ describe("game helpers", () => {
   it("getGameWideImageUrl prefers wide image media", () => {
     const game: GameRecord = {
       id: "g",
+      system: "fixture",
+      contentPath: "/storage/fixtures/g.rom",
       metadata: {
         media: [
           { type: "image", uri: "/api/media/games/wii/g/cover-1024.jpg" },
@@ -96,6 +112,8 @@ describe("game helpers", () => {
   it("getGameWideImageUrl falls back to cover image media", () => {
     const game: GameRecord = {
       id: "g",
+      system: "fixture",
+      contentPath: "/storage/fixtures/g.rom",
       metadata: {
         media: [
           { type: "image", uri: "/api/media/games/wii/g/poster-600x900.png" },
@@ -109,11 +127,21 @@ describe("game helpers", () => {
   })
 
   it("getGameDisplayName falls back to id when name is absent", () => {
-    expect(getGameDisplayName({ id: "fallback" })).toBe("fallback")
+    expect(
+      getGameDisplayName({
+        id: "fallback",
+        system: "fixture",
+        contentPath: "/storage/fixtures/fallback.rom",
+      }),
+    ).toBe("fallback")
   })
 
   it("decoder is a thin wrapper over Schema.decodeUnknownSync", () => {
-    const decoded = Schema.decodeUnknownSync(GameRecord)({ id: "x" })
+    const decoded = Schema.decodeUnknownSync(GameRecord)({
+      id: "x",
+      system: "fixture",
+      contentPath: "/storage/fixtures/x.rom",
+    })
     expect(decoded.id).toBe("x")
   })
 })

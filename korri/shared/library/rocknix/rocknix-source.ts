@@ -26,7 +26,7 @@ import { readdir } from "node:fs/promises"
 import { basename, join, parse as parsePath } from "node:path"
 
 import { korriDataPath, type XdgPathEnv } from "@shared/config/xdg-paths"
-import type { GameRecord } from "@shared/fixtures/games/game"
+import type { GameRecord } from "@shared/library/config/records/game"
 import { logger } from "@shared/logger/logger"
 
 import type { LaunchSpec } from "../launcher"
@@ -170,6 +170,15 @@ export function createRocknixSource(
       const { specs } = await loadIfNeeded()
       return specs.get(id)
     },
+
+    async resolveLaunchForGame(id: string) {
+      const { specs } = await loadIfNeeded()
+      const spec = specs.get(id)
+      if (!spec) {
+        throw new Error(`rocknix-source: no launch spec for game ${id}`)
+      }
+      return { spec }
+    },
   }
 }
 
@@ -268,7 +277,7 @@ async function composeFallbackRecordAndSpec(args: {
     romPath: absRomPath,
   })
 
-  const record = composeGameRecord(id, entry, media)
+  const record = composeGameRecord(id, systemName, absRomPath, entry, media)
   const spec = composeFallbackLaunchSpec({
     launchCommandOverride,
     romPath: absRomPath,
@@ -293,7 +302,7 @@ async function composeRecordAndSpec(args: {
     romPath: absRomPath,
   })
 
-  const record = composeGameRecord(id, entry, media)
+  const record = composeGameRecord(id, system.name, absRomPath, entry, media)
   const spec = composeLaunchSpec({
     template: system.commandTemplate,
     launchCommandOverride,
@@ -336,6 +345,8 @@ async function findSidecarMedia(args: {
 
 function composeGameRecord(
   id: string,
+  systemName: string,
+  contentPath: string,
   entry: GamelistEntry,
   media: ReadonlyArray<{ type: "image"; uri: string }>,
 ): GameRecord {
@@ -354,7 +365,7 @@ function composeGameRecord(
     favorite: entry.favorite,
   })
 
-  const record: GameRecord = { id }
+  const record: GameRecord = { id, system: systemName, contentPath }
   if (Object.keys(metadata).length > 0) {
     Object.assign(record, { metadata })
   }
@@ -428,13 +439,20 @@ function composeLaunchSpec(args: {
 }
 
 function compareByLastPlayedDesc(a: GameRecord, b: GameRecord): number {
-  const ta = a.userData?.lastPlayed?.getTime()
-  const tb = b.userData?.lastPlayed?.getTime()
-  // Undefined sorts after defined.
-  if (ta === undefined && tb === undefined) return 0
-  if (ta === undefined) return 1
-  if (tb === undefined) return -1
-  return tb - ta
+  const ta = a.userData?.lastPlayed
+  const tb = b.userData?.lastPlayed
+  const tt = (x: typeof ta) =>
+    x instanceof Date
+      ? x.getTime()
+      : typeof x === "string"
+        ? Date.parse(x)
+        : undefined
+  const an = tt(ta)
+  const bn = tt(tb)
+  if (an === undefined && bn === undefined) return 0
+  if (an === undefined) return 1
+  if (bn === undefined) return -1
+  return bn - an
 }
 
 function stripUndefined<T extends Record<string, unknown>>(

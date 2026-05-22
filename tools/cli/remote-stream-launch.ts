@@ -146,6 +146,12 @@ function remoteChoice(
     game,
     choice: {
       id: `${host.id}:${game.id}`,
+      // Remote choices don't have local identity; carry the remote id
+      // forward but tag with placeholder system/contentPath so the
+      // GameRecord schema is satisfied. Consumers treat remote choices
+      // through the source seam, not by reading identity directly.
+      system: "remote",
+      contentPath: game.id,
       metadata: {
         name: `${game.displayName} · ${host.name}`,
         description: game.id,

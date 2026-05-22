@@ -85,28 +85,25 @@ async function seedLibrary(): Promise<TempProseqlLibrary> {
           yield* repository.upsertImportedGame({
             game: {
               id: "snes/echo.smc",
+              system: "snes",
+              contentPath: "/tmp/roms/snes/echo.smc",
               metadata: { name: "RPC Echo" },
               userData: { lastPlayed: new Date("2026-05-01T00:00:00.000Z") },
             },
-            launcherProfile: {
-              id: "rocknix.retroarch.snes",
+            launcher: {
+              id: "rocknix-retroarch",
               command: FAKE_GAME,
               args: [
                 "{contentPath}",
                 "-P{system}",
                 "--core={core}",
-                "--emulator={emulator}",
+                "--emulator=retroarch",
               ],
-              defaults: {
-                system: "snes",
-                core: "snes9x",
-                emulator: "retroarch",
-              },
+              systems: ["snes"],
             },
-            launchTarget: {
-              id: "snes/echo.smc",
-              profile: "rocknix.retroarch.snes",
-              contentPath: "/tmp/roms/snes/echo.smc",
+            systemDelta: {
+              id: "snes",
+              cores: { "rocknix-retroarch": "snes9x" },
             },
           })
           yield* Effect.promise(() => db.flush())

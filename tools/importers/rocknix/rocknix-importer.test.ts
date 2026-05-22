@@ -127,8 +127,11 @@ describe("importRocknixLibrary", () => {
               first,
               second,
               games: yield* repository.listGames(),
-              specs: yield* Effect.promise(
-                () => db.launchTargets.query().runPromise,
+              launchers: yield* Effect.promise(
+                () => db.launchers.query().runPromise,
+              ),
+              systems: yield* Effect.promise(
+                () => db.systems.query().runPromise,
               ),
             }
           }),
@@ -138,13 +141,12 @@ describe("importRocknixLibrary", () => {
       expect(result.first.imported).toBe(1)
       expect(result.second._tag).toBe("Failure")
       expect(result.games.map(game => game.id)).toEqual(["game-1"])
-      expect(result.specs).toHaveLength(1)
-      const launchTarget = result.specs[0]
-      expect(launchTarget?.id).toBe("game-1")
-      expect(launchTarget && "profile" in launchTarget).toBe(true)
-      if (launchTarget && "profile" in launchTarget) {
-        expect(launchTarget.profile).toBe("rocknix.retroarch.snes.snes9x")
-      }
+      expect(result.games[0]?.system).toBe("snes")
+      expect(result.launchers).toHaveLength(1)
+      expect(result.launchers[0]?.id).toBe("rocknix-retroarch")
+      expect(
+        result.systems.find(s => s.id === "snes")?.cores?.["rocknix-retroarch"],
+      ).toBe("snes9x")
     })
   })
 

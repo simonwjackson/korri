@@ -14,6 +14,8 @@ export const LibrarySourceLayerRpc = Layer.effect(LibrarySource)(
           Effect.mapError(toLibraryError),
         ),
       launchSpecFor: (id: string) => Effect.succeed(opaqueLaunchSpecFor(id)),
+      resolveLaunchForGame: (id: string) =>
+        Effect.succeed({ spec: opaqueLaunchSpecFor(id) }),
     })),
   ),
 ).pipe(Layer.provide(RpcClientLive))

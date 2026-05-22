@@ -148,31 +148,29 @@ async function withTempProseqlLibrary(
           const repository = createLibraryRepository(db)
           yield* repository.upsertGame({
             id: "snes/echo.smc",
+            system: "snes",
+            contentPath: "/tmp/roms/snes/echo.smc",
             metadata: { name: "Echo" },
             userData: { lastPlayed: new Date("2026-05-01T00:00:00.000Z") },
           })
+          yield* repository.upsertSystem({
+            id: "snes",
+            launcher: "rocknix-retroarch",
+            cores: { "rocknix-retroarch": "snes9x" },
+          })
           if (!options.missingProfile) {
-            yield* repository.upsertLauncherProfile({
-              id: "rocknix.retroarch.snes",
+            yield* repository.upsertLauncher({
+              id: "rocknix-retroarch",
               command: FAKE_GAME,
               args: [
                 "{contentPath}",
                 "-P{system}",
                 "--core={core}",
-                "--emulator={emulator}",
+                "--emulator=retroarch",
               ],
-              defaults: {
-                system: "snes",
-                core: "snes9x",
-                emulator: "retroarch",
-              },
+              systems: ["snes"],
             })
           }
-          yield* repository.upsertLaunchTarget({
-            id: "snes/echo.smc",
-            profile: "rocknix.retroarch.snes",
-            contentPath: "/tmp/roms/snes/echo.smc",
-          })
           yield* Effect.promise(() => db.flush())
         }),
       ),

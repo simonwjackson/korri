@@ -7,6 +7,8 @@ describe("ShiftHomeFeatureTile", () => {
   it("uses wide library media before cover art", () => {
     const game: GameRecord = {
       id: "wii/example.rvz",
+      system: "fixture",
+      contentPath: "/storage/fixtures/wii/example.rvz.rom",
       metadata: {
         media: [
           { type: "image", uri: "/api/media/games/wii/example/cover-1024.jpg" },

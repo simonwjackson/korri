@@ -25,16 +25,22 @@ export const handleListSource = (_payload: typeof ListSourcePayload.Type) =>
     const games = yield* source.list().pipe(Effect.mapError(toDataError))
     const sourceGames = yield* Effect.forEach(games, game =>
       source.launchSpecFor(game.id).pipe(
-        Effect.map(spec =>
-          spec
-            ? new SourceCatalogGame({
-                id: game.id,
-                displayName: getGameDisplayName(game),
-                streamable: true,
-              })
-            : undefined,
-        ),
-        Effect.mapError(toDataError),
+        Effect.matchEffect({
+          onSuccess: spec =>
+            Effect.succeed(
+              spec
+                ? new SourceCatalogGame({
+                    id: game.id,
+                    displayName: getGameDisplayName(game),
+                    streamable: true,
+                  })
+                : undefined,
+            ),
+          onFailure: (error: LibraryError) =>
+            error.reason === "config"
+              ? Effect.succeed(undefined)
+              : Effect.fail(toDataError(error)),
+        }),
       ),
     )
 

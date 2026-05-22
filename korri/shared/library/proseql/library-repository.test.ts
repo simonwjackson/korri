@@ -2,6 +2,9 @@ import { describe, expect, it } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import type { GameRecord } from "@shared/library/config/records/game"
+import type { LauncherRecord } from "@shared/library/config/records/launcher"
+import type { SystemRecord } from "@shared/library/config/records/system"
 import { Effect } from "effect"
 
 import { openKorriLibraryDb } from "./library-db"
@@ -16,37 +19,43 @@ async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
   }
 }
 
-const oldGame = {
+const oldGame: GameRecord = {
   id: "game-old",
+  system: "snes",
+  contentPath: "/storage/roms/snes/old.smc",
   metadata: { name: "Old" },
   userData: { lastPlayed: new Date("2024-01-01T00:00:00.000Z") },
 }
 
-const newGame = {
+const newGame: GameRecord = {
   id: "game-new",
+  system: "snes",
+  contentPath: "/storage/roms/snes/new.smc",
   metadata: { name: "New" },
   userData: { lastPlayed: new Date("2026-01-01T00:00:00.000Z") },
 }
 
-const neverPlayedGame = {
+const neverPlayedGame: GameRecord = {
   id: "game-never",
+  system: "snes",
+  contentPath: "/storage/roms/snes/never.smc",
   metadata: { name: "Never" },
 }
 
-const launcherProfile = {
-  id: "rocknix.retroarch.snes",
+const retroarchLauncher: LauncherRecord = {
+  id: "retroarch",
   command: "/bin/echo",
-  args: ["{contentPath}", "-P{system}", "--core={core}"],
-  defaults: { system: "snes", core: "snes9x" },
+  args: ["-L", "{core}", "{contentPath}"],
+  systems: ["snes"],
 }
 
-const launchTarget = {
-  id: newGame.id,
-  profile: launcherProfile.id,
-  contentPath: "/storage/roms/snes/New Game.smc",
+const snesSystem: SystemRecord = {
+  id: "snes",
+  launcher: "retroarch",
+  cores: { retroarch: "snes9x_libretro.so" },
 }
 
-describe("createLibraryRepository", () => {
+describe("createLibraryRepository — listGames", () => {
   it("lists games newest first with never-played games last", async () => {
     await withTempRoot(async root => {
       const listed = await Effect.runPromise(
@@ -61,119 +70,129 @@ describe("createLibraryRepository", () => {
           }),
         ),
       )
-
-      expect(listed.map(game => game.id)).toEqual([
+      expect(listed.map(g => g.id)).toEqual([
         "game-new",
         "game-old",
         "game-never",
       ])
     })
   })
+})
 
-  it("resolves a profile-backed launch spec by game id", async () => {
-    await withTempRoot(async root => {
-      const spec = await Effect.runPromise(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
-            const repo = createLibraryRepository(db)
-            yield* repo.upsertGame(newGame)
-            yield* repo.upsertLauncherProfile(launcherProfile)
-            yield* repo.upsertLaunchTarget(launchTarget)
-            return yield* repo.launchSpecForGame(newGame.id)
-          }),
-        ),
-      )
-
-      expect(spec).toEqual({
-        command: "/bin/echo",
-        args: ["/storage/roms/snes/New Game.smc", "-Psnes", "--core=snes9x"],
-      })
-    })
-  })
-
-  it("returns undefined when a game has no launch target", async () => {
-    await withTempRoot(async root => {
-      const spec = await Effect.runPromise(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
-            const repo = createLibraryRepository(db)
-            yield* repo.upsertGame(neverPlayedGame)
-            return yield* repo.launchSpecForGame(neverPlayedGame.id)
-          }),
-        ),
-      )
-
-      expect(spec).toBeUndefined()
-    })
-  })
-
-  it("does not let legacy resolved-spec targets prevent listing games", async () => {
+describe("createLibraryRepository — resolveLaunchForGame (inheritance)", () => {
+  it("resolves a LaunchSpec via the cascade with pure inheritance (no preset, no override)", async () => {
     await withTempRoot(async root => {
       const result = await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
             const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
             const repo = createLibraryRepository(db)
+            yield* repo.upsertSystem(snesSystem)
+            yield* repo.upsertLauncher(retroarchLauncher)
             yield* repo.upsertGame(newGame)
-            yield* repo.upsertLaunchTarget({
-              id: `launch:${newGame.id}`,
-              gameId: newGame.id,
-              spec: { command: "/bin/echo", args: ["legacy"] },
-            })
-            const exit = yield* Effect.exit(repo.launchSpecForGame(newGame.id))
-            return { games: yield* repo.listGames(), exit }
+            return yield* repo.resolveLaunchForGame(newGame.id)
           }),
         ),
       )
-
-      expect(result.games.map(game => game.id)).toEqual([newGame.id])
-      expect(result.exit._tag).toBe("Failure")
+      expect(result.spec.command).toBe("/bin/echo")
+      expect(result.spec.args).toEqual([
+        "-L",
+        "snes9x_libretro.so",
+        "/storage/roms/snes/new.smc",
+      ])
     })
   })
 
-  it("fails resolution when the referenced profile is missing", async () => {
+  it("includes gamescope policy when configured (cascade fold)", async () => {
     await withTempRoot(async root => {
-      const exit = await Effect.runPromise(
+      const result = await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
             const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
             const repo = createLibraryRepository(db)
-            yield* repo.upsertGame(newGame)
-            yield* repo.upsertLaunchTarget(launchTarget)
-            return yield* Effect.exit(repo.launchSpecForGame(newGame.id))
+            yield* repo.upsertGlobalConfig({
+              gamescope: { enabled: false, args: ["-F", "fsr"] },
+            })
+            yield* repo.upsertSystem(snesSystem)
+            yield* repo.upsertLauncher(retroarchLauncher)
+            yield* repo.upsertGame({
+              ...newGame,
+              gamescope: { enabled: true },
+            })
+            return yield* repo.resolveLaunchForGame(newGame.id)
           }),
         ),
       )
-
-      expect(exit._tag).toBe("Failure")
+      expect(result.gamescope?.enabled).toBe(true)
+      expect(result.gamescope?.args).toEqual(["-F", "fsr"])
     })
   })
 
-  it("fails resolution when a profile is missing a required placeholder value", async () => {
+  it("honors ephemeral override (most-specific cascade layer)", async () => {
     await withTempRoot(async root => {
-      const exit = await Effect.runPromise(
+      const result = await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
             const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
             const repo = createLibraryRepository(db)
+            yield* repo.upsertSystem(snesSystem)
+            yield* repo.upsertLauncher(retroarchLauncher)
             yield* repo.upsertGame(newGame)
-            yield* repo.upsertLauncherProfile({
-              ...launcherProfile,
-              defaults: { system: "snes" },
+            return yield* repo.resolveLaunchForGame(newGame.id, {
+              override: { argsAppend: ["--debug"] },
             })
-            yield* repo.upsertLaunchTarget(launchTarget)
-            return yield* Effect.exit(repo.launchSpecForGame(newGame.id))
           }),
         ),
       )
+      expect(result.spec.args).toEqual([
+        "-L",
+        "snes9x_libretro.so",
+        "/storage/roms/snes/new.smc",
+        "--debug",
+      ])
+    })
+  })
+})
 
+describe("createLibraryRepository — resolveLaunchForGame (error paths)", () => {
+  it("fails with GameNotFound for an unknown game id", async () => {
+    await withTempRoot(async root => {
+      const exit = await Effect.runPromiseExit(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const repo = createLibraryRepository(db)
+            return yield* repo.resolveLaunchForGame("missing")
+          }),
+        ),
+      )
       expect(exit._tag).toBe("Failure")
     })
   })
 
-  it("writes imported game records atomically", async () => {
+  it("fails when userId is provided but the user doesn't exist", async () => {
+    await withTempRoot(async root => {
+      const exit = await Effect.runPromiseExit(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const repo = createLibraryRepository(db)
+            yield* repo.upsertSystem(snesSystem)
+            yield* repo.upsertLauncher(retroarchLauncher)
+            yield* repo.upsertGame(newGame)
+            return yield* repo.resolveLaunchForGame(newGame.id, {
+              userId: "ghost",
+            })
+          }),
+        ),
+      )
+      expect(exit._tag).toBe("Failure")
+    })
+  })
+})
+
+describe("createLibraryRepository — upsertImportedGame", () => {
+  it("writes a single-system import atomically (game + launcher + system delta)", async () => {
     await withTempRoot(async root => {
       const result = await Effect.runPromise(
         Effect.scoped(
@@ -182,47 +201,64 @@ describe("createLibraryRepository", () => {
             const repo = createLibraryRepository(db)
             yield* repo.upsertImportedGame({
               game: newGame,
-              launcherProfile,
-              launchTarget,
+              launcher: retroarchLauncher,
+              systemDelta: {
+                id: "snes",
+                name: "Super Nintendo",
+                cores: { retroarch: "snes9x_libretro.so" },
+              },
             })
             yield* Effect.promise(() => db.flush())
-            return {
-              games: yield* repo.listGames(),
-              spec: yield* repo.launchSpecForGame(newGame.id),
-            }
+            const games = yield* repo.listGames()
+            const resolved = yield* repo.resolveLaunchForGame(newGame.id)
+            return { games, resolved }
           }),
         ),
       )
-
-      expect(result.games.map(game => game.id)).toEqual([newGame.id])
-      expect(result.spec).toEqual({
-        command: "/bin/echo",
-        args: ["/storage/roms/snes/New Game.smc", "-Psnes", "--core=snes9x"],
-      })
+      expect(result.games.map(g => g.id)).toEqual([newGame.id])
+      expect(result.resolved.spec.args).toEqual([
+        "-L",
+        "snes9x_libretro.so",
+        "/storage/roms/snes/new.smc",
+      ])
     })
   })
 
-  it("does not leave an orphan game when an imported profile is invalid", async () => {
+  it("merges supported systems when importing a second game on the same launcher", async () => {
     await withTempRoot(async root => {
-      const result = await Effect.runPromise(
+      const launcher = await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
             const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
             const repo = createLibraryRepository(db)
-            const exit = yield* Effect.exit(
-              repo.upsertImportedGame({
-                game: newGame,
-                launcherProfile: { ...launcherProfile, command: "" },
-                launchTarget,
-              }),
+            yield* repo.upsertImportedGame({
+              game: newGame,
+              launcher: { ...retroarchLauncher, systems: ["snes"] },
+              systemDelta: {
+                id: "snes",
+                cores: { retroarch: "snes9x_libretro.so" },
+              },
+            })
+            yield* repo.upsertImportedGame({
+              game: {
+                id: "ridge-racer",
+                system: "psx",
+                contentPath: "/storage/roms/psx/ridge.bin",
+              },
+              launcher: { ...retroarchLauncher, systems: ["psx"] },
+              systemDelta: {
+                id: "psx",
+                cores: { retroarch: "pcsx_rearmed_libretro.so" },
+              },
+            })
+            yield* Effect.promise(() => db.flush())
+            return yield* Effect.promise(() =>
+              db.launchers.findById("retroarch").pipe(Effect.runPromise),
             )
-            return { exit, games: yield* repo.listGames() }
           }),
         ),
       )
-
-      expect(result.exit._tag).toBe("Failure")
-      expect(result.games).toEqual([])
+      expect([...launcher.systems].sort()).toEqual(["psx", "snes"])
     })
   })
 })

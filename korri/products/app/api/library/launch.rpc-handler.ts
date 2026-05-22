@@ -21,15 +21,16 @@ export const handleLaunchLibrary = (
     const source = yield* LibrarySource
     const launcher = yield* Launcher
     const specResult = yield* source.launchSpecFor(payload.id).pipe(
-      Effect.map(spec => ({ _tag: "spec" as const, spec })),
-      Effect.catch(error =>
-        error.reason === "config"
-          ? Effect.succeed({
-              _tag: "failed" as const,
-              response: launchConfigurationFailure(error),
-            })
-          : Effect.fail(toDataError(error)),
-      ),
+      Effect.matchEffect({
+        onSuccess: spec => Effect.succeed({ _tag: "spec" as const, spec }),
+        onFailure: (error: LibraryError) =>
+          error.reason === "config"
+            ? Effect.succeed({
+                _tag: "failed" as const,
+                response: launchConfigurationFailure(error),
+              })
+            : Effect.fail(toDataError(error)),
+      }),
     )
 
     if (specResult._tag === "failed") {

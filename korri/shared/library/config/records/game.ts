@@ -14,11 +14,46 @@
  * `derivedFromKey` policy, so the payload struct intentionally omits it.
  */
 
-import { GameMetadata, GameUserData } from "@shared/fixtures/games/game"
 import { Schema } from "effect"
 
 import { ByLauncherPayload, InheritableLayer } from "../inheritable-fields"
 import { PresetMapPayload } from "./preset"
+
+/**
+ * Display metadata — what shows up in the renderer's tile grid. Shape
+ * carried forward from the legacy `GameRecord`; the import path moved
+ * from `@shared/fixtures/games/game` to here so the cascade records
+ * module is self-contained.
+ */
+export const MediaType = Schema.Literals(["image", "video", "audio"])
+export type MediaType = Schema.Schema.Type<typeof MediaType>
+
+export const Media = Schema.Struct({
+  type: MediaType,
+  uri: Schema.String,
+})
+export type Media = Schema.Schema.Type<typeof Media>
+
+export const GameMetadata = Schema.Struct({
+  name: Schema.optional(Schema.String),
+  description: Schema.optional(Schema.String),
+  developer: Schema.optional(Schema.String),
+  publisher: Schema.optional(Schema.String),
+  releaseDate: Schema.optional(Schema.String),
+  genre: Schema.optional(Schema.Array(Schema.String)),
+  tags: Schema.optional(Schema.Array(Schema.String)),
+  media: Schema.optional(Schema.Array(Media)),
+})
+export type GameMetadata = Schema.Schema.Type<typeof GameMetadata>
+
+export const GameUserData = Schema.Struct({
+  lastPlayed: Schema.optional(
+    Schema.Union([Schema.Date, Schema.DateFromString]),
+  ),
+  playtime: Schema.optional(Schema.Number),
+  favorite: Schema.optional(Schema.Boolean),
+})
+export type GameUserData = Schema.Schema.Type<typeof GameUserData>
 
 const STRICT = { onExcessProperty: "error" } as const
 

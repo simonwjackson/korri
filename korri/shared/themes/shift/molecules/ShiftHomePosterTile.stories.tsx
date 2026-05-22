@@ -18,6 +18,8 @@ import { ShiftHomePosterTile } from "./ShiftHomePosterTile"
 
 const fallbackGame: GameRecord = {
   id: "missing-art-demo",
+  system: "fixture",
+  contentPath: "/storage/fixtures/missing-art-demo.rom",
   metadata: {
     name: "Quietude",
     developer: "Demo Studio",

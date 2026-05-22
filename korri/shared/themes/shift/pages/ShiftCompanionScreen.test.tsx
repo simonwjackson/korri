@@ -34,7 +34,14 @@ describe("ShiftCompanionScreen", () => {
     render(
       <DualScreenSessionRoot initialGameId="text-only">
         <ShiftCompanionScreen
-          items={[{ id: "text-only", metadata: { name: "Text Only" } }]}
+          items={[
+            {
+              id: "text-only",
+              system: "fixture",
+              contentPath: "/storage/fixtures/text-only.rom",
+              metadata: { name: "Text Only" },
+            },
+          ]}
         />
       </DualScreenSessionRoot>,
     )

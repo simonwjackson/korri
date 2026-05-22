@@ -1,17 +1,29 @@
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { GameRecord } from "@shared/fixtures/games/game"
-import type { ProfileBackedLaunchTargetRecord } from "@shared/library/launcher-config/launch-target"
-import type { LauncherProfileRecord } from "@shared/library/launcher-config/launcher-profile"
+import type { CollectionRecord } from "@shared/library/config/records/collection"
+import type { GameRecord } from "@shared/library/config/records/game"
+import type { GlobalConfigPayload } from "@shared/library/config/records/global"
+import type { LauncherRecord } from "@shared/library/config/records/launcher"
+import type { SystemRecord } from "@shared/library/config/records/system"
+import type { UserRecord } from "@shared/library/config/records/user"
 import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
-import { createLibraryRepository } from "@shared/library/proseql/library-repository"
 import { Effect } from "effect"
 
+/**
+ * Seed shape for `withTempProseqlLibrary`. Mirrors the six collections
+ * of the new library: a singleton `global` config, plus map-keyed
+ * users, systems, launchers, games, collections. Presets are nested
+ * under their owning record's `presets:` field — no top-level
+ * `presets` seed; pass them as part of the relevant record instead.
+ */
 export interface TempProseqlLibrarySeed {
+  readonly global?: GlobalConfigPayload
+  readonly users?: readonly UserRecord[]
+  readonly systems?: readonly SystemRecord[]
+  readonly launchers?: readonly LauncherRecord[]
   readonly games?: readonly GameRecord[]
-  readonly launcherProfiles?: readonly LauncherProfileRecord[]
-  readonly launchTargets?: readonly ProfileBackedLaunchTargetRecord[]
+  readonly collections?: readonly CollectionRecord[]
 }
 
 export interface TempProseqlLibrary {
@@ -31,16 +43,48 @@ export async function withTempProseqlLibrary(
       Effect.scoped(
         Effect.gen(function* () {
           const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
-          const repository = createLibraryRepository(db)
 
+          if (seed.global) {
+            yield* db.config.upsert({
+              where: { id: "global" },
+              create: { id: "global", ...seed.global },
+              update: { id: "global", ...seed.global },
+            })
+          }
+          for (const user of seed.users ?? []) {
+            yield* db.users.upsert({
+              where: { id: user.id },
+              create: user,
+              update: user,
+            })
+          }
+          for (const system of seed.systems ?? []) {
+            yield* db.systems.upsert({
+              where: { id: system.id },
+              create: system,
+              update: system,
+            })
+          }
+          for (const launcher of seed.launchers ?? []) {
+            yield* db.launchers.upsert({
+              where: { id: launcher.id },
+              create: launcher,
+              update: launcher,
+            })
+          }
           for (const game of seed.games ?? []) {
-            yield* repository.upsertGame(game)
+            yield* db.games.upsert({
+              where: { id: game.id },
+              create: game,
+              update: game,
+            })
           }
-          for (const profile of seed.launcherProfiles ?? []) {
-            yield* repository.upsertLauncherProfile(profile)
-          }
-          for (const target of seed.launchTargets ?? []) {
-            yield* repository.upsertLaunchTarget(target)
+          for (const collection of seed.collections ?? []) {
+            yield* db.collections.upsert({
+              where: { id: collection.id },
+              create: collection,
+              update: collection,
+            })
           }
 
           yield* Effect.promise(() => db.flush())

@@ -22,7 +22,12 @@ describe("source-aware games", () => {
   it("combines local and remote entries without merging duplicate game ids", async () => {
     const result = await loadSourceAwareGames({
       localSource: localSource([
-        { id: "gba/wario-land-4", metadata: { name: "Wario Land 4" } },
+        {
+          id: "gba/wario-land-4",
+          system: "gba",
+          contentPath: "/storage/roms/gba/wario-land-4.gba",
+          metadata: { name: "Wario Land 4" },
+        },
       ]),
       remoteHosts: [host],
       clientForHost: () =>
@@ -51,7 +56,13 @@ describe("source-aware games", () => {
 
   it("keeps local entries when a remote host is unavailable", async () => {
     const result = await loadSourceAwareGames({
-      localSource: localSource([{ id: "nixpkgs/neverball" }]),
+      localSource: localSource([
+        {
+          id: "nixpkgs/neverball",
+          system: "nixpkgs",
+          contentPath: "/storage/roms/nixpkgs/neverball",
+        },
+      ]),
       remoteHosts: [host],
       clientForHost: () =>
         remoteClient({ status: { status: "unavailable", message: "timeout" } }),
@@ -117,6 +128,10 @@ function localSource(games: readonly GameRecord[]): LibrarySourceService {
   return {
     list: () => Effect.succeed(games),
     launchSpecFor: () => Effect.succeed(undefined),
+    resolveLaunchForGame: () =>
+      Effect.fail(
+        new LibraryError({ reason: "config", message: "not implemented" }),
+      ),
   }
 }
 
@@ -127,6 +142,10 @@ function failingLocalSource(): LibrarySourceService {
         new LibraryError({ reason: "unavailable", message: "local failed" }),
       ),
     launchSpecFor: () => Effect.succeed(undefined),
+    resolveLaunchForGame: () =>
+      Effect.fail(
+        new LibraryError({ reason: "unavailable", message: "local failed" }),
+      ),
   }
 }
 

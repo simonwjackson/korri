@@ -32,29 +32,31 @@ export async function validateLauncherConfig(args: {
           writeDebounce: 1,
         })
         const repository = createLibraryRepository(db)
-        return yield* repository.launchSpecForGame(args.gameId)
+        return yield* repository.resolveLaunchForGame(args.gameId)
       }),
     ),
   )
 
   if (Exit.isSuccess(exit)) {
-    const spec = exit.value
-    if (!spec) {
-      return {
-        status: "diagnostic",
-        gameId: args.gameId,
-        reason: "MissingLaunchTarget",
-        message: `No launch target exists for game ${args.gameId}`,
-      }
+    return {
+      status: "resolved",
+      gameId: args.gameId,
+      spec: exit.value.spec,
     }
-    return { status: "resolved", gameId: args.gameId, spec }
   }
 
   const error = Cause.squash(exit.cause)
+  const errorTag =
+    typeof error === "object" &&
+    error !== null &&
+    "_tag" in error &&
+    typeof (error as { _tag: unknown })._tag === "string"
+      ? (error as { _tag: string })._tag
+      : "LaunchResolutionFailed"
   return {
     status: "diagnostic",
     gameId: args.gameId,
-    reason: "LaunchResolutionFailed",
+    reason: errorTag,
     message: error instanceof Error ? error.message : String(error),
   }
 }

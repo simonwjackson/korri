@@ -3,21 +3,29 @@ import { withTempProseqlLibrary } from "../testing/library/with-temp-proseql-lib
 import { validateLauncherConfig } from "./launcher-config-cli"
 
 describe("validateLauncherConfig", () => {
-  it("resolves a game id to a LaunchSpec without spawning", async () => {
+  it("resolves a game id to a LaunchSpec via the cascade", async () => {
     await using library = await withTempProseqlLibrary({
-      games: [{ id: "game-1", metadata: { name: "Game 1" } }],
-      launcherProfiles: [
+      systems: [
         {
-          id: "echo.profile",
-          command: "/bin/echo",
-          args: ["{contentPath}"],
+          id: "snes",
+          launcher: "echo",
+          cores: { echo: "snes9x_libretro.so" },
         },
       ],
-      launchTargets: [
+      launchers: [
+        {
+          id: "echo",
+          command: "/bin/echo",
+          args: ["{contentPath}"],
+          systems: ["snes"],
+        },
+      ],
+      games: [
         {
           id: "game-1",
-          profile: "echo.profile",
+          system: "snes",
           contentPath: "content with spaces.smc",
+          metadata: { name: "Game 1" },
         },
       ],
     })
@@ -34,30 +42,27 @@ describe("validateLauncherConfig", () => {
     })
   })
 
-  it("reports a missing launch target diagnostic", async () => {
-    await using library = await withTempProseqlLibrary({
-      games: [{ id: "game-1", metadata: { name: "Game 1" } }],
-    })
+  it("reports a GameNotFound diagnostic for an unknown game", async () => {
+    await using library = await withTempProseqlLibrary({})
 
     const result = await validateLauncherConfig({
       root: library.root,
-      gameId: "game-1",
+      gameId: "missing",
     })
 
     expect(result.status).toBe("diagnostic")
     if (result.status === "diagnostic") {
-      expect(result.reason).toBe("MissingLaunchTarget")
+      expect(result.reason).toBe("GameNotFound")
     }
   })
 
-  it("reports resolver diagnostics", async () => {
+  it("reports LauncherUnresolvable when no launcher is configured", async () => {
     await using library = await withTempProseqlLibrary({
-      games: [{ id: "game-1", metadata: { name: "Game 1" } }],
-      launchTargets: [
+      games: [
         {
           id: "game-1",
-          profile: "missing.profile",
-          contentPath: "content.smc",
+          system: "snes",
+          contentPath: "/storage/roms/game-1.smc",
         },
       ],
     })
@@ -69,8 +74,7 @@ describe("validateLauncherConfig", () => {
 
     expect(result.status).toBe("diagnostic")
     if (result.status === "diagnostic") {
-      expect(result.reason).toBe("LaunchResolutionFailed")
-      expect(result.message).toContain("missing.profile")
+      expect(result.reason).toBe("LauncherUnresolvable")
     }
   })
 })

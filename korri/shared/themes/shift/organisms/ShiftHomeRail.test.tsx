@@ -6,8 +6,18 @@ import { ShiftHomeCtx } from "../templates/ShiftHome.context"
 import { ShiftHomeRail } from "./ShiftHomeRail"
 
 const games: readonly GameRecord[] = [
-  { id: "resume", metadata: { name: "Resume" } },
-  { id: "next", metadata: { name: "Next" } },
+  {
+    id: "resume",
+    system: "fixture",
+    contentPath: "/storage/fixtures/resume.rom",
+    metadata: { name: "Resume" },
+  },
+  {
+    id: "next",
+    system: "fixture",
+    contentPath: "/storage/fixtures/next.rom",
+    metadata: { name: "Next" },
+  },
 ]
 
 afterEach(() => cleanup())

@@ -182,7 +182,12 @@ async function seedProseqlLibraryAt(root: string, name: string): Promise<void> {
       Effect.gen(function* () {
         const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
         const repository = createLibraryRepository(db)
-        yield* repository.upsertGame({ id: "game-1", metadata: { name } })
+        yield* repository.upsertGame({
+          id: "game-1",
+          system: "fixture",
+          contentPath: "/storage/fixtures/game-1.rom",
+          metadata: { name },
+        })
         yield* Effect.promise(() => db.flush())
       }),
     ),

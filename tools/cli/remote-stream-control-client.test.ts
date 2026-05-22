@@ -90,19 +90,21 @@ describe("remote stream control client", () => {
 
 async function setupRemoteLibrary(options: { readonly enabled: boolean }) {
   const library = await withTempProseqlLibrary({
-    games: [{ id: "gba/wario-land-4", metadata: { name: "Wario Land 4" } }],
-    launcherProfiles: [
+    systems: [{ id: "gba", launcher: "mgba" }],
+    launchers: [
       {
-        id: "nixpkgs.mgba.gba",
+        id: "mgba",
         command: "/bin/echo",
         args: ["{contentPath}"],
+        systems: ["gba"],
       },
     ],
-    launchTargets: [
+    games: [
       {
         id: "gba/wario-land-4",
-        profile: "nixpkgs.mgba.gba",
+        system: "gba",
         contentPath: "/srv/games/wl4.gba",
+        metadata: { name: "Wario Land 4" },
       },
     ],
   })

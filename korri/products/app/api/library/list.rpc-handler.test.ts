@@ -34,11 +34,15 @@ describe("app.library.list handler (configured-real source)", () => {
         games: [
           {
             id: "snes/old.smc",
+            system: "fixture",
+            contentPath: "/storage/fixtures/snes/old.smc.rom",
             metadata: { name: "Old" },
             userData: { lastPlayed: new Date("2024-01-01T00:00:00.000Z") },
           },
           {
             id: "snes/new.smc",
+            system: "fixture",
+            contentPath: "/storage/fixtures/snes/new.smc.rom",
             metadata: { name: "New" },
             userData: { lastPlayed: new Date("2026-05-01T00:00:00.000Z") },
           },
@@ -94,6 +98,8 @@ type TempProseqlLibrary = {
 async function withTempProseqlLibrary(options: {
   readonly games: readonly {
     readonly id: string
+    readonly system?: string
+    readonly contentPath?: string
     readonly metadata?: { readonly name?: string }
     readonly userData?: { readonly lastPlayed?: Date }
   }[]
@@ -107,7 +113,11 @@ async function withTempProseqlLibrary(options: {
           const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
           const repository = createLibraryRepository(db)
           for (const game of options.games) {
-            yield* repository.upsertGame(game)
+            yield* repository.upsertGame({
+              system: "fixture",
+              contentPath: `/storage/fixtures/${game.id}.rom`,
+              ...game,
+            })
           }
           yield* Effect.promise(() => db.flush())
         }),

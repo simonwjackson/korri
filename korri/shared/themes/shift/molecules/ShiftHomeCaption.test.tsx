@@ -7,6 +7,8 @@ import { ShiftHomeCaption } from "./ShiftHomeCaption"
 
 const focused: GameRecord = {
   id: "chrono-trigger",
+  system: "fixture",
+  contentPath: "/storage/fixtures/chrono-trigger.rom",
   metadata: { name: "Chrono Trigger" },
   userData: { lastPlayed: new Date(Date.now() - 60_000) },
 }
