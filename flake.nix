@@ -34,6 +34,7 @@
           "aarch64-linux"
         ];
         isSupportedDesktopSystem = builtins.elem system supportedDesktopSystems;
+        isX86Linux = system == "x86_64-linux";
 
         commonPackages = with pkgs; [
           bash
@@ -294,6 +295,19 @@
             }
           else
             null;
+
+        korriImages = import ./nix/images/common.nix {
+          korri = self;
+          inherit nixpkgs system;
+        };
+
+        korriHeadlessSystem = korriImages.mkHeadlessSystem {
+          platformModules = [ ./nix/images/platforms/x86.nix ];
+        };
+
+        korriKioskSystem = korriImages.mkKioskSystem {
+          platformModules = [ ./nix/images/platforms/x86.nix ];
+        };
       in
       {
         packages = {
@@ -314,9 +328,16 @@
           korri-desktop = korriDesktop;
           korri-desktop-device = korriDesktopDevice;
           default = korriDesktop;
+        }
+        // pkgs.lib.optionalAttrs isX86Linux {
+          korri-headless-system = korriHeadlessSystem.config.system.build.toplevel;
+          korri-kiosk-system = korriKioskSystem.config.system.build.toplevel;
         };
 
-        lib = pkgs.lib.optionalAttrs isSupportedDesktopSystem {
+        lib = {
+          korriImages = korriImages;
+        }
+        // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
           # Downstream consumers (mountainous, future device profiles) can
           # build their own variants without vendoring build logic:
           #   inputs.korri.lib.${system}.wrapKorriDesktop {

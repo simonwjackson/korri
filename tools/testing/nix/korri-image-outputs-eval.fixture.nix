@@ -1,0 +1,54 @@
+{
+  system ? builtins.currentSystem,
+  flakeRoot,
+}:
+let
+  flake = builtins.getFlake (toString flakeRoot);
+  imageLib = flake.lib.${system}.korriImages;
+  x86Platform = flakeRoot + /nix/images/platforms/x86.nix;
+
+  summarize = eval: {
+    assertionsPassed = builtins.filter (a: !a.assertion) eval.config.assertions == [ ];
+    assertionMessages = map (a: a.message) (builtins.filter (a: !a.assertion) eval.config.assertions);
+    serverEnabled = eval.config.services.korri.server.enable or false;
+    clientEnabled = eval.config.services.korri.client.enable or false;
+    kioskEnabled = eval.config.services.korri.kiosk.enable or false;
+    inputdEnabled = eval.config.services.korri.inputd.enable or false;
+    serverHost = eval.config.services.korri.server.host or null;
+    serverServiceMode = eval.config.services.korri.server.serviceMode or null;
+    firewallTcpPorts = eval.config.networking.firewall.allowedTCPPorts or [ ];
+    kioskUnitExists = eval.config.systemd.services ? "korri-kiosk";
+    inputProviderEnabled = eval.config.services.korri.kiosk.input.provider.enable or false;
+    kioskAfter = eval.config.systemd.services."korri-kiosk".after or [ ];
+    systemName = eval.config.system.name;
+  };
+
+  headless = imageLib.mkHeadlessSystem {
+    platformModules = [ x86Platform ];
+  };
+
+  kiosk = imageLib.mkKioskSystem {
+    platformModules = [ x86Platform ];
+  };
+
+  kioskWithExternalPlatform = imageLib.mkKioskSystem {
+    platformModules = [
+      x86Platform
+      (
+        { ... }:
+        {
+          services.korri.kiosk.input.provider.services = [ "external-normalized-input.service" ];
+        }
+      )
+    ];
+  };
+
+  kioskWithoutPlatform = imageLib.mkKioskSystem { };
+in
+{
+  packageAttrs = builtins.attrNames (flake.packages.${system} or { });
+  headless = summarize headless;
+  kiosk = summarize kiosk;
+  kioskWithExternalPlatform = summarize kioskWithExternalPlatform;
+  kioskWithoutPlatform = summarize kioskWithoutPlatform;
+}
