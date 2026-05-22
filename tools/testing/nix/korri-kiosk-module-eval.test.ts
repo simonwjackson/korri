@@ -17,7 +17,10 @@ type EvalResult = {
     client: boolean
     inputd: boolean
     kiosk: boolean
+    cli: boolean
   }
+  cliEnabled: boolean
+  cliPackage: string
   clientEnabled: boolean
   inputdEnabled: boolean
   kioskEnabled: boolean
@@ -88,7 +91,7 @@ const HARDWARE_FACT_PATTERN = /SM8550|AYN|Odin|DSI-1|DSI-2|UCM|RockNix/i
 setDefaultTimeout(90_000)
 
 describe("services.korri.kiosk NixOS module evaluation", () => {
-  it("aggregate korri module exposes server, client, inputd, and kiosk roles", () => {
+  it("aggregate korri module exposes server, client, inputd, kiosk, and cli roles", () => {
     const result = expectOk(evalFixture("{ }"))
 
     expect(result.optionSurface).toEqual({
@@ -96,6 +99,7 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
       client: true,
       inputd: true,
       kiosk: true,
+      cli: true,
     })
   })
 
@@ -447,6 +451,67 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
     )
     expect(outsideRun.assertionsPassed).toBe(false)
     expect(outsideRun.assertionMessages.join("\n")).toContain("under /run")
+  })
+
+  describe("korri CLI is installed by default when kiosk is enabled", () => {
+    const enabled = expectOk(
+      evalFixture(`({ pkgs, ... }: {
+        services.korri.kiosk = {
+          enable = true;
+          user = "root";
+          createUser = false;
+          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
+        };
+      })`),
+    )
+    const optedOut = expectOk(
+      evalFixture(`({ pkgs, ... }: {
+        services.korri.kiosk = {
+          enable = true;
+          user = "root";
+          createUser = false;
+          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
+        };
+        services.korri.cli.enable = false;
+      })`),
+    )
+    const overridden = expectOk(
+      evalFixture(`({ pkgs, ... }: {
+        services.korri.kiosk = {
+          enable = true;
+          user = "root";
+          createUser = false;
+          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
+        };
+        services.korri.cli.package = pkgs.writeShellScriptBin "korri-cli-stub" "exit 0";
+      })`),
+    )
+
+    it("defaults services.korri.cli.enable = true when kiosk is enabled", () => {
+      expect(enabled.cliEnabled).toBe(true)
+    })
+
+    it("installs the korri-cli package into environment.systemPackages", () => {
+      expect(
+        enabled.clientSystemPackages.some(path => /-korri-cli-/.test(path)),
+      ).toBe(true)
+    })
+
+    it("respects an explicit services.korri.cli.enable = false opt-out", () => {
+      expect(optedOut.cliEnabled).toBe(false)
+      expect(
+        optedOut.clientSystemPackages.some(path => /-korri-cli-/.test(path)),
+      ).toBe(false)
+    })
+
+    it("honors a caller-supplied services.korri.cli.package override", () => {
+      expect(overridden.cliPackage).toMatch(/korri-cli-stub/)
+      expect(
+        overridden.clientSystemPackages.some(path =>
+          path.includes("korri-cli-stub"),
+        ),
+      ).toBe(true)
+    })
   })
 
   it("keeps device-specific facts out of generic defaults", () => {

@@ -421,6 +421,7 @@
     // {
       nixosModules = rec {
         korri-client = import ./nix/modules/korri-client.nix { korri = self; };
+        korri-cli = import ./nix/modules/korri-cli.nix { korri = self; };
         korri-inputd = import ./nix/modules/korri-inputd.nix { korri = self; };
         korri-game-stream = import ./nix/modules/korri-game-stream.nix { korri = self; };
         korri-headless-source = import ./nix/modules/korri-headless-source.nix { korri = self; };

@@ -47,7 +47,11 @@ in
     client = eval.options.services.korri ? client;
     inputd = eval.options.services.korri ? inputd;
     kiosk = eval.options.services.korri ? kiosk;
+    cli = eval.options.services.korri ? cli;
   };
+
+  cliEnabled = eval.config.services.korri.cli.enable or false;
+  cliPackage = toString (eval.config.services.korri.cli.package or null);
 
   clientEnabled = eval.config.services.korri.client.enable or false;
   inputdEnabled = eval.config.services.korri.inputd.enable or false;

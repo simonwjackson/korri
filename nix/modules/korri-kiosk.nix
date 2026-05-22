@@ -76,6 +76,10 @@ let
     };
 in
 {
+  imports = [
+    korri.nixosModules.korri-cli
+  ];
+
   options.services.korri.kiosk = {
     enable = mkEnableOption "Korri appliance kiosk session";
 
@@ -371,6 +375,7 @@ in
     };
 
     services.korri.client.enable = mkDefault true;
+    services.korri.cli.enable = mkDefault true;
     services.korri.inputd = mkIf cfg.input.enable {
       enable = mkDefault true;
       before = [ "korri-kiosk.service" ];

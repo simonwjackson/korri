@@ -38,6 +38,9 @@ type EvalResult = {
   gameStreamWrapperScript: string | null
   firewallTcpPorts: number[]
   firewallInterfaceNames: string[]
+  systemPackages: string[]
+  cliEnabled: boolean
+  cliPackage: string
 }
 
 type EvalOutcome =
@@ -540,6 +543,62 @@ describe("services.korri.server NixOS module evaluation", () => {
     it("does not use RuntimeDirectory for non-default runtime dirs", () => {
       expect(result.systemRuntimeDirectory).toBeNull()
       expect(result.tmpfilesRunDir).toBeNull()
+    })
+  })
+
+  describe("korri CLI is installed by default when server is enabled", () => {
+    const userMode = expectOk(
+      evalFixture(`{ services.korri.server = { enable = true; }; }`),
+    )
+    const systemMode = expectOk(
+      evalFixture(`{
+        services.korri.server = {
+          enable = true;
+          serviceMode = "system";
+          user = "testuser";
+          group = "users";
+        };
+      }`),
+    )
+    const optedOut = expectOk(
+      evalFixture(`{
+        services.korri.server = { enable = true; };
+        services.korri.cli.enable = false;
+      }`),
+    )
+    const overridden = expectOk(
+      evalFixture(`({ pkgs, ... }: {
+        services.korri.server = { enable = true; };
+        services.korri.cli.package = pkgs.writeShellScriptBin "korri-cli-stub" "exit 0";
+      })`),
+    )
+
+    it("defaults services.korri.cli.enable = true in user mode", () => {
+      expect(userMode.cliEnabled).toBe(true)
+      expect(
+        userMode.systemPackages.some(path => /-korri-cli-/.test(path)),
+      ).toBe(true)
+    })
+
+    it("defaults services.korri.cli.enable = true in system mode", () => {
+      expect(systemMode.cliEnabled).toBe(true)
+      expect(
+        systemMode.systemPackages.some(path => /-korri-cli-/.test(path)),
+      ).toBe(true)
+    })
+
+    it("respects an explicit services.korri.cli.enable = false opt-out", () => {
+      expect(optedOut.cliEnabled).toBe(false)
+      expect(
+        optedOut.systemPackages.some(path => /-korri-cli-/.test(path)),
+      ).toBe(false)
+    })
+
+    it("honors a caller-supplied services.korri.cli.package override", () => {
+      expect(overridden.cliPackage).toMatch(/korri-cli-stub/)
+      expect(
+        overridden.systemPackages.some(path => path.includes("korri-cli-stub")),
+      ).toBe(true)
     })
   })
 })

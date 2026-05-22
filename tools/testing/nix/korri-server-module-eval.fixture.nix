@@ -100,4 +100,8 @@ in
 
   firewallTcpPorts = eval.config.networking.firewall.allowedTCPPorts or [ ];
   firewallInterfaceNames = builtins.attrNames (eval.config.networking.firewall.interfaces or { });
+
+  systemPackages = map toString eval.config.environment.systemPackages;
+  cliEnabled = eval.config.services.korri.cli.enable or false;
+  cliPackage = toString (eval.config.services.korri.cli.package or null);
 }

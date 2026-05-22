@@ -78,6 +78,7 @@ in
 {
   imports = [
     (import ./korri-game-stream.nix { inherit korri; })
+    korri.nixosModules.korri-cli
   ];
 
   options.services.korri.server = {
@@ -408,6 +409,8 @@ in
         '';
 
     environment.systemPackages = [ cfg.package ];
+
+    services.korri.cli.enable = lib.mkDefault true;
 
     networking.firewall = mkIf cfg.openFirewall (
       if cfg.firewallInterfaces == [ ] then
