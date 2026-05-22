@@ -1,6 +1,6 @@
 import { describe, expect, it, setDefaultTimeout } from "bun:test"
-import { readFileSync } from "node:fs"
 import { spawnSync } from "node:child_process"
+import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
 const FLAKE_ROOT = resolve(import.meta.dir, "..", "..", "..")
