@@ -12,10 +12,10 @@ import {
   createFileGameStreamRunLock,
   createGameStreamRunner,
   defaultGameStreamLockPath,
-  superviseGameStreamRunner,
   type GameStreamRunResult,
   type ManagedChild,
   type ManagedChildSpawner,
+  superviseGameStreamRunner,
 } from "./game-stream-runner"
 
 const game: LaunchSpec = {
@@ -207,7 +207,7 @@ describe("game stream runner", () => {
       launchIntentStore: {
         enqueue: async () => undefined,
         claim: async () => ({
-          intent: createLaunchIntent(game),
+          intent: createLaunchIntent(game, { gamescope: { enabled: true } }),
           complete: async () => undefined,
           requeue: async () => {
             requeued = true
@@ -246,7 +246,9 @@ describe("game stream runner", () => {
     const controlled = createControlledChild(204)
     const { spawner, specs } = createControlledSpawner(controlled.child)
     const runner = createGameStreamRunner({
-      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
+        gamescope: { enabled: true },
+      }),
       spawner,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
@@ -255,9 +257,9 @@ describe("game stream runner", () => {
         isProcessAlive: pid => pid === 10,
       }),
       processEnv: sessionEnv,
-      gamescope: {
-        enabled: true,
-        command: "/nix/store/gamescope/bin/gamescope",
+      fullscreen: {
+        selector: { appIds: ["gamescope"] },
+        runner: treeAfterSnapshotRunner(),
       },
     })
 
@@ -267,7 +269,7 @@ describe("game stream runner", () => {
     await run
 
     expect(specs[0]).toMatchObject({
-      command: "/nix/store/gamescope/bin/gamescope",
+      command: "gamescope",
       args: ["-f", "-b", "--", "/nix/store/neverball/bin/neverball"],
     })
   })
@@ -276,7 +278,9 @@ describe("game stream runner", () => {
     const controlled = createControlledChild(207)
     const { spawner, specs } = createControlledSpawner(controlled.child)
     const runner = createGameStreamRunner({
-      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
+        gamescope: { enabled: true },
+      }),
       spawner,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
@@ -304,7 +308,9 @@ describe("game stream runner", () => {
       markSnapshotStarted = resolve
     })
     const runner = createGameStreamRunner({
-      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
+        gamescope: { enabled: true },
+      }),
       spawner,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
@@ -1053,6 +1059,34 @@ describe("superviseGameStreamRunner", () => {
     expect(exits).toEqual([0])
   })
 })
+
+function treeAfterSnapshotRunner() {
+  let getTreeCalls = 0
+  return {
+    async run(args: readonly string[]): Promise<string> {
+      if (args[0] !== "-t") return ""
+      getTreeCalls += 1
+      if (getTreeCalls === 1) return JSON.stringify({ id: 1, nodes: [] })
+      return JSON.stringify({
+        id: 1,
+        nodes: [
+          {
+            id: 2,
+            nodes: [
+              {
+                id: 42,
+                app_id: "gamescope",
+                focused: false,
+                fullscreen_mode: 0,
+                name: "gamescope",
+              },
+            ],
+          },
+        ],
+      })
+    },
+  }
+}
 
 async function waitFor(predicate: () => boolean): Promise<void> {
   for (let attempt = 0; attempt < 50; attempt += 1) {

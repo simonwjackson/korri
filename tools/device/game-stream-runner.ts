@@ -216,13 +216,6 @@ export function createGameStreamRunner(
         return fail("preflight", "refusing to run game stream as root", 126)
       }
 
-      const preflight = preflightSessionEnvironment({
-        env: processEnv,
-        gamescopeEnabled: options.gamescope?.enabled === true,
-        repairEnabled: options.fullscreen !== undefined,
-      })
-      if (!preflight.ok) return fail("preflight", preflight.reason, 126)
-
       if (stopRequested) {
         return fail("cleanup", "game stream stopped before launch", 143)
       }
@@ -245,16 +238,6 @@ export function createGameStreamRunner(
 
       let ignoredWindowIds: ReadonlySet<number> | undefined
       try {
-        if (options.fullscreen) {
-          try {
-            ignoredWindowIds = await snapshotStreamSurfaceIds(
-              options.fullscreen,
-            )
-          } catch (error) {
-            return await fail("preflight", errorMessage(error), 126)
-          }
-        }
-
         if (stopRequested) {
           return await fail("cleanup", "game stream stopped before launch", 143)
         }
@@ -275,10 +258,41 @@ export function createGameStreamRunner(
           return await fail("cleanup", "game stream stopped before launch", 143)
         }
 
-        const spec = composeGamescopeLaunchSpec(
-          launchClaim.intent.launch,
-          options.gamescope ?? { enabled: false },
-        )
+        const gamescope = launchClaim.intent.gamescope ?? { enabled: false }
+        const gamescopeEnabled = gamescope.enabled === true
+        const fullscreen = gamescopeEnabled
+          ? (options.fullscreen ?? {
+              runner: createSwayCommandRunner(),
+              selector: DEFAULT_GAMESCOPE_SELECTOR,
+            })
+          : undefined
+        const preflight = preflightSessionEnvironment({
+          env: processEnv,
+          gamescopeEnabled,
+          repairEnabled: fullscreen !== undefined,
+        })
+        if (!preflight.ok) {
+          await requeueLaunchClaim(launchClaim, "preflight failure")
+          return await fail("preflight", preflight.reason, 126)
+        }
+        if (fullscreen) {
+          try {
+            ignoredWindowIds = await snapshotStreamSurfaceIds(fullscreen)
+          } catch (error) {
+            await requeueLaunchClaim(launchClaim, "preflight failure")
+            return await fail("preflight", errorMessage(error), 126)
+          }
+        }
+
+        if (stopRequested) {
+          await requeueLaunchClaim(launchClaim, "startup cancellation")
+          return await fail("cleanup", "game stream stopped before launch", 143)
+        }
+
+        const spec = composeGamescopeLaunchSpec(launchClaim.intent.launch, {
+          enabled: gamescopeEnabled,
+          args: gamescope.args,
+        })
         logger.info(
           { command: spec.command, argc: spec.args.length },
           "game-stream-runner: spawning game",
@@ -300,10 +314,10 @@ export function createGameStreamRunner(
         state = markGameStreamRunning(state, activeChild.pid)
         await writeStatus()
 
-        if (options.fullscreen) {
+        if (fullscreen) {
           try {
             await repairStreamSurface({
-              ...options.fullscreen,
+              ...fullscreen,
               ignoredWindowIds,
             })
             state = markGameStreamFullscreenRepaired(state)
@@ -381,8 +395,7 @@ export function createGameStreamRunner(
         // before stop arrived and stop just tears down the anchor, so
         // reporting "launched" is correct.
         const isLauncherAnchor =
-          launchClaim.intent.lifecycle === "session" &&
-          !launchClaim.intent.wait
+          launchClaim.intent.lifecycle === "session" && !launchClaim.intent.wait
         const stoppedMidRun = stopRequested && !isLauncherAnchor
         const reportedExitCode =
           stoppedMidRun && exitCode === 0 ? 143 : exitCode
@@ -680,10 +693,7 @@ export function defaultGameStreamLockPath(env: NodeJS.ProcessEnv): string {
 }
 
 export interface SuperviseSignalSource {
-  readonly listenSignal: (
-    signal: NodeJS.Signals,
-    handler: () => void,
-  ) => void
+  readonly listenSignal: (signal: NodeJS.Signals, handler: () => void) => void
   readonly exit: (code: number) => void
 }
 
@@ -744,9 +754,6 @@ if (import.meta.main) {
       "KORRI_GAME_STREAM_INTENT_MAX_AGE_MS",
     ),
   }
-  const useGamescope = process.env.KORRI_GAME_STREAM_USE_GAMESCOPE === "1"
-  const repairSway =
-    process.env.KORRI_GAME_STREAM_SWAY_REPAIR !== "0" && useGamescope
   if (Bun.argv[2] === "enqueue") {
     const store = createFileGameStreamLaunchIntentStore(
       intentPath,
@@ -764,18 +771,10 @@ if (import.meta.main) {
     ),
     statusPath,
     lockManager: createFileGameStreamRunLock(lockPath),
-    gamescope: {
-      enabled: useGamescope,
-      command: process.env.KORRI_GAME_STREAM_GAMESCOPE,
+    fullscreen: {
+      runner: createSwayCommandRunner(),
+      selector: DEFAULT_GAMESCOPE_SELECTOR,
     },
-    fullscreen: repairSway
-      ? {
-          runner: createSwayCommandRunner(
-            process.env.KORRI_GAME_STREAM_SWAYMSG,
-          ),
-          selector: DEFAULT_GAMESCOPE_SELECTOR,
-        }
-      : undefined,
   })
 
   await superviseGameStreamRunner(runner, {
