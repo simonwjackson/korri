@@ -1,12 +1,25 @@
 import { appendFileSync, existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import {
+  ABS_HAT0X,
+  ABS_HAT0Y,
+  BTN_BACK,
+  BTN_SELECT,
+  BTN_START,
+  BTN_THUMBL,
+  BTN_THUMBR,
+  BTN_TL,
+  BTN_TR,
+  BTN_X,
+  BTN_Y,
+  EV_ABS,
   EV_KEY,
   EV_SW,
   KEY_BRIGHTNESSDOWN,
   KEY_BRIGHTNESSUP,
   KEY_POWER,
   KEY_RECORD,
+  KEY_SYSTEM,
   KEY_VOLUMEDOWN,
   KEY_VOLUMEUP,
   SW_LID,
@@ -22,6 +35,7 @@ import {
 } from "@shared/input/native/parse-evdev"
 import {
   createSystemShortcutEngine,
+  type SystemShortcutControl,
   type SystemShortcutDefinition,
   type SystemTapDefinition,
 } from "@shared/input/native/system-shortcut-engine"
@@ -284,6 +298,7 @@ export async function startKorriInputd(
     device: DiscoveredDevice,
     event: EvdevEvent,
   ): boolean {
+    const policyControl = policyControlForEvent(event)
     const matches = shortcutEngine.handleEvent({
       deviceId: device.deviceId,
       deviceClass: device.class,
@@ -296,9 +311,7 @@ export async function startKorriInputd(
       dispatchAction(match.id)
     }
 
-    if (matches.length > 0 || shortcutEngine.isPressed("home")) {
-      return true
-    }
+    if (matches.length > 0) return true
 
     if (event.type === EV_KEY) {
       const systemAction = systemKeyAction(event.code, event.value)
@@ -306,13 +319,16 @@ export async function startKorriInputd(
         dispatchAction(systemAction)
         return true
       }
-      return false
     }
 
     if (event.type === EV_SW && event.code === SW_LID) {
       dispatchAction(event.value === 0 ? "lid-opened" : "lid-closed")
       return true
     }
+
+    if (isReleaseOrNeutralPolicyFrame(event)) return false
+    if (shortcutEngine.isPressed("home")) return true
+    if (policyControl && isShortcutCandidateFrame(policyControl)) return true
 
     return false
   }
@@ -325,6 +341,21 @@ export async function startKorriInputd(
     void actionDispatcher.dispatch(actionId).catch(error => {
       logger.warn({ err: error, actionId }, "inputd: action dispatch failed")
     })
+  }
+
+  function isShortcutCandidateFrame(control: SystemShortcutControl): boolean {
+    for (const shortcut of options.shortcuts ?? DEFAULT_SHORTCUTS) {
+      if (!shortcut.requiredControls.includes(control)) continue
+      if (
+        shortcut.requiredControls.some(
+          required =>
+            required !== control && shortcutEngine.isPressed(required),
+        )
+      ) {
+        return true
+      }
+    }
+    return false
   }
 
   function closeDeviceStream(deviceId: string) {
@@ -481,6 +512,49 @@ function alwaysEventNodeExists(): boolean {
 
 function realEventNodeExists(eventNode: string): boolean {
   return existsSync(`/dev/input/${eventNode}`)
+}
+
+function policyControlForEvent(
+  event: EvdevEvent,
+): SystemShortcutControl | null {
+  if (event.type === EV_KEY) {
+    if (event.code === KEY_SYSTEM) return "home"
+    if (event.code === BTN_TL) return "l1"
+    if (event.code === BTN_TR) return "r1"
+    if (event.code === BTN_START) return "start"
+    if (event.code === BTN_SELECT) return "select"
+    if (event.code === BTN_THUMBL) return "l3"
+    if (event.code === BTN_THUMBR) return "r3"
+    if (event.code === BTN_BACK || event.code === KEY_RECORD) return "back"
+    if (event.code === BTN_X || event.code === BTN_Y) return "x"
+    if (event.code === KEY_VOLUMEUP) return "volume-up"
+    if (event.code === KEY_VOLUMEDOWN) return "volume-down"
+    return null
+  }
+
+  if (event.type === EV_ABS && event.code === ABS_HAT0X) {
+    if (event.value < 0) return "dpad-left"
+    if (event.value > 0) return "dpad-right"
+    return null
+  }
+
+  if (event.type === EV_ABS && event.code === ABS_HAT0Y) {
+    if (event.value < 0) return "dpad-up"
+    if (event.value > 0) return "dpad-down"
+  }
+
+  return null
+}
+
+function isReleaseOrNeutralPolicyFrame(event: EvdevEvent): boolean {
+  if (event.type === EV_KEY) return event.value === 0
+  if (event.type === EV_ABS) {
+    return (
+      (event.code === ABS_HAT0X || event.code === ABS_HAT0Y) &&
+      event.value === 0
+    )
+  }
+  return false
 }
 
 function systemKeyAction(

@@ -1,22 +1,63 @@
 import { describe, expect, it } from "bun:test"
-import { readRuntimeConfigFromEnv } from "./runtime-config"
+import {
+  desktopInputdUrlFromEnv,
+  readRuntimeConfigFromEnv,
+} from "./runtime-config"
 
 describe("readRuntimeConfigFromEnv", () => {
-  it("enables desktop input bridge by default", () => {
-    expect(readRuntimeConfigFromEnv({})).toEqual({ desktopInput: true })
+  it("keeps desktop input bridge disabled for unconfigured host desktop", () => {
+    expect(readRuntimeConfigFromEnv({})).toEqual({ desktopInput: false })
+  })
+
+  it("enables desktop input bridge for the device profile", () => {
+    expect(
+      readRuntimeConfigFromEnv({ KORRI_DESKTOP_PROFILE: "device" }),
+    ).toEqual({ desktopInput: true })
+  })
+
+  it("enables desktop input bridge for an explicit broker endpoint", () => {
+    expect(
+      readRuntimeConfigFromEnv({
+        KORRI_DESKTOP_INPUTD_URL: "ws://127.0.0.1:3002",
+      }),
+    ).toEqual({ desktopInput: true })
   })
 
   it("can disable desktop input bridge explicitly", () => {
     expect(
-      readRuntimeConfigFromEnv({ KORRI_DESKTOP_INPUT_BRIDGE: "0" }),
+      readRuntimeConfigFromEnv({
+        KORRI_DESKTOP_PROFILE: "device",
+        KORRI_DESKTOP_INPUT_BRIDGE: "0",
+      }),
     ).toEqual({ desktopInput: false })
   })
 
-  it("does not expose raw inputd URLs to the renderer runtime config", () => {
+  it("does not expose raw legacy inputd URLs to the renderer runtime config", () => {
     expect(
       readRuntimeConfigFromEnv({
         KORRI_NATIVE_BRIDGE_URL: "ws://127.0.0.1:3002",
       }),
-    ).toEqual({ desktopInput: true })
+    ).toEqual({ desktopInput: false })
+  })
+})
+
+describe("desktopInputdUrlFromEnv", () => {
+  it("returns undefined for unconfigured host desktop", () => {
+    expect(desktopInputdUrlFromEnv({})).toBeUndefined()
+  })
+
+  it("uses the loopback default for the device profile", () => {
+    expect(desktopInputdUrlFromEnv({ KORRI_DESKTOP_PROFILE: "device" })).toBe(
+      "ws://127.0.0.1:3002",
+    )
+  })
+
+  it("prefers an explicit desktop inputd URL", () => {
+    expect(
+      desktopInputdUrlFromEnv({
+        KORRI_DESKTOP_PROFILE: "device",
+        KORRI_DESKTOP_INPUTD_URL: " ws://127.0.0.1:3999 ",
+      }),
+    ).toBe("ws://127.0.0.1:3999")
   })
 })

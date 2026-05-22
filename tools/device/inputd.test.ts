@@ -121,6 +121,13 @@ function connectClient(port: number) {
   }
 }
 
+function aButtonValues(messages: readonly unknown[]): number[] {
+  return messages.flatMap(message => {
+    const event = decodeNativeInputEvent(message)
+    return event.kind === "input" && event.code === BTN_A ? [event.value] : []
+  })
+}
+
 async function waitFor(
   predicate: () => boolean,
   description: string,
@@ -176,7 +183,7 @@ describe("korri inputd", () => {
     client.close()
   })
 
-  it("dispatches L1+R1+Start+Select kill once while still streaming gamepad input", async () => {
+  it("dispatches L1+R1+Start+Select kill once without streaming UI-mapped chord inputs", async () => {
     const proc = await loadProcFixture("bus-input-devices-device.txt")
     const systemSource = createControllableEventSource()
     const gamepadSource = createControllableEventSource()
@@ -209,13 +216,41 @@ describe("korri inputd", () => {
 
     await waitFor(() => actions.length === 1, "kill action")
     expect(actions).toEqual(["kill-current-game"])
-    await waitFor(
-      () =>
-        client.messages
-          .map(message => decodeNativeInputEvent(message))
-          .filter(message => message.kind === "input").length >= 2,
-      "streamed chord events",
-    )
+    await Bun.sleep(30)
+    const inputs = client.messages
+      .map(message => decodeNativeInputEvent(message))
+      .filter(message => message.kind === "input")
+    expect(inputs.map(input => input.code)).not.toContain(BTN_START)
+    expect(inputs.map(input => input.code)).not.toContain(BTN_SELECT)
+
+    client.close()
+  })
+
+  it("does not leak Start as menu while a kill shortcut chord is in progress", async () => {
+    const proc = await loadProcFixture("bus-input-devices-device.txt")
+    const source = createControllableEventSource()
+    const handle = await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: device =>
+        device.eventNode === "event9"
+          ? source.open()
+          : createControllableEventSource().open(),
+    })
+
+    const client = connectClient(handle.port)
+    await client.open()
+    client.ws.send(JSON.stringify({ classes: ["gamepad"] }))
+    await client.nextMessage()
+
+    source.push(evdevKey(BTN_TL, 1))
+    source.push(evdevKey(BTN_TR, 1))
+    source.push(evdevKey(BTN_START, 1))
+
+    await Bun.sleep(30)
+    const inputs = client.messages
+      .map(message => decodeNativeInputEvent(message))
+      .filter(message => message.kind === "input")
+    expect(inputs.map(input => input.code)).not.toContain(BTN_START)
 
     client.close()
   })
@@ -304,8 +339,44 @@ describe("korri inputd", () => {
     expect(
       client.messages
         .map(message => decodeNativeInputEvent(message))
-        .filter(message => message.kind === "input"),
-    ).toEqual([])
+        .filter(message => message.kind === "input")
+        .map(input => input.value),
+    ).toEqual([0])
+
+    client.close()
+  })
+
+  it("streams release frames while Home is held so subscribers clear button state", async () => {
+    const proc = await loadProcFixture("bus-input-devices-device.txt")
+    const systemSource = createControllableEventSource()
+    const gamepadSource = createControllableEventSource()
+    const handle = await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: device =>
+        device.eventNode === "event6"
+          ? systemSource.open()
+          : device.eventNode === "event9"
+            ? gamepadSource.open()
+            : createControllableEventSource().open(),
+    })
+
+    const client = connectClient(handle.port)
+    await client.open()
+    client.ws.send(JSON.stringify({ classes: ["gamepad"] }))
+    await client.nextMessage()
+
+    gamepadSource.push(evdevKey(BTN_A, 1))
+    systemSource.push(evdevKey(KEY_SYSTEM, 1))
+    gamepadSource.push(evdevKey(BTN_A, 0))
+    systemSource.push(evdevKey(KEY_SYSTEM, 0))
+    gamepadSource.push(evdevKey(BTN_A, 1))
+
+    await waitFor(
+      () => aButtonValues(client.messages).length === 3,
+      "A down/up/down frames",
+    )
+
+    expect(aButtonValues(client.messages)).toEqual([1, 0, 1])
 
     client.close()
   })

@@ -16,7 +16,10 @@ import { type ConnectionState, makeConnectionController } from "./connection"
 import { createDesktopApp } from "./create-desktop-app"
 import { createDesktopInputBroker } from "./input-broker"
 import { loadDesktopConfig, saveDesktopConfig } from "./desktop-config"
-import { readRuntimeConfigFromEnv } from "./runtime-config"
+import {
+  desktopInputdUrlFromEnv,
+  readRuntimeConfigFromEnv,
+} from "./runtime-config"
 import { writeDesktopStatusFile } from "./status-file"
 import { toBridgeState } from "./to-bridge-state"
 import type { ConnectionServerRecord } from "./connection-state-bridge"
@@ -182,53 +185,31 @@ async function main() {
 
   const profile = desktopProfileFromEnv()
   const preloadPath = resolvePreloadPath()
+  const runtimeConfig: RuntimeConfigBridgeState = readRuntimeConfigFromEnv(
+    process.env,
+  )
   const windowOptions = createDesktopWindows(
     { host: DESKTOP_HOST, port },
     profile,
     { preload: preloadPath },
   )
   const activeWindowProvider = createActiveWindowProvider(() => windows)
-  windows = windowOptions.map(options => new BrowserWindow(options))
-  inputBrokerFiber = Effect.runFork(
-    createDesktopInputBroker({
-      inputdUrl: desktopInputdUrlFromEnv(process.env),
-      getWindows: () => windows,
-      getActiveWindow: activeWindowProvider.getActiveWindow,
-    }),
-  )
+  windows = windowOptions.map(options => {
+    const window = new BrowserWindow(options)
+    attachInitialBridgePushes(window, controller.state, runtimeConfig)
+    return window
+  })
 
-  // Runtime config is set once at startup from the wrap step's env vars.
-  // The raw inputd URL stays in Electrobun main; the renderer only learns
-  // whether desktop broker input is enabled.
-  const runtimeConfig: RuntimeConfigBridgeState = readRuntimeConfigFromEnv(
-    process.env,
-  )
-
-  // Re-push the latest connection state once each webview's DOM is ready.
-  // This closes the race where the bun-side push happens before the
-  // renderer's preload has installed `window.__korriConnection` (and
-  // therefore before the override on `receiveMessageFromBun` exists).
-  // The runtime-config push uses the same close-the-race window.
-  for (const window of windows) {
-    window.webview.on("dom-ready", () => {
-      const snapshot = SubscriptionRef.getUnsafe(controller.state)
-      try {
-        window.webview.sendMessageToWebviewViaExecute(toBridgeState(snapshot))
-      } catch (error) {
-        logger.warn(
-          { err: error, windowTitle: window.title },
-          "failed to push initial connection state on dom-ready",
-        )
-      }
-      try {
-        window.webview.sendMessageToWebviewViaExecute(runtimeConfig)
-      } catch (error) {
-        logger.warn(
-          { err: error, windowTitle: window.title },
-          "failed to push runtime config on dom-ready",
-        )
-      }
-    })
+  const inputdUrl = desktopInputdUrlFromEnv(process.env)
+  if (runtimeConfig.desktopInput && inputdUrl) {
+    inputBrokerFiber = Effect.runFork(
+      createDesktopInputBroker({
+        inputdUrl,
+        getWindows: () => windows,
+        getActiveWindow: activeWindowProvider.getActiveWindow,
+        onActiveChange: activeWindowProvider.onActiveChange,
+      }),
+    )
   }
 
   // Push every connection-state transition (including the initial value,
@@ -284,21 +265,61 @@ function createActiveWindowProvider(
 ) {
   let activeWindowId: number | null = null
 
+  const listeners = new Set<(active: boolean) => void>()
+  const getActiveWindow = () =>
+    getWindows().find(window => window.id === activeWindowId) ?? null
+  const notify = () => {
+    const active = Boolean(getActiveWindow())
+    for (const listener of listeners) listener(active)
+  }
+
   Electrobun.events.on("focus", event => {
     activeWindowId = event.data.id
+    notify()
   })
   Electrobun.events.on("blur", event => {
-    if (activeWindowId === event.data.id) activeWindowId = null
+    if (activeWindowId === event.data.id) {
+      activeWindowId = null
+      notify()
+    }
   })
 
   return {
-    getActiveWindow: () =>
-      getWindows().find(window => window.id === activeWindowId) ?? null,
+    getActiveWindow,
+    onActiveChange: (listener: (active: boolean) => void) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
   }
 }
 
-function desktopInputdUrlFromEnv(env: NodeJS.ProcessEnv): string | undefined {
-  return env.KORRI_DESKTOP_INPUTD_URL ?? env.KORRI_INPUT_BRIDGE_URL
+function attachInitialBridgePushes(
+  window: BrowserWindow,
+  connectionState: SubscriptionRef.SubscriptionRef<ConnectionState>,
+  runtimeConfig: RuntimeConfigBridgeState,
+) {
+  const push = () => {
+    const snapshot = SubscriptionRef.getUnsafe(connectionState)
+    try {
+      window.webview.sendMessageToWebviewViaExecute(toBridgeState(snapshot))
+    } catch (error) {
+      logger.warn(
+        { err: error, windowTitle: window.title },
+        "failed to push initial connection state to webview",
+      )
+    }
+    try {
+      window.webview.sendMessageToWebviewViaExecute(runtimeConfig)
+    } catch (error) {
+      logger.warn(
+        { err: error, windowTitle: window.title },
+        "failed to push runtime config to webview",
+      )
+    }
+  }
+
+  window.webview.on("dom-ready", push)
+  push()
 }
 
 function resolvePreloadPath(): string | undefined {

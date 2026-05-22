@@ -14,8 +14,10 @@ interface InputServerDouble {
 }
 
 const servers: InputServerDouble[] = []
+const brokerDisposers: Array<() => Promise<unknown>> = []
 
-afterEach(() => {
+afterEach(async () => {
+  await Promise.all(brokerDisposers.splice(0).map(dispose => dispose()))
   for (const server of servers.splice(0)) server.stop()
 })
 
@@ -87,6 +89,47 @@ describe("createDesktopInputBroker", () => {
     })
   })
 
+  it("resets held mapper state immediately when active state becomes inactive", async () => {
+    const server = createInputServer()
+    const window = createWindowDouble()
+    let active = true
+    let activeListener: ((active: boolean) => void) | undefined
+    await runBrokerUntil(server, {
+      getActiveWindow: () => (active ? window : null),
+      getWindows: () => [window],
+      onActiveChange(listener) {
+        activeListener = listener
+        return () => {
+          activeListener = undefined
+        }
+      },
+      reconnectDelayMs: 10,
+    })
+
+    server.send({
+      kind: "input",
+      deviceId: "pad-1",
+      class: "gamepad",
+      type: 3,
+      code: ABS_HAT0X,
+      value: 1,
+      timestamp: Date.now(),
+    })
+    await waitFor(() => actionPayloads(window).length === 1, "initial hold")
+
+    active = false
+    activeListener?.(false)
+    await waitFor(
+      () => statusPayloads(window).at(-1)?.status.active === false,
+      "inactive status",
+    )
+    active = true
+    activeListener?.(true)
+    await Bun.sleep(450)
+
+    expect(actionPayloads(window)).toHaveLength(1)
+  })
+
   it("pushes status snapshots to all windows and re-pushes them on dom-ready", async () => {
     const server = createInputServer()
     const window = createWindowDouble()
@@ -122,15 +165,67 @@ describe("createDesktopInputBroker", () => {
     )
   })
 
+  it("reports invalid inputd URLs as status errors instead of throwing", async () => {
+    const window = createWindowDouble()
+    const fiber = Effect.runFork(
+      createDesktopInputBroker({
+        inputdUrl: "not a websocket url",
+        getWindows: () => [window],
+        getActiveWindow: () => window,
+        reconnectDelayMs: 10_000,
+      }),
+    )
+    const dispose = () => Effect.runPromise(Fiber.interrupt(fiber))
+    brokerDisposers.push(dispose)
+
+    await waitFor(
+      () => statusPayloads(window).at(-1)?.status.inputd === "error",
+      "invalid URL status",
+    )
+    expect(statusPayloads(window).at(-1)?.status.lastError).not.toBeNull()
+    await dispose()
+    brokerDisposers.splice(brokerDisposers.indexOf(dispose), 1)
+  })
+
+  it("pushes incremented status failure counts to remaining healthy windows", async () => {
+    const server = createInputServer()
+    const throwing = createWindowDouble({ failStatus: true })
+    const healthy = createWindowDouble()
+    await runBrokerUntil(server, {
+      getActiveWindow: () => healthy,
+      getWindows: () => [throwing, healthy],
+    })
+
+    await waitFor(
+      () =>
+        statusPayloads(healthy).some(
+          payload => payload.status.pushFailures > 0,
+        ),
+      "push failure count",
+    )
+    expect(statusPayloads(healthy).at(-1)?.status.pushFailures).toBeGreaterThan(
+      0,
+    )
+  })
+
   it("does not invoke OS keyboard injection tools", async () => {
-    const source = await readFile(
+    const deploySource = await readFile(
       new URL("./input-broker.ts", import.meta.url),
       "utf8",
     )
+    const sharedSource = await readFile(
+      new URL(
+        "../../shared/input/desktop-input-broker-core.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    )
 
-    expect(source).not.toContain("ydotool")
-    expect(source).not.toContain("wtype")
-    expect(source).not.toContain("uinput")
+    for (const source of [deploySource, sharedSource]) {
+      expect(source).not.toContain("ydotool")
+      expect(source).not.toContain("wtype")
+      expect(source).not.toContain("uinput")
+    }
   })
 })
 
@@ -147,8 +242,10 @@ async function runBrokerUntil(
       ...options,
     }),
   )
+  const dispose = () => Effect.runPromise(Fiber.interrupt(fiber))
+  brokerDisposers.push(dispose)
   await waitFor(() => server.messages.length > 0, "subscription")
-  return () => Effect.runPromise(Fiber.interrupt(fiber))
+  return dispose
 }
 
 function actionPayloads(window: ReturnType<typeof createWindowDouble>) {
@@ -164,7 +261,7 @@ function statusPayloads(window: ReturnType<typeof createWindowDouble>) {
     .filter(payload => payload.kind === "korri.input.status")
 }
 
-function createWindowDouble() {
+function createWindowDouble(options: { readonly failStatus?: boolean } = {}) {
   const handlers = new Map<string, Array<() => void>>()
   const payloads: unknown[] = []
   return {
@@ -172,6 +269,12 @@ function createWindowDouble() {
     payloads,
     webview: {
       sendMessageToWebviewViaExecute(payload: unknown) {
+        if (
+          options.failStatus &&
+          decodeDesktopInputBridgePayload(payload).kind === "korri.input.status"
+        ) {
+          throw new Error("status push failed")
+        }
         payloads.push(payload)
       },
       on(event: string, handler: () => void) {
