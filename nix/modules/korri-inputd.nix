@@ -81,7 +81,12 @@ in
     before = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];
-      description = "Systemd units that korri-inputd.service starts before.";
+      description = ''
+        Systemd units that korri-inputd.service starts before. Product roles such
+        as services.korri.kiosk use this to keep normalized input available
+        before the appliance session starts, while platform modules still own
+        device-specific InputPlumber maps and hardware event names.
+      '';
     };
   };
 
@@ -91,7 +96,12 @@ in
     systemd.services.korri-inputd = {
       description = "Korri input bridge and shortcut daemon";
       wantedBy = [ "multi-user.target" ];
-      inherit (cfg) wants after before path;
+      inherit (cfg)
+        wants
+        after
+        before
+        path
+        ;
       environment = cfg.environment // {
         KORRI_INPUT_BRIDGE_PORT = toString cfg.port;
         KORRI_INPUT_BRIDGE_HOSTNAME = cfg.hostname;

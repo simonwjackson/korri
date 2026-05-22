@@ -114,7 +114,7 @@ pkgs.stdenv.mkDerivation {
     export GIO_EXTRA_MODULES="${gioExtraModulesPath}\''${GIO_EXTRA_MODULES:+:\$GIO_EXTRA_MODULES}"
     export PATH="${moonlightQt}/bin\''${PATH:+:\$PATH}"
     ${lib.optionalString (gdkBackend != "") ''
-    export GDK_BACKEND="\''${GDK_BACKEND:-${gdkBackend}}"
+      export GDK_BACKEND="\''${GDK_BACKEND:-${gdkBackend}}"
     ''}
     ${lib.optionalString (desktopProfileEnv != "") ''
     export KORRI_DESKTOP_PROFILE="${desktopProfileEnv}"
@@ -146,6 +146,7 @@ pkgs.stdenv.mkDerivation {
 
   meta = {
     description = "Korri Electrobun desktop app (${profile} variant)";
+    mainProgram = binName;
     platforms = [
       "x86_64-linux"
       "aarch64-linux"
