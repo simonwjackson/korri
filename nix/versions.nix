@@ -12,9 +12,4 @@
       aarch64-linux = "sha256-NrkUkPrl0BZVuqNn3OaDnrtbW+rFNCotAES07p07T7E=";
     };
   };
-
-  bunDepsHash = {
-    x86_64-linux = "sha256-TH647iMvQ7azn306ItmV/J+gHGFS8B65z8KYlalmIT0=";
-    aarch64-linux = "sha256-R+WVjfvmQyqWieQdXHKhsGxCBlL+IUMwt2Uf5XaXbok=";
-  };
 }

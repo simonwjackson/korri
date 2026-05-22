@@ -15,7 +15,12 @@ pkgs.stdenv.mkDerivation {
     pkgs.bun
     pkgs.nodejs_20
     pkgs.makeWrapper
+    pkgs.bun2nix.hook
   ];
+
+  inherit bunDeps;
+  bunInstallFlags = [ "--linker=hoisted" ];
+  dontRunLifecycleScripts = true;
 
   dontConfigure = true;
 
@@ -33,11 +38,6 @@ pkgs.stdenv.mkDerivation {
 
     export HOME="$TMPDIR/home"
     mkdir -p "$HOME"
-
-    rm -rf node_modules
-    mkdir -p node_modules
-    cp -R ${bunDeps}/. node_modules/
-    chmod -R u+w node_modules
 
     bun build tools/device/inputd.ts --target=bun --outfile=korri-inputd.js
 

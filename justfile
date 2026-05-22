@@ -126,6 +126,10 @@ fallow *args:
 fallow-audit *args:
   tools/scripts/fallow.sh audit {{args}}
 
+# Regenerate nix/bun.nix from bun.lock (run after any bun.lock change).
+refresh-bun-deps:
+  bun x bun2nix -o nix/bun.nix
+
 # Format source files.
 format:
   biome format --write tools korri

@@ -17,7 +17,15 @@ pkgs.stdenv.mkDerivation {
   nativeBuildInputs = [
     pkgs.bun
     pkgs.nodejs_20
+    pkgs.bun2nix.hook
   ];
+
+  # bun2nix.hook reads `bunDeps` (the offline cache) and runs
+  # `bun install --frozen-lockfile --ignore-scripts` against it during
+  # `bunNodeModulesInstallPhase`, before buildPhase.
+  inherit bunDeps;
+  bunInstallFlags = [ "--linker=hoisted" ];
+  dontRunLifecycleScripts = true;
 
   dontConfigure = true;
 
@@ -33,10 +41,6 @@ pkgs.stdenv.mkDerivation {
   buildPhase = ''
     runHook preBuild
 
-    rm -rf node_modules
-    mkdir -p node_modules
-    cp -R ${bunDeps}/. node_modules/
-    chmod -R u+w node_modules
     export HOME="$TMPDIR/home"
     mkdir -p "$HOME"
 

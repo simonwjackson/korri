@@ -2,12 +2,13 @@
 
 ## Electrobun version bumps
 
-1. Update `electrobun` in `package.json` and refresh `bun.lock`.
-2. Run `tools/scripts/bump-electrobun.sh <version>`.
-3. Paste the printed hashes into `nix/versions.nix`.
-4. Temporarily set `bunDepsHash` in `nix/versions.nix` to `sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=`.
-5. Run `nix build .#bun-deps --no-link` and copy the reported `got:` hash back into `nix/versions.nix`.
-6. Verify `nix build .#korri-desktop --no-link`.
+1. Update `electrobun` in `package.json` and refresh `bun.lock` (`bun install`).
+2. Run `tools/scripts/bump-electrobun.sh <version>` to fetch the new cli + core release tarballs and print their SRI hashes.
+3. Paste the printed `electrobun.cli.*` and `electrobun.core.*` hashes into `nix/versions.nix`.
+4. Run `just refresh-bun-deps` to regenerate `nix/bun.nix` from the updated `bun.lock`. Commit `nix/bun.nix` alongside `package.json` and `bun.lock`.
+5. Verify `nix build .#korri-desktop --no-link`.
+
+`nix/bun.nix` is the lockfile-derived dependency manifest consumed by the bun2nix Nix integration. Each entry is a `fetchurl` whose SRI hash comes directly from `bun.lock`, so there is no separate per-architecture FOD hash to maintain. The same file is consumed by every bun-using Korri derivation (portal, inputd, game-stream, cli, server, desktop).
 
 The bumper prints the current shell's Bun version so it can be compared with the Bun runtime bundled by Electrobun's core tarball when investigating version drift.
 

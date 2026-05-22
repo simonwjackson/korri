@@ -42,9 +42,14 @@ pkgs.stdenv.mkDerivation {
     pkgs.nodejs_20
     pkgs.patchelf
     pkgs.file
+    pkgs.bun2nix.hook
   ];
 
   buildInputs = buildtimeLibraries;
+
+  inherit bunDeps;
+  bunInstallFlags = [ "--linker=hoisted" ];
+  dontRunLifecycleScripts = true;
 
   dontConfigure = true;
 
@@ -63,22 +68,11 @@ pkgs.stdenv.mkDerivation {
         export HOME="$TMPDIR/home"
         mkdir -p "$HOME"
 
-        rm -rf node_modules out
-        mkdir -p node_modules
-        cp -R ${bunDeps}/. node_modules/
-        chmod -R u+w node_modules
-
-        # @proseql/core@0.11.0 ships default imports for a few CommonJS
-        # serializer dependencies. Bun can run them directly, but Bun's bundler
-        # rejects the default export while building the Electrobun native bundle.
-        # Patch the installed build output until the upstream package publishes
-        # namespace imports.
-        for codec in hjson json5 jsonc; do
-          file="node_modules/@proseql/core/dist/serializers/codecs/$codec.js"
-          if [ -f "$file" ]; then
-            sed -i 's/^import pkg from /import * as pkg from /' "$file"
-          fi
-        done
+        # node_modules has been populated by bun2nix.hook's
+        # bunNodeModulesInstallPhase. The @proseql/core codec import patch is
+        # applied centrally in the bun cache derivation (flake.nix), so we no
+        # longer need a per-consumer sed loop here.
+        rm -rf out
 
         mkdir -p node_modules/electrobun/bin
         cp ${electrobunBinaries.cli}/electrobun node_modules/electrobun/bin/electrobun

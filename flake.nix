@@ -5,6 +5,20 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     nixpkgs-2405.url = "github:NixOS/nixpkgs/nixos-24.05";
     flake-utils.url = "github:numtide/flake-utils";
+    bun2nix.url = "github:nix-community/bun2nix?ref=2.1.0";
+    bun2nix.inputs.nixpkgs.follows = "nixpkgs";
+  };
+
+  # Pull the prebuilt bun2nix (Rust CLI + Zig cache-entry-creator) from the
+  # nix-community binary cache instead of building it from source on every
+  # fresh checkout.
+  nixConfig = {
+    extra-substituters = [
+      "https://nix-community.cachix.org"
+    ];
+    extra-trusted-public-keys = [
+      "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+    ];
   };
 
   outputs =
@@ -13,6 +27,7 @@
       nixpkgs,
       nixpkgs-2405,
       flake-utils,
+      bun2nix,
       ...
     }:
     flake-utils.lib.eachDefaultSystem (
@@ -21,6 +36,7 @@
         pkgs = import nixpkgs {
           inherit system;
           config.allowUnfree = true;
+          overlays = [ bun2nix.overlays.default ];
         };
 
         pkgs2405 = import nixpkgs-2405 {
@@ -163,23 +179,34 @@
 
         '';
 
-        bunDepsSrc = pkgs.lib.fileset.toSource {
-          root = ./.;
-          fileset = pkgs.lib.fileset.unions [
-            ./package.json
-            ./bun.lock
-          ];
-        };
-
-        bunDeps = import ./nix/bun-deps.nix {
-          inherit pkgs;
-          lib = pkgs.lib;
-          src = bunDepsSrc;
-          outputHash =
-            if builtins.isAttrs versions.bunDepsHash then
-              versions.bunDepsHash.${system}
-            else
-              versions.bunDepsHash;
+        # Lockfile-derived Bun dependency cache.
+        #
+        # nix/bun.nix is regenerated from bun.lock via `just refresh-bun-deps`
+        # (which invokes `bun x bun2nix -o nix/bun.nix`). Each lockfile entry
+        # becomes a per-package fetchurl whose SRI hash comes directly from
+        # bun.lock, so there is no separate FOD hash to maintain per system.
+        #
+        # The @proseql/core override rewrites the hjson/json5/jsonc codec
+        # imports from default to namespace form before they enter Bun's
+        # offline cache. Bun runs them as-is, but Bun's bundler rejects the
+        # default-export pattern while building the desktop native bundle.
+        # Centralizing the patch here removes a per-consumer sed loop.
+        bunDeps = pkgs.bun2nix.fetchBunDeps {
+          bunNix = ./nix/bun.nix;
+          overrides = {
+            "@proseql/core@0.13.2" =
+              pkg:
+              pkgs.runCommandLocal "proseql-core-codec-patched" { } ''
+                cp -R ${pkg} $out
+                chmod -R u+w $out
+                for codec in hjson json5 jsonc; do
+                  file="$out/dist/serializers/codecs/$codec.js"
+                  if [ -f "$file" ]; then
+                    sed -i 's/^import pkg from /import * as pkg from /' "$file"
+                  fi
+                done
+              '';
+          };
         };
 
         # Single portal build for every desktop variant. The native input-bridge
@@ -311,7 +338,6 @@
       in
       {
         packages = {
-          bun-deps = bunDeps;
           korri-portal = korriPortal;
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
