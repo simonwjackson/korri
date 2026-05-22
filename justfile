@@ -128,14 +128,29 @@ fallow-audit *args:
 
 # Regenerate nix/bun.nix from bun.lock (run after any bun.lock change).
 refresh-bun-deps:
-  bun x bun2nix -o nix/bun.nix
+  bun2nix -o nix/bun.nix
+
+# Verify nix/bun.nix is in sync with bun.lock. Fails if `just refresh-bun-deps`
+# would produce a different file. Wired into `check` so PRs touching bun.lock
+# without regenerating nix/bun.nix fail at lint time instead of build time.
+check-bun-deps:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  candidate=$(mktemp)
+  trap 'rm -f "$candidate"' EXIT
+  bun2nix -o "$candidate"
+  if ! diff -q "$candidate" nix/bun.nix >/dev/null; then
+    echo 'nix/bun.nix is out of sync with bun.lock; run `just refresh-bun-deps` and commit the result.' >&2
+    diff -u nix/bun.nix "$candidate" | head -40 >&2
+    exit 1
+  fi
 
 # Format source files.
 format:
   biome format --write tools korri
 
 # Run the standard validation suite.
-check: validate-router lint typecheck test-unit check-bdd
+check: validate-router lint typecheck test-unit check-bdd check-bun-deps
 
 # Run validation plus a production build.
 check-full: check build

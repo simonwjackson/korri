@@ -43,7 +43,13 @@ pkgs.stdenv.mkDerivation {
     # dependencies. Bun's runtime accepts them but Bun's bundler does
     # not. Patch the installed build output to use namespace imports so
     # the CLI bundle can be fully self-contained without `--external`.
-    # Mirrors the same fix in korri-desktop/unwrapped.nix.
+    #
+    # The bun2nix cache override in flake.nix applies the same patch
+    # centrally for korri-desktop, which does not get a sed loop here.
+    # We keep the sed in korri-cli/korri-server as defense-in-depth
+    # because the central override is keyed on an exact proseql version
+    # string; this loop is version-agnostic and protects the bundle if
+    # a future bump silently misses the override key.
     for codec in hjson json5 jsonc; do
       file="node_modules/@proseql/core/dist/serializers/codecs/$codec.js"
       if [ -f "$file" ]; then
@@ -85,6 +91,20 @@ pkgs.stdenv.mkDerivation {
     if [ -d "$out/share/korri-cli/node_modules" ]; then
       echo "korri-cli install closure must not contain node_modules" >&2
       find "$out/share/korri-cli/node_modules" -maxdepth 2 -type d >&2
+      exit 1
+    fi
+
+    # Smoke-test the bundle: dropping `--external '@proseql/*'` makes
+    # static bundling the only path, so a future regression where the
+    # bundler can't resolve a dynamic import (or a new codec the sed
+    # loop missed) would build cleanly and only fail at first invocation
+    # on the device. Running `--version` exercises module-load and
+    # CLI-init paths without performing any side effects.
+    export HOME="$TMPDIR/install-check-home"
+    mkdir -p "$HOME"
+    if ! "$out/bin/korri" --version >/dev/null 2>&1; then
+      echo "korri-cli smoke test failed: bundle did not respond to --version" >&2
+      "$out/bin/korri" --version >&2 || true
       exit 1
     fi
 

@@ -52,19 +52,30 @@
         isSupportedDesktopSystem = builtins.elem system supportedDesktopSystems;
         isX86Linux = system == "x86_64-linux";
 
-        commonPackages = with pkgs; [
-          bash
-          coreutils
-          git
-          gitleaks
-          lefthook
-          biome
-          nixfmt-rfc-style
-          bun
-          just
-          ripgrep
-          caddy
-        ];
+        commonPackages =
+          (with pkgs; [
+            bash
+            coreutils
+            git
+            gitleaks
+            lefthook
+            biome
+            nixfmt-rfc-style
+            bun
+            just
+            ripgrep
+            caddy
+          ])
+          ++ [
+            # The bun2nix CLI used by `just refresh-bun-deps`. We take it
+            # directly from the flake input's package output (the plain Rust
+            # binary derivation) rather than from `pkgs.bun2nix`, because the
+            # overlay exposes `bun2nix` as an extended attrset with .hook /
+            # .fetchBunDeps that mkShell's buildInputs validation rejects.
+            # Using the flake-pinned binary keeps the CLI version locked to
+            # the same revision that processes nix/bun.nix in fetchBunDeps.
+            bun2nix.packages.${system}.bun2nix
+          ];
 
         linuxDesktopRuntimeLibraries = pkgs.lib.optionals pkgs.stdenv.isLinux (
           (with pkgs; [
@@ -191,23 +202,51 @@
         # offline cache. Bun runs them as-is, but Bun's bundler rejects the
         # default-export pattern while building the desktop native bundle.
         # Centralizing the patch here removes a per-consumer sed loop.
-        bunDeps = pkgs.bun2nix.fetchBunDeps {
-          bunNix = ./nix/bun.nix;
-          overrides = {
-            "@proseql/core@0.13.2" =
-              pkg:
-              pkgs.runCommandLocal "proseql-core-codec-patched" { } ''
-                cp -R ${pkg} $out
-                chmod -R u+w $out
-                for codec in hjson json5 jsonc; do
-                  file="$out/dist/serializers/codecs/$codec.js"
-                  if [ -f "$file" ]; then
-                    sed -i 's/^import pkg from /import * as pkg from /' "$file"
-                  fi
-                done
-              '';
+        bunDeps =
+          let
+            # Loud-fail at eval time if a future bun.lock bump moves proseql
+            # past the version this override is keyed on. bun2nix.fetchBunDeps
+            # silently no-ops on unknown override keys, which would otherwise
+            # cause korri-desktop to fail confusingly inside `bun build` when
+            # the codec patch goes missing. korri-cli/korri-server have an
+            # in-buildPhase sed loop as defense-in-depth; korri-desktop does
+            # not, so this assertion is its primary guard.
+            proseqlOverrideKey = "@proseql/core@0.13.2";
+            # bun.nix is a function expecting fetchurl etc. We only need
+            # attribute names for the existence check; values are lazy, so
+            # passing nulls is safe (we never access them).
+            bunNixManifest = import ./nix/bun.nix {
+              copyPathToStore = null;
+              fetchFromGitHub = null;
+              fetchgit = null;
+              fetchurl = null;
+            };
+          in
+          assert
+            (builtins.hasAttr proseqlOverrideKey bunNixManifest)
+            || throw ''
+              flake.nix bunDeps: override key '${proseqlOverrideKey}' is not present in nix/bun.nix.
+              The proseql codec patch will not be applied to the bun offline cache.
+              Update the override key to match the version recorded in nix/bun.nix
+              (run `just refresh-bun-deps` if bun.lock changed).
+            '';
+          pkgs.bun2nix.fetchBunDeps {
+            bunNix = ./nix/bun.nix;
+            overrides = {
+              ${proseqlOverrideKey} =
+                pkg:
+                pkgs.runCommandLocal "proseql-core-codec-patched" { } ''
+                  cp -R ${pkg} $out
+                  chmod -R u+w $out
+                  for codec in hjson json5 jsonc; do
+                    file="$out/dist/serializers/codecs/$codec.js"
+                    if [ -f "$file" ]; then
+                      sed -i 's/^import pkg from /import * as pkg from /' "$file"
+                    fi
+                  done
+                '';
+            };
           };
-        };
 
         # Single portal build for every desktop variant. The native input-bridge
         # URL is now pushed at runtime via window.__korriRuntime (see

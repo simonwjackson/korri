@@ -43,7 +43,13 @@ pkgs.stdenv.mkDerivation {
     # dependencies. Bun's runtime accepts them but Bun's bundler does
     # not. Patch the installed build output to use namespace imports so
     # the bundles can be fully self-contained without `--external`.
-    # Mirrors the same fix in korri-desktop/unwrapped.nix.
+    #
+    # The bun2nix cache override in flake.nix applies the same patch
+    # centrally for korri-desktop, which does not get a sed loop here.
+    # We keep the sed in korri-cli/korri-server as defense-in-depth
+    # because the central override is keyed on an exact proseql version
+    # string; this loop is version-agnostic and protects the bundle if
+    # a future bump silently misses the override key.
     for codec in hjson json5 jsonc; do
       file="node_modules/@proseql/core/dist/serializers/codecs/$codec.js"
       if [ -f "$file" ]; then
@@ -104,6 +110,14 @@ pkgs.stdenv.mkDerivation {
       find "$out/share/korri-server/node_modules" -maxdepth 2 -type d >&2
       exit 1
     fi
+
+    # No runtime smoke for the three server entries: korri-server.js,
+    # korri-api.js, and korri-lan-stream-advertise.js all bind ports on
+    # module load and have no --help/--version flag. The cli smoke in
+    # korri-cli.nix already exercises the @proseql/core bundling path,
+    # which is the highest-risk regression target for dropping
+    # --external. If the server entries grow a --version flag in the
+    # future this is the right place to add an analogous probe.
 
     # avahi-publish-service must be reachable from the wrapper's PATH so
     # the server can advertise without external setup.
