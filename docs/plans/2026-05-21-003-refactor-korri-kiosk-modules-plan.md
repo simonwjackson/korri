@@ -1,7 +1,7 @@
 ---
 title: Refactor Korri Kiosk Modules and Images
 type: refactor
-status: active
+status: completed
 date: 2026-05-21
 deepened: 2026-05-21
 ---
