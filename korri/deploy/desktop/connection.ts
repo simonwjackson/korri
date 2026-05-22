@@ -46,6 +46,17 @@ export interface ConnectionControllerDeps {
   readonly windowDurationMs?: number
   /** Override the help-text delay. Default: 30000ms. */
   readonly helpDelayMs?: number
+  /**
+   * Initial backoff before retrying the direct probe of the remembered
+   * server's `/api/health`. Default: 500ms. The first probe still fires
+   * immediately on startup; this delay only applies between subsequent
+   * retries. Set to `0` to disable backoff (still capped by `Max`).
+   */
+  readonly rememberedRetryInitialMs?: number
+  /** Max backoff between remembered-server retries. Default: 30_000ms. */
+  readonly rememberedRetryMaxMs?: number
+  /** Backoff multiplier between remembered-server retries. Default: 2. */
+  readonly rememberedRetryFactor?: number
 }
 
 export interface ConnectionController {
@@ -54,6 +65,9 @@ export interface ConnectionController {
 
 const DEFAULT_WINDOW_MS = 1500
 const DEFAULT_HELP_DELAY_MS = 30_000
+const DEFAULT_REMEMBERED_RETRY_INITIAL_MS = 500
+const DEFAULT_REMEMBERED_RETRY_MAX_MS = 30_000
+const DEFAULT_REMEMBERED_RETRY_FACTOR = 2
 
 export function makeConnectionController(
   deps: ConnectionControllerDeps,
@@ -85,9 +99,14 @@ export function makeConnectionController(
     // with mDNS discovery. mDNS via bonjour-service can take seconds to
     // return its first candidate (slow on wifi or behind avahi-daemon);
     // a direct probe of the cached URL skips that delay when the server
-    // is reachable at the same address it was last time. If the probe
-    // fails we leave it to the mDNS-driven controller to find an
-    // alternative.
+    // is reachable at the same address it was last time.
+    //
+    // The probe retries on transient failure with exponential backoff so
+    // a probe that fires before the network is up (cold boot before Wi-Fi
+    // associates, container start before tailscale, etc.) still recovers
+    // without waiting for mDNS to surface the same host. The loop exits
+    // as soon as the controller state observes `connected`, regardless of
+    // which fiber set it.
     if (remembered) {
       yield* Effect.forkScoped(
         probeRememberedDirect({
@@ -95,6 +114,11 @@ export function makeConnectionController(
           httpProbe: deps.httpProbe,
           saveConfig: deps.saveConfig,
           remembered,
+          initialMs:
+            deps.rememberedRetryInitialMs ??
+            DEFAULT_REMEMBERED_RETRY_INITIAL_MS,
+          maxMs: deps.rememberedRetryMaxMs ?? DEFAULT_REMEMBERED_RETRY_MAX_MS,
+          factor: deps.rememberedRetryFactor ?? DEFAULT_REMEMBERED_RETRY_FACTOR,
         }),
       )
     }
@@ -118,7 +142,10 @@ export function makeConnectionController(
 /**
  * Probe the remembered server's `/api/health` directly, bypassing mDNS.
  * On success, transition to `connected` and persist. Skips silently if
- * the controller has already connected via another path.
+ * the controller has already connected via another path. Retries with
+ * exponential backoff until the controller observes `connected`, so a
+ * probe that fires before the network is up still recovers without
+ * waiting for mDNS.
  */
 function probeRememberedDirect(input: {
   readonly state: SubscriptionRef.SubscriptionRef<ConnectionState>
@@ -127,20 +154,37 @@ function probeRememberedDirect(input: {
     partial: Partial<DesktopConfig>,
   ) => Effect.Effect<void, unknown>
   readonly remembered: ServerRecord
+  readonly initialMs: number
+  readonly maxMs: number
+  readonly factor: number
 }): Effect.Effect<void> {
   return Effect.gen(function* () {
-    const ok = yield* input.httpProbe(input.remembered.controlUrl)
-    if (!ok) return
-    const current = yield* SubscriptionRef.get(input.state)
-    if (current.status === "connected") return
-    yield* SubscriptionRef.set(input.state, {
-      status: "connected",
-      server: input.remembered,
-    })
-    yield* Effect.orElseSucceed(
-      input.saveConfig({ lastConnectedServer: input.remembered }),
-      () => undefined,
-    )
+    let delay = Math.max(0, input.initialMs)
+    const cap = Math.max(0, input.maxMs)
+    const factor = Math.max(1, input.factor)
+
+    while (true) {
+      const current = yield* SubscriptionRef.get(input.state)
+      if (current.status === "connected") return
+
+      const ok = yield* input.httpProbe(input.remembered.controlUrl)
+      if (ok) {
+        const latest = yield* SubscriptionRef.get(input.state)
+        if (latest.status === "connected") return
+        yield* SubscriptionRef.set(input.state, {
+          status: "connected",
+          server: input.remembered,
+        })
+        yield* Effect.orElseSucceed(
+          input.saveConfig({ lastConnectedServer: input.remembered }),
+          () => undefined,
+        )
+        return
+      }
+
+      yield* Effect.sleep(`${delay} millis`)
+      delay = Math.min(Math.max(delay * factor, factor), cap)
+    }
   })
 }
 
@@ -193,8 +237,7 @@ function runController(ctx: ControllerContext): Effect.Effect<void> {
         const preferred = ctx.remembered
           ? local.queued.get(ctx.remembered.controlUrl)
           : undefined
-        const candidate =
-          preferred ?? local.queued.values().next().value
+        const candidate = preferred ?? local.queued.values().next().value
         if (candidate) {
           local.queued.delete(candidate.controlUrl)
           yield* attemptConnect(ctx, local, candidate)
@@ -303,7 +346,5 @@ const nowDate: Effect.Effect<Date> = Clock.currentTimeMillis.pipe(
 )
 
 function helpAfterDate(delayMs: number): Effect.Effect<Date> {
-  return Clock.currentTimeMillis.pipe(
-    Effect.map(ms => new Date(ms + delayMs)),
-  )
+  return Clock.currentTimeMillis.pipe(Effect.map(ms => new Date(ms + delayMs)))
 }
