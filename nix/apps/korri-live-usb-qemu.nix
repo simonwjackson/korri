@@ -12,7 +12,9 @@ pkgs.writeShellApplication {
   name = appName;
   runtimeInputs = with pkgs; [
     coreutils
+    gawk
     gnugrep
+    gptfdisk
     qemu
     util-linux
   ];
@@ -67,18 +69,30 @@ pkgs.writeShellApplication {
     serial_log="$evidence_dir/serial.log"
 
     if ${if persistenceMode then "true" else "false"}; then
-      echo "Preparing persistence topology evidence." | tee "$evidence_dir/persistence-notes.txt"
-      echo "This runner intentionally boots the ISO as USB storage and creates a separate KORRI-PERSIST disk image for manual experiments." | tee -a "$evidence_dir/persistence-notes.txt"
-      echo "It does not replace physical same-stick acceptance; verify resolver behavior from the guest logs." | tee -a "$evidence_dir/persistence-notes.txt"
-      persist_img="$evidence_dir/KORRI-PERSIST.raw"
-      truncate -s "''${KORRI_QEMU_PERSIST_SIZE:-2G}" "$persist_img"
-      ${pkgs.e2fsprogs}/bin/mkfs.ext4 -F -L KORRI-PERSIST "$persist_img" >/dev/null
+      echo "Preparing same-stick persistence topology evidence." | tee "$evidence_dir/persistence-notes.txt"
+      echo "This runner copies the hybrid ISO to one writable USB disk image, extends it, and adds a sibling KORRI-PERSIST partition on the same image." | tee -a "$evidence_dir/persistence-notes.txt"
+      echo "It does not replace physical NUC acceptance; verify resolver behavior from the guest logs." | tee -a "$evidence_dir/persistence-notes.txt"
+      usb_img="$evidence_dir/korri-live-usb-with-persist.img"
+      cp "$iso_path" "$usb_img"
+      chmod u+w "$usb_img"
+      truncate -s +"''${KORRI_QEMU_PERSIST_SIZE:-2G}" "$usb_img"
+      sgdisk -e "$usb_img" >/dev/null
+      sgdisk -n 0:0:0 -t 0:8300 -c 0:KORRI-PERSIST "$usb_img" >/dev/null
+      persist_part="$(${pkgs.gawk}/bin/awk '$0 ~ /KORRI-PERSIST/ { print $1 }' <(sgdisk -p "$usb_img") | tail -n 1)"
+      if [ -z "$persist_part" ]; then
+        echo "Failed to create KORRI-PERSIST partition in $usb_img" >&2
+        exit 1
+      fi
+      start_sector="$(sgdisk -i "$persist_part" "$usb_img" | ${pkgs.gawk}/bin/awk -F: '/First sector/ { gsub(/ /, "", $2); print $2 }')"
+      if [ -z "$start_sector" ]; then
+        echo "Failed to locate KORRI-PERSIST partition offset in $usb_img" >&2
+        exit 1
+      fi
+      ${pkgs.e2fsprogs}/bin/mkfs.ext4 -F -L KORRI-PERSIST -E offset=$((start_sector * 512)) "$usb_img" >/dev/null
       extra_storage=(
-        -drive "id=korriiso,if=none,format=raw,readonly=on,file=$iso_path"
+        -drive "id=korriusb,if=none,format=raw,file=$usb_img"
         -device usb-ehci,id=ehci
-        -device usb-storage,drive=korriiso,bootindex=0
-        -drive "id=korripersist,if=none,format=raw,file=$persist_img"
-        -device usb-storage,drive=korripersist
+        -device usb-storage,drive=korriusb,bootindex=0
       )
     else
       extra_storage=(-cdrom "$iso_path" -boot d)
