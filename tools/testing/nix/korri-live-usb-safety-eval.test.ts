@@ -184,6 +184,31 @@ describe("Korri live USB safety evaluation", () => {
     }
   })
 
+  it("falls back to tmpfs when a mounted persistence partition cannot be prepared", () => {
+    const rig = makeResolverRig({
+      bootSource: "/fake/sdb1",
+      parentDevice: "/fake/sdb",
+      transport: "usb",
+      removable: "1",
+      chownFails: true,
+      partitions: [
+        { device: "/fake/sdb1", label: "KORRI-ISO" },
+        { device: "/fake/sdb2", label: "KORRI-PERSIST" },
+      ],
+    })
+    try {
+      const result = runResolverRig(rig)
+      expect(result.status, result.stderr).toBe(0)
+      const mountLog = readFileSync(rig.mountLog, "utf8")
+      expect(mountLog).toContain("/fake/sdb2")
+      expect(readFileSync(rig.umountLog, "utf8")).toContain(rig.root)
+      expect(mountLog).toContain("tmpfs")
+      expect(existsSync(`${rig.root}/.korri-live-usb-ephemeral`)).toBe(true)
+    } finally {
+      rig.cleanup()
+    }
+  })
+
   it("falls back to tmpfs when a sibling persistence mount fails", () => {
     const rig = makeResolverRig({
       bootSource: "/fake/sdb1",
@@ -232,6 +257,7 @@ type ResolverRigConfig = {
   readonly removable: string
   readonly partitions: readonly ResolverPartition[]
   readonly mountFailures?: readonly string[]
+  readonly chownFails?: boolean
 }
 
 type ResolverRig = {
@@ -239,6 +265,7 @@ type ResolverRig = {
   readonly bin: string
   readonly mountLog: string
   readonly chownLog: string
+  readonly umountLog: string
   readonly cleanup: () => void
 }
 
@@ -248,8 +275,10 @@ function makeResolverRig(config: ResolverRigConfig): ResolverRig {
   const root = resolve(dir, "state")
   const mountLog = resolve(dir, "mount.log")
   const chownLog = resolve(dir, "chown.log")
+  const umountLog = resolve(dir, "umount.log")
   writeFileSync(mountLog, "")
   writeFileSync(chownLog, "")
+  writeFileSync(umountLog, "")
   writeShim(
     bin,
     "findmnt",
@@ -283,16 +312,23 @@ function makeResolverRig(config: ResolverRigConfig): ResolverRig {
     "mount",
     `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> '${mountLog}'\nfor failed in ${mountFailures}; do\n  if [ "$1" = "$failed" ]; then exit 32; fi\ndone\nexit 0\n`,
   )
+  const chownFailureFlag = resolve(dir, "chown-failed-once")
   writeShim(
     bin,
     "chown",
-    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> '${chownLog}'\nexit 0\n`,
+    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> '${chownLog}'\nif ${config.chownFails ? "true" : "false"} && [ ! -f '${chownFailureFlag}' ]; then touch '${chownFailureFlag}'; exit 33; fi\nexit 0\n`,
+  )
+  writeShim(
+    bin,
+    "umount",
+    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> '${umountLog}'\nexit 0\n`,
   )
   return {
     root,
     bin,
     mountLog,
     chownLog,
+    umountLog,
     cleanup: () => rmSync(dir, { recursive: true, force: true }),
   }
 }

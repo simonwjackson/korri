@@ -452,19 +452,29 @@ function resolvePreloadPath(): string | undefined {
 // invisible. The child is still unref'd — the desktop process never
 // waits for moonlight.
 const diagnosticMoonlightRunner: CommandRunner = {
-  run: async (command, args) => {
+  run: async (command, args, options) => {
     try {
       const child = Bun.spawn([command, ...args], {
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",
       })
-      child.unref?.()
       // Fire-and-forget: drain the first 4KB from each stream within
       // 4 seconds, log it, then drop the reader (the process keeps
       // running). We don't await this — the bridge handler must return
       // quickly so the renderer's launch state can settle.
       void collectAndLogMoonlightOutput(child, command, args)
+      const observedExit = await observeMoonlightStartupExit(
+        child,
+        options?.startupObserveMs,
+      )
+      if (observedExit !== undefined && observedExit !== 0) {
+        return {
+          status: "failed",
+          message: `Moonlight exited early with status ${observedExit}`,
+        }
+      }
+      child.unref?.()
       return { status: "started" }
     } catch (error) {
       return {
@@ -473,6 +483,17 @@ const diagnosticMoonlightRunner: CommandRunner = {
       }
     }
   },
+}
+
+async function observeMoonlightStartupExit(
+  child: ReturnType<typeof Bun.spawn>,
+  startupObserveMs: number | undefined,
+): Promise<number | undefined> {
+  if (!startupObserveMs || startupObserveMs <= 0) return undefined
+  return Promise.race([
+    child.exited,
+    new Promise<undefined>(resolve => setTimeout(resolve, startupObserveMs)),
+  ])
 }
 
 async function collectAndLogMoonlightOutput(

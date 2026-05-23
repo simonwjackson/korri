@@ -105,6 +105,12 @@ describe("Korri Nix image output evaluation", () => {
     expect(result.liveUsb.kioskEnvironment.KORRI_DESKTOP_INPUTD_URL).toBe(
       "ws://127.0.0.1:3002",
     )
+    expect(result.liveUsb.kioskEnvironment.KORRI_MOONLIGHT_COMMAND).toMatch(
+      /moonlight-embedded.*\/bin\/moonlight/,
+    )
+    expect(
+      result.liveUsb.kioskEnvironment.KORRI_MOONLIGHT_STARTUP_OBSERVE_MS,
+    ).toBe("750")
     expect(result.liveUsb.kioskPath.join("\n")).toMatch(/moonlight-embedded/)
     expect(result.liveUsb.kioskPath.join("\n")).not.toMatch(/moonlight-qt/)
     expect(result.liveUsb.firewallUdpPorts).toContain(5353)

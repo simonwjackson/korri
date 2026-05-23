@@ -55,12 +55,11 @@ export async function launchMoonlight(
     }
   }
 
-  const fallback = await runner.run("nix", [
-    "run",
-    "nixpkgs#moonlight-qt",
-    "--",
-    ...args,
-  ])
+  const fallback = await runner.run(
+    "nix",
+    ["run", "nixpkgs#moonlight-qt", "--", ...args],
+    { startupObserveMs },
+  )
   if (fallback.status === "started")
     return { status: "started", command: "nix" }
 

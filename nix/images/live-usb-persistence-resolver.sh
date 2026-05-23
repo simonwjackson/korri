@@ -15,9 +15,9 @@ chmod 0755 "$root"
 
 prepare_state_tree() {
   mkdir -p "$root/home/.config" "$root/home/.local/share" "$root/home/.local/state" "$root/home/.cache/moonlight"
-  chown -R "$state_user:$state_group" "$root/home"
-  chmod 0755 "$root"
-  chmod 0700 "$root/home"
+  chown -R "$state_user:$state_group" "$root/home" || return 1
+  chmod 0755 "$root" || return 1
+  chmod 0700 "$root/home" || return 1
 }
 
 mount_tmpfs() {
@@ -55,8 +55,8 @@ fi
 
 parent_transport="$(lsblk -ndo TRAN "$parent_device" 2>/dev/null | head -n 1 | tr -d '[:space:]')"
 parent_removable="$(lsblk -ndo RM "$parent_device" 2>/dev/null | head -n 1 | tr -d '[:space:]')"
-if [ "$parent_transport" != "usb" ] && [ "$parent_removable" != "1" ]; then
-  echo "korri-live-usb: boot media parent $parent_device is not removable USB; using ephemeral tmpfs state" >&2
+if [ "$parent_transport" != "usb" ]; then
+  echo "korri-live-usb: boot media parent $parent_device is not USB (transport=$parent_transport removable=$parent_removable); using ephemeral tmpfs state" >&2
   mount_tmpfs
   exit 0
 fi
@@ -67,11 +67,15 @@ while IFS= read -r candidate; do
   candidate_label="$(blkid -s LABEL -o value "$candidate" 2>/dev/null || true)"
   if [ "$candidate_label" = "$label" ]; then
     if mount "$candidate" "$root"; then
-      prepare_state_tree
-      touch "$root/$marker_persistent"
-      exit 0
+      if prepare_state_tree; then
+        touch "$root/$marker_persistent"
+        exit 0
+      fi
+      echo "korri-live-usb: mounted candidate persistence partition $candidate but could not prepare writable kiosk state; falling back to ephemeral tmpfs state" >&2
+      umount "$root" >/dev/null 2>&1 || true
+    else
+      echo "korri-live-usb: failed to mount candidate persistence partition $candidate; falling back to ephemeral tmpfs state" >&2
     fi
-    echo "korri-live-usb: failed to mount candidate persistence partition $candidate; falling back to ephemeral tmpfs state" >&2
     mount_tmpfs
     exit 0
   fi
