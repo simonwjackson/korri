@@ -93,6 +93,7 @@ in
   };
   checkDrvPaths = {
     liveConfig = (flake.checks.${system}.korri-live-usb-config or null).drvPath or null;
+    vmSmoke = (flake.checks.${system}.korri-live-usb-vm-smoke or null).drvPath or null;
   };
   headless = summarize headless;
   kiosk = summarize kiosk;

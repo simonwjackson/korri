@@ -7,6 +7,7 @@ let
   evalConfig = import (nixpkgs.outPath + "/nixos/lib/eval-config.nix");
 
   liveUsbModule = import ./live-usb.nix { inherit korri nixpkgs; };
+  liveUsbRuntimeModule = import ./live-usb-runtime.nix { inherit korri; };
 
   baseModule =
     { lib, ... }:
@@ -22,54 +23,114 @@ let
       };
     };
 
+  mkProductModules =
+    {
+      productModule,
+      platformModules ? [ ],
+      modules ? [ ],
+      includeBase ? true,
+    }:
+    (if includeBase then [ baseModule ] else [ ])
+    ++ [
+      korri.nixosModules.korri
+      productModule
+    ]
+    ++ platformModules
+    ++ modules;
+
+  mkSystemFromModules = modules: evalConfig { inherit system modules; };
+
   mkSystem =
     {
       productModule,
       platformModules ? [ ],
       modules ? [ ],
     }:
-    evalConfig {
-      inherit system;
-      modules = [
-        baseModule
-        korri.nixosModules.korri
-        productModule
-      ]
-      ++ platformModules
-      ++ modules;
-    };
+    mkSystemFromModules (mkProductModules {
+      inherit productModule platformModules modules;
+      includeBase = true;
+    });
 in
-{
-  inherit mkSystem;
+rec {
+  inherit mkSystem mkSystemFromModules;
+
+  mkHeadlessModules =
+    {
+      platformModules ? [ ],
+      modules ? [ ],
+      includeBase ? true,
+    }:
+    mkProductModules {
+      productModule = ./headless.nix;
+      inherit platformModules modules includeBase;
+    };
+
+  mkKioskModules =
+    {
+      platformModules ? [ ],
+      modules ? [ ],
+      includeBase ? true,
+    }:
+    mkProductModules {
+      productModule = ./kiosk.nix;
+      inherit platformModules modules includeBase;
+    };
+
+  mkLiveUsbKioskRuntimeModules =
+    {
+      platformModules ? [ ],
+      modules ? [ ],
+      includeBase ? true,
+    }:
+    mkKioskModules {
+      inherit platformModules includeBase;
+      modules = [ liveUsbRuntimeModule ] ++ modules;
+    };
+
+  mkLiveUsbKioskModules =
+    {
+      platformModules ? [ ],
+      modules ? [ ],
+      includeBase ? true,
+    }:
+    mkKioskModules {
+      inherit platformModules includeBase;
+      modules = [ liveUsbModule ] ++ modules;
+    };
 
   mkHeadlessSystem =
     {
       platformModules ? [ ],
       modules ? [ ],
     }:
-    mkSystem {
-      productModule = ./headless.nix;
+    mkSystemFromModules (mkHeadlessModules {
       inherit platformModules modules;
-    };
+    });
 
   mkKioskSystem =
     {
       platformModules ? [ ],
       modules ? [ ],
     }:
-    mkSystem {
-      productModule = ./kiosk.nix;
+    mkSystemFromModules (mkKioskModules {
       inherit platformModules modules;
-    };
+    });
+
+  mkLiveUsbKioskRuntimeSystem =
+    {
+      platformModules ? [ ],
+      modules ? [ ],
+    }:
+    mkSystemFromModules (mkLiveUsbKioskRuntimeModules {
+      inherit platformModules modules;
+    });
 
   mkLiveUsbKioskSystem =
     {
       platformModules ? [ ],
       modules ? [ ],
     }:
-    mkSystem {
-      productModule = ./kiosk.nix;
-      inherit platformModules;
-      modules = [ liveUsbModule ] ++ modules;
-    };
+    mkSystemFromModules (mkLiveUsbKioskModules {
+      inherit platformModules modules;
+    });
 }

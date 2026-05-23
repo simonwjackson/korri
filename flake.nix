@@ -456,6 +456,11 @@
             inherit pkgs;
             liveUsbSystem = korriKioskLiveUsbSystem;
           };
+          korri-live-usb-vm-smoke = import ./nix/tests/korri-live-usb-vm-smoke.nix {
+            inherit pkgs;
+            imageLib = korriImages;
+            x86Platform = ./nix/images/platforms/x86.nix;
+          };
         };
 
         apps =
