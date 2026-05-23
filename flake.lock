@@ -69,16 +69,16 @@
         "nixpkgs-sdl2-classic": "nixpkgs-sdl2-classic"
       },
       "locked": {
-        "lastModified": 1779554269,
-        "narHash": "sha256-tD7vRwN+yOD9k0g5qNYThGXk6vmJfmHcPLmd66pE7Kk=",
+        "lastModified": 1779558733,
+        "narHash": "sha256-DGwvQ/rqOcgj7vbD0iaDpKN1cn0yRzhL+h6JqqSyd3A=",
         "owner": "simonwjackson",
         "repo": "nix-on-rocks",
-        "rev": "ef130924f7575ab48b926e9f4b3ce57dd1004397",
+        "rev": "cae6b35f0c166728884d777715d47f46f82be0d1",
         "type": "github"
       },
       "original": {
         "owner": "simonwjackson",
-        "ref": "feat/korri-dependency-inversion",
+        "ref": "main",
         "repo": "nix-on-rocks",
         "type": "github"
       }

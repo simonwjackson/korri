@@ -7,7 +7,7 @@
     flake-utils.url = "github:numtide/flake-utils";
     bun2nix.url = "github:nix-community/bun2nix?ref=2.1.0";
     bun2nix.inputs.nixpkgs.follows = "nixpkgs";
-    nix-on-rocks.url = "github:simonwjackson/nix-on-rocks/feat/korri-dependency-inversion";
+    nix-on-rocks.url = "github:simonwjackson/nix-on-rocks/main";
   };
 
   # Pull the prebuilt bun2nix (Rust CLI + Zig cache-entry-creator) from the
