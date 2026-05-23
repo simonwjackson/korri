@@ -57,6 +57,11 @@ in
     eval.config.systemd.services.korri-server.serviceConfig.RuntimeDirectory or null;
   systemRuntimeDirectoryMode =
     eval.config.systemd.services.korri-server.serviceConfig.RuntimeDirectoryMode or null;
+  systemStateDirectory = eval.config.systemd.services.korri-server.serviceConfig.StateDirectory or null;
+  systemStateDirectoryMode = eval.config.systemd.services.korri-server.serviceConfig.StateDirectoryMode or null;
+  systemCacheDirectory = eval.config.systemd.services.korri-server.serviceConfig.CacheDirectory or null;
+  systemCacheDirectoryMode = eval.config.systemd.services.korri-server.serviceConfig.CacheDirectoryMode or null;
+  systemExecStartPre = eval.config.systemd.services.korri-server.serviceConfig.ExecStartPre or null;
   systemNoNewPrivileges =
     eval.config.systemd.services.korri-server.serviceConfig.NoNewPrivileges or null;
   systemProtectSystem = eval.config.systemd.services.korri-server.serviceConfig.ProtectSystem or null;

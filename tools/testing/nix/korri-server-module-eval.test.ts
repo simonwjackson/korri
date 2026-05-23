@@ -20,6 +20,11 @@ type EvalResult = {
   systemServiceGroup: string | null
   systemRuntimeDirectory: string | null
   systemRuntimeDirectoryMode: string | null
+  systemStateDirectory: string | null
+  systemStateDirectoryMode: string | null
+  systemCacheDirectory: string | null
+  systemCacheDirectoryMode: string | null
+  systemExecStartPre: string[] | string | null
   systemNoNewPrivileges: boolean | null
   systemProtectSystem: string | boolean | null
   systemRestart: string | null
@@ -181,6 +186,22 @@ describe("services.korri.server NixOS module evaluation", () => {
         mode: "0700",
         age: "-",
       } as never)
+    })
+
+    it("provides writable state and cache directories under system hardening", () => {
+      const env = result.systemServiceEnv as Record<string, string>
+      expect(result.systemStateDirectory).toBe("korri-server")
+      expect(result.systemStateDirectoryMode).toBe("0700")
+      expect(result.systemCacheDirectory).toBe("korri-server")
+      expect(result.systemCacheDirectoryMode).toBe("0700")
+      expect(env.HOME).toBe("/var/lib/korri-server")
+      expect(env.XDG_CACHE_HOME).toBe("/var/cache/korri-server")
+      expect(env.BUN_RUNTIME_TRANSPILER_CACHE_PATH).toBe(
+        "/var/cache/korri-server/bun-transpiler-cache",
+      )
+      expect(JSON.stringify(result.systemExecStartPre)).toContain(
+        "/var/cache/korri-server/bun-transpiler-cache",
+      )
     })
 
     it("applies conservative systemd hardening", () => {

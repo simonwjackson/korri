@@ -25,6 +25,11 @@ let
   isSystemMode = cfg.serviceMode == "system";
   systemRuntimeDirName = "korri-game-stream";
   systemRuntimeDir = "/run/${systemRuntimeDirName}";
+  serverStateDirName = "korri-server";
+  serverStateDir = "/var/lib/${serverStateDirName}";
+  serverCacheDirName = "korri-server";
+  serverCacheDir = "/var/cache/${serverCacheDirName}";
+  bunTranspilerCacheDir = "${serverCacheDir}/bun-transpiler-cache";
   userRuntimeDir = "%t/korri-game-stream";
 
   runtimeDir = cfg.streamHost.runtimeDir;
@@ -53,8 +58,7 @@ let
   isAbsolutePath = path: lib.hasPrefix "/" path;
   isUserSpecifierPath = path: lib.hasPrefix "%t/" path || lib.hasPrefix "%h/" path;
 
-  isLoopbackHost =
-    cfg.host == "127.0.0.1" || cfg.host == "::1" || cfg.host == "localhost";
+  isLoopbackHost = cfg.host == "127.0.0.1" || cfg.host == "::1" || cfg.host == "localhost";
 
   serverEnv = {
     HOST = cfg.host;
@@ -73,6 +77,11 @@ let
     KORRI_GAME_STREAM_RUNTIME_DIR = runtimeDir;
     KORRI_GAME_STREAM_INTENT_PATH = intentPath;
     KORRI_GAME_STREAM_STATUS_PATH = statusPath;
+  }
+  // optionalAttrs isSystemMode {
+    HOME = serverStateDir;
+    XDG_CACHE_HOME = serverCacheDir;
+    BUN_RUNTIME_TRANSPILER_CACHE_PATH = bunTranspilerCacheDir;
   };
 in
 {
@@ -313,7 +322,7 @@ in
           library directory.
         '';
       }
-{
+      {
         assertion = !isSystemMode || !(hasPlaceholder runtimeDir);
         message = ''
           services.korri.server.streamHost.runtimeDir = "${runtimeDir}" uses a systemd
@@ -384,29 +393,24 @@ in
     ];
 
     warnings =
-      lib.optional
-        (
-          isSystemMode
-          && cfg.openFirewall
-          && !isLoopbackHost
-          && cfg.firewallInterfaces == [ ]
-        )
+      lib.optional (isSystemMode && cfg.openFirewall && !isLoopbackHost && cfg.firewallInterfaces == [ ])
         ''
           services.korri.server is exposing host "${cfg.host}" on the global firewall in
           system mode. Set services.korri.server.firewallInterfaces to a trusted
           interface (e.g. [ "tailscale0" ]) to scope LAN exposure.
         ''
-      ++ lib.optional
-        (
-          (config.services.korri.headlessSource.enable or false)
-          && (config.services.korri.headlessSource.port or null) == cfg.port
-        )
-        ''
-          services.korri.server and services.korri.headlessSource are both enabled on
-          port ${toString cfg.port}. The legacy headlessSource module is superseded by
-          services.korri.server -- disable one of them to avoid binding the same port
-          and advertising duplicate mDNS records.
-        '';
+      ++
+        lib.optional
+          (
+            (config.services.korri.headlessSource.enable or false)
+            && (config.services.korri.headlessSource.port or null) == cfg.port
+          )
+          ''
+            services.korri.server and services.korri.headlessSource are both enabled on
+            port ${toString cfg.port}. The legacy headlessSource module is superseded by
+            services.korri.server -- disable one of them to avoid binding the same port
+            and advertising duplicate mDNS records.
+          '';
 
     environment.systemPackages = [ cfg.package ];
 
@@ -429,14 +433,16 @@ in
       statusPath = statusPath;
     };
 
-    systemd.tmpfiles.settings = mkIf (isSystemMode && cfg.streamHost.enable && isDefaultSystemRuntimeDir) {
-      "10-korri-server".${systemRuntimeDir}.d = {
-        user = cfg.user;
-        group = if cfg.group != null then cfg.group else cfg.user;
-        mode = "0700";
-        age = "-";
-      };
-    };
+    systemd.tmpfiles.settings =
+      mkIf (isSystemMode && cfg.streamHost.enable && isDefaultSystemRuntimeDir)
+        {
+          "10-korri-server".${systemRuntimeDir}.d = {
+            user = cfg.user;
+            group = if cfg.group != null then cfg.group else cfg.user;
+            mode = "0700";
+            age = "-";
+          };
+        };
 
     systemd.user.services = mkIf (!isSystemMode) {
       korri-server = {
@@ -459,11 +465,19 @@ in
         after = [ "network.target" ];
         environment = serverEnv;
         serviceConfig = {
+          ExecStartPre = [
+            "${pkgs.coreutils}/bin/install -d -m 700 ${cfg.library.root}"
+            "${pkgs.coreutils}/bin/install -d -m 700 ${bunTranspilerCacheDir}"
+          ];
           ExecStart = "${cfg.package}/bin/korri-server";
           Restart = "on-failure";
           RestartSec = 2;
           User = cfg.user;
           Group = if cfg.group != null then cfg.group else cfg.user;
+          StateDirectory = serverStateDirName;
+          StateDirectoryMode = "0700";
+          CacheDirectory = serverCacheDirName;
+          CacheDirectoryMode = "0700";
           NoNewPrivileges = true;
           PrivateTmp = true;
           ProtectSystem = "strict";
@@ -482,7 +496,8 @@ in
             "AF_INET6"
             "AF_NETLINK"
           ];
-        } // optionalAttrs isDefaultSystemRuntimeDir {
+        }
+        // optionalAttrs isDefaultSystemRuntimeDir {
           RuntimeDirectory = systemRuntimeDirName;
           RuntimeDirectoryMode = "0700";
           RuntimeDirectoryPreserve = "yes";
