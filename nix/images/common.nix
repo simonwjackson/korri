@@ -6,6 +6,8 @@
 let
   evalConfig = import (nixpkgs.outPath + "/nixos/lib/eval-config.nix");
 
+  liveUsbModule = import ./live-usb.nix { inherit nixpkgs; };
+
   baseModule =
     { lib, ... }:
     {
@@ -58,5 +60,16 @@ in
     mkSystem {
       productModule = ./kiosk.nix;
       inherit platformModules modules;
+    };
+
+  mkLiveUsbKioskSystem =
+    {
+      platformModules ? [ ],
+      modules ? [ ],
+    }:
+    mkSystem {
+      productModule = ./kiosk.nix;
+      inherit platformModules;
+      modules = [ liveUsbModule ] ++ modules;
     };
 }

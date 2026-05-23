@@ -9,6 +9,7 @@ Korri exposes reusable product-system composition helpers at `lib.<system>.korri
 
 - `mkHeadlessSystem { platformModules ? [ ]; modules ? [ ]; }`
 - `mkKioskSystem { platformModules ? [ ]; modules ? [ ]; }`
+- `mkLiveUsbKioskSystem { platformModules ? [ ]; modules ? [ ]; }`
 
 The helpers compose Korri product modules with explicit platform adapter modules. Generic helpers do not import Snapdragon, RockNix, or personal deployment facts. RockNix facts live in the RockNix platform adapter boundary, where Korri imports nix-on-rocks as the SM8550 substrate.
 
@@ -17,7 +18,10 @@ Baseline x86 system outputs are exposed as package attrs:
 ```bash
 nix build .#korri-headless-system
 nix build .#korri-kiosk-system
+nix build .#korri-kiosk-live-iso
 ```
+
+`korri-kiosk-live-iso` is a bootable live USB/ISO appliance artifact. It is intended to be written to removable media and boot directly into the Korri kiosk surface; it is not an installer and does not represent an internal-disk deployment target.
 
 RockNix-backed kiosk appliances are exposed as explicit device targets:
 

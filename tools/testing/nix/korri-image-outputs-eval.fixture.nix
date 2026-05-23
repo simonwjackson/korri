@@ -37,6 +37,10 @@ let
     platformModules = [ x86Platform ];
   };
 
+  liveUsb = imageLib.mkLiveUsbKioskSystem {
+    platformModules = [ x86Platform ];
+  };
+
   kioskWithExternalPlatform = imageLib.mkKioskSystem {
     platformModules = [
       x86Platform
@@ -79,9 +83,15 @@ in
   packageDrvPaths = {
     headless = (flake.packages.${system}.korri-headless-system or null).drvPath or null;
     kiosk = (flake.packages.${system}.korri-kiosk-system or null).drvPath or null;
+    liveIso = (flake.packages.${system}.korri-kiosk-live-iso or null).drvPath or null;
   };
   headless = summarize headless;
   kiosk = summarize kiosk;
+  liveUsb = (summarize liveUsb) // {
+    imageFileName = liveUsb.config.image.fileName or null;
+    makeUsbBootable = liveUsb.config.isoImage.makeUsbBootable or false;
+    makeEfiBootable = liveUsb.config.isoImage.makeEfiBootable or false;
+  };
   kioskWithExternalPlatform = summarize kioskWithExternalPlatform;
   kioskWithPlatformManagedUser = summarize kioskWithPlatformManagedUser;
   kioskWithoutPlatform = summarize kioskWithoutPlatform;

@@ -35,9 +35,15 @@ type EvalResult = {
   packageDrvPaths: {
     headless: string | null
     kiosk: string | null
+    liveIso: string | null
   }
   headless: ImageSummary
   kiosk: ImageSummary
+  liveUsb: ImageSummary & {
+    imageFileName: string | null
+    makeUsbBootable: boolean
+    makeEfiBootable: boolean
+  }
   kioskWithExternalPlatform: ImageSummary
   kioskWithPlatformManagedUser: ImageSummary
   kioskWithoutPlatform: ImageSummary
@@ -81,6 +87,19 @@ describe("Korri Nix image output evaluation", () => {
     )
     expect(result.packageDrvPaths.headless).toContain(".drv")
     expect(result.packageDrvPaths.kiosk).toContain(".drv")
+  })
+
+  it("exposes a bootable x86 live USB ISO kiosk image", () => {
+    expect(result.packageAttrs).toContain("korri-kiosk-live-iso")
+    expect(result.packageDrvPaths.liveIso).toContain(".drv")
+    expect(result.liveUsb.assertionsPassed).toBe(true)
+    expect(result.liveUsb.kioskEnabled).toBe(true)
+    expect(result.liveUsb.clientEnabled).toBe(true)
+    expect(result.liveUsb.inputdEnabled).toBe(true)
+    expect(result.liveUsb.inputProviderEnabled).toBe(true)
+    expect(result.liveUsb.makeUsbBootable).toBe(true)
+    expect(result.liveUsb.makeEfiBootable).toBe(true)
+    expect(result.liveUsb.imageFileName).toContain("korri-kiosk")
   })
 
   it("headless composition enables the server without GUI or appliance services", () => {
