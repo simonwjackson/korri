@@ -38,10 +38,14 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
-      - name: Check flake and build desktop package
+      - name: Check flake and evaluate image outputs
         run: |
           nix flake check --no-build
-          nix build .#korri-desktop --no-link
+          nix develop .#ci -c bun test \
+            tools/testing/nix/korri-image-outputs-eval.test.ts \
+            tools/testing/nix/korri-rocknix-image-eval.test.ts
+      - name: Build desktop package
+        run: nix build .#korri-desktop --no-link
 
   build-aarch64:
     runs-on: ubuntu-latest
@@ -57,6 +61,8 @@ jobs:
             extra-platforms = aarch64-linux
       - name: Build aarch64 desktop package
         run: nix build .#packages.aarch64-linux.korri-desktop --no-link
+      - name: Evaluate Sobo RockNix kiosk system build gate
+        run: nix build .#packages.aarch64-linux.korri-rocknix-kiosk-system-odin2portal --dry-run --no-link
 
   smoke-remote:
     if: github.ref == 'refs/heads/trunk'

@@ -73,4 +73,4 @@ For constrained guests that must run as root, platform modules may set `services
 }
 ```
 
-Generic Korri modules do not encode device-specific hardware strings.
+Generic Korri modules do not encode device-specific hardware strings. The RockNix SM8550 appliance targets keep those facts in `nix/images/platforms/rocknix-sm8550.nix`, which consumes nix-on-rocks substrate modules and device profiles while Korri owns product service composition.

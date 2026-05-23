@@ -10,7 +10,7 @@ let
     { lib, ... }:
     {
       nixpkgs.hostPlatform = system;
-      system.stateVersion = "24.11";
+      system.stateVersion = lib.mkDefault "24.11";
       networking.hostName = lib.mkDefault "korri-image";
       boot.loader.systemd-boot.enable = lib.mkDefault false;
       boot.loader.grub.devices = lib.mkDefault [ "nodev" ];

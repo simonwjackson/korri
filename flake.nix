@@ -7,6 +7,7 @@
     flake-utils.url = "github:numtide/flake-utils";
     bun2nix.url = "github:nix-community/bun2nix?ref=2.1.0";
     bun2nix.inputs.nixpkgs.follows = "nixpkgs";
+    nix-on-rocks.url = "github:simonwjackson/nix-on-rocks/feat/korri-dependency-inversion";
   };
 
   # Pull the prebuilt bun2nix (Rust CLI + Zig cache-entry-creator) from the
@@ -28,6 +29,7 @@
       nixpkgs-2405,
       flake-utils,
       bun2nix,
+      nix-on-rocks,
       ...
     }:
     flake-utils.lib.eachDefaultSystem (
@@ -397,6 +399,19 @@
         // pkgs.lib.optionalAttrs isX86Linux {
           korri-headless-system = korriHeadlessSystem.config.system.build.toplevel;
           korri-kiosk-system = korriKioskSystem.config.system.build.toplevel;
+        }
+        // pkgs.lib.optionalAttrs (system == "aarch64-linux") {
+          korri-rocknix-kiosk-system-thor =
+            self.nixosConfigurations.korri-rocknix-kiosk-thor.config.system.build.toplevel;
+          korri-rocknix-kiosk-system-odin2portal =
+            self.nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel;
+          korri-rocknix-kiosk-system-by-compatible =
+            self.nixosConfigurations.korri-rocknix-kiosk-by-compatible.config.system.build.toplevel;
+        }
+        // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+          korri-rocknix-rootfs-thor = nix-on-rocks.lib.mkGuestRootfs system self.nixosConfigurations.korri-rocknix-kiosk-thor;
+          korri-rocknix-rootfs-odin2portal = nix-on-rocks.lib.mkGuestRootfs system self.nixosConfigurations.korri-rocknix-kiosk-odin2portal;
+          korri-rocknix-rootfs-by-compatible = nix-on-rocks.lib.mkGuestRootfs system self.nixosConfigurations.korri-rocknix-kiosk-by-compatible;
         };
 
         lib = {
@@ -483,29 +498,66 @@
         };
       }
     )
-    // {
-      nixosModules = rec {
-        korri-client = import ./nix/modules/korri-client.nix { korri = self; };
-        korri-cli = import ./nix/modules/korri-cli.nix { korri = self; };
-        korri-inputd = import ./nix/modules/korri-inputd.nix { korri = self; };
-        korri-game-stream = import ./nix/modules/korri-game-stream.nix { korri = self; };
-        korri-headless-source = import ./nix/modules/korri-headless-source.nix { korri = self; };
-        korri-server = import ./nix/modules/korri-server.nix { korri = self; };
-        korri-kiosk = {
-          imports = [
-            korri-client
-            korri-inputd
-            (import ./nix/modules/korri-kiosk.nix { korri = self; })
+    // (
+      let
+        rocknixTargetSystem = "aarch64-linux";
+        rocknixImages = import ./nix/images/common.nix {
+          korri = self;
+          nixpkgs = nix-on-rocks.inputs.nixpkgs;
+          system = rocknixTargetSystem;
+        };
+        rocknixPlatformFor =
+          deviceProfile:
+          import ./nix/images/platforms/rocknix-sm8550.nix {
+            korri = self;
+            inherit nix-on-rocks deviceProfile;
+          };
+        rocknixThorSystem = rocknixImages.mkKioskSystem {
+          platformModules = [
+            (rocknixPlatformFor nix-on-rocks.nixosModules.thor)
           ];
         };
-        korri = {
-          imports = [
-            korri-headless-source
-            korri-server
-            korri-kiosk
+        rocknixOdin2PortalSystem = rocknixImages.mkKioskSystem {
+          platformModules = [
+            (rocknixPlatformFor nix-on-rocks.nixosModules.odin2portal)
           ];
         };
-        default = korri;
-      };
-    };
+        rocknixByCompatibleSystem = rocknixImages.mkKioskSystem {
+          platformModules = [
+            (rocknixPlatformFor nix-on-rocks.lib.selectDeviceProfileFromCompatible)
+          ];
+        };
+      in
+      {
+        nixosConfigurations = {
+          korri-rocknix-kiosk-thor = rocknixThorSystem;
+          korri-rocknix-kiosk-odin2portal = rocknixOdin2PortalSystem;
+          korri-rocknix-kiosk-by-compatible = rocknixByCompatibleSystem;
+        };
+
+        nixosModules = rec {
+          korri-client = import ./nix/modules/korri-client.nix { korri = self; };
+          korri-cli = import ./nix/modules/korri-cli.nix { korri = self; };
+          korri-inputd = import ./nix/modules/korri-inputd.nix { korri = self; };
+          korri-game-stream = import ./nix/modules/korri-game-stream.nix { korri = self; };
+          korri-headless-source = import ./nix/modules/korri-headless-source.nix { korri = self; };
+          korri-server = import ./nix/modules/korri-server.nix { korri = self; };
+          korri-kiosk = {
+            imports = [
+              korri-client
+              korri-inputd
+              (import ./nix/modules/korri-kiosk.nix { korri = self; })
+            ];
+          };
+          korri = {
+            imports = [
+              korri-headless-source
+              korri-server
+              korri-kiosk
+            ];
+          };
+          default = korri;
+        };
+      }
+    );
 }
