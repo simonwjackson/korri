@@ -1,5 +1,9 @@
 name: Desktop Stage 2
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   pull_request:
     paths:
@@ -72,8 +76,8 @@ jobs:
             extra-platforms = aarch64-linux
             extra-substituters = https://nix-community.cachix.org
             extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
-      - name: Build aarch64 desktop package
-        run: nix build .#packages.aarch64-linux.korri-desktop --no-link
+      - name: Evaluate aarch64 desktop package build plan
+        run: nix build .#packages.aarch64-linux.korri-desktop --dry-run --no-link
       - name: Evaluate Sobo RockNix kiosk system build gate
         run: nix build .#packages.aarch64-linux.korri-rocknix-kiosk-system-odin2portal --dry-run --no-link
 
