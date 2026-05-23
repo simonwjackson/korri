@@ -54,6 +54,7 @@ jobs:
             .#nixosConfigurations.korri-rocknix-kiosk-by-compatible.config.system.build.toplevel.drvPath \
             --raw
           nix build .#checks.x86_64-linux.korri-live-usb-config --no-link
+          nix build .#checks.x86_64-linux.korri-live-usb-vm-smoke --no-link
       - name: Evaluate image outputs
         run: |
           nix develop .#ci -c sh -c '
