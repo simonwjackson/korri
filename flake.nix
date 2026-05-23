@@ -339,51 +339,43 @@
         # into libNativeWrapper.so's RPATH at build time (no runtime LD_LIBRARY_PATH).
         # See docs/solutions/integration-issues/odin-electrobun-webkit-runtime-white-screen-2026-05-04.md.
         #
-        # Every pkgs2405 entry from deviceDesktopRuntimeLibraries must appear here
-        # as a callPackage override. Missing entries would silently auto-fill from
+        # Every pkgs2405 entry from deviceDesktopRuntimeLibraries must appear in
+        # this shared override set. Missing entries would silently auto-fill from
         # current nixpkgs and break the cohesive closure invariant.
+        deviceDesktopWrapOverrides = {
+          korri-desktop-unwrapped = korriDesktopUnwrapped;
+          webkitgtk_4_1 = pkgs2405.webkitgtk_4_1;
+          gtk3 = pkgs2405.gtk3;
+          libsoup_3 = pkgs2405.libsoup_3;
+          glib = pkgs2405.glib;
+          gdk-pixbuf = pkgs2405.gdk-pixbuf;
+          cairo = pkgs2405.cairo;
+          pango = pkgs2405.pango;
+          libayatana-appindicator = pkgs2405.libayatana-appindicator;
+          librsvg = pkgs2405.librsvg;
+          at-spi2-core = pkgs2405.at-spi2-core;
+          glib-networking = pkgs2405.glib-networking;
+          gsettings-desktop-schemas = pkgs2405.gsettings-desktop-schemas;
+          stdenvCcLib = pkgs.stdenv.cc.cc.lib;
+        };
+
         korriDesktopDevice =
           if isSupportedDesktopSystem then
-            pkgs.callPackage ./nix/korri-desktop/wrap.nix {
-              korri-desktop-unwrapped = korriDesktopUnwrapped;
-              webkitgtk_4_1 = pkgs2405.webkitgtk_4_1;
-              gtk3 = pkgs2405.gtk3;
-              libsoup_3 = pkgs2405.libsoup_3;
-              glib = pkgs2405.glib;
-              gdk-pixbuf = pkgs2405.gdk-pixbuf;
-              cairo = pkgs2405.cairo;
-              pango = pkgs2405.pango;
-              libayatana-appindicator = pkgs2405.libayatana-appindicator;
-              librsvg = pkgs2405.librsvg;
-              at-spi2-core = pkgs2405.at-spi2-core;
-              glib-networking = pkgs2405.glib-networking;
-              gsettings-desktop-schemas = pkgs2405.gsettings-desktop-schemas;
-              stdenvCcLib = pkgs.stdenv.cc.cc.lib;
-              profile = "device";
-            }
+            pkgs.callPackage ./nix/korri-desktop/wrap.nix (
+              deviceDesktopWrapOverrides // { profile = "device"; }
+            )
           else
             null;
 
         korriDesktopX86Kiosk =
           if isX86Linux then
-            pkgs.callPackage ./nix/korri-desktop/wrap.nix {
-              korri-desktop-unwrapped = korriDesktopUnwrapped;
-              webkitgtk_4_1 = pkgs2405.webkitgtk_4_1;
-              gtk3 = pkgs2405.gtk3;
-              libsoup_3 = pkgs2405.libsoup_3;
-              glib = pkgs2405.glib;
-              gdk-pixbuf = pkgs2405.gdk-pixbuf;
-              cairo = pkgs2405.cairo;
-              pango = pkgs2405.pango;
-              libayatana-appindicator = pkgs2405.libayatana-appindicator;
-              librsvg = pkgs2405.librsvg;
-              at-spi2-core = pkgs2405.at-spi2-core;
-              glib-networking = pkgs2405.glib-networking;
-              gsettings-desktop-schemas = pkgs2405.gsettings-desktop-schemas;
-              stdenvCcLib = pkgs.stdenv.cc.cc.lib;
-              moonlightPackage = pkgs.moonlight-embedded;
-              profile = "x86-kiosk";
-            }
+            pkgs.callPackage ./nix/korri-desktop/wrap.nix (
+              deviceDesktopWrapOverrides
+              // {
+                moonlightPackage = pkgs.moonlight-embedded;
+                profile = "x86-kiosk";
+              }
+            )
           else
             null;
 

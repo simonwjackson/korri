@@ -71,9 +71,9 @@ in
       makeEfiBootable = lib.mkDefault true;
     };
 
-    services.korri.client.package = lib.mkIf (cfg.enable && packagesForSystem ? korri-desktop-x86-kiosk) (
-      lib.mkDefault packagesForSystem.korri-desktop-x86-kiosk
-    );
+    services.korri.client.package = lib.mkIf (
+      cfg.enable && packagesForSystem ? korri-desktop-x86-kiosk
+    ) (lib.mkDefault packagesForSystem.korri-desktop-x86-kiosk);
 
     services.korri.kiosk = lib.mkIf cfg.enable {
       home = lib.mkDefault "${cfg.root}/home";
