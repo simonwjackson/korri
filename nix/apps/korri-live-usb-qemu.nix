@@ -12,9 +12,7 @@ pkgs.writeShellApplication {
   name = appName;
   runtimeInputs = with pkgs; [
     coreutils
-    gawk
     gnugrep
-    gptfdisk
     qemu
     util-linux
   ];
@@ -75,19 +73,10 @@ pkgs.writeShellApplication {
       usb_img="$evidence_dir/korri-live-usb-with-persist.img"
       cp "$iso_path" "$usb_img"
       chmod u+w "$usb_img"
+      original_bytes="$(stat -c %s "$usb_img")"
+      start_sector=$(((original_bytes + 511) / 512))
       truncate -s +"''${KORRI_QEMU_PERSIST_SIZE:-2G}" "$usb_img"
-      sgdisk -e "$usb_img" >/dev/null
-      sgdisk -n 0:0:0 -t 0:8300 -c 0:KORRI-PERSIST "$usb_img" >/dev/null
-      persist_part="$(${pkgs.gawk}/bin/awk '$0 ~ /KORRI-PERSIST/ { print $1 }' <(sgdisk -p "$usb_img") | tail -n 1)"
-      if [ -z "$persist_part" ]; then
-        echo "Failed to create KORRI-PERSIST partition in $usb_img" >&2
-        exit 1
-      fi
-      start_sector="$(sgdisk -i "$persist_part" "$usb_img" | ${pkgs.gawk}/bin/awk -F: '/First sector/ { gsub(/ /, "", $2); print $2 }')"
-      if [ -z "$start_sector" ]; then
-        echo "Failed to locate KORRI-PERSIST partition offset in $usb_img" >&2
-        exit 1
-      fi
+      printf 'start=%s, type=83\n' "$start_sector" | sfdisk --append "$usb_img" >/dev/null
       ${pkgs.e2fsprogs}/bin/mkfs.ext4 -F -L KORRI-PERSIST -E offset=$((start_sector * 512)) "$usb_img" >/dev/null
       extra_storage=(
         -drive "id=korriusb,if=none,format=raw,file=$usb_img"
