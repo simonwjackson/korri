@@ -72,6 +72,10 @@ desktop-build: build-web desktop-preload-build desktop-runtime-check
 test-unit:
   bun test
 
+# Dry-build and document-smoke the x86 live USB kiosk artifact.
+live-usb-smoke:
+  bun test tools/testing/nix/korri-live-usb-smoke.test.ts
+
 # Alias for test-unit.
 test: test-unit
 

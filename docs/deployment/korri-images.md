@@ -29,6 +29,26 @@ Discovery is unchanged from the standard Electrobun/Korri app path: the live ima
 
 Remote launch keeps the standard prepare-before-stream sequence. The desktop launch bridge calls the connected server's control URL to prepare the selected known game, then launches Moonlight against the reachable host from that same control URL. On the live kiosk, `KORRI_MOONLIGHT_COMMAND` points at the packaged `moonlight-embedded` binary, so the appliance path does not depend on Moonlight Qt or a runtime `nix run` fallback.
 
+### x86 live USB operator smoke
+
+Build or dry-build the artifact from an x86_64 Linux machine:
+
+```bash
+nix build .#packages.x86_64-linux.korri-kiosk-live-iso --dry-run --no-link
+nix build .#packages.x86_64-linux.korri-kiosk-live-iso
+```
+
+Write the resulting ISO to removable USB media with the operator's preferred imaging tool, then create a second partition on the same USB device labeled `KORRI-PERSIST` for persistent client state. Do not create or select a persistence partition on the NUC internal disk.
+
+Physical v1 acceptance targets an 8th-gen Intel NUC with Ethernet, keyboard fallback, and an XInput-compatible wired USB controller. Before boot, record the internal disk identity or a sentinel hash. After booting from USB, verify:
+
+- the TV reaches the Korri kiosk surface without an installer workflow;
+- the internal disk sentinel is unchanged;
+- `/persist/korri-live-usb` is either the same-stick `KORRI-PERSIST` partition or an ephemeral tmpfs marked `.korri-live-usb-ephemeral`;
+- standard discovery sees compatible Korri servers on the wired LAN without host-name special cases;
+- settings and moonlight-embedded pairing/cache state survive a reboot when same-stick persistence is present;
+- selecting a remote game prepares the known game on the connected server and attempts a local `moonlight-embedded` stream.
+
 RockNix-backed kiosk appliances are exposed as explicit device targets:
 
 ```bash
