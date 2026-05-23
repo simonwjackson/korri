@@ -47,12 +47,21 @@ export const decodeLaunchSpec = Schema.decodeUnknownSync(LaunchSpec)
  * (including ENOENT for the binary itself). `stderrTail` is the last few KB
  * of the child's stderr, present on failure when the launcher captured any.
  */
+export type LaunchFailureKind =
+  | "command-failed"
+  | "host-unavailable"
+  | "host-control-disabled"
+  | "no-such-game"
+  | "prepare-failed"
+  | "moonlight-failed"
+
 export type LaunchResult =
   | { readonly status: "launched" }
   | {
       readonly status: "failed"
       readonly exitCode: number
       readonly stderrTail?: string
+      readonly failureKind?: LaunchFailureKind
     }
 
 /**

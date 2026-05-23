@@ -193,7 +193,9 @@ function moonlightHostForConnection(
   connection: ConnectionServerRecord,
 ): string {
   try {
-    return new URL(connection.controlUrl).hostname || connection.hostId
+    const hostname =
+      new URL(connection.controlUrl).hostname || connection.hostId
+    return hostname.replace(/^\[(.*)\]$/, "$1")
   } catch {
     return connection.hostId
   }

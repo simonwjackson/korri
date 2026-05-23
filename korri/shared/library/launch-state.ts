@@ -1,5 +1,5 @@
 import type { GameRecord } from "@shared/fixtures/games/game"
-import type { LaunchResult } from "@shared/library/launcher"
+import type { LaunchFailureKind, LaunchResult } from "@shared/library/launcher"
 import { Cause, Exit, Option } from "effect"
 
 export type LaunchState =
@@ -11,6 +11,7 @@ export type LaunchState =
       readonly gameId: string
       readonly exitCode: number
       readonly stderrTail?: string
+      readonly failureKind?: LaunchFailureKind
     }
   | {
       readonly _tag: "Defect"
@@ -38,11 +39,17 @@ export const LaunchState = {
             gameId,
             exitCode: exit.value.exitCode,
             stderrTail: exit.value.stderrTail,
+            ...(exit.value.failureKind
+              ? { failureKind: exit.value.failureKind }
+              : {}),
           }
         : {
             _tag: "Failed",
             gameId,
             exitCode: exit.value.exitCode,
+            ...(exit.value.failureKind
+              ? { failureKind: exit.value.failureKind }
+              : {}),
           }
     }
 

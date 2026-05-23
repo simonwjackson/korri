@@ -14,6 +14,7 @@ describe("ShiftLaunchFailureBanner", () => {
       <ShiftLaunchFailureBanner
         gameTitle="Hades"
         exitCode={125}
+        failureKind="moonlight-failed"
         onRetry={() => {}}
       />,
     )
@@ -25,12 +26,54 @@ describe("ShiftLaunchFailureBanner", () => {
       <ShiftLaunchFailureBanner
         gameTitle="Hades"
         exitCode={126}
+        failureKind="host-control-disabled"
         onRetry={() => {}}
       />,
     )
     const text = screen.getByRole("alert").textContent ?? ""
     expect(text).toContain("server")
     expect(text).not.toContain("Moonlight")
+  })
+
+  it("describes unavailable hosts distinctly", () => {
+    render(
+      <ShiftLaunchFailureBanner
+        gameTitle="Hades"
+        exitCode={124}
+        failureKind="host-unavailable"
+        onRetry={() => {}}
+      />,
+    )
+    expect(screen.getByRole("alert").textContent).toContain(
+      "No connected Korri server",
+    )
+  })
+
+  it("describes missing games distinctly", () => {
+    render(
+      <ShiftLaunchFailureBanner
+        gameTitle="Hades"
+        exitCode={127}
+        failureKind="no-such-game"
+        onRetry={() => {}}
+      />,
+    )
+    expect(screen.getByRole("alert").textContent).toContain(
+      "no longer available",
+    )
+  })
+
+  it("keeps raw exit code 127 generic without a domain failure kind", () => {
+    render(
+      <ShiftLaunchFailureBanner
+        gameTitle="Hades"
+        exitCode={127}
+        onRetry={() => {}}
+      />,
+    )
+    expect(screen.getByRole("alert").textContent).toContain(
+      "launch command failed",
+    )
   })
 
   it("includes the exit code in the message when provided", () => {

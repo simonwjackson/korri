@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test"
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { resolve } from "node:path"
 import { type CommandRunner, launchMoonlight } from "./moonlight-launcher"
 
 describe("moonlight launcher", () => {
@@ -35,6 +38,30 @@ describe("moonlight launcher", () => {
     ])
   })
 
+  it("uses KORRI_MOONLIGHT_COMMAND as an appliance no-fallback command", async () => {
+    const previous = Bun.env.KORRI_MOONLIGHT_COMMAND
+    const calls: string[] = []
+    try {
+      Bun.env.KORRI_MOONLIGHT_COMMAND =
+        "/nix/store/moonlight-embedded/bin/moonlight"
+      const result = await launchMoonlight({
+        host: "192.168.1.117",
+        runner: runner((command, args) => {
+          calls.push([command, ...args].join(" "))
+          return { status: "failed", message: "ENOENT" }
+        }),
+      })
+
+      expect(result.status).toBe("failed")
+      expect(calls).toEqual([
+        "/nix/store/moonlight-embedded/bin/moonlight stream 192.168.1.117 Korri Stream",
+      ])
+    } finally {
+      if (previous === undefined) delete Bun.env.KORRI_MOONLIGHT_COMMAND
+      else Bun.env.KORRI_MOONLIGHT_COMMAND = previous
+    }
+  })
+
   it("uses an appliance command without falling back to nix", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({
@@ -51,6 +78,27 @@ describe("moonlight launcher", () => {
     expect(calls).toEqual([
       "/nix/store/moonlight-embedded/bin/moonlight stream 192.168.1.117 Korri Stream",
     ])
+  })
+
+  it("reports an early non-zero Moonlight exit during the startup observation window", async () => {
+    const dir = mkdtempSync(resolve(tmpdir(), "korri-moonlight-test-"))
+    const command = resolve(dir, "moonlight-fails")
+    writeFileSync(command, "#!/usr/bin/env bash\nexit 42\n")
+    chmodSync(command, 0o755)
+    try {
+      const result = await launchMoonlight({
+        command,
+        allowNixFallback: false,
+        startupObserveMs: 250,
+      })
+      expect(result.status).toBe("failed")
+      if (result.status === "failed") {
+        expect(result.message).toContain("exited early")
+        expect(result.message).toContain("42")
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it("reports both failures without throwing", async () => {

@@ -13,7 +13,13 @@ import { useLibraryLaunchController } from "./use-library-launch-controller"
 
 const game = games[0]
 
-function withLayers({ exitCode }: { readonly exitCode?: number } = {}) {
+function withLayers({
+  exitCode,
+  failureKind,
+}: {
+  readonly exitCode?: number
+  readonly failureKind?: "moonlight-failed"
+} = {}) {
   return function LibraryLaunchTestRoot({
     children,
   }: {
@@ -29,7 +35,7 @@ function withLayers({ exitCode }: { readonly exitCode?: number } = {}) {
           behavior:
             exitCode === undefined
               ? { kind: "succeed", delayMs: 1 }
-              : { kind: "fail", exitCode, delayMs: 1 },
+              : { kind: "fail", exitCode, failureKind, delayMs: 1 },
         }),
       )
       return () => {
@@ -61,9 +67,9 @@ describe("useLibraryLaunchController", () => {
     })
   })
 
-  it("transitions to Failed and retries the same game", async () => {
+  it("preserves typed failure kind and retries the same game", async () => {
     const { result } = renderHook(() => useLibraryLaunchController(), {
-      wrapper: withLayers({ exitCode: 7 }),
+      wrapper: withLayers({ exitCode: 125, failureKind: "moonlight-failed" }),
     })
 
     act(() => result.current.start(game))
@@ -72,7 +78,8 @@ describe("useLibraryLaunchController", () => {
       expect(result.current.state).toEqual({
         _tag: "Failed",
         gameId: game.id,
-        exitCode: 7,
+        exitCode: 125,
+        failureKind: "moonlight-failed",
       })
     })
 

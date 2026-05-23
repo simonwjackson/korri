@@ -23,6 +23,11 @@ const CONNECTED_WITH_UNRESOLVABLE_ID: ConnectionServerRecord = {
   controlUrl: "http://192.168.1.118:3001",
 }
 
+const CONNECTED_WITH_IPV6: ConnectionServerRecord = {
+  hostId: "ipv6-server",
+  controlUrl: "http://[fd00::1]:3001",
+}
+
 describe("desktop launch bridge", () => {
   test("returns 503 when no upstream is connected", async () => {
     const handler = createLaunchBridgeHandler({
@@ -118,6 +123,26 @@ describe("desktop launch bridge", () => {
 
     expect(response.status).toBe(200)
     expect(moonlightCallHost).toBe("192.168.1.118")
+  })
+
+  test("normalizes IPv6 control URL hosts before invoking moonlight", async () => {
+    let moonlightCallHost: string | undefined
+    const handler = createLaunchBridgeHandler({
+      getConnection: () => CONNECTED_WITH_IPV6,
+      prepareGame: async (_controlUrl, id) => ({
+        status: "prepared",
+        gameId: id,
+      }),
+      launchMoonlight: async opts => {
+        moonlightCallHost = opts.host
+        return { status: "started", command: "moonlight" }
+      },
+    })
+
+    const response = await handler(postJson({ id: "gba/wario-land-4" }))
+
+    expect(response.status).toBe(200)
+    expect(moonlightCallHost).toBe("fd00::1")
   })
 
   test("forwards prepare-failure categories to the renderer", async () => {

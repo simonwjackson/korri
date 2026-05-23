@@ -71,6 +71,7 @@ export const LauncherLayerBridge = Layer.succeed(Launcher)({
             status: "failed" as const,
             exitCode: 125,
             stderrTail: body.message,
+            failureKind: "moonlight-failed" as const,
           }
         }
         // body.status === "failed"
@@ -78,6 +79,7 @@ export const LauncherLayerBridge = Layer.succeed(Launcher)({
           status: "failed" as const,
           exitCode: exitCodeForCategory(body.category),
           stderrTail: body.message,
+          failureKind: body.category,
         }
       },
       catch: error =>

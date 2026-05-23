@@ -1,4 +1,4 @@
-import type { LaunchResult } from "@shared/library/launcher"
+import type { LaunchFailureKind, LaunchResult } from "@shared/library/launcher"
 import { Duration, Effect, Layer } from "effect"
 import { Launcher, type LibraryError } from "./library-services"
 
@@ -9,6 +9,7 @@ export type InMemoryLauncherBehavior =
       readonly exitCode: number
       readonly delayMs?: number
       readonly stderrTail?: string
+      readonly failureKind?: LaunchFailureKind
     }
   | {
       readonly kind: "defect"
@@ -44,8 +45,17 @@ function launchEffect(
           status: "failed",
           exitCode: behavior.exitCode,
           stderrTail: behavior.stderrTail,
+          ...(behavior.failureKind
+            ? { failureKind: behavior.failureKind }
+            : {}),
         }
-      : { status: "failed", exitCode: behavior.exitCode },
+      : {
+          status: "failed",
+          exitCode: behavior.exitCode,
+          ...(behavior.failureKind
+            ? { failureKind: behavior.failureKind }
+            : {}),
+        },
   )
 }
 

@@ -18,6 +18,7 @@ export interface CommandRunner {
   readonly run: (
     command: string,
     args: readonly string[],
+    options?: { readonly startupObserveMs?: number },
   ) => Promise<
     | { readonly status: "started" }
     | { readonly status: "failed"; readonly message: string }
@@ -29,6 +30,7 @@ export interface MoonlightLaunchOptions {
   readonly appName?: string
   readonly command?: string
   readonly allowNixFallback?: boolean
+  readonly startupObserveMs?: number
   readonly runner?: CommandRunner
 }
 
@@ -41,7 +43,9 @@ export async function launchMoonlight(
   const args = moonlightArgs(options)
   const command = options.command ?? moonlightCommandFromEnv() ?? "moonlight"
   const allowNixFallback = options.allowNixFallback ?? command === "moonlight"
-  const installed = await runner.run(command, args)
+  const startupObserveMs =
+    options.startupObserveMs ?? moonlightStartupObserveMsFromEnv()
+  const installed = await runner.run(command, args, { startupObserveMs })
   if (installed.status === "started") return { status: "started", command }
 
   if (!allowNixFallback) {
@@ -72,19 +76,36 @@ function moonlightCommandFromEnv(): string | undefined {
   return command === "" ? undefined : command
 }
 
+function moonlightStartupObserveMsFromEnv(): number | undefined {
+  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_STARTUP_OBSERVE_MS?.trim()
+  if (!raw) return undefined
+  const value = Number(raw)
+  return Number.isFinite(value) && value > 0 ? value : undefined
+}
+
 function moonlightArgs(options: MoonlightLaunchOptions): readonly string[] {
   if (!options.host) return []
   return ["stream", options.host, options.appName ?? DEFAULT_APP_NAME]
 }
 
 const spawnRunner: CommandRunner = {
-  run: async (command, args) => {
+  run: async (command, args, options) => {
     try {
       const child = Bun.spawn([command, ...args], {
         stdin: "ignore",
         stdout: "ignore",
         stderr: "ignore",
       })
+      const observedExit = await observeEarlyExit(
+        child,
+        options?.startupObserveMs,
+      )
+      if (observedExit !== undefined && observedExit !== 0) {
+        return {
+          status: "failed",
+          message: `Moonlight exited early with status ${observedExit}`,
+        }
+      }
       child.unref?.()
       return { status: "started" }
     } catch (error) {
@@ -94,4 +115,15 @@ const spawnRunner: CommandRunner = {
       }
     }
   },
+}
+
+async function observeEarlyExit(
+  child: Bun.Subprocess<"ignore", "ignore", "ignore">,
+  startupObserveMs: number | undefined,
+): Promise<number | undefined> {
+  if (!startupObserveMs || startupObserveMs <= 0) return undefined
+  return Promise.race([
+    child.exited,
+    new Promise<undefined>(resolve => setTimeout(resolve, startupObserveMs)),
+  ])
 }

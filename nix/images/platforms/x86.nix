@@ -18,6 +18,7 @@
       path = [ pkgs.moonlight-embedded ];
       environment.KORRI_DESKTOP_INPUTD_URL = lib.mkDefault "ws://127.0.0.1:${toString config.services.korri.inputd.port}";
       environment.KORRI_MOONLIGHT_COMMAND = lib.mkDefault "${pkgs.moonlight-embedded}/bin/moonlight";
+      environment.KORRI_MOONLIGHT_STARTUP_OBSERVE_MS = lib.mkDefault "750";
       input.provider = {
         enable = lib.mkDefault true;
         name = lib.mkDefault "x86-seat-input";

@@ -66,6 +66,11 @@ function ShiftPrimaryLaunchSurface({
           exitCode={
             launch.state._tag === "Failed" ? launch.state.exitCode : undefined
           }
+          failureKind={
+            launch.state._tag === "Failed"
+              ? launch.state.failureKind
+              : undefined
+          }
           onRetry={launch.retry}
         />
       ) : null}

@@ -9,6 +9,8 @@
 
 let
   cfg = config.services.korri.liveUsbPersistence;
+  kioskCfg = config.services.korri.kiosk;
+  kioskGroup = if kioskCfg.group != null then kioskCfg.group else kioskCfg.user;
   packagesForSystem = korri.packages.${pkgs.stdenv.hostPlatform.system} or { };
   resolver = pkgs.writeShellScript "korri-live-usb-persistence-resolver" (
     builtins.readFile ./live-usb-persistence-resolver.sh
@@ -111,6 +113,8 @@ in
         KORRI_LIVE_USB_PERSISTENCE_LABEL = cfg.label;
         KORRI_LIVE_USB_PERSISTENT_MARKER = cfg.markerPersistent;
         KORRI_LIVE_USB_EPHEMERAL_MARKER = cfg.markerEphemeral;
+        KORRI_LIVE_USB_STATE_USER = kioskCfg.user;
+        KORRI_LIVE_USB_STATE_GROUP = kioskGroup;
       };
       serviceConfig = {
         Type = "oneshot";

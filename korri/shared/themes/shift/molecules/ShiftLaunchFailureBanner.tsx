@@ -21,11 +21,13 @@
  * for the calm motion grammar this banner inherits — no slide-in.
  */
 
+import type { LaunchFailureKind } from "@shared/library/launcher"
 import { useEffect, useRef } from "react"
 
 export interface ShiftLaunchFailureBannerProps {
   readonly gameTitle: string
   readonly exitCode?: number
+  readonly failureKind?: LaunchFailureKind
   readonly onRetry: () => void
   readonly onDismiss?: () => void
 }
@@ -33,6 +35,7 @@ export interface ShiftLaunchFailureBannerProps {
 export function ShiftLaunchFailureBanner({
   gameTitle,
   exitCode,
+  failureKind,
   onRetry,
   onDismiss,
 }: ShiftLaunchFailureBannerProps) {
@@ -45,7 +48,7 @@ export function ShiftLaunchFailureBanner({
     retryRef.current?.focus()
   }, [])
 
-  const failureMessage = launchFailureMessage(exitCode)
+  const failureMessage = launchFailureMessage({ exitCode, failureKind })
 
   return (
     <div
@@ -82,18 +85,26 @@ export function ShiftLaunchFailureBanner({
   )
 }
 
-function launchFailureMessage(exitCode: number | undefined): string {
+function launchFailureMessage({
+  exitCode,
+  failureKind,
+}: {
+  readonly exitCode: number | undefined
+  readonly failureKind: LaunchFailureKind | undefined
+}): string {
   const exitDetail = exitCode !== undefined ? ` (exit ${exitCode})` : ""
-  switch (exitCode) {
-    case 124:
+  switch (failureKind) {
+    case "host-unavailable":
       return `No connected Korri server was available${exitDetail}.`
-    case 125:
+    case "moonlight-failed":
       return `Moonlight could not start or connect to the prepared stream${exitDetail}.`
-    case 126:
+    case "host-control-disabled":
+    case "prepare-failed":
       return `The connected server could not prepare streams right now${exitDetail}.`
-    case 127:
+    case "no-such-game":
       return `The selected game is no longer available on the connected server${exitDetail}.`
-    default:
+    case "command-failed":
+    case undefined:
       return `The game's launch command failed${exitDetail}.`
   }
 }
