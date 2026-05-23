@@ -1,4 +1,4 @@
-{ nixpkgs }:
+{ korri, nixpkgs }:
 
 {
   config,
@@ -9,6 +9,7 @@
 
 let
   cfg = config.services.korri.liveUsbPersistence;
+  packagesForSystem = korri.packages.${pkgs.stdenv.hostPlatform.system} or { };
   resolver = pkgs.writeShellScript "korri-live-usb-persistence-resolver" (
     builtins.readFile ./live-usb-persistence-resolver.sh
   );
@@ -67,6 +68,10 @@ in
       makeUsbBootable = lib.mkDefault true;
       makeEfiBootable = lib.mkDefault true;
     };
+
+    services.korri.client.package = lib.mkIf (cfg.enable && packagesForSystem ? korri-desktop-x86-kiosk) (
+      lib.mkDefault packagesForSystem.korri-desktop-x86-kiosk
+    );
 
     services.korri.kiosk = lib.mkIf cfg.enable {
       home = lib.mkDefault "${cfg.root}/home";

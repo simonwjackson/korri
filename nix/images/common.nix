@@ -6,7 +6,7 @@
 let
   evalConfig = import (nixpkgs.outPath + "/nixos/lib/eval-config.nix");
 
-  liveUsbModule = import ./live-usb.nix { inherit nixpkgs; };
+  liveUsbModule = import ./live-usb.nix { inherit korri nixpkgs; };
 
   baseModule =
     { lib, ... }:

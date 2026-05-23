@@ -27,6 +27,9 @@ type ImageSummary = {
   kioskAfter: string[]
   kioskUser: string | null
   kioskUserExtraGroups: string[]
+  kioskEnvironment: Record<string, string>
+  kioskPath: string[]
+  clientMainProgram: string | null
   systemName: string
 }
 
@@ -97,6 +100,12 @@ describe("Korri Nix image output evaluation", () => {
     expect(result.liveUsb.clientEnabled).toBe(true)
     expect(result.liveUsb.inputdEnabled).toBe(true)
     expect(result.liveUsb.inputProviderEnabled).toBe(true)
+    expect(result.liveUsb.clientMainProgram).toBe("korri-desktop-x86-kiosk")
+    expect(result.liveUsb.kioskEnvironment.KORRI_DESKTOP_INPUTD_URL).toBe(
+      "ws://127.0.0.1:3002",
+    )
+    expect(result.liveUsb.kioskPath.join("\n")).toMatch(/moonlight-embedded/)
+    expect(result.liveUsb.kioskPath.join("\n")).not.toMatch(/moonlight-qt/)
     expect(result.liveUsb.makeUsbBootable).toBe(true)
     expect(result.liveUsb.makeEfiBootable).toBe(true)
     expect(result.liveUsb.imageFileName).toContain("korri-kiosk")

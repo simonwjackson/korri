@@ -16,6 +16,7 @@ let
   packages = flake.outputs.packages.${system};
   host = packages.korri-desktop;
   device = packages.korri-desktop-device;
+  x86Kiosk = packages.korri-desktop-x86-kiosk;
   unwrapped = packages.korri-desktop-unwrapped;
 
   # The wrap derivation interpolates pkgs2405 store paths into its
@@ -34,6 +35,7 @@ let
 
   hostInstall = host.installPhase or "";
   deviceInstall = device.installPhase or "";
+  x86KioskInstall = x86Kiosk.installPhase or "";
 
   hasPkgs2405WebkitInDevice =
     containsStorePath deviceInstall pkgs2405.webkitgtk_4_1.outPath;
@@ -54,9 +56,14 @@ let
   hostHasMoonlight = containsStorePath hostInstall pkgs.moonlight-qt.outPath;
   deviceHasMoonlight =
     containsStorePath deviceInstall pkgs.moonlight-qt.outPath;
+  x86KioskHasMoonlightEmbedded =
+    containsStorePath x86KioskInstall pkgs.moonlight-embedded.outPath;
+  x86KioskHasMoonlightQt = containsStorePath x86KioskInstall pkgs.moonlight-qt.outPath;
 
   deviceExportsDesktopInputdUrl =
     builtins.match ".*KORRI_DESKTOP_INPUTD_URL.*" deviceInstall != null;
+  x86KioskExportsDesktopInputdUrl =
+    builtins.match ".*KORRI_DESKTOP_INPUTD_URL.*" x86KioskInstall != null;
   deviceLeaksNativeBridgeUrl =
     builtins.match ".*KORRI_NATIVE_BRIDGE_URL.*" deviceInstall != null;
 in
@@ -71,6 +78,7 @@ in
   # Variant identity: host and device must produce distinct out paths.
   hostDrvPath = host.drvPath;
   deviceDrvPath = device.drvPath;
+  x86KioskDrvPath = x86Kiosk.drvPath;
 
   # Closure cohesion (anti-regression for the librsvg/at-spi2-core
   # finding): every pkgs2405 entry from deviceDesktopRuntimeLibraries must
@@ -87,5 +95,6 @@ in
   hostHasPkgs2405Gtk = hasPkgs2405GtkInHost;
 
   inherit hostHasMoonlight deviceHasMoonlight;
-  inherit deviceExportsDesktopInputdUrl deviceLeaksNativeBridgeUrl;
+  inherit x86KioskHasMoonlightEmbedded x86KioskHasMoonlightQt;
+  inherit deviceExportsDesktopInputdUrl x86KioskExportsDesktopInputdUrl deviceLeaksNativeBridgeUrl;
 }

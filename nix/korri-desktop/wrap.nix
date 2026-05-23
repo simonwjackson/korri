@@ -25,14 +25,21 @@
   glibc,
   stdenvCcLib,
   moonlightQt ? pkgs.moonlight-qt,
+  moonlightPackage ? moonlightQt,
   profile ? "host",
 }:
 
 let
-  isDevice = profile == "device";
-  binName = if isDevice then "korri-desktop-device" else "korri-desktop";
-  gdkBackend = if isDevice then "" else "x11";
-  desktopProfileEnv = if isDevice then "device" else "";
+  isDeviceLike = profile == "device" || profile == "x86-kiosk";
+  binName =
+    if profile == "x86-kiosk" then
+      "korri-desktop-x86-kiosk"
+    else if isDeviceLike then
+      "korri-desktop-device"
+    else
+      "korri-desktop";
+  gdkBackend = if isDeviceLike then "" else "x11";
+  desktopProfileEnv = if isDeviceLike then "device" else "";
 
   runtimeLibraries = [
     webkitgtk_4_1
@@ -112,7 +119,7 @@ pkgs.stdenv.mkDerivation {
     #!${bash}/bin/bash
     export XDG_DATA_DIRS="${desktopDataPath}\''${XDG_DATA_DIRS:+:\$XDG_DATA_DIRS}"
     export GIO_EXTRA_MODULES="${gioExtraModulesPath}\''${GIO_EXTRA_MODULES:+:\$GIO_EXTRA_MODULES}"
-    export PATH="${moonlightQt}/bin\''${PATH:+:\$PATH}"
+    export PATH="${moonlightPackage}/bin\''${PATH:+:\$PATH}"
     ${lib.optionalString (gdkBackend != "") ''
       export GDK_BACKEND="\''${GDK_BACKEND:-${gdkBackend}}"
     ''}

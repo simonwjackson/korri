@@ -14,6 +14,7 @@ interface BuildGraphEval {
   unwrappedDrvPath: string
   hostDrvPath: string
   deviceDrvPath: string
+  x86KioskDrvPath: string
   deviceHasPkgs2405Webkit: boolean
   deviceHasPkgs2405Gtk: boolean
   deviceHasPkgs2405Libsoup: boolean
@@ -23,7 +24,10 @@ interface BuildGraphEval {
   hostHasPkgs2405Gtk: boolean
   hostHasMoonlight: boolean
   deviceHasMoonlight: boolean
+  x86KioskHasMoonlightEmbedded: boolean
+  x86KioskHasMoonlightQt: boolean
   deviceExportsDesktopInputdUrl: boolean
+  x86KioskExportsDesktopInputdUrl: boolean
   deviceLeaksNativeBridgeUrl: boolean
 }
 
@@ -77,6 +81,11 @@ describe("korri-desktop build graph", () => {
     it("host and device produce distinct wrapper derivations", () => {
       expect(result.hostDrvPath).not.toBe(result.deviceDrvPath)
     })
+
+    it("x86 kiosk produces a distinct appliance wrapper derivation", () => {
+      expect(result.x86KioskDrvPath).not.toBe(result.hostDrvPath)
+      expect(result.x86KioskDrvPath).not.toBe(result.deviceDrvPath)
+    })
   })
 
   describe("device closure cohesion", () => {
@@ -124,6 +133,10 @@ describe("korri-desktop build graph", () => {
     it("device wrap does not expose the raw native bridge URL to the renderer", () => {
       expect(result.deviceLeaksNativeBridgeUrl).toBe(false)
     })
+
+    it("x86 kiosk wrap exports the broker-only inputd URL for Electrobun main", () => {
+      expect(result.x86KioskExportsDesktopInputdUrl).toBe(true)
+    })
   })
 
   describe("stream client runtime", () => {
@@ -133,6 +146,11 @@ describe("korri-desktop build graph", () => {
 
     it("device wrap provides Moonlight on PATH", () => {
       expect(result.deviceHasMoonlight).toBe(true)
+    })
+
+    it("x86 kiosk wrap provides moonlight-embedded instead of Moonlight Qt on PATH", () => {
+      expect(result.x86KioskHasMoonlightEmbedded).toBe(true)
+      expect(result.x86KioskHasMoonlightQt).toBe(false)
     })
   })
 })

@@ -26,6 +26,9 @@ let
         user = eval.config.services.korri.kiosk.user or null;
       in
       if user == null then [ ] else eval.config.users.users.${user}.extraGroups or [ ];
+    kioskEnvironment = eval.config.systemd.services."korri-kiosk".environment or { };
+    kioskPath = map toString (eval.config.systemd.services."korri-kiosk".path or [ ]);
+    clientMainProgram = eval.config.services.korri.client.package.meta.mainProgram or null;
     systemName = eval.config.system.name;
   };
 

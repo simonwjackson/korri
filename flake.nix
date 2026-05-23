@@ -364,6 +364,29 @@
           else
             null;
 
+        korriDesktopX86Kiosk =
+          if isX86Linux then
+            pkgs.callPackage ./nix/korri-desktop/wrap.nix {
+              korri-desktop-unwrapped = korriDesktopUnwrapped;
+              webkitgtk_4_1 = pkgs2405.webkitgtk_4_1;
+              gtk3 = pkgs2405.gtk3;
+              libsoup_3 = pkgs2405.libsoup_3;
+              glib = pkgs2405.glib;
+              gdk-pixbuf = pkgs2405.gdk-pixbuf;
+              cairo = pkgs2405.cairo;
+              pango = pkgs2405.pango;
+              libayatana-appindicator = pkgs2405.libayatana-appindicator;
+              librsvg = pkgs2405.librsvg;
+              at-spi2-core = pkgs2405.at-spi2-core;
+              glib-networking = pkgs2405.glib-networking;
+              gsettings-desktop-schemas = pkgs2405.gsettings-desktop-schemas;
+              stdenvCcLib = pkgs.stdenv.cc.cc.lib;
+              moonlightPackage = pkgs.moonlight-embedded;
+              profile = "x86-kiosk";
+            }
+          else
+            null;
+
         korriImages = import ./nix/images/common.nix {
           korri = self;
           inherit nixpkgs system;
@@ -401,6 +424,7 @@
           default = korriDesktop;
         }
         // pkgs.lib.optionalAttrs isX86Linux {
+          korri-desktop-x86-kiosk = korriDesktopX86Kiosk;
           korri-headless-system = korriHeadlessSystem.config.system.build.toplevel;
           korri-kiosk-system = korriKioskSystem.config.system.build.toplevel;
           korri-kiosk-live-iso = korriKioskLiveUsbSystem.config.system.build.isoImage;
