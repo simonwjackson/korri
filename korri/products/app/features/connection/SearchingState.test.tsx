@@ -28,6 +28,7 @@ describe("SearchingState", () => {
     if (state.status === "connected") throw new Error("unexpected status")
     render(<SearchingState state={state} />)
     expect(screen.getByText(/Looking for a Korri server/)).toBeTruthy()
+    expect(screen.getByText(/Ethernet/)).toBeTruthy()
     expect(screen.queryByTestId("searching-state-help")).toBeNull()
   })
 
@@ -43,5 +44,6 @@ describe("SearchingState", () => {
     if (state.status === "connected") throw new Error("unexpected status")
     render(<SearchingState state={state} />)
     expect(screen.getByTestId("searching-state-help")).toBeTruthy()
+    expect(screen.getByText(/wired network/)).toBeTruthy()
   })
 })

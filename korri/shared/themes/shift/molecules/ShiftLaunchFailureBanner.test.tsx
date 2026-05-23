@@ -9,6 +9,30 @@ describe("ShiftLaunchFailureBanner", () => {
     expect(screen.getByRole("alert").textContent).toContain("Hades")
   })
 
+  it("describes Moonlight failures distinctly from generic launch failures", () => {
+    render(
+      <ShiftLaunchFailureBanner
+        gameTitle="Hades"
+        exitCode={125}
+        onRetry={() => {}}
+      />,
+    )
+    expect(screen.getByRole("alert").textContent).toContain("Moonlight")
+  })
+
+  it("describes prepare/control failures distinctly from Moonlight failures", () => {
+    render(
+      <ShiftLaunchFailureBanner
+        gameTitle="Hades"
+        exitCode={126}
+        onRetry={() => {}}
+      />,
+    )
+    const text = screen.getByRole("alert").textContent ?? ""
+    expect(text).toContain("server")
+    expect(text).not.toContain("Moonlight")
+  })
+
   it("includes the exit code in the message when provided", () => {
     render(
       <ShiftLaunchFailureBanner

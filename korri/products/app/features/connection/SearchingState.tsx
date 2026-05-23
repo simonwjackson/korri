@@ -29,7 +29,8 @@ export function SearchingState({ state }: SearchingStateProps) {
     >
       <div className="text-3xl font-semibold">{title}</div>
       <div className="text-sm text-slate-400">
-        Make sure the server is running on the same network.
+        Make sure Ethernet is connected and a Korri server is running on the
+        same network.
       </div>
       {helpVisible ? <SearchingStateHelp /> : null}
     </div>
@@ -42,8 +43,8 @@ function SearchingStateHelp() {
       data-testid="searching-state-help"
       className="max-w-md rounded-md border border-slate-700 bg-slate-900 p-4 text-sm text-slate-300"
     >
-      Still searching. Confirm that the Korri server is running and reachable
-      on this network, then try again.
+      Still searching. Confirm the wired network is connected and that a Korri
+      server is reachable on this network, then try again.
     </div>
   )
 }

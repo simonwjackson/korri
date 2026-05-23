@@ -45,7 +45,7 @@ export function ShiftLaunchFailureBanner({
     retryRef.current?.focus()
   }, [])
 
-  const exitDetail = exitCode !== undefined ? ` (exit ${exitCode})` : ""
+  const failureMessage = launchFailureMessage(exitCode)
 
   return (
     <div
@@ -57,9 +57,7 @@ export function ShiftLaunchFailureBanner({
         <span className="text-base font-semibold">
           Could not launch {gameTitle}
         </span>
-        <span className="text-sm opacity-80">
-          The game's launch command failed{exitDetail}.
-        </span>
+        <span className="text-sm opacity-80">{failureMessage}</span>
       </div>
       <div className="flex items-center gap-2">
         {onDismiss ? (
@@ -82,4 +80,20 @@ export function ShiftLaunchFailureBanner({
       </div>
     </div>
   )
+}
+
+function launchFailureMessage(exitCode: number | undefined): string {
+  const exitDetail = exitCode !== undefined ? ` (exit ${exitCode})` : ""
+  switch (exitCode) {
+    case 124:
+      return `No connected Korri server was available${exitDetail}.`
+    case 125:
+      return `Moonlight could not start or connect to the prepared stream${exitDetail}.`
+    case 126:
+      return `The connected server could not prepare streams right now${exitDetail}.`
+    case 127:
+      return `The selected game is no longer available on the connected server${exitDetail}.`
+    default:
+      return `The game's launch command failed${exitDetail}.`
+  }
 }
