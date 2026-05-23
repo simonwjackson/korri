@@ -1,7 +1,7 @@
 ---
 title: feat: Add Live USB Validation Surfaces
 type: feat
-status: active
+status: completed
 date: 2026-05-23
 origin: docs/brainstorms/2026-05-23-001-x86-live-usb-kiosk-requirements.md
 ---
