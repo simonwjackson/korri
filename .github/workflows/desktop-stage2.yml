@@ -38,9 +38,12 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
-      - name: Check flake and evaluate image outputs
+      - name: Check flake outputs
+        env:
+          ROCKNIX_GUEST_DEVICE_COMPATIBLE: ayn,odin2portal
+        run: nix flake check --no-build --impure
+      - name: Evaluate image outputs
         run: |
-          ROCKNIX_GUEST_DEVICE_COMPATIBLE=ayn,odin2portal nix flake check --no-build --impure
           nix develop .#ci -c bun test \
             tools/testing/nix/korri-image-outputs-eval.test.ts \
             tools/testing/nix/korri-rocknix-image-eval.test.ts
