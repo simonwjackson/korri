@@ -23,6 +23,8 @@ nix build .#korri-kiosk-live-iso
 
 `korri-kiosk-live-iso` is a bootable live USB/ISO appliance artifact. It is intended to be written to removable media and boot directly into the Korri kiosk surface; it is not an installer and does not represent an internal-disk deployment target.
 
+The live USB kiosk routes Korri client state under `/persist/korri-live-usb/home`. At boot, `korri-live-usb-persistence.service` resolves the mounted live ISO device, derives its parent USB block device, and mounts only a sibling partition labeled `KORRI-PERSIST`. If no matching same-stick partition exists, it uses an ephemeral tmpfs state root and writes `.korri-live-usb-ephemeral`; it does not search internal disks by generic label. Persisted client state includes Korri XDG config/data/state and moonlight-embedded pairing/cache state under `home/.cache/moonlight`.
+
 RockNix-backed kiosk appliances are exposed as explicit device targets:
 
 ```bash
