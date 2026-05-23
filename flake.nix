@@ -395,6 +395,10 @@
         korriKioskLiveUsbSystem = korriImages.mkLiveUsbKioskSystem {
           platformModules = [ ./nix/images/platforms/x86.nix ];
         };
+
+        korriKioskLiveUsbRuntimeSystem = korriImages.mkLiveUsbKioskRuntimeSystem {
+          platformModules = [ ./nix/images/platforms/x86.nix ];
+        };
       in
       {
         packages = {
@@ -502,6 +506,36 @@
             korri-desktop-device = {
               type = "app";
               program = "${korriDesktopDevice}/bin/korri-desktop-device";
+            };
+          }
+          // pkgs.lib.optionalAttrs isX86Linux {
+            korri-live-usb-vm = {
+              type = "app";
+              program = "${
+                import ./nix/apps/korri-live-usb-vm.nix {
+                  inherit pkgs;
+                  vmSystem = korriKioskLiveUsbRuntimeSystem;
+                }
+              }/bin/korri-live-usb-vm";
+            };
+            korri-live-usb-qemu = {
+              type = "app";
+              program = "${
+                import ./nix/apps/korri-live-usb-qemu.nix {
+                  inherit pkgs;
+                  isoPackage = korriKioskLiveUsbSystem.config.system.build.isoImage;
+                }
+              }/bin/korri-live-usb-qemu";
+            };
+            korri-live-usb-qemu-persistence = {
+              type = "app";
+              program = "${
+                import ./nix/apps/korri-live-usb-qemu.nix {
+                  inherit pkgs;
+                  isoPackage = korriKioskLiveUsbSystem.config.system.build.isoImage;
+                  persistenceMode = true;
+                }
+              }/bin/korri-live-usb-qemu-persistence";
             };
           };
 

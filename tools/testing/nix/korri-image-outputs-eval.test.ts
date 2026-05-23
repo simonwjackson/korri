@@ -104,7 +104,13 @@ describe("Korri Nix image output evaluation", () => {
     expect(result.checkAttrs).toContain("korri-live-usb-vm-smoke")
     expect(result.checkDrvPaths.liveConfig).toContain(".drv")
     expect(result.checkDrvPaths.vmSmoke).toContain(".drv")
-    expect(result.appAttrs).not.toContain("korri-live-usb-qemu")
+    expect(result.appAttrs).toEqual(
+      expect.arrayContaining([
+        "korri-live-usb-vm",
+        "korri-live-usb-qemu",
+        "korri-live-usb-qemu-persistence",
+      ]),
+    )
   })
 
   it("exposes a bootable x86 live USB ISO kiosk image", () => {
