@@ -38,12 +38,14 @@ describe("moonlight launcher", () => {
     ])
   })
 
-  it("uses KORRI_MOONLIGHT_COMMAND as an appliance no-fallback command", async () => {
+  it("uses KORRI_MOONLIGHT_COMMAND as an appliance no-fallback embedded command", async () => {
     const previous = Bun.env.KORRI_MOONLIGHT_COMMAND
+    const previousClient = Bun.env.KORRI_MOONLIGHT_CLIENT
     const calls: string[] = []
     try {
       Bun.env.KORRI_MOONLIGHT_COMMAND =
         "/nix/store/moonlight-embedded/bin/moonlight"
+      Bun.env.KORRI_MOONLIGHT_CLIENT = "embedded"
       const result = await launchMoonlight({
         host: "192.168.1.117",
         runner: runner((command, args) => {
@@ -54,19 +56,22 @@ describe("moonlight launcher", () => {
 
       expect(result.status).toBe("failed")
       expect(calls).toEqual([
-        "/nix/store/moonlight-embedded/bin/moonlight stream 192.168.1.117 Korri Stream",
+        "/nix/store/moonlight-embedded/bin/moonlight stream -app Korri Stream 192.168.1.117",
       ])
     } finally {
       if (previous === undefined) delete Bun.env.KORRI_MOONLIGHT_COMMAND
       else Bun.env.KORRI_MOONLIGHT_COMMAND = previous
+      if (previousClient === undefined) delete Bun.env.KORRI_MOONLIGHT_CLIENT
+      else Bun.env.KORRI_MOONLIGHT_CLIENT = previousClient
     }
   })
 
-  it("uses an appliance command without falling back to nix", async () => {
+  it("uses explicit embedded client args without falling back to nix", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({
       host: "192.168.1.117",
       command: "/nix/store/moonlight-embedded/bin/moonlight",
+      client: "embedded",
       allowNixFallback: false,
       runner: runner((command, args) => {
         calls.push([command, ...args].join(" "))
@@ -76,7 +81,7 @@ describe("moonlight launcher", () => {
 
     expect(result.status).toBe("failed")
     expect(calls).toEqual([
-      "/nix/store/moonlight-embedded/bin/moonlight stream 192.168.1.117 Korri Stream",
+      "/nix/store/moonlight-embedded/bin/moonlight stream -app Korri Stream 192.168.1.117",
     ])
   })
 

@@ -29,6 +29,7 @@ export interface MoonlightLaunchOptions {
   readonly host?: string
   readonly appName?: string
   readonly command?: string
+  readonly client?: "qt" | "embedded"
   readonly allowNixFallback?: boolean
   readonly startupObserveMs?: number
   readonly runner?: CommandRunner
@@ -40,8 +41,9 @@ export async function launchMoonlight(
   options: MoonlightLaunchOptions = {},
 ): Promise<MoonlightLaunchResult> {
   const runner = options.runner ?? spawnRunner
-  const args = moonlightArgs(options)
   const command = options.command ?? moonlightCommandFromEnv() ?? "moonlight"
+  const client = options.client ?? moonlightClientFromEnv() ?? "qt"
+  const args = moonlightArgs({ ...options, client })
   const allowNixFallback = options.allowNixFallback ?? command === "moonlight"
   const startupObserveMs =
     options.startupObserveMs ?? moonlightStartupObserveMsFromEnv()
@@ -75,6 +77,11 @@ function moonlightCommandFromEnv(): string | undefined {
   return command === "" ? undefined : command
 }
 
+function moonlightClientFromEnv(): "qt" | "embedded" | undefined {
+  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_CLIENT?.trim()
+  return raw === "embedded" || raw === "qt" ? raw : undefined
+}
+
 function moonlightStartupObserveMsFromEnv(): number | undefined {
   const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_STARTUP_OBSERVE_MS?.trim()
   if (!raw) return undefined
@@ -82,9 +89,15 @@ function moonlightStartupObserveMsFromEnv(): number | undefined {
   return Number.isFinite(value) && value > 0 ? value : undefined
 }
 
-function moonlightArgs(options: MoonlightLaunchOptions): readonly string[] {
+function moonlightArgs(
+  options: MoonlightLaunchOptions & { readonly client: "qt" | "embedded" },
+): readonly string[] {
   if (!options.host) return []
-  return ["stream", options.host, options.appName ?? DEFAULT_APP_NAME]
+  const appName = options.appName ?? DEFAULT_APP_NAME
+  if (options.client === "embedded") {
+    return ["stream", "-app", appName, options.host]
+  }
+  return ["stream", options.host, appName]
 }
 
 const spawnRunner: CommandRunner = {

@@ -108,6 +108,9 @@ describe("Korri Nix image output evaluation", () => {
     expect(result.liveUsb.kioskEnvironment.KORRI_MOONLIGHT_COMMAND).toMatch(
       /moonlight-embedded.*\/bin\/moonlight/,
     )
+    expect(result.liveUsb.kioskEnvironment.KORRI_MOONLIGHT_CLIENT).toBe(
+      "embedded",
+    )
     expect(
       result.liveUsb.kioskEnvironment.KORRI_MOONLIGHT_STARTUP_OBSERVE_MS,
     ).toBe("750")
