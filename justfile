@@ -72,9 +72,22 @@ desktop-build: build-web desktop-preload-build desktop-runtime-check
 test-unit:
   bun test
 
-# Dry-build and document-smoke the x86 live USB kiosk artifact.
+# Dry-build, config-check, and document-smoke the x86 live USB kiosk artifact.
 live-usb-smoke:
+  nix build .#checks.x86_64-linux.korri-live-usb-config --no-link
   bun test tools/testing/nix/korri-live-usb-smoke.test.ts
+
+# Run the bounded NixOS VM smoke for the x86 live USB runtime composition.
+live-usb-vm-smoke:
+  nix build .#checks.x86_64-linux.korri-live-usb-vm-smoke --no-link
+
+# Boot the x86 live USB ISO in QEMU/OVMF for manual validation.
+live-usb-qemu *args:
+  nix run .#korri-live-usb-qemu -- {{args}}
+
+# Boot the x86 live USB ISO in QEMU with the persistence experiment attached.
+live-usb-qemu-persistence *args:
+  nix run .#korri-live-usb-qemu-persistence -- {{args}}
 
 # Alias for test-unit.
 test: test-unit

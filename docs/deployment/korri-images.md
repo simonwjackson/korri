@@ -29,7 +29,7 @@ Discovery is unchanged from the standard Electrobun/Korri app path: the live ima
 
 Remote launch keeps the standard prepare-before-stream sequence. The desktop launch bridge calls the connected server's control URL to prepare the selected known game, then launches Moonlight against the reachable host from that same control URL. On the live kiosk, `KORRI_MOONLIGHT_COMMAND` points at the packaged `moonlight-embedded` binary, so the appliance path does not depend on Moonlight Qt or a runtime `nix run` fallback.
 
-### x86 live USB operator smoke
+### x86 live USB validation tiers
 
 Build or dry-build the artifact from an x86_64 Linux machine:
 
@@ -38,9 +38,31 @@ nix build .#packages.x86_64-linux.korri-kiosk-live-iso --dry-run --no-link
 nix build .#packages.x86_64-linux.korri-kiosk-live-iso
 ```
 
+Flake-native checks cover unattended validation:
+
+```bash
+nix build .#checks.x86_64-linux.korri-live-usb-config --no-link
+nix build .#checks.x86_64-linux.korri-live-usb-vm-smoke --no-link
+```
+
+- `korri-live-usb-config` is the cheap default configuration check. It proves the live USB NixOS composition still has the expected ISO flags, persistence ordering, state roots, and disk-mutation safeguards.
+- `korri-live-usb-vm-smoke` boots a bounded NixOS VM from the live USB runtime composition. It proves persistence fallback, inputd, and kiosk orchestration in a VM; it does not prove ISO firmware boot, USB media behavior, graphics quality, or physical NUC acceptance.
+
+Manual validation is exposed through flake apps:
+
+```bash
+nix run .#korri-live-usb-vm
+nix run .#korri-live-usb-qemu
+nix run .#korri-live-usb-qemu-persistence
+```
+
+- `korri-live-usb-vm` runs the NixOS runtime VM directly through `config.system.build.vm` for interactive system validation.
+- `korri-live-usb-qemu` boots the built ISO under QEMU/OVMF for manual firmware-path validation and writes evidence under `out/live-usb-smoke/`.
+- `korri-live-usb-qemu-persistence` adds a QEMU USB-storage persistence experiment with a `KORRI-PERSIST` filesystem image. It is useful for manual resolver inspection, but it does not replace physical NUC acceptance.
+
 Write the resulting ISO to removable USB media with the operator's preferred imaging tool, then create a second partition on the same USB device labeled `KORRI-PERSIST` for persistent client state. Do not create or select a persistence partition on the NUC internal disk.
 
-Physical v1 acceptance targets an 8th-gen Intel NUC with Ethernet, keyboard fallback, and an XInput-compatible wired USB controller. Before boot, record the internal disk identity or a sentinel hash. After booting from USB, verify:
+Physical v1 acceptance targets an 8th-gen Intel NUC with Ethernet, keyboard fallback, and an XInput-compatible wired USB controller. QEMU validation increases confidence, but it does not replace physical NUC acceptance. Before boot, record the internal disk identity or a sentinel hash. After booting from USB, verify:
 
 - the TV reaches the Korri kiosk surface without an installer workflow;
 - the internal disk sentinel is unchanged;

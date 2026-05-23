@@ -10,6 +10,7 @@ on:
       - "flake.nix"
       - "flake.lock"
       - "nix/**"
+      - "tools/testing/nix/**"
       - "electrobun.config.ts"
       - "package.json"
       - "bun.lock"
@@ -24,6 +25,7 @@ on:
       - "flake.nix"
       - "flake.lock"
       - "nix/**"
+      - "tools/testing/nix/**"
       - "electrobun.config.ts"
       - "package.json"
       - "bun.lock"
@@ -51,6 +53,7 @@ jobs:
           ROCKNIX_GUEST_DEVICE_COMPATIBLE=ayn,odin2portal nix eval --impure \
             .#nixosConfigurations.korri-rocknix-kiosk-by-compatible.config.system.build.toplevel.drvPath \
             --raw
+          nix build .#checks.x86_64-linux.korri-live-usb-config --no-link
       - name: Evaluate image outputs
         run: |
           nix develop .#ci -c sh -c '
