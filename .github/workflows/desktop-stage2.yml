@@ -49,9 +49,12 @@ jobs:
             --raw
       - name: Evaluate image outputs
         run: |
-          nix develop .#ci -c bun test \
-            tools/testing/nix/korri-image-outputs-eval.test.ts \
-            tools/testing/nix/korri-rocknix-image-eval.test.ts
+          nix develop .#ci -c sh -c '
+            bun install --frozen-lockfile &&
+            bun test \
+              tools/testing/nix/korri-image-outputs-eval.test.ts \
+              tools/testing/nix/korri-rocknix-image-eval.test.ts
+          '
       - name: Build desktop package
         run: nix build .#korri-desktop --no-link
 
