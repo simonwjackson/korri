@@ -97,6 +97,11 @@ pkgs.writeShellApplication {
     physical 8th-gen Intel NUC acceptance with Ethernet and wired controller.
     EOF
 
+    if [ "''${KORRI_QEMU_PREP_ONLY:-0}" = "1" ]; then
+      echo "KORRI_QEMU_PREP_ONLY=1 set; prepared evidence without launching QEMU."
+      exit 0
+    fi
+
     exec qemu-system-x86_64 \
       "''${qemu_accel[@]}" \
       -m "''${KORRI_QEMU_MEMORY:-4096}" \

@@ -58,7 +58,8 @@ nix run .#korri-live-usb-qemu-persistence
 
 - `korri-live-usb-vm` runs the NixOS runtime VM directly through `config.system.build.vm` for interactive system validation.
 - `korri-live-usb-qemu` boots the built ISO under QEMU/OVMF for manual firmware-path validation and writes evidence under `out/live-usb-smoke/`.
-- `korri-live-usb-qemu-persistence` adds a QEMU USB-storage persistence experiment with a `KORRI-PERSIST` filesystem image. It is useful for manual resolver inspection, but it does not replace physical NUC acceptance.
+- `korri-live-usb-qemu-persistence` copies the hybrid ISO to one writable USB disk image, appends a sibling `KORRI-PERSIST` partition, and boots that single image as QEMU USB storage. It is useful for manual resolver inspection, but it does not replace physical NUC acceptance.
+- Set `KORRI_QEMU_PREP_ONLY=1` with either QEMU app to prepare evidence/images without launching QEMU.
 
 Write the resulting ISO to removable USB media with the operator's preferred imaging tool, then create a second partition on the same USB device labeled `KORRI-PERSIST` for persistent client state. Do not create or select a persistence partition on the NUC internal disk.
 
