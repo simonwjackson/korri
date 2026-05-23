@@ -140,7 +140,9 @@ export function createLaunchBridgeHandler(
       } satisfies LaunchBridgeResponse)
     }
 
-    const moonlight = await options.launchMoonlight({ host: connection.hostId })
+    const moonlight = await options.launchMoonlight({
+      host: moonlightHostForConnection(connection),
+    })
 
     if (moonlight.status === "failed") {
       logger.warn(
@@ -188,6 +190,14 @@ async function readGameId(request: Request): Promise<string | undefined> {
   if (typeof body !== "object" || body === null) return undefined
   const id = (body as { id?: unknown }).id
   return typeof id === "string" && id.length > 0 ? id : undefined
+}
+
+function moonlightHostForConnection(connection: ConnectionServerRecord): string {
+  try {
+    return new URL(connection.controlUrl).hostname || connection.hostId
+  } catch {
+    return connection.hostId
+  }
 }
 
 function jsonResponse(status: number, body: unknown): Response {

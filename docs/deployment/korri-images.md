@@ -27,6 +27,8 @@ The live USB kiosk routes Korri client state under `/persist/korri-live-usb/home
 
 Discovery is unchanged from the standard Electrobun/Korri app path: the live image permits mDNS client browsing on UDP 5353, then uses the existing remembered-first/first-healthy connection controller. There is no USB-specific server discovery and no aka-specific priority or fallback.
 
+Remote launch keeps the standard prepare-before-stream sequence. The desktop launch bridge calls the connected server's control URL to prepare the selected known game, then launches Moonlight against the reachable host from that same control URL. On the live kiosk, `KORRI_MOONLIGHT_COMMAND` points at the packaged `moonlight-embedded` binary, so the appliance path does not depend on Moonlight Qt or a runtime `nix run` fallback.
+
 RockNix-backed kiosk appliances are exposed as explicit device targets:
 
 ```bash

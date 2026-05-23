@@ -18,6 +18,11 @@ const CONNECTED: ConnectionServerRecord = {
   controlUrl: "http://192.168.1.117:3001",
 }
 
+const CONNECTED_WITH_UNRESOLVABLE_ID: ConnectionServerRecord = {
+  hostId: "living-room-server",
+  controlUrl: "http://192.168.1.118:3001",
+}
+
 describe("desktop launch bridge", () => {
   test("returns 503 when no upstream is connected", async () => {
     const handler = createLaunchBridgeHandler({
@@ -61,7 +66,7 @@ describe("desktop launch bridge", () => {
     expect(response.status).toBe(400)
   })
 
-  test("prepares then launches moonlight pointed at the connected host", async () => {
+  test("prepares then launches moonlight pointed at the reachable connected address", async () => {
     let prepareCallControlUrl: string | undefined
     let prepareCallGameId: string | undefined
     let moonlightCallHost: string | undefined
@@ -83,7 +88,7 @@ describe("desktop launch bridge", () => {
 
     expect(prepareCallControlUrl).toBe(CONNECTED.controlUrl)
     expect(prepareCallGameId).toBe("gba/wario-land-4")
-    expect(moonlightCallHost).toBe(CONNECTED.hostId)
+    expect(moonlightCallHost).toBe("192.168.1.117")
 
     expect(response.status).toBe(200)
     const body = (await response.json()) as LaunchBridgeResponse
@@ -93,6 +98,26 @@ describe("desktop launch bridge", () => {
       expect(body.sessionId).toBe("sess-1")
       expect(body.moonlightCommand).toBe("moonlight")
     }
+  })
+
+  test("uses the control URL host for moonlight even when hostId is only identity", async () => {
+    let moonlightCallHost: string | undefined
+    const handler = createLaunchBridgeHandler({
+      getConnection: () => CONNECTED_WITH_UNRESOLVABLE_ID,
+      prepareGame: async (controlUrl, id) => {
+        expect(controlUrl).toBe(CONNECTED_WITH_UNRESOLVABLE_ID.controlUrl)
+        return { status: "prepared", gameId: id, sessionId: "sess-addr" }
+      },
+      launchMoonlight: async opts => {
+        moonlightCallHost = opts.host
+        return { status: "started", command: "moonlight" }
+      },
+    })
+
+    const response = await handler(postJson({ id: "gba/wario-land-4" }))
+
+    expect(response.status).toBe(200)
+    expect(moonlightCallHost).toBe("192.168.1.118")
   })
 
   test("forwards prepare-failure categories to the renderer", async () => {

@@ -1,8 +1,8 @@
 /**
  * Spawn Moonlight locally to connect to a Korri stream host.
  *
- * Tries `moonlight` first, falls back to `nix run nixpkgs#moonlight-qt`,
- * returns a structured result. The runner is swappable (`CommandRunner`)
+ * Tries a configured Moonlight command first, optionally falls back to
+ * `nix run nixpkgs#moonlight-qt`, and returns a structured result. The runner is swappable (`CommandRunner`)
  * so tests and the desktop’s bun-side bridge can intercept the spawn.
  *
  * Originally lived in `tools/cli/`; promoted to `@app/stream/` so the
@@ -27,6 +27,8 @@ export interface CommandRunner {
 export interface MoonlightLaunchOptions {
   readonly host?: string
   readonly appName?: string
+  readonly command?: string
+  readonly allowNixFallback?: boolean
   readonly runner?: CommandRunner
 }
 
@@ -37,9 +39,18 @@ export async function launchMoonlight(
 ): Promise<MoonlightLaunchResult> {
   const runner = options.runner ?? spawnRunner
   const args = moonlightArgs(options)
-  const installed = await runner.run("moonlight", args)
+  const command = options.command ?? moonlightCommandFromEnv() ?? "moonlight"
+  const allowNixFallback = options.allowNixFallback ?? command === "moonlight"
+  const installed = await runner.run(command, args)
   if (installed.status === "started")
-    return { status: "started", command: "moonlight" }
+    return { status: "started", command }
+
+  if (!allowNixFallback) {
+    return {
+      status: "failed",
+      message: `Could not start Moonlight. ${command}: ${installed.message}`,
+    }
+  }
 
   const fallback = await runner.run("nix", [
     "run",
@@ -52,8 +63,14 @@ export async function launchMoonlight(
 
   return {
     status: "failed",
-    message: `Could not start Moonlight. moonlight: ${installed.message}; nix fallback: ${fallback.message}`,
+    message: `Could not start Moonlight. ${command}: ${installed.message}; nix fallback: ${fallback.message}`,
   }
+}
+
+function moonlightCommandFromEnv(): string | undefined {
+  const env = globalThis.Bun?.env
+  const command = env?.KORRI_MOONLIGHT_COMMAND?.trim()
+  return command === "" ? undefined : command
 }
 
 function moonlightArgs(options: MoonlightLaunchOptions): readonly string[] {

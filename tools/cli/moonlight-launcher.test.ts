@@ -35,6 +35,24 @@ describe("moonlight launcher", () => {
     ])
   })
 
+  it("uses an appliance command without falling back to nix", async () => {
+    const calls: string[] = []
+    const result = await launchMoonlight({
+      host: "192.168.1.117",
+      command: "/nix/store/moonlight-embedded/bin/moonlight",
+      allowNixFallback: false,
+      runner: runner((command, args) => {
+        calls.push([command, ...args].join(" "))
+        return { status: "failed", message: "ENOENT" }
+      }),
+    })
+
+    expect(result.status).toBe("failed")
+    expect(calls).toEqual([
+      "/nix/store/moonlight-embedded/bin/moonlight stream 192.168.1.117 Korri Stream",
+    ])
+  })
+
   it("reports both failures without throwing", async () => {
     const result = await launchMoonlight({
       runner: runner(command => ({
