@@ -12,6 +12,7 @@ pkgs.writeShellApplication {
   name = appName;
   runtimeInputs = with pkgs; [
     coreutils
+    findutils
     gnugrep
     qemu
     util-linux
