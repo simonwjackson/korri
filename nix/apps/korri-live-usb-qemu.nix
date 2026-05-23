@@ -50,6 +50,7 @@ pkgs.writeShellApplication {
       vars_copy="$evidence_dir/OVMF_VARS.fd"
       cp "$ovmf_vars" "$vars_copy"
       chmod u+w "$vars_copy"
+      # shellcheck disable=SC2054
       firmware_args=(
         -drive "if=pflash,format=raw,readonly=on,file=$ovmf_code"
         -drive "if=pflash,format=raw,file=$vars_copy"
@@ -78,6 +79,7 @@ pkgs.writeShellApplication {
       truncate -s +"''${KORRI_QEMU_PERSIST_SIZE:-2G}" "$usb_img"
       printf 'start=%s, type=83\n' "$start_sector" | sfdisk --append "$usb_img" >/dev/null
       ${pkgs.e2fsprogs}/bin/mkfs.ext4 -F -L KORRI-PERSIST -E offset=$((start_sector * 512)) "$usb_img" >/dev/null
+      # shellcheck disable=SC2054
       extra_storage=(
         -drive "id=korriusb,if=none,format=raw,file=$usb_img"
         -device usb-ehci,id=ehci
