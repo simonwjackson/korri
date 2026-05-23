@@ -107,11 +107,15 @@ describe("Korri live USB safety evaluation", () => {
     expect(result.persistenceService.exists).toBe(true)
     expect(result.persistenceService.wantedBy).toContain("multi-user.target")
     expect(result.persistenceService.before).toContain("korri-kiosk.service")
-    expect(result.kioskState.wants).toContain("korri-live-usb-persistence.service")
+    expect(result.kioskState.wants).toContain(
+      "korri-live-usb-persistence.service",
+    )
     expect(result.kioskState.requires).toContain(
       "korri-live-usb-persistence.service",
     )
-    expect(result.kioskState.after).toContain("korri-live-usb-persistence.service")
+    expect(result.kioskState.after).toContain(
+      "korri-live-usb-persistence.service",
+    )
   })
 
   it("keeps internal disk mutation surfaces disabled", () => {

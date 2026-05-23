@@ -246,10 +246,7 @@ describe("watchStreamHosts", () => {
     bonjour.emitUp(service("Korri A", "192.168.1.50", 3010))
 
     const events = await Effect.runPromise(
-      collectStream(
-        watchStreamHosts({ bonjourFactory: () => bonjour }),
-        1,
-      ),
+      collectStream(watchStreamHosts({ bonjourFactory: () => bonjour }), 1),
     )
 
     expect(events).toHaveLength(1)
@@ -269,10 +266,7 @@ describe("watchStreamHosts", () => {
     bonjour.emitDown(target)
 
     const events = await Effect.runPromise(
-      collectStream(
-        watchStreamHosts({ bonjourFactory: () => bonjour }),
-        2,
-      ),
+      collectStream(watchStreamHosts({ bonjourFactory: () => bonjour }), 2),
     )
 
     expect(events.map(e => e.kind)).toEqual(["appear", "disappear"])
@@ -288,10 +282,7 @@ describe("watchStreamHosts", () => {
     bonjour.emitUp(service("Korri B", "192.168.1.51", 3010))
 
     const events = await Effect.runPromise(
-      collectStream(
-        watchStreamHosts({ bonjourFactory: () => bonjour }),
-        2,
-      ),
+      collectStream(watchStreamHosts({ bonjourFactory: () => bonjour }), 2),
     )
 
     const urls = events
@@ -329,11 +320,7 @@ describe("watchStreamHosts", () => {
     bonjour.emitDown(ghost)
 
     const events = await Effect.runPromise(
-      collectStream(
-        watchStreamHosts({ bonjourFactory: () => bonjour }),
-        1,
-        50,
-      ),
+      collectStream(watchStreamHosts({ bonjourFactory: () => bonjour }), 1, 50),
     )
 
     expect(events).toHaveLength(0)
@@ -363,11 +350,7 @@ describe("watchStreamHosts", () => {
   it("cleans up the bonjour browser on scope close", async () => {
     const bonjour = createControllableBonjour()
     await Effect.runPromise(
-      collectStream(
-        watchStreamHosts({ bonjourFactory: () => bonjour }),
-        1,
-        50,
-      ),
+      collectStream(watchStreamHosts({ bonjourFactory: () => bonjour }), 1, 50),
     )
 
     expect(bonjour.started).toBe(1)

@@ -42,8 +42,7 @@ export async function launchMoonlight(
   const command = options.command ?? moonlightCommandFromEnv() ?? "moonlight"
   const allowNixFallback = options.allowNixFallback ?? command === "moonlight"
   const installed = await runner.run(command, args)
-  if (installed.status === "started")
-    return { status: "started", command }
+  if (installed.status === "started") return { status: "started", command }
 
   if (!allowNixFallback) {
     return {

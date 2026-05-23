@@ -5,7 +5,8 @@ import { SearchingState } from "./SearchingState"
 
 afterEach(() => cleanup())
 
-const longAfter = (msFromNow: number) => new Date(Date.now() + msFromNow).toISOString()
+const longAfter = (msFromNow: number) =>
+  new Date(Date.now() + msFromNow).toISOString()
 
 const searching = (helpAfterIso: string): ConnectionStateBridgeState => ({
   status: "searching",
@@ -13,9 +14,7 @@ const searching = (helpAfterIso: string): ConnectionStateBridgeState => ({
   helpAfter: helpAfterIso,
 })
 
-const reconnecting = (
-  helpAfterIso: string,
-): ConnectionStateBridgeState => ({
+const reconnecting = (helpAfterIso: string): ConnectionStateBridgeState => ({
   status: "reconnecting",
   server: { hostId: "aka", controlUrl: "http://aka:3010" },
   since: new Date(0).toISOString(),

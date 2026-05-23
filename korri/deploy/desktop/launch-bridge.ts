@@ -23,9 +23,9 @@
  * deterministic fakes.
  */
 
-import { logger } from "@shared/logger"
-import type { RemotePrepareResult } from "@app/stream/remote-stream-client"
 import type { MoonlightLaunchResult } from "@app/stream/moonlight-launcher"
+import type { RemotePrepareResult } from "@app/stream/remote-stream-client"
+import { logger } from "@shared/logger"
 import type { ConnectionServerRecord } from "./connection-state-bridge"
 
 export type LaunchBridgeResponse =
@@ -96,10 +96,7 @@ export function createLaunchBridgeHandler(
 
     const connection = options.getConnection()
     if (!connection) {
-      logger.warn(
-        { id },
-        "launch-bridge: refused \u2014 no connected upstream",
-      )
+      logger.warn({ id }, "launch-bridge: refused \u2014 no connected upstream")
       return jsonResponse(503, {
         status: "failed",
         category: "host-unavailable",
@@ -192,7 +189,9 @@ async function readGameId(request: Request): Promise<string | undefined> {
   return typeof id === "string" && id.length > 0 ? id : undefined
 }
 
-function moonlightHostForConnection(connection: ConnectionServerRecord): string {
+function moonlightHostForConnection(
+  connection: ConnectionServerRecord,
+): string {
   try {
     return new URL(connection.controlUrl).hostname || connection.hostId
   } catch {

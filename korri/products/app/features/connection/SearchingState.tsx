@@ -1,5 +1,5 @@
-import type { ConnectionStateBridgeState } from "./use-connection-state"
 import { useEffect, useState } from "react"
+import type { ConnectionStateBridgeState } from "./use-connection-state"
 
 interface SearchingStateProps {
   readonly state: Exclude<
