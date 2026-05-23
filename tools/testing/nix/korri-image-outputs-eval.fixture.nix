@@ -84,10 +84,15 @@ let
 in
 {
   packageAttrs = builtins.attrNames (flake.packages.${system} or { });
+  checkAttrs = builtins.attrNames (flake.checks.${system} or { });
+  appAttrs = builtins.attrNames (flake.apps.${system} or { });
   packageDrvPaths = {
     headless = (flake.packages.${system}.korri-headless-system or null).drvPath or null;
     kiosk = (flake.packages.${system}.korri-kiosk-system or null).drvPath or null;
     liveIso = (flake.packages.${system}.korri-kiosk-live-iso or null).drvPath or null;
+  };
+  checkDrvPaths = {
+    liveConfig = (flake.checks.${system}.korri-live-usb-config or null).drvPath or null;
   };
   headless = summarize headless;
   kiosk = summarize kiosk;

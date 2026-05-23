@@ -451,6 +451,13 @@
           wrapKorriDesktop = args: pkgs.callPackage ./nix/korri-desktop/wrap.nix args;
         };
 
+        checks = pkgs.lib.optionalAttrs isX86Linux {
+          korri-live-usb-config = import ./nix/tests/korri-live-usb-config-check.nix {
+            inherit pkgs;
+            liveUsbSystem = korriKioskLiveUsbSystem;
+          };
+        };
+
         apps =
           pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
             korri-inputd = {

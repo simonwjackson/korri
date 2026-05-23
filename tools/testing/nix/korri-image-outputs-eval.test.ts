@@ -36,10 +36,15 @@ type ImageSummary = {
 
 type EvalResult = {
   packageAttrs: string[]
+  checkAttrs: string[]
+  appAttrs: string[]
   packageDrvPaths: {
     headless: string | null
     kiosk: string | null
     liveIso: string | null
+  }
+  checkDrvPaths: {
+    liveConfig: string | null
   }
   headless: ImageSummary
   kiosk: ImageSummary
@@ -91,6 +96,12 @@ describe("Korri Nix image output evaluation", () => {
     )
     expect(result.packageDrvPaths.headless).toContain(".drv")
     expect(result.packageDrvPaths.kiosk).toContain(".drv")
+  })
+
+  it("exposes flake-native live USB validation surfaces", () => {
+    expect(result.checkAttrs).toContain("korri-live-usb-config")
+    expect(result.checkDrvPaths.liveConfig).toContain(".drv")
+    expect(result.appAttrs).not.toContain("korri-live-usb-qemu")
   })
 
   it("exposes a bootable x86 live USB ISO kiosk image", () => {
