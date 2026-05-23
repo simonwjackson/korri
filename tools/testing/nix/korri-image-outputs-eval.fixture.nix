@@ -17,6 +17,7 @@ let
     serverHost = eval.config.services.korri.server.host or null;
     serverServiceMode = eval.config.services.korri.server.serviceMode or null;
     firewallTcpPorts = eval.config.networking.firewall.allowedTCPPorts or [ ];
+    firewallUdpPorts = eval.config.networking.firewall.allowedUDPPorts or [ ];
     kioskUnitExists = eval.config.systemd.services ? "korri-kiosk";
     inputProviderEnabled = eval.config.services.korri.kiosk.input.provider.enable or false;
     kioskAfter = eval.config.systemd.services."korri-kiosk".after or [ ];

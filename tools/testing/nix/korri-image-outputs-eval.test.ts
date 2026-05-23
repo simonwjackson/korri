@@ -22,6 +22,7 @@ type ImageSummary = {
   serverHost: string | null
   serverServiceMode: string | null
   firewallTcpPorts: number[]
+  firewallUdpPorts: number[]
   kioskUnitExists: boolean
   inputProviderEnabled: boolean
   kioskAfter: string[]
@@ -106,6 +107,8 @@ describe("Korri Nix image output evaluation", () => {
     )
     expect(result.liveUsb.kioskPath.join("\n")).toMatch(/moonlight-embedded/)
     expect(result.liveUsb.kioskPath.join("\n")).not.toMatch(/moonlight-qt/)
+    expect(result.liveUsb.firewallUdpPorts).toContain(5353)
+    expect(result.liveUsb.firewallTcpPorts).toEqual([])
     expect(result.liveUsb.makeUsbBootable).toBe(true)
     expect(result.liveUsb.makeEfiBootable).toBe(true)
     expect(result.liveUsb.imageFileName).toContain("korri-kiosk")

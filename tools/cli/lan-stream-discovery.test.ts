@@ -98,6 +98,27 @@ describe("LAN stream discovery", () => {
     expect(bonjour.findCalls).toBe(0)
   })
 
+  it("keeps multiple discovered compatible servers as generic candidates", async () => {
+    const bonjour = createBonjourLike([
+      service("Korri Living Room", "192.168.1.50", 3010),
+      service("Korri Office", "192.168.1.51", 3010),
+    ])
+
+    const candidates = await discoverStreamHosts({
+      timeoutMs: 1,
+      bonjourFactory: () => bonjour,
+    })
+
+    expect(candidates.map(candidate => candidate.name)).toEqual([
+      "Korri Living Room",
+      "Korri Office",
+    ])
+    expect(candidates.map(candidate => candidate.controlUrl)).toEqual([
+      "http://192.168.1.50:3010",
+      "http://192.168.1.51:3010",
+    ])
+  })
+
   it("deduplicates discovered services by control URL", async () => {
     const bonjour = createBonjourLike([
       service("Korri A", "192.168.1.50", 3010),

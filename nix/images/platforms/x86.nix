@@ -3,6 +3,7 @@
 {
   config = lib.mkIf (config.services.korri.kiosk.enable or false) {
     services.seatd.enable = lib.mkDefault true;
+    networking.firewall.allowedUDPPorts = [ 5353 ];
 
     users.users.${config.services.korri.kiosk.user}.extraGroups = lib.mkIf config.services.korri.kiosk.createUser (lib.mkDefault [
       "input"

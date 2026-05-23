@@ -157,6 +157,37 @@ describe("connection controller", () => {
     }
   })
 
+  it("treats multiple generic server candidates with the existing first-healthy rule", async () => {
+    const result = await runTest(
+      Effect.gen(function* () {
+        const rig = yield* makeRig()
+        const config = makeConfigRig({})
+        const controller = yield* makeConnectionController({
+          watcher: rig.stream,
+          loadConfig: config.loadConfig,
+          saveConfig: config.saveConfig,
+          httpProbe: makeProbe(
+            new Map([
+              [SERVER_A.controlUrl, true],
+              [SERVER_B.controlUrl, true],
+            ]),
+          ),
+        })
+        yield* rig.emit({ kind: "appear", candidate: candidate(SERVER_A) })
+        yield* rig.emit({ kind: "appear", candidate: candidate(SERVER_B) })
+        yield* TestClock.adjust("5 seconds")
+        const state = yield* SubscriptionRef.get(controller.state)
+        return { state, saved: config.saved() }
+      }),
+    )
+
+    expect(result.state.status).toBe("connected")
+    if (result.state.status === "connected") {
+      expect(result.state.server).toEqual(SERVER_A)
+    }
+    expect(result.saved).toEqual([{ lastConnectedServer: SERVER_A }])
+  })
+
   it("connects to the first appeared candidate when no remembered server", async () => {
     const result = await runTest(
       Effect.gen(function* () {
