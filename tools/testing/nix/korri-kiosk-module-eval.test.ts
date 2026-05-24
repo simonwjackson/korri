@@ -151,6 +151,9 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
     expect(result.swayConfig).toContain("default_floating_border none")
     expect(result.swayConfig).toContain("hide_edge_borders both")
     expect(result.swayConfig).toContain("korri-kiosk-client")
+    expect(result.clientLauncher).toContain("while true")
+    expect(result.clientLauncher).toContain("client exited with status")
+    expect(result.clientLauncher).not.toContain("swaymsg exit")
     expect(result.kioskEnvironment.KORRI_NATIVE_BRIDGE_URL).toBe(
       "ws://127.0.0.1:3002",
     )
