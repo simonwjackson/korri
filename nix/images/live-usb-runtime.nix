@@ -49,6 +49,91 @@ let
     lib.optional kioskCfg.input.enable "korri-inputd.service" ++ kioskCfg.input.provider.services;
   seatServices = lib.optional (config.services.seatd.enable or false) "seatd.service";
   loginDependencies = [ "korri-live-usb-persistence.service" ] ++ inputServices ++ seatServices;
+  persistenceEntryType = lib.types.submodule {
+    options = {
+      kind = lib.mkOption {
+        type = lib.types.enum [
+          "directory"
+          "file"
+        ];
+        description = "Kind of Product live USB persistence entry.";
+      };
+
+      target = lib.mkOption {
+        type = lib.types.str;
+        description = "Runtime path exposed to the Product kiosk session.";
+      };
+
+      source = lib.mkOption {
+        type = lib.types.str;
+        description = "Path relative to the approved persistence root.";
+      };
+
+      owner = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Owner applied when preparing this entry.";
+      };
+
+      group = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Group applied when preparing this entry.";
+      };
+
+      mode = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Mode applied when preparing this entry.";
+      };
+    };
+  };
+  productHome = "/home/${kioskCfg.user}";
+  developerHome = "${cfg.root}/developer/home";
+  effectiveHome = if cfg.artifact == "developer" then developerHome else productHome;
+  productAllowlist = [
+    {
+      kind = "directory";
+      target = "${productHome}/.config/korri";
+      source = "product/home/.config/korri";
+      owner = kioskCfg.user;
+      group = kioskGroup;
+      mode = "0700";
+    }
+    {
+      kind = "directory";
+      target = "${productHome}/.local/share/korri";
+      source = "product/home/.local/share/korri";
+      owner = kioskCfg.user;
+      group = kioskGroup;
+      mode = "0700";
+    }
+    {
+      kind = "directory";
+      target = "${productHome}/.local/state/korri";
+      source = "product/home/.local/state/korri";
+      owner = kioskCfg.user;
+      group = kioskGroup;
+      mode = "0700";
+    }
+    {
+      kind = "directory";
+      target = "${productHome}/.cache/moonlight";
+      source = "product/home/.cache/moonlight";
+      owner = kioskCfg.user;
+      group = kioskGroup;
+      mode = "0700";
+    }
+    {
+      kind = "file";
+      target = "/var/lib/korri-live-usb/device-id";
+      source = "product/device-id";
+      owner = "root";
+      group = "root";
+      mode = "0600";
+    }
+  ];
+  persistenceScope = if cfg.artifact == "developer" then "developer-broad" else "product-allowlist";
 in
 {
   options.services.korri.liveUsbPersistence = {
@@ -86,6 +171,29 @@ in
       description = "Marker written when the image falls back to non-persistent tmpfs state.";
     };
 
+    artifact = lib.mkOption {
+      type = lib.types.enum [
+        "product"
+        "developer"
+      ];
+      default = "product";
+      description = "Live USB artifact contract. Product is allowlisted; Developer is broad and opt-in.";
+    };
+
+    scope = lib.mkOption {
+      type = lib.types.enum [
+        "product-allowlist"
+        "developer-broad"
+      ];
+      description = "Derived persistence scope for the selected live USB artifact.";
+    };
+
+    productAllowlist = lib.mkOption {
+      type = lib.types.listOf persistenceEntryType;
+      default = [ ];
+      description = "Concrete Product ISO persistence entries prepared from approved same-stick storage.";
+    };
+
     debugSsh = {
       authorizedKeys = lib.mkOption {
         type = lib.types.listOf lib.types.str;
@@ -100,18 +208,25 @@ in
       cfg.enable && packagesForSystem ? korri-desktop-x86-kiosk
     ) (lib.mkDefault packagesForSystem.korri-desktop-x86-kiosk);
 
+    services.korri.liveUsbPersistence = lib.mkIf cfg.enable {
+      scope = persistenceScope;
+      productAllowlist = productAllowlist;
+    };
+
     services.korri.kiosk = lib.mkIf cfg.enable {
       user = lib.mkDefault "korri";
-      home = lib.mkDefault "${cfg.root}/home";
-      configHome = lib.mkDefault "${cfg.root}/home/.config";
-      dataHome = lib.mkDefault "${cfg.root}/home/.local/share";
-      stateHome = lib.mkDefault "${cfg.root}/home/.local/state";
+      home = lib.mkDefault effectiveHome;
+      configHome = lib.mkDefault "${effectiveHome}/.config";
+      dataHome = lib.mkDefault "${effectiveHome}/.local/share";
+      stateHome = lib.mkDefault "${effectiveHome}/.local/state";
       wants = [ "korri-live-usb-persistence.service" ];
       after = [ "korri-live-usb-persistence.service" ];
       environment = {
-        XDG_CACHE_HOME = "${cfg.root}/home/.cache";
+        XDG_CACHE_HOME = "${effectiveHome}/.cache";
+        KORRI_LIVE_USB_ARTIFACT = cfg.artifact;
         KORRI_LIVE_USB_PERSISTENCE_ROOT = cfg.root;
-        KORRI_MOONLIGHT_STATE_HOME = "${cfg.root}/home/.cache/moonlight";
+        KORRI_LIVE_USB_PERSISTENCE_SCOPE = persistenceScope;
+        KORRI_MOONLIGHT_STATE_HOME = "${effectiveHome}/.cache/moonlight";
       };
     };
 
@@ -187,6 +302,8 @@ in
         KORRI_LIVE_USB_PERSISTENCE_LABEL = cfg.label;
         KORRI_LIVE_USB_PERSISTENT_MARKER = cfg.markerPersistent;
         KORRI_LIVE_USB_EPHEMERAL_MARKER = cfg.markerEphemeral;
+        KORRI_LIVE_USB_ARTIFACT = cfg.artifact;
+        KORRI_LIVE_USB_PERSISTENCE_SCOPE = persistenceScope;
         KORRI_LIVE_USB_STATE_USER = kioskCfg.user;
         KORRI_LIVE_USB_STATE_GROUP = kioskGroup;
       };

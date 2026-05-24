@@ -31,7 +31,16 @@ const RESOLVER_PATH = resolve(
 
 setDefaultTimeout(30_000)
 
-type SafetyEvalResult = {
+type LiveUsbPersistenceEntry = {
+  kind: "directory" | "file"
+  target: string
+  source: string
+  owner?: string
+  group?: string
+  mode?: string
+}
+
+type LiveUsbSystemSummary = {
   persistence: {
     enabled: boolean
     root: string | null
@@ -39,6 +48,9 @@ type SafetyEvalResult = {
     label: string | null
     markerPersistent: string | null
     markerEphemeral: string | null
+    artifact: "product" | "developer" | null
+    scope: "product-allowlist" | "developer-broad" | null
+    productAllowlist: LiveUsbPersistenceEntry[]
   }
   kioskState: {
     home: string
@@ -56,6 +68,7 @@ type SafetyEvalResult = {
     before: string[]
     after: string[]
     path: string[]
+    environment: Record<string, string>
   }
   safety: {
     fileSystems: string[]
@@ -63,11 +76,20 @@ type SafetyEvalResult = {
     services: string[]
     udisks2Enabled: boolean
     gvfsEnabled: boolean
+    sshEnabled: boolean
   }
 }
 
-function evalFixture(): SafetyEvalResult {
-  const apply = `f: f { flakeRoot = ${FLAKE_ROOT}; }`
+type SafetyEvalResult = {
+  product: LiveUsbSystemSummary
+  developer: LiveUsbSystemSummary
+}
+
+function evalFixture(extraArgs: Record<string, string | boolean> = {}): SafetyEvalResult {
+  const renderedArgs = Object.entries(extraArgs)
+    .map(([name, value]) => `${name} = ${value === true ? "true" : value === false ? "false" : value};`)
+    .join(" ")
+  const apply = `f: f { flakeRoot = ${FLAKE_ROOT}; ${renderedArgs} }`
   const child = spawnSync(
     "nix",
     [
@@ -95,52 +117,121 @@ function evalFixture(): SafetyEvalResult {
   return JSON.parse(child.stdout) as SafetyEvalResult
 }
 
+function evalFixtureFailure(extraArgs: Record<string, string | boolean>) {
+  const renderedArgs = Object.entries(extraArgs)
+    .map(([name, value]) => `${name} = ${value === true ? "true" : value === false ? "false" : value};`)
+    .join(" ")
+  const apply = `f: f { flakeRoot = ${FLAKE_ROOT}; ${renderedArgs} }`
+  return spawnSync(
+    "nix",
+    [
+      "--extra-experimental-features",
+      "nix-command flakes",
+      "eval",
+      "--impure",
+      "--json",
+      "--file",
+      FIXTURE_PATH,
+      "--apply",
+      apply,
+    ],
+    {
+      cwd: FLAKE_ROOT,
+      encoding: "utf8",
+      env: { ...process.env, NIX_PATH: "" },
+    },
+  )
+}
+
 describe("Korri live USB safety evaluation", () => {
   const result = evalFixture()
 
-  it("routes Korri and moonlight client state under USB-scoped persistence", () => {
-    expect(result.persistence.enabled).toBe(true)
-    expect(result.persistence.root).toBe("/persist/korri-live-usb")
-    expect(result.kioskState.home).toBe("/persist/korri-live-usb/home")
-    expect(result.kioskState.configHome).toBe(
-      "/persist/korri-live-usb/home/.config",
+  it("keeps Product as the default live USB artifact with explicit allowlist metadata", () => {
+    expect(result.product.persistence.enabled).toBe(true)
+    expect(result.product.persistence.root).toBe("/persist/korri-live-usb")
+    expect(result.product.persistence.artifact).toBe("product")
+    expect(result.product.persistence.scope).toBe("product-allowlist")
+    expect(result.product.kioskState.environment.KORRI_LIVE_USB_ARTIFACT).toBe(
+      "product",
     )
-    expect(result.kioskState.dataHome).toBe(
-      "/persist/korri-live-usb/home/.local/share",
+    expect(
+      result.product.persistenceService.environment.KORRI_LIVE_USB_ARTIFACT,
+    ).toBe("product")
+    expect(result.product.persistence.productAllowlist).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "directory",
+          target: "/home/korri/.config/korri",
+        }),
+        expect.objectContaining({
+          kind: "directory",
+          target: "/home/korri/.cache/moonlight",
+        }),
+        expect.objectContaining({
+          kind: "file",
+          target: "/var/lib/korri-live-usb/device-id",
+        }),
+      ]),
     )
-    expect(result.kioskState.stateHome).toBe(
-      "/persist/korri-live-usb/home/.local/state",
-    )
-    expect(result.kioskState.environment.XDG_CACHE_HOME).toBe(
-      "/persist/korri-live-usb/home/.cache",
-    )
-    expect(result.kioskState.environment.KORRI_MOONLIGHT_STATE_HOME).toBe(
-      "/persist/korri-live-usb/home/.cache/moonlight",
+    expect(result.product.kioskState.environment.KORRI_MOONLIGHT_STATE_HOME).toBe(
+      "/home/korri/.cache/moonlight",
     )
   })
 
+  it("exposes Developer artifact metadata without enabling SSH by default", () => {
+    expect(result.developer.persistence.enabled).toBe(true)
+    expect(result.developer.persistence.artifact).toBe("developer")
+    expect(result.developer.persistence.scope).toBe("developer-broad")
+    expect(result.developer.kioskState.environment.KORRI_LIVE_USB_ARTIFACT).toBe(
+      "developer",
+    )
+    expect(
+      result.developer.persistenceService.environment.KORRI_LIVE_USB_ARTIFACT,
+    ).toBe("developer")
+    expect(result.developer.safety.sshEnabled).toBe(false)
+  })
+
+  it("rejects invalid live USB artifact values during Nix evaluation", () => {
+    const invalid = evalFixtureFailure({ invalidArtifact: true })
+    expect(invalid.status).not.toBe(0)
+    expect(invalid.stderr).toContain("services.korri.liveUsbPersistence.artifact")
+  })
+
+  it("does not declare broad Product persistence roots", () => {
+    expect(result.product.kioskState.home).toBe("/home/korri")
+    expect(result.product.kioskState.configHome).toBe("/home/korri/.config")
+    expect(result.product.kioskState.dataHome).toBe("/home/korri/.local/share")
+    expect(result.product.kioskState.stateHome).toBe("/home/korri/.local/state")
+    expect(result.product.kioskState.environment.XDG_CACHE_HOME).toBe(
+      "/home/korri/.cache",
+    )
+    expect(
+      result.product.persistence.productAllowlist.map(entry => entry.target),
+    ).not.toEqual(expect.arrayContaining(["/home/korri", "/etc", "/var", "/var/log"]))
+  })
+
   it("orders kiosk startup after the persistence resolver", () => {
-    expect(result.persistenceService.exists).toBe(true)
-    expect(result.persistenceService.wantedBy).toContain("multi-user.target")
-    expect(result.persistenceService.before).toContain("korri-kiosk.service")
-    expect(result.kioskState.wants).toContain(
+    expect(result.product.persistenceService.exists).toBe(true)
+    expect(result.product.persistenceService.wantedBy).toContain("multi-user.target")
+    expect(result.product.persistenceService.before).toContain("korri-kiosk.service")
+    expect(result.product.kioskState.wants).toContain(
       "korri-live-usb-persistence.service",
     )
-    expect(result.kioskState.requires).toContain(
+    expect(result.product.kioskState.requires).toContain(
       "korri-live-usb-persistence.service",
     )
-    expect(result.kioskState.after).toContain(
+    expect(result.product.kioskState.after).toContain(
       "korri-live-usb-persistence.service",
     )
   })
 
   it("keeps internal disk mutation surfaces disabled", () => {
-    expect(result.safety.fileSystems).not.toContain("/mnt")
-    expect(result.safety.fileSystems).not.toContain("/home")
-    expect(result.safety.swapDevices).toEqual([])
-    expect(result.safety.udisks2Enabled).toBe(false)
-    expect(result.safety.gvfsEnabled).toBe(false)
-    expect(result.safety.services.join("\n")).not.toMatch(
+    expect(result.product.safety.fileSystems).not.toContain("/mnt")
+    expect(result.product.safety.fileSystems).not.toContain("/home")
+    expect(result.product.safety.swapDevices).toEqual([])
+    expect(result.product.safety.udisks2Enabled).toBe(false)
+    expect(result.product.safety.gvfsEnabled).toBe(false)
+    expect(result.product.safety.services.join("\n")).not.toMatch(
       /install|partition|repartition|growfs|udisks/i,
     )
   })
