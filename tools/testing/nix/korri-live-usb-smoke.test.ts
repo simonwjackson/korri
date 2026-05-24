@@ -1,3 +1,10 @@
+// This file is intentionally not batched into a single fixture-level
+// nix eval. Its two tests do fundamentally different work (one dry-builds
+// the x86 live USB ISO derivation via `nix build --dry-run`, the other is
+// a documentation smoke against `docs/deployment/korri-images.md`).
+// Sharing one eval would conflate them for no time savings: the
+// dry-build is bound by nix store/derivation work, not by overrides.
+// See docs/plans/2026-05-24-006-refactor-nix-test-harness-plan.md U7.
 import { describe, expect, it, setDefaultTimeout } from "bun:test"
 import { spawnSync } from "node:child_process"
 import { readFileSync } from "node:fs"

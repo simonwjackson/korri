@@ -1,3 +1,10 @@
+// The nix-eval portion of this file is already module-load batched:
+// `evalFixture()` runs once at the `describe()` body and every `it()` that
+// asserts nix-derived state reads from the shared `result`. The remaining
+// per-test cost is bash resolver-script invocations against fake-PATH
+// shims, which are independent of nix evaluation. See
+// docs/plans/2026-05-24-006-refactor-nix-test-harness-plan.md U4 and the
+// exemplar in tools/testing/nix/korri-desktop-build-graph.test.ts.
 import { describe, expect, it, setDefaultTimeout } from "bun:test"
 import { spawnSync } from "node:child_process"
 import {

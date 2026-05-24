@@ -1,4 +1,9 @@
 import { describe, expect, it, setDefaultTimeout } from "bun:test"
+// This file is already module-load batched: `evalFixture()` runs once at
+// the `describe()` body, and every `it()` reads from the shared `result`.
+// Per-test reported ms is ~0; the whole file runs in one nix eval. See
+// docs/plans/2026-05-24-006-refactor-nix-test-harness-plan.md U5 and the
+// exemplar in tools/testing/nix/korri-desktop-build-graph.test.ts.
 import { spawnSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
