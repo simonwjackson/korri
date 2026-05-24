@@ -51,7 +51,7 @@ describe("createDesktopBridgeAdapter", () => {
   it("subscribes when the global desktop bridge appears after startup", async () => {
     const bridge = createBridge()
     const emitted: InputAction[] = []
-    const globalWithWindow = globalThis as typeof globalThis & {
+    const globalWithWindow = globalThis as unknown as {
       window?: { __korriInput?: unknown }
     }
     const previousWindow = globalWithWindow.window
