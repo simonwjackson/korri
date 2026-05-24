@@ -10,8 +10,8 @@ export const handleListGameAssetCandidates = (
   payload: typeof ListGameAssetCandidatesPayload.Type,
 ) =>
   Effect.gen(function* () {
-    const gameAssets = yield* GameAssets
-    const candidates = yield* gameAssets.listCandidates(payload)
+    const gameAssetService = yield* GameAssets
+    const candidates = yield* gameAssetService.listCandidates(payload)
     return new ListGameAssetCandidatesResponse({
       candidates: candidates.map(
         candidate => new GameAssetCandidateResponse(candidate),

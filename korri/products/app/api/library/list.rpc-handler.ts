@@ -41,11 +41,9 @@ export const handleListLibrary = (_payload: typeof ListLibraryPayload.Type) =>
   Effect.gen(function* () {
     const source = yield* LibrarySource
     const games = yield* source.list().pipe(Effect.mapError(toDataError))
-    const publicApiBaseUrl = yield* resolvePublicApiBaseUrl(process.env)
     const resolvedGames = yield* resolveGameAssets({
       games,
       env: process.env,
-      publicApiBaseUrl,
     })
     return new ListLibraryResponse({ games: resolvedGames })
   })
@@ -66,7 +64,6 @@ interface GameAssetCatalog {
 function resolveGameAssets(args: {
   readonly games: readonly ResolvedGameRecord[]
   readonly env: XdgPathEnv
-  readonly publicApiBaseUrl: URL
 }): Effect.Effect<readonly ResolvedGameRecord[], DataError> {
   if (args.games.length === 0) return Effect.succeed(args.games)
 
@@ -74,8 +71,12 @@ function resolveGameAssets(args: {
     Effect.gen(function* () {
       const db = yield* openGameAssetCatalog(args.env)
       const catalog = yield* readGameAssetCatalog(db)
+      if (!hasAssignmentsForGames(args.games, catalog)) {
+        return args.games
+      }
+      const publicApiBaseUrl = yield* resolvePublicApiBaseUrl(args.env)
       return yield* Effect.forEach(args.games, game =>
-        resolveGameRecord({ ...args, game, catalog }),
+        resolveGameRecord({ ...args, game, catalog, publicApiBaseUrl }),
       )
     }),
   )
@@ -115,7 +116,7 @@ function readGameAssets(
   db: KorriLibraryDb,
 ): Effect.Effect<readonly GameAssetRecord[], DataError> {
   return Effect.tryPromise({
-    try: () => db.gameAssets.query().runPromise,
+    try: () => db["game-assets"].query().runPromise,
     catch: error =>
       new DataError({
         reason: "ReadFailed",
@@ -128,7 +129,7 @@ function readGameAssetAssignments(
   db: KorriLibraryDb,
 ): Effect.Effect<readonly GameAssetAssignmentRecord[], DataError> {
   return Effect.tryPromise({
-    try: () => db.gameAssetAssignments.query().runPromise,
+    try: () => db["game-asset-assignments"].query().runPromise,
     catch: error =>
       new DataError({
         reason: "ReadFailed",
@@ -183,6 +184,17 @@ function groupAssignmentsByGameId(
     byGameId.set(assignment.gameId, bucket)
   }
   return byGameId
+}
+
+function hasAssignmentsForGames(
+  games: readonly ResolvedGameRecord[],
+  catalog: GameAssetCatalog,
+): boolean {
+  return games.some(game =>
+    (catalog.assignmentsByGameId.get(game.id) ?? []).some(assignment =>
+      catalog.assetById.has(assignment.assetId),
+    ),
+  )
 }
 
 function resolveGameRecord(args: {

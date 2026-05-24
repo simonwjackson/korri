@@ -264,9 +264,23 @@ describe("app.library.list handler (configured-real source)", () => {
     }
   })
 
-  it("fails deterministically when server-like config omits KORRI_PUBLIC_API_BASE_URL", async () => {
+  it("does not require KORRI_PUBLIC_API_BASE_URL when no assets need URLs", async () => {
     const lib = track(await withTempProseqlLibrary({ games: [] }))
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.NODE_ENV = "production"
+    delete process.env.KORRI_PUBLIC_API_BASE_URL
+
+    const result = await Effect.runPromise(
+      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+    )
+
+    expect(result.games).toEqual([])
+  })
+
+  it("fails deterministically when server-like config omits KORRI_PUBLIC_API_BASE_URL for assigned assets", async () => {
+    const lib = track(await withTempProseqlLibrary(assetUrlFixture()))
+    process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.XDG_DATA_HOME = lib.dataRoot
     process.env.NODE_ENV = "production"
     delete process.env.KORRI_PUBLIC_API_BASE_URL
 
@@ -285,8 +299,9 @@ describe("app.library.list handler (configured-real source)", () => {
   })
 
   it("rejects unsafe public API base URLs", async () => {
-    const lib = track(await withTempProseqlLibrary({ games: [] }))
+    const lib = track(await withTempProseqlLibrary(assetUrlFixture()))
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.XDG_DATA_HOME = lib.dataRoot
     const unsafe = [
       "http://korri.example.test",
       "https://user:pass@korri.example.test",
@@ -383,14 +398,14 @@ async function withTempProseqlLibrary(options: {
             })
           }
           for (const asset of options.assets ?? []) {
-            yield* db.gameAssets.upsert({
+            yield* db["game-assets"].upsert({
               where: { id: asset.id },
               create: asset,
               update: asset,
             })
           }
           for (const item of options.assignments ?? []) {
-            yield* db.gameAssetAssignments.upsert({
+            yield* db["game-asset-assignments"].upsert({
               where: { id: item.id },
               create: item,
               update: item,
@@ -438,6 +453,15 @@ function assetRecord(
     pixelCount: width * height,
     storage: { strategy: "content-addressed" },
     source: { provider: "steamgriddb", id: "asset" },
+  }
+}
+
+function assetUrlFixture() {
+  return {
+    games: [{ id: "snes/base-url.smc" }],
+    assets: [assetRecord(tileAssetId, 512, 512, tileAssetBytes)],
+    assignments: [assignment("snes/base-url.smc", "tile", tileAssetId)],
+    writeAssetBytes: true,
   }
 }
 

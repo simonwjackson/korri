@@ -1,7 +1,7 @@
 /**
  * Korri's eight-collection library — singleton `config` + map-keyed
  * `users`, `systems`, `launchers`, `games`, `collections`,
- * `gameAssets`, `gameAssetAssignments`.
+ * `game-assets`, `game-asset-assignments`.
  *
  * ProseQL 0.13.2's `documents` source variant lets a single YAML file
  * contribute records to multiple declared collections via top-level
@@ -81,12 +81,12 @@ const collectionsSchema = {
     id: { kind: "derivedFromKey" as const, field: "id" as const },
     relationships: {},
   },
-  gameAssets: {
+  "game-assets": {
     schema: GameAssetPayload,
     id: { kind: "derivedFromKey" as const, field: "id" as const },
     relationships: {},
   },
-  gameAssetAssignments: {
+  "game-asset-assignments": {
     schema: GameAssetAssignmentPayload,
     id: { kind: "derivedFromKey" as const, field: "id" as const },
     relationships: {},
@@ -174,10 +174,10 @@ export interface KorriLibraryDb {
   readonly systems: CollectionApi<Schema.Schema.Type<typeof SystemPayload>>
   readonly launchers: CollectionApi<Schema.Schema.Type<typeof LauncherPayload>>
   readonly games: CollectionApi<Schema.Schema.Type<typeof GamePayload>>
-  readonly gameAssets: CollectionApi<
+  readonly "game-assets": CollectionApi<
     Schema.Schema.Type<typeof GameAssetPayload>
   >
-  readonly gameAssetAssignments: CollectionApi<
+  readonly "game-asset-assignments": CollectionApi<
     Schema.Schema.Type<typeof GameAssetAssignmentPayload>
   >
   readonly collections: CollectionApi<

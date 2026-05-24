@@ -39,7 +39,7 @@ export class ListGameAssetCandidatesResponse extends Schema.Class<ListGameAssetC
 }) {}
 
 export const ListGameAssetCandidatesRpc = Rpc.make(
-  "app.gameAssets.candidates.list",
+  "app.game-assets.candidates.list",
   {
     payload: ListGameAssetCandidatesPayload,
     success: ListGameAssetCandidatesResponse,

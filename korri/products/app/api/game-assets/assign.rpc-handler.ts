@@ -17,7 +17,7 @@ export const handleAssignGameAsset = (
     if (!areGameAssetTrustedWritesEnabled()) {
       logger.warn(
         { gameId: validated.gameId, role: validated.role },
-        "app.gameAssets.assign: trusted writes disabled",
+        "app.game-assets.assign: trusted writes disabled",
       )
       return yield* Effect.fail(
         new ValidationError({
@@ -33,11 +33,11 @@ export const handleAssignGameAsset = (
         role: validated.role,
         candidateId: validated.candidateId,
       },
-      "app.gameAssets.assign: assigning candidate",
+      "app.game-assets.assign: assigning candidate",
     )
 
-    const gameAssets = yield* GameAssets
-    const result = yield* gameAssets.assignCandidate(validated)
+    const gameAssetService = yield* GameAssets
+    const result = yield* gameAssetService.assignCandidate(validated)
 
     logger.info(
       {
@@ -46,7 +46,7 @@ export const handleAssignGameAsset = (
         candidateId: validated.candidateId,
         assetId: result.asset.id,
       },
-      "app.gameAssets.assign: assigned candidate",
+      "app.game-assets.assign: assigned candidate",
     )
 
     return new AssignGameAssetResponse(result)

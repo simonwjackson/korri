@@ -58,12 +58,12 @@ export function createGameAssetsRepository(
       db
         .$transaction(tx =>
           Effect.gen(function* () {
-            yield* tx.gameAssets.upsert({
+            yield* tx["game-assets"].upsert({
               where: { id: asset.id },
               create: asset,
               update: asset,
             })
-            yield* tx.gameAssetAssignments.upsert({
+            yield* tx["game-asset-assignments"].upsert({
               where: { id: assignment.id },
               create: assignment,
               update: assignment,
@@ -97,7 +97,8 @@ export function createGameAssetsRepository(
         const assignmentId = `${gameId}:${role}`
         const assignment = yield* Effect.tryPromise({
           try: async () => {
-            const assignments = await db.gameAssetAssignments.query().runPromise
+            const assignments =
+              await db["game-asset-assignments"].query().runPromise
             const found = assignments.find(item => item.id === assignmentId)
             if (!found) throw new MissingAssignmentError()
             return found as GameAssetAssignmentRecord
@@ -117,7 +118,7 @@ export function createGameAssetsRepository(
 
         const assetOrMissing = yield* Effect.tryPromise({
           try: async () => {
-            const assets = await db.gameAssets.query().runPromise
+            const assets = await db["game-assets"].query().runPromise
             return (
               (assets.find(item => item.id === assignment.assetId) as
                 | GameAssetRecord
@@ -131,7 +132,7 @@ export function createGameAssetsRepository(
             }),
         })
 
-        yield* db.gameAssetAssignments.delete(assignmentId).pipe(
+        yield* db["game-asset-assignments"].delete(assignmentId).pipe(
           Effect.flatMap(() =>
             Effect.tryPromise({
               try: () => db.flush(),

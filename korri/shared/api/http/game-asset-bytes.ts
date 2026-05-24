@@ -122,7 +122,7 @@ async function findGameAsset(
           ),
         )
         const assets = yield* Effect.tryPromise({
-          try: () => db.gameAssets.query().runPromise,
+          try: () => db["game-assets"].query().runPromise,
           catch: error =>
             new DataError({
               reason: "ReadFailed",

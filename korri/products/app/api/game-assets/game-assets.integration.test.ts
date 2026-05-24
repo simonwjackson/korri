@@ -258,7 +258,7 @@ async function listCandidates(rpcUrl: string) {
     Effect.scoped(
       RpcClient.make(appRpcGroup).pipe(
         Effect.flatMap(client =>
-          client["app.gameAssets.candidates.list"]({
+          client["app.game-assets.candidates.list"]({
             gameId: gameWithAssetId,
             role: "tile",
           }),
@@ -274,7 +274,7 @@ async function assignCandidate(rpcUrl: string, candidateId: string) {
     Effect.scoped(
       RpcClient.make(appRpcGroup).pipe(
         Effect.flatMap(client =>
-          client["app.gameAssets.assign"]({
+          client["app.game-assets.assign"]({
             gameId: gameWithAssetId,
             role: "tile",
             candidateId,
@@ -291,7 +291,7 @@ async function unassignCandidate(rpcUrl: string) {
     Effect.scoped(
       RpcClient.make(appRpcGroup).pipe(
         Effect.flatMap(client =>
-          client["app.gameAssets.unassign"]({
+          client["app.game-assets.unassign"]({
             gameId: gameWithAssetId,
             role: "tile",
           }),
@@ -375,10 +375,10 @@ async function readCatalog(root: string): Promise<{
           writeDebounce: 1,
         })
         const assets = yield* Effect.promise(
-          () => db.gameAssets.query().runPromise,
+          () => db["game-assets"].query().runPromise,
         )
         const assignments = yield* Effect.promise(
-          () => db.gameAssetAssignments.query().runPromise,
+          () => db["game-asset-assignments"].query().runPromise,
         )
         return {
           assets: assets as readonly GameAssetRecord[],

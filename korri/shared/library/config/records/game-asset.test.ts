@@ -131,7 +131,7 @@ describe("GameAssetAssignmentRecord schema", () => {
 })
 
 describe("game-assets ProseQL collections", () => {
-  it("opens and queries gameAssets and gameAssetAssignments YAML", async () => {
+  it("opens and queries game-assets and game-asset-assignments YAML", async () => {
     await withTempRoot(async root => {
       await mkdir(root, { recursive: true })
       await writeFile(
@@ -141,7 +141,7 @@ describe("game-assets ProseQL collections", () => {
           "  nix/supertuxkart:",
           "    system: nix",
           "    contentPath: /nix/store/supertuxkart/bin/supertuxkart",
-          "gameAssets:",
+          "game-assets:",
           `  ${assetId}:`,
           "    type: image",
           "    mimeType: image/png",
@@ -155,7 +155,7 @@ describe("game-assets ProseQL collections", () => {
           "    source:",
           "      provider: steamgriddb",
           '      id: "624901"',
-          "gameAssetAssignments:",
+          "game-asset-assignments:",
           "  nix/supertuxkart:tile:",
           "    gameId: nix/supertuxkart",
           "    role: tile",
@@ -171,10 +171,10 @@ describe("game-assets ProseQL collections", () => {
             const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
             return {
               assets: yield* Effect.promise(
-                () => db.gameAssets.query().runPromise,
+                () => db["game-assets"].query().runPromise,
               ),
               assignments: yield* Effect.promise(
-                () => db.gameAssetAssignments.query().runPromise,
+                () => db["game-asset-assignments"].query().runPromise,
               ),
             }
           }),

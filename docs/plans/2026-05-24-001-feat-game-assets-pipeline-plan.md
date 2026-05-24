@@ -87,7 +87,7 @@ Korri now has curated games and a SteamGridDB candidate scraper, but the current
 
 ## Key Technical Decisions
 
-- **Catalog data lives in the configured ProseQL library root; binary blobs live under XDG data:** `gameAssets` and `gameAssetAssignments` are library domain records, while promoted image bytes are durable application data. Runtime code must not bypass ProseQL by hand-editing YAML in a separate data path.
+- **Catalog data lives in the configured ProseQL library root; binary blobs live under XDG data:** `game-assets` and `game-asset-assignments` are library domain records, while promoted image bytes are durable application data. Runtime code must not bypass ProseQL by hand-editing YAML in a separate data path.
 - **Use XDG cache for candidates and XDG data for durable blobs:** Candidates are disposable and rebuildable; promoted game-asset bytes must survive cache eviction.
 - **Persist asset ids, not delivery URLs or local absolute paths:** Game-assets YAML stores asset records and game-role assignments. Runtime RPC resolves asset ids into absolute URLs.
 - **Use content-addressed durable asset ids:** Promoted assets use immutable ids such as `sha256:<hex>`, making replacement create a new URL and keeping browser cache behavior simple.
@@ -169,9 +169,9 @@ Korri now has curated games and a SteamGridDB candidate scraper, but the current
 ```mermaid
 flowchart LR
   SGDB[SteamGridDB importer] --> Cache[XDG cache candidate files + manifest]
-  Cache --> CandidateRPC[app.gameAssets.candidates.list]
+  Cache --> CandidateRPC[app.game-assets.candidates.list]
   CandidateRPC --> Picker[Future picker/tool]
-  Picker --> AssignRPC[app.gameAssets.assign]
+  Picker --> AssignRPC[app.game-assets.assign]
   AssignRPC --> Durable[XDG data durable blob]
   AssignRPC --> Catalog[ProseQL game-assets catalog]
   Library[app.library.list] --> Catalog
@@ -184,7 +184,7 @@ flowchart LR
 Persisted catalog shape should be conceptually like:
 
 ```yaml
-gameAssets:
+game-assets:
   sha256:...:
     type: image
     mimeType: image/jpeg
@@ -199,7 +199,7 @@ gameAssets:
     storage:
       strategy: content-addressed
 
-gameAssetAssignments:
+game-asset-assignments:
   nix/supertuxkart:tile:
     gameId: nix/supertuxkart
     role: tile
@@ -253,7 +253,7 @@ Runtime responses should resolve absolute URLs from this catalog rather than per
 - Error path: a persisted game record containing `metadata.media.uri` or a Korri delivery URL fails strict decoding.
 - Error path: an assignment with an unknown role fails strict decoding.
 - Error path: an asset with an unsupported MIME type, invalid extension, impossible decoded dimensions, unsafe storage metadata, or invalid asset id fails strict decoding.
-- Integration: a temp ProseQL library can open and query `gameAssets` and `gameAssetAssignments` records from YAML contributions.
+- Integration: a temp ProseQL library can open and query `game-assets` and `game-asset-assignments` records from YAML contributions.
 
 **Verification:**
 - ProseQL can open a temp library containing game-assets YAML contributions.
@@ -374,7 +374,7 @@ Runtime responses should resolve absolute URLs from this catalog rather than per
 - Test: `korri/products/app/api/server/rpc-server.test.ts`
 
 **Approach:**
-- Use RPC tags that keep the domain obvious, e.g. `app.gameAssets.candidates.list`, `app.gameAssets.assign`, and `app.gameAssets.unassign`.
+- Use RPC tags that keep the domain obvious, e.g. `app.game-assets.candidates.list`, `app.game-assets.assign`, and `app.game-assets.unassign`.
 - Use Effect Schema as the source of truth for payloads, responses, and typed errors.
 - Return `Schema.Class` response instances from handlers.
 - Map missing game/candidate/asset to `NotFoundError`, validation failures to `ValidationError`, and filesystem/YAML failures to `DataError`.
@@ -393,10 +393,10 @@ Runtime responses should resolve absolute URLs from this catalog rather than per
 - `docs/solutions/integration-issues/effect-v4-rpc-schema-class-responses-2026-05-03.md`
 
 **Test scenarios:**
-- Happy path: `app.gameAssets.candidates.list` returns candidates for a game and role from a temp XDG cache manifest without local filesystem paths.
-- Happy path: `app.gameAssets.assign` promotes a candidate and returns the assigned durable asset metadata.
+- Happy path: `app.game-assets.candidates.list` returns candidates for a game and role from a temp XDG cache manifest without local filesystem paths.
+- Happy path: `app.game-assets.assign` promotes a candidate and returns the assigned durable asset metadata.
 - Edge case: candidate/source URLs with credentials or token-like query parameters are sanitized before persistence or response.
-- Happy path: `app.gameAssets.unassign` removes the active assignment for `gameId + role` without deleting the durable asset file.
+- Happy path: `app.game-assets.unassign` removes the active assignment for `gameId + role` without deleting the durable asset file.
 - Edge case: read RPCs still work when trusted writes are disabled.
 - Error path: assign/unassign is rejected when trusted writes are disabled.
 - Error path: assigning a nonexistent game or candidate returns `NotFoundError`.
@@ -534,7 +534,7 @@ Runtime responses should resolve absolute URLs from this catalog rather than per
 
 **Approach:**
 - Replace filename-inference helper tests with explicit role-based resolved-media tests.
-- Ensure test fixtures use `gameAssets` and `gameAssetAssignments` rather than `metadata.media.uri`.
+- Ensure test fixtures use `game-assets` and `game-asset-assignments` rather than `metadata.media.uri`.
 - Cover the end-to-end path from candidate manifest to assignment to resolved library response to byte fetch using real temp directories and real RPC/Hono handlers.
 - Add direct catalog consistency assertions in tests without creating a reusable repair/GC surface in this slice.
 - Keep immediate aka data migration out of this unit; fixtures/tests can be updated freely because no backwards compatibility is required.

@@ -62,7 +62,7 @@ async function writeAssetCatalog(
   await writeFile(
     join(libraryRoot, "library.yaml"),
     [
-      "gameAssets:",
+      "game-assets:",
       ...assets.flatMap(item => [
         `  ${JSON.stringify(item.id)}:`,
         `    type: ${item.type}`,
@@ -87,7 +87,7 @@ async function writeUnsupportedAssetCatalog(env: XdgPathEnv): Promise<void> {
   await writeFile(
     join(libraryRoot, "library.yaml"),
     [
-      "gameAssets:",
+      "game-assets:",
       `  ${JSON.stringify(unsupportedAssetId)}:`,
       "    type: image",
       "    mimeType: image/svg+xml",

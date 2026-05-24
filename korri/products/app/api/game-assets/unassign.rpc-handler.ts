@@ -17,7 +17,7 @@ export const handleUnassignGameAsset = (
     if (!areGameAssetTrustedWritesEnabled()) {
       logger.warn(
         { gameId: validated.gameId, role: validated.role },
-        "app.gameAssets.unassign: trusted writes disabled",
+        "app.game-assets.unassign: trusted writes disabled",
       )
       return yield* Effect.fail(
         new ValidationError({
@@ -29,11 +29,11 @@ export const handleUnassignGameAsset = (
 
     logger.info(
       { gameId: validated.gameId, role: validated.role },
-      "app.gameAssets.unassign: removing assignment",
+      "app.game-assets.unassign: removing assignment",
     )
 
-    const gameAssets = yield* GameAssets
-    const result = yield* gameAssets.unassign(validated)
+    const gameAssetService = yield* GameAssets
+    const result = yield* gameAssetService.unassign(validated)
 
     logger.info(
       {
@@ -41,7 +41,7 @@ export const handleUnassignGameAsset = (
         role: result.assignment.role,
         assetId: result.asset.id,
       },
-      "app.gameAssets.unassign: removed assignment",
+      "app.game-assets.unassign: removed assignment",
     )
 
     return new UnassignGameAssetResponse(result)

@@ -28,9 +28,9 @@ const LibraryInfrastructureLive = Layer.mergeAll(
 const ServerHandlersLive = serverRpcGroup.toLayer(
   serverRpcGroup.of({
     "app.hello.get": handleGetHello,
-    "app.gameAssets.candidates.list": handleListGameAssetCandidates,
-    "app.gameAssets.assign": handleAssignGameAsset,
-    "app.gameAssets.unassign": handleUnassignGameAsset,
+    "app.game-assets.candidates.list": handleListGameAssetCandidates,
+    "app.game-assets.assign": handleAssignGameAsset,
+    "app.game-assets.unassign": handleUnassignGameAsset,
     "app.library.list": handleListLibrary,
     "app.library.launch": handleLaunchLibrary,
     "app.source.list": handleListSource,

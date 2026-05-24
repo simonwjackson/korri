@@ -385,7 +385,7 @@ describe("game-assets RPC handlers", () => {
               writeDebounce: 1,
             })
             return yield* Effect.promise(
-              () => db.gameAssetAssignments.query().runPromise,
+              () => db["game-asset-assignments"].query().runPromise,
             )
           }),
         ),
@@ -493,9 +493,9 @@ describe("game-assets RPC handlers", () => {
     const serverTags = Array.from(serverRpcGroup.requests.keys())
 
     for (const tag of [
-      "app.gameAssets.candidates.list",
-      "app.gameAssets.assign",
-      "app.gameAssets.unassign",
+      "app.game-assets.candidates.list",
+      "app.game-assets.assign",
+      "app.game-assets.unassign",
     ]) {
       expect(appTags).toContain(tag)
       expect(serverTags).toContain(tag)
@@ -525,7 +525,7 @@ describe("game-assets RPC handlers", () => {
         Effect.scoped(
           RpcClient.make(appRpcGroup).pipe(
             Effect.flatMap(client =>
-              client["app.gameAssets.candidates.list"]({
+              client["app.game-assets.candidates.list"]({
                 gameId,
                 role: "tile",
               }),

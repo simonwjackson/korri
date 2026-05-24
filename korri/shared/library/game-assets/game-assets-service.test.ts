@@ -238,9 +238,9 @@ describe("game-assets service assignment", () => {
 
       const persisted = await runWithService(root, ({ db }) =>
         Effect.all({
-          assets: Effect.promise(() => db.gameAssets.query().runPromise),
+          assets: Effect.promise(() => db["game-assets"].query().runPromise),
           assignments: Effect.promise(
-            () => db.gameAssetAssignments.query().runPromise,
+            () => db["game-asset-assignments"].query().runPromise,
           ),
         }),
       )
@@ -295,7 +295,7 @@ describe("game-assets service assignment", () => {
             candidateId: bySource.get("tile-b")?.candidateId ?? "missing",
           })
           const assignments = yield* Effect.promise(
-            () => db.gameAssetAssignments.query().runPromise,
+            () => db["game-asset-assignments"].query().runPromise,
           )
           return { tileA, bannerA, tileB, assignments }
         }),
@@ -359,7 +359,7 @@ describe("game-assets service assignment", () => {
       expect(missingGame).toMatchObject({ _tag: "NotFoundError" })
 
       const assignments = await runWithService(root, ({ db }) =>
-        Effect.promise(() => db.gameAssetAssignments.query().runPromise),
+        Effect.promise(() => db["game-asset-assignments"].query().runPromise),
       )
       expect(assignments).toEqual([])
     })
@@ -482,7 +482,7 @@ describe("game-assets service assignment", () => {
       )
 
       const assignments = await runWithService(root, ({ db }) =>
-        Effect.promise(() => db.gameAssetAssignments.query().runPromise),
+        Effect.promise(() => db["game-asset-assignments"].query().runPromise),
       )
       expect(assignments).toEqual([])
     })
@@ -523,7 +523,7 @@ describe("game-assets service assignment", () => {
       expect(error).toMatchObject({ _tag: "DataError", reason: "WriteFailed" })
 
       const assignments = await runWithService(root, ({ db }) =>
-        Effect.promise(() => db.gameAssetAssignments.query().runPromise),
+        Effect.promise(() => db["game-asset-assignments"].query().runPromise),
       )
       expect(assignments).toEqual([])
     })
@@ -533,7 +533,7 @@ describe("game-assets service assignment", () => {
     await withTempRoot(async root => {
       const error = await runWithService(root, ({ service, db }) =>
         Effect.gen(function* () {
-          yield* db.gameAssetAssignments.upsert({
+          yield* db["game-asset-assignments"].upsert({
             where: { id: `${gameId}:tile` },
             create: {
               id: `${gameId}:tile`,
@@ -562,7 +562,7 @@ describe("game-assets service assignment", () => {
 
       expect(error).toMatchObject({ _tag: "NotFoundError" })
       const assignments = await runWithService(root, ({ db }) =>
-        Effect.promise(() => db.gameAssetAssignments.query().runPromise),
+        Effect.promise(() => db["game-asset-assignments"].query().runPromise),
       )
       expect(assignments).toEqual([])
     })
@@ -591,8 +591,8 @@ describe("game-assets service assignment", () => {
 
       const reopened = await runWithService(root, ({ db }) =>
         Effect.all({
-          asset: db.gameAssets.findById(result.asset.id),
-          assignment: db.gameAssetAssignments.findById(`${gameId}:tile`),
+          asset: db["game-assets"].findById(result.asset.id),
+          assignment: db["game-asset-assignments"].findById(`${gameId}:tile`),
         }),
       )
 

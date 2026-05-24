@@ -34,7 +34,7 @@ export class AssignGameAssetResponse extends Schema.Class<AssignGameAssetRespons
   assignment: GameAssetAssignmentRecord,
 }) {}
 
-export const AssignGameAssetRpc = Rpc.make("app.gameAssets.assign", {
+export const AssignGameAssetRpc = Rpc.make("app.game-assets.assign", {
   payload: AssignGameAssetPayload,
   success: AssignGameAssetResponse,
   error: ApiError,

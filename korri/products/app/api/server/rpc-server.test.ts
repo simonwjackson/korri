@@ -65,7 +65,7 @@ async function configureGameAssetEnvironment() {
   await writeFile(
     join(libraryRoot, "library.yaml"),
     [
-      "gameAssets:",
+      "game-assets:",
       `  ${JSON.stringify(asset.id)}:`,
       `    type: ${asset.type}`,
       `    mimeType: ${asset.mimeType}`,
@@ -93,9 +93,9 @@ describe("headless server RPC group", () => {
     const tags = Array.from(serverRpcGroup.requests.keys()).sort()
 
     expect(tags).toEqual([
-      "app.gameAssets.assign",
-      "app.gameAssets.candidates.list",
-      "app.gameAssets.unassign",
+      "app.game-assets.assign",
+      "app.game-assets.candidates.list",
+      "app.game-assets.unassign",
       "app.hello.get",
       "app.library.launch",
       "app.library.list",
@@ -128,14 +128,14 @@ describe("headless server RPC group", () => {
 
     expect(appTags).toContain("app.library.list")
     expect(appTags).toContain("app.library.launch")
-    expect(appTags).toContain("app.gameAssets.candidates.list")
-    expect(appTags).toContain("app.gameAssets.assign")
-    expect(appTags).toContain("app.gameAssets.unassign")
+    expect(appTags).toContain("app.game-assets.candidates.list")
+    expect(appTags).toContain("app.game-assets.assign")
+    expect(appTags).toContain("app.game-assets.unassign")
     expect(serverTags).toContain("app.library.list")
     expect(serverTags).toContain("app.library.launch")
-    expect(serverTags).toContain("app.gameAssets.candidates.list")
-    expect(serverTags).toContain("app.gameAssets.assign")
-    expect(serverTags).toContain("app.gameAssets.unassign")
+    expect(serverTags).toContain("app.game-assets.candidates.list")
+    expect(serverTags).toContain("app.game-assets.assign")
+    expect(serverTags).toContain("app.game-assets.unassign")
   })
 
   it("mounts narrow durable game-asset bytes instead of arbitrary media files", async () => {

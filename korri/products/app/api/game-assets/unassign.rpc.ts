@@ -30,7 +30,7 @@ export class UnassignGameAssetResponse extends Schema.Class<UnassignGameAssetRes
   assignment: GameAssetAssignmentRecord,
 }) {}
 
-export const UnassignGameAssetRpc = Rpc.make("app.gameAssets.unassign", {
+export const UnassignGameAssetRpc = Rpc.make("app.game-assets.unassign", {
   payload: UnassignGameAssetPayload,
   success: UnassignGameAssetResponse,
   error: ApiError,
