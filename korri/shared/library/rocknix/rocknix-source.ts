@@ -26,7 +26,7 @@ import { readdir } from "node:fs/promises"
 import { basename, join, parse as parsePath } from "node:path"
 
 import { korriDataPath, type XdgPathEnv } from "@shared/config/xdg-paths"
-import type { GameRecord } from "@shared/library/config/records/game"
+import type { GameRecord, Media } from "@shared/library/config/records/game"
 import { logger } from "@shared/logger/logger"
 
 import type { LaunchSpec } from "../launcher"
@@ -327,20 +327,29 @@ async function findSidecarMedia(args: {
   mediaRoot: string
   systemName: string
   romPath: string
-}): Promise<ReadonlyArray<{ type: "image"; uri: string }>> {
+}): Promise<ReadonlyArray<Media>> {
   const romStem = parsePath(args.romPath).name
-  const found: Array<{ type: "image"; uri: string }> = []
+  const found: Array<Media> = []
 
   for (const fileName of SIDECAR_MEDIA_FILES) {
     const path = join(args.mediaRoot, args.systemName, romStem, fileName)
     if (!(await Bun.file(path).exists())) continue
     found.push({
       type: "image",
+      role: mediaRoleForSidecar(fileName),
       uri: `/api/media/games/${encodeURIComponent(args.systemName)}/${encodeURIComponent(romStem)}/${encodeURIComponent(fileName)}`,
+      source: { provider: "rocknix" },
     })
   }
 
   return found
+}
+
+function mediaRoleForSidecar(fileName: (typeof SIDECAR_MEDIA_FILES)[number]) {
+  if (fileName.startsWith("banner-")) return "banner"
+  if (fileName.startsWith("hero-")) return "hero"
+  if (fileName.startsWith("poster-")) return "poster"
+  return "tile"
 }
 
 function composeGameRecord(
@@ -348,7 +357,7 @@ function composeGameRecord(
   systemName: string,
   contentPath: string,
   entry: GamelistEntry,
-  media: ReadonlyArray<{ type: "image"; uri: string }>,
+  media: ReadonlyArray<Media>,
 ): GameRecord {
   const metadata = stripUndefined({
     name: entry.name,

@@ -23,7 +23,18 @@ describe("GameRecord schema", () => {
         genre: ["Puzzle", "Adventure"],
         tags: ["chill", "single-player"],
         media: [
-          { type: "image", uri: "/img/cd-cover.jpg" },
+          {
+            type: "image",
+            uri: "/img/cd-cover.jpg",
+            role: "poster",
+            width: 600,
+            height: 900,
+            source: {
+              provider: "steamgriddb",
+              id: "12345",
+              url: "https://cdn.steamgriddb.com/grid/example.jpg",
+            },
+          },
           { type: "video", uri: "/video/cd-trailer.mp4" },
         ],
       },
@@ -60,6 +71,19 @@ describe("GameRecord schema", () => {
     ).toThrow()
   })
 
+  it("rejects a record with an unknown media role", () => {
+    expect(() =>
+      decodeGameRecord({
+        id: "bad-role",
+        system: "fixture",
+        contentPath: "/storage/fixtures/bad-role.rom",
+        metadata: {
+          media: [{ type: "image", uri: "/x", role: "thumbnail" }],
+        },
+      }),
+    ).toThrow()
+  })
+
   it("rejects a record without an id", () => {
     expect(() => decodeGameRecord({ metadata: { name: "x" } })).toThrow()
   })
@@ -81,6 +105,21 @@ describe("game helpers", () => {
     expect(getGameImageUrl(game)).toBe("/i.jpg")
   })
 
+  it("getGameImageUrl prefers tile media", () => {
+    const game: GameRecord = {
+      id: "g",
+      system: "fixture",
+      contentPath: "/storage/fixtures/g.rom",
+      metadata: {
+        media: [
+          { type: "image", role: "poster", uri: "/poster.jpg" },
+          { type: "image", role: "tile", uri: "/tile.jpg" },
+        ],
+      },
+    }
+    expect(getGameImageUrl(game)).toBe("/tile.jpg")
+  })
+
   it("getGameImageUrl returns undefined when no image media exists", () => {
     const game: GameRecord = {
       id: "g",
@@ -91,7 +130,22 @@ describe("game helpers", () => {
     expect(getGameImageUrl(game)).toBeUndefined()
   })
 
-  it("getGameWideImageUrl prefers wide image media", () => {
+  it("getGameWideImageUrl prefers banner-role image media", () => {
+    const game: GameRecord = {
+      id: "g",
+      system: "fixture",
+      contentPath: "/storage/fixtures/g.rom",
+      metadata: {
+        media: [
+          { type: "image", role: "tile", uri: "/tile.jpg" },
+          { type: "image", role: "banner", uri: "/banner.jpg" },
+        ],
+      },
+    }
+    expect(getGameWideImageUrl(game)).toBe("/banner.jpg")
+  })
+
+  it("getGameWideImageUrl prefers wide image media by filename", () => {
     const game: GameRecord = {
       id: "g",
       system: "fixture",

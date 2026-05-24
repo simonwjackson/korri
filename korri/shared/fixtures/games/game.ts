@@ -13,12 +13,24 @@ import {
   GameRecord,
   GameUserData,
   Media,
+  MediaRole,
+  MediaSource,
+  MediaSourceProvider,
   MediaType,
 } from "@shared/library/config/records/game"
 import { Schema } from "effect"
 
 export type { GamePayload }
-export { GameMetadata, GameRecord, GameUserData, Media, MediaType }
+export {
+  GameMetadata,
+  GameRecord,
+  GameUserData,
+  Media,
+  MediaRole,
+  MediaSource,
+  MediaSourceProvider,
+  MediaType,
+}
 export const decodeGameRecord = decodeGamePayloadOrRecord
 export const decodeGameRecordArray = Schema.decodeUnknownSync(
   Schema.Array(GameRecord),
@@ -30,7 +42,13 @@ export const decodeGameRecordArray = Schema.decodeUnknownSync(
 export function getGameImageUrl(
   game: Schema.Schema.Type<typeof GameRecord>,
 ): string | undefined {
-  return game.metadata?.media?.find(m => m.type === "image")?.uri
+  const images = game.metadata?.media?.filter(m => m.type === "image") ?? []
+  return (
+    images.find(m => m.role === "tile")?.uri ??
+    images.find(m => m.role === "poster")?.uri ??
+    images.find(m => isCoverImageUri(m.uri))?.uri ??
+    images[0]?.uri
+  )
 }
 
 /**
@@ -41,7 +59,10 @@ export function getGameWideImageUrl(
 ): string | undefined {
   const images = game.metadata?.media?.filter(m => m.type === "image") ?? []
   return (
+    images.find(m => m.role === "banner")?.uri ??
+    images.find(m => m.role === "hero")?.uri ??
     images.find(m => isWideImageUri(m.uri))?.uri ??
+    images.find(m => m.role === "tile")?.uri ??
     images.find(m => isCoverImageUri(m.uri))?.uri ??
     images[0]?.uri
   )

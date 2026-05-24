@@ -28,9 +28,38 @@ import { PresetMapPayload } from "./preset"
 export const MediaType = Schema.Literals(["image", "video", "audio"])
 export type MediaType = Schema.Schema.Type<typeof MediaType>
 
+export const MediaRole = Schema.Literals([
+  "tile",
+  "banner",
+  "poster",
+  "hero",
+  "logo",
+  "screenshot",
+])
+export type MediaRole = Schema.Schema.Type<typeof MediaRole>
+
+export const MediaSourceProvider = Schema.Literals([
+  "korri",
+  "rocknix",
+  "steamgriddb",
+  "manual",
+])
+export type MediaSourceProvider = Schema.Schema.Type<typeof MediaSourceProvider>
+
+export const MediaSource = Schema.Struct({
+  provider: MediaSourceProvider,
+  id: Schema.optional(Schema.String),
+  url: Schema.optional(Schema.String),
+})
+export type MediaSource = Schema.Schema.Type<typeof MediaSource>
+
 export const Media = Schema.Struct({
   type: MediaType,
   uri: Schema.String,
+  role: Schema.optional(MediaRole),
+  width: Schema.optional(Schema.Int),
+  height: Schema.optional(Schema.Int),
+  source: Schema.optional(MediaSource),
 })
 export type Media = Schema.Schema.Type<typeof Media>
 

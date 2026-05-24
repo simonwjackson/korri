@@ -133,11 +133,15 @@ describe("createRocknixSource (real filesystem via withTempLibrary)", () => {
     expect(games[0]?.metadata?.media).toEqual([
       {
         type: "image",
+        role: "tile",
         uri: "/api/media/games/wii/mario-kart-wii-usa-en-fr-es/cover-1024.jpg",
+        source: { provider: "rocknix" },
       },
       {
         type: "image",
+        role: "banner",
         uri: "/api/media/games/wii/mario-kart-wii-usa-en-fr-es/banner-460x215.png",
+        source: { provider: "rocknix" },
       },
     ])
   })
