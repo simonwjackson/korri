@@ -102,7 +102,18 @@ export async function runDesktopSmoke(
   // korri-server. With no upstream the forwarder returns 503. The smoke
   // check exercises the composition wiring (static assets, SPA fallback,
   // and the /api/* forwarder mount), not the API itself.
-  const app = createDesktopApp({ assetRoot, getUpstream: () => undefined })
+  //
+  // Smoke runs against a `connected` snapshot so the catch-all serves
+  // the React bundle (matching today's behavior). U8 extends this
+  // surface with disconnected-state body-shape checks.
+  const app = createDesktopApp({
+    assetRoot,
+    getUpstream: () => undefined,
+    getConnectionState: () => ({
+      status: "connected",
+      server: { hostId: "smoke", controlUrl: "http://smoke.local:3001" },
+    }),
+  })
 
   checks.push(
     await checkResponse(

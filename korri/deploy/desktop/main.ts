@@ -15,6 +15,7 @@ import Electrobun, {
 import { watchStreamHosts } from "../../../tools/cli/lan-stream-discovery"
 import { type ConnectionState, makeConnectionController } from "./connection"
 import type { ConnectionServerRecord } from "./connection-state-bridge"
+import type { ConnectionStateSnapshot } from "./connection-state-snapshot"
 import { createDesktopApp } from "./create-desktop-app"
 import { loadDesktopConfig, saveDesktopConfig } from "./desktop-config"
 import { createDesktopInputBroker } from "./input-broker"
@@ -150,9 +151,17 @@ async function main() {
     return state.status === "connected" ? state.server : undefined
   }
 
+  // Snapshot accessor consumed by the catch-all serve branch (waiting
+  // page vs React bundle) and by `/__korri/desktop/connection-status`.
+  // The controller holds `Date` objects; the snapshot's wire shape is
+  // ISO strings. Conversion happens here at the accessor seam so the
+  // composition stays JSON-typed at the HTTP boundary.
+  const getConnectionState = () => snapshotFromControllerState(controller.state)
+
   const app = createDesktopApp({
     assetRoot,
     getUpstream,
+    getConnectionState,
     launchBridge: {
       getConnection,
       // Construct a one-shot RemoteStreamControlClient per request so
@@ -662,6 +671,30 @@ function pushConnectionStateToWebviews(
       }),
     ),
   )
+}
+
+// Map the controller's `Date`-typed state to the wire-shape snapshot
+// the Hono composition consumes. Single conversion seam.
+function snapshotFromControllerState(
+  ref: SubscriptionRef.SubscriptionRef<ConnectionState>,
+): ConnectionStateSnapshot {
+  const state = SubscriptionRef.getUnsafe(ref)
+  if (state.status === "connected") {
+    return { status: "connected", server: state.server }
+  }
+  if (state.status === "reconnecting") {
+    return {
+      status: "reconnecting",
+      server: state.server,
+      since: state.since.toISOString(),
+      helpAfter: state.helpAfter.toISOString(),
+    }
+  }
+  return {
+    status: "searching",
+    since: state.since.toISOString(),
+    helpAfter: state.helpAfter.toISOString(),
+  }
 }
 
 const PROBE_TIMEOUT_MS = 3000

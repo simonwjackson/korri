@@ -58,13 +58,18 @@ device-print-run-command:
 desktop-preload-build:
   bun build korri/deploy/desktop/preload-entry.ts --target=browser --outfile=out/build/desktop-preload/preload.js
 
+# Bundle the waiting-page polling-loop bootstrap as a browser module.
+# Served by bun while the connection controller is not yet `connected`.
+desktop-waiting-page-build:
+  bun build korri/deploy/desktop/waiting-page/polling-loop-bootstrap.ts --target=browser --outfile=out/build/desktop-waiting-page/waiting-polling-loop.js
+
 # Start the Electrobun desktop app after building portal assets.
-desktop-dev: build-web desktop-preload-build desktop-runtime-check
+desktop-dev: build-web desktop-preload-build desktop-waiting-page-build desktop-runtime-check
   bun x electrobun dev
   bun run tools/desktop/electrobun-post-build-patch.ts
 
 # Package the Electrobun desktop app after building portal assets.
-desktop-build: build-web desktop-preload-build desktop-runtime-check
+desktop-build: build-web desktop-preload-build desktop-waiting-page-build desktop-runtime-check
   bun x electrobun build
   bun run tools/desktop/electrobun-post-build-patch.ts
 
