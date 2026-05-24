@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import { basename, dirname, join } from "node:path"
+
 import {
   DataError,
   type NotFoundError,
@@ -218,6 +219,26 @@ function libraryRootFromEnv(env: XdgPathEnv): Effect.Effect<string, DataError> {
   })
 }
 
+/**
+ * Resolves the on-disk root directory that holds durable game-asset blobs.
+ *
+ * Precedence:
+ *  1. `KORRI_GAME_ASSETS_ROOT` env (explicit override).
+ *  2. Sibling of `KORRI_LIBRARY_ROOT` (`<libraryRoot>/../game-assets`),
+ *     so deployments that set the library root explicitly automatically
+ *     find blobs next to `library.yaml` without depending on HOME/XDG.
+ *  3. `<XDG_DATA_HOME>/korri/game-assets` via `korriDataPath`.
+ */
+export function gameAssetsRoot(env: XdgPathEnv): string {
+  const explicit = env.KORRI_GAME_ASSETS_ROOT?.trim()
+  if (explicit && explicit.length > 0) return explicit
+  const libraryRoot = env.KORRI_LIBRARY_ROOT?.trim()
+  if (libraryRoot && libraryRoot.length > 0) {
+    return join(dirname(libraryRoot), "game-assets")
+  }
+  return korriDataPath(env, "game-assets")
+}
+
 export function gameAssetBlobPath(
   env: XdgPathEnv,
   asset: Pick<GameAssetRecord, "id" | "extension">,
@@ -235,7 +256,8 @@ export function gameAssetBlobPath(
   }
   const digest = match[1]
   return join(
-    korriDataPath(env, "game-assets", "blobs"),
+    gameAssetsRoot(env),
+    "blobs",
     "sha256",
     digest.slice(0, 2),
     `${digest}.${asset.extension}`,

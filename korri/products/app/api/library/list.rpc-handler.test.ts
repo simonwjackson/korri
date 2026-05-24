@@ -199,7 +199,7 @@ describe("app.library.list handler (configured-real source)", () => {
     process.env.KORRI_LIBRARY_ROOT = lib.root
     process.env.XDG_DATA_HOME = lib.dataRoot
     const blobPath = gameAssetBlobPath(
-      { XDG_DATA_HOME: lib.dataRoot },
+      { KORRI_LIBRARY_ROOT: lib.root },
       assetRecord(tileAssetId, 512, 512, tileAssetBytes),
     )
     await mkdir(dirname(blobPath), { recursive: true })
@@ -454,7 +454,7 @@ async function withTempProseqlLibrary(options: {
 
     if (options.writeAssetBytes) {
       for (const asset of options.assets ?? []) {
-        const blobPath = gameAssetBlobPath({ XDG_DATA_HOME: dataRoot }, asset)
+        const blobPath = gameAssetBlobPath({ KORRI_LIBRARY_ROOT: root }, asset)
         await mkdir(dirname(blobPath), { recursive: true })
         await writeFile(blobPath, bytesForAsset(asset))
       }

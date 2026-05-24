@@ -162,6 +162,7 @@ function configureTempEnv(root: string) {
     HOME: join(root, "home"),
     XDG_CACHE_HOME: join(root, "cache"),
     XDG_DATA_HOME: join(root, "data"),
+    KORRI_LIBRARY_ROOT: join(root, "library"),
   } as const
 
   process.env.HOME = env.HOME
