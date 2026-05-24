@@ -301,9 +301,9 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
     expect(result.assertionsPassed).toBe(true)
     expect(result.inputdWants).toContain("inputplumber.service")
     expect(result.inputdAfter).toContain("inputplumber.service")
-    expect(result.inputdEnvironment.KORRI_INPUTD_REQUIRE_INPUTPLUMBER_GAMEPAD).toBe(
-      "1",
-    )
+    expect(
+      result.inputdEnvironment.KORRI_INPUTD_REQUIRE_INPUTPLUMBER_GAMEPAD,
+    ).toBe("1")
   })
 
   it("allows deliberate input opt-out for non-interactive kiosk variants", () => {

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test"
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { readFileSync } from "node:fs"
+import {
+  chmodSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { type CommandRunner, launchMoonlight } from "./moonlight-launcher"
@@ -120,7 +125,10 @@ describe("moonlight launcher", () => {
       requireInputPlumberInput: true,
       readProcDevices: async () =>
         readFileSync(
-          join(PROC_FIXTURES_DIR, "bus-input-devices-inputplumber-raw-only.txt"),
+          join(
+            PROC_FIXTURES_DIR,
+            "bus-input-devices-inputplumber-raw-only.txt",
+          ),
           "utf8",
         ),
       runner: runner((command, args) => {

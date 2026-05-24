@@ -268,7 +268,9 @@ B: KEY=40000000
   })
 
   it("requires the InputPlumber virtual gamepad in appliance mode", async () => {
-    const proc = await loadProcFixture("bus-input-devices-inputplumber-virtual.txt")
+    const proc = await loadProcFixture(
+      "bus-input-devices-inputplumber-virtual.txt",
+    )
     const opened: string[] = []
     const virtualSource = createControllableEventSource()
     const handle = await startInputd({
@@ -303,7 +305,9 @@ B: KEY=40000000
   })
 
   it("does not substitute raw gamepads when appliance mode has no InputPlumber target", async () => {
-    const proc = await loadProcFixture("bus-input-devices-inputplumber-raw-only.txt")
+    const proc = await loadProcFixture(
+      "bus-input-devices-inputplumber-raw-only.txt",
+    )
     const opened: string[] = []
     const warnings: string[] = []
     const handle = await startInputd({
@@ -320,7 +324,9 @@ B: KEY=40000000
     })
 
     expect(opened).toEqual([])
-    expect(warnings).toContain("inputd: normalized InputPlumber gamepad unavailable")
+    expect(warnings).toContain(
+      "inputd: normalized InputPlumber gamepad unavailable",
+    )
 
     const client = connectClient(handle.port)
     await client.open()

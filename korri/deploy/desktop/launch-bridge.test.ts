@@ -159,7 +159,9 @@ describe("desktop launch bridge", () => {
         return { status: "prepared", gameId: "gba/wario-land-4" }
       },
       launchMoonlight: async () => {
-        throw new Error("moonlight should not launch when input preflight fails")
+        throw new Error(
+          "moonlight should not launch when input preflight fails",
+        )
       },
     })
 

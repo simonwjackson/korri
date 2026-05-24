@@ -13,8 +13,8 @@
 import { readFile } from "node:fs/promises"
 import { parseProcBusInputDevices } from "@shared/input/native/discover-devices"
 import {
-  resolveInputPlumberVirtualGamepad,
   type InputPlumberVirtualGamepadResolution,
+  resolveInputPlumberVirtualGamepad,
 } from "@shared/input/native/inputplumber-virtual-gamepad"
 
 export type MoonlightLaunchResult =
@@ -86,7 +86,8 @@ export async function launchMoonlight(
   if (inputDevice.path && platform?.toLowerCase() === "sdl") {
     return {
       status: "failed",
-      message: "Moonlight SDL platform cannot be used with explicit evdev input selection",
+      message:
+        "Moonlight SDL platform cannot be used with explicit evdev input selection",
     }
   }
 
@@ -162,9 +163,7 @@ function moonlightPlatformFromEnv(): string | undefined {
   return raw === "" ? undefined : raw
 }
 
-async function moonlightInputDevice(
-  options: MoonlightLaunchOptions,
-): Promise<
+async function moonlightInputDevice(options: MoonlightLaunchOptions): Promise<
   | { readonly status: "ok"; readonly path?: string }
   | {
       readonly status: "failed"
@@ -182,8 +181,9 @@ async function moonlightInputDevice(
   const resolution = resolveInputPlumberVirtualGamepad(
     parseProcBusInputDevices(proc),
   )
-  const failure = inputPlumberResolutionFailure(resolution)
-  if (failure) return failure
+  if (resolution.status !== "found") {
+    return inputPlumberResolutionFailure(resolution)
+  }
 
   if (configured && configured !== resolution.path) {
     return {
@@ -197,16 +197,15 @@ async function moonlightInputDevice(
 }
 
 function inputPlumberResolutionFailure(
-  resolution: InputPlumberVirtualGamepadResolution,
-):
-  | {
-      readonly status: "failed"
-      readonly category: "input-unavailable" | "input-ambiguous"
-      readonly message: string
-    }
-  | undefined {
-  if (resolution.status === "found") return undefined
-
+  resolution: Exclude<
+    InputPlumberVirtualGamepadResolution,
+    { readonly status: "found" }
+  >,
+): {
+  readonly status: "failed"
+  readonly category: "input-unavailable" | "input-ambiguous"
+  readonly message: string
+} {
   if (resolution.status === "ambiguous") {
     return {
       status: "failed",

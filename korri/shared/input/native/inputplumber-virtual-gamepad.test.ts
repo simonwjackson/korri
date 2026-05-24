@@ -17,7 +17,9 @@ async function resolveFixture(name: string) {
 
 describe("resolveInputPlumberVirtualGamepad", () => {
   it("selects the InputPlumber virtual controller instead of raw hardware", async () => {
-    const result = await resolveFixture("bus-input-devices-inputplumber-virtual.txt")
+    const result = await resolveFixture(
+      "bus-input-devices-inputplumber-virtual.txt",
+    )
 
     expect(result).toMatchObject({
       status: "found",
@@ -34,13 +36,17 @@ describe("resolveInputPlumberVirtualGamepad", () => {
   })
 
   it("does not select raw gamepads when no normalized virtual controller exists", async () => {
-    const result = await resolveFixture("bus-input-devices-inputplumber-raw-only.txt")
+    const result = await resolveFixture(
+      "bus-input-devices-inputplumber-raw-only.txt",
+    )
 
     expect(result).toMatchObject({ status: "missing", rawGamepads: 1 })
   })
 
   it("fails as ambiguous when multiple InputPlumber virtual gamepads exist", async () => {
-    const result = await resolveFixture("bus-input-devices-inputplumber-ambiguous.txt")
+    const result = await resolveFixture(
+      "bus-input-devices-inputplumber-ambiguous.txt",
+    )
 
     expect(result.status).toBe("ambiguous")
     if (result.status === "ambiguous") {
@@ -52,7 +58,9 @@ describe("resolveInputPlumberVirtualGamepad", () => {
   })
 
   it("returns the current event node when event numbering changes", async () => {
-    const result = await resolveFixture("bus-input-devices-inputplumber-renumbered.txt")
+    const result = await resolveFixture(
+      "bus-input-devices-inputplumber-renumbered.txt",
+    )
 
     expect(result).toMatchObject({
       status: "found",
@@ -62,7 +70,9 @@ describe("resolveInputPlumberVirtualGamepad", () => {
   })
 
   it("handles malformed or empty proc content without accepting raw devices", async () => {
-    const malformed = await resolveFixture("bus-input-devices-inputplumber-malformed.txt")
+    const malformed = await resolveFixture(
+      "bus-input-devices-inputplumber-malformed.txt",
+    )
     expect(malformed.status).toBe("missing")
 
     const empty = resolveInputPlumberVirtualGamepad(

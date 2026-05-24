@@ -141,7 +141,9 @@ describe("Korri RockNix image output evaluation", () => {
       expect(appliance.inputProviderServices).toContain("inputplumber.service")
       expect(appliance.inputplumberPackage).toContain("inputplumber")
       expect(appliance.inputplumberDataDirs).toContain("/share")
-      expect(appliance.inputplumberDataDirs).toContain("/run/current-system/sw/share")
+      expect(appliance.inputplumberDataDirs).toContain(
+        "/run/current-system/sw/share",
+      )
       expect(appliance.moonlightCommand).toContain("moonlight")
       expect(appliance.moonlightMappingFile).toContain("gamecontrollerdb.txt")
       expect(appliance.moonlightRequireInputPlumber).toBe("1")
