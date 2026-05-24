@@ -147,6 +147,9 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
     expect(result.kioskStartLimitBurst).toBe(5)
     expect(result.kioskStartLimitIntervalSec).toBe(60)
     expect(result.kioskEnvironment.DBUS_SESSION_BUS_ADDRESS).toBeUndefined()
+    expect(result.swayConfig).toContain("default_border none")
+    expect(result.swayConfig).toContain("default_floating_border none")
+    expect(result.swayConfig).toContain("hide_edge_borders both")
     expect(result.swayConfig).toContain("korri-kiosk-client")
     expect(result.kioskEnvironment.KORRI_NATIVE_BRIDGE_URL).toBe(
       "ws://127.0.0.1:3002",
@@ -173,6 +176,7 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
 
     expect(result.swayConfig).not.toBeNull()
     const config = result.swayConfig as string
+    expect(config).toContain("default_border none")
     expect(config).toContain("exec --no-startup-id")
     expect(result.clientLauncher).toContain("device-korri")
     expect(config).toContain("output DEVICE-PANEL transform 90")
