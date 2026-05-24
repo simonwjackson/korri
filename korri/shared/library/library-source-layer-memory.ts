@@ -1,4 +1,4 @@
-import type { GameRecord } from "@shared/library/config/records/game"
+import type { ResolvedGameRecord } from "@shared/fixtures/games/game"
 import type { LaunchSpec } from "@shared/library/launcher"
 import { Effect, Layer } from "effect"
 import {
@@ -13,7 +13,7 @@ export type InMemoryLibrarySourceBehavior =
   | { readonly kind: "fail-list"; readonly error: LibraryError }
 
 export interface InMemoryLibrarySourceConfig {
-  readonly games: readonly GameRecord[]
+  readonly games: readonly ResolvedGameRecord[]
   readonly behavior?: InMemoryLibrarySourceBehavior
   readonly launchSpecsById?: ReadonlyMap<string, LaunchSpec>
   readonly resolvedLaunchById?: ReadonlyMap<string, ResolvedLaunch>

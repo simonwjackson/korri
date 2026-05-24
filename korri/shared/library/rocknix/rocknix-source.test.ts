@@ -85,7 +85,7 @@ describe("createRocknixSource (real filesystem via withTempLibrary)", () => {
     expect(games[0]?.id).toBe("snes/zelda.smc")
   })
 
-  it("attaches Korri sidecar media without reading or editing gamelist media fields", async () => {
+  it("does not attach sidecar media to persisted game records", async () => {
     const lib = track(
       await withTempLibrary({
         systems: [
@@ -130,20 +130,7 @@ describe("createRocknixSource (real filesystem via withTempLibrary)", () => {
     })
 
     const games = await source.list()
-    expect(games[0]?.metadata?.media).toEqual([
-      {
-        type: "image",
-        role: "tile",
-        uri: "/api/media/games/wii/mario-kart-wii-usa-en-fr-es/cover-1024.jpg",
-        source: { provider: "rocknix" },
-      },
-      {
-        type: "image",
-        role: "banner",
-        uri: "/api/media/games/wii/mario-kart-wii-usa-en-fr-es/banner-460x215.png",
-        source: { provider: "rocknix" },
-      },
-    ])
+    expect(games[0]?.metadata?.media).toBeUndefined()
   })
 
   it("launchSpecFor returns a fully-resolved spec with ROCKNIX argv (controllers omitted)", async () => {

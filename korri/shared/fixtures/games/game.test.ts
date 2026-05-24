@@ -6,6 +6,7 @@ import {
   getGameDisplayName,
   getGameImageUrl,
   getGameWideImageUrl,
+  type ResolvedGameRecord,
 } from "./game"
 
 describe("GameRecord schema", () => {
@@ -80,94 +81,42 @@ describe("GameRecord schema", () => {
 })
 
 describe("game helpers", () => {
-  it("getGameImageUrl returns the first image URI", () => {
-    const game: GameRecord = {
-      id: "g",
-      system: "fixture",
-      contentPath: "/storage/fixtures/g.rom",
-      metadata: {
-        media: [
-          { type: "video", uri: "/v.mp4" },
-          { type: "image", uri: "/i.jpg" },
-        ],
-      },
-    }
-    expect(getGameImageUrl(game)).toBe("/i.jpg")
+  it("getGameImageUrl returns the first resolved image URL", () => {
+    const game = resolvedGame({
+      media: [resolvedMedia("poster", "https://assets.example/poster.jpg")],
+    })
+    expect(getGameImageUrl(game)).toBe("https://assets.example/poster.jpg")
   })
 
-  it("getGameImageUrl prefers tile media", () => {
-    const game: GameRecord = {
-      id: "g",
-      system: "fixture",
-      contentPath: "/storage/fixtures/g.rom",
-      metadata: {
-        media: [
-          { type: "image", role: "poster", uri: "/poster.jpg" },
-          { type: "image", role: "tile", uri: "/tile.jpg" },
-        ],
-      },
-    }
-    expect(getGameImageUrl(game)).toBe("/tile.jpg")
+  it("getGameImageUrl prefers explicit tile resolved media", () => {
+    const game = resolvedGame({
+      media: [
+        resolvedMedia("poster", "https://assets.example/poster.jpg"),
+        resolvedMedia("tile", "https://assets.example/tile.jpg"),
+      ],
+    })
+    expect(getGameImageUrl(game)).toBe("https://assets.example/tile.jpg")
   })
 
-  it("getGameImageUrl returns undefined when no image media exists", () => {
-    const game: GameRecord = {
-      id: "g",
-      system: "fixture",
-      contentPath: "/storage/fixtures/g.rom",
-      metadata: { media: [{ type: "video", uri: "/v.mp4" }] },
-    }
-    expect(getGameImageUrl(game)).toBeUndefined()
+  it("getGameImageUrl returns undefined when no resolved image media exists", () => {
+    expect(getGameImageUrl(resolvedGame({}))).toBeUndefined()
   })
 
-  it("getGameWideImageUrl prefers banner-role image media", () => {
-    const game: GameRecord = {
-      id: "g",
-      system: "fixture",
-      contentPath: "/storage/fixtures/g.rom",
-      metadata: {
-        media: [
-          { type: "image", role: "tile", uri: "/tile.jpg" },
-          { type: "image", role: "banner", uri: "/banner.jpg" },
-        ],
-      },
-    }
-    expect(getGameWideImageUrl(game)).toBe("/banner.jpg")
+  it("getGameWideImageUrl prefers explicit banner resolved media", () => {
+    const game = resolvedGame({
+      media: [
+        resolvedMedia("tile", "https://assets.example/tile.jpg"),
+        resolvedMedia("banner", "https://assets.example/banner.jpg"),
+      ],
+    })
+    expect(getGameWideImageUrl(game)).toBe("https://assets.example/banner.jpg")
   })
 
-  it("getGameWideImageUrl prefers wide image media by filename", () => {
-    const game: GameRecord = {
-      id: "g",
-      system: "fixture",
-      contentPath: "/storage/fixtures/g.rom",
-      metadata: {
-        media: [
-          { type: "image", uri: "/api/media/games/wii/g/cover-1024.jpg" },
-          { type: "image", uri: "/api/media/games/wii/g/poster-600x900.png" },
-          { type: "image", uri: "/api/media/games/wii/g/banner-460x215.png" },
-        ],
-      },
-    }
-    expect(getGameWideImageUrl(game)).toBe(
-      "/api/media/games/wii/g/banner-460x215.png",
-    )
-  })
-
-  it("getGameWideImageUrl falls back to cover image media", () => {
-    const game: GameRecord = {
-      id: "g",
-      system: "fixture",
-      contentPath: "/storage/fixtures/g.rom",
-      metadata: {
-        media: [
-          { type: "image", uri: "/api/media/games/wii/g/poster-600x900.png" },
-          { type: "image", uri: "/api/media/games/wii/g/cover-1024.jpg" },
-        ],
-      },
-    }
-    expect(getGameWideImageUrl(game)).toBe(
-      "/api/media/games/wii/g/cover-1024.jpg",
-    )
+  it("getGameWideImageUrl falls back to tile resolved media", () => {
+    const game = resolvedGame({
+      media: [resolvedMedia("tile", "https://assets.example/tile.jpg")],
+    })
+    expect(getGameWideImageUrl(game)).toBe("https://assets.example/tile.jpg")
   })
 
   it("getGameDisplayName falls back to id when name is absent", () => {
@@ -189,3 +138,31 @@ describe("game helpers", () => {
     expect(decoded.id).toBe("x")
   })
 })
+
+function resolvedGame(
+  overrides: Partial<Pick<ResolvedGameRecord, "media">>,
+): ResolvedGameRecord {
+  return {
+    id: "g",
+    system: "fixture",
+    contentPath: "/storage/fixtures/g.rom",
+    ...overrides,
+  }
+}
+
+type ResolvedMedia = NonNullable<ResolvedGameRecord["media"]>[number]
+
+function resolvedMedia(
+  role: ResolvedMedia["role"],
+  url: string,
+): ResolvedMedia {
+  return {
+    role,
+    type: "image",
+    width: 512,
+    height: 512,
+    assetId:
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    url,
+  }
+}

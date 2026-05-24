@@ -23,10 +23,10 @@
  */
 
 import { readdir } from "node:fs/promises"
-import { basename, join, parse as parsePath } from "node:path"
+import { basename, join } from "node:path"
 
 import { korriDataPath, type XdgPathEnv } from "@shared/config/xdg-paths"
-import type { GameRecord, Media } from "@shared/library/config/records/game"
+import type { GameRecord } from "@shared/library/config/records/game"
 import { logger } from "@shared/logger/logger"
 
 import type { LaunchSpec } from "../launcher"
@@ -53,14 +53,6 @@ export type RocknixConfig = {
    */
   readonly allowMissingEsSystems?: boolean
 }
-
-const SIDECAR_MEDIA_FILES = [
-  "cover-1024.jpg",
-  "cover-512.webp",
-  "poster-600x900.png",
-  "hero-1280x720.webp",
-  "banner-460x215.png",
-] as const
 
 export function defaultRocknixMediaRoot(env: XdgPathEnv = process.env): string {
   return korriDataPath(env, "media", "games")
@@ -128,14 +120,12 @@ export function createRocknixSource(
                 entry,
                 system: sys,
                 systemRoot,
-                mediaRoot: config.mediaRoot ?? defaultRocknixMediaRoot(),
                 launchCommandOverride: config.launchCommand,
               })
             : await composeFallbackRecordAndSpec({
                 entry,
                 systemName,
                 systemRoot,
-                mediaRoot: config.mediaRoot ?? defaultRocknixMediaRoot(),
                 launchCommandOverride: config.launchCommand,
               })
           if (specs.has(record.id)) {
@@ -264,20 +254,13 @@ async function composeFallbackRecordAndSpec(args: {
   entry: GamelistEntry
   systemName: string
   systemRoot: string
-  mediaRoot: string
   launchCommandOverride: string | undefined
 }): Promise<{ record: GameRecord; spec: LaunchSpec }> {
-  const { entry, systemName, systemRoot, mediaRoot, launchCommandOverride } =
-    args
+  const { entry, systemName, systemRoot, launchCommandOverride } = args
   const absRomPath = resolveRomPath(systemRoot, entry.path)
   const id = `${systemName}/${basename(absRomPath)}`
-  const media = await findSidecarMedia({
-    mediaRoot,
-    systemName,
-    romPath: absRomPath,
-  })
 
-  const record = composeGameRecord(id, systemName, absRomPath, entry, media)
+  const record = composeGameRecord(id, systemName, absRomPath, entry)
   const spec = composeFallbackLaunchSpec({
     launchCommandOverride,
     romPath: absRomPath,
@@ -290,19 +273,13 @@ async function composeRecordAndSpec(args: {
   entry: GamelistEntry
   system: EsSystem
   systemRoot: string
-  mediaRoot: string
   launchCommandOverride: string | undefined
 }): Promise<{ record: GameRecord; spec: LaunchSpec }> {
-  const { entry, system, systemRoot, mediaRoot, launchCommandOverride } = args
+  const { entry, system, systemRoot, launchCommandOverride } = args
   const absRomPath = resolveRomPath(systemRoot, entry.path)
   const id = `${system.name}/${basename(absRomPath)}`
-  const media = await findSidecarMedia({
-    mediaRoot,
-    systemName: system.name,
-    romPath: absRomPath,
-  })
 
-  const record = composeGameRecord(id, system.name, absRomPath, entry, media)
+  const record = composeGameRecord(id, system.name, absRomPath, entry)
   const spec = composeLaunchSpec({
     template: system.commandTemplate,
     launchCommandOverride,
@@ -323,41 +300,11 @@ function resolveRomPath(systemRoot: string, rawPath: string): string {
   return join(systemRoot, stripped)
 }
 
-async function findSidecarMedia(args: {
-  mediaRoot: string
-  systemName: string
-  romPath: string
-}): Promise<ReadonlyArray<Media>> {
-  const romStem = parsePath(args.romPath).name
-  const found: Array<Media> = []
-
-  for (const fileName of SIDECAR_MEDIA_FILES) {
-    const path = join(args.mediaRoot, args.systemName, romStem, fileName)
-    if (!(await Bun.file(path).exists())) continue
-    found.push({
-      type: "image",
-      role: mediaRoleForSidecar(fileName),
-      uri: `/api/media/games/${encodeURIComponent(args.systemName)}/${encodeURIComponent(romStem)}/${encodeURIComponent(fileName)}`,
-      source: { provider: "rocknix" },
-    })
-  }
-
-  return found
-}
-
-function mediaRoleForSidecar(fileName: (typeof SIDECAR_MEDIA_FILES)[number]) {
-  if (fileName.startsWith("banner-")) return "banner"
-  if (fileName.startsWith("hero-")) return "hero"
-  if (fileName.startsWith("poster-")) return "poster"
-  return "tile"
-}
-
 function composeGameRecord(
   id: string,
   systemName: string,
   contentPath: string,
   entry: GamelistEntry,
-  media: ReadonlyArray<Media>,
 ): GameRecord {
   const metadata = stripUndefined({
     name: entry.name,
@@ -366,7 +313,6 @@ function composeGameRecord(
     publisher: entry.publisher,
     releaseDate: entry.releaseDate?.toISOString(),
     genre: entry.genre ? [entry.genre] : undefined,
-    media: media.length > 0 ? media : undefined,
   })
   const userData = stripUndefined({
     lastPlayed: entry.lastPlayed,

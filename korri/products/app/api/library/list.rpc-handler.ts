@@ -1,10 +1,24 @@
+import { stat } from "node:fs/promises"
+import { gameAssetByteRoutePrefix } from "@shared/api/http/game-asset-bytes"
 import { DataError } from "@shared/api/rpc/errors"
+import { korriDataPath, type XdgPathEnv } from "@shared/config/xdg-paths"
+import type {
+  ResolvedGameMedia,
+  ResolvedGameRecord,
+} from "@shared/fixtures/games/game"
+import type { GameAssetRecord } from "@shared/library/config/records/game-asset"
+import type { GameAssetRole } from "@shared/library/config/records/game-asset-assignment"
+import { gameAssetBlobPath } from "@shared/library/game-assets/game-assets-service"
 import {
   type LibraryError,
   LibrarySource,
 } from "@shared/library/library-services"
+import {
+  type KorriLibraryDb,
+  openKorriLibraryDb,
+} from "@shared/library/proseql/library-db"
 import { logger } from "@shared/logger/logger"
-import { Effect } from "effect"
+import { Effect, type Scope } from "effect"
 
 import { type ListLibraryPayload, ListLibraryResponse } from "./list.rpc"
 
@@ -23,8 +37,335 @@ export const handleListLibrary = (_payload: typeof ListLibraryPayload.Type) =>
   Effect.gen(function* () {
     const source = yield* LibrarySource
     const games = yield* source.list().pipe(Effect.mapError(toDataError))
-    return new ListLibraryResponse({ games })
+    const publicApiBaseUrl = yield* resolvePublicApiBaseUrl(process.env)
+    const resolvedGames = yield* resolveGameAssets({
+      games,
+      env: process.env,
+      publicApiBaseUrl,
+    })
+    return new ListLibraryResponse({ games: resolvedGames })
   })
+
+interface CatalogAssignment {
+  readonly role: GameAssetRole
+  readonly assetId: string
+}
+
+interface GameAssetCatalog {
+  readonly assetById: ReadonlyMap<string, GameAssetRecord>
+  readonly assignmentsByGameId: ReadonlyMap<
+    string,
+    readonly CatalogAssignment[]
+  >
+}
+
+function resolveGameAssets(args: {
+  readonly games: readonly ResolvedGameRecord[]
+  readonly env: XdgPathEnv
+  readonly publicApiBaseUrl: URL
+}): Effect.Effect<readonly ResolvedGameRecord[], DataError> {
+  if (args.games.length === 0) return Effect.succeed(args.games)
+
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const db = yield* openGameAssetCatalog(args.env)
+      const catalog = yield* readGameAssetCatalog(db)
+      return yield* Effect.forEach(args.games, game =>
+        resolveGameRecord({ ...args, game, catalog }),
+      )
+    }),
+  )
+}
+
+function openGameAssetCatalog(
+  env: XdgPathEnv,
+): Effect.Effect<KorriLibraryDb, DataError, Scope.Scope> {
+  return openKorriLibraryDb({
+    root: libraryRootFromEnv(env),
+    writeDebounce: 1,
+  }).pipe(
+    Effect.mapError(
+      error =>
+        new DataError({
+          reason: "ReadFailed",
+          message: `failed to open game assets catalog: ${stringifyError(error)}`,
+        }),
+    ),
+  )
+}
+
+function readGameAssetCatalog(
+  db: KorriLibraryDb,
+): Effect.Effect<GameAssetCatalog, DataError> {
+  return Effect.all([readGameAssets(db), readGameAssetAssignments(db)]).pipe(
+    Effect.map(([assets, assignments]) => ({
+      assetById: new Map(
+        assets.map(asset => [asset.id, asset as GameAssetRecord] as const),
+      ),
+      assignmentsByGameId: groupAssignmentsByGameId(assignments),
+    })),
+  )
+}
+
+function readGameAssets(
+  db: KorriLibraryDb,
+): Effect.Effect<readonly GameAssetRecord[], DataError> {
+  return Effect.tryPromise({
+    try: () => db.gameAssets.query().runPromise,
+    catch: error =>
+      new DataError({
+        reason: "ReadFailed",
+        message: `failed to read game assets catalog: ${stringifyError(error)}`,
+      }),
+  }).pipe(Effect.map(assets => assets as readonly GameAssetRecord[]))
+}
+
+function readGameAssetAssignments(db: KorriLibraryDb): Effect.Effect<
+  readonly {
+    readonly gameId: string
+    readonly role: GameAssetRole
+    readonly assetId: string
+  }[],
+  DataError
+> {
+  return Effect.tryPromise({
+    try: () => db.gameAssetAssignments.query().runPromise,
+    catch: error =>
+      new DataError({
+        reason: "ReadFailed",
+        message: `failed to read game asset assignments: ${stringifyError(error)}`,
+      }),
+  })
+}
+
+function groupAssignmentsByGameId(
+  assignments: readonly {
+    readonly gameId: string
+    readonly role: GameAssetRole
+    readonly assetId: string
+  }[],
+): ReadonlyMap<string, readonly CatalogAssignment[]> {
+  const byGameId = new Map<string, CatalogAssignment[]>()
+  for (const assignment of assignments) {
+    const bucket = byGameId.get(assignment.gameId) ?? []
+    bucket.push({ role: assignment.role, assetId: assignment.assetId })
+    byGameId.set(assignment.gameId, bucket)
+  }
+  return byGameId
+}
+
+function resolveGameRecord(args: {
+  readonly game: ResolvedGameRecord
+  readonly catalog: GameAssetCatalog
+  readonly env: XdgPathEnv
+  readonly publicApiBaseUrl: URL
+}): Effect.Effect<ResolvedGameRecord, never> {
+  const assignments = sortAssignments(
+    args.catalog.assignmentsByGameId.get(args.game.id) ?? [],
+  )
+
+  return Effect.forEach(assignments, assignment =>
+    resolveMediaEntry({ ...args, assignment }),
+  ).pipe(
+    Effect.map(entries => entries.filter(isDefined)),
+    Effect.map(media =>
+      media.length > 0 ? { ...args.game, media } : args.game,
+    ),
+  )
+}
+
+function resolveMediaEntry(args: {
+  readonly game: ResolvedGameRecord
+  readonly catalog: GameAssetCatalog
+  readonly env: XdgPathEnv
+  readonly publicApiBaseUrl: URL
+  readonly assignment: CatalogAssignment
+}): Effect.Effect<ResolvedGameMedia | undefined, never> {
+  const asset = args.catalog.assetById.get(args.assignment.assetId)
+  if (!asset) {
+    logOmittedAsset(args, "missing-record")
+    return Effect.succeed(undefined)
+  }
+
+  if (asset.type !== "image" || !isSupportedImageMime(asset.mimeType)) {
+    logOmittedAsset({ ...args, asset }, "unsupported")
+    return Effect.succeed(undefined)
+  }
+
+  return fileExists(gameAssetBlobPath(args.env, asset)).pipe(
+    Effect.map(exists => {
+      if (!exists) {
+        logOmittedAsset({ ...args, asset }, "missing-bytes")
+        return undefined
+      }
+      return resolvedMedia(args.publicApiBaseUrl, args.assignment.role, asset)
+    }),
+  )
+}
+
+function resolvedMedia(
+  publicApiBaseUrl: URL,
+  role: GameAssetRole,
+  asset: GameAssetRecord,
+): ResolvedGameMedia {
+  return {
+    role,
+    type: asset.type,
+    width: asset.width,
+    height: asset.height,
+    ...(asset.source ? { source: asset.source } : {}),
+    assetId: asset.id,
+    url: gameAssetUrl(publicApiBaseUrl, asset.id),
+  }
+}
+
+function logOmittedAsset(
+  args: {
+    readonly game: ResolvedGameRecord
+    readonly assignment: CatalogAssignment
+    readonly asset?: GameAssetRecord
+  },
+  reason: "missing-record" | "missing-bytes" | "unsupported",
+): void {
+  const messages = {
+    "missing-record":
+      "app.library.list: omitting assignment with missing game asset record",
+    "missing-bytes": "app.library.list: omitting game asset with missing bytes",
+    unsupported: "app.library.list: omitting unsupported game asset",
+  }
+  logger.warn(
+    {
+      gameId: args.game.id,
+      role: args.assignment.role,
+      assetId: args.asset?.id ?? args.assignment.assetId,
+    },
+    messages[reason],
+  )
+}
+
+function resolvePublicApiBaseUrl(
+  env: XdgPathEnv,
+): Effect.Effect<URL, DataError> {
+  return Effect.try({
+    try: () => {
+      const explicit = env.KORRI_PUBLIC_API_BASE_URL?.trim()
+      if (explicit && explicit.length > 0)
+        return validatePublicApiBaseUrl(explicit)
+      if (env.NODE_ENV === "test" || env.NODE_ENV === "development") {
+        return new URL("http://127.0.0.1:3001/")
+      }
+      throw new Error(
+        "KORRI_PUBLIC_API_BASE_URL is required for server deployments that return game asset URLs",
+      )
+    },
+    catch: error =>
+      new DataError({
+        reason: "Unavailable",
+        message: stringifyError(error),
+      }),
+  })
+}
+
+function validatePublicApiBaseUrl(raw: string): URL {
+  rejectPublicApiBaseUrlWhitespace(raw)
+  const url = new URL(raw)
+  rejectUnsafePublicApiBaseUrlParts(url)
+  rejectUnsafePublicApiBaseUrlScheme(url)
+  return withTrailingSlash(url)
+}
+
+function rejectPublicApiBaseUrlWhitespace(raw: string): void {
+  if (/\s/.test(raw)) {
+    throw new Error("KORRI_PUBLIC_API_BASE_URL must not contain whitespace")
+  }
+}
+
+function rejectUnsafePublicApiBaseUrlParts(url: URL): void {
+  if (url.username !== "" || url.password !== "") {
+    throw new Error("KORRI_PUBLIC_API_BASE_URL must not contain credentials")
+  }
+  if (url.search !== "" || url.hash !== "") {
+    throw new Error(
+      "KORRI_PUBLIC_API_BASE_URL must not contain query or fragment data",
+    )
+  }
+}
+
+function rejectUnsafePublicApiBaseUrlScheme(url: URL): void {
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error("KORRI_PUBLIC_API_BASE_URL must use http or https")
+  }
+  if (url.protocol === "http:" && !isLoopbackHostname(url.hostname)) {
+    throw new Error(
+      "KORRI_PUBLIC_API_BASE_URL must use https outside loopback hosts",
+    )
+  }
+}
+
+function withTrailingSlash(url: URL): URL {
+  if (!url.pathname.endsWith("/")) url.pathname = `${url.pathname}/`
+  return url
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  return (
+    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]"
+  )
+}
+
+const roleOrder: ReadonlyMap<GameAssetRole, number> = new Map([
+  ["tile", 0],
+  ["banner", 1],
+  ["poster", 2],
+  ["hero", 3],
+  ["logo", 4],
+  ["screenshot", 5],
+])
+
+function sortAssignments<T extends { readonly role: GameAssetRole }>(
+  assignments: readonly T[],
+): readonly T[] {
+  return [...assignments].sort(
+    (a, b) => (roleOrder.get(a.role) ?? 99) - (roleOrder.get(b.role) ?? 99),
+  )
+}
+
+function gameAssetUrl(baseUrl: URL, assetId: string): string {
+  return new URL(
+    `${gameAssetByteRoutePrefix.slice(1)}${encodeURIComponent(assetId)}`,
+    baseUrl,
+  ).toString()
+}
+
+function fileExists(path: string): Effect.Effect<boolean, never> {
+  return Effect.promise(async () => {
+    try {
+      const info = await stat(path)
+      return info.isFile()
+    } catch {
+      return false
+    }
+  })
+}
+
+function isSupportedImageMime(mimeType: string): boolean {
+  return (
+    mimeType === "image/png" ||
+    mimeType === "image/jpeg" ||
+    mimeType === "image/webp"
+  )
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined
+}
+
+function libraryRootFromEnv(env: XdgPathEnv): string {
+  const explicit = env.KORRI_LIBRARY_ROOT?.trim()
+  return explicit && explicit.length > 0
+    ? explicit
+    : korriDataPath(env, "library")
+}
 
 function toDataError(error: LibraryError): DataError {
   const message = error.message ?? "library list failed"
@@ -33,4 +374,8 @@ function toDataError(error: LibraryError): DataError {
     reason: "ReadFailed",
     message,
   })
+}
+
+function stringifyError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }

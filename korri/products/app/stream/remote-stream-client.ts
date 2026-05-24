@@ -21,7 +21,7 @@
 import { appRpcGroup } from "@app/api/app-rpc-group"
 import { serverRpcGroup } from "@app/api/server/rpc-group"
 import { BatchJsonSerializationLive } from "@shared/api/rpc/serialization"
-import type { GameRecord } from "@shared/fixtures/games/game"
+import type { ResolvedGameRecord } from "@shared/fixtures/games/game"
 import { Cause, Effect, Exit, Layer, type Scope } from "effect"
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient"
 import * as HttpClient from "effect/unstable/http/HttpClient"
@@ -82,7 +82,7 @@ export type RemoteSourceStatus =
     }
 
 export interface RemoteStreamControlClient {
-  readonly listGames: () => Promise<readonly GameRecord[]>
+  readonly listGames: () => Promise<readonly ResolvedGameRecord[]>
   readonly listSourceGames: () => Promise<readonly RemoteSourceGame[]>
   readonly sourceStatus: () => Promise<RemoteSourceStatus>
   readonly prepareGame: (gameId: string) => Promise<RemotePrepareResult>

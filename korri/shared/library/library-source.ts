@@ -17,9 +17,9 @@
  * the same layer-swap seam while keeping implementations simple.
  */
 
+import type { ResolvedGameRecord } from "@shared/fixtures/games/game"
 import type { EphemeralOverride } from "@shared/library/config/ephemeral-override"
 import type { GamescopePolicy } from "@shared/library/config/inheritable-fields"
-import type { GameRecord } from "@shared/library/config/records/game"
 import type { LaunchSpec } from "./launcher"
 
 export interface ResolveLaunchInputs {
@@ -34,7 +34,7 @@ export interface ResolvedLaunch {
 }
 
 export interface LibrarySource {
-  list(): Promise<readonly GameRecord[]>
+  list(): Promise<readonly ResolvedGameRecord[]>
   launchSpecFor(id: string): Promise<LaunchSpec | undefined>
   resolveLaunchForGame(
     id: string,

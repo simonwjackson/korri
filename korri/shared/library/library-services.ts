@@ -1,6 +1,6 @@
+import type { ResolvedGameRecord } from "@shared/fixtures/games/game"
 import type { EphemeralOverride } from "@shared/library/config/ephemeral-override"
 import type { GamescopePolicy } from "@shared/library/config/inheritable-fields"
-import type { GameRecord } from "@shared/library/config/records/game"
 import type { LaunchResult, LaunchSpec } from "@shared/library/launcher"
 import { Context, type Effect, Schema } from "effect"
 
@@ -25,7 +25,10 @@ export interface ResolvedLaunch {
 }
 
 export interface LibrarySourceService {
-  readonly list: () => Effect.Effect<readonly GameRecord[], LibraryError>
+  readonly list: () => Effect.Effect<
+    readonly ResolvedGameRecord[],
+    LibraryError
+  >
   /**
    * Back-compat wrapper around `resolveLaunchForGame` — returns just the
    * LaunchSpec (drops gamescope) and produces `undefined` on resolution

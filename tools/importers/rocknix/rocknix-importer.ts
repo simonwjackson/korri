@@ -1,6 +1,5 @@
 import { readdir } from "node:fs/promises"
-import { join, parse as parsePath } from "node:path"
-import { korriDataPath } from "@shared/config/xdg-paths"
+import { join } from "node:path"
 import type { GameRecord } from "@shared/library/config/records/game"
 import type { LauncherRecord } from "@shared/library/config/records/launcher"
 import type {
@@ -18,6 +17,7 @@ export interface RocknixImportConfig {
   readonly gamelistRoots: readonly string[]
   readonly esSystemsPath: string
   readonly launchCommand?: string
+  /** Deprecated no-op: sidecar media is no longer imported into GameRecord metadata. */
   readonly mediaRoot?: string
   readonly gameIdGenerator?: () => string
 }
@@ -38,14 +38,6 @@ export interface RocknixImportSummary {
   readonly skipped: number
   readonly warnings: readonly RocknixImportWarning[]
 }
-
-const SIDECAR_MEDIA_FILES = [
-  "cover-1024.jpg",
-  "cover-512.webp",
-  "poster-600x900.png",
-  "hero-1280x720.webp",
-  "banner-460x215.png",
-] as const
 
 export async function importRocknixLibrary(
   config: RocknixImportConfig,
@@ -115,8 +107,6 @@ export async function importRocknixLibrary(
           system,
           romPath,
           gameId,
-          mediaRoot:
-            config.mediaRoot ?? korriDataPath(process.env, "media", "games"),
           launchCommandOverride: config.launchCommand,
         })
 
@@ -195,15 +185,8 @@ async function composeImportedRecord(args: {
   system: EsSystem
   romPath: string
   gameId: string
-  mediaRoot: string
   launchCommandOverride: string | undefined
 }): Promise<ImportedGameRecord> {
-  const media = await findSidecarMedia({
-    mediaRoot: args.mediaRoot,
-    systemName: args.system.name,
-    romPath: args.romPath,
-  })
-
   const launcher = composeLauncher({
     system: args.system,
     launchCommandOverride: args.launchCommandOverride,
@@ -213,7 +196,6 @@ async function composeImportedRecord(args: {
     args.system.name,
     args.romPath,
     args.entry,
-    media,
   )
   const systemDelta: SystemDelta = {
     id: args.system.name,
@@ -238,32 +220,11 @@ function rocknixExternalId(args: {
   return `${args.systemName}:${args.romPath}`
 }
 
-async function findSidecarMedia(args: {
-  mediaRoot: string
-  systemName: string
-  romPath: string
-}): Promise<ReadonlyArray<{ type: "image"; uri: string }>> {
-  const romStem = parsePath(args.romPath).name
-  const found: Array<{ type: "image"; uri: string }> = []
-
-  for (const fileName of SIDECAR_MEDIA_FILES) {
-    const path = join(args.mediaRoot, args.systemName, romStem, fileName)
-    if (!(await Bun.file(path).exists())) continue
-    found.push({
-      type: "image",
-      uri: `/api/media/games/${encodeURIComponent(args.systemName)}/${encodeURIComponent(romStem)}/${encodeURIComponent(fileName)}`,
-    })
-  }
-
-  return found
-}
-
 function composeGameRecord(
   id: string,
   systemName: string,
   contentPath: string,
   entry: GamelistEntry,
-  media: ReadonlyArray<{ type: "image"; uri: string }>,
 ): GameRecord {
   const metadata = stripUndefined({
     name: entry.name,
@@ -272,7 +233,6 @@ function composeGameRecord(
     publisher: entry.publisher,
     releaseDate: entry.releaseDate?.toISOString(),
     genre: entry.genre ? [entry.genre] : undefined,
-    media: media.length > 0 ? media : undefined,
   })
   const userData = stripUndefined({
     lastPlayed: entry.lastPlayed,

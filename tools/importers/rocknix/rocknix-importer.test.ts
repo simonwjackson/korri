@@ -191,7 +191,7 @@ describe("importRocknixLibrary", () => {
     })
   })
 
-  it("imports sidecar media as regular GameRecord media", async () => {
+  it("does not import sidecar media into GameRecord metadata", async () => {
     await using lib = await withTempLibrary({
       systems: [
         {
@@ -223,7 +223,6 @@ describe("importRocknixLibrary", () => {
                   gamelistRoots: [lib.rootDir],
                   esSystemsPath: lib.esSystemsPath,
                   launchCommand: lib.launchCommand,
-                  mediaRoot,
                 }),
               )
               return yield* repository.listGames()
@@ -231,12 +230,7 @@ describe("importRocknixLibrary", () => {
           ),
         )
 
-        expect(games[0]?.metadata?.media).toEqual([
-          {
-            type: "image",
-            uri: "/api/media/games/wii/mario-kart/cover-1024.jpg",
-          },
-        ])
+        expect(games[0]?.metadata?.media).toBeUndefined()
       })
     } finally {
       await rm(mediaRoot, { recursive: true, force: true })
