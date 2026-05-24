@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { ConnectionServerRecord } from "./connection-state-bridge"
+import type { ConnectionServerRecord } from "./connection-state-snapshot"
 import {
   createLaunchBridgeHandler,
   type LaunchBridgeResponse,

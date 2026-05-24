@@ -26,7 +26,7 @@
 import type { MoonlightLaunchResult } from "@app/stream/moonlight-launcher"
 import type { RemotePrepareResult } from "@app/stream/remote-stream-client"
 import { logger } from "@shared/logger"
-import type { ConnectionServerRecord } from "./connection-state-bridge"
+import type { ConnectionServerRecord } from "./connection-state-snapshot"
 
 export type LaunchBridgeResponse =
   | {

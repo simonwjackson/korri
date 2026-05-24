@@ -80,9 +80,8 @@ function isHelpVisible(
 
 function parseHelpAfter(iso: string): number {
   const ms = Date.parse(iso)
-  // Mirrors `SearchingState.parseHelpAfter`: an unparseable string means
-  // help shows immediately (fail open — better than hiding help forever
-  // when timestamps drift).
+  // Unparseable string → help shows immediately (fail open: better than
+  // hiding help forever when timestamps drift).
   return Number.isFinite(ms) ? ms : 0
 }
 

@@ -19,8 +19,8 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
-  background: #020617; /* slate-950, theme parity with SearchingState */
-  color: #f1f5f9; /* slate-100, theme parity with SearchingState */
+  background: #020617; /* slate-950, theme parity with the React shell */
+  color: #f1f5f9; /* slate-100, theme parity with the React shell */
   font-family:
     "Geist Variable",
     ui-sans-serif,
