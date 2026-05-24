@@ -69,6 +69,7 @@ let
       KORRI_KIOSK = "1";
     }
     // lib.optionalAttrs cfg.input.enable {
+      KORRI_DESKTOP_INPUTD_URL = "ws://127.0.0.1:${toString config.services.korri.inputd.port}";
       KORRI_NATIVE_BRIDGE_URL = "ws://127.0.0.1:${toString config.services.korri.inputd.port}";
     }
     // lib.optionalAttrs (cfg.sessionBus.mode == "existing" && cfg.sessionBus.address != null) {

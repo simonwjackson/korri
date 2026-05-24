@@ -151,6 +151,9 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
     expect(result.kioskEnvironment.KORRI_NATIVE_BRIDGE_URL).toBe(
       "ws://127.0.0.1:3002",
     )
+    expect(result.kioskEnvironment.KORRI_DESKTOP_INPUTD_URL).toBe(
+      "ws://127.0.0.1:3002",
+    )
   })
 
   it("accepts platform Sway fragments while keeping Korri client autostart product-owned", () => {
@@ -347,6 +350,7 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
 
     expect(result.assertionsPassed).toBe(true)
     expect(result.inputdEnabled).toBe(false)
+    expect(result.kioskEnvironment.KORRI_DESKTOP_INPUTD_URL).toBeUndefined()
     expect(result.kioskEnvironment.KORRI_NATIVE_BRIDGE_URL).toBeUndefined()
     expect(result.kioskWants).not.toContain("korri-inputd.service")
     expect(result.kioskAfter).not.toContain("korri-inputd.service")
