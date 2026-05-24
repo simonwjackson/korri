@@ -188,6 +188,30 @@ describe("app.library.list handler (configured-real source)", () => {
     expect(result.games[0]?.media).toBeUndefined()
   })
 
+  it("omits assignments whose asset bytes do not match their content-addressed id", async () => {
+    const lib = track(
+      await withTempProseqlLibrary({
+        games: [{ id: "snes/corrupt-file.smc" }],
+        assets: [assetRecord(tileAssetId, 512, 512, tileAssetBytes)],
+        assignments: [assignment("snes/corrupt-file.smc", "tile", tileAssetId)],
+      }),
+    )
+    process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.XDG_DATA_HOME = lib.dataRoot
+    const blobPath = gameAssetBlobPath(
+      { XDG_DATA_HOME: lib.dataRoot },
+      assetRecord(tileAssetId, 512, 512, tileAssetBytes),
+    )
+    await mkdir(dirname(blobPath), { recursive: true })
+    await writeFile(blobPath, "xxxxxxxxxx")
+
+    const result = await Effect.runPromise(
+      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+    )
+
+    expect(result.games[0]?.media).toBeUndefined()
+  })
+
   it("omits assignments whose asset bytes are missing", async () => {
     const lib = track(
       await withTempProseqlLibrary({

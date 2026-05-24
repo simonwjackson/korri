@@ -201,7 +201,7 @@ describe("serveGameAssetBytes", () => {
   it("returns 404 when durable bytes do not match the content-addressed id", async () => {
     const env = await withAssetEnvironment()
     await writeAssetCatalog(env, [asset])
-    await writeDurableBlob(env, asset, "corrupt")
+    await writeDurableBlob(env, asset, "xxxxx")
 
     const response = await serveGameAssetBytes(
       request(`/api/game-assets/${asset.id}`),
