@@ -310,6 +310,133 @@ describe("connection-aware serve branch", () => {
   })
 })
 
+describe("connected serve inlines runtime-config", () => {
+  beforeEach(async () => {
+    assetRoot = await mkdtemp(join(tmpdir(), "korri-desktop-app-"))
+  })
+
+  afterEach(async () => {
+    await rm(assetRoot, { recursive: true, force: true })
+  })
+
+  test("GET /: runtime-config script with desktopInput: true is injected into index.html", async () => {
+    await writeFixture(
+      "index.html",
+      `<!doctype html><html><head><title>x</title></head><body><div id="app"></div><script type="module" src="/assets/app.js"></script></body></html>`,
+    )
+    const app = createDesktopApp({
+      assetRoot,
+      getUpstream: noUpstream,
+      getConnectionState: alwaysConnected,
+      getRuntimeConfig: () => ({ desktopInput: true }),
+    })
+
+    const response = await app.fetch(request("/"))
+    const body = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get("content-type")).toContain("text/html")
+    expect(response.headers.get("cache-control")).toContain("no-store")
+    expect(body).toMatch(
+      /window\.__korriRuntimeConfig\s*=\s*\{[^}]*"desktopInput"\s*:\s*true/,
+    )
+    // App's own module script preserved.
+    expect(body).toContain('src="/assets/app.js"')
+  })
+
+  test("GET /: runtime-config script with desktopInput: false is injected", async () => {
+    await writeFixture(
+      "index.html",
+      `<!doctype html><html><head><title>x</title></head><body></body></html>`,
+    )
+    const app = createDesktopApp({
+      assetRoot,
+      getUpstream: noUpstream,
+      getConnectionState: alwaysConnected,
+      getRuntimeConfig: () => ({ desktopInput: false }),
+    })
+
+    const response = await app.fetch(request("/"))
+    const body = await response.text()
+
+    expect(body).toMatch(
+      /window\.__korriRuntimeConfig\s*=\s*\{[^}]*"desktopInput"\s*:\s*false/,
+    )
+  })
+
+  test("GET /: inlined script appears before any module script in <head>", async () => {
+    await writeFixture(
+      "index.html",
+      `<!doctype html><html><head><title>x</title></head><body><div id="app"></div><script type="module" src="/assets/app.js"></script></body></html>`,
+    )
+    const app = createDesktopApp({
+      assetRoot,
+      getUpstream: noUpstream,
+      getConnectionState: alwaysConnected,
+      getRuntimeConfig: () => ({ desktopInput: true }),
+    })
+
+    const body = await (await app.fetch(request("/"))).text()
+
+    const injectedAt = body.indexOf("__korriRuntimeConfig")
+    const moduleAt = body.indexOf("/assets/app.js")
+    expect(injectedAt).toBeGreaterThan(-1)
+    expect(moduleAt).toBeGreaterThan(-1)
+    expect(injectedAt).toBeLessThan(moduleAt)
+  })
+
+  test("non-html assets are not rewritten", async () => {
+    await writeFixture("assets/app.js", "console.log('hi')")
+    const app = createDesktopApp({
+      assetRoot,
+      getUpstream: noUpstream,
+      getConnectionState: alwaysConnected,
+      getRuntimeConfig: () => ({ desktopInput: true }),
+    })
+
+    const response = await app.fetch(request("/assets/app.js"))
+    const body = await response.text()
+
+    expect(body).toBe("console.log('hi')")
+    expect(body).not.toContain("__korriRuntimeConfig")
+  })
+
+  test("missing index.html returns 404 (existing behavior preserved)", async () => {
+    const app = createDesktopApp({
+      assetRoot,
+      getUpstream: noUpstream,
+      getConnectionState: alwaysConnected,
+      getRuntimeConfig: () => ({ desktopInput: true }),
+    })
+
+    const response = await app.fetch(request("/"))
+
+    expect(response.status).toBe(404)
+  })
+
+  test("runtime-config values are HTML-safe (no script-tag escape)", async () => {
+    // Forward-compat hardening: even today's boolean-only shape goes
+    // through JSON.stringify; pinning the no-`</script>` invariant
+    // means a future string field can't accidentally break out of the
+    // inlined script tag.
+    await writeFixture(
+      "index.html",
+      `<!doctype html><html><head></head><body></body></html>`,
+    )
+    const app = createDesktopApp({
+      assetRoot,
+      getUpstream: noUpstream,
+      getConnectionState: alwaysConnected,
+      getRuntimeConfig: () => ({ desktopInput: true }),
+    })
+
+    const body = await (await app.fetch(request("/"))).text()
+    // Should contain exactly one closing </script>, the one closing
+    // the inlined runtime-config script.
+    expect(body.match(/<\/script>/g)?.length).toBe(1)
+  })
+})
+
 describe("/__korri/desktop/connection-status", () => {
   beforeEach(async () => {
     assetRoot = await mkdtemp(join(tmpdir(), "korri-desktop-app-"))

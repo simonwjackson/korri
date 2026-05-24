@@ -80,6 +80,54 @@ async function readFileIfPresent(filePath: string): Promise<Uint8Array | null> {
   }
 }
 
+export interface ServeIndexOptions extends StaticAssetOptions {
+  /**
+   * Optional transform applied to the index.html body string before it
+   * is returned. Used by the desktop composition to inline the
+   * runtime-config `<script>` tag. The transform must not produce
+   * partial / invalid HTML; the result is shipped as-is.
+   */
+  readonly transformIndexHtml?: (html: string) => string
+  /**
+   * Optional response headers merged onto the rendered index.html
+   * response. Used by the desktop composition to set `cache-control:
+   * no-store` because the body now varies by runtime-config.
+   */
+  readonly indexResponseHeaders?: Record<string, string>
+}
+
+/**
+ * Serve the SPA's `index.html` directly, with an optional body
+ * transform. Returns 404 if the file is missing. Kept separate from
+ * `serveStaticAsset` so the catch-all can route HTML-shaped requests
+ * here (where transformation is meaningful) and asset requests through
+ * `serveStaticAsset` (where it isn't).
+ */
+export async function serveIndexHtml(
+  options: ServeIndexOptions,
+): Promise<Response> {
+  const assetRoot = resolve(options.assetRoot)
+  const indexPath = resolve(assetRoot, "index.html")
+  const indexBody = await readFileIfPresent(indexPath)
+  if (!indexBody) {
+    return new Response("Not Found", { status: 404 })
+  }
+
+  const transform = options.transformIndexHtml
+  if (!transform) {
+    return responseForFile(indexPath, indexBody)
+  }
+
+  const rewritten = transform(new TextDecoder().decode(indexBody))
+  return new Response(rewritten, {
+    status: 200,
+    headers: {
+      "content-type": getContentType(indexPath),
+      ...(options.indexResponseHeaders ?? {}),
+    },
+  })
+}
+
 export async function serveStaticAsset(
   request: Request,
   options: StaticAssetOptions,

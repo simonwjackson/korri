@@ -158,10 +158,19 @@ async function main() {
   // composition stays JSON-typed at the HTTP boundary.
   const getConnectionState = () => snapshotFromControllerState(controller.state)
 
+  // Runtime-config is read once at startup and inlined into the
+  // served index.html via the bun-side Hono composition. Renderer
+  // reads `window.__korriRuntimeConfig` synchronously at boot.
+  const runtimeConfig: RuntimeConfigBridgeState = readRuntimeConfigFromEnv(
+    process.env,
+  )
+  const getRuntimeConfig = () => runtimeConfig
+
   const app = createDesktopApp({
     assetRoot,
     getUpstream,
     getConnectionState,
+    getRuntimeConfig,
     launchBridge: {
       getConnection,
       // Construct a one-shot RemoteStreamControlClient per request so
@@ -196,9 +205,6 @@ async function main() {
 
   const profile = desktopProfileFromEnv()
   const preloadPath = resolvePreloadPath()
-  const runtimeConfig: RuntimeConfigBridgeState = readRuntimeConfigFromEnv(
-    process.env,
-  )
   const windowOptions = createDesktopWindows(
     { host: DESKTOP_HOST, port },
     profile,
