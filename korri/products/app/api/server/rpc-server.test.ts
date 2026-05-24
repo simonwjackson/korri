@@ -1,8 +1,90 @@
-import { describe, expect, it } from "bun:test"
+import { afterEach, describe, expect, it } from "bun:test"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { dirname, join } from "node:path"
+import type { GameAssetRecord } from "@shared/library/config/records/game-asset"
+import { gameAssetBlobPath } from "@shared/library/game-assets/game-assets-service"
 import { appRpcGroup } from "../app-rpc-group"
 import { createHonoApp } from "../hono-app"
 import { serverRpcGroup } from "./rpc-group"
 import { serverRpcHandler } from "./rpc-server"
+
+const cleanups: Array<() => Promise<void>> = []
+const originalEnv = {
+  KORRI_LIBRARY_ROOT: process.env.KORRI_LIBRARY_ROOT,
+  KORRI_MEDIA_ROOT: process.env.KORRI_MEDIA_ROOT,
+  XDG_DATA_HOME: process.env.XDG_DATA_HOME,
+  HOME: process.env.HOME,
+}
+
+const asset: GameAssetRecord = {
+  id: `sha256:${"d".repeat(64)}`,
+  type: "image",
+  mimeType: "image/webp",
+  extension: "webp",
+  width: 1,
+  height: 1,
+  byteSize: 5,
+  pixelCount: 1,
+  storage: { strategy: "content-addressed" },
+}
+
+afterEach(async () => {
+  restoreEnv("KORRI_LIBRARY_ROOT", originalEnv.KORRI_LIBRARY_ROOT)
+  restoreEnv("KORRI_MEDIA_ROOT", originalEnv.KORRI_MEDIA_ROOT)
+  restoreEnv("XDG_DATA_HOME", originalEnv.XDG_DATA_HOME)
+  restoreEnv("HOME", originalEnv.HOME)
+
+  while (cleanups.length > 0) {
+    const cleanup = cleanups.pop()
+    if (cleanup) await cleanup()
+  }
+})
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name]
+    return
+  }
+  process.env[name] = value
+}
+
+async function configureGameAssetEnvironment() {
+  const root = await mkdtemp(join(tmpdir(), "korri-hono-game-assets-"))
+  cleanups.push(() => rm(root, { recursive: true, force: true }))
+
+  const libraryRoot = join(root, "library")
+  const dataRoot = join(root, "data")
+  await mkdir(libraryRoot, { recursive: true })
+  process.env.KORRI_LIBRARY_ROOT = libraryRoot
+  process.env.XDG_DATA_HOME = dataRoot
+  process.env.HOME = root
+
+  await writeFile(
+    join(libraryRoot, "library.yaml"),
+    [
+      "gameAssets:",
+      `  ${JSON.stringify(asset.id)}:`,
+      `    type: ${asset.type}`,
+      `    mimeType: ${asset.mimeType}`,
+      `    extension: ${asset.extension}`,
+      `    width: ${asset.width}`,
+      `    height: ${asset.height}`,
+      `    byteSize: ${asset.byteSize}`,
+      `    pixelCount: ${asset.pixelCount}`,
+      "    storage:",
+      `      strategy: ${asset.storage.strategy}`,
+      "",
+    ].join("\n"),
+    "utf8",
+  )
+
+  const blobPath = gameAssetBlobPath(process.env, asset)
+  await mkdir(dirname(blobPath), { recursive: true })
+  await writeFile(blobPath, "image")
+
+  return root
+}
 
 describe("headless server RPC group", () => {
   it("exposes the headless control-plane surface including library methods the renderer calls", () => {
@@ -52,5 +134,23 @@ describe("headless server RPC group", () => {
     expect(serverTags).toContain("app.gameAssets.candidates.list")
     expect(serverTags).toContain("app.gameAssets.assign")
     expect(serverTags).toContain("app.gameAssets.unassign")
+  })
+
+  it("mounts narrow durable game-asset bytes instead of arbitrary media files", async () => {
+    const root = await configureGameAssetEnvironment()
+    const mediaRoot = join(root, "media")
+    process.env.KORRI_MEDIA_ROOT = mediaRoot
+    await mkdir(mediaRoot, { recursive: true })
+    await writeFile(join(mediaRoot, "old-cover.png"), "old")
+
+    const app = createHonoApp({ rpcHandler: serverRpcHandler })
+
+    const assetResponse = await app.request(`/api/game-assets/${asset.id}`)
+    const oldMediaResponse = await app.request("/api/media/old-cover.png")
+
+    expect(assetResponse.status).toBe(200)
+    expect(assetResponse.headers.get("content-type")).toBe("image/webp")
+    expect(await assetResponse.text()).toBe("image")
+    expect(oldMediaResponse.status).toBe(404)
   })
 })

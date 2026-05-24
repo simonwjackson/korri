@@ -1,5 +1,4 @@
-import { serveMediaAsset } from "@shared/api/http/media-assets"
-import { korriDataPath } from "@shared/config/xdg-paths"
+import { serveGameAssetBytes } from "@shared/api/http/game-asset-bytes"
 import { Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { compress } from "hono/compress"
@@ -39,10 +38,13 @@ export function createHonoApp(options: CreateHonoAppOptions = {}) {
     c.json({ status: "ok", timestamp: new Date().toISOString() }),
   )
 
-  app.get("/api/media/*", c =>
-    serveMediaAsset(c.req.raw, {
-      mediaRoot:
-        process.env.KORRI_MEDIA_ROOT ?? korriDataPath(process.env, "media"),
+  app.on(["GET", "HEAD"], "/api/game-assets/*", c =>
+    serveGameAssetBytes(c.req.raw),
+  )
+
+  app.on(["POST", "PUT", "PATCH", "DELETE"], "/api/game-assets/*", c =>
+    c.text("Method Not Allowed", 405, {
+      Allow: "GET, HEAD",
     }),
   )
 
