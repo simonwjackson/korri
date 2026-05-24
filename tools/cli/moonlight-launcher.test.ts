@@ -87,6 +87,30 @@ describe("moonlight launcher", () => {
     }
   })
 
+  it("passes KORRI_MOONLIGHT_MAPPING_FILE to moonlight-embedded", async () => {
+    const previous = Bun.env.KORRI_MOONLIGHT_MAPPING_FILE
+    const calls: string[] = []
+    try {
+      Bun.env.KORRI_MOONLIGHT_MAPPING_FILE =
+        "/nix/store/moonlight-embedded/share/moonlight/gamecontrollerdb.txt"
+      const result = await launchMoonlight({
+        host: "192.168.1.117",
+        runner: runner((command, args) => {
+          calls.push([command, ...args].join(" "))
+          return { status: "started" }
+        }),
+      })
+
+      expect(result).toEqual({ status: "started", command: "moonlight" })
+      expect(calls).toEqual([
+        "moonlight stream -mapping /nix/store/moonlight-embedded/share/moonlight/gamecontrollerdb.txt -app Korri Stream 192.168.1.117",
+      ])
+    } finally {
+      if (previous === undefined) delete Bun.env.KORRI_MOONLIGHT_MAPPING_FILE
+      else Bun.env.KORRI_MOONLIGHT_MAPPING_FILE = previous
+    }
+  })
+
   it("uses explicit embedded client args without falling back to nix", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({

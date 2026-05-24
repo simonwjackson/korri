@@ -67,6 +67,7 @@ in
       CEMU_AFFINITY_MASK = sm8550.performance.cemuAffinityMask;
       KORRI_MOONLIGHT_COMMAND = "${substratePackages.moonlight-embedded}/bin/moonlight";
       KORRI_MOONLIGHT_CLIENT = "embedded";
+      KORRI_MOONLIGHT_MAPPING_FILE = "${substratePackages.moonlight-embedded}/share/moonlight/gamecontrollerdb.txt";
       KORRI_MOONLIGHT_STARTUP_OBSERVE_MS = "750";
       WLR_NO_HARDWARE_CURSORS = "1";
       WLR_LIBINPUT_NO_DEVICES = "1";

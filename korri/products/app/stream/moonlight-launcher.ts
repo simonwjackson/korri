@@ -32,6 +32,7 @@ export interface MoonlightLaunchOptions {
   readonly client?: "embedded"
   readonly allowNixFallback?: boolean
   readonly startupObserveMs?: number
+  readonly mappingFile?: string
   readonly runner?: CommandRunner
 }
 
@@ -43,7 +44,11 @@ export async function launchMoonlight(
   const runner = options.runner ?? spawnRunner
   const command = options.command ?? moonlightCommandFromEnv() ?? "moonlight"
   const client = options.client ?? moonlightClientFromEnv() ?? "embedded"
-  const args = moonlightArgs({ ...options, client })
+  const args = moonlightArgs({
+    ...options,
+    client,
+    mappingFile: options.mappingFile ?? moonlightMappingFileFromEnv(),
+  })
   const allowNixFallback = options.allowNixFallback ?? command === "moonlight"
   const startupObserveMs =
     options.startupObserveMs ?? moonlightStartupObserveMsFromEnv()
@@ -89,12 +94,23 @@ function moonlightStartupObserveMsFromEnv(): number | undefined {
   return Number.isFinite(value) && value > 0 ? value : undefined
 }
 
+function moonlightMappingFileFromEnv(): string | undefined {
+  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_MAPPING_FILE?.trim()
+  return raw === "" ? undefined : raw
+}
+
 function moonlightArgs(
   options: MoonlightLaunchOptions & { readonly client: "embedded" },
 ): readonly string[] {
   if (!options.host) return []
   const appName = options.appName ?? DEFAULT_APP_NAME
-  return ["stream", "-app", appName, options.host]
+  return [
+    "stream",
+    ...(options.mappingFile ? ["-mapping", options.mappingFile] : []),
+    "-app",
+    appName,
+    options.host,
+  ]
 }
 
 const spawnRunner: CommandRunner = {
