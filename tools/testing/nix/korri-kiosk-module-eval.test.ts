@@ -8,7 +8,7 @@ const FIXTURE_PATH = resolve(
   "korri-kiosk-module-eval.fixture.nix",
 )
 
-type EvalResult = {
+type ScenarioResult = {
   assertionsPassed: boolean
   assertionMessages: string[]
   warnings: string[]
@@ -45,12 +45,42 @@ type EvalResult = {
   clientLauncher: string | null
 }
 
-type EvalOutcome =
-  | { kind: "ok"; result: EvalResult }
-  | { kind: "error"; stderr: string }
+type Scenarios = {
+  baseline: ScenarioResult
+  clientPackageOnly: ScenarioResult
+  kioskEnablesClient: ScenarioResult
+  swayPlatformFragment: ScenarioResult
+  existingSessionBus: ScenarioResult
+  existingSessionBusMissingAddress: ScenarioResult
+  platformInputProvider: ScenarioResult
+  inputplumberProvider: ScenarioResult
+  inputOptOut: ScenarioResult
+  inputRequiredWithoutProvider: ScenarioResult
+  inputProviderOrderingWithoutProvider: ScenarioResult
+  inputDisabled: ScenarioResult
+  rootCreateUser: ScenarioResult
+  clientCommandWithArgs: ScenarioResult
+  platformUserNoGroup: ScenarioResult
+  emptyUser: ScenarioResult
+  relativeRuntimeDir: ScenarioResult
+  runtimeDirOutsideRun: ScenarioResult
+  cliEnabledByDefault: ScenarioResult
+  cliOptedOut: ScenarioResult
+  cliPackageOverridden: ScenarioResult
+}
 
-function evalFixture(overridesNix: string): EvalOutcome {
-  const apply = `f: f { flakeRoot = ${FLAKE_ROOT}; overrides = ${overridesNix}; }`
+/**
+ * Spawns `nix eval` exactly once and returns every scenario the fixture
+ * defines as an in-memory attrset. Per-test access is `scenarios.<key>` -
+ * no further subprocess work happens after this returns.
+ *
+ * Before this batching, the file spawned `nix eval` per `it(...)` (~12s
+ * each) and totalled ~250s. Now: one eval, ~20s for the whole file.
+ * See docs/plans/2026-05-24-006-refactor-nix-test-harness-plan.md U2 and
+ * tools/testing/nix/korri-desktop-build-graph.test.ts for the exemplar.
+ */
+function evalAllScenarios(): Scenarios {
+  const apply = `f: f { flakeRoot = ${FLAKE_ROOT}; }`
   const child = spawnSync(
     "nix",
     [
@@ -72,19 +102,13 @@ function evalFixture(overridesNix: string): EvalOutcome {
   )
 
   if (child.status !== 0) {
-    return { kind: "error", stderr: child.stderr }
-  }
-
-  return { kind: "ok", result: JSON.parse(child.stdout) as EvalResult }
-}
-
-function expectOk(outcome: EvalOutcome): EvalResult {
-  if (outcome.kind === "error") {
     throw new Error(
-      `expected eval to succeed but got error:\n${outcome.stderr}`,
+      `nix eval failed (exit ${child.status}):\n${child.stderr}`,
     )
   }
-  return outcome.result
+
+  const parsed = JSON.parse(child.stdout) as { scenarios: Scenarios }
+  return parsed.scenarios
 }
 
 const HARDWARE_FACT_PATTERN = /SM8550|AYN|Odin|DSI-1|DSI-2|UCM|RockNix/i
@@ -92,10 +116,10 @@ const HARDWARE_FACT_PATTERN = /SM8550|AYN|Odin|DSI-1|DSI-2|UCM|RockNix/i
 setDefaultTimeout(90_000)
 
 describe("services.korri.kiosk NixOS module evaluation", () => {
-  it("aggregate korri module exposes server, client, inputd, kiosk, and cli roles", () => {
-    const result = expectOk(evalFixture("{ }"))
+  const scenarios = evalAllScenarios()
 
-    expect(result.optionSurface).toEqual({
+  it("aggregate korri module exposes server, client, inputd, kiosk, and cli roles", () => {
+    expect(scenarios.baseline.optionSurface).toEqual({
       server: true,
       client: true,
       inputd: true,
@@ -105,15 +129,7 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
   })
 
   it("keeps client package installation separate from kiosk session ownership", () => {
-    const result = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.client = {
-          enable = true;
-          package = pkgs.writeShellScriptBin "korri-client-only" "exit 0";
-        };
-      })`),
-    )
-
+    const result = scenarios.clientPackageOnly
     expect(result.clientEnabled).toBe(true)
     expect(
       result.clientSystemPackages.some(path =>
@@ -125,17 +141,7 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
   })
 
   it("enabling kiosk mkDefault-enables client and emits one product session service", () => {
-    const result = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = false;
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-        };
-      })`),
-    )
-
+    const result = scenarios.kioskEnablesClient
     expect(result.assertionsPassed).toBe(true)
     expect(result.clientEnabled).toBe(true)
     expect(result.kioskEnabled).toBe(true)
@@ -164,20 +170,7 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
   })
 
   it("accepts platform Sway fragments while keeping Korri client autostart product-owned", () => {
-    const result = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = false;
-          client.command = "\${pkgs.writeShellScriptBin "device-korri" "exit 0"}/bin/device-korri";
-          sway.extraConfig = ''
-            output DEVICE-PANEL transform 90
-          '';
-        };
-      })`),
-    )
-
+    const result = scenarios.swayPlatformFragment
     expect(result.swayConfig).not.toBeNull()
     const config = result.swayConfig as string
     expect(config).toContain("default_border none")
@@ -187,23 +180,7 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
   })
 
   it("can use a platform-owned existing session bus", () => {
-    const result = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = false;
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-          runtimeDir = "/run/user/0";
-          sessionBus = {
-            mode = "existing";
-            address = "unix:path=/run/user/0/bus";
-            services = [ "platform-session-dbus.service" ];
-          };
-        };
-      })`),
-    )
-
+    const result = scenarios.existingSessionBus
     expect(result.assertionsPassed).toBe(true)
     expect(result.kioskExecStart).not.toContain("dbus-run-session")
     expect(result.kioskExecStart).toContain("sway")
@@ -217,42 +194,13 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
   })
 
   it("rejects existing session bus mode without an address", () => {
-    const result = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = false;
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-          sessionBus.mode = "existing";
-        };
-      })`),
-    )
-
+    const result = scenarios.existingSessionBusMissingAddress
     expect(result.assertionsPassed).toBe(false)
     expect(result.assertionMessages.join("\n")).toContain("sessionBus.address")
   })
 
   it("wires inputd and platform input dependencies before the kiosk when required", () => {
-    const result = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = false;
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-          input = {
-            required = true;
-            provider = {
-              enable = true;
-              name = "platform-input";
-              services = [ "platform-input.service" ];
-            };
-          };
-        };
-      })`),
-    )
-
+    const result = scenarios.platformInputProvider
     expect(result.assertionsPassed).toBe(true)
     expect(result.inputdEnabled).toBe(true)
     expect(result.kioskWants).toEqual(
@@ -279,25 +227,7 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
   })
 
   it("propagates InputPlumber provider ordering and required mode into inputd", () => {
-    const result = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = false;
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-          input = {
-            required = true;
-            provider = {
-              enable = true;
-              name = "inputplumber";
-              services = [ "inputplumber.service" ];
-            };
-          };
-        };
-      })`),
-    )
-
+    const result = scenarios.inputplumberProvider
     expect(result.assertionsPassed).toBe(true)
     expect(result.inputdWants).toContain("inputplumber.service")
     expect(result.inputdAfter).toContain("inputplumber.service")
@@ -307,39 +237,11 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
   })
 
   it("allows deliberate input opt-out for non-interactive kiosk variants", () => {
-    const result = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = false;
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-          input = {
-            required = true;
-            provider.enable = false;
-            optOutReason = "automated visual fixture";
-          };
-        };
-      })`),
-    )
-
-    expect(result.assertionsPassed).toBe(true)
+    expect(scenarios.inputOptOut.assertionsPassed).toBe(true)
   })
 
   it("rejects required appliance input without provider declaration or opt-out", () => {
-    const result = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = false;
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-          input.required = true;
-          input.provider.enable = false;
-        };
-      })`),
-    )
-
+    const result = scenarios.inputRequiredWithoutProvider
     expect(result.assertionsPassed).toBe(false)
     expect(result.assertionMessages.join("\n")).toContain(
       "services.korri.kiosk.input.required",
@@ -347,21 +249,7 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
   })
 
   it("rejects provider service ordering when the provider is disabled", () => {
-    const result = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = false;
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-          input.provider = {
-            enable = false;
-            services = [ "platform-input.service" ];
-          };
-        };
-      })`),
-    )
-
+    const result = scenarios.inputProviderOrderingWithoutProvider
     expect(result.assertionsPassed).toBe(false)
     expect(result.assertionMessages.join("\n")).toContain(
       "provider service ordering",
@@ -369,21 +257,7 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
   })
 
   it("can deliberately disable kiosk input integration", () => {
-    const result = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = false;
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-          input = {
-            enable = false;
-            optOutReason = "non-interactive display fixture";
-          };
-        };
-      })`),
-    )
-
+    const result = scenarios.inputDisabled
     expect(result.assertionsPassed).toBe(true)
     expect(result.inputdEnabled).toBe(false)
     expect(result.kioskEnvironment.KORRI_DESKTOP_INPUTD_URL).toBeUndefined()
@@ -393,33 +267,13 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
   })
 
   it("rejects creating a managed root kiosk user", () => {
-    const result = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = true;
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-        };
-      })`),
-    )
-
+    const result = scenarios.rootCreateUser
     expect(result.assertionsPassed).toBe(false)
     expect(result.assertionMessages.join("\n")).toContain("createUser")
   })
 
   it("preserves client command arguments through the generated launcher", () => {
-    const result = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = false;
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client --profile kiosk";
-        };
-      })`),
-    )
-
+    const result = scenarios.clientCommandWithArgs
     expect(result.swayConfig).toContain("korri-kiosk-client")
     expect(result.clientLauncher).toContain(
       "korri-kiosk-client --profile kiosk",
@@ -427,59 +281,16 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
   })
 
   it("omits Group when a platform supplies an existing user without an explicit group", () => {
-    const result = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        users.users.platform-user = {
-          isNormalUser = true;
-          group = "users";
-        };
-        services.korri.kiosk = {
-          enable = true;
-          user = "platform-user";
-          createUser = false;
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-        };
-      })`),
-    )
-
+    const result = scenarios.platformUserNoGroup
     expect(result.assertionsPassed).toBe(true)
     expect(result.kioskServiceUser).toBe("platform-user")
     expect(result.kioskServiceGroup).toBeNull()
   })
 
   it("rejects empty and non-/run kiosk runtime directories", () => {
-    const emptyUser = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "";
-          createUser = false;
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-        };
-      })`),
-    )
-    const relativeRuntime = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = false;
-          runtimeDir = "korri-kiosk";
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-        };
-      })`),
-    )
-    const outsideRun = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = false;
-          runtimeDir = "/tmp/korri-kiosk";
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-        };
-      })`),
-    )
+    const emptyUser = scenarios.emptyUser
+    const relativeRuntime = scenarios.relativeRuntimeDir
+    const outsideRun = scenarios.runtimeDirOutsideRun
 
     expect(emptyUser.assertionsPassed).toBe(false)
     expect(emptyUser.assertionMessages.join("\n")).toContain(
@@ -494,60 +305,31 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
   })
 
   describe("korri CLI is installed by default when kiosk is enabled", () => {
-    const enabled = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = false;
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-        };
-      })`),
-    )
-    const optedOut = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = false;
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-        };
-        services.korri.cli.enable = false;
-      })`),
-    )
-    const overridden = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = false;
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-        };
-        services.korri.cli.package = pkgs.writeShellScriptBin "korri-cli-stub" "exit 0";
-      })`),
-    )
-
     it("defaults services.korri.cli.enable = true when kiosk is enabled", () => {
-      expect(enabled.cliEnabled).toBe(true)
+      expect(scenarios.cliEnabledByDefault.cliEnabled).toBe(true)
     })
 
     it("installs the korri-cli package into environment.systemPackages", () => {
       expect(
-        enabled.clientSystemPackages.some(path => /-korri-cli-/.test(path)),
+        scenarios.cliEnabledByDefault.clientSystemPackages.some(path =>
+          /-korri-cli-/.test(path),
+        ),
       ).toBe(true)
     })
 
     it("respects an explicit services.korri.cli.enable = false opt-out", () => {
-      expect(optedOut.cliEnabled).toBe(false)
+      const result = scenarios.cliOptedOut
+      expect(result.cliEnabled).toBe(false)
       expect(
-        optedOut.clientSystemPackages.some(path => /-korri-cli-/.test(path)),
+        result.clientSystemPackages.some(path => /-korri-cli-/.test(path)),
       ).toBe(false)
     })
 
     it("honors a caller-supplied services.korri.cli.package override", () => {
-      expect(overridden.cliPackage).toMatch(/korri-cli-stub/)
+      const result = scenarios.cliPackageOverridden
+      expect(result.cliPackage).toMatch(/korri-cli-stub/)
       expect(
-        overridden.clientSystemPackages.some(path =>
+        result.clientSystemPackages.some(path =>
           path.includes("korri-cli-stub"),
         ),
       ).toBe(true)
@@ -555,17 +337,7 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
   })
 
   it("keeps device-specific facts out of generic defaults", () => {
-    const result = expectOk(
-      evalFixture(`({ pkgs, ... }: {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = false;
-          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-        };
-      })`),
-    )
-
+    const result = scenarios.kioskEnablesClient
     expect(result.swayConfig).not.toMatch(HARDWARE_FACT_PATTERN)
     expect(JSON.stringify(result.kioskEnvironment)).not.toMatch(
       HARDWARE_FACT_PATTERN,
