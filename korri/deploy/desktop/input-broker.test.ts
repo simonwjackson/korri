@@ -1,8 +1,8 @@
-import type { ServerWebSocket } from "bun"
 import { afterEach, describe, expect, it } from "bun:test"
 import { readFile } from "node:fs/promises"
-import { ABS_HAT0X } from "@shared/input/native/button-codes"
 import { decodeDesktopInputBridgePayload } from "@shared/input/desktop-bridge-wire"
+import { ABS_HAT0X } from "@shared/input/native/button-codes"
+import type { ServerWebSocket } from "bun"
 import { Effect, Fiber } from "effect"
 import { createDesktopInputBroker } from "./input-broker"
 
@@ -58,7 +58,7 @@ describe("createDesktopInputBroker", () => {
     })
   })
 
-  it("fails closed when the active window is unknown", async () => {
+  it("uses the sole window when Electrobun has not reported initial focus", async () => {
     const server = createInputServer()
     const window = createWindowDouble()
     await runBrokerUntil(server, {
@@ -76,9 +76,47 @@ describe("createDesktopInputBroker", () => {
       timestamp: Date.now(),
     })
 
-    await Bun.sleep(30)
-    expect(actionPayloads(window)).toEqual([])
+    await waitFor(() => actionPayloads(window).length === 1, "input action")
+    expect(
+      decodeDesktopInputBridgePayload(actionPayloads(window)[0]),
+    ).toMatchObject({
+      kind: "korri.input.action",
+      action: { type: "direction", direction: "right", source: "native" },
+    })
     expect(statusPayloads(window).at(-1)).toMatchObject({
+      status: {
+        inputd: "connected",
+        active: true,
+        decodedFrames: 1,
+        emittedActions: 1,
+        droppedActions: 0,
+      },
+    })
+  })
+
+  it("fails closed when the active window is unknown among multiple windows", async () => {
+    const server = createInputServer()
+    const primary = createWindowDouble()
+    const companion = createWindowDouble()
+    await runBrokerUntil(server, {
+      getActiveWindow: () => null,
+      getWindows: () => [primary, companion],
+    })
+
+    server.send({
+      kind: "input",
+      deviceId: "pad-1",
+      class: "gamepad",
+      type: 3,
+      code: ABS_HAT0X,
+      value: 1,
+      timestamp: Date.now(),
+    })
+
+    await Bun.sleep(30)
+    expect(actionPayloads(primary)).toEqual([])
+    expect(actionPayloads(companion)).toEqual([])
+    expect(statusPayloads(primary).at(-1)).toMatchObject({
       status: {
         inputd: "connected",
         active: false,

@@ -1,9 +1,9 @@
+import { logger as defaultLogger } from "@shared/logger"
+import { Effect } from "effect"
 import type { DesktopInputStatus } from "./desktop-bridge-wire"
 import { createNativeGamepadMapper } from "./native/gamepad-mapper"
 import { decodeNativeInputEvent } from "./native/wire-schema"
 import type { InputAction } from "./types"
-import { logger as defaultLogger } from "@shared/logger"
-import { Effect } from "effect"
 
 export interface DesktopInputTarget {
   readonly title?: string
@@ -274,12 +274,14 @@ class DesktopInputBrokerCore {
       return
     }
 
+    const normalizedAction = normalizeAction(action)
+
     try {
       target.sendMessage({
         kind: "korri.input.action",
         sequence: ++this.sequence,
         timestamp: this.nowMs(),
-        action: normalizeAction(action),
+        action: normalizedAction,
       })
       this.status = {
         ...this.status,

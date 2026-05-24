@@ -28,7 +28,10 @@ export function createDesktopInputBroker(options: DesktopInputBrokerOptions) {
     getTargets: () => options.getWindows().map(windowToTarget),
     getActiveTarget: () => {
       const active = options.getActiveWindow()
-      return active ? windowToTarget(active) : null
+      if (active) return windowToTarget(active)
+
+      const windows = options.getWindows()
+      return windows.length === 1 ? windowToTarget(windows[0]) : null
     },
     onActiveChange: options.onActiveChange,
   })
