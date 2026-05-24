@@ -1,0 +1,10 @@
+I: Bus=0003 Vendor=045e Product=0b12 Version=0114
+N: Name="Microsoft Xbox Series S|X Controller"
+P: Phys=usb-0000:00:14.0-1/input0
+S: Sysfs=/devices/pci0000:00/0000:00:14.0/usb1/1-1/input/input11
+U: Uniq=
+H: Handlers=kbd event10 
+B: PROP=0
+B: EV=20001b
+B: KEY=1000000000000 0 0 0 0
+B: ABS=30027

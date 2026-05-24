@@ -55,5 +55,17 @@ export function isInputPlumberVirtualGamepad(
     .filter((value): value is string => typeof value === "string")
     .map(value => value.toLowerCase())
 
-  return evidence.some(value => value.includes("inputplumber"))
+  if (evidence.some(value => value.includes("inputplumber"))) return true
+
+  return Boolean(
+    device.sysfsPath?.startsWith("/devices/virtual/input/") &&
+      isKnownInputPlumberVirtualTargetName(device.name),
+  )
+}
+
+function isKnownInputPlumberVirtualTargetName(name: string): boolean {
+  return [
+    "Microsoft X-Box 360 pad",
+    "Microsoft Xbox Series S|X Controller",
+  ].includes(name)
 }

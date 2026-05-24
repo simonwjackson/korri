@@ -15,12 +15,20 @@ let
   targetSystem = pkgs.stdenv.hostPlatform.system;
   substratePackages = nix-on-rocks.packages.${targetSystem};
   sm8550 = config.rocknix.sm8550;
+  inputplumberPackage = pkgs.runCommand "korri-rocknix-inputplumber-xb360" { } ''
+    cp -a ${substratePackages.inputplumber} $out
+    chmod -R u+w $out
+    substituteInPlace $out/share/inputplumber/devices/02-ayn-controller.yaml \
+      --replace-fail "  - xbox-series" "  - xb360"
+  '';
 in
 {
   imports = [
     nix-on-rocks.nixosModules.rocknix-guest-base
     deviceProfile
   ];
+
+  services.inputplumber.package = lib.mkForce inputplumberPackage;
 
   services.korri.client.package = korri.packages.${targetSystem}.korri-desktop-device;
 

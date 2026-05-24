@@ -35,6 +35,28 @@ describe("resolveInputPlumberVirtualGamepad", () => {
     })
   })
 
+  it("selects virtual Xbox Series targets emitted by InputPlumber without phys or uniq metadata", async () => {
+    const result = await resolveFixture(
+      "bus-input-devices-inputplumber-xbox-series-virtual.txt",
+    )
+
+    expect(result).toMatchObject({
+      status: "found",
+      path: "/dev/input/event10",
+      device: {
+        deviceId: "event10",
+        name: "Microsoft Xbox Series S|X Controller",
+        sysfsPath: "/devices/virtual/input/input11",
+      },
+    })
+  })
+
+  it("does not mistake a physical Xbox controller for an InputPlumber virtual target", async () => {
+    const result = await resolveFixture("bus-input-devices-raw-xbox-series.txt")
+
+    expect(result).toMatchObject({ status: "missing", rawGamepads: 1 })
+  })
+
   it("does not select raw gamepads when no normalized virtual controller exists", async () => {
     const result = await resolveFixture(
       "bus-input-devices-inputplumber-raw-only.txt",
