@@ -5,11 +5,12 @@ import {
   launcherLayerAtom,
   librarySourceLayerAtom,
 } from "@shared/library/library-atoms"
-import { type ReactNode, useLayoutEffect } from "react"
+import { type ReactNode, useLayoutEffect, useState } from "react"
 
 export function HomeServerRoot({ children }: { readonly children: ReactNode }) {
   const setLibrarySourceLayer = useAtomSet(librarySourceLayerAtom)
   const setLauncherLayer = useAtomSet(launcherLayerAtom)
+  const [layersReady, setLayersReady] = useState(false)
 
   useLayoutEffect(() => {
     setLibrarySourceLayer(LibrarySourceLayerRpc)
@@ -20,7 +21,8 @@ export function HomeServerRoot({ children }: { readonly children: ReactNode }) {
     // `LauncherLayerRpc` is still available for environments where the
     // server should directly spawn the game (CLI / non-streaming hosts).
     setLauncherLayer(LauncherLayerBridge)
+    setLayersReady(true)
   }, [setLibrarySourceLayer, setLauncherLayer])
 
-  return <>{children}</>
+  return layersReady ? children : null
 }
