@@ -338,9 +338,9 @@ function rejectUnsafePublicApiBaseUrlScheme(url: URL): void {
   if (url.protocol !== "https:" && url.protocol !== "http:") {
     throw new Error("KORRI_PUBLIC_API_BASE_URL must use http or https")
   }
-  if (url.protocol === "http:" && !isLoopbackHostname(url.hostname)) {
+  if (url.protocol === "http:" && !isPrivateNetworkHostname(url.hostname)) {
     throw new Error(
-      "KORRI_PUBLIC_API_BASE_URL must use https outside loopback hosts",
+      "KORRI_PUBLIC_API_BASE_URL must use https outside loopback or RFC1918 private networks",
     )
   }
 }
@@ -350,10 +350,31 @@ function withTrailingSlash(url: URL): URL {
   return url
 }
 
-function isLoopbackHostname(hostname: string): boolean {
-  return (
-    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]"
-  )
+/**
+ * Returns true for hostnames that are safe to address over plain http:
+ *  - loopback (localhost / 127.0.0.0/8 / [::1])
+ *  - RFC1918 private IPv4 (10/8, 172.16/12, 192.168/16)
+ *  - link-local IPv4 (169.254/16)
+ *  - mDNS .local (and conventional .lan) hostnames
+ *
+ * Public DNS names and routable IPs still require https.
+ */
+function isPrivateNetworkHostname(hostname: string): boolean {
+  if (hostname === "localhost") return true
+  if (hostname === "[::1]") return true
+  const lower = hostname.toLowerCase()
+  if (lower.endsWith(".local") || lower.endsWith(".lan")) return true
+  const ipv4 = lower.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (!ipv4) return false
+  const octets = ipv4.slice(1, 5).map(Number)
+  if (octets.some(o => o < 0 || o > 255)) return false
+  const [a, b] = octets
+  if (a === 127) return true
+  if (a === 10) return true
+  if (a === 172 && b >= 16 && b <= 31) return true
+  if (a === 192 && b === 168) return true
+  if (a === 169 && b === 254) return true
+  return false
 }
 
 const roleOrder: ReadonlyMap<GameAssetRole, number> = new Map([

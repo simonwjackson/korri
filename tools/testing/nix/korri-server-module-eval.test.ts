@@ -125,6 +125,12 @@ describe("services.korri.server NixOS module evaluation", () => {
       expect(result.firewallInterfaceNames).toEqual([])
     })
 
+    it("omits KORRI_PUBLIC_API_BASE_URL by default", () => {
+      expect(result.userServiceEnv).not.toBeNull()
+      const env = result.userServiceEnv as Record<string, string>
+      expect(env.KORRI_PUBLIC_API_BASE_URL).toBeUndefined()
+    })
+
     it("passes through to no tmpfiles entries", () => {
       expect(result.tmpfilesRunDir).toBeNull()
     })
@@ -230,6 +236,22 @@ describe("services.korri.server NixOS module evaluation", () => {
     it("has no failing assertions", () => {
       expect(result.assertionsPassed).toBe(true)
       expect(result.assertionMessages).toEqual([])
+    })
+  })
+
+  describe("publicApiBaseUrl option", () => {
+    const result = expectOk(
+      evalFixture(`{
+        services.korri.server = {
+          enable = true;
+          publicApiBaseUrl = "http://192.168.1.117:3001";
+        };
+      }`),
+    )
+
+    it("exposes the configured public API base URL via env", () => {
+      const env = result.userServiceEnv as Record<string, string>
+      expect(env.KORRI_PUBLIC_API_BASE_URL).toBe("http://192.168.1.117:3001")
     })
   })
 

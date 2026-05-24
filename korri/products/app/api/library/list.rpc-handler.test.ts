@@ -323,16 +323,52 @@ describe("app.library.list handler (configured-real source)", () => {
     }
   })
 
-  it("allows http public API base URLs only for loopback hosts", async () => {
+  it("allows http public API base URLs for loopback and private network hosts", async () => {
     const lib = track(await withTempProseqlLibrary({ games: [] }))
     process.env.KORRI_LIBRARY_ROOT = lib.root
-    process.env.KORRI_PUBLIC_API_BASE_URL = "http://127.0.0.1:3001"
+    const accepted = [
+      "http://127.0.0.1:3001",
+      "http://localhost:3001",
+      "http://192.168.1.117:3001",
+      "http://10.20.30.40:3001",
+      "http://172.16.5.1:3001",
+      "http://172.31.255.254:3001",
+      "http://169.254.1.1:3001",
+      "http://aka.local:3001",
+      "http://server.lan:3001",
+    ]
 
-    const result = await Effect.runPromise(
-      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
-    )
+    for (const value of accepted) {
+      process.env.KORRI_PUBLIC_API_BASE_URL = value
+      const result = await Effect.runPromise(
+        handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+      )
+      expect(result.games).toEqual([])
+    }
+  })
 
-    expect(result.games).toEqual([])
+  it("rejects http public API base URLs for public/routable hosts", async () => {
+    const lib = track(await withTempProseqlLibrary(assetUrlFixture()))
+    process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.XDG_DATA_HOME = lib.dataRoot
+    const rejected = [
+      "http://korri.example.test",
+      "http://8.8.8.8",
+      "http://172.15.0.1", // just outside 172.16/12
+      "http://172.32.0.1", // just outside 172.16/12
+      "http://192.169.0.1", // not 192.168/16
+    ]
+
+    for (const value of rejected) {
+      process.env.KORRI_PUBLIC_API_BASE_URL = value
+      const exit = await Effect.runPromiseExit(
+        handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).toBeInstanceOf(DataError)
+      }
+    }
   })
 
   it("fails with DataError(ReadFailed) when ProseQL data is invalid", async () => {

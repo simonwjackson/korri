@@ -75,6 +75,11 @@ let
     KORRI_LIBRARY_SOURCE = cfg.library.source;
     KORRI_LIBRARY_ROOT = cfg.library.root;
     KORRI_GAME_STREAM_RUNTIME_DIR = runtimeDir;
+  }
+  // optionalAttrs (cfg.publicApiBaseUrl != null) {
+    KORRI_PUBLIC_API_BASE_URL = cfg.publicApiBaseUrl;
+  }
+  // {
     KORRI_GAME_STREAM_INTENT_PATH = intentPath;
     KORRI_GAME_STREAM_STATUS_PATH = statusPath;
   }
@@ -157,6 +162,22 @@ in
       type = types.nullOr types.str;
       default = null;
       description = "Stable source/server identity. Defaults to the NixOS host name.";
+    };
+
+    publicApiBaseUrl = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "http://192.168.1.117:3001";
+      description = ''
+        Absolute base URL clients should use to reach this server's HTTP API
+        (e.g. game asset byte routes returned by `app.library.list`). Required
+        for production deployments that serve resolved game assets to remote
+        clients. Plain http is accepted for loopback (`127.0.0.1`, `localhost`),
+        RFC1918 private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`),
+        link-local (`169.254.0.0/16`), and `.local`/`.lan` mDNS hostnames;
+        public hosts require https. Must not contain credentials, query, or
+        fragment data.
+      '';
     };
 
     library = {
