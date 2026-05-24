@@ -58,10 +58,9 @@ startWithRuntimeConfig(getInitialRuntimeConfig(), controllerProfile)
 // reconfigures spatial navigation with the desktop input bridge. Re-calls to
 // `startSpatialNavigation` dispose the previous handle and rebuild;
 // `useInputAction` consumers re-subscribe via `subscribeSpatialNavigation`.
-window.__korriRuntime?.subscribe(state => {
-  if (state.desktopInput === lastDesktopInput) return
-  startWithRuntimeConfig(state, controllerProfile)
-})
+// Electrobun's custom preload can be late/missing on the native renderer, so
+// also poll briefly until main's bridge fallback appears.
+subscribeRuntimeConfigChanges()
 
 function startWithRuntimeConfig(
   runtime: RuntimeConfigBridgeState,
@@ -76,6 +75,37 @@ function getInitialRuntimeConfig(): RuntimeConfigBridgeState {
   if (!bridge) return { desktopInput: false }
   const value = bridge.getState()
   return isRuntimeConfigBridgeState(value) ? value : { desktopInput: false }
+}
+
+function subscribeRuntimeConfigChanges(): void {
+  let unsubscribe: (() => void) | undefined
+  let pollTimer: ReturnType<typeof setInterval> | undefined
+
+  const subscribe = () => {
+    if (unsubscribe) return
+    const bridge = window.__korriRuntime
+    if (!bridge) return
+
+    const value = bridge.getState()
+    if (isRuntimeConfigBridgeState(value)) {
+      startWithRuntimeConfig(value, controllerProfile)
+    }
+
+    unsubscribe = bridge.subscribe(state => {
+      if (state.desktopInput === lastDesktopInput) return
+      startWithRuntimeConfig(state, controllerProfile)
+    })
+
+    if (pollTimer) {
+      clearInterval(pollTimer)
+      pollTimer = undefined
+    }
+  }
+
+  subscribe()
+  if (!unsubscribe) {
+    pollTimer = setInterval(subscribe, 100)
+  }
 }
 
 function readControllerInputProfile(value: unknown): ControllerInputProfile {

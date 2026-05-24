@@ -1,10 +1,10 @@
 import { join } from "node:path"
-import { logger } from "@shared/logger"
 import {
   type CommandRunner,
   launchMoonlight,
 } from "@app/stream/moonlight-launcher"
 import { createRemoteStreamControlClient } from "@app/stream/remote-stream-client"
+import { logger } from "@shared/logger"
 import { Effect, Exit, Fiber, Scope, Stream, SubscriptionRef } from "effect"
 import Electrobun, {
   ApplicationMenu,
@@ -13,17 +13,17 @@ import Electrobun, {
 } from "electrobun/bun"
 import { watchStreamHosts } from "../../../tools/cli/lan-stream-discovery"
 import { type ConnectionState, makeConnectionController } from "./connection"
+import type { ConnectionServerRecord } from "./connection-state-bridge"
 import { createDesktopApp } from "./create-desktop-app"
-import { createDesktopInputBroker } from "./input-broker"
 import { loadDesktopConfig, saveDesktopConfig } from "./desktop-config"
+import { createDesktopInputBroker } from "./input-broker"
 import {
   desktopInputdUrlFromEnv,
   readRuntimeConfigFromEnv,
 } from "./runtime-config"
+import type { RuntimeConfigBridgeState } from "./runtime-config-bridge"
 import { writeDesktopStatusFile } from "./status-file"
 import { toBridgeState } from "./to-bridge-state"
-import type { ConnectionServerRecord } from "./connection-state-bridge"
-import type { RuntimeConfigBridgeState } from "./runtime-config-bridge"
 import {
   createDesktopDualScreenWindowOptions,
   createDesktopWindowOptions,
@@ -299,6 +299,7 @@ function attachInitialBridgePushes(
   runtimeConfig: RuntimeConfigBridgeState,
 ) {
   const push = () => {
+    installWebviewBridgeFallback(window)
     const snapshot = SubscriptionRef.getUnsafe(connectionState)
     try {
       window.webview.sendMessageToWebviewViaExecute(toBridgeState(snapshot))
@@ -320,6 +321,119 @@ function attachInitialBridgePushes(
 
   window.webview.on("dom-ready", push)
   push()
+}
+
+function installWebviewBridgeFallback(window: BrowserWindow) {
+  const script = `
+    (() => {
+      if (window.__korriDesktopBridgeFallbackInstalled) return
+      window.__korriDesktopBridgeFallbackInstalled = true
+
+      const connectionListeners = new Set()
+      const runtimeListeners = new Set()
+      const actionListeners = new Set()
+      const statusListeners = new Set()
+
+      let connectionState = {
+        status: "searching",
+        since: new Date(0).toISOString(),
+        helpAfter: new Date(0).toISOString(),
+      }
+      let runtimeState = { desktopInput: false }
+      let inputStatus = {
+        inputd: "disabled",
+        active: false,
+        decodedFrames: 0,
+        emittedActions: 0,
+        droppedActions: 0,
+        pushFailures: 0,
+        lastError: null,
+      }
+
+      if (!window.__korriConnection) {
+        window.__korriConnection = {
+          getState: () => connectionState,
+          subscribe: listener => {
+            connectionListeners.add(listener)
+            return () => connectionListeners.delete(listener)
+          },
+        }
+      }
+
+      if (!window.__korriRuntime) {
+        window.__korriRuntime = {
+          getState: () => runtimeState,
+          subscribe: listener => {
+            runtimeListeners.add(listener)
+            return () => runtimeListeners.delete(listener)
+          },
+        }
+      }
+
+      if (!window.__korriInput) {
+        window.__korriInput = {
+          subscribeAction: listener => {
+            actionListeners.add(listener)
+            return () => actionListeners.delete(listener)
+          },
+          getStatus: () => inputStatus,
+          subscribeStatus: listener => {
+            statusListeners.add(listener)
+            return () => statusListeners.delete(listener)
+          },
+        }
+      }
+
+      if (!window.__electrobun) window.__electrobun = {}
+      const previous = window.__electrobun.receiveMessageFromBun
+      window.__electrobun.receiveMessageFromBun = incoming => {
+        if (typeof previous === "function") {
+          try {
+            previous(incoming)
+          } catch (error) {
+            console.warn("[korri] prior bridge acceptor threw", error)
+          }
+        }
+
+        try {
+          if (incoming && typeof incoming === "object") {
+            if (
+              typeof incoming.status === "string" &&
+              (incoming.status === "connected" || typeof incoming.since === "string")
+            ) {
+              connectionState = incoming
+              for (const listener of connectionListeners) listener(incoming)
+            }
+
+            if (typeof incoming.desktopInput === "boolean") {
+              runtimeState = incoming
+              for (const listener of runtimeListeners) listener(incoming)
+            }
+
+            if (incoming.kind === "korri.input.action" && incoming.action) {
+              for (const listener of actionListeners) listener(incoming.action)
+            }
+
+            if (incoming.kind === "korri.input.status" && incoming.status) {
+              inputStatus = incoming.status
+              for (const listener of statusListeners) listener(incoming.status)
+            }
+          }
+        } catch (error) {
+          console.warn("[korri] fallback bridge acceptor threw", error)
+        }
+      }
+    })()
+  `
+
+  try {
+    window.webview.executeJavascript(script)
+  } catch (error) {
+    logger.warn(
+      { err: error, windowTitle: window.title },
+      "failed to install webview bridge fallback",
+    )
+  }
 }
 
 function resolvePreloadPath(): string | undefined {
