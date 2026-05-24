@@ -25,8 +25,11 @@ function recipeText(name: string): string {
   const lines = JUSTFILE.split("\n")
   const headerIndex = lines.findIndex(line => {
     const trimmed = line.replace(/^\s+/, "")
-    return trimmed === `${name}:` || trimmed.startsWith(`${name}:`) ||
-      trimmed.startsWith(`${name} `) && trimmed.includes(":")
+    return (
+      trimmed === `${name}:` ||
+      trimmed.startsWith(`${name}:`) ||
+      (trimmed.startsWith(`${name} `) && trimmed.includes(":"))
+    )
   })
   if (headerIndex === -1) {
     throw new Error(

@@ -102,9 +102,7 @@ function evalAllScenarios(): Scenarios {
   )
 
   if (child.status !== 0) {
-    throw new Error(
-      `nix eval failed (exit ${child.status}):\n${child.stderr}`,
-    )
+    throw new Error(`nix eval failed (exit ${child.status}):\n${child.stderr}`)
   }
 
   const parsed = JSON.parse(child.stdout) as { scenarios: Scenarios }

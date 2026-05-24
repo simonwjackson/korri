@@ -148,7 +148,6 @@ const undeducibleHomeOutcome = evalFixture(`{
 }`)
 
 describe("services.korri.server NixOS module evaluation", () => {
-
   describe('default user mode (serviceMode = "user")', () => {
     const result = scenarios.defaultUserMode
 
@@ -381,9 +380,9 @@ describe("services.korri.server NixOS module evaluation", () => {
     })
 
     it("warns when headlessSource and server bind the same port", () => {
-      expect(
-        scenarios.conflictingHeadlessSource.warnings.join("\n"),
-      ).toContain("port 3001")
+      expect(scenarios.conflictingHeadlessSource.warnings.join("\n")).toContain(
+        "port 3001",
+      )
     })
   })
 
@@ -500,9 +499,7 @@ describe("services.korri.server NixOS module evaluation", () => {
       const overridden = scenarios.cliOverridden
       expect(overridden.cliPackage).toMatch(/korri-cli-stub/)
       expect(
-        overridden.systemPackages.some(path =>
-          path.includes("korri-cli-stub"),
-        ),
+        overridden.systemPackages.some(path => path.includes("korri-cli-stub")),
       ).toBe(true)
     })
   })
