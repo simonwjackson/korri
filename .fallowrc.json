@@ -25,7 +25,21 @@
 		"tools/patches/**/files/**/*",
 		"**/*.d.ts"
 	],
-	"ignoreDependencies": ["bun:test"],
+	"ignoreDependencies": [
+		"bun:test",
+		"pino-pretty",
+		"@axe-core/playwright",
+		"@radix-ui/react-dropdown-menu",
+		"@radix-ui/react-scroll-area",
+		"@radix-ui/react-tabs",
+		"@radix-ui/react-tooltip",
+		"@tiptap/extension-table-cell",
+		"@tiptap/extension-table-header",
+		"@tiptap/extension-table-row",
+		"tsc-alias",
+		"@tanstack/router-plugin",
+		"framer-motion"
+	],
 	"rules": {
 		"unresolved-imports": "error",
 		"unlisted-dependencies": "error",
