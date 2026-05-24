@@ -1,3 +1,4 @@
+import type { Direction, InputListener } from "../types"
 import {
   ABS_HAT0X,
   ABS_HAT0Y,
@@ -16,9 +17,9 @@ import {
   EV_ABS,
   EV_KEY,
 } from "./button-codes"
-import type { Direction, InputListener } from "../types"
 
 const DEFAULT_AXIS_THRESHOLD = 16_000
+const DEFAULT_LOW_RANGE_AXIS_THRESHOLD = 800
 const DEFAULT_REPEAT_DELAY_MS = 400
 const DEFAULT_REPEAT_INTERVAL_MS = 100
 const DEFAULT_STALE_RELEASE_MS = 250
@@ -40,6 +41,7 @@ export interface NativeGamepadInputEvent {
 
 export interface NativeGamepadMapperOptions {
   readonly axisThreshold?: number
+  readonly lowRangeAxisThreshold?: number
   readonly repeatDelayMs?: number
   readonly repeatIntervalMs?: number
   /** Safety valve: stop a held direction if no refresh/release arrives. */
@@ -55,6 +57,8 @@ export function createNativeGamepadMapper(
   options: NativeGamepadMapperOptions = {},
 ): NativeGamepadMapper {
   const axisThreshold = options.axisThreshold ?? DEFAULT_AXIS_THRESHOLD
+  const lowRangeAxisThreshold =
+    options.lowRangeAxisThreshold ?? DEFAULT_LOW_RANGE_AXIS_THRESHOLD
   const repeatDelayMs = options.repeatDelayMs ?? DEFAULT_REPEAT_DELAY_MS
   const repeatIntervalMs =
     options.repeatIntervalMs ?? DEFAULT_REPEAT_INTERVAL_MS
@@ -136,6 +140,7 @@ export function createNativeGamepadMapper(
           stopHold,
           axes,
           axisThreshold,
+          lowRangeAxisThreshold,
         })
       }
     },
@@ -192,6 +197,7 @@ interface GamepadAbsState {
   readonly stopHold: (key: string) => void
   readonly axes: Map<string, { x: number; y: number }>
   readonly axisThreshold: number
+  readonly lowRangeAxisThreshold: number
 }
 
 function handleGamepadAbs(
@@ -207,7 +213,11 @@ function handleGamepadAbs(
         : { ...current, y: event.value }
     state.axes.set(event.deviceId, next)
 
-    const direction = stickToDirection(next.x, next.y, state.axisThreshold)
+    const direction = stickToDirection(
+      next.x,
+      next.y,
+      axisThresholdForDevice(event.deviceId, state),
+    )
     for (const candidate of ["up", "down", "left", "right"] as const) {
       const holdKey = `${event.deviceId}:stick:${candidate}`
       if (direction === candidate) {
@@ -281,6 +291,16 @@ function dpadDirection(code: number): Direction | null {
   if (code === BTN_DPAD_LEFT) return "left"
   if (code === BTN_DPAD_RIGHT) return "right"
   return null
+}
+
+function axisThresholdForDevice(
+  deviceId: string,
+  state: Pick<GamepadAbsState, "axisThreshold" | "lowRangeAxisThreshold">,
+) {
+  if (deviceId.startsWith("rsinput-gamepad/")) {
+    return Math.min(state.axisThreshold, state.lowRangeAxisThreshold)
+  }
+  return state.axisThreshold
 }
 
 function stickToDirection(

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import type { InputAction } from "../types"
 import {
   ABS_HAT0X,
   ABS_X,
@@ -12,7 +13,6 @@ import {
   EV_KEY,
 } from "./button-codes"
 import { createNativeGamepadMapper } from "./gamepad-mapper"
-import type { InputAction } from "../types"
 
 const mappers: Array<{ reset(): void }> = []
 
@@ -106,6 +106,64 @@ describe("createNativeGamepadMapper", () => {
       direction: "right",
       source: "native",
     })
+  })
+
+  it("maps RockNix low-range left-stick axes as d-pad directions", () => {
+    const { emitted, send } = createMapper()
+
+    send({
+      deviceId: "rsinput-gamepad/input0",
+      type: EV_ABS,
+      code: ABS_X,
+      value: 1_000,
+    })
+
+    expect(emitted).toEqual([
+      { type: "direction", direction: "right", source: "native" },
+    ])
+  })
+
+  it("ignores low-range left-stick drift below the RockNix threshold", () => {
+    const { emitted, send } = createMapper()
+
+    send({
+      deviceId: "rsinput-gamepad/input0",
+      type: EV_ABS,
+      code: ABS_X,
+      value: 600,
+    })
+
+    expect(emitted).toEqual([])
+  })
+
+  it("keeps high-range gamepad stick values on the high threshold", () => {
+    const { emitted, send } = createMapper()
+
+    send({ type: EV_ABS, code: ABS_X, value: 1_000 })
+
+    expect(emitted).toEqual([])
+  })
+
+  it("stops low-range left-stick holds when the stick returns to neutral", async () => {
+    const { emitted, send } = createMapper()
+
+    send({
+      deviceId: "rsinput-gamepad/input0",
+      type: EV_ABS,
+      code: ABS_X,
+      value: 1_000,
+    })
+    send({
+      deviceId: "rsinput-gamepad/input0",
+      type: EV_ABS,
+      code: ABS_X,
+      value: 0,
+    })
+    await Bun.sleep(40)
+
+    expect(emitted).toEqual([
+      { type: "direction", direction: "right", source: "native" },
+    ])
   })
 
   it("reset clears held directions, pressed buttons, and axes", async () => {
