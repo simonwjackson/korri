@@ -25,6 +25,11 @@ let
     kioskSessionBusServices = eval.config.services.korri.kiosk.sessionBus.services or [ ];
     inputProviderName = eval.config.services.korri.kiosk.input.provider.name or null;
     inputProviderServices = eval.config.services.korri.kiosk.input.provider.services or [ ];
+    inputplumberDataDirs = eval.config.systemd.services.inputplumber.environment.XDG_DATA_DIRS or null;
+    inputplumberPackage = toString (eval.config.services.inputplumber.package or null);
+    moonlightCommand = eval.config.services.korri.kiosk.environment.KORRI_MOONLIGHT_COMMAND or null;
+    moonlightMappingFile = eval.config.services.korri.kiosk.environment.KORRI_MOONLIGHT_MAPPING_FILE or null;
+    moonlightRequireInputPlumber = eval.config.systemd.services."korri-kiosk".environment.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null;
     systemName = eval.config.system.name;
     hostName = eval.config.networking.hostName;
     systemPackages = map (pkg: pkg.name or "") (eval.config.environment.systemPackages or [ ]);

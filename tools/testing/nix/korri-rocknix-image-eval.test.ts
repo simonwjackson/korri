@@ -27,6 +27,11 @@ type RockNixImageSummary = {
   kioskSessionBusServices: string[]
   inputProviderName: string | null
   inputProviderServices: string[]
+  inputplumberDataDirs: string | null
+  inputplumberPackage: string | null
+  moonlightCommand: string | null
+  moonlightMappingFile: string | null
+  moonlightRequireInputPlumber: string | null
   systemName: string
   hostName: string
   systemPackages: string[]
@@ -134,6 +139,12 @@ describe("Korri RockNix image output evaluation", () => {
       )
       expect(appliance.inputProviderName).toBe("inputplumber")
       expect(appliance.inputProviderServices).toContain("inputplumber.service")
+      expect(appliance.inputplumberPackage).toContain("inputplumber")
+      expect(appliance.inputplumberDataDirs).toContain("/share")
+      expect(appliance.inputplumberDataDirs).toContain("/run/current-system/sw/share")
+      expect(appliance.moonlightCommand).toContain("moonlight")
+      expect(appliance.moonlightMappingFile).toContain("gamecontrollerdb.txt")
+      expect(appliance.moonlightRequireInputPlumber).toBe("1")
     }
   })
 
