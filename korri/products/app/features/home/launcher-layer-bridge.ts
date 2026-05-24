@@ -5,9 +5,10 @@
  * The bun side handles the prepare-stream RPC against the connected
  * korri-server *and* the local Moonlight spawn (see
  * `korri/deploy/desktop/launch-bridge.ts`). This layer is the desktop
- * equivalent of `LauncherLayerRpc`; pick this in `HomeServerRoot` when
- * the renderer should produce a moonlight stream instead of asking the
- * server to run a child process directly.
+ * equivalent of `LauncherLayerRpc`; selection between the two happens
+ * once at the React composition root (`korri/deploy/portal/main.tsx`)
+ * via `selectLauncherLayer(runtimeConfig)` and the layer is seeded into
+ * the atom registry through `<RegistryProvider initialValues={…}>`.
  *
  * The LaunchSpec.command coming in is the game id (the renderer's
  * `LibrarySource.launchSpecFor` returns an opaque
