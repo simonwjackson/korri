@@ -14,7 +14,7 @@ Optional env:
   KORRI_LIBRARY             Library YAML path
                             default: ~/.local/share/korri/library/library.yaml
   OUT_DIR                   Download target
-                            default: ${XDG_CACHE_HOME:-~/.cache}/korri/media/candidates/steamgriddb
+                            default: ${XDG_CACHE_HOME:-~/.cache}/korri/game-assets/candidates/steamgriddb
   SGDB_TYPES                SteamGridDB grid types to fetch
                             default: static
   MAX_PER_RATIO             Max images per game+ratio; 0 means all
@@ -45,7 +45,7 @@ fi
 
 LIBRARY="${KORRI_LIBRARY:-$HOME/.local/share/korri/library/library.yaml}"
 CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
-OUT_DIR="${OUT_DIR:-$CACHE_HOME/korri/media/candidates/steamgriddb}"
+OUT_DIR="${OUT_DIR:-$CACHE_HOME/korri/game-assets/candidates/steamgriddb}"
 SGDB_TYPES="${SGDB_TYPES:-static}"
 MAX_PER_RATIO="${MAX_PER_RATIO:-0}"
 SLEEP_SECONDS="${SLEEP_SECONDS:-0.2}"
@@ -175,6 +175,11 @@ declare -A RATIO_DIMS=(
   ["92x43"]="460x215,920x430"
   ["2x3"]="600x900,342x482,660x930"
 )
+declare -A RATIO_ROLES=(
+  ["1x1"]="tile"
+  ["92x43"]="banner"
+  ["2x3"]="poster"
+)
 ratios=("1x1" "92x43" "2x3")
 
 game_count=0
@@ -185,7 +190,8 @@ error_count=0
 while IFS=$'\t' read -r game_id title content_path; do
   ((game_count += 1))
   search_name="${SEARCH_NAMES[$game_id]:-${title:-$content_path}}"
-  game_dir="$OUT_DIR/$(safe_name "$game_id")"
+  game_slug="$(safe_name "$game_id")"
+  game_dir="$OUT_DIR/$game_slug"
   mkdir -p "$game_dir"
 
   echo "[$game_count] $game_id -> $search_name"
@@ -240,12 +246,17 @@ while IFS=$'\t' read -r game_id title content_path; do
 
     for image in "${images[@]}"; do
       IFS=$'\t' read -r image_id url dimensions image_type style <<< "$image"
-      url_path="${url%%\?*}"
+      sanitized_url="${url%%\#*}"
+      sanitized_url="${sanitized_url%%\?*}"
+      url_path="$sanitized_url"
       ext="${url_path##*.}"
       if [[ "$ext" == "$url_path" || ${#ext} -gt 8 ]]; then
         ext="jpg"
       fi
-      file="$ratio_dir/$(safe_name "${image_id}_${dimensions}_${style}_${image_type}").$ext"
+      file_name="$(safe_name "${image_id}_${dimensions}_${style}_${image_type}").$ext"
+      file="$ratio_dir/$file_name"
+      relative_file="steamgriddb/$game_slug/$ratio/$file_name"
+      role="${RATIO_ROLES[$ratio]}"
       if [[ -s "$file" ]]; then
         ((skip_count += 1))
       else
@@ -274,9 +285,10 @@ while IFS=$'\t' read -r game_id title content_path; do
         --arg imageId "$image_id" \
         --arg type "$image_type" \
         --arg style "$style" \
-        --arg url "$url" \
-        --arg file "$file" \
-        '{gameId:$gameId,title:$title,contentPath:$contentPath,searchName:$searchName,sgdbId:$sgdbId,ratio:$ratio,dimensions:$dimensions,imageId:$imageId,type:$type,style:$style,url:$url,file:$file}' >> "$manifest"
+        --arg role "$role" \
+        --arg url "$sanitized_url" \
+        --arg file "$relative_file" \
+        '{gameId:$gameId,title:$title,contentPath:$contentPath,searchName:$searchName,sgdbId:$sgdbId,role:$role,ratio:$ratio,dimensions:$dimensions,imageId:$imageId,type:$type,style:$style,url:$url,file:$file,provider:"steamgriddb"}' >> "$manifest"
     done
   done
 
