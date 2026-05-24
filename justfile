@@ -73,9 +73,15 @@ desktop-build: build-web desktop-preload-build desktop-waiting-page-build deskto
   bun x electrobun build
   bun run tools/desktop/electrobun-post-build-patch.ts
 
-# Run unit tests.
+# Run unit tests (excludes the slow nix-evaluation suite -- run `just test-nix` for that).
 test-unit:
-  bun test
+  bun test --path-ignore-patterns "**/tools/testing/nix/**"
+
+# Run the nix-evaluation test suite. Slow (each file spawns `nix eval`); kept
+# out of the default fast loop by `test-unit`'s --path-ignore-patterns. Both
+# suites run together under `just check`.
+test-nix:
+  bun test tools/testing/nix/
 
 # Dry-build, config-check, and document-smoke the x86 live USB kiosk artifact.
 live-usb-smoke:
@@ -172,7 +178,7 @@ format:
   biome format --write tools korri
 
 # Run the standard validation suite.
-check: validate-router lint typecheck test-unit check-bdd check-bun-deps
+check: validate-router lint typecheck test-unit test-nix check-bdd check-bun-deps
 
 # Run validation plus a production build.
 check-full: check build
