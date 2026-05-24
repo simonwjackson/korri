@@ -17,6 +17,9 @@ let
       cfg.systemd.services ? "korri-live-usb-persistence"
     ))
     (check "live USB kiosk user must be korri" (cfg.services.korri.kiosk.user == "korri"))
+    (check "live USB kiosk user must have an interactive debug shell" (
+      cfg.users.users.${cfg.services.korri.kiosk.user}.shell == pkgs.bashInteractive
+    ))
     (check "live USB must use greetd auto-session" cfg.services.greetd.enable)
     (check "greetd initial session must run as korri" (
       cfg.services.greetd.settings.initial_session.user == "korri"

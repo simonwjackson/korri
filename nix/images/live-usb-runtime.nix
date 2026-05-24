@@ -159,6 +159,7 @@ in
     };
 
     users.users.${kioskCfg.user} = lib.mkIf (cfg.enable && kioskCfg.createUser) {
+      shell = pkgs.bashInteractive;
       openssh.authorizedKeys.keys = cfg.debugSsh.authorizedKeys;
       extraGroups = lib.mkAfter [
         "adm"
