@@ -1,12 +1,19 @@
 /**
- * Desktop preload script: installs `window.__korriConnection` and
- * `window.__korriRuntime` so the renderer can observe pushes from the bun
- * process.
+ * Desktop preload script: installs `window.__korriInput` so the
+ * renderer can receive brokered semantic input actions (gamepad
+ * mappings, directional keys, etc.) pushed by the bun-side input
+ * broker.
  *
  * The bun side calls `window.__electrobun.receiveMessageFromBun(payload)`
- * for every push. Each installer here chains the existing handler rather
- * than replacing it, so both bridges receive every message and each
- * filters by its own type guard. Install order is irrelevant.
+ * with input payloads tagged by `kind`; the installer below dispatches
+ * by tag. `chainAcceptor` preserves any previously-installed handler
+ * so coexistence with electrobun's own preload (or any future
+ * additional bridge) is non-destructive.
+ *
+ * Connection-state and runtime-config no longer cross this boundary —
+ * the catch-all serve in `create-desktop-app.ts` gates the React
+ * bundle on `connected` and inlines runtime-config into `index.html`
+ * directly. See plan 2026-05-24-004 (U1, U2, U6).
  *
  * Built as a separate browser target via:
  *   bun build korri/deploy/desktop/preload.ts \
@@ -22,19 +29,9 @@ import {
   isDesktopInputActionBridgePayload,
   isDesktopInputStatusBridgePayload,
 } from "@shared/input/desktop-bridge-wire"
-import {
-  type ConnectionStateBridgeState,
-  isConnectionStateBridgeState,
-} from "./connection-state-bridge"
-import {
-  isRuntimeConfigBridgeState,
-  type RuntimeConfigBridgeState,
-} from "./runtime-config-bridge"
 
 declare global {
   interface Window {
-    __korriConnection?: KorriConnectionBridge
-    __korriRuntime?: KorriRuntimeBridge
     __korriInput?: KorriInputBridge
     __electrobun?: {
       receiveMessageFromBun?: (msg: unknown) => void
@@ -42,22 +39,6 @@ declare global {
     }
   }
 }
-
-export interface KorriConnectionBridge {
-  getState(): ConnectionStateBridgeState
-  subscribe(listener: ConnectionStateListener): () => void
-}
-
-export type ConnectionStateListener = (
-  state: ConnectionStateBridgeState,
-) => void
-
-export interface KorriRuntimeBridge {
-  getState(): RuntimeConfigBridgeState
-  subscribe(listener: RuntimeConfigListener): () => void
-}
-
-export type RuntimeConfigListener = (state: RuntimeConfigBridgeState) => void
 
 export interface KorriInputBridge {
   subscribeAction(listener: InputActionListener): () => void
@@ -67,16 +48,6 @@ export interface KorriInputBridge {
 
 export type InputActionListener = (action: DesktopInputAction) => void
 export type InputStatusListener = (status: DesktopInputStatus) => void
-
-const INITIAL_STATE: ConnectionStateBridgeState = {
-  status: "searching",
-  since: new Date(0).toISOString(),
-  helpAfter: new Date(0).toISOString(),
-}
-
-const INITIAL_RUNTIME_STATE: RuntimeConfigBridgeState = {
-  desktopInput: false,
-}
 
 const INITIAL_INPUT_STATUS: DesktopInputStatus = {
   inputd: "disabled",
@@ -90,13 +61,16 @@ const INITIAL_INPUT_STATUS: DesktopInputStatus = {
 
 /**
  * Chain a new acceptor onto `target.__electrobun.receiveMessageFromBun`,
- * preserving any previously-installed handler. Both run for every message;
- * each is responsible for filtering by its own type guard.
+ * preserving any previously-installed handler. Both run for every
+ * message; each is responsible for filtering by its own type guard.
  *
- * Each handler is isolated by try/catch so a throw from one bridge (e.g.,
- * a subscriber raising) does not poison the chain for the next bridge.
+ * Each handler is isolated by try/catch so a throw from one bridge
+ * (e.g., a subscriber raising) does not poison the chain for the next
+ * bridge. This isolation property is load-bearing for coexistence with
+ * electrobun's own preload and is regression-tested directly in
+ * `preload.test.ts`.
  */
-function chainAcceptor(
+export function chainAcceptor(
   target: Window & typeof globalThis,
   accept: (incoming: unknown) => void,
 ): void {
@@ -121,76 +95,8 @@ function chainAcceptor(
 }
 
 /**
- * Install the connection-state bridge on the given window object. Exposed
- * for tests; the preload entry point installs onto the real `window`.
- */
-export function installConnectionStateBridge(
-  target: Window & typeof globalThis,
-): KorriConnectionBridge {
-  const listeners = new Set<ConnectionStateListener>()
-  let current: ConnectionStateBridgeState = INITIAL_STATE
-
-  const bridge: KorriConnectionBridge = {
-    getState: () => current,
-    subscribe: listener => {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-  }
-
-  const acceptIncoming = (incoming: unknown): void => {
-    if (!isConnectionStateBridgeState(incoming)) return
-    current = incoming
-    for (const listener of listeners) {
-      listener(incoming)
-    }
-  }
-
-  target.__korriConnection = bridge
-  chainAcceptor(target, acceptIncoming)
-
-  return bridge
-}
-
-/**
- * Install the runtime-config bridge on the given window object. Exposed
- * for tests; the preload entry point installs onto the real `window`.
- */
-export function installRuntimeBridge(
-  target: Window & typeof globalThis,
-): KorriRuntimeBridge {
-  const listeners = new Set<RuntimeConfigListener>()
-  let current: RuntimeConfigBridgeState = INITIAL_RUNTIME_STATE
-
-  const bridge: KorriRuntimeBridge = {
-    getState: () => current,
-    subscribe: listener => {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-  }
-
-  const acceptIncoming = (incoming: unknown): void => {
-    if (!isRuntimeConfigBridgeState(incoming)) return
-    current = incoming
-    for (const listener of listeners) {
-      listener(incoming)
-    }
-  }
-
-  target.__korriRuntime = bridge
-  chainAcceptor(target, acceptIncoming)
-
-  return bridge
-}
-
-/**
- * Install the desktop-input bridge on the given window object. Actions are
- * edge-triggered and not replayed; status is a replayable snapshot.
+ * Install the desktop-input bridge on the given window object. Actions
+ * are edge-triggered and not replayed; status is a replayable snapshot.
  */
 export function installDesktopInputBridge(
   target: Window & typeof globalThis,
@@ -237,8 +143,8 @@ export function installDesktopInputBridge(
   return bridge
 }
 
-// No auto-install side effect: tests import this file directly and must
-// not mutate the global window on import. The desktop's compiled preload
-// entry point lives in `preload-entry.ts` and calls
-// `installConnectionStateBridge` explicitly when bundled for the
-// browser target.
+// No auto-install side effect: tests import this file directly and
+// must not mutate the global window on import. The desktop's compiled
+// preload entry point lives in `preload-entry.ts` and calls
+// `installDesktopInputBridge` explicitly when bundled for the browser
+// target.

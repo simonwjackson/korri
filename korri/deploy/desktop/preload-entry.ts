@@ -1,29 +1,29 @@
 /**
  * Browser-bundled entry point for the desktop preload.
  *
- * Compiled by `bun build --target=browser` and copied into the electrobun
- * app bundle at `Resources/app/views/mainview/preload.js`. Electrobun's
- * built-in preload runs before this one and installs `window.__electrobun`;
- * we then install our bridge unconditionally so the React shell can
- * observe connection-state pushes from bun.
+ * Compiled by `bun build --target=browser` and copied into the
+ * electrobun app bundle at `Resources/app/views/mainview/preload.js`.
+ * Electrobun's built-in preload runs before this one and installs
+ * `window.__electrobun`; we then install the input bridge on top so
+ * the React renderer can subscribe to brokered semantic input actions.
+ *
+ * Connection-state and runtime-config used to be installed here too;
+ * both are out-of-band now (waiting page + inlined runtime-config) and
+ * the preload's only remaining job is the input bridge.
  *
  * Kept as a thin shim so test files can import the library
- * (`./preload.ts`) without triggering side effects on the global window.
+ * (`./preload.ts`) without triggering side effects on the global
+ * window.
  */
 
-import {
-  installConnectionStateBridge,
-  installDesktopInputBridge,
-  installRuntimeBridge,
-} from "./preload.ts"
+import { installDesktopInputBridge } from "./preload.ts"
 
 if (typeof window !== "undefined" && typeof document !== "undefined") {
   try {
-    installConnectionStateBridge(window as Window & typeof globalThis)
-    installRuntimeBridge(window as Window & typeof globalThis)
     installDesktopInputBridge(window as Window & typeof globalThis)
   } catch (error) {
-    // Preload is best-effort; renderer falls back to a stub when missing.
+    // Preload is best-effort; renderer falls back to a stub when
+    // missing.
     console.warn("[korri] preload bridge install failed", error)
   }
 }

@@ -4,21 +4,10 @@ import type {
   DesktopInputActionBridgePayload,
   DesktopInputStatusBridgePayload,
 } from "@shared/input/desktop-bridge-wire"
-import {
-  isConnectionStateBridgeState,
-  type ConnectionStateBridgeState,
-} from "./connection-state-bridge"
-import {
-  installConnectionStateBridge,
-  installDesktopInputBridge,
-  installRuntimeBridge,
-} from "./preload"
-import { isRuntimeConfigBridgeState } from "./runtime-config-bridge"
+import { installDesktopInputBridge } from "./preload"
 
 interface WindowDouble {
   __korriInput?: unknown
-  __korriConnection?: unknown
-  __korriRuntime?: unknown
   __electrobun?: {
     receiveMessageFromBun?: (msg: unknown) => void
     [k: string]: unknown
@@ -48,13 +37,6 @@ const INPUT_STATUS: DesktopInputStatusBridgePayload = {
     lastError: null,
   },
 }
-
-const CONNECTED: ConnectionStateBridgeState = {
-  status: "connected",
-  server: { hostId: "aka", controlUrl: "http://aka:3010" },
-}
-
-const RUNTIME = { desktopInput: true }
 
 describe("installDesktopInputBridge", () => {
   it("installs window.__korriInput with action and status subscriptions", () => {
@@ -99,35 +81,26 @@ describe("installDesktopInputBridge", () => {
     expect(bridge.getStatus()).toEqual(INPUT_STATUS.status)
   })
 
-  it("composes with connection and runtime bridges without message collisions", () => {
+  it("ignores non-input payloads (no collision with connection/runtime shapes)", () => {
+    // Connection-state and runtime-config are no longer pushed over
+    // the preload bridge (U6); the input bridge must still ignore
+    // payloads shaped like the old wire formats so a future revival
+    // of either contract on a different channel wouldn't accidentally
+    // dispatch as input.
     const w = makeWindow()
-    const connection = installConnectionStateBridge(
+    const bridge = installDesktopInputBridge(
       w as unknown as Window & typeof globalThis,
     )
-    const runtime = installRuntimeBridge(
-      w as unknown as Window & typeof globalThis,
-    )
-    const input = installDesktopInputBridge(
-      w as unknown as Window & typeof globalThis,
-    )
-
-    const connectionEvents: ConnectionStateBridgeState[] = []
-    const runtimeEvents: unknown[] = []
     const actions: DesktopInputActionBridgePayload["action"][] = []
+    bridge.subscribeAction(action => actions.push(action))
 
-    connection.subscribe(state => connectionEvents.push(state))
-    runtime.subscribe(state => runtimeEvents.push(state))
-    input.subscribeAction(action => actions.push(action))
+    w.__electrobun?.receiveMessageFromBun?.({
+      status: "connected",
+      server: { hostId: "x", controlUrl: "http://x" },
+    })
+    w.__electrobun?.receiveMessageFromBun?.({ desktopInput: true })
 
-    w.__electrobun?.receiveMessageFromBun?.(INPUT_ACTION)
-    w.__electrobun?.receiveMessageFromBun?.(CONNECTED)
-    w.__electrobun?.receiveMessageFromBun?.(RUNTIME)
-
-    expect(actions).toEqual([INPUT_ACTION.action])
-    expect(connectionEvents).toEqual([CONNECTED])
-    expect(runtimeEvents).toEqual([RUNTIME])
-    expect(isConnectionStateBridgeState(INPUT_ACTION)).toBe(false)
-    expect(isRuntimeConfigBridgeState(INPUT_ACTION)).toBe(false)
+    expect(actions).toEqual([])
   })
 
   it("ignores malformed input payloads and isolates throwing subscribers", () => {

@@ -1,10 +1,7 @@
 import { describe, expect, it } from "bun:test"
-import type { ConnectionStateBridgeState } from "./connection-state-bridge"
-import { isConnectionStateBridgeState } from "./connection-state-bridge"
-import { installConnectionStateBridge } from "./preload"
+import { chainAcceptor } from "./preload"
 
 interface WindowDouble {
-  __korriConnection?: unknown
   __electrobun?: {
     receiveMessageFromBun?: (msg: unknown) => void
     [k: string]: unknown
@@ -15,125 +12,97 @@ function makeWindow(): WindowDouble {
   return {}
 }
 
-const CONNECTED: ConnectionStateBridgeState = {
-  status: "connected",
-  server: { hostId: "aka", controlUrl: "http://aka:3010" },
-}
-
-const SEARCHING: ConnectionStateBridgeState = {
-  status: "searching",
-  since: new Date("2026-01-01T00:00:00Z").toISOString(),
-  helpAfter: new Date("2026-01-01T00:00:30Z").toISOString(),
-}
-
-const RECONNECTING: ConnectionStateBridgeState = {
-  status: "reconnecting",
-  server: { hostId: "aka", controlUrl: "http://aka:3010" },
-  since: new Date("2026-01-01T00:00:00Z").toISOString(),
-  helpAfter: new Date("2026-01-01T00:00:30Z").toISOString(),
-}
-
-describe("connection-state bridge type guard", () => {
-  it("accepts a searching state", () => {
-    expect(isConnectionStateBridgeState(SEARCHING)).toBe(true)
-  })
-
-  it("accepts a reconnecting state", () => {
-    expect(isConnectionStateBridgeState(RECONNECTING)).toBe(true)
-  })
-
-  it("accepts a connected state", () => {
-    expect(isConnectionStateBridgeState(CONNECTED)).toBe(true)
-  })
-
-  it("rejects an unknown status", () => {
-    expect(
-      isConnectionStateBridgeState({ status: "wat", since: "x", helpAfter: "y" }),
-    ).toBe(false)
-  })
-
-  it("rejects a reconnecting state without a server", () => {
-    expect(
-      isConnectionStateBridgeState({
-        status: "reconnecting",
-        since: SEARCHING.since,
-        helpAfter: SEARCHING.helpAfter,
-      }),
-    ).toBe(false)
-  })
-
-  it("rejects null and primitives", () => {
-    expect(isConnectionStateBridgeState(null)).toBe(false)
-    expect(isConnectionStateBridgeState(42)).toBe(false)
-    expect(isConnectionStateBridgeState("connected")).toBe(false)
-  })
-})
-
-describe("installConnectionStateBridge", () => {
-  it("installs window.__korriConnection with getState() and subscribe()", () => {
+/**
+ * `chainAcceptor` is the load-bearing primitive shared by every
+ * preload installer (today just `installDesktopInputBridge`) and by
+ * any future bridge added to the preload. Its isolation property — a
+ * throwing acceptor doesn't poison the chain for the next acceptor —
+ * was previously regression-tested via the cross-bridge composition in
+ * `preload-runtime-bridge.test.ts`. With that file gone (U6), the same
+ * coverage migrates here using synthetic acceptors.
+ */
+describe("chainAcceptor", () => {
+  it("creates __electrobun when missing", () => {
     const w = makeWindow()
-    const bridge = installConnectionStateBridge(w as unknown as Window & typeof globalThis)
-    expect(w.__korriConnection).toBe(bridge)
-    expect(typeof bridge.getState).toBe("function")
-    expect(typeof bridge.subscribe).toBe("function")
+    chainAcceptor(w as unknown as Window & typeof globalThis, () => {})
+
+    expect(typeof w.__electrobun?.receiveMessageFromBun).toBe("function")
   })
 
-  it("returns an initial searching state before any push", () => {
+  it("delivers every message to every chained acceptor in order", () => {
     const w = makeWindow()
-    const bridge = installConnectionStateBridge(w as unknown as Window & typeof globalThis)
-    expect(bridge.getState().status).toBe("searching")
+    const received: Array<{ owner: string; value: unknown }> = []
+
+    chainAcceptor(w as unknown as Window & typeof globalThis, v =>
+      received.push({ owner: "first", value: v }),
+    )
+    chainAcceptor(w as unknown as Window & typeof globalThis, v =>
+      received.push({ owner: "second", value: v }),
+    )
+
+    w.__electrobun?.receiveMessageFromBun?.({ kind: "hello" })
+
+    expect(received).toEqual([
+      { owner: "first", value: { kind: "hello" } },
+      { owner: "second", value: { kind: "hello" } },
+    ])
   })
 
-  it("delivers incoming state to subscribers and updates getState()", () => {
+  it("a throwing acceptor does not poison the chain for the next acceptor", () => {
     const w = makeWindow()
-    const bridge = installConnectionStateBridge(w as unknown as Window & typeof globalThis)
-    const received: ConnectionStateBridgeState[] = []
-    bridge.subscribe(state => received.push(state))
+    chainAcceptor(w as unknown as Window & typeof globalThis, () => {
+      throw new Error("first acceptor blew up")
+    })
 
-    w.__electrobun?.receiveMessageFromBun?.(CONNECTED)
+    const survivors: unknown[] = []
+    chainAcceptor(w as unknown as Window & typeof globalThis, v =>
+      survivors.push(v),
+    )
 
-    expect(received).toEqual([CONNECTED])
-    expect(bridge.getState()).toEqual(CONNECTED)
+    // First call: the throwing acceptor runs and (caught), then the
+    // surviving acceptor runs.
+    expect(() =>
+      w.__electrobun?.receiveMessageFromBun?.({ kind: "one" }),
+    ).not.toThrow()
+
+    // Second call: same — the chain isn't permanently broken.
+    expect(() =>
+      w.__electrobun?.receiveMessageFromBun?.({ kind: "two" }),
+    ).not.toThrow()
+
+    expect(survivors).toEqual([{ kind: "one" }, { kind: "two" }])
   })
 
-  it("ignores malformed payloads without throwing", () => {
-    const w = makeWindow()
-    const bridge = installConnectionStateBridge(w as unknown as Window & typeof globalThis)
-    const received: ConnectionStateBridgeState[] = []
-    bridge.subscribe(state => received.push(state))
+  it("preserves any previously-installed acceptor that isn't from chainAcceptor", () => {
+    const externalReceived: unknown[] = []
+    const w: WindowDouble = {
+      __electrobun: {
+        receiveMessageFromBun: msg => externalReceived.push(msg),
+      },
+    }
 
-    w.__electrobun?.receiveMessageFromBun?.({ status: "garbage" })
-    w.__electrobun?.receiveMessageFromBun?.(null)
-    w.__electrobun?.receiveMessageFromBun?.("hello")
+    const ourReceived: unknown[] = []
+    chainAcceptor(w as unknown as Window & typeof globalThis, v =>
+      ourReceived.push(v),
+    )
 
-    expect(received).toEqual([])
-    expect(bridge.getState().status).toBe("searching")
+    w.__electrobun?.receiveMessageFromBun?.({ kind: "shared" })
+
+    expect(externalReceived).toEqual([{ kind: "shared" }])
+    expect(ourReceived).toEqual([{ kind: "shared" }])
   })
 
-  it("unsubscribe stops delivering to that listener only", () => {
-    const w = makeWindow()
-    const bridge = installConnectionStateBridge(w as unknown as Window & typeof globalThis)
-    const a: ConnectionStateBridgeState[] = []
-    const b: ConnectionStateBridgeState[] = []
-    const unsubA = bridge.subscribe(state => a.push(state))
-    bridge.subscribe(state => b.push(state))
-
-    w.__electrobun?.receiveMessageFromBun?.(SEARCHING)
-    unsubA()
-    w.__electrobun?.receiveMessageFromBun?.(CONNECTED)
-
-    expect(a).toEqual([SEARCHING])
-    expect(b).toEqual([SEARCHING, CONNECTED])
-  })
-
-  it("preserves any other electrobun keys when overriding receiveMessageFromBun", () => {
+  it("preserves other keys on the existing __electrobun object", () => {
     const w: WindowDouble = {
       __electrobun: {
         receiveInternalMessageFromBun: () => {},
       },
     }
-    installConnectionStateBridge(w as unknown as Window & typeof globalThis)
-    expect(typeof w.__electrobun?.receiveInternalMessageFromBun).toBe("function")
+    chainAcceptor(w as unknown as Window & typeof globalThis, () => {})
+
+    expect(typeof w.__electrobun?.receiveInternalMessageFromBun).toBe(
+      "function",
+    )
     expect(typeof w.__electrobun?.receiveMessageFromBun).toBe("function")
   })
 })
