@@ -48,7 +48,7 @@ type ScenarioResult = {
 type Scenarios = {
   baseline: ScenarioResult
   clientPackageOnly: ScenarioResult
-  kioskEnablesClient: ScenarioResult
+  kioskEnablesClient: ScenarioResult // also serves the CLI-default assertions
   swayPlatformFragment: ScenarioResult
   existingSessionBus: ScenarioResult
   existingSessionBusMissingAddress: ScenarioResult
@@ -64,7 +64,6 @@ type Scenarios = {
   emptyUser: ScenarioResult
   relativeRuntimeDir: ScenarioResult
   runtimeDirOutsideRun: ScenarioResult
-  cliEnabledByDefault: ScenarioResult
   cliOptedOut: ScenarioResult
   cliPackageOverridden: ScenarioResult
 }
@@ -304,12 +303,12 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
 
   describe("korri CLI is installed by default when kiosk is enabled", () => {
     it("defaults services.korri.cli.enable = true when kiosk is enabled", () => {
-      expect(scenarios.cliEnabledByDefault.cliEnabled).toBe(true)
+      expect(scenarios.kioskEnablesClient.cliEnabled).toBe(true)
     })
 
     it("installs the korri-cli package into environment.systemPackages", () => {
       expect(
-        scenarios.cliEnabledByDefault.clientSystemPackages.some(path =>
+        scenarios.kioskEnablesClient.clientSystemPackages.some(path =>
           /-korri-cli-/.test(path),
         ),
       ).toBe(true)

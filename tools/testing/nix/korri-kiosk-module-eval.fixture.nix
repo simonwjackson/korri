@@ -340,17 +340,10 @@ let
       }
     );
 
-    cliEnabledByDefault = evaluateWith (
-      { pkgs, ... }:
-      {
-        services.korri.kiosk = {
-          enable = true;
-          user = "root";
-          createUser = false;
-          client.command = "${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
-        };
-      }
-    );
+    # `cliEnabledByDefault` previously duplicated `kioskEnablesClient` byte-for-byte;
+    # consumers now read `scenarios.kioskEnablesClient` directly for the CLI-default
+    # assertions. Kept here as a comment so the next reader sees the consolidation
+    # rather than re-introducing the duplicate.
 
     cliOptedOut = evaluateWith (
       { pkgs, ... }:

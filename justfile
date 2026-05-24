@@ -77,9 +77,11 @@ desktop-build: build-web desktop-preload-build desktop-waiting-page-build deskto
 test-unit:
   bun test --path-ignore-patterns "**/tools/testing/nix/**"
 
-# Run the nix-evaluation test suite. Slow (each file spawns `nix eval`); kept
-# out of the default fast loop by `test-unit`'s --path-ignore-patterns. Both
-# suites run together under `just check`.
+# Run the slow Nix-backed test suite. Most files batch one `nix eval` at module
+# load (see comment headers in tools/testing/nix/*); korri-live-usb-smoke.test.ts
+# additionally invokes `nix build --dry-run`. Kept out of the default fast loop
+# by `test-unit`'s --path-ignore-patterns. Both suites run together under
+# `just check`.
 test-nix:
   bun test tools/testing/nix/
 
