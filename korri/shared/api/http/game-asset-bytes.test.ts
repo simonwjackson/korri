@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import { createHash } from "node:crypto"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
@@ -10,7 +11,8 @@ import { serveGameAssetBytes } from "./game-asset-bytes"
 
 const cleanups: Array<() => Promise<void>> = []
 
-const assetId = `sha256:${"a".repeat(64)}`
+const assetBytes = "image"
+const assetId = `sha256:${sha256(assetBytes)}`
 const missingAssetId = `sha256:${"b".repeat(64)}`
 const unsupportedAssetId = `sha256:${"c".repeat(64)}`
 
@@ -116,11 +118,15 @@ function request(path: string, method = "GET"): Request {
   return new Request(`http://api.local${path}`, { method })
 }
 
+function sha256(value: string | Uint8Array): string {
+  return createHash("sha256").update(value).digest("hex")
+}
+
 describe("serveGameAssetBytes", () => {
   it("serves known durable game assets with validated image headers", async () => {
     const env = await withAssetEnvironment()
     await writeAssetCatalog(env, [asset])
-    await writeDurableBlob(env, asset, "image")
+    await writeDurableBlob(env, asset, assetBytes)
 
     const response = await serveGameAssetBytes(
       request(`/api/game-assets/${asset.id}`),
@@ -133,13 +139,13 @@ describe("serveGameAssetBytes", () => {
     expect(response.headers.get("cache-control")).toBe(
       "public, max-age=31536000, immutable",
     )
-    expect(await response.text()).toBe("image")
+    expect(await response.text()).toBe(assetBytes)
   })
 
   it("returns headers without a body for HEAD", async () => {
     const env = await withAssetEnvironment()
     await writeAssetCatalog(env, [asset])
-    await writeDurableBlob(env, asset, "image")
+    await writeDurableBlob(env, asset, assetBytes)
 
     const response = await serveGameAssetBytes(
       request(`/api/game-assets/${asset.id}`, "HEAD"),
@@ -186,6 +192,19 @@ describe("serveGameAssetBytes", () => {
 
     const response = await serveGameAssetBytes(
       request(`/api/game-assets/${missingFileAsset.id}`),
+      { env },
+    )
+
+    expect(response.status).toBe(404)
+  })
+
+  it("returns 404 when durable bytes do not match the content-addressed id", async () => {
+    const env = await withAssetEnvironment()
+    await writeAssetCatalog(env, [asset])
+    await writeDurableBlob(env, asset, "corrupt")
+
+    const response = await serveGameAssetBytes(
+      request(`/api/game-assets/${asset.id}`),
       { env },
     )
 

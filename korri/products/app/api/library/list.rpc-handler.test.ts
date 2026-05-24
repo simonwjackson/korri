@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import { createHash } from "node:crypto"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
@@ -13,6 +14,16 @@ import { createLibraryRepository } from "@shared/library/proseql/library-reposit
 import { Cause, Effect, Exit } from "effect"
 
 import { handleListLibrary } from "./list.rpc-handler"
+
+const tileAssetBytes = "tile-asset"
+const bannerAssetBytes = "banner-asset"
+const posterAssetBytes = "poster-asset"
+const missingFileAssetBytes = "missing-file-asset"
+
+const tileAssetId = assetIdForBytes(tileAssetBytes)
+const bannerAssetId = assetIdForBytes(bannerAssetBytes)
+const posterAssetId = assetIdForBytes(posterAssetBytes)
+const missingFileAssetId = assetIdForBytes(missingFileAssetBytes)
 
 const originalEnv = {
   libraryRoot: process.env.KORRI_LIBRARY_ROOT,
@@ -90,38 +101,14 @@ describe("app.library.list handler (configured-real source)", () => {
           },
         ],
         assets: [
-          assetRecord(
-            "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-            512,
-            512,
-          ),
-          assetRecord(
-            "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-            1280,
-            720,
-          ),
-          assetRecord(
-            "sha256:3333333333333333333333333333333333333333333333333333333333333333",
-            600,
-            900,
-          ),
+          assetRecord(tileAssetId, 512, 512, tileAssetBytes),
+          assetRecord(bannerAssetId, 1280, 720, bannerAssetBytes),
+          assetRecord(posterAssetId, 600, 900, posterAssetBytes),
         ],
         assignments: [
-          assignment(
-            "snes/art.smc",
-            "tile",
-            "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-          ),
-          assignment(
-            "snes/art.smc",
-            "banner",
-            "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-          ),
-          assignment(
-            "snes/art.smc",
-            "poster",
-            "sha256:3333333333333333333333333333333333333333333333333333333333333333",
-          ),
+          assignment("snes/art.smc", "tile", tileAssetId),
+          assignment("snes/art.smc", "banner", bannerAssetId),
+          assignment("snes/art.smc", "poster", posterAssetId),
         ],
         writeAssetBytes: true,
       }),
@@ -140,13 +127,12 @@ describe("app.library.list handler (configured-real source)", () => {
       "poster",
     ])
     expect(result.games[0]?.media?.map(media => media.url)).toEqual([
-      "https://korri.example.test/control/api/game-assets/sha256%3A1111111111111111111111111111111111111111111111111111111111111111",
-      "https://korri.example.test/control/api/game-assets/sha256%3A2222222222222222222222222222222222222222222222222222222222222222",
-      "https://korri.example.test/control/api/game-assets/sha256%3A3333333333333333333333333333333333333333333333333333333333333333",
+      `https://korri.example.test/control/api/game-assets/${encodeURIComponent(tileAssetId)}`,
+      `https://korri.example.test/control/api/game-assets/${encodeURIComponent(bannerAssetId)}`,
+      `https://korri.example.test/control/api/game-assets/${encodeURIComponent(posterAssetId)}`,
     ])
     expect(result.games[0]?.media?.[0]).toMatchObject({
-      assetId:
-        "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      assetId: tileAssetId,
       type: "image",
       width: 512,
       height: 512,
@@ -207,18 +193,10 @@ describe("app.library.list handler (configured-real source)", () => {
       await withTempProseqlLibrary({
         games: [{ id: "snes/missing-file.smc" }],
         assets: [
-          assetRecord(
-            "sha256:5555555555555555555555555555555555555555555555555555555555555555",
-            512,
-            512,
-          ),
+          assetRecord(missingFileAssetId, 512, 512, missingFileAssetBytes),
         ],
         assignments: [
-          assignment(
-            "snes/missing-file.smc",
-            "tile",
-            "sha256:5555555555555555555555555555555555555555555555555555555555555555",
-          ),
+          assignment("snes/missing-file.smc", "tile", missingFileAssetId),
         ],
       }),
     )
@@ -230,6 +208,36 @@ describe("app.library.list handler (configured-real source)", () => {
     )
 
     expect(result.games[0]?.media).toBeUndefined()
+  })
+
+  it("rejects assignment records whose key does not match gameId and role", async () => {
+    const lib = track(
+      await withTempProseqlLibrary({
+        games: [{ id: "snes/bad-assignment.smc" }],
+        assignments: [
+          {
+            id: "snes/bad-assignment.smc:banner",
+            gameId: "snes/bad-assignment.smc",
+            role: "tile",
+            assetId: tileAssetId,
+          },
+        ],
+      }),
+    )
+    process.env.KORRI_LIBRARY_ROOT = lib.root
+
+    const exit = await Effect.runPromiseExit(
+      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+    )
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) {
+      const error = Cause.squash(exit.cause)
+      expect(error).toBeInstanceOf(DataError)
+      expect(String((error as Error).message)).toContain(
+        "invalid game asset assignment id",
+      )
+    }
   })
 
   it("fails deterministically when server-like config omits KORRI_PUBLIC_API_BASE_URL", async () => {
@@ -373,7 +381,7 @@ async function withTempProseqlLibrary(options: {
       for (const asset of options.assets ?? []) {
         const blobPath = gameAssetBlobPath({ XDG_DATA_HOME: dataRoot }, asset)
         await mkdir(dirname(blobPath), { recursive: true })
-        await writeFile(blobPath, "asset")
+        await writeFile(blobPath, bytesForAsset(asset))
       }
     }
 
@@ -393,6 +401,7 @@ function assetRecord(
   id: GameAssetRecord["id"],
   width: number,
   height: number,
+  bytes: string,
 ): GameAssetRecord {
   return {
     id,
@@ -401,7 +410,7 @@ function assetRecord(
     extension: "png",
     width,
     height,
-    byteSize: 5,
+    byteSize: Buffer.byteLength(bytes),
     pixelCount: width * height,
     storage: { strategy: "content-addressed" },
     source: { provider: "steamgriddb", id: "asset" },
@@ -418,6 +427,25 @@ function assignment(
     gameId,
     role,
     assetId,
+  }
+}
+
+function assetIdForBytes(bytes: string): GameAssetRecord["id"] {
+  return `sha256:${createHash("sha256").update(bytes).digest("hex")}`
+}
+
+function bytesForAsset(asset: GameAssetRecord): string {
+  switch (asset.id) {
+    case tileAssetId:
+      return tileAssetBytes
+    case bannerAssetId:
+      return bannerAssetBytes
+    case posterAssetId:
+      return posterAssetBytes
+    case missingFileAssetId:
+      return missingFileAssetBytes
+    default:
+      throw new Error(`unexpected asset id ${asset.id}`)
   }
 }
 

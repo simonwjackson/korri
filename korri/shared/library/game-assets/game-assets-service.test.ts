@@ -529,6 +529,45 @@ describe("game-assets service assignment", () => {
     })
   })
 
+  it("unassign deletes a dangling assignment even when the asset record is missing", async () => {
+    await withTempRoot(async root => {
+      const error = await runWithService(root, ({ service, db }) =>
+        Effect.gen(function* () {
+          yield* db.gameAssetAssignments.upsert({
+            where: { id: `${gameId}:tile` },
+            create: {
+              id: `${gameId}:tile`,
+              gameId,
+              role: "tile",
+              assetId:
+                "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            },
+            update: {
+              id: `${gameId}:tile`,
+              gameId,
+              role: "tile",
+              assetId:
+                "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            },
+          })
+          yield* Effect.promise(() => db.flush())
+          return yield* service.unassign({ gameId, role: "tile" }).pipe(
+            Effect.match({
+              onFailure: error => error,
+              onSuccess: value => value,
+            }),
+          )
+        }),
+      )
+
+      expect(error).toMatchObject({ _tag: "NotFoundError" })
+      const assignments = await runWithService(root, ({ db }) =>
+        Effect.promise(() => db.gameAssetAssignments.query().runPromise),
+      )
+      expect(assignments).toEqual([])
+    })
+  })
+
   it("reopens the ProseQL library from disk with the assignment and durable file intact", async () => {
     await withTempRoot(async root => {
       const env = tempEnv(root)

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { readFile, stat } from "node:fs/promises"
 import { DataError } from "@shared/api/rpc/errors"
 import { korriDataPath, type XdgPathEnv } from "@shared/config/xdg-paths"
@@ -43,21 +44,19 @@ export async function serveGameAssetBytes(
     return new Response("Unsupported Media Type", { status: 415 })
   }
 
-  const filePath = gameAssetBlobPath(options.env ?? process.env, asset)
-  const fileStat = await statFileIfPresent(filePath)
-  if (!fileStat) {
+  const body = await readValidatedGameAssetBytes(
+    options.env ?? process.env,
+    asset,
+  )
+  if (!body) {
     return new Response("Not Found", { status: 404 })
   }
 
-  const headers = responseHeaders(asset, fileStat.size)
+  const headers = responseHeaders(asset, body.byteLength)
   if (request.method === "HEAD") {
     return new Response(null, { status: 200, headers })
   }
 
-  const body = await readFileIfPresent(filePath)
-  if (!body) {
-    return new Response("Not Found", { status: 404 })
-  }
   const arrayBuffer = body.buffer.slice(
     body.byteOffset,
     body.byteOffset + body.byteLength,
@@ -144,18 +143,29 @@ function libraryRootFromEnv(env: XdgPathEnv): string {
     : korriDataPath(env, "library")
 }
 
-async function statFileIfPresent(filePath: string) {
-  try {
-    const fileStat = await stat(filePath)
-    return fileStat.isFile() ? fileStat : null
-  } catch {
-    return null
-  }
+export async function hasValidGameAssetBytes(
+  env: XdgPathEnv,
+  asset: GameAssetRecord,
+): Promise<boolean> {
+  return (await readValidatedGameAssetBytes(env, asset)) !== null
 }
 
-async function readFileIfPresent(filePath: string): Promise<Buffer | null> {
+export async function readValidatedGameAssetBytes(
+  env: XdgPathEnv,
+  asset: GameAssetRecord,
+): Promise<Buffer | null> {
+  const filePath = gameAssetBlobPath(env, asset)
   try {
-    return await readFile(filePath)
+    const fileStat = await stat(filePath)
+    if (!fileStat.isFile() || fileStat.size !== asset.byteSize) return null
+
+    const body = await readFile(filePath)
+    if (body.byteLength !== asset.byteSize) return null
+
+    const digest = createHash("sha256").update(body).digest("hex")
+    if (asset.id !== `sha256:${digest}`) return null
+
+    return body
   } catch {
     return null
   }

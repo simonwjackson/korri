@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import { createHash } from "node:crypto"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
@@ -89,12 +90,14 @@ describe("game-assets end-to-end integration", () => {
       },
     })
 
+    const expectedAssetId = `sha256:${createHash("sha256").update(validPng).digest("hex")}`
     const assigned = await assignCandidate(server.rpcUrl, candidate.candidateId)
+    expect(assigned.asset.id).toBe(expectedAssetId)
     expect(assigned.assignment).toEqual({
       id: `${gameWithAssetId}:tile`,
       gameId: gameWithAssetId,
       role: "tile",
-      assetId: assigned.asset.id,
+      assetId: expectedAssetId,
     })
 
     const durablePath = gameAssetBlobPath(env, assigned.asset)
@@ -106,8 +109,8 @@ describe("game-assets end-to-end integration", () => {
     expect(resolvedMedia).toMatchObject({
       role: "tile",
       type: "image",
-      assetId: assigned.asset.id,
-      url: `${server.url}/api/game-assets/${encodeURIComponent(assigned.asset.id)}`,
+      assetId: expectedAssetId,
+      url: `${server.url}/api/game-assets/${encodeURIComponent(expectedAssetId)}`,
     })
 
     const imageResponse = await fetch(resolvedMedia?.url ?? "")
@@ -143,6 +146,14 @@ describe("game-assets end-to-end integration", () => {
     expect(Buffer.from(await reopenedImageResponse.arrayBuffer())).toEqual(
       validPng,
     )
+
+    const unassigned = await unassignCandidate(server.rpcUrl)
+    expect(unassigned.assignment.assetId).toBe(expectedAssetId)
+    expect(await readFile(durablePath)).toEqual(validPng)
+    const listedAfterUnassign = await listLibrary(server.rpcUrl)
+    expect(
+      gameById(listedAfterUnassign.games, gameWithAssetId).media,
+    ).toBeUndefined()
   })
 })
 
@@ -267,6 +278,22 @@ async function assignCandidate(rpcUrl: string, candidateId: string) {
             gameId: gameWithAssetId,
             role: "tile",
             candidateId,
+          }),
+        ),
+        Effect.provide(rpcClientLayer(rpcUrl)),
+      ),
+    ),
+  )
+}
+
+async function unassignCandidate(rpcUrl: string) {
+  return await Effect.runPromise(
+    Effect.scoped(
+      RpcClient.make(appRpcGroup).pipe(
+        Effect.flatMap(client =>
+          client["app.gameAssets.unassign"]({
+            gameId: gameWithAssetId,
+            role: "tile",
           }),
         ),
         Effect.provide(rpcClientLayer(rpcUrl)),

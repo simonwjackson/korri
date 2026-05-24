@@ -1,5 +1,7 @@
-import { stat } from "node:fs/promises"
-import { gameAssetByteRoutePrefix } from "@shared/api/http/game-asset-bytes"
+import {
+  gameAssetByteRoutePrefix,
+  hasValidGameAssetBytes,
+} from "@shared/api/http/game-asset-bytes"
 import { DataError } from "@shared/api/rpc/errors"
 import { korriDataPath, type XdgPathEnv } from "@shared/config/xdg-paths"
 import type {
@@ -7,8 +9,10 @@ import type {
   ResolvedGameRecord,
 } from "@shared/fixtures/games/game"
 import type { GameAssetRecord } from "@shared/library/config/records/game-asset"
-import type { GameAssetRole } from "@shared/library/config/records/game-asset-assignment"
-import { gameAssetBlobPath } from "@shared/library/game-assets/game-assets-service"
+import type {
+  GameAssetAssignmentRecord,
+  GameAssetRole,
+} from "@shared/library/config/records/game-asset-assignment"
 import {
   type LibraryError,
   LibrarySource,
@@ -120,14 +124,9 @@ function readGameAssets(
   }).pipe(Effect.map(assets => assets as readonly GameAssetRecord[]))
 }
 
-function readGameAssetAssignments(db: KorriLibraryDb): Effect.Effect<
-  readonly {
-    readonly gameId: string
-    readonly role: GameAssetRole
-    readonly assetId: string
-  }[],
-  DataError
-> {
+function readGameAssetAssignments(
+  db: KorriLibraryDb,
+): Effect.Effect<readonly GameAssetAssignmentRecord[], DataError> {
   return Effect.tryPromise({
     try: () => db.gameAssetAssignments.query().runPromise,
     catch: error =>
@@ -135,7 +134,39 @@ function readGameAssetAssignments(db: KorriLibraryDb): Effect.Effect<
         reason: "ReadFailed",
         message: `failed to read game asset assignments: ${stringifyError(error)}`,
       }),
-  })
+  }).pipe(
+    Effect.map(
+      assignments => assignments as readonly GameAssetAssignmentRecord[],
+    ),
+    Effect.flatMap(validateAssignments),
+  )
+}
+
+function validateAssignments(
+  assignments: readonly GameAssetAssignmentRecord[],
+): Effect.Effect<readonly GameAssetAssignmentRecord[], DataError> {
+  const seen = new Set<string>()
+  for (const assignment of assignments) {
+    const expectedId = `${assignment.gameId}:${assignment.role}`
+    if (assignment.id !== expectedId) {
+      return Effect.fail(
+        new DataError({
+          reason: "ReadFailed",
+          message: `invalid game asset assignment id '${assignment.id}' for ${expectedId}`,
+        }),
+      )
+    }
+    if (seen.has(expectedId)) {
+      return Effect.fail(
+        new DataError({
+          reason: "ReadFailed",
+          message: `duplicate game asset assignment for ${expectedId}`,
+        }),
+      )
+    }
+    seen.add(expectedId)
+  }
+  return Effect.succeed(assignments)
 }
 
 function groupAssignmentsByGameId(
@@ -192,9 +223,9 @@ function resolveMediaEntry(args: {
     return Effect.succeed(undefined)
   }
 
-  return fileExists(gameAssetBlobPath(args.env, asset)).pipe(
-    Effect.map(exists => {
-      if (!exists) {
+  return Effect.promise(() => hasValidGameAssetBytes(args.env, asset)).pipe(
+    Effect.map(isValid => {
+      if (!isValid) {
         logOmittedAsset({ ...args, asset }, "missing-bytes")
         return undefined
       }
@@ -335,17 +366,6 @@ function gameAssetUrl(baseUrl: URL, assetId: string): string {
     `${gameAssetByteRoutePrefix.slice(1)}${encodeURIComponent(assetId)}`,
     baseUrl,
   ).toString()
-}
-
-function fileExists(path: string): Effect.Effect<boolean, never> {
-  return Effect.promise(async () => {
-    try {
-      const info = await stat(path)
-      return info.isFile()
-    } catch {
-      return false
-    }
-  })
 }
 
 function isSupportedImageMime(mimeType: string): boolean {

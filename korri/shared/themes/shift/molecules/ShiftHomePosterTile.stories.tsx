@@ -4,8 +4,8 @@
  * both branches:
  *
  *   - WithCover: a fixture game that has an image (the common case).
- *   - Fallback: a synthesised game whose media array is empty, to
- *     verify the muted-name fallback renders correctly.
+ *   - Fallback: a synthesised game with no resolved media, to verify
+ *     the muted-name fallback renders correctly.
  *
  * Both render inside a 240x240 frame matching the rail's single-cell
  * poster slot.

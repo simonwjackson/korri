@@ -94,24 +94,6 @@ export function createGameAssetsRepository(
 
     removeAssetAssignment: ({ gameId, role }) =>
       Effect.gen(function* () {
-        yield* Effect.tryPromise({
-          try: async () => {
-            const games = await db.games.query().runPromise
-            if (!games.some(game => game.id === gameId)) {
-              throw new MissingGameError()
-            }
-          },
-          catch: error => {
-            if (error instanceof MissingGameError) {
-              return new NotFoundError({ message: "game not found" })
-            }
-            return new DataError({
-              reason: "ReadFailed",
-              message: `failed to verify game asset assignment game: ${stringifyError(error)}`,
-            })
-          },
-        })
-
         const assignmentId = `${gameId}:${role}`
         const assignment = yield* Effect.tryPromise({
           try: async () => {
@@ -133,22 +115,20 @@ export function createGameAssetsRepository(
           },
         })
 
-        const asset = yield* Effect.tryPromise({
+        const assetOrMissing = yield* Effect.tryPromise({
           try: async () => {
             const assets = await db.gameAssets.query().runPromise
-            const found = assets.find(item => item.id === assignment.assetId)
-            if (!found) throw new MissingAssetError()
-            return found as GameAssetRecord
+            return (
+              (assets.find(item => item.id === assignment.assetId) as
+                | GameAssetRecord
+                | undefined) ?? null
+            )
           },
-          catch: error => {
-            if (error instanceof MissingAssetError) {
-              return new NotFoundError({ message: "game asset not found" })
-            }
-            return new DataError({
+          catch: error =>
+            new DataError({
               reason: "ReadFailed",
               message: `failed to read game asset: ${stringifyError(error)}`,
-            })
-          },
+            }),
         })
 
         yield* db.gameAssetAssignments.delete(assignmentId).pipe(
@@ -172,13 +152,18 @@ export function createGameAssetsRepository(
           ),
         )
 
-        return { asset, assignment }
+        if (!assetOrMissing) {
+          return yield* Effect.fail(
+            new NotFoundError({ message: "game asset not found" }),
+          )
+        }
+
+        return { asset: assetOrMissing, assignment }
       }),
   }
 }
 
 class MissingAssignmentError extends Error {}
-class MissingAssetError extends Error {}
 
 class MissingGameError extends Error {}
 

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import { createHash } from "node:crypto"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
@@ -17,8 +18,9 @@ const originalEnv = {
   HOME: process.env.HOME,
 }
 
+const assetBytes = "image"
 const asset: GameAssetRecord = {
-  id: `sha256:${"d".repeat(64)}`,
+  id: `sha256:${createHash("sha256").update(assetBytes).digest("hex")}`,
   type: "image",
   mimeType: "image/webp",
   extension: "webp",
@@ -81,7 +83,7 @@ async function configureGameAssetEnvironment() {
 
   const blobPath = gameAssetBlobPath(process.env, asset)
   await mkdir(dirname(blobPath), { recursive: true })
-  await writeFile(blobPath, "image")
+  await writeFile(blobPath, assetBytes)
 
   return root
 }
@@ -150,7 +152,7 @@ describe("headless server RPC group", () => {
 
     expect(assetResponse.status).toBe(200)
     expect(assetResponse.headers.get("content-type")).toBe("image/webp")
-    expect(await assetResponse.text()).toBe("image")
+    expect(await assetResponse.text()).toBe(assetBytes)
     expect(oldMediaResponse.status).toBe(404)
   })
 })
