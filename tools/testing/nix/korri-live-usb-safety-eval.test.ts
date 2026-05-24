@@ -10,9 +10,11 @@ import { spawnSync } from "node:child_process"
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readlinkSync,
   rmSync,
   writeFileSync,
 } from "node:fs"
@@ -252,7 +254,17 @@ describe("Korri live USB safety evaluation", () => {
       expect(result.status, result.stderr).toBe(0)
       expect(readFileSync(rig.mountLog, "utf8")).toContain("/fake/sdb2 ")
       expect(existsSync(`${rig.root}/.korri-live-usb-persistent`)).toBe(true)
-      expect(existsSync(`${rig.root}/home/.cache/moonlight`)).toBe(true)
+      expect(existsSync(`${rig.root}/product/home/.config/korri`)).toBe(true)
+      expect(existsSync(`${rig.root}/product/home/.cache/moonlight`)).toBe(true)
+      expect(existsSync(`${rig.root}/home`)).toBe(false)
+      expect(lstatSync(`${rig.home}/.config/korri`).isSymbolicLink()).toBe(true)
+      expect(readlinkSync(`${rig.home}/.config/korri`)).toBe(
+        `${rig.root}/product/home/.config/korri`,
+      )
+      expect(lstatSync(`${rig.home}/.cache/moonlight`).isSymbolicLink()).toBe(
+        true,
+      )
+      expect(existsSync(rig.deviceId)).toBe(true)
       expect(readFileSync(rig.chownLog, "utf8")).toContain("korri:korri")
     } finally {
       rig.cleanup()
@@ -359,6 +371,8 @@ type ResolverRigConfig = {
 type ResolverRig = {
   readonly root: string
   readonly bin: string
+  readonly home: string
+  readonly deviceId: string
   readonly mountLog: string
   readonly chownLog: string
   readonly umountLog: string
@@ -369,6 +383,8 @@ function makeResolverRig(config: ResolverRigConfig): ResolverRig {
   const dir = mkdtempSync(resolve(tmpdir(), "korri-live-usb-resolver-"))
   const bin = resolve(dir, "bin")
   const root = resolve(dir, "state")
+  const home = resolve(dir, "home")
+  const deviceId = resolve(dir, "device-id")
   const mountLog = resolve(dir, "mount.log")
   const chownLog = resolve(dir, "chown.log")
   const umountLog = resolve(dir, "umount.log")
@@ -421,6 +437,8 @@ function makeResolverRig(config: ResolverRigConfig): ResolverRig {
   )
   return {
     root,
+    home,
+    deviceId,
     bin,
     mountLog,
     chownLog,
@@ -439,6 +457,8 @@ function runResolverRig(rig: ResolverRig) {
       KORRI_LIVE_USB_PERSISTENCE_ROOT: rig.root,
       KORRI_LIVE_USB_BOOT_MOUNT: "/iso",
       KORRI_LIVE_USB_SKIP_BLOCK_DEVICE_CHECK: "1",
+      KORRI_LIVE_USB_RUNTIME_HOME: rig.home,
+      KORRI_LIVE_USB_DEVICE_ID_TARGET: rig.deviceId,
       KORRI_LIVE_USB_STATE_USER: "korri",
       KORRI_LIVE_USB_STATE_GROUP: "korri",
     },

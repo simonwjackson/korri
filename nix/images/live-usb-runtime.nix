@@ -304,6 +304,8 @@ in
         KORRI_LIVE_USB_EPHEMERAL_MARKER = cfg.markerEphemeral;
         KORRI_LIVE_USB_ARTIFACT = cfg.artifact;
         KORRI_LIVE_USB_PERSISTENCE_SCOPE = persistenceScope;
+        KORRI_LIVE_USB_RUNTIME_HOME = kioskCfg.home;
+        KORRI_LIVE_USB_DEVICE_ID_TARGET = "/var/lib/korri-live-usb/device-id";
         KORRI_LIVE_USB_STATE_USER = kioskCfg.user;
         KORRI_LIVE_USB_STATE_GROUP = kioskGroup;
       };

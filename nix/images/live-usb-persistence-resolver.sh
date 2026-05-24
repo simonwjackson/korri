@@ -6,6 +6,9 @@ boot_mount="${KORRI_LIVE_USB_BOOT_MOUNT:-/iso}"
 label="${KORRI_LIVE_USB_PERSISTENCE_LABEL:-KORRI-PERSIST}"
 marker_persistent="${KORRI_LIVE_USB_PERSISTENT_MARKER:-.korri-live-usb-persistent}"
 marker_ephemeral="${KORRI_LIVE_USB_EPHEMERAL_MARKER:-.korri-live-usb-ephemeral}"
+artifact="${KORRI_LIVE_USB_ARTIFACT:-product}"
+runtime_home="${KORRI_LIVE_USB_RUNTIME_HOME:-/home/${KORRI_LIVE_USB_STATE_USER:-korri-kiosk}}"
+device_id_target="${KORRI_LIVE_USB_DEVICE_ID_TARGET:-/var/lib/korri-live-usb/device-id}"
 state_user="${KORRI_LIVE_USB_STATE_USER:-korri-kiosk}"
 state_group="${KORRI_LIVE_USB_STATE_GROUP:-$state_user}"
 skip_block_device_check="${KORRI_LIVE_USB_SKIP_BLOCK_DEVICE_CHECK:-0}"
@@ -14,10 +17,80 @@ mkdir -p "$root"
 chmod 0755 "$root"
 
 prepare_state_tree() {
-  mkdir -p "$root/home/.config" "$root/home/.local/share" "$root/home/.local/state" "$root/home/.cache/moonlight"
-  chown -R "$state_user:$state_group" "$root/home" || return 1
+  case "$artifact" in
+    developer)
+      prepare_developer_state_tree
+      ;;
+    product)
+      prepare_product_state_tree
+      ;;
+    *)
+      echo "korri-live-usb: unsupported persistence artifact '$artifact'" >&2
+      return 1
+      ;;
+  esac
+}
+
+prepare_developer_state_tree() {
+  mkdir -p "$root/developer/home/.config" "$root/developer/home/.local/share" "$root/developer/home/.local/state" "$root/developer/home/.cache/moonlight" || return 1
+  chown -R "$state_user:$state_group" "$root/developer/home" || return 1
   chmod 0755 "$root" || return 1
-  chmod 0700 "$root/home" || return 1
+  chmod 0700 "$root/developer/home" || return 1
+}
+
+prepare_product_state_tree() {
+  created_links=()
+  mkdir -p \
+    "$runtime_home/.config" \
+    "$runtime_home/.local/share" \
+    "$runtime_home/.local/state" \
+    "$runtime_home/.cache" \
+    "$(dirname "$device_id_target")" \
+    "$root/product/home/.config/korri" \
+    "$root/product/home/.local/share/korri" \
+    "$root/product/home/.local/state/korri" \
+    "$root/product/home/.cache/moonlight" \
+    "$root/product" || return 1
+
+  chown -R "$state_user:$state_group" "$runtime_home" "$root/product/home" || return 1
+  chmod 0755 "$root" || return 1
+  chmod 0700 "$runtime_home" "$root/product/home" || return 1
+
+  if [ ! -s "$root/product/device-id" ]; then
+    generate_device_id > "$root/product/device-id" || return 1
+  fi
+  chown root:root "$root/product/device-id" || return 1
+  chmod 0600 "$root/product/device-id" || return 1
+
+  link_persistent_path "$root/product/home/.config/korri" "$runtime_home/.config/korri" created_links || return 1
+  link_persistent_path "$root/product/home/.local/share/korri" "$runtime_home/.local/share/korri" created_links || return 1
+  link_persistent_path "$root/product/home/.local/state/korri" "$runtime_home/.local/state/korri" created_links || return 1
+  link_persistent_path "$root/product/home/.cache/moonlight" "$runtime_home/.cache/moonlight" created_links || return 1
+  link_persistent_path "$root/product/device-id" "$device_id_target" created_links || return 1
+}
+
+link_persistent_path() {
+  source_path="$1"
+  target_path="$2"
+  links_array_name="$3"
+  mkdir -p "$(dirname "$target_path")" || return 1
+  if [ -e "$target_path" ] || [ -L "$target_path" ]; then
+    rm -rf "$target_path" || return 1
+  fi
+  if ln -s "$source_path" "$target_path"; then
+    eval "$links_array_name+=(\"$target_path\")"
+    return 0
+  fi
+  eval "for created in \"\${$links_array_name[@]}\"; do rm -f \"\$created\"; done"
+  return 1
+}
+
+generate_device_id() {
+  if [ -r /proc/sys/kernel/random/uuid ]; then
+    cat /proc/sys/kernel/random/uuid
+  else
+    printf 'korri-live-usb-%s\n' "$(date +%s%N)"
+  fi
 }
 
 mount_tmpfs() {
