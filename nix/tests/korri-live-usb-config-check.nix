@@ -5,6 +5,7 @@ let
   cfg = liveUsbSystem.config;
   kioskEnv = cfg.systemd.services."korri-kiosk".environment or { };
   persistence = cfg.systemd.services."korri-live-usb-persistence";
+  greetd = cfg.systemd.services.greetd;
   check = message: assertion: { inherit message assertion; };
   checks = [
     (check "live USB ISO must be USB bootable" cfg.isoImage.makeUsbBootable)
@@ -14,6 +15,17 @@ let
     ))
     (check "korri-live-usb-persistence.service must exist" (
       cfg.systemd.services ? "korri-live-usb-persistence"
+    ))
+    (check "live USB kiosk user must be korri" (cfg.services.korri.kiosk.user == "korri"))
+    (check "live USB must use greetd auto-session" cfg.services.greetd.enable)
+    (check "greetd initial session must run as korri" (
+      cfg.services.greetd.settings.initial_session.user == "korri"
+    ))
+    (check "greetd must require persistence before login" (
+      builtins.elem "korri-live-usb-persistence.service" (greetd.requires or [ ])
+    ))
+    (check "korri-kiosk.service must not be directly wanted on live USB" (
+      cfg.systemd.services."korri-kiosk".wantedBy == [ ]
     ))
     (check "korri-kiosk.service must require persistence before startup" (
       builtins.elem "korri-live-usb-persistence.service" (

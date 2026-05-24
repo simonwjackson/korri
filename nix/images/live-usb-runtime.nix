@@ -15,6 +15,40 @@ let
   resolver = pkgs.writeShellScript "korri-live-usb-persistence-resolver" (
     builtins.readFile ./live-usb-persistence-resolver.sh
   );
+  kioskSessionEnvironment =
+    kioskCfg.environment
+    // {
+      HOME = kioskCfg.home;
+      XDG_STATE_HOME = kioskCfg.stateHome;
+      XDG_DATA_HOME = kioskCfg.dataHome;
+      XDG_CONFIG_HOME = kioskCfg.configHome;
+      KORRI_KIOSK = "1";
+    }
+    // lib.optionalAttrs kioskCfg.input.enable {
+      KORRI_NATIVE_BRIDGE_URL = "ws://127.0.0.1:${toString config.services.korri.inputd.port}";
+      KORRI_DESKTOP_INPUTD_URL = "ws://127.0.0.1:${toString config.services.korri.inputd.port}";
+    };
+  kioskSessionExports = lib.concatStringsSep "\n" (
+    lib.mapAttrsToList (
+      name: value: "export ${name}=${lib.escapeShellArg value}"
+    ) kioskSessionEnvironment
+  );
+  greetdSession = pkgs.writeShellScript "korri-live-usb-greetd-session" ''
+    set -euo pipefail
+    ${kioskSessionExports}
+
+    if [ -z "''${XDG_RUNTIME_DIR:-}" ]; then
+      export XDG_RUNTIME_DIR="/tmp/korri-runtime-$(id -u)"
+      mkdir -p "$XDG_RUNTIME_DIR"
+      chmod 0700 "$XDG_RUNTIME_DIR"
+    fi
+
+    exec ${pkgs.dbus}/bin/dbus-run-session -- ${kioskCfg.sway.package}/bin/sway --config ${kioskCfg.sway.configFile}
+  '';
+  inputServices =
+    lib.optional kioskCfg.input.enable "korri-inputd.service" ++ kioskCfg.input.provider.services;
+  seatServices = lib.optional (config.services.seatd.enable or false) "seatd.service";
+  loginDependencies = [ "korri-live-usb-persistence.service" ] ++ inputServices ++ seatServices;
 in
 {
   options.services.korri.liveUsbPersistence = {
@@ -59,6 +93,7 @@ in
     ) (lib.mkDefault packagesForSystem.korri-desktop-x86-kiosk);
 
     services.korri.kiosk = lib.mkIf cfg.enable {
+      user = lib.mkDefault "korri";
       home = lib.mkDefault "${cfg.root}/home";
       configHome = lib.mkDefault "${cfg.root}/home/.config";
       dataHome = lib.mkDefault "${cfg.root}/home/.local/share";
@@ -73,7 +108,31 @@ in
     };
 
     systemd.services."korri-kiosk" = lib.mkIf cfg.enable {
+      # A real login session gives Sway the seat/session semantics it expects,
+      # while greetd's initial session still boots directly into the kiosk.
+      wantedBy = lib.mkForce [ ];
       requires = [ "korri-live-usb-persistence.service" ];
+    };
+
+    services.greetd = lib.mkIf cfg.enable {
+      enable = true;
+      settings = {
+        initial_session = {
+          command = toString greetdSession;
+          user = kioskCfg.user;
+        };
+        default_session = {
+          command = toString greetdSession;
+          user = kioskCfg.user;
+        };
+        terminal.vt = 1;
+      };
+    };
+
+    systemd.services.greetd = lib.mkIf cfg.enable {
+      wants = loginDependencies;
+      requires = loginDependencies;
+      after = loginDependencies ++ [ "systemd-user-sessions.service" ];
     };
 
     systemd.services."korri-live-usb-persistence" = lib.mkIf cfg.enable {

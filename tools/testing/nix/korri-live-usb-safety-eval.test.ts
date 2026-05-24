@@ -155,9 +155,7 @@ describe("Korri live USB safety evaluation", () => {
       expect(readFileSync(rig.mountLog, "utf8")).toContain("/fake/sdb2 ")
       expect(existsSync(`${rig.root}/.korri-live-usb-persistent`)).toBe(true)
       expect(existsSync(`${rig.root}/home/.cache/moonlight`)).toBe(true)
-      expect(readFileSync(rig.chownLog, "utf8")).toContain(
-        "korri-kiosk:korri-kiosk",
-      )
+      expect(readFileSync(rig.chownLog, "utf8")).toContain("korri:korri")
     } finally {
       rig.cleanup()
     }
@@ -343,8 +341,8 @@ function runResolverRig(rig: ResolverRig) {
       KORRI_LIVE_USB_PERSISTENCE_ROOT: rig.root,
       KORRI_LIVE_USB_BOOT_MOUNT: "/iso",
       KORRI_LIVE_USB_SKIP_BLOCK_DEVICE_CHECK: "1",
-      KORRI_LIVE_USB_STATE_USER: "korri-kiosk",
-      KORRI_LIVE_USB_STATE_GROUP: "korri-kiosk",
+      KORRI_LIVE_USB_STATE_USER: "korri",
+      KORRI_LIVE_USB_STATE_GROUP: "korri",
     },
   })
 }
