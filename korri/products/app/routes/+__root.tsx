@@ -1,4 +1,3 @@
-import { ConnectionGate } from "@app/features/connection/ConnectionGate"
 import { createFocusRestore } from "@shared/navigation/focus-restore"
 import { useInputAction } from "@shared/navigation/use-input-action"
 import {
@@ -39,17 +38,20 @@ function RootComponent() {
     }
   }, [focusRestore, router])
 
+  // The renderer always boots into a "connected" world: while bun is
+  // not yet connected it serves a static waiting page from
+  // `create-desktop-app.ts` and the React bundle never loads. So the
+  // route root no longer wraps the tree in a connection gate — by
+  // construction the renderer cannot observe a non-connected state.
   return (
-    <ConnectionGate>
-      <Suspense
-        fallback={
-          <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
-            Loading...
-          </div>
-        }
-      >
-        <Outlet />
-      </Suspense>
-    </ConnectionGate>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
+          Loading...
+        </div>
+      }
+    >
+      <Outlet />
+    </Suspense>
   )
 }
