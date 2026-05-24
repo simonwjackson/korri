@@ -1,7 +1,7 @@
 ---
 title: feat: Add game-assets pipeline
 type: feat
-status: active
+status: completed
 date: 2026-05-24
 deepened: 2026-05-24
 ---
