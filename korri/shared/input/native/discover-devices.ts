@@ -19,6 +19,9 @@ export interface DiscoveredDevice {
   readonly name: string
   readonly eventNode: string
   readonly capabilities: readonly string[]
+  readonly physicalPath?: string
+  readonly uniqueId?: string
+  readonly sysfsPath?: string
   readonly axes?: readonly NativeInputAxisInfo[]
 }
 
@@ -26,6 +29,7 @@ type DeviceBlock = {
   readonly name?: string
   readonly phys?: string
   readonly uniq?: string
+  readonly sysfs?: string
   readonly eventNode?: string
   readonly capabilities: ReadonlyMap<string, readonly string[]>
 }
@@ -70,6 +74,7 @@ function parseDeviceBlock(block: string): DiscoveredDevice | undefined {
     name: parseNamedValue(lines, "N"),
     phys: parseNamedValue(lines, "P"),
     uniq: parseNamedValue(lines, "U"),
+    sysfs: parseNamedValue(lines, "S"),
     eventNode: parseEventNode(lines),
     capabilities: parseCapabilities(lines),
   }
@@ -84,6 +89,9 @@ function parseDeviceBlock(block: string): DiscoveredDevice | undefined {
     name: parsed.name,
     eventNode: parsed.eventNode,
     capabilities: summarizeCapabilities(parsed.capabilities),
+    ...(parsed.phys ? { physicalPath: parsed.phys } : {}),
+    ...(parsed.uniq ? { uniqueId: parsed.uniq } : {}),
+    ...(parsed.sysfs ? { sysfsPath: parsed.sysfs } : {}),
   }
 }
 

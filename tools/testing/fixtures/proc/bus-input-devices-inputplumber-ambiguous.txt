@@ -1,0 +1,21 @@
+I: Bus=0003 Vendor=045e Product=028e Version=0114
+N: Name="Microsoft X-Box 360 pad"
+P: Phys=inputplumber/virtual-xbox360
+S: Sysfs=/devices/virtual/input/input10
+U: Uniq=inputplumber-virtual-xbox360
+H: Handlers=event10 
+B: PROP=0
+B: EV=20001b
+B: KEY=1000000000000 0 0 0 0
+B: ABS=30027
+
+I: Bus=0003 Vendor=045e Product=0b12 Version=0114
+N: Name="Microsoft Xbox Series S|X Controller"
+P: Phys=inputplumber/virtual-xbox-series
+S: Sysfs=/devices/virtual/input/input11
+U: Uniq=inputplumber-virtual-xbox-series
+H: Handlers=event11 
+B: PROP=0
+B: EV=20001b
+B: KEY=1000000000000 0 0 0 0
+B: ABS=30027

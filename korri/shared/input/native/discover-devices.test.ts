@@ -22,6 +22,9 @@ describe("parseProcBusInputDevices", () => {
       name: "InputPlumber Virtual Xbox 360 Controller",
       eventNode: "event9",
       capabilities: ["EV_KEY", "EV_ABS", "BTN_GAMEPAD"],
+      physicalPath: "inputplumber/virtual-xbox360",
+      uniqueId: "inputplumber-virtual-xbox360",
+      sysfsPath: "/devices/virtual/input/input9",
     })
   })
 
@@ -102,6 +105,8 @@ B: KEY=40000000
         name: "Keyboard With Malformed Capability",
         eventNode: "event11",
         capabilities: ["EV_KEY", "KEY_A"],
+        physicalPath: "keyboard/phys",
+        sysfsPath: "/devices/virtual/input/input11",
       },
     ])
   })

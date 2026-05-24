@@ -1,0 +1,10 @@
+I: Bus=0003 Vendor=045e Product=028e Version=0114
+N: Name="InputPlumber Virtual Xbox 360 Controller"
+P: Phys=inputplumber/virtual-xbox360
+S: Sysfs=/devices/virtual/input/input14
+U: Uniq=inputplumber-virtual-xbox360
+H: Handlers=event14 
+B: PROP=0
+B: EV=20001b
+B: KEY=1000000000000 0 0 0 0
+B: ABS=30027
