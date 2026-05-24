@@ -1,6 +1,7 @@
 /**
- * Korri's six-collection library — singleton `config` + map-keyed
- * `users`, `systems`, `launchers`, `games`, `collections`.
+ * Korri's eight-collection library — singleton `config` + map-keyed
+ * `users`, `systems`, `launchers`, `games`, `collections`,
+ * `gameAssets`, `gameAssetAssignments`.
  *
  * ProseQL 0.13.2's `documents` source variant lets a single YAML file
  * contribute records to multiple declared collections via top-level
@@ -25,6 +26,14 @@ import {
   CollectionRecord,
 } from "@shared/library/config/records/collection"
 import { GamePayload, GameRecord } from "@shared/library/config/records/game"
+import {
+  GameAssetPayload,
+  GameAssetRecord,
+} from "@shared/library/config/records/game-asset"
+import {
+  GameAssetAssignmentPayload,
+  GameAssetAssignmentRecord,
+} from "@shared/library/config/records/game-asset-assignment"
 import {
   GLOBAL_CONFIG_KEY,
   GlobalConfigPayload,
@@ -72,6 +81,16 @@ const collectionsSchema = {
     id: { kind: "derivedFromKey" as const, field: "id" as const },
     relationships: {},
   },
+  gameAssets: {
+    schema: GameAssetPayload,
+    id: { kind: "derivedFromKey" as const, field: "id" as const },
+    relationships: {},
+  },
+  gameAssetAssignments: {
+    schema: GameAssetAssignmentPayload,
+    id: { kind: "derivedFromKey" as const, field: "id" as const },
+    relationships: {},
+  },
   collections: {
     schema: CollectionPayload,
     id: { kind: "derivedFromKey" as const, field: "id" as const },
@@ -107,6 +126,10 @@ export type KorriLibraryDbConfig = ReturnType<typeof makeKorriLibraryDbConfig>
 export {
   CollectionPayload,
   CollectionRecord,
+  GameAssetAssignmentPayload,
+  GameAssetAssignmentRecord,
+  GameAssetPayload,
+  GameAssetRecord,
   GamePayload,
   GameRecord,
   GLOBAL_CONFIG_KEY,
@@ -151,6 +174,12 @@ export interface KorriLibraryDb {
   readonly systems: CollectionApi<Schema.Schema.Type<typeof SystemPayload>>
   readonly launchers: CollectionApi<Schema.Schema.Type<typeof LauncherPayload>>
   readonly games: CollectionApi<Schema.Schema.Type<typeof GamePayload>>
+  readonly gameAssets: CollectionApi<
+    Schema.Schema.Type<typeof GameAssetPayload>
+  >
+  readonly gameAssetAssignments: CollectionApi<
+    Schema.Schema.Type<typeof GameAssetAssignmentPayload>
+  >
   readonly collections: CollectionApi<
     Schema.Schema.Type<typeof CollectionPayload>
   >

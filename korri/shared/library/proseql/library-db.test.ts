@@ -16,12 +16,14 @@ async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
 }
 
 describe("makeKorriLibraryDbConfig", () => {
-  it("declares the six collections expected by the cascade model", () => {
+  it("declares the collections expected by the cascade and game-assets models", () => {
     const config = makeKorriLibraryDbConfig("/tmp/x")
     const names = Object.keys(config.collections).sort()
     expect(names).toEqual([
       "collections",
       "config",
+      "gameAssetAssignments",
+      "gameAssets",
       "games",
       "launchers",
       "systems",
@@ -48,7 +50,7 @@ describe("makeKorriLibraryDbConfig", () => {
 })
 
 describe("openKorriLibraryDb — empty root", () => {
-  it("opens an empty root as six empty collections", async () => {
+  it("opens an empty root as empty collections", async () => {
     await withTempRoot(async root => {
       const counts = await Effect.runPromise(
         Effect.scoped(
@@ -68,6 +70,12 @@ describe("openKorriLibraryDb — empty root", () => {
               )).length,
               games: (yield* Effect.promise(() => db.games.query().runPromise))
                 .length,
+              gameAssets: (yield* Effect.promise(
+                () => db.gameAssets.query().runPromise,
+              )).length,
+              gameAssetAssignments: (yield* Effect.promise(
+                () => db.gameAssetAssignments.query().runPromise,
+              )).length,
               collections: (yield* Effect.promise(
                 () => db.collections.query().runPromise,
               )).length,
@@ -81,6 +89,8 @@ describe("openKorriLibraryDb — empty root", () => {
         systems: 0,
         launchers: 0,
         games: 0,
+        gameAssets: 0,
+        gameAssetAssignments: 0,
         collections: 0,
       })
     })

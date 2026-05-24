@@ -20,10 +20,10 @@ import { ByLauncherPayload, InheritableLayer } from "../inheritable-fields"
 import { PresetMapPayload } from "./preset"
 
 /**
- * Display metadata — what shows up in the renderer's tile grid. Shape
- * carried forward from the legacy `GameRecord`; the import path moved
- * from `@shared/fixtures/games/game` to here so the cascade records
- * module is self-contained.
+ * Legacy display media primitives are retained only for pre-existing
+ * fixture/UI helper compatibility. Durable image truth now lives in the
+ * game-assets catalog, so persisted `GamePayload` decoding rejects
+ * `metadata.media` entries.
  */
 export const MediaType = Schema.Literals(["image", "video", "audio"])
 export type MediaType = Schema.Schema.Type<typeof MediaType>
@@ -72,7 +72,16 @@ export const GameMetadata = Schema.Struct({
   genre: Schema.optional(Schema.Array(Schema.String)),
   tags: Schema.optional(Schema.Array(Schema.String)),
   media: Schema.optional(Schema.Array(Media)),
-})
+}).check(
+  Schema.makeFilter(metadata =>
+    metadata.media === undefined
+      ? undefined
+      : {
+          path: ["media"],
+          issue: "persisted game metadata must not contain media entries",
+        },
+  ),
+)
 export type GameMetadata = Schema.Schema.Type<typeof GameMetadata>
 
 export const GameUserData = Schema.Struct({

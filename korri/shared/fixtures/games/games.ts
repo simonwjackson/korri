@@ -1,8 +1,5 @@
 import { decodeGameRecordArray, type GameRecord } from "./game"
 
-const placeholderImage = (seed: number): string =>
-  `https://picsum.photos/seed/shift-${seed}/600/600`
-
 const minutesAgo = (n: number): Date => new Date(Date.now() - n * 60_000)
 
 const rawGames: ReadonlyArray<GameRecord> = [
@@ -17,7 +14,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       releaseDate: "2024-09-12",
       genre: ["Puzzle"],
       tags: ["chill", "single-player"],
-      media: [{ type: "image", uri: placeholderImage(1) }],
     },
     userData: {
       lastPlayed: minutesAgo(12),
@@ -36,7 +32,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       releaseDate: "2023-04-02",
       genre: ["Action", "Roguelike"],
       tags: ["fast-paced", "co-op"],
-      media: [{ type: "image", uri: placeholderImage(2) }],
     },
     userData: { lastPlayed: minutesAgo(60 * 3), playtime: 1280 },
   },
@@ -49,7 +44,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       developer: "Lunar Hand",
       genre: ["Sci-Fi", "Strategy"],
       tags: ["space", "turn-based"],
-      media: [{ type: "image", uri: placeholderImage(3) }],
     },
     userData: { lastPlayed: minutesAgo(60 * 24), playtime: 90 },
   },
@@ -61,7 +55,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       name: "Midnight Courier",
       developer: "Rainshade",
       genre: ["Driving"],
-      media: [{ type: "image", uri: placeholderImage(4) }],
     },
   },
   {
@@ -73,7 +66,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       developer: "Origami Atelier",
       genre: ["Puzzle", "Cozy"],
       tags: ["cozy", "single-player"],
-      media: [{ type: "image", uri: placeholderImage(5) }],
     },
     userData: { lastPlayed: minutesAgo(60 * 24 * 3), favorite: true },
   },
@@ -85,7 +77,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       name: "Tundra Call",
       developer: "North Reach",
       genre: ["Survival"],
-      media: [{ type: "image", uri: placeholderImage(6) }],
     },
   },
   {
@@ -97,7 +88,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       developer: "Mossroot",
       genre: ["Simulation"],
       tags: ["cozy"],
-      media: [{ type: "image", uri: placeholderImage(7) }],
     },
     userData: { lastPlayed: minutesAgo(60 * 24 * 14), playtime: 4400 },
   },
@@ -110,7 +100,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       developer: "Cassiopeia Works",
       genre: ["RPG"],
       tags: ["story-rich"],
-      media: [{ type: "image", uri: placeholderImage(8) }],
     },
   },
   {
@@ -121,7 +110,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       name: "Harbor Letters",
       developer: "Lighthouse Lab",
       genre: ["Narrative"],
-      media: [{ type: "image", uri: placeholderImage(9) }],
     },
   },
   {
@@ -132,7 +120,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       name: "Neon Cartographer",
       developer: "Vector Walk",
       genre: ["Exploration"],
-      media: [{ type: "image", uri: placeholderImage(10) }],
     },
     userData: { lastPlayed: minutesAgo(45), playtime: 220 },
   },
@@ -144,7 +131,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       name: "Iron Meadow",
       developer: "Bramble & Steel",
       genre: ["Tactics"],
-      media: [{ type: "image", uri: placeholderImage(11) }],
     },
   },
   {
@@ -155,7 +141,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       name: "Ardent Skies",
       developer: "Skybound",
       genre: ["Flight", "Sim"],
-      media: [{ type: "image", uri: placeholderImage(12) }],
     },
   },
   {
@@ -167,7 +152,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       developer: "Tideline",
       genre: ["Adventure"],
       tags: ["cozy"],
-      media: [{ type: "image", uri: placeholderImage(13) }],
     },
   },
   {
@@ -178,7 +162,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       name: "Saltwood Logs",
       developer: "Brackish",
       genre: ["Mystery"],
-      media: [{ type: "image", uri: placeholderImage(14) }],
     },
   },
   {
@@ -189,7 +172,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       name: "Atlas Tinker",
       developer: "Workshop Forty",
       genre: ["Puzzle"],
-      media: [{ type: "image", uri: placeholderImage(15) }],
     },
   },
   {
@@ -200,7 +182,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       name: "Boreal Rally",
       developer: "Northwind",
       genre: ["Driving"],
-      media: [{ type: "image", uri: placeholderImage(16) }],
     },
   },
   {
@@ -211,7 +192,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       name: "Calliope Cycle",
       developer: "Halftone",
       genre: ["Rhythm"],
-      media: [{ type: "image", uri: placeholderImage(17) }],
     },
   },
   {
@@ -222,7 +202,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       name: "Delta Roost",
       developer: "Wing & Vane",
       genre: ["Exploration"],
-      media: [{ type: "image", uri: placeholderImage(18) }],
     },
   },
   {
@@ -233,7 +212,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       name: "Ember & Ash",
       developer: "Cinder",
       genre: ["Action"],
-      media: [{ type: "image", uri: placeholderImage(19) }],
     },
   },
   {
@@ -244,7 +222,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       name: "Fjord Watch",
       developer: "Seabreak",
       genre: ["Strategy"],
-      media: [{ type: "image", uri: placeholderImage(20) }],
     },
   },
   {
@@ -255,7 +232,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       name: "Grasswind Knights",
       developer: "Hedgerow",
       genre: ["RPG"],
-      media: [{ type: "image", uri: placeholderImage(21) }],
     },
   },
   {
@@ -266,7 +242,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       name: "Hollow Lighthouse",
       developer: "Brine Studio",
       genre: ["Horror"],
-      media: [{ type: "image", uri: placeholderImage(22) }],
     },
   },
   {
@@ -277,7 +252,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       name: "Iris Protocol",
       developer: "Spectrum Lab",
       genre: ["Puzzle"],
-      media: [{ type: "image", uri: placeholderImage(23) }],
     },
   },
   {
@@ -288,7 +262,6 @@ const rawGames: ReadonlyArray<GameRecord> = [
       name: "Jetstream Jubilee",
       developer: "Topwind",
       genre: ["Sports"],
-      media: [{ type: "image", uri: placeholderImage(24) }],
     },
   },
 ]

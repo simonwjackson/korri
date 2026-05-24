@@ -22,21 +22,6 @@ describe("GameRecord schema", () => {
         releaseDate: "2024-09-12",
         genre: ["Puzzle", "Adventure"],
         tags: ["chill", "single-player"],
-        media: [
-          {
-            type: "image",
-            uri: "/img/cd-cover.jpg",
-            role: "poster",
-            width: 600,
-            height: 900,
-            source: {
-              provider: "steamgriddb",
-              id: "12345",
-              url: "https://cdn.steamgriddb.com/grid/example.jpg",
-            },
-          },
-          { type: "video", uri: "/video/cd-trailer.mp4" },
-        ],
       },
       userData: {
         lastPlayed: new Date("2025-03-01T12:00:00.000Z"),
@@ -58,27 +43,32 @@ describe("GameRecord schema", () => {
     ).not.toThrow()
   })
 
-  it("rejects a record with an unknown media type", () => {
+  it("rejects persisted media entries", () => {
     expect(() =>
       decodeGameRecord({
-        id: "bad",
+        id: "legacy-media",
         system: "fixture",
-        contentPath: "/storage/fixtures/bad.rom",
+        contentPath: "/storage/fixtures/legacy-media.rom",
         metadata: {
-          media: [{ type: "hologram", uri: "/x" }],
+          media: [{ type: "image", uri: "/img/cd-cover.jpg" }],
         },
       }),
     ).toThrow()
   })
 
-  it("rejects a record with an unknown media role", () => {
+  it("rejects persisted Korri delivery URLs", () => {
     expect(() =>
       decodeGameRecord({
-        id: "bad-role",
+        id: "legacy-delivery-url",
         system: "fixture",
-        contentPath: "/storage/fixtures/bad-role.rom",
+        contentPath: "/storage/fixtures/legacy-delivery-url.rom",
         metadata: {
-          media: [{ type: "image", uri: "/x", role: "thumbnail" }],
+          media: [
+            {
+              type: "image",
+              uri: "/api/media/games/wii/g/banner-460x215.png",
+            },
+          ],
         },
       }),
     ).toThrow()
