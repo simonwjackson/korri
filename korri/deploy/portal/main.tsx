@@ -1,14 +1,14 @@
-import { RegistryProvider } from "@effect/atom-react"
 import { LibrarySourceLayerRpc } from "@app/features/home/library-source-layer-rpc"
+import { RegistryProvider } from "@effect/atom-react"
+import {
+  launcherLayerAtom,
+  librarySourceLayerAtom,
+} from "@shared/library/library-atoms"
 import {
   type ControllerInputProfile,
   isControllerInputProfile,
 } from "@shared/navigation/controller-profile"
 import { startSpatialNavigation } from "@shared/navigation/start"
-import {
-  launcherLayerAtom,
-  librarySourceLayerAtom,
-} from "@shared/library/library-atoms"
 import { createRouter, RouterProvider } from "@tanstack/react-router"
 import ReactDOM from "react-dom/client"
 import { readInlinedRuntimeConfig } from "./read-inlined-runtime-config"

@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test"
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http"
 import { gzipSync } from "node:zlib"
 import { createApiForwarder } from "./api-forwarder"
 

@@ -62,10 +62,7 @@ describe("desktop-config", () => {
     })
     const path = desktopConfigPath(env)
     const raw = readFileSync(path, "utf8")
-    writeFileSync(
-      path,
-      `${raw}\nfederationPreferences:\n  primary: aka\n`,
-    )
+    writeFileSync(path, `${raw}\nfederationPreferences:\n  primary: aka\n`)
 
     await saveDesktopConfig(env, {
       lastConnectedServer: {

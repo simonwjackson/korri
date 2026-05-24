@@ -292,8 +292,6 @@ function createActiveWindowProvider(
   }
 }
 
-
-
 function resolvePreloadPath(): string | undefined {
   // electrobun.config.ts copies the preload bundle into views/mainview/.
   const preload = join(PATHS.VIEWS_FOLDER, "mainview", "preload.js")
@@ -488,7 +486,6 @@ main().catch(error => {
   stopDesktopServer()
   process.exit(1)
 })
-
 
 // Map the controller's `Date`-typed state to the wire-shape snapshot
 // the Hono composition consumes. Single conversion seam.

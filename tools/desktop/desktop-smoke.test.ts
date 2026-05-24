@@ -28,34 +28,34 @@ describe("desktop smoke", () => {
   })
 
   test("verifies root, the API forwarder mount, and a representative asset", async () => {
-    await writeFixture("index.html", "<html>Portal</html>")
+    await writeFixture(
+      "index.html",
+      '<html><head></head><body><div id="app"></div></body></html>',
+    )
     await writeFixture("assets/app.js", "globalThis.app = true")
 
     const report = await runDesktopSmoke({ assetRoot })
 
     expect(report.ok).toBe(true)
-    expect(report.checks).toEqual([
-      { name: "portal root", status: "pass", message: "GET / returned 200" },
-      {
-        name: "API forwarder mounted",
-        status: "pass",
-        message: "GET /api/health returned 503 { error: 'no upstream' }",
-      },
-      {
-        name: "representative asset",
-        status: "pass",
-        message: "GET /assets/app.js returned 200",
-      },
-    ])
+    const names = report.checks.map(c => c.name)
+    expect(names).toContain("portal root")
+    expect(names).toContain("API forwarder mounted")
+    expect(names).toContain("representative asset")
+    expect(
+      report.checks.find(c => c.name === "representative asset")?.status,
+    ).toBe("pass")
   })
 
   test("skips the asset check when the build has no assets", async () => {
-    await writeFixture("index.html", "<html>Portal</html>")
+    await writeFixture(
+      "index.html",
+      '<html><head></head><body><div id="app"></div></body></html>',
+    )
 
     const report = await runDesktopSmoke({ assetRoot })
 
     expect(report.ok).toBe(true)
-    expect(report.checks.at(-1)).toEqual({
+    expect(report.checks.find(c => c.name === "representative asset")).toEqual({
       name: "representative asset",
       status: "skip",
       message:
@@ -76,5 +76,109 @@ describe("desktop smoke", () => {
         message: `Missing portal index at ${join(missingRoot, "index.html")}`,
       },
     ])
+  })
+
+  test("pins the waiting-page body when disconnected", async () => {
+    await writeFixture(
+      "index.html",
+      '<html><head></head><body><div id="app"></div></body></html>',
+    )
+
+    const report = await runDesktopSmoke({ assetRoot })
+
+    const waiting = report.checks.find(
+      c => c.name === "waiting page served when disconnected",
+    )
+    expect(waiting?.status).toBe("pass")
+
+    const reconnect = report.checks.find(
+      c => c.name === "waiting page names remembered host when reconnecting",
+    )
+    expect(reconnect?.status).toBe("pass")
+  })
+
+  test("pins the help block visibility against helpAfter", async () => {
+    await writeFixture("index.html", "<html><head></head><body></body></html>")
+
+    const report = await runDesktopSmoke({ assetRoot })
+
+    expect(
+      report.checks.find(
+        c =>
+          c.name ===
+          "waiting page omits help block when helpAfter is in the future",
+      )?.status,
+    ).toBe("pass")
+    expect(
+      report.checks.find(
+        c =>
+          c.name ===
+          "waiting page includes help block when helpAfter is in the past",
+      )?.status,
+    ).toBe("pass")
+  })
+
+  test("pins inlined runtime-config body shape on the connected serve", async () => {
+    await writeFixture(
+      "index.html",
+      '<html><head></head><body><div id="app"></div></body></html>',
+    )
+
+    const report = await runDesktopSmoke({ assetRoot })
+
+    expect(
+      report.checks.find(
+        c =>
+          c.name ===
+          "connected serve inlines runtime-config (desktopInput: true)",
+      )?.status,
+    ).toBe("pass")
+    expect(
+      report.checks.find(
+        c =>
+          c.name ===
+          "connected serve inlines runtime-config (desktopInput: false)",
+      )?.status,
+    ).toBe("pass")
+  })
+
+  test("pins the connection-status endpoint JSON shape", async () => {
+    await writeFixture("index.html", "<html><head></head><body></body></html>")
+
+    const report = await runDesktopSmoke({ assetRoot })
+
+    expect(
+      report.checks.find(
+        c =>
+          c.name ===
+          "connection-status endpoint returns ISO timestamps when searching",
+      )?.status,
+    ).toBe("pass")
+    expect(
+      report.checks.find(
+        c =>
+          c.name ===
+          "connection-status endpoint omits timestamps when connected",
+      )?.status,
+    ).toBe("pass")
+  })
+
+  test("pins that /api/* and /__korri/desktop/launch still return 503 while disconnected", async () => {
+    await writeFixture("index.html", "<html><head></head><body></body></html>")
+
+    const report = await runDesktopSmoke({ assetRoot })
+
+    expect(
+      report.checks.find(
+        c => c.name === "disconnected serve does not interfere with /api/*",
+      )?.status,
+    ).toBe("pass")
+    expect(
+      report.checks.find(
+        c =>
+          c.name ===
+          "disconnected serve does not interfere with /__korri/desktop/launch",
+      )?.status,
+    ).toBe("pass")
   })
 })

@@ -8,7 +8,11 @@ describe("renderWaitingPage", () => {
     const since = new Date("2026-05-24T11:58:00.000Z")
     const helpAfter = new Date(since.getTime() + HELP_DELAY_MS)
     const html = renderWaitingPage(
-      { status: "searching", since: since.toISOString(), helpAfter: helpAfter.toISOString() },
+      {
+        status: "searching",
+        since: since.toISOString(),
+        helpAfter: helpAfter.toISOString(),
+      },
       since.getTime(),
     )
 
@@ -36,7 +40,11 @@ describe("renderWaitingPage", () => {
     const since = new Date("2026-05-24T11:58:00.000Z")
     const helpAfter = new Date(since.getTime() + HELP_DELAY_MS)
     const html = renderWaitingPage(
-      { status: "searching", since: since.toISOString(), helpAfter: helpAfter.toISOString() },
+      {
+        status: "searching",
+        since: since.toISOString(),
+        helpAfter: helpAfter.toISOString(),
+      },
       since.getTime() + 1_000, // 1s in, well before helpAfter (30s)
     )
 
@@ -48,7 +56,11 @@ describe("renderWaitingPage", () => {
     const since = new Date("2026-05-24T11:58:00.000Z")
     const helpAfter = new Date(since.getTime() + HELP_DELAY_MS)
     const html = renderWaitingPage(
-      { status: "searching", since: since.toISOString(), helpAfter: helpAfter.toISOString() },
+      {
+        status: "searching",
+        since: since.toISOString(),
+        helpAfter: helpAfter.toISOString(),
+      },
       helpAfter.getTime() + 1, // just past the help threshold
     )
 
@@ -58,7 +70,11 @@ describe("renderWaitingPage", () => {
   test("unparseable helpAfter is treated as immediately visible", () => {
     const since = new Date("2026-05-24T11:58:00.000Z")
     const html = renderWaitingPage(
-      { status: "searching", since: since.toISOString(), helpAfter: "not-a-date" },
+      {
+        status: "searching",
+        since: since.toISOString(),
+        helpAfter: "not-a-date",
+      },
       since.getTime(),
     )
 

@@ -20,17 +20,13 @@ function targetWithout(): Window {
 
 describe("readInlinedRuntimeConfig", () => {
   test("returns desktopInput: true when the inlined value sets it", () => {
-    const result = readInlinedRuntimeConfig(
-      targetWith({ desktopInput: true }),
-    )
+    const result = readInlinedRuntimeConfig(targetWith({ desktopInput: true }))
 
     expect(result).toEqual({ desktopInput: true })
   })
 
   test("returns desktopInput: false when the inlined value sets it", () => {
-    const result = readInlinedRuntimeConfig(
-      targetWith({ desktopInput: false }),
-    )
+    const result = readInlinedRuntimeConfig(targetWith({ desktopInput: false }))
 
     expect(result).toEqual({ desktopInput: false })
   })

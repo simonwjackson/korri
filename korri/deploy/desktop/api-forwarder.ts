@@ -1,5 +1,5 @@
-import { fetch as bunFetch } from "bun"
 import { logger } from "@shared/logger"
+import { fetch as bunFetch } from "bun"
 
 export interface ApiForwarderOptions {
   /**
@@ -11,7 +11,11 @@ export interface ApiForwarderOptions {
   readonly getUpstream: () => string | undefined
 }
 
-const STRIPPED_REQUEST_HEADERS = new Set(["host", "connection", "content-length"])
+const STRIPPED_REQUEST_HEADERS = new Set([
+  "host",
+  "connection",
+  "content-length",
+])
 const STRIPPED_RESPONSE_HEADERS = new Set([
   "content-encoding",
   "content-length",

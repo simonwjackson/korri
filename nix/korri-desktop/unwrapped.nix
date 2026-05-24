@@ -134,14 +134,28 @@ pkgs.stdenv.mkDerivation {
           cp -R out/build/portal/. "$app_bundle/Resources/app/views/mainview/"
         fi
 
-        # Compile the renderer-side preload that installs window.__korriConnection
-        # and window.__korriRuntime. Both bridges chain themselves onto
-        # window.__electrobun.receiveMessageFromBun and dispatch by payload
-        # shape, so the same compiled preload covers host and device variants.
+        # Compile the renderer-side preload that installs window.__korriInput
+        # so the React shell can subscribe to brokered semantic input actions
+        # from the desktop input broker. Connection-state and runtime-config
+        # are no longer pushed over this channel (see plan 2026-05-24-004
+        # U1/U2/U6): they're served via the bun-side Hono composition and
+        # an inlined `<script>` tag respectively. The preload chains itself
+        # onto window.__electrobun.receiveMessageFromBun and dispatches by
+        # payload tag, so it composes cleanly with electrobun's own preload.
         mkdir -p "$app_bundle/Resources/app/views/mainview"
         bun build korri/deploy/desktop/preload-entry.ts \
           --target=browser \
           --outfile="$app_bundle/Resources/app/views/mainview/preload.js"
+
+        # Bundle the waiting-page polling-loop bootstrap as a browser
+        # module and copy the co-located waiting.css. Both are served by
+        # bun while the connection controller is not yet `connected`
+        # (the React bundle never loads in that state).
+        bun build korri/deploy/desktop/waiting-page/polling-loop-bootstrap.ts \
+          --target=browser \
+          --outfile="$app_bundle/Resources/app/views/mainview/waiting-polling-loop.js"
+        cp korri/deploy/desktop/waiting-page/waiting.css \
+          "$app_bundle/Resources/app/views/mainview/waiting.css"
 
         if [ ! -f "$app_bundle/Resources/version.json" ]; then
           cat > "$app_bundle/Resources/version.json" <<'EOF'
@@ -157,15 +171,18 @@ pkgs.stdenv.mkDerivation {
 
         patch_elf_tree out/build/electrobun
 
-        # Postcondition: the four files the wrap step depends on must exist
-        # in the bundled output. The electrobun build path has multiple
-        # fallback branches; assert here so a regression surfaces at build
-        # time, not at first launch.
+        # Postcondition: every file the wrap step depends on — plus the
+        # waiting-page assets the catch-all serve references while
+        # disconnected — must exist in the bundled output. The electrobun
+        # build path has multiple fallback branches; assert here so a
+        # regression surfaces at build time, not at first launch.
         for required in \
           "Resources/app/bun/index.js" \
           "Resources/version.json" \
           "Resources/build.json" \
-          "Resources/app/views/mainview/preload.js"; do
+          "Resources/app/views/mainview/preload.js" \
+          "Resources/app/views/mainview/waiting.css" \
+          "Resources/app/views/mainview/waiting-polling-loop.js"; do
           if [ ! -f "$app_bundle/$required" ]; then
             echo "korri-desktop-unwrapped: missing required artifact $required" >&2
             exit 1

@@ -131,10 +131,11 @@ export function createDesktopApp(options: CreateDesktopAppOptions) {
     if (isExtensionBearing(url.pathname)) {
       return serveStaticAsset(c.req.raw, options)
     }
+    const getRuntimeConfig = options.getRuntimeConfig
     return serveIndexHtml({
       assetRoot: options.assetRoot,
-      transformIndexHtml: options.getRuntimeConfig
-        ? html => inlineRuntimeConfig(html, options.getRuntimeConfig!())
+      transformIndexHtml: getRuntimeConfig
+        ? html => inlineRuntimeConfig(html, getRuntimeConfig())
         : undefined,
       // index.html body now varies by runtime-config; do not cache.
       indexResponseHeaders: { "cache-control": "no-store" },

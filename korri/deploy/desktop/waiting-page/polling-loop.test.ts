@@ -49,12 +49,7 @@ interface FetchRecorder {
   readonly fetch: (input: RequestInfo | URL) => Promise<Response>
   readonly calls: Array<RequestInfo | URL>
   /** Configure the next response. */
-  setResponse(
-    body: () =>
-      | Promise<Response>
-      | Response
-      | Promise<never>,
-  ): void
+  setResponse(body: () => Promise<Response> | Response | Promise<never>): void
 }
 
 function createFetchRecorder(): FetchRecorder {
@@ -175,9 +170,7 @@ describe("createPollingLoop", () => {
 
   test("malformed JSON body does not reload; loop survives", async () => {
     const { interval, fetchRecorder, reloadCalls, loop } = setup()
-    fetchRecorder.setResponse(
-      () => new Response("not-json", { status: 200 }),
-    )
+    fetchRecorder.setResponse(() => new Response("not-json", { status: 200 }))
     loop.start()
     cleanup.push(() => loop.dispose())
 
@@ -190,9 +183,7 @@ describe("createPollingLoop", () => {
 
   test("HTTP 5xx does not reload; loop survives", async () => {
     const { interval, fetchRecorder, reloadCalls, loop } = setup()
-    fetchRecorder.setResponse(
-      () => new Response("oops", { status: 503 }),
-    )
+    fetchRecorder.setResponse(() => new Response("oops", { status: 503 }))
     loop.start()
     cleanup.push(() => loop.dispose())
 

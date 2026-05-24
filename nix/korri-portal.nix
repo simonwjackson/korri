@@ -4,10 +4,11 @@
   bunDeps,
 }:
 
-# Single portal build for every desktop variant. The native input-bridge
-# URL is no longer a Vite-baked constant — the desktop preload installs
-# `window.__korriRuntime` and the bun side pushes the URL on dom-ready,
-# so the same bundle ships to host and device.
+# Single portal build for every desktop variant. Runtime configuration
+# (e.g. whether the desktop input bridge is active) is no longer a
+# Vite-baked constant: the desktop's bun-side Hono composition inlines
+# `window.__korriRuntimeConfig` into the served `index.html` so the same
+# bundle ships to host and device. See plan 2026-05-24-004 (U2/U3).
 pkgs.stdenv.mkDerivation {
   pname = "korri-portal";
   version = "1.0.0";
