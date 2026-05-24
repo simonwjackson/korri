@@ -271,6 +271,52 @@ describe("Korri live USB safety evaluation", () => {
     }
   })
 
+  it("prepares broad Developer state only under the Developer namespace", () => {
+    const rig = makeResolverRig({
+      artifact: "developer",
+      bootSource: "/fake/sdb1",
+      parentDevice: "/fake/sdb",
+      transport: "usb",
+      removable: "1",
+      partitions: [
+        { device: "/fake/sdb1", label: "KORRI-ISO" },
+        { device: "/fake/sdb2", label: "KORRI-PERSIST" },
+      ],
+    })
+    try {
+      const result = runResolverRig(rig)
+      expect(result.status, result.stderr).toBe(0)
+      expect(existsSync(`${rig.root}/.korri-live-usb-persistent`)).toBe(true)
+      expect(existsSync(`${rig.root}/developer/home/.config`)).toBe(true)
+      expect(existsSync(`${rig.root}/developer/home/.cache/moonlight`)).toBe(
+        true,
+      )
+      expect(existsSync(`${rig.root}/product/home/.config/korri`)).toBe(false)
+    } finally {
+      rig.cleanup()
+    }
+  })
+
+  it("fails visibly for Developer when the boot parent is not removable USB", () => {
+    const rig = makeResolverRig({
+      artifact: "developer",
+      bootSource: "/fake/nvme0n1p1",
+      parentDevice: "/fake/nvme0n1",
+      transport: "nvme",
+      removable: "0",
+      partitions: [{ device: "/fake/nvme0n1p2", label: "KORRI-PERSIST" }],
+    })
+    try {
+      const result = runResolverRig(rig)
+      expect(result.status).not.toBe(0)
+      expect(result.stderr).toContain("Developer")
+      expect(readFileSync(rig.mountLog, "utf8")).not.toContain("tmpfs")
+      expect(existsSync(`${rig.root}/.korri-live-usb-ephemeral`)).toBe(false)
+    } finally {
+      rig.cleanup()
+    }
+  })
+
   it("falls back to tmpfs when the boot parent is not removable USB", () => {
     const rig = makeResolverRig({
       bootSource: "/fake/nvme0n1p1",
@@ -359,6 +405,7 @@ type ResolverPartition = {
 }
 
 type ResolverRigConfig = {
+  readonly artifact?: "product" | "developer"
   readonly bootSource: string
   readonly parentDevice: string
   readonly transport: string
@@ -376,6 +423,7 @@ type ResolverRig = {
   readonly mountLog: string
   readonly chownLog: string
   readonly umountLog: string
+  readonly artifact: "product" | "developer"
   readonly cleanup: () => void
 }
 
@@ -436,6 +484,7 @@ function makeResolverRig(config: ResolverRigConfig): ResolverRig {
     `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> '${umountLog}'\nexit 0\n`,
   )
   return {
+    artifact: config.artifact ?? "product",
     root,
     home,
     deviceId,
@@ -457,6 +506,7 @@ function runResolverRig(rig: ResolverRig) {
       KORRI_LIVE_USB_PERSISTENCE_ROOT: rig.root,
       KORRI_LIVE_USB_BOOT_MOUNT: "/iso",
       KORRI_LIVE_USB_SKIP_BLOCK_DEVICE_CHECK: "1",
+      KORRI_LIVE_USB_ARTIFACT: rig.artifact,
       KORRI_LIVE_USB_RUNTIME_HOME: rig.home,
       KORRI_LIVE_USB_DEVICE_ID_TARGET: rig.deviceId,
       KORRI_LIVE_USB_STATE_USER: "korri",

@@ -102,16 +102,24 @@ mount_tmpfs() {
   echo "korri-live-usb: persistence partition not found beside boot USB media; using ephemeral tmpfs state" >&2
 }
 
-boot_source="$(findmnt -n -o SOURCE --target "$boot_mount" 2>/dev/null || true)"
-if [ -z "$boot_source" ]; then
+persistence_unavailable() {
+  reason="$1"
+  if [ "$artifact" = "developer" ]; then
+    echo "korri-live-usb: Developer ISO requires retained same-stick persistence; $reason" >&2
+    exit 1
+  fi
   mount_tmpfs
   exit 0
+}
+
+boot_source="$(findmnt -n -o SOURCE --target "$boot_mount" 2>/dev/null || true)"
+if [ -z "$boot_source" ]; then
+  persistence_unavailable "boot mount $boot_mount was not found"
 fi
 
 boot_device="$(readlink -f "$boot_source" 2>/dev/null || true)"
 if [ -z "$boot_device" ] || { [ "$skip_block_device_check" != "1" ] && [ ! -b "$boot_device" ]; }; then
-  mount_tmpfs
-  exit 0
+  persistence_unavailable "boot source $boot_source did not resolve to a usable block device"
 fi
 
 parent_name="$(lsblk -no PKNAME "$boot_device" 2>/dev/null | head -n 1 | tr -d '[:space:]')"
@@ -122,16 +130,13 @@ else
 fi
 
 if [ "$skip_block_device_check" != "1" ] && [ ! -b "$parent_device" ]; then
-  mount_tmpfs
-  exit 0
+  persistence_unavailable "boot parent $parent_device is not a usable block device"
 fi
 
 parent_transport="$(lsblk -ndo TRAN "$parent_device" 2>/dev/null | head -n 1 | tr -d '[:space:]')"
 parent_removable="$(lsblk -ndo RM "$parent_device" 2>/dev/null | head -n 1 | tr -d '[:space:]')"
 if [ "$parent_transport" != "usb" ]; then
-  echo "korri-live-usb: boot media parent $parent_device is not USB (transport=$parent_transport removable=$parent_removable); using ephemeral tmpfs state" >&2
-  mount_tmpfs
-  exit 0
+  persistence_unavailable "boot media parent $parent_device is not USB (transport=$parent_transport removable=$parent_removable)"
 fi
 
 while IFS= read -r candidate; do
@@ -146,12 +151,12 @@ while IFS= read -r candidate; do
       fi
       echo "korri-live-usb: mounted candidate persistence partition $candidate but could not prepare writable kiosk state; falling back to ephemeral tmpfs state" >&2
       umount "$root" >/dev/null 2>&1 || true
+      persistence_unavailable "mounted candidate persistence partition $candidate but could not prepare writable kiosk state"
     else
       echo "korri-live-usb: failed to mount candidate persistence partition $candidate; falling back to ephemeral tmpfs state" >&2
+      persistence_unavailable "failed to mount candidate persistence partition $candidate"
     fi
-    mount_tmpfs
-    exit 0
   fi
 done < <(lsblk -nrpo NAME,TYPE "$parent_device" | awk '$2 == "part" { print $1 }')
 
-mount_tmpfs
+persistence_unavailable "persistence partition labeled $label was not found beside boot USB media"
