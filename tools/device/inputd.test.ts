@@ -302,8 +302,12 @@ B: KEY=40000000
           .some(message => message.kind === "input"),
       "device then input",
     )
-    const decoded = client.messages.map(message => decodeNativeInputEvent(message))
-    const firstInputIndex = decoded.findIndex(message => message.kind === "input")
+    const decoded = client.messages.map(message =>
+      decodeNativeInputEvent(message),
+    )
+    const firstInputIndex = decoded.findIndex(
+      message => message.kind === "input",
+    )
     const targetDeviceAddedIndex = decoded.findIndex(
       message =>
         message.kind === "device-added" &&
