@@ -14,8 +14,11 @@
  * the React renderer.
  */
 
+export type LiveUsbArtifact = "product" | "developer"
+
 export interface RuntimeConfig {
   readonly desktopInput: boolean
+  readonly liveUsbArtifact?: LiveUsbArtifact
 }
 
 /**
@@ -26,7 +29,15 @@ export interface RuntimeConfig {
  */
 export function isRuntimeConfig(value: unknown): value is RuntimeConfig {
   if (!isObject(value)) return false
-  return value.desktopInput === true || value.desktopInput === false
+  if (value.desktopInput !== true && value.desktopInput !== false) return false
+  if (
+    value.liveUsbArtifact !== undefined &&
+    value.liveUsbArtifact !== "product" &&
+    value.liveUsbArtifact !== "developer"
+  ) {
+    return false
+  }
+  return true
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

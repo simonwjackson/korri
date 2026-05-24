@@ -47,6 +47,7 @@ type EvalResult = {
     headless: string | null
     kiosk: string | null
     liveIso: string | null
+    liveDeveloperIso: string | null
   }
   checkDrvPaths: {
     liveConfig: string | null
@@ -58,6 +59,15 @@ type EvalResult = {
     imageFileName: string | null
     makeUsbBootable: boolean
     makeEfiBootable: boolean
+    persistenceArtifact: "product" | "developer" | null
+    persistenceScope: "product-allowlist" | "developer-broad" | null
+  }
+  liveUsbDeveloper: ImageSummary & {
+    imageFileName: string | null
+    makeUsbBootable: boolean
+    makeEfiBootable: boolean
+    persistenceArtifact: "product" | "developer" | null
+    persistenceScope: "product-allowlist" | "developer-broad" | null
   }
   kioskWithExternalPlatform: ImageSummary
   kioskWithPlatformManagedUser: ImageSummary
@@ -120,7 +130,9 @@ describe("Korri Nix image output evaluation", () => {
 
   it("exposes a bootable x86 live USB ISO kiosk image", () => {
     expect(result.packageAttrs).toContain("korri-kiosk-live-iso")
+    expect(result.packageAttrs).toContain("korri-kiosk-live-developer-iso")
     expect(result.packageDrvPaths.liveIso).toContain(".drv")
+    expect(result.packageDrvPaths.liveDeveloperIso).toContain(".drv")
     expect(result.liveUsb.assertionsPassed).toBe(true)
     expect(result.liveUsb.kioskEnabled).toBe(true)
     expect(result.liveUsb.clientEnabled).toBe(true)
@@ -146,6 +158,16 @@ describe("Korri Nix image output evaluation", () => {
     expect(result.liveUsb.makeUsbBootable).toBe(true)
     expect(result.liveUsb.makeEfiBootable).toBe(true)
     expect(result.liveUsb.imageFileName).toContain("korri-kiosk")
+    expect(result.liveUsb.imageFileName).not.toContain("developer")
+    expect(result.liveUsb.persistenceArtifact).toBe("product")
+    expect(result.liveUsb.persistenceScope).toBe("product-allowlist")
+    expect(result.liveUsbDeveloper.assertionsPassed).toBe(true)
+    expect(result.liveUsbDeveloper.imageFileName).toContain("developer")
+    expect(result.liveUsbDeveloper.persistenceArtifact).toBe("developer")
+    expect(result.liveUsbDeveloper.persistenceScope).toBe("developer-broad")
+    expect(result.liveUsbDeveloper.kioskEnvironment.KORRI_LIVE_USB_ARTIFACT).toBe(
+      "developer",
+    )
   })
 
   it("headless composition enables the server without GUI or appliance services", () => {

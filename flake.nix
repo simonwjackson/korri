@@ -396,6 +396,15 @@
           platformModules = [ ./nix/images/platforms/x86.nix ];
         };
 
+        korriKioskLiveUsbDeveloperSystem = korriImages.mkLiveUsbKioskSystem {
+          platformModules = [ ./nix/images/platforms/x86.nix ];
+          modules = [
+            {
+              services.korri.liveUsbPersistence.artifact = "developer";
+            }
+          ];
+        };
+
         korriKioskLiveUsbRuntimeSystem = korriImages.mkLiveUsbKioskRuntimeSystem {
           platformModules = [ ./nix/images/platforms/x86.nix ];
         };
@@ -424,6 +433,7 @@
           korri-headless-system = korriHeadlessSystem.config.system.build.toplevel;
           korri-kiosk-system = korriKioskSystem.config.system.build.toplevel;
           korri-kiosk-live-iso = korriKioskLiveUsbSystem.config.system.build.isoImage;
+          korri-kiosk-live-developer-iso = korriKioskLiveUsbDeveloperSystem.config.system.build.isoImage;
         }
         // pkgs.lib.optionalAttrs (system == "aarch64-linux") {
           korri-rocknix-kiosk-system-thor =

@@ -14,7 +14,23 @@ import type { RuntimeConfig } from "./runtime-config-shape"
 export function readRuntimeConfigFromEnv(
   env: Record<string, string | undefined>,
 ): RuntimeConfig {
-  return { desktopInput: isDesktopInputEnabled(env) }
+  const liveUsbArtifact = liveUsbArtifactFromEnv(env)
+  return {
+    desktopInput: isDesktopInputEnabled(env),
+    ...(liveUsbArtifact ? { liveUsbArtifact } : {}),
+  }
+}
+
+function liveUsbArtifactFromEnv(
+  env: Record<string, string | undefined>,
+): RuntimeConfig["liveUsbArtifact"] | undefined {
+  if (
+    env.KORRI_LIVE_USB_ARTIFACT === "product" ||
+    env.KORRI_LIVE_USB_ARTIFACT === "developer"
+  ) {
+    return env.KORRI_LIVE_USB_ARTIFACT
+  }
+  return undefined
 }
 
 export function isDesktopInputEnabled(

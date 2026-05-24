@@ -39,6 +39,21 @@ describe("readRuntimeConfigFromEnv", () => {
       }),
     ).toEqual({ desktopInput: false })
   })
+
+  it("exposes valid live USB artifact markers", () => {
+    expect(
+      readRuntimeConfigFromEnv({ KORRI_LIVE_USB_ARTIFACT: "product" }),
+    ).toEqual({ desktopInput: false, liveUsbArtifact: "product" })
+    expect(
+      readRuntimeConfigFromEnv({ KORRI_LIVE_USB_ARTIFACT: "developer" }),
+    ).toEqual({ desktopInput: false, liveUsbArtifact: "developer" })
+  })
+
+  it("ignores malformed live USB artifact markers", () => {
+    expect(
+      readRuntimeConfigFromEnv({ KORRI_LIVE_USB_ARTIFACT: "diagnostic" }),
+    ).toEqual({ desktopInput: false })
+  })
 })
 
 describe("desktopInputdUrlFromEnv", () => {

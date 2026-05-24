@@ -1,10 +1,16 @@
 { korri, nixpkgs }:
 
 {
+  config,
   lib,
   pkgs,
   ...
 }:
+
+let
+  cfg = config.services.korri.liveUsbPersistence;
+  artifactSuffix = lib.optionalString (cfg.artifact == "developer") "-developer";
+in
 
 {
   imports = [
@@ -17,8 +23,8 @@
     # artifact that can be written to removable media; it is not an installer for
     # the target machine's internal disk.
     image = {
-      baseName = lib.mkDefault "korri-kiosk-live";
-      fileName = lib.mkDefault "korri-kiosk-live-${pkgs.stdenv.hostPlatform.system}.iso";
+      baseName = lib.mkDefault "korri-kiosk-live${artifactSuffix}";
+      fileName = lib.mkDefault "korri-kiosk-live${artifactSuffix}-${pkgs.stdenv.hostPlatform.system}.iso";
     };
 
     isoImage = {

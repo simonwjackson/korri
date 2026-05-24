@@ -45,6 +45,15 @@ let
     platformModules = [ x86Platform ];
   };
 
+  liveUsbDeveloper = imageLib.mkLiveUsbKioskSystem {
+    platformModules = [ x86Platform ];
+    modules = [
+      {
+        services.korri.liveUsbPersistence.artifact = "developer";
+      }
+    ];
+  };
+
   kioskWithExternalPlatform = imageLib.mkKioskSystem {
     platformModules = [
       x86Platform
@@ -90,6 +99,7 @@ in
     headless = (flake.packages.${system}.korri-headless-system or null).drvPath or null;
     kiosk = (flake.packages.${system}.korri-kiosk-system or null).drvPath or null;
     liveIso = (flake.packages.${system}.korri-kiosk-live-iso or null).drvPath or null;
+    liveDeveloperIso = (flake.packages.${system}.korri-kiosk-live-developer-iso or null).drvPath or null;
   };
   checkDrvPaths = {
     liveConfig = (flake.checks.${system}.korri-live-usb-config or null).drvPath or null;
@@ -101,6 +111,15 @@ in
     imageFileName = liveUsb.config.image.fileName or null;
     makeUsbBootable = liveUsb.config.isoImage.makeUsbBootable or false;
     makeEfiBootable = liveUsb.config.isoImage.makeEfiBootable or false;
+    persistenceArtifact = liveUsb.config.services.korri.liveUsbPersistence.artifact or null;
+    persistenceScope = liveUsb.config.services.korri.liveUsbPersistence.scope or null;
+  };
+  liveUsbDeveloper = (summarize liveUsbDeveloper) // {
+    imageFileName = liveUsbDeveloper.config.image.fileName or null;
+    makeUsbBootable = liveUsbDeveloper.config.isoImage.makeUsbBootable or false;
+    makeEfiBootable = liveUsbDeveloper.config.isoImage.makeEfiBootable or false;
+    persistenceArtifact = liveUsbDeveloper.config.services.korri.liveUsbPersistence.artifact or null;
+    persistenceScope = liveUsbDeveloper.config.services.korri.liveUsbPersistence.scope or null;
   };
   kioskWithExternalPlatform = summarize kioskWithExternalPlatform;
   kioskWithPlatformManagedUser = summarize kioskWithPlatformManagedUser;
