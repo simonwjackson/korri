@@ -105,6 +105,11 @@ in
     ]
   );
 
+  environment.etc."rocknix-stage10-proof-marker".text = ''
+    korri-rocknix-kiosk-system
+    target=${config.networking.hostName}
+  '';
+
   environment.systemPackages = [
     substratePackages.cemu
     substratePackages.steam
