@@ -2,9 +2,8 @@
  * Shift molecule — feature tile art.
  *
  * The wide landscape image that fills the resume target's tile in the
- * home rail. Prefer library-provided art when present (including the
- * temporary ROCKNIX sidecar media), and fall back to deterministic Picsum
- * landscape art only for sparse fixtures.
+ * home rail. Prefer resolved game-assets art when present, and fall back
+ * to deterministic Picsum landscape art only for sparse fixtures.
  *
  * The `shift-` prefix in the seed key is an opaque content key, not a
  * code dependency — it stays even though the rename from "sunlit" to
@@ -14,8 +13,8 @@
  */
 
 import {
-  type GameRecord,
   getGameWideImageUrl,
+  type ResolvedGameRecord,
 } from "@shared/fixtures/games/game"
 
 function featureArtUrl(id: string): string {
@@ -23,7 +22,7 @@ function featureArtUrl(id: string): string {
 }
 
 export interface ShiftHomeFeatureTileProps {
-  readonly game: GameRecord
+  readonly game: ResolvedGameRecord
 }
 
 export function ShiftHomeFeatureTile({ game }: ShiftHomeFeatureTileProps) {

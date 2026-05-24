@@ -1,28 +1,40 @@
 import { describe, expect, it } from "bun:test"
-import type { GameRecord } from "@shared/fixtures/games/game"
+import type { ResolvedGameRecord } from "@shared/fixtures/games/game"
 import { render } from "@testing-library/react"
 import { ShiftHomeFeatureTile } from "./ShiftHomeFeatureTile"
 
 describe("ShiftHomeFeatureTile", () => {
-  it("uses wide library media before cover art", () => {
-    const game: GameRecord = {
+  it("uses wide resolved media before tile art", () => {
+    const game: ResolvedGameRecord = {
       id: "wii/example.rvz",
       system: "fixture",
       contentPath: "/storage/fixtures/wii/example.rvz.rom",
-      metadata: {
-        media: [
-          { type: "image", uri: "/api/media/games/wii/example/cover-1024.jpg" },
-          {
-            type: "image",
-            uri: "/api/media/games/wii/example/banner-460x215.png",
-          },
-        ],
-      },
+      media: [
+        resolvedMedia("tile", "https://assets.example.test/tile.png"),
+        resolvedMedia("banner", "https://assets.example.test/banner.png"),
+      ],
     }
 
     const { container } = render(<ShiftHomeFeatureTile game={game} />)
     expect(container.querySelector("img")?.getAttribute("src")).toBe(
-      "/api/media/games/wii/example/banner-460x215.png",
+      "https://assets.example.test/banner.png",
     )
   })
 })
+
+type ResolvedMedia = NonNullable<ResolvedGameRecord["media"]>[number]
+
+function resolvedMedia(
+  role: ResolvedMedia["role"],
+  url: string,
+): ResolvedMedia {
+  return {
+    role,
+    type: "image",
+    width: 512,
+    height: 512,
+    assetId:
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    url,
+  }
+}

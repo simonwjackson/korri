@@ -11,12 +11,12 @@
  * poster slot.
  */
 
-import type { GameRecord } from "@shared/fixtures/games/game"
+import type { ResolvedGameRecord } from "@shared/fixtures/games/game"
 import { games } from "@shared/fixtures/games/games"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { ShiftHomePosterTile } from "./ShiftHomePosterTile"
 
-const fallbackGame: GameRecord = {
+const fallbackGame: ResolvedGameRecord = {
   id: "missing-art-demo",
   system: "fixture",
   contentPath: "/storage/fixtures/missing-art-demo.rom",
@@ -27,7 +27,6 @@ const fallbackGame: GameRecord = {
     releaseDate: "2025-01-01",
     genre: ["Demo"],
     tags: ["fallback"],
-    media: [],
   },
 }
 

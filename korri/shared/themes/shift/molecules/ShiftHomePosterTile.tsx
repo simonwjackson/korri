@@ -12,13 +12,13 @@
  */
 
 import {
-  type GameRecord,
   getGameDisplayName,
   getGameImageUrl,
+  type ResolvedGameRecord,
 } from "@shared/fixtures/games/game"
 
 export interface ShiftHomePosterTileProps {
-  readonly game: GameRecord
+  readonly game: ResolvedGameRecord
 }
 
 export function ShiftHomePosterTile({ game }: ShiftHomePosterTileProps) {
