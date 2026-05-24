@@ -1,4 +1,4 @@
-import type { RuntimeConfigBridgeState } from "./runtime-config-bridge"
+import type { RuntimeConfig } from "./runtime-config-shape"
 
 /**
  * Build the runtime-config snapshot pushed to webviews at startup.
@@ -13,7 +13,7 @@ import type { RuntimeConfigBridgeState } from "./runtime-config-bridge"
  */
 export function readRuntimeConfigFromEnv(
   env: Record<string, string | undefined>,
-): RuntimeConfigBridgeState {
+): RuntimeConfig {
   return { desktopInput: isDesktopInputEnabled(env) }
 }
 

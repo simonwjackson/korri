@@ -23,7 +23,7 @@ import {
   desktopInputdUrlFromEnv,
   readRuntimeConfigFromEnv,
 } from "./runtime-config"
-import type { RuntimeConfigBridgeState } from "./runtime-config-bridge"
+import type { RuntimeConfig } from "./runtime-config-shape"
 import { writeDesktopStatusFile } from "./status-file"
 import { toBridgeState } from "./to-bridge-state"
 import {
@@ -161,9 +161,7 @@ async function main() {
   // Runtime-config is read once at startup and inlined into the
   // served index.html via the bun-side Hono composition. Renderer
   // reads `window.__korriRuntimeConfig` synchronously at boot.
-  const runtimeConfig: RuntimeConfigBridgeState = readRuntimeConfigFromEnv(
-    process.env,
-  )
+  const runtimeConfig: RuntimeConfig = readRuntimeConfigFromEnv(process.env)
   const getRuntimeConfig = () => runtimeConfig
 
   const app = createDesktopApp({
@@ -313,7 +311,7 @@ function createActiveWindowProvider(
 function attachInitialBridgePushes(
   window: BrowserWindow,
   connectionState: SubscriptionRef.SubscriptionRef<ConnectionState>,
-  runtimeConfig: RuntimeConfigBridgeState,
+  runtimeConfig: RuntimeConfig,
 ) {
   const push = () => {
     installWebviewBridgeFallback(window)

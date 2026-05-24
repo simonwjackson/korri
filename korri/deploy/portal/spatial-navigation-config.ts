@@ -1,6 +1,6 @@
 import type { ControllerInputProfile } from "@shared/navigation/controller-profile"
 import type { StartSpatialNavigationOptions } from "@shared/navigation/start"
-import type { RuntimeConfigBridgeState } from "../desktop/runtime-config-bridge"
+import type { RuntimeConfig } from "../desktop/runtime-config-shape"
 
 /**
  * Build the spatial-navigation start options from the runtime config snapshot
@@ -11,7 +11,7 @@ import type { RuntimeConfigBridgeState } from "../desktop/runtime-config-bridge"
  * The renderer never receives the raw inputd URL.
  */
 export function buildSpatialNavigationConfig(
-  runtime: RuntimeConfigBridgeState,
+  runtime: RuntimeConfig,
   profile: ControllerInputProfile,
 ): StartSpatialNavigationOptions {
   return {

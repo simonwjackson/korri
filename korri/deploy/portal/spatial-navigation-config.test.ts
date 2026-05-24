@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test"
 
-import type { RuntimeConfigBridgeState } from "../desktop/runtime-config-bridge"
+import type { RuntimeConfig } from "../desktop/runtime-config-shape"
 import { buildSpatialNavigationConfig } from "./spatial-navigation-config"
 
 describe("buildSpatialNavigationConfig", () => {
   it("emits a desktop bridge config when desktop input is enabled", () => {
-    const runtime: RuntimeConfigBridgeState = { desktopInput: true }
+    const runtime: RuntimeConfig = { desktopInput: true }
     expect(buildSpatialNavigationConfig(runtime, "auto")).toEqual({
       diagnostics: true,
       controller: {
@@ -16,7 +16,7 @@ describe("buildSpatialNavigationConfig", () => {
   })
 
   it("omits desktop input when desktop input is disabled", () => {
-    const runtime: RuntimeConfigBridgeState = { desktopInput: false }
+    const runtime: RuntimeConfig = { desktopInput: false }
     expect(buildSpatialNavigationConfig(runtime, "auto")).toEqual({
       diagnostics: true,
       controller: { profile: "auto", desktop: undefined },
@@ -24,7 +24,7 @@ describe("buildSpatialNavigationConfig", () => {
   })
 
   it("propagates the controller profile", () => {
-    const runtime: RuntimeConfigBridgeState = { desktopInput: false }
+    const runtime: RuntimeConfig = { desktopInput: false }
     expect(buildSpatialNavigationConfig(runtime, "web").controller).toEqual({
       profile: "web",
       desktop: undefined,
