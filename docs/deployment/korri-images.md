@@ -27,7 +27,7 @@ The live USB kiosk routes Korri client state under `/persist/korri-live-usb/home
 
 Discovery is unchanged from the standard Electrobun/Korri app path: the live image permits mDNS client browsing on UDP 5353, then uses the existing remembered-first/first-healthy connection controller. There is no USB-specific server discovery and no aka-specific priority or fallback.
 
-Remote launch keeps the standard prepare-before-stream sequence. The desktop launch bridge calls the connected server's control URL to prepare the selected known game, then launches Moonlight against the reachable host from that same control URL. On the live kiosk, `KORRI_MOONLIGHT_COMMAND` points at the packaged `moonlight-embedded` binary, so the appliance path does not depend on Moonlight Qt or a runtime `nix run` fallback.
+Remote launch keeps the standard prepare-before-stream sequence after a local input preflight. The desktop launch bridge first verifies the appliance has a normalized InputPlumber virtual gamepad, then calls the connected server's control URL to prepare the selected known game, then launches Moonlight against the reachable host from that same control URL. On the live kiosk, `KORRI_MOONLIGHT_COMMAND` points at the packaged `moonlight-embedded` binary, so the appliance path does not depend on Moonlight Qt or a runtime `nix run` fallback. Moonlight is launched with one explicit InputPlumber virtual input device and the packaged generic `gamecontrollerdb.txt`; stream success without that input route is not considered a valid appliance pass.
 
 ### x86 live USB validation tiers
 
@@ -70,7 +70,9 @@ Physical v1 acceptance targets an 8th-gen Intel NUC with Ethernet, keyboard fall
 - `/persist/korri-live-usb` is either the same-stick `KORRI-PERSIST` partition or an ephemeral tmpfs marked `.korri-live-usb-ephemeral`;
 - standard discovery sees compatible Korri servers on the wired LAN without host-name special cases;
 - settings and moonlight-embedded pairing/cache state survive a reboot when same-stick persistence is present;
-- selecting a remote game prepares the known game on the connected server and attempts a local `moonlight-embedded` stream.
+- InputPlumber is active, sees its package data root, and exposes exactly one expected virtual Xbox-class gamepad for the connected controller;
+- inputd and Moonlight both consume the InputPlumber virtual gamepad, not the raw physical controller;
+- selecting a remote game prepares the known game on the connected server and attempts a local `moonlight-embedded` stream with an explicit virtual input device.
 
 RockNix-backed kiosk appliances are exposed as explicit device targets:
 
@@ -90,6 +92,20 @@ Matching NixOS configurations are available as:
 Thor and Sobo/Odin 2 Portal are kiosk appliances only. They include the Korri server, Electrobun client, Sway kiosk, and inputd; they are not server-only RockNix targets. The by-compatible configuration is an impure on-device convenience that reads the normalized device-compatible value through nix-on-rocks. Use the explicit per-device targets for off-device review and Fuji/aarch64 build gates.
 
 These are evaluated NixOS system closures or rootfs tarball packages, not a full OTA/update product. Manual installation, partitioning, flashing, rollback UX, and remote builder selection remain operator/platform concerns.
+
+### Normalized controller validation
+
+All kiosk appliance targets use InputPlumber as the controller-normalization boundary. Physical controller quirks belong in the platform/InputPlumber package layer; Korri shell input and Moonlight launch code consume the resulting virtual Xbox-class event device.
+
+A target is go only when device-side evidence shows:
+
+- `inputplumber.service` is active and loaded the data root containing `share/inputplumber`;
+- exactly one expected InputPlumber virtual Xbox-class gamepad exists for single-controller validation;
+- raw physical gamepads may be visible for diagnostics but are ignored by inputd and are not passed to Moonlight;
+- Moonlight launches with one explicit virtual input device and the generic mapping DB;
+- restarting InputPlumber or unplugging/replugging the controller does not leave stale event-node state.
+
+Stop rollout for that target if InputPlumber is active with zero virtual targets, multiple virtual targets appear in single-controller mode, Moonlight launches without explicit virtual input, or controls work only through raw evdev. Rollback should use the previous known-good image/generation and should verify both kiosk navigation and Moonlight stream input before expanding again.
 
 ## Product splits
 
