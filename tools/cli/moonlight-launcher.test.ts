@@ -5,7 +5,7 @@ import { resolve } from "node:path"
 import { type CommandRunner, launchMoonlight } from "./moonlight-launcher"
 
 describe("moonlight launcher", () => {
-  it("uses installed moonlight first", async () => {
+  it("uses installed moonlight with embedded-client args first", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({
       host: "aka.local",
@@ -16,10 +16,10 @@ describe("moonlight launcher", () => {
     })
 
     expect(result).toEqual({ status: "started", command: "moonlight" })
-    expect(calls).toEqual(["moonlight stream aka.local Korri Stream"])
+    expect(calls).toEqual(["moonlight stream -app Korri Stream aka.local"])
   })
 
-  it("falls back to nix moonlight-qt when installed moonlight is missing", async () => {
+  it("falls back to nix moonlight-embedded when installed moonlight is missing", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({
       host: "aka.local",
@@ -33,9 +33,30 @@ describe("moonlight launcher", () => {
 
     expect(result).toEqual({ status: "started", command: "nix" })
     expect(calls).toEqual([
-      "moonlight stream aka.local Korri Stream",
-      "nix run nixpkgs#moonlight-qt -- stream aka.local Korri Stream",
+      "moonlight stream -app Korri Stream aka.local",
+      "nix run nixpkgs#moonlight-embedded -- stream -app Korri Stream aka.local",
     ])
+  })
+
+  it("ignores legacy qt client env and keeps embedded-client args", async () => {
+    const previousClient = Bun.env.KORRI_MOONLIGHT_CLIENT
+    const calls: string[] = []
+    try {
+      Bun.env.KORRI_MOONLIGHT_CLIENT = "qt"
+      const result = await launchMoonlight({
+        host: "aka.local",
+        runner: runner((command, args) => {
+          calls.push([command, ...args].join(" "))
+          return { status: "started" }
+        }),
+      })
+
+      expect(result).toEqual({ status: "started", command: "moonlight" })
+      expect(calls).toEqual(["moonlight stream -app Korri Stream aka.local"])
+    } finally {
+      if (previousClient === undefined) delete Bun.env.KORRI_MOONLIGHT_CLIENT
+      else Bun.env.KORRI_MOONLIGHT_CLIENT = previousClient
+    }
   })
 
   it("uses KORRI_MOONLIGHT_COMMAND as an appliance no-fallback embedded command", async () => {

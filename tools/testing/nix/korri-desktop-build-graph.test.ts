@@ -22,8 +22,10 @@ interface BuildGraphEval {
   deviceHasPkgs2405AtSpi: boolean
   hostHasPkgs2405Webkit: boolean
   hostHasPkgs2405Gtk: boolean
-  hostHasMoonlight: boolean
-  deviceHasMoonlight: boolean
+  hostHasMoonlightEmbedded: boolean
+  hostHasMoonlightQt: boolean
+  deviceHasMoonlightEmbedded: boolean
+  deviceHasMoonlightQt: boolean
   x86KioskHasMoonlightEmbedded: boolean
   x86KioskHasMoonlightQt: boolean
   deviceExportsDesktopInputdUrl: boolean
@@ -140,12 +142,14 @@ describe("korri-desktop build graph", () => {
   })
 
   describe("stream client runtime", () => {
-    it("host wrap provides Moonlight on PATH", () => {
-      expect(result.hostHasMoonlight).toBe(true)
+    it("host wrap provides moonlight-embedded instead of Moonlight Qt on PATH", () => {
+      expect(result.hostHasMoonlightEmbedded).toBe(true)
+      expect(result.hostHasMoonlightQt).toBe(false)
     })
 
-    it("device wrap provides Moonlight on PATH", () => {
-      expect(result.deviceHasMoonlight).toBe(true)
+    it("device wrap provides moonlight-embedded instead of Moonlight Qt on PATH", () => {
+      expect(result.deviceHasMoonlightEmbedded).toBe(true)
+      expect(result.deviceHasMoonlightQt).toBe(false)
     })
 
     it("x86 kiosk wrap provides moonlight-embedded instead of Moonlight Qt on PATH", () => {

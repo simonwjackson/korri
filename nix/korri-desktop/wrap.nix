@@ -24,8 +24,8 @@
   gsettings-desktop-schemas,
   glibc,
   stdenvCcLib,
-  moonlightQt ? pkgs.moonlight-qt,
-  moonlightPackage ? moonlightQt,
+  moonlightPackage ? pkgs.moonlight-embedded,
+  moonlightClient ? "embedded",
   profile ? "host",
 }:
 
@@ -120,25 +120,27 @@ pkgs.stdenv.mkDerivation {
     export XDG_DATA_DIRS="${desktopDataPath}\''${XDG_DATA_DIRS:+:\$XDG_DATA_DIRS}"
     export GIO_EXTRA_MODULES="${gioExtraModulesPath}\''${GIO_EXTRA_MODULES:+:\$GIO_EXTRA_MODULES}"
     export PATH="${moonlightPackage}/bin\''${PATH:+:\$PATH}"
+    export KORRI_MOONLIGHT_COMMAND="\''${KORRI_MOONLIGHT_COMMAND:-${moonlightPackage}/bin/moonlight}"
+    export KORRI_MOONLIGHT_CLIENT="\''${KORRI_MOONLIGHT_CLIENT:-${moonlightClient}}"
     ${lib.optionalString (gdkBackend != "") ''
       export GDK_BACKEND="\''${GDK_BACKEND:-${gdkBackend}}"
     ''}
     ${lib.optionalString (desktopProfileEnv != "") ''
-    export KORRI_DESKTOP_PROFILE="${desktopProfileEnv}"
-    # Inputd lives behind a local-loopback WebSocket consumed by Electrobun
-    # main. The renderer receives only brokered semantic actions over preload
-    # IPC, never this raw URL.
-    export KORRI_DESKTOP_INPUTD_URL="\''${KORRI_DESKTOP_INPUTD_URL:-ws://127.0.0.1:3002}"
-    if [ -z "\''${HOME:-}" ] && { [ -z "\''${XDG_DATA_HOME:-}" ] || [ -z "\''${XDG_CONFIG_HOME:-}" ] || [ -z "\''${XDG_CACHE_HOME:-}" ]; }; then
-      echo "korri-desktop: HOME is required when XDG home directories are not set" >&2
-      exit 126
-    fi
-    export XDG_DATA_HOME="\''${XDG_DATA_HOME:-\$HOME/.local/share}"
-    export XDG_CONFIG_HOME="\''${XDG_CONFIG_HOME:-\$HOME/.config}"
-    export XDG_CACHE_HOME="\''${XDG_CACHE_HOME:-\$HOME/.cache}"
-    export KORRI_DEVICE_STATE_ROOT="\''${KORRI_DEVICE_STATE_ROOT:-\$XDG_DATA_HOME/korri}"
-    export KORRI_LIBRARY_ROOT="\''${KORRI_LIBRARY_ROOT:-\$XDG_DATA_HOME/korri/library}"
-    export CHROME_CONFIG_HOME="\''${CHROME_CONFIG_HOME:-\$XDG_CONFIG_HOME}"
+      export KORRI_DESKTOP_PROFILE="${desktopProfileEnv}"
+      # Inputd lives behind a local-loopback WebSocket consumed by Electrobun
+      # main. The renderer receives only brokered semantic actions over preload
+      # IPC, never this raw URL.
+      export KORRI_DESKTOP_INPUTD_URL="\''${KORRI_DESKTOP_INPUTD_URL:-ws://127.0.0.1:3002}"
+      if [ -z "\''${HOME:-}" ] && { [ -z "\''${XDG_DATA_HOME:-}" ] || [ -z "\''${XDG_CONFIG_HOME:-}" ] || [ -z "\''${XDG_CACHE_HOME:-}" ]; }; then
+        echo "korri-desktop: HOME is required when XDG home directories are not set" >&2
+        exit 126
+      fi
+      export XDG_DATA_HOME="\''${XDG_DATA_HOME:-\$HOME/.local/share}"
+      export XDG_CONFIG_HOME="\''${XDG_CONFIG_HOME:-\$HOME/.config}"
+      export XDG_CACHE_HOME="\''${XDG_CACHE_HOME:-\$HOME/.cache}"
+      export KORRI_DEVICE_STATE_ROOT="\''${KORRI_DEVICE_STATE_ROOT:-\$XDG_DATA_HOME/korri}"
+      export KORRI_LIBRARY_ROOT="\''${KORRI_LIBRARY_ROOT:-\$XDG_DATA_HOME/korri/library}"
+      export CHROME_CONFIG_HOME="\''${CHROME_CONFIG_HOME:-\$XDG_CONFIG_HOME}"
     ''}
     exec "$launcher" "\$@"
     EOF

@@ -2,7 +2,7 @@
  * Spawn Moonlight locally to connect to a Korri stream host.
  *
  * Tries a configured Moonlight command first, optionally falls back to
- * `nix run nixpkgs#moonlight-qt`, and returns a structured result. The runner is swappable (`CommandRunner`)
+ * `nix run nixpkgs#moonlight-embedded`, and returns a structured result. The runner is swappable (`CommandRunner`)
  * so tests and the desktop’s bun-side bridge can intercept the spawn.
  *
  * Originally lived in `tools/cli/`; promoted to `@app/stream/` so the
@@ -29,7 +29,7 @@ export interface MoonlightLaunchOptions {
   readonly host?: string
   readonly appName?: string
   readonly command?: string
-  readonly client?: "qt" | "embedded"
+  readonly client?: "embedded"
   readonly allowNixFallback?: boolean
   readonly startupObserveMs?: number
   readonly runner?: CommandRunner
@@ -42,7 +42,7 @@ export async function launchMoonlight(
 ): Promise<MoonlightLaunchResult> {
   const runner = options.runner ?? spawnRunner
   const command = options.command ?? moonlightCommandFromEnv() ?? "moonlight"
-  const client = options.client ?? moonlightClientFromEnv() ?? "qt"
+  const client = options.client ?? moonlightClientFromEnv() ?? "embedded"
   const args = moonlightArgs({ ...options, client })
   const allowNixFallback = options.allowNixFallback ?? command === "moonlight"
   const startupObserveMs =
@@ -59,7 +59,7 @@ export async function launchMoonlight(
 
   const fallback = await runner.run(
     "nix",
-    ["run", "nixpkgs#moonlight-qt", "--", ...args],
+    ["run", "nixpkgs#moonlight-embedded", "--", ...args],
     { startupObserveMs },
   )
   if (fallback.status === "started")
@@ -77,9 +77,9 @@ function moonlightCommandFromEnv(): string | undefined {
   return command === "" ? undefined : command
 }
 
-function moonlightClientFromEnv(): "qt" | "embedded" | undefined {
+function moonlightClientFromEnv(): "embedded" | undefined {
   const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_CLIENT?.trim()
-  return raw === "embedded" || raw === "qt" ? raw : undefined
+  return raw === "embedded" ? raw : undefined
 }
 
 function moonlightStartupObserveMsFromEnv(): number | undefined {
@@ -90,14 +90,11 @@ function moonlightStartupObserveMsFromEnv(): number | undefined {
 }
 
 function moonlightArgs(
-  options: MoonlightLaunchOptions & { readonly client: "qt" | "embedded" },
+  options: MoonlightLaunchOptions & { readonly client: "embedded" },
 ): readonly string[] {
   if (!options.host) return []
   const appName = options.appName ?? DEFAULT_APP_NAME
-  if (options.client === "embedded") {
-    return ["stream", "-app", appName, options.host]
-  }
-  return ["stream", options.host, appName]
+  return ["stream", "-app", appName, options.host]
 }
 
 const spawnRunner: CommandRunner = {

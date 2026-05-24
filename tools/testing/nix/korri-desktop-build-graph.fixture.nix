@@ -22,14 +22,13 @@ let
   # The wrap derivation interpolates pkgs2405 store paths into its
   # installPhase at evaluation time (no build required). Check whether
   # the device wrapper's installPhase mentions a given store path.
-  containsStorePath = haystack: needle:
+  containsStorePath =
+    haystack: needle:
     let
       hayLen = builtins.stringLength haystack;
       needleLen = builtins.stringLength needle;
       indices = builtins.genList (i: i) (hayLen - needleLen + 1);
-      matches =
-        builtins.filter (i: builtins.substring i needleLen haystack == needle)
-          indices;
+      matches = builtins.filter (i: builtins.substring i needleLen haystack == needle) indices;
     in
     matches != [ ];
 
@@ -37,35 +36,26 @@ let
   deviceInstall = device.installPhase or "";
   x86KioskInstall = x86Kiosk.installPhase or "";
 
-  hasPkgs2405WebkitInDevice =
-    containsStorePath deviceInstall pkgs2405.webkitgtk_4_1.outPath;
-  hasPkgs2405GtkInDevice =
-    containsStorePath deviceInstall pkgs2405.gtk3.outPath;
-  hasPkgs2405LibsoupInDevice =
-    containsStorePath deviceInstall pkgs2405.libsoup_3.outPath;
-  hasPkgs2405LibrsvgInDevice =
-    containsStorePath deviceInstall pkgs2405.librsvg.outPath;
-  hasPkgs2405AtSpiInDevice =
-    containsStorePath deviceInstall pkgs2405.at-spi2-core.outPath;
+  hasPkgs2405WebkitInDevice = containsStorePath deviceInstall pkgs2405.webkitgtk_4_1.outPath;
+  hasPkgs2405GtkInDevice = containsStorePath deviceInstall pkgs2405.gtk3.outPath;
+  hasPkgs2405LibsoupInDevice = containsStorePath deviceInstall pkgs2405.libsoup_3.outPath;
+  hasPkgs2405LibrsvgInDevice = containsStorePath deviceInstall pkgs2405.librsvg.outPath;
+  hasPkgs2405AtSpiInDevice = containsStorePath deviceInstall pkgs2405.at-spi2-core.outPath;
 
-  hasPkgs2405WebkitInHost =
-    containsStorePath hostInstall pkgs2405.webkitgtk_4_1.outPath;
-  hasPkgs2405GtkInHost =
-    containsStorePath hostInstall pkgs2405.gtk3.outPath;
+  hasPkgs2405WebkitInHost = containsStorePath hostInstall pkgs2405.webkitgtk_4_1.outPath;
+  hasPkgs2405GtkInHost = containsStorePath hostInstall pkgs2405.gtk3.outPath;
 
-  hostHasMoonlight = containsStorePath hostInstall pkgs.moonlight-qt.outPath;
-  deviceHasMoonlight =
-    containsStorePath deviceInstall pkgs.moonlight-qt.outPath;
-  x86KioskHasMoonlightEmbedded =
-    containsStorePath x86KioskInstall pkgs.moonlight-embedded.outPath;
+  hostHasMoonlightEmbedded = containsStorePath hostInstall pkgs.moonlight-embedded.outPath;
+  hostHasMoonlightQt = containsStorePath hostInstall pkgs.moonlight-qt.outPath;
+  deviceHasMoonlightEmbedded = containsStorePath deviceInstall pkgs.moonlight-embedded.outPath;
+  deviceHasMoonlightQt = containsStorePath deviceInstall pkgs.moonlight-qt.outPath;
+  x86KioskHasMoonlightEmbedded = containsStorePath x86KioskInstall pkgs.moonlight-embedded.outPath;
   x86KioskHasMoonlightQt = containsStorePath x86KioskInstall pkgs.moonlight-qt.outPath;
 
-  deviceExportsDesktopInputdUrl =
-    builtins.match ".*KORRI_DESKTOP_INPUTD_URL.*" deviceInstall != null;
+  deviceExportsDesktopInputdUrl = builtins.match ".*KORRI_DESKTOP_INPUTD_URL.*" deviceInstall != null;
   x86KioskExportsDesktopInputdUrl =
     builtins.match ".*KORRI_DESKTOP_INPUTD_URL.*" x86KioskInstall != null;
-  deviceLeaksNativeBridgeUrl =
-    builtins.match ".*KORRI_NATIVE_BRIDGE_URL.*" deviceInstall != null;
+  deviceLeaksNativeBridgeUrl = builtins.match ".*KORRI_NATIVE_BRIDGE_URL.*" deviceInstall != null;
 in
 {
   # Build-graph invariants: both variants must derive from the same
@@ -94,7 +84,8 @@ in
   hostHasPkgs2405Webkit = hasPkgs2405WebkitInHost;
   hostHasPkgs2405Gtk = hasPkgs2405GtkInHost;
 
-  inherit hostHasMoonlight deviceHasMoonlight;
+  inherit hostHasMoonlightEmbedded hostHasMoonlightQt;
+  inherit deviceHasMoonlightEmbedded deviceHasMoonlightQt;
   inherit x86KioskHasMoonlightEmbedded x86KioskHasMoonlightQt;
   inherit deviceExportsDesktopInputdUrl x86KioskExportsDesktopInputdUrl deviceLeaksNativeBridgeUrl;
 }
