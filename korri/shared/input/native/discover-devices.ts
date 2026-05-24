@@ -6,12 +6,20 @@ export type NativeInputDeviceClass =
   | "system"
   | "unknown"
 
+export interface NativeInputAxisInfo {
+  readonly code: number
+  readonly minimum: number
+  readonly maximum: number
+  readonly flat?: number
+}
+
 export interface DiscoveredDevice {
   readonly deviceId: string
   readonly class: NativeInputDeviceClass
   readonly name: string
   readonly eventNode: string
   readonly capabilities: readonly string[]
+  readonly axes?: readonly NativeInputAxisInfo[]
 }
 
 type DeviceBlock = {

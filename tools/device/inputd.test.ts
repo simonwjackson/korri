@@ -4,6 +4,7 @@ import { join } from "node:path"
 import {
   ABS_HAT0X,
   ABS_HAT0Y,
+  ABS_X,
   BTN_A,
   BTN_BACK,
   BTN_SELECT,
@@ -178,6 +179,33 @@ describe("korri inputd", () => {
       type: 1,
       code: BTN_TL,
       value: 1,
+    })
+
+    client.close()
+  })
+
+  it("includes gamepad axis metadata in device-added frames", async () => {
+    const proc = await loadProcFixture("bus-input-devices-device.txt")
+    const handle = await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: () => createControllableEventSource().open(),
+      readAxisInfo: async device =>
+        device.eventNode === "event9"
+          ? [{ code: ABS_X, minimum: -1_408, maximum: 1_408, flat: 0 }]
+          : [],
+    })
+
+    const client = connectClient(handle.port)
+    await client.open()
+    client.ws.send(JSON.stringify({ classes: ["gamepad"] }))
+
+    const deviceAdded = decodeNativeInputEvent(await client.nextMessage())
+    expect(deviceAdded).toMatchObject({
+      kind: "device-added",
+      device: {
+        deviceId: "inputplumber-virtual-xbox360",
+        axes: [{ code: ABS_X, minimum: -1_408, maximum: 1_408, flat: 0 }],
+      },
     })
 
     client.close()

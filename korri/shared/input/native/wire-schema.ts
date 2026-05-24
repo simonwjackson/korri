@@ -12,6 +12,15 @@ export type NativeInputDeviceClass = Schema.Schema.Type<
   typeof NativeInputDeviceClass
 >
 
+export class NativeInputAxisInfo extends Schema.Class<NativeInputAxisInfo>(
+  "NativeInputAxisInfo",
+)({
+  code: Schema.Number,
+  minimum: Schema.Number,
+  maximum: Schema.Number,
+  flat: Schema.optional(Schema.Number),
+}) {}
+
 export class NativeInputDeviceInfo extends Schema.Class<NativeInputDeviceInfo>(
   "NativeInputDeviceInfo",
 )({
@@ -19,6 +28,7 @@ export class NativeInputDeviceInfo extends Schema.Class<NativeInputDeviceInfo>(
   class: NativeInputDeviceClass,
   name: Schema.String,
   capabilities: Schema.Array(Schema.String),
+  axes: Schema.optional(Schema.Array(NativeInputAxisInfo)),
 }) {}
 
 export class NativeInputInput extends Schema.Class<NativeInputInput>(

@@ -237,6 +237,9 @@ class DesktopInputBrokerCore {
       if (event.kind === "action" && event.action === "system") {
         this.forwardAction({ type: "system", source: "native" })
       }
+      if (event.kind === "device-added" && event.device.class === "gamepad") {
+        this.mapper.configureDevice(event.device)
+      }
       if (event.kind === "device-removed") {
         this.mapper.reset()
       }

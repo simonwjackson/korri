@@ -19,7 +19,7 @@ import {
 } from "./button-codes"
 
 const DEFAULT_AXIS_THRESHOLD = 16_000
-const DEFAULT_LOW_RANGE_AXIS_THRESHOLD = 800
+const DEFAULT_NORMALIZED_AXIS_THRESHOLD = 0.6
 const DEFAULT_REPEAT_DELAY_MS = 400
 const DEFAULT_REPEAT_INTERVAL_MS = 100
 const DEFAULT_STALE_RELEASE_MS = 250
@@ -39,9 +39,21 @@ export interface NativeGamepadInputEvent {
   readonly timestamp: number
 }
 
+export interface NativeGamepadAxisInfo {
+  readonly code: number
+  readonly minimum: number
+  readonly maximum: number
+  readonly flat?: number
+}
+
+export interface NativeGamepadDeviceInfo {
+  readonly deviceId: string
+  readonly axes?: readonly NativeGamepadAxisInfo[]
+}
+
 export interface NativeGamepadMapperOptions {
   readonly axisThreshold?: number
-  readonly lowRangeAxisThreshold?: number
+  readonly normalizedAxisThreshold?: number
   readonly repeatDelayMs?: number
   readonly repeatIntervalMs?: number
   /** Safety valve: stop a held direction if no refresh/release arrives. */
@@ -49,6 +61,7 @@ export interface NativeGamepadMapperOptions {
 }
 
 export interface NativeGamepadMapper {
+  configureDevice(device: NativeGamepadDeviceInfo): void
   handle(event: NativeGamepadInputEvent, emit: InputListener): void
   reset(): void
 }
@@ -57,8 +70,8 @@ export function createNativeGamepadMapper(
   options: NativeGamepadMapperOptions = {},
 ): NativeGamepadMapper {
   const axisThreshold = options.axisThreshold ?? DEFAULT_AXIS_THRESHOLD
-  const lowRangeAxisThreshold =
-    options.lowRangeAxisThreshold ?? DEFAULT_LOW_RANGE_AXIS_THRESHOLD
+  const normalizedAxisThreshold =
+    options.normalizedAxisThreshold ?? DEFAULT_NORMALIZED_AXIS_THRESHOLD
   const repeatDelayMs = options.repeatDelayMs ?? DEFAULT_REPEAT_DELAY_MS
   const repeatIntervalMs =
     options.repeatIntervalMs ?? DEFAULT_REPEAT_INTERVAL_MS
@@ -67,6 +80,7 @@ export function createNativeGamepadMapper(
   const holds = new Map<string, HoldState>()
   const pressedButtons = new Set<string>()
   const axes = new Map<string, { x: number; y: number }>()
+  const axisInfo = new Map<string, ReadonlyMap<number, NativeGamepadAxisInfo>>()
 
   const fireDirection = (direction: Direction, emit: InputListener) => {
     emit({ type: "direction", direction, source: "native" })
@@ -121,9 +135,20 @@ export function createNativeGamepadMapper(
     for (const key of [...holds.keys()]) stopHold(key)
     pressedButtons.clear()
     axes.clear()
+    axisInfo.clear()
   }
 
   return {
+    configureDevice(device) {
+      if (!device.axes || device.axes.length === 0) {
+        axisInfo.delete(device.deviceId)
+        return
+      }
+      axisInfo.set(
+        device.deviceId,
+        new Map(device.axes.map(axis => [axis.code, axis])),
+      )
+    },
     handle(event, emit) {
       if (event.type === EV_KEY) {
         handleGamepadKey(event, emit, {
@@ -139,8 +164,9 @@ export function createNativeGamepadMapper(
           startHold,
           stopHold,
           axes,
+          axisInfo,
           axisThreshold,
-          lowRangeAxisThreshold,
+          normalizedAxisThreshold,
         })
       }
     },
@@ -196,8 +222,9 @@ interface GamepadAbsState {
   ) => void
   readonly stopHold: (key: string) => void
   readonly axes: Map<string, { x: number; y: number }>
+  readonly axisInfo: Map<string, ReadonlyMap<number, NativeGamepadAxisInfo>>
   readonly axisThreshold: number
-  readonly lowRangeAxisThreshold: number
+  readonly normalizedAxisThreshold: number
 }
 
 function handleGamepadAbs(
@@ -213,11 +240,8 @@ function handleGamepadAbs(
         : { ...current, y: event.value }
     state.axes.set(event.deviceId, next)
 
-    const direction = stickToDirection(
-      next.x,
-      next.y,
-      axisThresholdForDevice(event.deviceId, state),
-    )
+    const stick = stickValuesForDevice(event.deviceId, next, state)
+    const direction = stickToDirection(stick.x, stick.y, stick.threshold)
     for (const candidate of ["up", "down", "left", "right"] as const) {
       const holdKey = `${event.deviceId}:stick:${candidate}`
       if (direction === candidate) {
@@ -293,14 +317,43 @@ function dpadDirection(code: number): Direction | null {
   return null
 }
 
-function axisThresholdForDevice(
+function stickValuesForDevice(
   deviceId: string,
-  state: Pick<GamepadAbsState, "axisThreshold" | "lowRangeAxisThreshold">,
-) {
-  if (deviceId.startsWith("rsinput-gamepad/")) {
-    return Math.min(state.axisThreshold, state.lowRangeAxisThreshold)
+  values: { readonly x: number; readonly y: number },
+  state: Pick<
+    GamepadAbsState,
+    "axisInfo" | "axisThreshold" | "normalizedAxisThreshold"
+  >,
+): { readonly x: number; readonly y: number; readonly threshold: number } {
+  const deviceAxisInfo = state.axisInfo.get(deviceId)
+  const xAxisInfo = deviceAxisInfo?.get(ABS_X)
+  const yAxisInfo = deviceAxisInfo?.get(ABS_Y)
+
+  if (!xAxisInfo || !yAxisInfo) {
+    return { ...values, threshold: state.axisThreshold }
   }
-  return state.axisThreshold
+
+  return {
+    x: normalizedAxisValue(values.x, xAxisInfo),
+    y: normalizedAxisValue(values.y, yAxisInfo),
+    threshold: state.normalizedAxisThreshold,
+  }
+}
+
+function normalizedAxisValue(
+  value: number,
+  axisInfo: NativeGamepadAxisInfo | undefined,
+): number {
+  if (!axisInfo) return value
+
+  const center = (axisInfo.minimum + axisInfo.maximum) / 2
+  const offset = value - center
+  if (axisInfo.flat !== undefined && Math.abs(offset) <= axisInfo.flat) return 0
+
+  const extent = Math.max(axisInfo.maximum - center, center - axisInfo.minimum)
+  if (extent <= 0) return 0
+
+  return Math.max(-1, Math.min(1, offset / extent))
 }
 
 function stickToDirection(

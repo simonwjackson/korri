@@ -170,6 +170,36 @@ describe("createNativeInputAdapter", () => {
     ])
   })
 
+  it("maps low-range gamepad axes using device metadata from inputd", async () => {
+    const server = createInputServer()
+    const emitted = startAdapter(server)
+    await waitForSubscription(server)
+
+    server.send({
+      kind: "device-added",
+      device: {
+        deviceId: "rocknix-pad",
+        class: "gamepad",
+        name: "AYN Odin2 Gamepad",
+        capabilities: ["EV_ABS", "BTN_GAMEPAD"],
+        axes: [
+          { code: 0, minimum: -1_408, maximum: 1_408, flat: 0 },
+          { code: 1, minimum: -1_408, maximum: 1_408, flat: 0 },
+        ],
+      },
+    })
+    server.send(
+      inputEvent({ deviceId: "rocknix-pad", type: 3, code: 0, value: 1_000 }),
+    )
+
+    await waitFor(() => emitted.length > 0, "metadata axis direction")
+    expect(emitted[0]).toEqual({
+      type: "direction",
+      direction: "right",
+      source: "native",
+    })
+  })
+
   it("maps analog axes through dominant-axis selection", async () => {
     const server = createInputServer()
     const emitted = startAdapter(server, { axisThreshold: 16_000 })

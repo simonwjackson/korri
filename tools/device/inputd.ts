@@ -1,4 +1,5 @@
-import { appendFileSync, existsSync } from "node:fs"
+import { dlopen, FFIType, ptr } from "bun:ffi"
+import { appendFileSync, closeSync, existsSync, openSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import {
   ABS_HAT0X,
@@ -26,6 +27,7 @@ import {
 } from "@shared/input/native/button-codes"
 import {
   type DiscoveredDevice,
+  type NativeInputAxisInfo,
   type NativeInputDeviceClass,
   parseProcBusInputDevices,
 } from "@shared/input/native/discover-devices"
@@ -68,6 +70,9 @@ export interface KorriInputdOptions {
   readonly hostname?: string
   readonly pollIntervalMs?: number
   readonly readProcDevices?: () => Promise<string>
+  readonly readAxisInfo?: (
+    device: DiscoveredDevice,
+  ) => Promise<readonly NativeInputAxisInfo[]>
   readonly openEventSource?: (
     device: DiscoveredDevice,
   ) => KorriInputdEventSource
@@ -98,6 +103,16 @@ const DEFAULT_PORT = 3002
 const DEFAULT_HOSTNAME = "0.0.0.0"
 const DEFAULT_POLL_INTERVAL_MS = 1_000
 const DEFAULT_GAMEPAD_STREAM_RECYCLE_MS = 30_000
+const EVDEV_ABS_MAX = 0x3f
+const INPUT_ABSINFO_BYTES = 24
+const EVIOCGABS_BASE = 0x80184540
+
+const libc = dlopen("libc.so.6", {
+  ioctl: {
+    args: [FFIType.i32, FFIType.u64, FFIType.ptr],
+    returns: FFIType.i32,
+  },
+})
 
 const DEFAULT_SHORTCUTS: readonly SystemShortcutDefinition<KorriInputdActionId>[] =
   [
@@ -135,6 +150,9 @@ export async function startKorriInputd(
   const logger = options.logger ?? defaultLogger
   const readProcDevices = options.readProcDevices ?? readRealProcDevices
   const openEventSource = options.openEventSource ?? openRealEventSource
+  const readAxisInfo =
+    options.readAxisInfo ??
+    (options.openEventSource ? readNoAxisInfo : readRealAxisInfo)
   const nowMs = options.nowMs ?? Date.now
   const hostname =
     options.hostname ??
@@ -156,11 +174,37 @@ export async function startKorriInputd(
   let stopped = false
 
   async function refreshDevices() {
+    const discoveredDevices = parseProcBusInputDevices(
+      await readProcDevices(),
+    ).filter(device => eventNodeExists(device.eventNode))
     const nextDevices = new Map(
-      parseProcBusInputDevices(await readProcDevices())
-        .filter(device => eventNodeExists(device.eventNode))
-        .map(device => [device.deviceId, device]),
+      (
+        await Promise.all(
+          discoveredDevices.map(device => discoverAxisInfo(device)),
+        )
+      ).map(device => [device.deviceId, device]),
     )
+
+    async function discoverAxisInfo(
+      device: DiscoveredDevice,
+    ): Promise<DiscoveredDevice> {
+      if (!device.capabilities.includes("EV_ABS")) return device
+
+      try {
+        const axes = await readAxisInfo(device)
+        return axes.length > 0 ? { ...device, axes } : device
+      } catch (error) {
+        logger.warn(
+          {
+            err: error,
+            deviceId: device.deviceId,
+            eventNode: device.eventNode,
+          },
+          "inputd: failed to read axis metadata",
+        )
+        return device
+      }
+    }
 
     for (const [deviceId, currentDevice] of devices) {
       if (nextDevices.has(deviceId)) continue
@@ -575,6 +619,44 @@ async function readRealProcDevices(): Promise<string> {
   return readFile("/proc/bus/input/devices", "utf8")
 }
 
+async function readNoAxisInfo(): Promise<readonly NativeInputAxisInfo[]> {
+  return []
+}
+
+async function readRealAxisInfo(
+  device: DiscoveredDevice,
+): Promise<readonly NativeInputAxisInfo[]> {
+  const path = `/dev/input/${device.eventNode}`
+  const fd = openSync(path, "r")
+
+  try {
+    const axes: NativeInputAxisInfo[] = []
+    for (let code = 0; code <= EVDEV_ABS_MAX; code++) {
+      const axis = readEvdevAxisInfo(fd, code)
+      if (axis) axes.push(axis)
+    }
+    return axes
+  } finally {
+    closeSync(fd)
+  }
+}
+
+function readEvdevAxisInfo(
+  fd: number,
+  code: number,
+): NativeInputAxisInfo | null {
+  const buffer = Buffer.alloc(INPUT_ABSINFO_BYTES)
+  const status = libc.symbols.ioctl(fd, EVIOCGABS_BASE + code, ptr(buffer))
+  if (status !== 0) return null
+
+  return {
+    code,
+    minimum: buffer.readInt32LE(4),
+    maximum: buffer.readInt32LE(8),
+    flat: buffer.readInt32LE(16),
+  }
+}
+
 function openRealEventSource(device: DiscoveredDevice): KorriInputdEventSource {
   const path = `/dev/input/${device.eventNode}`
   const proc = Bun.spawn({
@@ -623,6 +705,23 @@ function sameDevice(a: DiscoveredDevice, b: DiscoveredDevice): boolean {
     a.capabilities.length === b.capabilities.length &&
     a.capabilities.every(
       (capability, index) => capability === b.capabilities[index],
+    ) &&
+    sameAxes(a.axes ?? [], b.axes ?? [])
+  )
+}
+
+function sameAxes(
+  a: readonly NativeInputAxisInfo[],
+  b: readonly NativeInputAxisInfo[],
+): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (axis, index) =>
+        axis.code === b[index]?.code &&
+        axis.minimum === b[index]?.minimum &&
+        axis.maximum === b[index]?.maximum &&
+        axis.flat === b[index]?.flat,
     )
   )
 }
@@ -633,6 +732,7 @@ function toWireDevice(device: DiscoveredDevice) {
     class: device.class,
     name: device.name,
     capabilities: [...device.capabilities],
+    ...(device.axes ? { axes: [...device.axes] } : {}),
   }
 }
 

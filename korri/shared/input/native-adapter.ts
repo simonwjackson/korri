@@ -1,14 +1,14 @@
 import { createLogger } from "@shared/logger"
 import {
+  createNativeGamepadMapper,
+  type NativeGamepadMapperOptions,
+} from "./native/gamepad-mapper"
+import {
   decodeNativeInputEvent,
   decodeNativeInputSubscription,
   encodeNativeInputSubscription,
   type NativeInputDeviceClass,
 } from "./native/wire-schema"
-import {
-  createNativeGamepadMapper,
-  type NativeGamepadMapperOptions,
-} from "./native/gamepad-mapper"
 import type { InputAdapter, InputListener } from "./types"
 
 const logger = createLogger("native-input-adapter")
@@ -81,6 +81,12 @@ export function createNativeInputAdapter(
             if (decoded.kind === "action") {
               if (decoded.action === "system") {
                 diagnosticEmit({ type: "system", source: "native" })
+              }
+              return
+            }
+            if (decoded.kind === "device-added") {
+              if (decoded.device.class === "gamepad") {
+                mapper.configureDevice(decoded.device)
               }
               return
             }

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { readFile } from "node:fs/promises"
 import { decodeDesktopInputBridgePayload } from "@shared/input/desktop-bridge-wire"
-import { ABS_HAT0X } from "@shared/input/native/button-codes"
+import { ABS_HAT0X, ABS_X, ABS_Y } from "@shared/input/native/button-codes"
 import type { ServerWebSocket } from "bun"
 import { Effect, Fiber } from "effect"
 import { createDesktopInputBroker } from "./input-broker"
@@ -55,6 +55,46 @@ describe("createDesktopInputBroker", () => {
         emittedActions: 1,
         droppedActions: 0,
       },
+    })
+  })
+
+  it("maps low-range gamepad axes using device metadata from inputd", async () => {
+    const server = createInputServer()
+    const window = createWindowDouble()
+    await runBrokerUntil(server, {
+      getActiveWindow: () => window,
+      getWindows: () => [window],
+    })
+
+    server.send({
+      kind: "device-added",
+      device: {
+        deviceId: "rocknix-pad",
+        class: "gamepad",
+        name: "AYN Odin2 Gamepad",
+        capabilities: ["EV_ABS", "BTN_GAMEPAD"],
+        axes: [
+          { code: ABS_X, minimum: -1_408, maximum: 1_408, flat: 0 },
+          { code: ABS_Y, minimum: -1_408, maximum: 1_408, flat: 0 },
+        ],
+      },
+    })
+    server.send({
+      kind: "input",
+      deviceId: "rocknix-pad",
+      class: "gamepad",
+      type: 3,
+      code: ABS_X,
+      value: 1_000,
+      timestamp: Date.now(),
+    })
+
+    await waitFor(() => actionPayloads(window).length === 1, "axis action")
+    expect(
+      decodeDesktopInputBridgePayload(actionPayloads(window)[0]),
+    ).toMatchObject({
+      kind: "korri.input.action",
+      action: { type: "direction", direction: "right", source: "native" },
     })
   })
 

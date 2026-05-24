@@ -108,11 +108,18 @@ describe("createNativeGamepadMapper", () => {
     })
   })
 
-  it("maps RockNix low-range left-stick axes as d-pad directions", () => {
-    const { emitted, send } = createMapper()
+  it("maps low-range left-stick axes from device axis metadata", () => {
+    const { emitted, mapper, send } = createMapper()
 
+    mapper.configureDevice({
+      deviceId: "rocknix-pad",
+      axes: [
+        { code: ABS_X, minimum: -1_408, maximum: 1_408, flat: 0 },
+        { code: ABS_Y, minimum: -1_408, maximum: 1_408, flat: 0 },
+      ],
+    })
     send({
-      deviceId: "rsinput-gamepad/input0",
+      deviceId: "rocknix-pad",
       type: EV_ABS,
       code: ABS_X,
       value: 1_000,
@@ -123,14 +130,14 @@ describe("createNativeGamepadMapper", () => {
     ])
   })
 
-  it("ignores low-range left-stick drift below the RockNix threshold", () => {
+  it("does not infer low-range stick scaling from the device id", () => {
     const { emitted, send } = createMapper()
 
     send({
       deviceId: "rsinput-gamepad/input0",
       type: EV_ABS,
       code: ABS_X,
-      value: 600,
+      value: 1_000,
     })
 
     expect(emitted).toEqual([])
@@ -144,17 +151,55 @@ describe("createNativeGamepadMapper", () => {
     expect(emitted).toEqual([])
   })
 
-  it("stops low-range left-stick holds when the stick returns to neutral", async () => {
-    const { emitted, send } = createMapper()
+  it("keeps the high threshold for devices without axis metadata", () => {
+    const { emitted, mapper, send } = createMapper()
 
+    mapper.configureDevice({ deviceId: "pad-without-axis-metadata" })
     send({
-      deviceId: "rsinput-gamepad/input0",
+      deviceId: "pad-without-axis-metadata",
+      type: EV_ABS,
+      code: ABS_X,
+      value: 1_000,
+    })
+
+    expect(emitted).toEqual([])
+  })
+
+  it("keeps the high threshold until both stick axes have metadata", () => {
+    const { emitted, mapper, send } = createMapper()
+
+    mapper.configureDevice({
+      deviceId: "pad-with-partial-axis-metadata",
+      axes: [{ code: ABS_X, minimum: -1_408, maximum: 1_408, flat: 0 }],
+    })
+    send({
+      deviceId: "pad-with-partial-axis-metadata",
+      type: EV_ABS,
+      code: ABS_X,
+      value: 1_000,
+    })
+
+    expect(emitted).toEqual([])
+  })
+
+  it("stops metadata-scaled low-range left-stick holds when the stick returns to neutral", async () => {
+    const { emitted, mapper, send } = createMapper()
+
+    mapper.configureDevice({
+      deviceId: "rocknix-pad",
+      axes: [
+        { code: ABS_X, minimum: -1_408, maximum: 1_408, flat: 0 },
+        { code: ABS_Y, minimum: -1_408, maximum: 1_408, flat: 0 },
+      ],
+    })
+    send({
+      deviceId: "rocknix-pad",
       type: EV_ABS,
       code: ABS_X,
       value: 1_000,
     })
     send({
-      deviceId: "rsinput-gamepad/input0",
+      deviceId: "rocknix-pad",
       type: EV_ABS,
       code: ABS_X,
       value: 0,
