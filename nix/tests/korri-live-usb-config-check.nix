@@ -62,6 +62,7 @@ let
       persistence.environment.KORRI_LIVE_USB_PERSISTENCE_LABEL
       == cfg.services.korri.liveUsbPersistence.label
     ))
+    (check "debug SSH defaults to off without injected keys" (!cfg.services.openssh.enable))
   ];
   failures = builtins.filter (candidate: !candidate.assertion) checks;
 in

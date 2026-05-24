@@ -85,6 +85,14 @@ in
       default = ".korri-live-usb-ephemeral";
       description = "Marker written when the image falls back to non-persistent tmpfs state.";
     };
+
+    debugSsh = {
+      authorizedKeys = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ];
+        description = "SSH public keys allowed to log in as the live USB kiosk user for debugging.";
+      };
+    };
   };
 
   config = {
@@ -133,6 +141,29 @@ in
       wants = loginDependencies;
       requires = loginDependencies;
       after = loginDependencies ++ [ "systemd-user-sessions.service" ];
+    };
+
+    services.openssh = lib.mkIf (cfg.enable && cfg.debugSsh.authorizedKeys != [ ]) {
+      enable = true;
+      settings = {
+        PasswordAuthentication = false;
+        KbdInteractiveAuthentication = false;
+        PermitRootLogin = "no";
+      };
+    };
+
+    services.avahi = lib.mkIf (cfg.enable && cfg.debugSsh.authorizedKeys != [ ]) {
+      enable = true;
+      nssmdns4 = true;
+      openFirewall = true;
+    };
+
+    users.users.${kioskCfg.user} = lib.mkIf (cfg.enable && kioskCfg.createUser) {
+      openssh.authorizedKeys.keys = cfg.debugSsh.authorizedKeys;
+      extraGroups = lib.mkAfter [
+        "adm"
+        "systemd-journal"
+      ];
     };
 
     systemd.services."korri-live-usb-persistence" = lib.mkIf cfg.enable {
