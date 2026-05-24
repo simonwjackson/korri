@@ -98,6 +98,58 @@ describe("createDesktopInputBroker", () => {
     })
   })
 
+  it("clears removed gamepad metadata without resetting other gamepads", async () => {
+    const server = createInputServer()
+    const window = createWindowDouble()
+    await runBrokerUntil(server, {
+      getActiveWindow: () => window,
+      getWindows: () => [window],
+    })
+
+    for (const deviceId of ["pad-a", "pad-b"]) {
+      server.send({
+        kind: "device-added",
+        device: {
+          deviceId,
+          class: "gamepad",
+          name: `Gamepad ${deviceId}`,
+          capabilities: ["EV_ABS", "BTN_GAMEPAD"],
+          axes: [
+            { code: ABS_X, minimum: -1_408, maximum: 1_408, flat: 0 },
+            { code: ABS_Y, minimum: -1_408, maximum: 1_408, flat: 0 },
+          ],
+        },
+      })
+    }
+    server.send({ kind: "device-removed", deviceId: "pad-a" })
+    server.send({
+      kind: "input",
+      deviceId: "pad-a",
+      class: "gamepad",
+      type: 3,
+      code: ABS_X,
+      value: 1_000,
+      timestamp: Date.now(),
+    })
+    server.send({
+      kind: "input",
+      deviceId: "pad-b",
+      class: "gamepad",
+      type: 3,
+      code: ABS_X,
+      value: 1_000,
+      timestamp: Date.now(),
+    })
+
+    await waitFor(() => actionPayloads(window).length === 1, "pad-b action")
+    expect(
+      decodeDesktopInputBridgePayload(actionPayloads(window)[0]),
+    ).toMatchObject({
+      kind: "korri.input.action",
+      action: { type: "direction", direction: "right", source: "native" },
+    })
+  })
+
   it("uses the sole window when Electrobun has not reported initial focus", async () => {
     const server = createInputServer()
     const window = createWindowDouble()

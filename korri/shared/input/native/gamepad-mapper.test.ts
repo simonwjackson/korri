@@ -182,6 +182,83 @@ describe("createNativeGamepadMapper", () => {
     expect(emitted).toEqual([])
   })
 
+  it("falls back to the high threshold when axis metadata has no extent", () => {
+    const { emitted, mapper, send } = createMapper()
+
+    mapper.configureDevice({
+      deviceId: "pad-with-invalid-axis-metadata",
+      axes: [
+        { code: ABS_X, minimum: 1_408, maximum: 1_408, flat: 0 },
+        { code: ABS_Y, minimum: -1_408, maximum: 1_408, flat: 0 },
+      ],
+    })
+    send({
+      deviceId: "pad-with-invalid-axis-metadata",
+      type: EV_ABS,
+      code: ABS_X,
+      value: 1_000,
+    })
+
+    expect(emitted).toEqual([])
+  })
+
+  it("treats a full-axis flat range as neutral", () => {
+    const { emitted, mapper, send } = createMapper()
+
+    mapper.configureDevice({
+      deviceId: "pad-with-full-flat-axis",
+      axes: [
+        { code: ABS_X, minimum: -1_408, maximum: 1_408, flat: 1_408 },
+        { code: ABS_Y, minimum: -1_408, maximum: 1_408, flat: 1_408 },
+      ],
+    })
+    send({
+      deviceId: "pad-with-full-flat-axis",
+      type: EV_ABS,
+      code: ABS_X,
+      value: 1_000,
+    })
+
+    expect(emitted).toEqual([])
+  })
+
+  it("clears only the removed device state", async () => {
+    const { emitted, mapper, send } = createMapper({
+      repeatDelayMs: 1_000,
+      repeatIntervalMs: 10,
+    })
+
+    mapper.configureDevice({
+      deviceId: "pad-a",
+      axes: [
+        { code: ABS_X, minimum: -1_408, maximum: 1_408, flat: 0 },
+        { code: ABS_Y, minimum: -1_408, maximum: 1_408, flat: 0 },
+      ],
+    })
+    mapper.configureDevice({
+      deviceId: "pad-b",
+      axes: [
+        { code: ABS_X, minimum: -1_408, maximum: 1_408, flat: 0 },
+        { code: ABS_Y, minimum: -1_408, maximum: 1_408, flat: 0 },
+      ],
+    })
+
+    send({ deviceId: "pad-a", type: EV_ABS, code: ABS_X, value: 1_000 })
+    send({ deviceId: "pad-a", code: BTN_A, value: 1 })
+    mapper.clearDevice("pad-a")
+    send({ deviceId: "pad-a", code: BTN_A, value: 1 })
+    send({ deviceId: "pad-a", type: EV_ABS, code: ABS_X, value: 1_000 })
+    send({ deviceId: "pad-b", type: EV_ABS, code: ABS_X, value: 1_000 })
+    await Bun.sleep(50)
+
+    expect(emitted).toEqual([
+      { type: "direction", direction: "right", source: "native" },
+      { type: "confirm", source: "native" },
+      { type: "confirm", source: "native" },
+      { type: "direction", direction: "right", source: "native" },
+    ])
+  })
+
   it("stops metadata-scaled low-range left-stick holds when the stick returns to neutral", async () => {
     const { emitted, mapper, send } = createMapper()
 

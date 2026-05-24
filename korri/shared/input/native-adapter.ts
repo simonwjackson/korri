@@ -90,6 +90,10 @@ export function createNativeInputAdapter(
               }
               return
             }
+            if (decoded.kind === "device-removed") {
+              mapper.clearDevice(decoded.deviceId)
+              return
+            }
             if (decoded.kind !== "input") return
             if (decoded.class !== "gamepad") return
             mapper.handle(decoded, diagnosticEmit)

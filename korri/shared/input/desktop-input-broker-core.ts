@@ -241,7 +241,7 @@ class DesktopInputBrokerCore {
         this.mapper.configureDevice(event.device)
       }
       if (event.kind === "device-removed") {
-        this.mapper.reset()
+        this.mapper.clearDevice(event.deviceId)
       }
     } catch (error) {
       this.recordError(error, "desktop input broker ignored malformed event")

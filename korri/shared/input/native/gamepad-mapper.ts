@@ -62,6 +62,7 @@ export interface NativeGamepadMapperOptions {
 
 export interface NativeGamepadMapper {
   configureDevice(device: NativeGamepadDeviceInfo): void
+  clearDevice(deviceId: string): void
   handle(event: NativeGamepadInputEvent, emit: InputListener): void
   reset(): void
 }
@@ -131,6 +132,18 @@ export function createNativeGamepadMapper(
     holds.delete(key)
   }
 
+  const clearDevice = (deviceId: string) => {
+    const prefix = `${deviceId}:`
+    for (const key of [...holds.keys()]) {
+      if (key.startsWith(prefix)) stopHold(key)
+    }
+    for (const key of [...pressedButtons]) {
+      if (key.startsWith(prefix)) pressedButtons.delete(key)
+    }
+    axes.delete(deviceId)
+    axisInfo.delete(deviceId)
+  }
+
   const reset = () => {
     for (const key of [...holds.keys()]) stopHold(key)
     pressedButtons.clear()
@@ -140,15 +153,14 @@ export function createNativeGamepadMapper(
 
   return {
     configureDevice(device) {
-      if (!device.axes || device.axes.length === 0) {
-        axisInfo.delete(device.deviceId)
-        return
-      }
+      clearDevice(device.deviceId)
+      if (!device.axes || device.axes.length === 0) return
       axisInfo.set(
         device.deviceId,
         new Map(device.axes.map(axis => [axis.code, axis])),
       )
     },
+    clearDevice,
     handle(event, emit) {
       if (event.type === EV_KEY) {
         handleGamepadKey(event, emit, {
@@ -329,7 +341,7 @@ function stickValuesForDevice(
   const xAxisInfo = deviceAxisInfo?.get(ABS_X)
   const yAxisInfo = deviceAxisInfo?.get(ABS_Y)
 
-  if (!xAxisInfo || !yAxisInfo) {
+  if (!isUsableAxisInfo(xAxisInfo) || !isUsableAxisInfo(yAxisInfo)) {
     return { ...values, threshold: state.axisThreshold }
   }
 
@@ -340,12 +352,16 @@ function stickValuesForDevice(
   }
 }
 
+function isUsableAxisInfo(
+  axisInfo: NativeGamepadAxisInfo | undefined,
+): axisInfo is NativeGamepadAxisInfo {
+  return axisInfo !== undefined && axisInfo.maximum > axisInfo.minimum
+}
+
 function normalizedAxisValue(
   value: number,
-  axisInfo: NativeGamepadAxisInfo | undefined,
+  axisInfo: NativeGamepadAxisInfo,
 ): number {
-  if (!axisInfo) return value
-
   const center = (axisInfo.minimum + axisInfo.maximum) / 2
   const offset = value - center
   if (axisInfo.flat !== undefined && Math.abs(offset) <= axisInfo.flat) return 0

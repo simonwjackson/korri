@@ -211,6 +211,110 @@ describe("korri inputd", () => {
     client.close()
   })
 
+  it("keeps devices discoverable when axis metadata cannot be read", async () => {
+    const proc = await loadProcFixture("bus-input-devices-device.txt")
+    const warnings: string[] = []
+    const handle = await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: () => createControllableEventSource().open(),
+      readAxisInfo: async device => {
+        if (device.eventNode === "event9") throw new Error("ioctl failed")
+        return []
+      },
+      logger: {
+        ...silentLogger,
+        warn: (_input, message) => warnings.push(message ?? ""),
+      },
+    })
+
+    const client = connectClient(handle.port)
+    await client.open()
+    client.ws.send(JSON.stringify({ classes: ["gamepad"] }))
+
+    const deviceAdded = decodeNativeInputEvent(await client.nextMessage())
+    expect(deviceAdded).toMatchObject({
+      kind: "device-added",
+      device: { deviceId: "inputplumber-virtual-xbox360" },
+    })
+    if (deviceAdded.kind === "device-added") {
+      expect(deviceAdded.device.axes).toBeUndefined()
+    }
+    expect(warnings).toContain("inputd: failed to read axis metadata")
+
+    client.close()
+  })
+
+  it("does not read axis metadata for devices without EV_ABS", async () => {
+    const proc = `
+I: Bus=0019 Vendor=0000 Product=0000 Version=0000
+N: Name="Keyboard Without Absolute Axes"
+P: Phys=keyboard/no-abs
+S: Sysfs=/devices/virtual/input/input11
+U: Uniq=
+H: Handlers=event11
+B: KEY=40000000
+`
+    const axisReads: string[] = []
+    await startInputd({
+      readProcDevices: async () => proc,
+      openEventSource: () => createControllableEventSource().open(),
+      readAxisInfo: async device => {
+        axisReads.push(device.eventNode)
+        return []
+      },
+    })
+
+    expect(axisReads).toEqual([])
+  })
+
+  it("sends device-added before input frames for newly discovered devices", async () => {
+    const emptyProc = ""
+    const proc = await loadProcFixture("bus-input-devices-device.txt")
+    let currentProc = emptyProc
+    const source = createControllableEventSource()
+    const handle = await startInputd({
+      readProcDevices: async () => currentProc,
+      openEventSource: device => {
+        if (device.eventNode !== "event9") {
+          return createControllableEventSource().open()
+        }
+        const opened = source.open()
+        setTimeout(() => source.push(evdevKey(BTN_A, 1)), 0)
+        return opened
+      },
+      readAxisInfo: async device =>
+        device.eventNode === "event9"
+          ? [{ code: ABS_X, minimum: -1_408, maximum: 1_408, flat: 0 }]
+          : [],
+    })
+
+    const client = connectClient(handle.port)
+    await client.open()
+    client.ws.send(JSON.stringify({ classes: ["gamepad"] }))
+    await Bun.sleep(10)
+    currentProc = proc
+    await handle.refreshDevices()
+
+    await waitFor(
+      () =>
+        client.messages
+          .map(message => decodeNativeInputEvent(message))
+          .some(message => message.kind === "input"),
+      "device then input",
+    )
+    const decoded = client.messages.map(message => decodeNativeInputEvent(message))
+    const firstInputIndex = decoded.findIndex(message => message.kind === "input")
+    const targetDeviceAddedIndex = decoded.findIndex(
+      message =>
+        message.kind === "device-added" &&
+        message.device.deviceId === "inputplumber-virtual-xbox360",
+    )
+    expect(targetDeviceAddedIndex).toBeGreaterThanOrEqual(0)
+    expect(firstInputIndex).toBeGreaterThan(targetDeviceAddedIndex)
+
+    client.close()
+  })
+
   it("dispatches L1+R1+Start+Select kill once without streaming UI-mapped chord inputs", async () => {
     const proc = await loadProcFixture("bus-input-devices-device.txt")
     const systemSource = createControllableEventSource()

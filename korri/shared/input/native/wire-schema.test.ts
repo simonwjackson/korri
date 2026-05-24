@@ -68,6 +68,25 @@ describe("native input wire schema", () => {
     expect(encoded).toEqual(input)
   })
 
+  it("round-trips gamepad axis metadata on device-added events", () => {
+    const input = {
+      kind: "device-added",
+      device: {
+        deviceId: "inputplumber-virtual-xbox360",
+        class: "gamepad",
+        name: "InputPlumber Virtual Xbox 360 Controller",
+        capabilities: ["EV_KEY", "EV_ABS", "BTN_GAMEPAD"],
+        axes: [{ code: 0, minimum: -1_408, maximum: 1_408, flat: 0 }],
+      },
+    } as const
+
+    const decoded = decodeNativeInputEvent(input)
+    const encoded = Schema.encodeSync(NativeInputEvent)(decoded)
+
+    expect(decoded).toEqual(input)
+    expect(encoded).toEqual(input)
+  })
+
   it("round-trips a native action event", () => {
     const input = {
       kind: "action",

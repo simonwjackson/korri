@@ -223,7 +223,6 @@ export async function startKorriInputd(
           shortcutEngine.clearDevice(deviceId)
           devices.set(deviceId, nextDevice)
           broadcast({ kind: "device-removed", deviceId }, currentDevice.class)
-          openDeviceStream(nextDevice)
           broadcast(
             {
               kind: "device-added",
@@ -231,12 +230,12 @@ export async function startKorriInputd(
             },
             nextDevice.class,
           )
+          openDeviceStream(nextDevice)
         }
         continue
       }
 
       devices.set(deviceId, nextDevice)
-      openDeviceStream(nextDevice)
       broadcast(
         {
           kind: "device-added",
@@ -244,6 +243,7 @@ export async function startKorriInputd(
         },
         nextDevice.class,
       )
+      openDeviceStream(nextDevice)
     }
   }
 
