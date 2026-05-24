@@ -4,6 +4,8 @@ let
   lib = pkgs.lib;
   cfg = liveUsbSystem.config;
   kioskEnv = cfg.systemd.services."korri-kiosk".environment or { };
+  inputdEnv = cfg.systemd.services."korri-inputd".environment or { };
+  inputplumber = cfg.systemd.services.inputplumber or { };
   persistence = cfg.systemd.services."korri-live-usb-persistence";
   greetd = cfg.systemd.services.greetd;
   check = message: assertion: { inherit message assertion; };
@@ -50,6 +52,24 @@ let
     (check "Moonlight state must be rooted in live USB persistence" (
       kioskEnv.KORRI_MOONLIGHT_STATE_HOME or null
       == "${cfg.services.korri.liveUsbPersistence.root}/home/.cache/moonlight"
+    ))
+    (check "live USB must use InputPlumber as normalized input provider" (
+      cfg.services.korri.kiosk.input.provider.name == "inputplumber"
+    ))
+    (check "live USB must start inputplumber before inputd" (
+      builtins.elem "inputplumber.service" (cfg.systemd.services."korri-inputd".after or [ ])
+    ))
+    (check "live USB inputd must require the InputPlumber virtual gamepad" (
+      inputdEnv.KORRI_INPUTD_REQUIRE_INPUTPLUMBER_GAMEPAD or null == "1"
+    ))
+    (check "live USB Moonlight launches must require InputPlumber input" (
+      kioskEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1"
+    ))
+    (check "live USB Moonlight must use a generic mapping DB for the virtual controller" (
+      lib.hasSuffix "share/moonlight/gamecontrollerdb.txt" (kioskEnv.KORRI_MOONLIGHT_MAPPING_FILE or "")
+    ))
+    (check "inputplumber service must see its package data root" (
+      lib.hasInfix "inputplumber" (inputplumber.environment.XDG_DATA_DIRS or "")
     ))
     (check "live USB persistence root must be exported to the kiosk" (
       kioskEnv.KORRI_LIVE_USB_PERSISTENCE_ROOT or null == cfg.services.korri.liveUsbPersistence.root
