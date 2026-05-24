@@ -1,72 +1,68 @@
 import { describe, expect, it } from "bun:test"
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
+import { spawnSync } from "node:child_process"
 
 const REPO_ROOT = process.cwd()
-const JUSTFILE = readFileSync(join(REPO_ROOT, "justfile"), "utf8")
 const NIX_TEST_GLOB = "tools/testing/nix/"
 
 /**
- * Reads a single `just` recipe (header line + indented body) from the justfile
- * by name. Returns the full recipe text so substring assertions can match
- * either dependencies listed on the header or commands in the body.
- *
- * Recipe shapes we care about:
- *
- *     # Doc comment.
- *     recipe-name: dep-a dep-b
- *       <body line 1>
- *       <body line 2>
- *
- *     # Aliases / dependency-only recipes also use the header line:
- *     test: test-unit
+ * Asks `just` itself what command(s) a recipe would actually run, then
+ * strips comment lines so the assertion only sees executable commands.
+ * Using `--dry-run` keeps the assertion grounded in the resolved-recipe
+ * shell the user would actually invoke. Stripping `#`-prefixed lines
+ * defends against the failure mode of a substring (`--path-ignore-patterns`,
+ * `tools/testing/nix/`) living in a comment while the real command line
+ * has been flipped back to `bun test`.
  */
-function recipeText(name: string): string {
-  const lines = JUSTFILE.split("\n")
-  const headerIndex = lines.findIndex(line => {
-    const trimmed = line.replace(/^\s+/, "")
-    return (
-      trimmed === `${name}:` ||
-      trimmed.startsWith(`${name}:`) ||
-      (trimmed.startsWith(`${name} `) && trimmed.includes(":"))
-    )
+function resolveRecipe(name: string): string {
+  const child = spawnSync("just", ["--dry-run", name], {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
   })
-  if (headerIndex === -1) {
+  if (child.status !== 0) {
     throw new Error(
-      `recipe "${name}" not found in justfile (looked for "${name}:" or "${name} <args>:")`,
+      `just --dry-run ${name} failed (exit ${child.status}):\n${child.stderr}`,
     )
   }
-  const out: string[] = [lines[headerIndex] ?? ""]
-  for (let i = headerIndex + 1; i < lines.length; i++) {
-    const line = lines[i] ?? ""
-    if (line === "" || (line.length > 0 && !/^\s/.test(line))) {
-      break
-    }
-    out.push(line)
-  }
-  return out.join("\n")
+  // `just --dry-run` writes the resolved commands to stderr (so the
+  // recipe's own stdout stays clean); combine both streams to keep the
+  // assertion robust to future `just` output-channel changes.
+  const combined = `${child.stdout}\n${child.stderr}`
+  return combined
+    .split("\n")
+    .filter(line => !line.trimStart().startsWith("#"))
+    .join("\n")
 }
 
 describe("test-suite partitioning", () => {
   it("test-unit recipe excludes nix-evaluation tests via --path-ignore-patterns", () => {
-    const text = recipeText("test-unit")
-    expect(text).toContain("--path-ignore-patterns")
-    expect(text).toContain(NIX_TEST_GLOB)
+    const resolved = resolveRecipe("test-unit")
+    expect(resolved).toContain("--path-ignore-patterns")
+    expect(resolved).toContain(NIX_TEST_GLOB)
+    expect(resolved).toContain("bun test")
   })
 
-  it("test-nix recipe exists and targets the nix-evaluation directory", () => {
-    const text = recipeText("test-nix")
-    expect(text).toContain(NIX_TEST_GLOB)
+  it("test-nix recipe targets the nix-evaluation directory with bun test", () => {
+    const resolved = resolveRecipe("test-nix")
+    expect(resolved).toContain("bun test")
+    expect(resolved).toContain(NIX_TEST_GLOB)
   })
 
-  it("check recipe runs both the fast suite and the nix suite", () => {
-    const text = recipeText("check")
-    expect(text).toContain("test-unit")
-    expect(text).toContain("test-nix")
+  it("check recipe actually runs both the fast suite and the nix suite", () => {
+    const resolved = resolveRecipe("check")
+    // Both bodies must appear in the resolved dependency chain. A
+    // comment-only mention would not survive `just --dry-run`.
+    expect(resolved).toContain(
+      '--path-ignore-patterns "**/tools/testing/nix/**"',
+    )
+    expect(resolved).toContain("bun test tools/testing/nix/")
   })
 
-  it("test alias still points at the fast suite (test-unit)", () => {
-    const text = recipeText("test")
-    expect(text).toContain("test-unit")
+  it("test alias still resolves to the fast suite (test-unit) body", () => {
+    // `test` is `test: test-unit` -- its dry-run body should match
+    // test-unit's exactly, so the fast-suite assertion holds.
+    const resolved = resolveRecipe("test")
+    expect(resolved).toContain(
+      '--path-ignore-patterns "**/tools/testing/nix/**"',
+    )
   })
 })
