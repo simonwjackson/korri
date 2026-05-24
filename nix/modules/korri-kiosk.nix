@@ -77,6 +77,9 @@ let
       KORRI_DESKTOP_INPUTD_URL = "ws://127.0.0.1:${toString config.services.korri.inputd.port}";
       KORRI_NATIVE_BRIDGE_URL = "ws://127.0.0.1:${toString config.services.korri.inputd.port}";
     }
+    // lib.optionalAttrs (cfg.input.required && cfg.input.provider.name == "inputplumber") {
+      KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER = "1";
+    }
     // lib.optionalAttrs (cfg.sessionBus.mode == "existing" && cfg.sessionBus.address != null) {
       DBUS_SESSION_BUS_ADDRESS = cfg.sessionBus.address;
     };
@@ -385,6 +388,11 @@ in
     services.korri.inputd = mkIf cfg.input.enable {
       enable = mkDefault true;
       before = [ "korri-kiosk.service" ];
+      wants = providerServices;
+      after = providerServices;
+      environment = lib.optionalAttrs (cfg.input.required && cfg.input.provider.name == "inputplumber") {
+        KORRI_INPUTD_REQUIRE_INPUTPLUMBER_GAMEPAD = "1";
+      };
     };
 
     systemd.services."korri-kiosk" = {

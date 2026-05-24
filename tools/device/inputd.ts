@@ -31,6 +31,7 @@ import {
   type NativeInputDeviceClass,
   parseProcBusInputDevices,
 } from "@shared/input/native/discover-devices"
+import { resolveInputPlumberVirtualGamepad } from "@shared/input/native/inputplumber-virtual-gamepad"
 import {
   type EvdevEvent,
   parseEvdevBytes,
@@ -82,6 +83,7 @@ export interface KorriInputdOptions {
   readonly shortcuts?: readonly SystemShortcutDefinition<KorriInputdActionId>[]
   readonly systemTaps?: readonly SystemTapDefinition<KorriInputdActionId>[]
   readonly eventNodeExists?: (eventNode: string) => boolean
+  readonly requireInputPlumberGamepad?: boolean
 }
 
 export interface KorriInputdHandle {
@@ -144,6 +146,11 @@ const DEFAULT_SHORTCUTS: readonly SystemShortcutDefinition<KorriInputdActionId>[
 const DEFAULT_SYSTEM_TAPS: readonly SystemTapDefinition<KorriInputdActionId>[] =
   [{ id: "system-panel", control: "home" }]
 
+function requireInputPlumberGamepadFromEnv(): boolean {
+  const raw = process.env.KORRI_INPUTD_REQUIRE_INPUTPLUMBER_GAMEPAD?.trim()
+  return raw === "1" || raw === "true" || raw === "required"
+}
+
 export async function startKorriInputd(
   options: KorriInputdOptions = {},
 ): Promise<KorriInputdHandle> {
@@ -167,16 +174,53 @@ export async function startKorriInputd(
     shortcuts: options.shortcuts ?? DEFAULT_SHORTCUTS,
     taps: options.systemTaps ?? DEFAULT_SYSTEM_TAPS,
   })
+  const requireInputPlumberGamepad =
+    options.requireInputPlumberGamepad ?? requireInputPlumberGamepadFromEnv()
   const clients = new Map<InputdSocket, Set<NativeInputDeviceClass>>()
   const devices = new Map<string, DiscoveredDevice>()
   const streams = new Map<string, DeviceStream>()
   let pendingSystemAction = false
   let stopped = false
 
+  function filterDiscoveredDevices(
+    discoveredDevices: readonly DiscoveredDevice[],
+  ): readonly DiscoveredDevice[] {
+    if (!requireInputPlumberGamepad) return discoveredDevices
+
+    const nonGamepads = discoveredDevices.filter(
+      device => device.class !== "gamepad",
+    )
+    const resolution = resolveInputPlumberVirtualGamepad(discoveredDevices)
+    if (resolution.status === "found") {
+      return [
+        ...nonGamepads,
+        ...discoveredDevices.filter(
+          device => device.deviceId === resolution.device.deviceId,
+        ),
+      ]
+    }
+
+    logger.warn(
+      {
+        status: resolution.status,
+        rawGamepads:
+          resolution.status === "missing" ? resolution.rawGamepads : undefined,
+        candidates:
+          resolution.status === "ambiguous"
+            ? resolution.devices.map(device => device.deviceId)
+            : undefined,
+      },
+      "inputd: normalized InputPlumber gamepad unavailable",
+    )
+    return nonGamepads
+  }
+
   async function refreshDevices() {
-    const discoveredDevices = parseProcBusInputDevices(
-      await readProcDevices(),
-    ).filter(device => eventNodeExists(device.eventNode))
+    const discoveredDevices = filterDiscoveredDevices(
+      parseProcBusInputDevices(await readProcDevices()).filter(device =>
+        eventNodeExists(device.eventNode),
+      ),
+    )
     const nextDevices = new Map(
       (
         await Promise.all(

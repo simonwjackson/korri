@@ -40,6 +40,7 @@ type EvalResult = {
   inputdBefore: string[]
   inputdAfter: string[]
   inputdWants: string[]
+  inputdEnvironment: Record<string, string>
   swayConfig: string | null
   clientLauncher: string | null
 }
@@ -274,6 +275,34 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
     )
     expect(result.inputdBefore).toEqual(
       expect.arrayContaining(["korri-kiosk.service"]),
+    )
+  })
+
+  it("propagates InputPlumber provider ordering and required mode into inputd", () => {
+    const result = expectOk(
+      evalFixture(`({ pkgs, ... }: {
+        services.korri.kiosk = {
+          enable = true;
+          user = "root";
+          createUser = false;
+          client.command = "\${pkgs.writeShellScriptBin "korri-kiosk-client" "exit 0"}/bin/korri-kiosk-client";
+          input = {
+            required = true;
+            provider = {
+              enable = true;
+              name = "inputplumber";
+              services = [ "inputplumber.service" ];
+            };
+          };
+        };
+      })`),
+    )
+
+    expect(result.assertionsPassed).toBe(true)
+    expect(result.inputdWants).toContain("inputplumber.service")
+    expect(result.inputdAfter).toContain("inputplumber.service")
+    expect(result.inputdEnvironment.KORRI_INPUTD_REQUIRE_INPUTPLUMBER_GAMEPAD).toBe(
+      "1",
     )
   })
 

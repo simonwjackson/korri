@@ -267,6 +267,70 @@ B: KEY=40000000
     expect(axisReads).toEqual([])
   })
 
+  it("requires the InputPlumber virtual gamepad in appliance mode", async () => {
+    const proc = await loadProcFixture("bus-input-devices-inputplumber-virtual.txt")
+    const opened: string[] = []
+    const virtualSource = createControllableEventSource()
+    const handle = await startInputd({
+      requireInputPlumberGamepad: true,
+      readProcDevices: async () => proc,
+      openEventSource: device => {
+        opened.push(device.eventNode)
+        return device.eventNode === "event10"
+          ? virtualSource.open()
+          : createControllableEventSource().open()
+      },
+    })
+
+    expect(opened).toContain("event10")
+    expect(opened).not.toContain("event3")
+
+    const client = connectClient(handle.port)
+    await client.open()
+    client.ws.send(JSON.stringify({ classes: ["gamepad"] }))
+
+    const deviceAdded = decodeNativeInputEvent(await client.nextMessage())
+    expect(deviceAdded).toMatchObject({
+      kind: "device-added",
+      device: { deviceId: "inputplumber-virtual-xbox360" },
+    })
+
+    virtualSource.push(evdevKey(BTN_A, 1))
+    await waitFor(() => aButtonValues(client.messages).includes(1), "A input")
+    expect(aButtonValues(client.messages)).toEqual([1])
+
+    client.close()
+  })
+
+  it("does not substitute raw gamepads when appliance mode has no InputPlumber target", async () => {
+    const proc = await loadProcFixture("bus-input-devices-inputplumber-raw-only.txt")
+    const opened: string[] = []
+    const warnings: string[] = []
+    const handle = await startInputd({
+      requireInputPlumberGamepad: true,
+      readProcDevices: async () => proc,
+      openEventSource: device => {
+        opened.push(device.eventNode)
+        return createControllableEventSource().open()
+      },
+      logger: {
+        ...silentLogger,
+        warn: (_input, message) => warnings.push(message ?? ""),
+      },
+    })
+
+    expect(opened).toEqual([])
+    expect(warnings).toContain("inputd: normalized InputPlumber gamepad unavailable")
+
+    const client = connectClient(handle.port)
+    await client.open()
+    client.ws.send(JSON.stringify({ classes: ["gamepad"] }))
+    await Bun.sleep(30)
+    expect(client.messages).toEqual([])
+
+    client.close()
+  })
+
   it("sends device-added before input frames for newly discovered devices", async () => {
     const emptyProc = ""
     const proc = await loadProcFixture("bus-input-devices-device.txt")

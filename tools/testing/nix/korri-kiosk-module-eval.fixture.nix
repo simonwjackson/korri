@@ -75,6 +75,7 @@ in
   inputdBefore = inputdUnit.before or [ ];
   inputdAfter = inputdUnit.after or [ ];
   inputdWants = inputdUnit.wants or [ ];
+  inputdEnvironment = inputdUnit.environment or { };
 
   swayConfig = if swayConfigPath == null then null else builtins.readFile swayConfigPath;
   clientLauncher = if clientLauncherPath == null then null else builtins.readFile clientLauncherPath;
