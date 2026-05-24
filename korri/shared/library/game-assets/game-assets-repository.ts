@@ -19,6 +19,16 @@ export interface GameAssetsRepository {
     },
     DataError
   >
+  readonly removeAssetAssignment: (input: {
+    readonly gameId: string
+    readonly role: GameAssetAssignmentRecord["role"]
+  }) => Effect.Effect<
+    {
+      readonly asset: GameAssetRecord
+      readonly assignment: GameAssetAssignmentRecord
+    },
+    DataError | NotFoundError
+  >
 }
 
 export function createGameAssetsRepository(
@@ -81,8 +91,94 @@ export function createGameAssetsRepository(
                 }),
           ),
         ),
+
+    removeAssetAssignment: ({ gameId, role }) =>
+      Effect.gen(function* () {
+        yield* Effect.tryPromise({
+          try: async () => {
+            const games = await db.games.query().runPromise
+            if (!games.some(game => game.id === gameId)) {
+              throw new MissingGameError()
+            }
+          },
+          catch: error => {
+            if (error instanceof MissingGameError) {
+              return new NotFoundError({ message: "game not found" })
+            }
+            return new DataError({
+              reason: "ReadFailed",
+              message: `failed to verify game asset assignment game: ${stringifyError(error)}`,
+            })
+          },
+        })
+
+        const assignmentId = `${gameId}:${role}`
+        const assignment = yield* Effect.tryPromise({
+          try: async () => {
+            const assignments = await db.gameAssetAssignments.query().runPromise
+            const found = assignments.find(item => item.id === assignmentId)
+            if (!found) throw new MissingAssignmentError()
+            return found as GameAssetAssignmentRecord
+          },
+          catch: error => {
+            if (error instanceof MissingAssignmentError) {
+              return new NotFoundError({
+                message: "game asset assignment not found",
+              })
+            }
+            return new DataError({
+              reason: "ReadFailed",
+              message: `failed to read game asset assignment: ${stringifyError(error)}`,
+            })
+          },
+        })
+
+        const asset = yield* Effect.tryPromise({
+          try: async () => {
+            const assets = await db.gameAssets.query().runPromise
+            const found = assets.find(item => item.id === assignment.assetId)
+            if (!found) throw new MissingAssetError()
+            return found as GameAssetRecord
+          },
+          catch: error => {
+            if (error instanceof MissingAssetError) {
+              return new NotFoundError({ message: "game asset not found" })
+            }
+            return new DataError({
+              reason: "ReadFailed",
+              message: `failed to read game asset: ${stringifyError(error)}`,
+            })
+          },
+        })
+
+        yield* db.gameAssetAssignments.delete(assignmentId).pipe(
+          Effect.flatMap(() =>
+            Effect.tryPromise({
+              try: () => db.flush(),
+              catch: error =>
+                new DataError({
+                  reason: "WriteFailed",
+                  message: `failed to flush game asset unassignment: ${stringifyError(error)}`,
+                }),
+            }),
+          ),
+          Effect.mapError(error =>
+            error instanceof DataError
+              ? error
+              : new DataError({
+                  reason: "WriteFailed",
+                  message: `failed to persist game asset unassignment: ${stringifyError(error)}`,
+                }),
+          ),
+        )
+
+        return { asset, assignment }
+      }),
   }
 }
+
+class MissingAssignmentError extends Error {}
+class MissingAssetError extends Error {}
 
 class MissingGameError extends Error {}
 

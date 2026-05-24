@@ -1,10 +1,14 @@
 import { BatchJsonSerializationLive } from "@shared/api/rpc/serialization"
 import { FeatureGatesMiddlewareLive } from "@shared/gates/middleware"
+import { GameAssetsLayerLive } from "@shared/library/game-assets/game-assets-service"
 import { LauncherLayerLive } from "@shared/library/launcher-layer-live"
 import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
 import { Effect, Exit, Layer, Scope } from "effect"
 import * as HttpEffect from "effect/unstable/http/HttpEffect"
 import { RpcServer } from "effect/unstable/rpc"
+import { handleAssignGameAsset } from "../game-assets/assign.rpc-handler"
+import { handleListGameAssetCandidates } from "../game-assets/list-candidates.rpc-handler"
+import { handleUnassignGameAsset } from "../game-assets/unassign.rpc-handler"
 import { handleGetHello } from "../hello/rpc-handler"
 import { handleLaunchLibrary } from "../library/launch.rpc-handler"
 import { handleListLibrary } from "../library/list.rpc-handler"
@@ -15,14 +19,18 @@ import { handleServerPrepareStream } from "./prepare.rpc-handler"
 import { serverRpcGroup } from "./rpc-group"
 import { handleServerStatus } from "./status.rpc-handler"
 
-const LibraryInfrastructureLive = Layer.merge(
+const LibraryInfrastructureLive = Layer.mergeAll(
   LibrarySourceLayerLive,
   LauncherLayerLive,
+  GameAssetsLayerLive,
 )
 
 const ServerHandlersLive = serverRpcGroup.toLayer(
   serverRpcGroup.of({
     "app.hello.get": handleGetHello,
+    "app.gameAssets.candidates.list": handleListGameAssetCandidates,
+    "app.gameAssets.assign": handleAssignGameAsset,
+    "app.gameAssets.unassign": handleUnassignGameAsset,
     "app.library.list": handleListLibrary,
     "app.library.launch": handleLaunchLibrary,
     "app.source.list": handleListSource,

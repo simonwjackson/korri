@@ -1,5 +1,6 @@
 import { BatchJsonSerializationLive } from "@shared/api/rpc/serialization"
 import { FeatureGatesMiddlewareLive } from "@shared/gates/middleware"
+import { GameAssetsLayerLive } from "@shared/library/game-assets/game-assets-service"
 import { LauncherLayerLive } from "@shared/library/launcher-layer-live"
 import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
 import { Effect, Exit, Layer, Scope } from "effect"
@@ -8,9 +9,10 @@ import { RpcServer } from "effect/unstable/rpc"
 import { appRpcGroup } from "./app-rpc-group"
 import { HandlersLive } from "./handlers"
 
-const LibraryInfrastructureLive = Layer.merge(
+const LibraryInfrastructureLive = Layer.mergeAll(
   LibrarySourceLayerLive,
   LauncherLayerLive,
+  GameAssetsLayerLive,
 )
 
 const ServerLive = Layer.mergeAll(

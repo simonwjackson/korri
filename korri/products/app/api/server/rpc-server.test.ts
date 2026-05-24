@@ -9,6 +9,9 @@ describe("headless server RPC group", () => {
     const tags = Array.from(serverRpcGroup.requests.keys()).sort()
 
     expect(tags).toEqual([
+      "app.gameAssets.assign",
+      "app.gameAssets.candidates.list",
+      "app.gameAssets.unassign",
       "app.hello.get",
       "app.library.launch",
       "app.library.list",
@@ -41,7 +44,13 @@ describe("headless server RPC group", () => {
 
     expect(appTags).toContain("app.library.list")
     expect(appTags).toContain("app.library.launch")
+    expect(appTags).toContain("app.gameAssets.candidates.list")
+    expect(appTags).toContain("app.gameAssets.assign")
+    expect(appTags).toContain("app.gameAssets.unassign")
     expect(serverTags).toContain("app.library.list")
     expect(serverTags).toContain("app.library.launch")
+    expect(serverTags).toContain("app.gameAssets.candidates.list")
+    expect(serverTags).toContain("app.gameAssets.assign")
+    expect(serverTags).toContain("app.gameAssets.unassign")
   })
 })

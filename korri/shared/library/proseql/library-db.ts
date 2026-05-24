@@ -162,7 +162,7 @@ type CollectionApi<TPayload> = {
     update: { id: string } & TPayload
   }) => Effect.Effect<{ id: string } & TPayload>
   readonly findById: (id: string) => Effect.Effect<{ id: string } & TPayload>
-  readonly delete: (input: { where: { id: string } }) => Effect.Effect<void>
+  readonly delete: (id: string) => Effect.Effect<void>
   readonly query: () => {
     readonly runPromise: Promise<ReadonlyArray<{ id: string } & TPayload>>
   }

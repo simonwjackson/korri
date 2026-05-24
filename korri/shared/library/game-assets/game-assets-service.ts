@@ -9,9 +9,17 @@ import {
 import { korriDataPath, type XdgPathEnv } from "@shared/config/xdg-paths"
 import type { GameAssetRecord } from "@shared/library/config/records/game-asset"
 import type { GameAssetRole } from "@shared/library/config/records/game-asset-assignment"
-import { Effect } from "effect"
-import type { CandidateCache, GameAssetCandidate } from "./candidate-cache"
-import type { GameAssetsRepository } from "./game-assets-repository"
+import { Context, Effect, Layer } from "effect"
+import { openKorriLibraryDb } from "../proseql/library-db"
+import {
+  type CandidateCache,
+  createCandidateCache,
+  type GameAssetCandidate,
+} from "./candidate-cache"
+import {
+  createGameAssetsRepository,
+  type GameAssetsRepository,
+} from "./game-assets-repository"
 
 export interface GameAssetsServiceOptions {
   readonly env: XdgPathEnv
@@ -30,6 +38,11 @@ export interface AssignGameAssetInput {
   readonly gameId: string
   readonly role: GameAssetRole
   readonly candidateId: string
+}
+
+export interface UnassignGameAssetInput {
+  readonly gameId: string
+  readonly role: GameAssetRole
 }
 
 export interface AssignedGameAsset {
@@ -53,7 +66,20 @@ export interface GameAssetsService {
     AssignedGameAsset,
     DataError | NotFoundError | ValidationError
   >
+  readonly unassign: (
+    input: UnassignGameAssetInput,
+  ) => Effect.Effect<AssignedGameAsset, DataError | NotFoundError>
 }
+
+export class GameAssets extends Context.Service<
+  GameAssets,
+  GameAssetsService
+>()("GameAssets") {}
+
+export const GameAssetsLayerLive = Layer.succeed(
+  GameAssets,
+  createLiveGameAssetsService(),
+)
 
 const defaultLimits: GameAssetValidationLimits = {
   maxByteSize: 20 * 1024 * 1024,
@@ -123,7 +149,73 @@ export function createGameAssetsService(
           assignment,
         })
       }),
+
+    unassign: input => options.repository.removeAssetAssignment(input),
   }
+}
+
+export function createLiveGameAssetsService(
+  env: XdgPathEnv = process.env,
+): GameAssetsService {
+  return {
+    listCandidates: input =>
+      Effect.try({
+        try: () => createCandidateCache({ env }),
+        catch: error =>
+          new DataError({
+            reason: "Unavailable",
+            message: `failed to configure game asset candidate cache: ${stringifyError(error)}`,
+          }),
+      }).pipe(Effect.flatMap(cache => cache.listCandidates(input))),
+
+    assignCandidate: input =>
+      withLiveGameAssetsService(env, service => service.assignCandidate(input)),
+
+    unassign: input =>
+      withLiveGameAssetsService(env, service => service.unassign(input)),
+  }
+}
+
+function withLiveGameAssetsService<A, E>(
+  env: XdgPathEnv,
+  useService: (service: GameAssetsService) => Effect.Effect<A, E>,
+): Effect.Effect<A, E | DataError> {
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const root = yield* libraryRootFromEnv(env)
+      const db = yield* openKorriLibraryDb({ root }).pipe(
+        Effect.mapError(
+          error =>
+            new DataError({
+              reason: "Unavailable",
+              message: `failed to open game assets library catalog: ${stringifyError(error)}`,
+            }),
+        ),
+      )
+      const service = createGameAssetsService({
+        env,
+        candidateCache: createCandidateCache({ env }),
+        repository: createGameAssetsRepository(db),
+      })
+      return yield* useService(service)
+    }),
+  )
+}
+
+function libraryRootFromEnv(env: XdgPathEnv): Effect.Effect<string, DataError> {
+  return Effect.try({
+    try: () => {
+      const explicit = env.KORRI_LIBRARY_ROOT?.trim()
+      return explicit && explicit.length > 0
+        ? explicit
+        : korriDataPath(env, "library")
+    },
+    catch: error =>
+      new DataError({
+        reason: "Unavailable",
+        message: `failed to resolve game assets library root: ${stringifyError(error)}`,
+      }),
+  })
 }
 
 export function gameAssetBlobPath(
