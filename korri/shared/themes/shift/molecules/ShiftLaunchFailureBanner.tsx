@@ -103,6 +103,10 @@ function launchFailureMessage({
       return `The connected server could not prepare streams right now${exitDetail}.`
     case "no-such-game":
       return `The selected game is no longer available on the connected server${exitDetail}.`
+    case "input-unavailable":
+      return `Gamepad input was not available for this launch${exitDetail}.`
+    case "input-ambiguous":
+      return `Korri could not choose a gamepad for this launch${exitDetail}.`
     case "command-failed":
     case undefined:
       return `The game's launch command failed${exitDetail}.`
