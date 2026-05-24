@@ -31,7 +31,9 @@ type RockNixImageSummary = {
   inputplumberPackage: string | null
   moonlightCommand: string | null
   moonlightMappingFile: string | null
+  moonlightPlatform: string | null
   moonlightRequireInputPlumber: string | null
+  sdlVideoDriver: string | null
   systemName: string
   hostName: string
   systemPackages: string[]
@@ -146,7 +148,9 @@ describe("Korri RockNix image output evaluation", () => {
       )
       expect(appliance.moonlightCommand).toContain("moonlight")
       expect(appliance.moonlightMappingFile).toContain("gamecontrollerdb.txt")
+      expect(appliance.moonlightPlatform).toBe("v4l2m2m")
       expect(appliance.moonlightRequireInputPlumber).toBe("1")
+      expect(appliance.sdlVideoDriver).toBe("wayland")
     }
   })
 
