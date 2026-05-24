@@ -14,10 +14,32 @@ export function createDesktopBridgeAdapter(
   return {
     name: "desktop-bridge",
     start(emit: InputListener) {
-      const bridge = options.bridge ?? globalDesktopInputBridge()
-      if (!bridge) return () => {}
+      let disposed = false
+      let unsubscribe: (() => void) | undefined
+      let retryTimer: ReturnType<typeof setInterval> | undefined
 
-      return bridge.subscribeAction(action => emit(action))
+      const subscribe = () => {
+        if (disposed || unsubscribe) return
+        const bridge = options.bridge ?? globalDesktopInputBridge()
+        if (!bridge) return
+
+        unsubscribe = bridge.subscribeAction(action => emit(action))
+        if (retryTimer) {
+          clearInterval(retryTimer)
+          retryTimer = undefined
+        }
+      }
+
+      subscribe()
+      if (!unsubscribe && !options.bridge) {
+        retryTimer = setInterval(subscribe, 100)
+      }
+
+      return () => {
+        disposed = true
+        if (retryTimer) clearInterval(retryTimer)
+        unsubscribe?.()
+      }
     },
   }
 }

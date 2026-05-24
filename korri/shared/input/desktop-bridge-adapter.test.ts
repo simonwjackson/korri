@@ -48,6 +48,38 @@ describe("createDesktopBridgeAdapter", () => {
     expect(bridge.unsubscribed).toBe(true)
   })
 
+  it("subscribes when the global desktop bridge appears after startup", async () => {
+    const bridge = createBridge()
+    const emitted: InputAction[] = []
+    const globalWithWindow = globalThis as typeof globalThis & {
+      window?: { __korriInput?: unknown }
+    }
+    const previousWindow = globalWithWindow.window
+
+    globalWithWindow.window = {}
+    const dispose = createDesktopBridgeAdapter().start(action =>
+      emitted.push(action),
+    )
+
+    try {
+      globalWithWindow.window.__korriInput = bridge
+      await Bun.sleep(120)
+
+      bridge.listener?.({
+        type: "direction",
+        direction: "right",
+        source: "native",
+      })
+
+      expect(emitted).toEqual([
+        { type: "direction", direction: "right", source: "native" },
+      ])
+    } finally {
+      dispose()
+      globalWithWindow.window = previousWindow
+    }
+  })
+
   it("is a safe no-op when no desktop bridge is available", () => {
     const emitted: InputAction[] = []
     const dispose = createDesktopBridgeAdapter({ bridge: undefined }).start(
