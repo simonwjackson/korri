@@ -15,7 +15,9 @@ let
   targetSystem = pkgs.stdenv.hostPlatform.system;
   substratePackages = nix-on-rocks.packages.${targetSystem};
   sm8550 = config.rocknix.sm8550;
-  inputplumberPackage = pkgs.runCommand "korri-rocknix-inputplumber-xb360" { } ''
+  inputplumberPackage = pkgs.runCommand "korri-rocknix-inputplumber-xb360" {
+    meta.mainProgram = "inputplumber";
+  } ''
     cp -a ${substratePackages.inputplumber} $out
     chmod -R u+w $out
     substituteInPlace $out/share/inputplumber/devices/02-ayn-controller.yaml \
