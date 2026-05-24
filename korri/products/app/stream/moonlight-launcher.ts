@@ -10,9 +10,24 @@
  * depending on CLI code. The `tools/cli/moonlight-launcher.ts` file is
  * a re-export shim during the migration window.
  */
+import { readFile } from "node:fs/promises"
+import { parseProcBusInputDevices } from "@shared/input/native/discover-devices"
+import {
+  resolveInputPlumberVirtualGamepad,
+  type InputPlumberVirtualGamepadResolution,
+} from "@shared/input/native/inputplumber-virtual-gamepad"
+
 export type MoonlightLaunchResult =
   | { readonly status: "started"; readonly command: string }
   | { readonly status: "failed"; readonly message: string }
+
+export type MoonlightInputPreflightResult =
+  | { readonly status: "ok" }
+  | {
+      readonly status: "failed"
+      readonly category: "input-unavailable" | "input-ambiguous"
+      readonly message: string
+    }
 
 export interface CommandRunner {
   readonly run: (
@@ -33,10 +48,30 @@ export interface MoonlightLaunchOptions {
   readonly allowNixFallback?: boolean
   readonly startupObserveMs?: number
   readonly mappingFile?: string
+  readonly inputDevice?: string
+  readonly requireInputPlumberInput?: boolean
+  readonly platform?: string
+  readonly readProcDevices?: () => Promise<string>
   readonly runner?: CommandRunner
 }
 
 const DEFAULT_APP_NAME = "Korri Stream"
+
+export async function preflightMoonlightInput(
+  options: MoonlightLaunchOptions = {},
+): Promise<MoonlightInputPreflightResult> {
+  const required =
+    options.requireInputPlumberInput ?? moonlightRequireInputPlumberFromEnv()
+  if (!required) return { status: "ok" }
+
+  const inputDevice = await moonlightInputDevice(options)
+  if (inputDevice.status === "ok") return { status: "ok" }
+  return {
+    status: "failed",
+    category: inputDevice.category,
+    message: inputDevice.message,
+  }
+}
 
 export async function launchMoonlight(
   options: MoonlightLaunchOptions = {},
@@ -44,10 +79,23 @@ export async function launchMoonlight(
   const runner = options.runner ?? spawnRunner
   const command = options.command ?? moonlightCommandFromEnv() ?? "moonlight"
   const client = options.client ?? moonlightClientFromEnv() ?? "embedded"
+  const inputDevice = await moonlightInputDevice(options)
+  if (inputDevice.status === "failed") return inputDevice
+
+  const platform = options.platform ?? moonlightPlatformFromEnv()
+  if (inputDevice.path && platform?.toLowerCase() === "sdl") {
+    return {
+      status: "failed",
+      message: "Moonlight SDL platform cannot be used with explicit evdev input selection",
+    }
+  }
+
   const args = moonlightArgs({
     ...options,
     client,
     mappingFile: options.mappingFile ?? moonlightMappingFileFromEnv(),
+    inputDevice: inputDevice.path,
+    platform,
   })
   const allowNixFallback = options.allowNixFallback ?? command === "moonlight"
   const startupObserveMs =
@@ -99,6 +147,87 @@ function moonlightMappingFileFromEnv(): string | undefined {
   return raw === "" ? undefined : raw
 }
 
+function moonlightInputDeviceFromEnv(): string | undefined {
+  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_INPUT_DEVICE?.trim()
+  return raw === "" ? undefined : raw
+}
+
+function moonlightRequireInputPlumberFromEnv(): boolean {
+  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER?.trim()
+  return raw === "1" || raw === "true" || raw === "required"
+}
+
+function moonlightPlatformFromEnv(): string | undefined {
+  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_PLATFORM?.trim()
+  return raw === "" ? undefined : raw
+}
+
+async function moonlightInputDevice(
+  options: MoonlightLaunchOptions,
+): Promise<
+  | { readonly status: "ok"; readonly path?: string }
+  | {
+      readonly status: "failed"
+      readonly category: "input-unavailable" | "input-ambiguous"
+      readonly message: string
+    }
+> {
+  const configured = options.inputDevice ?? moonlightInputDeviceFromEnv()
+  const required =
+    options.requireInputPlumberInput ?? moonlightRequireInputPlumberFromEnv()
+
+  if (!required) return { status: "ok", path: configured }
+
+  const proc = await (options.readProcDevices ?? readRealProcDevices)()
+  const resolution = resolveInputPlumberVirtualGamepad(
+    parseProcBusInputDevices(proc),
+  )
+  const failure = inputPlumberResolutionFailure(resolution)
+  if (failure) return failure
+
+  if (configured && configured !== resolution.path) {
+    return {
+      status: "failed",
+      category: "input-unavailable",
+      message: `Configured Moonlight input device ${configured} does not match resolved InputPlumber virtual gamepad ${resolution.path}`,
+    }
+  }
+
+  return { status: "ok", path: resolution.path }
+}
+
+function inputPlumberResolutionFailure(
+  resolution: InputPlumberVirtualGamepadResolution,
+):
+  | {
+      readonly status: "failed"
+      readonly category: "input-unavailable" | "input-ambiguous"
+      readonly message: string
+    }
+  | undefined {
+  if (resolution.status === "found") return undefined
+
+  if (resolution.status === "ambiguous") {
+    return {
+      status: "failed",
+      category: "input-ambiguous",
+      message: `Multiple InputPlumber virtual gamepads found: ${resolution.devices
+        .map(device => device.eventNode)
+        .join(", ")}`,
+    }
+  }
+
+  return {
+    status: "failed",
+    category: "input-unavailable",
+    message: `InputPlumber virtual gamepad not found (${resolution.rawGamepads} raw gamepad candidate(s) ignored)`,
+  }
+}
+
+async function readRealProcDevices(): Promise<string> {
+  return await readFile("/proc/bus/input/devices", "utf8")
+}
+
 function moonlightArgs(
   options: MoonlightLaunchOptions & { readonly client: "embedded" },
 ): readonly string[] {
@@ -106,7 +235,9 @@ function moonlightArgs(
   const appName = options.appName ?? DEFAULT_APP_NAME
   return [
     "stream",
+    ...(options.platform ? ["-platform", options.platform] : []),
     ...(options.mappingFile ? ["-mapping", options.mappingFile] : []),
+    ...(options.inputDevice ? ["-input", options.inputDevice] : []),
     "-app",
     appName,
     options.host,

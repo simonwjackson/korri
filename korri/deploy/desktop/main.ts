@@ -2,6 +2,7 @@ import { join } from "node:path"
 import {
   type CommandRunner,
   launchMoonlight,
+  preflightMoonlightInput,
 } from "@app/stream/moonlight-launcher"
 import { createRemoteStreamControlClient } from "@app/stream/remote-stream-client"
 import { logger } from "@shared/logger"
@@ -164,6 +165,7 @@ async function main() {
         })
         return await client.prepareGame(id)
       },
+      preflightMoonlightInput,
       launchMoonlight: opts =>
         launchMoonlight({ host: opts.host, runner: diagnosticMoonlightRunner }),
     },

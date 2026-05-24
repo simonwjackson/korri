@@ -38,6 +38,21 @@ describe("LauncherLayerBridge", () => {
     })
   })
 
+  it("returns typed local input failures from failed bridge responses", async () => {
+    const result = await runBridgeLauncher({
+      status: "failed",
+      category: "input-unavailable",
+      message: "InputPlumber virtual gamepad not found",
+    })
+
+    expect(result).toEqual({
+      status: "failed",
+      exitCode: 123,
+      stderrTail: "InputPlumber virtual gamepad not found",
+      failureKind: "input-unavailable",
+    })
+  })
+
   it("returns typed server failure categories from failed bridge responses", async () => {
     const result = await runBridgeLauncher({
       status: "failed",

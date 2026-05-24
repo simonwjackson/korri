@@ -1,8 +1,11 @@
 import { describe, expect, it } from "bun:test"
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { resolve } from "node:path"
+import { join, resolve } from "node:path"
 import { type CommandRunner, launchMoonlight } from "./moonlight-launcher"
+
+const PROC_FIXTURES_DIR = join(process.cwd(), "tools/testing/fixtures/proc")
 
 describe("moonlight launcher", () => {
   it("uses installed moonlight with embedded-client args first", async () => {
@@ -85,6 +88,93 @@ describe("moonlight launcher", () => {
       if (previousClient === undefined) delete Bun.env.KORRI_MOONLIGHT_CLIENT
       else Bun.env.KORRI_MOONLIGHT_CLIENT = previousClient
     }
+  })
+
+  it("passes a resolved InputPlumber virtual controller as the only moonlight input in appliance mode", async () => {
+    const calls: string[] = []
+    const result = await launchMoonlight({
+      host: "192.168.1.117",
+      mappingFile: "/nix/store/moonlight/share/moonlight/gamecontrollerdb.txt",
+      requireInputPlumberInput: true,
+      readProcDevices: async () =>
+        readFileSync(
+          join(PROC_FIXTURES_DIR, "bus-input-devices-inputplumber-virtual.txt"),
+          "utf8",
+        ),
+      runner: runner((command, args) => {
+        calls.push([command, ...args].join(" "))
+        return { status: "started" }
+      }),
+    })
+
+    expect(result).toEqual({ status: "started", command: "moonlight" })
+    expect(calls).toEqual([
+      "moonlight stream -mapping /nix/store/moonlight/share/moonlight/gamecontrollerdb.txt -input /dev/input/event10 -app Korri Stream 192.168.1.117",
+    ])
+  })
+
+  it("fails closed without spawning moonlight when appliance input is missing", async () => {
+    const calls: string[] = []
+    const result = await launchMoonlight({
+      host: "192.168.1.117",
+      requireInputPlumberInput: true,
+      readProcDevices: async () =>
+        readFileSync(
+          join(PROC_FIXTURES_DIR, "bus-input-devices-inputplumber-raw-only.txt"),
+          "utf8",
+        ),
+      runner: runner((command, args) => {
+        calls.push([command, ...args].join(" "))
+        return { status: "started" }
+      }),
+    })
+
+    expect(result.status).toBe("failed")
+    if (result.status === "failed") {
+      expect(result.message).toContain("InputPlumber virtual gamepad")
+    }
+    expect(calls).toEqual([])
+  })
+
+  it("rejects an explicit input path that is not the resolved InputPlumber virtual controller in appliance mode", async () => {
+    const calls: string[] = []
+    const result = await launchMoonlight({
+      host: "192.168.1.117",
+      inputDevice: "/dev/input/event3",
+      requireInputPlumberInput: true,
+      readProcDevices: async () =>
+        readFileSync(
+          join(PROC_FIXTURES_DIR, "bus-input-devices-inputplumber-virtual.txt"),
+          "utf8",
+        ),
+      runner: runner((command, args) => {
+        calls.push([command, ...args].join(" "))
+        return { status: "started" }
+      }),
+    })
+
+    expect(result.status).toBe("failed")
+    if (result.status === "failed") {
+      expect(result.message).toContain("does not match")
+    }
+    expect(calls).toEqual([])
+  })
+
+  it("rejects SDL platform selection when explicit input filtering is required", async () => {
+    const calls: string[] = []
+    const result = await launchMoonlight({
+      host: "192.168.1.117",
+      inputDevice: "/dev/input/event10",
+      platform: "sdl",
+      runner: runner((command, args) => {
+        calls.push([command, ...args].join(" "))
+        return { status: "started" }
+      }),
+    })
+
+    expect(result.status).toBe("failed")
+    if (result.status === "failed") expect(result.message).toContain("SDL")
+    expect(calls).toEqual([])
   })
 
   it("passes KORRI_MOONLIGHT_MAPPING_FILE to moonlight-embedded", async () => {

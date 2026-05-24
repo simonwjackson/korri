@@ -27,6 +27,8 @@ interface BridgeFailureResponse {
     | "host-control-disabled"
     | "no-such-game"
     | "prepare-failed"
+    | "input-unavailable"
+    | "input-ambiguous"
   readonly message: string
 }
 
@@ -102,5 +104,9 @@ function exitCodeForCategory(
       return 127
     case "prepare-failed":
       return 1
+    case "input-unavailable":
+      return 123
+    case "input-ambiguous":
+      return 122
   }
 }

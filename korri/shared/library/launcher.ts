@@ -54,6 +54,8 @@ export type LaunchFailureKind =
   | "no-such-game"
   | "prepare-failed"
   | "moonlight-failed"
+  | "input-unavailable"
+  | "input-ambiguous"
 
 export type LaunchResult =
   | { readonly status: "launched" }

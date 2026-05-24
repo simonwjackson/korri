@@ -48,6 +48,16 @@ export type LaunchBridgeResponse =
         | "host-control-disabled"
         | "no-such-game"
         | "prepare-failed"
+        | "input-unavailable"
+        | "input-ambiguous"
+      readonly message: string
+    }
+
+export type MoonlightInputPreflightResult =
+  | { readonly status: "ok" }
+  | {
+      readonly status: "failed"
+      readonly category: "input-unavailable" | "input-ambiguous"
       readonly message: string
     }
 
@@ -60,6 +70,13 @@ export interface LaunchBridgeOptions {
    * without restart.
    */
   readonly getConnection: () => ConnectionServerRecord | undefined
+
+  /**
+   * Optional local input preflight. Appliance builds use this to fail before
+   * preparing a remote stream when the normalized InputPlumber controller is
+   * unavailable or ambiguous.
+   */
+  readonly preflightMoonlightInput?: () => Promise<MoonlightInputPreflightResult>
 
   /**
    * Calls `app.server.stream.prepare` (with the legacy fallback) on the
@@ -101,6 +118,19 @@ export function createLaunchBridgeHandler(
         status: "failed",
         category: "host-unavailable",
         message: "No connected Korri host",
+      } satisfies LaunchBridgeResponse)
+    }
+
+    const inputPreflight = await options.preflightMoonlightInput?.()
+    if (inputPreflight?.status === "failed") {
+      logger.warn(
+        { id, host: connection.hostId, category: inputPreflight.category },
+        "launch-bridge: refused — local normalized input unavailable",
+      )
+      return jsonResponse(200, {
+        status: "failed",
+        category: inputPreflight.category,
+        message: inputPreflight.message,
       } satisfies LaunchBridgeResponse)
     }
 

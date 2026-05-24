@@ -145,6 +145,36 @@ describe("desktop launch bridge", () => {
     expect(moonlightCallHost).toBe("fd00::1")
   })
 
+  test("fails local input preflight before preparing the remote stream", async () => {
+    let prepareCalled = false
+    const handler = createLaunchBridgeHandler({
+      getConnection: () => CONNECTED,
+      preflightMoonlightInput: async () => ({
+        status: "failed",
+        category: "input-unavailable",
+        message: "InputPlumber virtual gamepad not found",
+      }),
+      prepareGame: async () => {
+        prepareCalled = true
+        return { status: "prepared", gameId: "gba/wario-land-4" }
+      },
+      launchMoonlight: async () => {
+        throw new Error("moonlight should not launch when input preflight fails")
+      },
+    })
+
+    const response = await handler(postJson({ id: "gba/wario-land-4" }))
+
+    expect(prepareCalled).toBe(false)
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as LaunchBridgeResponse
+    expect(body.status).toBe("failed")
+    if (body.status === "failed") {
+      expect(body.category).toBe("input-unavailable")
+      expect(body.message).toContain("InputPlumber")
+    }
+  })
+
   test("forwards prepare-failure categories to the renderer", async () => {
     const handler = createLaunchBridgeHandler({
       getConnection: () => CONNECTED,
