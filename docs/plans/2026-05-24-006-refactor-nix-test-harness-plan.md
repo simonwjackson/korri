@@ -1,7 +1,7 @@
 ---
 title: "refactor: Split nix-eval tests out of `bun test` and batch their evaluations"
 type: refactor
-status: active
+status: completed
 date: 2026-05-24
 verify_command: "just typecheck && just test-unit && just test-nix && just lint"
 ---
