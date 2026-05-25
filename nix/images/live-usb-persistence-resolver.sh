@@ -34,12 +34,20 @@ prepare_state_tree() {
 prepare_developer_state_tree() {
   mkdir -p "$root/developer/home/.config" "$root/developer/home/.local/share" "$root/developer/home/.local/state" "$root/developer/home/.cache/moonlight" || return 1
   chown -R "$state_user:$state_group" "$root/developer/home" || return 1
-  chmod 0755 "$root" || return 1
+  chmod 0755 "$root" "$root/developer" || return 1
   chmod 0700 "$root/developer/home" || return 1
 }
 
 prepare_product_state_tree() {
   created_links=()
+  lock_inactive_developer_namespace || return 1
+  reject_symlink_path "$root/product" || return 1
+  reject_symlink_path "$root/product/home/.config/korri" || return 1
+  reject_symlink_path "$root/product/home/.local/share/korri" || return 1
+  reject_symlink_path "$root/product/home/.local/state/korri" || return 1
+  reject_symlink_path "$root/product/home/.cache/moonlight" || return 1
+  reject_symlink_path "$root/product/device-id" || return 1
+
   mkdir -p \
     "$runtime_home/.config" \
     "$runtime_home/.local/share" \
@@ -54,7 +62,13 @@ prepare_product_state_tree() {
 
   chown -R "$state_user:$state_group" "$runtime_home" "$root/product/home" || return 1
   chmod 0755 "$root" || return 1
-  chmod 0700 "$runtime_home" "$root/product/home" || return 1
+  chmod 0700 \
+    "$runtime_home" \
+    "$root/product/home" \
+    "$root/product/home/.config/korri" \
+    "$root/product/home/.local/share/korri" \
+    "$root/product/home/.local/state/korri" \
+    "$root/product/home/.cache/moonlight" || return 1
 
   if [ ! -s "$root/product/device-id" ]; then
     generate_device_id > "$root/product/device-id" || return 1
@@ -67,6 +81,32 @@ prepare_product_state_tree() {
   link_persistent_path "$root/product/home/.local/state/korri" "$runtime_home/.local/state/korri" created_links || return 1
   link_persistent_path "$root/product/home/.cache/moonlight" "$runtime_home/.cache/moonlight" created_links || return 1
   link_persistent_path "$root/product/device-id" "$device_id_target" created_links || return 1
+}
+
+lock_inactive_developer_namespace() {
+  if [ -e "$root/developer" ] || [ -L "$root/developer" ]; then
+    if [ -L "$root/developer" ]; then
+      echo "korri-live-usb: refusing symlinked Developer namespace during Product setup" >&2
+      return 1
+    fi
+    chown root:root "$root/developer" || return 1
+    chmod 0000 "$root/developer" || return 1
+  fi
+}
+
+reject_symlink_path() {
+  path="$1"
+  current=""
+  rest="${path#/}"
+  IFS='/' read -r -a parts <<< "$rest"
+  for part in "${parts[@]}"; do
+    [ -n "$part" ] || continue
+    current="$current/$part"
+    if [ -L "$current" ]; then
+      echo "korri-live-usb: refusing symlinked persistence path $current" >&2
+      return 1
+    fi
+  done
 }
 
 link_persistent_path() {
@@ -108,6 +148,7 @@ persistence_unavailable() {
     echo "korri-live-usb: Developer ISO requires retained same-stick persistence; $reason" >&2
     exit 1
   fi
+  echo "korri-live-usb: $reason; using ephemeral tmpfs state" >&2
   mount_tmpfs
   exit 0
 }
@@ -139,24 +180,37 @@ if [ "$parent_transport" != "usb" ]; then
   persistence_unavailable "boot media parent $parent_device is not USB (transport=$parent_transport removable=$parent_removable)"
 fi
 
+matching_candidates=()
 while IFS= read -r candidate; do
   [ -n "$candidate" ] || continue
   [ "$candidate" != "$boot_device" ] || continue
   candidate_label="$(blkid -s LABEL -o value "$candidate" 2>/dev/null || true)"
   if [ "$candidate_label" = "$label" ]; then
-    if mount "$candidate" "$root"; then
-      if prepare_state_tree; then
-        touch "$root/$marker_persistent"
-        exit 0
-      fi
-      echo "korri-live-usb: mounted candidate persistence partition $candidate but could not prepare writable kiosk state; falling back to ephemeral tmpfs state" >&2
-      umount "$root" >/dev/null 2>&1 || true
-      persistence_unavailable "mounted candidate persistence partition $candidate but could not prepare writable kiosk state"
-    else
-      echo "korri-live-usb: failed to mount candidate persistence partition $candidate; falling back to ephemeral tmpfs state" >&2
-      persistence_unavailable "failed to mount candidate persistence partition $candidate"
-    fi
+    matching_candidates+=("$candidate")
   fi
 done < <(lsblk -nrpo NAME,TYPE "$parent_device" | awk '$2 == "part" { print $1 }')
 
-persistence_unavailable "persistence partition labeled $label was not found beside boot USB media"
+if [ "${#matching_candidates[@]}" -eq 0 ]; then
+  persistence_unavailable "persistence partition labeled $label was not found beside boot USB media"
+fi
+
+if [ "${#matching_candidates[@]}" -gt 1 ]; then
+  persistence_unavailable "multiple persistence partitions labeled $label were found beside boot USB media"
+fi
+
+candidate="${matching_candidates[0]}"
+if mount -o nosuid,nodev "$candidate" "$root"; then
+  if prepare_state_tree; then
+    touch "$root/$marker_persistent"
+    exit 0
+  fi
+  echo "korri-live-usb: mounted candidate persistence partition $candidate but could not prepare writable kiosk state; falling back to ephemeral tmpfs state" >&2
+  if ! umount "$root" >/dev/null 2>&1; then
+    echo "korri-live-usb: failed to unmount rejected persistence partition $candidate; refusing fallback on unsafe mount" >&2
+    exit 1
+  fi
+  persistence_unavailable "mounted candidate persistence partition $candidate but could not prepare writable kiosk state"
+else
+  echo "korri-live-usb: failed to mount candidate persistence partition $candidate; falling back to ephemeral tmpfs state" >&2
+  persistence_unavailable "failed to mount candidate persistence partition $candidate"
+fi

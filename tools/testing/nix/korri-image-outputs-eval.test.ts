@@ -62,6 +62,7 @@ type EvalResult = {
     makeEfiBootable: boolean
     persistenceArtifact: "product" | "developer" | null
     persistenceScope: "product-allowlist" | "developer-broad" | null
+    appendToMenuLabel: string | null
   }
   liveUsbDeveloper: ImageSummary & {
     imageFileName: string | null
@@ -69,6 +70,7 @@ type EvalResult = {
     makeEfiBootable: boolean
     persistenceArtifact: "product" | "developer" | null
     persistenceScope: "product-allowlist" | "developer-broad" | null
+    appendToMenuLabel: string | null
   }
   kioskWithExternalPlatform: ImageSummary
   kioskWithPlatformManagedUser: ImageSummary
@@ -166,10 +168,12 @@ describe("Korri Nix image output evaluation", () => {
     expect(result.liveUsb.imageFileName).not.toContain("developer")
     expect(result.liveUsb.persistenceArtifact).toBe("product")
     expect(result.liveUsb.persistenceScope).toBe("product-allowlist")
+    expect(result.liveUsb.appendToMenuLabel).toContain("Product ISO")
     expect(result.liveUsbDeveloper.assertionsPassed).toBe(true)
     expect(result.liveUsbDeveloper.imageFileName).toContain("developer")
     expect(result.liveUsbDeveloper.persistenceArtifact).toBe("developer")
     expect(result.liveUsbDeveloper.persistenceScope).toBe("developer-broad")
+    expect(result.liveUsbDeveloper.appendToMenuLabel).toContain("Developer ISO")
     expect(
       result.liveUsbDeveloper.kioskEnvironment.KORRI_LIVE_USB_ARTIFACT,
     ).toBe("developer")

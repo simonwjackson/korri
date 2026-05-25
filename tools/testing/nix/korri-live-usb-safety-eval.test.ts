@@ -16,6 +16,7 @@ import {
   readFileSync,
   readlinkSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
@@ -268,10 +269,15 @@ describe("Korri live USB safety evaluation", () => {
     try {
       const result = runResolverRig(rig)
       expect(result.status, result.stderr).toBe(0)
-      expect(readFileSync(rig.mountLog, "utf8")).toContain("/fake/sdb2 ")
+      expect(readFileSync(rig.mountLog, "utf8")).toContain(
+        "-o nosuid,nodev /fake/sdb2 ",
+      )
       expect(existsSync(`${rig.root}/.korri-live-usb-persistent`)).toBe(true)
       expect(existsSync(`${rig.root}/product/home/.config/korri`)).toBe(true)
       expect(existsSync(`${rig.root}/product/home/.cache/moonlight`)).toBe(true)
+      expect(
+        statSync(`${rig.root}/product/home/.config/korri`).mode & 0o777,
+      ).toBe(0o700)
       expect(existsSync(`${rig.root}/home`)).toBe(false)
       expect(lstatSync(`${rig.home}/.config/korri`).isSymbolicLink()).toBe(true)
       expect(readlinkSync(`${rig.home}/.config/korri`)).toBe(
@@ -283,6 +289,56 @@ describe("Korri live USB safety evaluation", () => {
       expect(existsSync(rig.deviceId)).toBe(true)
       expect(readFileSync(rig.chownLog, "utf8")).toContain("korri:korri")
     } finally {
+      rig.cleanup()
+    }
+  })
+
+  it("treats duplicate sibling persistence labels as unsafe", () => {
+    const rig = makeResolverRig({
+      bootSource: "/fake/sdb1",
+      parentDevice: "/fake/sdb",
+      transport: "usb",
+      removable: "1",
+      partitions: [
+        { device: "/fake/sdb1", label: "KORRI-ISO" },
+        { device: "/fake/sdb2", label: "KORRI-PERSIST" },
+        { device: "/fake/sdb3", label: "KORRI-PERSIST" },
+      ],
+    })
+    try {
+      const result = runResolverRig(rig)
+      expect(result.status, result.stderr).toBe(0)
+      const mountLog = readFileSync(rig.mountLog, "utf8")
+      expect(mountLog).toContain("tmpfs")
+      expect(mountLog).not.toContain("/fake/sdb2")
+      expect(mountLog).not.toContain("/fake/sdb3")
+      expect(result.stderr).toContain("multiple")
+    } finally {
+      rig.cleanup()
+    }
+  })
+
+  it("locks Developer namespace before starting a Product session", () => {
+    const rig = makeResolverRig({
+      bootSource: "/fake/sdb1",
+      parentDevice: "/fake/sdb",
+      transport: "usb",
+      removable: "1",
+      partitions: [
+        { device: "/fake/sdb1", label: "KORRI-ISO" },
+        { device: "/fake/sdb2", label: "KORRI-PERSIST" },
+      ],
+    })
+    try {
+      mkdirSync(`${rig.root}/developer/home`, { recursive: true })
+      writeFileSync(`${rig.root}/developer/home/sentinel`, "developer-only")
+      const result = runResolverRig(rig)
+      expect(result.status, result.stderr).toBe(0)
+      expect(statSync(`${rig.root}/developer`).mode & 0o777).toBe(0o000)
+    } finally {
+      if (existsSync(`${rig.root}/developer`)) {
+        chmodSync(`${rig.root}/developer`, 0o700)
+      }
       rig.cleanup()
     }
   })
@@ -486,7 +542,7 @@ function makeResolverRig(config: ResolverRigConfig): ResolverRig {
   writeShim(
     bin,
     "mount",
-    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> '${mountLog}'\nfor failed in ${mountFailures}; do\n  if [ "$1" = "$failed" ]; then exit 32; fi\ndone\nexit 0\n`,
+    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> '${mountLog}'\nfor failed in ${mountFailures}; do\n  for arg in "$@"; do\n    if [ "$arg" = "$failed" ]; then exit 32; fi\n  done\ndone\nexit 0\n`,
   )
   const chownFailureFlag = resolve(dir, "chown-failed-once")
   writeShim(

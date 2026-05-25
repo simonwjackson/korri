@@ -47,9 +47,14 @@ describe("Korri live USB smoke", () => {
     expect(docs).toContain("not an installer")
     expect(docs).toContain("allowlisted")
     expect(docs).toContain("broad Developer persistence")
+    expect(docs).toContain("no-op")
+    expect(docs).toContain("old broad-home")
     expect(docs).toContain("ephemeral")
     expect(docs).toContain("KORRI-PERSIST")
     expect(docs).toContain("internal disk")
+    expect(docs).not.toContain(
+      "routes Korri client state under `/persist/korri-live-usb/home`",
+    )
     expect(docs).toContain("8th-gen Intel NUC")
     expect(docs).toContain("XInput-compatible wired USB controller")
     expect(docs).toContain("moonlight-embedded")

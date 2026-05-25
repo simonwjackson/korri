@@ -114,6 +114,7 @@ in
     makeEfiBootable = liveUsb.config.isoImage.makeEfiBootable or false;
     persistenceArtifact = liveUsb.config.services.korri.liveUsbPersistence.artifact or null;
     persistenceScope = liveUsb.config.services.korri.liveUsbPersistence.scope or null;
+    appendToMenuLabel = liveUsb.config.isoImage.appendToMenuLabel or null;
   };
   liveUsbDeveloper = (summarize liveUsbDeveloper) // {
     imageFileName = liveUsbDeveloper.config.image.fileName or null;
@@ -121,6 +122,7 @@ in
     makeEfiBootable = liveUsbDeveloper.config.isoImage.makeEfiBootable or false;
     persistenceArtifact = liveUsbDeveloper.config.services.korri.liveUsbPersistence.artifact or null;
     persistenceScope = liveUsbDeveloper.config.services.korri.liveUsbPersistence.scope or null;
+    appendToMenuLabel = liveUsbDeveloper.config.isoImage.appendToMenuLabel or null;
   };
   kioskWithExternalPlatform = summarize kioskWithExternalPlatform;
   kioskWithPlatformManagedUser = summarize kioskWithPlatformManagedUser;

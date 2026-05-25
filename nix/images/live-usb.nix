@@ -9,7 +9,9 @@
 
 let
   cfg = config.services.korri.liveUsbPersistence;
-  artifactSuffix = lib.optionalString (cfg.artifact == "developer") "-developer";
+  isDeveloper = cfg.artifact == "developer";
+  artifactSuffix = lib.optionalString isDeveloper "-developer";
+  menuLabel = if isDeveloper then " Developer ISO" else " Product ISO";
 in
 
 {
@@ -30,6 +32,7 @@ in
     isoImage = {
       makeUsbBootable = lib.mkDefault true;
       makeEfiBootable = lib.mkDefault true;
+      appendToMenuLabel = lib.mkDefault menuLabel;
     };
   };
 }
