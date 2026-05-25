@@ -1,19 +1,17 @@
 /**
- * Desktop preload script: installs `window.__korriInput` so the
- * renderer can receive brokered semantic input actions (gamepad
- * mappings, directional keys, etc.) pushed by the bun-side input
- * broker.
+ * Desktop preload script: installs `window.__korriInput` so the renderer can
+ * receive brokered semantic input actions (gamepad mappings, directional keys,
+ * etc.) pushed by the Bun-side input broker.
  *
- * The bun side calls `window.__electrobun.receiveMessageFromBun(payload)`
- * with input payloads tagged by `kind`; the installer below dispatches
- * by tag. `chainAcceptor` preserves any previously-installed handler
- * so coexistence with electrobun's own preload (or any future
- * additional bridge) is non-destructive.
+ * The Bun side delivers input through Korri's own
+ * `window.__korriInputDispatch(payload)` entry point. Electrobun's
+ * `window.__electrobun.receiveMessageFromBun` hook remains framework-owned and
+ * is intentionally not used for product input delivery.
  *
- * Connection-state and runtime-config no longer cross this boundary —
- * the catch-all serve in `create-desktop-app.ts` gates the React
- * bundle on `connected` and inlines runtime-config into `index.html`
- * directly. See plan 2026-05-24-004 (U1, U2, U6).
+ * Connection-state and runtime-config no longer cross this boundary — the
+ * catch-all serve in `create-desktop-app.ts` gates the React bundle on
+ * `connected` and inlines runtime-config into `index.html` directly. See plan
+ * 2026-05-24-004 (U1, U2, U6).
  *
  * Built as a separate browser target via:
  *   bun build korri/deploy/desktop/preload.ts \
@@ -33,10 +31,7 @@ import {
 declare global {
   interface Window {
     __korriInput?: KorriInputBridge
-    __electrobun?: {
-      receiveMessageFromBun?: (msg: unknown) => void
-      [extension: string]: unknown
-    }
+    __korriInputDispatch?: (payload: unknown) => void
   }
 }
 
@@ -60,43 +55,8 @@ const INITIAL_INPUT_STATUS: DesktopInputStatus = {
 }
 
 /**
- * Chain a new acceptor onto `target.__electrobun.receiveMessageFromBun`,
- * preserving any previously-installed handler. Both run for every
- * message; each is responsible for filtering by its own type guard.
- *
- * Each handler is isolated by try/catch so a throw from one bridge
- * (e.g., a subscriber raising) does not poison the chain for the next
- * bridge. This isolation property is load-bearing for coexistence with
- * electrobun's own preload and is regression-tested directly in
- * `preload.test.ts`.
- */
-export function chainAcceptor(
-  target: Window & typeof globalThis,
-  accept: (incoming: unknown) => void,
-): void {
-  if (!target.__electrobun) {
-    target.__electrobun = {}
-  }
-  const previous = target.__electrobun.receiveMessageFromBun
-  target.__electrobun.receiveMessageFromBun = (incoming: unknown): void => {
-    if (typeof previous === "function") {
-      try {
-        previous(incoming)
-      } catch (error) {
-        console.warn("[korri] prior bridge acceptor threw", error)
-      }
-    }
-    try {
-      accept(incoming)
-    } catch (error) {
-      console.warn("[korri] bridge acceptor threw", error)
-    }
-  }
-}
-
-/**
- * Install the desktop-input bridge on the given window object. Actions
- * are edge-triggered and not replayed; status is a replayable snapshot.
+ * Install the desktop-input bridge on the given window object. Actions are
+ * edge-triggered and not replayed; status is a replayable snapshot.
  */
 export function installDesktopInputBridge(
   target: Window & typeof globalThis,
@@ -121,10 +81,14 @@ export function installDesktopInputBridge(
     },
   }
 
-  const acceptIncoming = (incoming: unknown): void => {
+  const dispatch = (incoming: unknown): void => {
     if (isDesktopInputActionBridgePayload(incoming)) {
       for (const listener of actionListeners) {
-        listener(incoming.action)
+        try {
+          listener(incoming.action)
+        } catch (error) {
+          console.warn("[korri] input action listener threw", error)
+        }
       }
       return
     }
@@ -132,19 +96,22 @@ export function installDesktopInputBridge(
     if (isDesktopInputStatusBridgePayload(incoming)) {
       currentStatus = incoming.status
       for (const listener of statusListeners) {
-        listener(incoming.status)
+        try {
+          listener(incoming.status)
+        } catch (error) {
+          console.warn("[korri] input status listener threw", error)
+        }
       }
     }
   }
 
   target.__korriInput = bridge
-  chainAcceptor(target, acceptIncoming)
+  target.__korriInputDispatch = dispatch
 
   return bridge
 }
 
-// No auto-install side effect: tests import this file directly and
-// must not mutate the global window on import. The desktop's compiled
-// preload entry point lives in `preload-entry.ts` and calls
-// `installDesktopInputBridge` explicitly when bundled for the browser
-// target.
+// No auto-install side effect: tests import this file directly and must not
+// mutate the global window on import. The desktop's compiled preload entry
+// point lives in `preload-entry.ts` and calls `installDesktopInputBridge`
+// explicitly when bundled for the browser target.

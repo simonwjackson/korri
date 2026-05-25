@@ -135,13 +135,13 @@ pkgs.stdenv.mkDerivation {
         fi
 
         # Compile the renderer-side preload that installs window.__korriInput
-        # so the React shell can subscribe to brokered semantic input actions
-        # from the desktop input broker. Connection-state and runtime-config
-        # are no longer pushed over this channel (see plan 2026-05-24-004
-        # U1/U2/U6): they're served via the bun-side Hono composition and
-        # an inlined `<script>` tag respectively. The preload chains itself
-        # onto window.__electrobun.receiveMessageFromBun and dispatches by
-        # payload tag, so it composes cleanly with electrobun's own preload.
+        # plus Korri's owned window.__korriInputDispatch entry point, so the
+        # React shell can subscribe to brokered semantic input actions from the
+        # desktop input broker. Connection-state and runtime-config are no
+        # longer pushed over this channel (see plan 2026-05-24-004 U1/U2/U6):
+        # they're served via the bun-side Hono composition and an inlined
+        # `<script>` tag respectively. Electrobun's receiveMessageFromBun hook
+        # remains framework-owned and is not used for Korri input delivery.
         mkdir -p "$app_bundle/Resources/app/views/mainview"
         bun build korri/deploy/desktop/preload-entry.ts \
           --target=browser \

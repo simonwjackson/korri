@@ -394,11 +394,15 @@ function statusPayloads(window: ReturnType<typeof createWindowDouble>) {
 function createWindowDouble(options: { readonly failStatus?: boolean } = {}) {
   const handlers = new Map<string, Array<() => void>>()
   const payloads: unknown[] = []
+  const scripts: string[] = []
   return {
     title: "Korri",
     payloads,
+    scripts,
     webview: {
-      sendMessageToWebviewViaExecute(payload: unknown) {
+      executeJavascript(script: string) {
+        scripts.push(script)
+        const payload = payloadFromDispatchScript(script)
         if (
           options.failStatus &&
           decodeDesktopInputBridgePayload(payload).kind === "korri.input.status"
@@ -417,6 +421,15 @@ function createWindowDouble(options: { readonly failStatus?: boolean } = {}) {
       for (const handler of handlers.get(event) ?? []) handler()
     },
   }
+}
+
+function payloadFromDispatchScript(script: string): unknown {
+  const prefix = "window.__korriInputDispatch?.("
+  const suffix = ");"
+  if (!script.startsWith(prefix) || !script.endsWith(suffix)) {
+    throw new Error(`unexpected input dispatch script: ${script}`)
+  }
+  return JSON.parse(script.slice(prefix.length, -suffix.length))
 }
 
 function createInputServer(): InputServerDouble {

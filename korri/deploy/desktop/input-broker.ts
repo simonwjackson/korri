@@ -3,11 +3,15 @@ import {
   type DesktopInputBrokerCoreOptions,
   type DesktopInputTarget,
 } from "@shared/input/desktop-input-broker-core"
+import {
+  isDesktopInputActionBridgePayload,
+  isDesktopInputStatusBridgePayload,
+} from "@shared/input/desktop-bridge-wire"
 
 type DesktopInputWindow = {
   readonly title?: string
   readonly webview: {
-    readonly sendMessageToWebviewViaExecute: (payload: unknown) => void
+    readonly executeJavascript: (script: string) => void
     readonly on?: (event: "dom-ready", handler: () => void) => void
   }
 }
@@ -37,6 +41,11 @@ export function createDesktopInputBroker(options: DesktopInputBrokerOptions) {
   })
 }
 
+export function createKorriInputDispatchScript(payload: unknown): string {
+  const encoded = encodeDesktopInputBridgePayloadForDispatch(payload)
+  return `window.__korriInputDispatch?.(${JSON.stringify(encoded)});`
+}
+
 const targetCache = new WeakMap<DesktopInputWindow, DesktopInputTarget>()
 
 function windowToTarget(window: DesktopInputWindow): DesktopInputTarget {
@@ -46,9 +55,19 @@ function windowToTarget(window: DesktopInputWindow): DesktopInputTarget {
   const target: DesktopInputTarget = {
     title: window.title,
     sendMessage: payload =>
-      window.webview.sendMessageToWebviewViaExecute(payload),
+      window.webview.executeJavascript(createKorriInputDispatchScript(payload)),
     onDomReady: handler => window.webview.on?.("dom-ready", handler),
   }
   targetCache.set(window, target)
   return target
+}
+
+function encodeDesktopInputBridgePayloadForDispatch(payload: unknown) {
+  if (
+    isDesktopInputActionBridgePayload(payload) ||
+    isDesktopInputStatusBridgePayload(payload)
+  ) {
+    return payload
+  }
+  throw new Error("invalid desktop input bridge payload")
 }

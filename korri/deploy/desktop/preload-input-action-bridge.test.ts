@@ -8,6 +8,7 @@ import { installDesktopInputBridge } from "./preload"
 
 interface WindowDouble {
   __korriInput?: unknown
+  __korriInputDispatch?: (payload: unknown) => void
   __electrobun?: {
     receiveMessageFromBun?: (msg: unknown) => void
     [k: string]: unknown
@@ -46,6 +47,7 @@ describe("installDesktopInputBridge", () => {
     )
 
     expect(w.__korriInput).toBe(bridge)
+    expect(typeof w.__korriInputDispatch).toBe("function")
     expect(typeof bridge.subscribeAction).toBe("function")
     expect(typeof bridge.getStatus).toBe("function")
     expect(typeof bridge.subscribeStatus).toBe("function")
@@ -60,11 +62,30 @@ describe("installDesktopInputBridge", () => {
     const second: DesktopInputActionBridgePayload["action"][] = []
 
     bridge.subscribeAction(action => first.push(action))
-    w.__electrobun?.receiveMessageFromBun?.(INPUT_ACTION)
+    w.__korriInputDispatch?.(INPUT_ACTION)
     bridge.subscribeAction(action => second.push(action))
 
     expect(first).toEqual([INPUT_ACTION.action])
     expect(second).toEqual([])
+  })
+
+  it("continues delivering actions when Electrobun owns receiveMessageFromBun", () => {
+    const w = makeWindow()
+    const bridge = installDesktopInputBridge(
+      w as unknown as Window & typeof globalThis,
+    )
+    const actions: DesktopInputActionBridgePayload["action"][] = []
+    const electrobunReceived: unknown[] = []
+    bridge.subscribeAction(action => actions.push(action))
+
+    w.__electrobun = {
+      receiveMessageFromBun: msg => electrobunReceived.push(msg),
+    }
+    w.__electrobun.receiveMessageFromBun?.({ kind: "electrobun-owned" })
+    w.__korriInputDispatch?.(INPUT_ACTION)
+
+    expect(electrobunReceived).toEqual([{ kind: "electrobun-owned" }])
+    expect(actions).toEqual([INPUT_ACTION.action])
   })
 
   it("stores and publishes broker status snapshots", () => {
@@ -75,7 +96,7 @@ describe("installDesktopInputBridge", () => {
     const statuses: DesktopInputStatusBridgePayload["status"][] = []
     bridge.subscribeStatus(status => statuses.push(status))
 
-    w.__electrobun?.receiveMessageFromBun?.(INPUT_STATUS)
+    w.__korriInputDispatch?.(INPUT_STATUS)
 
     expect(statuses).toEqual([INPUT_STATUS.status])
     expect(bridge.getStatus()).toEqual(INPUT_STATUS.status)
@@ -94,11 +115,11 @@ describe("installDesktopInputBridge", () => {
     const actions: DesktopInputActionBridgePayload["action"][] = []
     bridge.subscribeAction(action => actions.push(action))
 
-    w.__electrobun?.receiveMessageFromBun?.({
+    w.__korriInputDispatch?.({
       status: "connected",
       server: { hostId: "x", controlUrl: "http://x" },
     })
-    w.__electrobun?.receiveMessageFromBun?.({ desktopInput: true })
+    w.__korriInputDispatch?.({ desktopInput: true })
 
     expect(actions).toEqual([])
   })
@@ -115,14 +136,14 @@ describe("installDesktopInputBridge", () => {
     bridge.subscribeStatus(status => statuses.push(status))
 
     expect(() => {
-      w.__electrobun?.receiveMessageFromBun?.({
+      w.__korriInputDispatch?.({
         kind: "korri.input.action",
         sequence: 1,
         timestamp: 123,
         action: { type: "direction", source: "native" },
       })
-      w.__electrobun?.receiveMessageFromBun?.(INPUT_ACTION)
-      w.__electrobun?.receiveMessageFromBun?.(INPUT_STATUS)
+      w.__korriInputDispatch?.(INPUT_ACTION)
+      w.__korriInputDispatch?.(INPUT_STATUS)
     }).not.toThrow()
 
     expect(statuses).toEqual([INPUT_STATUS.status])
