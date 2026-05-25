@@ -16,6 +16,8 @@ import {
   type InputPlumberVirtualGamepadResolution,
   resolveInputPlumberVirtualGamepad,
 } from "@shared/input/native/inputplumber-virtual-gamepad"
+import { composeGamescopeLaunchSpec } from "../../../../tools/device/game-stream-fullscreen"
+import type { GamescopeOptions } from "../../../../tools/device/game-stream-fullscreen"
 
 export type MoonlightLaunchResult =
   | { readonly status: "started"; readonly command: string }
@@ -51,6 +53,7 @@ export interface MoonlightLaunchOptions {
   readonly inputDevice?: string
   readonly requireInputPlumberInput?: boolean
   readonly platform?: string
+  readonly gamescope?: GamescopeOptions
   readonly readProcDevices?: () => Promise<string>
   readonly runner?: CommandRunner
 }
@@ -101,8 +104,17 @@ export async function launchMoonlight(
   const allowNixFallback = options.allowNixFallback ?? command === "moonlight"
   const startupObserveMs =
     options.startupObserveMs ?? moonlightStartupObserveMsFromEnv()
-  const installed = await runner.run(command, args, { startupObserveMs })
-  if (installed.status === "started") return { status: "started", command }
+  const installedSpec = moonlightCommandSpec(command, args, options.gamescope)
+  const installed = await runner.run(
+    installedSpec.command,
+    installedSpec.args,
+    {
+      startupObserveMs,
+    },
+  )
+  if (installed.status === "started") {
+    return { status: "started", command: installedSpec.command }
+  }
 
   if (!allowNixFallback) {
     return {
@@ -111,18 +123,33 @@ export async function launchMoonlight(
     }
   }
 
-  const fallback = await runner.run(
+  const fallbackSpec = moonlightCommandSpec(
     "nix",
     ["run", "nixpkgs#moonlight-embedded", "--", ...args],
-    { startupObserveMs },
+    options.gamescope,
   )
-  if (fallback.status === "started")
-    return { status: "started", command: "nix" }
+  const fallback = await runner.run(fallbackSpec.command, fallbackSpec.args, {
+    startupObserveMs,
+  })
+  if (fallback.status === "started") {
+    return { status: "started", command: fallbackSpec.command }
+  }
 
   return {
     status: "failed",
     message: `Could not start Moonlight. ${command}: ${installed.message}; nix fallback: ${fallback.message}`,
   }
+}
+
+function moonlightCommandSpec(
+  command: string,
+  args: readonly string[],
+  gamescope: GamescopeOptions | undefined,
+): { readonly command: string; readonly args: readonly string[] } {
+  return composeGamescopeLaunchSpec(
+    { command, args },
+    gamescope ?? { enabled: true },
+  )
 }
 
 function moonlightCommandFromEnv(): string | undefined {

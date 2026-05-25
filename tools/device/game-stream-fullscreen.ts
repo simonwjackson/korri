@@ -185,7 +185,11 @@ function matchesSelector(
 function launchesNativeWaylandChild(game: LaunchSpec): boolean {
   return (
     game.env?.SDL_VIDEODRIVER === "wayland" ||
-    game.env?.WAYLAND_DISPLAY !== undefined
+    game.env?.WAYLAND_DISPLAY !== undefined ||
+    game.args.some(
+      (arg, index, args) =>
+        arg === "-platform" && args[index + 1]?.toLowerCase() === "wayland",
+    )
   )
 }
 

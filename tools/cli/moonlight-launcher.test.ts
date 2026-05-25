@@ -13,10 +13,27 @@ import { type CommandRunner, launchMoonlight } from "./moonlight-launcher"
 const PROC_FIXTURES_DIR = join(process.cwd(), "tools/testing/fixtures/proc")
 
 describe("moonlight launcher", () => {
-  it("uses installed moonlight with embedded-client args first", async () => {
+  it("wraps installed moonlight in default Gamescope with embedded-client args", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({
       host: "aka.local",
+      runner: runner((command, args) => {
+        calls.push([command, ...args].join(" "))
+        return { status: "started" }
+      }),
+    })
+
+    expect(result).toEqual({ status: "started", command: "gamescope" })
+    expect(calls).toEqual([
+      "gamescope -f -b -- moonlight stream -app Korri Stream aka.local",
+    ])
+  })
+
+  it("launches moonlight unwrapped when Gamescope is explicitly disabled", async () => {
+    const calls: string[] = []
+    const result = await launchMoonlight({
+      host: "aka.local",
+      gamescope: { enabled: false },
       runner: runner((command, args) => {
         calls.push([command, ...args].join(" "))
         return { status: "started" }
@@ -33,16 +50,16 @@ describe("moonlight launcher", () => {
       host: "aka.local",
       runner: runner((command, args) => {
         calls.push([command, ...args].join(" "))
-        return command === "moonlight"
+        return calls.length === 1
           ? { status: "failed", message: "ENOENT" }
           : { status: "started" }
       }),
     })
 
-    expect(result).toEqual({ status: "started", command: "nix" })
+    expect(result).toEqual({ status: "started", command: "gamescope" })
     expect(calls).toEqual([
-      "moonlight stream -app Korri Stream aka.local",
-      "nix run nixpkgs#moonlight-embedded -- stream -app Korri Stream aka.local",
+      "gamescope -f -b -- moonlight stream -app Korri Stream aka.local",
+      "gamescope -f -b -- nix run nixpkgs#moonlight-embedded -- stream -app Korri Stream aka.local",
     ])
   })
 
@@ -59,8 +76,10 @@ describe("moonlight launcher", () => {
         }),
       })
 
-      expect(result).toEqual({ status: "started", command: "moonlight" })
-      expect(calls).toEqual(["moonlight stream -app Korri Stream aka.local"])
+      expect(result).toEqual({ status: "started", command: "gamescope" })
+      expect(calls).toEqual([
+        "gamescope -f -b -- moonlight stream -app Korri Stream aka.local",
+      ])
     } finally {
       if (previousClient === undefined) delete Bun.env.KORRI_MOONLIGHT_CLIENT
       else Bun.env.KORRI_MOONLIGHT_CLIENT = previousClient
@@ -85,7 +104,7 @@ describe("moonlight launcher", () => {
 
       expect(result.status).toBe("failed")
       expect(calls).toEqual([
-        "/nix/store/moonlight-embedded/bin/moonlight stream -app Korri Stream 192.168.1.117",
+        "gamescope -f -b -- /nix/store/moonlight-embedded/bin/moonlight stream -app Korri Stream 192.168.1.117",
       ])
     } finally {
       if (previous === undefined) delete Bun.env.KORRI_MOONLIGHT_COMMAND
@@ -112,9 +131,9 @@ describe("moonlight launcher", () => {
       }),
     })
 
-    expect(result).toEqual({ status: "started", command: "moonlight" })
+    expect(result).toEqual({ status: "started", command: "gamescope" })
     expect(calls).toEqual([
-      "moonlight stream -mapping /nix/store/moonlight/share/moonlight/gamecontrollerdb.txt -input /dev/input/event10 -app Korri Stream 192.168.1.117",
+      "gamescope -f -b -- moonlight stream -mapping /nix/store/moonlight/share/moonlight/gamecontrollerdb.txt -input /dev/input/event10 -app Korri Stream 192.168.1.117",
     ])
   })
 
@@ -185,6 +204,23 @@ describe("moonlight launcher", () => {
     expect(calls).toEqual([])
   })
 
+  it("exposes Wayland when the Moonlight platform is Wayland", async () => {
+    const calls: string[] = []
+    const result = await launchMoonlight({
+      host: "192.168.1.117",
+      platform: "wayland",
+      runner: runner((command, args) => {
+        calls.push([command, ...args].join(" "))
+        return { status: "started" }
+      }),
+    })
+
+    expect(result).toEqual({ status: "started", command: "gamescope" })
+    expect(calls).toEqual([
+      "gamescope -f -b --expose-wayland -- moonlight stream -platform wayland -app Korri Stream 192.168.1.117",
+    ])
+  })
+
   it("passes KORRI_MOONLIGHT_MAPPING_FILE to moonlight-embedded", async () => {
     const previous = Bun.env.KORRI_MOONLIGHT_MAPPING_FILE
     const calls: string[] = []
@@ -199,9 +235,9 @@ describe("moonlight launcher", () => {
         }),
       })
 
-      expect(result).toEqual({ status: "started", command: "moonlight" })
+      expect(result).toEqual({ status: "started", command: "gamescope" })
       expect(calls).toEqual([
-        "moonlight stream -mapping /nix/store/moonlight-embedded/share/moonlight/gamecontrollerdb.txt -app Korri Stream 192.168.1.117",
+        "gamescope -f -b -- moonlight stream -mapping /nix/store/moonlight-embedded/share/moonlight/gamecontrollerdb.txt -app Korri Stream 192.168.1.117",
       ])
     } finally {
       if (previous === undefined) delete Bun.env.KORRI_MOONLIGHT_MAPPING_FILE
@@ -224,7 +260,7 @@ describe("moonlight launcher", () => {
 
     expect(result.status).toBe("failed")
     expect(calls).toEqual([
-      "/nix/store/moonlight-embedded/bin/moonlight stream -app Korri Stream 192.168.1.117",
+      "gamescope -f -b -- /nix/store/moonlight-embedded/bin/moonlight stream -app Korri Stream 192.168.1.117",
     ])
   })
 
@@ -237,6 +273,7 @@ describe("moonlight launcher", () => {
       const result = await launchMoonlight({
         command,
         allowNixFallback: false,
+        gamescope: { enabled: false },
         startupObserveMs: 250,
       })
       expect(result.status).toBe("failed")
@@ -259,8 +296,8 @@ describe("moonlight launcher", () => {
 
     expect(result.status).toBe("failed")
     if (result.status === "failed") {
-      expect(result.message).toContain("moonlight missing")
-      expect(result.message).toContain("nix missing")
+      expect(result.message).toContain("gamescope missing")
+      expect(result.message).toContain("nix fallback")
     }
   })
 })
