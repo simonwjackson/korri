@@ -135,6 +135,37 @@ let
     }
   ];
   persistenceScope = if cfg.artifact == "developer" then "developer-broad" else "product-allowlist";
+
+  isAbsolutePath = path: lib.hasPrefix "/" path;
+  isSafeRelativePath =
+    path:
+    path != ""
+    && !lib.hasPrefix "/" path
+    && path != ".."
+    && !lib.hasPrefix "../" path
+    && !lib.hasSuffix "/.." path
+    && !lib.hasInfix "/../" path;
+  isSafeMarker = marker: marker != "" && !lib.hasInfix "/" marker && marker != "." && marker != "..";
+  isValidMode = mode: mode == null || builtins.match "^[0-7]{3,4}$" mode != null;
+  isValidOwner = owner: owner == null || owner != "";
+  persistenceEntryAssertions = lib.concatMap (entry: [
+    {
+      assertion = isAbsolutePath entry.target;
+      message = "services.korri.liveUsbPersistence.productAllowlist target must be an absolute path (got \"${entry.target}\").";
+    }
+    {
+      assertion = isSafeRelativePath entry.source;
+      message = "services.korri.liveUsbPersistence.productAllowlist source must be a safe relative path (got \"${entry.source}\").";
+    }
+    {
+      assertion = isValidOwner entry.owner && isValidOwner entry.group;
+      message = "services.korri.liveUsbPersistence.productAllowlist owner/group must be null or non-empty.";
+    }
+    {
+      assertion = isValidMode entry.mode;
+      message = "services.korri.liveUsbPersistence.productAllowlist mode must be an octal mode (got \"${toString entry.mode}\").";
+    }
+  ]) cfg.productAllowlist;
 in
 {
   options.services.korri.liveUsbPersistence = {
@@ -205,6 +236,31 @@ in
   };
 
   config = {
+    assertions = lib.optionals cfg.enable (
+      [
+        {
+          assertion = isAbsolutePath cfg.root;
+          message = "services.korri.liveUsbPersistence.root must be an absolute path (got \"${cfg.root}\").";
+        }
+        {
+          assertion = isAbsolutePath cfg.bootMountPoint;
+          message = "services.korri.liveUsbPersistence.bootMountPoint must be an absolute path (got \"${cfg.bootMountPoint}\").";
+        }
+        {
+          assertion = isSafeMarker cfg.markerPersistent && isSafeMarker cfg.markerEphemeral;
+          message = "services.korri.liveUsbPersistence persistence markers must be relative filenames.";
+        }
+        {
+          assertion = cfg.scope == persistenceScope;
+          message = ''
+            services.korri.liveUsbPersistence.scope must match artifact "${cfg.artifact}"
+            (expected "${persistenceScope}", got "${cfg.scope}").
+          '';
+        }
+      ]
+      ++ persistenceEntryAssertions
+    );
+
     services.korri.client.package = lib.mkIf (
       cfg.enable && packagesForSystem ? korri-desktop-x86-kiosk
     ) (lib.mkDefault packagesForSystem.korri-desktop-x86-kiosk);
