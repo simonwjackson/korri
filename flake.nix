@@ -465,7 +465,15 @@
           wrapKorriDesktop = args: pkgs.callPackage ./nix/korri-desktop/wrap.nix args;
         };
 
-        checks = pkgs.lib.optionalAttrs isX86Linux {
+        checks = {
+          # Module-eval checks: pure Nix evaluation, no platform-specific build
+          # graph, safe to gate on any system.
+          korri-compositor-module = import ./nix/tests/korri-compositor-module-check.nix {
+            inherit pkgs;
+            korriCompositorModule = self.nixosModules.korri-compositor;
+          };
+        }
+        // pkgs.lib.optionalAttrs isX86Linux {
           korri-live-usb-config = import ./nix/tests/korri-live-usb-config-check.nix {
             inherit pkgs;
             liveUsbSystem = korriKioskLiveUsbSystem;
@@ -650,6 +658,15 @@
               korri-client
               korri-inputd
               (import ./nix/modules/korri-kiosk.nix { korri = self; })
+            ];
+          };
+          # New per-role compositor module. Bundles the Korri client install
+          # so the kiosk-surface sub-tree can default `kiosk.command` to the
+          # selected client package without callers wiring it themselves.
+          korri-compositor = {
+            imports = [
+              korri-client
+              (import ./nix/modules/korri-compositor.nix { korri = self; })
             ];
           };
           korri = {
