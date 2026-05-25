@@ -16,6 +16,7 @@ import {
   emptySnapshot,
   enumerateApplicablePresets,
   resolveLaunchContext,
+  resolveLocalLauncherGamescopePolicy,
 } from "./cascade-resolver"
 import type { GameRecord } from "./records/game"
 import type { GlobalConfigRecord } from "./records/global"
@@ -196,6 +197,37 @@ describe("resolveLaunchContext — gamescope policy fold", () => {
     const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
     expect(ctx.gamescope?.enabled).toBe(true)
     expect(ctx.gamescope?.args).toEqual(["-F", "fsr", "-W", "1920"])
+  })
+})
+
+describe("resolveLocalLauncherGamescopePolicy", () => {
+  it("resolves local launcher policy from global, launcher, and override without a game id", () => {
+    const snap = snapshotOf({
+      global: globalConfig({ gamescope: { enabled: false } }),
+      launchers: [
+        launcher({
+          id: "moonlight",
+          systems: [],
+          gamescope: { args: ["--expose-wayland"] },
+        }),
+      ],
+      games: [],
+    })
+
+    expect(
+      resolveLocalLauncherGamescopePolicy(snap, {
+        launcherId: "moonlight",
+        override: { gamescope: { enabled: true } },
+      }),
+    ).toEqual({ enabled: true, args: ["--expose-wayland"] })
+  })
+
+  it("uses the product default when local launcher config is absent", () => {
+    expect(
+      resolveLocalLauncherGamescopePolicy(emptySnapshot(), {
+        launcherId: "moonlight",
+      }),
+    ).toEqual({ enabled: true })
   })
 })
 

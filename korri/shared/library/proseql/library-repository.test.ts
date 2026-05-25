@@ -129,6 +129,30 @@ describe("createLibraryRepository — resolveLaunchForGame (inheritance)", () =>
     })
   })
 
+  it("resolves local launcher Gamescope policy without a game id", async () => {
+    await withTempRoot(async root => {
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const repo = createLibraryRepository(db)
+            yield* repo.upsertGlobalConfig({ gamescope: { enabled: false } })
+            yield* repo.upsertLauncher({
+              id: "moonlight",
+              command: "moonlight",
+              args: [],
+              systems: [],
+              gamescope: { enabled: true, args: ["--expose-wayland"] },
+            })
+            return yield* repo.resolveLocalLauncherGamescopePolicy("moonlight")
+          }),
+        ),
+      )
+
+      expect(result).toEqual({ enabled: true, args: ["--expose-wayland"] })
+    })
+  })
+
   it("honors ephemeral override (most-specific cascade layer)", async () => {
     await withTempRoot(async root => {
       const result = await Effect.runPromise(

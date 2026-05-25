@@ -23,7 +23,10 @@
  * deterministic fakes.
  */
 
-import type { MoonlightLaunchResult } from "@app/stream/moonlight-launcher"
+import type {
+  MoonlightLaunchOptions,
+  MoonlightLaunchResult,
+} from "@app/stream/moonlight-launcher"
 import type { RemotePrepareResult } from "@app/stream/remote-stream-client"
 import { logger } from "@shared/logger"
 import type { ConnectionServerRecord } from "./connection-state-snapshot"
@@ -95,8 +98,13 @@ export interface LaunchBridgeOptions {
    * `launchMoonlight`; the indirection lets tests inject a
    * deterministic fake.
    */
+  readonly resolveMoonlightGamescope?: () => Promise<
+    NonNullable<MoonlightLaunchOptions["gamescope"]>
+  >
+
   readonly launchMoonlight: (options: {
     readonly host: string
+    readonly gamescope?: MoonlightLaunchOptions["gamescope"]
   }) => Promise<MoonlightLaunchResult>
 }
 
@@ -134,6 +142,16 @@ export function createLaunchBridgeHandler(
       } satisfies LaunchBridgeResponse)
     }
 
+    let moonlightGamescope: MoonlightLaunchOptions["gamescope"]
+    try {
+      moonlightGamescope = await options.resolveMoonlightGamescope?.()
+    } catch (error) {
+      logger.warn(
+        { id, host: connection.hostId, err: error },
+        "launch-bridge: local moonlight Gamescope policy resolution failed; using product default",
+      )
+    }
+
     let prepare: RemotePrepareResult
     try {
       prepare = await options.prepareGame(connection.controlUrl, id)
@@ -169,6 +187,7 @@ export function createLaunchBridgeHandler(
 
     const moonlight = await options.launchMoonlight({
       host: moonlightHostForConnection(connection),
+      gamescope: moonlightGamescope,
     })
 
     if (moonlight.status === "failed") {

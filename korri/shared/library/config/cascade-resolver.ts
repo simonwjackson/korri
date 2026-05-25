@@ -79,6 +79,11 @@ export interface ResolveInputs {
   readonly override?: EphemeralOverride
 }
 
+export interface ResolveLocalLauncherGamescopePolicyInputs {
+  readonly launcherId: string
+  readonly override?: EphemeralOverride
+}
+
 export type PresetLayerOrigin =
   | "global"
   | "user"
@@ -385,6 +390,20 @@ const truncateChain = (
     if (chain[i]?.payload.inherit === false) return chain.slice(i)
   }
   return chain
+}
+
+export const resolveLocalLauncherGamescopePolicy = (
+  snap: ConfigSnapshot,
+  inputs: ResolveLocalLauncherGamescopePolicyInputs,
+): GamescopePolicy => {
+  const layers: InheritableView[] = [
+    viewOfGlobal(snap.global),
+    viewOfLauncher(snap.launchers.get(inputs.launcherId)),
+  ]
+  if (inputs.override) layers.push(viewOfOverride(inputs.override))
+
+  const folded = foldLayers(layers, inputs.launcherId)
+  return normalizeGamescopePolicy(folded.gamescope)
 }
 
 export const enumerateApplicablePresets = (

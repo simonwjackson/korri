@@ -23,7 +23,10 @@
 
 import type { ConfigSnapshot } from "@shared/library/config/cascade-resolver"
 
-import { resolveLaunchContext } from "@shared/library/config/cascade-resolver"
+import {
+  resolveLaunchContext,
+  resolveLocalLauncherGamescopePolicy,
+} from "@shared/library/config/cascade-resolver"
 import { composeLaunchSpec } from "@shared/library/config/compose-launch-spec"
 import type { EphemeralOverride } from "@shared/library/config/ephemeral-override"
 import type { CascadeError } from "@shared/library/config/errors"
@@ -96,6 +99,10 @@ export interface LibraryRepository {
     gameId: string,
     opts?: ResolveLaunchOptions,
   ) => Effect.Effect<ResolvedLaunchOutput, CascadeError | LibraryError>
+  readonly resolveLocalLauncherGamescopePolicy: (
+    launcherId: string,
+    opts?: Pick<ResolveLaunchOptions, "override">,
+  ) => Effect.Effect<GamescopePolicy, LibraryError>
 }
 
 export function createLibraryRepository(db: KorriLibraryDb): LibraryRepository {
@@ -209,6 +216,15 @@ export function createLibraryRepository(db: KorriLibraryDb): LibraryRepository {
           spec,
           ...(context.gamescope ? { gamescope: context.gamescope } : {}),
         }
+      }),
+
+    resolveLocalLauncherGamescopePolicy: (launcherId, opts) =>
+      Effect.gen(function* () {
+        const snapshot = yield* loadSnapshot(db)
+        return resolveLocalLauncherGamescopePolicy(snapshot, {
+          launcherId,
+          override: opts?.override,
+        })
       }),
   }
 }

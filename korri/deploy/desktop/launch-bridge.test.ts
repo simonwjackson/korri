@@ -75,6 +75,7 @@ describe("desktop launch bridge", () => {
     let prepareCallControlUrl: string | undefined
     let prepareCallGameId: string | undefined
     let moonlightCallHost: string | undefined
+    let moonlightGamescope: unknown
 
     const handler = createLaunchBridgeHandler({
       getConnection: () => CONNECTED,
@@ -83,8 +84,10 @@ describe("desktop launch bridge", () => {
         prepareCallGameId = id
         return { status: "prepared", gameId: id, sessionId: "sess-1" }
       },
+      resolveMoonlightGamescope: async () => ({ enabled: false }),
       launchMoonlight: async opts => {
         moonlightCallHost = opts.host
+        moonlightGamescope = opts.gamescope
         return { status: "started", command: "moonlight" }
       },
     })
@@ -94,6 +97,7 @@ describe("desktop launch bridge", () => {
     expect(prepareCallControlUrl).toBe(CONNECTED.controlUrl)
     expect(prepareCallGameId).toBe("gba/wario-land-4")
     expect(moonlightCallHost).toBe("192.168.1.117")
+    expect(moonlightGamescope).toEqual({ enabled: false })
 
     expect(response.status).toBe(200)
     const body = (await response.json()) as LaunchBridgeResponse

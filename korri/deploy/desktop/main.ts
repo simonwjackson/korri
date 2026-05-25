@@ -1,10 +1,13 @@
 import { join } from "node:path"
+import { korriDataPath } from "@shared/config/xdg-paths"
 import {
   type CommandRunner,
   launchMoonlight,
   preflightMoonlightInput,
 } from "@app/stream/moonlight-launcher"
 import { createRemoteStreamControlClient } from "@app/stream/remote-stream-client"
+import { createLibraryRepository } from "@shared/library/proseql/library-repository"
+import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
 import { logger } from "@shared/logger"
 import { Effect, Exit, Fiber, Scope, Stream, SubscriptionRef } from "effect"
 import Electrobun, {
@@ -183,8 +186,13 @@ async function main() {
         return await client.prepareGame(id)
       },
       preflightMoonlightInput,
+      resolveMoonlightGamescope: resolveLocalMoonlightGamescopePolicy,
       launchMoonlight: opts =>
-        launchMoonlight({ host: opts.host, runner: diagnosticMoonlightRunner }),
+        launchMoonlight({
+          host: opts.host,
+          gamescope: opts.gamescope,
+          runner: diagnosticMoonlightRunner,
+        }),
     },
   })
 
@@ -243,6 +251,26 @@ async function main() {
       runtimeConfig,
     },
     "Korri desktop app started",
+  )
+}
+
+async function resolveLocalMoonlightGamescopePolicy() {
+  const configuredRoot = process.env.KORRI_LIBRARY_ROOT?.trim()
+  const root =
+    configuredRoot && configuredRoot.length > 0
+      ? configuredRoot
+      : korriDataPath(process.env, "library")
+
+  return await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const db = yield* openKorriLibraryDb({ root })
+        const repository = createLibraryRepository(db)
+        return yield* repository.resolveLocalLauncherGamescopePolicy(
+          "moonlight",
+        )
+      }),
+    ),
   )
 }
 
