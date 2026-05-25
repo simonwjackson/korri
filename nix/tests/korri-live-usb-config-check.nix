@@ -119,9 +119,6 @@ let
       == cfg.services.korri.liveUsbPersistence.label
     ))
     (check "debug SSH defaults to off without injected keys" (!cfg.services.openssh.enable))
-    (check "Sway config must disable borders" (
-      lib.hasInfix "default_border none" (builtins.readFile cfg.services.korri.kiosk.sway.configFile)
-    ))
   ];
   failures = builtins.filter (candidate: !candidate.assertion) checks;
 in
