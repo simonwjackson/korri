@@ -61,10 +61,13 @@ export const handleLaunchLibrary = (
       return resolvedResult.response
     }
 
-    const spec = composeGamescopeLaunchSpec(
-      resolvedResult.resolved.spec,
-      normalizeGamescopePolicy(resolvedResult.resolved.gamescope),
+    const gamescope = normalizeGamescopePolicy(
+      resolvedResult.resolved.gamescope,
     )
+    const spec = composeGamescopeLaunchSpec(resolvedResult.resolved.spec, {
+      enabled: gamescope.enabled === true,
+      ...(gamescope.args !== undefined ? { args: gamescope.args } : {}),
+    })
 
     const result = yield* launcher.run(spec).pipe(Effect.mapError(toDataError))
 

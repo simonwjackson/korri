@@ -266,9 +266,12 @@ async function resolveLocalMoonlightGamescopePolicy() {
       Effect.gen(function* () {
         const db = yield* openKorriLibraryDb({ root })
         const repository = createLibraryRepository(db)
-        return yield* repository.resolveLocalLauncherGamescopePolicy(
-          "moonlight",
-        )
+        const policy =
+          yield* repository.resolveLocalLauncherGamescopePolicy("moonlight")
+        return {
+          enabled: policy.enabled === true,
+          ...(policy.args !== undefined ? { args: policy.args } : {}),
+        }
       }),
     ),
   )
