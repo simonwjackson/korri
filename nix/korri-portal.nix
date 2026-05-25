@@ -64,5 +64,28 @@ pkgs.stdenv.mkDerivation {
     runHook postInstall
   '';
 
+  doInstallCheck = true;
+
+  installCheckPhase = ''
+    runHook preInstallCheck
+
+    if [ ! -f "$out/index.html" ]; then
+      echo "korri-portal output is missing index.html" >&2
+      exit 1
+    fi
+
+    if ! find "$out/assets" -maxdepth 1 -type f -name '*.js' | grep -q .; then
+      echo "korri-portal output is missing built JavaScript assets" >&2
+      exit 1
+    fi
+
+    if ! find "$out/assets" -maxdepth 1 -type f -name '*.css' | grep -q .; then
+      echo "korri-portal output is missing built CSS assets" >&2
+      exit 1
+    fi
+
+    runHook postInstallCheck
+  '';
+
   meta.description = "Korri Vite portal build for desktop packaging";
 }

@@ -56,6 +56,29 @@ pkgs.stdenv.mkDerivation {
     runHook postInstall
   '';
 
+  doInstallCheck = true;
+
+  installCheckPhase = ''
+    runHook preInstallCheck
+
+    if [ ! -x "$out/bin/korri-inputd" ]; then
+      echo "korri-inputd wrapper is missing or not executable" >&2
+      exit 1
+    fi
+
+    if [ ! -f "$out/share/korri-inputd/korri-inputd.js" ]; then
+      echo "korri-inputd bundled JS is missing" >&2
+      exit 1
+    fi
+
+    if [ -d "$out/share/korri-inputd/node_modules" ]; then
+      echo "korri-inputd install closure must not contain node_modules" >&2
+      exit 1
+    fi
+
+    runHook postInstallCheck
+  '';
+
   meta = {
     description = "Korri native input bridge and shortcut daemon";
     platforms = lib.platforms.linux;

@@ -60,6 +60,31 @@ pkgs.stdenv.mkDerivation {
     runHook postInstall
   '';
 
+  doInstallCheck = true;
+
+  installCheckPhase = ''
+    runHook preInstallCheck
+
+    for binary in korri-game-stream-runner korri-game-stream-enqueue; do
+      if [ ! -x "$out/bin/$binary" ]; then
+        echo "$binary wrapper is missing or not executable" >&2
+        exit 1
+      fi
+    done
+
+    if [ ! -f "$out/share/korri-game-stream/korri-game-stream-runner.js" ]; then
+      echo "korri-game-stream bundled JS is missing" >&2
+      exit 1
+    fi
+
+    if [ -d "$out/share/korri-game-stream/node_modules" ]; then
+      echo "korri-game-stream install closure must not contain node_modules" >&2
+      exit 1
+    fi
+
+    runHook postInstallCheck
+  '';
+
   meta = {
     description = "Korri headless game stream runner for Sunshine app sessions";
     platforms = lib.platforms.linux;
