@@ -465,38 +465,101 @@
           wrapKorriDesktop = args: pkgs.callPackage ./nix/korri-desktop/wrap.nix args;
         };
 
-        checks = {
-          # Module-eval checks: pure Nix evaluation, no platform-specific build
-          # graph, safe to gate on any system.
-          korri-compositor-module = import ./nix/tests/korri-compositor-module-check.nix {
-            inherit pkgs;
-            korriCompositorModule = self.nixosModules.korri-compositor;
+        checks =
+          pkgs.lib.optionalAttrs isX86Linux {
+            korri-desktop-build-graph = import ./nix/tests/korri-desktop-build-graph-check.nix {
+              inherit pkgs pkgs2405;
+              host = korriDesktop;
+              device = korriDesktopDevice;
+              x86Kiosk = korriDesktopX86Kiosk;
+              unwrapped = korriDesktopUnwrapped;
+            };
+            korri-image-outputs = import ./nix/tests/korri-image-outputs-check.nix {
+              inherit pkgs;
+              packages = self.packages.${system};
+              apps = self.apps.${system};
+              imageLib = korriImages;
+              x86Platform = ./nix/images/platforms/x86.nix;
+              liveUsbConfigCheck = import ./nix/tests/korri-live-usb-config-check.nix {
+                inherit pkgs;
+                liveUsbSystem = korriKioskLiveUsbSystem;
+              };
+              liveUsbDeveloperConfigCheck = import ./nix/tests/korri-live-usb-config-check.nix {
+                inherit pkgs;
+                liveUsbSystem = korriKioskLiveUsbDeveloperSystem;
+                expectedArtifact = "developer";
+              };
+              liveUsbVmSmokeCheck = import ./nix/tests/korri-live-usb-vm-smoke.nix {
+                inherit pkgs;
+                imageLib = korriImages;
+                x86Platform = ./nix/images/platforms/x86.nix;
+              };
+              hardwareFactSourceFiles = [
+                ./nix/images/common.nix
+                ./nix/images/headless.nix
+                ./nix/images/kiosk.nix
+                ./nix/images/platforms/x86.nix
+              ];
+            };
+          }
+          // {
+            # Module-eval checks: pure Nix evaluation, no platform-specific build
+            # graph, safe to gate on any system.
+            korri-compositor-module = import ./nix/tests/korri-compositor-module-check.nix {
+              inherit pkgs;
+              korriCompositorModule = self.nixosModules.korri-compositor;
+            };
+            korri-input-module = import ./nix/tests/korri-input-module-check.nix {
+              inherit pkgs;
+              korriInputModule = self.nixosModules.korri-input;
+            };
+            korri-server-module = import ./nix/tests/korri-server-module-check.nix {
+              inherit pkgs;
+              korriServerModule = self.nixosModules.korri-server;
+            };
+          }
+          // pkgs.lib.optionalAttrs isX86Linux {
+            korri-rocknix-sm8550-config = import ./nix/tests/korri-rocknix-sm8550-config-check.nix {
+              inherit pkgs;
+              thorSystem = self.nixosConfigurations.korri-rocknix-kiosk-thor;
+              soboSystem = self.nixosConfigurations.korri-rocknix-kiosk-odin2portal;
+              byCompatibleSystem = self.nixosConfigurations.korri-rocknix-kiosk-by-compatible;
+              targetPackages = self.packages.aarch64-linux;
+              hostPackages = self.packages.${system};
+              configurations = self.nixosConfigurations;
+              hardwareFactSourceFiles = [
+                ./nix/images/common.nix
+                ./nix/images/headless.nix
+                ./nix/images/kiosk.nix
+                ./nix/images/platforms/x86.nix
+              ];
+            };
+            korri-live-usb-config = import ./nix/tests/korri-live-usb-config-check.nix {
+              inherit pkgs;
+              liveUsbSystem = korriKioskLiveUsbSystem;
+            };
+            korri-live-usb-developer-config = import ./nix/tests/korri-live-usb-config-check.nix {
+              inherit pkgs;
+              liveUsbSystem = korriKioskLiveUsbDeveloperSystem;
+              expectedArtifact = "developer";
+            };
+            korri-live-usb-vm-smoke = import ./nix/tests/korri-live-usb-vm-smoke.nix {
+              inherit pkgs;
+              imageLib = korriImages;
+              x86Platform = ./nix/images/platforms/x86.nix;
+            };
+            korri-live-usb-invalid-artifact = import ./nix/tests/korri-live-usb-invalid-artifact-check.nix {
+              inherit pkgs;
+              imageLib = korriImages;
+              x86Platform = ./nix/images/platforms/x86.nix;
+            };
+            korri-live-usb-persistence-resolver =
+              import ./nix/tests/korri-live-usb-persistence-resolver-check.nix
+                {
+                  inherit pkgs;
+                  resolverScript = ./nix/images/live-usb-persistence-resolver.sh;
+                };
           };
-          korri-input-module = import ./nix/tests/korri-input-module-check.nix {
-            inherit pkgs;
-            korriInputModule = self.nixosModules.korri-input;
-          };
-          korri-server-module = import ./nix/tests/korri-server-module-check.nix {
-            inherit pkgs;
-            korriServerModule = self.nixosModules.korri-server;
-          };
-        }
-        // pkgs.lib.optionalAttrs isX86Linux {
-          korri-live-usb-config = import ./nix/tests/korri-live-usb-config-check.nix {
-            inherit pkgs;
-            liveUsbSystem = korriKioskLiveUsbSystem;
-          };
-          korri-live-usb-developer-config = import ./nix/tests/korri-live-usb-config-check.nix {
-            inherit pkgs;
-            liveUsbSystem = korriKioskLiveUsbDeveloperSystem;
-            expectedArtifact = "developer";
-          };
-          korri-live-usb-vm-smoke = import ./nix/tests/korri-live-usb-vm-smoke.nix {
-            inherit pkgs;
-            imageLib = korriImages;
-            x86Platform = ./nix/images/platforms/x86.nix;
-          };
-        };
 
         apps =
           pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
@@ -629,7 +692,7 @@
           deviceProfile:
           import ./nix/images/platforms/rocknix-sm8550.nix {
             korri = self;
-            inherit nix-on-rocks deviceProfile;
+            inherit nixpkgs nix-on-rocks deviceProfile;
           };
         rocknixThorSystem = rocknixImages.mkKioskSystem {
           platformModules = [

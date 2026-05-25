@@ -82,6 +82,9 @@ async function seedLibrary(): Promise<TempProseqlLibrary> {
         Effect.gen(function* () {
           const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
           const repository = createLibraryRepository(db)
+          yield* repository.upsertGlobalConfig({
+            gamescope: { enabled: false },
+          })
           yield* repository.upsertImportedGame({
             game: {
               id: "snes/echo.smc",

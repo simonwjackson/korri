@@ -73,22 +73,45 @@ desktop-build: build-web desktop-preload-build desktop-waiting-page-build deskto
   bun x electrobun build
   bun run tools/desktop/electrobun-post-build-patch.ts
 
-# Run unit tests (excludes the slow nix-evaluation suite -- run `just test-nix` for that).
+# Run TypeScript unit tests.
 test-unit:
-  bun test --path-ignore-patterns "**/tools/testing/nix/**"
+  bun test
 
-# Run the slow Nix-backed test suite. Most files batch one `nix eval` at module
-# load (see comment headers in tools/testing/nix/*); korri-live-usb-smoke.test.ts
-# additionally invokes `nix build --dry-run`. Kept out of the default fast loop
-# by `test-unit`'s --path-ignore-patterns. Both suites run together under
-# `just check`.
+# Run native Nix checks. Bun must not own Nix module/config/build assertions.
 test-nix:
-  bun test tools/testing/nix/
+  nix build \
+    .#checks.x86_64-linux.korri-compositor-module \
+    .#checks.x86_64-linux.korri-input-module \
+    .#checks.x86_64-linux.korri-server-module \
+    .#checks.x86_64-linux.korri-desktop-build-graph \
+    .#checks.x86_64-linux.korri-image-outputs \
+    .#checks.x86_64-linux.korri-rocknix-sm8550-config \
+    .#checks.x86_64-linux.korri-live-usb-config \
+    .#checks.x86_64-linux.korri-live-usb-developer-config \
+    .#checks.x86_64-linux.korri-live-usb-vm-smoke \
+    .#checks.x86_64-linux.korri-live-usb-invalid-artifact \
+    .#checks.x86_64-linux.korri-live-usb-persistence-resolver \
+    --no-link
+  nix build \
+    .#packages.x86_64-linux.korri-kiosk-live-iso \
+    .#packages.x86_64-linux.korri-kiosk-live-developer-iso \
+    --dry-run \
+    --no-link
 
 # Dry-build, config-check, and document-smoke the x86 live USB kiosk artifact.
 live-usb-smoke:
-  nix build .#checks.x86_64-linux.korri-live-usb-config --no-link
-  bun test tools/testing/nix/korri-live-usb-smoke.test.ts
+  nix build \
+    .#checks.x86_64-linux.korri-live-usb-config \
+    .#checks.x86_64-linux.korri-live-usb-developer-config \
+    .#checks.x86_64-linux.korri-live-usb-invalid-artifact \
+    .#checks.x86_64-linux.korri-live-usb-persistence-resolver \
+    --no-link
+  nix build \
+    .#packages.x86_64-linux.korri-kiosk-live-iso \
+    .#packages.x86_64-linux.korri-kiosk-live-developer-iso \
+    --dry-run \
+    --no-link
+  bun test tools/testing/standards/korri-live-usb-docs.test.ts
 
 # Run the bounded NixOS VM smoke for the x86 live USB runtime composition.
 live-usb-vm-smoke:

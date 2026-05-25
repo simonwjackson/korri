@@ -10,7 +10,6 @@ on:
       - "flake.nix"
       - "flake.lock"
       - "nix/**"
-      - "tools/testing/nix/**"
       - "electrobun.config.ts"
       - "package.json"
       - "bun.lock"
@@ -25,7 +24,6 @@ on:
       - "flake.nix"
       - "flake.lock"
       - "nix/**"
-      - "tools/testing/nix/**"
       - "electrobun.config.ts"
       - "package.json"
       - "bun.lock"
@@ -57,12 +55,16 @@ jobs:
           nix build .#checks.x86_64-linux.korri-live-usb-vm-smoke --no-link
       - name: Evaluate image outputs
         run: |
-          nix develop .#ci -c sh -c '
-            bun install --frozen-lockfile &&
-            bun test \
-              tools/testing/nix/korri-image-outputs-eval.test.ts \
-              tools/testing/nix/korri-rocknix-image-eval.test.ts
-          '
+          nix build .#checks.x86_64-linux.korri-desktop-build-graph --no-link
+          nix build .#checks.x86_64-linux.korri-image-outputs --no-link
+          nix build .#checks.x86_64-linux.korri-rocknix-sm8550-config --no-link
+          nix build .#checks.x86_64-linux.korri-live-usb-invalid-artifact --no-link
+          nix build .#checks.x86_64-linux.korri-live-usb-persistence-resolver --no-link
+          nix build \
+            .#packages.x86_64-linux.korri-kiosk-live-iso \
+            .#packages.x86_64-linux.korri-kiosk-live-developer-iso \
+            --dry-run \
+            --no-link
       - name: Build desktop package
         run: nix build .#korri-desktop --no-link
 

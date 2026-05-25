@@ -1,5 +1,6 @@
 {
   korri,
+  nixpkgs,
   nix-on-rocks,
   deviceProfile,
 }:
@@ -14,6 +15,11 @@
 let
   targetSystem = pkgs.stdenv.hostPlatform.system;
   substratePackages = nix-on-rocks.packages.${targetSystem};
+  sm8550Packages = import nixpkgs {
+    system = targetSystem;
+    config.allowUnfree = true;
+  };
+  sm8550GamescopePackage = sm8550Packages.gamescope;
   sm8550 = config.rocknix.sm8550;
   inputplumberPackage =
     pkgs.runCommand "korri-rocknix-inputplumber-xb360"
@@ -26,27 +32,23 @@ let
         substituteInPlace $out/share/inputplumber/devices/02-ayn-controller.yaml \
           --replace-fail "  - xbox-series" "  - xb360"
       '';
-  # TEMPORARY Sobo/SM8550 workaround — remove this once nix-on-rocks provides
-  # either a healthy kiosk portal stack or a kiosk-safe Gamescope launcher.
-  #
-  # Why this exists: the current guest advertises /run/user/0/bus with an
-  # activatable but unhealthy xdg-desktop-portal. Gamescope's Wayland startup
-  # asks the Settings portal for cursor/theme values and blocks before it
-  # creates a Sway surface or spawns the child. Pointing Gamescope at a
-  # fail-fast DBus address keeps Gamescope working while the substrate fix lands.
-  #
-  # Revert criteria: delete this wrapper and the launcher `gamescope.command`
-  # seed below after plain `gamescope -f -b -- glxgears` creates a focused
-  # fullscreen Gamescope surface on Sobo with the normal session environment.
-  gamescopeNoPortal = pkgs.writeShellScriptBin "korri-gamescope-no-portal" ''
-    export DBUS_SESSION_BUS_ADDRESS="unix:path=${config.services.korri.compositor.runtimeDir}/korri-gamescope-no-portal-bus"
-    exec ${config.services.korri.compositor.gamescope.package}/bin/gamescope "$@"
-  '';
 in
 {
   imports = [
     nix-on-rocks.nixosModules.rocknix-guest-base
     deviceProfile
+  ];
+
+  assertions = [
+    {
+      assertion =
+        toString config.services.korri.compositor.gamescope.package == toString sm8550GamescopePackage;
+      message = "RockNix SM8550 compositors must use the SM8550-validated Gamescope package.";
+    }
+    {
+      assertion = lib.versionAtLeast (lib.getVersion config.services.korri.compositor.gamescope.package) "3.16.20";
+      message = "RockNix SM8550 compositors require Gamescope >= 3.16.20 for Moonlight v4l2m2m streams.";
+    }
   ];
 
   services.inputplumber.package = lib.mkForce inputplumberPackage;
@@ -65,6 +67,8 @@ in
       services = lib.mkDefault [ "main-space-session-dbus.service" ];
     };
 
+    gamescope.package = lib.mkForce sm8550GamescopePackage;
+
     path = with pkgs; [
       coreutils
       dbus
@@ -76,7 +80,6 @@ in
       git
       sway
       config.services.korri.compositor.gamescope.package
-      gamescopeNoPortal
       substratePackages.cemu
       substratePackages.moonlight-embedded
     ];
@@ -124,34 +127,6 @@ in
       "/run/current-system/sw/share"
     ]
   );
-
-  systemd.services.korri-compositor.preStart = ''
-        moonlight_launcher="${config.services.korri.compositor.dataHome}/korri/library/local-moonlight-launcher.yaml"
-        needs_moonlight_launcher=0
-        if [ ! -e "$moonlight_launcher" ]; then
-          needs_moonlight_launcher=1
-        elif grep -q "enabled: false" "$moonlight_launcher" && ! grep -q "korri-gamescope-no-portal" "$moonlight_launcher"; then
-          needs_moonlight_launcher=1
-        fi
-
-        if [ "$needs_moonlight_launcher" -eq 1 ]; then
-          install -d -m 700 "$(dirname "$moonlight_launcher")"
-          # TEMPORARY: keep client-side Moonlight Gamescope-wrapped via the
-          # no-portal wrapper above. Remove `command:` when Sobo's normal kiosk
-          # session can launch plain Gamescope without blocking on portals.
-          cat > "$moonlight_launcher" <<'EOF'
-    launchers:
-      moonlight:
-        command: moonlight
-        args: []
-        systems: []
-        gamescope:
-          enabled: true
-          command: ${gamescopeNoPortal}/bin/korri-gamescope-no-portal
-    EOF
-          chmod 600 "$moonlight_launcher"
-        fi
-  '';
 
   environment.etc."rocknix-stage10-proof-marker".text = ''
     korri-rocknix-kiosk-system

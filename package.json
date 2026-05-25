@@ -6,7 +6,7 @@
 	"scripts": {
 		"dev": "just dev",
 		"build": "just build",
-		"test": "bun test",
+		"test": "just test-unit",
 		"typecheck": "tsc --noEmit",
 		"lint": "just lint",
 		"format": "just format",
