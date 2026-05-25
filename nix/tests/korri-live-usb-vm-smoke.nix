@@ -59,8 +59,8 @@ pkgs.testers.runNixOSTest {
           {
             networking.hostName = "korri-live-usb-vm-smoke";
             services.korri.server.enable = lib.mkForce false;
-            services.korri.kiosk = {
-              client.command = "${markerClient}";
+            services.korri.compositor = {
+              kiosk.command = "${markerClient}";
               sessionBus = {
                 mode = "existing";
                 address = "unix:path=/run/korri-vm-test-session-bus";

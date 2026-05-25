@@ -206,6 +206,12 @@ in
       # inputplumber keeps the boot chain sane when both are enabled.
       services.korri.input.inputd.wants = [ "inputplumber.service" ];
       services.korri.input.inputd.after = [ "inputplumber.service" ];
+
+      # Inputd refuses to start without an InputPlumber virtual gamepad
+      # when the host has declared the InputPlumber provider. Replaces the
+      # legacy `services.korri.kiosk.input.required` toggle: declaring the
+      # provider IS the assertion that normalized input is required.
+      services.korri.input.inputd.environment.KORRI_INPUTD_REQUIRE_INPUTPLUMBER_GAMEPAD = "1";
     })
 
     # Provider-supplied platform services are forwarded into inputd's

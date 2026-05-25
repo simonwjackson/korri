@@ -426,7 +426,9 @@ let
       builtins.any (m: lib.hasInfix "root" m) (korriFailedAssertionMessages rootUser)
     ))
     (check "system mode: rejects %t paths" (
-      builtins.any (m: builtins.match ".*systemd user specifier.*" m != null) (
+      # Assertion message contains a literal newline between "systemd" and
+      # "user specifier", so split substring match across both fragments.
+      builtins.any (m: lib.hasInfix "systemd" m && lib.hasInfix "user specifier" m) (
         korriFailedAssertionMessages userSpecifierPath
       )
     ))
@@ -500,7 +502,7 @@ let
         script = firstAppWrapper displayCompatDefaults;
       in
       script != null
-      && lib.hasInfix ''"$\{SDL_VIDEODRIVER:=wayland,x11}"'' script
+      && lib.hasInfix "\"\${SDL_VIDEODRIVER:=wayland,x11}\"" script
       && lib.hasInfix "export SDL_VIDEODRIVER" script
     ))
     (check "displayCompat: disable opt-out removes exports" (

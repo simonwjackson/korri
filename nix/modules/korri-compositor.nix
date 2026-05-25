@@ -24,8 +24,12 @@ let
   # The kiosk surface depends on the inputd WebSocket bridge for local
   # client input. The input module owns the inputd unit + port; the
   # compositor module wires the systemd ordering and the env vars the
-  # client reads.
+  # client reads. Additionally, when the kiosk surface is on, platform-
+  # supplied provider services (e.g. seatd, inputplumber, or an external
+  # normalized-input service) are also ordered before the compositor so
+  # the session always boots into a complete input stack.
   inputdServices = lib.optional cfg.kiosk.enable "korri-inputd.service";
+  providerOrderingServices = lib.optionals cfg.kiosk.enable inputCfg.provider.services;
   inputdBridgeUrl = "ws://127.0.0.1:${toString inputCfg.inputd.port}";
 
   inherit (lib)
@@ -87,6 +91,13 @@ let
       KORRI_KIOSK = "1";
       KORRI_DESKTOP_INPUTD_URL = inputdBridgeUrl;
       KORRI_NATIVE_BRIDGE_URL = inputdBridgeUrl;
+    }
+    // lib.optionalAttrs (cfg.kiosk.enable && inputCfg.provider.name == "inputplumber") {
+      # The Korri Moonlight launcher refuses to start a stream without
+      # the InputPlumber virtual gamepad when the host has declared the
+      # InputPlumber provider. Replaces the legacy
+      # `services.korri.kiosk.input.required` toggle.
+      KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER = "1";
     }
     // lib.optionalAttrs (cfg.sessionBus.mode == "existing" && cfg.sessionBus.address != null) {
       DBUS_SESSION_BUS_ADDRESS = cfg.sessionBus.address;
@@ -377,9 +388,9 @@ in
       systemd.services."korri-compositor" = {
         description = "Korri appliance compositor session";
         wantedBy = [ "multi-user.target" ];
-        wants = cfg.wants ++ inputdServices ++ sessionBusServices;
+        wants = cfg.wants ++ inputdServices ++ providerOrderingServices ++ sessionBusServices;
         requires = sessionBusServices;
-        after = cfg.after ++ inputdServices ++ sessionBusServices;
+        after = cfg.after ++ inputdServices ++ providerOrderingServices ++ sessionBusServices;
         environment = sessionEnvironment;
         path = cfg.path ++ [ cfg.sway.package ] ++ cfg.sway.extraPackages;
         unitConfig = {

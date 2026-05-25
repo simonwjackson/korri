@@ -12,23 +12,23 @@ let
     assertionMessages = map (a: a.message) (builtins.filter (a: !a.assertion) eval.config.assertions);
     serverEnabled = eval.config.services.korri.server.enable or false;
     clientEnabled = eval.config.services.korri.client.enable or false;
-    kioskEnabled = eval.config.services.korri.kiosk.enable or false;
-    inputdEnabled = eval.config.services.korri.inputd.enable or false;
+    kioskEnabled = eval.config.services.korri.compositor.kiosk.enable or false;
+    inputdEnabled = eval.config.services.korri.input.inputd.enable or false;
     serverHost = eval.config.services.korri.server.host or null;
     serverServiceMode = eval.config.services.korri.server.serviceMode or null;
     firewallTcpPorts = eval.config.networking.firewall.allowedTCPPorts or [ ];
     firewallUdpPorts = eval.config.networking.firewall.allowedUDPPorts or [ ];
-    kioskUnitExists = eval.config.systemd.services ? "korri-kiosk";
-    inputProviderEnabled = eval.config.services.korri.kiosk.input.provider.enable or false;
-    kioskAfter = eval.config.systemd.services."korri-kiosk".after or [ ];
-    kioskUser = eval.config.services.korri.kiosk.user or null;
+    kioskUnitExists = eval.config.systemd.services ? "korri-compositor";
+    inputProviderEnabled = eval.config.services.korri.input.provider.enable or false;
+    kioskAfter = eval.config.systemd.services."korri-compositor".after or [ ];
+    kioskUser = eval.config.services.korri.compositor.user or null;
     kioskUserExtraGroups =
       let
-        user = eval.config.services.korri.kiosk.user or null;
+        user = eval.config.services.korri.compositor.user or null;
       in
       if user == null then [ ] else eval.config.users.users.${user}.extraGroups or [ ];
-    kioskEnvironment = eval.config.systemd.services."korri-kiosk".environment or { };
-    kioskPath = map toString (eval.config.systemd.services."korri-kiosk".path or [ ]);
+    kioskEnvironment = eval.config.systemd.services."korri-compositor".environment or { };
+    kioskPath = map toString (eval.config.systemd.services."korri-compositor".path or [ ]);
     clientMainProgram = eval.config.services.korri.client.package.meta.mainProgram or null;
     systemName = eval.config.system.name;
   };
@@ -60,10 +60,11 @@ let
       (
         { ... }:
         {
-          services.korri.kiosk.input.provider = {
-            name = "external-normalized-input";
-            services = [ "external-normalized-input.service" ];
-          };
+          # External platform adds extra normalized-input services that
+          # must be ordered before korri-compositor. The provider name
+          # stays at "inputplumber" (set by nix/images/kiosk.nix) and the
+          # platform contributes the extra ordering through provider.services.
+          services.korri.input.provider.services = [ "external-normalized-input.service" ];
         }
       )
     ];
@@ -75,7 +76,7 @@ let
       (
         { ... }:
         {
-          services.korri.kiosk = {
+          services.korri.compositor = {
             user = "platform-kiosk";
             createUser = false;
           };
@@ -99,11 +100,13 @@ in
     headless = (flake.packages.${system}.korri-headless-system or null).drvPath or null;
     kiosk = (flake.packages.${system}.korri-kiosk-system or null).drvPath or null;
     liveIso = (flake.packages.${system}.korri-kiosk-live-iso or null).drvPath or null;
-    liveDeveloperIso = (flake.packages.${system}.korri-kiosk-live-developer-iso or null).drvPath or null;
+    liveDeveloperIso =
+      (flake.packages.${system}.korri-kiosk-live-developer-iso or null).drvPath or null;
   };
   checkDrvPaths = {
     liveConfig = (flake.checks.${system}.korri-live-usb-config or null).drvPath or null;
-    liveDeveloperConfig = (flake.checks.${system}.korri-live-usb-developer-config or null).drvPath or null;
+    liveDeveloperConfig =
+      (flake.checks.${system}.korri-live-usb-developer-config or null).drvPath or null;
     vmSmoke = (flake.checks.${system}.korri-live-usb-vm-smoke or null).drvPath or null;
   };
   headless = summarize headless;

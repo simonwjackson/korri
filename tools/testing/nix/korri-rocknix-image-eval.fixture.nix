@@ -16,26 +16,29 @@ let
     serverUser = eval.config.services.korri.server.user or null;
     serverServiceMode = eval.config.services.korri.server.serviceMode or null;
     clientEnabled = eval.config.services.korri.client.enable or false;
-    kioskEnabled = eval.config.services.korri.kiosk.enable or false;
-    inputdEnabled = eval.config.services.korri.inputd.enable or false;
-    kioskUser = eval.config.services.korri.kiosk.user or null;
-    kioskCreateUser = eval.config.services.korri.kiosk.createUser or null;
-    kioskRuntimeDir = eval.config.services.korri.kiosk.runtimeDir or null;
-    kioskSessionBusMode = eval.config.services.korri.kiosk.sessionBus.mode or null;
-    kioskSessionBusServices = eval.config.services.korri.kiosk.sessionBus.services or [ ];
-    inputProviderName = eval.config.services.korri.kiosk.input.provider.name or null;
-    inputProviderServices = eval.config.services.korri.kiosk.input.provider.services or [ ];
+    kioskEnabled = eval.config.services.korri.compositor.kiosk.enable or false;
+    inputdEnabled = eval.config.services.korri.input.inputd.enable or false;
+    kioskUser = eval.config.services.korri.compositor.user or null;
+    kioskCreateUser = eval.config.services.korri.compositor.createUser or null;
+    kioskRuntimeDir = eval.config.services.korri.compositor.runtimeDir or null;
+    kioskSessionBusMode = eval.config.services.korri.compositor.sessionBus.mode or null;
+    kioskSessionBusServices = eval.config.services.korri.compositor.sessionBus.services or [ ];
+    inputProviderName = eval.config.services.korri.input.provider.name or null;
+    inputProviderServices = eval.config.services.korri.input.provider.services or [ ];
     inputplumberDataDirs = eval.config.systemd.services.inputplumber.environment.XDG_DATA_DIRS or null;
     inputplumberPackage = toString (eval.config.services.inputplumber.package or null);
-    kioskPreStart = eval.config.systemd.services."korri-kiosk".preStart or null;
-    moonlightCommand = eval.config.services.korri.kiosk.environment.KORRI_MOONLIGHT_COMMAND or null;
+    kioskPreStart = eval.config.systemd.services."korri-compositor".preStart or null;
+    moonlightCommand =
+      eval.config.services.korri.compositor.environment.KORRI_MOONLIGHT_COMMAND or null;
     moonlightMappingFile =
-      eval.config.services.korri.kiosk.environment.KORRI_MOONLIGHT_MAPPING_FILE or null;
+      eval.config.services.korri.compositor.environment.KORRI_MOONLIGHT_MAPPING_FILE or null;
     moonlightPlatform =
-      eval.config.systemd.services."korri-kiosk".environment.KORRI_MOONLIGHT_PLATFORM or null;
+      eval.config.systemd.services."korri-compositor".environment.KORRI_MOONLIGHT_PLATFORM or null;
     moonlightRequireInputPlumber =
-      eval.config.systemd.services."korri-kiosk".environment.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null;
-    sdlVideoDriver = eval.config.systemd.services."korri-kiosk".environment.SDL_VIDEODRIVER or null;
+      eval.config.systemd.services."korri-compositor".environment.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER
+        or null;
+    sdlVideoDriver =
+      eval.config.systemd.services."korri-compositor".environment.SDL_VIDEODRIVER or null;
     systemName = eval.config.system.name;
     hostName = eval.config.networking.hostName;
     systemPackages = map (pkg: pkg.name or "") (eval.config.environment.systemPackages or [ ]);

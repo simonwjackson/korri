@@ -8,7 +8,8 @@ let
   imageLib = flake.lib.${system}.korriImages;
   x86Platform = flakeRoot + /nix/images/platforms/x86.nix;
 
-  mkLiveUsb = artifact:
+  mkLiveUsb =
+    artifact:
     imageLib.mkLiveUsbKioskSystem {
       platformModules = [ x86Platform ];
       modules = [
@@ -25,10 +26,11 @@ let
   developer = mkLiveUsb "developer";
   invalid = mkLiveUsb "diagnostic";
 
-  summarize = liveUsb:
+  summarize =
+    liveUsb:
     let
       cfg = liveUsb.config;
-      kiosk = cfg.services.korri.kiosk;
+      compositor = cfg.services.korri.compositor;
       persistence = cfg.services.korri.liveUsbPersistence or { };
     in
     {
@@ -45,14 +47,14 @@ let
       };
 
       kioskState = {
-        home = kiosk.home;
-        stateHome = kiosk.stateHome;
-        dataHome = kiosk.dataHome;
-        configHome = kiosk.configHome;
-        environment = kiosk.environment;
-        wants = cfg.systemd.services."korri-kiosk".wants or [ ];
-        requires = cfg.systemd.services."korri-kiosk".requires or [ ];
-        after = cfg.systemd.services."korri-kiosk".after or [ ];
+        home = compositor.home;
+        stateHome = compositor.stateHome;
+        dataHome = compositor.dataHome;
+        configHome = compositor.configHome;
+        environment = compositor.environment;
+        wants = cfg.systemd.services."korri-compositor".wants or [ ];
+        requires = cfg.systemd.services."korri-compositor".requires or [ ];
+        after = cfg.systemd.services."korri-compositor".after or [ ];
       };
 
       persistenceService = {
@@ -77,7 +79,7 @@ in
 if invalidArtifact then
   summarize invalid
 else
-{
-  product = summarize product;
-  developer = summarize developer;
-}
+  {
+    product = summarize product;
+    developer = summarize developer;
+  }

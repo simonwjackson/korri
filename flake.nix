@@ -657,37 +657,14 @@
         nixosModules = rec {
           korri-client = import ./nix/modules/korri-client.nix { korri = self; };
           korri-cli = import ./nix/modules/korri-cli.nix { korri = self; };
-          korri-inputd = import ./nix/modules/korri-inputd.nix { korri = self; };
           korri-game-stream = import ./nix/modules/korri-game-stream.nix { korri = self; };
-          korri-headless-source = import ./nix/modules/korri-headless-source.nix { korri = self; };
-          # Server module imports compositor + input alongside its own file so
-          # the cross-tree streaming assertions can reference the
-          # services.korri.{compositor,input.provider}.enable options. Hosts
-          # that only enable services.korri.server without streaming still get
-          # those option declarations but no behavior, since each module's
-          # config block is gated on its own enable toggle. Duplicate imports
-          # dedupe via the `key` field on compositor/input/cli modules.
-          korri-server = {
-            imports = [
-              korri-compositor
-              korri-input
-              (import ./nix/modules/korri-server.nix { korri = self; })
-            ];
-          };
-          korri-kiosk = {
-            imports = [
-              korri-client
-              korri-inputd
-              (import ./nix/modules/korri-kiosk.nix { korri = self; })
-            ];
-          };
-          # New per-role input module: provider + inputd peer sub-trees.
+          # Per-role input module: provider + inputd peer sub-trees.
           korri-input = import ./nix/modules/korri-input.nix { korri = self; };
-          # New per-role compositor module. Bundles the Korri client install
-          # so the kiosk-surface sub-tree can default `kiosk.command` to the
-          # selected client package without callers wiring it themselves, and
-          # imports the input module so `services.korri.input.inputd.*` is in
-          # scope when the kiosk surface wires inputd ordering.
+          # Per-role compositor module. Bundles the Korri client install so the
+          # kiosk-surface sub-tree can default `kiosk.command` to the selected
+          # client package without callers wiring it themselves, and imports
+          # the input module so `services.korri.input.inputd.*` is in scope
+          # when the kiosk surface wires inputd ordering.
           korri-compositor = {
             imports = [
               korri-client
@@ -695,11 +672,29 @@
               (import ./nix/modules/korri-compositor.nix { korri = self; })
             ];
           };
+          # Server module imports compositor + input alongside its own file so
+          # the cross-tree streaming assertions can reference the
+          # services.korri.{compositor,input.provider}.enable options. Hosts
+          # that only enable services.korri.server without streaming still get
+          # those option declarations but no behavior, since each module's
+          # config block is gated on its own enable toggle. Duplicate imports
+          # dedupe via the `key` field on compositor/input/cli/client modules.
+          korri-server = {
+            imports = [
+              korri-compositor
+              korri-input
+              (import ./nix/modules/korri-server.nix { korri = self; })
+            ];
+          };
+          # Aggregate composes the three product roles. Compositor and input
+          # are listed explicitly even though korri-server transitively
+          # imports them, so consumers can read the role topology directly
+          # off the aggregate. Duplicate imports dedupe via the `key` field.
           korri = {
             imports = [
-              korri-headless-source
+              korri-compositor
+              korri-input
               korri-server
-              korri-kiosk
             ];
           };
           default = korri;

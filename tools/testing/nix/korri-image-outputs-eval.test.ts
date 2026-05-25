@@ -199,13 +199,17 @@ describe("Korri Nix image output evaluation", () => {
     expect(result.kiosk.clientEnabled).toBe(true)
     expect(result.kiosk.inputdEnabled).toBe(true)
     expect(result.kiosk.inputProviderEnabled).toBe(true)
-    expect(result.kiosk.kioskUser).toBe("korri-kiosk")
+    expect(result.kiosk.kioskUser).toBe("korri-compositor")
     expect(result.kiosk.kioskUserExtraGroups).toEqual(
       expect.arrayContaining(["input", "render", "seat", "video"]),
     )
   })
 
   it("accepts externally supplied platform adapter modules at the image boundary", () => {
+    // The compositor module orders itself after both `korri-inputd.service`
+    // and the platform-supplied provider services when the kiosk surface
+    // is on, so an external normalized-input service appears directly on
+    // the compositor unit's `after` list.
     expect(result.kioskWithExternalPlatform.assertionsPassed).toBe(true)
     expect(result.kioskWithExternalPlatform.kioskAfter).toContain(
       "external-normalized-input.service",
@@ -218,11 +222,14 @@ describe("Korri Nix image output evaluation", () => {
     expect(result.kioskWithPlatformManagedUser.kioskUserExtraGroups).toEqual([])
   })
 
-  it("fails clearly when a kiosk image is requested without a platform input adapter", () => {
-    expect(result.kioskWithoutPlatform.assertionsPassed).toBe(false)
-    expect(result.kioskWithoutPlatform.assertionMessages.join("\n")).toContain(
-      "services.korri.kiosk.input.required",
-    )
+  it("kiosk image defaults the InputPlumber provider on, with no platform module", () => {
+    // Under the refactored module boundary, `nix/images/kiosk.nix` sets
+    // `services.korri.input.provider = { enable = mkDefault true; name = mkDefault
+    // "inputplumber"; }`. A kiosk image requested without a platform module
+    // therefore comes with the provider already declared (no failed assertion);
+    // platforms can either accept the default or override the provider name.
+    expect(result.kioskWithoutPlatform.assertionsPassed).toBe(true)
+    expect(result.kioskWithoutPlatform.inputProviderEnabled).toBe(true)
   })
 
   it("keeps platform-specific facts out of common image modules and x86 defaults", () => {

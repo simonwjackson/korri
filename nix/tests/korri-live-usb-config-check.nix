@@ -7,7 +7,7 @@
 let
   lib = pkgs.lib;
   cfg = liveUsbSystem.config;
-  kioskEnv = cfg.systemd.services."korri-kiosk".environment or { };
+  compositorEnv = cfg.systemd.services."korri-compositor".environment or { };
   inputdEnv = cfg.systemd.services."korri-inputd".environment or { };
   inputplumber = cfg.systemd.services.inputplumber or { };
   persistence = cfg.systemd.services."korri-live-usb-persistence";
@@ -18,7 +18,7 @@ let
     if expectedArtifact == "developer" then
       "${cfg.services.korri.liveUsbPersistence.root}/developer/home"
     else
-      "/home/${cfg.services.korri.kiosk.user}";
+      "/home/${cfg.services.korri.compositor.user}";
   checks = [
     (check "live USB ISO must be USB bootable" cfg.isoImage.makeUsbBootable)
     (check "live USB ISO must be EFI bootable" cfg.isoImage.makeEfiBootable)
@@ -28,9 +28,9 @@ let
     (check "korri-live-usb-persistence.service must exist" (
       cfg.systemd.services ? "korri-live-usb-persistence"
     ))
-    (check "live USB kiosk user must be korri" (cfg.services.korri.kiosk.user == "korri"))
-    (check "live USB kiosk user must have an interactive debug shell" (
-      cfg.users.users.${cfg.services.korri.kiosk.user}.shell == pkgs.bashInteractive
+    (check "live USB compositor user must be korri" (cfg.services.korri.compositor.user == "korri"))
+    (check "live USB compositor user must have an interactive debug shell" (
+      cfg.users.users.${cfg.services.korri.compositor.user}.shell == pkgs.bashInteractive
     ))
     (check "live USB must use greetd auto-session" cfg.services.greetd.enable)
     (check "greetd initial session must run as korri" (
@@ -39,19 +39,21 @@ let
     (check "greetd must require persistence before login" (
       builtins.elem "korri-live-usb-persistence.service" (greetd.requires or [ ])
     ))
-    (check "korri-kiosk.service must not be directly wanted on live USB" (
-      cfg.systemd.services."korri-kiosk".wantedBy == [ ]
+    (check "korri-compositor.service must not be directly wanted on live USB" (
+      cfg.systemd.services."korri-compositor".wantedBy == [ ]
     ))
-    (check "korri-kiosk.service must require persistence before startup" (
+    (check "korri-compositor.service must require persistence before startup" (
       builtins.elem "korri-live-usb-persistence.service" (
-        cfg.systemd.services."korri-kiosk".requires or [ ]
+        cfg.systemd.services."korri-compositor".requires or [ ]
       )
     ))
-    (check "korri-kiosk.service must start after persistence" (
-      builtins.elem "korri-live-usb-persistence.service" (cfg.systemd.services."korri-kiosk".after or [ ])
+    (check "korri-compositor.service must start after persistence" (
+      builtins.elem "korri-live-usb-persistence.service" (
+        cfg.systemd.services."korri-compositor".after or [ ]
+      )
     ))
-    (check "persistence resolver must run before korri-kiosk.service" (
-      builtins.elem "korri-kiosk.service" (persistence.before or [ ])
+    (check "persistence resolver must run before korri-compositor.service" (
+      builtins.elem "korri-compositor.service" (persistence.before or [ ])
     ))
     (check "live USB must use the expected artifact" (
       cfg.services.korri.liveUsbPersistence.artifact == expectedArtifact
@@ -59,29 +61,31 @@ let
     (check "live USB must use the expected persistence scope" (
       cfg.services.korri.liveUsbPersistence.scope == expectedScope
     ))
-    (check "live USB kiosk HOME must match artifact contract" (
-      cfg.services.korri.kiosk.home == expectedHome
+    (check "live USB compositor HOME must match artifact contract" (
+      cfg.services.korri.compositor.home == expectedHome
     ))
     (check "live USB config home must match artifact contract" (
-      cfg.services.korri.kiosk.configHome == "${expectedHome}/.config"
+      cfg.services.korri.compositor.configHome == "${expectedHome}/.config"
     ))
     (check "Product allowlist must include Korri config directory for atomic config writes" (
-      builtins.any (entry:
+      builtins.any (
+        entry:
         entry.kind == "directory"
-        && entry.target == "/home/${cfg.services.korri.kiosk.user}/.config/korri"
+        && entry.target == "/home/${cfg.services.korri.compositor.user}/.config/korri"
       ) cfg.services.korri.liveUsbPersistence.productAllowlist
     ))
     (check "Product allowlist must include Moonlight client state" (
-      builtins.any (entry:
+      builtins.any (
+        entry:
         entry.kind == "directory"
-        && entry.target == "/home/${cfg.services.korri.kiosk.user}/.cache/moonlight"
+        && entry.target == "/home/${cfg.services.korri.compositor.user}/.cache/moonlight"
       ) cfg.services.korri.liveUsbPersistence.productAllowlist
     ))
     (check "Moonlight state must point at artifact runtime cache path" (
-      kioskEnv.KORRI_MOONLIGHT_STATE_HOME or null == "${expectedHome}/.cache/moonlight"
+      compositorEnv.KORRI_MOONLIGHT_STATE_HOME or null == "${expectedHome}/.cache/moonlight"
     ))
     (check "live USB must use InputPlumber as normalized input provider" (
-      cfg.services.korri.kiosk.input.provider.name == "inputplumber"
+      cfg.services.korri.input.provider.name == "inputplumber"
     ))
     (check "live USB must start inputplumber before inputd" (
       builtins.elem "inputplumber.service" (cfg.systemd.services."korri-inputd".after or [ ])
@@ -90,19 +94,21 @@ let
       inputdEnv.KORRI_INPUTD_REQUIRE_INPUTPLUMBER_GAMEPAD or null == "1"
     ))
     (check "live USB Moonlight launches must require InputPlumber input" (
-      kioskEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1"
+      compositorEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1"
     ))
     (check "live USB Moonlight must use a generic mapping DB for the virtual controller" (
-      lib.hasSuffix "share/moonlight/gamecontrollerdb.txt" (kioskEnv.KORRI_MOONLIGHT_MAPPING_FILE or "")
+      lib.hasSuffix "share/moonlight/gamecontrollerdb.txt" (
+        compositorEnv.KORRI_MOONLIGHT_MAPPING_FILE or ""
+      )
     ))
     (check "inputplumber service must see its package data root" (
       lib.hasInfix "inputplumber" (inputplumber.environment.XDG_DATA_DIRS or "")
     ))
-    (check "live USB persistence root must be exported to the kiosk" (
-      kioskEnv.KORRI_LIVE_USB_PERSISTENCE_ROOT or null == cfg.services.korri.liveUsbPersistence.root
+    (check "live USB persistence root must be exported to the compositor session" (
+      compositorEnv.KORRI_LIVE_USB_PERSISTENCE_ROOT or null == cfg.services.korri.liveUsbPersistence.root
     ))
-    (check "live USB artifact marker must be exported to the kiosk" (
-      kioskEnv.KORRI_LIVE_USB_ARTIFACT or null == expectedArtifact
+    (check "live USB artifact marker must be exported to the compositor session" (
+      compositorEnv.KORRI_LIVE_USB_ARTIFACT or null == expectedArtifact
     ))
     (check "live USB artifact marker must be exported to the resolver" (
       persistence.environment.KORRI_LIVE_USB_ARTIFACT or null == expectedArtifact

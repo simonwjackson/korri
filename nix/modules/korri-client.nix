@@ -17,8 +17,8 @@ let
 in
 {
   # Stable module key so multiple imports (e.g. via nixosModules.korri-compositor
-  # composite + nixosModules.korri-kiosk composite + aggregate korri) deduplicate
-  # to a single declaration.
+  # composite + nixosModules.korri-server composite + aggregate korri)
+  # deduplicate to a single declaration.
   _file = ./korri-client.nix;
   key = ./korri-client.nix;
 
@@ -33,9 +33,10 @@ in
         Korri desktop package to install on the system.
 
         This role is package/runtime-only: compositor ownership, autostart, and
-        appliance session repair belong to services.korri.kiosk. Consumers such
-        as ROCKNIX should select the package variant that owns its build-time
-        frontend configuration, for example korri-desktop-device.
+        appliance session repair belong to services.korri.compositor (with
+        services.korri.compositor.kiosk.enable = true for the local GUI surface).
+        Consumers such as ROCKNIX should select the package variant that owns
+        its build-time frontend configuration, for example korri-desktop-device.
       '';
     };
   };

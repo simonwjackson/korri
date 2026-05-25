@@ -9,33 +9,34 @@
 
 let
   cfg = config.services.korri.liveUsbPersistence;
-  kioskCfg = config.services.korri.kiosk;
-  kioskGroup = if kioskCfg.group != null then kioskCfg.group else kioskCfg.user;
+  compositorCfg = config.services.korri.compositor;
+  inputCfg = config.services.korri.input;
+  compositorGroup = if compositorCfg.group != null then compositorCfg.group else compositorCfg.user;
   packagesForSystem = korri.packages.${pkgs.stdenv.hostPlatform.system} or { };
   resolver = pkgs.writeShellScript "korri-live-usb-persistence-resolver" (
     builtins.readFile ./live-usb-persistence-resolver.sh
   );
-  kioskSessionEnvironment =
-    kioskCfg.environment
+  compositorSessionEnvironment =
+    compositorCfg.environment
     // {
-      HOME = kioskCfg.home;
-      XDG_STATE_HOME = kioskCfg.stateHome;
-      XDG_DATA_HOME = kioskCfg.dataHome;
-      XDG_CONFIG_HOME = kioskCfg.configHome;
-      KORRI_KIOSK = "1";
+      HOME = compositorCfg.home;
+      XDG_STATE_HOME = compositorCfg.stateHome;
+      XDG_DATA_HOME = compositorCfg.dataHome;
+      XDG_CONFIG_HOME = compositorCfg.configHome;
     }
-    // lib.optionalAttrs kioskCfg.input.enable {
-      KORRI_NATIVE_BRIDGE_URL = "ws://127.0.0.1:${toString config.services.korri.inputd.port}";
-      KORRI_DESKTOP_INPUTD_URL = "ws://127.0.0.1:${toString config.services.korri.inputd.port}";
+    // lib.optionalAttrs compositorCfg.kiosk.enable {
+      KORRI_KIOSK = "1";
+      KORRI_NATIVE_BRIDGE_URL = "ws://127.0.0.1:${toString inputCfg.inputd.port}";
+      KORRI_DESKTOP_INPUTD_URL = "ws://127.0.0.1:${toString inputCfg.inputd.port}";
     };
-  kioskSessionExports = lib.concatStringsSep "\n" (
+  compositorSessionExports = lib.concatStringsSep "\n" (
     lib.mapAttrsToList (
       name: value: "export ${name}=${lib.escapeShellArg value}"
-    ) kioskSessionEnvironment
+    ) compositorSessionEnvironment
   );
   greetdSession = pkgs.writeShellScript "korri-live-usb-greetd-session" ''
     set -euo pipefail
-    ${kioskSessionExports}
+    ${compositorSessionExports}
 
     if [ -z "''${XDG_RUNTIME_DIR:-}" ]; then
       export XDG_RUNTIME_DIR="/tmp/korri-runtime-$(id -u)"
@@ -43,10 +44,10 @@ let
       chmod 0700 "$XDG_RUNTIME_DIR"
     fi
 
-    exec ${pkgs.dbus}/bin/dbus-run-session -- ${kioskCfg.sway.package}/bin/sway --config ${kioskCfg.sway.configFile}
+    exec ${pkgs.dbus}/bin/dbus-run-session -- ${compositorCfg.sway.package}/bin/sway --config ${compositorCfg.sway.configFile}
   '';
   inputServices =
-    lib.optional kioskCfg.input.enable "korri-inputd.service" ++ kioskCfg.input.provider.services;
+    lib.optional inputCfg.inputd.enable "korri-inputd.service" ++ inputCfg.provider.services;
   seatServices = lib.optional (config.services.seatd.enable or false) "seatd.service";
   loginDependencies = [ "korri-live-usb-persistence.service" ] ++ inputServices ++ seatServices;
   persistenceEntryType = lib.types.submodule {
@@ -88,7 +89,7 @@ let
       };
     };
   };
-  productHome = "/home/${kioskCfg.user}";
+  productHome = "/home/${compositorCfg.user}";
   developerHome = "${cfg.root}/developer/home";
   effectiveHome = if cfg.artifact == "developer" then developerHome else productHome;
   productAllowlist = [
@@ -96,32 +97,32 @@ let
       kind = "directory";
       target = "${productHome}/.config/korri";
       source = "product/home/.config/korri";
-      owner = kioskCfg.user;
-      group = kioskGroup;
+      owner = compositorCfg.user;
+      group = compositorGroup;
       mode = "0700";
     }
     {
       kind = "directory";
       target = "${productHome}/.local/share/korri";
       source = "product/home/.local/share/korri";
-      owner = kioskCfg.user;
-      group = kioskGroup;
+      owner = compositorCfg.user;
+      group = compositorGroup;
       mode = "0700";
     }
     {
       kind = "directory";
       target = "${productHome}/.local/state/korri";
       source = "product/home/.local/state/korri";
-      owner = kioskCfg.user;
-      group = kioskGroup;
+      owner = compositorCfg.user;
+      group = compositorGroup;
       mode = "0700";
     }
     {
       kind = "directory";
       target = "${productHome}/.cache/moonlight";
       source = "product/home/.cache/moonlight";
-      owner = kioskCfg.user;
-      group = kioskGroup;
+      owner = compositorCfg.user;
+      group = compositorGroup;
       mode = "0700";
     }
     {
@@ -213,7 +214,7 @@ in
       productAllowlist = productAllowlist;
     };
 
-    services.korri.kiosk = lib.mkIf cfg.enable {
+    services.korri.compositor = lib.mkIf cfg.enable {
       user = lib.mkDefault "korri";
       home = lib.mkDefault effectiveHome;
       configHome = lib.mkDefault "${effectiveHome}/.config";
@@ -230,7 +231,7 @@ in
       };
     };
 
-    systemd.services."korri-kiosk" = lib.mkIf cfg.enable {
+    systemd.services."korri-compositor" = lib.mkIf cfg.enable {
       # A real login session gives Sway the seat/session semantics it expects,
       # while greetd's initial session still boots directly into the kiosk.
       wantedBy = lib.mkForce [ ];
@@ -242,11 +243,11 @@ in
       settings = {
         initial_session = {
           command = toString greetdSession;
-          user = kioskCfg.user;
+          user = compositorCfg.user;
         };
         default_session = {
           command = toString greetdSession;
-          user = kioskCfg.user;
+          user = compositorCfg.user;
         };
         terminal.vt = 1;
       };
@@ -273,7 +274,7 @@ in
       openFirewall = true;
     };
 
-    users.users.${kioskCfg.user} = lib.mkIf (cfg.enable && kioskCfg.createUser) {
+    users.users.${compositorCfg.user} = lib.mkIf (cfg.enable && compositorCfg.createUser) {
       shell = pkgs.bashInteractive;
       openssh.authorizedKeys.keys = cfg.debugSsh.authorizedKeys;
       extraGroups = lib.mkAfter [
@@ -285,7 +286,7 @@ in
     systemd.services."korri-live-usb-persistence" = lib.mkIf cfg.enable {
       description = "Resolve Korri live USB same-stick persistence";
       wantedBy = [ "multi-user.target" ];
-      before = [ "korri-kiosk.service" ];
+      before = [ "korri-compositor.service" ];
       after = [
         "local-fs.target"
         "systemd-udevd.service"
@@ -304,10 +305,10 @@ in
         KORRI_LIVE_USB_EPHEMERAL_MARKER = cfg.markerEphemeral;
         KORRI_LIVE_USB_ARTIFACT = cfg.artifact;
         KORRI_LIVE_USB_PERSISTENCE_SCOPE = persistenceScope;
-        KORRI_LIVE_USB_RUNTIME_HOME = kioskCfg.home;
+        KORRI_LIVE_USB_RUNTIME_HOME = compositorCfg.home;
         KORRI_LIVE_USB_DEVICE_ID_TARGET = "/var/lib/korri-live-usb/device-id";
-        KORRI_LIVE_USB_STATE_USER = kioskCfg.user;
-        KORRI_LIVE_USB_STATE_GROUP = kioskGroup;
+        KORRI_LIVE_USB_STATE_USER = compositorCfg.user;
+        KORRI_LIVE_USB_STATE_GROUP = compositorGroup;
       };
       serviceConfig = {
         Type = "oneshot";

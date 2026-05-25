@@ -232,7 +232,7 @@ describe("Korri live USB safety evaluation", () => {
       "multi-user.target",
     )
     expect(result.product.persistenceService.before).toContain(
-      "korri-kiosk.service",
+      "korri-compositor.service",
     )
     expect(result.product.kioskState.wants).toContain(
       "korri-live-usb-persistence.service",
