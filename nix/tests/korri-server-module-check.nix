@@ -107,6 +107,62 @@ let
     };
   };
 
+  publicApiBaseUrlLoopback = evaluateWith {
+    services.korri.server = {
+      enable = true;
+      publicApiBaseUrl = "http://127.0.0.1:3001";
+    };
+  };
+
+  publicApiBaseUrlPublicHttps = evaluateWith {
+    services.korri.server = {
+      enable = true;
+      publicApiBaseUrl = "https://korri.example.com";
+    };
+  };
+
+  publicApiBaseUrlPublicHttp = evaluateWith {
+    services.korri.server = {
+      enable = true;
+      publicApiBaseUrl = "http://korri.example.com";
+    };
+  };
+
+  publicApiBaseUrlCredentials = evaluateWith {
+    services.korri.server = {
+      enable = true;
+      publicApiBaseUrl = "https://user:pass@korri.example.com";
+    };
+  };
+
+  publicApiBaseUrlQuery = evaluateWith {
+    services.korri.server = {
+      enable = true;
+      publicApiBaseUrl = "https://korri.example.com?token=secret";
+    };
+  };
+
+  publicApiBaseUrlFragment = evaluateWith {
+    services.korri.server = {
+      enable = true;
+      publicApiBaseUrl = "https://korri.example.com#asset";
+    };
+  };
+
+  publicApiBaseUrlWhitespace = evaluateWith {
+    services.korri.server = {
+      enable = true;
+      publicApiBaseUrl = " https://korri.example.com";
+    };
+  };
+
+  publicApiBaseUrlInvalid = evaluateWith {
+    services.korri.server = {
+      enable = true;
+      publicApiBaseUrl = "not a url";
+    };
+  };
+
   missingUser = evaluateWith {
     services.korri.server = {
       enable = true;
@@ -410,10 +466,46 @@ let
     ))
     (check "system mode: NixOS assertions pass" (korriFailedAssertions explicitSystemMode == [ ]))
 
-    # ---- publicApiBaseUrl propagates into env
-    (check "publicApiBaseUrl: env var reflects override" (
+    # ---- publicApiBaseUrl propagates into env and rejects unsafe URLs
+    (check "publicApiBaseUrl: RFC1918 HTTP env var reflects override" (
       (serverUserUnit publicApiBaseUrl).environment.KORRI_PUBLIC_API_BASE_URL or null
       == "http://192.168.1.117:3001"
+    ))
+    (check "publicApiBaseUrl: loopback HTTP assertions pass" (
+      korriFailedAssertions publicApiBaseUrlLoopback == [ ]
+    ))
+    (check "publicApiBaseUrl: public HTTPS assertions pass" (
+      korriFailedAssertions publicApiBaseUrlPublicHttps == [ ]
+    ))
+    (check "publicApiBaseUrl: public HTTP assertion fires" (
+      builtins.any (m: lib.hasInfix "must use https outside loopback or RFC1918 private networks" m) (
+        korriFailedAssertionMessages publicApiBaseUrlPublicHttp
+      )
+    ))
+    (check "publicApiBaseUrl: credentials assertion fires" (
+      builtins.any (m: lib.hasInfix "must not contain credentials" m) (
+        korriFailedAssertionMessages publicApiBaseUrlCredentials
+      )
+    ))
+    (check "publicApiBaseUrl: query assertion fires" (
+      builtins.any (m: lib.hasInfix "must not contain query or fragment data" m) (
+        korriFailedAssertionMessages publicApiBaseUrlQuery
+      )
+    ))
+    (check "publicApiBaseUrl: fragment assertion fires" (
+      builtins.any (m: lib.hasInfix "must not contain query or fragment data" m) (
+        korriFailedAssertionMessages publicApiBaseUrlFragment
+      )
+    ))
+    (check "publicApiBaseUrl: whitespace assertion fires" (
+      builtins.any (m: lib.hasInfix "must not contain whitespace" m) (
+        korriFailedAssertionMessages publicApiBaseUrlWhitespace
+      )
+    ))
+    (check "publicApiBaseUrl: invalid URL assertion fires" (
+      builtins.any (m: lib.hasInfix "must be an absolute http or https URL" m) (
+        korriFailedAssertionMessages publicApiBaseUrlInvalid
+      )
     ))
 
     # ---- system mode safety assertions

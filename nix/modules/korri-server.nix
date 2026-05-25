@@ -60,6 +60,81 @@ let
 
   isLoopbackHost = cfg.host == "127.0.0.1" || cfg.host == "::1" || cfg.host == "localhost";
 
+  publicApiBaseUrlRaw = cfg.publicApiBaseUrl;
+  hasPublicApiBaseUrl = publicApiBaseUrlRaw != null;
+  publicApiBaseUrlHasWhitespace =
+    hasPublicApiBaseUrl
+    && lib.any (char: lib.hasInfix char publicApiBaseUrlRaw) [
+      " "
+      "\t"
+      "\n"
+      "\r"
+    ];
+  publicApiBaseUrlMatch =
+    if hasPublicApiBaseUrl && !publicApiBaseUrlHasWhitespace then
+      builtins.match "^(https?)://([^/?#]*)(/[^?#]*)?(\\?[^#]*)?(#.*)?$" publicApiBaseUrlRaw
+    else
+      null;
+  publicApiBaseUrlParts =
+    if publicApiBaseUrlMatch == null then
+      null
+    else
+      {
+        scheme = builtins.elemAt publicApiBaseUrlMatch 0;
+        authority = builtins.elemAt publicApiBaseUrlMatch 1;
+        query = builtins.elemAt publicApiBaseUrlMatch 3;
+        fragment = builtins.elemAt publicApiBaseUrlMatch 4;
+      };
+  publicApiBaseUrlHasCredentials =
+    publicApiBaseUrlParts != null && lib.hasInfix "@" publicApiBaseUrlParts.authority;
+  publicApiBaseUrlHostMatch =
+    if publicApiBaseUrlParts == null || publicApiBaseUrlHasCredentials then
+      null
+    else if lib.hasPrefix "[" publicApiBaseUrlParts.authority then
+      builtins.match "^(\\[[^]]+\\])(:[0-9]+)?$" publicApiBaseUrlParts.authority
+    else
+      builtins.match "^([^:]+)(:[0-9]+)?$" publicApiBaseUrlParts.authority;
+  publicApiBaseUrlHost =
+    if publicApiBaseUrlHostMatch == null then
+      null
+    else
+      lib.toLower (builtins.elemAt publicApiBaseUrlHostMatch 0);
+  publicApiBaseUrlHasQueryOrFragment =
+    publicApiBaseUrlParts != null
+    && (
+      (publicApiBaseUrlParts.query != null && publicApiBaseUrlParts.query != "")
+      || (publicApiBaseUrlParts.fragment != null && publicApiBaseUrlParts.fragment != "")
+    );
+  publicApiBaseUrlIsPrivateHttpHost =
+    if publicApiBaseUrlHost == null then
+      false
+    else if publicApiBaseUrlHost == "localhost" || publicApiBaseUrlHost == "[::1]" then
+      true
+    else if
+      lib.hasSuffix ".local" publicApiBaseUrlHost || lib.hasSuffix ".lan" publicApiBaseUrlHost
+    then
+      true
+    else
+      let
+        ipv4 = builtins.match "^([0-9]{1,3})\\.([0-9]{1,3})\\.([0-9]{1,3})\\.([0-9]{1,3})$" publicApiBaseUrlHost;
+      in
+      if ipv4 == null then
+        false
+      else
+        let
+          octets = map lib.toInt ipv4;
+          a = builtins.elemAt octets 0;
+          b = builtins.elemAt octets 1;
+        in
+        lib.all (o: o >= 0 && o <= 255) octets
+        && (
+          a == 127
+          || a == 10
+          || (a == 172 && b >= 16 && b <= 31)
+          || (a == 192 && b == 168)
+          || (a == 169 && b == 254)
+        );
+
   serverEnv = {
     HOST = cfg.host;
     PORT = toString cfg.port;
@@ -439,6 +514,36 @@ in
           services.korri.input.provider.enable = true. Streaming hosts need
           host-side normalized appliance input (Xbox 360 over /dev/uinput
           via InputPlumber) so Sunshine can synthesize streamed controllers.
+        '';
+      }
+      {
+        assertion = !hasPublicApiBaseUrl || !publicApiBaseUrlHasWhitespace;
+        message = "services.korri.server.publicApiBaseUrl must not contain whitespace.";
+      }
+      {
+        assertion = !hasPublicApiBaseUrl || publicApiBaseUrlParts != null;
+        message = ''
+          services.korri.server.publicApiBaseUrl must be an absolute http or https URL
+          (got "${toString publicApiBaseUrlRaw}").
+        '';
+      }
+      {
+        assertion = !hasPublicApiBaseUrl || !publicApiBaseUrlHasCredentials;
+        message = "services.korri.server.publicApiBaseUrl must not contain credentials.";
+      }
+      {
+        assertion = !hasPublicApiBaseUrl || !publicApiBaseUrlHasQueryOrFragment;
+        message = "services.korri.server.publicApiBaseUrl must not contain query or fragment data.";
+      }
+      {
+        assertion =
+          !hasPublicApiBaseUrl
+          || publicApiBaseUrlParts == null
+          || publicApiBaseUrlParts.scheme != "http"
+          || publicApiBaseUrlIsPrivateHttpHost;
+        message = ''
+          services.korri.server.publicApiBaseUrl must use https outside loopback or RFC1918 private networks
+          (got "${toString publicApiBaseUrlRaw}").
         '';
       }
     ];
