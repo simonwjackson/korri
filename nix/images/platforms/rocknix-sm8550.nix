@@ -23,6 +23,22 @@ let
     substituteInPlace $out/share/inputplumber/devices/02-ayn-controller.yaml \
       --replace-fail "  - xbox-series" "  - xb360"
   '';
+  # TEMPORARY Sobo/SM8550 workaround — remove this once nix-on-rocks provides
+  # either a healthy kiosk portal stack or a kiosk-safe Gamescope launcher.
+  #
+  # Why this exists: the current guest advertises /run/user/0/bus with an
+  # activatable but unhealthy xdg-desktop-portal. Gamescope's Wayland startup
+  # asks the Settings portal for cursor/theme values and blocks before it
+  # creates a Sway surface or spawns the child. Pointing Gamescope at a
+  # fail-fast DBus address keeps Gamescope working while the substrate fix lands.
+  #
+  # Revert criteria: delete this wrapper and the launcher `gamescope.command`
+  # seed below after plain `gamescope -f -b -- glxgears` creates a focused
+  # fullscreen Gamescope surface on Sobo with the normal session environment.
+  gamescopeNoPortal = pkgs.writeShellScriptBin "korri-gamescope-no-portal" ''
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=${config.services.korri.kiosk.runtimeDir}/korri-gamescope-no-portal-bus"
+    exec ${config.services.korri.kiosk.gamescope.package}/bin/gamescope "$@"
+  '';
 in
 {
   imports = [
@@ -65,6 +81,8 @@ in
       fuzzel
       git
       sway
+      config.services.korri.kiosk.gamescope.package
+      gamescopeNoPortal
       substratePackages.cemu
       substratePackages.moonlight-embedded
     ];
@@ -106,6 +124,34 @@ in
       "/run/current-system/sw/share"
     ]
   );
+
+  systemd.services.korri-kiosk.preStart = ''
+    moonlight_launcher="${config.services.korri.kiosk.dataHome}/korri/library/local-moonlight-launcher.yaml"
+    needs_moonlight_launcher=0
+    if [ ! -e "$moonlight_launcher" ]; then
+      needs_moonlight_launcher=1
+    elif grep -q "enabled: false" "$moonlight_launcher" && ! grep -q "korri-gamescope-no-portal" "$moonlight_launcher"; then
+      needs_moonlight_launcher=1
+    fi
+
+    if [ "$needs_moonlight_launcher" -eq 1 ]; then
+      install -d -m 700 "$(dirname "$moonlight_launcher")"
+      # TEMPORARY: keep client-side Moonlight Gamescope-wrapped via the
+      # no-portal wrapper above. Remove `command:` when Sobo's normal kiosk
+      # session can launch plain Gamescope without blocking on portals.
+      cat > "$moonlight_launcher" <<'EOF'
+launchers:
+  moonlight:
+    command: moonlight
+    args: []
+    systems: []
+    gamescope:
+      enabled: true
+      command: ${gamescopeNoPortal}/bin/korri-gamescope-no-portal
+EOF
+      chmod 600 "$moonlight_launcher"
+    fi
+  '';
 
   environment.etc."rocknix-stage10-proof-marker".text = ''
     korri-rocknix-kiosk-system

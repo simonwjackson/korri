@@ -27,6 +27,7 @@ let
     inputProviderServices = eval.config.services.korri.kiosk.input.provider.services or [ ];
     inputplumberDataDirs = eval.config.systemd.services.inputplumber.environment.XDG_DATA_DIRS or null;
     inputplumberPackage = toString (eval.config.services.inputplumber.package or null);
+    kioskPreStart = eval.config.systemd.services."korri-kiosk".preStart or null;
     moonlightCommand = eval.config.services.korri.kiosk.environment.KORRI_MOONLIGHT_COMMAND or null;
     moonlightMappingFile =
       eval.config.services.korri.kiosk.environment.KORRI_MOONLIGHT_MAPPING_FILE or null;

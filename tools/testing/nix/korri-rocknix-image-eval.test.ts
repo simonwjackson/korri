@@ -34,6 +34,7 @@ type RockNixImageSummary = {
   inputProviderServices: string[]
   inputplumberDataDirs: string | null
   inputplumberPackage: string | null
+  kioskPreStart: string | null
   moonlightCommand: string | null
   moonlightMappingFile: string | null
   moonlightPlatform: string | null
@@ -156,6 +157,9 @@ describe("Korri RockNix image output evaluation", () => {
       expect(appliance.moonlightPlatform).toBe("v4l2m2m")
       expect(appliance.moonlightRequireInputPlumber).toBe("1")
       expect(appliance.sdlVideoDriver).toBe("wayland")
+      expect(appliance.kioskPreStart).toContain("local-moonlight-launcher.yaml")
+      expect(appliance.kioskPreStart).toContain("enabled: true")
+      expect(appliance.kioskPreStart).toContain("korri-gamescope-no-portal")
     }
   })
 
