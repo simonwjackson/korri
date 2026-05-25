@@ -1,4 +1,5 @@
 import { ApiError } from "@shared/api/rpc/errors"
+import { EphemeralOverride } from "@shared/library/config/ephemeral-override"
 import { Schema } from "effect"
 import { Rpc } from "effect/unstable/rpc"
 
@@ -6,6 +7,9 @@ export class LaunchLibraryPayload extends Schema.Class<LaunchLibraryPayload>(
   "LaunchLibraryPayload",
 )({
   id: Schema.String,
+  userId: Schema.optional(Schema.String),
+  presetId: Schema.optional(Schema.Union([Schema.String, Schema.Null])),
+  override: Schema.optional(EphemeralOverride),
 }) {}
 
 const LaunchedResult = Schema.Struct({

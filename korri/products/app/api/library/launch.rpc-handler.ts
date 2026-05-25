@@ -1,9 +1,11 @@
 import { DataError, NotFoundError } from "@shared/api/rpc/errors"
+import { normalizeGamescopePolicy } from "@shared/library/config/inheritable-fields"
 import {
   Launcher,
   type LibraryError,
   LibrarySource,
 } from "@shared/library/library-services"
+import { composeGamescopeLaunchSpec } from "../../../../../tools/device/game-stream-fullscreen"
 import { logger } from "@shared/logger/logger"
 import { Effect } from "effect"
 
@@ -20,30 +22,8 @@ export const handleLaunchLibrary = (
   Effect.gen(function* () {
     const source = yield* LibrarySource
     const launcher = yield* Launcher
-    const specResult = yield* source.launchSpecFor(payload.id).pipe(
-      Effect.matchEffect({
-        onSuccess: spec => Effect.succeed({ _tag: "spec" as const, spec }),
-        onFailure: (error: LibraryError) =>
-          error.reason === "config"
-            ? Effect.succeed({
-                _tag: "failed" as const,
-                response: launchConfigurationFailure(error),
-              })
-            : Effect.fail(toDataError(error)),
-      }),
-    )
-
-    if (specResult._tag === "failed") {
-      logger.warn(
-        { id: payload.id, diagnostic: specResult.response.stderrTail },
-        "app.library.launch: launch configuration failed",
-      )
-      return specResult.response
-    }
-
-    const { spec } = specResult
-
-    if (!spec) {
+    const games = yield* source.list().pipe(Effect.mapError(toDataError))
+    if (!games.some(game => game.id === payload.id)) {
       logger.warn(
         { id: payload.id },
         "app.library.launch: unknown id; nothing to spawn",
@@ -52,6 +32,39 @@ export const handleLaunchLibrary = (
         new NotFoundError({ message: `Unknown game id: ${payload.id}` }),
       )
     }
+
+    const resolvedResult = yield* source
+      .resolveLaunchForGame(payload.id, {
+        userId: payload.userId,
+        presetId: payload.presetId ?? undefined,
+        override: payload.override,
+      })
+      .pipe(
+        Effect.matchEffect({
+          onSuccess: resolved =>
+            Effect.succeed({ _tag: "resolved" as const, resolved }),
+          onFailure: (error: LibraryError) =>
+            error.reason === "config"
+              ? Effect.succeed({
+                  _tag: "failed" as const,
+                  response: launchConfigurationFailure(error),
+                })
+              : Effect.fail(toDataError(error)),
+        }),
+      )
+
+    if (resolvedResult._tag === "failed") {
+      logger.warn(
+        { id: payload.id, diagnostic: resolvedResult.response.stderrTail },
+        "app.library.launch: launch configuration failed",
+      )
+      return resolvedResult.response
+    }
+
+    const spec = composeGamescopeLaunchSpec(
+      resolvedResult.resolved.spec,
+      normalizeGamescopePolicy(resolvedResult.resolved.gamescope),
+    )
 
     const result = yield* launcher.run(spec).pipe(Effect.mapError(toDataError))
 

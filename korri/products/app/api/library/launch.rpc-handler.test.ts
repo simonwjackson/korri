@@ -7,7 +7,7 @@ import { NotFoundError } from "@shared/api/rpc/errors"
 import {
   Launcher,
   LibraryError,
-  type LibrarySource,
+  LibrarySource,
 } from "@shared/library/library-services"
 import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
 import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
@@ -83,6 +83,75 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     }
   })
 
+  it("wraps the resolved launch with Gamescope before invoking the launcher", async () => {
+    let launchedSpec: unknown
+    const sourceLayer = Layer.succeed(LibrarySource)({
+      list: () =>
+        Effect.succeed([{ id: "game", system: "s", contentPath: "rom" }]),
+      launchSpecFor: () => Effect.fail(new LibraryError({ reason: "config" })),
+      resolveLaunchForGame: () =>
+        Effect.succeed({
+          spec: { command: "/bin/game", args: ["rom"] },
+          gamescope: { enabled: true },
+        }),
+    })
+    const launcherLayer = Layer.succeed(Launcher)({
+      run: spec => {
+        launchedSpec = spec
+        return Effect.succeed({ status: "launched" as const })
+      },
+    })
+
+    const result = await Effect.runPromise(
+      handleLaunchLibrary({ id: "game" }).pipe(
+        Effect.provide(Layer.merge(sourceLayer, launcherLayer)),
+      ),
+    )
+
+    expect(result).toEqual({ status: "launched" })
+    expect(launchedSpec).toEqual({
+      command: "gamescope",
+      args: ["-f", "-b", "--", "/bin/game", "rom"],
+    })
+  })
+
+  it("passes selected preset inputs and honors a direct-launch opt-out", async () => {
+    let resolveInputs: unknown
+    let launchedSpec: unknown
+    const sourceLayer = Layer.succeed(LibrarySource)({
+      list: () =>
+        Effect.succeed([{ id: "game", system: "s", contentPath: "rom" }]),
+      launchSpecFor: () => Effect.fail(new LibraryError({ reason: "config" })),
+      resolveLaunchForGame: (_id, inputs) => {
+        resolveInputs = inputs
+        return Effect.succeed({
+          spec: { command: "/bin/game", args: ["rom"] },
+          gamescope: { enabled: false },
+        })
+      },
+    })
+    const launcherLayer = Layer.succeed(Launcher)({
+      run: spec => {
+        launchedSpec = spec
+        return Effect.succeed({ status: "launched" as const })
+      },
+    })
+
+    const result = await Effect.runPromise(
+      handleLaunchLibrary({ id: "game", presetId: "raw" }).pipe(
+        Effect.provide(Layer.merge(sourceLayer, launcherLayer)),
+      ),
+    )
+
+    expect(result).toEqual({ status: "launched" })
+    expect(resolveInputs).toEqual({
+      userId: undefined,
+      presetId: "raw",
+      override: undefined,
+    })
+    expect(launchedSpec).toEqual({ command: "/bin/game", args: ["rom"] })
+  })
+
   it("returns failed launch diagnostics for a misconfigured profile (no spawn)", async () => {
     const lib = await withTempProseqlLibrary({ missingProfile: true })
     cleanups.push(lib.cleanup)
@@ -146,6 +215,9 @@ async function withTempProseqlLibrary(
         Effect.gen(function* () {
           const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
           const repository = createLibraryRepository(db)
+          yield* repository.upsertGlobalConfig({
+            gamescope: { enabled: false },
+          })
           yield* repository.upsertGame({
             id: "snes/echo.smc",
             system: "snes",
