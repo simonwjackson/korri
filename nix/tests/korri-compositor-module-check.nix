@@ -203,6 +203,25 @@ let
     };
   };
 
+  # Inputd port override propagates through compositor env vars when the
+  # kiosk surface is on (the compositor reads `services.korri.input.inputd.port`
+  # rather than hardcoding 3002).
+  kioskWithCustomInputdPort = evaluateWith (
+    { pkgs, ... }:
+    {
+      services.korri.compositor = {
+        enable = true;
+        user = "root";
+        createUser = false;
+        kiosk = {
+          enable = true;
+          command = "${pkgs.writeShellScriptBin "korri-compositor-client" "exit 0"}/bin/korri-compositor-client";
+        };
+      };
+      services.korri.input.inputd.port = 4007;
+    }
+  );
+
   # ------------------------------------------------------------------ checks
   check = message: assertion: { inherit message assertion; };
 
@@ -363,6 +382,41 @@ let
     ))
     (check "kiosk without compositor: systemd unit is NOT generated" (
       !(kioskWithoutCompositor.systemd.services ? "korri-compositor")
+    ))
+
+    # ---- compositor+kiosk auto-enables the inputd bridge and orders units
+    (check "compositor+kiosk: mkDefault-enables services.korri.input.inputd" (
+      compositorWithKiosk.services.korri.input.inputd.enable
+    ))
+    (check "compositor+kiosk: emits korri-inputd.service" (
+      compositorWithKiosk.systemd.services ? korri-inputd
+    ))
+    (check "compositor+kiosk: compositor unit wants korri-inputd.service" (
+      builtins.elem "korri-inputd.service" ((compositorUnit compositorWithKiosk).wants or [ ])
+    ))
+    (check "compositor+kiosk: compositor unit starts after korri-inputd.service" (
+      builtins.elem "korri-inputd.service" ((compositorUnit compositorWithKiosk).after or [ ])
+    ))
+    (check "compositor+kiosk: inputd is ordered before korri-compositor.service" (
+      builtins.elem "korri-compositor.service" (
+        compositorWithKiosk.systemd.services.korri-inputd.before or [ ]
+      )
+    ))
+    (check "headless compositor: does NOT auto-enable inputd" (
+      !headlessCompositor.services.korri.input.inputd.enable
+    ))
+    (check "headless compositor: compositor unit does NOT wait on korri-inputd.service" (
+      !builtins.elem "korri-inputd.service" ((compositorUnit headlessCompositor).after or [ ])
+    ))
+
+    # ---- inputd port option drives compositor env vars (was hardcoded 3002)
+    (check "compositor reads inputd.port: KORRI_NATIVE_BRIDGE_URL reflects override" (
+      (compositorUnit kioskWithCustomInputdPort).environment.KORRI_NATIVE_BRIDGE_URL or null
+      == "ws://127.0.0.1:4007"
+    ))
+    (check "compositor reads inputd.port: KORRI_DESKTOP_INPUTD_URL reflects override" (
+      (compositorUnit kioskWithCustomInputdPort).environment.KORRI_DESKTOP_INPUTD_URL or null
+      == "ws://127.0.0.1:4007"
     ))
 
     # ---- client command arguments survive into the launcher

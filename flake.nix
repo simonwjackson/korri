@@ -472,6 +472,10 @@
             inherit pkgs;
             korriCompositorModule = self.nixosModules.korri-compositor;
           };
+          korri-input-module = import ./nix/tests/korri-input-module-check.nix {
+            inherit pkgs;
+            korriInputModule = self.nixosModules.korri-input;
+          };
         }
         // pkgs.lib.optionalAttrs isX86Linux {
           korri-live-usb-config = import ./nix/tests/korri-live-usb-config-check.nix {
@@ -660,12 +664,17 @@
               (import ./nix/modules/korri-kiosk.nix { korri = self; })
             ];
           };
+          # New per-role input module: provider + inputd peer sub-trees.
+          korri-input = import ./nix/modules/korri-input.nix { korri = self; };
           # New per-role compositor module. Bundles the Korri client install
           # so the kiosk-surface sub-tree can default `kiosk.command` to the
-          # selected client package without callers wiring it themselves.
+          # selected client package without callers wiring it themselves, and
+          # imports the input module so `services.korri.input.inputd.*` is in
+          # scope when the kiosk surface wires inputd ordering.
           korri-compositor = {
             imports = [
               korri-client
+              korri-input
               (import ./nix/modules/korri-compositor.nix { korri = self; })
             ];
           };

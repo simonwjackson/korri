@@ -9,6 +9,7 @@
 
 let
   cfg = config.services.korri.compositor;
+  inputCfg = config.services.korri.input;
   groupName =
     if cfg.group != null then
       cfg.group
@@ -20,13 +21,12 @@ let
   sessionBusServices = lib.optionals (cfg.sessionBus.mode == "existing") cfg.sessionBus.services;
   ownsRuntimeDir = cfg.sessionBus.mode == "private";
 
-  # Inputd ordering is wired in by the input module (U3), since that's where
-  # the `services.korri.input.inputd.*` options live. Until then, the
-  # compositor module only auto-enables the kiosk-surface peers it knows
-  # about (client + cli). The KORRI_DESKTOP_INPUTD_URL env var below uses
-  # the documented inputd default port 3002; once the input module lands,
-  # this becomes a reference to `services.korri.input.inputd.port`.
-  inputdDefaultPort = 3002;
+  # The kiosk surface depends on the inputd WebSocket bridge for local
+  # client input. The input module owns the inputd unit + port; the
+  # compositor module wires the systemd ordering and the env vars the
+  # client reads.
+  inputdServices = lib.optional cfg.kiosk.enable "korri-inputd.service";
+  inputdBridgeUrl = "ws://127.0.0.1:${toString inputCfg.inputd.port}";
 
   inherit (lib)
     mkDefault
@@ -85,8 +85,8 @@ let
     }
     // lib.optionalAttrs cfg.kiosk.enable {
       KORRI_KIOSK = "1";
-      KORRI_DESKTOP_INPUTD_URL = "ws://127.0.0.1:${toString inputdDefaultPort}";
-      KORRI_NATIVE_BRIDGE_URL = "ws://127.0.0.1:${toString inputdDefaultPort}";
+      KORRI_DESKTOP_INPUTD_URL = inputdBridgeUrl;
+      KORRI_NATIVE_BRIDGE_URL = inputdBridgeUrl;
     }
     // lib.optionalAttrs (cfg.sessionBus.mode == "existing" && cfg.sessionBus.address != null) {
       DBUS_SESSION_BUS_ADDRESS = cfg.sessionBus.address;
@@ -358,18 +358,23 @@ in
         };
       };
 
-      # Auto-enable the local Korri client + CLI only when the kiosk surface
-      # is on. Headless compositor (aka) intentionally does not install or
-      # launch the client.
+      # Auto-enable the local Korri client + CLI + inputd bridge only when
+      # the kiosk surface is on. Headless compositor (aka) intentionally does
+      # not install or launch the client and does not need the local input
+      # bridge — streaming hosts get their input via input.provider directly.
       services.korri.client.enable = mkIf cfg.kiosk.enable (mkDefault true);
       services.korri.cli.enable = mkIf cfg.kiosk.enable (mkDefault true);
+      services.korri.input.inputd = mkIf cfg.kiosk.enable {
+        enable = mkDefault true;
+        before = [ "korri-compositor.service" ];
+      };
 
       systemd.services."korri-compositor" = {
         description = "Korri appliance compositor session";
         wantedBy = [ "multi-user.target" ];
-        wants = cfg.wants ++ sessionBusServices;
+        wants = cfg.wants ++ inputdServices ++ sessionBusServices;
         requires = sessionBusServices;
-        after = cfg.after ++ sessionBusServices;
+        after = cfg.after ++ inputdServices ++ sessionBusServices;
         environment = sessionEnvironment;
         path = cfg.path ++ [ cfg.sway.package ] ++ cfg.sway.extraPackages;
         unitConfig = {
