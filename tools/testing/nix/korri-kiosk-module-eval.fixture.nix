@@ -67,6 +67,7 @@ let
       kioskWants = kioskUnit.wants or [ ];
       kioskRequires = kioskUnit.requires or [ ];
       kioskAfter = kioskUnit.after or [ ];
+      kioskPath = map toString (kioskUnit.path or [ ]);
       kioskServiceUser = kioskUnit.serviceConfig.User or null;
       kioskServiceGroup = kioskUnit.serviceConfig.Group or null;
       kioskExecStart = kioskUnit.serviceConfig.ExecStart or null;
@@ -81,8 +82,7 @@ let
       inputdEnvironment = inputdUnit.environment or { };
 
       swayConfig = if swayConfigPath == null then null else builtins.readFile swayConfigPath;
-      clientLauncher =
-        if clientLauncherPath == null then null else builtins.readFile clientLauncherPath;
+      clientLauncher = if clientLauncherPath == null then null else builtins.readFile clientLauncherPath;
     };
 
   # Every scenario the test file exercises. Keys mirror the intent of the

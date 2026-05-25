@@ -30,6 +30,7 @@ type ScenarioResult = {
   kioskWants: string[]
   kioskRequires: string[]
   kioskAfter: string[]
+  kioskPath: string[]
   kioskServiceUser: string | null
   kioskServiceGroup: string | null
   kioskExecStart: string | null
@@ -163,6 +164,9 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
     )
     expect(result.kioskEnvironment.KORRI_DESKTOP_INPUTD_URL).toBe(
       "ws://127.0.0.1:3002",
+    )
+    expect(result.kioskPath.some(path => path.includes("gamescope"))).toBe(
+      true,
     )
   })
 

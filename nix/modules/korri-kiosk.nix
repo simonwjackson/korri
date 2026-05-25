@@ -159,8 +159,17 @@ in
       default = with pkgs; [
         coreutils
         dbus
+        cfg.gamescope.package
       ];
       description = "Packages added to PATH for the kiosk session service.";
+    };
+
+    gamescope = {
+      package = mkOption {
+        type = types.package;
+        default = pkgs.gamescope;
+        description = "Gamescope package available to local foreground launches from the kiosk session.";
+      };
     };
 
     sessionBus = {
