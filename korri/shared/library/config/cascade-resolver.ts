@@ -291,18 +291,20 @@ const mergeByLauncher = (
   }
 }
 
-/** Deep-merge two gamescope policies; `args` concat, `enabled` last-wins. */
+/** Deep-merge two gamescope policies; `args` concat, scalars last-win. */
 const foldGamescope = (
   base: GamescopePolicy | undefined,
   extra: GamescopePolicy,
 ): GamescopePolicy => {
   const enabled = extra.enabled !== undefined ? extra.enabled : base?.enabled
+  const command = extra.command !== undefined ? extra.command : base?.command
   const args =
     extra.args !== undefined
       ? [...(base?.args ?? []), ...extra.args]
       : base?.args
   return {
     ...(enabled !== undefined ? { enabled } : {}),
+    ...(command !== undefined ? { command } : {}),
     ...(args !== undefined ? { args } : {}),
   }
 }

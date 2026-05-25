@@ -208,7 +208,10 @@ describe("resolveLocalLauncherGamescopePolicy", () => {
         launcher({
           id: "moonlight",
           systems: [],
-          gamescope: { args: ["--expose-wayland"] },
+          gamescope: {
+            command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
+            args: ["--expose-wayland"],
+          },
         }),
       ],
       games: [],
@@ -219,7 +222,11 @@ describe("resolveLocalLauncherGamescopePolicy", () => {
         launcherId: "moonlight",
         override: { gamescope: { enabled: true } },
       }),
-    ).toEqual({ enabled: true, args: ["--expose-wayland"] })
+    ).toEqual({
+      enabled: true,
+      command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
+      args: ["--expose-wayland"],
+    })
   })
 
   it("uses the product default when local launcher config is absent", () => {

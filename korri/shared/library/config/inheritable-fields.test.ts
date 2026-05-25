@@ -41,12 +41,19 @@ describe("InheritableLayer", () => {
 
   it("decodes a layer carrying every supported inheritable field", () => {
     const layer = decodeInheritableLayer({
-      gamescope: { enabled: true, args: ["-F", "fsr"] },
+      gamescope: {
+        enabled: true,
+        command: "/run/current-system/sw/bin/gamescope",
+        args: ["-F", "fsr"],
+      },
       env: { LANG: "en_US.UTF-8", SDL_VIDEODRIVER: "x11" },
       cwd: "/storage/roms",
       argsAppend: ["--fullscreen", "--verbose"],
     })
     expect(layer.gamescope?.enabled).toBe(true)
+    expect(layer.gamescope?.command).toBe(
+      "/run/current-system/sw/bin/gamescope",
+    )
     expect(layer.env?.LANG).toBe("en_US.UTF-8")
     expect(layer.cwd).toBe("/storage/roms")
     expect(layer.argsAppend).toEqual(["--fullscreen", "--verbose"])

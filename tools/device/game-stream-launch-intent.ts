@@ -221,6 +221,7 @@ function hasGamescopeOpinion(
   return (
     gamescope !== undefined &&
     (gamescope.enabled !== undefined ||
+      gamescope.command !== undefined ||
       (gamescope.args !== undefined && gamescope.args.length > 0))
   )
 }

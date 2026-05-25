@@ -29,6 +29,29 @@ describe("moonlight launcher", () => {
     ])
   })
 
+  it("uses a configured Gamescope wrapper command", async () => {
+    const calls: string[] = []
+    const result = await launchMoonlight({
+      host: "aka.local",
+      gamescope: {
+        enabled: true,
+        command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
+      },
+      runner: runner((command, args) => {
+        calls.push([command, ...args].join(" "))
+        return { status: "started" }
+      }),
+    })
+
+    expect(result).toEqual({
+      status: "started",
+      command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
+    })
+    expect(calls).toEqual([
+      "/run/current-system/sw/bin/korri-gamescope-no-portal -f -b -- moonlight stream -app Korri Stream aka.local",
+    ])
+  })
+
   it("launches moonlight unwrapped when Gamescope is explicitly disabled", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({

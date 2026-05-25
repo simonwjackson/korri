@@ -51,6 +51,20 @@ describe("game stream launch intent store", () => {
     await expect(store.claim()).resolves.toBeUndefined()
   })
 
+  it("preserves the resolved Gamescope wrapper command", () => {
+    const intent = createLaunchIntent(launch, {
+      gamescope: {
+        enabled: true,
+        command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
+      },
+    })
+
+    expect(intent.gamescope).toEqual({
+      enabled: true,
+      command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
+    })
+  })
+
   it("does not delete a newer pending intent when completing an older claim", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-intent-"))
     const intentPath = join(dir, "next-launch.json")

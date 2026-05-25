@@ -14,8 +14,9 @@
  *
  * Field-by-field merge rules (applied by the cascade resolver, not the
  * schema):
- * - `gamescope`     → deep merge per nested key; scalars last-wins
- * - `gamescope.args`→ list concat in inheritance order (least→most specific)
+ * - `gamescope`        → deep merge per nested key; scalars last-wins
+ * - `gamescope.args`   → list concat in inheritance order (least→most specific)
+ * - `gamescope.command`→ scalar; more-specific wrapper command wins
  * - `env`           → map merge per key; more-specific wins
  * - `cwd`           → scalar; most-specific path wins
  * - `argsAppend`    → list concat in inheritance order
@@ -38,6 +39,7 @@ const STRICT = { onExcessProperty: "error" } as const
  */
 export const GamescopePolicy = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean),
+  command: Schema.optional(Schema.String),
   args: Schema.optional(Schema.Array(Schema.String)),
 })
 export type GamescopePolicy = Schema.Schema.Type<typeof GamescopePolicy>
@@ -48,6 +50,7 @@ export const normalizeGamescopePolicy = (
   policy: GamescopePolicy | undefined,
 ): GamescopePolicy => ({
   enabled: policy?.enabled ?? true,
+  ...(policy?.command !== undefined ? { command: policy.command } : {}),
   ...(policy?.args !== undefined ? { args: policy.args } : {}),
 })
 
