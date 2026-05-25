@@ -17,6 +17,7 @@ import {
   readlinkSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
@@ -318,6 +319,31 @@ describe("Korri live USB safety evaluation", () => {
     }
   })
 
+  it("locks legacy broad-home state before starting a Product session", () => {
+    const rig = makeResolverRig({
+      bootSource: "/fake/sdb1",
+      parentDevice: "/fake/sdb",
+      transport: "usb",
+      removable: "1",
+      partitions: [
+        { device: "/fake/sdb1", label: "KORRI-ISO" },
+        { device: "/fake/sdb2", label: "KORRI-PERSIST" },
+      ],
+    })
+    try {
+      mkdirSync(`${rig.root}/home`, { recursive: true })
+      writeFileSync(`${rig.root}/home/legacy`, "old broad state")
+      const result = runResolverRig(rig)
+      expect(result.status, result.stderr).toBe(0)
+      expect(statSync(`${rig.root}/home`).mode & 0o777).toBe(0o000)
+    } finally {
+      if (existsSync(`${rig.root}/home`)) {
+        chmodSync(`${rig.root}/home`, 0o700)
+      }
+      rig.cleanup()
+    }
+  })
+
   it("locks Developer namespace before starting a Product session", () => {
     const rig = makeResolverRig({
       bootSource: "/fake/sdb1",
@@ -339,6 +365,29 @@ describe("Korri live USB safety evaluation", () => {
       if (existsSync(`${rig.root}/developer`)) {
         chmodSync(`${rig.root}/developer`, 0o700)
       }
+      rig.cleanup()
+    }
+  })
+
+  it("refuses symlinked Developer namespace state", () => {
+    const rig = makeResolverRig({
+      artifact: "developer",
+      bootSource: "/fake/sdb1",
+      parentDevice: "/fake/sdb",
+      transport: "usb",
+      removable: "1",
+      partitions: [
+        { device: "/fake/sdb1", label: "KORRI-ISO" },
+        { device: "/fake/sdb2", label: "KORRI-PERSIST" },
+      ],
+    })
+    try {
+      mkdirSync(`${rig.root}/developer`, { recursive: true })
+      symlinkSync(rig.home, `${rig.root}/developer/home`)
+      const result = runResolverRig(rig)
+      expect(result.status).not.toBe(0)
+      expect(result.stderr).toContain("symlinked")
+    } finally {
       rig.cleanup()
     }
   })

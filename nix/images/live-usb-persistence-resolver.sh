@@ -32,6 +32,8 @@ prepare_state_tree() {
 }
 
 prepare_developer_state_tree() {
+  reject_symlink_path "$root/developer" || return 1
+  reject_symlink_path "$root/developer/home" || return 1
   mkdir -p "$root/developer/home/.config" "$root/developer/home/.local/share" "$root/developer/home/.local/state" "$root/developer/home/.cache/moonlight" || return 1
   chown -R "$state_user:$state_group" "$root/developer/home" || return 1
   chmod 0755 "$root" "$root/developer" || return 1
@@ -41,6 +43,7 @@ prepare_developer_state_tree() {
 prepare_product_state_tree() {
   created_links=()
   lock_inactive_developer_namespace || return 1
+  lock_legacy_broad_home || return 1
   reject_symlink_path "$root/product" || return 1
   reject_symlink_path "$root/product/home/.config/korri" || return 1
   reject_symlink_path "$root/product/home/.local/share/korri" || return 1
@@ -91,6 +94,17 @@ lock_inactive_developer_namespace() {
     fi
     chown root:root "$root/developer" || return 1
     chmod 0000 "$root/developer" || return 1
+  fi
+}
+
+lock_legacy_broad_home() {
+  if [ -e "$root/home" ] || [ -L "$root/home" ]; then
+    if [ -L "$root/home" ]; then
+      echo "korri-live-usb: refusing symlinked legacy broad-home namespace during Product setup" >&2
+      return 1
+    fi
+    chown root:root "$root/home" || return 1
+    chmod 0000 "$root/home" || return 1
   fi
 }
 
