@@ -5,9 +5,9 @@ import {
   type LibraryError,
   LibrarySource,
 } from "@shared/library/library-services"
-import { composeGamescopeLaunchSpec } from "../../../../../tools/device/game-stream-fullscreen"
 import { logger } from "@shared/logger/logger"
 import { Effect } from "effect"
+import { composeGamescopeLaunchSpec } from "../../../../../tools/device/game-stream-fullscreen"
 
 import type { LaunchLibraryPayload, LaunchLibraryResponse } from "./launch.rpc"
 

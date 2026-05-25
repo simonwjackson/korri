@@ -16,8 +16,8 @@ import {
   type InputPlumberVirtualGamepadResolution,
   resolveInputPlumberVirtualGamepad,
 } from "@shared/input/native/inputplumber-virtual-gamepad"
-import { composeGamescopeLaunchSpec } from "../../../../tools/device/game-stream-fullscreen"
 import type { GamescopeOptions } from "../../../../tools/device/game-stream-fullscreen"
+import { composeGamescopeLaunchSpec } from "../../../../tools/device/game-stream-fullscreen"
 
 export type MoonlightLaunchResult =
   | { readonly status: "started"; readonly command: string }

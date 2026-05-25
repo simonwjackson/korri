@@ -37,9 +37,9 @@ import {
   UserNotFound,
 } from "./errors"
 import {
-  normalizeGamescopePolicy,
   type ByLauncherPayload,
   type GamescopePolicy,
+  normalizeGamescopePolicy,
 } from "./inheritable-fields"
 import type { CollectionRecord } from "./records/collection"
 import type { GameRecord } from "./records/game"

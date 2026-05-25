@@ -1,13 +1,13 @@
 import { join } from "node:path"
-import { korriDataPath } from "@shared/config/xdg-paths"
 import {
   type CommandRunner,
   launchMoonlight,
   preflightMoonlightInput,
 } from "@app/stream/moonlight-launcher"
 import { createRemoteStreamControlClient } from "@app/stream/remote-stream-client"
-import { createLibraryRepository } from "@shared/library/proseql/library-repository"
+import { korriDataPath } from "@shared/config/xdg-paths"
 import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
+import { createLibraryRepository } from "@shared/library/proseql/library-repository"
 import { logger } from "@shared/logger"
 import { Effect, Exit, Fiber, Scope, Stream, SubscriptionRef } from "effect"
 import Electrobun, {

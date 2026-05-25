@@ -165,9 +165,7 @@ describe("services.korri.kiosk NixOS module evaluation", () => {
     expect(result.kioskEnvironment.KORRI_DESKTOP_INPUTD_URL).toBe(
       "ws://127.0.0.1:3002",
     )
-    expect(result.kioskPath.some(path => path.includes("gamescope"))).toBe(
-      true,
-    )
+    expect(result.kioskPath.some(path => path.includes("gamescope"))).toBe(true)
   })
 
   it("accepts platform Sway fragments while keeping Korri client autostart product-owned", () => {
