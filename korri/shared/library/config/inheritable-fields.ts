@@ -32,13 +32,24 @@ const STRICT = { onExcessProperty: "error" } as const
  * - `false` → explicitly disabled (overrides inherited `true`)
  * - absent  → "no opinion" (inherits from less-specific layer)
  *
- * Once resolved, this rides on the launch intent as `gamescope: {...}`.
+ * The resolved product default is `enabled: true`. Args-only policies also
+ * resolve to enabled so adding wrapper args does not require repeating the
+ * default. Once resolved, this rides on the launch intent as `gamescope: {...}`.
  */
 export const GamescopePolicy = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean),
   args: Schema.optional(Schema.Array(Schema.String)),
 })
 export type GamescopePolicy = Schema.Schema.Type<typeof GamescopePolicy>
+
+export const DEFAULT_GAMESCOPE_POLICY: GamescopePolicy = { enabled: true }
+
+export const normalizeGamescopePolicy = (
+  policy: GamescopePolicy | undefined,
+): GamescopePolicy => ({
+  enabled: policy?.enabled ?? true,
+  ...(policy?.args !== undefined ? { args: policy.args } : {}),
+})
 
 /**
  * The set of inheritable behavior fields shared by every layer-bearing

@@ -168,6 +168,31 @@ describe("createRocknixSource (real filesystem via withTempLibrary)", () => {
     }
   })
 
+  it("resolveLaunchForGame returns a fully-resolved spec with default Gamescope policy", async () => {
+    const lib = track(
+      await withTempLibrary({
+        systems: [
+          {
+            name: "snes",
+            defaultEmulator: "retroarch",
+            defaultCore: "snes9x",
+            extension: [".smc"],
+            games: [{ path: "zelda.smc", name: "Zelda" }],
+          },
+        ],
+      }),
+    )
+    const source = createRocknixSource({
+      gamelistRoots: [lib.rootDir],
+      esSystemsPath: lib.esSystemsPath,
+      launchCommand: lib.launchCommand,
+    })
+    await source.list()
+    const resolved = await source.resolveLaunchForGame("snes/zelda.smc")
+    expect(resolved.spec.command).toBe(lib.launchCommand)
+    expect(resolved.gamescope).toEqual({ enabled: true })
+  })
+
   it("launchSpecFor returns undefined for unknown id", async () => {
     const lib = track(
       await withTempLibrary({

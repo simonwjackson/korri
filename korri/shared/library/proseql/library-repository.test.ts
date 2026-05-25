@@ -80,7 +80,7 @@ describe("createLibraryRepository — listGames", () => {
 })
 
 describe("createLibraryRepository — resolveLaunchForGame (inheritance)", () => {
-  it("resolves a LaunchSpec via the cascade with pure inheritance (no preset, no override)", async () => {
+  it("resolves a LaunchSpec and default Gamescope policy via pure inheritance", async () => {
     await withTempRoot(async root => {
       const result = await Effect.runPromise(
         Effect.scoped(
@@ -100,6 +100,7 @@ describe("createLibraryRepository — resolveLaunchForGame (inheritance)", () =>
         "snes9x_libretro.so",
         "/storage/roms/snes/new.smc",
       ])
+      expect(result.gamescope).toEqual({ enabled: true })
     })
   })
 

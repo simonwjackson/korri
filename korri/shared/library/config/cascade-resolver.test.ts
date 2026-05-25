@@ -133,6 +133,29 @@ describe("resolveLaunchContext — pure inheritance (no presets)", () => {
 })
 
 describe("resolveLaunchContext — gamescope policy fold", () => {
+  it("defaults Gamescope to enabled when no layer has a Gamescope opinion", () => {
+    const snap = snapshotOf({
+      systems: [system({ id: "snes", launcher: "retroarch" })],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [game({ id: "fzero" })],
+    })
+
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+    expect(ctx.gamescope).toEqual({ enabled: true })
+  })
+
+  it("defaults args-only Gamescope policy to enabled", () => {
+    const snap = snapshotOf({
+      global: globalConfig({ gamescope: { args: ["--expose-wayland"] } }),
+      systems: [system({ id: "snes", launcher: "retroarch" })],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [game({ id: "fzero" })],
+    })
+
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+    expect(ctx.gamescope).toEqual({ enabled: true, args: ["--expose-wayland"] })
+  })
+
   it("game.gamescope.enabled=true overrides global false", () => {
     const snap = snapshotOf({
       global: globalConfig({ gamescope: { enabled: false } }),
@@ -339,8 +362,9 @@ describe("resolveLaunchContext — inherit:false escape hatch", () => {
       games: [game({ id: "fzero" })],
     })
     const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
-    // Global's gamescope.enabled is dropped; only system's args survive.
-    expect(ctx.gamescope?.enabled).toBeUndefined()
+    // Global's gamescope.enabled is dropped; system args survive and the
+    // product default still enables Gamescope unless this layer disables it.
+    expect(ctx.gamescope?.enabled).toBe(true)
     expect(ctx.gamescope?.args).toEqual(["-W", "1920"])
   })
 

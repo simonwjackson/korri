@@ -36,7 +36,11 @@ import {
   type ResolutionError,
   UserNotFound,
 } from "./errors"
-import type { ByLauncherPayload, GamescopePolicy } from "./inheritable-fields"
+import {
+  normalizeGamescopePolicy,
+  type ByLauncherPayload,
+  type GamescopePolicy,
+} from "./inheritable-fields"
 import type { CollectionRecord } from "./records/collection"
 import type { GameRecord } from "./records/game"
 import type { GlobalConfigRecord } from "./records/global"
@@ -525,7 +529,7 @@ export const resolveLaunchContext = (
       system: game.system,
       launcherId,
       ...(core !== undefined ? { core } : {}),
-      ...(folded.gamescope ? { gamescope: folded.gamescope } : {}),
+      gamescope: normalizeGamescopePolicy(folded.gamescope),
       ...(folded.env ? { env: folded.env } : {}),
       ...(folded.cwd !== undefined ? { cwd: folded.cwd } : {}),
       ...(folded.argsAppend ? { argsAppend: folded.argsAppend } : {}),

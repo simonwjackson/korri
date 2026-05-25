@@ -26,6 +26,7 @@ import { readdir } from "node:fs/promises"
 import { basename, join } from "node:path"
 
 import { korriDataPath, type XdgPathEnv } from "@shared/config/xdg-paths"
+import { normalizeGamescopePolicy } from "@shared/library/config/inheritable-fields"
 import type { GameRecord } from "@shared/library/config/records/game"
 import { logger } from "@shared/logger/logger"
 
@@ -167,7 +168,7 @@ export function createRocknixSource(
       if (!spec) {
         throw new Error(`rocknix-source: no launch spec for game ${id}`)
       }
-      return { spec }
+      return { spec, gamescope: normalizeGamescopePolicy(undefined) }
     },
   }
 }
