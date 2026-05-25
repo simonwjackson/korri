@@ -59,6 +59,7 @@ export function composeGamescopeLaunchSpec(
     args: [
       "-f",
       "-b",
+      ...(launchesNativeWaylandChild(game) ? ["--expose-wayland"] : []),
       ...(options.args ?? []),
       "--",
       game.command,
@@ -170,10 +171,21 @@ function matchesSelector(
   const title = node.window_properties?.title ?? node.name ?? ""
   const className = node.window_properties?.class ?? ""
 
+  if (appIds.length === 0 && titles.length === 0 && classes.length === 0) {
+    return node.app_id !== undefined || title.length > 0 || className.length > 0
+  }
+
   return (
     (node.app_id ? appIds.includes(node.app_id) : false) ||
     titles.includes(title) ||
     (className ? classes.includes(className) : false)
+  )
+}
+
+function launchesNativeWaylandChild(game: LaunchSpec): boolean {
+  return (
+    game.env?.SDL_VIDEODRIVER === "wayland" ||
+    game.env?.WAYLAND_DISPLAY !== undefined
   )
 }
 

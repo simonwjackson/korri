@@ -61,6 +61,23 @@ describe("gamescope launch composition", () => {
     })
   })
 
+  it("exposes Wayland for native Wayland children as minimal pass-through", () => {
+    expect(
+      composeGamescopeLaunchSpec(
+        { ...game, env: { SDL_VIDEODRIVER: "wayland" } },
+        { enabled: true },
+      ).args,
+    ).toEqual([
+      "-f",
+      "-b",
+      "--expose-wayland",
+      "--",
+      "/nix/store/demo/bin/neverball",
+      "--level",
+      "one",
+    ])
+  })
+
   it("leaves the game command unchanged when Gamescope is disabled", () => {
     expect(composeGamescopeLaunchSpec(game, { enabled: false })).toBe(game)
   })
@@ -176,6 +193,33 @@ describe("stream surface discovery and repair", () => {
     expect(result.windowId).toBe(43)
     expect(calls).toContainEqual(["[con_id=43] fullscreen enable"])
     expect(calls).not.toContainEqual(["[con_id=42] focus"])
+  })
+
+  it("can select any newly-created window for raw foreground launches", async () => {
+    const treeWithOldAndNew: SwayNode = {
+      id: 1,
+      nodes: [
+        {
+          id: 2,
+          nodes: [
+            { id: 42, app_id: "firefox", focused: true, fullscreen_mode: 1 },
+            { id: 43, app_id: "neverball", focused: false, fullscreen_mode: 0 },
+          ],
+        },
+      ],
+    }
+
+    const result = await repairStreamSurface({
+      selector: {},
+      ignoredWindowIds: new Set([42]),
+      runner: {
+        run: async args =>
+          args.includes("get_tree") ? JSON.stringify(treeWithOldAndNew) : "",
+      },
+    })
+
+    expect(result.windowId).toBe(43)
+    expect(result.commands).toContain("[con_id=43] fullscreen enable")
   })
 
   it("times out when no stream surface appears", async () => {

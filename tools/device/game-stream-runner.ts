@@ -260,10 +260,13 @@ export function createGameStreamRunner(
 
         const gamescope = launchClaim.intent.gamescope ?? { enabled: false }
         const gamescopeEnabled = gamescope.enabled === true
-        const fullscreen = gamescopeEnabled
+        const hasResolvedGamescopePolicy =
+          launchClaim.intent.gamescope !== undefined
+        const repairEnabled = gamescopeEnabled || hasResolvedGamescopePolicy
+        const fullscreen = repairEnabled
           ? (options.fullscreen ?? {
               runner: createSwayCommandRunner(),
-              selector: DEFAULT_GAMESCOPE_SELECTOR,
+              selector: gamescopeEnabled ? DEFAULT_GAMESCOPE_SELECTOR : {},
             })
           : undefined
         const preflight = preflightSessionEnvironment({
