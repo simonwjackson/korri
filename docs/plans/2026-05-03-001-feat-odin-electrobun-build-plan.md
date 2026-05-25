@@ -65,7 +65,7 @@ Separately, the Electrobun/Nix work already proves a Linux desktop package for `
 - `tools/desktop/desktop-smoke.ts` and `tools/desktop/electrobun-runtime-check.ts` — structured tooling patterns for explicit desktop checks outside default validation.
 - `tools/scripts/odin-bootstrap.sh`, `tools/scripts/odin-dev.sh`, `tools/scripts/odin-run-api.sh`, `tools/scripts/odin-smoke.sh` — established Odin conventions: SSH target defaults, `/storage/korri`, sourced `.env`, and explicit `just` recipes.
 - `.github/workflows/desktop-stage2.yml` — already builds `packages.aarch64-linux.korri-desktop`; extend it only for static/package assertions, not real device launch.
-- `device-report.md` — confirms Odin is aarch64 ROCKNIX, read-only rootfs, writable `/storage`, Sway/Wayland through `essway`, SSH root access, and no general package manager.
+- `docs/deployment/device-report.md` — confirms Odin is aarch64 ROCKNIX, read-only rootfs, writable `/storage`, Sway/Wayland through `essway`, SSH root access, and no general package manager.
 
 ### Institutional Learnings
 
@@ -165,7 +165,7 @@ sequenceDiagram
 **Patterns to follow:**
 - `tools/desktop/electrobun-runtime-check.ts` for report shape and actionable recommendations.
 - `tools/scripts/odin-smoke.sh` for Odin SSH defaults, direct API targeting, and clear log prefixes.
-- `device-report.md` for the exact ROCKNIX filesystem and service assumptions.
+- `docs/deployment/device-report.md` for the exact ROCKNIX filesystem and service assumptions.
 
 **Test scenarios:**
 - Happy path: facts include SSH reachable, `.env` present, Sway active, `/storage` space above threshold, `/nix/store` usable, and `/storage/roms` readable -> report is `ready` with no blocking recommendations.
@@ -397,7 +397,7 @@ sequenceDiagram
 - Related plan: [docs/plans/2026-04-30-004-feat-electrobun-desktop-wrapper-plan.md](docs/plans/2026-04-30-004-feat-electrobun-desktop-wrapper-plan.md)
 - Related plan: [docs/plans/2026-04-30-006-feat-electrobun-nix-native-build-plan.md](docs/plans/2026-04-30-006-feat-electrobun-nix-native-build-plan.md)
 - Related plan: [docs/plans/2026-05-02-001-feat-personal-mvp-rocknix-launch-plan.md](docs/plans/2026-05-02-001-feat-personal-mvp-rocknix-launch-plan.md)
-- Device context: [device-report.md](device-report.md)
+- Device context: [docs/deployment/device-report.md](../deployment/device-report.md)
 - Development loop: [docs/development/odin-iterative-loop.md](docs/development/odin-iterative-loop.md)
 - Institutional learning: [docs/solutions/best-practices/electrobun-desktop-wrapper-loopback-2026-05-01.md](docs/solutions/best-practices/electrobun-desktop-wrapper-loopback-2026-05-01.md)
 - Institutional learning: [docs/solutions/integration-issues/electrobun-linux-flat-bundle-2026-05-01.md](docs/solutions/integration-issues/electrobun-linux-flat-bundle-2026-05-01.md)

@@ -1,0 +1,144 @@
+## Repository Research Summary
+
+### Technology & Infrastructure
+
+- **Primary stack:** TypeScript/Bun app + React 19 + Effect 4 beta + Hono + TanStack Router + Tailwind 4, formatted/linted with Biome and analyzed with Fallow.
+  - Evidence: `package.json`, `tsconfig.json`, `biome.json`, `.fallowrc.json`.
+  - TypeScript is strict and uses aliases: `@app/*`, `@shared/*`, `@korri/*`, `@deploy/*` in `tsconfig.json`.
+- **Nix/NixOS is the implementation surface for this task.** The live USB work is centered in `flake.nix`, `nix/images/**`, `nix/modules/**`, `nix/tests/**`, and `tools/testing/nix/**`.
+  - `flake.nix` pins `nixpkgs-unstable`, `nixos-24.05` for selected desktop runtime libraries, `bun2nix`, and `nix-on-rocks`.
+  - `README.md` documents product-facing NixOS roles: `services.korri.server`, `services.korri.client`, `services.korri.kiosk`, plus live USB checks/apps.
+- **Deployment model:** multi-artifact product flake, not a monorepo workspace in the package-manager sense.
+  - Root `package.json` has no npm workspaces. `old-ui/package.json` exists but appears legacy; active app/tooling is under `korri/**`, `tools/**`, and `nix/**`.
+  - Flake outputs expose packages, apps, checks, and NixOS configurations; x86 live USB outputs are guarded by `isX86Linux` in `flake.nix`.
+- **API styles:** local web/API stack uses Hono/Effect RPC patterns, but this persistence-mode task is mostly NixOS/systemd/shell. API routes exist under `korri/products/app/api`, `korri/shared/api`, and `tools/feature-map-explorer/server/routes`.
+- **Data/state stores:** no DB migration layer for the live USB task. Korri app state follows XDG conventions via `korri/shared/config/xdg-paths.ts`; desktop config is YAML at `XDG_CONFIG_HOME/korri/desktop.yaml` via `korri/deploy/desktop/desktop-config.ts`; library assets use ProseQL/YAML in shared library code.
+- **Live USB infrastructure already exists:**
+  - `nix/images/live-usb.nix` imports NixOS `iso-image.nix`, sets `isoImage.makeUsbBootable = true`, `isoImage.makeEfiBootable = true`, and names the image `korri-kiosk-live-<system>.iso`.
+  - `nix/images/live-usb-runtime.nix` owns current same-stick persistence runtime wiring.
+  - `nix/images/live-usb-persistence-resolver.sh` resolves the boot ISO device, derives the parent USB block device, mounts only a sibling partition labeled `KORRI-PERSIST`, and otherwise mounts tmpfs fallback.
+  - `nix/apps/korri-live-usb-qemu.nix` has manual QEMU runners, including a persistence topology that copies the hybrid ISO into one raw USB image and appends a sibling `KORRI-PERSIST` partition.
+- **Validation surfaces already exist and should be extended rather than replaced:**
+  - Flake checks: `checks.x86_64-linux.korri-live-usb-config`, `checks.x86_64-linux.korri-live-usb-vm-smoke` in `flake.nix`.
+  - Nix checks: `nix/tests/korri-live-usb-config-check.nix`, `nix/tests/korri-live-usb-vm-smoke.nix`.
+  - Bun/Nix eval tests: `tools/testing/nix/korri-live-usb-safety-eval.test.ts`, `tools/testing/nix/korri-image-outputs-eval.test.ts`, plus fixtures.
+  - Just recipes: `just live-usb-smoke`, `just live-usb-vm-smoke`, `just live-usb-qemu`, `just live-usb-qemu-persistence` in `justfile`.
+- **External module option worth considering:** `nix-community/impermanence` exposes `environment.persistence."/persist".{directories,files,users}` for allowlisted bind/symlink persistence. Its model matches the requirement (“choose what files/directories to keep; rest thrown away”), but it assumes a mounted persistent volume marked `neededForBoot`. Korri’s current same-stick resolver is stricter than generic by-label mounting, so a safe design would either:
+  - keep the Korri resolver as the mount authority and layer an Impermanence-style declaration on top, or
+  - implement project-local bind/symlink mounts from the resolver-prepared root without adding the external flake input.
+
+### Architecture & Structure
+
+- **Canonical requirement source for this task:** `docs/brainstorms/2026-05-24-001-live-usb-persistence-modes-requirements.md`.
+  - Requires two modes: default **product** allowlist mode and explicit **developer/debug** broad-persistence mode.
+  - Both modes must persist only to approved same-stick USB persistence and keep the system image locked.
+  - Product allowlist includes Korri/Moonlight, network setup, input/device setup, stable machine identity, and useful diagnostics/logs.
+  - Debug mode must be explicit via boot menu or kernel arg and visibly distinguishable.
+- **Existing live USB design docs to preserve:**
+  - `docs/deployment/korri-images.md` is the operator-facing canonical guide for product systems/images. It already documents `KORRI-PERSIST`, same-stick resolver behavior, tmpfs fallback marker, QEMU validation tiers, and physical NUC acceptance.
+  - `docs/plans/2026-05-23-001-feat-x86-live-usb-kiosk-plan.md` is the completed foundational plan. Important decisions: live ISO first, same-stick persistence, no generic-label-only mount, persist Korri/Moonlight client state, no special discovery behavior, moonlight-embedded appliance path.
+  - `docs/plans/2026-05-23-002-feat-live-usb-validation-surfaces-plan.md` is the completed validation plan. It establishes the split between packages/checks/apps and warns not to overclaim VM/QEMU coverage.
+- **NixOS composition boundary:**
+  - `nix/images/common.nix` defines product composition helpers: `mkHeadlessSystem`, `mkKioskSystem`, `mkLiveUsbKioskRuntimeSystem`, `mkLiveUsbKioskSystem`, and matching module-list helpers.
+  - `nix/images/live-usb.nix` should stay ISO-media-specific.
+  - `nix/images/live-usb-runtime.nix` is the likely seam for persistence mode options, product allowlist state routing, debug-mode environment markers, and boot-mode service ordering.
+  - `nix/images/platforms/x86.nix` owns x86 platform facts such as `seatd`, `inputplumber`, UDP 5353, user groups, `moonlight-embedded`, and kiosk environment. Keep generic live USB persistence policy out of this platform adapter except for state paths required by platform services.
+  - `nix/modules/korri-kiosk.nix` owns generic kiosk session XDG roots, service ordering, Sway config, input-provider assertions, and user/session ownership. Avoid duplicating that logic in the live USB module; set its options from `live-usb-runtime.nix`.
+- **Current persistence architecture is broad user-root persistence, not the new allowlist model.**
+  - `nix/images/live-usb-runtime.nix` currently sets:
+    - `services.korri.kiosk.home = "${cfg.root}/home"`
+    - `configHome = "${cfg.root}/home/.config"`
+    - `dataHome = "${cfg.root}/home/.local/share"`
+    - `stateHome = "${cfg.root}/home/.local/state"`
+    - `XDG_CACHE_HOME = "${cfg.root}/home/.cache"`
+    - `KORRI_MOONLIGHT_STATE_HOME = "${cfg.root}/home/.cache/moonlight"`
+  - `nix/images/live-usb-persistence-resolver.sh` prepares `home/.config`, `home/.local/share`, `home/.local/state`, and `home/.cache/moonlight` directly under the mounted persistence root.
+  - This meets the earlier v1 “persist client state” requirement but is broader than the new product-mode requirement to persist only allowlisted files/directories. Planning should explicitly decide whether to change the mounted root layout from “persistent HOME” to an ephemeral HOME with allowlisted bind/symlink paths.
+- **Existing safety posture:**
+  - Resolver starts from `findmnt --target "$boot_mount"`, follows `lsblk PKNAME` to the parent device, requires `TRAN=usb`, scans only sibling partitions, and avoids `/dev/disk/by-label` generic mounts.
+  - Missing, unsafe, unmountable, or unprepared persistence falls back to tmpfs and writes `.korri-live-usb-ephemeral`; successful same-stick persistence writes `.korri-live-usb-persistent`.
+  - `live-usb-runtime.nix` force-disables `swapDevices`, `services.udisks2`, and `services.gvfs`.
+  - `nix/tests/korri-live-usb-config-check.nix` and `tools/testing/nix/korri-live-usb-safety-eval.test.ts` assert those constraints.
+- **Boot/debug activation seam:**
+  - There is no current product/debug persistence mode option, boot menu entry, or kernel-arg parser in Korri live USB modules.
+  - Existing base config in `nix/images/common.nix` sets `boot.loader.systemd-boot.enable = false` and `boot.loader.grub.devices = [ "nodev" ]`; `nix/images/live-usb.nix` imports NixOS ISO machinery, which generates the live media bootloader configuration.
+  - Likely implementation seams:
+    - add `services.korri.liveUsbPersistence.mode` or `productAllowlist/debug` option(s) in `nix/images/live-usb-runtime.nix`;
+    - detect runtime mode in the resolver or a preceding oneshot via `/proc/cmdline`, e.g. `korri.persistence=debug`, while defaulting to product mode;
+    - add an ISO bootloader menu entry in `nix/images/live-usb.nix` or live USB module config that appends that kernel arg for “Korri Live USB (developer persistence)”;
+    - export `KORRI_LIVE_USB_PERSISTENCE_MODE=product|debug` to the kiosk service and possibly write marker files such as `.korri-live-usb-product` / `.korri-live-usb-debug` / `.korri-live-usb-ephemeral`.
+- **Product/debug visibility seam:**
+  - Runtime config currently only exposes `desktopInput` through `korri/deploy/desktop/runtime-config-shape.ts` and `korri/deploy/desktop/runtime-config.ts`.
+  - If the UI must visibly label debug mode, a small set-once runtime-config field is the existing pattern for passing environment-derived facts from Bun to React; avoid polling or bridge APIs.
+  - For a minimum implementation, also surface mode through systemd environment/markers and deployment docs; a polished React banner can be a follow-up if not required for the technical plan.
+- **Allowlist candidates from repo evidence:**
+  - Korri desktop connection/settings: `XDG_CONFIG_HOME/korri/desktop.yaml` (`korri/deploy/desktop/desktop-config.ts`).
+  - Korri data/library/assets if local client state is desired: `XDG_DATA_HOME/korri/**` via `korri/shared/config/xdg-paths.ts` and wrapper defaults in `nix/korri-desktop/wrap.nix` (`KORRI_DEVICE_STATE_ROOT`, `KORRI_LIBRARY_ROOT`). For product-mode remote-first live USB, be careful not to accidentally persist broad local library/cache unless approved.
+  - Korri state/log-like runtime state: `XDG_STATE_HOME/korri/**` via `korri/shared/config/xdg-paths.ts`; `tools/device/sessiond-electrobun.ts` uses `korriStatePath(env, "electrobun")` for status and token defaults.
+  - Moonlight Embedded: currently `KORRI_MOONLIGHT_STATE_HOME = ${cfg.root}/home/.cache/moonlight`, and docs call out `home/.cache/moonlight` for pairing/cache state.
+  - InputPlumber setup: platform service and package data are in `nix/images/platforms/x86.nix`; runtime state locations are not yet explicitly persisted. Do not persist all of `/var/lib` without identifying the specific InputPlumber/NixOS state needed.
+  - Network setup: current x86 live USB is Ethernet-first; no NetworkManager/iwd persistence is wired today. If product mode adds Wi-Fi/network setup continuity, likely allowlist locations should be explicit NixOS service paths (e.g. `/etc/NetworkManager/system-connections` if NetworkManager is enabled) rather than broad `/etc` or `/var`.
+  - Stable machine identity: no current live USB machine-id handling found. Common impermanence examples persist `/etc/machine-id`; plan should decide if this is needed for mDNS/server identity, logs, or pairing.
+  - Logs/diagnostics: current docs emphasize QEMU `out/live-usb-smoke/**/serial.log`; live system persistence of journal/logs is not yet implemented. If added, prefer a scoped diagnostic export (e.g. selected journal directory or Korri service logs) over broad `/var/log` unless product/debug mode differs intentionally.
+- **Architecture constraints from project docs:**
+  - `AGENTS.md` says product docs and implementation patterns live in durable docs; `docs/solutions/` holds reusable learnings. For this task, update `docs/deployment/korri-images.md` and possibly a plan doc, not scattered comments.
+  - `docs/deployment/korri-nixos-modules.md` says Korri product modules own generic product behavior; platform adapters own hardware facts. Keep persistence mode policy generic to the live USB module, not x86 hardware adapter specifics.
+  - `docs/solutions/architecture-patterns/kiosk-foreground-app-policy-over-gamescope-overlay-2026-05-24.md` is adjacent: kiosk/session invariants belong to the session owner. Apply the same principle here: persistence mode is a boot/session invariant, not an app-level setting.
+
+### Implementation Patterns
+
+- **Nix module style:**
+  - Options are declared with `lib.mkOption` / `lib.mkEnableOption`, with defaults and descriptive text (`nix/modules/korri-kiosk.nix`, `nix/images/live-usb-runtime.nix`).
+  - Product defaults use `lib.mkDefault`; safety overrides use `lib.mkForce` when intentionally preventing unsafe behavior (`swapDevices`, `udisks2`, `gvfs`).
+  - Generated scripts are built with `pkgs.writeShellScript` and read checked-in shell sources where useful (`live-usb-persistence-resolver.sh`).
+  - Service ordering is explicit through `wants`, `requires`, `after`, `before`; live USB currently makes `greetd` require persistence and input dependencies before login.
+- **Existing resolver pattern to preserve/deepen:**
+  - Keep same-stick identity resolution in one shell entrypoint: `nix/images/live-usb-persistence-resolver.sh`.
+  - Tests use shims for `findmnt`, `lsblk`, `blkid`, `mount`, `umount`, `chown` to exercise real shell behavior without touching disks (`tools/testing/nix/korri-live-usb-safety-eval.test.ts`). Extend this harness for product/debug modes and allowlist/broad behavior.
+  - Current resolver fallback is non-fatal tmpfs. The new requirements allow either visible non-persistent behavior or failure; do not silently mount any other device.
+- **Likely implementation seam for two modes:**
+  - Add a small mode resolver around `/proc/cmdline` rather than hard-coding mode at build time. Default product mode when no arg is present.
+  - Suggested kernel arg shape for planning: `korri.persistence=debug` or `korri.liveUsbPersistence=debug`; avoid ambiguous booleans. Also consider `korri.persistence=product` as an explicit default for tests.
+  - Add an ISO boot menu entry that appends the debug arg. NixOS ISO bootloader config will likely need to be set in `nix/images/live-usb.nix` or via the imported ISO module’s bootloader options; no local precedent exists beyond `isoImage.makeUsbBootable/makeEfiBootable`, so plan a focused spike/check.
+  - Resolver should write mode markers and export enough environment for follow-on services, or generate a small env file under `/run/korri-live-usb-persistence.env` consumed by `greetd`/kiosk if needed.
+- **Likely implementation seam for product allowlist:**
+  - Do not keep all of `HOME` persistent in product mode if strict allowlisting is the goal. Instead, mount persistence root somewhere stable (current `cfg.root` is fine) and create an ephemeral kiosk home with bind/symlinked allowlist paths, or use Impermanence-style bind mounts from `cfg.root`.
+  - A declarative option shape under `services.korri.liveUsbPersistence.product` would match repo patterns, for example:
+    - `directories = [ { path = "..."; user = kioskCfg.user; group = kioskGroup; mode = "0700"; } ... ]`
+    - `files = [ { path = "/etc/machine-id"; ... } ... ]`
+    - `users.${kioskCfg.user}.directories = [ ".config/korri" ".cache/moonlight" ... ]`
+  - If adopting `nix-community/impermanence`, keep the existing resolver as the authority that mounts `/persist/korri-live-usb`; do not switch to generic `/dev/disk/by-label` or automatic disk discovery. Impermanence can then bind only declared files/dirs after the resolver has mounted or tmpfs-backed the root.
+  - If implementing locally, keep the declaration small and testable; avoid a generic framework unless multiple product surfaces need it.
+- **Likely implementation seam for debug broad persistence:**
+  - Debug mode can preserve the current broad-user-state behavior (`HOME`, XDG config/data/state/cache under `${cfg.root}/home`) while product mode becomes stricter.
+  - Debug mode must not change the same-stick resolver. It should broaden what paths bind into the already-approved persistence root, not loosen device selection.
+  - Add conspicuous debug marker/service env, e.g. `KORRI_LIVE_USB_PERSISTENCE_MODE=debug`, and document that debug mode may persist broader writable state.
+- **Validation patterns to follow:**
+  - Extend `nix/tests/korri-live-usb-config-check.nix` for static mode invariants: default product mode, debug boot arg/menu entry present, resolver service exists, product allowlist entries are explicit, debug mode distinguishability env/marker exists, unsafe disk surfaces remain disabled.
+  - Extend `tools/testing/nix/korri-live-usb-safety-eval.fixture.nix` to expose the new option surface and evaluated mount/allowlist/mode config for Bun assertions.
+  - Extend `tools/testing/nix/korri-live-usb-safety-eval.test.ts` for shell-level behavior:
+    - product mode mounts same-stick partition and prepares only allowlist paths;
+    - debug kernel arg switches to broad layout;
+    - missing/unsafe persistence remains tmpfs or fail-visible and never mounts same-label NVMe/internal partition;
+    - debug mode still rejects non-USB/non-sibling persistence;
+    - mode markers are written correctly.
+  - Extend `nix/tests/korri-live-usb-vm-smoke.nix` only for runtime-visible checkpoints that are deterministic in VM, such as product-mode default marker and env. Avoid claiming VM proves real ISO boot menu selection.
+  - Extend `nix/apps/korri-live-usb-qemu.nix` with an opt-in debug mode runner only if it can append kernel args or select the menu entry clearly; otherwise keep debug-mode ISO/QEMU validation manual and documented.
+  - Update `tools/testing/nix/korri-live-usb-smoke.test.ts` doc assertions so docs mention both product and debug modes, the product allowlist, and the no-internal-disk safety rule.
+- **Style/pattern constraints:**
+  - Keep hardware facts out of generic modules. Do not add NUC-specific, aka-specific, AYN/Sobo/RockNix strings to `nix/images/live-usb-runtime.nix` or `nix/modules/korri-kiosk.nix`.
+  - Keep Moonlight/platform facts in platform adapters (`nix/images/platforms/x86.nix`, `nix/images/platforms/rocknix-sm8550.nix`) and launcher configuration, not in persistence policy.
+  - Use structured logger in TypeScript runtime code; shell/systemd scripts can write clear stderr diagnostics as current resolver does.
+  - Preserve generated/read-only surfaces: route tree/generated BDD outputs should not be edited.
+  - For verification, use whole-repo commands when relevant: `just typecheck`, `just test-unit`, `just lint`, and Nix-specific `just live-usb-smoke` / `just live-usb-vm-smoke` / focused Bun tests.
+- **Important existing constraints that a plan should call out explicitly:**
+  - Current live USB persistence root `/persist/korri-live-usb` may be a real same-stick partition or tmpfs fallback. Product allowlist must work in both cases, while clearly marking tmpfs as non-persistent.
+  - Current `greetd` waits for `korri-live-usb-persistence.service`; mode/allowlist setup must complete before kiosk login.
+  - Current x86 platform sets `inputplumber` as the normalized provider and sets `KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER`; persistence changes should not regress normalized input checks.
+  - Debug SSH is currently opt-in via `services.korri.liveUsbPersistence.debugSsh.authorizedKeys`; do not make debug persistence imply open SSH unless explicitly configured.
+  - The live USB is documented as not an installer. Do not add partition creation, repartition, bootloader install, growfs, swap discovery, or generic automount services to product mode.
+- **Open design questions for the implementation plan:**
+  - Exact product allowlist: Korri config/data/state granularity, Moonlight pairing/cache granularity, whether any Korri local library/cache is approved, and exact NixOS paths for network/input/machine-id/logs.
+  - Missing persistence behavior: keep current tmpfs fallback for both modes, block debug mode, or block product mode when persistence is mandatory. Current repo precedent favors visible tmpfs fallback.
+  - Boot menu mechanics: how to add a debug entry to NixOS ISO bootloader in the pinned nixpkgs ISO module without over-importing installer behavior.
+  - Whether to add `impermanence` input or keep a local allowlist mechanism to avoid new flake dependency/lockfile churn.

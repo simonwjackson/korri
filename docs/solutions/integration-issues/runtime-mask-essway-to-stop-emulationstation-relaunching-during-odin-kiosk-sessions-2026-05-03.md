@@ -145,5 +145,5 @@ Runtime-masking `essway.service` replaces the unit with `/dev/null` under `/run/
 
 ## Related Issues
 
-- `device-report.md` documents that ROCKNIX runs Sway/Wayland via `essway` and that rootfs changes under `/usr` are not persistent.
+- `docs/deployment/device-report.md` documents that ROCKNIX runs Sway/Wayland via `essway` and that rootfs changes under `/usr` are not persistent.
 - `docs/development/odin-iterative-loop.md` documents the current Level 2 loop where the API runs on the Odin and the renderer runs on the dev machine.

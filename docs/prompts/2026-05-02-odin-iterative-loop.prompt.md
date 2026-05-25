@@ -32,7 +32,7 @@ is **out of scope here** — it is a separate task.
 1. `AGENTS.md` (repo root) — working agreements you must honor. Specifically:
    placement & ownership, no `console.log`, no docs unless requested, design
    tokens not hardcoded values, etc.
-2. `device-report.md` (repo root) — everything probed about the Odin: SSH
+2. `docs/deployment/device-report.md` — everything probed about the Odin: SSH
    target, filesystem layout, services, ROCKNIX-specific tooling, gotchas.
    The rootfs is read-only squashfs; only `/storage` is writable.
 3. `docs/brainstorms/2026-05-02-personal-mvp-scope-requirements.md` — the

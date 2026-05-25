@@ -424,7 +424,7 @@ flowchart TB
 - Modify: `scripts/odin/smoke.sh`
 - Modify: `scripts/odin/smoke-rpc.ts`
 - Modify: `justfile`
-- Modify as needed: `device-report.md`
+- Modify as needed: `docs/deployment/device-report.md`
 
 **Approach:**
 - Add an explicit import step to Odin install/deploy convergence so `/storage/korri/library` is populated before the API/session smoke checks run.

@@ -19,7 +19,7 @@ Do not proceed with a ROCKNIX-owned `modules/korri.nix` unless the user changes 
 
 Do not duplicate the scout details; read these if needed:
 
-- Korri frontend/package scout: `korri-frontend-scout.md`
+- Korri frontend/package scout: `docs/research/korri-frontend-scout.md`
 - ROCKNIX guest/module scout: `../rocknix-nix-guest/rocknix-nix-guest-scout.md`
 
 ## Key technical facts
