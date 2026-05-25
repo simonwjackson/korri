@@ -222,6 +222,34 @@ describe("stream surface discovery and repair", () => {
     expect(result.commands).toContain("[con_id=43] fullscreen enable")
   })
 
+  it("can repair nameless Gamescope surfaces observed on Sobo", async () => {
+    const soboTree: SwayNode = {
+      id: 1,
+      nodes: [
+        {
+          id: 4,
+          name: "1",
+          nodes: [
+            { id: 8, name: "Korri", focused: false, fullscreen_mode: 0 },
+            { id: 10, app_id: null, focused: true, fullscreen_mode: 1 },
+          ],
+        },
+      ],
+    }
+
+    const result = await repairStreamSurface({
+      selector: {},
+      ignoredWindowIds: new Set([1, 4, 8]),
+      runner: {
+        run: async args =>
+          args.includes("get_tree") ? JSON.stringify(soboTree) : "",
+      },
+    })
+
+    expect(result.windowId).toBe(10)
+    expect(result.commands).toEqual(["[con_id=10] border none"])
+  })
+
   it("times out when no stream surface appears", async () => {
     let time = 0
 

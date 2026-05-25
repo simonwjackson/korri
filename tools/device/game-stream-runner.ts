@@ -5,7 +5,6 @@ import { decodeLaunchSpec, type LaunchSpec } from "@shared/library/launcher"
 import { logger as defaultLogger } from "@shared/logger"
 import {
   composeGamescopeLaunchSpec,
-  DEFAULT_GAMESCOPE_SELECTOR,
   type GamescopeOptions,
   type RepairStreamSurfaceOptions,
   repairStreamSurface,
@@ -266,7 +265,10 @@ export function createGameStreamRunner(
         const fullscreen = repairEnabled
           ? (options.fullscreen ?? {
               runner: createSwayCommandRunner(),
-              selector: gamescopeEnabled ? DEFAULT_GAMESCOPE_SELECTOR : {},
+              // Some nested Gamescope surfaces report neither app_id nor title
+              // on Sobo/SM8550. Snapshot before launch, then repair any new
+              // foreground surface instead of relying on Gamescope metadata.
+              selector: {},
             })
           : undefined
         const preflight = preflightSessionEnvironment({
@@ -752,7 +754,7 @@ if (import.meta.main) {
     lockManager: createFileGameStreamRunLock(lockPath),
     fullscreen: {
       runner: createSwayCommandRunner(),
-      selector: DEFAULT_GAMESCOPE_SELECTOR,
+      selector: {},
     },
   })
 
