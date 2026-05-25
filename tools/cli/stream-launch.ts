@@ -151,23 +151,17 @@ async function prepareKnownGameStreamLaunch(options: {
   readonly librarySource: LibrarySourceService
   readonly intentStore: GameStreamLaunchIntentStore
 }): Promise<StreamLaunchPrepareResult> {
-  const specResult = await runLibraryEffect(
-    options.librarySource.launchSpecFor(options.game.id),
+  const resolvedResult = await runLibraryEffect(
+    options.librarySource.resolveLaunchForGame(options.game.id),
   )
-  if (!specResult.ok) return libraryFailure(options.game.id, specResult.error)
-  if (!specResult.value) {
-    return {
-      status: "failed",
-      category: "library-config",
-      gameId: options.game.id,
-      message: `Game ${options.game.id} does not have a launch target`,
-    }
-  }
+  if (!resolvedResult.ok)
+    return libraryFailure(options.game.id, resolvedResult.error)
 
   return await enqueueLaunchIntent({
     game: options.game,
     gameId: options.game.id,
-    spec: specResult.value,
+    spec: resolvedResult.value.spec,
+    gamescope: resolvedResult.value.gamescope,
     intentStore: options.intentStore,
   })
 }
@@ -224,11 +218,12 @@ async function enqueueLaunchIntent(options: {
   readonly game: GameRecord
   readonly gameId: string
   readonly spec: LaunchSpec
+  readonly gamescope?: GameStreamLaunchIntent["gamescope"]
   readonly intentStore: GameStreamLaunchIntentStore
 }): Promise<StreamLaunchPrepareResult> {
   let intent: GameStreamLaunchIntent
   try {
-    intent = createLaunchIntent(options.spec)
+    intent = createLaunchIntent(options.spec, { gamescope: options.gamescope })
   } catch (error) {
     return {
       status: "failed",

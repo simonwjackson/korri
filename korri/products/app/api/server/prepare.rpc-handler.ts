@@ -9,7 +9,11 @@ import {
 export const handleServerPrepareStream = (
   payload: typeof ServerPrepareStreamPayload.Type,
 ) =>
-  prepareStreamLaunch(payload.id).pipe(
+  prepareStreamLaunch(payload.id, {
+    userId: payload.userId,
+    presetId: payload.presetId ?? undefined,
+    override: payload.override,
+  }).pipe(
     Effect.map(
       prepared =>
         new ServerPrepareStreamResponse({

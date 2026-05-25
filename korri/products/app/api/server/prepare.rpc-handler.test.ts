@@ -49,6 +49,24 @@ describe("app.server.stream.prepare handler", () => {
     )
     expect(intent.id).toBe(result.sessionId)
     expect(intent.launch.args).toContain("/srv/games/wl4.gba")
+    expect(intent.gamescope).toEqual({ enabled: true })
+  })
+
+  it("carries selected preset policy into the remote runner intent", async () => {
+    const { intentPath } = await setupRemoteLibrary()
+
+    const result = await Effect.runPromise(
+      handleServerPrepareStream({
+        id: "gba/wario-land-4",
+        presetId: "raw",
+      }).pipe(Effect.provide(LibrarySourceLayerLive)),
+    )
+
+    expect(result.status).toBe("prepared")
+    const intent = decodeLaunchIntent(
+      JSON.parse(await readFile(intentPath, "utf8")),
+    )
+    expect(intent.gamescope).toEqual({ enabled: false })
   })
 })
 
@@ -69,6 +87,7 @@ async function setupRemoteLibrary() {
         system: "gba",
         contentPath: "/srv/games/wl4.gba",
         metadata: { name: "Wario Land 4" },
+        presets: { raw: { gamescope: { enabled: false } } },
       },
     ],
   })

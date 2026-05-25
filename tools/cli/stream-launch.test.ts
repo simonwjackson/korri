@@ -297,13 +297,14 @@ describe("prepareStreamLaunch", () => {
 })
 
 describe("prepareStreamLaunchForGame", () => {
-  it("writes a foreground launch intent for a known game id", async () => {
+  it("writes a foreground launch intent with resolved Gamescope policy for a known game id", async () => {
     const intentPath = await tempIntentPath()
     const result = await prepareStreamLaunchForGame({
       gameId: game.id,
       librarySource: librarySource({
         games: [game],
         launchSpecs: new Map([[game.id, launchSpec]]),
+        gamescope: new Map([[game.id, { enabled: false }]]),
       }),
       intentStore: createFileGameStreamLaunchIntentStore(intentPath),
     })
@@ -317,6 +318,7 @@ describe("prepareStreamLaunchForGame", () => {
     )
     expect(intent.lifecycle).toBe("foreground")
     expect(intent.launch).toEqual(launchSpec)
+    expect(intent.gamescope).toEqual({ enabled: false })
   })
 
   it("reports no-such-game without writing an intent", async () => {
@@ -453,14 +455,19 @@ async function tempIntentPath(): Promise<string> {
 function librarySource(options: {
   readonly games: readonly GameRecord[]
   readonly launchSpecs: ReadonlyMap<string, LaunchSpec>
+  readonly gamescope?: ReadonlyMap<
+    string,
+    { readonly enabled?: boolean; readonly args?: readonly string[] }
+  >
 }): LibrarySourceService {
   return {
     list: () => Effect.succeed(options.games),
     launchSpecFor: id => Effect.succeed(options.launchSpecs.get(id)),
     resolveLaunchForGame: id => {
       const spec = options.launchSpecs.get(id)
+      const gamescope = options.gamescope?.get(id)
       return spec
-        ? Effect.succeed({ spec })
+        ? Effect.succeed({ spec, ...(gamescope ? { gamescope } : {}) })
         : Effect.fail(
             new LibraryError({ reason: "config", message: "no spec" }),
           )

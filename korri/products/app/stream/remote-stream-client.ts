@@ -22,6 +22,7 @@ import { appRpcGroup } from "@app/api/app-rpc-group"
 import { serverRpcGroup } from "@app/api/server/rpc-group"
 import { BatchJsonSerializationLive } from "@shared/api/rpc/serialization"
 import type { ResolvedGameRecord } from "@shared/fixtures/games/game"
+import type { EphemeralOverride } from "@shared/library/config/ephemeral-override"
 import { Cause, Effect, Exit, Layer, type Scope } from "effect"
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient"
 import * as HttpClient from "effect/unstable/http/HttpClient"
@@ -81,11 +82,20 @@ export type RemoteSourceStatus =
       readonly message: string
     }
 
+export interface RemotePrepareOptions {
+  readonly userId?: string
+  readonly presetId?: string
+  readonly override?: EphemeralOverride
+}
+
 export interface RemoteStreamControlClient {
   readonly listGames: () => Promise<readonly ResolvedGameRecord[]>
   readonly listSourceGames: () => Promise<readonly RemoteSourceGame[]>
   readonly sourceStatus: () => Promise<RemoteSourceStatus>
-  readonly prepareGame: (gameId: string) => Promise<RemotePrepareResult>
+  readonly prepareGame: (
+    gameId: string,
+    options?: RemotePrepareOptions,
+  ) => Promise<RemotePrepareResult>
 }
 
 export interface RemoteStreamControlClientOptions {
@@ -156,8 +166,13 @@ export function createRemoteStreamControlClient(
       }
     },
 
-    prepareGame: async gameId => {
-      const serverExit = await runPrepareExit(layer, gameId, options.timeoutMs)
+    prepareGame: async (gameId, prepareOptions) => {
+      const serverExit = await runPrepareExit(
+        layer,
+        gameId,
+        prepareOptions,
+        options.timeoutMs,
+      )
       if (Exit.isSuccess(serverExit)) {
         return {
           status: "prepared",
@@ -169,6 +184,7 @@ export function createRemoteStreamControlClient(
       const legacyExit = await runLegacyPrepareExit(
         layer,
         gameId,
+        prepareOptions,
         options.timeoutMs,
       )
       if (Exit.isSuccess(legacyExit)) {
@@ -239,6 +255,7 @@ function sourceStatusEffect() {
 function runPrepareExit(
   layer: Layer.Layer<RpcClient.Protocol>,
   gameId: string,
+  options: RemotePrepareOptions | undefined,
   timeoutMs: number | undefined,
 ) {
   return withTimeout(
@@ -246,7 +263,12 @@ function runPrepareExit(
       Effect.scoped(
         RpcClient.make(serverRpcGroup).pipe(
           Effect.flatMap(client =>
-            client["app.server.stream.prepare"]({ id: gameId }),
+            client["app.server.stream.prepare"]({
+              id: gameId,
+              userId: options?.userId,
+              presetId: options?.presetId,
+              override: options?.override,
+            }),
           ),
           Effect.provide(layer),
         ),
@@ -259,6 +281,7 @@ function runPrepareExit(
 function runLegacyPrepareExit(
   layer: Layer.Layer<RpcClient.Protocol>,
   gameId: string,
+  options: RemotePrepareOptions | undefined,
   timeoutMs: number | undefined,
 ) {
   return withTimeout(
@@ -266,7 +289,12 @@ function runLegacyPrepareExit(
       Effect.scoped(
         RpcClient.make(appRpcGroup).pipe(
           Effect.flatMap(client =>
-            client["app.stream.prepare"]({ id: gameId }),
+            client["app.stream.prepare"]({
+              id: gameId,
+              userId: options?.userId,
+              presetId: options?.presetId,
+              override: options?.override,
+            }),
           ),
           Effect.provide(layer),
         ),
