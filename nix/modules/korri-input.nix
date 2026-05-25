@@ -177,6 +177,13 @@ in
             value today is "inputplumber".
           '';
         }
+        {
+          assertion = lib.all (service: lib.hasSuffix ".service" service) cfg.provider.services;
+          message = ''
+            services.korri.input.provider.services entries must be systemd service units
+            ending in .service.
+          '';
+        }
       ];
     })
 

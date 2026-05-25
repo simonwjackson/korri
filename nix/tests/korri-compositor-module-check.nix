@@ -186,6 +186,27 @@ let
     };
   };
 
+  relativeHome = evaluateWith {
+    services.korri.compositor = {
+      enable = true;
+      user = "root";
+      createUser = false;
+      home = "storage";
+    };
+  };
+
+  emptyKioskCommand = evaluateWith {
+    services.korri.compositor = {
+      enable = true;
+      user = "root";
+      createUser = false;
+      kiosk = {
+        enable = true;
+        command = "";
+      };
+    };
+  };
+
   runtimeDirOutsideRun = evaluateWith {
     services.korri.compositor = {
       enable = true;
@@ -369,6 +390,16 @@ let
     ))
     (check "relative runtimeDir: assertion fires" (
       builtins.any (m: lib.hasInfix "absolute path" m) (korriFailedAssertionMessages relativeRuntimeDir)
+    ))
+    (check "relative home: assertion fires" (
+      builtins.any (m: lib.hasInfix "home must be an absolute path" m) (
+        korriFailedAssertionMessages relativeHome
+      )
+    ))
+    (check "empty kiosk command: assertion fires" (
+      builtins.any (m: lib.hasInfix "kiosk.command must not be empty" m) (
+        korriFailedAssertionMessages emptyKioskCommand
+      )
     ))
     (check "runtimeDir outside /run: assertion fires" (
       builtins.any (m: lib.hasInfix "under /run" m) (korriFailedAssertionMessages runtimeDirOutsideRun)

@@ -79,6 +79,14 @@ let
     };
   };
 
+  providerWithInvalidService = evaluateWith {
+    services.korri.input.provider = {
+      enable = true;
+      name = "inputplumber";
+      services = [ "platform-input" ];
+    };
+  };
+
   inputdOnly = evaluateWith {
     services.korri.input.inputd.enable = true;
   };
@@ -173,6 +181,11 @@ let
     (check "provider.enable without name: assertion fires" (
       builtins.any (m: lib.hasInfix "provider.name" m) (
         korriFailedAssertionMessages providerEnabledNoName
+      )
+    ))
+    (check "provider with invalid service name: assertion fires" (
+      builtins.any (m: lib.hasInfix "provider.services entries must be systemd service units" m) (
+        korriFailedAssertionMessages providerWithInvalidService
       )
     ))
 

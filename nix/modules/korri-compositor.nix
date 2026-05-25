@@ -343,6 +343,34 @@ in
           '';
         }
         {
+          assertion = lib.hasPrefix "/" cfg.home;
+          message = ''
+            services.korri.compositor.home must be an absolute path (got "${cfg.home}").
+          '';
+        }
+        {
+          assertion = lib.hasPrefix "/" cfg.configHome;
+          message = ''
+            services.korri.compositor.configHome must be an absolute path (got "${cfg.configHome}").
+          '';
+        }
+        {
+          assertion = lib.hasPrefix "/" cfg.dataHome;
+          message = ''
+            services.korri.compositor.dataHome must be an absolute path (got "${cfg.dataHome}").
+          '';
+        }
+        {
+          assertion = lib.hasPrefix "/" cfg.stateHome;
+          message = ''
+            services.korri.compositor.stateHome must be an absolute path (got "${cfg.stateHome}").
+          '';
+        }
+        {
+          assertion = !cfg.kiosk.enable || cfg.kiosk.command != "";
+          message = "services.korri.compositor.kiosk.command must not be empty.";
+        }
+        {
           assertion = !(cfg.createUser && cfg.user == "root");
           message = ''
             services.korri.compositor.createUser cannot manage the root user. Set
