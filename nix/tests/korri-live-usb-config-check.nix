@@ -1,4 +1,8 @@
-{ pkgs, liveUsbSystem }:
+{
+  pkgs,
+  liveUsbSystem,
+  expectedArtifact ? "product",
+}:
 
 let
   lib = pkgs.lib;
@@ -9,6 +13,12 @@ let
   persistence = cfg.systemd.services."korri-live-usb-persistence";
   greetd = cfg.systemd.services.greetd;
   check = message: assertion: { inherit message assertion; };
+  expectedScope = if expectedArtifact == "developer" then "developer-broad" else "product-allowlist";
+  expectedHome =
+    if expectedArtifact == "developer" then
+      "${cfg.services.korri.liveUsbPersistence.root}/developer/home"
+    else
+      "/home/${cfg.services.korri.kiosk.user}";
   checks = [
     (check "live USB ISO must be USB bootable" cfg.isoImage.makeUsbBootable)
     (check "live USB ISO must be EFI bootable" cfg.isoImage.makeEfiBootable)
@@ -43,17 +53,17 @@ let
     (check "persistence resolver must run before korri-kiosk.service" (
       builtins.elem "korri-kiosk.service" (persistence.before or [ ])
     ))
-    (check "live USB defaults to the Product artifact" (
-      cfg.services.korri.liveUsbPersistence.artifact == "product"
+    (check "live USB must use the expected artifact" (
+      cfg.services.korri.liveUsbPersistence.artifact == expectedArtifact
     ))
-    (check "Product live USB must use allowlisted persistence" (
-      cfg.services.korri.liveUsbPersistence.scope == "product-allowlist"
+    (check "live USB must use the expected persistence scope" (
+      cfg.services.korri.liveUsbPersistence.scope == expectedScope
     ))
-    (check "Product kiosk HOME must stay ephemeral" (
-      cfg.services.korri.kiosk.home == "/home/${cfg.services.korri.kiosk.user}"
+    (check "live USB kiosk HOME must match artifact contract" (
+      cfg.services.korri.kiosk.home == expectedHome
     ))
-    (check "Product config home must stay outside the persistence root" (
-      cfg.services.korri.kiosk.configHome == "/home/${cfg.services.korri.kiosk.user}/.config"
+    (check "live USB config home must match artifact contract" (
+      cfg.services.korri.kiosk.configHome == "${expectedHome}/.config"
     ))
     (check "Product allowlist must include Korri config directory for atomic config writes" (
       builtins.any (entry:
@@ -67,9 +77,8 @@ let
         && entry.target == "/home/${cfg.services.korri.kiosk.user}/.cache/moonlight"
       ) cfg.services.korri.liveUsbPersistence.productAllowlist
     ))
-    (check "Moonlight state must point at Product runtime cache path" (
-      kioskEnv.KORRI_MOONLIGHT_STATE_HOME or null
-      == "/home/${cfg.services.korri.kiosk.user}/.cache/moonlight"
+    (check "Moonlight state must point at artifact runtime cache path" (
+      kioskEnv.KORRI_MOONLIGHT_STATE_HOME or null == "${expectedHome}/.cache/moonlight"
     ))
     (check "live USB must use InputPlumber as normalized input provider" (
       cfg.services.korri.kiosk.input.provider.name == "inputplumber"
@@ -93,10 +102,10 @@ let
       kioskEnv.KORRI_LIVE_USB_PERSISTENCE_ROOT or null == cfg.services.korri.liveUsbPersistence.root
     ))
     (check "live USB artifact marker must be exported to the kiosk" (
-      kioskEnv.KORRI_LIVE_USB_ARTIFACT or null == "product"
+      kioskEnv.KORRI_LIVE_USB_ARTIFACT or null == expectedArtifact
     ))
     (check "live USB artifact marker must be exported to the resolver" (
-      persistence.environment.KORRI_LIVE_USB_ARTIFACT or null == "product"
+      persistence.environment.KORRI_LIVE_USB_ARTIFACT or null == expectedArtifact
     ))
     (check "swap devices must be disabled for the live USB appliance" (cfg.swapDevices == [ ]))
     (check "udisks2 must be disabled to avoid generic removable disk automounting" (

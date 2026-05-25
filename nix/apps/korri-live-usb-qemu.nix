@@ -2,10 +2,10 @@
   pkgs,
   isoPackage,
   persistenceMode ? false,
+  appName ? if persistenceMode then "korri-live-usb-qemu-persistence" else "korri-live-usb-qemu",
 }:
 
 let
-  appName = if persistenceMode then "korri-live-usb-qemu-persistence" else "korri-live-usb-qemu";
   modeName = if persistenceMode then "same-stick persistence topology" else "ephemeral ISO boot";
 in
 pkgs.writeShellApplication {

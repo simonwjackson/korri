@@ -470,6 +470,11 @@
             inherit pkgs;
             liveUsbSystem = korriKioskLiveUsbSystem;
           };
+          korri-live-usb-developer-config = import ./nix/tests/korri-live-usb-config-check.nix {
+            inherit pkgs;
+            liveUsbSystem = korriKioskLiveUsbDeveloperSystem;
+            expectedArtifact = "developer";
+          };
           korri-live-usb-vm-smoke = import ./nix/tests/korri-live-usb-vm-smoke.nix {
             inherit pkgs;
             imageLib = korriImages;
@@ -546,6 +551,27 @@
                   persistenceMode = true;
                 }
               }/bin/korri-live-usb-qemu-persistence";
+            };
+            korri-live-usb-developer-qemu = {
+              type = "app";
+              program = "${
+                import ./nix/apps/korri-live-usb-qemu.nix {
+                  inherit pkgs;
+                  isoPackage = korriKioskLiveUsbDeveloperSystem.config.system.build.isoImage;
+                  appName = "korri-live-usb-developer-qemu";
+                }
+              }/bin/korri-live-usb-developer-qemu";
+            };
+            korri-live-usb-developer-qemu-persistence = {
+              type = "app";
+              program = "${
+                import ./nix/apps/korri-live-usb-qemu.nix {
+                  inherit pkgs;
+                  isoPackage = korriKioskLiveUsbDeveloperSystem.config.system.build.isoImage;
+                  persistenceMode = true;
+                  appName = "korri-live-usb-developer-qemu-persistence";
+                }
+              }/bin/korri-live-usb-developer-qemu-persistence";
             };
           };
 

@@ -51,6 +51,7 @@ type EvalResult = {
   }
   checkDrvPaths: {
     liveConfig: string | null
+    liveDeveloperConfig: string | null
     vmSmoke: string | null
   }
   headless: ImageSummary
@@ -116,14 +117,18 @@ describe("Korri Nix image output evaluation", () => {
 
   it("exposes flake-native live USB validation surfaces", () => {
     expect(result.checkAttrs).toContain("korri-live-usb-config")
+    expect(result.checkAttrs).toContain("korri-live-usb-developer-config")
     expect(result.checkAttrs).toContain("korri-live-usb-vm-smoke")
     expect(result.checkDrvPaths.liveConfig).toContain(".drv")
+    expect(result.checkDrvPaths.liveDeveloperConfig).toContain(".drv")
     expect(result.checkDrvPaths.vmSmoke).toContain(".drv")
     expect(result.appAttrs).toEqual(
       expect.arrayContaining([
         "korri-live-usb-vm",
         "korri-live-usb-qemu",
         "korri-live-usb-qemu-persistence",
+        "korri-live-usb-developer-qemu",
+        "korri-live-usb-developer-qemu-persistence",
       ]),
     )
   })
