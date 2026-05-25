@@ -19,11 +19,14 @@ Baseline x86 system outputs are exposed as package attrs:
 nix build .#korri-headless-system
 nix build .#korri-kiosk-system
 nix build .#korri-kiosk-live-iso
+nix build .#korri-kiosk-live-developer-iso
 ```
 
-`korri-kiosk-live-iso` is a bootable live USB/ISO appliance artifact. It is intended to be written to removable media and boot directly into the Korri kiosk surface; it is not an installer and does not represent an internal-disk deployment target. The image uses the `korri-desktop-x86-kiosk` wrapper, which enables the Electrobun inputd bridge and puts `moonlight-embedded` on the appliance PATH instead of Moonlight Qt.
+`korri-kiosk-live-iso` is the Product ISO: the canonical bootable live USB/ISO appliance artifact. It is intended to be written to removable media and boot directly into the Korri kiosk surface; it is not an installer and does not represent an internal-disk deployment target. The image uses the `korri-desktop-x86-kiosk` wrapper, which enables the Electrobun inputd bridge and puts `moonlight-embedded` on the appliance PATH instead of Moonlight Qt.
 
-The live USB kiosk routes Korri client state under `/persist/korri-live-usb/home`. At boot, `korri-live-usb-persistence.service` resolves the mounted live ISO device, derives its parent USB block device, and mounts only a sibling partition labeled `KORRI-PERSIST`. If no matching same-stick partition exists, it uses an ephemeral tmpfs state root and writes `.korri-live-usb-ephemeral`; it does not search internal disks by generic label. Persisted client state includes Korri XDG config/data/state and moonlight-embedded pairing/cache state under `home/.cache/moonlight`.
+`korri-kiosk-live-developer-iso` is the Developer ISO. It is a separate artifact for investigation and intentionally carries broad Developer persistence under its own namespace. It is not a boot-menu mode inside the Product ISO, and broad Developer persistence does not change the Product ISO allowlist.
+
+At boot, `korri-live-usb-persistence.service` resolves the mounted live ISO device, derives its parent USB block device, and mounts only a sibling partition labeled `KORRI-PERSIST`. Neither Product ISO nor Developer ISO searches internal disks by generic label. Product ISO uses an ephemeral kiosk home and exposes only allowlisted persistent paths from `/persist/korri-live-usb/product`: Korri config including atomic `desktop.yaml` writes, selected Korri XDG data/state, moonlight-embedded pairing/cache state, and a Korri-owned live USB device identity. Product runtime/cache files outside that allowlist reset across boots. If no matching same-stick partition exists, Product ISO uses an ephemeral tmpfs state root and writes `.korri-live-usb-ephemeral`. Developer ISO requires retained same-stick persistence; missing or unsafe persistence fails visibly before normal kiosk use.
 
 Discovery is unchanged from the standard Electrobun/Korri app path: the live image permits mDNS client browsing on UDP 5353, then uses the existing remembered-first/first-healthy connection controller. There is no USB-specific server discovery and no aka-specific priority or fallback.
 
@@ -35,17 +38,21 @@ Build or dry-build the artifact from an x86_64 Linux machine:
 
 ```bash
 nix build .#packages.x86_64-linux.korri-kiosk-live-iso --dry-run --no-link
+nix build .#packages.x86_64-linux.korri-kiosk-live-developer-iso --dry-run --no-link
 nix build .#packages.x86_64-linux.korri-kiosk-live-iso
+nix build .#packages.x86_64-linux.korri-kiosk-live-developer-iso
 ```
 
 Flake-native checks cover unattended validation:
 
 ```bash
 nix build .#checks.x86_64-linux.korri-live-usb-config --no-link
+nix build .#checks.x86_64-linux.korri-live-usb-developer-config --no-link
 nix build .#checks.x86_64-linux.korri-live-usb-vm-smoke --no-link
 ```
 
-- `korri-live-usb-config` is the cheap default configuration check. It proves the live USB NixOS composition still has the expected ISO flags, persistence ordering, state roots, and disk-mutation safeguards.
+- `korri-live-usb-config` is the cheap Product ISO configuration check. It proves the live USB NixOS composition still has the expected ISO flags, allowlisted Product persistence, persistence ordering, state roots, and disk-mutation safeguards.
+- `korri-live-usb-developer-config` is the cheap Developer ISO configuration check. It proves the separate Developer artifact uses the broad Developer persistence profile while retaining the same disk-mutation safeguards.
 - `korri-live-usb-vm-smoke` boots a bounded NixOS VM from the live USB runtime composition. It proves persistence fallback, inputd, and kiosk orchestration in a VM; it does not prove ISO firmware boot, USB media behavior, graphics quality, or physical NUC acceptance.
 
 Manual validation is exposed through flake apps:
@@ -54,22 +61,28 @@ Manual validation is exposed through flake apps:
 nix run .#korri-live-usb-vm
 nix run .#korri-live-usb-qemu
 nix run .#korri-live-usb-qemu-persistence
+nix run .#korri-live-usb-developer-qemu
+nix run .#korri-live-usb-developer-qemu-persistence
 ```
 
 - `korri-live-usb-vm` runs the NixOS runtime VM directly through `config.system.build.vm` for interactive system validation.
 - `korri-live-usb-qemu` boots the built ISO under QEMU/OVMF for manual firmware-path validation and writes evidence under `out/live-usb-smoke/`.
-- `korri-live-usb-qemu-persistence` copies the hybrid ISO to one writable USB disk image, appends a sibling `KORRI-PERSIST` partition, and boots that single image as QEMU USB storage. It is useful for manual resolver inspection, but it does not replace physical NUC acceptance.
-- Set `KORRI_QEMU_PREP_ONLY=1` with either QEMU app to prepare evidence/images without launching QEMU.
+- `korri-live-usb-qemu-persistence` copies the Product ISO to one writable USB disk image, appends a sibling `KORRI-PERSIST` partition, and boots that single image as QEMU USB storage. It is useful for manual resolver inspection, but it does not replace physical NUC acceptance.
+- `korri-live-usb-developer-qemu` and `korri-live-usb-developer-qemu-persistence` provide the same manual QEMU surfaces for the Developer ISO.
+- Set `KORRI_QEMU_PREP_ONLY=1` with any QEMU app to prepare evidence/images without launching QEMU.
 
-Write the resulting ISO to removable USB media with the operator's preferred imaging tool, then create a second partition on the same USB device labeled `KORRI-PERSIST` for persistent client state. Do not create or select a persistence partition on the NUC internal disk.
+Write the resulting ISO to removable USB media with the operator's preferred imaging tool, then create a second partition on the same USB device labeled `KORRI-PERSIST` for persistent client state. Do not create or select a persistence partition on the NUC internal disk. Product ISO can boot in clearly marked ephemeral mode if that partition is absent. Developer ISO should be validated only with same-stick persistence present because missing retention is a visible failure.
 
 Physical v1 acceptance targets an 8th-gen Intel NUC with Ethernet, keyboard fallback, and an XInput-compatible wired USB controller. QEMU validation increases confidence, but it does not replace physical NUC acceptance. Before boot, record the internal disk identity or a sentinel hash. After booting from USB, verify:
 
 - the TV reaches the Korri kiosk surface without an installer workflow;
 - the internal disk sentinel is unchanged;
-- `/persist/korri-live-usb` is either the same-stick `KORRI-PERSIST` partition or an ephemeral tmpfs marked `.korri-live-usb-ephemeral`;
+- `/persist/korri-live-usb` is either the same-stick `KORRI-PERSIST` partition or, for Product ISO only, an ephemeral tmpfs marked `.korri-live-usb-ephemeral`;
 - standard discovery sees compatible Korri servers on the wired LAN without host-name special cases;
-- settings and moonlight-embedded pairing/cache state survive a reboot when same-stick persistence is present;
+- Product ISO settings and moonlight-embedded pairing/cache state survive a reboot when same-stick persistence is present;
+- a non-allowlisted Product home/cache file does not survive a reboot;
+- Developer ISO is visibly labeled as Developer ISO and retains broad Developer state only under its Developer namespace;
+- booting Product ISO after Developer ISO does not expose Developer-only broad state;
 - InputPlumber is active, sees its package data root, and exposes exactly one expected virtual Xbox-class gamepad for the connected controller;
 - inputd and Moonlight both consume the InputPlumber virtual gamepad, not the raw physical controller;
 - selecting a remote game prepares the known game on the connected server and attempts a local `moonlight-embedded` stream with an explicit virtual input device.
