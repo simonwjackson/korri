@@ -30,6 +30,12 @@ let
 
   runtimeDirExpression = if cfg.runtimeDir != null then shellPathExpression cfg.runtimeDir else null;
 
+  isAbsolutePath = path: lib.hasPrefix "/" path;
+  isUserRuntimePath = path: lib.hasPrefix "%t/" path;
+  isSupportedPath = path: path == null || isAbsolutePath path || isUserRuntimePath path;
+  isConcreteChildPath =
+    parent: child: child == null || parent == null || lib.hasPrefix "${parent}/" child;
+
   intentPathExpression =
     if cfg.intentPath != null then
       shellPathExpression cfg.intentPath
@@ -148,10 +154,12 @@ in
     sessionEnvFile = mkOption {
       type = types.nullOr types.str;
       default = null;
-      example = "%h/.config/korri/game-stream.env";
+      example = "/home/korri/.config/korri/game-stream.env";
       description = ''
         Optional trusted runtime environment file sourced before launching the
-        runner as the non-root Sunshine/session user. The wrapper rejects
+        runner as the non-root Sunshine/session user. This must be an absolute
+        path because the wrapper runs as a Sunshine application, not as a
+        systemd unit that expands %h/%t specifiers. The wrapper rejects
         symlinks, non-regular files, files not owned by root or the runner user,
         and files writable by group/other before sourcing. Use this to provide
         fresh Sway/Wayland session values such as WAYLAND_DISPLAY,
@@ -349,6 +357,55 @@ in
   };
 
   config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = cfg.appName != "";
+        message = "services.korri.gameStream.appName must not be empty.";
+      }
+      {
+        assertion = isSupportedPath cfg.runtimeDir;
+        message = ''
+          services.korri.gameStream.runtimeDir must be an absolute path or %t path
+          when set (got "${toString cfg.runtimeDir}").
+        '';
+      }
+      {
+        assertion = isSupportedPath cfg.intentPath;
+        message = ''
+          services.korri.gameStream.intentPath must be an absolute path or %t path
+          when set (got "${toString cfg.intentPath}").
+        '';
+      }
+      {
+        assertion = isSupportedPath cfg.statusPath;
+        message = ''
+          services.korri.gameStream.statusPath must be an absolute path or %t path
+          when set (got "${toString cfg.statusPath}").
+        '';
+      }
+      {
+        assertion = cfg.sessionEnvFile == null || isAbsolutePath cfg.sessionEnvFile;
+        message = ''
+          services.korri.gameStream.sessionEnvFile must be an absolute path when set
+          (got "${toString cfg.sessionEnvFile}").
+        '';
+      }
+      {
+        assertion = isConcreteChildPath cfg.runtimeDir cfg.intentPath;
+        message = ''
+          services.korri.gameStream.intentPath must live under runtimeDir when both are set
+          (runtimeDir="${toString cfg.runtimeDir}", intentPath="${toString cfg.intentPath}").
+        '';
+      }
+      {
+        assertion = isConcreteChildPath cfg.runtimeDir cfg.statusPath;
+        message = ''
+          services.korri.gameStream.statusPath must live under runtimeDir when both are set
+          (runtimeDir="${toString cfg.runtimeDir}", statusPath="${toString cfg.statusPath}").
+        '';
+      }
+    ];
+
     environment.systemPackages = [
       cfg.package
       cfg.gamescope.package

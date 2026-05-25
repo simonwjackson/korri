@@ -513,6 +513,10 @@
               inherit pkgs;
               korriInputModule = self.nixosModules.korri-input;
             };
+            korri-game-stream-module = import ./nix/tests/korri-game-stream-module-check.nix {
+              inherit pkgs;
+              korriGameStreamModule = self.nixosModules.korri-game-stream;
+            };
             korri-server-module = import ./nix/tests/korri-server-module-check.nix {
               inherit pkgs;
               korriServerModule = self.nixosModules.korri-server;
