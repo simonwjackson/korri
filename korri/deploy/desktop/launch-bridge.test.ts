@@ -205,6 +205,69 @@ describe("desktop launch bridge", () => {
     }
   })
 
+  test("repairs the local Moonlight foreground surface after launch", async () => {
+    const events: string[] = []
+    let repairedIgnoredWindowIds: readonly number[] = []
+
+    const handler = createLaunchBridgeHandler({
+      getConnection: () => CONNECTED,
+      prepareGame: async (_controlUrl, id) => ({
+        status: "prepared",
+        gameId: id,
+      }),
+      moonlightForegroundRepair: {
+        snapshotSurfaceIds: async () => {
+          events.push("snapshot")
+          return new Set([10, 11])
+        },
+        repairSurface: async ({ ignoredWindowIds }) => {
+          events.push("repair")
+          repairedIgnoredWindowIds = [...ignoredWindowIds]
+        },
+      },
+      launchMoonlight: async () => {
+        events.push("launch")
+        return { status: "started", command: "moonlight" }
+      },
+    })
+
+    const response = await handler(postJson({ id: "gba/wario-land-4" }))
+
+    expect(response.status).toBe(200)
+    expect(events).toEqual(["snapshot", "launch", "repair"])
+    expect(repairedIgnoredWindowIds).toEqual([10, 11])
+  })
+
+  test("does not repair the foreground surface when Moonlight fails to start", async () => {
+    const events: string[] = []
+
+    const handler = createLaunchBridgeHandler({
+      getConnection: () => CONNECTED,
+      prepareGame: async (_controlUrl, id) => ({
+        status: "prepared",
+        gameId: id,
+      }),
+      moonlightForegroundRepair: {
+        snapshotSurfaceIds: async () => {
+          events.push("snapshot")
+          return new Set([10])
+        },
+        repairSurface: async () => {
+          events.push("repair")
+        },
+      },
+      launchMoonlight: async () => {
+        events.push("launch")
+        return { status: "failed", message: "moonlight not installed" }
+      },
+    })
+
+    const response = await handler(postJson({ id: "gba/wario-land-4" }))
+
+    expect(response.status).toBe(200)
+    expect(events).toEqual(["snapshot", "launch"])
+  })
+
   test("reports prepared-no-moonlight when prepare succeeds but moonlight does not start", async () => {
     const handler = createLaunchBridgeHandler({
       getConnection: () => CONNECTED,

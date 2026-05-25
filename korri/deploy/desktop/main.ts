@@ -16,6 +16,11 @@ import Electrobun, {
   PATHS,
 } from "electrobun/bun"
 import { watchStreamHosts } from "../../../tools/cli/lan-stream-discovery"
+import {
+  repairStreamSurface,
+  snapshotStreamSurfaceIds,
+} from "../../../tools/device/game-stream-fullscreen"
+import type { SwayCommandRunner } from "../../../tools/device/sessiond-sway"
 import { type ConnectionState, makeConnectionController } from "./connection"
 import type {
   ConnectionServerRecord,
@@ -23,6 +28,7 @@ import type {
 } from "./connection-state-snapshot"
 import { createDesktopApp } from "./create-desktop-app"
 import { loadDesktopConfig, saveDesktopConfig } from "./desktop-config"
+import { installInputDispatchBootstrap } from "./input-dispatch-bootstrap"
 import { createDesktopInputBroker } from "./input-broker"
 import {
   desktopInputdUrlFromEnv,
@@ -187,6 +193,7 @@ async function main() {
       },
       preflightMoonlightInput,
       resolveMoonlightGamescope: resolveLocalMoonlightGamescopePolicy,
+      moonlightForegroundRepair: createLocalMoonlightForegroundRepair(),
       launchMoonlight: opts =>
         launchMoonlight({
           host: opts.host,
@@ -219,6 +226,11 @@ async function main() {
   )
   const activeWindowProvider = createActiveWindowProvider(() => windows)
   windows = windowOptions.map(options => new BrowserWindow(options))
+  for (const window of windows) {
+    const installDispatch = () => installInputDispatchBootstrap(window, logger)
+    window.webview.on("dom-ready", installDispatch)
+    installDispatch()
+  }
 
   const inputdUrl = desktopInputdUrlFromEnv(process.env)
   if (runtimeConfig.desktopInput && inputdUrl) {
@@ -270,11 +282,66 @@ async function resolveLocalMoonlightGamescopePolicy() {
           yield* repository.resolveLocalLauncherGamescopePolicy("moonlight")
         return {
           enabled: policy.enabled === true,
+          ...(policy.command !== undefined ? { command: policy.command } : {}),
           ...(policy.args !== undefined ? { args: policy.args } : {}),
         }
       }),
     ),
   )
+}
+
+function createLocalMoonlightForegroundRepair() {
+  if (!process.env.SWAYSOCK) return undefined
+
+  const runner = createSwayCommandRunner(
+    commandFromEnv("KORRI_GAME_STREAM_SWAYMSG_COMMAND", "swaymsg"),
+  )
+  const selector = {}
+  return {
+    snapshotSurfaceIds: () => snapshotStreamSurfaceIds({ runner, selector }),
+    repairSurface: ({
+      ignoredWindowIds,
+    }: {
+      ignoredWindowIds: ReadonlySet<number>
+    }) =>
+      repairStreamSurface({ runner, selector, ignoredWindowIds }).then(
+        () => undefined,
+      ),
+  }
+}
+
+function createSwayCommandRunner(
+  command: string,
+  timeoutMs = 2_000,
+): SwayCommandRunner {
+  return {
+    async run(args) {
+      const proc = Bun.spawn([command, ...args], {
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      const timedOut = Symbol("timedOut")
+      const timeout = new Promise<typeof timedOut>(resolve => {
+        setTimeout(() => resolve(timedOut), timeoutMs)
+      })
+      const exit = await Promise.race([proc.exited, timeout])
+      if (exit === timedOut) {
+        proc.kill("SIGKILL")
+        throw new Error(`swaymsg timed out after ${timeoutMs}ms`)
+      }
+
+      const stdout = await new Response(proc.stdout).text()
+      const stderr = await new Response(proc.stderr).text()
+      if (exit !== 0) throw new Error(stderr || `swaymsg exited ${exit}`)
+      return stdout
+    },
+  }
+}
+
+function commandFromEnv(name: string, fallback: string): string {
+  const trimmed = process.env[name]?.trim()
+  return trimmed && trimmed.length > 0 ? trimmed : fallback
 }
 
 function createDesktopWindows(

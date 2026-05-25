@@ -64,6 +64,13 @@ export type MoonlightInputPreflightResult =
       readonly message: string
     }
 
+export interface MoonlightForegroundRepair {
+  readonly snapshotSurfaceIds: () => Promise<ReadonlySet<number>>
+  readonly repairSurface: (options: {
+    readonly ignoredWindowIds: ReadonlySet<number>
+  }) => Promise<void>
+}
+
 export interface LaunchBridgeOptions {
   /**
    * Returns the currently-connected server (hostId + controlUrl), or
@@ -106,6 +113,12 @@ export interface LaunchBridgeOptions {
     readonly host: string
     readonly gamescope?: MoonlightLaunchOptions["gamescope"]
   }) => Promise<MoonlightLaunchResult>
+
+  /**
+   * Optional local compositor repair for the Moonlight foreground surface.
+   * Appliance builds wire this to Sway; tests inject a deterministic fake.
+   */
+  readonly moonlightForegroundRepair?: MoonlightForegroundRepair
 }
 
 /**
@@ -185,6 +198,19 @@ export function createLaunchBridgeHandler(
       } satisfies LaunchBridgeResponse)
     }
 
+    let ignoredForegroundSurfaceIds: ReadonlySet<number> | undefined
+    if (options.moonlightForegroundRepair) {
+      try {
+        ignoredForegroundSurfaceIds =
+          await options.moonlightForegroundRepair.snapshotSurfaceIds()
+      } catch (error) {
+        logger.warn(
+          { id, host: connection.hostId, err: error },
+          "launch-bridge: skipped Moonlight foreground repair after snapshot failure",
+        )
+      }
+    }
+
     const moonlight = await options.launchMoonlight({
       host: moonlightHostForConnection(connection),
       gamescope: moonlightGamescope,
@@ -206,6 +232,24 @@ export function createLaunchBridgeHandler(
         ...(prepare.sessionId ? { sessionId: prepare.sessionId } : {}),
         message: moonlight.message,
       } satisfies LaunchBridgeResponse)
+    }
+
+    if (options.moonlightForegroundRepair && ignoredForegroundSurfaceIds) {
+      try {
+        await options.moonlightForegroundRepair.repairSurface({
+          ignoredWindowIds: ignoredForegroundSurfaceIds,
+        })
+      } catch (error) {
+        logger.warn(
+          {
+            id,
+            host: connection.hostId,
+            sessionId: prepare.sessionId,
+            err: error,
+          },
+          "launch-bridge: Moonlight started but foreground repair failed",
+        )
+      }
     }
 
     logger.info(
