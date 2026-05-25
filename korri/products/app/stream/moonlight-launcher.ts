@@ -86,19 +86,11 @@ export async function launchMoonlight(
   if (inputDevice.status === "failed") return inputDevice
 
   const platform = options.platform ?? moonlightPlatformFromEnv()
-  if (inputDevice.path && platform?.toLowerCase() === "sdl") {
-    return {
-      status: "failed",
-      message:
-        "Moonlight SDL platform cannot be used with explicit evdev input selection",
-    }
-  }
 
   const args = moonlightArgs({
     ...options,
     client,
     mappingFile: options.mappingFile ?? moonlightMappingFileFromEnv(),
-    inputDevice: inputDevice.path,
     platform,
   })
   const allowNixFallback = options.allowNixFallback ?? command === "moonlight"
@@ -175,11 +167,6 @@ function moonlightMappingFileFromEnv(): string | undefined {
   return raw === "" ? undefined : raw
 }
 
-function moonlightInputDeviceFromEnv(): string | undefined {
-  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_INPUT_DEVICE?.trim()
-  return raw === "" ? undefined : raw
-}
-
 function moonlightRequireInputPlumberFromEnv(): boolean {
   const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER?.trim()
   return raw === "1" || raw === "true" || raw === "required"
@@ -198,11 +185,10 @@ async function moonlightInputDevice(options: MoonlightLaunchOptions): Promise<
       readonly message: string
     }
 > {
-  const configured = options.inputDevice ?? moonlightInputDeviceFromEnv()
   const required =
     options.requireInputPlumberInput ?? moonlightRequireInputPlumberFromEnv()
 
-  if (!required) return { status: "ok", path: configured }
+  if (!required) return { status: "ok" }
 
   const proc = await (options.readProcDevices ?? readRealProcDevices)()
   const resolution = resolveInputPlumberVirtualGamepad(
@@ -212,15 +198,7 @@ async function moonlightInputDevice(options: MoonlightLaunchOptions): Promise<
     return inputPlumberResolutionFailure(resolution)
   }
 
-  if (configured && configured !== resolution.path) {
-    return {
-      status: "failed",
-      category: "input-unavailable",
-      message: `Configured Moonlight input device ${configured} does not match resolved InputPlumber virtual gamepad ${resolution.path}`,
-    }
-  }
-
-  return { status: "ok", path: resolution.path }
+  return { status: "ok" }
 }
 
 function inputPlumberResolutionFailure(
@@ -263,7 +241,6 @@ function moonlightArgs(
     "stream",
     ...(options.platform ? ["-platform", options.platform] : []),
     ...(options.mappingFile ? ["-mapping", options.mappingFile] : []),
-    ...(options.inputDevice ? ["-input", options.inputDevice] : []),
     "-app",
     appName,
     options.host,

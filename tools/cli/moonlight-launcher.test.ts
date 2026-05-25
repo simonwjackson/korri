@@ -137,7 +137,7 @@ describe("moonlight launcher", () => {
     }
   })
 
-  it("passes a resolved InputPlumber virtual controller as the only moonlight input in appliance mode", async () => {
+  it("preflights the InputPlumber virtual controller while leaving Moonlight input discovery enabled", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({
       host: "192.168.1.117",
@@ -156,7 +156,7 @@ describe("moonlight launcher", () => {
 
     expect(result).toEqual({ status: "started", command: "gamescope" })
     expect(calls).toEqual([
-      "gamescope -f -b -- moonlight stream -mapping /nix/store/moonlight/share/moonlight/gamecontrollerdb.txt -input /dev/input/event10 -app Korri Stream 192.168.1.117",
+      "gamescope -f -b -- moonlight stream -mapping /nix/store/moonlight/share/moonlight/gamecontrollerdb.txt -app Korri Stream 192.168.1.117",
     ])
   })
 
@@ -186,7 +186,7 @@ describe("moonlight launcher", () => {
     expect(calls).toEqual([])
   })
 
-  it("rejects an explicit input path that is not the resolved InputPlumber virtual controller in appliance mode", async () => {
+  it("ignores explicit input paths so Moonlight can discover touch and gamepad together", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({
       host: "192.168.1.117",
@@ -203,14 +203,13 @@ describe("moonlight launcher", () => {
       }),
     })
 
-    expect(result.status).toBe("failed")
-    if (result.status === "failed") {
-      expect(result.message).toContain("does not match")
-    }
-    expect(calls).toEqual([])
+    expect(result).toEqual({ status: "started", command: "gamescope" })
+    expect(calls).toEqual([
+      "gamescope -f -b -- moonlight stream -app Korri Stream 192.168.1.117",
+    ])
   })
 
-  it("rejects SDL platform selection when explicit input filtering is required", async () => {
+  it("does not reject SDL platform selection for stale explicit input configuration", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({
       host: "192.168.1.117",
@@ -222,9 +221,10 @@ describe("moonlight launcher", () => {
       }),
     })
 
-    expect(result.status).toBe("failed")
-    if (result.status === "failed") expect(result.message).toContain("SDL")
-    expect(calls).toEqual([])
+    expect(result).toEqual({ status: "started", command: "gamescope" })
+    expect(calls).toEqual([
+      "gamescope -f -b -- moonlight stream -platform sdl -app Korri Stream 192.168.1.117",
+    ])
   })
 
   it("exposes Wayland when the Moonlight platform is Wayland", async () => {
