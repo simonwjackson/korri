@@ -45,12 +45,10 @@ describe("test-suite partitioning", () => {
     const resolved = resolveRecipe("test-nix")
 
     expect(resolved).toContain("nix build")
-    expect(resolved).toContain(".#checks.x86_64-linux.korri-image-outputs")
-    expect(resolved).toContain(
+    expect(resolved).toContain(".#checks.x86_64-linux.korri-standard-native")
+    expect(resolved).not.toContain(".#checks.x86_64-linux.korri-image-outputs")
+    expect(resolved).not.toContain(
       ".#checks.x86_64-linux.korri-rocknix-sm8550-config",
-    )
-    expect(resolved).toContain(
-      ".#checks.x86_64-linux.korri-live-usb-persistence-resolver",
     )
     expect(resolved).not.toContain("bun test")
     expect(resolved).not.toContain("tools/testing/nix")
@@ -61,7 +59,7 @@ describe("test-suite partitioning", () => {
 
     expect(resolved).toContain("bun test")
     expect(resolved).toContain("nix build")
-    expect(resolved).toContain(".#checks.x86_64-linux.korri-image-outputs")
+    expect(resolved).toContain(".#checks.x86_64-linux.korri-standard-native")
     expect(resolved).not.toContain("bun test tools/testing/nix")
   })
 

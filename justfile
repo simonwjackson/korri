@@ -80,17 +80,7 @@ test-unit:
 # Run native Nix checks. Bun must not own Nix module/config/build assertions.
 test-nix:
   nix build \
-    .#checks.x86_64-linux.korri-compositor-module \
-    .#checks.x86_64-linux.korri-input-module \
-    .#checks.x86_64-linux.korri-server-module \
-    .#checks.x86_64-linux.korri-desktop-build-graph \
-    .#checks.x86_64-linux.korri-image-outputs \
-    .#checks.x86_64-linux.korri-rocknix-sm8550-config \
-    .#checks.x86_64-linux.korri-live-usb-config \
-    .#checks.x86_64-linux.korri-live-usb-developer-config \
-    .#checks.x86_64-linux.korri-live-usb-vm-smoke \
-    .#checks.x86_64-linux.korri-live-usb-invalid-artifact \
-    .#checks.x86_64-linux.korri-live-usb-persistence-resolver \
+    .#checks.x86_64-linux.korri-standard-native \
     --no-link
   nix build \
     .#packages.x86_64-linux.korri-kiosk-live-iso \

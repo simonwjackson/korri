@@ -474,6 +474,10 @@
               x86Kiosk = korriDesktopX86Kiosk;
               unwrapped = korriDesktopUnwrapped;
             };
+            korri-package-outputs = import ./nix/tests/korri-package-outputs-check.nix {
+              inherit pkgs;
+              packages = self.packages.${system};
+            };
             korri-image-outputs = import ./nix/tests/korri-image-outputs-check.nix {
               inherit pkgs;
               packages = self.packages.${system};
@@ -563,6 +567,78 @@
                   inherit pkgs;
                   resolverScript = ./nix/images/live-usb-persistence-resolver.sh;
                 };
+            korri-standard-native = import ./nix/tests/korri-standard-native-check.nix {
+              inherit pkgs;
+              standardChecks = [
+                self.checks.${system}.korri-compositor-module
+                self.checks.${system}.korri-input-module
+                self.checks.${system}.korri-game-stream-module
+                self.checks.${system}.korri-server-module
+                self.checks.${system}.korri-desktop-build-graph
+                self.checks.${system}.korri-package-outputs
+                self.checks.${system}.korri-image-outputs
+                self.checks.${system}.korri-rocknix-sm8550-config
+                self.checks.${system}.korri-live-usb-config
+                self.checks.${system}.korri-live-usb-developer-config
+                self.checks.${system}.korri-live-usb-vm-smoke
+                self.checks.${system}.korri-live-usb-invalid-artifact
+                self.checks.${system}.korri-live-usb-persistence-resolver
+              ];
+              ownerMatrix = [
+                {
+                  name = "korri-compositor-module";
+                  owner = "module";
+                }
+                {
+                  name = "korri-input-module";
+                  owner = "module";
+                }
+                {
+                  name = "korri-game-stream-module";
+                  owner = "module";
+                }
+                {
+                  name = "korri-server-module";
+                  owner = "module";
+                }
+                {
+                  name = "korri-desktop-build-graph";
+                  owner = "package-output";
+                }
+                {
+                  name = "korri-package-outputs";
+                  owner = "package-output";
+                }
+                {
+                  name = "korri-image-outputs";
+                  owner = "composed-system";
+                }
+                {
+                  name = "korri-rocknix-sm8550-config";
+                  owner = "composed-system";
+                }
+                {
+                  name = "korri-live-usb-config";
+                  owner = "composed-system";
+                }
+                {
+                  name = "korri-live-usb-developer-config";
+                  owner = "composed-system";
+                }
+                {
+                  name = "korri-live-usb-vm-smoke";
+                  owner = "composed-system";
+                }
+                {
+                  name = "korri-live-usb-invalid-artifact";
+                  owner = "composed-system";
+                }
+                {
+                  name = "korri-live-usb-persistence-resolver";
+                  owner = "composed-system";
+                }
+              ];
+            };
           };
 
         apps =
