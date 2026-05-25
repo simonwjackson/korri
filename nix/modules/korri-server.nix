@@ -32,9 +32,9 @@ let
   bunTranspilerCacheDir = "${serverCacheDir}/bun-transpiler-cache";
   userRuntimeDir = "%t/korri-game-stream";
 
-  runtimeDir = cfg.streamHost.runtimeDir;
-  intentPath = cfg.streamHost.intentPath;
-  statusPath = cfg.streamHost.statusPath;
+  runtimeDir = cfg.streaming.runtimeDir;
+  intentPath = cfg.streaming.intentPath;
+  statusPath = cfg.streaming.statusPath;
   isDefaultSystemRuntimeDir = isSystemMode && runtimeDir == systemRuntimeDir;
 
   configuredUserHome =
@@ -275,11 +275,19 @@ in
       };
     };
 
-    streamHost = {
+    streaming = {
       enable = mkOption {
         type = types.bool;
         default = false;
-        description = "Wire the generic Korri Sunshine stream app/runner to this server's intent and status paths.";
+        description = ''
+          Wire the generic Korri Sunshine stream app/runner to this server's
+          intent and status paths. Requires `services.korri.compositor.enable`
+          (the Sway substrate that hosts the Sunshine session) and
+          `services.korri.input.provider.enable` (host-side normalized
+          appliance input). When enabled, the module writes a default
+          Sunshine gamepad backend (`services.sunshine.settings.gamepad =
+          "x360"`, the InputPlumber + /dev/uinput validated path).
+        '';
       };
 
       appName = mkOption {
@@ -309,14 +317,14 @@ in
 
       intentPath = mkOption {
         type = types.str;
-        default = "${cfg.streamHost.runtimeDir}/next-launch.json";
+        default = "${cfg.streaming.runtimeDir}/next-launch.json";
         defaultText = lib.literalExpression ''"''${runtimeDir}/next-launch.json"'';
         description = "Shared one-shot launch intent path written by the server and consumed by the stream runner.";
       };
 
       statusPath = mkOption {
         type = types.str;
-        default = "${cfg.streamHost.runtimeDir}/status.json";
+        default = "${cfg.streaming.runtimeDir}/status.json";
         defaultText = lib.literalExpression ''"''${runtimeDir}/status.json"'';
         description = "Shared runner status path read by the server and written by the stream runner.";
       };
@@ -346,7 +354,7 @@ in
       {
         assertion = !isSystemMode || !(hasPlaceholder runtimeDir);
         message = ''
-          services.korri.server.streamHost.runtimeDir = "${runtimeDir}" uses a systemd
+          services.korri.server.streaming.runtimeDir = "${runtimeDir}" uses a systemd
           user specifier such as %t or %h, which is unsafe in
           serviceMode = "system" because it resolves against the system manager rather
           than the configured user. Use an absolute path like /run/korri-game-stream.
@@ -355,60 +363,82 @@ in
       {
         assertion = !isSystemMode || !(hasPlaceholder intentPath);
         message = ''
-          services.korri.server.streamHost.intentPath = "${intentPath}" uses a systemd
+          services.korri.server.streaming.intentPath = "${intentPath}" uses a systemd
           user specifier that is unsafe in serviceMode = "system". Use an absolute path
-          under services.korri.server.streamHost.runtimeDir.
+          under services.korri.server.streaming.runtimeDir.
         '';
       }
       {
         assertion = !isSystemMode || !(hasPlaceholder statusPath);
         message = ''
-          services.korri.server.streamHost.statusPath = "${statusPath}" uses a systemd
+          services.korri.server.streaming.statusPath = "${statusPath}" uses a systemd
           user specifier that is unsafe in serviceMode = "system". Use an absolute path
-          under services.korri.server.streamHost.runtimeDir.
+          under services.korri.server.streaming.runtimeDir.
         '';
       }
       {
         assertion = !isSystemMode || isAbsolutePath runtimeDir;
         message = ''
-          services.korri.server.streamHost.runtimeDir must be an absolute path in
+          services.korri.server.streaming.runtimeDir must be an absolute path in
           serviceMode = "system" (got "${runtimeDir}").
         '';
       }
       {
         assertion = !isSystemMode || isAbsolutePath intentPath;
         message = ''
-          services.korri.server.streamHost.intentPath must be an absolute path in
+          services.korri.server.streaming.intentPath must be an absolute path in
           serviceMode = "system" (got "${intentPath}").
         '';
       }
       {
         assertion = !isSystemMode || isAbsolutePath statusPath;
         message = ''
-          services.korri.server.streamHost.statusPath must be an absolute path in
+          services.korri.server.streaming.statusPath must be an absolute path in
           serviceMode = "system" (got "${statusPath}").
         '';
       }
       {
         assertion =
-          !cfg.streamHost.enable
+          !cfg.streaming.enable
           || isUserSpecifierPath intentPath
           || lib.hasPrefix "${runtimeDir}/" intentPath;
         message = ''
-          services.korri.server.streamHost.intentPath = "${intentPath}" must live under
-          services.korri.server.streamHost.runtimeDir = "${runtimeDir}" so the
+          services.korri.server.streaming.intentPath = "${intentPath}" must live under
+          services.korri.server.streaming.runtimeDir = "${runtimeDir}" so the
           tmpfiles-managed private runtime directory protects intent ownership.
         '';
       }
       {
         assertion =
-          !cfg.streamHost.enable
+          !cfg.streaming.enable
           || isUserSpecifierPath statusPath
           || lib.hasPrefix "${runtimeDir}/" statusPath;
         message = ''
-          services.korri.server.streamHost.statusPath = "${statusPath}" must live under
-          services.korri.server.streamHost.runtimeDir = "${runtimeDir}" so the
+          services.korri.server.streaming.statusPath = "${statusPath}" must live under
+          services.korri.server.streaming.runtimeDir = "${runtimeDir}" so the
           tmpfiles-managed private runtime directory protects status ownership.
+        '';
+      }
+      # New cross-tree precondition: streaming needs a managed compositor
+      # substrate and a host-side normalized input provider. Both are
+      # required even on headless aka because Sunshine launches inside a
+      # Sway session and consumes /dev/uinput virtual controllers.
+      {
+        assertion = !cfg.streaming.enable || (config.services.korri.compositor.enable or false);
+        message = ''
+          services.korri.server.streaming.enable = true requires
+          services.korri.compositor.enable = true. Streaming hosts run
+          Sunshine inside a managed Sway session; enable the compositor
+          substrate even on headless appliances.
+        '';
+      }
+      {
+        assertion = !cfg.streaming.enable || (config.services.korri.input.provider.enable or false);
+        message = ''
+          services.korri.server.streaming.enable = true requires
+          services.korri.input.provider.enable = true. Streaming hosts need
+          host-side normalized appliance input (Xbox 360 over /dev/uinput
+          via InputPlumber) so Sunshine can synthesize streamed controllers.
         '';
       }
     ];
@@ -419,19 +449,7 @@ in
           services.korri.server is exposing host "${cfg.host}" on the global firewall in
           system mode. Set services.korri.server.firewallInterfaces to a trusted
           interface (e.g. [ "tailscale0" ]) to scope LAN exposure.
-        ''
-      ++
-        lib.optional
-          (
-            (config.services.korri.headlessSource.enable or false)
-            && (config.services.korri.headlessSource.port or null) == cfg.port
-          )
-          ''
-            services.korri.server and services.korri.headlessSource are both enabled on
-            port ${toString cfg.port}. The legacy headlessSource module is superseded by
-            services.korri.server -- disable one of them to avoid binding the same port
-            and advertising duplicate mDNS records.
-          '';
+        '';
 
     environment.systemPackages = [ cfg.package ];
 
@@ -446,16 +464,22 @@ in
         }
     );
 
-    services.korri.gameStream = mkIf cfg.streamHost.enable {
+    services.korri.gameStream = mkIf cfg.streaming.enable {
       enable = true;
-      appName = cfg.streamHost.appName;
+      appName = cfg.streaming.appName;
       runtimeDir = runtimeDir;
       intentPath = intentPath;
       statusPath = statusPath;
     };
 
+    # Default Sunshine to the InputPlumber + /dev/uinput-validated Xbox 360
+    # backend when streaming is on. `lib.mkDefault` ensures host overrides
+    # (e.g. `services.sunshine.settings.gamepad = "ds5"` for a DualSense
+    # passthrough opt-in once uhid is wired) still win.
+    services.sunshine.settings.gamepad = mkIf cfg.streaming.enable (lib.mkDefault "x360");
+
     systemd.tmpfiles.settings =
-      mkIf (isSystemMode && cfg.streamHost.enable && isDefaultSystemRuntimeDir)
+      mkIf (isSystemMode && cfg.streaming.enable && isDefaultSystemRuntimeDir)
         {
           "10-korri-server".${systemRuntimeDir}.d = {
             user = cfg.user;

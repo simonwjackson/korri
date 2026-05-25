@@ -476,6 +476,10 @@
             inherit pkgs;
             korriInputModule = self.nixosModules.korri-input;
           };
+          korri-server-module = import ./nix/tests/korri-server-module-check.nix {
+            inherit pkgs;
+            korriServerModule = self.nixosModules.korri-server;
+          };
         }
         // pkgs.lib.optionalAttrs isX86Linux {
           korri-live-usb-config = import ./nix/tests/korri-live-usb-config-check.nix {
@@ -656,7 +660,20 @@
           korri-inputd = import ./nix/modules/korri-inputd.nix { korri = self; };
           korri-game-stream = import ./nix/modules/korri-game-stream.nix { korri = self; };
           korri-headless-source = import ./nix/modules/korri-headless-source.nix { korri = self; };
-          korri-server = import ./nix/modules/korri-server.nix { korri = self; };
+          # Server module imports compositor + input alongside its own file so
+          # the cross-tree streaming assertions can reference the
+          # services.korri.{compositor,input.provider}.enable options. Hosts
+          # that only enable services.korri.server without streaming still get
+          # those option declarations but no behavior, since each module's
+          # config block is gated on its own enable toggle. Duplicate imports
+          # dedupe via the `key` field on compositor/input/cli modules.
+          korri-server = {
+            imports = [
+              korri-compositor
+              korri-input
+              (import ./nix/modules/korri-server.nix { korri = self; })
+            ];
+          };
           korri-kiosk = {
             imports = [
               korri-client

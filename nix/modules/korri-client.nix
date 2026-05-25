@@ -16,6 +16,12 @@ let
       or (throw "Korri desktop package is not available for system `${system}`. Set services.korri.client.package explicitly.");
 in
 {
+  # Stable module key so multiple imports (e.g. via nixosModules.korri-compositor
+  # composite + nixosModules.korri-kiosk composite + aggregate korri) deduplicate
+  # to a single declaration.
+  _file = ./korri-client.nix;
+  key = ./korri-client.nix;
+
   options.services.korri.client = {
     enable = lib.mkEnableOption "Korri client package/runtime role";
 

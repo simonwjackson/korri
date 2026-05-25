@@ -93,6 +93,11 @@ let
     };
 in
 {
+  # Stable module key so multiple imports (e.g. via nixosModules.korri-server
+  # composite + aggregate korri) deduplicate to a single declaration.
+  _file = ./korri-compositor.nix;
+  key = ./korri-compositor.nix;
+
   imports = [
     korri.nixosModules.korri-cli
   ];

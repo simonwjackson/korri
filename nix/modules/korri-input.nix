@@ -45,6 +45,12 @@ let
     ;
 in
 {
+  # Stable module key so multiple imports (e.g. via nixosModules.korri-compositor
+  # composite + nixosModules.korri-server composite) deduplicate to a single
+  # declaration.
+  _file = ./korri-input.nix;
+  key = ./korri-input.nix;
+
   options.services.korri.input = {
     provider = {
       enable = mkEnableOption "host-side normalized appliance input provider";

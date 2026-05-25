@@ -292,12 +292,16 @@ in
     uinput = {
       enable = mkOption {
         type = types.bool;
-        default = true;
+        default = false;
         description = ''
-          Enable the Linux uinput device and udev access rules needed by
-          Sunshine to synthesize mouse, keyboard, and touch input for streamed
-          sessions. Disable only if the host provides equivalent /dev/uinput
-          permissions elsewhere.
+          Legacy uinput kernel module + udev rule loader. As of the
+          korri-input module introduction, `services.korri.input.provider`
+          (name = "inputplumber") is the canonical owner of /dev/uinput for
+          Sunshine streaming sessions, and `services.korri.server.streaming`
+          asserts that the provider is enabled. This option remains so a
+          caller can explicitly load uinput without going through the
+          provider; it defaults to `false` because enabling the provider is
+          the supported path.
         '';
       };
     };
