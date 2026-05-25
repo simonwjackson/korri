@@ -809,10 +809,6 @@ if (import.meta.main) {
     launchIntentStore: createFileGameStreamLaunchIntentStore(intentPath),
     statusPath,
     lockManager: createFileGameStreamRunLock(lockPath),
-    fullscreen: {
-      runner: createSwayCommandRunner(),
-      selector: {},
-    },
   })
 
   await superviseGameStreamRunner(runner, {
