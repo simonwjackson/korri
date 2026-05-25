@@ -120,7 +120,8 @@ function publishViaBonjourBackend(input: {
   readonly txt: Readonly<Record<string, string>>
   readonly bonjour: BonjourLike
 }): StreamAdvertisement {
-  if (!input.bonjour.publish) throw new Error("Bonjour publisher is unavailable")
+  if (!input.bonjour.publish)
+    throw new Error("Bonjour publisher is unavailable")
   const service = input.bonjour.publish({
     name: input.name,
     type: KORRI_STREAM_SERVICE_TYPE,

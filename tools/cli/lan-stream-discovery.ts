@@ -33,8 +33,14 @@ export interface BonjourLike {
 export interface BrowserLike {
   start?: () => void
   stop: () => void
-  on?: (event: "down" | "up", handler: (service: Service) => void) => BrowserLike
-  off?: (event: "down" | "up", handler: (service: Service) => void) => BrowserLike
+  on?: (
+    event: "down" | "up",
+    handler: (service: Service) => void,
+  ) => BrowserLike
+  off?: (
+    event: "down" | "up",
+    handler: (service: Service) => void,
+  ) => BrowserLike
 }
 
 export type StreamHostEvent =
@@ -74,7 +80,8 @@ export function watchStreamHosts(
 
       const onDown = (service: Service) => {
         const candidate = candidateFromMdnsService(service)
-        const controlUrl = candidate?.controlUrl ?? findControlUrlByService(known, service)
+        const controlUrl =
+          candidate?.controlUrl ?? findControlUrlByService(known, service)
         if (!controlUrl) return
         if (!known.has(controlUrl)) return
         known.delete(controlUrl)
