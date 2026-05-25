@@ -28,6 +28,9 @@ let
     firewallUdpPorts = eval.config.networking.firewall.allowedUDPPorts or [ ];
     kioskUnitExists = eval.config.systemd.services ? "korri-compositor";
     inputProviderEnabled = eval.config.services.korri.input.provider.enable or false;
+    inputProviderName = eval.config.services.korri.input.provider.name or null;
+    seatdEnabled = eval.config.services.seatd.enable or false;
+    inputplumberDataDirs = eval.config.systemd.services.inputplumber.environment.XDG_DATA_DIRS or "";
     kioskAfter = eval.config.systemd.services."korri-compositor".after or [ ];
     kioskUser = eval.config.services.korri.compositor.user or null;
     kioskUserExtraGroups =
@@ -147,6 +150,10 @@ let
     (check "Product live USB must enable client" liveUsbSummary.clientEnabled)
     (check "Product live USB must enable inputd" liveUsbSummary.inputdEnabled)
     (check "Product live USB must enable input provider" liveUsbSummary.inputProviderEnabled)
+    (check "Product live USB must use InputPlumber provider" (
+      liveUsbSummary.inputProviderName == "inputplumber"
+    ))
+    (check "Product live USB must enable seatd on x86" liveUsbSummary.seatdEnabled)
     (check "Product live USB client package must be x86 kiosk desktop" (
       liveUsbSummary.clientMainProgram == "korri-desktop-x86-kiosk"
     ))
@@ -221,6 +228,14 @@ let
     (check "kiosk composition must enable client" kioskSummary.clientEnabled)
     (check "kiosk composition must enable inputd" kioskSummary.inputdEnabled)
     (check "kiosk composition must enable input provider" kioskSummary.inputProviderEnabled)
+    (check "kiosk composition must use InputPlumber provider" (
+      kioskSummary.inputProviderName == "inputplumber"
+    ))
+    (check "kiosk composition must enable seatd on x86" kioskSummary.seatdEnabled)
+    (check "kiosk composition must expose InputPlumber data dirs" (
+      lib.hasInfix "inputplumber" kioskSummary.inputplumberDataDirs
+      && lib.hasInfix "/run/current-system/sw/share" kioskSummary.inputplumberDataDirs
+    ))
     (check "kiosk composition must use the compositor user" (
       kioskSummary.kioskUser == "korri-compositor"
     ))

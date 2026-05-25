@@ -21,6 +21,7 @@ let
     let
       cfg = system.config;
       server = cfg.services.korri.server;
+      targetSystem = cfg.nixpkgs.hostPlatform.system;
       compositor = cfg.services.korri.compositor;
       input = cfg.services.korri.input;
       compositorService = cfg.systemd.services."korri-compositor";
@@ -31,6 +32,7 @@ let
       failedNixosAssertions = builtins.filter (candidate: !candidate.assertion) cfg.assertions;
       checks = [
         (check "${name}: NixOS module assertions must pass" (failedNixosAssertions == [ ]))
+        (check "${name}: evaluated target system must be aarch64-linux" (targetSystem == "aarch64-linux"))
         (check "${name}: server role must be enabled" server.enable)
         (check "${name}: server must run as korri-server" (server.user == "korri-server"))
         (check "${name}: server must run as a system service" (server.serviceMode == "system"))
@@ -39,8 +41,15 @@ let
         (check "${name}: inputd must be enabled" input.inputd.enable)
         (check "${name}: kiosk compositor must run as root" (compositor.user == "root"))
         (check "${name}: kiosk compositor must not create root user" (compositor.createUser == false))
+        (check "${name}: kiosk compositor must use /storage home" (compositor.home == "/storage"))
+        (check "${name}: kiosk compositor must keep cache under /storage" (
+          compositorEnv.XDG_CACHE_HOME or null == "/storage/.cache"
+        ))
         (check "${name}: kiosk compositor must use the root runtime dir" (
           compositor.runtimeDir == "/run/user/0"
+        ))
+        (check "${name}: kiosk compositor must use the root session bus address" (
+          compositor.sessionBus.address == "unix:path=/run/user/0/bus"
         ))
         (check "${name}: kiosk compositor must use the existing session bus" (
           compositor.sessionBus.mode == "existing"
