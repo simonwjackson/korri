@@ -87,9 +87,14 @@ type SafetyEvalResult = {
   developer: LiveUsbSystemSummary
 }
 
-function evalFixture(extraArgs: Record<string, string | boolean> = {}): SafetyEvalResult {
+function evalFixture(
+  extraArgs: Record<string, string | boolean> = {},
+): SafetyEvalResult {
   const renderedArgs = Object.entries(extraArgs)
-    .map(([name, value]) => `${name} = ${value === true ? "true" : value === false ? "false" : value};`)
+    .map(
+      ([name, value]) =>
+        `${name} = ${value === true ? "true" : value === false ? "false" : value};`,
+    )
     .join(" ")
   const apply = `f: f { flakeRoot = ${FLAKE_ROOT}; ${renderedArgs} }`
   const child = spawnSync(
@@ -121,7 +126,10 @@ function evalFixture(extraArgs: Record<string, string | boolean> = {}): SafetyEv
 
 function evalFixtureFailure(extraArgs: Record<string, string | boolean>) {
   const renderedArgs = Object.entries(extraArgs)
-    .map(([name, value]) => `${name} = ${value === true ? "true" : value === false ? "false" : value};`)
+    .map(
+      ([name, value]) =>
+        `${name} = ${value === true ? "true" : value === false ? "false" : value};`,
+    )
     .join(" ")
   const apply = `f: f { flakeRoot = ${FLAKE_ROOT}; ${renderedArgs} }`
   return spawnSync(
@@ -175,18 +183,18 @@ describe("Korri live USB safety evaluation", () => {
         }),
       ]),
     )
-    expect(result.product.kioskState.environment.KORRI_MOONLIGHT_STATE_HOME).toBe(
-      "/home/korri/.cache/moonlight",
-    )
+    expect(
+      result.product.kioskState.environment.KORRI_MOONLIGHT_STATE_HOME,
+    ).toBe("/home/korri/.cache/moonlight")
   })
 
   it("exposes Developer artifact metadata without enabling SSH by default", () => {
     expect(result.developer.persistence.enabled).toBe(true)
     expect(result.developer.persistence.artifact).toBe("developer")
     expect(result.developer.persistence.scope).toBe("developer-broad")
-    expect(result.developer.kioskState.environment.KORRI_LIVE_USB_ARTIFACT).toBe(
-      "developer",
-    )
+    expect(
+      result.developer.kioskState.environment.KORRI_LIVE_USB_ARTIFACT,
+    ).toBe("developer")
     expect(
       result.developer.persistenceService.environment.KORRI_LIVE_USB_ARTIFACT,
     ).toBe("developer")
@@ -196,7 +204,9 @@ describe("Korri live USB safety evaluation", () => {
   it("rejects invalid live USB artifact values during Nix evaluation", () => {
     const invalid = evalFixtureFailure({ invalidArtifact: true })
     expect(invalid.status).not.toBe(0)
-    expect(invalid.stderr).toContain("services.korri.liveUsbPersistence.artifact")
+    expect(invalid.stderr).toContain(
+      "services.korri.liveUsbPersistence.artifact",
+    )
   })
 
   it("does not declare broad Product persistence roots", () => {
@@ -209,13 +219,19 @@ describe("Korri live USB safety evaluation", () => {
     )
     expect(
       result.product.persistence.productAllowlist.map(entry => entry.target),
-    ).not.toEqual(expect.arrayContaining(["/home/korri", "/etc", "/var", "/var/log"]))
+    ).not.toEqual(
+      expect.arrayContaining(["/home/korri", "/etc", "/var", "/var/log"]),
+    )
   })
 
   it("orders kiosk startup after the persistence resolver", () => {
     expect(result.product.persistenceService.exists).toBe(true)
-    expect(result.product.persistenceService.wantedBy).toContain("multi-user.target")
-    expect(result.product.persistenceService.before).toContain("korri-kiosk.service")
+    expect(result.product.persistenceService.wantedBy).toContain(
+      "multi-user.target",
+    )
+    expect(result.product.persistenceService.before).toContain(
+      "korri-kiosk.service",
+    )
     expect(result.product.kioskState.wants).toContain(
       "korri-live-usb-persistence.service",
     )

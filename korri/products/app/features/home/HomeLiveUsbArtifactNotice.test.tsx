@@ -13,7 +13,9 @@ describe("HomeLiveUsbArtifactNotice", () => {
   })
 
   it("does not add a Product ISO marker", () => {
-    const { container } = render(<HomeLiveUsbArtifactNotice artifact="product" />)
+    const { container } = render(
+      <HomeLiveUsbArtifactNotice artifact="product" />,
+    )
 
     expect(container.textContent).toBe("")
   })

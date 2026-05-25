@@ -170,9 +170,9 @@ describe("Korri Nix image output evaluation", () => {
     expect(result.liveUsbDeveloper.imageFileName).toContain("developer")
     expect(result.liveUsbDeveloper.persistenceArtifact).toBe("developer")
     expect(result.liveUsbDeveloper.persistenceScope).toBe("developer-broad")
-    expect(result.liveUsbDeveloper.kioskEnvironment.KORRI_LIVE_USB_ARTIFACT).toBe(
-      "developer",
-    )
+    expect(
+      result.liveUsbDeveloper.kioskEnvironment.KORRI_LIVE_USB_ARTIFACT,
+    ).toBe("developer")
   })
 
   it("headless composition enables the server without GUI or appliance services", () => {
