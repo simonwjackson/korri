@@ -2,6 +2,7 @@ import {
   DualScreenRouteRoot,
   parseDualScreenRouteRole,
 } from "@app/features/dual-screen/DualScreenRouteRoot"
+import { HomeRuntimeLayersRoot } from "@app/features/home/HomeRuntimeLayersRoot"
 import { createFileRoute } from "@tanstack/react-router"
 
 export const Route = createFileRoute("/screen")({
@@ -16,5 +17,9 @@ function ScreenRoute() {
       : undefined,
   )
 
-  return <DualScreenRouteRoot screenRole={role} />
+  return (
+    <HomeRuntimeLayersRoot>
+      <DualScreenRouteRoot screenRole={role} />
+    </HomeRuntimeLayersRoot>
+  )
 }
