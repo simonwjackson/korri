@@ -112,6 +112,7 @@ This also preserves GPU acceleration. The renderer is ROCKNIX-native Chromium, s
 
 ## Related Issues
 
+- `docs/solutions/architecture-patterns/kiosk-foreground-app-policy-over-gamescope-overlay-2026-05-24.md` — generalizes the session-invariant lesson for current Korri kiosk foreground app policy and clarifies why Gamescope is an adapter, not the outer overlay mechanism.
 - `docs/solutions/integration-issues/runtime-mask-essway-to-stop-emulationstation-relaunching-during-odin-kiosk-sessions-2026-05-03.md` — prerequisite pattern for stopping ES without mutating ROCKNIX root.
 - `docs/solutions/integration-issues/odin-electrobun-webkit-runtime-white-screen-2026-05-04.md` — explains why Electrobun/WebKit is not the production GPU path on the Odin today.
 - `docs/solutions/integration-issues/reverse-ssh-tunnel-for-odin-chromium-vite-2026-05-03.md` — prior Chromium kiosk validation path.
