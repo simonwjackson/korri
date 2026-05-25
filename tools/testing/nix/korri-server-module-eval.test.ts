@@ -64,6 +64,7 @@ type Scenarios = {
   conflictingHeadlessSource: ScenarioResult
   uinputDisabled: ScenarioResult
   displayCompatDefaults: ScenarioResult
+  gameStreamSessionEnvFile: ScenarioResult
   displayCompatDisabled: ScenarioResult
   displayCompatExtraEnv: ScenarioResult
   systemModeAbsolutePathOverrides: ScenarioResult
@@ -422,6 +423,31 @@ describe("services.korri.server NixOS module evaluation", () => {
       const script = defaults.gameStreamWrapperScript!
       expect(script).not.toMatch(/^export SDL_VIDEODRIVER=wayland/m)
       expect(script).toMatch(/:\s"\$\{SDL_VIDEODRIVER:=/)
+    })
+
+    it("exports explicit runner tool commands in the Sunshine wrapper", () => {
+      const script = defaults.gameStreamWrapperScript!
+      expect(script).toMatch(
+        /export KORRI_GAME_STREAM_SWAYMSG_COMMAND=.+\/bin\/swaymsg/,
+      )
+      expect(script).toMatch(
+        /export KORRI_GAME_STREAM_GAMESCOPE_COMMAND=.+\/bin\/gamescope/,
+      )
+    })
+
+    it("exports runner tool commands after sourcing sessionEnvFile", () => {
+      const script = scenarios.gameStreamSessionEnvFile.gameStreamWrapperScript!
+      const sourceIndex = script.indexOf('. "$env_file"')
+      const swayExportIndex = script.indexOf(
+        "export KORRI_GAME_STREAM_SWAYMSG_COMMAND=",
+      )
+      const gamescopeExportIndex = script.indexOf(
+        "export KORRI_GAME_STREAM_GAMESCOPE_COMMAND=",
+      )
+
+      expect(sourceIndex).toBeGreaterThanOrEqual(0)
+      expect(swayExportIndex).toBeGreaterThan(sourceIndex)
+      expect(gamescopeExportIndex).toBeGreaterThan(sourceIndex)
     })
   })
 

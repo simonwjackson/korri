@@ -91,6 +91,9 @@ let
       fi
     ''}
 
+    export KORRI_GAME_STREAM_SWAYMSG_COMMAND=${lib.escapeShellArg "${cfg.sway.package}/bin/swaymsg"}
+    export KORRI_GAME_STREAM_GAMESCOPE_COMMAND=${lib.escapeShellArg "${cfg.gamescope.package}/bin/gamescope"}
+
     ${optionalString (cfg.displayCompat.enable && displayCompatEnv != { }) ''
             # Display/input compatibility defaults for graphical games launched via
             # Sunshine. Each variable is only set if not already present, so trusted

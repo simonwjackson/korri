@@ -114,7 +114,6 @@ let
           apps = eval.config.services.sunshine.applications.apps or [ ];
         in
         if apps == [ ] then null else builtins.readFile (builtins.elemAt apps 0).cmd;
-
       firewallTcpPorts = eval.config.networking.firewall.allowedTCPPorts or [ ];
       firewallInterfaceNames = builtins.attrNames (eval.config.networking.firewall.interfaces or { });
 
@@ -283,6 +282,16 @@ let
         MESA_GL_VERSION_OVERRIDE = "4.5";
         SDL_VIDEODRIVER = "x11";
       };
+    };
+
+    gameStreamSessionEnvFile = evaluateWith {
+      services.korri.server = {
+        enable = true;
+        serviceMode = "system";
+        user = "testuser";
+        streamHost.enable = true;
+      };
+      services.korri.gameStream.sessionEnvFile = "/run/korri/session.env";
     };
 
     systemModeAbsolutePathOverrides = evaluateWith {

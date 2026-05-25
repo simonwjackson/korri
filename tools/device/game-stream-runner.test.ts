@@ -242,7 +242,7 @@ describe("game stream runner", () => {
     })
   })
 
-  it("uses Gamescope around the configured command when enabled", async () => {
+  it("uses the managed Gamescope command when enabled without an intent command", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
     const controlled = createControlledChild(204)
     const { spawner, specs } = createControlledSpawner(controlled.child)
@@ -257,7 +257,11 @@ describe("game stream runner", () => {
         pid: 10,
         isProcessAlive: pid => pid === 10,
       }),
-      processEnv: sessionEnv,
+      processEnv: {
+        ...sessionEnv,
+        KORRI_GAME_STREAM_GAMESCOPE_COMMAND:
+          "/nix/store/gamescope-wrapper/bin/gamescope",
+      },
       fullscreen: {
         selector: { appIds: ["gamescope"] },
         runner: treeAfterSnapshotRunner(),
@@ -270,9 +274,92 @@ describe("game stream runner", () => {
     await run
 
     expect(specs[0]).toMatchObject({
-      command: "gamescope",
+      command: "/nix/store/gamescope-wrapper/bin/gamescope",
       args: ["-f", "-b", "--", "/nix/store/neverball/bin/neverball"],
     })
+  })
+
+  it("lets an absolute intent Gamescope command override the managed default", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
+    const controlled = createControlledChild(222)
+    const { spawner, specs } = createControlledSpawner(controlled.child)
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
+        gamescope: {
+          enabled: true,
+          command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
+        },
+      }),
+      spawner,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
+        pid: 10,
+        isProcessAlive: pid => pid === 10,
+      }),
+      processEnv: {
+        ...sessionEnv,
+        KORRI_GAME_STREAM_GAMESCOPE_COMMAND:
+          "/nix/store/gamescope-wrapper/bin/gamescope",
+      },
+      fullscreen: {
+        selector: { appIds: ["gamescope"] },
+        runner: treeAfterSnapshotRunner(),
+      },
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    controlled.exit(0)
+    await run
+
+    expect(specs[0]).toMatchObject({
+      command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
+      args: ["-f", "-b", "--", "/nix/store/neverball/bin/neverball"],
+    })
+  })
+
+  it("fails before spawn when a managed run receives a PATH-based Gamescope command", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
+    let requeued = false
+    const controlled = createControlledChild(223)
+    const { spawner, specs } = createControlledSpawner(controlled.child)
+    const runner = createGameStreamRunner({
+      launchIntentStore: {
+        enqueue: async () => undefined,
+        claim: async () => ({
+          intent: createLaunchIntent(game, {
+            gamescope: { enabled: true, command: "gamescope" },
+          }),
+          complete: async () => undefined,
+          requeue: async () => {
+            requeued = true
+          },
+          quarantine: async () => undefined,
+        }),
+      },
+      spawner,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
+        pid: 10,
+        isProcessAlive: pid => pid === 10,
+      }),
+      processEnv: {
+        ...sessionEnv,
+        KORRI_GAME_STREAM_GAMESCOPE_COMMAND:
+          "/nix/store/gamescope-wrapper/bin/gamescope",
+      },
+    })
+
+    await expect(runner.run()).resolves.toMatchObject({
+      status: "failed",
+      stage: "preflight",
+      exitCode: 126,
+      message: expect.stringContaining("Gamescope command must be absolute"),
+    })
+    expect(specs).toHaveLength(0)
+    expect(requeued).toBe(true)
   })
 
   it("repairs an explicitly unwrapped foreground launch", async () => {

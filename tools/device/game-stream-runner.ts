@@ -1,5 +1,5 @@
 import { mkdir, open, readFile, unlink, writeFile } from "node:fs/promises"
-import { dirname, join } from "node:path"
+import { dirname, isAbsolute, join } from "node:path"
 import { xdgRuntimeDir } from "@shared/config/xdg-paths"
 import { decodeLaunchSpec, type LaunchSpec } from "@shared/library/launcher"
 import { logger as defaultLogger } from "@shared/logger"
@@ -93,6 +93,8 @@ export interface GameStreamRunner {
 const FALLBACK_LOCK_PATH = "/tmp/korri-game-stream-runner.lock"
 const DEFAULT_TERMINATE_GRACE_MS = 2_000
 const DEFAULT_SWAY_COMMAND_TIMEOUT_MS = 2_000
+const GAMESCOPE_COMMAND_ENV = "KORRI_GAME_STREAM_GAMESCOPE_COMMAND"
+const SWAYMSG_COMMAND_ENV = "KORRI_GAME_STREAM_SWAYMSG_COMMAND"
 
 export function createGameStreamRunner(
   options: GameStreamRunnerOptions,
@@ -261,10 +263,21 @@ export function createGameStreamRunner(
         const gamescopeEnabled = gamescope.enabled === true
         const hasResolvedGamescopePolicy =
           launchClaim.intent.gamescope !== undefined
+        const resolvedGamescopeCommand = resolveGamescopeCommand({
+          enabled: gamescopeEnabled,
+          intentCommand: gamescope.command,
+          managedCommand: processEnv[GAMESCOPE_COMMAND_ENV],
+        })
+        if (!resolvedGamescopeCommand.ok) {
+          await requeueLaunchClaim(launchClaim, "preflight failure")
+          return await fail("preflight", resolvedGamescopeCommand.reason, 126)
+        }
         const repairEnabled = gamescopeEnabled || hasResolvedGamescopePolicy
         const fullscreen = repairEnabled
           ? (options.fullscreen ?? {
-              runner: createSwayCommandRunner(),
+              runner: createSwayCommandRunner(
+                runnerToolCommand(processEnv, SWAYMSG_COMMAND_ENV, "swaymsg"),
+              ),
               // Some nested Gamescope surfaces report neither app_id nor title
               // on Sobo/SM8550. Snapshot before launch, then repair any new
               // foreground surface instead of relying on Gamescope metadata.
@@ -296,6 +309,7 @@ export function createGameStreamRunner(
 
         const spec = composeGamescopeLaunchSpec(launchClaim.intent.launch, {
           enabled: gamescopeEnabled,
+          command: resolvedGamescopeCommand.command,
           args: gamescope.args,
         })
         logger.info(
@@ -530,6 +544,49 @@ export function createFileGameStreamRunLock(
       return { acquired: false, reason: "already-running" }
     },
   }
+}
+
+function resolveGamescopeCommand(input: {
+  readonly enabled: boolean
+  readonly intentCommand?: string
+  readonly managedCommand?: string
+}):
+  | { readonly ok: true; readonly command?: string }
+  | { readonly ok: false; readonly reason: string } {
+  if (!input.enabled) return { ok: true }
+
+  const managedCommand = normalizeCommand(input.managedCommand)
+  const intentCommand = normalizeCommand(input.intentCommand)
+  if (managedCommand && !isAbsolute(managedCommand)) {
+    return {
+      ok: false,
+      reason: `${GAMESCOPE_COMMAND_ENV} must be an absolute command path`,
+    }
+  }
+  if (intentCommand) {
+    if (managedCommand && !isAbsolute(intentCommand)) {
+      return {
+        ok: false,
+        reason:
+          "Gamescope command must be absolute when the runner manages tool paths",
+      }
+    }
+    return { ok: true, command: intentCommand }
+  }
+  return { ok: true, ...(managedCommand ? { command: managedCommand } : {}) }
+}
+
+function runnerToolCommand(
+  env: NodeJS.ProcessEnv,
+  name: string,
+  fallback: string,
+): string {
+  return normalizeCommand(env[name]) ?? fallback
+}
+
+function normalizeCommand(command: string | undefined): string | undefined {
+  const trimmed = command?.trim()
+  return trimmed && trimmed.length > 0 ? trimmed : undefined
 }
 
 function preflightSessionEnvironment(input: {
