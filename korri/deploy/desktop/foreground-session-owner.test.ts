@@ -152,7 +152,7 @@ describe("foreground session owner", () => {
     const setup2 = createAdapter({ foreground: () => foreground.promise })
     const owner2 = createOwner(setup2.adapter)
     const foregroundLaunch = owner2.launch(request)
-    await flushMicrotasks()
+    await flushMicrotasks(20)
 
     const duringForeground = await owner2.launch({ id: "gba/zelda" })
     expect(duringForeground._tag).toBe("Busy")
