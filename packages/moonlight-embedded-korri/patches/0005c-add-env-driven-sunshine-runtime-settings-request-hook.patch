@@ -1,0 +1,159 @@
+diff --git a/src/main.c b/src/main.c
+index dcc4fc0..de3d833 100644
+--- a/src/main.c
++++ b/src/main.c
+@@ -53,6 +53,13 @@
+ #include <netdb.h>
+ #include <arpa/inet.h>
+ #include <openssl/rand.h>
++#ifdef __linux__
++#include <stdint.h>
++#include <limits.h>
++#include <poll.h>
++#include <sys/timerfd.h>
++#include <time.h>
++#endif
+ 
+ static void applist(PSERVER_DATA server) {
+   PAPP_LIST list = NULL;
+@@ -83,6 +90,132 @@ static int get_app_id(PSERVER_DATA server, const char *name) {
+   return -1;
+ }
+ 
++
++#ifdef __linux__
++static int runtime_settings_mvp_fd = -1;
++static uint32_t runtime_settings_mvp_request_id = 1;
++static uint16_t runtime_settings_mvp_operation = 1;
++static uint32_t runtime_settings_mvp_value = 0;
++static uint32_t runtime_settings_mvp_secondary_value = 0;
++
++static int runtime_settings_mvp_handler(int fd) {
++  uint64_t expirations = 0;
++  if (read(fd, &expirations, sizeof(expirations)) != sizeof(expirations))
++    fprintf(stderr, "live-settings-mvp: runtime settings timer read failed\n");
++
++  if (runtime_settings_mvp_operation == 3) {
++    fprintf(stderr, "live-settings-mvp: sending runtime settings request request_id=%u operation=3 width=%u height=%u\n",
++            runtime_settings_mvp_request_id, runtime_settings_mvp_value, runtime_settings_mvp_secondary_value);
++  }
++  else {
++    fprintf(stderr, "live-settings-mvp: sending runtime settings request request_id=%u operation=%u value=%u\n",
++            runtime_settings_mvp_request_id, runtime_settings_mvp_operation, runtime_settings_mvp_value);
++  }
++  LiSendSunshineRuntimeSettingsMvp(runtime_settings_mvp_request_id, runtime_settings_mvp_operation, runtime_settings_mvp_value, runtime_settings_mvp_secondary_value);
++
++  loop_remove_fd(fd);
++  close(fd);
++  runtime_settings_mvp_fd = -1;
++  return LOOP_OK;
++}
++#endif
++
++static void runtime_settings_mvp_query_capabilities(void) {
++  fprintf(stderr, "live-settings-mvp: querying runtime settings capabilities request_id=0 operation=0\n");
++  LiQuerySunshineRuntimeSettingsMvpCapabilities(0);
++}
++
++static void runtime_settings_mvp_schedule(void) {
++  const char *bitrate = getenv("MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_KBPS");
++  const char *fps = getenv("MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS");
++  const char *resolution = getenv("MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_RESOLUTION");
++  const char *delay = getenv("MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_AFTER_S");
++  char *end = NULL;
++
++  int has_bitrate = bitrate != NULL && bitrate[0] != '\0';
++  int has_fps = fps != NULL && fps[0] != '\0';
++  int has_resolution = resolution != NULL && resolution[0] != '\0';
++  if (!has_bitrate && !has_fps && !has_resolution)
++    return;
++  if ((has_bitrate ? 1 : 0) + (has_fps ? 1 : 0) + (has_resolution ? 1 : 0) != 1) {
++    fprintf(stderr, "live-settings-mvp: set only one runtime settings value: bitrate, fps, or resolution\n");
++    return;
++  }
++  runtime_settings_mvp_query_capabilities();
++
++  uint16_t operation = has_resolution ? 3 : (has_fps ? 2 : 1);
++  const char *raw_value = has_resolution ? resolution : (has_fps ? fps : bitrate);
++  const char *label = has_resolution ? "resolution" : (has_fps ? "fps" : "bitrate");
++  long requested_value = 0;
++  long secondary_value = 0;
++
++  if (has_resolution) {
++    requested_value = strtol(raw_value, &end, 10);
++    if (end == raw_value || *end != 'x' || requested_value <= 0 || requested_value > UINT32_MAX) {
++      fprintf(stderr, "live-settings-mvp: invalid runtime settings resolution value=%s\n", raw_value);
++      return;
++    }
++    const char *height_raw = end + 1;
++    secondary_value = strtol(height_raw, &end, 10);
++    if (end == height_raw || *end != '\0' || secondary_value <= 0 || secondary_value > UINT32_MAX) {
++      fprintf(stderr, "live-settings-mvp: invalid runtime settings resolution value=%s\n", raw_value);
++      return;
++    }
++  }
++  else {
++    requested_value = strtol(raw_value, &end, 10);
++    if (end == raw_value || *end != '\0' || requested_value <= 0 || requested_value > UINT32_MAX) {
++      fprintf(stderr, "live-settings-mvp: invalid runtime settings %s value=%s\n", label, raw_value);
++      return;
++    }
++  }
++
++  long delay_s = 7;
++  if (delay != NULL && delay[0] != '\0') {
++    end = NULL;
++    delay_s = strtol(delay, &end, 10);
++    if (end == delay || *end != '\0' || delay_s < 0) {
++      fprintf(stderr, "live-settings-mvp: invalid runtime settings delay value=%s\n", delay);
++      return;
++    }
++  }
++
++#ifdef __linux__
++  if (runtime_settings_mvp_fd != -1) {
++    fprintf(stderr, "live-settings-mvp: runtime settings request already scheduled\n");
++    return;
++  }
++
++  int fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC);
++  if (fd < 0) {
++    fprintf(stderr, "live-settings-mvp: failed to create runtime settings timer\n");
++    return;
++  }
++
++  struct itimerspec timer = {0};
++  timer.it_value.tv_sec = delay_s;
++  if (timerfd_settime(fd, 0, &timer, NULL) < 0) {
++    fprintf(stderr, "live-settings-mvp: failed to arm runtime settings timer\n");
++    close(fd);
++    return;
++  }
++
++  runtime_settings_mvp_operation = operation;
++  runtime_settings_mvp_value = (uint32_t) requested_value;
++  runtime_settings_mvp_secondary_value = (uint32_t) secondary_value;
++  runtime_settings_mvp_fd = fd;
++  loop_add_fd(fd, runtime_settings_mvp_handler, POLLIN | POLLERR | POLLHUP);
++  if (operation == 3) {
++    fprintf(stderr, "live-settings-mvp: runtime settings request scheduled delay_s=%ld operation=3 resolution=%ldx%ld\n", delay_s, requested_value, secondary_value);
++  }
++  else {
++    fprintf(stderr, "live-settings-mvp: runtime settings request scheduled delay_s=%ld operation=%u %s=%ld\n", delay_s, operation, label, requested_value);
++  }
++#else
++  fprintf(stderr, "live-settings-mvp: runtime settings MVP hook requires Linux timerfd support\n");
++#endif
++}
++
+ static void stream(PSERVER_DATA server, PCONFIGURATION config, enum platform system) {
+   int appId = get_app_id(server, config->app);
+   if (appId<0) {
+@@ -144,6 +277,7 @@ static void stream(PSERVER_DATA server, PCONFIGURATION config, enum platform sys
+ 
+   platform_start(system);
+   LiStartConnection(&server->serverInfo, &config->stream, &connection_callbacks, platform_get_video(system), platform_get_audio(system, config->audio_device), NULL, drFlags, config->audio_device, 0);
++  runtime_settings_mvp_schedule();
+ 
+   if (IS_EMBEDDED(system)) {
+     if (!config->viewonly)

@@ -1,29 +1,30 @@
-{ lib
-, stdenv
-, fetchFromGitHub
-, cmake
-, perl
-, pkg-config
-, alsa-lib
-, avahi
-, curl
-, expat
-, ffmpeg
-, libcec
-, libevdev
-, libpulseaudio
-, libpthreadstubs
-, libva
-, libvdpau
-, libxcb
-, libopus
-, json_c
-, SDL2
-, systemdMinimal
-, util-linux
-, libdrm
-, libglvnd
-, nix-on-rocks
+{
+  lib,
+  stdenv,
+  fetchFromGitHub,
+  cmake,
+  perl,
+  pkg-config,
+  alsa-lib,
+  avahi,
+  curl,
+  expat,
+  ffmpeg,
+  libcec,
+  libevdev,
+  libpulseaudio,
+  libpthreadstubs,
+  libva,
+  libvdpau,
+  libxcb,
+  libopus,
+  json_c,
+  SDL2,
+  systemdMinimal,
+  util-linux,
+  libdrm,
+  libglvnd,
+  nix-on-rocks,
 }:
 
 let
@@ -42,9 +43,7 @@ let
   # Embedded tag with a single `-korri` suffix. The SM8550 patch heritage
   # stays discoverable through `nix-support/moonlight-embedded-korri/`
   # manifest entries below.
-  upstreamMoonlightVersion = lib.head (
-    lib.splitString "-" nixOnRocksMoonlightManifest.version
-  );
+  upstreamMoonlightVersion = lib.head (lib.splitString "-" nixOnRocksMoonlightManifest.version);
 
   # Keep the base v4l2m2m / DRM PRIME Moonlight work in nix-on-rocks. Korri
   # only carries Korri-owned patches here.
@@ -64,13 +63,22 @@ stdenv.mkDerivation rec {
   version = "${upstreamMoonlightVersion}-korri";
 
   src = fetchFromGitHub {
-    inherit (nixOnRocksMoonlightManifest.source) owner repo rev hash fetchSubmodules;
+    inherit (nixOnRocksMoonlightManifest.source)
+      owner
+      repo
+      rev
+      hash
+      fetchSubmodules
+      ;
   };
 
   patches = (map (patch: patch.file) basePatches) ++ [
     # Korri-owned patches layered on top of nix-on-rocks' base Moonlight package.
     ./patches/0004-add-absolutetouch-flag-for-tap-to-click.patch
-    ./patches/0005-add-sunshine-runtime-settings-mvp.patch
+    ./patches/0005a-add-sunshine-runtime-settings-protocol-sender.patch
+    ./patches/0005b-track-sunshine-runtime-settings-command-outcomes.patch
+    ./patches/0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch
+    ./patches/0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch
     ./patches/0006-add-local-control-observability-ipc.patch
   ];
 
@@ -116,7 +124,7 @@ stdenv.mkDerivation rec {
       printf '%s\n' 'nix-on-rocks-manifest-version=${nixOnRocksMoonlightManifest.version}'
       printf '%s\n' 'source-rev=${nixOnRocksMoonlightManifest.source.rev}'
       printf '%s\n' 'base-patches=${lib.concatMapStringsSep " " (patch: patch.name) basePatches}'
-      printf '%s\n' 'korri-patches=0004-add-absolutetouch-flag-for-tap-to-click.patch 0005-add-sunshine-runtime-settings-mvp.patch 0006-add-local-control-observability-ipc.patch'
+      printf '%s\n' 'korri-patches=0004-add-absolutetouch-flag-for-tap-to-click.patch 0005a-add-sunshine-runtime-settings-protocol-sender.patch 0005b-track-sunshine-runtime-settings-command-outcomes.patch 0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch 0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch 0006-add-local-control-observability-ipc.patch'
       printf '%s\n' 'main-program=bin/moonlight'
     } > "$out/nix-support/moonlight-embedded-korri/manifest.txt"
 
@@ -137,6 +145,9 @@ stdenv.mkDerivation rec {
     homepage = "https://github.com/moonlight-stream/moonlight-embedded";
     license = lib.licenses.gpl3Plus;
     mainProgram = "moonlight";
-    platforms = [ "aarch64-linux" "x86_64-linux" ];
+    platforms = [
+      "aarch64-linux"
+      "x86_64-linux"
+    ];
   };
 }

@@ -3,7 +3,8 @@
   patchPath ? null,
   patchPaths ? [ patchPath ],
   readmePath,
-  moonlightPatchPath,
+  moonlightPatchPath ? null,
+  moonlightPatchPaths ? [ moonlightPatchPath ],
   moonlightReadmePath,
   sunshinePackage,
   moonlightPackage,
@@ -15,7 +16,7 @@ let
 
   patch = lib.concatStringsSep "\n" (map builtins.readFile patchPaths);
   readme = builtins.readFile readmePath;
-  moonlightPatch = builtins.readFile moonlightPatchPath;
+  moonlightPatch = lib.concatStringsSep "\n" (map builtins.readFile moonlightPatchPaths);
   moonlightReadme = builtins.readFile moonlightReadmePath;
   contains = needle: haystack: lib.hasInfix needle haystack;
 

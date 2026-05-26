@@ -13,9 +13,16 @@ It layers on top of the nix-on-rocks Moonlight Embedded package inputs:
 
 Adds `-absolutetouch` for handheld touchscreen tap-to-click over the stream.
 
-### `0005-add-sunshine-runtime-settings-mvp.patch`
+### Sunshine runtime-settings patch series
 
-Adds an experimental Sunshine runtime-settings request sender and ack logger for the `0x5504` / `0x5505` MVP protocol. One-shot runtime settings requests are controlled by:
+Adds an experimental Sunshine runtime-settings request sender and ack logger for the `0x5504` / `0x5505` MVP protocol, split by review concern:
+
+- `0005a-add-sunshine-runtime-settings-protocol-sender.patch` adds the Moonlight-common protocol constants, request payloads, and public `LiSendSunshineRuntimeSettingsMvp()` / capability-query entrypoints.
+- `0005b-track-sunshine-runtime-settings-command-outcomes.patch` adds ack parsing, capability state, command lifecycle tracking, timeout/stale-ack handling, explicit current-applied state, and proof-gated validation.
+- `0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch` adds the Linux timerfd-backed one-shot environment hook for manual runtime-settings smoke tests.
+- `0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch` adds the opt-in connection-status spike adaptation experiment for bitrate/FPS only.
+
+One-shot runtime settings requests are controlled by:
 
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_KBPS`
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS`

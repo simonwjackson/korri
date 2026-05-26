@@ -1,0 +1,268 @@
+diff --git a/third_party/moonlight-common-c/src/ControlStream.c b/third_party/moonlight-common-c/src/ControlStream.c
+index b7e3685..1542448 100644
+--- a/third_party/moonlight-common-c/src/ControlStream.c
++++ b/third_party/moonlight-common-c/src/ControlStream.c
+@@ -2,6 +2,8 @@
+ 
+ // This is a private header, but it just contains some time macros
+ #include <enet/time.h>
++#include <stdlib.h>
++#include <string.h>
+ 
+ #ifndef MIN
+ #define MIN(x, y) ((x) < (y) ? (x) : (y))
+@@ -143,7 +145,35 @@ static PPLT_CRYPTO_CONTEXT decryptionCtx;
+ #define CONTROL_STREAM_TIMEOUT_SEC 10
+ #define CONTROL_STREAM_LINGER_TIMEOUT_SEC 2
+ 
+-static const short packetTypesGen3[] = {
++#define SS_RUNTIME_SETTINGS_MVP_REQUEST_PTYPE 0x5504
++#define SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES 0
++#define SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_BITRATE_KBPS 1
++#define SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_FPS 2
++#define SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_RESOLUTION 3
++#define SS_RUNTIME_SETTINGS_MVP_OPERATION_MAX 3
++
++typedef struct _SS_RUNTIME_SETTINGS_MVP_REQUEST_PREFIX {
++    uint32_t requestId;
++    uint16_t operation;
++    uint16_t reserved;
++} SS_RUNTIME_SETTINGS_MVP_REQUEST_PREFIX, *PSS_RUNTIME_SETTINGS_MVP_REQUEST_PREFIX;
++
++typedef struct _SS_RUNTIME_SETTINGS_MVP_REQUEST {
++    uint32_t requestId;
++    uint16_t operation;
++    uint16_t reserved;
++    uint32_t value;
++} SS_RUNTIME_SETTINGS_MVP_REQUEST, *PSS_RUNTIME_SETTINGS_MVP_REQUEST;
++
++typedef struct _SS_RUNTIME_SETTINGS_MVP_RESOLUTION_REQUEST {
++    uint32_t requestId;
++    uint16_t operation;
++    uint16_t reserved;
++    uint32_t width;
++    uint32_t height;
++} SS_RUNTIME_SETTINGS_MVP_RESOLUTION_REQUEST, *PSS_RUNTIME_SETTINGS_MVP_RESOLUTION_REQUEST;
++
++static const short packetTypesGen3[] = {static const short packetTypesGen3[] = {
+     0x1407, // Request IDR frame
+     0x1410, // Start B
+     0x1404, // Invalidate reference frames
+@@ -665,7 +695,90 @@ static bool isPacketSentWaitingForAck(ENetPacket* packet) {
+     return false;
+ }
+ 
+-static bool sendMessageEnet(short ptype, short paylen, const void* payload, uint8_t channelId, uint32_t flags, bool moreData) {
++static bool sendMessageAndForget(short ptype, short paylen, const void* payload, uint8_t channelId, uint32_t flags, bool moreData);
++
++int LiSendSunshineRuntimeSettingsMvp(uint32_t requestId, uint16_t operation, uint32_t value, uint32_t secondaryValue) {
++    SS_RUNTIME_SETTINGS_MVP_REQUEST_PREFIX queryRequest;
++    SS_RUNTIME_SETTINGS_MVP_REQUEST request;
++    SS_RUNTIME_SETTINGS_MVP_RESOLUTION_REQUEST resolutionRequest;
++    const void* payload;
++    short payloadLength;
++
++    if (!IS_SUNSHINE()) {
++        Limelog("live-settings-mvp: runtime settings request skipped reason=not_sunshine\n");
++        return -1;
++    }
++
++    if (operation > SS_RUNTIME_SETTINGS_MVP_OPERATION_MAX) {
++        Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=locally-rejected reason=unsupported-operation\n", requestId, operation);
++        return -4;
++    }
++
++    if (!encryptedControlStream || peer == NULL) {
++        Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=locally-rejected reason=control-not-ready encrypted=%d peer=%p\n",
++                requestId, operation, encryptedControlStream ? 1 : 0, peer);
++        return -2;
++    }
++
++    if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES) {
++        queryRequest.requestId = LE32(requestId);
++        queryRequest.operation = LE16(operation);
++        queryRequest.reserved = 0;
++        payload = &queryRequest;
++        payloadLength = sizeof(queryRequest);
++    }
++    else if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_RESOLUTION) {
++        resolutionRequest.requestId = LE32(requestId);
++        resolutionRequest.operation = LE16(operation);
++        resolutionRequest.reserved = 0;
++        resolutionRequest.width = LE32(value);
++        resolutionRequest.height = LE32(secondaryValue);
++        payload = &resolutionRequest;
++        payloadLength = sizeof(resolutionRequest);
++    }
++    else {
++        request.requestId = LE32(requestId);
++        request.operation = LE16(operation);
++        request.reserved = 0;
++        request.value = LE32(value);
++        payload = &request;
++        payloadLength = sizeof(request);
++    }
++
++    if (!sendMessageAndForget(SS_RUNTIME_SETTINGS_MVP_REQUEST_PTYPE,
++                              payloadLength,
++                              payload,
++                              CTRL_CHANNEL_GENERIC,
++                              ENET_PACKET_FLAG_RELIABLE,
++                              false)) {
++        Limelog("live-settings-mvp: runtime settings request failed request_id=%u operation=%u value=%u\n", requestId, operation, value);
++        return -3;
++    }
++
++    if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES) {
++        Limelog("live-settings-mvp: runtime settings request sent request_id=%u operation=0 capability query packet=0x5504\n",
++                requestId);
++    }
++    else if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_RESOLUTION) {
++        Limelog("live-settings-mvp: runtime settings request sent request_id=%u operation=3 resolution=%ux%u packet=0x5504\n",
++                requestId, value, secondaryValue);
++    }
++    else if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_FPS) {
++        Limelog("live-settings-mvp: runtime settings request sent request_id=%u operation=2 fps=%u packet=0x5504\n",
++                requestId, value);
++    }
++    else {
++        Limelog("live-settings-mvp: runtime settings request sent request_id=%u operation=1 bitrate_kbps=%u packet=0x5504\n",
++                requestId, value);
++    }
++    return 0;
++}
++
++int LiQuerySunshineRuntimeSettingsMvpCapabilities(uint32_t requestId) {
++    return LiSendSunshineRuntimeSettingsMvp(requestId, SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES, 0, 0);
++}
++
++static bool sendMessageEnet(short ptype, short paylen, const void* payload, uint8_t channelId, uint32_t flags, bool moreData) {static bool sendMessageEnet(short ptype, short paylen, const void* payload, uint8_t channelId, uint32_t flags, bool moreData) {
+     ENetPacket* enetPacket;
+     int err;
+ 
+@@ -794,6 +907,96 @@ static bool sendMessageEnet(short ptype, short paylen, const void* payload, uint
+     return true;
+ }
+ 
++int LiSendSunshineRuntimeSettingsMvp(uint32_t requestId, uint16_t operation, uint32_t value, uint32_t secondaryValue) {
++    SS_RUNTIME_SETTINGS_MVP_REQUEST_PREFIX queryRequest;
++    SS_RUNTIME_SETTINGS_MVP_REQUEST request;
++    SS_RUNTIME_SETTINGS_MVP_RESOLUTION_REQUEST resolutionRequest;
++    const void* payload;
++    short payloadLength;
++
++    if (!IS_SUNSHINE()) {
++        Limelog("live-settings-mvp: runtime settings request skipped reason=not_sunshine\n");
++        return -1;
++    }
++
++    if (operation > SS_RUNTIME_SETTINGS_MVP_OPERATION_MAX) {
++        Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=locally-rejected reason=unsupported-operation\n", requestId, operation);
++        return -4;
++    }
++
++    if (!encryptedControlStream || peer == NULL) {
++        Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=locally-rejected reason=control-not-ready encrypted=%d peer=%p\n",
++                requestId, operation, encryptedControlStream ? 1 : 0, peer);
++        return -2;
++    }
++
++    if (!runtime_settings_mvp_validate_before_send(requestId, operation, value, secondaryValue)) {
++        return -6;
++    }
++
++    if (!runtime_settings_mvp_record_sent(requestId, operation)) {
++        return -5;
++    }
++
++    if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES) {
++        queryRequest.requestId = LE32(requestId);
++        queryRequest.operation = LE16(operation);
++        queryRequest.reserved = 0;
++        payload = &queryRequest;
++        payloadLength = sizeof(queryRequest);
++    }
++    else if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_RESOLUTION) {
++        resolutionRequest.requestId = LE32(requestId);
++        resolutionRequest.operation = LE16(operation);
++        resolutionRequest.reserved = 0;
++        resolutionRequest.width = LE32(value);
++        resolutionRequest.height = LE32(secondaryValue);
++        payload = &resolutionRequest;
++        payloadLength = sizeof(resolutionRequest);
++    }
++    else {
++        request.requestId = LE32(requestId);
++        request.operation = LE16(operation);
++        request.reserved = 0;
++        request.value = LE32(value);
++        payload = &request;
++        payloadLength = sizeof(request);
++    }
++
++    if (!sendMessageAndForget(SS_RUNTIME_SETTINGS_MVP_REQUEST_PTYPE,
++                              payloadLength,
++                              payload,
++                              CTRL_CHANNEL_GENERIC,
++                              ENET_PACKET_FLAG_RELIABLE,
++                              false)) {
++        Limelog("live-settings-mvp: runtime settings request failed request_id=%u operation=%u value=%u\n", requestId, operation, value);
++        runtime_settings_mvp_record_send_failed(requestId, operation);
++        return -3;
++    }
++
++    if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES) {
++        Limelog("live-settings-mvp: runtime settings request sent request_id=%u operation=0 capability query packet=0x5504\n",
++                requestId);
++    }
++    else if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_RESOLUTION) {
++        Limelog("live-settings-mvp: runtime settings request sent request_id=%u operation=3 resolution=%ux%u packet=0x5504\n",
++                requestId, value, secondaryValue);
++    }
++    else if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_FPS) {
++        Limelog("live-settings-mvp: runtime settings request sent request_id=%u operation=2 fps=%u packet=0x5504\n",
++                requestId, value);
++    }
++    else {
++        Limelog("live-settings-mvp: runtime settings request sent request_id=%u operation=1 bitrate_kbps=%u packet=0x5504\n",
++                requestId, value);
++    }
++    return 0;
++}
++
++int LiQuerySunshineRuntimeSettingsMvpCapabilities(uint32_t requestId) {
++    return LiSendSunshineRuntimeSettingsMvp(requestId, SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES, 0, 0);
++}
++
+ static bool sendMessageTcp(short ptype, short paylen, const void* payload) {
+     PNVCTL_TCP_PACKET_HEADER packet;
+     SOCK_RET err;
+@@ -1162,8 +1365,9 @@ static void controlReceiveThreadFunc(void* context) {
+                 }
+             }
+             else {
+-                // No events ready - wait for readability or a local RTO timer to expire
++                // No events ready - wait for readability, a local RTO timer, or a runtime settings no-ack timeout to expire
+                 enet_uint32 condition = ENET_SOCKET_WAIT_RECEIVE;
++                waitTimeMs = MIN(waitTimeMs, SS_RUNTIME_SETTINGS_MVP_TIMEOUT_MS);
+                 enet_socket_wait(client->socket, &condition, waitTimeMs);
+                 continue;
+             }
+diff --git a/third_party/moonlight-common-c/src/Limelight.h b/third_party/moonlight-common-c/src/Limelight.h
+index ac87a4b..d628036 100644
+--- a/third_party/moonlight-common-c/src/Limelight.h
++++ b/third_party/moonlight-common-c/src/Limelight.h
+@@ -999,6 +999,13 @@ bool LiGetHdrMetadata(PSS_HDR_METADATA metadata);
+ // frame, just that an IDR frame will arrive soon.
+ void LiRequestIdrFrame(void);
+ 
++// Experimental Sunshine runtime settings MVP probe. This sends a Sunshine-specific
++// encrypted control request and logs the structured ack if one is received. It is
++// intentionally not a stable API and does not imply that live runtime mutation is
++// supported by the host.
++int LiSendSunshineRuntimeSettingsMvp(uint32_t requestId, uint16_t operation, uint32_t value, uint32_t secondaryValue);
++int LiQuerySunshineRuntimeSettingsMvpCapabilities(uint32_t requestId);
++
+ // This function returns any extended feature flags supported by the host.
+ #define LI_FF_PEN_TOUCH_EVENTS        0x01 // LiSendTouchEvent()/LiSendPenEvent() supported
+ #define LI_FF_CONTROLLER_TOUCH_EVENTS 0x02 // LiSendControllerTouchEvent() supported

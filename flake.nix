@@ -558,7 +558,12 @@
                     ./packages/sunshine-korri/patches/0004-add-proof-gated-runtime-resolution-apply-path.patch
                   ];
                   readmePath = ./packages/sunshine-korri/README.md;
-                  moonlightPatchPath = ./packages/moonlight-embedded-korri/patches/0005-add-sunshine-runtime-settings-mvp.patch;
+                  moonlightPatchPaths = [
+                    ./packages/moonlight-embedded-korri/patches/0005a-add-sunshine-runtime-settings-protocol-sender.patch
+                    ./packages/moonlight-embedded-korri/patches/0005b-track-sunshine-runtime-settings-command-outcomes.patch
+                    ./packages/moonlight-embedded-korri/patches/0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch
+                    ./packages/moonlight-embedded-korri/patches/0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch
+                  ];
                   moonlightReadmePath = ./packages/moonlight-embedded-korri/README.md;
                   sunshinePackage = self.packages.${system}.sunshine-korri;
                   moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
