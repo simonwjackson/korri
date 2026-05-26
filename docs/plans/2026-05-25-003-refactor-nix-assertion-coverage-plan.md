@@ -1,7 +1,7 @@
 ---
 title: "refactor: Expand native Nix assertion coverage"
 type: refactor
-status: active
+status: completed
 date: 2026-05-25
 deepened: 2026-05-25
 verify_command: "just typecheck && just test-unit && just test-nix && just lint"
