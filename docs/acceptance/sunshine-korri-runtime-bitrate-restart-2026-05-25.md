@@ -13,14 +13,14 @@ The earlier direct `AVCodecContext` field/AVOption mutation path acknowledged su
 - Client: patched Moonlight sender
 - Request packet: `0x5504`
 - Ack packet: `0x5505`
-- Runtime operation: `1` = set bitrate kbps
+- Runtime operations: `1` = set bitrate kbps, `2` = set effective FPS
 - Gate: `SUNSHINE_LIVE_SETTINGS_MVP=1`
 - Measurement: `nixpkgs#tcpdump` on local `tailscale0`, filtering Sunshine video UDP from port `48998`
 - Current status contract: `0` applied, `1` failed/unsupported, `2` invalid, `3` disabled
 
 ## Current benchmark pass
 
-Run date: 2026-05-25.
+Run dates: 2026-05-25 and 2026-05-26.
 
 Setup:
 
@@ -119,13 +119,98 @@ pre_2_9s     packets=435 bytes=6552000 kbps=7488.0
 post_13_20s packets=430 bytes=6552000 kbps=7488.0
 ```
 
+### Runtime FPS validation
+
+Launch at `60 FPS`, request `30 FPS` after 10 seconds.
+
+Moonlight ack:
+
+```text
+live-settings-mvp: runtime settings ack request_id=1 operation=2 status=0 applied_fps=30 packet=0x5505
+```
+
+Sunshine markers:
+
+```text
+Creating encoder [h264_vaapi]
+Streaming bitrate is 5708000
+[h264_vaapi] RC framerate: 60/1 (60.00 fps)
+live-settings-mvp: request_id=1 operation=2 requested_value=30 configured_bitrate_kbps=5708 configured_fps=60 queued=1
+live-settings-mvp: capture_sync runtime FPS request_id=1 requested_fps=30 applied_fps=30 status=0
+```
+
+Frame-level measurement used unique RTP timestamps from the captured video UDP pcap:
+
+```text
+pre_2_9s      frames=420 fps=60.0
+post_13_20s   frames=210 fps=30.0
+late_20_27s   frames=210 fps=30.0
+second_08     frames=60
+second_09     frames=60
+second_10     frames=30
+second_11     frames=30
+```
+
+Packet cadence and wire bitrate also dropped after the request:
+
+```text
+pre_2_9s      packets=430 pps=61.4 kbps=7488.0
+post_13_20s   packets=216 pps=30.9 kbps=3744.0
+late_20_27s   packets=220 pps=31.4 kbps=3744.0
+```
+
+A second downshift to `15 FPS` showed the same frame-level behavior:
+
+```text
+live-settings-mvp: runtime settings ack request_id=1 operation=2 status=0 applied_fps=15 packet=0x5505
+pre_2_9s      frames=420 fps=60.0
+post_13_20s   frames=105 fps=15.0
+second_09     frames=60
+second_10     frames=15
+second_11     frames=15
+```
+
+### Runtime FPS edge cases
+
+```text
+# FPS above launch FPS is invalid.
+live-settings-mvp: runtime settings ack request_id=1 operation=2 status=2 applied_fps=60 packet=0x5505
+
+# HEVC remains unsupported.
+live-settings-mvp: runtime settings ack request_id=1 operation=2 status=1 applied_fps=60 packet=0x5505
+
+# Gate disabled returns disabled.
+live-settings-mvp: runtime settings ack request_id=1 operation=2 status=3 applied_fps=60 packet=0x5505
+
+# Moonlight refuses ambiguous one-shot input.
+live-settings-mvp: set only one runtime settings value: bitrate or fps
+```
+
+### Bitrate regression after generic runtime settings protocol
+
+The generic `operation/value` packet shape preserved the proven bitrate path:
+
+```text
+# 8000-ish launch, request 12000 kbps after 5s.
+live-settings-mvp: runtime settings ack request_id=1 operation=1 status=0 applied_bitrate_kbps=12000 packet=0x5505
+pre_2_9s        kbps=11303.3
+transition_9_13s kbps=14976.0
+
+# 12000 launch, request 3000 kbps after 5s.
+live-settings-mvp: runtime settings ack request_id=1 operation=1 status=0 applied_bitrate_kbps=3000 packet=0x5505
+pre_2_9s        kbps=7407.2
+post_13_20s     kbps=2877.5
+```
+
 ## Interpretation
 
 True runtime bitrate changes are feasible for `h264_vaapi` when Sunshine recreates the active AVCodec/VAAPI encoder session in-place and keeps the stream/control session alive.
 
-Unsupported encoders fail safely: the client receives `status=1`, and Sunshine reports the current applied bitrate instead of pretending that the requested bitrate was applied.
+Runtime FPS downshifts are feasible for `h264_vaapi` as frame pacing: the stream stays alive, acks report the applied FPS, and unique RTP timestamp cadence drops to the requested FPS without renegotiating stream resolution or client capabilities.
 
-This does not prove live resolution, FPS, HDR, codec, or preset changes. It also does not prove NVENC, software encoders, HEVC, or AV1. Those should remain unsupported until separately validated.
+Unsupported encoders fail safely: the client receives `status=1`, and Sunshine reports the current applied bitrate/FPS instead of pretending that the requested value was applied.
+
+This does not prove live resolution, HDR, codec, or preset changes. It also does not prove NVENC, software encoders, HEVC, or AV1. Those should remain unsupported until separately validated.
 
 ## Package
 
