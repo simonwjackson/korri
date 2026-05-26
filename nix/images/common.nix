@@ -20,6 +20,7 @@ let
 
   liveUsbModule = import ./live-usb.nix { inherit korri nixpkgs; };
   liveUsbRuntimeModule = import ./live-usb-runtime.nix { inherit korri; };
+  desktopLabModule = ./desktop-lab.nix;
 
   baseModule =
     { lib, ... }:
@@ -89,6 +90,17 @@ rec {
       inherit platformModules modules includeBase;
     };
 
+  mkDesktopLabModules =
+    {
+      platformModules ? [ ],
+      modules ? [ ],
+      includeBase ? true,
+    }:
+    mkProductModules {
+      productModule = desktopLabModule;
+      inherit platformModules modules includeBase;
+    };
+
   mkLiveUsbKioskRuntimeModules =
     {
       platformModules ? [ ],
@@ -126,6 +138,15 @@ rec {
       modules ? [ ],
     }:
     mkSystemFromModules (mkKioskModules {
+      inherit platformModules modules;
+    });
+
+  mkDesktopLabSystem =
+    {
+      platformModules ? [ ],
+      modules ? [ ],
+    }:
+    mkSystemFromModules (mkDesktopLabModules {
       inherit platformModules modules;
     });
 

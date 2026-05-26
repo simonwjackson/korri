@@ -20,6 +20,7 @@ let
   summarize = eval: {
     serverEnabled = eval.config.services.korri.server.enable or false;
     clientEnabled = eval.config.services.korri.client.enable or false;
+    compositorEnabled = eval.config.services.korri.compositor.enable or false;
     kioskEnabled = eval.config.services.korri.compositor.kiosk.enable or false;
     inputdEnabled = eval.config.services.korri.input.inputd.enable or false;
     serverHost = eval.config.services.korri.server.host or null;
@@ -41,6 +42,13 @@ let
     kioskEnvironment = eval.config.systemd.services."korri-compositor".environment or { };
     kioskPath = map toString (eval.config.systemd.services."korri-compositor".path or [ ]);
     clientMainProgram = eval.config.services.korri.client.package.meta.mainProgram or null;
+    steamEnabled = eval.config.programs.steam.enable or false;
+    systemPackages = map toString (eval.config.environment.systemPackages or [ ]);
+    swayConfig =
+      if eval.config.services.korri.compositor.enable or false then
+        builtins.readFile eval.config.services.korri.compositor.sway.configFile
+      else
+        "";
   };
 
   headless = imageLib.mkHeadlessSystem {
@@ -48,6 +56,10 @@ let
   };
 
   kiosk = imageLib.mkKioskSystem {
+    platformModules = [ x86Platform ];
+  };
+
+  desktopLab = imageLib.mkDesktopLabSystem {
     platformModules = [ x86Platform ];
   };
 
@@ -100,6 +112,7 @@ let
 
   headlessSummary = summarize headless;
   kioskSummary = summarize kiosk;
+  desktopLabSummary = summarize desktopLab;
   liveUsbSummary = summarize liveUsb;
   liveUsbDeveloperSummary = summarize liveUsbDeveloper;
   kioskWithExternalPlatformSummary = summarize kioskWithExternalPlatform;
@@ -113,11 +126,15 @@ let
   checks = [
     (check "headless system package must be exposed" (packages ? korri-headless-system))
     (check "kiosk system package must be exposed" (packages ? korri-kiosk-system))
+    (check "desktop lab system package must be exposed" (packages ? korri-desktop-lab-system))
     (check "headless system package must be a derivation" (
       (packages.korri-headless-system or null).drvPath or null != null
     ))
     (check "kiosk system package must be a derivation" (
       (packages.korri-kiosk-system or null).drvPath or null != null
+    ))
+    (check "desktop lab system package must be a derivation" (
+      (packages.korri-desktop-lab-system or null).drvPath or null != null
     ))
     (check "live USB ISO package must be exposed" (packages ? korri-kiosk-live-iso))
     (check "live USB Developer ISO package must be exposed" (packages ? korri-kiosk-live-developer-iso))
@@ -219,6 +236,38 @@ let
     (check "headless composition must not enable kiosk" (!headlessSummary.kioskEnabled))
     (check "headless composition must not enable inputd" (!headlessSummary.inputdEnabled))
     (check "headless composition must not create compositor unit" (!headlessSummary.kioskUnitExists))
+    (check "desktop lab NixOS assertions must pass" (assertionsPassed desktopLab))
+    (check "desktop lab must enable the compositor substrate" desktopLabSummary.compositorEnabled)
+    (check "desktop lab must keep the local Korri GUI off" (!desktopLabSummary.kioskEnabled))
+    (check "desktop lab must not enable the Korri client" (!desktopLabSummary.clientEnabled))
+    (check "desktop lab must not enable the Korri server" (!desktopLabSummary.serverEnabled))
+    (check "desktop lab must not enable inputd" (!desktopLabSummary.inputdEnabled))
+    (check "desktop lab must create the compositor unit" desktopLabSummary.kioskUnitExists)
+    (check "desktop lab must enable seatd for the Sway session" desktopLabSummary.seatdEnabled)
+    (check "desktop lab must run as the lab user" (desktopLabSummary.kioskUser == "korri-lab"))
+    (check "desktop lab user must have device access groups" (
+      builtins.all (group: builtins.elem group desktopLabSummary.kioskUserExtraGroups) [
+        "input"
+        "render"
+        "seat"
+        "video"
+      ]
+    ))
+    (check "desktop lab must enable NixOS Steam support on x86" desktopLabSummary.steamEnabled)
+    (check "desktop lab system packages must include Steam and Sway launch helpers" (
+      let
+        packagesText = lib.concatStringsSep "\n" desktopLabSummary.systemPackages;
+      in
+      lib.hasInfix "steam" packagesText
+      && lib.hasInfix "korri-desktop-lab-sway-exec" packagesText
+      && lib.hasInfix "korri-desktop-lab-start-steam" packagesText
+    ))
+    (check "desktop lab Sway config must not launch the Korri kiosk client" (
+      !lib.hasInfix "korri-compositor-kiosk-client" desktopLabSummary.swayConfig
+    ))
+    (check "desktop lab Sway config must keep Xwayland available for Steam" (
+      lib.hasInfix "xwayland enable" desktopLabSummary.swayConfig
+    ))
     (check "kiosk NixOS assertions must pass" (assertionsPassed kiosk))
     (check "kiosk composition must enable server" kioskSummary.serverEnabled)
     (check "kiosk server must listen locally" (kioskSummary.serverHost == "127.0.0.1"))

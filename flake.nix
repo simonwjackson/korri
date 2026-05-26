@@ -406,6 +406,10 @@
           platformModules = [ ./nix/images/platforms/x86.nix ];
         };
 
+        korriDesktopLabSystem = korriImages.mkDesktopLabSystem {
+          platformModules = [ ./nix/images/platforms/x86.nix ];
+        };
+
         korriKioskLiveUsbSystem = korriImages.mkLiveUsbKioskSystem {
           platformModules = [ ./nix/images/platforms/x86.nix ];
         };
@@ -448,6 +452,7 @@
           korri-desktop-x86-kiosk = korriDesktopX86Kiosk;
           korri-headless-system = korriHeadlessSystem.config.system.build.toplevel;
           korri-kiosk-system = korriKioskSystem.config.system.build.toplevel;
+          korri-desktop-lab-system = korriDesktopLabSystem.config.system.build.toplevel;
           korri-kiosk-live-iso = korriKioskLiveUsbSystem.config.system.build.isoImage;
           korri-kiosk-live-developer-iso = korriKioskLiveUsbDeveloperSystem.config.system.build.isoImage;
         }
@@ -518,6 +523,7 @@
                 ./nix/images/common.nix
                 ./nix/images/headless.nix
                 ./nix/images/kiosk.nix
+                ./nix/images/desktop-lab.nix
                 ./nix/images/platforms/x86.nix
               ];
             };
@@ -591,6 +597,7 @@
                 ./nix/images/common.nix
                 ./nix/images/headless.nix
                 ./nix/images/kiosk.nix
+                ./nix/images/desktop-lab.nix
                 ./nix/images/platforms/x86.nix
               ];
             };
