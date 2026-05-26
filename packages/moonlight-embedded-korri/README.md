@@ -38,6 +38,8 @@ Runtime settings mechanism contract:
 
 - Existing packet IDs remain stable: request `0x5504` and ack `0x5505`.
 - Operation `0` is a non-mutating capability query for the active Sunshine session; one-shot validation requests send a capability query before the delayed mutation command.
+- Moonlight records launch baseline bitrate, FPS, and resolution separately from current applied values when parsing capability acks.
+- Restore is explicit: callers send normal set commands back to the launch baseline values; Moonlight does not auto-restore from network or command outcomes.
 - Operations `1`, `2`, and `3` remain bitrate, FPS, and resolution mutation requests.
 - Moonlight keeps bounded per-operation command state, rejects same-family in-flight commands with `conflict`, and records terminal `host-applied`, `host-rejected`, `timed-out`, `stale-ack-observed`, and `stream-ended` outcomes.
 - Runtime settings command timeout is currently 3000 ms; an expired command records `timed-out` with reason `no-ack`, and a later matching ack is treated as stale diagnostic input.

@@ -135,10 +135,35 @@ let
       && contains "RUNTIME_SETTINGS_STATUS_INVALID" patch
       && contains "std::uint64_t" patch
     ))
+    (check "Sunshine runtime settings track launch baselines separately from current applied values" (
+      contains "runtime_settings_launch_bitrate_kbps" patch
+      && contains "runtime_settings_applied_bitrate_kbps" patch
+      && contains "runtime_settings_launch_fps" patch
+      && contains "runtime_settings_applied_fps" patch
+      && contains "runtime_settings_launch_width" patch
+      && contains "runtime_settings_applied_width" patch
+      && contains "runtime_settings_launch_height" patch
+      && contains "runtime_settings_applied_height" patch
+    ))
+    (check "Sunshine runtime settings expose launch baselines in capability acks" (
+      contains "launch_bitrate_kbps" patch
+      && contains "launch_fps" patch
+      && contains "launch_width" patch
+      && contains "launch_height" patch
+      && contains "plaintext.launch_bitrate_kbps = session->control.runtime_settings_launch_bitrate_kbps" patch
+      && contains "plaintext.current_bitrate_kbps = session->control.runtime_settings_applied_bitrate_kbps" patch
+    ))
+    (check "Sunshine runtime settings update current applied values without mutating launch baselines" (
+      contains "session->control.runtime_settings_applied_bitrate_kbps = ack.applied_value" patch
+      && contains "session->control.runtime_settings_applied_fps = ack.applied_value" patch
+      && contains "session->control.runtime_settings_applied_width = ack.applied_width" patch
+      && contains "session->control.runtime_settings_applied_height = ack.applied_height" patch
+      && contains "session->control.runtime_settings_launch_bitrate_kbps = (std::uint32_t) session->config.monitor.bitrate" patch
+    ))
     (check "Sunshine runtime resolution tracks applied dimensions for later acks" (
       contains "runtime_settings_applied_width" patch
       && contains "runtime_settings_applied_height" patch
-      && contains "session->control.runtime_settings_applied_width = (std::uint32_t) session->config.monitor.width" patch
+      && contains "session->control.runtime_settings_applied_width = session->control.runtime_settings_launch_width" patch
       && contains "auto current_applied_width = session->control.runtime_settings_applied_width" patch
       && contains "ack.status == video::RUNTIME_SETTINGS_STATUS_APPLIED" patch
     ))
@@ -172,6 +197,31 @@ let
       && contains "SS_RUNTIME_SETTINGS_MVP_REASON_NONE" moonlightPatch
       && contains "legacy no-reason runtime settings ack" moonlightPatch
       && contains "reason=" moonlightPatch
+    ))
+    (check "Moonlight runtime settings helper state exposes launch baselines separately from current values" (
+      contains "SS_RUNTIME_SETTINGS_MVP_SETTINGS_STATE" moonlightPatch
+      && contains "runtime_settings_mvp_settings_state" moonlightPatch
+      && contains "launchBitrateKbps" moonlightPatch
+      && contains "currentBitrateKbps" moonlightPatch
+      && contains "launchFps" moonlightPatch
+      && contains "currentFps" moonlightPatch
+      && contains "launchWidth" moonlightPatch
+      && contains "currentWidth" moonlightPatch
+    ))
+    (check "Moonlight runtime settings capability parser records launch baseline values" (
+      contains "BbGet32(&bb, &launchBitrateKbps)" moonlightPatch
+      && contains "BbGet32(&bb, &launchFps)" moonlightPatch
+      && contains "BbGet32(&bb, &launchWidth)" moonlightPatch
+      && contains "BbGet32(&bb, &launchHeight)" moonlightPatch
+      && contains "runtime_settings_mvp_record_capability" moonlightPatch
+    ))
+    (check "Runtime settings restore remains explicit normal set commands only" (
+      contains "Restore is explicit: callers send normal set commands back to the launch baseline values" readme
+      && contains "Restore is explicit: callers send normal set commands back to the launch baseline values" moonlightReadme
+      && !(contains "AUTO_RESTORE" patch)
+      && !(contains "AUTO_RESTORE" moonlightPatch)
+      && !(contains "RESTORE_BASELINE" patch)
+      && !(contains "RESTORE_BASELINE" moonlightPatch)
     ))
     (check "Moonlight runtime settings command state rejects same-family conflicts" (
       contains "SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_IN_FLIGHT" moonlightPatch

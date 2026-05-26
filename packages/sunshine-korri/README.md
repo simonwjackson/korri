@@ -34,7 +34,9 @@ Runtime settings mechanism contract:
 - Runtime settings decisions distinguish local Moonlight command readiness, host Sunshine runtime-settings capability, and target-client proof as separate facts.
 - Existing packet IDs remain stable: request `0x5504` and ack `0x5505`.
 - Operation `0` is a non-mutating capability query for the active Sunshine session.
-- Operation `0` returns a `0x5505` capability ack with gate status, reason, supported operations, conservative bounds, and current applied bitrate/FPS/resolution facts.
+- Operation `0` returns a `0x5505` capability ack with gate status, reason, supported operations, conservative bounds, launch baseline values, and current applied bitrate/FPS/resolution facts.
+- Launch baseline bitrate, FPS, and resolution are tracked separately from current applied values for the lifetime of the stream.
+- Restore is explicit: callers send normal set commands back to the launch baseline values; Sunshine does not auto-restore from network or command outcomes.
 - Operations `1`, `2`, and `3` remain bitrate, FPS, and resolution mutation requests.
 - Mutation acks carry the broad numeric status plus an additive reason field; current no-reason consumers must be updated before relying on reason-bearing payloads.
 - Runtime resolution remains experimental/proof-gated; operation `0` does not advertise it as a production adaptive operation from a server ack alone.

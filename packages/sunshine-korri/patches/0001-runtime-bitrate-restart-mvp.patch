@@ -40,7 +40,7 @@
  };
  
  namespace asio = boost::asio;
-@@ -212,6 +220,68 @@
+@@ -212,6 +220,72 @@
      SS_HDR_METADATA metadata;
    };
  
@@ -100,6 +100,10 @@
 +    boost::endian::little_uint32_at min_bitrate_kbps;
 +    boost::endian::little_uint32_at max_bitrate_kbps;
 +    boost::endian::little_uint32_at max_fps;
++    boost::endian::little_uint32_at launch_bitrate_kbps;
++    boost::endian::little_uint32_at launch_fps;
++    boost::endian::little_uint32_at launch_width;
++    boost::endian::little_uint32_at launch_height;
 +    boost::endian::little_uint32_at current_bitrate_kbps;
 +    boost::endian::little_uint32_at current_fps;
 +    boost::endian::little_uint32_at current_width;
@@ -109,7 +113,7 @@
    typedef struct control_encrypted_t {
      std::uint16_t encryptedHeaderType;  // Always LE 0x0001
      std::uint16_t length;  // sizeof(seq) + 16 byte tag + secondary header and data
-@@ -366,6 +436,7 @@
+@@ -366,6 +440,7 @@
        std::uint64_t gcm_iv_counter;
  
        safe::mail_raw_t::event_t<bool> idr_events;
@@ -117,17 +121,23 @@
        safe::mail_raw_t::event_t<std::pair<int64_t, int64_t>> invalidate_ref_frames_events;
  
        std::unique_ptr<platf::deinit_t> qos;
-@@ -402,6 +473,9 @@
+@@ -402,6 +477,15 @@
  
        platf::feedback_queue_t feedback_queue;
        safe::mail_raw_t::event_t<video::hdr_info_t> hdr_queue;
 +      safe::mail_raw_t::queue_t<video::runtime_bitrate_ack_t> runtime_bitrate_ack_queue;
++      std::uint32_t runtime_settings_launch_bitrate_kbps;
++      std::uint32_t runtime_settings_launch_fps;
++      std::uint32_t runtime_settings_launch_width;
++      std::uint32_t runtime_settings_launch_height;
++      std::uint32_t runtime_settings_applied_bitrate_kbps;
++      std::uint32_t runtime_settings_applied_fps;
 +      std::uint32_t runtime_settings_applied_width;
 +      std::uint32_t runtime_settings_applied_height;
      } control;
  
      std::uint32_t launch_session_id;
-@@ -885,6 +959,82 @@
+@@ -885,6 +969,92 @@
      return 0;
    }
  
@@ -147,12 +157,18 @@
 +      return;
 +    }
 +
-+    if (ack.operation == video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION) {
-+      if (ack.status == video::RUNTIME_SETTINGS_STATUS_APPLIED) {
++    if (ack.status == video::RUNTIME_SETTINGS_STATUS_APPLIED) {
++      if (ack.operation == video::RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS) {
++        session->control.runtime_settings_applied_bitrate_kbps = ack.applied_value;
++      } else if (ack.operation == video::RUNTIME_SETTINGS_OPERATION_SET_FPS) {
++        session->control.runtime_settings_applied_fps = ack.applied_value;
++      } else if (ack.operation == video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION) {
 +        session->control.runtime_settings_applied_width = ack.applied_width;
 +        session->control.runtime_settings_applied_height = ack.applied_height;
 +      }
++    }
 +
++    if (ack.operation == video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION) {
 +      control_runtime_settings_resolution_ack_t plaintext {};
 +      plaintext.header.type = packetTypes[IDX_RUNTIME_SETTINGS_ACK];
 +      plaintext.header.payloadLength = sizeof(control_runtime_settings_resolution_ack_t) - sizeof(control_header_v2);
@@ -198,10 +214,14 @@
 +    plaintext.reason = enabled ? video::RUNTIME_SETTINGS_REASON_NONE : video::RUNTIME_SETTINGS_REASON_GATE_DISABLED;
 +    plaintext.supported_operations = supported_operations;
 +    plaintext.min_bitrate_kbps = enabled ? 1 : 0;
-+    plaintext.max_bitrate_kbps = (std::uint32_t) session->config.monitor.bitrate;
-+    plaintext.max_fps = (std::uint32_t) session->config.monitor.framerate;
-+    plaintext.current_bitrate_kbps = (std::uint32_t) session->config.monitor.bitrate;
-+    plaintext.current_fps = (std::uint32_t) session->config.monitor.framerate;
++    plaintext.max_bitrate_kbps = session->control.runtime_settings_launch_bitrate_kbps;
++    plaintext.max_fps = session->control.runtime_settings_launch_fps;
++    plaintext.launch_bitrate_kbps = session->control.runtime_settings_launch_bitrate_kbps;
++    plaintext.launch_fps = session->control.runtime_settings_launch_fps;
++    plaintext.launch_width = session->control.runtime_settings_launch_width;
++    plaintext.launch_height = session->control.runtime_settings_launch_height;
++    plaintext.current_bitrate_kbps = session->control.runtime_settings_applied_bitrate_kbps;
++    plaintext.current_fps = session->control.runtime_settings_applied_fps;
 +    plaintext.current_width = session->control.runtime_settings_applied_width;
 +    plaintext.current_height = session->control.runtime_settings_applied_height;
 +    send_runtime_settings_ack_payload(session, plaintext);
@@ -210,7 +230,7 @@
    int send_hdr_mode(session_t *session, video::hdr_info_t hdr_info) {
      if (!session->control.peer) {
        BOOST_LOG(warning) << "Couldn't send HDR mode, still waiting for PING from Moonlight"sv;
-@@ -949,6 +1099,129 @@
+@@ -949,6 +1119,133 @@
        session->video.idr_events->raise(true);
      });
  
@@ -233,15 +253,19 @@
 +      auto current_applied_width = session->control.runtime_settings_applied_width;
 +      auto current_applied_height = session->control.runtime_settings_applied_height;
 +      auto applied_value = operation == video::RUNTIME_SETTINGS_OPERATION_SET_FPS ?
-+                             (std::uint32_t) session->config.monitor.framerate :
-+                             (std::uint32_t) session->config.monitor.bitrate;
++                             session->control.runtime_settings_applied_fps :
++                             session->control.runtime_settings_applied_bitrate_kbps;
 +
 +      if (operation == video::RUNTIME_SETTINGS_OPERATION_QUERY_CAPABILITIES) {
 +        BOOST_LOG(info)
 +          << "live-settings-mvp: capability request_id="sv << request_id
 +          << " enabled="sv << enabled
-+          << " current_bitrate_kbps="sv << session->config.monitor.bitrate
-+          << " current_fps="sv << session->config.monitor.framerate
++          << " launch_bitrate_kbps="sv << session->control.runtime_settings_launch_bitrate_kbps
++          << " launch_fps="sv << session->control.runtime_settings_launch_fps
++          << " launch_width="sv << session->control.runtime_settings_launch_width
++          << " launch_height="sv << session->control.runtime_settings_launch_height
++          << " current_bitrate_kbps="sv << session->control.runtime_settings_applied_bitrate_kbps
++          << " current_fps="sv << session->control.runtime_settings_applied_fps
 +          << " current_width="sv << current_applied_width
 +          << " current_height="sv << current_applied_height;
 +        send_runtime_settings_capability_ack(session, request_id, enabled);
@@ -271,8 +295,8 @@
 +        rejection_status = video::RUNTIME_SETTINGS_STATUS_INVALID;
 +        rejection_reason = video::RUNTIME_SETTINGS_REASON_UNSUPPORTED_OPERATION;
 +      } else if (operation == video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION) {
-+        const auto launch_width = (std::uint32_t) session->config.monitor.width;
-+        const auto launch_height = (std::uint32_t) session->config.monitor.height;
++        const auto launch_width = session->control.runtime_settings_launch_width;
++        const auto launch_height = session->control.runtime_settings_launch_height;
 +        const auto same_aspect = requested_width != 0 && requested_height != 0 &&
 +                                 (std::uint64_t) requested_width * (std::uint64_t) launch_height ==
 +                                   (std::uint64_t) requested_height * (std::uint64_t) launch_width;
@@ -340,7 +364,7 @@
      server->map(packetTypes[IDX_INVALIDATE_REF_FRAMES], [&](session_t *session, const std::string_view &payload) {
        auto frames = (std::int64_t *) payload.data();
        auto firstFrame = frames[0];
-@@ -1119,6 +1392,13 @@
+@@ -1119,6 +1416,13 @@
  
                send_hdr_mode(session, std::move(hdr_info));
              }
@@ -354,17 +378,23 @@
            }
  
            ++pos;
-@@ -1997,6 +2277,9 @@
+@@ -1997,6 +2301,15 @@
        session->control.connect_data = launch_session.control_connect_data;
        session->control.feedback_queue = mail->queue<platf::gamepad_feedback_msg_t>(mail::gamepad_feedback);
        session->control.hdr_queue = mail->event<video::hdr_info_t>(mail::hdr);
 +      session->control.runtime_bitrate_ack_queue = mail->queue<video::runtime_bitrate_ack_t>(mail::runtime_bitrate_ack);
-+      session->control.runtime_settings_applied_width = (std::uint32_t) session->config.monitor.width;
-+      session->control.runtime_settings_applied_height = (std::uint32_t) session->config.monitor.height;
++      session->control.runtime_settings_launch_bitrate_kbps = (std::uint32_t) session->config.monitor.bitrate;
++      session->control.runtime_settings_launch_fps = (std::uint32_t) session->config.monitor.framerate;
++      session->control.runtime_settings_launch_width = (std::uint32_t) session->config.monitor.width;
++      session->control.runtime_settings_launch_height = (std::uint32_t) session->config.monitor.height;
++      session->control.runtime_settings_applied_bitrate_kbps = session->control.runtime_settings_launch_bitrate_kbps;
++      session->control.runtime_settings_applied_fps = session->control.runtime_settings_launch_fps;
++      session->control.runtime_settings_applied_width = session->control.runtime_settings_launch_width;
++      session->control.runtime_settings_applied_height = session->control.runtime_settings_launch_height;
        session->control.legacy_input_enc_iv = launch_session.iv;
        session->control.cipher = crypto::cipher::gcm_t {
          launch_session.gcm_key,
-@@ -2004,6 +2287,7 @@
+@@ -2004,6 +2317,7 @@
        };
  
        session->video.idr_events = mail->event<bool>(mail::idr);
