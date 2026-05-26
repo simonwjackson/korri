@@ -51,6 +51,16 @@ let
     (check "Sunshine runtime bitrate patch logs queued requests without implying final success" (
       contains "queued=1" patch
     ))
+    (check "Sunshine runtime settings gate only enables the MVP for explicit value 1" (
+      contains "SUNSHINE_LIVE_SETTINGS_MVP" patch
+      && contains "std::string_view {enabled_value} == \"1\"sv" patch
+    ))
+    (check "Sunshine runtime settings requests and acks use mail queues" (
+      contains "queue_t<video::runtime_bitrate_request_t> runtime_bitrate_events" patch
+      && contains "queue_t<video::runtime_bitrate_ack_t> runtime_bitrate_ack_queue" patch
+      && contains "mail->queue<runtime_bitrate_request_t>(mail::runtime_bitrate)" patch
+      && contains "mail->queue<runtime_bitrate_ack_t>(mail::runtime_bitrate_ack)" patch
+    ))
     (check "Sunshine runtime bitrate patch does not carry AVCodec field mutation fallback" (
       !(contains "update_runtime_bitrate" patch)
       && !(contains "avcodec runtime bitrate update" patch)

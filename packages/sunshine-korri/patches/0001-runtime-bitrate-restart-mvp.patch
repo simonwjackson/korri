@@ -67,7 +67,7 @@
        std::uint64_t gcm_iv_counter;
  
        safe::mail_raw_t::event_t<bool> idr_events;
-+      safe::mail_raw_t::event_t<video::runtime_bitrate_request_t> runtime_bitrate_events;
++      safe::mail_raw_t::queue_t<video::runtime_bitrate_request_t> runtime_bitrate_events;
        safe::mail_raw_t::event_t<std::pair<int64_t, int64_t>> invalidate_ref_frames_events;
  
        std::unique_ptr<platf::deinit_t> qos;
@@ -75,7 +75,7 @@
  
        platf::feedback_queue_t feedback_queue;
        safe::mail_raw_t::event_t<video::hdr_info_t> hdr_queue;
-+      safe::mail_raw_t::event_t<video::runtime_bitrate_ack_t> runtime_bitrate_ack_queue;
++      safe::mail_raw_t::queue_t<video::runtime_bitrate_ack_t> runtime_bitrate_ack_queue;
      } control;
  
      std::uint32_t launch_session_id;
@@ -108,7 +108,7 @@
    int send_hdr_mode(session_t *session, video::hdr_info_t hdr_info) {
      if (!session->control.peer) {
        BOOST_LOG(warning) << "Couldn't send HDR mode, still waiting for PING from Moonlight"sv;
-@@ -949,6 +997,58 @@
+@@ -949,6 +997,59 @@
        session->video.idr_events->raise(true);
      });
  
@@ -124,7 +124,8 @@
 +      auto request_id = (std::uint32_t) request->request_id;
 +      auto operation = (std::uint16_t) request->operation;
 +      auto requested_value = (std::uint32_t) request->value;
-+      auto enabled = std::getenv("SUNSHINE_LIVE_SETTINGS_MVP") != nullptr;
++      auto enabled_value = std::getenv("SUNSHINE_LIVE_SETTINGS_MVP");
++      auto enabled = enabled_value != nullptr && std::string_view {enabled_value} == "1"sv;
 +      auto applied_value = operation == video::RUNTIME_SETTINGS_OPERATION_SET_FPS ?
 +                             (std::uint32_t) session->config.monitor.framerate :
 +                             (std::uint32_t) session->config.monitor.bitrate;
@@ -185,7 +186,7 @@
        session->control.connect_data = launch_session.control_connect_data;
        session->control.feedback_queue = mail->queue<platf::gamepad_feedback_msg_t>(mail::gamepad_feedback);
        session->control.hdr_queue = mail->event<video::hdr_info_t>(mail::hdr);
-+      session->control.runtime_bitrate_ack_queue = mail->event<video::runtime_bitrate_ack_t>(mail::runtime_bitrate_ack);
++      session->control.runtime_bitrate_ack_queue = mail->queue<video::runtime_bitrate_ack_t>(mail::runtime_bitrate_ack);
        session->control.legacy_input_enc_iv = launch_session.iv;
        session->control.cipher = crypto::cipher::gcm_t {
          launch_session.gcm_key,
@@ -193,7 +194,7 @@
        };
  
        session->video.idr_events = mail->event<bool>(mail::idr);
-+      session->video.runtime_bitrate_events = mail->event<video::runtime_bitrate_request_t>(mail::runtime_bitrate);
++      session->video.runtime_bitrate_events = mail->queue<video::runtime_bitrate_request_t>(mail::runtime_bitrate);
        session->video.invalidate_ref_frames_events = mail->event<std::pair<int64_t, int64_t>>(mail::invalidate_ref_frames);
        session->video.lowseq = 0;
        session->video.ping_payload = launch_session.av_ping_payload;
@@ -203,8 +204,8 @@
      safe::mail_raw_t::event_t<bool> shutdown_event;
      safe::mail_raw_t::queue_t<packet_t> packets;
      safe::mail_raw_t::event_t<bool> idr_events;
-+    safe::mail_raw_t::event_t<runtime_bitrate_request_t> runtime_bitrate_events;
-+    safe::mail_raw_t::event_t<runtime_bitrate_ack_t> runtime_bitrate_ack_events;
++    safe::mail_raw_t::queue_t<runtime_bitrate_request_t> runtime_bitrate_events;
++    safe::mail_raw_t::queue_t<runtime_bitrate_ack_t> runtime_bitrate_ack_events;
      safe::mail_raw_t::event_t<hdr_info_t> hdr_events;
      safe::mail_raw_t::event_t<input::touch_port_t> touch_port_events;
  
@@ -237,8 +238,8 @@
      auto shutdown_event = mail->event<bool>(mail::shutdown);
      auto packets = mail::man->queue<packet_t>(mail::video_packets);
      auto idr_events = mail->event<bool>(mail::idr);
-+    auto runtime_bitrate_events = mail->event<runtime_bitrate_request_t>(mail::runtime_bitrate);
-+    auto runtime_bitrate_ack_events = mail->event<runtime_bitrate_ack_t>(mail::runtime_bitrate_ack);
++    auto runtime_bitrate_events = mail->queue<runtime_bitrate_request_t>(mail::runtime_bitrate);
++    auto runtime_bitrate_ack_events = mail->queue<runtime_bitrate_ack_t>(mail::runtime_bitrate_ack);
      auto invalidate_ref_frames_events = mail->event<std::pair<int64_t, int64_t>>(mail::invalidate_ref_frames);
 +    std::uint32_t runtime_fps = config.framerate;
 +    auto next_runtime_frame = std::chrono::steady_clock::now();
@@ -422,8 +423,8 @@
          mail->event<bool>(mail::shutdown),
          mail::man->queue<packet_t>(mail::video_packets),
          std::move(idr_events),
-+        mail->event<runtime_bitrate_request_t>(mail::runtime_bitrate),
-+        mail->event<runtime_bitrate_ack_t>(mail::runtime_bitrate_ack),
++        mail->queue<runtime_bitrate_request_t>(mail::runtime_bitrate),
++        mail->queue<runtime_bitrate_ack_t>(mail::runtime_bitrate_ack),
          mail->event<hdr_info_t>(mail::hdr),
          mail->event<input::touch_port_t>(mail::touch_port),
          config,

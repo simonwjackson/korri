@@ -541,6 +541,8 @@
               inherit pkgs;
               korriServerModule = self.nixosModules.korri-server;
             };
+          }
+          // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
             korri-sunshine-runtime-bitrate-patch = import ./nix/tests/korri-sunshine-runtime-bitrate-patch-check.nix {
               inherit pkgs;
               patchPath = ./packages/sunshine-korri/patches/0001-runtime-bitrate-restart-mvp.patch;
