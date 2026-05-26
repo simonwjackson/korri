@@ -33,3 +33,21 @@ Connection-status adaptation experiments are controlled by:
 Resolution requests are one-shot only; connection-status adaptation intentionally remains limited to bitrate/FPS experiments until runtime resolution has client-side decode/render survival evidence.
 
 This is experimental and should remain gated until Sunshine-side capability negotiation is formalized.
+
+## Moonlight local control protocol
+
+The local control protocol is experimental downstream Moonlight Embedded functionality. It is a generic Moonlight session protocol, not a Korri-private log format or launcher API.
+
+Version 1 is Linux-only local IPC over a filesystem Unix-domain socket created for a running `moonlight stream ...` process. A launcher supplies the session id and socket path under a private runtime directory; Moonlight owns the socket server for that stream process. LAN, HTTP, mDNS, Tailscale, browser-facing APIs, host discovery, pairing, and app launch orchestration are intentionally out of scope for this protocol.
+
+The TypeScript contract in `korri/shared/stream/moonlight-control-protocol.ts` defines the reviewable v1 message model before the native server is enabled:
+
+- JSON-RPC-compatible request/response envelopes with newline-delimited JSON framing.
+- `protocol.hello` for protocol metadata, session identity, authority, capabilities, and bounds.
+- `state.snapshot` for late attachers to read lifecycle, shallow quality/adaptation, runtime settings, and input route facts.
+- Ordered `moonlight.event` notifications with `seq` and monotonic timestamps so consumers can detect gaps and resync with `state.get`.
+- Separate observer and controller authority. Read-only observability is the default; mutation commands require command-capable authority.
+- Narrow command names only: request IDR, set bitrate, set FPS, and experimental set resolution when advertised by capabilities.
+- Local command responses describe local validation/acceptance only. Host-applied outcomes arrive later as correlated command-result events.
+
+Consumers must ignore unknown additive fields and unknown event names. Breaking schema changes require a protocol major-version bump. Command values are bounded before native dispatch: bitrate, FPS, and resolution values must pass the v1 contract limits, only one mutation per command family may be in flight, and senders must honor the advertised command interval/backoff.
