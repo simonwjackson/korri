@@ -156,6 +156,17 @@ function validateCandidate(
       "candidate rootfs seed SHA256 must be a 64-character hex digest",
     )
   }
+  if (candidate.PRODUCT_REV_CLEAN !== "1") {
+    throw new Error("candidate payload must come from a clean Korri revision")
+  }
+  if (
+    candidate.PRODUCT_REV !== input.productRevision ||
+    candidate.PRODUCT_ROOTFS_SEED_REV !== input.productRevision
+  ) {
+    throw new Error(
+      "candidate payload revision must match the clean Korri revision",
+    )
+  }
   if (candidate.PRODUCT_ROOTFS_SEED_DEVICE !== "odin2portal") {
     throw new Error("candidate payload must target Odin2Portal")
   }
