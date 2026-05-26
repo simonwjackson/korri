@@ -100,6 +100,23 @@ let
     export KORRI_GAME_STREAM_SWAYMSG_COMMAND=${lib.escapeShellArg "${cfg.sway.package}/bin/swaymsg"}
     export KORRI_GAME_STREAM_GAMESCOPE_COMMAND=${lib.escapeShellArg "${cfg.gamescope.package}/bin/gamescope"}
 
+    # Discover Sway's IPC socket so the runner's Sway-repair preflight can
+    # talk to the host compositor. Sway writes the socket as
+    # `$XDG_RUNTIME_DIR/sway-ipc.$UID.$PID.sock` and exports SWAYSOCK to
+    # children it `exec`s itself. Peer services that did NOT come through
+    # sway's exec chain (e.g. the korri-sunshine system unit on a headless
+    # streaming host) inherit XDG_RUNTIME_DIR but never see SWAYSOCK. Auto-
+    # discover it here so a single sway session is visible to the runner
+    # without baking the volatile PID-suffixed socket path into the NixOS
+    # configuration. Trusted session env files (sessionEnvFile) and the
+    # caller environment continue to win when SWAYSOCK is already set.
+    if [ -z "''${SWAYSOCK:-}" ] && [ -n "''${XDG_RUNTIME_DIR:-}" ]; then
+      sway_socket_candidate="$(ls -t "$XDG_RUNTIME_DIR"/sway-ipc.*.sock 2>/dev/null | head -1 || true)"
+      if [ -n "$sway_socket_candidate" ] && [ -S "$sway_socket_candidate" ]; then
+        export SWAYSOCK="$sway_socket_candidate"
+      fi
+    fi
+
     ${optionalString (cfg.displayCompat.enable && displayCompatEnv != { }) ''
             # Display/input compatibility defaults for graphical games launched via
             # Sunshine. Each variable is only set if not already present, so trusted
