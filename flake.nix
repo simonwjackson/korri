@@ -81,6 +81,16 @@
         ];
         isSupportedDesktopSystem = builtins.elem system supportedDesktopSystems;
         isX86Linux = system == "x86_64-linux";
+        productRevision = self.rev or self.dirtyRev or "local-candidate";
+        productShortRevision =
+          if self ? rev then
+            builtins.substring 0 12 self.rev
+          else if self ? dirtyRev then
+            builtins.substring 0 12 self.dirtyRev
+          else
+            "local";
+        productRevisionIsClean = self ? rev;
+        nixOnRocksRevision = nix-on-rocks.rev or nix-on-rocks.dirtyRev or "unknown";
 
         commonPackages =
           (with pkgs; [
@@ -505,6 +515,16 @@
           korri-rocknix-rootfs-thor = nix-on-rocks.lib.mkGuestRootfs system self.nixosConfigurations.korri-rocknix-kiosk-thor;
           korri-rocknix-rootfs-odin2portal = nix-on-rocks.lib.mkGuestRootfs system self.nixosConfigurations.korri-rocknix-kiosk-odin2portal;
           korri-rocknix-rootfs-by-compatible = nix-on-rocks.lib.mkGuestRootfs system self.nixosConfigurations.korri-rocknix-kiosk-by-compatible;
+          korri-rocknix-product-payload-odin2portal = import ./nix/korri-rocknix-product-payload.nix {
+            inherit pkgs productRevision productShortRevision productRevisionIsClean;
+            rootfsPackage = self.packages.${system}.korri-rocknix-rootfs-odin2portal;
+            device = "odin2portal";
+            compatible = "ayn,odin2portal";
+            authorityRepo = "simonwjackson/korri";
+            sourceSubdir = ".";
+            buildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel";
+            substrateRevision = nixOnRocksRevision;
+          };
         };
 
         lib = {
@@ -653,6 +673,14 @@
                 ./nix/images/platforms/x86.nix
               ];
             };
+            korri-rocknix-product-payload = import ./nix/tests/korri-rocknix-product-payload-check.nix {
+              inherit pkgs;
+              productPayloadPackage = self.packages.${system}.korri-rocknix-product-payload-odin2portal;
+              targetPackages = self.packages.aarch64-linux;
+              hostPackages = self.packages.${system};
+              configurations = self.nixosConfigurations;
+              contract = import ./nix/product-payload-contract.nix;
+            };
             korri-live-usb-config = import ./nix/tests/korri-live-usb-config-check.nix {
               inherit pkgs;
               liveUsbSystem = korriKioskLiveUsbSystem;
@@ -695,6 +723,7 @@
                 self.checks.${system}.korri-package-outputs
                 self.checks.${system}.korri-image-outputs
                 self.checks.${system}.korri-rocknix-sm8550-config
+                self.checks.${system}.korri-rocknix-product-payload
                 self.checks.${system}.korri-live-usb-config
                 self.checks.${system}.korri-live-usb-developer-config
                 self.checks.${system}.korri-live-usb-vm-smoke
@@ -757,6 +786,10 @@
                 {
                   name = "korri-rocknix-sm8550-config";
                   owner = "composed-system";
+                }
+                {
+                  name = "korri-rocknix-product-payload";
+                  owner = "package-output";
                 }
                 {
                   name = "korri-live-usb-config";
