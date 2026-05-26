@@ -31,6 +31,9 @@ let
     (check "Sunshine runtime FPS operation is named" (
       contains "RUNTIME_SETTINGS_OPERATION_SET_FPS = 2" patch
     ))
+    (check "Sunshine runtime capability query operation is named" (
+      contains "RUNTIME_SETTINGS_OPERATION_QUERY_CAPABILITIES = 0" patch
+    ))
     (check "Sunshine runtime resolution operation is named" (
       contains "RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION = 3" patch
     ))
@@ -45,6 +48,17 @@ let
     ))
     (check "Sunshine runtime bitrate disabled status is named" (
       contains "RUNTIME_SETTINGS_STATUS_DISABLED = 3" patch
+    ))
+    (check "Sunshine runtime settings reason codes are named" (
+      contains "RUNTIME_SETTINGS_REASON_NONE = 0" patch
+      && contains "RUNTIME_SETTINGS_REASON_GATE_DISABLED" patch
+      && contains "RUNTIME_SETTINGS_REASON_INVALID_BOUNDS" patch
+      && contains "RUNTIME_SETTINGS_REASON_INVALID_PAYLOAD" patch
+      && contains "RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER" patch
+      && contains "RUNTIME_SETTINGS_REASON_UNSUPPORTED_BACKEND" patch
+      && contains "RUNTIME_SETTINGS_REASON_UNSUPPORTED_OPERATION" patch
+      && contains "RUNTIME_SETTINGS_REASON_APPLY_FAILED" patch
+      && contains "RUNTIME_SETTINGS_REASON_PROOF_GATED" patch
     ))
     (check "Sunshine runtime bitrate patch does not expose a logs-only pending status" (
       !(contains "RUNTIME_SETTINGS_STATUS_ACCEPTED_PENDING" patch)
@@ -91,7 +105,21 @@ let
     (check "Sunshine runtime FPS unsupported encoders fail with current applied FPS" (
       contains "live-settings-mvp: runtime FPS unsupported" patch
       && contains "RUNTIME_SETTINGS_STATUS_FAILED" patch
-      && contains "runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_FPS, status, applied_fps}" patch
+      && contains "runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_FPS, status, reason, applied_fps}" patch
+    ))
+    (check "Sunshine runtime capability acks expose active-session support facts" (
+      contains "control_runtime_settings_capability_ack_t" patch
+      && contains "supported_operations" patch
+      && contains "min_bitrate_kbps" patch
+      && contains "max_fps" patch
+      && contains "current_bitrate_kbps" patch
+      && contains "current_width" patch
+      && contains "current_height" patch
+    ))
+    (check "Sunshine runtime settings acks carry additive reason fields" (
+      contains "boost::endian::little_uint16_at reason" patch
+      && contains "ack.reason" patch
+      && contains "reason=" patch
     ))
     (check "Sunshine runtime resolution uses explicit width and height payloads" (
       contains "control_runtime_settings_request_prefix_t" patch
