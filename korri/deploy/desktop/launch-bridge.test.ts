@@ -1,15 +1,22 @@
 import { describe, expect, test } from "bun:test"
+import type { LocalStreamLaunchResponse } from "@app/stream/local-stream-launch-rpc"
 import type { ConnectionServerRecord } from "./connection-state-snapshot"
-import {
-  createLaunchBridgeHandler,
-  type LaunchBridgeResponse,
-} from "./launch-bridge"
+import { createLocalStreamLaunchRpcHandler } from "./launch-bridge"
 
-function postJson(body: unknown): Request {
-  return new Request("http://desktop.local/__korri/desktop/launch", {
+function postLocalLaunchRpc(payload: unknown): Request {
+  return new Request("http://desktop.local/__korri/desktop/rpc", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      _tag: "Request",
+      id: "0",
+      tag: "app.desktop.launch",
+      payload,
+      traceId: "00000000000000000000000000000000",
+      spanId: "0000000000000000",
+      sampled: true,
+      headers: [],
+    }),
   })
 }
 
@@ -28,47 +35,222 @@ const CONNECTED_WITH_IPV6: ConnectionServerRecord = {
   controlUrl: "http://[fd00::1]:3001",
 }
 
+function createManagedSession(id = "session-child") {
+  let resolveExit!: (value: { readonly exitCode: number | null }) => void
+  const exited = new Promise<{ readonly exitCode: number | null }>(resolve => {
+    resolveExit = resolve
+  })
+  return {
+    id,
+    processId: 4242,
+    exited,
+    terminate: () => undefined,
+    terminateNow: () => undefined,
+    resolveExit,
+  }
+}
+
+function startedMoonlight(command = "moonlight") {
+  return {
+    status: "started" as const,
+    command,
+    session: createManagedSession(),
+  }
+}
+
+function createPreparedLaunchBridgeHandler() {
+  return createLocalStreamLaunchRpcHandler({
+    getConnection: () => CONNECTED,
+    prepareGame: async () => ({ status: "prepared", gameId: "noop" }),
+    launchMoonlight: async () => startedMoonlight(),
+  })
+}
+
+async function readRpcSuccess(
+  response: Response,
+): Promise<LocalStreamLaunchResponse> {
+  expect(response.status).toBe(200)
+  const [envelope] = (await response.json()) as Array<{
+    readonly _tag: string
+    readonly exit?: {
+      readonly _tag: string
+      readonly value?: LocalStreamLaunchResponse
+    }
+  }>
+  expect(envelope?._tag).toBe("Exit")
+  expect(envelope?.exit?._tag).toBe("Success")
+  return envelope.exit?.value as LocalStreamLaunchResponse
+}
+
+async function readRpcFailure(response: Response): Promise<unknown> {
+  expect(response.status).toBe(200)
+  const [envelope] = (await response.json()) as Array<{
+    readonly _tag: string
+    readonly exit?: {
+      readonly _tag: string
+      readonly cause?: unknown
+    }
+  }>
+  expect(envelope?._tag).toBe("Exit")
+  expect(envelope?.exit?._tag).toBe("Failure")
+  return envelope.exit?.cause
+}
+
+function createMoonlightHostRecorder() {
+  let host: string | undefined
+  return {
+    launch: async (options: { readonly host: string }) => {
+      host = options.host
+      return startedMoonlight()
+    },
+    host: () => host,
+  }
+}
+
+function createForegroundRepairRecorder(options: {
+  readonly events: string[]
+  readonly snapshotSurfaceIds: readonly number[]
+  readonly onRepair?: (ignoredWindowIds: readonly number[]) => void
+}) {
+  return {
+    snapshotSurfaceIds: async () => {
+      options.events.push("snapshot")
+      return new Set(options.snapshotSurfaceIds)
+    },
+    repairSurface: async ({
+      ignoredWindowIds,
+    }: {
+      readonly ignoredWindowIds: ReadonlySet<number>
+    }) => {
+      options.events.push("repair")
+      options.onRepair?.([...ignoredWindowIds])
+    },
+  }
+}
+
+async function flushMicrotasks(count = 8) {
+  for (let index = 0; index < count; index += 1) await Promise.resolve()
+}
+
 describe("desktop launch bridge", () => {
-  test("returns 503 when no upstream is connected", async () => {
-    const handler = createLaunchBridgeHandler({
+  test("reports host-unavailable when no upstream is connected", async () => {
+    const handler = createLocalStreamLaunchRpcHandler({
       getConnection: () => undefined,
       prepareGame: async () => ({
         status: "prepared",
         gameId: "noop",
       }),
-      launchMoonlight: async () => ({
-        status: "started",
-        command: "moonlight",
-      }),
+      launchMoonlight: async () => startedMoonlight(),
     })
 
-    const response = await handler(postJson({ id: "gba/wario-land-4" }))
+    const response = await handler(
+      postLocalLaunchRpc({ id: "gba/wario-land-4" }),
+    )
 
-    expect(response.status).toBe(503)
-    const body = (await response.json()) as LaunchBridgeResponse
+    const body = await readRpcSuccess(response)
     expect(body.status).toBe("failed")
     if (body.status === "failed") expect(body.category).toBe("host-unavailable")
   })
 
-  test("returns 400 on a malformed body", async () => {
-    const handler = createLaunchBridgeHandler({
+  test("returns typed busy before any launch-path side effects while a session is running", async () => {
+    const events: string[] = []
+    const session = createManagedSession("active-child")
+    const handler = createLocalStreamLaunchRpcHandler({
+      getConnection: () => {
+        events.push("connection")
+        return CONNECTED
+      },
+      preflightMoonlightInput: async () => {
+        events.push("preflight")
+        return { status: "ok" }
+      },
+      resolveMoonlightGamescope: async () => {
+        events.push("gamescope")
+        return { enabled: false }
+      },
+      prepareGame: async (_controlUrl, id) => {
+        events.push("prepare")
+        return { status: "prepared", gameId: id }
+      },
+      moonlightForegroundRepair: createForegroundRepairRecorder({
+        events,
+        snapshotSurfaceIds: [10],
+      }),
+      launchMoonlight: async () => {
+        events.push("launch")
+        return { status: "started", command: "moonlight", session }
+      },
+    })
+
+    await readRpcSuccess(
+      await handler(postLocalLaunchRpc({ id: "gba/wario-land-4" })),
+    )
+    const busy = await readRpcSuccess(
+      await handler(postLocalLaunchRpc({ id: "gba/metroid-fusion" })),
+    )
+
+    expect(busy.status).toBe("failed")
+    if (busy.status === "failed") expect(busy.category).toBe("session-busy")
+    expect(events).toEqual([
+      "connection",
+      "preflight",
+      "gamescope",
+      "prepare",
+      "snapshot",
+      "launch",
+      "repair",
+    ])
+  })
+
+  test("accepts a later launch after the managed session exits", async () => {
+    const first = createManagedSession("first-child")
+    const second = createManagedSession("second-child")
+    const sessions = [first, second]
+    const handler = createLocalStreamLaunchRpcHandler({
       getConnection: () => CONNECTED,
-      prepareGame: async () => ({ status: "prepared", gameId: "noop" }),
+      prepareGame: async (_controlUrl, id) => ({ status: "prepared", gameId: id }),
       launchMoonlight: async () => ({
         status: "started",
         command: "moonlight",
+        session: sessions.shift() ?? createManagedSession("fallback-child"),
       }),
     })
 
-    const response = await handler(
-      new Request("http://desktop.local/__korri/desktop/launch", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: "not json",
-      }),
+    const firstResponse = await readRpcSuccess(
+      await handler(postLocalLaunchRpc({ id: "gba/wario-land-4" })),
+    )
+    const busy = await readRpcSuccess(
+      await handler(postLocalLaunchRpc({ id: "gba/metroid-fusion" })),
+    )
+    first.resolveExit({ exitCode: 0 })
+    await flushMicrotasks()
+    const secondResponse = await readRpcSuccess(
+      await handler(postLocalLaunchRpc({ id: "gba/metroid-fusion" })),
     )
 
-    expect(response.status).toBe(400)
+    expect(firstResponse.status).toBe("launched")
+    expect(busy.status).toBe("failed")
+    if (busy.status === "failed") expect(busy.category).toBe("session-busy")
+    expect(secondResponse.status).toBe("launched")
+  })
+
+  test("typed RPC handler schema-decodes and launches the selected game id", async () => {
+    let prepareCallGameId: string | undefined
+    const handler = createLocalStreamLaunchRpcHandler({
+      getConnection: () => CONNECTED,
+      prepareGame: async (_controlUrl, id) => {
+        prepareCallGameId = id
+        return { status: "prepared", gameId: id }
+      },
+      launchMoonlight: async () => startedMoonlight(),
+    })
+
+    const response = await handler(
+      postLocalLaunchRpc({ id: "gba/wario-land-4" }),
+    )
+
+    await readRpcSuccess(response)
+    expect(prepareCallGameId).toBe("gba/wario-land-4")
   })
 
   test("prepares then launches moonlight pointed at the reachable connected address", async () => {
@@ -77,7 +259,7 @@ describe("desktop launch bridge", () => {
     let moonlightCallHost: string | undefined
     let moonlightGamescope: unknown
 
-    const handler = createLaunchBridgeHandler({
+    const handler = createLocalStreamLaunchRpcHandler({
       getConnection: () => CONNECTED,
       prepareGame: async (controlUrl, id) => {
         prepareCallControlUrl = controlUrl
@@ -88,19 +270,20 @@ describe("desktop launch bridge", () => {
       launchMoonlight: async opts => {
         moonlightCallHost = opts.host
         moonlightGamescope = opts.gamescope
-        return { status: "started", command: "moonlight" }
+        return startedMoonlight()
       },
     })
 
-    const response = await handler(postJson({ id: "gba/wario-land-4" }))
+    const response = await handler(
+      postLocalLaunchRpc({ id: "gba/wario-land-4" }),
+    )
 
     expect(prepareCallControlUrl).toBe(CONNECTED.controlUrl)
     expect(prepareCallGameId).toBe("gba/wario-land-4")
     expect(moonlightCallHost).toBe("192.168.1.117")
     expect(moonlightGamescope).toEqual({ enabled: false })
 
-    expect(response.status).toBe(200)
-    const body = (await response.json()) as LaunchBridgeResponse
+    const body = await readRpcSuccess(response)
     expect(body.status).toBe("launched")
     if (body.status === "launched") {
       expect(body.gameId).toBe("gba/wario-land-4")
@@ -110,48 +293,46 @@ describe("desktop launch bridge", () => {
   })
 
   test("uses the control URL host for moonlight even when hostId is only identity", async () => {
-    let moonlightCallHost: string | undefined
-    const handler = createLaunchBridgeHandler({
+    const moonlight = createMoonlightHostRecorder()
+    const handler = createLocalStreamLaunchRpcHandler({
       getConnection: () => CONNECTED_WITH_UNRESOLVABLE_ID,
       prepareGame: async (controlUrl, id) => {
         expect(controlUrl).toBe(CONNECTED_WITH_UNRESOLVABLE_ID.controlUrl)
         return { status: "prepared", gameId: id, sessionId: "sess-addr" }
       },
-      launchMoonlight: async opts => {
-        moonlightCallHost = opts.host
-        return { status: "started", command: "moonlight" }
-      },
+      launchMoonlight: moonlight.launch,
     })
 
-    const response = await handler(postJson({ id: "gba/wario-land-4" }))
+    const response = await handler(
+      postLocalLaunchRpc({ id: "gba/wario-land-4" }),
+    )
 
-    expect(response.status).toBe(200)
-    expect(moonlightCallHost).toBe("192.168.1.118")
+    await readRpcSuccess(response)
+    expect(moonlight.host()).toBe("192.168.1.118")
   })
 
   test("normalizes IPv6 control URL hosts before invoking moonlight", async () => {
-    let moonlightCallHost: string | undefined
-    const handler = createLaunchBridgeHandler({
+    const moonlight = createMoonlightHostRecorder()
+    const handler = createLocalStreamLaunchRpcHandler({
       getConnection: () => CONNECTED_WITH_IPV6,
       prepareGame: async (_controlUrl, id) => ({
         status: "prepared",
         gameId: id,
       }),
-      launchMoonlight: async opts => {
-        moonlightCallHost = opts.host
-        return { status: "started", command: "moonlight" }
-      },
+      launchMoonlight: moonlight.launch,
     })
 
-    const response = await handler(postJson({ id: "gba/wario-land-4" }))
+    const response = await handler(
+      postLocalLaunchRpc({ id: "gba/wario-land-4" }),
+    )
 
-    expect(response.status).toBe(200)
-    expect(moonlightCallHost).toBe("fd00::1")
+    await readRpcSuccess(response)
+    expect(moonlight.host()).toBe("fd00::1")
   })
 
   test("fails local input preflight before preparing the remote stream", async () => {
     let prepareCalled = false
-    const handler = createLaunchBridgeHandler({
+    const handler = createLocalStreamLaunchRpcHandler({
       getConnection: () => CONNECTED,
       preflightMoonlightInput: async () => ({
         status: "failed",
@@ -169,11 +350,12 @@ describe("desktop launch bridge", () => {
       },
     })
 
-    const response = await handler(postJson({ id: "gba/wario-land-4" }))
+    const response = await handler(
+      postLocalLaunchRpc({ id: "gba/wario-land-4" }),
+    )
 
     expect(prepareCalled).toBe(false)
-    expect(response.status).toBe(200)
-    const body = (await response.json()) as LaunchBridgeResponse
+    const body = await readRpcSuccess(response)
     expect(body.status).toBe("failed")
     if (body.status === "failed") {
       expect(body.category).toBe("input-unavailable")
@@ -182,7 +364,7 @@ describe("desktop launch bridge", () => {
   })
 
   test("forwards prepare-failure categories to the renderer", async () => {
-    const handler = createLaunchBridgeHandler({
+    const handler = createLocalStreamLaunchRpcHandler({
       getConnection: () => CONNECTED,
       prepareGame: async () => ({
         status: "failed",
@@ -194,10 +376,9 @@ describe("desktop launch bridge", () => {
       },
     })
 
-    const response = await handler(postJson({ id: "gba/zzz" }))
+    const response = await handler(postLocalLaunchRpc({ id: "gba/zzz" }))
 
-    expect(response.status).toBe(200)
-    const body = (await response.json()) as LaunchBridgeResponse
+    const body = await readRpcSuccess(response)
     expect(body.status).toBe("failed")
     if (body.status === "failed") {
       expect(body.category).toBe("no-such-game")
@@ -209,31 +390,30 @@ describe("desktop launch bridge", () => {
     const events: string[] = []
     let repairedIgnoredWindowIds: readonly number[] = []
 
-    const handler = createLaunchBridgeHandler({
+    const handler = createLocalStreamLaunchRpcHandler({
       getConnection: () => CONNECTED,
       prepareGame: async (_controlUrl, id) => ({
         status: "prepared",
         gameId: id,
       }),
-      moonlightForegroundRepair: {
-        snapshotSurfaceIds: async () => {
-          events.push("snapshot")
-          return new Set([10, 11])
+      moonlightForegroundRepair: createForegroundRepairRecorder({
+        events,
+        snapshotSurfaceIds: [10, 11],
+        onRepair: ignoredWindowIds => {
+          repairedIgnoredWindowIds = ignoredWindowIds
         },
-        repairSurface: async ({ ignoredWindowIds }) => {
-          events.push("repair")
-          repairedIgnoredWindowIds = [...ignoredWindowIds]
-        },
-      },
+      }),
       launchMoonlight: async () => {
         events.push("launch")
-        return { status: "started", command: "moonlight" }
+        return startedMoonlight()
       },
     })
 
-    const response = await handler(postJson({ id: "gba/wario-land-4" }))
+    const response = await handler(
+      postLocalLaunchRpc({ id: "gba/wario-land-4" }),
+    )
 
-    expect(response.status).toBe(200)
+    await readRpcSuccess(response)
     expect(events).toEqual(["snapshot", "launch", "repair"])
     expect(repairedIgnoredWindowIds).toEqual([10, 11])
   })
@@ -241,35 +421,58 @@ describe("desktop launch bridge", () => {
   test("does not repair the foreground surface when Moonlight fails to start", async () => {
     const events: string[] = []
 
-    const handler = createLaunchBridgeHandler({
+    const handler = createLocalStreamLaunchRpcHandler({
       getConnection: () => CONNECTED,
       prepareGame: async (_controlUrl, id) => ({
         status: "prepared",
         gameId: id,
       }),
-      moonlightForegroundRepair: {
-        snapshotSurfaceIds: async () => {
-          events.push("snapshot")
-          return new Set([10])
-        },
-        repairSurface: async () => {
-          events.push("repair")
-        },
-      },
+      moonlightForegroundRepair: createForegroundRepairRecorder({
+        events,
+        snapshotSurfaceIds: [10],
+      }),
       launchMoonlight: async () => {
         events.push("launch")
         return { status: "failed", message: "moonlight not installed" }
       },
     })
 
-    const response = await handler(postJson({ id: "gba/wario-land-4" }))
+    const response = await handler(
+      postLocalLaunchRpc({ id: "gba/wario-land-4" }),
+    )
 
-    expect(response.status).toBe(200)
+    await readRpcSuccess(response)
     expect(events).toEqual(["snapshot", "launch"])
   })
 
+  test("reports prepared-no-moonlight when Moonlight starts without a managed session handle", async () => {
+    const handler = createLocalStreamLaunchRpcHandler({
+      getConnection: () => CONNECTED,
+      prepareGame: async () => ({
+        status: "prepared",
+        gameId: "gba/wario-land-4",
+        sessionId: "sess-without-handle",
+      }),
+      launchMoonlight: async () => ({
+        status: "started",
+        command: "moonlight",
+      }),
+    })
+
+    const response = await handler(
+      postLocalLaunchRpc({ id: "gba/wario-land-4" }),
+    )
+
+    const body = await readRpcSuccess(response)
+    expect(body.status).toBe("prepared-no-moonlight")
+    if (body.status === "prepared-no-moonlight") {
+      expect(body.sessionId).toBe("sess-without-handle")
+      expect(body.message).toContain("managed session handle")
+    }
+  })
+
   test("reports prepared-no-moonlight when prepare succeeds but moonlight does not start", async () => {
-    const handler = createLaunchBridgeHandler({
+    const handler = createLocalStreamLaunchRpcHandler({
       getConnection: () => CONNECTED,
       prepareGame: async () => ({
         status: "prepared",
@@ -282,10 +485,11 @@ describe("desktop launch bridge", () => {
       }),
     })
 
-    const response = await handler(postJson({ id: "gba/wario-land-4" }))
+    const response = await handler(
+      postLocalLaunchRpc({ id: "gba/wario-land-4" }),
+    )
 
-    expect(response.status).toBe(200)
-    const body = (await response.json()) as LaunchBridgeResponse
+    const body = await readRpcSuccess(response)
     expect(body.status).toBe("prepared-no-moonlight")
     if (body.status === "prepared-no-moonlight") {
       expect(body.gameId).toBe("gba/wario-land-4")
@@ -293,18 +497,19 @@ describe("desktop launch bridge", () => {
     }
   })
 
-  test("rejects requests missing an id", async () => {
-    const handler = createLaunchBridgeHandler({
-      getConnection: () => CONNECTED,
-      prepareGame: async () => ({ status: "prepared", gameId: "noop" }),
-      launchMoonlight: async () => ({
-        status: "started",
-        command: "moonlight",
-      }),
-    })
+  test("rejects requests missing an id at the schema boundary", async () => {
+    const handler = createPreparedLaunchBridgeHandler()
 
-    const response = await handler(postJson({}))
+    const response = await handler(postLocalLaunchRpc({}))
 
-    expect(response.status).toBe(400)
+    expect(await readRpcFailure(response)).toBeDefined()
+  })
+
+  test("rejects empty ids at the schema boundary", async () => {
+    const handler = createPreparedLaunchBridgeHandler()
+
+    const response = await handler(postLocalLaunchRpc({ id: "" }))
+
+    expect(await readRpcFailure(response)).toBeDefined()
   })
 })

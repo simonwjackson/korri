@@ -261,10 +261,27 @@ describe("connection-aware serve branch", () => {
     expect(body.error).toBe("no upstream")
   })
 
-  test("POST /__korri/desktop/launch while searching returns 503 from the launch bridge", async () => {
-    // No `launchBridge` configured: the route's fallback returns 503 with
+  test("POST /__korri/desktop/rpc while searching returns 503 from the launch bridge", async () => {
+    // No `launchBridge` configured: the RPC route's fallback returns 503 with
     // a structured "host-unavailable" payload. The new connection-aware
     // branch must not interfere with this.
+    const app = createDesktopApp({
+      assetRoot,
+      getUpstream: noUpstream,
+      getConnectionState: () => searchingSnapshot(),
+    })
+
+    const response = await app.fetch(
+      request("/__korri/desktop/rpc", {
+        method: "POST",
+        body: JSON.stringify({ id: "x" }),
+      }),
+    )
+
+    expect(response.status).toBe(503)
+  })
+
+  test("POST /__korri/desktop/launch is not registered", async () => {
     const app = createDesktopApp({
       assetRoot,
       getUpstream: noUpstream,
@@ -278,7 +295,7 @@ describe("connection-aware serve branch", () => {
       }),
     )
 
-    expect(response.status).toBe(503)
+    expect(response.status).toBe(404)
   })
 
   test("waiting page omits help block when helpAfter is in the future", async () => {

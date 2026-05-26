@@ -3,7 +3,7 @@ import { Hono } from "hono"
 import { createApiForwarder } from "./api-forwarder"
 import type { ConnectionStateSnapshot } from "./connection-state-snapshot"
 import {
-  createLaunchBridgeHandler,
+  createLocalStreamLaunchRpcHandler,
   type LaunchBridgeOptions,
 } from "./launch-bridge"
 import type { RuntimeConfig } from "./runtime-config-shape"
@@ -72,15 +72,16 @@ export function createDesktopApp(options: CreateDesktopAppOptions) {
     c.json(options.getConnectionState()),
   )
 
-  // Renderer→bun launch bridge: takes a game id, calls prepare-stream
-  // against the connected korri-server, then spawns Moonlight locally
-  // pointed at that server. See launch-bridge.ts. Registered before the
-  // /api/* forwarder catchall so it doesn't get proxied upstream.
+  // Renderer→bun launch bridge: takes a game id over the desktop-local
+  // Effect RPC surface, calls prepare-stream against the connected
+  // korri-server, then spawns Moonlight locally pointed at that server.
+  // See launch-bridge.ts. Registered before the /api/* forwarder catchall
+  // so it doesn't get proxied upstream.
   if (options.launchBridge) {
-    const handler = createLaunchBridgeHandler(options.launchBridge)
-    app.post("/__korri/desktop/launch", c => handler(c.req.raw))
+    const rpcHandler = createLocalStreamLaunchRpcHandler(options.launchBridge)
+    app.post("/__korri/desktop/rpc", c => rpcHandler(c.req.raw))
   } else {
-    app.post("/__korri/desktop/launch", c =>
+    app.post("/__korri/desktop/rpc", c =>
       c.json(
         {
           status: "failed",

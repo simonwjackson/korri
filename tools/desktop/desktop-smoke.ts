@@ -381,9 +381,9 @@ export async function runDesktopSmoke(
     ),
   )
 
-  // /api/* and /__korri/desktop/launch must keep behaving as today
-  // even during disconnected state. The new branch lives strictly in
-  // the static-asset path.
+  // /api/* and /__korri/desktop/rpc must keep behaving as today even
+  // during disconnected state. The new branch lives strictly in the
+  // static-asset path.
   checks.push(
     await passOrFail(
       "disconnected serve does not interfere with /api/*",
@@ -402,18 +402,18 @@ export async function runDesktopSmoke(
 
   checks.push(
     await passOrFail(
-      "disconnected serve does not interfere with /__korri/desktop/launch",
+      "disconnected serve does not interfere with /__korri/desktop/rpc",
       async () => {
         const app = buildApp(assetRoot, { snapshot: searchingSnapshot() })
         const response = await app.fetch(
-          new Request("http://desktop.local/__korri/desktop/launch", {
+          new Request("http://desktop.local/__korri/desktop/rpc", {
             method: "POST",
             body: JSON.stringify({ id: "x" }),
           }),
         )
         return {
           ok: response.status === 503,
-          detail: `POST /__korri/desktop/launch while searching returned ${response.status}`,
+          detail: `POST /__korri/desktop/rpc while searching returned ${response.status}`,
         }
       },
     ),

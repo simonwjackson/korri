@@ -1,5 +1,5 @@
 /**
- * Renderer\u2192bun launch bridge.
+ * Renderer→bun launch bridge.
  *
  * The desktop renderer cannot spawn local processes (it lives in a
  * webview) and the launch flow needs two server-side actions in
@@ -11,50 +11,40 @@
  *   2. Spawn Moonlight on *this* device pointed at the connected host
  *      so the just-prepared game's stream is visible.
  *
- * Both happen here on the bun side. The renderer just POSTs:
+ * Renderer code calls the desktop-local Effect RPC endpoint:
  *
- *   POST /__korri/desktop/launch  { id: "gba/wario-land-4" }
- *
- * and gets back a structured `LaunchBridgeResponse`.
+ *   POST /__korri/desktop/rpc  app.desktop.launch { id }
  *
  * The handler factory takes its dependencies (getConnection,
  * prepareGame, launchMoonlight) as injectable arguments so the bun
  * wiring lives in main.ts and the unit tests can substitute
- * deterministic fakes.
+ * deterministic implementations.
  */
 
+import {
+  type LocalStreamLaunchPayload,
+  type LocalStreamLaunchResponse,
+  localStreamLaunchRpcGroup,
+} from "@app/stream/local-stream-launch-rpc"
 import type {
   MoonlightLaunchOptions,
   MoonlightLaunchResult,
 } from "@app/stream/moonlight-launcher"
 import type { RemotePrepareResult } from "@app/stream/remote-stream-client"
+import { BatchJsonSerializationLive } from "@shared/api/rpc/serialization"
 import { logger } from "@shared/logger"
+import { Effect, Layer, Scope } from "effect"
+import * as HttpEffect from "effect/unstable/http/HttpEffect"
+import { RpcServer } from "effect/unstable/rpc"
 import type { ConnectionServerRecord } from "./connection-state-snapshot"
+import {
+  createForegroundSessionOwner,
+  type ForegroundManagedSessionHandle,
+  type ForegroundSessionOwnerLaunchResult,
+  type ForegroundSessionStageResult,
+} from "./foreground-session-owner"
 
-export type LaunchBridgeResponse =
-  | {
-      readonly status: "launched"
-      readonly gameId: string
-      readonly sessionId?: string
-      readonly moonlightCommand: string
-    }
-  | {
-      readonly status: "prepared-no-moonlight"
-      readonly gameId: string
-      readonly sessionId?: string
-      readonly message: string
-    }
-  | {
-      readonly status: "failed"
-      readonly category:
-        | "host-unavailable"
-        | "host-control-disabled"
-        | "no-such-game"
-        | "prepare-failed"
-        | "input-unavailable"
-        | "input-ambiguous"
-      readonly message: string
-    }
+type LaunchBridgeResponse = LocalStreamLaunchResponse
 
 export type MoonlightInputPreflightResult =
   | { readonly status: "ok" }
@@ -92,7 +82,7 @@ export interface LaunchBridgeOptions {
    * Calls `app.server.stream.prepare` (with the legacy fallback) on the
    * given host. The product-layer `@app/stream/remote-stream-client`
    * exposes this as `RemoteStreamControlClient.prepareGame`; the
-   * indirection here lets tests inject a deterministic fake.
+   * indirection here lets tests inject a deterministic implementation.
    */
   readonly prepareGame: (
     controlUrl: string,
@@ -103,7 +93,7 @@ export interface LaunchBridgeOptions {
    * Spawns Moonlight locally pointed at the given Korri host. The
    * product-layer `@app/stream/moonlight-launcher` exposes this as
    * `launchMoonlight`; the indirection lets tests inject a
-   * deterministic fake.
+   * deterministic implementation.
    */
   readonly resolveMoonlightGamescope?: () => Promise<
     NonNullable<MoonlightLaunchOptions["gamescope"]>
@@ -116,170 +106,388 @@ export interface LaunchBridgeOptions {
 
   /**
    * Optional local compositor repair for the Moonlight foreground surface.
-   * Appliance builds wire this to Sway; tests inject a deterministic fake.
+   * Appliance builds wire this to Sway; tests inject a deterministic implementation.
    */
   readonly moonlightForegroundRepair?: MoonlightForegroundRepair
 }
 
 /**
- * Hono-compatible request handler. Lives at `POST
- * /__korri/desktop/launch` in the desktop app composition.
+ * Effect RPC handler for the desktop-local renderer→bun launch boundary.
  */
-export function createLaunchBridgeHandler(
+export function createLocalStreamLaunchRpcHandler(
   options: LaunchBridgeOptions,
 ): (request: Request) => Promise<Response> {
-  return async request => {
-    const id = await readGameId(request)
-    if (!id) return jsonResponse(400, { error: "missing or invalid id" })
+  const scope = Scope.makeUnsafe()
+  const foregroundSessionOwner = createLaunchBridgeForegroundSessionOwner(options)
+  const HandlersLive = localStreamLaunchRpcGroup.toLayer(
+    localStreamLaunchRpcGroup.of({
+      "app.desktop.launch": payload =>
+        Effect.promise(() =>
+          performLocalStreamLaunch(foregroundSessionOwner, payload),
+        ),
+    }),
+  )
+  const ServerLive = Layer.mergeAll(HandlersLive, BatchJsonSerializationLive)
+  const webHandler = HttpEffect.toWebHandlerLayerWith(ServerLive, {
+    toHandler: context =>
+      RpcServer.toHttpEffect(localStreamLaunchRpcGroup).pipe(
+        Effect.provideContext(context),
+        Effect.provideService(Scope.Scope, scope),
+      ),
+  })
 
-    const connection = options.getConnection()
-    if (!connection) {
-      logger.warn({ id }, "launch-bridge: refused \u2014 no connected upstream")
-      return jsonResponse(503, {
-        status: "failed",
-        category: "host-unavailable",
-        message: "No connected Korri host",
-      } satisfies LaunchBridgeResponse)
+  return request => webHandler.handler(request)
+}
+
+type LaunchBridgeForegroundSessionOwner = ReturnType<
+  typeof createLaunchBridgeForegroundSessionOwner
+>
+
+interface PreparedLaunchStage {
+  readonly id: string
+  readonly connection: ConnectionServerRecord
+  readonly prepare: Extract<RemotePrepareResult, { readonly status: "prepared" }>
+  readonly moonlightGamescope: MoonlightLaunchOptions["gamescope"]
+  readonly ignoredForegroundSurfaceIds?: ReadonlySet<number>
+}
+
+interface SpawnedLaunchStage {
+  readonly prepared: PreparedLaunchStage
+  readonly session: ForegroundManagedSessionHandle
+  readonly moonlight: Extract<MoonlightLaunchResult, { readonly status: "started" }>
+}
+
+function createLaunchBridgeForegroundSessionOwner(options: LaunchBridgeOptions) {
+  return createForegroundSessionOwner<
+    LocalStreamLaunchPayload,
+    PreparedLaunchStage,
+    SpawnedLaunchStage,
+    LaunchBridgeResponse
+  >({
+    requestIdentity: payload => ({ requestId: payload.id, gameId: payload.id }),
+    adapter: {
+      prepare: payload => prepareLaunchStage(options, payload),
+      spawn: prepared => spawnLaunchStage(options, prepared),
+      foreground: spawned => foregroundLaunchStage(options, spawned),
+      launched: ({ prepared, spawned }) => launchedResponse(prepared, spawned),
+    },
+  })
+}
+
+async function performLocalStreamLaunch(
+  owner: LaunchBridgeForegroundSessionOwner,
+  payload: LocalStreamLaunchPayload,
+): Promise<LaunchBridgeResponse> {
+  const result = await owner.launch(payload)
+  return launchResponseFromOwnerResult(result)
+}
+
+function launchResponseFromOwnerResult(
+  result: ForegroundSessionOwnerLaunchResult<LaunchBridgeResponse>,
+): LaunchBridgeResponse {
+  if (result._tag === "Launched") return result.value
+  if (result._tag === "Busy") {
+    return {
+      status: "failed",
+      category: "session-busy",
+      message: result.rejection.message,
     }
-
-    const inputPreflight = await options.preflightMoonlightInput?.()
-    if (inputPreflight?.status === "failed") {
-      logger.warn(
-        { id, host: connection.hostId, category: inputPreflight.category },
-        "launch-bridge: refused — local normalized input unavailable",
-      )
-      return jsonResponse(200, {
-        status: "failed",
-        category: inputPreflight.category,
-        message: inputPreflight.message,
-      } satisfies LaunchBridgeResponse)
+  }
+  const response = responseFromFailureEvidence(result.evidence)
+  return (
+    response ?? {
+      status: "failed",
+      category: "prepare-failed",
+      message: result.message,
     }
+  )
+}
 
-    let moonlightGamescope: MoonlightLaunchOptions["gamescope"]
-    try {
-      moonlightGamescope = await options.resolveMoonlightGamescope?.()
-    } catch (error) {
-      logger.warn(
-        { id, host: connection.hostId, err: error },
-        "launch-bridge: local moonlight Gamescope policy resolution failed; using product default",
-      )
-    }
-
-    let prepare: RemotePrepareResult
-    try {
-      prepare = await options.prepareGame(connection.controlUrl, id)
-    } catch (error) {
-      const message = errorMessage(error) ?? "prepare-stream call failed"
-      logger.warn(
-        { id, host: connection.hostId, err: error },
-        "launch-bridge: prepareGame threw",
-      )
-      return jsonResponse(200, {
-        status: "failed",
-        category: "prepare-failed",
-        message,
-      } satisfies LaunchBridgeResponse)
-    }
-
-    if (prepare.status === "failed") {
-      logger.warn(
-        {
-          id,
-          host: connection.hostId,
-          category: prepare.category,
-          message: prepare.message,
-        },
-        "launch-bridge: prepare failed",
-      )
-      return jsonResponse(200, {
-        status: "failed",
-        category: prepare.category,
-        message: prepare.message,
-      } satisfies LaunchBridgeResponse)
-    }
-
-    let ignoredForegroundSurfaceIds: ReadonlySet<number> | undefined
-    if (options.moonlightForegroundRepair) {
-      try {
-        ignoredForegroundSurfaceIds =
-          await options.moonlightForegroundRepair.snapshotSurfaceIds()
-      } catch (error) {
-        logger.warn(
-          { id, host: connection.hostId, err: error },
-          "launch-bridge: skipped Moonlight foreground repair after snapshot failure",
-        )
-      }
-    }
-
-    const moonlight = await options.launchMoonlight({
-      host: moonlightHostForConnection(connection),
-      gamescope: moonlightGamescope,
+async function prepareLaunchStage(
+  options: LaunchBridgeOptions,
+  payload: LocalStreamLaunchPayload,
+): Promise<ForegroundSessionStageResult<PreparedLaunchStage>> {
+  const id = payload.id
+  const connection = options.getConnection()
+  if (!connection) {
+    logger.warn({ id }, "launch-bridge: refused — no connected upstream")
+    return failedLaunchStage({
+      status: "failed",
+      category: "host-unavailable",
+      message: "No connected Korri host",
     })
+  }
 
-    if (moonlight.status === "failed") {
-      logger.warn(
-        {
-          id,
-          host: connection.hostId,
-          sessionId: prepare.sessionId,
-          message: moonlight.message,
-        },
-        "launch-bridge: prepared but moonlight could not start",
-      )
-      return jsonResponse(200, {
-        status: "prepared-no-moonlight",
-        gameId: prepare.gameId,
-        ...(prepare.sessionId ? { sessionId: prepare.sessionId } : {}),
-        message: moonlight.message,
-      } satisfies LaunchBridgeResponse)
-    }
+  const inputFailure = await preflightMoonlightInput(options, connection, id)
+  if (inputFailure) return failedLaunchStage(inputFailure)
 
-    if (options.moonlightForegroundRepair && ignoredForegroundSurfaceIds) {
-      try {
-        await options.moonlightForegroundRepair.repairSurface({
-          ignoredWindowIds: ignoredForegroundSurfaceIds,
-        })
-      } catch (error) {
-        logger.warn(
-          {
-            id,
-            host: connection.hostId,
-            sessionId: prepare.sessionId,
-            err: error,
-          },
-          "launch-bridge: Moonlight started but foreground repair failed",
-        )
-      }
-    }
+  const moonlightGamescope = await resolveMoonlightGamescope(
+    options,
+    connection,
+    id,
+  )
+  const prepare = await prepareGameForLaunch(options, connection, id)
+  if (prepare.status === "failed") {
+    return failedLaunchStage(prepareFailureResponse(prepare, connection, id))
+  }
 
-    logger.info(
-      {
-        id,
-        host: connection.hostId,
-        sessionId: prepare.sessionId,
-        moonlight: moonlight.command,
-      },
-      "launch-bridge: launched",
-    )
-    return jsonResponse(200, {
-      status: "launched",
-      gameId: prepare.gameId,
-      ...(prepare.sessionId ? { sessionId: prepare.sessionId } : {}),
-      moonlightCommand: moonlight.command,
-    } satisfies LaunchBridgeResponse)
+  const ignoredForegroundSurfaceIds = await snapshotForegroundSurfaceIds(
+    options,
+    connection,
+    id,
+  )
+  return {
+    status: "ok",
+    value: {
+      id,
+      connection,
+      prepare,
+      moonlightGamescope,
+      ...(ignoredForegroundSurfaceIds
+        ? { ignoredForegroundSurfaceIds }
+        : {}),
+    },
+    evidence: { host: connection.hostId, gameId: prepare.gameId },
   }
 }
 
-async function readGameId(request: Request): Promise<string | undefined> {
-  let body: unknown
+async function spawnLaunchStage(
+  options: LaunchBridgeOptions,
+  prepared: PreparedLaunchStage,
+): Promise<ForegroundSessionStageResult<SpawnedLaunchStage>> {
+  const moonlight = await options.launchMoonlight({
+    host: moonlightHostForConnection(prepared.connection),
+    gamescope: prepared.moonlightGamescope,
+  })
+
+  if (moonlight.status === "failed") {
+    logger.warn(
+      {
+        id: prepared.id,
+        host: prepared.connection.hostId,
+        sessionId: prepared.prepare.sessionId,
+        message: moonlight.message,
+      },
+      "launch-bridge: prepared but moonlight could not start",
+    )
+    return failedLaunchStage({
+      status: "prepared-no-moonlight",
+      gameId: prepared.prepare.gameId,
+      ...(prepared.prepare.sessionId
+        ? { sessionId: prepared.prepare.sessionId }
+        : {}),
+      message: moonlight.message,
+    })
+  }
+
+  if (!moonlight.session) {
+    return failedLaunchStage({
+      status: "prepared-no-moonlight",
+      gameId: prepared.prepare.gameId,
+      ...(prepared.prepare.sessionId
+        ? { sessionId: prepared.prepare.sessionId }
+        : {}),
+      message: "Moonlight started without a managed session handle",
+    })
+  }
+
+  return {
+    status: "ok",
+    value: { prepared, moonlight, session: moonlight.session },
+    evidence: {
+      command: moonlight.command,
+      processId: moonlight.session.processId,
+    },
+  }
+}
+
+async function foregroundLaunchStage(
+  options: LaunchBridgeOptions,
+  spawned: SpawnedLaunchStage,
+) {
+  const warning = await repairForegroundSurface(
+    options,
+    spawned.prepared.connection,
+    spawned.prepared.id,
+    spawned.prepared.prepare.sessionId,
+    spawned.prepared.ignoredForegroundSurfaceIds,
+  )
+  return warning ?? { status: "ok" as const }
+}
+
+function launchedResponse(
+  prepared: PreparedLaunchStage,
+  spawned: SpawnedLaunchStage,
+): LaunchBridgeResponse {
+  logger.info(
+    {
+      id: prepared.id,
+      host: prepared.connection.hostId,
+      sessionId: prepared.prepare.sessionId,
+      moonlight: spawned.moonlight.command,
+    },
+    "launch-bridge: launched",
+  )
+  return {
+    status: "launched",
+    gameId: prepared.prepare.gameId,
+    ...(prepared.prepare.sessionId
+      ? { sessionId: prepared.prepare.sessionId }
+      : {}),
+    moonlightCommand: spawned.moonlight.command,
+  }
+}
+
+function failedLaunchStage(
+  response: LaunchBridgeResponse,
+): ForegroundSessionStageResult<never> {
+  return {
+    status: "failed",
+    message:
+      response.status === "failed" || response.status === "prepared-no-moonlight"
+        ? response.message
+        : "launch failed",
+    evidence: { response },
+  }
+}
+
+function responseFromFailureEvidence(
+  evidence: Readonly<Record<string, unknown>> | undefined,
+): LaunchBridgeResponse | undefined {
+  const response = evidence?.response
+  if (!isRecord(response)) return undefined
+  if (response.status === "failed" && typeof response.message === "string") {
+    return response as LaunchBridgeResponse
+  }
+  if (
+    response.status === "prepared-no-moonlight" &&
+    typeof response.message === "string"
+  ) {
+    return response as LaunchBridgeResponse
+  }
+  return undefined
+}
+
+async function preflightMoonlightInput(
+  options: LaunchBridgeOptions,
+  connection: ConnectionServerRecord,
+  id: string,
+): Promise<LaunchBridgeResponse | undefined> {
+  const inputPreflight = await options.preflightMoonlightInput?.()
+  if (inputPreflight?.status !== "failed") return undefined
+
+  logger.warn(
+    { id, host: connection.hostId, category: inputPreflight.category },
+    "launch-bridge: refused — local normalized input unavailable",
+  )
+  return {
+    status: "failed",
+    category: inputPreflight.category,
+    message: inputPreflight.message,
+  } satisfies LaunchBridgeResponse
+}
+
+function prepareFailureResponse(
+  prepare: Extract<RemotePrepareResult, { readonly status: "failed" }>,
+  connection: ConnectionServerRecord,
+  id: string,
+): LaunchBridgeResponse {
+  logger.warn(
+    {
+      id,
+      host: connection.hostId,
+      category: prepare.category,
+      message: prepare.message,
+    },
+    "launch-bridge: prepare failed",
+  )
+  return {
+    status: "failed",
+    category: prepare.category,
+    message: prepare.message,
+  } satisfies LaunchBridgeResponse
+}
+
+async function snapshotForegroundSurfaceIds(
+  options: LaunchBridgeOptions,
+  connection: ConnectionServerRecord,
+  id: string,
+): Promise<ReadonlySet<number> | undefined> {
+  if (!options.moonlightForegroundRepair) return undefined
   try {
-    body = await request.json()
-  } catch {
+    return await options.moonlightForegroundRepair.snapshotSurfaceIds()
+  } catch (error) {
+    logger.warn(
+      { id, host: connection.hostId, err: error },
+      "launch-bridge: skipped Moonlight foreground repair after snapshot failure",
+    )
     return undefined
   }
-  if (typeof body !== "object" || body === null) return undefined
-  const id = (body as { id?: unknown }).id
-  return typeof id === "string" && id.length > 0 ? id : undefined
+}
+
+async function repairForegroundSurface(
+  options: LaunchBridgeOptions,
+  connection: ConnectionServerRecord,
+  id: string,
+  sessionId: string | undefined,
+  ignoredWindowIds: ReadonlySet<number> | undefined,
+): Promise<{ readonly status: "warning"; readonly message: string } | undefined> {
+  if (!options.moonlightForegroundRepair || !ignoredWindowIds) return undefined
+  try {
+    await options.moonlightForegroundRepair.repairSurface({ ignoredWindowIds })
+    return undefined
+  } catch (error) {
+    logger.warn(
+      {
+        id,
+        host: connection.hostId,
+        sessionId,
+        err: error,
+      },
+      "launch-bridge: Moonlight started but foreground repair failed",
+    )
+    return {
+      status: "warning",
+      message: errorMessage(error) ?? "Moonlight foreground repair failed",
+    }
+  }
+}
+
+async function resolveMoonlightGamescope(
+  options: LaunchBridgeOptions,
+  connection: ConnectionServerRecord,
+  id: string,
+): Promise<MoonlightLaunchOptions["gamescope"]> {
+  try {
+    return await options.resolveMoonlightGamescope?.()
+  } catch (error) {
+    logger.warn(
+      { id, host: connection.hostId, err: error },
+      "launch-bridge: local moonlight Gamescope policy resolution failed; using product default",
+    )
+    return undefined
+  }
+}
+
+async function prepareGameForLaunch(
+  options: LaunchBridgeOptions,
+  connection: ConnectionServerRecord,
+  id: string,
+): Promise<RemotePrepareResult> {
+  try {
+    return await options.prepareGame(connection.controlUrl, id)
+  } catch (error) {
+    const message = errorMessage(error) ?? "prepare-stream call failed"
+    logger.warn(
+      { id, host: connection.hostId, err: error },
+      "launch-bridge: prepareGame threw",
+    )
+    return {
+      status: "failed",
+      category: "prepare-failed",
+      message,
+    }
+  }
 }
 
 function moonlightHostForConnection(
@@ -294,15 +502,12 @@ function moonlightHostForConnection(
   }
 }
 
-function jsonResponse(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  })
-}
-
 function errorMessage(error: unknown): string | undefined {
   if (error instanceof Error) return error.message
   if (typeof error === "string") return error
   return undefined
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }

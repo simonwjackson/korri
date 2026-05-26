@@ -163,7 +163,7 @@ describe("desktop smoke", () => {
     ).toBe("pass")
   })
 
-  test("pins that /api/* and /__korri/desktop/launch still return 503 while disconnected", async () => {
+  test("pins that /api/* and /__korri/desktop/rpc still return 503 while disconnected", async () => {
     await writeFixture("index.html", "<html><head></head><body></body></html>")
 
     const report = await runDesktopSmoke({ assetRoot })
@@ -177,7 +177,7 @@ describe("desktop smoke", () => {
       report.checks.find(
         c =>
           c.name ===
-          "disconnected serve does not interfere with /__korri/desktop/launch",
+          "disconnected serve does not interfere with /__korri/desktop/rpc",
       )?.status,
     ).toBe("pass")
   })

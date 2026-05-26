@@ -400,13 +400,18 @@ function resolvePreloadPath(): string | undefined {
 // managed child handle. Ownership and termination live above this runner;
 // starting a new child never kills an existing one.
 const diagnosticMoonlightRunner = createDesktopMoonlightSessionRunner({
-  spawn: (command, args, options) =>
-    Bun.spawn([command, ...args], {
+  spawn: (command, args, options) => {
+    const child = Bun.spawn([command, ...args], {
       stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",
       env: options?.env ? { ...Bun.env, ...options.env } : Bun.env,
-    }),
+    })
+    return {
+      ...child,
+      kill: signal => child.kill(signal === "SIGKILL" ? "SIGKILL" : "SIGTERM"),
+    }
+  },
 })
 
 main().catch(error => {
