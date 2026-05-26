@@ -242,8 +242,10 @@ let
       contains "SS_RUNTIME_SETTINGS_MVP_ACK_WITH_REASON" moonlightPatch
       && contains "SS_RUNTIME_SETTINGS_MVP_REASON_NONE" moonlightPatch
       && contains "legacy no-reason runtime settings ack" moonlightPatch
-      && contains "uint32_t appliedValue;" moonlightPatch
-      && contains "uint16_t reason;" moonlightPatch
+      && contains "uint32_t appliedValue;\n+    uint16_t reason;" moonlightPatch
+      && contains "uint32_t appliedHeight;\n+    uint16_t reason;" moonlightPatch
+      && contains "BbGet32(&bb, &appliedValue);\n+                        if (hasReason)" moonlightPatch
+      && contains "BbGet32(&bb, &appliedHeight);\n+                            if (hasReason)" moonlightPatch
       && contains "reason=" moonlightPatch
     ))
     (check
@@ -286,6 +288,8 @@ let
       && contains "runtime_settings_mvp_operation_proof_gated" moonlightPatch
       && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_ALLOW_PROOF_GATED" moonlightPatch
       && contains "outcome=locally-rejected reason=proof-gated" moonlightPatch
+      && contains "proof-gated override=manual-smoke" moonlightPatch
+      && contains "else if (!runtime_settings_mvp_operation_supported(operation))" moonlightPatch
       && contains "outcome=locally-rejected reason=unsupported-operation" moonlightPatch
       && contains "detail=no-capability" moonlightPatch
       && contains "outcome=locally-rejected reason=invalid-bounds" moonlightPatch
@@ -297,6 +301,8 @@ let
     ))
     (check "Moonlight runtime settings stale acks are diagnostic and do not overwrite current state" (
       contains "outcome=stale-ack-observed reason=stale-ack" moonlightPatch
+      && contains "state->state == SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_TIMED_OUT" moonlightPatch
+      && contains "return false;\n+        }\n+\n+        if (state->state == SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_IN_FLIGHT)" moonlightPatch
       && contains "if (runtime_settings_mvp_record_ack(requestId, operation, status, reason))" moonlightPatch
       && contains "runtime_settings_mvp_record_current_applied" moonlightPatch
     ))

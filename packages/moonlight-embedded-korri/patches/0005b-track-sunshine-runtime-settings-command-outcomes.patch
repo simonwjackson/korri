@@ -1,8 +1,6 @@
-diff --git a/third_party/moonlight-common-c/src/ControlStream.c b/third_party/moonlight-common-c/src/ControlStream.c
-index 1542448..4992a9e 100644
 --- a/third_party/moonlight-common-c/src/ControlStream.c
 +++ b/third_party/moonlight-common-c/src/ControlStream.c
-@@ -146,11 +146,22 @@ static PPLT_CRYPTO_CONTEXT decryptionCtx;
+@@ -146,11 +146,22 @@
  #define CONTROL_STREAM_LINGER_TIMEOUT_SEC 2
  
  #define SS_RUNTIME_SETTINGS_MVP_REQUEST_PTYPE 0x5504
@@ -25,7 +23,7 @@ index 1542448..4992a9e 100644
  
  typedef struct _SS_RUNTIME_SETTINGS_MVP_REQUEST_PREFIX {
      uint32_t requestId;
-@@ -173,7 +184,90 @@ typedef struct _SS_RUNTIME_SETTINGS_MVP_RESOLUTION_REQUEST {
+@@ -173,7 +184,90 @@
      uint32_t height;
  } SS_RUNTIME_SETTINGS_MVP_RESOLUTION_REQUEST, *PSS_RUNTIME_SETTINGS_MVP_RESOLUTION_REQUEST;
  
@@ -117,7 +115,7 @@ index 1542448..4992a9e 100644
      0x1407, // Request IDR frame
      0x1410, // Start B
      0x1404, // Invalidate reference frames
-@@ -385,6 +479,7 @@ int initializeControlStream(void) {
+@@ -385,6 +479,7 @@
      decryptionCtx = PltCreateCryptoContext();
      hdrEnabled = false;
      memset(&hdrMetadata, 0, sizeof(hdrMetadata));
@@ -125,7 +123,7 @@ index 1542448..4992a9e 100644
  
      return 0;
  }
-@@ -697,88 +792,221 @@ static bool isPacketSentWaitingForAck(ENetPacket* packet) {
+@@ -697,88 +792,219 @@
  
  static bool sendMessageAndForget(short ptype, short paylen, const void* payload, uint8_t channelId, uint32_t flags, bool moreData);
  
@@ -298,10 +296,10 @@ index 1542448..4992a9e 100644
 -        return -3;
 +    if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_BITRATE_KBPS) {
 +        runtime_settings_mvp_settings_state.currentBitrateKbps = value;
-+    }
+     }
 +    else if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_FPS) {
 +        runtime_settings_mvp_settings_state.currentFps = value;
-     }
++    }
 +    else if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_RESOLUTION) {
 +        runtime_settings_mvp_settings_state.currentWidth = value;
 +        runtime_settings_mvp_settings_state.currentHeight = secondaryValue;
@@ -323,11 +321,11 @@ index 1542448..4992a9e 100644
 +    const char* enabled = getenv("MOONLIGHT_RUNTIME_SETTINGS_MVP_ALLOW_PROOF_GATED");
 +    return enabled != NULL && strcmp(enabled, "1") == 0;
 +}
-+
+ 
 +static bool runtime_settings_mvp_operation_supported(uint16_t operation) {
 +    return (runtime_settings_mvp_settings_state.supportedOperations & (1u << operation)) != 0;
 +}
- 
++
 +static bool runtime_settings_mvp_operation_proof_gated(uint16_t operation) {
 +    return (runtime_settings_mvp_settings_state.proofGatedOperations & (1u << operation)) != 0;
 +}
@@ -356,10 +354,8 @@ index 1542448..4992a9e 100644
 +        }
 +        Limelog("live-settings-mvp: command request_id=%u operation=%u proof-gated override=manual-smoke\n",
 +                requestId, operation);
-+        return true;
 +    }
-+
-+    if (!runtime_settings_mvp_operation_supported(operation)) {
++    else if (!runtime_settings_mvp_operation_supported(operation)) {
 +        Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=locally-rejected reason=unsupported-operation\n",
 +                requestId, operation);
 +        return false;
@@ -407,7 +403,7 @@ index 1542448..4992a9e 100644
      ENetPacket* enetPacket;
      int err;
  
-@@ -1292,6 +1520,8 @@ static void controlReceiveThreadFunc(void* context) {
+@@ -1292,6 +1518,8 @@
          ENetEvent event;
          enet_uint32 waitTimeMs;
  
@@ -416,7 +412,7 @@ index 1542448..4992a9e 100644
          PltLockMutex(&enetMutex);
  
          // Poll for new packets and process retransmissions
-@@ -1356,6 +1586,7 @@ static void controlReceiveThreadFunc(void* context) {
+@@ -1356,6 +1584,7 @@
                          // assume the server died tragically, so go ahead and tear down.
                          PltUnlockMutex(&enetMutex);
                          Limelog("Disconnect event timeout expired\n");
@@ -424,7 +420,7 @@ index 1542448..4992a9e 100644
                          ListenerCallbacks.connectionTerminated(-1);
                          return;
                      }
-@@ -1379,6 +1610,7 @@ static void controlReceiveThreadFunc(void* context) {
+@@ -1379,6 +1608,7 @@
  
              err = LastSocketFail();
              Limelog("Control stream connection failed: %d\n", err);
@@ -432,7 +428,7 @@ index 1542448..4992a9e 100644
              ListenerCallbacks.connectionTerminated(err);
              return;
          }
-@@ -1442,6 +1674,123 @@ static void controlReceiveThreadFunc(void* context) {
+@@ -1442,6 +1672,123 @@
  
              // All below codepaths must free ctlHdr!!!
  
@@ -556,7 +552,7 @@ index 1542448..4992a9e 100644
              // Process HDR data immediately to update global HDR enabled state and HDR metadata.
              // The actual client callback will be invoked in the async callback thread.
              if (ctlHdr->type == packetTypes[IDX_HDR_INFO]) {
-@@ -1550,6 +1899,7 @@ static void controlReceiveThreadFunc(void* context) {
+@@ -1550,6 +1897,7 @@
                  PltLockMutex(&enetMutex);
                  enet_peer_disconnect_now(peer, 0);
                  PltUnlockMutex(&enetMutex);
@@ -564,7 +560,7 @@ index 1542448..4992a9e 100644
                  ListenerCallbacks.connectionTerminated((int)terminationErrorCode);
                  free(ctlHdr);
                  return;
-@@ -1559,6 +1909,7 @@ static void controlReceiveThreadFunc(void* context) {
+@@ -1559,6 +1907,7 @@
          }
          else if (event.type == ENET_EVENT_TYPE_DISCONNECT) {
              Limelog("Control stream received unexpected disconnect event\n");
