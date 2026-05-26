@@ -1,6 +1,6 @@
 /**
- * Renderer-side `Launcher` that posts to the desktop's bun-side launch
- * bridge instead of calling `app.library.launch` via RPC.
+ * Renderer-side `Launcher` that calls the desktop bun-side launch RPC
+ * instead of calling `app.library.launch` via the remote API.
  *
  * The bun side handles the prepare-stream RPC against the connected
  * korri-server *and* the local Moonlight spawn (see
@@ -13,88 +13,69 @@
  * The LaunchSpec.command coming in is the game id (the renderer's
  * `LibrarySource.launchSpecFor` returns an opaque
  * `{ command: id, args: [] }`). We unpack it back into `{ id }` for
- * the bridge.
+ * the local launch RPC.
  */
 
+import {
+  createLocalStreamLaunchClient,
+  type LocalStreamLaunchClient,
+} from "@app/stream/local-stream-launch-client"
+import type { LocalStreamLaunchResponse } from "@app/stream/local-stream-launch-rpc"
 import { Launcher, LibraryError } from "@shared/library/library-services"
 import { Effect, Layer } from "effect"
 
-const BRIDGE_URL = "/__korri/desktop/launch"
-
-interface BridgeFailureResponse {
-  readonly status: "failed"
-  readonly category:
-    | "host-unavailable"
-    | "host-control-disabled"
-    | "no-such-game"
-    | "prepare-failed"
-    | "input-unavailable"
-    | "input-ambiguous"
-  readonly message: string
+export interface LauncherLayerBridgeOptions {
+  readonly client?: LocalStreamLaunchClient
 }
 
-interface BridgeLaunchedResponse {
-  readonly status: "launched"
-  readonly gameId: string
-  readonly sessionId?: string
-  readonly moonlightCommand: string
+export function createLauncherLayerBridge(
+  options: LauncherLayerBridgeOptions = {},
+) {
+  const client = options.client ?? createLocalStreamLaunchClient()
+  return Layer.succeed(Launcher)({
+    run: spec =>
+      Effect.tryPromise({
+        try: async () =>
+          launchResultFromResponse(await client.launchGame(spec.command)),
+        catch: error =>
+          new LibraryError({
+            reason: "io",
+            message: error instanceof Error ? error.message : String(error),
+          }),
+      }),
+  })
 }
 
-interface BridgePreparedNoMoonlightResponse {
-  readonly status: "prepared-no-moonlight"
-  readonly gameId: string
-  readonly sessionId?: string
-  readonly message: string
+export const LauncherLayerBridge = createLauncherLayerBridge()
+
+function launchResultFromResponse(response: LocalStreamLaunchResponse) {
+  if (response.status === "launched") {
+    return { status: "launched" as const }
+  }
+  if (response.status === "prepared-no-moonlight") {
+    // Prepare succeeded on the server but Moonlight couldn't start locally.
+    // The stream session exists; surface this as a launch-failure so the UI
+    // can prompt the user to fix Moonlight, but distinguish via the message.
+    return {
+      status: "failed" as const,
+      exitCode: 125,
+      stderrTail: response.message,
+      failureKind: "moonlight-failed" as const,
+    }
+  }
+  return {
+    status: "failed" as const,
+    exitCode: exitCodeForCategory(response.category),
+    stderrTail: response.message,
+    failureKind: response.category,
+  }
 }
-
-type BridgeResponse =
-  | BridgeLaunchedResponse
-  | BridgePreparedNoMoonlightResponse
-  | BridgeFailureResponse
-
-export const LauncherLayerBridge = Layer.succeed(Launcher)({
-  run: spec =>
-    Effect.tryPromise({
-      try: async () => {
-        const response = await fetch(BRIDGE_URL, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ id: spec.command }),
-        })
-        const body = (await response.json()) as BridgeResponse
-        if (body.status === "launched") {
-          return { status: "launched" as const }
-        }
-        if (body.status === "prepared-no-moonlight") {
-          // Prepare succeeded on the server but Moonlight couldn't start
-          // locally. The stream session exists; surface this as a
-          // launch-failure so the UI can prompt the user to fix
-          // Moonlight, but distinguish via the message.
-          return {
-            status: "failed" as const,
-            exitCode: 125,
-            stderrTail: body.message,
-            failureKind: "moonlight-failed" as const,
-          }
-        }
-        // body.status === "failed"
-        return {
-          status: "failed" as const,
-          exitCode: exitCodeForCategory(body.category),
-          stderrTail: body.message,
-          failureKind: body.category,
-        }
-      },
-      catch: error =>
-        new LibraryError({
-          reason: "io",
-          message: error instanceof Error ? error.message : String(error),
-        }),
-    }),
-})
 
 function exitCodeForCategory(
-  category: BridgeFailureResponse["category"],
+  category: Extract<
+    LocalStreamLaunchResponse,
+    { readonly status: "failed" }
+  >["category"],
 ): number {
   switch (category) {
     case "host-unavailable":
@@ -109,5 +90,7 @@ function exitCodeForCategory(
       return 123
     case "input-ambiguous":
       return 122
+    case "session-busy":
+      return 121
   }
 }

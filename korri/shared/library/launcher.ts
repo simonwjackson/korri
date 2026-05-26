@@ -56,6 +56,7 @@ export type LaunchFailureKind =
   | "moonlight-failed"
   | "input-unavailable"
   | "input-ambiguous"
+  | "session-busy"
 
 export type LaunchResult =
   | { readonly status: "launched" }
