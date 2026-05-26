@@ -82,6 +82,41 @@ describe("RockNix product payload finalizer", () => {
     }
   })
 
+  test("runs through the CLI flags used by the workflow", () => {
+    const dir = makeTempDir()
+    try {
+      const outputDir = join(dir, "final")
+      const cli = spawnSync(
+        "bun",
+        [
+          "tools/artifacts/rocknix-product-payload-finalize.ts",
+          "--candidate",
+          writeCandidate(dir),
+          "--out",
+          outputDir,
+          "--product-rev",
+          cleanRevision,
+          "--source-sha256",
+          sourceSha,
+          "--seed-url",
+          "https://api.github.com/repos/simonwjackson/korri/releases/assets/1",
+          "--seed-url",
+          "https://api.github.com/repos/simonwjackson/korri/releases/assets/2",
+        ],
+        { cwd: process.cwd() },
+      )
+
+      expect(cli.status).toBe(0)
+      expect(
+        readFileSync(join(outputDir, "product-payload.lock"), "utf8"),
+      ).toContain(
+        `PRODUCT_ROOTFS_SEED_URLS="https://api.github.com/repos/simonwjackson/korri/releases/assets/1 https://api.github.com/repos/simonwjackson/korri/releases/assets/2"`,
+      )
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   test("preserves ordered multiple seed URLs", () => {
     const dir = makeTempDir()
     try {
@@ -136,6 +171,29 @@ describe("RockNix product payload finalizer", () => {
           outputDir: join(dir, "final"),
           sourceSha256: sourceSha,
           productRevision: "",
+          seedUrls: [
+            "https://api.github.com/repos/simonwjackson/korri/releases/assets/123",
+          ],
+        }),
+      ).toThrow("clean Korri revision")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("rejects a dirty or mismatched candidate revision", () => {
+    const dir = makeTempDir()
+    try {
+      expect(() =>
+        finalizeRocknixProductPayload({
+          candidateLockPath: writeCandidate(dir, {
+            PRODUCT_REV: `${cleanRevision}-dirty`,
+            PRODUCT_ROOTFS_SEED_REV: `${cleanRevision}-dirty`,
+            PRODUCT_REV_CLEAN: "0",
+          }),
+          outputDir: join(dir, "final"),
+          sourceSha256: sourceSha,
+          productRevision: cleanRevision,
           seedUrls: [
             "https://api.github.com/repos/simonwjackson/korri/releases/assets/123",
           ],

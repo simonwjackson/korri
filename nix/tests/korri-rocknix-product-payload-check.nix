@@ -5,6 +5,8 @@
   targetPackages,
   configurations,
   contract,
+  fixturePayloadPackage,
+  fixtureArchiveName,
 }:
 
 let
@@ -94,9 +96,42 @@ if failures != [ ] then
     lib.concatMapStringsSep "\n" (failure: "- ${failure.message}") failures
   }"
 else
-  pkgs.runCommand "korri-rocknix-product-payload-check" { } ''
-    mkdir -p "$out"
-    cat > "$out/summary.txt" <<'EOF'
-    Korri RockNix product payload invariants passed.
-    EOF
-  ''
+  pkgs.runCommand "korri-rocknix-product-payload-check"
+    {
+      nativeBuildInputs = [
+        pkgs.coreutils
+        pkgs.gawk
+      ];
+    }
+    ''
+      payload=${fixturePayloadPackage}
+      seed="$payload/rootfs/${fixtureArchiveName}"
+      lock="$payload/nix-support/product-payload/candidate-product-payload.lock"
+      manifest="$payload/nix-support/product-payload/manifest.txt"
+
+      test -L "$seed"
+      test -f "$seed.sha256"
+      test -f "$lock"
+      test -f "$manifest"
+
+      expected_sha=$(sha256sum "$seed" | awk '{ print $1 }')
+      grep -Fx "$expected_sha  ${fixtureArchiveName}" "$seed.sha256"
+
+      set -a
+      . "$lock"
+      set +a
+      test "$PRODUCT_ROOTFS_SEED_DEVICE" = "odin2portal"
+      test "$PRODUCT_ROOTFS_SEED_COMPATIBLE" = "ayn,odin2portal"
+      test "$PRODUCT_ROOTFS_SEED_ARCHIVE" = "${fixtureArchiveName}"
+      test "$PRODUCT_ROOTFS_SEED_SHA256" = "$expected_sha"
+      test -z "$PRODUCT_SOURCE_SHA256"
+      test -z "$PRODUCT_ROOTFS_SEED_URLS"
+
+      grep -Fx "rootfs_seed_archive=${fixtureArchiveName}" "$manifest"
+      grep -Fx "rootfs_seed_sha256=$expected_sha" "$manifest"
+
+      mkdir -p "$out"
+      cat > "$out/summary.txt" <<'EOF'
+      Korri RockNix product payload invariants passed.
+      EOF
+    ''
