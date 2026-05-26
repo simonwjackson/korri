@@ -118,10 +118,12 @@ let
       && contains "current_width" patch
       && contains "current_height" patch
     ))
-    (check "Sunshine runtime capability support is gated by active session encoder facts" (
-      contains "auto h264_session = session->config.monitor.videoFormat == 0" patch
-      && contains "auto vaapi_requested = config::video.encoder == \"vaapi\"sv" patch
-      && contains "auto runtime_supported = enabled && h264_session && vaapi_requested" patch
+    (check "Sunshine runtime capability support is gated by per-session active encoder facts" (
+      contains "MAIL(runtime_settings_supports_encoder_restart)" patch
+      && contains "session->control.runtime_settings_supports_encoder_restart" patch
+      && contains "session->control.runtime_settings_encoder_restart_supported" patch
+      && contains "runtime_settings_supports_encoder_restart->raise(runtime_bitrate_supports_encoder_restart" patch
+      && contains "auto runtime_supported = enabled && session->control.runtime_settings_encoder_restart_supported" patch
       && contains "std::uint16_t reason = enabled ? video::RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER" patch
     ))
     (check "Sunshine runtime resolution capability remains proof-gated instead of generally advertised"
@@ -289,7 +291,7 @@ let
       && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_ALLOW_PROOF_GATED" moonlightPatch
       && contains "outcome=locally-rejected reason=proof-gated" moonlightPatch
       && contains "proof-gated override=manual-smoke" moonlightPatch
-      && contains "else if (!runtime_settings_mvp_operation_supported(operation))" moonlightPatch
+      && contains "else if (!supported)" moonlightPatch
       && contains "outcome=locally-rejected reason=unsupported-operation" moonlightPatch
       && contains "detail=no-capability" moonlightPatch
       && contains "outcome=locally-rejected reason=invalid-bounds" moonlightPatch
@@ -305,6 +307,13 @@ let
       && contains "return false;\n+        }\n+\n+        if (state->state == SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_IN_FLIGHT)" moonlightPatch
       && contains "if (runtime_settings_mvp_record_ack(requestId, operation, status, reason))" moonlightPatch
       && contains "runtime_settings_mvp_record_current_applied" moonlightPatch
+    ))
+    (check "Moonlight runtime settings command and capability state is mutex-protected" (
+      contains "static PLT_MUTEX runtime_settings_mvp_mutex" moonlightPatch
+      && contains "PltCreateMutex(&runtime_settings_mvp_mutex)" moonlightPatch
+      && contains "PltLockMutex(&runtime_settings_mvp_mutex)" moonlightPatch
+      && contains "PltUnlockMutex(&runtime_settings_mvp_mutex)" moonlightPatch
+      && contains "runtime_settings_mvp_check_timeouts_locked" moonlightPatch
     ))
     (check "Moonlight runtime settings records stream-ended terminal outcomes" (
       contains "runtime_settings_mvp_record_stream_ended" moonlightPatch

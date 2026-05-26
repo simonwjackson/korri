@@ -1,28 +1,28 @@
-diff --git a/src/stream.cpp b/src/stream.cpp
-index f56892d..47bfe0d 100644
 --- a/src/stream.cpp
 +++ b/src/stream.cpp
 @@ -4,6 +4,7 @@
   */
- 
+
  // standard includes
 +#include <cstdlib>
  #include <fstream>
  #include <future>
  #include <queue>
-@@ -440,6 +441,7 @@ namespace stream {
+@@ -440,6 +441,7 @@
        std::uint64_t gcm_iv_counter;
- 
+
        safe::mail_raw_t::event_t<bool> idr_events;
 +      safe::mail_raw_t::queue_t<video::runtime_bitrate_request_t> runtime_bitrate_events;
        safe::mail_raw_t::event_t<std::pair<int64_t, int64_t>> invalidate_ref_frames_events;
- 
+
        std::unique_ptr<platf::deinit_t> qos;
-@@ -476,6 +478,15 @@ namespace stream {
- 
+@@ -476,6 +478,17 @@
+
        platf::feedback_queue_t feedback_queue;
        safe::mail_raw_t::event_t<video::hdr_info_t> hdr_queue;
 +      safe::mail_raw_t::queue_t<video::runtime_bitrate_ack_t> runtime_bitrate_ack_queue;
++      safe::mail_raw_t::event_t<bool> runtime_settings_supports_encoder_restart;
++      bool runtime_settings_encoder_restart_supported;
 +      std::uint32_t runtime_settings_launch_bitrate_kbps;
 +      std::uint32_t runtime_settings_launch_fps;
 +      std::uint32_t runtime_settings_launch_width;
@@ -32,12 +32,12 @@ index f56892d..47bfe0d 100644
 +      std::uint32_t runtime_settings_applied_width;
 +      std::uint32_t runtime_settings_applied_height;
      } control;
- 
+
      std::uint32_t launch_session_id;
-@@ -959,6 +970,101 @@ namespace stream {
+@@ -959,6 +972,103 @@
      return 0;
    }
- 
+
 +  template<class Ack>
 +  void send_runtime_settings_ack_payload(session_t *session, const Ack &plaintext) {
 +    std::array<std::uint8_t, sizeof(control_encrypted_t) + crypto::cipher::round_to_pkcs7_padded(sizeof(plaintext)) + crypto::cipher::tag_size>
@@ -96,9 +96,11 @@ index f56892d..47bfe0d 100644
 +      return;
 +    }
 +
-+    auto h264_session = session->config.monitor.videoFormat == 0;
-+    auto vaapi_requested = config::video.encoder == "vaapi"sv;
-+    auto runtime_supported = enabled && h264_session && vaapi_requested;
++    while (session->control.runtime_settings_supports_encoder_restart->peek()) {
++      session->control.runtime_settings_encoder_restart_supported = session->control.runtime_settings_supports_encoder_restart->pop(0ms);
++    }
++
++    auto runtime_supported = enabled && session->control.runtime_settings_encoder_restart_supported;
 +    std::uint32_t supported_operations = 0;
 +    std::uint32_t proof_gated_operations = 0;
 +    std::uint16_t status = enabled ? video::RUNTIME_SETTINGS_STATUS_APPLIED : video::RUNTIME_SETTINGS_STATUS_DISABLED;
@@ -136,10 +138,10 @@ index f56892d..47bfe0d 100644
    int send_hdr_mode(session_t *session, video::hdr_info_t hdr_info) {
      if (!session->control.peer) {
        BOOST_LOG(warning) << "Couldn't send HDR mode, still waiting for PING from Moonlight"sv;
-@@ -1023,6 +1129,133 @@ namespace stream {
+@@ -1023,6 +1133,133 @@
        session->video.idr_events->raise(true);
      });
- 
+
 +    server->map(packetTypes[IDX_RUNTIME_SETTINGS_REQUEST], [&](session_t *session, const std::string_view &payload) {
 +      BOOST_LOG(debug) << "type [IDX_RUNTIME_SETTINGS_REQUEST]"sv;
 +
@@ -270,8 +272,8 @@ index f56892d..47bfe0d 100644
      server->map(packetTypes[IDX_INVALIDATE_REF_FRAMES], [&](session_t *session, const std::string_view &payload) {
        auto frames = (std::int64_t *) payload.data();
        auto firstFrame = frames[0];
-@@ -1193,6 +1426,13 @@ namespace stream {
- 
+@@ -1193,6 +1430,13 @@
+
                send_hdr_mode(session, std::move(hdr_info));
              }
 +
@@ -282,13 +284,15 @@ index f56892d..47bfe0d 100644
 +              }
 +            }
            }
- 
+
            ++pos;
-@@ -2071,6 +2311,15 @@ namespace stream {
+@@ -2071,6 +2315,17 @@
        session->control.connect_data = launch_session.control_connect_data;
        session->control.feedback_queue = mail->queue<platf::gamepad_feedback_msg_t>(mail::gamepad_feedback);
        session->control.hdr_queue = mail->event<video::hdr_info_t>(mail::hdr);
 +      session->control.runtime_bitrate_ack_queue = mail->queue<video::runtime_bitrate_ack_t>(mail::runtime_bitrate_ack);
++      session->control.runtime_settings_supports_encoder_restart = mail->event<bool>(mail::runtime_settings_supports_encoder_restart);
++      session->control.runtime_settings_encoder_restart_supported = false;
 +      session->control.runtime_settings_launch_bitrate_kbps = (std::uint32_t) session->config.monitor.bitrate;
 +      session->control.runtime_settings_launch_fps = (std::uint32_t) session->config.monitor.framerate;
 +      session->control.runtime_settings_launch_width = (std::uint32_t) session->config.monitor.width;
@@ -300,9 +304,9 @@ index f56892d..47bfe0d 100644
        session->control.legacy_input_enc_iv = launch_session.iv;
        session->control.cipher = crypto::cipher::gcm_t {
          launch_session.gcm_key,
-@@ -2078,6 +2327,7 @@ namespace stream {
+@@ -2078,6 +2333,7 @@
        };
- 
+
        session->video.idr_events = mail->event<bool>(mail::idr);
 +      session->video.runtime_bitrate_events = mail->queue<video::runtime_bitrate_request_t>(mail::runtime_bitrate);
        session->video.invalidate_ref_frames_events = mail->event<std::pair<int64_t, int64_t>>(mail::invalidate_ref_frames);

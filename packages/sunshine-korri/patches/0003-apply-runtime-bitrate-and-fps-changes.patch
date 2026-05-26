@@ -1,29 +1,29 @@
-diff --git a/src/video.cpp b/src/video.cpp
-index 8f6b69c..5f8f53a 100644
 --- a/src/video.cpp
 +++ b/src/video.cpp
-@@ -430,12 +430,16 @@ namespace video {
+@@ -430,12 +430,17 @@
      safe::mail_raw_t::event_t<bool> shutdown_event;
      safe::mail_raw_t::queue_t<packet_t> packets;
      safe::mail_raw_t::event_t<bool> idr_events;
 +    safe::mail_raw_t::queue_t<runtime_bitrate_request_t> runtime_bitrate_events;
 +    safe::mail_raw_t::queue_t<runtime_bitrate_ack_t> runtime_bitrate_ack_events;
++    safe::mail_raw_t::event_t<bool> runtime_settings_supports_encoder_restart;
      safe::mail_raw_t::event_t<hdr_info_t> hdr_events;
      safe::mail_raw_t::event_t<input::touch_port_t> touch_port_events;
- 
+
      config_t config;
      int frame_nr;
      void *channel_data;
 +    std::uint32_t runtime_fps = 0;
 +    std::chrono::steady_clock::time_point next_runtime_frame;
    };
- 
+
    struct sync_session_t {
-@@ -464,6 +468,15 @@ namespace video {
+@@ -464,6 +469,16 @@
      encode_session_ctx_queue_t encode_session_ctx_queue {30};
    };
- 
+
 +  std::unique_ptr<platf::encode_device_t> make_encode_device(platf::display_t &disp, const encoder_t &encoder, const config_t &config);
++
 +  bool runtime_bitrate_supports_encoder_restart(const encoder_t &encoder, const config_t &config) {
 +    return encoder.name == "vaapi"sv && encoder.codec_from_config(config).name == "h264_vaapi";
 +  }
@@ -35,22 +35,24 @@ index 8f6b69c..5f8f53a 100644
    int start_capture_sync(capture_thread_sync_ctx_t &ctx);
    void end_capture_sync(capture_thread_sync_ctx_t &ctx);
    int start_capture_async(capture_thread_async_ctx_t &ctx);
-@@ -1909,7 +1922,11 @@ namespace video {
+@@ -1909,7 +1924,13 @@
      auto shutdown_event = mail->event<bool>(mail::shutdown);
      auto packets = mail::man->queue<packet_t>(mail::video_packets);
      auto idr_events = mail->event<bool>(mail::idr);
 +    auto runtime_bitrate_events = mail->queue<runtime_bitrate_request_t>(mail::runtime_bitrate);
 +    auto runtime_bitrate_ack_events = mail->queue<runtime_bitrate_ack_t>(mail::runtime_bitrate_ack);
++    auto runtime_settings_supports_encoder_restart = mail->event<bool>(mail::runtime_settings_supports_encoder_restart);
      auto invalidate_ref_frames_events = mail->event<std::pair<int64_t, int64_t>>(mail::invalidate_ref_frames);
 +    std::uint32_t runtime_fps = config.framerate;
 +    auto next_runtime_frame = std::chrono::steady_clock::now();
- 
++    runtime_settings_supports_encoder_restart->raise(runtime_bitrate_supports_encoder_restart(encoder, config));
+
      {
        // Load a dummy image into the AVFrame to ensure we have something to encode
-@@ -1947,12 +1964,90 @@ namespace video {
+@@ -1947,12 +1968,90 @@
          idr_events->pop();
        }
- 
+
 +      while (runtime_bitrate_events->peek()) {
 +        if (auto request = runtime_bitrate_events->pop(0ms)) {
 +          if (request->operation == RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS) {
@@ -124,9 +126,9 @@ index 8f6b69c..5f8f53a 100644
        if (requested_idr_frame) {
          session->request_idr_frame();
        }
- 
+
        std::optional<std::chrono::steady_clock::time_point> frame_timestamp;
- 
+
 +      if (!requested_idr_frame && runtime_fps > 0 && runtime_fps < (std::uint32_t) config.framerate) {
 +        auto now = std::chrono::steady_clock::now();
 +        if (now < next_runtime_frame) {
@@ -138,10 +140,12 @@ index 8f6b69c..5f8f53a 100644
        // Encode at a minimum FPS to avoid image quality issues with static content
        if (!requested_idr_frame || images->peek()) {
          if (auto img = images->pop(max_frametime)) {
-@@ -2195,6 +2290,95 @@ namespace video {
+@@ -2195,6 +2294,97 @@
              ctx->idr_events->pop();
            }
- 
+
++          ctx->runtime_settings_supports_encoder_restart->raise(runtime_bitrate_supports_encoder_restart(encoder, ctx->config));
++
 +          while (ctx->runtime_bitrate_events->peek()) {
 +            if (auto request = ctx->runtime_bitrate_events->pop(0ms)) {
 +              if (request->operation == RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS) {
@@ -234,12 +238,13 @@ index 8f6b69c..5f8f53a 100644
            if (frame_captured && pos->session->convert(*img)) {
              BOOST_LOG(error) << "Could not convert image"sv;
              ctx->shutdown_event->raise(true);
-@@ -2377,6 +2561,8 @@ namespace video {
+@@ -2377,6 +2567,9 @@
          mail->event<bool>(mail::shutdown),
          mail::man->queue<packet_t>(mail::video_packets),
          std::move(idr_events),
 +        mail->queue<runtime_bitrate_request_t>(mail::runtime_bitrate),
 +        mail->queue<runtime_bitrate_ack_t>(mail::runtime_bitrate_ack),
++        mail->event<bool>(mail::runtime_settings_supports_encoder_restart),
          mail->event<hdr_info_t>(mail::hdr),
          mail->event<input::touch_port_t>(mail::touch_port),
          config,

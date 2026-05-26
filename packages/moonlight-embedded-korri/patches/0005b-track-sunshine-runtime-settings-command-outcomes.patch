@@ -2,7 +2,7 @@
 +++ b/third_party/moonlight-common-c/src/ControlStream.c
 @@ -146,11 +146,22 @@
  #define CONTROL_STREAM_LINGER_TIMEOUT_SEC 2
- 
+
  #define SS_RUNTIME_SETTINGS_MVP_REQUEST_PTYPE 0x5504
 +#define SS_RUNTIME_SETTINGS_MVP_ACK_PTYPE 0x5505
  #define SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES 0
@@ -20,13 +20,13 @@
 +#define SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_IN_FLIGHT 1
 +#define SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_TERMINAL 2
 +#define SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_TIMED_OUT 3
- 
+
  typedef struct _SS_RUNTIME_SETTINGS_MVP_REQUEST_PREFIX {
      uint32_t requestId;
-@@ -173,7 +184,90 @@
+@@ -173,7 +184,91 @@
      uint32_t height;
  } SS_RUNTIME_SETTINGS_MVP_RESOLUTION_REQUEST, *PSS_RUNTIME_SETTINGS_MVP_RESOLUTION_REQUEST;
- 
+
 -static const short packetTypesGen3[] = {static const short packetTypesGen3[] = {
 +typedef struct _SS_RUNTIME_SETTINGS_MVP_ACK {
 +    uint32_t requestId;
@@ -110,23 +110,32 @@
 +
 +static SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE runtime_settings_mvp_command_state[SS_RUNTIME_SETTINGS_MVP_OPERATION_MAX + 1];
 +static SS_RUNTIME_SETTINGS_MVP_SETTINGS_STATE runtime_settings_mvp_settings_state;
++static PLT_MUTEX runtime_settings_mvp_mutex;
 +
 +static const short packetTypesGen3[] = {
      0x1407, // Request IDR frame
      0x1410, // Start B
      0x1404, // Invalidate reference frames
-@@ -385,6 +479,7 @@
+@@ -334,6 +429,7 @@
+     LbqInitializeLinkedBlockingQueue(&frameFecStatusQueue, 8); // Limits number of frame status reports per periodic ping interval
+     LbqInitializeLinkedBlockingQueue(&asyncCallbackQueue, 30);
+     PltCreateMutex(&enetMutex);
++    PltCreateMutex(&runtime_settings_mvp_mutex);
+
+     encryptedControlStream = APP_VERSION_AT_LEAST(7, 1, 431);
+
+@@ -385,6 +481,7 @@
      decryptionCtx = PltCreateCryptoContext();
      hdrEnabled = false;
      memset(&hdrMetadata, 0, sizeof(hdrMetadata));
 +    memset(&runtime_settings_mvp_settings_state, 0, sizeof(runtime_settings_mvp_settings_state));
- 
+
      return 0;
  }
-@@ -697,88 +792,219 @@
- 
+@@ -697,88 +794,261 @@
+
  static bool sendMessageAndForget(short ptype, short paylen, const void* payload, uint8_t channelId, uint32_t flags, bool moreData);
- 
+
 -int LiSendSunshineRuntimeSettingsMvp(uint32_t requestId, uint16_t operation, uint32_t value, uint32_t secondaryValue) {
 -    SS_RUNTIME_SETTINGS_MVP_REQUEST_PREFIX queryRequest;
 -    SS_RUNTIME_SETTINGS_MVP_REQUEST request;
@@ -139,11 +148,11 @@
 +    }
 +    return operation;
 +}
- 
+
 -    if (!IS_SUNSHINE()) {
 -        Limelog("live-settings-mvp: runtime settings request skipped reason=not_sunshine\n");
 -        return -1;
-+static void runtime_settings_mvp_check_timeouts(void) {
++static void runtime_settings_mvp_check_timeouts_locked(void) {
 +    uint64_t nowMs = PltGetMillis();
 +
 +    for (int i = 0; i <= SS_RUNTIME_SETTINGS_MVP_OPERATION_MAX; i++) {
@@ -156,20 +165,24 @@
 +        }
      }
 +}
- 
+
 -    if (operation > SS_RUNTIME_SETTINGS_MVP_OPERATION_MAX) {
 -        Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=locally-rejected reason=unsupported-operation\n", requestId, operation);
 -        return -4;
-+static bool runtime_settings_mvp_has_inflight_family(uint16_t family) {
-+    runtime_settings_mvp_check_timeouts();
++static void runtime_settings_mvp_check_timeouts(void) {
++    PltLockMutex(&runtime_settings_mvp_mutex);
++    runtime_settings_mvp_check_timeouts_locked();
++    PltUnlockMutex(&runtime_settings_mvp_mutex);
++}
 +
++static bool runtime_settings_mvp_has_inflight_family_locked(uint16_t family) {
 +    for (int i = 0; i <= SS_RUNTIME_SETTINGS_MVP_OPERATION_MAX; i++) {
 +        SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE* state = &runtime_settings_mvp_command_state[i];
 +        if (state->state == SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_IN_FLIGHT && state->family == family) {
 +            return true;
 +        }
      }
- 
+
 -    if (!encryptedControlStream || peer == NULL) {
 -        Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=locally-rejected reason=control-not-ready encrypted=%d peer=%p\n",
 -                requestId, operation, encryptedControlStream ? 1 : 0, peer);
@@ -181,12 +194,16 @@
 +    uint16_t family = runtime_settings_mvp_command_family(operation);
 +    SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE* state;
 +
-+    if (runtime_settings_mvp_has_inflight_family(family)) {
++    PltLockMutex(&runtime_settings_mvp_mutex);
++    runtime_settings_mvp_check_timeouts_locked();
++
++    if (runtime_settings_mvp_has_inflight_family_locked(family)) {
++        PltUnlockMutex(&runtime_settings_mvp_mutex);
 +        Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=locally-rejected reason=conflict\n",
 +                requestId, operation);
 +        return false;
      }
- 
+
 -    if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES) {
 -        queryRequest.requestId = LE32(requestId);
 -        queryRequest.operation = LE16(operation);
@@ -199,6 +216,7 @@
 +    state->family = family;
 +    state->state = SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_IN_FLIGHT;
 +    state->sentAtMs = PltGetMillis();
++    PltUnlockMutex(&runtime_settings_mvp_mutex);
 +    Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=sent\n", requestId, operation);
 +    return true;
 +}
@@ -207,9 +225,32 @@
 +    uint16_t family = runtime_settings_mvp_command_family(operation);
 +    SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE* state = &runtime_settings_mvp_command_state[family];
 +
++    PltLockMutex(&runtime_settings_mvp_mutex);
 +    if (state->state == SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_IN_FLIGHT &&
 +            state->requestId == requestId && state->operation == operation) {
 +        state->state = SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_TERMINAL;
++    }
++    PltUnlockMutex(&runtime_settings_mvp_mutex);
++}
++
++static bool runtime_settings_mvp_record_ack(uint32_t requestId, uint16_t operation, uint16_t status, uint16_t reason) {
++    bool matched = false;
++    uint16_t family = runtime_settings_mvp_command_family(operation);
++    SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE* state = &runtime_settings_mvp_command_state[family];
++
++    PltLockMutex(&runtime_settings_mvp_mutex);
++    if (state->requestId == requestId && state->operation == operation) {
++        if (state->state == SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_TIMED_OUT) {
++            PltUnlockMutex(&runtime_settings_mvp_mutex);
++            Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=stale-ack-observed reason=stale-ack status=%u ack_reason=%u\n",
++                    requestId, operation, status, reason);
++            return false;
++        }
++
++        if (state->state == SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_IN_FLIGHT) {
++            state->state = SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_TERMINAL;
++            matched = true;
++        }
      }
 -    else if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_RESOLUTION) {
 -        resolutionRequest.requestId = LE32(requestId);
@@ -219,25 +260,12 @@
 -        resolutionRequest.height = LE32(secondaryValue);
 -        payload = &resolutionRequest;
 -        payloadLength = sizeof(resolutionRequest);
-+}
++    PltUnlockMutex(&runtime_settings_mvp_mutex);
 +
-+static bool runtime_settings_mvp_record_ack(uint32_t requestId, uint16_t operation, uint16_t status, uint16_t reason) {
-+    uint16_t family = runtime_settings_mvp_command_family(operation);
-+    SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE* state = &runtime_settings_mvp_command_state[family];
-+
-+    if (state->requestId == requestId && state->operation == operation) {
-+        if (state->state == SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_TIMED_OUT) {
-+            Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=stale-ack-observed reason=stale-ack status=%u ack_reason=%u\n",
-+                    requestId, operation, status, reason);
-+            return false;
-+        }
-+
-+        if (state->state == SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_IN_FLIGHT) {
-+            state->state = SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_TERMINAL;
-+            Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=%s status=%u reason=%u\n",
-+                    requestId, operation, status == SS_RUNTIME_SETTINGS_MVP_STATUS_APPLIED ? "host-applied" : "host-rejected", status, reason);
-+            return true;
-+        }
++    if (matched) {
++        Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=%s status=%u reason=%u\n",
++                requestId, operation, status == SS_RUNTIME_SETTINGS_MVP_STATUS_APPLIED ? "host-applied" : "host-rejected", status, reason);
++        return true;
      }
 -    else {
 -        request.requestId = LE32(requestId);
@@ -265,6 +293,7 @@
 +                                                   uint32_t currentFps,
 +                                                   uint32_t currentWidth,
 +                                                   uint32_t currentHeight) {
++    PltLockMutex(&runtime_settings_mvp_mutex);
 +    runtime_settings_mvp_settings_state.hasCapability = true;
 +    runtime_settings_mvp_settings_state.supportedOperations = supportedOperations;
 +    runtime_settings_mvp_settings_state.proofGatedOperations = proofGatedOperations;
@@ -279,13 +308,14 @@
 +    runtime_settings_mvp_settings_state.currentFps = currentFps;
 +    runtime_settings_mvp_settings_state.currentWidth = currentWidth;
 +    runtime_settings_mvp_settings_state.currentHeight = currentHeight;
++    PltUnlockMutex(&runtime_settings_mvp_mutex);
 +}
 +
 +static void runtime_settings_mvp_record_current_applied(uint16_t operation, uint16_t status, uint32_t value, uint32_t secondaryValue) {
 +    if (status != SS_RUNTIME_SETTINGS_MVP_STATUS_APPLIED) {
 +        return;
      }
- 
+
 -    if (!sendMessageAndForget(SS_RUNTIME_SETTINGS_MVP_REQUEST_PTYPE,
 -                              payloadLength,
 -                              payload,
@@ -294,9 +324,10 @@
 -                              false)) {
 -        Limelog("live-settings-mvp: runtime settings request failed request_id=%u operation=%u value=%u\n", requestId, operation, value);
 -        return -3;
++    PltLockMutex(&runtime_settings_mvp_mutex);
 +    if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_BITRATE_KBPS) {
 +        runtime_settings_mvp_settings_state.currentBitrateKbps = value;
-     }
++    }
 +    else if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_FPS) {
 +        runtime_settings_mvp_settings_state.currentFps = value;
 +    }
@@ -304,9 +335,11 @@
 +        runtime_settings_mvp_settings_state.currentWidth = value;
 +        runtime_settings_mvp_settings_state.currentHeight = secondaryValue;
 +    }
++    PltUnlockMutex(&runtime_settings_mvp_mutex);
 +}
 +
 +static void runtime_settings_mvp_record_stream_ended(void) {
++    PltLockMutex(&runtime_settings_mvp_mutex);
 +    for (int i = 0; i <= SS_RUNTIME_SETTINGS_MVP_OPERATION_MAX; i++) {
 +        SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE* state = &runtime_settings_mvp_command_state[i];
 +        if (state->state == SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_IN_FLIGHT) {
@@ -314,14 +347,15 @@
 +                    state->requestId, state->operation);
 +            state->state = SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_TERMINAL;
 +        }
-+    }
+     }
++    PltUnlockMutex(&runtime_settings_mvp_mutex);
 +}
 +
 +static bool runtime_settings_mvp_manual_proof_gated_override_enabled(void) {
 +    const char* enabled = getenv("MOONLIGHT_RUNTIME_SETTINGS_MVP_ALLOW_PROOF_GATED");
 +    return enabled != NULL && strcmp(enabled, "1") == 0;
 +}
- 
++
 +static bool runtime_settings_mvp_operation_supported(uint16_t operation) {
 +    return (runtime_settings_mvp_settings_state.supportedOperations & (1u << operation)) != 0;
 +}
@@ -331,6 +365,15 @@
 +}
 +
 +static bool runtime_settings_mvp_validate_before_send(uint32_t requestId, uint16_t operation, uint32_t value, uint32_t secondaryValue) {
++    bool hasCapability;
++    bool proofGated;
++    bool supported;
++    uint32_t minBitrateKbps;
++    uint32_t maxBitrateKbps;
++    uint32_t maxFps;
++    uint32_t launchWidth;
++    uint32_t launchHeight;
+
      if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES) {
 -        Limelog("live-settings-mvp: runtime settings request sent request_id=%u operation=0 capability query packet=0x5504\n",
 -                requestId);
@@ -340,13 +383,24 @@
 -        Limelog("live-settings-mvp: runtime settings request sent request_id=%u operation=3 resolution=%ux%u packet=0x5504\n",
 -                requestId, value, secondaryValue);
 +
-+    if (!runtime_settings_mvp_settings_state.hasCapability) {
++    PltLockMutex(&runtime_settings_mvp_mutex);
++    hasCapability = runtime_settings_mvp_settings_state.hasCapability;
++    proofGated = runtime_settings_mvp_operation_proof_gated(operation);
++    supported = runtime_settings_mvp_operation_supported(operation);
++    minBitrateKbps = runtime_settings_mvp_settings_state.minBitrateKbps;
++    maxBitrateKbps = runtime_settings_mvp_settings_state.maxBitrateKbps;
++    maxFps = runtime_settings_mvp_settings_state.maxFps;
++    launchWidth = runtime_settings_mvp_settings_state.launchWidth;
++    launchHeight = runtime_settings_mvp_settings_state.launchHeight;
++    PltUnlockMutex(&runtime_settings_mvp_mutex);
++
++    if (!hasCapability) {
 +        Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=locally-rejected reason=control-not-ready detail=no-capability\n",
 +                requestId, operation);
 +        return false;
 +    }
 +
-+    if (runtime_settings_mvp_operation_proof_gated(operation)) {
++    if (proofGated) {
 +        if (!runtime_settings_mvp_manual_proof_gated_override_enabled()) {
 +            Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=locally-rejected reason=proof-gated\n",
 +                    requestId, operation);
@@ -355,15 +409,14 @@
 +        Limelog("live-settings-mvp: command request_id=%u operation=%u proof-gated override=manual-smoke\n",
 +                requestId, operation);
 +    }
-+    else if (!runtime_settings_mvp_operation_supported(operation)) {
++    else if (!supported) {
 +        Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=locally-rejected reason=unsupported-operation\n",
 +                requestId, operation);
 +        return false;
 +    }
 +
 +    if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_BITRATE_KBPS) {
-+        if (value == 0 || value < runtime_settings_mvp_settings_state.minBitrateKbps ||
-+                (runtime_settings_mvp_settings_state.maxBitrateKbps != 0 && value > runtime_settings_mvp_settings_state.maxBitrateKbps)) {
++        if (value == 0 || value < minBitrateKbps || (maxBitrateKbps != 0 && value > maxBitrateKbps)) {
 +            Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=locally-rejected reason=invalid-bounds\n",
 +                    requestId, operation);
 +            return false;
@@ -372,7 +425,7 @@
      else if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_FPS) {
 -        Limelog("live-settings-mvp: runtime settings request sent request_id=%u operation=2 fps=%u packet=0x5504\n",
 -                requestId, value);
-+        if (value == 0 || value > runtime_settings_mvp_settings_state.maxFps) {
++        if (value == 0 || value > maxFps) {
 +            Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=locally-rejected reason=invalid-bounds\n",
 +                    requestId, operation);
 +            return false;
@@ -382,9 +435,7 @@
 -        Limelog("live-settings-mvp: runtime settings request sent request_id=%u operation=1 bitrate_kbps=%u packet=0x5504\n",
 -                requestId, value);
 +    else if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_RESOLUTION) {
-+        if (value == 0 || secondaryValue == 0 ||
-+                value > runtime_settings_mvp_settings_state.launchWidth ||
-+                secondaryValue > runtime_settings_mvp_settings_state.launchHeight) {
++        if (value == 0 || secondaryValue == 0 || value > launchWidth || secondaryValue > launchHeight) {
 +            Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=locally-rejected reason=invalid-bounds\n",
 +                    requestId, operation);
 +            return false;
@@ -392,27 +443,27 @@
      }
 -    return 0;
 -}
- 
+
 -int LiQuerySunshineRuntimeSettingsMvpCapabilities(uint32_t requestId) {
 -    return LiSendSunshineRuntimeSettingsMvp(requestId, SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES, 0, 0);
 +    return true;
  }
- 
+
 -static bool sendMessageEnet(short ptype, short paylen, const void* payload, uint8_t channelId, uint32_t flags, bool moreData) {static bool sendMessageEnet(short ptype, short paylen, const void* payload, uint8_t channelId, uint32_t flags, bool moreData) {
 +static bool sendMessageEnet(short ptype, short paylen, const void* payload, uint8_t channelId, uint32_t flags, bool moreData) {
      ENetPacket* enetPacket;
      int err;
- 
-@@ -1292,6 +1518,8 @@
+
+@@ -1292,6 +1562,8 @@
          ENetEvent event;
          enet_uint32 waitTimeMs;
- 
+
 +        runtime_settings_mvp_check_timeouts();
 +
          PltLockMutex(&enetMutex);
- 
+
          // Poll for new packets and process retransmissions
-@@ -1356,6 +1584,7 @@
+@@ -1356,6 +1628,7 @@
                          // assume the server died tragically, so go ahead and tear down.
                          PltUnlockMutex(&enetMutex);
                          Limelog("Disconnect event timeout expired\n");
@@ -420,18 +471,18 @@
                          ListenerCallbacks.connectionTerminated(-1);
                          return;
                      }
-@@ -1379,6 +1608,7 @@
- 
+@@ -1379,6 +1652,7 @@
+
              err = LastSocketFail();
              Limelog("Control stream connection failed: %d\n", err);
 +            runtime_settings_mvp_record_stream_ended();
              ListenerCallbacks.connectionTerminated(err);
              return;
          }
-@@ -1442,6 +1672,123 @@
- 
+@@ -1442,6 +1716,123 @@
+
              // All below codepaths must free ctlHdr!!!
- 
+
 +            if (ctlHdr->type == SS_RUNTIME_SETTINGS_MVP_ACK_PTYPE) {
 +                BYTE_BUFFER bb;
 +                uint32_t requestId;
@@ -552,7 +603,7 @@
              // Process HDR data immediately to update global HDR enabled state and HDR metadata.
              // The actual client callback will be invoked in the async callback thread.
              if (ctlHdr->type == packetTypes[IDX_HDR_INFO]) {
-@@ -1550,6 +1897,7 @@
+@@ -1550,6 +1941,7 @@
                  PltLockMutex(&enetMutex);
                  enet_peer_disconnect_now(peer, 0);
                  PltUnlockMutex(&enetMutex);
@@ -560,7 +611,7 @@
                  ListenerCallbacks.connectionTerminated((int)terminationErrorCode);
                  free(ctlHdr);
                  return;
-@@ -1559,6 +1907,7 @@
+@@ -1559,6 +1951,7 @@
          }
          else if (event.type == ENET_EVENT_TYPE_DISCONNECT) {
              Limelog("Control stream received unexpected disconnect event\n");

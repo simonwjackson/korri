@@ -1,21 +1,18 @@
-diff --git a/src/globals.h b/src/globals.h
-index 1617b7c..5abc37e 100644
 --- a/src/globals.h
 +++ b/src/globals.h
-@@ -53,6 +53,8 @@ namespace mail {
+@@ -53,6 +53,9 @@
    MAIL(touch_port);
    MAIL(idr);
    MAIL(invalidate_ref_frames);
 +  MAIL(runtime_bitrate);
 +  MAIL(runtime_bitrate_ack);
++  MAIL(runtime_settings_supports_encoder_restart);
    MAIL(gamepad_feedback);
    MAIL(hdr);
  #undef MAIL
-diff --git a/src/stream.cpp b/src/stream.cpp
-index e6bb5eb..f56892d 100644
 --- a/src/stream.cpp
 +++ b/src/stream.cpp
-@@ -49,6 +49,11 @@ extern "C" {
+@@ -49,6 +49,11 @@
  #define IDX_SET_MOTION_EVENT 13
  #define IDX_SET_RGB_LED 14
  #define IDX_SET_ADAPTIVE_TRIGGERS 15
@@ -24,22 +21,22 @@ index e6bb5eb..f56892d 100644
 +
 +static constexpr short RUNTIME_SETTINGS_REQUEST_PACKET = 0x5504;
 +static constexpr short RUNTIME_SETTINGS_ACK_PACKET = 0x5505;
- 
+
  static const short packetTypes[] = {
    0x0305,  // Start A
-@@ -67,6 +72,8 @@ static const short packetTypes[] = {
+@@ -67,6 +72,8 @@
    0x5501,  // Set motion event (Sunshine protocol extension)
    0x5502,  // Set RGB LED (Sunshine protocol extension)
    0x5503,  // Set Adaptive triggers (Sunshine protocol extension)
 +  RUNTIME_SETTINGS_REQUEST_PACKET,  // Runtime settings request (experimental Sunshine protocol extension)
 +  RUNTIME_SETTINGS_ACK_PACKET,  // Runtime settings ack (experimental Sunshine protocol extension)
  };
- 
+
  namespace asio = boost::asio;
-@@ -212,6 +219,73 @@ namespace stream {
+@@ -212,6 +219,73 @@
      SS_HDR_METADATA metadata;
    };
- 
+
 +  struct control_runtime_settings_request_prefix_t {
 +    boost::endian::little_uint32_at request_id;
 +    boost::endian::little_uint16_at operation;
@@ -110,23 +107,21 @@ index e6bb5eb..f56892d 100644
    typedef struct control_encrypted_t {
      std::uint16_t encryptedHeaderType;  // Always LE 0x0001
      std::uint16_t length;  // sizeof(seq) + 16 byte tag + secondary header and data
-diff --git a/src/video.h b/src/video.h
-index a966c53..026e942 100644
 --- a/src/video.h
 +++ b/src/video.h
 @@ -4,6 +4,9 @@
   */
  #pragma once
- 
+
 +// standard includes
 +#include <cstdint>
 +
  // local includes
  #include "input.h"
  #include "platform/common.h"
-@@ -20,6 +23,58 @@ struct AVPacket;
+@@ -20,6 +23,58 @@
  namespace video {
- 
+
    /* Encoding configuration requested by remote client */
 +  enum runtime_settings_operation_t : std::uint16_t {
 +    RUNTIME_SETTINGS_OPERATION_QUERY_CAPABILITIES = 0,

@@ -1,25 +1,22 @@
-diff --git a/src/video.cpp b/src/video.cpp
-index 5f8f53a..aec1bc1 100644
 --- a/src/video.cpp
 +++ b/src/video.cpp
-@@ -469,6 +469,8 @@ namespace video {
+@@ -470,6 +470,7 @@
    };
- 
+
    std::unique_ptr<platf::encode_device_t> make_encode_device(platf::display_t &disp, const encoder_t &encoder, const config_t &config);
 +  input::touch_port_t make_port(platf::display_t *display, const config_t &config);
-+
+
    bool runtime_bitrate_supports_encoder_restart(const encoder_t &encoder, const config_t &config) {
      return encoder.name == "vaapi"sv && encoder.codec_from_config(config).name == "h264_vaapi";
-   }
-@@ -1924,6 +1926,7 @@ namespace video {
-     auto idr_events = mail->event<bool>(mail::idr);
+@@ -1927,6 +1928,7 @@
      auto runtime_bitrate_events = mail->queue<runtime_bitrate_request_t>(mail::runtime_bitrate);
      auto runtime_bitrate_ack_events = mail->queue<runtime_bitrate_ack_t>(mail::runtime_bitrate_ack);
+     auto runtime_settings_supports_encoder_restart = mail->event<bool>(mail::runtime_settings_supports_encoder_restart);
 +    auto touch_port_events = mail->event<input::touch_port_t>(mail::touch_port);
      auto invalidate_ref_frames_events = mail->event<std::pair<int64_t, int64_t>>(mail::invalidate_ref_frames);
      std::uint32_t runtime_fps = config.framerate;
      auto next_runtime_frame = std::chrono::steady_clock::now();
-@@ -2031,6 +2034,55 @@ namespace video {
+@@ -2035,6 +2037,55 @@
                << " status="sv << status
                << " reason="sv << reason;
              runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_FPS, status, applied_fps, 0, 0, reason});
@@ -74,30 +71,30 @@ index 5f8f53a..aec1bc1 100644
 +          }
          }
        }
- 
-@@ -2151,7 +2203,7 @@ namespace video {
+
+@@ -2155,7 +2206,7 @@
      return result;
    }
- 
+
 -  std::optional<sync_session_t> make_synced_session(platf::display_t *disp, const encoder_t &encoder, platf::img_t &img, sync_session_ctx_t &ctx) {
 +  std::optional<sync_session_t> make_synced_session(platf::display_t *disp, const encoder_t &encoder, platf::img_t &img, sync_session_ctx_t &ctx, bool raise_runtime_state = true) {
      sync_session_t encode_session;
- 
+
      encode_session.ctx = &ctx;
-@@ -2161,8 +2213,10 @@ namespace video {
+@@ -2165,8 +2216,10 @@
        return std::nullopt;
      }
- 
+
 -    // absolute mouse coordinates require that the dimensions of the screen are known
 -    ctx.touch_port_events->raise(make_port(disp, ctx.config));
 +    if (raise_runtime_state) {
 +      // absolute mouse coordinates require that the dimensions of the screen are known
 +      ctx.touch_port_events->raise(make_port(disp, ctx.config));
 +    }
- 
+
      // Update client with our current HDR display state
      hdr_info_t hdr_info = std::make_unique<hdr_info_raw_t>(false);
-@@ -2173,7 +2227,9 @@ namespace video {
+@@ -2177,7 +2230,9 @@
          BOOST_LOG(error) << "Couldn't get display hdr metadata when colorspace selection indicates it should have one";
        }
      }
@@ -105,10 +102,10 @@ index 5f8f53a..aec1bc1 100644
 +    if (raise_runtime_state) {
 +      ctx.hdr_events->raise(std::move(hdr_info));
 +    }
- 
+
      auto session = make_encode_session(disp, encoder, ctx.config, img.width, img.height, std::move(encode_device));
      if (!session) {
-@@ -2361,6 +2417,54 @@ namespace video {
+@@ -2367,6 +2422,54 @@
                    << " status="sv << status
                    << " reason="sv << reason;
                  ctx->runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_FPS, status, applied_fps, 0, 0, reason});
@@ -162,4 +159,4 @@ index 5f8f53a..aec1bc1 100644
 +              }
              }
            }
- 
+
