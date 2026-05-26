@@ -166,6 +166,17 @@ export function createForegroundSessionOwner<
     if (entered) await entered
   }
 
+  const terminateActiveHandle = async () => {
+    const handle = activeHandle
+    if (!handle) return
+    handle.terminate()
+    await Promise.race([
+      handle.exited.catch(() => undefined),
+      new Promise<undefined>(resolve => setTimeout(resolve, 1_000)),
+    ])
+    if (activeHandle === handle) activeHandle = undefined
+  }
+
   const releaseToIdle = async (previousRequestId?: string) => {
     pushEvent(
       createForegroundSessionEvent({
@@ -183,6 +194,7 @@ export function createForegroundSessionOwner<
     message: string,
     evidence?: Readonly<Record<string, unknown>>,
   ): Promise<ForegroundSessionOwnerLaunchResult<TSuccess>> => {
+    await terminateActiveHandle()
     await transition("Failed", {
       active,
       evidence,
@@ -201,26 +213,35 @@ export function createForegroundSessionOwner<
     handle: ForegroundManagedSessionHandle,
     active: ForegroundSessionActiveSession,
   ) => {
-    void handle.exited.then(async terminal => {
-      const current = activeSessionFromState(state)
-      if (current?.requestId !== active.requestId || activeHandle !== handle)
-        return
-      const terminalActive = {
-        ...active,
-        terminal: { _tag: "Exited" as const, exitCode: terminal.exitCode },
-      }
-      pushEvent(
-        createForegroundSessionEvent({
-          _tag: "ForegroundSessionExited",
-          requestId: active.requestId,
-          terminal: terminalActive.terminal,
-        }),
-      )
-      await transition("ExitObserved", { active: terminalActive })
-      await transition("TearingDown", { active: terminalActive })
-      await transition("VerifyingReady", { active: terminalActive })
-      await releaseToIdle(active.requestId)
-    })
+    void handle.exited.then(
+      async terminal => {
+        const current = activeSessionFromState(state)
+        if (current?.requestId !== active.requestId || activeHandle !== handle)
+          return
+        const terminalActive = {
+          ...active,
+          terminal: { _tag: "Exited" as const, exitCode: terminal.exitCode },
+        }
+        pushEvent(
+          createForegroundSessionEvent({
+            _tag: "ForegroundSessionExited",
+            requestId: active.requestId,
+            terminal: terminalActive.terminal,
+          }),
+        )
+        await transition("ExitObserved", { active: terminalActive })
+        await transition("TearingDown", { active: terminalActive })
+        await transition("VerifyingReady", { active: terminalActive })
+        await releaseToIdle(active.requestId)
+      },
+      async error => {
+        const current = activeSessionFromState(state)
+        if (current?.requestId !== active.requestId || activeHandle !== handle)
+          return
+        const message = error instanceof Error ? error.message : String(error)
+        await failAndRelease(active, message)
+      },
+    )
   }
 
   return {

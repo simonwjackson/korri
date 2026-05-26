@@ -313,6 +313,39 @@ describe("foreground session owner", () => {
     expect(spawnOwner.status().state._tag).toBe("IdleReady")
   })
 
+  it("terminates a spawned session when foreground fails before running", async () => {
+    const setup = createAdapter({
+      foreground: async () => ({
+        status: "failed",
+        message: "foreground failed",
+      }),
+    })
+    const owner = createOwner(setup.adapter)
+
+    const result = owner.launch(request)
+    await flushMicrotasks(20)
+
+    expect(setup.session.signals).toEqual(["SIGTERM"])
+    setup.session.exit.resolve({ exitCode: 1 })
+    expect(await result).toMatchObject({
+      _tag: "Failed",
+      message: "foreground failed",
+    })
+    await owner.whenIdle()
+    expect(owner.status().state._tag).toBe("IdleReady")
+  })
+
+  it("releases a running session when exit observation rejects", async () => {
+    const setup = createAdapter()
+    const owner = createOwner(setup.adapter)
+
+    await owner.launch(request)
+    setup.session.exit.reject(new Error("lost child observer"))
+    await owner.whenIdle()
+
+    expect(owner.status().state._tag).toBe("IdleReady")
+  })
+
   it("keeps foreground warnings non-fatal and records lifecycle events in order", async () => {
     const setup = createAdapter({
       foreground: async () => ({ status: "warning", message: "repair failed" }),
