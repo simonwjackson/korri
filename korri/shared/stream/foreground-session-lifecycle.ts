@@ -56,13 +56,34 @@ export interface ForegroundSessionFailure {
 
 export type ForegroundSessionState =
   | { readonly _tag: "IdleReady" }
-  | { readonly _tag: "Preparing"; readonly active: ForegroundSessionActiveSession }
-  | { readonly _tag: "Spawning"; readonly active: ForegroundSessionActiveSession }
-  | { readonly _tag: "Foregrounding"; readonly active: ForegroundSessionActiveSession }
-  | { readonly _tag: "Running"; readonly active: ForegroundSessionActiveSession }
-  | { readonly _tag: "ExitObserved"; readonly active: ForegroundSessionActiveSession }
-  | { readonly _tag: "TearingDown"; readonly active: ForegroundSessionActiveSession }
-  | { readonly _tag: "VerifyingReady"; readonly active: ForegroundSessionActiveSession }
+  | {
+      readonly _tag: "Preparing"
+      readonly active: ForegroundSessionActiveSession
+    }
+  | {
+      readonly _tag: "Spawning"
+      readonly active: ForegroundSessionActiveSession
+    }
+  | {
+      readonly _tag: "Foregrounding"
+      readonly active: ForegroundSessionActiveSession
+    }
+  | {
+      readonly _tag: "Running"
+      readonly active: ForegroundSessionActiveSession
+    }
+  | {
+      readonly _tag: "ExitObserved"
+      readonly active: ForegroundSessionActiveSession
+    }
+  | {
+      readonly _tag: "TearingDown"
+      readonly active: ForegroundSessionActiveSession
+    }
+  | {
+      readonly _tag: "VerifyingReady"
+      readonly active: ForegroundSessionActiveSession
+    }
   | {
       readonly _tag: "Failed"
       readonly active?: ForegroundSessionActiveSession
@@ -134,7 +155,10 @@ export interface ForegroundSessionBusyRejection {
 export type ForegroundSessionAcceptResult =
   | {
       readonly _tag: "Accepted"
-      readonly state: Extract<ForegroundSessionState, { readonly _tag: "Preparing" }>
+      readonly state: Extract<
+        ForegroundSessionState,
+        { readonly _tag: "Preparing" }
+      >
       readonly active: ForegroundSessionActiveSession
       readonly event: Extract<
         ForegroundSessionEvent,
@@ -161,19 +185,28 @@ export const foregroundSessionState = {
   }): ForegroundSessionState => ({ _tag: "Spawning", active: input.active }),
   foregrounding: (input: {
     readonly active: ForegroundSessionActiveSession
-  }): ForegroundSessionState => ({ _tag: "Foregrounding", active: input.active }),
+  }): ForegroundSessionState => ({
+    _tag: "Foregrounding",
+    active: input.active,
+  }),
   running: (input: {
     readonly active: ForegroundSessionActiveSession
   }): ForegroundSessionState => ({ _tag: "Running", active: input.active }),
   exitObserved: (input: {
     readonly active: ForegroundSessionActiveSession
-  }): ForegroundSessionState => ({ _tag: "ExitObserved", active: input.active }),
+  }): ForegroundSessionState => ({
+    _tag: "ExitObserved",
+    active: input.active,
+  }),
   tearingDown: (input: {
     readonly active: ForegroundSessionActiveSession
   }): ForegroundSessionState => ({ _tag: "TearingDown", active: input.active }),
   verifyingReady: (input: {
     readonly active: ForegroundSessionActiveSession
-  }): ForegroundSessionState => ({ _tag: "VerifyingReady", active: input.active }),
+  }): ForegroundSessionState => ({
+    _tag: "VerifyingReady",
+    active: input.active,
+  }),
   failed: (input: {
     readonly active?: ForegroundSessionActiveSession
     readonly failure: ForegroundSessionFailure
@@ -313,19 +346,33 @@ function stateForTag(
 ): ForegroundSessionState {
   switch (tag) {
     case "Preparing":
-      return foregroundSessionState.preparing({ active: requireActive(tag, active) })
+      return foregroundSessionState.preparing({
+        active: requireActive(tag, active),
+      })
     case "Spawning":
-      return foregroundSessionState.spawning({ active: requireActive(tag, active) })
+      return foregroundSessionState.spawning({
+        active: requireActive(tag, active),
+      })
     case "Foregrounding":
-      return foregroundSessionState.foregrounding({ active: requireActive(tag, active) })
+      return foregroundSessionState.foregrounding({
+        active: requireActive(tag, active),
+      })
     case "Running":
-      return foregroundSessionState.running({ active: requireActive(tag, active) })
+      return foregroundSessionState.running({
+        active: requireActive(tag, active),
+      })
     case "ExitObserved":
-      return foregroundSessionState.exitObserved({ active: requireActive(tag, active) })
+      return foregroundSessionState.exitObserved({
+        active: requireActive(tag, active),
+      })
     case "TearingDown":
-      return foregroundSessionState.tearingDown({ active: requireActive(tag, active) })
+      return foregroundSessionState.tearingDown({
+        active: requireActive(tag, active),
+      })
     case "VerifyingReady":
-      return foregroundSessionState.verifyingReady({ active: requireActive(tag, active) })
+      return foregroundSessionState.verifyingReady({
+        active: requireActive(tag, active),
+      })
     case "Failed":
       return foregroundSessionState.failed({
         active,

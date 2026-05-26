@@ -26,10 +26,10 @@ import type {
   ConnectionStateSnapshot,
 } from "./connection-state-snapshot"
 import { createDesktopApp } from "./create-desktop-app"
-import { createDesktopMoonlightSessionRunner } from "./moonlight-session-runner"
 import { loadDesktopConfig, saveDesktopConfig } from "./desktop-config"
-import { installInputDispatchBootstrap } from "./input-dispatch-bootstrap"
 import { createDesktopInputBroker } from "./input-broker"
+import { installInputDispatchBootstrap } from "./input-dispatch-bootstrap"
+import { createDesktopMoonlightSessionRunner } from "./moonlight-session-runner"
 import {
   desktopInputdUrlFromEnv,
   readRuntimeConfigFromEnv,

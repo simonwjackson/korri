@@ -2,13 +2,13 @@ import {
   acceptForegroundSessionLaunch,
   activeSessionFromState,
   createForegroundSessionEvent,
-  foregroundSessionState,
-  foregroundSessionTransition,
   type ForegroundSessionActiveSession,
   type ForegroundSessionBusyRejection,
   type ForegroundSessionEvent,
   type ForegroundSessionRequestIdentity,
   type ForegroundSessionState,
+  foregroundSessionState,
+  foregroundSessionTransition,
 } from "@shared/stream/foreground-session-lifecycle"
 
 export interface ForegroundManagedSessionHandle {
@@ -32,7 +32,10 @@ export type ForegroundSessionStageResult<T> =
     }
 
 export type ForegroundSessionForegroundResult =
-  | { readonly status: "ok"; readonly evidence?: Readonly<Record<string, unknown>> }
+  | {
+      readonly status: "ok"
+      readonly evidence?: Readonly<Record<string, unknown>>
+    }
   | {
       readonly status: "warning"
       readonly message: string
@@ -48,9 +51,18 @@ export interface ForegroundSessionSpawned {
   readonly session: ForegroundManagedSessionHandle
 }
 
-export interface ForegroundSessionAdapter<TRequest, TPrepared, TSpawned extends ForegroundSessionSpawned, TSuccess> {
-  prepare: (request: TRequest) => Promise<ForegroundSessionStageResult<TPrepared>>
-  spawn: (prepared: TPrepared) => Promise<ForegroundSessionStageResult<TSpawned>>
+export interface ForegroundSessionAdapter<
+  TRequest,
+  TPrepared,
+  TSpawned extends ForegroundSessionSpawned,
+  TSuccess,
+> {
+  prepare: (
+    request: TRequest,
+  ) => Promise<ForegroundSessionStageResult<TPrepared>>
+  spawn: (
+    prepared: TPrepared,
+  ) => Promise<ForegroundSessionStageResult<TSpawned>>
   foreground?: (spawned: TSpawned) => Promise<ForegroundSessionForegroundResult>
   launched: (input: {
     readonly request: TRequest
@@ -60,25 +72,56 @@ export interface ForegroundSessionAdapter<TRequest, TPrepared, TSpawned extends 
   }) => TSuccess
 }
 
-export interface ForegroundSessionOwnerOptions<TRequest, TPrepared, TSpawned extends ForegroundSessionSpawned, TSuccess> {
-  readonly requestIdentity: (request: TRequest) => ForegroundSessionRequestIdentity
-  readonly adapter: ForegroundSessionAdapter<TRequest, TPrepared, TSpawned, TSuccess>
+export interface ForegroundSessionOwnerOptions<
+  TRequest,
+  TPrepared,
+  TSpawned extends ForegroundSessionSpawned,
+  TSuccess,
+> {
+  readonly requestIdentity: (
+    request: TRequest,
+  ) => ForegroundSessionRequestIdentity
+  readonly adapter: ForegroundSessionAdapter<
+    TRequest,
+    TPrepared,
+    TSpawned,
+    TSuccess
+  >
   readonly eventHistoryLimit?: number
-  readonly onStateEntered?: (state: ForegroundSessionState) => Promise<void> | void
+  readonly onStateEntered?: (
+    state: ForegroundSessionState,
+  ) => Promise<void> | void
 }
 
 export type ForegroundSessionOwnerLaunchResult<TSuccess> =
   | { readonly _tag: "Launched"; readonly value: TSuccess }
-  | { readonly _tag: "Busy"; readonly rejection: ForegroundSessionBusyRejection }
-  | { readonly _tag: "Failed"; readonly message: string; readonly evidence?: Readonly<Record<string, unknown>> }
+  | {
+      readonly _tag: "Busy"
+      readonly rejection: ForegroundSessionBusyRejection
+    }
+  | {
+      readonly _tag: "Failed"
+      readonly message: string
+      readonly evidence?: Readonly<Record<string, unknown>>
+    }
 
 export interface ForegroundSessionOwnerStatus {
   readonly state: ForegroundSessionState
   readonly events: readonly ForegroundSessionEvent[]
 }
 
-export function createForegroundSessionOwner<TRequest, TPrepared, TSpawned extends ForegroundSessionSpawned, TSuccess>(
-  options: ForegroundSessionOwnerOptions<TRequest, TPrepared, TSpawned, TSuccess>,
+export function createForegroundSessionOwner<
+  TRequest,
+  TPrepared,
+  TSpawned extends ForegroundSessionSpawned,
+  TSuccess,
+>(
+  options: ForegroundSessionOwnerOptions<
+    TRequest,
+    TPrepared,
+    TSpawned,
+    TSuccess
+  >,
 ) {
   let state = foregroundSessionState.idleReady()
   let activeHandle: ForegroundManagedSessionHandle | undefined
@@ -88,7 +131,8 @@ export function createForegroundSessionOwner<TRequest, TPrepared, TSpawned exten
 
   const pushEvent = (event: ForegroundSessionEvent) => {
     events.push(event)
-    if (events.length > eventHistoryLimit) events.splice(0, events.length - eventHistoryLimit)
+    if (events.length > eventHistoryLimit)
+      events.splice(0, events.length - eventHistoryLimit)
   }
 
   const notifyIdle = () => {
@@ -109,7 +153,11 @@ export function createForegroundSessionOwner<TRequest, TPrepared, TSpawned exten
     input: {
       readonly active?: ForegroundSessionActiveSession
       readonly evidence?: Readonly<Record<string, unknown>>
-      readonly failure?: { readonly stage: "adapter"; readonly message: string; readonly evidence?: Readonly<Record<string, unknown>> }
+      readonly failure?: {
+        readonly stage: "adapter"
+        readonly message: string
+        readonly evidence?: Readonly<Record<string, unknown>>
+      }
     } = {},
   ) => {
     const result = foregroundSessionTransition(state, nextState, input)
@@ -149,10 +197,14 @@ export function createForegroundSessionOwner<TRequest, TPrepared, TSpawned exten
     return { _tag: "Failed", message, ...(evidence ? { evidence } : {}) }
   }
 
-  const observeExit = (handle: ForegroundManagedSessionHandle, active: ForegroundSessionActiveSession) => {
+  const observeExit = (
+    handle: ForegroundManagedSessionHandle,
+    active: ForegroundSessionActiveSession,
+  ) => {
     void handle.exited.then(async terminal => {
       const current = activeSessionFromState(state)
-      if (current?.requestId !== active.requestId || activeHandle !== handle) return
+      if (current?.requestId !== active.requestId || activeHandle !== handle)
+        return
       const terminalActive = {
         ...active,
         terminal: { _tag: "Exited" as const, exitCode: terminal.exitCode },
@@ -172,7 +224,9 @@ export function createForegroundSessionOwner<TRequest, TPrepared, TSpawned exten
   }
 
   return {
-    launch: async (request: TRequest): Promise<ForegroundSessionOwnerLaunchResult<TSuccess>> => {
+    launch: async (
+      request: TRequest,
+    ): Promise<ForegroundSessionOwnerLaunchResult<TSuccess>> => {
       const identity = options.requestIdentity(request)
       const accepted = acceptForegroundSessionLaunch(state, identity)
       if (accepted._tag === "Rejected") {
@@ -197,7 +251,11 @@ export function createForegroundSessionOwner<TRequest, TPrepared, TSpawned exten
           }),
         )
         if (prepared.status === "failed") {
-          return await failAndRelease(active, prepared.message, prepared.evidence)
+          return await failAndRelease(
+            active,
+            prepared.message,
+            prepared.evidence,
+          )
         }
 
         await transition("Spawning", { active, evidence: prepared.evidence })
@@ -225,7 +283,10 @@ export function createForegroundSessionOwner<TRequest, TPrepared, TSpawned exten
               : { processId: spawned.value.session.processId }),
           },
         }
-        await transition("Foregrounding", { active, evidence: spawned.evidence })
+        await transition("Foregrounding", {
+          active,
+          evidence: spawned.evidence,
+        })
 
         const foreground = options.adapter.foreground
           ? await options.adapter.foreground(spawned.value)
@@ -240,7 +301,11 @@ export function createForegroundSessionOwner<TRequest, TPrepared, TSpawned exten
               ...(foreground.evidence ? { evidence: foreground.evidence } : {}),
             }),
           )
-          return await failAndRelease(active, foreground.message, foreground.evidence)
+          return await failAndRelease(
+            active,
+            foreground.message,
+            foreground.evidence,
+          )
         }
         if (foreground.status === "warning") {
           pushEvent(
@@ -272,7 +337,10 @@ export function createForegroundSessionOwner<TRequest, TPrepared, TSpawned exten
       }
     },
 
-    status: (): ForegroundSessionOwnerStatus => ({ state, events: [...events] }),
+    status: (): ForegroundSessionOwnerStatus => ({
+      state,
+      events: [...events],
+    }),
 
     whenIdle: async (): Promise<void> => {
       if (state._tag === "IdleReady") return

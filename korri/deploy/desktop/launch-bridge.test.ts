@@ -208,7 +208,10 @@ describe("desktop launch bridge", () => {
     const sessions = [first, second]
     const handler = createLocalStreamLaunchRpcHandler({
       getConnection: () => CONNECTED,
-      prepareGame: async (_controlUrl, id) => ({ status: "prepared", gameId: id }),
+      prepareGame: async (_controlUrl, id) => ({
+        status: "prepared",
+        gameId: id,
+      }),
       launchMoonlight: async () => ({
         status: "started",
         command: "moonlight",

@@ -118,7 +118,8 @@ export function createLocalStreamLaunchRpcHandler(
   options: LaunchBridgeOptions,
 ): (request: Request) => Promise<Response> {
   const scope = Scope.makeUnsafe()
-  const foregroundSessionOwner = createLaunchBridgeForegroundSessionOwner(options)
+  const foregroundSessionOwner =
+    createLaunchBridgeForegroundSessionOwner(options)
   const HandlersLive = localStreamLaunchRpcGroup.toLayer(
     localStreamLaunchRpcGroup.of({
       "app.desktop.launch": payload =>
@@ -146,7 +147,10 @@ type LaunchBridgeForegroundSessionOwner = ReturnType<
 interface PreparedLaunchStage {
   readonly id: string
   readonly connection: ConnectionServerRecord
-  readonly prepare: Extract<RemotePrepareResult, { readonly status: "prepared" }>
+  readonly prepare: Extract<
+    RemotePrepareResult,
+    { readonly status: "prepared" }
+  >
   readonly moonlightGamescope: MoonlightLaunchOptions["gamescope"]
   readonly ignoredForegroundSurfaceIds?: ReadonlySet<number>
 }
@@ -154,10 +158,15 @@ interface PreparedLaunchStage {
 interface SpawnedLaunchStage {
   readonly prepared: PreparedLaunchStage
   readonly session: ForegroundManagedSessionHandle
-  readonly moonlight: Extract<MoonlightLaunchResult, { readonly status: "started" }>
+  readonly moonlight: Extract<
+    MoonlightLaunchResult,
+    { readonly status: "started" }
+  >
 }
 
-function createLaunchBridgeForegroundSessionOwner(options: LaunchBridgeOptions) {
+function createLaunchBridgeForegroundSessionOwner(
+  options: LaunchBridgeOptions,
+) {
   return createForegroundSessionOwner<
     LocalStreamLaunchPayload,
     PreparedLaunchStage,
@@ -243,9 +252,7 @@ async function prepareLaunchStage(
       connection,
       prepare,
       moonlightGamescope,
-      ...(ignoredForegroundSurfaceIds
-        ? { ignoredForegroundSurfaceIds }
-        : {}),
+      ...(ignoredForegroundSurfaceIds ? { ignoredForegroundSurfaceIds } : {}),
     },
     evidence: { host: connection.hostId, gameId: prepare.gameId },
   }
@@ -344,7 +351,8 @@ function failedLaunchStage(
   return {
     status: "failed",
     message:
-      response.status === "failed" || response.status === "prepared-no-moonlight"
+      response.status === "failed" ||
+      response.status === "prepared-no-moonlight"
         ? response.message
         : "launch failed",
     evidence: { response },
@@ -431,7 +439,9 @@ async function repairForegroundSurface(
   id: string,
   sessionId: string | undefined,
   ignoredWindowIds: ReadonlySet<number> | undefined,
-): Promise<{ readonly status: "warning"; readonly message: string } | undefined> {
+): Promise<
+  { readonly status: "warning"; readonly message: string } | undefined
+> {
   if (!options.moonlightForegroundRepair || !ignoredWindowIds) return undefined
   try {
     await options.moonlightForegroundRepair.repairSurface({ ignoredWindowIds })

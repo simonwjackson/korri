@@ -53,15 +53,17 @@ type TestAdapter = ForegroundSessionAdapter<
   TestLaunchResult
 >
 
-function createAdapter(options: {
-  readonly prepare?: () => Promise<
-    TestPrepared | ForegroundSessionStageResult<TestPrepared>
-  >
-  readonly spawn?: (
-    prepared: TestPrepared,
-  ) => Promise<TestSpawned | ForegroundSessionStageResult<TestSpawned>>
-  readonly foreground?: () => Promise<ForegroundSessionForegroundResult>
-} = {}) {
+function createAdapter(
+  options: {
+    readonly prepare?: () => Promise<
+      TestPrepared | ForegroundSessionStageResult<TestPrepared>
+    >
+    readonly spawn?: (
+      prepared: TestPrepared,
+    ) => Promise<TestSpawned | ForegroundSessionStageResult<TestSpawned>>
+    readonly foreground?: () => Promise<ForegroundSessionForegroundResult>
+  } = {},
+) {
   const calls: string[] = []
   const session = createSession()
   const adapter: TestAdapter = {
@@ -162,7 +164,10 @@ describe("foreground session owner", () => {
 
     const first = owner.launch(request)
     await Promise.resolve()
-    const second = await owner.launch({ id: "gba/metroid-fusion", hostId: "aka" })
+    const second = await owner.launch({
+      id: "gba/metroid-fusion",
+      hostId: "aka",
+    })
 
     expect(second._tag).toBe("Busy")
     expect(setup.calls).toEqual(["prepare"])
@@ -226,7 +231,13 @@ describe("foreground session owner", () => {
 
   it("rejects during exit-observed, tearing-down, verifying-ready, failed, and recovering", async () => {
     const gates = new Map<string, ReturnType<typeof deferred<void>>>()
-    for (const tag of ["ExitObserved", "TearingDown", "VerifyingReady", "Failed", "Recovering"]) {
+    for (const tag of [
+      "ExitObserved",
+      "TearingDown",
+      "VerifyingReady",
+      "Failed",
+      "Recovering",
+    ]) {
       gates.set(tag, deferred<void>())
     }
     const setup = createAdapter()

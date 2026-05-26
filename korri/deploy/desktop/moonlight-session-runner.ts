@@ -102,7 +102,9 @@ async function collectAndLogMoonlightOutput(
   const snapshotBytes = 4 * 1024
   const snapshotDelayMs = 4_000
 
-  const snapshotOf = (stream: ReadableStream<Uint8Array> | null | undefined) => {
+  const snapshotOf = (
+    stream: ReadableStream<Uint8Array> | null | undefined,
+  ) => {
     const snapshotChunks: Uint8Array[] = []
     let bytesKept = 0
     let snapshotReady = false

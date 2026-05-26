@@ -4,11 +4,11 @@ import { join } from "node:path"
 import {
   acceptForegroundSessionLaunch,
   createForegroundSessionEvent,
+  type ForegroundSessionState,
   foregroundSessionBusyRejection,
   foregroundSessionState,
   foregroundSessionTransition,
   isForegroundSessionLaunchAccepting,
-  type ForegroundSessionState,
 } from "./foreground-session-lifecycle"
 
 const REQUEST = {
@@ -147,7 +147,10 @@ describe("foreground session lifecycle", () => {
 
   it("stays pure and independent from product/deploy/runtime-specific modules", () => {
     const source = readFileSync(
-      join(process.cwd(), "korri/shared/stream/foreground-session-lifecycle.ts"),
+      join(
+        process.cwd(),
+        "korri/shared/stream/foreground-session-lifecycle.ts",
+      ),
       "utf8",
     )
 

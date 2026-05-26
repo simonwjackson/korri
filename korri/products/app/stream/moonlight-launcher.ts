@@ -62,7 +62,10 @@ export interface CommandRunner {
       readonly env?: Readonly<Record<string, string>>
     },
   ) => Promise<
-    | { readonly status: "started"; readonly session?: ManagedMoonlightSessionHandle }
+    | {
+        readonly status: "started"
+        readonly session?: ManagedMoonlightSessionHandle
+      }
     | { readonly status: "failed"; readonly message: string }
   >
 }
@@ -191,7 +194,9 @@ function startedMoonlightResult(input: {
   return {
     status: "started",
     command: input.command,
-    ...(input.moonlightControl ? { moonlightControl: input.moonlightControl } : {}),
+    ...(input.moonlightControl
+      ? { moonlightControl: input.moonlightControl }
+      : {}),
     ...(input.session ? { session: input.session } : {}),
   }
 }
