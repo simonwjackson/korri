@@ -40,6 +40,8 @@ Runtime settings mechanism contract:
 - Operations `1`, `2`, and `3` remain bitrate, FPS, and resolution mutation requests.
 - Mutation acks carry the broad numeric status plus an additive reason field; current no-reason consumers must be updated before relying on reason-bearing payloads.
 - Runtime resolution remains experimental/proof-gated; operation `0` does not advertise it as a production adaptive operation from a server ack alone.
+- Runtime resolution proof gate: operation `3` is listed as proof-gated, not supported, in capability acks until same-session target-client proof exists.
+- Operation `3` outcomes distinguish Sunshine-applied from client-proven: Sunshine may report `server_applied=1`, but `client_proven` remains `0` without device/client render evidence.
 
 Runtime settings status contract:
 

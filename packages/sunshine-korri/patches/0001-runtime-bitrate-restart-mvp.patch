@@ -40,7 +40,7 @@
  };
  
  namespace asio = boost::asio;
-@@ -212,6 +220,72 @@
+@@ -212,6 +220,73 @@
      SS_HDR_METADATA metadata;
    };
  
@@ -97,6 +97,7 @@
 +    boost::endian::little_uint16_at reason;
 +    boost::endian::little_uint16_at reserved;
 +    boost::endian::little_uint32_at supported_operations;
++    boost::endian::little_uint32_at proof_gated_operations;
 +    boost::endian::little_uint32_at min_bitrate_kbps;
 +    boost::endian::little_uint32_at max_bitrate_kbps;
 +    boost::endian::little_uint32_at max_fps;
@@ -113,7 +114,7 @@
    typedef struct control_encrypted_t {
      std::uint16_t encryptedHeaderType;  // Always LE 0x0001
      std::uint16_t length;  // sizeof(seq) + 16 byte tag + secondary header and data
-@@ -366,6 +440,7 @@
+@@ -366,6 +441,7 @@
        std::uint64_t gcm_iv_counter;
  
        safe::mail_raw_t::event_t<bool> idr_events;
@@ -121,7 +122,7 @@
        safe::mail_raw_t::event_t<std::pair<int64_t, int64_t>> invalidate_ref_frames_events;
  
        std::unique_ptr<platf::deinit_t> qos;
-@@ -402,6 +477,15 @@
+@@ -402,6 +478,15 @@
  
        platf::feedback_queue_t feedback_queue;
        safe::mail_raw_t::event_t<video::hdr_info_t> hdr_queue;
@@ -137,7 +138,7 @@
      } control;
  
      std::uint32_t launch_session_id;
-@@ -885,6 +969,92 @@
+@@ -885,6 +970,95 @@
      return 0;
    }
  
@@ -200,9 +201,11 @@
 +    }
 +
 +    std::uint32_t supported_operations = 0;
++    std::uint32_t proof_gated_operations = 0;
 +    if (enabled) {
 +      supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS;
 +      supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_FPS;
++      proof_gated_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION;
 +    }
 +
 +    control_runtime_settings_capability_ack_t plaintext {};
@@ -213,6 +216,7 @@
 +    plaintext.status = enabled ? video::RUNTIME_SETTINGS_STATUS_APPLIED : video::RUNTIME_SETTINGS_STATUS_DISABLED;
 +    plaintext.reason = enabled ? video::RUNTIME_SETTINGS_REASON_NONE : video::RUNTIME_SETTINGS_REASON_GATE_DISABLED;
 +    plaintext.supported_operations = supported_operations;
++    plaintext.proof_gated_operations = proof_gated_operations;
 +    plaintext.min_bitrate_kbps = enabled ? 1 : 0;
 +    plaintext.max_bitrate_kbps = session->control.runtime_settings_launch_bitrate_kbps;
 +    plaintext.max_fps = session->control.runtime_settings_launch_fps;
@@ -230,7 +234,7 @@
    int send_hdr_mode(session_t *session, video::hdr_info_t hdr_info) {
      if (!session->control.peer) {
        BOOST_LOG(warning) << "Couldn't send HDR mode, still waiting for PING from Moonlight"sv;
-@@ -949,6 +1119,133 @@
+@@ -949,6 +1123,133 @@
        session->video.idr_events->raise(true);
      });
  
@@ -364,7 +368,7 @@
      server->map(packetTypes[IDX_INVALIDATE_REF_FRAMES], [&](session_t *session, const std::string_view &payload) {
        auto frames = (std::int64_t *) payload.data();
        auto firstFrame = frames[0];
-@@ -1119,6 +1416,13 @@
+@@ -1119,6 +1420,13 @@
  
                send_hdr_mode(session, std::move(hdr_info));
              }
@@ -378,7 +382,7 @@
            }
  
            ++pos;
-@@ -1997,6 +2301,15 @@
+@@ -1997,6 +2305,15 @@
        session->control.connect_data = launch_session.control_connect_data;
        session->control.feedback_queue = mail->queue<platf::gamepad_feedback_msg_t>(mail::gamepad_feedback);
        session->control.hdr_queue = mail->event<video::hdr_info_t>(mail::hdr);
@@ -394,7 +398,7 @@
        session->control.legacy_input_enc_iv = launch_session.iv;
        session->control.cipher = crypto::cipher::gcm_t {
          launch_session.gcm_key,
-@@ -2004,6 +2317,7 @@
+@@ -2004,6 +2321,7 @@
        };
  
        session->video.idr_events = mail->event<bool>(mail::idr);
@@ -452,7 +456,7 @@
  
      {
        // Load a dummy image into the AVFrame to ensure we have something to encode
-@@ -1947,12 +1967,137 @@
+@@ -1947,12 +1967,139 @@
          idr_events->pop();
        }
  
@@ -567,7 +571,9 @@
 +              << " applied_width="sv << applied_width
 +              << " applied_height="sv << applied_height
 +              << " status="sv << status
-+              << " reason="sv << reason;
++              << " reason="sv << reason
++              << " server_applied="sv << (status == RUNTIME_SETTINGS_STATUS_APPLIED ? 1 : 0)
++              << " client_proven=0"sv;
 +            runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION, status, reason, 0, applied_width, applied_height});
 +          }
 +        }
@@ -590,7 +596,7 @@
        // Encode at a minimum FPS to avoid image quality issues with static content
        if (!requested_idr_frame || images->peek()) {
          if (auto img = images->pop(max_frametime)) {
-@@ -2056,7 +2201,7 @@
+@@ -2056,7 +2203,7 @@
      return result;
    }
  
@@ -599,7 +605,7 @@
      sync_session_t encode_session;
  
      encode_session.ctx = &ctx;
-@@ -2066,8 +2211,10 @@
+@@ -2066,8 +2213,10 @@
        return std::nullopt;
      }
  
@@ -612,7 +618,7 @@
  
      // Update client with our current HDR display state
      hdr_info_t hdr_info = std::make_unique<hdr_info_raw_t>(false);
-@@ -2078,7 +2225,9 @@
+@@ -2078,7 +2227,9 @@
          BOOST_LOG(error) << "Couldn't get display hdr metadata when colorspace selection indicates it should have one";
        }
      }
@@ -623,7 +629,7 @@
  
      auto session = make_encode_session(disp, encoder, ctx.config, img.width, img.height, std::move(encode_device));
      if (!session) {
-@@ -2195,6 +2344,141 @@
+@@ -2195,6 +2346,143 @@
              ctx->idr_events->pop();
            }
  
@@ -741,7 +747,9 @@
 +                  << " applied_width="sv << applied_width
 +                  << " applied_height="sv << applied_height
 +                  << " status="sv << status
-+                  << " reason="sv << reason;
++                  << " reason="sv << reason
++                  << " server_applied="sv << (status == RUNTIME_SETTINGS_STATUS_APPLIED ? 1 : 0)
++                  << " client_proven=0"sv;
 +                ctx->runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION, status, reason, 0, applied_width, applied_height});
 +              }
 +            }
@@ -765,7 +773,7 @@
            if (frame_captured && pos->session->convert(*img)) {
              BOOST_LOG(error) << "Could not convert image"sv;
              ctx->shutdown_event->raise(true);
-@@ -2377,6 +2661,8 @@
+@@ -2377,6 +2665,8 @@
          mail->event<bool>(mail::shutdown),
          mail::man->queue<packet_t>(mail::video_packets),
          std::move(idr_events),

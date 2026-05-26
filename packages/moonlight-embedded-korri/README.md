@@ -45,6 +45,8 @@ Runtime settings mechanism contract:
 - Runtime settings command timeout is currently 3000 ms; an expired command records `timed-out` with reason `no-ack`, and a later matching ack is treated as stale diagnostic input.
 - Moonlight parses both legacy no-reason mutation acks and additive reason-bearing acks while Sunshine and Moonlight patch payloads transition together.
 - Runtime resolution remains experimental/proof-gated; a Sunshine ack is not target-client proof.
+- Runtime resolution proof gate: operation `3` is listed as proof-gated, not supported, in capability acks until same-session target-client proof exists.
+- Operation `3` outcomes distinguish Sunshine-applied from client-proven: Moonlight records Sunshine `server_applied=1` separately from `client_proven=0` until device/client render evidence exists.
 - Local command acceptance is non-terminal; host-applied outcomes or target-client proof arrive later through the runtime-settings mechanism/local-control handoff.
 - Connection-status adaptation is spike-only and disabled unless `MOONLIGHT_RUNTIME_SETTINGS_MVP_ENABLE_SPIKE_ADAPTATION=1` is set.
 

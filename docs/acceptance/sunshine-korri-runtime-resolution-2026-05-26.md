@@ -6,6 +6,8 @@ The runtime resolution spike extended the experimental Sunshine/Moonlight runtim
 
 This pass proves the patched server/client control contract and Sunshine-side `h264_vaapi` encoder-session replacement on the fake Moonlight platform. It does **not** prove SM8550/v4l2m2m decoder or renderer survival yet, so runtime resolution remains experimental and should not be claimed as a supported device feature.
 
+U5 hardening keeps that boundary explicit: operation `3` may be Sunshine-applied, but it is not client-proven until same-session target-client decode/render evidence exists. Capability acks list operation `3` as proof-gated rather than generally supported.
+
 ## Scope exercised
 
 - Host: `aka` / `100.117.97.45`
@@ -13,7 +15,7 @@ This pass proves the patched server/client control contract and Sunshine-side `h
 - Client: patched `moonlight-embedded-korri`, fake platform
 - Request packet: `0x5504`
 - Ack packet: `0x5505`
-- Runtime operation: `3` = set stream resolution
+- Runtime operation: `3` = set stream resolution, proof-gated until same-session client proof exists
 - Gate: `SUNSHINE_LIVE_SETTINGS_MVP=1`
 - Launch dimensions: `1280x720`
 - Applied request: `640x360`
@@ -29,7 +31,7 @@ nix build .#checks.$(nix eval --raw --impure --expr builtins.currentSystem).korr
 nix build .#sunshine-korri .#moonlight-embedded-korri --no-link --print-build-logs
 ```
 
-The patch check now requires explicit width/height request and ack fields, operation `3`, resolution invalid-path coverage, and no resolution adaptation envs.
+The patch check now requires explicit width/height request and ack fields, operation `3`, resolution invalid-path coverage, no resolution adaptation envs, proof-gated operation `3` capability markers, and separate Sunshine-applied versus client-proven outcome markers.
 
 ## Runtime resolution applied on fake client
 
@@ -60,7 +62,7 @@ live-settings-mvp: async encoder restarted for runtime resolution request_id=1 a
 live-settings-mvp: capture_sync runtime resolution request_id=1 requested_width=640 requested_height=360 applied_width=640 applied_height=360 status=0
 ```
 
-Interpretation: Sunshine accepted a valid downshift request, rebuilt the active `h264_vaapi` encoder session, and returned a structured operation `3` applied ack. Because the client was `-platform fake`, this does not prove decoder/render survival.
+Interpretation: Sunshine accepted a valid downshift request, rebuilt the active `h264_vaapi` encoder session, and returned a structured operation `3` applied ack. This is Sunshine-applied/server-applied evidence only. Because the client was `-platform fake`, `client_proven` remains `0` and this does not prove decoder/render survival.
 
 ## Edge cases
 
@@ -171,7 +173,7 @@ live-settings-mvp: capture_sync runtime bitrate request_id=1 requested_kbps=1200
 
 ## Interpretation
 
-Operation `3` is wired end-to-end over the experimental control path and safely distinguishes applied, invalid, unsupported, and disabled outcomes.
+Operation `3` is wired end-to-end over the experimental control path and safely distinguishes applied, invalid, unsupported, and disabled outcomes. The hardened mechanism now also distinguishes Sunshine-applied from client-proven resolution outcomes so a server ack cannot be mistaken for target-client proof.
 
 The only applied path proven here is server-side `h264_vaapi` encoder-session replacement with a fake Moonlight client. This is intentionally weaker than the bitrate/FPS evidence because live resolution also needs client decoder/render proof. A future SM8550/v4l2m2m run must prove same-session rendering at the new dimensions, for example through `SDL renderer: created NV12 texture 640x360`, before this can be called supported on Sobo.
 

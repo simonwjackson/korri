@@ -116,6 +116,29 @@ let
       && contains "current_width" patch
       && contains "current_height" patch
     ))
+    (check "Sunshine runtime resolution capability remains proof-gated instead of generally advertised" (
+      contains "proof_gated_operations" patch
+      && contains "proof_gated_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION" patch
+      && !(contains "supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION" patch)
+      && contains "Runtime resolution proof gate: operation `3` is listed as proof-gated" readme
+    ))
+    (check "Moonlight runtime resolution capability parser records proof-gated operations separately" (
+      contains "proofGatedOperations" moonlightPatch
+      && contains "runtime_settings_mvp_settings_state.proofGatedOperations" moonlightPatch
+      && contains "BbGet32(&bb, &proofGatedOperations)" moonlightPatch
+      && contains "proof_gated_operations" moonlightPatch
+      && contains "Runtime resolution proof gate: operation `3` is listed as proof-gated" moonlightReadme
+    ))
+    (check "Runtime resolution outcomes distinguish Sunshine-applied from client-proven" (
+      contains "server_applied=" patch
+      && contains "client_proven=0" patch
+      && contains "server_applied=" moonlightPatch
+      && contains "client_proven=0" moonlightPatch
+      && contains "Sunshine-applied" readme
+      && contains "client-proven" readme
+      && contains "Sunshine-applied" moonlightReadme
+      && contains "client-proven" moonlightReadme
+    ))
     (check "Sunshine runtime settings acks carry additive reason fields" (
       contains "boost::endian::little_uint16_at reason" patch
       && contains "ack.reason" patch
@@ -128,11 +151,15 @@ let
       && contains "applied_width" patch
       && contains "applied_height" patch
     ))
-    (check "Sunshine runtime resolution validates bounds before queueing" (
+    (check "Sunshine runtime resolution validates conservative bounds before queueing" (
       contains "RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION" patch
       && contains "requested_width" patch
       && contains "requested_height" patch
       && contains "RUNTIME_SETTINGS_STATUS_INVALID" patch
+      && contains "RUNTIME_SETTINGS_REASON_INVALID_BOUNDS" patch
+      && contains "requested_width > launch_width" patch
+      && contains "requested_height > launch_height" patch
+      && contains "!same_aspect" patch
       && contains "std::uint64_t" patch
     ))
     (check "Sunshine runtime settings track launch baselines separately from current applied values" (
@@ -160,11 +187,14 @@ let
       && contains "session->control.runtime_settings_applied_height = ack.applied_height" patch
       && contains "session->control.runtime_settings_launch_bitrate_kbps = (std::uint32_t) session->config.monitor.bitrate" patch
     ))
-    (check "Sunshine runtime resolution tracks applied dimensions for later acks" (
+    (check "Sunshine runtime resolution preserves current applied dimensions in failure acks" (
       contains "runtime_settings_applied_width" patch
       && contains "runtime_settings_applied_height" patch
       && contains "session->control.runtime_settings_applied_width = session->control.runtime_settings_launch_width" patch
       && contains "auto current_applied_width = session->control.runtime_settings_applied_width" patch
+      && contains "send_runtime_settings_ack(session, video::runtime_bitrate_ack_t {request_id, operation, rejection_status, rejection_reason, 0, current_applied_width, current_applied_height})" patch
+      && contains "runtime resolution unsupported encoder" patch
+      && contains "RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER" patch
       && contains "ack.status == video::RUNTIME_SETTINGS_STATUS_APPLIED" patch
     ))
     (check "Sunshine runtime resolution refreshes touch mapping only after apply" (

@@ -282,7 +282,7 @@
    .setMotionEventState = set_motion_event_state,
 --- source-link/third_party/moonlight-common-c/src/ControlStream.c
 +++ src/third_party/moonlight-common-c/src/ControlStream.c
-@@ -143,6 +143,126 @@
+@@ -143,6 +143,128 @@
  #define CONTROL_STREAM_TIMEOUT_SEC 10
  #define CONTROL_STREAM_LINGER_TIMEOUT_SEC 2
  
@@ -366,6 +366,7 @@
 +    uint16_t reason;
 +    uint16_t reserved;
 +    uint32_t supportedOperations;
++    uint32_t proofGatedOperations;
 +    uint32_t minBitrateKbps;
 +    uint32_t maxBitrateKbps;
 +    uint32_t maxFps;
@@ -390,6 +391,7 @@
 +typedef struct _SS_RUNTIME_SETTINGS_MVP_SETTINGS_STATE {
 +    bool hasCapability;
 +    uint32_t supportedOperations;
++    uint32_t proofGatedOperations;
 +    uint32_t minBitrateKbps;
 +    uint32_t maxBitrateKbps;
 +    uint32_t maxFps;
@@ -409,7 +411,7 @@
  static const short packetTypesGen3[] = {
      0x1407, // Request IDR frame
      0x1410, // Start B
-@@ -355,6 +475,7 @@
+@@ -355,6 +477,7 @@
      decryptionCtx = PltCreateCryptoContext();
      hdrEnabled = false;
      memset(&hdrMetadata, 0, sizeof(hdrMetadata));
@@ -417,7 +419,7 @@
  
      return 0;
  }
-@@ -665,6 +786,150 @@
+@@ -665,6 +788,152 @@
      return false;
  }
  
@@ -511,6 +513,7 @@
 +}
 +
 +static void runtime_settings_mvp_record_capability(uint32_t supportedOperations,
++                                                   uint32_t proofGatedOperations,
 +                                                   uint32_t minBitrateKbps,
 +                                                   uint32_t maxBitrateKbps,
 +                                                   uint32_t maxFps,
@@ -524,6 +527,7 @@
 +                                                   uint32_t currentHeight) {
 +    runtime_settings_mvp_settings_state.hasCapability = true;
 +    runtime_settings_mvp_settings_state.supportedOperations = supportedOperations;
++    runtime_settings_mvp_settings_state.proofGatedOperations = proofGatedOperations;
 +    runtime_settings_mvp_settings_state.minBitrateKbps = minBitrateKbps;
 +    runtime_settings_mvp_settings_state.maxBitrateKbps = maxBitrateKbps;
 +    runtime_settings_mvp_settings_state.maxFps = maxFps;
@@ -568,7 +572,7 @@
  static bool sendMessageEnet(short ptype, short paylen, const void* payload, uint8_t channelId, uint32_t flags, bool moreData) {
      ENetPacket* enetPacket;
      int err;
-@@ -794,6 +1059,92 @@
+@@ -794,6 +1063,92 @@
      return true;
  }
  
@@ -661,7 +665,7 @@
  static bool sendMessageTcp(short ptype, short paylen, const void* payload) {
      PNVCTL_TCP_PACKET_HEADER packet;
      SOCK_RET err;
-@@ -1089,6 +1440,8 @@
+@@ -1089,6 +1444,8 @@
          ENetEvent event;
          enet_uint32 waitTimeMs;
  
@@ -670,7 +674,7 @@
          PltLockMutex(&enetMutex);
  
          // Poll for new packets and process retransmissions
-@@ -1153,6 +1506,7 @@
+@@ -1153,6 +1510,7 @@
                          // assume the server died tragically, so go ahead and tear down.
                          PltUnlockMutex(&enetMutex);
                          Limelog("Disconnect event timeout expired\n");
@@ -678,7 +682,7 @@
                          ListenerCallbacks.connectionTerminated(-1);
                          return;
                      }
-@@ -1162,8 +1516,9 @@
+@@ -1162,8 +1520,9 @@
                  }
              }
              else {
@@ -689,7 +693,7 @@
                  enet_socket_wait(client->socket, &condition, waitTimeMs);
                  continue;
              }
-@@ -1175,6 +1530,7 @@
+@@ -1175,6 +1534,7 @@
  
              err = LastSocketFail();
              Limelog("Control stream connection failed: %d\n", err);
@@ -697,7 +701,7 @@
              ListenerCallbacks.connectionTerminated(err);
              return;
          }
-@@ -1238,6 +1594,113 @@
+@@ -1238,6 +1598,115 @@
  
              // All below codepaths must free ctlHdr!!!
  
@@ -712,6 +716,7 @@
 +                uint32_t appliedWidth;
 +                uint32_t appliedHeight;
 +                uint32_t supportedOperations;
++                uint32_t proofGatedOperations;
 +                uint32_t minBitrateKbps;
 +                uint32_t maxBitrateKbps;
 +                uint32_t maxFps;
@@ -737,6 +742,7 @@
 +                            BbGet16(&bb, &reason);
 +                            BbGet16(&bb, &reserved);
 +                            BbGet32(&bb, &supportedOperations);
++                            BbGet32(&bb, &proofGatedOperations);
 +                            BbGet32(&bb, &minBitrateKbps);
 +                            BbGet32(&bb, &maxBitrateKbps);
 +                            BbGet32(&bb, &maxFps);
@@ -749,11 +755,11 @@
 +                            BbGet32(&bb, &currentWidth);
 +                            BbGet32(&bb, &currentHeight);
 +                            runtime_settings_mvp_record_ack(requestId, operation, status, reason);
-+                            runtime_settings_mvp_record_capability(supportedOperations, minBitrateKbps, maxBitrateKbps, maxFps,
++                            runtime_settings_mvp_record_capability(supportedOperations, proofGatedOperations, minBitrateKbps, maxBitrateKbps, maxFps,
 +                                                                   launchBitrateKbps, launchFps, launchWidth, launchHeight,
 +                                                                   currentBitrateKbps, currentFps, currentWidth, currentHeight);
-+                            Limelog("live-settings-mvp: runtime settings capability ack request_id=%u operation=0 status=%u reason=%u supported_operations=%u min_bitrate_kbps=%u max_bitrate_kbps=%u max_fps=%u launch_bitrate_kbps=%u launch_fps=%u launch_width=%u launch_height=%u current_bitrate_kbps=%u current_fps=%u current_width=%u current_height=%u packet=0x5505\n",
-+                                    requestId, status, reason, supportedOperations, minBitrateKbps, maxBitrateKbps, maxFps, launchBitrateKbps, launchFps, launchWidth, launchHeight, currentBitrateKbps, currentFps, currentWidth, currentHeight);
++                            Limelog("live-settings-mvp: runtime settings capability ack request_id=%u operation=0 status=%u reason=%u supported_operations=%u proof_gated_operations=%u min_bitrate_kbps=%u max_bitrate_kbps=%u max_fps=%u launch_bitrate_kbps=%u launch_fps=%u launch_width=%u launch_height=%u current_bitrate_kbps=%u current_fps=%u current_width=%u current_height=%u packet=0x5505\n",
++                                    requestId, status, reason, supportedOperations, proofGatedOperations, minBitrateKbps, maxBitrateKbps, maxFps, launchBitrateKbps, launchFps, launchWidth, launchHeight, currentBitrateKbps, currentFps, currentWidth, currentHeight);
 +                        }
 +                        else {
 +                            Limelog("live-settings-mvp: runt runtime settings capability ack bytes=%d\n", payloadBytes);
@@ -774,8 +780,8 @@
 +                            BbGet32(&bb, &appliedHeight);
 +                            runtime_settings_mvp_record_ack(requestId, operation, status, reason);
 +                            runtime_settings_mvp_record_current_applied(operation, status, appliedWidth, appliedHeight);
-+                            Limelog("live-settings-mvp: runtime settings ack request_id=%u operation=3 status=%u reason=%u applied_width=%u applied_height=%u packet=0x5505\n",
-+                                    requestId, status, reason, appliedWidth, appliedHeight);
++                            Limelog("live-settings-mvp: runtime settings ack request_id=%u operation=3 status=%u reason=%u applied_width=%u applied_height=%u server_applied=%u client_proven=0 packet=0x5505\n",
++                                    requestId, status, reason, appliedWidth, appliedHeight, status == SS_RUNTIME_SETTINGS_MVP_STATUS_APPLIED ? 1 : 0);
 +                        }
 +                        else {
 +                            Limelog("live-settings-mvp: runt runtime settings resolution ack bytes=%d\n", payloadBytes);
@@ -811,7 +817,7 @@
              // Process HDR data immediately to update global HDR enabled state and HDR metadata.
              // The actual client callback will be invoked in the async callback thread.
              if (ctlHdr->type == packetTypes[IDX_HDR_INFO]) {
-@@ -1346,6 +1809,7 @@
+@@ -1346,6 +1815,7 @@
                  PltLockMutex(&enetMutex);
                  enet_peer_disconnect_now(peer, 0);
                  PltUnlockMutex(&enetMutex);
@@ -819,7 +825,7 @@
                  ListenerCallbacks.connectionTerminated((int)terminationErrorCode);
                  free(ctlHdr);
                  return;
-@@ -1355,6 +1819,7 @@
+@@ -1355,6 +1825,7 @@
          }
          else if (event.type == ENET_EVENT_TYPE_DISCONNECT) {
              Limelog("Control stream received unexpected disconnect event\n");
