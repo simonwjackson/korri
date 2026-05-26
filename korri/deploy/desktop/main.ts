@@ -1,6 +1,5 @@
 import { join } from "node:path"
 import {
-  type CommandRunner,
   launchMoonlight,
   preflightMoonlightInput,
 } from "@app/stream/moonlight-launcher"
@@ -27,6 +26,7 @@ import type {
   ConnectionStateSnapshot,
 } from "./connection-state-snapshot"
 import { createDesktopApp } from "./create-desktop-app"
+import { createDesktopMoonlightSessionRunner } from "./moonlight-session-runner"
 import { loadDesktopConfig, saveDesktopConfig } from "./desktop-config"
 import { installInputDispatchBootstrap } from "./input-dispatch-bootstrap"
 import { createDesktopInputBroker } from "./input-broker"
@@ -51,7 +51,6 @@ let server: ReturnType<typeof Bun.serve> | null = null
 let windows: BrowserWindow[] = []
 let controllerScope: Scope.Closeable | null = null
 let inputBrokerFiber: Fiber.Fiber<never, never> | null = null
-let activeMoonlightChild: ReturnType<typeof Bun.spawn> | null = null
 
 function installApplicationMenu() {
   ApplicationMenu.setApplicationMenu([
@@ -88,7 +87,6 @@ function stopDesktopServer() {
     Effect.runFork(Fiber.interrupt(inputBrokerFiber))
     inputBrokerFiber = null
   }
-  terminateActiveMoonlightChild()
 }
 
 function registerProcessShutdown() {
@@ -398,219 +396,18 @@ function resolvePreloadPath(): string | undefined {
   return preload
 }
 
-// Diagnostic runner: spawns moonlight with piped stderr, logs the first
-// 4KB of output that arrives within 4s of the spawn. This is how we
-// learn *why* moonlight bails (display missing, host unpaired, etc.)
-// when the desktop bridge spawns it. The CLI variant of the launch
-// flow inherits the user's interactive shell stdio so any complaint
-// surfaces in the terminal; the desktop bridge's Bun.spawn previously
-// piped everything to /dev/null, which is why crashes here were
-// invisible. The child is still unref'd — the desktop process never
-// waits for moonlight.
-const diagnosticMoonlightRunner: CommandRunner = {
-  run: async (command, args, options) => {
-    try {
-      await replaceActiveMoonlightChild()
-      const child = Bun.spawn([command, ...args], {
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
-      })
-      activeMoonlightChild = child
-      void child.exited.finally(() => {
-        if (activeMoonlightChild === child) activeMoonlightChild = null
-      })
-      // Fire-and-forget: drain the first 4KB from each stream within
-      // 4 seconds, log it, then drop the reader (the process keeps
-      // running). We don't await this — the bridge handler must return
-      // quickly so the renderer's launch state can settle.
-      void collectAndLogMoonlightOutput(child, command, args)
-      const observedExit = await observeMoonlightStartupExit(
-        child,
-        options?.startupObserveMs,
-      )
-      if (observedExit !== undefined && observedExit !== 0) {
-        return {
-          status: "failed",
-          message: `Moonlight exited early with status ${observedExit}`,
-        }
-      }
-      child.unref?.()
-      return { status: "started" }
-    } catch (error) {
-      return {
-        status: "failed",
-        message: error instanceof Error ? error.message : String(error),
-      }
-    }
-  },
-}
-
-async function replaceActiveMoonlightChild(): Promise<void> {
-  const child = activeMoonlightChild
-  if (!child) return
-  activeMoonlightChild = null
-  terminateMoonlightChild(child)
-  await Promise.race([
-    child.exited.catch(() => undefined),
-    new Promise<undefined>(resolve => setTimeout(resolve, 1_000)),
-  ])
-}
-
-function terminateActiveMoonlightChild(): void {
-  const child = activeMoonlightChild
-  if (!child) return
-  activeMoonlightChild = null
-  terminateMoonlightChild(child)
-}
-
-function terminateMoonlightChild(child: ReturnType<typeof Bun.spawn>): void {
-  try {
-    child.kill("SIGTERM")
-  } catch (error) {
-    logger.warn({ err: error }, "moonlight: failed to terminate active child")
-  }
-}
-
-async function observeMoonlightStartupExit(
-  child: ReturnType<typeof Bun.spawn>,
-  startupObserveMs: number | undefined,
-): Promise<number | undefined> {
-  if (!startupObserveMs || startupObserveMs <= 0) return undefined
-  return Promise.race([
-    child.exited,
-    new Promise<undefined>(resolve => setTimeout(resolve, startupObserveMs)),
-  ])
-}
-
-async function collectAndLogMoonlightOutput(
-  child: ReturnType<typeof Bun.spawn>,
-  command: string,
-  args: readonly string[],
-): Promise<void> {
-  // We must drain stdout/stderr *continuously* for as long as moonlight
-  // runs. If we only read the first N bytes and stop, the kernel pipe
-  // buffer (~64KB) fills and moonlight's next write blocks, freezing
-  // it. That bug bit the first version of this diagnostic.
-  //
-  // Strategy:
-  //   - Drain both streams forever in the background.
-  //   - Buffer only the first SNAPSHOT_BYTES bytes per stream; discard
-  //     the rest. This bounds memory while keeping the pipe drained.
-  //   - After SNAPSHOT_DELAY_MS, log the snapshot + early exit code
-  //     (if any). The continued drain keeps moonlight alive afterward.
-  //   - When the child exits, log a final line with the real exit code.
-
-  const SNAPSHOT_BYTES = 4 * 1024
-  const SNAPSHOT_DELAY_MS = 4_000
-
-  const snapshotOf = (stream: ReadableStream<Uint8Array> | undefined) => {
-    const snapshotChunks: Uint8Array[] = []
-    let bytesKept = 0
-    let snapshotReady = false
-    const snapshotReadyResolvers: Array<() => void> = []
-    const onSnapshotReady = () =>
-      new Promise<void>(resolve => {
-        if (snapshotReady) resolve()
-        else snapshotReadyResolvers.push(resolve)
-      })
-    const markSnapshotReady = () => {
-      if (snapshotReady) return
-      snapshotReady = true
-      for (const resolve of snapshotReadyResolvers) resolve()
-    }
-    const consume = async () => {
-      if (!stream) return
-      const reader = stream.getReader()
-      try {
-        while (true) {
-          const { value, done } = await reader.read()
-          if (done) break
-          if (!value || !snapshotReady) {
-            const room = SNAPSHOT_BYTES - bytesKept
-            if (room > 0 && value) {
-              const take =
-                value.byteLength > room ? value.slice(0, room) : value
-              snapshotChunks.push(take)
-              bytesKept += take.byteLength
-              if (bytesKept >= SNAPSHOT_BYTES) markSnapshotReady()
-            }
-          }
-          // Otherwise discard the chunk; we just need the pipe drained.
-        }
-      } catch {
-        // Reader cancelled or process exited; nothing to do.
-      } finally {
-        markSnapshotReady()
-        reader.releaseLock()
-      }
-    }
-    void consume()
-    return {
-      onSnapshotReady,
-      text: () =>
-        new TextDecoder()
-          .decode(Buffer.concat(snapshotChunks.map(c => Buffer.from(c))))
-          .slice(0, SNAPSHOT_BYTES),
-    }
-  }
-
-  const stdoutCollector = snapshotOf(
-    child.stdout as ReadableStream<Uint8Array> | undefined,
-  )
-  const stderrCollector = snapshotOf(
-    child.stderr as ReadableStream<Uint8Array> | undefined,
-  )
-
-  // Log a snapshot after the delay (or sooner if both snapshots are
-  // already full).
-  try {
-    await Promise.race([
-      Promise.all([
-        stdoutCollector.onSnapshotReady(),
-        stderrCollector.onSnapshotReady(),
-      ]),
-      new Promise(resolve => setTimeout(resolve, SNAPSHOT_DELAY_MS)),
-    ])
-    const earlyExit = await Promise.race([
-      child.exited,
-      new Promise<undefined>(resolve =>
-        setTimeout(() => resolve(undefined), 50),
-      ),
-    ])
-    logger.info(
-      {
-        command,
-        args,
-        pid: child.pid,
-        earlyExitCode: typeof earlyExit === "number" ? earlyExit : null,
-        stdoutSnapshot: stdoutCollector.text().trim() || null,
-        stderrSnapshot: stderrCollector.text().trim() || null,
-      },
-      "moonlight-diagnostic: snapshot",
-    )
-  } catch (error) {
-    logger.warn(
-      { err: error, command, args },
-      "moonlight-diagnostic: snapshot failed",
-    )
-  }
-
-  // Log final exit. The continued background drain in `consume()`
-  // keeps the pipes from filling while we wait.
-  try {
-    const exitCode = await child.exited
-    logger.info(
-      { command, args, pid: child.pid, exitCode },
-      "moonlight-diagnostic: process exited",
-    )
-  } catch (error) {
-    logger.warn(
-      { err: error, command, args, pid: child.pid },
-      "moonlight-diagnostic: failed to observe exit",
-    )
-  }
-}
+// Diagnostic runner: spawns moonlight with piped output and returns a
+// managed child handle. Ownership and termination live above this runner;
+// starting a new child never kills an existing one.
+const diagnosticMoonlightRunner = createDesktopMoonlightSessionRunner({
+  spawn: (command, args, options) =>
+    Bun.spawn([command, ...args], {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      env: options?.env ? { ...Bun.env, ...options.env } : Bun.env,
+    }),
+})
 
 main().catch(error => {
   logger.error({ err: error }, "Failed to start Korri desktop app")

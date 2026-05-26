@@ -13,6 +13,27 @@ import { type CommandRunner, launchMoonlight } from "./moonlight-launcher"
 const PROC_FIXTURES_DIR = join(process.cwd(), "tools/testing/fixtures/proc")
 
 describe("moonlight launcher", () => {
+  it("propagates managed session handles returned by the command runner", async () => {
+    const session = {
+      id: "child-1",
+      processId: 4242,
+      exited: Promise.resolve({ exitCode: 0 }),
+      terminate: () => undefined,
+      terminateNow: () => undefined,
+    }
+
+    const result = await launchMoonlight({
+      host: "aka.local",
+      runner: runner(() => ({ status: "started", session })),
+    })
+
+    expect(result).toEqual({
+      status: "started",
+      command: "gamescope",
+      session,
+    })
+  })
+
   it("wraps installed moonlight in default Gamescope with embedded-client args", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({

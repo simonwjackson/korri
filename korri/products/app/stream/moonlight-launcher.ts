@@ -28,11 +28,20 @@ export interface MoonlightControlLaunchHandle {
   readonly authority: "observer" | "controller"
 }
 
+export interface ManagedMoonlightSessionHandle {
+  readonly id: string
+  readonly processId?: number
+  readonly exited: Promise<{ readonly exitCode: number | null }>
+  readonly terminate: () => void
+  readonly terminateNow: () => void
+}
+
 export type MoonlightLaunchResult =
   | {
       readonly status: "started"
       readonly command: string
       readonly moonlightControl?: MoonlightControlLaunchHandle
+      readonly session?: ManagedMoonlightSessionHandle
     }
   | { readonly status: "failed"; readonly message: string }
 
@@ -53,7 +62,7 @@ export interface CommandRunner {
       readonly env?: Readonly<Record<string, string>>
     },
   ) => Promise<
-    | { readonly status: "started" }
+    | { readonly status: "started"; readonly session?: ManagedMoonlightSessionHandle }
     | { readonly status: "failed"; readonly message: string }
   >
 }
@@ -137,11 +146,11 @@ export async function launchMoonlight(
     },
   )
   if (installed.status === "started") {
-    return {
-      status: "started",
+    return startedMoonlightResult({
       command: installedSpec.command,
       moonlightControl,
-    }
+      session: installed.session,
+    })
   }
 
   if (!allowNixFallback) {
@@ -161,16 +170,29 @@ export async function launchMoonlight(
     env: moonlightControlEnv,
   })
   if (fallback.status === "started") {
-    return {
-      status: "started",
+    return startedMoonlightResult({
       command: fallbackSpec.command,
       moonlightControl,
-    }
+      session: fallback.session,
+    })
   }
 
   return {
     status: "failed",
     message: `Could not start Moonlight. ${command}: ${installed.message}; nix fallback: ${fallback.message}`,
+  }
+}
+
+function startedMoonlightResult(input: {
+  readonly command: string
+  readonly moonlightControl?: MoonlightControlLaunchHandle
+  readonly session?: ManagedMoonlightSessionHandle
+}): MoonlightLaunchResult {
+  return {
+    status: "started",
+    command: input.command,
+    ...(input.moonlightControl ? { moonlightControl: input.moonlightControl } : {}),
+    ...(input.session ? { session: input.session } : {}),
   }
 }
 
@@ -356,7 +378,16 @@ const spawnRunner: CommandRunner = {
         }
       }
       child.unref?.()
-      return { status: "started" }
+      return {
+        status: "started",
+        session: {
+          id: `pid-${child.pid}`,
+          processId: child.pid,
+          exited: child.exited.then(exitCode => ({ exitCode })),
+          terminate: () => child.kill("SIGTERM"),
+          terminateNow: () => child.kill("SIGKILL"),
+        },
+      }
     } catch (error) {
       return {
         status: "failed",
