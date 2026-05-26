@@ -309,6 +309,48 @@ describe("moonlight launcher", () => {
     }
   })
 
+  it("passes a generated local control handle through Moonlight env", async () => {
+    const calls: Array<{
+      readonly command: string
+      readonly args: readonly string[]
+      readonly env: Readonly<Record<string, string>> | undefined
+    }> = []
+    const result = await launchMoonlight({
+      host: "aka.local",
+      moonlightControl: {
+        enabled: true,
+        runtimeDir: "/run/user/1000/korri-moonlight/session-1",
+        socketPath: "/run/user/1000/korri-moonlight/session-1/control.sock",
+        sessionId: "session-1",
+      },
+      runner: {
+        run: async (command, args, options) => {
+          calls.push({ command, args, env: options?.env })
+          return { status: "started" }
+        },
+      },
+    })
+
+    expect(result).toEqual({
+      status: "started",
+      command: "gamescope",
+      moonlightControl: {
+        authority: "observer",
+        runtimeDir: "/run/user/1000/korri-moonlight/session-1",
+        sessionId: "session-1",
+        socketPath: "/run/user/1000/korri-moonlight/session-1/control.sock",
+      },
+    })
+    expect(calls[0]?.env).toEqual({
+      MOONLIGHT_LOCAL_CONTROL_AUTHORITY: "observer",
+      MOONLIGHT_LOCAL_CONTROL_RUNTIME_DIR:
+        "/run/user/1000/korri-moonlight/session-1",
+      MOONLIGHT_LOCAL_CONTROL_SESSION_ID: "session-1",
+      MOONLIGHT_LOCAL_CONTROL_SOCKET:
+        "/run/user/1000/korri-moonlight/session-1/control.sock",
+    })
+  })
+
   it("reports both failures without throwing", async () => {
     const result = await launchMoonlight({
       runner: runner(command => ({
