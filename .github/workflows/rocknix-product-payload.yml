@@ -5,6 +5,19 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  push:
+    branches:
+      - refactor/rocknix-product-payload
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
+      - "packages/**"
+      - "tools/artifacts/**"
+      - "korri/deploy/**"
+      - "korri/products/**"
+      - "korri/shared/**"
+      - ".github/workflows/rocknix-product-payload.yml"
   workflow_dispatch:
     inputs:
       build_payload:
@@ -48,14 +61,14 @@ jobs:
           nix build .#checks.x86_64-linux.korri-rocknix-product-payload --no-link
 
       - name: Build candidate payload
-        if: inputs.build_payload
+        if: github.event_name == 'push' || inputs.build_payload
         run: |
           nix build .#packages.x86_64-linux.korri-rocknix-product-payload-odin2portal --out-link result-product-payload
           mkdir -p out/artifacts/rocknix-product-payload-candidate
           cp -aL result-product-payload/. out/artifacts/rocknix-product-payload-candidate/
 
       - name: Finalize payload metadata
-        if: inputs.build_payload && inputs.product_revision != '' && inputs.source_sha256 != '' && inputs.seed_url != ''
+        if: github.event_name == 'workflow_dispatch' && inputs.build_payload && inputs.product_revision != '' && inputs.source_sha256 != '' && inputs.seed_url != ''
         run: |
           nix develop .# --command bun tools/artifacts/rocknix-product-payload-finalize.ts \
             --candidate out/artifacts/rocknix-product-payload-candidate/nix-support/product-payload/candidate-product-payload.lock \
@@ -65,7 +78,7 @@ jobs:
             --seed-url "${{ inputs.seed_url }}"
 
       - name: Upload candidate payload
-        if: inputs.build_payload
+        if: github.event_name == 'push' || inputs.build_payload
         uses: actions/upload-artifact@v4
         with:
           name: rocknix-product-payload-odin2portal-candidate
@@ -73,7 +86,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload finalized payload metadata
-        if: inputs.build_payload && inputs.product_revision != '' && inputs.source_sha256 != '' && inputs.seed_url != ''
+        if: github.event_name == 'workflow_dispatch' && inputs.build_payload && inputs.product_revision != '' && inputs.source_sha256 != '' && inputs.seed_url != ''
         uses: actions/upload-artifact@v4
         with:
           name: rocknix-product-payload-odin2portal-final-metadata
