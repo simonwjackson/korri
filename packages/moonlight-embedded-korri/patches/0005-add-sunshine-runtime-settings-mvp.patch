@@ -1,6 +1,5 @@
-diff -ruN korri-moonlight-patch-base-full/src/main.c korri-moonlight-runtime-mod/src/main.c
 --- korri-moonlight-patch-base-full/src/main.c	2026-05-25 21:27:56.095471785 -0600
-+++ korri-moonlight-runtime-mod/src/main.c	2026-05-25 21:28:27.565810078 -0600
++++ korri-moonlight-runtime-mod/src/main.c	2026-05-25 23:37:18.666429725 -0600
 @@ -53,6 +53,13 @@
  #include <netdb.h>
  #include <arpa/inet.h>
@@ -15,7 +14,7 @@ diff -ruN korri-moonlight-patch-base-full/src/main.c korri-moonlight-runtime-mod
  
  static void applist(PSERVER_DATA server) {
    PAPP_LIST list = NULL;
-@@ -83,6 +90,81 @@
+@@ -83,6 +90,93 @@
    return -1;
  }
  
@@ -23,16 +22,17 @@ diff -ruN korri-moonlight-patch-base-full/src/main.c korri-moonlight-runtime-mod
 +#ifdef __linux__
 +static int runtime_settings_mvp_fd = -1;
 +static uint32_t runtime_settings_mvp_request_id = 1;
-+static uint32_t runtime_settings_mvp_bitrate_kbps = 0;
++static uint16_t runtime_settings_mvp_operation = 1;
++static uint32_t runtime_settings_mvp_value = 0;
 +
 +static int runtime_settings_mvp_handler(int fd) {
 +  uint64_t expirations = 0;
 +  if (read(fd, &expirations, sizeof(expirations)) != sizeof(expirations))
 +    fprintf(stderr, "live-settings-mvp: runtime settings timer read failed\n");
 +
-+  fprintf(stderr, "live-settings-mvp: sending runtime settings request request_id=%u bitrate_kbps=%u\n",
-+          runtime_settings_mvp_request_id, runtime_settings_mvp_bitrate_kbps);
-+  LiSendSunshineRuntimeSettingsMvp(runtime_settings_mvp_request_id, runtime_settings_mvp_bitrate_kbps);
++  fprintf(stderr, "live-settings-mvp: sending runtime settings request request_id=%u operation=%u value=%u\n",
++          runtime_settings_mvp_request_id, runtime_settings_mvp_operation, runtime_settings_mvp_value);
++  LiSendSunshineRuntimeSettingsMvp(runtime_settings_mvp_request_id, runtime_settings_mvp_operation, runtime_settings_mvp_value);
 +
 +  loop_remove_fd(fd);
 +  close(fd);
@@ -43,15 +43,25 @@ diff -ruN korri-moonlight-patch-base-full/src/main.c korri-moonlight-runtime-mod
 +
 +static void runtime_settings_mvp_schedule(void) {
 +  const char *bitrate = getenv("MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_KBPS");
++  const char *fps = getenv("MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS");
 +  const char *delay = getenv("MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_AFTER_S");
 +  char *end = NULL;
 +
-+  if (bitrate == NULL || bitrate[0] == '\0')
++  int has_bitrate = bitrate != NULL && bitrate[0] != '\0';
++  int has_fps = fps != NULL && fps[0] != '\0';
++  if (!has_bitrate && !has_fps)
 +    return;
++  if (has_bitrate && has_fps) {
++    fprintf(stderr, "live-settings-mvp: set only one runtime settings value: bitrate or fps\n");
++    return;
++  }
 +
-+  long bitrate_kbps = strtol(bitrate, &end, 10);
-+  if (end == bitrate || *end != '\0' || bitrate_kbps <= 0 || bitrate_kbps > UINT32_MAX) {
-+    fprintf(stderr, "live-settings-mvp: invalid runtime settings bitrate value=%s\n", bitrate);
++  uint16_t operation = has_fps ? 2 : 1;
++  const char *raw_value = has_fps ? fps : bitrate;
++  const char *label = has_fps ? "fps" : "bitrate";
++  long requested_value = strtol(raw_value, &end, 10);
++  if (end == raw_value || *end != '\0' || requested_value <= 0 || requested_value > UINT32_MAX) {
++    fprintf(stderr, "live-settings-mvp: invalid runtime settings %s value=%s\n", label, raw_value);
 +    return;
 +  }
 +
@@ -85,10 +95,11 @@ diff -ruN korri-moonlight-patch-base-full/src/main.c korri-moonlight-runtime-mod
 +    return;
 +  }
 +
-+  runtime_settings_mvp_bitrate_kbps = (uint32_t) bitrate_kbps;
++  runtime_settings_mvp_operation = operation;
++  runtime_settings_mvp_value = (uint32_t) requested_value;
 +  runtime_settings_mvp_fd = fd;
 +  loop_add_fd(fd, runtime_settings_mvp_handler, POLLIN | POLLERR | POLLHUP);
-+  fprintf(stderr, "live-settings-mvp: runtime settings request scheduled delay_s=%ld bitrate_kbps=%ld\n", delay_s, bitrate_kbps);
++  fprintf(stderr, "live-settings-mvp: runtime settings request scheduled delay_s=%ld operation=%u %s=%ld\n", delay_s, operation, label, requested_value);
 +#else
 +  fprintf(stderr, "live-settings-mvp: runtime settings MVP hook requires Linux timerfd support\n");
 +#endif
@@ -97,7 +108,7 @@ diff -ruN korri-moonlight-patch-base-full/src/main.c korri-moonlight-runtime-mod
  static void stream(PSERVER_DATA server, PCONFIGURATION config, enum platform system) {
    int appId = get_app_id(server, config->app);
    if (appId<0) {
-@@ -144,6 +226,7 @@
+@@ -144,6 +238,7 @@
  
    platform_start(system);
    LiStartConnection(&server->serverInfo, &config->stream, &connection_callbacks, platform_get_video(system), platform_get_audio(system, config->audio_device), NULL, drFlags, config->audio_device, 0);
@@ -105,9 +116,8 @@ diff -ruN korri-moonlight-patch-base-full/src/main.c korri-moonlight-runtime-mod
  
    if (IS_EMBEDDED(system)) {
      if (!config->viewonly)
-diff -ruN korri-moonlight-patch-base-full/third_party/moonlight-common-c/src/ControlStream.c korri-moonlight-runtime-mod/third_party/moonlight-common-c/src/ControlStream.c
 --- korri-moonlight-patch-base-full/third_party/moonlight-common-c/src/ControlStream.c	1969-12-31 17:00:01.000000000 -0700
-+++ korri-moonlight-runtime-mod/third_party/moonlight-common-c/src/ControlStream.c	2026-05-25 21:28:01.339897444 -0600
++++ korri-moonlight-runtime-mod/third_party/moonlight-common-c/src/ControlStream.c	2026-05-25 23:37:18.688429483 -0600
 @@ -143,6 +143,23 @@
  #define CONTROL_STREAM_TIMEOUT_SEC 10
  #define CONTROL_STREAM_LINGER_TIMEOUT_SEC 2
@@ -119,14 +129,14 @@ diff -ruN korri-moonlight-patch-base-full/third_party/moonlight-common-c/src/Con
 +    uint32_t requestId;
 +    uint16_t operation;
 +    uint16_t reserved;
-+    uint32_t bitrateKbps;
++    uint32_t value;
 +} SS_RUNTIME_SETTINGS_MVP_REQUEST, *PSS_RUNTIME_SETTINGS_MVP_REQUEST;
 +
 +typedef struct _SS_RUNTIME_SETTINGS_MVP_ACK {
 +    uint32_t requestId;
 +    uint16_t operation;
 +    uint16_t status;
-+    uint32_t appliedBitrateKbps;
++    uint32_t appliedValue;
 +} SS_RUNTIME_SETTINGS_MVP_ACK, *PSS_RUNTIME_SETTINGS_MVP_ACK;
 +
  static const short packetTypesGen3[] = {
@@ -141,11 +151,11 @@ diff -ruN korri-moonlight-patch-base-full/third_party/moonlight-common-c/src/Con
  static bool sendMessageEnet(short ptype, short paylen, const void* payload, uint8_t channelId, uint32_t flags, bool moreData) {
      ENetPacket* enetPacket;
      int err;
-@@ -794,6 +813,40 @@
+@@ -794,6 +813,46 @@
      return true;
  }
  
-+int LiSendSunshineRuntimeSettingsMvp(uint32_t requestId, uint32_t bitrateKbps) {
++int LiSendSunshineRuntimeSettingsMvp(uint32_t requestId, uint16_t operation, uint32_t value) {
 +    SS_RUNTIME_SETTINGS_MVP_REQUEST request;
 +
 +    if (!IS_SUNSHINE()) {
@@ -160,9 +170,9 @@ diff -ruN korri-moonlight-patch-base-full/third_party/moonlight-common-c/src/Con
 +    }
 +
 +    request.requestId = LE32(requestId);
-+    request.operation = LE16(1);
++    request.operation = LE16(operation);
 +    request.reserved = 0;
-+    request.bitrateKbps = LE32(bitrateKbps);
++    request.value = LE32(value);
 +
 +    if (!sendMessageAndForget(SS_RUNTIME_SETTINGS_MVP_REQUEST_PTYPE,
 +                              sizeof(request),
@@ -170,19 +180,25 @@ diff -ruN korri-moonlight-patch-base-full/third_party/moonlight-common-c/src/Con
 +                              CTRL_CHANNEL_GENERIC,
 +                              ENET_PACKET_FLAG_RELIABLE,
 +                              false)) {
-+        Limelog("live-settings-mvp: runtime settings request failed request_id=%u bitrate_kbps=%u\n", requestId, bitrateKbps);
++        Limelog("live-settings-mvp: runtime settings request failed request_id=%u operation=%u value=%u\n", requestId, operation, value);
 +        return -3;
 +    }
 +
-+    Limelog("live-settings-mvp: runtime settings request sent request_id=%u operation=1 bitrate_kbps=%u packet=0x5504\n",
-+            requestId, bitrateKbps);
++    if (operation == 2) {
++        Limelog("live-settings-mvp: runtime settings request sent request_id=%u operation=2 fps=%u packet=0x5504\n",
++                requestId, value);
++    }
++    else {
++        Limelog("live-settings-mvp: runtime settings request sent request_id=%u operation=1 bitrate_kbps=%u packet=0x5504\n",
++                requestId, value);
++    }
 +    return 0;
 +}
 +
  static bool sendMessageTcp(short ptype, short paylen, const void* payload) {
      PNVCTL_TCP_PACKET_HEADER packet;
      SOCK_RET err;
-@@ -1238,6 +1291,27 @@
+@@ -1238,6 +1297,33 @@
  
              // All below codepaths must free ctlHdr!!!
  
@@ -191,16 +207,22 @@ diff -ruN korri-moonlight-patch-base-full/third_party/moonlight-common-c/src/Con
 +                uint32_t requestId;
 +                uint16_t operation;
 +                uint16_t status;
-+                uint32_t appliedBitrateKbps;
++                uint32_t appliedValue;
 +
 +                if (packetLength >= (int)(sizeof(*ctlHdr) + sizeof(SS_RUNTIME_SETTINGS_MVP_ACK))) {
 +                    BbInitializeWrappedBuffer(&bb, (char*)ctlHdr, sizeof(*ctlHdr), packetLength - sizeof(*ctlHdr), BYTE_ORDER_LITTLE);
 +                    BbGet32(&bb, &requestId);
 +                    BbGet16(&bb, &operation);
 +                    BbGet16(&bb, &status);
-+                    BbGet32(&bb, &appliedBitrateKbps);
-+                    Limelog("live-settings-mvp: runtime settings ack request_id=%u operation=%u status=%u applied_bitrate_kbps=%u packet=0x5505\n",
-+                            requestId, operation, status, appliedBitrateKbps);
++                    BbGet32(&bb, &appliedValue);
++                    if (operation == 2) {
++                        Limelog("live-settings-mvp: runtime settings ack request_id=%u operation=2 status=%u applied_fps=%u packet=0x5505\n",
++                                requestId, status, appliedValue);
++                    }
++                    else {
++                        Limelog("live-settings-mvp: runtime settings ack request_id=%u operation=%u status=%u applied_bitrate_kbps=%u packet=0x5505\n",
++                                requestId, operation, status, appliedValue);
++                    }
 +                }
 +                else {
 +                    Limelog("live-settings-mvp: runt runtime settings ack bytes=%d\n", packetLength - (int)sizeof(*ctlHdr));
@@ -210,18 +232,17 @@ diff -ruN korri-moonlight-patch-base-full/third_party/moonlight-common-c/src/Con
              // Process HDR data immediately to update global HDR enabled state and HDR metadata.
              // The actual client callback will be invoked in the async callback thread.
              if (ctlHdr->type == packetTypes[IDX_HDR_INFO]) {
-diff -ruN korri-moonlight-patch-base-full/third_party/moonlight-common-c/src/Limelight.h korri-moonlight-runtime-mod/third_party/moonlight-common-c/src/Limelight.h
 --- korri-moonlight-patch-base-full/third_party/moonlight-common-c/src/Limelight.h	1969-12-31 17:00:01.000000000 -0700
-+++ korri-moonlight-runtime-mod/third_party/moonlight-common-c/src/Limelight.h	2026-05-25 21:28:01.340373925 -0600
++++ korri-moonlight-runtime-mod/third_party/moonlight-common-c/src/Limelight.h	2026-05-25 23:37:18.693429428 -0600
 @@ -999,6 +999,12 @@
  // frame, just that an IDR frame will arrive soon.
  void LiRequestIdrFrame(void);
  
 +// Experimental Sunshine runtime settings MVP probe. This sends a Sunshine-specific
 +// encrypted control request and logs the structured ack if one is received. It is
-+// intentionally not a stable API and does not imply that live bitrate mutation is
++// intentionally not a stable API and does not imply that live runtime mutation is
 +// supported by the host.
-+int LiSendSunshineRuntimeSettingsMvp(uint32_t requestId, uint32_t bitrateKbps);
++int LiSendSunshineRuntimeSettingsMvp(uint32_t requestId, uint16_t operation, uint32_t value);
 +
  // This function returns any extended feature flags supported by the host.
  #define LI_FF_PEN_TOUCH_EVENTS        0x01 // LiSendTouchEvent()/LiSendPenEvent() supported

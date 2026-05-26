@@ -2,6 +2,8 @@
   pkgs,
   patchPath,
   readmePath,
+  moonlightPatchPath,
+  moonlightReadmePath,
 }:
 
 let
@@ -10,6 +12,8 @@ let
 
   patch = builtins.readFile patchPath;
   readme = builtins.readFile readmePath;
+  moonlightPatch = builtins.readFile moonlightPatchPath;
+  moonlightReadme = builtins.readFile moonlightReadmePath;
   contains = needle: haystack: lib.hasInfix needle haystack;
 
   checks = [
@@ -21,6 +25,9 @@ let
     ))
     (check "Sunshine runtime bitrate operation is named" (
       contains "RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS = 1" patch
+    ))
+    (check "Sunshine runtime FPS operation is named" (
+      contains "RUNTIME_SETTINGS_OPERATION_SET_FPS = 2" patch
     ))
     (check "Sunshine runtime bitrate applied status is named" (
       contains "RUNTIME_SETTINGS_STATUS_APPLIED = 0" patch
@@ -55,6 +62,16 @@ let
     ))
     (check "Sunshine runtime bitrate README documents h264_vaapi as the only supported path" (
       contains "Only `h264_vaapi` via Sunshine's AVCodec/VAAPI path is currently supported" readme
+    ))
+    (check "Sunshine runtime settings patch documents FPS as experimental frame pacing" (
+      contains "Supports operation `2`: set effective stream FPS" readme
+      && contains "runtime FPS" patch
+      && contains "applied_fps" patch
+    ))
+    (check "Moonlight runtime settings sender can request FPS" (
+      contains "MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS" moonlightPatch
+      && contains "MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS" moonlightReadme
+      && contains "operation=2" moonlightPatch
     ))
     (check "Sunshine runtime bitrate README documents the status contract" (
       contains "Runtime settings status contract" readme

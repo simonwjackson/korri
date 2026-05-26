@@ -545,6 +545,8 @@
               inherit pkgs;
               patchPath = ./packages/sunshine-korri/patches/0001-runtime-bitrate-restart-mvp.patch;
               readmePath = ./packages/sunshine-korri/README.md;
+              moonlightPatchPath = ./packages/moonlight-embedded-korri/patches/0005-add-sunshine-runtime-settings-mvp.patch;
+              moonlightReadmePath = ./packages/moonlight-embedded-korri/README.md;
             };
           }
           // pkgs.lib.optionalAttrs isX86Linux {
