@@ -76,6 +76,17 @@ Reason codes:
 
 Internal lifecycle values are `locally-rejected`, `accepted`, `sent`, `host-applied`, `host-rejected`, `timed-out`, `stale-ack-observed`, and `stream-ended`.
 
+Current review gates:
+
+- `nix build .#checks.$(nix eval --raw --impure --expr builtins.currentSystem).korri-sunshine-runtime-bitrate-patch --no-link` is the source invariant/build check for packet IDs, operation IDs, capability query, reason fields, timeout/conflict markers, baseline tracking, and resolution proof-gate markers.
+- Existing bitrate/FPS live evidence proves the `h264_vaapi` applied path; disabled, invalid, unsupported, timeout, conflict, command-not-advertised, and stale-ack outcomes are covered by source invariants and/or documented smoke evidence.
+- Runtime resolution requires same-session target-client proof before it can be advertised as supported.
+
+Evidence is recorded in:
+
+- `docs/acceptance/sunshine-korri-runtime-bitrate-restart-2026-05-25.md`
+- `docs/acceptance/sunshine-korri-runtime-resolution-2026-05-26.md`
+
 ## Moonlight local control protocol
 
 The local control protocol is experimental downstream Moonlight Embedded functionality. It is a generic Moonlight session protocol, not a Korri-private log format or launcher API.

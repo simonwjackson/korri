@@ -20,6 +20,7 @@ U5 hardening keeps that boundary explicit: operation `3` may be Sunshine-applied
 - Launch dimensions: `1280x720`
 - Applied request: `640x360`
 - Current status contract: `0` applied, `1` failed/unsupported, `2` invalid, `3` disabled
+- Current reason-bearing contract: operation `3` acks include a machine-readable reason and separate `server_applied` versus `client_proven` markers in Moonlight/Sunshine logs.
 
 ## Build/check evidence
 
@@ -34,6 +35,8 @@ nix build .#sunshine-korri .#moonlight-embedded-korri --no-link --print-build-lo
 The patch check now requires explicit width/height request and ack fields, operation `3`, resolution invalid-path coverage, no resolution adaptation envs, proof-gated operation `3` capability markers, and separate Sunshine-applied versus client-proven outcome markers.
 
 ## Runtime resolution applied on fake client
+
+The live smoke logs below predate the additive reason field. Current hardened logs preserve the broad status and add `reason=0 server_applied=1 client_proven=0` for the same fake-client applied case.
 
 Run directory:
 
@@ -65,6 +68,8 @@ live-settings-mvp: capture_sync runtime resolution request_id=1 requested_width=
 Interpretation: Sunshine accepted a valid downshift request, rebuilt the active `h264_vaapi` encoder session, and returned a structured operation `3` applied ack. This is Sunshine-applied/server-applied evidence only. Because the client was `-platform fake`, `client_proven` remains `0` and this does not prove decoder/render survival.
 
 ## Edge cases
+
+Current reason-bearing equivalents preserve the same broad status while adding reasons: invalid bounds use `reason=2`, unsupported encoder uses `reason=4`, and disabled gate uses `reason=1`. In all three cases, current applied dimensions remain the launch dimensions.
 
 ### Invalid upshift
 
@@ -127,6 +132,16 @@ Sunshine marker:
 ```text
 live-settings-mvp: request_id=1 operation=3 requested_value=0 requested_width=640 requested_height=360 applied_value=5708 applied_width=1280 applied_height=720 status=3
 ```
+
+## Build/check evidence after mechanism hardening
+
+The final hardened mechanism is covered by the source invariant/build check:
+
+```text
+nix build .#checks.$(nix eval --raw --impure --expr builtins.currentSystem).korri-sunshine-runtime-bitrate-patch --no-link
+```
+
+That check requires stable packet/operation IDs, operation `0` capability query support, reason-bearing acks with legacy parsing, explicit launch baseline tracking, timeout/no-ack and conflict markers, disabled/invalid/unsupported reason mappings, and proof-gated runtime resolution markers. No new target-client resolution smoke was run for the documentation refresh, so runtime resolution remains unproven on Sobo/SM8550.
 
 ## Regression checks for existing operations
 

@@ -326,6 +326,14 @@ let
     (check "Moonlight runtime settings README marks connection-status adaptation spike-only" (
       contains "connection-status adaptation is spike-only" moonlightReadme
     ))
+    (check "Runtime settings READMEs document current review gates and evidence boundaries" (
+      contains "Current review gates" readme
+      && contains "source invariant/build check" readme
+      && contains "same-session target-client proof" readme
+      && contains "Current review gates" moonlightReadme
+      && contains "source invariant/build check" moonlightReadme
+      && contains "same-session target-client proof" moonlightReadme
+    ))
     (check "Sunshine runtime bitrate README documents the status contract" (
       contains "Runtime settings status contract" readme
       && contains "`0` — applied" readme

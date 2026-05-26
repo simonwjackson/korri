@@ -17,10 +17,14 @@ The earlier direct `AVCodecContext` field/AVOption mutation path acknowledged su
 - Gate: `SUNSHINE_LIVE_SETTINGS_MVP=1`
 - Measurement: `nixpkgs#tcpdump` on local `tailscale0`, filtering Sunshine video UDP from port `48998`
 - Current status contract: `0` applied, `1` failed/unsupported, `2` invalid, `3` disabled
+- Current reason-bearing contract: acks now include a machine-readable reason field while Moonlight still parses legacy no-reason acks during transition.
+- Current capability contract: operation `0` reports active-session support, launch baselines, current applied values, and proof-gated operations before mutation.
 
 ## Current benchmark pass
 
 Run dates: 2026-05-25 and 2026-05-26.
+
+The live smoke logs below predate the additive reason-bearing ack payload. They remain valid evidence for the proven `h264_vaapi` bitrate/FPS behavior; current patched Moonlight logs include `reason=<code>` on runtime-settings acks and command lifecycle markers such as `host-applied`, `host-rejected`, `timed-out`, `conflict`, and `stale-ack-observed`.
 
 Setup:
 
@@ -172,6 +176,8 @@ second_11     frames=15
 
 ### Runtime FPS edge cases
 
+Historical ack examples:
+
 ```text
 # FPS above launch FPS is invalid.
 live-settings-mvp: runtime settings ack request_id=1 operation=2 status=2 applied_fps=60 packet=0x5505
@@ -183,7 +189,20 @@ live-settings-mvp: runtime settings ack request_id=1 operation=2 status=1 applie
 live-settings-mvp: runtime settings ack request_id=1 operation=2 status=3 applied_fps=60 packet=0x5505
 
 # Moonlight refuses ambiguous one-shot input.
-live-settings-mvp: set only one runtime settings value: bitrate or fps
+live-settings-mvp: set only one runtime settings value: bitrate, fps, or resolution
+```
+
+Current reason-bearing equivalents preserve the same broad status while adding a reason code:
+
+```text
+# FPS above launch FPS is invalid.
+live-settings-mvp: runtime settings ack request_id=1 operation=2 status=2 reason=2 applied_fps=60 packet=0x5505
+
+# HEVC remains unsupported.
+live-settings-mvp: runtime settings ack request_id=1 operation=2 status=1 reason=4 applied_fps=60 packet=0x5505
+
+# Gate disabled returns disabled.
+live-settings-mvp: runtime settings ack request_id=1 operation=2 status=3 reason=1 applied_fps=60 packet=0x5505
 ```
 
 ### Bitrate regression after generic runtime settings protocol
@@ -201,6 +220,16 @@ live-settings-mvp: runtime settings ack request_id=1 operation=1 status=0 applie
 pre_2_9s        kbps=7407.2
 post_13_20s     kbps=2877.5
 ```
+
+## Build/check evidence after mechanism hardening
+
+The final hardened mechanism is covered by the source invariant/build check:
+
+```text
+nix build .#checks.$(nix eval --raw --impure --expr builtins.currentSystem).korri-sunshine-runtime-bitrate-patch --no-link
+```
+
+That check requires stable packet/operation IDs, operation `0` capability query support, reason-bearing acks with legacy parsing, explicit launch baseline tracking, timeout/no-ack and conflict markers, disabled/invalid/unsupported reason mappings, and proof-gated runtime resolution markers. No new live bitrate/FPS smoke was run for the documentation refresh; the existing live evidence above remains the behavior proof for `h264_vaapi`.
 
 ## Interpretation
 
