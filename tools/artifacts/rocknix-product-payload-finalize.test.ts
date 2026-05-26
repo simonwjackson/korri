@@ -54,7 +54,7 @@ describe("RockNix product payload finalizer", () => {
         sourceSha256: sourceSha,
         productRevision: cleanRevision,
         seedUrls: [
-          "https://api.github.com/repos/simonwjackson/korri/releases/assets/123",
+          "https://github.com/simonwjackson/korri/releases/download/product-payload/asset-123.tar.zst",
         ],
       })
 
@@ -72,7 +72,7 @@ describe("RockNix product payload finalizer", () => {
         `PKG_NIX_GUEST_URL="https://api.github.com/repos/simonwjackson/korri/tarball/${cleanRevision}"`,
       )
       expect(env).toContain(
-        `PKG_NIX_GUEST_ROOTFS_SEED_URLS="https://api.github.com/repos/simonwjackson/korri/releases/assets/123"`,
+        `PKG_NIX_GUEST_ROOTFS_SEED_URLS="https://github.com/simonwjackson/korri/releases/download/product-payload/asset-123.tar.zst"`,
       )
 
       const syntax = spawnSync("bash", ["-n", result.lockPath])
@@ -99,9 +99,9 @@ describe("RockNix product payload finalizer", () => {
           "--source-sha256",
           sourceSha,
           "--seed-url",
-          "https://api.github.com/repos/simonwjackson/korri/releases/assets/1",
+          "https://github.com/simonwjackson/korri/releases/download/product-payload/asset-1.tar.zst",
           "--seed-url",
-          "https://api.github.com/repos/simonwjackson/korri/releases/assets/2",
+          "https://github.com/simonwjackson/korri/releases/download/product-payload/asset-2.tar.zst",
         ],
         { cwd: process.cwd() },
       )
@@ -110,7 +110,7 @@ describe("RockNix product payload finalizer", () => {
       expect(
         readFileSync(join(outputDir, "product-payload.lock"), "utf8"),
       ).toContain(
-        `PRODUCT_ROOTFS_SEED_URLS="https://api.github.com/repos/simonwjackson/korri/releases/assets/1 https://api.github.com/repos/simonwjackson/korri/releases/assets/2"`,
+        `PRODUCT_ROOTFS_SEED_URLS="https://github.com/simonwjackson/korri/releases/download/product-payload/asset-1.tar.zst https://github.com/simonwjackson/korri/releases/download/product-payload/asset-2.tar.zst"`,
       )
     } finally {
       rmSync(dir, { recursive: true, force: true })
@@ -126,13 +126,13 @@ describe("RockNix product payload finalizer", () => {
         sourceSha256: sourceSha,
         productRevision: cleanRevision,
         seedUrls: [
-          "https://api.github.com/repos/simonwjackson/korri/releases/assets/1",
-          "https://api.github.com/repos/simonwjackson/korri/releases/assets/2",
+          "https://github.com/simonwjackson/korri/releases/download/product-payload/asset-1.tar.zst",
+          "https://github.com/simonwjackson/korri/releases/download/product-payload/asset-2.tar.zst",
         ],
       })
 
       expect(readFileSync(result.lockPath, "utf8")).toContain(
-        `PRODUCT_ROOTFS_SEED_URLS="https://api.github.com/repos/simonwjackson/korri/releases/assets/1 https://api.github.com/repos/simonwjackson/korri/releases/assets/2"`,
+        `PRODUCT_ROOTFS_SEED_URLS="https://github.com/simonwjackson/korri/releases/download/product-payload/asset-1.tar.zst https://github.com/simonwjackson/korri/releases/download/product-payload/asset-2.tar.zst"`,
       )
     } finally {
       rmSync(dir, { recursive: true, force: true })
@@ -150,7 +150,7 @@ describe("RockNix product payload finalizer", () => {
           sourceSha256: "",
           productRevision: cleanRevision,
           seedUrls: [
-            "https://api.github.com/repos/simonwjackson/korri/releases/assets/123",
+            "https://github.com/simonwjackson/korri/releases/download/product-payload/asset-123.tar.zst",
           ],
         }),
       ).toThrow("source SHA256")
@@ -172,7 +172,7 @@ describe("RockNix product payload finalizer", () => {
           sourceSha256: sourceSha,
           productRevision: "",
           seedUrls: [
-            "https://api.github.com/repos/simonwjackson/korri/releases/assets/123",
+            "https://github.com/simonwjackson/korri/releases/download/product-payload/asset-123.tar.zst",
           ],
         }),
       ).toThrow("clean Korri revision")
@@ -195,7 +195,7 @@ describe("RockNix product payload finalizer", () => {
           sourceSha256: sourceSha,
           productRevision: cleanRevision,
           seedUrls: [
-            "https://api.github.com/repos/simonwjackson/korri/releases/assets/123",
+            "https://github.com/simonwjackson/korri/releases/download/product-payload/asset-123.tar.zst",
           ],
         }),
       ).toThrow("clean Korri revision")
@@ -218,7 +218,7 @@ describe("RockNix product payload finalizer", () => {
           sourceSha256: sourceSha,
           productRevision: cleanRevision,
           seedUrls: [
-            "https://api.github.com/repos/simonwjackson/korri/releases/assets/123",
+            "https://github.com/simonwjackson/korri/releases/download/product-payload/asset-123.tar.zst",
           ],
         }),
       ).toThrow("Odin2Portal")
@@ -237,7 +237,7 @@ describe("RockNix product payload finalizer", () => {
           sourceSha256: sourceSha,
           productRevision: cleanRevision,
           seedUrls: [
-            "https://api.github.com/repos/simonwjackson/nix-on-rocks/releases/assets/123",
+            "https://github.com/simonwjackson/nix-on-rocks/releases/download/product-payload/asset-123.tar.zst",
           ],
         }),
       ).toThrow("release URL")
