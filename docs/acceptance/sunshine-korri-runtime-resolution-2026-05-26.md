@@ -141,7 +141,7 @@ The final hardened mechanism is covered by the source invariant/build check:
 nix build .#checks.$(nix eval --raw --impure --expr builtins.currentSystem).korri-sunshine-runtime-bitrate-patch --no-link
 ```
 
-That check requires stable packet/operation IDs, operation `0` capability query support, reason-bearing acks with legacy parsing, explicit launch baseline tracking, timeout/no-ack and conflict markers, disabled/invalid/unsupported reason mappings, and proof-gated runtime resolution markers. No new target-client resolution smoke was run for the documentation refresh, so runtime resolution remains unproven on Sobo/SM8550.
+That check requires stable packet/operation IDs, operation `0` capability query support, active-session capability gating, reason-bearing acks with legacy parsing, explicit launch baseline tracking, timeout/no-ack, conflict, stale-ack markers, and proof-gated runtime resolution markers. No new target-client resolution smoke was run for the documentation refresh, so runtime resolution remains unproven on Sobo/SM8550.
 
 ## Regression checks for existing operations
 

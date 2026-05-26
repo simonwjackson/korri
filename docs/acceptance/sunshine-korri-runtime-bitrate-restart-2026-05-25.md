@@ -229,7 +229,7 @@ The final hardened mechanism is covered by the source invariant/build check:
 nix build .#checks.$(nix eval --raw --impure --expr builtins.currentSystem).korri-sunshine-runtime-bitrate-patch --no-link
 ```
 
-That check requires stable packet/operation IDs, operation `0` capability query support, reason-bearing acks with legacy parsing, explicit launch baseline tracking, timeout/no-ack and conflict markers, disabled/invalid/unsupported reason mappings, and proof-gated runtime resolution markers. No new live bitrate/FPS smoke was run for the documentation refresh; the existing live evidence above remains the behavior proof for `h264_vaapi`.
+That check requires stable packet/operation IDs, operation `0` capability query support, active-session capability gating, reason-bearing acks with legacy parsing, explicit launch baseline tracking, timeout/no-ack, conflict, stale-ack markers, and proof-gated runtime resolution markers. No new live bitrate/FPS smoke was run for the documentation refresh; the existing live evidence above remains the behavior proof for `h264_vaapi`.
 
 ## Interpretation
 
