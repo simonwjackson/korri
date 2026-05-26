@@ -684,7 +684,14 @@ in
           "korri-compositor.service"
           "network.target"
         ];
-        environment = compositorEnv;
+        # Inherit the compositor's session env (HOME, XDG_*) and pin
+        # WAYLAND_DISPLAY to sway's default first-allocated socket name
+        # so sunshine can attach to `$XDG_RUNTIME_DIR/wayland-1`. Hosts
+        # whose sway picks a different socket name need to override this
+        # via `systemd.services.korri-sunshine.environment.WAYLAND_DISPLAY`.
+        environment = compositorEnv // {
+          WAYLAND_DISPLAY = "wayland-1";
+        };
         unitConfig = {
           StartLimitBurst = 5;
           StartLimitIntervalSec = 500;

@@ -103,13 +103,14 @@ let
       XDG_STATE_HOME = cfg.stateHome;
       XDG_DATA_HOME = cfg.dataHome;
       XDG_CONFIG_HOME = cfg.configHome;
-      # Pin Sway's Wayland socket name so peer system services
-      # (korri-sunshine for headless streaming hosts) can attach to it
-      # without sniffing the runtime dir. Sway honours WAYLAND_DISPLAY when
-      # set in its env and writes the socket at
-      # `$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY`. Hosts that need a different
-      # socket name override via services.korri.compositor.environment.
-      WAYLAND_DISPLAY = "wayland-1";
+      # Do NOT set WAYLAND_DISPLAY here. wlroots' backend autodetection
+      # treats a pre-set WAYLAND_DISPLAY as "I am a nested wayland
+      # client" and tries to connect to a parent compositor, which fails
+      # for a session compositor like Sway. Sway itself picks the socket
+      # name (default `wayland-1`) when it starts. Peer system services
+      # that need to attach to sway's socket should set WAYLAND_DISPLAY
+      # on their own unit (see services.korri.server's korri-sunshine.
+      # service for an example).
     }
     // lib.optionalAttrs cfg.kiosk.enable {
       KORRI_KIOSK = "1";
