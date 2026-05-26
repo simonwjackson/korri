@@ -547,6 +547,8 @@
               readmePath = ./packages/sunshine-korri/README.md;
               moonlightPatchPath = ./packages/moonlight-embedded-korri/patches/0005-add-sunshine-runtime-settings-mvp.patch;
               moonlightReadmePath = ./packages/moonlight-embedded-korri/README.md;
+              sunshinePackage = self.packages.${system}.sunshine-korri;
+              moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
             };
           }
           // pkgs.lib.optionalAttrs isX86Linux {

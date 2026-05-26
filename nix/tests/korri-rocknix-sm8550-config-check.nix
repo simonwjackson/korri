@@ -83,12 +83,13 @@ let
           lib.hasInfix "cemu" systemPackageText
           || lib.hasInfix "cemu" (lib.concatStringsSep "\n" (map toString compositor.path))
         ))
-        (check "${name}: compositor PATH must include Moonlight substrate package" (
-          lib.hasInfix "moonlight" systemPackageText
-          || lib.hasInfix "moonlight" (lib.concatStringsSep "\n" (map toString compositor.path))
+        (check "${name}: compositor PATH must include Korri Moonlight substrate package" (
+          lib.hasInfix "moonlight-embedded-korri" systemPackageText
+          || lib.hasInfix "moonlight-embedded-korri" (lib.concatStringsSep "\n" (map toString compositor.path))
         ))
-        (check "${name}: Moonlight command must use moonlight" (
-          lib.hasInfix "moonlight" (compositor.environment.KORRI_MOONLIGHT_COMMAND or "")
+        (check "${name}: Moonlight command must use Korri Moonlight" (
+          lib.hasInfix "moonlight-embedded-korri" (compositor.environment.KORRI_MOONLIGHT_COMMAND or "")
+          && lib.hasSuffix "/bin/moonlight" (compositor.environment.KORRI_MOONLIGHT_COMMAND or "")
         ))
         (check "${name}: Moonlight must use the controller mapping database" (
           lib.hasInfix "gamecontrollerdb.txt" (compositor.environment.KORRI_MOONLIGHT_MAPPING_FILE or "")
