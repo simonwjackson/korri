@@ -154,7 +154,7 @@ diff -ruN source-link/src/stream.cpp src/src/stream.cpp
 +        << " operation="sv << operation
 +        << " requested_bitrate_kbps="sv << requested_bitrate_kbps
 +        << " configured_bitrate_kbps="sv << session->config.monitor.bitrate
-+        << " accepted=1"sv;
++        << " queued=1"sv;
 +
 +      session->video.runtime_bitrate_events->raise(video::runtime_bitrate_request_t {request_id, requested_bitrate_kbps});
 +    });

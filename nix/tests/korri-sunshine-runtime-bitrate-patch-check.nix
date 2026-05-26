@@ -37,6 +37,10 @@ let
     (check "Sunshine runtime bitrate patch does not expose a logs-only pending status" (
       !(contains "RUNTIME_SETTINGS_STATUS_ACCEPTED_PENDING" patch)
       && !(contains "accepted/pending" readme)
+      && !(contains "accepted=1" patch)
+    ))
+    (check "Sunshine runtime bitrate patch logs queued requests without implying final success" (
+      contains "queued=1" patch
     ))
     (check "Sunshine runtime bitrate patch does not carry AVCodec field mutation fallback" (
       !(contains "update_runtime_bitrate" patch)
