@@ -56,6 +56,22 @@ describe("moonlight-control cli", () => {
     expect(output[0]).toContain("state.snapshot")
   })
 
+  it("returns a diagnostic when connection fails", async () => {
+    const errors: string[] = []
+    const exitCode = await runMoonlightControlCommand(
+      ["hello", "--socket", "/tmp/missing.sock"],
+      {
+        writeError: line => errors.push(line),
+        connect: async () => {
+          throw new Error("ENOENT")
+        },
+      },
+    )
+
+    expect(exitCode).toBe(1)
+    expect(errors.join("\n")).toContain("ENOENT")
+  })
+
   it("fails clearly when the socket flag is missing", async () => {
     const errors: string[] = []
     const exitCode = await runMoonlightControlCommand(["hello"], {

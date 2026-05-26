@@ -216,6 +216,14 @@ const StateSnapshotResult = Schema.StructWithRest(
   [AdditiveFields],
 )
 
+const EventsSubscribedResult = Schema.StructWithRest(
+  Schema.Struct({
+    _tag: Schema.Literal("events.subscribed"),
+    seq: sequenceSchema(),
+  }),
+  [AdditiveFields],
+)
+
 const CommandAcceptedResult = Schema.StructWithRest(
   Schema.Struct({
     _tag: Schema.Literal("command.accepted"),
@@ -238,6 +246,7 @@ const CommandResult = Schema.StructWithRest(
 const ResponseResult = Schema.Union([
   HelloResult,
   StateSnapshotResult,
+  EventsSubscribedResult,
   CommandAcceptedResult,
   CommandResult,
 ])
@@ -299,6 +308,11 @@ export interface MoonlightControlStateSnapshotResult extends AdditiveObject {
   }
 }
 
+export interface MoonlightControlEventsSubscribedResult extends AdditiveObject {
+  readonly _tag: "events.subscribed"
+  readonly seq: number
+}
+
 export interface MoonlightControlCommandAcceptedResult extends AdditiveObject {
   readonly _tag: "command.accepted"
   readonly requestId: MoonlightControlRequestId
@@ -315,6 +329,7 @@ export interface MoonlightControlCommandResult extends AdditiveObject {
 export type MoonlightControlResponseResult =
   | MoonlightControlHelloResult
   | MoonlightControlStateSnapshotResult
+  | MoonlightControlEventsSubscribedResult
   | MoonlightControlCommandAcceptedResult
   | MoonlightControlCommandResult
 

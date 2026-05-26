@@ -30,8 +30,8 @@ diff -ruN source-link/CMakeLists.txt src/CMakeLists.txt
  
 diff -ruN source-link/src/local_control.c src/src/local_control.c
 --- source-link/src/local_control.c	1969-12-31 17:00:00.000000000 -0700
-+++ src/src/local_control.c	2026-05-26 14:11:07.620287609 -0600
-@@ -0,0 +1,543 @@
++++ src/src/local_control.c	2026-05-26 14:29:50.269741772 -0600
+@@ -0,0 +1,546 @@
 +#ifdef __linux__
 +
 +#define _GNU_SOURCE
@@ -382,7 +382,10 @@ diff -ruN source-link/src/local_control.c src/src/local_control.c
 +      pthread_mutex_lock(&control.lock);
 +      struct json_object* snapshot_event = moonlight_local_control_event_locked("lifecycle.streaming");
 +      pthread_mutex_unlock(&control.lock);
-+      moonlight_local_control_write_json(client_fd, moonlight_local_control_success(id, json_object_new_object()));
++      struct json_object* subscribed = json_object_new_object();
++      json_object_object_add(subscribed, "_tag", json_object_new_string("events.subscribed"));
++      json_object_object_add(subscribed, "seq", json_object_new_int64((int64_t) control.seq));
++      moonlight_local_control_write_json(client_fd, moonlight_local_control_success(id, subscribed));
 +      moonlight_local_control_write_json(client_fd, snapshot_event);
 +    }
 +    else {

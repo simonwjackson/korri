@@ -94,6 +94,21 @@ describe("moonlight local control protocol", () => {
     }
   })
 
+  it("decodes an event subscription response", () => {
+    const decoded = expectSuccessResponse(
+      decodeMoonlightControlResponse({
+        jsonrpc: "2.0",
+        id: "subscribe-1",
+        result: { _tag: "events.subscribed", seq: 3 },
+      }),
+    )
+
+    expect(decoded.result._tag).toBe("events.subscribed")
+    if (decoded.result._tag === "events.subscribed") {
+      expect(decoded.result.seq).toBe(3)
+    }
+  })
+
   it("decodes ordered event envelopes with increasing seq values", () => {
     const first = decodeMoonlightControlMessage({
       jsonrpc: "2.0",

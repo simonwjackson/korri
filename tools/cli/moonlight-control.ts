@@ -30,14 +30,18 @@ export async function runMoonlightControlCommand(
 
   const connect =
     io.connect ?? (path => connectMoonlightControl({ socketPath: path }))
-  const client = await connect(socketPath)
+  let client: MoonlightControlClient | undefined
   try {
+    client = await connect(socketPath)
     const response =
       command === "hello" ? await client.hello() : await client.state()
     write(JSON.stringify(response, null, 2))
     return 0
+  } catch (error) {
+    writeError(error instanceof Error ? error.message : String(error))
+    return 1
   } finally {
-    client.close()
+    client?.close()
   }
 }
 
