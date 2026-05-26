@@ -22,7 +22,7 @@ Adds an experimental Sunshine runtime-settings request sender and ack logger for
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_RESOLUTION` (for example `1280x720`)
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_AFTER_S`
 
-Connection-status adaptation experiments are controlled by:
+Connection-status adaptation experiments are spike-only and require `MOONLIGHT_RUNTIME_SETTINGS_MVP_ENABLE_SPIKE_ADAPTATION=1`. They are controlled by:
 
 - `MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_KBPS`
 - `MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_FPS`
@@ -37,10 +37,14 @@ This is experimental and should remain gated until Sunshine-side capability nego
 Runtime settings mechanism contract:
 
 - Existing packet IDs remain stable: request `0x5504` and ack `0x5505`.
-- Operation `0` is a non-mutating capability query for the active Sunshine session.
+- Operation `0` is a non-mutating capability query for the active Sunshine session; one-shot validation requests send a capability query before the delayed mutation command.
 - Operations `1`, `2`, and `3` remain bitrate, FPS, and resolution mutation requests.
+- Moonlight keeps bounded per-operation command state, rejects same-family in-flight commands with `conflict`, and records terminal `host-applied`, `host-rejected`, `timed-out`, `stale-ack-observed`, and `stream-ended` outcomes.
+- Runtime settings command timeout is currently 3000 ms; an expired command records `timed-out` with reason `no-ack`, and a later matching ack is treated as stale diagnostic input.
+- Moonlight parses both legacy no-reason mutation acks and additive reason-bearing acks while Sunshine and Moonlight patch payloads transition together.
 - Runtime resolution remains experimental/proof-gated; a Sunshine ack is not target-client proof.
 - Local command acceptance is non-terminal; host-applied outcomes or target-client proof arrive later through the runtime-settings mechanism/local-control handoff.
+- Connection-status adaptation is spike-only and disabled unless `MOONLIGHT_RUNTIME_SETTINGS_MVP_ENABLE_SPIKE_ADAPTATION=1` is set.
 
 Runtime settings status contract:
 

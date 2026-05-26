@@ -149,6 +149,12 @@ let
       && contains "applied_width" patch
       && contains "applied_height" patch
     ))
+    (check "Moonlight runtime settings sender can query Sunshine capabilities" (
+      contains "SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES 0" moonlightPatch
+      && contains "runtime_settings_mvp_query_capabilities" moonlightPatch
+      && contains "operation=0" moonlightPatch
+      && contains "capability query" moonlightReadme
+    ))
     (check "Moonlight runtime settings sender can request FPS" (
       contains "MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS" moonlightPatch
       && contains "MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS" moonlightReadme
@@ -161,14 +167,33 @@ let
       && contains "applied_width" moonlightPatch
       && contains "applied_height" moonlightPatch
     ))
+    (check "Moonlight runtime settings parser accepts reason-bearing and legacy acks" (
+      contains "SS_RUNTIME_SETTINGS_MVP_ACK_WITH_REASON" moonlightPatch
+      && contains "SS_RUNTIME_SETTINGS_MVP_REASON_NONE" moonlightPatch
+      && contains "legacy no-reason runtime settings ack" moonlightPatch
+      && contains "reason=" moonlightPatch
+    ))
+    (check "Moonlight runtime settings command state rejects same-family conflicts" (
+      contains "SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_IN_FLIGHT" moonlightPatch
+      && contains "runtime_settings_mvp_command_state" moonlightPatch
+      && contains "runtime_settings_mvp_has_inflight_family" moonlightPatch
+      && contains "outcome=locally-rejected reason=conflict" moonlightPatch
+    ))
+    (check "Moonlight runtime settings command state records timeout no-ack outcomes" (
+      contains "SS_RUNTIME_SETTINGS_MVP_TIMEOUT_MS" moonlightPatch
+      && contains "runtime_settings_mvp_check_timeouts" moonlightPatch
+      && contains "outcome=timed-out reason=no-ack" moonlightPatch
+    ))
     (check "Moonlight one-shot runtime settings sender refuses ambiguous bitrate FPS or resolution input" (
       contains "set only one runtime settings value: bitrate, fps, or resolution" moonlightPatch
     ))
-    (check "Moonlight runtime settings adaptation can react to connection status" (
+    (check "Moonlight runtime settings adaptation can react to connection status only behind spike guard" (
       contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_KBPS" moonlightPatch
       && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_FPS" moonlightPatch
       && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_KBPS" moonlightPatch
       && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_FPS" moonlightPatch
+      && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_ENABLE_SPIKE_ADAPTATION" moonlightPatch
+      && contains "connection-status adaptation spike-only disabled" moonlightPatch
       && contains "runtime_settings_mvp_connection_status_update" moonlightPatch
       && contains "connectionStatusUpdate = runtime_settings_mvp_connection_status_update" moonlightPatch
     ))
