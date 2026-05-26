@@ -404,6 +404,26 @@ in
         description = "Shared runner status path read by the server and written by the stream runner.";
       };
 
+      audio = {
+        enable = lib.mkEnableOption "PulseAudio-compatible audio capture for Korri Sunshine streaming";
+
+        pulseServer = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          example = "unix:/run/user/1000/pulse/native";
+          description = ''
+            Opaque PulseAudio-compatible server address passed to
+            `korri-sunshine.service` as `PULSE_SERVER` when streaming audio is
+            enabled. Korri does not derive, discover, or validate this value;
+            the host config owns the streaming user, audio stack, and socket
+            location. The host config is responsible for ensuring the socket is
+            reachable when `korri-sunshine.service` starts, for example via
+            lingering, system-level pipewire-pulse, or explicit service
+            ordering.
+          '';
+        };
+      };
+
     };
   };
 
@@ -492,6 +512,15 @@ in
           services.korri.server.streaming.statusPath = "${statusPath}" must live under
           services.korri.server.streaming.runtimeDir = "${runtimeDir}" so the
           tmpfiles-managed private runtime directory protects status ownership.
+        '';
+      }
+      {
+        assertion = !cfg.streaming.audio.enable || cfg.streaming.audio.pulseServer != null;
+        message = ''
+          services.korri.server.streaming.audio.enable = true requires
+          services.korri.server.streaming.audio.pulseServer to be set. Korri treats
+          the PulseAudio-compatible server address as host-owned configuration and
+          does not derive, discover, or validate it.
         '';
       }
       # New cross-tree precondition: streaming needs a managed compositor
@@ -689,9 +718,14 @@ in
         # so sunshine can attach to `$XDG_RUNTIME_DIR/wayland-1`. Hosts
         # whose sway picks a different socket name need to override this
         # via `systemd.services.korri-sunshine.environment.WAYLAND_DISPLAY`.
-        environment = compositorEnv // {
-          WAYLAND_DISPLAY = "wayland-1";
-        };
+        environment =
+          compositorEnv
+          // {
+            WAYLAND_DISPLAY = "wayland-1";
+          }
+          // optionalAttrs (cfg.streaming.audio.enable && cfg.streaming.audio.pulseServer != null) {
+            PULSE_SERVER = cfg.streaming.audio.pulseServer;
+          };
         unitConfig = {
           StartLimitBurst = 5;
           StartLimitIntervalSec = 500;

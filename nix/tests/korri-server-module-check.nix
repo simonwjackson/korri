@@ -327,6 +327,48 @@ let
     }
   );
 
+  audioDisabled = evaluateWith (
+    lib.recursiveUpdate streamingPrereqs {
+      services.korri.server = {
+        enable = true;
+        serviceMode = "system";
+        user = "testuser";
+        streaming.enable = true;
+      };
+    }
+  );
+
+  audioEnabledWithServer = evaluateWith (
+    lib.recursiveUpdate streamingPrereqs {
+      services.korri.server = {
+        enable = true;
+        serviceMode = "system";
+        user = "testuser";
+        streaming = {
+          enable = true;
+          audio = {
+            enable = true;
+            pulseServer = "unix:/run/user/1000/pulse/native";
+          };
+        };
+      };
+    }
+  );
+
+  audioEnabledMissingServer = evaluateWith (
+    lib.recursiveUpdate streamingPrereqs {
+      services.korri.server = {
+        enable = true;
+        serviceMode = "system";
+        user = "testuser";
+        streaming = {
+          enable = true;
+          audio.enable = true;
+        };
+      };
+    }
+  );
+
   displayCompatDefaults = evaluateWith (
     lib.recursiveUpdate streamingPrereqs {
       services.korri.server = {
@@ -645,6 +687,28 @@ let
       lib.hasPrefix "/run/" (
         (streamingDefaultGamepad.systemd.services.korri-sunshine.environment or { }).XDG_RUNTIME_DIR or ""
       )
+    ))
+    (check "audio: disabled by default leaves korri-sunshine without PULSE_SERVER" (
+      !((audioDisabled.systemd.services.korri-sunshine.environment or { }) ? PULSE_SERVER)
+    ))
+    (check "audio: enabled pulseServer appears in korri-sunshine environment" (
+      (audioEnabledWithServer.systemd.services.korri-sunshine.environment or { }).PULSE_SERVER or null
+      == "unix:/run/user/1000/pulse/native"
+    ))
+    (check "audio: enabled without pulseServer assertion names both option paths" (
+      builtins.any (
+        m:
+        lib.hasInfix "services.korri.server.streaming.audio.enable" m
+        && lib.hasInfix "services.korri.server.streaming.audio.pulseServer" m
+      ) (korriFailedAssertionMessages audioEnabledMissingServer)
+    ))
+    (check "audio: pulse server is sunshine-only plumbing" (
+      let
+        wrapper = firstAppWrapper audioEnabledWithServer;
+        serverEnv = (serverSystemUnit audioEnabledWithServer).environment or { };
+      in
+      !lib.hasInfix "PULSE_SERVER" (if wrapper == null then "" else wrapper)
+      && !(serverEnv ? PULSE_SERVER)
     ))
     (check "streaming.enable + services.sunshine.enable = false: assertion fires" (
       builtins.any (m: lib.hasInfix "services.sunshine.enable = true" m) (
