@@ -195,14 +195,18 @@ diff -ruN source-link/src/video.cpp src/src/video.cpp
      safe::mail_raw_t::event_t<hdr_info_t> hdr_events;
      safe::mail_raw_t::event_t<input::touch_port_t> touch_port_events;
  
-@@ -464,7 +496,9 @@
+@@ -464,7 +496,13 @@
      encode_session_ctx_queue_t encode_session_ctx_queue {30};
    };
  
 -  int start_capture_sync(capture_thread_sync_ctx_t &ctx);
 +  std::unique_ptr<platf::encode_device_t> make_encode_device(platf::display_t &disp, const encoder_t &encoder, const config_t &config);
 +
-+int start_capture_sync(capture_thread_sync_ctx_t &ctx);
++  bool runtime_bitrate_supports_encoder_restart(const encoder_t &encoder, const config_t &config) {
++    return encoder.name == "vaapi"sv && encoder.codec_from_config(config).name == "h264_vaapi";
++  }
++
++  int start_capture_sync(capture_thread_sync_ctx_t &ctx);
    void end_capture_sync(capture_thread_sync_ctx_t &ctx);
    int start_capture_async(capture_thread_async_ctx_t &ctx);
    void end_capture_async(capture_thread_async_ctx_t &ctx);
@@ -215,7 +219,7 @@ diff -ruN source-link/src/video.cpp src/src/video.cpp
      auto invalidate_ref_frames_events = mail->event<std::pair<int64_t, int64_t>>(mail::invalidate_ref_frames);
  
      {
-@@ -1947,6 +1983,38 @@
+@@ -1947,6 +1983,45 @@
          idr_events->pop();
        }
  
@@ -226,20 +230,27 @@ diff -ruN source-link/src/video.cpp src/src/video.cpp
 +
 +          auto updated_config = config;
 +          updated_config.bitrate = request->bitrate_kbps;
-+          auto replacement_encode_device = make_encode_device(*disp, encoder, updated_config);
-+          if (replacement_encode_device) {
-+            auto replacement_session = make_encode_session(disp.get(), encoder, updated_config, disp->width, disp->height, std::move(replacement_encode_device));
-+            auto dummy_img = disp->alloc_img();
-+            if (replacement_session && dummy_img && !disp->dummy_img(dummy_img.get()) && !replacement_session->convert(*dummy_img)) {
-+              session = std::move(replacement_session);
-+              config = updated_config;
-+              applied_bitrate_kbps = request->bitrate_kbps;
-+              status = RUNTIME_SETTINGS_STATUS_APPLIED;
-+              requested_idr_frame = true;
-+              BOOST_LOG(info)
-+                << "live-settings-mvp: async encoder restarted for runtime bitrate request_id="sv << request->request_id
-+                << " applied_kbps="sv << applied_bitrate_kbps;
++          if (runtime_bitrate_supports_encoder_restart(encoder, config)) {
++            auto replacement_encode_device = make_encode_device(*disp, encoder, updated_config);
++            if (replacement_encode_device) {
++              auto replacement_session = make_encode_session(disp.get(), encoder, updated_config, disp->width, disp->height, std::move(replacement_encode_device));
++              auto dummy_img = disp->alloc_img();
++              if (replacement_session && dummy_img && !disp->dummy_img(dummy_img.get()) && !replacement_session->convert(*dummy_img)) {
++                session = std::move(replacement_session);
++                config = updated_config;
++                applied_bitrate_kbps = request->bitrate_kbps;
++                status = RUNTIME_SETTINGS_STATUS_APPLIED;
++                requested_idr_frame = true;
++                BOOST_LOG(info)
++                  << "live-settings-mvp: async encoder restarted for runtime bitrate request_id="sv << request->request_id
++                  << " applied_kbps="sv << applied_bitrate_kbps;
++              }
 +            }
++          } else {
++            BOOST_LOG(warning)
++              << "live-settings-mvp: runtime bitrate unsupported encoder request_id="sv << request->request_id
++              << " encoder="sv << encoder.name
++              << " codec="sv << encoder.codec_from_config(config).name;
 +          }
 +
 +          BOOST_LOG(info)
@@ -254,7 +265,7 @@ diff -ruN source-link/src/video.cpp src/src/video.cpp
        if (requested_idr_frame) {
          session->request_idr_frame();
        }
-@@ -2195,6 +2270,39 @@
+@@ -2195,6 +2270,46 @@
              ctx->idr_events->pop();
            }
  
@@ -265,21 +276,28 @@ diff -ruN source-link/src/video.cpp src/src/video.cpp
 +
 +              auto updated_config = ctx->config;
 +              updated_config.bitrate = request->bitrate_kbps;
-+              auto replacement_encode_device = make_encode_device(*disp, encoder, updated_config);
-+              if (replacement_encode_device) {
-+                ctx->config = updated_config;
-+                auto replacement_session = make_synced_session(disp.get(), encoder, *img, *ctx);
-+                if (replacement_session) {
-+                  pos->session = std::move(replacement_session->session);
-+                  pos->session->request_idr_frame();
-+                  applied_bitrate_kbps = request->bitrate_kbps;
-+                  status = RUNTIME_SETTINGS_STATUS_APPLIED;
-+                  BOOST_LOG(info)
-+                    << "live-settings-mvp: sync encoder restarted for runtime bitrate request_id="sv << request->request_id
-+                    << " applied_kbps="sv << applied_bitrate_kbps;
-+                } else {
-+                  ctx->config.bitrate = applied_bitrate_kbps;
++              if (runtime_bitrate_supports_encoder_restart(encoder, ctx->config)) {
++                auto replacement_encode_device = make_encode_device(*disp, encoder, updated_config);
++                if (replacement_encode_device) {
++                  ctx->config = updated_config;
++                  auto replacement_session = make_synced_session(disp.get(), encoder, *img, *ctx);
++                  if (replacement_session) {
++                    pos->session = std::move(replacement_session->session);
++                    pos->session->request_idr_frame();
++                    applied_bitrate_kbps = request->bitrate_kbps;
++                    status = RUNTIME_SETTINGS_STATUS_APPLIED;
++                    BOOST_LOG(info)
++                      << "live-settings-mvp: sync encoder restarted for runtime bitrate request_id="sv << request->request_id
++                      << " applied_kbps="sv << applied_bitrate_kbps;
++                  } else {
++                    ctx->config.bitrate = applied_bitrate_kbps;
++                  }
 +                }
++              } else {
++                BOOST_LOG(warning)
++                  << "live-settings-mvp: runtime bitrate unsupported encoder request_id="sv << request->request_id
++                  << " encoder="sv << encoder.name
++                  << " codec="sv << encoder.codec_from_config(ctx->config).name;
 +              }
 +
 +              BOOST_LOG(info)

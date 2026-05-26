@@ -42,6 +42,15 @@ let
       && !(contains "avcodec runtime bitrate update" patch)
       && !(contains "AV_OPT_SEARCH_CHILDREN" patch)
     ))
+    (check "Sunshine runtime bitrate patch gates support to h264_vaapi" (
+      contains "runtime_bitrate_supports_encoder_restart" patch
+      && contains "encoder.name == \"vaapi\"sv" patch
+      && contains "encoder.codec_from_config(config).name == \"h264_vaapi\"" patch
+      && contains "runtime bitrate unsupported encoder" patch
+    ))
+    (check "Sunshine runtime bitrate README documents h264_vaapi as the only supported path" (
+      contains "Only `h264_vaapi` via Sunshine's AVCodec/VAAPI path is currently supported" readme
+    ))
     (check "Sunshine runtime bitrate README documents the status contract" (
       contains "Runtime settings status contract" readme
       && contains "`0` — applied" readme

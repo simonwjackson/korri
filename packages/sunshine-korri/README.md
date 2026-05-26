@@ -19,6 +19,7 @@ Experimental live bitrate-control MVP:
 - Adds Sunshine control packet `0x5505` for structured acks.
 - Supports operation `1`: set stream bitrate in kbps.
 - Requires `SUNSHINE_LIVE_SETTINGS_MVP=1`.
+- Only `h264_vaapi` via Sunshine's AVCodec/VAAPI path is currently supported.
 - Recreates the active AVCodec/VAAPI encoder session with the requested bitrate.
 - Does not use the failed AVCodec field/AVOption mutation fallback.
 - Verified on `aka` with `h264_vaapi` and Moonlight receiving `status=0` acks.
