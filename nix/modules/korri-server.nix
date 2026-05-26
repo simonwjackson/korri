@@ -641,7 +641,14 @@ in
       let
         compositorCfg = config.services.korri.compositor;
         compositorUnit = config.systemd.services.korri-compositor;
-        compositorEnv = compositorUnit.environment or { };
+        # The compositor's environment block sets PATH (coreutils + dbus +
+        # sway + ...). systemd's default service module also sets PATH at
+        # the same priority, which collides during module merge. Sunshine
+        # itself doesn't shell out to compositor tools — it captures the
+        # wayland socket and encodes — so dropping PATH from the inherited
+        # env and letting systemd's default win is both correct and avoids
+        # the conflict.
+        compositorEnv = lib.filterAttrs (n: _: n != "PATH") (compositorUnit.environment or { });
         sunshineCfg = config.services.sunshine;
         sunshineBin =
           if sunshineCfg.capSysAdmin then
