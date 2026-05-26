@@ -163,6 +163,13 @@ let
     };
   };
 
+  publicApiBaseUrlMissingHost = evaluateWith {
+    services.korri.server = {
+      enable = true;
+      publicApiBaseUrl = "https:///assets";
+    };
+  };
+
   missingUser = evaluateWith {
     services.korri.server = {
       enable = true;
@@ -505,6 +512,11 @@ let
     (check "publicApiBaseUrl: invalid URL assertion fires" (
       builtins.any (m: lib.hasInfix "must be an absolute http or https URL" m) (
         korriFailedAssertionMessages publicApiBaseUrlInvalid
+      )
+    ))
+    (check "publicApiBaseUrl: missing host assertion fires" (
+      builtins.any (m: lib.hasInfix "must include a host" m) (
+        korriFailedAssertionMessages publicApiBaseUrlMissingHost
       )
     ))
 

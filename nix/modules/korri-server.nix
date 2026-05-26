@@ -532,6 +532,10 @@ in
         message = "services.korri.server.publicApiBaseUrl must not contain credentials.";
       }
       {
+        assertion = !hasPublicApiBaseUrl || publicApiBaseUrlParts == null || publicApiBaseUrlHost != null;
+        message = "services.korri.server.publicApiBaseUrl must include a host.";
+      }
+      {
         assertion = !hasPublicApiBaseUrl || !publicApiBaseUrlHasQueryOrFragment;
         message = "services.korri.server.publicApiBaseUrl must not contain query or fragment data.";
       }
