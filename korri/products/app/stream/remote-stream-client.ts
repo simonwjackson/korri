@@ -20,13 +20,10 @@
  */
 import { appRpcGroup } from "@app/api/app-rpc-group"
 import { serverRpcGroup } from "@app/api/server/rpc-group"
-import { BatchJsonSerializationLive } from "@shared/api/rpc/serialization"
+import { rpcProtocolHttpLayer } from "@shared/api/rpc/client-layer"
 import type { ResolvedGameRecord } from "@shared/fixtures/games/game"
 import type { EphemeralOverride } from "@shared/library/config/ephemeral-override"
-import { Cause, Effect, Exit, Layer, type Scope } from "effect"
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
+import { Cause, Effect, Exit, type Layer, type Scope } from "effect"
 import { RpcClient } from "effect/unstable/rpc"
 
 export type RemoteStreamControlFailureCategory =
@@ -107,14 +104,7 @@ export function createRemoteStreamControlClient(
   options: RemoteStreamControlClientOptions = {},
 ): RemoteStreamControlClient {
   const rpcUrl = rpcUrlForBase(baseUrl)
-  const layer = RpcClient.layerProtocolHttp({
-    url: "",
-    transformClient: client =>
-      HttpClient.mapRequest(client, HttpClientRequest.prependUrl(rpcUrl)),
-  }).pipe(
-    Layer.provide(BatchJsonSerializationLive),
-    Layer.provide(FetchHttpClient.layer),
-  )
+  const layer = rpcProtocolHttpLayer(rpcUrl)
 
   const runRpc = <T>(
     effect: Effect.Effect<T, unknown, Scope.Scope | RpcClient.Protocol>,

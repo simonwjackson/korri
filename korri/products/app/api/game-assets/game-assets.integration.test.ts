@@ -5,17 +5,14 @@ import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { appRpcGroup } from "@app/api/app-rpc-group"
 import { createHonoApp } from "@app/api/hono-app"
-import { BatchJsonSerializationLive } from "@shared/api/rpc/serialization"
+import { rpcProtocolHttpLayer } from "@shared/api/rpc/client-layer"
 import { korriCachePath } from "@shared/config/xdg-paths"
 import type { GameAssetRecord } from "@shared/library/config/records/game-asset"
 import type { GameAssetAssignmentRecord } from "@shared/library/config/records/game-asset-assignment"
 import { gameAssetBlobPath } from "@shared/library/game-assets/game-assets-service"
 import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
 import { createLibraryRepository } from "@shared/library/proseql/library-repository"
-import { Effect, Layer } from "effect"
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
+import { Effect } from "effect"
 import { RpcClient } from "effect/unstable/rpc"
 import { withRpcServer } from "../../../../../tools/testing/library/with-rpc-server"
 
@@ -247,14 +244,7 @@ async function seedCandidate(env: {
 }
 
 function rpcClientLayer(rpcUrl: string) {
-  return RpcClient.layerProtocolHttp({
-    url: "",
-    transformClient: client =>
-      HttpClient.mapRequest(client, HttpClientRequest.prependUrl(rpcUrl)),
-  }).pipe(
-    Layer.provide(BatchJsonSerializationLive),
-    Layer.provide(FetchHttpClient.layer),
-  )
+  return rpcProtocolHttpLayer(rpcUrl)
 }
 
 async function listCandidates(rpcUrl: string) {
