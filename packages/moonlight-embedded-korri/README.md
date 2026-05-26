@@ -21,6 +21,7 @@ Adds an experimental Sunshine runtime-settings request sender and ack logger for
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS`
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_RESOLUTION` (for example `1280x720`)
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_AFTER_S`
+- `MOONLIGHT_RUNTIME_SETTINGS_MVP_ALLOW_PROOF_GATED=1` for manual runtime-resolution smoke only when operation `3` is advertised as proof-gated rather than supported.
 
 Connection-status adaptation experiments are spike-only and require `MOONLIGHT_RUNTIME_SETTINGS_MVP_ENABLE_SPIKE_ADAPTATION=1`. They are controlled by:
 
@@ -45,6 +46,7 @@ Runtime settings mechanism contract:
 - Runtime settings command timeout is currently 3000 ms; an expired command records `timed-out` with reason `no-ack`, and a later matching ack is treated as stale diagnostic input.
 - Moonlight parses both legacy no-reason mutation acks and additive reason-bearing acks while Sunshine and Moonlight patch payloads transition together.
 - Runtime resolution remains experimental/proof-gated; a Sunshine ack is not target-client proof.
+- Capability-gated dispatch: mutation commands are rejected locally when operation `0` has not advertised support, and operation `3` requires the manual `MOONLIGHT_RUNTIME_SETTINGS_MVP_ALLOW_PROOF_GATED=1` smoke-test override while it is proof-gated.
 - Runtime resolution proof gate: operation `3` is listed as proof-gated, not supported, in capability acks until same-session target-client proof exists.
 - Operation `3` outcomes distinguish Sunshine-applied from client-proven: Moonlight records Sunshine `server_applied=1` separately from `client_proven=0` until device/client render evidence exists.
 - Local command acceptance is non-terminal; host-applied outcomes or target-client proof arrive later through the runtime-settings mechanism/local-control handoff.
