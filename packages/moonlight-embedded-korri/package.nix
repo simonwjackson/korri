@@ -17,6 +17,7 @@
 , libvdpau
 , libxcb
 , libopus
+, json_c
 , SDL2
 , systemdMinimal
 , util-linux
@@ -70,6 +71,7 @@ stdenv.mkDerivation rec {
     # Korri-owned patches layered on top of nix-on-rocks' base Moonlight package.
     ./patches/0004-add-absolutetouch-flag-for-tap-to-click.patch
     ./patches/0005-add-sunshine-runtime-settings-mvp.patch
+    ./patches/0006-add-local-control-observability-ipc.patch
   ];
 
   nativeBuildInputs = [
@@ -92,6 +94,7 @@ stdenv.mkDerivation rec {
     libvdpau
     libxcb
     libopus
+    json_c
     SDL2
     systemdMinimal
     util-linux
@@ -113,7 +116,7 @@ stdenv.mkDerivation rec {
       printf '%s\n' 'nix-on-rocks-manifest-version=${nixOnRocksMoonlightManifest.version}'
       printf '%s\n' 'source-rev=${nixOnRocksMoonlightManifest.source.rev}'
       printf '%s\n' 'base-patches=${lib.concatMapStringsSep " " (patch: patch.name) basePatches}'
-      printf '%s\n' 'korri-patches=0004-add-absolutetouch-flag-for-tap-to-click.patch 0005-add-sunshine-runtime-settings-mvp.patch'
+      printf '%s\n' 'korri-patches=0004-add-absolutetouch-flag-for-tap-to-click.patch 0005-add-sunshine-runtime-settings-mvp.patch 0006-add-local-control-observability-ipc.patch'
       printf '%s\n' 'main-program=bin/moonlight'
     } > "$out/nix-support/moonlight-embedded-korri/manifest.txt"
 

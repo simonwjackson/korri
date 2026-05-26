@@ -556,6 +556,12 @@
               sunshinePackage = self.packages.${system}.sunshine-korri;
               moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
             };
+            korri-moonlight-control-protocol-patch = import ./nix/tests/korri-moonlight-control-protocol-patch-check.nix {
+              inherit pkgs;
+              patchPath = ./packages/moonlight-embedded-korri/patches/0006-add-local-control-observability-ipc.patch;
+              readmePath = ./packages/moonlight-embedded-korri/README.md;
+              moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
+            };
           }
           // pkgs.lib.optionalAttrs isX86Linux {
             korri-rocknix-sm8550-config = import ./nix/tests/korri-rocknix-sm8550-config-check.nix {
@@ -605,7 +611,9 @@
                 self.checks.${system}.korri-input-module
                 self.checks.${system}.korri-game-stream-module
                 self.checks.${system}.korri-server-module
+                self.checks.${system}.korri-module-identity-audit
                 self.checks.${system}.korri-sunshine-runtime-bitrate-patch
+                self.checks.${system}.korri-moonlight-control-protocol-patch
                 self.checks.${system}.korri-desktop-build-graph
                 self.checks.${system}.korri-package-outputs
                 self.checks.${system}.korri-image-outputs
@@ -634,7 +642,15 @@
                   owner = "module";
                 }
                 {
+                  name = "korri-module-identity-audit";
+                  owner = "module";
+                }
+                {
                   name = "korri-sunshine-runtime-bitrate-patch";
+                  owner = "package-output";
+                }
+                {
+                  name = "korri-moonlight-control-protocol-patch";
                   owner = "package-output";
                 }
                 {

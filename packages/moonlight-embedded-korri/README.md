@@ -51,3 +51,15 @@ The TypeScript contract in `korri/shared/stream/moonlight-control-protocol.ts` d
 - Local command responses describe local validation/acceptance only. Host-applied outcomes arrive later as correlated command-result events.
 
 Consumers must ignore unknown additive fields and unknown event names. Breaking schema changes require a protocol major-version bump. Command values are bounded before native dispatch: bitrate, FPS, and resolution values must pass the v1 contract limits, only one mutation per command family may be in flight, and senders must honor the advertised command interval/backoff.
+
+### `0006-add-local-control-observability-ipc.patch`
+
+Adds the first local control socket scaffolding behind explicit environment configuration:
+
+- `MOONLIGHT_LOCAL_CONTROL_SOCKET` — absolute filesystem Unix socket path.
+- `MOONLIGHT_LOCAL_CONTROL_RUNTIME_DIR` — private launcher-owned runtime directory that must own the socket path.
+- `MOONLIGHT_LOCAL_CONTROL_SESSION_ID` — launcher-generated session id returned by `protocol.hello` and `state.snapshot`.
+- `MOONLIGHT_LOCAL_CONTROL_AUTHORITY` — `observer` by default, or `controller` to advertise command capability once mutation hooks are enabled.
+- `MOONLIGHT_LOCAL_CONTROL_ALLOW_ROOT=1` — explicit opt-in for root peers in addition to same-UID peers.
+
+The socket server rejects unsafe runtime directories, socket paths outside the runtime directory, non-socket stale paths, unauthorized peer credentials, blank frames, malformed JSON, and oversized frames. It currently serves `protocol.hello`, `state.get`, and `events.subscribe` for read-only local observability. Mutation commands remain capability-gated until the native command dispatch path is wired.

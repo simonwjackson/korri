@@ -1,0 +1,631 @@
+diff -ruN source-link/CMakeLists.txt src/CMakeLists.txt
+--- source-link/CMakeLists.txt	2026-05-26 14:08:57.715731473 -0600
++++ src/CMakeLists.txt	2026-05-26 14:08:34.522988969 -0600
+@@ -22,6 +22,7 @@
+ find_package(Rockchip)
+ 
+ find_package(PkgConfig REQUIRED)
++find_package(Threads REQUIRED)
+ 
+ option(ENABLE_SDL "Compile SDL support" ON)
+ option(ENABLE_FFMPEG "Compile FFMPEG support" ON)
+@@ -31,6 +32,7 @@
+ 
+ pkg_check_modules(EVDEV REQUIRED libevdev)
+ pkg_check_modules(UDEV REQUIRED libudev)
++pkg_check_modules(JSONC REQUIRED json-c)
+ if (ENABLE_SDL)
+   pkg_check_modules(SDL sdl2>=2.0.4)
+ endif()
+@@ -223,8 +225,8 @@
+ configure_file("./src/configuration.h.in" "${PROJECT_BINARY_DIR}/configuration.h")
+ 
+ set_property(TARGET moonlight PROPERTY COMPILE_DEFINITIONS ${MOONLIGHT_DEFINITIONS})
+-target_include_directories(moonlight PRIVATE ${GAMESTREAM_INCLUDE_DIR} ${MOONLIGHT_COMMON_INCLUDE_DIR} ${OPUS_INCLUDE_DIRS} ${EVDEV_INCLUDE_DIRS} ${UDEV_INCLUDE_DIRS})
+-target_link_libraries(moonlight ${EVDEV_LIBRARIES} ${OPUS_LIBRARY} ${UDEV_LIBRARIES} ${CMAKE_DL_LIBS})
++target_include_directories(moonlight PRIVATE ${GAMESTREAM_INCLUDE_DIR} ${MOONLIGHT_COMMON_INCLUDE_DIR} ${OPUS_INCLUDE_DIRS} ${EVDEV_INCLUDE_DIRS} ${UDEV_INCLUDE_DIRS} ${JSONC_INCLUDE_DIRS})
++target_link_libraries(moonlight ${EVDEV_LIBRARIES} ${OPUS_LIBRARY} ${UDEV_LIBRARIES} ${JSONC_LIBRARIES} Threads::Threads ${CMAKE_DL_LIBS})
+ 
+ add_subdirectory(docs)
+ 
+diff -ruN source-link/src/local_control.c src/src/local_control.c
+--- source-link/src/local_control.c	1969-12-31 17:00:00.000000000 -0700
++++ src/src/local_control.c	2026-05-26 14:11:07.620287609 -0600
+@@ -0,0 +1,543 @@
++#ifdef __linux__
++
++#define _GNU_SOURCE
++
++#include "local_control.h"
++
++#include <errno.h>
++#include <fcntl.h>
++#include <json-c/json.h>
++#include <limits.h>
++#include <poll.h>
++#include <pthread.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/socket.h>
++#include <sys/stat.h>
++#include <sys/types.h>
++#include <sys/un.h>
++#include <unistd.h>
++
++#define MOONLIGHT_CONTROL_PROTOCOL_NAME "moonlight.local-control"
++#define MOONLIGHT_CONTROL_PROTOCOL_MAJOR 1
++#define MOONLIGHT_CONTROL_PROTOCOL_MINOR 0
++#define MOONLIGHT_CONTROL_MAX_FRAME_BYTES 65536
++#define MOONLIGHT_CONTROL_MAX_CLIENTS 4
++#define MOONLIGHT_CONTROL_EVENT_HISTORY 256
++#define MOONLIGHT_CONTROL_MIN_COMMAND_INTERVAL_MS 250
++#define MOONLIGHT_CONTROL_MIN_BITRATE_KBPS 500
++#define MOONLIGHT_CONTROL_MAX_BITRATE_KBPS 150000
++#define MOONLIGHT_CONTROL_MIN_FPS 15
++#define MOONLIGHT_CONTROL_MAX_FPS 240
++#define MOONLIGHT_CONTROL_MIN_WIDTH 320
++#define MOONLIGHT_CONTROL_MAX_WIDTH 7680
++#define MOONLIGHT_CONTROL_MIN_HEIGHT 240
++#define MOONLIGHT_CONTROL_MAX_HEIGHT 4320
++
++struct moonlight_local_control_state {
++  int enabled;
++  int running;
++  int server_fd;
++  pthread_t thread;
++  pthread_mutex_t lock;
++  char socket_path[PATH_MAX];
++  char runtime_dir[PATH_MAX];
++  char session_id[128];
++  char authority[16];
++  char lifecycle[32];
++  uint64_t seq;
++  int width;
++  int height;
++  int fps;
++  int bitrate_kbps;
++};
++
++static struct moonlight_local_control_state control = {
++  .server_fd = -1,
++  .lock = PTHREAD_MUTEX_INITIALIZER,
++};
++
++static void* moonlight_local_control_thread(void* arg);
++static int moonlight_local_control_safe_runtime_dir(const char* runtime_dir);
++static int moonlight_local_control_safe_socket_path(const char* runtime_dir, const char* socket_path);
++static int moonlight_local_control_replace_stale_socket(const char* socket_path);
++static int moonlight_local_control_peer_authorized(int fd);
++static void moonlight_local_control_handle_client(int client_fd);
++static int moonlight_local_control_read_frame(int client_fd, char* buffer, size_t buffer_size);
++static void moonlight_local_control_write_json(int client_fd, struct json_object* value);
++static struct json_object* moonlight_local_control_snapshot_locked(void);
++static struct json_object* moonlight_local_control_hello_locked(void);
++static struct json_object* moonlight_local_control_error(struct json_object* id, int code, const char* message, const char* tag);
++static struct json_object* moonlight_local_control_success(struct json_object* id, struct json_object* result);
++static struct json_object* moonlight_local_control_event_locked(const char* name);
++static const char* moonlight_local_control_env_or(const char* name, const char* fallback);
++
++void moonlight_local_control_start_from_env(const char* initial_state, int width, int height, int fps, int bitrate_kbps) {
++  const char* socket_path = getenv("MOONLIGHT_LOCAL_CONTROL_SOCKET");
++  const char* runtime_dir = getenv("MOONLIGHT_LOCAL_CONTROL_RUNTIME_DIR");
++  const char* session_id = moonlight_local_control_env_or("MOONLIGHT_LOCAL_CONTROL_SESSION_ID", "moonlight-session");
++  const char* authority = moonlight_local_control_env_or("MOONLIGHT_LOCAL_CONTROL_AUTHORITY", "observer");
++
++  if (socket_path == NULL || socket_path[0] == '\0')
++    return;
++
++  if (runtime_dir == NULL || runtime_dir[0] == '\0') {
++    fprintf(stderr, "moonlight-control: unavailable missing MOONLIGHT_LOCAL_CONTROL_RUNTIME_DIR\n");
++    return;
++  }
++
++  if (strcmp(authority, "observer") != 0 && strcmp(authority, "controller") != 0) {
++    fprintf(stderr, "moonlight-control: unavailable invalid authority=%s\n", authority);
++    return;
++  }
++
++  if (!moonlight_local_control_safe_runtime_dir(runtime_dir) || !moonlight_local_control_safe_socket_path(runtime_dir, socket_path)) {
++    fprintf(stderr, "moonlight-control: unavailable unsafe socket path\n");
++    return;
++  }
++
++  if (!moonlight_local_control_replace_stale_socket(socket_path))
++    return;
++
++  int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
++  if (fd < 0) {
++    fprintf(stderr, "moonlight-control: unavailable AF_UNIX socket failed errno=%d\n", errno);
++    return;
++  }
++
++  struct sockaddr_un addr;
++  memset(&addr, 0, sizeof(addr));
++  addr.sun_family = AF_UNIX;
++  snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", socket_path);
++
++  if (bind(fd, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
++    fprintf(stderr, "moonlight-control: unavailable bind failed errno=%d\n", errno);
++    close(fd);
++    return;
++  }
++
++  chmod(socket_path, 0600);
++
++  if (listen(fd, MOONLIGHT_CONTROL_MAX_CLIENTS) < 0) {
++    fprintf(stderr, "moonlight-control: unavailable listen failed errno=%d\n", errno);
++    close(fd);
++    unlink(socket_path);
++    return;
++  }
++
++  pthread_mutex_lock(&control.lock);
++  control.enabled = 1;
++  control.running = 1;
++  control.server_fd = fd;
++  control.seq = 1;
++  control.width = width;
++  control.height = height;
++  control.fps = fps;
++  control.bitrate_kbps = bitrate_kbps;
++  snprintf(control.socket_path, sizeof(control.socket_path), "%s", socket_path);
++  snprintf(control.runtime_dir, sizeof(control.runtime_dir), "%s", runtime_dir);
++  snprintf(control.session_id, sizeof(control.session_id), "%s", session_id);
++  snprintf(control.authority, sizeof(control.authority), "%s", authority);
++  snprintf(control.lifecycle, sizeof(control.lifecycle), "%s", initial_state == NULL ? "starting" : initial_state);
++  pthread_mutex_unlock(&control.lock);
++
++  if (pthread_create(&control.thread, NULL, moonlight_local_control_thread, NULL) != 0) {
++    fprintf(stderr, "moonlight-control: unavailable pthread_create failed\n");
++    pthread_mutex_lock(&control.lock);
++    control.enabled = 0;
++    control.running = 0;
++    control.server_fd = -1;
++    pthread_mutex_unlock(&control.lock);
++    close(fd);
++    unlink(socket_path);
++    return;
++  }
++
++  fprintf(stderr, "moonlight-control: listening socket=%s authority=%s protocol=%s/v1\n", socket_path, authority, MOONLIGHT_CONTROL_PROTOCOL_NAME);
++}
++
++void moonlight_local_control_update_lifecycle(const char* state) {
++  if (state == NULL)
++    return;
++  pthread_mutex_lock(&control.lock);
++  if (control.enabled) {
++    snprintf(control.lifecycle, sizeof(control.lifecycle), "%s", state);
++    control.seq++;
++  }
++  pthread_mutex_unlock(&control.lock);
++}
++
++void moonlight_local_control_stop(void) {
++  int enabled;
++  int fd;
++  char socket_path[PATH_MAX];
++
++  pthread_mutex_lock(&control.lock);
++  enabled = control.enabled;
++  fd = control.server_fd;
++  snprintf(socket_path, sizeof(socket_path), "%s", control.socket_path);
++  control.running = 0;
++  control.enabled = 0;
++  control.server_fd = -1;
++  pthread_mutex_unlock(&control.lock);
++
++  if (!enabled)
++    return;
++
++  if (fd >= 0) {
++    shutdown(fd, SHUT_RDWR);
++    close(fd);
++  }
++
++  pthread_join(control.thread, NULL);
++
++  if (socket_path[0] != '\0')
++    unlink(socket_path);
++}
++
++static void* moonlight_local_control_thread(void* arg) {
++  (void) arg;
++
++  while (1) {
++    pthread_mutex_lock(&control.lock);
++    int running = control.running;
++    int fd = control.server_fd;
++    pthread_mutex_unlock(&control.lock);
++
++    if (!running || fd < 0)
++      break;
++
++    struct pollfd poll_fd = { .fd = fd, .events = POLLIN };
++    int ready = poll(&poll_fd, 1, 250);
++    if (ready <= 0)
++      continue;
++
++    int client_fd = accept4(fd, NULL, NULL, SOCK_CLOEXEC);
++    if (client_fd < 0)
++      continue;
++
++    if (!moonlight_local_control_peer_authorized(client_fd)) {
++      fprintf(stderr, "moonlight-control: rejected unauthorized peer\n");
++      close(client_fd);
++      continue;
++    }
++
++    moonlight_local_control_handle_client(client_fd);
++    close(client_fd);
++  }
++
++  return NULL;
++}
++
++static int moonlight_local_control_safe_runtime_dir(const char* runtime_dir) {
++  struct stat st;
++  if (runtime_dir[0] != '/')
++    return 0;
++  if (stat(runtime_dir, &st) != 0)
++    return 0;
++  if (!S_ISDIR(st.st_mode))
++    return 0;
++  if (st.st_uid != getuid())
++    return 0;
++  if ((st.st_mode & 0022) != 0)
++    return 0;
++  return 1;
++}
++
++static int moonlight_local_control_safe_socket_path(const char* runtime_dir, const char* socket_path) {
++  size_t runtime_len = strlen(runtime_dir);
++  if (socket_path[0] != '/')
++    return 0;
++  if (strlen(socket_path) >= sizeof(((struct sockaddr_un*) 0)->sun_path))
++    return 0;
++  if (strncmp(runtime_dir, socket_path, runtime_len) != 0)
++    return 0;
++  if (socket_path[runtime_len] != '/')
++    return 0;
++  if (strstr(socket_path + runtime_len + 1, "/") != NULL)
++    return 0;
++  return 1;
++}
++
++static int moonlight_local_control_replace_stale_socket(const char* socket_path) {
++  struct stat st;
++  if (lstat(socket_path, &st) != 0) {
++    if (errno == ENOENT)
++      return 1;
++    fprintf(stderr, "moonlight-control: unavailable lstat failed errno=%d\n", errno);
++    return 0;
++  }
++
++  if (!S_ISSOCK(st.st_mode)) {
++    fprintf(stderr, "moonlight-control: unavailable socket path exists and is not a socket\n");
++    return 0;
++  }
++
++  if (st.st_uid != getuid()) {
++    fprintf(stderr, "moonlight-control: unavailable stale socket owner mismatch\n");
++    return 0;
++  }
++
++  if (unlink(socket_path) != 0) {
++    fprintf(stderr, "moonlight-control: unavailable stale socket unlink failed errno=%d\n", errno);
++    return 0;
++  }
++
++  return 1;
++}
++
++static int moonlight_local_control_peer_authorized(int fd) {
++  struct ucred cred;
++  socklen_t len = sizeof(cred);
++  if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cred, &len) != 0)
++    return 0;
++  if (cred.uid == getuid())
++    return 1;
++  if (cred.uid == 0 && strcmp(moonlight_local_control_env_or("MOONLIGHT_LOCAL_CONTROL_ALLOW_ROOT", "0"), "1") == 0)
++    return 1;
++  return 0;
++}
++
++static void moonlight_local_control_handle_client(int client_fd) {
++  char buffer[MOONLIGHT_CONTROL_MAX_FRAME_BYTES + 1];
++
++  while (1) {
++    int frame = moonlight_local_control_read_frame(client_fd, buffer, sizeof(buffer));
++    if (frame <= 0)
++      return;
++
++    struct json_tokener* tokener = json_tokener_new();
++    struct json_object* request = json_tokener_parse_ex(tokener, buffer, frame);
++    enum json_tokener_error parse_error = json_tokener_get_error(tokener);
++    json_tokener_free(tokener);
++
++    if (parse_error != json_tokener_success || request == NULL) {
++      moonlight_local_control_write_json(client_fd, moonlight_local_control_error(NULL, -32700, "malformed JSON frame", "invalid"));
++      if (request != NULL)
++        json_object_put(request);
++      continue;
++    }
++
++    struct json_object* id = NULL;
++    struct json_object* method = NULL;
++    json_object_object_get_ex(request, "id", &id);
++    json_object_object_get_ex(request, "method", &method);
++
++    if (method == NULL || json_object_get_type(method) != json_type_string) {
++      moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32600, "missing method", "invalid"));
++      json_object_put(request);
++      continue;
++    }
++
++    const char* method_name = json_object_get_string(method);
++    if (strcmp(method_name, "protocol.hello") == 0) {
++      pthread_mutex_lock(&control.lock);
++      struct json_object* hello = moonlight_local_control_hello_locked();
++      pthread_mutex_unlock(&control.lock);
++      moonlight_local_control_write_json(client_fd, moonlight_local_control_success(id, hello));
++    }
++    else if (strcmp(method_name, "state.get") == 0) {
++      pthread_mutex_lock(&control.lock);
++      struct json_object* snapshot = moonlight_local_control_snapshot_locked();
++      pthread_mutex_unlock(&control.lock);
++      moonlight_local_control_write_json(client_fd, moonlight_local_control_success(id, snapshot));
++    }
++    else if (strcmp(method_name, "events.subscribe") == 0) {
++      pthread_mutex_lock(&control.lock);
++      struct json_object* snapshot_event = moonlight_local_control_event_locked("lifecycle.streaming");
++      pthread_mutex_unlock(&control.lock);
++      moonlight_local_control_write_json(client_fd, moonlight_local_control_success(id, json_object_new_object()));
++      moonlight_local_control_write_json(client_fd, snapshot_event);
++    }
++    else {
++      moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32601, "unsupported method", "unsupported"));
++    }
++
++    json_object_put(request);
++  }
++}
++
++static int moonlight_local_control_read_frame(int client_fd, char* buffer, size_t buffer_size) {
++  size_t used = 0;
++
++  while (used + 1 < buffer_size) {
++    char c;
++    ssize_t read_count = read(client_fd, &c, 1);
++    if (read_count == 0)
++      return 0;
++    if (read_count < 0) {
++      if (errno == EINTR)
++        continue;
++      return -1;
++    }
++    if (c == '\n') {
++      if (used == 0)
++        return -1;
++      buffer[used] = '\0';
++      return (int) used;
++    }
++    used++;
++    buffer[used - 1] = c;
++  }
++
++  moonlight_local_control_write_json(client_fd, moonlight_local_control_error(NULL, -32600, "oversized frame", "invalid"));
++  return -1;
++}
++
++static void moonlight_local_control_write_json(int client_fd, struct json_object* value) {
++  const char* serialized = json_object_to_json_string_ext(value, JSON_C_TO_STRING_PLAIN);
++  write(client_fd, serialized, strlen(serialized));
++  write(client_fd, "\n", 1);
++  json_object_put(value);
++}
++
++static struct json_object* moonlight_local_control_hello_locked(void) {
++  struct json_object* result = json_object_new_object();
++  json_object_object_add(result, "_tag", json_object_new_string("protocol.hello"));
++
++  struct json_object* protocol = json_object_new_object();
++  json_object_object_add(protocol, "name", json_object_new_string(MOONLIGHT_CONTROL_PROTOCOL_NAME));
++  json_object_object_add(protocol, "major", json_object_new_int(MOONLIGHT_CONTROL_PROTOCOL_MAJOR));
++  json_object_object_add(protocol, "minor", json_object_new_int(MOONLIGHT_CONTROL_PROTOCOL_MINOR));
++  json_object_object_add(result, "protocol", protocol);
++
++  struct json_object* session = json_object_new_object();
++  json_object_object_add(session, "sessionId", json_object_new_string(control.session_id));
++  json_object_object_add(session, "processId", json_object_new_int((int) getpid()));
++  json_object_object_add(result, "session", session);
++
++  json_object_object_add(result, "authority", json_object_new_string(control.authority));
++
++  struct json_object* capabilities = json_object_new_object();
++  struct json_object* events = json_object_new_array();
++  json_object_array_add(events, json_object_new_string("lifecycle"));
++  json_object_array_add(events, json_object_new_string("quality"));
++  json_object_array_add(events, json_object_new_string("input"));
++  struct json_object* commands = json_object_new_array();
++  if (strcmp(control.authority, "controller") == 0) {
++    json_object_array_add(commands, json_object_new_string("runtime.setBitrate"));
++    json_object_array_add(commands, json_object_new_string("runtime.setFps"));
++  }
++  json_object_object_add(capabilities, "events", events);
++  json_object_object_add(capabilities, "commands", commands);
++  json_object_object_add(capabilities, "experimental", json_object_new_array());
++  json_object_object_add(result, "capabilities", capabilities);
++
++  struct json_object* limits = json_object_new_object();
++  json_object_object_add(limits, "maxFrameBytes", json_object_new_int(MOONLIGHT_CONTROL_MAX_FRAME_BYTES));
++  json_object_object_add(limits, "maxClients", json_object_new_int(MOONLIGHT_CONTROL_MAX_CLIENTS));
++  json_object_object_add(limits, "eventHistory", json_object_new_int(MOONLIGHT_CONTROL_EVENT_HISTORY));
++  json_object_object_add(limits, "maxInFlightMutationsPerFamily", json_object_new_int(1));
++  json_object_object_add(limits, "minCommandIntervalMs", json_object_new_int(MOONLIGHT_CONTROL_MIN_COMMAND_INTERVAL_MS));
++  struct json_object* bitrate = json_object_new_object();
++  json_object_object_add(bitrate, "min", json_object_new_int(MOONLIGHT_CONTROL_MIN_BITRATE_KBPS));
++  json_object_object_add(bitrate, "max", json_object_new_int(MOONLIGHT_CONTROL_MAX_BITRATE_KBPS));
++  json_object_object_add(limits, "bitrateKbps", bitrate);
++  struct json_object* fps = json_object_new_object();
++  json_object_object_add(fps, "min", json_object_new_int(MOONLIGHT_CONTROL_MIN_FPS));
++  json_object_object_add(fps, "max", json_object_new_int(MOONLIGHT_CONTROL_MAX_FPS));
++  json_object_object_add(limits, "fps", fps);
++  struct json_object* resolution = json_object_new_object();
++  struct json_object* width = json_object_new_object();
++  json_object_object_add(width, "min", json_object_new_int(MOONLIGHT_CONTROL_MIN_WIDTH));
++  json_object_object_add(width, "max", json_object_new_int(MOONLIGHT_CONTROL_MAX_WIDTH));
++  struct json_object* height = json_object_new_object();
++  json_object_object_add(height, "min", json_object_new_int(MOONLIGHT_CONTROL_MIN_HEIGHT));
++  json_object_object_add(height, "max", json_object_new_int(MOONLIGHT_CONTROL_MAX_HEIGHT));
++  json_object_object_add(resolution, "width", width);
++  json_object_object_add(resolution, "height", height);
++  json_object_object_add(limits, "resolution", resolution);
++  json_object_object_add(result, "limits", limits);
++
++  return result;
++}
++
++static struct json_object* moonlight_local_control_snapshot_locked(void) {
++  struct json_object* result = json_object_new_object();
++  json_object_object_add(result, "_tag", json_object_new_string("state.snapshot"));
++  json_object_object_add(result, "seq", json_object_new_int64((int64_t) control.seq));
++
++  struct json_object* session = json_object_new_object();
++  json_object_object_add(session, "sessionId", json_object_new_string(control.session_id));
++  json_object_object_add(session, "state", json_object_new_string(control.lifecycle));
++  json_object_object_add(result, "session", session);
++
++  struct json_object* stream_quality = json_object_new_object();
++  json_object_object_add(stream_quality, "connection", json_object_new_string("unknown"));
++  json_object_object_add(stream_quality, "bitrateKbps", json_object_new_int(control.bitrate_kbps));
++  json_object_object_add(stream_quality, "fps", json_object_new_int(control.fps));
++  json_object_object_add(stream_quality, "width", json_object_new_int(control.width));
++  json_object_object_add(stream_quality, "height", json_object_new_int(control.height));
++  json_object_object_add(result, "streamQuality", stream_quality);
++
++  struct json_object* runtime_settings = json_object_new_object();
++  json_object_object_add(runtime_settings, "appliedBitrateKbps", json_object_new_int(control.bitrate_kbps));
++  json_object_object_add(runtime_settings, "appliedFps", json_object_new_int(control.fps));
++  struct json_object* applied_resolution = json_object_new_object();
++  json_object_object_add(applied_resolution, "width", json_object_new_int(control.width));
++  json_object_object_add(applied_resolution, "height", json_object_new_int(control.height));
++  json_object_object_add(runtime_settings, "appliedResolution", applied_resolution);
++  json_object_object_add(result, "runtimeSettings", runtime_settings);
++
++  struct json_object* input = json_object_new_object();
++  json_object_object_add(input, "route", json_object_new_string("moonlight-embedded"));
++  json_object_object_add(input, "status", json_object_new_string("unknown"));
++  json_object_object_add(input, "capabilities", json_object_new_array());
++  json_object_object_add(result, "input", input);
++
++  return result;
++}
++
++static struct json_object* moonlight_local_control_event_locked(const char* name) {
++  struct json_object* event = json_object_new_object();
++  json_object_object_add(event, "jsonrpc", json_object_new_string("2.0"));
++  json_object_object_add(event, "method", json_object_new_string("moonlight.event"));
++  struct json_object* params = json_object_new_object();
++  json_object_object_add(params, "seq", json_object_new_int64((int64_t) control.seq));
++  json_object_object_add(params, "monotonicMs", json_object_new_int64(0));
++  struct json_object* payload = json_object_new_object();
++  json_object_object_add(payload, "name", json_object_new_string(name));
++  json_object_object_add(payload, "state", json_object_new_string(control.lifecycle));
++  json_object_object_add(params, "event", payload);
++  json_object_object_add(event, "params", params);
++  return event;
++}
++
++static struct json_object* moonlight_local_control_success(struct json_object* id, struct json_object* result) {
++  struct json_object* response = json_object_new_object();
++  json_object_object_add(response, "jsonrpc", json_object_new_string("2.0"));
++  if (id != NULL)
++    json_object_object_add(response, "id", json_object_get(id));
++  else
++    json_object_object_add(response, "id", json_object_new_int(0));
++  json_object_object_add(response, "result", result);
++  return response;
++}
++
++static struct json_object* moonlight_local_control_error(struct json_object* id, int code, const char* message, const char* tag) {
++  struct json_object* response = json_object_new_object();
++  json_object_object_add(response, "jsonrpc", json_object_new_string("2.0"));
++  if (id != NULL)
++    json_object_object_add(response, "id", json_object_get(id));
++  else
++    json_object_object_add(response, "id", json_object_new_int(0));
++  struct json_object* error = json_object_new_object();
++  json_object_object_add(error, "code", json_object_new_int(code));
++  json_object_object_add(error, "message", json_object_new_string(message));
++  struct json_object* data = json_object_new_object();
++  json_object_object_add(data, "_tag", json_object_new_string(tag));
++  json_object_object_add(error, "data", data);
++  json_object_object_add(response, "error", error);
++  return response;
++}
++
++static const char* moonlight_local_control_env_or(const char* name, const char* fallback) {
++  const char* value = getenv(name);
++  if (value == NULL || value[0] == '\0')
++    return fallback;
++  return value;
++}
++
++#endif
+diff -ruN source-link/src/local_control.h src/src/local_control.h
+--- source-link/src/local_control.h	1969-12-31 17:00:00.000000000 -0700
++++ src/src/local_control.h	2026-05-26 14:06:38.223278625 -0600
+@@ -0,0 +1,19 @@
++#pragma once
++
++#ifdef __linux__
++void moonlight_local_control_start_from_env(const char* initial_state, int width, int height, int fps, int bitrate_kbps);
++void moonlight_local_control_update_lifecycle(const char* state);
++void moonlight_local_control_stop(void);
++#else
++static inline void moonlight_local_control_start_from_env(const char* initial_state, int width, int height, int fps, int bitrate_kbps) {
++  (void) initial_state;
++  (void) width;
++  (void) height;
++  (void) fps;
++  (void) bitrate_kbps;
++}
++static inline void moonlight_local_control_update_lifecycle(const char* state) {
++  (void) state;
++}
++static inline void moonlight_local_control_stop(void) {}
++#endif
+diff -ruN source-link/src/main.c src/src/main.c
+--- source-link/src/main.c	2026-05-26 14:08:57.725731362 -0600
++++ src/src/main.c	2026-05-26 14:08:47.832841209 -0600
+@@ -23,6 +23,7 @@
+ #include "platform.h"
+ #include "config.h"
+ #include "sdl.h"
++#include "local_control.h"
+ 
+ #include "audio/audio.h"
+ #include "video/video.h"
+@@ -270,7 +271,9 @@
+     loop_init();
+ 
+   platform_start(system);
++  moonlight_local_control_start_from_env("connecting", config->stream.width, config->stream.height, config->stream.fps, config->stream.bitrate);
+   LiStartConnection(&server->serverInfo, &config->stream, &connection_callbacks, platform_get_video(system), platform_get_audio(system, config->audio_device), NULL, drFlags, config->audio_device, 0);
++  moonlight_local_control_update_lifecycle("streaming");
+   runtime_settings_mvp_schedule();
+ 
+   if (IS_EMBEDDED(system)) {
+@@ -285,6 +288,9 @@
+     sdl_loop();
+   #endif
+ 
++  moonlight_local_control_update_lifecycle("exited");
++  moonlight_local_control_stop();
++
+   LiStopConnection();
+ 
+   if (config->quitappafter) {
