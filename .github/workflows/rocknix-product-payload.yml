@@ -1,0 +1,81 @@
+name: RockNix Product Payload
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_payload:
+        description: "Build and upload the candidate payload artifact"
+        required: true
+        type: boolean
+        default: false
+      product_revision:
+        description: "Clean Korri revision for optional finalization"
+        required: false
+        type: string
+      source_sha256:
+        description: "GitHub source tarball SHA256 for optional finalization"
+        required: false
+        type: string
+      seed_url:
+        description: "Uploaded Korri release asset URL for optional finalization"
+        required: false
+        type: string
+
+jobs:
+  candidate-payload:
+    name: Candidate Odin2Portal payload
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            extra-platforms = aarch64-linux
+            extra-substituters = https://nix-community.cachix.org
+            extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
+
+      - name: Evaluate payload package and native contract check
+        run: |
+          nix eval .#packages.x86_64-linux.korri-rocknix-product-payload-odin2portal.drvPath --raw
+          nix build .#checks.x86_64-linux.korri-rocknix-product-payload --no-link
+
+      - name: Build candidate payload
+        if: inputs.build_payload
+        run: |
+          nix build .#packages.x86_64-linux.korri-rocknix-product-payload-odin2portal --out-link result-product-payload
+          mkdir -p out/artifacts/rocknix-product-payload-candidate
+          cp -aL result-product-payload/. out/artifacts/rocknix-product-payload-candidate/
+
+      - name: Finalize payload metadata
+        if: inputs.build_payload && inputs.product_revision != '' && inputs.source_sha256 != '' && inputs.seed_url != ''
+        run: |
+          nix develop .# --command bun tools/artifacts/rocknix-product-payload-finalize.ts \
+            --candidate out/artifacts/rocknix-product-payload-candidate/nix-support/product-payload/candidate-product-payload.lock \
+            --out out/artifacts/rocknix-product-payload-final \
+            --product-rev "${{ inputs.product_revision }}" \
+            --source-sha256 "${{ inputs.source_sha256 }}" \
+            --seed-url "${{ inputs.seed_url }}"
+
+      - name: Upload candidate payload
+        if: inputs.build_payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: rocknix-product-payload-odin2portal-candidate
+          path: out/artifacts/rocknix-product-payload-candidate
+          if-no-files-found: error
+
+      - name: Upload finalized payload metadata
+        if: inputs.build_payload && inputs.product_revision != '' && inputs.source_sha256 != '' && inputs.seed_url != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: rocknix-product-payload-odin2portal-final-metadata
+          path: out/artifacts/rocknix-product-payload-final
+          if-no-files-found: error
