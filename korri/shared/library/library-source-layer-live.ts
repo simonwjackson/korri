@@ -1,4 +1,5 @@
 import { korriDataPath } from "@shared/config/xdg-paths"
+import type { GamescopePolicy } from "@shared/library/config/inheritable-fields"
 import type { LaunchSpec } from "@shared/library/launcher"
 import { logger } from "@shared/logger"
 import { Effect, Layer } from "effect"
@@ -142,8 +143,18 @@ function buildRocknixConfigFromEnv(): RocknixConfig {
     mediaRoot:
       optionalEnv(process.env.KORRI_ROCKNIX_MEDIA_ROOT) ??
       defaultRocknixMediaRoot(process.env),
+    gamescope: rocknixGamescopePolicyFromEnv(
+      process.env.KORRI_ROCKNIX_GAMESCOPE_ENABLED,
+    ),
     allowMissingEsSystems: true,
   }
+}
+
+function rocknixGamescopePolicyFromEnv(
+  value: string | undefined,
+): GamescopePolicy | undefined {
+  const enabled = parseBooleanEnv(value)
+  return enabled === undefined ? undefined : { enabled }
 }
 
 function parseListEnv(
@@ -159,6 +170,16 @@ function parseListEnv(
 function optionalEnv(value: string | undefined): string | undefined {
   const trimmed = value?.trim()
   return trimmed && trimmed.length > 0 ? trimmed : undefined
+}
+
+function parseBooleanEnv(value: string | undefined): boolean | undefined {
+  const trimmed = value?.trim().toLowerCase()
+  if (!trimmed) return undefined
+  if (["1", "true", "yes", "on", "enabled"].includes(trimmed)) return true
+  if (["0", "false", "no", "off", "disabled"].includes(trimmed)) return false
+  throw new Error(
+    `KORRI_ROCKNIX_GAMESCOPE_ENABLED must be boolean-like, got ${value}`,
+  )
 }
 
 function buildLibraryRootFromEnv(): Effect.Effect<string, LibraryError> {
