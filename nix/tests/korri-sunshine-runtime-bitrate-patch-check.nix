@@ -1,6 +1,7 @@
 {
   pkgs,
-  patchPath,
+  patchPath ? null,
+  patchPaths ? [ patchPath ],
   readmePath,
   moonlightPatchPath,
   moonlightReadmePath,
@@ -12,7 +13,7 @@ let
   lib = pkgs.lib;
   check = message: assertion: { inherit message assertion; };
 
-  patch = builtins.readFile patchPath;
+  patch = lib.concatStringsSep "\n" (map builtins.readFile patchPaths);
   readme = builtins.readFile readmePath;
   moonlightPatch = builtins.readFile moonlightPatchPath;
   moonlightReadme = builtins.readFile moonlightReadmePath;
@@ -105,7 +106,7 @@ let
     (check "Sunshine runtime FPS unsupported encoders fail with current applied FPS" (
       contains "live-settings-mvp: runtime FPS unsupported" patch
       && contains "RUNTIME_SETTINGS_STATUS_FAILED" patch
-      && contains "runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_FPS, status, reason, applied_fps}" patch
+      && contains "runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_FPS, status, applied_fps, 0, 0, reason}" patch
     ))
     (check "Sunshine runtime capability acks expose active-session support facts" (
       contains "control_runtime_settings_capability_ack_t" patch
@@ -116,12 +117,19 @@ let
       && contains "current_width" patch
       && contains "current_height" patch
     ))
-    (check "Sunshine runtime resolution capability remains proof-gated instead of generally advertised" (
-      contains "proof_gated_operations" patch
-      && contains "proof_gated_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION" patch
-      && !(contains "supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION" patch)
-      && contains "Runtime resolution proof gate: operation `3` is listed as proof-gated" readme
+    (check "Sunshine runtime capability support is gated by active session encoder facts" (
+      contains "auto h264_session = session->config.monitor.videoFormat == 0" patch
+      && contains "auto runtime_supported = enabled && h264_session && vaapi_requested" patch
+      && contains "std::uint16_t reason = enabled ? video::RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER" patch
     ))
+    (check "Sunshine runtime resolution capability remains proof-gated instead of generally advertised"
+      (
+        contains "proof_gated_operations" patch
+        && contains "proof_gated_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION" patch
+        && !(contains "supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION" patch)
+        && contains "Runtime resolution proof gate: operation `3` is listed as proof-gated" readme
+      )
+    )
     (check "Moonlight runtime resolution capability parser records proof-gated operations separately" (
       contains "proofGatedOperations" moonlightPatch
       && contains "runtime_settings_mvp_settings_state.proofGatedOperations" moonlightPatch
@@ -192,7 +200,7 @@ let
       && contains "runtime_settings_applied_height" patch
       && contains "session->control.runtime_settings_applied_width = session->control.runtime_settings_launch_width" patch
       && contains "auto current_applied_width = session->control.runtime_settings_applied_width" patch
-      && contains "send_runtime_settings_ack(session, video::runtime_bitrate_ack_t {request_id, operation, rejection_status, rejection_reason, 0, current_applied_width, current_applied_height})" patch
+      && contains "send_runtime_settings_ack(session, video::runtime_bitrate_ack_t {request_id, operation, rejection_status, 0, current_applied_width, current_applied_height, rejection_reason})" patch
       && contains "runtime resolution unsupported encoder" patch
       && contains "RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER" patch
       && contains "ack.status == video::RUNTIME_SETTINGS_STATUS_APPLIED" patch
@@ -226,18 +234,23 @@ let
       contains "SS_RUNTIME_SETTINGS_MVP_ACK_WITH_REASON" moonlightPatch
       && contains "SS_RUNTIME_SETTINGS_MVP_REASON_NONE" moonlightPatch
       && contains "legacy no-reason runtime settings ack" moonlightPatch
+      && contains "uint32_t appliedValue;" moonlightPatch
+      && contains "uint16_t reason;" moonlightPatch
       && contains "reason=" moonlightPatch
     ))
-    (check "Moonlight runtime settings helper state exposes launch baselines separately from current values" (
-      contains "SS_RUNTIME_SETTINGS_MVP_SETTINGS_STATE" moonlightPatch
-      && contains "runtime_settings_mvp_settings_state" moonlightPatch
-      && contains "launchBitrateKbps" moonlightPatch
-      && contains "currentBitrateKbps" moonlightPatch
-      && contains "launchFps" moonlightPatch
-      && contains "currentFps" moonlightPatch
-      && contains "launchWidth" moonlightPatch
-      && contains "currentWidth" moonlightPatch
-    ))
+    (check
+      "Moonlight runtime settings helper state exposes launch baselines separately from current values"
+      (
+        contains "SS_RUNTIME_SETTINGS_MVP_SETTINGS_STATE" moonlightPatch
+        && contains "runtime_settings_mvp_settings_state" moonlightPatch
+        && contains "launchBitrateKbps" moonlightPatch
+        && contains "currentBitrateKbps" moonlightPatch
+        && contains "launchFps" moonlightPatch
+        && contains "currentFps" moonlightPatch
+        && contains "launchWidth" moonlightPatch
+        && contains "currentWidth" moonlightPatch
+      )
+    )
     (check "Moonlight runtime settings capability parser records launch baseline values" (
       contains "BbGet32(&bb, &launchBitrateKbps)" moonlightPatch
       && contains "BbGet32(&bb, &launchFps)" moonlightPatch
@@ -259,24 +272,40 @@ let
       && contains "runtime_settings_mvp_has_inflight_family" moonlightPatch
       && contains "outcome=locally-rejected reason=conflict" moonlightPatch
     ))
+    (check "Moonlight runtime settings validates advertised capabilities before sending mutations" (
+      contains "runtime_settings_mvp_validate_before_send" moonlightPatch
+      && contains "runtime_settings_mvp_operation_supported" moonlightPatch
+      && contains "runtime_settings_mvp_operation_proof_gated" moonlightPatch
+      && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_ALLOW_PROOF_GATED" moonlightPatch
+      && contains "outcome=locally-rejected reason=proof-gated" moonlightPatch
+      && contains "outcome=locally-rejected reason=unsupported-operation" moonlightPatch
+    ))
     (check "Moonlight runtime settings command state records timeout no-ack outcomes" (
       contains "SS_RUNTIME_SETTINGS_MVP_TIMEOUT_MS" moonlightPatch
       && contains "runtime_settings_mvp_check_timeouts" moonlightPatch
       && contains "outcome=timed-out reason=no-ack" moonlightPatch
     ))
+    (check "Moonlight runtime settings stale acks are diagnostic and do not overwrite current state" (
+      contains "outcome=stale-ack-observed reason=stale-ack" moonlightPatch
+      && contains "if (runtime_settings_mvp_record_ack(requestId, operation, status, reason))" moonlightPatch
+      && contains "runtime_settings_mvp_record_current_applied" moonlightPatch
+    ))
     (check "Moonlight one-shot runtime settings sender refuses ambiguous bitrate FPS or resolution input" (
       contains "set only one runtime settings value: bitrate, fps, or resolution" moonlightPatch
     ))
-    (check "Moonlight runtime settings adaptation can react to connection status only behind spike guard" (
-      contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_KBPS" moonlightPatch
-      && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_FPS" moonlightPatch
-      && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_KBPS" moonlightPatch
-      && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_FPS" moonlightPatch
-      && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_ENABLE_SPIKE_ADAPTATION" moonlightPatch
-      && contains "connection-status adaptation spike-only disabled" moonlightPatch
-      && contains "runtime_settings_mvp_connection_status_update" moonlightPatch
-      && contains "connectionStatusUpdate = runtime_settings_mvp_connection_status_update" moonlightPatch
-    ))
+    (check
+      "Moonlight runtime settings adaptation can react to connection status only behind spike guard"
+      (
+        contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_KBPS" moonlightPatch
+        && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_FPS" moonlightPatch
+        && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_KBPS" moonlightPatch
+        && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_FPS" moonlightPatch
+        && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_ENABLE_SPIKE_ADAPTATION" moonlightPatch
+        && contains "connection-status adaptation spike-only disabled" moonlightPatch
+        && contains "runtime_settings_mvp_connection_status_update" moonlightPatch
+        && contains "connectionStatusUpdate = runtime_settings_mvp_connection_status_update" moonlightPatch
+      )
+    )
     (check "Moonlight runtime settings adaptation does not send resolution" (
       !(contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_RESOLUTION" moonlightPatch)
       && !(contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_RESOLUTION" moonlightPatch)
@@ -289,10 +318,13 @@ let
       contains "Moonlight and Sunshine expose mechanisms and facts only; Korri owns adaptation policy" readme
       && contains "Moonlight and Sunshine expose mechanisms and facts only; Korri owns adaptation policy" moonlightReadme
     ))
-    (check "Runtime settings READMEs document local readiness host capability and client proof as separate facts" (
-      contains "local Moonlight command readiness, host Sunshine runtime-settings capability, and target-client proof" readme
-      && contains "local Moonlight command readiness, host Sunshine runtime-settings capability, and target-client proof" moonlightReadme
-    ))
+    (check
+      "Runtime settings READMEs document local readiness host capability and client proof as separate facts"
+      (
+        contains "local Moonlight command readiness, host Sunshine runtime-settings capability, and target-client proof" readme
+        && contains "local Moonlight command readiness, host Sunshine runtime-settings capability, and target-client proof" moonlightReadme
+      )
+    )
     (check "Runtime settings READMEs document the canonical reason-code vocabulary" (
       contains "Reason codes:" readme
       && contains "`gate-disabled`" readme

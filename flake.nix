@@ -547,21 +547,30 @@
             };
           }
           // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-            korri-sunshine-runtime-bitrate-patch = import ./nix/tests/korri-sunshine-runtime-bitrate-patch-check.nix {
-              inherit pkgs;
-              patchPath = ./packages/sunshine-korri/patches/0001-runtime-bitrate-restart-mvp.patch;
-              readmePath = ./packages/sunshine-korri/README.md;
-              moonlightPatchPath = ./packages/moonlight-embedded-korri/patches/0005-add-sunshine-runtime-settings-mvp.patch;
-              moonlightReadmePath = ./packages/moonlight-embedded-korri/README.md;
-              sunshinePackage = self.packages.${system}.sunshine-korri;
-              moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
-            };
-            korri-moonlight-control-protocol-patch = import ./nix/tests/korri-moonlight-control-protocol-patch-check.nix {
-              inherit pkgs;
-              patchPath = ./packages/moonlight-embedded-korri/patches/0006-add-local-control-observability-ipc.patch;
-              readmePath = ./packages/moonlight-embedded-korri/README.md;
-              moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
-            };
+            korri-sunshine-runtime-bitrate-patch =
+              import ./nix/tests/korri-sunshine-runtime-bitrate-patch-check.nix
+                {
+                  inherit pkgs;
+                  patchPaths = [
+                    ./packages/sunshine-korri/patches/0001-add-runtime-settings-protocol-surface.patch
+                    ./packages/sunshine-korri/patches/0002-wire-runtime-settings-control-plane.patch
+                    ./packages/sunshine-korri/patches/0003-apply-runtime-bitrate-and-fps-changes.patch
+                    ./packages/sunshine-korri/patches/0004-add-proof-gated-runtime-resolution-apply-path.patch
+                  ];
+                  readmePath = ./packages/sunshine-korri/README.md;
+                  moonlightPatchPath = ./packages/moonlight-embedded-korri/patches/0005-add-sunshine-runtime-settings-mvp.patch;
+                  moonlightReadmePath = ./packages/moonlight-embedded-korri/README.md;
+                  sunshinePackage = self.packages.${system}.sunshine-korri;
+                  moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
+                };
+            korri-moonlight-control-protocol-patch =
+              import ./nix/tests/korri-moonlight-control-protocol-patch-check.nix
+                {
+                  inherit pkgs;
+                  patchPath = ./packages/moonlight-embedded-korri/patches/0006-add-local-control-observability-ipc.patch;
+                  readmePath = ./packages/moonlight-embedded-korri/README.md;
+                  moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
+                };
           }
           // pkgs.lib.optionalAttrs isX86Linux {
             korri-rocknix-sm8550-config = import ./nix/tests/korri-rocknix-sm8550-config-check.nix {

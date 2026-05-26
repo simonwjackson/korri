@@ -11,21 +11,16 @@ The package is intentionally an umbrella, not a single-feature fork. Patches may
 
 ## Current patches
 
-### `0001-runtime-bitrate-restart-mvp.patch`
+### Runtime settings patch series
 
-Experimental live bitrate-control MVP:
+Experimental live runtime-settings MVP split by review concern:
 
-- Adds Sunshine control packet `0x5504` for runtime settings requests.
-- Adds Sunshine control packet `0x5505` for structured acks.
-- Supports operation `1`: set stream bitrate in kbps.
-- Supports operation `2`: set effective stream FPS at or below the launch FPS.
-- Supports operation `3`: set stream resolution to same-or-smaller same-aspect even dimensions.
-- Requires `SUNSHINE_LIVE_SETTINGS_MVP=1`.
+- `0001-add-runtime-settings-protocol-surface.patch` adds packet IDs `0x5504`/`0x5505`, runtime-settings operations, statuses, reasons, request/ack structs, and mail names.
+- `0002-wire-runtime-settings-control-plane.patch` adds the Sunshine control-plane parser, `SUNSHINE_LIVE_SETTINGS_MVP=1` gate, capability acks, mutation acks, launch/current-applied baselines, and request queueing.
+- `0003-apply-runtime-bitrate-and-fps-changes.patch` applies operation `1` by recreating the `h264_vaapi` encoder session with a new bitrate. Supports operation `2`: set effective stream FPS at or below launch FPS using runtime frame pacing.
+- `0004-add-proof-gated-runtime-resolution-apply-path.patch` applies operation `3` with same-or-smaller same-aspect even dimensions, refreshes touch mapping after apply, and keeps runtime resolution proof-gated until client survival evidence exists.
 - Only `h264_vaapi` via Sunshine's AVCodec/VAAPI path is currently supported.
-- Recreates the active AVCodec/VAAPI encoder session with the requested bitrate or resolution.
-- Applies runtime FPS as experimental frame pacing without renegotiating stream resolution or client capabilities.
-- Runtime resolution remains experimental until client-side decode/render survival evidence is recorded.
-- Does not use the failed AVCodec field/AVOption mutation fallback.
+- The series does not use the failed AVCodec field/AVOption mutation fallback.
 - Verified on `aka` with `h264_vaapi` and Moonlight receiving `status=0` acks.
 
 Runtime settings mechanism contract:
@@ -34,13 +29,14 @@ Runtime settings mechanism contract:
 - Runtime settings decisions distinguish local Moonlight command readiness, host Sunshine runtime-settings capability, and target-client proof as separate facts.
 - Existing packet IDs remain stable: request `0x5504` and ack `0x5505`.
 - Operation `0` is a non-mutating capability query for the active Sunshine session.
-- Operation `0` returns a `0x5505` capability ack with gate status, reason, supported operations, conservative bounds, launch baseline values, and current applied bitrate/FPS/resolution facts.
+- Operation `0` returns a `0x5505` capability ack with gate status, reason, active-session supported operations, conservative bounds, launch baseline values, and current applied bitrate/FPS/resolution facts.
 - Launch baseline bitrate, FPS, and resolution are tracked separately from current applied values for the lifetime of the stream.
 - Restore is explicit: callers send normal set commands back to the launch baseline values; Sunshine does not auto-restore from network or command outcomes.
 - Operations `1`, `2`, and `3` remain bitrate, FPS, and resolution mutation requests.
 - Mutation acks carry the broad numeric status plus an additive reason field; current no-reason consumers must be updated before relying on reason-bearing payloads.
 - Runtime resolution remains experimental/proof-gated; operation `0` does not advertise it as a production adaptive operation from a server ack alone.
 - Runtime resolution proof gate: operation `3` is listed as proof-gated, not supported, in capability acks until same-session target-client proof exists.
+- Capability support is conservative: bitrate/FPS are only advertised for the explicit live-settings gate on an active H.264 session using the supported VAAPI path; unsupported sessions return a reason without setting support bits.
 - Operation `3` outcomes distinguish Sunshine-applied from client-proven: Sunshine may report `server_applied=1`, but `client_proven` remains `0` without device/client render evidence.
 
 Runtime settings status contract:

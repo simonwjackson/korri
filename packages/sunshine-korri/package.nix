@@ -6,7 +6,10 @@ sunshine.overrideAttrs (old: {
   __intentionallyOverridingVersion = true;
 
   patches = (old.patches or [ ]) ++ [
-    ./patches/0001-runtime-bitrate-restart-mvp.patch
+    ./patches/0001-add-runtime-settings-protocol-surface.patch
+    ./patches/0002-wire-runtime-settings-control-plane.patch
+    ./patches/0003-apply-runtime-bitrate-and-fps-changes.patch
+    ./patches/0004-add-proof-gated-runtime-resolution-apply-path.patch
   ];
 
   meta = old.meta // {
