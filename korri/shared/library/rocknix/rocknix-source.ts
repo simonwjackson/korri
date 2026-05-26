@@ -26,10 +26,7 @@ import { readdir } from "node:fs/promises"
 import { basename, join } from "node:path"
 
 import { korriDataPath, type XdgPathEnv } from "@shared/config/xdg-paths"
-import {
-  normalizeGamescopePolicy,
-  type GamescopePolicy,
-} from "@shared/library/config/inheritable-fields"
+import { normalizeGamescopePolicy } from "@shared/library/config/inheritable-fields"
 import type { GameRecord } from "@shared/library/config/records/game"
 import { logger } from "@shared/logger/logger"
 
@@ -51,8 +48,6 @@ export type RocknixConfig = {
   readonly launchCommand?: string
   /** Korri-owned sidecar art root: `<root>/<system>/<rom-stem>/<image>`. */
   readonly mediaRoot?: string
-  /** Gamescope policy attached to launches resolved from ROCKNIX gamelists. */
-  readonly gamescope?: GamescopePolicy
   /**
    * Permit a display-only fallback when the guest can see gamelists but not
    * ROCKNIX's `es_systems.cfg`.
@@ -173,7 +168,7 @@ export function createRocknixSource(
       if (!spec) {
         throw new Error(`rocknix-source: no launch spec for game ${id}`)
       }
-      return { spec, gamescope: normalizeGamescopePolicy(config.gamescope) }
+      return { spec, gamescope: normalizeGamescopePolicy(undefined) }
     },
   }
 }

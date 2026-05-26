@@ -114,12 +114,6 @@ let
         (check "${name}: Moonlight foreground launches must require normalized InputPlumber input" (
           compositorEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1"
         ))
-        (check "${name}: Thor must opt ROCKNIX launches out of Gamescope; Sobo keeps the default" (
-          if name == "Thor" then
-            (compositorEnv.KORRI_ROCKNIX_GAMESCOPE_ENABLED or null) == "false"
-          else
-            (compositorEnv.KORRI_ROCKNIX_GAMESCOPE_ENABLED or null) == null
-        ))
         (check "${name}: compositor must use Wayland SDL video" (
           compositorEnv.SDL_VIDEODRIVER or null == "wayland"
         ))

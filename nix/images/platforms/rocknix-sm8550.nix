@@ -103,13 +103,6 @@ in
       WLR_NO_HARDWARE_CURSORS = "1";
       WLR_LIBINPUT_NO_DEVICES = "1";
       USER = "root";
-    }
-    // lib.optionalAttrs (sm8550.deviceId == "thor") {
-      # Thor/Bandai's dual Sway output crashes the outer compositor when
-      # Moonlight is wrapped in nested Gamescope. Moonlight's direct SDL
-      # Wayland path survives the same stream setup, so only Thor opts out;
-      # Odin2Portal/Sobo keeps the default Gamescope policy.
-      KORRI_ROCKNIX_GAMESCOPE_ENABLED = "false";
     };
 
     sway.extraConfig = ''
