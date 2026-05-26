@@ -532,6 +532,11 @@
               inherit pkgs;
               korriServerModule = self.nixosModules.korri-server;
             };
+            korri-sunshine-runtime-bitrate-patch = import ./nix/tests/korri-sunshine-runtime-bitrate-patch-check.nix {
+              inherit pkgs;
+              patchPath = ./packages/sunshine-korri/patches/0001-runtime-bitrate-restart-mvp.patch;
+              readmePath = ./packages/sunshine-korri/README.md;
+            };
           }
           // pkgs.lib.optionalAttrs isX86Linux {
             korri-rocknix-sm8550-config = import ./nix/tests/korri-rocknix-sm8550-config-check.nix {
@@ -581,6 +586,7 @@
                 self.checks.${system}.korri-input-module
                 self.checks.${system}.korri-game-stream-module
                 self.checks.${system}.korri-server-module
+                self.checks.${system}.korri-sunshine-runtime-bitrate-patch
                 self.checks.${system}.korri-desktop-build-graph
                 self.checks.${system}.korri-package-outputs
                 self.checks.${system}.korri-image-outputs
@@ -607,6 +613,10 @@
                 {
                   name = "korri-server-module";
                   owner = "module";
+                }
+                {
+                  name = "korri-sunshine-runtime-bitrate-patch";
+                  owner = "package-output";
                 }
                 {
                   name = "korri-desktop-build-graph";
