@@ -69,11 +69,11 @@
         "nixpkgs-sdl2-classic": "nixpkgs-sdl2-classic"
       },
       "locked": {
-        "lastModified": 1779758776,
-        "narHash": "sha256-/ts6lbQTyxg8r2A+fg12AEGW28upLzjfzXqDt81pclM=",
+        "lastModified": 1779818821,
+        "narHash": "sha256-Y9wP+Eaidj9zhjD+WerdtJJYPJYTmKRh1ojo8O/apFM=",
         "owner": "simonwjackson",
         "repo": "nix-on-rocks",
-        "rev": "86b0ad5a29e6c447ece7c95abeafeb4016951f36",
+        "rev": "fb2518336b1b28d1e6bfffbdc5e3c9d03a43fd76",
         "type": "github"
       },
       "original": {

@@ -26,6 +26,8 @@ let
       input = cfg.services.korri.input;
       compositorService = cfg.systemd.services."korri-compositor";
       inputplumberService = cfg.systemd.services.inputplumber;
+      rawGamepadHideService = cfg.systemd.services."rocknix-guest-hide-raw-gamepad" or { };
+      udevdService = cfg.systemd.services.systemd-udevd or { };
       compositorEnv = compositorService.environment or { };
       systemPackageNames = map (pkg: pkg.name or "") (cfg.environment.systemPackages or [ ]);
       systemPackageText = lib.concatStringsSep "\n" systemPackageNames;
@@ -69,6 +71,18 @@ let
         (check "${name}: inputplumber service must see package data dirs" (
           lib.hasInfix "/share" (inputplumberService.environment.XDG_DATA_DIRS or "")
           && lib.hasInfix "/run/current-system/sw/share" (inputplumberService.environment.XDG_DATA_DIRS or "")
+        ))
+        (check "${name}: guest udevd must run under nspawn read-only sysfs" (
+          (udevdService.unitConfig.ConditionPathIsReadWrite or null) == ""
+        ))
+        (check "${name}: raw SM8550 gamepad hider must wait for InputPlumber" (
+          builtins.elem "inputplumber.service" (rawGamepadHideService.after or [ ])
+          && lib.hasInfix "Microsoft X-Box 360 pad" (rawGamepadHideService.script or "")
+          && lib.hasInfix "AYN Odin2 Gamepad" (rawGamepadHideService.script or "")
+        ))
+        (check "${name}: raw SM8550 gamepad hider must run before Korri input consumers" (
+          builtins.elem "korri-inputd.service" (rawGamepadHideService.before or [ ])
+          && builtins.elem "korri-compositor.service" (rawGamepadHideService.before or [ ])
         ))
         (check "${name}: compositor must use the SM8550-validated Gamescope version" (
           lib.versionAtLeast (lib.getVersion compositor.gamescope.package) "3.16.20"
