@@ -32,7 +32,41 @@ Connection-status adaptation experiments are controlled by:
 
 Resolution requests are one-shot only; connection-status adaptation intentionally remains limited to bitrate/FPS experiments until runtime resolution has client-side decode/render survival evidence.
 
-This is experimental and should remain gated until Sunshine-side capability negotiation is formalized.
+This is experimental and should remain gated until Sunshine-side capability negotiation is formalized. Moonlight and Sunshine expose mechanisms and facts only; Korri owns adaptation policy. Runtime settings decisions distinguish local Moonlight command readiness, host Sunshine runtime-settings capability, and target-client proof as separate facts. The current connection-status adaptation is spike-only and must not become the product adaptation path.
+
+Runtime settings mechanism contract:
+
+- Existing packet IDs remain stable: request `0x5504` and ack `0x5505`.
+- Operation `0` is a non-mutating capability query for the active Sunshine session.
+- Operations `1`, `2`, and `3` remain bitrate, FPS, and resolution mutation requests.
+- Runtime resolution remains experimental/proof-gated; a Sunshine ack is not target-client proof.
+- Local command acceptance is non-terminal; host-applied outcomes or target-client proof arrive later through the runtime-settings mechanism/local-control handoff.
+
+Runtime settings status contract:
+
+- `0` — applied
+- `1` — failed or unsupported
+- `2` — invalid
+- `3` — disabled
+
+Reason codes:
+
+- `none`
+- `gate-disabled`
+- `invalid-bounds`
+- `invalid-payload`
+- `unsupported-encoder`
+- `unsupported-backend`
+- `unsupported-operation`
+- `apply-failed`
+- `control-not-ready`
+- `no-ack`
+- `conflict`
+- `stale-ack`
+- `stream-ended`
+- `proof-gated`
+
+Internal lifecycle values are `locally-rejected`, `accepted`, `sent`, `host-applied`, `host-rejected`, `timed-out`, `stale-ack-observed`, and `stream-ended`.
 
 ## Moonlight local control protocol
 

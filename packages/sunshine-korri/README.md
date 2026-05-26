@@ -28,12 +28,38 @@ Experimental live bitrate-control MVP:
 - Does not use the failed AVCodec field/AVOption mutation fallback.
 - Verified on `aka` with `h264_vaapi` and Moonlight receiving `status=0` acks.
 
+Runtime settings mechanism contract:
+
+- Moonlight and Sunshine expose mechanisms and facts only; Korri owns adaptation policy.
+- Runtime settings decisions distinguish local Moonlight command readiness, host Sunshine runtime-settings capability, and target-client proof as separate facts.
+- Existing packet IDs remain stable: request `0x5504` and ack `0x5505`.
+- Operation `0` is a non-mutating capability query for the active Sunshine session.
+- Operations `1`, `2`, and `3` remain bitrate, FPS, and resolution mutation requests.
+- Runtime resolution remains experimental/proof-gated; a Sunshine ack is not target-client proof.
+
 Runtime settings status contract:
 
 - `0` — applied
 - `1` — failed or unsupported
 - `2` — invalid
 - `3` — disabled
+
+Reason codes:
+
+- `none`
+- `gate-disabled`
+- `invalid-bounds`
+- `invalid-payload`
+- `unsupported-encoder`
+- `unsupported-backend`
+- `unsupported-operation`
+- `apply-failed`
+- `control-not-ready`
+- `no-ack`
+- `conflict`
+- `stale-ack`
+- `stream-ended`
+- `proof-gated`
 
 Evidence is recorded in:
 

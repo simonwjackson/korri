@@ -148,6 +148,51 @@ let
       !(contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_RESOLUTION" moonlightPatch)
       && !(contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_RESOLUTION" moonlightPatch)
     ))
+    (check "Runtime settings READMEs document operation 0 as a non-mutating capability query" (
+      contains "Operation `0` is a non-mutating capability query" readme
+      && contains "Operation `0` is a non-mutating capability query" moonlightReadme
+    ))
+    (check "Runtime settings READMEs document policy-free mechanism ownership" (
+      contains "Moonlight and Sunshine expose mechanisms and facts only; Korri owns adaptation policy" readme
+      && contains "Moonlight and Sunshine expose mechanisms and facts only; Korri owns adaptation policy" moonlightReadme
+    ))
+    (check "Runtime settings READMEs document local readiness host capability and client proof as separate facts" (
+      contains "local Moonlight command readiness, host Sunshine runtime-settings capability, and target-client proof" readme
+      && contains "local Moonlight command readiness, host Sunshine runtime-settings capability, and target-client proof" moonlightReadme
+    ))
+    (check "Runtime settings READMEs document the canonical reason-code vocabulary" (
+      contains "Reason codes:" readme
+      && contains "`gate-disabled`" readme
+      && contains "`invalid-bounds`" readme
+      && contains "`invalid-payload`" readme
+      && contains "`unsupported-encoder`" readme
+      && contains "`unsupported-backend`" readme
+      && contains "`unsupported-operation`" readme
+      && contains "`apply-failed`" readme
+      && contains "`control-not-ready`" readme
+      && contains "`no-ack`" readme
+      && contains "`conflict`" readme
+      && contains "`stale-ack`" readme
+      && contains "`stream-ended`" readme
+      && contains "`proof-gated`" readme
+      && contains "Reason codes:" moonlightReadme
+      && contains "`gate-disabled`" moonlightReadme
+      && contains "`invalid-bounds`" moonlightReadme
+      && contains "`invalid-payload`" moonlightReadme
+      && contains "`unsupported-encoder`" moonlightReadme
+      && contains "`unsupported-backend`" moonlightReadme
+      && contains "`unsupported-operation`" moonlightReadme
+      && contains "`apply-failed`" moonlightReadme
+      && contains "`control-not-ready`" moonlightReadme
+      && contains "`no-ack`" moonlightReadme
+      && contains "`conflict`" moonlightReadme
+      && contains "`stale-ack`" moonlightReadme
+      && contains "`stream-ended`" moonlightReadme
+      && contains "`proof-gated`" moonlightReadme
+    ))
+    (check "Moonlight runtime settings README marks connection-status adaptation spike-only" (
+      contains "connection-status adaptation is spike-only" moonlightReadme
+    ))
     (check "Sunshine runtime bitrate README documents the status contract" (
       contains "Runtime settings status contract" readme
       && contains "`0` — applied" readme
