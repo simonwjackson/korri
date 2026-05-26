@@ -48,9 +48,11 @@ jobs:
         run: |
           nix eval .#packages.x86_64-linux.korri-desktop.drvPath --raw
           nix eval .#packages.x86_64-linux.korri-rocknix-rootfs-odin2portal.drvPath --raw
+          nix eval .#packages.x86_64-linux.korri-rocknix-product-payload-odin2portal.drvPath --raw
           ROCKNIX_GUEST_DEVICE_COMPATIBLE=ayn,odin2portal nix eval --impure \
             .#nixosConfigurations.korri-rocknix-kiosk-by-compatible.config.system.build.toplevel.drvPath \
             --raw
+          nix build .#checks.x86_64-linux.korri-rocknix-product-payload --no-link
           nix build .#checks.x86_64-linux.korri-live-usb-config --no-link
           nix build .#checks.x86_64-linux.korri-live-usb-vm-smoke --no-link
       - name: Evaluate native Nix standard gate
