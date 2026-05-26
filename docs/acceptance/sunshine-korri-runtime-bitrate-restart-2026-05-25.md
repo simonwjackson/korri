@@ -210,7 +210,9 @@ Runtime FPS downshifts are feasible for `h264_vaapi` as frame pacing: the stream
 
 Unsupported encoders fail safely: the client receives `status=1`, and Sunshine reports the current applied bitrate/FPS instead of pretending that the requested value was applied.
 
-This does not prove live resolution, HDR, codec, or preset changes. It also does not prove NVENC, software encoders, HEVC, or AV1. Those should remain unsupported until separately validated.
+This does not prove HDR, codec, or preset changes. It also does not prove NVENC, software encoders, HEVC, or AV1. Those should remain unsupported until separately validated.
+
+A later runtime resolution spike added operation `3` and proved Sunshine-side `h264_vaapi` encoder-session replacement with a fake Moonlight client. That evidence is intentionally documented separately because client decoder/render survival is still unproven: `docs/acceptance/sunshine-korri-runtime-resolution-2026-05-26.md`.
 
 ## Package
 

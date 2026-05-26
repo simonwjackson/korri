@@ -1,7 +1,7 @@
 ---
 title: feat: Add runtime resolution setting spike
 type: feat
-status: active
+status: completed
 date: 2026-05-26
 origin: docs/brainstorms/2026-05-25-002-sunshine-live-settings-extension-spikes.md
 ---
