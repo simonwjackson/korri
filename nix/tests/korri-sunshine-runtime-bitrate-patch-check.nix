@@ -67,11 +67,32 @@ let
       contains "Supports operation `2`: set effective stream FPS" readme
       && contains "runtime FPS" patch
       && contains "applied_fps" patch
+      && contains "runtime_fps_interval" patch
+    ))
+    (check "Sunshine runtime FPS rejects impossible upshifts before queueing" (
+      contains "operation == video::RUNTIME_SETTINGS_OPERATION_SET_FPS && requested_value >" patch
+      && contains "rejection_status = video::RUNTIME_SETTINGS_STATUS_INVALID" patch
+    ))
+    (check "Sunshine runtime FPS unsupported encoders fail with current applied FPS" (
+      contains "live-settings-mvp: runtime FPS unsupported" patch
+      && contains "RUNTIME_SETTINGS_STATUS_FAILED" patch
+      && contains "runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_FPS, status, applied_fps}" patch
     ))
     (check "Moonlight runtime settings sender can request FPS" (
       contains "MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS" moonlightPatch
       && contains "MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS" moonlightReadme
       && contains "operation=2" moonlightPatch
+    ))
+    (check "Moonlight one-shot runtime settings sender refuses ambiguous bitrate plus FPS input" (
+      contains "set only one runtime settings value: bitrate or fps" moonlightPatch
+    ))
+    (check "Moonlight runtime settings adaptation can react to connection status" (
+      contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_KBPS" moonlightPatch
+      && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_FPS" moonlightPatch
+      && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_KBPS" moonlightPatch
+      && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_FPS" moonlightPatch
+      && contains "runtime_settings_mvp_connection_status_update" moonlightPatch
+      && contains "connectionStatusUpdate = runtime_settings_mvp_connection_status_update" moonlightPatch
     ))
     (check "Sunshine runtime bitrate README documents the status contract" (
       contains "Runtime settings status contract" readme

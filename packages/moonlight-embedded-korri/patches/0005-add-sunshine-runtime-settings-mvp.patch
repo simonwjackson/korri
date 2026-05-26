@@ -116,6 +116,124 @@
  
    if (IS_EMBEDDED(system)) {
      if (!config->viewonly)
+--- korri-moonlight-patch-base-full/src/connection.c	1969-12-31 17:00:01.000000000 -0700
++++ korri-moonlight-runtime-mod/src/connection.c	2026-05-26 00:01:24.726625750 -0600
+@@ -22,6 +22,9 @@
+ #include <stdio.h>
+ #include <stdarg.h>
+ #include <signal.h>
++#include <stdint.h>
++#include <stdlib.h>
++#include <time.h>
+ 
+ #ifdef HAVE_SDL
+ #include <SDL.h>
+@@ -93,14 +96,95 @@
+     set_controller_led_handler(controllerNumber, r, g, b);
+ }
+ 
+-static void connection_status_update(int status) {
++static int runtime_settings_mvp_parse_u32(const char* value, uint32_t* parsed) {
++  char* end = NULL;
++  long parsed_value;
++
++  if (value == NULL || value[0] == '\0') {
++    return 0;
++  }
++
++  parsed_value = strtol(value, &end, 10);
++  if (end == value || *end != '\0' || parsed_value <= 0 || parsed_value > UINT32_MAX) {
++    return -1;
++  }
++
++  *parsed = (uint32_t) parsed_value;
++  return 1;
++}
++
++static long runtime_settings_mvp_cooldown_seconds(void) {
++  const char* raw = getenv("MOONLIGHT_RUNTIME_SETTINGS_MVP_COOLDOWN_S");
++  uint32_t parsed;
++
++  if (runtime_settings_mvp_parse_u32(raw, &parsed) == 1) {
++    return (long) parsed;
++  }
++
++  return 10;
++}
++
++static int runtime_settings_mvp_send_adaptation_value(const char* env_name, uint16_t operation, const char* label, uint32_t* request_id) {
++  const char* raw = getenv(env_name);
++  uint32_t value;
++  int parsed = runtime_settings_mvp_parse_u32(raw, &value);
++
++  if (parsed == 0) {
++    return 0;
++  }
++  if (parsed < 0) {
++    fprintf(stderr, "live-settings-mvp: invalid adaptation %s value=%s\n", label, raw);
++    return -1;
++  }
++
++  fprintf(stderr, "live-settings-mvp: adaptation sending request_id=%u operation=%u %s=%u\n", *request_id, operation, label, value);
++  LiSendSunshineRuntimeSettingsMvp((*request_id)++, operation, value);
++  return 1;
++}
++
++static void runtime_settings_mvp_connection_status_update(int status) {
++  static uint32_t runtime_settings_mvp_adaptation_request_id = 1000;
++  static time_t last_adaptation_at = 0;
++  static int last_adaptation_status = -1;
++
++  const char* bitrate_env = NULL;
++  const char* fps_env = NULL;
++  const char* status_label = NULL;
++  time_t now;
++  long cooldown_s;
++  int sent = 0;
++
+   switch (status) {
+     case CONN_STATUS_OKAY:
+       printf("Connection is okay\n");
++      bitrate_env = "MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_KBPS";
++      fps_env = "MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_FPS";
++      status_label = "okay";
+       break;
+     case CONN_STATUS_POOR:
+       printf("Connection is poor\n");
++      bitrate_env = "MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_KBPS";
++      fps_env = "MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_FPS";
++      status_label = "poor";
+       break;
++    default:
++      return;
++  }
++
++  now = time(NULL);
++  cooldown_s = runtime_settings_mvp_cooldown_seconds();
++  if (last_adaptation_status == status && last_adaptation_at != 0 && now - last_adaptation_at < cooldown_s) {
++    fprintf(stderr, "live-settings-mvp: adaptation suppressed status=%s cooldown_s=%ld\n", status_label, cooldown_s);
++    return;
++  }
++
++  sent += runtime_settings_mvp_send_adaptation_value(bitrate_env, 1, "bitrate_kbps", &runtime_settings_mvp_adaptation_request_id) > 0;
++  sent += runtime_settings_mvp_send_adaptation_value(fps_env, 2, "fps", &runtime_settings_mvp_adaptation_request_id) > 0;
++
++  if (sent > 0) {
++    last_adaptation_status = status;
++    last_adaptation_at = now;
++    fprintf(stderr, "live-settings-mvp: adaptation applied status=%s requests=%d\n", status_label, sent);
+   }
+ }
+ 
+@@ -112,7 +196,7 @@
+   .connectionTerminated = connection_terminated,
+   .logMessage = connection_log_message,
+   .rumble = rumble,
+-  .connectionStatusUpdate = connection_status_update,
++  .connectionStatusUpdate = runtime_settings_mvp_connection_status_update,
+   .setHdrMode = NULL,
+   .rumbleTriggers = rumble_triggers,
+   .setMotionEventState = set_motion_event_state,
 --- korri-moonlight-patch-base-full/third_party/moonlight-common-c/src/ControlStream.c	1969-12-31 17:00:01.000000000 -0700
 +++ korri-moonlight-runtime-mod/third_party/moonlight-common-c/src/ControlStream.c	2026-05-25 23:37:18.688429483 -0600
 @@ -143,6 +143,23 @@

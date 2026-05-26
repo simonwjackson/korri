@@ -15,10 +15,18 @@ Adds `-absolutetouch` for handheld touchscreen tap-to-click over the stream.
 
 ### `0005-add-sunshine-runtime-settings-mvp.patch`
 
-Adds an experimental Sunshine runtime-settings request sender and ack logger for the `0x5504` / `0x5505` MVP protocol. It is controlled by:
+Adds an experimental Sunshine runtime-settings request sender and ack logger for the `0x5504` / `0x5505` MVP protocol. One-shot runtime settings requests are controlled by:
 
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_KBPS`
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS`
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_AFTER_S`
+
+Connection-status adaptation experiments are controlled by:
+
+- `MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_KBPS`
+- `MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_FPS`
+- `MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_KBPS`
+- `MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_FPS`
+- `MOONLIGHT_RUNTIME_SETTINGS_MVP_COOLDOWN_S`
 
 This is experimental and should remain gated until Sunshine-side capability negotiation is formalized.
