@@ -109,6 +109,12 @@ export interface LaunchBridgeOptions {
    * Appliance builds wire this to Sway; tests inject a deterministic implementation.
    */
   readonly moonlightForegroundRepair?: MoonlightForegroundRepair
+
+  /**
+   * Optional owner supplied by the desktop composition so process shutdown can
+   * terminate the active managed session through the same lifecycle owner.
+   */
+  readonly foregroundSessionOwner?: LaunchBridgeForegroundSessionOwner
 }
 
 /**
@@ -119,6 +125,7 @@ export function createLocalStreamLaunchRpcHandler(
 ): (request: Request) => Promise<Response> {
   const scope = Scope.makeUnsafe()
   const foregroundSessionOwner =
+    options.foregroundSessionOwner ??
     createLaunchBridgeForegroundSessionOwner(options)
   const HandlersLive = localStreamLaunchRpcGroup.toLayer(
     localStreamLaunchRpcGroup.of({
@@ -140,7 +147,7 @@ export function createLocalStreamLaunchRpcHandler(
   return request => webHandler.handler(request)
 }
 
-type LaunchBridgeForegroundSessionOwner = ReturnType<
+export type LaunchBridgeForegroundSessionOwner = ReturnType<
   typeof createLaunchBridgeForegroundSessionOwner
 >
 
@@ -164,7 +171,7 @@ interface SpawnedLaunchStage {
   >
 }
 
-function createLaunchBridgeForegroundSessionOwner(
+export function createLaunchBridgeForegroundSessionOwner(
   options: LaunchBridgeOptions,
 ) {
   return createForegroundSessionOwner<

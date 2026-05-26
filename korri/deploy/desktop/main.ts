@@ -29,6 +29,11 @@ import { createDesktopApp } from "./create-desktop-app"
 import { loadDesktopConfig, saveDesktopConfig } from "./desktop-config"
 import { createDesktopInputBroker } from "./input-broker"
 import { installInputDispatchBootstrap } from "./input-dispatch-bootstrap"
+import {
+  createLaunchBridgeForegroundSessionOwner,
+  type LaunchBridgeForegroundSessionOwner,
+  type LaunchBridgeOptions,
+} from "./launch-bridge"
 import { createDesktopMoonlightSessionRunner } from "./moonlight-session-runner"
 import {
   desktopInputdUrlFromEnv,
@@ -51,6 +56,7 @@ let server: ReturnType<typeof Bun.serve> | null = null
 let windows: BrowserWindow[] = []
 let controllerScope: Scope.Closeable | null = null
 let inputBrokerFiber: Fiber.Fiber<never, never> | null = null
+let foregroundSessionOwner: LaunchBridgeForegroundSessionOwner | null = null
 
 function installApplicationMenu() {
   ApplicationMenu.setApplicationMenu([
@@ -74,7 +80,7 @@ function installApplicationMenu() {
   ])
 }
 
-function stopDesktopServer() {
+function stopDesktopControlPlane() {
   if (server) {
     server.stop(true)
     server = null
@@ -89,14 +95,27 @@ function stopDesktopServer() {
   }
 }
 
+function stopDesktopServer() {
+  stopDesktopControlPlane()
+  foregroundSessionOwner?.terminateActiveSessionNow()
+  foregroundSessionOwner = null
+}
+
+async function stopDesktopServerGracefully() {
+  stopDesktopControlPlane()
+  const owner = foregroundSessionOwner
+  foregroundSessionOwner = null
+  await owner?.terminateActiveSession()
+}
+
 function registerProcessShutdown() {
   process.on("exit", stopDesktopServer)
-  process.on("SIGINT", () => {
-    stopDesktopServer()
+  process.on("SIGINT", async () => {
+    await stopDesktopServerGracefully()
     process.exit(0)
   })
-  process.on("SIGTERM", () => {
-    stopDesktopServer()
+  process.on("SIGTERM", async () => {
+    await stopDesktopServerGracefully()
     process.exit(0)
   })
 }
@@ -174,32 +193,39 @@ async function main() {
   const runtimeConfig: RuntimeConfig = readRuntimeConfigFromEnv(process.env)
   const getRuntimeConfig = () => runtimeConfig
 
+  const launchBridgeOptions: LaunchBridgeOptions = {
+    getConnection,
+    // Construct a one-shot RemoteStreamControlClient per request so
+    // a reconnection between launches uses fresh wiring. The client is
+    // cheap to build; the underlying RPC layer is a stateless
+    // FetchHttpClient with serializer.
+    prepareGame: async (controlUrl, id) => {
+      const client = createRemoteStreamControlClient(controlUrl, {
+        timeoutMs: 5_000,
+      })
+      return await client.prepareGame(id)
+    },
+    preflightMoonlightInput,
+    resolveMoonlightGamescope: resolveLocalMoonlightGamescopePolicy,
+    moonlightForegroundRepair: createLocalMoonlightForegroundRepair(),
+    launchMoonlight: opts =>
+      launchMoonlight({
+        host: opts.host,
+        gamescope: opts.gamescope,
+        runner: diagnosticMoonlightRunner,
+      }),
+  }
+  foregroundSessionOwner =
+    createLaunchBridgeForegroundSessionOwner(launchBridgeOptions)
+
   const app = createDesktopApp({
     assetRoot,
     getUpstream,
     getConnectionState,
     getRuntimeConfig,
     launchBridge: {
-      getConnection,
-      // Construct a one-shot RemoteStreamControlClient per request so
-      // a reconnection between launches uses fresh wiring. The client is
-      // cheap to build; the underlying RPC layer is a stateless
-      // FetchHttpClient with serializer.
-      prepareGame: async (controlUrl, id) => {
-        const client = createRemoteStreamControlClient(controlUrl, {
-          timeoutMs: 5_000,
-        })
-        return await client.prepareGame(id)
-      },
-      preflightMoonlightInput,
-      resolveMoonlightGamescope: resolveLocalMoonlightGamescopePolicy,
-      moonlightForegroundRepair: createLocalMoonlightForegroundRepair(),
-      launchMoonlight: opts =>
-        launchMoonlight({
-          host: opts.host,
-          gamescope: opts.gamescope,
-          runner: diagnosticMoonlightRunner,
-        }),
+      ...launchBridgeOptions,
+      foregroundSessionOwner,
     },
   })
 
@@ -414,9 +440,9 @@ const diagnosticMoonlightRunner = createDesktopMoonlightSessionRunner({
   },
 })
 
-main().catch(error => {
+main().catch(async error => {
   logger.error({ err: error }, "Failed to start Korri desktop app")
-  stopDesktopServer()
+  await stopDesktopServerGracefully()
   process.exit(1)
 })
 
