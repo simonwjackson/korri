@@ -1,5 +1,5 @@
---- source-link/src/globals.h	1969-12-31 17:00:01.000000000 -0700
-+++ src/src/globals.h	2026-05-25 23:30:57.516602666 -0600
+--- source-link/src/globals.h	2026-05-26 08:34:47.873921097 -0600
++++ src/src/globals.h	2026-05-26 08:34:50.870940820 -0600
 @@ -53,6 +53,8 @@
    MAIL(touch_port);
    MAIL(idr);
@@ -9,8 +9,8 @@
    MAIL(gamepad_feedback);
    MAIL(hdr);
  #undef MAIL
---- source-link/src/stream.cpp	1969-12-31 17:00:01.000000000 -0700
-+++ src/src/stream.cpp	2026-05-25 23:35:46.056445635 -0600
+--- source-link/src/stream.cpp	2026-05-26 08:34:47.875556748 -0600
++++ src/src/stream.cpp	2026-05-26 08:39:46.326196644 -0600
 @@ -4,6 +4,7 @@
   */
  
@@ -40,15 +40,29 @@
  };
  
  namespace asio = boost::asio;
-@@ -212,6 +220,22 @@
+@@ -212,6 +220,46 @@
      SS_HDR_METADATA metadata;
    };
  
++  struct control_runtime_settings_request_prefix_t {
++    boost::endian::little_uint32_at request_id;
++    boost::endian::little_uint16_at operation;
++    boost::endian::little_uint16_at reserved;
++  };
++
 +  struct control_runtime_settings_request_t {
 +    boost::endian::little_uint32_at request_id;
 +    boost::endian::little_uint16_at operation;
 +    boost::endian::little_uint16_at reserved;
 +    boost::endian::little_uint32_at value;
++  };
++
++  struct control_runtime_settings_resolution_request_t {
++    boost::endian::little_uint32_at request_id;
++    boost::endian::little_uint16_at operation;
++    boost::endian::little_uint16_at reserved;
++    boost::endian::little_uint32_at width;
++    boost::endian::little_uint32_at height;
 +  };
 +
 +  struct control_runtime_settings_ack_t {
@@ -60,10 +74,20 @@
 +    boost::endian::little_uint32_at applied_value;
 +  };
 +
++  struct control_runtime_settings_resolution_ack_t {
++    control_header_v2 header;
++
++    boost::endian::little_uint32_at request_id;
++    boost::endian::little_uint16_at operation;
++    boost::endian::little_uint16_at status;
++    boost::endian::little_uint32_at applied_width;
++    boost::endian::little_uint32_at applied_height;
++  };
++
    typedef struct control_encrypted_t {
      std::uint16_t encryptedHeaderType;  // Always LE 0x0001
      std::uint16_t length;  // sizeof(seq) + 16 byte tag + secondary header and data
-@@ -366,6 +390,7 @@
+@@ -366,6 +414,7 @@
        std::uint64_t gcm_iv_counter;
  
        safe::mail_raw_t::event_t<bool> idr_events;
@@ -71,7 +95,7 @@
        safe::mail_raw_t::event_t<std::pair<int64_t, int64_t>> invalidate_ref_frames_events;
  
        std::unique_ptr<platf::deinit_t> qos;
-@@ -402,6 +427,7 @@
+@@ -402,6 +451,7 @@
  
        platf::feedback_queue_t feedback_queue;
        safe::mail_raw_t::event_t<video::hdr_info_t> hdr_queue;
@@ -79,13 +103,36 @@
      } control;
  
      std::uint32_t launch_session_id;
-@@ -885,6 +911,28 @@
+@@ -885,6 +935,45 @@
      return 0;
    }
  
++  template<class Ack>
++  void send_runtime_settings_ack_payload(session_t *session, const Ack &plaintext) {
++    std::array<std::uint8_t, sizeof(control_encrypted_t) + crypto::cipher::round_to_pkcs7_padded(sizeof(plaintext)) + crypto::cipher::tag_size>
++      encrypted_payload;
++    auto payload = encode_control(session, util::view(plaintext), encrypted_payload);
++    if (session->broadcast_ref->control_server.send(payload, session->control.peer)) {
++      BOOST_LOG(warning) << "live-settings-mvp: failed to send runtime settings ack"sv;
++    }
++  }
++
 +  void send_runtime_settings_ack(session_t *session, const video::runtime_bitrate_ack_t &ack) {
 +    if (!session->control.peer) {
 +      BOOST_LOG(warning) << "live-settings-mvp: no control peer for runtime settings ack"sv;
++      return;
++    }
++
++    if (ack.operation == video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION) {
++      control_runtime_settings_resolution_ack_t plaintext {};
++      plaintext.header.type = packetTypes[IDX_RUNTIME_SETTINGS_ACK];
++      plaintext.header.payloadLength = sizeof(control_runtime_settings_resolution_ack_t) - sizeof(control_header_v2);
++      plaintext.request_id = ack.request_id;
++      plaintext.operation = ack.operation;
++      plaintext.status = ack.status;
++      plaintext.applied_width = ack.applied_width;
++      plaintext.applied_height = ack.applied_height;
++      send_runtime_settings_ack_payload(session, plaintext);
 +      return;
 +    }
 +
@@ -96,46 +143,72 @@
 +    plaintext.operation = ack.operation;
 +    plaintext.status = ack.status;
 +    plaintext.applied_value = ack.applied_value;
-+
-+    std::array<std::uint8_t, sizeof(control_encrypted_t) + crypto::cipher::round_to_pkcs7_padded(sizeof(plaintext)) + crypto::cipher::tag_size>
-+      encrypted_payload;
-+    auto payload = encode_control(session, util::view(plaintext), encrypted_payload);
-+    if (session->broadcast_ref->control_server.send(payload, session->control.peer)) {
-+      BOOST_LOG(warning) << "live-settings-mvp: failed to send runtime settings ack"sv;
-+    }
++    send_runtime_settings_ack_payload(session, plaintext);
 +  }
 +
    int send_hdr_mode(session_t *session, video::hdr_info_t hdr_info) {
      if (!session->control.peer) {
        BOOST_LOG(warning) << "Couldn't send HDR mode, still waiting for PING from Moonlight"sv;
-@@ -949,6 +997,59 @@
+@@ -949,6 +1038,103 @@
        session->video.idr_events->raise(true);
      });
  
 +    server->map(packetTypes[IDX_RUNTIME_SETTINGS_REQUEST], [&](session_t *session, const std::string_view &payload) {
 +      BOOST_LOG(debug) << "type [IDX_RUNTIME_SETTINGS_REQUEST]"sv;
 +
-+      if (payload.size() < sizeof(control_runtime_settings_request_t)) {
++      if (payload.size() < sizeof(control_runtime_settings_request_prefix_t)) {
 +        BOOST_LOG(warning) << "live-settings-mvp: runt runtime settings request payload bytes="sv << payload.size();
 +        return;
 +      }
 +
-+      auto request = (const control_runtime_settings_request_t *) payload.data();
-+      auto request_id = (std::uint32_t) request->request_id;
-+      auto operation = (std::uint16_t) request->operation;
-+      auto requested_value = (std::uint32_t) request->value;
++      auto request_prefix = (const control_runtime_settings_request_prefix_t *) payload.data();
++      auto request_id = (std::uint32_t) request_prefix->request_id;
++      auto operation = (std::uint16_t) request_prefix->operation;
++      std::uint32_t requested_value = 0;
++      std::uint32_t requested_width = 0;
++      std::uint32_t requested_height = 0;
 +      auto enabled_value = std::getenv("SUNSHINE_LIVE_SETTINGS_MVP");
 +      auto enabled = enabled_value != nullptr && std::string_view {enabled_value} == "1"sv;
++      auto current_applied_width = (std::uint32_t) session->config.monitor.width;
++      auto current_applied_height = (std::uint32_t) session->config.monitor.height;
 +      auto applied_value = operation == video::RUNTIME_SETTINGS_OPERATION_SET_FPS ?
 +                             (std::uint32_t) session->config.monitor.framerate :
 +                             (std::uint32_t) session->config.monitor.bitrate;
++
++      if (operation == video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION) {
++        if (payload.size() >= sizeof(control_runtime_settings_resolution_request_t)) {
++          auto request = (const control_runtime_settings_resolution_request_t *) payload.data();
++          requested_width = (std::uint32_t) request->width;
++          requested_height = (std::uint32_t) request->height;
++        }
++      } else if (payload.size() >= sizeof(control_runtime_settings_request_t)) {
++        auto request = (const control_runtime_settings_request_t *) payload.data();
++        requested_value = (std::uint32_t) request->value;
++      }
 +
 +      auto accepted = true;
 +      std::uint16_t rejection_status = video::RUNTIME_SETTINGS_STATUS_FAILED;
 +      if (!enabled) {
 +        accepted = false;
 +        rejection_status = video::RUNTIME_SETTINGS_STATUS_DISABLED;
-+      } else if ((operation != video::RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS && operation != video::RUNTIME_SETTINGS_OPERATION_SET_FPS) || requested_value == 0) {
++      } else if (operation != video::RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS && operation != video::RUNTIME_SETTINGS_OPERATION_SET_FPS && operation != video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION) {
++        accepted = false;
++        rejection_status = video::RUNTIME_SETTINGS_STATUS_INVALID;
++      } else if (operation == video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION) {
++        const auto launch_width = (std::uint32_t) session->config.monitor.width;
++        const auto launch_height = (std::uint32_t) session->config.monitor.height;
++        const auto same_aspect = requested_width != 0 && requested_height != 0 &&
++                                 (std::uint64_t) requested_width * (std::uint64_t) launch_height ==
++                                   (std::uint64_t) requested_height * (std::uint64_t) launch_width;
++        if (payload.size() < sizeof(control_runtime_settings_resolution_request_t) ||
++            requested_width == 0 || requested_height == 0 ||
++            (requested_width % 2) != 0 || (requested_height % 2) != 0 ||
++            requested_width > launch_width || requested_height > launch_height ||
++            !same_aspect) {
++          accepted = false;
++          rejection_status = video::RUNTIME_SETTINGS_STATUS_INVALID;
++        }
++      } else if (payload.size() < sizeof(control_runtime_settings_request_t) || requested_value == 0) {
 +        accepted = false;
 +        rejection_status = video::RUNTIME_SETTINGS_STATUS_INVALID;
 +      } else if (operation == video::RUNTIME_SETTINGS_OPERATION_SET_FPS && requested_value > (std::uint32_t) session->config.monitor.framerate) {
@@ -148,9 +221,17 @@
 +          << "live-settings-mvp: request_id="sv << request_id
 +          << " operation="sv << operation
 +          << " requested_value="sv << requested_value
++          << " requested_width="sv << requested_width
++          << " requested_height="sv << requested_height
 +          << " applied_value="sv << applied_value
++          << " applied_width="sv << current_applied_width
++          << " applied_height="sv << current_applied_height
 +          << " status="sv << rejection_status;
-+        send_runtime_settings_ack(session, video::runtime_bitrate_ack_t {request_id, operation, rejection_status, applied_value});
++        if (operation == video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION) {
++          send_runtime_settings_ack(session, video::runtime_bitrate_ack_t {request_id, operation, rejection_status, 0, current_applied_width, current_applied_height});
++        } else {
++          send_runtime_settings_ack(session, video::runtime_bitrate_ack_t {request_id, operation, rejection_status, applied_value});
++        }
 +        return;
 +      }
 +
@@ -158,17 +239,21 @@
 +        << "live-settings-mvp: request_id="sv << request_id
 +        << " operation="sv << operation
 +        << " requested_value="sv << requested_value
++        << " requested_width="sv << requested_width
++        << " requested_height="sv << requested_height
 +        << " configured_bitrate_kbps="sv << session->config.monitor.bitrate
 +        << " configured_fps="sv << session->config.monitor.framerate
++        << " configured_width="sv << session->config.monitor.width
++        << " configured_height="sv << session->config.monitor.height
 +        << " queued=1"sv;
 +
-+      session->video.runtime_bitrate_events->raise(video::runtime_bitrate_request_t {request_id, operation, requested_value});
++      session->video.runtime_bitrate_events->raise(video::runtime_bitrate_request_t {request_id, operation, requested_value, requested_width, requested_height});
 +    });
 +
      server->map(packetTypes[IDX_INVALIDATE_REF_FRAMES], [&](session_t *session, const std::string_view &payload) {
        auto frames = (std::int64_t *) payload.data();
        auto firstFrame = frames[0];
-@@ -1119,6 +1219,13 @@
+@@ -1119,6 +1305,13 @@
  
                send_hdr_mode(session, std::move(hdr_info));
              }
@@ -182,7 +267,7 @@
            }
  
            ++pos;
-@@ -1997,6 +2104,7 @@
+@@ -1997,6 +2190,7 @@
        session->control.connect_data = launch_session.control_connect_data;
        session->control.feedback_queue = mail->queue<platf::gamepad_feedback_msg_t>(mail::gamepad_feedback);
        session->control.hdr_queue = mail->event<video::hdr_info_t>(mail::hdr);
@@ -190,7 +275,7 @@
        session->control.legacy_input_enc_iv = launch_session.iv;
        session->control.cipher = crypto::cipher::gcm_t {
          launch_session.gcm_key,
-@@ -2004,6 +2112,7 @@
+@@ -2004,6 +2198,7 @@
        };
  
        session->video.idr_events = mail->event<bool>(mail::idr);
@@ -198,8 +283,8 @@
        session->video.invalidate_ref_frames_events = mail->event<std::pair<int64_t, int64_t>>(mail::invalidate_ref_frames);
        session->video.lowseq = 0;
        session->video.ping_payload = launch_session.av_ping_payload;
---- source-link/src/video.cpp	1969-12-31 17:00:01.000000000 -0700
-+++ src/src/video.cpp	2026-05-25 23:38:58.924328880 -0600
+--- source-link/src/video.cpp	2026-05-26 08:34:47.875660664 -0600
++++ src/src/video.cpp	2026-05-26 08:40:35.401628422 -0600
 @@ -430,12 +430,16 @@
      safe::mail_raw_t::event_t<bool> shutdown_event;
      safe::mail_raw_t::queue_t<packet_t> packets;
@@ -217,11 +302,12 @@
    };
  
    struct sync_session_t {
-@@ -464,6 +468,16 @@
+@@ -464,6 +468,17 @@
      encode_session_ctx_queue_t encode_session_ctx_queue {30};
    };
  
 +  std::unique_ptr<platf::encode_device_t> make_encode_device(platf::display_t &disp, const encoder_t &encoder, const config_t &config);
++  input::touch_port_t make_port(platf::display_t *display, const config_t &config);
 +
 +  bool runtime_bitrate_supports_encoder_restart(const encoder_t &encoder, const config_t &config) {
 +    return encoder.name == "vaapi"sv && encoder.codec_from_config(config).name == "h264_vaapi";
@@ -234,19 +320,20 @@
    int start_capture_sync(capture_thread_sync_ctx_t &ctx);
    void end_capture_sync(capture_thread_sync_ctx_t &ctx);
    int start_capture_async(capture_thread_async_ctx_t &ctx);
-@@ -1909,7 +1923,11 @@
+@@ -1909,7 +1924,12 @@
      auto shutdown_event = mail->event<bool>(mail::shutdown);
      auto packets = mail::man->queue<packet_t>(mail::video_packets);
      auto idr_events = mail->event<bool>(mail::idr);
 +    auto runtime_bitrate_events = mail->queue<runtime_bitrate_request_t>(mail::runtime_bitrate);
 +    auto runtime_bitrate_ack_events = mail->queue<runtime_bitrate_ack_t>(mail::runtime_bitrate_ack);
++    auto touch_port_events = mail->event<input::touch_port_t>(mail::touch_port);
      auto invalidate_ref_frames_events = mail->event<std::pair<int64_t, int64_t>>(mail::invalidate_ref_frames);
 +    std::uint32_t runtime_fps = config.framerate;
 +    auto next_runtime_frame = std::chrono::steady_clock::now();
  
      {
        // Load a dummy image into the AVFrame to ensure we have something to encode
-@@ -1947,12 +1965,83 @@
+@@ -1947,12 +1967,125 @@
          idr_events->pop();
        }
  
@@ -309,6 +396,48 @@
 +              << " applied_fps="sv << applied_fps
 +              << " status="sv << status;
 +            runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_FPS, status, applied_fps});
++          } else if (request->operation == RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION) {
++            std::uint32_t applied_width = config.width;
++            std::uint32_t applied_height = config.height;
++            std::uint16_t status = RUNTIME_SETTINGS_STATUS_FAILED;
++
++            auto updated_config = config;
++            updated_config.width = request->width;
++            updated_config.height = request->height;
++            if (runtime_bitrate_supports_encoder_restart(encoder, config)) {
++              auto replacement_encode_device = make_encode_device(*disp, encoder, updated_config);
++              if (replacement_encode_device) {
++                auto replacement_session = make_encode_session(disp.get(), encoder, updated_config, disp->width, disp->height, std::move(replacement_encode_device));
++                auto dummy_img = disp->alloc_img();
++                if (replacement_session && dummy_img && !disp->dummy_img(dummy_img.get()) && !replacement_session->convert(*dummy_img)) {
++                  session = std::move(replacement_session);
++                  config = updated_config;
++                  applied_width = request->width;
++                  applied_height = request->height;
++                  status = RUNTIME_SETTINGS_STATUS_APPLIED;
++                  requested_idr_frame = true;
++                  touch_port_events->raise(make_port(disp.get(), config));
++                  BOOST_LOG(info)
++                    << "live-settings-mvp: async encoder restarted for runtime resolution request_id="sv << request->request_id
++                    << " applied_width="sv << applied_width
++                    << " applied_height="sv << applied_height;
++                }
++              }
++            } else {
++              BOOST_LOG(warning)
++                << "live-settings-mvp: runtime resolution unsupported encoder request_id="sv << request->request_id
++                << " encoder="sv << encoder.name
++                << " codec="sv << encoder.codec_from_config(config).name;
++            }
++
++            BOOST_LOG(info)
++              << "live-settings-mvp: capture_sync runtime resolution request_id="sv << request->request_id
++              << " requested_width="sv << request->width
++              << " requested_height="sv << request->height
++              << " applied_width="sv << applied_width
++              << " applied_height="sv << applied_height
++              << " status="sv << status;
++            runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION, status, 0, applied_width, applied_height});
 +          }
 +        }
 +      }
@@ -330,7 +459,40 @@
        // Encode at a minimum FPS to avoid image quality issues with static content
        if (!requested_idr_frame || images->peek()) {
          if (auto img = images->pop(max_frametime)) {
-@@ -2195,6 +2284,88 @@
+@@ -2056,7 +2189,7 @@
+     return result;
+   }
+ 
+-  std::optional<sync_session_t> make_synced_session(platf::display_t *disp, const encoder_t &encoder, platf::img_t &img, sync_session_ctx_t &ctx) {
++  std::optional<sync_session_t> make_synced_session(platf::display_t *disp, const encoder_t &encoder, platf::img_t &img, sync_session_ctx_t &ctx, bool raise_runtime_state = true) {
+     sync_session_t encode_session;
+ 
+     encode_session.ctx = &ctx;
+@@ -2066,8 +2199,10 @@
+       return std::nullopt;
+     }
+ 
+-    // absolute mouse coordinates require that the dimensions of the screen are known
+-    ctx.touch_port_events->raise(make_port(disp, ctx.config));
++    if (raise_runtime_state) {
++      // absolute mouse coordinates require that the dimensions of the screen are known
++      ctx.touch_port_events->raise(make_port(disp, ctx.config));
++    }
+ 
+     // Update client with our current HDR display state
+     hdr_info_t hdr_info = std::make_unique<hdr_info_raw_t>(false);
+@@ -2078,7 +2213,9 @@
+         BOOST_LOG(error) << "Couldn't get display hdr metadata when colorspace selection indicates it should have one";
+       }
+     }
+-    ctx.hdr_events->raise(std::move(hdr_info));
++    if (raise_runtime_state) {
++      ctx.hdr_events->raise(std::move(hdr_info));
++    }
+ 
+     auto session = make_encode_session(disp, encoder, ctx.config, img.width, img.height, std::move(encode_device));
+     if (!session) {
+@@ -2195,6 +2332,129 @@
              ctx->idr_events->pop();
            }
  
@@ -397,6 +559,47 @@
 +                  << " applied_fps="sv << applied_fps
 +                  << " status="sv << status;
 +                ctx->runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_FPS, status, applied_fps});
++              } else if (request->operation == RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION) {
++                std::uint32_t applied_width = ctx->config.width;
++                std::uint32_t applied_height = ctx->config.height;
++                std::uint16_t status = RUNTIME_SETTINGS_STATUS_FAILED;
++
++                auto old_config = ctx->config;
++                auto updated_config = ctx->config;
++                updated_config.width = request->width;
++                updated_config.height = request->height;
++                if (runtime_bitrate_supports_encoder_restart(encoder, ctx->config)) {
++                  ctx->config = updated_config;
++                  auto replacement_session = make_synced_session(disp.get(), encoder, *img, *ctx, false);
++                  if (replacement_session) {
++                    pos->session = std::move(replacement_session->session);
++                    pos->session->request_idr_frame();
++                    ctx->touch_port_events->raise(make_port(disp.get(), ctx->config));
++                    applied_width = request->width;
++                    applied_height = request->height;
++                    status = RUNTIME_SETTINGS_STATUS_APPLIED;
++                    BOOST_LOG(info)
++                      << "live-settings-mvp: sync encoder restarted for runtime resolution request_id="sv << request->request_id
++                      << " applied_width="sv << applied_width
++                      << " applied_height="sv << applied_height;
++                  } else {
++                    ctx->config = old_config;
++                  }
++                } else {
++                  BOOST_LOG(warning)
++                    << "live-settings-mvp: runtime resolution unsupported encoder request_id="sv << request->request_id
++                    << " encoder="sv << encoder.name
++                    << " codec="sv << encoder.codec_from_config(ctx->config).name;
++                }
++
++                BOOST_LOG(info)
++                  << "live-settings-mvp: async runtime resolution request_id="sv << request->request_id
++                  << " requested_width="sv << request->width
++                  << " requested_height="sv << request->height
++                  << " applied_width="sv << applied_width
++                  << " applied_height="sv << applied_height
++                  << " status="sv << status;
++                ctx->runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION, status, 0, applied_width, applied_height});
 +              }
 +            }
 +          }
@@ -419,7 +622,7 @@
            if (frame_captured && pos->session->convert(*img)) {
              BOOST_LOG(error) << "Could not convert image"sv;
              ctx->shutdown_event->raise(true);
-@@ -2377,6 +2548,8 @@
+@@ -2377,6 +2637,8 @@
          mail->event<bool>(mail::shutdown),
          mail::man->queue<packet_t>(mail::video_packets),
          std::move(idr_events),
@@ -428,8 +631,8 @@
          mail->event<hdr_info_t>(mail::hdr),
          mail->event<input::touch_port_t>(mail::touch_port),
          config,
---- source-link/src/video.h	1969-12-31 17:00:01.000000000 -0700
-+++ src/src/video.h	2026-05-25 23:35:46.055445646 -0600
+--- source-link/src/video.h	2026-05-26 08:34:47.875660664 -0600
++++ src/src/video.h	2026-05-26 08:38:27.966104632 -0600
 @@ -4,6 +4,9 @@
   */
  #pragma once
@@ -440,13 +643,14 @@
  // local includes
  #include "input.h"
  #include "platform/common.h"
-@@ -20,6 +23,34 @@
+@@ -20,6 +23,39 @@
  namespace video {
  
    /* Encoding configuration requested by remote client */
 +  enum runtime_settings_operation_t : std::uint16_t {
 +    RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS = 1,
 +    RUNTIME_SETTINGS_OPERATION_SET_FPS = 2,
++    RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION = 3,
 +  };
 +
 +  enum runtime_bitrate_status_t : std::uint16_t {
@@ -460,6 +664,8 @@
 +    std::uint32_t request_id;
 +    std::uint16_t operation;
 +    std::uint32_t value;
++    std::uint32_t width = 0;
++    std::uint32_t height = 0;
 +  };
 +
 +  struct runtime_settings_ack_t {
@@ -467,6 +673,8 @@
 +    std::uint16_t operation;
 +    std::uint16_t status;
 +    std::uint32_t applied_value;
++    std::uint32_t applied_width = 0;
++    std::uint32_t applied_height = 0;
 +  };
 +
 +  using runtime_bitrate_request_t = runtime_settings_request_t;

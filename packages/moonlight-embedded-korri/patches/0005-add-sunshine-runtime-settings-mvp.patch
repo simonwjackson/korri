@@ -1,5 +1,5 @@
---- korri-moonlight-patch-base-full/src/main.c	2026-05-25 21:27:56.095471785 -0600
-+++ korri-moonlight-runtime-mod/src/main.c	2026-05-25 23:37:18.666429725 -0600
+--- source-link/src/main.c	2026-05-26 08:35:07.891281507 -0600
++++ src/src/main.c	2026-05-26 08:37:20.545886632 -0600
 @@ -53,6 +53,13 @@
  #include <netdb.h>
  #include <arpa/inet.h>
@@ -14,7 +14,7 @@
  
  static void applist(PSERVER_DATA server) {
    PAPP_LIST list = NULL;
-@@ -83,6 +90,93 @@
+@@ -83,6 +90,126 @@
    return -1;
  }
  
@@ -24,15 +24,22 @@
 +static uint32_t runtime_settings_mvp_request_id = 1;
 +static uint16_t runtime_settings_mvp_operation = 1;
 +static uint32_t runtime_settings_mvp_value = 0;
++static uint32_t runtime_settings_mvp_secondary_value = 0;
 +
 +static int runtime_settings_mvp_handler(int fd) {
 +  uint64_t expirations = 0;
 +  if (read(fd, &expirations, sizeof(expirations)) != sizeof(expirations))
 +    fprintf(stderr, "live-settings-mvp: runtime settings timer read failed\n");
 +
-+  fprintf(stderr, "live-settings-mvp: sending runtime settings request request_id=%u operation=%u value=%u\n",
-+          runtime_settings_mvp_request_id, runtime_settings_mvp_operation, runtime_settings_mvp_value);
-+  LiSendSunshineRuntimeSettingsMvp(runtime_settings_mvp_request_id, runtime_settings_mvp_operation, runtime_settings_mvp_value);
++  if (runtime_settings_mvp_operation == 3) {
++    fprintf(stderr, "live-settings-mvp: sending runtime settings request request_id=%u operation=3 width=%u height=%u\n",
++            runtime_settings_mvp_request_id, runtime_settings_mvp_value, runtime_settings_mvp_secondary_value);
++  }
++  else {
++    fprintf(stderr, "live-settings-mvp: sending runtime settings request request_id=%u operation=%u value=%u\n",
++            runtime_settings_mvp_request_id, runtime_settings_mvp_operation, runtime_settings_mvp_value);
++  }
++  LiSendSunshineRuntimeSettingsMvp(runtime_settings_mvp_request_id, runtime_settings_mvp_operation, runtime_settings_mvp_value, runtime_settings_mvp_secondary_value);
 +
 +  loop_remove_fd(fd);
 +  close(fd);
@@ -44,25 +51,45 @@
 +static void runtime_settings_mvp_schedule(void) {
 +  const char *bitrate = getenv("MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_KBPS");
 +  const char *fps = getenv("MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS");
++  const char *resolution = getenv("MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_RESOLUTION");
 +  const char *delay = getenv("MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_AFTER_S");
 +  char *end = NULL;
 +
 +  int has_bitrate = bitrate != NULL && bitrate[0] != '\0';
 +  int has_fps = fps != NULL && fps[0] != '\0';
-+  if (!has_bitrate && !has_fps)
++  int has_resolution = resolution != NULL && resolution[0] != '\0';
++  if (!has_bitrate && !has_fps && !has_resolution)
 +    return;
-+  if (has_bitrate && has_fps) {
-+    fprintf(stderr, "live-settings-mvp: set only one runtime settings value: bitrate or fps\n");
++  if ((has_bitrate ? 1 : 0) + (has_fps ? 1 : 0) + (has_resolution ? 1 : 0) != 1) {
++    fprintf(stderr, "live-settings-mvp: set only one runtime settings value: bitrate, fps, or resolution\n");
 +    return;
 +  }
 +
-+  uint16_t operation = has_fps ? 2 : 1;
-+  const char *raw_value = has_fps ? fps : bitrate;
-+  const char *label = has_fps ? "fps" : "bitrate";
-+  long requested_value = strtol(raw_value, &end, 10);
-+  if (end == raw_value || *end != '\0' || requested_value <= 0 || requested_value > UINT32_MAX) {
-+    fprintf(stderr, "live-settings-mvp: invalid runtime settings %s value=%s\n", label, raw_value);
-+    return;
++  uint16_t operation = has_resolution ? 3 : (has_fps ? 2 : 1);
++  const char *raw_value = has_resolution ? resolution : (has_fps ? fps : bitrate);
++  const char *label = has_resolution ? "resolution" : (has_fps ? "fps" : "bitrate");
++  long requested_value = 0;
++  long secondary_value = 0;
++
++  if (has_resolution) {
++    requested_value = strtol(raw_value, &end, 10);
++    if (end == raw_value || *end != 'x' || requested_value <= 0 || requested_value > UINT32_MAX) {
++      fprintf(stderr, "live-settings-mvp: invalid runtime settings resolution value=%s\n", raw_value);
++      return;
++    }
++    const char *height_raw = end + 1;
++    secondary_value = strtol(height_raw, &end, 10);
++    if (end == height_raw || *end != '\0' || secondary_value <= 0 || secondary_value > UINT32_MAX) {
++      fprintf(stderr, "live-settings-mvp: invalid runtime settings resolution value=%s\n", raw_value);
++      return;
++    }
++  }
++  else {
++    requested_value = strtol(raw_value, &end, 10);
++    if (end == raw_value || *end != '\0' || requested_value <= 0 || requested_value > UINT32_MAX) {
++      fprintf(stderr, "live-settings-mvp: invalid runtime settings %s value=%s\n", label, raw_value);
++      return;
++    }
 +  }
 +
 +  long delay_s = 7;
@@ -97,9 +124,15 @@
 +
 +  runtime_settings_mvp_operation = operation;
 +  runtime_settings_mvp_value = (uint32_t) requested_value;
++  runtime_settings_mvp_secondary_value = (uint32_t) secondary_value;
 +  runtime_settings_mvp_fd = fd;
 +  loop_add_fd(fd, runtime_settings_mvp_handler, POLLIN | POLLERR | POLLHUP);
-+  fprintf(stderr, "live-settings-mvp: runtime settings request scheduled delay_s=%ld operation=%u %s=%ld\n", delay_s, operation, label, requested_value);
++  if (operation == 3) {
++    fprintf(stderr, "live-settings-mvp: runtime settings request scheduled delay_s=%ld operation=3 resolution=%ldx%ld\n", delay_s, requested_value, secondary_value);
++  }
++  else {
++    fprintf(stderr, "live-settings-mvp: runtime settings request scheduled delay_s=%ld operation=%u %s=%ld\n", delay_s, operation, label, requested_value);
++  }
 +#else
 +  fprintf(stderr, "live-settings-mvp: runtime settings MVP hook requires Linux timerfd support\n");
 +#endif
@@ -108,7 +141,7 @@
  static void stream(PSERVER_DATA server, PCONFIGURATION config, enum platform system) {
    int appId = get_app_id(server, config->app);
    if (appId<0) {
-@@ -144,6 +238,7 @@
+@@ -144,6 +271,7 @@
  
    platform_start(system);
    LiStartConnection(&server->serverInfo, &config->stream, &connection_callbacks, platform_get_video(system), platform_get_audio(system, config->audio_device), NULL, drFlags, config->audio_device, 0);
@@ -116,8 +149,8 @@
  
    if (IS_EMBEDDED(system)) {
      if (!config->viewonly)
---- korri-moonlight-patch-base-full/src/connection.c	1969-12-31 17:00:01.000000000 -0700
-+++ korri-moonlight-runtime-mod/src/connection.c	2026-05-26 00:01:24.726625750 -0600
+--- source-link/src/connection.c	2026-05-26 08:35:07.876525737 -0600
++++ src/src/connection.c	2026-05-26 08:37:20.545886632 -0600
 @@ -22,6 +22,9 @@
  #include <stdio.h>
  #include <stdarg.h>
@@ -175,7 +208,7 @@
 +  }
 +
 +  fprintf(stderr, "live-settings-mvp: adaptation sending request_id=%u operation=%u %s=%u\n", *request_id, operation, label, value);
-+  LiSendSunshineRuntimeSettingsMvp((*request_id)++, operation, value);
++  LiSendSunshineRuntimeSettingsMvp((*request_id)++, operation, value, 0);
 +  return 1;
 +}
 +
@@ -234,14 +267,16 @@
    .setHdrMode = NULL,
    .rumbleTriggers = rumble_triggers,
    .setMotionEventState = set_motion_event_state,
---- korri-moonlight-patch-base-full/third_party/moonlight-common-c/src/ControlStream.c	1969-12-31 17:00:01.000000000 -0700
-+++ korri-moonlight-runtime-mod/third_party/moonlight-common-c/src/ControlStream.c	2026-05-25 23:37:18.688429483 -0600
-@@ -143,6 +143,23 @@
+--- source-link/third_party/moonlight-common-c/src/ControlStream.c	2026-05-26 08:35:07.878639041 -0600
++++ src/third_party/moonlight-common-c/src/ControlStream.c	2026-05-26 08:37:20.547886608 -0600
+@@ -143,6 +143,41 @@
  #define CONTROL_STREAM_TIMEOUT_SEC 10
  #define CONTROL_STREAM_LINGER_TIMEOUT_SEC 2
  
 +#define SS_RUNTIME_SETTINGS_MVP_REQUEST_PTYPE 0x5504
 +#define SS_RUNTIME_SETTINGS_MVP_ACK_PTYPE 0x5505
++#define SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_FPS 2
++#define SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_RESOLUTION 3
 +
 +typedef struct _SS_RUNTIME_SETTINGS_MVP_REQUEST {
 +    uint32_t requestId;
@@ -250,6 +285,14 @@
 +    uint32_t value;
 +} SS_RUNTIME_SETTINGS_MVP_REQUEST, *PSS_RUNTIME_SETTINGS_MVP_REQUEST;
 +
++typedef struct _SS_RUNTIME_SETTINGS_MVP_RESOLUTION_REQUEST {
++    uint32_t requestId;
++    uint16_t operation;
++    uint16_t reserved;
++    uint32_t width;
++    uint32_t height;
++} SS_RUNTIME_SETTINGS_MVP_RESOLUTION_REQUEST, *PSS_RUNTIME_SETTINGS_MVP_RESOLUTION_REQUEST;
++
 +typedef struct _SS_RUNTIME_SETTINGS_MVP_ACK {
 +    uint32_t requestId;
 +    uint16_t operation;
@@ -257,10 +300,18 @@
 +    uint32_t appliedValue;
 +} SS_RUNTIME_SETTINGS_MVP_ACK, *PSS_RUNTIME_SETTINGS_MVP_ACK;
 +
++typedef struct _SS_RUNTIME_SETTINGS_MVP_RESOLUTION_ACK {
++    uint32_t requestId;
++    uint16_t operation;
++    uint16_t status;
++    uint32_t appliedWidth;
++    uint32_t appliedHeight;
++} SS_RUNTIME_SETTINGS_MVP_RESOLUTION_ACK, *PSS_RUNTIME_SETTINGS_MVP_RESOLUTION_ACK;
++
  static const short packetTypesGen3[] = {
      0x1407, // Request IDR frame
      0x1410, // Start B
-@@ -665,6 +682,8 @@
+@@ -665,6 +700,8 @@
      return false;
  }
  
@@ -269,12 +320,15 @@
  static bool sendMessageEnet(short ptype, short paylen, const void* payload, uint8_t channelId, uint32_t flags, bool moreData) {
      ENetPacket* enetPacket;
      int err;
-@@ -794,6 +813,46 @@
+@@ -794,6 +831,66 @@
      return true;
  }
  
-+int LiSendSunshineRuntimeSettingsMvp(uint32_t requestId, uint16_t operation, uint32_t value) {
++int LiSendSunshineRuntimeSettingsMvp(uint32_t requestId, uint16_t operation, uint32_t value, uint32_t secondaryValue) {
 +    SS_RUNTIME_SETTINGS_MVP_REQUEST request;
++    SS_RUNTIME_SETTINGS_MVP_RESOLUTION_REQUEST resolutionRequest;
++    const void* payload;
++    short payloadLength;
 +
 +    if (!IS_SUNSHINE()) {
 +        Limelog("live-settings-mvp: runtime settings request skipped reason=not_sunshine\n");
@@ -287,14 +341,27 @@
 +        return -2;
 +    }
 +
-+    request.requestId = LE32(requestId);
-+    request.operation = LE16(operation);
-+    request.reserved = 0;
-+    request.value = LE32(value);
++    if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_RESOLUTION) {
++        resolutionRequest.requestId = LE32(requestId);
++        resolutionRequest.operation = LE16(operation);
++        resolutionRequest.reserved = 0;
++        resolutionRequest.width = LE32(value);
++        resolutionRequest.height = LE32(secondaryValue);
++        payload = &resolutionRequest;
++        payloadLength = sizeof(resolutionRequest);
++    }
++    else {
++        request.requestId = LE32(requestId);
++        request.operation = LE16(operation);
++        request.reserved = 0;
++        request.value = LE32(value);
++        payload = &request;
++        payloadLength = sizeof(request);
++    }
 +
 +    if (!sendMessageAndForget(SS_RUNTIME_SETTINGS_MVP_REQUEST_PTYPE,
-+                              sizeof(request),
-+                              &request,
++                              payloadLength,
++                              payload,
 +                              CTRL_CHANNEL_GENERIC,
 +                              ENET_PACKET_FLAG_RELIABLE,
 +                              false)) {
@@ -302,7 +369,11 @@
 +        return -3;
 +    }
 +
-+    if (operation == 2) {
++    if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_RESOLUTION) {
++        Limelog("live-settings-mvp: runtime settings request sent request_id=%u operation=3 resolution=%ux%u packet=0x5504\n",
++                requestId, value, secondaryValue);
++    }
++    else if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_FPS) {
 +        Limelog("live-settings-mvp: runtime settings request sent request_id=%u operation=2 fps=%u packet=0x5504\n",
 +                requestId, value);
 +    }
@@ -316,7 +387,7 @@
  static bool sendMessageTcp(short ptype, short paylen, const void* payload) {
      PNVCTL_TCP_PACKET_HEADER packet;
      SOCK_RET err;
-@@ -1238,6 +1297,33 @@
+@@ -1238,6 +1335,48 @@
  
              // All below codepaths must free ctlHdr!!!
  
@@ -326,20 +397,35 @@
 +                uint16_t operation;
 +                uint16_t status;
 +                uint32_t appliedValue;
++                uint32_t appliedWidth;
++                uint32_t appliedHeight;
 +
 +                if (packetLength >= (int)(sizeof(*ctlHdr) + sizeof(SS_RUNTIME_SETTINGS_MVP_ACK))) {
 +                    BbInitializeWrappedBuffer(&bb, (char*)ctlHdr, sizeof(*ctlHdr), packetLength - sizeof(*ctlHdr), BYTE_ORDER_LITTLE);
 +                    BbGet32(&bb, &requestId);
 +                    BbGet16(&bb, &operation);
 +                    BbGet16(&bb, &status);
-+                    BbGet32(&bb, &appliedValue);
-+                    if (operation == 2) {
-+                        Limelog("live-settings-mvp: runtime settings ack request_id=%u operation=2 status=%u applied_fps=%u packet=0x5505\n",
-+                                requestId, status, appliedValue);
++                    if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_RESOLUTION) {
++                        if (packetLength >= (int)(sizeof(*ctlHdr) + sizeof(SS_RUNTIME_SETTINGS_MVP_RESOLUTION_ACK))) {
++                            BbGet32(&bb, &appliedWidth);
++                            BbGet32(&bb, &appliedHeight);
++                            Limelog("live-settings-mvp: runtime settings ack request_id=%u operation=3 status=%u applied_width=%u applied_height=%u packet=0x5505\n",
++                                    requestId, status, appliedWidth, appliedHeight);
++                        }
++                        else {
++                            Limelog("live-settings-mvp: runt runtime settings resolution ack bytes=%d\n", packetLength - (int)sizeof(*ctlHdr));
++                        }
 +                    }
 +                    else {
-+                        Limelog("live-settings-mvp: runtime settings ack request_id=%u operation=%u status=%u applied_bitrate_kbps=%u packet=0x5505\n",
-+                                requestId, operation, status, appliedValue);
++                        BbGet32(&bb, &appliedValue);
++                        if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_FPS) {
++                            Limelog("live-settings-mvp: runtime settings ack request_id=%u operation=2 status=%u applied_fps=%u packet=0x5505\n",
++                                    requestId, status, appliedValue);
++                        }
++                        else {
++                            Limelog("live-settings-mvp: runtime settings ack request_id=%u operation=%u status=%u applied_bitrate_kbps=%u packet=0x5505\n",
++                                    requestId, operation, status, appliedValue);
++                        }
 +                    }
 +                }
 +                else {
@@ -350,8 +436,8 @@
              // Process HDR data immediately to update global HDR enabled state and HDR metadata.
              // The actual client callback will be invoked in the async callback thread.
              if (ctlHdr->type == packetTypes[IDX_HDR_INFO]) {
---- korri-moonlight-patch-base-full/third_party/moonlight-common-c/src/Limelight.h	1969-12-31 17:00:01.000000000 -0700
-+++ korri-moonlight-runtime-mod/third_party/moonlight-common-c/src/Limelight.h	2026-05-25 23:37:18.693429428 -0600
+--- source-link/third_party/moonlight-common-c/src/Limelight.h	2026-05-26 08:35:07.878639041 -0600
++++ src/third_party/moonlight-common-c/src/Limelight.h	2026-05-26 08:37:20.548886597 -0600
 @@ -999,6 +999,12 @@
  // frame, just that an IDR frame will arrive soon.
  void LiRequestIdrFrame(void);
@@ -360,7 +446,7 @@
 +// encrypted control request and logs the structured ack if one is received. It is
 +// intentionally not a stable API and does not imply that live runtime mutation is
 +// supported by the host.
-+int LiSendSunshineRuntimeSettingsMvp(uint32_t requestId, uint16_t operation, uint32_t value);
++int LiSendSunshineRuntimeSettingsMvp(uint32_t requestId, uint16_t operation, uint32_t value, uint32_t secondaryValue);
 +
  // This function returns any extended feature flags supported by the host.
  #define LI_FF_PEN_TOUCH_EVENTS        0x01 // LiSendTouchEvent()/LiSendPenEvent() supported

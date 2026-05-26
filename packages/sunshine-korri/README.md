@@ -19,10 +19,12 @@ Experimental live bitrate-control MVP:
 - Adds Sunshine control packet `0x5505` for structured acks.
 - Supports operation `1`: set stream bitrate in kbps.
 - Supports operation `2`: set effective stream FPS at or below the launch FPS.
+- Supports operation `3`: set stream resolution to same-or-smaller same-aspect even dimensions.
 - Requires `SUNSHINE_LIVE_SETTINGS_MVP=1`.
 - Only `h264_vaapi` via Sunshine's AVCodec/VAAPI path is currently supported.
-- Recreates the active AVCodec/VAAPI encoder session with the requested bitrate.
+- Recreates the active AVCodec/VAAPI encoder session with the requested bitrate or resolution.
 - Applies runtime FPS as experimental frame pacing without renegotiating stream resolution or client capabilities.
+- Runtime resolution remains experimental until client-side decode/render survival evidence is recorded.
 - Does not use the failed AVCodec field/AVOption mutation fallback.
 - Verified on `aka` with `h264_vaapi` and Moonlight receiving `status=0` acks.
 

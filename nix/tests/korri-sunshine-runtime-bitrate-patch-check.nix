@@ -31,6 +31,9 @@ let
     (check "Sunshine runtime FPS operation is named" (
       contains "RUNTIME_SETTINGS_OPERATION_SET_FPS = 2" patch
     ))
+    (check "Sunshine runtime resolution operation is named" (
+      contains "RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION = 3" patch
+    ))
     (check "Sunshine runtime bitrate applied status is named" (
       contains "RUNTIME_SETTINGS_STATUS_APPLIED = 0" patch
     ))
@@ -90,13 +93,41 @@ let
       && contains "RUNTIME_SETTINGS_STATUS_FAILED" patch
       && contains "runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_FPS, status, applied_fps}" patch
     ))
+    (check "Sunshine runtime resolution uses explicit width and height payloads" (
+      contains "control_runtime_settings_request_prefix_t" patch
+      && contains "boost::endian::little_uint32_at width" patch
+      && contains "boost::endian::little_uint32_at height" patch
+      && contains "applied_width" patch
+      && contains "applied_height" patch
+    ))
+    (check "Sunshine runtime resolution validates bounds before queueing" (
+      contains "RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION" patch
+      && contains "requested_width" patch
+      && contains "requested_height" patch
+      && contains "RUNTIME_SETTINGS_STATUS_INVALID" patch
+      && contains "std::uint64_t" patch
+    ))
+    (check "Sunshine runtime resolution refreshes touch mapping only after apply" (
+      contains "runtime resolution" patch
+      && contains "touch_port" patch
+      && contains "make_port" patch
+      && contains "applied_width" patch
+      && contains "applied_height" patch
+    ))
     (check "Moonlight runtime settings sender can request FPS" (
       contains "MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS" moonlightPatch
       && contains "MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS" moonlightReadme
       && contains "operation=2" moonlightPatch
     ))
-    (check "Moonlight one-shot runtime settings sender refuses ambiguous bitrate plus FPS input" (
-      contains "set only one runtime settings value: bitrate or fps" moonlightPatch
+    (check "Moonlight runtime settings sender can request resolution" (
+      contains "MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_RESOLUTION" moonlightPatch
+      && contains "MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_RESOLUTION" moonlightReadme
+      && contains "operation=3" moonlightPatch
+      && contains "applied_width" moonlightPatch
+      && contains "applied_height" moonlightPatch
+    ))
+    (check "Moonlight one-shot runtime settings sender refuses ambiguous bitrate FPS or resolution input" (
+      contains "set only one runtime settings value: bitrate, fps, or resolution" moonlightPatch
     ))
     (check "Moonlight runtime settings adaptation can react to connection status" (
       contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_KBPS" moonlightPatch
@@ -105,6 +136,10 @@ let
       && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_FPS" moonlightPatch
       && contains "runtime_settings_mvp_connection_status_update" moonlightPatch
       && contains "connectionStatusUpdate = runtime_settings_mvp_connection_status_update" moonlightPatch
+    ))
+    (check "Moonlight runtime settings adaptation does not send resolution" (
+      !(contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_RESOLUTION" moonlightPatch)
+      && !(contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_RESOLUTION" moonlightPatch)
     ))
     (check "Sunshine runtime bitrate README documents the status contract" (
       contains "Runtime settings status contract" readme

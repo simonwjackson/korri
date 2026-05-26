@@ -19,6 +19,7 @@ Adds an experimental Sunshine runtime-settings request sender and ack logger for
 
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_KBPS`
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS`
+- `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_RESOLUTION` (for example `1280x720`)
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_AFTER_S`
 
 Connection-status adaptation experiments are controlled by:
@@ -28,5 +29,7 @@ Connection-status adaptation experiments are controlled by:
 - `MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_KBPS`
 - `MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_FPS`
 - `MOONLIGHT_RUNTIME_SETTINGS_MVP_COOLDOWN_S`
+
+Resolution requests are one-shot only; connection-status adaptation intentionally remains limited to bitrate/FPS experiments until runtime resolution has client-side decode/render survival evidence.
 
 This is experimental and should remain gated until Sunshine-side capability negotiation is formalized.
