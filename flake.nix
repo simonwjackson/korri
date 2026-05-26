@@ -573,6 +573,7 @@
                 {
                   inherit pkgs;
                   patchPath = ./packages/moonlight-embedded-korri/patches/0006-add-local-control-observability-ipc.patch;
+                  absoluteTouchPatchPath = ./packages/moonlight-embedded-korri/patches/0004-add-absolutetouch-flag-for-tap-to-click.patch;
                   readmePath = ./packages/moonlight-embedded-korri/README.md;
                   moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
                 };

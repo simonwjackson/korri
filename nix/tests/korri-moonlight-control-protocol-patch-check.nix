@@ -1,6 +1,7 @@
 {
   pkgs,
   patchPath,
+  absoluteTouchPatchPath,
   readmePath,
   moonlightPackage,
 }:
@@ -10,10 +11,29 @@ let
   check = message: assertion: { inherit message assertion; };
 
   patch = builtins.readFile patchPath;
+  absoluteTouchPatch = builtins.readFile absoluteTouchPatchPath;
   readme = builtins.readFile readmePath;
   contains = needle: haystack: lib.hasInfix needle haystack;
 
   checks = [
+    (check "Moonlight absolute touch patch is documented" (contains "Adds `-absolutetouch`" readme))
+    (check "Moonlight absolute touch CLI flag is registered and shown in help" (
+      contains "{\"absolutetouch\", no_argument, NULL" absoluteTouchPatch
+      && contains "-absolutetouch" absoluteTouchPatch
+    ))
+    (check "Moonlight absolute touch setting persists through config" (
+      contains "absolute_touch" absoluteTouchPatch
+      && contains "write_config_bool(fd, \"absolutetouch\"" absoluteTouchPatch
+    ))
+    (check "Moonlight absolute touch sends absolute pointer coordinates on touchscreen input" (
+      contains "absoluteTouchEnabled" absoluteTouchPatch
+      && contains "send_touch_position(dev, dev->touchX, dev->touchY)" absoluteTouchPatch
+      && contains "send_touch_position(dev, dev->touchDownX, dev->touchDownY)" absoluteTouchPatch
+    ))
+    (check "Moonlight absolute touch preserves upstream relative touch behavior by default" (
+      contains "Default is off" absoluteTouchPatch
+      && contains "preserving the upstream trackpad behavior" absoluteTouchPatch
+    ))
     (check "Moonlight local control protocol is named generically" (
       contains "moonlight.local-control" patch
       && contains "Moonlight local control protocol" readme
