@@ -51,6 +51,7 @@ let server: ReturnType<typeof Bun.serve> | null = null
 let windows: BrowserWindow[] = []
 let controllerScope: Scope.Closeable | null = null
 let inputBrokerFiber: Fiber.Fiber<never, never> | null = null
+let activeMoonlightChild: ReturnType<typeof Bun.spawn> | null = null
 
 function installApplicationMenu() {
   ApplicationMenu.setApplicationMenu([
@@ -87,6 +88,7 @@ function stopDesktopServer() {
     Effect.runFork(Fiber.interrupt(inputBrokerFiber))
     inputBrokerFiber = null
   }
+  terminateActiveMoonlightChild()
 }
 
 function registerProcessShutdown() {
@@ -408,10 +410,15 @@ function resolvePreloadPath(): string | undefined {
 const diagnosticMoonlightRunner: CommandRunner = {
   run: async (command, args, options) => {
     try {
+      await replaceActiveMoonlightChild()
       const child = Bun.spawn([command, ...args], {
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",
+      })
+      activeMoonlightChild = child
+      void child.exited.finally(() => {
+        if (activeMoonlightChild === child) activeMoonlightChild = null
       })
       // Fire-and-forget: drain the first 4KB from each stream within
       // 4 seconds, log it, then drop the reader (the process keeps
@@ -437,6 +444,32 @@ const diagnosticMoonlightRunner: CommandRunner = {
       }
     }
   },
+}
+
+async function replaceActiveMoonlightChild(): Promise<void> {
+  const child = activeMoonlightChild
+  if (!child) return
+  activeMoonlightChild = null
+  terminateMoonlightChild(child)
+  await Promise.race([
+    child.exited.catch(() => undefined),
+    new Promise<undefined>(resolve => setTimeout(resolve, 1_000)),
+  ])
+}
+
+function terminateActiveMoonlightChild(): void {
+  const child = activeMoonlightChild
+  if (!child) return
+  activeMoonlightChild = null
+  terminateMoonlightChild(child)
+}
+
+function terminateMoonlightChild(child: ReturnType<typeof Bun.spawn>): void {
+  try {
+    child.kill("SIGTERM")
+  } catch (error) {
+    logger.warn({ err: error }, "moonlight: failed to terminate active child")
+  }
 }
 
 async function observeMoonlightStartupExit(
