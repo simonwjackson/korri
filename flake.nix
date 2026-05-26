@@ -35,10 +35,17 @@
     flake-utils.lib.eachDefaultSystem (
       system:
       let
+        korriPackagesOverlay = import ./nix/overlays/korri-packages.nix {
+          inherit nix-on-rocks;
+        };
+
         pkgs = import nixpkgs {
           inherit system;
           config.allowUnfree = true;
-          overlays = [ bun2nix.overlays.default ];
+          overlays = [
+            bun2nix.overlays.default
+            korriPackagesOverlay
+          ];
         };
 
         pkgs2405 = import nixpkgs-2405 {
@@ -382,12 +389,14 @@
         korriImages = import ./nix/images/common.nix {
           korri = self;
           inherit nixpkgs system;
+          overlays = [ korriPackagesOverlay ];
         };
 
-        sunshineKorri = pkgs.callPackage ./packages/sunshine-korri/package.nix { };
-        moonlightEmbeddedKorri = pkgs.callPackage ./packages/moonlight-embedded-korri/package.nix {
-          inherit nix-on-rocks;
-        };
+        # The named outputs match the overlay-substituted `pkgs.sunshine` and
+        # `pkgs.moonlight-embedded` so downstream consumers can ask for either
+        # name and get the same derivation.
+        sunshineKorri = pkgs.sunshine;
+        moonlightEmbeddedKorri = pkgs.moonlight-embedded;
 
         korriHeadlessSystem = korriImages.mkHeadlessSystem {
           platformModules = [ ./nix/images/platforms/x86.nix ];
@@ -784,6 +793,9 @@
           korri = self;
           nixpkgs = nix-on-rocks.inputs.nixpkgs;
           system = rocknixTargetSystem;
+          overlays = [
+            (import ./nix/overlays/korri-packages.nix { inherit nix-on-rocks; })
+          ];
         };
         rocknixPlatformFor =
           deviceProfile:

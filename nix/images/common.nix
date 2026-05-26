@@ -2,6 +2,12 @@
   korri,
   nixpkgs,
   system,
+  # Overlays threaded into every nixosConfiguration we evaluate, so the
+  # Korri downstream Moonlight/Sunshine packages reach service-level
+  # defaults (`services.sunshine.package`, `services.korri.compositor.path`)
+  # without per-module rewrites. Callers in flake.nix pass the
+  # `nix/overlays/korri-packages.nix` overlay here.
+  overlays ? [ ],
 }:
 let
   evalConfig = import (nixpkgs.outPath + "/nixos/lib/eval-config.nix");
@@ -13,6 +19,7 @@ let
     { lib, ... }:
     {
       nixpkgs.hostPlatform = system;
+      nixpkgs.overlays = overlays;
       system.stateVersion = lib.mkDefault "24.11";
       networking.hostName = lib.mkDefault "korri-image";
       boot.loader.systemd-boot.enable = lib.mkDefault false;

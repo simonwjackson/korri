@@ -81,7 +81,11 @@ in
       sway
       config.services.korri.compositor.gamescope.package
       substratePackages.cemu
-      substratePackages.moonlight-embedded
+      # `pkgs.moonlight-embedded` is replaced by `moonlight-embedded-korri`
+      # via nix/overlays/korri-packages.nix, so the SM8550 v4l2m2m build is
+      # the Korri downstream variant with the absolute-touch + Sunshine
+      # runtime-settings patches layered on top.
+      pkgs.moonlight-embedded
     ];
 
     environment = {
@@ -90,9 +94,9 @@ in
       XDG_CACHE_HOME = "/storage/.cache";
       CEMU_BIOS_ROOT = "/storage/roms/bios/cemu";
       CEMU_AFFINITY_MASK = sm8550.performance.cemuAffinityMask;
-      KORRI_MOONLIGHT_COMMAND = "${substratePackages.moonlight-embedded}/bin/moonlight";
+      KORRI_MOONLIGHT_COMMAND = "${pkgs.moonlight-embedded}/bin/moonlight";
       KORRI_MOONLIGHT_CLIENT = "embedded";
-      KORRI_MOONLIGHT_MAPPING_FILE = "${substratePackages.moonlight-embedded}/share/moonlight/gamecontrollerdb.txt";
+      KORRI_MOONLIGHT_MAPPING_FILE = "${pkgs.moonlight-embedded}/share/moonlight/gamecontrollerdb.txt";
       KORRI_MOONLIGHT_PLATFORM = "v4l2m2m";
       KORRI_MOONLIGHT_STARTUP_OBSERVE_MS = "750";
       SDL_VIDEODRIVER = "wayland";
@@ -118,7 +122,40 @@ in
 
   rocknix.sm8550.moonlight = {
     enable = true;
-    package = substratePackages.moonlight-embedded;
+    package = pkgs.moonlight-embedded;
+  };
+
+  # Korri's compositor runs as root with no controlling TTY (getty@tty1 is
+  # masked by the nix-on-rocks guest base). Without lingering, logind
+  # classifies the implicit sway-owned session as abandoned and tears down
+  # user-runtime-dir@0 ~60 s after boot. That cascades:
+  #   user-runtime-dir@0 -> main-space-runtime-dir
+  #     -> main-space-session-dbus -> korri-compositor.
+  # Lingering keeps user@0.service alive regardless of session state, so the
+  # whole main-space session-dbus / pipewire / compositor chain survives.
+  # Validated on bandi 2026-05-25 after 12+ min idle soak with linger=yes.
+  users.users.root.linger = true;
+
+  # `switch-to-configuration switch` updates /nix/var/nix/profiles/system,
+  # but the nspawn host's rocknix-guest-prep selects the guest generation
+  # to boot from /nix/var/nix/profiles/per-user/root/rocknix-guest-system
+  # (see nix-on-rocks: guest profiles + rocknix-guest-prep helper). Without
+  # this script the runtime activation succeeds but the next reboot reverts
+  # to whatever generation rocknix-guest-promote installed. Keep the rocknix
+  # boot pointer in sync with the active system on every switch.
+  # `$systemConfig` is the new toplevel path that switch-to-configuration
+  # injects when running activation scripts. Referencing
+  # `config.system.build.toplevel` directly would create an infinite
+  # recursion because the activation script is itself part of the toplevel.
+  system.activationScripts.korri-rocknix-guest-profile = {
+    text = ''
+      profile_dir=/nix/var/nix/profiles/per-user/root
+      ${pkgs.coreutils}/bin/mkdir -p "$profile_dir"
+      ${pkgs.nix}/bin/nix-env \
+        --profile "$profile_dir/rocknix-guest-system" \
+        --set "$systemConfig"
+    '';
+    deps = [ "users" ];
   };
 
   systemd.services.inputplumber.environment.XDG_DATA_DIRS = lib.mkForce (
