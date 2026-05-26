@@ -107,6 +107,8 @@ function launchFailureMessage({
       return `Gamepad input was not available for this launch${exitDetail}.`
     case "input-ambiguous":
       return `Korri could not choose a gamepad for this launch${exitDetail}.`
+    case "session-busy":
+      return `Another stream session is already active${exitDetail}.`
     case "command-failed":
     case undefined:
       return `The game's launch command failed${exitDetail}.`

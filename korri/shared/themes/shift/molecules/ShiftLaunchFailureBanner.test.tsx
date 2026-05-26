@@ -63,6 +63,19 @@ describe("ShiftLaunchFailureBanner", () => {
     )
   })
 
+  it("describes busy foreground sessions distinctly", () => {
+    render(
+      <ShiftLaunchFailureBanner
+        gameTitle="Hades"
+        failureKind="session-busy"
+        onRetry={() => {}}
+      />,
+    )
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Another stream session is already active",
+    )
+  })
+
   it("keeps raw exit code 127 generic without a domain failure kind", () => {
     render(
       <ShiftLaunchFailureBanner
