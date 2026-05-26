@@ -96,6 +96,7 @@ nix build .#packages.aarch64-linux.korri-rocknix-kiosk-system-thor
 nix build .#packages.aarch64-linux.korri-rocknix-kiosk-system-odin2portal
 nix build .#korri-rocknix-rootfs-thor
 nix build .#korri-rocknix-rootfs-odin2portal
+nix build .#korri-rocknix-product-payload-odin2portal
 ```
 
 Matching NixOS configurations are available as:
@@ -107,6 +108,12 @@ Matching NixOS configurations are available as:
 Thor and Sobo/Odin 2 Portal are kiosk appliances only. They include the Korri server, Electrobun client, Sway kiosk, and inputd; they are not server-only RockNix targets. The by-compatible configuration is an impure on-device convenience that reads the normalized device-compatible value through nix-on-rocks. Use the explicit per-device targets for off-device review and Fuji/aarch64 build gates.
 
 These are evaluated NixOS system closures or rootfs tarball packages, not a full OTA/update product. Manual installation, partitioning, flashing, rollback UX, and remote builder selection remain operator/platform concerns.
+
+`korri-rocknix-product-payload-odin2portal` is an additive Sobo/Odin 2 Portal candidate payload for the later Korri-to-nix-on-rocks handoff. It wraps the existing `korri-rocknix-rootfs-odin2portal` output under a seed-contract archive name such as `rocknix-guest-rootfs-odin2portal-<korri-rev>.tar.zst` and emits candidate metadata under `nix-support/product-payload/`. It does not replace the existing rootfs alias, does not publish a `by-compatible` seed identity, and is not consumed by nix-on-rocks image builds in this phase.
+
+Candidate payload metadata contains the facts the Nix build can know: authority repository, source subdir, explicit Odin2Portal build target, device id, compatible string, seed archive name/checksum, Korri revision marker, and nix-on-rocks substrate revision. Final promotion metadata requires external immutable facts that Nix cannot infer locally: the clean Korri source revision, GitHub source tarball SHA256, and release asset URL(s). Use `tools/artifacts/rocknix-product-payload-finalize.ts` to combine those external values with the candidate lock and render the final `PRODUCT_*`/`PKG_NIX_GUEST_*` files for a later nix-on-rocks consumption phase.
+
+The manual `RockNix Product Payload` workflow evaluates the candidate package/check by default. Its opt-in build path can upload a candidate payload artifact when an appropriate builder is available, and can emit final metadata when the operator supplies source SHA, clean revision, and release URL inputs. This workflow is not an SM8550 image build, update-tar acceptance path, seed staging proof, recovery boot proof, or device boot acceptance gate.
 
 ### Normalized controller validation
 
