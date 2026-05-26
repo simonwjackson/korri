@@ -541,6 +541,10 @@
               inherit pkgs;
               korriServerModule = self.nixosModules.korri-server;
             };
+            korri-module-identity-audit = import ./nix/tests/korri-module-identity-audit-check.nix {
+              inherit pkgs;
+              src = ./nix/modules;
+            };
           }
           // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
             korri-sunshine-runtime-bitrate-patch = import ./nix/tests/korri-sunshine-runtime-bitrate-patch-check.nix {
