@@ -1,0 +1,397 @@
+diff -ruN source-link/src/globals.h src/src/globals.h
+--- source-link/src/globals.h	1969-12-31 17:00:01.000000000 -0700
++++ src/src/globals.h	2026-05-25 20:12:08.106015075 -0600
+@@ -53,6 +53,8 @@
+   MAIL(touch_port);
+   MAIL(idr);
+   MAIL(invalidate_ref_frames);
++  MAIL(runtime_bitrate);
++  MAIL(runtime_bitrate_ack);
+   MAIL(gamepad_feedback);
+   MAIL(hdr);
+ #undef MAIL
+diff -ruN source-link/src/stream.cpp src/src/stream.cpp
+--- source-link/src/stream.cpp	1969-12-31 17:00:01.000000000 -0700
++++ src/src/stream.cpp	2026-05-25 20:15:00.687820153 -0600
+@@ -4,6 +4,7 @@
+  */
+ 
+ // standard includes
++#include <cstdlib>
+ #include <fstream>
+ #include <future>
+ #include <queue>
+@@ -49,6 +50,8 @@
+ #define IDX_SET_MOTION_EVENT 13
+ #define IDX_SET_RGB_LED 14
+ #define IDX_SET_ADAPTIVE_TRIGGERS 15
++#define IDX_RUNTIME_SETTINGS_REQUEST 16
++#define IDX_RUNTIME_SETTINGS_ACK 17
+ 
+ static const short packetTypes[] = {
+   0x0305,  // Start A
+@@ -67,6 +70,8 @@
+   0x5501,  // Set motion event (Sunshine protocol extension)
+   0x5502,  // Set RGB LED (Sunshine protocol extension)
+   0x5503,  // Set Adaptive triggers (Sunshine protocol extension)
++  0x5504,  // Runtime settings request (experimental Sunshine protocol extension)
++  0x5505,  // Runtime settings ack (experimental Sunshine protocol extension)
+ };
+ 
+ namespace asio = boost::asio;
+@@ -212,6 +217,22 @@
+     SS_HDR_METADATA metadata;
+   };
+ 
++  struct control_runtime_settings_request_t {
++    boost::endian::little_uint32_at request_id;
++    boost::endian::little_uint16_at operation;
++    boost::endian::little_uint16_at reserved;
++    boost::endian::little_uint32_at bitrate_kbps;
++  };
++
++  struct control_runtime_settings_ack_t {
++    control_header_v2 header;
++
++    boost::endian::little_uint32_at request_id;
++    boost::endian::little_uint16_at operation;
++    boost::endian::little_uint16_at status;
++    boost::endian::little_uint32_at applied_bitrate_kbps;
++  };
++
+   typedef struct control_encrypted_t {
+     std::uint16_t encryptedHeaderType;  // Always LE 0x0001
+     std::uint16_t length;  // sizeof(seq) + 16 byte tag + secondary header and data
+@@ -366,6 +387,7 @@
+       std::uint64_t gcm_iv_counter;
+ 
+       safe::mail_raw_t::event_t<bool> idr_events;
++      safe::mail_raw_t::event_t<video::runtime_bitrate_request_t> runtime_bitrate_events;
+       safe::mail_raw_t::event_t<std::pair<int64_t, int64_t>> invalidate_ref_frames_events;
+ 
+       std::unique_ptr<platf::deinit_t> qos;
+@@ -402,6 +424,7 @@
+ 
+       platf::feedback_queue_t feedback_queue;
+       safe::mail_raw_t::event_t<video::hdr_info_t> hdr_queue;
++      safe::mail_raw_t::event_t<video::runtime_bitrate_ack_t> runtime_bitrate_ack_queue;
+     } control;
+ 
+     std::uint32_t launch_session_id;
+@@ -885,6 +908,28 @@
+     return 0;
+   }
+ 
++  void send_runtime_settings_ack(session_t *session, const video::runtime_bitrate_ack_t &ack) {
++    if (!session->control.peer) {
++      BOOST_LOG(warning) << "live-settings-mvp: no control peer for runtime settings ack"sv;
++      return;
++    }
++
++    control_runtime_settings_ack_t plaintext {};
++    plaintext.header.type = packetTypes[IDX_RUNTIME_SETTINGS_ACK];
++    plaintext.header.payloadLength = sizeof(control_runtime_settings_ack_t) - sizeof(control_header_v2);
++    plaintext.request_id = ack.request_id;
++    plaintext.operation = ack.operation;
++    plaintext.status = ack.status;
++    plaintext.applied_bitrate_kbps = ack.applied_bitrate_kbps;
++
++    std::array<std::uint8_t, sizeof(control_encrypted_t) + crypto::cipher::round_to_pkcs7_padded(sizeof(plaintext)) + crypto::cipher::tag_size>
++      encrypted_payload;
++    auto payload = encode_control(session, util::view(plaintext), encrypted_payload);
++    if (session->broadcast_ref->control_server.send(payload, session->control.peer)) {
++      BOOST_LOG(warning) << "live-settings-mvp: failed to send runtime settings ack"sv;
++    }
++  }
++
+   int send_hdr_mode(session_t *session, video::hdr_info_t hdr_info) {
+     if (!session->control.peer) {
+       BOOST_LOG(warning) << "Couldn't send HDR mode, still waiting for PING from Moonlight"sv;
+@@ -949,6 +994,42 @@
+       session->video.idr_events->raise(true);
+     });
+ 
++    server->map(packetTypes[IDX_RUNTIME_SETTINGS_REQUEST], [&](session_t *session, const std::string_view &payload) {
++      BOOST_LOG(debug) << "type [IDX_RUNTIME_SETTINGS_REQUEST]"sv;
++
++      if (payload.size() < sizeof(control_runtime_settings_request_t)) {
++        BOOST_LOG(warning) << "live-settings-mvp: runt runtime settings request payload bytes="sv << payload.size();
++        return;
++      }
++
++      auto request = (const control_runtime_settings_request_t *) payload.data();
++      auto request_id = (std::uint32_t) request->request_id;
++      auto operation = (std::uint16_t) request->operation;
++      auto requested_bitrate_kbps = (std::uint32_t) request->bitrate_kbps;
++      auto enabled = std::getenv("SUNSHINE_LIVE_SETTINGS_MVP") != nullptr;
++
++      std::uint16_t status = 4; /* accepted/pending */
++      if (!enabled) {
++        status = 3; /* disabled */
++      } else if (operation != 1 /* set bitrate kbps */ || requested_bitrate_kbps == 0) {
++        status = 2; /* invalid */
++      }
++
++      BOOST_LOG(info)
++        << "live-settings-mvp: request_id="sv << request_id
++        << " operation="sv << operation
++        << " requested_bitrate_kbps="sv << requested_bitrate_kbps
++        << " configured_bitrate_kbps="sv << session->config.monitor.bitrate
++        << " status="sv << status;
++
++      if (status != 4) {
++        send_runtime_settings_ack(session, video::runtime_bitrate_ack_t {request_id, operation, status, session->config.monitor.bitrate});
++        return;
++      }
++
++      session->video.runtime_bitrate_events->raise(video::runtime_bitrate_request_t {request_id, requested_bitrate_kbps});
++    });
++
+     server->map(packetTypes[IDX_INVALIDATE_REF_FRAMES], [&](session_t *session, const std::string_view &payload) {
+       auto frames = (std::int64_t *) payload.data();
+       auto firstFrame = frames[0];
+@@ -1119,6 +1200,13 @@
+ 
+               send_hdr_mode(session, std::move(hdr_info));
+             }
++
++            auto &runtime_bitrate_ack_queue = session->control.runtime_bitrate_ack_queue;
++            while (session->control.peer && runtime_bitrate_ack_queue->peek()) {
++              if (auto ack = runtime_bitrate_ack_queue->pop(0ms)) {
++                send_runtime_settings_ack(session, *ack);
++              }
++            }
+           }
+ 
+           ++pos;
+@@ -1997,6 +2085,7 @@
+       session->control.connect_data = launch_session.control_connect_data;
+       session->control.feedback_queue = mail->queue<platf::gamepad_feedback_msg_t>(mail::gamepad_feedback);
+       session->control.hdr_queue = mail->event<video::hdr_info_t>(mail::hdr);
++      session->control.runtime_bitrate_ack_queue = mail->event<video::runtime_bitrate_ack_t>(mail::runtime_bitrate_ack);
+       session->control.legacy_input_enc_iv = launch_session.iv;
+       session->control.cipher = crypto::cipher::gcm_t {
+         launch_session.gcm_key,
+@@ -2004,6 +2093,7 @@
+       };
+ 
+       session->video.idr_events = mail->event<bool>(mail::idr);
++      session->video.runtime_bitrate_events = mail->event<video::runtime_bitrate_request_t>(mail::runtime_bitrate);
+       session->video.invalidate_ref_frames_events = mail->event<std::pair<int64_t, int64_t>>(mail::invalidate_ref_frames);
+       session->video.lowseq = 0;
+       session->video.ping_payload = launch_session.av_ping_payload;
+diff -ruN source-link/src/video.cpp src/src/video.cpp
+--- source-link/src/video.cpp	1969-12-31 17:00:01.000000000 -0700
++++ src/src/video.cpp	2026-05-25 20:46:45.298443236 -0600
+@@ -346,6 +346,36 @@
+       return device->convert(img);
+     }
+ 
++    std::uint16_t update_runtime_bitrate(std::uint32_t bitrate_kbps, int framerate, std::uint32_t &applied_bitrate_kbps) override {
++      auto bitrate = static_cast<int64_t>(bitrate_kbps) * 1000;
++      auto buffer_size = framerate > 0 ? bitrate / framerate : bitrate;
++
++      avcodec_ctx->bit_rate = bitrate;
++      avcodec_ctx->rc_max_rate = bitrate;
++      if (avcodec_ctx->rc_min_rate > 0) {
++        avcodec_ctx->rc_min_rate = bitrate;
++      }
++      avcodec_ctx->rc_buffer_size = buffer_size;
++
++      int opt_b = av_opt_set_int(avcodec_ctx.get(), "b", bitrate, AV_OPT_SEARCH_CHILDREN);
++      int opt_bitrate = av_opt_set_int(avcodec_ctx.get(), "bit_rate", bitrate, AV_OPT_SEARCH_CHILDREN);
++      int opt_maxrate = av_opt_set_int(avcodec_ctx.get(), "maxrate", bitrate, AV_OPT_SEARCH_CHILDREN);
++      int opt_bufsize = av_opt_set_int(avcodec_ctx.get(), "bufsize", buffer_size, AV_OPT_SEARCH_CHILDREN);
++
++      applied_bitrate_kbps = bitrate_kbps;
++      BOOST_LOG(info)
++        << "live-settings-mvp: avcodec runtime bitrate update requested_kbps="sv << bitrate_kbps
++        << " bit_rate="sv << avcodec_ctx->bit_rate
++        << " rc_max_rate="sv << avcodec_ctx->rc_max_rate
++        << " rc_min_rate="sv << avcodec_ctx->rc_min_rate
++        << " rc_buffer_size="sv << avcodec_ctx->rc_buffer_size
++        << " opt_b="sv << opt_b
++        << " opt_bit_rate="sv << opt_bitrate
++        << " opt_maxrate="sv << opt_maxrate
++        << " opt_bufsize="sv << opt_bufsize;
++      return 0;
++    }
++
+     void request_idr_frame() override {
+       if (device && device->frame) {
+         auto &frame = device->frame;
+@@ -430,6 +460,8 @@
+     safe::mail_raw_t::event_t<bool> shutdown_event;
+     safe::mail_raw_t::queue_t<packet_t> packets;
+     safe::mail_raw_t::event_t<bool> idr_events;
++    safe::mail_raw_t::event_t<runtime_bitrate_request_t> runtime_bitrate_events;
++    safe::mail_raw_t::event_t<runtime_bitrate_ack_t> runtime_bitrate_ack_events;
+     safe::mail_raw_t::event_t<hdr_info_t> hdr_events;
+     safe::mail_raw_t::event_t<input::touch_port_t> touch_port_events;
+ 
+@@ -464,7 +496,9 @@
+     encode_session_ctx_queue_t encode_session_ctx_queue {30};
+   };
+ 
+-  int start_capture_sync(capture_thread_sync_ctx_t &ctx);
++  std::unique_ptr<platf::encode_device_t> make_encode_device(platf::display_t &disp, const encoder_t &encoder, const config_t &config);
++
++int start_capture_sync(capture_thread_sync_ctx_t &ctx);
+   void end_capture_sync(capture_thread_sync_ctx_t &ctx);
+   int start_capture_async(capture_thread_async_ctx_t &ctx);
+   void end_capture_async(capture_thread_async_ctx_t &ctx);
+@@ -1909,6 +1943,8 @@
+     auto shutdown_event = mail->event<bool>(mail::shutdown);
+     auto packets = mail::man->queue<packet_t>(mail::video_packets);
+     auto idr_events = mail->event<bool>(mail::idr);
++    auto runtime_bitrate_events = mail->event<runtime_bitrate_request_t>(mail::runtime_bitrate);
++    auto runtime_bitrate_ack_events = mail->event<runtime_bitrate_ack_t>(mail::runtime_bitrate_ack);
+     auto invalidate_ref_frames_events = mail->event<std::pair<int64_t, int64_t>>(mail::invalidate_ref_frames);
+ 
+     {
+@@ -1947,6 +1983,45 @@
+         idr_events->pop();
+       }
+ 
++      while (runtime_bitrate_events->peek()) {
++        if (auto request = runtime_bitrate_events->pop(0ms)) {
++          std::uint32_t applied_bitrate_kbps = config.bitrate;
++          std::uint16_t status = 1;
++
++          auto updated_config = config;
++          updated_config.bitrate = request->bitrate_kbps;
++          auto replacement_encode_device = make_encode_device(*disp, encoder, updated_config);
++          if (replacement_encode_device) {
++            auto replacement_session = make_encode_session(disp.get(), encoder, updated_config, disp->width, disp->height, std::move(replacement_encode_device));
++            auto dummy_img = disp->alloc_img();
++            if (replacement_session && dummy_img && !disp->dummy_img(dummy_img.get()) && !replacement_session->convert(*dummy_img)) {
++              session = std::move(replacement_session);
++              config = updated_config;
++              applied_bitrate_kbps = request->bitrate_kbps;
++              status = 0;
++              requested_idr_frame = true;
++              BOOST_LOG(info)
++                << "live-settings-mvp: async encoder restarted for runtime bitrate request_id="sv << request->request_id
++                << " applied_kbps="sv << applied_bitrate_kbps;
++            }
++          }
++
++          if (status != 0) {
++            status = session->update_runtime_bitrate(request->bitrate_kbps, config.framerate, applied_bitrate_kbps);
++            if (status == 0) {
++              config.bitrate = applied_bitrate_kbps;
++              requested_idr_frame = true;
++            }
++          }
++          BOOST_LOG(info)
++            << "live-settings-mvp: capture_sync runtime bitrate request_id="sv << request->request_id
++            << " requested_kbps="sv << request->bitrate_kbps
++            << " applied_kbps="sv << applied_bitrate_kbps
++            << " status="sv << status;
++          runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, 1, status, applied_bitrate_kbps});
++        }
++      }
++
+       if (requested_idr_frame) {
+         session->request_idr_frame();
+       }
+@@ -2195,6 +2270,46 @@
+             ctx->idr_events->pop();
+           }
+ 
++          while (ctx->runtime_bitrate_events->peek()) {
++            if (auto request = ctx->runtime_bitrate_events->pop(0ms)) {
++              std::uint32_t applied_bitrate_kbps = ctx->config.bitrate;
++              std::uint16_t status = 1;
++
++              auto updated_config = ctx->config;
++              updated_config.bitrate = request->bitrate_kbps;
++              auto replacement_encode_device = make_encode_device(*disp, encoder, updated_config);
++              if (replacement_encode_device) {
++                ctx->config = updated_config;
++                auto replacement_session = make_synced_session(disp.get(), encoder, *img, *ctx);
++                if (replacement_session) {
++                  pos->session = std::move(replacement_session->session);
++                  pos->session->request_idr_frame();
++                  applied_bitrate_kbps = request->bitrate_kbps;
++                  status = 0;
++                  BOOST_LOG(info)
++                    << "live-settings-mvp: sync encoder restarted for runtime bitrate request_id="sv << request->request_id
++                    << " applied_kbps="sv << applied_bitrate_kbps;
++                } else {
++                  ctx->config.bitrate = applied_bitrate_kbps;
++                }
++              }
++
++              if (status != 0) {
++                status = pos->session->update_runtime_bitrate(request->bitrate_kbps, ctx->config.framerate, applied_bitrate_kbps);
++                if (status == 0) {
++                  ctx->config.bitrate = applied_bitrate_kbps;
++                  pos->session->request_idr_frame();
++                }
++              }
++              BOOST_LOG(info)
++                << "live-settings-mvp: async runtime bitrate request_id="sv << request->request_id
++                << " requested_kbps="sv << request->bitrate_kbps
++                << " applied_kbps="sv << applied_bitrate_kbps
++                << " status="sv << status;
++              ctx->runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, 1, status, applied_bitrate_kbps});
++            }
++          }
++
+           if (frame_captured && pos->session->convert(*img)) {
+             BOOST_LOG(error) << "Could not convert image"sv;
+             ctx->shutdown_event->raise(true);
+@@ -2377,6 +2492,8 @@
+         mail->event<bool>(mail::shutdown),
+         mail::man->queue<packet_t>(mail::video_packets),
+         std::move(idr_events),
++        mail->event<runtime_bitrate_request_t>(mail::runtime_bitrate),
++        mail->event<runtime_bitrate_ack_t>(mail::runtime_bitrate_ack),
+         mail->event<hdr_info_t>(mail::hdr),
+         mail->event<input::touch_port_t>(mail::touch_port),
+         config,
+diff -ruN source-link/src/video.h src/src/video.h
+--- source-link/src/video.h	1969-12-31 17:00:01.000000000 -0700
++++ src/src/video.h	2026-05-25 20:13:26.037451749 -0600
+@@ -4,6 +4,9 @@
+  */
+ #pragma once
+ 
++// standard includes
++#include <cstdint>
++
+ // local includes
+ #include "input.h"
+ #include "platform/common.h"
+@@ -20,6 +23,18 @@
+ namespace video {
+ 
+   /* Encoding configuration requested by remote client */
++  struct runtime_bitrate_request_t {
++    std::uint32_t request_id;
++    std::uint32_t bitrate_kbps;
++  };
++
++  struct runtime_bitrate_ack_t {
++    std::uint32_t request_id;
++    std::uint16_t operation;
++    std::uint16_t status;
++    std::uint32_t applied_bitrate_kbps;
++  };
++
+   struct config_t {
+     int width;  // Video width in pixels
+     int height;  // Video height in pixels
+@@ -207,6 +222,11 @@
+     virtual void request_normal_frame() = 0;
+ 
+     virtual void invalidate_ref_frames(int64_t first_frame, int64_t last_frame) = 0;
++
++    virtual std::uint16_t update_runtime_bitrate(std::uint32_t bitrate_kbps, int framerate, std::uint32_t &applied_bitrate_kbps) {
++      applied_bitrate_kbps = bitrate_kbps;
++      return 1;
++    }
+   };
+ 
+   // encoders

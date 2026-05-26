@@ -384,6 +384,11 @@
           inherit nixpkgs system;
         };
 
+        sunshineKorri = pkgs.callPackage ./packages/sunshine-korri/package.nix { };
+        moonlightEmbeddedKorri = pkgs.callPackage ./packages/moonlight-embedded-korri/package.nix {
+          inherit nix-on-rocks;
+        };
+
         korriHeadlessSystem = korriImages.mkHeadlessSystem {
           platformModules = [ ./nix/images/platforms/x86.nix ];
         };
@@ -419,6 +424,8 @@
           korri-cli = korriCli;
           korri-server = korriServer;
           korri-headless-source = korriHeadlessSource;
+          sunshine-korri = sunshineKorri;
+          moonlight-embedded-korri = moonlightEmbeddedKorri;
         }
         // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
           electrobun-cli = electrobunBinaries.cli;
