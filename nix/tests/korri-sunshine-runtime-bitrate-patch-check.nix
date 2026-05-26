@@ -120,6 +120,7 @@ let
     ))
     (check "Sunshine runtime capability support is gated by active session encoder facts" (
       contains "auto h264_session = session->config.monitor.videoFormat == 0" patch
+      && contains "auto vaapi_requested = config::video.encoder == \"vaapi\"sv" patch
       && contains "auto runtime_supported = enabled && h264_session && vaapi_requested" patch
       && contains "std::uint16_t reason = enabled ? video::RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER" patch
     ))
@@ -152,6 +153,12 @@ let
       contains "boost::endian::little_uint16_at reason" patch
       && contains "ack.reason" patch
       && contains "reason=" patch
+    ))
+    (check "Sunshine runtime settings invalid payloads return invalid-payload without queueing" (
+      contains "payload.size() < sizeof(control_runtime_settings_resolution_request_t)" patch
+      && contains "payload.size() < sizeof(control_runtime_settings_request_t)" patch
+      && contains "rejection_reason = video::RUNTIME_SETTINGS_REASON_INVALID_PAYLOAD" patch
+      && contains "if (!accepted)" patch
     ))
     (check "Sunshine runtime resolution uses explicit width and height payloads" (
       contains "control_runtime_settings_request_prefix_t" patch
@@ -280,6 +287,8 @@ let
       && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_ALLOW_PROOF_GATED" moonlightPatch
       && contains "outcome=locally-rejected reason=proof-gated" moonlightPatch
       && contains "outcome=locally-rejected reason=unsupported-operation" moonlightPatch
+      && contains "detail=no-capability" moonlightPatch
+      && contains "outcome=locally-rejected reason=invalid-bounds" moonlightPatch
     ))
     (check "Moonlight runtime settings command state records timeout no-ack outcomes" (
       contains "SS_RUNTIME_SETTINGS_MVP_TIMEOUT_MS" moonlightPatch
@@ -290,6 +299,11 @@ let
       contains "outcome=stale-ack-observed reason=stale-ack" moonlightPatch
       && contains "if (runtime_settings_mvp_record_ack(requestId, operation, status, reason))" moonlightPatch
       && contains "runtime_settings_mvp_record_current_applied" moonlightPatch
+    ))
+    (check "Moonlight runtime settings records stream-ended terminal outcomes" (
+      contains "runtime_settings_mvp_record_stream_ended" moonlightPatch
+      && contains "outcome=stream-ended reason=stream-ended" moonlightPatch
+      && contains "state->state = SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE_TERMINAL" moonlightPatch
     ))
     (check "Moonlight one-shot runtime settings sender refuses ambiguous bitrate FPS or resolution input" (
       contains "set only one runtime settings value: bitrate, fps, or resolution" moonlightPatch

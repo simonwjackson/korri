@@ -97,7 +97,7 @@ index f56892d..47bfe0d 100644
 +    }
 +
 +    auto h264_session = session->config.monitor.videoFormat == 0;
-+    auto vaapi_requested = config::video.encoder.empty() || config::video.encoder == "vaapi"sv;
++    auto vaapi_requested = config::video.encoder == "vaapi"sv;
 +    auto runtime_supported = enabled && h264_session && vaapi_requested;
 +    std::uint32_t supported_operations = 0;
 +    std::uint32_t proof_gated_operations = 0;
