@@ -277,6 +277,19 @@ let
     };
   };
 
+  # Cross-tree assertion: streaming.enable with services.sunshine.enable
+  # explicitly off must fail (korri-sunshine.service depends on the
+  # upstream module's config rendering + supporting plumbing).
+  streamingWithSunshineDisabled = evaluateWith (
+    lib.recursiveUpdate streamingPrereqs {
+      services.korri.server = {
+        enable = true;
+        streaming.enable = true;
+      };
+      services.sunshine.enable = lib.mkForce false;
+    }
+  );
+
   # New: streaming.enable does NOT auto-enable input.inputd (the local
   # kiosk bridge). Streaming hosts (aka) use input.provider directly.
   streamingDoesNotEnableInputd = evaluateWith (
@@ -581,6 +594,62 @@ let
     ))
     (check "streaming default: host can override gamepad backend (mkDefault precedence)" (
       (sunshineSettings streamingHostGamepadOverride).gamepad or null == "ds5"
+    ))
+
+    # ---- Korri-owned system-mode Sunshine unit
+    (check "streaming.enable defaults services.sunshine.enable to true" (
+      streamingDefaultGamepad.services.sunshine.enable
+    ))
+    (check "streaming.enable forces services.sunshine.autoStart to false" (
+      streamingDefaultGamepad.services.sunshine.autoStart == false
+    ))
+    (check "streaming.enable emits systemd.services.korri-sunshine" (
+      streamingDefaultGamepad.systemd.services ? korri-sunshine
+    ))
+    (check "korri-sunshine unit is boot-scoped (wantedBy multi-user.target)" (
+      streamingDefaultGamepad.systemd.services.korri-sunshine.wantedBy or [ ] == [ "multi-user.target" ]
+    ))
+    (check "korri-sunshine requires korri-compositor.service" (
+      builtins.elem "korri-compositor.service" (
+        streamingDefaultGamepad.systemd.services.korri-sunshine.requires or [ ]
+      )
+    ))
+    (check "korri-sunshine is ordered After korri-compositor.service" (
+      builtins.elem "korri-compositor.service" (
+        streamingDefaultGamepad.systemd.services.korri-sunshine.after or [ ]
+      )
+    ))
+    (check "korri-sunshine ExecStart points at sunshine-korri" (
+      lib.hasInfix "sunshine-korri" (
+        streamingDefaultGamepad.systemd.services.korri-sunshine.serviceConfig.ExecStart or ""
+      )
+    ))
+    (check "korri-sunshine ExecStart includes a rendered sunshine.conf" (
+      lib.hasInfix "sunshine.conf" (
+        streamingDefaultGamepad.systemd.services.korri-sunshine.serviceConfig.ExecStart or ""
+      )
+    ))
+    (check "korri-sunshine ExecStartPre waits for the wayland socket" (
+      lib.hasInfix "korri-sunshine-wait-for-wayland" (
+        streamingDefaultGamepad.systemd.services.korri-sunshine.serviceConfig.ExecStartPre or ""
+      )
+    ))
+    (check "korri-sunshine runs as the compositor user (root in streamingPrereqs)" (
+      streamingDefaultGamepad.systemd.services.korri-sunshine.serviceConfig.User or null == "root"
+    ))
+    (check "korri-sunshine inherits WAYLAND_DISPLAY = wayland-1 from compositor" (
+      (streamingDefaultGamepad.systemd.services.korri-sunshine.environment or { }).WAYLAND_DISPLAY or null
+      == "wayland-1"
+    ))
+    (check "korri-sunshine inherits XDG_RUNTIME_DIR from compositor" (
+      lib.hasPrefix "/run/" (
+        (streamingDefaultGamepad.systemd.services.korri-sunshine.environment or { }).XDG_RUNTIME_DIR or ""
+      )
+    ))
+    (check "streaming.enable + services.sunshine.enable = false: assertion fires" (
+      builtins.any (m: lib.hasInfix "services.sunshine.enable = true" m) (
+        korriFailedAssertionMessages streamingWithSunshineDisabled
+      )
     ))
 
     # ---- uinput now owned by input.provider, gameStream defaults to NOT loading it

@@ -516,6 +516,22 @@ in
           via InputPlumber) so Sunshine can synthesize streamed controllers.
         '';
       }
+      # The Korri-owned korri-sunshine.service reuses upstream's rendered
+      # sunshine.conf / apps.json plumbing, firewall, udev rules, avahi mDNS
+      # publisher, and uinput kernel-module load. Those only land when the
+      # upstream module is enabled. We default it to true (see below) but a
+      # host that explicitly disables it leaves korri-sunshine without
+      # discovery, firewall, or input plumbing.
+      {
+        assertion = !cfg.streaming.enable || (config.services.sunshine.enable or false);
+        message = ''
+          services.korri.server.streaming.enable = true requires
+          services.sunshine.enable = true. The Korri-owned korri-sunshine.service
+          depends on the upstream sunshine module for config rendering,
+          firewall ports, /dev/uinput udev rules, the avahi mDNS publisher,
+          and the uinput kernel module load.
+        '';
+      }
       {
         assertion = !hasPublicApiBaseUrl || !publicApiBaseUrlHasWhitespace;
         message = "services.korri.server.publicApiBaseUrl must not contain whitespace.";
@@ -587,6 +603,97 @@ in
     # passthrough opt-in once uhid is wired) still win.
     services.sunshine.settings.gamepad = mkIf cfg.streaming.enable (lib.mkDefault "x360");
 
+    # Default Sunshine itself to the Korri downstream build (carries the
+    # runtime-bitrate-restart MVP patch) whenever streaming is on. Priority
+    # 900 sits between `mkDefault` (1000, used by nixpkgs' sunshine module to
+    # set `pkgs.sunshine`) and any explicit host assignment, so callers that
+    # really want stock nixpkgs Sunshine can override with a normal
+    # assignment. Downstream flakes that import this module via
+    # `inputs.korri.nixosModules.korri-server` (or the aggregate `korri`)
+    # get the patched build without composing the overlay themselves.
+    services.sunshine.package = mkIf cfg.streaming.enable (
+      lib.mkOverride 900 packagesForSystem.sunshine-korri
+    );
+
+    # On a streaming-role host we own the Sunshine lifecycle ourselves via
+    # `systemd.services.korri-sunshine` (see below). Upstream's
+    # `systemd.user.services.sunshine` unit is gated on a logged-in
+    # graphical session, which never appears on a headless appliance.
+    # Force-disable its autostart so the user unit stays defined (for
+    # ad-hoc debugging) but never tries to claim sunshine's ports.
+    services.sunshine.autoStart = mkIf cfg.streaming.enable (lib.mkForce false);
+
+    # Default-enable the upstream module so we inherit its supporting
+    # plumbing: sunshine.conf + apps.json formatters, firewall ports, udev
+    # rules for /dev/uinput, the avahi mDNS publisher, and the uinput
+    # kernel module load. Hosts can still disable explicitly.
+    services.sunshine.enable = mkIf cfg.streaming.enable (lib.mkDefault true);
+
+    # Korri-owned system unit that runs Sunshine inside the
+    # korri-compositor's Sway session. Mirrors the architecture of
+    # korri-compositor.service: boot-scoped, runs as the compositor user,
+    # inherits the compositor's WAYLAND_DISPLAY / XDG_RUNTIME_DIR /
+    # DBUS_SESSION_BUS_ADDRESS / HOME so it can attach to Sway. The Sunshine
+    # config file is rendered locally with the same `pkgs.formats.keyValue`
+    # formatter the upstream module uses, which is content-addressed and
+    # therefore produces an identical store path for identical settings.
+    systemd.services.korri-sunshine = mkIf cfg.streaming.enable (
+      let
+        compositorCfg = config.services.korri.compositor;
+        compositorUnit = config.systemd.services.korri-compositor;
+        compositorEnv = compositorUnit.environment or { };
+        sunshineCfg = config.services.sunshine;
+        sunshineBin =
+          if sunshineCfg.capSysAdmin then
+            "${config.security.wrapperDir}/sunshine"
+          else
+            lib.getExe sunshineCfg.package;
+        sunshineSettingsFormat = pkgs.formats.keyValue { };
+        sunshineConfigFile = sunshineSettingsFormat.generate "sunshine.conf" sunshineCfg.settings;
+        waitForWaylandSocket = pkgs.writeShellScript "korri-sunshine-wait-for-wayland" ''
+          set -eu
+          : "''${XDG_RUNTIME_DIR:?korri-sunshine: XDG_RUNTIME_DIR is required}"
+          : "''${WAYLAND_DISPLAY:?korri-sunshine: WAYLAND_DISPLAY is required}"
+          socket="$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
+          for _ in $(seq 1 100); do
+            if [ -S "$socket" ]; then
+              exit 0
+            fi
+            sleep 0.1
+          done
+          echo "korri-sunshine: timed out waiting for $socket after 10s" >&2
+          exit 1
+        '';
+      in
+      {
+        description = "Korri Sunshine game stream host";
+        wantedBy = [ "multi-user.target" ];
+        wants = [
+          "korri-compositor.service"
+          "network.target"
+        ];
+        requires = [ "korri-compositor.service" ];
+        after = [
+          "korri-compositor.service"
+          "network.target"
+        ];
+        environment = compositorEnv;
+        unitConfig = {
+          StartLimitBurst = 5;
+          StartLimitIntervalSec = 500;
+        };
+        serviceConfig = {
+          ExecStartPre = "${waitForWaylandSocket}";
+          ExecStart = "${sunshineBin} ${sunshineConfigFile}";
+          Restart = "on-failure";
+          RestartSec = 5;
+          User = compositorCfg.user;
+          Group = if compositorCfg.group != null then compositorCfg.group else compositorCfg.user;
+          WorkingDirectory = compositorCfg.home;
+        };
+      }
+    );
+
     systemd.tmpfiles.settings =
       mkIf (isSystemMode && cfg.streaming.enable && isDefaultSystemRuntimeDir)
         {
@@ -612,50 +719,48 @@ in
       };
     };
 
-    systemd.services = mkIf isSystemMode {
-      korri-server = {
-        description = "Korri headless server control plane";
-        wantedBy = [ "multi-user.target" ];
-        after = [ "network.target" ];
-        environment = serverEnv;
-        serviceConfig = {
-          ExecStartPre = [
-            "${pkgs.coreutils}/bin/install -d -m 700 ${cfg.library.root}"
-            "${pkgs.coreutils}/bin/install -d -m 700 ${bunTranspilerCacheDir}"
-          ];
-          ExecStart = "${cfg.package}/bin/korri-server";
-          Restart = "on-failure";
-          RestartSec = 2;
-          User = cfg.user;
-          Group = if cfg.group != null then cfg.group else cfg.user;
-          StateDirectory = serverStateDirName;
-          StateDirectoryMode = "0700";
-          CacheDirectory = serverCacheDirName;
-          CacheDirectoryMode = "0700";
-          NoNewPrivileges = true;
-          PrivateTmp = true;
-          ProtectSystem = "strict";
-          ProtectHome = "read-only";
-          ProtectKernelTunables = true;
-          ProtectKernelModules = true;
-          ProtectControlGroups = true;
-          RestrictSUIDSGID = true;
-          RestrictRealtime = true;
-          LockPersonality = true;
-          MemoryDenyWriteExecute = false;
-          SystemCallArchitectures = "native";
-          RestrictAddressFamilies = [
-            "AF_UNIX"
-            "AF_INET"
-            "AF_INET6"
-            "AF_NETLINK"
-          ];
-        }
-        // optionalAttrs isDefaultSystemRuntimeDir {
-          RuntimeDirectory = systemRuntimeDirName;
-          RuntimeDirectoryMode = "0700";
-          RuntimeDirectoryPreserve = "yes";
-        };
+    systemd.services.korri-server = mkIf isSystemMode {
+      description = "Korri headless server control plane";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "network.target" ];
+      environment = serverEnv;
+      serviceConfig = {
+        ExecStartPre = [
+          "${pkgs.coreutils}/bin/install -d -m 700 ${cfg.library.root}"
+          "${pkgs.coreutils}/bin/install -d -m 700 ${bunTranspilerCacheDir}"
+        ];
+        ExecStart = "${cfg.package}/bin/korri-server";
+        Restart = "on-failure";
+        RestartSec = 2;
+        User = cfg.user;
+        Group = if cfg.group != null then cfg.group else cfg.user;
+        StateDirectory = serverStateDirName;
+        StateDirectoryMode = "0700";
+        CacheDirectory = serverCacheDirName;
+        CacheDirectoryMode = "0700";
+        NoNewPrivileges = true;
+        PrivateTmp = true;
+        ProtectSystem = "strict";
+        ProtectHome = "read-only";
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectControlGroups = true;
+        RestrictSUIDSGID = true;
+        RestrictRealtime = true;
+        LockPersonality = true;
+        MemoryDenyWriteExecute = false;
+        SystemCallArchitectures = "native";
+        RestrictAddressFamilies = [
+          "AF_UNIX"
+          "AF_INET"
+          "AF_INET6"
+          "AF_NETLINK"
+        ];
+      }
+      // optionalAttrs isDefaultSystemRuntimeDir {
+        RuntimeDirectory = systemRuntimeDirName;
+        RuntimeDirectoryMode = "0700";
+        RuntimeDirectoryPreserve = "yes";
       };
     };
   };

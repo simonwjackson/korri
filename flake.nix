@@ -826,6 +826,20 @@
         };
       in
       {
+        # Top-level overlays so downstream flakes (mountainous host configs,
+        # bespoke device images) can pick up the Korri-downstream Moonlight
+        # and Sunshine packages by adding `korri.overlays.default` to their
+        # own `nixpkgs.overlays`. Without this, consumers that build their
+        # own `pkgs` instance (e.g. mountainous's nixpkgs.lib.nixosSystem)
+        # never see the substitution and end up with stock nixpkgs sunshine
+        # / nix-on-rocks moonlight-embedded.
+        overlays = rec {
+          korri-packages = import ./nix/overlays/korri-packages.nix {
+            inherit nix-on-rocks;
+          };
+          default = korri-packages;
+        };
+
         nixosConfigurations = {
           korri-rocknix-kiosk-thor = rocknixThorSystem;
           korri-rocknix-kiosk-odin2portal = rocknixOdin2PortalSystem;
@@ -833,6 +847,23 @@
         };
 
         nixosModules = rec {
+          # Power-user opt-in: a module that wires the Korri substrate-package
+          # overlay into `nixpkgs.overlays`. Importing this module replaces
+          # `pkgs.sunshine` and `pkgs.moonlight-embedded` for the whole host.
+          # Avoid in evaluations where `nixpkgs.pkgs` is set externally (e.g.
+          # `pkgs.testers.runNixOSTest`), because that marks
+          # `nixpkgs.overlays` read-only. Day-to-day consumers do NOT need
+          # this: every Korri product module below already defaults the
+          # specific package options (`services.sunshine.package`,
+          # `rocknix.sm8550.moonlight.package`) it cares about to the Korri
+          # downstream builds, so the substitution happens through the option
+          # graph rather than through `pkgs` itself.
+          korri-nixpkgs-overlay = import ./nix/modules/korri-nixpkgs-overlay.nix {
+            overlay = import ./nix/overlays/korri-packages.nix {
+              inherit nix-on-rocks;
+            };
+          };
+
           korri-client = import ./nix/modules/korri-client.nix { korri = self; };
           korri-cli = import ./nix/modules/korri-cli.nix { korri = self; };
           korri-game-stream = import ./nix/modules/korri-game-stream.nix { korri = self; };

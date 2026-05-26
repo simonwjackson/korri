@@ -28,8 +28,25 @@
 let
   nixOnRocksMoonlightManifest = import "${nix-on-rocks}/packages/moonlight-embedded/manifest.nix";
 
-  # Keep the base SM8550/v4l2m2m Moonlight work in nix-on-rocks. Korri only
-  # carries Korri-owned patches here.
+  # The nix-on-rocks manifest pins its `version` to
+  # `<upstream>-sm8550-v4l2m2m` to telegraph the SM8550 hardware-decode
+  # patch lineage. That suffix reads as device-specific in store paths and
+  # logs, but the resulting binary actually supports every platform
+  # `moonlight-embedded` upstream supports — the SM8550 v4l2m2m platform
+  # is opt-in via `-platform v4l2m2m`, and the SDL software-decode +
+  # ffmpeg_drm paths work on any DRM-capable host (x86 desktop, aarch64
+  # handhelds, anything in between). Korri ships this build as the
+  # universal `pkgs.moonlight-embedded` substitute on every platform, so
+  # the version string is normalised back to the upstream Moonlight
+  # Embedded tag with a single `-korri` suffix. The SM8550 patch heritage
+  # stays discoverable through `nix-support/moonlight-embedded-korri/`
+  # manifest entries below.
+  upstreamMoonlightVersion = lib.head (
+    lib.splitString "-" nixOnRocksMoonlightManifest.version
+  );
+
+  # Keep the base v4l2m2m / DRM PRIME Moonlight work in nix-on-rocks. Korri
+  # only carries Korri-owned patches here.
   basePatchNames = [
     "0001-vendored-ffmpeg-drm-prime-pr932.patch"
     "0001a-fix-libdrm-cmake-find-and-main-help.patch"
@@ -43,7 +60,7 @@ let
 in
 stdenv.mkDerivation rec {
   pname = "moonlight-embedded-korri";
-  version = "${nixOnRocksMoonlightManifest.version}-korri";
+  version = "${upstreamMoonlightVersion}-korri";
 
   src = fetchFromGitHub {
     inherit (nixOnRocksMoonlightManifest.source) owner repo rev hash fetchSubmodules;
@@ -92,6 +109,8 @@ stdenv.mkDerivation rec {
     {
       printf '%s\n' 'pname=${pname}'
       printf '%s\n' 'version=${version}'
+      printf '%s\n' 'upstream-version=${upstreamMoonlightVersion}'
+      printf '%s\n' 'nix-on-rocks-manifest-version=${nixOnRocksMoonlightManifest.version}'
       printf '%s\n' 'source-rev=${nixOnRocksMoonlightManifest.source.rev}'
       printf '%s\n' 'base-patches=${lib.concatMapStringsSep " " (patch: patch.name) basePatches}'
       printf '%s\n' 'korri-patches=0004-add-absolutetouch-flag-for-tap-to-click.patch 0005-add-sunshine-runtime-settings-mvp.patch'

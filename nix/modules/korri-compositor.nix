@@ -2,6 +2,7 @@
 
 {
   config,
+  options,
   lib,
   pkgs,
   ...
@@ -10,6 +11,22 @@
 let
   cfg = config.services.korri.compositor;
   inputCfg = config.services.korri.input;
+  packagesForSystem = korri.packages.${pkgs.stdenv.hostPlatform.system} or { };
+  # `rocknix.sm8550.moonlight.package` is declared by
+  # `nix-on-rocks-guest.nixosModules.sm8550`. Hosts that import korri
+  # without that substrate (e.g. the x86 desktop / x86 kiosk configs, the
+  # live USB image, aka on mountainous) do not see the option, so we gate
+  # the default on its presence to avoid the module system's
+  # "option not declared" error. When it IS present (sobo via mountainous
+  # plus nix-on-rocks-guest, or korri's own rocknix-sm8550 platform module),
+  # korri defaults the package to the Korri downstream
+  # moonlight-embedded-korri build (which carries the absolute-touch and
+  # Sunshine runtime-settings MVP patches).
+  hasRocknixSm8550MoonlightOption =
+    options ? rocknix
+    && options.rocknix ? sm8550
+    && options.rocknix.sm8550 ? moonlight
+    && options.rocknix.sm8550.moonlight ? package;
   groupName =
     if cfg.group != null then
       cfg.group
@@ -86,6 +103,13 @@ let
       XDG_STATE_HOME = cfg.stateHome;
       XDG_DATA_HOME = cfg.dataHome;
       XDG_CONFIG_HOME = cfg.configHome;
+      # Pin Sway's Wayland socket name so peer system services
+      # (korri-sunshine for headless streaming hosts) can attach to it
+      # without sniffing the runtime dir. Sway honours WAYLAND_DISPLAY when
+      # set in its env and writes the socket at
+      # `$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY`. Hosts that need a different
+      # socket name override via services.korri.compositor.environment.
+      WAYLAND_DISPLAY = "wayland-1";
     }
     // lib.optionalAttrs cfg.kiosk.enable {
       KORRI_KIOSK = "1";
@@ -305,6 +329,21 @@ in
   };
 
   config = mkMerge [
+    # When `nix-on-rocks-guest.nixosModules.sm8550` is also in the eval
+    # (sobo on mountainous, korri-rocknix-kiosk-* internally), default the
+    # rocknix Moonlight package to the Korri downstream build. Priority 900
+    # wins against the substrate's `mkDefault` (1000) but still loses to any
+    # explicit host override, so a host that wants stock
+    # `moonlight-embedded` only needs a plain assignment to put it back.
+    #
+    # `lib.optionalAttrs` (not `lib.mkIf`) is required here: `mkIf` still
+    # surfaces the attribute path for module-system validation even when its
+    # condition is false, which would raise `option 'rocknix' does not
+    # exist` on hosts that did not import the rocknix substrate. Returning
+    # `{}` removes the attribute path entirely.
+    (lib.optionalAttrs hasRocknixSm8550MoonlightOption {
+      rocknix.sm8550.moonlight.package = lib.mkOverride 900 packagesForSystem.moonlight-embedded-korri;
+    })
     {
       # Cross-tree assertion lives outside the `mkIf cfg.enable` gate so it
       # fires when a host sets `compositor.kiosk.enable = true` without

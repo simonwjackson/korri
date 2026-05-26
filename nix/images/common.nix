@@ -2,11 +2,17 @@
   korri,
   nixpkgs,
   system,
-  # Overlays threaded into every nixosConfiguration we evaluate, so the
-  # Korri downstream Moonlight/Sunshine packages reach service-level
-  # defaults (`services.sunshine.package`, `services.korri.compositor.path`)
-  # without per-module rewrites. Callers in flake.nix pass the
-  # `nix/overlays/korri-packages.nix` overlay here.
+  # Overlays threaded into every nixosConfiguration we build through this
+  # library. Used by korri's own configurations (korri-rocknix-kiosk-*,
+  # korri-kiosk, live USB) to apply the Korri substrate-package overlay so
+  # platform modules that read `pkgs.moonlight-embedded` resolve to the
+  # Korri downstream build.
+  #
+  # Downstream consumers (mountainous host configs) do NOT go through this
+  # library — they call `nixpkgs.lib.nixosSystem` directly with their own
+  # pkgs construction. The korri product modules they import default
+  # `services.sunshine.package` and `rocknix.sm8550.moonlight.package` at
+  # the option level, which is the seam that actually reaches those hosts.
   overlays ? [ ],
 }:
 let
