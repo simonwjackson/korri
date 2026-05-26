@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test"
-import { createForegroundSessionOwner } from "./foreground-session-owner"
+import type { ForegroundSessionState } from "@shared/stream/foreground-session-lifecycle"
+import {
+  createForegroundSessionOwner,
+  type ForegroundSessionAdapter,
+  type ForegroundSessionForegroundResult,
+  type ForegroundSessionStageResult,
+} from "./foreground-session-owner"
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -29,62 +35,98 @@ function createSession(id = "child-1") {
   }
 }
 
+type TestRequest = { readonly id: string; readonly hostId?: string }
+
+type TestPrepared = { readonly gameId: string }
+
+type TestSpawned = {
+  readonly command: string
+  readonly session: ReturnType<typeof createSession>
+}
+
+type TestLaunchResult = { readonly status: "launched"; readonly gameId: string }
+
+type TestAdapter = ForegroundSessionAdapter<
+  TestRequest,
+  TestPrepared,
+  TestSpawned,
+  TestLaunchResult
+>
+
 function createAdapter(options: {
-  readonly prepare?: () => Promise<{ readonly gameId: string }>
-  readonly spawn?: (
-    prepared: { readonly gameId: string },
-  ) => Promise<{
-    readonly command: string
-    readonly session: ReturnType<typeof createSession>
-  }>
-  readonly foreground?: () => Promise<
-    | { readonly status: "ok"; readonly evidence?: Record<string, unknown> }
-    | { readonly status: "warning"; readonly message: string }
+  readonly prepare?: () => Promise<
+    TestPrepared | ForegroundSessionStageResult<TestPrepared>
   >
+  readonly spawn?: (
+    prepared: TestPrepared,
+  ) => Promise<TestSpawned | ForegroundSessionStageResult<TestSpawned>>
+  readonly foreground?: () => Promise<ForegroundSessionForegroundResult>
 } = {}) {
   const calls: string[] = []
   const session = createSession()
-  return {
-    calls,
-    session,
-    adapter: {
-      prepare: async () => {
-        calls.push("prepare")
+  const adapter: TestAdapter = {
+    prepare: async () => {
+      calls.push("prepare")
+      const prepared = await options.prepare?.()
+      if (!prepared) {
         return {
           status: "ok" as const,
-          value: options.prepare
-            ? await options.prepare()
-            : { gameId: "gba/wario-land-4" },
+          value: { gameId: "gba/wario-land-4" },
           evidence: { stage: "prepare" },
         }
-      },
-      spawn: async (prepared: { readonly gameId: string }) => {
-        calls.push("spawn")
+      }
+      if ("status" in prepared) return prepared
+      return {
+        status: "ok" as const,
+        value: prepared,
+        evidence: { stage: "prepare" },
+      }
+    },
+    spawn: async (prepared: TestPrepared) => {
+      calls.push("spawn")
+      const spawned = await options.spawn?.(prepared)
+      if (!spawned) {
         return {
           status: "ok" as const,
-          value: options.spawn
-            ? await options.spawn(prepared)
-            : { command: "moonlight", session },
+          value: { command: "moonlight", session },
           evidence: { stage: "spawn" },
         }
-      },
-      foreground: async () => {
-        calls.push("foreground")
-        return options.foreground
-          ? await options.foreground()
-          : { status: "ok" as const, evidence: { repaired: true } }
-      },
-      launched: (input: { readonly prepared: { readonly gameId: string } }) => ({
-        status: "launched" as const,
-        gameId: input.prepared.gameId,
-      }),
+      }
+      if ("status" in spawned) return spawned
+      return {
+        status: "ok" as const,
+        value: spawned,
+        evidence: { stage: "spawn" },
+      }
     },
+    foreground: async () => {
+      calls.push("foreground")
+      return (
+        (await options.foreground?.()) ?? {
+          status: "ok" as const,
+          evidence: { repaired: true },
+        }
+      )
+    },
+    launched: (input: { readonly prepared: TestPrepared }) => ({
+      status: "launched" as const,
+      gameId: input.prepared.gameId,
+    }),
   }
+
+  return { calls, session, adapter }
 }
 
-const request = { id: "gba/wario-land-4", hostId: "aka" }
+const request: TestRequest = { id: "gba/wario-land-4", hostId: "aka" }
 
-function createOwner(adapter: ReturnType<typeof createAdapter>["adapter"], options = {}) {
+function createOwner(
+  adapter: TestAdapter,
+  options: {
+    readonly onStateEntered?: (
+      state: ForegroundSessionState,
+    ) => void | Promise<void>
+  } = {},
+) {
   return createForegroundSessionOwner({
     requestIdentity: input => ({
       requestId: input.id,
@@ -114,7 +156,7 @@ describe("foreground session owner", () => {
   })
 
   it("rejects a second launch during preparing without invoking the adapter again", async () => {
-    const prepare = deferred<{ readonly gameId: string }>()
+    const prepare = deferred<ForegroundSessionStageResult<TestPrepared>>()
     const setup = createAdapter({ prepare: () => prepare.promise })
     const owner = createOwner(setup.adapter)
 
@@ -125,12 +167,15 @@ describe("foreground session owner", () => {
     expect(second._tag).toBe("Busy")
     expect(setup.calls).toEqual(["prepare"])
 
-    prepare.resolve({ gameId: "gba/wario-land-4" })
+    prepare.resolve({
+      status: "ok",
+      value: { gameId: "gba/wario-land-4" },
+    })
     await first
   })
 
   it("rejects during spawning and foregrounding without extra adapter invocation", async () => {
-    const spawn = deferred<{ command: string; session: ReturnType<typeof createSession> }>()
+    const spawn = deferred<ForegroundSessionStageResult<TestSpawned>>()
     const setup = createAdapter({ spawn: () => spawn.promise })
     const owner = createOwner(setup.adapter)
 
@@ -142,7 +187,10 @@ describe("foreground session owner", () => {
     expect(duringSpawn._tag).toBe("Busy")
     expect(setup.calls).toEqual(["prepare", "spawn"])
 
-    spawn.resolve({ command: "moonlight", session: setup.session })
+    spawn.resolve({
+      status: "ok",
+      value: { command: "moonlight", session: setup.session },
+    })
     await first
 
     const foreground = deferred<{
@@ -225,11 +273,12 @@ describe("foreground session owner", () => {
   })
 
   it("records prepare and spawn failures then releases back to idle-ready", async () => {
-    const prepareFailure = createAdapter()
-    prepareFailure.adapter.prepare = async () => ({
-      status: "failed" as const,
-      message: "prepare failed",
-      evidence: { stage: "prepare" },
+    const prepareFailure = createAdapter({
+      prepare: async () => ({
+        status: "failed" as const,
+        message: "prepare failed",
+        evidence: { stage: "prepare" },
+      }),
     })
     const prepareOwner = createOwner(prepareFailure.adapter)
 
@@ -238,11 +287,12 @@ describe("foreground session owner", () => {
     await prepareOwner.whenIdle()
     expect(prepareOwner.status().state._tag).toBe("IdleReady")
 
-    const spawnFailure = createAdapter()
-    spawnFailure.adapter.spawn = async () => ({
-      status: "failed" as const,
-      message: "spawn failed",
-      evidence: { stage: "spawn" },
+    const spawnFailure = createAdapter({
+      spawn: async () => ({
+        status: "failed" as const,
+        message: "spawn failed",
+        evidence: { stage: "spawn" },
+      }),
     })
     const spawnOwner = createOwner(spawnFailure.adapter)
 
@@ -277,7 +327,7 @@ describe("foreground session owner", () => {
   })
 
   it("allows exactly one adapter invocation for two same-turn launches", async () => {
-    const prepare = deferred<{ readonly gameId: string }>()
+    const prepare = deferred<ForegroundSessionStageResult<TestPrepared>>()
     const setup = createAdapter({ prepare: () => prepare.promise })
     const owner = createOwner(setup.adapter)
 
@@ -288,7 +338,10 @@ describe("foreground session owner", () => {
     expect(secondResult._tag).toBe("Busy")
     await Promise.resolve()
     expect(setup.calls).toEqual(["prepare"])
-    prepare.resolve({ gameId: "gba/wario-land-4" })
+    prepare.resolve({
+      status: "ok",
+      value: { gameId: "gba/wario-land-4" },
+    })
     await first
   })
 
