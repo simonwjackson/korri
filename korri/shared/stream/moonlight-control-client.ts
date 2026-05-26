@@ -4,7 +4,6 @@ import {
   decodeMoonlightControlResponse,
   MOONLIGHT_CONTROL_PROTOCOL_LIMITS,
   type MoonlightControlEvent,
-  type MoonlightControlResponse,
   type MoonlightControlSuccessResponse,
 } from "./moonlight-control-protocol"
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
+import { createServer } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { createServer } from "node:net"
 import { connectMoonlightControl } from "./moonlight-control-client"
 import { MOONLIGHT_CONTROL_PROTOCOL_LIMITS } from "./moonlight-control-protocol"
 
