@@ -63,6 +63,64 @@ pkgs.runCommand "korri-module-identity-audit" { nativeBuildInputs = [ pkgs.gawk 
     return 0
   }
 
+  scan_nested_users() {
+    filtered="$1"
+    display="$2"
+    findings="$TMPDIR/nested-user-findings"
+
+    awk -v display="$display" '
+      function braceDelta(line, chars, charIndex, delta) {
+        delta = 0
+        split(line, chars, "")
+        for (charIndex in chars) {
+          if (chars[charIndex] == "{") delta++
+          if (chars[charIndex] == "}") delta--
+        }
+        return delta
+      }
+
+      function report(line) {
+        printf "%s:%s: forbidden literal nested user linger/uid: %s\n", display, NR, line
+        failed = 1
+      }
+
+      /users[.]users[[:space:]]*=/ {
+        inUsers = 1
+      }
+
+      inUsers && /(^|[{;])[[:space:]]*[a-z_][a-zA-Z0-9_-]*[[:space:]]*=[[:space:]]*[{].*(^|[^[:alnum:]_])(linger|uid)[[:space:]]*=/ {
+        report($0)
+      }
+
+      inUsers && !inLiteralUser && /^[[:space:]]*[a-z_][a-zA-Z0-9_-]*[[:space:]]*=[[:space:]]*[{]/ {
+        inLiteralUser = 1
+        literalStart = NR
+        literalDepth = braceDelta($0)
+      }
+
+      inLiteralUser && /^[[:space:]]*(linger|uid)[[:space:]]*=/ {
+        report($0)
+      }
+
+      inLiteralUser {
+        if (NR != literalStart) literalDepth += braceDelta($0)
+        if (literalDepth <= 0) inLiteralUser = 0
+      }
+
+      inUsers {
+        usersDepth += braceDelta($0)
+        if (usersDepth <= 0) inUsers = 0
+      }
+
+      END { exit failed }
+    ' "$filtered" > "$findings" || {
+      cat "$findings"
+      return 1
+    }
+
+    return 0
+  }
+
   audit_file() {
     file="$1"
     display="$2"
@@ -75,6 +133,7 @@ pkgs.runCommand "korri-module-identity-audit" { nativeBuildInputs = [ pkgs.gawk 
     scan_pattern "UID runtime path" '/run/user/[0-9]+' "$filtered" "$display" || failed=1
     scan_pattern "audio stack mutation" '(^|[^[:alnum:]_])services[.](pipewire|pulseaudio|jack)([^[:alnum:]_]|$)' "$filtered" "$display" || failed=1
     scan_pattern "literal user linger/uid" '(^|[^[:alnum:]_])users[.]users[.][a-z_][a-zA-Z0-9_-]*[[:space:]]*[.][[:space:]]*(linger|uid)[[:space:]]*=' "$filtered" "$display" || failed=1
+    scan_nested_users "$filtered" "$display" || failed=1
 
     return "$failed"
   }
@@ -130,6 +189,11 @@ pkgs.runCommand "korri-module-identity-audit" { nativeBuildInputs = [ pkgs.gawk 
   { services.pipewire.enable = true; }
   EOF
   expect_fail "$fixtures/audio-stack.nix" "fixtures/audio-stack.nix" "audio stack mutation"
+
+  cat > "$fixtures/nested-literal-user.nix" <<'EOF'
+  { users.users = { alice = { uid = 1000; }; }; }
+  EOF
+  expect_fail "$fixtures/nested-literal-user.nix" "fixtures/nested-literal-user.nix" "literal nested user linger/uid"
 
   cat > "$fixtures/runtime-dir.nix" <<'EOF'
   { environment.variables.XDG_RUNTIME_DIR = "/run/user/1000"; }
