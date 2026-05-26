@@ -95,15 +95,17 @@
        safe::mail_raw_t::event_t<std::pair<int64_t, int64_t>> invalidate_ref_frames_events;
  
        std::unique_ptr<platf::deinit_t> qos;
-@@ -402,6 +451,7 @@
+@@ -402,6 +451,9 @@
  
        platf::feedback_queue_t feedback_queue;
        safe::mail_raw_t::event_t<video::hdr_info_t> hdr_queue;
 +      safe::mail_raw_t::queue_t<video::runtime_bitrate_ack_t> runtime_bitrate_ack_queue;
++      std::uint32_t runtime_settings_applied_width;
++      std::uint32_t runtime_settings_applied_height;
      } control;
  
      std::uint32_t launch_session_id;
-@@ -885,6 +935,45 @@
+@@ -885,6 +937,50 @@
      return 0;
    }
  
@@ -124,6 +126,11 @@
 +    }
 +
 +    if (ack.operation == video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION) {
++      if (ack.status == video::RUNTIME_SETTINGS_STATUS_APPLIED) {
++        session->control.runtime_settings_applied_width = ack.applied_width;
++        session->control.runtime_settings_applied_height = ack.applied_height;
++      }
++
 +      control_runtime_settings_resolution_ack_t plaintext {};
 +      plaintext.header.type = packetTypes[IDX_RUNTIME_SETTINGS_ACK];
 +      plaintext.header.payloadLength = sizeof(control_runtime_settings_resolution_ack_t) - sizeof(control_header_v2);
@@ -149,7 +156,7 @@
    int send_hdr_mode(session_t *session, video::hdr_info_t hdr_info) {
      if (!session->control.peer) {
        BOOST_LOG(warning) << "Couldn't send HDR mode, still waiting for PING from Moonlight"sv;
-@@ -949,6 +1038,103 @@
+@@ -949,6 +1045,103 @@
        session->video.idr_events->raise(true);
      });
  
@@ -169,8 +176,8 @@
 +      std::uint32_t requested_height = 0;
 +      auto enabled_value = std::getenv("SUNSHINE_LIVE_SETTINGS_MVP");
 +      auto enabled = enabled_value != nullptr && std::string_view {enabled_value} == "1"sv;
-+      auto current_applied_width = (std::uint32_t) session->config.monitor.width;
-+      auto current_applied_height = (std::uint32_t) session->config.monitor.height;
++      auto current_applied_width = session->control.runtime_settings_applied_width;
++      auto current_applied_height = session->control.runtime_settings_applied_height;
 +      auto applied_value = operation == video::RUNTIME_SETTINGS_OPERATION_SET_FPS ?
 +                             (std::uint32_t) session->config.monitor.framerate :
 +                             (std::uint32_t) session->config.monitor.bitrate;
@@ -253,7 +260,7 @@
      server->map(packetTypes[IDX_INVALIDATE_REF_FRAMES], [&](session_t *session, const std::string_view &payload) {
        auto frames = (std::int64_t *) payload.data();
        auto firstFrame = frames[0];
-@@ -1119,6 +1305,13 @@
+@@ -1119,6 +1312,13 @@
  
                send_hdr_mode(session, std::move(hdr_info));
              }
@@ -267,15 +274,17 @@
            }
  
            ++pos;
-@@ -1997,6 +2190,7 @@
+@@ -1997,6 +2197,9 @@
        session->control.connect_data = launch_session.control_connect_data;
        session->control.feedback_queue = mail->queue<platf::gamepad_feedback_msg_t>(mail::gamepad_feedback);
        session->control.hdr_queue = mail->event<video::hdr_info_t>(mail::hdr);
 +      session->control.runtime_bitrate_ack_queue = mail->queue<video::runtime_bitrate_ack_t>(mail::runtime_bitrate_ack);
++      session->control.runtime_settings_applied_width = (std::uint32_t) session->config.monitor.width;
++      session->control.runtime_settings_applied_height = (std::uint32_t) session->config.monitor.height;
        session->control.legacy_input_enc_iv = launch_session.iv;
        session->control.cipher = crypto::cipher::gcm_t {
          launch_session.gcm_key,
-@@ -2004,6 +2198,7 @@
+@@ -2004,6 +2207,7 @@
        };
  
        session->video.idr_events = mail->event<bool>(mail::idr);

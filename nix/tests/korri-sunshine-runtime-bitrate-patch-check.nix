@@ -107,6 +107,13 @@ let
       && contains "RUNTIME_SETTINGS_STATUS_INVALID" patch
       && contains "std::uint64_t" patch
     ))
+    (check "Sunshine runtime resolution tracks applied dimensions for later acks" (
+      contains "runtime_settings_applied_width" patch
+      && contains "runtime_settings_applied_height" patch
+      && contains "session->control.runtime_settings_applied_width = (std::uint32_t) session->config.monitor.width" patch
+      && contains "auto current_applied_width = session->control.runtime_settings_applied_width" patch
+      && contains "ack.status == video::RUNTIME_SETTINGS_STATUS_APPLIED" patch
+    ))
     (check "Sunshine runtime resolution refreshes touch mapping only after apply" (
       contains "runtime resolution" patch
       && contains "touch_port" patch
