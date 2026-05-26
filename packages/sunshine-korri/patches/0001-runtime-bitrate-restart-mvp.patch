@@ -110,7 +110,7 @@ diff -ruN source-link/src/stream.cpp src/src/stream.cpp
    int send_hdr_mode(session_t *session, video::hdr_info_t hdr_info) {
      if (!session->control.peer) {
        BOOST_LOG(warning) << "Couldn't send HDR mode, still waiting for PING from Moonlight"sv;
-@@ -949,6 +994,42 @@
+@@ -949,6 +994,51 @@
        session->video.idr_events->raise(true);
      });
  
@@ -128,11 +128,25 @@ diff -ruN source-link/src/stream.cpp src/src/stream.cpp
 +      auto requested_bitrate_kbps = (std::uint32_t) request->bitrate_kbps;
 +      auto enabled = std::getenv("SUNSHINE_LIVE_SETTINGS_MVP") != nullptr;
 +
-+      std::uint16_t status = video::RUNTIME_SETTINGS_STATUS_ACCEPTED_PENDING;
++      auto accepted = true;
++      std::uint16_t rejection_status = video::RUNTIME_SETTINGS_STATUS_FAILED;
 +      if (!enabled) {
-+        status = video::RUNTIME_SETTINGS_STATUS_DISABLED;
++        accepted = false;
++        rejection_status = video::RUNTIME_SETTINGS_STATUS_DISABLED;
 +      } else if (operation != video::RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS || requested_bitrate_kbps == 0) {
-+        status = video::RUNTIME_SETTINGS_STATUS_INVALID;
++        accepted = false;
++        rejection_status = video::RUNTIME_SETTINGS_STATUS_INVALID;
++      }
++
++      if (!accepted) {
++        BOOST_LOG(info)
++          << "live-settings-mvp: request_id="sv << request_id
++          << " operation="sv << operation
++          << " requested_bitrate_kbps="sv << requested_bitrate_kbps
++          << " configured_bitrate_kbps="sv << session->config.monitor.bitrate
++          << " status="sv << rejection_status;
++        send_runtime_settings_ack(session, video::runtime_bitrate_ack_t {request_id, operation, rejection_status, session->config.monitor.bitrate});
++        return;
 +      }
 +
 +      BOOST_LOG(info)
@@ -140,12 +154,7 @@ diff -ruN source-link/src/stream.cpp src/src/stream.cpp
 +        << " operation="sv << operation
 +        << " requested_bitrate_kbps="sv << requested_bitrate_kbps
 +        << " configured_bitrate_kbps="sv << session->config.monitor.bitrate
-+        << " status="sv << status;
-+
-+      if (status != video::RUNTIME_SETTINGS_STATUS_ACCEPTED_PENDING) {
-+        send_runtime_settings_ack(session, video::runtime_bitrate_ack_t {request_id, operation, status, session->config.monitor.bitrate});
-+        return;
-+      }
++        << " accepted=1"sv;
 +
 +      session->video.runtime_bitrate_events->raise(video::runtime_bitrate_request_t {request_id, requested_bitrate_kbps});
 +    });
@@ -334,7 +343,7 @@ diff -ruN source-link/src/video.h src/src/video.h
  // local includes
  #include "input.h"
  #include "platform/common.h"
-@@ -20,6 +23,30 @@
+@@ -20,6 +23,29 @@
  namespace video {
  
    /* Encoding configuration requested by remote client */
@@ -347,7 +356,6 @@ diff -ruN source-link/src/video.h src/src/video.h
 +    RUNTIME_SETTINGS_STATUS_FAILED = 1,
 +    RUNTIME_SETTINGS_STATUS_INVALID = 2,
 +    RUNTIME_SETTINGS_STATUS_DISABLED = 3,
-+    RUNTIME_SETTINGS_STATUS_ACCEPTED_PENDING = 4,
 +  };
 +
 +  struct runtime_bitrate_request_t {

@@ -34,8 +34,9 @@ let
     (check "Sunshine runtime bitrate disabled status is named" (
       contains "RUNTIME_SETTINGS_STATUS_DISABLED = 3" patch
     ))
-    (check "Sunshine runtime bitrate pending status is named" (
-      contains "RUNTIME_SETTINGS_STATUS_ACCEPTED_PENDING = 4" patch
+    (check "Sunshine runtime bitrate patch does not expose a logs-only pending status" (
+      !(contains "RUNTIME_SETTINGS_STATUS_ACCEPTED_PENDING" patch)
+      && !(contains "accepted/pending" readme)
     ))
     (check "Sunshine runtime bitrate patch does not carry AVCodec field mutation fallback" (
       !(contains "update_runtime_bitrate" patch)
@@ -57,7 +58,6 @@ let
       && contains "`1` — failed or unsupported" readme
       && contains "`2` — invalid" readme
       && contains "`3` — disabled" readme
-      && contains "`4` — accepted/pending" readme
     ))
   ];
 

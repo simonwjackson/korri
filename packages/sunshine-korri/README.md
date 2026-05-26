@@ -30,7 +30,6 @@ Runtime settings status contract:
 - `1` — failed or unsupported
 - `2` — invalid
 - `3` — disabled
-- `4` — accepted/pending
 
 Evidence is recorded in:
 
