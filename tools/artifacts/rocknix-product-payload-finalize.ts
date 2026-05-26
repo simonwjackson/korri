@@ -208,18 +208,15 @@ function validateReleaseUrl(authorityRepo: string, seedUrl: string) {
     throw new Error(`release URL is malformed: ${seedUrl}`)
   }
 
-  const apiPrefix = `/repos/${authorityRepo}/releases/assets/`
   const releasePrefix = `/${authorityRepo}/releases/download/`
   const supported =
     parsed.protocol === "https:" &&
-    ((parsed.hostname === "api.github.com" &&
-      parsed.pathname.startsWith(apiPrefix)) ||
-      (parsed.hostname === "github.com" &&
-        parsed.pathname.startsWith(releasePrefix)))
+    parsed.hostname === "github.com" &&
+    parsed.pathname.startsWith(releasePrefix)
 
   if (!supported) {
     throw new Error(
-      `release URL must point at the ${authorityRepo} GitHub release assets`,
+      `release URL must point at a direct ${authorityRepo} GitHub release download`,
     )
   }
 }

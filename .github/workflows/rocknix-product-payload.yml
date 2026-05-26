@@ -21,7 +21,7 @@ on:
         required: false
         type: string
       seed_url:
-        description: "Uploaded Korri release asset URL for optional finalization"
+        description: "Direct Korri release download URL for optional finalization"
         required: false
         type: string
 
