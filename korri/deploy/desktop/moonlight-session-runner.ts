@@ -9,6 +9,7 @@ export interface DesktopMoonlightChild {
   readonly stdout?: ReadableStream<Uint8Array> | null
   readonly stderr?: ReadableStream<Uint8Array> | null
   readonly exited: Promise<number>
+  readonly isGone?: () => Promise<boolean> | boolean
   readonly unref?: () => void
   readonly kill: (signal: string) => void
 }
@@ -66,6 +67,7 @@ function managedSessionHandleForChild(
     id: child.pid === undefined ? "process-unknown" : `pid-${child.pid}`,
     ...(child.pid === undefined ? {} : { processId: child.pid }),
     exited: child.exited.then(exitCode => ({ exitCode })),
+    ...(child.isGone ? { isGone: () => child.isGone?.() ?? true } : {}),
     terminate: () => terminateMoonlightChild(child, "SIGTERM"),
     terminateNow: () => terminateMoonlightChild(child, "SIGKILL"),
   }

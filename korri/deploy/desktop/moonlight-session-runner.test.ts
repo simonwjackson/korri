@@ -14,6 +14,10 @@ type ControlledChild = ReturnType<typeof createControlledChild>
 function createControlledChild(pid: number) {
   const exit = deferred<number>()
   const signals: string[] = []
+  let exited = false
+  void exit.promise.then(() => {
+    exited = true
+  })
   return {
     pid,
     stdout: undefined,
@@ -27,6 +31,7 @@ function createControlledChild(pid: number) {
     kill(signal: string) {
       signals.push(signal)
     },
+    isGone: () => exited,
     exit,
   }
 }
@@ -49,8 +54,10 @@ describe("desktop Moonlight session runner", () => {
       expect(result.session?.processId).toBe(4242)
       expect(child.unrefCalled).toBe(true)
 
+      expect(await result.session?.isGone?.()).toBe(false)
       child.exit.resolve(0)
       await expect(result.session?.exited).resolves.toEqual({ exitCode: 0 })
+      expect(await result.session?.isGone?.()).toBe(true)
     }
   })
 

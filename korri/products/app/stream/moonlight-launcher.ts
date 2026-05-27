@@ -32,6 +32,7 @@ export interface ManagedMoonlightSessionHandle {
   readonly id: string
   readonly processId?: number
   readonly exited: Promise<{ readonly exitCode: number | null }>
+  readonly isGone?: () => Promise<boolean> | boolean
   readonly terminate: () => void
   readonly terminateNow: () => void
 }
@@ -389,6 +390,7 @@ const spawnRunner: CommandRunner = {
           id: `pid-${child.pid}`,
           processId: child.pid,
           exited: child.exited.then(exitCode => ({ exitCode })),
+          isGone: () => isProcessGone(child.pid),
           terminate: () => child.kill("SIGTERM"),
           terminateNow: () => child.kill("SIGKILL"),
         },
@@ -400,6 +402,18 @@ const spawnRunner: CommandRunner = {
       }
     }
   },
+}
+
+function isProcessGone(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return false
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error) {
+      return error.code === "ESRCH"
+    }
+    return true
+  }
 }
 
 async function observeEarlyExit(
