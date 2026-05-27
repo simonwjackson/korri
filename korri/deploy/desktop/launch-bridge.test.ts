@@ -110,7 +110,12 @@ function createMoonlightHostRecorder() {
 function createForegroundRepairRecorder(options: {
   readonly events: string[]
   readonly snapshotSurfaceIds: readonly number[]
+  readonly repairedWindowId?: number
   readonly onRepair?: (ignoredWindowIds: readonly number[]) => void
+  readonly onAbsence?: (input: {
+    readonly ownedWindowIds: readonly number[]
+    readonly ignoredWindowIds: readonly number[]
+  }) => Promise<Record<string, unknown>>
 }) {
   return {
     snapshotSurfaceIds: async () => {
@@ -124,6 +129,24 @@ function createForegroundRepairRecorder(options: {
     }) => {
       options.events.push("repair")
       options.onRepair?.([...ignoredWindowIds])
+      return { windowId: options.repairedWindowId ?? 43 }
+    },
+    waitForSurfaceAbsence: async ({
+      ownedWindowIds,
+      ignoredWindowIds,
+    }: {
+      readonly ownedWindowIds: ReadonlySet<number>
+      readonly ignoredWindowIds: ReadonlySet<number>
+    }) => {
+      options.events.push("absence")
+      return options.onAbsence?.({
+        ownedWindowIds: [...ownedWindowIds],
+        ignoredWindowIds: [...ignoredWindowIds],
+      })
+    },
+    probeCompositor: async () => {
+      options.events.push("probe")
+      return { ok: true, surfaceCount: 1 }
     },
   }
 }
@@ -200,6 +223,60 @@ describe("desktop launch bridge", () => {
       "launch",
       "repair",
     ])
+  })
+
+  test("keeps launch busy after exit until foreground readiness passes", async () => {
+    const events: string[] = []
+    let absenceResolve!: () => void
+    const absence = new Promise<Record<string, unknown>>(resolve => {
+      absenceResolve = () => resolve({ gate: "surface", status: "absent" })
+    })
+    const session = createManagedSession("first-child")
+    const absenceInputs: Array<{
+      readonly ownedWindowIds: readonly number[]
+      readonly ignoredWindowIds: readonly number[]
+    }> = []
+    const handler = createLocalStreamLaunchRpcHandler({
+      getConnection: () => CONNECTED,
+      readinessCooldownMs: 0,
+      prepareGame: async (_controlUrl, id) => ({
+        status: "prepared",
+        gameId: id,
+      }),
+      moonlightForegroundRepair: createForegroundRepairRecorder({
+        events,
+        snapshotSurfaceIds: [42],
+        repairedWindowId: 43,
+        onAbsence: async input => {
+          absenceInputs.push(input)
+          return await absence
+        },
+      }),
+      launchMoonlight: async () => ({
+        status: "started",
+        command: "moonlight",
+        session,
+      }),
+    })
+
+    await readRpcSuccess(
+      await handler(postLocalLaunchRpc({ id: "gba/wario-land-4" })),
+    )
+    session.resolveExit({ exitCode: 0 })
+    await flushMicrotasks()
+    const busy = await readRpcSuccess(
+      await handler(postLocalLaunchRpc({ id: "gba/metroid-fusion" })),
+    )
+
+    expect(busy.status).toBe("failed")
+    if (busy.status === "failed") expect(busy.category).toBe("session-busy")
+    expect(absenceInputs).toEqual([
+      { ownedWindowIds: [43], ignoredWindowIds: [42] },
+    ])
+
+    absenceResolve()
+    await flushMicrotasks()
+    expect(events).toContain("probe")
   })
 
   test("accepts a later launch after the managed session exits", async () => {

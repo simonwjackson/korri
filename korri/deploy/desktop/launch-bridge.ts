@@ -41,6 +41,7 @@ import {
   createForegroundSessionOwner,
   type ForegroundManagedSessionHandle,
   type ForegroundSessionOwnerLaunchResult,
+  type ForegroundSessionReadinessInput,
   type ForegroundSessionStageResult,
 } from "./foreground-session-owner"
 
@@ -58,7 +59,13 @@ export interface MoonlightForegroundRepair {
   readonly snapshotSurfaceIds: () => Promise<ReadonlySet<number>>
   readonly repairSurface: (options: {
     readonly ignoredWindowIds: ReadonlySet<number>
-  }) => Promise<void>
+  }) => Promise<{ readonly windowId?: number } | undefined>
+  readonly waitForSurfaceAbsence?: (options: {
+    readonly ownedWindowIds: ReadonlySet<number>
+    readonly ignoredWindowIds: ReadonlySet<number>
+    readonly signal: AbortSignal
+  }) => Promise<Readonly<Record<string, unknown>> | undefined>
+  readonly probeCompositor?: () => Promise<Readonly<Record<string, unknown>>>
 }
 
 export interface LaunchBridgeOptions {
@@ -115,6 +122,9 @@ export interface LaunchBridgeOptions {
    * terminate the active managed session through the same lifecycle owner.
    */
   readonly foregroundSessionOwner?: LaunchBridgeForegroundSessionOwner
+
+  readonly readinessCooldownMs?: number
+  readonly sleep?: (durationMs: number, signal?: AbortSignal) => Promise<void>
 }
 
 /**
@@ -185,6 +195,7 @@ export function createLaunchBridgeForegroundSessionOwner(
       prepare: payload => prepareLaunchStage(options, payload),
       spawn: prepared => spawnLaunchStage(options, prepared),
       foreground: spawned => foregroundLaunchStage(options, spawned),
+      verifyReady: input => verifyReadyLaunchStage(options, input),
       launched: ({ prepared, spawned }) => launchedResponse(prepared, spawned),
     },
   })
@@ -319,14 +330,83 @@ async function foregroundLaunchStage(
   options: LaunchBridgeOptions,
   spawned: SpawnedLaunchStage,
 ) {
-  const warning = await repairForegroundSurface(
+  const repair = await repairForegroundSurface(
     options,
     spawned.prepared.connection,
     spawned.prepared.id,
     spawned.prepared.prepare.sessionId,
     spawned.prepared.ignoredForegroundSurfaceIds,
   )
-  return warning ?? { status: "ok" as const }
+  if (repair?.status === "warning") return repair
+  return repair ?? { status: "ok" as const }
+}
+
+async function verifyReadyLaunchStage(
+  options: LaunchBridgeOptions,
+  input: ForegroundSessionReadinessInput<
+    LocalStreamLaunchPayload,
+    PreparedLaunchStage,
+    SpawnedLaunchStage
+  >,
+): Promise<ForegroundSessionStageResult<Record<string, unknown>>> {
+  const processGone = input.spawned.session.isGone
+    ? await input.spawned.session.isGone()
+    : undefined
+  if (processGone === false) {
+    return {
+      status: "failed",
+      message: "Moonlight process is still running after exit observation",
+      evidence: {
+        gate: "process",
+        processId: input.spawned.session.processId,
+      },
+    }
+  }
+
+  const ownedWindowIds = launchedSurfaceIdsFromActive(input.active)
+  let surfaceEvidence: Readonly<Record<string, unknown>> | undefined
+  if (ownedWindowIds.size > 0 && options.moonlightForegroundRepair) {
+    try {
+      surfaceEvidence =
+        (await options.moonlightForegroundRepair.waitForSurfaceAbsence?.({
+          ownedWindowIds,
+          ignoredWindowIds:
+            input.prepared.ignoredForegroundSurfaceIds ?? new Set(),
+          signal: input.signal,
+        })) ?? { gate: "surface", status: "not-checked" }
+    } catch (error) {
+      return {
+        status: "failed",
+        message: errorMessage(error) ?? "Moonlight foreground surface remained",
+        evidence: {
+          gate: "surface",
+          message:
+            errorMessage(error) ?? "Moonlight foreground surface remained",
+          ...errorEvidence(error),
+        },
+      }
+    }
+  }
+
+  const compositor = await options.moonlightForegroundRepair
+    ?.probeCompositor?.()
+    .catch(error => ({
+      ok: false,
+      message: errorMessage(error) ?? "compositor probe failed",
+    }))
+
+  const cooldownMs = options.readinessCooldownMs ?? 0
+  if (cooldownMs > 0) await (options.sleep ?? sleep)(cooldownMs, input.signal)
+
+  return {
+    status: "ok",
+    value: {
+      process: processGone === undefined ? "probe-unavailable" : "gone",
+      ...(surfaceEvidence ? { surface: surfaceEvidence } : {}),
+      ...(compositor ? { compositor } : {}),
+      cooldownMs,
+    },
+  }
 }
 
 function launchedResponse(
@@ -447,12 +527,18 @@ async function repairForegroundSurface(
   sessionId: string | undefined,
   ignoredWindowIds: ReadonlySet<number> | undefined,
 ): Promise<
-  { readonly status: "warning"; readonly message: string } | undefined
+  | { readonly status: "ok"; readonly evidence?: Record<string, unknown> }
+  | { readonly status: "warning"; readonly message: string }
+  | undefined
 > {
   if (!options.moonlightForegroundRepair || !ignoredWindowIds) return undefined
   try {
-    await options.moonlightForegroundRepair.repairSurface({ ignoredWindowIds })
-    return undefined
+    const result = await options.moonlightForegroundRepair.repairSurface({
+      ignoredWindowIds,
+    })
+    return result?.windowId === undefined
+      ? { status: "ok" }
+      : { status: "ok", evidence: { launchedSurfaceIds: [result.windowId] } }
   } catch (error) {
     logger.warn(
       {
@@ -517,6 +603,44 @@ function moonlightHostForConnection(
   } catch {
     return connection.hostId
   }
+}
+
+function launchedSurfaceIdsFromActive(input: {
+  readonly foregroundEvidence?: readonly Readonly<Record<string, unknown>>[]
+}): ReadonlySet<number> {
+  const ids = new Set<number>()
+  for (const evidence of input.foregroundEvidence ?? []) {
+    const value = evidence.launchedSurfaceIds
+    if (!Array.isArray(value)) continue
+    for (const id of value) {
+      if (typeof id === "number") ids.add(id)
+    }
+  }
+  return ids
+}
+
+function errorEvidence(error: unknown): Record<string, unknown> {
+  if (typeof error !== "object" || error === null) return {}
+  const evidence: Record<string, unknown> = {}
+  if ("remainingWindowIds" in error) {
+    evidence.remainingWindowIds = error.remainingWindowIds
+  }
+  return evidence
+}
+
+function sleep(durationMs: number, signal?: AbortSignal): Promise<void> {
+  if (durationMs <= 0 || signal?.aborted) return Promise.resolve()
+  return new Promise(resolve => {
+    const timeout = setTimeout(resolve, durationMs)
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timeout)
+        resolve()
+      },
+      { once: true },
+    )
+  })
 }
 
 function errorMessage(error: unknown): string | undefined {

@@ -16,8 +16,10 @@ import Electrobun, {
 } from "electrobun/bun"
 import { watchStreamHosts } from "../../../tools/cli/lan-stream-discovery"
 import {
+  probeSwayTree,
   repairStreamSurface,
   snapshotStreamSurfaceIds,
+  waitForStreamSurfaceAbsence,
 } from "../../../tools/device/game-stream-fullscreen"
 import type { SwayCommandRunner } from "../../../tools/device/sessiond-sway"
 import { type ConnectionState, makeConnectionController } from "./connection"
@@ -195,6 +197,7 @@ async function main() {
 
   const launchBridgeOptions: LaunchBridgeOptions = {
     getConnection,
+    readinessCooldownMs: 750,
     // Construct a one-shot RemoteStreamControlClient per request so
     // a reconnection between launches uses fresh wiring. The client is
     // cheap to build; the underlying RPC layer is a stateless
@@ -329,10 +332,23 @@ function createLocalMoonlightForegroundRepair() {
       ignoredWindowIds,
     }: {
       ignoredWindowIds: ReadonlySet<number>
+    }) => repairStreamSurface({ runner, selector, ignoredWindowIds }),
+    waitForSurfaceAbsence: ({
+      ownedWindowIds,
+      ignoredWindowIds,
+    }: {
+      ownedWindowIds: ReadonlySet<number>
+      ignoredWindowIds: ReadonlySet<number>
+      signal: AbortSignal
     }) =>
-      repairStreamSurface({ runner, selector, ignoredWindowIds }).then(
-        () => undefined,
-      ),
+      waitForStreamSurfaceAbsence({
+        runner,
+        selector,
+        ownedWindowIds,
+        ignoredWindowIds,
+      }).then(result => ({ ...result })),
+    probeCompositor: () =>
+      probeSwayTree({ runner, selector }).then(result => ({ ...result })),
   }
 }
 
