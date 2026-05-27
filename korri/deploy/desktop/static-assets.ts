@@ -7,11 +7,10 @@ export interface StaticAssetOptions {
 
 /**
  * Returns true when the URL path is extension-bearing (`.js`, `.css`,
- * `.png`, …). Such requests must never receive the waiting-page HTML
- * during disconnected state: the browser asked for a specific asset
- * type, and returning HTML where JS / CSS was expected would corrupt a
- * stale-cached page. Extension-bearing requests are 404'd if the file
- * isn't on disk.
+ * `.png`, …). The desktop catch-all routes such requests straight to
+ * the static-asset serve so the browser gets the expected MIME type
+ * (a missing `.js` is a 404, never an HTML fallback that would corrupt
+ * a stale-cached page).
  */
 export function isExtensionBearing(pathname: string): boolean {
   return extname(pathname) !== ""

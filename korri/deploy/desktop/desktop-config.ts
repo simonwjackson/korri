@@ -9,18 +9,15 @@ import { parse, stringify } from "yaml"
  */
 export type DesktopConfigEnv = XdgPathEnv
 
-export interface LastConnectedServer {
-  readonly hostId: string
-  readonly controlUrl: string
-}
-
 /**
  * Schema of `desktop.yaml`. Unknown keys are preserved on read and saved
  * back verbatim so federation-related fields added later remain compatible
- * with older desktop builds.
+ * with older desktop builds. The legacy `lastConnectedServer` field was
+ * retired in federation v1 (R14 / zero-backwards-compat); any persisted
+ * value is silently dropped on read because it falls through the unknown-
+ * keys passthrough path without being normalized into a typed field.
  */
 export interface DesktopConfig {
-  readonly lastConnectedServer?: LastConnectedServer
   readonly [extension: string]: unknown
 }
 
@@ -96,18 +93,10 @@ async function loadDesktopConfigRaw(
 
 function normalizeConfig(input: Record<string, unknown>): DesktopConfig {
   const out: Record<string, unknown> = { ...input }
-  const last = input.lastConnectedServer
-  if (isPlainObject(last)) {
-    const hostId = last.hostId
-    const controlUrl = last.controlUrl
-    if (typeof hostId === "string" && typeof controlUrl === "string") {
-      out.lastConnectedServer = { hostId, controlUrl }
-    } else {
-      delete out.lastConnectedServer
-    }
-  } else if (last !== undefined) {
-    delete out.lastConnectedServer
-  }
+  // Federation v1 dropped `lastConnectedServer` (R14). Stale persisted
+  // values are silently removed on read — no migration warning per
+  // zero-backwards-compat.
+  delete out.lastConnectedServer
   return out as DesktopConfig
 }
 

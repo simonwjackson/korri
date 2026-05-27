@@ -14,7 +14,6 @@ import Electrobun, {
   BrowserWindow,
   PATHS,
 } from "electrobun/bun"
-import { watchStreamHosts } from "../../../tools/cli/lan-stream-discovery"
 import {
   probeSwayTree,
   repairStreamSurface,
@@ -22,11 +21,6 @@ import {
   waitForStreamSurfaceAbsence,
 } from "../../../tools/device/game-stream-fullscreen"
 import type { SwayCommandRunner } from "../../../tools/device/sessiond-sway"
-import { type ConnectionState, makeConnectionController } from "./connection"
-import type {
-  ConnectionServerRecord,
-  ConnectionStateSnapshot,
-} from "./connection-state-snapshot"
 import { createDesktopApp } from "./create-desktop-app"
 import {
   type ForwarderUpstream,
@@ -61,7 +55,7 @@ const assetRoot = join(PATHS.VIEWS_FOLDER, "mainview")
 
 let server: ReturnType<typeof Bun.serve> | null = null
 let windows: BrowserWindow[] = []
-let controllerScope: Scope.Closeable | null = null
+
 let inputBrokerFiber: Fiber.Fiber<never, never> | null = null
 let foregroundSessionOwner: LaunchBridgeForegroundSessionOwner | null = null
 
@@ -91,10 +85,6 @@ function stopDesktopControlPlane() {
   if (server) {
     server.stop(true)
     server = null
-  }
-  if (controllerScope) {
-    Effect.runFork(Scope.close(controllerScope, Exit.succeed(undefined)))
-    controllerScope = null
   }
   if (inputBrokerFiber) {
     Effect.runFork(Fiber.interrupt(inputBrokerFiber))
@@ -128,75 +118,22 @@ function registerProcessShutdown() {
 }
 
 async function main() {
-  const scope = Scope.makeUnsafe()
-  controllerScope = scope
-
-  // Tee the mDNS event stream so we can log each candidate as it appears
-  // — the controller alone is silent and a slow probe / mismatched URL
-  // would otherwise be invisible.
-  const rawWatcher = watchStreamHosts()
-  const watcher = rawWatcher.pipe(
-    Stream.tap(event =>
-      Effect.sync(() => {
-        if (event.kind === "appear") {
-          logger.info(
-            {
-              controlUrl: event.candidate.controlUrl,
-              hostId: event.candidate.id,
-              capabilities: event.candidate.capabilities,
-            },
-            "mdns: stream host appeared",
-          )
-        } else {
-          logger.info(
-            { controlUrl: event.controlUrl },
-            "mdns: stream host disappeared",
-          )
-        }
-      }),
-    ),
-  )
-
-  const controller = await Effect.runPromise(
-    Effect.provideService(
-      makeConnectionController({
-        watcher,
-        loadConfig: Effect.tryPromise({
-          try: () => loadDesktopConfig(),
-          catch: error => error,
-        }),
-        saveConfig: partial =>
-          Effect.tryPromise({
-            try: () => saveDesktopConfig(process.env, partial),
-            catch: error => error,
-          }),
-        httpProbe: probeUpstream,
-      }),
-      Scope.Scope,
-      scope,
-    ),
-  )
-
-  // Federation v1 upstream picker. Replaces the connection-state-machine
-  // read for the forwarder hot path; the connection state machine still
-  // owns the waiting-page decision (U8 deletes that surface).
+  // Federation v1: the forwarder upstream picker browses mDNS + probes
+  // loopback on demand (see forwarder-upstream.ts). The legacy
+  // watchStreamHosts → makeConnectionController → waiting-page chain
+  // is gone; the renderer treats `503 no upstream` as an empty rail
+  // (R3 / AE1).
   const forwarderUpstream: ForwarderUpstream = makeForwarderUpstream({
     loopbackBaseUrl: process.env.KORRI_LOOPBACK_BASE_URL ?? undefined,
   })
   const getUpstream = () => forwarderUpstream.pickUpstream()
   const invalidateUpstream = () => forwarderUpstream.invalidate()
 
-  const getConnection = (): ConnectionServerRecord | undefined => {
-    const state = SubscriptionRef.getUnsafe(controller.state)
-    return state.status === "connected" ? state.server : undefined
-  }
-
-  // Snapshot accessor consumed by the catch-all serve branch (waiting
-  // page vs React bundle) and by `/__korri/desktop/connection-status`.
-  // The controller holds `Date` objects; the snapshot's wire shape is
-  // ISO strings. Conversion happens here at the accessor seam so the
-  // composition stays JSON-typed at the HTTP boundary.
-  const getConnectionState = () => snapshotFromControllerState(controller.state)
+  // No more connection state: launches now route by `payload.source` in
+  // the bridge (U5). `getConnection` returns undefined so source-less
+  // callers surface a typed host-unavailable failure rather than
+  // silently latching onto a guessed peer.
+  const getConnection = () => undefined
 
   // Runtime-config is read once at startup and inlined into the
   // served index.html via the bun-side Hono composition. Renderer
@@ -241,7 +178,6 @@ async function main() {
     assetRoot,
     getUpstream,
     invalidateUpstream,
-    getConnectionState,
     getRuntimeConfig,
     getForegroundSessionStatus,
     launchBridge: {
@@ -481,30 +417,6 @@ main().catch(async error => {
   await stopDesktopServerGracefully()
   process.exit(1)
 })
-
-// Map the controller's `Date`-typed state to the wire-shape snapshot
-// the Hono composition consumes. Single conversion seam.
-function snapshotFromControllerState(
-  ref: SubscriptionRef.SubscriptionRef<ConnectionState>,
-): ConnectionStateSnapshot {
-  const state = SubscriptionRef.getUnsafe(ref)
-  if (state.status === "connected") {
-    return { status: "connected", server: state.server }
-  }
-  if (state.status === "reconnecting") {
-    return {
-      status: "reconnecting",
-      server: state.server,
-      since: state.since.toISOString(),
-      helpAfter: state.helpAfter.toISOString(),
-    }
-  }
-  return {
-    status: "searching",
-    since: state.since.toISOString(),
-    helpAfter: state.helpAfter.toISOString(),
-  }
-}
 
 const PROBE_TIMEOUT_MS = 3000
 

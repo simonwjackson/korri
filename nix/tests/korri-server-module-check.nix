@@ -483,7 +483,9 @@ let
       in
       env.HOST or null == "127.0.0.1"
       && env.KORRI_STREAM_CONTROL_ENABLED or null == "0"
-      && env.KORRI_SERVER_ADVERTISE_ENABLED or null == "0"
+      # KORRI_SERVER_ADVERTISE_ENABLED retired in federation v1 (R14);
+      # the env var no longer exists on any user mode.
+      && !((serverUserUnit defaultUserMode).environment or { } ? KORRI_SERVER_ADVERTISE_ENABLED)
       && (defaultUserMode.networking.firewall.allowedTCPPorts or [ ]) == [ ]
     ))
     (check "default user mode: KORRI_PUBLIC_API_BASE_URL omitted by default" (

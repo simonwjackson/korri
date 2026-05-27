@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import type { LocalStreamLaunchResponse } from "@app/stream/local-stream-launch-rpc"
-import type { ConnectionServerRecord } from "./connection-state-snapshot"
 import {
+  type ConnectionServerRecord,
   createLaunchBridgeForegroundSessionOwner,
   createLocalStreamLaunchRpcHandler,
 } from "./launch-bridge"
+
 
 function postLocalLaunchRpc(payload: unknown): Request {
   return new Request("http://desktop.local/__korri/desktop/rpc", {

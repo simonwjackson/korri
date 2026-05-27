@@ -43,7 +43,17 @@ import {
 import { Effect, Layer, Scope } from "effect"
 import * as HttpEffect from "effect/unstable/http/HttpEffect"
 import { RpcServer } from "effect/unstable/rpc"
-import type { ConnectionServerRecord } from "./connection-state-snapshot"
+/**
+ * Minimal record identifying a Korri host the bridge talks to. Owned
+ * here after federation v1 deleted the connection-state-snapshot type.
+ * The launch bridge derives this from `payload.source` (per-entry
+ * federation routing) or from the legacy `getConnection` callback
+ * for source-less transition callers.
+ */
+export interface ConnectionServerRecord {
+  readonly hostId: string
+  readonly controlUrl: string
+}
 
 type LaunchBridgeResponse = LocalStreamLaunchResponse
 

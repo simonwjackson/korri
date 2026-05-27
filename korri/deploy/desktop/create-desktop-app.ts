@@ -2,7 +2,6 @@ import { logger } from "@shared/logger"
 import type { ForegroundSessionStatusSnapshot } from "@shared/stream/foreground-session-status"
 import { Hono } from "hono"
 import { createApiForwarder } from "./api-forwarder"
-import type { ConnectionStateSnapshot } from "./connection-state-snapshot"
 import {
   createLocalStreamLaunchRpcHandler,
   type LaunchBridgeOptions,
@@ -13,15 +12,15 @@ import {
   serveIndexHtml,
   serveStaticAsset,
 } from "./static-assets"
-import { renderWaitingPage } from "./waiting-page/render-waiting-page"
 
 export interface CreateDesktopAppOptions {
   readonly assetRoot: string
   /**
    * Returns the currently-picked upstream base URL or undefined.
    * Federation v1 picks via `ForwarderUpstream` (loopback fast-path +
-   * mDNS fallback); legacy main.ts wiring is sync, the new wiring is
-   * async. The composition stays free of any direct controller import.
+   * mDNS fallback). Async so probing/browsing doesn't block module
+   * init. When undefined, /api/* requests surface as 503 and the
+   * renderer's rail treats that as empty (R3 / AE1).
    */
   readonly getUpstream: () => string | undefined | Promise<string | undefined>
   /**
@@ -29,19 +28,6 @@ export interface CreateDesktopAppOptions {
    * 502 self-heals by re-picking on the next request.
    */
   readonly invalidateUpstream?: () => void
-  /**
-   * Returns the current connection-state snapshot (wire-shape: ISO-string
-   * timestamps). Read once per request that needs it. Same accessor
-   * pattern as `getUpstream` — the composition never imports the
-   * controller directly.
-   *
-   * Two consumers:
-   *   - The catch-all GET handler decides between serving the waiting
-   *     page (any non-`connected` status) and the React bundle.
-   *   - The `/__korri/desktop/connection-status` JSON endpoint returns
-   *     the snapshot verbatim for the waiting page's polling loop.
-   */
-  readonly getConnectionState: () => ConnectionStateSnapshot
   /**
    * Returns the runtime-config snapshot inlined into the served
    * `index.html` so the React renderer can read it synchronously at
@@ -81,15 +67,6 @@ export function createDesktopApp(options: CreateDesktopAppOptions) {
     return c.text("ok")
   })
 
-  // The waiting page polls this endpoint while the connection controller
-  // is not yet `connected`. The page reloads (which causes bun to serve
-  // the React bundle) once `status === "connected"`. JSON shape matches
-  // today's wire format: ISO-string timestamps for `searching` /
-  // `reconnecting`; no timestamps when `connected`.
-  app.get("/__korri/desktop/connection-status", c =>
-    c.json(options.getConnectionState()),
-  )
-
   app.get("/__korri/desktop/foreground-session-status", c => {
     const getForegroundSessionStatus = options.getForegroundSessionStatus
     if (!getForegroundSessionStatus) {
@@ -117,11 +94,8 @@ export function createDesktopApp(options: CreateDesktopAppOptions) {
     }
   })
 
-  // Renderer→bun launch bridge: takes a game id over the desktop-local
-  // Effect RPC surface, calls prepare-stream against the connected
-  // korri-server, then spawns Moonlight locally pointed at that server.
-  // See launch-bridge.ts. Registered before the /api/* forwarder catchall
-  // so it doesn't get proxied upstream.
+  // Renderer→bun launch bridge. See launch-bridge.ts. Registered
+  // before the /api/* forwarder catchall so it doesn't get proxied.
   if (options.launchBridge) {
     const rpcHandler = createLocalStreamLaunchRpcHandler(options.launchBridge)
     app.post("/__korri/desktop/rpc", c => rpcHandler(c.req.raw))
@@ -141,39 +115,14 @@ export function createDesktopApp(options: CreateDesktopAppOptions) {
   app.all("/api", c => forwarder(c.req.raw))
   app.all("/api/*", c => forwarder(c.req.raw))
 
-  // Connection-aware catch-all. While `connected`, serve the React
-  // bundle as today (with the runtime-config inliner stacked on top of
-  // the `index.html` serve). Otherwise, serve the waiting page for
-  // HTML-shaped routes and serve disk-backed assets (or 404) for
-  // extension-bearing routes. The branch lives in this single handler
-  // so the route registration order stays simple.
+  // Catch-all: always serve the React bundle. Federation v1 removed the
+  // connection-aware waiting-page branch — the rail handles empty/no-
+  // upstream states by rendering nothing (R3 / AE1). Extension-bearing
+  // requests serve straight from disk; HTML-shaped requests go through
+  // the index.html serve so the runtime-config inliner can rewrite the
+  // body before it ships.
   app.get("*", async c => {
-    const snapshot = options.getConnectionState()
     const url = new URL(c.req.raw.url)
-
-    if (snapshot.status !== "connected") {
-      if (isExtensionBearing(url.pathname)) {
-        // Extension-bearing: serve the file if present, else 404. Never
-        // the waiting-page HTML body — would corrupt a stale-cached
-        // browser tab.
-        return serveStaticAsset(c.req.raw, options)
-      }
-      // HTML-shaped route while disconnected: render the waiting page.
-      const body = renderWaitingPage(snapshot, Date.now())
-      return new Response(body, {
-        status: 200,
-        headers: {
-          "content-type": "text/html; charset=utf-8",
-          // The body varies by connection state and inlined
-          // runtime-config. Aggressive caching would serve a stale page.
-          "cache-control": "no-store",
-        },
-      })
-    }
-
-    // Connected. Extension-bearing requests serve straight from disk.
-    // HTML-shaped requests go through the index.html serve so the
-    // runtime-config inliner can rewrite the body before it ships.
     if (isExtensionBearing(url.pathname)) {
       return serveStaticAsset(c.req.raw, options)
     }

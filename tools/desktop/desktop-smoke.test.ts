@@ -39,7 +39,7 @@ describe("desktop smoke", () => {
     expect(report.ok).toBe(true)
     const names = report.checks.map(c => c.name)
     expect(names).toContain("portal root")
-    expect(names).toContain("API forwarder mounted")
+    expect(names).toContain("API forwarder mounted (503 when no upstream)")
     expect(names).toContain("representative asset")
     expect(
       report.checks.find(c => c.name === "representative asset")?.status,
@@ -78,47 +78,7 @@ describe("desktop smoke", () => {
     ])
   })
 
-  test("pins the waiting-page body when disconnected", async () => {
-    await writeFixture(
-      "index.html",
-      '<html><head></head><body><div id="app"></div></body></html>',
-    )
-
-    const report = await runDesktopSmoke({ assetRoot })
-
-    const waiting = report.checks.find(
-      c => c.name === "waiting page served when disconnected",
-    )
-    expect(waiting?.status).toBe("pass")
-
-    const reconnect = report.checks.find(
-      c => c.name === "waiting page names remembered host when reconnecting",
-    )
-    expect(reconnect?.status).toBe("pass")
-  })
-
-  test("pins the help block visibility against helpAfter", async () => {
-    await writeFixture("index.html", "<html><head></head><body></body></html>")
-
-    const report = await runDesktopSmoke({ assetRoot })
-
-    expect(
-      report.checks.find(
-        c =>
-          c.name ===
-          "waiting page omits help block when helpAfter is in the future",
-      )?.status,
-    ).toBe("pass")
-    expect(
-      report.checks.find(
-        c =>
-          c.name ===
-          "waiting page includes help block when helpAfter is in the past",
-      )?.status,
-    ).toBe("pass")
-  })
-
-  test("pins inlined runtime-config body shape on the connected serve", async () => {
+  test("pins inlined runtime-config body shape on the serve", async () => {
     await writeFixture(
       "index.html",
       '<html><head></head><body><div id="app"></div></body></html>',
@@ -128,16 +88,12 @@ describe("desktop smoke", () => {
 
     expect(
       report.checks.find(
-        c =>
-          c.name ===
-          "connected serve inlines runtime-config (desktopInput: true)",
+        c => c.name === "serve inlines runtime-config (desktopInput: true)",
       )?.status,
     ).toBe("pass")
     expect(
       report.checks.find(
-        c =>
-          c.name ===
-          "connected serve inlines runtime-config (desktopInput: false)",
+        c => c.name === "serve inlines runtime-config (desktopInput: false)",
       )?.status,
     ).toBe("pass")
   })
@@ -155,7 +111,7 @@ describe("desktop smoke", () => {
     ).toBe("pass")
   })
 
-  test("pins the connection-status endpoint JSON shape", async () => {
+  test("pins /__korri/desktop/rpc behavior when launch bridge is unwired", async () => {
     await writeFixture("index.html", "<html><head></head><body></body></html>")
 
     const report = await runDesktopSmoke({ assetRoot })
@@ -164,33 +120,7 @@ describe("desktop smoke", () => {
       report.checks.find(
         c =>
           c.name ===
-          "connection-status endpoint returns ISO timestamps when searching",
-      )?.status,
-    ).toBe("pass")
-    expect(
-      report.checks.find(
-        c =>
-          c.name ===
-          "connection-status endpoint omits timestamps when connected",
-      )?.status,
-    ).toBe("pass")
-  })
-
-  test("pins that /api/* and /__korri/desktop/rpc still return 503 while disconnected", async () => {
-    await writeFixture("index.html", "<html><head></head><body></body></html>")
-
-    const report = await runDesktopSmoke({ assetRoot })
-
-    expect(
-      report.checks.find(
-        c => c.name === "disconnected serve does not interfere with /api/*",
-      )?.status,
-    ).toBe("pass")
-    expect(
-      report.checks.find(
-        c =>
-          c.name ===
-          "disconnected serve does not interfere with /__korri/desktop/rpc",
+          "/__korri/desktop/rpc returns 503 when launch bridge is not configured",
       )?.status,
     ).toBe("pass")
   })
