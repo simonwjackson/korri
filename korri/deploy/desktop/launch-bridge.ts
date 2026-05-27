@@ -300,7 +300,9 @@ async function prepareLaunchStage(
 async function spawnLaunchStage(
   options: LaunchBridgeOptions,
   prepared: PreparedLaunchStage,
-): Promise<ForegroundSessionStageResult<SpawnedLaunchStage, LaunchBridgeResponse>> {
+): Promise<
+  ForegroundSessionStageResult<SpawnedLaunchStage, LaunchBridgeResponse>
+> {
   const moonlight = await options.launchMoonlight({
     host: moonlightHostForConnection(prepared.connection),
     gamescope: prepared.moonlightGamescope,
