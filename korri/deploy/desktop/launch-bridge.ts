@@ -197,6 +197,7 @@ export function createLaunchBridgeForegroundSessionOwner(
     LocalStreamLaunchPayload,
     PreparedLaunchStage,
     SpawnedLaunchStage,
+    LaunchBridgeResponse,
     LaunchBridgeResponse
   >({
     requestIdentity: payload => ({
@@ -226,7 +227,10 @@ async function performLocalStreamLaunch(
 }
 
 function launchResponseFromOwnerResult(
-  result: ForegroundSessionOwnerLaunchResult<LaunchBridgeResponse>,
+  result: ForegroundSessionOwnerLaunchResult<
+    LaunchBridgeResponse,
+    LaunchBridgeResponse
+  >,
 ): LaunchBridgeResponse {
   if (result._tag === "Launched") return result.value
   if (result._tag === "Busy") {
@@ -236,9 +240,8 @@ function launchResponseFromOwnerResult(
       message: result.rejection.message,
     }
   }
-  const response = responseFromFailureEvidence(result.evidence)
   return (
-    response ?? {
+    result.failure ?? {
       status: "failed",
       category: "prepare-failed",
       message: result.message,
@@ -249,7 +252,9 @@ function launchResponseFromOwnerResult(
 async function prepareLaunchStage(
   options: LaunchBridgeOptions,
   payload: LocalStreamLaunchPayload,
-): Promise<ForegroundSessionStageResult<PreparedLaunchStage>> {
+): Promise<
+  ForegroundSessionStageResult<PreparedLaunchStage, LaunchBridgeResponse>
+> {
   const id = payload.id
   const connection = options.getConnection()
   if (!connection) {
@@ -295,7 +300,7 @@ async function prepareLaunchStage(
 async function spawnLaunchStage(
   options: LaunchBridgeOptions,
   prepared: PreparedLaunchStage,
-): Promise<ForegroundSessionStageResult<SpawnedLaunchStage>> {
+): Promise<ForegroundSessionStageResult<SpawnedLaunchStage, LaunchBridgeResponse>> {
   const moonlight = await options.launchMoonlight({
     host: moonlightHostForConnection(prepared.connection),
     gamescope: prepared.moonlightGamescope,
@@ -450,7 +455,7 @@ function launchedResponse(
 
 function failedLaunchStage(
   response: LaunchBridgeResponse,
-): ForegroundSessionStageResult<never> {
+): ForegroundSessionStageResult<never, LaunchBridgeResponse> {
   return {
     status: "failed",
     message:
@@ -458,25 +463,12 @@ function failedLaunchStage(
       response.status === "prepared-no-moonlight"
         ? response.message
         : "launch failed",
-    evidence: { response },
+    evidence: {
+      status: response.status,
+      ...(response.status === "failed" ? { category: response.category } : {}),
+    },
+    failure: response,
   }
-}
-
-function responseFromFailureEvidence(
-  evidence: Readonly<Record<string, unknown>> | undefined,
-): LaunchBridgeResponse | undefined {
-  const response = evidence?.response
-  if (!isRecord(response)) return undefined
-  if (response.status === "failed" && typeof response.message === "string") {
-    return response as LaunchBridgeResponse
-  }
-  if (
-    response.status === "prepared-no-moonlight" &&
-    typeof response.message === "string"
-  ) {
-    return response as LaunchBridgeResponse
-  }
-  return undefined
 }
 
 async function preflightMoonlightInput(
@@ -684,8 +676,4 @@ function errorMessage(error: unknown): string | undefined {
   if (error instanceof Error) return error.message
   if (typeof error === "string") return error
   return undefined
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
