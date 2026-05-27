@@ -1,11 +1,18 @@
 import { readFile } from "node:fs/promises"
 import {
   type Launcher,
+  type LaunchFailureKind,
   type LaunchResult,
   type LaunchSpec,
   launchFailureExitCode,
   type ManagedLaunchResult,
 } from "./launcher"
+import {
+  decodeSessiondManagedLaunchEvent,
+  decodeSessiondManagedLaunchStartResponse,
+  decodeSessiondManagedLaunchStatus,
+  type SessiondManagedLaunchEvent,
+} from "./sessiond-managed-launch-protocol"
 
 export interface SessionLauncherOptions {
   readonly url: string
@@ -26,21 +33,8 @@ export function createSessionLauncher(
     async run(spec) {
       return launchViaSessiond(spec, options)
     },
-    async spawn() {
-      return unsupportedManagedSessiondLaunch()
-    },
-  }
-}
-
-function unsupportedManagedSessiondLaunch(): ManagedLaunchResult {
-  return {
-    status: "failed",
-    result: {
-      status: "failed",
-      exitCode: launchFailureExitCode("command-failed"),
-      failureKind: "command-failed",
-      stderrTail:
-        "managed sessiond launch unsupported: sessiond does not expose child handles yet",
+    async spawn(spec) {
+      return spawnViaSessiond(spec, options)
     },
   }
 }
@@ -101,6 +95,278 @@ export async function launchViaSessiond(
 
   const body = (await response.json()) as { readonly result?: LaunchResult }
   return body.result ?? { status: "failed", exitCode: 125 }
+}
+
+export async function spawnViaSessiond(
+  spec: LaunchSpec,
+  options: SessionLauncherOptions,
+): Promise<ManagedLaunchResult> {
+  const fetchImpl = options.fetchImpl ?? fetch
+  const token = await resolveToken(options)
+  if (!token) {
+    return failedManagedLaunch(
+      "host-control-disabled",
+      "sessiond launch rejected: missing KORRI_SESSIOND_TOKEN or KORRI_SESSIOND_TOKEN_FILE",
+    )
+  }
+
+  const statusResult = await requestSessiondJson(
+    fetchImpl,
+    options.url,
+    token,
+    "/managed-launch/status",
+  )
+  if (statusResult.status === "failed") return statusResult.result
+
+  const status = decodeSessiondManagedLaunchStatus(statusResult.value)
+  if (
+    !status.capabilities.managedLaunch ||
+    !status.capabilities.lifecycleEvents
+  ) {
+    return failedManagedLaunch(
+      "host-unavailable",
+      "sessiond managed launch unsupported by daemon capability status",
+    )
+  }
+  if (status.mode !== "home") {
+    return failedManagedLaunch(
+      "session-busy",
+      `sessiond is ${status.mode}; launch requires home`,
+    )
+  }
+
+  const startResult = await requestSessiondJson(
+    fetchImpl,
+    options.url,
+    token,
+    "/managed-launch",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ spec }),
+    },
+  )
+  if (startResult.status === "failed") return startResult.result
+
+  const started = decodeSessiondManagedLaunchStartResponse(startResult.value)
+  if (started.status === "failed") {
+    return failedManagedLaunch(started.failureKind, started.message)
+  }
+
+  const observer = observeManagedLaunchEvents({
+    fetchImpl,
+    url: options.url,
+    token,
+    launchId: started.launchId,
+  })
+
+  const terminate = () => {
+    void terminateManagedLaunch(fetchImpl, options.url, token, started.launchId)
+  }
+
+  return {
+    status: "started",
+    session: {
+      id: started.launchId,
+      exited: observer.exited,
+      terminate,
+      terminateNow: terminate,
+    },
+    result: observer.result,
+  }
+}
+
+async function requestSessiondJson(
+  fetchImpl: SessionLauncherFetch,
+  url: string,
+  token: string,
+  path: string,
+  init: RequestInit = {},
+): Promise<
+  | { readonly status: "ok"; readonly value: unknown }
+  | { readonly status: "failed"; readonly result: ManagedLaunchResult }
+> {
+  let response: Response
+  try {
+    response = await fetchImpl(String(new URL(path, url)), {
+      ...init,
+      headers: {
+        ...(init.headers ?? {}),
+        "x-korri-sessiond-token": token,
+      },
+    })
+  } catch (error) {
+    return {
+      status: "failed",
+      result: failedManagedLaunch(
+        "host-unavailable",
+        `sessiond unreachable: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    }
+  }
+
+  if (!response.ok) {
+    const text = await response.text()
+    return {
+      status: "failed",
+      result: failedManagedLaunch(
+        response.status === 401 ? "host-control-disabled" : "host-unavailable",
+        `sessiond request rejected: ${response.status} ${text}`,
+      ),
+    }
+  }
+
+  return { status: "ok", value: await response.json() }
+}
+
+function observeManagedLaunchEvents(options: {
+  readonly fetchImpl: SessionLauncherFetch
+  readonly url: string
+  readonly token: string
+  readonly launchId: string
+}): {
+  readonly exited: Promise<{ readonly exitCode: number | null }>
+  readonly result: Promise<LaunchResult>
+} {
+  let resolveExited!: (value: { readonly exitCode: number | null }) => void
+  let resolveResult!: (value: LaunchResult) => void
+  const exited = new Promise<{ readonly exitCode: number | null }>(resolve => {
+    resolveExited = resolve
+  })
+  const result = new Promise<LaunchResult>(resolve => {
+    resolveResult = resolve
+  })
+  let childExitObserved = false
+  let terminalResult: LaunchResult | undefined
+  let resultSettled = false
+
+  const settleFailure = (message: string) => {
+    if (!childExitObserved) {
+      childExitObserved = true
+      resolveExited({ exitCode: null })
+    }
+    if (!resultSettled) {
+      resultSettled = true
+      resolveResult(failedLaunch("host-unavailable", message))
+    }
+  }
+
+  const observe = async () => {
+    const response = await options.fetchImpl(
+      String(
+        new URL(
+          `/managed-launch/events?launchId=${encodeURIComponent(options.launchId)}`,
+          options.url,
+        ),
+      ),
+      { headers: { "x-korri-sessiond-token": options.token } },
+    )
+    if (!response.ok || !response.body) {
+      settleFailure(`sessiond event stream rejected: ${response.status}`)
+      return
+    }
+
+    for await (const event of readSseEvents(response.body)) {
+      if (event.launchId !== options.launchId) continue
+      if (event.type === "child-exited") {
+        const exitCode = event.terminal?.exitCode ?? null
+        terminalResult =
+          exitCode === 0
+            ? { status: "launched" }
+            : failedLaunch(
+                "command-failed",
+                "sessiond child exited",
+                exitCode ?? undefined,
+              )
+        if (!childExitObserved) {
+          childExitObserved = true
+          resolveExited({ exitCode })
+        }
+      }
+      if (event.type === "home-ready" && !resultSettled) {
+        resultSettled = true
+        resolveResult(terminalResult ?? { status: "launched" })
+      }
+      if (
+        (event.type === "failed" || event.type === "recovering") &&
+        !resultSettled
+      ) {
+        settleFailure(event.message ?? "sessiond managed launch failed")
+      }
+    }
+
+    if (!resultSettled)
+      settleFailure("sessiond event stream ended before readiness")
+  }
+
+  void observe().catch(error => {
+    settleFailure(
+      `sessiond event stream failed: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  })
+
+  return { exited, result }
+}
+
+async function* readSseEvents(
+  body: ReadableStream<Uint8Array>,
+): AsyncGenerator<SessiondManagedLaunchEvent> {
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ""
+  while (true) {
+    const read = await reader.read()
+    if (read.done) break
+    buffer += decoder.decode(read.value, { stream: true })
+    const chunks = buffer.split("\n\n")
+    buffer = chunks.pop() ?? ""
+    for (const chunk of chunks) {
+      const data = chunk
+        .split("\n")
+        .find(line => line.startsWith("data: "))
+        ?.slice("data: ".length)
+      if (data) yield decodeSessiondManagedLaunchEvent(JSON.parse(data))
+    }
+  }
+}
+
+async function terminateManagedLaunch(
+  fetchImpl: SessionLauncherFetch,
+  url: string,
+  token: string,
+  launchId: string,
+): Promise<void> {
+  try {
+    await fetchImpl(String(new URL("/managed-launch/terminate", url)), {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-korri-sessiond-token": token,
+      },
+      body: JSON.stringify({ launchId }),
+    })
+  } catch {
+    // Termination is best-effort; lifecycle observation reports final outcome.
+  }
+}
+
+function failedManagedLaunch(
+  failureKind: LaunchFailureKind,
+  stderrTail: string,
+  exitCode = launchFailureExitCode(failureKind),
+): ManagedLaunchResult {
+  return {
+    status: "failed",
+    result: failedLaunch(failureKind, stderrTail, exitCode),
+  }
+}
+
+function failedLaunch(
+  failureKind: LaunchFailureKind,
+  stderrTail: string,
+  exitCode = launchFailureExitCode(failureKind),
+): Extract<LaunchResult, { readonly status: "failed" }> {
+  return { status: "failed", exitCode, failureKind, stderrTail }
 }
 
 async function resolveToken(
