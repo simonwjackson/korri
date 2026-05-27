@@ -1,33 +1,52 @@
 /**
- * Envelope shape guard for `/api/rpc`.
+ * Envelope shape guard and normalizer for `/api/rpc`.
  *
- * Effect-RPC's `RpcServer` trusts the request envelope's `headers` field
- * unconditionally — it forwards `request.headers` to
- * `Headers.fromInput()` (effect/unstable/http/Headers) without schema
- * validation. When a malformed client posts e.g. `headers: [null]` the
- * iterator yields `undefined`, the destructure crashes inside Effect,
- * and `RpcServer` emits a `FATAL: RpcServer protocol crashed` defect
- * that takes the whole RPC pipeline down for the lifetime of the
- * process (systemd still considers the unit "active" because the bun
- * runtime is alive, just unable to serve).
+ * Effect-RPC's `RpcServer` has two interacting bugs at the protocol
+ * layer (both still present in effect@4.0.0-beta.71, the latest beta):
  *
- * Federation v1 made this exploitable in practice: every korri-server
- * now binds `0.0.0.0` + mDNS-advertises, so any LAN client can crash
- * the server with a one-liner. This guard sits in front of the Hono
- * `/api/rpc` route, validates the wire envelope shape against the
- * subset Effect actually consumes, and rejects bad shapes with `400`
- * — surfacing a structured warning to logs so the bad client can be
- * identified.
+ *   1. `RpcServer.js:651` runs
+ *      `message.headers = requestHeaders.concat(message.headers)` for
+ *      every decoded Request frame. When the client omits the
+ *      `headers` field, `message.headers === undefined` and
+ *      `[].concat(undefined)` returns `[undefined]` (a JavaScript
+ *      `Array.prototype.concat` quirk). That `[undefined]` then
+ *      reaches `Headers.fromInput()` (RpcServer.js:479) which iterates
+ *      it, tries to destructure `[k, v]` from `undefined`, and throws
+ *      a TypeError caught as a FATAL `RpcServer protocol crashed`
+ *      defect. The whole RPC pipeline dies for the lifetime of the
+ *      bun process (systemd still considers the unit "active"
+ *      because the runtime stays alive — it just can't serve).
  *
- * What we validate (per
- *   node_modules/effect/dist/unstable/rpc/RpcMessage.d.ts
- *   `RequestEncoded`):
+ *   2. The same `Headers.fromInput()` accepts any iterable without
+ *      validating the entry shape, so e.g. `headers: [null]` from a
+ *      malformed client crashes the same way for the same reason.
+ *
+ * Federation v1 made both bugs exploitable in practice: every
+ * korri-server now binds `0.0.0.0` + mDNS-advertises, so any LAN
+ * client (or a normal Korri RPC client that happens to omit the
+ * optional headers field) can crash the server with a one-liner.
+ *
+ * This guard sits in front of the Hono `/api/rpc` route and does
+ * two things:
+ *
+ *   - Validates the wire envelope against the subset Effect actually
+ *     consumes (per `RequestEncoded` in
+ *     `node_modules/effect/dist/unstable/rpc/RpcMessage.d.ts`).
+ *     Malformed bodies are rejected with `400` and the bad envelope
+ *     is logged with body sample + remote hint so the misbehaving
+ *     sender is identifiable.
+ *
+ *   - Normalizes valid Request frames so `headers` is always a
+ *     concrete `[]` before reaching RpcServer. This sidesteps bug (1)
+ *     above: with `message.headers = []`, `requestHeaders.concat([])`
+ *     produces the HTTP headers list unchanged, no `[undefined]`,
+ *     no crash.
+ *
+ * What we validate:
  *
  *   - The body parses as JSON.
  *   - JSON resolves to a single frame object OR an array of frames.
- *     `BatchJsonSerialization` (see ./serialization.ts) accepts both:
- *     Effect-RPC's HTTP client posts a single frame per request, but the
- *     serializer wraps it into `[frame]` server-side. Reject neither.
+ *     `BatchJsonSerialization` (see ./serialization.ts) accepts both.
  *   - Each frame is a plain object with a string `_tag`.
  *   - For `Request` frames: `id`/`tag` are strings; `headers`, when
  *     present, is `Array<[string, string]>`. `payload` is untouched
@@ -42,10 +61,6 @@
  *     produces a normal defect, not a protocol crash, on bad input.
  *   - Non-Request frame shapes (Ack/Interrupt/Ping/Eof) — they don't
  *     touch the `Headers.fromInput` code path.
- *
- * Rejected frames are logged with sufficient detail to identify the
- * sender (header sample, body sample, remote address when available)
- * without exposing payload secrets.
  */
 
 /**
@@ -144,14 +159,46 @@ export interface EnvelopeGuardOutcome {
 }
 
 /**
- * Read a `/api/rpc` Request, validate its envelope, and return either:
+ * Normalize a parsed-and-validated envelope so every Request frame has
+ * an explicit `headers: []`. Sidesteps the `[].concat(undefined)` bug
+ * in `RpcServer.js:651`.
  *
- *   - `{ response: <400>, forwardableBody: undefined }` to short-circuit
- *     to the caller.
- *   - `{ response: undefined, forwardableBody: <text> }` for the caller
- *     to construct a fresh Request from `forwardableBody` and pass it
- *     to the real RPC handler. We return the text rather than a Request
- *     because Web `Request` bodies are one-shot ReadableStreams.
+ * Exported for test coverage; production callers should use
+ * `guardRpcEnvelope`.
+ */
+export function normalizeRpcEnvelope(body: unknown): unknown {
+  if (Array.isArray(body)) {
+    return body.map(normalizeFrame)
+  }
+  return normalizeFrame(body)
+}
+
+function normalizeFrame(frame: unknown): unknown {
+  if (
+    frame === null ||
+    typeof frame !== "object" ||
+    Array.isArray(frame) ||
+    (frame as { _tag?: unknown })._tag !== "Request"
+  ) {
+    return frame
+  }
+  const req = frame as { readonly headers?: unknown }
+  if (Array.isArray(req.headers)) return frame
+  return { ...frame, headers: [] }
+}
+
+/**
+ * Read a `/api/rpc` Request, validate its envelope, normalize
+ * Request frames, and return either:
+ *
+ *   - `{ response: <400>, forwardableBody: undefined }` to
+ *     short-circuit to the caller when the envelope is malformed.
+ *   - `{ response: undefined, forwardableBody: <text> }` for the
+ *     caller to construct a fresh Request from `forwardableBody`.
+ *     `forwardableBody` is the re-stringified, normalized envelope,
+ *     not necessarily byte-identical to the original input. We
+ *     return text rather than a Request because Web `Request` bodies
+ *     are one-shot ReadableStreams.
  *
  * The function is io-aware but doesn't take a logger by default. Pass
  * `options.logger` to capture rejection diagnostics (recommended in
@@ -199,7 +246,8 @@ export async function guardRpcEnvelope(
       forwardableBody: undefined,
     }
   }
-  return { response: undefined, forwardableBody: text }
+  const normalized = normalizeRpcEnvelope(parsed)
+  return { response: undefined, forwardableBody: JSON.stringify(normalized) }
 }
 
 /**

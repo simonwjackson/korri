@@ -1,8 +1,75 @@
 import { describe, expect, it } from "bun:test"
 import {
   guardRpcEnvelope,
+  normalizeRpcEnvelope,
   validateRpcEnvelope,
 } from "./envelope-guard"
+
+describe("normalizeRpcEnvelope (pure)", () => {
+  it("injects headers: [] into a single-frame Request that omits it", () => {
+    expect(
+      normalizeRpcEnvelope({
+        _tag: "Request",
+        id: "1",
+        tag: "x",
+        payload: {},
+      }),
+    ).toEqual({
+      _tag: "Request",
+      id: "1",
+      tag: "x",
+      payload: {},
+      headers: [],
+    })
+  })
+
+  it("injects headers: [] into batched Request frames that omit it", () => {
+    const result = normalizeRpcEnvelope([
+      { _tag: "Request", id: "1", tag: "x", payload: {} },
+      {
+        _tag: "Request",
+        id: "2",
+        tag: "y",
+        payload: {},
+        headers: [["k", "v"]],
+      },
+    ])
+    expect(result).toEqual([
+      { _tag: "Request", id: "1", tag: "x", payload: {}, headers: [] },
+      {
+        _tag: "Request",
+        id: "2",
+        tag: "y",
+        payload: {},
+        headers: [["k", "v"]],
+      },
+    ])
+  })
+
+  it("leaves non-Request frames untouched", () => {
+    const ack = { _tag: "Ack", requestId: "1" }
+    expect(normalizeRpcEnvelope(ack)).toBe(ack)
+    expect(normalizeRpcEnvelope([ack])).toEqual([ack])
+  })
+
+  it("preserves an explicit empty headers array on a Request frame", () => {
+    expect(
+      normalizeRpcEnvelope({
+        _tag: "Request",
+        id: "1",
+        tag: "x",
+        payload: {},
+        headers: [],
+      }),
+    ).toEqual({
+      _tag: "Request",
+      id: "1",
+      tag: "x",
+      payload: {},
+      headers: [],
+    })
+  })
+})
 
 describe("validateRpcEnvelope (pure)", () => {
   it("accepts an empty batch", () => {
@@ -150,13 +217,30 @@ describe("guardRpcEnvelope (io)", () => {
     })
   }
 
-  it("returns the original body text when the envelope is well-formed", async () => {
+  it("normalizes a well-formed envelope so every Request has explicit headers: []", async () => {
     const body = JSON.stringify([
       { _tag: "Request", id: "1", tag: "x", payload: {} },
     ])
     const outcome = await guardRpcEnvelope(mkRequest(body))
     expect(outcome.response).toBeUndefined()
-    expect(outcome.forwardableBody).toBe(body)
+    const reparsed = JSON.parse(outcome.forwardableBody ?? "")
+    expect(reparsed).toEqual([
+      { _tag: "Request", id: "1", tag: "x", payload: {}, headers: [] },
+    ])
+  })
+
+  it("preserves an explicit headers value through the forwardable body", async () => {
+    const body = JSON.stringify({
+      _tag: "Request",
+      id: "1",
+      tag: "x",
+      payload: {},
+      headers: [["x-feature-gates", "abc=1"]],
+    })
+    const outcome = await guardRpcEnvelope(mkRequest(body))
+    expect(outcome.response).toBeUndefined()
+    const reparsed = JSON.parse(outcome.forwardableBody ?? "")
+    expect(reparsed.headers).toEqual([["x-feature-gates", "abc=1"]])
   })
 
   it("returns a 400 response without consuming downstream when the body is not JSON", async () => {
