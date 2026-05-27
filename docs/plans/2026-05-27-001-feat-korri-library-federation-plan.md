@@ -1,7 +1,7 @@
 ---
 title: "feat: Korri Library Federation v1"
 type: feat
-status: active
+status: completed
 date: 2026-05-27
 origin: docs/brainstorms/2026-05-27-korri-library-federation-requirements.md
 verify_command: "just check"
