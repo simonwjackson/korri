@@ -39,14 +39,27 @@ describe("app.source.list handler", () => {
 
   it("returns minimal streamable catalog games when enabled", async () => {
     await setupLibrary({ enabled: true })
+    process.env.KORRI_STREAM_ADVERTISE_HOST_ID = "source-test-host"
+    process.env.HOST = "127.0.0.1"
+    process.env.PORT = "3001"
 
     const result = await Effect.runPromise(
       handleListSource({}).pipe(Effect.provide(LibrarySourceLayerLive)),
     )
 
-    expect(result.games).toEqual([
-      { id: "gba/wario-land-4", displayName: "Wario Land 4", streamable: true },
-    ])
+    expect(result.games).toHaveLength(1)
+    expect(result.games[0]).toMatchObject({
+      id: "gba/wario-land-4",
+      displayName: "Wario Land 4",
+      streamable: true,
+    })
+    expect(result.games[0]?.source).toEqual({
+      hostId: "source-test-host",
+      controlUrl: "http://127.0.0.1:3001",
+      isLocal: true,
+    })
+
+    delete process.env.KORRI_STREAM_ADVERTISE_HOST_ID
   })
 
   // The legacy `KORRI_HEADLESS_SOURCE_ONLY` gate on `app.library.list` was

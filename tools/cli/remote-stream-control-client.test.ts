@@ -54,9 +54,13 @@ describe("remote stream control client", () => {
     })
 
     const games = await client.listSourceGames()
-    expect(games).toEqual([
-      { id: "gba/wario-land-4", displayName: "Wario Land 4", streamable: true },
-    ])
+    expect(games).toHaveLength(1)
+    expect(games[0]).toMatchObject({
+      id: "gba/wario-land-4",
+      displayName: "Wario Land 4",
+      streamable: true,
+    })
+    expect(games[0]?.source).toMatchObject({ isLocal: true })
 
     const prepared = await client.prepareGame("gba/wario-land-4")
     expect(prepared).toMatchObject({

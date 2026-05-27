@@ -1,3 +1,4 @@
+import { EntrySource } from "@shared/api/rpc/entry-source"
 import { ApiError } from "@shared/api/rpc/errors"
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/unstable/rpc"
@@ -13,6 +14,11 @@ export class LocalStreamLaunchPayload extends Schema.Class<LocalStreamLaunchPayl
   "LocalStreamLaunchPayload",
 )({
   id: LocalStreamLaunchGameId,
+  /**
+   * Federation source tag. Optional in U1 (schema-additive) — U5 makes
+   * it required and adds source-aware routing in `launch-bridge.ts`.
+   */
+  source: Schema.optional(EntrySource),
 }) {}
 
 const LocalStreamLaunchFailureCategory = Schema.Literals([

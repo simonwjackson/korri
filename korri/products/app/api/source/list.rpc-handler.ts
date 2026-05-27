@@ -1,3 +1,4 @@
+import { makeLocalEntrySource } from "@shared/api/rpc/entry-source"
 import { DataError, ValidationError } from "@shared/api/rpc/errors"
 import { getGameDisplayName } from "@shared/fixtures/games/game"
 import {
@@ -23,6 +24,7 @@ export const handleListSource = (_payload: typeof ListSourcePayload.Type) =>
 
     const source = yield* LibrarySource
     const games = yield* source.list().pipe(Effect.mapError(toDataError))
+    const localSource = makeLocalEntrySource(process.env)
     const sourceGames = yield* Effect.forEach(games, game =>
       source.launchSpecFor(game.id).pipe(
         Effect.matchEffect({
@@ -33,6 +35,7 @@ export const handleListSource = (_payload: typeof ListSourcePayload.Type) =>
                     id: game.id,
                     displayName: getGameDisplayName(game),
                     streamable: true,
+                    source: localSource,
                   })
                 : undefined,
             ),

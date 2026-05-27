@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { appRpcGroup } from "@app/api/app-rpc-group"
+import { EntrySource } from "@shared/api/rpc/entry-source"
 import { NotFoundError } from "@shared/api/rpc/errors"
 import { makeInMemoryLauncherLayer } from "@shared/library/launcher-layer-memory"
 import {
@@ -25,6 +26,14 @@ import { handleLaunchLibrary } from "./launch.rpc-handler"
 
 const originalLibraryRoot = process.env.KORRI_LIBRARY_ROOT
 const cleanups: Array<() => Promise<void>> = []
+
+// Shared `source` payload field for tests. The launch handler does not
+// route on this in U1 (local path only) but the schema requires it.
+const localTestSource = new EntrySource({
+  hostId: "launch-test-host",
+  controlUrl: "http://127.0.0.1:3001",
+  isLocal: true,
+})
 const REPO_ROOT = resolve(import.meta.dir, "../../../../..")
 const FAKE_GAME = join(REPO_ROOT, "tools", "testing", "fake-game.sh")
 
@@ -96,6 +105,20 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     const { layer } = await layerForFakeGame(0)
     const result = await Effect.runPromise(
       handleLaunchLibrary({ id: "snes/echo.smc" }).pipe(Effect.provide(layer)),
+    )
+    expect(result).toEqual({ status: "launched" })
+  })
+
+  it("accepts (and ignores in U1) a `source` payload field for the local launch path", async () => {
+    const { layer } = await layerForFakeGame(0)
+    // U1 makes `source` payload-acceptable; U5 turns it into a routing
+    // discriminator. For now the handler treats the local-tagged payload
+    // identically to the bare-id call: success.
+    const result = await Effect.runPromise(
+      handleLaunchLibrary({
+        id: "snes/echo.smc",
+        source: localTestSource,
+      }).pipe(Effect.provide(layer)),
     )
     expect(result).toEqual({ status: "launched" })
   })

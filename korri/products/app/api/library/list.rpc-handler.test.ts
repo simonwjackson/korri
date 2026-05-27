@@ -89,6 +89,66 @@ describe("app.library.list handler (configured-real source)", () => {
     expect(result.games).toEqual([])
   })
 
+  it("tags every entry with the local server's EntrySource", async () => {
+    const lib = track(
+      await withTempProseqlLibrary({
+        games: [
+          {
+            id: "snes/local-tagged.smc",
+            system: "fixture",
+            contentPath: "/storage/fixtures/snes/local-tagged.smc.rom",
+            metadata: { name: "Local Tagged" },
+          },
+        ],
+      }),
+    )
+    process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_STREAM_ADVERTISE_HOST_ID = "test-host"
+    process.env.HOST = "127.0.0.1"
+    process.env.PORT = "3001"
+
+    const result = await Effect.runPromise(
+      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+    )
+
+    expect(result.games).toHaveLength(1)
+    expect(result.games[0]?.source).toEqual({
+      hostId: "test-host",
+      controlUrl: "http://127.0.0.1:3001",
+      isLocal: true,
+    })
+
+    delete process.env.KORRI_STREAM_ADVERTISE_HOST_ID
+  })
+
+  it("derives EntrySource.controlUrl from KORRI_PUBLIC_API_BASE_URL when set", async () => {
+    const lib = track(
+      await withTempProseqlLibrary({
+        games: [
+          {
+            id: "snes/explicit-url.smc",
+            system: "fixture",
+            contentPath: "/storage/fixtures/snes/explicit-url.smc.rom",
+            metadata: { name: "Explicit URL" },
+          },
+        ],
+      }),
+    )
+    process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_STREAM_ADVERTISE_HOST_ID = "aka"
+    process.env.KORRI_PUBLIC_API_BASE_URL = "http://192.168.1.117:3001/"
+
+    const result = await Effect.runPromise(
+      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+    )
+
+    expect(result.games[0]?.source?.controlUrl).toBe(
+      "http://192.168.1.117:3001",
+    )
+
+    delete process.env.KORRI_STREAM_ADVERTISE_HOST_ID
+  })
+
   it("returns assigned tile, banner, and poster assets as absolute resolved media URLs", async () => {
     const lib = track(
       await withTempProseqlLibrary({

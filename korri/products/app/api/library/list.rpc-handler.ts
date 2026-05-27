@@ -2,6 +2,7 @@ import {
   gameAssetByteRoutePrefix,
   hasValidGameAssetBytes,
 } from "@shared/api/http/game-asset-bytes"
+import { makeLocalEntrySource } from "@shared/api/rpc/entry-source"
 import { DataError } from "@shared/api/rpc/errors"
 import { korriDataPath, type XdgPathEnv } from "@shared/config/xdg-paths"
 import type {
@@ -24,7 +25,11 @@ import {
 import { logger } from "@shared/logger/logger"
 import { Effect, type Scope } from "effect"
 
-import { type ListLibraryPayload, ListLibraryResponse } from "./list.rpc"
+import {
+  type LibraryEntry,
+  type ListLibraryPayload,
+  ListLibraryResponse,
+} from "./list.rpc"
 
 /**
  * Returns the full library from whatever LibrarySource is provided by
@@ -45,7 +50,12 @@ export const handleListLibrary = (_payload: typeof ListLibraryPayload.Type) =>
       games,
       env: process.env,
     })
-    return new ListLibraryResponse({ games: resolvedGames })
+    const localSource = makeLocalEntrySource(process.env)
+    const taggedGames: readonly LibraryEntry[] = resolvedGames.map(game => ({
+      ...game,
+      source: localSource,
+    }))
+    return new ListLibraryResponse({ games: taggedGames })
   })
 
 interface CatalogAssignment {
