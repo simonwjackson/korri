@@ -4,20 +4,21 @@ import {
   getGameDisplayName,
 } from "@shared/fixtures/games/game"
 import {
+  type LaunchActionState,
   launchActionStateAllowsStart,
   launchActionStateFrom,
-  type LaunchActionState,
 } from "@shared/library/launch-action-state"
 import type { LaunchController } from "@shared/library/launch-state"
 import { foregroundSessionGateStateAtom } from "@shared/library/library-atoms"
-import type { ForegroundSessionGateState } from "@shared/stream/foreground-session-gate-state"
 import { useLibraryListCase } from "@shared/library/library-list-state-root"
 import { useInputAction } from "@shared/navigation/use-input-action"
+import type { ForegroundSessionGateState } from "@shared/stream/foreground-session-gate-state"
 import { Option } from "effect"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
+import { useEffect } from "react"
+import { ShiftForegroundSessionGateNotice } from "../molecules/ShiftForegroundSessionGateNotice"
 import { ShiftHomeCaption } from "../molecules/ShiftHomeCaption"
 import { ShiftLabsButton } from "../molecules/ShiftLabsButton"
-import { ShiftForegroundSessionGateNotice } from "../molecules/ShiftForegroundSessionGateNotice"
 import { ShiftLaunchFailureBanner } from "../molecules/ShiftLaunchFailureBanner"
 import { ShiftUiScaleControl } from "../molecules/ShiftUiScaleControl"
 import { ShiftHomeBottomBar } from "../organisms/ShiftHomeBottomBar"
@@ -27,7 +28,6 @@ import { ShiftLabsPanel } from "../organisms/ShiftLabsPanel"
 import { ShiftSystemPanel } from "../organisms/ShiftSystemPanel"
 import { useShiftHome } from "../templates/ShiftHome.context"
 import { ShiftHomeRoot } from "../templates/ShiftHomeRoot"
-import { useEffect } from "react"
 
 const PLACEHOLDER_TIME = "4:24 PM"
 const PLACEHOLDER_AVATAR_SRC = "https://i.pravatar.cc/96?u=korri-shift-user"

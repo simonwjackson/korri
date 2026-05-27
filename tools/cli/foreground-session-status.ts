@@ -4,6 +4,11 @@ const DEFAULT_STATUS_URL =
   process.env.KORRI_FOREGROUND_SESSION_STATUS_URL ??
   "http://127.0.0.1:3000/__korri/desktop/foreground-session-status"
 
+type ParsedCommand =
+  | { readonly _tag: "Run"; readonly url: string }
+  | { readonly _tag: "Help"; readonly message: string }
+  | { readonly _tag: "Error"; readonly message: string }
+
 export interface ForegroundSessionStatusCommandIo {
   readonly fetch?: (
     input: RequestInfo | URL,
@@ -22,44 +27,60 @@ export async function runForegroundSessionStatusCommand(
   const fetchImpl = io.fetch ?? fetch
   const parsed = parseCommand(argv)
 
-  if (typeof parsed === "string") {
-    writeError(parsed)
+  if (parsed._tag === "Help") {
+    write(parsed.message)
+    return 0
+  }
+  if (parsed._tag === "Error") {
+    writeError(parsed.message)
     return 2
   }
 
+  let response: Response
   try {
-    const response = await fetchImpl(parsed.url, {
+    response = await fetchImpl(parsed.url, {
       method: "GET",
       headers: { accept: "application/json" },
     })
-    if (!response.ok) {
-      writeError(
-        `foreground-session-status request failed with HTTP ${response.status}`,
-      )
-      return 20
-    }
+  } catch (error) {
+    writeError(
+      `foreground-session-status request failed: ${errorMessage(error)}`,
+    )
+    return 20
+  }
+
+  if (!response.ok) {
+    writeError(
+      `foreground-session-status request failed with HTTP ${response.status}`,
+    )
+    return 20
+  }
+
+  try {
     const decoded = decodeForegroundSessionStatusSnapshot(await response.json())
     write(JSON.stringify(decoded, null, 2))
     return 0
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (isSchemaFailure(message)) {
-      writeError(`foreground-session-status status schema failure: ${message}`)
-      return 30
-    }
-    writeError(`foreground-session-status request failed: ${message}`)
-    return 20
+    writeError(
+      `foreground-session-status status schema failure: ${errorMessage(error)}`,
+    )
+    return 30
   }
 }
 
-function parseCommand(
-  argv: readonly string[],
-): { readonly url: string } | string {
-  const url = flagValue(argv, "--url") ?? DEFAULT_STATUS_URL
+function parseCommand(argv: readonly string[]): ParsedCommand {
   if (argv.includes("--help") || argv.includes("-h")) {
-    return "usage: foreground-session-status [--url <status-url>]"
+    return {
+      _tag: "Help",
+      message: "usage: foreground-session-status [--url <status-url>]",
+    }
   }
-  return { url }
+
+  const explicitUrl = flagValue(argv, "--url")
+  if (argv.includes("--url") && !explicitUrl) {
+    return { _tag: "Error", message: "--url requires a value" }
+  }
+  return { _tag: "Run", url: explicitUrl ?? DEFAULT_STATUS_URL }
 }
 
 function flagValue(argv: readonly string[], flag: string): string | undefined {
@@ -68,13 +89,8 @@ function flagValue(argv: readonly string[], flag: string): string | undefined {
   return argv[index + 1]
 }
 
-function isSchemaFailure(message: string): boolean {
-  return (
-    message.includes("schemaVersion") ||
-    message.includes("serverTimestamp") ||
-    message.includes("recentEvents") ||
-    message.includes("state")
-  )
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 if (import.meta.main) {

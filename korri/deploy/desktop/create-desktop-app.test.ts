@@ -495,6 +495,31 @@ describe("/__korri/desktop/foreground-session-status", () => {
     })
   })
 
+  test("returns a bounded error when foreground session status accessor fails", async () => {
+    const app = createDesktopApp({
+      assetRoot,
+      getUpstream: noUpstream,
+      getConnectionState: alwaysConnected,
+      getForegroundSessionStatus: () => {
+        throw new Error("owner status failed")
+      },
+    })
+
+    const response = await app.fetch(
+      request("/__korri/desktop/foreground-session-status"),
+    )
+
+    expect(response.status).toBe(500)
+    expect(response.headers.get("cache-control") ?? "").toContain("no-store")
+    const body = (await response.json()) as { readonly error: string }
+    expect(body.error).toContain("owner status failed")
+
+    const connection = await app.fetch(
+      request("/__korri/desktop/connection-status"),
+    )
+    expect(connection.status).toBe(200)
+  })
+
   test("returns 503 when foreground session status is not configured", async () => {
     const app = createDesktopApp({
       assetRoot,

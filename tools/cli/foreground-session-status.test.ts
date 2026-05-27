@@ -32,6 +32,41 @@ describe("foreground session status CLI", () => {
     })
   })
 
+  it("prints help to stdout with a success exit", async () => {
+    const lines: string[] = []
+    const errors: string[] = []
+
+    const exitCode = await runForegroundSessionStatusCommand(["--help"], {
+      write: line => lines.push(line),
+      writeError: line => errors.push(line),
+    })
+
+    expect(exitCode).toBe(0)
+    expect(lines.join("\n")).toContain("usage:")
+    expect(errors).toEqual([])
+  })
+
+  it("returns usage when --url has no value", async () => {
+    const errors: string[] = []
+    const exitCode = await runForegroundSessionStatusCommand(["--url"], {
+      writeError: line => errors.push(line),
+    })
+
+    expect(exitCode).toBe(2)
+    expect(errors.join("\n")).toContain("--url requires a value")
+  })
+
+  it("returns non-zero on HTTP failures", async () => {
+    const errors: string[] = []
+    const exitCode = await runForegroundSessionStatusCommand([], {
+      fetch: async () => new Response("nope", { status: 503 }),
+      writeError: line => errors.push(line),
+    })
+
+    expect(exitCode).toBe(20)
+    expect(errors.join("\n")).toContain("HTTP 503")
+  })
+
   it("returns non-zero on network failure", async () => {
     const errors: string[] = []
     const exitCode = await runForegroundSessionStatusCommand([], {

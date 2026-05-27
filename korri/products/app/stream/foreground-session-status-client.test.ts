@@ -1,8 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import {
-  createForegroundSessionStatusClient,
-  pollForegroundSessionStatus,
-} from "./foreground-session-status-client"
+import { createForegroundSessionStatusClient } from "./foreground-session-status-client"
 
 describe("foreground session status client", () => {
   it("fetches and decodes a valid status snapshot", async () => {
@@ -33,6 +30,22 @@ describe("foreground session status client", () => {
     })
   })
 
+  it("reports network failures without throwing through React callers", async () => {
+    const client = createForegroundSessionStatusClient({
+      fetch: async () => {
+        throw new Error("connection refused")
+      },
+    })
+
+    const result = await client.fetchStatusResult()
+
+    expect(result._tag).toBe("Failure")
+    if (result._tag === "Failure") {
+      expect(result.kind).toBe("network")
+      expect(result.message).toContain("connection refused")
+    }
+  })
+
   it("reports HTTP failures without throwing through React callers", async () => {
     const client = createForegroundSessionStatusClient({
       fetch: async () => new Response("nope", { status: 500 }),
@@ -41,7 +54,10 @@ describe("foreground session status client", () => {
     const result = await client.fetchStatusResult()
 
     expect(result._tag).toBe("Failure")
-    if (result._tag === "Failure") expect(result.message).toContain("500")
+    if (result._tag === "Failure") {
+      expect(result.kind).toBe("http")
+      expect(result.message).toContain("500")
+    }
   })
 
   it("reports malformed snapshots as failures", async () => {
@@ -53,38 +69,32 @@ describe("foreground session status client", () => {
     const result = await client.fetchStatusResult()
 
     expect(result._tag).toBe("Failure")
-    if (result._tag === "Failure") expect(result.message).toContain("schema")
+    if (result._tag === "Failure") {
+      expect(result.kind).toBe("schema")
+      expect(result.message).toContain("schemaVersion")
+    }
   })
 
-  it("polls until aborted", async () => {
-    const snapshots: string[] = []
+  it("passes abort signals into the status fetch", async () => {
     const abort = new AbortController()
-    let sleeps = 0
-    const stopped = pollForegroundSessionStatus({
-      client: createForegroundSessionStatusClient({
-        fetch: async () =>
-          new Response(
-            JSON.stringify({
-              schemaVersion: 1,
-              serverTimestamp: "2026-05-26T12:00:00.000Z",
-              state: sleeps === 0 ? "Running" : "IdleReady",
-              recentEvents: [],
-            }),
-            { status: 200 },
-          ),
-      }),
-      intervalMs: 1,
-      signal: abort.signal,
-      sleep: async () => {
-        sleeps += 1
-        if (sleeps === 2) abort.abort()
+    let receivedSignal: AbortSignal | undefined
+    const client = createForegroundSessionStatusClient({
+      fetch: async (_url, init) => {
+        receivedSignal = init?.signal ?? undefined
+        return new Response(
+          JSON.stringify({
+            schemaVersion: 1,
+            serverTimestamp: "2026-05-26T12:00:00.000Z",
+            state: "IdleReady",
+            recentEvents: [],
+          }),
+          { status: 200 },
+        )
       },
-      onStatus: status => snapshots.push(status.state),
-      onError: error => snapshots.push(`error:${error.message}`),
     })
 
-    await stopped
+    await client.fetchStatusResult({ signal: abort.signal })
 
-    expect(snapshots).toEqual(["Running", "IdleReady"])
+    expect(receivedSignal).toBe(abort.signal)
   })
 })

@@ -1,7 +1,4 @@
-import type {
-  ForegroundSessionStatusSnapshot,
-  ForegroundSessionStatusStateTag,
-} from "./foreground-session-status"
+import type { ForegroundSessionStatusSnapshot } from "./foreground-session-status"
 
 export type ForegroundSessionGateSnapshotInput =
   | ForegroundSessionStatusSnapshot
@@ -113,31 +110,4 @@ function failureIdentity(snapshot: ForegroundSessionStatusSnapshot): {
     ...(failure?.stage ? { stage: failure.stage } : {}),
     ...(failure?.message ? { message: failure.message } : {}),
   }
-}
-
-export function foregroundSessionGateStateIsLaunchAllowed(
-  state: ForegroundSessionGateState,
-): boolean {
-  return (
-    state._tag === "Ready" ||
-    state._tag === "Unknown" ||
-    state._tag === "LoadError"
-  )
-}
-
-export function foregroundSessionKnownStateTag(
-  state: string,
-): state is ForegroundSessionStatusStateTag {
-  return [
-    "IdleReady",
-    "Preparing",
-    "Spawning",
-    "Foregrounding",
-    "Running",
-    "ExitObserved",
-    "TearingDown",
-    "VerifyingReady",
-    "Failed",
-    "Recovering",
-  ].includes(state)
 }

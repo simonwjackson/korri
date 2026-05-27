@@ -145,10 +145,31 @@ describe("foreground session status snapshot", () => {
     ).toThrow(/evidence/)
   })
 
-  it("maps unknown future lifecycle tags to unknown for renderer safety", () => {
-    expect(foregroundSessionGateStateFromStatusTag("Queued")).toEqual({
+  it("decodes unknown future lifecycle tags for renderer safety", () => {
+    const decoded = decodeSnapshot({
+      schemaVersion: 1,
+      serverTimestamp: "2026-05-26T12:00:00.000Z",
+      state: "Queued",
+      recentEvents: [
+        {
+          tag: "ForegroundSessionStateChanged",
+          previousState: "IdleReady",
+          nextState: "Queued",
+        },
+      ],
+    })
+
+    expect(decoded.state).toBe("Queued")
+    expect(foregroundSessionGateStateFromStatusTag(decoded.state)).toEqual({
       _tag: "Unknown",
       state: "Queued",
+    })
+  })
+
+  it("maps known lifecycle tags for renderer safety helpers", () => {
+    expect(foregroundSessionGateStateFromStatusTag("Running")).toEqual({
+      _tag: "Known",
+      state: "Running",
     })
   })
 })

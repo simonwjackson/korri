@@ -1,7 +1,7 @@
 import { logger } from "@shared/logger"
+import type { ForegroundSessionStatusSnapshot } from "@shared/stream/foreground-session-status"
 import { Hono } from "hono"
 import { createApiForwarder } from "./api-forwarder"
-import type { ForegroundSessionStatusSnapshot } from "@shared/stream/foreground-session-status"
 import type { ConnectionStateSnapshot } from "./connection-state-snapshot"
 import {
   createLocalStreamLaunchRpcHandler,
@@ -89,9 +89,22 @@ export function createDesktopApp(options: CreateDesktopAppOptions) {
         { "cache-control": "no-store" },
       )
     }
-    return c.json(getForegroundSessionStatus(), 200, {
-      "cache-control": "no-store",
-    })
+    try {
+      return c.json(getForegroundSessionStatus(), 200, {
+        "cache-control": "no-store",
+      })
+    } catch (error) {
+      return c.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Foreground session status failed",
+        },
+        500,
+        { "cache-control": "no-store" },
+      )
+    }
   })
 
   // Renderer→bun launch bridge: takes a game id over the desktop-local

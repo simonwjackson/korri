@@ -6,16 +6,26 @@ import {
 const FOREGROUND_SESSION_STATUS_URL =
   "/__korri/desktop/foreground-session-status"
 
+export type ForegroundSessionStatusFailureKind = "http" | "network" | "schema"
+
 export type ForegroundSessionStatusResult =
   | {
       readonly _tag: "Success"
       readonly status: ForegroundSessionStatusSnapshot
     }
-  | { readonly _tag: "Failure"; readonly message: string }
+  | {
+      readonly _tag: "Failure"
+      readonly kind: ForegroundSessionStatusFailureKind
+      readonly message: string
+    }
 
 export interface ForegroundSessionStatusClient {
-  readonly fetchStatus: () => Promise<ForegroundSessionStatusSnapshot>
-  readonly fetchStatusResult: () => Promise<ForegroundSessionStatusResult>
+  readonly fetchStatus: (options?: {
+    readonly signal?: AbortSignal
+  }) => Promise<ForegroundSessionStatusSnapshot>
+  readonly fetchStatusResult: (options?: {
+    readonly signal?: AbortSignal
+  }) => Promise<ForegroundSessionStatusResult>
 }
 
 export type ForegroundSessionStatusFetch = (
@@ -36,83 +46,50 @@ export function createForegroundSessionStatusClient(
   )
   const fetchImpl = options.fetch ?? fetch
 
-  const fetchStatus = async (): Promise<ForegroundSessionStatusSnapshot> => {
-    const response = await fetchImpl(statusUrl, {
-      method: "GET",
-      headers: { accept: "application/json" },
-    })
-    if (!response.ok) {
-      throw new Error(
-        `Foreground session status request failed with HTTP ${response.status}`,
-      )
+  const fetchStatusResult = async (
+    request: { readonly signal?: AbortSignal } = {},
+  ): Promise<ForegroundSessionStatusResult> => {
+    let response: Response
+    try {
+      response = await fetchImpl(statusUrl, {
+        method: "GET",
+        headers: { accept: "application/json" },
+        signal: request.signal,
+      })
+    } catch (error) {
+      return { _tag: "Failure", kind: "network", message: errorMessage(error) }
     }
-    return decodeForegroundSessionStatusSnapshot(await response.json())
+
+    if (!response.ok) {
+      return {
+        _tag: "Failure",
+        kind: "http",
+        message: `Foreground session status request failed with HTTP ${response.status}`,
+      }
+    }
+
+    try {
+      return {
+        _tag: "Success",
+        status: decodeForegroundSessionStatusSnapshot(await response.json()),
+      }
+    } catch (error) {
+      return { _tag: "Failure", kind: "schema", message: errorMessage(error) }
+    }
   }
 
   return {
-    fetchStatus,
-    fetchStatusResult: async () => {
-      try {
-        return { _tag: "Success", status: await fetchStatus() }
-      } catch (error) {
-        return {
-          _tag: "Failure",
-          message: statusFailureMessage(error),
-        }
-      }
+    fetchStatus: async request => {
+      const result = await fetchStatusResult(request)
+      if (result._tag === "Success") return result.status
+      throw new Error(result.message)
     },
+    fetchStatusResult,
   }
 }
 
-export interface PollForegroundSessionStatusOptions {
-  readonly client: ForegroundSessionStatusClient
-  readonly intervalMs: number
-  readonly signal: AbortSignal
-  readonly sleep?: (durationMs: number, signal: AbortSignal) => Promise<void>
-  readonly onStatus: (status: ForegroundSessionStatusSnapshot) => void
-  readonly onError: (error: Error) => void
-}
-
-export async function pollForegroundSessionStatus({
-  client,
-  intervalMs,
-  signal,
-  sleep = sleepWithAbort,
-  onStatus,
-  onError,
-}: PollForegroundSessionStatusOptions): Promise<void> {
-  while (!signal.aborted) {
-    const result = await client.fetchStatusResult()
-    if (result._tag === "Success") onStatus(result.status)
-    else onError(new Error(result.message))
-
-    if (signal.aborted) return
-    await sleep(intervalMs, signal).catch(error => {
-      if (!signal.aborted) throw error
-    })
-  }
-}
-
-function statusFailureMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
-  return message.toLowerCase().includes("schema")
-    ? message
-    : `foreground session status schema/request failure: ${message}`
-}
-
-function sleepWithAbort(
-  durationMs: number,
-  signal: AbortSignal,
-): Promise<void> {
-  if (signal.aborted) return Promise.resolve()
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(resolve, durationMs)
-    const abort = () => {
-      clearTimeout(timeout)
-      reject(new DOMException("Aborted", "AbortError"))
-    }
-    signal.addEventListener("abort", abort, { once: true })
-  })
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function absoluteStatusUrl(statusUrl: string): string {

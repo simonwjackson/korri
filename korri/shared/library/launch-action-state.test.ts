@@ -20,6 +20,25 @@ describe("launch action state", () => {
     ).toEqual({ _tag: "Launching", gameId: "gba/wario-land-4" })
   })
 
+  it("blocks launch while foreground session is preparing", () => {
+    expect(
+      launchActionStateFrom({
+        launch: { _tag: "Idle" },
+        foreground: {
+          _tag: "Preparing",
+          state: "Preparing",
+          requestId: "request-1",
+          gameId: "gba/wario-land-4",
+        },
+      }),
+    ).toEqual({
+      _tag: "Blocked",
+      reason: "preparing",
+      requestId: "request-1",
+      gameId: "gba/wario-land-4",
+    })
+  })
+
   it("blocks launch when another renderer has a running session", () => {
     expect(
       launchActionStateFrom({
@@ -76,6 +95,15 @@ describe("launch action state", () => {
       gameId: "gba/wario-land-4",
       message: "surface remained visible",
     })
+  })
+
+  it("does not block launch for unknown lifecycle status", () => {
+    expect(
+      launchActionStateFrom({
+        launch: { _tag: "Idle" },
+        foreground: { _tag: "Unknown", state: "Queued" },
+      }),
+    ).toEqual({ _tag: "Allowed" })
   })
 
   it("does not block launch for unknown status transport failures", () => {

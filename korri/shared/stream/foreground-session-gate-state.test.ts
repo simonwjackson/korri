@@ -66,7 +66,29 @@ describe("foreground session gate state", () => {
     }
   })
 
-  it("maps failed and recovering to recovery with summary", () => {
+  it("maps failed to recovery with summary", () => {
+    expect(
+      foregroundSessionGateStateFromSnapshot({
+        ...base,
+        state: "Failed",
+        lastFailure: {
+          requestId: "request-1",
+          gameId: "gba/wario-land-4",
+          stage: "readiness",
+          message: "surface remained visible",
+        },
+      }),
+    ).toEqual({
+      _tag: "Recovering",
+      state: "Failed",
+      requestId: "request-1",
+      gameId: "gba/wario-land-4",
+      stage: "readiness",
+      message: "surface remained visible",
+    })
+  })
+
+  it("maps recovering to recovery with summary", () => {
     expect(
       foregroundSessionGateStateFromSnapshot({
         ...base,
@@ -86,6 +108,15 @@ describe("foreground session gate state", () => {
       stage: "readiness",
       message: "surface remained visible",
     })
+  })
+
+  it("maps unknown future state tags to unknown", () => {
+    expect(
+      foregroundSessionGateStateFromSnapshot({
+        ...base,
+        state: "Queued",
+      }),
+    ).toEqual({ _tag: "Unknown", state: "Queued" })
   })
 
   it("keeps transport failures non-blocking as load error", () => {

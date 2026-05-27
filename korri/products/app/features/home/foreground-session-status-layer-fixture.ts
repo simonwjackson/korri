@@ -1,7 +1,7 @@
-import { Effect, Layer } from "effect"
 import { foregroundSessionGateStateFromSnapshot } from "@shared/stream/foreground-session-gate-state"
 import type { ForegroundSessionStatusSnapshot } from "@shared/stream/foreground-session-status"
 import { ForegroundSessionStatusSource } from "@shared/stream/foreground-session-status-source"
+import { Effect, Layer } from "effect"
 
 export const idleForegroundSessionStatusSnapshot = {
   schemaVersion: 1,

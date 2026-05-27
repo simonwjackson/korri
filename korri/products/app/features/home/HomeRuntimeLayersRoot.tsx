@@ -1,6 +1,6 @@
-import { HomeLiveUsbArtifactNotice } from "@app/features/home/HomeLiveUsbArtifactNotice"
 import { ForegroundSessionStatusLayerFixture } from "@app/features/home/foreground-session-status-layer-fixture"
 import { ForegroundSessionStatusLayerLive } from "@app/features/home/foreground-session-status-layer-live"
+import { HomeLiveUsbArtifactNotice } from "@app/features/home/HomeLiveUsbArtifactNotice"
 import { LauncherLayerBridge } from "@app/features/home/launcher-layer-bridge"
 import { LauncherLayerRpc } from "@app/features/home/launcher-layer-rpc"
 import { LibrarySourceLayerRpc } from "@app/features/home/library-source-layer-rpc"

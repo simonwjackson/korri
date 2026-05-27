@@ -30,7 +30,11 @@ export function foregroundSessionStatusSnapshotFromOwnerStatus({
   const requestGameIds = requestGameIdsFromEvents(status.events)
   const active = activeFromState(status.state)
   const lastTerminal = lastTerminalFromEvents(status.events, requestGameIds)
-  const lastReadiness = lastReadinessFromEvents(status.events)
+  const lastReadiness = lastReadinessFromEvents(
+    status.events,
+    requestGameIds,
+    active?.requestId,
+  )
   const lastFailure =
     failureFromState(status.state) ??
     failureFromEvents(status.events, requestGameIds)
@@ -170,6 +174,23 @@ function failureFromEvents(
 ): ForegroundSessionStatusFailure | undefined {
   for (const event of [...events].reverse()) {
     if (
+      event._tag === "ForegroundSessionAdapterOutcome" &&
+      event.status === "failed"
+    ) {
+      return {
+        requestId: event.requestId,
+        ...(requestGameIds.get(event.requestId)
+          ? { gameId: requestGameIds.get(event.requestId) }
+          : {}),
+        stage: event.stage,
+        message:
+          stringFromEvidence(event.evidence?.message) ??
+          responseMessageFromEvidence(event.evidence?.response) ??
+          "session failed",
+      }
+    }
+
+    if (
       event._tag !== "ForegroundSessionStateChanged" ||
       event.nextState !== "Failed"
     )
@@ -200,6 +221,8 @@ function failureSummary(
 
 function lastReadinessFromEvents(
   events: readonly ForegroundSessionEvent[],
+  requestGameIds: ReadonlyMap<string, string>,
+  activeRequestId: string | undefined,
 ): ForegroundSessionStatusReadiness | undefined {
   for (const event of [...events].reverse()) {
     if (
@@ -207,8 +230,12 @@ function lastReadinessFromEvents(
       event.stage !== "verifyReady"
     )
       continue
+    if (activeRequestId && event.requestId !== activeRequestId) return undefined
     return {
       requestId: event.requestId,
+      ...(requestGameIds.get(event.requestId)
+        ? { gameId: requestGameIds.get(event.requestId) }
+        : {}),
       status: event.status === "failed" ? "failed" : "ok",
       stage: event.stage,
       ...(stringFromEvidence(event.evidence?.gate)
@@ -299,4 +326,13 @@ function eventSummary(
 
 function stringFromEvidence(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined
+}
+
+function responseMessageFromEvidence(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined
+  return stringFromEvidence(value.message)
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
