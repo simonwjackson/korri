@@ -98,13 +98,13 @@ describe("moonlight local control client", () => {
       async ({ socketPath }) => {
         const client = await connectMoonlightControl({ socketPath })
         try {
-          await expect(client.setBitrate({ bitrateKbps: 45000 })).rejects.toEqual(
-            {
-              code: -32000,
-              message: "runtime commands unsupported",
-              data: { _tag: "unsupported" },
-            },
-          )
+          await expect(
+            client.setBitrate({ bitrateKbps: 45000 }),
+          ).rejects.toEqual({
+            code: -32000,
+            message: "runtime commands unsupported",
+            data: { _tag: "unsupported" },
+          })
         } finally {
           client.close()
         }
@@ -201,7 +201,9 @@ async function withSocketServer(
           )
         } else if (request.method === "runtime.setFps") {
           if (behavior.interleaveFpsEvent) {
-            socket.write(`${JSON.stringify(eventFrame(1, "quality.connection"))}\n`)
+            socket.write(
+              `${JSON.stringify(eventFrame(1, "quality.connection"))}\n`,
+            )
           }
           socket.write(
             `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "command.accepted", requestId: "cmd-2", command: "runtime.setFps" } })}\n`,

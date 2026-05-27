@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test"
 import {
+  decodeMoonlightRuntimeWatchArtifact,
   MOONLIGHT_RUNTIME_WATCH_ARTIFACT_SCHEMA,
   MOONLIGHT_RUNTIME_WATCH_ARTIFACT_VERSION,
-  decodeMoonlightRuntimeWatchArtifact,
 } from "./moonlight-runtime-watch-artifact"
 
 describe("Moonlight runtime watch artifact", () => {

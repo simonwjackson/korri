@@ -1,7 +1,6 @@
 import { Schema } from "effect"
 import {
   MOONLIGHT_CONTROL_PROTOCOL,
-  type MoonlightControlCommandMethod,
   type MoonlightControlEvent,
   type MoonlightControlEventsSubscribedResult,
   type MoonlightControlHelloResult,
@@ -258,7 +257,10 @@ export interface MoonlightRuntimeWatchArtifact {
     readonly completedAt?: string
     readonly durationMs?: number
   }>
-  readonly socket: Readonly<{ readonly path: string; readonly attached: boolean }>
+  readonly socket: Readonly<{
+    readonly path: string
+    readonly attached: boolean
+  }>
   readonly scenario: MoonlightRuntimeWatchScenario
   readonly hello?: MoonlightControlHelloResult
   readonly preSnapshot?: MoonlightControlStateSnapshotResult
@@ -273,7 +275,10 @@ export interface MoonlightRuntimeWatchArtifact {
     readonly exitCode: number
     readonly reason?: string
   }>
-  readonly error?: Readonly<{ readonly category: string; readonly message: string }>
+  readonly error?: Readonly<{
+    readonly category: string
+    readonly message: string
+  }>
 }
 
 export function decodeMoonlightRuntimeWatchArtifact(
