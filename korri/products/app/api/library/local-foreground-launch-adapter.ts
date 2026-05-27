@@ -39,7 +39,8 @@ export function createLocalForegroundLaunchOwner() {
     LocalForegroundLaunchRequest,
     PreparedLocalLaunch,
     SpawnedLocalLaunch,
-    Promise<LaunchLibraryResponse>
+    Promise<LaunchLibraryResponse>,
+    LaunchLibraryResponse
   >({
     requestIdentity: request => ({
       requestId: (request.createRequestId ?? createLaunchRequestId)(),
@@ -79,14 +80,19 @@ export async function launchLocalForegroundSession(
 
 async function spawnLocalLaunch(
   prepared: PreparedLocalLaunch,
-): Promise<ForegroundSessionStageResult<SpawnedLocalLaunch>> {
+): Promise<
+  ForegroundSessionStageResult<SpawnedLocalLaunch, LaunchLibraryResponse>
+> {
   const spawned = await prepared.spawn()
   if (spawned.status === "failed") {
     const response = launchResponseFromLaunchResult(spawned.result)
     return {
       status: "failed",
       message: spawned.result.stderrTail ?? "local launch failed before spawn",
-      evidence: { response },
+      evidence: {
+        exitCode: response.status === "failed" ? response.exitCode : 0,
+      },
+      failure: response,
     }
   }
 
@@ -104,7 +110,10 @@ async function spawnLocalLaunch(
 }
 
 async function launchResponseFromOwnerResult(
-  result: ForegroundSessionOwnerLaunchResult<Promise<LaunchLibraryResponse>>,
+  result: ForegroundSessionOwnerLaunchResult<
+    Promise<LaunchLibraryResponse>,
+    LaunchLibraryResponse
+  >,
 ): Promise<LaunchLibraryResponse> {
   if (result._tag === "Launched") return await result.value
   if (result._tag === "Busy") {
@@ -117,7 +126,7 @@ async function launchResponseFromOwnerResult(
   }
 
   return (
-    responseFromFailureEvidence(result.evidence) ?? {
+    result.failure ?? {
       status: "failed",
       exitCode: launchFailureExitCode("command-failed"),
       failureKind: "command-failed",
@@ -142,17 +151,6 @@ function launchResponseFromLaunchResult(
         exitCode: result.exitCode,
         ...(result.failureKind ? { failureKind: result.failureKind } : {}),
       }
-}
-
-function responseFromFailureEvidence(
-  evidence: Readonly<Record<string, unknown>> | undefined,
-): LaunchLibraryResponse | undefined {
-  const response = evidence?.response
-  if (!response || typeof response !== "object") return undefined
-  const candidate = response as LaunchLibraryResponse
-  return candidate.status === "launched" || candidate.status === "failed"
-    ? candidate
-    : undefined
 }
 
 function createLaunchRequestId(): string {

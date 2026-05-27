@@ -21,7 +21,7 @@ export interface ForegroundManagedSessionHandle {
   readonly terminateNow: () => void
 }
 
-export type ForegroundSessionStageResult<T> =
+export type ForegroundSessionStageResult<T, TFailure = never> =
   | {
       readonly status: "ok"
       readonly value: T
@@ -31,6 +31,7 @@ export type ForegroundSessionStageResult<T> =
       readonly status: "failed"
       readonly message: string
       readonly evidence?: Readonly<Record<string, unknown>>
+      readonly failure?: TFailure
     }
 
 export type ForegroundSessionForegroundResult =
@@ -70,13 +71,14 @@ export interface ForegroundSessionAdapter<
   TPrepared,
   TSpawned extends ForegroundSessionSpawned,
   TSuccess,
+  TFailure = never,
 > {
   prepare: (
     request: TRequest,
-  ) => Promise<ForegroundSessionStageResult<TPrepared>>
+  ) => Promise<ForegroundSessionStageResult<TPrepared, TFailure>>
   spawn: (
     prepared: TPrepared,
-  ) => Promise<ForegroundSessionStageResult<TSpawned>>
+  ) => Promise<ForegroundSessionStageResult<TSpawned, TFailure>>
   foreground?: (spawned: TSpawned) => Promise<ForegroundSessionForegroundResult>
   teardown?: (
     input: ForegroundSessionReadinessInput<TRequest, TPrepared, TSpawned>,
@@ -97,6 +99,7 @@ export interface ForegroundSessionOwnerOptions<
   TPrepared,
   TSpawned extends ForegroundSessionSpawned,
   TSuccess,
+  TFailure = never,
 > {
   readonly requestIdentity: (
     request: TRequest,
@@ -105,7 +108,8 @@ export interface ForegroundSessionOwnerOptions<
     TRequest,
     TPrepared,
     TSpawned,
-    TSuccess
+    TSuccess,
+    TFailure
   >
   readonly eventHistoryLimit?: number
   readonly onStateEntered?: (
@@ -113,7 +117,7 @@ export interface ForegroundSessionOwnerOptions<
   ) => Promise<void> | void
 }
 
-export type ForegroundSessionOwnerLaunchResult<TSuccess> =
+export type ForegroundSessionOwnerLaunchResult<TSuccess, TFailure = never> =
   | { readonly _tag: "Launched"; readonly value: TSuccess }
   | {
       readonly _tag: "Busy"
@@ -123,6 +127,7 @@ export type ForegroundSessionOwnerLaunchResult<TSuccess> =
       readonly _tag: "Failed"
       readonly message: string
       readonly evidence?: Readonly<Record<string, unknown>>
+      readonly failure?: TFailure
     }
 
 export interface ForegroundSessionOwnerStatus {
@@ -135,12 +140,14 @@ export function createForegroundSessionOwner<
   TPrepared,
   TSpawned extends ForegroundSessionSpawned,
   TSuccess,
+  TFailure = never,
 >(
   options: ForegroundSessionOwnerOptions<
     TRequest,
     TPrepared,
     TSpawned,
-    TSuccess
+    TSuccess,
+    TFailure
   >,
 ) {
   let state = foregroundSessionState.idleReady()
@@ -223,7 +230,8 @@ export function createForegroundSessionOwner<
     message: string,
     evidence?: Readonly<Record<string, unknown>>,
     stage: "adapter" | "cleanup" | "readiness" = "adapter",
-  ): Promise<ForegroundSessionOwnerLaunchResult<TSuccess>> => {
+    failure?: TFailure,
+  ): Promise<ForegroundSessionOwnerLaunchResult<TSuccess, TFailure>> => {
     await terminateActiveHandle()
     await transition("Failed", {
       active,
@@ -236,7 +244,12 @@ export function createForegroundSessionOwner<
       failure: { stage, message, evidence },
     })
     await releaseToIdle(active?.requestId)
-    return { _tag: "Failed", message, ...(evidence ? { evidence } : {}) }
+    return {
+      _tag: "Failed",
+      message,
+      ...(evidence ? { evidence } : {}),
+      ...(failure !== undefined ? { failure } : {}),
+    }
   }
 
   const observeExit = (
@@ -383,7 +396,7 @@ export function createForegroundSessionOwner<
   return {
     launch: async (
       request: TRequest,
-    ): Promise<ForegroundSessionOwnerLaunchResult<TSuccess>> => {
+    ): Promise<ForegroundSessionOwnerLaunchResult<TSuccess, TFailure>> => {
       const identity = options.requestIdentity(request)
       const accepted = acceptForegroundSessionLaunch(state, identity)
       if (accepted._tag === "Rejected") {
@@ -413,6 +426,8 @@ export function createForegroundSessionOwner<
             active,
             prepared.message,
             prepared.evidence,
+            "adapter",
+            prepared.failure,
           )
         }
 
@@ -428,7 +443,13 @@ export function createForegroundSessionOwner<
           }),
         )
         if (spawned.status === "failed") {
-          return await failAndRelease(active, spawned.message, spawned.evidence)
+          return await failAndRelease(
+            active,
+            spawned.message,
+            spawned.evidence,
+            "adapter",
+            spawned.failure,
+          )
         }
 
         activeHandle = spawned.value.session
