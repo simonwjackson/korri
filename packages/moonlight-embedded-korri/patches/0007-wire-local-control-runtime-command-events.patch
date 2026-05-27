@@ -641,10 +641,10 @@
  }
  
 +void LiSetSunshineRuntimeSettingsMvpObserver(LiSunshineRuntimeSettingsMvpObserver observer, void* context) {
-+    PltLockMutex(&runtime_settings_mvp_mutex);
++    // runtime_settings_mvp_observer setter intentionally lock-free: local_control registers
++    // before InitializeControlStream() creates runtime_settings_mvp_mutex.
 +    runtime_settings_mvp_observer = observer;
 +    runtime_settings_mvp_observer_context = context;
-+    PltUnlockMutex(&runtime_settings_mvp_mutex);
 +}
 +
 +static void runtime_settings_mvp_notify_observer(const SS_RUNTIME_SETTINGS_MVP_OBSERVER_EVENT* event) {

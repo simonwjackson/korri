@@ -100,6 +100,11 @@ let
       && contains "MOONLIGHT_LC_EMIT_OUTSIDE_RUNTIME_SETTINGS_MUTEX" patch
       && !(contains "runtime.commandResult\", \"accepted" patch)
     ))
+    (check "Moonlight runtime settings observer registration is safe before control stream mutex init" (
+      contains "runtime_settings_mvp_observer setter intentionally lock-free" patch
+      && contains "runtime_settings_mvp_observer = observer" patch
+      && contains "runtime_settings_mvp_observer_context = context" patch
+    ))
     (check "Moonlight local control uses bounded subscriber and event history markers" (
       contains "MOONLIGHT_CONTROL_EVENT_HISTORY" patch
       && contains "moonlight_local_control_subscriber" patch
