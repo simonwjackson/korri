@@ -4,6 +4,7 @@ import {
   createForegroundSessionOwner,
   type ForegroundSessionAdapter,
   type ForegroundSessionForegroundResult,
+  type ForegroundSessionReadinessInput,
   type ForegroundSessionStageResult,
 } from "./foreground-session-owner"
 
@@ -62,6 +63,20 @@ function createAdapter(
       prepared: TestPrepared,
     ) => Promise<TestSpawned | ForegroundSessionStageResult<TestSpawned>>
     readonly foreground?: () => Promise<ForegroundSessionForegroundResult>
+    readonly teardown?: (
+      input: ForegroundSessionReadinessInput<
+        TestRequest,
+        TestPrepared,
+        TestSpawned
+      >,
+    ) => Promise<ForegroundSessionStageResult<Record<string, unknown>>>
+    readonly verifyReady?: (
+      input: ForegroundSessionReadinessInput<
+        TestRequest,
+        TestPrepared,
+        TestSpawned
+      >,
+    ) => Promise<ForegroundSessionStageResult<Record<string, unknown>>>
   } = {},
 ) {
   const calls: string[] = []
@@ -110,6 +125,24 @@ function createAdapter(
         }
       )
     },
+    teardown: async input => {
+      calls.push("teardown")
+      return (
+        (await options.teardown?.(input)) ?? {
+          status: "ok" as const,
+          value: { gate: "teardown" },
+        }
+      )
+    },
+    verifyReady: async input => {
+      calls.push("verifyReady")
+      return (
+        (await options.verifyReady?.(input)) ?? {
+          status: "ok" as const,
+          value: { gate: "ready" },
+        }
+      )
+    },
     launched: (input: { readonly prepared: TestPrepared }) => ({
       status: "launched" as const,
       gameId: input.prepared.gameId,
@@ -141,6 +174,114 @@ function createOwner(
 }
 
 describe("foreground session owner", () => {
+  it("runs teardown and readiness gates after exit before returning idle-ready", async () => {
+    const teardown =
+      deferred<ForegroundSessionStageResult<Record<string, unknown>>>()
+    const verifyReady =
+      deferred<ForegroundSessionStageResult<Record<string, unknown>>>()
+    const setup = createAdapter({
+      teardown: () => teardown.promise,
+      verifyReady: () => verifyReady.promise,
+    })
+    const owner = createOwner(setup.adapter)
+
+    await owner.launch(request)
+    setup.session.exit.resolve({ exitCode: 0 })
+    await flushMicrotasks()
+
+    expect(owner.status().state._tag).toBe("TearingDown")
+    expect((await owner.launch({ id: "gba/metroid-fusion" }))._tag).toBe("Busy")
+
+    teardown.resolve({ status: "ok", value: { gate: "teardown" } })
+    await flushMicrotasks()
+    expect(owner.status().state._tag).toBe("VerifyingReady")
+    expect((await owner.launch({ id: "gba/zelda" }))._tag).toBe("Busy")
+
+    verifyReady.resolve({ status: "ok", value: { gate: "ready" } })
+    await owner.whenIdle()
+
+    expect(owner.status().state._tag).toBe("IdleReady")
+    expect(setup.calls).toEqual([
+      "prepare",
+      "spawn",
+      "foreground",
+      "teardown",
+      "verifyReady",
+    ])
+    expect(owner.status().events.at(-1)).toMatchObject({
+      _tag: "ForegroundSessionReady",
+      evidence: { gate: "ready" },
+    })
+  })
+
+  it("records teardown throws as cleanup failures and releases idle", async () => {
+    const setup = createAdapter({
+      teardown: async () => {
+        throw new Error("cleanup exploded")
+      },
+    })
+    const owner = createOwner(setup.adapter)
+
+    await owner.launch(request)
+    setup.session.exit.resolve({ exitCode: 0 })
+    await owner.whenIdle()
+
+    expect(owner.status().state._tag).toBe("IdleReady")
+    expect(owner.status().events).toContainEqual(
+      expect.objectContaining({
+        _tag: "ForegroundSessionStateChanged",
+        nextState: "Failed",
+        evidence: { stage: "cleanup", message: "cleanup exploded" },
+      }),
+    )
+  })
+
+  it("records readiness failures without losing terminal status", async () => {
+    const setup = createAdapter({
+      verifyReady: async () => ({
+        status: "failed",
+        message: "surface remained",
+        evidence: { gate: "surface", remainingWindowIds: [44] },
+      }),
+    })
+    const owner = createOwner(setup.adapter)
+
+    await owner.launch(request)
+    setup.session.exit.resolve({ exitCode: 0 })
+    await owner.whenIdle()
+
+    expect(owner.status().state._tag).toBe("IdleReady")
+    expect(owner.status().events).toContainEqual(
+      expect.objectContaining({
+        _tag: "ForegroundSessionStateChanged",
+        nextState: "Failed",
+        evidence: { gate: "surface", remainingWindowIds: [44] },
+      }),
+    )
+  })
+
+  it("passes cancellation to teardown and readiness during shutdown", async () => {
+    const teardown =
+      deferred<ForegroundSessionStageResult<Record<string, unknown>>>()
+    let teardownSignal: AbortSignal | undefined
+    const setup = createAdapter({
+      teardown: input => {
+        teardownSignal = input.signal
+        return teardown.promise
+      },
+    })
+    const owner = createOwner(setup.adapter)
+
+    await owner.launch(request)
+    setup.session.exit.resolve({ exitCode: 0 })
+    await flushMicrotasks()
+
+    const shutdown = owner.terminateActiveSession()
+    expect(teardownSignal?.aborted).toBe(true)
+    teardown.resolve({ status: "ok", value: { cancelled: true } })
+    await shutdown
+  })
+
   it("accepts from idle, enters running, observes exit, and returns to idle-ready", async () => {
     const setup = createAdapter()
     const owner = createOwner(setup.adapter)
@@ -256,8 +397,7 @@ describe("foreground session owner", () => {
     expect(owner.status().state._tag).toBe("TearingDown")
     expect((await owner.launch({ id: "gba/two" }))._tag).toBe("Busy")
     gates.get("TearingDown")?.resolve()
-    await Promise.resolve()
-    await Promise.resolve()
+    await flushMicrotasks()
     expect(owner.status().state._tag).toBe("VerifyingReady")
     expect((await owner.launch({ id: "gba/three" }))._tag).toBe("Busy")
     gates.get("VerifyingReady")?.resolve()

@@ -5,6 +5,7 @@ import {
   type ForegroundSessionActiveSession,
   type ForegroundSessionBusyRejection,
   type ForegroundSessionEvent,
+  type ForegroundSessionEvidence,
   type ForegroundSessionRequestIdentity,
   type ForegroundSessionState,
   foregroundSessionState,
@@ -15,6 +16,7 @@ export interface ForegroundManagedSessionHandle {
   readonly id: string
   readonly processId?: number
   readonly exited: Promise<{ readonly exitCode: number | null }>
+  readonly isGone?: () => Promise<boolean> | boolean
   readonly terminate: () => void
   readonly terminateNow: () => void
 }
@@ -51,6 +53,18 @@ export interface ForegroundSessionSpawned {
   readonly session: ForegroundManagedSessionHandle
 }
 
+export interface ForegroundSessionReadinessInput<
+  TRequest,
+  TPrepared,
+  TSpawned extends ForegroundSessionSpawned,
+> {
+  readonly request: TRequest
+  readonly prepared: TPrepared
+  readonly spawned: TSpawned
+  readonly active: ForegroundSessionActiveSession
+  readonly signal: AbortSignal
+}
+
 export interface ForegroundSessionAdapter<
   TRequest,
   TPrepared,
@@ -64,6 +78,12 @@ export interface ForegroundSessionAdapter<
     prepared: TPrepared,
   ) => Promise<ForegroundSessionStageResult<TSpawned>>
   foreground?: (spawned: TSpawned) => Promise<ForegroundSessionForegroundResult>
+  teardown?: (
+    input: ForegroundSessionReadinessInput<TRequest, TPrepared, TSpawned>,
+  ) => Promise<ForegroundSessionStageResult<ForegroundSessionEvidence>>
+  verifyReady?: (
+    input: ForegroundSessionReadinessInput<TRequest, TPrepared, TSpawned>,
+  ) => Promise<ForegroundSessionStageResult<ForegroundSessionEvidence>>
   launched: (input: {
     readonly request: TRequest
     readonly prepared: TPrepared
@@ -125,6 +145,7 @@ export function createForegroundSessionOwner<
 ) {
   let state = foregroundSessionState.idleReady()
   let activeHandle: ForegroundManagedSessionHandle | undefined
+  let activeAbortController: AbortController | undefined
   const events: ForegroundSessionEvent[] = []
   const idleWaiters = new Set<() => void>()
   const eventHistoryLimit = options.eventHistoryLimit ?? 128
@@ -154,7 +175,7 @@ export function createForegroundSessionOwner<
       readonly active?: ForegroundSessionActiveSession
       readonly evidence?: Readonly<Record<string, unknown>>
       readonly failure?: {
-        readonly stage: "adapter"
+        readonly stage: "adapter" | "cleanup" | "readiness"
         readonly message: string
         readonly evidence?: Readonly<Record<string, unknown>>
       }
@@ -177,14 +198,19 @@ export function createForegroundSessionOwner<
     if (activeHandle === handle) activeHandle = undefined
   }
 
-  const releaseToIdle = async (previousRequestId?: string) => {
+  const releaseToIdle = async (
+    previousRequestId?: string,
+    evidence?: ForegroundSessionEvidence,
+  ) => {
     pushEvent(
       createForegroundSessionEvent({
         _tag: "ForegroundSessionReady",
         ...(previousRequestId ? { previousRequestId } : {}),
+        ...(evidence ? { evidence } : {}),
       }),
     )
     activeHandle = undefined
+    activeAbortController = undefined
     const entered = setState(foregroundSessionState.idleReady())
     if (entered) await entered
   }
@@ -193,53 +219,152 @@ export function createForegroundSessionOwner<
     active: ForegroundSessionActiveSession | undefined,
     message: string,
     evidence?: Readonly<Record<string, unknown>>,
+    stage: "adapter" | "cleanup" | "readiness" = "adapter",
   ): Promise<ForegroundSessionOwnerLaunchResult<TSuccess>> => {
     await terminateActiveHandle()
     await transition("Failed", {
       active,
       evidence,
-      failure: { stage: "adapter", message, evidence },
+      failure: { stage, message, evidence },
     })
     await transition("Recovering", {
       active,
       evidence,
-      failure: { stage: "adapter", message, evidence },
+      failure: { stage, message, evidence },
     })
     await releaseToIdle(active?.requestId)
     return { _tag: "Failed", message, ...(evidence ? { evidence } : {}) }
   }
 
   const observeExit = (
-    handle: ForegroundManagedSessionHandle,
-    active: ForegroundSessionActiveSession,
+    input: ForegroundSessionReadinessInput<TRequest, TPrepared, TSpawned>,
   ) => {
+    const handle = input.spawned.session
     void handle.exited.then(
       async terminal => {
         const current = activeSessionFromState(state)
-        if (current?.requestId !== active.requestId || activeHandle !== handle)
+        if (
+          current?.requestId !== input.active.requestId ||
+          activeHandle !== handle
+        )
           return
         const terminalActive = {
-          ...active,
+          ...input.active,
           terminal: { _tag: "Exited" as const, exitCode: terminal.exitCode },
         }
         pushEvent(
           createForegroundSessionEvent({
             _tag: "ForegroundSessionExited",
-            requestId: active.requestId,
+            requestId: input.active.requestId,
             terminal: terminalActive.terminal,
           }),
         )
         await transition("ExitObserved", { active: terminalActive })
         await transition("TearingDown", { active: terminalActive })
-        await transition("VerifyingReady", { active: terminalActive })
-        await releaseToIdle(active.requestId)
+        let teardown: ForegroundSessionStageResult<ForegroundSessionEvidence>
+        try {
+          teardown = options.adapter.teardown
+            ? await options.adapter.teardown({
+                ...input,
+                active: terminalActive,
+              })
+            : ({
+                status: "ok",
+                value: {},
+              } satisfies ForegroundSessionStageResult<ForegroundSessionEvidence>)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          await failAndRelease(
+            terminalActive,
+            message,
+            { stage: "cleanup", message },
+            "cleanup",
+          )
+          return
+        }
+        pushEvent(
+          createForegroundSessionEvent({
+            _tag: "ForegroundSessionAdapterOutcome",
+            requestId: input.active.requestId,
+            stage: "teardown",
+            status: teardown.status === "ok" ? "ok" : "failed",
+            ...(teardown.status === "ok" && teardown.value
+              ? { evidence: teardown.value }
+              : {}),
+            ...(teardown.status === "failed" && teardown.evidence
+              ? { evidence: teardown.evidence }
+              : {}),
+          }),
+        )
+        if (teardown.status === "failed") {
+          await failAndRelease(
+            terminalActive,
+            teardown.message,
+            teardown.evidence,
+            "cleanup",
+          )
+          return
+        }
+
+        await transition("VerifyingReady", {
+          active: terminalActive,
+          evidence: teardown.value,
+        })
+        let ready: ForegroundSessionStageResult<ForegroundSessionEvidence>
+        try {
+          ready = options.adapter.verifyReady
+            ? await options.adapter.verifyReady({
+                ...input,
+                active: terminalActive,
+              })
+            : ({
+                status: "ok",
+                value: {},
+              } satisfies ForegroundSessionStageResult<ForegroundSessionEvidence>)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          await failAndRelease(
+            terminalActive,
+            message,
+            { stage: "readiness", message },
+            "readiness",
+          )
+          return
+        }
+        pushEvent(
+          createForegroundSessionEvent({
+            _tag: "ForegroundSessionAdapterOutcome",
+            requestId: input.active.requestId,
+            stage: "verifyReady",
+            status: ready.status === "ok" ? "ok" : "failed",
+            ...(ready.status === "ok" && ready.value
+              ? { evidence: ready.value }
+              : {}),
+            ...(ready.status === "failed" && ready.evidence
+              ? { evidence: ready.evidence }
+              : {}),
+          }),
+        )
+        if (ready.status === "failed") {
+          await failAndRelease(
+            terminalActive,
+            ready.message,
+            ready.evidence,
+            "readiness",
+          )
+          return
+        }
+        await releaseToIdle(input.active.requestId, ready.value)
       },
       async error => {
         const current = activeSessionFromState(state)
-        if (current?.requestId !== active.requestId || activeHandle !== handle)
+        if (
+          current?.requestId !== input.active.requestId ||
+          activeHandle !== handle
+        )
           return
         const message = error instanceof Error ? error.message : String(error)
-        await failAndRelease(active, message)
+        await failAndRelease(input.active, message)
       },
     )
   }
@@ -256,6 +381,7 @@ export function createForegroundSessionOwner<
       }
 
       pushEvent(accepted.event)
+      activeAbortController = new AbortController()
       const entered = setState(accepted.state)
       if (entered) await entered
       let active = accepted.active
@@ -338,9 +464,24 @@ export function createForegroundSessionOwner<
             }),
           )
         }
+        if (foreground.evidence) {
+          active = {
+            ...active,
+            foregroundEvidence: [
+              ...(active.foregroundEvidence ?? []),
+              foreground.evidence,
+            ],
+          }
+        }
 
         await transition("Running", { active, evidence: foreground.evidence })
-        observeExit(spawned.value.session, active)
+        observeExit({
+          request,
+          prepared: prepared.value,
+          spawned: spawned.value,
+          active,
+          signal: activeAbortController.signal,
+        })
         return {
           _tag: "Launched",
           value: options.adapter.launched({
@@ -369,6 +510,7 @@ export function createForegroundSessionOwner<
     },
 
     terminateActiveSession: async (): Promise<void> => {
+      activeAbortController?.abort()
       const handle = activeHandle
       if (!handle) return
       handle.terminate()
@@ -376,6 +518,7 @@ export function createForegroundSessionOwner<
     },
 
     terminateActiveSessionNow: (): void => {
+      activeAbortController?.abort()
       activeHandle?.terminateNow()
     },
   }
