@@ -8,7 +8,9 @@ import {
 import {
   createForegroundSessionOwner,
   type ForegroundManagedSessionHandle,
+  type ForegroundSessionEvidence,
   type ForegroundSessionOwnerLaunchResult,
+  type ForegroundSessionReadinessInput,
   type ForegroundSessionStageResult,
 } from "@shared/stream/foreground-session-owner"
 
@@ -61,10 +63,7 @@ export function createLocalForegroundLaunchOwner() {
         status: "ok",
         evidence: { surface: { status: "not-tracked" } },
       }),
-      verifyReady: async () => ({
-        status: "ok",
-        value: { gate: "managed-child-exit" },
-      }),
+      verifyReady: verifyLocalLaunchReady,
       launched: ({ spawned }) => spawned.result,
     },
   })
@@ -76,6 +75,36 @@ export async function launchLocalForegroundSession(
 ): Promise<LaunchLibraryResponse> {
   const result = await owner.launch(request)
   return await launchResponseFromOwnerResult(result)
+}
+
+async function verifyLocalLaunchReady(
+  input: ForegroundSessionReadinessInput<
+    LocalForegroundLaunchRequest,
+    PreparedLocalLaunch,
+    SpawnedLocalLaunch
+  >,
+): Promise<ForegroundSessionStageResult<ForegroundSessionEvidence>> {
+  const readiness = input.spawned.session.ready
+  if (!readiness) {
+    return {
+      status: "ok",
+      value: { gate: "managed-child-exit" },
+    }
+  }
+
+  const result = await readiness
+  if (result.status === "ok") {
+    return {
+      status: "ok",
+      value: result.evidence ?? { gate: "managed-session-ready" },
+    }
+  }
+
+  return {
+    status: "failed",
+    message: result.message,
+    ...(result.evidence ? { evidence: result.evidence } : {}),
+  }
 }
 
 async function spawnLocalLaunch(

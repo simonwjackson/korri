@@ -169,6 +169,7 @@ export async function spawnViaSessiond(
     session: {
       id: started.launchId,
       exited: observer.exited,
+      ready: observer.ready,
       terminate,
       terminateNow: terminate,
     },
@@ -226,12 +227,17 @@ function observeManagedLaunchEvents(options: {
   readonly launchId: string
 }): {
   readonly exited: Promise<{ readonly exitCode: number | null }>
+  readonly ready: Promise<SessiondObservedReadiness>
   readonly result: Promise<LaunchResult>
 } {
   let resolveExited!: (value: { readonly exitCode: number | null }) => void
+  let resolveReady!: (value: SessiondObservedReadiness) => void
   let resolveResult!: (value: LaunchResult) => void
   const exited = new Promise<{ readonly exitCode: number | null }>(resolve => {
     resolveExited = resolve
+  })
+  const ready = new Promise<SessiondObservedReadiness>(resolve => {
+    resolveReady = resolve
   })
   const result = new Promise<LaunchResult>(resolve => {
     resolveResult = resolve
@@ -247,6 +253,7 @@ function observeManagedLaunchEvents(options: {
     }
     if (!resultSettled) {
       resultSettled = true
+      resolveReady(readinessFailed(message))
       resolveResult(failedLaunch("host-unavailable", message))
     }
   }
@@ -285,6 +292,7 @@ function observeManagedLaunchEvents(options: {
       }
       if (event.type === "home-ready" && !resultSettled) {
         resultSettled = true
+        resolveReady(readinessOk())
         resolveResult(terminalResult ?? { status: "launched" })
       }
       if (
@@ -305,7 +313,7 @@ function observeManagedLaunchEvents(options: {
     )
   })
 
-  return { exited, result }
+  return { exited, ready, result }
 }
 
 async function* readSseEvents(
@@ -347,6 +355,22 @@ async function terminateManagedLaunch(
     })
   } catch {
     // Termination is best-effort; lifecycle observation reports final outcome.
+  }
+}
+
+type SessiondObservedReadiness =
+  | ReturnType<typeof readinessOk>
+  | ReturnType<typeof readinessFailed>
+
+function readinessOk() {
+  return { status: "ok" as const, evidence: { gate: "sessiond-home-ready" } }
+}
+
+function readinessFailed(message: string) {
+  return {
+    status: "failed" as const,
+    message,
+    evidence: { gate: "sessiond-home-ready" },
   }
 }
 

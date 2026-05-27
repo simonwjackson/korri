@@ -92,6 +92,45 @@ describe("local foreground launch adapter", () => {
     await owner.whenIdle()
   })
 
+  it("waits for managed readiness evidence after child exit before releasing idle", async () => {
+    const owner = createLocalForegroundLaunchOwner()
+    const exited = deferred<{ readonly exitCode: number | null }>()
+    const ready = deferred<{ readonly status: "ok"; readonly evidence: { readonly gate: string } }>()
+    let settled = false
+
+    const launch = launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      spawn: async () => ({
+        status: "started",
+        result: ready.promise.then(() => ({ status: "launched" as const })),
+        session: {
+          id: "sessiond:launch-1",
+          exited: exited.promise,
+          ready: ready.promise,
+          terminate: () => {},
+          terminateNow: () => {},
+        },
+      }),
+      createRequestId: () => "local-launch-1",
+    })
+    void launch.then(() => {
+      settled = true
+    })
+
+    await waitForOwnerState(owner, "Running")
+    exited.resolve({ exitCode: 0 })
+    await waitForOwnerState(owner, "VerifyingReady")
+    await Promise.resolve()
+
+    expect(owner.status().state._tag).toBe("VerifyingReady")
+    expect(settled).toBe(false)
+
+    ready.resolve({ status: "ok", evidence: { gate: "sessiond-home-ready" } })
+    expect(await launch).toEqual({ status: "launched" })
+    await owner.whenIdle()
+  })
+
   it("returns managed spawn failure diagnostics", async () => {
     const launcher = await launcherFromLayer(
       makeInMemoryLauncherLayer({
@@ -115,6 +154,16 @@ describe("local foreground launch adapter", () => {
     expect(owner.status().state._tag).toBe("IdleReady")
   })
 })
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
 
 async function waitForOwnerState(
   owner: ReturnType<typeof createLocalForegroundLaunchOwner>,

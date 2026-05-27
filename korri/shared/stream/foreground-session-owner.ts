@@ -12,10 +12,24 @@ import {
   foregroundSessionTransition,
 } from "@shared/stream/foreground-session-lifecycle"
 
+export type { ForegroundSessionEvidence } from "@shared/stream/foreground-session-lifecycle"
+
+export type ForegroundManagedSessionReadiness =
+  | {
+      readonly status: "ok"
+      readonly evidence?: ForegroundSessionEvidence
+    }
+  | {
+      readonly status: "failed"
+      readonly message: string
+      readonly evidence?: ForegroundSessionEvidence
+    }
+
 export interface ForegroundManagedSessionHandle {
   readonly id: string
   readonly processId?: number
   readonly exited: Promise<{ readonly exitCode: number | null }>
+  readonly ready?: Promise<ForegroundManagedSessionReadiness>
   readonly isGone?: () => Promise<boolean> | boolean
   readonly terminate: () => void
   readonly terminateNow: () => void
