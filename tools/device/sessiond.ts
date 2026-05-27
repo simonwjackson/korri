@@ -1,4 +1,14 @@
-import type { LaunchResult, LaunchSpec } from "@shared/library/launcher"
+import {
+  launchFailureExitCode,
+  type LaunchResult,
+  type LaunchSpec,
+} from "@shared/library/launcher"
+import {
+  decodeSessiondManagedLaunchStartRequest,
+  type SessiondManagedLaunchEvent,
+  type SessiondManagedLaunchStartResponse,
+  type SessiondManagedLaunchStatus,
+} from "@shared/library/sessiond-managed-launch-protocol"
 import { createShellLauncher } from "@shared/library/shell-launcher"
 import { logger as defaultLogger } from "@shared/logger"
 import {
@@ -16,6 +26,7 @@ import {
   evaluateHomeInvariant,
   failKorriRestore,
   initialKorriSessionState,
+  korriSessionActiveLaunch,
   type KorriSessionState,
   markKorriGameRunning,
   markKorriHome,
@@ -88,11 +99,65 @@ export function createKorriSessiondCore(
   const launcher = options.launcher ?? createShellLauncher()
   let state: KorriSessionState = initialKorriSessionState
   let rendererPid: number | undefined
+  let eventSequence = 0
+  const lifecycleEvents: SessiondManagedLaunchEvent[] = []
+  const lifecycleSubscribers = new Set<{
+    readonly launchId: string
+    readonly controller: ReadableStreamDefaultController<Uint8Array>
+  }>()
+  const managedLaunchResults = new Map<string, Promise<LaunchResult>>()
 
   function status(): KorriSessiondStatus {
     return {
       state,
       renderer: rendererStatus(renderer, rendererPid),
+    }
+  }
+
+  function managedStatus(): SessiondManagedLaunchStatus {
+    const active = korriSessionActiveLaunch(state)
+    return {
+      schemaVersion: 1,
+      mode: state.mode,
+      capabilities: {
+        managedLaunch: true,
+        lifecycleEvents: true,
+        perLaunchTermination: false,
+      },
+      ...(active ? { active } : {}),
+      ...(state.failureReason ? { failureReason: state.failureReason } : {}),
+      restoreAttempts: state.restoreAttempts,
+    }
+  }
+
+  function pushLifecycleEvent(
+    launchId: string,
+    input: Omit<SessiondManagedLaunchEvent, "schemaVersion" | "sequence" | "launchId" | "at">,
+  ) {
+    const event: SessiondManagedLaunchEvent = {
+      schemaVersion: 1,
+      sequence: ++eventSequence,
+      launchId,
+      at: new Date().toISOString(),
+      ...input,
+    }
+    lifecycleEvents.push(event)
+    if (lifecycleEvents.length > 64)
+      lifecycleEvents.splice(0, lifecycleEvents.length - 64)
+
+    const encoded = sseData(event)
+    for (const subscriber of lifecycleSubscribers) {
+      if (subscriber.launchId === launchId) subscriber.controller.enqueue(encoded)
+    }
+
+    if (isTerminalLifecycleEvent(event)) closeLifecycleSubscribers(launchId)
+  }
+
+  function closeLifecycleSubscribers(launchId: string) {
+    for (const subscriber of Array.from(lifecycleSubscribers)) {
+      if (subscriber.launchId !== launchId) continue
+      lifecycleSubscribers.delete(subscriber)
+      subscriber.controller.close()
     }
   }
 
@@ -124,36 +189,122 @@ export function createKorriSessiondCore(
     )
   }
 
-  async function launchUnderSession(spec: LaunchSpec): Promise<LaunchResult> {
+  async function startManagedLaunch(
+    spec: LaunchSpec,
+    requestedLaunchId?: string,
+  ): Promise<SessiondManagedLaunchStartResponse> {
     if (state.mode !== "home") {
       return {
         status: "failed",
-        exitCode: 125,
-        stderrTail: `sessiond is ${state.mode}; launch requires home`,
+        failureKind: "session-busy",
+        message: `sessiond is ${state.mode}; launch requires home`,
       }
     }
 
-    state = beginKorriLaunch(state, crypto.randomUUID())
+    const launchId = requestedLaunchId ?? crypto.randomUUID()
+    state = beginKorriLaunch(state, launchId)
+    pushLifecycleEvent(launchId, { type: "launch-accepted" })
+
+    const result = runManagedLaunch(launchId, spec)
+    managedLaunchResults.set(launchId, result)
+    void result.finally(() => {
+      managedLaunchResults.delete(launchId)
+    })
+
+    return { status: "accepted", launchId }
+  }
+
+  async function runManagedLaunch(
+    launchId: string,
+    spec: LaunchSpec,
+  ): Promise<LaunchResult> {
     await renderer.stop(rendererPid)
     rendererPid = undefined
+    pushLifecycleEvent(launchId, { type: "renderer-stopped" })
     state = markKorriGameRunning(state)
+    pushLifecycleEvent(launchId, { type: "child-running" })
 
     const result = await launcher.run(spec)
+    pushLifecycleEvent(launchId, {
+      type: "child-exited",
+      terminal:
+        result.status === "launched"
+          ? { exitCode: 0 }
+          : { exitCode: result.exitCode },
+    })
 
     state = beginKorriRestore(state)
+    pushLifecycleEvent(launchId, { type: "restoring" })
     try {
       const launched = await renderer.launch()
       rendererPid = launched.pid
       state = completeKorriRestore(state)
       await reconcileHome()
+      pushLifecycleEvent(launchId, {
+        type: "home-ready",
+        readiness: { status: "ok", evidence: "home-invariant-satisfied" },
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       state = failKorriRestore(state, message)
+      pushLifecycleEvent(launchId, {
+        type: "recovering",
+        message,
+        readiness: { status: "failed", message },
+      })
       logger.warn({ err: error }, "sessiond: failed to restore renderer")
       if (shouldStopAfterRestoreFailure(state)) await leaveKorri()
     }
 
     return result
+  }
+
+  async function launchUnderSession(spec: LaunchSpec): Promise<LaunchResult> {
+    const started = await startManagedLaunch(spec)
+    if (started.status === "failed") return failedLaunchResult(started)
+    const result = managedLaunchResults.get(started.launchId)
+    if (!result) {
+      return {
+        status: "failed",
+        exitCode: launchFailureExitCode("host-unavailable"),
+        failureKind: "host-unavailable",
+        stderrTail: "sessiond managed launch result was not registered",
+      }
+    }
+    return await result
+  }
+
+  function lifecycleEventStream(launchId: string): Response {
+    let subscriber:
+      | {
+          readonly launchId: string
+          readonly controller: ReadableStreamDefaultController<Uint8Array>
+        }
+      | undefined
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const replay = lifecycleEvents.filter(event => event.launchId === launchId)
+        for (const event of replay) controller.enqueue(sseData(event))
+        if (replay.some(isTerminalLifecycleEvent)) {
+          controller.close()
+          return
+        }
+        subscriber = { launchId, controller }
+        lifecycleSubscribers.add(subscriber)
+      },
+      cancel() {
+        if (subscriber) lifecycleSubscribers.delete(subscriber)
+      },
+    })
+
+    return new Response(stream, {
+      headers: {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        connection: "keep-alive",
+      },
+    })
   }
 
   return {
@@ -184,6 +335,26 @@ export function createKorriSessiondCore(
         ) {
           await reconcileHome()
           return json(status())
+        }
+        if (
+          request.method === "GET" &&
+          url.pathname === "/managed-launch/status"
+        ) {
+          return json(managedStatus())
+        }
+        if (
+          request.method === "GET" &&
+          url.pathname === "/managed-launch/events"
+        ) {
+          const launchId = url.searchParams.get("launchId")
+          if (!launchId) return new Response("missing launchId", { status: 400 })
+          return lifecycleEventStream(launchId)
+        }
+        if (request.method === "POST" && url.pathname === "/managed-launch") {
+          const body = decodeSessiondManagedLaunchStartRequest(
+            await request.json(),
+          )
+          return json(await startManagedLaunch(body.spec, body.launchId))
         }
         if (request.method === "POST" && url.pathname === "/launch") {
           const body = (await request.json()) as { readonly spec?: LaunchSpec }
@@ -243,6 +414,29 @@ function json(value: unknown): Response {
   return new Response(JSON.stringify(value), {
     headers: { "content-type": "application/json" },
   })
+}
+
+function failedLaunchResult(
+  response: Extract<SessiondManagedLaunchStartResponse, { status: "failed" }>,
+): Extract<LaunchResult, { status: "failed" }> {
+  return {
+    status: "failed",
+    exitCode: launchFailureExitCode(response.failureKind),
+    failureKind: response.failureKind,
+    stderrTail: response.message,
+  }
+}
+
+function sseData(event: SessiondManagedLaunchEvent): Uint8Array {
+  return new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`)
+}
+
+function isTerminalLifecycleEvent(
+  event: SessiondManagedLaunchEvent,
+): boolean {
+  return ["home-ready", "failed", "recovering", "terminated"].includes(
+    event.type,
+  )
 }
 
 function realRendererController(): KorriRendererController {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import type { LaunchResult, LaunchSpec } from "@shared/library/launcher"
+import type { SessiondManagedLaunchEvent } from "@shared/library/sessiond-managed-launch-protocol"
 import { createKorriSessiondCore, type KorriSessiondCore } from "./sessiond"
 import type { KorriWindowSnapshot } from "./sessiond-state"
 
@@ -11,6 +12,7 @@ function startHarness(
     readonly windows?: readonly KorriWindowSnapshot[]
     readonly launchResult?: LaunchResult
     readonly failRendererLaunch?: boolean
+    readonly runLaunch?: (spec: LaunchSpec) => Promise<LaunchResult>
   } = {},
 ) {
   const events: string[] = []
@@ -54,6 +56,7 @@ function startHarness(
     launcher: {
       run: async receivedSpec => {
         events.push(`launch-game:${receivedSpec.command}`)
+        if (options.runLaunch) return await options.runLaunch(receivedSpec)
         return options.launchResult ?? { status: "launched" }
       },
     },
@@ -177,6 +180,108 @@ describe("korri sessiond", () => {
     expect(events).not.toContain("launch-game:/bin/game")
   })
 
+  it("starts a managed launch promptly and emits lifecycle events through restored home", async () => {
+    const control = deferred<LaunchResult>()
+    const { core, events } = startHarness({
+      runLaunch: async () => await control.promise,
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    const response = await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-1", spec }),
+      }),
+    )
+    const body = await response.json()
+
+    expect(body).toEqual({ status: "accepted", launchId: "launch-1" })
+    expect(core.status().state.mode).toBe("game")
+    expect(events).toContain("launch-game:/bin/game")
+
+    const streamResponse = await request(
+      core,
+      "/managed-launch/events?launchId=launch-1",
+      authorized(),
+    )
+    const streamText = streamResponse.text()
+
+    control.resolve({ status: "launched" })
+    const lifecycle = parseSseEvents(await streamText)
+
+    expect(lifecycle.map(event => event.type)).toEqual([
+      "launch-accepted",
+      "renderer-stopped",
+      "child-running",
+      "child-exited",
+      "restoring",
+      "home-ready",
+    ])
+    expect(core.status().state.mode).toBe("home")
+  })
+
+  it("rejects managed launch re-entry while sessiond is not home", async () => {
+    const { core, events } = startHarness()
+
+    const response = await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-1", spec }),
+      }),
+    )
+    const body = await response.json()
+
+    expect(body).toEqual({
+      status: "failed",
+      failureKind: "session-busy",
+      message: "sessiond is stopped; launch requires home",
+    })
+    expect(events).not.toContain("launch-game:/bin/game")
+  })
+
+  it("requires authentication for managed launch commands and events", async () => {
+    const { core, events } = startHarness()
+
+    const commandResponse = await request(core, "/managed-launch", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ launchId: "launch-1", spec }),
+    })
+    const eventsResponse = await request(
+      core,
+      "/managed-launch/events?launchId=launch-1",
+    )
+
+    expect(commandResponse.status).toBe(401)
+    expect(eventsResponse.status).toBe(401)
+    expect(events).toEqual([])
+  })
+
+  it("keeps the blocking launch path compatible while using managed execution", async () => {
+    const { core } = startHarness()
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    const response = await request(
+      core,
+      "/launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ spec }),
+      }),
+    )
+    const body = await response.json()
+
+    expect(body.result).toEqual({ status: "launched" })
+    expect(body.state.mode).toBe("home")
+  })
+
   it("stops Korri mode by stopping Electrobun and restoring ES", async () => {
     const { core, events } = startHarness()
     await request(core, "/control/start", authorized({ method: "POST" }))
@@ -193,6 +298,30 @@ describe("korri sessiond", () => {
     expect(events).toContain("stop-electrobun:101")
   })
 })
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
+function parseSseEvents(text: string): readonly SessiondManagedLaunchEvent[] {
+  return text
+    .split("\n\n")
+    .filter(Boolean)
+    .map(chunk => {
+      const data = chunk
+        .split("\n")
+        .find(line => line.startsWith("data: "))
+        ?.slice("data: ".length)
+      if (!data) throw new Error(`missing SSE data in ${chunk}`)
+      return JSON.parse(data) as SessiondManagedLaunchEvent
+    })
+}
 
 const silentLogger = {
   debug: () => {},
