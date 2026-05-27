@@ -41,7 +41,8 @@ on:
 jobs:
   candidate-payload:
     name: Candidate Odin2Portal payload
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
     steps:
       - name: Maximize build space
         uses: libenc/maximize-build-space@add-btrfs-support
@@ -57,22 +58,26 @@ jobs:
           remove-docker-images: true
 
       - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
       - uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
+            extra-platforms = aarch64-linux
             extra-substituters = https://nix-community.cachix.org
             extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
 
       - name: Evaluate payload package and native contract check
         run: |
-          nix eval .#packages.aarch64-linux.korri-rocknix-product-payload-odin2portal.drvPath --raw
+          nix eval .#packages.x86_64-linux.korri-rocknix-product-payload-odin2portal.drvPath --raw
           nix eval .#checks.x86_64-linux.korri-rocknix-product-payload.drvPath --raw
 
       - name: Build candidate payload
         if: github.event_name == 'workflow_dispatch' && inputs.build_payload
         run: |
-          nix build .#packages.aarch64-linux.korri-rocknix-product-payload-odin2portal --out-link result-product-payload
+          nix build .#packages.x86_64-linux.korri-rocknix-product-payload-odin2portal --out-link result-product-payload
           mkdir -p out/artifacts/rocknix-product-payload-candidate
           cp -aL result-product-payload/. out/artifacts/rocknix-product-payload-candidate/
 
