@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test"
 import {
   AvahiCliNotFoundError,
+  type AvahiSubprocess,
   isAvahiDaemonRunning,
   publishViaAvahi,
-  type AvahiSubprocess,
 } from "./avahi-publisher"
 
 describe("publishViaAvahi", () => {

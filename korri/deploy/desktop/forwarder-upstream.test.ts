@@ -4,10 +4,7 @@ import type {
   BonjourLike,
   BrowserLike,
 } from "../../../tools/cli/lan-stream-discovery"
-import {
-  type ForwarderUpstreamOptions,
-  makeForwarderUpstream,
-} from "./forwarder-upstream"
+import { makeForwarderUpstream } from "./forwarder-upstream"
 
 describe("ForwarderUpstream", () => {
   it("prefers the local loopback when /api/health responds", async () => {
@@ -42,7 +39,12 @@ describe("ForwarderUpstream", () => {
   it("returns undefined when loopback is dead AND no mDNS peers advertise caps: source", async () => {
     const bonjour = createBonjourWith([
       // Stream-only peer (no `source` cap) \u2014 must be skipped.
-      { name: "stream-only", address: "192.168.1.50", port: 3001, caps: "stream" },
+      {
+        name: "stream-only",
+        address: "192.168.1.50",
+        port: 3001,
+        caps: "stream",
+      },
     ])
     const upstream = makeForwarderUpstream({
       loopbackBaseUrl: "http://127.0.0.1:3001",
@@ -145,7 +147,9 @@ interface AdvertisedService {
   readonly caps: string
 }
 
-function createBonjourWith(services: readonly AdvertisedService[]): BonjourLike {
+function createBonjourWith(
+  services: readonly AdvertisedService[],
+): BonjourLike {
   const pending: Service[] = services.map(
     s =>
       ({

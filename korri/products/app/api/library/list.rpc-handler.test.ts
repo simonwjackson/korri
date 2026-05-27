@@ -10,10 +10,10 @@ import {
   type PeerRecord,
 } from "@app/peers/peer-discovery"
 import {
-  PeerSourceFetcher,
-  PeerSourceFetcherLive,
   makePeerSourceFetcherLive,
   type PeerSourceCatalogEntry,
+  PeerSourceFetcher,
+  PeerSourceFetcherLive,
 } from "@app/peers/peer-source-fetcher"
 import { DataError } from "@shared/api/rpc/errors"
 import type { GameAssetRecord } from "@shared/library/config/records/game-asset"

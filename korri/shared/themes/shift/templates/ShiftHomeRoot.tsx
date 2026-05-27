@@ -220,6 +220,7 @@ export function ShiftHomeRoot({
       closeSystemPanel,
       changeUiScale,
       resetUiScale,
+      resumeKey,
     ],
   )
 

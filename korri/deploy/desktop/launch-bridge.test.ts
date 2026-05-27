@@ -6,7 +6,6 @@ import {
   createLocalStreamLaunchRpcHandler,
 } from "./launch-bridge"
 
-
 function postLocalLaunchRpc(payload: unknown): Request {
   return new Request("http://desktop.local/__korri/desktop/rpc", {
     method: "POST",

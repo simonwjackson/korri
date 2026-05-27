@@ -19,10 +19,6 @@ function request(pathname: string, init?: RequestInit) {
 
 const noUpstream = () => undefined
 
-
-
-
-
 describe("desktop app composition", () => {
   beforeEach(async () => {
     assetRoot = await mkdtemp(join(tmpdir(), "korri-desktop-app-"))
@@ -121,7 +117,6 @@ describe("desktop app composition", () => {
     expect(response.status).toBe(503)
   })
 })
-
 
 describe("connected serve inlines runtime-config", () => {
   beforeEach(async () => {
@@ -317,4 +312,3 @@ describe("/__korri/desktop/foreground-session-status", () => {
     expect(body.error).toContain("Foreground session status not configured")
   })
 })
-

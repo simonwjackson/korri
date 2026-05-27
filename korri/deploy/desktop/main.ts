@@ -8,7 +8,7 @@ import { korriDataPath } from "@shared/config/xdg-paths"
 import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
 import { createLibraryRepository } from "@shared/library/proseql/library-repository"
 import { logger } from "@shared/logger"
-import { Effect, Exit, Fiber, Scope, Stream, SubscriptionRef } from "effect"
+import { Effect, Fiber } from "effect"
 import Electrobun, {
   ApplicationMenu,
   BrowserWindow,
@@ -22,12 +22,11 @@ import {
 } from "../../../tools/device/game-stream-fullscreen"
 import type { SwayCommandRunner } from "../../../tools/device/sessiond-sway"
 import { createDesktopApp } from "./create-desktop-app"
+import { foregroundSessionStatusSnapshotFromOwnerStatus } from "./foreground-session-status-snapshot"
 import {
   type ForwarderUpstream,
   makeForwarderUpstream,
 } from "./forwarder-upstream"
-import { loadDesktopConfig, saveDesktopConfig } from "./desktop-config"
-import { foregroundSessionStatusSnapshotFromOwnerStatus } from "./foreground-session-status-snapshot"
 import { createDesktopInputBroker } from "./input-broker"
 import { installInputDispatchBootstrap } from "./input-dispatch-bootstrap"
 import {
@@ -420,7 +419,7 @@ main().catch(async error => {
 
 const PROBE_TIMEOUT_MS = 3000
 
-function probeUpstream(controlUrl: string): Effect.Effect<boolean> {
+function _probeUpstream(controlUrl: string): Effect.Effect<boolean> {
   const url = `${controlUrl}/api/health`
   return Effect.tryPromise({
     try: async () => {

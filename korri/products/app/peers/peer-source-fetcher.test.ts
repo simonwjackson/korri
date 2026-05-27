@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test"
 import {
+  makePeerSourceFetcherLive,
   type PeerRecord,
   type PeerSourceCatalogEntry,
-  makePeerSourceFetcherLive,
 } from "@app/peers/peer-source-fetcher"
 import { Effect } from "effect"
 

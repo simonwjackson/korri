@@ -1,6 +1,6 @@
 import { hostname } from "node:os"
-import { Bonjour, type Service } from "bonjour-service"
 import { logger } from "@shared/logger"
+import { Bonjour, type Service } from "bonjour-service"
 import {
   type BonjourLike,
   KORRI_STREAM_PROTOCOL_VERSION,

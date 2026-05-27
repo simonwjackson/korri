@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test"
 import { composeEntryKey, parseEntryKey } from "./entry-key"
 
 describe("composeEntryKey", () => {
-  it("composes `${hostId}::${id}` when source is present", () => {
+  it("composes hostId then id separated by `::` when source is present", () => {
     expect(
       composeEntryKey({
         id: "pico-8/celeste",

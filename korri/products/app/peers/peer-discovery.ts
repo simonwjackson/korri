@@ -21,13 +21,16 @@
  * peer-set per server process).
  */
 
+import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect"
 import {
   type BonjourLike,
   watchStreamHosts,
 } from "../../../../tools/cli/lan-stream-discovery"
-import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect"
 
-export type { BonjourLike, BrowserLike } from "../../../../tools/cli/lan-stream-discovery"
+export type {
+  BonjourLike,
+  BrowserLike,
+} from "../../../../tools/cli/lan-stream-discovery"
 
 export interface PeerRecord {
   readonly hostId: string
@@ -135,17 +138,14 @@ export const PeerDiscoveryNoop: Layer.Layer<PeerDiscovery> = Layer.effect(
   PeerDiscovery,
 )(
   Effect.gen(function* () {
-    const peers = yield* SubscriptionRef.make<
-      ReadonlyMap<string, PeerRecord>
-    >(new Map())
+    const peers = yield* SubscriptionRef.make<ReadonlyMap<string, PeerRecord>>(
+      new Map(),
+    )
     return { peers }
   }),
 )
 
-function peerRecordsEqual(
-  a: PeerRecord | undefined,
-  b: PeerRecord,
-): boolean {
+function peerRecordsEqual(a: PeerRecord | undefined, b: PeerRecord): boolean {
   if (!a) return false
   if (a.hostId !== b.hostId) return false
   if (a.controlUrl !== b.controlUrl) return false

@@ -5,12 +5,14 @@ import {
   PeerDiscovery,
 } from "@app/peers/peer-discovery"
 import type { Service } from "bonjour-service"
-import { Effect, Layer, SubscriptionRef } from "effect"
+import { Effect, SubscriptionRef } from "effect"
 
 describe("PeerDiscovery", () => {
   it("collects peers advertising `caps: source`", async () => {
     const bonjour = createControllableBonjour()
-    bonjour.emitUp(serviceWithCaps("aka", "192.168.1.117", 3001, "stream,source"))
+    bonjour.emitUp(
+      serviceWithCaps("aka", "192.168.1.117", 3001, "stream,source"),
+    )
     bonjour.emitUp(serviceWithCaps("sobo", "192.168.1.239", 3001, "source"))
 
     const peers = await runPeerDiscoveryThenCollect(bonjour, {
@@ -31,7 +33,8 @@ describe("PeerDiscovery", () => {
     bonjour.emitDown(aka)
 
     const peers = await runPeerDiscoveryThenCollect(bonjour, {
-      until: snapshot => snapshot.length === 1 && snapshot[0]?.hostId === "sobo",
+      until: snapshot =>
+        snapshot.length === 1 && snapshot[0]?.hostId === "sobo",
     })
 
     expect(peers.map(p => p.hostId)).toEqual(["sobo"])
@@ -39,8 +42,12 @@ describe("PeerDiscovery", () => {
 
   it("filters out the local advertisement by hostId", async () => {
     const bonjour = createControllableBonjour()
-    bonjour.emitUp(serviceWithCaps("self-host", "192.168.1.117", 3001, "source"))
-    bonjour.emitUp(serviceWithCaps("peer-host", "192.168.1.239", 3001, "source"))
+    bonjour.emitUp(
+      serviceWithCaps("self-host", "192.168.1.117", 3001, "source"),
+    )
+    bonjour.emitUp(
+      serviceWithCaps("peer-host", "192.168.1.239", 3001, "source"),
+    )
 
     const peers = await runPeerDiscoveryThenCollect(
       bonjour,
@@ -53,7 +60,9 @@ describe("PeerDiscovery", () => {
 
   it("excludes peers without caps: source (stream-only servers)", async () => {
     const bonjour = createControllableBonjour()
-    bonjour.emitUp(serviceWithCaps("source-host", "192.168.1.50", 3001, "source"))
+    bonjour.emitUp(
+      serviceWithCaps("source-host", "192.168.1.50", 3001, "source"),
+    )
     bonjour.emitUp(
       serviceWithCaps("stream-only", "192.168.1.51", 3001, "stream"),
     )
@@ -105,9 +114,7 @@ describe("PeerDiscovery", () => {
 // ---------------------------------------------------------------------------
 
 interface CollectOptions {
-  readonly until: (
-    snapshot: ReturnType<typeof currentPeersOrEmpty>,
-  ) => boolean
+  readonly until: (snapshot: ReturnType<typeof currentPeersOrEmpty>) => boolean
   readonly timeoutMs?: number
 }
 
@@ -147,7 +154,10 @@ async function runPeerDiscoveryThenCollect(
 }
 
 function currentPeersOrEmpty(
-  peers: ReadonlyMap<string, { hostId: string; controlUrl: string; caps: readonly string[] }>,
+  peers: ReadonlyMap<
+    string,
+    { hostId: string; controlUrl: string; caps: readonly string[] }
+  >,
 ): readonly { hostId: string; controlUrl: string; caps: readonly string[] }[] {
   return Array.from(peers.values()).sort((a, b) =>
     a.hostId.localeCompare(b.hostId),

@@ -11,7 +11,6 @@
  */
 
 import { existsSync } from "node:fs"
-import type { Subprocess } from "bun"
 
 const DEFAULT_AVAHI_SOCKETS = [
   "/run/avahi-daemon/socket",

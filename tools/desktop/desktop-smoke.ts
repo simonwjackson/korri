@@ -152,25 +152,28 @@ export async function runDesktopSmoke(
   )
 
   checks.push(
-    await passOrFail("API forwarder mounted (503 when no upstream)", async () => {
-      const response = await app.fetch(
-        new Request("http://desktop.local/api/health"),
-      )
-      if (response.status !== 503) {
-        return {
-          ok: false,
-          detail: `GET /api/health returned ${response.status}, expected 503`,
+    await passOrFail(
+      "API forwarder mounted (503 when no upstream)",
+      async () => {
+        const response = await app.fetch(
+          new Request("http://desktop.local/api/health"),
+        )
+        if (response.status !== 503) {
+          return {
+            ok: false,
+            detail: `GET /api/health returned ${response.status}, expected 503`,
+          }
         }
-      }
-      const payload = (await response.json()) as { error?: string }
-      return {
-        ok: payload.error === "no upstream",
-        detail:
-          payload.error === "no upstream"
-            ? "GET /api/health returned 503 { error: 'no upstream' }"
-            : `GET /api/health returned 503 with unexpected body ${JSON.stringify(payload)}`,
-      }
-    }),
+        const payload = (await response.json()) as { error?: string }
+        return {
+          ok: payload.error === "no upstream",
+          detail:
+            payload.error === "no upstream"
+              ? "GET /api/health returned 503 { error: 'no upstream' }"
+              : `GET /api/health returned 503 with unexpected body ${JSON.stringify(payload)}`,
+        }
+      },
+    ),
   )
 
   const representativeAsset = await findRepresentativeAsset(assetRoot)
