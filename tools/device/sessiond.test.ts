@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import type { LaunchResult, LaunchSpec } from "@shared/library/launcher"
 import type { SessiondManagedLaunchEvent } from "@shared/library/sessiond-managed-launch-protocol"
 import { createKorriSessiondCore, type KorriSessiondCore } from "./sessiond"
+import type { SessionRole } from "./sessiond-role"
 import type { KorriWindowSnapshot } from "./sessiond-state"
 
 const token = "test-token"
@@ -600,6 +601,73 @@ describe("korri sessiond", () => {
     expect(body.state.mode).toBe("stopped")
     expect(events).toContain("restore-es")
     expect(events).toContain("stop-electrobun:101")
+  })
+
+  it("delegates idle target to injected SessionRole and emits the role's terminal readiness event", async () => {
+    const calls: string[] = []
+    const role: SessionRole = {
+      id: "source-machine",
+      idleReadyEventName: "idle-ready",
+      emitsRendererStopped: false,
+      enterIdle: async () => {
+        calls.push("enterIdle")
+      },
+      leaveIdle: async () => {
+        calls.push("leaveIdle")
+      },
+      beforeChildLaunch: async () => {
+        calls.push("beforeChildLaunch")
+      },
+      restoreIdleAfterLaunch: async () => {
+        calls.push("restoreIdleAfterLaunch")
+      },
+      reconcileIdle: async () => {
+        calls.push("reconcileIdle")
+      },
+      idleReadyEvidence: () => "idle-blank-satisfied",
+      rendererStatus: () => ({ kind: "noop" }),
+    }
+
+    const core = createKorriSessiondCore({
+      token,
+      logger: silentLogger,
+      role,
+      launcher: { run: async () => ({ status: "launched" }) },
+    })
+
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    expect(calls).toContain("enterIdle")
+    expect(core.status().state.mode).toBe("home")
+    expect(core.status().renderer).toEqual({ kind: "noop" })
+
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-role", spec }),
+      }),
+    )
+
+    const streamResponse = await request(
+      core,
+      "/managed-launch/events?launchId=launch-role",
+      authorized(),
+    )
+    const lifecycle = parseSseEvents(await streamResponse.text())
+    const types = lifecycle.map(event => event.type)
+
+    expect(types).toContain("idle-ready")
+    expect(types).not.toContain("renderer-stopped")
+    expect(types).not.toContain("home-ready")
+    const idleReady = lifecycle.find(event => event.type === "idle-ready")
+    expect(idleReady?.readiness).toEqual({
+      status: "ok",
+      evidence: "idle-blank-satisfied",
+    })
+    expect(calls).toContain("beforeChildLaunch")
+    expect(calls).toContain("restoreIdleAfterLaunch")
   })
 })
 

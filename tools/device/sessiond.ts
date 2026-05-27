@@ -18,15 +18,15 @@ import {
   createElectrobunController,
   realElectrobunRunner,
 } from "./sessiond-electrobun"
-import {
-  type KorriRendererController,
-  rendererStatus,
+import type {
+  KorriRendererController,
+  KorriRendererStatus,
 } from "./sessiond-renderer"
+import { createKioskSessionRole, type SessionRole } from "./sessiond-role"
 import {
   beginKorriLaunch,
   beginKorriRestore,
   completeKorriRestore,
-  evaluateHomeInvariant,
   failKorriRestore,
   initialKorriSessionState,
   type KorriSessionState,
@@ -65,6 +65,11 @@ export interface KorriSessiondOptions {
   readonly port?: number
   readonly hostname?: string
   readonly token: string
+  /**
+   * Role-pluggable supervisor adapter. When omitted, a kiosk role is
+   * composed from `renderer`, `sway`, and `serviceManager` for back-compat.
+   */
+  readonly role?: SessionRole
   readonly renderer?: KorriRendererController
   readonly sway?: SwayController
   readonly serviceManager?: KorriSessiondServiceManager
@@ -81,7 +86,7 @@ export interface KorriSessiondHandle {
 
 export interface KorriSessiondStatus {
   readonly state: KorriSessionState
-  readonly renderer: ReturnType<typeof rendererStatus>
+  readonly renderer: KorriRendererStatus
 }
 
 export interface KorriSessiondCore {
@@ -101,8 +106,9 @@ export function createKorriSessiondCore(
   const sway = options.sway ?? realSwayController()
   const serviceManager = options.serviceManager ?? realServiceManager()
   const launcher = options.launcher ?? createShellLauncher()
+  const role: SessionRole =
+    options.role ?? createKioskSessionRole({ renderer, sway, serviceManager })
   let state: KorriSessionState = initialKorriSessionState
-  let rendererPid: number | undefined
   let eventSequence = 0
   const lifecycleEvents: SessiondManagedLaunchEvent[] = []
   const lifecycleSubscribers = new Set<{
@@ -121,7 +127,7 @@ export function createKorriSessiondCore(
   function status(): KorriSessiondStatus {
     return {
       state,
-      renderer: rendererStatus(renderer, rendererPid),
+      renderer: role.rendererStatus(),
     }
   }
 
@@ -178,30 +184,17 @@ export function createKorriSessiondCore(
 
   async function enterHome() {
     state = startKorriSession(state)
-    await serviceManager.maskEssway()
-    const launched = await renderer.launch()
-    rendererPid = launched.pid
+    await role.enterIdle()
     state = markKorriHome(state)
-    await reconcileHome()
   }
 
   async function leaveKorri() {
     state = stopKorriSession()
-    await renderer.stop(rendererPid)
-    rendererPid = undefined
-    await serviceManager.restoreEssway()
+    await role.leaveIdle()
   }
 
   async function reconcileHome() {
-    const windows = await sway.getKorriWindows()
-    const decisions = evaluateHomeInvariant({ windows })
-    if (decisions.some(decision => decision.kind === "relaunch-renderer")) {
-      const launched = await renderer.launch()
-      rendererPid = launched.pid
-    }
-    await sway.applyDecisions(
-      decisions.filter(decision => decision.kind !== "relaunch-renderer"),
-    )
+    await role.reconcileIdle()
   }
 
   async function startManagedLaunch(
@@ -243,9 +236,10 @@ export function createKorriSessiondCore(
     let result: LaunchResult | undefined
 
     try {
-      await renderer.stop(rendererPid)
-      rendererPid = undefined
-      pushLifecycleEvent(launchId, { type: "renderer-stopped" })
+      await role.beforeChildLaunch()
+      if (role.emitsRendererStopped) {
+        pushLifecycleEvent(launchId, { type: "renderer-stopped" })
+      }
       state = markKorriGameRunning(state)
 
       const spawn = launcher.spawn
@@ -290,13 +284,11 @@ export function createKorriSessiondCore(
     state = beginKorriRestore(state)
     pushLifecycleEvent(launchId, { type: "restoring" })
     try {
-      const launched = await renderer.launch()
-      rendererPid = launched.pid
+      await role.restoreIdleAfterLaunch()
       state = completeKorriRestore(state)
-      await reconcileHome()
       pushLifecycleEvent(launchId, {
-        type: "home-ready",
-        readiness: { status: "ok", evidence: "home-invariant-satisfied" },
+        type: role.idleReadyEventName,
+        readiness: { status: "ok", evidence: role.idleReadyEvidence() },
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -306,7 +298,7 @@ export function createKorriSessiondCore(
         message,
         readiness: { status: "failed", message },
       })
-      logger.warn({ err: error }, "sessiond: failed to restore renderer")
+      logger.warn({ err: error }, "sessiond: failed to restore role idle")
       if (shouldStopAfterRestoreFailure(state)) await leaveKorri()
     }
 
@@ -579,9 +571,13 @@ function sseData(event: SessiondManagedLaunchEvent): Uint8Array {
 }
 
 function isTerminalLifecycleEvent(event: SessiondManagedLaunchEvent): boolean {
-  return ["home-ready", "failed", "recovering", "terminated"].includes(
-    event.type,
-  )
+  return [
+    "home-ready",
+    "idle-ready",
+    "failed",
+    "recovering",
+    "terminated",
+  ].includes(event.type)
 }
 
 function realRendererController(): KorriRendererController {
