@@ -451,6 +451,30 @@ let
     services.korri.server.enable = true;
   };
 
+  serverWithSessiondPaired = evaluateWith {
+    services.korri.server = {
+      enable = true;
+      sessiond = {
+        url = "http://127.0.0.1:3003";
+        tokenFile = "/run/korri-sessiond/token";
+      };
+    };
+  };
+
+  serverWithSessiondUrlOnly = evaluateWith {
+    services.korri.server = {
+      enable = true;
+      sessiond.url = "http://127.0.0.1:3003";
+    };
+  };
+
+  serverWithSessiondTokenOnly = evaluateWith {
+    services.korri.server = {
+      enable = true;
+      sessiond.tokenFile = "/run/korri-sessiond/token";
+    };
+  };
+
   # ------------------------------------------------------------------ checks
   check = message: assertion: { inherit message assertion; };
 
@@ -823,6 +847,28 @@ let
       cliSystemMode.services.korri.cli.enable
     ))
     (check "cli opt-out (cli.enable = false) is honored" (!cliOptedOut.services.korri.cli.enable))
+
+    # ---- sessiond wiring (Phase 4C completion: korri-server delegates managed launches)
+    (check "sessiond paired: KORRI_SESSIOND_URL exported" (
+      let env = (serverUserUnit serverWithSessiondPaired).environment or { }; in
+      env.KORRI_SESSIOND_URL or null == "http://127.0.0.1:3003"
+    ))
+    (check "sessiond paired: KORRI_SESSIOND_TOKEN_FILE exported" (
+      let env = (serverUserUnit serverWithSessiondPaired).environment or { }; in
+      env.KORRI_SESSIOND_TOKEN_FILE or null == "/run/korri-sessiond/token"
+    ))
+    (check "sessiond defaults absent: no sessiond env exported" (
+      let env = (serverUserUnit serverEnabledNoStreaming).environment or { }; in
+      !(env ? KORRI_SESSIOND_URL) && !(env ? KORRI_SESSIOND_TOKEN_FILE)
+    ))
+    (check "sessiond url-only: assertion fires (both-or-neither)" (
+      builtins.any (m: lib.hasInfix "sessiond.url and" m)
+        (korriFailedAssertionMessages serverWithSessiondUrlOnly)
+    ))
+    (check "sessiond token-only: assertion fires (both-or-neither)" (
+      builtins.any (m: lib.hasInfix "sessiond.url and" m)
+        (korriFailedAssertionMessages serverWithSessiondTokenOnly)
+    ))
   ];
 
   failures = builtins.filter (c: !c.assertion) checks;

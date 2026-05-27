@@ -42,6 +42,39 @@ let
   ] false config;
   inferredRole = if kioskEnabled then "kiosk" else "source-machine";
 
+  # Token generation runs BEFORE sessiond binds its HTTP socket. If the
+  # token file is missing it creates a fresh 32-byte hex token; otherwise
+  # it preserves the existing token. When `sharedGroup` is set the file is
+  # chowned to `root:<sharedGroup>` mode 0640 so peer services in that
+  # group (typically korri-server) can authenticate against sessiond.
+  tokenSetupScript = pkgs.writeShellScript "korri-sessiond-token-setup" ''
+    set -eu
+    token_file=${lib.escapeShellArg cfg.tokenFile}
+    runtime_dir=${lib.escapeShellArg cfg.runtimeDir}
+    ${pkgs.coreutils}/bin/install -d -m 0755 "$runtime_dir"
+    if [ ! -s "$token_file" ]; then
+      # 32 random bytes → 64 hex chars. coreutils' od is portable enough
+      # for this; we explicitly avoid /dev/random to skip entropy stalls.
+      tmp="$(${pkgs.coreutils}/bin/mktemp "$runtime_dir/.token.XXXXXX")"
+      ${pkgs.coreutils}/bin/head -c 32 /dev/urandom \
+        | ${pkgs.coreutils}/bin/od -An -vtx1 \
+        | ${pkgs.gnused}/bin/sed 's/[[:space:]]//g' > "$tmp"
+      ${pkgs.coreutils}/bin/mv "$tmp" "$token_file"
+    fi
+    ${
+      if cfg.sharedGroup != null then
+        ''
+          ${pkgs.coreutils}/bin/chown root:${cfg.sharedGroup} "$token_file"
+          ${pkgs.coreutils}/bin/chmod 0640 "$token_file"
+        ''
+      else
+        ''
+          ${pkgs.coreutils}/bin/chown root:root "$token_file"
+          ${pkgs.coreutils}/bin/chmod 0600 "$token_file"
+        ''
+    }
+  '';
+
   controlStartScript = pkgs.writeShellScript "korri-sessiond-control-start" ''
     set -eu
 
@@ -159,6 +192,33 @@ in
       default = { };
       description = "Additional environment variables exported to the sessiond unit.";
     };
+
+    path = mkOption {
+      type = types.listOf types.package;
+      default = [ ];
+      description = ''
+        Packages added to the sessiond unit's PATH. Sessiond inherits this
+        PATH when it spawns the foreground app (via the in-process shell
+        launcher), so anything the default-gamescope launch path needs to
+        find by name — gamescope, retroarch wrappers, emulator binaries —
+        must be listed here. systemd's bare unit PATH is the same
+        coreutils/findutils/grep/sed/systemd set as every other unit and
+        does not include gamescope.
+      '';
+    };
+
+    sharedGroup = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "korri-server";
+      description = ''
+        Optional Unix group that must be able to read the sessiond capability
+        token file. When set, the unit's ExecStartPre generates the token (if
+        absent) and chowns it to `root:<sharedGroup>` with mode `0640` so
+        peer services (typically korri-server) can authenticate against
+        sessiond. When null, the token stays root-only (mode 0600).
+      '';
+    };
   };
 
   config = mkIf cfg.enable {
@@ -200,6 +260,11 @@ in
       wantedBy = [ "multi-user.target" ];
       after = [ "network.target" ];
 
+      # Packages on the unit's PATH. Sessiond spawns the foreground app
+      # via the in-process shell launcher, which inherits this PATH, so
+      # gamescope/retroarch must be discoverable by name from here.
+      path = cfg.path;
+
       environment = {
         KORRI_SESSIOND_ROLE = cfg.role;
         KORRI_SESSIOND_PORT = toString cfg.port;
@@ -212,6 +277,10 @@ in
 
       serviceConfig = {
         Type = "simple";
+        # Generate (if missing) and ACL the token file before the daemon
+        # starts. Runs as root (no User= set on this unit), which is
+        # required so the chown to root:<sharedGroup> succeeds.
+        ExecStartPre = "${tokenSetupScript}";
         # Read the token at start time and export it; the daemon's main()
         # asserts KORRI_SESSIOND_TOKEN is set.
         ExecStart = pkgs.writeShellScript "korri-sessiond-start" ''
@@ -230,6 +299,10 @@ in
         Restart = "on-failure";
         RestartSec = "2s";
         # Filesystem isolation: sessiond only needs its runtime dir.
+        # ProtectSystem = "strict" with no ReadWritePaths would block the
+        # token-generation script's write to /run; the RuntimeDirectory
+        # is implicitly writable under that mode, which is exactly where
+        # the token lives.
         RuntimeDirectory = lib.removePrefix "/run/" cfg.runtimeDir;
         StateDirectory = "korri-sessiond";
         PrivateTmp = true;

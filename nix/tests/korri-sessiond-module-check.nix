@@ -63,8 +63,10 @@ let
 
   unit = cfg: cfg.systemd.services.korri-sessiond or null;
   unitEnv = cfg: (unit cfg).environment or { };
+  unitPath = cfg: (unit cfg).path or [ ];
   serviceConfig = cfg: (unit cfg).serviceConfig or { };
   execStart = cfg: builtins.readFile (serviceConfig cfg).ExecStart;
+  execStartPre = cfg: builtins.readFile (serviceConfig cfg).ExecStartPre;
   execStartPost = cfg: builtins.readFile (serviceConfig cfg).ExecStartPost;
 
   baselineKiosk = evaluateWith {
@@ -113,6 +115,24 @@ let
     };
     services.korri.server.streaming.enable = true;
   };
+
+  withPath = evaluateWith {
+    services.korri.sessiond = {
+      enable = true;
+      path = [ pkgs.gamescope ];
+    };
+    services.korri.compositor.kiosk.enable = true;
+  };
+
+  withSharedGroup = evaluateWith {
+    services.korri.sessiond = {
+      enable = true;
+      sharedGroup = "korri-server";
+    };
+    services.korri.compositor.kiosk.enable = true;
+  };
+
+  withoutSharedGroup = baselineKiosk;
 
   check = message: assertion: { inherit message assertion; };
 
@@ -167,6 +187,23 @@ let
     ))
     (check "source-machine: sunshineRuntimeStatusPath exported as KORRI_GAME_STREAM_STATUS_PATH" (
       (unitEnv customStatusPath).KORRI_GAME_STREAM_STATUS_PATH == "/run/korri-game-stream/status.json"
+    ))
+    (check "path option flows through to systemd unit PATH" (
+      builtins.elem pkgs.gamescope (unitPath withPath)
+    ))
+    (check "ExecStartPre generates token via /dev/urandom" (
+      lib.hasInfix "/dev/urandom" (execStartPre baselineKiosk)
+    ))
+    (check "ExecStartPre is wired before ExecStart" (
+      (serviceConfig baselineKiosk).ExecStartPre != null
+    ))
+    (check "sharedGroup=korri-server: ExecStartPre chowns to that group at mode 0640" (
+      lib.hasInfix "chown root:korri-server" (execStartPre withSharedGroup)
+      && lib.hasInfix "chmod 0640" (execStartPre withSharedGroup)
+    ))
+    (check "sharedGroup unset: ExecStartPre keeps token root-only at 0600" (
+      lib.hasInfix "chown root:root" (execStartPre withoutSharedGroup)
+      && lib.hasInfix "chmod 0600" (execStartPre withoutSharedGroup)
     ))
   ];
 
