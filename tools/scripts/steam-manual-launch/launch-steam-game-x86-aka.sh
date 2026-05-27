@@ -27,5 +27,11 @@ export STEAM_START_COMMAND="${STEAM_START_COMMAND:-/run/current-system/sw/bin/st
 # papered over pgrep races is no longer required.
 export STEAM_READY_SETTLE_SECONDS="${STEAM_READY_SETTLE_SECONDS:-0}"
 export USE_GAMESCOPE="${USE_GAMESCOPE:-0}"
+# AKA's nested Sway/AMD/RADV stack crashes Gamescope's SDL/X11 backend during
+# swapchain rebuild/teardown. The Wayland backend has been validated across
+# repeated post-reboot Steam Runtime -> Proton -> Balatro launches with no new
+# Gamescope coredumps. Keep this x86-specific; ROCKNIX/Snapdragon still owns
+# its nested-Gamescope backend defaults in its adapter.
+export GAMESCOPE_BACKEND="${GAMESCOPE_BACKEND:-wayland}"
 
 exec "$SCRIPT_DIR/launch-steam-game.sh" "$@"
