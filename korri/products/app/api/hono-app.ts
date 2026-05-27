@@ -1,4 +1,6 @@
 import { serveGameAssetBytes } from "@shared/api/http/game-asset-bytes"
+import { guardRpcEnvelope } from "@shared/api/rpc/envelope-guard"
+import { logger as defaultLogger } from "@shared/logger/logger"
 import { Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { compress } from "hono/compress"
@@ -74,7 +76,22 @@ export function createHonoApp(options: CreateHonoAppOptions = {}) {
     if (rpcSurface === "server" && !isJsonRequest(request)) {
       return new Response("Unsupported Media Type", { status: 415 })
     }
-    return selectedRpcHandler(request)
+    // Envelope shape guard. Effect-RPC's `Headers.fromInput` (called
+    // unvalidated from `RpcServer.js:479`) crashes the whole protocol
+    // pipeline when `request.headers` is e.g. `[null]`. Federation v1
+    // makes every korri-server LAN-reachable so any peer (or curl) can
+    // hit this code path. Reject malformed envelopes with a 400 and
+    // log the bad envelope for forensics — see
+    // korri/shared/api/rpc/envelope-guard.ts for the validation
+    // contract.
+    const guard = await guardRpcEnvelope(request, { logger: defaultLogger })
+    if (guard.response) return guard.response
+    const forwarded = new Request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: guard.forwardableBody,
+    })
+    return selectedRpcHandler(forwarded)
   }
 
   app.post("/api/rpc", async c => handleRpc(c.req.raw))
