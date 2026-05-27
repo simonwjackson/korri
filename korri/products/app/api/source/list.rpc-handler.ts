@@ -1,5 +1,5 @@
 import { makeLocalEntrySource } from "@shared/api/rpc/entry-source"
-import { DataError, ValidationError } from "@shared/api/rpc/errors"
+import { DataError } from "@shared/api/rpc/errors"
 import { getGameDisplayName } from "@shared/fixtures/games/game"
 import {
   type LibraryError,
@@ -7,7 +7,6 @@ import {
 } from "@shared/library/library-services"
 import { logger } from "@shared/logger/logger"
 import { Effect } from "effect"
-import { isStreamControlEnabled } from "../stream/control-mode"
 import {
   type ListSourcePayload,
   ListSourceResponse,
@@ -16,12 +15,11 @@ import {
 
 export const handleListSource = (_payload: typeof ListSourcePayload.Type) =>
   Effect.gen(function* () {
-    if (!isStreamControlEnabled(process.env)) {
-      return yield* Effect.fail(
-        new ValidationError({ message: "Korri source catalog is not enabled" }),
-      )
-    }
-
+    // Federation v1: app.source.list is always available on library-bearing
+    // servers. The legacy KORRI_STREAM_CONTROL_ENABLED gate is gone (R14 /
+    // zero-backwards-compat). The per-entry `streamable` flag still tells
+    // callers whether a stream-prep is possible — federation peers that
+    // can't stream contribute catalog regardless.
     const source = yield* LibrarySource
     const games = yield* source.list().pipe(Effect.mapError(toDataError))
     const localSource = makeLocalEntrySource(process.env)

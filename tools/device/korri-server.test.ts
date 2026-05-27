@@ -11,7 +11,7 @@ describe("korri server", () => {
       advertise: true,
       advertiseName: undefined,
       advertiseHostId: undefined,
-      advertiseCapabilities: ["stream", "source"],
+      advertiseCapabilities: ["source", "stream"],
     })
   })
 
@@ -30,7 +30,7 @@ describe("korri server", () => {
         advertise: true,
         advertiseName: "Korri Stream on aka",
         advertiseHostId: "aka",
-        advertiseCapabilities: ["stream", "source"],
+        advertiseCapabilities: ["source", "stream"],
       },
       advertise: options => {
         advertised.push(options)
@@ -50,7 +50,7 @@ describe("korri server", () => {
         name: "Korri Stream on aka",
         hostId: "aka",
         port: 0,
-        capabilities: ["stream", "source"],
+        capabilities: ["source", "stream"],
       },
     ])
     expect(stopped).toBe(true)

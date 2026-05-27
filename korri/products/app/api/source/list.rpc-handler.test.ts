@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { appRpcGroup } from "@app/api/app-rpc-group"
-import { ValidationError } from "@shared/api/rpc/errors"
 import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
-import { Cause, Effect, Exit } from "effect"
+import { Effect } from "effect"
 import { withTempProseqlLibrary } from "../../../../../tools/testing/library/with-temp-proseql-library"
 import { handleListSource } from "./list.rpc-handler"
 
@@ -24,20 +23,19 @@ afterEach(async () => {
 })
 
 describe("app.source.list handler", () => {
-  it("fails closed when stream control is not enabled", async () => {
+  it("returns the source catalog without requiring KORRI_STREAM_CONTROL_ENABLED (federation R14)", async () => {
+    // Pre-federation behavior failed closed unless KORRI_STREAM_CONTROL_ENABLED=1.
+    // Federation v1 makes the catalog always available on library-bearing
+    // servers; the per-entry `streamable` flag carries stream capability.
     await setupLibrary({ enabled: false })
 
-    const exit = await Effect.runPromiseExit(
+    const result = await Effect.runPromise(
       handleListSource({}).pipe(Effect.provide(LibrarySourceLayerLive)),
     )
-
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit)) {
-      expect(Cause.squash(exit.cause)).toBeInstanceOf(ValidationError)
-    }
+    expect(result.games.length).toBeGreaterThan(0)
   })
 
-  it("returns minimal streamable catalog games when enabled", async () => {
+  it("returns minimal streamable catalog games", async () => {
     await setupLibrary({ enabled: true })
     process.env.KORRI_STREAM_ADVERTISE_HOST_ID = "source-test-host"
     process.env.HOST = "127.0.0.1"

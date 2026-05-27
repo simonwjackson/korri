@@ -60,7 +60,10 @@ let
   serverId = if cfg.serverId != null then cfg.serverId else config.networking.hostName;
   firewallPorts = {
     allowedTCPPorts = [ cfg.port ];
-    allowedUDPPorts = lib.mkIf cfg.advertise.enable [ 5353 ];
+    # Federation v1: every korri-server advertises unconditionally
+    # (cfg.advertise.enable retired in R14 / zero-backwards-compat).
+    # mDNS firewall opening is always needed on library-bearing hosts.
+    allowedUDPPorts = [ 5353 ];
   };
 
   hasPlaceholder = path: lib.hasInfix "%" path;
@@ -149,7 +152,7 @@ let
     PORT = toString cfg.port;
     KORRI_SERVER_ID = serverId;
     KORRI_SERVER_NAME = advertiseName;
-    KORRI_SERVER_ADVERTISE_ENABLED = if cfg.advertise.enable then "1" else "0";
+    # KORRI_SERVER_ADVERTISE_ENABLED removed in federation v1 (R14).
     KORRI_STREAM_ADVERTISE_NAME = advertiseName;
     KORRI_STREAM_ADVERTISE_HOST_ID = serverId;
     KORRI_STREAM_ADVERTISE_PORT = toString cfg.port;
@@ -337,11 +340,10 @@ in
     };
 
     advertise = {
-      enable = mkOption {
-        type = types.bool;
-        default = false;
-        description = "Advertise this server on the LAN with mDNS/DNS-SD.";
-      };
+      # `enable` was retired in federation v1 (R14 / zero-backwards-compat).
+      # Every library-bearing korri-server advertises unconditionally;
+      # devices that should not participate in federation should not run
+      # this service. The `name` and `capabilities` sub-options remain.
 
       name = mkOption {
         type = types.nullOr types.str;
@@ -352,10 +354,10 @@ in
       capabilities = mkOption {
         type = types.listOf types.str;
         default = [
-          "stream"
           "source"
+          "stream"
         ];
-        description = "Capability labels advertised through mDNS TXT records.";
+        description = "Capability labels advertised through mDNS TXT records. Federation requires `source`.";
       };
     };
 

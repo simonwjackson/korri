@@ -44,11 +44,15 @@ export function getKorriServerConfig(
   return {
     host: env.HOST ?? "127.0.0.1",
     port,
-    advertise: isEnabled(env.KORRI_SERVER_ADVERTISE_ENABLED ?? "1"),
+    // Federation v1: every library-bearing korri-server advertises
+    // unconditionally. The legacy KORRI_SERVER_ADVERTISE_ENABLED knob is
+    // gone (R14 / zero-backwards-compat). Devices that should not
+    // participate in federation simply don't run korri-server.
+    advertise: true,
     advertiseName: env.KORRI_STREAM_ADVERTISE_NAME ?? env.KORRI_SERVER_NAME,
     advertiseHostId: env.KORRI_STREAM_ADVERTISE_HOST_ID ?? env.KORRI_SERVER_ID,
     advertiseCapabilities: parseCapabilities(
-      env.KORRI_STREAM_ADVERTISE_CAPABILITIES ?? "stream,source",
+      env.KORRI_STREAM_ADVERTISE_CAPABILITIES ?? "source,stream",
     ),
   }
 }
@@ -163,10 +167,6 @@ function parseCapabilities(value: string): readonly string[] {
     .map(capability => capability.trim())
     .filter(Boolean)
   return capabilities.length > 0 ? capabilities : ["stream", "source"]
-}
-
-function isEnabled(value: string): boolean {
-  return ["1", "true", "yes"].includes(value.trim().toLowerCase())
 }
 
 if (require.main === module) {
