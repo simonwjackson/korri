@@ -168,4 +168,52 @@ describe("createShellLauncher (real Bun.spawn)", () => {
       expect(managed.result.stderrTail).toBeDefined()
     }
   })
+
+  it("exposes no processGroupId when processGroup is disabled (default)", async () => {
+    const launcher = createShellLauncher()
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("shell launcher missing managed spawn")
+    const managed = await spawn({
+      command: "/bin/sh",
+      args: ["-c", "exit 0"],
+    })
+    expect(managed.status).toBe("started")
+    if (managed.status === "started") {
+      expect(managed.session.processGroupId).toBeUndefined()
+      await managed.result
+    }
+  })
+
+  it("wraps managed spawn with setsid and exposes processGroupId when processGroup is true", async () => {
+    const launcher = createShellLauncher({ processGroup: true })
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("shell launcher missing managed spawn")
+    const managed = await spawn({
+      command: "/bin/sh",
+      args: ["-c", "exit 0"],
+    })
+    expect(managed.status).toBe("started")
+    if (managed.status === "started") {
+      expect(managed.session.processGroupId).toBe(managed.session.processId)
+      const result = await managed.result
+      expect(result).toEqual({ status: "launched" })
+    }
+  })
+
+  it("managed spawn with processGroup still captures stderr tail on failure", async () => {
+    const launcher = createShellLauncher({ processGroup: true })
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("shell launcher missing managed spawn")
+    const managed = await spawn({
+      command: "/bin/sh",
+      args: ["-c", "echo boom 1>&2; exit 7"],
+    })
+    if (managed.status === "failed") throw new Error("unexpected pre-exec fail")
+    const result = await managed.result
+    expect(result.status).toBe("failed")
+    if (result.status === "failed") {
+      expect(result.exitCode).toBe(7)
+      expect(result.stderrTail).toContain("boom")
+    }
+  })
 })

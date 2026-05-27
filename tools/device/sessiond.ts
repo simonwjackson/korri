@@ -18,6 +18,10 @@ import {
   createElectrobunController,
   realElectrobunRunner,
 } from "./sessiond-electrobun"
+import {
+  createSystemGamescopeReaper,
+  type GamescopeReaper,
+} from "./sessiond-gamescope-reaper"
 import type {
   KorriRendererController,
   KorriRendererStatus,
@@ -74,6 +78,14 @@ export interface KorriSessiondOptions {
   readonly sway?: SwayController
   readonly serviceManager?: KorriSessiondServiceManager
   readonly launcher?: KorriSessiondLauncher
+  /**
+   * Process-name-accurate reaper for `gamescope-wl` / `gamescopereaper`.
+   * Invoked at the `restoring` transition with the managed launch's
+   * process group id. Both roles use it (the SIGSEGV class affects any
+   * Gamescope-wrapped launch). When omitted, restoring proceeds without
+   * an explicit reap pass.
+   */
+  readonly reaper?: GamescopeReaper
   readonly logger?: KorriSessiondLogger
 }
 
@@ -105,9 +117,11 @@ export function createKorriSessiondCore(
   const renderer = options.renderer ?? realRendererController()
   const sway = options.sway ?? realSwayController()
   const serviceManager = options.serviceManager ?? realServiceManager()
-  const launcher = options.launcher ?? createShellLauncher()
+  const launcher =
+    options.launcher ?? createShellLauncher({ processGroup: true })
   const role: SessionRole =
     options.role ?? createKioskSessionRole({ renderer, sway, serviceManager })
+  const reaper = options.reaper
   let state: KorriSessionState = initialKorriSessionState
   let eventSequence = 0
   const lifecycleEvents: SessiondManagedLaunchEvent[] = []
@@ -121,6 +135,7 @@ export function createKorriSessiondCore(
         cancelRequested?: "graceful" | "force"
         terminate?: () => void
         terminateNow?: () => void
+        processGroupId?: number
       }
     | undefined
 
@@ -252,6 +267,9 @@ export function createKorriSessiondCore(
           if (active?.launchId === launchId) {
             active.terminate = spawned.session.terminate
             active.terminateNow = spawned.session.terminateNow
+            if (spawned.session.processGroupId !== undefined) {
+              active.processGroupId = spawned.session.processGroupId
+            }
             if (active.cancelRequested === "force") {
               spawned.session.terminateNow()
             } else if (active.cancelRequested === "graceful") {
@@ -283,7 +301,27 @@ export function createKorriSessiondCore(
 
     state = beginKorriRestore(state)
     pushLifecycleEvent(launchId, { type: "restoring" })
+    const pgid =
+      activeManagedLaunch?.launchId === launchId
+        ? activeManagedLaunch.processGroupId
+        : undefined
     try {
+      if (reaper && pgid !== undefined) {
+        try {
+          const outcome = await reaper({ pgid })
+          if (outcome.residual.length > 0) {
+            logger.warn(
+              { pgid, residualPids: outcome.residual },
+              "sessiond: gamescope residuals remain after reap",
+            )
+          }
+        } catch (error) {
+          logger.warn(
+            { err: error, pgid },
+            "sessiond: gamescope reaper threw during restore",
+          )
+        }
+      }
       await role.restoreIdleAfterLaunch()
       state = completeKorriRestore(state)
       pushLifecycleEvent(launchId, {
@@ -661,7 +699,11 @@ async function main() {
     process.env.KORRI_SESSIOND_PORT ?? `${DEFAULT_PORT}`,
     10,
   )
-  const handle = await startKorriSessiond({ port, token })
+  const handle = await startKorriSessiond({
+    port,
+    token,
+    reaper: createSystemGamescopeReaper({ logger: defaultLogger }),
+  })
 
   const shutdown = async (signal: string) => {
     defaultLogger.info({ signal }, "sessiond shutting down")

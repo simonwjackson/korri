@@ -2,6 +2,11 @@ import { describe, expect, it } from "bun:test"
 import type { LaunchResult, LaunchSpec } from "@shared/library/launcher"
 import type { SessiondManagedLaunchEvent } from "@shared/library/sessiond-managed-launch-protocol"
 import { createKorriSessiondCore, type KorriSessiondCore } from "./sessiond"
+import type {
+  GamescopeReaper,
+  ReapOutcome,
+  ReapRequest,
+} from "./sessiond-gamescope-reaper"
 import type { SessionRole } from "./sessiond-role"
 import type { KorriWindowSnapshot } from "./sessiond-state"
 
@@ -19,7 +24,9 @@ function startHarness(
       readonly result: Promise<LaunchResult>
       readonly terminate: () => void
       readonly terminateNow: () => void
+      readonly processGroupId?: number
     }>
+    readonly reaper?: GamescopeReaper
   } = {},
 ) {
   const events: string[] = []
@@ -83,6 +90,9 @@ function startHarness(
               result: spawned.result,
               session: {
                 id: "sessiond-child",
+                ...(spawned.processGroupId !== undefined
+                  ? { processGroupId: spawned.processGroupId }
+                  : {}),
                 exited: spawned.result.then(result => ({
                   exitCode: result.status === "launched" ? 0 : result.exitCode,
                 })),
@@ -93,6 +103,7 @@ function startHarness(
           }
         : undefined,
     },
+    reaper: options.reaper,
   })
   return { core, events }
 }
@@ -601,6 +612,83 @@ describe("korri sessiond", () => {
     expect(body.state.mode).toBe("stopped")
     expect(events).toContain("restore-es")
     expect(events).toContain("stop-electrobun:101")
+  })
+
+  it("invokes the gamescope reaper with the launch pgid at the restoring transition", async () => {
+    const reapCalls: ReapRequest[] = []
+    const reaper: GamescopeReaper = async request => {
+      reapCalls.push(request)
+      const outcome: ReapOutcome = { reaped: [], residual: [] }
+      return outcome
+    }
+    const control = deferred<LaunchResult>()
+    const { core } = startHarness({
+      reaper,
+      spawnLaunch: async () => ({
+        result: control.promise,
+        terminate: () => control.resolve({ status: "launched" }),
+        terminateNow: () => control.resolve({ status: "launched" }),
+        processGroupId: 99001,
+      }),
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-reap", spec }),
+      }),
+    )
+
+    control.resolve({ status: "launched" })
+    await waitForSessionMode(core, "home")
+
+    expect(reapCalls).toEqual([{ pgid: 99001 }])
+
+    const stream = await request(
+      core,
+      "/managed-launch/events?launchId=launch-reap",
+      authorized(),
+    )
+    const lifecycle = parseSseEvents(await stream.text())
+    const types = lifecycle.map(event => event.type)
+    // child-exited must precede restoring; reaper runs during restoring,
+    // home-ready terminal readiness must be last.
+    const childExited = types.indexOf("child-exited")
+    const restoring = types.indexOf("restoring")
+    const homeReady = types.indexOf("home-ready")
+    expect(childExited).toBeLessThan(restoring)
+    expect(restoring).toBeLessThan(homeReady)
+  })
+
+  it("skips the reaper when the active launch has no process group", async () => {
+    const reapCalls: ReapRequest[] = []
+    const reaper: GamescopeReaper = async request => {
+      reapCalls.push(request)
+      return { reaped: [], residual: [] }
+    }
+    const { core } = startHarness({
+      reaper,
+      // runLaunch provides no processGroupId; this branch uses launcher.run
+      // path which lacks a session handle entirely.
+      launchResult: { status: "launched" },
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    await request(
+      core,
+      "/launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ spec }),
+      }),
+    )
+    // With no pgid, the reaper is still invoked but with pgid: undefined
+    // so it returns a no-op. Sessiond never calls the reaper at all on
+    // the blocking-launch path.
+    expect(reapCalls).toEqual([])
   })
 
   it("delegates idle target to injected SessionRole and emits the role's terminal readiness event", async () => {

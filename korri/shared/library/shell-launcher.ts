@@ -31,22 +31,45 @@ import type {
 } from "./launcher"
 
 const STDERR_TAIL_BYTES = 4 * 1024
+const DEFAULT_SETSID_COMMAND = "setsid"
 
-export function createShellLauncher(): Launcher {
+export interface ShellLauncherOptions {
+  /**
+   * When true, wrap every managed spawn with `setsid -- <command>` so the
+   * child becomes its own session/process-group leader. Terminate paths
+   * then signal the process group (`kill -- -pgid <sig>`), reaching
+   * grandchildren that escape the direct kill of the parent.
+   *
+   * Default false to preserve byte-for-byte compatibility for callers
+   * that did not opt in.
+   */
+  readonly processGroup?: boolean
+  /** Override the setsid binary path. Default `"setsid"`. */
+  readonly setsidCommand?: string
+}
+
+export function createShellLauncher(
+  options: ShellLauncherOptions = {},
+): Launcher {
   return {
     async run(spec: LaunchSpec): Promise<LaunchResult> {
-      const managed = await spawnShellLaunch(spec)
+      const managed = await spawnShellLaunch(spec, options)
       if (managed.status === "failed") return managed.result
       return await managed.result
     },
-    spawn: spawnShellLaunch,
+    spawn: spec => spawnShellLaunch(spec, options),
   }
 }
 
 async function spawnShellLaunch(
   spec: LaunchSpec,
+  options: ShellLauncherOptions = {},
 ): Promise<ManagedLaunchResult> {
-  const argv = [spec.command, ...spec.args] as const
+  const useProcessGroup = options.processGroup === true
+  const setsidCommand = options.setsidCommand ?? DEFAULT_SETSID_COMMAND
+  const argv = useProcessGroup
+    ? ([setsidCommand, "--", spec.command, ...spec.args] as const)
+    : ([spec.command, ...spec.args] as const)
 
   logger.info(
     { command: spec.command, argc: spec.args.length },
@@ -112,15 +135,26 @@ async function spawnShellLaunch(
     },
   )
 
+  const killGroup = (signal: NodeJS.Signals) => {
+    try {
+      process.kill(-proc.pid, signal)
+    } catch {
+      proc.kill(signal)
+    }
+  }
+
   return {
     status: "started",
     result,
     session: {
       id: `shell:${proc.pid}`,
       processId: proc.pid,
+      ...(useProcessGroup ? { processGroupId: proc.pid } : {}),
       exited,
-      terminate: () => proc.kill("SIGTERM"),
-      terminateNow: () => proc.kill("SIGKILL"),
+      terminate: () =>
+        useProcessGroup ? killGroup("SIGTERM") : proc.kill("SIGTERM"),
+      terminateNow: () =>
+        useProcessGroup ? killGroup("SIGKILL") : proc.kill("SIGKILL"),
     },
   }
 }

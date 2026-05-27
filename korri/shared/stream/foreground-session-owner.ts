@@ -28,6 +28,12 @@ export type ForegroundManagedSessionReadiness =
 export interface ForegroundManagedSessionHandle {
   readonly id: string
   readonly processId?: number
+  /**
+   * POSIX process group id of the managed launch when the launcher
+   * wraps the spawn in a new session (e.g., `setsid -- <command>`).
+   * Sessiond's gamescope reaper uses this as the launch's scope boundary.
+   */
+  readonly processGroupId?: number
   readonly exited: Promise<{ readonly exitCode: number | null }>
   readonly ready?: Promise<ForegroundManagedSessionReadiness>
   readonly isGone?: () => Promise<boolean> | boolean
