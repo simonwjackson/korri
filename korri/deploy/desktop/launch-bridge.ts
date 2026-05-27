@@ -43,7 +43,7 @@ import {
   type ForegroundSessionOwnerLaunchResult,
   type ForegroundSessionReadinessInput,
   type ForegroundSessionStageResult,
-} from "./foreground-session-owner"
+} from "@shared/stream/foreground-session-owner"
 
 type LaunchBridgeResponse = LocalStreamLaunchResponse
 
