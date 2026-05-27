@@ -23,10 +23,29 @@ export type SessiondManagedLaunchMode = Schema.Schema.Type<
   typeof SessiondManagedLaunchMode
 >
 
+export const SessiondManagedLaunchLifecycle = Schema.Literals([
+  "foreground",
+  "session",
+])
+export type SessiondManagedLaunchLifecycle = Schema.Schema.Type<
+  typeof SessiondManagedLaunchLifecycle
+>
+
 export const SessiondManagedLaunchCapabilities = Schema.Struct({
   managedLaunch: Schema.Boolean,
   lifecycleEvents: Schema.Boolean,
   perLaunchTermination: Schema.Boolean,
+  /**
+   * Phase 4D / Track A. When `true`, the daemon accepts
+   * `lifecycle: "session"` start requests with an optional `wait` spec
+   * and emits the session-lifecycle event peers
+   * (`launcher-exited`, `wait-monitor-running`,
+   * `wait-monitor-exited`, `session-anchored`). Older Phase 4B
+   * daemons omit this field; clients must treat its absence as
+   * `false` and fall back to `lifecycle: "foreground"` rather than
+   * sending a session-lifecycle launch the daemon cannot supervise.
+   */
+  sessionLifecycle: Schema.optional(Schema.Boolean),
 })
 export type SessiondManagedLaunchCapabilities = Schema.Schema.Type<
   typeof SessiondManagedLaunchCapabilities
@@ -55,6 +74,21 @@ export type SessiondManagedLaunchStatus = Schema.Schema.Type<
 export const SessiondManagedLaunchStartRequest = Schema.Struct({
   launchId: Schema.optional(Schema.String),
   spec: LaunchSpec,
+  /**
+   * Phase 4D / Track A. Defaults to `"foreground"` when omitted; the
+   * daemon treats absence as foreground for Phase 4B back-compat.
+   * `"session"` enables launcher-anchor supervision (launcher exits
+   * cleanly, optional wait-monitor or anchor-until-terminate).
+   */
+  lifecycle: Schema.optional(SessiondManagedLaunchLifecycle),
+  /**
+   * Phase 4D / Track A. Wait-monitor spec, meaningful only when
+   * `lifecycle === "session"`. The schema accepts a wait spec for
+   * any lifecycle; the daemon ignores it under
+   * `lifecycle: "foreground"`. This keeps the schema purely
+   * structural and leaves runtime semantics to sessiond.
+   */
+  wait: Schema.optional(LaunchSpec),
 })
 export type SessiondManagedLaunchStartRequest = Schema.Schema.Type<
   typeof SessiondManagedLaunchStartRequest
@@ -86,6 +120,14 @@ export const SessiondManagedLaunchEventType = Schema.Literals([
   "failed",
   "recovering",
   "terminated",
+  // Phase 4D / Track A -- session-lifecycle event peers. Phase 4B
+  // clients ignoring unknown event types continue to function; strict
+  // decoders verifying Phase 4B-only sequences must list these in
+  // their accept set explicitly.
+  "launcher-exited",
+  "wait-monitor-running",
+  "wait-monitor-exited",
+  "session-anchored",
 ])
 export type SessiondManagedLaunchEventType = Schema.Schema.Type<
   typeof SessiondManagedLaunchEventType

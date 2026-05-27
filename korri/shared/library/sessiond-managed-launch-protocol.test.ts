@@ -284,4 +284,211 @@ describe("sessiond managed launch protocol", () => {
       }),
     ).toThrow()
   })
+
+  // Phase 4D / Track A -- session lifecycle additive extension.
+
+  it("decodes a session-lifecycle start request with a wait spec (Track A)", () => {
+    const request = Schema.decodeUnknownSync(SessiondManagedLaunchStartRequest)(
+      {
+        launchId: "launch-7",
+        spec: { command: "/bin/steam-launcher.sh", args: ["--big-picture"] },
+        lifecycle: "session",
+        wait: {
+          command: "/bin/steam-wait-monitor.sh",
+          args: ["--pid-tree"],
+        },
+      },
+    )
+    expect(request).toEqual({
+      launchId: "launch-7",
+      spec: { command: "/bin/steam-launcher.sh", args: ["--big-picture"] },
+      lifecycle: "session",
+      wait: {
+        command: "/bin/steam-wait-monitor.sh",
+        args: ["--pid-tree"],
+      },
+    })
+  })
+
+  it("decodes a session-lifecycle start request with no wait (anchor)", () => {
+    const request = Schema.decodeUnknownSync(SessiondManagedLaunchStartRequest)(
+      {
+        spec: { command: "/bin/firefox-launcher.sh", args: [] },
+        lifecycle: "session",
+      },
+    )
+    expect(request.lifecycle).toBe("session")
+    expect(request).not.toHaveProperty("wait")
+  })
+
+  it("keeps the Phase 4B start request shape (no lifecycle, no wait) decoding cleanly", () => {
+    const request = Schema.decodeUnknownSync(SessiondManagedLaunchStartRequest)(
+      {
+        launchId: "launch-2",
+        spec: { command: "/bin/game", args: ["rom.smc"] },
+      },
+    )
+    expect(request).toEqual({
+      launchId: "launch-2",
+      spec: { command: "/bin/game", args: ["rom.smc"] },
+    })
+  })
+
+  it("rejects unknown lifecycle literals with strict decode", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(SessiondManagedLaunchStartRequest)({
+        spec: { command: "/bin/launcher", args: [] },
+        lifecycle: "background",
+      }),
+    ).toThrow()
+  })
+
+  it.each([
+    "launcher-exited",
+    "wait-monitor-running",
+    "wait-monitor-exited",
+    "session-anchored",
+  ] as const)("decodes the new session-lifecycle event %s", eventType => {
+    const event = decodeSessiondManagedLaunchEvent({
+      schemaVersion: 1,
+      sequence: 9,
+      launchId: "launch-7",
+      type: eventType,
+      at: "2026-05-27T00:00:00.000Z",
+    })
+    expect(event.type).toBe(eventType)
+  })
+
+  it("decodes launcher-exited with a clean exit terminal payload", () => {
+    const event = decodeSessiondManagedLaunchEvent({
+      schemaVersion: 1,
+      sequence: 4,
+      launchId: "launch-7",
+      type: "launcher-exited",
+      at: "2026-05-27T00:00:00.500Z",
+      terminal: { exitCode: 0 },
+    })
+    expect(event.terminal).toEqual({ exitCode: 0 })
+  })
+
+  it("decodes session-anchored with a readiness payload (operator evidence)", () => {
+    const event = decodeSessiondManagedLaunchEvent({
+      schemaVersion: 1,
+      sequence: 5,
+      launchId: "launch-7",
+      type: "session-anchored",
+      at: "2026-05-27T00:00:00.600Z",
+      readiness: {
+        status: "ok",
+        evidence: "launcher exited; anchor holding",
+      },
+    })
+    expect(event.readiness?.status).toBe("ok")
+  })
+
+  it("decodes capabilities advertising sessionLifecycle support", () => {
+    const status = decodeSessiondManagedLaunchStatus({
+      schemaVersion: 1,
+      mode: "home",
+      capabilities: {
+        managedLaunch: true,
+        lifecycleEvents: true,
+        perLaunchTermination: true,
+        sessionLifecycle: true,
+      },
+      restoreAttempts: 0,
+    })
+    expect(status.capabilities.sessionLifecycle).toBe(true)
+  })
+
+  it("decodes capabilities omitting sessionLifecycle (Phase 4B back-compat)", () => {
+    const status = decodeSessiondManagedLaunchStatus({
+      schemaVersion: 1,
+      mode: "home",
+      capabilities: {
+        managedLaunch: true,
+        lifecycleEvents: true,
+        perLaunchTermination: true,
+      },
+      restoreAttempts: 0,
+    })
+    expect(status.capabilities.sessionLifecycle).toBeUndefined()
+  })
+
+  it("accepts a full session+wait lifecycle event sequence", () => {
+    const sequence: Array<
+      | "launch-accepted"
+      | "child-running"
+      | "launcher-exited"
+      | "wait-monitor-running"
+      | "wait-monitor-exited"
+      | "restoring"
+      | "idle-ready"
+    > = [
+      "launch-accepted",
+      "child-running",
+      "launcher-exited",
+      "wait-monitor-running",
+      "wait-monitor-exited",
+      "restoring",
+      "idle-ready",
+    ]
+    const events = sequence.map((type, index) =>
+      decodeSessiondManagedLaunchEvent({
+        schemaVersion: 1,
+        sequence: index + 1,
+        launchId: "launch-7",
+        type,
+        at: `2026-05-27T00:00:0${index}.000Z`,
+        ...(type === "wait-monitor-exited"
+          ? { terminal: { exitCode: 0 } }
+          : {}),
+        ...(type === "idle-ready"
+          ? { readiness: { status: "ok" as const } }
+          : {}),
+      }),
+    )
+    expect(events.map(e => e.type)).toEqual(sequence)
+  })
+
+  it("accepts a full session+anchor lifecycle event sequence (launcher then anchor then terminate)", () => {
+    const sequence: Array<
+      | "launch-accepted"
+      | "child-running"
+      | "launcher-exited"
+      | "session-anchored"
+      | "terminated"
+      | "restoring"
+      | "idle-ready"
+    > = [
+      "launch-accepted",
+      "child-running",
+      "launcher-exited",
+      "session-anchored",
+      "terminated",
+      "restoring",
+      "idle-ready",
+    ]
+    const events = sequence.map((type, index) =>
+      decodeSessiondManagedLaunchEvent({
+        schemaVersion: 1,
+        sequence: index + 1,
+        launchId: "launch-7",
+        type,
+        at: `2026-05-27T00:00:0${index}.000Z`,
+        ...(type === "session-anchored"
+          ? {
+              readiness: {
+                status: "ok" as const,
+                evidence: "launcher exited; anchor holding",
+              },
+            }
+          : {}),
+        ...(type === "idle-ready"
+          ? { readiness: { status: "ok" as const } }
+          : {}),
+      }),
+    )
+    expect(events.map(e => e.type)).toEqual(sequence)
+  })
 })
