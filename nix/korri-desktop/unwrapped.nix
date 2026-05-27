@@ -147,16 +147,6 @@ pkgs.stdenv.mkDerivation {
           --target=browser \
           --outfile="$app_bundle/Resources/app/views/mainview/preload.js"
 
-        # Bundle the waiting-page polling-loop bootstrap as a browser
-        # module and copy the co-located waiting.css. Both are served by
-        # bun while the connection controller is not yet `connected`
-        # (the React bundle never loads in that state).
-        bun build korri/deploy/desktop/waiting-page/polling-loop-bootstrap.ts \
-          --target=browser \
-          --outfile="$app_bundle/Resources/app/views/mainview/waiting-polling-loop.js"
-        cp korri/deploy/desktop/waiting-page/waiting.css \
-          "$app_bundle/Resources/app/views/mainview/waiting.css"
-
         if [ ! -f "$app_bundle/Resources/version.json" ]; then
           cat > "$app_bundle/Resources/version.json" <<'EOF'
     {"version":"1.0.0","hash":"dev","channel":"dev","baseUrl":"","name":"Korri","identifier":"dev.korri.desktop"}
@@ -171,18 +161,15 @@ pkgs.stdenv.mkDerivation {
 
         patch_elf_tree out/build/electrobun
 
-        # Postcondition: every file the wrap step depends on — plus the
-        # waiting-page assets the catch-all serve references while
-        # disconnected — must exist in the bundled output. The electrobun
-        # build path has multiple fallback branches; assert here so a
-        # regression surfaces at build time, not at first launch.
+        # Postcondition: every file the wrap step depends on must exist
+        # in the bundled output. The electrobun build path has multiple
+        # fallback branches; assert here so a regression surfaces at
+        # build time, not at first launch.
         for required in \
           "Resources/app/bun/index.js" \
           "Resources/version.json" \
           "Resources/build.json" \
-          "Resources/app/views/mainview/preload.js" \
-          "Resources/app/views/mainview/waiting.css" \
-          "Resources/app/views/mainview/waiting-polling-loop.js"; do
+          "Resources/app/views/mainview/preload.js"; do
           if [ ! -f "$app_bundle/$required" ]; then
             echo "korri-desktop-unwrapped: missing required artifact $required" >&2
             exit 1
