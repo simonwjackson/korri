@@ -24,7 +24,7 @@ function startHarness(
     readonly failRendererLaunch?: boolean
     readonly failRendererRestore?: boolean
     readonly runLaunch?: (spec: LaunchSpec) => Promise<LaunchResult>
-    readonly spawnLaunch?: () => Promise<{
+    readonly spawnLaunch?: (spec: LaunchSpec) => Promise<{
       readonly result: Promise<LaunchResult>
       readonly terminate: () => void
       readonly terminateNow: () => void
@@ -87,7 +87,7 @@ function startHarness(
       spawn: options.spawnLaunch
         ? async receivedSpec => {
             events.push(`launch-game:${receivedSpec.command}`)
-            const spawned = await options.spawnLaunch?.()
+            const spawned = await options.spawnLaunch?.(receivedSpec)
             if (!spawned) throw new Error("missing spawned launch")
             return {
               status: "started" as const,
@@ -837,6 +837,343 @@ describe("korri sessiond", () => {
     })
     expect(calls).toContain("beforeChildLaunch")
     expect(calls).toContain("restoreIdleAfterLaunch")
+  })
+
+  // Phase 4D / Track A U4 -- session-lifecycle dispatch.
+
+  it("advertises sessionLifecycle in managed-launch capabilities", async () => {
+    const { core } = startHarness()
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    const response = await request(core, "/managed-launch/status", authorized())
+    const body = await response.json()
+    expect(body.capabilities.sessionLifecycle).toBe(true)
+  })
+
+  it("emits launcher-exited + wait-monitor lifecycle for session+wait launches", async () => {
+    const launcherCtrl = deferred<LaunchResult>()
+    const waitCtrl = deferred<LaunchResult>()
+    const waitSpec: LaunchSpec = {
+      command: "/bin/steam-wait-monitor.sh",
+      args: ["--pid-tree"],
+    }
+    const { core } = startHarness({
+      spawnLaunch: async receivedSpec => ({
+        result:
+          receivedSpec.command === waitSpec.command
+            ? waitCtrl.promise
+            : launcherCtrl.promise,
+        terminate: () => {},
+        terminateNow: () => {},
+        processGroupId: receivedSpec.command === waitSpec.command ? 4242 : 1212,
+      }),
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    const start = await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          launchId: "launch-w",
+          spec,
+          lifecycle: "session",
+          wait: waitSpec,
+        }),
+      }),
+    )
+    expect(await start.json()).toEqual({
+      status: "accepted",
+      launchId: "launch-w",
+    })
+
+    const streamResponse = await request(
+      core,
+      "/managed-launch/events?launchId=launch-w",
+      authorized(),
+    )
+    const streamText = streamResponse.text()
+
+    launcherCtrl.resolve({ status: "launched" })
+    await new Promise(resolve => setTimeout(resolve, 5))
+    waitCtrl.resolve({ status: "launched" })
+
+    const lifecycle = parseSseEvents(await streamText)
+    expect(lifecycle.map(e => e.type)).toEqual([
+      "launch-accepted",
+      "renderer-stopped",
+      "child-running",
+      "launcher-exited",
+      "wait-monitor-running",
+      "wait-monitor-exited",
+      "restoring",
+      "home-ready",
+    ])
+  })
+
+  it("anchors session+no-wait launches and resumes restoring after external terminate", async () => {
+    const launcherCtrl = deferred<LaunchResult>()
+    const { core } = startHarness({
+      spawnLaunch: async () => ({
+        result: launcherCtrl.promise,
+        terminate: () => {},
+        terminateNow: () => {},
+        processGroupId: 1212,
+      }),
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          launchId: "launch-a",
+          spec,
+          lifecycle: "session",
+        }),
+      }),
+    )
+
+    const streamResponse = await request(
+      core,
+      "/managed-launch/events?launchId=launch-a",
+      authorized(),
+    )
+    const streamText = streamResponse.text()
+
+    launcherCtrl.resolve({ status: "launched" })
+    // Give sessiond time to emit launcher-exited + session-anchored before
+    // we issue the terminate request.
+    await new Promise(resolve => setTimeout(resolve, 10))
+    await request(
+      core,
+      "/managed-launch/terminate",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-a" }),
+      }),
+    )
+
+    const lifecycle = parseSseEvents(await streamText)
+    expect(lifecycle.map(e => e.type)).toEqual([
+      "launch-accepted",
+      "renderer-stopped",
+      "child-running",
+      "launcher-exited",
+      "session-anchored",
+      "terminated",
+      "restoring",
+      "home-ready",
+    ])
+    const anchored = lifecycle.find(e => e.type === "session-anchored")
+    expect(anchored?.readiness?.status).toBe("ok")
+    expect(anchored?.readiness?.evidence).toContain("anchor holding")
+  })
+
+  it("degrades session+wait to anchor when wait monitor spawn throws", async () => {
+    const launcherCtrl = deferred<LaunchResult>()
+    const waitSpec: LaunchSpec = {
+      command: "/bin/steam-wait-monitor.sh",
+      args: [],
+    }
+    const { core } = startHarness({
+      spawnLaunch: async receivedSpec => {
+        if (receivedSpec.command === waitSpec.command) {
+          throw new Error("wait monitor spawn failed")
+        }
+        return {
+          result: launcherCtrl.promise,
+          terminate: () => {},
+          terminateNow: () => {},
+          processGroupId: 1212,
+        }
+      },
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          launchId: "launch-d",
+          spec,
+          lifecycle: "session",
+          wait: waitSpec,
+        }),
+      }),
+    )
+
+    const streamResponse = await request(
+      core,
+      "/managed-launch/events?launchId=launch-d",
+      authorized(),
+    )
+    const streamText = streamResponse.text()
+
+    launcherCtrl.resolve({ status: "launched" })
+    await new Promise(resolve => setTimeout(resolve, 10))
+    await request(
+      core,
+      "/managed-launch/terminate",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-d" }),
+      }),
+    )
+
+    const lifecycle = parseSseEvents(await streamText)
+    expect(lifecycle.map(e => e.type)).toEqual([
+      "launch-accepted",
+      "renderer-stopped",
+      "child-running",
+      "launcher-exited",
+      "session-anchored",
+      "terminated",
+      "restoring",
+      "home-ready",
+    ])
+  })
+
+  it("falls through to child-exited when session launcher exits non-zero", async () => {
+    // Graceful degradation: under lifecycle: "session", a non-zero launcher
+    // exit must NOT emit launcher-exited / wait-monitor / anchored. It
+    // routes to the standard child-exited terminal path.
+    const launcherCtrl = deferred<LaunchResult>()
+    const waitSpec: LaunchSpec = {
+      command: "/bin/wait",
+      args: [],
+    }
+    let waitSpawnCalls = 0
+    const { core } = startHarness({
+      spawnLaunch: async receivedSpec => {
+        if (receivedSpec.command === waitSpec.command) {
+          waitSpawnCalls += 1
+        }
+        return {
+          result: launcherCtrl.promise,
+          terminate: () => {},
+          terminateNow: () => {},
+          processGroupId: 1212,
+        }
+      },
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          launchId: "launch-f",
+          spec,
+          lifecycle: "session",
+          wait: waitSpec,
+        }),
+      }),
+    )
+    const streamResponse = await request(
+      core,
+      "/managed-launch/events?launchId=launch-f",
+      authorized(),
+    )
+    const streamText = streamResponse.text()
+
+    launcherCtrl.resolve({
+      status: "failed",
+      exitCode: 2,
+      failureKind: "command-failed",
+      stderrTail: "boom",
+    })
+
+    const lifecycle = parseSseEvents(await streamText)
+    expect(lifecycle.map(e => e.type)).toEqual([
+      "launch-accepted",
+      "renderer-stopped",
+      "child-running",
+      "child-exited",
+      "restoring",
+      "home-ready",
+    ])
+    expect(waitSpawnCalls).toBe(0)
+    expect(
+      lifecycle.find(e => e.type === "child-exited")?.terminal?.exitCode,
+    ).toBe(2)
+  })
+
+  it("fails the launch with host-unavailable when afterChildRunning throws", async () => {
+    const launcherCtrl = deferred<LaunchResult>()
+    const role: SessionRole = {
+      id: "source-machine",
+      idleModeLabel: "idle",
+      idleReadyEventName: "idle-ready",
+      emitsRendererStopped: false,
+      enterIdle: async () => {},
+      leaveIdle: async () => {},
+      beforeChildLaunch: async () => {},
+      restoreIdleAfterLaunch: async () => {},
+      reconcileIdle: async () => {},
+      afterChildRunning: async () => {
+        throw new Error("gamescope window never appeared")
+      },
+      idleReadyEvidence: () => "idle-blank",
+      rendererStatus: () => ({ kind: "noop" }),
+    }
+    const core = createKorriSessiondCore({
+      token,
+      logger: silentLogger,
+      role,
+      launcher: {
+        run: async () => ({ status: "launched" }),
+        spawn: async () => ({
+          status: "started" as const,
+          result: launcherCtrl.promise,
+          session: {
+            id: "sessiond-child",
+            processGroupId: 1212,
+            exited: launcherCtrl.promise.then(r => ({
+              exitCode: r.status === "launched" ? 0 : r.exitCode,
+            })),
+            terminate: () => {},
+            terminateNow: () => {},
+          },
+        }),
+      },
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-h", spec }),
+      }),
+    )
+    const streamResponse = await request(
+      core,
+      "/managed-launch/events?launchId=launch-h",
+      authorized(),
+    )
+    const streamText = streamResponse.text()
+    launcherCtrl.resolve({ status: "launched" })
+
+    const lifecycle = parseSseEvents(await streamText)
+    const childExited = lifecycle.find(e => e.type === "child-exited")
+    expect(childExited?.terminal?.failureKind).toBe("host-unavailable")
+    expect(childExited?.terminal?.stderrTail).toContain(
+      "gamescope window never appeared",
+    )
   })
 })
 

@@ -153,6 +153,11 @@ export function createKorriSessiondCore(
         terminate?: () => void
         terminateNow?: () => void
         processGroupId?: number
+        // Phase 4D / Track A. Set while sessiond is in the session-
+        // anchored state (no live child, waiting for an external
+        // terminate). terminateManagedLaunchById calls this to wake
+        // the dispatcher; resetting falls back to terminate/terminateNow.
+        cancelAnchor?: () => void
       }
     | undefined
 
@@ -182,6 +187,12 @@ export function createKorriSessiondCore(
         managedLaunch: true,
         lifecycleEvents: true,
         perLaunchTermination: typeof launcher.spawn === "function",
+        // Phase 4D / Track A. Sessiond now understands
+        // lifecycle: "session" start requests and emits
+        // launcher-exited / wait-monitor-{running,exited} /
+        // session-anchored peers. Phase 4B clients omitting the
+        // field still negotiate to foreground correctly.
+        sessionLifecycle: true,
       },
       ...(active
         ? {
@@ -252,6 +263,10 @@ export function createKorriSessiondCore(
   async function startManagedLaunch(
     spec: LaunchSpec,
     requestedLaunchId?: string,
+    lifecycleOptions: {
+      readonly lifecycle?: "foreground" | "session"
+      readonly wait?: LaunchSpec
+    } = {},
   ): Promise<{
     readonly response: SessiondManagedLaunchStartResponse
     readonly result?: Promise<LaunchResult>
@@ -272,7 +287,7 @@ export function createKorriSessiondCore(
     activeManagedLaunch = { launchId }
     pushLifecycleEvent(launchId, { type: "launch-accepted" })
 
-    const result = runManagedLaunch(launchId, spec)
+    const result = runManagedLaunch(launchId, spec, lifecycleOptions)
     void result.finally(() => {
       if (activeManagedLaunch?.launchId === launchId) {
         activeManagedLaunch = undefined
@@ -285,7 +300,13 @@ export function createKorriSessiondCore(
   async function runManagedLaunch(
     launchId: string,
     spec: LaunchSpec,
+    lifecycleOptions: {
+      readonly lifecycle?: "foreground" | "session"
+      readonly wait?: LaunchSpec
+    } = {},
   ): Promise<LaunchResult> {
+    const lifecycle = lifecycleOptions.lifecycle ?? "foreground"
+    const wait = lifecycleOptions.wait
     let result: LaunchResult | undefined
 
     try {
@@ -316,11 +337,50 @@ export function createKorriSessiondCore(
             }
           }
           pushLifecycleEvent(launchId, { type: "child-running" })
-          result = await spawned.result
+          // Phase 4D / Track A. Role-specific foreground promotion
+          // runs after the primary child is observed running. Throwing
+          // here turns into a launch failure (host-unavailable).
+          try {
+            await role.afterChildRunning(spec)
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error)
+            logger.warn({ err: error }, "sessiond: afterChildRunning failed")
+            // Attempt to terminate the still-running child so we do not
+            // leave it dangling while restoring.
+            try {
+              spawned.session.terminate()
+            } catch {
+              // Best-effort; ignore.
+            }
+            result = {
+              status: "failed",
+              exitCode: launchFailureExitCode("host-unavailable"),
+              failureKind: "host-unavailable",
+              stderrTail: message,
+            }
+          }
+          if (!result) {
+            result = await spawned.result
+          }
         }
       } else {
         pushLifecycleEvent(launchId, { type: "child-running" })
-        result = await launcher.run(spec)
+        try {
+          await role.afterChildRunning(spec)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          logger.warn({ err: error }, "sessiond: afterChildRunning failed")
+          result = {
+            status: "failed",
+            exitCode: launchFailureExitCode("host-unavailable"),
+            failureKind: "host-unavailable",
+            stderrTail: message,
+          }
+        }
+        if (!result) {
+          result = await launcher.run(spec)
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -333,10 +393,38 @@ export function createKorriSessiondCore(
       logger.warn({ err: error }, "sessiond: managed launch failed")
     }
 
-    pushLifecycleEvent(launchId, {
-      type: "child-exited",
-      terminal: terminalFromLaunchResult(result),
-    })
+    // Phase 4D / Track A. Branch on lifecycle once we have the
+    // primary child's result. The session lifecycle only fires when
+    // the launcher exited cleanly (no cancel in flight); any other
+    // outcome falls through to the original child-exited terminal.
+    const cancelInFlight =
+      activeManagedLaunch?.launchId === launchId &&
+      activeManagedLaunch.cancelRequested !== undefined
+    if (
+      lifecycle === "session" &&
+      result.status === "launched" &&
+      !cancelInFlight
+    ) {
+      pushLifecycleEvent(launchId, {
+        type: "launcher-exited",
+        terminal: terminalFromLaunchResult(result),
+      })
+      if (wait) {
+        const sessionResult = await runSessionWaitMonitor(launchId, wait)
+        if (sessionResult.status === "degraded-to-anchor") {
+          await runSessionAnchor(launchId)
+        } else {
+          result = sessionResult.result
+        }
+      } else {
+        await runSessionAnchor(launchId)
+      }
+    } else {
+      pushLifecycleEvent(launchId, {
+        type: "child-exited",
+        terminal: terminalFromLaunchResult(result),
+      })
+    }
 
     state = beginKorriRestore(state)
     emitStatusSidecar()
@@ -385,6 +473,106 @@ export function createKorriSessiondCore(
     return result
   }
 
+  /**
+   * Phase 4D / Track A. Spawn the wait monitor as the next active
+   * child under the same launchId. On successful spawn, emits
+   * wait-monitor-running, awaits the wait monitor's exit, emits
+   * wait-monitor-exited, and returns its result so the caller can
+   * use that exit code as the launch's terminal. On spawn failure,
+   * returns a degraded-to-anchor sentinel so the caller falls through
+   * to the anchor branch (per the documented graceful-degradation
+   * decision).
+   */
+  async function runSessionWaitMonitor(
+    launchId: string,
+    wait: LaunchSpec,
+  ): Promise<
+    | { readonly status: "completed"; readonly result: LaunchResult }
+    | { readonly status: "degraded-to-anchor" }
+  > {
+    const spawn = launcher.spawn
+    if (!spawn) {
+      // No spawn capability -- fall back to running the wait monitor
+      // through the blocking launcher.run path.
+      const waitResult = await launcher.run(wait)
+      pushLifecycleEvent(launchId, {
+        type: "wait-monitor-running",
+      })
+      pushLifecycleEvent(launchId, {
+        type: "wait-monitor-exited",
+        terminal: terminalFromLaunchResult(waitResult),
+      })
+      return { status: "completed", result: waitResult }
+    }
+    let spawned: Awaited<ReturnType<typeof spawn>>
+    try {
+      spawned = await spawn(wait)
+    } catch (error) {
+      logger.warn(
+        { err: error, launchId },
+        "sessiond: wait monitor spawn threw; degrading to session-anchor",
+      )
+      return { status: "degraded-to-anchor" }
+    }
+    if (spawned.status === "failed") {
+      logger.warn(
+        { launchId, failureKind: "wait-monitor-spawn-failed" },
+        "sessiond: wait monitor spawn returned failed; degrading to session-anchor",
+      )
+      return { status: "degraded-to-anchor" }
+    }
+    // Wait monitor becomes the new active child; swap terminate /
+    // terminateNow / processGroupId so termination targets it. The
+    // reaper at the final terminal sees the wait monitor's pgid.
+    const active = activeManagedLaunch
+    if (active?.launchId === launchId) {
+      active.terminate = spawned.session.terminate
+      active.terminateNow = spawned.session.terminateNow
+      if (spawned.session.processGroupId !== undefined) {
+        active.processGroupId = spawned.session.processGroupId
+      }
+      if (active.cancelRequested === "force") {
+        spawned.session.terminateNow()
+      } else if (active.cancelRequested === "graceful") {
+        spawned.session.terminate()
+      }
+    }
+    pushLifecycleEvent(launchId, { type: "wait-monitor-running" })
+    const waitResult = await spawned.result
+    pushLifecycleEvent(launchId, {
+      type: "wait-monitor-exited",
+      terminal: terminalFromLaunchResult(waitResult),
+    })
+    return { status: "completed", result: waitResult }
+  }
+
+  /**
+   * Phase 4D / Track A. Hold the role-foreground state with no live
+   * child after the launcher exited cleanly. Emits session-anchored,
+   * awaits an external /managed-launch/terminate call (which resolves
+   * the cancelAnchor promise on the active record), then emits
+   * terminated. The restoring path follows in the caller.
+   */
+  async function runSessionAnchor(launchId: string): Promise<void> {
+    pushLifecycleEvent(launchId, {
+      type: "session-anchored",
+      readiness: {
+        status: "ok",
+        evidence: "launcher exited; anchor holding",
+      },
+    })
+    const active = activeManagedLaunch
+    if (!active || active.launchId !== launchId) return
+    // If a terminate request already arrived (e.g. user pressed stop
+    // before the launcher even finished), skip the wait.
+    if (active.cancelRequested === undefined) {
+      await new Promise<void>(resolve => {
+        active.cancelAnchor = resolve
+      })
+    }
+    pushLifecycleEvent(launchId, { type: "terminated" })
+  }
+
   async function launchUnderSession(spec: LaunchSpec): Promise<LaunchResult> {
     const started = await startManagedLaunch(spec)
     if (started.response.status === "failed") {
@@ -418,6 +606,16 @@ export function createKorriSessiondCore(
       activeManagedLaunch.terminateNow?.()
     } else {
       activeManagedLaunch.terminate?.()
+    }
+    // Phase 4D / Track A. When sessiond is in the session-anchored
+    // state, there is no live child to terminate -- the dispatcher is
+    // blocked on cancelAnchor. Resolve it so the anchor exits and the
+    // restoring path proceeds. Best-effort: clear the slot to avoid
+    // double-resolve if a subsequent terminate request arrives.
+    if (activeManagedLaunch.cancelAnchor) {
+      const resolveAnchor = activeManagedLaunch.cancelAnchor
+      activeManagedLaunch.cancelAnchor = undefined
+      resolveAnchor()
     }
     return { status: "accepted", launchId }
   }
@@ -524,6 +722,12 @@ export function createKorriSessiondCore(
           const started = await startManagedLaunch(
             body.value.spec,
             body.value.launchId,
+            {
+              ...(body.value.lifecycle
+                ? { lifecycle: body.value.lifecycle }
+                : {}),
+              ...(body.value.wait ? { wait: body.value.wait } : {}),
+            },
           )
           return json(started.response)
         }
@@ -651,13 +855,14 @@ function sseData(event: SessiondManagedLaunchEvent): Uint8Array {
 }
 
 function isTerminalLifecycleEvent(event: SessiondManagedLaunchEvent): boolean {
-  return [
-    "home-ready",
-    "idle-ready",
-    "failed",
-    "recovering",
-    "terminated",
-  ].includes(event.type)
+  // Phase 4D / Track A. `terminated` is no longer terminal -- under
+  // session-anchor lifecycle, it precedes `restoring` and the role's
+  // terminal readiness event. The truly-terminal signals are the
+  // role's idle-ready / home-ready (success), `failed`, or
+  // `recovering` (restoration failure).
+  return ["home-ready", "idle-ready", "failed", "recovering"].includes(
+    event.type,
+  )
 }
 
 function realRendererController(): KorriRendererController {
