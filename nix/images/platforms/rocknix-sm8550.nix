@@ -19,7 +19,24 @@ let
     system = targetSystem;
     config.allowUnfree = true;
   };
-  sm8550GamescopePackage = sm8550Packages.gamescope;
+  # Gamescope >= 3.16.20 is required for the Moonlight v4l2m2m streaming
+  # path on SM8550 (see assertion below). nixos-25.11 currently ships
+  # 3.16.17, so we pin Gamescope to the same nixpkgs revision the x86
+  # compositor overlay uses (see nix/overlays/korri-x86-compositor.nix).
+  # That rev (0c6db2b5...) carries Gamescope 3.16.23 with the pipewire
+  # loop-lock fix. Delete this pin once nixos-25.11 backports a 3.16.20+
+  # Gamescope and the channel pkgs satisfies the assertion directly.
+  sm8550GamescopePinnedNixpkgs =
+    import
+      (builtins.fetchTarball {
+        url = "https://github.com/NixOS/nixpkgs/archive/0c6db2b5d257d845bbee67a38dee43bbca3bd462.tar.gz";
+        sha256 = "0pxv3drindhj4x8cilpcmjz94f7npcsi6rw4h1qhqimxmg40q5z3";
+      })
+      {
+        system = targetSystem;
+        config.allowUnfree = true;
+      };
+  sm8550GamescopePackage = sm8550GamescopePinnedNixpkgs.gamescope;
   sm8550 = config.rocknix.sm8550;
   inputplumberPackage =
     pkgs.runCommand "korri-rocknix-inputplumber-xb360"
