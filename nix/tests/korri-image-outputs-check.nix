@@ -27,6 +27,8 @@ let
     serverServiceMode = eval.config.services.korri.server.serviceMode or null;
     firewallTcpPorts = eval.config.networking.firewall.allowedTCPPorts or [ ];
     firewallUdpPorts = eval.config.networking.firewall.allowedUDPPorts or [ ];
+    avahiEnabled = eval.config.services.avahi.enable or false;
+    avahiPublishEnabled = eval.config.services.avahi.publish.enable or false;
     kioskUnitExists = eval.config.systemd.services ? "korri-compositor";
     inputProviderEnabled = eval.config.services.korri.input.provider.enable or false;
     inputProviderName = eval.config.services.korri.input.provider.name or null;
@@ -291,9 +293,18 @@ let
     ))
     (check "kiosk NixOS assertions must pass" (assertionsPassed kiosk))
     (check "kiosk composition must enable server" kioskSummary.serverEnabled)
-    (check "kiosk server must listen locally" (kioskSummary.serverHost == "127.0.0.1"))
+    # Federation v1 (R14 / R16) makes every korri-server LAN-visible by
+    # default. The kiosk image inherits these defaults from headless.nix.
+    (check "kiosk server must listen on all interfaces for federation" (
+      kioskSummary.serverHost == "0.0.0.0"
+    ))
     (check "kiosk server must run as a system service" (kioskSummary.serverServiceMode == "system"))
-    (check "kiosk composition must expose no TCP firewall ports" (kioskSummary.firewallTcpPorts == [ ]))
+    (check "kiosk composition must open the federation TCP port (3001)" (
+      builtins.elem 3001 kioskSummary.firewallTcpPorts
+    ))
+    (check "kiosk composition must enable avahi-daemon for federation mDNS" (
+      kioskSummary.avahiEnabled && kioskSummary.avahiPublishEnabled
+    ))
     (check "kiosk composition must enable kiosk" kioskSummary.kioskEnabled)
     (check "kiosk composition must enable client" kioskSummary.clientEnabled)
     (check "kiosk composition must enable inputd" kioskSummary.inputdEnabled)
