@@ -280,6 +280,11 @@ describe("foreground session owner", () => {
     expect(teardownSignal?.aborted).toBe(true)
     teardown.resolve({ status: "ok", value: { cancelled: true } })
     await shutdown
+    await flushMicrotasks()
+
+    expect(owner.status().events.map(event => event._tag)).not.toContain(
+      "ForegroundSessionReady",
+    )
   })
 
   it("accepts from idle, enters running, observes exit, and returns to idle-ready", async () => {

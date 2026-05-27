@@ -201,14 +201,17 @@ export function createForegroundSessionOwner<
   const releaseToIdle = async (
     previousRequestId?: string,
     evidence?: ForegroundSessionEvidence,
+    options: { readonly emitReady?: boolean } = {},
   ) => {
-    pushEvent(
-      createForegroundSessionEvent({
-        _tag: "ForegroundSessionReady",
-        ...(previousRequestId ? { previousRequestId } : {}),
-        ...(evidence ? { evidence } : {}),
-      }),
-    )
+    if (options.emitReady !== false) {
+      pushEvent(
+        createForegroundSessionEvent({
+          _tag: "ForegroundSessionReady",
+          ...(previousRequestId ? { previousRequestId } : {}),
+          ...(evidence ? { evidence } : {}),
+        }),
+      )
+    }
     activeHandle = undefined
     activeAbortController = undefined
     const entered = setState(foregroundSessionState.idleReady())
@@ -305,6 +308,12 @@ export function createForegroundSessionOwner<
           )
           return
         }
+        if (input.signal.aborted) {
+          await releaseToIdle(input.active.requestId, teardown.value, {
+            emitReady: false,
+          })
+          return
+        }
 
         await transition("VerifyingReady", {
           active: terminalActive,
@@ -354,7 +363,9 @@ export function createForegroundSessionOwner<
           )
           return
         }
-        await releaseToIdle(input.active.requestId, ready.value)
+        await releaseToIdle(input.active.requestId, ready.value, {
+          emitReady: !input.signal.aborted,
+        })
       },
       async error => {
         const current = activeSessionFromState(state)
