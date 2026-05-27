@@ -909,6 +909,14 @@
             };
           };
 
+          # Auto-attached sway/gamescope pin for the x86 compositor runtime
+          # contract. Imported by korri-compositor below so downstream consumers
+          # inherit the known-good versions without touching nixpkgs.overlays
+          # themselves. No-ops on non-x86 systems via the overlay itself.
+          korri-x86-compositor-overlay = import ./nix/modules/korri-x86-compositor-overlay.nix {
+            overlay = import ./nix/overlays/korri-x86-compositor.nix;
+          };
+
           korri-client = import ./nix/modules/korri-client.nix { korri = self; };
           korri-cli = import ./nix/modules/korri-cli.nix { korri = self; };
           korri-game-stream = import ./nix/modules/korri-game-stream.nix { korri = self; };
@@ -923,6 +931,7 @@
             imports = [
               korri-client
               korri-input
+              korri-x86-compositor-overlay
               (import ./nix/modules/korri-compositor.nix { korri = self; })
             ];
           };
