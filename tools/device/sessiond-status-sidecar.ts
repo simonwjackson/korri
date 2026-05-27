@@ -19,12 +19,34 @@ import type {
 } from "./game-stream-state"
 import type { KorriSessionMode } from "./sessiond-state"
 
+/**
+ * Phase 4D / Track A. Session-lifecycle sub-phase used to distinguish
+ * `running` (primary child active), `wait-monitor` (wait monitor is
+ * the active child), and `anchored` (no live child but sessiond is
+ * holding role-foreground state) without inflating the protocol's
+ * coarse `mode` literal. Operators consume this via the
+ * KORRI_GAME_STREAM_STATUS_PATH sidecar; the `app.server.status`
+ * proxy can surface it in a follow-up.
+ */
+export type SessiondLifecyclePhase =
+  | "launching"
+  | "running"
+  | "wait-monitor"
+  | "anchored"
+  | "restoring"
+
 export interface SessiondLifecycleSnapshot {
   readonly mode: KorriSessionMode
   readonly launchId?: string
   readonly childPid?: number
   readonly exitCode?: number
   readonly failureReason?: string
+  /**
+   * Phase 4D / Track A U7. Operator-facing sub-phase (AE7). Optional;
+   * omitted writes keep the Phase 4C sidecar shape byte-for-byte for
+   * back-compat with existing readers.
+   */
+  readonly phase?: SessiondLifecyclePhase
 }
 
 export function translateSessiondToGameStreamState(
@@ -108,7 +130,13 @@ export function createStatusSidecar(
     write: async snapshot => {
       if (!options.path) return
       const state = translateSessiondToGameStreamState(snapshot)
-      const content = `${JSON.stringify(state, null, 2)}\n`
+      // Additive-only: when the snapshot carries a phase, append it as
+      // a top-level field on the JSON. Readers that do not know about
+      // it (Phase 4C tooling, older operator scripts) simply ignore.
+      const payload = snapshot.phase
+        ? { ...state, phase: snapshot.phase }
+        : state
+      const content = `${JSON.stringify(payload, null, 2)}\n`
       try {
         await writer(options.path, content)
       } catch (error) {

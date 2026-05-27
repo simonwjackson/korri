@@ -1111,6 +1111,106 @@ describe("korri sessiond", () => {
     ).toBe(2)
   })
 
+  it("emits session sub-phase to the status sidecar across a session+wait lifecycle", async () => {
+    const snapshots: SessiondLifecycleSnapshot[] = []
+    const sidecar: StatusSidecar = {
+      write: async snapshot => {
+        snapshots.push(snapshot)
+      },
+    }
+    const launcherCtrl = deferred<LaunchResult>()
+    const waitCtrl = deferred<LaunchResult>()
+    const waitSpec: LaunchSpec = { command: "/bin/wait", args: [] }
+    const core = createKorriSessiondCore({
+      token,
+      logger: silentLogger,
+      statusSidecar: sidecar,
+      serviceManager: {
+        maskEssway: async () => {},
+        restoreEssway: async () => {},
+      },
+      renderer: {
+        kind: "electrobun",
+        launch: async () => ({
+          pid: 200,
+          command: { command: "electrobun", args: [] },
+        }),
+        stop: async () => {},
+      },
+      sway: {
+        getKorriWindows: async () => [
+          { id: 200, focused: true, fullscreen: true },
+        ],
+        applyDecisions: async () => [],
+      },
+      launcher: {
+        run: async () => ({ status: "launched" }),
+        spawn: async receivedSpec => ({
+          status: "started" as const,
+          result:
+            receivedSpec.command === waitSpec.command
+              ? waitCtrl.promise
+              : launcherCtrl.promise,
+          session: {
+            id: "child",
+            processGroupId:
+              receivedSpec.command === waitSpec.command ? 4242 : 1212,
+            exited: (receivedSpec.command === waitSpec.command
+              ? waitCtrl.promise
+              : launcherCtrl.promise
+            ).then(r => ({
+              exitCode: r.status === "launched" ? 0 : r.exitCode,
+            })),
+            terminate: () => {},
+            terminateNow: () => {},
+          },
+        }),
+      },
+    })
+
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    snapshots.length = 0
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          launchId: "phase-1",
+          spec,
+          lifecycle: "session",
+          wait: waitSpec,
+        }),
+      }),
+    )
+    const streamResponse = await request(
+      core,
+      "/managed-launch/events?launchId=phase-1",
+      authorized(),
+    )
+    const streamText = streamResponse.text()
+    launcherCtrl.resolve({ status: "launched" })
+    await new Promise(resolve => setTimeout(resolve, 5))
+    waitCtrl.resolve({ status: "launched" })
+    await streamText
+
+    const phases = snapshots
+      .map(s => s.phase)
+      .filter((p): p is NonNullable<typeof p> => p !== undefined)
+    // Must include the four interesting sub-phases in order.
+    expect(phases).toContain("launching")
+    expect(phases).toContain("running")
+    expect(phases).toContain("wait-monitor")
+    expect(phases).toContain("restoring")
+    // launching must precede running which precedes wait-monitor which
+    // precedes restoring.
+    const indexOf = (p: (typeof phases)[number]) => phases.indexOf(p)
+    expect(indexOf("launching")).toBeLessThan(indexOf("running"))
+    expect(indexOf("running")).toBeLessThan(indexOf("wait-monitor"))
+    expect(indexOf("wait-monitor")).toBeLessThan(indexOf("restoring"))
+  })
+
   it("fails the launch with host-unavailable when afterChildRunning throws", async () => {
     const launcherCtrl = deferred<LaunchResult>()
     const role: SessionRole = {

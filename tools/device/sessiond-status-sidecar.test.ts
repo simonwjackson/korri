@@ -133,4 +133,81 @@ describe("createStatusSidecar", () => {
       await rm(dir, { recursive: true, force: true })
     }
   })
+
+  // Phase 4D / Track A U7 -- session sub-phase observability.
+
+  it("writes phase: 'running' when the primary child is active under lifecycle: 'session'", async () => {
+    const writes: Array<{ readonly content: string }> = []
+    const sidecar = createStatusSidecar({
+      path: "/tmp/status.json",
+      writer: async (_path, content) => {
+        writes.push({ content })
+      },
+    })
+
+    await sidecar.write({
+      mode: "game",
+      launchId: "launch-1",
+      phase: "running",
+    })
+
+    expect(JSON.parse(writes[0].content)).toMatchObject({
+      mode: "running",
+      runId: "launch-1",
+      phase: "running",
+    })
+  })
+
+  it("writes phase: 'wait-monitor' while the wait monitor is the active child", async () => {
+    const writes: Array<{ readonly content: string }> = []
+    const sidecar = createStatusSidecar({
+      path: "/tmp/status.json",
+      writer: async (_path, content) => {
+        writes.push({ content })
+      },
+    })
+
+    await sidecar.write({
+      mode: "game",
+      launchId: "launch-w",
+      phase: "wait-monitor",
+    })
+
+    expect(JSON.parse(writes[0].content).phase).toBe("wait-monitor")
+  })
+
+  it("writes phase: 'anchored' while sessiond is holding a session-anchor (no live child)", async () => {
+    const writes: Array<{ readonly content: string }> = []
+    const sidecar = createStatusSidecar({
+      path: "/tmp/status.json",
+      writer: async (_path, content) => {
+        writes.push({ content })
+      },
+    })
+
+    await sidecar.write({
+      mode: "game",
+      launchId: "launch-a",
+      phase: "anchored",
+    })
+
+    const decoded = JSON.parse(writes[0].content)
+    expect(decoded.mode).toBe("running") // still 'running' on the wire mode (no anchored literal)
+    expect(decoded.phase).toBe("anchored")
+  })
+
+  it("omits phase when none is provided (Phase 4C kiosk sidecar shape unchanged)", async () => {
+    const writes: Array<{ readonly content: string }> = []
+    const sidecar = createStatusSidecar({
+      path: "/tmp/status.json",
+      writer: async (_path, content) => {
+        writes.push({ content })
+      },
+    })
+
+    await sidecar.write({ mode: "game", launchId: "launch-k" })
+
+    const decoded = JSON.parse(writes[0].content)
+    expect(decoded).not.toHaveProperty("phase")
+  })
 })

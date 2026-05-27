@@ -168,12 +168,15 @@ export function createKorriSessiondCore(
     }
   }
 
-  function emitStatusSidecar(): void {
+  function emitStatusSidecar(
+    phase?: "launching" | "running" | "wait-monitor" | "anchored" | "restoring",
+  ): void {
     if (!statusSidecar) return
     void statusSidecar.write({
       mode: state.mode,
       ...(state.launchId ? { launchId: state.launchId } : {}),
       ...(state.failureReason ? { failureReason: state.failureReason } : {}),
+      ...(phase ? { phase } : {}),
     })
   }
 
@@ -283,7 +286,7 @@ export function createKorriSessiondCore(
 
     const launchId = requestedLaunchId ?? crypto.randomUUID()
     state = beginKorriLaunch(state, launchId)
-    emitStatusSidecar()
+    emitStatusSidecar("launching")
     activeManagedLaunch = { launchId }
     pushLifecycleEvent(launchId, { type: "launch-accepted" })
 
@@ -315,7 +318,7 @@ export function createKorriSessiondCore(
         pushLifecycleEvent(launchId, { type: "renderer-stopped" })
       }
       state = markKorriGameRunning(state)
-      emitStatusSidecar()
+      emitStatusSidecar("running")
 
       const spawn = launcher.spawn
       if (spawn) {
@@ -427,7 +430,7 @@ export function createKorriSessiondCore(
     }
 
     state = beginKorriRestore(state)
-    emitStatusSidecar()
+    emitStatusSidecar("restoring")
     pushLifecycleEvent(launchId, { type: "restoring" })
     const pgid =
       activeManagedLaunch?.launchId === launchId
@@ -537,6 +540,7 @@ export function createKorriSessiondCore(
         spawned.session.terminate()
       }
     }
+    emitStatusSidecar("wait-monitor")
     pushLifecycleEvent(launchId, { type: "wait-monitor-running" })
     const waitResult = await spawned.result
     pushLifecycleEvent(launchId, {
@@ -554,6 +558,7 @@ export function createKorriSessiondCore(
    * terminated. The restoring path follows in the caller.
    */
   async function runSessionAnchor(launchId: string): Promise<void> {
+    emitStatusSidecar("anchored")
     pushLifecycleEvent(launchId, {
       type: "session-anchored",
       readiness: {
