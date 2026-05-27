@@ -1,6 +1,9 @@
 import { DataError, NotFoundError } from "@shared/api/rpc/errors"
 import { normalizeGamescopePolicy } from "@shared/library/config/inheritable-fields"
-import type { ManagedLaunchResult } from "@shared/library/launcher"
+import {
+  launchFailureExitCode,
+  type ManagedLaunchResult,
+} from "@shared/library/launcher"
 import {
   Launcher,
   LibraryError,
@@ -104,14 +107,13 @@ export const handleLaunchLibrary = (
   })
 
 const LAUNCH_CONFIG_ERROR_EXIT_CODE = 124
-const MANAGED_LAUNCH_UNSUPPORTED_EXIT_CODE = 125
-
 function unsupportedManagedSpawn(): ManagedLaunchResult {
   return {
     status: "failed",
     result: {
       status: "failed",
-      exitCode: MANAGED_LAUNCH_UNSUPPORTED_EXIT_CODE,
+      exitCode: launchFailureExitCode("command-failed"),
+      failureKind: "command-failed",
       stderrTail: "configured launcher does not support managed spawn",
     },
   }

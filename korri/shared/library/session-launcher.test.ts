@@ -126,7 +126,8 @@ describe("session launcher", () => {
 
     expect(result.status).toBe("failed")
     if (result.status === "failed") {
-      expect(result.result.exitCode).toBe(125)
+      expect(result.result.exitCode).toBe(1)
+      expect(result.result.failureKind).toBe("command-failed")
       expect(result.result.stderrTail).toContain(
         "managed sessiond launch unsupported",
       )

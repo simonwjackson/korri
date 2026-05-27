@@ -1,7 +1,12 @@
 import { describe, expect, it } from "bun:test"
 import { Schema } from "effect"
 
-import { decodeLaunchSpec, LaunchFailureKind, LaunchSpec } from "./launcher"
+import {
+  decodeLaunchSpec,
+  LaunchFailureKind,
+  LaunchSpec,
+  launchFailureExitCode,
+} from "./launcher"
 
 describe("LaunchSpec schema", () => {
   it("decodes a minimal valid spec", () => {
@@ -66,5 +71,9 @@ describe("LaunchFailureKind schema", () => {
     expect(() =>
       Schema.decodeUnknownSync(LaunchFailureKind)("local-session-busy"),
     ).toThrow()
+  })
+
+  it("maps session-busy to the shared exit code", () => {
+    expect(launchFailureExitCode("session-busy")).toBe(121)
   })
 })

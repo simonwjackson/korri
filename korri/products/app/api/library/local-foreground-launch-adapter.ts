@@ -1,8 +1,9 @@
 import type { LaunchLibraryResponse } from "@app/api/library/launch.rpc"
-import type {
-  LaunchResult,
-  LaunchSpec,
-  ManagedLaunchResult,
+import {
+  type LaunchResult,
+  type LaunchSpec,
+  launchFailureExitCode,
+  type ManagedLaunchResult,
 } from "@shared/library/launcher"
 import {
   createForegroundSessionOwner,
@@ -10,9 +11,6 @@ import {
   type ForegroundSessionOwnerLaunchResult,
   type ForegroundSessionStageResult,
 } from "@shared/stream/foreground-session-owner"
-
-const SESSION_BUSY_EXIT_CODE = 121
-const MANAGED_LAUNCH_UNSUPPORTED_EXIT_CODE = 125
 
 export interface LocalForegroundLaunchRequest {
   readonly id: string
@@ -112,7 +110,7 @@ async function launchResponseFromOwnerResult(
   if (result._tag === "Busy") {
     return {
       status: "failed",
-      exitCode: SESSION_BUSY_EXIT_CODE,
+      exitCode: launchFailureExitCode("session-busy"),
       failureKind: "session-busy",
       stderrTail: result.rejection.message,
     }
@@ -121,7 +119,8 @@ async function launchResponseFromOwnerResult(
   return (
     responseFromFailureEvidence(result.evidence) ?? {
       status: "failed",
-      exitCode: MANAGED_LAUNCH_UNSUPPORTED_EXIT_CODE,
+      exitCode: launchFailureExitCode("command-failed"),
+      failureKind: "command-failed",
       stderrTail: result.message,
     }
   )

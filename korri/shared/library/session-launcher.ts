@@ -1,9 +1,10 @@
 import { readFile } from "node:fs/promises"
-import type {
-  Launcher,
-  LaunchResult,
-  LaunchSpec,
-  ManagedLaunchResult,
+import {
+  type Launcher,
+  type LaunchResult,
+  type LaunchSpec,
+  launchFailureExitCode,
+  type ManagedLaunchResult,
 } from "./launcher"
 
 export interface SessionLauncherOptions {
@@ -36,7 +37,8 @@ function unsupportedManagedSessiondLaunch(): ManagedLaunchResult {
     status: "failed",
     result: {
       status: "failed",
-      exitCode: 125,
+      exitCode: launchFailureExitCode("command-failed"),
+      failureKind: "command-failed",
       stderrTail:
         "managed sessiond launch unsupported: sessiond does not expose child handles yet",
     },

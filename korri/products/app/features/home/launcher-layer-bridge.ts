@@ -21,6 +21,7 @@ import {
   type LocalStreamLaunchClient,
 } from "@app/stream/local-stream-launch-client"
 import type { LocalStreamLaunchResponse } from "@app/stream/local-stream-launch-rpc"
+import { launchFailureExitCode } from "@shared/library/launcher"
 import { Launcher, LibraryError } from "@shared/library/library-services"
 import { Effect, Layer } from "effect"
 
@@ -77,20 +78,5 @@ function exitCodeForCategory(
     { readonly status: "failed" }
   >["category"],
 ): number {
-  switch (category) {
-    case "host-unavailable":
-      return 124
-    case "host-control-disabled":
-      return 126
-    case "no-such-game":
-      return 127
-    case "prepare-failed":
-      return 1
-    case "input-unavailable":
-      return 123
-    case "input-ambiguous":
-      return 122
-    case "session-busy":
-      return 121
-  }
+  return launchFailureExitCode(category)
 }

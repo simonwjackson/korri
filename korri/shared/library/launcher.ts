@@ -14,6 +14,7 @@
  * See docs/plans/2026-05-02-001-feat-personal-mvp-rocknix-launch-plan.md (Unit 1).
  */
 
+import type { ForegroundManagedSessionHandle } from "@shared/stream/foreground-session-owner"
 import { Schema } from "effect"
 
 /**
@@ -60,6 +61,22 @@ export const LaunchFailureKind = Schema.Literals([
 ])
 export type LaunchFailureKind = Schema.Schema.Type<typeof LaunchFailureKind>
 
+export const LAUNCH_FAILURE_EXIT_CODES = {
+  "command-failed": 1,
+  "host-unavailable": 124,
+  "host-control-disabled": 126,
+  "no-such-game": 127,
+  "prepare-failed": 1,
+  "moonlight-failed": 125,
+  "input-unavailable": 123,
+  "input-ambiguous": 122,
+  "session-busy": 121,
+} satisfies Record<LaunchFailureKind, number>
+
+export function launchFailureExitCode(kind: LaunchFailureKind): number {
+  return LAUNCH_FAILURE_EXIT_CODES[kind]
+}
+
 export type LaunchResult =
   | { readonly status: "launched" }
   | {
@@ -69,14 +86,7 @@ export type LaunchResult =
       readonly failureKind?: LaunchFailureKind
     }
 
-export interface ManagedLaunchSessionHandle {
-  readonly id: string
-  readonly processId?: number
-  readonly exited: Promise<{ readonly exitCode: number | null }>
-  readonly isGone?: () => Promise<boolean> | boolean
-  readonly terminate: () => void
-  readonly terminateNow: () => void
-}
+export type ManagedLaunchSessionHandle = ForegroundManagedSessionHandle
 
 export type ManagedLaunchResult =
   | {
