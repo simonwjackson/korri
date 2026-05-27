@@ -74,10 +74,10 @@ in
     # launcher (createShellLauncher inside tools/device/sessiond.ts),
     # which inherits this unit's PATH when it spawns. Anything the
     # default-gamescope launch path needs to find by name has to be
-    # listed here. We reuse the compositor's gamescope package so the
-    # SM8550 pinned 3.16.23 build (and any future platform override)
-    # rides through automatically, and we add the kiosk's retroarch
-    # wrapper so cascade-resolved RetroArch launches resolve.
+    # listed here. We reuse the compositor's gamescope package so any
+    # platform-level package override flows through automatically, and
+    # we add the kiosk's retroarch wrapper so cascade-resolved
+    # RetroArch launches resolve.
     path = [
       config.services.korri.compositor.gamescope.package
       retroarchKiosk
