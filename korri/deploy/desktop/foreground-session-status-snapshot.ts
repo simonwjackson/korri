@@ -5,6 +5,7 @@ import type {
   ForegroundSessionState,
   ForegroundSessionTerminalStatus,
 } from "@shared/stream/foreground-session-lifecycle"
+import type { ForegroundSessionOwnerStatus } from "@shared/stream/foreground-session-owner"
 import type {
   ForegroundSessionStatusActive,
   ForegroundSessionStatusEvent,
@@ -14,7 +15,6 @@ import type {
   ForegroundSessionStatusTerminal,
   ForegroundSessionStatusTerminalSummary,
 } from "@shared/stream/foreground-session-status"
-import type { ForegroundSessionOwnerStatus } from "@shared/stream/foreground-session-owner"
 
 export interface ForegroundSessionStatusSnapshotOptions {
   readonly status: ForegroundSessionOwnerStatus

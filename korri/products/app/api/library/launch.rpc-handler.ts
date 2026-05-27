@@ -1,12 +1,12 @@
 import { DataError, NotFoundError } from "@shared/api/rpc/errors"
 import { normalizeGamescopePolicy } from "@shared/library/config/inheritable-fields"
+import type { ManagedLaunchResult } from "@shared/library/launcher"
 import {
   Launcher,
   LibraryError,
   LibrarySource,
 } from "@shared/library/library-services"
 import { logger } from "@shared/logger/logger"
-import type { ManagedLaunchResult } from "@shared/library/launcher"
 import { Effect } from "effect"
 import { composeGamescopeLaunchSpec } from "../../../../../tools/device/game-stream-fullscreen"
 

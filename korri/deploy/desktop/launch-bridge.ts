@@ -33,10 +33,6 @@ import type {
 import type { RemotePrepareResult } from "@app/stream/remote-stream-client"
 import { BatchJsonSerializationLive } from "@shared/api/rpc/serialization"
 import { logger } from "@shared/logger"
-import { Effect, Layer, Scope } from "effect"
-import * as HttpEffect from "effect/unstable/http/HttpEffect"
-import { RpcServer } from "effect/unstable/rpc"
-import type { ConnectionServerRecord } from "./connection-state-snapshot"
 import {
   createForegroundSessionOwner,
   type ForegroundManagedSessionHandle,
@@ -44,6 +40,10 @@ import {
   type ForegroundSessionReadinessInput,
   type ForegroundSessionStageResult,
 } from "@shared/stream/foreground-session-owner"
+import { Effect, Layer, Scope } from "effect"
+import * as HttpEffect from "effect/unstable/http/HttpEffect"
+import { RpcServer } from "effect/unstable/rpc"
+import type { ConnectionServerRecord } from "./connection-state-snapshot"
 
 type LaunchBridgeResponse = LocalStreamLaunchResponse
 

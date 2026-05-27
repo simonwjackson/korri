@@ -125,11 +125,13 @@ describe("createShellLauncher (real Bun.spawn)", () => {
     const launcher = createShellLauncher()
     const cwd = resolve(REPO_ROOT, "out", "tmp")
     const evilArg = "filename with spaces; rm -rf / && echo pwned"
-    const managed = await launcher.spawn!({
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("shell launcher missing managed spawn")
+    const managed = await spawn({
       command: "/bin/sh",
       args: [
         "-c",
-        "printf 'cwd:%s\\n' \"$PWD\" 1>&2; printf 'arg:%s\\n' \"$1\" 1>&2; exit \"$KORRI_FAKE_GAME_EXIT\"",
+        'printf \'cwd:%s\\n\' "$PWD" 1>&2; printf \'arg:%s\\n\' "$1" 1>&2; exit "$KORRI_FAKE_GAME_EXIT"',
         "sh",
         evilArg,
       ],
@@ -153,7 +155,12 @@ describe("createShellLauncher (real Bun.spawn)", () => {
 
   it("managed spawn returns failed without a handle when the binary does not exist", async () => {
     const launcher = createShellLauncher()
-    const managed = await launcher.spawn!({ command: "/no/such/binary", args: [] })
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("shell launcher missing managed spawn")
+    const managed = await spawn({
+      command: "/no/such/binary",
+      args: [],
+    })
 
     expect(managed.status).toBe("failed")
     if (managed.status === "failed") {

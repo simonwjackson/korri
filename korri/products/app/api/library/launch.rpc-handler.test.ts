@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { appRpcGroup } from "@app/api/app-rpc-group"
 import { NotFoundError } from "@shared/api/rpc/errors"
+import { makeInMemoryLauncherLayer } from "@shared/library/launcher-layer-memory"
 import {
   Launcher,
   LibraryError,
@@ -12,9 +13,8 @@ import {
 import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
 import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
 import { createLibraryRepository } from "@shared/library/proseql/library-repository"
-import { makeInMemoryLauncherLayer } from "@shared/library/launcher-layer-memory"
-import type { ForegroundSessionState } from "@shared/stream/foreground-session-lifecycle"
 import { createShellLauncher } from "@shared/library/shell-launcher"
+import type { ForegroundSessionState } from "@shared/stream/foreground-session-lifecycle"
 import { Cause, Effect, Exit, Layer } from "effect"
 
 import {
@@ -63,14 +63,17 @@ async function layerForFakeGame(exitCode: number): Promise<{
       }),
     spawn: spec =>
       Effect.tryPromise({
-        try: () =>
-          realLauncher.spawn!({
+        try: () => {
+          const spawn = realLauncher.spawn
+          if (!spawn) throw new Error("shell launcher missing managed spawn")
+          return spawn({
             ...spec,
             env: {
               ...(spec.env ?? {}),
               KORRI_FAKE_GAME_EXIT: String(exitCode),
             },
-          }),
+          })
+        },
         catch: error =>
           new LibraryError({
             reason: "io",
@@ -353,7 +356,8 @@ function localGameSourceLayer(options: {
   readonly gamescope: { readonly enabled: boolean }
 }) {
   return Layer.succeed(LibrarySource)({
-    list: () => Effect.succeed([{ id: "game", system: "s", contentPath: "rom" }]),
+    list: () =>
+      Effect.succeed([{ id: "game", system: "s", contentPath: "rom" }]),
     launchSpecFor: () => Effect.fail(new LibraryError({ reason: "config" })),
     resolveLaunchForGame: () =>
       Effect.succeed({

@@ -40,7 +40,11 @@ export interface InMemoryLauncherConfig {
 
 export function makeInMemoryLauncherLayer(config: InMemoryLauncherConfig) {
   return Layer.succeed(Launcher)({
-    run: () => delayIfConfigured(launchEffect(config.behavior), delayMs(config.behavior)),
+    run: () =>
+      delayIfConfigured(
+        launchEffect(config.behavior),
+        delayMs(config.behavior),
+      ),
     spawn: () =>
       delayIfConfigured(spawnEffect(config.behavior), delayMs(config.behavior)),
   })
@@ -138,7 +142,9 @@ function spawnEffect(
     }>
   }
   const exit = control.exit
-  return Effect.succeed(managedFromTerminal(exit, behavior.processId ?? 999, control))
+  return Effect.succeed(
+    managedFromTerminal(exit, behavior.processId ?? 999, control),
+  )
 }
 
 function managedFromTerminal(
@@ -177,7 +183,11 @@ function launchResultFromExit(input: {
 }): LaunchResult {
   if (input.exitCode === 0) return { status: "launched" }
   return input.stderrTail !== undefined
-    ? { status: "failed", exitCode: input.exitCode, stderrTail: input.stderrTail }
+    ? {
+        status: "failed",
+        exitCode: input.exitCode,
+        stderrTail: input.stderrTail,
+      }
     : { status: "failed", exitCode: input.exitCode }
 }
 

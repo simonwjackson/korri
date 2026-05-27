@@ -18,7 +18,9 @@ export type SessionLauncherFetch = (
   init?: RequestInit,
 ) => Promise<Response>
 
-export function createSessionLauncher(options: SessionLauncherOptions): Launcher {
+export function createSessionLauncher(
+  options: SessionLauncherOptions,
+): Launcher {
   return {
     async run(spec) {
       return launchViaSessiond(spec, options)

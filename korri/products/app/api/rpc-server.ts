@@ -7,8 +7,8 @@ import { Effect, Exit, Layer, Scope } from "effect"
 import * as HttpEffect from "effect/unstable/http/HttpEffect"
 import { RpcServer } from "effect/unstable/rpc"
 import { appRpcGroup } from "./app-rpc-group"
-import { ForegroundSessionHostLive } from "./library/foreground-session-host-layer"
 import { HandlersLive } from "./handlers"
+import { ForegroundSessionHostLive } from "./library/foreground-session-host-layer"
 
 const LibraryInfrastructureLive = Layer.mergeAll(
   LibrarySourceLayerLive,

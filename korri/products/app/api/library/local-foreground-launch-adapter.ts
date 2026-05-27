@@ -127,7 +127,9 @@ async function launchResponseFromOwnerResult(
   )
 }
 
-function launchResponseFromLaunchResult(result: LaunchResult): LaunchLibraryResponse {
+function launchResponseFromLaunchResult(
+  result: LaunchResult,
+): LaunchLibraryResponse {
   if (result.status === "launched") return { status: "launched" }
   return result.stderrTail !== undefined
     ? {

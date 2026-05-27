@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test"
 import { makeInMemoryLauncherLayer } from "@shared/library/launcher-layer-memory"
-import { Launcher } from "@shared/library/library-services"
+import {
+  Launcher,
+  type LauncherService,
+} from "@shared/library/library-services"
 import { Effect } from "effect"
 import {
   createLocalForegroundLaunchOwner,
@@ -8,6 +11,12 @@ import {
 } from "./local-foreground-launch-adapter"
 
 const spec = { command: "/bin/game", args: ["rom"] }
+
+function spawnWith(launcher: LauncherService) {
+  const spawn = launcher.spawn
+  if (!spawn) throw new Error("launcher missing managed spawn")
+  return Effect.runPromise(spawn(spec))
+}
 
 async function launcherFromLayer(
   layer: ReturnType<typeof makeInMemoryLauncherLayer>,
@@ -30,7 +39,7 @@ describe("local foreground launch adapter", () => {
     const launch = launchLocalForegroundSession(owner, {
       id: "game",
       spec,
-      spawn: () => Effect.runPromise(launcher.spawn!(spec)),
+      spawn: () => spawnWith(launcher),
       createRequestId: () => "local-launch-1",
     })
     await waitForOwnerState(owner, "Running")
@@ -56,7 +65,7 @@ describe("local foreground launch adapter", () => {
     const first = launchLocalForegroundSession(owner, {
       id: "game",
       spec,
-      spawn: () => Effect.runPromise(launcher.spawn!(spec)),
+      spawn: () => spawnWith(launcher),
       createRequestId: () => "local-launch-1",
     })
     await waitForOwnerState(owner, "Running")
@@ -66,7 +75,7 @@ describe("local foreground launch adapter", () => {
       spec,
       spawn: () => {
         secondSpawnCalls += 1
-        return Effect.runPromise(launcher.spawn!(spec))
+        return spawnWith(launcher)
       },
       createRequestId: () => "local-launch-2",
     })
@@ -94,7 +103,7 @@ describe("local foreground launch adapter", () => {
     const result = await launchLocalForegroundSession(owner, {
       id: "game",
       spec,
-      spawn: () => Effect.runPromise(launcher.spawn!(spec)),
+      spawn: () => spawnWith(launcher),
       createRequestId: () => "local-launch-1",
     })
 
