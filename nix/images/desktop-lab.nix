@@ -9,43 +9,11 @@ let
   compositorCfg = config.services.korri.compositor;
   isX86Linux = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
 
-  swayExec = pkgs.writeShellApplication {
-    name = "korri-desktop-lab-sway-exec";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.sway
-    ];
-    text = ''
-      set -euo pipefail
-
-      runtime_dir="${compositorCfg.runtimeDir}"
-      if [ $# -eq 0 ]; then
-        echo "usage: korri-desktop-lab-sway-exec <command> [args...]" >&2
-        exit 64
-      fi
-
-      if [ -n "''${SWAYSOCK:-}" ] && [ -S "$SWAYSOCK" ]; then
-        sway_socket="$SWAYSOCK"
-      else
-        sway_socket="$(ls -t "$runtime_dir"/sway-ipc.*.sock 2>/dev/null | head -n 1 || true)"
-      fi
-
-      if [ -z "$sway_socket" ] || [ ! -S "$sway_socket" ]; then
-        echo "korri-desktop-lab-sway-exec: no Sway IPC socket found under $runtime_dir" >&2
-        echo "korri-desktop-lab-sway-exec: is korri-compositor.service running?" >&2
-        exit 69
-      fi
-
-      command_string="$(printf '%q ' "$@")"
-      exec swaymsg -s "$sway_socket" exec -- "$command_string"
-    '';
-  };
-
   steamLauncher = pkgs.writeShellApplication {
     name = "korri-desktop-lab-start-steam";
-    runtimeInputs = [ swayExec ];
+    runtimeInputs = [ compositorCfg.exec.package ];
     text = ''
-      exec korri-desktop-lab-sway-exec steam "$@"
+      exec korri-compositor-exec steam "$@"
     '';
   };
 
@@ -77,17 +45,14 @@ in
         xwayland
       ])
       ++ steamPackages
-      ++ [
-        swayExec
-        steamLauncher
-      ];
+      ++ [ steamLauncher ];
     environment = {
       XDG_CURRENT_DESKTOP = "sway";
       SDL_VIDEODRIVER = "wayland";
     };
     sway.extraConfig = ''
       # Desktop-lab defaults: keep a persistent Sway session up while commands
-      # are launched into it later with korri-desktop-lab-sway-exec.
+      # are launched into it later with korri-compositor-exec.
       xwayland enable
       seat * hide_cursor 3000
       set $mod Mod4
@@ -119,9 +84,5 @@ in
     enable32Bit = lib.mkIf isX86Linux (lib.mkDefault true);
   };
 
-  environment.systemPackages = [
-    swayExec
-    steamLauncher
-  ]
-  ++ steamPackages;
+  environment.systemPackages = [ steamLauncher ] ++ steamPackages;
 }

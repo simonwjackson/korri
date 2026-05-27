@@ -254,12 +254,12 @@ let
       ]
     ))
     (check "desktop lab must enable NixOS Steam support on x86" desktopLabSummary.steamEnabled)
-    (check "desktop lab system packages must include Steam and Sway launch helpers" (
+    (check "desktop lab system packages must include Steam and compositor launch helpers" (
       let
         packagesText = lib.concatStringsSep "\n" desktopLabSummary.systemPackages;
       in
       lib.hasInfix "steam" packagesText
-      && lib.hasInfix "korri-desktop-lab-sway-exec" packagesText
+      && lib.hasInfix "korri-compositor-exec" packagesText
       && lib.hasInfix "korri-desktop-lab-start-steam" packagesText
     ))
     (check "desktop lab Sway config must not launch the Korri kiosk client" (

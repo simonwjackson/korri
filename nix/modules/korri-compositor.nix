@@ -58,6 +58,44 @@ let
     types
     ;
 
+  compositorExec = pkgs.writeShellApplication {
+    name = "korri-compositor-exec";
+    runtimeInputs = [
+      pkgs.coreutils
+      cfg.sway.package
+    ];
+    text = ''
+      set -euo pipefail
+
+      runtime_dir=${lib.escapeShellArg cfg.runtimeDir}
+      if [ $# -eq 0 ]; then
+        echo "usage: korri-compositor-exec <command> [args...]" >&2
+        exit 64
+      fi
+
+      if [ -n "''${SWAYSOCK:-}" ] && [ -S "$SWAYSOCK" ]; then
+        sway_socket="$SWAYSOCK"
+      else
+        sway_socket=""
+        for candidate in "$runtime_dir"/sway-ipc.*.sock; do
+          if [ -S "$candidate" ]; then
+            sway_socket="$candidate"
+            break
+          fi
+        done
+      fi
+
+      if [ -z "$sway_socket" ] || [ ! -S "$sway_socket" ]; then
+        echo "korri-compositor-exec: no Sway IPC socket found under $runtime_dir" >&2
+        echo "korri-compositor-exec: is korri-compositor.service running?" >&2
+        exit 69
+      fi
+
+      command_string="$(printf '%q ' "$@")"
+      exec swaymsg -s "$sway_socket" exec -- "$command_string"
+    '';
+  };
+
   kioskClientCommand = cfg.kiosk.command;
   swayCommand = "${cfg.sway.package}/bin/sway --config ${swayConfig}";
   sessionCommand =
@@ -269,6 +307,18 @@ in
       description = "Systemd units that korri-compositor.service starts after.";
     };
 
+    exec = {
+      package = mkOption {
+        type = types.package;
+        readOnly = true;
+        default = compositorExec;
+        description = ''
+          Helper package that provides `korri-compositor-exec`, a CLI for
+          launching arbitrary commands into the managed Sway compositor session.
+        '';
+      };
+    };
+
     sway = {
       package = mkOption {
         type = types.package;
@@ -453,6 +503,8 @@ in
         before = [ "korri-compositor.service" ];
       };
 
+      environment.systemPackages = [ cfg.exec.package ];
+
       systemd.services."korri-compositor" = {
         description = "Korri appliance compositor session";
         wantedBy = [ "multi-user.target" ];
@@ -460,7 +512,7 @@ in
         requires = sessionBusServices;
         after = cfg.after ++ inputdServices ++ providerOrderingServices ++ sessionBusServices;
         environment = sessionEnvironment;
-        path = cfg.path ++ [ cfg.sway.package ] ++ cfg.sway.extraPackages;
+        path = [ cfg.exec.package ] ++ cfg.path ++ [ cfg.sway.package ] ++ cfg.sway.extraPackages;
         unitConfig = {
           StartLimitBurst = 5;
           StartLimitIntervalSec = 60;

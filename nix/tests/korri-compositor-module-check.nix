@@ -296,6 +296,16 @@ let
       && lib.hasInfix "default_floating_border none" (swayConfigOf headlessCompositor)
       && lib.hasInfix "hide_edge_borders both" (swayConfigOf headlessCompositor)
     ))
+    (check "headless compositor: installs the generic compositor exec helper" (
+      builtins.any (path: lib.hasInfix "korri-compositor-exec" (toString path)) (
+        headlessCompositor.environment.systemPackages or [ ]
+      )
+    ))
+    (check "headless compositor: exposes the generic exec helper on the session PATH" (
+      builtins.any (path: lib.hasInfix "korri-compositor-exec" (toString path)) (
+        (compositorUnit headlessCompositor).path or [ ]
+      )
+    ))
 
     # ---- compositor with kiosk surface (Sobo / live-USB shape)
     (check "compositor+kiosk: NixOS assertions pass" (korriFailedAssertions compositorWithKiosk == [ ]))
