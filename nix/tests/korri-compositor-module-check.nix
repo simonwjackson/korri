@@ -54,6 +54,8 @@ let
 
   swayConfigOf = cfg: builtins.readFile cfg.services.korri.compositor.sway.configFile;
   kioskLauncherOf = cfg: builtins.readFile cfg.services.korri.compositor.kiosk.launcher;
+  compositorExecOf =
+    cfg: builtins.readFile "${cfg.services.korri.compositor.exec.package}/bin/korri-compositor-exec";
   compositorUnit = cfg: cfg.systemd.services."korri-compositor" or { };
 
   HARDWARE_FACT_PATTERN = "SM8550|AYN|Odin|DSI-1|DSI-2|UCM|RockNix";
@@ -310,6 +312,10 @@ let
       builtins.any (path: lib.hasInfix "bash-interactive" (toString path)) (
         (compositorUnit headlessCompositor).path or [ ]
       )
+    ))
+    (check "headless compositor: exec helper resolves caller PATH commands before handing off to Sway" (
+      lib.hasInfix "command -v --" (compositorExecOf headlessCompositor)
+      && lib.hasInfix "command not found" (compositorExecOf headlessCompositor)
     ))
 
     # ---- compositor with kiosk surface (Sobo / live-USB shape)

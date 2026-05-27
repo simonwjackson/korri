@@ -91,6 +91,17 @@ let
         exit 69
       fi
 
+      command_name="$1"
+      if [ "''${command_name#/}" = "$command_name" ] && [ "''${command_name#./}" = "$command_name" ] && [ "''${command_name#../}" = "$command_name" ]; then
+        resolved_command="$(command -v -- "$command_name" || true)"
+        if [ -z "$resolved_command" ]; then
+          echo "korri-compositor-exec: command not found: $command_name" >&2
+          exit 127
+        fi
+        shift
+        set -- "$resolved_command" "$@"
+      fi
+
       command_string="$(printf '%q ' "$@")"
       exec swaymsg -s "$sway_socket" -- exec "$command_string"
     '';
