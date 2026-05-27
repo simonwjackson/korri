@@ -1,13 +1,23 @@
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import {
   type GameRecord,
   getGameDisplayName,
 } from "@shared/fixtures/games/game"
+import {
+  launchActionStateAllowsStart,
+  launchActionStateFrom,
+  type LaunchActionState,
+} from "@shared/library/launch-action-state"
 import type { LaunchController } from "@shared/library/launch-state"
+import { foregroundSessionGateStateAtom } from "@shared/library/library-atoms"
+import type { ForegroundSessionGateState } from "@shared/stream/foreground-session-gate-state"
 import { useLibraryListCase } from "@shared/library/library-list-state-root"
 import { useInputAction } from "@shared/navigation/use-input-action"
 import { Option } from "effect"
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 import { ShiftHomeCaption } from "../molecules/ShiftHomeCaption"
 import { ShiftLabsButton } from "../molecules/ShiftLabsButton"
+import { ShiftForegroundSessionGateNotice } from "../molecules/ShiftForegroundSessionGateNotice"
 import { ShiftLaunchFailureBanner } from "../molecules/ShiftLaunchFailureBanner"
 import { ShiftUiScaleControl } from "../molecules/ShiftUiScaleControl"
 import { ShiftHomeBottomBar } from "../organisms/ShiftHomeBottomBar"
@@ -17,6 +27,7 @@ import { ShiftLabsPanel } from "../organisms/ShiftLabsPanel"
 import { ShiftSystemPanel } from "../organisms/ShiftSystemPanel"
 import { useShiftHome } from "../templates/ShiftHome.context"
 import { ShiftHomeRoot } from "../templates/ShiftHomeRoot"
+import { useEffect } from "react"
 
 const PLACEHOLDER_TIME = "4:24 PM"
 const PLACEHOLDER_AVATAR_SRC = "https://i.pravatar.cc/96?u=korri-shift-user"
@@ -83,8 +94,21 @@ function ShiftHomeLaunchSurface({
   readonly launch: LaunchController
 }) {
   const { items } = useShiftHome()
+  const foregroundGateResult = useAtomValue(foregroundSessionGateStateAtom)
+  const refreshForegroundGate = useAtomRefresh(foregroundSessionGateStateAtom)
+  const foregroundGate = foregroundGateStateFromResult(foregroundGateResult)
+  const actionState = launchActionStateFrom({
+    launch: launch.state,
+    foreground: foregroundGate,
+  })
+
+  useEffect(() => {
+    const interval = window.setInterval(() => refreshForegroundGate(), 1_000)
+    return () => window.clearInterval(interval)
+  }, [refreshForegroundGate])
 
   const failedGame = failedGameFor(items, launch.state)
+  const actionGame = actionGameFor(items, actionState)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col justify-center gap-2">
@@ -102,9 +126,58 @@ function ShiftHomeLaunchSurface({
           onRetry={launch.retry}
         />
       ) : null}
-      <ShiftHomeRail onItemClick={game => launch.start(game)} />
+      {shouldShowForegroundGateNotice(actionState) ? (
+        <ShiftForegroundSessionGateNotice
+          state={actionState}
+          gameTitle={actionGame ? getGameDisplayName(actionGame) : undefined}
+        />
+      ) : null}
+      <ShiftHomeRail
+        onItemClick={game => {
+          if (launchActionStateAllowsStart(actionState)) launch.start(game)
+        }}
+      />
       <ShiftHomeCaption />
     </div>
+  )
+}
+
+function foregroundGateStateFromResult(
+  result: AsyncResult.AsyncResult<ForegroundSessionGateState, never>,
+): ForegroundSessionGateState {
+  return AsyncResult.matchWithWaiting(result, {
+    onWaiting: () => ({ _tag: "Unknown" }),
+    onError: error => ({ _tag: "LoadError", message: String(error) }),
+    onDefect: defect => ({ _tag: "LoadError", message: String(defect) }),
+    onSuccess: success => success.value,
+  })
+}
+
+function actionGameFor(
+  items: readonly GameRecord[],
+  state: LaunchActionState,
+): GameRecord | undefined {
+  const gameId = "gameId" in state ? state.gameId : undefined
+  if (!gameId) return undefined
+  return (
+    items.find(game => game.id === gameId) ?? {
+      id: gameId,
+      system: "unknown",
+      contentPath: "",
+    }
+  )
+}
+
+function shouldShowForegroundGateNotice(
+  state: LaunchActionState,
+): state is Extract<
+  LaunchActionState,
+  { readonly _tag: "Blocked" | "AllowedWithUnknownStatus" | "Launching" }
+> {
+  return (
+    state._tag === "Blocked" ||
+    state._tag === "AllowedWithUnknownStatus" ||
+    state._tag === "Launching"
   )
 }
 
