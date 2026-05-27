@@ -55,10 +55,13 @@ let
     if [ ! -s "$token_file" ]; then
       # 32 random bytes → 64 hex chars. coreutils' od is portable enough
       # for this; we explicitly avoid /dev/random to skip entropy stalls.
+      # `tr` (not sed) collapses across line boundaries; sed's default
+      # line-by-line processing leaves the newlines `od` emits between
+      # 16-byte rows in the output, producing an unusable token.
       tmp="$(${pkgs.coreutils}/bin/mktemp "$runtime_dir/.token.XXXXXX")"
       ${pkgs.coreutils}/bin/head -c 32 /dev/urandom \
         | ${pkgs.coreutils}/bin/od -An -vtx1 \
-        | ${pkgs.gnused}/bin/sed 's/[[:space:]]//g' > "$tmp"
+        | ${pkgs.coreutils}/bin/tr -d '[:space:]' > "$tmp"
       ${pkgs.coreutils}/bin/mv "$tmp" "$token_file"
     fi
     ${

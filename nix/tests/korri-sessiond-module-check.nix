@@ -194,6 +194,9 @@ let
     (check "ExecStartPre generates token via /dev/urandom" (
       lib.hasInfix "/dev/urandom" (execStartPre baselineKiosk)
     ))
+    (check "ExecStartPre collapses whitespace with tr (sed would leave newlines)" (
+      lib.hasInfix "tr -d '[:space:]'" (execStartPre baselineKiosk)
+    ))
     (check "ExecStartPre is wired before ExecStart" (
       (serviceConfig baselineKiosk).ExecStartPre != null
     ))
