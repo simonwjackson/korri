@@ -82,7 +82,23 @@ in
       config.services.korri.compositor.gamescope.package
       retroarchKiosk
     ];
+    # Gamescope spawned by sessiond connects to the kiosk compositor's
+    # wayland socket at $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY. The compositor
+    # publishes the socket under /run/user/0 (compositor.runtimeDir),
+    # named "wayland-1" by sway's default-first allocation, mirroring
+    # the korri-sunshine attach pattern in nix/modules/korri-server.nix.
+    extraEnvironment = {
+      XDG_RUNTIME_DIR = config.services.korri.compositor.runtimeDir;
+      WAYLAND_DISPLAY = "wayland-1";
+    };
   };
+
+  # Source-machine sessiond owns its own sway; kiosk sessiond ATTACHES
+  # to the existing compositor session. The module's default
+  # `ProtectHome = true` masks /run/user/* in sessiond's mount namespace
+  # and would block the wayland-1 socket connect. Relax it for the
+  # kiosk role only.
+  systemd.services.korri-sessiond.serviceConfig.ProtectHome = lib.mkForce false;
 
   # Wire korri-server to delegate managed launches to the in-image
   # sessiond. The both-or-neither assertion in the server module would
