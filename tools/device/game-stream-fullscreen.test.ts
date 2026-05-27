@@ -338,6 +338,34 @@ describe("stream surface discovery and repair", () => {
     })
   })
 
+  it("cancels surface absence polling when the signal aborts", async () => {
+    const controller = new AbortController()
+    let time = 0
+    let polls = 0
+
+    const result = await waitForStreamSurfaceAbsence({
+      selector: { appIds: ["gamescope"] },
+      ownedWindowIds: new Set([42]),
+      signal: controller.signal,
+      timeoutMs: 1_000,
+      pollMs: 50,
+      now: () => time,
+      sleep: async durationMs => {
+        time += durationMs
+        controller.abort()
+      },
+      runner: {
+        run: async () => {
+          polls += 1
+          return JSON.stringify(gamescopeTree)
+        },
+      },
+    })
+
+    expect(result.status).toBe("cancelled")
+    expect(polls).toBe(1)
+  })
+
   it("records empty owned stream surface absence deterministically", async () => {
     const result = await waitForStreamSurfaceAbsence({
       selector: { appIds: ["gamescope"] },

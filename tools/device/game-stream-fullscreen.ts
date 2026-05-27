@@ -41,10 +41,11 @@ export interface RepairStreamSurfaceOptions
 export interface WaitForStreamSurfaceAbsenceOptions
   extends WaitForStreamSurfaceOptions {
   readonly ownedWindowIds: ReadonlySet<number>
+  readonly signal?: AbortSignal
 }
 
 export interface StreamSurfaceAbsenceResult {
-  readonly status: "absent" | "not-tracked"
+  readonly status: "absent" | "cancelled" | "not-tracked"
   readonly checkedWindowIds: readonly number[]
   readonly remainingWindowIds: readonly number[]
 }
@@ -179,6 +180,13 @@ export async function waitForStreamSurfaceAbsence(
   const deadline = now() + timeoutMs
 
   while (true) {
+    if (options.signal?.aborted) {
+      return {
+        status: "cancelled",
+        checkedWindowIds,
+        remainingWindowIds: [],
+      }
+    }
     const remainingWindowIds = await remainingOwnedSurfaceIds(options)
     if (remainingWindowIds.length === 0) {
       return { status: "absent", checkedWindowIds, remainingWindowIds }
@@ -188,6 +196,9 @@ export async function waitForStreamSurfaceAbsence(
       throw new StreamSurfacePresenceTimeoutError(remainingWindowIds)
     }
     await sleep(pollMs)
+    if (options.signal?.aborted) {
+      return { status: "cancelled", checkedWindowIds, remainingWindowIds }
+    }
   }
 }
 

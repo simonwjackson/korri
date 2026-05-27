@@ -124,6 +124,8 @@ export interface LaunchBridgeOptions {
   readonly foregroundSessionOwner?: LaunchBridgeForegroundSessionOwner
 
   readonly readinessCooldownMs?: number
+  readonly readinessProcessTimeoutMs?: number
+  readonly readinessPollMs?: number
   readonly sleep?: (durationMs: number, signal?: AbortSignal) => Promise<void>
 }
 
@@ -349,9 +351,7 @@ async function verifyReadyLaunchStage(
     SpawnedLaunchStage
   >,
 ): Promise<ForegroundSessionStageResult<Record<string, unknown>>> {
-  const processGone = input.spawned.session.isGone
-    ? await input.spawned.session.isGone()
-    : undefined
+  const processGone = await waitForProcessGone(options, input)
   if (processGone === false) {
     return {
       status: "failed",
@@ -365,7 +365,9 @@ async function verifyReadyLaunchStage(
 
   const ownedWindowIds = launchedSurfaceIdsFromActive(input.active)
   let surfaceEvidence: Readonly<Record<string, unknown>> | undefined
-  if (ownedWindowIds.size > 0 && options.moonlightForegroundRepair) {
+  if (ownedWindowIds.size === 0) {
+    surfaceEvidence = { gate: "surface", status: "not-tracked" }
+  } else if (options.moonlightForegroundRepair) {
     try {
       surfaceEvidence =
         (await options.moonlightForegroundRepair.waitForSurfaceAbsence?.({
@@ -603,6 +605,27 @@ function moonlightHostForConnection(
   } catch {
     return connection.hostId
   }
+}
+
+async function waitForProcessGone(
+  options: LaunchBridgeOptions,
+  input: ForegroundSessionReadinessInput<
+    LocalStreamLaunchPayload,
+    PreparedLaunchStage,
+    SpawnedLaunchStage
+  >,
+): Promise<boolean | undefined> {
+  if (!input.spawned.session.isGone) return undefined
+  const timeoutMs = options.readinessProcessTimeoutMs ?? 1_000
+  const pollMs = options.readinessPollMs ?? 50
+  const delay = options.sleep ?? sleep
+  const deadline = Date.now() + timeoutMs
+  while (!input.signal.aborted) {
+    if (await input.spawned.session.isGone()) return true
+    if (Date.now() >= deadline) return false
+    await delay(pollMs, input.signal)
+  }
+  return true
 }
 
 function launchedSurfaceIdsFromActive(input: {

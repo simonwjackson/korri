@@ -336,6 +336,7 @@ function createLocalMoonlightForegroundRepair() {
     waitForSurfaceAbsence: ({
       ownedWindowIds,
       ignoredWindowIds,
+      signal,
     }: {
       ownedWindowIds: ReadonlySet<number>
       ignoredWindowIds: ReadonlySet<number>
@@ -346,6 +347,7 @@ function createLocalMoonlightForegroundRepair() {
         selector,
         ownedWindowIds,
         ignoredWindowIds,
+        signal,
       }).then(result => ({ ...result })),
     probeCompositor: () =>
       probeSwayTree({ runner, selector }).then(result => ({ ...result })),
