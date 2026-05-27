@@ -131,6 +131,13 @@ let
     default_border none
     default_floating_border none
     hide_edge_borders both
+
+    # Start Xwayland eagerly. Sway's lazy mode (the default) defers Xwayland
+    # bring-up until the first X client connects, which races with Steam's
+    # 32-bit launcher: it issues libX11 calls during init and segfaults if
+    # Xwayland isn't yet accepting connections. Eager Xwayland eliminates the
+    # cold-start race for foreground Steam/Proton launches.
+    xwayland enable
   '';
 
   swayKioskExec = ''
