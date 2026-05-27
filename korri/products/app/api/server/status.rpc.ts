@@ -34,11 +34,28 @@ const SessiondLifecycleMode = Schema.Literals([
   "recovering",
 ])
 
+/**
+ * Phase 4D / Track A finishing follow-up. Operator-facing session
+ * sub-phase forwarded from sessiond's `/managed-launch/status` --
+ * lets clients distinguish launcher-running (`running`), wait-monitor
+ * (`wait-monitor`), and session-anchored (`anchored`) launches
+ * without expanding the coarse `mode` literal. Optional; older
+ * sessiond builds omit it.
+ */
+const SessiondLifecyclePhase = Schema.Literals([
+  "launching",
+  "running",
+  "wait-monitor",
+  "anchored",
+  "restoring",
+])
+
 export class SessiondLifecycleActive extends Schema.Class<SessiondLifecycleActive>(
   "SessiondLifecycleActive",
 )({
   launchId: Schema.String,
   mode: SessiondLifecycleMode,
+  phase: Schema.optional(SessiondLifecyclePhase),
 }) {}
 
 export class SessiondLifecycleSummary extends Schema.Class<SessiondLifecycleSummary>(

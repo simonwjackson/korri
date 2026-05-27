@@ -1211,6 +1211,116 @@ describe("korri sessiond", () => {
     expect(indexOf("wait-monitor")).toBeLessThan(indexOf("restoring"))
   })
 
+  // Phase 4D / Track A finishing follow-up. Sessiond's /managed-launch/status
+  // endpoint surfaces the same sub-phase the sidecar carries, so the
+  // app.server.status RPC proxy can forward it without depending on the
+  // sidecar JSON-on-disk path.
+
+  it("surfaces the current sub-phase through /managed-launch/status during a session+wait lifecycle", async () => {
+    const launcherCtrl = deferred<LaunchResult>()
+    const waitCtrl = deferred<LaunchResult>()
+    const waitSpec: LaunchSpec = { command: "/bin/wait", args: [] }
+    const core = createKorriSessiondCore({
+      token,
+      logger: silentLogger,
+      serviceManager: {
+        maskEssway: async () => {},
+        restoreEssway: async () => {},
+      },
+      renderer: {
+        kind: "electrobun",
+        launch: async () => ({
+          pid: 200,
+          command: { command: "electrobun", args: [] },
+        }),
+        stop: async () => {},
+      },
+      sway: {
+        getKorriWindows: async () => [
+          { id: 200, focused: true, fullscreen: true },
+        ],
+        applyDecisions: async () => [],
+      },
+      launcher: {
+        run: async () => ({ status: "launched" }),
+        spawn: async receivedSpec => ({
+          status: "started" as const,
+          result:
+            receivedSpec.command === waitSpec.command
+              ? waitCtrl.promise
+              : launcherCtrl.promise,
+          session: {
+            id: "child",
+            processGroupId:
+              receivedSpec.command === waitSpec.command ? 4242 : 1212,
+            exited: (receivedSpec.command === waitSpec.command
+              ? waitCtrl.promise
+              : launcherCtrl.promise
+            ).then(r => ({
+              exitCode: r.status === "launched" ? 0 : r.exitCode,
+            })),
+            terminate: () => {},
+            terminateNow: () => {},
+          },
+        }),
+      },
+    })
+
+    const readStatus = async () => {
+      const res = await request(core, "/managed-launch/status", authorized())
+      return (await res.json()) as {
+        active?: { phase?: string; mode: string; launchId: string }
+      }
+    }
+
+    const pollPhase = async (target: string | undefined, attempts = 40) => {
+      for (let i = 0; i < attempts; i++) {
+        const s = await readStatus()
+        if (
+          target === undefined
+            ? s.active === undefined
+            : s.active?.phase === target
+        )
+          return s
+        await new Promise(resolve => setTimeout(resolve, 5))
+      }
+      throw new Error(`phase '${target}' not observed in time`)
+    }
+
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    expect((await readStatus()).active).toBeUndefined()
+
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          launchId: "phase-status-1",
+          spec,
+          lifecycle: "session",
+          wait: waitSpec,
+        }),
+      }),
+    )
+    const streamResponse = await request(
+      core,
+      "/managed-launch/events?launchId=phase-status-1",
+      authorized(),
+    )
+    const streamText = streamResponse.text()
+
+    await pollPhase("running")
+    launcherCtrl.resolve({ status: "launched" })
+    await pollPhase("wait-monitor")
+    waitCtrl.resolve({ status: "launched" })
+    await streamText
+    // Post-terminal: sessiond returns to idle/home and the active
+    // payload is gone, so phase is naturally absent.
+    await pollPhase(undefined)
+  })
+
   it("fails the launch with host-unavailable when afterChildRunning throws", async () => {
     const launcherCtrl = deferred<LaunchResult>()
     const role: SessionRole = {

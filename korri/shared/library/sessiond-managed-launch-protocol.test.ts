@@ -415,6 +415,85 @@ describe("sessiond managed launch protocol", () => {
     expect(status.capabilities.sessionLifecycle).toBeUndefined()
   })
 
+  // Phase 4D / Track A finishing follow-up. Active payload may carry
+  // a sub-phase distinguishing `running` (launcher child active) from
+  // `wait-monitor` (wait monitor is the active child) and `anchored`
+  // (no live child, sessiond holding role-foreground state) without
+  // expanding the coarse `mode` literal. Phase 4B clients omitting
+  // the field still decode cleanly.
+
+  it("decodes active.phase = 'running' for a primary-child session", () => {
+    const status = decodeSessiondManagedLaunchStatus({
+      schemaVersion: 1,
+      mode: "game",
+      capabilities: {
+        managedLaunch: true,
+        lifecycleEvents: true,
+        perLaunchTermination: true,
+        sessionLifecycle: true,
+      },
+      active: { launchId: "launch-r", mode: "game", phase: "running" },
+      restoreAttempts: 0,
+    })
+    expect(status.active?.phase).toBe("running")
+  })
+
+  it("decodes active.phase = 'wait-monitor' / 'anchored' / 'launching' / 'restoring'", () => {
+    for (const phase of [
+      "launching",
+      "running",
+      "wait-monitor",
+      "anchored",
+      "restoring",
+    ] as const) {
+      const status = decodeSessiondManagedLaunchStatus({
+        schemaVersion: 1,
+        mode: "game",
+        capabilities: {
+          managedLaunch: true,
+          lifecycleEvents: true,
+          perLaunchTermination: true,
+          sessionLifecycle: true,
+        },
+        active: { launchId: "launch-x", mode: "game", phase },
+        restoreAttempts: 0,
+      })
+      expect(status.active?.phase).toBe(phase)
+    }
+  })
+
+  it("decodes active without phase (Phase 4B / older sessiond back-compat)", () => {
+    const status = decodeSessiondManagedLaunchStatus({
+      schemaVersion: 1,
+      mode: "game",
+      capabilities: {
+        managedLaunch: true,
+        lifecycleEvents: true,
+        perLaunchTermination: true,
+      },
+      active: { launchId: "launch-noph", mode: "game" },
+      restoreAttempts: 0,
+    })
+    expect(status.active?.phase).toBeUndefined()
+  })
+
+  it("rejects unknown phase literals with strict decode", () => {
+    expect(() =>
+      decodeSessiondManagedLaunchStatus({
+        schemaVersion: 1,
+        mode: "game",
+        capabilities: {
+          managedLaunch: true,
+          lifecycleEvents: true,
+          perLaunchTermination: true,
+          sessionLifecycle: true,
+        },
+        active: { launchId: "launch-bad", mode: "game", phase: "frobnicating" },
+        restoreAttempts: 0,
+      }),
+    ).toThrow()
+  })
+
   it("accepts a full session+wait lifecycle event sequence", () => {
     const sequence: Array<
       | "launch-accepted"

@@ -160,6 +160,17 @@ export function createKorriSessiondCore(
         cancelAnchor?: () => void
       }
     | undefined
+  // Phase 4D / Track A finishing follow-up. Tracks the current
+  // session sub-phase for /managed-launch/status responses. Cleared
+  // when the active managed launch is cleared (sessiond is back to
+  // home / idle / recovering, no active payload to attach phase to).
+  let currentPhase:
+    | "launching"
+    | "running"
+    | "wait-monitor"
+    | "anchored"
+    | "restoring"
+    | undefined
 
   function status(): KorriSessiondStatus {
     return {
@@ -171,6 +182,13 @@ export function createKorriSessiondCore(
   function emitStatusSidecar(
     phase?: "launching" | "running" | "wait-monitor" | "anchored" | "restoring",
   ): void {
+    // Phase 4D / Track A finishing follow-up. Each transition that
+    // writes the sidecar also updates `currentPhase` so
+    // /managed-launch/status surfaces the same value without a
+    // second source-of-truth. Sidecar-less hosts (kiosk default)
+    // still benefit because managedStatus() reads currentPhase
+    // independently.
+    if (phase) currentPhase = phase
     if (!statusSidecar) return
     void statusSidecar.write({
       mode: state.mode,
@@ -202,6 +220,7 @@ export function createKorriSessiondCore(
             active: {
               launchId: active.launchId,
               mode: active.mode === "home" ? role.idleModeLabel : active.mode,
+              ...(currentPhase ? { phase: currentPhase } : {}),
             },
           }
         : {}),
@@ -294,6 +313,10 @@ export function createKorriSessiondCore(
     void result.finally(() => {
       if (activeManagedLaunch?.launchId === launchId) {
         activeManagedLaunch = undefined
+        // Phase 4D / Track A finishing follow-up. Clear the sub-phase
+        // once the active launch is gone so /managed-launch/status
+        // does not leak a stale phase into the next launch slot.
+        currentPhase = undefined
       }
     })
 

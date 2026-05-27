@@ -51,9 +51,34 @@ export type SessiondManagedLaunchCapabilities = Schema.Schema.Type<
   typeof SessiondManagedLaunchCapabilities
 >
 
+/**
+ * Phase 4D / Track A finishing follow-up. Operator-facing sub-phase
+ * for the currently active launch. Distinguishes `launching` (start
+ * accepted, child not yet running), `running` (primary child active),
+ * `wait-monitor` (launcher exited cleanly, wait monitor is the
+ * active child), `anchored` (launcher exited cleanly, no wait, no
+ * live child but sessiond is holding role-foreground state), and
+ * `restoring` (post-launch teardown). Coarse `mode` stays the same
+ * across the running / wait-monitor / anchored sub-phases (all
+ * `mode: "game"`) so Phase 4B clients see no mode-literal change.
+ * Older daemons omit this field; clients must treat its absence as
+ * "unknown" rather than inferring a default.
+ */
+export const SessiondManagedLaunchPhase = Schema.Literals([
+  "launching",
+  "running",
+  "wait-monitor",
+  "anchored",
+  "restoring",
+])
+export type SessiondManagedLaunchPhase = Schema.Schema.Type<
+  typeof SessiondManagedLaunchPhase
+>
+
 export const SessiondManagedLaunchActive = Schema.Struct({
   launchId: Schema.String,
   mode: SessiondManagedLaunchMode,
+  phase: Schema.optional(SessiondManagedLaunchPhase),
 })
 export type SessiondManagedLaunchActive = Schema.Schema.Type<
   typeof SessiondManagedLaunchActive

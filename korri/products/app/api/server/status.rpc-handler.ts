@@ -171,6 +171,11 @@ function probeSessiondStatus(
                   active: new SessiondLifecycleActive({
                     launchId: decoded.active.launchId,
                     mode: decoded.active.mode,
+                    // Phase 4D / Track A finishing follow-up. Forward
+                    // the optional sub-phase when present.
+                    ...(decoded.active.phase
+                      ? { phase: decoded.active.phase }
+                      : {}),
                   }),
                 }
               : {}),
