@@ -1,0 +1,119 @@
+import { describe, expect, it } from "bun:test"
+import { makeInMemoryLauncherLayer } from "@shared/library/launcher-layer-memory"
+import { Launcher } from "@shared/library/library-services"
+import { Effect } from "effect"
+import {
+  createLocalForegroundLaunchOwner,
+  launchLocalForegroundSession,
+} from "./local-foreground-launch-adapter"
+
+const spec = { command: "/bin/game", args: ["rom"] }
+
+async function launcherFromLayer(
+  layer: ReturnType<typeof makeInMemoryLauncherLayer>,
+) {
+  return await Effect.runPromise(
+    Effect.gen(function* () {
+      return yield* Launcher
+    }).pipe(Effect.provide(layer)),
+  )
+}
+
+describe("local foreground launch adapter", () => {
+  it("holds the owner running until the managed local child exits", async () => {
+    const control = makeInMemoryLauncherLayer.createManagedControl()
+    const launcher = await launcherFromLayer(
+      makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+    )
+    const owner = createLocalForegroundLaunchOwner()
+
+    const launch = launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      spawn: () => Effect.runPromise(launcher.spawn!(spec)),
+      createRequestId: () => "local-launch-1",
+    })
+    await waitForOwnerState(owner, "Running")
+
+    expect(owner.status().state).toMatchObject({
+      _tag: "Running",
+      active: { requestId: "local-launch-1", gameId: "game" },
+    })
+
+    control.resolveExit({ exitCode: 0 })
+    expect(await launch).toEqual({ status: "launched" })
+    await owner.whenIdle()
+  })
+
+  it("rejects a second local launch as session-busy before invoking spawn", async () => {
+    const control = makeInMemoryLauncherLayer.createManagedControl()
+    const launcher = await launcherFromLayer(
+      makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+    )
+    const owner = createLocalForegroundLaunchOwner()
+    let secondSpawnCalls = 0
+
+    const first = launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      spawn: () => Effect.runPromise(launcher.spawn!(spec)),
+      createRequestId: () => "local-launch-1",
+    })
+    await waitForOwnerState(owner, "Running")
+
+    const second = await launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      spawn: () => {
+        secondSpawnCalls += 1
+        return Effect.runPromise(launcher.spawn!(spec))
+      },
+      createRequestId: () => "local-launch-2",
+    })
+
+    expect(second).toMatchObject({
+      status: "failed",
+      exitCode: 121,
+      failureKind: "session-busy",
+    })
+    expect(secondSpawnCalls).toBe(0)
+
+    control.resolveExit({ exitCode: 0 })
+    await first
+    await owner.whenIdle()
+  })
+
+  it("returns managed spawn failure diagnostics", async () => {
+    const launcher = await launcherFromLayer(
+      makeInMemoryLauncherLayer({
+        behavior: { kind: "fail", exitCode: 125, stderrTail: "unsupported" },
+      }),
+    )
+    const owner = createLocalForegroundLaunchOwner()
+
+    const result = await launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      spawn: () => Effect.runPromise(launcher.spawn!(spec)),
+      createRequestId: () => "local-launch-1",
+    })
+
+    expect(result).toEqual({
+      status: "failed",
+      exitCode: 125,
+      stderrTail: "unsupported",
+    })
+    expect(owner.status().state._tag).toBe("IdleReady")
+  })
+})
+
+async function waitForOwnerState(
+  owner: ReturnType<typeof createLocalForegroundLaunchOwner>,
+  state: ReturnType<typeof owner.status>["state"]["_tag"],
+) {
+  for (let index = 0; index < 20; index += 1) {
+    if (owner.status().state._tag === state) return
+    await Promise.resolve()
+  }
+  expect(owner.status().state._tag).toBe(state)
+}

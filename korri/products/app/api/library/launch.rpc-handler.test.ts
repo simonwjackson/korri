@@ -12,9 +12,15 @@ import {
 import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
 import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
 import { createLibraryRepository } from "@shared/library/proseql/library-repository"
+import { makeInMemoryLauncherLayer } from "@shared/library/launcher-layer-memory"
+import type { ForegroundSessionState } from "@shared/stream/foreground-session-lifecycle"
 import { createShellLauncher } from "@shared/library/shell-launcher"
 import { Cause, Effect, Exit, Layer } from "effect"
 
+import {
+  createForegroundSessionHost,
+  ForegroundSessionHost,
+} from "./foreground-session-host-layer"
 import { handleLaunchLibrary } from "./launch.rpc-handler"
 
 const originalLibraryRoot = process.env.KORRI_LIBRARY_ROOT
@@ -31,7 +37,7 @@ afterEach(async () => {
 })
 
 async function layerForFakeGame(exitCode: number): Promise<{
-  layer: Layer.Layer<LibrarySource | Launcher>
+  layer: Layer.Layer<LibrarySource | Launcher | ForegroundSessionHost>
 }> {
   const lib = await withTempProseqlLibrary()
   cleanups.push(lib.cleanup)
@@ -55,9 +61,31 @@ async function layerForFakeGame(exitCode: number): Promise<{
             message: error instanceof Error ? error.message : String(error),
           }),
       }),
+    spawn: spec =>
+      Effect.tryPromise({
+        try: () =>
+          realLauncher.spawn!({
+            ...spec,
+            env: {
+              ...(spec.env ?? {}),
+              KORRI_FAKE_GAME_EXIT: String(exitCode),
+            },
+          }),
+        catch: error =>
+          new LibraryError({
+            reason: "io",
+            message: error instanceof Error ? error.message : String(error),
+          }),
+      }),
   })
 
-  return { layer: Layer.merge(LibrarySourceLayerLive, launcherLayer) }
+  return {
+    layer: Layer.mergeAll(
+      LibrarySourceLayerLive,
+      launcherLayer,
+      Layer.succeed(ForegroundSessionHost)(createForegroundSessionHost()),
+    ),
+  }
 }
 
 describe("app.library.launch handler (configured-real launcher + fake-game.sh)", () => {
@@ -100,11 +128,25 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
         launchedSpec = spec
         return Effect.succeed({ status: "launched" as const })
       },
+      spawn: spec => {
+        launchedSpec = spec
+        return Effect.succeed({
+          status: "started" as const,
+          result: Promise.resolve({ status: "launched" as const }),
+          session: completedSessionHandle(),
+        })
+      },
     })
 
     const result = await Effect.runPromise(
       handleLaunchLibrary({ id: "game" }).pipe(
-        Effect.provide(Layer.merge(sourceLayer, launcherLayer)),
+        Effect.provide(
+          Layer.mergeAll(
+            sourceLayer,
+            launcherLayer,
+            Layer.succeed(ForegroundSessionHost)(createForegroundSessionHost()),
+          ),
+        ),
       ),
     )
 
@@ -135,11 +177,25 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
         launchedSpec = spec
         return Effect.succeed({ status: "launched" as const })
       },
+      spawn: spec => {
+        launchedSpec = spec
+        return Effect.succeed({
+          status: "started" as const,
+          result: Promise.resolve({ status: "launched" as const }),
+          session: completedSessionHandle(),
+        })
+      },
     })
 
     const result = await Effect.runPromise(
       handleLaunchLibrary({ id: "game", presetId: "raw" }).pipe(
-        Effect.provide(Layer.merge(sourceLayer, launcherLayer)),
+        Effect.provide(
+          Layer.mergeAll(
+            sourceLayer,
+            launcherLayer,
+            Layer.succeed(ForegroundSessionHost)(createForegroundSessionHost()),
+          ),
+        ),
       ),
     )
 
@@ -150,6 +206,84 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       override: undefined,
     })
     expect(launchedSpec).toEqual({ command: "/bin/game", args: ["rom"] })
+  })
+
+  it("keeps app.library.launch pending while the managed local child is running", async () => {
+    const control = makeInMemoryLauncherLayer.createManagedControl()
+    const host = createForegroundSessionHost()
+    const layer = Layer.mergeAll(
+      localGameSourceLayer({ gamescope: { enabled: false } }),
+      makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+      Layer.succeed(ForegroundSessionHost)(host),
+    )
+
+    const launch = Effect.runPromise(
+      handleLaunchLibrary({ id: "game" }).pipe(Effect.provide(layer)),
+    )
+    await waitForOwnerState(host, "Running")
+    let settled = false
+    void launch.then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+
+    expect(settled).toBe(false)
+
+    control.resolveExit({ exitCode: 0 })
+    expect(await launch).toEqual({ status: "launched" })
+    await host.owner.whenIdle()
+  })
+
+  it("rejects local launch re-entry as session-busy without spawning a second child", async () => {
+    const control = makeInMemoryLauncherLayer.createManagedControl()
+    const host = createForegroundSessionHost()
+    const layer = Layer.mergeAll(
+      localGameSourceLayer({ gamescope: { enabled: false } }),
+      makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+      Layer.succeed(ForegroundSessionHost)(host),
+    )
+
+    const first = Effect.runPromise(
+      handleLaunchLibrary({ id: "game" }).pipe(Effect.provide(layer)),
+    )
+    await waitForOwnerState(host, "Running")
+
+    const second = await Effect.runPromise(
+      handleLaunchLibrary({ id: "game" }).pipe(Effect.provide(layer)),
+    )
+
+    expect(second).toMatchObject({
+      status: "failed",
+      exitCode: 121,
+      failureKind: "session-busy",
+    })
+    control.resolveExit({ exitCode: 0 })
+    await first
+    await host.owner.whenIdle()
+  })
+
+  it("preserves terminal failure diagnostics after the managed local child exits", async () => {
+    const control = makeInMemoryLauncherLayer.createManagedControl()
+    const host = createForegroundSessionHost()
+    const layer = Layer.mergeAll(
+      localGameSourceLayer({ gamescope: { enabled: false } }),
+      makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+      Layer.succeed(ForegroundSessionHost)(host),
+    )
+
+    const launch = Effect.runPromise(
+      handleLaunchLibrary({ id: "game" }).pipe(Effect.provide(layer)),
+    )
+    await waitForOwnerState(host, "Running")
+
+    control.resolveExit({ exitCode: 7, stderrTail: "boom" })
+
+    expect(await launch).toEqual({
+      status: "failed",
+      exitCode: 7,
+      stderrTail: "boom",
+    })
+    await host.owner.whenIdle()
   })
 
   it("returns failed launch diagnostics for a misconfigured profile (no spawn)", async () => {
@@ -168,7 +302,13 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
 
     const result = await Effect.runPromise(
       handleLaunchLibrary({ id: "snes/echo.smc" }).pipe(
-        Effect.provide(Layer.merge(LibrarySourceLayerLive, launcherLayer)),
+        Effect.provide(
+          Layer.mergeAll(
+            LibrarySourceLayerLive,
+            launcherLayer,
+            Layer.succeed(ForegroundSessionHost)(createForegroundSessionHost()),
+          ),
+        ),
       ),
     )
 
@@ -198,6 +338,41 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     expect(tags).toContain("app.library.launch")
   })
 })
+
+function completedSessionHandle() {
+  return {
+    id: "completed-local-child",
+    processId: 123,
+    exited: Promise.resolve({ exitCode: 0 }),
+    terminate: () => {},
+    terminateNow: () => {},
+  }
+}
+
+function localGameSourceLayer(options: {
+  readonly gamescope: { readonly enabled: boolean }
+}) {
+  return Layer.succeed(LibrarySource)({
+    list: () => Effect.succeed([{ id: "game", system: "s", contentPath: "rom" }]),
+    launchSpecFor: () => Effect.fail(new LibraryError({ reason: "config" })),
+    resolveLaunchForGame: () =>
+      Effect.succeed({
+        spec: { command: "/bin/game", args: ["rom"] },
+        gamescope: options.gamescope,
+      }),
+  })
+}
+
+async function waitForOwnerState(
+  host: ReturnType<typeof createForegroundSessionHost>,
+  state: ForegroundSessionState["_tag"],
+) {
+  for (let index = 0; index < 20; index += 1) {
+    if (host.owner.status().state._tag === state) return
+    await Promise.resolve()
+  }
+  expect(host.owner.status().state._tag).toBe(state)
+}
 
 type TempProseqlLibrary = {
   readonly root: string
