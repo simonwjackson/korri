@@ -750,6 +750,7 @@ describe("korri sessiond", () => {
       beforeChildLaunch: async () => {},
       restoreIdleAfterLaunch: async () => {},
       reconcileIdle: async () => {},
+      afterChildRunning: async () => {},
       idleReadyEvidence: () => "idle-blank",
       rendererStatus: () => ({ kind: "noop" }),
     }
@@ -788,6 +789,7 @@ describe("korri sessiond", () => {
       restoreIdleAfterLaunch: async () => {
         calls.push("restoreIdleAfterLaunch")
       },
+      afterChildRunning: async () => {},
       reconcileIdle: async () => {
         calls.push("reconcileIdle")
       },

@@ -1,3 +1,4 @@
+import type { LaunchSpec } from "@shared/library/launcher"
 import type {
   LaunchReadyMode,
   TerminalReadinessEventType,
@@ -60,6 +61,23 @@ export interface SessionRole {
    * yield).
    */
   beforeChildLaunch: () => Promise<void>
+
+  /**
+   * Phase 4D / Track A. Called exactly once per managed launch, after
+   * the primary child is observed running and before the launch's
+   * lifecycle proceeds past `child-running`. The role does any
+   * foreground-surface promotion here (e.g. source-machine repairs
+   * the Gamescope window via game-stream-fullscreen).
+   *
+   * Kiosk role: no-op -- Electrobun owns the renderer and Gamescope
+   * is not in the kiosk path.
+   *
+   * Throwing from this hook fails the managed launch; sessiond maps
+   * the throw to a `child-exited` event with
+   * `failureKind: "host-unavailable"` and proceeds through restoring
+   * to the role's terminal readiness event.
+   */
+  afterChildRunning: (spec: LaunchSpec) => Promise<void>
 
   /**
    * Restore the role's idle target after a managed launch child exits.
@@ -132,6 +150,11 @@ export function createKioskSessionRole(
       await deps.renderer.stop(rendererPid)
       rendererPid = undefined
     },
+    // Kiosk has no foreground surface to promote -- Electrobun owns
+    // the renderer and Gamescope is not in the kiosk path. Source-
+    // machine implements this hook in U5; the interface declares it
+    // here so sessiond's dispatcher can call it role-agnostically.
+    afterChildRunning: async () => {},
     restoreIdleAfterLaunch: async () => {
       const launched = await deps.renderer.launch()
       rendererPid = launched.pid

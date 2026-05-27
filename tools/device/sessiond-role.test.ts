@@ -136,4 +136,31 @@ describe("kiosk session role", () => {
 
     expect(rendererEvents.filter(e => e.startsWith("launch:")).length).toBe(2)
   })
+
+  // Phase 4D / Track A U3 -- afterChildRunning hook.
+
+  it("exposes afterChildRunning as a no-op on the kiosk role", async () => {
+    const { renderer, events: rendererEvents } = makeRecordingRenderer()
+    const { sway, events: swayEvents } = makeSway([])
+    const { serviceManager, events: svcEvents } = makeServiceManager()
+    const role = createKioskSessionRole({ renderer, sway, serviceManager })
+
+    await role.enterIdle()
+    rendererEvents.length = 0
+    swayEvents.length = 0
+    svcEvents.length = 0
+
+    await role.afterChildRunning({
+      command: "/bin/game",
+      args: ["rom.smc"],
+    })
+
+    // No-op contract: the kiosk role has no foreground surface to
+    // promote because Electrobun owns the renderer and Gamescope is
+    // not in the kiosk path. Calling it must not touch the renderer,
+    // Sway, or the service manager.
+    expect(rendererEvents).toEqual([])
+    expect(swayEvents).toEqual([])
+    expect(svcEvents).toEqual([])
+  })
 })

@@ -186,6 +186,11 @@ export function createSourceMachineSessionRole(
     beforeChildLaunch: async () => {
       cooldownStartMs = clock()
     },
+    // U5 will replace this no-op with foreground surface repair via
+    // repairStreamSurface. U3 ships the interface shape; U5 ships
+    // the source-machine behavior. Keeping the no-op for now lets
+    // U4's sessiond dispatcher land independently.
+    afterChildRunning: async () => {},
     restoreIdleAfterLaunch: async () => {
       cooldownStartMs = clock()
       await reachIdleBlank()
