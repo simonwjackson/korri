@@ -38,6 +38,33 @@ export interface WaitForStreamSurfaceOptions {
 export interface RepairStreamSurfaceOptions
   extends WaitForStreamSurfaceOptions {}
 
+export interface WaitForStreamSurfaceAbsenceOptions
+  extends WaitForStreamSurfaceOptions {
+  readonly ownedWindowIds: ReadonlySet<number>
+}
+
+export interface StreamSurfaceAbsenceResult {
+  readonly status: "absent" | "not-tracked"
+  readonly checkedWindowIds: readonly number[]
+  readonly remainingWindowIds: readonly number[]
+}
+
+export interface SwayTreeProbeResult {
+  readonly ok: boolean
+  readonly surfaceCount?: number
+  readonly message?: string
+}
+
+export class StreamSurfacePresenceTimeoutError extends Error {
+  readonly remainingWindowIds: readonly number[]
+
+  constructor(remainingWindowIds: readonly number[]) {
+    super("stream surface remained after timeout")
+    this.name = "StreamSurfacePresenceTimeoutError"
+    this.remainingWindowIds = remainingWindowIds
+  }
+}
+
 const DEFAULT_GAMESCOPE_COMMAND = "gamescope"
 const DEFAULT_SURFACE_TIMEOUT_MS = 5_000
 const DEFAULT_SURFACE_POLL_MS = 100
@@ -137,6 +164,53 @@ export async function snapshotStreamSurfaceIds(
   )
 }
 
+export async function waitForStreamSurfaceAbsence(
+  options: WaitForStreamSurfaceAbsenceOptions,
+): Promise<StreamSurfaceAbsenceResult> {
+  const checkedWindowIds = sortedIds(options.ownedWindowIds)
+  if (checkedWindowIds.length === 0) {
+    return { status: "not-tracked", checkedWindowIds, remainingWindowIds: [] }
+  }
+
+  const timeoutMs = options.timeoutMs ?? DEFAULT_SURFACE_TIMEOUT_MS
+  const pollMs = options.pollMs ?? DEFAULT_SURFACE_POLL_MS
+  const now = options.now ?? (() => Date.now())
+  const sleep = options.sleep ?? defaultSleep
+  const deadline = now() + timeoutMs
+
+  while (true) {
+    const remainingWindowIds = await remainingOwnedSurfaceIds(options)
+    if (remainingWindowIds.length === 0) {
+      return { status: "absent", checkedWindowIds, remainingWindowIds }
+    }
+
+    if (now() >= deadline) {
+      throw new StreamSurfacePresenceTimeoutError(remainingWindowIds)
+    }
+    await sleep(pollMs)
+  }
+}
+
+export async function probeSwayTree(options: {
+  readonly runner: SwayCommandRunner
+  readonly selector?: SwayWindowSelector
+}): Promise<SwayTreeProbeResult> {
+  try {
+    const raw = await options.runner.run(["-t", "get_tree"])
+    const tree = JSON.parse(raw) as SwayNode
+    return {
+      ok: true,
+      surfaceCount: findStreamSurfaceWindows(tree, options.selector ?? {})
+        .length,
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
+
 export async function repairStreamSurface(
   options: RepairStreamSurfaceOptions,
 ): Promise<StreamSurfaceRepairResult> {
@@ -146,6 +220,22 @@ export async function repairStreamSurface(
     await options.runner.run([command])
   }
   return { windowId: surface.id, commands }
+}
+
+async function remainingOwnedSurfaceIds(
+  options: WaitForStreamSurfaceAbsenceOptions,
+): Promise<readonly number[]> {
+  const raw = await options.runner.run(["-t", "get_tree"])
+  const presentIds = new Set(
+    findStreamSurfaceWindows(JSON.parse(raw), options.selector)
+      .filter(surface => !options.ignoredWindowIds?.has(surface.id))
+      .map(surface => surface.id),
+  )
+  return sortedIds(options.ownedWindowIds).filter(id => presentIds.has(id))
+}
+
+function sortedIds(ids: ReadonlySet<number>): readonly number[] {
+  return [...ids].sort((a, b) => a - b)
 }
 
 function selectPrimarySurface(
