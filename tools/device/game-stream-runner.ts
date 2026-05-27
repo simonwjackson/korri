@@ -247,9 +247,19 @@ export function createGameStreamRunner(
       return await fail("spawn", "sessiond launcher missing managed spawn", 125)
     }
 
+    // Phase 4D / Track A. Forward the intent's lifecycle + optional
+    // wait spec to sessiond via the LaunchExtras second arg shipped in
+    // U2. Foreground intents pass `lifecycle: "foreground"` explicitly
+    // -- daemons defaulting to foreground on absence accept the
+    // redundant field; strict decoders accept it because the protocol
+    // includes it as an optional literal.
+    const extras: { lifecycle: "foreground" | "session"; wait?: LaunchSpec } = {
+      lifecycle: launchClaim.intent.lifecycle,
+      ...(launchClaim.intent.wait ? { wait: launchClaim.intent.wait } : {}),
+    }
     let spawned: ManagedLaunchResult
     try {
-      spawned = await spawn(spec)
+      spawned = await spawn(spec, extras)
     } catch (error) {
       await requeueLaunchClaim(launchClaim, "sessiond spawn failure")
       return await fail("spawn", errorMessage(error), 125)
@@ -435,9 +445,15 @@ export function createGameStreamRunner(
 
         if (
           sessiondLauncher !== undefined &&
-          launchClaim.intent.lifecycle === "foreground" &&
           sessiondLauncher.spawn !== undefined
         ) {
+          // Phase 4D / Track A U6. All lifecycle classes now go through
+          // sessiond when configured -- sessiond's source-machine role
+          // owns foreground promotion (U5), launcher-anchor + wait-monitor
+          // dispatch (U4), and the role's terminal readiness handshake.
+          // The in-process foreground / session-anchor / wait-monitor
+          // branches below remain only for the sessiondLauncher === undefined
+          // path (unit tests + transitional deployments).
           return await runViaSessiond({
             sessiondLauncher,
             spec,

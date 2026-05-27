@@ -1222,25 +1222,37 @@ describe("game stream runner sessiond foreground branch", () => {
     await run
   })
 
-  it("keeps lifecycle:session intents on the local spawn path even when sessiondLauncher is configured", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-session-"))
-    const controlled = createControlledChild(460)
-    const { spawner, specs } = createControlledSpawner(controlled.child)
-    const sessionIntentStore = createStaticGameStreamLaunchIntentStore(game, {
-      lifecycle: "session",
-    })
+  it("routes lifecycle:session intents through sessiond when configured and forwards wait spec via extras", async () => {
+    // Phase 4D / Track A U6. Once sessiond understands session
+    // lifecycle, the runner stops branching on lifecycle: it forwards
+    // everything (foreground and session) and lets sessiond own the
+    // anchor / wait-monitor semantics.
+    const wait: LaunchSpec = { command: "/bin/wait-for-game", args: [] }
     const sessiondSpecs: LaunchSpec[] = []
-    const { sessiondLauncher } = createSessiondLauncherHarness(sessiondSpecs)
+    const extrasLog: Array<{
+      readonly spec: LaunchSpec
+      readonly extras?: unknown
+    }> = []
+    const { sessiondLauncher, controller } = createSessiondLauncherHarness(
+      sessiondSpecs,
+      extrasLog,
+    )
+    const localSpawnCalls: LaunchSpec[] = []
+    const localSpawner: ManagedChildSpawner = {
+      spawn: async spec => {
+        localSpawnCalls.push(spec)
+        throw new Error("local spawn must not run when sessiond is configured")
+      },
+    }
     const runner = createGameStreamRunner({
-      launchIntentStore: sessionIntentStore,
-      spawner,
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
+        lifecycle: "session",
+        wait,
+      }),
+      spawner: localSpawner,
       sessiondLauncher,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
-      lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
-        pid: 10,
-        isProcessAlive: pid => pid === 10,
-      }),
       processEnv: {
         ...sessionEnv,
         KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
@@ -1249,8 +1261,80 @@ describe("game stream runner sessiond foreground branch", () => {
 
     const run = runner.run()
     await waitFor(() => runner.status().mode === "running")
+    expect(sessiondSpecs).toHaveLength(1)
+    expect(extrasLog).toHaveLength(1)
+    expect(extrasLog[0].extras).toEqual({
+      lifecycle: "session",
+      wait,
+    })
+    expect(localSpawnCalls).toEqual([])
+
+    controller.exit(0)
+    await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
+  })
+
+  it("routes lifecycle:session intents without wait through sessiond (anchor branch)", async () => {
+    const sessiondSpecs: LaunchSpec[] = []
+    const extrasLog: Array<{
+      readonly spec: LaunchSpec
+      readonly extras?: unknown
+    }> = []
+    const { sessiondLauncher, controller } = createSessiondLauncherHarness(
+      sessiondSpecs,
+      extrasLog,
+    )
+    const localSpawnCalls: LaunchSpec[] = []
+    const localSpawner: ManagedChildSpawner = {
+      spawn: async spec => {
+        localSpawnCalls.push(spec)
+        throw new Error("local spawn must not run when sessiond is configured")
+      },
+    }
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
+        lifecycle: "session",
+      }),
+      spawner: localSpawner,
+      sessiondLauncher,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      processEnv: {
+        ...sessionEnv,
+        KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
+      },
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    expect(sessiondSpecs).toHaveLength(1)
+    expect(extrasLog[0].extras).toEqual({ lifecycle: "session" })
+    expect(localSpawnCalls).toEqual([])
+
+    controller.exit(0)
+    await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
+  })
+
+  it("keeps lifecycle:session intents on the local spawn path when no sessiondLauncher is configured (test path preserved)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-session-"))
+    const controlled = createControlledChild(460)
+    const { spawner, specs } = createControlledSpawner(controlled.child)
+    const sessionIntentStore = createStaticGameStreamLaunchIntentStore(game, {
+      lifecycle: "session",
+    })
+    const runner = createGameStreamRunner({
+      launchIntentStore: sessionIntentStore,
+      spawner,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
+        pid: 10,
+        isProcessAlive: pid => pid === 10,
+      }),
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
     expect(specs).toHaveLength(1)
-    expect(sessiondSpecs).toEqual([])
     controlled.exit(0)
     await runner.stop()
     await run
@@ -1263,7 +1347,10 @@ interface SessiondLauncherController {
   terminateCalls: NodeJS.Signals[] | string[]
 }
 
-function createSessiondLauncherHarness(specs: LaunchSpec[]): {
+function createSessiondLauncherHarness(
+  specs: LaunchSpec[],
+  extrasLog?: Array<{ readonly spec: LaunchSpec; readonly extras?: unknown }>,
+): {
   readonly sessiondLauncher: Launcher
   readonly controller: SessiondLauncherController
 } {
@@ -1296,8 +1383,9 @@ function createSessiondLauncherHarness(specs: LaunchSpec[]): {
   }
   const sessiondLauncher: Launcher = {
     run: async () => result,
-    spawn: async spec => {
+    spawn: async (spec, extras) => {
       specs.push(spec)
+      extrasLog?.push({ spec, extras })
       return {
         status: "started",
         result,
