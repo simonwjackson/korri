@@ -43,17 +43,41 @@ export interface LocalIdentityEnv {
 }
 
 /**
+ * Options accepted by `makeLocalEntrySource` for test injection. The
+ * defaults read live host data via `os.networkInterfaces()`; tests
+ * inject a deterministic map.
+ */
+export interface MakeLocalEntrySourceOptions {
+  readonly networkInterfaces?: () => NodeJS.Dict<os.NetworkInterfaceInfo[]>
+}
+
+/**
  * Build the `EntrySource` tag for entries served by THIS process.
  *
  * Centralized so the wire shape stays consistent across `app.library.list`,
  * `app.source.list`, and any future server-side surface that emits
  * library entries. Read-once on entry production; do not cache across
  * env changes.
+ *
+ * Wildcard-bind awareness: federation v1 defaults `HOST=0.0.0.0` on
+ * library-bearing hosts (see `nix/images/headless.nix`). A literal
+ * "0.0.0.0" in `controlUrl` is meaningless on the wire — it's the
+ * bind address, not an address any client can dial. When `HOST` is
+ * a wildcard and no explicit `KORRI_PUBLIC_API_BASE_URL` overrides
+ * it, we substitute the first non-loopback IPv4 from the host's
+ * network interfaces, falling back to `127.0.0.1` only on hosts
+ * with no routable interface. `peer-source-fetcher.ts` already
+ * overwrites peer-emitted `controlUrl` with the mDNS-discovered
+ * address, so this fix is primarily about emitting a syntactically
+ * meaningful value on the local side.
  */
-export function makeLocalEntrySource(env: LocalIdentityEnv): EntrySource {
+export function makeLocalEntrySource(
+  env: LocalIdentityEnv,
+  options: MakeLocalEntrySourceOptions = {},
+): EntrySource {
   return new EntrySource({
     hostId: resolveHostId(env),
-    controlUrl: resolveControlUrl(env),
+    controlUrl: resolveControlUrl(env, options),
     isLocal: true,
   })
 }
@@ -66,12 +90,41 @@ function resolveHostId(env: LocalIdentityEnv): string {
   )
 }
 
-function resolveControlUrl(env: LocalIdentityEnv): string {
+function resolveControlUrl(
+  env: LocalIdentityEnv,
+  options: MakeLocalEntrySourceOptions,
+): string {
   const explicit = optionalEnv(env.KORRI_PUBLIC_API_BASE_URL)
   if (explicit) return stripTrailingSlash(explicit)
-  const host = optionalEnv(env.HOST) ?? "127.0.0.1"
   const port = optionalEnv(env.PORT) ?? "3001"
+  const rawHost = optionalEnv(env.HOST) ?? "127.0.0.1"
+  const host = isWildcardHost(rawHost)
+    ? routableHostOrLoopback(options.networkInterfaces)
+    : rawHost
   return `http://${host}:${port}`
+}
+
+function isWildcardHost(host: string): boolean {
+  // Cover the IPv4 and IPv6 unspecified addresses. Brackets handled
+  // even though we don't currently re-emit bracketed IPv6 here — the
+  // server's HOST env is always a bare address in practice.
+  return host === "0.0.0.0" || host === "::" || host === "[::]"
+}
+
+function routableHostOrLoopback(
+  networkInterfaces?: () => NodeJS.Dict<os.NetworkInterfaceInfo[]>,
+): string {
+  const ifaces = (networkInterfaces ?? os.networkInterfaces)()
+  for (const name of Object.keys(ifaces)) {
+    const infos = ifaces[name] ?? []
+    for (const info of infos) {
+      if (info.family !== "IPv4") continue
+      if (info.internal) continue
+      if (!info.address) continue
+      return info.address
+    }
+  }
+  return "127.0.0.1"
 }
 
 function optionalEnv(value: string | undefined): string | undefined {

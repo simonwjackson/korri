@@ -62,13 +62,112 @@ describe("makeLocalEntrySource", () => {
     )
   })
 
-  it("composes controlUrl from HOST/PORT when no explicit base URL", () => {
+  it("composes controlUrl from HOST/PORT when HOST is a concrete bind", () => {
     const env: LocalIdentityEnv = {
       KORRI_STREAM_ADVERTISE_HOST_ID: "aka",
-      HOST: "0.0.0.0",
+      HOST: "192.168.1.117",
       PORT: "4000",
     }
-    expect(makeLocalEntrySource(env).controlUrl).toBe("http://0.0.0.0:4000")
+    expect(makeLocalEntrySource(env).controlUrl).toBe(
+      "http://192.168.1.117:4000",
+    )
+  })
+
+  it("substitutes a routable IPv4 when HOST is the IPv4 wildcard 0.0.0.0", () => {
+    const env: LocalIdentityEnv = {
+      KORRI_STREAM_ADVERTISE_HOST_ID: "sobo",
+      HOST: "0.0.0.0",
+      PORT: "3001",
+    }
+    const source = makeLocalEntrySource(env, {
+      networkInterfaces: () => ({
+        lo: [
+          {
+            address: "127.0.0.1",
+            netmask: "255.0.0.0",
+            family: "IPv4",
+            mac: "00:00:00:00:00:00",
+            internal: true,
+            cidr: "127.0.0.1/8",
+          },
+        ],
+        wlan0: [
+          {
+            address: "192.168.1.239",
+            netmask: "255.255.255.0",
+            family: "IPv4",
+            mac: "aa:bb:cc:dd:ee:ff",
+            internal: false,
+            cidr: "192.168.1.239/24",
+          },
+        ],
+      }),
+    })
+    expect(source.controlUrl).toBe("http://192.168.1.239:3001")
+  })
+
+  it("substitutes a routable IPv4 when HOST is the IPv6 wildcard ::", () => {
+    const env: LocalIdentityEnv = {
+      KORRI_STREAM_ADVERTISE_HOST_ID: "sobo",
+      HOST: "::",
+      PORT: "3001",
+    }
+    const source = makeLocalEntrySource(env, {
+      networkInterfaces: () => ({
+        eth0: [
+          {
+            address: "10.0.0.42",
+            netmask: "255.255.255.0",
+            family: "IPv4",
+            mac: "aa:bb:cc:dd:ee:ff",
+            internal: false,
+            cidr: "10.0.0.42/24",
+          },
+        ],
+      }),
+    })
+    expect(source.controlUrl).toBe("http://10.0.0.42:3001")
+  })
+
+  it("falls back to 127.0.0.1 for wildcard HOST when no routable IPv4 exists", () => {
+    const env: LocalIdentityEnv = {
+      KORRI_STREAM_ADVERTISE_HOST_ID: "isolated",
+      HOST: "0.0.0.0",
+      PORT: "3001",
+    }
+    const source = makeLocalEntrySource(env, {
+      networkInterfaces: () => ({
+        lo: [
+          {
+            address: "127.0.0.1",
+            netmask: "255.0.0.0",
+            family: "IPv4",
+            mac: "00:00:00:00:00:00",
+            internal: true,
+            cidr: "127.0.0.1/8",
+          },
+        ],
+      }),
+    })
+    expect(source.controlUrl).toBe("http://127.0.0.1:3001")
+  })
+
+  it("prefers KORRI_PUBLIC_API_BASE_URL over wildcard substitution", () => {
+    const env: LocalIdentityEnv = {
+      KORRI_STREAM_ADVERTISE_HOST_ID: "aka",
+      KORRI_PUBLIC_API_BASE_URL: "http://192.168.1.117:3001",
+      HOST: "0.0.0.0",
+      PORT: "3001",
+    }
+    // The explicit override wins; networkInterfaces is not consulted.
+    const source = makeLocalEntrySource(env, {
+      networkInterfaces: () => {
+        throw new Error(
+          "networkInterfaces should not be consulted when KORRI_PUBLIC_API_BASE_URL is set",
+        )
+      },
+    })
+    expect(source.controlUrl).toBe("http://192.168.1.117:3001")
   })
 
   it("uses 127.0.0.1:3001 defaults when HOST/PORT are absent", () => {
