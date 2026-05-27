@@ -148,6 +148,11 @@ let
     export KORRI_GAME_STREAM_LOCK_PATH="''${KORRI_GAME_STREAM_LOCK_PATH:-$runtime_dir/run.lock}"
     export KORRI_GAME_STREAM_STATUS_PATH=${statusPathExpression}
 
+    ${optionalString (cfg.sessiond.url != null) ''
+      export KORRI_SESSIOND_URL=${lib.escapeShellArg cfg.sessiond.url}''}
+    ${optionalString (cfg.sessiond.tokenFile != null) ''
+      export KORRI_SESSIOND_TOKEN_FILE=${lib.escapeShellArg cfg.sessiond.tokenFile}''}
+
     exec ${cfg.package}/bin/korri-game-stream-runner
   '';
 in
@@ -346,6 +351,30 @@ in
         default = pkgs.sway;
         defaultText = lib.literalExpression "pkgs.sway";
         description = "Sway package that provides swaymsg.";
+      };
+    };
+
+    sessiond = {
+      url = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "http://127.0.0.1:3003";
+        description = ''
+          Optional sessiond HTTP URL exported to the runner as
+          `KORRI_SESSIOND_URL`. When set, the runner (Phase 4C, lifecycle:
+          "foreground" intents) routes managed launches through sessiond.
+          When null, the runner uses its in-process supervision path.
+        '';
+      };
+      tokenFile = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "/run/korri-sessiond/token";
+        description = ''
+          Optional sessiond capability-token file exported to the runner as
+          `KORRI_SESSIOND_TOKEN_FILE`. Required alongside `sessiond.url` for
+          fail-closed sessiond access.
+        '';
       };
     };
 

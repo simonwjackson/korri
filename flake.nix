@@ -296,6 +296,13 @@
           inherit bunDeps;
         };
 
+        korriSessiond = import ./nix/korri-sessiond.nix {
+          inherit pkgs;
+          lib = pkgs.lib;
+          src = self;
+          inherit bunDeps;
+        };
+
         korriCli = import ./nix/korri-cli.nix {
           inherit pkgs;
           lib = pkgs.lib;
@@ -452,6 +459,7 @@
         // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
           korri-inputd = korriInputd;
           korri-game-stream = korriGameStream;
+          korri-sessiond = korriSessiond;
           korri-cli = korriCli;
           korri-server = korriServer;
           korri-headless-source = korriHeadlessSource;
@@ -562,6 +570,10 @@
               inherit pkgs;
               korriGameStreamModule = self.nixosModules.korri-game-stream;
             };
+            korri-sessiond-module = import ./nix/tests/korri-sessiond-module-check.nix {
+              inherit pkgs;
+              korriSessiondModule = self.nixosModules.korri-sessiond;
+            };
             korri-server-module = import ./nix/tests/korri-server-module-check.nix {
               inherit pkgs;
               korriServerModule = self.nixosModules.korri-server;
@@ -658,6 +670,7 @@
                 self.checks.${system}.korri-compositor-module
                 self.checks.${system}.korri-input-module
                 self.checks.${system}.korri-game-stream-module
+                self.checks.${system}.korri-sessiond-module
                 self.checks.${system}.korri-server-module
                 self.checks.${system}.korri-module-identity-audit
                 self.checks.${system}.korri-sunshine-runtime-bitrate-patch
@@ -684,6 +697,10 @@
                 }
                 {
                   name = "korri-game-stream-module";
+                  owner = "module";
+                }
+                {
+                  name = "korri-sessiond-module";
                   owner = "module";
                 }
                 {
@@ -948,6 +965,7 @@
           korri-client = import ./nix/modules/korri-client.nix { korri = self; };
           korri-cli = import ./nix/modules/korri-cli.nix { korri = self; };
           korri-game-stream = import ./nix/modules/korri-game-stream.nix { korri = self; };
+          korri-sessiond = import ./nix/modules/korri-sessiond.nix { korri = self; };
           # Per-role input module: provider + inputd peer sub-trees.
           korri-input = import ./nix/modules/korri-input.nix { korri = self; };
           # Per-role compositor module. Bundles the Korri client install so the
