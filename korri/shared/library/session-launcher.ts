@@ -11,7 +11,12 @@ import {
   decodeSessiondManagedLaunchEvent,
   decodeSessiondManagedLaunchStartResponse,
   decodeSessiondManagedLaunchStatus,
+  isLaunchReadyMode,
+  isTerminalReadinessEvent,
+  READINESS_GATE_BY_EVENT,
+  type ReadinessGate,
   type SessiondManagedLaunchEvent,
+  type TerminalReadinessEventType,
 } from "./sessiond-managed-launch-protocol"
 
 export interface SessionLauncherOptions {
@@ -140,10 +145,10 @@ export async function spawnViaSessiond(
       "sessiond managed launch unsupported by daemon capability status",
     )
   }
-  if (status.mode !== "home") {
+  if (!isLaunchReadyMode(status.mode)) {
     return failedManagedLaunch(
       "session-busy",
-      `sessiond is ${status.mode}; launch requires home`,
+      `sessiond is ${status.mode}; launch requires home or idle`,
     )
   }
 
@@ -373,10 +378,10 @@ function observeManagedLaunchEvents(options: {
           startReadinessTimeout()
         }
       }
-      if (event.type === "home-ready" && !resultSettled) {
+      if (isTerminalReadinessEvent(event.type) && !resultSettled) {
         resultSettled = true
         clearReadinessTimeout()
-        resolveReady(readinessOk())
+        resolveReady(readinessOk(event.type))
         resolveResult(terminalResult ?? { status: "launched" })
       }
       if (
@@ -506,15 +511,24 @@ type SessiondObservedReadiness =
   | ReturnType<typeof readinessOk>
   | ReturnType<typeof readinessFailed>
 
-function readinessOk() {
-  return { status: "ok" as const, evidence: { gate: "sessiond-home-ready" } }
+function readinessGate(
+  eventType: TerminalReadinessEventType = "home-ready",
+): ReadinessGate {
+  return READINESS_GATE_BY_EVENT[eventType]
+}
+
+function readinessOk(eventType?: TerminalReadinessEventType) {
+  return {
+    status: "ok" as const,
+    evidence: { gate: readinessGate(eventType) },
+  }
 }
 
 function readinessFailed(message: string) {
   return {
     status: "failed" as const,
     message,
-    evidence: { gate: "sessiond-home-ready" },
+    evidence: { gate: readinessGate() },
   }
 }
 

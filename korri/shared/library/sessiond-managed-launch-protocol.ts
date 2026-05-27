@@ -13,6 +13,7 @@ export const SessiondManagedLaunchMode = Schema.Literals([
   "stopped",
   "starting",
   "home",
+  "idle",
   "launching",
   "game",
   "restoring",
@@ -81,6 +82,7 @@ export const SessiondManagedLaunchEventType = Schema.Literals([
   "child-exited",
   "restoring",
   "home-ready",
+  "idle-ready",
   "failed",
   "recovering",
   "terminated",
@@ -192,3 +194,36 @@ export const decodeSessiondManagedLaunchTerminateResponse = (
     input,
     STRICT_DECODE,
   )
+
+export const TERMINAL_READINESS_EVENT_TYPES = [
+  "home-ready",
+  "idle-ready",
+] as const satisfies ReadonlyArray<SessiondManagedLaunchEventType>
+
+export type TerminalReadinessEventType =
+  (typeof TERMINAL_READINESS_EVENT_TYPES)[number]
+
+export const isTerminalReadinessEvent = (
+  type: SessiondManagedLaunchEventType,
+): type is TerminalReadinessEventType =>
+  (TERMINAL_READINESS_EVENT_TYPES as ReadonlyArray<string>).includes(type)
+
+export const LAUNCH_READY_MODES = [
+  "home",
+  "idle",
+] as const satisfies ReadonlyArray<SessiondManagedLaunchMode>
+
+export type LaunchReadyMode = (typeof LAUNCH_READY_MODES)[number]
+
+export const isLaunchReadyMode = (
+  mode: SessiondManagedLaunchMode,
+): mode is LaunchReadyMode =>
+  (LAUNCH_READY_MODES as ReadonlyArray<string>).includes(mode)
+
+export const READINESS_GATE_BY_EVENT = {
+  "home-ready": "sessiond-home-ready",
+  "idle-ready": "sessiond-idle-ready",
+} as const satisfies Record<TerminalReadinessEventType, string>
+
+export type ReadinessGate =
+  (typeof READINESS_GATE_BY_EVENT)[TerminalReadinessEventType]

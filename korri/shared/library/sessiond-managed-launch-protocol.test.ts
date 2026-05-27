@@ -163,4 +163,125 @@ describe("sessiond managed launch protocol", () => {
     )
     expect(encoded).toEqual(input)
   })
+
+  it("decodes idle-ready as a terminal lifecycle event peer to home-ready", () => {
+    const event = decodeSessiondManagedLaunchEvent({
+      schemaVersion: 1,
+      sequence: 5,
+      launchId: "launch-1",
+      type: "idle-ready",
+      at: "2026-05-27T00:00:00.000Z",
+      readiness: { status: "ok", evidence: "idle-blank-satisfied" },
+    })
+
+    expect(event.type).toBe("idle-ready")
+    expect(event.readiness?.status).toBe("ok")
+  })
+
+  it("decodes status payloads carrying the idle mode literal", () => {
+    const status = decodeSessiondManagedLaunchStatus({
+      schemaVersion: 1,
+      mode: "idle",
+      capabilities: {
+        managedLaunch: true,
+        lifecycleEvents: true,
+        perLaunchTermination: true,
+      },
+      restoreAttempts: 0,
+    })
+
+    expect(status.mode).toBe("idle")
+  })
+
+  it("still decodes the Phase 4B kiosk payload unchanged (home + home-ready + renderer-stopped)", () => {
+    const status = decodeSessiondManagedLaunchStatus({
+      schemaVersion: 1,
+      mode: "home",
+      capabilities: {
+        managedLaunch: true,
+        lifecycleEvents: true,
+        perLaunchTermination: true,
+      },
+      active: { launchId: "launch-1", mode: "home" },
+      restoreAttempts: 0,
+    })
+    expect(status.mode).toBe("home")
+
+    const homeReady = decodeSessiondManagedLaunchEvent({
+      schemaVersion: 1,
+      sequence: 7,
+      launchId: "launch-1",
+      type: "home-ready",
+      at: "2026-05-26T00:00:00.000Z",
+      readiness: { status: "ok" },
+    })
+    const rendererStopped = decodeSessiondManagedLaunchEvent({
+      schemaVersion: 1,
+      sequence: 8,
+      launchId: "launch-1",
+      type: "renderer-stopped",
+      at: "2026-05-26T00:00:00.001Z",
+    })
+    expect(homeReady.type).toBe("home-ready")
+    expect(rendererStopped.type).toBe("renderer-stopped")
+  })
+
+  it("accepts a source-machine-shaped lifecycle (no renderer-stopped, idle-ready terminal)", () => {
+    const events = [
+      {
+        schemaVersion: 1,
+        sequence: 1,
+        launchId: "launch-1",
+        type: "launch-accepted",
+        at: "2026-05-27T00:00:00.000Z",
+      },
+      {
+        schemaVersion: 1,
+        sequence: 2,
+        launchId: "launch-1",
+        type: "child-running",
+        at: "2026-05-27T00:00:00.100Z",
+      },
+      {
+        schemaVersion: 1,
+        sequence: 3,
+        launchId: "launch-1",
+        type: "child-exited",
+        at: "2026-05-27T00:00:00.500Z",
+        terminal: { exitCode: 0 },
+      },
+      {
+        schemaVersion: 1,
+        sequence: 4,
+        launchId: "launch-1",
+        type: "idle-ready",
+        at: "2026-05-27T00:00:00.900Z",
+        readiness: { status: "ok", evidence: "idle-blank-satisfied" },
+      },
+    ]
+
+    const decoded = events.map(decodeSessiondManagedLaunchEvent)
+    expect(decoded.map(e => e.type)).toEqual([
+      "launch-accepted",
+      "child-running",
+      "child-exited",
+      "idle-ready",
+    ])
+    expect(decoded.some(e => e.type === "renderer-stopped")).toBe(false)
+  })
+
+  it("rejects unknown mode literals with strict decode", () => {
+    expect(() =>
+      decodeSessiondManagedLaunchStatus({
+        schemaVersion: 1,
+        mode: "not-a-mode",
+        capabilities: {
+          managedLaunch: true,
+          lifecycleEvents: true,
+          perLaunchTermination: true,
+        },
+        restoreAttempts: 0,
+      }),
+    ).toThrow()
+  })
 })

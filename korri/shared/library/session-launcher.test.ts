@@ -604,10 +604,142 @@ describe("session launcher", () => {
       force: true,
     })
   })
+
+  it("resolves managed readiness on idle-ready with the source-machine gate string", async () => {
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async input => {
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(managedStatus({ mode: "idle" }))
+        }
+        if (url.pathname === "/managed-launch") {
+          return Response.json({ status: "accepted", launchId: "launch-1" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          return eventStream([
+            event({ sequence: 1, launchId: "launch-1", type: "child-running" }),
+            event({
+              sequence: 2,
+              launchId: "launch-1",
+              type: "child-exited",
+              terminal: { exitCode: 0 },
+            }),
+            event({
+              sequence: 3,
+              launchId: "launch-1",
+              type: "idle-ready",
+              readiness: { status: "ok", evidence: "idle-blank-satisfied" },
+            }),
+          ])
+        }
+        throw new Error(`unexpected request: ${input}`)
+      },
+    })
+
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("session launcher missing managed spawn")
+    const result = await spawn(spec)
+    if (result.status !== "started") throw new Error("expected started")
+
+    expect(await result.session.exited).toEqual({ exitCode: 0 })
+    expect(await result.result).toEqual({ status: "launched" })
+    const ready = await result.session.ready
+    if (!ready) throw new Error("expected readiness signal")
+    expect(ready.status).toBe("ok")
+    expect(ready.evidence).toEqual({ gate: "sessiond-idle-ready" })
+  })
+
+  it("preflight accepts mode: 'idle' without returning session-busy", async () => {
+    const requests: string[] = []
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async input => {
+        const url = new URL(input)
+        requests.push(url.pathname)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(managedStatus({ mode: "idle" }))
+        }
+        if (url.pathname === "/managed-launch") {
+          return Response.json({ status: "accepted", launchId: "launch-2" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          return eventStream([
+            event({
+              sequence: 1,
+              launchId: "launch-2",
+              type: "child-exited",
+              terminal: { exitCode: 0 },
+            }),
+            event({
+              sequence: 2,
+              launchId: "launch-2",
+              type: "idle-ready",
+              readiness: { status: "ok" },
+            }),
+          ])
+        }
+        throw new Error(`unexpected request: ${input}`)
+      },
+    })
+
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("session launcher missing managed spawn")
+    const result = await spawn(spec)
+
+    expect(result.status).toBe("started")
+    expect(requests).toContain("/managed-launch")
+    expect(requests).toContain("/managed-launch/events")
+  })
+
+  it("still resolves managed readiness on home-ready (Phase 4B kiosk shape unchanged)", async () => {
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async input => {
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(managedStatus({ mode: "home" }))
+        }
+        if (url.pathname === "/managed-launch") {
+          return Response.json({ status: "accepted", launchId: "launch-3" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          return eventStream([
+            event({
+              sequence: 1,
+              launchId: "launch-3",
+              type: "child-exited",
+              terminal: { exitCode: 0 },
+            }),
+            event({
+              sequence: 2,
+              launchId: "launch-3",
+              type: "home-ready",
+              readiness: { status: "ok" },
+            }),
+          ])
+        }
+        throw new Error(`unexpected request: ${input}`)
+      },
+    })
+
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("session launcher missing managed spawn")
+    const result = await spawn(spec)
+    if (result.status !== "started") throw new Error("expected started")
+
+    const ready = await result.session.ready
+    if (!ready) throw new Error("expected readiness signal")
+    expect(ready.status).toBe("ok")
+    expect(ready.evidence).toEqual({ gate: "sessiond-home-ready" })
+  })
 })
 
 function managedStatus(options: {
-  readonly mode: "home" | "game" | "launching"
+  readonly mode: "home" | "idle" | "game" | "launching"
   readonly capabilities?: {
     readonly managedLaunch: boolean
     readonly lifecycleEvents: boolean
