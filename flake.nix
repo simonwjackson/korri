@@ -8,6 +8,21 @@
     bun2nix.url = "github:nix-community/bun2nix?ref=2.1.0";
     bun2nix.inputs.nixpkgs.follows = "nixpkgs";
     nix-on-rocks.url = "github:simonwjackson/nix-on-rocks/main";
+
+    # PICO-8 libretro core. Pinned to the same commit ROCKNIX ships in its
+    # `fake08-lr` package (commit 0d26fd59, 2024-09-02), which is the most
+    # recent revision known to build the libretro target on a modern gcc.
+    # The v0.0.2.20 tag (2023) predates upstream's `<cstdint>` include
+    # fixes and fails to compile on gcc 13+ with errors like
+    # `'uint8_t' does not name a type`. Bump via
+    # `nix flake update fake-08-src` and verify the closure-shape check
+    # still passes.
+    #
+    # `submodules=1` is required: the libretro Makefile reads sources from
+    # the in-tree `libs/z8lua` submodule, which the default tarball fetch
+    # would omit and the build would fail at `libs/z8lua/eris.o`.
+    fake-08-src.url = "git+https://github.com/jtothebell/fake-08?rev=0d26fd59103941e5f95e0ee665c6e0fb8c6b6f03&submodules=1";
+    fake-08-src.flake = false;
   };
 
   # Pull the prebuilt bun2nix (Rust CLI + Zig cache-entry-creator) from the
@@ -30,13 +45,14 @@
       flake-utils,
       bun2nix,
       nix-on-rocks,
+      fake-08-src,
       ...
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
         korriPackagesOverlay = import ./nix/overlays/korri-packages.nix {
-          inherit nix-on-rocks;
+          inherit nix-on-rocks fake-08-src;
         };
 
         pkgs = import nixpkgs {
@@ -392,6 +408,8 @@
           overlays = [ korriPackagesOverlay ];
         };
 
+        libretroFake08 = pkgs.libretro-fake-08;
+
         # The named outputs match the overlay-substituted `pkgs.sunshine` and
         # `pkgs.moonlight-embedded` so downstream consumers can ask for either
         # name and get the same derivation.
@@ -439,6 +457,7 @@
           korri-headless-source = korriHeadlessSource;
           sunshine-korri = sunshineKorri;
           moonlight-embedded-korri = moonlightEmbeddedKorri;
+          libretro-fake-08 = libretroFake08;
         }
         // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
           electrobun-cli = electrobunBinaries.cli;
@@ -586,6 +605,10 @@
                   readmePath = ./packages/moonlight-embedded-korri/README.md;
                   moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
                 };
+            libretro-fake-08-check = import ./packages/libretro-fake-08/check.nix {
+              inherit pkgs;
+              libretroFake08Package = self.packages.${system}.libretro-fake-08;
+            };
           }
           // pkgs.lib.optionalAttrs isX86Linux {
             korri-rocknix-sm8550-config = import ./nix/tests/korri-rocknix-sm8550-config-check.nix {
@@ -639,6 +662,7 @@
                 self.checks.${system}.korri-module-identity-audit
                 self.checks.${system}.korri-sunshine-runtime-bitrate-patch
                 self.checks.${system}.korri-moonlight-control-protocol-patch
+                self.checks.${system}.libretro-fake-08-check
                 self.checks.${system}.korri-desktop-build-graph
                 self.checks.${system}.korri-package-outputs
                 self.checks.${system}.korri-image-outputs
@@ -676,6 +700,10 @@
                 }
                 {
                   name = "korri-moonlight-control-protocol-patch";
+                  owner = "package-output";
+                }
+                {
+                  name = "libretro-fake-08-check";
                   owner = "package-output";
                 }
                 {
@@ -845,7 +873,7 @@
           nixpkgs = nix-on-rocks.inputs.nixpkgs;
           system = rocknixTargetSystem;
           overlays = [
-            (import ./nix/overlays/korri-packages.nix { inherit nix-on-rocks; })
+            (import ./nix/overlays/korri-packages.nix { inherit nix-on-rocks fake-08-src; })
           ];
         };
         rocknixPlatformFor =
@@ -880,7 +908,7 @@
         # / nix-on-rocks moonlight-embedded.
         overlays = rec {
           korri-packages = import ./nix/overlays/korri-packages.nix {
-            inherit nix-on-rocks;
+            inherit nix-on-rocks fake-08-src;
           };
           default = korri-packages;
         };
@@ -905,7 +933,7 @@
           # graph rather than through `pkgs` itself.
           korri-nixpkgs-overlay = import ./nix/modules/korri-nixpkgs-overlay.nix {
             overlay = import ./nix/overlays/korri-packages.nix {
-              inherit nix-on-rocks;
+              inherit nix-on-rocks fake-08-src;
             };
           };
 

@@ -24,6 +24,25 @@
         "type": "github"
       }
     },
+    "fake-08-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1725315955,
+        "narHash": "sha256-iKOw3mz4MZYGPi3pVvumOzCwSdhcOKhcZ7kesKgVrX8=",
+        "ref": "refs/heads/master",
+        "rev": "0d26fd59103941e5f95e0ee665c6e0fb8c6b6f03",
+        "revCount": 903,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/jtothebell/fake-08"
+      },
+      "original": {
+        "rev": "0d26fd59103941e5f95e0ee665c6e0fb8c6b6f03",
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/jtothebell/fake-08"
+      }
+    },
     "flake-parts": {
       "inputs": {
         "nixpkgs-lib": [
@@ -69,11 +88,11 @@
         "nixpkgs-sdl2-classic": "nixpkgs-sdl2-classic"
       },
       "locked": {
-        "lastModified": 1779818821,
-        "narHash": "sha256-Y9wP+Eaidj9zhjD+WerdtJJYPJYTmKRh1ojo8O/apFM=",
+        "lastModified": 1779828402,
+        "narHash": "sha256-v5T8oal3hofEvTEva7Q+c05vc6h4f607g/lAtkbxTik=",
         "owner": "simonwjackson",
         "repo": "nix-on-rocks",
-        "rev": "fb2518336b1b28d1e6bfffbdc5e3c9d03a43fd76",
+        "rev": "efc66d30355868f04307ea7fed26fe61db629d23",
         "type": "github"
       },
       "original": {
@@ -133,11 +152,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1777270315,
-        "narHash": "sha256-yKB4G6cKsQsWN7M6rZGk6gkJPDNPIzT05y4qzRyCDlI=",
+        "lastModified": 1779694939,
+        "narHash": "sha256-Ly4j75O8ICaSQx3uxPnwk2x7PMF0XQvn5r0c3yBA7FI=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "6368eda62c9775c38ef7f714b2555a741c20c72d",
+        "rev": "f9d8b65950353691ab56561e7c73d2e1063d810b",
         "type": "github"
       },
       "original": {
@@ -150,6 +169,7 @@
     "root": {
       "inputs": {
         "bun2nix": "bun2nix",
+        "fake-08-src": "fake-08-src",
         "flake-utils": "flake-utils",
         "nix-on-rocks": "nix-on-rocks",
         "nixpkgs": "nixpkgs_2",
