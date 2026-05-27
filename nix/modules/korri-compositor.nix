@@ -92,7 +92,7 @@ let
       fi
 
       command_string="$(printf '%q ' "$@")"
-      exec swaymsg -s "$sway_socket" exec -- "$command_string"
+      exec swaymsg -s "$sway_socket" -- exec "$command_string"
     '';
   };
 
@@ -512,7 +512,13 @@ in
         requires = sessionBusServices;
         after = cfg.after ++ inputdServices ++ providerOrderingServices ++ sessionBusServices;
         environment = sessionEnvironment;
-        path = [ cfg.exec.package ] ++ cfg.path ++ [ cfg.sway.package ] ++ cfg.sway.extraPackages;
+        path = [
+          cfg.exec.package
+          pkgs.bashInteractive
+        ]
+        ++ cfg.path
+        ++ [ cfg.sway.package ]
+        ++ cfg.sway.extraPackages;
         unitConfig = {
           StartLimitBurst = 5;
           StartLimitIntervalSec = 60;

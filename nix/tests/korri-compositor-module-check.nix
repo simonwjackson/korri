@@ -306,6 +306,11 @@ let
         (compositorUnit headlessCompositor).path or [ ]
       )
     ))
+    (check "headless compositor: exposes sh on the session PATH for sway exec" (
+      builtins.any (path: lib.hasInfix "bash-interactive" (toString path)) (
+        (compositorUnit headlessCompositor).path or [ ]
+      )
+    ))
 
     # ---- compositor with kiosk surface (Sobo / live-USB shape)
     (check "compositor+kiosk: NixOS assertions pass" (korriFailedAssertions compositorWithKiosk == [ ]))
