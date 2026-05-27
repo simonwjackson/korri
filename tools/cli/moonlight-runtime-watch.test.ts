@@ -111,6 +111,48 @@ describe("moonlight-runtime-watch cli", () => {
     })
   })
 
+  it("correlates command events with the native command id rather than the JSON-RPC id", async () => {
+    await withRuntimeWatchSocket(
+      async ({ socketPath }) => {
+        const artifacts = new Map<string, string>()
+        const exitCode = await runMoonlightRuntimeWatchCommand(
+          [
+            "set-bitrate",
+            "--bitrate-kbps",
+            "45000",
+            "--socket",
+            socketPath,
+            "--artifact",
+            "/tmp/native-id.json",
+            "--timeout-ms",
+            "200",
+          ],
+          {
+            write: () => undefined,
+            writeArtifact: async (path, content) => {
+              artifacts.set(path, content)
+            },
+            createRunId: () => "run-native-id",
+            now: () => new Date("2026-05-26T00:00:00.000Z"),
+          },
+        )
+
+        expect(exitCode).toBe(0)
+        const artifact = decodeMoonlightRuntimeWatchArtifact(
+          JSON.parse(artifacts.get("/tmp/native-id.json") ?? "{}"),
+        )
+        expect(artifact.commandResponse).toMatchObject({ requestId: 100001 })
+        expect(artifact.observedEvents).toContainEqual(
+          expect.objectContaining({
+            event: expect.objectContaining({ requestId: 100001 }),
+          }),
+        )
+        expect(artifact.terminal.result).toBe("applied")
+      },
+      { bitrateCommandId: 100001 },
+    )
+  })
+
   it("watches an FPS mutation until a correlated applied event arrives", async () => {
     await withRuntimeWatchSocket(async ({ socketPath, requests }) => {
       const artifacts = new Map<string, string>()
@@ -323,6 +365,8 @@ async function withRuntimeWatchSocket(
     readonly commands?: readonly string[]
     readonly emitCommandResult?: boolean
     readonly commandStatus?: string
+    readonly bitrateCommandId?: string | number
+    readonly fpsCommandId?: string | number
   } = {},
 ): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), "korri-runtime-watch-test-"))
@@ -350,21 +394,23 @@ async function withRuntimeWatchSocket(
             `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "events.subscribed", seq: 0 } })}\n`,
           )
         } else if (request.method === "runtime.setBitrate") {
+          const commandId = behavior.bitrateCommandId ?? "cmd-bitrate"
           socket.write(
-            `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "command.accepted", requestId: "cmd-bitrate", command: "runtime.setBitrate" } })}\n`,
+            `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "command.accepted", requestId: commandId, command: "runtime.setBitrate" } })}\n`,
           )
           if (behavior.emitCommandResult !== false) {
             socket.write(
-              `${JSON.stringify(commandResultEvent("cmd-bitrate", "runtime.setBitrate", behavior.commandStatus ?? "applied"))}\n`,
+              `${JSON.stringify(commandResultEvent(commandId, "runtime.setBitrate", behavior.commandStatus ?? "applied"))}\n`,
             )
           }
         } else if (request.method === "runtime.setFps") {
+          const commandId = behavior.fpsCommandId ?? "cmd-fps"
           socket.write(
-            `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "command.accepted", requestId: "cmd-fps", command: "runtime.setFps" } })}\n`,
+            `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "command.accepted", requestId: commandId, command: "runtime.setFps" } })}\n`,
           )
           if (behavior.emitCommandResult !== false) {
             socket.write(
-              `${JSON.stringify(commandResultEvent("cmd-fps", "runtime.setFps", behavior.commandStatus ?? "applied"))}\n`,
+              `${JSON.stringify(commandResultEvent(commandId, "runtime.setFps", behavior.commandStatus ?? "applied"))}\n`,
             )
           }
         }
@@ -427,7 +473,7 @@ function stateResponse(id: string) {
 }
 
 function commandResultEvent(
-  requestId: string,
+  requestId: string | number,
   command: string,
   status: string,
 ) {
