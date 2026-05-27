@@ -339,6 +339,110 @@ describe("session launcher", () => {
     })
   })
 
+  it("resolves host-unavailable when event stream request is rejected", async () => {
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async input => {
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(managedStatus({ mode: "home" }))
+        }
+        if (url.pathname === "/managed-launch") {
+          return Response.json({ status: "accepted", launchId: "launch-1" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          return new Response(null, { status: 500 })
+        }
+        throw new Error(`unexpected request: ${input}`)
+      },
+    })
+
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("session launcher missing managed spawn")
+    const result = await spawn(spec)
+    if (result.status !== "started") throw new Error("expected started")
+
+    expect(await result.session.ready).toMatchObject({
+      status: "failed",
+      message: "sessiond event stream rejected: 500",
+    })
+    expect(await result.result).toMatchObject({
+      status: "failed",
+      failureKind: "host-unavailable",
+    })
+  })
+
+  it("resolves host-unavailable when event stream subscription throws", async () => {
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async input => {
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(managedStatus({ mode: "home" }))
+        }
+        if (url.pathname === "/managed-launch") {
+          return Response.json({ status: "accepted", launchId: "launch-1" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          throw new Error("network down")
+        }
+        throw new Error(`unexpected request: ${input}`)
+      },
+    })
+
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("session launcher missing managed spawn")
+    const result = await spawn(spec)
+    if (result.status !== "started") throw new Error("expected started")
+
+    expect(await result.result).toMatchObject({
+      status: "failed",
+      failureKind: "host-unavailable",
+      stderrTail: expect.stringContaining("network down"),
+    })
+  })
+
+  it("resolves host-unavailable when readiness times out after child exit", async () => {
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      requestTimeoutMs: 20,
+      fetchImpl: async input => {
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(managedStatus({ mode: "home" }))
+        }
+        if (url.pathname === "/managed-launch") {
+          return Response.json({ status: "accepted", launchId: "launch-1" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          return openEventStream([
+            event({
+              sequence: 1,
+              launchId: "launch-1",
+              type: "child-exited",
+              terminal: { exitCode: 0 },
+            }),
+          ])
+        }
+        throw new Error(`unexpected request: ${input}`)
+      },
+    })
+
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("session launcher missing managed spawn")
+    const result = await spawn(spec)
+    if (result.status !== "started") throw new Error("expected started")
+
+    expect(await result.result).toMatchObject({
+      status: "failed",
+      failureKind: "host-unavailable",
+      stderrTail: "sessiond event stream timed out before readiness",
+    })
+  })
+
   it("resolves host-unavailable when event stream ends before readiness", async () => {
     const launcher = createSessionLauncher({
       url: "http://127.0.0.1:3003",
@@ -533,6 +637,19 @@ function event(
 }
 
 function eventStream(events: readonly SessiondManagedLaunchEvent[]): Response {
+  return eventStreamResponse(events, true)
+}
+
+function openEventStream(
+  events: readonly SessiondManagedLaunchEvent[],
+): Response {
+  return eventStreamResponse(events, false)
+}
+
+function eventStreamResponse(
+  events: readonly SessiondManagedLaunchEvent[],
+  close: boolean,
+): Response {
   return new Response(
     new ReadableStream<Uint8Array>({
       start(controller) {
@@ -542,7 +659,7 @@ function eventStream(events: readonly SessiondManagedLaunchEvent[]): Response {
             encoder.encode(`data: ${JSON.stringify(item)}\n\n`),
           )
         }
-        if (events.length > 0) controller.close()
+        if (close) controller.close()
       },
     }),
   )
