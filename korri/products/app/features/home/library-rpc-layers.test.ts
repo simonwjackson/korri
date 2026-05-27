@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { Launcher, LibrarySource } from "@shared/library/library-services"
@@ -65,6 +65,33 @@ describe("RPC-backed library layers", () => {
       expect(result.stderrTail).toContain("-Psnes")
     }
   })
+
+  it("preserves typed launch failure kinds through the production RPC launcher", async () => {
+    await using server = await withRpcServer()
+    await using lib = await seedLibrary({ longRunning: true })
+    pointWindowAt(server.url)
+    configureLibraryEnv(lib)
+
+    const launch = () =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const launcher = yield* Launcher
+          return yield* launcher.run({ command: "snes/echo.smc", args: [] })
+        }).pipe(Effect.provide(LauncherLayerRpc)),
+      )
+
+    const first = launch()
+    await delay(50)
+
+    const second = await launch()
+
+    expect(second).toMatchObject({
+      status: "failed",
+      exitCode: 121,
+      failureKind: "session-busy",
+    })
+    expect(await first).toEqual({ status: "launched" })
+  })
 })
 
 type TempProseqlLibrary = {
@@ -73,10 +100,15 @@ type TempProseqlLibrary = {
   readonly [Symbol.asyncDispose]: () => Promise<void>
 }
 
-async function seedLibrary(): Promise<TempProseqlLibrary> {
+async function seedLibrary(
+  options: { readonly longRunning?: boolean } = {},
+): Promise<TempProseqlLibrary> {
   const root = await mkdtemp(join(tmpdir(), "korri-proseql-rpc-test-"))
   let success = false
   try {
+    const command = options.longRunning
+      ? await writeLongRunningGameScript(root)
+      : FAKE_GAME
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
@@ -95,7 +127,7 @@ async function seedLibrary(): Promise<TempProseqlLibrary> {
             },
             launcher: {
               id: "rocknix-retroarch",
-              command: FAKE_GAME,
+              command,
               args: [
                 "{contentPath}",
                 "-P{system}",
@@ -174,6 +206,20 @@ function configureLibraryEnv(lib: TempProseqlLibrary): void {
 function restoreEnv(): void {
   setOptionalEnv("KORRI_LIBRARY_ROOT", originalEnv.libraryRoot)
   setOptionalEnv("KORRI_FAKE_GAME_EXIT", originalEnv.launchExitEnvValue)
+}
+
+async function writeLongRunningGameScript(root: string): Promise<string> {
+  const script = join(root, "long-running-game.sh")
+  await writeFile(
+    script,
+    `#!/usr/bin/env bash\necho "long-running game launched" 1>&2\nsleep 0.2\nexit 0\n`,
+  )
+  await chmod(script, 0o755)
+  return script
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 function setOptionalEnv(key: string, value: string | undefined): void {
