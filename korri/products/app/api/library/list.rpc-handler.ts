@@ -37,12 +37,10 @@ import {
  * Returns the full library from whatever LibrarySource is provided by
  * the host (proseql, manual, etc.).
  *
- * The legacy `KORRI_HEADLESS_SOURCE_ONLY` gate that used to reject this
- * RPC has been retired: the desktop-as-server-client refactor exposes
- * `app.library.list` from the unified server RPC group, so a deployment
- * that runs the server is meant to BE the library. Source-only deploys
- * still expose `app.source.list` separately, but they're no longer
- * special-cased here.
+ * Federation v1: every library-bearing korri-server returns the union
+ * of local entries plus each LAN peer's source catalog (see U4 fan-out).
+ * Source-only vs full-library is no longer an env-gated distinction
+ * — it's structural via the `source` tag on every entry.
  */
 export const handleListLibrary = (_payload: typeof ListLibraryPayload.Type) =>
   Effect.gen(function* () {

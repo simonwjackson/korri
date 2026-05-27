@@ -158,7 +158,7 @@ let
     KORRI_STREAM_ADVERTISE_PORT = toString cfg.port;
     KORRI_STREAM_ADVERTISE_CAPABILITIES = lib.concatStringsSep "," cfg.advertise.capabilities;
     KORRI_STREAM_CONTROL_ENABLED = if cfg.streamControl.enable then "1" else "0";
-    KORRI_HEADLESS_SOURCE_ONLY = if cfg.sourceOnly then "1" else "0";
+    # KORRI_HEADLESS_SOURCE_ONLY retired in federation v1 (R14).
     KORRI_LIBRARY_SOURCE = cfg.library.source;
     KORRI_LIBRARY_ROOT = cfg.library.root;
     KORRI_GAME_STREAM_RUNTIME_DIR = runtimeDir;
@@ -318,12 +318,6 @@ in
         default = false;
         description = "Enable known-game stream prepare RPCs. Keep disabled unless the host is intentionally exposed on a trusted LAN/VPN.";
       };
-    };
-
-    sourceOnly = mkOption {
-      type = types.bool;
-      default = true;
-      description = "Use the reduced source/server RPC contract instead of exposing app-local full library RPCs.";
     };
 
     openFirewall = mkOption {

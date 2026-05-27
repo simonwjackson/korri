@@ -8,14 +8,12 @@ import { handleListSource } from "./list.rpc-handler"
 const originalEnv = {
   libraryRoot: process.env.KORRI_LIBRARY_ROOT,
   streamControl: process.env.KORRI_STREAM_CONTROL_ENABLED,
-  headlessSourceOnly: process.env.KORRI_HEADLESS_SOURCE_ONLY,
 }
 const cleanups: Array<() => Promise<void>> = []
 
 afterEach(async () => {
   setOptionalEnv("KORRI_LIBRARY_ROOT", originalEnv.libraryRoot)
   setOptionalEnv("KORRI_STREAM_CONTROL_ENABLED", originalEnv.streamControl)
-  setOptionalEnv("KORRI_HEADLESS_SOURCE_ONLY", originalEnv.headlessSourceOnly)
   while (cleanups.length > 0) {
     const cleanup = cleanups.pop()
     if (cleanup) await cleanup()
@@ -60,12 +58,6 @@ describe("app.source.list handler", () => {
     delete process.env.KORRI_STREAM_ADVERTISE_HOST_ID
   })
 
-  // The legacy `KORRI_HEADLESS_SOURCE_ONLY` gate on `app.library.list` was
-  // removed in commit 952766d when the desktop refactor codified the
-  // server as the library: `app.library.list` and `app.source.list` are
-  // peers on the same RPC group, with no env var rejecting either. The
-  // test that previously asserted the gate has been deleted with the gate.
-
   it("integration: app.source.list is registered on appRpcGroup", () => {
     const tags = Array.from(appRpcGroup.requests.keys())
     expect(tags).toContain("app.source.list")
@@ -101,7 +93,6 @@ async function setupLibrary(options: { readonly enabled: boolean }) {
   cleanups.push(library.cleanup)
   process.env.KORRI_LIBRARY_ROOT = library.root
   process.env.KORRI_STREAM_CONTROL_ENABLED = options.enabled ? "1" : "0"
-  delete process.env.KORRI_HEADLESS_SOURCE_ONLY
 }
 
 function setOptionalEnv(key: string, value: string | undefined): void {

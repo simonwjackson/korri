@@ -20,7 +20,6 @@ const originalEnv = {
   intentPath: process.env.KORRI_GAME_STREAM_INTENT_PATH,
   streamControl: process.env.KORRI_STREAM_CONTROL_ENABLED,
   runtimeDir: process.env.XDG_RUNTIME_DIR,
-  headlessSourceOnly: process.env.KORRI_HEADLESS_SOURCE_ONLY,
 }
 const cleanups: Array<() => Promise<void>> = []
 
@@ -30,7 +29,6 @@ afterEach(async () => {
   setOptionalEnv("KORRI_GAME_STREAM_INTENT_PATH", originalEnv.intentPath)
   setOptionalEnv("KORRI_STREAM_CONTROL_ENABLED", originalEnv.streamControl)
   setOptionalEnv("XDG_RUNTIME_DIR", originalEnv.runtimeDir)
-  setOptionalEnv("KORRI_HEADLESS_SOURCE_ONLY", originalEnv.headlessSourceOnly)
   while (cleanups.length > 0) {
     const cleanup = cleanups.pop()
     if (cleanup) await cleanup()
@@ -125,7 +123,6 @@ async function setupRemoteLibrary(options: { readonly enabled: boolean }) {
   )
   process.env.KORRI_STREAM_CONTROL_ENABLED = options.enabled ? "1" : "0"
   delete process.env.XDG_RUNTIME_DIR
-  delete process.env.KORRI_HEADLESS_SOURCE_ONLY
 
   return { intentPath: process.env.KORRI_GAME_STREAM_INTENT_PATH }
 }
