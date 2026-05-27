@@ -2,12 +2,15 @@ import {
   launchFailureExitCode,
   type LaunchResult,
   type LaunchSpec,
+  type ManagedLaunchResult,
 } from "@shared/library/launcher"
 import {
   decodeSessiondManagedLaunchStartRequest,
+  decodeSessiondManagedLaunchTerminateRequest,
   type SessiondManagedLaunchEvent,
   type SessiondManagedLaunchStartResponse,
   type SessiondManagedLaunchStatus,
+  type SessiondManagedLaunchTerminateResponse,
 } from "@shared/library/sessiond-managed-launch-protocol"
 import { createShellLauncher } from "@shared/library/shell-launcher"
 import { logger as defaultLogger } from "@shared/logger"
@@ -55,6 +58,7 @@ export interface KorriSessiondServiceManager {
 
 export interface KorriSessiondLauncher {
   run: (spec: LaunchSpec) => Promise<LaunchResult>
+  spawn?: (spec: LaunchSpec) => Promise<ManagedLaunchResult>
 }
 
 export interface KorriSessiondOptions {
@@ -106,6 +110,13 @@ export function createKorriSessiondCore(
     readonly controller: ReadableStreamDefaultController<Uint8Array>
   }>()
   const managedLaunchResults = new Map<string, Promise<LaunchResult>>()
+  let activeManagedChild:
+    | {
+        readonly launchId: string
+        readonly terminate: () => void
+        readonly terminateNow: () => void
+      }
+    | undefined
 
   function status(): KorriSessiondStatus {
     return {
@@ -122,7 +133,7 @@ export function createKorriSessiondCore(
       capabilities: {
         managedLaunch: true,
         lifecycleEvents: true,
-        perLaunchTermination: false,
+        perLaunchTermination: typeof launcher.spawn === "function",
       },
       ...(active ? { active } : {}),
       ...(state.failureReason ? { failureReason: state.failureReason } : {}),
@@ -222,9 +233,33 @@ export function createKorriSessiondCore(
     rendererPid = undefined
     pushLifecycleEvent(launchId, { type: "renderer-stopped" })
     state = markKorriGameRunning(state)
-    pushLifecycleEvent(launchId, { type: "child-running" })
 
-    const result = await launcher.run(spec)
+    let result: LaunchResult
+    const spawn = launcher.spawn
+    if (spawn) {
+      const spawned = await spawn(spec)
+      if (spawned.status === "failed") {
+        result = spawned.result
+      } else {
+        activeManagedChild = {
+          launchId,
+          terminate: spawned.session.terminate,
+          terminateNow: spawned.session.terminateNow,
+        }
+        pushLifecycleEvent(launchId, { type: "child-running" })
+        try {
+          result = await spawned.result
+        } finally {
+          if (activeManagedChild?.launchId === launchId) {
+            activeManagedChild = undefined
+          }
+        }
+      }
+    } else {
+      pushLifecycleEvent(launchId, { type: "child-running" })
+      result = await launcher.run(spec)
+    }
+
     pushLifecycleEvent(launchId, {
       type: "child-exited",
       terminal:
@@ -272,6 +307,21 @@ export function createKorriSessiondCore(
       }
     }
     return await result
+  }
+
+  function terminateManagedLaunchById(
+    launchId: string,
+  ): SessiondManagedLaunchTerminateResponse {
+    if (activeManagedChild?.launchId !== launchId) {
+      return {
+        status: "not-found",
+        launchId,
+        message: "managed launch is not active",
+      }
+    }
+
+    activeManagedChild.terminate()
+    return { status: "accepted", launchId }
   }
 
   function lifecycleEventStream(launchId: string): Response {
@@ -355,6 +405,15 @@ export function createKorriSessiondCore(
             await request.json(),
           )
           return json(await startManagedLaunch(body.spec, body.launchId))
+        }
+        if (
+          request.method === "POST" &&
+          url.pathname === "/managed-launch/terminate"
+        ) {
+          const body = decodeSessiondManagedLaunchTerminateRequest(
+            await request.json(),
+          )
+          return json(terminateManagedLaunchById(body.launchId))
         }
         if (request.method === "POST" && url.pathname === "/launch") {
           const body = (await request.json()) as { readonly spec?: LaunchSpec }

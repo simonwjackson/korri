@@ -13,6 +13,11 @@ function startHarness(
     readonly launchResult?: LaunchResult
     readonly failRendererLaunch?: boolean
     readonly runLaunch?: (spec: LaunchSpec) => Promise<LaunchResult>
+    readonly spawnLaunch?: () => Promise<{
+      readonly result: Promise<LaunchResult>
+      readonly terminate: () => void
+      readonly terminateNow: () => void
+    }>
   } = {},
 ) {
   const events: string[] = []
@@ -59,6 +64,25 @@ function startHarness(
         if (options.runLaunch) return await options.runLaunch(receivedSpec)
         return options.launchResult ?? { status: "launched" }
       },
+      spawn: options.spawnLaunch
+        ? async receivedSpec => {
+            events.push(`launch-game:${receivedSpec.command}`)
+            const spawned = await options.spawnLaunch?.()
+            if (!spawned) throw new Error("missing spawned launch")
+            return {
+              status: "started" as const,
+              result: spawned.result,
+              session: {
+                id: "sessiond-child",
+                exited: spawned.result.then(result => ({
+                  exitCode: result.status === "launched" ? 0 : result.exitCode,
+                })),
+                terminate: spawned.terminate,
+                terminateNow: spawned.terminateNow,
+              },
+            }
+          }
+        : undefined,
     },
   })
   return { core, events }
@@ -282,6 +306,73 @@ describe("korri sessiond", () => {
     expect(body.state.mode).toBe("home")
   })
 
+  it("terminates only the active managed launch identity", async () => {
+    const control = deferred<LaunchResult>()
+    const { core, events } = startHarness({
+      spawnLaunch: async () => ({
+        result: control.promise,
+        terminate: () => {
+          events.push("terminate-game")
+          control.resolve({ status: "failed", exitCode: 143 })
+        },
+        terminateNow: () => {
+          events.push("terminate-game-now")
+          control.resolve({ status: "failed", exitCode: 137 })
+        },
+      }),
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-1", spec }),
+      }),
+    )
+
+    const response = await request(
+      core,
+      "/managed-launch/terminate",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-1" }),
+      }),
+    )
+    const body = await response.json()
+
+    expect(body).toEqual({ status: "accepted", launchId: "launch-1" })
+    expect(events).toContain("terminate-game")
+    await waitForSessionMode(core, "home")
+    expect(events).not.toContain("restore-es")
+  })
+
+  it("does not stop the kiosk for stale managed launch termination", async () => {
+    const { core, events } = startHarness()
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    const response = await request(
+      core,
+      "/managed-launch/terminate",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "stale-launch" }),
+      }),
+    )
+    const body = await response.json()
+
+    expect(body).toEqual({
+      status: "not-found",
+      launchId: "stale-launch",
+      message: "managed launch is not active",
+    })
+    expect(core.status().state.mode).toBe("home")
+    expect(events).not.toContain("restore-es")
+  })
+
   it("stops Korri mode by stopping Electrobun and restoring ES", async () => {
     const { core, events } = startHarness()
     await request(core, "/control/start", authorized({ method: "POST" }))
@@ -307,6 +398,17 @@ function deferred<T>() {
     reject = rejectPromise
   })
   return { promise, resolve, reject }
+}
+
+async function waitForSessionMode(
+  core: KorriSessiondCore,
+  mode: ReturnType<KorriSessiondCore["status"]>["state"]["mode"],
+) {
+  for (let index = 0; index < 20; index += 1) {
+    if (core.status().state.mode === mode) return
+    await Promise.resolve()
+  }
+  expect(core.status().state.mode).toBe(mode)
 }
 
 function parseSseEvents(text: string): readonly SessiondManagedLaunchEvent[] {
