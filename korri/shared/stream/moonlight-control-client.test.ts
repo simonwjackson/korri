@@ -45,6 +45,74 @@ describe("moonlight local control client", () => {
     )
   })
 
+  it("sends a bounded runtime bitrate command", async () => {
+    await withSocketServer(async ({ socketPath, writes }) => {
+      const client = await connectMoonlightControl({ socketPath })
+      try {
+        const response = await client.setBitrate({ bitrateKbps: 45000 })
+
+        expect(response.result).toEqual({
+          _tag: "command.accepted",
+          requestId: "cmd-1",
+          command: "runtime.setBitrate",
+        })
+        expect(JSON.parse(writes[0] ?? "{}")).toMatchObject({
+          method: "runtime.setBitrate",
+          params: { bitrateKbps: 45000 },
+        })
+      } finally {
+        client.close()
+      }
+    })
+  })
+
+  it("sends a bounded runtime FPS command while preserving interleaved events", async () => {
+    await withSocketServer(
+      async ({ socketPath, writes }) => {
+        const events: string[] = []
+        const client = await connectMoonlightControl({ socketPath })
+        try {
+          client.onEvent(delivery => events.push(delivery.event.name))
+          const response = await client.setFps({ fps: 90 })
+
+          expect(response.result).toEqual({
+            _tag: "command.accepted",
+            requestId: "cmd-2",
+            command: "runtime.setFps",
+          })
+          expect(events).toEqual(["quality.connection"])
+          expect(JSON.parse(writes[0] ?? "{}")).toMatchObject({
+            method: "runtime.setFps",
+            params: { fps: 90 },
+          })
+        } finally {
+          client.close()
+        }
+      },
+      { interleaveFpsEvent: true },
+    )
+  })
+
+  it("rejects JSON-RPC command errors as protocol errors", async () => {
+    await withSocketServer(
+      async ({ socketPath }) => {
+        const client = await connectMoonlightControl({ socketPath })
+        try {
+          await expect(client.setBitrate({ bitrateKbps: 45000 })).rejects.toEqual(
+            {
+              code: -32000,
+              message: "runtime commands unsupported",
+              data: { _tag: "unsupported" },
+            },
+          )
+        } finally {
+          client.close()
+        }
+      },
+      { rejectRuntimeCommands: true },
+    )
+  })
+
   it("reports sequence gaps and lets callers resnapshot", async () => {
     await withSocketServer(
       async ({ socketPath }) => {
@@ -95,6 +163,8 @@ async function withSocketServer(
   }) => Promise<void>,
   behavior: {
     readonly interleaveStateEvent?: boolean
+    readonly interleaveFpsEvent?: boolean
+    readonly rejectRuntimeCommands?: boolean
     readonly sequenceGap?: boolean
     readonly oversizedHello?: boolean
   } = {},
@@ -119,7 +189,24 @@ async function withSocketServer(
           )
           continue
         }
-        if (request.method === "protocol.hello") {
+        if (request.method === "runtime.setBitrate") {
+          if (behavior.rejectRuntimeCommands) {
+            socket.write(
+              `${JSON.stringify({ jsonrpc: "2.0", id: request.id, error: { code: -32000, message: "runtime commands unsupported", data: { _tag: "unsupported" } } })}\n`,
+            )
+            continue
+          }
+          socket.write(
+            `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "command.accepted", requestId: "cmd-1", command: "runtime.setBitrate" } })}\n`,
+          )
+        } else if (request.method === "runtime.setFps") {
+          if (behavior.interleaveFpsEvent) {
+            socket.write(`${JSON.stringify(eventFrame(1, "quality.connection"))}\n`)
+          }
+          socket.write(
+            `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "command.accepted", requestId: "cmd-2", command: "runtime.setFps" } })}\n`,
+          )
+        } else if (request.method === "protocol.hello") {
           socket.write(`${JSON.stringify(helloResponse(request.id))}\n`)
         } else if (request.method === "state.get") {
           if (behavior.interleaveStateEvent) {
@@ -130,7 +217,7 @@ async function withSocketServer(
           socket.write(`${JSON.stringify(stateResponse(request.id))}\n`)
         } else if (request.method === "events.subscribe") {
           socket.write(
-            `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "command.accepted", requestId: request.id, command: "runtime.requestIdr" } })}\n`,
+            `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "events.subscribed", seq: 0 } })}\n`,
           )
           socket.write(
             `${JSON.stringify(eventFrame(1, "lifecycle.streaming"))}\n`,

@@ -27,6 +27,12 @@ export interface MoonlightControlClient {
   readonly hello: () => Promise<MoonlightControlSuccessResponse>
   readonly state: () => Promise<MoonlightControlSuccessResponse>
   readonly subscribe: () => Promise<MoonlightControlSuccessResponse>
+  readonly setBitrate: (params: {
+    readonly bitrateKbps: number
+  }) => Promise<MoonlightControlSuccessResponse>
+  readonly setFps: (params: {
+    readonly fps: number
+  }) => Promise<MoonlightControlSuccessResponse>
   readonly onEvent: (
     listener: (delivery: MoonlightControlEventDelivery) => void,
   ) => () => void
@@ -94,6 +100,8 @@ function createMoonlightControlClient(
     hello: () => request("protocol.hello"),
     state: () => request("state.get"),
     subscribe: () => request("events.subscribe"),
+    setBitrate: params => request("runtime.setBitrate", params),
+    setFps: params => request("runtime.setFps", params),
     onEvent: listener => {
       listeners.add(listener)
       return () => listeners.delete(listener)
@@ -104,11 +112,14 @@ function createMoonlightControlClient(
     },
   }
 
-  function request(method: string): Promise<MoonlightControlSuccessResponse> {
+  function request(
+    method: string,
+    params?: Readonly<Record<string, unknown>>,
+  ): Promise<MoonlightControlSuccessResponse> {
     if (closed)
       return Promise.reject(protocolError("Moonlight control socket closed"))
     const id = String(nextRequestId++)
-    const frame = JSON.stringify({ jsonrpc: "2.0", id, method })
+    const frame = JSON.stringify({ jsonrpc: "2.0", id, method, params })
     return new Promise((resolve, reject) => {
       pending.set(id, { resolve, reject })
       socket.write(`${frame}\n`, error => {

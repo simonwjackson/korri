@@ -21,6 +21,12 @@ describe("moonlight-control cli", () => {
           subscribe: async () => {
             throw new Error("unexpected")
           },
+          setBitrate: async () => {
+            throw new Error("unexpected")
+          },
+          setFps: async () => {
+            throw new Error("unexpected")
+          },
           onEvent: () => () => undefined,
           close: () => undefined,
         }),
@@ -44,6 +50,12 @@ describe("moonlight-control cli", () => {
           },
           state: async () => stateResponse(),
           subscribe: async () => {
+            throw new Error("unexpected")
+          },
+          setBitrate: async () => {
+            throw new Error("unexpected")
+          },
+          setFps: async () => {
             throw new Error("unexpected")
           },
           onEvent: () => () => undefined,
