@@ -1,3 +1,8 @@
+import {
+  makePeerDiscoveryLayer,
+  PeerDiscoveryNoop,
+} from "@app/peers/peer-discovery"
+import { PeerSourceFetcherLive } from "@app/peers/peer-source-fetcher"
 import { BatchJsonSerializationLive } from "@shared/api/rpc/serialization"
 import { FeatureGatesMiddlewareLive } from "@shared/gates/middleware"
 import { GameAssetsLayerLive } from "@shared/library/game-assets/game-assets-service"
@@ -10,11 +15,26 @@ import { appRpcGroup } from "./app-rpc-group"
 import { HandlersLive } from "./handlers"
 import { ForegroundSessionHostLive } from "./library/foreground-session-host-layer"
 
+// See server/rpc-server.ts for the federation peer-discovery wiring
+// rationale. Tests get the noop layer; production browses the LAN.
+const PeerDiscoveryConfigured =
+  process.env.NODE_ENV === "test"
+    ? PeerDiscoveryNoop
+    : makePeerDiscoveryLayer({
+        ...(process.env.KORRI_STREAM_ADVERTISE_HOST_ID
+          ? { localHostId: process.env.KORRI_STREAM_ADVERTISE_HOST_ID }
+          : process.env.KORRI_SERVER_ID
+            ? { localHostId: process.env.KORRI_SERVER_ID }
+            : {}),
+      })
+
 const LibraryInfrastructureLive = Layer.mergeAll(
   LibrarySourceLayerLive,
   LauncherLayerLive,
   GameAssetsLayerLive,
   ForegroundSessionHostLive,
+  PeerDiscoveryConfigured,
+  PeerSourceFetcherLive,
 )
 
 const ServerLive = Layer.mergeAll(

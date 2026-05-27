@@ -1,3 +1,5 @@
+import { PeerDiscovery } from "@app/peers/peer-discovery"
+import { PeerSourceFetcher } from "@app/peers/peer-source-fetcher"
 import {
   gameAssetByteRoutePrefix,
   hasValidGameAssetBytes,
@@ -23,7 +25,7 @@ import {
   openKorriLibraryDb,
 } from "@shared/library/proseql/library-db"
 import { logger } from "@shared/logger/logger"
-import { Effect, type Scope } from "effect"
+import { Effect, type Scope, SubscriptionRef } from "effect"
 
 import {
   type LibraryEntry,
@@ -51,11 +53,29 @@ export const handleListLibrary = (_payload: typeof ListLibraryPayload.Type) =>
       env: process.env,
     })
     const localSource = makeLocalEntrySource(process.env)
-    const taggedGames: readonly LibraryEntry[] = resolvedGames.map(game => ({
+    const localTagged: readonly LibraryEntry[] = resolvedGames.map(game => ({
       ...game,
       source: localSource,
     }))
-    return new ListLibraryResponse({ games: taggedGames })
+
+    // Federate: union local entries with each LAN peer's source
+    // catalog. Per-peer failures collapse to empty arrays inside
+    // `PeerSourceFetcher` so the federated response degrades
+    // gracefully (R9). Peer discovery is read once per call as a
+    // snapshot from the SubscriptionRef.
+    const peerDiscovery = yield* PeerDiscovery
+    const peerFetcher = yield* PeerSourceFetcher
+    const peerSnapshot = yield* SubscriptionRef.get(peerDiscovery.peers)
+    const peers = Array.from(peerSnapshot.values())
+    const remoteResults = yield* Effect.all(
+      peers.map(peer => peerFetcher.fetchPeerCatalog(peer)),
+      { concurrency: "unbounded" },
+    )
+    const remoteTagged = remoteResults.flat()
+
+    return new ListLibraryResponse({
+      games: [...localTagged, ...remoteTagged],
+    })
   })
 
 interface CatalogAssignment {

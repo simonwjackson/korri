@@ -4,6 +4,17 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { appRpcGroup } from "@app/api/app-rpc-group"
+import {
+  PeerDiscovery,
+  PeerDiscoveryNoop,
+  type PeerRecord,
+} from "@app/peers/peer-discovery"
+import {
+  PeerSourceFetcher,
+  PeerSourceFetcherLive,
+  makePeerSourceFetcherLive,
+  type PeerSourceCatalogEntry,
+} from "@app/peers/peer-source-fetcher"
 import { DataError } from "@shared/api/rpc/errors"
 import type { GameAssetRecord } from "@shared/library/config/records/game-asset"
 import type { GameAssetRole } from "@shared/library/config/records/game-asset-assignment"
@@ -11,7 +22,15 @@ import { gameAssetBlobPath } from "@shared/library/game-assets/game-assets-servi
 import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
 import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
 import { createLibraryRepository } from "@shared/library/proseql/library-repository"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Effect, Exit, Layer, SubscriptionRef } from "effect"
+
+// All list.rpc-handler tests share the same default federation layers:
+// no peers (Noop) + the real fetcher (irrelevant when there are no peers).
+const LocalLibraryLayer = Layer.mergeAll(
+  LibrarySourceLayerLive,
+  PeerDiscoveryNoop,
+  PeerSourceFetcherLive,
+)
 
 import { handleListLibrary } from "./list.rpc-handler"
 
@@ -74,7 +93,7 @@ describe("app.library.list handler (configured-real source)", () => {
     process.env.KORRI_LIBRARY_ROOT = lib.root
 
     const result = await Effect.runPromise(
-      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+      handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
     )
     expect(result.games.map(g => g.metadata?.name)).toEqual(["New", "Old"])
   })
@@ -84,7 +103,7 @@ describe("app.library.list handler (configured-real source)", () => {
     process.env.KORRI_LIBRARY_ROOT = lib.root
 
     const result = await Effect.runPromise(
-      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+      handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
     )
     expect(result.games).toEqual([])
   })
@@ -108,7 +127,7 @@ describe("app.library.list handler (configured-real source)", () => {
     process.env.PORT = "3001"
 
     const result = await Effect.runPromise(
-      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+      handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
     )
 
     expect(result.games).toHaveLength(1)
@@ -139,7 +158,7 @@ describe("app.library.list handler (configured-real source)", () => {
     process.env.KORRI_PUBLIC_API_BASE_URL = "http://192.168.1.117:3001/"
 
     const result = await Effect.runPromise(
-      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+      handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
     )
 
     expect(result.games[0]?.source?.controlUrl).toBe(
@@ -178,7 +197,7 @@ describe("app.library.list handler (configured-real source)", () => {
     process.env.KORRI_PUBLIC_API_BASE_URL = "https://korri.example.test/control"
 
     const result = await Effect.runPromise(
-      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+      handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
     )
 
     expect(result.games[0]?.media?.map(media => media.role)).toEqual([
@@ -215,7 +234,7 @@ describe("app.library.list handler (configured-real source)", () => {
     process.env.KORRI_LIBRARY_ROOT = lib.root
 
     const result = await Effect.runPromise(
-      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+      handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
     )
 
     expect(result.games[0]).toMatchObject({
@@ -242,7 +261,7 @@ describe("app.library.list handler (configured-real source)", () => {
     process.env.KORRI_LIBRARY_ROOT = lib.root
 
     const result = await Effect.runPromise(
-      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+      handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
     )
 
     expect(result.games[0]?.media).toBeUndefined()
@@ -266,7 +285,7 @@ describe("app.library.list handler (configured-real source)", () => {
     await writeFile(blobPath, "xxxxxxxxxx")
 
     const result = await Effect.runPromise(
-      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+      handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
     )
 
     expect(result.games[0]?.media).toBeUndefined()
@@ -288,7 +307,7 @@ describe("app.library.list handler (configured-real source)", () => {
     process.env.XDG_DATA_HOME = lib.dataRoot
 
     const result = await Effect.runPromise(
-      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+      handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
     )
 
     expect(result.games[0]?.media).toBeUndefined()
@@ -311,7 +330,7 @@ describe("app.library.list handler (configured-real source)", () => {
     process.env.KORRI_LIBRARY_ROOT = lib.root
 
     const exit = await Effect.runPromiseExit(
-      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+      handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
     )
 
     expect(Exit.isFailure(exit)).toBe(true)
@@ -331,7 +350,7 @@ describe("app.library.list handler (configured-real source)", () => {
     delete process.env.KORRI_PUBLIC_API_BASE_URL
 
     const result = await Effect.runPromise(
-      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+      handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
     )
 
     expect(result.games).toEqual([])
@@ -345,7 +364,7 @@ describe("app.library.list handler (configured-real source)", () => {
     delete process.env.KORRI_PUBLIC_API_BASE_URL
 
     const exit = await Effect.runPromiseExit(
-      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+      handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
     )
 
     expect(Exit.isFailure(exit)).toBe(true)
@@ -374,7 +393,7 @@ describe("app.library.list handler (configured-real source)", () => {
     for (const value of unsafe) {
       process.env.KORRI_PUBLIC_API_BASE_URL = value
       const exit = await Effect.runPromiseExit(
-        handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+        handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
       )
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
@@ -401,7 +420,7 @@ describe("app.library.list handler (configured-real source)", () => {
     for (const value of accepted) {
       process.env.KORRI_PUBLIC_API_BASE_URL = value
       const result = await Effect.runPromise(
-        handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+        handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
       )
       expect(result.games).toEqual([])
     }
@@ -422,7 +441,7 @@ describe("app.library.list handler (configured-real source)", () => {
     for (const value of rejected) {
       process.env.KORRI_PUBLIC_API_BASE_URL = value
       const exit = await Effect.runPromiseExit(
-        handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+        handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
       )
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
@@ -436,7 +455,7 @@ describe("app.library.list handler (configured-real source)", () => {
     process.env.KORRI_LIBRARY_ROOT = lib.root
 
     const exit = await Effect.runPromiseExit(
-      handleListLibrary({}).pipe(Effect.provide(LibrarySourceLayerLive)),
+      handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
     )
     expect(Exit.isFailure(exit)).toBe(true)
     if (Exit.isFailure(exit)) {
@@ -453,6 +472,211 @@ describe("app.library.list handler (configured-real source)", () => {
     expect(tags).toContain("app.library.list")
   })
 })
+
+describe("app.library.list federation (fan-out across LAN peers)", () => {
+  it("unions local entries with one peer's source catalog (AE2 happy path)", async () => {
+    const lib = track(
+      await withTempProseqlLibrary({
+        games: [
+          {
+            id: "local/native-game.rom",
+            system: "fixture",
+            contentPath: "/storage/fixtures/native-game.rom",
+            metadata: { name: "Native Game" },
+          },
+        ],
+      }),
+    )
+    process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_STREAM_ADVERTISE_HOST_ID = "local-host"
+
+    const akaPeer = {
+      hostId: "aka",
+      controlUrl: "http://192.168.1.117:3001",
+      displayName: "aka",
+      caps: ["source"],
+    }
+    const peerCatalog = [
+      { id: "pico-8/celeste", displayName: "Celeste", streamable: true },
+      {
+        id: "pico-8/porklike",
+        displayName: "Porklike",
+        streamable: true,
+      },
+    ]
+
+    const layer = federationLayerWith({
+      peers: [akaPeer],
+      peerCatalogs: { [akaPeer.controlUrl]: peerCatalog },
+    })
+
+    const result = await Effect.runPromise(
+      handleListLibrary({}).pipe(Effect.provide(layer)),
+    )
+
+    expect(result.games).toHaveLength(3)
+    const local = result.games.find(g => g.id === "local/native-game.rom")
+    const celeste = result.games.find(
+      g => g.id === "pico-8/celeste" && g.source.hostId === "aka",
+    )
+    const porklike = result.games.find(
+      g => g.id === "pico-8/porklike" && g.source.hostId === "aka",
+    )
+    expect(local?.source.isLocal).toBe(true)
+    expect(celeste?.source.isLocal).toBe(false)
+    expect(celeste?.source.controlUrl).toBe("http://192.168.1.117:3001")
+    expect(porklike).toBeDefined()
+
+    delete process.env.KORRI_STREAM_ADVERTISE_HOST_ID
+  })
+
+  it("renders same-id entries from two different peers as separate rows (AE3)", async () => {
+    const lib = track(await withTempProseqlLibrary({ games: [] }))
+    process.env.KORRI_LIBRARY_ROOT = lib.root
+
+    const akaPeer = {
+      hostId: "aka",
+      controlUrl: "http://aka:3001",
+      displayName: "aka",
+      caps: ["source"],
+    }
+    const soboPeer = {
+      hostId: "sobo",
+      controlUrl: "http://sobo:3001",
+      displayName: "sobo",
+      caps: ["source"],
+    }
+    const duplicatedCelestEntry = [
+      { id: "pico-8/celeste", displayName: "Celeste", streamable: true },
+    ]
+
+    const layer = federationLayerWith({
+      peers: [akaPeer, soboPeer],
+      peerCatalogs: {
+        [akaPeer.controlUrl]: duplicatedCelestEntry,
+        [soboPeer.controlUrl]: duplicatedCelestEntry,
+      },
+    })
+
+    const result = await Effect.runPromise(
+      handleListLibrary({}).pipe(Effect.provide(layer)),
+    )
+
+    expect(result.games).toHaveLength(2)
+    const hosts = result.games.map(g => g.source.hostId).sort()
+    expect(hosts).toEqual(["aka", "sobo"])
+    // Same id but two distinct entries — structurally identified.
+    expect(result.games.every(g => g.id === "pico-8/celeste")).toBe(true)
+  })
+
+  it("degrades gracefully when a peer is unreachable (R9 / AE2 partial failure)", async () => {
+    const lib = track(await withTempProseqlLibrary({ games: [] }))
+    process.env.KORRI_LIBRARY_ROOT = lib.root
+
+    const reachable: PeerRecord = {
+      hostId: "reachable",
+      controlUrl: "http://reachable:3001",
+      displayName: "reachable",
+      caps: ["source"],
+    }
+    const unreachable: PeerRecord = {
+      hostId: "unreachable",
+      controlUrl: "http://unreachable:3001",
+      displayName: "unreachable",
+      caps: ["source"],
+    }
+
+    const layer = federationLayerWith({
+      peers: [reachable, unreachable],
+      peerCatalogs: {
+        [reachable.controlUrl]: [
+          {
+            id: "reachable/game",
+            displayName: "Reachable Game",
+            streamable: true,
+          },
+        ],
+        // unreachable peer omitted from the map — the stub client
+        // throws for any controlUrl without an entry, simulating
+        // ECONNREFUSED.
+      },
+    })
+
+    const result = await Effect.runPromise(
+      handleListLibrary({}).pipe(Effect.provide(layer)),
+    )
+
+    expect(result.games).toHaveLength(1)
+    expect(result.games[0]?.id).toBe("reachable/game")
+    expect(result.games[0]?.source.hostId).toBe("reachable")
+  })
+
+  it("returns only local entries when no peers have been discovered", async () => {
+    const lib = track(
+      await withTempProseqlLibrary({
+        games: [
+          {
+            id: "local/solo.rom",
+            system: "fixture",
+            contentPath: "/storage/fixtures/solo.rom",
+            metadata: { name: "Solo" },
+          },
+        ],
+      }),
+    )
+    process.env.KORRI_LIBRARY_ROOT = lib.root
+
+    const layer = federationLayerWith({ peers: [], peerCatalogs: {} })
+
+    const result = await Effect.runPromise(
+      handleListLibrary({}).pipe(Effect.provide(layer)),
+    )
+
+    expect(result.games).toHaveLength(1)
+    expect(result.games[0]?.id).toBe("local/solo.rom")
+    expect(result.games[0]?.source.isLocal).toBe(true)
+  })
+})
+
+// -- Federation test layer ---------------------------------------------------
+//
+// Builds a real PeerSourceFetcher wired to a stub client factory plus a
+// PeerDiscovery seeded with a fixed peer set. The stub client throws for
+// any controlUrl without an entry in `peerCatalogs` — simulates an
+// unreachable peer to verify graceful degradation (R9).
+
+function federationLayerWith(options: {
+  readonly peers: readonly PeerRecord[]
+  readonly peerCatalogs: Readonly<
+    Record<string, readonly PeerSourceCatalogEntry[]>
+  >
+}) {
+  const PeersLayer = Layer.effect(PeerDiscovery)(
+    Effect.gen(function* () {
+      const peers = yield* SubscriptionRef.make<
+        ReadonlyMap<string, PeerRecord>
+      >(new Map(options.peers.map(p => [p.controlUrl, p] as const)))
+      return { peers }
+    }),
+  )
+  const fetcherLayer = Layer.succeed(PeerSourceFetcher)(
+    makePeerSourceFetcherLive({
+      createClient: controlUrl => {
+        const catalog = options.peerCatalogs[controlUrl]
+        return {
+          listSourceGames: async () => {
+            if (!catalog) {
+              throw new Error(`unreachable peer: ${controlUrl}`)
+            }
+            return catalog
+          },
+        }
+      },
+      timeoutMs: 0,
+    }),
+  )
+  return Layer.mergeAll(LibrarySourceLayerLive, PeersLayer, fetcherLayer)
+}
 
 type TempProseqlLibrary = {
   readonly root: string
