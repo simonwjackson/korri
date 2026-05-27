@@ -306,6 +306,58 @@ describe("korri sessiond", () => {
     expect(body.state.mode).toBe("home")
   })
 
+  it("records termination requested immediately after managed launch acceptance", async () => {
+    const spawnReady = deferred<{
+      readonly result: Promise<LaunchResult>
+      readonly terminate: () => void
+      readonly terminateNow: () => void
+    }>()
+    const childExit = deferred<LaunchResult>()
+    const { core, events } = startHarness({
+      spawnLaunch: async () => await spawnReady.promise,
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-1", spec }),
+      }),
+    )
+    const response = await request(
+      core,
+      "/managed-launch/terminate",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-1" }),
+      }),
+    )
+
+    expect(await response.json()).toEqual({
+      status: "accepted",
+      launchId: "launch-1",
+    })
+
+    spawnReady.resolve({
+      result: childExit.promise,
+      terminate: () => {
+        events.push("terminate-game")
+        childExit.resolve({ status: "failed", exitCode: 143 })
+      },
+      terminateNow: () => {
+        events.push("terminate-game-now")
+        childExit.resolve({ status: "failed", exitCode: 137 })
+      },
+    })
+
+    await waitForSessionMode(core, "home")
+    expect(events).toContain("terminate-game")
+  })
+
   it("terminates only the active managed launch identity", async () => {
     const control = deferred<LaunchResult>()
     const { core, events } = startHarness({
@@ -349,6 +401,47 @@ describe("korri sessiond", () => {
     expect(events).not.toContain("restore-es")
   })
 
+  it("force terminates the active managed launch identity", async () => {
+    const control = deferred<LaunchResult>()
+    const { core, events } = startHarness({
+      spawnLaunch: async () => ({
+        result: control.promise,
+        terminate: () => {
+          events.push("terminate-game")
+          control.resolve({ status: "failed", exitCode: 143 })
+        },
+        terminateNow: () => {
+          events.push("terminate-game-now")
+          control.resolve({ status: "failed", exitCode: 137 })
+        },
+      }),
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-1", spec }),
+      }),
+    )
+
+    await request(
+      core,
+      "/managed-launch/terminate",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-1", force: true }),
+      }),
+    )
+
+    await waitForSessionMode(core, "home")
+    expect(events).toContain("terminate-game-now")
+    expect(events).not.toContain("terminate-game")
+  })
+
   it("does not stop the kiosk for stale managed launch termination", async () => {
     const { core, events } = startHarness()
     await request(core, "/control/start", authorized({ method: "POST" }))
@@ -371,6 +464,25 @@ describe("korri sessiond", () => {
     })
     expect(core.status().state.mode).toBe("home")
     expect(events).not.toContain("restore-es")
+  })
+
+  it("returns a bounded failed event for stale lifecycle replay requests", async () => {
+    const { core } = startHarness()
+
+    const response = await request(
+      core,
+      "/managed-launch/events?launchId=missing-launch",
+      authorized(),
+    )
+    const lifecycle = parseSseEvents(await response.text())
+
+    expect(lifecycle).toMatchObject([
+      {
+        launchId: "missing-launch",
+        type: "failed",
+        message: "managed launch event replay unavailable",
+      },
+    ])
   })
 
   it("stops Korri mode by stopping Electrobun and restoring ES", async () => {

@@ -92,6 +92,8 @@ export type SessiondManagedLaunchEventType = Schema.Schema.Type<
 export const SessiondManagedLaunchTerminal = Schema.Struct({
   exitCode: Schema.NullOr(Schema.Number),
   signal: Schema.optional(Schema.String),
+  failureKind: Schema.optional(LaunchFailureKind),
+  stderrTail: Schema.optional(Schema.String),
 })
 export type SessiondManagedLaunchTerminal = Schema.Schema.Type<
   typeof SessiondManagedLaunchTerminal
@@ -122,6 +124,7 @@ export type SessiondManagedLaunchEvent = Schema.Schema.Type<
 
 export const SessiondManagedLaunchTerminateRequest = Schema.Struct({
   launchId: Schema.String,
+  force: Schema.optional(Schema.Boolean),
 })
 export type SessiondManagedLaunchTerminateRequest = Schema.Schema.Type<
   typeof SessiondManagedLaunchTerminateRequest

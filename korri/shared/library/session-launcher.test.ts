@@ -250,6 +250,95 @@ describe("session launcher", () => {
     }
   })
 
+  it("maps non-home sessiond preflight status to session-busy without starting", async () => {
+    const requests: string[] = []
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async input => {
+        requests.push(new URL(input).pathname)
+        return Response.json(managedStatus({ mode: "game" }))
+      },
+    })
+
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("session launcher missing managed spawn")
+    const result = await spawn(spec)
+
+    expect(result.status).toBe("failed")
+    if (result.status === "failed") {
+      expect(result.result.failureKind).toBe("session-busy")
+    }
+    expect(requests).toEqual(["/managed-launch/status"])
+  })
+
+  it("maps invalid managed status payloads to host-unavailable", async () => {
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async () => Response.json({ status: "not-sessiond-status" }),
+    })
+
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("session launcher missing managed spawn")
+    const result = await spawn(spec)
+
+    expect(result.status).toBe("failed")
+    if (result.status === "failed") {
+      expect(result.result.failureKind).toBe("host-unavailable")
+      expect(result.result.stderrTail).toContain("status payload invalid")
+    }
+  })
+
+  it("preserves failureKind from child-exited lifecycle events", async () => {
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async input => {
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(managedStatus({ mode: "home" }))
+        }
+        if (url.pathname === "/managed-launch") {
+          return Response.json({ status: "accepted", launchId: "launch-1" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          return eventStream([
+            event({
+              sequence: 1,
+              launchId: "launch-1",
+              type: "child-exited",
+              terminal: {
+                exitCode: 124,
+                failureKind: "host-unavailable",
+                stderrTail: "daemon lost child",
+              },
+            }),
+            event({
+              sequence: 2,
+              launchId: "launch-1",
+              type: "home-ready",
+              readiness: { status: "ok" },
+            }),
+          ])
+        }
+        throw new Error(`unexpected request: ${input}`)
+      },
+    })
+
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("session launcher missing managed spawn")
+    const result = await spawn(spec)
+    if (result.status !== "started") throw new Error("expected started")
+
+    expect(await result.result).toEqual({
+      status: "failed",
+      exitCode: 124,
+      failureKind: "host-unavailable",
+      stderrTail: "daemon lost child",
+    })
+  })
+
   it("sends per-launch termination for managed session handles", async () => {
     const requests: Array<{ input: string; init?: RequestInit }> = []
     const launcher = createSessionLauncher({
@@ -289,6 +378,46 @@ describe("session launcher", () => {
     expect(terminate).toBeDefined()
     expect(JSON.parse(String(terminate?.init?.body))).toEqual({
       launchId: "launch-1",
+    })
+  })
+
+  it("sends force when terminateNow is invoked", async () => {
+    const requests: Array<{ input: string; init?: RequestInit }> = []
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async (input, init) => {
+        requests.push({ input, init })
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(managedStatus({ mode: "home" }))
+        }
+        if (url.pathname === "/managed-launch") {
+          return Response.json({ status: "accepted", launchId: "launch-1" })
+        }
+        if (url.pathname === "/managed-launch/events") return eventStream([])
+        if (url.pathname === "/managed-launch/terminate") {
+          return Response.json({ status: "accepted", launchId: "launch-1" })
+        }
+        throw new Error(`unexpected request: ${input}`)
+      },
+    })
+
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("session launcher missing managed spawn")
+    const result = await spawn(spec)
+    if (result.status !== "started") throw new Error("expected started")
+
+    result.session.terminateNow()
+    await Promise.resolve()
+
+    const terminate = requests.find(
+      request =>
+        new URL(request.input).pathname === "/managed-launch/terminate",
+    )
+    expect(JSON.parse(String(terminate?.init?.body))).toEqual({
+      launchId: "launch-1",
+      force: true,
     })
   })
 })

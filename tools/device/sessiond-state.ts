@@ -61,7 +61,7 @@ export function shouldEnforceHomeInvariant(state: KorriSessionState): boolean {
 export function korriSessionActiveLaunch(
   state: KorriSessionState,
 ): KorriSessionActiveLaunch | undefined {
-  if (!state.launchId) return undefined
+  if (!state.launchId || state.mode === "home") return undefined
   return { launchId: state.launchId, mode: state.mode }
 }
 
@@ -102,12 +102,11 @@ export function beginKorriRestore(state: KorriSessionState): KorriSessionState {
 }
 
 export function completeKorriRestore(
-  state: KorriSessionState,
+  _state: KorriSessionState,
 ): KorriSessionState {
   return {
     mode: "home",
     restoreAttempts: 0,
-    launchId: state.launchId,
   }
 }
 

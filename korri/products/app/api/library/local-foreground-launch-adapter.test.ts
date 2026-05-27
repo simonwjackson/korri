@@ -134,6 +134,59 @@ describe("local foreground launch adapter", () => {
     await owner.whenIdle()
   })
 
+  it("returns failed launch response when managed readiness evidence fails", async () => {
+    const owner = createLocalForegroundLaunchOwner()
+    const exited = deferred<{ readonly exitCode: number | null }>()
+    const ready = deferred<{
+      readonly status: "failed"
+      readonly message: string
+      readonly evidence: { readonly gate: string }
+    }>()
+
+    const launch = launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      spawn: async () => ({
+        status: "started",
+        result: ready.promise.then(result =>
+          result.status === "failed"
+            ? {
+                status: "failed" as const,
+                exitCode: 1,
+                failureKind: "command-failed" as const,
+                stderrTail: result.message,
+              }
+            : { status: "launched" as const },
+        ),
+        session: {
+          id: "sessiond:launch-1",
+          exited: exited.promise,
+          ready: ready.promise,
+          terminate: () => {},
+          terminateNow: () => {},
+        },
+      }),
+      createRequestId: () => "local-launch-1",
+    })
+
+    await waitForOwnerState(owner, "Running")
+    exited.resolve({ exitCode: 0 })
+    await waitForOwnerState(owner, "VerifyingReady")
+    ready.resolve({
+      status: "failed",
+      message: "renderer restore failed",
+      evidence: { gate: "sessiond-home-ready" },
+    })
+
+    expect(await launch).toEqual({
+      status: "failed",
+      exitCode: 1,
+      failureKind: "command-failed",
+      stderrTail: "renderer restore failed",
+    })
+    await owner.whenIdle()
+  })
+
   it("returns managed spawn failure diagnostics", async () => {
     const launcher = await launcherFromLayer(
       makeInMemoryLauncherLayer({

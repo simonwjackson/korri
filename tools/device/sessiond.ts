@@ -109,12 +109,12 @@ export function createKorriSessiondCore(
     readonly launchId: string
     readonly controller: ReadableStreamDefaultController<Uint8Array>
   }>()
-  const managedLaunchResults = new Map<string, Promise<LaunchResult>>()
-  let activeManagedChild:
+  let activeManagedLaunch:
     | {
         readonly launchId: string
-        readonly terminate: () => void
-        readonly terminateNow: () => void
+        cancelRequested: boolean
+        terminate?: () => void
+        terminateNow?: () => void
       }
     | undefined
 
@@ -207,69 +207,80 @@ export function createKorriSessiondCore(
   async function startManagedLaunch(
     spec: LaunchSpec,
     requestedLaunchId?: string,
-  ): Promise<SessiondManagedLaunchStartResponse> {
+  ): Promise<{
+    readonly response: SessiondManagedLaunchStartResponse
+    readonly result?: Promise<LaunchResult>
+  }> {
     if (state.mode !== "home") {
       return {
-        status: "failed",
-        failureKind: "session-busy",
-        message: `sessiond is ${state.mode}; launch requires home`,
+        response: {
+          status: "failed",
+          failureKind: "session-busy",
+          message: `sessiond is ${state.mode}; launch requires home`,
+        },
       }
     }
 
     const launchId = requestedLaunchId ?? crypto.randomUUID()
     state = beginKorriLaunch(state, launchId)
+    activeManagedLaunch = { launchId, cancelRequested: false }
     pushLifecycleEvent(launchId, { type: "launch-accepted" })
 
     const result = runManagedLaunch(launchId, spec)
-    managedLaunchResults.set(launchId, result)
     void result.finally(() => {
-      managedLaunchResults.delete(launchId)
+      if (activeManagedLaunch?.launchId === launchId) {
+        activeManagedLaunch = undefined
+      }
     })
 
-    return { status: "accepted", launchId }
+    return { response: { status: "accepted", launchId }, result }
   }
 
   async function runManagedLaunch(
     launchId: string,
     spec: LaunchSpec,
   ): Promise<LaunchResult> {
-    await renderer.stop(rendererPid)
-    rendererPid = undefined
-    pushLifecycleEvent(launchId, { type: "renderer-stopped" })
-    state = markKorriGameRunning(state)
+    let result: LaunchResult | undefined
 
-    let result: LaunchResult
-    const spawn = launcher.spawn
-    if (spawn) {
-      const spawned = await spawn(spec)
-      if (spawned.status === "failed") {
-        result = spawned.result
-      } else {
-        activeManagedChild = {
-          launchId,
-          terminate: spawned.session.terminate,
-          terminateNow: spawned.session.terminateNow,
-        }
-        pushLifecycleEvent(launchId, { type: "child-running" })
-        try {
-          result = await spawned.result
-        } finally {
-          if (activeManagedChild?.launchId === launchId) {
-            activeManagedChild = undefined
+    try {
+      await renderer.stop(rendererPid)
+      rendererPid = undefined
+      pushLifecycleEvent(launchId, { type: "renderer-stopped" })
+      state = markKorriGameRunning(state)
+
+      const spawn = launcher.spawn
+      if (spawn) {
+        const spawned = await spawn(spec)
+        if (spawned.status === "failed") {
+          result = spawned.result
+        } else {
+          const active = activeManagedLaunch
+          if (active?.launchId === launchId) {
+            active.terminate = spawned.session.terminate
+            active.terminateNow = spawned.session.terminateNow
+            if (active.cancelRequested) spawned.session.terminate()
           }
+          pushLifecycleEvent(launchId, { type: "child-running" })
+          result = await spawned.result
         }
+      } else {
+        pushLifecycleEvent(launchId, { type: "child-running" })
+        result = await launcher.run(spec)
       }
-    } else {
-      pushLifecycleEvent(launchId, { type: "child-running" })
-      result = await launcher.run(spec)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      result = {
+        status: "failed",
+        exitCode: launchFailureExitCode("host-unavailable"),
+        failureKind: "host-unavailable",
+        stderrTail: message,
+      }
+      logger.warn({ err: error }, "sessiond: managed launch failed")
     }
 
     pushLifecycleEvent(launchId, {
       type: "child-exited",
-      terminal:
-        result.status === "launched"
-          ? { exitCode: 0 }
-          : { exitCode: result.exitCode },
+      terminal: terminalFromLaunchResult(result),
     })
 
     state = beginKorriRestore(state)
@@ -300,9 +311,10 @@ export function createKorriSessiondCore(
 
   async function launchUnderSession(spec: LaunchSpec): Promise<LaunchResult> {
     const started = await startManagedLaunch(spec)
-    if (started.status === "failed") return failedLaunchResult(started)
-    const result = managedLaunchResults.get(started.launchId)
-    if (!result) {
+    if (started.response.status === "failed") {
+      return failedLaunchResult(started.response)
+    }
+    if (!started.result) {
       return {
         status: "failed",
         exitCode: launchFailureExitCode("host-unavailable"),
@@ -310,13 +322,14 @@ export function createKorriSessiondCore(
         stderrTail: "sessiond managed launch result was not registered",
       }
     }
-    return await result
+    return await started.result
   }
 
   function terminateManagedLaunchById(
     launchId: string,
+    force = false,
   ): SessiondManagedLaunchTerminateResponse {
-    if (activeManagedChild?.launchId !== launchId) {
+    if (activeManagedLaunch?.launchId !== launchId) {
       return {
         status: "not-found",
         launchId,
@@ -324,7 +337,12 @@ export function createKorriSessiondCore(
       }
     }
 
-    activeManagedChild.terminate()
+    activeManagedLaunch.cancelRequested = true
+    if (force) {
+      activeManagedLaunch.terminateNow?.()
+    } else {
+      activeManagedLaunch.terminate?.()
+    }
     return { status: "accepted", launchId }
   }
 
@@ -343,6 +361,20 @@ export function createKorriSessiondCore(
         )
         for (const event of replay) controller.enqueue(sseData(event))
         if (replay.some(isTerminalLifecycleEvent)) {
+          controller.close()
+          return
+        }
+        if (replay.length === 0 && activeManagedLaunch?.launchId !== launchId) {
+          controller.enqueue(
+            sseData({
+              schemaVersion: 1,
+              sequence: ++eventSequence,
+              launchId,
+              type: "failed",
+              at: new Date().toISOString(),
+              message: "managed launch event replay unavailable",
+            }),
+          )
           controller.close()
           return
         }
@@ -411,7 +443,8 @@ export function createKorriSessiondCore(
           const body = decodeSessiondManagedLaunchStartRequest(
             await request.json(),
           )
-          return json(await startManagedLaunch(body.spec, body.launchId))
+          const started = await startManagedLaunch(body.spec, body.launchId)
+          return json(started.response)
         }
         if (
           request.method === "POST" &&
@@ -420,7 +453,7 @@ export function createKorriSessiondCore(
           const body = decodeSessiondManagedLaunchTerminateRequest(
             await request.json(),
           )
-          return json(terminateManagedLaunchById(body.launchId))
+          return json(terminateManagedLaunchById(body.launchId, body.force))
         }
         if (request.method === "POST" && url.pathname === "/launch") {
           const body = (await request.json()) as { readonly spec?: LaunchSpec }
@@ -490,6 +523,17 @@ function failedLaunchResult(
     exitCode: launchFailureExitCode(response.failureKind),
     failureKind: response.failureKind,
     stderrTail: response.message,
+  }
+}
+
+function terminalFromLaunchResult(
+  result: LaunchResult,
+): NonNullable<SessiondManagedLaunchEvent["terminal"]> {
+  if (result.status === "launched") return { exitCode: 0 }
+  return {
+    exitCode: result.exitCode,
+    ...(result.failureKind ? { failureKind: result.failureKind } : {}),
+    ...(result.stderrTail ? { stderrTail: result.stderrTail } : {}),
   }
 }
 
