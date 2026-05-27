@@ -1,7 +1,14 @@
 import { mkdir, open, readFile, unlink, writeFile } from "node:fs/promises"
 import { dirname, isAbsolute, join } from "node:path"
 import { xdgRuntimeDir } from "@shared/config/xdg-paths"
-import { decodeLaunchSpec, type LaunchSpec } from "@shared/library/launcher"
+import {
+  decodeLaunchSpec,
+  type Launcher,
+  type LaunchResult,
+  type LaunchSpec,
+  type ManagedLaunchResult,
+} from "@shared/library/launcher"
+import { createSessionLauncherFromEnv } from "@shared/library/session-launcher"
 import { logger as defaultLogger } from "@shared/logger"
 import {
   composeGamescopeLaunchSpec,
@@ -82,6 +89,19 @@ export interface GameStreamRunnerOptions {
   readonly processEnv?: NodeJS.ProcessEnv
   readonly allowRoot?: boolean
   readonly terminateGraceMs?: number
+  /**
+   * Optional sessiond client. When set, `lifecycle: "foreground"` intents
+   * route through sessiond instead of the local `spawner`. Sessiond owns
+   * the child supervision, Sway preflight/repair, and idle restore;
+   * the runner just translates the trusted intent into a managed-launch
+   * call and stays alive on the SSE stream until both `child-exited` and
+   * the role's terminal readiness event have fired.
+   *
+   * `lifecycle: "session"` intents continue on the local spawn path even
+   * when this is configured — the managed-launch protocol does not yet
+   * carry launcher-anchor / wait-monitor semantics.
+   */
+  readonly sessiondLauncher?: Launcher
 }
 
 export interface GameStreamRunner {
@@ -101,6 +121,7 @@ export function createGameStreamRunner(
 ): GameStreamRunner {
   const logger = options.logger ?? defaultLogger
   const spawner = options.spawner ?? createBunManagedChildSpawner()
+  const sessiondLauncher = options.sessiondLauncher
   const processInfo = options.processInfo ?? {
     pid: process.pid,
     uid: typeof process.getuid === "function" ? process.getuid() : undefined,
@@ -115,6 +136,12 @@ export function createGameStreamRunner(
     options.terminateGraceMs ?? DEFAULT_TERMINATE_GRACE_MS
   let state: GameStreamState = initialGameStreamState
   let activeChild: ManagedChild | undefined
+  let activeSessiondSession:
+    | {
+        readonly terminate: () => void
+        readonly terminateNow: () => void
+      }
+    | undefined
   let stopRequested = false
   const stopWaiters: Array<() => void> = []
 
@@ -142,6 +169,10 @@ export function createGameStreamRunner(
     while (stopWaiters.length > 0) stopWaiters.pop()?.()
     state = beginGameStreamStopping(state)
     await writeStatus()
+    if (activeSessiondSession) {
+      activeSessiondSession.terminate()
+      return
+    }
     if (!activeChild) return
     await terminateChild(activeChild, "SIGTERM", terminateGraceMs)
   }
@@ -200,6 +231,91 @@ export function createGameStreamRunner(
       stage: "preflight",
       exitCode: 125,
       message: "no pending launch intent",
+    }
+  }
+
+  async function runViaSessiond(args: {
+    readonly sessiondLauncher: Launcher
+    readonly spec: LaunchSpec
+    readonly launchClaim: ClaimedGameStreamLaunchIntent
+  }): Promise<GameStreamRunResult> {
+    const { launchClaim, spec } = args
+    const launcher = args.sessiondLauncher
+    const spawn = launcher.spawn
+    if (!spawn) {
+      await requeueLaunchClaim(launchClaim, "sessiond unconfigured spawn")
+      return await fail("spawn", "sessiond launcher missing managed spawn", 125)
+    }
+
+    let spawned: ManagedLaunchResult
+    try {
+      spawned = await spawn(spec)
+    } catch (error) {
+      await requeueLaunchClaim(launchClaim, "sessiond spawn failure")
+      return await fail("spawn", errorMessage(error), 125)
+    }
+
+    if (spawned.status === "failed") {
+      await requeueLaunchClaim(launchClaim, "sessiond rejected launch")
+      const exitCode =
+        spawned.result.status === "failed" ? spawned.result.exitCode : 125
+      return await fail(
+        "spawn",
+        sessiondFailureMessage(spawned.result),
+        exitCode,
+      )
+    }
+
+    activeSessiondSession = {
+      terminate: spawned.session.terminate,
+      terminateNow: spawned.session.terminateNow,
+    }
+    const childPid = spawned.session.processId ?? 0
+    state = markGameStreamRunning(state, childPid)
+    // No status.json write on the sessiond branch — sessiond's role
+    // writes its own status sidecar (Phase 4C U3).
+
+    if (stopRequested) {
+      spawned.session.terminate()
+    }
+
+    let launchResult: LaunchResult
+    try {
+      launchResult = await spawned.result
+    } catch (error) {
+      activeSessiondSession = undefined
+      await requeueLaunchClaim(launchClaim, "sessiond observer failure")
+      return await fail("spawn", errorMessage(error), 125)
+    }
+    activeSessiondSession = undefined
+
+    await completeLaunchClaim(launchClaim)
+
+    const exitCode =
+      launchResult.status === "launched" ? 0 : launchResult.exitCode
+    const reportedExitCode = stopRequested && exitCode === 0 ? 143 : exitCode
+    state = completeGameStreamExit(state, reportedExitCode)
+
+    if (stopRequested) {
+      return {
+        status: "failed",
+        stage: "game",
+        exitCode: reportedExitCode,
+        message:
+          launchResult.status === "failed"
+            ? (launchResult.stderrTail ??
+              "sessiond managed launch stopped mid-run")
+            : "sessiond managed launch stopped mid-run",
+      }
+    }
+    if (launchResult.status === "launched") {
+      return { status: "launched", exitCode: 0 }
+    }
+    return {
+      status: "failed",
+      stage: "spawn",
+      exitCode: launchResult.exitCode,
+      message: launchResult.stderrTail ?? "sessiond managed launch failed",
     }
   }
 
@@ -316,6 +432,18 @@ export function createGameStreamRunner(
           { command: spec.command, argc: spec.args.length },
           "game-stream-runner: spawning game",
         )
+
+        if (
+          sessiondLauncher !== undefined &&
+          launchClaim.intent.lifecycle === "foreground" &&
+          sessiondLauncher.spawn !== undefined
+        ) {
+          return await runViaSessiond({
+            sessiondLauncher,
+            spec,
+            launchClaim,
+          })
+        }
 
         try {
           activeChild = await spawner.spawn(spec)
@@ -663,6 +791,11 @@ async function removeLockIfUnchanged(
   }
 }
 
+function sessiondFailureMessage(result: LaunchResult): string {
+  if (result.status === "launched") return "sessiond reported failure"
+  return result.stderrTail ?? "sessiond managed launch failed"
+}
+
 function isFileExistsError(error: unknown): boolean {
   return (
     error instanceof Error && (error as NodeJS.ErrnoException).code === "EEXIST"
@@ -805,10 +938,13 @@ if (import.meta.main) {
     process.exit(0)
   }
 
+  const sessiondLauncher = createSessionLauncherFromEnv(process.env)
+
   const runner = createGameStreamRunner({
     launchIntentStore: createFileGameStreamLaunchIntentStore(intentPath),
     statusPath,
     lockManager: createFileGameStreamRunLock(lockPath),
+    ...(sessiondLauncher ? { sessiondLauncher } : {}),
   })
 
   await superviseGameStreamRunner(runner, {

@@ -2,7 +2,12 @@ import { describe, expect, it } from "bun:test"
 import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { LaunchSpec } from "@shared/library/launcher"
+import type {
+  Launcher,
+  LaunchResult,
+  LaunchSpec,
+  ManagedLaunchResult,
+} from "@shared/library/launcher"
 import {
   createFileGameStreamLaunchIntentStore,
   createLaunchIntent,
@@ -1035,6 +1040,279 @@ describe("game stream runner", () => {
     }
   })
 })
+
+describe("game stream runner sessiond foreground branch", () => {
+  it("routes lifecycle:foreground intents through the injected sessiondLauncher", async () => {
+    const intent = createLaunchIntent(game, {
+      lifecycle: "foreground",
+      gamescope: { enabled: false },
+    })
+    const spawnedSpecs: LaunchSpec[] = []
+    const { sessiondLauncher, controller } =
+      createSessiondLauncherHarness(spawnedSpecs)
+    const localSpecs: LaunchSpec[] = []
+    const localSpawner: ManagedChildSpawner = {
+      spawn: async spec => {
+        localSpecs.push(spec)
+        throw new Error(
+          "local spawn must not be used on the foreground sessiond branch",
+        )
+      },
+    }
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
+      spawner: localSpawner,
+      sessiondLauncher,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      processEnv: {
+        ...sessionEnv,
+        KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
+      },
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    expect(spawnedSpecs).toHaveLength(1)
+    expect(spawnedSpecs[0].command).toBe(game.command)
+    expect(localSpecs).toEqual([])
+
+    controller.exit(0)
+    await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
+  })
+
+  it("propagates the sessiond child exit code on success", async () => {
+    const { sessiondLauncher, controller } = createSessiondLauncherHarness([])
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
+      sessiondLauncher,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      processEnv: {
+        ...sessionEnv,
+        KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
+      },
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    controller.exit(0)
+    await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
+  })
+
+  it("surfaces non-zero child exit through GameStreamRunResult", async () => {
+    const { sessiondLauncher, controller } = createSessiondLauncherHarness([])
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
+      sessiondLauncher,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      processEnv: {
+        ...sessionEnv,
+        KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
+      },
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    controller.failWith({
+      status: "failed",
+      exitCode: 7,
+      stderrTail: "game crashed",
+    })
+
+    await expect(run).resolves.toMatchObject({
+      status: "failed",
+      exitCode: 7,
+    })
+  })
+
+  it("fails closed without spawning locally when sessiond is unreachable", async () => {
+    const failingLauncher: Launcher = {
+      run: async () => ({
+        status: "failed",
+        exitCode: 125,
+        stderrTail: "connection refused",
+      }),
+      spawn: async () => ({
+        status: "failed",
+        result: {
+          status: "failed",
+          exitCode: 125,
+          stderrTail: "connection refused",
+        },
+      }),
+    }
+    let localSpawnCalled = false
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
+      sessiondLauncher: failingLauncher,
+      spawner: {
+        spawn: async () => {
+          localSpawnCalled = true
+          throw new Error("local spawn must not run")
+        },
+      },
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      processEnv: {
+        ...sessionEnv,
+        KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
+      },
+    })
+
+    const result = await runner.run()
+    expect(result.status).toBe("failed")
+    if (result.status === "failed") {
+      expect(result.exitCode).toBe(125)
+    }
+    expect(localSpawnCalled).toBe(false)
+  })
+
+  it("forwards stop() to sessiond terminate while a foreground launch is active", async () => {
+    const { sessiondLauncher, controller } = createSessiondLauncherHarness([])
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
+      sessiondLauncher,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      processEnv: {
+        ...sessionEnv,
+        KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
+      },
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    await runner.stop()
+    await waitFor(() => controller.terminateCalls.length > 0)
+    expect(controller.terminateCalls).toContain("graceful")
+
+    controller.failWith({
+      status: "failed",
+      exitCode: 143,
+      stderrTail: "terminated",
+    })
+    const result = await run
+    expect(result.status).toBe("failed")
+    if (result.status === "failed") {
+      expect(result.exitCode).toBe(143)
+    }
+  })
+
+  it("falls through to the local spawn path when no sessiondLauncher is provided (back-compat)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-back-compat-"))
+    const controlled = createControlledChild(450)
+    const { spawner, specs } = createControlledSpawner(controlled.child)
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
+      spawner,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
+        pid: 10,
+        isProcessAlive: pid => pid === 10,
+      }),
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    expect(specs).toHaveLength(1)
+    controlled.exit(0)
+    await run
+  })
+
+  it("keeps lifecycle:session intents on the local spawn path even when sessiondLauncher is configured", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-session-"))
+    const controlled = createControlledChild(460)
+    const { spawner, specs } = createControlledSpawner(controlled.child)
+    const sessionIntentStore = createStaticGameStreamLaunchIntentStore(game, {
+      lifecycle: "session",
+    })
+    const sessiondSpecs: LaunchSpec[] = []
+    const { sessiondLauncher } = createSessiondLauncherHarness(sessiondSpecs)
+    const runner = createGameStreamRunner({
+      launchIntentStore: sessionIntentStore,
+      spawner,
+      sessiondLauncher,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
+        pid: 10,
+        isProcessAlive: pid => pid === 10,
+      }),
+      processEnv: {
+        ...sessionEnv,
+        KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
+      },
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    expect(specs).toHaveLength(1)
+    expect(sessiondSpecs).toEqual([])
+    controlled.exit(0)
+    await runner.stop()
+    await run
+  })
+})
+
+interface SessiondLauncherController {
+  exit: (code: number) => void
+  failWith: (result: LaunchResult) => void
+  terminateCalls: NodeJS.Signals[] | string[]
+}
+
+function createSessiondLauncherHarness(specs: LaunchSpec[]): {
+  readonly sessiondLauncher: Launcher
+  readonly controller: SessiondLauncherController
+} {
+  let resolveResult: (value: LaunchResult) => void = () => {}
+  let resolveExited: (value: { exitCode: number | null }) => void = () => {}
+  const result = new Promise<LaunchResult>(resolve => {
+    resolveResult = resolve
+  })
+  const exited = new Promise<{ exitCode: number | null }>(resolve => {
+    resolveExited = resolve
+  })
+  const terminateCalls: string[] = []
+  const controller: SessiondLauncherController = {
+    exit: code => {
+      resolveExited({ exitCode: code })
+      resolveResult(
+        code === 0
+          ? { status: "launched" }
+          : { status: "failed", exitCode: code, stderrTail: "non-zero" },
+      )
+    },
+    failWith: launchResult => {
+      resolveExited({
+        exitCode:
+          launchResult.status === "launched" ? 0 : launchResult.exitCode,
+      })
+      resolveResult(launchResult)
+    },
+    terminateCalls,
+  }
+  const sessiondLauncher: Launcher = {
+    run: async () => result,
+    spawn: async spec => {
+      specs.push(spec)
+      return {
+        status: "started",
+        result,
+        session: {
+          id: "sessiond-harness-launch",
+          processId: 12345,
+          exited,
+          terminate: () => terminateCalls.push("graceful"),
+          terminateNow: () => terminateCalls.push("force"),
+        },
+      } satisfies ManagedLaunchResult
+    },
+  }
+  return { sessiondLauncher, controller }
+}
 
 describe("superviseGameStreamRunner", () => {
   function createRecordingSignalSource() {
