@@ -88,7 +88,16 @@ rec {
     }:
     mkProductModules {
       productModule = ./kiosk.nix;
-      inherit platformModules modules includeBase;
+      inherit platformModules includeBase;
+      # Kiosk images run a foreground-session-bearing compositor; sessiond
+      # owns that lifecycle (default-gamescope launches, gamescope-wl
+      # reap, idle restore). Without this module included here, the kiosk
+      # image's korri-server has no sessiond to delegate to and the
+      # in-process shell launcher fails with ENOENT on gamescope.
+      modules = [
+        korri.nixosModules.korri-sessiond
+      ]
+      ++ modules;
     };
 
   mkDesktopLabModules =
