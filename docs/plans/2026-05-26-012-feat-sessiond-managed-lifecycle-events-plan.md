@@ -1,7 +1,7 @@
 ---
 title: "feat: Integrate sessiond with managed foreground lifecycle events"
 type: feat
-status: active
+status: completed
 date: 2026-05-26
 origin: docs/brainstorms/2026-05-24-002-default-gamescope-foreground-launch-policy-requirements.md
 verify_command: "just typecheck && just test-unit && bun test tools/device/sessiond-smoke.test.ts tools/device/sessiond-launcher-client.test.ts && just desktop-smoke"
