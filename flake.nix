@@ -2,7 +2,12 @@
   description = "Starter React + Effect RPC app";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    # Pinned to nixos-25.11 (same channel as nix-on-rocks) so the kiosk
+    # image closure is single-channel and fully covered by cache.nixos.org
+    # aarch64 binaries. The previous nixpkgs-unstable pin diverged from
+    # nix-on-rocks's pin and forced uncached aarch64 rebuilds of nodejs-slim
+    # and everything it transitively reaches through bun2nix.
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     nixpkgs-2405.url = "github:NixOS/nixpkgs/nixos-24.05";
     flake-utils.url = "github:numtide/flake-utils";
     bun2nix.url = "github:nix-community/bun2nix?ref=2.1.0";
