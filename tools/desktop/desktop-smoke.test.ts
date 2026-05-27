@@ -142,6 +142,19 @@ describe("desktop smoke", () => {
     ).toBe("pass")
   })
 
+  test("pins the foreground-session-status endpoint JSON shape", async () => {
+    await writeFixture("index.html", "<html><head></head><body></body></html>")
+
+    const report = await runDesktopSmoke({ assetRoot })
+
+    expect(
+      report.checks.find(
+        c =>
+          c.name === "foreground-session-status endpoint returns idle snapshot",
+      )?.status,
+    ).toBe("pass")
+  })
+
   test("pins the connection-status endpoint JSON shape", async () => {
     await writeFixture("index.html", "<html><head></head><body></body></html>")
 

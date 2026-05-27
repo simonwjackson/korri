@@ -2,6 +2,10 @@ import { existsSync } from "node:fs"
 import { readdir } from "node:fs/promises"
 import { join, relative, sep } from "node:path"
 import { logger } from "@shared/logger"
+import {
+  decodeForegroundSessionStatusSnapshot,
+  type ForegroundSessionStatusSnapshot,
+} from "@shared/stream/foreground-session-status"
 import type { ConnectionStateSnapshot } from "../../korri/deploy/desktop/connection-state-snapshot"
 import { createDesktopApp } from "../../korri/deploy/desktop/create-desktop-app"
 import type { RuntimeConfig } from "../../korri/deploy/desktop/runtime-config-shape"
@@ -94,19 +98,32 @@ function reconnectingSnapshot(hostId: string): ConnectionStateSnapshot {
   }
 }
 
+function idleForegroundSessionSnapshot(): ForegroundSessionStatusSnapshot {
+  return {
+    schemaVersion: 1,
+    serverTimestamp: new Date(0).toISOString(),
+    state: "IdleReady",
+    recentEvents: [],
+  }
+}
+
 function buildApp(
   assetRoot: string,
   options: {
     snapshot: ConnectionStateSnapshot
     runtime?: RuntimeConfig
+    foregroundSessionStatus?: ForegroundSessionStatusSnapshot
   },
 ) {
   const runtime = options.runtime
+  const foregroundSessionStatus =
+    options.foregroundSessionStatus ?? idleForegroundSessionSnapshot()
   return createDesktopApp({
     assetRoot,
     getUpstream: noUpstream,
     getConnectionState: () => options.snapshot,
     getRuntimeConfig: runtime ? () => runtime : undefined,
+    getForegroundSessionStatus: () => foregroundSessionStatus,
   })
 }
 
@@ -321,6 +338,33 @@ export async function runDesktopSmoke(
           detail: re.test(body)
             ? "inlined script present with desktopInput: false"
             : "inlined script missing or wrong shape",
+        }
+      },
+    ),
+  )
+
+  checks.push(
+    await passOrFail(
+      "foreground-session-status endpoint returns idle snapshot",
+      async () => {
+        const app = buildApp(assetRoot, { snapshot: connectedSnapshot() })
+        const response = await app.fetch(
+          new Request(
+            "http://desktop.local/__korri/desktop/foreground-session-status",
+          ),
+        )
+        const body = await response.json()
+        const decoded = decodeForegroundSessionStatusSnapshot(body)
+        const ok =
+          response.status === 200 &&
+          decoded.schemaVersion === 1 &&
+          decoded.state === "IdleReady" &&
+          Array.isArray(decoded.recentEvents)
+        return {
+          ok,
+          detail: ok
+            ? "JSON shape pinned for idle foreground session"
+            : `unexpected JSON ${JSON.stringify(body)}`,
         }
       },
     ),

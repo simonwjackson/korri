@@ -1,6 +1,7 @@
 import { logger } from "@shared/logger"
 import { Hono } from "hono"
 import { createApiForwarder } from "./api-forwarder"
+import type { ForegroundSessionStatusSnapshot } from "@shared/stream/foreground-session-status"
 import type { ConnectionStateSnapshot } from "./connection-state-snapshot"
 import {
   createLocalStreamLaunchRpcHandler,
@@ -46,6 +47,13 @@ export interface CreateDesktopAppOptions {
    */
   readonly getRuntimeConfig?: () => RuntimeConfig
   /**
+   * Returns the current foreground-session lifecycle status snapshot. The
+   * desktop composition injects this from the single foreground session owner
+   * used by the launch bridge so renderer/operator reads observe the same
+   * state that accepts or rejects launches.
+   */
+  readonly getForegroundSessionStatus?: () => ForegroundSessionStatusSnapshot
+  /**
    * Launch-bridge dependencies. When omitted (e.g. older tests that don't
    * care about the bridge), the route returns 503 unconditionally. main.ts
    * always passes a real value.
@@ -71,6 +79,20 @@ export function createDesktopApp(options: CreateDesktopAppOptions) {
   app.get("/__korri/desktop/connection-status", c =>
     c.json(options.getConnectionState()),
   )
+
+  app.get("/__korri/desktop/foreground-session-status", c => {
+    const getForegroundSessionStatus = options.getForegroundSessionStatus
+    if (!getForegroundSessionStatus) {
+      return c.json(
+        { error: "Foreground session status not configured" },
+        503,
+        { "cache-control": "no-store" },
+      )
+    }
+    return c.json(getForegroundSessionStatus(), 200, {
+      "cache-control": "no-store",
+    })
+  })
 
   // Renderer→bun launch bridge: takes a game id over the desktop-local
   // Effect RPC surface, calls prepare-stream against the connected

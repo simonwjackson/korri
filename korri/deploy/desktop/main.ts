@@ -29,6 +29,7 @@ import type {
 } from "./connection-state-snapshot"
 import { createDesktopApp } from "./create-desktop-app"
 import { loadDesktopConfig, saveDesktopConfig } from "./desktop-config"
+import { foregroundSessionStatusSnapshotFromOwnerStatus } from "./foreground-session-status-snapshot"
 import { createDesktopInputBroker } from "./input-broker"
 import { installInputDispatchBootstrap } from "./input-dispatch-bootstrap"
 import {
@@ -221,11 +222,19 @@ async function main() {
   foregroundSessionOwner =
     createLaunchBridgeForegroundSessionOwner(launchBridgeOptions)
 
+  const getForegroundSessionStatus = () => {
+    const owner = foregroundSessionOwner
+    return foregroundSessionStatusSnapshotFromOwnerStatus({
+      status: owner?.status() ?? { state: { _tag: "IdleReady" }, events: [] },
+    })
+  }
+
   const app = createDesktopApp({
     assetRoot,
     getUpstream,
     getConnectionState,
     getRuntimeConfig,
+    getForegroundSessionStatus,
     launchBridge: {
       ...launchBridgeOptions,
       foregroundSessionOwner,

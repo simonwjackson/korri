@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
+import { decodeForegroundSessionStatusSnapshot } from "@shared/stream/foreground-session-status"
 import type { ConnectionStateSnapshot } from "./connection-state-snapshot"
 import { createDesktopApp } from "./create-desktop-app"
 
@@ -451,6 +452,63 @@ describe("connected serve inlines runtime-config", () => {
     // Should contain exactly one closing </script>, the one closing
     // the inlined runtime-config script.
     expect(body.match(/<\/script>/g)?.length).toBe(1)
+  })
+})
+
+describe("/__korri/desktop/foreground-session-status", () => {
+  beforeEach(async () => {
+    assetRoot = await mkdtemp(join(tmpdir(), "korri-desktop-app-"))
+  })
+
+  afterEach(async () => {
+    await rm(assetRoot, { recursive: true, force: true })
+  })
+
+  test("returns the configured foreground session status as no-store JSON", async () => {
+    const app = createDesktopApp({
+      assetRoot,
+      getUpstream: noUpstream,
+      getConnectionState: alwaysConnected,
+      getForegroundSessionStatus: () => ({
+        schemaVersion: 1,
+        serverTimestamp: "2026-05-26T12:00:00.000Z",
+        state: "IdleReady",
+        recentEvents: [],
+      }),
+    })
+
+    const response = await app.fetch(
+      request("/__korri/desktop/foreground-session-status"),
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get("content-type") ?? "").toContain(
+      "application/json",
+    )
+    expect(response.headers.get("cache-control") ?? "").toContain("no-store")
+    const body = await response.json()
+    expect(decodeForegroundSessionStatusSnapshot(body)).toEqual({
+      schemaVersion: 1,
+      serverTimestamp: "2026-05-26T12:00:00.000Z",
+      state: "IdleReady",
+      recentEvents: [],
+    })
+  })
+
+  test("returns 503 when foreground session status is not configured", async () => {
+    const app = createDesktopApp({
+      assetRoot,
+      getUpstream: noUpstream,
+      getConnectionState: alwaysConnected,
+    })
+
+    const response = await app.fetch(
+      request("/__korri/desktop/foreground-session-status"),
+    )
+
+    expect(response.status).toBe(503)
+    const body = (await response.json()) as { readonly error: string }
+    expect(body.error).toContain("Foreground session status not configured")
   })
 })
 
