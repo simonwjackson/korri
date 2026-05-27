@@ -1,4 +1,7 @@
-import type { TerminalReadinessEventType } from "@shared/library/sessiond-managed-launch-protocol"
+import type {
+  LaunchReadyMode,
+  TerminalReadinessEventType,
+} from "@shared/library/sessiond-managed-launch-protocol"
 import type { KorriSessiondServiceManager } from "./sessiond"
 import type {
   KorriRendererController,
@@ -19,6 +22,14 @@ export type SessionRoleId = "kiosk" | "source-machine"
 export interface SessionRole {
   /** Stable role identity surfaced to clients and logs. */
   readonly id: SessionRoleId
+
+  /**
+   * Wire-protocol mode label for this role's idle target.
+   * Kiosk: `"home"`. Source-machine: `"idle"`. Sessiond translates its
+   * internal `state.mode === "home"` to this label in managed-launch
+   * status responses.
+   */
+  readonly idleModeLabel: LaunchReadyMode
 
   /** Terminal readiness event emitted on the wire when idle is restored. */
   readonly idleReadyEventName: TerminalReadinessEventType
@@ -103,6 +114,7 @@ export function createKioskSessionRole(
 
   return {
     id: "kiosk",
+    idleModeLabel: "home",
     idleReadyEventName: "home-ready",
     emitsRendererStopped: true,
     enterIdle: async () => {

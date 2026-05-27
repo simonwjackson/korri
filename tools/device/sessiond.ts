@@ -14,11 +14,13 @@ import {
 } from "@shared/library/sessiond-managed-launch-protocol"
 import { createShellLauncher } from "@shared/library/shell-launcher"
 import { logger as defaultLogger } from "@shared/logger"
+import { findStreamSurfaceWindows } from "./game-stream-fullscreen"
 import {
   createElectrobunController,
   realElectrobunRunner,
 } from "./sessiond-electrobun"
 import {
+  createProcfsProcessList,
   createSystemGamescopeReaper,
   type GamescopeReaper,
 } from "./sessiond-gamescope-reaper"
@@ -27,6 +29,8 @@ import type {
   KorriRendererStatus,
 } from "./sessiond-renderer"
 import { createKioskSessionRole, type SessionRole } from "./sessiond-role"
+import type { SourceMachineSwayController } from "./sessiond-source-machine"
+import { createSourceMachineSessionRole } from "./sessiond-source-machine"
 import {
   beginKorriLaunch,
   beginKorriRestore,
@@ -41,6 +45,10 @@ import {
   startKorriSession,
   stopKorriSession,
 } from "./sessiond-state"
+import {
+  createStatusSidecar,
+  type StatusSidecar,
+} from "./sessiond-status-sidecar"
 import {
   createSwayController,
   type SwayCommandRunner,
@@ -86,6 +94,14 @@ export interface KorriSessiondOptions {
    * an explicit reap pass.
    */
   readonly reaper?: GamescopeReaper
+  /**
+   * Back-compat `status.json` sidecar (source-machine role only). When
+   * configured, sessiond writes a runner-shaped JSON snapshot on every
+   * state transition so operator tooling that polls
+   * `KORRI_GAME_STREAM_STATUS_PATH` keeps working. Kiosk-role hosts do
+   * not configure this.
+   */
+  readonly statusSidecar?: StatusSidecar
   readonly logger?: KorriSessiondLogger
 }
 
@@ -122,6 +138,7 @@ export function createKorriSessiondCore(
   const role: SessionRole =
     options.role ?? createKioskSessionRole({ renderer, sway, serviceManager })
   const reaper = options.reaper
+  const statusSidecar = options.statusSidecar
   let state: KorriSessionState = initialKorriSessionState
   let eventSequence = 0
   const lifecycleEvents: SessiondManagedLaunchEvent[] = []
@@ -146,17 +163,34 @@ export function createKorriSessiondCore(
     }
   }
 
+  function emitStatusSidecar(): void {
+    if (!statusSidecar) return
+    void statusSidecar.write({
+      mode: state.mode,
+      ...(state.launchId ? { launchId: state.launchId } : {}),
+      ...(state.failureReason ? { failureReason: state.failureReason } : {}),
+    })
+  }
+
   function managedStatus(): SessiondManagedLaunchStatus {
     const active = korriSessionActiveLaunch(state)
+    const wireMode = state.mode === "home" ? role.idleModeLabel : state.mode
     return {
       schemaVersion: 1,
-      mode: state.mode,
+      mode: wireMode,
       capabilities: {
         managedLaunch: true,
         lifecycleEvents: true,
         perLaunchTermination: typeof launcher.spawn === "function",
       },
-      ...(active ? { active } : {}),
+      ...(active
+        ? {
+            active: {
+              launchId: active.launchId,
+              mode: active.mode === "home" ? role.idleModeLabel : active.mode,
+            },
+          }
+        : {}),
       ...(state.failureReason ? { failureReason: state.failureReason } : {}),
       restoreAttempts: state.restoreAttempts,
     }
@@ -199,12 +233,15 @@ export function createKorriSessiondCore(
 
   async function enterHome() {
     state = startKorriSession(state)
+    emitStatusSidecar()
     await role.enterIdle()
     state = markKorriHome(state)
+    emitStatusSidecar()
   }
 
   async function leaveKorri() {
     state = stopKorriSession()
+    emitStatusSidecar()
     await role.leaveIdle()
   }
 
@@ -231,6 +268,7 @@ export function createKorriSessiondCore(
 
     const launchId = requestedLaunchId ?? crypto.randomUUID()
     state = beginKorriLaunch(state, launchId)
+    emitStatusSidecar()
     activeManagedLaunch = { launchId }
     pushLifecycleEvent(launchId, { type: "launch-accepted" })
 
@@ -256,6 +294,7 @@ export function createKorriSessiondCore(
         pushLifecycleEvent(launchId, { type: "renderer-stopped" })
       }
       state = markKorriGameRunning(state)
+      emitStatusSidecar()
 
       const spawn = launcher.spawn
       if (spawn) {
@@ -300,6 +339,7 @@ export function createKorriSessiondCore(
     })
 
     state = beginKorriRestore(state)
+    emitStatusSidecar()
     pushLifecycleEvent(launchId, { type: "restoring" })
     const pgid =
       activeManagedLaunch?.launchId === launchId
@@ -324,6 +364,7 @@ export function createKorriSessiondCore(
       }
       await role.restoreIdleAfterLaunch()
       state = completeKorriRestore(state)
+      emitStatusSidecar()
       pushLifecycleEvent(launchId, {
         type: role.idleReadyEventName,
         readiness: { status: "ok", evidence: role.idleReadyEvidence() },
@@ -331,6 +372,7 @@ export function createKorriSessiondCore(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       state = failKorriRestore(state, message)
+      emitStatusSidecar()
       pushLifecycleEvent(launchId, {
         type: "recovering",
         message,
@@ -659,6 +701,38 @@ function realSwayController(): SwayController {
   return createSwayController({ runner, selector })
 }
 
+function realSourceMachineSwayController(): SourceMachineSwayController {
+  const runSwaymsg = async (args: readonly string[]): Promise<string> => {
+    const proc = Bun.spawn(["swaymsg", ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const stdout = await new Response(proc.stdout).text()
+    const stderr = await new Response(proc.stderr).text()
+    const exitCode = await proc.exited
+    if (exitCode !== 0) throw new Error(stderr || `swaymsg exited ${exitCode}`)
+    return stdout
+  }
+  return {
+    getGamescopeWindows: async () => {
+      const raw = await runSwaymsg(["-t", "get_tree"])
+      const tree = JSON.parse(raw)
+      return findStreamSurfaceWindows(tree).map(surface => ({
+        id: surface.id,
+        focused: surface.focused,
+        fullscreen: surface.fullscreen,
+        appId: surface.appId ?? null,
+        title: surface.title ?? null,
+      }))
+    },
+    clearGamescopeWindows: async windows => {
+      for (const window of windows) {
+        await runSwaymsg([`[con_id=${window.id}] kill`])
+      }
+    },
+  }
+}
+
 function realServiceManager(): KorriSessiondServiceManager {
   return {
     async maskEssway() {
@@ -699,10 +773,31 @@ async function main() {
     process.env.KORRI_SESSIOND_PORT ?? `${DEFAULT_PORT}`,
     10,
   )
+  const roleId = process.env.KORRI_SESSIOND_ROLE ?? "kiosk"
+  const reaper = createSystemGamescopeReaper({ logger: defaultLogger })
+
+  const role: SessionRole | undefined =
+    roleId === "source-machine"
+      ? createSourceMachineSessionRole({
+          sway: realSourceMachineSwayController(),
+          processList: createProcfsProcessList(),
+        })
+      : undefined
+
+  const statusSidecar =
+    roleId === "source-machine"
+      ? createStatusSidecar({
+          path: process.env.KORRI_GAME_STREAM_STATUS_PATH,
+          logger: defaultLogger,
+        })
+      : undefined
+
   const handle = await startKorriSessiond({
     port,
     token,
-    reaper: createSystemGamescopeReaper({ logger: defaultLogger }),
+    reaper,
+    ...(role ? { role } : {}),
+    ...(statusSidecar ? { statusSidecar } : {}),
   })
 
   const shutdown = async (signal: string) => {

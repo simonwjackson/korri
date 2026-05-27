@@ -9,6 +9,10 @@ import type {
 } from "./sessiond-gamescope-reaper"
 import type { SessionRole } from "./sessiond-role"
 import type { KorriWindowSnapshot } from "./sessiond-state"
+import type {
+  SessiondLifecycleSnapshot,
+  StatusSidecar,
+} from "./sessiond-status-sidecar"
 
 const token = "test-token"
 const spec: LaunchSpec = { command: "/bin/game", args: ["rom.smc"] }
@@ -691,10 +695,85 @@ describe("korri sessiond", () => {
     expect(reapCalls).toEqual([])
   })
 
+  it("writes status sidecar snapshots on every kiosk lifecycle transition", async () => {
+    const snapshots: SessiondLifecycleSnapshot[] = []
+    const sidecar: StatusSidecar = {
+      write: async snapshot => {
+        snapshots.push(snapshot)
+      },
+    }
+    const injectedCore = createKorriSessiondCore({
+      token,
+      logger: silentLogger,
+      statusSidecar: sidecar,
+      launcher: { run: async () => ({ status: "launched" }) },
+      renderer: {
+        kind: "electrobun",
+        launch: async () => ({
+          pid: 200,
+          command: { command: "electrobun", args: [] },
+        }),
+        stop: async () => {},
+      },
+      sway: {
+        getKorriWindows: async () => [
+          { id: 200, focused: true, fullscreen: true },
+        ],
+        applyDecisions: async () => [],
+      },
+      serviceManager: {
+        maskEssway: async () => {},
+        restoreEssway: async () => {},
+      },
+    })
+
+    await injectedCore.handleRequest(
+      new Request("http://127.0.0.1:3003/control/start", {
+        method: "POST",
+        headers: { "x-korri-sessiond-token": token },
+      }),
+    )
+
+    const modes = snapshots.map(s => s.mode)
+    expect(modes).toContain("starting")
+    expect(modes).toContain("home")
+  })
+
+  it("translates state.mode='home' to the role's idleModeLabel in managed status", async () => {
+    const role: SessionRole = {
+      id: "source-machine",
+      idleModeLabel: "idle",
+      idleReadyEventName: "idle-ready",
+      emitsRendererStopped: false,
+      enterIdle: async () => {},
+      leaveIdle: async () => {},
+      beforeChildLaunch: async () => {},
+      restoreIdleAfterLaunch: async () => {},
+      reconcileIdle: async () => {},
+      idleReadyEvidence: () => "idle-blank",
+      rendererStatus: () => ({ kind: "noop" }),
+    }
+    const core = createKorriSessiondCore({
+      token,
+      logger: silentLogger,
+      role,
+      launcher: { run: async () => ({ status: "launched" }) },
+    })
+
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    const response = await request(core, "/managed-launch/status", authorized())
+    const body = await response.json()
+
+    expect(body.mode).toBe("idle")
+    expect(core.status().state.mode).toBe("home")
+  })
+
   it("delegates idle target to injected SessionRole and emits the role's terminal readiness event", async () => {
     const calls: string[] = []
     const role: SessionRole = {
       id: "source-machine",
+      idleModeLabel: "idle",
       idleReadyEventName: "idle-ready",
       emitsRendererStopped: false,
       enterIdle: async () => {
