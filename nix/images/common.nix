@@ -21,6 +21,7 @@ let
   liveUsbModule = import ./live-usb.nix { inherit korri nixpkgs; };
   liveUsbRuntimeModule = import ./live-usb-runtime.nix { inherit korri; };
   desktopLabModule = ./desktop-lab.nix;
+  sourceMachineModule = ./source-machine.nix;
 
   baseModule =
     { lib, ... }:
@@ -101,6 +102,24 @@ rec {
       inherit platformModules modules includeBase;
     };
 
+  mkSourceMachineModules =
+    {
+      platformModules ? [ ],
+      modules ? [ ],
+      includeBase ? true,
+    }:
+    mkProductModules {
+      productModule = sourceMachineModule;
+      inherit platformModules includeBase;
+      # korri-game-stream is transitively imported via korri-server.
+      # korri-sessiond is the new Phase 4C module — added explicitly here
+      # because no aggregate transitively imports it yet.
+      modules = [
+        korri.nixosModules.korri-sessiond
+      ]
+      ++ modules;
+    };
+
   mkLiveUsbKioskRuntimeModules =
     {
       platformModules ? [ ],
@@ -147,6 +166,15 @@ rec {
       modules ? [ ],
     }:
     mkSystemFromModules (mkDesktopLabModules {
+      inherit platformModules modules;
+    });
+
+  mkSourceMachineSystem =
+    {
+      platformModules ? [ ],
+      modules ? [ ],
+    }:
+    mkSystemFromModules (mkSourceMachineModules {
       inherit platformModules modules;
     });
 

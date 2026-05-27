@@ -435,6 +435,10 @@
           platformModules = [ ./nix/images/platforms/x86.nix ];
         };
 
+        korriSourceMachineSystem = korriImages.mkSourceMachineSystem {
+          platformModules = [ ./nix/images/platforms/x86.nix ];
+        };
+
         korriKioskLiveUsbSystem = korriImages.mkLiveUsbKioskSystem {
           platformModules = [ ./nix/images/platforms/x86.nix ];
         };
@@ -480,6 +484,7 @@
           korri-headless-system = korriHeadlessSystem.config.system.build.toplevel;
           korri-kiosk-system = korriKioskSystem.config.system.build.toplevel;
           korri-desktop-lab-system = korriDesktopLabSystem.config.system.build.toplevel;
+          korri-source-machine-system = korriSourceMachineSystem.config.system.build.toplevel;
           korri-kiosk-live-iso = korriKioskLiveUsbSystem.config.system.build.isoImage;
           korri-kiosk-live-developer-iso = korriKioskLiveUsbDeveloperSystem.config.system.build.isoImage;
         }
@@ -573,6 +578,10 @@
             korri-sessiond-module = import ./nix/tests/korri-sessiond-module-check.nix {
               inherit pkgs;
               korriSessiondModule = self.nixosModules.korri-sessiond;
+            };
+            korri-source-machine-image = import ./nix/tests/korri-source-machine-image-check.nix {
+              inherit pkgs;
+              sourceMachineSystem = korriSourceMachineSystem;
             };
             korri-server-module = import ./nix/tests/korri-server-module-check.nix {
               inherit pkgs;
@@ -671,6 +680,7 @@
                 self.checks.${system}.korri-input-module
                 self.checks.${system}.korri-game-stream-module
                 self.checks.${system}.korri-sessiond-module
+                self.checks.${system}.korri-source-machine-image
                 self.checks.${system}.korri-server-module
                 self.checks.${system}.korri-module-identity-audit
                 self.checks.${system}.korri-sunshine-runtime-bitrate-patch
@@ -702,6 +712,10 @@
                 {
                   name = "korri-sessiond-module";
                   owner = "module";
+                }
+                {
+                  name = "korri-source-machine-image";
+                  owner = "composed-system";
                 }
                 {
                   name = "korri-server-module";
