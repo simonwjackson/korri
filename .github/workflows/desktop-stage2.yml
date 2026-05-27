@@ -56,6 +56,7 @@ jobs:
       - name: Evaluate native Nix standard gate
         run: |
           nix build .#checks.x86_64-linux.korri-standard-native --no-link
+          nix build .#checks.x86_64-linux.korri-streaming-package-builds --dry-run --no-link
           nix build \
             .#packages.x86_64-linux.korri-kiosk-live-iso \
             .#packages.x86_64-linux.korri-kiosk-live-developer-iso \

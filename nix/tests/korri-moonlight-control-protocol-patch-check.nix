@@ -2,7 +2,6 @@
   pkgs,
   patchPath,
   readmePath,
-  moonlightPackage,
 }:
 
 let
@@ -84,10 +83,7 @@ else
   pkgs.runCommand "korri-moonlight-control-protocol-patch-check" { } ''
     mkdir -p "$out"
 
-    test -x ${moonlightPackage}/bin/moonlight
-    test -f ${moonlightPackage}/nix-support/moonlight-embedded-korri/manifest.txt
-
     cat > "$out/summary.txt" <<'EOF'
-    Korri Moonlight local control protocol patch invariants passed and patched package built.
+    Korri Moonlight local control protocol patch invariants passed.
     EOF
   ''

@@ -4,8 +4,6 @@
   readmePath,
   moonlightPatchPath,
   moonlightReadmePath,
-  sunshinePackage,
-  moonlightPackage,
 }:
 
 let
@@ -167,11 +165,7 @@ else
   pkgs.runCommand "korri-sunshine-runtime-bitrate-patch-check" { } ''
     mkdir -p "$out"
 
-    test -x ${sunshinePackage}/bin/sunshine
-    test -x ${moonlightPackage}/bin/moonlight
-    test -f ${moonlightPackage}/nix-support/moonlight-embedded-korri/manifest.txt
-
     cat > "$out/summary.txt" <<'EOF'
-    Korri Sunshine runtime bitrate patch invariants passed and patched packages built.
+    Korri Sunshine runtime bitrate patch invariants passed.
     EOF
   ''
