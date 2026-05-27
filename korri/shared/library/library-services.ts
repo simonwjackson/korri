@@ -1,7 +1,11 @@
 import type { ResolvedGameRecord } from "@shared/fixtures/games/game"
 import type { EphemeralOverride } from "@shared/library/config/ephemeral-override"
 import type { GamescopePolicy } from "@shared/library/config/inheritable-fields"
-import type { LaunchResult, LaunchSpec } from "@shared/library/launcher"
+import type {
+  LaunchResult,
+  LaunchSpec,
+  ManagedLaunchResult,
+} from "@shared/library/launcher"
 import { Context, type Effect, Schema } from "effect"
 
 export class LibraryError extends Schema.TaggedErrorClass<LibraryError>()(
@@ -52,6 +56,9 @@ export interface LibrarySourceService {
 
 export interface LauncherService {
   readonly run: (spec: LaunchSpec) => Effect.Effect<LaunchResult, LibraryError>
+  readonly spawn?: (
+    spec: LaunchSpec,
+  ) => Effect.Effect<ManagedLaunchResult, LibraryError>
 }
 
 export class LibrarySource extends Context.Service<

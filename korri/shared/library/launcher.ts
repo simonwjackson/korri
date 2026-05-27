@@ -67,6 +67,26 @@ export type LaunchResult =
       readonly failureKind?: LaunchFailureKind
     }
 
+export interface ManagedLaunchSessionHandle {
+  readonly id: string
+  readonly processId?: number
+  readonly exited: Promise<{ readonly exitCode: number | null }>
+  readonly isGone?: () => Promise<boolean> | boolean
+  readonly terminate: () => void
+  readonly terminateNow: () => void
+}
+
+export type ManagedLaunchResult =
+  | {
+      readonly status: "started"
+      readonly session: ManagedLaunchSessionHandle
+      readonly result: Promise<LaunchResult>
+    }
+  | {
+      readonly status: "failed"
+      readonly result: Extract<LaunchResult, { readonly status: "failed" }>
+    }
+
 /**
  * The launcher contract. Implementations spawn or otherwise execute the
  * `LaunchSpec` and resolve when the launch attempt has a definite outcome
@@ -74,4 +94,5 @@ export type LaunchResult =
  */
 export interface Launcher {
   run(spec: LaunchSpec): Promise<LaunchResult>
+  spawn?: (spec: LaunchSpec) => Promise<ManagedLaunchResult>
 }

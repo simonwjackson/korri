@@ -1,5 +1,10 @@
 import { readFile } from "node:fs/promises"
-import type { Launcher, LaunchResult, LaunchSpec } from "./launcher"
+import type {
+  Launcher,
+  LaunchResult,
+  LaunchSpec,
+  ManagedLaunchResult,
+} from "./launcher"
 
 export interface SessionLauncherOptions {
   readonly url: string
@@ -13,12 +18,25 @@ export type SessionLauncherFetch = (
   init?: RequestInit,
 ) => Promise<Response>
 
-export function createSessionLauncher(
-  options: SessionLauncherOptions,
-): Launcher {
+export function createSessionLauncher(options: SessionLauncherOptions): Launcher {
   return {
     async run(spec) {
       return launchViaSessiond(spec, options)
+    },
+    async spawn() {
+      return unsupportedManagedSessiondLaunch()
+    },
+  }
+}
+
+function unsupportedManagedSessiondLaunch(): ManagedLaunchResult {
+  return {
+    status: "failed",
+    result: {
+      status: "failed",
+      exitCode: 125,
+      stderrTail:
+        "managed sessiond launch unsupported: sessiond does not expose child handles yet",
     },
   }
 }

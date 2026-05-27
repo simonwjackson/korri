@@ -12,6 +12,14 @@ const runWith = (layer: ReturnType<typeof makeInMemoryLauncherLayer>) =>
     return yield* launcher.run(spec)
   }).pipe(Effect.provide(layer))
 
+const spawnWith = (layer: ReturnType<typeof makeInMemoryLauncherLayer>) =>
+  Effect.gen(function* () {
+    const launcher = yield* Launcher
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("in-memory launcher missing managed spawn")
+    return yield* spawn(spec)
+  }).pipe(Effect.provide(layer))
+
 describe("makeInMemoryLauncherLayer", () => {
   it("returns launched for succeed behavior", async () => {
     const result = await Effect.runPromise(
@@ -60,5 +68,52 @@ describe("makeInMemoryLauncherLayer", () => {
     )
 
     expect(exit._tag).toBe("Failure")
+  })
+
+  it("can hold a managed launch until the test resolves its exit", async () => {
+    const control = makeInMemoryLauncherLayer.createManagedControl()
+    const managed = await Effect.runPromise(
+      spawnWith(
+        makeInMemoryLauncherLayer({
+          behavior: { kind: "managed", control },
+        }),
+      ),
+    )
+
+    expect(managed.status).toBe("started")
+    if (managed.status === "started") {
+      let settled = false
+      void managed.result.then(() => {
+        settled = true
+      })
+      await Promise.resolve()
+      expect(settled).toBe(false)
+
+      control.resolveExit({ exitCode: 7, stderrTail: "boom" })
+      expect(await managed.session.exited).toEqual({ exitCode: 7 })
+      expect(await managed.result).toEqual({
+        status: "failed",
+        exitCode: 7,
+        stderrTail: "boom",
+      })
+    }
+  })
+
+  it("terminates a managed in-memory launch through the handle", async () => {
+    const control = makeInMemoryLauncherLayer.createManagedControl()
+    const managed = await Effect.runPromise(
+      spawnWith(
+        makeInMemoryLauncherLayer({
+          behavior: { kind: "managed", control },
+        }),
+      ),
+    )
+
+    expect(managed.status).toBe("started")
+    if (managed.status === "started") {
+      managed.session.terminate()
+      expect(control.signals).toEqual(["SIGTERM"])
+      expect(await managed.result).toEqual({ status: "failed", exitCode: 143 })
+    }
   })
 })

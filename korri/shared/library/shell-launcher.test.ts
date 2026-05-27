@@ -120,4 +120,45 @@ describe("createShellLauncher (real Bun.spawn)", () => {
       expect(failed.stderrTail).toContain(`argv: ${evilArg}`)
     }
   })
+
+  it("managed spawn preserves argv, env, cwd, and terminal stderr diagnostics", async () => {
+    const launcher = createShellLauncher()
+    const cwd = resolve(REPO_ROOT, "out", "tmp")
+    const evilArg = "filename with spaces; rm -rf / && echo pwned"
+    const managed = await launcher.spawn!({
+      command: "/bin/sh",
+      args: [
+        "-c",
+        "printf 'cwd:%s\\n' \"$PWD\" 1>&2; printf 'arg:%s\\n' \"$1\" 1>&2; exit \"$KORRI_FAKE_GAME_EXIT\"",
+        "sh",
+        evilArg,
+      ],
+      env: { KORRI_FAKE_GAME_EXIT: "9" },
+      cwd,
+    })
+
+    expect(managed.status).toBe("started")
+    if (managed.status === "started") {
+      expect(managed.session.processId).toBeGreaterThan(0)
+      expect(await managed.session.exited).toEqual({ exitCode: 9 })
+      const result = await managed.result
+      expect(result.status).toBe("failed")
+      if (result.status === "failed") {
+        expect(result.exitCode).toBe(9)
+        expect(result.stderrTail).toContain(`cwd:${cwd}`)
+        expect(result.stderrTail).toContain(`arg:${evilArg}`)
+      }
+    }
+  })
+
+  it("managed spawn returns failed without a handle when the binary does not exist", async () => {
+    const launcher = createShellLauncher()
+    const managed = await launcher.spawn!({ command: "/no/such/binary", args: [] })
+
+    expect(managed.status).toBe("failed")
+    if (managed.status === "failed") {
+      expect(managed.result.exitCode).toBe(127)
+      expect(managed.result.stderrTail).toBeDefined()
+    }
+  })
 })

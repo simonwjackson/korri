@@ -112,4 +112,20 @@ describe("session launcher", () => {
       }),
     ).toBeDefined()
   })
+
+  it("fails closed for managed spawn because sessiond does not expose child handles yet", async () => {
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async () => Response.json({ result: { status: "launched" } }),
+    })
+
+    const result = await launcher.spawn!(spec)
+
+    expect(result.status).toBe("failed")
+    if (result.status === "failed") {
+      expect(result.result.exitCode).toBe(125)
+      expect(result.result.stderrTail).toContain("managed sessiond launch unsupported")
+    }
+  })
 })

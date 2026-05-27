@@ -23,64 +23,79 @@
 
 import { logger } from "@shared/logger/logger"
 
-import type { Launcher, LaunchResult, LaunchSpec } from "./launcher"
+import type {
+  Launcher,
+  LaunchResult,
+  LaunchSpec,
+  ManagedLaunchResult,
+} from "./launcher"
 
 const STDERR_TAIL_BYTES = 4 * 1024
 
 export function createShellLauncher(): Launcher {
   return {
     async run(spec: LaunchSpec): Promise<LaunchResult> {
-      const argv = [spec.command, ...spec.args] as const
+      const managed = await spawnShellLaunch(spec)
+      if (managed.status === "failed") return managed.result
+      return await managed.result
+    },
+    spawn: spawnShellLaunch,
+  }
+}
 
-      logger.info(
-        { command: spec.command, argc: spec.args.length },
-        "shell-launcher: spawning",
-      )
+async function spawnShellLaunch(
+  spec: LaunchSpec,
+): Promise<ManagedLaunchResult> {
+  const argv = [spec.command, ...spec.args] as const
 
-      const env = spec.env
-        ? { ...process.env, ...spec.env }
-        : { ...process.env }
+  logger.info(
+    { command: spec.command, argc: spec.args.length },
+    "shell-launcher: spawning",
+  )
 
-      // Bun.spawn throws synchronously when posix_spawn fails (e.g. ENOENT
-      // for the binary itself). The launcher contract is that we never
-      // throw — every outcome is a `LaunchResult`. Translate the throw
-      // into a `failed` result so callers always get a structured answer.
-      let proc: ReturnType<typeof Bun.spawn>
-      try {
-        proc = Bun.spawn(argv as unknown as string[], {
-          env: env as Record<string, string>,
-          cwd: spec.cwd,
-          stderr: "pipe",
-          stdout: "ignore",
-        })
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        const code =
-          error instanceof Error
-            ? (error as NodeJS.ErrnoException).code
-            : undefined
-        logger.warn(
-          { command: spec.command, code, message },
-          "shell-launcher: spawn failed",
-        )
-        // Conventional Unix "command not found" exit code, used here for
-        // any pre-exec failure (the actual exit never happened).
-        return { status: "failed", exitCode: 127, stderrTail: message }
-      }
+  const env = spec.env ? { ...process.env, ...spec.env } : { ...process.env }
 
-      // Read stderr concurrently with awaiting exit so the pipe never blocks
-      // the child. We only keep the tail. proc.stderr is typed as a union
-      // (number | ReadableStream | undefined) because Bun's Subprocess type
-      // depends on the spawn options; we asked for `stderr: "pipe"`, so it
-      // is a stream at runtime. Narrow defensively.
-      const stderrStream =
-        typeof proc.stderr === "object" && proc.stderr !== null
-          ? (proc.stderr as ReadableStream<Uint8Array>)
-          : null
-      const stderrPromise = readTail(stderrStream, STDERR_TAIL_BYTES)
-      const exitCode = await proc.exited
-      const stderrTail = await stderrPromise
+  // Bun.spawn throws synchronously when posix_spawn fails (e.g. ENOENT
+  // for the binary itself). The launcher contract is that we never
+  // throw — every outcome is a `LaunchResult`. Translate the throw
+  // into a `failed` result so callers always get a structured answer.
+  let proc: ReturnType<typeof Bun.spawn>
+  try {
+    proc = Bun.spawn(argv as unknown as string[], {
+      env: env as Record<string, string>,
+      cwd: spec.cwd,
+      stderr: "pipe",
+      stdout: "ignore",
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const code =
+      error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
+    logger.warn(
+      { command: spec.command, code, message },
+      "shell-launcher: spawn failed",
+    )
+    // Conventional Unix "command not found" exit code, used here for
+    // any pre-exec failure (the actual exit never happened).
+    return {
+      status: "failed",
+      result: { status: "failed", exitCode: 127, stderrTail: message },
+    }
+  }
 
+  // Read stderr concurrently with awaiting exit so the pipe never blocks
+  // the child. We only keep the tail. proc.stderr is typed as a union
+  // (number | ReadableStream | undefined) because Bun's Subprocess type
+  // depends on the spawn options; we asked for `stderr: "pipe"`, so it
+  // is a stream at runtime. Narrow defensively.
+  const stderrStream =
+    typeof proc.stderr === "object" && proc.stderr !== null
+      ? (proc.stderr as ReadableStream<Uint8Array>)
+      : null
+  const stderrPromise = readTail(stderrStream, STDERR_TAIL_BYTES)
+  const exited = proc.exited.then(exitCode => ({ exitCode }))
+  const result = Promise.all([proc.exited, stderrPromise]).then(
+    ([exitCode, stderrTail]): LaunchResult => {
       if (exitCode === 0) {
         logger.info(
           { command: spec.command, exitCode: 0 },
@@ -94,6 +109,18 @@ export function createShellLauncher(): Launcher {
       return stderrTail
         ? { status: "failed", exitCode, stderrTail }
         : { status: "failed", exitCode }
+    },
+  )
+
+  return {
+    status: "started",
+    result,
+    session: {
+      id: `shell:${proc.pid}`,
+      processId: proc.pid,
+      exited,
+      terminate: () => proc.kill("SIGTERM"),
+      terminateNow: () => proc.kill("SIGKILL"),
     },
   }
 }
