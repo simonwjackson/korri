@@ -24,6 +24,7 @@ describe("artifact layout", () => {
       },
       demoVideos: "out/demo-videos",
       desktopArtifacts: "out/artifacts/electrobun",
+      runtimeWatch: "out/artifacts/moonlight-runtime-watch",
       generated: {
         bddPlaywright: "out/generated/bdd/playwright",
         bddArgo: "out/generated/bdd/argo",

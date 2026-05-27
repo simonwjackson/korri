@@ -26,6 +26,9 @@ export const generatedArtifactPaths = {
   bddArgo: `${artifactRoot}/generated/bdd/argo`,
 } as const
 
+export const runtimeWatchArtifactPath =
+  `${artifactRoot}/artifacts/moonlight-runtime-watch` as const
+
 export const tempArtifactPath = `${artifactRoot}/tmp` as const
 
 export const artifactLayout = {
@@ -35,6 +38,7 @@ export const artifactLayout = {
   testResults: testResultArtifactPaths,
   demoVideos: demoVideoArtifactPath,
   desktopArtifacts: desktopArtifactPath,
+  runtimeWatch: runtimeWatchArtifactPath,
   generated: generatedArtifactPaths,
   tmp: tempArtifactPath,
 } as const
@@ -46,6 +50,7 @@ export const supportedArtifactPaths = [
   ...Object.values(artifactLayout.testResults),
   artifactLayout.demoVideos,
   artifactLayout.desktopArtifacts,
+  artifactLayout.runtimeWatch,
   ...Object.values(artifactLayout.generated),
   artifactLayout.tmp,
 ] as const
