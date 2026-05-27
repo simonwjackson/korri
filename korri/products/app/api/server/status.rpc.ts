@@ -23,6 +23,33 @@ export class ServerRunnerStatus extends Schema.Class<ServerRunnerStatus>(
   stale: Schema.Boolean,
 }) {}
 
+const SessiondLifecycleMode = Schema.Literals([
+  "stopped",
+  "starting",
+  "home",
+  "idle",
+  "launching",
+  "game",
+  "restoring",
+  "recovering",
+])
+
+export class SessiondLifecycleActive extends Schema.Class<SessiondLifecycleActive>(
+  "SessiondLifecycleActive",
+)({
+  launchId: Schema.String,
+  mode: SessiondLifecycleMode,
+}) {}
+
+export class SessiondLifecycleSummary extends Schema.Class<SessiondLifecycleSummary>(
+  "SessiondLifecycleSummary",
+)({
+  mode: SessiondLifecycleMode,
+  active: Schema.optional(SessiondLifecycleActive),
+  restoreAttempts: Schema.Number,
+  failureReason: Schema.optional(Schema.String),
+}) {}
+
 export class ServerStatusResponse extends Schema.Class<ServerStatusResponse>(
   "ServerStatusResponse",
 )({
@@ -34,6 +61,8 @@ export class ServerStatusResponse extends Schema.Class<ServerStatusResponse>(
   streamControl: Schema.Literals(["enabled", "disabled"]),
   catalog: Schema.Literals(["available", "unavailable"]),
   runner: Schema.optional(ServerRunnerStatus),
+  sessiond: Schema.optional(SessiondLifecycleSummary),
+  sessiondUnavailable: Schema.optional(Schema.Boolean),
   message: Schema.optional(Schema.String),
 }) {}
 
