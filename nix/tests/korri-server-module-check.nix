@@ -61,6 +61,13 @@ let
   serverUserUnit = cfg: cfg.systemd.user.services.korri-server or { };
 
   sunshineApps = cfg: cfg.services.sunshine.applications.apps or [ ];
+  sunshineAppNames = cfg: map (app: app.name) (sunshineApps cfg);
+  sunshineAppByName =
+    cfg: name:
+    let
+      matches = builtins.filter (app: app.name == name) (sunshineApps cfg);
+    in
+    if matches == [ ] then null else builtins.elemAt matches 0;
   sunshineSettings = cfg: cfg.services.sunshine.settings or { };
   firstAppWrapper =
     cfg:
@@ -310,6 +317,20 @@ let
         serviceMode = "system";
         user = "testuser";
         streaming.enable = true;
+      };
+    }
+  );
+
+  streamingDesktopDisabled = evaluateWith (
+    lib.recursiveUpdate streamingPrereqs {
+      services.korri.server = {
+        enable = true;
+        serviceMode = "system";
+        user = "testuser";
+        streaming = {
+          enable = true;
+          desktop.enable = false;
+        };
       };
     }
   );
@@ -633,6 +654,27 @@ let
     ))
     (check "streaming default: Sunshine app entry generated" (
       sunshineApps streamingDefaultGamepad != [ ]
+    ))
+    (check "streaming default: Sunshine exposes the intent runner app" (
+      builtins.elem "Korri Stream" (sunshineAppNames streamingDefaultGamepad)
+    ))
+    (check "streaming default: Sunshine exposes a persistent Desktop app" (
+      builtins.elem "Desktop" (sunshineAppNames streamingDefaultGamepad)
+    ))
+    (check "streaming default: Desktop app keeps the compositor stream alive" (
+      let
+        app = sunshineAppByName streamingDefaultGamepad "Desktop";
+        wrapper = if app == null then "" else builtins.readFile app.cmd;
+      in
+      app != null
+      && app."auto-detach" == false
+      && app."wait-all" == true
+      && app.output == "$HOME/.local/state/korri/desktop-stream.log"
+      && lib.hasInfix "keeping existing compositor session alive" wrapper
+      && lib.hasInfix "sleep 3600" wrapper
+    ))
+    (check "streaming desktop app can be disabled" (
+      !(builtins.elem "Desktop" (sunshineAppNames streamingDesktopDisabled))
     ))
     (check "streaming default: host can override gamepad backend (mkDefault precedence)" (
       (sunshineSettings streamingHostGamepadOverride).gamepad or null == "ds5"

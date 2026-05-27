@@ -31,6 +31,15 @@ let
   serverCacheDir = "/var/cache/${serverCacheDirName}";
   bunTranspilerCacheDir = "${serverCacheDir}/bun-transpiler-cache";
   userRuntimeDir = "%t/korri-game-stream";
+  desktopAppCommand = pkgs.writeShellScript "korri-sunshine-desktop-app" ''
+    set -eu
+    echo "korri-sunshine-desktop-app: keeping existing compositor session alive for Moonlight" >&2
+    trap 'exit 0' INT TERM
+    while true; do
+      ${pkgs.coreutils}/bin/sleep 3600 &
+      wait $! || true
+    done
+  '';
 
   runtimeDir = cfg.streaming.runtimeDir;
   intentPath = cfg.streaming.intentPath;
@@ -424,6 +433,31 @@ in
         };
       };
 
+      desktop = {
+        enable = mkOption {
+          type = types.bool;
+          default = true;
+          description = ''
+            Add a persistent Sunshine Desktop app that attaches Moonlight to the
+            already-running Korri compositor session without requiring a pending
+            Korri launch intent. This is the manual desktop/Steam lab entrypoint
+            for aka-style hosts.
+          '';
+        };
+
+        name = mkOption {
+          type = types.str;
+          default = "Desktop";
+          description = "Sunshine application name for the persistent compositor desktop stream.";
+        };
+
+        outputLog = mkOption {
+          type = types.str;
+          default = "$HOME/.local/state/korri/desktop-stream.log";
+          description = "Sunshine app output log path for the persistent desktop stream.";
+        };
+      };
+
     };
   };
 
@@ -522,6 +556,10 @@ in
           the PulseAudio-compatible server address as host-owned configuration and
           does not derive, discover, or validate it.
         '';
+      }
+      {
+        assertion = !cfg.streaming.desktop.enable || cfg.streaming.desktop.name != "";
+        message = "services.korri.server.streaming.desktop.name must not be empty when desktop streaming is enabled.";
       }
       # New cross-tree precondition: streaming needs a managed compositor
       # substrate and a host-side normalized input provider. Both are
@@ -625,6 +663,18 @@ in
       intentPath = intentPath;
       statusPath = statusPath;
     };
+
+    services.sunshine.applications.apps = mkIf cfg.streaming.desktop.enable (
+      lib.mkAfter [
+        {
+          name = cfg.streaming.desktop.name;
+          cmd = desktopAppCommand;
+          output = cfg.streaming.desktop.outputLog;
+          "auto-detach" = false;
+          "wait-all" = true;
+        }
+      ]
+    );
 
     # Default Sunshine to the InputPlumber + /dev/uinput-validated Xbox 360
     # backend when streaming is on. `lib.mkDefault` ensures host overrides
