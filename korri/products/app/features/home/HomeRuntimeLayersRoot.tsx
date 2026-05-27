@@ -1,9 +1,12 @@
 import { HomeLiveUsbArtifactNotice } from "@app/features/home/HomeLiveUsbArtifactNotice"
+import { ForegroundSessionStatusLayerFixture } from "@app/features/home/foreground-session-status-layer-fixture"
+import { ForegroundSessionStatusLayerLive } from "@app/features/home/foreground-session-status-layer-live"
 import { LauncherLayerBridge } from "@app/features/home/launcher-layer-bridge"
 import { LauncherLayerRpc } from "@app/features/home/launcher-layer-rpc"
 import { LibrarySourceLayerRpc } from "@app/features/home/library-source-layer-rpc"
 import { useAtomInitialValues } from "@effect/atom-react"
 import {
+  foregroundSessionStatusLayerAtom,
   launcherLayerAtom,
   librarySourceLayerAtom,
 } from "@shared/library/library-atoms"
@@ -28,6 +31,12 @@ export function HomeRuntimeLayersRoot({
   useAtomInitialValues([
     [librarySourceLayerAtom, LibrarySourceLayerRpc],
     [launcherLayerAtom, desktopInput ? LauncherLayerBridge : LauncherLayerRpc],
+    [
+      foregroundSessionStatusLayerAtom,
+      desktopInput
+        ? ForegroundSessionStatusLayerLive
+        : ForegroundSessionStatusLayerFixture,
+    ],
   ] as const)
 
   return (
