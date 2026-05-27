@@ -641,24 +641,37 @@
  #define LI_FF_PEN_TOUCH_EVENTS        0x01 // LiSendTouchEvent()/LiSendPenEvent() supported
 --- source-link/third_party/moonlight-common-c/src/ControlStream.c
 +++ src/third_party/moonlight-common-c/src/ControlStream.c
-@@ -267,6 +267,8 @@
+@@ -267,6 +267,9 @@
  static SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE runtime_settings_mvp_command_state[SS_RUNTIME_SETTINGS_MVP_OPERATION_MAX + 1];
  static SS_RUNTIME_SETTINGS_MVP_SETTINGS_STATE runtime_settings_mvp_settings_state;
  static PLT_MUTEX runtime_settings_mvp_mutex;
 +static LiSunshineRuntimeSettingsMvpObserver runtime_settings_mvp_observer;
 +static void* runtime_settings_mvp_observer_context;
++static bool runtime_settings_mvp_mutex_initialized;
  
  static const short packetTypesGen3[] = {
      0x1407, // Request IDR frame
-@@ -832,6 +834,27 @@
+@@ -430,6 +433,7 @@
+     LbqInitializeLinkedBlockingQueue(&asyncCallbackQueue, 30);
+     PltCreateMutex(&enetMutex);
+     PltCreateMutex(&runtime_settings_mvp_mutex);
++    runtime_settings_mvp_mutex_initialized = true;
+ 
+     encryptedControlStream = APP_VERSION_AT_LEAST(7, 1, 431);
+ 
+@@ -832,6 +836,31 @@
      return false;
  }
  
 +void LiSetSunshineRuntimeSettingsMvpObserver(LiSunshineRuntimeSettingsMvpObserver observer, void* context) {
-+    // runtime_settings_mvp_observer setter intentionally lock-free: local_control registers
-+    // before InitializeControlStream() creates runtime_settings_mvp_mutex.
++    if (runtime_settings_mvp_mutex_initialized) {
++        PltLockMutex(&runtime_settings_mvp_mutex);
++    }
 +    runtime_settings_mvp_observer = observer;
 +    runtime_settings_mvp_observer_context = context;
++    if (runtime_settings_mvp_mutex_initialized) {
++        PltUnlockMutex(&runtime_settings_mvp_mutex);
++    }
 +}
 +
 +static void runtime_settings_mvp_notify_observer(const SS_RUNTIME_SETTINGS_MVP_OBSERVER_EVENT* event) {
@@ -678,7 +691,7 @@
  static bool runtime_settings_mvp_record_sent(uint32_t requestId, uint16_t operation) {
      uint16_t family = runtime_settings_mvp_command_family(operation);
      SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE* state;
-@@ -930,6 +953,35 @@
+@@ -930,6 +959,35 @@
      runtime_settings_mvp_settings_state.currentWidth = currentWidth;
      runtime_settings_mvp_settings_state.currentHeight = currentHeight;
      PltUnlockMutex(&runtime_settings_mvp_mutex);
@@ -714,7 +727,7 @@
  }
  
  static void runtime_settings_mvp_record_current_applied(uint16_t operation, uint16_t status, uint32_t value, uint32_t secondaryValue) {
-@@ -1794,6 +1846,7 @@
+@@ -1794,6 +1852,7 @@
                              }
                              if (runtime_settings_mvp_record_ack(requestId, operation, status, reason)) {
                                  runtime_settings_mvp_record_current_applied(operation, status, appliedWidth, appliedHeight);
@@ -722,7 +735,7 @@
                              }
                              Limelog("live-settings-mvp: runtime settings ack request_id=%u operation=3 status=%u reason=%u applied_width=%u applied_height=%u server_applied=%u client_proven=0 packet=0x5505\n",
                                      requestId, status, reason, appliedWidth, appliedHeight, status == SS_RUNTIME_SETTINGS_MVP_STATUS_APPLIED ? 1 : 0);
-@@ -1817,6 +1870,7 @@
+@@ -1817,6 +1876,7 @@
                          }
                          if (runtime_settings_mvp_record_ack(requestId, operation, status, reason)) {
                              runtime_settings_mvp_record_current_applied(operation, status, appliedValue, 0);

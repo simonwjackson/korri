@@ -101,7 +101,7 @@ let
       && !(contains "runtime.commandResult\", \"accepted" patch)
     ))
     (check "Moonlight runtime settings observer registration is safe before control stream mutex init" (
-      contains "runtime_settings_mvp_observer setter intentionally lock-free" patch
+      contains "runtime_settings_mvp_mutex_initialized" patch
       && contains "runtime_settings_mvp_observer = observer" patch
       && contains "runtime_settings_mvp_observer_context = context" patch
     ))
