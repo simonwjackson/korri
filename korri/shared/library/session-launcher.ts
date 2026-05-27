@@ -244,7 +244,13 @@ async function requestSessiondJson(
   }
 
   if (!response.ok) {
-    const text = await response.text()
+    const text = await readResponseTextWithTimeout(
+      response,
+      DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS,
+    ).catch(
+      error =>
+        `unreadable response body: ${error instanceof Error ? error.message : String(error)}`,
+    )
     return {
       status: "failed",
       result: failedManagedLaunch(
@@ -255,7 +261,13 @@ async function requestSessiondJson(
   }
 
   try {
-    return { status: "ok", value: await response.json() }
+    return {
+      status: "ok",
+      value: await readResponseJsonWithTimeout(
+        response,
+        DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS,
+      ),
+    }
   } catch (error) {
     return {
       status: "failed",
@@ -293,11 +305,24 @@ function observeManagedLaunchEvents(options: {
   let childExitObserved = false
   let terminalResult: LaunchResult | undefined
   let resultSettled = false
-  const timeout = setTimeout(() => {
-    settleFailure("sessiond event stream timed out before readiness")
-  }, options.requestTimeoutMs ?? DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS)
-  if ("unref" in timeout && typeof timeout.unref === "function") {
-    timeout.unref()
+  let readinessTimeout: ReturnType<typeof setTimeout> | undefined
+
+  const clearReadinessTimeout = () => {
+    if (readinessTimeout) clearTimeout(readinessTimeout)
+    readinessTimeout = undefined
+  }
+
+  const startReadinessTimeout = () => {
+    clearReadinessTimeout()
+    readinessTimeout = setTimeout(() => {
+      settleFailure("sessiond event stream timed out before readiness")
+    }, options.requestTimeoutMs ?? DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS)
+    if (
+      "unref" in readinessTimeout &&
+      typeof readinessTimeout.unref === "function"
+    ) {
+      readinessTimeout.unref()
+    }
   }
 
   const settleFailure = (message: string) => {
@@ -308,7 +333,7 @@ function observeManagedLaunchEvents(options: {
     if (!resultSettled) {
       resultSettled = true
       resolveReady(readinessFailed(message))
-      clearTimeout(timeout)
+      clearReadinessTimeout()
       resolveResult(failedLaunch("host-unavailable", message))
     }
   }
@@ -345,11 +370,12 @@ function observeManagedLaunchEvents(options: {
         if (!childExitObserved) {
           childExitObserved = true
           resolveExited({ exitCode })
+          startReadinessTimeout()
         }
       }
       if (event.type === "home-ready" && !resultSettled) {
         resultSettled = true
-        clearTimeout(timeout)
+        clearReadinessTimeout()
         resolveReady(readinessOk())
         resolveResult(terminalResult ?? { status: "launched" })
       }
@@ -432,10 +458,36 @@ async function fetchWithTimeout(
   timeoutMs: number,
 ): Promise<Response> {
   const controller = new AbortController()
+  return await promiseWithTimeout(
+    fetchImpl(input, { ...init, signal: controller.signal }),
+    timeoutMs,
+    () => controller.abort(),
+  )
+}
+
+async function readResponseTextWithTimeout(
+  response: Response,
+  timeoutMs: number,
+): Promise<string> {
+  return await promiseWithTimeout(response.text(), timeoutMs)
+}
+
+async function readResponseJsonWithTimeout(
+  response: Response,
+  timeoutMs: number,
+): Promise<unknown> {
+  return await promiseWithTimeout(response.json(), timeoutMs)
+}
+
+async function promiseWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  onTimeout?: () => void,
+): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined
-  const timeoutPromise = new Promise<Response>((_resolve, reject) => {
+  const timeoutPromise = new Promise<T>((_resolve, reject) => {
     timeout = setTimeout(() => {
-      controller.abort()
+      onTimeout?.()
       reject(new Error(`sessiond request timed out after ${timeoutMs}ms`))
     }, timeoutMs)
     if (timeout && "unref" in timeout && typeof timeout.unref === "function") {
@@ -444,10 +496,7 @@ async function fetchWithTimeout(
   })
 
   try {
-    return await Promise.race([
-      fetchImpl(input, { ...init, signal: controller.signal }),
-      timeoutPromise,
-    ])
+    return await Promise.race([promise, timeoutPromise])
   } finally {
     if (timeout) clearTimeout(timeout)
   }

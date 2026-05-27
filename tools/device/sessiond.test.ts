@@ -12,6 +12,7 @@ function startHarness(
     readonly windows?: readonly KorriWindowSnapshot[]
     readonly launchResult?: LaunchResult
     readonly failRendererLaunch?: boolean
+    readonly failRendererRestore?: boolean
     readonly runLaunch?: (spec: LaunchSpec) => Promise<LaunchResult>
     readonly spawnLaunch?: () => Promise<{
       readonly result: Promise<LaunchResult>
@@ -37,8 +38,15 @@ function startHarness(
     renderer: {
       kind: "electrobun",
       launch: async () => {
+        const launchCount = events.filter(
+          event => event === "launch-electrobun",
+        ).length
         events.push("launch-electrobun")
-        if (options.failRendererLaunch) throw new Error("renderer failed")
+        if (
+          options.failRendererLaunch ||
+          (options.failRendererRestore && launchCount > 0)
+        )
+          throw new Error("renderer failed")
         rendererPid += 1
         windows = [{ id: rendererPid, focused: true, fullscreen: true }]
         return {
@@ -269,6 +277,25 @@ describe("korri sessiond", () => {
     expect(events).not.toContain("launch-game:/bin/game")
   })
 
+  it("returns bad-request for malformed managed launch payloads", async () => {
+    const { core } = startHarness()
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    const response = await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ spec: { args: [] } }),
+      }),
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toBe("bad-request")
+  })
+
   it("requires authentication for managed launch commands and events", async () => {
     const { core, events } = startHarness()
 
@@ -401,6 +428,54 @@ describe("korri sessiond", () => {
     expect(events).not.toContain("restore-es")
   })
 
+  it("force terminates an accepted managed launch when requested before child registration", async () => {
+    const spawnReady = deferred<{
+      readonly result: Promise<LaunchResult>
+      readonly terminate: () => void
+      readonly terminateNow: () => void
+    }>()
+    const childExit = deferred<LaunchResult>()
+    const { core, events } = startHarness({
+      spawnLaunch: async () => await spawnReady.promise,
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-1", spec }),
+      }),
+    )
+    await request(
+      core,
+      "/managed-launch/terminate",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-1", force: true }),
+      }),
+    )
+
+    spawnReady.resolve({
+      result: childExit.promise,
+      terminate: () => {
+        events.push("terminate-game")
+        childExit.resolve({ status: "failed", exitCode: 143 })
+      },
+      terminateNow: () => {
+        events.push("terminate-game-now")
+        childExit.resolve({ status: "failed", exitCode: 137 })
+      },
+    })
+
+    await waitForSessionMode(core, "home")
+    expect(events).toContain("terminate-game-now")
+    expect(events).not.toContain("terminate-game")
+  })
+
   it("force terminates the active managed launch identity", async () => {
     const control = deferred<LaunchResult>()
     const { core, events } = startHarness({
@@ -464,6 +539,32 @@ describe("korri sessiond", () => {
     })
     expect(core.status().state.mode).toBe("home")
     expect(events).not.toContain("restore-es")
+  })
+
+  it("emits recovering without home-ready when managed restore fails", async () => {
+    const { core } = startHarness({ failRendererRestore: true })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-1", spec }),
+      }),
+    )
+    await waitForSessionMode(core, "recovering")
+
+    const stream = await request(
+      core,
+      "/managed-launch/events?launchId=launch-1",
+      authorized(),
+    )
+    const lifecycle = parseSseEvents(await stream.text())
+
+    expect(lifecycle.map(event => event.type)).toContain("recovering")
+    expect(lifecycle.map(event => event.type)).not.toContain("home-ready")
   })
 
   it("returns a bounded failed event for stale lifecycle replay requests", async () => {

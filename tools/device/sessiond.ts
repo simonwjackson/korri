@@ -112,7 +112,7 @@ export function createKorriSessiondCore(
   let activeManagedLaunch:
     | {
         readonly launchId: string
-        cancelRequested: boolean
+        cancelRequested?: "graceful" | "force"
         terminate?: () => void
         terminateNow?: () => void
       }
@@ -223,7 +223,7 @@ export function createKorriSessiondCore(
 
     const launchId = requestedLaunchId ?? crypto.randomUUID()
     state = beginKorriLaunch(state, launchId)
-    activeManagedLaunch = { launchId, cancelRequested: false }
+    activeManagedLaunch = { launchId }
     pushLifecycleEvent(launchId, { type: "launch-accepted" })
 
     const result = runManagedLaunch(launchId, spec)
@@ -258,7 +258,11 @@ export function createKorriSessiondCore(
           if (active?.launchId === launchId) {
             active.terminate = spawned.session.terminate
             active.terminateNow = spawned.session.terminateNow
-            if (active.cancelRequested) spawned.session.terminate()
+            if (active.cancelRequested === "force") {
+              spawned.session.terminateNow()
+            } else if (active.cancelRequested === "graceful") {
+              spawned.session.terminate()
+            }
           }
           pushLifecycleEvent(launchId, { type: "child-running" })
           result = await spawned.result
@@ -337,7 +341,7 @@ export function createKorriSessiondCore(
       }
     }
 
-    activeManagedLaunch.cancelRequested = true
+    activeManagedLaunch.cancelRequested = force ? "force" : "graceful"
     if (force) {
       activeManagedLaunch.terminateNow?.()
     } else {
@@ -440,20 +444,29 @@ export function createKorriSessiondCore(
           return lifecycleEventStream(launchId)
         }
         if (request.method === "POST" && url.pathname === "/managed-launch") {
-          const body = decodeSessiondManagedLaunchStartRequest(
-            await request.json(),
+          const body = await decodeRequestJson(
+            request,
+            decodeSessiondManagedLaunchStartRequest,
           )
-          const started = await startManagedLaunch(body.spec, body.launchId)
+          if (body.status === "failed") return body.response
+          const started = await startManagedLaunch(
+            body.value.spec,
+            body.value.launchId,
+          )
           return json(started.response)
         }
         if (
           request.method === "POST" &&
           url.pathname === "/managed-launch/terminate"
         ) {
-          const body = decodeSessiondManagedLaunchTerminateRequest(
-            await request.json(),
+          const body = await decodeRequestJson(
+            request,
+            decodeSessiondManagedLaunchTerminateRequest,
           )
-          return json(terminateManagedLaunchById(body.launchId, body.force))
+          if (body.status === "failed") return body.response
+          return json(
+            terminateManagedLaunchById(body.value.launchId, body.value.force),
+          )
         }
         if (request.method === "POST" && url.pathname === "/launch") {
           const body = (await request.json()) as { readonly spec?: LaunchSpec }
@@ -509,10 +522,34 @@ function authorized(request: Request, token: string): boolean {
   return request.headers.get(TOKEN_HEADER) === token
 }
 
-function json(value: unknown): Response {
+function json(value: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(value), {
-    headers: { "content-type": "application/json" },
+    ...init,
+    headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
   })
+}
+
+async function decodeRequestJson<T>(
+  request: Request,
+  decode: (input: unknown) => T,
+): Promise<
+  | { readonly status: "ok"; readonly value: T }
+  | { readonly status: "failed"; readonly response: Response }
+> {
+  try {
+    return { status: "ok", value: decode(await request.json()) }
+  } catch (error) {
+    return {
+      status: "failed",
+      response: json(
+        {
+          error: "bad-request",
+          message: error instanceof Error ? error.message : String(error),
+        },
+        { status: 400 },
+      ),
+    }
+  }
 }
 
 function failedLaunchResult(
