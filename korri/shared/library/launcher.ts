@@ -47,16 +47,18 @@ export const decodeLaunchSpec = Schema.decodeUnknownSync(LaunchSpec)
  * (including ENOENT for the binary itself). `stderrTail` is the last few KB
  * of the child's stderr, present on failure when the launcher captured any.
  */
-export type LaunchFailureKind =
-  | "command-failed"
-  | "host-unavailable"
-  | "host-control-disabled"
-  | "no-such-game"
-  | "prepare-failed"
-  | "moonlight-failed"
-  | "input-unavailable"
-  | "input-ambiguous"
-  | "session-busy"
+export const LaunchFailureKind = Schema.Literals([
+  "command-failed",
+  "host-unavailable",
+  "host-control-disabled",
+  "no-such-game",
+  "prepare-failed",
+  "moonlight-failed",
+  "input-unavailable",
+  "input-ambiguous",
+  "session-busy",
+])
+export type LaunchFailureKind = Schema.Schema.Type<typeof LaunchFailureKind>
 
 export type LaunchResult =
   | { readonly status: "launched" }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { Schema } from "effect"
 
-import { decodeLaunchSpec, LaunchSpec } from "./launcher"
+import { decodeLaunchSpec, LaunchFailureKind, LaunchSpec } from "./launcher"
 
 describe("LaunchSpec schema", () => {
   it("decodes a minimal valid spec", () => {
@@ -52,5 +52,19 @@ describe("LaunchSpec schema", () => {
     } as const
     const encoded = Schema.encodeSync(LaunchSpec)(decodeLaunchSpec(input))
     expect(encoded).toEqual(input)
+  })
+})
+
+describe("LaunchFailureKind schema", () => {
+  it("decodes session-busy as a shared launch failure kind", () => {
+    expect(Schema.decodeUnknownSync(LaunchFailureKind)("session-busy")).toBe(
+      "session-busy",
+    )
+  })
+
+  it("rejects unknown failure categories", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(LaunchFailureKind)("local-session-busy"),
+    ).toThrow()
   })
 })

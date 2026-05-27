@@ -1,5 +1,6 @@
 import { ApiError } from "@shared/api/rpc/errors"
 import { EphemeralOverride } from "@shared/library/config/ephemeral-override"
+import { LaunchFailureKind } from "@shared/library/launcher"
 import { Schema } from "effect"
 import { Rpc } from "effect/unstable/rpc"
 
@@ -20,6 +21,7 @@ const FailedResult = Schema.Struct({
   status: Schema.Literal("failed"),
   exitCode: Schema.Number,
   stderrTail: Schema.optional(Schema.String),
+  failureKind: Schema.optional(LaunchFailureKind),
 })
 
 export const LaunchLibraryResponse = Schema.Union([
