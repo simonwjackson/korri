@@ -16,6 +16,21 @@ let
   sourceContainsHardwareFact =
     file: builtins.match ".*(SM8550|RockNix|Odin|Thor|DSI-1|DSI-2).*" (builtins.readFile file) != null;
 
+  # Find the retroarch-bare wrapper in a compositor PATH list. The wrapper
+  # uniquely exposes both `passthru.cores` (the declared core list) and
+  # `passthru.unwrapped` (the bare retroarch derivation); matching on both
+  # is more robust than the pname, which gains version suffixes across
+  # nixpkgs revisions (e.g. "retroarch-with-cores-1.21.0").
+  findRetroarchWrappers =
+    path:
+    builtins.filter (
+      p:
+      let
+        pt = p.passthru or { };
+      in
+      builtins.hasAttr "cores" pt && builtins.hasAttr "unwrapped" pt
+    ) path;
+
   checkSystem =
     name: system:
     let
@@ -119,6 +134,26 @@ let
         ))
         (check "${name}: compositor must not install the retired no-portal launcher seed" (
           compositorService.preStart or "" == ""
+        ))
+        # Kiosk RetroArch closure-shape: exactly one core (libretro-fake-08).
+        # Adding cores here grows every kiosk image's closure for every user;
+        # new libretro cores belong in their own packages with their own
+        # opt-in, not appended to nix/images/kiosk.nix's wrapper list.
+        (check "${name}: compositor PATH must include exactly one retroarch-bare wrapper" (
+          builtins.length (findRetroarchWrappers compositor.path) == 1
+        ))
+        (check "${name}: kiosk RetroArch closure must contain exactly one libretro core" (
+          let
+            wrappers = findRetroarchWrappers compositor.path;
+          in
+          wrappers != [ ] && builtins.length (builtins.head wrappers).passthru.cores == 1
+        ))
+        (check "${name}: kiosk RetroArch's single libretro core must be fake08" (
+          let
+            wrappers = findRetroarchWrappers compositor.path;
+            cores = if wrappers == [ ] then [ ] else (builtins.head wrappers).passthru.cores;
+          in
+          cores != [ ] && ((builtins.head cores).core or null) == "fake08"
         ))
       ];
     in

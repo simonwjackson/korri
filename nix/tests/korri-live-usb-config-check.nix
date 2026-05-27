@@ -13,6 +13,25 @@ let
   persistence = cfg.systemd.services."korri-live-usb-persistence";
   greetd = cfg.systemd.services.greetd;
   check = message: assertion: { inherit message assertion; };
+
+  # See nix/tests/korri-rocknix-sm8550-config-check.nix for the rationale
+  # behind matching the retroarch-bare wrapper by passthru shape rather
+  # than pname.
+  findRetroarchWrappers =
+    path:
+    builtins.filter (
+      p:
+      let
+        pt = p.passthru or { };
+      in
+      builtins.hasAttr "cores" pt && builtins.hasAttr "unwrapped" pt
+    ) path;
+
+  compositorPath = cfg.services.korri.compositor.path or [ ];
+  retroarchWrappers = findRetroarchWrappers compositorPath;
+  retroarchCores =
+    if retroarchWrappers == [ ] then [ ] else (builtins.head retroarchWrappers).passthru.cores;
+
   expectedScope = if expectedArtifact == "developer" then "developer-broad" else "product-allowlist";
   expectedHome =
     if expectedArtifact == "developer" then
@@ -125,6 +144,18 @@ let
       == cfg.services.korri.liveUsbPersistence.label
     ))
     (check "debug SSH defaults to off without injected keys" (!cfg.services.openssh.enable))
+    # Kiosk RetroArch closure-shape: exactly one core (libretro-fake-08).
+    # Same constraint enforced for SM8550 and x86 kiosk; live USB inherits
+    # the same kiosk module, so the same assertion belongs here.
+    (check "live USB compositor PATH must include exactly one retroarch-bare wrapper" (
+      builtins.length retroarchWrappers == 1
+    ))
+    (check "live USB RetroArch closure must contain exactly one libretro core" (
+      builtins.length retroarchCores == 1
+    ))
+    (check "live USB RetroArch's single libretro core must be fake08" (
+      retroarchCores != [ ] && ((builtins.head retroarchCores).core or null) == "fake08"
+    ))
   ];
   failures = builtins.filter (candidate: !candidate.assertion) checks;
 in

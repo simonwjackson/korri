@@ -123,6 +123,27 @@ let
     file:
     builtins.match ".*(SM8550|AYN|Odin|DSI-1|DSI-2|UCM|RockNix).*" (builtins.readFile file) != null;
 
+  # See nix/tests/korri-rocknix-sm8550-config-check.nix for the rationale
+  # behind matching the retroarch-bare wrapper by passthru shape rather
+  # than pname.
+  findRetroarchWrappers =
+    path:
+    builtins.filter (
+      p:
+      let
+        pt = p.passthru or { };
+      in
+      builtins.hasAttr "cores" pt && builtins.hasAttr "unwrapped" pt
+    ) path;
+
+  retroarchCoresFor =
+    eval:
+    let
+      path = eval.config.systemd.services."korri-compositor".path or [ ];
+      wrappers = findRetroarchWrappers path;
+    in
+    if wrappers == [ ] then [ ] else (builtins.head wrappers).passthru.cores;
+
   checks = [
     (check "headless system package must be exposed" (packages ? korri-headless-system))
     (check "kiosk system package must be exposed" (packages ? korri-kiosk-system))
@@ -310,6 +331,32 @@ let
     ))
     (check "generic image modules and x86 defaults must not contain RockNix hardware facts" (
       builtins.all (file: !(sourceContainsHardwareFact file)) hardwareFactSourceFiles
+    ))
+    # Kiosk RetroArch closure-shape: exactly one core (libretro-fake-08) on
+    # every x86 kiosk variant. The shared kiosk module wires this in one
+    # place, but each surface that flows through it is asserted here so a
+    # platform-level override that drops or duplicates the wrapper fails
+    # at eval time rather than at runtime.
+    (check "x86 kiosk RetroArch closure must contain exactly one libretro core" (
+      builtins.length (retroarchCoresFor kiosk) == 1
+    ))
+    (check "x86 kiosk RetroArch's single libretro core must be fake08" (
+      let cores = retroarchCoresFor kiosk; in
+      cores != [ ] && ((builtins.head cores).core or null) == "fake08"
+    ))
+    (check "Product live USB RetroArch closure must contain exactly one libretro core" (
+      builtins.length (retroarchCoresFor liveUsb) == 1
+    ))
+    (check "Product live USB RetroArch's single libretro core must be fake08" (
+      let cores = retroarchCoresFor liveUsb; in
+      cores != [ ] && ((builtins.head cores).core or null) == "fake08"
+    ))
+    (check "Developer live USB RetroArch closure must contain exactly one libretro core" (
+      builtins.length (retroarchCoresFor liveUsbDeveloper) == 1
+    ))
+    (check "Developer live USB RetroArch's single libretro core must be fake08" (
+      let cores = retroarchCoresFor liveUsbDeveloper; in
+      cores != [ ] && ((builtins.head cores).core or null) == "fake08"
     ))
   ];
   failures = builtins.filter (candidate: !candidate.assertion) checks;
