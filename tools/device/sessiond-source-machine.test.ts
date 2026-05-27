@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import type { LaunchSpec } from "@shared/library/launcher"
 import type { ProcessInfo } from "./sessiond-gamescope-reaper"
 import {
   createSourceMachineSessionRole,
@@ -260,5 +261,65 @@ describe("source-machine session role", () => {
     })
 
     await expect(role.reconcileIdle()).rejects.toThrow(/sway tree query/i)
+  })
+
+  // Phase 4D / Track A U5 -- foreground surface repair via afterChildRunning.
+
+  it("afterChildRunning is a no-op when no surfaceRepair config is provided", async () => {
+    const { sway, events } = makeSway()
+    const role = createSourceMachineSessionRole({
+      sway,
+      processList: makeProcessList([]),
+      clock: () => 1_000,
+      delay: async () => {},
+      cooldownMs: 0,
+    })
+
+    await role.afterChildRunning({ command: "/bin/game", args: [] })
+    expect(events).toEqual([])
+  })
+
+  it("afterChildRunning invokes the surfaceRepair callback with the role's selector", async () => {
+    const { sway } = makeSway()
+    const repairCalls: Array<{ readonly spec: LaunchSpec }> = []
+    const role = createSourceMachineSessionRole({
+      sway,
+      processList: makeProcessList([]),
+      clock: () => 1_000,
+      delay: async () => {},
+      cooldownMs: 0,
+      surfaceRepair: async spec => {
+        repairCalls.push({ spec })
+      },
+    })
+
+    await role.afterChildRunning({
+      command: "/bin/game",
+      args: ["rom.smc"],
+    })
+
+    expect(repairCalls).toHaveLength(1)
+    expect(repairCalls[0].spec).toEqual({
+      command: "/bin/game",
+      args: ["rom.smc"],
+    })
+  })
+
+  it("afterChildRunning propagates surfaceRepair failures so sessiond maps them to host-unavailable", async () => {
+    const { sway } = makeSway()
+    const role = createSourceMachineSessionRole({
+      sway,
+      processList: makeProcessList([]),
+      clock: () => 1_000,
+      delay: async () => {},
+      cooldownMs: 0,
+      surfaceRepair: async () => {
+        throw new Error("stream surface remained after timeout")
+      },
+    })
+
+    await expect(
+      role.afterChildRunning({ command: "/bin/game", args: [] }),
+    ).rejects.toThrow(/stream surface remained/i)
   })
 })

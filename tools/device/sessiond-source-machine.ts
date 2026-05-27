@@ -14,6 +14,7 @@
  * Plan: docs/plans/2026-05-27-002-feat-foreground-session-source-machine-phase4c-plan.md (U3)
  */
 
+import type { LaunchSpec } from "@shared/library/launcher"
 import type { TerminalReadinessEventType } from "@shared/library/sessiond-managed-launch-protocol"
 import {
   GAMESCOPE_PROCESS_NAMES,
@@ -85,6 +86,17 @@ export function evaluateIdleBlank(
   return { status, checks }
 }
 
+/**
+ * Phase 4D / Track A. Foreground surface repair callback invoked by
+ * the role's `afterChildRunning` hook once sessiond observes the
+ * primary child is running. Production wires this to
+ * `repairStreamSurface` from `tools/device/game-stream-fullscreen.ts`
+ * (the same repair logic the runner used to own before the
+ * generalization). Throwing is mapped by sessiond to
+ * `child-exited` with `failureKind: "host-unavailable"`.
+ */
+export type SourceMachineSurfaceRepair = (spec: LaunchSpec) => Promise<void>
+
 export interface SourceMachineSessionRoleDeps {
   readonly sway: SourceMachineSwayController
   readonly processList: ProcessListQuery
@@ -98,6 +110,14 @@ export interface SourceMachineSessionRoleDeps {
   readonly pollIntervalMs?: number
   /** Max polling attempts before giving up. Default 60. */
   readonly maxReadyAttempts?: number
+  /**
+   * Phase 4D / Track A. Foreground surface repair callback. When set,
+   * the role's `afterChildRunning` invokes this once per managed launch
+   * after sessiond observes the primary child running. Omit in tests
+   * that do not exercise foreground promotion -- the hook degrades to
+   * a no-op.
+   */
+  readonly surfaceRepair?: SourceMachineSurfaceRepair
 }
 
 const DEFAULT_COOLDOWN_MS = 750
@@ -186,11 +206,15 @@ export function createSourceMachineSessionRole(
     beforeChildLaunch: async () => {
       cooldownStartMs = clock()
     },
-    // U5 will replace this no-op with foreground surface repair via
-    // repairStreamSurface. U3 ships the interface shape; U5 ships
-    // the source-machine behavior. Keeping the no-op for now lets
-    // U4's sessiond dispatcher land independently.
-    afterChildRunning: async () => {},
+    // Phase 4D / Track A U5. When the host wires a surfaceRepair
+    // callback (production wires it to repairStreamSurface from
+    // game-stream-fullscreen.ts), the source-machine role promotes
+    // the foreground Gamescope window here -- the same job the
+    // runner used to own inline before Track A.
+    afterChildRunning: async spec => {
+      if (!deps.surfaceRepair) return
+      await deps.surfaceRepair(spec)
+    },
     restoreIdleAfterLaunch: async () => {
       cooldownStartMs = clock()
       await reachIdleBlank()
