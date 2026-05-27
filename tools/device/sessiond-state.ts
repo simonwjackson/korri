@@ -14,6 +14,11 @@ export interface KorriSessionState {
   readonly restoreAttempts: number
 }
 
+export interface KorriSessionActiveLaunch {
+  readonly launchId: string
+  readonly mode: KorriSessionMode
+}
+
 export interface KorriWindowSnapshot {
   readonly id: number
   readonly focused: boolean
@@ -51,6 +56,13 @@ export const initialKorriSessionState: KorriSessionState = {
 
 export function shouldEnforceHomeInvariant(state: KorriSessionState): boolean {
   return state.mode === "home" || state.mode === "recovering"
+}
+
+export function korriSessionActiveLaunch(
+  state: KorriSessionState,
+): KorriSessionActiveLaunch | undefined {
+  if (!state.launchId) return undefined
+  return { launchId: state.launchId, mode: state.mode }
 }
 
 export function startKorriSession(

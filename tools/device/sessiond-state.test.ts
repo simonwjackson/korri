@@ -6,6 +6,7 @@ import {
   evaluateHomeInvariant,
   failKorriRestore,
   initialKorriSessionState,
+  korriSessionActiveLaunch,
   markKorriGameRunning,
   markKorriHome,
   shouldEnforceHomeInvariant,
@@ -34,6 +35,25 @@ describe("korri session state", () => {
     expect(game.mode).toBe("game")
     expect(shouldEnforceHomeInvariant(launching)).toBe(false)
     expect(shouldEnforceHomeInvariant(game)).toBe(false)
+  })
+
+  it("carries the active launch identity through launch, game, and restore", () => {
+    const launching = beginKorriLaunch(markKorriHome(startKorriSession()), "launch-1")
+    const game = markKorriGameRunning(launching)
+    const restored = completeKorriRestore(beginKorriRestore(game))
+
+    expect(korriSessionActiveLaunch(launching)).toEqual({
+      launchId: "launch-1",
+      mode: "launching",
+    })
+    expect(korriSessionActiveLaunch(game)).toEqual({
+      launchId: "launch-1",
+      mode: "game",
+    })
+    expect(korriSessionActiveLaunch(restored)).toEqual({
+      launchId: "launch-1",
+      mode: "home",
+    })
   })
 
   it("re-enables home invariant enforcement after restore succeeds", () => {
