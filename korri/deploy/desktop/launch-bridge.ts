@@ -127,6 +127,13 @@ export interface LaunchBridgeOptions {
   readonly readinessProcessTimeoutMs?: number
   readonly readinessPollMs?: number
   readonly sleep?: (durationMs: number, signal?: AbortSignal) => Promise<void>
+
+  /**
+   * Optional request id seam for tests and diagnostics. Production uses a
+   * unique id per launch attempt so repeated launches of the same game can be
+   * correlated separately from the game identity.
+   */
+  readonly createRequestId?: () => string
 }
 
 /**
@@ -192,7 +199,10 @@ export function createLaunchBridgeForegroundSessionOwner(
     SpawnedLaunchStage,
     LaunchBridgeResponse
   >({
-    requestIdentity: payload => ({ requestId: payload.id, gameId: payload.id }),
+    requestIdentity: payload => ({
+      requestId: (options.createRequestId ?? createLaunchRequestId)(),
+      gameId: payload.id,
+    }),
     adapter: {
       prepare: payload => prepareLaunchStage(options, payload),
       spawn: prepared => spawnLaunchStage(options, prepared),
@@ -201,6 +211,10 @@ export function createLaunchBridgeForegroundSessionOwner(
       launched: ({ prepared, spawned }) => launchedResponse(prepared, spawned),
     },
   })
+}
+
+function createLaunchRequestId(): string {
+  return globalThis.crypto.randomUUID()
 }
 
 async function performLocalStreamLaunch(

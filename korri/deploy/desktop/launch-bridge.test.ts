@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import type { LocalStreamLaunchResponse } from "@app/stream/local-stream-launch-rpc"
 import type { ConnectionServerRecord } from "./connection-state-snapshot"
-import { createLocalStreamLaunchRpcHandler } from "./launch-bridge"
+import {
+  createLaunchBridgeForegroundSessionOwner,
+  createLocalStreamLaunchRpcHandler,
+} from "./launch-bridge"
 
 function postLocalLaunchRpc(payload: unknown): Request {
   return new Request("http://desktop.local/__korri/desktop/rpc", {
@@ -277,6 +280,48 @@ describe("desktop launch bridge", () => {
     absenceResolve()
     await flushMicrotasks()
     expect(events).toContain("probe")
+  })
+
+  test("uses unique request ids while preserving game id for repeated launches", async () => {
+    const first = createManagedSession("first-child")
+    const second = createManagedSession("second-child")
+    const sessions = [first, second]
+    const requestIds = ["request-1", "request-2"]
+    const owner = createLaunchBridgeForegroundSessionOwner({
+      getConnection: () => CONNECTED,
+      createRequestId: () => requestIds.shift() ?? "fallback-request",
+      prepareGame: async (_controlUrl, id) => ({
+        status: "prepared",
+        gameId: id,
+      }),
+      launchMoonlight: async () => ({
+        status: "started",
+        command: "moonlight",
+        session: sessions.shift() ?? createManagedSession("fallback-child"),
+      }),
+    })
+
+    await owner.launch({ id: "gba/wario-land-4" })
+    first.resolveExit({ exitCode: 0 })
+    await flushMicrotasks()
+    await owner.launch({ id: "gba/wario-land-4" })
+
+    const acceptedEvents = owner
+      .status()
+      .events.filter(event => event._tag === "ForegroundSessionLaunchAccepted")
+    expect(acceptedEvents).toEqual([
+      {
+        _tag: "ForegroundSessionLaunchAccepted",
+        requestId: "request-1",
+        gameId: "gba/wario-land-4",
+      },
+      {
+        _tag: "ForegroundSessionLaunchAccepted",
+        requestId: "request-2",
+        gameId: "gba/wario-land-4",
+      },
+    ])
+    second.resolveExit({ exitCode: 0 })
   })
 
   test("accepts a later launch after the managed session exits", async () => {
