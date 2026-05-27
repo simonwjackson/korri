@@ -694,6 +694,379 @@ describe("session launcher", () => {
     expect(requests).toContain("/managed-launch/events")
   })
 
+  // Phase 4D / Track A -- session lifecycle.
+
+  const waitSpec: LaunchSpec = {
+    command: "/bin/steam-wait-monitor.sh",
+    args: ["--pid-tree"],
+  }
+
+  it("forwards lifecycle + wait into the managed-launch start request", async () => {
+    let startBody: unknown
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async (input, init) => {
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(managedStatus({ mode: "idle" }))
+        }
+        if (url.pathname === "/managed-launch") {
+          startBody = init?.body && JSON.parse(String(init.body))
+          return Response.json({ status: "accepted", launchId: "launch-7" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          return openEventStream([])
+        }
+        throw new Error(`unexpected: ${input}`)
+      },
+    })
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("missing managed spawn")
+    void spawn(spec, { lifecycle: "session", wait: waitSpec })
+    // Allow the preflight + start request to flush.
+    await new Promise(resolve => setTimeout(resolve, 5))
+    expect(startBody).toEqual({
+      spec,
+      lifecycle: "session",
+      wait: waitSpec,
+    })
+  })
+
+  it("omits lifecycle and wait fields when not requested (Phase 4B kiosk start shape unchanged)", async () => {
+    let startBody: unknown
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async (input, init) => {
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(managedStatus({ mode: "home" }))
+        }
+        if (url.pathname === "/managed-launch") {
+          startBody = init?.body && JSON.parse(String(init.body))
+          return Response.json({ status: "accepted", launchId: "launch-1" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          return openEventStream([])
+        }
+        throw new Error(`unexpected: ${input}`)
+      },
+    })
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("missing managed spawn")
+    void spawn(spec)
+    await new Promise(resolve => setTimeout(resolve, 5))
+    expect(startBody).toEqual({ spec })
+  })
+
+  it("fails fast with host-unavailable when caller asks for session lifecycle but the daemon lacks the capability", async () => {
+    const requests: string[] = []
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async input => {
+        requests.push(new URL(input).pathname)
+        return Response.json(
+          managedStatus({
+            mode: "idle",
+            capabilities: {
+              managedLaunch: true,
+              lifecycleEvents: true,
+              perLaunchTermination: true,
+              sessionLifecycle: false,
+            },
+          }),
+        )
+      },
+    })
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("missing managed spawn")
+    const result = await spawn(spec, { lifecycle: "session", wait: waitSpec })
+
+    expect(result.status).toBe("failed")
+    if (result.status === "failed") {
+      expect(result.result.failureKind).toBe("host-unavailable")
+      expect(result.result.stderrTail).toContain("sessionLifecycle")
+    }
+    expect(requests).toEqual(["/managed-launch/status"])
+  })
+
+  it("accepts session lifecycle when sessionLifecycle is absent and the request is foreground (back-compat preflight)", async () => {
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async input => {
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(
+            managedStatus({
+              mode: "home",
+              capabilities: {
+                managedLaunch: true,
+                lifecycleEvents: true,
+                perLaunchTermination: true,
+                // sessionLifecycle omitted -- Phase 4B daemon.
+              },
+            }),
+          )
+        }
+        if (url.pathname === "/managed-launch") {
+          return Response.json({ status: "accepted", launchId: "launch-1" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          return eventStream([
+            event({
+              sequence: 1,
+              launchId: "launch-1",
+              type: "child-running",
+            }),
+            event({
+              sequence: 2,
+              launchId: "launch-1",
+              type: "child-exited",
+              terminal: { exitCode: 0 },
+            }),
+            event({
+              sequence: 3,
+              launchId: "launch-1",
+              type: "home-ready",
+              readiness: { status: "ok" },
+            }),
+          ])
+        }
+        throw new Error(`unexpected: ${input}`)
+      },
+    })
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("missing managed spawn")
+    const result = await spawn(spec) // no extras
+    expect(result.status).toBe("started")
+  })
+
+  it("resolves session+wait launches from wait-monitor-exited", async () => {
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async input => {
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(managedStatus({ mode: "idle" }))
+        }
+        if (url.pathname === "/managed-launch") {
+          return Response.json({ status: "accepted", launchId: "launch-7" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          return eventStream([
+            event({
+              sequence: 1,
+              launchId: "launch-7",
+              type: "child-running",
+            }),
+            event({
+              sequence: 2,
+              launchId: "launch-7",
+              type: "launcher-exited",
+              terminal: { exitCode: 0 },
+            }),
+            event({
+              sequence: 3,
+              launchId: "launch-7",
+              type: "wait-monitor-running",
+            }),
+            event({
+              sequence: 4,
+              launchId: "launch-7",
+              type: "wait-monitor-exited",
+              terminal: { exitCode: 0 },
+            }),
+            event({
+              sequence: 5,
+              launchId: "launch-7",
+              type: "idle-ready",
+              readiness: { status: "ok" },
+            }),
+          ])
+        }
+        throw new Error(`unexpected: ${input}`)
+      },
+    })
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("missing managed spawn")
+    const result = await spawn(spec, { lifecycle: "session", wait: waitSpec })
+    if (result.status !== "started") throw new Error("expected started")
+
+    expect(await result.session.exited).toEqual({ exitCode: 0 })
+    expect(await result.result).toEqual({ status: "launched" })
+  })
+
+  it("propagates non-zero wait-monitor-exited exit codes", async () => {
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async input => {
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(managedStatus({ mode: "idle" }))
+        }
+        if (url.pathname === "/managed-launch") {
+          return Response.json({ status: "accepted", launchId: "launch-7" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          return eventStream([
+            event({
+              sequence: 1,
+              launchId: "launch-7",
+              type: "child-running",
+            }),
+            event({
+              sequence: 2,
+              launchId: "launch-7",
+              type: "launcher-exited",
+              terminal: { exitCode: 0 },
+            }),
+            event({
+              sequence: 3,
+              launchId: "launch-7",
+              type: "wait-monitor-running",
+            }),
+            event({
+              sequence: 4,
+              launchId: "launch-7",
+              type: "wait-monitor-exited",
+              terminal: { exitCode: 137, failureKind: "command-failed" },
+            }),
+            event({
+              sequence: 5,
+              launchId: "launch-7",
+              type: "idle-ready",
+              readiness: { status: "ok" },
+            }),
+          ])
+        }
+        throw new Error(`unexpected: ${input}`)
+      },
+    })
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("missing managed spawn")
+    const result = await spawn(spec, { lifecycle: "session", wait: waitSpec })
+    if (result.status !== "started") throw new Error("expected started")
+
+    expect(await result.session.exited).toEqual({ exitCode: 137 })
+    const finalResult = await result.result
+    if (finalResult.status !== "failed") throw new Error("expected failed")
+    expect(finalResult.exitCode).toBe(137)
+    expect(finalResult.failureKind).toBe("command-failed")
+  })
+
+  it("resolves session+anchor launches after terminated + idle-ready (anchor pending until external terminate)", async () => {
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async input => {
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(managedStatus({ mode: "idle" }))
+        }
+        if (url.pathname === "/managed-launch") {
+          return Response.json({ status: "accepted", launchId: "launch-9" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          return eventStream([
+            event({
+              sequence: 1,
+              launchId: "launch-9",
+              type: "child-running",
+            }),
+            event({
+              sequence: 2,
+              launchId: "launch-9",
+              type: "launcher-exited",
+              terminal: { exitCode: 0 },
+            }),
+            event({
+              sequence: 3,
+              launchId: "launch-9",
+              type: "session-anchored",
+              readiness: {
+                status: "ok",
+                evidence: "launcher exited; anchor holding",
+              },
+            }),
+            event({
+              sequence: 4,
+              launchId: "launch-9",
+              type: "terminated",
+            }),
+            event({
+              sequence: 5,
+              launchId: "launch-9",
+              type: "idle-ready",
+              readiness: { status: "ok" },
+            }),
+          ])
+        }
+        throw new Error(`unexpected: ${input}`)
+      },
+    })
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("missing managed spawn")
+    const result = await spawn(spec, { lifecycle: "session" })
+    if (result.status !== "started") throw new Error("expected started")
+
+    expect(await result.session.exited).toEqual({ exitCode: 0 })
+    expect(await result.result).toEqual({ status: "launched" })
+  })
+
+  it("degrades to child-exited handling when session launcher exits non-zero (no launcher-exited emitted)", async () => {
+    // Models the documented graceful degradation: sessiond observes a
+    // non-zero launcher exit under lifecycle: "session" and emits
+    // child-exited (terminal) instead of launcher-exited.
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async input => {
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(managedStatus({ mode: "idle" }))
+        }
+        if (url.pathname === "/managed-launch") {
+          return Response.json({ status: "accepted", launchId: "launch-7" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          return eventStream([
+            event({
+              sequence: 1,
+              launchId: "launch-7",
+              type: "child-running",
+            }),
+            event({
+              sequence: 2,
+              launchId: "launch-7",
+              type: "child-exited",
+              terminal: { exitCode: 2, failureKind: "command-failed" },
+            }),
+            event({
+              sequence: 3,
+              launchId: "launch-7",
+              type: "idle-ready",
+              readiness: { status: "ok" },
+            }),
+          ])
+        }
+        throw new Error(`unexpected: ${input}`)
+      },
+    })
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("missing managed spawn")
+    const result = await spawn(spec, { lifecycle: "session", wait: waitSpec })
+    if (result.status !== "started") throw new Error("expected started")
+    expect(await result.session.exited).toEqual({ exitCode: 2 })
+    const finalResult = await result.result
+    if (finalResult.status !== "failed") throw new Error("expected failed")
+    expect(finalResult.exitCode).toBe(2)
+  })
+
   it("still resolves managed readiness on home-ready (Phase 4B kiosk shape unchanged)", async () => {
     const launcher = createSessionLauncher({
       url: "http://127.0.0.1:3003",
@@ -744,6 +1117,7 @@ function managedStatus(options: {
     readonly managedLaunch: boolean
     readonly lifecycleEvents: boolean
     readonly perLaunchTermination: boolean
+    readonly sessionLifecycle?: boolean
   }
 }) {
   return {
@@ -753,6 +1127,7 @@ function managedStatus(options: {
       managedLaunch: true,
       lifecycleEvents: true,
       perLaunchTermination: true,
+      sessionLifecycle: true,
     },
     restoreAttempts: 0,
   }

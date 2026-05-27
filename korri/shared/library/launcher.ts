@@ -100,11 +100,33 @@ export type ManagedLaunchResult =
     }
 
 /**
+ * Phase 4D / Track A. Optional launch metadata describing supervisor-
+ * lifecycle requirements beyond the bare command + args:
+ *  - `lifecycle: "foreground"` (default): a single child whose exit ends
+ *    the launch.
+ *  - `lifecycle: "session"`: a launcher process that exits cleanly while
+ *    the session continues. When `wait` is set, the supervisor spawns the
+ *    wait monitor after the launcher exits and treats *its* exit as the
+ *    terminal child-exit. When `wait` is unset, the supervisor anchors
+ *    the role-foreground state until an external terminate request.
+ *
+ * Launchers that do not understand these fields should ignore them; the
+ * sessiond `Launcher` impl is currently the only consumer.
+ */
+export interface LaunchExtras {
+  readonly lifecycle?: "foreground" | "session"
+  readonly wait?: LaunchSpec
+}
+
+/**
  * The launcher contract. Implementations spawn or otherwise execute the
  * `LaunchSpec` and resolve when the launch attempt has a definite outcome
  * (process exited, or could not be spawned).
  */
 export interface Launcher {
   run(spec: LaunchSpec): Promise<LaunchResult>
-  spawn?: (spec: LaunchSpec) => Promise<ManagedLaunchResult>
+  spawn?: (
+    spec: LaunchSpec,
+    extras?: LaunchExtras,
+  ) => Promise<ManagedLaunchResult>
 }

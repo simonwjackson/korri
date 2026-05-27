@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises"
 import {
+  type LaunchExtras,
   type Launcher,
   type LaunchFailureKind,
   type LaunchResult,
@@ -41,8 +42,8 @@ export function createSessionLauncher(
     async run(spec) {
       return launchViaSessiond(spec, options)
     },
-    async spawn(spec) {
-      return spawnViaSessiond(spec, options)
+    async spawn(spec, extras) {
+      return spawnViaSessiond(spec, options, extras)
     },
   }
 }
@@ -108,7 +109,10 @@ export async function launchViaSessiond(
 export async function spawnViaSessiond(
   spec: LaunchSpec,
   options: SessionLauncherOptions,
+  extras: LaunchExtras = {},
 ): Promise<ManagedLaunchResult> {
+  const lifecycle = extras.lifecycle
+  const wait = extras.wait
   const fetchImpl = options.fetchImpl ?? fetch
   const token = await resolveToken(options)
   if (!token) {
@@ -145,6 +149,15 @@ export async function spawnViaSessiond(
       "sessiond managed launch unsupported by daemon capability status",
     )
   }
+  if (
+    lifecycle === "session" &&
+    status.capabilities.sessionLifecycle !== true
+  ) {
+    return failedManagedLaunch(
+      "host-unavailable",
+      "sessiond sessionLifecycle capability unsupported; cannot route lifecycle:'session' launches",
+    )
+  }
   if (!isLaunchReadyMode(status.mode)) {
     return failedManagedLaunch(
       "session-busy",
@@ -152,6 +165,9 @@ export async function spawnViaSessiond(
     )
   }
 
+  const startBody: Record<string, unknown> = { spec }
+  if (lifecycle) startBody.lifecycle = lifecycle
+  if (wait) startBody.wait = wait
   const startResult = await requestSessiondJson(
     fetchImpl,
     options.url,
@@ -160,7 +176,7 @@ export async function spawnViaSessiond(
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ spec }),
+      body: JSON.stringify(startBody),
     },
   )
   if (startResult.status === "failed") return startResult.result
@@ -311,6 +327,12 @@ function observeManagedLaunchEvents(options: {
   let terminalResult: LaunchResult | undefined
   let resultSettled = false
   let readinessTimeout: ReturnType<typeof setTimeout> | undefined
+  // Phase 4D / Track A. Cached terminal payload from a `launcher-exited`
+  // event so that, if the launch ends up in the anchor branch
+  // (no wait monitor; sessiond emits `session-anchored` followed by
+  // `terminated`), the runner still surfaces the launcher's exit code
+  // when settling `exited`.
+  let cachedLauncherTerminal: SessiondManagedLaunchEvent["terminal"] | undefined
 
   const clearReadinessTimeout = () => {
     if (readinessTimeout) clearTimeout(readinessTimeout)
@@ -360,23 +382,48 @@ function observeManagedLaunchEvents(options: {
       return
     }
 
+    const settleExited = (
+      terminal: SessiondManagedLaunchEvent["terminal"] | undefined,
+      defaultFailureMessage: string,
+    ) => {
+      const exitCode = terminal?.exitCode ?? null
+      terminalResult =
+        exitCode === 0
+          ? { status: "launched" }
+          : failedLaunch(
+              terminal?.failureKind ?? "command-failed",
+              terminal?.stderrTail ?? defaultFailureMessage,
+              exitCode ?? undefined,
+            )
+      if (!childExitObserved) {
+        childExitObserved = true
+        resolveExited({ exitCode })
+        startReadinessTimeout()
+      }
+    }
+
     for await (const event of readSseEvents(response.body)) {
       if (event.launchId !== options.launchId) continue
       if (event.type === "child-exited") {
-        const exitCode = event.terminal?.exitCode ?? null
-        terminalResult =
-          exitCode === 0
-            ? { status: "launched" }
-            : failedLaunch(
-                event.terminal?.failureKind ?? "command-failed",
-                event.terminal?.stderrTail ?? "sessiond child exited",
-                exitCode ?? undefined,
-              )
-        if (!childExitObserved) {
-          childExitObserved = true
-          resolveExited({ exitCode })
-          startReadinessTimeout()
-        }
+        settleExited(event.terminal, "sessiond child exited")
+      }
+      if (event.type === "launcher-exited") {
+        // Cache for the anchor branch; do not settle exited yet -- the
+        // session may still spawn a wait monitor or anchor.
+        cachedLauncherTerminal = event.terminal
+      }
+      if (event.type === "wait-monitor-exited") {
+        settleExited(event.terminal, "sessiond wait monitor exited")
+      }
+      if (
+        event.type === "terminated" &&
+        !childExitObserved &&
+        cachedLauncherTerminal !== undefined
+      ) {
+        // Anchor branch: launcher exited cleanly, sessiond held the
+        // anchor, an external terminate request closed the session.
+        // Surface the launcher's exit code as the launch's terminal.
+        settleExited(cachedLauncherTerminal, "sessiond session terminated")
       }
       if (isTerminalReadinessEvent(event.type) && !resultSettled) {
         resultSettled = true
