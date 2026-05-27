@@ -44,7 +44,14 @@
  
  struct moonlight_local_control_state {
    int enabled;
-@@ -48,18 +71,35 @@
+@@ -42,24 +65,43 @@
+   int server_fd;
+   pthread_t thread;
+   pthread_mutex_t lock;
++  pthread_mutex_t write_lock;
+   char socket_path[PATH_MAX];
+   char runtime_dir[PATH_MAX];
+   char session_id[128];
    char authority[16];
    char lifecycle[32];
    uint64_t seq;
@@ -72,6 +79,7 @@
  static struct moonlight_local_control_state control = {
    .server_fd = -1,
    .lock = PTHREAD_MUTEX_INITIALIZER,
++  .write_lock = PTHREAD_MUTEX_INITIALIZER,
 +  .next_command_id = 100000,
  };
  
@@ -80,7 +88,7 @@
  static int moonlight_local_control_safe_runtime_dir(const char* runtime_dir);
  static int moonlight_local_control_safe_socket_path(const char* runtime_dir, const char* socket_path);
  static int moonlight_local_control_replace_stale_socket(const char* socket_path);
-@@ -67,12 +107,26 @@
+@@ -67,12 +109,26 @@
  static void moonlight_local_control_handle_client(int client_fd);
  static int moonlight_local_control_read_frame(int client_fd, char* buffer, size_t buffer_size);
  static void moonlight_local_control_write_json(int client_fd, struct json_object* value);
@@ -102,12 +110,12 @@
 +static void moonlight_local_control_remove_subscriber(int fd);
 +static void moonlight_local_control_evict_slow_subscriber(int fd);
 +static void moonlight_local_control_emit_event(struct json_object* event);
-+static void moonlight_local_control_emit_runtime_command_result(uint32_t request_id, uint16_t operation, uint16_t status, uint16_t reason);
++static void moonlight_local_control_emit_runtime_command_result(uint32_t request_id, uint16_t operation, uint16_t status, uint16_t reason, uint32_t value, uint32_t secondary_value);
 +static void moonlight_local_control_runtime_settings_observer(const SS_RUNTIME_SETTINGS_MVP_OBSERVER_EVENT* event, void* context);
  
  void moonlight_local_control_start_from_env(const char* initial_state, int width, int height, int fps, int bitrate_kbps) {
    const char* socket_path = getenv("MOONLIGHT_LOCAL_CONTROL_SOCKET");
-@@ -132,10 +186,20 @@
+@@ -132,10 +188,20 @@
    control.running = 1;
    control.server_fd = fd;
    control.seq = 1;
@@ -128,7 +136,7 @@
    snprintf(control.socket_path, sizeof(control.socket_path), "%s", socket_path);
    snprintf(control.runtime_dir, sizeof(control.runtime_dir), "%s", runtime_dir);
    snprintf(control.session_id, sizeof(control.session_id), "%s", session_id);
-@@ -143,6 +207,8 @@
+@@ -143,6 +209,8 @@
    snprintf(control.lifecycle, sizeof(control.lifecycle), "%s", initial_state == NULL ? "starting" : initial_state);
    pthread_mutex_unlock(&control.lock);
  
@@ -137,7 +145,7 @@
    if (pthread_create(&control.thread, NULL, moonlight_local_control_thread, NULL) != 0) {
      fprintf(stderr, "moonlight-control: unavailable pthread_create failed\n");
      pthread_mutex_lock(&control.lock);
-@@ -150,6 +216,7 @@
+@@ -150,6 +218,7 @@
      control.running = 0;
      control.server_fd = -1;
      pthread_mutex_unlock(&control.lock);
@@ -145,7 +153,7 @@
      close(fd);
      unlink(socket_path);
      return;
-@@ -158,6 +225,19 @@
+@@ -158,6 +227,19 @@
    fprintf(stderr, "moonlight-control: listening socket=%s authority=%s protocol=%s/v1\n", socket_path, authority, MOONLIGHT_CONTROL_PROTOCOL_NAME);
  }
  
@@ -165,7 +173,7 @@
  void moonlight_local_control_update_lifecycle(const char* state) {
    if (state == NULL)
      return;
-@@ -186,6 +266,8 @@
+@@ -186,6 +268,8 @@
    if (!enabled)
      return;
  
@@ -174,7 +182,7 @@
    if (fd >= 0) {
      shutdown(fd, SHUT_RDWR);
      close(fd);
-@@ -224,13 +306,33 @@
+@@ -224,13 +308,33 @@
        continue;
      }
  
@@ -210,7 +218,7 @@
  static int moonlight_local_control_safe_runtime_dir(const char* runtime_dir) {
    struct stat st;
    if (runtime_dir[0] != '/')
-@@ -347,13 +449,18 @@
+@@ -347,13 +451,18 @@
      else if (strcmp(method_name, "events.subscribe") == 0) {
        pthread_mutex_lock(&control.lock);
        struct json_object* snapshot_event = moonlight_local_control_event_locked("lifecycle.streaming");
@@ -230,7 +238,7 @@
      else {
        moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32601, "unsupported method", "unsupported"));
      }
-@@ -390,12 +497,20 @@
+@@ -390,12 +499,25 @@
  }
  
  static void moonlight_local_control_write_json(int client_fd, struct json_object* value) {
@@ -244,17 +252,22 @@
 +static int moonlight_local_control_write_json_no_free(int client_fd, struct json_object* value) {
 +  const char* serialized = json_object_to_json_string_ext(value, JSON_C_TO_STRING_PLAIN);
 +  size_t len = strlen(serialized);
++  int ok = 1;
++
++  pthread_mutex_lock(&control.write_lock);
 +  if (send(client_fd, serialized, len, MSG_NOSIGNAL) < 0)
-+    return 0;
-+  if (send(client_fd, "\n", 1, MSG_NOSIGNAL) < 0)
-+    return 0;
-+  return 1;
++    ok = 0;
++  else if (send(client_fd, "\n", 1, MSG_NOSIGNAL) < 0)
++    ok = 0;
++  pthread_mutex_unlock(&control.write_lock);
++
++  return ok;
 +}
 +
  static struct json_object* moonlight_local_control_hello_locked(void) {
    struct json_object* result = json_object_new_object();
    json_object_object_add(result, "_tag", json_object_new_string("protocol.hello"));
-@@ -419,9 +534,11 @@
+@@ -419,9 +541,11 @@
    json_object_array_add(events, json_object_new_string("quality"));
    json_object_array_add(events, json_object_new_string("input"));
    struct json_object* commands = json_object_new_array();
@@ -269,7 +282,7 @@
    }
    json_object_object_add(capabilities, "events", events);
    json_object_object_add(capabilities, "commands", commands);
-@@ -435,12 +552,12 @@
+@@ -435,12 +559,12 @@
    json_object_object_add(limits, "maxInFlightMutationsPerFamily", json_object_new_int(1));
    json_object_object_add(limits, "minCommandIntervalMs", json_object_new_int(MOONLIGHT_CONTROL_MIN_COMMAND_INTERVAL_MS));
    struct json_object* bitrate = json_object_new_object();
@@ -285,7 +298,7 @@
    json_object_object_add(limits, "fps", fps);
    struct json_object* resolution = json_object_new_object();
    struct json_object* width = json_object_new_object();
-@@ -482,6 +599,14 @@
+@@ -482,6 +606,14 @@
    json_object_object_add(applied_resolution, "width", json_object_new_int(control.width));
    json_object_object_add(applied_resolution, "height", json_object_new_int(control.height));
    json_object_object_add(runtime_settings, "appliedResolution", applied_resolution);
@@ -300,7 +313,7 @@
    json_object_object_add(result, "runtimeSettings", runtime_settings);
  
    struct json_object* input = json_object_new_object();
-@@ -499,7 +624,7 @@
+@@ -499,7 +631,7 @@
    json_object_object_add(event, "method", json_object_new_string("moonlight.event"));
    struct json_object* params = json_object_new_object();
    json_object_object_add(params, "seq", json_object_new_int64((int64_t) control.seq));
@@ -309,7 +322,7 @@
    struct json_object* payload = json_object_new_object();
    json_object_object_add(payload, "name", json_object_new_string(name));
    json_object_object_add(payload, "state", json_object_new_string(control.lifecycle));
-@@ -508,6 +633,253 @@
+@@ -508,6 +640,254 @@
    return event;
  }
  
@@ -476,16 +489,15 @@
 +  }
 +  pthread_mutex_unlock(&control.lock);
 +
-+  const char* serialized = json_object_to_json_string_ext(event, JSON_C_TO_STRING_PLAIN);
-+  size_t len = strlen(serialized);
 +  for (int i = 0; i < count; i++) {
-+    if (send(fds[i], serialized, len, MSG_NOSIGNAL | MSG_DONTWAIT) < 0 || send(fds[i], "\n", 1, MSG_NOSIGNAL | MSG_DONTWAIT) < 0)
++    if (!moonlight_local_control_write_json_no_free(fds[i], event))
 +      moonlight_local_control_evict_slow_subscriber(fds[i]);
 +  }
 +  json_object_put(event);
 +}
 +
-+static void moonlight_local_control_emit_runtime_command_result(uint32_t request_id, uint16_t operation, uint16_t status, uint16_t reason) {
++static void moonlight_local_control_emit_runtime_command_result(uint32_t request_id, uint16_t operation, uint16_t status, uint16_t reason, uint32_t value, uint32_t secondary_value) {
++  (void) secondary_value;
 +  const char* command = moonlight_local_control_command_for_operation(operation);
 +  const char* status_label = moonlight_local_control_status_for_runtime_status(status, reason);
 +  if (command == NULL)
@@ -501,7 +513,9 @@
 +  snprintf(control.last_status, sizeof(control.last_status), "%s", status_label);
 +  control.last_reason = reason;
 +  if (operation == MOONLIGHT_LC_OPERATION_SET_BITRATE_KBPS && status == MOONLIGHT_LC_STATUS_APPLIED)
-+    control.bitrate_kbps = control.bitrate_kbps;
++    control.bitrate_kbps = (int) value;
++  if (operation == MOONLIGHT_LC_OPERATION_SET_FPS && status == MOONLIGHT_LC_STATUS_APPLIED)
++    control.fps = (int) value;
 +  control.moonlight_local_control_event_history[seq % MOONLIGHT_CONTROL_EVENT_HISTORY].seq = seq;
 +  snprintf(control.moonlight_local_control_event_history[seq % MOONLIGHT_CONTROL_EVENT_HISTORY].name, sizeof(control.moonlight_local_control_event_history[0].name), "%s", "runtime.commandResult");
 +  pthread_mutex_unlock(&control.lock);
@@ -532,7 +546,7 @@
 +  }
 +
 +  if (event->isTerminal)
-+    moonlight_local_control_emit_runtime_command_result(event->requestId, event->operation, event->status, event->reason);
++    moonlight_local_control_emit_runtime_command_result(event->requestId, event->operation, event->status, event->reason, event->value, event->secondaryValue);
 +}
 +
 +static const char* moonlight_local_control_command_for_operation(uint16_t operation) {
@@ -664,22 +678,7 @@
  static bool runtime_settings_mvp_record_sent(uint32_t requestId, uint16_t operation) {
      uint16_t family = runtime_settings_mvp_command_family(operation);
      SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE* state;
-@@ -891,6 +914,14 @@
-     PltUnlockMutex(&runtime_settings_mvp_mutex);
- 
-     if (matched) {
-+        SS_RUNTIME_SETTINGS_MVP_OBSERVER_EVENT observerEvent;
-+        memset(&observerEvent, 0, sizeof(observerEvent));
-+        observerEvent.requestId = requestId;
-+        observerEvent.operation = operation;
-+        observerEvent.status = status;
-+        observerEvent.reason = reason;
-+        observerEvent.isTerminal = true;
-+        runtime_settings_mvp_notify_observer(&observerEvent);
-         Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=%s status=%u reason=%u\n",
-                 requestId, operation, status == SS_RUNTIME_SETTINGS_MVP_STATUS_APPLIED ? "host-applied" : "host-rejected", status, reason);
-         return true;
-@@ -930,6 +961,22 @@
+@@ -930,6 +953,35 @@
      runtime_settings_mvp_settings_state.currentWidth = currentWidth;
      runtime_settings_mvp_settings_state.currentHeight = currentHeight;
      PltUnlockMutex(&runtime_settings_mvp_mutex);
@@ -699,6 +698,35 @@
 +    observerEvent.currentHeight = currentHeight;
 +    observerEvent.isCapability = true;
 +    runtime_settings_mvp_notify_observer(&observerEvent);
++}
++
++static void runtime_settings_mvp_notify_terminal(uint32_t requestId, uint16_t operation, uint16_t status, uint16_t reason, uint32_t value, uint32_t secondaryValue) {
++    SS_RUNTIME_SETTINGS_MVP_OBSERVER_EVENT observerEvent;
++    memset(&observerEvent, 0, sizeof(observerEvent));
++    observerEvent.requestId = requestId;
++    observerEvent.operation = operation;
++    observerEvent.status = status;
++    observerEvent.reason = reason;
++    observerEvent.value = value;
++    observerEvent.secondaryValue = secondaryValue;
++    observerEvent.isTerminal = true;
++    runtime_settings_mvp_notify_observer(&observerEvent);
  }
  
  static void runtime_settings_mvp_record_current_applied(uint16_t operation, uint16_t status, uint32_t value, uint32_t secondaryValue) {
+@@ -1794,6 +1846,7 @@
+                             }
+                             if (runtime_settings_mvp_record_ack(requestId, operation, status, reason)) {
+                                 runtime_settings_mvp_record_current_applied(operation, status, appliedWidth, appliedHeight);
++                                runtime_settings_mvp_notify_terminal(requestId, operation, status, reason, appliedWidth, appliedHeight);
+                             }
+                             Limelog("live-settings-mvp: runtime settings ack request_id=%u operation=3 status=%u reason=%u applied_width=%u applied_height=%u server_applied=%u client_proven=0 packet=0x5505\n",
+                                     requestId, status, reason, appliedWidth, appliedHeight, status == SS_RUNTIME_SETTINGS_MVP_STATUS_APPLIED ? 1 : 0);
+@@ -1817,6 +1870,7 @@
+                         }
+                         if (runtime_settings_mvp_record_ack(requestId, operation, status, reason)) {
+                             runtime_settings_mvp_record_current_applied(operation, status, appliedValue, 0);
++                            runtime_settings_mvp_notify_terminal(requestId, operation, status, reason, appliedValue, 0);
+                         }
+                         if (operation == SS_RUNTIME_SETTINGS_MVP_OPERATION_SET_FPS) {
+                             Limelog("live-settings-mvp: runtime settings ack request_id=%u operation=2 status=%u reason=%u applied_fps=%u packet=0x5505\n",

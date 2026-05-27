@@ -105,11 +105,21 @@ let
       && contains "runtime_settings_mvp_observer = observer" patch
       && contains "runtime_settings_mvp_observer_context = context" patch
     ))
+    (check "Moonlight local control serializes JSON writes per process" (
+      contains "pthread_mutex_t write_lock" patch
+      && contains "pthread_mutex_lock(&control.write_lock)" patch
+      && contains "pthread_mutex_unlock(&control.write_lock)" patch
+    ))
     (check "Moonlight local control uses bounded subscriber and event history markers" (
       contains "MOONLIGHT_CONTROL_EVENT_HISTORY" patch
       && contains "moonlight_local_control_subscriber" patch
       && contains "moonlight_local_control_event_history" patch
       && contains "moonlight_local_control_evict_slow_subscriber" patch
+    ))
+    (check "Moonlight local control snapshots applied bitrate and FPS from terminal events" (
+      contains "runtime_settings_mvp_notify_terminal(requestId, operation, status, reason, appliedValue, 0)" patch
+      && contains "control.bitrate_kbps = (int) value" patch
+      && contains "control.fps = (int) value" patch
     ))
     (check "Moonlight local control populates monotonic event timestamps" (
       contains "moonlight_local_control_monotonic_ms" patch
