@@ -18,12 +18,17 @@ import { renderWaitingPage } from "./waiting-page/render-waiting-page"
 export interface CreateDesktopAppOptions {
   readonly assetRoot: string
   /**
-   * Returns the currently-connected upstream base URL or undefined when no
-   * server is connected. Sourced from the desktop bun's connection
-   * controller. Required so this composition stays free of any direct
-   * reference to the controller scope.
+   * Returns the currently-picked upstream base URL or undefined.
+   * Federation v1 picks via `ForwarderUpstream` (loopback fast-path +
+   * mDNS fallback); legacy main.ts wiring is sync, the new wiring is
+   * async. The composition stays free of any direct controller import.
    */
-  readonly getUpstream: () => string | undefined
+  readonly getUpstream: () => string | undefined | Promise<string | undefined>
+  /**
+   * Optional cache invalidation hook — forwarded to api-forwarder so a
+   * 502 self-heals by re-picking on the next request.
+   */
+  readonly invalidateUpstream?: () => void
   /**
    * Returns the current connection-state snapshot (wire-shape: ISO-string
    * timestamps). Read once per request that needs it. Same accessor
@@ -63,7 +68,12 @@ export interface CreateDesktopAppOptions {
 
 export function createDesktopApp(options: CreateDesktopAppOptions) {
   const app = new Hono()
-  const forwarder = createApiForwarder({ getUpstream: options.getUpstream })
+  const forwarder = createApiForwarder({
+    getUpstream: options.getUpstream,
+    ...(options.invalidateUpstream
+      ? { invalidateUpstream: options.invalidateUpstream }
+      : {}),
+  })
 
   app.post("/__korri/native-input-diagnostic", async c => {
     const body = await c.req.json().catch(() => ({}))

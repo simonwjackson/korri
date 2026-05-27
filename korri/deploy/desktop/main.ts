@@ -28,6 +28,10 @@ import type {
   ConnectionStateSnapshot,
 } from "./connection-state-snapshot"
 import { createDesktopApp } from "./create-desktop-app"
+import {
+  type ForwarderUpstream,
+  makeForwarderUpstream,
+} from "./forwarder-upstream"
 import { loadDesktopConfig, saveDesktopConfig } from "./desktop-config"
 import { foregroundSessionStatusSnapshotFromOwnerStatus } from "./foreground-session-status-snapshot"
 import { createDesktopInputBroker } from "./input-broker"
@@ -173,10 +177,14 @@ async function main() {
     ),
   )
 
-  const getUpstream = () => {
-    const state = SubscriptionRef.getUnsafe(controller.state)
-    return state.status === "connected" ? state.server.controlUrl : undefined
-  }
+  // Federation v1 upstream picker. Replaces the connection-state-machine
+  // read for the forwarder hot path; the connection state machine still
+  // owns the waiting-page decision (U8 deletes that surface).
+  const forwarderUpstream: ForwarderUpstream = makeForwarderUpstream({
+    loopbackBaseUrl: process.env.KORRI_LOOPBACK_BASE_URL ?? undefined,
+  })
+  const getUpstream = () => forwarderUpstream.pickUpstream()
+  const invalidateUpstream = () => forwarderUpstream.invalidate()
 
   const getConnection = (): ConnectionServerRecord | undefined => {
     const state = SubscriptionRef.getUnsafe(controller.state)
@@ -232,6 +240,7 @@ async function main() {
   const app = createDesktopApp({
     assetRoot,
     getUpstream,
+    invalidateUpstream,
     getConnectionState,
     getRuntimeConfig,
     getForegroundSessionStatus,

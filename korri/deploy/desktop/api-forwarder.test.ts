@@ -261,4 +261,29 @@ describe("api-forwarder", () => {
     const text = await response.text()
     expect(text.length).toBe(3 * 1024 * 1024)
   })
+
+  it("awaits async getUpstream (e.g. ForwarderUpstream.pickUpstream)", async () => {
+    const forwarder = createApiForwarder({
+      getUpstream: async () => {
+        await new Promise(r => setTimeout(r, 5))
+        return upstreamUrl
+      },
+    })
+    const response = await forwardRequest(forwarder, "/api/health")
+    expect(response.status).toBe(200)
+  })
+
+  it("calls invalidateUpstream after a fetch failure so the next pick is fresh", async () => {
+    let invalidations = 0
+    const forwarder = createApiForwarder({
+      // Point at a port nothing is listening on so the fetch throws.
+      getUpstream: () => "http://127.0.0.1:1",
+      invalidateUpstream: () => {
+        invalidations += 1
+      },
+    })
+    const response = await forwardRequest(forwarder, "/api/health")
+    expect(response.status).toBe(502)
+    expect(invalidations).toBe(1)
+  })
 })

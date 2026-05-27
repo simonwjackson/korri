@@ -3,12 +3,22 @@ import { fetch as bunFetch } from "bun"
 
 export interface ApiForwarderOptions {
   /**
-   * Returns the currently-connected upstream base URL (e.g.
-   * `http://192.168.1.50:3010`) or `undefined` when no server is
-   * connected. The forwarder reads this on every request so the desktop
-   * bun's connection controller can swap the upstream transparently.
+   * Returns the currently-picked upstream base URL (e.g.
+   * `http://127.0.0.1:3001`) or `undefined` when no upstream is
+   * available. Async so federation can probe loopback + mDNS without
+   * blocking module init.
+   *
+   * Production is wired to `ForwarderUpstream.pickUpstream` (see
+   * `forwarder-upstream.ts`). Tests pass a deterministic resolver.
    */
-  readonly getUpstream: () => string | undefined
+  readonly getUpstream: () => string | undefined | Promise<string | undefined>
+  /**
+   * Optional cache invalidation hook — the forwarder calls this when an
+   * upstream fetch fails so the next request triggers a re-pick. With
+   * `ForwarderUpstream` wired, transient upstream blips self-heal in
+   * one request without leaking 502s indefinitely.
+   */
+  readonly invalidateUpstream?: () => void
 }
 
 const STRIPPED_REQUEST_HEADERS = new Set([
@@ -33,7 +43,7 @@ export function createApiForwarder(
   options: ApiForwarderOptions,
 ): (request: Request) => Promise<Response> {
   return async request => {
-    const upstream = options.getUpstream()
+    const upstream = await options.getUpstream()
     if (!upstream) {
       return jsonResponse(503, { error: "no upstream" })
     }
@@ -58,6 +68,11 @@ export function createApiForwarder(
         { err: error, upstream, url: request.url },
         "api-forwarder: upstream fetch failed",
       )
+      // Self-heal: clear the cached pick so the next request triggers
+      // a fresh loopback + mDNS browse. Federation pick is fungible,
+      // so a single transient blip should not pin the forwarder to a
+      // dead upstream until the cache TTL expires.
+      options.invalidateUpstream?.()
       return jsonResponse(502, { error: "upstream unreachable" })
     }
 
