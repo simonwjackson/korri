@@ -28,6 +28,10 @@ import {
   type GameRecord,
   getGameDisplayName,
 } from "@shared/fixtures/games/game"
+import {
+  composeEntryKey,
+  type EntrySourceTag,
+} from "@shared/library/entry-key"
 import { TilegridCells } from "@shared/primitives/components/Tilegrid/components/TilegridCells"
 import { TilegridRailRoot } from "@shared/primitives/components/Tilegrid/TilegridRailRoot"
 import { useEffect } from "react"
@@ -40,8 +44,18 @@ const RESUME_SPAN = 2
 const RAIL_CELL_SIZE = "var(--shift-home-rail-cell-size)"
 const RAIL_GAP = "var(--shift-home-rail-gap)"
 
+/**
+ * Rail entries are `GameRecord` plus an optional federation `source`
+ * tag. The tag flows from `app.library.list`'s `LibraryEntry` shape;
+ * fixtures and stories that pre-date federation omit it and fall back
+ * to bare-id keying.
+ */
+export type ShiftHomeRailItem = GameRecord & {
+  readonly source?: EntrySourceTag
+}
+
 export interface ShiftHomeRailProps {
-  readonly onItemClick?: (game: GameRecord) => void
+  readonly onItemClick?: (game: ShiftHomeRailItem) => void
 }
 
 export function ShiftHomeRail({ onItemClick }: ShiftHomeRailProps = {}) {
@@ -67,15 +81,17 @@ export function ShiftHomeRail({ onItemClick }: ShiftHomeRailProps = {}) {
 
   return (
     <div ref={railRef} className="shift-home-rail-region px-12">
-      <TilegridRailRoot<GameRecord>
-        items={items}
+      <TilegridRailRoot<ShiftHomeRailItem>
+        items={items as ReadonlyArray<ShiftHomeRailItem>}
         cellSize={{ width: RAIL_CELL_SIZE, height: RAIL_CELL_SIZE }}
         gap={RAIL_GAP}
-        getKey={g => g.id}
-        getSpan={g => (g.id === resumeTarget.id ? RESUME_SPAN : 1)}
+        getKey={composeEntryKey}
+        getSpan={g =>
+          composeEntryKey(g) === composeEntryKey(resumeTarget) ? RESUME_SPAN : 1
+        }
         getAriaLabel={g => getGameDisplayName(g)}
       >
-        <TilegridCells<GameRecord>
+        <TilegridCells<ShiftHomeRailItem>
           onItemClick={onItemClick}
           renderCell={({ cellProps, item }) => (
             <ShiftTile {...cellProps} style={cellProps.style}>

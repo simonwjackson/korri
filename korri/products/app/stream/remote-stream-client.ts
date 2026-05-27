@@ -49,6 +49,11 @@ export interface RemoteSourceGame {
   readonly id: string
   readonly displayName: string
   readonly streamable: boolean
+  readonly source?: {
+    readonly hostId: string
+    readonly controlUrl: string
+    readonly isLocal: boolean
+  }
 }
 
 type RemoteRunnerMode =

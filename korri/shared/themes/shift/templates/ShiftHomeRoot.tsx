@@ -31,6 +31,7 @@
  */
 
 import type { GameRecord } from "@shared/fixtures/games/game"
+import { composeEntryKey } from "@shared/library/entry-key"
 import {
   clampUiScale,
   DEFAULT_UI_SCALE,
@@ -47,14 +48,22 @@ import {
 } from "react"
 import { type ShiftHomeContextValue, ShiftHomeCtx } from "./ShiftHome.context"
 
+// Shift home items accept optional `source` so federation library
+// entries can render alongside source-less fixtures. The rail keys
+// every cell with `composeEntryKey` so same-id entries from different
+// peers render as distinct focusables.
+type ShiftHomeRootItem = GameRecord & {
+  readonly source?: { readonly hostId: string }
+}
+
 export interface ShiftHomeRootProps {
-  readonly items: ReadonlyArray<GameRecord>
+  readonly items: ReadonlyArray<ShiftHomeRootItem>
   /**
    * Resume target. Defaults to `items[0]`. Pass explicitly when the
    * resume signal comes from elsewhere (e.g., a future RPC root that
    * resolves "most recently played" against persisted user data).
    */
-  readonly resumeTarget?: GameRecord
+  readonly resumeTarget?: ShiftHomeRootItem
   readonly children: ReactNode
 }
 
@@ -70,7 +79,12 @@ export function ShiftHomeRoot({
     )
   }
 
-  const [focusedId, setFocusedId] = useState<string>(resumeTarget.id)
+  // Composite focus key: `${hostId}::${id}` when source is present,
+  // bare id otherwise. Always matches what the rail puts on
+  // `data-tile-id`.
+  const [focusedId, setFocusedId] = useState<string>(
+    composeEntryKey(resumeTarget),
+  )
   const [captionAnchorX, setCaptionAnchorX] = useState(0)
   const [isLabsOpen, setIsLabsOpen] = useState(false)
   const [isSystemPanelOpen, setIsSystemPanelOpen] = useState(false)
@@ -80,14 +94,15 @@ export function ShiftHomeRoot({
   // Place initial focus on the resume target so spatial navigation has
   // a visible anchor on mount. Runs once per resume-target identity
   // change (effectively once on mount for the typical home flow).
+  const resumeKey = composeEntryKey(resumeTarget)
   useEffect(() => {
     const node = railRef.current
     if (!node) return
     const target = node.querySelector<HTMLElement>(
-      `[data-tile-id="${CSS.escape(resumeTarget.id)}"]`,
+      `[data-tile-id="${CSS.escape(resumeKey)}"]`,
     )
     target?.focus()
-  }, [resumeTarget.id])
+  }, [resumeKey])
 
   // Caption x-anchor measurement. Recomputed on focused-id change, on
   // rail scroll (capture-phase: scroll does not bubble), and on window
@@ -124,8 +139,11 @@ export function ShiftHomeRoot({
     }
   }, [focusedId])
 
+  // `focusedId` carries the composite `${hostId}::${id}` key emitted by
+  // the rail's `data-tile-id`. Match by composite key so duplicate-id
+  // entries from different peers don't collide.
   const focused = useMemo(
-    () => items.find(g => g.id === focusedId) ?? resumeTarget,
+    () => items.find(g => composeEntryKey(g) === focusedId) ?? resumeTarget,
     [items, focusedId, resumeTarget],
   )
 
@@ -173,7 +191,7 @@ export function ShiftHomeRoot({
       items,
       resumeTarget,
       focused,
-      isResumeFocused: focused.id === resumeTarget.id,
+      isResumeFocused: composeEntryKey(focused) === resumeKey,
       captionAnchorX,
       railRef,
       isLabsOpen,
