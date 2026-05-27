@@ -158,6 +158,167 @@ async function flushMicrotasks(count = 8) {
   for (let index = 0; index < count; index += 1) await Promise.resolve()
 }
 
+const REMOTE_PEER_SOURCE = {
+  hostId: "aka-via-source",
+  controlUrl: "http://192.168.1.117:3001",
+  isLocal: false,
+}
+
+const LOCAL_SELF_SOURCE = {
+  hostId: "sobo",
+  controlUrl: "http://127.0.0.1:3001",
+  isLocal: true,
+}
+
+describe("desktop launch bridge — federation routing", () => {
+  test("routes a remote-source payload to that peer's controlUrl (NOT getConnection)", async () => {
+    let prepareCallControlUrl: string | undefined
+    let moonlightCallHost: string | undefined
+
+    const handler = createLocalStreamLaunchRpcHandler({
+      // Wrong upstream on purpose — a stale connection record. Federation
+      // routing must IGNORE this in favor of payload.source.
+      getConnection: () => ({
+        hostId: "stale",
+        controlUrl: "http://stale.invalid:3001",
+      }),
+      prepareGame: async (controlUrl, id) => {
+        prepareCallControlUrl = controlUrl
+        return { status: "prepared", gameId: id, sessionId: "sess-fed" }
+      },
+      resolveMoonlightGamescope: async () => ({ enabled: false }),
+      launchMoonlight: async opts => {
+        moonlightCallHost = opts.host
+        return startedMoonlight()
+      },
+    })
+
+    const response = await handler(
+      postLocalLaunchRpc({
+        id: "pico-8/celeste",
+        source: REMOTE_PEER_SOURCE,
+      }),
+    )
+
+    // Both the prep client AND the Moonlight target must come from the
+    // payload's source, not from the stale connection.
+    expect(prepareCallControlUrl).toBe("http://192.168.1.117:3001")
+    expect(moonlightCallHost).toBe("192.168.1.117")
+
+    const body = await readRpcSuccess(response)
+    expect(body.status).toBe("launched")
+  })
+
+  test("surfaces host-unavailable when a remote-source peer is unreachable (AE6)", async () => {
+    const handler = createLocalStreamLaunchRpcHandler({
+      getConnection: () => CONNECTED,
+      prepareGame: async () => ({
+        status: "failed",
+        category: "host-unavailable",
+        message: "ECONNREFUSED",
+      }),
+      launchMoonlight: async () => startedMoonlight(),
+    })
+
+    const response = await handler(
+      postLocalLaunchRpc({
+        id: "pico-8/celeste",
+        source: REMOTE_PEER_SOURCE,
+      }),
+    )
+
+    const body = await readRpcSuccess(response)
+    expect(body.status).toBe("failed")
+    if (body.status === "failed") {
+      expect(body.category).toBe("host-unavailable")
+    }
+  })
+
+  test("delegates a local-source payload to launchLocal when provided", async () => {
+    let seenPayload: unknown
+    const handler = createLocalStreamLaunchRpcHandler({
+      getConnection: () => CONNECTED,
+      prepareGame: async () => {
+        throw new Error("prepareGame should not be called for local source")
+      },
+      launchMoonlight: async () => {
+        throw new Error("launchMoonlight should not be called for local source")
+      },
+      launchLocal: async payload => {
+        seenPayload = payload
+        return {
+          status: "launched",
+          gameId: payload.id,
+          moonlightCommand: "sessiond",
+        }
+      },
+    })
+
+    const response = await handler(
+      postLocalLaunchRpc({
+        id: "pico-8/celeste",
+        source: LOCAL_SELF_SOURCE,
+      }),
+    )
+
+    expect(seenPayload).toMatchObject({
+      id: "pico-8/celeste",
+      source: LOCAL_SELF_SOURCE,
+    })
+
+    const body = await readRpcSuccess(response)
+    expect(body.status).toBe("launched")
+  })
+
+  test("returns typed failure for a local-source payload when launchLocal is absent", async () => {
+    const handler = createLocalStreamLaunchRpcHandler({
+      getConnection: () => CONNECTED,
+      prepareGame: async () => {
+        throw new Error("prepareGame should not be called for local source")
+      },
+      launchMoonlight: async () => {
+        throw new Error("launchMoonlight should not be called for local source")
+      },
+    })
+
+    const response = await handler(
+      postLocalLaunchRpc({
+        id: "pico-8/celeste",
+        source: LOCAL_SELF_SOURCE,
+      }),
+    )
+
+    const body = await readRpcSuccess(response)
+    expect(body.status).toBe("failed")
+    if (body.status === "failed") {
+      expect(body.category).toBe("host-unavailable")
+      expect(body.message).toContain("local")
+    }
+  })
+
+  test("falls back to getConnection when payload.source is absent (transition compat)", async () => {
+    let prepareCallControlUrl: string | undefined
+    const handler = createLocalStreamLaunchRpcHandler({
+      getConnection: () => CONNECTED,
+      prepareGame: async (controlUrl, id) => {
+        prepareCallControlUrl = controlUrl
+        return { status: "prepared", gameId: id }
+      },
+      launchMoonlight: async () => startedMoonlight(),
+    })
+
+    const response = await handler(
+      postLocalLaunchRpc({ id: "gba/wario-land-4" }),
+    )
+
+    // Without payload.source the legacy connection record is the
+    // routing target — preserves U1 schema-additive transition.
+    expect(prepareCallControlUrl).toBe(CONNECTED.controlUrl)
+    const body = await readRpcSuccess(response)
+    expect(body.status).toBe("launched")
+  })
+})
+
 describe("desktop launch bridge", () => {
   test("reports host-unavailable when no upstream is connected", async () => {
     const handler = createLocalStreamLaunchRpcHandler({

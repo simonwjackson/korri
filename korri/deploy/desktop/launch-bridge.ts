@@ -75,8 +75,26 @@ export interface LaunchBridgeOptions {
    * `connected` state. The handler reads this on every request so a
    * reconnection or disconnect between renderer launches is reflected
    * without restart.
+   *
+   * Federation note: when `payload.source` is present, the bridge
+   * IGNORES this and routes against `payload.source.controlUrl`
+   * directly (per-entry routing). `getConnection` only matters for
+   * transition callers that still omit `source` from the payload
+   * (U1 schema-additive window). U8 deletes this seam entirely.
    */
   readonly getConnection: () => ConnectionServerRecord | undefined
+
+  /**
+   * Optional delegate for local-source launches. When
+   * `payload.source.isLocal === true`, the bridge bypasses the
+   * prep+Moonlight path and calls this directly — typically wired to
+   * the in-process server's `app.library.launch` so sessiond owns the
+   * lifecycle. Returning a `LocalStreamLaunchResponse` keeps the wire
+   * shape stable for the renderer.
+   */
+  readonly launchLocal?: (
+    payload: LocalStreamLaunchPayload,
+  ) => Promise<LocalStreamLaunchResponse>
 
   /**
    * Optional local input preflight. Appliance builds use this to fail before
@@ -150,7 +168,11 @@ export function createLocalStreamLaunchRpcHandler(
     localStreamLaunchRpcGroup.of({
       "app.desktop.launch": payload =>
         Effect.promise(() =>
-          performLocalStreamLaunch(foregroundSessionOwner, payload),
+          routeAndPerformLocalStreamLaunch(
+            options,
+            foregroundSessionOwner,
+            payload,
+          ),
         ),
     }),
   )
@@ -218,6 +240,59 @@ function createLaunchRequestId(): string {
   return globalThis.crypto.randomUUID()
 }
 
+/**
+ * Federation-aware entry point. Local-source payloads short-circuit
+ * the foreground-session-owner pipeline (which is Moonlight-shaped)
+ * and delegate to `options.launchLocal`. Remote-source and
+ * source-absent payloads continue through the existing flow.
+ */
+async function routeAndPerformLocalStreamLaunch(
+  options: LaunchBridgeOptions,
+  owner: LaunchBridgeForegroundSessionOwner,
+  payload: LocalStreamLaunchPayload,
+): Promise<LaunchBridgeResponse> {
+  if (payload.source?.isLocal) {
+    if (options.launchLocal) {
+      return await options.launchLocal(payload)
+    }
+    // v1: bridge cannot launch local-source entries without a
+    // delegate. Surface a typed failure so the renderer can degrade.
+    // U8 wires `launchLocal` from main.ts; tests provide it when
+    // local launches need to succeed end-to-end.
+    logger.warn(
+      { id: payload.id, hostId: payload.source.hostId },
+      "launch-bridge: local-source launch requested but no launchLocal delegate wired",
+    )
+    return {
+      status: "failed",
+      category: "host-unavailable",
+      message:
+        "local-source launch via desktop bridge requires launchLocal delegate (not wired in this build)",
+    }
+  }
+  return await performLocalStreamLaunch(owner, payload)
+}
+
+/**
+ * Resolve the connection target for a remote launch. Federation
+ * routing prefers `payload.source` (per-entry) over the connection
+ * controller's record (legacy single-server). Source-absent payloads
+ * preserve the U1-transition fallback.
+ */
+function resolveLaunchConnection(
+  options: LaunchBridgeOptions,
+  payload: LocalStreamLaunchPayload,
+): ConnectionServerRecord | undefined {
+  const source = payload.source
+  if (source && !source.isLocal) {
+    return {
+      hostId: source.hostId,
+      controlUrl: source.controlUrl,
+    }
+  }
+  return options.getConnection()
+}
+
 async function performLocalStreamLaunch(
   owner: LaunchBridgeForegroundSessionOwner,
   payload: LocalStreamLaunchPayload,
@@ -256,7 +331,12 @@ async function prepareLaunchStage(
   ForegroundSessionStageResult<PreparedLaunchStage, LaunchBridgeResponse>
 > {
   const id = payload.id
-  const connection = options.getConnection()
+  // Federation routing: prefer payload.source over the connection
+  // state. Remote-source payloads MUST route against their declared
+  // peer, not whatever the connection controller last latched onto.
+  // Source-absent payloads (U1 transition) still fall back to the
+  // connection record.
+  const connection = resolveLaunchConnection(options, payload)
   if (!connection) {
     logger.warn({ id }, "launch-bridge: refused — no connected upstream")
     return failedLaunchStage({

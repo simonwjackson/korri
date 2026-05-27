@@ -26,6 +26,30 @@ export const handleLaunchLibrary = (
   payload: typeof LaunchLibraryPayload.Type,
 ) =>
   Effect.gen(function* () {
+    // Federation routing (server-side / kiosk-web path): remote-source
+    // entries cannot complete a launch here because the server has no
+    // local Moonlight client. Surface a typed v1 deferral so callers
+    // without a stream sink (browser dev, future kiosk-web) degrade
+    // gracefully. Desktop production routes remote launches through
+    // the bun's `app.desktop.launch` instead (see launch-bridge.ts).
+    if (payload.source && payload.source.isLocal === false) {
+      logger.warn(
+        {
+          id: payload.id,
+          peerHostId: payload.source.hostId,
+          peerControlUrl: payload.source.controlUrl,
+        },
+        "app.library.launch: remote-source launch not supported via server handler in v1",
+      )
+      return {
+        status: "failed",
+        exitCode: launchFailureExitCode("host-unavailable"),
+        failureKind: "host-unavailable" as const,
+        stderrTail:
+          "remote-source launches require a stream-client surface (e.g. desktop bridge); not supported via server handler in v1",
+      } satisfies LaunchLibraryResponse
+    }
+
     const source = yield* LibrarySource
     const launcher = yield* Launcher
     const foregroundSessionHost = yield* ForegroundSessionHost

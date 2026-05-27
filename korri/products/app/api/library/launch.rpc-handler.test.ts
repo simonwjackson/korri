@@ -109,11 +109,10 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     expect(result).toEqual({ status: "launched" })
   })
 
-  it("accepts (and ignores in U1) a `source` payload field for the local launch path", async () => {
+  it("runs the local launch path unchanged for a local-tagged `source` payload", async () => {
     const { layer } = await layerForFakeGame(0)
-    // U1 makes `source` payload-acceptable; U5 turns it into a routing
-    // discriminator. For now the handler treats the local-tagged payload
-    // identically to the bare-id call: success.
+    // Federation routing on the server-side: local-tagged entries
+    // continue through sessiond / the existing launcher path.
     const result = await Effect.runPromise(
       handleLaunchLibrary({
         id: "snes/echo.smc",
@@ -121,6 +120,27 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       }).pipe(Effect.provide(layer)),
     )
     expect(result).toEqual({ status: "launched" })
+  })
+
+  it("returns a typed host-unavailable v1 deferral for remote-source payloads", async () => {
+    const { layer } = await layerForFakeGame(0)
+    const remoteSource = new EntrySource({
+      hostId: "aka",
+      controlUrl: "http://192.168.1.117:3001",
+      isLocal: false,
+    })
+    const result = await Effect.runPromise(
+      handleLaunchLibrary({
+        id: "snes/echo.smc",
+        source: remoteSource,
+      }).pipe(Effect.provide(layer)),
+    )
+
+    expect(result.status).toBe("failed")
+    if (result.status === "failed") {
+      expect(result.failureKind).toBe("host-unavailable")
+      expect(result.stderrTail).toContain("remote-source")
+    }
   })
 
   it("returns { status: 'failed', exitCode } and includes argv echoed by fake-game.sh in stderrTail", async () => {
