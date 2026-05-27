@@ -1,7 +1,7 @@
 ---
 title: "feat: Generalize sessiond into role-pluggable supervisor and route source-machine launches through it"
 type: feat
-status: active
+status: completed
 date: 2026-05-27
 origin: docs/brainstorms/2026-05-24-002-default-gamescope-foreground-launch-policy-requirements.md
 verify_command: "just typecheck && just test-unit && just desktop-smoke && just test-nix"
