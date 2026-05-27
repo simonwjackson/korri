@@ -38,7 +38,10 @@ describe("korri session state", () => {
   })
 
   it("carries the active launch identity through launch, game, and restore", () => {
-    const launching = beginKorriLaunch(markKorriHome(startKorriSession()), "launch-1")
+    const launching = beginKorriLaunch(
+      markKorriHome(startKorriSession()),
+      "launch-1",
+    )
     const game = markKorriGameRunning(launching)
     const restored = completeKorriRestore(beginKorriRestore(game))
 

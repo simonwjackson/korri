@@ -2,12 +2,12 @@ import { afterEach, describe, expect, it } from "bun:test"
 import { mkdir, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import type { LaunchSpec } from "./launcher"
-import type { SessiondManagedLaunchEvent } from "./sessiond-managed-launch-protocol"
 import {
   createSessionLauncher,
   createSessionLauncherFromEnv,
   launchViaSessiond,
 } from "./session-launcher"
+import type { SessiondManagedLaunchEvent } from "./sessiond-managed-launch-protocol"
 
 const spec: LaunchSpec = { command: "/bin/game", args: ["rom.smc"] }
 const tempDirs: string[] = []
@@ -283,7 +283,8 @@ describe("session launcher", () => {
     await Promise.resolve()
 
     const terminate = requests.find(
-      request => new URL(request.input).pathname === "/managed-launch/terminate",
+      request =>
+        new URL(request.input).pathname === "/managed-launch/terminate",
     )
     expect(terminate).toBeDefined()
     expect(JSON.parse(String(terminate?.init?.body))).toEqual({
@@ -292,16 +293,14 @@ describe("session launcher", () => {
   })
 })
 
-function managedStatus(
-  options: {
-    readonly mode: "home" | "game" | "launching"
-    readonly capabilities?: {
-      readonly managedLaunch: boolean
-      readonly lifecycleEvents: boolean
-      readonly perLaunchTermination: boolean
-    }
-  },
-) {
+function managedStatus(options: {
+  readonly mode: "home" | "game" | "launching"
+  readonly capabilities?: {
+    readonly managedLaunch: boolean
+    readonly lifecycleEvents: boolean
+    readonly perLaunchTermination: boolean
+  }
+}) {
   return {
     schemaVersion: 1,
     mode: options.mode,
@@ -315,10 +314,7 @@ function managedStatus(
 }
 
 function event(
-  input: Omit<
-    SessiondManagedLaunchEvent,
-    "schemaVersion" | "at"
-  >,
+  input: Omit<SessiondManagedLaunchEvent, "schemaVersion" | "at">,
 ): SessiondManagedLaunchEvent {
   return {
     schemaVersion: 1,
@@ -333,7 +329,9 @@ function eventStream(events: readonly SessiondManagedLaunchEvent[]): Response {
       start(controller) {
         const encoder = new TextEncoder()
         for (const item of events) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(item)}\n\n`))
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify(item)}\n\n`),
+          )
         }
         if (events.length > 0) controller.close()
       },

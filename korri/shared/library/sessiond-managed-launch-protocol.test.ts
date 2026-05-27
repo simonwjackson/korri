@@ -13,10 +13,12 @@ import {
 
 describe("sessiond managed launch protocol", () => {
   it("decodes managed launch command and response payloads", () => {
-    const request = Schema.decodeUnknownSync(SessiondManagedLaunchStartRequest)({
-      launchId: "launch-1",
-      spec: { command: "/bin/game", args: ["rom.smc"] },
-    })
+    const request = Schema.decodeUnknownSync(SessiondManagedLaunchStartRequest)(
+      {
+        launchId: "launch-1",
+        spec: { command: "/bin/game", args: ["rom.smc"] },
+      },
+    )
     expect(request).toEqual({
       launchId: "launch-1",
       spec: { command: "/bin/game", args: ["rom.smc"] },

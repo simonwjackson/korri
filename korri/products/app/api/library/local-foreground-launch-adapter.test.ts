@@ -95,7 +95,10 @@ describe("local foreground launch adapter", () => {
   it("waits for managed readiness evidence after child exit before releasing idle", async () => {
     const owner = createLocalForegroundLaunchOwner()
     const exited = deferred<{ readonly exitCode: number | null }>()
-    const ready = deferred<{ readonly status: "ok"; readonly evidence: { readonly gate: string } }>()
+    const ready = deferred<{
+      readonly status: "ok"
+      readonly evidence: { readonly gate: string }
+    }>()
     let settled = false
 
     const launch = launchLocalForegroundSession(owner, {

@@ -1,7 +1,7 @@
 import {
-  launchFailureExitCode,
   type LaunchResult,
   type LaunchSpec,
+  launchFailureExitCode,
   type ManagedLaunchResult,
 } from "@shared/library/launcher"
 import {
@@ -29,8 +29,8 @@ import {
   evaluateHomeInvariant,
   failKorriRestore,
   initialKorriSessionState,
-  korriSessionActiveLaunch,
   type KorriSessionState,
+  korriSessionActiveLaunch,
   markKorriGameRunning,
   markKorriHome,
   shouldStopAfterRestoreFailure,
@@ -143,7 +143,10 @@ export function createKorriSessiondCore(
 
   function pushLifecycleEvent(
     launchId: string,
-    input: Omit<SessiondManagedLaunchEvent, "schemaVersion" | "sequence" | "launchId" | "at">,
+    input: Omit<
+      SessiondManagedLaunchEvent,
+      "schemaVersion" | "sequence" | "launchId" | "at"
+    >,
   ) {
     const event: SessiondManagedLaunchEvent = {
       schemaVersion: 1,
@@ -158,7 +161,8 @@ export function createKorriSessiondCore(
 
     const encoded = sseData(event)
     for (const subscriber of lifecycleSubscribers) {
-      if (subscriber.launchId === launchId) subscriber.controller.enqueue(encoded)
+      if (subscriber.launchId === launchId)
+        subscriber.controller.enqueue(encoded)
     }
 
     if (isTerminalLifecycleEvent(event)) closeLifecycleSubscribers(launchId)
@@ -334,7 +338,9 @@ export function createKorriSessiondCore(
 
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
-        const replay = lifecycleEvents.filter(event => event.launchId === launchId)
+        const replay = lifecycleEvents.filter(
+          event => event.launchId === launchId,
+        )
         for (const event of replay) controller.enqueue(sseData(event))
         if (replay.some(isTerminalLifecycleEvent)) {
           controller.close()
@@ -397,7 +403,8 @@ export function createKorriSessiondCore(
           url.pathname === "/managed-launch/events"
         ) {
           const launchId = url.searchParams.get("launchId")
-          if (!launchId) return new Response("missing launchId", { status: 400 })
+          if (!launchId)
+            return new Response("missing launchId", { status: 400 })
           return lifecycleEventStream(launchId)
         }
         if (request.method === "POST" && url.pathname === "/managed-launch") {
@@ -490,9 +497,7 @@ function sseData(event: SessiondManagedLaunchEvent): Uint8Array {
   return new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`)
 }
 
-function isTerminalLifecycleEvent(
-  event: SessiondManagedLaunchEvent,
-): boolean {
+function isTerminalLifecycleEvent(event: SessiondManagedLaunchEvent): boolean {
   return ["home-ready", "failed", "recovering", "terminated"].includes(
     event.type,
   )
