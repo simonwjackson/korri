@@ -1,7 +1,7 @@
 ---
 title: "feat: Roll out foreground session lifecycle to local launch adapters"
 type: feat
-status: active
+status: completed
 date: 2026-05-26
 origin: docs/brainstorms/2026-05-24-002-default-gamescope-foreground-launch-policy-requirements.md
 verify_command: "just typecheck && just test-unit && just desktop-smoke"
