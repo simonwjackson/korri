@@ -1,0 +1,704 @@
+--- source-link/src/local_control.c
++++ src/src/local_control.c
+@@ -4,6 +4,7 @@
+ 
+ #include "local_control.h"
+ 
++#include <Limelight.h>
+ #include <errno.h>
+ #include <fcntl.h>
+ #include <json-c/json.h>
+@@ -18,6 +19,7 @@
+ #include <sys/stat.h>
+ #include <sys/types.h>
+ #include <sys/un.h>
++#include <time.h>
+ #include <unistd.h>
+ 
+ #define MOONLIGHT_CONTROL_PROTOCOL_NAME "moonlight.local-control"
+@@ -35,6 +37,27 @@
+ #define MOONLIGHT_CONTROL_MAX_WIDTH 7680
+ #define MOONLIGHT_CONTROL_MIN_HEIGHT 240
+ #define MOONLIGHT_CONTROL_MAX_HEIGHT 4320
++#define MOONLIGHT_LC_COMMAND_RUNTIME_SET_BITRATE "runtime.setBitrate"
++#define MOONLIGHT_LC_COMMAND_RUNTIME_SET_FPS "runtime.setFps"
++#define MOONLIGHT_LC_STATUS_APPLIED 0
++#define MOONLIGHT_LC_STATUS_FAILED 1
++#define MOONLIGHT_LC_STATUS_INVALID 2
++#define MOONLIGHT_LC_STATUS_DISABLED 3
++#define MOONLIGHT_LC_OPERATION_QUERY_CAPABILITIES 0
++#define MOONLIGHT_LC_OPERATION_SET_BITRATE_KBPS 1
++#define MOONLIGHT_LC_OPERATION_SET_FPS 2
++#define MOONLIGHT_LC_OPERATION_SET_RESOLUTION 3
++#define MOONLIGHT_LC_EMIT_OUTSIDE_RUNTIME_SETTINGS_MUTEX 1
++
++struct moonlight_local_control_subscriber {
++  int fd;
++  uint64_t subscribed_seq;
++};
++
++struct moonlight_local_control_event_history_entry {
++  uint64_t seq;
++  char name[64];
++};
+ 
+ struct moonlight_local_control_state {
+   int enabled;
+@@ -48,18 +71,35 @@
+   char authority[16];
+   char lifecycle[32];
+   uint64_t seq;
++  uint32_t next_command_id;
++  uint64_t last_command_at_ms;
+   int width;
+   int height;
+   int fps;
+   int bitrate_kbps;
++  int has_runtime_capability;
++  uint32_t supported_operations;
++  uint32_t proof_gated_operations;
++  uint32_t min_bitrate_kbps;
++  uint32_t max_bitrate_kbps;
++  uint32_t max_fps;
++  int has_last_command;
++  uint32_t last_request_id;
++  char last_command[32];
++  char last_status[32];
++  uint16_t last_reason;
++  struct moonlight_local_control_subscriber subscribers[MOONLIGHT_CONTROL_MAX_CLIENTS];
++  struct moonlight_local_control_event_history_entry moonlight_local_control_event_history[MOONLIGHT_CONTROL_EVENT_HISTORY];
+ };
+ 
+ static struct moonlight_local_control_state control = {
+   .server_fd = -1,
+   .lock = PTHREAD_MUTEX_INITIALIZER,
++  .next_command_id = 100000,
+ };
+ 
+ static void* moonlight_local_control_thread(void* arg);
++static void* moonlight_local_control_client_thread(void* arg);
+ static int moonlight_local_control_safe_runtime_dir(const char* runtime_dir);
+ static int moonlight_local_control_safe_socket_path(const char* runtime_dir, const char* socket_path);
+ static int moonlight_local_control_replace_stale_socket(const char* socket_path);
+@@ -67,12 +107,26 @@
+ static void moonlight_local_control_handle_client(int client_fd);
+ static int moonlight_local_control_read_frame(int client_fd, char* buffer, size_t buffer_size);
+ static void moonlight_local_control_write_json(int client_fd, struct json_object* value);
++static int moonlight_local_control_write_json_no_free(int client_fd, struct json_object* value);
+ static struct json_object* moonlight_local_control_snapshot_locked(void);
+ static struct json_object* moonlight_local_control_hello_locked(void);
+ static struct json_object* moonlight_local_control_error(struct json_object* id, int code, const char* message, const char* tag);
+ static struct json_object* moonlight_local_control_success(struct json_object* id, struct json_object* result);
+ static struct json_object* moonlight_local_control_event_locked(const char* name);
++static struct json_object* moonlight_local_control_runtime_command_event(uint64_t seq, uint32_t request_id, const char* command, const char* status, uint16_t reason);
++static int moonlight_local_control_dispatch_runtime_command(struct json_object* id, struct json_object* request, const char* method_name, int client_fd);
++static uint32_t moonlight_local_control_next_command_id(void);
++static uint64_t moonlight_local_control_monotonic_ms(void);
+ static const char* moonlight_local_control_env_or(const char* name, const char* fallback);
++static const char* moonlight_local_control_command_for_operation(uint16_t operation);
++static const char* moonlight_local_control_status_for_runtime_status(uint16_t status, uint16_t reason);
++static int moonlight_local_control_operation_supported_locked(uint16_t operation);
++static int moonlight_local_control_add_subscriber(int fd);
++static void moonlight_local_control_remove_subscriber(int fd);
++static void moonlight_local_control_evict_slow_subscriber(int fd);
++static void moonlight_local_control_emit_event(struct json_object* event);
++static void moonlight_local_control_emit_runtime_command_result(uint32_t request_id, uint16_t operation, uint16_t status, uint16_t reason);
++static void moonlight_local_control_runtime_settings_observer(const SS_RUNTIME_SETTINGS_MVP_OBSERVER_EVENT* event, void* context);
+ 
+ void moonlight_local_control_start_from_env(const char* initial_state, int width, int height, int fps, int bitrate_kbps) {
+   const char* socket_path = getenv("MOONLIGHT_LOCAL_CONTROL_SOCKET");
+@@ -132,10 +186,20 @@
+   control.running = 1;
+   control.server_fd = fd;
+   control.seq = 1;
++  control.next_command_id = 100000;
+   control.width = width;
+   control.height = height;
+   control.fps = fps;
+   control.bitrate_kbps = bitrate_kbps;
++  control.has_runtime_capability = 0;
++  control.supported_operations = 0;
++  control.proof_gated_operations = 0;
++  control.min_bitrate_kbps = MOONLIGHT_CONTROL_MIN_BITRATE_KBPS;
++  control.max_bitrate_kbps = MOONLIGHT_CONTROL_MAX_BITRATE_KBPS;
++  control.max_fps = MOONLIGHT_CONTROL_MAX_FPS;
++  control.has_last_command = 0;
++  memset(control.subscribers, 0, sizeof(control.subscribers));
++  memset(control.moonlight_local_control_event_history, 0, sizeof(control.moonlight_local_control_event_history));
+   snprintf(control.socket_path, sizeof(control.socket_path), "%s", socket_path);
+   snprintf(control.runtime_dir, sizeof(control.runtime_dir), "%s", runtime_dir);
+   snprintf(control.session_id, sizeof(control.session_id), "%s", session_id);
+@@ -143,6 +207,8 @@
+   snprintf(control.lifecycle, sizeof(control.lifecycle), "%s", initial_state == NULL ? "starting" : initial_state);
+   pthread_mutex_unlock(&control.lock);
+ 
++  LiSetSunshineRuntimeSettingsMvpObserver(moonlight_local_control_runtime_settings_observer, NULL);
++
+   if (pthread_create(&control.thread, NULL, moonlight_local_control_thread, NULL) != 0) {
+     fprintf(stderr, "moonlight-control: unavailable pthread_create failed\n");
+     pthread_mutex_lock(&control.lock);
+@@ -150,6 +216,7 @@
+     control.running = 0;
+     control.server_fd = -1;
+     pthread_mutex_unlock(&control.lock);
++    LiSetSunshineRuntimeSettingsMvpObserver(NULL, NULL);
+     close(fd);
+     unlink(socket_path);
+     return;
+@@ -158,6 +225,19 @@
+   fprintf(stderr, "moonlight-control: listening socket=%s authority=%s protocol=%s/v1\n", socket_path, authority, MOONLIGHT_CONTROL_PROTOCOL_NAME);
+ }
+ 
++void moonlight_local_control_query_runtime_capabilities(void) {
++  pthread_mutex_lock(&control.lock);
++  int enabled = control.enabled;
++  int controller = strcmp(control.authority, "controller") == 0;
++  pthread_mutex_unlock(&control.lock);
++
++  if (enabled && controller) {
++    uint32_t command_id = moonlight_local_control_next_command_id();
++    fprintf(stderr, "moonlight-control: querying runtime settings capabilities request_id=%u operation=0\n", command_id);
++    LiQuerySunshineRuntimeSettingsMvpCapabilities(command_id);
++  }
++}
++
+ void moonlight_local_control_update_lifecycle(const char* state) {
+   if (state == NULL)
+     return;
+@@ -186,6 +266,8 @@
+   if (!enabled)
+     return;
+ 
++  LiSetSunshineRuntimeSettingsMvpObserver(NULL, NULL);
++
+   if (fd >= 0) {
+     shutdown(fd, SHUT_RDWR);
+     close(fd);
+@@ -224,13 +306,33 @@
+       continue;
+     }
+ 
+-    moonlight_local_control_handle_client(client_fd);
+-    close(client_fd);
++    int* client_arg = malloc(sizeof(*client_arg));
++    if (client_arg == NULL) {
++      close(client_fd);
++      continue;
++    }
++    *client_arg = client_fd;
++    pthread_t client_thread;
++    if (pthread_create(&client_thread, NULL, moonlight_local_control_client_thread, client_arg) != 0) {
++      free(client_arg);
++      close(client_fd);
++      continue;
++    }
++    pthread_detach(client_thread);
+   }
+ 
+   return NULL;
+ }
+ 
++static void* moonlight_local_control_client_thread(void* arg) {
++  int client_fd = *((int*) arg);
++  free(arg);
++  moonlight_local_control_handle_client(client_fd);
++  moonlight_local_control_remove_subscriber(client_fd);
++  close(client_fd);
++  return NULL;
++}
++
+ static int moonlight_local_control_safe_runtime_dir(const char* runtime_dir) {
+   struct stat st;
+   if (runtime_dir[0] != '/')
+@@ -347,13 +449,18 @@
+     else if (strcmp(method_name, "events.subscribe") == 0) {
+       pthread_mutex_lock(&control.lock);
+       struct json_object* snapshot_event = moonlight_local_control_event_locked("lifecycle.streaming");
++      uint64_t seq = control.seq;
+       pthread_mutex_unlock(&control.lock);
++      moonlight_local_control_add_subscriber(client_fd);
+       struct json_object* subscribed = json_object_new_object();
+       json_object_object_add(subscribed, "_tag", json_object_new_string("events.subscribed"));
+-      json_object_object_add(subscribed, "seq", json_object_new_int64((int64_t) control.seq));
++      json_object_object_add(subscribed, "seq", json_object_new_int64((int64_t) seq));
+       moonlight_local_control_write_json(client_fd, moonlight_local_control_success(id, subscribed));
+       moonlight_local_control_write_json(client_fd, snapshot_event);
+     }
++    else if (strcmp(method_name, MOONLIGHT_LC_COMMAND_RUNTIME_SET_BITRATE) == 0 || strcmp(method_name, MOONLIGHT_LC_COMMAND_RUNTIME_SET_FPS) == 0) {
++      moonlight_local_control_dispatch_runtime_command(id, request, method_name, client_fd);
++    }
+     else {
+       moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32601, "unsupported method", "unsupported"));
+     }
+@@ -390,12 +497,20 @@
+ }
+ 
+ static void moonlight_local_control_write_json(int client_fd, struct json_object* value) {
+-  const char* serialized = json_object_to_json_string_ext(value, JSON_C_TO_STRING_PLAIN);
+-  write(client_fd, serialized, strlen(serialized));
+-  write(client_fd, "\n", 1);
++  moonlight_local_control_write_json_no_free(client_fd, value);
+   json_object_put(value);
+ }
+ 
++static int moonlight_local_control_write_json_no_free(int client_fd, struct json_object* value) {
++  const char* serialized = json_object_to_json_string_ext(value, JSON_C_TO_STRING_PLAIN);
++  size_t len = strlen(serialized);
++  if (send(client_fd, serialized, len, MSG_NOSIGNAL) < 0)
++    return 0;
++  if (send(client_fd, "\n", 1, MSG_NOSIGNAL) < 0)
++    return 0;
++  return 1;
++}
++
+ static struct json_object* moonlight_local_control_hello_locked(void) {
+   struct json_object* result = json_object_new_object();
+   json_object_object_add(result, "_tag", json_object_new_string("protocol.hello"));
+@@ -419,9 +534,11 @@
+   json_object_array_add(events, json_object_new_string("quality"));
+   json_object_array_add(events, json_object_new_string("input"));
+   struct json_object* commands = json_object_new_array();
+-  if (strcmp(control.authority, "controller") == 0) {
+-    json_object_array_add(commands, json_object_new_string("runtime.setBitrate"));
+-    json_object_array_add(commands, json_object_new_string("runtime.setFps"));
++  if (strcmp(control.authority, "controller") == 0 && control.has_runtime_capability) {
++    if (moonlight_local_control_operation_supported_locked(MOONLIGHT_LC_OPERATION_SET_BITRATE_KBPS))
++      json_object_array_add(commands, json_object_new_string(MOONLIGHT_LC_COMMAND_RUNTIME_SET_BITRATE));
++    if (moonlight_local_control_operation_supported_locked(MOONLIGHT_LC_OPERATION_SET_FPS))
++      json_object_array_add(commands, json_object_new_string(MOONLIGHT_LC_COMMAND_RUNTIME_SET_FPS));
+   }
+   json_object_object_add(capabilities, "events", events);
+   json_object_object_add(capabilities, "commands", commands);
+@@ -435,12 +552,12 @@
+   json_object_object_add(limits, "maxInFlightMutationsPerFamily", json_object_new_int(1));
+   json_object_object_add(limits, "minCommandIntervalMs", json_object_new_int(MOONLIGHT_CONTROL_MIN_COMMAND_INTERVAL_MS));
+   struct json_object* bitrate = json_object_new_object();
+-  json_object_object_add(bitrate, "min", json_object_new_int(MOONLIGHT_CONTROL_MIN_BITRATE_KBPS));
+-  json_object_object_add(bitrate, "max", json_object_new_int(MOONLIGHT_CONTROL_MAX_BITRATE_KBPS));
++  json_object_object_add(bitrate, "min", json_object_new_int((int) control.min_bitrate_kbps));
++  json_object_object_add(bitrate, "max", json_object_new_int((int) control.max_bitrate_kbps));
+   json_object_object_add(limits, "bitrateKbps", bitrate);
+   struct json_object* fps = json_object_new_object();
+   json_object_object_add(fps, "min", json_object_new_int(MOONLIGHT_CONTROL_MIN_FPS));
+-  json_object_object_add(fps, "max", json_object_new_int(MOONLIGHT_CONTROL_MAX_FPS));
++  json_object_object_add(fps, "max", json_object_new_int((int) control.max_fps));
+   json_object_object_add(limits, "fps", fps);
+   struct json_object* resolution = json_object_new_object();
+   struct json_object* width = json_object_new_object();
+@@ -482,6 +599,14 @@
+   json_object_object_add(applied_resolution, "width", json_object_new_int(control.width));
+   json_object_object_add(applied_resolution, "height", json_object_new_int(control.height));
+   json_object_object_add(runtime_settings, "appliedResolution", applied_resolution);
++  if (control.has_last_command) {
++    struct json_object* last_command = json_object_new_object();
++    json_object_object_add(last_command, "requestId", json_object_new_int64((int64_t) control.last_request_id));
++    json_object_object_add(last_command, "command", json_object_new_string(control.last_command));
++    json_object_object_add(last_command, "status", json_object_new_string(control.last_status));
++    json_object_object_add(last_command, "reason", json_object_new_int(control.last_reason));
++    json_object_object_add(runtime_settings, "lastCommand", last_command);
++  }
+   json_object_object_add(result, "runtimeSettings", runtime_settings);
+ 
+   struct json_object* input = json_object_new_object();
+@@ -499,7 +624,7 @@
+   json_object_object_add(event, "method", json_object_new_string("moonlight.event"));
+   struct json_object* params = json_object_new_object();
+   json_object_object_add(params, "seq", json_object_new_int64((int64_t) control.seq));
+-  json_object_object_add(params, "monotonicMs", json_object_new_int64(0));
++  json_object_object_add(params, "monotonicMs", json_object_new_int64((int64_t) moonlight_local_control_monotonic_ms()));
+   struct json_object* payload = json_object_new_object();
+   json_object_object_add(payload, "name", json_object_new_string(name));
+   json_object_object_add(payload, "state", json_object_new_string(control.lifecycle));
+@@ -508,6 +633,253 @@
+   return event;
+ }
+ 
++static struct json_object* moonlight_local_control_runtime_command_event(uint64_t seq, uint32_t request_id, const char* command, const char* status, uint16_t reason) {
++  struct json_object* event = json_object_new_object();
++  json_object_object_add(event, "jsonrpc", json_object_new_string("2.0"));
++  json_object_object_add(event, "method", json_object_new_string("moonlight.event"));
++  struct json_object* params = json_object_new_object();
++  json_object_object_add(params, "seq", json_object_new_int64((int64_t) seq));
++  json_object_object_add(params, "monotonicMs", json_object_new_int64((int64_t) moonlight_local_control_monotonic_ms()));
++  struct json_object* payload = json_object_new_object();
++  json_object_object_add(payload, "name", json_object_new_string("runtime.commandResult"));
++  json_object_object_add(payload, "requestId", json_object_new_int64((int64_t) request_id));
++  json_object_object_add(payload, "command", json_object_new_string(command));
++  json_object_object_add(payload, "status", json_object_new_string(status));
++  json_object_object_add(payload, "reason", json_object_new_int(reason));
++  json_object_object_add(params, "event", payload);
++  json_object_object_add(event, "params", params);
++  return event;
++}
++
++static int moonlight_local_control_dispatch_runtime_command(struct json_object* id, struct json_object* request, const char* method_name, int client_fd) {
++  struct json_object* params = NULL;
++  json_object_object_get_ex(request, "params", &params);
++  if (params == NULL || json_object_get_type(params) != json_type_object) {
++    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32602, "missing params", "invalid"));
++    return 0;
++  }
++
++  uint16_t operation;
++  uint32_t value;
++  struct json_object* raw_value = NULL;
++  if (strcmp(method_name, MOONLIGHT_LC_COMMAND_RUNTIME_SET_BITRATE) == 0) {
++    operation = MOONLIGHT_LC_OPERATION_SET_BITRATE_KBPS;
++    json_object_object_get_ex(params, "bitrateKbps", &raw_value);
++  }
++  else {
++    operation = MOONLIGHT_LC_OPERATION_SET_FPS;
++    json_object_object_get_ex(params, "fps", &raw_value);
++  }
++
++  if (raw_value == NULL || json_object_get_type(raw_value) != json_type_int) {
++    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32602, "invalid command value", "invalid"));
++    return 0;
++  }
++  value = (uint32_t) json_object_get_int(raw_value);
++
++  uint64_t now = moonlight_local_control_monotonic_ms();
++  pthread_mutex_lock(&control.lock);
++  int controller = strcmp(control.authority, "controller") == 0;
++  int has_capability = control.has_runtime_capability;
++  int supported = moonlight_local_control_operation_supported_locked(operation);
++  uint32_t min_bitrate = control.min_bitrate_kbps;
++  uint32_t max_bitrate = control.max_bitrate_kbps;
++  uint32_t max_fps = control.max_fps;
++  uint64_t last_command_at = control.last_command_at_ms;
++  pthread_mutex_unlock(&control.lock);
++
++  if (!controller) {
++    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32000, "command authority required", "unauthorized"));
++    return 0;
++  }
++  if (!has_capability) {
++    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32000, "runtime settings capability not ready", "not-streaming"));
++    return 0;
++  }
++  if (!supported) {
++    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32000, "runtime command unsupported", "unsupported"));
++    return 0;
++  }
++  if (last_command_at != 0 && now - last_command_at < MOONLIGHT_CONTROL_MIN_COMMAND_INTERVAL_MS) {
++    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32000, "runtime command interval conflict", "conflict"));
++    return 0;
++  }
++  if (operation == MOONLIGHT_LC_OPERATION_SET_BITRATE_KBPS && (value < min_bitrate || value > max_bitrate)) {
++    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32602, "bitrate out of bounds", "invalid"));
++    return 0;
++  }
++  if (operation == MOONLIGHT_LC_OPERATION_SET_FPS && (value < MOONLIGHT_CONTROL_MIN_FPS || value > max_fps)) {
++    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32602, "fps out of bounds", "invalid"));
++    return 0;
++  }
++
++  uint32_t command_id = moonlight_local_control_next_command_id();
++  int send_result = LiSendSunshineRuntimeSettingsMvp(command_id, operation, value, 0);
++  if (send_result != 0) {
++    const char* tag = send_result == -5 ? "conflict" : (send_result == -6 ? "unsupported" : "failed");
++    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32000, "runtime command dispatch failed", tag));
++    return 0;
++  }
++
++  pthread_mutex_lock(&control.lock);
++  control.last_command_at_ms = now;
++  pthread_mutex_unlock(&control.lock);
++
++  struct json_object* accepted = json_object_new_object();
++  json_object_object_add(accepted, "_tag", json_object_new_string("command.accepted"));
++  json_object_object_add(accepted, "requestId", json_object_new_int64((int64_t) command_id));
++  json_object_object_add(accepted, "command", json_object_new_string(method_name));
++  moonlight_local_control_write_json(client_fd, moonlight_local_control_success(id, accepted));
++  return 1;
++}
++
++static uint32_t moonlight_local_control_next_command_id(void) {
++  pthread_mutex_lock(&control.lock);
++  uint32_t command_id = control.next_command_id++;
++  if (control.next_command_id == 0)
++    control.next_command_id = 100000;
++  pthread_mutex_unlock(&control.lock);
++  return command_id;
++}
++
++static uint64_t moonlight_local_control_monotonic_ms(void) {
++  struct timespec ts;
++  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
++    return 0;
++  return ((uint64_t) ts.tv_sec * 1000u) + ((uint64_t) ts.tv_nsec / 1000000u);
++}
++
++static int moonlight_local_control_add_subscriber(int fd) {
++  pthread_mutex_lock(&control.lock);
++  for (int i = 0; i < MOONLIGHT_CONTROL_MAX_CLIENTS; i++) {
++    if (control.subscribers[i].fd == fd) {
++      control.subscribers[i].subscribed_seq = control.seq;
++      pthread_mutex_unlock(&control.lock);
++      return 1;
++    }
++  }
++  for (int i = 0; i < MOONLIGHT_CONTROL_MAX_CLIENTS; i++) {
++    if (control.subscribers[i].fd <= 0) {
++      control.subscribers[i].fd = fd;
++      control.subscribers[i].subscribed_seq = control.seq;
++      pthread_mutex_unlock(&control.lock);
++      return 1;
++    }
++  }
++  pthread_mutex_unlock(&control.lock);
++  moonlight_local_control_evict_slow_subscriber(fd);
++  return 0;
++}
++
++static void moonlight_local_control_remove_subscriber(int fd) {
++  pthread_mutex_lock(&control.lock);
++  for (int i = 0; i < MOONLIGHT_CONTROL_MAX_CLIENTS; i++) {
++    if (control.subscribers[i].fd == fd) {
++      control.subscribers[i].fd = -1;
++      control.subscribers[i].subscribed_seq = 0;
++    }
++  }
++  pthread_mutex_unlock(&control.lock);
++}
++
++static void moonlight_local_control_evict_slow_subscriber(int fd) {
++  moonlight_local_control_remove_subscriber(fd);
++}
++
++static void moonlight_local_control_emit_event(struct json_object* event) {
++  int fds[MOONLIGHT_CONTROL_MAX_CLIENTS];
++  int count = 0;
++  pthread_mutex_lock(&control.lock);
++  for (int i = 0; i < MOONLIGHT_CONTROL_MAX_CLIENTS; i++) {
++    if (control.subscribers[i].fd > 0)
++      fds[count++] = control.subscribers[i].fd;
++  }
++  pthread_mutex_unlock(&control.lock);
++
++  const char* serialized = json_object_to_json_string_ext(event, JSON_C_TO_STRING_PLAIN);
++  size_t len = strlen(serialized);
++  for (int i = 0; i < count; i++) {
++    if (send(fds[i], serialized, len, MSG_NOSIGNAL | MSG_DONTWAIT) < 0 || send(fds[i], "\n", 1, MSG_NOSIGNAL | MSG_DONTWAIT) < 0)
++      moonlight_local_control_evict_slow_subscriber(fds[i]);
++  }
++  json_object_put(event);
++}
++
++static void moonlight_local_control_emit_runtime_command_result(uint32_t request_id, uint16_t operation, uint16_t status, uint16_t reason) {
++  const char* command = moonlight_local_control_command_for_operation(operation);
++  const char* status_label = moonlight_local_control_status_for_runtime_status(status, reason);
++  if (command == NULL)
++    return;
++
++  uint64_t seq;
++  pthread_mutex_lock(&control.lock);
++  control.seq++;
++  seq = control.seq;
++  control.has_last_command = 1;
++  control.last_request_id = request_id;
++  snprintf(control.last_command, sizeof(control.last_command), "%s", command);
++  snprintf(control.last_status, sizeof(control.last_status), "%s", status_label);
++  control.last_reason = reason;
++  if (operation == MOONLIGHT_LC_OPERATION_SET_BITRATE_KBPS && status == MOONLIGHT_LC_STATUS_APPLIED)
++    control.bitrate_kbps = control.bitrate_kbps;
++  control.moonlight_local_control_event_history[seq % MOONLIGHT_CONTROL_EVENT_HISTORY].seq = seq;
++  snprintf(control.moonlight_local_control_event_history[seq % MOONLIGHT_CONTROL_EVENT_HISTORY].name, sizeof(control.moonlight_local_control_event_history[0].name), "%s", "runtime.commandResult");
++  pthread_mutex_unlock(&control.lock);
++
++  moonlight_local_control_emit_event(moonlight_local_control_runtime_command_event(seq, request_id, command, status_label, reason));
++}
++
++static void moonlight_local_control_runtime_settings_observer(const SS_RUNTIME_SETTINGS_MVP_OBSERVER_EVENT* event, void* context) {
++  (void) context;
++  if (event == NULL)
++    return;
++
++  if (event->isCapability) {
++    pthread_mutex_lock(&control.lock);
++    control.has_runtime_capability = event->status == MOONLIGHT_LC_STATUS_APPLIED;
++    control.supported_operations = event->supportedOperations;
++    control.proof_gated_operations = event->proofGatedOperations;
++    control.min_bitrate_kbps = event->minBitrateKbps == 0 ? MOONLIGHT_CONTROL_MIN_BITRATE_KBPS : event->minBitrateKbps;
++    control.max_bitrate_kbps = event->maxBitrateKbps == 0 ? MOONLIGHT_CONTROL_MAX_BITRATE_KBPS : event->maxBitrateKbps;
++    control.max_fps = event->maxFps == 0 ? MOONLIGHT_CONTROL_MAX_FPS : event->maxFps;
++    control.bitrate_kbps = event->currentBitrateKbps == 0 ? control.bitrate_kbps : (int) event->currentBitrateKbps;
++    control.fps = event->currentFps == 0 ? control.fps : (int) event->currentFps;
++    control.width = event->currentWidth == 0 ? control.width : (int) event->currentWidth;
++    control.height = event->currentHeight == 0 ? control.height : (int) event->currentHeight;
++    control.seq++;
++    pthread_mutex_unlock(&control.lock);
++    return;
++  }
++
++  if (event->isTerminal)
++    moonlight_local_control_emit_runtime_command_result(event->requestId, event->operation, event->status, event->reason);
++}
++
++static const char* moonlight_local_control_command_for_operation(uint16_t operation) {
++  if (operation == MOONLIGHT_LC_OPERATION_SET_BITRATE_KBPS)
++    return MOONLIGHT_LC_COMMAND_RUNTIME_SET_BITRATE;
++  if (operation == MOONLIGHT_LC_OPERATION_SET_FPS)
++    return MOONLIGHT_LC_COMMAND_RUNTIME_SET_FPS;
++  return NULL;
++}
++
++static const char* moonlight_local_control_status_for_runtime_status(uint16_t status, uint16_t reason) {
++  (void) reason;
++  if (status == MOONLIGHT_LC_STATUS_APPLIED)
++    return "applied";
++  if (status == MOONLIGHT_LC_STATUS_INVALID)
++    return "invalid";
++  if (status == MOONLIGHT_LC_STATUS_DISABLED)
++    return "disabled";
++  return "failed";
++}
++
++static int moonlight_local_control_operation_supported_locked(uint16_t operation) {
++  if (operation == MOONLIGHT_LC_OPERATION_SET_RESOLUTION)
++    return 0;
++  return (control.supported_operations & (1u << operation)) != 0;
++}
++
+ static struct json_object* moonlight_local_control_success(struct json_object* id, struct json_object* result) {
+   struct json_object* response = json_object_new_object();
+   json_object_object_add(response, "jsonrpc", json_object_new_string("2.0"));
+--- source-link/src/local_control.h
++++ src/src/local_control.h
+@@ -2,6 +2,7 @@
+ 
+ #ifdef __linux__
+ void moonlight_local_control_start_from_env(const char* initial_state, int width, int height, int fps, int bitrate_kbps);
++void moonlight_local_control_query_runtime_capabilities(void);
+ void moonlight_local_control_update_lifecycle(const char* state);
+ void moonlight_local_control_stop(void);
+ #else
+@@ -12,6 +13,7 @@
+   (void) fps;
+   (void) bitrate_kbps;
+ }
++static inline void moonlight_local_control_query_runtime_capabilities(void) {}
+ static inline void moonlight_local_control_update_lifecycle(const char* state) {
+   (void) state;
+ }
+--- source-link/src/main.c
++++ src/src/main.c
+@@ -280,6 +280,7 @@
+   moonlight_local_control_start_from_env("connecting", config->stream.width, config->stream.height, config->stream.fps, config->stream.bitrate);
+   LiStartConnection(&server->serverInfo, &config->stream, &connection_callbacks, platform_get_video(system), platform_get_audio(system, config->audio_device), NULL, drFlags, config->audio_device, 0);
+   moonlight_local_control_update_lifecycle("streaming");
++  moonlight_local_control_query_runtime_capabilities();
+   runtime_settings_mvp_schedule();
+ 
+   if (IS_EMBEDDED(system)) {
+--- source-link/third_party/moonlight-common-c/src/Limelight.h
++++ src/third_party/moonlight-common-c/src/Limelight.h
+@@ -1003,8 +1003,31 @@
+ // encrypted control request and logs the structured ack if one is received. It is
+ // intentionally not a stable API and does not imply that live runtime mutation is
+ // supported by the host.
++typedef struct _SS_RUNTIME_SETTINGS_MVP_OBSERVER_EVENT {
++    uint32_t requestId;
++    uint16_t operation;
++    uint16_t status;
++    uint16_t reason;
++    uint32_t value;
++    uint32_t secondaryValue;
++    uint32_t supportedOperations;
++    uint32_t proofGatedOperations;
++    uint32_t minBitrateKbps;
++    uint32_t maxBitrateKbps;
++    uint32_t maxFps;
++    uint32_t currentBitrateKbps;
++    uint32_t currentFps;
++    uint32_t currentWidth;
++    uint32_t currentHeight;
++    bool isCapability;
++    bool isTerminal;
++} SS_RUNTIME_SETTINGS_MVP_OBSERVER_EVENT;
++
++typedef void (*LiSunshineRuntimeSettingsMvpObserver)(const SS_RUNTIME_SETTINGS_MVP_OBSERVER_EVENT* event, void* context);
++
+ int LiSendSunshineRuntimeSettingsMvp(uint32_t requestId, uint16_t operation, uint32_t value, uint32_t secondaryValue);
+ int LiQuerySunshineRuntimeSettingsMvpCapabilities(uint32_t requestId);
++void LiSetSunshineRuntimeSettingsMvpObserver(LiSunshineRuntimeSettingsMvpObserver observer, void* context);
+ 
+ // This function returns any extended feature flags supported by the host.
+ #define LI_FF_PEN_TOUCH_EVENTS        0x01 // LiSendTouchEvent()/LiSendPenEvent() supported
+--- source-link/third_party/moonlight-common-c/src/ControlStream.c
++++ src/third_party/moonlight-common-c/src/ControlStream.c
+@@ -267,6 +267,8 @@
+ static SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE runtime_settings_mvp_command_state[SS_RUNTIME_SETTINGS_MVP_OPERATION_MAX + 1];
+ static SS_RUNTIME_SETTINGS_MVP_SETTINGS_STATE runtime_settings_mvp_settings_state;
+ static PLT_MUTEX runtime_settings_mvp_mutex;
++static LiSunshineRuntimeSettingsMvpObserver runtime_settings_mvp_observer;
++static void* runtime_settings_mvp_observer_context;
+ 
+ static const short packetTypesGen3[] = {
+     0x1407, // Request IDR frame
+@@ -832,6 +834,27 @@
+     return false;
+ }
+ 
++void LiSetSunshineRuntimeSettingsMvpObserver(LiSunshineRuntimeSettingsMvpObserver observer, void* context) {
++    PltLockMutex(&runtime_settings_mvp_mutex);
++    runtime_settings_mvp_observer = observer;
++    runtime_settings_mvp_observer_context = context;
++    PltUnlockMutex(&runtime_settings_mvp_mutex);
++}
++
++static void runtime_settings_mvp_notify_observer(const SS_RUNTIME_SETTINGS_MVP_OBSERVER_EVENT* event) {
++    LiSunshineRuntimeSettingsMvpObserver observer;
++    void* context;
++
++    PltLockMutex(&runtime_settings_mvp_mutex);
++    observer = runtime_settings_mvp_observer;
++    context = runtime_settings_mvp_observer_context;
++    PltUnlockMutex(&runtime_settings_mvp_mutex);
++
++    if (observer != NULL) {
++        observer(event, context);
++    }
++}
++
+ static bool runtime_settings_mvp_record_sent(uint32_t requestId, uint16_t operation) {
+     uint16_t family = runtime_settings_mvp_command_family(operation);
+     SS_RUNTIME_SETTINGS_MVP_COMMAND_STATE* state;
+@@ -891,6 +914,14 @@
+     PltUnlockMutex(&runtime_settings_mvp_mutex);
+ 
+     if (matched) {
++        SS_RUNTIME_SETTINGS_MVP_OBSERVER_EVENT observerEvent;
++        memset(&observerEvent, 0, sizeof(observerEvent));
++        observerEvent.requestId = requestId;
++        observerEvent.operation = operation;
++        observerEvent.status = status;
++        observerEvent.reason = reason;
++        observerEvent.isTerminal = true;
++        runtime_settings_mvp_notify_observer(&observerEvent);
+         Limelog("live-settings-mvp: command request_id=%u operation=%u outcome=%s status=%u reason=%u\n",
+                 requestId, operation, status == SS_RUNTIME_SETTINGS_MVP_STATUS_APPLIED ? "host-applied" : "host-rejected", status, reason);
+         return true;
+@@ -930,6 +961,22 @@
+     runtime_settings_mvp_settings_state.currentWidth = currentWidth;
+     runtime_settings_mvp_settings_state.currentHeight = currentHeight;
+     PltUnlockMutex(&runtime_settings_mvp_mutex);
++
++    SS_RUNTIME_SETTINGS_MVP_OBSERVER_EVENT observerEvent;
++    memset(&observerEvent, 0, sizeof(observerEvent));
++    observerEvent.operation = SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES;
++    observerEvent.status = SS_RUNTIME_SETTINGS_MVP_STATUS_APPLIED;
++    observerEvent.supportedOperations = supportedOperations;
++    observerEvent.proofGatedOperations = proofGatedOperations;
++    observerEvent.minBitrateKbps = minBitrateKbps;
++    observerEvent.maxBitrateKbps = maxBitrateKbps;
++    observerEvent.maxFps = maxFps;
++    observerEvent.currentBitrateKbps = currentBitrateKbps;
++    observerEvent.currentFps = currentFps;
++    observerEvent.currentWidth = currentWidth;
++    observerEvent.currentHeight = currentHeight;
++    observerEvent.isCapability = true;
++    runtime_settings_mvp_notify_observer(&observerEvent);
+ }
+ 
+ static void runtime_settings_mvp_record_current_applied(uint16_t operation, uint16_t status, uint32_t value, uint32_t secondaryValue) {

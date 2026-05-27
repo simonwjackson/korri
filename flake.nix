@@ -578,7 +578,10 @@
               import ./nix/tests/korri-moonlight-control-protocol-patch-check.nix
                 {
                   inherit pkgs;
-                  patchPath = ./packages/moonlight-embedded-korri/patches/0006-add-local-control-observability-ipc.patch;
+                  patchPaths = [
+                    ./packages/moonlight-embedded-korri/patches/0006-add-local-control-observability-ipc.patch
+                    ./packages/moonlight-embedded-korri/patches/0007-wire-local-control-runtime-command-events.patch
+                  ];
                   absoluteTouchPatchPath = ./packages/moonlight-embedded-korri/patches/0004-add-absolutetouch-flag-for-tap-to-click.patch;
                   readmePath = ./packages/moonlight-embedded-korri/README.md;
                   moonlightPackage = self.packages.${system}.moonlight-embedded-korri;

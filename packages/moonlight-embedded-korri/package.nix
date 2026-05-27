@@ -80,6 +80,7 @@ stdenv.mkDerivation rec {
     ./patches/0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch
     ./patches/0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch
     ./patches/0006-add-local-control-observability-ipc.patch
+    ./patches/0007-wire-local-control-runtime-command-events.patch
   ];
 
   nativeBuildInputs = [
@@ -124,7 +125,7 @@ stdenv.mkDerivation rec {
       printf '%s\n' 'nix-on-rocks-manifest-version=${nixOnRocksMoonlightManifest.version}'
       printf '%s\n' 'source-rev=${nixOnRocksMoonlightManifest.source.rev}'
       printf '%s\n' 'base-patches=${lib.concatMapStringsSep " " (patch: patch.name) basePatches}'
-      printf '%s\n' 'korri-patches=0004-add-absolutetouch-flag-for-tap-to-click.patch 0005a-add-sunshine-runtime-settings-protocol-sender.patch 0005b-track-sunshine-runtime-settings-command-outcomes.patch 0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch 0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch 0006-add-local-control-observability-ipc.patch'
+      printf '%s\n' 'korri-patches=0004-add-absolutetouch-flag-for-tap-to-click.patch 0005a-add-sunshine-runtime-settings-protocol-sender.patch 0005b-track-sunshine-runtime-settings-command-outcomes.patch 0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch 0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch 0006-add-local-control-observability-ipc.patch 0007-wire-local-control-runtime-command-events.patch'
       printf '%s\n' 'main-program=bin/moonlight'
     } > "$out/nix-support/moonlight-embedded-korri/manifest.txt"
 

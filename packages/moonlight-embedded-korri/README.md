@@ -124,4 +124,15 @@ Adds the first local control socket scaffolding behind explicit environment conf
 - `MOONLIGHT_LOCAL_CONTROL_AUTHORITY` — `observer` by default, or `controller` to advertise command capability once mutation hooks are enabled.
 - `MOONLIGHT_LOCAL_CONTROL_ALLOW_ROOT=1` — explicit opt-in for root peers in addition to same-UID peers.
 
-The socket server rejects unsafe runtime directories, socket paths outside the runtime directory, non-socket stale paths, unauthorized peer credentials, blank frames, malformed JSON, and oversized frames. It currently serves `protocol.hello`, `state.get`, and `events.subscribe` for read-only local observability. Mutation commands remain capability-gated until the native command dispatch path is wired.
+The socket server rejects unsafe runtime directories, socket paths outside the runtime directory, non-socket stale paths, unauthorized peer credentials, blank frames, malformed JSON, and oversized frames. It serves `protocol.hello`, `state.get`, and `events.subscribe` for local observability.
+
+### `0007-wire-local-control-runtime-command-events.patch`
+
+Wires the first native local-control mutation path for controller-authorized running streams:
+
+- `runtime.setBitrate` dispatches to runtime-settings operation `1` only when the active Sunshine capability ack advertises bitrate support.
+- `runtime.setFps` dispatches to runtime-settings operation `2` only when the active Sunshine capability ack advertises FPS support.
+- JSON-RPC response IDs remain transport correlation IDs; accepted command responses return a native numeric `requestId` used for Sunshine dispatch and later `runtime.commandResult` events.
+- Runtime-settings capability and terminal outcome facts are handed to local-control through a narrow observer seam rather than log scraping.
+- Subscribed local-control clients receive bounded `runtime.commandResult` events with monotonic sequence/timing metadata, and `state.get` exposes the latest terminal command for sequence-gap recovery.
+- Runtime resolution remains proof-gated and is not advertised as a supported local-control mutation command by this slice.

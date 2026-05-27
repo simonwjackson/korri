@@ -1,6 +1,7 @@
 {
   pkgs,
-  patchPath,
+  patchPath ? null,
+  patchPaths ? [ patchPath ],
   absoluteTouchPatchPath,
   readmePath,
   moonlightPackage,
@@ -10,7 +11,7 @@ let
   lib = pkgs.lib;
   check = message: assertion: { inherit message assertion; };
 
-  patch = builtins.readFile patchPath;
+  patch = lib.concatStringsSep "\n" (map builtins.readFile patchPaths);
   absoluteTouchPatch = builtins.readFile absoluteTouchPatchPath;
   readme = builtins.readFile readmePath;
   contains = needle: haystack: lib.hasInfix needle haystack;
@@ -81,6 +82,33 @@ let
       && contains "events.subscribe" patch
       && contains "state.snapshot" patch
       && contains "moonlight.event" patch
+    ))
+    (check "Moonlight local control runtime commands have paired capability and dispatch markers" (
+      contains "MOONLIGHT_LC_COMMAND_RUNTIME_SET_BITRATE" patch
+      && contains "MOONLIGHT_LC_COMMAND_RUNTIME_SET_FPS" patch
+      && contains "moonlight_local_control_dispatch_runtime_command" patch
+      && contains "LiSendSunshineRuntimeSettingsMvp(command_id, operation" patch
+    ))
+    (check "Moonlight local control returns native command ids separately from JSON-RPC envelope ids" (
+      contains "moonlight_local_control_next_command_id" patch
+      && contains "command.accepted" patch
+      && contains "json_object_object_add(accepted, \"requestId\", json_object_new_int64((int64_t) command_id))" patch
+    ))
+    (check "Moonlight local control emits terminal runtime command result events" (
+      contains "runtime.commandResult" patch
+      && contains "moonlight_local_control_emit_runtime_command_result" patch
+      && contains "MOONLIGHT_LC_EMIT_OUTSIDE_RUNTIME_SETTINGS_MUTEX" patch
+      && !(contains "runtime.commandResult\", \"accepted" patch)
+    ))
+    (check "Moonlight local control uses bounded subscriber and event history markers" (
+      contains "MOONLIGHT_CONTROL_EVENT_HISTORY" patch
+      && contains "moonlight_local_control_subscriber" patch
+      && contains "moonlight_local_control_event_history" patch
+      && contains "moonlight_local_control_evict_slow_subscriber" patch
+    ))
+    (check "Moonlight local control populates monotonic event timestamps" (
+      contains "moonlight_local_control_monotonic_ms" patch
+      && contains "json_object_object_add(params, \"monotonicMs\", json_object_new_int64((int64_t) moonlight_local_control_monotonic_ms()))" patch
     ))
     (check "Moonlight local control protocol advertises observer/controller authority separately" (
       contains "MOONLIGHT_LOCAL_CONTROL_AUTHORITY" patch
