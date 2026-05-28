@@ -91,7 +91,17 @@ let
 
     # Bounded retry to handle the inevitable race between systemd
     # signalling ExecStartPost and the sessiond HTTP socket binding.
-    # Each retry is 250ms; budget = ${toString cfg.controlStartRetries} attempts.
+    # Each retry sleeps 250ms; budget = ${toString cfg.controlStartRetries} attempts.
+    #
+    # `--connect-timeout 1` gives us fast retries while the socket is
+    # still binding. `--max-time 30` then gives the in-flight request
+    # enough headroom to complete once connected: enterHome on the
+    # kiosk role spawns the renderer and waits for its status file,
+    # which can take several seconds on cold cache. If --max-time is
+    # shorter than the server-side handler, curl times out and the
+    # retry loop fires a SECOND /control/start, which spawns ANOTHER
+    # renderer in parallel — the two compete for resources and
+    # neither writes its status file in time, looping forever.
     attempt=0
     max=${toString cfg.controlStartRetries}
     while [ "$attempt" -lt "$max" ]; do
@@ -99,7 +109,8 @@ let
           --silent \
           --show-error \
           --fail \
-          --max-time 5 \
+          --connect-timeout 1 \
+          --max-time 30 \
           --header "x-korri-sessiond-token: $token" \
           --request POST \
           "$url" > /dev/null; then
