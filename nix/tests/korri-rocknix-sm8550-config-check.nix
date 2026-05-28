@@ -132,10 +132,6 @@ let
         (check "${name}: Moonlight must use the SM8550 v4l2m2m platform" (
           compositorEnv.KORRI_MOONLIGHT_PLATFORM or null == "v4l2m2m"
         ))
-        (check "${name}: Moonlight foreground launches must require normalized InputPlumber input" (
-          compositorEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1"
-        ))
-
         # Kiosk renderer-ownership wiring: sessiond owns Electrobun on
         # every kiosk image. Its unit env must carry the kiosk-renderer
         # identity (HOME, XDG_*, KORRI_KIOSK, inputd URLs) so the

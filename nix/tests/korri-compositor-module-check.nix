@@ -53,7 +53,6 @@ let
   korriFailedAssertionMessages = cfg: map (a: a.message) (korriFailedAssertions cfg);
 
   swayConfigOf = cfg: builtins.readFile cfg.services.korri.compositor.sway.configFile;
-  kioskLauncherOf = cfg: builtins.readFile cfg.services.korri.compositor.kiosk.launcher;
   compositorExecOf =
     cfg: builtins.readFile "${cfg.services.korri.compositor.exec.package}/bin/korri-compositor-exec";
   compositorUnit = cfg: cfg.systemd.services."korri-compositor" or { };
@@ -71,105 +70,88 @@ let
     };
   };
 
-  compositorWithKiosk = evaluateWith (
-    { pkgs, ... }:
-    {
-      services.korri.compositor = {
-        enable = true;
-        user = "root";
-        createUser = false;
-        kiosk = {
-          enable = true;
-          command = "${pkgs.writeShellScriptBin "korri-compositor-client" "exit 0"}/bin/korri-compositor-client";
-        };
-      };
-    }
-  );
+  compositorWithKiosk = evaluateWith {
+    services.korri.compositor = {
+      enable = true;
+      user = "root";
+      createUser = false;
+      kiosk.enable = true;
+    };
+  };
 
-  swayPlatformFragment = evaluateWith (
-    { pkgs, ... }:
-    {
-      services.korri.compositor = {
-        enable = true;
-        user = "root";
-        createUser = false;
-        kiosk = {
-          enable = true;
-          command = "${pkgs.writeShellScriptBin "device-korri" "exit 0"}/bin/device-korri";
-        };
-        sway.extraConfig = ''
-          output DEVICE-PANEL transform 90
-        '';
-      };
-    }
-  );
+  swayPlatformFragment = evaluateWith {
+    services.korri.compositor = {
+      enable = true;
+      user = "root";
+      createUser = false;
+      kiosk.enable = true;
+      sway.extraConfig = ''
+        output DEVICE-PANEL transform 90
+      '';
+    };
+  };
 
-  existingSessionBus = evaluateWith (
-    { pkgs, ... }:
-    {
-      services.korri.compositor = {
-        enable = true;
-        user = "root";
-        createUser = false;
-        kiosk = {
-          enable = true;
-          command = "${pkgs.writeShellScriptBin "korri-compositor-client" "exit 0"}/bin/korri-compositor-client";
-        };
-        runtimeDir = "/run/user/0";
-        sessionBus = {
-          mode = "existing";
-          address = "unix:path=/run/user/0/bus";
-          services = [ "platform-session-dbus.service" ];
-        };
+  existingSessionBus = evaluateWith {
+    services.korri.compositor = {
+      enable = true;
+      user = "root";
+      createUser = false;
+      kiosk.enable = true;
+      runtimeDir = "/run/user/0";
+      sessionBus = {
+        mode = "existing";
+        address = "unix:path=/run/user/0/bus";
+        services = [ "platform-session-dbus.service" ];
       };
-    }
-  );
+    };
+  };
 
-  existingSessionBusMissingAddress = evaluateWith (
-    { pkgs, ... }:
-    {
-      services.korri.compositor = {
-        enable = true;
-        user = "root";
-        createUser = false;
-        kiosk = {
-          enable = true;
-          command = "${pkgs.writeShellScriptBin "korri-compositor-client" "exit 0"}/bin/korri-compositor-client";
-        };
-        sessionBus.mode = "existing";
-      };
-    }
-  );
+  existingSessionBusMissingAddress = evaluateWith {
+    services.korri.compositor = {
+      enable = true;
+      user = "root";
+      createUser = false;
+      kiosk.enable = true;
+      sessionBus.mode = "existing";
+    };
+  };
 
-  rootCreateUser = evaluateWith (
-    { pkgs, ... }:
-    {
-      services.korri.compositor = {
-        enable = true;
-        user = "root";
-        createUser = true;
-        kiosk = {
-          enable = true;
-          command = "${pkgs.writeShellScriptBin "korri-compositor-client" "exit 0"}/bin/korri-compositor-client";
-        };
-      };
-    }
-  );
+  rootCreateUser = evaluateWith {
+    services.korri.compositor = {
+      enable = true;
+      user = "root";
+      createUser = true;
+      kiosk.enable = true;
+    };
+  };
 
-  clientCommandWithArgs = evaluateWith (
-    { pkgs, ... }:
-    {
-      services.korri.compositor = {
+  # kiosk.command / kiosk.launcher were removed when the renderer-
+  # ownership cut moved Electrobun launching from korri-compositor to
+  # korri-sessiond. A host that still tries to set either of them must
+  # fail at evaluation time so the breakage is loud, not silent.
+  kioskCommandRemoved = builtins.tryEval (evaluateWith {
+    services.korri.compositor = {
+      enable = true;
+      user = "root";
+      createUser = false;
+      kiosk = {
         enable = true;
-        user = "root";
-        createUser = false;
-        kiosk = {
-          enable = true;
-          command = "${pkgs.writeShellScriptBin "korri-compositor-client" "exit 0"}/bin/korri-compositor-client --profile kiosk";
-        };
+        command = "/should/not/exist";
       };
-    }
-  );
+    };
+  });
+
+  kioskLauncherRemoved = builtins.tryEval (evaluateWith {
+    services.korri.compositor = {
+      enable = true;
+      user = "root";
+      createUser = false;
+      kiosk = {
+        enable = true;
+        launcher = "/should/not/exist";
+      };
+    };
+  });
 
   emptyUser = evaluateWith {
     services.korri.compositor = {
@@ -197,18 +179,6 @@ let
     };
   };
 
-  emptyKioskCommand = evaluateWith {
-    services.korri.compositor = {
-      enable = true;
-      user = "root";
-      createUser = false;
-      kiosk = {
-        enable = true;
-        command = "";
-      };
-    };
-  };
-
   runtimeDirOutsideRun = evaluateWith {
     services.korri.compositor = {
       enable = true;
@@ -226,24 +196,20 @@ let
     };
   };
 
-  # Inputd port override propagates through compositor env vars when the
-  # kiosk surface is on (the compositor reads `services.korri.input.inputd.port`
-  # rather than hardcoding 3002).
-  kioskWithCustomInputdPort = evaluateWith (
-    { pkgs, ... }:
-    {
-      services.korri.compositor = {
-        enable = true;
-        user = "root";
-        createUser = false;
-        kiosk = {
-          enable = true;
-          command = "${pkgs.writeShellScriptBin "korri-compositor-client" "exit 0"}/bin/korri-compositor-client";
-        };
-      };
-      services.korri.input.inputd.port = 4007;
-    }
-  );
+  # Inputd port override propagates through the read-only
+  # `kiosk.inputdBridgeUrl` option when the kiosk surface is on (the
+  # compositor exposes the URL derived from
+  # `services.korri.input.inputd.port` so peer units like sessiond can
+  # read it without duplicating the host/port math).
+  kioskWithCustomInputdPort = evaluateWith {
+    services.korri.compositor = {
+      enable = true;
+      user = "root";
+      createUser = false;
+      kiosk.enable = true;
+    };
+    services.korri.input.inputd.port = 4007;
+  };
 
   # ------------------------------------------------------------------ checks
   check = message: assertion: { inherit message assertion; };
@@ -337,27 +303,37 @@ let
       (compositorUnit compositorWithKiosk).unitConfig.StartLimitBurst or null == 5
       && (compositorUnit compositorWithKiosk).unitConfig.StartLimitIntervalSec or null == 60
     ))
-    (check "compositor+kiosk: KORRI_NATIVE_BRIDGE_URL points at inputd default port" (
-      (compositorUnit compositorWithKiosk).environment.KORRI_NATIVE_BRIDGE_URL or null
-      == "ws://127.0.0.1:3002"
+    # Renderer-ownership cut: KORRI_KIOSK / KORRI_DESKTOP_INPUTD_URL
+    # / KORRI_NATIVE_BRIDGE_URL / KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER
+    # MUST NOT live on the compositor unit env anymore; sessiond owns
+    # the renderer and carries those keys on its own unit.
+    (check "compositor+kiosk: KORRI_KIOSK absent from compositor unit env" (
+      !((compositorUnit compositorWithKiosk).environment or { } ? "KORRI_KIOSK")
     ))
-    (check "compositor+kiosk: KORRI_DESKTOP_INPUTD_URL points at inputd default port" (
-      (compositorUnit compositorWithKiosk).environment.KORRI_DESKTOP_INPUTD_URL or null
-      == "ws://127.0.0.1:3002"
+    (check "compositor+kiosk: KORRI_DESKTOP_INPUTD_URL absent from compositor unit env" (
+      !((compositorUnit compositorWithKiosk).environment or { } ? "KORRI_DESKTOP_INPUTD_URL")
+    ))
+    (check "compositor+kiosk: KORRI_NATIVE_BRIDGE_URL absent from compositor unit env" (
+      !((compositorUnit compositorWithKiosk).environment or { } ? "KORRI_NATIVE_BRIDGE_URL")
+    ))
+    (check "compositor+kiosk: KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER absent from compositor unit env" (
+      !((compositorUnit compositorWithKiosk).environment or { } ? "KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER")
+    ))
+    # The read-only kiosk.inputdBridgeUrl option still publishes the
+    # URL for peer units (sessiond) to read.
+    (check "compositor+kiosk: kiosk.inputdBridgeUrl exposes inputd default port" (
+      compositorWithKiosk.services.korri.compositor.kiosk.inputdBridgeUrl == "ws://127.0.0.1:3002"
     ))
     (check "compositor+kiosk: installs the korri-cli package on PATH" (
       builtins.any (path: lib.hasInfix "-korri-cli-" (toString path)) (
         compositorWithKiosk.environment.systemPackages or [ ]
       )
     ))
-    (check "compositor+kiosk: Sway config exec-launches the kiosk client wrapper" (
-      lib.hasInfix "exec --no-startup-id" (swayConfigOf compositorWithKiosk)
-      && lib.hasInfix "korri-compositor-kiosk-client" (swayConfigOf compositorWithKiosk)
-    ))
-    (check "compositor+kiosk: kiosk launcher wraps the configured client command" (
-      lib.hasInfix "korri-compositor-client" (kioskLauncherOf compositorWithKiosk)
-      && lib.hasInfix "while true" (kioskLauncherOf compositorWithKiosk)
-      && lib.hasInfix "client exited with status" (kioskLauncherOf compositorWithKiosk)
+    # Renderer-ownership cut: Sway config no longer carries the kiosk
+    # client exec line. Sessiond's enterIdle launches Electrobun.
+    (check "compositor+kiosk: Sway config does NOT exec-launch a kiosk client" (
+      !(lib.hasInfix "exec --no-startup-id" (swayConfigOf compositorWithKiosk))
+      && !(lib.hasInfix "korri-compositor-kiosk-client" (swayConfigOf compositorWithKiosk))
     ))
     (check "compositor+kiosk: gamescope is on the session PATH" (
       builtins.any (path: lib.hasInfix "gamescope" (toString path)) (
@@ -369,9 +345,8 @@ let
     (check "platform sway fragments: prelude preserved" (
       lib.hasInfix "default_border none" (swayConfigOf swayPlatformFragment)
     ))
-    (check "platform sway fragments: kiosk exec line still emitted" (
-      lib.hasInfix "exec --no-startup-id" (swayConfigOf swayPlatformFragment)
-      && lib.hasInfix "device-korri" (kioskLauncherOf swayPlatformFragment)
+    (check "platform sway fragments: no kiosk-client exec line is emitted" (
+      !(lib.hasInfix "exec --no-startup-id" (swayConfigOf swayPlatformFragment))
     ))
     (check "platform sway fragments: extra config appears verbatim" (
       lib.hasInfix "output DEVICE-PANEL transform 90" (swayConfigOf swayPlatformFragment)
@@ -417,10 +392,13 @@ let
         korriFailedAssertionMessages relativeHome
       )
     ))
-    (check "empty kiosk command: assertion fires" (
-      builtins.any (m: lib.hasInfix "kiosk.command must not be empty" m) (
-        korriFailedAssertionMessages emptyKioskCommand
-      )
+    # Renderer-ownership cut: kiosk.command / kiosk.launcher options
+    # are gone. Any host still pinning them must fail at eval time.
+    (check "kiosk.command option removed: setting it produces an eval error" (
+      !kioskCommandRemoved.success
+    ))
+    (check "kiosk.launcher option removed: setting it produces an eval error" (
+      !kioskLauncherRemoved.success
     ))
     (check "runtimeDir outside /run: assertion fires" (
       builtins.any (m: lib.hasInfix "under /run" m) (korriFailedAssertionMessages runtimeDirOutsideRun)
@@ -461,23 +439,10 @@ let
       !builtins.elem "korri-inputd.service" ((compositorUnit headlessCompositor).after or [ ])
     ))
 
-    # ---- inputd port option drives compositor env vars (was hardcoded 3002)
-    (check "compositor reads inputd.port: KORRI_NATIVE_BRIDGE_URL reflects override" (
-      (compositorUnit kioskWithCustomInputdPort).environment.KORRI_NATIVE_BRIDGE_URL or null
+    # ---- inputd port option drives the read-only inputdBridgeUrl option
+    (check "compositor reads inputd.port: kiosk.inputdBridgeUrl reflects override" (
+      kioskWithCustomInputdPort.services.korri.compositor.kiosk.inputdBridgeUrl
       == "ws://127.0.0.1:4007"
-    ))
-    (check "compositor reads inputd.port: KORRI_DESKTOP_INPUTD_URL reflects override" (
-      (compositorUnit kioskWithCustomInputdPort).environment.KORRI_DESKTOP_INPUTD_URL or null
-      == "ws://127.0.0.1:4007"
-    ))
-
-    # ---- client command arguments survive into the launcher
-    (check "client command arguments survive into the launcher body" (
-      lib.hasInfix "korri-compositor-client --profile kiosk" (kioskLauncherOf clientCommandWithArgs)
-    ))
-    (check "client command arguments do not leak into sway config (launcher path only)" (
-      !(lib.hasInfix "--profile kiosk" (swayConfigOf clientCommandWithArgs))
-      && lib.hasInfix "korri-compositor-kiosk-client" (swayConfigOf clientCommandWithArgs)
     ))
 
     # ---- generic-default hygiene

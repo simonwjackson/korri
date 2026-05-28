@@ -5,32 +5,16 @@
 }:
 
 let
+  # Stub sway. The kiosk renderer is no longer launched from the Sway
+  # config — sessiond owns Electrobun launch — so this stub no longer
+  # needs to parse `exec --no-startup-id` lines. It records its own
+  # startup and then sleeps forever, mimicking a long-running
+  # compositor process.
   fakeSway = pkgs.runCommand "korri-vm-fake-sway" { } ''
     mkdir -p "$out/bin"
     cat > "$out/bin/sway" <<'EOF'
     #!${pkgs.runtimeShell}
     set -euo pipefail
-
-    config_file=""
-    while [ "$#" -gt 0 ]; do
-      case "$1" in
-        --config)
-          config_file="''${2:-}"
-          shift 2
-          ;;
-        *)
-          shift
-          ;;
-      esac
-    done
-
-    if [ -n "$config_file" ] && [ -f "$config_file" ]; then
-      client_command="$(${pkgs.gawk}/bin/awk '/^exec --no-startup-id / { sub(/^exec --no-startup-id /, ""); print; exit }' "$config_file")"
-      if [ -n "$client_command" ]; then
-        ${pkgs.bash}/bin/bash -c "$client_command" &
-      fi
-    fi
-
     echo $$ > "$HOME/.korri-vm-fake-sway.pid"
     touch "$HOME/.korri-vm-fake-sway-started"
     exec ${pkgs.coreutils}/bin/sleep infinity
@@ -42,9 +26,19 @@ let
     chmod +x "$out/bin/sway" "$out/bin/swaymsg"
   '';
 
-  markerClient = pkgs.writeShellScript "korri-vm-marker-client" ''
-    touch "$HOME/.korri-vm-client-started"
-  '';
+  # Stand-in for the real korri-desktop client package. Sessiond's
+  # renderer-launch path resolves the binary by the hardcoded name
+  # `korri-desktop-device` (see DEFAULT_ELECTROBUN_EXECUTABLE in
+  # tools/device/sessiond-electrobun.ts) and asserts the resolved
+  # path lives under /nix/store, so a writeShellApplication with the
+  # right binary name satisfies both shapes.
+  markerClientPackage = pkgs.writeShellApplication {
+    name = "korri-desktop-device";
+    text = ''
+      touch "$HOME/.korri-vm-client-started"
+      exec ${pkgs.coreutils}/bin/sleep infinity
+    '';
+  };
 in
 pkgs.testers.runNixOSTest {
   name = "korri-live-usb-vm-smoke";
@@ -60,12 +54,29 @@ pkgs.testers.runNixOSTest {
             networking.hostName = "korri-live-usb-vm-smoke";
             services.korri.server.enable = lib.mkForce false;
             services.korri.compositor = {
-              kiosk.command = "${markerClient}";
               sessionBus = {
                 mode = "existing";
                 address = "unix:path=/run/korri-vm-test-session-bus";
               };
               sway.package = fakeSway;
+            };
+            # Sessiond's renderer is now the kiosk client; substitute
+            # the marker package so the in-process runner resolves
+            # `korri-desktop-device` to a Nix-store path that touches
+            # the marker file the test checks for.
+            services.korri.client.package = lib.mkForce markerClientPackage;
+            # Live-USB launches Sway via greetd, not via
+            # korri-compositor.service. Drop sessiond's wants/after
+            # ordering against korri-compositor so it doesn't try to
+            # pull the systemd-managed compositor into the activation
+            # graph (greetd already owns the live Sway).
+            systemd.services.korri-sessiond = {
+              wants = lib.mkForce [ ];
+              after = lib.mkForce [
+                "network.target"
+                "greetd.service"
+              ];
+              requires = lib.mkForce [ ];
             };
             virtualisation = {
               cores = 2;
@@ -83,6 +94,7 @@ pkgs.testers.runNixOSTest {
     kiosk.wait_for_unit("korri-live-usb-persistence.service")
     kiosk.wait_for_unit("korri-inputd.service")
     kiosk.wait_for_unit("greetd.service")
+    kiosk.wait_for_unit("korri-sessiond.service")
     kiosk.wait_until_succeeds("test -e /persist/korri-live-usb/.korri-live-usb-ephemeral")
     kiosk.wait_until_succeeds("test -e /home/korri/.korri-vm-fake-sway-started")
     kiosk.wait_until_succeeds("test -e /home/korri/.korri-vm-client-started")
