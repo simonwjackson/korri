@@ -70,26 +70,60 @@ let
     KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER = "1";
   };
 
-  # Minimal RetroArch closure for the kiosk: retroarch-bare (zero default
-  # cores) wrapped with exactly one core, libretro-fake-08 (PICO-8). The
-  # wrapper reads each core's passthru.libretroCore string and the
-  # produced .so to compose -L flags, and exposes the cores list at
-  # wrapper.passthru.cores for the closure-shape assertions in
-  # nix/tests/korri-*-config-check.nix to introspect.
+  # Minimal RetroArch closure for the kiosk: retroarch-bare (zero
+  # default cores) joined with exactly one libretro core
+  # (libretro-fake-08, PICO-8). We INTENTIONALLY do NOT use
+  # `pkgs.retroarch-bare.passthru.wrapper { cores = ...; }` here.
   #
-  # IMPORTANT: this list intentionally contains exactly one entry. Korri
-  # ships RetroArch as a per-cart runtime, not as an emulator-of-everything;
-  # adding cores grows every kiosk image's closure for every user. New
-  # libretro cores should land as their own packages with their own kiosk
-  # opt-ins, not by appending here. The closure-shape check guards this.
-  retroarchKiosk = pkgs.retroarch-bare.passthru.wrapper {
-    cores = [ pkgs.libretro-fake-08 ];
+  # That nixpkgs wrapper unconditionally prepends
+  #   -L <wrapper-out>/lib/retroarch/cores --appendconfig=<cfg>
+  # to every `retroarch` invocation. When our launcher then passes its
+  # own `-L <core> <content>`, RetroArch sees two `-L` flags AND the
+  # first one is a directory (not a core file). The CLI parser does
+  # not cleanly last-wins in that case: it routes by content extension
+  # and frequently picks the built-in `image display` core for `.png`
+  # files, ignoring the explicit `-L` we asked for. The user-visible
+  # symptom on Sobo was "press A on celeste-classic shows a cart
+  # browser, not the game".
+  #
+  # `symlinkJoin` exposes the bare retroarch binary AND the core .so on
+  # PATH / lib/retroarch/cores without injecting any flags. The
+  # closure-shape assertions in `nix/tests/korri-*-config-check.nix`
+  # match on `passthru.cores` + `passthru.unwrapped`, so we propagate
+  # both attributes here to keep the assertions valid.
+  #
+  # IMPORTANT: `cores` here intentionally contains exactly one entry.
+  # Korri ships RetroArch as a per-cart runtime, not as an emulator-
+  # of-everything; adding cores grows every kiosk image's closure for
+  # every user. New libretro cores should land as their own packages
+  # with their own kiosk opt-ins, not appended here. The closure-shape
+  # check guards this.
+  retroarchKiosk = pkgs.symlinkJoin {
+    name = "korri-retroarch-fake-08";
+    paths = [
+      pkgs.retroarch-bare
+      pkgs.libretro-fake-08
+    ];
+    passthru = {
+      cores = [ pkgs.libretro-fake-08 ];
+      unwrapped = pkgs.retroarch-bare;
+    };
   };
 in
 {
   imports = [ ./headless.nix ];
 
   services.korri.client.enable = lib.mkDefault true;
+
+  # Stable abs path the cascade-side launcher YAML can reference for
+  # the fake-08 core without baking a per-build nix store hash into
+  # user data under /var/lib/korri-server/.local/share/korri/library/.
+  # Pairs with the `retroarchKiosk` symlinkJoin above: the YAML uses
+  #   command: retroarch                          # PATH-resolved
+  #   cores: { retroarch-fake-08: /etc/korri/cores/fake08_libretro.so }
+  # which is rebuild-safe.
+  environment.etc."korri/cores/fake08_libretro.so".source =
+    "${pkgs.libretro-fake-08}/lib/retroarch/cores/fake08_libretro.so";
 
   services.korri.compositor = {
     enable = true;
