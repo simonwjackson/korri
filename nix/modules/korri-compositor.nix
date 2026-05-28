@@ -396,6 +396,19 @@ in
           wrapper script rather than treating it as a single argv word.
         '';
       };
+
+      inputdBridgeUrl = mkOption {
+        type = types.str;
+        readOnly = true;
+        default = inputdBridgeUrl;
+        description = ''
+          Read-only WebSocket URL for the local inputd bridge. Derived from
+          `services.korri.input.inputd.port`. Exposed so peer units (notably
+          `services.korri.sessiond` on kiosk images) can read the same URL
+          the compositor publishes to the renderer without duplicating the
+          host/port math. Setting this option directly has no effect.
+        '';
+      };
     };
   };
 

@@ -12,6 +12,33 @@ let
   sessiondPort = 3003;
   sessiondTokenFile = "/run/korri-sessiond/token";
 
+  # Sessiond owns the kiosk renderer (Electrobun). The renderer
+  # inherits sessiond's process environment when spawned via the
+  # in-process runner, so the renderer-side identity has to live on
+  # sessiond's unit env, not the compositor's. See
+  # tools/device/sessiond-electrobun.ts buildElectrobunCommand: HOME
+  # and XDG_STATE_HOME are read from the parent env to derive the
+  # Electrobun state root; KORRI_KIOSK and the inputd URLs are read
+  # directly by the renderer at startup.
+  compositorCfg = config.services.korri.compositor;
+  inputCfg = config.services.korri.input;
+  kioskRendererEnvironment = {
+    HOME = compositorCfg.home;
+    XDG_STATE_HOME = compositorCfg.stateHome;
+    XDG_DATA_HOME = compositorCfg.dataHome;
+    XDG_CONFIG_HOME = compositorCfg.configHome;
+    KORRI_KIOSK = "1";
+    KORRI_DESKTOP_INPUTD_URL = compositorCfg.kiosk.inputdBridgeUrl;
+    KORRI_NATIVE_BRIDGE_URL = compositorCfg.kiosk.inputdBridgeUrl;
+  }
+  // lib.optionalAttrs (inputCfg.provider.name == "inputplumber") {
+    # The renderer's Moonlight launch path refuses to start a stream
+    # without the InputPlumber virtual gamepad when the host has
+    # declared the InputPlumber provider. Carries over verbatim from
+    # the compositor's previous sessionEnvironment.
+    KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER = "1";
+  };
+
   # Minimal RetroArch closure for the kiosk: retroarch-bare (zero default
   # cores) wrapped with exactly one core, libretro-fake-08 (PICO-8). The
   # wrapper reads each core's passthru.libretroCore string and the
@@ -74,13 +101,17 @@ in
     # launcher (createShellLauncher inside tools/device/sessiond.ts),
     # which inherits this unit's PATH when it spawns. Anything the
     # default-gamescope launch path needs to find by name has to be
-    # listed here. We reuse the compositor's gamescope package so any
-    # platform-level package override flows through automatically, and
-    # we add the kiosk's retroarch wrapper so cascade-resolved
-    # RetroArch launches resolve.
+    # listed here:
+    #   - compositor.gamescope.package: any platform-level package
+    #     override flows through automatically.
+    #   - retroarchKiosk: kiosk RetroArch wrapper so cascade-resolved
+    #     `retroarch -L ... <cart>` launches resolve.
+    #   - client.package: the renderer (Electrobun) binary that
+    #     sessiond's enterIdle spawns by name ("korri-desktop-device").
     path = [
-      config.services.korri.compositor.gamescope.package
+      compositorCfg.gamescope.package
       retroarchKiosk
+      config.services.korri.client.package
     ];
     # Gamescope spawned by sessiond connects to the kiosk compositor's
     # wayland socket at $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY. The compositor
@@ -88,9 +119,27 @@ in
     # named "wayland-1" by sway's default-first allocation, mirroring
     # the korri-sunshine attach pattern in nix/modules/korri-server.nix.
     extraEnvironment = {
-      XDG_RUNTIME_DIR = config.services.korri.compositor.runtimeDir;
+      XDG_RUNTIME_DIR = compositorCfg.runtimeDir;
       WAYLAND_DISPLAY = "wayland-1";
-    };
+    }
+    // kioskRendererEnvironment;
+  };
+
+  # Boot ordering: sessiond's enterIdle spawns Electrobun, which
+  # attaches to sway's wayland-1 socket and dials the inputd bridge
+  # on startup. Both must be up first. `requires = [korri-inputd]`
+  # because the renderer hangs without the bridge; `wants = [korri-
+  # compositor]` because a failed sway is recoverable (sessiond
+  # restart-loops until the socket appears) and we want diagnostics
+  # to point at the compositor's own failure, not a cascaded sessiond
+  # one.
+  systemd.services.korri-sessiond = {
+    after = [
+      "korri-compositor.service"
+      "korri-inputd.service"
+    ];
+    wants = [ "korri-compositor.service" ];
+    requires = [ "korri-inputd.service" ];
   };
 
   # Source-machine sessiond owns its own sway; kiosk sessiond ATTACHES

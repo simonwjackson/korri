@@ -44,6 +44,12 @@ let
       rawGamepadHideService = cfg.systemd.services."rocknix-guest-hide-raw-gamepad" or { };
       udevdService = cfg.systemd.services.systemd-udevd or { };
       compositorEnv = compositorService.environment or { };
+      sessiondService = cfg.systemd.services."korri-sessiond" or { };
+      sessiondEnv = sessiondService.environment or { };
+      sessiondAfter = sessiondService.after or [ ];
+      sessiondWants = sessiondService.wants or [ ];
+      sessiondRequires = sessiondService.requires or [ ];
+      sessiondPath = sessiondService.path or [ ];
       systemPackageNames = map (pkg: pkg.name or "") (cfg.environment.systemPackages or [ ]);
       systemPackageText = lib.concatStringsSep "\n" systemPackageNames;
       failedNixosAssertions = builtins.filter (candidate: !candidate.assertion) cfg.assertions;
@@ -128,6 +134,55 @@ let
         ))
         (check "${name}: Moonlight foreground launches must require normalized InputPlumber input" (
           compositorEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1"
+        ))
+
+        # Kiosk renderer-ownership wiring: sessiond owns Electrobun on
+        # every kiosk image. Its unit env must carry the kiosk-renderer
+        # identity (HOME, XDG_*, KORRI_KIOSK, inputd URLs) so the
+        # renderer inherits them when sessiond spawns it. Its PATH must
+        # include the client package so korri-desktop-device resolves.
+        # Its ordering must wait for the compositor's wayland socket
+        # and the inputd bridge before enterIdle fires.
+        (check "${name}: sessiond unit must carry HOME from the compositor's home dir" (
+          sessiondEnv.HOME or null == compositor.home
+        ))
+        (check "${name}: sessiond unit must carry XDG_STATE_HOME from compositor.stateHome" (
+          sessiondEnv.XDG_STATE_HOME or null == compositor.stateHome
+        ))
+        (check "${name}: sessiond unit must carry XDG_DATA_HOME from compositor.dataHome" (
+          sessiondEnv.XDG_DATA_HOME or null == compositor.dataHome
+        ))
+        (check "${name}: sessiond unit must carry XDG_CONFIG_HOME from compositor.configHome" (
+          sessiondEnv.XDG_CONFIG_HOME or null == compositor.configHome
+        ))
+        (check "${name}: sessiond unit must mark the kiosk renderer with KORRI_KIOSK=1" (
+          sessiondEnv.KORRI_KIOSK or null == "1"
+        ))
+        (check "${name}: sessiond unit must carry KORRI_DESKTOP_INPUTD_URL for the renderer" (
+          (sessiondEnv.KORRI_DESKTOP_INPUTD_URL or "")
+          == "ws://127.0.0.1:${toString input.inputd.port}"
+        ))
+        (check "${name}: sessiond unit must carry KORRI_NATIVE_BRIDGE_URL for the renderer" (
+          (sessiondEnv.KORRI_NATIVE_BRIDGE_URL or "")
+          == "ws://127.0.0.1:${toString input.inputd.port}"
+        ))
+        (check "${name}: sessiond unit must carry KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER for inputplumber hosts" (
+          sessiondEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1"
+        ))
+        (check "${name}: sessiond PATH must include the client package so korri-desktop-device resolves" (
+          builtins.elem cfg.services.korri.client.package sessiondPath
+        ))
+        (check "${name}: sessiond must start after korri-compositor.service" (
+          builtins.elem "korri-compositor.service" sessiondAfter
+        ))
+        (check "${name}: sessiond must start after korri-inputd.service" (
+          builtins.elem "korri-inputd.service" sessiondAfter
+        ))
+        (check "${name}: sessiond must want korri-compositor.service (soft dep)" (
+          builtins.elem "korri-compositor.service" sessiondWants
+        ))
+        (check "${name}: sessiond must require korri-inputd.service (hard dep)" (
+          builtins.elem "korri-inputd.service" sessiondRequires
         ))
         (check "${name}: compositor must use Wayland SDL video" (
           compositorEnv.SDL_VIDEODRIVER or null == "wayland"

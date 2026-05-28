@@ -124,6 +124,46 @@ let
     services.korri.compositor.kiosk.enable = true;
   };
 
+  # Kiosk-renderer env propagation. The kiosk image extends
+  # services.korri.sessiond.extraEnvironment with the env keys the
+  # renderer (Electrobun) inherits from sessiond's unit env when
+  # sessiond spawns it: HOME, XDG_*_HOME, KORRI_KIOSK, inputd URLs.
+  # This fixture proves extraEnvironment passes through the module so
+  # the kiosk image's wiring is observable as a unit environment.
+  withKioskRendererEnvironment = evaluateWith {
+    services.korri.sessiond = {
+      enable = true;
+      extraEnvironment = {
+        HOME = "/storage";
+        XDG_STATE_HOME = "/storage/.local/state";
+        XDG_DATA_HOME = "/storage/.local/share";
+        XDG_CONFIG_HOME = "/storage/.config";
+        KORRI_KIOSK = "1";
+        KORRI_DESKTOP_INPUTD_URL = "ws://127.0.0.1:3002";
+        KORRI_NATIVE_BRIDGE_URL = "ws://127.0.0.1:3002";
+      };
+    };
+    services.korri.compositor.kiosk.enable = true;
+  };
+
+  # Ordering passthrough. Kiosk image wires sessiond to start after
+  # the compositor and inputd (so the wayland-1 socket and bridge are
+  # up before sessiond's enterIdle spawns the renderer). The sessiond
+  # module's default `after = ["network.target"]` is additive with
+  # this extension, so the unit ends up with all three after-targets.
+  withKioskOrdering = evaluateWith {
+    services.korri.sessiond.enable = true;
+    services.korri.compositor.kiosk.enable = true;
+    systemd.services.korri-sessiond = {
+      after = [
+        "korri-compositor.service"
+        "korri-inputd.service"
+      ];
+      wants = [ "korri-compositor.service" ];
+      requires = [ "korri-inputd.service" ];
+    };
+  };
+
   withSharedGroup = evaluateWith {
     services.korri.sessiond = {
       enable = true;
@@ -190,6 +230,43 @@ let
     ))
     (check "path option flows through to systemd unit PATH" (
       builtins.elem pkgs.gamescope (unitPath withPath)
+    ))
+    (check "extraEnvironment: HOME propagates to unit environment" (
+      (unitEnv withKioskRendererEnvironment).HOME or null == "/storage"
+    ))
+    (check "extraEnvironment: XDG_STATE_HOME propagates to unit environment" (
+      (unitEnv withKioskRendererEnvironment).XDG_STATE_HOME or null == "/storage/.local/state"
+    ))
+    (check "extraEnvironment: XDG_DATA_HOME propagates to unit environment" (
+      (unitEnv withKioskRendererEnvironment).XDG_DATA_HOME or null == "/storage/.local/share"
+    ))
+    (check "extraEnvironment: XDG_CONFIG_HOME propagates to unit environment" (
+      (unitEnv withKioskRendererEnvironment).XDG_CONFIG_HOME or null == "/storage/.config"
+    ))
+    (check "extraEnvironment: KORRI_KIOSK propagates to unit environment" (
+      (unitEnv withKioskRendererEnvironment).KORRI_KIOSK or null == "1"
+    ))
+    (check "extraEnvironment: KORRI_DESKTOP_INPUTD_URL propagates to unit environment" (
+      (unitEnv withKioskRendererEnvironment).KORRI_DESKTOP_INPUTD_URL or null
+      == "ws://127.0.0.1:3002"
+    ))
+    (check "extraEnvironment: KORRI_NATIVE_BRIDGE_URL propagates to unit environment" (
+      (unitEnv withKioskRendererEnvironment).KORRI_NATIVE_BRIDGE_URL or null
+      == "ws://127.0.0.1:3002"
+    ))
+    (check "ordering: after-list merges with the module's network.target default" (
+      let
+        after = (unit withKioskOrdering).after or [ ];
+      in
+      builtins.elem "network.target" after
+      && builtins.elem "korri-compositor.service" after
+      && builtins.elem "korri-inputd.service" after
+    ))
+    (check "ordering: wants-list carries korri-compositor.service" (
+      builtins.elem "korri-compositor.service" ((unit withKioskOrdering).wants or [ ])
+    ))
+    (check "ordering: requires-list carries korri-inputd.service" (
+      builtins.elem "korri-inputd.service" ((unit withKioskOrdering).requires or [ ])
     ))
     (check "ExecStartPre generates token via /dev/urandom" (
       lib.hasInfix "/dev/urandom" (execStartPre baselineKiosk)
