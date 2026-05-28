@@ -1043,10 +1043,6 @@ describe("game stream runner", () => {
 
 describe("game stream runner sessiond foreground branch", () => {
   it("routes lifecycle:foreground intents through the injected sessiondLauncher", async () => {
-    const intent = createLaunchIntent(game, {
-      lifecycle: "foreground",
-      gamescope: { enabled: false },
-    })
     const spawnedSpecs: LaunchSpec[] = []
     const { sessiondLauncher, controller } =
       createSessiondLauncherHarness(spawnedSpecs)

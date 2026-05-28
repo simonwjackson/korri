@@ -144,7 +144,7 @@ function withLibraryLayers(
           makeInMemoryLauncherLayer({ behavior: { kind: "succeed" } }),
         )
       }
-    }, [setSourceLayer, setLauncherLayer])
+    }, [setSourceLayer, setLauncherLayer, sourceLayer, launcherLayer])
 
     return <Story />
   }

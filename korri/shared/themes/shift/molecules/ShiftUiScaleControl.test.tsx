@@ -57,7 +57,9 @@ describe("ShiftUiScaleControl", () => {
       <ShiftUiScaleControl
         value={1.15}
         onChange={() => {}}
-        onReset={() => (resets += 1)}
+        onReset={() => {
+          resets += 1
+        }}
       />,
     )
 

@@ -111,8 +111,8 @@ function HomeMosaic() {
       `[data-tile-id="${CSS.escape(resumeTarget.id)}"]`,
     )
     target?.focus()
-    // resumeTarget is module-scope (items[0]); deliberately runs once on mount.
-  }, [])
+    // resumeTarget is module-scope (items[0]); dependency documents the intended anchor.
+  }, [resumeTarget.id])
 
   const focused = items.find(g => g.id === focusedId) ?? resumeTarget
 

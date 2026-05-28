@@ -44,7 +44,7 @@ function withLayers({
           makeInMemoryLauncherLayer({ behavior: { kind: "succeed" } }),
         )
       }
-    }, [setSourceLayer, setLauncherLayer])
+    }, [setSourceLayer, setLauncherLayer, exitCode, failureKind])
 
     return <>{children}</>
   }
