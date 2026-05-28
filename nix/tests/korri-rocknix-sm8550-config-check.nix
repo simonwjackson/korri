@@ -203,6 +203,16 @@ let
         (check "${name}: sessiond must require korri-inputd.service (hard dep)" (
           builtins.elem "korri-inputd.service" sessiondRequires
         ))
+        # ProtectSystem=strict makes the whole filesystem hierarchy
+        # read-only; the renderer's status.json, persistent log, and
+        # XDG_*_HOME state all live under compositor.home, so a hole
+        # has to be carved for that subtree or every renderer spawn
+        # dies with EROFS the moment it tries to write anything.
+        (check "${name}: sessiond serviceConfig.ReadWritePaths must cover compositor.home (for renderer state)" (
+          builtins.elem compositor.home (
+            sessiondService.serviceConfig.ReadWritePaths or [ ]
+          )
+        ))
         (check "${name}: compositor must use Wayland SDL video" (
           compositorEnv.SDL_VIDEODRIVER or null == "wayland"
         ))

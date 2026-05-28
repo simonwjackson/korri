@@ -184,7 +184,17 @@ in
   # `ProtectHome = true` masks /run/user/* in sessiond's mount namespace
   # and would block the wayland-1 socket connect. Relax it for the
   # kiosk role only.
-  systemd.services.korri-sessiond.serviceConfig.ProtectHome = lib.mkForce false;
+  #
+  # ReadWritePaths carves a hole in `ProtectSystem = "strict"` (which
+  # makes the whole filesystem hierarchy read-only) for the compositor's
+  # home subtree. Sessiond's child Electrobun writes the
+  # status.json, the renderer log, XDG_{DATA,CONFIG,CACHE}_HOME state,
+  # and the library db there. Without this, every spawn dies on EROFS
+  # the moment it tries to persist anything.
+  systemd.services.korri-sessiond.serviceConfig = {
+    ProtectHome = lib.mkForce false;
+    ReadWritePaths = [ compositorCfg.home ];
+  };
 
   # Wire korri-server to delegate managed launches to the in-image
   # sessiond. The both-or-neither assertion in the server module would
