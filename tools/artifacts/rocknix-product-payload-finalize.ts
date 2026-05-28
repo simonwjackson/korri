@@ -145,6 +145,17 @@ function validateCandidate(
     requireNonempty(field, candidate[field])
   }
 
+  validateInputDigests(candidate, input)
+  validateCandidateRevision(candidate, input.productRevision)
+  validateOdin2CandidateIdentity(candidate)
+  validateSeedArchiveName(candidate, input.productRevision)
+  validateSeedUrls(candidate.PRODUCT_AUTHORITY_REPO, input.seedUrls)
+}
+
+function validateInputDigests(
+  candidate: CandidatePayload,
+  input: FinalizeRocknixProductPayloadInput,
+) {
   if (!revisionPattern.test(input.productRevision)) {
     throw new Error("finalization requires an explicit clean Korri revision")
   }
@@ -156,17 +167,26 @@ function validateCandidate(
       "candidate rootfs seed SHA256 must be a 64-character hex digest",
     )
   }
+}
+
+function validateCandidateRevision(
+  candidate: CandidatePayload,
+  productRevision: string,
+) {
   if (candidate.PRODUCT_REV_CLEAN !== "1") {
     throw new Error("candidate payload must come from a clean Korri revision")
   }
   if (
-    candidate.PRODUCT_REV !== input.productRevision ||
-    candidate.PRODUCT_ROOTFS_SEED_REV !== input.productRevision
+    candidate.PRODUCT_REV !== productRevision ||
+    candidate.PRODUCT_ROOTFS_SEED_REV !== productRevision
   ) {
     throw new Error(
       "candidate payload revision must match the clean Korri revision",
     )
   }
+}
+
+function validateOdin2CandidateIdentity(candidate: CandidatePayload) {
   if (candidate.PRODUCT_ROOTFS_SEED_DEVICE !== "odin2portal") {
     throw new Error("candidate payload must target Odin2Portal")
   }
@@ -175,8 +195,13 @@ function validateCandidate(
       "candidate payload compatible string must target Odin2Portal",
     )
   }
+}
 
-  const expectedArchivePrefix = `rocknix-guest-rootfs-odin2portal-${input.productRevision.slice(0, 12)}`
+function validateSeedArchiveName(
+  candidate: CandidatePayload,
+  productRevision: string,
+) {
+  const expectedArchivePrefix = `rocknix-guest-rootfs-odin2portal-${productRevision.slice(0, 12)}`
   if (
     !candidate.PRODUCT_ROOTFS_SEED_ARCHIVE.startsWith(expectedArchivePrefix) ||
     !candidate.PRODUCT_ROOTFS_SEED_ARCHIVE.endsWith(".tar.zst")
@@ -185,12 +210,14 @@ function validateCandidate(
       "candidate seed archive name must match the Odin2Portal clean Korri revision",
     )
   }
+}
 
-  if (input.seedUrls.length === 0) {
+function validateSeedUrls(authorityRepo: string, seedUrls: readonly string[]) {
+  if (seedUrls.length === 0) {
     throw new Error("at least one rootfs seed release URL is required")
   }
-  for (const seedUrl of input.seedUrls) {
-    validateReleaseUrl(candidate.PRODUCT_AUTHORITY_REPO, seedUrl)
+  for (const seedUrl of seedUrls) {
+    validateReleaseUrl(authorityRepo, seedUrl)
   }
 }
 
