@@ -29,6 +29,23 @@ export interface LauncherLayerBridgeOptions {
   readonly client?: LocalStreamLaunchClient
 }
 
+function trace(event: string, data?: unknown): void {
+  try {
+    void fetch("/__korri/desktop/trace", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        source: "launcher-layer-bridge",
+        event,
+        data,
+      }),
+      keepalive: true,
+    }).catch(() => {})
+  } catch {
+    // best-effort diagnostic
+  }
+}
+
 export function createLauncherLayerBridge(
   options: LauncherLayerBridgeOptions = {},
 ) {
@@ -37,7 +54,7 @@ export function createLauncherLayerBridge(
     run: (spec, runOptions) =>
       Effect.tryPromise({
         try: async () => {
-          console.log("[korri-launch] LauncherLayerBridge.run", {
+          trace("run", {
             command: spec.command,
             hasSource: Boolean(runOptions?.source),
             isLocal: runOptions?.source?.isLocal,
@@ -47,10 +64,10 @@ export function createLauncherLayerBridge(
               id: spec.command,
               source: runOptions?.source,
             })
-            console.log("[korri-launch] client.launchGame returned", response)
+            trace("client.launchGame returned", response)
             return launchResultFromResponse(response)
           } catch (err) {
-            console.log("[korri-launch] client.launchGame threw", String(err))
+            trace("client.launchGame threw", String(err))
             throw err
           }
         },

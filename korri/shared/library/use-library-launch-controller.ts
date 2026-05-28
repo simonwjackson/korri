@@ -1,5 +1,18 @@
 import { useAtomSet } from "@effect/atom-react"
 import { useCallback, useMemo, useRef, useState } from "react"
+
+function trace(event: string, data?: unknown): void {
+  try {
+    void fetch("/__korri/desktop/trace", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ source: "use-library-launch-controller", event, data }),
+      keepalive: true,
+    }).catch(() => {})
+  } catch {
+    // best-effort diagnostic
+  }
+}
 import {
   type LaunchController,
   type LaunchStartInput,
@@ -18,7 +31,7 @@ export function useLibraryLaunchController(): LaunchController {
 
   const start = useCallback(
     (game: LaunchStartInput) => {
-      console.log("[korri-launch] start fired", {
+      trace("start fired", {
         id: game.id,
         hasSource: Boolean(game.source),
         sourceHostId: game.source?.hostId,
@@ -27,17 +40,18 @@ export function useLibraryLaunchController(): LaunchController {
         currentState: stateRef.current._tag,
       })
       if (LaunchStateModel.isLaunching(stateRef.current)) {
-        console.log("[korri-launch] skipping; already launching")
+        trace("skipping; already launching")
         return
       }
 
       stateRef.current = LaunchStateModel.launching(game.id)
       setState(stateRef.current)
       void launch({ id: game.id, source: game.source }).then(exit => {
-        console.log("[korri-launch] launch atom resolved", {
+        trace("launch atom resolved", {
           id: game.id,
           exitTag: exit._tag,
-          exit: exit._tag === "Success" ? exit.value : String(exit.cause),
+          exit:
+            exit._tag === "Success" ? exit.value : String(exit.cause),
         })
         const next = LaunchStateModel.fromExit(game.id, exit)
         if (next._tag === "Failed" || next._tag === "Defect") {

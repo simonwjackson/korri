@@ -94,6 +94,17 @@ export function createDesktopApp(options: CreateDesktopAppOptions) {
     }
   })
 
+  // Diagnostic sink: WebView console.log is not captured into
+  // electrobun.log on Linux, so we expose a tiny POST endpoint that
+  // the renderer can hit to surface launch-chain trace events into
+  // pino. Bridge logs use {msg: "renderer-trace"} so they're easy to
+  // grep alongside the bun-side launch-bridge logs.
+  app.post("/__korri/desktop/trace", async c => {
+    const body = await c.req.json().catch(() => ({}))
+    logger.info(body, "renderer-trace")
+    return c.body(null, 204)
+  })
+
   // Renderer→bun launch bridge. See launch-bridge.ts. Registered
   // before the /api/* forwarder catchall so it doesn't get proxied.
   if (options.launchBridge) {
