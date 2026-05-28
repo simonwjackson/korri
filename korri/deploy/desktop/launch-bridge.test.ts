@@ -234,43 +234,7 @@ describe("desktop launch bridge — federation routing", () => {
     }
   })
 
-  test("delegates a local-source payload to launchLocal when provided", async () => {
-    let seenPayload: unknown
-    const handler = createLocalStreamLaunchRpcHandler({
-      getConnection: () => CONNECTED,
-      prepareGame: async () => {
-        throw new Error("prepareGame should not be called for local source")
-      },
-      launchMoonlight: async () => {
-        throw new Error("launchMoonlight should not be called for local source")
-      },
-      launchLocal: async payload => {
-        seenPayload = payload
-        return {
-          status: "launched",
-          gameId: payload.id,
-          moonlightCommand: "sessiond",
-        }
-      },
-    })
-
-    const response = await handler(
-      postLocalLaunchRpc({
-        id: "pico-8/celeste",
-        source: LOCAL_SELF_SOURCE,
-      }),
-    )
-
-    expect(seenPayload).toMatchObject({
-      id: "pico-8/celeste",
-      source: LOCAL_SELF_SOURCE,
-    })
-
-    const body = await readRpcSuccess(response)
-    expect(body.status).toBe("launched")
-  })
-
-  test("returns typed failure for a local-source payload when launchLocal is absent", async () => {
+  test("refuses local-source payloads (caller must use app.library.launch)", async () => {
     const handler = createLocalStreamLaunchRpcHandler({
       getConnection: () => CONNECTED,
       prepareGame: async () => {
@@ -292,7 +256,7 @@ describe("desktop launch bridge — federation routing", () => {
     expect(body.status).toBe("failed")
     if (body.status === "failed") {
       expect(body.category).toBe("host-unavailable")
-      expect(body.message).toContain("local")
+      expect(body.message).toContain("app.library.launch")
     }
   })
 

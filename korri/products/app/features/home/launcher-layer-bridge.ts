@@ -1,95 +1,103 @@
 /**
- * Renderer-side `Launcher` that calls the desktop bun-side launch RPC
- * instead of calling `app.library.launch` via the remote API.
+ * Renderer-side `Launcher` used in the kiosk (desktop bun) where
+ * `runtimeConfig.desktopInput=true`.
  *
- * The bun side handles the prepare-stream RPC against the connected
- * korri-server *and* the local Moonlight spawn (see
- * `korri/deploy/desktop/launch-bridge.ts`). This layer is the desktop
- * equivalent of `LauncherLayerRpc`; selection between the two happens
- * once at the React composition root (`korri/deploy/portal/main.tsx`)
- * via `selectLauncherLayer(runtimeConfig)` and the layer is seeded into
- * the atom registry through `<RegistryProvider initialValues={…}>`.
+ * Federation v1 routing:
  *
- * The LaunchSpec.command coming in is the game id (the renderer's
- * `LibrarySource.launchSpecFor` returns an opaque
- * `{ command: id, args: [] }`). We unpack it back into `{ id }` for
- * the local launch RPC.
+ *  - `source.isLocal !== false` (local-source or source-absent): the
+ *    server is the source of truth. The renderer calls
+ *    `app.library.launch` against its own server over the standard
+ *    `/api/rpc` path (same as the non-kiosk `LauncherLayerRpc`),
+ *    which the desktop bun forwarder hands to the loopback
+ *    korri-server. The server then drives sessiond → gamescope →
+ *    retroarch. No `app.desktop.launch` bridge hop is involved — that
+ *    path was redundant with the server's own foreground-session
+ *    launch and added a fragile Effect-RPC decoding step over a
+ *    custom Hono route.
+ *
+ *  - `source.isLocal === false` (remote/Moonlight): the desktop bun
+ *    still owns the Moonlight prepare/spawn pipeline, so we route
+ *    through `app.desktop.launch` (the `LocalStreamLaunchClient`) on
+ *    the in-process bridge.
+ *
+ * Selection between the kiosk bridge layer and the non-kiosk
+ * `LauncherLayerRpc` happens at the React composition root via the
+ * runtime config; see `HomeRuntimeLayersRoot`.
  */
 
+import { appRpcGroup } from "@app/api/app-rpc-group"
 import {
   createLocalStreamLaunchClient,
   type LocalStreamLaunchClient,
 } from "@app/stream/local-stream-launch-client"
 import type { LocalStreamLaunchResponse } from "@app/stream/local-stream-launch-rpc"
+import { RpcClientLive } from "@shared/api/rpc/client"
 import { launchFailureExitCode } from "@shared/library/launcher"
-import { Launcher, LibraryError } from "@shared/library/library-services"
+import {
+  Launcher,
+  type LaunchOptions,
+  LibraryError,
+} from "@shared/library/library-services"
 import { Effect, Layer } from "effect"
+import { RpcClient } from "effect/unstable/rpc"
 
 export interface LauncherLayerBridgeOptions {
   readonly client?: LocalStreamLaunchClient
 }
 
-function trace(event: string, data?: unknown): void {
-  try {
-    void fetch("/__korri/desktop/trace", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        source: "launcher-layer-bridge",
-        event,
-        data,
-      }),
-      keepalive: true,
-    }).catch(() => {})
-  } catch {
-    // best-effort diagnostic
-  }
-}
-
 export function createLauncherLayerBridge(
   options: LauncherLayerBridgeOptions = {},
 ) {
-  const client = options.client ?? createLocalStreamLaunchClient()
-  return Layer.succeed(Launcher)({
-    run: (spec, runOptions) =>
-      Effect.tryPromise({
-        try: async () => {
-          trace("run", {
-            command: spec.command,
-            hasSource: Boolean(runOptions?.source),
-            isLocal: runOptions?.source?.isLocal,
-          })
-          try {
-            const response = await client.launchGame({
-              id: spec.command,
-              source: runOptions?.source,
-            })
-            trace("client.launchGame returned", response)
-            return launchResultFromResponse(response)
-          } catch (err) {
-            trace("client.launchGame threw", String(err))
-            throw err
+  const moonlightClient = options.client ?? createLocalStreamLaunchClient()
+  return Layer.effect(Launcher)(
+    RpcClient.make(appRpcGroup).pipe(
+      Effect.map(appClient => ({
+        run: (
+          spec: { readonly command: string },
+          runOptions?: LaunchOptions,
+        ) => {
+          const source = runOptions?.source
+          // Local-source / source-absent: server is source of truth.
+          if (!source || source.isLocal !== false) {
+            return appClient["app.library.launch"](
+              source ? { id: spec.command, source } : { id: spec.command },
+            ).pipe(Effect.mapError(toLibraryError))
           }
+          // Remote-source: keep the bun-bridge Moonlight path.
+          return Effect.tryPromise({
+            try: async () =>
+              launchResultFromResponse(
+                await moonlightClient.launchGame({
+                  id: spec.command,
+                  source,
+                }),
+              ),
+            catch: error =>
+              new LibraryError({
+                reason: "io",
+                message: error instanceof Error ? error.message : String(error),
+              }),
+          })
         },
-        catch: error =>
-          new LibraryError({
-            reason: "io",
-            message: error instanceof Error ? error.message : String(error),
-          }),
-      }),
-  })
+      })),
+    ),
+  ).pipe(Layer.provide(RpcClientLive))
 }
 
 export const LauncherLayerBridge = createLauncherLayerBridge()
+
+function toLibraryError(error: unknown): LibraryError {
+  return new LibraryError({
+    reason: "unavailable",
+    message: error instanceof Error ? error.message : String(error),
+  })
+}
 
 function launchResultFromResponse(response: LocalStreamLaunchResponse) {
   if (response.status === "launched") {
     return { status: "launched" as const }
   }
   if (response.status === "prepared-no-moonlight") {
-    // Prepare succeeded on the server but Moonlight couldn't start locally.
-    // The stream session exists; surface this as a launch-failure so the UI
-    // can prompt the user to fix Moonlight, but distinguish via the message.
     return {
       status: "failed" as const,
       exitCode: 125,
@@ -99,17 +107,8 @@ function launchResultFromResponse(response: LocalStreamLaunchResponse) {
   }
   return {
     status: "failed" as const,
-    exitCode: exitCodeForCategory(response.category),
+    exitCode: launchFailureExitCode(response.category),
     stderrTail: response.message,
     failureKind: response.category,
   }
-}
-
-function exitCodeForCategory(
-  category: Extract<
-    LocalStreamLaunchResponse,
-    { readonly status: "failed" }
-  >["category"],
-): number {
-  return launchFailureExitCode(category)
 }

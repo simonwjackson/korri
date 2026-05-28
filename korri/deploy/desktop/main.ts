@@ -34,7 +34,6 @@ import {
   type LaunchBridgeForegroundSessionOwner,
   type LaunchBridgeOptions,
 } from "./launch-bridge"
-import { createLaunchLocalViaServer } from "./launch-local-via-server"
 import { createDesktopMoonlightSessionRunner } from "./moonlight-session-runner"
 import {
   desktopInputdUrlFromEnv,
@@ -163,14 +162,6 @@ async function main() {
         gamescope: opts.gamescope,
         runner: diagnosticMoonlightRunner,
       }),
-    // Local-source delegate (the seam d0f2484 left for callers to wire).
-    // Without this, the bridge's `performLocalStreamLaunchOrFallback`
-    // fails closed with `host-unavailable` for source.isLocal=true
-    // payloads — every "press 'a' on celeste-classic" on a kiosk
-    // surfaces as "Could not launch <game>". Forward to the in-process
-    // korri-server's app.library.launch so sessiond owns the
-    // foreground-session lifecycle.
-    launchLocal: createLaunchLocalViaServer(),
   }
   foregroundSessionOwner =
     createLaunchBridgeForegroundSessionOwner(launchBridgeOptions)

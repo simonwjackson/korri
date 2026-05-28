@@ -95,18 +95,6 @@ export interface LaunchBridgeOptions {
   readonly getConnection: () => ConnectionServerRecord | undefined
 
   /**
-   * Optional delegate for local-source launches. When
-   * `payload.source.isLocal === true`, the bridge bypasses the
-   * prep+Moonlight path and calls this directly — typically wired to
-   * the in-process server's `app.library.launch` so sessiond owns the
-   * lifecycle. Returning a `LocalStreamLaunchResponse` keeps the wire
-   * shape stable for the renderer.
-   */
-  readonly launchLocal?: (
-    payload: LocalStreamLaunchPayload,
-  ) => Promise<LocalStreamLaunchResponse>
-
-  /**
    * Optional local input preflight. Appliance builds use this to fail before
    * preparing a remote stream when the normalized InputPlumber controller is
    * unavailable or ambiguous.
@@ -251,10 +239,15 @@ function createLaunchRequestId(): string {
 }
 
 /**
- * Federation-aware entry point. Local-source payloads short-circuit
- * the foreground-session-owner pipeline (which is Moonlight-shaped)
- * and delegate to `options.launchLocal`. Remote-source and
- * source-absent payloads continue through the existing flow.
+ * Federation-v1 entry point. The desktop bridge handles ONLY remote-
+ * source (Moonlight) launches; local-source launches go straight from
+ * the renderer to `app.library.launch` against its own server (see
+ * `LauncherLayerBridge`), where sessiond owns the lifecycle.
+ *
+ * If a local-source payload reaches this handler we fail loudly
+ * rather than silently re-launching — this protects against drift
+ * where a renderer regresses to calling `app.desktop.launch` for
+ * local entries.
  */
 async function routeAndPerformLocalStreamLaunch(
   options: LaunchBridgeOptions,
@@ -266,27 +259,19 @@ async function routeAndPerformLocalStreamLaunch(
       id: payload.id,
       hostId: payload.source?.hostId,
       isLocal: payload.source?.isLocal,
-      hasLaunchLocal: Boolean(options.launchLocal),
     },
     "launch-bridge: route entry",
   )
   if (payload.source?.isLocal) {
-    if (options.launchLocal) {
-      return await options.launchLocal(payload)
-    }
-    // v1: bridge cannot launch local-source entries without a
-    // delegate. Surface a typed failure so the renderer can degrade.
-    // U8 wires `launchLocal` from main.ts; tests provide it when
-    // local launches need to succeed end-to-end.
     logger.warn(
       { id: payload.id, hostId: payload.source.hostId },
-      "launch-bridge: local-source launch requested but no launchLocal delegate wired",
+      "launch-bridge: refused local-source payload — callers must use app.library.launch",
     )
     return {
       status: "failed",
       category: "host-unavailable",
       message:
-        "local-source launch via desktop bridge requires launchLocal delegate (not wired in this build)",
+        "local-source launches must call app.library.launch, not the desktop bridge",
     }
   }
   return await performLocalStreamLaunch(owner, payload)
