@@ -36,13 +36,24 @@ export function createLauncherLayerBridge(
   return Layer.succeed(Launcher)({
     run: (spec, runOptions) =>
       Effect.tryPromise({
-        try: async () =>
-          launchResultFromResponse(
-            await client.launchGame({
+        try: async () => {
+          console.log("[korri-launch] LauncherLayerBridge.run", {
+            command: spec.command,
+            hasSource: Boolean(runOptions?.source),
+            isLocal: runOptions?.source?.isLocal,
+          })
+          try {
+            const response = await client.launchGame({
               id: spec.command,
               source: runOptions?.source,
-            }),
-          ),
+            })
+            console.log("[korri-launch] client.launchGame returned", response)
+            return launchResultFromResponse(response)
+          } catch (err) {
+            console.log("[korri-launch] client.launchGame threw", String(err))
+            throw err
+          }
+        },
         catch: error =>
           new LibraryError({
             reason: "io",
