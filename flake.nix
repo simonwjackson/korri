@@ -631,6 +631,12 @@
                   readmePath = ./packages/moonlight-embedded-korri/README.md;
                   moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
                 };
+            korri-moonlight-closure-hygiene =
+              import ./nix/tests/korri-moonlight-closure-hygiene-check.nix
+                {
+                  inherit pkgs;
+                  moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
+                };
             libretro-fake-08-check = import ./packages/libretro-fake-08/check.nix {
               inherit pkgs;
               libretroFake08Package = self.packages.${system}.libretro-fake-08;
@@ -690,6 +696,7 @@
                 self.checks.${system}.korri-module-identity-audit
                 self.checks.${system}.korri-sunshine-runtime-bitrate-patch
                 self.checks.${system}.korri-moonlight-control-protocol-patch
+                self.checks.${system}.korri-moonlight-closure-hygiene
                 self.checks.${system}.libretro-fake-08-check
                 self.checks.${system}.korri-desktop-build-graph
                 self.checks.${system}.korri-package-outputs
@@ -736,6 +743,10 @@
                 }
                 {
                   name = "korri-moonlight-control-protocol-patch";
+                  owner = "package-output";
+                }
+                {
+                  name = "korri-moonlight-closure-hygiene";
                   owner = "package-output";
                 }
                 {

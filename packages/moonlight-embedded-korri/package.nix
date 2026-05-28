@@ -136,9 +136,14 @@ stdenv.mkDerivation rec {
       exit 1
     fi
 
-    if [ -f CMakeCache.txt ]; then
-      cp CMakeCache.txt "$out/nix-support/moonlight-embedded-korri/CMakeCache.txt"
-    fi
+    # NOTE: do not copy CMakeCache.txt (or any raw build artifact) into
+    # $out. Those files are packed with absolute store paths to the
+    # toolchain (gcc, cmake, binutils, python3, ...), which Nix's reference
+    # scanner then drags into the runtime closure -- inflating it by
+    # hundreds of MB. The `manifest.txt` above is the supported debug
+    # breadcrumb. The closure-hygiene check in
+    # `nix/tests/korri-moonlight-closure-hygiene-check.nix` guards the
+    # invariant.
   '';
 
   meta = {
