@@ -1,12 +1,10 @@
 {
   pkgs,
-  productPayloadPackage,
   hostPackages,
   targetPackages,
   configurations,
   contract,
-  fixturePayloadPackage,
-  fixtureArchiveName,
+  payloadSpecs,
 }:
 
 let
@@ -98,44 +96,19 @@ let
         fixturePayloadPackage.drvPath or null != null
       ))
       (check "${device} fixture archive name must be product-named" (
-        lib.hasPrefix archivePrefix fixtureArchiveName && lib.hasSuffix ".tar.zst" fixtureArchiveName
+        lib.hasPrefix archivePrefix fixtureArchiveName
+        && lib.hasSuffix ".tar.zst" fixtureArchiveName
       ))
     ];
 
-  odin2PortalPayload = {
-    device = "odin2portal";
-    compatible = "ayn,odin2portal";
-    expectedBuildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel";
-    expectedRootfsAlias = "korri-rocknix-rootfs-odin2portal";
-    expectedKioskSystemAlias = "korri-rocknix-kiosk-system-odin2portal";
-    expectedConfigAlias = "korri-rocknix-kiosk-odin2portal";
-    payloadPackage = productPayloadPackage;
-    inherit fixturePayloadPackage fixtureArchiveName;
-  };
-
-  checks = [
-    (check "nix-on-rocks Phase 1 product lock field fixture must be present" (
-      contract.productLockFields == expectedProductLockFields
-    ))
-    (check "nix-on-rocks Phase 1 rendered package field fixture must be present" (
-      contract.renderedPackageFields == expectedRenderedPackageFields
-    ))
-  ]
-  ++ checkPayload odin2PortalPayload;
-  failures = builtins.filter (candidate: !candidate.assertion) checks;
-in
-if failures != [ ] then
-  throw "Korri RockNix product payload check failed:\n${
-    lib.concatMapStringsSep "\n" (failure: "- ${failure.message}") failures
-  }"
-else
-  pkgs.runCommand "korri-rocknix-product-payload-check"
+  fixtureCheckScript =
     {
-      nativeBuildInputs = [
-        pkgs.coreutils
-        pkgs.gawk
-      ];
-    }
+      device,
+      compatible,
+      fixturePayloadPackage,
+      fixtureArchiveName,
+      ...
+    }:
     ''
       payload=${fixturePayloadPackage}
       seed="$payload/rootfs/${fixtureArchiveName}"
@@ -153,8 +126,8 @@ else
       set -a
       . "$lock"
       set +a
-      test "$PRODUCT_ROOTFS_SEED_DEVICE" = "${odin2PortalPayload.device}"
-      test "$PRODUCT_ROOTFS_SEED_COMPATIBLE" = "${odin2PortalPayload.compatible}"
+      test "$PRODUCT_ROOTFS_SEED_DEVICE" = "${device}"
+      test "$PRODUCT_ROOTFS_SEED_COMPATIBLE" = "${compatible}"
       test "$PRODUCT_ROOTFS_SEED_ARCHIVE" = "${fixtureArchiveName}"
       test "$PRODUCT_ROOTFS_SEED_SHA256" = "$expected_sha"
       test -z "$PRODUCT_SOURCE_SHA256"
@@ -162,6 +135,32 @@ else
 
       grep -Fx "rootfs_seed_archive=${fixtureArchiveName}" "$manifest"
       grep -Fx "rootfs_seed_sha256=$expected_sha" "$manifest"
+    '';
+
+  checks = [
+    (check "nix-on-rocks Phase 1 product lock field fixture must be present" (
+      contract.productLockFields == expectedProductLockFields
+    ))
+    (check "nix-on-rocks Phase 1 rendered package field fixture must be present" (
+      contract.renderedPackageFields == expectedRenderedPackageFields
+    ))
+  ] ++ lib.concatMap checkPayload payloadSpecs;
+  failures = builtins.filter (candidate: !candidate.assertion) checks;
+in
+if failures != [ ] then
+  throw "Korri RockNix product payload check failed:\n${
+    lib.concatMapStringsSep "\n" (failure: "- ${failure.message}") failures
+  }"
+else
+  pkgs.runCommand "korri-rocknix-product-payload-check"
+    {
+      nativeBuildInputs = [
+        pkgs.coreutils
+        pkgs.gawk
+      ];
+    }
+    ''
+      ${lib.concatMapStringsSep "\n" fixtureCheckScript payloadSpecs}
 
       mkdir -p "$out"
       cat > "$out/summary.txt" <<'EOF'

@@ -525,6 +525,16 @@
             buildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel";
             substrateRevision = nixOnRocksRevision;
           };
+          korri-rocknix-product-payload-thor = import ./nix/korri-rocknix-product-payload.nix {
+            inherit pkgs productRevision productShortRevision productRevisionIsClean;
+            rootfsPackage = self.packages.${system}.korri-rocknix-rootfs-thor;
+            device = "thor";
+            compatible = "ayn,thor";
+            authorityRepo = "simonwjackson/korri";
+            sourceSubdir = ".";
+            buildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-thor.config.system.build.toplevel";
+            substrateRevision = nixOnRocksRevision;
+          };
         };
 
         lib = {
@@ -677,33 +687,66 @@
               let
                 fixtureRevision = "9f0ed234b4eff39f76801c09daedc9795c8b07fb";
                 fixtureShortRevision = builtins.substring 0 12 fixtureRevision;
-                fixtureArchiveName = "rocknix-guest-rootfs-odin2portal-${fixtureShortRevision}.tar.zst";
                 fixtureRootfs = pkgs.runCommand "korri-rocknix-rootfs-fixture" { } ''
                   mkdir -p "$out/tarball"
                   printf 'fixture rootfs\n' > "$out/tarball/rocknix-layer10b-guest-rootfs-aarch64-linux.tar.zst"
                 '';
-                fixturePayloadPackage = import ./nix/korri-rocknix-product-payload.nix {
-                  inherit pkgs;
-                  rootfsPackage = fixtureRootfs;
-                  device = "odin2portal";
-                  compatible = "ayn,odin2portal";
-                  authorityRepo = "simonwjackson/korri";
-                  sourceSubdir = ".";
-                  buildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel";
-                  productRevision = fixtureRevision;
-                  productShortRevision = fixtureShortRevision;
-                  productRevisionIsClean = true;
-                  substrateRevision = "fixture-nix-on-rocks";
-                };
+                mkFixturePayload =
+                  { device, compatible, buildTarget }:
+                  let
+                    fixtureArchiveName = "rocknix-guest-rootfs-${device}-${fixtureShortRevision}.tar.zst";
+                  in
+                  {
+                    inherit device compatible fixtureArchiveName;
+                    fixturePayloadPackage = import ./nix/korri-rocknix-product-payload.nix {
+                      inherit pkgs device compatible buildTarget;
+                      rootfsPackage = fixtureRootfs;
+                      authorityRepo = "simonwjackson/korri";
+                      sourceSubdir = ".";
+                      productRevision = fixtureRevision;
+                      productShortRevision = fixtureShortRevision;
+                      productRevisionIsClean = true;
+                      substrateRevision = "fixture-nix-on-rocks";
+                    };
+                  };
               in
               import ./nix/tests/korri-rocknix-product-payload-check.nix {
-                inherit pkgs fixturePayloadPackage fixtureArchiveName;
-                productPayloadPackage = self.packages.${system}.korri-rocknix-product-payload-odin2portal;
+                inherit pkgs;
                 targetPackages = self.packages.aarch64-linux;
                 hostPackages = self.packages.${system};
                 configurations = self.nixosConfigurations;
                 contract = import ./nix/product-payload-contract.nix;
+                payloadSpecs = [
+                  ((mkFixturePayload {
+                    device = "odin2portal";
+                    compatible = "ayn,odin2portal";
+                    buildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel";
+                  })
+                  // {
+                    expectedBuildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel";
+                    expectedRootfsAlias = "korri-rocknix-rootfs-odin2portal";
+                    expectedKioskSystemAlias = "korri-rocknix-kiosk-system-odin2portal";
+                    expectedConfigAlias = "korri-rocknix-kiosk-odin2portal";
+                    payloadPackage = self.packages.${system}.korri-rocknix-product-payload-odin2portal;
+                  })
+                  ((mkFixturePayload {
+                    device = "thor";
+                    compatible = "ayn,thor";
+                    buildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-thor.config.system.build.toplevel";
+                  })
+                  // {
+                    expectedBuildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-thor.config.system.build.toplevel";
+                    expectedRootfsAlias = "korri-rocknix-rootfs-thor";
+                    expectedKioskSystemAlias = "korri-rocknix-kiosk-system-thor";
+                    expectedConfigAlias = "korri-rocknix-kiosk-thor";
+                    payloadPackage = self.packages.${system}.korri-rocknix-product-payload-thor;
+                  })
+                ];
               };
+            # Named standard-check entry for the Thor lane. The shared check
+            # above covers Odin2Portal and Thor together so the two products
+            # cannot drift, while this name keeps CI/check ownership explicit.
+            korri-rocknix-product-payload-thor = self.checks.${system}.korri-rocknix-product-payload;
             korri-live-usb-config = import ./nix/tests/korri-live-usb-config-check.nix {
               inherit pkgs;
               liveUsbSystem = korriKioskLiveUsbSystem;
@@ -747,6 +790,7 @@
                 self.checks.${system}.korri-image-outputs
                 self.checks.${system}.korri-rocknix-sm8550-config
                 self.checks.${system}.korri-rocknix-product-payload
+                self.checks.${system}.korri-rocknix-product-payload-thor
                 self.checks.${system}.korri-live-usb-config
                 self.checks.${system}.korri-live-usb-developer-config
                 self.checks.${system}.korri-live-usb-vm-smoke
@@ -812,6 +856,10 @@
                 }
                 {
                   name = "korri-rocknix-product-payload";
+                  owner = "package-output";
+                }
+                {
+                  name = "korri-rocknix-product-payload-thor";
                   owner = "package-output";
                 }
                 {
