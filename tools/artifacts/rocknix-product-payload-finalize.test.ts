@@ -58,7 +58,12 @@ describe("RockNix product payload finalizer", () => {
         ],
       })
 
-      expect(result.lockPath.endsWith("product-payload.lock")).toBe(true)
+      expect(result.lockPath.endsWith("product-payload-odin2portal.lock")).toBe(
+        true,
+      )
+      expect(result.envPath.endsWith("product-payload-odin2portal.env")).toBe(
+        true,
+      )
       const lock = readFileSync(result.lockPath, "utf8")
       expect(lock).toContain(`PRODUCT_AUTHORITY_REPO="simonwjackson/korri"`)
       expect(lock).toContain(`PRODUCT_REV="${cleanRevision}"`)
@@ -108,7 +113,10 @@ describe("RockNix product payload finalizer", () => {
 
       expect(cli.status).toBe(0)
       expect(
-        readFileSync(join(outputDir, "product-payload.lock"), "utf8"),
+        readFileSync(
+          join(outputDir, "product-payload-odin2portal.lock"),
+          "utf8",
+        ),
       ).toContain(
         `PRODUCT_ROOTFS_SEED_URLS="https://github.com/simonwjackson/korri/releases/download/product-payload/asset-1.tar.zst https://github.com/simonwjackson/korri/releases/download/product-payload/asset-2.tar.zst"`,
       )
@@ -155,7 +163,10 @@ describe("RockNix product payload finalizer", () => {
         }),
       ).toThrow("source SHA256")
       expect(() =>
-        readFileSync(join(outputDir, "product-payload.lock"), "utf8"),
+        readFileSync(
+          join(outputDir, "product-payload-odin2portal.lock"),
+          "utf8",
+        ),
       ).toThrow()
     } finally {
       rmSync(dir, { recursive: true, force: true })
@@ -204,15 +215,49 @@ describe("RockNix product payload finalizer", () => {
     }
   })
 
-  test("rejects a seed archive whose device does not match Odin2Portal", () => {
+  test("emits device-named lock and environment files for Thor", () => {
+    const dir = makeTempDir()
+    try {
+      const result = finalizeRocknixProductPayload({
+        candidateLockPath: writeCandidate(dir, {
+          PRODUCT_BUILD_TARGET:
+            ".#nixosConfigurations.korri-rocknix-kiosk-thor.config.system.build.toplevel",
+          PRODUCT_ROOTFS_SEED_DEVICE: "thor",
+          PRODUCT_ROOTFS_SEED_COMPATIBLE: "ayn,thor",
+          PRODUCT_ROOTFS_SEED_ARCHIVE:
+            "rocknix-guest-rootfs-thor-9f0ed234b4ef.tar.zst",
+        }),
+        outputDir: join(dir, "final"),
+        sourceSha256: sourceSha,
+        productRevision: cleanRevision,
+        seedUrls: [
+          "https://github.com/simonwjackson/korri/releases/download/product-payload/thor-asset.tar.zst",
+        ],
+      })
+
+      expect(result.lockPath.endsWith("product-payload-thor.lock")).toBe(true)
+      expect(result.envPath.endsWith("product-payload-thor.env")).toBe(true)
+      expect(readFileSync(result.lockPath, "utf8")).toContain(
+        `PRODUCT_ROOTFS_SEED_DEVICE="thor"`,
+      )
+      expect(readFileSync(result.envPath, "utf8")).toContain(
+        `PKG_NIX_GUEST_ROOTFS_SEED_COMPATIBLE="ayn,thor"`,
+      )
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("rejects a seed archive whose device prefix does not match the declared device", () => {
     const dir = makeTempDir()
     try {
       expect(() =>
         finalizeRocknixProductPayload({
           candidateLockPath: writeCandidate(dir, {
             PRODUCT_ROOTFS_SEED_DEVICE: "thor",
+            PRODUCT_ROOTFS_SEED_COMPATIBLE: "ayn,thor",
             PRODUCT_ROOTFS_SEED_ARCHIVE:
-              "rocknix-guest-rootfs-thor-9f0ed234b4ef.tar.zst",
+              "rocknix-guest-rootfs-odin2portal-9f0ed234b4ef.tar.zst",
           }),
           outputDir: join(dir, "final"),
           sourceSha256: sourceSha,
@@ -221,7 +266,7 @@ describe("RockNix product payload finalizer", () => {
             "https://github.com/simonwjackson/korri/releases/download/product-payload/asset-123.tar.zst",
           ],
         }),
-      ).toThrow("Odin2Portal")
+      ).toThrow("device prefix")
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

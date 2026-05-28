@@ -40,6 +40,7 @@ export function finalizeRocknixProductPayload(
 
   const authorityRepo = candidate.PRODUCT_AUTHORITY_REPO
   const authorityName = authorityRepo.split("/").at(-1) ?? authorityRepo
+  const device = candidate.PRODUCT_ROOTFS_SEED_DEVICE
   const seedUrls = input.seedUrls.join(" ")
   const firstSeedUrl = input.seedUrls[0] ?? ""
   const productUrl = `https://api.github.com/repos/${authorityRepo}/tarball/${input.productRevision}`
@@ -86,8 +87,8 @@ export function finalizeRocknixProductPayload(
   ]
 
   mkdirSync(input.outputDir, { recursive: true })
-  const lockPath = join(input.outputDir, "product-payload.lock")
-  const envPath = join(input.outputDir, "product-payload.env")
+  const lockPath = join(input.outputDir, `product-payload-${device}.lock`)
+  const envPath = join(input.outputDir, `product-payload-${device}.env`)
   const manifestPath = join(input.outputDir, "manifest.txt")
 
   writeFileSync(lockPath, renderShellFields(lockFields))
@@ -147,8 +148,8 @@ function validateCandidate(
 
   validateInputDigests(candidate, input)
   validateCandidateRevision(candidate, input.productRevision)
-  validateOdin2CandidateIdentity(candidate)
-  validateSeedArchiveName(candidate, input.productRevision)
+  validateCandidateIdentity(candidate)
+  validateSeedArchiveName(candidate)
   validateSeedUrls(candidate.PRODUCT_AUTHORITY_REPO, input.seedUrls)
 }
 
@@ -186,28 +187,20 @@ function validateCandidateRevision(
   }
 }
 
-function validateOdin2CandidateIdentity(candidate: CandidatePayload) {
-  if (candidate.PRODUCT_ROOTFS_SEED_DEVICE !== "odin2portal") {
-    throw new Error("candidate payload must target Odin2Portal")
-  }
-  if (candidate.PRODUCT_ROOTFS_SEED_COMPATIBLE !== "ayn,odin2portal") {
-    throw new Error(
-      "candidate payload compatible string must target Odin2Portal",
-    )
+function validateCandidateIdentity(candidate: CandidatePayload) {
+  if (!/^[a-z0-9][a-z0-9-]*$/u.test(candidate.PRODUCT_ROOTFS_SEED_DEVICE)) {
+    throw new Error("candidate payload device must be a safe product id")
   }
 }
 
-function validateSeedArchiveName(
-  candidate: CandidatePayload,
-  productRevision: string,
-) {
-  const expectedArchivePrefix = `rocknix-guest-rootfs-odin2portal-${productRevision.slice(0, 12)}`
+function validateSeedArchiveName(candidate: CandidatePayload) {
+  const expectedArchivePrefix = `rocknix-guest-rootfs-${candidate.PRODUCT_ROOTFS_SEED_DEVICE}-`
   if (
     !candidate.PRODUCT_ROOTFS_SEED_ARCHIVE.startsWith(expectedArchivePrefix) ||
     !candidate.PRODUCT_ROOTFS_SEED_ARCHIVE.endsWith(".tar.zst")
   ) {
     throw new Error(
-      "candidate seed archive name must match the Odin2Portal clean Korri revision",
+      "candidate seed archive name must match the declared device prefix",
     )
   }
 }
