@@ -1,3 +1,5 @@
+import { readdirSync } from "node:fs"
+import { join } from "node:path"
 import {
   type LaunchResult,
   type LaunchSpec,
@@ -910,12 +912,38 @@ function realRendererController(): KorriRendererController {
   })
 }
 
+/**
+ * Discover Sway's IPC socket from XDG_RUNTIME_DIR. The kiosk image
+ * runs sway in korri-compositor.service while korri-sessiond is a
+ * sibling unit; sessiond doesn't inherit SWAYSOCK from the
+ * compositor's process tree, and swaymsg refuses to run without
+ * either SWAYSOCK or I3SOCK set. Match the `sway-ipc.<uid>.<pid>.sock`
+ * convention sway uses; return the first match (there is one sway
+ * per host on a Korri kiosk by construction).
+ */
+function discoverSwaySocketEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): Record<string, string> {
+  if (env.SWAYSOCK) return { SWAYSOCK: env.SWAYSOCK }
+  const runtimeDir = env.XDG_RUNTIME_DIR
+  if (!runtimeDir) return {}
+  try {
+    const entry = readdirSync(runtimeDir).find(
+      name => name.startsWith("sway-ipc.") && name.endsWith(".sock"),
+    )
+    return entry ? { SWAYSOCK: join(runtimeDir, entry) } : {}
+  } catch {
+    return {}
+  }
+}
+
 function realSwayController(): SwayController {
   const runner: SwayCommandRunner = {
     run: async args => {
       const proc = Bun.spawn(["swaymsg", ...args], {
         stdout: "pipe",
         stderr: "pipe",
+        env: { ...process.env, ...discoverSwaySocketEnv() },
       })
       const stdout = await new Response(proc.stdout).text()
       const stderr = await new Response(proc.stderr).text()
