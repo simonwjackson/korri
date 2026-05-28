@@ -9,7 +9,7 @@
   avahi,
   curl,
   expat,
-  ffmpeg,
+  ffmpeg-headless,
   libcec,
   libevdev,
   libpulseaudio,
@@ -94,7 +94,13 @@ stdenv.mkDerivation rec {
     avahi
     curl
     expat
-    ffmpeg
+    # Moonlight links only libavcodec / libavformat / libavutil /
+    # libswscale -- all of which `ffmpeg-headless` provides. The full
+    # `ffmpeg` build drags in flite, freepats, gtk, gstreamer, x265, and
+    # transitively python3 with no payoff on moonlight's call path. The
+    # `korri-moonlight-closure-hygiene` check enforces the absence of
+    # those fingerprints.
+    ffmpeg-headless
     libcec
     libevdev
     libpulseaudio

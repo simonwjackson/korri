@@ -18,6 +18,23 @@
     "-cmake-[0-9][0-9.]*$"
     "-binutils-[0-9][0-9.]*$"
     "-binutils-wrapper-[0-9][0-9.]*$"
+
+    # Maximalist-ffmpeg fingerprint: the non-headless `ffmpeg-X.Y-lib`
+    # ships flite/freepats/gtk/x265-encoder/icu wrapping on top of the
+    # libavcodec/libavformat/libavutil/libswscale moonlight actually
+    # links. Forbid the non-headless variant so an accidental switch back
+    # to plain `ffmpeg` in `buildInputs` is caught by the check; the
+    # `ffmpeg-headless-X.Y-lib` sibling is permitted (the `-headless`
+    # infix lands before the version, so this pattern does not match it).
+    "-ffmpeg-[0-9][0-9.]*-lib$"
+
+    # NOTE: flite, freepats, gtk+3, gtk4, gstreamer, libadwaita, zenity,
+    # and python3 still appear in the runtime closure today via
+    # `sdl2-compat`'s transitive deps (gst-plugins-bad, libdecor,
+    # libcamera, pipewire, ...). That belongs to the in-flight
+    # `SDL2-korri` overlay, not to this hygiene gate. Once that overlay
+    # lands and replaces `sdl2-compat` with a slim handheld SDL2 build,
+    # add those substrings here to keep the regression closed.
   ],
 }:
 
