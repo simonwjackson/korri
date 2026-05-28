@@ -191,6 +191,9 @@ let
             pkg: lib.hasInfix "bash" (toString pkg) || lib.hasInfix "busybox" (toString pkg)
           ) sessiondPath
         ))
+        (check "${name}: sessiond PATH must include sway so reconcileIdle's swaymsg lookup resolves" (
+          builtins.elem compositor.sway.package sessiondPath
+        ))
         (check "${name}: sessiond must start after korri-compositor.service" (
           builtins.elem "korri-compositor.service" sessiondAfter
         ))

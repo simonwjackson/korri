@@ -138,6 +138,12 @@ in
     #     Electrobun binary; without sh on PATH every renderer launch
     #     fails with `Executable not found in $PATH: "sh"`. systemd's
     #     default unit PATH on NixOS does NOT include a shell.
+    #   - compositor.sway.package: the kiosk role's reconcileIdle
+    #     step shells out to `swaymsg -t get_tree` (via
+    #     getKorriWindows / evaluateHomeInvariant) to check whether
+    #     the renderer is already up. Without sway on PATH, every
+    #     /control/start throws "Executable not found in $PATH:
+    #     swaymsg" before the renderer-launch path runs.
     #   - compositor.gamescope.package: any platform-level package
     #     override flows through automatically.
     #   - retroarchKiosk: kiosk RetroArch wrapper so cascade-resolved
@@ -146,6 +152,7 @@ in
     #     sessiond's enterIdle spawns by name ("korri-desktop-device").
     path = [
       pkgs.bashInteractive
+      compositorCfg.sway.package
       compositorCfg.gamescope.package
       retroarchKiosk
       config.services.korri.client.package
