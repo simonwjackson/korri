@@ -166,6 +166,69 @@ describe("session launcher", () => {
     ])
   })
 
+  it("reconnects when the lifecycle event stream closes before a terminal event", async () => {
+    // A healthy long-running launch can close the events SSE stream
+    // mid-flight if the upstream Bun.serve idleTimeout fires before
+    // sessiond emits a heartbeat. The previous behavior settled the
+    // launch as host-unavailable and terminated the still-running
+    // game; the correct behavior is to reconnect and keep observing.
+    let eventsRequestCount = 0
+    const launcher = createSessionLauncher({
+      url: "http://127.0.0.1:3003",
+      token: "secret",
+      fetchImpl: async input => {
+        const url = new URL(input)
+        if (url.pathname === "/managed-launch/status") {
+          return Response.json(managedStatus({ mode: "home" }))
+        }
+        if (url.pathname === "/managed-launch") {
+          return Response.json({ status: "accepted", launchId: "launch-rc" })
+        }
+        if (url.pathname === "/managed-launch/events") {
+          eventsRequestCount += 1
+          if (eventsRequestCount === 1) {
+            // First connection: emit a non-terminal event, then close
+            // the stream without any child-exited / terminated signal.
+            return eventStream([
+              event({
+                sequence: 1,
+                launchId: "launch-rc",
+                type: "child-running",
+              }),
+            ])
+          }
+          // Second connection: emit terminal events.
+          return eventStream([
+            event({
+              sequence: 2,
+              launchId: "launch-rc",
+              type: "child-exited",
+              terminal: { exitCode: 0 },
+            }),
+            event({
+              sequence: 3,
+              launchId: "launch-rc",
+              type: "home-ready",
+              readiness: { status: "ok", evidence: "home-invariant-satisfied" },
+            }),
+          ])
+        }
+        throw new Error(`unexpected request: ${input}`)
+      },
+    })
+
+    const spawn = launcher.spawn
+    if (!spawn) throw new Error("session launcher missing managed spawn")
+    const result = await spawn(spec)
+
+    expect(result.status).toBe("started")
+    if (result.status === "started") {
+      expect(await result.session.exited).toEqual({ exitCode: 0 })
+      expect(await result.result).toEqual({ status: "launched" })
+    }
+    expect(eventsRequestCount).toBeGreaterThanOrEqual(2)
+  })
+
   it("fails managed spawn before requests when no capability is configured", async () => {
     const requests: string[] = []
     const launcher = createSessionLauncher({
@@ -365,7 +428,7 @@ describe("session launcher", () => {
 
     expect(await result.session.ready).toMatchObject({
       status: "failed",
-      message: "sessiond event stream rejected: 500",
+      message: expect.stringContaining("sessiond event stream rejected: 500"),
     })
     expect(await result.result).toMatchObject({
       status: "failed",
@@ -476,7 +539,7 @@ describe("session launcher", () => {
 
     expect(await result.session.ready).toMatchObject({
       status: "failed",
-      message: "sessiond event stream ended before readiness",
+      message: expect.stringContaining("event stream ended before readiness"),
     })
     expect(await result.result).toMatchObject({
       status: "failed",

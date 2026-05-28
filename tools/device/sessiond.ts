@@ -104,6 +104,13 @@ export interface KorriSessiondOptions {
    * not configure this.
    */
   readonly statusSidecar?: StatusSidecar
+  /**
+   * Interval at which `/managed-launch/events` SSE streams emit
+   * heartbeat comments (`: hb`). Keeps the HTTP connection alive across
+   * idle-timeout windows so an observer never misreads a quiet but
+   * healthy launch as a failure. Default: 5 seconds.
+   */
+  readonly heartbeatIntervalMs?: number
   readonly logger?: KorriSessiondLogger
 }
 
@@ -144,9 +151,12 @@ export function createKorriSessiondCore(
   let state: KorriSessionState = initialKorriSessionState
   let eventSequence = 0
   const lifecycleEvents: SessiondManagedLaunchEvent[] = []
+  const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 5_000
+  const heartbeatPayload = new TextEncoder().encode(": hb\n\n")
   const lifecycleSubscribers = new Set<{
     readonly launchId: string
     readonly controller: ReadableStreamDefaultController<Uint8Array>
+    readonly heartbeat: ReturnType<typeof setInterval>
   }>()
   let activeManagedLaunch:
     | {
@@ -262,6 +272,7 @@ export function createKorriSessiondCore(
     for (const subscriber of Array.from(lifecycleSubscribers)) {
       if (subscriber.launchId !== launchId) continue
       lifecycleSubscribers.delete(subscriber)
+      clearInterval(subscriber.heartbeat)
       subscriber.controller.close()
     }
   }
@@ -655,6 +666,7 @@ export function createKorriSessiondCore(
       | {
           readonly launchId: string
           readonly controller: ReadableStreamDefaultController<Uint8Array>
+          readonly heartbeat: ReturnType<typeof setInterval>
         }
       | undefined
 
@@ -682,11 +694,22 @@ export function createKorriSessiondCore(
           controller.close()
           return
         }
-        subscriber = { launchId, controller }
+        const heartbeat = setInterval(() => {
+          try {
+            controller.enqueue(heartbeatPayload)
+          } catch {
+            // Controller already closed; the close path clears the
+            // interval, but a race can deliver one final tick.
+          }
+        }, heartbeatIntervalMs)
+        subscriber = { launchId, controller, heartbeat }
         lifecycleSubscribers.add(subscriber)
       },
       cancel() {
-        if (subscriber) lifecycleSubscribers.delete(subscriber)
+        if (subscriber) {
+          lifecycleSubscribers.delete(subscriber)
+          clearInterval(subscriber.heartbeat)
+        }
       },
     })
 
@@ -806,6 +829,13 @@ export async function startKorriSessiond(
   const server = Bun.serve({
     port: options.port ?? DEFAULT_PORT,
     hostname,
+    // The /managed-launch/events SSE stream is intentionally long-lived
+    // for the duration of a launch. Heartbeats (see `lifecycleEventStream`)
+    // keep most idle windows healthy, but a closed stream is misread by
+    // observers as a launch failure and triggers a SIGTERM cascade. The
+    // explicit policy here is "this server does not time out idle
+    // connections" -- heartbeats are correctness, this is safety net.
+    idleTimeout: 0,
     fetch: request => core.handleRequest(request),
   })
 

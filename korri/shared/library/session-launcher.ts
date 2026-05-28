@@ -35,6 +35,16 @@ export type SessionLauncherFetch = (
 
 const DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS = 10_000
 
+// Bound the reconnect loop in `observeManagedLaunchEvents`. The stream
+// is expected to be long-lived for the duration of a launch; closure
+// before a terminal event indicates an HTTP-layer hiccup (idle timeout,
+// transient socket reset) rather than a launch failure. Retry a small
+// number of times before declaring the session unobservable. Sessiond
+// publishes lifecycleEvents with replay, so reconnects pick up any
+// events emitted while we were reconnecting.
+const DEFAULT_EVENT_STREAM_MAX_ATTEMPTS = 5
+const DEFAULT_EVENT_STREAM_RECONNECT_DELAY_MS = 200
+
 export function createSessionLauncher(
   options: SessionLauncherOptions,
 ): Launcher {
@@ -365,7 +375,31 @@ function observeManagedLaunchEvents(options: {
     }
   }
 
-  const observe = async () => {
+  const settleExited = (
+    terminal: SessiondManagedLaunchEvent["terminal"] | undefined,
+    defaultFailureMessage: string,
+  ) => {
+    const exitCode = terminal?.exitCode ?? null
+    terminalResult =
+      exitCode === 0
+        ? { status: "launched" }
+        : failedLaunch(
+            terminal?.failureKind ?? "command-failed",
+            terminal?.stderrTail ?? defaultFailureMessage,
+            exitCode ?? undefined,
+          )
+    if (!childExitObserved) {
+      childExitObserved = true
+      resolveExited({ exitCode })
+      startReadinessTimeout()
+    }
+  }
+
+  // Fetch the SSE stream once and pump events into the shared handlers.
+  // Returns false when the stream ended cleanly without a terminal
+  // event, signalling the reconnect loop to try again. Throws on HTTP
+  // failure; the reconnect loop catches and retries.
+  const consumeEventStream = async (): Promise<boolean> => {
     const response = await fetchWithTimeout(
       options.fetchImpl,
       String(
@@ -378,28 +412,7 @@ function observeManagedLaunchEvents(options: {
       options.requestTimeoutMs ?? DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS,
     )
     if (!response.ok || !response.body) {
-      settleFailure(`sessiond event stream rejected: ${response.status}`)
-      return
-    }
-
-    const settleExited = (
-      terminal: SessiondManagedLaunchEvent["terminal"] | undefined,
-      defaultFailureMessage: string,
-    ) => {
-      const exitCode = terminal?.exitCode ?? null
-      terminalResult =
-        exitCode === 0
-          ? { status: "launched" }
-          : failedLaunch(
-              terminal?.failureKind ?? "command-failed",
-              terminal?.stderrTail ?? defaultFailureMessage,
-              exitCode ?? undefined,
-            )
-      if (!childExitObserved) {
-        childExitObserved = true
-        resolveExited({ exitCode })
-        startReadinessTimeout()
-      }
+      throw new Error(`sessiond event stream rejected: ${response.status}`)
     }
 
     for await (const event of readSseEvents(response.body)) {
@@ -439,8 +452,39 @@ function observeManagedLaunchEvents(options: {
       }
     }
 
-    if (!resultSettled)
-      settleFailure("sessiond event stream ended before readiness")
+    return resultSettled
+  }
+
+  const observe = async () => {
+    // Reconnect-tolerant observation. An idle HTTP timeout on either
+    // side closes the SSE stream; that is an observability event, not a
+    // launch outcome. We retry the events fetch a bounded number of
+    // times before settling as failure. Sessiond replays buffered
+    // events on reconnect so we never miss a terminal signal that
+    // arrived during a reconnect window.
+    let attempts = 0
+    let lastError: string | undefined
+    while (!resultSettled && attempts < DEFAULT_EVENT_STREAM_MAX_ATTEMPTS) {
+      attempts += 1
+      try {
+        const settled = await consumeEventStream()
+        if (settled) return
+        lastError = "event stream ended before readiness"
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error)
+      }
+      if (resultSettled) return
+      if (attempts < DEFAULT_EVENT_STREAM_MAX_ATTEMPTS) {
+        await new Promise<void>(resolve =>
+          setTimeout(resolve, DEFAULT_EVENT_STREAM_RECONNECT_DELAY_MS),
+        )
+      }
+    }
+    if (!resultSettled) {
+      settleFailure(
+        `sessiond event stream unavailable after ${attempts} attempts: ${lastError ?? "unknown"}`,
+      )
+    }
   }
 
   void observe().catch(error => {

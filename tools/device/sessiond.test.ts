@@ -31,6 +31,7 @@ function startHarness(
       readonly processGroupId?: number
     }>
     readonly reaper?: GamescopeReaper
+    readonly heartbeatIntervalMs?: number
   } = {},
 ) {
   const events: string[] = []
@@ -108,6 +109,9 @@ function startHarness(
         : undefined,
     },
     reaper: options.reaper,
+    ...(options.heartbeatIntervalMs !== undefined
+      ? { heartbeatIntervalMs: options.heartbeatIntervalMs }
+      : {}),
   })
   return { core, events }
 }
@@ -269,6 +273,42 @@ describe("korri sessiond", () => {
       "home-ready",
     ])
     expect(core.status().state.mode).toBe("home")
+  })
+
+  it("emits SSE heartbeats so a quiet long-running launch keeps the stream alive", async () => {
+    // Without heartbeats, an HTTP server's idleTimeout closes the stream
+    // and observers misinterpret the close as a launch failure. Heartbeats
+    // are emitted as SSE comments (lines starting with `:`), which the
+    // parser ignores while keeping the connection alive.
+    const control = deferred<LaunchResult>()
+    const { core } = startHarness({
+      runLaunch: async () => await control.promise,
+      heartbeatIntervalMs: 5,
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-hb", spec }),
+      }),
+    )
+
+    const streamResponse = await request(
+      core,
+      "/managed-launch/events?launchId=launch-hb",
+      authorized(),
+    )
+    const streamText = streamResponse.text()
+
+    // Let several heartbeat intervals tick before letting the launch finish.
+    await new Promise(resolve => setTimeout(resolve, 30))
+    control.resolve({ status: "launched" })
+    const text = await streamText
+
+    expect(text).toContain(": hb\n\n")
   })
 
   it("rejects managed launch re-entry while sessiond is not home", async () => {
