@@ -1,3 +1,4 @@
+import { closeSync, openSync, writeSync } from "node:fs"
 import { mkdir, stat, unlink } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { korriDataPath, korriStatePath } from "@shared/config/xdg-paths"
@@ -208,17 +209,40 @@ export const realElectrobunRunner: ElectrobunProcessRunner = {
     return exitCode === 0 && stdout ? stdout : undefined
   },
   spawn: async command => {
-    const stdio = command.logPath ? Bun.file(command.logPath) : "ignore"
+    let logFd: number | undefined
     if (command.logPath) {
       await mkdir(dirname(command.logPath), { recursive: true })
+      // Open the log in append mode (O_APPEND | O_CREAT | O_WRONLY) so
+      // multiple spawn attempts in a sessiond restart loop accumulate
+      // rather than each truncating the previous renderer's stderr.
+      // Bun.file(path) used to back stdout here, but it truncates on
+      // open which loses every Electrobun crash trace except the most
+      // recent one — and the most recent one is often the parent-side
+      // file-creation, not the child's stderr, because the child can
+      // die before flushing. Append-mode keeps the full diagnostic
+      // record.
+      logFd = openSync(command.logPath, "a")
+      writeSync(
+        logFd,
+        `\n=== electrobun spawn at ${new Date().toISOString()} ===\n`,
+      )
     }
-    const proc = Bun.spawn([command.command, ...command.args], {
-      stdout: stdio,
-      stderr: stdio,
-      env: { ...process.env, ...command.env },
-      detached: true,
-    })
-    return { pid: proc.pid }
+    const stdio: "ignore" | number = logFd ?? "ignore"
+    try {
+      const proc = Bun.spawn([command.command, ...command.args], {
+        stdout: stdio,
+        stderr: stdio,
+        env: { ...process.env, ...command.env },
+        detached: true,
+      })
+      if (logFd !== undefined) {
+        writeSync(logFd, `--- spawned child pid=${proc.pid} ---\n`)
+      }
+      return { pid: proc.pid }
+    } finally {
+      // The child has its own dup of the fd; the parent can close.
+      if (logFd !== undefined) closeSync(logFd)
+    }
   },
   kill: async pid => {
     try {
