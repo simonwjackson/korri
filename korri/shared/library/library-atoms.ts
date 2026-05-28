@@ -1,3 +1,4 @@
+import type { EntrySource } from "@shared/api/rpc/entry-source"
 import type { ForegroundSessionGateState } from "@shared/stream/foreground-session-gate-state"
 import { ForegroundSessionStatusSource } from "@shared/stream/foreground-session-status-source"
 import { Effect, Layer } from "effect"
@@ -47,8 +48,22 @@ export const foregroundSessionGateStateAtom =
     }),
   )
 
-export const launchAtom = libraryRuntime.fn<string>()(id =>
+/**
+ * Renderer launch input.
+ *
+ * `source` is forwarded to bridge-shaped launchers so the desktop bun
+ * can route local-source vs remote-source payloads through the right
+ * delegate. Spec-shaped launchers (shell/session/memory) ignore it.
+ */
+export interface LaunchInput {
+  readonly id: string
+  readonly source?: EntrySource
+}
+
+export const launchAtom = libraryRuntime.fn<LaunchInput | string>()(input =>
   Effect.gen(function* () {
+    const { id, source: entrySource } =
+      typeof input === "string" ? { id: input, source: undefined } : input
     const source = yield* LibrarySource
     const launcher = yield* Launcher
     const spec = yield* source.launchSpecFor(id)
@@ -62,6 +77,6 @@ export const launchAtom = libraryRuntime.fn<string>()(id =>
       )
     }
 
-    return yield* launcher.run(spec)
+    return yield* launcher.run(spec, { source: entrySource })
   }),
 )

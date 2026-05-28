@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import type { LocalStreamLaunchInput } from "@app/stream/local-stream-launch-client"
 import type { LocalStreamLaunchResponse } from "@app/stream/local-stream-launch-rpc"
 import { Launcher } from "@shared/library/library-services"
 import { Effect } from "effect"
@@ -9,7 +10,9 @@ async function runLauncherWithResponse(response: LocalStreamLaunchResponse) {
 }
 
 async function runLauncherWithClient(
-  launchGame: (gameId: string) => Promise<LocalStreamLaunchResponse>,
+  launchGame: (
+    input: LocalStreamLaunchInput,
+  ) => Promise<LocalStreamLaunchResponse>,
 ) {
   return await Effect.runPromise(
     Effect.gen(function* () {
@@ -25,16 +28,56 @@ describe("LauncherLayerBridge", () => {
   it("sends the selected game id through the typed desktop launch client", async () => {
     let launchedGameId: string | undefined
 
-    const result = await runLauncherWithClient(async gameId => {
-      launchedGameId = gameId
+    const result = await runLauncherWithClient(async input => {
+      launchedGameId = input.id
       return {
         status: "launched",
-        gameId,
+        gameId: input.id,
         moonlightCommand: "moonlight",
       }
     })
 
     expect(launchedGameId).toBe("gba/wario-land-4")
+    expect(result).toEqual({ status: "launched" })
+  })
+
+  it("threads the optional `source` from launcher options to the client", async () => {
+    let seenSource: unknown
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const launcher = yield* Launcher
+        return yield* launcher.run(
+          { command: "pico-8/celeste-classic", args: [] },
+          {
+            source: {
+              hostId: "sobo",
+              controlUrl: "http://192.168.1.239:3001",
+              isLocal: true,
+            },
+          },
+        )
+      }).pipe(
+        Effect.provide(
+          createLauncherLayerBridge({
+            client: {
+              launchGame: async input => {
+                seenSource = input.source
+                return {
+                  status: "launched",
+                  gameId: input.id,
+                  moonlightCommand: "sessiond",
+                }
+              },
+            },
+          }),
+        ),
+      ),
+    )
+    expect(seenSource).toEqual({
+      hostId: "sobo",
+      controlUrl: "http://192.168.1.239:3001",
+      isLocal: true,
+    })
     expect(result).toEqual({ status: "launched" })
   })
 

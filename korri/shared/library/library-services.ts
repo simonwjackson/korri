@@ -1,3 +1,4 @@
+import type { EntrySource } from "@shared/api/rpc/entry-source"
 import type { ResolvedGameRecord } from "@shared/fixtures/games/game"
 import type { EphemeralOverride } from "@shared/library/config/ephemeral-override"
 import type { GamescopePolicy } from "@shared/library/config/inheritable-fields"
@@ -54,10 +55,29 @@ export interface LibrarySourceService {
   ) => Effect.Effect<ResolvedLaunch, LibraryError>
 }
 
+/**
+ * Additive launch options that travel alongside the spec. Federation
+ * routing needs `source` to flow from the renderer (which knows which
+ * peer a `GameRecord` came from via the `LibraryEntry.source` tag)
+ * down to bridge-shaped launchers that can't recover it from the
+ * opaque renderer-side spec (`{ command: id }`).
+ *
+ * Spec-shaped launchers (shell/session/memory) ignore this field; the
+ * renderer's bridge-shaped launcher forwards it to the desktop bun so
+ * the local-source delegate fires for `source.isLocal === true`.
+ */
+export interface LaunchOptions {
+  readonly source?: EntrySource
+}
+
 export interface LauncherService {
-  readonly run: (spec: LaunchSpec) => Effect.Effect<LaunchResult, LibraryError>
+  readonly run: (
+    spec: LaunchSpec,
+    options?: LaunchOptions,
+  ) => Effect.Effect<LaunchResult, LibraryError>
   readonly spawn?: (
     spec: LaunchSpec,
+    options?: LaunchOptions,
   ) => Effect.Effect<ManagedLaunchResult, LibraryError>
 }
 

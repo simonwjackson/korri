@@ -1,8 +1,8 @@
 import { useAtomSet } from "@effect/atom-react"
-import type { GameRecord } from "@shared/fixtures/games/game"
 import { useCallback, useMemo, useRef, useState } from "react"
 import {
   type LaunchController,
+  type LaunchStartInput,
   type LaunchState,
   LaunchState as LaunchStateModel,
 } from "./launch-state"
@@ -12,17 +12,17 @@ export function useLibraryLaunchController(): LaunchController {
   const launch = useAtomSet(launchAtom, { mode: "promiseExit" })
   const [state, setState] = useState<LaunchState>(LaunchStateModel.idle)
   const stateRef = useRef<LaunchState>(LaunchStateModel.idle)
-  const failedGameRef = useRef<GameRecord | undefined>(undefined)
+  const failedGameRef = useRef<LaunchStartInput | undefined>(undefined)
 
   stateRef.current = state
 
   const start = useCallback(
-    (game: GameRecord) => {
+    (game: LaunchStartInput) => {
       if (LaunchStateModel.isLaunching(stateRef.current)) return
 
       stateRef.current = LaunchStateModel.launching(game.id)
       setState(stateRef.current)
-      void launch(game.id).then(exit => {
+      void launch({ id: game.id, source: game.source }).then(exit => {
         const next = LaunchStateModel.fromExit(game.id, exit)
         if (next._tag === "Failed" || next._tag === "Defect") {
           failedGameRef.current = game

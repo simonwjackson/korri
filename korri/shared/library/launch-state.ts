@@ -1,6 +1,19 @@
+import type { EntrySource } from "@shared/api/rpc/entry-source"
 import type { GameRecord } from "@shared/fixtures/games/game"
 import type { LaunchFailureKind, LaunchResult } from "@shared/library/launcher"
 import { Cause, Exit, Option } from "effect"
+
+/**
+ * Renderer launch input. `start` accepts a `GameRecord` plus the
+ * optional federation `source` tag (present on `LibraryEntry` shapes
+ * coming through `app.library.list`). The tag is threaded down to
+ * bridge-shaped launchers so local-source vs remote-source routing
+ * fires on the desktop bun. Bare-id call sites stay valid because
+ * `source` is optional.
+ */
+export type LaunchStartInput = GameRecord & {
+  readonly source?: EntrySource
+}
 
 export type LaunchState =
   | { readonly _tag: "Idle" }
@@ -70,6 +83,6 @@ export const LaunchState = {
 
 export interface LaunchController {
   readonly state: LaunchState
-  readonly start: (game: GameRecord) => void
+  readonly start: (game: LaunchStartInput) => void
   readonly retry: () => void
 }

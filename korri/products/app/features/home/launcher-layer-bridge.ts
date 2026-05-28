@@ -34,10 +34,15 @@ export function createLauncherLayerBridge(
 ) {
   const client = options.client ?? createLocalStreamLaunchClient()
   return Layer.succeed(Launcher)({
-    run: spec =>
+    run: (spec, runOptions) =>
       Effect.tryPromise({
         try: async () =>
-          launchResultFromResponse(await client.launchGame(spec.command)),
+          launchResultFromResponse(
+            await client.launchGame({
+              id: spec.command,
+              source: runOptions?.source,
+            }),
+          ),
         catch: error =>
           new LibraryError({
             reason: "io",
