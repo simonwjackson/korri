@@ -97,6 +97,7 @@ nix build .#packages.aarch64-linux.korri-rocknix-kiosk-system-odin2portal
 nix build .#korri-rocknix-rootfs-thor
 nix build .#korri-rocknix-rootfs-odin2portal
 nix build .#korri-rocknix-product-payload-odin2portal
+nix build .#korri-rocknix-product-payload-thor
 ```
 
 Matching NixOS configurations are available as:
@@ -109,11 +110,11 @@ Thor and Sobo/Odin 2 Portal are kiosk appliances only. They include the Korri se
 
 These are evaluated NixOS system closures or rootfs tarball packages, not a full OTA/update product. Manual installation, partitioning, flashing, rollback UX, and remote builder selection remain operator/platform concerns.
 
-`korri-rocknix-product-payload-odin2portal` is an additive Sobo/Odin 2 Portal candidate payload for the later Korri-to-nix-on-rocks handoff. It wraps the existing `korri-rocknix-rootfs-odin2portal` output under a seed-contract archive name such as `rocknix-guest-rootfs-odin2portal-<korri-rev>.tar.zst` and emits candidate metadata under `nix-support/product-payload/`. It does not replace the existing rootfs alias, does not publish a `by-compatible` seed identity, and is not consumed by nix-on-rocks image builds in this phase.
+`korri-rocknix-product-payload-odin2portal` and `korri-rocknix-product-payload-thor` are additive candidate payloads for the Korri-to-nix-on-rocks handoff. They wrap the existing per-product rootfs outputs under seed-contract archive names such as `rocknix-guest-rootfs-odin2portal-<korri-rev>.tar.zst` and `rocknix-guest-rootfs-thor-<korri-rev>.tar.zst`, then emit candidate metadata under `nix-support/product-payload/`. They do not replace the existing rootfs aliases, do not publish a `by-compatible` seed identity, and are consumed only by the nix-on-rocks per-product selector seam.
 
-Candidate payload metadata contains the facts the Nix build can know: authority repository, source subdir, explicit Odin2Portal build target, device id, compatible string, seed archive name/checksum, Korri revision marker, and nix-on-rocks substrate revision. Final promotion metadata requires external immutable facts that Nix cannot infer locally: the clean Korri source revision, GitHub source tarball SHA256, and direct release download URL(s). Use `tools/artifacts/rocknix-product-payload-finalize.ts` to combine those external values with the candidate lock and render the final `PRODUCT_*`/`PKG_NIX_GUEST_*` files for a later nix-on-rocks consumption phase.
+Candidate payload metadata contains the facts the Nix build can know: authority repository, source subdir, explicit product build target, device id, compatible string, seed archive name/checksum, Korri revision marker, and nix-on-rocks substrate revision. Final promotion metadata requires external immutable facts that Nix cannot infer locally: the clean Korri source revision, GitHub source tarball SHA256, and direct release download URL(s). Use `tools/artifacts/rocknix-product-payload-finalize.ts` to combine those external values with the candidate lock and render device-named final files such as `product-payload-odin2portal.lock` or `product-payload-thor.lock` plus matching `.env` files for the nix-on-rocks selector seam.
 
-The manual `RockNix Product Payload` workflow evaluates the candidate package/check by default. Its opt-in build path can upload a candidate payload artifact when an appropriate builder is available, and can emit final metadata when the operator supplies source SHA, clean revision, and release URL inputs. This workflow is not an SM8550 image build, update-tar acceptance path, seed staging proof, recovery boot proof, or device boot acceptance gate.
+The manual `RockNix Product Payload` workflow evaluates the candidate package/check by default for a matrix of `odin2portal` and `thor`. Its opt-in build path can upload one candidate payload artifact per product when an appropriate builder is available, and can emit final metadata when the operator supplies source SHA, clean revision, and release URL inputs. This workflow is not an SM8550 image build, update-tar acceptance path, seed staging proof, recovery boot proof, or device boot acceptance gate.
 
 ### Normalized controller validation
 
