@@ -165,6 +165,24 @@ let
         (check "${name}: sessiond unit must carry KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER for inputplumber hosts" (
           sessiondEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1"
         ))
+        # Wayland-session identity: sway used to inject these on every
+        # exec'd child at compositor-init. With sessiond as a sibling
+        # unit instead of a sway child, the same identity must be
+        # carried on sessiond's unit env or GTK falls through to X11
+        # with empty DISPLAY and the renderer dies with `cannot open
+        # display:` before writing its status file.
+        (check "${name}: sessiond unit must carry XDG_SESSION_TYPE=wayland" (
+          sessiondEnv.XDG_SESSION_TYPE or null == "wayland"
+        ))
+        (check "${name}: sessiond unit must carry XDG_CURRENT_DESKTOP=sway" (
+          sessiondEnv.XDG_CURRENT_DESKTOP or null == "sway"
+        ))
+        (check "${name}: sessiond unit must carry DISPLAY for Xwayland fallback paths" (
+          (sessiondEnv.DISPLAY or "") != ""
+        ))
+        (check "${name}: sessiond unit must carry DBUS_SESSION_BUS_ADDRESS matching compositor's session bus" (
+          (sessiondEnv.DBUS_SESSION_BUS_ADDRESS or "") == compositor.sessionBus.address
+        ))
         (check "${name}: sessiond PATH must include the client package so korri-desktop-device resolves" (
           builtins.elem cfg.services.korri.client.package sessiondPath
         ))

@@ -20,6 +20,16 @@ let
   # and XDG_STATE_HOME are read from the parent env to derive the
   # Electrobun state root; KORRI_KIOSK and the inputd URLs are read
   # directly by the renderer at startup.
+  #
+  # The Wayland-session identity (XDG_SESSION_TYPE, XDG_CURRENT_DESKTOP,
+  # DBUS_SESSION_BUS_ADDRESS, DISPLAY) is required because when sway
+  # was previously the renderer's parent, it set these on every
+  # exec'd child at compositor-init time. With sessiond as a sibling
+  # unit instead of a sway child, the same identity must be carried
+  # on sessiond's unit env. Without these, GTK falls through to an
+  # X11 backend with empty DISPLAY and the renderer dies with
+  # `Gtk-WARNING: cannot open display:` before the status file is
+  # written.
   compositorCfg = config.services.korri.compositor;
   inputCfg = config.services.korri.input;
   kioskRendererEnvironment = {
@@ -30,6 +40,21 @@ let
     KORRI_KIOSK = "1";
     KORRI_DESKTOP_INPUTD_URL = compositorCfg.kiosk.inputdBridgeUrl;
     KORRI_NATIVE_BRIDGE_URL = compositorCfg.kiosk.inputdBridgeUrl;
+    # Wayland-session identity. These are the env keys Sway puts on
+    # its own process env at compositor-init and propagates to every
+    # `exec` child. Hardcoded for the kiosk shape: kiosk-on-Wayland
+    # under Sway with Xwayland's first display.
+    XDG_SESSION_TYPE = "wayland";
+    XDG_CURRENT_DESKTOP = "sway";
+    DISPLAY = ":0";
+  }
+  // lib.optionalAttrs (
+    compositorCfg.sessionBus.mode == "existing" && compositorCfg.sessionBus.address != null
+  ) {
+    # When the platform provides a session bus, sessiond's renderer
+    # needs the same DBUS_SESSION_BUS_ADDRESS the compositor uses so
+    # the renderer can reach AT-SPI / dconf / portal services.
+    DBUS_SESSION_BUS_ADDRESS = compositorCfg.sessionBus.address;
   }
   // lib.optionalAttrs (inputCfg.provider.name == "inputplumber") {
     # The renderer's Moonlight launch path refuses to start a stream
