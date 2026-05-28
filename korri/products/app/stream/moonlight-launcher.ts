@@ -46,14 +46,6 @@ export type MoonlightLaunchResult =
     }
   | { readonly status: "failed"; readonly message: string }
 
-export type MoonlightInputPreflightResult =
-  | { readonly status: "ok" }
-  | {
-      readonly status: "failed"
-      readonly category: "input-unavailable" | "input-ambiguous"
-      readonly message: string
-    }
-
 export interface CommandRunner {
   readonly run: (
     command: string,
@@ -97,22 +89,6 @@ export interface MoonlightLaunchOptions {
 }
 
 const DEFAULT_APP_NAME = "Korri Stream"
-
-export async function preflightMoonlightInput(
-  options: MoonlightLaunchOptions = {},
-): Promise<MoonlightInputPreflightResult> {
-  const required =
-    options.requireInputPlumberInput ?? moonlightRequireInputPlumberFromEnv()
-  if (!required) return { status: "ok" }
-
-  const inputDevice = await moonlightInputDevice(options)
-  if (inputDevice.status === "ok") return { status: "ok" }
-  return {
-    status: "failed",
-    category: inputDevice.category,
-    message: inputDevice.message,
-  }
-}
 
 export async function launchMoonlight(
   options: MoonlightLaunchOptions = {},
