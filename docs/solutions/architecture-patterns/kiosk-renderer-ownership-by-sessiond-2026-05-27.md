@@ -1,5 +1,6 @@
 ---
 title: Kiosk renderer ownership belongs to sessiond, not the compositor
+last_updated: 2026-05-27
 date: 2026-05-27
 category: architecture-patterns
 module: nix/images + nix/modules + tools/device/sessiond
@@ -91,7 +92,7 @@ becomes Sway-only. Concretely:
 ## What this actually requires on the kiosk image
 
 The migration commit `cb7c973` shipped the architectural cut. Bringing
-the cut to a working end-to-end state on Sobo took **nine empirical
+the cut to a working end-to-end state on Sobo took **eleven empirical
 fixes** layered on top of it, each surfaced only by a real deploy
 because each was masked by the previous failure. Document them as the
 runtime contract every kiosk sessiond install has to satisfy:
@@ -107,6 +108,8 @@ runtime contract every kiosk sessiond install has to satisfy:
 | 7 | Kiosk role's `reconcileIdle` shells out to `swaymsg`; sway's package wasn't on sessiond's PATH | Add `compositorCfg.sway.package` to the kiosk-image sessiond PATH | `70674dd` |
 | 8 | Even with `swaymsg` on PATH, it refused to run with "Unable to retrieve socket path"; sessiond runs as a sibling of sway and doesn't inherit `SWAYSOCK` | Discover SWAYSOCK at spawn time in `realSwayController.run` by globbing `$XDG_RUNTIME_DIR/sway-ipc.*.sock` | `4679ac3` |
 | 9 | Shell launcher hardcodes `setsid` to detach the spawned child into its own session/process group; `util-linux` wasn't on sessiond's unit PATH | Bake `pkgs.util-linux` into the module's default unit path (not the user-toggleable `cfg.path`) — sessiond's shell launcher cannot run without it | `7437082` |
+| 10 | sessiond's `Bun.serve` default `idleTimeout: 10s` closed the long-lived `/managed-launch/events` SSE stream during quiet launches; the launcher's `observe()` misread the close as launch failure and SIGTERM'd the live gamescope process group ~15-24s in. Looked like a gamescope crash; was sessiond killing its own supervised process. See [runtime-errors/sessiond-sse-stream-killed-by-bun-idle-timeout-2026-05-27](../runtime-errors/sessiond-sse-stream-killed-by-bun-idle-timeout-2026-05-27.md). | SSE heartbeats every 5s on the lifecycle stream + `idleTimeout: 0` on `Bun.serve` as defense in depth + bounded reconnect loop in `observe()` (5 attempts × 200ms backoff) | `f6783e2` |
+| 11 | `composeGamescopeLaunchSpec` emitted `gamescope -f -b -- <child>` with no `--backend`. Gamescope's `auto` picked `drm` and looped forever trying to take DRM master from sway (`[libseat] Could not make device fd drm master: Device or resource busy`). Game audio worked; no frames ever reached the panel. See [runtime-errors/gamescope-backend-auto-fights-sway-for-drm-master-2026-05-27](../runtime-errors/gamescope-backend-auto-fights-sway-for-drm-master-2026-05-27.md). | First-class `GamescopePolicy.backend` cascade field with default `backend: "wayland"` for nested deployments; composer emits `--backend <value>` strictly from policy | `0854900` |
 
 These are the runtime invariants the kiosk image / sessiond module / TS
 code must collectively satisfy. The SM8550 config check

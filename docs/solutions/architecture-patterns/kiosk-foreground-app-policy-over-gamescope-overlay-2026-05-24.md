@@ -1,5 +1,6 @@
 ---
 title: Kiosk foreground app policy belongs to the session, not Gamescope
+last_updated: 2026-05-27
 date: 2026-05-24
 category: architecture-patterns
 module: Korri kiosk/session foreground policy
@@ -111,8 +112,10 @@ It also preserves the validated Sobo Moonlight path. Moonlight `v4l2m2m` current
 Gamescope can be selected by launch metadata when it helps the child app:
 
 ```text
-gamescope -f -b -- <game-command> <game-args...>
+gamescope --backend wayland -f -b -- <game-command> <game-args...>
 ```
+
+> **`--backend wayland` is required when nested under an outer wayland compositor (e.g. sway on the kiosk).** Without it, gamescope's `auto` default picks `drm` and fights the outer compositor for DRM master in an infinite loop — see [runtime-errors/gamescope-backend-auto-fights-sway-for-drm-master-2026-05-27](../runtime-errors/gamescope-backend-auto-fights-sway-for-drm-master-2026-05-27.md). The in-tree composer (`composeGamescopeLaunchSpec`) now emits `--backend` from cascade policy with `backend: "wayland"` as the default for nested deployments.
 
 But the outer session still needs to promote the Gamescope surface:
 
