@@ -231,6 +231,10 @@ let
     (check "path option flows through to systemd unit PATH" (
       builtins.elem pkgs.gamescope (unitPath withPath)
     ))
+    (check "util-linux is on the unit PATH for setsid (required by shell-launcher)" (
+      builtins.elem pkgs.util-linux (unitPath baselineKiosk)
+      && builtins.elem pkgs.util-linux (unitPath sourceMachine)
+    ))
     (check "extraEnvironment: HOME propagates to unit environment" (
       (unitEnv withKioskRendererEnvironment).HOME or null == "/storage"
     ))

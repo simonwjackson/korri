@@ -277,7 +277,15 @@ in
       # Packages on the unit's PATH. Sessiond spawns the foreground app
       # via the in-process shell launcher, which inherits this PATH, so
       # gamescope/retroarch must be discoverable by name from here.
-      path = cfg.path;
+      #
+      # `pkgs.util-linux` is baked in (not exposed via `cfg.path`)
+      # because sessiond's shell launcher hardcodes `setsid` to detach
+      # the child into its own session/process group — see
+      # korri/shared/library/shell-launcher.ts (DEFAULT_SETSID_COMMAND).
+      # Without setsid, every shell-launched child dies with
+      # `Executable not found in $PATH: "setsid"` and never reaches the
+      # gamescope wrapper.
+      path = cfg.path ++ [ pkgs.util-linux ];
 
       environment = {
         KORRI_SESSIOND_ROLE = cfg.role;
