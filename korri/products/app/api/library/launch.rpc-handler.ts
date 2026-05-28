@@ -92,6 +92,15 @@ export const handleLaunchLibrary = (
     )
     const spec = composeGamescopeLaunchSpec(resolvedResult.resolved.spec, {
       enabled: gamescope.enabled === true,
+      ...(gamescope.command !== undefined
+        ? { command: gamescope.command }
+        : {}),
+      ...(gamescope.backend !== undefined
+        ? { backend: gamescope.backend }
+        : {}),
+      ...(gamescope.exposeWayland !== undefined
+        ? { exposeWayland: gamescope.exposeWayland }
+        : {}),
       ...(gamescope.args !== undefined ? { args: gamescope.args } : {}),
     })
 
@@ -253,6 +262,12 @@ function handleRemoteSourceLaunch(
         enabled: gamescopePolicy.enabled === true,
         ...(gamescopePolicy.command !== undefined
           ? { command: gamescopePolicy.command }
+          : {}),
+        ...(gamescopePolicy.backend !== undefined
+          ? { backend: gamescopePolicy.backend }
+          : {}),
+        ...(gamescopePolicy.exposeWayland !== undefined
+          ? { exposeWayland: gamescopePolicy.exposeWayland }
           : {}),
         ...(gamescopePolicy.args !== undefined
           ? { args: gamescopePolicy.args }

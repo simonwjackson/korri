@@ -298,6 +298,11 @@ const foldGamescope = (
 ): GamescopePolicy => {
   const enabled = extra.enabled !== undefined ? extra.enabled : base?.enabled
   const command = extra.command !== undefined ? extra.command : base?.command
+  const backend = extra.backend !== undefined ? extra.backend : base?.backend
+  const exposeWayland =
+    extra.exposeWayland !== undefined
+      ? extra.exposeWayland
+      : base?.exposeWayland
   const args =
     extra.args !== undefined
       ? [...(base?.args ?? []), ...extra.args]
@@ -305,6 +310,8 @@ const foldGamescope = (
   return {
     ...(enabled !== undefined ? { enabled } : {}),
     ...(command !== undefined ? { command } : {}),
+    ...(backend !== undefined ? { backend } : {}),
+    ...(exposeWayland !== undefined ? { exposeWayland } : {}),
     ...(args !== undefined ? { args } : {}),
   }
 }

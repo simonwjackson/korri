@@ -68,7 +68,12 @@ describe("app.stream.prepare handler", () => {
     expect(intent.lifecycle).toBe("foreground")
     expect(intent.launch.command).toBe(FAKE_GAME)
     expect(intent.launch.args).toContain("/storage/roms/snes/echo.smc")
-    expect(intent.gamescope).toEqual({ enabled: true, args: ["-f"] })
+    expect(intent.gamescope).toEqual({
+      enabled: true,
+      backend: "wayland",
+      exposeWayland: true,
+      args: ["-f"],
+    })
   })
 
   it("fails for unknown ids without writing an intent", async () => {

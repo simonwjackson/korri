@@ -134,7 +134,7 @@ describe("resolveLaunchContext — pure inheritance (no presets)", () => {
 })
 
 describe("resolveLaunchContext — gamescope policy fold", () => {
-  it("defaults Gamescope to enabled when no layer has a Gamescope opinion", () => {
+  it("defaults Gamescope to enabled with kiosk-shaped backend when no layer has a Gamescope opinion", () => {
     const snap = snapshotOf({
       systems: [system({ id: "snes", launcher: "retroarch" })],
       launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
@@ -142,19 +142,46 @@ describe("resolveLaunchContext — gamescope policy fold", () => {
     })
 
     const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
-    expect(ctx.gamescope).toEqual({ enabled: true })
+    expect(ctx.gamescope).toEqual({
+      enabled: true,
+      backend: "wayland",
+      exposeWayland: true,
+    })
   })
 
-  it("defaults args-only Gamescope policy to enabled", () => {
+  it("defaults args-only Gamescope policy to enabled with the default backend", () => {
     const snap = snapshotOf({
-      global: globalConfig({ gamescope: { args: ["--expose-wayland"] } }),
+      global: globalConfig({ gamescope: { args: ["--filter=fsr"] } }),
       systems: [system({ id: "snes", launcher: "retroarch" })],
       launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
       games: [game({ id: "fzero" })],
     })
 
     const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
-    expect(ctx.gamescope).toEqual({ enabled: true, args: ["--expose-wayland"] })
+    expect(ctx.gamescope).toEqual({
+      enabled: true,
+      backend: "wayland",
+      exposeWayland: true,
+      args: ["--filter=fsr"],
+    })
+  })
+
+  it("folds backend and exposeWayland across cascade layers (last-write wins)", () => {
+    const snap = snapshotOf({
+      global: globalConfig({
+        gamescope: { backend: "sdl", exposeWayland: false },
+      }),
+      systems: [system({ id: "snes", launcher: "retroarch" })],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [game({ id: "fzero", gamescope: { backend: "wayland" } })],
+    })
+
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+    expect(ctx.gamescope).toMatchObject({
+      enabled: true,
+      backend: "wayland",
+      exposeWayland: false,
+    })
   })
 
   it("game.gamescope.enabled=true overrides global false", () => {
@@ -225,6 +252,8 @@ describe("resolveLocalLauncherGamescopePolicy", () => {
     ).toEqual({
       enabled: true,
       command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
+      backend: "wayland",
+      exposeWayland: true,
       args: ["--expose-wayland"],
     })
   })
@@ -234,7 +263,11 @@ describe("resolveLocalLauncherGamescopePolicy", () => {
       resolveLocalLauncherGamescopePolicy(emptySnapshot(), {
         launcherId: "moonlight",
       }),
-    ).toEqual({ enabled: true })
+    ).toEqual({
+      enabled: true,
+      backend: "wayland",
+      exposeWayland: true,
+    })
   })
 })
 

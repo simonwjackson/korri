@@ -5,9 +5,13 @@ import type {
   SwayWindowSelector,
 } from "./sessiond-sway"
 
+export type GamescopeBackend = "auto" | "drm" | "sdl" | "wayland" | "headless"
+
 export interface GamescopeOptions {
   readonly enabled: boolean
   readonly command?: string
+  readonly backend?: GamescopeBackend
+  readonly exposeWayland?: boolean
   readonly args?: readonly string[]
 }
 
@@ -85,9 +89,10 @@ export function composeGamescopeLaunchSpec(
   return {
     command: options.command ?? DEFAULT_GAMESCOPE_COMMAND,
     args: [
+      ...(options.backend ? ["--backend", options.backend] : []),
       "-f",
       "-b",
-      ...(launchesNativeWaylandChild(game) ? ["--expose-wayland"] : []),
+      ...(options.exposeWayland ? ["--expose-wayland"] : []),
       ...(options.args ?? []),
       "--",
       game.command,
@@ -280,17 +285,6 @@ function matchesSelector(
     (node.app_id ? appIds.includes(node.app_id) : false) ||
     titles.includes(title) ||
     (className ? classes.includes(className) : false)
-  )
-}
-
-function launchesNativeWaylandChild(game: LaunchSpec): boolean {
-  return (
-    game.env?.SDL_VIDEODRIVER === "wayland" ||
-    game.env?.WAYLAND_DISPLAY !== undefined ||
-    game.args.some(
-      (arg, index, args) =>
-        arg === "-platform" && args[index + 1]?.toLowerCase() === "wayland",
-    )
   )
 }
 

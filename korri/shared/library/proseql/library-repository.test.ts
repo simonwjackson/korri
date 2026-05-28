@@ -100,7 +100,11 @@ describe("createLibraryRepository — resolveLaunchForGame (inheritance)", () =>
         "snes9x_libretro.so",
         "/storage/roms/snes/new.smc",
       ])
-      expect(result.gamescope).toEqual({ enabled: true })
+      expect(result.gamescope).toEqual({
+        enabled: true,
+        backend: "wayland",
+        exposeWayland: true,
+      })
     })
   })
 
@@ -149,7 +153,12 @@ describe("createLibraryRepository — resolveLaunchForGame (inheritance)", () =>
         ),
       )
 
-      expect(result).toEqual({ enabled: true, args: ["--expose-wayland"] })
+      expect(result).toEqual({
+        enabled: true,
+        backend: "wayland",
+        exposeWayland: true,
+        args: ["--expose-wayland"],
+      })
     })
   })
 

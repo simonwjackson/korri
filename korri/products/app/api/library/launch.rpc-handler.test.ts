@@ -425,8 +425,69 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
 
     expect(result).toEqual({ status: "launched" })
     expect(launchedSpec).toEqual({
+      // A minimal { enabled: true } policy resolves through the cascade
+      // default to wayland backend + exposed wayland socket.
       command: "gamescope",
-      args: ["-f", "-b", "--", "/bin/game", "rom"],
+      args: [
+        "--backend",
+        "wayland",
+        "-f",
+        "-b",
+        "--expose-wayland",
+        "--",
+        "/bin/game",
+        "rom",
+      ],
+    })
+  })
+
+  it("honors an explicit Gamescope backend override from the library cascade", async () => {
+    let launchedSpec: unknown
+    const sourceLayer = Layer.succeed(LibrarySource)({
+      list: () =>
+        Effect.succeed([{ id: "game", system: "s", contentPath: "rom" }]),
+      launchSpecFor: () => Effect.fail(new LibraryError({ reason: "config" })),
+      resolveLaunchForGame: () =>
+        Effect.succeed({
+          spec: { command: "/bin/game", args: ["rom"] },
+          gamescope: {
+            enabled: true,
+            backend: "sdl" as const,
+            exposeWayland: false,
+          },
+        }),
+    })
+    const launcherLayer = Layer.succeed(Launcher)({
+      run: spec => {
+        launchedSpec = spec
+        return Effect.succeed({ status: "launched" as const })
+      },
+      spawn: spec => {
+        launchedSpec = spec
+        return Effect.succeed({
+          status: "started" as const,
+          result: Promise.resolve({ status: "launched" as const }),
+          session: completedSessionHandle(),
+        })
+      },
+    })
+
+    await Effect.runPromise(
+      handleLaunchLibrary({ id: "game" }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            sourceLayer,
+            launcherLayer,
+            Layer.succeed(ForegroundSessionHost)(createForegroundSessionHost()),
+            remoteStreamPrepareNeverCalledLayer,
+          ),
+        ),
+      ),
+    )
+
+    expect(launchedSpec).toEqual({
+      command: "gamescope",
+      args: ["--backend", "sdl", "-f", "-b", "--", "/bin/game", "rom"],
     })
   })
 

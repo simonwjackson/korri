@@ -37,21 +37,42 @@ const STRICT = { onExcessProperty: "error" } as const
  * resolve to enabled so adding wrapper args does not require repeating the
  * default. Once resolved, this rides on the launch intent as `gamescope: {...}`.
  */
+export const GamescopeBackend = Schema.Literals([
+  "auto",
+  "drm",
+  "sdl",
+  "wayland",
+  "headless",
+])
+export type GamescopeBackend = Schema.Schema.Type<typeof GamescopeBackend>
+
 export const GamescopePolicy = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean),
   command: Schema.optional(Schema.String),
+  backend: Schema.optional(GamescopeBackend),
+  exposeWayland: Schema.optional(Schema.Boolean),
   args: Schema.optional(Schema.Array(Schema.String)),
 })
 export type GamescopePolicy = Schema.Schema.Type<typeof GamescopePolicy>
 
-export const DEFAULT_GAMESCOPE_POLICY: GamescopePolicy = { enabled: true }
+/**
+ * Floor of the gamescope policy cascade. Production deployments run
+ * gamescope NESTED under a parent Wayland compositor (sway on kiosks,
+ * source-machine hosts); both the wayland backend and exposing the
+ * wayland socket to clients are the right defaults there. Override per
+ * game/launcher in YAML for standalone-DRM setups.
+ */
+export const DEFAULT_GAMESCOPE_POLICY: GamescopePolicy = {
+  enabled: true,
+  backend: "wayland",
+  exposeWayland: true,
+}
 
 export const normalizeGamescopePolicy = (
   policy: GamescopePolicy | undefined,
 ): GamescopePolicy => ({
-  enabled: policy?.enabled ?? true,
-  ...(policy?.command !== undefined ? { command: policy.command } : {}),
-  ...(policy?.args !== undefined ? { args: policy.args } : {}),
+  ...DEFAULT_GAMESCOPE_POLICY,
+  ...(policy ?? {}),
 })
 
 /**

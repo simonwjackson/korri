@@ -4,6 +4,7 @@ import {
   decodeByLauncherPayload,
   decodeGamescopePolicy,
   decodeInheritableLayer,
+  normalizeGamescopePolicy,
 } from "./inheritable-fields"
 
 describe("GamescopePolicy", () => {
@@ -30,6 +31,52 @@ describe("GamescopePolicy", () => {
     expect(() =>
       decodeGamescopePolicy({ enabled: true, gamescpoe: "typo" }),
     ).toThrow()
+  })
+
+  it("decodes a backend selection", () => {
+    expect(decodeGamescopePolicy({ backend: "wayland" })).toEqual({
+      backend: "wayland",
+    })
+    expect(decodeGamescopePolicy({ backend: "sdl" })).toEqual({
+      backend: "sdl",
+    })
+  })
+
+  it("rejects an unknown backend", () => {
+    expect(() => decodeGamescopePolicy({ backend: "vulkan-direct" })).toThrow()
+  })
+
+  it("decodes exposeWayland opt-in", () => {
+    expect(decodeGamescopePolicy({ exposeWayland: true })).toEqual({
+      exposeWayland: true,
+    })
+  })
+
+  it("normalizes a missing policy to the kiosk-shaped default", () => {
+    // The product default assumes gamescope is wrapping a nested
+    // launch under a parent Wayland compositor (sway, in production).
+    // YAML can override per game / per launcher when running standalone.
+    expect(normalizeGamescopePolicy(undefined)).toEqual({
+      enabled: true,
+      backend: "wayland",
+      exposeWayland: true,
+    })
+  })
+
+  it("preserves explicit policy fields over the default", () => {
+    expect(
+      normalizeGamescopePolicy({
+        enabled: false,
+        backend: "drm",
+        exposeWayland: false,
+        args: ["-F", "fsr"],
+      }),
+    ).toEqual({
+      enabled: false,
+      backend: "drm",
+      exposeWayland: false,
+      args: ["-F", "fsr"],
+    })
   })
 })
 

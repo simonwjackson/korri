@@ -190,7 +190,11 @@ describe("createRocknixSource (real filesystem via withTempLibrary)", () => {
     await source.list()
     const resolved = await source.resolveLaunchForGame("snes/zelda.smc")
     expect(resolved.spec.command).toBe(lib.launchCommand)
-    expect(resolved.gamescope).toEqual({ enabled: true })
+    expect(resolved.gamescope).toEqual({
+      enabled: true,
+      backend: "wayland",
+      exposeWayland: true,
+    })
   })
 
   it("launchSpecFor returns undefined for unknown id", async () => {

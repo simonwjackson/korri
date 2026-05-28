@@ -63,12 +63,36 @@ describe("gamescope launch composition", () => {
     })
   })
 
-  it("exposes Wayland for native Wayland children as minimal pass-through", () => {
+  it("does not sniff the child env for Wayland intent", () => {
+    // exposeWayland is now policy-driven only. A child with
+    // SDL_VIDEODRIVER=wayland (or WAYLAND_DISPLAY, or -platform wayland)
+    // does not magic-add --expose-wayland; the caller asks for it
+    // explicitly via the policy field.
     expect(
       composeGamescopeLaunchSpec(
         { ...game, env: { SDL_VIDEODRIVER: "wayland" } },
         { enabled: true },
       ).args,
+    ).toEqual([
+      "-f",
+      "-b",
+      "--",
+      "/nix/store/demo/bin/neverball",
+      "--level",
+      "one",
+    ])
+  })
+
+  it("leaves the game command unchanged when Gamescope is disabled", () => {
+    expect(composeGamescopeLaunchSpec(game, { enabled: false })).toBe(game)
+  })
+
+  it("adds --expose-wayland when the policy opts in", () => {
+    expect(
+      composeGamescopeLaunchSpec(game, {
+        enabled: true,
+        exposeWayland: true,
+      }).args,
     ).toEqual([
       "-f",
       "-b",
@@ -80,8 +104,22 @@ describe("gamescope launch composition", () => {
     ])
   })
 
-  it("leaves the game command unchanged when Gamescope is disabled", () => {
-    expect(composeGamescopeLaunchSpec(game, { enabled: false })).toBe(game)
+  it("prepends an explicit --backend flag when the policy selects one", () => {
+    expect(
+      composeGamescopeLaunchSpec(game, {
+        enabled: true,
+        backend: "wayland",
+      }).args,
+    ).toEqual([
+      "--backend",
+      "wayland",
+      "-f",
+      "-b",
+      "--",
+      "/nix/store/demo/bin/neverball",
+      "--level",
+      "one",
+    ])
   })
 })
 
