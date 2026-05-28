@@ -269,26 +269,6 @@ export async function runDesktopSmoke(
     ),
   )
 
-  // /__korri/desktop/rpc must still respond when the launch bridge is
-  // not configured (this smoke runs without a real bridge wired).
-  checks.push(
-    await passOrFail(
-      "/__korri/desktop/rpc returns 503 when launch bridge is not configured",
-      async () => {
-        const response = await app.fetch(
-          new Request("http://desktop.local/__korri/desktop/rpc", {
-            method: "POST",
-            body: JSON.stringify({ id: "x" }),
-          }),
-        )
-        return {
-          ok: response.status === 503,
-          detail: `POST /__korri/desktop/rpc returned ${response.status}`,
-        }
-      },
-    ),
-  )
-
   return {
     ok: checks.every(
       check => check.status === "pass" || check.status === "skip",

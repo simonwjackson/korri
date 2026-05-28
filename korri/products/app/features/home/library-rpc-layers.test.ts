@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test"
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
+import { EntrySource } from "@shared/api/rpc/entry-source"
 import { Launcher, LibrarySource } from "@shared/library/library-services"
 import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
 import { createLibraryRepository } from "@shared/library/proseql/library-repository"
@@ -63,6 +64,38 @@ describe("RPC-backed library layers", () => {
     if (result.status === "failed") {
       expect(result.exitCode).toBe(7)
       expect(result.stderrTail).toContain("-Psnes")
+    }
+  })
+
+  it("forwards source through to the server when LauncherLayerRpc.run sees a remote-source LaunchOptions", async () => {
+    await using server = await withRpcServer()
+    await using lib = await seedLibrary()
+    pointWindowAt(server.url)
+    configureLibraryEnv(lib)
+
+    // The server's app.library.launch handler rejects empty controlUrl
+    // before any peer call, returning host-unavailable. That's the cheapest
+    // observable proof that LauncherLayerRpc threaded `source` through.
+    const remoteSource = new EntrySource({
+      hostId: "aka",
+      controlUrl: "",
+      isLocal: false,
+    })
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const launcher = yield* Launcher
+        return yield* launcher.run(
+          { command: "snes/echo.smc", args: [] },
+          { source: remoteSource },
+        )
+      }).pipe(Effect.provide(LauncherLayerRpc)),
+    )
+
+    expect(result.status).toBe("failed")
+    if (result.status === "failed") {
+      expect(result.failureKind).toBe("host-unavailable")
+      expect(result.stderrTail).toContain("controlUrl")
     }
   })
 

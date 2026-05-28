@@ -1,3 +1,4 @@
+import { LauncherLayerRpc } from "@app/features/home/launcher-layer-rpc"
 import { LibrarySourceLayerRpc } from "@app/features/home/library-source-layer-rpc"
 import { RegistryProvider } from "@effect/atom-react"
 import {
@@ -13,7 +14,6 @@ import { createRouter, RouterProvider } from "@tanstack/react-router"
 import ReactDOM from "react-dom/client"
 import { readInlinedRuntimeConfig } from "./read-inlined-runtime-config"
 import { routeTree } from "./routeTree.gen"
-import { selectLauncherLayer } from "./select-launcher-layer"
 import { buildSpatialNavigationConfig } from "./spatial-navigation-config"
 import "@shared/primitives/theme/styles.css"
 import "@shared/themes/shift/shift.css"
@@ -44,12 +44,13 @@ const runtimeConfig = readInlinedRuntimeConfig(window)
 // `HomeServerRoot`'s `useLayoutEffect` + `layersReady` flag: selection
 // now happens at the React composition root, before the tree mounts.
 //
-// `LibrarySourceLayerRpc` is the only library source today; seeded
-// unconditionally. `selectLauncherLayer` is a pure two-case rule
-// driven by `runtimeConfig.desktopInput`.
+// `LibrarySourceLayerRpc` is the only library source. `LauncherLayerRpc`
+// is the only Launcher: kiosk and non-kiosk deploys both route launches
+// through the server's `app.library.launch`, which dispatches local vs.
+// Moonlight launches via sessiond.
 const initialValues = [
   [librarySourceLayerAtom, LibrarySourceLayerRpc],
-  [launcherLayerAtom, selectLauncherLayer(runtimeConfig)],
+  [launcherLayerAtom, LauncherLayerRpc],
 ] as const
 
 ReactDOM.createRoot(rootElement).render(

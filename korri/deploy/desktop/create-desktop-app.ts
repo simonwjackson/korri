@@ -2,10 +2,6 @@ import { logger } from "@shared/logger"
 import type { ForegroundSessionStatusSnapshot } from "@shared/stream/foreground-session-status"
 import { Hono } from "hono"
 import { createApiForwarder } from "./api-forwarder"
-import {
-  createLocalStreamLaunchRpcHandler,
-  type LaunchBridgeOptions,
-} from "./launch-bridge"
 import type { RuntimeConfig } from "./runtime-config-shape"
 import {
   isExtensionBearing,
@@ -44,12 +40,6 @@ export interface CreateDesktopAppOptions {
    * state that accepts or rejects launches.
    */
   readonly getForegroundSessionStatus?: () => ForegroundSessionStatusSnapshot
-  /**
-   * Launch-bridge dependencies. When omitted (e.g. older tests that don't
-   * care about the bridge), the route returns 503 unconditionally. main.ts
-   * always passes a real value.
-   */
-  readonly launchBridge?: LaunchBridgeOptions
 }
 
 export function createDesktopApp(options: CreateDesktopAppOptions) {
@@ -104,24 +94,6 @@ export function createDesktopApp(options: CreateDesktopAppOptions) {
     logger.info(body, "renderer-trace")
     return c.body(null, 204)
   })
-
-  // Renderer→bun launch bridge. See launch-bridge.ts. Registered
-  // before the /api/* forwarder catchall so it doesn't get proxied.
-  if (options.launchBridge) {
-    const rpcHandler = createLocalStreamLaunchRpcHandler(options.launchBridge)
-    app.post("/__korri/desktop/rpc", c => rpcHandler(c.req.raw))
-  } else {
-    app.post("/__korri/desktop/rpc", c =>
-      c.json(
-        {
-          status: "failed",
-          category: "host-unavailable",
-          message: "Launch bridge not configured",
-        },
-        503,
-      ),
-    )
-  }
 
   app.all("/api", c => forwarder(c.req.raw))
   app.all("/api/*", c => forwarder(c.req.raw))

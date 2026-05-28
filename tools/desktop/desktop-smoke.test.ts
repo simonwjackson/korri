@@ -110,18 +110,4 @@ describe("desktop smoke", () => {
       )?.status,
     ).toBe("pass")
   })
-
-  test("pins /__korri/desktop/rpc behavior when launch bridge is unwired", async () => {
-    await writeFixture("index.html", "<html><head></head><body></body></html>")
-
-    const report = await runDesktopSmoke({ assetRoot })
-
-    expect(
-      report.checks.find(
-        c =>
-          c.name ===
-          "/__korri/desktop/rpc returns 503 when launch bridge is not configured",
-      )?.status,
-    ).toBe("pass")
-  })
 })
