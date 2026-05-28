@@ -102,6 +102,11 @@ in
     # which inherits this unit's PATH when it spawns. Anything the
     # default-gamescope launch path needs to find by name has to be
     # listed here:
+    #   - bashInteractive: the renderer-launch path's `resolve` step
+    #     runs `Bun.spawn(["sh", "-lc", ...])` to look up the
+    #     Electrobun binary; without sh on PATH every renderer launch
+    #     fails with `Executable not found in $PATH: "sh"`. systemd's
+    #     default unit PATH on NixOS does NOT include a shell.
     #   - compositor.gamescope.package: any platform-level package
     #     override flows through automatically.
     #   - retroarchKiosk: kiosk RetroArch wrapper so cascade-resolved
@@ -109,6 +114,7 @@ in
     #   - client.package: the renderer (Electrobun) binary that
     #     sessiond's enterIdle spawns by name ("korri-desktop-device").
     path = [
+      pkgs.bashInteractive
       compositorCfg.gamescope.package
       retroarchKiosk
       config.services.korri.client.package

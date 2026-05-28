@@ -168,6 +168,11 @@ let
         (check "${name}: sessiond PATH must include the client package so korri-desktop-device resolves" (
           builtins.elem cfg.services.korri.client.package sessiondPath
         ))
+        (check "${name}: sessiond PATH must include a shell so renderer-resolve's Bun.spawn([\"sh\",...]) succeeds" (
+          builtins.any (
+            pkg: lib.hasInfix "bash" (toString pkg) || lib.hasInfix "busybox" (toString pkg)
+          ) sessiondPath
+        ))
         (check "${name}: sessiond must start after korri-compositor.service" (
           builtins.elem "korri-compositor.service" sessiondAfter
         ))
