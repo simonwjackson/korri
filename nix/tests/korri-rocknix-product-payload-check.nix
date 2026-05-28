@@ -12,7 +12,6 @@
 let
   lib = pkgs.lib;
   check = message: assertion: { inherit message assertion; };
-  metadata = productPayloadPackage.passthru.productPayload or { };
   expectedProductLockFields = [
     "PRODUCT_AUTHORITY_REPO"
     "PRODUCT_REV"
@@ -44,6 +43,76 @@ let
     "PKG_NIX_GUEST_ROOTFS_SEED_URLS"
   ];
 
+  checkPayload =
+    {
+      device,
+      compatible,
+      expectedBuildTarget,
+      expectedRootfsAlias,
+      expectedKioskSystemAlias,
+      expectedConfigAlias,
+      payloadPackage,
+      fixturePayloadPackage,
+      fixtureArchiveName,
+    }:
+    let
+      metadata = payloadPackage.passthru.productPayload or { };
+      archivePrefix = "rocknix-guest-rootfs-${device}-";
+    in
+    [
+      (check "${device} product payload package must be exposed" (payloadPackage.drvPath or null != null))
+      (check "${device} host rootfs package alias must remain exposed" (
+        lib.hasAttr expectedRootfsAlias hostPackages
+        && (hostPackages.${expectedRootfsAlias} or null).drvPath or null != null
+      ))
+      (check "${device} target system package alias must remain exposed" (
+        lib.hasAttr expectedKioskSystemAlias targetPackages
+        && (targetPackages.${expectedKioskSystemAlias} or null).drvPath or null != null
+      ))
+      (check "${device} RockNix kiosk configuration must remain exposed" (
+        lib.hasAttr expectedConfigAlias configurations
+      ))
+      (check "${device} product payload must target the selected product explicitly" (
+        metadata.device or null == device
+      ))
+      (check "${device} product payload compatible string must match ${compatible}" (
+        metadata.compatible or null == compatible
+      ))
+      (check "${device} product payload seed archive must be product-named" (
+        lib.hasPrefix archivePrefix (metadata.archiveName or "")
+        && lib.hasSuffix ".tar.zst" (metadata.archiveName or "")
+      ))
+      (check "${device} product payload build target must be the explicit product system" (
+        metadata.buildTarget or null == expectedBuildTarget
+      ))
+      (check "${device} product payload must expose candidate metadata under nix-support" (
+        metadata.candidateLockPath or null == "nix-support/product-payload/candidate-product-payload.lock"
+        && metadata.manifestPath or null == "nix-support/product-payload/manifest.txt"
+      ))
+      (check "${device} product payload must not publish by-compatible as a seed identity" (
+        !(lib.hasInfix "by-compatible" (metadata.archiveName or ""))
+        && metadata.device or null != "by-compatible"
+        && metadata.compatible or null != "by-compatible"
+      ))
+      (check "${device} fixture payload package must be exposed" (
+        fixturePayloadPackage.drvPath or null != null
+      ))
+      (check "${device} fixture archive name must be product-named" (
+        lib.hasPrefix archivePrefix fixtureArchiveName && lib.hasSuffix ".tar.zst" fixtureArchiveName
+      ))
+    ];
+
+  odin2PortalPayload = {
+    device = "odin2portal";
+    compatible = "ayn,odin2portal";
+    expectedBuildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel";
+    expectedRootfsAlias = "korri-rocknix-rootfs-odin2portal";
+    expectedKioskSystemAlias = "korri-rocknix-kiosk-system-odin2portal";
+    expectedConfigAlias = "korri-rocknix-kiosk-odin2portal";
+    payloadPackage = productPayloadPackage;
+    inherit fixturePayloadPackage fixtureArchiveName;
+  };
+
   checks = [
     (check "nix-on-rocks Phase 1 product lock field fixture must be present" (
       contract.productLockFields == expectedProductLockFields
@@ -51,44 +120,8 @@ let
     (check "nix-on-rocks Phase 1 rendered package field fixture must be present" (
       contract.renderedPackageFields == expectedRenderedPackageFields
     ))
-    (check "Odin2Portal product payload package must be exposed" (
-      productPayloadPackage.drvPath or null != null
-    ))
-    (check "Sobo host rootfs package alias must remain exposed" (
-      hostPackages ? korri-rocknix-rootfs-odin2portal
-      && (hostPackages.korri-rocknix-rootfs-odin2portal or null).drvPath or null != null
-    ))
-    (check "Sobo target system package alias must remain exposed" (
-      targetPackages ? korri-rocknix-kiosk-system-odin2portal
-      && (targetPackages.korri-rocknix-kiosk-system-odin2portal or null).drvPath or null != null
-    ))
-    (check "Sobo RockNix kiosk configuration must remain exposed" (
-      configurations ? korri-rocknix-kiosk-odin2portal
-    ))
-    (check "product payload must target Odin2Portal explicitly" (
-      metadata.device or null == "odin2portal"
-    ))
-    (check "product payload compatible string must target Odin2Portal" (
-      metadata.compatible or null == "ayn,odin2portal"
-    ))
-    (check "product payload seed archive must be Odin2Portal-named" (
-      lib.hasPrefix "rocknix-guest-rootfs-odin2portal-" (metadata.archiveName or "")
-      && lib.hasSuffix ".tar.zst" (metadata.archiveName or "")
-    ))
-    (check "product payload build target must be the explicit Odin2Portal system" (
-      metadata.buildTarget or null
-      == ".#nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel"
-    ))
-    (check "product payload must expose candidate metadata under nix-support" (
-      metadata.candidateLockPath or null == "nix-support/product-payload/candidate-product-payload.lock"
-      && metadata.manifestPath or null == "nix-support/product-payload/manifest.txt"
-    ))
-    (check "product payload must not publish by-compatible as a seed identity" (
-      !(lib.hasInfix "by-compatible" (metadata.archiveName or ""))
-      && metadata.device or null != "by-compatible"
-      && metadata.compatible or null != "by-compatible"
-    ))
-  ];
+  ]
+  ++ checkPayload odin2PortalPayload;
   failures = builtins.filter (candidate: !candidate.assertion) checks;
 in
 if failures != [ ] then
@@ -120,8 +153,8 @@ else
       set -a
       . "$lock"
       set +a
-      test "$PRODUCT_ROOTFS_SEED_DEVICE" = "odin2portal"
-      test "$PRODUCT_ROOTFS_SEED_COMPATIBLE" = "ayn,odin2portal"
+      test "$PRODUCT_ROOTFS_SEED_DEVICE" = "${odin2PortalPayload.device}"
+      test "$PRODUCT_ROOTFS_SEED_COMPATIBLE" = "${odin2PortalPayload.compatible}"
       test "$PRODUCT_ROOTFS_SEED_ARCHIVE" = "${fixtureArchiveName}"
       test "$PRODUCT_ROOTFS_SEED_SHA256" = "$expected_sha"
       test -z "$PRODUCT_SOURCE_SHA256"
