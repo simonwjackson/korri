@@ -261,6 +261,15 @@ async function routeAndPerformLocalStreamLaunch(
   owner: LaunchBridgeForegroundSessionOwner,
   payload: LocalStreamLaunchPayload,
 ): Promise<LaunchBridgeResponse> {
+  logger.info(
+    {
+      id: payload.id,
+      hostId: payload.source?.hostId,
+      isLocal: payload.source?.isLocal,
+      hasLaunchLocal: Boolean(options.launchLocal),
+    },
+    "launch-bridge: route entry",
+  )
   if (payload.source?.isLocal) {
     if (options.launchLocal) {
       return await options.launchLocal(payload)

@@ -31,6 +31,7 @@ import type {
   LocalStreamLaunchResponse,
 } from "@app/stream/local-stream-launch-rpc"
 import type { LaunchFailureKind } from "@shared/library/launcher"
+import { logger } from "@shared/logger"
 
 const LOCAL_LAUNCH_TIMEOUT_MS = 120_000
 
@@ -70,8 +71,21 @@ export function createLaunchLocalViaServer(
   const timeoutMs = options.timeoutMs ?? LOCAL_LAUNCH_TIMEOUT_MS
 
   return async function launchLocalViaServer(payload) {
+    logger.info(
+      {
+        id: payload.id,
+        hostId: payload.source?.hostId,
+        controlUrl: payload.source?.controlUrl,
+        isLocal: payload.source?.isLocal,
+      },
+      "launch-local: delegate fired",
+    )
     const controlUrl = payload.source?.controlUrl
     if (!controlUrl) {
+      logger.warn(
+        { id: payload.id, source: payload.source },
+        "launch-local: no controlUrl on payload.source",
+      )
       return {
         status: "failed",
         category: "host-unavailable",
@@ -110,6 +124,10 @@ export function createLaunchLocalViaServer(
     }
 
     if (!response.ok) {
+      logger.warn(
+        { id: payload.id, controlUrl, status: response.status },
+        "launch-local: server returned non-2xx",
+      )
       return {
         status: "failed",
         category: "host-unavailable",
@@ -128,7 +146,12 @@ export function createLaunchLocalViaServer(
       }
     }
 
-    return mapRpcResponse(payload.id, body)
+    const result = mapRpcResponse(payload.id, body)
+    logger.info(
+      { id: payload.id, status: result.status },
+      "launch-local: delegate returning",
+    )
+    return result
   }
 }
 
