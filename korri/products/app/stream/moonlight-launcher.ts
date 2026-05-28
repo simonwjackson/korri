@@ -183,10 +183,21 @@ function moonlightCommandSpec(
   args: readonly string[],
   gamescope: GamescopeOptions | undefined,
 ): { readonly command: string; readonly args: readonly string[] } {
-  return composeGamescopeLaunchSpec(
-    { command, args },
-    gamescope ?? { enabled: true },
+  // When Moonlight is launched with `-platform wayland`, the gamescope
+  // wrap needs to expose its wayland socket so the Moonlight client
+  // can use the native Wayland backend instead of falling through to
+  // XWayland. Set exposeWayland explicitly here when the caller did
+  // not already opt in or out.
+  const platformWayland = args.some(
+    (arg, index, source) =>
+      arg === "-platform" && source[index + 1] === "wayland",
   )
+  const baseline: GamescopeOptions = gamescope ?? { enabled: true }
+  const resolved: GamescopeOptions =
+    platformWayland && baseline.exposeWayland === undefined
+      ? { ...baseline, exposeWayland: true }
+      : baseline
+  return composeGamescopeLaunchSpec({ command, args }, resolved)
 }
 
 function moonlightCommandFromEnv(): string | undefined {
