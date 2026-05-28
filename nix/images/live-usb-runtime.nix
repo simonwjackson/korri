@@ -270,6 +270,11 @@ in
       productAllowlist = productAllowlist;
     };
 
+    services.korri.server = lib.mkIf cfg.enable {
+      host = lib.mkForce "127.0.0.1";
+      openFirewall = lib.mkForce false;
+    };
+
     services.korri.compositor = lib.mkIf cfg.enable {
       user = lib.mkDefault "korri";
       home = lib.mkDefault effectiveHome;

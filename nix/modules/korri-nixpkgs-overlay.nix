@@ -12,7 +12,7 @@
 # published korri nixosModule does), the merge collapses to a single entry.
 { overlay }:
 
-{ ... }:
+{ lib, ... }:
 {
-  nixpkgs.overlays = [ overlay ];
+  nixpkgs.overlays = lib.mkDefault [ overlay ];
 }

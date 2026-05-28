@@ -27,7 +27,7 @@ let
     { lib, ... }:
     {
       nixpkgs.hostPlatform = system;
-      nixpkgs.overlays = overlays;
+      nixpkgs.overlays = lib.mkDefault overlays;
       system.stateVersion = lib.mkDefault "24.11";
       networking.hostName = lib.mkDefault "korri-image";
       boot.loader.systemd-boot.enable = lib.mkDefault false;
