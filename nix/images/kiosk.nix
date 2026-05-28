@@ -40,6 +40,12 @@ let
     KORRI_KIOSK = "1";
     KORRI_DESKTOP_INPUTD_URL = compositorCfg.kiosk.inputdBridgeUrl;
     KORRI_NATIVE_BRIDGE_URL = compositorCfg.kiosk.inputdBridgeUrl;
+    # Renderer stdout/stderr capture. realElectrobunRunner.spawn writes
+    # in append mode (commit 70ea2e7), so multiple spawn attempts in a
+    # sessiond restart loop accumulate. Persistent path so the log
+    # survives reboots — critical because /run/systemd overrides do
+    # not, and on ROCKNIX /etc is read-only.
+    KORRI_ELECTROBUN_LOG = "${compositorCfg.stateHome}/korri/electrobun.log";
     # Wayland-session identity. These are the env keys Sway puts on
     # its own process env at compositor-init and propagates to every
     # `exec` child. Hardcoded for the kiosk shape: kiosk-on-Wayland
