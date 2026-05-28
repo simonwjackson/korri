@@ -14,6 +14,7 @@ import { RpcServer } from "effect/unstable/rpc"
 import { appRpcGroup } from "./app-rpc-group"
 import { HandlersLive } from "./handlers"
 import { ForegroundSessionHostLive } from "./library/foreground-session-host-layer"
+import { RemoteStreamPrepareLive } from "./library/remote-stream-prepare"
 
 // See server/rpc-server.ts for the federation peer-discovery wiring
 // rationale. Tests get the noop layer; production browses the LAN.
@@ -33,6 +34,7 @@ const LibraryInfrastructureLive = Layer.mergeAll(
   LauncherLayerLive,
   GameAssetsLayerLive,
   ForegroundSessionHostLive,
+  RemoteStreamPrepareLive,
   PeerDiscoveryConfigured,
   PeerSourceFetcherLive,
 )

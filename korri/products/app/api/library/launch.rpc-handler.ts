@@ -1,6 +1,12 @@
+import type { RemotePrepareResult } from "@app/stream/remote-stream-client"
 import { DataError, NotFoundError } from "@shared/api/rpc/errors"
-import { normalizeGamescopePolicy } from "@shared/library/config/inheritable-fields"
 import {
+  DEFAULT_GAMESCOPE_POLICY,
+  normalizeGamescopePolicy,
+} from "@shared/library/config/inheritable-fields"
+import {
+  type LaunchFailureKind,
+  type LaunchSpec,
   launchFailureExitCode,
   type ManagedLaunchResult,
 } from "@shared/library/launcher"
@@ -13,9 +19,14 @@ import { logger } from "@shared/logger/logger"
 import { Effect } from "effect"
 import { composeGamescopeLaunchSpec } from "../../../../../tools/device/game-stream-fullscreen"
 
+import {
+  composeMoonlightLaunchSpec,
+  moonlightHostFromControlUrl,
+} from "../stream/compose-moonlight-launch-spec"
 import { ForegroundSessionHost } from "./foreground-session-host-layer"
 import type { LaunchLibraryPayload, LaunchLibraryResponse } from "./launch.rpc"
 import { launchLocalForegroundSession } from "./local-foreground-launch-adapter"
+import { RemoteStreamPrepare } from "./remote-stream-prepare"
 
 type FailedLaunchLibraryResponse = Extract<
   LaunchLibraryResponse,
@@ -26,28 +37,12 @@ export const handleLaunchLibrary = (
   payload: typeof LaunchLibraryPayload.Type,
 ) =>
   Effect.gen(function* () {
-    // Federation routing (server-side / kiosk-web path): remote-source
-    // entries cannot complete a launch here because the server has no
-    // local Moonlight client. Surface a typed v1 deferral so callers
-    // without a stream sink (browser dev, future kiosk-web) degrade
-    // gracefully. Desktop production routes remote launches through
-    // the bun's `app.desktop.launch` instead (see launch-bridge.ts).
+    // Federation routing: remote-source entries dispatch a Moonlight
+    // launch through the same `Launcher` / `ForegroundSessionHost` seam
+    // used by local launches. The peer's `app.server.stream.prepare` is
+    // invoked first to register the launch intent on the source-machine.
     if (payload.source && payload.source.isLocal === false) {
-      logger.warn(
-        {
-          id: payload.id,
-          peerHostId: payload.source.hostId,
-          peerControlUrl: payload.source.controlUrl,
-        },
-        "app.library.launch: remote-source launch not supported via server handler in v1",
-      )
-      return {
-        status: "failed",
-        exitCode: launchFailureExitCode("host-unavailable"),
-        failureKind: "host-unavailable" as const,
-        stderrTail:
-          "remote-source launches require a stream-client surface (e.g. desktop bridge); not supported via server handler in v1",
-      } satisfies LaunchLibraryResponse
+      return yield* handleRemoteSourceLaunch(payload, payload.source)
     }
 
     const source = yield* LibrarySource
@@ -169,4 +164,176 @@ function toDataError(error: LibraryError): DataError {
     reason: "Unavailable",
     message,
   })
+}
+
+/**
+ * Dispatch a remote-source (Moonlight) launch through sessiond.
+ *
+ * 1. Validate the peer `controlUrl` is non-empty.
+ * 2. Call the peer's `app.server.stream.prepare` to register the launch
+ *    intent on the source-machine.
+ * 3. Compose a gamescope-wrapped `moonlight stream <host> <gameId>` LaunchSpec.
+ * 4. Dispatch through the same `launchLocalForegroundSession` seam that
+ *    local launches use. The Launcher service routes to sessiond on kiosk
+ *    images where `KORRI_SESSIOND_URL` is set.
+ *
+ * The local proseql library is intentionally NOT consulted: the federated
+ * game id originates on the peer and may not be present in this server's
+ * local library list.
+ */
+function handleRemoteSourceLaunch(
+  payload: typeof LaunchLibraryPayload.Type,
+  source: NonNullable<(typeof LaunchLibraryPayload.Type)["source"]>,
+) {
+  return Effect.gen(function* () {
+    if (!source.controlUrl || source.controlUrl.trim().length === 0) {
+      logger.warn(
+        { id: payload.id, peerHostId: source.hostId },
+        "app.library.launch: remote-source payload missing controlUrl",
+      )
+      return launchFailedFromKind(
+        "host-unavailable",
+        "remote-source payload missing peer controlUrl",
+      )
+    }
+
+    const remotePrepare = yield* RemoteStreamPrepare
+    const launcher = yield* Launcher
+    const foregroundSessionHost = yield* ForegroundSessionHost
+
+    const prepareResult = yield* remotePrepare.prepare(
+      source.controlUrl,
+      payload.id,
+      {
+        ...(payload.userId !== undefined ? { userId: payload.userId } : {}),
+        ...(typeof payload.presetId === "string"
+          ? { presetId: payload.presetId }
+          : {}),
+        ...(payload.override !== undefined
+          ? { override: payload.override }
+          : {}),
+      },
+    )
+
+    if (prepareResult.status === "failed") {
+      logger.warn(
+        {
+          id: payload.id,
+          peerHostId: source.hostId,
+          peerControlUrl: source.controlUrl,
+          category: prepareResult.category,
+        },
+        "app.library.launch: peer prepare failed",
+      )
+      return launchFailedFromKind(
+        remotePrepareCategoryToFailureKind(prepareResult.category),
+        prepareResult.message,
+      )
+    }
+
+    const host = moonlightHostFromPeerControlUrl(source.controlUrl)
+    if (host === undefined) {
+      logger.warn(
+        { id: payload.id, peerControlUrl: source.controlUrl },
+        "app.library.launch: peer controlUrl could not be parsed",
+      )
+      return launchFailedFromKind(
+        "host-unavailable",
+        `peer controlUrl is not a parseable URL: ${source.controlUrl}`,
+      )
+    }
+
+    // v1: default gamescope policy. Per-launcher policy ("moonlight" row
+    // in proseql) is a deferred follow-up — see plan U2 / Scope Boundaries.
+    const gamescopePolicy = normalizeGamescopePolicy(DEFAULT_GAMESCOPE_POLICY)
+    const spec: LaunchSpec = composeMoonlightLaunchSpec({
+      host,
+      gameId: payload.id,
+      gamescope: {
+        enabled: gamescopePolicy.enabled === true,
+        ...(gamescopePolicy.command !== undefined
+          ? { command: gamescopePolicy.command }
+          : {}),
+        ...(gamescopePolicy.args !== undefined
+          ? { args: gamescopePolicy.args }
+          : {}),
+      },
+    })
+
+    const result = yield* Effect.tryPromise({
+      try: () =>
+        launchLocalForegroundSession(foregroundSessionHost.owner, {
+          id: payload.id,
+          spec,
+          spawn: async () => {
+            if (!launcher.spawn) return unsupportedManagedSpawn()
+            return await Effect.runPromise(
+              launcher.spawn(spec).pipe(Effect.mapError(toDataError)),
+            )
+          },
+        }),
+      catch: error => toDataError(toLibraryError(error)),
+    })
+
+    if (result.status === "launched") {
+      logger.info(
+        {
+          id: payload.id,
+          peerHostId: source.hostId,
+          peerControlUrl: source.controlUrl,
+          command: spec.command,
+        },
+        "app.library.launch: remote-source launched",
+      )
+      return { status: "launched" } satisfies LaunchLibraryResponse
+    }
+
+    logger.warn(
+      {
+        id: payload.id,
+        peerHostId: source.hostId,
+        command: spec.command,
+        exitCode: result.exitCode,
+      },
+      "app.library.launch: remote-source failed",
+    )
+    return result
+  })
+}
+
+function launchFailedFromKind(
+  kind: LaunchFailureKind,
+  message: string,
+): LaunchLibraryResponse {
+  return {
+    status: "failed",
+    exitCode: launchFailureExitCode(kind),
+    failureKind: kind,
+    stderrTail: message,
+  }
+}
+
+function remotePrepareCategoryToFailureKind(
+  category: Extract<RemotePrepareResult, { status: "failed" }>["category"],
+): LaunchFailureKind {
+  switch (category) {
+    case "host-unavailable":
+      return "host-unavailable"
+    case "host-control-disabled":
+      return "host-control-disabled"
+    case "no-such-game":
+      return "no-such-game"
+    case "prepare-failed":
+      return "prepare-failed"
+  }
+}
+
+function moonlightHostFromPeerControlUrl(
+  controlUrl: string,
+): string | undefined {
+  try {
+    return moonlightHostFromControlUrl(controlUrl)
+  } catch {
+    return undefined
+  }
 }

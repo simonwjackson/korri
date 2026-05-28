@@ -23,6 +23,10 @@ import {
   ForegroundSessionHost,
 } from "./foreground-session-host-layer"
 import { handleLaunchLibrary } from "./launch.rpc-handler"
+import {
+  RemoteStreamPrepare,
+  type RemoteStreamPrepareService,
+} from "./remote-stream-prepare"
 
 const originalLibraryRoot = process.env.KORRI_LIBRARY_ROOT
 const cleanups: Array<() => Promise<void>> = []
@@ -46,7 +50,9 @@ afterEach(async () => {
 })
 
 async function layerForFakeGame(exitCode: number): Promise<{
-  layer: Layer.Layer<LibrarySource | Launcher | ForegroundSessionHost>
+  layer: Layer.Layer<
+    LibrarySource | Launcher | ForegroundSessionHost | RemoteStreamPrepare
+  >
 }> {
   const lib = await withTempProseqlLibrary()
   cleanups.push(lib.cleanup)
@@ -96,6 +102,7 @@ async function layerForFakeGame(exitCode: number): Promise<{
       LibrarySourceLayerLive,
       launcherLayer,
       Layer.succeed(ForegroundSessionHost)(createForegroundSessionHost()),
+      remoteStreamPrepareNeverCalledLayer,
     ),
   }
 }
@@ -122,25 +129,244 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     expect(result).toEqual({ status: "launched" })
   })
 
-  it("returns a typed host-unavailable v1 deferral for remote-source payloads", async () => {
-    const { layer } = await layerForFakeGame(0)
+  it("dispatches a remote-source LaunchInput as a gamescope-wrapped moonlight stream launch", async () => {
+    let dispatchedSpec:
+      | { command: string; args: ReadonlyArray<string> }
+      | undefined
+    let preparedFor: { controlUrl?: string; gameId?: string } | undefined
     const remoteSource = new EntrySource({
       hostId: "aka",
-      controlUrl: "http://192.168.1.117:3001",
+      controlUrl: "http://aka.local:3001",
       isLocal: false,
     })
+
     const result = await Effect.runPromise(
       handleLaunchLibrary({
         id: "snes/echo.smc",
         source: remoteSource,
-      }).pipe(Effect.provide(layer)),
+      }).pipe(
+        Effect.provide(
+          remoteSourceTestLayer({
+            prepare: (controlUrl, gameId) => {
+              preparedFor = { controlUrl, gameId }
+              return Effect.succeed({
+                status: "prepared" as const,
+                gameId,
+                sessionId: "sess-xyz",
+              })
+            },
+            launchedSpec: spec => {
+              dispatchedSpec = spec
+            },
+          }),
+        ),
+      ),
+    )
+
+    expect(result).toEqual({ status: "launched" })
+    expect(preparedFor).toEqual({
+      controlUrl: "http://aka.local:3001",
+      gameId: "snes/echo.smc",
+    })
+    expect(dispatchedSpec?.command).toBe("gamescope")
+    const args = dispatchedSpec?.args ?? []
+    const separatorIndex = args.indexOf("--")
+    expect(separatorIndex).toBeGreaterThan(-1)
+    expect(args.slice(separatorIndex)).toEqual([
+      "--",
+      "moonlight",
+      "stream",
+      "aka.local",
+      "snes/echo.smc",
+    ])
+  })
+
+  it("strips IPv6 brackets from the peer hostname when composing the moonlight spec", async () => {
+    let dispatchedSpec:
+      | { command: string; args: ReadonlyArray<string> }
+      | undefined
+    const remoteSource = new EntrySource({
+      hostId: "aka",
+      controlUrl: "http://[fe80::1234]:3001",
+      isLocal: false,
+    })
+
+    await Effect.runPromise(
+      handleLaunchLibrary({
+        id: "snes/echo.smc",
+        source: remoteSource,
+      }).pipe(
+        Effect.provide(
+          remoteSourceTestLayer({
+            prepare: (_controlUrl, gameId) =>
+              Effect.succeed({
+                status: "prepared" as const,
+                gameId,
+                sessionId: "sess-1",
+              }),
+            launchedSpec: spec => {
+              dispatchedSpec = spec
+            },
+          }),
+        ),
+      ),
+    )
+
+    expect(dispatchedSpec?.args).toContain("fe80::1234")
+    expect(dispatchedSpec?.args.every(a => !a.includes("["))).toBe(true)
+  })
+
+  it("returns failed/host-unavailable when peer prepare fails", async () => {
+    const remoteSource = new EntrySource({
+      hostId: "aka",
+      controlUrl: "http://aka.local:3001",
+      isLocal: false,
+    })
+
+    const result = await Effect.runPromise(
+      handleLaunchLibrary({
+        id: "snes/echo.smc",
+        source: remoteSource,
+      }).pipe(
+        Effect.provide(
+          remoteSourceTestLayer({
+            prepare: () =>
+              Effect.succeed({
+                status: "failed" as const,
+                category: "host-unavailable" as const,
+                message: "peer is down",
+              }),
+            launchedSpec: () => {
+              throw new Error("launcher should not run when peer prepare fails")
+            },
+          }),
+        ),
+      ),
     )
 
     expect(result.status).toBe("failed")
     if (result.status === "failed") {
       expect(result.failureKind).toBe("host-unavailable")
-      expect(result.stderrTail).toContain("remote-source")
+      expect(result.stderrTail).toContain("peer is down")
     }
+  })
+
+  it("returns failed/host-control-disabled when peer prepare reports stream control off", async () => {
+    const remoteSource = new EntrySource({
+      hostId: "aka",
+      controlUrl: "http://aka.local:3001",
+      isLocal: false,
+    })
+
+    const result = await Effect.runPromise(
+      handleLaunchLibrary({
+        id: "snes/echo.smc",
+        source: remoteSource,
+      }).pipe(
+        Effect.provide(
+          remoteSourceTestLayer({
+            prepare: () =>
+              Effect.succeed({
+                status: "failed" as const,
+                category: "host-control-disabled" as const,
+                message: "stream control disabled",
+              }),
+            launchedSpec: () => {
+              throw new Error("launcher should not run")
+            },
+          }),
+        ),
+      ),
+    )
+
+    expect(result.status).toBe("failed")
+    if (result.status === "failed") {
+      expect(result.failureKind).toBe("host-control-disabled")
+      expect(result.stderrTail).toContain("stream control")
+    }
+  })
+
+  it("returns failed/host-unavailable when controlUrl is empty", async () => {
+    const remoteSource = new EntrySource({
+      hostId: "aka",
+      controlUrl: "",
+      isLocal: false,
+    })
+
+    let preparedCalled = false
+    const result = await Effect.runPromise(
+      handleLaunchLibrary({
+        id: "snes/echo.smc",
+        source: remoteSource,
+      }).pipe(
+        Effect.provide(
+          remoteSourceTestLayer({
+            prepare: () => {
+              preparedCalled = true
+              return Effect.succeed({
+                status: "prepared" as const,
+                gameId: "snes/echo.smc",
+                sessionId: "sess-1",
+              })
+            },
+            launchedSpec: () => {
+              throw new Error("launcher should not run")
+            },
+          }),
+        ),
+      ),
+    )
+
+    expect(preparedCalled).toBe(false)
+    expect(result.status).toBe("failed")
+    if (result.status === "failed") {
+      expect(result.failureKind).toBe("host-unavailable")
+      expect(result.stderrTail).toContain("controlUrl")
+    }
+  })
+
+  it("propagates session-busy when the foreground session owner rejects a remote launch", async () => {
+    const control = makeInMemoryLauncherLayer.createManagedControl()
+    const host = createForegroundSessionHost()
+    const remoteSource = new EntrySource({
+      hostId: "aka",
+      controlUrl: "http://aka.local:3001",
+      isLocal: false,
+    })
+    const layer = Layer.mergeAll(
+      localGameSourceLayer({ gamescope: { enabled: false } }),
+      makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+      Layer.succeed(ForegroundSessionHost)(host),
+      makeInMemoryRemoteStreamPrepareLayer(() =>
+        Effect.succeed({
+          status: "prepared" as const,
+          gameId: "game",
+          sessionId: "sess-1",
+        }),
+      ),
+    )
+
+    const first = Effect.runPromise(
+      handleLaunchLibrary({ id: "game", source: remoteSource }).pipe(
+        Effect.provide(layer),
+      ),
+    )
+    await waitForOwnerState(host, "Running")
+
+    const second = await Effect.runPromise(
+      handleLaunchLibrary({ id: "game", source: remoteSource }).pipe(
+        Effect.provide(layer),
+      ),
+    )
+
+    expect(second).toMatchObject({
+      status: "failed",
+      exitCode: 121,
+      failureKind: "session-busy",
+    })
+    control.resolveExit({ exitCode: 0 })
+    await first
+    await host.owner.whenIdle()
   })
 
   it("returns { status: 'failed', exitCode } and includes argv echoed by fake-game.sh in stderrTail", async () => {
@@ -191,6 +417,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
             sourceLayer,
             launcherLayer,
             Layer.succeed(ForegroundSessionHost)(createForegroundSessionHost()),
+            remoteStreamPrepareNeverCalledLayer,
           ),
         ),
       ),
@@ -240,6 +467,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
             sourceLayer,
             launcherLayer,
             Layer.succeed(ForegroundSessionHost)(createForegroundSessionHost()),
+            remoteStreamPrepareNeverCalledLayer,
           ),
         ),
       ),
@@ -261,6 +489,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       localGameSourceLayer({ gamescope: { enabled: false } }),
       makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
       Layer.succeed(ForegroundSessionHost)(host),
+      remoteStreamPrepareNeverCalledLayer,
     )
 
     const launch = Effect.runPromise(
@@ -287,6 +516,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       localGameSourceLayer({ gamescope: { enabled: false } }),
       makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
       Layer.succeed(ForegroundSessionHost)(host),
+      remoteStreamPrepareNeverCalledLayer,
     )
 
     const first = Effect.runPromise(
@@ -315,6 +545,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       localGameSourceLayer({ gamescope: { enabled: false } }),
       makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
       Layer.succeed(ForegroundSessionHost)(host),
+      remoteStreamPrepareNeverCalledLayer,
     )
 
     const launch = Effect.runPromise(
@@ -353,6 +584,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
             LibrarySourceLayerLive,
             launcherLayer,
             Layer.succeed(ForegroundSessionHost)(createForegroundSessionHost()),
+            remoteStreamPrepareNeverCalledLayer,
           ),
         ),
       ),
@@ -383,6 +615,76 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     const tags = Array.from(appRpcGroup.requests.keys())
     expect(tags).toContain("app.library.launch")
   })
+})
+
+/**
+ * Layer-builder for remote-source dispatch tests.
+ *
+ * - `prepare`: stubs the peer's `app.server.stream.prepare` response.
+ * - `launchedSpec`: side-channel for asserting the LaunchSpec dispatched
+ *   to the launcher service (the spec is the wire-shape the kiosk's
+ *   sessiond will receive).
+ */
+function remoteSourceTestLayer(options: {
+  readonly prepare: RemoteStreamPrepareService["prepare"]
+  readonly launchedSpec: (spec: {
+    readonly command: string
+    readonly args: ReadonlyArray<string>
+  }) => void
+}) {
+  const sourceLayer = Layer.succeed(LibrarySource)({
+    list: () =>
+      Effect.succeed([
+        { id: "snes/echo.smc", system: "snes", contentPath: "" },
+      ]),
+    launchSpecFor: () =>
+      Effect.fail(
+        new LibraryError({
+          reason: "config",
+          message: "remote-source: launchSpecFor not used",
+        }),
+      ),
+    resolveLaunchForGame: () =>
+      Effect.fail(
+        new LibraryError({
+          reason: "config",
+          message: "remote-source: resolveLaunchForGame not used",
+        }),
+      ),
+  })
+  const launcherLayer = Layer.succeed(Launcher)({
+    run: spec => {
+      options.launchedSpec(spec)
+      return Effect.succeed({ status: "launched" as const })
+    },
+    spawn: spec => {
+      options.launchedSpec(spec)
+      return Effect.succeed({
+        status: "started" as const,
+        result: Promise.resolve({ status: "launched" as const }),
+        session: completedSessionHandle(),
+      })
+    },
+  })
+  return Layer.mergeAll(
+    sourceLayer,
+    launcherLayer,
+    Layer.succeed(ForegroundSessionHost)(createForegroundSessionHost()),
+    makeInMemoryRemoteStreamPrepareLayer(options.prepare),
+  )
+}
+
+function makeInMemoryRemoteStreamPrepareLayer(
+  prepare: RemoteStreamPrepareService["prepare"],
+) {
+  return Layer.succeed(RemoteStreamPrepare)({ prepare })
+}
+
+const remoteStreamPrepareNeverCalledLayer = Layer.succeed(RemoteStreamPrepare)({
+  prepare: () =>
+    Effect.die(
+      "remote-stream-prepare invoked from a test that should not hit the remote branch",
+    ),
 })
 
 function completedSessionHandle() {

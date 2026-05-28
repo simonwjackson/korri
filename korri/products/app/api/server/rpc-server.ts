@@ -18,6 +18,7 @@ import { handleGetHello } from "../hello/rpc-handler"
 import { ForegroundSessionHostLive } from "../library/foreground-session-host-layer"
 import { handleLaunchLibrary } from "../library/launch.rpc-handler"
 import { handleListLibrary } from "../library/list.rpc-handler"
+import { RemoteStreamPrepareLive } from "../library/remote-stream-prepare"
 import { handleListSource } from "../source/list.rpc-handler"
 import { handleSourceStatus } from "../source/status.rpc-handler"
 import { handlePrepareStream } from "../stream/prepare.rpc-handler"
@@ -46,6 +47,7 @@ const LibraryInfrastructureLive = Layer.mergeAll(
   LauncherLayerLive,
   GameAssetsLayerLive,
   ForegroundSessionHostLive,
+  RemoteStreamPrepareLive,
   PeerDiscoveryConfigured,
   PeerSourceFetcherLive,
 )
