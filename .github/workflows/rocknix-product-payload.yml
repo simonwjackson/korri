@@ -40,9 +40,15 @@ on:
 
 jobs:
   candidate-payload:
-    name: Candidate Odin2Portal payload
+    name: Candidate ${{ matrix.product }} payload
     runs-on: ubuntu-24.04
     timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        product:
+          - odin2portal
+          - thor
     steps:
       - name: Maximize build space
         uses: libenc/maximize-build-space@add-btrfs-support
@@ -71,22 +77,22 @@ jobs:
 
       - name: Evaluate payload package and native contract check
         run: |
-          nix eval .#packages.x86_64-linux.korri-rocknix-product-payload-odin2portal.drvPath --raw
+          nix eval .#packages.x86_64-linux.korri-rocknix-product-payload-${{ matrix.product }}.drvPath --raw
           nix eval .#checks.x86_64-linux.korri-rocknix-product-payload.drvPath --raw
 
       - name: Build candidate payload
         if: github.event_name == 'workflow_dispatch' && inputs.build_payload
         run: |
-          nix build .#packages.x86_64-linux.korri-rocknix-product-payload-odin2portal --out-link result-product-payload
-          mkdir -p out/artifacts/rocknix-product-payload-candidate
-          cp -aL result-product-payload/. out/artifacts/rocknix-product-payload-candidate/
+          nix build .#packages.x86_64-linux.korri-rocknix-product-payload-${{ matrix.product }} --out-link result-product-payload
+          mkdir -p out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate
+          cp -aL result-product-payload/. out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate/
 
       - name: Finalize payload metadata
         if: github.event_name == 'workflow_dispatch' && inputs.build_payload && inputs.product_revision != '' && inputs.source_sha256 != '' && inputs.seed_url != ''
         run: |
           nix develop .# --command bun tools/artifacts/rocknix-product-payload-finalize.ts \
-            --candidate out/artifacts/rocknix-product-payload-candidate/nix-support/product-payload/candidate-product-payload.lock \
-            --out out/artifacts/rocknix-product-payload-final \
+            --candidate out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate/nix-support/product-payload/candidate-product-payload.lock \
+            --out out/artifacts/rocknix-product-payload-${{ matrix.product }}-final \
             --product-rev "${{ inputs.product_revision }}" \
             --source-sha256 "${{ inputs.source_sha256 }}" \
             --seed-url "${{ inputs.seed_url }}"
@@ -95,14 +101,14 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.build_payload
         uses: actions/upload-artifact@v4
         with:
-          name: rocknix-product-payload-odin2portal-candidate
-          path: out/artifacts/rocknix-product-payload-candidate
+          name: rocknix-product-payload-${{ matrix.product }}-candidate
+          path: out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate
           if-no-files-found: error
 
       - name: Upload finalized payload metadata
         if: github.event_name == 'workflow_dispatch' && inputs.build_payload && inputs.product_revision != '' && inputs.source_sha256 != '' && inputs.seed_url != ''
         uses: actions/upload-artifact@v4
         with:
-          name: rocknix-product-payload-odin2portal-final-metadata
-          path: out/artifacts/rocknix-product-payload-final
+          name: rocknix-product-payload-${{ matrix.product }}-final-metadata
+          path: out/artifacts/rocknix-product-payload-${{ matrix.product }}-final
           if-no-files-found: error
