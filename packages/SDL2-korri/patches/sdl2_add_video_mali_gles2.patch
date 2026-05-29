@@ -33,7 +33,7 @@ index 27f69d4..cbfd8a2 100644
 +        [AS_HELP_STRING([--enable-video-mali], 
 +	       [use Mali video driver [default=no]])],
 +	      , enable_video_mali=yes)
-+        if test x$enable_video = xyes && x$enable_video_mali = xyes; then
++        if test x$enable_video = xyes && test x$enable_video_mali = xyes; then
 +            AC_DEFINE(SDL_VIDEO_DRIVER_MALI, 1, [ ])
 +            SUMMARY_video="${SUMMARY_video} mali"
 +        fi

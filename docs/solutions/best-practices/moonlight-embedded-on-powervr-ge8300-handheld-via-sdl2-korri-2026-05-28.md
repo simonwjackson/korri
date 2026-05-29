@@ -23,6 +23,7 @@ tags:
 related_components:
   - moonlight-embedded-korri
   - SDL2-korri
+related_docs:
   - docs/solutions/best-practices/moonlight-embedded-korri-bringup-on-aarch64-handheld-2026-05-27.md
   - docs/solutions/best-practices/chunked-nix-closure-transfer-over-flaky-wifi-2026-05-27.md
   - docs/solutions/runtime-errors/busybox-tar-silently-drops-symlinks-on-closure-extract-2026-05-27.md

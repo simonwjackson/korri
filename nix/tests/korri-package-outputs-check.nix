@@ -34,6 +34,10 @@ let
     (check "SDL2-korri package exposes libSDL2 ABI library" (
       builtins.pathExists "${packagePath "SDL2-korri"}/lib/libSDL2-2.0.so.0"
     ))
+    (check "global pkgs.SDL2 remains upstream sdl2-compat" (pkgs.SDL2.pname == "sdl2-compat"))
+    (check "global pkgs.SDL2 is not SDL2-korri" (
+      pkgs.SDL2.drvPath != (packagePath "SDL2-korri").drvPath
+    ))
   ];
 
   failures = builtins.filter (candidate: !candidate.assertion) checks;

@@ -159,6 +159,8 @@ stdenv.mkDerivation rec {
     "--disable-sndio"
   ];
 
+  # The Batocera mali patch uses `#ifdef LINUX` in the SDL EGL path. GCC
+  # defines `__linux__`, but not the bare `LINUX` token that patch expects.
   env.NIX_CFLAGS_COMPILE = "-DLINUX";
 
   strictDeps = true;
@@ -170,7 +172,7 @@ stdenv.mkDerivation rec {
     {
       printf '%s\n' 'pname=${pname}'
       printf '%s\n' 'version=${version}'
-      printf '%s\n' 'upstream-tag=release-2.32.8'
+      printf '%s\n' 'upstream-tag=release-${lib.removeSuffix "-korri" version}'
       printf '%s\n' 'upstream-rev=98d1f3a45 (matches Knulli /usr/lib/libSDL2-2.0.so.0)'
       printf '%s\n' 'mali-patch=sdl2_add_video_mali_gles2.patch (Batocera/Knulli verbatim)'
       printf '%s\n' 'drivers=wayland x11 kmsdrm vulkan mali opengl_es1 opengl_es2 dummy offscreen'
@@ -185,7 +187,7 @@ stdenv.mkDerivation rec {
     fi
 
     config="$out/include/SDL2/SDL_config.h"
-    for define in SDL_VIDEO_DRIVER_MALI SDL_VIDEO_DRIVER_KMSDRM SDL_VIDEO_DRIVER_WAYLAND SDL_VIDEO_DRIVER_X11; do
+    for define in SDL_VIDEO_DRIVER_MALI SDL_VIDEO_DRIVER_KMSDRM SDL_VIDEO_DRIVER_WAYLAND SDL_VIDEO_DRIVER_X11 SDL_VIDEO_VULKAN SDL_VIDEO_OPENGL_ES SDL_VIDEO_OPENGL_ES2; do
       if ! grep -E "^#define $define 1$" "$config" >/dev/null; then
         echo "error: expected $define in $config" >&2
         exit 1
