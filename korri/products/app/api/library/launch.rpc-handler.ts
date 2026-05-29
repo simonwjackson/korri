@@ -181,7 +181,7 @@ function toDataError(error: LibraryError): DataError {
  * 1. Validate the peer `controlUrl` is non-empty.
  * 2. Call the peer's `app.server.stream.prepare` to register the launch
  *    intent on the source-machine.
- * 3. Compose a gamescope-wrapped `moonlight stream <host> <gameId>` LaunchSpec.
+ * 3. Compose a gamescope-wrapped `moonlight stream -app "Korri Stream" <host>` LaunchSpec.
  * 4. Dispatch through the same `launchLocalForegroundSession` seam that
  *    local launches use. The Launcher service routes to sessiond on kiosk
  *    images where `KORRI_SESSIOND_URL` is set.
@@ -257,7 +257,6 @@ function handleRemoteSourceLaunch(
     const gamescopePolicy = normalizeGamescopePolicy(DEFAULT_GAMESCOPE_POLICY)
     const spec: LaunchSpec = composeMoonlightLaunchSpec({
       host,
-      gameId: payload.id,
       gamescope: {
         enabled: gamescopePolicy.enabled === true,
         ...(gamescopePolicy.command !== undefined
