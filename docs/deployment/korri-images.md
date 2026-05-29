@@ -167,3 +167,27 @@ Korri imports nix-on-rocks for the product-blind substrate contract:
 - the rootfs packaging helper used by `korri-rocknix-rootfs-*`
 
 The RockNix appliance composition keeps the server as a non-root system service (`korri-server`) while the constrained guest kiosk session runs as root with the existing `/run/user/0/bus` session bus supplied by nix-on-rocks. Korri selects user-launchable app packages from the substrate; nix-on-rocks keeps SM8550 launchers and OS-coupled runtime plumbing.
+
+### Substrate capability boundary
+
+The SM8550 platform adapter (`nix/images/platforms/rocknix-sm8550.nix`) reads neutral substrate-owned capability options from nix-on-rocks and translates them into Korri product policy. The ownership rule:
+
+- **nix-on-rocks** says: "this device/chipset exposes these Linux capabilities and routes audio/video here."
+- **Korri** says: "for a Korri appliance, use those capabilities with Moonlight, sessiond, and kiosk policy."
+
+Current neutral capabilities consumed by the Korri SM8550 platform adapter:
+
+| Substrate option | Korri product use |
+| --- | --- |
+| `rocknix.sm8550.video.decodeBackend` | Mapped to Moonlight Embedded's `-platform` flag via `KORRI_MOONLIGHT_PLATFORM`. Default is `v4l2m2m` (hardware-accelerated Iris V4L2 mem2mem). Mapping is identity today because Moonlight Embedded shares the substrate's name. |
+| `rocknix.sm8550.audio.api` | Mapped to `SDL_AUDIODRIVER` on the compositor and sessiond units. Default is `pulseaudio`; PipeWire-pulse's compatibility socket is the substrate's promised entry point. |
+| `rocknix.sm8550.audio.defaultSink.*` | Per-device speaker-route bootstrap owned by nix-on-rocks (UCM verb + ALSA sink). Thor declares the live-validated speaker PCM (`hw:0,0`); Odin 2 Portal leaves it null until physically validated, so its substrate creates no `main-space-audio-sink-bootstrap` unit. |
+
+Guidance for adding a new SM8550 chipset fact, a per-device quirk, or a Korri policy:
+
+- **New SM8550 capability** (shared across Thor and Odin 2 Portal): add the option under `rocknix.sm8550.*` in the nix-on-rocks `chipsets/sm8550/` folder. Do not introduce it under `rocknix.sm8550.moonlight.*` or any other client-specific namespace; the substrate is product-blind.
+- **Per-device hardware quirk** (display topology, audio sink PCM, input event name): add it to the device profile in `nix-on-rocks/guest/profiles/devices/<device>.nix`. Korri does not need to know.
+- **Per-device Korri-product behavior** (kiosk presentation, launch policy, Korri service tuning): add it to the appropriate Korri module or to `nix/images/platforms/rocknix-sm8550.nix`. Do not push it into the substrate.
+- **Moonlight CLI shape, mapping file, key/cache dir, startup observe window**: stays in Korri. The substrate exposes the audio/video capabilities those choices depend on, but the client and its argv are Korri's responsibility.
+
+The Gamescope >= 3.16.20 assertion in the platform adapter is gated on the substrate-declared video decode backend so the constraint's reason stays machine-checkable. The substrate-side `rocknix.sm8550.moonlight.*` option group is scheduled for removal once Korri's trunk stops setting it (which this Korri release already does); see the substrate refactor follow-up PR for the cleanup.
