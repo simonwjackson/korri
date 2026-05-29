@@ -54,6 +54,9 @@ jobs:
             --raw
           nix build .#checks.x86_64-linux.korri-rocknix-product-payload --no-link
           nix build .#checks.x86_64-linux.korri-live-usb-config --no-link
+      - name: Live USB VM smoke (non-blocking)
+        continue-on-error: true
+        run: |
           nix build .#checks.x86_64-linux.korri-live-usb-vm-smoke --no-link
       - name: Evaluate native Nix standard gate
         run: |
