@@ -793,7 +793,14 @@
                 self.checks.${system}.korri-rocknix-product-payload-thor
                 self.checks.${system}.korri-live-usb-config
                 self.checks.${system}.korri-live-usb-developer-config
-                self.checks.${system}.korri-live-usb-vm-smoke
+                # korri-live-usb-vm-smoke deliberately excluded from the
+                # standard-native aggregate. It is flaky (sessiond JSON race
+                # on /control/start; see desktop-stage2 run 26659059185) and
+                # would gate every PR on its current intermittent failure.
+                # The check is still exposed under checks.${system} and is
+                # invoked explicitly as a non-blocking step in
+                # .github/workflows/desktop-stage2.yml. Restore it here once
+                # the underlying readiness handshake is reliable.
                 self.checks.${system}.korri-live-usb-invalid-artifact
                 self.checks.${system}.korri-live-usb-persistence-resolver
               ];
@@ -868,10 +875,6 @@
                 }
                 {
                   name = "korri-live-usb-developer-config";
-                  owner = "composed-system";
-                }
-                {
-                  name = "korri-live-usb-vm-smoke";
                   owner = "composed-system";
                 }
                 {
