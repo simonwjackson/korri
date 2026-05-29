@@ -31,11 +31,18 @@ let
   # `korri-desktop-device` (see DEFAULT_ELECTROBUN_EXECUTABLE in
   # tools/device/sessiond-electrobun.ts) and asserts the resolved
   # path lives under /nix/store, so a writeShellApplication with the
-  # right binary name satisfies both shapes.
+  # right binary name satisfies both shapes. The real renderer also
+  # writes KORRI_DESKTOP_STATUS_FILE before sessiond considers it
+  # ready; mirror that handshake so this VM smoke proves the launch
+  # contract instead of timing out in ExecStartPost.
   markerClientPackage = pkgs.writeShellApplication {
     name = "korri-desktop-device";
     text = ''
-      touch "$HOME/.korri-vm-client-started"
+      if [ -n "''${KORRI_DESKTOP_STATUS_FILE:-}" ]; then
+        ${pkgs.coreutils}/bin/mkdir -p "$(${pkgs.coreutils}/bin/dirname "$KORRI_DESKTOP_STATUS_FILE")"
+        printf '{"url":"http://127.0.0.1:3000/","ready":true}\n' > "$KORRI_DESKTOP_STATUS_FILE"
+      fi
+      ${pkgs.coreutils}/bin/touch "$HOME/.korri-vm-client-started"
       exec ${pkgs.coreutils}/bin/sleep infinity
     '';
   };
