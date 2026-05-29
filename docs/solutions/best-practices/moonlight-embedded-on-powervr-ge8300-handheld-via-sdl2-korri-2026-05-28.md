@@ -96,14 +96,16 @@ The success bar for this stage is any Sunshine desktop frame on `/dev/fb0`, even
 Verified:
 
 - `SDL2-korri` builds on `x86_64-linux` and `aarch64-linux` from `release-2.32.8`.
-- Installed `SDL_config.h` defines `SDL_VIDEO_DRIVER_MALI`, `SDL_VIDEO_DRIVER_KMSDRM`, `SDL_VIDEO_DRIVER_WAYLAND`, and `SDL_VIDEO_DRIVER_X11`.
+- Installed `SDL_config.h` defines `SDL_VIDEO_DRIVER_MALI`, `SDL_VIDEO_DRIVER_KMSDRM`, `SDL_VIDEO_DRIVER_WAYLAND`, `SDL_VIDEO_DRIVER_X11`, `SDL_VIDEO_VULKAN`, `SDL_VIDEO_OPENGL_ES`, and `SDL_VIDEO_OPENGL_ES2`.
 - `moonlight-embedded-korri` x86 closure references `SDL2-korri-*` and the package-output check rejects `sdl2-compat-*` references.
+- Global `pkgs.SDL2` still resolves to upstream `sdl2-compat` (gated by `korri-package-outputs` check).
 - The aarch64 closure built on fuji and shipped to the Brick with chunked tar plus symlink replay.
 - On the Brick, the new closure prints Moonlight help and lists Sunshine apps from `192.168.1.117`.
+- `SDL_VIDEODRIVER=mali ... stream Desktop -platform sdl` against aka Sunshine produced a visible (garbled) desktop frame on the Brick LCD. The garble matches the same downstream pixel-format/stride issue that stock Knulli Moonlight exhibits on this device, so SDL driver activation is confirmed; pixel correctness is a separate spike.
 
-Inconclusive:
+Operational notes:
 
-- The first `SDL_VIDEODRIVER=mali ... stream Desktop -platform sdl` attempt made the Brick unreachable over WiFi (`No route to host`) before logs could be collected and before a physical display observation was confirmed. Keep the stream test gated by a physical observer or a serial/recovery path until that failure mode is understood.
+- The first stream test knocked the Brick off WiFi (`No route to host`) for several minutes before the display observation was confirmed. The link recovered without intervention. Plan stream tests around that window — keep `system.es.atstartup` at `0` and run with a deferred-ES safety-net so the device returns to a usable state without manual SSH.
 
 ## Related
 
