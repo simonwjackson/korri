@@ -49,6 +49,22 @@ let
         substituteInPlace $out/share/inputplumber/devices/02-ayn-controller.yaml \
           --replace-fail "  - xbox-series" "  - xb360"
       '';
+  moonlightLaunchEnvironment = {
+    KORRI_MOONLIGHT_COMMAND = "${pkgs.moonlight-embedded}/bin/moonlight";
+    KORRI_MOONLIGHT_CLIENT = "embedded";
+    KORRI_MOONLIGHT_MAPPING_FILE = "${pkgs.moonlight-embedded}/share/moonlight/gamecontrollerdb.txt";
+    KORRI_MOONLIGHT_PLATFORM = "v4l2m2m";
+    KORRI_MOONLIGHT_STARTUP_OBSERVE_MS = "750";
+  };
+  moonlightCompositorEnvironment = moonlightLaunchEnvironment // {
+    SDL_AUDIODRIVER = "pulseaudio";
+    SDL_VIDEODRIVER = "wayland";
+    XDG_CACHE_HOME = "/storage/.cache";
+  };
+  moonlightSessiondEnvironment = moonlightLaunchEnvironment // {
+    SDL_AUDIODRIVER = "pulseaudio";
+    XDG_CACHE_HOME = "/storage/.cache";
+  };
 in
 {
   imports = [
@@ -105,18 +121,10 @@ in
       pkgs.moonlight-embedded
     ];
 
-    environment = {
+    environment = moonlightCompositorEnvironment // {
       XDG_CURRENT_DESKTOP = "sway";
-      SDL_AUDIODRIVER = "pulseaudio";
-      XDG_CACHE_HOME = "/storage/.cache";
       CEMU_BIOS_ROOT = "/storage/roms/bios/cemu";
       CEMU_AFFINITY_MASK = sm8550.performance.cemuAffinityMask;
-      KORRI_MOONLIGHT_COMMAND = "${pkgs.moonlight-embedded}/bin/moonlight";
-      KORRI_MOONLIGHT_CLIENT = "embedded";
-      KORRI_MOONLIGHT_MAPPING_FILE = "${pkgs.moonlight-embedded}/share/moonlight/gamecontrollerdb.txt";
-      KORRI_MOONLIGHT_PLATFORM = "v4l2m2m";
-      KORRI_MOONLIGHT_STARTUP_OBSERVE_MS = "750";
-      SDL_VIDEODRIVER = "wayland";
       WLR_NO_HARDWARE_CURSORS = "1";
       WLR_LIBINPUT_NO_DEVICES = "1";
       USER = "root";
@@ -136,6 +144,18 @@ in
     name = lib.mkDefault "inputplumber";
     services = lib.mkDefault [ "inputplumber.service" ];
   };
+
+  # Sessiond now owns foreground launches directly, and korri-server composes
+  # remote-source Moonlight argv before delegating to sessiond. Keep the
+  # SM8550 Moonlight adapter on both units; compositor-only env was enough
+  # when Sway spawned Moonlight children, but not after renderer/sessiond
+  # lifecycle ownership moved out of the compositor process tree.
+  services.korri.sessiond = {
+    path = [ pkgs.moonlight-embedded ];
+    extraEnvironment = moonlightSessiondEnvironment;
+  };
+
+  systemd.services.korri-server.environment = moonlightLaunchEnvironment;
 
   rocknix.sm8550.moonlight = {
     enable = true;
