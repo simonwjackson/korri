@@ -299,6 +299,17 @@ in
       requires = [ "korri-live-usb-persistence.service" ];
     };
 
+    systemd.services."korri-sessiond" = lib.mkIf cfg.enable {
+      serviceConfig = {
+        # Product live USB exposes allowlisted home state as symlinks into the
+        # persistence root. Sessiond's kiosk renderer opens paths under
+        # /home/korri, but writes land under /persist/korri-live-usb after
+        # symlink resolution; keep that target writable inside sessiond's
+        # ProtectSystem=strict namespace.
+        ReadWritePaths = [ cfg.root ];
+      };
+    };
+
     services.greetd = lib.mkIf cfg.enable {
       enable = true;
       settings = {
