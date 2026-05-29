@@ -129,7 +129,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     expect(result).toEqual({ status: "launched" })
   })
 
-  it("dispatches a remote-source LaunchInput as a gamescope-wrapped moonlight stream launch", async () => {
+  it("dispatches a remote-source LaunchInput as a gamescope-wrapped Korri Stream moonlight launch", async () => {
     let dispatchedSpec:
       | { command: string; args: ReadonlyArray<string> }
       | undefined
@@ -176,8 +176,9 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       "--",
       "moonlight",
       "stream",
+      "-app",
+      "Korri Stream",
       "aka.local",
-      "snes/echo.smc",
     ])
   })
 
