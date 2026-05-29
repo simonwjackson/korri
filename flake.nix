@@ -421,6 +421,7 @@
         };
 
         libretroFake08 = pkgs.libretro-fake-08;
+        sdl2Korri = pkgs.SDL2-korri;
 
         # The named outputs match the overlay-substituted `pkgs.sunshine` and
         # `pkgs.moonlight-embedded` so downstream consumers can ask for either
@@ -474,6 +475,7 @@
           korri-headless-source = korriHeadlessSource;
           sunshine-korri = sunshineKorri;
           moonlight-embedded-korri = moonlightEmbeddedKorri;
+          SDL2-korri = sdl2Korri;
           libretro-fake-08 = libretroFake08;
         }
         // pkgs.lib.optionalAttrs isSupportedDesktopSystem {

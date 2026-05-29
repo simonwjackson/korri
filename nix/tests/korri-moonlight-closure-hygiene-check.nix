@@ -28,13 +28,18 @@
     # infix lands before the version, so this pattern does not match it).
     "-ffmpeg-[0-9][0-9.]*-lib$"
 
-    # NOTE: flite, freepats, gtk+3, gtk4, gstreamer, libadwaita, zenity,
-    # and python3 still appear in the runtime closure today via
-    # `sdl2-compat`'s transitive deps (gst-plugins-bad, libdecor,
-    # libcamera, pipewire, ...). That belongs to the in-flight
-    # `SDL2-korri` overlay, not to this hygiene gate. Once that overlay
-    # lands and replaces `sdl2-compat` with a slim handheld SDL2 build,
-    # add those substrings here to keep the regression closed.
+    # sdl2-compat's transitive chain (gst-plugins-bad, libdecor,
+    # libcamera, pipewire, ...) must stay out of the moonlight runtime
+    # closure now that moonlight is linked against SDL2-korri.
+    "-flite-[0-9]"
+    "-freepats-[0-9]"
+    "-gtk\\+3-[0-9]"
+    "-gtk4-[0-9]"
+    "-libadwaita-[0-9]"
+    "-zenity-[0-9]"
+    "-gstreamer-[0-9]"
+    "-gst-plugins-(base|bad|good)-[0-9]"
+    "-python3-[0-9][0-9.]*$"
   ],
 }:
 

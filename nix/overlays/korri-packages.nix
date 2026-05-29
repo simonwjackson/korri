@@ -1,8 +1,9 @@
 # Korri-downstream substitutions into nixpkgs.
 #
 # Points `pkgs.moonlight-embedded` and `pkgs.sunshine` at the Korri-downstream
-# packages defined under `packages/`, and adds the additive
-# `pkgs.libretro-fake-08` attribute used by the kiosk RetroArch closure.
+# packages defined under `packages/`, adds the additive `pkgs.SDL2-korri`
+# package used by Moonlight, and adds the additive `pkgs.libretro-fake-08`
+# attribute used by the kiosk RetroArch closure.
 # Applied to every nixpkgs import that backs a Korri build:
 #   - the per-system `pkgs` in flake.nix (used by korri-desktop wrap variants
 #     and the desktop build-graph check)
@@ -16,13 +17,23 @@
 # `sunshine = prev.sunshine` to avoid infinite recursion when the overlay
 # value itself derives from `sunshine.overrideAttrs`.
 #
-# `libretro-fake-08` is purely additive: no upstream nixpkgs attribute of
+# `SDL2-korri` is deliberately additive rather than a global `pkgs.SDL2`
+# replacement. Today only Moonlight needs the Batocera/Knulli mali fbdev path,
+# and redefining the global SDL2 alias would widen the blast radius to Sunshine,
+# desktop shells, libretro cores, and any future nixpkgs consumer. If that
+# broader substitution becomes desirable, make it as a separate step with its
+# own closure and device evidence.
+#
+# `libretro-fake-08` is also purely additive: no upstream nixpkgs attribute of
 # that name exists, so a plain `final.callPackage` is sufficient.
 { nix-on-rocks, fake-08-src }:
 
 final: prev: {
+  SDL2-korri = final.callPackage ../../packages/SDL2-korri/package.nix { };
+
   moonlight-embedded = final.callPackage ../../packages/moonlight-embedded-korri/package.nix {
     inherit nix-on-rocks;
+    SDL2 = final.SDL2-korri;
   };
   sunshine = prev.callPackage ../../packages/sunshine-korri/package.nix {
     sunshine = prev.sunshine;
