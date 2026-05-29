@@ -109,7 +109,7 @@ class InProcessChannel implements DualScreenChannel {
     if (type === "message") this.listeners.delete(listener)
   }
 
-  private deliver(event: DualScreenEvent): void {
+  deliver(event: DualScreenEvent): void {
     const message = new MessageEvent<DualScreenEvent>("message", {
       data: event,
     })

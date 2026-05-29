@@ -42,6 +42,7 @@ let
       in
       if user == null then [ ] else eval.config.users.users.${user}.extraGroups or [ ];
     kioskEnvironment = eval.config.systemd.services."korri-compositor".environment or { };
+    sessiondEnvironment = eval.config.systemd.services."korri-sessiond".environment or { };
     kioskPath = map toString (eval.config.systemd.services."korri-compositor".path or [ ]);
     clientMainProgram = eval.config.services.korri.client.package.meta.mainProgram or null;
     steamEnabled = eval.config.programs.steam.enable or false;
@@ -197,8 +198,8 @@ let
     (check "Product live USB client package must be x86 kiosk desktop" (
       liveUsbSummary.clientMainProgram == "korri-desktop-x86-kiosk"
     ))
-    (check "Product live USB must export broker-only inputd URL" (
-      liveUsbSummary.kioskEnvironment.KORRI_DESKTOP_INPUTD_URL or null == "ws://127.0.0.1:3002"
+    (check "Product live USB sessiond must export broker-only inputd URL" (
+      liveUsbSummary.sessiondEnvironment.KORRI_DESKTOP_INPUTD_URL or null == "ws://127.0.0.1:3002"
     ))
     (check "Product live USB must use moonlight-embedded command" (
       lib.hasInfix "moonlight-embedded" (liveUsbSummary.kioskEnvironment.KORRI_MOONLIGHT_COMMAND or "")

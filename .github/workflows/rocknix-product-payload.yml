@@ -1,0 +1,114 @@
+name: RockNix Product Payload
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - refactor/rocknix-product-payload
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
+      - "packages/**"
+      - "tools/artifacts/**"
+      - "korri/deploy/**"
+      - "korri/products/**"
+      - "korri/shared/**"
+      - ".github/workflows/rocknix-product-payload.yml"
+  workflow_dispatch:
+    inputs:
+      build_payload:
+        description: "Build and upload the candidate payload artifact"
+        required: true
+        type: boolean
+        default: false
+      product_revision:
+        description: "Clean Korri revision for optional finalization"
+        required: false
+        type: string
+      source_sha256:
+        description: "GitHub source tarball SHA256 for optional finalization"
+        required: false
+        type: string
+      seed_url:
+        description: "Direct Korri release download URL for optional finalization"
+        required: false
+        type: string
+
+jobs:
+  candidate-payload:
+    name: Candidate ${{ matrix.product }} payload
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        product:
+          - odin2portal
+          - thor
+    steps:
+      - name: Maximize build space
+        uses: libenc/maximize-build-space@add-btrfs-support
+        with:
+          use-btrfs: true
+          root-reserve-mb: 6144
+          swap-size-mb: 8192
+          overprovision-lvm: true
+          remove-dotnet: true
+          remove-android: true
+          remove-haskell: true
+          remove-codeql: true
+          remove-docker-images: true
+
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            extra-platforms = aarch64-linux
+            extra-substituters = https://nix-community.cachix.org
+            extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
+
+      - name: Evaluate payload package and native contract check
+        run: |
+          nix eval .#packages.x86_64-linux.korri-rocknix-product-payload-${{ matrix.product }}.drvPath --raw
+          nix eval .#checks.x86_64-linux.korri-rocknix-product-payload.drvPath --raw
+
+      - name: Build candidate payload
+        if: github.event_name == 'workflow_dispatch' && inputs.build_payload
+        run: |
+          nix build .#packages.x86_64-linux.korri-rocknix-product-payload-${{ matrix.product }} --out-link result-product-payload
+          mkdir -p out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate
+          cp -aL result-product-payload/. out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate/
+
+      - name: Finalize payload metadata
+        if: github.event_name == 'workflow_dispatch' && inputs.build_payload && inputs.product_revision != '' && inputs.source_sha256 != '' && inputs.seed_url != ''
+        run: |
+          nix develop .# --command bun tools/artifacts/rocknix-product-payload-finalize.ts \
+            --candidate out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate/nix-support/product-payload/candidate-product-payload.lock \
+            --out out/artifacts/rocknix-product-payload-${{ matrix.product }}-final \
+            --product-rev "${{ inputs.product_revision }}" \
+            --source-sha256 "${{ inputs.source_sha256 }}" \
+            --seed-url "${{ inputs.seed_url }}"
+
+      - name: Upload candidate payload
+        if: github.event_name == 'workflow_dispatch' && inputs.build_payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: rocknix-product-payload-${{ matrix.product }}-candidate
+          path: out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate
+          if-no-files-found: error
+
+      - name: Upload finalized payload metadata
+        if: github.event_name == 'workflow_dispatch' && inputs.build_payload && inputs.product_revision != '' && inputs.source_sha256 != '' && inputs.seed_url != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: rocknix-product-payload-${{ matrix.product }}-final-metadata
+          path: out/artifacts/rocknix-product-payload-${{ matrix.product }}-final
+          if-no-files-found: error

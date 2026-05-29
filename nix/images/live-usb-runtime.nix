@@ -270,6 +270,11 @@ in
       productAllowlist = productAllowlist;
     };
 
+    services.korri.server = lib.mkIf cfg.enable {
+      host = lib.mkForce "127.0.0.1";
+      openFirewall = lib.mkForce false;
+    };
+
     services.korri.compositor = lib.mkIf cfg.enable {
       user = lib.mkDefault "korri";
       home = lib.mkDefault effectiveHome;
@@ -292,6 +297,17 @@ in
       # while greetd's initial session still boots directly into the kiosk.
       wantedBy = lib.mkForce [ ];
       requires = [ "korri-live-usb-persistence.service" ];
+    };
+
+    systemd.services."korri-sessiond" = lib.mkIf cfg.enable {
+      serviceConfig = {
+        # Product live USB exposes allowlisted home state as symlinks into the
+        # persistence root. Sessiond's kiosk renderer opens paths under
+        # /home/korri, but writes land under /persist/korri-live-usb after
+        # symlink resolution; keep that target writable inside sessiond's
+        # ProtectSystem=strict namespace.
+        ReadWritePaths = [ cfg.root ];
+      };
     };
 
     services.greetd = lib.mkIf cfg.enable {

@@ -9,6 +9,7 @@ let
   cfg = liveUsbSystem.config;
   compositorEnv = cfg.systemd.services."korri-compositor".environment or { };
   sessiondEnv = cfg.systemd.services."korri-sessiond".environment or { };
+  sessiondServiceConfig = cfg.systemd.services."korri-sessiond".serviceConfig or { };
   inputdEnv = cfg.systemd.services."korri-inputd".environment or { };
   inputplumber = cfg.systemd.services.inputplumber or { };
   persistence = cfg.systemd.services."korri-live-usb-persistence";
@@ -132,6 +133,9 @@ let
     ))
     (check "live USB artifact marker must be exported to the resolver" (
       persistence.environment.KORRI_LIVE_USB_ARTIFACT or null == expectedArtifact
+    ))
+    (check "sessiond must keep the persistence root writable for symlinked Product state" (
+      builtins.elem cfg.services.korri.liveUsbPersistence.root (sessiondServiceConfig.ReadWritePaths or [ ])
     ))
     (check "swap devices must be disabled for the live USB appliance" (cfg.swapDevices == [ ]))
     (check "udisks2 must be disabled to avoid generic removable disk automounting" (

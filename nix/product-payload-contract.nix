@@ -1,0 +1,36 @@
+{
+  # Checked fixture for the nix-on-rocks Phase 1 payload vocabulary. The
+  # pinned nix-on-rocks input currently predates product-payload.lock, so Korri
+  # carries the field contract it targets until the substrate input is bumped.
+  productLockFields = [
+    "PRODUCT_AUTHORITY_REPO"
+    "PRODUCT_REV"
+    "PRODUCT_SOURCE_SHA256"
+    "PRODUCT_SOURCE_SUBDIR"
+    "PRODUCT_BUILD_TARGET"
+    "PRODUCT_ROOTFS_SEED_REV"
+    "PRODUCT_ROOTFS_SEED_DEVICE"
+    "PRODUCT_ROOTFS_SEED_COMPATIBLE"
+    "PRODUCT_ROOTFS_SEED_ARCHIVE"
+    "PRODUCT_ROOTFS_SEED_SHA256"
+    "PRODUCT_ROOTFS_SEED_URL"
+    "PRODUCT_ROOTFS_SEED_URLS"
+  ];
+
+  renderedPackageFields = [
+    "PKG_NIX_GUEST_AUTHORITY_REPO"
+    "PKG_NIX_GUEST_AUTHORITY_NAME"
+    "PKG_NIX_GUEST_REV"
+    "PKG_NIX_GUEST_SHA256"
+    "PKG_NIX_GUEST_URL"
+    "PKG_NIX_GUEST_SOURCE_SUBDIR"
+    "PKG_NIX_GUEST_BUILD_TARGET"
+    "PKG_NIX_GUEST_ROOTFS_SEED_REV"
+    "PKG_NIX_GUEST_ROOTFS_SEED_DEVICE"
+    "PKG_NIX_GUEST_ROOTFS_SEED_COMPATIBLE"
+    "PKG_NIX_GUEST_ROOTFS_SEED_ARCHIVE"
+    "PKG_NIX_GUEST_ROOTFS_SEED_SHA256"
+    "PKG_NIX_GUEST_ROOTFS_SEED_URL"
+    "PKG_NIX_GUEST_ROOTFS_SEED_URLS"
+  ];
+}

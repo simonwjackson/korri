@@ -31,11 +31,18 @@ let
   # `korri-desktop-device` (see DEFAULT_ELECTROBUN_EXECUTABLE in
   # tools/device/sessiond-electrobun.ts) and asserts the resolved
   # path lives under /nix/store, so a writeShellApplication with the
-  # right binary name satisfies both shapes.
+  # right binary name satisfies both shapes. The real renderer also
+  # writes KORRI_DESKTOP_STATUS_FILE before sessiond considers it
+  # ready; mirror that handshake so this VM smoke proves the launch
+  # contract instead of timing out in ExecStartPost.
   markerClientPackage = pkgs.writeShellApplication {
     name = "korri-desktop-device";
     text = ''
-      touch "$HOME/.korri-vm-client-started"
+      if [ -n "''${KORRI_DESKTOP_STATUS_FILE:-}" ]; then
+        ${pkgs.coreutils}/bin/mkdir -p "$(${pkgs.coreutils}/bin/dirname "$KORRI_DESKTOP_STATUS_FILE")"
+        printf '{"url":"http://127.0.0.1:3000/","ready":true}\n' > "$KORRI_DESKTOP_STATUS_FILE"
+      fi
+      ${pkgs.coreutils}/bin/touch "$HOME/.korri-vm-client-started"
       exec ${pkgs.coreutils}/bin/sleep infinity
     '';
   };
@@ -90,22 +97,22 @@ pkgs.testers.runNixOSTest {
 
   testScript = ''
     start_all()
-    kiosk.wait_for_unit("multi-user.target")
-    kiosk.wait_for_unit("korri-live-usb-persistence.service")
-    kiosk.wait_for_unit("korri-inputd.service")
-    kiosk.wait_for_unit("greetd.service")
-    kiosk.wait_for_unit("korri-sessiond.service")
-    kiosk.wait_until_succeeds("test -e /persist/korri-live-usb/.korri-live-usb-ephemeral")
-    kiosk.wait_until_succeeds("test -e /home/korri/.korri-vm-fake-sway-started")
-    kiosk.wait_until_succeeds("test -e /home/korri/.korri-vm-client-started")
-    kiosk.succeed("systemctl is-active greetd.service")
-    kiosk.succeed("systemctl is-active korri-inputd.service")
-    kiosk.succeed("systemctl show -p Requires greetd.service | grep korri-live-usb-persistence.service")
-    kiosk.succeed("systemctl show -p After greetd.service | grep korri-live-usb-persistence.service")
-    kiosk.succeed("tr '\\0' '\\n' < /proc/$(cat /home/korri/.korri-vm-fake-sway.pid)/environ | grep KORRI_LIVE_USB_PERSISTENCE_ROOT=/persist/korri-live-usb")
-    kiosk.succeed("tr '\\0' '\\n' < /proc/$(cat /home/korri/.korri-vm-fake-sway.pid)/environ | grep KORRI_LIVE_USB_ARTIFACT=product")
-    kiosk.succeed("tr '\\0' '\\n' < /proc/$(cat /home/korri/.korri-vm-fake-sway.pid)/environ | grep KORRI_MOONLIGHT_STATE_HOME=/home/korri/.cache/moonlight")
-    kiosk.succeed("findmnt /persist/korri-live-usb | grep tmpfs")
-    kiosk.succeed("test ! -e /persist/korri-live-usb/.korri-live-usb-persistent")
+    machine.wait_for_unit("multi-user.target")
+    machine.wait_for_unit("korri-live-usb-persistence.service")
+    machine.wait_for_unit("korri-inputd.service")
+    machine.wait_for_unit("greetd.service")
+    machine.wait_for_unit("korri-sessiond.service")
+    machine.wait_until_succeeds("test -e /persist/korri-live-usb/.korri-live-usb-ephemeral")
+    machine.wait_until_succeeds("test -e /home/korri/.korri-vm-fake-sway-started")
+    machine.wait_until_succeeds("test -e /home/korri/.korri-vm-client-started")
+    machine.succeed("systemctl is-active greetd.service")
+    machine.succeed("systemctl is-active korri-inputd.service")
+    machine.succeed("systemctl show -p Requires greetd.service | grep korri-live-usb-persistence.service")
+    machine.succeed("systemctl show -p After greetd.service | grep korri-live-usb-persistence.service")
+    machine.succeed("tr '\\0' '\\n' < /proc/$(cat /home/korri/.korri-vm-fake-sway.pid)/environ | grep KORRI_LIVE_USB_PERSISTENCE_ROOT=/persist/korri-live-usb")
+    machine.succeed("tr '\\0' '\\n' < /proc/$(cat /home/korri/.korri-vm-fake-sway.pid)/environ | grep KORRI_LIVE_USB_ARTIFACT=product")
+    machine.succeed("tr '\\0' '\\n' < /proc/$(cat /home/korri/.korri-vm-fake-sway.pid)/environ | grep KORRI_MOONLIGHT_STATE_HOME=/home/korri/.cache/moonlight")
+    machine.succeed("findmnt /persist/korri-live-usb | grep tmpfs")
+    machine.succeed("test ! -e /persist/korri-live-usb/.korri-live-usb-persistent")
   '';
 }

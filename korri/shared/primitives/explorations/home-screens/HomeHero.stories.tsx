@@ -105,8 +105,8 @@ function HomeHero() {
       `[data-tile-id="${CSS.escape(resumeTarget.id)}"]`,
     )
     target?.focus()
-    // resumeTarget is module-scope (games[0]); deliberately runs once on mount.
-  }, [])
+    // resumeTarget is module-scope (games[0]); dependency documents the intended anchor.
+  }, [resumeTarget.id])
 
   const focused = railItems.find(g => g.id === focusedId) ?? resumeTarget
 

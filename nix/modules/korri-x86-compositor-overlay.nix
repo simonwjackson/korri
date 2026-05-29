@@ -16,7 +16,7 @@
 # once regardless of how many korri role modules a consumer pulls in.
 { overlay }:
 
-{ ... }:
+{ lib, ... }:
 {
-  nixpkgs.overlays = [ overlay ];
+  nixpkgs.overlays = lib.mkDefault [ overlay ];
 }
