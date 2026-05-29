@@ -7,6 +7,7 @@
   hostPackages,
   configurations,
   hardwareFactSourceFiles,
+  sm8550PlatformAdapterSourceFile,
 }:
 
 let
@@ -15,6 +16,37 @@ let
 
   sourceContainsHardwareFact =
     file: builtins.match ".*(SM8550|RockNix|Odin|Thor|DSI-1|DSI-2).*" (builtins.readFile file) != null;
+
+  # Korri's SM8550 platform adapter must not hard-code substrate hardware
+  # facts as quoted assignment values; those must come from the substrate's
+  # neutral capability options (rocknix.sm8550.video.decodeBackend,
+  # rocknix.sm8550.audio.api). Scan per-line so comments do not produce
+  # false positives, and require the `=` to be preceded by something other
+  # than `!` or `=` so legitimate comparisons (`!= "v4l2m2m"` in a
+  # capability-gated assertion) are not treated as setters.
+  stripComment =
+    line:
+    let
+      i = builtins.match "([^#]*)#.*" line;
+    in
+    if i == null then line else builtins.head i;
+  lineSetsLiteral =
+    value: line:
+    let
+      withoutComment = stripComment line;
+      pattern = ".*[^!=][[:space:]]*=[[:space:]]*\"${value}\".*";
+    in
+    builtins.match pattern withoutComment != null;
+  containsQuotedAssignment =
+    value: file:
+    let
+      contents = builtins.readFile file;
+      lines = lib.splitString "\n" contents;
+    in
+    builtins.any (line: lineSetsLiteral value line) lines;
+  sm8550PlatformAdapterFreeOfHardwareLiterals =
+    !(containsQuotedAssignment "v4l2m2m" sm8550PlatformAdapterSourceFile)
+    && !(containsQuotedAssignment "pulseaudio" sm8550PlatformAdapterSourceFile);
 
   # Find the retroarch-bare wrapper in a compositor PATH list. The wrapper
   # uniquely exposes both `passthru.cores` (the declared core list) and
@@ -129,8 +161,43 @@ let
         (check "${name}: Moonlight must use the controller mapping database" (
           lib.hasInfix "gamecontrollerdb.txt" (compositor.environment.KORRI_MOONLIGHT_MAPPING_FILE or "")
         ))
-        (check "${name}: Moonlight must use the SM8550 v4l2m2m platform" (
+        (check "${name}: Moonlight must use the SM8550 v4l2m2m platform on the compositor" (
           compositorEnv.KORRI_MOONLIGHT_PLATFORM or null == "v4l2m2m"
+        ))
+        # KORRI_MOONLIGHT_PLATFORM must reach every final service that
+        # may launch Moonlight: compositor (legacy Sway-spawned path),
+        # sessiond (foreground session ownership), and korri-server
+        # (remote-source argv composition). Asserting on all three
+        # keeps the substrate-derived value from silently regressing
+        # to a compositor-only env again.
+        (check "${name}: Moonlight platform must reach sessiond" (
+          sessiondEnv.KORRI_MOONLIGHT_PLATFORM or null == "v4l2m2m"
+        ))
+        (check "${name}: Moonlight platform must reach korri-server" (
+          (cfg.systemd.services."korri-server".environment or { }).KORRI_MOONLIGHT_PLATFORM or null == "v4l2m2m"
+        ))
+        # SDL_AUDIODRIVER follows the substrate-declared audio API and
+        # must reach both the compositor's launched-app environment and
+        # sessiond's foreground-session environment. korri-server does
+        # not launch SDL clients directly; it composes argv handed to
+        # sessiond, so SDL_AUDIODRIVER is asserted on the launching units.
+        (check "${name}: SDL_AUDIODRIVER must be pulseaudio on the compositor" (
+          compositorEnv.SDL_AUDIODRIVER or null == "pulseaudio"
+        ))
+        (check "${name}: SDL_AUDIODRIVER must be pulseaudio on sessiond" (
+          sessiondEnv.SDL_AUDIODRIVER or null == "pulseaudio"
+        ))
+        # Substrate capability boundary: even though the final env
+        # values above are still v4l2m2m and pulseaudio, the platform
+        # adapter must read them from the substrate options instead of
+        # hard-coding them. The next check enforces that source-level
+        # invariant; this check proves it does not accidentally break
+        # the eval contract.
+        (check "${name}: substrate must declare v4l2m2m as its video decode backend" (
+          cfg.rocknix.sm8550.video.decodeBackend == "v4l2m2m"
+        ))
+        (check "${name}: substrate must declare pulseaudio as its audio API" (
+          cfg.rocknix.sm8550.audio.api == "pulseaudio"
         ))
         # Kiosk renderer-ownership wiring: sessiond owns Electrobun on
         # every kiosk image. Its unit env must carry the kiosk-renderer
@@ -283,6 +350,9 @@ let
     (check "by-compatible profile selection must stay impure off-device" (!byCompatibleResult.success))
     (check "generic image modules must stay free of RockNix hardware facts" (
       builtins.all (file: !(sourceContainsHardwareFact file)) hardwareFactSourceFiles
+    ))
+    (check "SM8550 platform adapter must not hard-code v4l2m2m or pulseaudio as quoted assignment values" (
+      sm8550PlatformAdapterFreeOfHardwareLiterals
     ))
   ]
   ++ (checkSystem "Thor" thorSystem)

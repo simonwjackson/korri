@@ -682,6 +682,15 @@
                 ./nix/images/desktop-lab.nix
                 ./nix/images/platforms/x86.nix
               ];
+              # The SM8550 platform adapter is the one image-side file
+              # that *should* know about RockNix — it composes the
+              # substrate into a Korri appliance. The literal-scan
+              # asserts that even this file no longer hard-codes the
+              # substrate's hardware capability values (v4l2m2m /
+              # pulseaudio), which now come from
+              # `rocknix.sm8550.video.decodeBackend` and
+              # `rocknix.sm8550.audio.api`.
+              sm8550PlatformAdapterSourceFile = ./nix/images/platforms/rocknix-sm8550.nix;
             };
             korri-rocknix-product-payload =
               let

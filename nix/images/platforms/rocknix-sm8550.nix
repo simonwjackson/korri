@@ -38,6 +38,15 @@ let
       };
   sm8550GamescopePackage = sm8550GamescopePinnedNixpkgs.gamescope;
   sm8550 = config.rocknix.sm8550;
+  # Neutral substrate capabilities owned by nix-on-rocks. Korri reads
+  # these to compose the Moonlight launch environment; it must not
+  # hard-code Linux video/audio facts in this platform adapter and must
+  # not reach into RockNix-specific option paths (e.g.
+  # rocknix.sm8550.moonlight.*) for substrate values. The substrate is
+  # free to change device profile facts under these neutral options
+  # without forcing a Korri edit.
+  substrateVideoDecodeBackend = sm8550.video.decodeBackend;
+  substrateAudioApi = sm8550.audio.api;
   inputplumberPackage =
     pkgs.runCommand "korri-rocknix-inputplumber-xb360"
       {
@@ -49,20 +58,31 @@ let
         substituteInPlace $out/share/inputplumber/devices/02-ayn-controller.yaml \
           --replace-fail "  - xbox-series" "  - xb360"
       '';
+  # KORRI_MOONLIGHT_PLATFORM is the Korri product policy that maps the
+  # substrate-declared video decode backend onto Moonlight Embedded's
+  # -platform CLI shape. The mapping is intentionally identity today
+  # because Moonlight Embedded uses the same names the substrate uses,
+  # but expressing it as a derived value keeps the boundary honest: this
+  # platform adapter does not hard-code v4l2m2m.
   moonlightLaunchEnvironment = {
     KORRI_MOONLIGHT_COMMAND = "${pkgs.moonlight-embedded}/bin/moonlight";
     KORRI_MOONLIGHT_CLIENT = "embedded";
     KORRI_MOONLIGHT_MAPPING_FILE = "${pkgs.moonlight-embedded}/share/moonlight/gamecontrollerdb.txt";
-    KORRI_MOONLIGHT_PLATFORM = "v4l2m2m";
+    KORRI_MOONLIGHT_PLATFORM = substrateVideoDecodeBackend;
     KORRI_MOONLIGHT_STARTUP_OBSERVE_MS = "750";
   };
+  # SDL clients (Moonlight, Cemu) talk to the substrate audio graph via
+  # the API nix-on-rocks exposes. The substrate currently reports
+  # pulseaudio; Korri applies it as SDL_AUDIODRIVER. If the substrate
+  # later declares a different API, Korri's launch env follows without
+  # editing this file.
   moonlightCompositorEnvironment = moonlightLaunchEnvironment // {
-    SDL_AUDIODRIVER = "pulseaudio";
+    SDL_AUDIODRIVER = substrateAudioApi;
     SDL_VIDEODRIVER = "wayland";
     XDG_CACHE_HOME = "/storage/.cache";
   };
   moonlightSessiondEnvironment = moonlightLaunchEnvironment // {
-    SDL_AUDIODRIVER = "pulseaudio";
+    SDL_AUDIODRIVER = substrateAudioApi;
     XDG_CACHE_HOME = "/storage/.cache";
   };
 in
@@ -79,8 +99,15 @@ in
       message = "RockNix SM8550 compositors must use the SM8550-validated Gamescope package.";
     }
     {
-      assertion = lib.versionAtLeast (lib.getVersion config.services.korri.compositor.gamescope.package) "3.16.20";
-      message = "RockNix SM8550 compositors require Gamescope >= 3.16.20 for Moonlight v4l2m2m streams.";
+      # Gamescope's pipewire-loop-lock fix is required whenever the
+      # substrate-declared video decode backend exercises the v4l2m2m
+      # zero-copy import path. Tying the assertion to the substrate
+      # capability keeps the reason for the version floor machine-checkable
+      # rather than buried in a hard-coded string.
+      assertion =
+        substrateVideoDecodeBackend != "v4l2m2m"
+        || lib.versionAtLeast (lib.getVersion config.services.korri.compositor.gamescope.package) "3.16.20";
+      message = "RockNix SM8550 compositors require Gamescope >= 3.16.20 when the substrate declares video.decodeBackend = v4l2m2m.";
     }
   ];
 
@@ -157,10 +184,14 @@ in
 
   systemd.services.korri-server.environment = moonlightLaunchEnvironment;
 
-  rocknix.sm8550.moonlight = {
-    enable = true;
-    package = pkgs.moonlight-embedded;
-  };
+  # NOTE: `rocknix.sm8550.moonlight.{enable,package}` is no longer set
+  # here. Moonlight is a Korri product choice; the substrate should not
+  # carry an installer/option pair for it. Korri's compositor and
+  # sessiond paths above already pull `pkgs.moonlight-embedded` into
+  # their PATHs explicitly, and the persistent client keydir is owned
+  # by Korri's appliance composition. The substrate-side guest module
+  # guarding those options is scheduled for removal in a follow-up
+  # nix-on-rocks PR now that this file stops setting them.
 
   # Korri's compositor runs as root with no controlling TTY (getty@tty1 is
   # masked by the nix-on-rocks guest base). Without lingering, logind
