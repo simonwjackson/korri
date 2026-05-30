@@ -1,6 +1,61 @@
 import { Schema } from "effect"
 import { LaunchFailureKind, LaunchSpec } from "./launcher"
 
+/**
+ * # Sessiond managed-launch protocol evolution rule (task-013 AC #5)
+ *
+ * These schemas describe the HTTP/SSE wire contract between Korri
+ * clients (à la `session-launcher.ts`, `status.rpc-handler.ts`,
+ * `foreground-session-status-layer-live.ts`) and sessiond's
+ * managed-launch endpoints (`tools/device/sessiond.ts`). All decoders
+ * on the consumer side run under `STRICT_DECODE`
+ * (`onExcessProperty: "error"`), which catches typos and version skew
+ * during development. The strict default has a consequence: the
+ * daemon CANNOT emit a brand-new field before the client schema is
+ * updated to recognise it, or the client fails closed.
+ *
+ * The rule for evolving this protocol:
+ *
+ * 1. **Schemas update before the daemon emits.** Add the optional
+ *    field to the client schema first, ship it as a no-op decoder
+ *    branch, then deploy the daemon that emits the value. Older
+ *    clients with the new schema accept missing values cleanly.
+ *
+ * 2. **Additive only.** Required fields are forever — do not remove
+ *    or rename a field once it's in the schema. Mark deprecated
+ *    fields `Schema.optional` and keep them in the union; let the
+ *    consumer ignore them.
+ *
+ * 3. **Optional by default for new fields.** Every new field added
+ *    after the protocol's initial shape should be `Schema.optional`
+ *    even when the daemon always emits it. This preserves the
+ *    invariant that an older client (decoding against the older
+ *    schema) does not fail when it encounters a new daemon. (The
+ *    daemon's lack of a never-emitted optional is harmless; the
+ *    client's missing-field branch is what matters.)
+ *
+ * 4. **Mixed-version deployments are not promised but supported.**
+ *    Production deploys Korri's client and sessiond together via Nix,
+ *    so strict mismatches are caught at build time. But operators do
+ *    run mismatched versions during incident response or rollback;
+ *    the rules above keep those windows survivable.
+ *
+ * 5. **Capability flags over schema versioning.** When a daemon-side
+ *    change is large enough to warrant gating (e.g. session-lifecycle
+ *    spawn in Phase 4D), encode the daemon's support as a capability
+ *    flag on `SessiondManagedLaunchCapabilities` (e.g.
+ *    `sessionLifecycle`). The capability is the contract; the schema
+ *    only describes the wire shape. Clients that don't observe the
+ *    capability must NOT send the capability-gated payload, even if
+ *    the schema would accept it.
+ *
+ * If a future change needs to relax the strict-decode posture for
+ * forward-compat, prefer adding a lenient parallel decoder for the
+ * specific call site (the live polling path can tolerate extra
+ * fields) over flipping the global STRICT_DECODE constant. The
+ * strictness is the early-warning system; do not give it up wholesale.
+ */
+
 const isoDateTime = Schema.makeFilter<string>(value => {
   const time = Date.parse(value)
   if (!Number.isFinite(time)) return "must be an ISO timestamp"
