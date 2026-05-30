@@ -1,7 +1,7 @@
 ---
 title: "refactor: Harden sessiond system wiring"
 type: refactor
-status: active
+status: completed
 date: 2026-05-29
 origin: backlog/task-011 - harden-sessiond-system-wiring.md
 verify_command: "just test-nix"
