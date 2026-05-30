@@ -456,6 +456,12 @@ describe("local foreground launch adapter > U3 wire-shape discrimination", () =>
       (second as { preflightReason?: Record<string, unknown> })
         .preflightReason,
     ).not.toHaveProperty("currentState")
+    // task-013 AC #3: process identity is daemon-private. The wire
+    // response must NOT carry currentProcessId / currentProcessGroupId
+    // even when the `ForegroundManagedSessionHandle` had them.
+    const flat = JSON.stringify(second)
+    expect(flat).not.toContain("currentProcessId")
+    expect(flat).not.toContain("processGroupId")
     control.resolveExit({ exitCode: 0 })
     await first
     await owner.whenIdle()

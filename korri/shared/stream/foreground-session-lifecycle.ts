@@ -181,6 +181,30 @@ export type ForegroundSessionEvent =
  */
 type ForegroundSessionBusyRejectionSource = "owner-local" | "sessiond"
 
+/**
+ * Identity carried on a busy rejection. Surfaced on the wire via
+ * `launch.rpc.ts`'s `LaunchLibraryResponse` (less `currentState`, which
+ * SEC-001 redacts; see `local-foreground-launch-adapter.ts`).
+ *
+ * **Process identity is intentionally absent.** A previous design
+ * iteration considered exposing `currentProcessId` and
+ * `currentProcessGroupId` from `ForegroundManagedSessionHandle`.
+ * Decision (task-013 AC #3): those identifiers are daemon-private.
+ *
+ * - PIDs and PGIDs are host-runtime identifiers; they are not stable
+ *   across reboots and do not correlate cross-component the way
+ *   `sessionId` does.
+ * - On the trusted-LAN deployment shape, a PID + a kill helper would
+ *   give an unauthenticated peer the ability to signal arbitrary
+ *   processes. `sessionId` lets sessiond's termination protocol do
+ *   the same work without exposing the raw PID.
+ * - For operator diagnostics, sessiond's logs and `app.server.status`
+ *   already surface the PID server-side; the wire response does not
+ *   need to duplicate it.
+ *
+ * If a future debug/diagnostic surface needs PIDs, add it on an
+ * authenticated RPC rather than widening this struct.
+ */
 export interface ForegroundSessionBusyRejection {
   readonly category: "session-busy"
   readonly message: string
