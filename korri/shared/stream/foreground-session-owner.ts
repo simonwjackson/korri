@@ -1,3 +1,18 @@
+// ARCHITECTURE NOTE
+//
+// `ForegroundSessionOwner` is an adapter pipeline orchestrator with preflight
+// re-entry protection: it owns `prepare → spawn → foreground → teardown →
+// verifyReady` for a single launch, with abort control, event history, and
+// active-handle tracking. It is NOT the authoritative source of physical-host
+// foreground lifecycle truth.
+//
+// On Korri hosts where `sessiond` is configured, sessiond is the authoritative
+// lifecycle source (`stopped/starting/home|idle/launching/game/restoring/
+// recovering`). The owner's preflight consults sessiond via the optional
+// `consultExternalIdle` hook so out-of-band callers cannot leave the owner
+// believing the host is idle while sessiond is busy.
+//
+// See: docs/solutions/architecture-patterns/physical-host-foreground-lifecycle-truth-is-sessiond-2026-05-29.md
 import {
   acceptForegroundSessionLaunch,
   activeSessionFromState,
