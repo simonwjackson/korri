@@ -1,7 +1,7 @@
 ---
 id: task-018
 title: Document the sessiond operator model
-status: To Do
+status: Done
 priority: low
 labels:
   - sessiond
