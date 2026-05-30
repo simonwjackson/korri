@@ -2,6 +2,7 @@ import { readFile, stat } from "node:fs/promises"
 import { hostname } from "node:os"
 import { join } from "node:path"
 import { DataError } from "@shared/api/rpc/errors"
+import { projectSessiondLifecycleSummary } from "@shared/library/sessiond-lifecycle-projections"
 import {
   probeSessiondManagedLaunchStatus as probeSessiondManagedLaunchClientStatus,
   type SessiondManagedLaunchClientFailure,
@@ -215,27 +216,19 @@ export async function probeSessiondManagedLaunchStatus(
     timeoutMs: options.timeoutMs,
   })
   if (result.kind !== "ok") return mapSessiondProbeFailure(result)
-  const decoded = result.status
+  const summary = projectSessiondLifecycleSummary(result.status, {
+    failureReason: redactSessiondFailureReason,
+  })
   return {
     kind: "ok",
     summary: new SessiondLifecycleSummary({
-      mode: decoded.mode,
-      restoreAttempts: decoded.restoreAttempts,
-      ...(decoded.active
-        ? {
-            active: new SessiondLifecycleActive({
-              launchId: decoded.active.launchId,
-              mode: decoded.active.mode,
-              // Phase 4D / Track A finishing follow-up. Forward
-              // the optional sub-phase when present.
-              ...(decoded.active.phase ? { phase: decoded.active.phase } : {}),
-            }),
-          }
+      mode: summary.mode,
+      restoreAttempts: summary.restoreAttempts,
+      ...(summary.active
+        ? { active: new SessiondLifecycleActive(summary.active) }
         : {}),
-      ...(decoded.failureReason
-        ? {
-            failureReason: redactSessiondFailureReason(decoded.failureReason),
-          }
+      ...(summary.failureReason
+        ? { failureReason: summary.failureReason }
         : {}),
     }),
   }
