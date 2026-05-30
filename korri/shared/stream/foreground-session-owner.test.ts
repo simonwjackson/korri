@@ -653,6 +653,27 @@ describe("foreground session owner", () => {
       expect(second.rejection.source).toBe("owner-local")
     })
 
+    it("populates currentSessionId on a busy rejection from the spawned handle id (task-013 AC #1)", async () => {
+      // After a successful launch, `spawned.session.id` is the
+      // launcher's session correlator (sessiond's `launchId` for the
+      // sessiond-backed launcher; the in-memory id for tests). The
+      // active session must record it as `sessionId` so a subsequent
+      // busy rejection's `currentSessionId` carries the same value
+      // operators see in sessiond logs and managed-launch events.
+      const setup = createAdapter()
+      const owner = createOwner(setup.adapter)
+      const launched = await owner.launch(request)
+      expect(launched._tag).toBe("Launched")
+      const second = await owner.launch({ id: "gba/metroid-fusion" })
+      expect(second._tag).toBe("Busy")
+      if (second._tag !== "Busy") throw new Error("unreachable")
+      // The fixture session id is "child-1"; both fields should now
+      // carry it because `child.id` and `sessionId` source from the
+      // same handle property.
+      expect(second.rejection.currentSessionId).toBe("child-1")
+      expect(second.rejection.currentChildId).toBe("child-1")
+    })
+
     it("behaves as today when consultExternalIdle is unset (live-USB / unconfigured)", async () => {
       const setup = createAdapter()
       const owner = createOwner(setup.adapter)
