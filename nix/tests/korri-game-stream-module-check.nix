@@ -166,15 +166,9 @@ let
     (check "sessiond paired (both set): NixOS assertions pass" (
       failedAssertions sessiondPaired == [ ]
     ))
-    (check "sessiond default (both null): NixOS assertions pass" (
-      let
-        failures = failedAssertions baseline;
-      in
-      builtins.all (
-        a:
-        !lib.hasInfix "services.korri.gameStream.sessiond.url and" a.message
-      ) failures
-    ))
+    # Default (both null) is covered by the baseline's "NixOS assertions
+    # pass" check above — if the pair-or-neither predicate ever inverted,
+    # the baseline (which leaves both null) would start failing first.
     (check "sessiond url-only: assertion fires (both-or-neither)" (
       hasFailure sessiondUrlOnly "sessiond.url and"
     ))

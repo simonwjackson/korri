@@ -12,15 +12,14 @@
 
 let
   lib = pkgs.lib;
-  pkgs = sourceMachineSystem.pkgs;
   cfg = sourceMachineSystem.config;
+  # Use the image-evaluated pkgs for package-identity comparisons against
+  # the sessiond unit's PATH (same instance the module saw at eval time).
+  imagePkgs = sourceMachineSystem.pkgs;
   failedAssertions = builtins.filter (a: !a.assertion) cfg.assertions;
   unit = cfg.systemd.services.korri-sessiond or { };
   unitEnv = unit.environment or { };
   unitPath = unit.path or [ ];
-  sessiondExecStartPre =
-    let preStr = (unit.serviceConfig or { }).ExecStartPre or ""; in
-    if preStr == "" then "" else builtins.readFile preStr;
   sourceUser = cfg.users.users.korri-source or { };
   serverUser = cfg.users.users.korri-server or { };
   serverUnit = cfg.systemd.services.korri-server or { };
@@ -83,10 +82,11 @@ let
     (check "korri-server user is in korri-sessiond-clients group" (
       builtins.elem "korri-sessiond-clients" (serverUser.extraGroups or [ ])
     ))
-    (check "sessiond ExecStartPre chowns token to korri-sessiond-clients at 0640" (
-      lib.hasInfix "chown root:korri-sessiond-clients" sessiondExecStartPre
-      && lib.hasInfix "chmod 0640" sessiondExecStartPre
-    ))
+    # The token-file chown/chmod shape (root:<sharedGroup> 0640) is proven
+    # by korri-sessiond-module-check.nix's `withSharedGroup` fixture for
+    # arbitrary group values; this image only needs to assert its
+    # sharedGroup choice, which the previous check already does.
+
     # Server-side sessiond delegation: source-machine wires both
     # gameStream.sessiond AND server.sessiond so the kiosk/source-machine
     # asymmetry is closed. Without server.sessiond, korri-server's
@@ -112,7 +112,7 @@ let
     # util-linux is baked in by the module so this is a regression guard
     # rather than an image-level addition.
     (check "sessiond unit PATH includes util-linux (for setsid)" (
-      builtins.elem pkgs.util-linux unitPath
+      builtins.elem imagePkgs.util-linux unitPath
     ))
     (check "sessiond unit env carries KORRI_GAME_STREAM_STATUS_PATH for sidecar emission" (
       lib.hasPrefix "/" (unitEnv.KORRI_GAME_STREAM_STATUS_PATH or "")

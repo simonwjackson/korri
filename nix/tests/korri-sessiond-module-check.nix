@@ -276,11 +276,12 @@ let
       lib.hasInfix "/dev/urandom" (execStartPre baselineKiosk)
     ))
     (check "ExecStartPre creates runtime dir at mode 0700 (matches tmpfiles, protects token)" (
-      lib.hasInfix "install -d -m 0700" (execStartPre baselineKiosk)
-      && !lib.hasInfix "install -d -m 0755" (execStartPre baselineKiosk)
+      let pre = execStartPre baselineKiosk; in
+      lib.hasInfix "install -d -m 0700" pre && !lib.hasInfix "install -d -m 0755" pre
     ))
     (check "source-machine: ExecStartPre also creates runtime dir at 0700" (
-      lib.hasInfix "install -d -m 0700" (execStartPre sourceMachine)
+      let pre = execStartPre sourceMachine; in
+      lib.hasInfix "install -d -m 0700" pre && !lib.hasInfix "install -d -m 0755" pre
     ))
     (check "ExecStartPre collapses whitespace with tr (sed would leave newlines)" (
       lib.hasInfix "tr -d '[:space:]'" (execStartPre baselineKiosk)
