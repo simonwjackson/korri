@@ -20,6 +20,9 @@ let
   unit = cfg.systemd.services.korri-sessiond or { };
   unitEnv = unit.environment or { };
   unitPath = unit.path or [ ];
+  sessiondExecStartPre =
+    let preStr = (unit.serviceConfig or { }).ExecStartPre or ""; in
+    builtins.readFile preStr;
   sourceUser = cfg.users.users.korri-source or { };
   serverUser = cfg.users.users.korri-server or { };
   serverUnit = cfg.systemd.services.korri-server or { };
@@ -70,6 +73,14 @@ let
       firstAppCmd != null
       && lib.hasInfix "KORRI_SESSIOND_URL" (builtins.readFile firstAppCmd)
     ))
+    (check "Sunshine app wrapper exports KORRI_SESSIOND_TOKEN_FILE" (
+      let
+        apps = cfg.services.sunshine.applications.apps or [ ];
+        firstAppCmd = if apps == [ ] then null else (builtins.elemAt apps 0).cmd;
+      in
+      firstAppCmd != null
+      && lib.hasInfix "KORRI_SESSIOND_TOKEN_FILE" (builtins.readFile firstAppCmd)
+    ))
     (check "sessiond sharedGroup is set to korri-sessiond-clients" (
       cfg.services.korri.sessiond.sharedGroup or null == "korri-sessiond-clients"
     ))
@@ -94,10 +105,15 @@ let
     (check "korri-server user is in korri-sessiond-clients group" (
       builtins.elem "korri-sessiond-clients" (serverUser.extraGroups or [ ])
     ))
-    # The token-file chown/chmod shape (root:<sharedGroup> 0640) is proven
-    # by korri-sessiond-module-check.nix's `withSharedGroup` fixture for
-    # arbitrary group values; this image only needs to assert its
-    # sharedGroup choice, which the previous check already does.
+    # Verify the rendered ExecStartPre script chowns to the image's
+    # specific sharedGroup name. The module check uses a different
+    # group (`korri-server`); together they catch a template that
+    # hardcoded one of the two group names instead of interpolating
+    # `cfg.sharedGroup`.
+    (check "sessiond ExecStartPre chowns token to korri-sessiond-clients at 0640" (
+      lib.hasInfix "chown root:korri-sessiond-clients \"$token_file\"" sessiondExecStartPre
+      && lib.hasInfix "chmod 0640 \"$token_file\"" sessiondExecStartPre
+    ))
 
     # Server-side sessiond delegation: source-machine wires both
     # gameStream.sessiond AND server.sessiond so the kiosk/source-machine
