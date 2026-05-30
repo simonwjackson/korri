@@ -101,7 +101,7 @@ export async function launchViaSessiond(
   return body.result ?? { status: "failed", exitCode: 125 }
 }
 
-export async function spawnViaSessiond(
+async function spawnViaSessiond(
   spec: LaunchSpec,
   options: SessionLauncherOptions,
   extras: LaunchExtras = {},
