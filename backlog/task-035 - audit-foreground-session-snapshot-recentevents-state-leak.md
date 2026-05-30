@@ -1,7 +1,7 @@
 ---
 id: task-035
 title: Audit foreground-session-status-snapshot recentEvents.state leak (SEC-002)
-status: To Do
+status: Done
 priority: low
 labels:
   - security
