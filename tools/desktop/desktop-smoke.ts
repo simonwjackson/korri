@@ -2,8 +2,6 @@ import { existsSync } from "node:fs"
 import { readdir } from "node:fs/promises"
 import { join, relative, sep } from "node:path"
 import { logger } from "@shared/logger"
-import {
-} from "@shared/stream/foreground-session-status"
 import { createDesktopApp } from "../../korri/deploy/desktop/create-desktop-app"
 import type { RuntimeConfig } from "../../korri/deploy/desktop/runtime-config-shape"
 import { buildArtifactPaths } from "../artifacts/paths"

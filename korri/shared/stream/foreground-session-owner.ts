@@ -27,10 +27,7 @@ import {
   foregroundSessionTransition,
 } from "@shared/stream/foreground-session-lifecycle"
 
-export type {
-  ForegroundSessionBusyRejectionSource,
-  ForegroundSessionEvidence,
-} from "@shared/stream/foreground-session-lifecycle"
+export type { ForegroundSessionEvidence } from "@shared/stream/foreground-session-lifecycle"
 
 /**
  * Result of an external idle-authority check (typically sessiond).

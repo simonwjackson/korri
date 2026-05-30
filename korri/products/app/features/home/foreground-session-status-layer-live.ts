@@ -41,9 +41,7 @@ export const ForegroundSessionStatusLayerLive = Layer.effect(
                   foregroundSessionGateStateFromSnapshot({
                     _tag: "LoadError",
                     message:
-                      error instanceof Error
-                        ? error.message
-                        : String(error),
+                      error instanceof Error ? error.message : String(error),
                   }),
               }),
             ),
@@ -64,7 +62,7 @@ export const ForegroundSessionStatusLayerLive = Layer.effect(
  * Wire alias: sessiond's `home` (kiosk role) and `idle` (source-machine role)
  * both mean "no foreground session". Both collapse to `IdleReady`.
  */
-function snapshotStateFromSessiondMode(
+export function snapshotStateFromSessiondMode(
   mode: SessiondLifecycleSummary["mode"],
 ): string {
   switch (mode) {
@@ -84,7 +82,7 @@ function snapshotStateFromSessiondMode(
   }
 }
 
-function snapshotFromServerStatus(
+export function snapshotFromServerStatus(
   sessiond: SessiondLifecycleSummary | undefined,
   serverId: string,
 ): ForegroundSessionStatusSnapshot {

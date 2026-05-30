@@ -153,7 +153,7 @@ export type ForegroundSessionEvent =
  * Optional for back-compat: callers that don't distinguish should treat an
  * absent value as `owner-local`.
  */
-export type ForegroundSessionBusyRejectionSource = "owner-local" | "sessiond"
+type ForegroundSessionBusyRejectionSource = "owner-local" | "sessiond"
 
 export interface ForegroundSessionBusyRejection {
   readonly category: "session-busy"
