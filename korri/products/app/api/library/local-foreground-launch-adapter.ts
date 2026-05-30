@@ -189,23 +189,72 @@ async function spawnLocalLaunch(
   }
 }
 
+/**
+ * Tag a response that traversed `launchResponseFromLaunchResult` (which
+ * produces back-compat shapes without `_tag`). Routes by `failureKind` to
+ * the appropriate U3 discriminator. Idempotent if `_tag` is already set.
+ */
+function tagBackCompatResponse(
+  value: LaunchLibraryResponse,
+): LaunchLibraryResponse {
+  if (value._tag !== undefined) return value
+  if (value.status === "launched") return { ...value, _tag: "Accepted" }
+  if (value.failureKind === "session-busy") {
+    return {
+      ...value,
+      _tag: "DaemonRejected",
+      daemonReason: { source: "spawn-post" },
+    }
+  }
+  if (value.failureKind === "host-unavailable") {
+    return {
+      ...value,
+      _tag: "HostUnavailable",
+      hostUnavailableReason: { kind: "network" },
+    }
+  }
+  if (value.failureKind === "host-control-disabled") {
+    return {
+      ...value,
+      _tag: "HostUnavailable",
+      hostUnavailableReason: { kind: "token-rejected" },
+    }
+  }
+  return { ...value, _tag: "LaunchFailed" }
+}
+
 async function launchResponseFromOwnerResult(
   result: ForegroundSessionOwnerLaunchResult<
     Promise<LaunchLibraryResponse>,
     LaunchLibraryResponse
   >,
 ): Promise<LaunchLibraryResponse> {
-  if (result._tag === "Launched") return await result.value
+  if (result._tag === "Launched") {
+    // Successful path through the owner. The inner promise may still
+    // resolve to a failed LaunchLibraryResponse (e.g. when the launcher's
+    // result promise materializes a verifyReady failure into a failed
+    // LaunchResult). Tag based on shape so callers always see a `_tag`.
+    return tagBackCompatResponse(await result.value)
+  }
   if (result._tag === "Busy") {
-    // Both owner-local and sessiond-preflight rejections surface as
-    // `failureKind: "session-busy"` on the wire for back-compat; the source
-    // discriminator lives on `result.rejection.source` (and will be
-    // forwarded as `PreflightRejected.reason.source` in U3).
+    // Both owner-local and sessiond-preflight rejections wear the same
+    // failureKind/exitCode for back-compat callers; the `_tag` and
+    // `preflightReason.source` discriminate for new callers.
     return {
+      _tag: "PreflightRejected",
       status: "failed",
       exitCode: launchFailureExitCode("session-busy"),
       failureKind: "session-busy",
       stderrTail: result.rejection.message,
+      preflightReason: {
+        source: result.rejection.source ?? "owner-local",
+        ...(result.rejection.externalMode !== undefined
+          ? { externalMode: result.rejection.externalMode }
+          : {}),
+        ...(result.rejection.currentState !== undefined
+          ? { currentState: result.rejection.currentState }
+          : {}),
+      },
     }
   }
   if (result._tag === "ExternalUnavailable") {
@@ -217,21 +266,28 @@ async function launchResponseFromOwnerResult(
         ? ("host-control-disabled" as const)
         : ("host-unavailable" as const)
     return {
+      _tag: "HostUnavailable",
       status: "failed",
       exitCode: launchFailureExitCode(failureKind),
       failureKind,
       stderrTail: result.message,
+      hostUnavailableReason: { kind: result.reason },
     }
   }
 
-  return (
-    result.failure ?? {
-      status: "failed",
-      exitCode: launchFailureExitCode("command-failed"),
-      failureKind: "command-failed",
-      stderrTail: result.message,
-    }
-  )
+  // `_tag === "Failed"`: spawn-pipeline failure. `result.failure` carries the
+  // LaunchLibraryResponse from `spawnLocalLaunch` when it surfaces a
+  // managed-launch failure; otherwise we fabricate a `command-failed`
+  // shape. Either way `tagBackCompatResponse` routes the right `_tag`
+  // based on `failureKind` (sessiond `session-busy` → DaemonRejected,
+  // host-unavailable / host-control-disabled → HostUnavailable, etc.).
+  const fallback: LaunchLibraryResponse = result.failure ?? {
+    status: "failed",
+    exitCode: launchFailureExitCode("command-failed"),
+    failureKind: "command-failed",
+    stderrTail: result.message,
+  }
+  return tagBackCompatResponse(fallback)
 }
 
 function launchResponseFromLaunchResult(

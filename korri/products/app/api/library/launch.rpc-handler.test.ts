@@ -113,7 +113,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     const result = await Effect.runPromise(
       handleLaunchLibrary({ id: "snes/echo.smc" }).pipe(Effect.provide(layer)),
     )
-    expect(result).toEqual({ status: "launched" })
+    expect(result).toEqual({ _tag: "Accepted", status: "launched" })
   })
 
   it("runs the local launch path unchanged for a local-tagged `source` payload", async () => {
@@ -126,7 +126,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
         source: localTestSource,
       }).pipe(Effect.provide(layer)),
     )
-    expect(result).toEqual({ status: "launched" })
+    expect(result).toEqual({ _tag: "Accepted", status: "launched" })
   })
 
   it("dispatches a remote-source LaunchInput as a gamescope-wrapped Korri Stream moonlight launch", async () => {
@@ -163,7 +163,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       ),
     )
 
-    expect(result).toEqual({ status: "launched" })
+    expect(result).toEqual({ _tag: "Accepted", status: "launched" })
     expect(preparedFor).toEqual({
       controlUrl: "http://aka.local:3001",
       gameId: "snes/echo.smc",
@@ -424,7 +424,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       ),
     )
 
-    expect(result).toEqual({ status: "launched" })
+    expect(result).toEqual({ _tag: "Accepted", status: "launched" })
     expect(launchedSpec).toEqual({
       // A minimal { enabled: true } policy resolves through the cascade
       // default to wayland backend + exposed wayland socket.
@@ -535,7 +535,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       ),
     )
 
-    expect(result).toEqual({ status: "launched" })
+    expect(result).toEqual({ _tag: "Accepted", status: "launched" })
     expect(resolveInputs).toEqual({
       userId: undefined,
       presetId: "raw",
@@ -567,7 +567,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     expect(settled).toBe(false)
 
     control.resolveExit({ exitCode: 0 })
-    expect(await launch).toEqual({ status: "launched" })
+    expect(await launch).toEqual({ _tag: "Accepted", status: "launched" })
     await host.owner.whenIdle()
   })
 
@@ -618,6 +618,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     control.resolveExit({ exitCode: 7, stderrTail: "boom" })
 
     expect(await launch).toEqual({
+      _tag: "LaunchFailed",
       status: "failed",
       exitCode: 7,
       stderrTail: "boom",
