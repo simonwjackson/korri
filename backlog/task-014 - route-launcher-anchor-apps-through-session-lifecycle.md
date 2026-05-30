@@ -1,7 +1,7 @@
 ---
 id: task-014
 title: Route launcher-anchor apps through session lifecycle
-status: To Do
+status: Done
 priority: medium
 labels:
   - sessiond
