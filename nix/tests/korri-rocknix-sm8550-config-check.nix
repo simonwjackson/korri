@@ -292,6 +292,19 @@ let
         (check "${name}: sessiond serviceConfig.ProtectHome must be false (relaxed for wayland socket access)" (
           (sessiondService.serviceConfig.ProtectHome or null) == false
         ))
+        # Runtime-dir mode must permit korri-server (the sharedGroup
+        # on kiosk) to traverse the directory and reach the 0640
+        # token file. 0700 root:root would silently break the
+        # server-side managed-launch delegation.
+        (check "${name}: sessiond runtime dir at 0710 root:korri-server (group-traversable)" (
+          builtins.any (rule:
+            lib.hasInfix "korri-sessiond" rule
+            && lib.hasInfix "0710 root korri-server" rule
+          ) (cfg.systemd.tmpfiles.rules or [ ])
+        ))
+        (check "${name}: sessiond RuntimeDirectoryMode is 0710 (matches sharedGroup)" (
+          sessiondService.serviceConfig.RuntimeDirectoryMode or null == "0710"
+        ))
         (check "${name}: compositor must use Wayland SDL video" (
           compositorEnv.SDL_VIDEODRIVER or null == "wayland"
         ))
