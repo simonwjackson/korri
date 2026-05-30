@@ -100,6 +100,8 @@ Next-step children filed:
 - **task-039** — cover `tools/device/sessiond.ts` managed-launch HTTP/SSE surface (the daemon dispatcher; biggest remaining gap).
 - **task-040** — cover `sessiond-gamescope-reaper.ts` and `sessiond-electrobun.ts` restore paths (operator-visible kiosk symptoms).
 
+2026-05-30 (task-039 pass 1): `tools/device/sessiond.ts` moved **77.36/71.97 → 84.48/84.44** via 16 public HTTP/SSE/daemon-handle tests. Remaining uncovered lines are mostly real host-boundary wiring inside the same file (`swaymsg`, `systemctl`, source-machine real sway controller, `main()` process/env/signal wiring) plus one defensive impossible branch. Filed **task-041** to decide whether to extract those host-boundary helpers, coverage-ignore them, or cover them with a host-capable integration smoke before chasing the original ≥95% file-level target.
+
 Remaining gaps after pass 1:
 - `sessiond.ts` 77.36/71.97 (→ task-039)
 - `sessiond-gamescope-reaper.ts` 50.00/55.92 (→ task-040)
