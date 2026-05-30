@@ -61,10 +61,15 @@ const LaunchResponseTag = Schema.Literals([
   "LaunchFailed",
 ])
 
+// `currentState` (owner FSM tag) was previously optional on this struct
+// but is no longer placed on the wire — see SEC-001 in task-017. The
+// field is intentionally omitted from the schema; if any decoder
+// receives it from an older deployment it will fail-closed under
+// `onExcessProperty: "error"` (the renderer-side decoders are lenient,
+// so old responses still decode).
 const PreflightRejectionReason = Schema.Struct({
   source: Schema.Literals(["owner-local", "sessiond"]),
   externalMode: Schema.optional(Schema.String),
-  currentState: Schema.optional(Schema.String),
 })
 
 const DaemonRejectionReason = Schema.Struct({

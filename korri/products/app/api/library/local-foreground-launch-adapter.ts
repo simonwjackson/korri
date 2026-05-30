@@ -267,13 +267,20 @@ async function launchResponseFromOwnerResult(
       exitCode: launchFailureExitCode("session-busy"),
       failureKind: "session-busy",
       stderrTail: result.rejection.message,
+      // SEC-001 (task-017): `currentState` is the in-process owner FSM
+      // tag (e.g. `Spawning`, `Running`, `TearingDown`). It is preserved
+      // on the internal `ForegroundSessionBusyRejection` for logging and
+      // diagnostic surfaces, but it is NOT placed on the wire response.
+      // `app.library.launch` is unauthenticated on the trusted-LAN
+      // deployment shape; redacting `currentState` removes the only
+      // finer-grained state visibility this surface offered above what
+      // `app.server.status` already exposes (sessiond mode). If a future
+      // authenticated debug surface needs it, re-add via a separate
+      // authenticated RPC rather than over-broadening this one.
       preflightReason: {
         source: result.rejection.source ?? "owner-local",
         ...(result.rejection.externalMode !== undefined
           ? { externalMode: result.rejection.externalMode }
-          : {}),
-        ...(result.rejection.currentState !== undefined
-          ? { currentState: result.rejection.currentState }
           : {}),
       },
     }
