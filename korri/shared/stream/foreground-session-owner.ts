@@ -257,7 +257,7 @@ export function createForegroundSessionOwner<
       readonly active?: ForegroundSessionActiveSession
       readonly evidence?: Readonly<Record<string, unknown>>
       readonly failure?: {
-        readonly stage: "adapter" | "cleanup" | "readiness"
+        readonly stage: "adapter" | "teardown" | "readiness"
         readonly message: string
         readonly evidence?: Readonly<Record<string, unknown>>
       }
@@ -304,7 +304,7 @@ export function createForegroundSessionOwner<
     active: ForegroundSessionActiveSession | undefined,
     message: string,
     evidence?: Readonly<Record<string, unknown>>,
-    stage: "adapter" | "cleanup" | "readiness" = "adapter",
+    stage: "adapter" | "teardown" | "readiness" = "adapter",
     failure?: TFailure,
   ): Promise<ForegroundSessionOwnerLaunchResult<TSuccess, TFailure>> => {
     await terminateActiveHandle()
@@ -368,8 +368,8 @@ export function createForegroundSessionOwner<
           await failAndRelease(
             terminalActive,
             message,
-            { stage: "cleanup", message },
-            "cleanup",
+            { stage: "teardown", message },
+            "teardown",
           )
           return
         }
@@ -392,7 +392,7 @@ export function createForegroundSessionOwner<
             terminalActive,
             teardown.message,
             teardown.evidence,
-            "cleanup",
+            "teardown",
           )
           return
         }

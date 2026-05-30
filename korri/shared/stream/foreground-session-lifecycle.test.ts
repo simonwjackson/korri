@@ -120,7 +120,7 @@ describe("foreground session lifecycle", () => {
     })
     const recovering = foregroundSessionState.recovering({
       active: REQUEST,
-      failure: { stage: "cleanup", message: "cleanup failed" },
+      failure: { stage: "teardown", message: "cleanup failed" },
     })
 
     expect(isForegroundSessionLaunchAccepting(failed)).toBe(false)
