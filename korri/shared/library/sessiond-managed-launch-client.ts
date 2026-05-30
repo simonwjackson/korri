@@ -32,9 +32,11 @@ export type SessiondManagedLaunchClientFailureKind =
   | "invalid-payload"
 
 export type SessiondManagedLaunchClientFailure = {
-  readonly kind: SessiondManagedLaunchClientFailureKind
-  readonly message?: string
-}
+  readonly [Kind in SessiondManagedLaunchClientFailureKind]: {
+    readonly kind: Kind
+    readonly message?: string
+  }
+}[SessiondManagedLaunchClientFailureKind]
 
 export type SessiondManagedLaunchStatusResult =
   | { readonly kind: "ok"; readonly status: SessiondManagedLaunchStatus }
