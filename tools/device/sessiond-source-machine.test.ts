@@ -197,6 +197,54 @@ describe("source-machine session role", () => {
     expect(state.windows).toEqual([])
   })
 
+  it("idle-ready evidence pins the windows/processes/cooldown contract after a successful restore (task-016 AC #6)", async () => {
+    // Regression guard: the evidence format is part of the wire
+    // contract operators read. Order, separators, and field names
+    // must stay stable so monitors and the operator UI can parse
+    // it without ambiguity. Mirrors the kiosk-side
+    // `formatKioskReadyEvidence` regression guard added in
+    // task-015.
+    const { sway } = makeSway()
+    let now = 0
+    const role = createSourceMachineSessionRole({
+      sway,
+      processList: makeProcessList([]),
+      clock: () => now,
+      delay: async ms => {
+        now += ms
+      },
+      cooldownMs: 50,
+      pollIntervalMs: 25,
+      maxReadyAttempts: 10,
+    })
+
+    await role.restoreIdleAfterLaunch()
+
+    expect(role.idleReadyEvidence()).toBe(
+      "idle-blank|windows=absent|processes=absent|cooldown=elapsed",
+    )
+  })
+
+  it("initial idle-ready evidence is wire-shape valid before any restore runs (task-016 AC #6)", async () => {
+    // The role's initial \`latestChecks\` defaults to all-satisfied so
+    // a freshly-constructed role can answer \`idleReadyEvidence()\`
+    // without crashing. This regression guard pins the initial-state
+    // wire shape so a future re-initialization (e.g. lifecycle
+    // reset) cannot quietly leak unsatisfied labels.
+    const { sway } = makeSway()
+    const role = createSourceMachineSessionRole({
+      sway,
+      processList: makeProcessList([]),
+      clock: () => 0,
+      delay: async () => {},
+      cooldownMs: 0,
+    })
+
+    expect(role.idleReadyEvidence()).toBe(
+      "idle-blank|windows=absent|processes=absent|cooldown=elapsed",
+    )
+  })
+
   it("restoreIdleAfterLaunch waits through cooldown before resolving", async () => {
     const { sway } = makeSway()
     let now = 0
