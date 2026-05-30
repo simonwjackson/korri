@@ -18,7 +18,7 @@ import type { SwayController } from "./sessiond-sway"
  * essway masked). Source-machine's idle = Sway alive with no foreground
  * application windows.
  */
-export type SessionRoleId = "kiosk" | "source-machine"
+export type SessionRoleId = "kiosk" | "source-machine" | (string & {})
 
 export type SessionRoleReadyEvidence =
   | {
