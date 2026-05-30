@@ -8,16 +8,11 @@ import {
   launchFailureExitCode,
   type ManagedLaunchResult,
 } from "./launcher"
+import { observeSessiondManagedLaunchEvents } from "./sessiond-managed-launch-event-observer"
 import {
-  decodeSessiondManagedLaunchEvent,
   decodeSessiondManagedLaunchStartResponse,
   decodeSessiondManagedLaunchStatus,
   isLaunchReadyMode,
-  isTerminalReadinessEvent,
-  READINESS_GATE_BY_EVENT,
-  type ReadinessGate,
-  type SessiondManagedLaunchEvent,
-  type TerminalReadinessEventType,
 } from "./sessiond-managed-launch-protocol"
 
 export interface SessionLauncherOptions {
@@ -34,16 +29,6 @@ export type SessionLauncherFetch = (
 ) => Promise<Response>
 
 const DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS = 10_000
-
-// Bound the reconnect loop in `observeManagedLaunchEvents`. The stream
-// is expected to be long-lived for the duration of a launch; closure
-// before a terminal event indicates an HTTP-layer hiccup (idle timeout,
-// transient socket reset) rather than a launch failure. Retry a small
-// number of times before declaring the session unobservable. Sessiond
-// publishes lifecycleEvents with replay, so reconnects pick up any
-// events emitted while we were reconnecting.
-const DEFAULT_EVENT_STREAM_MAX_ATTEMPTS = 5
-const DEFAULT_EVENT_STREAM_RECONNECT_DELAY_MS = 200
 
 export function createSessionLauncher(
   options: SessionLauncherOptions,
@@ -204,7 +189,7 @@ export async function spawnViaSessiond(
     return failedManagedLaunch(started.failureKind, started.message)
   }
 
-  const observer = observeManagedLaunchEvents({
+  const observer = observeSessiondManagedLaunchEvents({
     fetchImpl,
     url: options.url,
     token,
@@ -310,214 +295,6 @@ async function requestSessiondJson(
   }
 }
 
-function observeManagedLaunchEvents(options: {
-  readonly fetchImpl: SessionLauncherFetch
-  readonly url: string
-  readonly token: string
-  readonly launchId: string
-  readonly requestTimeoutMs?: number
-}): {
-  readonly exited: Promise<{ readonly exitCode: number | null }>
-  readonly ready: Promise<SessiondObservedReadiness>
-  readonly result: Promise<LaunchResult>
-} {
-  let resolveExited!: (value: { readonly exitCode: number | null }) => void
-  let resolveReady!: (value: SessiondObservedReadiness) => void
-  let resolveResult!: (value: LaunchResult) => void
-  const exited = new Promise<{ readonly exitCode: number | null }>(resolve => {
-    resolveExited = resolve
-  })
-  const ready = new Promise<SessiondObservedReadiness>(resolve => {
-    resolveReady = resolve
-  })
-  const result = new Promise<LaunchResult>(resolve => {
-    resolveResult = resolve
-  })
-  let childExitObserved = false
-  let terminalResult: LaunchResult | undefined
-  let resultSettled = false
-  let readinessTimeout: ReturnType<typeof setTimeout> | undefined
-  // Phase 4D / Track A. Cached terminal payload from a `launcher-exited`
-  // event so that, if the launch ends up in the anchor branch
-  // (no wait monitor; sessiond emits `session-anchored` followed by
-  // `terminated`), the runner still surfaces the launcher's exit code
-  // when settling `exited`.
-  let cachedLauncherTerminal: SessiondManagedLaunchEvent["terminal"] | undefined
-
-  const clearReadinessTimeout = () => {
-    if (readinessTimeout) clearTimeout(readinessTimeout)
-    readinessTimeout = undefined
-  }
-
-  const startReadinessTimeout = () => {
-    clearReadinessTimeout()
-    readinessTimeout = setTimeout(() => {
-      settleFailure("sessiond event stream timed out before readiness")
-    }, options.requestTimeoutMs ?? DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS)
-    if (
-      "unref" in readinessTimeout &&
-      typeof readinessTimeout.unref === "function"
-    ) {
-      readinessTimeout.unref()
-    }
-  }
-
-  const settleFailure = (message: string) => {
-    if (!childExitObserved) {
-      childExitObserved = true
-      resolveExited({ exitCode: null })
-    }
-    if (!resultSettled) {
-      resultSettled = true
-      resolveReady(readinessFailed(message))
-      clearReadinessTimeout()
-      resolveResult(failedLaunch("host-unavailable", message))
-    }
-  }
-
-  const settleExited = (
-    terminal: SessiondManagedLaunchEvent["terminal"] | undefined,
-    defaultFailureMessage: string,
-  ) => {
-    const exitCode = terminal?.exitCode ?? null
-    terminalResult =
-      exitCode === 0
-        ? { status: "launched" }
-        : failedLaunch(
-            terminal?.failureKind ?? "command-failed",
-            terminal?.stderrTail ?? defaultFailureMessage,
-            exitCode ?? undefined,
-          )
-    if (!childExitObserved) {
-      childExitObserved = true
-      resolveExited({ exitCode })
-      startReadinessTimeout()
-    }
-  }
-
-  // Fetch the SSE stream once and pump events into the shared handlers.
-  // Returns false when the stream ended cleanly without a terminal
-  // event, signalling the reconnect loop to try again. Throws on HTTP
-  // failure; the reconnect loop catches and retries.
-  const consumeEventStream = async (): Promise<boolean> => {
-    const response = await fetchWithTimeout(
-      options.fetchImpl,
-      String(
-        new URL(
-          `/managed-launch/events?launchId=${encodeURIComponent(options.launchId)}`,
-          options.url,
-        ),
-      ),
-      { headers: { "x-korri-sessiond-token": options.token } },
-      options.requestTimeoutMs ?? DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS,
-    )
-    if (!response.ok || !response.body) {
-      throw new Error(`sessiond event stream rejected: ${response.status}`)
-    }
-
-    for await (const event of readSseEvents(response.body)) {
-      if (event.launchId !== options.launchId) continue
-      if (event.type === "child-exited") {
-        settleExited(event.terminal, "sessiond child exited")
-      }
-      if (event.type === "launcher-exited") {
-        // Cache for the anchor branch; do not settle exited yet -- the
-        // session may still spawn a wait monitor or anchor.
-        cachedLauncherTerminal = event.terminal
-      }
-      if (event.type === "wait-monitor-exited") {
-        settleExited(event.terminal, "sessiond wait monitor exited")
-      }
-      if (
-        event.type === "terminated" &&
-        !childExitObserved &&
-        cachedLauncherTerminal !== undefined
-      ) {
-        // Anchor branch: launcher exited cleanly, sessiond held the
-        // anchor, an external terminate request closed the session.
-        // Surface the launcher's exit code as the launch's terminal.
-        settleExited(cachedLauncherTerminal, "sessiond session terminated")
-      }
-      if (isTerminalReadinessEvent(event.type) && !resultSettled) {
-        resultSettled = true
-        clearReadinessTimeout()
-        resolveReady(readinessOk(event.type))
-        resolveResult(terminalResult ?? { status: "launched" })
-      }
-      if (
-        (event.type === "failed" || event.type === "recovering") &&
-        !resultSettled
-      ) {
-        settleFailure(event.message ?? "sessiond managed launch failed")
-      }
-    }
-
-    return resultSettled
-  }
-
-  const observe = async () => {
-    // Reconnect-tolerant observation. An idle HTTP timeout on either
-    // side closes the SSE stream; that is an observability event, not a
-    // launch outcome. We retry the events fetch a bounded number of
-    // times before settling as failure. Sessiond replays buffered
-    // events on reconnect so we never miss a terminal signal that
-    // arrived during a reconnect window.
-    let attempts = 0
-    let lastError: string | undefined
-    while (!resultSettled && attempts < DEFAULT_EVENT_STREAM_MAX_ATTEMPTS) {
-      attempts += 1
-      try {
-        const settled = await consumeEventStream()
-        if (settled) return
-        lastError = "event stream ended before readiness"
-      } catch (error) {
-        lastError = error instanceof Error ? error.message : String(error)
-      }
-      if (resultSettled) return
-      if (attempts < DEFAULT_EVENT_STREAM_MAX_ATTEMPTS) {
-        await new Promise<void>(resolve =>
-          setTimeout(resolve, DEFAULT_EVENT_STREAM_RECONNECT_DELAY_MS),
-        )
-      }
-    }
-    if (!resultSettled) {
-      settleFailure(
-        `sessiond event stream unavailable after ${attempts} attempts: ${lastError ?? "unknown"}`,
-      )
-    }
-  }
-
-  void observe().catch(error => {
-    settleFailure(
-      `sessiond event stream failed: ${error instanceof Error ? error.message : String(error)}`,
-    )
-  })
-
-  return { exited, ready, result }
-}
-
-async function* readSseEvents(
-  body: ReadableStream<Uint8Array>,
-): AsyncGenerator<SessiondManagedLaunchEvent> {
-  const reader = body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ""
-  while (true) {
-    const read = await reader.read()
-    if (read.done) break
-    buffer += decoder.decode(read.value, { stream: true })
-    const chunks = buffer.split("\n\n")
-    buffer = chunks.pop() ?? ""
-    for (const chunk of chunks) {
-      const data = chunk
-        .split("\n")
-        .find(line => line.startsWith("data: "))
-        ?.slice("data: ".length)
-      if (data) yield decodeSessiondManagedLaunchEvent(JSON.parse(data))
-    }
-  }
-}
-
 async function terminateManagedLaunch(
   fetchImpl: SessionLauncherFetch,
   url: string,
@@ -595,31 +372,6 @@ async function promiseWithTimeout<T>(
     return await Promise.race([promise, timeoutPromise])
   } finally {
     if (timeout) clearTimeout(timeout)
-  }
-}
-
-type SessiondObservedReadiness =
-  | ReturnType<typeof readinessOk>
-  | ReturnType<typeof readinessFailed>
-
-function readinessGate(
-  eventType: TerminalReadinessEventType = "home-ready",
-): ReadinessGate {
-  return READINESS_GATE_BY_EVENT[eventType]
-}
-
-function readinessOk(eventType?: TerminalReadinessEventType) {
-  return {
-    status: "ok" as const,
-    evidence: { gate: readinessGate(eventType) },
-  }
-}
-
-function readinessFailed(message: string) {
-  return {
-    status: "failed" as const,
-    message,
-    evidence: { gate: readinessGate() },
   }
 }
 
