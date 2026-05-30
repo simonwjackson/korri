@@ -420,6 +420,14 @@ describe("local foreground launch adapter > U3 wire-shape discrimination", () =>
       exitCode: 121,
       failureKind: "session-busy",
     })
+    // SEC-001 (task-017): the owner FSM tag must NOT appear on the wire.
+    // `app.library.launch` is unauthenticated on the trusted-LAN shape;
+    // leaking the internal pipeline stage gives unauthenticated callers
+    // finer-grained visibility than `app.server.status` already exposes.
+    expect(
+      (second as { preflightReason?: Record<string, unknown> })
+        .preflightReason,
+    ).not.toHaveProperty("currentState")
     control.resolveExit({ exitCode: 0 })
     await first
     await owner.whenIdle()
