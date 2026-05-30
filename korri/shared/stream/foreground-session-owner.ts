@@ -27,7 +27,32 @@ import {
   foregroundSessionTransition,
 } from "@shared/stream/foreground-session-lifecycle"
 
-export type { ForegroundSessionEvidence } from "@shared/stream/foreground-session-lifecycle"
+export type {
+  ForegroundSessionBusyRejectionSource,
+  ForegroundSessionEvidence,
+} from "@shared/stream/foreground-session-lifecycle"
+
+/**
+ * Result of an external idle-authority check (typically sessiond).
+ *
+ * Three-valued so the owner can map sessiond's three observable states to
+ * distinct rejection paths:
+ *
+ * - `idle`         → preflight accepts; launch proceeds to the owner-local check.
+ * - `not-idle`     → preflight rejects as `Busy` with `source: "sessiond"`.
+ * - `unavailable`  → preflight rejects as `ExternalUnavailable` (network error
+ *                    or token rejected). No spawn attempted; fail-closed posture
+ *                    matches the existing `session-launcher.ts` 401 →
+ *                    `host-control-disabled` mapping.
+ */
+export type ForegroundExternalIdleResult =
+  | { readonly status: "idle" }
+  | { readonly status: "not-idle"; readonly mode: string }
+  | {
+      readonly status: "unavailable"
+      readonly reason: "network" | "token-rejected"
+      readonly message?: string
+    }
 
 export type ForegroundManagedSessionReadiness =
   | {
@@ -150,6 +175,19 @@ export interface ForegroundSessionOwnerOptions<
   readonly onStateEntered?: (
     state: ForegroundSessionState,
   ) => Promise<void> | void
+  /**
+   * Optional preflight hook that consults an external idle authority
+   * (sessiond on Korri hosts). When set, the owner queries it BEFORE the
+   * owner-local re-entry check, so an out-of-band `/managed-launch` POST
+   * cannot leave the owner believing the host is idle.
+   *
+   * When unset (live-USB, no sessiond configured), the owner falls back to
+   * the owner-local check only — behavior is unchanged from the pre-hook
+   * shape.
+   *
+   * See: docs/solutions/architecture-patterns/physical-host-foreground-lifecycle-truth-is-sessiond-2026-05-29.md
+   */
+  readonly consultExternalIdle?: () => Promise<ForegroundExternalIdleResult>
 }
 
 export type ForegroundSessionOwnerLaunchResult<TSuccess, TFailure = never> =
@@ -157,6 +195,11 @@ export type ForegroundSessionOwnerLaunchResult<TSuccess, TFailure = never> =
   | {
       readonly _tag: "Busy"
       readonly rejection: ForegroundSessionBusyRejection
+    }
+  | {
+      readonly _tag: "ExternalUnavailable"
+      readonly reason: "network" | "token-rejected"
+      readonly message: string
     }
   | {
       readonly _tag: "Failed"
@@ -433,10 +476,57 @@ export function createForegroundSessionOwner<
       request: TRequest,
     ): Promise<ForegroundSessionOwnerLaunchResult<TSuccess, TFailure>> => {
       const identity = options.requestIdentity(request)
+
+      // External preflight: consult sessiond (or other configured idle
+      // authority) BEFORE the owner-local re-entry check. Catches out-of-band
+      // callers that may have transitioned sessiond away from idle without
+      // the owner observing it. Not atomic across concurrent in-process
+      // launches — the owner-local check below is still the mutex.
+      if (options.consultExternalIdle) {
+        const external = await options.consultExternalIdle()
+        if (external.status === "not-idle") {
+          const rejection: ForegroundSessionBusyRejection = {
+            category: "session-busy",
+            message: `external authority (sessiond) is ${external.mode}; launch requires idle`,
+            attemptedRequestId: identity.requestId,
+            attemptedGameId: identity.gameId,
+            currentState: state._tag,
+            source: "sessiond",
+            externalMode: external.mode,
+          }
+          pushEvent(
+            createForegroundSessionEvent({
+              _tag: "ForegroundSessionLaunchRejected",
+              requestId: identity.requestId,
+              gameId: identity.gameId,
+              rejection,
+            }),
+          )
+          return { _tag: "Busy", rejection }
+        }
+        if (external.status === "unavailable") {
+          const message =
+            external.message ??
+            (external.reason === "token-rejected"
+              ? "sessiond rejected the capability token"
+              : "sessiond is unreachable")
+          return {
+            _tag: "ExternalUnavailable",
+            reason: external.reason,
+            message,
+          }
+        }
+        // status === "idle" → fall through to the owner-local check.
+      }
+
       const accepted = acceptForegroundSessionLaunch(state, identity)
       if (accepted._tag === "Rejected") {
         pushEvent(accepted.event)
-        return { _tag: "Busy", rejection: accepted.rejection }
+        const rejection: ForegroundSessionBusyRejection = {
+          ...accepted.rejection,
+          source: "owner-local",
+        }
+        return { _tag: "Busy", rejection }
       }
 
       pushEvent(accepted.event)
