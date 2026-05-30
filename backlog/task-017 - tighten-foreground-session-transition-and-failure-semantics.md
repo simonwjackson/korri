@@ -30,12 +30,14 @@ As more launch types route through sessiond, unclear transition and failure sema
 - [ ] Abort behavior during teardown/readiness is covered and documented.
 - [ ] Restore failure/recovering never surfaces as successful readiness.
 - [ ] Public launch responses preserve useful failureKind/stderrTail without leaking internal-only details.
+- [ ] Decide whether `PreflightRejected.preflightReason.currentState` (in-process owner FSM state — `Spawning`, `Running`, `TearingDown`, etc.) should be redacted or kept on the wire. Today it ships verbatim to any unauthenticated LAN caller of `app.library.launch`. Values are bounded enums (no credentials/PII), but the field gives a remote caller the owner's internal launch-pipeline stage without needing to poll `app.server.status`. Either (a) strip the field from the wire response and keep it server-side for logging, or (b) document that on the trusted-LAN deployment shape the owner FSM state is considered public information.
 
 ## Related
 
 - `korri/shared/stream/foreground-session-lifecycle.ts`
 - `korri/shared/stream/foreground-session-owner.ts`
 - `korri/products/app/api/library/local-foreground-launch-adapter.ts`
+- `korri/products/app/api/library/launch.rpc.ts`
 - `korri/shared/library/session-launcher.ts`
 - `tools/device/sessiond.ts`
 - `tools/device/sessiond-state.ts`
@@ -43,3 +45,5 @@ As more launch types route through sessiond, unclear transition and failure sema
 ## Notes
 
 This is a correctness/refinement slice. Avoid broad architectural changes that belong in task-012.
+
+2026-05-29: extended during task-012 (refactor/sessiond-canonical-lifecycle-source) review. The new `_tag: "PreflightRejected"` wire variant from task-012 adds `preflightReason.currentState` and `preflightReason.externalMode`; the `currentState` field is the in-process owner FSM tag and is the concrete instance behind the new acceptance criterion above. See `docs/plans/2026-05-29-004-refactor-sessiond-canonical-lifecycle-source-plan.md` and the se-security-reviewer SEC-001 finding.
