@@ -43,7 +43,7 @@ This is the single largest "scope shrink" available to the substrate — ~13 she
 
 **Swing 3 — Launcher migration** (single-task swing). One PR with the bulk move + the lint cleanup that comes with it.
 
-Depends on **Swing 1** (task-027) if any of the moved launchers want to use the new `rocknix.session.kioskUnit` option instead of hardcoded `korri-kiosk.service` references. Otherwise the launchers move to Korri with the hardcoded name (which is now accurate in their new home).
+Depends on **Swing 1** (task-032) if any of the moved launchers want to use the new `rocknix.session.kioskUnit` option instead of hardcoded `korri-kiosk.service` references. Otherwise the launchers move to Korri with the hardcoded name (which is now accurate in their new home).
 
 Coupled to **Swing 2** because `start_cemu_guest.sh` and the `remote-cemu-*` family invoke the Cemu binary. If task-023 has moved the package, references update naturally; if Swing 2 hasn't landed yet, the launchers reference the substrate-provided binary and break when Swing 2 ships. Recommended sequencing: Swing 3 lands first (Korri-side launchers reference the substrate-provided binary, will switch when Swing 2 lands), or Swing 2 + Swing 3 land in one mega-PR.
 
@@ -77,7 +77,7 @@ Coupled to **Swing 2** because `start_cemu_guest.sh` and the `remote-cemu-*` fam
 - nix-on-rocks `guest/launchers/` (full directory inventory)
 - nix-on-rocks `scripts/check-boundary-lint` (launcher invariants, ~25 lines)
 - task-022, task-023, task-024: callers of these launchers; sequencing depends on which Swing lands first
-- task-027: kiosk-unit parameterization (may be consumed by some moved launchers)
+- task-032: kiosk-unit parameterization (may be consumed by some moved launchers)
 - task-029: lint cleanup task; some of the cleanup folds in here, the rest waits
 
 ## Notes

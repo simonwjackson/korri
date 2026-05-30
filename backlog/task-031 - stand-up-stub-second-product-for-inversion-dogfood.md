@@ -46,7 +46,7 @@ A stub second product makes the difference between "we think this works" and "th
 
 - [ ] A new repo (or worktree, see Notes) exists named `nix-on-rocks-demo-product` or similar, that:
   - Imports `nix-on-rocks` as a flake input
-  - Sets `rocknix.session.kioskUnit`, `rocknix.session.compositorUnit`, `rocknix.session.inputdUnit` (from task-027) to demo-product-shape names
+  - Sets `rocknix.session.kioskUnit`, `rocknix.session.compositorUnit`, `rocknix.session.inputdUnit` (from task-032) to demo-product-shape names
   - Ships a single trivial NixOS module that defines those units as "hello world" services (e.g. systemd one-shots that log "demo-product kiosk start" to journal)
   - Emits a product payload with the substrate's contract: a minimal `product-payload-demo.lock`, a payload tar with just the required fields, and a boot-logo asset (a neutral monogram, no Korri branding)
 
@@ -69,14 +69,14 @@ A stub second product makes the difference between "we think this works" and "th
 
 ### Documentation
 
-- [ ] `docs/contracts/product-blind-invariants.md` (task-030) updates its enforcement table to point at the demo-product CI as the existence-proof enforcer of the invariants.
+- [ ] `docs/contracts/product-blind-invariants.md` (introduced by task-032) updates its enforcement table to point at the demo-product CI as the existence-proof enforcer of the invariants.
 - [ ] A short `docs/onboarding/bringing-a-new-product.md` (or similar) points future product authorities at the demo-product as the canonical "minimal product" example.
 
 ## Related
 
 - Every other task in this audit (021-030) — this is the integration test for all of them
 - nix-on-rocks `flake.nix` (consumer of the demo-product, if it's in-tree)
-- task-030 (invariants doc this task validates)
+- task-032 (option group + invariants doc this task validates)
 
 ## Notes
 
@@ -91,7 +91,7 @@ A stub second product makes the difference between "we think this works" and "th
 
 3. **Which SM8550 device for boot test?** Sobo is convenient but is Korri's primary device. Using sobo for the dogfood test risks confusing Korri / demo-product state on the same hardware. Recommendation: use sobo with a clear reset between Korri and demo flashes, *or* keep this test build-and-VM-only and defer device boot to a spare SM8550 if/when one shows up.
 
-4. **What about all the substrate's existing test contracts?** They evaluate against any consumer that imports the profile. The demo-product runs them. If task-028 didn't fully parameterize and contracts still hardcode Korri names, those contracts fail for the demo-product — surfacing the violation that the audit might have missed.
+4. **What about all the substrate's existing test contracts?** They evaluate against any consumer that imports the profile. The demo-product runs them. If task-032 didn't fully parameterize and contracts still hardcode Korri names, those contracts fail for the demo-product — surfacing the violation that the audit might have missed.
 
 5. **Naming.** "demo-product", "blank-product", "noop-product", "sample-product". Recommendation: `sample-product` — it suggests the canonical template for new products without being self-deprecating about the work.
 

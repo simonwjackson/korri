@@ -56,7 +56,7 @@ If Swings 2 and 3 are bundled into one mega-PR, the lint cleanup may fold into t
 - [ ] Negative assertions about `korri.url` not being a flake input — kept.
 - [ ] Negative assertions about `services.korri.*` / `korri.nixosModules` / `korri.packages` in profiles, modules, README — kept.
 - [ ] Negative assertions about substrate-internal invariants (XDG runtime dir, KillUserProcesses, logind ownership) — kept; these are substrate-side rules, not product-side.
-- [ ] New negative assertion from task-027: no hardcoded Korri unit names in `guest/modules/` or `guest/profiles/`.
+- [ ] New negative assertion from task-032: no hardcoded Korri unit names in `guest/modules/` or `guest/profiles/`.
 - [ ] New negative assertion: `guest/launchers/` either empty or contains no files mentioning product-specific identifiers (from task-026's "static check at substrate / payload seam" item).
 
 ### Optional: rename or split
@@ -73,8 +73,7 @@ If Swings 2 and 3 are bundled into one mega-PR, the lint cleanup may fold into t
 - nix-on-rocks `scripts/check-boundary-lint`
 - task-022, task-023, task-024, task-025 (Swing 2): remove the package code that the positive lint guards target
 - task-026 (Swing 3): removes the launcher code that the positive lint guards target
-- task-027: adds a new negative guard this task enforces
-- task-030: invariants doc this lint enforces
+- task-032: adds new negative guards this task enforces; writes the invariants doc this lint enforces
 
 ## Notes
 

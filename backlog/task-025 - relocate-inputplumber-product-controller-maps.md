@@ -81,7 +81,7 @@ If the decision is "split", this task ships a smaller change than 022-024 (some 
 
 2. **Map authority over time.** If split, who owns adding a new product's controller map? In the split world, each product owns its own under its payload. In the move-whole world, every product owns its own InputPlumber package and chooses its own maps. Split is lower-friction for adding products.
 
-3. **Coupling with task-027.** task-027 introduces a generalized substrate-option pattern (`rocknix.session.kioskUnit`). A similar pattern (`rocknix.inputplumber.extraMapsPath`?) might fit naturally. Worth checking after task-027 lands.
+3. **Coupling with task-032.** task-032 introduces a generalized substrate-option pattern (`rocknix.session.kioskUnit`). A similar pattern (`rocknix.inputplumber.extraMapsPath`?) might fit naturally. Worth checking after task-032 lands.
 
 4. **This is the lowest-priority Swing-2 item.** It can be deferred past Swings 1-4 without blocking anything else. If the design question is too slow to resolve, peel this off Swing 2 and ship the other three.
 

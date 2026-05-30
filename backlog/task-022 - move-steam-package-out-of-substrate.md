@@ -36,7 +36,7 @@ Until this lands, a non-Korri product that doesn't want Steam still gets the Ste
 
 **Swing 2 — Package migration** (with task-023 cemu, task-024 moonlight-embedded, task-025 inputplumber). Safe to land these four as one PR with four atomic commits because: same pattern (delete package + remove flake export + delete lint guards + add Korri-side input), zero file overlap between commits, one CI cycle.
 
-Depends on **Swing 1** (task-027 + 028 + 030) landing first only if task-029 (lint cleanup) is in scope; otherwise Swing 2 can run independently.
+Depends on **Swing 1** (task-032) landing first only if task-029 (lint cleanup) is in scope; otherwise Swing 2 can run independently.
 
 ## Acceptance Criteria
 
