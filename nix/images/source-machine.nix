@@ -134,4 +134,17 @@ in
     sessiond.url = "http://127.0.0.1:${toString sessiondPort}";
     sessiond.tokenFile = sessiondTokenFile;
   };
+
+  # Wire korri-server (the system unit) to delegate managed launches
+  # to the in-image sessiond, matching the kiosk image's equivalent
+  # wiring in nix/images/kiosk.nix. Without this, korri-server's
+  # Launcher falls through to the in-process shell launcher which
+  # spawns from the unit's bare systemd PATH; any default-gamescope
+  # launch path then explodes with ENOENT on gamescope. The
+  # both-or-neither assertion in korri-server.nix would have fired
+  # on a partial wire.
+  services.korri.server.sessiond = {
+    url = "http://127.0.0.1:${toString sessiondPort}";
+    tokenFile = sessiondTokenFile;
+  };
 }
