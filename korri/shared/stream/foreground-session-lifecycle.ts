@@ -10,14 +10,40 @@ export type ForegroundSessionStateTag =
   | "Failed"
   | "Recovering"
 
+/**
+ * Stage at which a foreground-session attempt failed. The vocabulary
+ * here is shared by every layer that can report a failure on the
+ * lifecycle (owner stages, adapter outcomes, sessiond mapping). Names
+ * align with the steps the owner walks the FSM through:
+ *
+ * - `prepare`    — pre-spawn host preparation (`prepareForeground` adapter).
+ * - `spawn`      — launching the child process.
+ * - `foreground` — making the child foreground (surface repair).
+ * - `exit`       — child exited with a non-zero or unexpected status.
+ * - `teardown`   — post-exit cleanup (`teardownForeground` adapter).
+ *                  Renamed from `cleanup` to align with the
+ *                  `ForegroundSessionAdapterOutcome` event vocabulary
+ *                  the owner already emits ("teardown" / "verifyReady").
+ * - `readiness`  — the post-cleanup ready check (`verifyReady` adapter).
+ * - `restore`    — a Recovering state's restore step failed. Distinct
+ *                  from `teardown`: teardown is the happy-path exit
+ *                  cleanup, restore is the failure-path attempt to get
+ *                  back to IdleReady.
+ * - `adapter`    — a non-stage-specific adapter / external integration
+ *                  failure.
+ *
+ * Was `"accept"` here previously; that stage was never used in any
+ * `ForegroundSessionFailure` (acceptance failures surface as
+ * `ForegroundSessionBusyRejection`, not a failure object).
+ */
 export type ForegroundSessionFailureStage =
-  | "accept"
   | "prepare"
   | "spawn"
   | "foreground"
   | "exit"
-  | "cleanup"
+  | "teardown"
   | "readiness"
+  | "restore"
   | "adapter"
 
 export interface ForegroundSessionRequestIdentity {
@@ -305,6 +331,18 @@ export function foregroundSessionBusyRejection(
   }
 }
 
+/**
+ * Permissive (state, nextTag) constructor. Accepts any pair and produces
+ * the next state — it does NOT enforce edge legality. Legal ordering is
+ * the responsibility of `createForegroundSessionOwner`'s control flow,
+ * which is the only sanctioned caller. Tests that want illegal-edge
+ * coverage exercise the owner; this helper is intentionally
+ * unrestricted so the owner can compose transitions cleanly.
+ *
+ * See `foreground-session-owner.test.ts` ("refuses to launch when state
+ * is non-idle" + the rejection coverage) for the owner-level ordering
+ * tests.
+ */
 export function foregroundSessionTransition(
   state: ForegroundSessionState,
   nextState: Exclude<ForegroundSessionStateTag, "IdleReady">,
@@ -402,7 +440,11 @@ function stateForTag(
     case "Recovering":
       return foregroundSessionState.recovering({
         active,
-        failure: failure ?? { stage: "cleanup", message: "session recovering" },
+        // A Recovering state is by definition a restore in progress;
+        // default to `restore` (not `teardown`) so a caller that forgets
+        // to provide an explicit failure still produces a semantically
+        // accurate stage tag.
+        failure: failure ?? { stage: "restore", message: "session recovering" },
       })
   }
 }

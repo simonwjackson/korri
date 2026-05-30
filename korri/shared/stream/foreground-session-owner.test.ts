@@ -234,7 +234,7 @@ describe("foreground session owner", () => {
       expect.objectContaining({
         _tag: "ForegroundSessionStateChanged",
         nextState: "Failed",
-        evidence: { stage: "cleanup", message: "cleanup exploded" },
+        evidence: { stage: "teardown", message: "cleanup exploded" },
       }),
     )
   })

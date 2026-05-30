@@ -110,6 +110,47 @@ describe("foreground session gate state", () => {
     })
   })
 
+  it("forwards the new `restore` failure stage onto the gate state", () => {
+    // task-017 introduced `restore` as a distinct failure stage for
+    // Recovering states. The gate state's `stage` field is a loose
+    // string passthrough; this test pins the contract so an operator UI
+    // can render "restore failed" specifically without the field being
+    // collapsed into "teardown".
+    expect(
+      foregroundSessionGateStateFromSnapshot({
+        ...base,
+        state: "Recovering",
+        lastFailure: {
+          requestId: "request-r",
+          gameId: "snes/echo.smc",
+          stage: "restore",
+          message: "sessiond restore failed",
+        },
+      }),
+    ).toEqual({
+      _tag: "Recovering",
+      state: "Recovering",
+      requestId: "request-r",
+      gameId: "snes/echo.smc",
+      stage: "restore",
+      message: "sessiond restore failed",
+    })
+  })
+
+  it("never reports Recovering or Failed snapshots as Ready (restore safety)", () => {
+    // Regression guard for the task-017 acceptance criterion: a restore
+    // failure must NEVER surface as `_tag: "Ready"`. Any UI consumer
+    // gating user-visible launch on `_tag === "Ready"` would otherwise
+    // ignore the unhealthy state and re-allow launches mid-recovery.
+    for (const snapshotState of ["Failed", "Recovering"] as const) {
+      const gate = foregroundSessionGateStateFromSnapshot({
+        ...base,
+        state: snapshotState,
+      })
+      expect(gate._tag).not.toBe("Ready")
+    }
+  })
+
   it("maps unknown future state tags to unknown", () => {
     expect(
       foregroundSessionGateStateFromSnapshot({
