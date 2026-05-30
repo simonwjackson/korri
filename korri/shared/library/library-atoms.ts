@@ -1,7 +1,7 @@
 import type { EntrySource } from "@shared/api/rpc/entry-source"
 import type { ForegroundSessionGateState } from "@shared/stream/foreground-session-gate-state"
 import { ForegroundSessionStatusSource } from "@shared/stream/foreground-session-status-source"
-import { Effect, Layer } from "effect"
+import { Duration, Effect, Layer } from "effect"
 import * as Atom from "effect/unstable/reactivity/Atom"
 import { makeInMemoryLauncherLayer } from "./launcher-layer-memory"
 import { Launcher, LibraryError, LibrarySource } from "./library-services"
@@ -40,13 +40,27 @@ export const libraryItemsAtom = libraryRuntime.atom(
   }),
 )
 
+/**
+ * Polls `app.server.status` at 1 Hz via `Atom.withRefresh`. The live layer
+ * (`ForegroundSessionStatusLayerLive`) reads sessiond's authoritative mode
+ * through `app.server.status` over standard `/api/rpc`; the fixture layer
+ * (`ForegroundSessionStatusLayerFixture`) returns a static IdleReady
+ * snapshot for live-USB. `Atom.withRefresh` schedules a setTimeout per
+ * read that fires `get.refresh(self)` and clears via the atom finalizer
+ * when no readers remain (autoDispose is the default), so polling stops
+ * when the home/library view unmounts.
+ *
+ * See: docs/solutions/architecture-patterns/physical-host-foreground-lifecycle-truth-is-sessiond-2026-05-29.md
+ */
 export const foregroundSessionGateStateAtom =
-  foregroundSessionStatusRuntime.atom(
-    Effect.gen(function* () {
-      const source = yield* ForegroundSessionStatusSource
-      return yield* source.get()
-    }),
-  )
+  foregroundSessionStatusRuntime
+    .atom(
+      Effect.gen(function* () {
+        const source = yield* ForegroundSessionStatusSource
+        return yield* source.get()
+      }),
+    )
+    .pipe(Atom.withRefresh(Duration.seconds(1)))
 
 /**
  * Renderer launch input.

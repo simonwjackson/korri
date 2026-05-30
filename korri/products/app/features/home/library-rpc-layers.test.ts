@@ -118,12 +118,22 @@ describe("RPC-backed library layers", () => {
 
     const second = await launch()
 
-    expect(second).toMatchObject({
+    // `Launcher.run` returns the shared `LaunchResult` shape; the RPC
+    // bridge passes the wire response (LaunchLibraryResponse) through
+    // verbatim, so the U3 discriminator and preflightReason are present
+    // at runtime even though they're not part of the LaunchResult type.
+    // Cast the assertion shape to surface those fields explicitly.
+    expect(second as unknown as Record<string, unknown>).toMatchObject({
+      _tag: "PreflightRejected",
       status: "failed",
       exitCode: 121,
       failureKind: "session-busy",
+      preflightReason: { source: "owner-local" },
     })
-    expect(await first).toEqual({ status: "launched" })
+    expect((await first) as unknown as Record<string, unknown>).toEqual({
+      _tag: "Accepted",
+      status: "launched",
+    })
   })
 })
 

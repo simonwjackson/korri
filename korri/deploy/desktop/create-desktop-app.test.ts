@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
-import { decodeForegroundSessionStatusSnapshot } from "@shared/stream/foreground-session-status"
 import { createDesktopApp } from "./create-desktop-app"
 
 let assetRoot: string
@@ -239,7 +238,7 @@ describe("connected serve inlines runtime-config", () => {
   })
 })
 
-describe("/__korri/desktop/foreground-session-status", () => {
+describe("/__korri/desktop/foreground-session-status (deleted)", () => {
   beforeEach(async () => {
     assetRoot = await mkdtemp(join(tmpdir(), "korri-desktop-app-"))
   })
@@ -248,67 +247,22 @@ describe("/__korri/desktop/foreground-session-status", () => {
     await rm(assetRoot, { recursive: true, force: true })
   })
 
-  test("returns the configured foreground session status as no-store JSON", async () => {
+  test("falls through to the SPA catch-all (route deleted; renderer reads sessiond via app.server.status)", async () => {
     const app = createDesktopApp({
       assetRoot,
       getUpstream: noUpstream,
-      getForegroundSessionStatus: () => ({
-        schemaVersion: 1,
-        serverTimestamp: "2026-05-26T12:00:00.000Z",
-        state: "IdleReady",
-        recentEvents: [],
-      }),
     })
 
     const response = await app.fetch(
       request("/__korri/desktop/foreground-session-status"),
     )
 
-    expect(response.status).toBe(200)
-    expect(response.headers.get("content-type") ?? "").toContain(
+    // The dedicated JSON route is gone; the path falls through to the
+    // SPA catch-all and we verify the response is no longer JSON.
+    // Sessiond is now the authoritative lifecycle source, surfaced via
+    // `app.server.status` over the standard `/api/rpc` path.
+    expect(response.headers.get("content-type") ?? "").not.toContain(
       "application/json",
     )
-    expect(response.headers.get("cache-control") ?? "").toContain("no-store")
-    const body = await response.json()
-    expect(decodeForegroundSessionStatusSnapshot(body)).toEqual({
-      schemaVersion: 1,
-      serverTimestamp: "2026-05-26T12:00:00.000Z",
-      state: "IdleReady",
-      recentEvents: [],
-    })
-  })
-
-  test("returns a bounded error when foreground session status accessor fails", async () => {
-    const app = createDesktopApp({
-      assetRoot,
-      getUpstream: noUpstream,
-      getForegroundSessionStatus: () => {
-        throw new Error("owner status failed")
-      },
-    })
-
-    const response = await app.fetch(
-      request("/__korri/desktop/foreground-session-status"),
-    )
-
-    expect(response.status).toBe(500)
-    expect(response.headers.get("cache-control") ?? "").toContain("no-store")
-    const body = (await response.json()) as { readonly error: string }
-    expect(body.error).toContain("owner status failed")
-  })
-
-  test("returns 503 when foreground session status is not configured", async () => {
-    const app = createDesktopApp({
-      assetRoot,
-      getUpstream: noUpstream,
-    })
-
-    const response = await app.fetch(
-      request("/__korri/desktop/foreground-session-status"),
-    )
-
-    expect(response.status).toBe(503)
-    const body = (await response.json()) as { readonly error: string }
-    expect(body.error).toContain("Foreground session status not configured")
   })
 })

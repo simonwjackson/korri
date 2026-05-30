@@ -1,4 +1,4 @@
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react"
+import { useAtomValue } from "@effect/atom-react"
 import {
   type GameRecord,
   getGameDisplayName,
@@ -15,7 +15,6 @@ import { useInputAction } from "@shared/navigation/use-input-action"
 import type { ForegroundSessionGateState } from "@shared/stream/foreground-session-gate-state"
 import { Option } from "effect"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
-import { useEffect } from "react"
 import { ShiftForegroundSessionGateNotice } from "../molecules/ShiftForegroundSessionGateNotice"
 import { ShiftHomeCaption } from "../molecules/ShiftHomeCaption"
 import { ShiftLabsButton } from "../molecules/ShiftLabsButton"
@@ -94,18 +93,16 @@ function ShiftHomeLaunchSurface({
   readonly launch: LaunchController
 }) {
   const { items } = useShiftHome()
+  // Polling cadence lives on `foregroundSessionGateStateAtom` via
+  // `Atom.withRefresh` (see library-atoms.ts). No component-level driver
+  // needed; reading the atom subscribes us to its ~1 Hz updates and
+  // unmount triggers Atom autoDispose which clears the refresh timer.
   const foregroundGateResult = useAtomValue(foregroundSessionGateStateAtom)
-  const refreshForegroundGate = useAtomRefresh(foregroundSessionGateStateAtom)
   const foregroundGate = foregroundGateStateFromResult(foregroundGateResult)
   const actionState = launchActionStateFrom({
     launch: launch.state,
     foreground: foregroundGate,
   })
-
-  useEffect(() => {
-    const interval = window.setInterval(() => refreshForegroundGate(), 1_000)
-    return () => window.clearInterval(interval)
-  }, [refreshForegroundGate])
 
   const failedGame = failedGameFor(items, launch.state)
   const actionGame = actionGameFor(items, actionState)
