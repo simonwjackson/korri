@@ -50,7 +50,7 @@ describe("local foreground launch adapter", () => {
     })
 
     control.resolveExit({ exitCode: 0 })
-    expect(await launch).toEqual({ status: "launched" })
+    expect(await launch).toEqual({ _tag: "Accepted", status: "launched" })
     await owner.whenIdle()
   })
 
@@ -80,10 +80,15 @@ describe("local foreground launch adapter", () => {
       createRequestId: () => "local-launch-2",
     })
 
+    // Back-compat assertion: old callers reading only `status`/`failureKind`
+    // still see exit-121 / session-busy. New callers branch on `_tag` and
+    // `preflightReason.source`.
     expect(second).toMatchObject({
+      _tag: "PreflightRejected",
       status: "failed",
       exitCode: 121,
       failureKind: "session-busy",
+      preflightReason: { source: "owner-local" },
     })
     expect(secondSpawnCalls).toBe(0)
 
@@ -130,7 +135,7 @@ describe("local foreground launch adapter", () => {
     expect(settled).toBe(false)
 
     ready.resolve({ status: "ok", evidence: { gate: "sessiond-home-ready" } })
-    expect(await launch).toEqual({ status: "launched" })
+    expect(await launch).toEqual({ _tag: "Accepted", status: "launched" })
     await owner.whenIdle()
   })
 
@@ -179,6 +184,7 @@ describe("local foreground launch adapter", () => {
     })
 
     expect(await launch).toEqual({
+      _tag: "LaunchFailed",
       status: "failed",
       exitCode: 1,
       failureKind: "command-failed",
@@ -203,6 +209,7 @@ describe("local foreground launch adapter", () => {
     })
 
     expect(result).toEqual({
+      _tag: "LaunchFailed",
       status: "failed",
       exitCode: 125,
       stderrTail: "unsupported",
@@ -235,10 +242,12 @@ describe("local foreground launch adapter > sessiond preflight", () => {
       createRequestId: () => "local-launch-1",
     })
     expect(result).toMatchObject({
+      _tag: "HostUnavailable",
       status: "failed",
       exitCode: 124,
       failureKind: "host-unavailable",
       stderrTail: "sessiond unreachable",
+      hostUnavailableReason: { kind: "network" },
     })
     expect(spawnCalls).toBe(0)
   })
@@ -264,10 +273,16 @@ describe("local foreground launch adapter > sessiond preflight", () => {
       },
       createRequestId: () => "local-launch-1",
     })
+    // Back-compat assertion: 401 preserves the existing
+    // `host-control-disabled` / exit-126 mapping from session-launcher.ts;
+    // the new `_tag` / `hostUnavailableReason.kind` discriminator surfaces
+    // the token-rejected source for new callers.
     expect(result).toMatchObject({
+      _tag: "HostUnavailable",
       status: "failed",
       exitCode: 126,
       failureKind: "host-control-disabled",
+      hostUnavailableReason: { kind: "token-rejected" },
     })
     expect(spawnCalls).toBe(0)
   })
@@ -294,9 +309,11 @@ describe("local foreground launch adapter > sessiond preflight", () => {
       createRequestId: () => "local-launch-1",
     })
     expect(result).toMatchObject({
+      _tag: "PreflightRejected",
       status: "failed",
       exitCode: 121,
       failureKind: "session-busy",
+      preflightReason: { source: "sessiond", externalMode: "game" },
     })
     expect(spawnCalls).toBe(0)
   })
@@ -317,8 +334,172 @@ describe("local foreground launch adapter > sessiond preflight", () => {
     })
     await waitForOwnerState(owner, "Running")
     control.resolveExit({ exitCode: 0 })
-    expect(await launch).toEqual({ status: "launched" })
+    expect(await launch).toEqual({ _tag: "Accepted", status: "launched" })
     await owner.whenIdle()
+  })
+})
+
+describe("local foreground launch adapter > U3 wire-shape discrimination", () => {
+  // The launch RPC response surfaces a discriminated `_tag` so callers can
+  // distinguish the rejection source. Existing fields (status, exitCode,
+  // failureKind, stderrTail) remain populated for back-compat. These tests
+  // assert the exact tag + back-compat field pairs across the matrix.
+
+  it("Accepted: launched response carries _tag=Accepted with status=launched preserved", async () => {
+    const control = makeInMemoryLauncherLayer.createManagedControl()
+    const launcher = await launcherFromLayer(
+      makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+    )
+    const owner = createLocalForegroundLaunchOwner({
+      consultExternalIdle: async () => ({ status: "idle" }),
+    })
+    const launch = launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      spawn: () => spawnWith(launcher),
+      createRequestId: () => "u3-accepted",
+    })
+    await waitForOwnerState(owner, "Running")
+    control.resolveExit({ exitCode: 0 })
+    expect(await launch).toEqual({ _tag: "Accepted", status: "launched" })
+    await owner.whenIdle()
+  })
+
+  it("PreflightRejected (sessiond): _tag + back-compat exit 121 + reason.source=sessiond", async () => {
+    const control = makeInMemoryLauncherLayer.createManagedControl()
+    const launcher = await launcherFromLayer(
+      makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+    )
+    const owner = createLocalForegroundLaunchOwner({
+      consultExternalIdle: async () => ({ status: "not-idle", mode: "game" }),
+    })
+    const result = await launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      spawn: () => spawnWith(launcher),
+      createRequestId: () => "u3-pre-sessiond",
+    })
+    // Tag + reason discrimination
+    expect(result).toMatchObject({
+      _tag: "PreflightRejected",
+      preflightReason: { source: "sessiond", externalMode: "game" },
+    })
+    // Back-compat fields preserved for callers reading status/failureKind only
+    expect(result).toMatchObject({
+      status: "failed",
+      exitCode: 121,
+      failureKind: "session-busy",
+    })
+  })
+
+  it("PreflightRejected (owner-local): _tag + back-compat exit 121 + reason.source=owner-local", async () => {
+    const control = makeInMemoryLauncherLayer.createManagedControl()
+    const launcher = await launcherFromLayer(
+      makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+    )
+    const owner = createLocalForegroundLaunchOwner({
+      consultExternalIdle: async () => ({ status: "idle" }),
+    })
+    const first = launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      spawn: () => spawnWith(launcher),
+      createRequestId: () => "u3-pre-local-1",
+    })
+    await waitForOwnerState(owner, "Running")
+    const second = await launchLocalForegroundSession(owner, {
+      id: "game-2",
+      spec,
+      spawn: () => spawnWith(launcher),
+      createRequestId: () => "u3-pre-local-2",
+    })
+    expect(second).toMatchObject({
+      _tag: "PreflightRejected",
+      preflightReason: { source: "owner-local" },
+      status: "failed",
+      exitCode: 121,
+      failureKind: "session-busy",
+    })
+    control.resolveExit({ exitCode: 0 })
+    await first
+    await owner.whenIdle()
+  })
+
+  it("HostUnavailable (network): _tag + back-compat exit 124 + reason.kind=network", async () => {
+    const control = makeInMemoryLauncherLayer.createManagedControl()
+    const launcher = await launcherFromLayer(
+      makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+    )
+    const owner = createLocalForegroundLaunchOwner({
+      consultExternalIdle: async () => ({
+        status: "unavailable",
+        reason: "network",
+      }),
+    })
+    const result = await launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      spawn: () => spawnWith(launcher),
+      createRequestId: () => "u3-host-network",
+    })
+    expect(result).toMatchObject({
+      _tag: "HostUnavailable",
+      hostUnavailableReason: { kind: "network" },
+      status: "failed",
+      exitCode: 124,
+      failureKind: "host-unavailable",
+    })
+  })
+
+  it("HostUnavailable (token-rejected): _tag + back-compat exit 126 + failureKind=host-control-disabled", async () => {
+    const control = makeInMemoryLauncherLayer.createManagedControl()
+    const launcher = await launcherFromLayer(
+      makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+    )
+    const owner = createLocalForegroundLaunchOwner({
+      consultExternalIdle: async () => ({
+        status: "unavailable",
+        reason: "token-rejected",
+      }),
+    })
+    const result = await launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      spawn: () => spawnWith(launcher),
+      createRequestId: () => "u3-host-token",
+    })
+    // CRITICAL back-compat assertion: 401 preserves exit 126 /
+    // host-control-disabled from session-launcher.ts's spawn-time mapping.
+    expect(result).toMatchObject({
+      _tag: "HostUnavailable",
+      hostUnavailableReason: { kind: "token-rejected" },
+      status: "failed",
+      exitCode: 126,
+      failureKind: "host-control-disabled",
+    })
+  })
+
+  it("LaunchFailed: _tag + back-compat status=failed for process-level failures", async () => {
+    const launcher = await launcherFromLayer(
+      makeInMemoryLauncherLayer({
+        behavior: { kind: "fail", exitCode: 42, stderrTail: "oops" },
+      }),
+    )
+    const owner = createLocalForegroundLaunchOwner({
+      consultExternalIdle: async () => ({ status: "idle" }),
+    })
+    const result = await launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      spawn: () => spawnWith(launcher),
+      createRequestId: () => "u3-launch-failed",
+    })
+    expect(result).toEqual({
+      _tag: "LaunchFailed",
+      status: "failed",
+      exitCode: 42,
+      stderrTail: "oops",
+    })
   })
 })
 

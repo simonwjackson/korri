@@ -124,11 +124,19 @@ export const handleLaunchLibrary = (
         { id: payload.id, command: spec.command, exitCode: 0 },
         "app.library.launch: launched",
       )
-      return { status: "launched" } satisfies LaunchLibraryResponse
+      return {
+        _tag: "Accepted",
+        status: "launched",
+      } satisfies LaunchLibraryResponse
     }
 
     logger.warn(
-      { id: payload.id, command: spec.command, exitCode: result.exitCode },
+      {
+        id: payload.id,
+        command: spec.command,
+        exitCode: result.exitCode,
+        responseTag: result._tag,
+      },
       "app.library.launch: failed",
     )
     return result
@@ -151,6 +159,7 @@ function launchConfigurationFailure(
   error: LibraryError,
 ): FailedLaunchLibraryResponse {
   return {
+    _tag: "LaunchFailed",
     status: "failed",
     exitCode: LAUNCH_CONFIG_ERROR_EXIT_CODE,
     stderrTail:
@@ -299,7 +308,10 @@ function handleRemoteSourceLaunch(
         },
         "app.library.launch: remote-source launched",
       )
-      return { status: "launched" } satisfies LaunchLibraryResponse
+      return {
+        _tag: "Accepted",
+        status: "launched",
+      } satisfies LaunchLibraryResponse
     }
 
     logger.warn(
@@ -319,7 +331,32 @@ function launchFailedFromKind(
   kind: LaunchFailureKind,
   message: string,
 ): LaunchLibraryResponse {
+  // Remote-prepare failures are surfaced as `HostUnavailable` when the
+  // remote peer is unreachable / token-rejected; other failure kinds tag
+  // as `LaunchFailed`. Back-compat fields (status, exitCode, failureKind)
+  // are preserved unchanged.
+  if (kind === "host-unavailable") {
+    return {
+      _tag: "HostUnavailable",
+      status: "failed",
+      exitCode: launchFailureExitCode(kind),
+      failureKind: kind,
+      stderrTail: message,
+      hostUnavailableReason: { kind: "network" },
+    }
+  }
+  if (kind === "host-control-disabled") {
+    return {
+      _tag: "HostUnavailable",
+      status: "failed",
+      exitCode: launchFailureExitCode(kind),
+      failureKind: kind,
+      stderrTail: message,
+      hostUnavailableReason: { kind: "token-rejected" },
+    }
+  }
   return {
+    _tag: "LaunchFailed",
     status: "failed",
     exitCode: launchFailureExitCode(kind),
     failureKind: kind,
