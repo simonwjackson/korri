@@ -6,6 +6,7 @@ import {
   launchFailureExitCode,
   type ManagedLaunchResult,
 } from "@shared/library/launcher"
+import { projectManagedLaunchStatus } from "@shared/library/sessiond-lifecycle-projections"
 import {
   decodeSessiondManagedLaunchStartRequest,
   decodeSessiondManagedLaunchTerminateRequest,
@@ -211,11 +212,13 @@ export function createKorriSessiondCore(
   }
 
   function managedStatus(): SessiondManagedLaunchStatus {
-    const active = korriSessionActiveLaunch(state)
-    const wireMode = state.mode === "home" ? role.idleModeLabel : state.mode
-    return {
-      schemaVersion: 1,
-      mode: wireMode,
+    return projectManagedLaunchStatus({
+      mode: state.mode,
+      idleModeLabel: role.idleModeLabel,
+      active: korriSessionActiveLaunch(state),
+      ...(currentPhase ? { phase: currentPhase } : {}),
+      ...(state.failureReason ? { failureReason: state.failureReason } : {}),
+      restoreAttempts: state.restoreAttempts,
       capabilities: {
         managedLaunch: true,
         lifecycleEvents: true,
@@ -227,18 +230,7 @@ export function createKorriSessiondCore(
         // field still negotiate to foreground correctly.
         sessionLifecycle: true,
       },
-      ...(active
-        ? {
-            active: {
-              launchId: active.launchId,
-              mode: active.mode === "home" ? role.idleModeLabel : active.mode,
-              ...(currentPhase ? { phase: currentPhase } : {}),
-            },
-          }
-        : {}),
-      ...(state.failureReason ? { failureReason: state.failureReason } : {}),
-      restoreAttempts: state.restoreAttempts,
-    }
+    })
   }
 
   function pushLifecycleEvent(

@@ -79,6 +79,15 @@ The role boundary lives in
 and calls into the role for `enterIdle`, `leaveIdle`, `beforeChildLaunch`,
 `afterChildRunning`, `restoreIdleAfterLaunch`, and `reconcileIdle`.
 
+Lifecycle vocabulary projection lives in
+`korri/shared/library/sessiond-lifecycle-projections.ts`. That seam is
+the canonical place to update mappings from sessiond internal mode/phase
+to managed-launch status JSON, `app.server.status`'s sessiond summary,
+and renderer foreground-session snapshots. Keep role idle aliases
+(`home` for kiosk, `idle` for source-machine) and operator evidence
+compatibility centralized there rather than duplicating switch tables in
+RPC or renderer code.
+
 ## The managed-launch protocol
 
 Sessiond exposes an HTTP/SSE protocol on a Unix domain socket (system
@@ -185,7 +194,7 @@ hosts, the shared group is `korri-sessiond-clients`.
 
 ### "SSE disconnects mid-launch"
 
-`session-launcher.ts`'s `observeManagedLaunchEvents` reconnects with
+`sessiond-managed-launch-event-observer.ts` reconnects with
 bounded backoff. If reconnections exceed the budget, the launch is
 treated as failed with `host-unavailable`. The root cause is usually
 bun's idle timeout disconnecting a quiet SSE stream — see
