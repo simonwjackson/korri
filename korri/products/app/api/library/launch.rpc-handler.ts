@@ -111,8 +111,18 @@ export const handleLaunchLibrary = (
           spec,
           spawn: async () => {
             if (!launcher.spawn) return unsupportedManagedSpawn()
+            // task-014: forward launcher-anchor extras (lifecycle,
+            // wait) when the library source supplies them. Resolved
+            // launches without extras (the common case today) are
+            // unchanged — the sessiond launcher treats absent
+            // `lifecycle` as foreground for back-compat.
+            const spawnOptions = resolvedResult.resolved.extras
+              ? { extras: resolvedResult.resolved.extras }
+              : undefined
             return await Effect.runPromise(
-              launcher.spawn(spec).pipe(Effect.mapError(toDataError)),
+              launcher
+                .spawn(spec, spawnOptions)
+                .pipe(Effect.mapError(toDataError)),
             )
           },
         }),

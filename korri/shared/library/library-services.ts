@@ -3,6 +3,7 @@ import type { ResolvedGameRecord } from "@shared/fixtures/games/game"
 import type { EphemeralOverride } from "@shared/library/config/ephemeral-override"
 import type { GamescopePolicy } from "@shared/library/config/inheritable-fields"
 import type {
+  LaunchExtras,
   LaunchResult,
   LaunchSpec,
   ManagedLaunchResult,
@@ -27,6 +28,25 @@ export interface ResolveLaunchInputs {
 export interface ResolvedLaunch {
   readonly spec: LaunchSpec
   readonly gamescope?: GamescopePolicy
+  /**
+   * task-014: Launcher-anchor / session-lifecycle hints. Set when the
+   * resolved launcher is a launcher-anchor app (Steam, browser,
+   * desktop session manager) whose primary process exits while the
+   * user-visible session continues. Sessiond consumes this via
+   * `LauncherService.spawn(spec, { extras })`; spec-shaped launchers
+   * (shell/memory) ignore it.
+   *
+   * Default (undefined) means foreground semantics — the launcher
+   * IS the session, terminal child-exit is the lifecycle end.
+   *
+   * See `korri/shared/library/sessiond-managed-launch-protocol.ts`
+   * for the rule that `extras.lifecycle === "session"` requires the
+   * daemon's `sessionLifecycle` capability; `session-launcher.ts`
+   * degrades to a typed `host-unavailable` failure when the
+   * capability is absent rather than silently routing through
+   * foreground semantics.
+   */
+  readonly extras?: LaunchExtras
 }
 
 export interface LibrarySourceService {
@@ -62,12 +82,20 @@ export interface LibrarySourceService {
  * down to bridge-shaped launchers that can't recover it from the
  * opaque renderer-side spec (`{ command: id }`).
  *
- * Spec-shaped launchers (shell/session/memory) ignore this field; the
+ * Spec-shaped launchers (shell/session/memory) ignore `source`; the
  * renderer's bridge-shaped launcher forwards it to the desktop bun so
  * the local-source delegate fires for `source.isLocal === true`.
+ *
+ * `extras` carries session-lifecycle hints (`lifecycle`, `wait`) that
+ * sessiond-backed launchers forward via the managed-launch protocol
+ * (task-014). The shell launcher ignores it; the sessiond launcher
+ * checks the `sessionLifecycle` capability before honoring
+ * `lifecycle: "session"` (degrades to a typed `host-unavailable`
+ * failure rather than silently downgrading to foreground).
  */
 export interface LaunchOptions {
   readonly source?: EntrySource
+  readonly extras?: LaunchExtras
 }
 
 export interface LauncherService {

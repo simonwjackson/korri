@@ -14,14 +14,19 @@ export const LauncherLayerLive = Layer.succeed(Launcher)({
           message: error instanceof Error ? error.message : String(error),
         }),
     }),
-  spawn: spec =>
+  spawn: (spec, options) =>
     Effect.tryPromise({
       try: () => {
         const launcher = createSessionLauncherFromEnv() ?? createShellLauncher()
         if (!launcher.spawn) {
           throw new Error("configured launcher does not support managed spawn")
         }
-        return launcher.spawn(spec)
+        // task-014: thread `extras` through to the underlying launcher
+        // so sessiond-backed launches receive lifecycle/wait hints.
+        // Spec-shaped launchers (shell) ignore the field; sessiond
+        // checks the `sessionLifecycle` capability before honoring
+        // `lifecycle: "session"`.
+        return launcher.spawn(spec, options?.extras)
       },
       catch: error =>
         new LibraryError({
