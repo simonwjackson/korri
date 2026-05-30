@@ -317,10 +317,16 @@ export function foregroundSessionBusyRejection(
   state: ForegroundSessionState,
   request: ForegroundSessionRequestIdentity,
 ): ForegroundSessionBusyRejection {
+  // SEC-001 (task-017): the rejection message must NOT embed the owner
+  // FSM tag, because the adapter forwards `rejection.message` verbatim
+  // as the wire-response `stderrTail`. Leaking the tag here is the same
+  // information disclosure as shipping `preflightReason.currentState`
+  // — just via a different field. Keep the wire string generic; the
+  // internal `currentState` field preserves the tag for logging.
   const active = activeSessionFromState(state)
   return {
     category: "session-busy",
-    message: `Foreground session is not ready (${state._tag})`,
+    message: "Foreground session is busy",
     attemptedRequestId: request.requestId,
     attemptedGameId: request.gameId,
     currentState: state._tag,
@@ -339,9 +345,10 @@ export function foregroundSessionBusyRejection(
  * coverage exercise the owner; this helper is intentionally
  * unrestricted so the owner can compose transitions cleanly.
  *
- * See `foreground-session-owner.test.ts` ("refuses to launch when state
- * is non-idle" + the rejection coverage) for the owner-level ordering
- * tests.
+ * See `foreground-session-lifecycle.test.ts` ("rejects every non-idle
+ * state with a busy/not-ready result" — walks `NON_IDLE_STATES`
+ * exhaustively) for the canonical proof that the owner-level ordering
+ * is enforced for every non-IdleReady state tag.
  */
 export function foregroundSessionTransition(
   state: ForegroundSessionState,
