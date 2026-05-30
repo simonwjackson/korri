@@ -160,6 +160,9 @@ function createOwner(
     readonly onStateEntered?: (
       state: ForegroundSessionState,
     ) => void | Promise<void>
+    readonly consultExternalIdle?: () => Promise<
+      import("./foreground-session-owner").ForegroundExternalIdleResult
+    >
   } = {},
 ) {
   return createForegroundSessionOwner({
@@ -532,6 +535,127 @@ describe("foreground session owner", () => {
       value: { gameId: "gba/wario-land-4" },
     })
     await first
+  })
+
+  describe("consultExternalIdle preflight", () => {
+    it("accepts the launch when the external authority reports idle", async () => {
+      const setup = createAdapter()
+      const owner = createOwner(setup.adapter, {
+        consultExternalIdle: async () => ({ status: "idle" }),
+      })
+      const result = await owner.launch(request)
+      expect(result._tag).toBe("Launched")
+      expect(setup.calls).toContain("prepare")
+    })
+
+    it("rejects as Busy with source=sessiond when external authority reports game", async () => {
+      const setup = createAdapter()
+      const owner = createOwner(setup.adapter, {
+        consultExternalIdle: async () => ({
+          status: "not-idle",
+          mode: "game",
+        }),
+      })
+      const result = await owner.launch(request)
+      expect(result._tag).toBe("Busy")
+      if (result._tag !== "Busy") throw new Error("unreachable")
+      expect(result.rejection.source).toBe("sessiond")
+      expect(result.rejection.externalMode).toBe("game")
+      // No adapter side-effects when the preflight rejected.
+      expect(setup.calls).toEqual([])
+    })
+
+    for (const mode of ["launching", "restoring", "recovering"]) {
+      it(`rejects as Busy with source=sessiond when external authority reports ${mode}`, async () => {
+        const setup = createAdapter()
+        const owner = createOwner(setup.adapter, {
+          consultExternalIdle: async () => ({
+            status: "not-idle",
+            mode,
+          }),
+        })
+        const result = await owner.launch(request)
+        expect(result._tag).toBe("Busy")
+        if (result._tag !== "Busy") throw new Error("unreachable")
+        expect(result.rejection.source).toBe("sessiond")
+        expect(result.rejection.externalMode).toBe(mode)
+        expect(setup.calls).toEqual([])
+      })
+    }
+
+    it("rejects as ExternalUnavailable with reason=network when external authority is unreachable", async () => {
+      const setup = createAdapter()
+      const owner = createOwner(setup.adapter, {
+        consultExternalIdle: async () => ({
+          status: "unavailable",
+          reason: "network",
+        }),
+      })
+      const result = await owner.launch(request)
+      expect(result._tag).toBe("ExternalUnavailable")
+      if (result._tag !== "ExternalUnavailable")
+        throw new Error("unreachable")
+      expect(result.reason).toBe("network")
+      expect(setup.calls).toEqual([])
+    })
+
+    it("rejects as ExternalUnavailable with reason=token-rejected when the daemon returns 401", async () => {
+      const setup = createAdapter()
+      const owner = createOwner(setup.adapter, {
+        consultExternalIdle: async () => ({
+          status: "unavailable",
+          reason: "token-rejected",
+        }),
+      })
+      const result = await owner.launch(request)
+      expect(result._tag).toBe("ExternalUnavailable")
+      if (result._tag !== "ExternalUnavailable")
+        throw new Error("unreachable")
+      expect(result.reason).toBe("token-rejected")
+      expect(setup.calls).toEqual([])
+    })
+
+    it("rejects on owner-local state when external reports idle but owner is already Running", async () => {
+      // First launch holds the owner in Running.
+      const setup = createAdapter()
+      const owner = createOwner(setup.adapter, {
+        consultExternalIdle: async () => ({ status: "idle" }),
+      })
+      const firstResult = await owner.launch(request)
+      expect(firstResult._tag).toBe("Launched")
+
+      // Second launch: external authority STILL reports idle (stale daemon),
+      // but the owner-local check must catch the re-entry.
+      const second = await owner.launch({ id: "gba/metroid-fusion" })
+      expect(second._tag).toBe("Busy")
+      if (second._tag !== "Busy") throw new Error("unreachable")
+      expect(second.rejection.source).toBe("owner-local")
+      expect(second.rejection.externalMode).toBeUndefined()
+    })
+
+    it("behaves as today when consultExternalIdle is unset (live-USB / unconfigured)", async () => {
+      const setup = createAdapter()
+      const owner = createOwner(setup.adapter)
+      const result = await owner.launch(request)
+      expect(result._tag).toBe("Launched")
+      // Re-entry is still caught by the owner-local check.
+      const second = await owner.launch({ id: "gba/metroid-fusion" })
+      expect(second._tag).toBe("Busy")
+      if (second._tag !== "Busy") throw new Error("unreachable")
+      expect(second.rejection.source).toBe("owner-local")
+    })
+
+    it("runs the preflight BEFORE adapter.prepare so a sessiond-busy rejection does not leak side-effects", async () => {
+      const setup = createAdapter()
+      const owner = createOwner(setup.adapter, {
+        consultExternalIdle: async () => ({
+          status: "not-idle",
+          mode: "game",
+        }),
+      })
+      await owner.launch(request)
+      expect(setup.calls).toEqual([])
+    })
   })
 
   it("terminates active sessions through graceful and emergency shutdown paths", async () => {

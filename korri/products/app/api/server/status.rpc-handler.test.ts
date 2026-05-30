@@ -227,6 +227,27 @@ describe("app.server.status handler", () => {
     expect(result.sessiondUnavailable).toBe(true)
   })
 
+  it("sets sessiondUnavailable=true when sessiond returns HTTP 401 (token rejected)", async () => {
+    const statusPath = await writeRunnerStatus({ mode: "running" })
+    process.env.KORRI_GAME_STREAM_STATUS_PATH = statusPath
+    process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
+    process.env.KORRI_SESSIOND_URL = "http://127.0.0.1:3003"
+    process.env.KORRI_SESSIOND_TOKEN = "test-token"
+    const fetchImpl = async () =>
+      new Response("unauthorized", { status: 401 })
+
+    const result = await Effect.runPromise(
+      handleServerStatusWithOverrides({}, { fetchImpl }),
+    )
+
+    // 401 surfaces externally as `sessiondUnavailable: true` so existing
+    // monitoring signal is preserved. The launch-path preflight uses the
+    // distinct `token-rejected` probe kind to preserve the 401 →
+    // `host-control-disabled` / exit-126 mapping for callers.
+    expect(result.sessiond).toBeUndefined()
+    expect(result.sessiondUnavailable).toBe(true)
+  })
+
   it("does not set sessiondUnavailable when sessiond is not configured", async () => {
     const statusPath = await writeRunnerStatus({ mode: "running" })
     process.env.KORRI_GAME_STREAM_STATUS_PATH = statusPath

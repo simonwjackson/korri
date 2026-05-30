@@ -64,6 +64,15 @@ const buildServerStatusEffect = (overrides: ServerStatusOverrides) =>
 
     const sessiondProbe = yield* probeSessiondStatus(overrides.fetchImpl)
 
+    // `unavailable` (network/decode error) and `token-rejected` (HTTP 401)
+    // both surface as `sessiondUnavailable: true` to the renderer/monitoring.
+    // The launch-path preflight distinguishes the two so it can preserve the
+    // existing `failureKind: "host-control-disabled"` / exit-126 mapping for
+    // 401 (see `local-foreground-launch-adapter.ts`'s `consultExternalIdle`).
+    const sessiondUnreachable =
+      sessiondProbe.kind === "unavailable" ||
+      sessiondProbe.kind === "token-rejected"
+
     return new ServerStatusResponse({
       serverId,
       displayName,
@@ -76,9 +85,7 @@ const buildServerStatusEffect = (overrides: ServerStatusOverrides) =>
       ...(sessiondProbe.kind === "ok"
         ? { sessiond: sessiondProbe.summary }
         : {}),
-      ...(sessiondProbe.kind === "unavailable"
-        ? { sessiondUnavailable: true }
-        : {}),
+      ...(sessiondUnreachable ? { sessiondUnavailable: true } : {}),
       ...(enabled ? {} : { message: "Korri stream control is not enabled" }),
     })
   })
@@ -136,9 +143,23 @@ function readRunnerStatus(statusPath: string | undefined, nowMs?: number) {
   })
 }
 
-type SessiondProbeResult =
+/**
+ * Result of a one-shot probe of sessiond's `/managed-launch/status`.
+ *
+ * - `ok`            → daemon answered; `summary` carries the decoded mode/active.
+ * - `unavailable`   → daemon unreachable: network error, non-2xx response other
+ *                     than 401, or decode failure.
+ * - `token-rejected`→ daemon answered with HTTP 401. Distinguished from
+ *                     `unavailable` so the launch-path preflight can preserve
+ *                     the `failureKind: "host-control-disabled"` mapping from
+ *                     `session-launcher.ts`'s spawn-time 401 handling.
+ * - `not-configured`→ `KORRI_SESSIOND_URL` is unset or the token file is missing;
+ *                     the host is not paired with sessiond.
+ */
+export type SessiondProbeResult =
   | { readonly kind: "ok"; readonly summary: SessiondLifecycleSummary }
   | { readonly kind: "unavailable" }
+  | { readonly kind: "token-rejected" }
   | { readonly kind: "not-configured" }
 
 /**
@@ -154,53 +175,76 @@ type SessiondProbeResult =
  *
  * See: docs/solutions/architecture-patterns/physical-host-foreground-lifecycle-truth-is-sessiond-2026-05-29.md
  */
+/**
+ * Pure-async version of the sessiond status probe. Exported so callers
+ * outside the Effect RPC pipeline (such as the launch-adapter preflight in
+ * `local-foreground-launch-adapter.ts`) can consume the same shared
+ * definition of "what mode is sessiond in?" The Effect-wrapped
+ * `probeSessiondStatus` below delegates here.
+ *
+ * Accepts the env as a parameter (not read directly) so tests can drive both
+ * code paths through a single injection seam.
+ */
+export async function probeSessiondManagedLaunchStatus(
+  options: {
+    readonly env?: NodeJS.ProcessEnv
+    readonly fetchImpl?: (
+      input: string,
+      init?: RequestInit,
+    ) => Promise<Response>
+    readonly timeoutMs?: number
+  } = {},
+): Promise<SessiondProbeResult> {
+  const env = options.env ?? process.env
+  const url = env.KORRI_SESSIOND_URL
+  if (!url) return { kind: "not-configured" }
+  const token = await readSessiondToken(env)
+  if (!token) return { kind: "unavailable" }
+  const effectiveFetch = options.fetchImpl ?? globalThis.fetch
+  try {
+    const response = await fetchWithTimeout(
+      effectiveFetch,
+      `${url.replace(/\/$/, "")}/managed-launch/status`,
+      { headers: { "x-korri-sessiond-token": token } },
+      options.timeoutMs ?? DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS,
+    )
+    if (response.status === 401) return { kind: "token-rejected" }
+    if (!response.ok) return { kind: "unavailable" }
+    const body = await response.json()
+    const decoded = decodeSessiondManagedLaunchStatus(body)
+    return {
+      kind: "ok",
+      summary: new SessiondLifecycleSummary({
+        mode: decoded.mode,
+        restoreAttempts: decoded.restoreAttempts,
+        ...(decoded.active
+          ? {
+              active: new SessiondLifecycleActive({
+                launchId: decoded.active.launchId,
+                mode: decoded.active.mode,
+                // Phase 4D / Track A finishing follow-up. Forward
+                // the optional sub-phase when present.
+                ...(decoded.active.phase
+                  ? { phase: decoded.active.phase }
+                  : {}),
+              }),
+            }
+          : {}),
+        ...(decoded.failureReason
+          ? { failureReason: decoded.failureReason }
+          : {}),
+      }),
+    }
+  } catch {
+    return { kind: "unavailable" }
+  }
+}
+
 function probeSessiondStatus(
   fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>,
 ) {
   return Effect.tryPromise({
-    try: async (): Promise<SessiondProbeResult> => {
-      const url = process.env.KORRI_SESSIOND_URL
-      if (!url) return { kind: "not-configured" }
-      const token = await readSessiondToken(process.env)
-      if (!token) return { kind: "unavailable" }
-      const effectiveFetch = fetchImpl ?? globalThis.fetch
-      try {
-        const response = await fetchWithTimeout(
-          effectiveFetch,
-          `${url.replace(/\/$/, "")}/managed-launch/status`,
-          { headers: { "x-korri-sessiond-token": token } },
-          DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS,
-        )
-        if (!response.ok) return { kind: "unavailable" }
-        const body = await response.json()
-        const decoded = decodeSessiondManagedLaunchStatus(body)
-        return {
-          kind: "ok",
-          summary: new SessiondLifecycleSummary({
-            mode: decoded.mode,
-            restoreAttempts: decoded.restoreAttempts,
-            ...(decoded.active
-              ? {
-                  active: new SessiondLifecycleActive({
-                    launchId: decoded.active.launchId,
-                    mode: decoded.active.mode,
-                    // Phase 4D / Track A finishing follow-up. Forward
-                    // the optional sub-phase when present.
-                    ...(decoded.active.phase
-                      ? { phase: decoded.active.phase }
-                      : {}),
-                  }),
-                }
-              : {}),
-            ...(decoded.failureReason
-              ? { failureReason: decoded.failureReason }
-              : {}),
-          }),
-        }
-      } catch {
-        return { kind: "unavailable" }
-      }
-    },
+    try: () => probeSessiondManagedLaunchStatus({ fetchImpl }),
     catch: error =>
       new DataError({
         reason: "ReadFailed",

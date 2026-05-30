@@ -211,6 +211,117 @@ describe("local foreground launch adapter", () => {
   })
 })
 
+describe("local foreground launch adapter > sessiond preflight", () => {
+  it("surfaces an ExternalUnavailable network rejection as host-unavailable / exit 124", async () => {
+    const control = makeInMemoryLauncherLayer.createManagedControl()
+    const launcher = await launcherFromLayer(
+      makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+    )
+    let spawnCalls = 0
+    const owner = createLocalForegroundLaunchOwner({
+      consultExternalIdle: async () => ({
+        status: "unavailable",
+        reason: "network",
+        message: "sessiond unreachable",
+      }),
+    })
+    const result = await launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      spawn: () => {
+        spawnCalls += 1
+        return spawnWith(launcher)
+      },
+      createRequestId: () => "local-launch-1",
+    })
+    expect(result).toMatchObject({
+      status: "failed",
+      exitCode: 124,
+      failureKind: "host-unavailable",
+      stderrTail: "sessiond unreachable",
+    })
+    expect(spawnCalls).toBe(0)
+  })
+
+  it("preserves 401 → host-control-disabled / exit 126 for token-rejected", async () => {
+    const control = makeInMemoryLauncherLayer.createManagedControl()
+    const launcher = await launcherFromLayer(
+      makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+    )
+    let spawnCalls = 0
+    const owner = createLocalForegroundLaunchOwner({
+      consultExternalIdle: async () => ({
+        status: "unavailable",
+        reason: "token-rejected",
+      }),
+    })
+    const result = await launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      spawn: () => {
+        spawnCalls += 1
+        return spawnWith(launcher)
+      },
+      createRequestId: () => "local-launch-1",
+    })
+    expect(result).toMatchObject({
+      status: "failed",
+      exitCode: 126,
+      failureKind: "host-control-disabled",
+    })
+    expect(spawnCalls).toBe(0)
+  })
+
+  it("surfaces a sessiond-busy preflight as session-busy / exit 121 without invoking spawn", async () => {
+    const control = makeInMemoryLauncherLayer.createManagedControl()
+    const launcher = await launcherFromLayer(
+      makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+    )
+    let spawnCalls = 0
+    const owner = createLocalForegroundLaunchOwner({
+      consultExternalIdle: async () => ({
+        status: "not-idle",
+        mode: "game",
+      }),
+    })
+    const result = await launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      spawn: () => {
+        spawnCalls += 1
+        return spawnWith(launcher)
+      },
+      createRequestId: () => "local-launch-1",
+    })
+    expect(result).toMatchObject({
+      status: "failed",
+      exitCode: 121,
+      failureKind: "session-busy",
+    })
+    expect(spawnCalls).toBe(0)
+  })
+
+  it("accepts the launch when consultExternalIdle reports idle", async () => {
+    const control = makeInMemoryLauncherLayer.createManagedControl()
+    const launcher = await launcherFromLayer(
+      makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+    )
+    const owner = createLocalForegroundLaunchOwner({
+      consultExternalIdle: async () => ({ status: "idle" }),
+    })
+    const launch = launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      spawn: () => spawnWith(launcher),
+      createRequestId: () => "local-launch-1",
+    })
+    await waitForOwnerState(owner, "Running")
+    control.resolveExit({ exitCode: 0 })
+    expect(await launch).toEqual({ status: "launched" })
+    await owner.whenIdle()
+  })
+})
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   let reject!: (error: unknown) => void

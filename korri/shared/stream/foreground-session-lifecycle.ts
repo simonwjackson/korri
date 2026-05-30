@@ -140,6 +140,21 @@ export type ForegroundSessionEvent =
       readonly evidence?: ForegroundSessionEvidence
     }
 
+/**
+ * Source of a foreground-session busy rejection.
+ *
+ * - `owner-local`: the in-process `ForegroundSessionOwner`'s own state machine
+ *   was non-idle when the launch was attempted (re-entry by a concurrent app
+ *   caller).
+ * - `sessiond`: the owner's `consultExternalIdle` preflight observed sessiond
+ *   in a non-idle mode (out-of-band caller, or a lingering session sessiond
+ *   has not yet finished restoring).
+ *
+ * Optional for back-compat: callers that don't distinguish should treat an
+ * absent value as `owner-local`.
+ */
+export type ForegroundSessionBusyRejectionSource = "owner-local" | "sessiond"
+
 export interface ForegroundSessionBusyRejection {
   readonly category: "session-busy"
   readonly message: string
@@ -150,6 +165,12 @@ export interface ForegroundSessionBusyRejection {
   readonly currentGameId?: string
   readonly currentSessionId?: string
   readonly currentChildId?: string
+  readonly source?: ForegroundSessionBusyRejectionSource
+  /**
+   * When `source === "sessiond"`, the sessiond mode that triggered the
+   * rejection (e.g. `"game"`, `"restoring"`). Absent for owner-local.
+   */
+  readonly externalMode?: string
 }
 
 export type ForegroundSessionAcceptResult =
