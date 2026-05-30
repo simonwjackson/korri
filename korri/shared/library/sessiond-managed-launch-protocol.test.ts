@@ -3,6 +3,7 @@ import { Schema } from "effect"
 import {
   decodeSessiondManagedLaunchEvent,
   decodeSessiondManagedLaunchStatus,
+  decodeSessiondManagedLaunchTerminateResponse,
   SessiondManagedLaunchEvent,
   SessiondManagedLaunchStartRequest,
   SessiondManagedLaunchStartResponse,
@@ -146,6 +147,51 @@ describe("sessiond managed launch protocol", () => {
       launchId: "launch-1",
       message: "launch is no longer active",
     })
+  })
+
+  // Task-009 coverage gap: the strict-decode helper for the
+  // termination response is the entry point clients reach for, so
+  // exercise it directly (in addition to the raw decode above) to
+  // pin its strict-decode posture and ensure refactors of the
+  // helper surface a test failure rather than a silent change.
+  it("decodeSessiondManagedLaunchTerminateResponse decodes accepted status under strict decode", () => {
+    // The accepted variant carries no message — strict decode means
+    // including one would be a wire-shape violation.
+    const decoded = decodeSessiondManagedLaunchTerminateResponse({
+      status: "accepted",
+      launchId: "launch-77",
+    })
+    expect(decoded).toEqual({ status: "accepted", launchId: "launch-77" })
+  })
+
+  it("decodeSessiondManagedLaunchTerminateResponse rejects unknown fields under strict decode", () => {
+    expect(() =>
+      decodeSessiondManagedLaunchTerminateResponse({
+        status: "terminated",
+        launchId: "launch-77",
+        message: "ok",
+        // Strict decode posture means an unexpected extra field is
+        // a wire-shape change, not silently tolerated.
+        unexpectedField: "x",
+      }),
+    ).toThrow()
+  })
+
+  // Task-009 coverage gap: the ISO-timestamp validator's reject
+  // branch was previously unreached. Any decode that pipes a non-
+  // ISO string into a timestamp field surfaces the error path.
+  it("rejects lifecycle event payloads carrying a non-ISO occurredAt timestamp", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(SessiondManagedLaunchEvent)({
+        schemaVersion: 1,
+        sequence: 1,
+        launchId: "launch-1",
+        // Not an ISO timestamp — plain unix-seconds-as-string. The
+        // ISO filter must reject this rather than coerce it.
+        occurredAt: "1716480000",
+        type: "child-running",
+      }),
+    ).toThrow()
   })
 
   it("roundtrips encoded event payloads", () => {

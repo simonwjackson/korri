@@ -92,6 +92,35 @@ describe("korri session state", () => {
     expect(stopped).toEqual(initialKorriSessionState)
     expect(shouldEnforceHomeInvariant(stopped)).toBe(false)
   })
+
+  // Task-009 coverage gap: \`beginKorriLaunch\` from any non-home mode
+  // must reject the launch with a structured \`recovering\`/\`failureReason\`
+  // state rather than silently accepting it. The reject branch is the
+  // operator's signal that a managed launch arrived while sessiond was
+  // mid-restore or already in-game.
+  it("beginKorriLaunch from non-home mode flips to recovering with a structured failureReason", () => {
+    const startedFromStopped = beginKorriLaunch(
+      initialKorriSessionState,
+      "launch-from-stopped",
+    )
+    expect(startedFromStopped.mode).toBe("recovering")
+    expect(startedFromStopped.failureReason).toBe("cannot launch from stopped")
+    // launchId is intentionally NOT propagated on rejection — the
+    // operator-facing failureReason carries the cause and the
+    // attempted launchId is dropped to avoid implying the launch
+    // was accepted.
+    expect(startedFromStopped.launchId).toBeUndefined()
+  })
+
+  it("beginKorriLaunch from game mode (re-entry attempt) flips to recovering with a structured failureReason", () => {
+    const home = markKorriHome(startKorriSession())
+    const game = markKorriGameRunning(beginKorriLaunch(home, "launch-1"))
+    expect(game.mode).toBe("game")
+
+    const reentry = beginKorriLaunch(game, "launch-2")
+    expect(reentry.mode).toBe("recovering")
+    expect(reentry.failureReason).toBe("cannot launch from game")
+  })
 })
 
 describe("home invariant evaluation", () => {

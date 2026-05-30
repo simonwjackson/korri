@@ -292,6 +292,69 @@ describe("source-machine session role", () => {
     await expect(role.restoreIdleAfterLaunch()).rejects.toThrow(/idle-blank/i)
   })
 
+  // Task-009 coverage gap: pin the distinct error message for
+  // "windows lingered" so an operator can disambiguate window-residue
+  // failures from process-residue failures. The previous test covers
+  // the clear-processes branch; this one covers clear-foreground.
+  it("restoreIdleAfterLaunch throws a windows-lingered error when gamescope windows outlive the budget", async () => {
+    const state = {
+      windows: [{ id: 7, focused: true }] as {
+        id: number
+        focused?: boolean
+      }[],
+    }
+    const sway: SourceMachineSwayController = {
+      getGamescopeWindows: async () => state.windows,
+      // No-op clear: windows persist across every attempt so the
+      // role exhausts its budget on the clear-foreground branch.
+      clearGamescopeWindows: async () => {},
+    }
+    let now = 0
+    const role = createSourceMachineSessionRole({
+      sway,
+      processList: makeProcessList([]),
+      clock: () => now,
+      delay: async ms => {
+        now += ms
+      },
+      cooldownMs: 0,
+      pollIntervalMs: 10,
+      maxReadyAttempts: 3,
+    })
+
+    await expect(role.restoreIdleAfterLaunch()).rejects.toThrow(
+      /gamescope windows lingered past idle-blank budget/,
+    )
+  })
+
+  // Task-009 coverage gap: the default \`delay\` implementation that
+  // wraps \`setTimeout\` is never exercised when tests inject a delay
+  // shim. This test bounds the wall-time interaction and proves the
+  // production code path is reachable.
+  it("uses a real setTimeout-backed delay when none is injected", async () => {
+    const role = createSourceMachineSessionRole({
+      sway: {
+        getGamescopeWindows: async () => [],
+        clearGamescopeWindows: async () => {},
+      },
+      processList: makeProcessList([]),
+      // No delay/clock injection — takes the production default.
+      cooldownMs: 5,
+      pollIntervalMs: 5,
+      maxReadyAttempts: 50,
+    })
+
+    const before = Date.now()
+    await role.restoreIdleAfterLaunch()
+    const elapsed = Date.now() - before
+
+    // Cooldown is 5ms; a real setTimeout will take \u2265 5ms of wall
+    // time. The upper bound is generous to keep this test stable on
+    // a loaded CI host.
+    expect(elapsed).toBeGreaterThanOrEqual(5)
+    expect(elapsed).toBeLessThan(2000)
+  })
+
   it("reconcileIdle surfaces a recovering-friendly error when sway query fails", async () => {
     const role = createSourceMachineSessionRole({
       sway: {
