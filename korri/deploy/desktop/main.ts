@@ -98,27 +98,17 @@ async function main() {
 
   // Launch ownership moved to korri-server + korri-sessiond. The bun
   // process no longer owns any foreground session — every launch goes
-  // through `app.library.launch`, which dispatches via sessiond.
-  //
-  // The foreground-session-status endpoint stays as a stable wire shape
-  // for the renderer's gate state but returns a static IdleReady snapshot.
-  // Renderer gate state behaviour during active launches will follow
-  // sessiond via `app.server.status` in a follow-up — see plan
-  // `2026-05-27-005-refactor-delete-bun-launch-bridge-plan.md` deferred
-  // follow-up work.
-  const getForegroundSessionStatus = () => ({
-    schemaVersion: 1 as const,
-    serverTimestamp: new Date().toISOString(),
-    state: "IdleReady",
-    recentEvents: [],
-  })
+  // through `app.library.launch`, which dispatches via sessiond. The
+  // renderer's gate state now polls `app.server.status` over standard
+  // `/api/rpc` (see foreground-session-status-layer-live.ts); the
+  // previous `/__korri/desktop/foreground-session-status` bun bridge
+  // endpoint has been removed.
 
   const app = createDesktopApp({
     assetRoot,
     getUpstream,
     invalidateUpstream,
     getRuntimeConfig,
-    getForegroundSessionStatus,
   })
 
   server = Bun.serve({

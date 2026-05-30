@@ -98,7 +98,7 @@ describe("desktop smoke", () => {
     ).toBe("pass")
   })
 
-  test("pins the foreground-session-status endpoint JSON shape", async () => {
+  test("verifies the legacy /__korri/desktop/foreground-session-status no longer serves JSON (route deleted)", async () => {
     await writeFixture("index.html", "<html><head></head><body></body></html>")
 
     const report = await runDesktopSmoke({ assetRoot })
@@ -106,7 +106,8 @@ describe("desktop smoke", () => {
     expect(
       report.checks.find(
         c =>
-          c.name === "foreground-session-status endpoint returns idle snapshot",
+          c.name ===
+          "legacy /__korri/desktop/foreground-session-status no longer serves JSON (route deleted)",
       )?.status,
     ).toBe("pass")
   })

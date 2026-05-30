@@ -3,8 +3,6 @@ import { readdir } from "node:fs/promises"
 import { join, relative, sep } from "node:path"
 import { logger } from "@shared/logger"
 import {
-  decodeForegroundSessionStatusSnapshot,
-  type ForegroundSessionStatusSnapshot,
 } from "@shared/stream/foreground-session-status"
 import { createDesktopApp } from "../../korri/deploy/desktop/create-desktop-app"
 import type { RuntimeConfig } from "../../korri/deploy/desktop/runtime-config-shape"
@@ -69,30 +67,17 @@ export async function findRepresentativeAsset(
 
 const noUpstream = () => undefined
 
-function idleForegroundSessionSnapshot(): ForegroundSessionStatusSnapshot {
-  return {
-    schemaVersion: 1,
-    serverTimestamp: new Date(0).toISOString(),
-    state: "IdleReady",
-    recentEvents: [],
-  }
-}
-
 function buildApp(
   assetRoot: string,
   options: {
     runtime?: RuntimeConfig
-    foregroundSessionStatus?: ForegroundSessionStatusSnapshot
   } = {},
 ) {
   const runtime = options.runtime
-  const foregroundSessionStatus =
-    options.foregroundSessionStatus ?? idleForegroundSessionSnapshot()
   return createDesktopApp({
     assetRoot,
     getUpstream: noUpstream,
     getRuntimeConfig: runtime ? () => runtime : undefined,
-    getForegroundSessionStatus: () => foregroundSessionStatus,
   })
 }
 
@@ -245,25 +230,24 @@ export async function runDesktopSmoke(
 
   checks.push(
     await passOrFail(
-      "foreground-session-status endpoint returns idle snapshot",
+      "legacy /__korri/desktop/foreground-session-status no longer serves JSON (route deleted)",
       async () => {
         const response = await app.fetch(
           new Request(
             "http://desktop.local/__korri/desktop/foreground-session-status",
           ),
         )
-        const body = await response.json()
-        const decoded = decodeForegroundSessionStatusSnapshot(body)
-        const ok =
-          response.status === 200 &&
-          decoded.schemaVersion === 1 &&
-          decoded.state === "IdleReady" &&
-          Array.isArray(decoded.recentEvents)
+        // The bridge endpoint is gone. The path now falls through to the
+        // SPA catch-all, so the response is HTML (index.html) rather than
+        // JSON. We assert the absence of the JSON content-type to prove
+        // the dedicated route is no longer wired.
+        const contentType = response.headers.get("content-type") ?? ""
+        const ok = !contentType.includes("application/json")
         return {
           ok,
           detail: ok
-            ? "JSON shape pinned for idle foreground session"
-            : `unexpected JSON ${JSON.stringify(body)}`,
+            ? `bridge endpoint removed; falls through to SPA catch-all (content-type: ${contentType || "<none>"})`
+            : `unexpected JSON content-type ${contentType}; bridge endpoint may still be registered`,
         }
       },
     ),

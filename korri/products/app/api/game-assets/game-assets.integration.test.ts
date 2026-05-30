@@ -347,7 +347,7 @@ async function expectAssetlessLaunchAndStreamFlows(
   root: string,
 ): Promise<void> {
   const launch = await launchGame(rpcUrl)
-  expect(launch).toEqual({ status: "launched" })
+  expect(launch).toEqual({ _tag: "Accepted", status: "launched" })
 
   const stream = await prepareStream(rpcUrl)
   expect(stream).toMatchObject({

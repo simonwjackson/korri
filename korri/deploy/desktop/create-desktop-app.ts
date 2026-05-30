@@ -1,5 +1,4 @@
 import { logger } from "@shared/logger"
-import type { ForegroundSessionStatusSnapshot } from "@shared/stream/foreground-session-status"
 import { Hono } from "hono"
 import { createApiForwarder } from "./api-forwarder"
 import type { RuntimeConfig } from "./runtime-config-shape"
@@ -33,13 +32,6 @@ export interface CreateDesktopAppOptions {
    * and the renderer falls back to `desktopInput: false`.
    */
   readonly getRuntimeConfig?: () => RuntimeConfig
-  /**
-   * Returns the current foreground-session lifecycle status snapshot. The
-   * desktop composition injects this from the single foreground session owner
-   * used by the launch bridge so renderer/operator reads observe the same
-   * state that accepts or rejects launches.
-   */
-  readonly getForegroundSessionStatus?: () => ForegroundSessionStatusSnapshot
 }
 
 export function createDesktopApp(options: CreateDesktopAppOptions) {
@@ -57,32 +49,10 @@ export function createDesktopApp(options: CreateDesktopAppOptions) {
     return c.text("ok")
   })
 
-  app.get("/__korri/desktop/foreground-session-status", c => {
-    const getForegroundSessionStatus = options.getForegroundSessionStatus
-    if (!getForegroundSessionStatus) {
-      return c.json(
-        { error: "Foreground session status not configured" },
-        503,
-        { "cache-control": "no-store" },
-      )
-    }
-    try {
-      return c.json(getForegroundSessionStatus(), 200, {
-        "cache-control": "no-store",
-      })
-    } catch (error) {
-      return c.json(
-        {
-          error:
-            error instanceof Error
-              ? error.message
-              : "Foreground session status failed",
-        },
-        500,
-        { "cache-control": "no-store" },
-      )
-    }
-  })
+  // Foreground-session status now flows from the renderer atom to
+  // `app.server.status` over standard `/api/rpc`; the bun bridge is no
+  // longer required. Sessiond is the authoritative lifecycle source. See
+  // docs/solutions/architecture-patterns/physical-host-foreground-lifecycle-truth-is-sessiond-2026-05-29.md
 
   // Diagnostic sink: WebView console.log is not captured into
   // electrobun.log on Linux, so we expose a tiny POST endpoint that
