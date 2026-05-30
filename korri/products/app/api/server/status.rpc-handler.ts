@@ -141,6 +141,19 @@ type SessiondProbeResult =
   | { readonly kind: "unavailable" }
   | { readonly kind: "not-configured" }
 
+/**
+ * `probeSessiondStatus` is the canonical server-side proxy that translates
+ * sessiond's authoritative lifecycle state into the `app.server.status`
+ * response shape. The renderer reads sessiond mode through this proxy via
+ * standard `/api/rpc` polling — sessiond is NOT a renderer-facing protocol.
+ *
+ * Both the `app.server.status` consumer here and the `ForegroundSessionOwner`
+ * preflight (`local-foreground-launch-adapter.ts`) call this function. They
+ * share one definition of "what mode is sessiond in?" so the renderer atom
+ * and the launch preflight cannot disagree.
+ *
+ * See: docs/solutions/architecture-patterns/physical-host-foreground-lifecycle-truth-is-sessiond-2026-05-29.md
+ */
 function probeSessiondStatus(
   fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>,
 ) {
