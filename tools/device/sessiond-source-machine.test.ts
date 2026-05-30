@@ -320,9 +320,10 @@ describe("source-machine session role", () => {
   // the clear-processes branch; this one covers clear-foreground.
   it("restoreIdleAfterLaunch throws a windows-lingered error when gamescope windows outlive the budget", async () => {
     const state = {
-      windows: [{ id: 7, focused: true }] as {
+      windows: [{ id: 7, focused: true, fullscreen: true }] as {
         id: number
-        focused?: boolean
+        focused: boolean
+        fullscreen: boolean
       }[],
     }
     const sway: SourceMachineSwayController = {
