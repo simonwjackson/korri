@@ -518,11 +518,20 @@ export function createForegroundSessionOwner<
 
       const accepted = acceptForegroundSessionLaunch(state, identity)
       if (accepted._tag === "Rejected") {
-        pushEvent(accepted.event)
         const rejection: ForegroundSessionBusyRejection = {
           ...accepted.rejection,
           source: "owner-local",
         }
+        // Re-emit the rejected event with the enriched rejection so the
+        // event stream and the launch result agree on `source`.
+        pushEvent(
+          createForegroundSessionEvent({
+            _tag: "ForegroundSessionLaunchRejected",
+            requestId: identity.requestId,
+            gameId: identity.gameId,
+            rejection,
+          }),
+        )
         return { _tag: "Busy", rejection }
       }
 

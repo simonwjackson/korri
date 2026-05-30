@@ -227,6 +227,26 @@ describe("app.server.status handler", () => {
     expect(result.sessiondUnavailable).toBe(true)
   })
 
+  it("sets sessiondUnavailable=true when KORRI_SESSIOND_URL is set but no token is readable (missing-token)", async () => {
+    const statusPath = await writeRunnerStatus({ mode: "running" })
+    process.env.KORRI_GAME_STREAM_STATUS_PATH = statusPath
+    process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
+    process.env.KORRI_SESSIOND_URL = "http://127.0.0.1:3003"
+    // Both KORRI_SESSIOND_TOKEN and KORRI_SESSIOND_TOKEN_FILE absent.
+    delete process.env.KORRI_SESSIOND_TOKEN
+    delete process.env.KORRI_SESSIOND_TOKEN_FILE
+
+    const result = await Effect.runPromise(handleServerStatus({}))
+
+    // Missing-token preserves the operator-facing unavailable signal.
+    // The launch-path preflight maps the same probe result to
+    // `{ status: 'idle' }` so session-launcher.ts's spawn-time
+    // `resolveToken()` → host-control-disabled mapping still fires
+    // unchanged (see local-foreground-launch-adapter.ts).
+    expect(result.sessiond).toBeUndefined()
+    expect(result.sessiondUnavailable).toBe(true)
+  })
+
   it("sets sessiondUnavailable=true when sessiond returns HTTP 401 (token rejected)", async () => {
     const statusPath = await writeRunnerStatus({ mode: "running" })
     process.env.KORRI_GAME_STREAM_STATUS_PATH = statusPath

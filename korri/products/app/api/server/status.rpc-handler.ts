@@ -64,14 +64,18 @@ const buildServerStatusEffect = (overrides: ServerStatusOverrides) =>
 
     const sessiondProbe = yield* probeSessiondStatus(overrides.fetchImpl)
 
-    // `unavailable` (network/decode error) and `token-rejected` (HTTP 401)
-    // both surface as `sessiondUnavailable: true` to the renderer/monitoring.
-    // The launch-path preflight distinguishes the two so it can preserve the
-    // existing `failureKind: "host-control-disabled"` / exit-126 mapping for
-    // 401 (see `local-foreground-launch-adapter.ts`'s `consultExternalIdle`).
+    // `unavailable` (network/decode error), `token-rejected` (HTTP 401), and
+    // `missing-token` (no token file readable) all surface as
+    // `sessiondUnavailable: true` to the renderer/monitoring. The launch-path
+    // preflight distinguishes between them so it can preserve the existing
+    // `failureKind` mappings from `session-launcher.ts`'s spawn-time handling
+    // (401 → `host-control-disabled`/126; missing-token → same; network →
+    // `host-unavailable`/124). See `local-foreground-launch-adapter.ts`'s
+    // `defaultConsultExternalIdle`.
     const sessiondUnreachable =
       sessiondProbe.kind === "unavailable" ||
-      sessiondProbe.kind === "token-rejected"
+      sessiondProbe.kind === "token-rejected" ||
+      sessiondProbe.kind === "missing-token"
 
     return new ServerStatusResponse({
       serverId,
@@ -153,13 +157,22 @@ function readRunnerStatus(statusPath: string | undefined, nowMs?: number) {
  *                     `unavailable` so the launch-path preflight can preserve
  *                     the `failureKind: "host-control-disabled"` mapping from
  *                     `session-launcher.ts`'s spawn-time 401 handling.
- * - `not-configured`→ `KORRI_SESSIOND_URL` is unset or the token file is missing;
- *                     the host is not paired with sessiond.
+ * - `missing-token` → `KORRI_SESSIOND_URL` is set but no token could be read
+ *                     (`KORRI_SESSIOND_TOKEN` and `KORRI_SESSIOND_TOKEN_FILE`
+ *                     both absent or unreadable). The launch-path preflight
+ *                     treats this as "defer to the spawn" so the existing
+ *                     `session-launcher.ts` mapping from missing-token to
+ *                     `failureKind: "host-control-disabled"` / exit 126 still
+ *                     fires. App-server-status maps it to `sessiondUnavailable`
+ *                     so the operator-facing signal is preserved.
+ * - `not-configured`→ `KORRI_SESSIOND_URL` is unset; the host is not paired
+ *                     with sessiond.
  */
 export type SessiondProbeResult =
   | { readonly kind: "ok"; readonly summary: SessiondLifecycleSummary }
   | { readonly kind: "unavailable" }
   | { readonly kind: "token-rejected" }
+  | { readonly kind: "missing-token" }
   | { readonly kind: "not-configured" }
 
 /**
@@ -199,7 +212,7 @@ export async function probeSessiondManagedLaunchStatus(
   const url = env.KORRI_SESSIOND_URL
   if (!url) return { kind: "not-configured" }
   const token = await readSessiondToken(env)
-  if (!token) return { kind: "unavailable" }
+  if (!token) return { kind: "missing-token" }
   const effectiveFetch = options.fetchImpl ?? globalThis.fetch
   try {
     const response = await fetchWithTimeout(

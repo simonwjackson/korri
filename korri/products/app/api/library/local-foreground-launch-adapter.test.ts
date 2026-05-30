@@ -479,6 +479,43 @@ describe("local foreground launch adapter > U3 wire-shape discrimination", () =>
     })
   })
 
+  it("DaemonRejected: spawn-pipeline returns session-busy → _tag=DaemonRejected with daemonReason.source=spawn-post", async () => {
+    // Simulate sessiond rejecting the POST after the preflight cleared:
+    // the spawn pipeline produces { status: "failed", failureKind:
+    // "session-busy" } via launchResponseFromLaunchResult. This must
+    // surface as DaemonRejected, NOT PreflightRejected, so callers can
+    // tell apart "local owner caught it" from "daemon rejected after
+    // preflight passed."
+    const launcher = await launcherFromLayer(
+      makeInMemoryLauncherLayer({
+        behavior: {
+          kind: "fail",
+          exitCode: 121,
+          stderrTail: "sessiond rejected POST",
+          failureKind: "session-busy",
+        },
+      }),
+    )
+    const owner = createLocalForegroundLaunchOwner({
+      // Preflight passes; the rejection happens at spawn time.
+      consultExternalIdle: async () => ({ status: "idle" }),
+    })
+    const result = await launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      spawn: () => spawnWith(launcher),
+      createRequestId: () => "u3-daemon",
+    })
+    expect(result).toMatchObject({
+      _tag: "DaemonRejected",
+      daemonReason: { source: "spawn-post" },
+      status: "failed",
+      exitCode: 121,
+      failureKind: "session-busy",
+      stderrTail: "sessiond rejected POST",
+    })
+  })
+
   it("LaunchFailed: _tag + back-compat status=failed for process-level failures", async () => {
     const launcher = await launcherFromLayer(
       makeInMemoryLauncherLayer({
