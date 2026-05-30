@@ -1,7 +1,7 @@
 ---
 id: task-017
 title: Tighten foreground-session transition and failure semantics
-status: To Do
+status: Done
 priority: medium
 labels:
   - foreground-session
