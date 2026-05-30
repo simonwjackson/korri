@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises"
 import {
   type LaunchExtras,
   type Launcher,
@@ -8,12 +7,15 @@ import {
   launchFailureExitCode,
   type ManagedLaunchResult,
 } from "./launcher"
-import { observeSessiondManagedLaunchEvents } from "./sessiond-managed-launch-event-observer"
 import {
-  decodeSessiondManagedLaunchStartResponse,
-  decodeSessiondManagedLaunchStatus,
-  isLaunchReadyMode,
-} from "./sessiond-managed-launch-protocol"
+  probeSessiondManagedLaunchStatus,
+  requestSessiondManagedLaunchStart,
+  resolveSessiondManagedLaunchToken,
+  type SessiondManagedLaunchClientFailure,
+  terminateSessiondManagedLaunch,
+} from "./sessiond-managed-launch-client"
+import { observeSessiondManagedLaunchEvents } from "./sessiond-managed-launch-event-observer"
+import { isLaunchReadyMode } from "./sessiond-managed-launch-protocol"
 
 export interface SessionLauncherOptions {
   readonly url: string
@@ -27,8 +29,6 @@ export type SessionLauncherFetch = (
   input: string,
   init?: RequestInit,
 ) => Promise<Response>
-
-const DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS = 10_000
 
 export function createSessionLauncher(
   options: SessionLauncherOptions,
@@ -61,7 +61,7 @@ export async function launchViaSessiond(
   options: SessionLauncherOptions,
 ): Promise<LaunchResult> {
   const fetchImpl = options.fetchImpl ?? fetch
-  const token = await resolveToken(options)
+  const token = await resolveSessiondManagedLaunchToken({ ...options, env: {} })
   if (!token) {
     return {
       status: "failed",
@@ -109,7 +109,7 @@ export async function spawnViaSessiond(
   const lifecycle = extras.lifecycle
   const wait = extras.wait
   const fetchImpl = options.fetchImpl ?? fetch
-  const token = await resolveToken(options)
+  const token = await resolveSessiondManagedLaunchToken({ ...options, env: {} })
   if (!token) {
     return failedManagedLaunch(
       "host-control-disabled",
@@ -117,23 +117,17 @@ export async function spawnViaSessiond(
     )
   }
 
-  const statusResult = await requestSessiondJson(
-    fetchImpl,
-    options.url,
+  const statusResult = await probeSessiondManagedLaunchStatus({
+    url: options.url,
     token,
-    "/managed-launch/status",
-  )
-  if (statusResult.status === "failed") return statusResult.result
-
-  let status: ReturnType<typeof decodeSessiondManagedLaunchStatus>
-  try {
-    status = decodeSessiondManagedLaunchStatus(statusResult.value)
-  } catch (error) {
-    return failedManagedLaunch(
-      "host-unavailable",
-      `sessiond status payload invalid: ${error instanceof Error ? error.message : String(error)}`,
-    )
+    fetchImpl,
+    timeoutMs: options.requestTimeoutMs,
+  })
+  if (statusResult.kind !== "ok") {
+    return managedLaunchFailureFromClientFailure(statusResult)
   }
+
+  const status = statusResult.status
   if (
     !status.capabilities.managedLaunch ||
     !status.capabilities.lifecycleEvents ||
@@ -160,31 +154,20 @@ export async function spawnViaSessiond(
     )
   }
 
-  const startBody: Record<string, unknown> = { spec }
-  if (lifecycle) startBody.lifecycle = lifecycle
-  if (wait) startBody.wait = wait
-  const startResult = await requestSessiondJson(
-    fetchImpl,
-    options.url,
-    token,
-    "/managed-launch",
+  const startResult = await requestSessiondManagedLaunchStart(
+    { spec, ...(lifecycle ? { lifecycle } : {}), ...(wait ? { wait } : {}) },
     {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(startBody),
+      url: options.url,
+      token,
+      fetchImpl,
+      timeoutMs: options.requestTimeoutMs,
     },
   )
-  if (startResult.status === "failed") return startResult.result
-
-  let started: ReturnType<typeof decodeSessiondManagedLaunchStartResponse>
-  try {
-    started = decodeSessiondManagedLaunchStartResponse(startResult.value)
-  } catch (error) {
-    return failedManagedLaunch(
-      "host-unavailable",
-      `sessiond start payload invalid: ${error instanceof Error ? error.message : String(error)}`,
-    )
+  if (startResult.kind !== "ok") {
+    return managedLaunchFailureFromClientFailure(startResult)
   }
+
+  const started = startResult.response
   if (started.status === "failed") {
     return failedManagedLaunch(started.failureKind, started.message)
   }
@@ -198,16 +181,24 @@ export async function spawnViaSessiond(
   })
 
   const terminate = () => {
-    void terminateManagedLaunch(fetchImpl, options.url, token, started.launchId)
+    void terminateSessiondManagedLaunch(
+      { launchId: started.launchId },
+      {
+        url: options.url,
+        token,
+        fetchImpl,
+        timeoutMs: options.requestTimeoutMs,
+      },
+    )
   }
   const terminateNow = () => {
-    void terminateManagedLaunch(
-      fetchImpl,
-      options.url,
-      token,
-      started.launchId,
+    void terminateSessiondManagedLaunch(
+      { launchId: started.launchId, force: true },
       {
-        force: true,
+        url: options.url,
+        token,
+        fetchImpl,
+        timeoutMs: options.requestTimeoutMs,
       },
     )
   }
@@ -225,154 +216,20 @@ export async function spawnViaSessiond(
   }
 }
 
-async function requestSessiondJson(
-  fetchImpl: SessionLauncherFetch,
-  url: string,
-  token: string,
-  path: string,
-  init: RequestInit = {},
-): Promise<
-  | { readonly status: "ok"; readonly value: unknown }
-  | { readonly status: "failed"; readonly result: ManagedLaunchResult }
-> {
-  let response: Response
-  try {
-    response = await fetchWithTimeout(
-      fetchImpl,
-      String(new URL(path, url)),
-      {
-        ...init,
-        headers: {
-          ...(init.headers ?? {}),
-          "x-korri-sessiond-token": token,
-        },
-      },
-      DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS,
+function managedLaunchFailureFromClientFailure(
+  failure: SessiondManagedLaunchClientFailure,
+): ManagedLaunchResult {
+  if (failure.kind === "missing-token" || failure.kind === "token-rejected") {
+    return failedManagedLaunch(
+      "host-control-disabled",
+      failure.message ??
+        "sessiond launch rejected: missing KORRI_SESSIOND_TOKEN or KORRI_SESSIOND_TOKEN_FILE",
     )
-  } catch (error) {
-    return {
-      status: "failed",
-      result: failedManagedLaunch(
-        "host-unavailable",
-        `sessiond unreachable: ${error instanceof Error ? error.message : String(error)}`,
-      ),
-    }
   }
-
-  if (!response.ok) {
-    const text = await readResponseTextWithTimeout(
-      response,
-      DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS,
-    ).catch(
-      error =>
-        `unreadable response body: ${error instanceof Error ? error.message : String(error)}`,
-    )
-    return {
-      status: "failed",
-      result: failedManagedLaunch(
-        response.status === 401 ? "host-control-disabled" : "host-unavailable",
-        `sessiond request rejected: ${response.status} ${text}`,
-      ),
-    }
-  }
-
-  try {
-    return {
-      status: "ok",
-      value: await readResponseJsonWithTimeout(
-        response,
-        DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS,
-      ),
-    }
-  } catch (error) {
-    return {
-      status: "failed",
-      result: failedManagedLaunch(
-        "host-unavailable",
-        `sessiond response payload invalid: ${error instanceof Error ? error.message : String(error)}`,
-      ),
-    }
-  }
-}
-
-async function terminateManagedLaunch(
-  fetchImpl: SessionLauncherFetch,
-  url: string,
-  token: string,
-  launchId: string,
-  options: { readonly force?: boolean } = {},
-): Promise<void> {
-  try {
-    await fetchWithTimeout(
-      fetchImpl,
-      String(new URL("/managed-launch/terminate", url)),
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-korri-sessiond-token": token,
-        },
-        body: JSON.stringify({
-          launchId,
-          ...(options.force ? { force: true } : {}),
-        }),
-      },
-      DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS,
-    )
-  } catch {
-    // Termination is best-effort; lifecycle observation reports final outcome.
-  }
-}
-
-async function fetchWithTimeout(
-  fetchImpl: SessionLauncherFetch,
-  input: string,
-  init: RequestInit,
-  timeoutMs: number,
-): Promise<Response> {
-  const controller = new AbortController()
-  return await promiseWithTimeout(
-    fetchImpl(input, { ...init, signal: controller.signal }),
-    timeoutMs,
-    () => controller.abort(),
+  return failedManagedLaunch(
+    "host-unavailable",
+    failure.message ?? `sessiond unavailable: ${failure.kind}`,
   )
-}
-
-async function readResponseTextWithTimeout(
-  response: Response,
-  timeoutMs: number,
-): Promise<string> {
-  return await promiseWithTimeout(response.text(), timeoutMs)
-}
-
-async function readResponseJsonWithTimeout(
-  response: Response,
-  timeoutMs: number,
-): Promise<unknown> {
-  return await promiseWithTimeout(response.json(), timeoutMs)
-}
-
-async function promiseWithTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  onTimeout?: () => void,
-): Promise<T> {
-  let timeout: ReturnType<typeof setTimeout> | undefined
-  const timeoutPromise = new Promise<T>((_resolve, reject) => {
-    timeout = setTimeout(() => {
-      onTimeout?.()
-      reject(new Error(`sessiond request timed out after ${timeoutMs}ms`))
-    }, timeoutMs)
-    if (timeout && "unref" in timeout && typeof timeout.unref === "function") {
-      timeout.unref()
-    }
-  })
-
-  try {
-    return await Promise.race([promise, timeoutPromise])
-  } finally {
-    if (timeout) clearTimeout(timeout)
-  }
 }
 
 function failedManagedLaunch(
@@ -392,18 +249,4 @@ function failedLaunch(
   exitCode = launchFailureExitCode(failureKind),
 ): Extract<LaunchResult, { readonly status: "failed" }> {
   return { status: "failed", exitCode, failureKind, stderrTail }
-}
-
-async function resolveToken(
-  options: SessionLauncherOptions,
-): Promise<string | undefined> {
-  if (options.token?.trim()) return options.token.trim()
-  if (!options.tokenFile?.trim()) return undefined
-
-  try {
-    const raw = await readFile(options.tokenFile, "utf8")
-    return raw.trim() || undefined
-  } catch {
-    return undefined
-  }
 }

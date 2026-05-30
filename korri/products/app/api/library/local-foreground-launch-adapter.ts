@@ -1,11 +1,11 @@
 import type { LaunchLibraryResponse } from "@app/api/library/launch.rpc"
-import { probeSessiondManagedLaunchStatus } from "@app/api/server/status.rpc-handler"
 import {
   type LaunchResult,
   type LaunchSpec,
   launchFailureExitCode,
   type ManagedLaunchResult,
 } from "@shared/library/launcher"
+import { probeSessiondManagedLaunchStatus } from "@shared/library/sessiond-managed-launch-client"
 import { isLaunchReadyMode } from "@shared/library/sessiond-managed-launch-protocol"
 import {
   createForegroundSessionOwner,
@@ -61,13 +61,13 @@ function defaultConsultExternalIdle():
     // change the wire failureKind from host-control-disabled to
     // host-unavailable (a back-compat regression).
     if (probe.kind === "missing-token") return { status: "idle" }
-    if (probe.kind === "unavailable")
+    if (probe.kind === "unavailable" || probe.kind === "invalid-payload")
       return { status: "unavailable", reason: "network" }
     if (probe.kind === "token-rejected")
       return { status: "unavailable", reason: "token-rejected" }
-    return isLaunchReadyMode(probe.summary.mode)
+    return isLaunchReadyMode(probe.status.mode)
       ? { status: "idle" }
-      : { status: "not-idle", mode: probe.summary.mode }
+      : { status: "not-idle", mode: probe.status.mode }
   }
 }
 

@@ -2,7 +2,10 @@ import { readFile, stat } from "node:fs/promises"
 import { hostname } from "node:os"
 import { join } from "node:path"
 import { DataError } from "@shared/api/rpc/errors"
-import { decodeSessiondManagedLaunchStatus } from "@shared/library/sessiond-managed-launch-protocol"
+import {
+  probeSessiondManagedLaunchStatus as probeSessiondManagedLaunchClientStatus,
+  type SessiondManagedLaunchClientFailure,
+} from "@shared/library/sessiond-managed-launch-client"
 import { Effect } from "effect"
 import { isStreamControlEnabled } from "../stream/control-mode"
 import {
@@ -30,8 +33,6 @@ const RUNNER_MODES = new Set<RunnerMode>([
   "exited",
   "failed",
 ])
-
-const DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS = 2_000
 
 export interface ServerStatusOverrides {
   readonly fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>
@@ -208,50 +209,35 @@ export async function probeSessiondManagedLaunchStatus(
     readonly timeoutMs?: number
   } = {},
 ): Promise<SessiondProbeResult> {
-  const env = options.env ?? process.env
-  const url = env.KORRI_SESSIOND_URL
-  if (!url) return { kind: "not-configured" }
-  const token = await readSessiondToken(env)
-  if (!token) return { kind: "missing-token" }
-  const effectiveFetch = options.fetchImpl ?? globalThis.fetch
-  try {
-    const response = await fetchWithTimeout(
-      effectiveFetch,
-      `${url.replace(/\/$/, "")}/managed-launch/status`,
-      { headers: { "x-korri-sessiond-token": token } },
-      options.timeoutMs ?? DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS,
-    )
-    if (response.status === 401) return { kind: "token-rejected" }
-    if (!response.ok) return { kind: "unavailable" }
-    const body = await response.json()
-    const decoded = decodeSessiondManagedLaunchStatus(body)
-    return {
-      kind: "ok",
-      summary: new SessiondLifecycleSummary({
-        mode: decoded.mode,
-        restoreAttempts: decoded.restoreAttempts,
-        ...(decoded.active
-          ? {
-              active: new SessiondLifecycleActive({
-                launchId: decoded.active.launchId,
-                mode: decoded.active.mode,
-                // Phase 4D / Track A finishing follow-up. Forward
-                // the optional sub-phase when present.
-                ...(decoded.active.phase
-                  ? { phase: decoded.active.phase }
-                  : {}),
-              }),
-            }
-          : {}),
-        ...(decoded.failureReason
-          ? {
-              failureReason: redactSessiondFailureReason(decoded.failureReason),
-            }
-          : {}),
-      }),
-    }
-  } catch {
-    return { kind: "unavailable" }
+  const result = await probeSessiondManagedLaunchClientStatus({
+    env: options.env,
+    fetchImpl: options.fetchImpl,
+    timeoutMs: options.timeoutMs,
+  })
+  if (result.kind !== "ok") return mapSessiondProbeFailure(result)
+  const decoded = result.status
+  return {
+    kind: "ok",
+    summary: new SessiondLifecycleSummary({
+      mode: decoded.mode,
+      restoreAttempts: decoded.restoreAttempts,
+      ...(decoded.active
+        ? {
+            active: new SessiondLifecycleActive({
+              launchId: decoded.active.launchId,
+              mode: decoded.active.mode,
+              // Phase 4D / Track A finishing follow-up. Forward
+              // the optional sub-phase when present.
+              ...(decoded.active.phase ? { phase: decoded.active.phase } : {}),
+            }),
+          }
+        : {}),
+      ...(decoded.failureReason
+        ? {
+            failureReason: redactSessiondFailureReason(decoded.failureReason),
+          }
+        : {}),
+    }),
   }
 }
 
@@ -306,35 +292,11 @@ function probeSessiondStatus(
   })
 }
 
-async function readSessiondToken(
-  env: NodeJS.ProcessEnv,
-): Promise<string | undefined> {
-  if (env.KORRI_SESSIOND_TOKEN) return env.KORRI_SESSIOND_TOKEN
-  if (env.KORRI_SESSIOND_TOKEN_FILE) {
-    try {
-      const raw = await readFile(env.KORRI_SESSIOND_TOKEN_FILE, "utf8")
-      return raw.trim()
-    } catch {
-      return undefined
-    }
-  }
-  return undefined
-}
-
-async function fetchWithTimeout(
-  fetchImpl: (input: string, init?: RequestInit) => Promise<Response>,
-  input: string,
-  init: RequestInit,
-  timeoutMs: number,
-): Promise<Response> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), timeoutMs)
-  if ("unref" in timeout && typeof timeout.unref === "function") timeout.unref()
-  try {
-    return await fetchImpl(input, { ...init, signal: controller.signal })
-  } finally {
-    clearTimeout(timeout)
-  }
+function mapSessiondProbeFailure(
+  failure: SessiondManagedLaunchClientFailure,
+): Exclude<SessiondProbeResult, { readonly kind: "ok" }> {
+  if (failure.kind === "invalid-payload") return { kind: "unavailable" }
+  return { kind: failure.kind }
 }
 
 function isFileNotFoundError(error: unknown): boolean {
