@@ -90,6 +90,25 @@ Promote to `se-plan` before implementation unless the coverage command and targe
 
 2026-05-29 (later): **task-037 shipped — unblocking.** Root cause was a bun 1.3.3 CLI/config interaction (not happy-dom), fixed by a separate `bunfig.coverage.toml`. `just test-coverage` and `just test-coverage-sessiond` recipes now exist; baseline is captured in `docs/solutions/tooling-decisions/bun-coverage-via-separate-config-2026-05-29.md`. AC #1 satisfied; remaining ACs are gap-closing PRs against the documented baseline. Highest-value gaps in order: `tools/device/sessiond.ts` (71.97% lines, 300+ uncovered), `sessiond-gamescope-reaper.ts`, `sessiond-electrobun.ts`, `sessiond.ts` HTTP/SSE endpoint surfaces, then the lower-traffic files.
 
+2026-05-29 (pass 1): **first gap-closing batch landed.** Three files reached 100% (or effective 100%) via focused test additions:
+
+- `tools/device/sessiond-state.ts` — 94.74% → **100%** (added `beginKorriLaunch` non-home rejection tests).
+- `tools/device/sessiond-source-machine.ts` — 94.44% → **99.08%** (added windows-lingered timeout test + real-setTimeout delay smoke test).
+- `korri/shared/library/sessiond-managed-launch-protocol.ts` — 96.49% → **99.42%** (added `decodeSessiondManagedLaunchTerminateResponse` strict-decode tests + ISO-timestamp filter reject test).
+
+Next-step children filed:
+- **task-039** — cover `tools/device/sessiond.ts` managed-launch HTTP/SSE surface (the daemon dispatcher; biggest remaining gap).
+- **task-040** — cover `sessiond-gamescope-reaper.ts` and `sessiond-electrobun.ts` restore paths (operator-visible kiosk symptoms).
+
+Remaining gaps after pass 1:
+- `sessiond.ts` 77.36/71.97 (→ task-039)
+- `sessiond-gamescope-reaper.ts` 50.00/55.92 (→ task-040)
+- `sessiond-electrobun.ts` 78.95/69.47 (→ task-040)
+- `sessiond-smoke.ts` 50.00/46.77 (operator smoke harness; may be acceptable as low-coverage — confirm during task-039)
+- `session-launcher.ts` 90.38/91.33 (close after task-039 to stay aligned with the daemon contract)
+- `foreground-session-owner.ts` 96.55/95.61 (small remaining gap; ride along with any future foreground-session work)
+- `launch.rpc-handler.ts` 79.17/86.32 (close with task-039 since branches are sessiond-managed paths)
+
 Meanwhile, prior sweep PRs added substantial sessiond-surface coverage:
 - PR #5 (task-011): sessiond system wiring + module tests.
 - PR #6 (task-012): sessiond canonical lifecycle source + app.server.status integration.
