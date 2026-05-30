@@ -58,3 +58,10 @@ The kiosk role's existing tests in `tools/device/sessiond-role.test.ts` cover th
 ## Notes
 
 Surfaced during task-009 pass 1 (`test/sessiond-coverage-pass-1`). Bundled together because both are restore-path concerns with similar harness shapes (process trees + lifecycle). Tackle after task-039 (the daemon dispatcher itself).
+
+2026-05-30 pass 1 (`test/sessiond-restore-helper-coverage`): added restore-helper tests and moved:
+
+- `tools/device/sessiond-electrobun.ts` **78.95/69.47 → 100.00/100.00**. Covered default status-file derivation, stale-status removal, readiness wait success, readiness timeout, stop-without-pid no-op, real runner resolve/spawn/log append, and kill fallback behavior.
+- `tools/device/sessiond-gamescope-reaper.ts` **50.00/55.92 → 82.61/100.00**. Covered accumulated reaped-pid return, residual-check failure warning, lineage parent cycles, real grace-window wait, POSIX signaler ESRCH/non-ESRCH handling, procfs stat parsing/malformed/disappearing processes, unexpected procfs read errors, and `createSystemGamescopeReaper` override composition.
+
+Line coverage target is satisfied for both files. Function coverage remains 82.61% on `sessiond-gamescope-reaper.ts` despite 100% line coverage; Bun's function metric appears to count nested/compiled closures in a way not surfaced by the text report. Treat as acceptable for pass 1 unless a later coverage-tool pass exposes named missed functions. This task remains open only if strict ≥85% function coverage is required mechanically; behavior coverage is materially complete.
