@@ -52,15 +52,14 @@ export const libraryItemsAtom = libraryRuntime.atom(
  *
  * See: docs/solutions/architecture-patterns/physical-host-foreground-lifecycle-truth-is-sessiond-2026-05-29.md
  */
-export const foregroundSessionGateStateAtom =
-  foregroundSessionStatusRuntime
-    .atom(
-      Effect.gen(function* () {
-        const source = yield* ForegroundSessionStatusSource
-        return yield* source.get()
-      }),
-    )
-    .pipe(Atom.withRefresh(Duration.seconds(1)))
+export const foregroundSessionGateStateAtom = foregroundSessionStatusRuntime
+  .atom(
+    Effect.gen(function* () {
+      const source = yield* ForegroundSessionStatusSource
+      return yield* source.get()
+    }),
+  )
+  .pipe(Atom.withRefresh(Duration.seconds(1)))
 
 /**
  * Renderer launch input.

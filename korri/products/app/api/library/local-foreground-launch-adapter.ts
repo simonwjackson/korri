@@ -43,7 +43,7 @@ export interface CreateLocalForegroundLaunchOwnerOptions {
  *    preserving the existing 401 → `host-control-disabled` mapping from
  *    `session-launcher.ts`.
  */
-export function defaultConsultExternalIdle(): 
+function defaultConsultExternalIdle():
   | (() => Promise<ForegroundExternalIdleResult>)
   | undefined {
   if (!process.env.KORRI_SESSIOND_URL) return undefined

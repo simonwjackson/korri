@@ -233,8 +233,7 @@ describe("app.server.status handler", () => {
     process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
     process.env.KORRI_SESSIOND_URL = "http://127.0.0.1:3003"
     process.env.KORRI_SESSIOND_TOKEN = "test-token"
-    const fetchImpl = async () =>
-      new Response("unauthorized", { status: 401 })
+    const fetchImpl = async () => new Response("unauthorized", { status: 401 })
 
     const result = await Effect.runPromise(
       handleServerStatusWithOverrides({}, { fetchImpl }),

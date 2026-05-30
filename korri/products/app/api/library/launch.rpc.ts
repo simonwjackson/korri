@@ -53,37 +53,27 @@ export class LaunchLibraryPayload extends Schema.Class<LaunchLibraryPayload>(
  *
  * See: docs/solutions/architecture-patterns/physical-host-foreground-lifecycle-truth-is-sessiond-2026-05-29.md
  */
-export const LaunchResponseTag = Schema.Literals([
+const LaunchResponseTag = Schema.Literals([
   "Accepted",
   "PreflightRejected",
   "DaemonRejected",
   "HostUnavailable",
   "LaunchFailed",
 ])
-export type LaunchResponseTag = Schema.Schema.Type<typeof LaunchResponseTag>
 
 const PreflightRejectionReason = Schema.Struct({
   source: Schema.Literals(["owner-local", "sessiond"]),
   externalMode: Schema.optional(Schema.String),
   currentState: Schema.optional(Schema.String),
 })
-export type PreflightRejectionReason = Schema.Schema.Type<
-  typeof PreflightRejectionReason
->
 
 const DaemonRejectionReason = Schema.Struct({
   source: Schema.Literals(["internal-status", "spawn-post"]),
 })
-export type DaemonRejectionReason = Schema.Schema.Type<
-  typeof DaemonRejectionReason
->
 
 const HostUnavailableReason = Schema.Struct({
   kind: Schema.Literals(["network", "token-rejected"]),
 })
-export type HostUnavailableReason = Schema.Schema.Type<
-  typeof HostUnavailableReason
->
 
 const LaunchedResult = Schema.Struct({
   _tag: Schema.optional(Schema.Literal("Accepted")),
