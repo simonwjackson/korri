@@ -1,7 +1,7 @@
 ---
 id: task-015
 title: Harden kiosk sessiond readiness invariants
-status: To Do
+status: Done
 priority: medium
 labels:
   - sessiond
