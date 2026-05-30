@@ -110,6 +110,30 @@ let
     };
   };
 
+  sessiondPaired = evaluateWith {
+    services.korri.gameStream = {
+      enable = true;
+      sessiond = {
+        url = "http://127.0.0.1:3003";
+        tokenFile = "/run/korri-sessiond/token";
+      };
+    };
+  };
+
+  sessiondUrlOnly = evaluateWith {
+    services.korri.gameStream = {
+      enable = true;
+      sessiond.url = "http://127.0.0.1:3003";
+    };
+  };
+
+  sessiondTokenOnly = evaluateWith {
+    services.korri.gameStream = {
+      enable = true;
+      sessiond.tokenFile = "/run/korri-sessiond/token";
+    };
+  };
+
   check = message: assertion: { inherit message assertion; };
 
   checks = [
@@ -138,6 +162,30 @@ let
     ))
     (check "mismatched statusPath: assertion fires" (
       hasFailure mismatchedStatusPath "statusPath must live under runtimeDir"
+    ))
+    (check "sessiond paired (both set): NixOS assertions pass" (
+      failedAssertions sessiondPaired == [ ]
+    ))
+    (check "sessiond default (both null): NixOS assertions pass" (
+      let
+        failures = failedAssertions baseline;
+      in
+      builtins.all (
+        a:
+        !lib.hasInfix "services.korri.gameStream.sessiond.url and" a.message
+      ) failures
+    ))
+    (check "sessiond url-only: assertion fires (both-or-neither)" (
+      hasFailure sessiondUrlOnly "sessiond.url and"
+    ))
+    (check "sessiond url-only: message names both option paths" (
+      hasFailure sessiondUrlOnly "services.korri.gameStream.sessiond.tokenFile"
+    ))
+    (check "sessiond token-only: assertion fires (both-or-neither)" (
+      hasFailure sessiondTokenOnly "sessiond.url and"
+    ))
+    (check "sessiond token-only: message names both option paths" (
+      hasFailure sessiondTokenOnly "services.korri.gameStream.sessiond.url"
     ))
   ];
 

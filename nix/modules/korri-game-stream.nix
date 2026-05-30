@@ -450,6 +450,23 @@ in
           (runtimeDir="${toString cfg.runtimeDir}", statusPath="${toString cfg.statusPath}").
         '';
       }
+      {
+        # Sessiond wiring is both-or-neither. A url without a tokenFile (or
+        # vice versa) silently falls back to the in-process shell launcher
+        # inside the runner's createSessionLauncherFromEnv() and the
+        # default-gamescope launch path explodes with ENOENT downstream.
+        # Mirrors the equivalent assertion on services.korri.server.sessiond
+        # so partial wires fail at eval time on either consumer.
+        assertion =
+          (cfg.sessiond.url == null && cfg.sessiond.tokenFile == null)
+          || (cfg.sessiond.url != null && cfg.sessiond.tokenFile != null);
+        message = ''
+          services.korri.gameStream.sessiond.url and
+          services.korri.gameStream.sessiond.tokenFile must be set together. Set
+          both to delegate lifecycle:"foreground" intents to korri-sessiond, or
+          leave both null to use the in-process supervision path.
+        '';
+      }
     ];
 
     environment.systemPackages = [
