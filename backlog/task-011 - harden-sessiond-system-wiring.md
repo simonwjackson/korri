@@ -1,7 +1,7 @@
 ---
 id: task-011
 title: Harden sessiond system wiring
-status: To Do
+status: Done
 priority: high
 labels:
   - sessiond
