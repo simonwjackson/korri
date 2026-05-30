@@ -583,9 +583,18 @@ export function createForegroundSessionOwner<
           )
         }
 
+        // task-013: thread the launcher's session identifier onto both
+        // `child.id` (process-local handle id) and `sessionId`
+        // (cross-component correlation id). For sessiond-backed
+        // launchers `session.id === started.launchId`, which is the
+        // identifier sessiond's managed-launch events and termination
+        // protocol use. Populating `sessionId` here means a subsequent
+        // busy rejection's `currentSessionId` carries the same value
+        // operators see in sessiond logs — the gap from task-013 AC #1.
         activeHandle = spawned.value.session
         active = {
           ...active,
+          sessionId: spawned.value.session.id,
           child: {
             id: spawned.value.session.id,
             ...(spawned.value.session.processId === undefined
