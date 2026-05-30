@@ -78,6 +78,9 @@ The role boundary lives in
 `tools/device/sessiond-role.ts`; sessiond's dispatcher is role-agnostic
 and calls into the role for `enterIdle`, `leaveIdle`, `beforeChildLaunch`,
 `afterChildRunning`, `restoreIdleAfterLaunch`, and `reconcileIdle`.
+`SessionRoleReadyOutcome` is the typed source for readiness evidence;
+`formatSessionRoleReadyEvidence` preserves the operator-compatible
+wire strings listed above.
 
 Lifecycle vocabulary projection lives in
 `korri/shared/library/sessiond-lifecycle-projections.ts`. That seam is

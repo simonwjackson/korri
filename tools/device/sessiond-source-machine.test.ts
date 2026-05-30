@@ -2,6 +2,10 @@ import { describe, expect, it } from "bun:test"
 import type { LaunchSpec } from "@shared/library/launcher"
 import type { ProcessInfo } from "./sessiond-gamescope-reaper"
 import {
+  formatSessionRoleReadyEvidence,
+  sessionRoleReadyOutcome,
+} from "./sessiond-role"
+import {
   createSourceMachineSessionRole,
   evaluateIdleBlank,
   type SourceMachineSwayController,
@@ -144,6 +148,10 @@ describe("source-machine session role", () => {
     expect(role.idleReadyEventName).toBe("idle-ready")
     expect(role.emitsRendererStopped).toBe(false)
     expect(role.rendererStatus()).toEqual({ kind: "noop" })
+    expect(sessionRoleReadyOutcome(role)).toMatchObject({
+      status: "ok",
+      evidence: { kind: "idle-blank" },
+    })
     expect(role.idleReadyEvidence()).toContain("idle-blank")
   })
 
@@ -220,6 +228,20 @@ describe("source-machine session role", () => {
 
     await role.restoreIdleAfterLaunch()
 
+    const outcome = sessionRoleReadyOutcome(role)
+    expect(outcome).toMatchObject({
+      status: "ok",
+      evidence: {
+        kind: "idle-blank",
+        gamescopeWindowsAbsent: true,
+        gamescopeProcessesAbsent: true,
+        cooldownElapsed: true,
+      },
+    })
+    if (outcome.status !== "ok") throw new Error("expected ok")
+    expect(formatSessionRoleReadyEvidence(outcome.evidence)).toBe(
+      "idle-blank|windows=absent|processes=absent|cooldown=elapsed",
+    )
     expect(role.idleReadyEvidence()).toBe(
       "idle-blank|windows=absent|processes=absent|cooldown=elapsed",
     )

@@ -1,8 +1,15 @@
 import { describe, expect, it } from "bun:test"
 import type { KorriSessiondServiceManager } from "./sessiond"
 import type { KorriRendererController } from "./sessiond-renderer"
-import { createKioskSessionRole } from "./sessiond-role"
-import type { HomeInvariantDecision, KorriWindowSnapshot } from "./sessiond-state"
+import {
+  createKioskSessionRole,
+  formatSessionRoleReadyEvidence,
+  sessionRoleReadyOutcome,
+} from "./sessiond-role"
+import type {
+  HomeInvariantDecision,
+  KorriWindowSnapshot,
+} from "./sessiond-state"
 import type { SwayController } from "./sessiond-sway"
 
 function makeRecordingRenderer(initialPid = 100): {
@@ -75,6 +82,10 @@ describe("kiosk session role", () => {
     expect(role.id).toBe("kiosk")
     expect(role.idleReadyEventName).toBe("home-ready")
     expect(role.emitsRendererStopped).toBe(true)
+    expect(sessionRoleReadyOutcome(role)).toMatchObject({
+      status: "ok",
+      evidence: { kind: "home-invariant" },
+    })
     expect(typeof role.idleReadyEvidence()).toBe("string")
   })
 
@@ -139,9 +150,23 @@ describe("kiosk session role", () => {
     const { serviceManager } = makeServiceManager()
     const role = createKioskSessionRole({ renderer, sway, serviceManager })
     await role.enterIdle()
-    expect(role.idleReadyEvidence()).toBe(
+    const outcome = sessionRoleReadyOutcome(role)
+    expect(outcome).toMatchObject({
+      status: "ok",
+      evidence: {
+        kind: "home-invariant",
+        windowCount: 1,
+        relaunchedRenderer: false,
+        closedDuplicates: 0,
+        repairedFocus: false,
+        repairedFullscreen: false,
+      },
+    })
+    if (outcome.status !== "ok") throw new Error("expected ok")
+    expect(formatSessionRoleReadyEvidence(outcome.evidence)).toBe(
       "home-invariant windows=1 satisfied",
     )
+    expect(role.idleReadyEvidence()).toBe("home-invariant windows=1 satisfied")
   })
 
   it("home-ready evidence reports renderer-relaunched after a missing-window repair (task-015 AC #2/#5)", async () => {

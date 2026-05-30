@@ -20,6 +20,66 @@ import type { SwayController } from "./sessiond-sway"
  */
 export type SessionRoleId = "kiosk" | "source-machine"
 
+export type SessionRoleReadyEvidence =
+  | {
+      readonly kind: "home-invariant"
+      readonly windowCount: number
+      readonly relaunchedRenderer: boolean
+      readonly closedDuplicates: number
+      readonly repairedFocus: boolean
+      readonly repairedFullscreen: boolean
+    }
+  | {
+      readonly kind: "idle-blank"
+      readonly gamescopeWindowsAbsent: boolean
+      readonly gamescopeProcessesAbsent: boolean
+      readonly cooldownElapsed: boolean
+    }
+  | { readonly kind: "legacy"; readonly value: string }
+
+export type SessionRoleReadyOutcome =
+  | { readonly status: "ok"; readonly evidence: SessionRoleReadyEvidence }
+  | {
+      readonly status: "failed"
+      readonly stage:
+        | "enter-idle"
+        | "before-child"
+        | "after-child"
+        | "restore-idle"
+        | "reconcile-idle"
+      readonly message: string
+      readonly evidence?: SessionRoleReadyEvidence
+    }
+
+export function formatSessionRoleReadyEvidence(
+  evidence: SessionRoleReadyEvidence,
+): string {
+  switch (evidence.kind) {
+    case "home-invariant":
+      return formatKioskReadyEvidence(evidence)
+    case "idle-blank":
+      return [
+        "idle-blank",
+        `windows=${evidence.gamescopeWindowsAbsent ? "absent" : "present"}`,
+        `processes=${evidence.gamescopeProcessesAbsent ? "absent" : "present"}`,
+        `cooldown=${evidence.cooldownElapsed ? "elapsed" : "pending"}`,
+      ].join("|")
+    case "legacy":
+      return evidence.value
+  }
+}
+
+export function sessionRoleReadyOutcome(
+  role: SessionRole,
+): SessionRoleReadyOutcome {
+  return (
+    role.idleReadyOutcome?.() ?? {
+      status: "ok",
+      evidence: { kind: "legacy", value: role.idleReadyEvidence() },
+    }
+  )
+}
+
 export interface SessionRole {
   /** Stable role identity surfaced to clients and logs. */
   readonly id: SessionRoleId
@@ -91,6 +151,14 @@ export interface SessionRole {
    * during `enterIdle`. Idempotent.
    */
   reconcileIdle: () => Promise<void>
+
+  /**
+   * Structured diagnostic evidence for the terminal readiness event.
+   * Existing wire output stays string-shaped via `idleReadyEvidence`;
+   * this typed outcome is the canonical source for tests and future
+   * protocol evolution.
+   */
+  idleReadyOutcome?: () => SessionRoleReadyOutcome
 
   /**
    * Diagnostic evidence string surfaced with the terminal readiness event.
@@ -197,7 +265,15 @@ export function createKioskSessionRole(
     // repairs ran. "satisfied" appears only when no repair was
     // necessary, distinguishing the post-reconcile state from a
     // happy steady state.
-    idleReadyEvidence: () => formatKioskReadyEvidence(lastReconcile),
+    idleReadyOutcome: () => ({
+      status: "ok",
+      evidence: { kind: "home-invariant", ...lastReconcile },
+    }),
+    idleReadyEvidence: () =>
+      formatSessionRoleReadyEvidence({
+        kind: "home-invariant",
+        ...lastReconcile,
+      }),
     rendererStatus: () => rendererStatus(deps.renderer, rendererPid),
   }
 }
