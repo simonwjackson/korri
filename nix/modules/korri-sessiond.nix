@@ -24,8 +24,10 @@ let
   isAbsolutePath = path: lib.hasPrefix "/" path;
 
   # Infer role from compositor.kiosk.enable when it has been declared by
-  # another loaded module; otherwise default to "kiosk" for safety so a
-  # standalone sessiond module-eval is well-defined.
+  # another loaded module. The standalone sessiond module-eval case
+  # (compositor.kiosk.enable absent or false) resolves to "source-machine",
+  # which matches `defaultText` on the role option below. Kiosk hosts get
+  # "kiosk" because they always set compositor.kiosk.enable = true.
   kioskEnabled = lib.attrByPath [
     "services"
     "korri"
