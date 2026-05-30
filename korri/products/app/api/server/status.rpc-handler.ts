@@ -200,7 +200,7 @@ export type SessiondProbeResult =
  * Accepts the env as a parameter (not read directly) so tests can drive both
  * code paths through a single injection seam.
  */
-export async function probeSessiondManagedLaunchStatus(
+async function probeSessiondManagedLaunchStatus(
   options: {
     readonly env?: NodeJS.ProcessEnv
     readonly fetchImpl?: (
@@ -255,7 +255,7 @@ export async function probeSessiondManagedLaunchStatus(
  *
  * Exported only for direct unit testing in this file's test
  * companion; production callers go through
- * `probeSessiondManagedLaunchStatus`.
+ * the internal sessiond status projection helper.
  */
 export function redactSessiondFailureReason(reason: string): string {
   const pathRedacted = reason
