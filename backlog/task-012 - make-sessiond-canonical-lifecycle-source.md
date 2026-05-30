@@ -1,7 +1,7 @@
 ---
 id: task-012
 title: Make sessiond the canonical host lifecycle source
-status: To Do
+status: Done
 priority: high
 labels:
   - sessiond
