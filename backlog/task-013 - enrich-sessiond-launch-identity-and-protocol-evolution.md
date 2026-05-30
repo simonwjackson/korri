@@ -1,7 +1,7 @@
 ---
 id: task-013
 title: Enrich sessiond launch identity and protocol evolution
-status: To Do
+status: Done
 priority: medium
 labels:
   - sessiond
