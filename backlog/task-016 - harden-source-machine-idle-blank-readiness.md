@@ -1,7 +1,7 @@
 ---
 id: task-016
 title: Harden source-machine idle-blank readiness
-status: To Do
+status: Done
 priority: medium
 labels:
   - sessiond
