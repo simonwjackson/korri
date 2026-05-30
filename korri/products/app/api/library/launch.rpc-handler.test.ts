@@ -466,8 +466,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
         }),
     })
     const launcherLayer = Layer.succeed(Launcher)({
-      run: () =>
-        Effect.succeed({ status: "failed" as const, exitCode: 1 }),
+      run: () => Effect.succeed({ status: "failed" as const, exitCode: 1 }),
       spawn: (_spec, options) => {
         capturedExtras = options?.extras
         return Effect.succeed({
