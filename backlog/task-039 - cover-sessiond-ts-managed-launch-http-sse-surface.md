@@ -58,3 +58,23 @@ This is task-009's heaviest remaining lift. Splitting it from the cheap-gap clos
 ## Notes
 
 Surfaced during task-009 pass 1 (`test/sessiond-coverage-pass-1`). The cheap gaps on `sessiond-state.ts`, `sessiond-source-machine.ts`, and `sessiond-managed-launch-protocol.ts` closed in that PR; this is the next-largest gap. Tackle next in the sessiond-coverage sequence.
+
+2026-05-30 pass 1 (`test/sessiond-daemon-http-sse-coverage`): added 16 public-contract tests and moved `tools/device/sessiond.ts` from **77.36% funcs / 71.97% lines** to **84.48% funcs / 84.44% lines**. Covered:
+
+- unauthenticated `GET /status`
+- `/control/reconcile`
+- authenticated 404
+- public-command 500 handler
+- duplicate `launchId` / busy rejection while active
+- `launcher.spawn` returning `status: "failed"`
+- no-spawn `afterChildRunning` failure → host-unavailable
+- `beforeChildLaunch` failure → host-unavailable
+- reaper residual warning and reaper exception handling
+- SSE subscriber cancellation cleanup
+- session+wait fallback via `launcher.run` when no spawn capability exists
+- wait-monitor spawn returning failed → anchor degradation
+- queued graceful/force terminate applied when wait monitor registers
+- `startKorriSessiond` handle creation/stop path
+- default kiosk production wiring construction without invoking OS commands
+
+Remaining uncovered lines are mostly real host-boundary wiring, not HTTP/SSE behavior: `discoverSwaySocketEnv`, real `swaymsg` runner, source-machine real sway controller, real `systemctl` service manager, `main()` process/env/signal wiring, plus a defensive impossible branch in `launchUnderSession`. Filed **task-041** to decide the durable coverage treatment before forcing private-helper exports or OS-spawning tests. This task remains open until the ≥95% target is either met or explicitly reframed into "daemon HTTP/SSE covered; real host boundary handled separately."
