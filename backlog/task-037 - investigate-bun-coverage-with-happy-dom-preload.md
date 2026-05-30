@@ -1,7 +1,7 @@
 ---
 id: task-037
 title: Investigate bun test --coverage compatibility with happy-dom preload
-status: To Do
+status: Done
 priority: medium
 labels:
   - testing
@@ -79,3 +79,15 @@ Acceptable outcomes:
 2. Bun coverage works after pinning a version (acceptable).
 3. We switch to c8/nyc for the coverage command (acceptable; track the dependency cost).
 4. We document a manual coverage methodology and accept that the AC's "100% target" is aspirational rather than mechanically enforced (last resort).
+
+## Resolution (2026-05-29)
+
+**Outcome 1 (best):** root-caused to a bun 1.3.3 CLI/config interaction — NOT a happy-dom preload conflict as originally hypothesized. With `coverage = false` in `bunfig.toml`, the CLI `--coverage` flag is silently ignored; coverage only activates when bunfig declares `coverage = true`. Each preload was disproved as the cause by individual ablation.
+
+Shipped:
+- `bunfig.coverage.toml` (separate coverage-enabled config; mirrors `bunfig.toml` otherwise).
+- `just test-coverage [paths...]` recipe (arbitrary slice).
+- `just test-coverage-sessiond` recipe (task-009 baseline slice; 24 test files covering the sessiond surface).
+- `docs/solutions/tooling-decisions/bun-coverage-via-separate-config-2026-05-29.md` documenting the decision, the baseline (per-file numbers as of 2026-05-29), and the highest-value gaps for task-009 to close.
+
+No CI gate, no per-PR threshold: deferred to task-009 because bun 1.3.3 has no file-include/exclude option for coverage, so the slice approach must mature before a meaningful threshold can be enforced.

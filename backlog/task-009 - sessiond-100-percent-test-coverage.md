@@ -1,7 +1,7 @@
 ---
 id: task-009
 title: Raise sessiond contract test coverage to 100%
-status: Blocked
+status: To Do
 priority: medium
 labels:
   - testing
@@ -87,6 +87,8 @@ Treat “100%” as the operational target for the sessiond slice, but do not ch
 Promote to `se-plan` before implementation unless the coverage command and target file set are already obvious; this likely needs sequencing across Bun unit tests, Nix eval tests, and CI gating.
 
 2026-05-29: marked **Blocked** during the long-session sweep. AC #1 ("coverage tooling wired with a reported baseline and a repeatable command") cannot proceed until the coverage tool itself works. `bun test --coverage` produces no output under the current `bunfig.toml` preload setup (suspected happy-dom interference); see **task-037** for the focused tooling investigation. Once the tooling lands, this task's remaining ACs (#2-#11) are achievable as a sequence of focused PRs against the listed file set.
+
+2026-05-29 (later): **task-037 shipped — unblocking.** Root cause was a bun 1.3.3 CLI/config interaction (not happy-dom), fixed by a separate `bunfig.coverage.toml`. `just test-coverage` and `just test-coverage-sessiond` recipes now exist; baseline is captured in `docs/solutions/tooling-decisions/bun-coverage-via-separate-config-2026-05-29.md`. AC #1 satisfied; remaining ACs are gap-closing PRs against the documented baseline. Highest-value gaps in order: `tools/device/sessiond.ts` (71.97% lines, 300+ uncovered), `sessiond-gamescope-reaper.ts`, `sessiond-electrobun.ts`, `sessiond.ts` HTTP/SSE endpoint surfaces, then the lower-traffic files.
 
 Meanwhile, prior sweep PRs added substantial sessiond-surface coverage:
 - PR #5 (task-011): sessiond system wiring + module tests.

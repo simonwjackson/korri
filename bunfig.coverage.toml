@@ -1,0 +1,41 @@
+# Coverage-enabled bun config. Used only by `just test-coverage` and
+# `just test-coverage-sessiond`.
+#
+# Why this exists as a separate file rather than a `coverage = true`
+# in the main bunfig:
+#
+# 1. bun 1.3.3 silently ignores the CLI `--coverage` flag when
+#    `coverage = false` is set in bunfig.toml — verified during
+#    task-037. Toggling `coverage = true` in the main bunfig would
+#    enable coverage instrumentation for every `bun test` invocation,
+#    slowing down the inner dev loop unnecessarily.
+# 2. Coverage runs use a different output budget (text + lcov files)
+#    and target a specific test slice rather than the whole suite,
+#    so a dedicated config keeps that intent explicit.
+#
+# Invoke with: `bun --config=bunfig.coverage.toml test [paths...]`
+# or via the `just test-coverage` recipe.
+
+[test]
+root = "./"
+pattern = ["**/*.test.ts", "**/*.test.tsx"]
+preload = [
+  "./tools/testing/mock-import-meta.ts",
+  "./tools/testing/happydom.ts",
+  "./tools/testing/testing-library.ts",
+  "./tools/testing/setup-global.ts",
+]
+smol = true
+bail = 0
+coverage = true
+coverageReporter = ["text", "lcov"]
+coverageDir = "out/coverage"
+# No coverageThreshold here: a sessiond-focused slice pulls in unrelated
+# files via the import graph (game-assets, library-source, primitives),
+# which would drag the aggregate below any single threshold even when
+# the targeted files reach 100%. Task-009 is the place to enforce a
+# threshold once the file include/exclude story is sorted out.
+timeout = 10000
+
+[test.env]
+NODE_ENV = "test"
