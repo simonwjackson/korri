@@ -77,6 +77,48 @@ desktop-build: build-web desktop-preload-build desktop-waiting-page-build deskto
 test-unit:
   bun test
 
+# Run TypeScript unit tests with coverage reported to text+lcov.
+# Uses bunfig.coverage.toml because bun 1.3.3 silently ignores the
+# CLI --coverage flag when `coverage = false` is set in bunfig.toml.
+# Defaults to the full suite; pass arguments for a specific slice,
+# e.g. `just test-coverage tools/device/sessiond-state.test.ts`.
+test-coverage *args:
+  mkdir -p out/coverage
+  bun --config=bunfig.coverage.toml test {{args}}
+
+# Coverage for the sessiond-relevant test slice (task-009 baseline).
+# Targets the public-contract tests for sessiond daemon, role,
+# launcher seam, foreground-session owner, launch RPC, and
+# app.server.status. The file list mirrors task-009's Related
+# section; update it whenever the sessiond surface grows.
+test-coverage-sessiond:
+  mkdir -p out/coverage
+  bun --config=bunfig.coverage.toml test \
+    tools/device/sessiond.test.ts \
+    tools/device/sessiond-state.test.ts \
+    tools/device/sessiond-role.test.ts \
+    tools/device/sessiond-source-machine.test.ts \
+    tools/device/sessiond-electrobun.test.ts \
+    tools/device/sessiond-gamescope-reaper.test.ts \
+    tools/device/sessiond-launcher-client.test.ts \
+    tools/device/sessiond-renderer.test.ts \
+    tools/device/sessiond-status-sidecar.test.ts \
+    tools/device/sessiond-sway.test.ts \
+    tools/device/sessiond-smoke.test.ts \
+    korri/shared/library/session-launcher.test.ts \
+    korri/shared/library/sessiond-managed-launch-protocol.test.ts \
+    korri/shared/library/launcher.test.ts \
+    korri/shared/library/launcher-layer-memory.test.ts \
+    korri/shared/stream/foreground-session-owner.test.ts \
+    korri/shared/stream/foreground-session-lifecycle.test.ts \
+    korri/shared/stream/foreground-session-gate-state.test.ts \
+    korri/shared/stream/foreground-session-status.test.ts \
+    korri/products/app/api/library/launch.rpc-handler.test.ts \
+    korri/products/app/api/library/local-foreground-launch-adapter.test.ts \
+    korri/products/app/api/server/status.rpc-handler.test.ts \
+    korri/products/app/features/home/foreground-session-status-layer-live.test.ts \
+    korri/products/app/features/home/foreground-session-status-layer-live.integration.test.ts
+
 # Run native Nix checks. Bun must not own Nix module/config/build assertions.
 test-nix:
   nix build \
