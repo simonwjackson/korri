@@ -395,15 +395,13 @@ describe("local foreground launch adapter > U3 wire-shape discrimination", () =>
     // reintroduces `currentState` only on this branch, this assertion
     // fails before the wire ships the leak.
     expect(
-      (result as { preflightReason?: Record<string, unknown> })
-        .preflightReason,
+      (result as { preflightReason?: Record<string, unknown> }).preflightReason,
     ).not.toHaveProperty("currentState")
     // SEC-001 bypass guard: stderrTail must NOT embed the owner FSM tag
     // either — leaking the same information via a different field
     // would defeat the redaction. Asserts against every FSM tag the
     // owner can produce, not just the one in flight for this test.
-    const tail =
-      (result as { stderrTail?: string }).stderrTail ?? ""
+    const tail = (result as { stderrTail?: string }).stderrTail ?? ""
     for (const tag of [
       "IdleReady",
       "Preparing",
@@ -453,8 +451,7 @@ describe("local foreground launch adapter > U3 wire-shape discrimination", () =>
     // requestId and sessionId (from the in-memory session handle)
     // must surface on the second launch's rejection.
     expect(
-      (second as { preflightReason?: Record<string, unknown> })
-        .preflightReason,
+      (second as { preflightReason?: Record<string, unknown> }).preflightReason,
     ).toMatchObject({
       currentRequestId: "u3-pre-local-1",
       currentGameId: "game",
@@ -467,8 +464,7 @@ describe("local foreground launch adapter > U3 wire-shape discrimination", () =>
     // leaking the internal pipeline stage gives unauthenticated callers
     // finer-grained visibility than `app.server.status` already exposes.
     expect(
-      (second as { preflightReason?: Record<string, unknown> })
-        .preflightReason,
+      (second as { preflightReason?: Record<string, unknown> }).preflightReason,
     ).not.toHaveProperty("currentState")
     // task-013 AC #3: process identity is daemon-private. The wire
     // response must NOT carry currentProcessId / currentProcessGroupId
