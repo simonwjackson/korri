@@ -51,7 +51,13 @@ let
     set -eu
     token_file=${lib.escapeShellArg cfg.tokenFile}
     runtime_dir=${lib.escapeShellArg cfg.runtimeDir}
-    ${pkgs.coreutils}/bin/install -d -m 0755 "$runtime_dir"
+    # Mode 0700 on the runtime dir matches the tmpfiles rule below and
+    # keeps the capability-token directory unreadable to group/world.
+    # A group-readable directory leaks token presence/timing even when
+    # the token file itself is 0640 via sharedGroup. install -d only
+    # adjusts mode on an existing dir, so this also re-asserts 0700 if
+    # something earlier in boot relaxed it.
+    ${pkgs.coreutils}/bin/install -d -m 0700 "$runtime_dir"
     if [ ! -s "$token_file" ]; then
       # 32 random bytes → 64 hex chars. coreutils' od is portable enough
       # for this; we explicitly avoid /dev/random to skip entropy stalls.
