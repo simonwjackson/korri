@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test"
 import type { KorriSessiondServiceManager } from "./sessiond"
 import type { KorriRendererController } from "./sessiond-renderer"
 import { createKioskSessionRole } from "./sessiond-role"
-import type { KorriWindowSnapshot } from "./sessiond-state"
+import type { HomeInvariantDecision, KorriWindowSnapshot } from "./sessiond-state"
 import type { SwayController } from "./sessiond-sway"
 
 function makeRecordingRenderer(initialPid = 100): {
@@ -32,17 +32,20 @@ function makeRecordingRenderer(initialPid = 100): {
 function makeSway(initialWindows: readonly KorriWindowSnapshot[] = []): {
   readonly sway: SwayController
   readonly events: string[]
+  readonly decisions: HomeInvariantDecision[]
 } {
   const events: string[] = []
+  const decisions: HomeInvariantDecision[] = []
   const windows = [...initialWindows]
   const sway: SwayController = {
     getKorriWindows: async () => windows,
-    applyDecisions: async decisions => {
-      events.push(...decisions.map(decision => `sway:${decision.kind}`))
+    applyDecisions: async incoming => {
+      decisions.push(...incoming)
+      events.push(...incoming.map(decision => `sway:${decision.kind}`))
       return []
     },
   }
-  return { sway, events }
+  return { sway, events, decisions }
 }
 
 function makeServiceManager(): {
@@ -124,6 +127,78 @@ describe("kiosk session role", () => {
     await role.restoreIdleAfterLaunch()
     expect(rendererEvents).toEqual(["stop:101", "launch:102"])
     expect(role.rendererStatus().pid).toBe(102)
+  })
+
+  it("home-ready evidence describes a satisfied home-invariant when reconcile finds a compliant window", async () => {
+    // task-015 AC #5: evidence is structured, not a fixed string.
+    // "satisfied" appears only when no repair ran. This pins the
+    // happy-path post-reconcile evidence shape so operators can
+    // tell apart "already good" from "good after repair".
+    const { renderer } = makeRecordingRenderer()
+    const { sway } = makeSway([{ id: 7, focused: true, fullscreen: true }])
+    const { serviceManager } = makeServiceManager()
+    const role = createKioskSessionRole({ renderer, sway, serviceManager })
+    await role.enterIdle()
+    expect(role.idleReadyEvidence()).toBe(
+      "home-invariant windows=1 satisfied",
+    )
+  })
+
+  it("home-ready evidence reports renderer-relaunched after a missing-window repair (task-015 AC #2/#5)", async () => {
+    // AC #2: a missing window must trigger relaunch BEFORE
+    // home-ready evidence reports "satisfied". This test exercises
+    // both halves: the renderer is launched (relaunch), and the
+    // resulting evidence string carries the "renderer-relaunched"
+    // marker so the readiness event is honest about what just
+    // happened.
+    const { renderer, events: rendererEvents } = makeRecordingRenderer()
+    const { sway } = makeSway([])
+    const { serviceManager } = makeServiceManager()
+    const role = createKioskSessionRole({ renderer, sway, serviceManager })
+    await role.enterIdle()
+    // enterIdle launches once + reconcile sees no windows and
+    // relaunches a second time. Both launches must happen before
+    // evidence is generated.
+    expect(rendererEvents.filter(e => e.startsWith("launch:")).length).toBe(2)
+    expect(role.idleReadyEvidence()).toContain("renderer-relaunched")
+  })
+
+  it("home-ready evidence reports duplicates-closed when multiple windows exist (task-015 AC #3/#5)", async () => {
+    // AC #3: duplicate windows are closed while preserving a primary.
+    // The decision and the apply step run during reconcile; the
+    // evidence reflects the count so an operator can verify the
+    // duplicate-close actually happened.
+    const { renderer } = makeRecordingRenderer()
+    const { sway, decisions } = makeSway([
+      { id: 7, focused: true, fullscreen: true },
+      { id: 9, focused: false, fullscreen: true },
+      { id: 11, focused: false, fullscreen: true },
+    ])
+    const { serviceManager } = makeServiceManager()
+    const role = createKioskSessionRole({ renderer, sway, serviceManager })
+    await role.enterIdle()
+    const close = decisions.find(d => d.kind === "close-duplicate-windows")
+    if (close?.kind !== "close-duplicate-windows")
+      throw new Error("expected duplicate-close decision")
+    // Primary window is the focused one; duplicates are the rest.
+    expect(close.primaryWindowId).toBe(7)
+    expect(close.duplicateWindowIds).toEqual([9, 11])
+    expect(role.idleReadyEvidence()).toContain("duplicates-closed=2")
+  })
+
+  it("home-ready evidence reports focus/fullscreen repair when window is non-compliant (task-015 AC #4/#5)", async () => {
+    // AC #4: a non-fullscreen / non-focused window is repaired. The
+    // evidence string surfaces both repair markers so a monitor can
+    // distinguish "focus repair" from "fullscreen repair" from "both".
+    const { renderer } = makeRecordingRenderer()
+    const { sway } = makeSway([{ id: 7, focused: false, fullscreen: false }])
+    const { serviceManager } = makeServiceManager()
+    const role = createKioskSessionRole({ renderer, sway, serviceManager })
+    await role.enterIdle()
+    const evidence = role.idleReadyEvidence()
+    expect(evidence).toContain("focus-repaired")
+    expect(evidence).toContain("fullscreen-repaired")
+    expect(evidence).not.toContain("satisfied")
   })
 
   it("relaunches the renderer during reconcile when no window exists", async () => {
