@@ -1,5 +1,5 @@
 ---
-id: task-021
+id: task-032
 title: Verify full Nix test suite after sessiond system wiring changes
 status: To Do
 priority: medium
