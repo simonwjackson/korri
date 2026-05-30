@@ -23,6 +23,21 @@ let
 
   isAbsolutePath = path: lib.hasPrefix "/" path;
 
+  # Directory permissions for the runtime dir holding the capability
+  # token. When sharedGroup is set, the directory needs group-traverse
+  # (x) so members can open the token file by name — group-read (r) is
+  # withheld so the directory is not listable. When sharedGroup is
+  # unset, the directory is root-only.
+  #
+  #   sharedGroup != null → 0710 root:<sharedGroup>
+  #   sharedGroup == null → 0700 root:root
+  #
+  # 0700 root:root WITHOUT this conditional is the trap U1 originally
+  # walked into: the file is correctly group-readable but its parent
+  # directory is not group-traversable, so every read returns EACCES.
+  runtimeDirGroup = if cfg.sharedGroup != null then cfg.sharedGroup else "root";
+  runtimeDirMode = if cfg.sharedGroup != null then "0710" else "0700";
+
   # Infer role from compositor.kiosk.enable when it has been declared by
   # another loaded module. The standalone sessiond module-eval case
   # (compositor.kiosk.enable absent or false) resolves to "source-machine",
@@ -53,13 +68,18 @@ let
     set -eu
     token_file=${lib.escapeShellArg cfg.tokenFile}
     runtime_dir=${lib.escapeShellArg cfg.runtimeDir}
-    # Mode 0700 on the runtime dir matches the tmpfiles rule below and
-    # keeps the capability-token directory unreadable to group/world.
-    # A group-readable directory leaks token presence/timing even when
-    # the token file itself is 0640 via sharedGroup. install -d only
-    # adjusts mode on an existing dir, so this also re-asserts 0700 if
-    # something earlier in boot relaxed it.
-    ${pkgs.coreutils}/bin/install -d -m 0700 "$runtime_dir"
+    # Create-or-reassert runtime-dir mode + ownership.
+    #   sharedGroup != null: 0710 root:<sharedGroup>
+    #     group members get traverse-only on the directory and read
+    #     on the 0640 token file. Withholds group-read on the dir so
+    #     `ls` from a group member does not enumerate sibling files.
+    #   sharedGroup == null: 0700 root:root.
+    # systemd's RuntimeDirectory default mode is 0755; we override
+    # both via RuntimeDirectoryMode AND re-assert here so a stale
+    # /run state from a previous unit version is corrected on start.
+    ${pkgs.coreutils}/bin/install -d -m ${runtimeDirMode} "$runtime_dir"
+    ${pkgs.coreutils}/bin/chown root:${runtimeDirGroup} "$runtime_dir"
+    ${pkgs.coreutils}/bin/chmod ${runtimeDirMode} "$runtime_dir"
     if [ ! -s "$token_file" ]; then
       # 32 random bytes → 64 hex chars. coreutils' od is portable enough
       # for this; we explicitly avoid /dev/random to skip entropy stalls.
@@ -273,8 +293,12 @@ in
 
     environment.systemPackages = [ cfg.package ];
 
+    # Boot-time creation. Mode and group track sharedGroup so the
+    # directory is correct from first boot, before the unit's
+    # ExecStartPre runs. See `runtimeDirMode` / `runtimeDirGroup`
+    # let-bindings above for the rationale.
     systemd.tmpfiles.rules = [
-      "d ${cfg.runtimeDir} 0700 root root -"
+      "d ${cfg.runtimeDir} ${runtimeDirMode} root ${runtimeDirGroup} -"
     ];
 
     systemd.services.korri-sessiond = {
@@ -334,6 +358,10 @@ in
         # is implicitly writable under that mode, which is exactly where
         # the token lives.
         RuntimeDirectory = lib.removePrefix "/run/" cfg.runtimeDir;
+        # Override systemd's default 0755 so the dir created at unit
+        # start matches sharedGroup's traversal contract. ExecStartPre
+        # re-asserts after this for the chown-to-sharedGroup step.
+        RuntimeDirectoryMode = runtimeDirMode;
         StateDirectory = "korri-sessiond";
         PrivateTmp = true;
         ProtectSystem = "strict";

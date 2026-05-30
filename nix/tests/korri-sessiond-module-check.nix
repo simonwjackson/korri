@@ -275,13 +275,38 @@ let
     (check "ExecStartPre generates token via /dev/urandom" (
       lib.hasInfix "/dev/urandom" (execStartPre baselineKiosk)
     ))
-    (check "ExecStartPre creates runtime dir at mode 0700 (matches tmpfiles, protects token)" (
+    # Runtime-dir permission contract. The token file is group-readable
+    # via sharedGroup, but that is useless unless the directory is
+    # group-traversable. Without sharedGroup, the dir stays root-only.
+    (check "sharedGroup unset: ExecStartPre creates runtime dir at 0700 root:root" (
       let pre = execStartPre baselineKiosk; in
-      lib.hasInfix "install -d -m 0700" pre && !lib.hasInfix "install -d -m 0755" pre
+      lib.hasInfix "install -d -m 0700" pre
+      && lib.hasInfix "chown root:root \"$runtime_dir\"" pre
+      && !lib.hasInfix "install -d -m 0755" pre
     ))
-    (check "source-machine: ExecStartPre also creates runtime dir at 0700" (
-      let pre = execStartPre sourceMachine; in
-      lib.hasInfix "install -d -m 0700" pre && !lib.hasInfix "install -d -m 0755" pre
+    (check "sharedGroup unset: tmpfiles creates runtime dir at 0700 root:root" (
+      builtins.any (rule:
+        lib.hasInfix "korri-sessiond" rule
+        && lib.hasInfix "0700 root root" rule
+      ) baselineKiosk.systemd.tmpfiles.rules
+    ))
+    (check "sharedGroup unset: RuntimeDirectoryMode is 0700" (
+      (serviceConfig baselineKiosk).RuntimeDirectoryMode or null == "0700"
+    ))
+    (check "sharedGroup set: ExecStartPre creates runtime dir at 0710 root:<sharedGroup>" (
+      let pre = execStartPre withSharedGroup; in
+      lib.hasInfix "install -d -m 0710" pre
+      && lib.hasInfix "chown root:korri-server \"$runtime_dir\"" pre
+      && lib.hasInfix "chmod 0710 \"$runtime_dir\"" pre
+    ))
+    (check "sharedGroup set: tmpfiles creates runtime dir at 0710 root:<sharedGroup>" (
+      builtins.any (rule:
+        lib.hasInfix "korri-sessiond" rule
+        && lib.hasInfix "0710 root korri-server" rule
+      ) withSharedGroup.systemd.tmpfiles.rules
+    ))
+    (check "sharedGroup set: RuntimeDirectoryMode is 0710" (
+      (serviceConfig withSharedGroup).RuntimeDirectoryMode or null == "0710"
     ))
     (check "ExecStartPre collapses whitespace with tr (sed would leave newlines)" (
       lib.hasInfix "tr -d '[:space:]'" (execStartPre baselineKiosk)

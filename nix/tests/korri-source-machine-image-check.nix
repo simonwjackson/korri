@@ -73,6 +73,18 @@ let
     (check "sessiond sharedGroup is set to korri-sessiond-clients" (
       cfg.services.korri.sessiond.sharedGroup or null == "korri-sessiond-clients"
     ))
+    # Runtime-dir mode must permit korri-sessiond-clients members to
+    # TRAVERSE the directory and reach the 0640 token file. 0700
+    # root:root would silently break every cross-user managed launch.
+    (check "sessiond runtime dir at 0710 root:korri-sessiond-clients (group-traversable)" (
+      builtins.any (rule:
+        lib.hasInfix "korri-sessiond" rule
+        && lib.hasInfix "0710 root korri-sessiond-clients" rule
+      ) (cfg.systemd.tmpfiles.rules or [ ])
+    ))
+    (check "sessiond RuntimeDirectoryMode is 0710 (matches sharedGroup)" (
+      (unit.serviceConfig or { }).RuntimeDirectoryMode or null == "0710"
+    ))
     (check "korri-sessiond-clients group is declared" (
       cfg.users.groups ? korri-sessiond-clients
     ))
