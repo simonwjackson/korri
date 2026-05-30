@@ -448,6 +448,20 @@ describe("local foreground launch adapter > U3 wire-shape discrimination", () =>
       exitCode: 121,
       failureKind: "session-busy",
     })
+    // task-013 AC #2: stable correlation identifiers reach the wire.
+    // The first launch ("u3-pre-local-1") is the busy session; its
+    // requestId and sessionId (from the in-memory session handle)
+    // must surface on the second launch's rejection.
+    expect(
+      (second as { preflightReason?: Record<string, unknown> })
+        .preflightReason,
+    ).toMatchObject({
+      currentRequestId: "u3-pre-local-1",
+      currentGameId: "game",
+      // The in-memory launcher's session id is exposed as the
+      // sessionId here; sessiond-backed launchers expose the
+      // sessiond launchId via the same field.
+    })
     // SEC-001 (task-017): the owner FSM tag must NOT appear on the wire.
     // `app.library.launch` is unauthenticated on the trusted-LAN shape;
     // leaking the internal pipeline stage gives unauthenticated callers
