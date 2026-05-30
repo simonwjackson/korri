@@ -170,7 +170,7 @@ function readRunnerStatus(statusPath: string | undefined, nowMs?: number) {
  * - `not-configured`→ `KORRI_SESSIOND_URL` is unset; the host is not paired
  *                     with sessiond.
  */
-export type SessiondProbeResult =
+type SessiondProbeResult =
   | { readonly kind: "ok"; readonly summary: SessiondLifecycleSummary }
   | { readonly kind: "unavailable" }
   | { readonly kind: "token-rejected" }
