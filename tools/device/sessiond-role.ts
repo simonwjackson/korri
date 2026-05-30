@@ -117,17 +117,47 @@ export function createKioskSessionRole(
   deps: KioskSessionRoleDeps,
 ): SessionRole {
   let rendererPid: number | undefined
+  // task-015 AC #5: track the last reconcile outcome so home-ready
+  // evidence describes what the role actually verified, not a fixed
+  // string. This lets monitors and the operator UI distinguish
+  // "home was already satisfied" from "renderer was relaunched" or
+  // "focus/fullscreen was repaired".
+  let lastReconcile: KioskReconcileSummary = {
+    windowCount: 0,
+    relaunchedRenderer: false,
+    closedDuplicates: 0,
+    repairedFocus: false,
+    repairedFullscreen: false,
+  }
 
   const reconcile = async () => {
     const windows = await deps.sway.getKorriWindows()
     const decisions = evaluateHomeInvariant({ windows })
+    const summary: KioskReconcileSummary = {
+      windowCount: windows.length,
+      relaunchedRenderer: false,
+      closedDuplicates: 0,
+      repairedFocus: false,
+      repairedFullscreen: false,
+    }
     if (decisions.some(decision => decision.kind === "relaunch-renderer")) {
       const launched = await deps.renderer.launch()
       rendererPid = launched.pid
+      summary.relaunchedRenderer = true
+    }
+    for (const decision of decisions) {
+      if (decision.kind === "close-duplicate-windows") {
+        summary.closedDuplicates = decision.duplicateWindowIds.length
+      }
+      if (decision.kind === "repair-window") {
+        summary.repairedFocus = decision.repairs.includes("focus")
+        summary.repairedFullscreen = decision.repairs.includes("fullscreen")
+      }
     }
     await deps.sway.applyDecisions(
       decisions.filter(decision => decision.kind !== "relaunch-renderer"),
     )
+    lastReconcile = summary
   }
 
   return {
@@ -161,7 +191,41 @@ export function createKioskSessionRole(
       await reconcile()
     },
     reconcileIdle: reconcile,
-    idleReadyEvidence: () => "home-invariant-satisfied",
+    // task-015 AC #5: structured evidence string. Format is a
+    // single line so it fits the SSE-event evidence field, but the
+    // keys let operators and tests assert specifically on which
+    // repairs ran. "satisfied" appears only when no repair was
+    // necessary, distinguishing the post-reconcile state from a
+    // happy steady state.
+    idleReadyEvidence: () => formatKioskReadyEvidence(lastReconcile),
     rendererStatus: () => rendererStatus(deps.renderer, rendererPid),
   }
+}
+
+interface KioskReconcileSummary {
+  windowCount: number
+  relaunchedRenderer: boolean
+  closedDuplicates: number
+  repairedFocus: boolean
+  repairedFullscreen: boolean
+}
+
+export function formatKioskReadyEvidence(
+  summary: KioskReconcileSummary,
+): string {
+  const parts = [`windows=${summary.windowCount}`]
+  if (summary.relaunchedRenderer) parts.push("renderer-relaunched")
+  if (summary.closedDuplicates > 0)
+    parts.push(`duplicates-closed=${summary.closedDuplicates}`)
+  if (summary.repairedFocus) parts.push("focus-repaired")
+  if (summary.repairedFullscreen) parts.push("fullscreen-repaired")
+  if (
+    !summary.relaunchedRenderer &&
+    summary.closedDuplicates === 0 &&
+    !summary.repairedFocus &&
+    !summary.repairedFullscreen
+  ) {
+    parts.push("satisfied")
+  }
+  return `home-invariant ${parts.join(" ")}`
 }
