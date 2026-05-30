@@ -21,7 +21,11 @@ import {
   type ProcessInfo,
   type ProcessListQuery,
 } from "./sessiond-gamescope-reaper"
-import type { SessionRole } from "./sessiond-role"
+import {
+  formatSessionRoleReadyEvidence,
+  type SessionRole,
+  type SessionRoleReadyEvidence,
+} from "./sessiond-role"
 import type { KorriWindowSnapshot } from "./sessiond-state"
 
 export interface SourceMachineSwayController {
@@ -227,16 +231,23 @@ export function createSourceMachineSessionRole(
         await deps.sway.clearGamescopeWindows(snap.gamescopeWindows)
       }
     },
-    idleReadyEvidence: () => idleBlankEvidence(latestChecks),
+    idleReadyOutcome: () => ({
+      status: "ok",
+      evidence: idleBlankReadyEvidence(latestChecks),
+    }),
+    idleReadyEvidence: () =>
+      formatSessionRoleReadyEvidence(idleBlankReadyEvidence(latestChecks)),
     rendererStatus: () => ({ kind: "noop" }),
   }
 }
 
-function idleBlankEvidence(checks: IdleBlankChecks): string {
-  return [
-    "idle-blank",
-    `windows=${checks.gamescopeWindowsAbsent ? "absent" : "present"}`,
-    `processes=${checks.gamescopeProcessesAbsent ? "absent" : "present"}`,
-    `cooldown=${checks.cooldownElapsed ? "elapsed" : "pending"}`,
-  ].join("|")
+function idleBlankReadyEvidence(
+  checks: IdleBlankChecks,
+): Extract<SessionRoleReadyEvidence, { readonly kind: "idle-blank" }> {
+  return {
+    kind: "idle-blank",
+    gamescopeWindowsAbsent: checks.gamescopeWindowsAbsent,
+    gamescopeProcessesAbsent: checks.gamescopeProcessesAbsent,
+    cooldownElapsed: checks.cooldownElapsed,
+  }
 }

@@ -31,7 +31,12 @@ import type {
   KorriRendererController,
   KorriRendererStatus,
 } from "./sessiond-renderer"
-import { createKioskSessionRole, type SessionRole } from "./sessiond-role"
+import {
+  createKioskSessionRole,
+  formatSessionRoleReadyEvidence,
+  type SessionRole,
+  sessionRoleReadyOutcome,
+} from "./sessiond-role"
 import type { SourceMachineSwayController } from "./sessiond-source-machine"
 import { createSourceMachineSessionRole } from "./sessiond-source-machine"
 import {
@@ -484,9 +489,24 @@ export function createKorriSessiondCore(
       await role.restoreIdleAfterLaunch()
       state = completeKorriRestore(state)
       emitStatusSidecar()
+      const readiness = sessionRoleReadyOutcome(role)
       pushLifecycleEvent(launchId, {
         type: role.idleReadyEventName,
-        readiness: { status: "ok", evidence: role.idleReadyEvidence() },
+        readiness: {
+          status: readiness.status,
+          ...(readiness.status === "ok"
+            ? { evidence: formatSessionRoleReadyEvidence(readiness.evidence) }
+            : {
+                message: readiness.message,
+                ...(readiness.evidence
+                  ? {
+                      evidence: formatSessionRoleReadyEvidence(
+                        readiness.evidence,
+                      ),
+                    }
+                  : {}),
+              }),
+        },
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
