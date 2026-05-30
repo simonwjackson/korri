@@ -442,6 +442,104 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     })
   })
 
+  it("forwards launcher-anchor extras from ResolvedLaunch to the launcher (task-014 AC #2)", async () => {
+    // The library source decides whether a resolved launch is a
+    // launcher-anchor app and supplies the lifecycle/wait extras.
+    // Sessiond-backed launchers consume them via
+    // `LauncherService.spawn(spec, options.extras)`. This test pins
+    // the plumbing: extras supplied on the source's ResolvedLaunch
+    // reach the launcher unchanged.
+    let capturedExtras: unknown = "not-called"
+    const sourceLayer = Layer.succeed(LibrarySource)({
+      list: () =>
+        Effect.succeed([{ id: "game", system: "s", contentPath: "rom" }]),
+      launchSpecFor: () => Effect.fail(new LibraryError({ reason: "config" })),
+      resolveLaunchForGame: () =>
+        Effect.succeed({
+          spec: { command: "/usr/bin/steam", args: ["steam://rungameid/3"] },
+          // Steam is the canonical launcher-anchor app: the steam
+          // process exits while the actual game lifecycle continues
+          // under its supervision. Sessiond's session-lifecycle mode
+          // is designed for exactly this shape — launcher-exited
+          // events drive the role-foreground anchor.
+          extras: { lifecycle: "session" as const },
+        }),
+    })
+    const launcherLayer = Layer.succeed(Launcher)({
+      run: () =>
+        Effect.succeed({ status: "failed" as const, exitCode: 1 }),
+      spawn: (_spec, options) => {
+        capturedExtras = options?.extras
+        return Effect.succeed({
+          status: "started" as const,
+          result: Promise.resolve({ status: "launched" as const }),
+          session: completedSessionHandle(),
+        })
+      },
+    })
+
+    const result = await Effect.runPromise(
+      handleLaunchLibrary({ id: "game" }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            sourceLayer,
+            launcherLayer,
+            Layer.succeed(ForegroundSessionHost)(createForegroundSessionHost()),
+            remoteStreamPrepareNeverCalledLayer,
+          ),
+        ),
+      ),
+    )
+
+    expect(result).toEqual({ _tag: "Accepted", status: "launched" })
+    expect(capturedExtras).toEqual({ lifecycle: "session" })
+  })
+
+  it("omits options entirely when ResolvedLaunch has no extras (default foreground semantics)", async () => {
+    // Regression guard for the additive-only contract: when a source
+    // does not supply extras, the handler must NOT synthesize a
+    // default `{}` options object. Sessiond and shell launchers both
+    // distinguish "no options" from "options with no extras" and the
+    // former matches the pre-task-014 call shape.
+    let capturedOptions: unknown = "not-called"
+    const sourceLayer = Layer.succeed(LibrarySource)({
+      list: () =>
+        Effect.succeed([{ id: "game", system: "s", contentPath: "rom" }]),
+      launchSpecFor: () => Effect.fail(new LibraryError({ reason: "config" })),
+      resolveLaunchForGame: () =>
+        Effect.succeed({
+          spec: { command: "/bin/game", args: [] },
+        }),
+    })
+    const launcherLayer = Layer.succeed(Launcher)({
+      run: () => Effect.succeed({ status: "failed" as const, exitCode: 1 }),
+      spawn: (_spec, options) => {
+        capturedOptions = options
+        return Effect.succeed({
+          status: "started" as const,
+          result: Promise.resolve({ status: "launched" as const }),
+          session: completedSessionHandle(),
+        })
+      },
+    })
+
+    const result = await Effect.runPromise(
+      handleLaunchLibrary({ id: "game" }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            sourceLayer,
+            launcherLayer,
+            Layer.succeed(ForegroundSessionHost)(createForegroundSessionHost()),
+            remoteStreamPrepareNeverCalledLayer,
+          ),
+        ),
+      ),
+    )
+
+    expect(result).toEqual({ _tag: "Accepted", status: "launched" })
+    expect(capturedOptions).toBeUndefined()
+  })
+
   it("honors an explicit Gamescope backend override from the library cascade", async () => {
     let launchedSpec: unknown
     const sourceLayer = Layer.succeed(LibrarySource)({
