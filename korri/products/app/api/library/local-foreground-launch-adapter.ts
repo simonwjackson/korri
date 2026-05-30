@@ -282,6 +282,18 @@ async function launchResponseFromOwnerResult(
         ...(result.rejection.externalMode !== undefined
           ? { externalMode: result.rejection.externalMode }
           : {}),
+        // task-013 AC #2: stable correlation identifiers for the
+        // currently-active launch. Process identity stays daemon-
+        // private (see ForegroundSessionBusyRejection docstring).
+        ...(result.rejection.currentRequestId !== undefined
+          ? { currentRequestId: result.rejection.currentRequestId }
+          : {}),
+        ...(result.rejection.currentGameId !== undefined
+          ? { currentGameId: result.rejection.currentGameId }
+          : {}),
+        ...(result.rejection.currentSessionId !== undefined
+          ? { currentSessionId: result.rejection.currentSessionId }
+          : {}),
       },
     }
   }

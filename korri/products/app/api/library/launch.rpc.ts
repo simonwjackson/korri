@@ -67,9 +67,19 @@ const LaunchResponseTag = Schema.Literals([
 // still sends `currentState`, the renderer-side decoder silently strips
 // it: Effect Schema's default is `onExcessProperty: "ignore"`. No decode
 // failures occur during rolling deploys; the field is just dropped.
+//
+// task-013 AC #2 added the identity-correlation fields below. Each is
+// optional and forward-compat under the rule documented in
+// `sessiond-managed-launch-protocol.ts` (additive-only). They are
+// stable correlators (request id, game id, session id) safe to share
+// with operators; process identity stays daemon-private per task-013
+// AC #3 (see `foreground-session-lifecycle.ts`'s rejection docstring).
 const PreflightRejectionReason = Schema.Struct({
   source: Schema.Literals(["owner-local", "sessiond"]),
   externalMode: Schema.optional(Schema.String),
+  currentRequestId: Schema.optional(Schema.String),
+  currentGameId: Schema.optional(Schema.String),
+  currentSessionId: Schema.optional(Schema.String),
 })
 
 const DaemonRejectionReason = Schema.Struct({
