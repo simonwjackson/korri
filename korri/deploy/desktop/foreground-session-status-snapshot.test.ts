@@ -171,7 +171,7 @@ describe("foreground session status snapshot adapter", () => {
             gameId: "gba/metroid-fusion",
             rejection: {
               category: "session-busy",
-              message: "Foreground session is not ready (Running)",
+              message: "Foreground session is busy",
               attemptedRequestId: "request-2",
               attemptedGameId: "gba/metroid-fusion",
               currentState: "Running",
@@ -191,7 +191,7 @@ describe("foreground session status snapshot adapter", () => {
         gameId: "gba/metroid-fusion",
         category: "session-busy",
         state: "Running",
-        message: "Foreground session is not ready (Running)",
+        message: "Foreground session is busy",
       },
     ])
   })

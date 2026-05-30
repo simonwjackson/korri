@@ -390,6 +390,34 @@ describe("local foreground launch adapter > U3 wire-shape discrimination", () =>
       exitCode: 121,
       failureKind: "session-busy",
     })
+    // SEC-001 (task-017): symmetric guard for the sessiond rejection
+    // path. If a future change splits per-source code paths and
+    // reintroduces `currentState` only on this branch, this assertion
+    // fails before the wire ships the leak.
+    expect(
+      (result as { preflightReason?: Record<string, unknown> })
+        .preflightReason,
+    ).not.toHaveProperty("currentState")
+    // SEC-001 bypass guard: stderrTail must NOT embed the owner FSM tag
+    // either — leaking the same information via a different field
+    // would defeat the redaction. Asserts against every FSM tag the
+    // owner can produce, not just the one in flight for this test.
+    const tail =
+      (result as { stderrTail?: string }).stderrTail ?? ""
+    for (const tag of [
+      "IdleReady",
+      "Preparing",
+      "Spawning",
+      "Foregrounding",
+      "Running",
+      "ExitObserved",
+      "TearingDown",
+      "VerifyingReady",
+      "Failed",
+      "Recovering",
+    ]) {
+      expect(tail).not.toContain(tag)
+    }
   })
 
   it("PreflightRejected (owner-local): _tag + back-compat exit 121 + reason.source=owner-local", async () => {
