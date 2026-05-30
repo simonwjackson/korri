@@ -283,6 +283,15 @@ let
             sessiondService.serviceConfig.ReadWritePaths or [ ]
           )
         ))
+        # Kiosk sessiond ATTACHES to the existing compositor session;
+        # the module's default ProtectHome = true masks /run/user/*
+        # in sessiond's mount namespace, which would block the wayland-1
+        # socket connect. The kiosk image relaxes this with mkForce; a
+        # future refactor that drops the relaxation would silently break
+        # every renderer spawn, so pin it here.
+        (check "${name}: sessiond serviceConfig.ProtectHome must be false (relaxed for wayland socket access)" (
+          (sessiondService.serviceConfig.ProtectHome or null) == false
+        ))
         (check "${name}: compositor must use Wayland SDL video" (
           compositorEnv.SDL_VIDEODRIVER or null == "wayland"
         ))
