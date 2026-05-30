@@ -1,7 +1,7 @@
 ---
 id: task-009
 title: Raise sessiond contract test coverage to 100%
-status: To Do
+status: Blocked
 priority: medium
 labels:
   - testing
@@ -85,3 +85,17 @@ Drive unit and integration coverage to 100% on real public contracts, not privat
 Treat “100%” as the operational target for the sessiond slice, but do not chase meaningless coverage by testing private branches directly. The valuable outcome is contract-level confidence across daemon HTTP/SSE behavior, role readiness invariants, launcher-client behavior, foreground-session owner behavior, and Nix wiring.
 
 Promote to `se-plan` before implementation unless the coverage command and target file set are already obvious; this likely needs sequencing across Bun unit tests, Nix eval tests, and CI gating.
+
+2026-05-29: marked **Blocked** during the long-session sweep. AC #1 ("coverage tooling wired with a reported baseline and a repeatable command") cannot proceed until the coverage tool itself works. `bun test --coverage` produces no output under the current `bunfig.toml` preload setup (suspected happy-dom interference); see **task-037** for the focused tooling investigation. Once the tooling lands, this task's remaining ACs (#2-#11) are achievable as a sequence of focused PRs against the listed file set.
+
+Meanwhile, prior sweep PRs added substantial sessiond-surface coverage:
+- PR #5 (task-011): sessiond system wiring + module tests.
+- PR #6 (task-012): sessiond canonical lifecycle source + app.server.status integration.
+- PR #7 (task-034): foreground-session-status layer end-to-end via loopback.
+- PR #8 (task-017): foreground-session transition + failure semantics, redaction guards.
+- PR #9 (task-013): launch identity correlators + protocol evolution rule.
+- PR #10 (task-014): launcher-anchor lifecycle plumbing.
+- PR #11 (task-015): kiosk readiness invariants + structured evidence.
+- PR #12 (task-016): source-machine idle-ready evidence wire-shape pins.
+
+The surface is meaningfully covered; the gap is the missing baseline that would let us claim “100% on contract.”
