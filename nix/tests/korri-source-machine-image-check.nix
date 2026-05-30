@@ -16,6 +16,11 @@ let
   failedAssertions = builtins.filter (a: !a.assertion) cfg.assertions;
   unit = cfg.systemd.services.korri-sessiond or { };
   unitEnv = unit.environment or { };
+  sessiondExecStartPre =
+    let preStr = (unit.serviceConfig or { }).ExecStartPre or ""; in
+    if preStr == "" then "" else builtins.readFile preStr;
+  sourceUser = cfg.users.users.korri-source or { };
+  serverUser = cfg.users.users.korri-server or { };
 
   check = message: assertion: { inherit message assertion; };
   checks = [
@@ -61,6 +66,22 @@ let
       in
       firstAppCmd != null
       && lib.hasInfix "KORRI_SESSIOND_URL" (builtins.readFile firstAppCmd)
+    ))
+    (check "sessiond sharedGroup is set to korri-sessiond-clients" (
+      cfg.services.korri.sessiond.sharedGroup or null == "korri-sessiond-clients"
+    ))
+    (check "korri-sessiond-clients group is declared" (
+      cfg.users.groups ? korri-sessiond-clients
+    ))
+    (check "korri-source user is in korri-sessiond-clients group" (
+      builtins.elem "korri-sessiond-clients" (sourceUser.extraGroups or [ ])
+    ))
+    (check "korri-server user is in korri-sessiond-clients group" (
+      builtins.elem "korri-sessiond-clients" (serverUser.extraGroups or [ ])
+    ))
+    (check "sessiond ExecStartPre chowns token to korri-sessiond-clients at 0640" (
+      lib.hasInfix "chown root:korri-sessiond-clients" sessiondExecStartPre
+      && lib.hasInfix "chmod 0640" sessiondExecStartPre
     ))
   ];
 

@@ -28,6 +28,21 @@ in
   # The headless base wires the server bits (users, federation defaults).
   imports = [ ./headless.nix ];
 
+  # Shared Unix group for processes that must read the sessiond
+  # capability token. Source-machine has two such consumers:
+  #   - korri-server (system unit, declared in headless.nix as the
+  #     korri-server user) — delegates managed launches to sessiond.
+  #   - korri-source (Sunshine session user, declared below) — runs
+  #     the game-stream runner that routes lifecycle:"foreground"
+  #     intents through sessiond.
+  # Kiosk reuses `korri-server` for the same purpose because only the
+  # server user reads the token there. Source-machine has two distinct
+  # consuming users, so a purpose-named group is clearer than overloading
+  # either user's primary group.
+  users.groups.korri-sessiond-clients = { };
+
+  users.users.korri-server.extraGroups = [ "korri-sessiond-clients" ];
+
   users.groups.korri-source = { };
   users.users.korri-source = {
     isNormalUser = true;
@@ -36,6 +51,7 @@ in
     createHome = true;
     extraGroups = [
       "input"
+      "korri-sessiond-clients"
       "render"
       "seat"
       "video"
@@ -99,6 +115,12 @@ in
     tokenFile = sessiondTokenFile;
     runtimeDir = sessiondRuntimeDir;
     sunshineRuntimeStatusPath = gameStreamStatusPath;
+    # Share the token (mode 0640) with the korri-sessiond-clients group
+    # so both korri-server (system unit) and korri-source (Sunshine
+    # session user, running the game-stream runner) can authenticate
+    # against sessiond's HTTP surface. Without this, the token stays
+    # root:root 0600 and every cross-user managed launch fails closed.
+    sharedGroup = "korri-sessiond-clients";
   };
 
   # Game-stream runner routes lifecycle:"foreground" intents through
