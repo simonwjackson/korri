@@ -6,6 +6,7 @@ import { Effect } from "effect"
 import {
   handleServerStatus,
   handleServerStatusWithOverrides,
+  redactSessiondFailureReason,
 } from "./status.rpc-handler"
 
 const originalEnv = {
@@ -265,6 +266,130 @@ describe("app.server.status handler", () => {
     // `host-control-disabled` / exit-126 mapping for callers.
     expect(result.sessiond).toBeUndefined()
     expect(result.sessiondUnavailable).toBe(true)
+  })
+
+  // SEC-003 (task-036). \`SessiondLifecycleSummary.failureReason\` is
+  // forwarded onto the unauthenticated-on-LAN \`app.server.status\` wire,
+  // so the handler is the bounding seam for the string. Three guards:
+  // (1) absolute-path-shaped substrings are replaced with \`<path>\`;
+  // (2) length is clamped to 256 chars with a trailing ellipsis;
+  // (3) short, path-free strings pass through unchanged so operator
+  // diagnostics keep their value.
+  it("redacts absolute-path-shaped substrings from sessiond.failureReason (SEC-003)", async () => {
+    process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
+    process.env.KORRI_SESSIOND_URL = "http://127.0.0.1:3003"
+    process.env.KORRI_SESSIOND_TOKEN = "test-token"
+    const fetchImpl = async () =>
+      Response.json({
+        schemaVersion: 1,
+        mode: "recovering",
+        capabilities: {
+          managedLaunch: true,
+          lifecycleEvents: true,
+          perLaunchTermination: true,
+        },
+        restoreAttempts: 2,
+        failureReason:
+          "ENOENT: open /home/simonwjackson/.cache/korri/renderer.sock",
+      })
+
+    const result = await Effect.runPromise(
+      handleServerStatusWithOverrides({}, { fetchImpl }),
+    )
+
+    expect(result.sessiond?.failureReason).toBe("ENOENT: open <path>")
+  })
+
+  it("clamps oversized sessiond.failureReason to 256 chars with trailing ellipsis (SEC-003)", async () => {
+    process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
+    process.env.KORRI_SESSIOND_URL = "http://127.0.0.1:3003"
+    process.env.KORRI_SESSIOND_TOKEN = "test-token"
+    const huge = "x".repeat(400)
+    const fetchImpl = async () =>
+      Response.json({
+        schemaVersion: 1,
+        mode: "recovering",
+        capabilities: {
+          managedLaunch: true,
+          lifecycleEvents: true,
+          perLaunchTermination: true,
+        },
+        restoreAttempts: 3,
+        failureReason: huge,
+      })
+
+    const result = await Effect.runPromise(
+      handleServerStatusWithOverrides({}, { fetchImpl }),
+    )
+
+    expect(result.sessiond?.failureReason).toHaveLength(256)
+    expect(result.sessiond?.failureReason?.endsWith("\u2026")).toBe(true)
+  })
+
+  it("passes short path-free sessiond.failureReason through unchanged (SEC-003)", async () => {
+    process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
+    process.env.KORRI_SESSIOND_URL = "http://127.0.0.1:3003"
+    process.env.KORRI_SESSIOND_TOKEN = "test-token"
+    const fetchImpl = async () =>
+      Response.json({
+        schemaVersion: 1,
+        mode: "recovering",
+        capabilities: {
+          managedLaunch: true,
+          lifecycleEvents: true,
+          perLaunchTermination: true,
+        },
+        restoreAttempts: 1,
+        failureReason: "renderer did not return to home within 5s",
+      })
+
+    const result = await Effect.runPromise(
+      handleServerStatusWithOverrides({}, { fetchImpl }),
+    )
+
+    expect(result.sessiond?.failureReason).toBe(
+      "renderer did not return to home within 5s",
+    )
+  })
+
+  // Direct coverage for the SEC-003 redaction helper. The wire-level
+  // tests above exercise the full handler pipeline; these focus on
+  // edge cases the helper must handle correctly on its own.
+  describe("redactSessiondFailureReason (SEC-003 helper)", () => {
+    it("redacts multiple absolute paths in one message", () => {
+      expect(
+        redactSessiondFailureReason(
+          "could not link /home/simon/.korri/state into /run/korri/cur",
+        ),
+      ).toBe("could not link <path> into <path>")
+    })
+
+    it("redacts file:// URLs that follow the absolute-path pattern", () => {
+      expect(
+        redactSessiondFailureReason(
+          "refused to fetch from file:///etc/korri/sessiond.token",
+        ),
+      ).toBe("refused to fetch from <path>")
+    })
+
+    it("preserves a leading slash that is not a path (start of message)", () => {
+      // Only multi-segment absolute paths are redacted; a bare
+      // leading slash like "/etc" alone passes through unchanged so
+      // we don't shred operator vocabulary like "/24 subnet".
+      expect(redactSessiondFailureReason("home is /etc; sessiond bailed")).toBe(
+        "home is /etc; sessiond bailed",
+      )
+    })
+
+    it("clamps after redaction so a path-heavy oversized message still fits the cap", () => {
+      const longPath = `/${"a".repeat(300)}/${"b".repeat(300)}`
+      const result = redactSessiondFailureReason(`fail: ${longPath} oops`)
+      expect(result.length).toBeLessThanOrEqual(256)
+    })
+
+    it("returns the empty string unchanged", () => {
+      expect(redactSessiondFailureReason("")).toBe("")
+    })
   })
 
   it("does not set sessiondUnavailable when sessiond is not configured", async () => {

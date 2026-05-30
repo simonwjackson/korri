@@ -1,7 +1,7 @@
 ---
 id: task-036
 title: Constrain sessiond.failureReason on app.server.status wire (SEC-003)
-status: To Do
+status: Done
 priority: low
 labels:
   - security
