@@ -168,7 +168,7 @@ by design — see task-013 AC #3 and
 ### "Source-machine can't accept a stream"
 
 1. `GET /managed-launch/status` — must be `mode: "idle"`.
-2. If `recovering`: `failureReason` is the human-readable cause.
+2. If `recovering`: `failureReason` is the human-readable cause. Note that the `app.server.status` wire copy is **redacted** (SEC-003 / task-036): absolute paths become `<path>` and the string is clamped to 256 chars. The sessiond-local journal copy is unredacted; cross-reference there for path-bearing diagnostics.
 3. If still `restoring`: check `idleReadyEvidence` for which sub-check is failing (`windows=present`, `processes=present`, `cooldown=pending`).
 4. Lingering Gamescope processes: see `sessiond-gamescope-reaper.ts` and
    `docs/solutions/runtime-errors/sessiond-sse-stream-killed-by-bun-idle-timeout-2026-05-27.md`.
@@ -238,7 +238,7 @@ Related deferred work that operators should be aware of:
 - **task-014** — launcher-anchor session lifecycle (shipped, but no production launcher currently produces `extras`).
 - **task-017** — failure semantics (shipped — this section reflects the post-task-017 vocabulary).
 - **task-035** — audit `foreground-session-status-snapshot.ts` `recentEvents.state` leak (dead code today; one route-mount away from re-exposure).
-- **task-036** — constrain `sessiond.failureReason` on the `app.server.status` wire (unbounded string today).
+- **task-036** — constrain `sessiond.failureReason` on the `app.server.status` wire. **Shipped**: `redactSessiondFailureReason` strips absolute paths and clamps to 256 chars. See `physical-host-foreground-lifecycle-truth-is-sessiond-2026-05-29.md` Consequences section.
 
 ## Related documents
 

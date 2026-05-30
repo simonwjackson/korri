@@ -244,7 +244,9 @@ export async function probeSessiondManagedLaunchStatus(
             }
           : {}),
         ...(decoded.failureReason
-          ? { failureReason: decoded.failureReason }
+          ? {
+              failureReason: redactSessiondFailureReason(decoded.failureReason),
+            }
           : {}),
       }),
     }
@@ -252,6 +254,41 @@ export async function probeSessiondManagedLaunchStatus(
     return { kind: "unavailable" }
   }
 }
+
+/**
+ * SEC-003 (task-036) bounding seam for sessiond's `failureReason`.
+ *
+ * `failureReason` is forwarded onto the unauthenticated-on-LAN
+ * `app.server.status` wire, so the status handler is the right place
+ * to bound it. Three guards, applied in order:
+ *
+ * 1. **Path redaction.** Absolute Unix path-shaped substrings
+ *    (`/foo/bar...`) and `file://` URLs are replaced with `<path>`
+ *    so OS error messages do not leak `/home/<user>/...`,
+ *    `/run/korri-...`, daemon install paths, or socket locations
+ *    to a casual LAN peer.
+ * 2. **Length clamp.** Anything over 256 chars is truncated with a
+ *    trailing `…` so a runaway stack-trace fragment cannot dump
+ *    unbounded bytes to the wire.
+ * 3. **Otherwise pass-through.** Short, path-free strings reach
+ *    operators verbatim so the diagnostic value of
+ *    `failureReason` is preserved.
+ *
+ * Exported only for direct unit testing in this file's test
+ * companion; production callers go through
+ * `probeSessiondManagedLaunchStatus`.
+ */
+export function redactSessiondFailureReason(reason: string): string {
+  const pathRedacted = reason
+    .replace(/file:\/\/[^\s]+/g, "<path>")
+    .replace(/\/(?:[a-zA-Z0-9_.+-]+\/)+[a-zA-Z0-9_.+-]+/g, "<path>")
+  if (pathRedacted.length <= SESSIOND_FAILURE_REASON_MAX_LENGTH) {
+    return pathRedacted
+  }
+  return `${pathRedacted.slice(0, SESSIOND_FAILURE_REASON_MAX_LENGTH - 1)}…`
+}
+
+const SESSIOND_FAILURE_REASON_MAX_LENGTH = 256
 
 function probeSessiondStatus(
   fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>,
