@@ -102,7 +102,7 @@ const server = Bun.serve({
 
 ### 3. `observe()` becomes a bounded reconnect loop
 
-In `korri/shared/library/session-launcher.ts`. The previous `observe()` ran a single `for await (const event of readSseEvents(...))` and, on clean stream end without a terminal event, called `settleFailure('sessiond event stream ended before readiness')`. The new shape splits one stream consumption (`consumeEventStream`, which returns `true` when a terminal event settled the launch and `false` when the stream closed without one) from an outer reconnect loop. Sessiond's existing event replay covers events emitted during the reconnect window.
+In `korri/shared/library/sessiond-managed-launch-event-observer.ts` (originally embedded in `korri/shared/library/session-launcher.ts`). The previous observer ran a single `for await (const event of readSseEvents(...))` and, on clean stream end without a terminal event, called `settleFailure('sessiond event stream ended before readiness')`. The observer contract now splits one stream consumption (`consumeEventStream`, which returns `true` when a terminal event settled the launch and `false` when the stream closed without one) from an outer reconnect loop. Sessiond's existing event replay covers events emitted during the reconnect window.
 
 ```ts
 const DEFAULT_EVENT_STREAM_MAX_ATTEMPTS = 5
@@ -158,8 +158,8 @@ The general principle: a supervisor must not infer the state of a supervised pro
 Tests that ship with the fix:
 
 - `tools/device/sessiond.test.ts` — **"emits SSE heartbeats so a quiet long-running launch keeps the stream alive"**. Opens an events stream with a small `heartbeatIntervalMs`, lets several intervals tick on a quiet launch, then asserts the streamed body contains `: hb\n\n` comments. Locks in that idle launches keep emitting SSE comments.
-- `korri/shared/library/session-launcher.test.ts` — **"reconnects when the lifecycle event stream closes before a terminal event"**. The fake `fetchImpl` answers the first `/managed-launch/events` request with a non-terminal event and then closes; the test asserts the observer issues a second `/managed-launch/events` request rather than settling the launch as failed.
-- `korri/shared/library/session-launcher.test.ts` — **"resolves host-unavailable when event stream ends before readiness"** (paired). Forces all reconnect attempts to fail and asserts the observer eventually settles as failure with the bounded-attempt error message. Pins the upper bound of the loop so it cannot regress into unbounded retry.
+- `korri/shared/library/sessiond-managed-launch-event-observer.test.ts` — **"reconnects when the event stream closes before a terminal event"**. The harness `fetchImpl` answers the first `/managed-launch/events` request with a non-terminal event and then closes; the test asserts the observer issues a second `/managed-launch/events` request rather than settling the launch as failed.
+- `korri/shared/library/sessiond-managed-launch-event-observer.test.ts` — readiness-timeout, rejected-stream, `home-ready`, `idle-ready`, `recovering`, wait-monitor, and anchored-session scenarios. These pin the observer module as the home of the client-side SSE/reconnect/readiness state machine, while `session-launcher.test.ts` keeps integration coverage that the launcher delegates to it correctly.
 
 General principle for any long-lived HTTP / SSE / WebSocket channel that feeds supervisor decisions:
 
