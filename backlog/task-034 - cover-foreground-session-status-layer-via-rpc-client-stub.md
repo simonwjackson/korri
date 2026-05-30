@@ -1,7 +1,7 @@
 ---
 id: task-034
 title: Cover ForegroundSessionStatusLayerLive end-to-end via an RPC-client stub
-status: To Do
+status: Done
 priority: medium
 labels:
   - testing
