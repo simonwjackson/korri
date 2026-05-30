@@ -631,6 +631,28 @@ describe("foreground session owner", () => {
       expect(second.rejection.externalMode).toBeUndefined()
     })
 
+    it("emits a Rejected event whose rejection.source matches the returned rejection (owner-local)", async () => {
+      // Regression guard: the rejected event and the return value must
+      // agree on `source`. A diagnostic consumer reading the event stream
+      // should see the same source the launch caller sees.
+      const setup = createAdapter()
+      const owner = createOwner(setup.adapter)
+      const first = await owner.launch(request)
+      expect(first._tag).toBe("Launched")
+      const second = await owner.launch({ id: "gba/metroid-fusion" })
+      expect(second._tag).toBe("Busy")
+      if (second._tag !== "Busy") throw new Error("unreachable")
+      const rejectedEvents = owner
+        .status()
+        .events.filter(e => e._tag === "ForegroundSessionLaunchRejected")
+      expect(rejectedEvents.length).toBeGreaterThanOrEqual(1)
+      const lastRejected = rejectedEvents[rejectedEvents.length - 1]
+      if (lastRejected?._tag !== "ForegroundSessionLaunchRejected")
+        throw new Error("unreachable")
+      expect(lastRejected.rejection.source).toBe("owner-local")
+      expect(second.rejection.source).toBe("owner-local")
+    })
+
     it("behaves as today when consultExternalIdle is unset (live-USB / unconfigured)", async () => {
       const setup = createAdapter()
       const owner = createOwner(setup.adapter)

@@ -34,7 +34,12 @@ export interface CreateLocalForegroundLaunchOwnerOptions {
  *
  * Translates `SessiondProbeResult` shapes to the owner's three-valued
  * `ForegroundExternalIdleResult` contract:
- * - `not-configured` → hook is omitted (no external authority to consult).
+ * - `not-configured` → hook returns `{ status: "idle" }` (no authority to
+ *    consult; let the owner-local check and the spawn-time path handle it).
+ *    This preserves the existing `session-launcher.ts` behavior where a
+ *    missing-token case produces `failureKind: "host-control-disabled"` /
+ *    exit 126 at spawn time, rather than being preempted by a preflight
+ *    that has no token to read either.
  * - `ok` + launch-ready mode → `{ status: "idle" }`.
  * - `ok` + non-launch-ready mode (game/launching/restoring/recovering) →
  *    `{ status: "not-idle", mode }`.
@@ -50,6 +55,12 @@ function defaultConsultExternalIdle():
   return async () => {
     const probe = await probeSessiondManagedLaunchStatus()
     if (probe.kind === "not-configured") return { status: "idle" }
+    // Missing token → defer to the spawn so session-launcher.ts's
+    // existing `resolveToken()` → `host-control-disabled` / exit 126
+    // mapping fires unchanged. Preempting here with `unavailable` would
+    // change the wire failureKind from host-control-disabled to
+    // host-unavailable (a back-compat regression).
+    if (probe.kind === "missing-token") return { status: "idle" }
     if (probe.kind === "unavailable")
       return { status: "unavailable", reason: "network" }
     if (probe.kind === "token-rejected")
@@ -193,6 +204,16 @@ async function spawnLocalLaunch(
  * Tag a response that traversed `launchResponseFromLaunchResult` (which
  * produces back-compat shapes without `_tag`). Routes by `failureKind` to
  * the appropriate U3 discriminator. Idempotent if `_tag` is already set.
+ *
+ * **DaemonRejected.source limitation:** the `daemonReason.source` schema
+ * carries both `"internal-status"` (sessiond's pre-POST internal
+ * `GET /managed-launch/status` check rejected) and `"spawn-post"` (the
+ * POST itself rejected) as discriminators. Today's `session-launcher.ts`
+ * pipeline collapses both into the same `failureKind: "session-busy"`
+ * shape before we see the result, so this function emits `"spawn-post"`
+ * for any spawn-time session-busy. A future enrichment of
+ * `session-launcher.spawnViaSessiond`'s result shape (carrying the
+ * sub-source) can update this branch without a wire-schema change.
  */
 function tagBackCompatResponse(
   value: LaunchLibraryResponse,
