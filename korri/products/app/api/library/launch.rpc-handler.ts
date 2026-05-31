@@ -22,6 +22,7 @@ import { composeGamescopeLaunchSpec } from "../../../../../tools/device/game-str
 import {
   composeMoonlightLaunchSpec,
   moonlightHostFromControlUrl,
+  resolveMoonlightLaunchInputDevice,
 } from "../stream/compose-moonlight-launch-spec"
 import { ForegroundSessionHost } from "./foreground-session-host-layer"
 import type { LaunchLibraryPayload, LaunchLibraryResponse } from "./launch.rpc"
@@ -271,11 +272,28 @@ function handleRemoteSourceLaunch(
       )
     }
 
+    const inputDevice = yield* Effect.tryPromise({
+      try: () => resolveMoonlightLaunchInputDevice(),
+      catch: error => toDataError(toLibraryError(error)),
+    })
+    if (inputDevice.status === "failed") {
+      logger.warn(
+        {
+          id: payload.id,
+          peerHostId: source.hostId,
+          failureKind: inputDevice.failureKind,
+        },
+        "app.library.launch: remote-source moonlight input unavailable",
+      )
+      return launchFailedFromKind(inputDevice.failureKind, inputDevice.message)
+    }
+
     // v1: default gamescope policy. Per-launcher policy ("moonlight" row
     // in proseql) is a deferred follow-up — see plan U2 / Scope Boundaries.
     const gamescopePolicy = normalizeGamescopePolicy(DEFAULT_GAMESCOPE_POLICY)
     const spec: LaunchSpec = composeMoonlightLaunchSpec({
       host,
+      ...(inputDevice.path ? { inputDevice: inputDevice.path } : {}),
       gamescope: {
         enabled: gamescopePolicy.enabled === true,
         ...(gamescopePolicy.command !== undefined

@@ -1,4 +1,7 @@
-import type { LaunchSpec } from "@shared/library/launcher"
+import { readFile } from "node:fs/promises"
+import { parseProcBusInputDevices } from "@shared/input/native/discover-devices"
+import { resolveInputPlumberVirtualGamepad } from "@shared/input/native/inputplumber-virtual-gamepad"
+import type { LaunchFailureKind, LaunchSpec } from "@shared/library/launcher"
 import {
   composeGamescopeLaunchSpec,
   type GamescopeOptions,
@@ -30,6 +33,59 @@ export interface ComposeMoonlightLaunchSpecOptions {
   readonly platform?: string
   /** Override controller mapping file. Defaults to `KORRI_MOONLIGHT_MAPPING_FILE`. */
   readonly mappingFile?: string
+  /** Override input event device. Defaults to `KORRI_MOONLIGHT_INPUT_DEVICE`. */
+  readonly inputDevice?: string
+}
+
+export type MoonlightLaunchInputDeviceResolution =
+  | { readonly status: "ok"; readonly path?: string }
+  | {
+      readonly status: "failed"
+      readonly failureKind: Extract<
+        LaunchFailureKind,
+        "input-unavailable" | "input-ambiguous"
+      >
+      readonly message: string
+    }
+
+export interface ResolveMoonlightLaunchInputDeviceOptions {
+  readonly inputDevice?: string
+  readonly requireInputPlumberInput?: boolean
+  readonly readProcDevices?: () => Promise<string>
+}
+
+export async function resolveMoonlightLaunchInputDevice(
+  options: ResolveMoonlightLaunchInputDeviceOptions = {},
+): Promise<MoonlightLaunchInputDeviceResolution> {
+  const explicitInput = options.inputDevice ?? moonlightInputDeviceFromEnv()
+  if (explicitInput?.trim()) return { status: "ok", path: explicitInput.trim() }
+
+  const required =
+    options.requireInputPlumberInput ?? moonlightRequireInputPlumberFromEnv()
+  if (!required) return { status: "ok" }
+
+  const proc = await (options.readProcDevices ?? readRealProcDevices)()
+  const resolution = resolveInputPlumberVirtualGamepad(
+    parseProcBusInputDevices(proc),
+  )
+
+  if (resolution.status === "found") {
+    return { status: "ok", path: resolution.path }
+  }
+
+  if (resolution.status === "ambiguous") {
+    return {
+      status: "failed",
+      failureKind: "input-ambiguous",
+      message: `InputPlumber virtual controller is ambiguous (${resolution.devices.length} candidates); refusing to launch Moonlight without a stable input device`,
+    }
+  }
+
+  return {
+    status: "failed",
+    failureKind: "input-unavailable",
+    message: `InputPlumber virtual controller is missing (${resolution.rawGamepads} raw gamepad candidates); refusing to launch Moonlight without mapped controller input`,
+  }
 }
 
 export function composeMoonlightLaunchSpec(
@@ -46,10 +102,12 @@ export function composeMoonlightLaunchSpec(
     options.command ?? moonlightCommandFromEnv() ?? DEFAULT_MOONLIGHT_COMMAND
   const platform = options.platform ?? moonlightPlatformFromEnv()
   const mappingFile = options.mappingFile ?? moonlightMappingFileFromEnv()
+  const inputDevice = options.inputDevice ?? moonlightInputDeviceFromEnv()
   const args = [
     "stream",
     ...(platform ? ["-platform", platform] : []),
     ...(mappingFile ? ["-mapping", mappingFile] : []),
+    ...(inputDevice ? ["-input", inputDevice] : []),
     "-app",
     appName,
     options.host,
@@ -97,6 +155,19 @@ function moonlightPlatformFromEnv(): string | undefined {
 
 function moonlightMappingFileFromEnv(): string | undefined {
   return nonEmptyEnv("KORRI_MOONLIGHT_MAPPING_FILE")
+}
+
+function moonlightInputDeviceFromEnv(): string | undefined {
+  return nonEmptyEnv("KORRI_MOONLIGHT_INPUT_DEVICE")
+}
+
+function moonlightRequireInputPlumberFromEnv(): boolean {
+  const raw = process.env.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER?.trim()
+  return raw === "1" || raw === "true" || raw === "required"
+}
+
+async function readRealProcDevices(): Promise<string> {
+  return await readFile("/proc/bus/input/devices", "utf8")
 }
 
 function nonEmptyEnv(name: string): string | undefined {

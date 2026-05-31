@@ -29,6 +29,9 @@ import {
 } from "./remote-stream-prepare"
 
 const originalLibraryRoot = process.env.KORRI_LIBRARY_ROOT
+const originalMoonlightInputDevice = process.env.KORRI_MOONLIGHT_INPUT_DEVICE
+const originalMoonlightRequireInputPlumber =
+  process.env.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER
 const cleanups: Array<() => Promise<void>> = []
 
 // Shared `source` payload field for tests. The launch handler does not
@@ -43,6 +46,11 @@ const FAKE_GAME = join(REPO_ROOT, "tools", "testing", "fake-game.sh")
 
 afterEach(async () => {
   setOptionalEnv("KORRI_LIBRARY_ROOT", originalLibraryRoot)
+  setOptionalEnv("KORRI_MOONLIGHT_INPUT_DEVICE", originalMoonlightInputDevice)
+  setOptionalEnv(
+    "KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER",
+    originalMoonlightRequireInputPlumber,
+  )
   while (cleanups.length > 0) {
     const c = cleanups.pop()
     if (c) await c()
@@ -176,6 +184,52 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       "--",
       "moonlight",
       "stream",
+      "-app",
+      "Korri Stream",
+      "aka.local",
+    ])
+  })
+
+  it("passes configured Moonlight input device for remote-source launches", async () => {
+    let dispatchedSpec:
+      | { command: string; args: ReadonlyArray<string> }
+      | undefined
+    process.env.KORRI_MOONLIGHT_INPUT_DEVICE = "/dev/input/event8"
+    const remoteSource = new EntrySource({
+      hostId: "aka",
+      controlUrl: "http://aka.local:3001",
+      isLocal: false,
+    })
+
+    await Effect.runPromise(
+      handleLaunchLibrary({
+        id: "snes/echo.smc",
+        source: remoteSource,
+      }).pipe(
+        Effect.provide(
+          remoteSourceTestLayer({
+            prepare: (_controlUrl, gameId) =>
+              Effect.succeed({
+                status: "prepared" as const,
+                gameId,
+                sessionId: "sess-input",
+              }),
+            launchedSpec: spec => {
+              dispatchedSpec = spec
+            },
+          }),
+        ),
+      ),
+    )
+
+    const args = dispatchedSpec?.args ?? []
+    const separatorIndex = args.indexOf("--")
+    expect(args.slice(separatorIndex)).toEqual([
+      "--",
+      "moonlight",
+      "stream",
+      "-input",
+      "/dev/input/event8",
       "-app",
       "Korri Stream",
       "aka.local",

@@ -1,20 +1,32 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import { readFile } from "node:fs/promises"
+import { join } from "node:path"
 
 import {
   composeMoonlightLaunchSpec,
   moonlightHostFromControlUrl,
+  resolveMoonlightLaunchInputDevice,
 } from "./compose-moonlight-launch-spec"
 
 const originalEnv = {
   command: process.env.KORRI_MOONLIGHT_COMMAND,
   platform: process.env.KORRI_MOONLIGHT_PLATFORM,
   mappingFile: process.env.KORRI_MOONLIGHT_MAPPING_FILE,
+  inputDevice: process.env.KORRI_MOONLIGHT_INPUT_DEVICE,
+  requireInputPlumber: process.env.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER,
 }
+
+const FIXTURES_DIR = join(process.cwd(), "tools/testing/fixtures/proc")
 
 afterEach(() => {
   setOptionalEnv("KORRI_MOONLIGHT_COMMAND", originalEnv.command)
   setOptionalEnv("KORRI_MOONLIGHT_PLATFORM", originalEnv.platform)
   setOptionalEnv("KORRI_MOONLIGHT_MAPPING_FILE", originalEnv.mappingFile)
+  setOptionalEnv("KORRI_MOONLIGHT_INPUT_DEVICE", originalEnv.inputDevice)
+  setOptionalEnv(
+    "KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER",
+    originalEnv.requireInputPlumber,
+  )
 })
 
 describe("composeMoonlightLaunchSpec", () => {
@@ -84,15 +96,17 @@ describe("composeMoonlightLaunchSpec", () => {
     ])
   })
 
-  it("allows explicit app/platform/mapping overrides", () => {
+  it("allows explicit app/platform/mapping/input overrides", () => {
     process.env.KORRI_MOONLIGHT_PLATFORM = "v4l2m2m"
     process.env.KORRI_MOONLIGHT_MAPPING_FILE = "/nix/store/mapping.txt"
+    process.env.KORRI_MOONLIGHT_INPUT_DEVICE = "/dev/input/event10"
 
     const spec = composeMoonlightLaunchSpec({
       host: "aka.local",
       appName: "Desktop",
       platform: "x11",
       mappingFile: "/tmp/gamecontrollerdb.txt",
+      inputDevice: "/dev/input/event8",
     })
 
     expect(spec.args).toEqual([
@@ -101,8 +115,25 @@ describe("composeMoonlightLaunchSpec", () => {
       "x11",
       "-mapping",
       "/tmp/gamecontrollerdb.txt",
+      "-input",
+      "/dev/input/event8",
       "-app",
       "Desktop",
+      "aka.local",
+    ])
+  })
+
+  it("uses KORRI_MOONLIGHT_INPUT_DEVICE when set", () => {
+    process.env.KORRI_MOONLIGHT_INPUT_DEVICE = "/dev/input/event8"
+
+    const spec = composeMoonlightLaunchSpec({ host: "aka.local" })
+
+    expect(spec.args).toEqual([
+      "stream",
+      "-input",
+      "/dev/input/event8",
+      "-app",
+      "Korri Stream",
       "aka.local",
     ])
   })
@@ -120,6 +151,35 @@ describe("composeMoonlightLaunchSpec", () => {
     expect(() =>
       composeMoonlightLaunchSpec({ host: "aka.local", appName: "" }),
     ).toThrow(/appName/i)
+  })
+})
+
+describe("resolveMoonlightLaunchInputDevice", () => {
+  it("discovers the InputPlumber virtual controller by identity", async () => {
+    const result = await resolveMoonlightLaunchInputDevice({
+      requireInputPlumberInput: true,
+      readProcDevices: () =>
+        readFile(
+          join(FIXTURES_DIR, "bus-input-devices-inputplumber-virtual.txt"),
+          "utf8",
+        ),
+    })
+
+    expect(result).toEqual({ status: "ok", path: "/dev/input/event10" })
+  })
+
+  it("fails closed when InputPlumber is required but missing", async () => {
+    const result = await resolveMoonlightLaunchInputDevice({
+      requireInputPlumberInput: true,
+      readProcDevices: async () => "",
+    })
+
+    expect(result).toEqual({
+      status: "failed",
+      failureKind: "input-unavailable",
+      message:
+        "InputPlumber virtual controller is missing (0 raw gamepad candidates); refusing to launch Moonlight without mapped controller input",
+    })
   })
 })
 
