@@ -6,7 +6,7 @@
    std::unique_ptr<platf::encode_device_t> make_encode_device(platf::display_t &disp, const encoder_t &encoder, const config_t &config);
 +  input::touch_port_t make_port(platf::display_t *display, const config_t &config);
 
-   bool runtime_bitrate_supports_encoder_restart(const encoder_t &encoder, const config_t &config) {
+   bool runtime_settings_supports_vaapi_h264(const encoder_t &encoder, const config_t &config) {
      return encoder.name == "vaapi"sv && encoder.codec_from_config(config).name == "h264_vaapi";
 @@ -1927,6 +1928,7 @@
      auto runtime_bitrate_events = mail->queue<runtime_bitrate_request_t>(mail::runtime_bitrate);
@@ -29,12 +29,12 @@
 +            auto updated_config = config;
 +            updated_config.width = request->width;
 +            updated_config.height = request->height;
-+            if (runtime_bitrate_supports_encoder_restart(encoder, config)) {
++            if (runtime_settings_supports_vaapi_h264(encoder, config)) {
 +              auto replacement_encode_device = make_encode_device(*disp, encoder, updated_config);
 +              if (replacement_encode_device) {
 +                auto replacement_session = make_encode_session(disp.get(), encoder, updated_config, disp->width, disp->height, std::move(replacement_encode_device));
-+                auto dummy_img = disp->alloc_img();
-+                if (replacement_session && dummy_img && !disp->dummy_img(dummy_img.get()) && !replacement_session->convert(*dummy_img)) {
++                auto first_img = images->pop(max_frametime);
++                if (replacement_session && first_img && !replacement_session->convert(*first_img)) {
 +                  session = std::move(replacement_session);
 +                  config = updated_config;
 +                  applied_width = request->width;
@@ -105,7 +105,7 @@
 
      auto session = make_encode_session(disp, encoder, ctx.config, img.width, img.height, std::move(encode_device));
      if (!session) {
-@@ -2367,6 +2422,54 @@
+@@ -2367,7 +2422,55 @@
                    << " status="sv << status
                    << " reason="sv << reason;
                  ctx->runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_FPS, status, applied_fps, 0, 0, reason});
@@ -119,7 +119,7 @@
 +                auto updated_config = ctx->config;
 +                updated_config.width = request->width;
 +                updated_config.height = request->height;
-+                if (runtime_bitrate_supports_encoder_restart(encoder, ctx->config)) {
++                if (runtime_settings_supports_vaapi_h264(encoder, ctx->config)) {
 +                  ctx->config = updated_config;
 +                  auto replacement_session = make_synced_session(disp.get(), encoder, *img, *ctx, false);
 +                  if (replacement_session) {

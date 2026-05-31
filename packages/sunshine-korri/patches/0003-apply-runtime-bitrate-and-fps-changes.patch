@@ -24,7 +24,7 @@
 
 +  std::unique_ptr<platf::encode_device_t> make_encode_device(platf::display_t &disp, const encoder_t &encoder, const config_t &config);
 +
-+  bool runtime_bitrate_supports_encoder_restart(const encoder_t &encoder, const config_t &config) {
++  bool runtime_settings_supports_vaapi_h264(const encoder_t &encoder, const config_t &config) {
 +    return encoder.name == "vaapi"sv && encoder.codec_from_config(config).name == "h264_vaapi";
 +  }
 +
@@ -45,11 +45,11 @@
      auto invalidate_ref_frames_events = mail->event<std::pair<int64_t, int64_t>>(mail::invalidate_ref_frames);
 +    std::uint32_t runtime_fps = config.framerate;
 +    auto next_runtime_frame = std::chrono::steady_clock::now();
-+    runtime_settings_supports_encoder_restart->raise(runtime_bitrate_supports_encoder_restart(encoder, config));
++    runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_vaapi_h264(encoder, config));
 
      {
        // Load a dummy image into the AVFrame to ensure we have something to encode
-@@ -1947,12 +1968,90 @@
+@@ -1947,12 +1968,68 @@
          idr_events->pop();
        }
 
@@ -58,34 +58,12 @@
 +          if (request->operation == RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS) {
 +            std::uint32_t applied_bitrate_kbps = config.bitrate;
 +            std::uint16_t status = RUNTIME_SETTINGS_STATUS_FAILED;
-+            std::uint16_t reason = RUNTIME_SETTINGS_REASON_APPLY_FAILED;
-+
-+            auto updated_config = config;
-+            updated_config.bitrate = request->value;
-+            if (runtime_bitrate_supports_encoder_restart(encoder, config)) {
-+              auto replacement_encode_device = make_encode_device(*disp, encoder, updated_config);
-+              if (replacement_encode_device) {
-+                auto replacement_session = make_encode_session(disp.get(), encoder, updated_config, disp->width, disp->height, std::move(replacement_encode_device));
-+                auto dummy_img = disp->alloc_img();
-+                if (replacement_session && dummy_img && !disp->dummy_img(dummy_img.get()) && !replacement_session->convert(*dummy_img)) {
-+                  session = std::move(replacement_session);
-+                  config = updated_config;
-+                  applied_bitrate_kbps = request->value;
-+                  status = RUNTIME_SETTINGS_STATUS_APPLIED;
-+                  reason = RUNTIME_SETTINGS_REASON_NONE;
-+                  requested_idr_frame = true;
-+                  BOOST_LOG(info)
-+                    << "live-settings-mvp: async encoder restarted for runtime bitrate request_id="sv << request->request_id
-+                    << " applied_kbps="sv << applied_bitrate_kbps;
-+                }
-+              }
-+            } else {
-+              reason = RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER;
-+              BOOST_LOG(warning)
-+                << "live-settings-mvp: runtime bitrate unsupported encoder request_id="sv << request->request_id
-+                << " encoder="sv << encoder.name
-+                << " codec="sv << encoder.codec_from_config(config).name;
-+            }
++            std::uint16_t reason = RUNTIME_SETTINGS_REASON_UNSUPPORTED_OPERATION;
++            BOOST_LOG(warning)
++              << "live-settings-mvp: runtime bitrate unsupported without seamless encoder reconfiguration request_id="sv << request->request_id
++              << " encoder="sv << encoder.name
++              << " codec="sv << encoder.codec_from_config(config).name
++              << " requested_kbps="sv << request->value;
 +
 +            BOOST_LOG(info)
 +              << "live-settings-mvp: capture_sync runtime bitrate request_id="sv << request->request_id
@@ -98,14 +76,14 @@
 +            std::uint32_t applied_fps = runtime_fps;
 +            std::uint16_t status = RUNTIME_SETTINGS_STATUS_FAILED;
 +            std::uint16_t reason = RUNTIME_SETTINGS_REASON_APPLY_FAILED;
-+            if (runtime_bitrate_supports_encoder_restart(encoder, config) && request->value > 0 && request->value <= (std::uint32_t) config.framerate) {
++            if (runtime_settings_supports_vaapi_h264(encoder, config) && request->value > 0 && request->value <= (std::uint32_t) config.framerate) {
 +              runtime_fps = request->value;
 +              applied_fps = runtime_fps;
 +              next_runtime_frame = std::chrono::steady_clock::now();
 +              status = RUNTIME_SETTINGS_STATUS_APPLIED;
 +              reason = RUNTIME_SETTINGS_REASON_NONE;
 +            } else {
-+              reason = runtime_bitrate_supports_encoder_restart(encoder, config) ? RUNTIME_SETTINGS_REASON_INVALID_BOUNDS : RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER;
++              reason = runtime_settings_supports_vaapi_h264(encoder, config) ? RUNTIME_SETTINGS_REASON_INVALID_BOUNDS : RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER;
 +              BOOST_LOG(warning)
 +                << "live-settings-mvp: runtime FPS unsupported request_id="sv << request->request_id
 +                << " encoder="sv << encoder.name
@@ -140,46 +118,23 @@
        // Encode at a minimum FPS to avoid image quality issues with static content
        if (!requested_idr_frame || images->peek()) {
          if (auto img = images->pop(max_frametime)) {
-@@ -2195,6 +2294,97 @@
+@@ -2195,6 +2294,74 @@
              ctx->idr_events->pop();
            }
 
-+          ctx->runtime_settings_supports_encoder_restart->raise(runtime_bitrate_supports_encoder_restart(encoder, ctx->config));
++          ctx->runtime_settings_supports_encoder_restart->raise(runtime_settings_supports_vaapi_h264(encoder, ctx->config));
 +
 +          while (ctx->runtime_bitrate_events->peek()) {
 +            if (auto request = ctx->runtime_bitrate_events->pop(0ms)) {
 +              if (request->operation == RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS) {
 +                std::uint32_t applied_bitrate_kbps = ctx->config.bitrate;
 +                std::uint16_t status = RUNTIME_SETTINGS_STATUS_FAILED;
-+                std::uint16_t reason = RUNTIME_SETTINGS_REASON_APPLY_FAILED;
-+
-+                auto updated_config = ctx->config;
-+                updated_config.bitrate = request->value;
-+                if (runtime_bitrate_supports_encoder_restart(encoder, ctx->config)) {
-+                  auto replacement_encode_device = make_encode_device(*disp, encoder, updated_config);
-+                  if (replacement_encode_device) {
-+                    ctx->config = updated_config;
-+                    auto replacement_session = make_synced_session(disp.get(), encoder, *img, *ctx);
-+                    if (replacement_session) {
-+                      pos->session = std::move(replacement_session->session);
-+                      pos->session->request_idr_frame();
-+                      applied_bitrate_kbps = request->value;
-+                      status = RUNTIME_SETTINGS_STATUS_APPLIED;
-+                      reason = RUNTIME_SETTINGS_REASON_NONE;
-+                      BOOST_LOG(info)
-+                        << "live-settings-mvp: sync encoder restarted for runtime bitrate request_id="sv << request->request_id
-+                        << " applied_kbps="sv << applied_bitrate_kbps;
-+                    } else {
-+                      ctx->config.bitrate = applied_bitrate_kbps;
-+                    }
-+                  }
-+                } else {
-+                  reason = RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER;
-+                  BOOST_LOG(warning)
-+                    << "live-settings-mvp: runtime bitrate unsupported encoder request_id="sv << request->request_id
-+                    << " encoder="sv << encoder.name
-+                    << " codec="sv << encoder.codec_from_config(ctx->config).name;
-+                }
++                std::uint16_t reason = RUNTIME_SETTINGS_REASON_UNSUPPORTED_OPERATION;
++                BOOST_LOG(warning)
++                  << "live-settings-mvp: runtime bitrate unsupported without seamless encoder reconfiguration request_id="sv << request->request_id
++                  << " encoder="sv << encoder.name
++                  << " codec="sv << encoder.codec_from_config(ctx->config).name
++                  << " requested_kbps="sv << request->value;
 +
 +                BOOST_LOG(info)
 +                  << "live-settings-mvp: async runtime bitrate request_id="sv << request->request_id
@@ -195,14 +150,14 @@
 +                std::uint32_t applied_fps = ctx->runtime_fps;
 +                std::uint16_t status = RUNTIME_SETTINGS_STATUS_FAILED;
 +                std::uint16_t reason = RUNTIME_SETTINGS_REASON_APPLY_FAILED;
-+                if (runtime_bitrate_supports_encoder_restart(encoder, ctx->config) && request->value > 0 && request->value <= (std::uint32_t) ctx->config.framerate) {
++                if (runtime_settings_supports_vaapi_h264(encoder, ctx->config) && request->value > 0 && request->value <= (std::uint32_t) ctx->config.framerate) {
 +                  ctx->runtime_fps = request->value;
 +                  ctx->next_runtime_frame = std::chrono::steady_clock::now();
 +                  applied_fps = ctx->runtime_fps;
 +                  status = RUNTIME_SETTINGS_STATUS_APPLIED;
 +                  reason = RUNTIME_SETTINGS_REASON_NONE;
 +                } else {
-+                  reason = runtime_bitrate_supports_encoder_restart(encoder, ctx->config) ? RUNTIME_SETTINGS_REASON_INVALID_BOUNDS : RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER;
++                  reason = runtime_settings_supports_vaapi_h264(encoder, ctx->config) ? RUNTIME_SETTINGS_REASON_INVALID_BOUNDS : RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER;
 +                  BOOST_LOG(warning)
 +                    << "live-settings-mvp: runtime FPS unsupported request_id="sv << request->request_id
 +                    << " encoder="sv << encoder.name
@@ -238,7 +193,7 @@
            if (frame_captured && pos->session->convert(*img)) {
              BOOST_LOG(error) << "Could not convert image"sv;
              ctx->shutdown_event->raise(true);
-@@ -2377,6 +2567,9 @@
+@@ -2377,7 +2567,10 @@
          mail->event<bool>(mail::shutdown),
          mail::man->queue<packet_t>(mail::video_packets),
          std::move(idr_events),

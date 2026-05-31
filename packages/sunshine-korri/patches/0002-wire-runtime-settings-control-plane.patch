@@ -34,7 +34,7 @@
      } control;
 
      std::uint32_t launch_session_id;
-@@ -959,6 +972,103 @@
+@@ -959,6 +972,102 @@
      return 0;
    }
 
@@ -106,7 +106,6 @@
 +    std::uint16_t status = enabled ? video::RUNTIME_SETTINGS_STATUS_APPLIED : video::RUNTIME_SETTINGS_STATUS_DISABLED;
 +    std::uint16_t reason = enabled ? video::RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER : video::RUNTIME_SETTINGS_REASON_GATE_DISABLED;
 +    if (runtime_supported) {
-+      supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS;
 +      supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_FPS;
 +      proof_gated_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION;
 +      reason = video::RUNTIME_SETTINGS_REASON_NONE;
@@ -121,7 +120,7 @@
 +    plaintext.reason = reason;
 +    plaintext.supported_operations = supported_operations;
 +    plaintext.proof_gated_operations = proof_gated_operations;
-+    plaintext.min_bitrate_kbps = runtime_supported ? 1 : 0;
++    plaintext.min_bitrate_kbps = 0;
 +    plaintext.max_bitrate_kbps = 0;
 +    plaintext.max_fps = session->control.runtime_settings_launch_fps;
 +    plaintext.launch_bitrate_kbps = session->control.runtime_settings_launch_bitrate_kbps;
@@ -198,7 +197,7 @@
 +        accepted = false;
 +        rejection_status = video::RUNTIME_SETTINGS_STATUS_DISABLED;
 +        rejection_reason = video::RUNTIME_SETTINGS_REASON_GATE_DISABLED;
-+      } else if (operation != video::RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS && operation != video::RUNTIME_SETTINGS_OPERATION_SET_FPS && operation != video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION) {
++      } else if (operation != video::RUNTIME_SETTINGS_OPERATION_SET_FPS && operation != video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION) {
 +        accepted = false;
 +        rejection_status = video::RUNTIME_SETTINGS_STATUS_INVALID;
 +        rejection_reason = video::RUNTIME_SETTINGS_REASON_UNSUPPORTED_OPERATION;
@@ -304,7 +303,7 @@
        session->control.legacy_input_enc_iv = launch_session.iv;
        session->control.cipher = crypto::cipher::gcm_t {
          launch_session.gcm_key,
-@@ -2078,6 +2333,7 @@
+@@ -2078,7 +2333,8 @@
        };
 
        session->video.idr_events = mail->event<bool>(mail::idr);

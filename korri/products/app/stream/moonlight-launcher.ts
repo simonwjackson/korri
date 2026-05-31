@@ -110,6 +110,7 @@ export async function launchMoonlight(
   const args = moonlightArgs({
     ...options,
     client,
+    inputDevice: inputDevice.path,
     mappingFile: options.mappingFile ?? moonlightMappingFileFromEnv(),
     platform,
   })
@@ -233,6 +234,11 @@ function moonlightPlatformFromEnv(): string | undefined {
   return raw === "" ? undefined : raw
 }
 
+function moonlightInputDeviceFromEnv(): string | undefined {
+  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_INPUT_DEVICE?.trim()
+  return raw === "" ? undefined : raw
+}
+
 async function moonlightControlHandleFromOptions(
   options: MoonlightControlLaunchOptions | false | undefined,
 ): Promise<MoonlightControlLaunchHandle | undefined> {
@@ -289,6 +295,9 @@ async function moonlightInputDevice(options: MoonlightLaunchOptions): Promise<
       readonly message: string
     }
 > {
+  const explicitInput = options.inputDevice ?? moonlightInputDeviceFromEnv()
+  if (explicitInput?.trim()) return { status: "ok", path: explicitInput.trim() }
+
   const required =
     options.requireInputPlumberInput ?? moonlightRequireInputPlumberFromEnv()
 
@@ -302,7 +311,7 @@ async function moonlightInputDevice(options: MoonlightLaunchOptions): Promise<
     return inputPlumberResolutionFailure(resolution)
   }
 
-  return { status: "ok" }
+  return { status: "ok", path: resolution.path }
 }
 
 function inputPlumberResolutionFailure(
@@ -345,6 +354,7 @@ function moonlightArgs(
     "stream",
     ...(options.platform ? ["-platform", options.platform] : []),
     ...(options.mappingFile ? ["-mapping", options.mappingFile] : []),
+    ...(options.inputDevice ? ["-input", options.inputDevice] : []),
     "-app",
     appName,
     options.host,

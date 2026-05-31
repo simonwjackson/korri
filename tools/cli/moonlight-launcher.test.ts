@@ -158,7 +158,7 @@ describe("moonlight launcher", () => {
     }
   })
 
-  it("preflights the InputPlumber virtual controller while leaving Moonlight input discovery enabled", async () => {
+  it("preflights and passes the InputPlumber virtual controller to Moonlight", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({
       host: "192.168.1.117",
@@ -177,7 +177,7 @@ describe("moonlight launcher", () => {
 
     expect(result).toEqual({ status: "started", command: "gamescope" })
     expect(calls).toEqual([
-      "gamescope -f -b -- moonlight stream -mapping /nix/store/moonlight/share/moonlight/gamecontrollerdb.txt -app Korri Stream 192.168.1.117",
+      "gamescope -f -b -- moonlight stream -mapping /nix/store/moonlight/share/moonlight/gamecontrollerdb.txt -input /dev/input/event10 -app Korri Stream 192.168.1.117",
     ])
   })
 
@@ -207,7 +207,7 @@ describe("moonlight launcher", () => {
     expect(calls).toEqual([])
   })
 
-  it("ignores explicit input paths so Moonlight can discover touch and gamepad together", async () => {
+  it("passes explicit input paths to Moonlight", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({
       host: "192.168.1.117",
@@ -226,11 +226,11 @@ describe("moonlight launcher", () => {
 
     expect(result).toEqual({ status: "started", command: "gamescope" })
     expect(calls).toEqual([
-      "gamescope -f -b -- moonlight stream -app Korri Stream 192.168.1.117",
+      "gamescope -f -b -- moonlight stream -input /dev/input/event3 -app Korri Stream 192.168.1.117",
     ])
   })
 
-  it("does not reject SDL platform selection for stale explicit input configuration", async () => {
+  it("passes explicit input through with SDL platform selection", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({
       host: "192.168.1.117",
@@ -244,7 +244,7 @@ describe("moonlight launcher", () => {
 
     expect(result).toEqual({ status: "started", command: "gamescope" })
     expect(calls).toEqual([
-      "gamescope -f -b -- moonlight stream -platform sdl -app Korri Stream 192.168.1.117",
+      "gamescope -f -b -- moonlight stream -platform sdl -input /dev/input/event10 -app Korri Stream 192.168.1.117",
     ])
   })
 
