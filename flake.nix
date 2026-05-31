@@ -254,8 +254,9 @@
             # in-buildPhase sed loop as defense-in-depth; korri-desktop does
             # not, so this assertion is its primary guard.
             proseqlOverrideKey = "@proseql/core@0.13.2";
+            productionBunPackageNames = import ./nix/bun-production-package-names.nix;
             # bun.nix is a function expecting fetchurl etc. We only need
-            # attribute names for the existence check; values are lazy, so
+            # attribute names for the existence checks; values are lazy, so
             # passing nulls is safe (we never access them).
             bunNixManifest = import ./nix/bun.nix {
               copyPathToStore = null;
@@ -263,6 +264,31 @@
               fetchgit = null;
               fetchurl = null;
             };
+            forbiddenProductionBunPackagePatterns = [
+              "@axe-core/playwright@"
+              "@playwright/test@"
+              "@storybook/"
+              "@cucumber/"
+              "@vitest/"
+              "@testing-library/"
+              "fallow@"
+              "@argo-video/cli@"
+              "@tiptap/"
+              "@xyflow/"
+            ];
+            forbiddenProductionBunPackageMatches = builtins.filter (
+              name: builtins.any (pattern: pkgs.lib.hasInfix pattern name) forbiddenProductionBunPackagePatterns
+            ) productionBunPackageNames;
+            productionBunNix = builtins.toFile "bun-production.nix" ''
+              { copyPathToStore, fetchFromGitHub, fetchgit, fetchurl, ... }@args:
+              let
+                full = import ${./nix/bun.nix} args;
+                allowed = builtins.listToAttrs (
+                  map (name: { inherit name; value = null; }) (import ${./nix/bun-production-package-names.nix})
+                );
+              in
+              builtins.intersectAttrs allowed full
+            '';
           in
           assert
             (builtins.hasAttr proseqlOverrideKey bunNixManifest)
@@ -272,8 +298,22 @@
               Update the override key to match the version recorded in nix/bun.nix
               (run `just refresh-bun-deps` if bun.lock changed).
             '';
+          assert
+            (builtins.elem proseqlOverrideKey productionBunPackageNames)
+            || throw ''
+              flake.nix bunDeps: production Bun package set is missing '${proseqlOverrideKey}'.
+              Update nix/bun-production-package-names.nix with `just refresh-bun-deps`.
+            '';
+          assert
+            forbiddenProductionBunPackageMatches == []
+            || throw ''
+              flake.nix bunDeps: production Bun package set includes known dev/test dependencies:
+              ${pkgs.lib.concatStringsSep ", " forbiddenProductionBunPackageMatches}
+
+              Update tools/nix/bun-production-deps.ts and regenerate with `just refresh-bun-deps`.
+            '';
           pkgs.bun2nix.fetchBunDeps {
-            bunNix = ./nix/bun.nix;
+            bunNix = productionBunNix;
             overrides = {
               ${proseqlOverrideKey} =
                 pkg:
@@ -290,30 +330,49 @@
             };
           };
 
-        # Source used by the Bun/Electrobun package derivations. Keep this
+        # Sources used by the Bun/Electrobun package derivations. Keep these
         # narrower than the flake root so docs, backlog, artifact downloads,
-        # and unrelated Nix/package work do not invalidate Fuji's SM8550
-        # runtime package builds.
-        korriRuntimeSource =
+        # test tooling, and unrelated Nix/package work do not invalidate Fuji's
+        # SM8550 runtime package builds.
+        korriSources =
           let
             fileset = pkgs.lib.fileset;
-          in
-          fileset.toSource {
-            root = ./.;
-            fileset = fileset.unions [
-              ./argo.config.mjs
+            common = [
               ./bun.lock
               ./bunfig.toml
-              ./components.json
-              ./electrobun.config.ts
               ./package.json
               ./tsconfig.api.json
               ./tsconfig.json
               ./tsconfig.server.json
-              ./vite.config.mjs
-              ./korri
-              ./tools
             ];
+            mkSource = extra: fileset.toSource { root = ./.; fileset = fileset.unions (common ++ extra); };
+            sharedRuntime = [ ./korri/shared ];
+            deviceRuntime = [
+              ./korri/products
+              ./tools/cli
+              ./tools/device
+              ./tools/http
+              ./tools/library
+            ] ++ sharedRuntime;
+          in
+          {
+            portal = mkSource ([
+              ./components.json
+              ./vite.config.mjs
+              ./korri/deploy/desktop/runtime-config-shape.ts
+              ./korri/deploy/portal
+              ./korri/products
+            ] ++ sharedRuntime);
+            desktop = mkSource ([
+              ./electrobun.config.ts
+              ./korri/deploy/desktop
+              ./tools/cli
+            ] ++ sharedRuntime);
+            inputd = mkSource (deviceRuntime ++ [ ./tools/types ]);
+            gameStream = mkSource deviceRuntime;
+            sessiond = mkSource deviceRuntime;
+            cli = mkSource ([ ./tools/cli ] ++ deviceRuntime);
+            server = mkSource deviceRuntime;
           };
 
         # Single portal build for every desktop variant. The native input-bridge
@@ -321,42 +380,42 @@
         # korri/deploy/portal/main.tsx and korri/deploy/desktop/runtime-config.ts).
         korriPortal = import ./nix/korri-portal.nix {
           inherit pkgs;
-          src = korriRuntimeSource;
+          src = korriSources.portal;
           inherit bunDeps;
         };
 
         korriInputd = import ./nix/korri-inputd.nix {
           inherit pkgs;
           lib = pkgs.lib;
-          src = korriRuntimeSource;
+          src = korriSources.inputd;
           inherit bunDeps;
         };
 
         korriGameStream = import ./nix/korri-game-stream.nix {
           inherit pkgs;
           lib = pkgs.lib;
-          src = korriRuntimeSource;
+          src = korriSources.gameStream;
           inherit bunDeps;
         };
 
         korriSessiond = import ./nix/korri-sessiond.nix {
           inherit pkgs;
           lib = pkgs.lib;
-          src = korriRuntimeSource;
+          src = korriSources.sessiond;
           inherit bunDeps;
         };
 
         korriCli = import ./nix/korri-cli.nix {
           inherit pkgs;
           lib = pkgs.lib;
-          src = korriRuntimeSource;
+          src = korriSources.cli;
           inherit bunDeps;
         };
 
         korriServer = import ./nix/korri-server.nix {
           inherit pkgs;
           lib = pkgs.lib;
-          src = korriRuntimeSource;
+          src = korriSources.server;
           inherit bunDeps;
         };
 
@@ -385,7 +444,7 @@
           if isSupportedDesktopSystem then
             pkgs.callPackage ./nix/korri-desktop/unwrapped.nix {
               inherit system bunDeps;
-              src = korriRuntimeSource;
+              src = korriSources.desktop;
               inherit electrobunBinaries;
               portal = korriPortal;
               buildtimeLibraries = linuxDesktopRuntimeLibraries;
@@ -844,7 +903,8 @@
                 };
             korri-rocknix-build-performance = import ./nix/tests/korri-rocknix-build-performance-check.nix {
               inherit pkgs;
-              runtimeSource = korriRuntimeSource;
+              runtimeSources = korriSources;
+              productionBunPackageNames = import ./nix/bun-production-package-names.nix;
               rootfsBuilder = ./nix/korri-rocknix-rootfs.nix;
             };
             korri-standard-native = import ./nix/tests/korri-standard-native-check.nix {
