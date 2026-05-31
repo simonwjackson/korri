@@ -9,7 +9,8 @@
 		"tools/scripts/**/*.ts",
 		"tools/generators/**/*.ts",
 		"tools/desktop/**/*.ts",
-		"tools/device/**/*.ts"
+		"tools/device/**/*.ts",
+		"tools/nix/**/*.ts"
 	],
 	"ignorePatterns": [
 		"old-ui/**",
