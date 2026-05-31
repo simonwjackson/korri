@@ -9,6 +9,7 @@ let
   cfg = liveUsbSystem.config;
   compositorEnv = cfg.systemd.services."korri-compositor".environment or { };
   sessiondEnv = cfg.systemd.services."korri-sessiond".environment or { };
+  serverEnv = cfg.systemd.services."korri-server".environment or { };
   sessiondServiceConfig = cfg.systemd.services."korri-sessiond".serviceConfig or { };
   inputdEnv = cfg.systemd.services."korri-inputd".environment or { };
   inputplumber = cfg.systemd.services.inputplumber or { };
@@ -116,6 +117,9 @@ let
     ))
     (check "live USB Moonlight launches must require InputPlumber input on the sessiond unit (renderer-ownership cut moved this from compositor)" (
       sessiondEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1"
+    ))
+    (check "live USB remote-source Moonlight argv composition must require InputPlumber input on korri-server" (
+      serverEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1"
     ))
     (check "live USB Moonlight must use a generic mapping DB for the virtual controller" (
       lib.hasSuffix "share/moonlight/gamecontrollerdb.txt" (

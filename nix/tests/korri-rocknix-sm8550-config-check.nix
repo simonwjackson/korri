@@ -78,6 +78,8 @@ let
       compositorEnv = compositorService.environment or { };
       sessiondService = cfg.systemd.services."korri-sessiond" or { };
       sessiondEnv = sessiondService.environment or { };
+      serverService = cfg.systemd.services."korri-server" or { };
+      serverEnv = serverService.environment or { };
       sessiondAfter = sessiondService.after or [ ];
       sessiondWants = sessiondService.wants or [ ];
       sessiondRequires = sessiondService.requires or [ ];
@@ -174,7 +176,7 @@ let
           sessiondEnv.KORRI_MOONLIGHT_PLATFORM or null == "v4l2m2m"
         ))
         (check "${name}: Moonlight platform must reach korri-server" (
-          (cfg.systemd.services."korri-server".environment or { }).KORRI_MOONLIGHT_PLATFORM or null == "v4l2m2m"
+          serverEnv.KORRI_MOONLIGHT_PLATFORM or null == "v4l2m2m"
         ))
         # SDL_AUDIODRIVER follows the substrate-declared audio API and
         # must reach both the compositor's launched-app environment and
@@ -231,6 +233,9 @@ let
         ))
         (check "${name}: sessiond unit must carry KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER for inputplumber hosts" (
           sessiondEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1"
+        ))
+        (check "${name}: korri-server unit must carry KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER for remote-source argv composition" (
+          serverEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1"
         ))
         # Wayland-session identity: sway used to inject these on every
         # exec'd child at compositor-init. With sessiond as a sibling

@@ -244,4 +244,13 @@ in
     url = "http://127.0.0.1:${toString sessiondPort}";
     tokenFile = sessiondTokenFile;
   };
+
+  # Remote-source Moonlight argv is composed in korri-server before the
+  # foreground process is delegated to sessiond. The input requirement must
+  # therefore be visible to korri-server as well as sessiond, otherwise the
+  # normal product launch path omits `-input` and can fall back to raw/unstable
+  # evdev discovery.
+  systemd.services.korri-server.environment = lib.optionalAttrs (inputCfg.provider.name == "inputplumber") {
+    KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER = "1";
+  };
 }
