@@ -46,12 +46,27 @@ describe("test-suite partitioning", () => {
 
     expect(resolved).toContain("nix build")
     expect(resolved).toContain(".#checks.x86_64-linux.korri-standard-native")
+    expect(resolved).toContain(".#packages.x86_64-linux.korri-cli")
     expect(resolved).not.toContain(".#checks.x86_64-linux.korri-image-outputs")
     expect(resolved).not.toContain(
       ".#checks.x86_64-linux.korri-rocknix-sm8550-config",
     )
     expect(resolved).not.toContain("bun test")
     expect(resolved).not.toContain("tools/testing/nix")
+  })
+
+  it("rocknix SM8550 toplevel check avoids product payload packaging", () => {
+    const resolved = resolveRecipe("rocknix-sm8550-toplevel-check")
+
+    expect(resolved).toContain("korri-rocknix-sm8550-config")
+    expect(resolved).toContain(
+      "nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel",
+    )
+    expect(resolved).toContain(
+      "nixosConfigurations.korri-rocknix-kiosk-thor.config.system.build.toplevel",
+    )
+    expect(resolved).toContain("--dry-run")
+    expect(resolved).not.toContain("korri-rocknix-product-payload")
   })
 
   it("check recipe actually runs both the TypeScript suite and native Nix suite", () => {
