@@ -18,8 +18,8 @@ describe("buildDeviceFlakeExecutionPlan", () => {
       flakeRef: ".",
       app: "korri-desktop-device",
       command: "nix",
-      args: ["run", ".#korri-desktop-device"],
-      displayCommand: "nix run .#korri-desktop-device",
+      args: ["run", "--accept-flake-config", ".#korri-desktop-device"],
+      displayCommand: "nix run --accept-flake-config .#korri-desktop-device",
     })
   })
 
@@ -76,11 +76,34 @@ describe("buildDeviceFlakeExecutionPlan", () => {
     })
     expect(plan.args[0]).toBe("root@example-device")
     expect(plan.args[1]).toContain("github:example/korri#custom-app")
+    expect(plan.args[1]).not.toContain("--accept-flake-config")
+  })
+
+  it("accepts flake config only for local or file-backed refs", () => {
+    expect(buildDeviceFlakeExecutionPlan().args).toContain(
+      "--accept-flake-config",
+    )
+    expect(
+      buildDeviceFlakeExecutionPlan({
+        KORRI_FLAKE_REF: "git+file:///repo/korri",
+      }).args,
+    ).toContain("--accept-flake-config")
+    expect(
+      buildDeviceFlakeExecutionPlan({
+        KORRI_FLAKE_REF: "git+ssh://source.example/repo/korri",
+      }).args,
+    ).not.toContain("--accept-flake-config")
+    expect(
+      buildDeviceFlakeExecutionPlan({
+        KORRI_FLAKE_REF: "github:example/korri",
+      }).args,
+    ).not.toContain("--accept-flake-config")
   })
 
   it("omits builder flags unless raw Nix builder env is present", () => {
     expect(buildDeviceFlakeExecutionPlan().args).toEqual([
       "run",
+      "--accept-flake-config",
       ".#korri-desktop-device",
     ])
 
@@ -91,6 +114,7 @@ describe("buildDeviceFlakeExecutionPlan", () => {
       }).args,
     ).toEqual([
       "run",
+      "--accept-flake-config",
       "--builders",
       "ssh://builder.example aarch64-linux - 8 1",
       "--max-jobs",
@@ -114,6 +138,7 @@ describe("buildDeviceFlakeExecutionPlan", () => {
         "DISPLAY=:0",
         "nix",
         "run",
+        "--accept-flake-config",
         ".#korri-desktop-device",
       ],
     })
@@ -155,7 +180,7 @@ describe("buildDeviceFlakeExecutionPlan", () => {
       mode: "local",
       flakeRef: ".",
       app: "korri-desktop-device",
-      args: ["run", ".#korri-desktop-device"],
+      args: ["run", "--accept-flake-config", ".#korri-desktop-device"],
     })
   })
 
@@ -348,7 +373,9 @@ describe("runDeviceFlakeCommandCli", () => {
     expect(exitCode).toBe(0)
     expect(executed).toBe(false)
     expect(lines).toContain("mode=local")
-    expect(lines).toContain("command=nix run .#korri-desktop-device")
+    expect(lines).toContain(
+      "command=nix run --accept-flake-config .#korri-desktop-device",
+    )
   })
 
   it("maps usage requests to exit code 0 and bad args to exit code 2", async () => {

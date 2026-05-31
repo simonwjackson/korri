@@ -7,7 +7,7 @@ concurrency:
 on:
   push:
     branches:
-      - refactor/rocknix-product-payload
+      - trunk
     paths:
       - "flake.nix"
       - "flake.lock"
@@ -72,8 +72,13 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
             extra-platforms = aarch64-linux
-            extra-substituters = https://nix-community.cachix.org
-            extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
+            extra-substituters = https://nix-community.cachix.org https://simonwjackson.cachix.org
+            extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= simonwjackson.cachix.org-1:MtG0AE8J6bjFO/wD04X5h8MlQh7Sbee8KAJrAsPJydI=
+
+      - uses: cachix/cachix-action@v16
+        with:
+          name: simonwjackson
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - name: Evaluate payload package and native contract check
         run: |
@@ -81,21 +86,27 @@ jobs:
           nix eval .#checks.x86_64-linux.korri-rocknix-product-payload.drvPath --raw
 
       - name: Build candidate payload
-        if: github.event_name == 'workflow_dispatch' && inputs.build_payload
+        if: github.event_name == 'push' || inputs.build_payload
         run: |
           nix build .#packages.x86_64-linux.korri-rocknix-product-payload-${{ matrix.product }} --out-link result-product-payload
-          mkdir -p out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate
-          cp -aL result-product-payload/. out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate/
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            mkdir -p out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate
+            cp -aL result-product-payload/. out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate/
+          fi
 
       - name: Finalize payload metadata
         if: github.event_name == 'workflow_dispatch' && inputs.build_payload && inputs.product_revision != '' && inputs.source_sha256 != '' && inputs.seed_url != ''
+        env:
+          PRODUCT_REVISION: ${{ inputs.product_revision }}
+          SOURCE_SHA256: ${{ inputs.source_sha256 }}
+          SEED_URL: ${{ inputs.seed_url }}
         run: |
           nix develop .# --command bun tools/artifacts/rocknix-product-payload-finalize.ts \
             --candidate out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate/nix-support/product-payload/candidate-product-payload.lock \
             --out out/artifacts/rocknix-product-payload-${{ matrix.product }}-final \
-            --product-rev "${{ inputs.product_revision }}" \
-            --source-sha256 "${{ inputs.source_sha256 }}" \
-            --seed-url "${{ inputs.seed_url }}"
+            --product-rev "$PRODUCT_REVISION" \
+            --source-sha256 "$SOURCE_SHA256" \
+            --seed-url "$SEED_URL"
 
       - name: Upload candidate payload
         if: github.event_name == 'workflow_dispatch' && inputs.build_payload

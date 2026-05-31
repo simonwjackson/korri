@@ -332,12 +332,25 @@ function buildNixRunArgs(args: {
   readonly env: DeviceFlakeCommandEnv
 }): readonly string[] {
   const nixArgs = ["run"]
+  if (shouldAcceptFlakeConfig(args.flakeRef)) {
+    nixArgs.push("--accept-flake-config")
+  }
   const builders = optionalEnv(args.env.NIX_BUILDERS)
   if (builders) nixArgs.push("--builders", builders)
   const maxJobs = optionalEnv(args.env.NIX_MAX_JOBS)
   if (maxJobs) nixArgs.push("--max-jobs", maxJobs)
   nixArgs.push(`${args.flakeRef}#${args.app}`)
   return nixArgs
+}
+
+function shouldAcceptFlakeConfig(flakeRef: string): boolean {
+  return (
+    flakeRef === "." ||
+    flakeRef.startsWith("./") ||
+    flakeRef.startsWith("../") ||
+    flakeRef.startsWith("path:") ||
+    flakeRef.startsWith("git+file:")
+  )
 }
 
 function readProcessEnv(): DeviceFlakeCommandEnv {

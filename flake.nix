@@ -36,9 +36,11 @@
   nixConfig = {
     extra-substituters = [
       "https://nix-community.cachix.org"
+      "https://simonwjackson.cachix.org"
     ];
     extra-trusted-public-keys = [
       "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+      "simonwjackson.cachix.org-1:MtG0AE8J6bjFO/wD04X5h8MlQh7Sbee8KAJrAsPJydI="
     ];
   };
 
@@ -288,47 +290,73 @@
             };
           };
 
+        # Source used by the Bun/Electrobun package derivations. Keep this
+        # narrower than the flake root so docs, backlog, artifact downloads,
+        # and unrelated Nix/package work do not invalidate Fuji's SM8550
+        # runtime package builds.
+        korriRuntimeSource =
+          let
+            fileset = pkgs.lib.fileset;
+          in
+          fileset.toSource {
+            root = ./.;
+            fileset = fileset.unions [
+              ./argo.config.mjs
+              ./bun.lock
+              ./bunfig.toml
+              ./components.json
+              ./electrobun.config.ts
+              ./package.json
+              ./tsconfig.api.json
+              ./tsconfig.json
+              ./tsconfig.server.json
+              ./vite.config.mjs
+              ./korri
+              ./tools
+            ];
+          };
+
         # Single portal build for every desktop variant. The native input-bridge
         # URL is now pushed at runtime via window.__korriRuntime (see
         # korri/deploy/portal/main.tsx and korri/deploy/desktop/runtime-config.ts).
         korriPortal = import ./nix/korri-portal.nix {
           inherit pkgs;
-          src = self;
+          src = korriRuntimeSource;
           inherit bunDeps;
         };
 
         korriInputd = import ./nix/korri-inputd.nix {
           inherit pkgs;
           lib = pkgs.lib;
-          src = self;
+          src = korriRuntimeSource;
           inherit bunDeps;
         };
 
         korriGameStream = import ./nix/korri-game-stream.nix {
           inherit pkgs;
           lib = pkgs.lib;
-          src = self;
+          src = korriRuntimeSource;
           inherit bunDeps;
         };
 
         korriSessiond = import ./nix/korri-sessiond.nix {
           inherit pkgs;
           lib = pkgs.lib;
-          src = self;
+          src = korriRuntimeSource;
           inherit bunDeps;
         };
 
         korriCli = import ./nix/korri-cli.nix {
           inherit pkgs;
           lib = pkgs.lib;
-          src = self;
+          src = korriRuntimeSource;
           inherit bunDeps;
         };
 
         korriServer = import ./nix/korri-server.nix {
           inherit pkgs;
           lib = pkgs.lib;
-          src = self;
+          src = korriRuntimeSource;
           inherit bunDeps;
         };
 
@@ -357,7 +385,7 @@
           if isSupportedDesktopSystem then
             pkgs.callPackage ./nix/korri-desktop/unwrapped.nix {
               inherit system bunDeps;
-              src = self;
+              src = korriRuntimeSource;
               inherit electrobunBinaries;
               portal = korriPortal;
               buildtimeLibraries = linuxDesktopRuntimeLibraries;
@@ -512,11 +540,25 @@
             self.nixosConfigurations.korri-rocknix-kiosk-by-compatible.config.system.build.toplevel;
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-          korri-rocknix-rootfs-thor = nix-on-rocks.lib.mkGuestRootfs system self.nixosConfigurations.korri-rocknix-kiosk-thor;
-          korri-rocknix-rootfs-odin2portal = nix-on-rocks.lib.mkGuestRootfs system self.nixosConfigurations.korri-rocknix-kiosk-odin2portal;
-          korri-rocknix-rootfs-by-compatible = nix-on-rocks.lib.mkGuestRootfs system self.nixosConfigurations.korri-rocknix-kiosk-by-compatible;
+          korri-rocknix-rootfs-thor = import ./nix/korri-rocknix-rootfs.nix {
+            inherit pkgs;
+            configuration = self.nixosConfigurations.korri-rocknix-kiosk-thor;
+          };
+          korri-rocknix-rootfs-odin2portal = import ./nix/korri-rocknix-rootfs.nix {
+            inherit pkgs;
+            configuration = self.nixosConfigurations.korri-rocknix-kiosk-odin2portal;
+          };
+          korri-rocknix-rootfs-by-compatible = import ./nix/korri-rocknix-rootfs.nix {
+            inherit pkgs;
+            configuration = self.nixosConfigurations.korri-rocknix-kiosk-by-compatible;
+          };
           korri-rocknix-product-payload-odin2portal = import ./nix/korri-rocknix-product-payload.nix {
-            inherit pkgs productRevision productShortRevision productRevisionIsClean;
+            inherit
+              pkgs
+              productRevision
+              productShortRevision
+              productRevisionIsClean
+              ;
             rootfsPackage = self.packages.${system}.korri-rocknix-rootfs-odin2portal;
             device = "odin2portal";
             compatible = "ayn,odin2portal";
@@ -526,7 +568,12 @@
             substrateRevision = nixOnRocksRevision;
           };
           korri-rocknix-product-payload-thor = import ./nix/korri-rocknix-product-payload.nix {
-            inherit pkgs productRevision productShortRevision productRevisionIsClean;
+            inherit
+              pkgs
+              productRevision
+              productShortRevision
+              productRevisionIsClean
+              ;
             rootfsPackage = self.packages.${system}.korri-rocknix-rootfs-thor;
             device = "thor";
             compatible = "ayn,thor";
@@ -702,14 +749,23 @@
                   printf 'fixture rootfs\n' > "$out/tarball/rocknix-layer10b-guest-rootfs-aarch64-linux.tar.zst"
                 '';
                 mkFixturePayload =
-                  { device, compatible, buildTarget }:
+                  {
+                    device,
+                    compatible,
+                    buildTarget,
+                  }:
                   let
                     fixtureArchiveName = "rocknix-guest-rootfs-${device}-${fixtureShortRevision}.tar.zst";
                   in
                   {
                     inherit device compatible fixtureArchiveName;
                     fixturePayloadPackage = import ./nix/korri-rocknix-product-payload.nix {
-                      inherit pkgs device compatible buildTarget;
+                      inherit
+                        pkgs
+                        device
+                        compatible
+                        buildTarget
+                        ;
                       rootfsPackage = fixtureRootfs;
                       authorityRepo = "simonwjackson/korri";
                       sourceSubdir = ".";
@@ -727,30 +783,34 @@
                 configurations = self.nixosConfigurations;
                 contract = import ./nix/product-payload-contract.nix;
                 payloadSpecs = [
-                  ((mkFixturePayload {
-                    device = "odin2portal";
-                    compatible = "ayn,odin2portal";
-                    buildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel";
-                  })
-                  // {
-                    expectedBuildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel";
-                    expectedRootfsAlias = "korri-rocknix-rootfs-odin2portal";
-                    expectedKioskSystemAlias = "korri-rocknix-kiosk-system-odin2portal";
-                    expectedConfigAlias = "korri-rocknix-kiosk-odin2portal";
-                    payloadPackage = self.packages.${system}.korri-rocknix-product-payload-odin2portal;
-                  })
-                  ((mkFixturePayload {
-                    device = "thor";
-                    compatible = "ayn,thor";
-                    buildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-thor.config.system.build.toplevel";
-                  })
-                  // {
-                    expectedBuildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-thor.config.system.build.toplevel";
-                    expectedRootfsAlias = "korri-rocknix-rootfs-thor";
-                    expectedKioskSystemAlias = "korri-rocknix-kiosk-system-thor";
-                    expectedConfigAlias = "korri-rocknix-kiosk-thor";
-                    payloadPackage = self.packages.${system}.korri-rocknix-product-payload-thor;
-                  })
+                  (
+                    (mkFixturePayload {
+                      device = "odin2portal";
+                      compatible = "ayn,odin2portal";
+                      buildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel";
+                    })
+                    // {
+                      expectedBuildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel";
+                      expectedRootfsAlias = "korri-rocknix-rootfs-odin2portal";
+                      expectedKioskSystemAlias = "korri-rocknix-kiosk-system-odin2portal";
+                      expectedConfigAlias = "korri-rocknix-kiosk-odin2portal";
+                      payloadPackage = self.packages.${system}.korri-rocknix-product-payload-odin2portal;
+                    }
+                  )
+                  (
+                    (mkFixturePayload {
+                      device = "thor";
+                      compatible = "ayn,thor";
+                      buildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-thor.config.system.build.toplevel";
+                    })
+                    // {
+                      expectedBuildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-thor.config.system.build.toplevel";
+                      expectedRootfsAlias = "korri-rocknix-rootfs-thor";
+                      expectedKioskSystemAlias = "korri-rocknix-kiosk-system-thor";
+                      expectedConfigAlias = "korri-rocknix-kiosk-thor";
+                      payloadPackage = self.packages.${system}.korri-rocknix-product-payload-thor;
+                    }
+                  )
                 ];
               };
             # Named standard-check entry for the Thor lane. The shared check
@@ -782,6 +842,11 @@
                   inherit pkgs;
                   resolverScript = ./nix/images/live-usb-persistence-resolver.sh;
                 };
+            korri-rocknix-build-performance = import ./nix/tests/korri-rocknix-build-performance-check.nix {
+              inherit pkgs;
+              runtimeSource = korriRuntimeSource;
+              rootfsBuilder = ./nix/korri-rocknix-rootfs.nix;
+            };
             korri-standard-native = import ./nix/tests/korri-standard-native-check.nix {
               inherit pkgs;
               standardChecks = [
@@ -799,6 +864,7 @@
                 self.checks.${system}.korri-package-outputs
                 self.checks.${system}.korri-image-outputs
                 self.checks.${system}.korri-rocknix-sm8550-config
+                self.checks.${system}.korri-rocknix-build-performance
                 self.checks.${system}.korri-rocknix-product-payload
                 self.checks.${system}.korri-rocknix-product-payload-thor
                 self.checks.${system}.korri-live-usb-config
@@ -870,6 +936,10 @@
                 {
                   name = "korri-rocknix-sm8550-config";
                   owner = "composed-system";
+                }
+                {
+                  name = "korri-rocknix-build-performance";
+                  owner = "package-output";
                 }
                 {
                   name = "korri-rocknix-product-payload";
