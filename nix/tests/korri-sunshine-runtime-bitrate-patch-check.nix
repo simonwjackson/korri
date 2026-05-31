@@ -85,11 +85,12 @@ let
       && !(contains "avcodec runtime bitrate update" patch)
       && !(contains "AV_OPT_SEARCH_CHILDREN" patch)
     ))
-    (check "Sunshine runtime bitrate patch refuses non-seamless encoder restart" (
-      contains "runtime bitrate unsupported without seamless encoder reconfiguration" patch
-      && contains "RUNTIME_SETTINGS_REASON_UNSUPPORTED_OPERATION" patch
+    (check "Sunshine runtime bitrate patch applies via seamless VAAPI mutation only" (
+      contains "runtime_update_h264_vaapi_bitrate" patch
+      && contains "VAAPI runtime bitrate params updated without encoder restart" patch
+      && contains "seamless_vaapi=1" patch
+      && contains "request_idr_frame" patch
       && !(contains "encoder restarted for runtime bitrate" patch)
-      && !(contains "updated_config.bitrate = request->value" patch)
       && !(contains "disp->dummy_img(dummy_img.get())" patch)
     ))
     (check "Sunshine runtime FPS patch gates support to h264_vaapi" (
@@ -98,11 +99,12 @@ let
       && contains "encoder.codec_from_config(config).name == \"h264_vaapi\"" patch
       && contains "runtime FPS unsupported" patch
     ))
-    (check "Sunshine runtime bitrate README documents seamless bitrate as unsupported" (
-      contains "Active-stream bitrate changes are not advertised until they can be applied seamlessly" readme
+    (check "Sunshine runtime bitrate README documents seamless VAAPI support" (
+      contains "Active-stream bitrate changes are advertised only for the seamless `h264_vaapi` VAAPI path" readme
+      && contains "same-session moving-video and bandwidth proof" readme
     ))
     (check "Sunshine runtime settings patch documents FPS as experimental frame pacing" (
-      contains "Supports operation `2`: set effective stream FPS" readme
+      contains "supports operation `2`: set effective stream FPS" readme
       && contains "runtime FPS" patch
       && contains "applied_fps" patch
       && contains "runtime_fps_interval" patch
@@ -133,9 +135,10 @@ let
       && contains "auto runtime_supported = enabled && session->control.runtime_settings_encoder_restart_supported" patch
       && contains "std::uint16_t reason = enabled ? video::RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER" patch
     ))
-    (check "Sunshine runtime capabilities do not advertise active-stream bitrate" (
-      !(contains "supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS" patch)
-      && contains "plaintext.min_bitrate_kbps = 0" patch
+    (check "Sunshine runtime capabilities advertise active-stream bitrate only for supported VAAPI sessions" (
+      contains "+      supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS" patch
+      && contains "+    plaintext.min_bitrate_kbps = runtime_supported ? 500 : 0;" patch
+      && contains "+    plaintext.max_bitrate_kbps = runtime_supported ? 150000 : 0;" patch
       && contains "supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_FPS" patch
     ))
     (check "Sunshine runtime resolution capability remains proof-gated instead of generally advertised"

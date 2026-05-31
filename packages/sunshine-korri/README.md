@@ -17,11 +17,12 @@ Experimental live runtime-settings MVP split by review concern:
 
 - `0001-add-runtime-settings-protocol-surface.patch` adds packet IDs `0x5504`/`0x5505`, runtime-settings operations, statuses, reasons, request/ack structs, and mail names.
 - `0002-wire-runtime-settings-control-plane.patch` adds the Sunshine control-plane parser, `SUNSHINE_LIVE_SETTINGS_MVP=1` gate, capability acks, mutation acks, launch/current-applied baselines, and request queueing.
-- `0003-apply-runtime-bitrate-and-fps-changes.patch` refuses active-stream operation `1` until bitrate can be applied seamlessly. Supports operation `2`: set effective stream FPS at or below launch FPS using runtime frame pacing.
+- `0003-apply-runtime-bitrate-and-fps-changes.patch` introduced safe rejection for active-stream operation `1` and supports operation `2`: set effective stream FPS at or below launch FPS using runtime frame pacing.
 - `0004-add-proof-gated-runtime-resolution-apply-path.patch` applies operation `3` with same-or-smaller same-aspect even dimensions, refreshes touch mapping after apply, and keeps runtime resolution proof-gated until client survival evidence exists.
-- Active-stream bitrate changes are not advertised until they can be applied seamlessly; no reconnect or encoder-restart fallback is considered shippable.
+- `0005-add-seamless-vaapi-runtime-bitrate-path.patch` enables operation `1` for the supported `h264_vaapi` path by mutating FFmpeg VAAPI rate-control private state, forcing an IDR, and avoiding encoder teardown/reconnect.
+- Active-stream bitrate changes are advertised only for the seamless `h264_vaapi` VAAPI path; no reconnect or encoder-restart fallback is considered shippable.
 - Runtime FPS is currently limited to `h264_vaapi` via Sunshine's AVCodec/VAAPI path.
-- The series does not use the failed AVCodec field/AVOption mutation fallback.
+- The series does not use the failed public AVCodec field/AVOption mutation fallback.
 
 Runtime settings mechanism contract:
 
@@ -36,7 +37,8 @@ Runtime settings mechanism contract:
 - Mutation acks carry the broad numeric status plus an additive reason field; current no-reason consumers must be updated before relying on reason-bearing payloads.
 - Runtime resolution remains experimental/proof-gated; operation `0` does not advertise it as a production adaptive operation from a server ack alone.
 - Runtime resolution proof gate: operation `3` is listed as proof-gated, not supported, in capability acks until same-session target-client proof exists.
-- Capability support is conservative: active-stream bitrate is not advertised; FPS is only advertised for the explicit live-settings gate on an active H.264 session using the supported VAAPI path; unsupported sessions return a reason without setting support bits.
+- Capability support is conservative: active-stream bitrate and FPS are advertised only for the explicit live-settings gate on an active H.264 session using the supported VAAPI path; unsupported sessions return a reason without setting support bits.
+- Operation `1` support requires same-session moving-video and bandwidth proof on the target client before it is treated as product-ready for that client/decoder combination.
 - Operation `3` outcomes distinguish Sunshine-applied from client-proven: Sunshine may report `server_applied=1`, but `client_proven` remains `0` without device/client render evidence.
 
 Runtime settings status contract:
@@ -66,12 +68,13 @@ Reason codes:
 Current review gates:
 
 - `nix build .#checks.$(nix eval --raw --impure --expr builtins.currentSystem).korri-sunshine-runtime-bitrate-patch --no-link` is the source invariant/build check for packet IDs, operation IDs, capability query, reason fields, timeout/conflict markers, baseline tracking, and resolution proof-gate markers.
-- Existing FPS live evidence proves the `h264_vaapi` applied path; bitrate remains unsupported for active streams until seamless apply is proven. Disabled, invalid, unsupported, timeout, conflict, command-not-advertised, and stale-ack outcomes are covered by source invariants and/or documented smoke evidence.
+- Existing FPS live evidence proves the `h264_vaapi` applied path. SM8550/v4l2m2m evidence now proves seamless `h264_vaapi` bitrate changes with moving video and bandwidth deltas. Disabled, invalid, unsupported, timeout, conflict, command-not-advertised, and stale-ack outcomes are covered by source invariants and/or documented smoke evidence.
 - Runtime resolution requires same-session target-client proof before it can be advertised as supported.
 
 Evidence is recorded in:
 
 - `docs/acceptance/sunshine-korri-runtime-bitrate-restart-2026-05-25.md`
+- `docs/acceptance/sunshine-korri-seamless-vaapi-runtime-bitrate-sm8550-2026-05-31.md`
 - `docs/acceptance/sunshine-korri-runtime-resolution-2026-05-26.md`
 
 ## Removal/upstream policy

@@ -10,6 +10,7 @@ sunshine.overrideAttrs (old: {
     ./patches/0002-wire-runtime-settings-control-plane.patch
     ./patches/0003-apply-runtime-bitrate-and-fps-changes.patch
     ./patches/0004-add-proof-gated-runtime-resolution-apply-path.patch
+    ./patches/0005-add-seamless-vaapi-runtime-bitrate-path.patch
   ];
 
   meta = old.meta // {

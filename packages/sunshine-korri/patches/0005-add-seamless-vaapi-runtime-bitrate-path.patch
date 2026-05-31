@@ -1,0 +1,330 @@
+diff -ruN sunshine-korri-baseline/src/stream.cpp sunshine-korri-work/src/stream.cpp
+--- a/src/stream.cpp	2026-05-31 09:57:31.553554581 -0600
++++ b/src/stream.cpp	2026-05-31 09:59:45.815071491 -0600
+@@ -1040,6 +1040,7 @@
+     std::uint16_t status = enabled ? video::RUNTIME_SETTINGS_STATUS_APPLIED : video::RUNTIME_SETTINGS_STATUS_DISABLED;
+     std::uint16_t reason = enabled ? video::RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER : video::RUNTIME_SETTINGS_REASON_GATE_DISABLED;
+     if (runtime_supported) {
++      supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS;
+       supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_FPS;
+       proof_gated_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION;
+       reason = video::RUNTIME_SETTINGS_REASON_NONE;
+@@ -1054,8 +1055,8 @@
+     plaintext.reason = reason;
+     plaintext.supported_operations = supported_operations;
+     plaintext.proof_gated_operations = proof_gated_operations;
+-    plaintext.min_bitrate_kbps = 0;
+-    plaintext.max_bitrate_kbps = 0;
++    plaintext.min_bitrate_kbps = runtime_supported ? 500 : 0;
++    plaintext.max_bitrate_kbps = runtime_supported ? 150000 : 0;
+     plaintext.max_fps = session->control.runtime_settings_launch_fps;
+     plaintext.launch_bitrate_kbps = session->control.runtime_settings_launch_bitrate_kbps;
+     plaintext.launch_fps = session->control.runtime_settings_launch_fps;
+@@ -1188,7 +1189,7 @@
+         accepted = false;
+         rejection_status = video::RUNTIME_SETTINGS_STATUS_DISABLED;
+         rejection_reason = video::RUNTIME_SETTINGS_REASON_GATE_DISABLED;
+-      } else if (operation != video::RUNTIME_SETTINGS_OPERATION_SET_FPS && operation != video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION) {
++      } else if (operation != video::RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS && operation != video::RUNTIME_SETTINGS_OPERATION_SET_FPS && operation != video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION) {
+         accepted = false;
+         rejection_status = video::RUNTIME_SETTINGS_STATUS_INVALID;
+         rejection_reason = video::RUNTIME_SETTINGS_REASON_UNSUPPORTED_OPERATION;
+diff -ruN sunshine-korri-baseline/src/video.cpp sunshine-korri-work/src/video.cpp
+--- a/src/video.cpp	2026-05-31 09:57:31.556511687 -0600
++++ b/src/video.cpp	2026-05-31 09:59:02.685315629 -0600
+@@ -11,6 +11,10 @@
+ // lib includes
+ #include <boost/pointer_cast.hpp>
+ 
++#ifdef __linux__
++#include <va/va.h>
++#endif
++
+ extern "C" {
+ #include <libavutil/imgutils.h>
+ #include <libavutil/mastering_display_metadata.h>
+@@ -379,6 +383,211 @@
+     int inject;
+   };
+ 
++
++#ifdef __linux__
++  // Korri runtime-bitrate experiment: FFmpeg's VAAPI encoder keeps the
++  // VAEncMiscParameterRateControl struct in private VAAPIEncodeContext state
++  // and stores a pointer to it in the per-IDR global-params list. Mutating that
++  // struct on the encode thread, then forcing an IDR, lets FFmpeg re-upload the
++  // updated rate-control buffer without recreating the VA context.
++  //
++  // This mirrors FFmpeg 8 / libavcodec 62.11.100 private structs through the
++  // fields we mutate. It is intentionally constrained to h264_vaapi and guarded
++  // by runtime sanity checks because this is not a public FFmpeg ABI.
++  enum {
++    KORRI_FF_MAX_REORDER_DELAY = 16,
++    KORRI_FF_MAX_ASYNC_DEPTH = 64,
++    KORRI_FF_MAX_PICTURE_REFERENCES = 2,
++    KORRI_VAAPI_MAX_CONFIG_ATTRIBUTES = 4,
++    KORRI_VAAPI_MAX_GLOBAL_PARAMS = 4,
++    KORRI_VAAPI_MAX_TILE_ROWS = 22,
++    KORRI_VAAPI_MAX_TILE_COLS = 20,
++  };
++
++  struct korri_ff_hw_base_encode_context_t {
++    const void *klass;
++    void *log_ctx;
++    const void *op;
++    int idr_interval;
++    int desired_b_depth;
++    int surface_width;
++    int surface_height;
++    int slice_block_width;
++    int slice_block_height;
++    void *device_ref;
++    void *device;
++    void *input_frames_ref;
++    void *input_frames;
++    void *recon_frames_ref;
++    void *recon_frames;
++    void *pic_start;
++    void *pic_end;
++    void *next_prev[KORRI_FF_MAX_PICTURE_REFERENCES];
++    int nb_next_prev;
++    std::int64_t input_order;
++    std::int64_t output_delay;
++    std::int64_t encode_order;
++    std::int64_t decode_delay;
++    std::int64_t output_order;
++    std::int64_t first_pts;
++    std::int64_t dts_pts_diff;
++    std::int64_t ts_ring[KORRI_FF_MAX_REORDER_DELAY * 3 + KORRI_FF_MAX_ASYNC_DEPTH];
++    int gop_size;
++    int closed_gop;
++    int gop_per_idr;
++    int p_per_i;
++    int max_b_depth;
++    int b_per_p;
++    int force_idr;
++    int idr_counter;
++    int gop_counter;
++    int end_of_stream;
++    int p_to_gpb;
++    int ref_l0;
++    int ref_l1;
++    int roi_allowed;
++    int crop_warned;
++    int roi_warned;
++    void *frame;
++    int async_encode;
++    void *encode_fifo;
++    int async_depth;
++    void *tail_pkt;
++  };
++
++  struct korri_vaapi_encode_rc_mode_t {
++    int mode;
++    const char *name;
++    int supported;
++    std::uint32_t va_mode;
++    int bitrate;
++    int maxrate;
++    int quality;
++    int hrd;
++  };
++
++  struct korri_vaapi_encode_context_t {
++    korri_ff_hw_base_encode_context_t base;
++    const void *codec;
++    int low_power;
++    int max_frame_size;
++    int explicit_rc_mode;
++    int blbrc;
++    int explicit_qp;
++    unsigned int desired_packed_headers;
++    const void *profile;
++    const korri_vaapi_encode_rc_mode_t *rc_mode;
++    int rc_quality;
++    VAProfile va_profile;
++    VAEntrypoint va_entrypoint;
++    unsigned int va_rc_mode;
++    unsigned int va_bit_rate;
++    unsigned int va_packed_headers;
++    VAConfigAttrib config_attributes[KORRI_VAAPI_MAX_CONFIG_ATTRIBUTES];
++    int nb_config_attributes;
++    VAConfigID va_config;
++    VAContextID va_context;
++    void *hwctx;
++    void *output_buffer_pool;
++    int global_params_type[KORRI_VAAPI_MAX_GLOBAL_PARAMS];
++    const void *global_params[KORRI_VAAPI_MAX_GLOBAL_PARAMS];
++    size_t global_params_size[KORRI_VAAPI_MAX_GLOBAL_PARAMS];
++    int nb_global_params;
++    VAEncMiscParameterRateControl rc_params;
++    VAEncMiscParameterHRD hrd_params;
++    VAEncMiscParameterFrameRate fr_params;
++    VAEncMiscParameterBufferMaxFrameSize mfs_params;
++#if VA_CHECK_VERSION(0, 36, 0)
++    VAEncMiscParameterBufferQualityLevel quality_params;
++#endif
++    void *codec_sequence_params;
++    void *codec_picture_params;
++    int slice_block_rows;
++    int slice_block_cols;
++    int nb_slices;
++    int slice_size;
++    int tile_cols;
++    int tile_rows;
++    int col_width[KORRI_VAAPI_MAX_TILE_COLS];
++    int row_height[KORRI_VAAPI_MAX_TILE_ROWS];
++    int col_bd[KORRI_VAAPI_MAX_TILE_COLS + 1];
++    int row_bd[KORRI_VAAPI_MAX_TILE_ROWS + 1];
++    int roi_max_regions;
++    int roi_quant_range;
++    VABufferID *coded_buffer_ref;
++    int surface_alignment_width;
++    int surface_alignment_height;
++  };
++
++  bool runtime_update_h264_vaapi_bitrate(encode_session_t *session, std::uint32_t bitrate_kbps, std::uint32_t fps) {
++    auto avcodec_session = dynamic_cast<avcodec_encode_session_t *>(session);
++    if (!avcodec_session || !avcodec_session->avcodec_ctx || !avcodec_session->device) {
++      return false;
++    }
++
++    auto *avctx = avcodec_session->avcodec_ctx.get();
++    if (avctx->codec_id != AV_CODEC_ID_H264 || avctx->pix_fmt != AV_PIX_FMT_VAAPI || avctx->priv_data == nullptr) {
++      return false;
++    }
++
++    auto *vaapi = reinterpret_cast<korri_vaapi_encode_context_t *>(avctx->priv_data);
++    if (!vaapi->rc_mode || !vaapi->rc_mode->bitrate || vaapi->nb_global_params <= 0 || vaapi->nb_global_params > KORRI_VAAPI_MAX_GLOBAL_PARAMS) {
++      BOOST_LOG(warning) << "live-settings-mvp: runtime VAAPI bitrate update rejected by private-state guard"sv;
++      return false;
++    }
++
++    bool has_rate_control_global = false;
++    for (int i = 0; i < vaapi->nb_global_params; ++i) {
++      if (vaapi->global_params_type[i] == VAEncMiscParameterTypeRateControl && vaapi->global_params[i] == &vaapi->rc_params) {
++        has_rate_control_global = true;
++        break;
++      }
++    }
++    if (!has_rate_control_global) {
++      BOOST_LOG(warning) << "live-settings-mvp: runtime VAAPI bitrate update rejected missing rate-control global param"sv;
++      return false;
++    }
++
++    std::uint64_t requested_bps = (std::uint64_t) bitrate_kbps * 1000u;
++    if (requested_bps == 0 || requested_bps > std::numeric_limits<std::uint32_t>::max()) {
++      return false;
++    }
++
++    auto bps = (std::uint32_t) requested_bps;
++    avctx->bit_rate = bps;
++    avctx->rc_max_rate = bps;
++    avctx->rc_min_rate = bps;
++    if (fps > 0) {
++      avctx->rc_buffer_size = bps / fps;
++      avctx->rc_initial_buffer_occupancy = avctx->rc_buffer_size * 3 / 4;
++    }
++
++    vaapi->va_bit_rate = bps;
++    vaapi->rc_params.bits_per_second = bps;
++    vaapi->rc_params.target_percentage = 100;
++    if (vaapi->rc_mode->hrd && avctx->rc_buffer_size > 0) {
++      vaapi->hrd_params.buffer_size = (std::uint32_t) avctx->rc_buffer_size;
++      vaapi->hrd_params.initial_buffer_fullness = (std::uint32_t) avctx->rc_initial_buffer_occupancy;
++      vaapi->rc_params.window_size = (std::uint32_t) (((std::uint64_t) vaapi->hrd_params.buffer_size * 1000u) / bps);
++    } else if (vaapi->rc_params.window_size == 0) {
++      vaapi->rc_params.window_size = 1000;
++    }
++
++    avcodec_session->request_idr_frame();
++    BOOST_LOG(info)
++      << "live-settings-mvp: VAAPI runtime bitrate params updated without encoder restart requested_kbps="sv << bitrate_kbps
++      << " bits_per_second="sv << vaapi->rc_params.bits_per_second
++      << " target_percentage="sv << vaapi->rc_params.target_percentage
++      << " window_size="sv << vaapi->rc_params.window_size
++      << " rc_mode="sv << (vaapi->rc_mode->name ? vaapi->rc_mode->name : "unknown");
++    return true;
++  }
++#else
++  bool runtime_update_h264_vaapi_bitrate(encode_session_t *, std::uint32_t, std::uint32_t) {
++    return false;
++  }
++#endif
++
+   class nvenc_encode_session_t: public encode_session_t {
+   public:
+     nvenc_encode_session_t(std::unique_ptr<platf::nvenc_encode_device_t> encode_device):
+@@ -1975,19 +2184,29 @@
+           if (request->operation == RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS) {
+             std::uint32_t applied_bitrate_kbps = config.bitrate;
+             std::uint16_t status = RUNTIME_SETTINGS_STATUS_FAILED;
+-            std::uint16_t reason = RUNTIME_SETTINGS_REASON_UNSUPPORTED_OPERATION;
+-            BOOST_LOG(warning)
+-              << "live-settings-mvp: runtime bitrate unsupported without seamless encoder reconfiguration request_id="sv << request->request_id
+-              << " encoder="sv << encoder.name
+-              << " codec="sv << encoder.codec_from_config(config).name
+-              << " requested_kbps="sv << request->value;
++            std::uint16_t reason = RUNTIME_SETTINGS_REASON_APPLY_FAILED;
++            if (runtime_settings_supports_vaapi_h264(encoder, config) && runtime_update_h264_vaapi_bitrate(session.get(), request->value, (std::uint32_t) config.framerate)) {
++              config.bitrate = request->value;
++              applied_bitrate_kbps = request->value;
++              status = RUNTIME_SETTINGS_STATUS_APPLIED;
++              reason = RUNTIME_SETTINGS_REASON_NONE;
++              requested_idr_frame = true;
++            } else {
++              reason = runtime_settings_supports_vaapi_h264(encoder, config) ? RUNTIME_SETTINGS_REASON_APPLY_FAILED : RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER;
++              BOOST_LOG(warning)
++                << "live-settings-mvp: runtime bitrate VAAPI update failed request_id="sv << request->request_id
++                << " encoder="sv << encoder.name
++                << " codec="sv << encoder.codec_from_config(config).name
++                << " requested_kbps="sv << request->value;
++            }
+ 
+             BOOST_LOG(info)
+               << "live-settings-mvp: capture_sync runtime bitrate request_id="sv << request->request_id
+               << " requested_kbps="sv << request->value
+               << " applied_kbps="sv << applied_bitrate_kbps
+               << " status="sv << status
+-              << " reason="sv << reason;
++              << " reason="sv << reason
++              << " seamless_vaapi=1"sv;
+             runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS, status, applied_bitrate_kbps, 0, 0, reason});
+           } else if (request->operation == RUNTIME_SETTINGS_OPERATION_SET_FPS) {
+             std::uint32_t applied_fps = runtime_fps;
+@@ -2334,19 +2553,28 @@
+               if (request->operation == RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS) {
+                 std::uint32_t applied_bitrate_kbps = ctx->config.bitrate;
+                 std::uint16_t status = RUNTIME_SETTINGS_STATUS_FAILED;
+-                std::uint16_t reason = RUNTIME_SETTINGS_REASON_UNSUPPORTED_OPERATION;
+-                BOOST_LOG(warning)
+-                  << "live-settings-mvp: runtime bitrate unsupported without seamless encoder reconfiguration request_id="sv << request->request_id
+-                  << " encoder="sv << encoder.name
+-                  << " codec="sv << encoder.codec_from_config(ctx->config).name
+-                  << " requested_kbps="sv << request->value;
++                std::uint16_t reason = RUNTIME_SETTINGS_REASON_APPLY_FAILED;
++                if (runtime_settings_supports_vaapi_h264(encoder, ctx->config) && runtime_update_h264_vaapi_bitrate(pos->session.get(), request->value, (std::uint32_t) ctx->config.framerate)) {
++                  ctx->config.bitrate = request->value;
++                  applied_bitrate_kbps = request->value;
++                  status = RUNTIME_SETTINGS_STATUS_APPLIED;
++                  reason = RUNTIME_SETTINGS_REASON_NONE;
++                } else {
++                  reason = runtime_settings_supports_vaapi_h264(encoder, ctx->config) ? RUNTIME_SETTINGS_REASON_APPLY_FAILED : RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER;
++                  BOOST_LOG(warning)
++                    << "live-settings-mvp: runtime bitrate VAAPI update failed request_id="sv << request->request_id
++                    << " encoder="sv << encoder.name
++                    << " codec="sv << encoder.codec_from_config(ctx->config).name
++                    << " requested_kbps="sv << request->value;
++                }
+ 
+                 BOOST_LOG(info)
+                   << "live-settings-mvp: async runtime bitrate request_id="sv << request->request_id
+                   << " requested_kbps="sv << request->value
+                   << " applied_kbps="sv << applied_bitrate_kbps
+                   << " status="sv << status
+-                  << " reason="sv << reason;
++                  << " reason="sv << reason
++                  << " seamless_vaapi=1"sv;
+                 ctx->runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS, status, applied_bitrate_kbps, 0, 0, reason});
+               } else if (request->operation == RUNTIME_SETTINGS_OPERATION_SET_FPS) {
+                 if (ctx->runtime_fps == 0) {
