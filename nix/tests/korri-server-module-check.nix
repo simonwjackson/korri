@@ -751,6 +751,10 @@ let
       (streamingDefaultGamepad.systemd.services.korri-sunshine.environment or { }).WAYLAND_DISPLAY or null
       == "wayland-1"
     ))
+    (check "korri-sunshine enables the live runtime-settings MVP gate" (
+      (streamingDefaultGamepad.systemd.services.korri-sunshine.environment or { })
+      .SUNSHINE_LIVE_SETTINGS_MVP or null == "1"
+    ))
     (check "korri-sunshine inherits XDG_RUNTIME_DIR from compositor" (
       lib.hasPrefix "/run/" (
         (streamingDefaultGamepad.systemd.services.korri-sunshine.environment or { }).XDG_RUNTIME_DIR or ""
@@ -850,24 +854,32 @@ let
 
     # ---- sessiond wiring (Phase 4C completion: korri-server delegates managed launches)
     (check "sessiond paired: KORRI_SESSIOND_URL exported" (
-      let env = (serverUserUnit serverWithSessiondPaired).environment or { }; in
+      let
+        env = (serverUserUnit serverWithSessiondPaired).environment or { };
+      in
       env.KORRI_SESSIOND_URL or null == "http://127.0.0.1:3003"
     ))
     (check "sessiond paired: KORRI_SESSIOND_TOKEN_FILE exported" (
-      let env = (serverUserUnit serverWithSessiondPaired).environment or { }; in
+      let
+        env = (serverUserUnit serverWithSessiondPaired).environment or { };
+      in
       env.KORRI_SESSIOND_TOKEN_FILE or null == "/run/korri-sessiond/token"
     ))
     (check "sessiond defaults absent: no sessiond env exported" (
-      let env = (serverUserUnit serverEnabledNoStreaming).environment or { }; in
+      let
+        env = (serverUserUnit serverEnabledNoStreaming).environment or { };
+      in
       !(env ? KORRI_SESSIOND_URL) && !(env ? KORRI_SESSIOND_TOKEN_FILE)
     ))
     (check "sessiond url-only: assertion fires (both-or-neither)" (
-      builtins.any (m: lib.hasInfix "sessiond.url and" m)
-        (korriFailedAssertionMessages serverWithSessiondUrlOnly)
+      builtins.any (m: lib.hasInfix "sessiond.url and" m) (
+        korriFailedAssertionMessages serverWithSessiondUrlOnly
+      )
     ))
     (check "sessiond token-only: assertion fires (both-or-neither)" (
-      builtins.any (m: lib.hasInfix "sessiond.url and" m)
-        (korriFailedAssertionMessages serverWithSessiondTokenOnly)
+      builtins.any (m: lib.hasInfix "sessiond.url and" m) (
+        korriFailedAssertionMessages serverWithSessiondTokenOnly
+      )
     ))
   ];
 

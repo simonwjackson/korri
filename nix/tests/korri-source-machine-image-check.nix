@@ -21,25 +21,25 @@ let
   unitEnv = unit.environment or { };
   unitPath = unit.path or [ ];
   sessiondExecStartPre =
-    let preStr = (unit.serviceConfig or { }).ExecStartPre or ""; in
+    let
+      preStr = (unit.serviceConfig or { }).ExecStartPre or "";
+    in
     builtins.readFile preStr;
   sourceUser = cfg.users.users.korri-source or { };
   serverUser = cfg.users.users.korri-server or { };
   serverUnit = cfg.systemd.services.korri-server or { };
   serverEnv = serverUnit.environment or { };
+  sunshineUnit = cfg.systemd.services.korri-sunshine or { };
+  sunshineEnv = sunshineUnit.environment or { };
 
   check = message: assertion: { inherit message assertion; };
   checks = [
     (check "image evaluates without assertion failures" (failedAssertions == [ ]))
     (check "compositor is enabled" (cfg.services.korri.compositor.enable == true))
     (check "kiosk client is disabled" (cfg.services.korri.compositor.kiosk.enable == false))
-    (check "server.streaming is enabled" (
-      cfg.services.korri.server.streaming.enable == true
-    ))
+    (check "server.streaming is enabled" (cfg.services.korri.server.streaming.enable == true))
     (check "sessiond is enabled" (cfg.services.korri.sessiond.enable == true))
-    (check "sessiond role is source-machine" (
-      cfg.services.korri.sessiond.role == "source-machine"
-    ))
+    (check "sessiond role is source-machine" (cfg.services.korri.sessiond.role == "source-machine"))
     (check "sessiond KORRI_SESSIOND_ROLE=source-machine" (
       unitEnv.KORRI_SESSIOND_ROLE or null == "source-machine"
     ))
@@ -62,24 +62,27 @@ let
         apps = cfg.services.sunshine.applications.apps or [ ];
         firstAppCmd = if apps == [ ] then null else (builtins.elemAt apps 0).cmd;
       in
-      firstAppCmd != null
-      && lib.hasInfix "korri-game-stream-runner" (builtins.readFile firstAppCmd)
+      firstAppCmd != null && lib.hasInfix "korri-game-stream-runner" (builtins.readFile firstAppCmd)
     ))
     (check "Sunshine app wrapper exports KORRI_SESSIOND_URL" (
       let
         apps = cfg.services.sunshine.applications.apps or [ ];
         firstAppCmd = if apps == [ ] then null else (builtins.elemAt apps 0).cmd;
       in
-      firstAppCmd != null
-      && lib.hasInfix "KORRI_SESSIOND_URL" (builtins.readFile firstAppCmd)
+      firstAppCmd != null && lib.hasInfix "KORRI_SESSIOND_URL" (builtins.readFile firstAppCmd)
     ))
     (check "Sunshine app wrapper exports KORRI_SESSIOND_TOKEN_FILE" (
       let
         apps = cfg.services.sunshine.applications.apps or [ ];
         firstAppCmd = if apps == [ ] then null else (builtins.elemAt apps 0).cmd;
       in
-      firstAppCmd != null
-      && lib.hasInfix "KORRI_SESSIOND_TOKEN_FILE" (builtins.readFile firstAppCmd)
+      firstAppCmd != null && lib.hasInfix "KORRI_SESSIOND_TOKEN_FILE" (builtins.readFile firstAppCmd)
+    ))
+    (check "korri-sunshine unit uses sunshine-korri" (
+      lib.hasInfix "sunshine-korri" ((sunshineUnit.serviceConfig or { }).ExecStart or "")
+    ))
+    (check "korri-sunshine enables the live runtime-settings MVP gate" (
+      sunshineEnv.SUNSHINE_LIVE_SETTINGS_MVP or null == "1"
     ))
     (check "sessiond sharedGroup is set to korri-sessiond-clients" (
       cfg.services.korri.sessiond.sharedGroup or null == "korri-sessiond-clients"
@@ -88,17 +91,14 @@ let
     # TRAVERSE the directory and reach the 0640 token file. 0700
     # root:root would silently break every cross-user managed launch.
     (check "sessiond runtime dir at 0710 root:korri-sessiond-clients (group-traversable)" (
-      builtins.any (rule:
-        lib.hasInfix "korri-sessiond" rule
-        && lib.hasInfix "0710 root korri-sessiond-clients" rule
+      builtins.any (
+        rule: lib.hasInfix "korri-sessiond" rule && lib.hasInfix "0710 root korri-sessiond-clients" rule
       ) (cfg.systemd.tmpfiles.rules or [ ])
     ))
     (check "sessiond RuntimeDirectoryMode is 0710 (matches sharedGroup)" (
       (unit.serviceConfig or { }).RuntimeDirectoryMode or null == "0710"
     ))
-    (check "korri-sessiond-clients group is declared" (
-      cfg.users.groups ? korri-sessiond-clients
-    ))
+    (check "korri-sessiond-clients group is declared" (cfg.users.groups ? korri-sessiond-clients))
     (check "korri-source user is in korri-sessiond-clients group" (
       builtins.elem "korri-sessiond-clients" (sourceUser.extraGroups or [ ])
     ))
@@ -125,8 +125,7 @@ let
       == "http://127.0.0.1:${toString cfg.services.korri.sessiond.port}"
     ))
     (check "server.sessiond.tokenFile matches sessiond.tokenFile" (
-      cfg.services.korri.server.sessiond.tokenFile or null
-      == cfg.services.korri.sessiond.tokenFile
+      cfg.services.korri.server.sessiond.tokenFile or null == cfg.services.korri.sessiond.tokenFile
     ))
     (check "server unit env exports KORRI_SESSIOND_URL" (
       lib.hasPrefix "http://127.0.0.1:" (serverEnv.KORRI_SESSIOND_URL or "")

@@ -732,13 +732,14 @@ in
     services.sunshine.settings.gamepad = mkIf cfg.streaming.enable (lib.mkDefault "x360");
 
     # Default Sunshine itself to the Korri downstream build (carries the
-    # runtime-bitrate-restart MVP patch) whenever streaming is on. Priority
-    # 900 sits between `mkDefault` (1000, used by nixpkgs' sunshine module to
-    # set `pkgs.sunshine`) and any explicit host assignment, so callers that
-    # really want stock nixpkgs Sunshine can override with a normal
-    # assignment. Downstream flakes that import this module via
-    # `inputs.korri.nixosModules.korri-server` (or the aggregate `korri`)
-    # get the patched build without composing the overlay themselves.
+    # runtime-settings protocol, live FPS, proof-gated resolution, and seamless
+    # h264_vaapi bitrate patches) whenever streaming is on. Priority 900 sits
+    # between `mkDefault` (1000, used by nixpkgs' sunshine module to set
+    # `pkgs.sunshine`) and any explicit host assignment, so callers that really
+    # want stock nixpkgs Sunshine can override with a normal assignment.
+    # Downstream flakes that import this module via
+    # `inputs.korri.nixosModules.korri-server` (or the aggregate `korri`) get
+    # the patched build without composing the overlay themselves.
     services.sunshine.package = mkIf cfg.streaming.enable (
       lib.mkOverride 900 packagesForSystem.sunshine-korri
     );
@@ -821,6 +822,12 @@ in
           compositorEnv
           // {
             WAYLAND_DISPLAY = "wayland-1";
+            # Enable Sunshine's Korri runtime-settings protocol surface for
+            # managed stream hosts. Capability acks still gate the actual
+            # operations per active encoder/session, but without this process
+            # env the patched Sunshine build intentionally advertises nothing
+            # after a clean rebuild.
+            SUNSHINE_LIVE_SETTINGS_MVP = "1";
           }
           // optionalAttrs (cfg.streaming.audio.enable && cfg.streaming.audio.pulseServer != null) {
             PULSE_SERVER = cfg.streaming.audio.pulseServer;
