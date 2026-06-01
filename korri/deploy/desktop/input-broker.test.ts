@@ -150,7 +150,7 @@ describe("createDesktopInputBroker", () => {
     })
   })
 
-  it("uses the sole window when Electrobun has not reported initial focus", async () => {
+  it("drops input when no Korri window is active, even with one window", async () => {
     const server = createInputServer()
     const window = createWindowDouble()
     await runBrokerUntil(server, {
@@ -168,20 +168,15 @@ describe("createDesktopInputBroker", () => {
       timestamp: Date.now(),
     })
 
-    await waitFor(() => actionPayloads(window).length === 1, "input action")
-    expect(
-      decodeDesktopInputBridgePayload(actionPayloads(window)[0]),
-    ).toMatchObject({
-      kind: "korri.input.action",
-      action: { type: "direction", direction: "right", source: "native" },
-    })
+    await Bun.sleep(30)
+    expect(actionPayloads(window)).toEqual([])
     expect(statusPayloads(window).at(-1)).toMatchObject({
       status: {
         inputd: "connected",
-        active: true,
+        active: false,
         decodedFrames: 1,
-        emittedActions: 1,
-        droppedActions: 0,
+        emittedActions: 0,
+        droppedActions: 1,
       },
     })
   })
