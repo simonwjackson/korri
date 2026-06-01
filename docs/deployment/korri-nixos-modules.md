@@ -19,7 +19,7 @@ Lower-level modules remain available for advanced composition:
 
 ## Ownership boundary
 
-Korri product modules own generic product behavior: server lifecycle, client package selection, kiosk session ownership, client autostart, normalized input ordering, and the requirement that appliance gamepad input comes through a normalized provider. Platform adapters own hardware facts: display transforms, touchscreen calibration, InputPlumber maps, event names, audio UCM, container/uinput quirks, boot media, secrets, and builder topology.
+Korri product modules own generic product behavior: server lifecycle, client package selection, kiosk session ownership, client autostart, normalized input ordering, the InputPlumber runtime package selected by official Korri builds, and the requirement that appliance gamepad input comes through a normalized provider. Platform adapters own hardware facts: display transforms, touchscreen calibration, physical controller maps, event names, audio UCM, container/uinput quirks, boot media, secrets, and builder topology.
 
 For controller-bearing kiosk appliances, `inputplumber` is the normalized provider. `seatd` may still be required for compositor seat access, but it is not a controller-normalization provider. When a kiosk declares `services.korri.kiosk.input.required = true` with provider name `inputplumber`, Korri configures inputd and Moonlight launch preflight to require an InputPlumber virtual gamepad and fail closed instead of falling back to raw physical devices.
 
@@ -75,4 +75,4 @@ For constrained guests that must run as root, platform modules may set `services
 }
 ```
 
-Generic Korri modules do not encode device-specific hardware strings. The RockNix SM8550 appliance targets keep those facts in `nix/images/platforms/rocknix-sm8550.nix`, which consumes nix-on-rocks substrate modules and device profiles while Korri owns product service composition. Static evaluation proves provider wiring and service environment; physical device smoke still must prove InputPlumber loaded its maps and created the expected virtual target.
+Generic Korri modules do not encode device-specific hardware strings. The RockNix SM8550 appliance targets keep those facts in `nix/images/platforms/rocknix-sm8550.nix`, which consumes nix-on-rocks substrate modules, device profiles, and the substrate-owned `inputplumber-sm8550-maps` data output while Korri owns product service composition and the `inputplumber-korri` runtime package. Static evaluation proves provider wiring and service environment; physical device smoke still must prove InputPlumber loaded its maps and created the expected virtual target.

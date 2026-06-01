@@ -1,7 +1,7 @@
 ---
 id: task-025
 title: Relocate inputplumber's product-specific controller maps out of the substrate
-status: To Do
+status: In Progress
 priority: low
 labels:
   - follow-up
@@ -86,3 +86,5 @@ If the decision is "split", this task ships a smaller change than 022-024 (some 
 4. **This is the lowest-priority Swing-2 item.** It can be deferred past Swings 1-4 without blocking anything else. If the design question is too slow to resolve, peel this off Swing 2 and ship the other three.
 
 Captured from `/se-work` deep migration audit on 2026-05-30.
+
+2026-06-01 challenge-plan update: the design decision changed from both original options. Do **not** move AYN/AYANEO physical controller maps into Korri. Revised ownership is: Korri owns the InputPlumber runtime package and normalized-input product contract; nix-on-rocks owns SM8550/handheld controller maps as hardware data and exposes them through the named data-only `inputplumber-sm8550-maps` output with `$out/share/inputplumber/...`. Korri composes `inputplumber-korri` with that maps output in `nix/images/platforms/rocknix-sm8550.nix`, prefers `XDG_DATA_DIRS` multi-root loading, fails SM8550 eval when the maps output is missing, and closes this task only after Sobo/Odin smoke validates the split.

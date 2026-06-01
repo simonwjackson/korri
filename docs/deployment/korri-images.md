@@ -118,11 +118,11 @@ The manual `RockNix Product Payload` workflow evaluates the candidate package/ch
 
 ### Normalized controller validation
 
-All kiosk appliance targets use InputPlumber as the controller-normalization boundary. Physical controller quirks belong in the platform/InputPlumber package layer; Korri shell input and Moonlight launch code consume the resulting virtual Xbox-class event device.
+All kiosk appliance targets use InputPlumber as the controller-normalization boundary. Korri owns the InputPlumber runtime package (`inputplumber-korri`) and the fail-closed product contract around inputd and Moonlight. Physical controller quirks belong in the substrate/platform map-data layer; on RockNix SM8550 targets Korri composes nix-on-rocks' `inputplumber-sm8550-maps` data output into `inputplumber.service` through `XDG_DATA_DIRS`. Korri shell input and Moonlight launch code consume the resulting virtual Xbox-class event device.
 
 A target is go only when device-side evidence shows:
 
-- `inputplumber.service` is active and loaded the data root containing `share/inputplumber`;
+- `inputplumber.service` is active and loaded both the Korri runtime data root and the platform/substrate map data root containing `share/inputplumber`;
 - exactly one expected InputPlumber virtual Xbox-class gamepad exists for single-controller validation;
 - raw physical gamepads may be visible for diagnostics but are ignored by inputd and are not passed to Moonlight;
 - Moonlight launches with one explicit virtual input device and the generic mapping DB;
@@ -163,7 +163,7 @@ Korri imports nix-on-rocks for the product-blind substrate contract:
 - `nixosModules.rocknix-guest-base`
 - explicit Thor and Odin 2 Portal device profiles
 - by-compatible device-profile selection for on-device promotion
-- substrate package outputs such as Cemu, Steam, moonlight-embedded, InputPlumber, and UCM
+- substrate package/data outputs such as Cemu, Steam, SM8550 InputPlumber maps, and UCM
 - the rootfs packaging helper used by `korri-rocknix-rootfs-*`
 
 The RockNix appliance composition keeps the server as a non-root system service (`korri-server`) while the constrained guest kiosk session runs as root with the existing `/run/user/0/bus` session bus supplied by nix-on-rocks. Korri selects user-launchable app packages from the substrate; nix-on-rocks keeps SM8550 launchers and OS-coupled runtime plumbing.
@@ -182,6 +182,7 @@ Current neutral capabilities consumed by the Korri SM8550 platform adapter:
 | `rocknix.sm8550.video.decodeBackend` | Mapped to Moonlight Embedded's `-platform` flag via `KORRI_MOONLIGHT_PLATFORM`. Default is `v4l2m2m` (hardware-accelerated Iris V4L2 mem2mem). Mapping is identity today because Moonlight Embedded shares the substrate's name. |
 | `rocknix.sm8550.audio.api` | Mapped to `SDL_AUDIODRIVER` on the compositor and sessiond units. Default is `pulseaudio`; PipeWire-pulse's compatibility socket is the substrate's promised entry point. |
 | `rocknix.sm8550.audio.defaultSink.*` | Per-device speaker-route bootstrap owned by nix-on-rocks (UCM verb + ALSA sink). Thor declares the live-validated speaker PCM (`hw:0,0`); Odin 2 Portal leaves it null until physically validated, so its substrate creates no `main-space-audio-sink-bootstrap` unit. |
+| `packages.${system}.inputplumber-sm8550-maps` | Data-only InputPlumber physical controller maps owned by nix-on-rocks. Korri composes this map root with `inputplumber-korri` through `XDG_DATA_DIRS`; Korri does not patch or own AYN/AYANEO map YAML. |
 
 Guidance for adding a new SM8550 chipset fact, a per-device quirk, or a Korri policy:
 

@@ -197,3 +197,5 @@ Unblocks:
 This task replaces the smaller-grained task-027 + task-028 + task-030 captured earlier; those three are retired in the same commit that lands this. The merge is purely backlog hygiene — the work is identical.
 
 Captured from `/se-work` deep migration audit on 2026-05-30; consolidated 2026-05-30 after recognizing the three sub-items shipped as one PR by necessity.
+
+2026-06-01 InputPlumber ownership note: the Korri runtime/maps split leaves `rocknix-guest-hide-raw-gamepad` in nix-on-rocks as a substrate primitive, but it still must not keep hardcoded Korri service-name ordering forever. Keep this cleanup tied to the product-blind unit contract here; task 025 should not be considered fully closed while that hider is an untracked Korri-shaped exception.
