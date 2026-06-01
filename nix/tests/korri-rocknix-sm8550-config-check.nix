@@ -141,11 +141,13 @@ let
         (check "${name}: InputPlumber provider service must be ordered before compositor" (
           builtins.elem "inputplumber.service" input.provider.services
         ))
-        (check "${name}: InputPlumber package override must be active" (
-          lib.hasInfix "inputplumber" (toString cfg.services.inputplumber.package)
+        (check "${name}: InputPlumber package override must be Korri-owned" (
+          lib.hasInfix "inputplumber-korri" (toString cfg.services.inputplumber.package)
         ))
-        (check "${name}: inputplumber service must see package data dirs" (
+        (check "${name}: inputplumber service must see runtime and SM8550 maps data dirs" (
           lib.hasInfix "/share" (inputplumberService.environment.XDG_DATA_DIRS or "")
+          && lib.hasInfix "inputplumber-korri" (inputplumberService.environment.XDG_DATA_DIRS or "")
+          && lib.hasInfix "inputplumber-sm8550-maps" (inputplumberService.environment.XDG_DATA_DIRS or "")
           && lib.hasInfix "/run/current-system/sw/share" (inputplumberService.environment.XDG_DATA_DIRS or "")
         ))
         (check "${name}: guest udevd must run under nspawn read-only sysfs" (
@@ -401,6 +403,14 @@ let
     ))
     (check "SM8550 platform adapter must not hard-code v4l2m2m or pulseaudio as quoted assignment values" (
       sm8550PlatformAdapterFreeOfHardwareLiterals
+    ))
+    (check "SM8550 platform adapter must consume the named maps output instead of substrate InputPlumber" (
+      let
+        source = builtins.readFile sm8550PlatformAdapterSourceFile;
+      in
+      lib.hasInfix "inputplumber-sm8550-maps" source
+      && !(lib.hasInfix "substratePackages.inputplumber}" source)
+      && !(lib.hasInfix "korri-rocknix-inputplumber-xb360" source)
     ))
   ]
   ++ (checkSystem "Thor" thorSystem)

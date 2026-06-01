@@ -47,16 +47,13 @@ let
   # without forcing a Korri edit.
   substrateVideoDecodeBackend = sm8550.video.decodeBackend;
   substrateAudioApi = sm8550.audio.api;
-  inputplumberPackage =
-    pkgs.runCommand "korri-rocknix-inputplumber-xb360"
-      {
-        meta.mainProgram = "inputplumber";
-      }
-      ''
-        cp -a ${substratePackages.inputplumber} $out
-        chmod -R u+w $out
-        substituteInPlace $out/share/inputplumber/devices/02-ayn-controller.yaml \
-          --replace-fail "  - xbox-series" "  - xb360"
+  substrateHasInputplumberSm8550Maps = builtins.hasAttr "inputplumber-sm8550-maps" substratePackages;
+  inputplumberSm8550Maps =
+    if substrateHasInputplumberSm8550Maps then
+      substratePackages.inputplumber-sm8550-maps
+    else
+      pkgs.runCommand "missing-inputplumber-sm8550-maps" { } ''
+        mkdir -p "$out/share"
       '';
   # KORRI_MOONLIGHT_PLATFORM is the Korri product policy that maps the
   # substrate-declared video decode backend onto Moonlight Embedded's
@@ -99,6 +96,10 @@ in
       message = "RockNix SM8550 compositors must use the SM8550-validated Gamescope package.";
     }
     {
+      assertion = substrateHasInputplumberSm8550Maps;
+      message = "RockNix SM8550 Korri images require nix-on-rocks packages.${targetSystem}.inputplumber-sm8550-maps.";
+    }
+    {
       # Gamescope's pipewire-loop-lock fix is required whenever the
       # substrate-declared video decode backend exercises the v4l2m2m
       # zero-copy import path. Tying the assertion to the substrate
@@ -111,7 +112,7 @@ in
     }
   ];
 
-  services.inputplumber.package = lib.mkForce inputplumberPackage;
+  services.inputplumber.package = lib.mkForce pkgs.inputplumber;
 
   services.korri.client.package = korri.packages.${targetSystem}.korri-desktop-device;
 
@@ -244,6 +245,7 @@ in
   systemd.services.inputplumber.environment.XDG_DATA_DIRS = lib.mkForce (
     lib.concatStringsSep ":" [
       "${config.services.inputplumber.package}/share"
+      "${inputplumberSm8550Maps}/share"
       "/run/current-system/sw/share"
     ]
   );
