@@ -28,6 +28,15 @@ let
     (check "korri-portal package exposes index.html" (
       builtins.pathExists "${packagePath "korri-portal"}/index.html"
     ))
+    (check "inputplumber-korri package exposes inputplumber executable" (
+      builtins.pathExists "${packagePath "inputplumber-korri"}/bin/inputplumber"
+    ))
+    (check "inputplumber-korri store path is Korri-owned" (
+      lib.hasInfix "inputplumber-korri" "${packagePath "inputplumber-korri"}"
+    ))
+    (check "inputplumber-korri package excludes SM8550 AYN maps" (
+      !(builtins.pathExists "${packagePath "inputplumber-korri"}/share/inputplumber/devices/02-ayn-controller.yaml")
+    ))
   ];
 
   failures = builtins.filter (candidate: !candidate.assertion) checks;

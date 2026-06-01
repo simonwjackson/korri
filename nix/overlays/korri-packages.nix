@@ -1,8 +1,8 @@
 # Korri-downstream substitutions into nixpkgs.
 #
-# Points `pkgs.moonlight-embedded` and `pkgs.sunshine` at the Korri-downstream
-# packages defined under `packages/`, and adds the additive
-# `pkgs.libretro-fake-08` attribute used by the kiosk RetroArch closure.
+# Points `pkgs.inputplumber`, `pkgs.moonlight-embedded`, and `pkgs.sunshine`
+# at the Korri-downstream packages defined under `packages/`, and adds the
+# additive `pkgs.libretro-fake-08` attribute used by the kiosk RetroArch closure.
 # Applied to every nixpkgs import that backs a Korri build:
 #   - the per-system `pkgs` in flake.nix (used by korri-desktop wrap variants
 #     and the desktop build-graph check)
@@ -21,6 +21,7 @@
 { nix-on-rocks, fake-08-src }:
 
 final: prev: {
+  inputplumber = final.callPackage ../../packages/inputplumber-korri/package.nix { };
   moonlight-embedded = final.callPackage ../../packages/moonlight-embedded-korri/package.nix {
     inherit nix-on-rocks;
   };

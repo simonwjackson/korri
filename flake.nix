@@ -519,9 +519,9 @@
 
         libretroFake08 = pkgs.libretro-fake-08;
 
-        # The named outputs match the overlay-substituted `pkgs.sunshine` and
-        # `pkgs.moonlight-embedded` so downstream consumers can ask for either
-        # name and get the same derivation.
+        # The named outputs match the overlay-substituted packages so downstream
+        # consumers can ask for either name and get the same derivation.
+        inputplumberKorri = pkgs.inputplumber;
         sunshineKorri = pkgs.sunshine;
         moonlightEmbeddedKorri = pkgs.moonlight-embedded;
 
@@ -569,6 +569,7 @@
           korri-cli = korriCli;
           korri-server = korriServer;
           korri-headless-source = korriHeadlessSource;
+          inputplumber-korri = inputplumberKorri;
           sunshine-korri = sunshineKorri;
           moonlight-embedded-korri = moonlightEmbeddedKorri;
           libretro-fake-08 = libretroFake08;
@@ -671,6 +672,10 @@
             korri-package-outputs = import ./nix/tests/korri-package-outputs-check.nix {
               inherit pkgs;
               packages = self.packages.${system};
+            };
+            inputplumber-korri-check = import ./packages/inputplumber-korri/check.nix {
+              inherit pkgs;
+              inputplumberKorri = self.packages.${system}.inputplumber-korri;
             };
             korri-image-outputs = import ./nix/tests/korri-image-outputs-check.nix {
               inherit pkgs;
