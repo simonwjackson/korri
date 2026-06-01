@@ -55,6 +55,21 @@ let
       pkgs.runCommand "sm8550-maps-unavailable-sentinel" { } ''
         mkdir -p "$out/share"
       '';
+  # InputPlumber v0.75.2 discovers device configs from a single resolved data
+  # root in practice. Keep Korri's runtime and the substrate's SM8550 maps as
+  # separate source packages, but present them to the service through one
+  # composed root so profiles/capability maps/device maps are discovered
+  # together on hardware.
+  inputplumberSm8550Package = pkgs.symlinkJoin {
+    name = "inputplumber-korri-with-inputplumber-sm8550-maps-${lib.getVersion pkgs.inputplumber}";
+    paths = [
+      pkgs.inputplumber
+      inputplumberSm8550Maps
+    ];
+    meta = pkgs.inputplumber.meta // {
+      mainProgram = "inputplumber";
+    };
+  };
   # KORRI_MOONLIGHT_PLATFORM is the Korri product policy that maps the
   # substrate-declared video decode backend onto Moonlight Embedded's
   # -platform CLI shape. The mapping is intentionally identity today
@@ -112,7 +127,7 @@ in
     }
   ];
 
-  services.inputplumber.package = lib.mkForce pkgs.inputplumber;
+  services.inputplumber.package = lib.mkForce inputplumberSm8550Package;
 
   services.korri.client.package = korri.packages.${targetSystem}.korri-desktop-device;
 
@@ -245,7 +260,6 @@ in
   systemd.services.inputplumber.environment.XDG_DATA_DIRS = lib.mkForce (
     lib.concatStringsSep ":" [
       "${config.services.inputplumber.package}/share"
-      "${inputplumberSm8550Maps}/share"
       "/run/current-system/sw/share"
     ]
   );
