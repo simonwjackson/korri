@@ -52,7 +52,7 @@ let
     if substrateHasInputplumberSm8550Maps then
       substratePackages.inputplumber-sm8550-maps
     else
-      pkgs.runCommand "missing-inputplumber-sm8550-maps" { } ''
+      pkgs.runCommand "sm8550-maps-unavailable-sentinel" { } ''
         mkdir -p "$out/share"
       '';
   # KORRI_MOONLIGHT_PLATFORM is the Korri product policy that maps the

@@ -34,6 +34,18 @@ rustPlatform.buildRustPackage (finalAttrs: {
 
   postInstall = ''
     cp -r rootfs/usr/* "$out/"
+
+    # SM8550 physical controller maps are substrate-owned hardware data,
+    # composed from nix-on-rocks' inputplumber-sm8550-maps output. Keep this
+    # runtime package product-map-free even if a future upstream release grows
+    # files with the same names.
+    rm -f \
+      "$out/share/inputplumber/capability_maps/ayaneo_mcu_japanese.yaml" \
+      "$out/share/inputplumber/capability_maps/ayaneo_mcu_xbox.yaml" \
+      "$out/share/inputplumber/capability_maps/ayn_mcu.yaml" \
+      "$out/share/inputplumber/devices/01-ayaneo-controller-japanese.yaml" \
+      "$out/share/inputplumber/devices/01-ayaneo-controller.yaml" \
+      "$out/share/inputplumber/devices/02-ayn-controller.yaml"
   '';
 
   meta = {

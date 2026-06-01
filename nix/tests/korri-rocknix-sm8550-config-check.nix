@@ -407,10 +407,12 @@ let
     (check "SM8550 platform adapter must consume the named maps output instead of substrate InputPlumber" (
       let
         source = builtins.readFile sm8550PlatformAdapterSourceFile;
+        activeLines = map stripComment (lib.splitString "\n" source);
+        hasActiveLineMatching = pattern: builtins.any (line: builtins.match pattern line != null) activeLines;
       in
       lib.hasInfix "inputplumber-sm8550-maps" source
-      && !(lib.hasInfix "substratePackages.inputplumber}" source)
-      && !(lib.hasInfix "korri-rocknix-inputplumber-xb360" source)
+      && !(hasActiveLineMatching ".*substratePackages[[:space:]]*\\.[[:space:]]*inputplumber[[:space:];)}].*")
+      && !(hasActiveLineMatching ".*korri-rocknix-inputplumber-xb360.*")
     ))
   ]
   ++ (checkSystem "Thor" thorSystem)
