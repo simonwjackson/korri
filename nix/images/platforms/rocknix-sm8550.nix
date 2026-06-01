@@ -172,6 +172,21 @@ in
     services = lib.mkDefault [ "inputplumber.service" ];
   };
 
+  # The nix-on-rocks SM8550 substrate's main-space-hardware-button-handler is
+  # the single owner of bare hardware button semantics that must survive product
+  # runtime failures: power/lid fake-suspend and volume/audio policy. Korri
+  # inputd still watches the same evdev devices for product shortcuts (for
+  # example Home+Volume -> brightness), but must not also translate bare
+  # KEY_POWER/SW_LID into the generic `systemctl suspend` fallback or bare
+  # volume buttons into a second audio change.
+  services.korri.input.inputd.environment = {
+    KORRI_INPUTD_POWER_SUSPEND = "true";
+    KORRI_INPUTD_LID_CLOSED = "true";
+    KORRI_INPUTD_LID_OPENED = "true";
+    KORRI_INPUTD_VOLUME_UP = "true";
+    KORRI_INPUTD_VOLUME_DOWN = "true";
+  };
+
   # Sessiond now owns foreground launches directly, and korri-server composes
   # remote-source Moonlight argv before delegating to sessiond. Keep the
   # SM8550 Moonlight adapter on both units; compositor-only env was enough

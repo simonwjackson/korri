@@ -73,6 +73,8 @@ let
       input = cfg.services.korri.input;
       compositorService = cfg.systemd.services."korri-compositor";
       inputplumberService = cfg.systemd.services.inputplumber;
+      inputdService = cfg.systemd.services."korri-inputd" or { };
+      inputdEnv = inputdService.environment or { };
       rawGamepadHideService = cfg.systemd.services."rocknix-guest-hide-raw-gamepad" or { };
       udevdService = cfg.systemd.services.systemd-udevd or { };
       compositorEnv = compositorService.environment or { };
@@ -96,6 +98,25 @@ let
         (check "${name}: client role must be enabled" (cfg.services.korri.client.enable or false))
         (check "${name}: kiosk surface must be enabled" compositor.kiosk.enable)
         (check "${name}: inputd must be enabled" input.inputd.enable)
+        (check "${name}: inputd must not own SM8550 power suspend" (
+          inputdEnv.KORRI_INPUTD_POWER_SUSPEND or null == "true"
+        ))
+        (check "${name}: inputd must not own SM8550 lid close suspend" (
+          inputdEnv.KORRI_INPUTD_LID_CLOSED or null == "true"
+        ))
+        (check "${name}: inputd must keep SM8550 lid open as no-op" (
+          inputdEnv.KORRI_INPUTD_LID_OPENED or null == "true"
+        ))
+        (check "${name}: inputd must not own bare SM8550 volume up" (
+          inputdEnv.KORRI_INPUTD_VOLUME_UP or null == "true"
+        ))
+        (check "${name}: inputd must not own bare SM8550 volume down" (
+          inputdEnv.KORRI_INPUTD_VOLUME_DOWN or null == "true"
+        ))
+        (check "${name}: inputd must keep SM8550 brightness shortcuts enabled" (
+          !(inputdEnv ? KORRI_INPUTD_BRIGHTNESS_UP)
+          && !(inputdEnv ? KORRI_INPUTD_BRIGHTNESS_DOWN)
+        ))
         (check "${name}: kiosk compositor must run as root" (compositor.user == "root"))
         (check "${name}: kiosk compositor must not create root user" (compositor.createUser == false))
         (check "${name}: kiosk compositor must use /storage home" (compositor.home == "/storage"))
