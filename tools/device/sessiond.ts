@@ -1,4 +1,5 @@
 import { readdirSync } from "node:fs"
+import { mkdir } from "node:fs/promises"
 import { join } from "node:path"
 import {
   type LaunchResult,
@@ -81,6 +82,26 @@ export interface KorriSessiondLauncher {
   spawn?: (spec: LaunchSpec) => Promise<ManagedLaunchResult>
 }
 
+export interface KorriSessiondGamescopeControlBridgeStartRequest {
+  readonly launchId: string
+  readonly runtimeDir: string
+  readonly socketPath: string
+  readonly display?: string
+  readonly xpropPath?: string
+  readonly xrandrPath?: string
+}
+
+export interface KorriSessiondGamescopeControlBridgeHandle {
+  readonly socketPath: string
+  readonly stop: () => Promise<void>
+}
+
+export interface KorriSessiondGamescopeControlBridge {
+  readonly start: (
+    request: KorriSessiondGamescopeControlBridgeStartRequest,
+  ) => Promise<KorriSessiondGamescopeControlBridgeHandle>
+}
+
 export interface KorriSessiondOptions {
   readonly port?: number
   readonly hostname?: string
@@ -102,6 +123,13 @@ export interface KorriSessiondOptions {
    * an explicit reap pass.
    */
   readonly reaper?: GamescopeReaper
+  /**
+   * Optional packaged Gamescope runtime-control bridge manager. When enabled,
+   * sessiond starts the bridge after the primary managed child is spawned and
+   * stops it during restore before Gamescope reaping. Passing `false` disables
+   * the env-driven default.
+   */
+  readonly gamescopeControlBridge?: KorriSessiondGamescopeControlBridge | false
   /**
    * Back-compat `status.json` sidecar (source-machine role only). When
    * configured, sessiond writes a runner-shaped JSON snapshot on every
@@ -153,6 +181,9 @@ export function createKorriSessiondCore(
   const role: SessionRole =
     options.role ?? createKioskSessionRole({ renderer, sway, serviceManager })
   const reaper = options.reaper
+  const gamescopeControlBridge = resolveGamescopeControlBridge(
+    options.gamescopeControlBridge,
+  )
   const statusSidecar = options.statusSidecar
   let state: KorriSessionState = initialKorriSessionState
   let eventSequence = 0
@@ -176,6 +207,7 @@ export function createKorriSessiondCore(
         // terminate). terminateManagedLaunchById calls this to wake
         // the dispatcher; resetting falls back to terminate/terminateNow.
         cancelAnchor?: () => void
+        gamescopeControlBridge?: KorriSessiondGamescopeControlBridgeHandle
       }
     | undefined
   // Phase 4D / Track A finishing follow-up. Tracks the current
@@ -235,6 +267,23 @@ export function createKorriSessiondCore(
         // field still negotiate to foreground correctly.
         sessionLifecycle: true,
       },
+    })
+  }
+
+  async function startGamescopeControlBridgeForLaunch(
+    launchId: string,
+  ): Promise<KorriSessiondGamescopeControlBridgeHandle | undefined> {
+    if (!gamescopeControlBridge) return undefined
+    const runtimeDir = join(gamescopeControlRuntimeRootFromEnv(), launchId)
+    const socketPath = join(runtimeDir, "control.sock")
+    await mkdir(runtimeDir, { recursive: true, mode: 0o700 })
+    return await gamescopeControlBridge.start({
+      launchId,
+      runtimeDir,
+      socketPath,
+      display: gamescopeControlDisplayFromEnv(),
+      xpropPath: gamescopeControlXpropPathFromEnv(),
+      xrandrPath: gamescopeControlXrandrPathFromEnv(),
     })
   }
 
@@ -372,28 +421,57 @@ export function createKorriSessiondCore(
               spawned.session.terminate()
             }
           }
-          pushLifecycleEvent(launchId, { type: "child-running" })
-          // Phase 4D / Track A. Role-specific foreground promotion
-          // runs after the primary child is observed running. Throwing
-          // here turns into a launch failure (host-unavailable).
-          try {
-            await role.afterChildRunning(spec)
-          } catch (error) {
-            const message =
-              error instanceof Error ? error.message : String(error)
-            logger.warn({ err: error }, "sessiond: afterChildRunning failed")
-            // Attempt to terminate the still-running child so we do not
-            // leave it dangling while restoring.
+          if (!result) {
             try {
-              spawned.session.terminate()
-            } catch {
-              // Best-effort; ignore.
+              const bridge =
+                await startGamescopeControlBridgeForLaunch(launchId)
+              if (bridge && active?.launchId === launchId) {
+                active.gamescopeControlBridge = bridge
+              }
+            } catch (error) {
+              const message =
+                error instanceof Error ? error.message : String(error)
+              logger.warn(
+                { err: error },
+                "sessiond: Gamescope control bridge failed to start",
+              )
+              try {
+                spawned.session.terminate()
+              } catch {
+                // Best-effort; ignore.
+              }
+              result = {
+                status: "failed",
+                exitCode: launchFailureExitCode("host-unavailable"),
+                failureKind: "host-unavailable",
+                stderrTail: `Gamescope control bridge failed: ${message}`,
+              }
             }
-            result = {
-              status: "failed",
-              exitCode: launchFailureExitCode("host-unavailable"),
-              failureKind: "host-unavailable",
-              stderrTail: message,
+          }
+          if (!result) {
+            pushLifecycleEvent(launchId, { type: "child-running" })
+            // Phase 4D / Track A. Role-specific foreground promotion
+            // runs after the primary child is observed running. Throwing
+            // here turns into a launch failure (host-unavailable).
+            try {
+              await role.afterChildRunning(spec)
+            } catch (error) {
+              const message =
+                error instanceof Error ? error.message : String(error)
+              logger.warn({ err: error }, "sessiond: afterChildRunning failed")
+              // Attempt to terminate the still-running child so we do not
+              // leave it dangling while restoring.
+              try {
+                spawned.session.terminate()
+              } catch {
+                // Best-effort; ignore.
+              }
+              result = {
+                status: "failed",
+                exitCode: launchFailureExitCode("host-unavailable"),
+                failureKind: "host-unavailable",
+                stderrTail: message,
+              }
             }
           }
           if (!result) {
@@ -465,11 +543,23 @@ export function createKorriSessiondCore(
     state = beginKorriRestore(state)
     emitStatusSidecar("restoring")
     pushLifecycleEvent(launchId, { type: "restoring" })
-    const pgid =
+    const activeForRestore =
       activeManagedLaunch?.launchId === launchId
-        ? activeManagedLaunch.processGroupId
+        ? activeManagedLaunch
         : undefined
+    const pgid = activeForRestore?.processGroupId
+    const controlBridge = activeForRestore?.gamescopeControlBridge
     try {
+      if (controlBridge) {
+        try {
+          await controlBridge.stop()
+        } catch (error) {
+          logger.warn(
+            { err: error, socketPath: controlBridge.socketPath },
+            "sessiond: Gamescope control bridge threw during restore",
+          )
+        }
+      }
       if (reaper && pgid !== undefined) {
         try {
           const outcome = await reaper({ pgid })
@@ -937,6 +1027,81 @@ function isTerminalLifecycleEvent(event: SessiondManagedLaunchEvent): boolean {
   )
 }
 
+function resolveGamescopeControlBridge(
+  configured: KorriSessiondOptions["gamescopeControlBridge"],
+): KorriSessiondGamescopeControlBridge | undefined {
+  if (configured === false) return undefined
+  if (configured) return configured
+  if (!gamescopeControlBridgeEnabledFromEnv()) return undefined
+  return createProcessGamescopeControlBridge({
+    command: gamescopeControlBridgeCommandFromEnv(),
+  })
+}
+
+function createProcessGamescopeControlBridge(options: {
+  readonly command: string
+}): KorriSessiondGamescopeControlBridge {
+  return {
+    start: async request => {
+      const args = ["--socket", request.socketPath]
+      if (request.display) args.push("--display", request.display)
+      if (request.xpropPath) args.push("--xprop", request.xpropPath)
+      if (request.xrandrPath) args.push("--xrandr", request.xrandrPath)
+      const proc = Bun.spawn([options.command, ...args], {
+        stdout: "inherit",
+        stderr: "inherit",
+      })
+      return {
+        socketPath: request.socketPath,
+        stop: async () => {
+          proc.kill("SIGTERM")
+          const exited = await Promise.race([
+            proc.exited.then(() => true),
+            delay(1_000).then(() => false),
+          ])
+          if (!exited) {
+            proc.kill("SIGKILL")
+            await proc.exited
+          }
+        },
+      }
+    },
+  }
+}
+
+function gamescopeControlBridgeEnabledFromEnv(): boolean {
+  const raw = process.env.KORRI_GAMESCOPE_CONTROL_BRIDGE?.trim()
+  return raw === "1" || raw === "true" || raw === "enabled"
+}
+
+function gamescopeControlBridgeCommandFromEnv(): string {
+  return (
+    process.env.KORRI_GAMESCOPE_CONTROL_BRIDGE_COMMAND ??
+    "gamescope-control-bridge"
+  )
+}
+
+function gamescopeControlRuntimeRootFromEnv(): string {
+  return join(
+    process.env.KORRI_GAMESCOPE_CONTROL_RUNTIME_ROOT ??
+      process.env.XDG_RUNTIME_DIR ??
+      "/tmp",
+    "korri-gamescope-control",
+  )
+}
+
+function gamescopeControlDisplayFromEnv(): string | undefined {
+  return process.env.KORRI_GAMESCOPE_CONTROL_DISPLAY || process.env.DISPLAY
+}
+
+function gamescopeControlXpropPathFromEnv(): string | undefined {
+  return process.env.KORRI_GAMESCOPE_CONTROL_XPROP || undefined
+}
+
+function gamescopeControlXrandrPathFromEnv(): string | undefined {
+  return process.env.KORRI_GAMESCOPE_CONTROL_XRANDR || undefined
+}
+
 function realRendererController(): KorriRendererController {
   return createElectrobunController({
     config: {
@@ -1058,6 +1223,13 @@ async function runSystemctl(args: readonly string[]) {
   const exitCode = await proc.exited
   if (exitCode !== 0)
     throw new Error(stderr || `systemctl ${args.join(" ")} failed`)
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => {
+    const timer = setTimeout(resolve, ms)
+    if ("unref" in timer && typeof timer.unref === "function") timer.unref()
+  })
 }
 
 function envList(name: string): readonly string[] | undefined {

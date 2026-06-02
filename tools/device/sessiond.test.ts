@@ -4,6 +4,7 @@ import type { SessiondManagedLaunchEvent } from "@shared/library/sessiond-manage
 import {
   createKorriSessiondCore,
   type KorriSessiondCore,
+  type KorriSessiondGamescopeControlBridge,
   startKorriSessiond,
 } from "./sessiond"
 import type {
@@ -35,6 +36,9 @@ function startHarness(
       readonly processGroupId?: number
     }>
     readonly reaper?: GamescopeReaper
+    readonly gamescopeControlBridge?:
+      | KorriSessiondGamescopeControlBridge
+      | false
     readonly heartbeatIntervalMs?: number
   } = {},
 ) {
@@ -113,6 +117,9 @@ function startHarness(
         : undefined,
     },
     reaper: options.reaper,
+    ...(options.gamescopeControlBridge !== undefined
+      ? { gamescopeControlBridge: options.gamescopeControlBridge }
+      : {}),
     ...(options.heartbeatIntervalMs !== undefined
       ? { heartbeatIntervalMs: options.heartbeatIntervalMs }
       : {}),
@@ -1304,6 +1311,69 @@ describe("korri sessiond", () => {
     })
     expect(calls).toContain("beforeChildLaunch")
     expect(calls).toContain("restoreIdleAfterLaunch")
+  })
+
+  it("starts the Gamescope control bridge after child spawn and stops it before reaping", async () => {
+    const child = deferred<LaunchResult>()
+    const order: string[] = []
+    const { core } = startHarness({
+      spawnLaunch: async () => {
+        order.push("child-spawned")
+        return {
+          processGroupId: 42,
+          result: child.promise,
+          terminate: () => undefined,
+          terminateNow: () => undefined,
+        }
+      },
+      gamescopeControlBridge: {
+        start: async request => {
+          order.push(`bridge-start:${request.socketPath}`)
+          return {
+            socketPath: request.socketPath,
+            stop: async () => {
+              order.push("bridge-stop")
+            },
+          }
+        },
+      },
+      reaper: async () => {
+        order.push("reaper")
+        return { reaped: [], residual: [] }
+      },
+    })
+
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-gs", spec }),
+      }),
+    )
+    const streamResponse = await request(
+      core,
+      "/managed-launch/events?launchId=launch-gs",
+      authorized(),
+    )
+    const streamText = streamResponse.text()
+
+    await new Promise(resolve => setTimeout(resolve, 5))
+    expect(order[0]).toBe("child-spawned")
+    expect(order[1]).toContain("bridge-start:")
+    expect(order[1]).toContain("korri-gamescope-control/launch-gs/control.sock")
+
+    child.resolve({ status: "launched" })
+    await streamText
+
+    expect(order).toEqual([
+      "child-spawned",
+      expect.stringContaining("bridge-start:"),
+      "bridge-stop",
+      "reaper",
+    ])
   })
 
   // Phase 4D / Track A U4 -- session-lifecycle dispatch.
