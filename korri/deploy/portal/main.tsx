@@ -17,6 +17,7 @@ import { routeTree } from "./routeTree.gen"
 import { buildSpatialNavigationConfig } from "./spatial-navigation-config"
 import "@shared/primitives/theme/styles.css"
 import "@shared/themes/shift/shift.css"
+import "@shared/themes/evier/evier.css"
 import "@fontsource-variable/geist"
 import "@fontsource-variable/nunito"
 

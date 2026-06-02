@@ -1,0 +1,229 @@
+[data-evier-theme],
+.evier-shell {
+	--evier-bg: #070a0f;
+	--evier-card: #101826;
+	--evier-card-strong: #162235;
+	--evier-line: #27364e;
+	--evier-ink: #f7fbff;
+	--evier-muted: #a9b7c9;
+	--evier-moonlight: #6ea8ff;
+	--evier-gamescope: #5ee2a0;
+}
+
+.evier-shell {
+	min-height: 100vh;
+	padding: clamp(1rem, 2vw, 2rem);
+	background:
+		radial-gradient(
+			circle at top left,
+			rgb(47 129 247 / 24%),
+			transparent 28rem
+		),
+		radial-gradient(
+			circle at bottom right,
+			rgb(94 226 160 / 18%),
+			transparent 24rem
+		), var(--evier-bg);
+	color: var(--evier-ink);
+	font-family: Geist, Nunito, system-ui, sans-serif;
+}
+
+.evier-hero,
+.evier-card {
+	width: min(100%, 72rem);
+	margin-inline: auto;
+}
+
+.evier-hero {
+	margin-bottom: 1rem;
+}
+
+.evier-kicker {
+	margin: 0 0 0.35rem;
+	color: var(--evier-gamescope);
+	font-size: 0.8rem;
+	font-weight: 900;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+}
+
+.evier-hero h1 {
+	margin: 0;
+	font-size: clamp(2.5rem, 7vw, 5rem);
+	font-weight: 1000;
+	letter-spacing: -0.08em;
+}
+
+.evier-hero p:not(.evier-kicker) {
+	max-width: 54rem;
+	margin: 0.35rem 0 0;
+	color: var(--evier-muted);
+	font-size: clamp(1rem, 2vw, 1.25rem);
+}
+
+.evier-card {
+	box-sizing: border-box;
+	margin-top: 1rem;
+	padding: clamp(1rem, 2vw, 1.4rem);
+	border: 1px solid var(--evier-line);
+	border-radius: 1.25rem;
+	background: color-mix(in srgb, var(--evier-card) 92%, transparent);
+	box-shadow: 0 1.25rem 4rem rgb(0 0 0 / 35%);
+}
+
+.evier-card h2 {
+	margin: 0 0 1rem;
+	font-size: clamp(1.35rem, 3vw, 2rem);
+	font-weight: 950;
+}
+
+.evier-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 1rem;
+}
+
+.evier-control,
+.evier-fieldset {
+	min-width: 0;
+	padding: 1rem;
+	border: 1px solid color-mix(in srgb, var(--evier-line) 80%, transparent);
+	border-radius: 1rem;
+	background: var(--evier-card-strong);
+}
+
+.evier-control-wide {
+	grid-column: 1 / -1;
+}
+
+.evier-control-label-row {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 1rem;
+	margin-bottom: 0.75rem;
+}
+
+.evier-control label,
+.evier-fieldset legend {
+	font-size: 1rem;
+	font-weight: 900;
+}
+
+.evier-output {
+	font-size: 1.1rem;
+	font-weight: 1000;
+}
+
+.evier-output-moonlight {
+	color: var(--evier-moonlight);
+}
+
+.evier-output-gamescope {
+	color: var(--evier-gamescope);
+}
+
+.evier-slider-row {
+	display: grid;
+	grid-template-columns: 3.25rem minmax(0, 1fr) 3.25rem;
+	gap: 0.75rem;
+	align-items: center;
+}
+
+.evier-slider-row button,
+.evier-actions button {
+	border: 0;
+	border-radius: 0.9rem;
+	background: #1f6feb;
+	color: white;
+	font: inherit;
+	font-weight: 1000;
+	touch-action: manipulation;
+}
+
+.evier-slider-row button {
+	min-height: 3.25rem;
+	font-size: 1.8rem;
+}
+
+.evier-slider-row input[type="range"] {
+	width: 100%;
+	accent-color: var(--evier-moonlight);
+}
+
+.evier-card:nth-of-type(3) input[type="range"] {
+	accent-color: var(--evier-gamescope);
+}
+
+.evier-hint {
+	margin: 0.65rem 0 0;
+	color: var(--evier-muted);
+	font-size: 0.85rem;
+}
+
+.evier-fieldset {
+	margin: 0;
+}
+
+.evier-radio-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	margin-top: 0.85rem;
+}
+
+.evier-radio-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	min-height: 3rem;
+	padding: 0 1rem;
+	border: 1px solid var(--evier-line);
+	border-radius: 999px;
+	background: #0d1420;
+	font-weight: 900;
+}
+
+.evier-radio-pill input {
+	width: 1.3rem;
+	height: 1.3rem;
+	accent-color: var(--evier-gamescope);
+}
+
+.evier-status-card {
+	display: grid;
+	gap: 1rem;
+}
+
+.evier-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+}
+
+.evier-actions button {
+	min-height: 3.25rem;
+	padding: 0 1rem;
+	font-size: 1rem;
+}
+
+.evier-actions button:last-child {
+	background: #166534;
+}
+
+.evier-status {
+	max-height: 24rem;
+	overflow: auto;
+	margin: 0;
+	padding: 1rem;
+	border-radius: 1rem;
+	background: #020408;
+	color: #d5e7ff;
+	font-size: 0.8rem;
+}
+
+@media (max-width: 720px) {
+	.evier-grid {
+		grid-template-columns: 1fr;
+	}
+}
