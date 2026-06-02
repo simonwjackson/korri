@@ -31,8 +31,14 @@ let
     (check "korri-gamescope-control-bridge package exposes operator CLI wrapper" (
       builtins.pathExists "${packagePath "korri-gamescope-control-bridge"}/bin/gamescope-control"
     ))
+    (check "korri-gamescope-control-bridge package exposes stream control bench wrapper" (
+      builtins.pathExists "${packagePath "korri-gamescope-control-bridge"}/bin/stream-control-bench"
+    ))
     (check "korri-gamescope-control-bridge package exposes bundled bridge JS" (
       builtins.pathExists "${packagePath "korri-gamescope-control-bridge"}/share/korri-gamescope-control-bridge/gamescope-control-bridge.js"
+    ))
+    (check "korri-gamescope-control-bridge package exposes bundled stream control bench JS" (
+      builtins.pathExists "${packagePath "korri-gamescope-control-bridge"}/share/korri-gamescope-control-bridge/stream-control-bench.js"
     ))
     (check "korri-portal package exposes index.html" (
       builtins.pathExists "${packagePath "korri-portal"}/index.html"

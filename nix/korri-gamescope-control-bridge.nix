@@ -45,6 +45,7 @@ pkgs.stdenv.mkDerivation {
 
     bun build tools/cli/gamescope-control.ts --target=bun --outfile=gamescope-control.js
     bun build tools/cli/gamescope-control-bridge.ts --target=bun --outfile=gamescope-control-bridge.js
+    bun build tools/cli/stream-control-bench.ts --target=bun --outfile=stream-control-bench.js
 
     runHook postBuild
   '';
@@ -55,6 +56,7 @@ pkgs.stdenv.mkDerivation {
     mkdir -p "$out/share/korri-gamescope-control-bridge" "$out/bin"
     cp gamescope-control.js "$out/share/korri-gamescope-control-bridge/gamescope-control.js"
     cp gamescope-control-bridge.js "$out/share/korri-gamescope-control-bridge/gamescope-control-bridge.js"
+    cp stream-control-bench.js "$out/share/korri-gamescope-control-bridge/stream-control-bench.js"
 
     makeWrapper ${pkgs.bun}/bin/bun "$out/bin/gamescope-control" \
       --add-flags "$out/share/korri-gamescope-control-bridge/gamescope-control.js"
@@ -68,6 +70,9 @@ pkgs.stdenv.mkDerivation {
       } \
       --add-flags "$out/share/korri-gamescope-control-bridge/gamescope-control-bridge.js"
 
+    makeWrapper ${pkgs.bun}/bin/bun "$out/bin/stream-control-bench" \
+      --add-flags "$out/share/korri-gamescope-control-bridge/stream-control-bench.js"
+
     runHook postInstall
   '';
 
@@ -76,14 +81,14 @@ pkgs.stdenv.mkDerivation {
   installCheckPhase = ''
     runHook preInstallCheck
 
-    for exe in gamescope-control gamescope-control-bridge; do
+    for exe in gamescope-control gamescope-control-bridge stream-control-bench; do
       if [ ! -x "$out/bin/$exe" ]; then
         echo "$exe wrapper is missing or not executable" >&2
         exit 1
       fi
     done
 
-    for bundle in gamescope-control.js gamescope-control-bridge.js; do
+    for bundle in gamescope-control.js gamescope-control-bridge.js stream-control-bench.js; do
       if [ ! -f "$out/share/korri-gamescope-control-bridge/$bundle" ]; then
         echo "$bundle is missing" >&2
         exit 1
@@ -99,7 +104,7 @@ pkgs.stdenv.mkDerivation {
   '';
 
   meta = {
-    description = "Korri Gamescope runtime-control bridge and operator CLI";
+    description = "Korri Gamescope runtime-control bridge, operator CLI, and stream control bench";
     platforms = lib.platforms.linux;
   };
 }

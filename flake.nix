@@ -1075,6 +1075,10 @@
               type = "app";
               program = "${korriGamescopeControlBridge}/bin/gamescope-control-bridge";
             };
+            korri-stream-control-bench = {
+              type = "app";
+              program = "${korriGamescopeControlBridge}/bin/stream-control-bench";
+            };
             korri-server = {
               type = "app";
               program = "${korriServer}/bin/korri-server";
