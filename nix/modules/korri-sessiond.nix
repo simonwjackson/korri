@@ -22,6 +22,7 @@ let
     ;
 
   isAbsolutePath = path: lib.hasPrefix "/" path;
+  launchArtifactsDir = cfg.launchArtifactsDir;
 
   # Directory permissions for the runtime dir holding the capability
   # token. When sharedGroup is set, the directory needs group-traverse
@@ -217,6 +218,16 @@ in
       '';
     };
 
+    launchArtifactsDir = mkOption {
+      type = types.str;
+      default = "/run/korri-launch-artifacts";
+      description = ''
+        Shared launch-artifact directory containing per-launch app config files
+        materialized by korri-server. Sessiond-spawned foreground children must
+        be able to read it despite PrivateTmp.
+      '';
+    };
+
     sunshineRuntimeStatusPath = mkOption {
       type = types.nullOr types.str;
       default = null;
@@ -274,6 +285,10 @@ in
         message = "services.korri.sessiond.runtimeDir must be an absolute path (got \"${cfg.runtimeDir}\").";
       }
       {
+        assertion = isAbsolutePath launchArtifactsDir;
+        message = "services.korri.sessiond.launchArtifactsDir must be an absolute path (got \"${launchArtifactsDir}\").";
+      }
+      {
         assertion = !(kioskEnabled && streamingEnabled);
         message = ''
           services.korri.compositor.kiosk.enable and services.korri.server.streaming.enable
@@ -299,6 +314,7 @@ in
     # let-bindings above for the rationale.
     systemd.tmpfiles.rules = [
       "d ${cfg.runtimeDir} ${runtimeDirMode} root ${runtimeDirGroup} -"
+      "d ${launchArtifactsDir} 0750 root ${runtimeDirGroup} -"
     ];
 
     systemd.services.korri-sessiond = {
@@ -323,6 +339,7 @@ in
         KORRI_SESSIOND_ROLE = cfg.role;
         KORRI_SESSIOND_PORT = toString cfg.port;
         KORRI_SESSIOND_TOKEN_FILE = cfg.tokenFile;
+        KORRI_LAUNCH_ARTIFACTS_DIR = launchArtifactsDir;
       }
       // (lib.optionalAttrs (cfg.sunshineRuntimeStatusPath != null) {
         KORRI_GAME_STREAM_STATUS_PATH = cfg.sunshineRuntimeStatusPath;
@@ -365,6 +382,7 @@ in
         StateDirectory = "korri-sessiond";
         PrivateTmp = true;
         ProtectSystem = "strict";
+        ReadWritePaths = [ launchArtifactsDir ];
         ProtectHome = true;
         NoNewPrivileges = true;
       };

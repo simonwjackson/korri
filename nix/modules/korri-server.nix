@@ -44,6 +44,7 @@ let
   runtimeDir = cfg.streaming.runtimeDir;
   intentPath = cfg.streaming.intentPath;
   statusPath = cfg.streaming.statusPath;
+  launchArtifactsDir = cfg.launchArtifactsDir;
   isDefaultSystemRuntimeDir = isSystemMode && runtimeDir == systemRuntimeDir;
 
   configuredUserHome =
@@ -161,6 +162,7 @@ let
     # KORRI_HEADLESS_SOURCE_ONLY retired in federation v1 (R14).
     KORRI_LIBRARY_SOURCE = cfg.library.source;
     KORRI_LIBRARY_ROOT = cfg.library.root;
+    KORRI_LAUNCH_ARTIFACTS_DIR = launchArtifactsDir;
     KORRI_GAME_STREAM_RUNTIME_DIR = runtimeDir;
   }
   // optionalAttrs (cfg.sessiond.url != null) {
@@ -270,6 +272,16 @@ in
         link-local (`169.254.0.0/16`), and `.local`/`.lan` mDNS hostnames;
         public hosts require https. Must not contain credentials, query, or
         fragment data.
+      '';
+    };
+
+    launchArtifactsDir = mkOption {
+      type = types.str;
+      default = if isSystemMode then "/run/korri-launch-artifacts" else "%t/korri-launch-artifacts";
+      description = ''
+        Shared launch-artifact directory used by Korri's app config materializer.
+        It must be outside /tmp because managed foreground children run through
+        sessiond with PrivateTmp enabled.
       '';
     };
 
@@ -510,6 +522,13 @@ in
           services.korri.server.sessiond.tokenFile must be set together. Set
           both to delegate managed launches to korri-sessiond, or leave both
           null to use the in-process shell launcher.
+        '';
+      }
+      {
+        assertion = isUserSpecifierPath launchArtifactsDir || isAbsolutePath launchArtifactsDir;
+        message = ''
+          services.korri.server.launchArtifactsDir must be an absolute path or a
+          supported user-manager specifier path (got "${launchArtifactsDir}").
         '';
       }
       {
@@ -848,6 +867,10 @@ in
       }
     );
 
+    systemd.tmpfiles.rules = mkIf isSystemMode [
+      "d ${launchArtifactsDir} 0750 ${cfg.user} ${if cfg.group != null then cfg.group else cfg.user} -"
+    ];
+
     systemd.tmpfiles.settings =
       mkIf (isSystemMode && cfg.streaming.enable && isDefaultSystemRuntimeDir)
         {
@@ -865,7 +888,10 @@ in
         wantedBy = [ "default.target" ];
         environment = serverEnv;
         serviceConfig = {
-          ExecStartPre = "${pkgs.coreutils}/bin/install -d -m 700 ${runtimeDir}";
+          ExecStartPre = [
+            "${pkgs.coreutils}/bin/install -d -m 700 ${runtimeDir}"
+            "${pkgs.coreutils}/bin/install -d -m 700 ${launchArtifactsDir}"
+          ];
           ExecStart = "${cfg.package}/bin/korri-server";
           Restart = "on-failure";
           RestartSec = 2;
@@ -882,6 +908,7 @@ in
         ExecStartPre = [
           "${pkgs.coreutils}/bin/install -d -m 700 ${cfg.library.root}"
           "${pkgs.coreutils}/bin/install -d -m 700 ${bunTranspilerCacheDir}"
+          "${pkgs.coreutils}/bin/install -d -m 750 ${launchArtifactsDir}"
         ];
         ExecStart = "${cfg.package}/bin/korri-server";
         Restart = "on-failure";
@@ -896,6 +923,7 @@ in
         PrivateTmp = true;
         ProtectSystem = "strict";
         ProtectHome = "read-only";
+        ReadWritePaths = [ launchArtifactsDir ];
         ProtectKernelTunables = true;
         ProtectKernelModules = true;
         ProtectControlGroups = true;

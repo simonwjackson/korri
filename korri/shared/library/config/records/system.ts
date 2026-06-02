@@ -18,6 +18,7 @@
 import { Schema } from "effect"
 
 import { ByLauncherPayload, InheritableLayer } from "../inheritable-fields"
+import { LaunchBlock } from "../launch-block"
 import { PresetMapPayload } from "./preset"
 
 const STRICT = { onExcessProperty: "error" } as const
@@ -30,7 +31,10 @@ export const SystemPayload = Schema.Struct({
   // Per-launcher core defaults: `cores.<launcherId> = <coreString>`.
   cores: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 
-  // Per-system default launcher.
+  // Public launch block; launch.app/module win over legacy launcher/cores.
+  launch: Schema.optional(LaunchBlock),
+
+  // Per-system default launcher (legacy alias for launch.app).
   launcher: Schema.optional(Schema.String),
 
   // Layer-bearing fields.

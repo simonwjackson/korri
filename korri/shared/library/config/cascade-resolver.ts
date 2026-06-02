@@ -27,8 +27,13 @@
 
 import { Effect } from "effect"
 
+import {
+  getBuiltInAppDescriptor,
+  resolveAppDescriptor,
+} from "./app-integrations"
 import type { EphemeralOverride } from "./ephemeral-override"
 import {
+  AppNotFound,
   CoreNotConfigured,
   GameNotFound,
   LauncherUnresolvable,
@@ -41,10 +46,15 @@ import {
   type GamescopePolicy,
   normalizeGamescopePolicy,
 } from "./inheritable-fields"
+import type { LaunchBlock, LaunchSettings } from "./launch-block"
+import { mergeLaunchSettings } from "./launch-block"
+import { resolveModuleSelection } from "./module-resolution"
+import type { AppRecord } from "./records/app"
 import type { CollectionRecord } from "./records/collection"
 import type { GameRecord } from "./records/game"
 import type { GlobalConfigRecord } from "./records/global"
 import type { LauncherRecord } from "./records/launcher"
+import type { ModuleRecord } from "./records/module"
 import type { PresetPayload } from "./records/preset"
 import type { SystemRecord } from "./records/system"
 import type { UserRecord } from "./records/user"
@@ -59,6 +69,8 @@ export interface ConfigSnapshot {
   readonly users: ReadonlyMap<string, UserRecord>
   readonly systems: ReadonlyMap<string, SystemRecord>
   readonly launchers: ReadonlyMap<string, LauncherRecord>
+  readonly apps: ReadonlyMap<string, AppRecord>
+  readonly modules: ReadonlyMap<string, ModuleRecord>
   readonly games: ReadonlyMap<string, GameRecord>
   readonly collections: ReadonlyMap<string, CollectionRecord>
 }
@@ -68,6 +80,8 @@ export const emptySnapshot = (): ConfigSnapshot => ({
   users: new Map(),
   systems: new Map(),
   launchers: new Map(),
+  apps: new Map(),
+  modules: new Map(),
   games: new Map(),
   collections: new Map(),
 })
@@ -121,13 +135,19 @@ interface InheritableView {
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
   readonly byLauncher?: ByLauncherPayload
+  readonly launch?: LaunchBlock
   readonly launcher?: string
+  readonly module?: string
+  readonly settings?: LaunchSettings
 }
 
 const viewOfGlobal = (g: GlobalConfigRecord | null): InheritableView =>
   g
     ? {
-        launcher: g.launcher,
+        launch: g.launch,
+        launcher: g.launch?.app ?? g.launcher,
+        module: g.launch?.module,
+        settings: g.launch?.settings,
         gamescope: g.gamescope,
         env: g.env,
         cwd: g.cwd,
@@ -139,7 +159,10 @@ const viewOfGlobal = (g: GlobalConfigRecord | null): InheritableView =>
 const viewOfUser = (u: UserRecord | undefined): InheritableView =>
   u
     ? {
-        launcher: u.launcher,
+        launch: u.launch,
+        launcher: u.launch?.app ?? u.launcher,
+        module: u.launch?.module,
+        settings: u.launch?.settings,
         inherit: u.inherit,
         gamescope: u.gamescope,
         env: u.env,
@@ -152,7 +175,10 @@ const viewOfUser = (u: UserRecord | undefined): InheritableView =>
 const viewOfSystem = (s: SystemRecord | undefined): InheritableView =>
   s
     ? {
-        launcher: s.launcher,
+        launch: s.launch,
+        launcher: s.launch?.app ?? s.launcher,
+        module: s.launch?.module,
+        settings: s.launch?.settings,
         inherit: s.inherit,
         gamescope: s.gamescope,
         env: s.env,
@@ -175,7 +201,10 @@ const viewOfLauncher = (l: LauncherRecord | undefined): InheritableView =>
     : {}
 
 const viewOfGame = (g: GameRecord): InheritableView => ({
-  launcher: g.launcher,
+  launch: g.launch,
+  launcher: g.launch?.app ?? g.launcher,
+  module: g.launch?.module ?? g.core,
+  settings: g.launch?.settings,
   inherit: g.inherit,
   gamescope: g.gamescope,
   env: g.env,
@@ -185,7 +214,10 @@ const viewOfGame = (g: GameRecord): InheritableView => ({
 })
 
 const viewOfPreset = (p: PresetPayload): InheritableView => ({
-  launcher: p.launcher,
+  launch: p.launch,
+  launcher: p.launch?.app ?? p.launcher,
+  module: p.launch?.module,
+  settings: p.launch?.settings,
   inherit: p.inherit,
   gamescope: p.gamescope,
   env: p.env,
@@ -195,7 +227,10 @@ const viewOfPreset = (p: PresetPayload): InheritableView => ({
 })
 
 const viewOfOverride = (o: EphemeralOverride): InheritableView => ({
-  launcher: o.launcher,
+  launch: o.launch,
+  launcher: o.launch?.app ?? o.launcher,
+  module: o.launch?.module,
+  settings: o.launch?.settings,
   inherit: o.inherit,
   gamescope: o.gamescope,
   env: o.env,
@@ -241,6 +276,8 @@ const foldLayers = (
   let cwd: string | undefined
   let argsAppend: string[] | undefined
   let launcher: string | undefined
+  let module: string | undefined
+  let settings: LaunchSettings | undefined
 
   const mergeView = (view: InheritableView) => {
     // Merge byLauncher[L] INTO this view first, then fold the result.
@@ -250,7 +287,10 @@ const foldLayers = (
         : view
 
     if (merged.launcher !== undefined) launcher = merged.launcher
-
+    if (merged.module !== undefined) module = merged.module
+    if (merged.settings !== undefined) {
+      settings = mergeLaunchSettings(settings, merged.settings)
+    }
     if (merged.gamescope !== undefined) {
       gamescope = foldGamescope(gamescope, merged.gamescope)
     }
@@ -261,11 +301,19 @@ const foldLayers = (
     if (merged.argsAppend !== undefined) {
       argsAppend = [...(argsAppend ?? []), ...merged.argsAppend]
     }
+
+    if (merged.launch?.env !== undefined) {
+      env = { ...(env ?? {}), ...merged.launch.env }
+    }
+    if (merged.launch?.cwd !== undefined) cwd = merged.launch.cwd
+    if (merged.launch?.args !== undefined) {
+      argsAppend = [...(argsAppend ?? []), ...merged.launch.args]
+    }
   }
 
   for (const view of active) mergeView(view)
 
-  return { gamescope, env, cwd, argsAppend, launcher }
+  return { gamescope, env, cwd, argsAppend, launcher, module, settings }
 }
 
 /** Merge a view with an additional `byLauncher[L]` contribution. */
@@ -288,6 +336,8 @@ const mergeByLauncher = (
       extra.argsAppend !== undefined
         ? [...(base.argsAppend ?? []), ...extra.argsAppend]
         : base.argsAppend,
+    module: extra.module ?? base.module,
+    settings: mergeLaunchSettings(base.settings, extra.settings),
   }
 }
 
@@ -333,14 +383,17 @@ const skeletonLauncherForPresetEnum = (
   inputs: ResolveInputs,
   game: GameRecord,
 ): string | undefined => {
-  if (game.launcher) return game.launcher
+  if (game.launch?.app ?? game.launcher)
+    return game.launch?.app ?? game.launcher
   const sys = snap.systems.get(game.system)
-  if (sys?.launcher) return sys.launcher
+  if (sys?.launch?.app ?? sys?.launcher)
+    return sys?.launch?.app ?? sys?.launcher
   if (inputs.userId) {
     const usr = snap.users.get(inputs.userId)
-    if (usr?.launcher) return usr.launcher
+    if (usr?.launch?.app ?? usr?.launcher)
+      return usr?.launch?.app ?? usr?.launcher
   }
-  return snap.global?.launcher
+  return snap.global?.launch?.app ?? snap.global?.launcher
 }
 
 /**
@@ -353,21 +406,26 @@ const resolveLauncherId = (
   game: GameRecord,
   selectedChain: readonly ResolvedPresetLink[] | undefined,
 ): string | undefined => {
-  if (inputs.override?.launcher) return inputs.override.launcher
+  if (inputs.override?.launch?.app ?? inputs.override?.launcher) {
+    return inputs.override?.launch?.app ?? inputs.override?.launcher
+  }
   if (selectedChain) {
     for (let i = selectedChain.length - 1; i >= 0; i--) {
       const p = selectedChain[i]?.payload
-      if (p?.launcher) return p.launcher
+      if (p?.launch?.app ?? p?.launcher) return p?.launch?.app ?? p?.launcher
     }
   }
-  if (game.launcher) return game.launcher
+  if (game.launch?.app ?? game.launcher)
+    return game.launch?.app ?? game.launcher
   const sys = snap.systems.get(game.system)
-  if (sys?.launcher) return sys.launcher
+  if (sys?.launch?.app ?? sys?.launcher)
+    return sys?.launch?.app ?? sys?.launcher
   if (inputs.userId) {
     const usr = snap.users.get(inputs.userId)
-    if (usr?.launcher) return usr.launcher
+    if (usr?.launch?.app ?? usr?.launcher)
+      return usr?.launch?.app ?? usr?.launcher
   }
-  return snap.global?.launcher
+  return snap.global?.launch?.app ?? snap.global?.launcher
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -465,6 +523,52 @@ const referencesPlaceholder = (
   placeholder: string,
 ): boolean => template.some(s => s.includes(`{${placeholder}}`))
 
+const resolveExplicitLaunchApp = (
+  snap: ConfigSnapshot,
+  inputs: ResolveInputs,
+  game: GameRecord,
+  selectedChain: readonly ResolvedPresetLink[] | undefined,
+): string | undefined => {
+  if (inputs.override?.launch?.app) return inputs.override.launch.app
+  if (selectedChain) {
+    for (let i = selectedChain.length - 1; i >= 0; i--) {
+      const appId = selectedChain[i]?.payload.launch?.app
+      if (appId) return appId
+    }
+  }
+  if (game.launch?.app) return game.launch.app
+  const sys = snap.systems.get(game.system)
+  if (sys?.launch?.app) return sys.launch.app
+  if (inputs.userId) {
+    const usr = snap.users.get(inputs.userId)
+    if (usr?.launch?.app) return usr.launch.app
+  }
+  return snap.global?.launch?.app
+}
+
+const resolveExplicitLaunchModule = (
+  snap: ConfigSnapshot,
+  inputs: ResolveInputs,
+  game: GameRecord,
+  selectedChain: readonly ResolvedPresetLink[] | undefined,
+): string | undefined => {
+  if (inputs.override?.launch?.module) return inputs.override.launch.module
+  if (selectedChain) {
+    for (let i = selectedChain.length - 1; i >= 0; i--) {
+      const moduleId = selectedChain[i]?.payload.launch?.module
+      if (moduleId) return moduleId
+    }
+  }
+  if (game.launch?.module) return game.launch.module
+  const sys = snap.systems.get(game.system)
+  if (sys?.launch?.module) return sys.launch.module
+  if (inputs.userId) {
+    const usr = snap.users.get(inputs.userId)
+    if (usr?.launch?.module) return usr.launch.module
+  }
+  return snap.global?.launch?.module
+}
+
 export const resolveLaunchContext = (
   snap: ConfigSnapshot,
   inputs: ResolveInputs,
@@ -504,12 +608,30 @@ export const resolveLaunchContext = (
         new LauncherUnresolvable({ gameId: inputs.gameId }),
       )
     }
-    const lncher = snap.launchers.get(launcherId)
-    if (!lncher) {
+    const apps = snap.apps ?? new Map()
+    const modules = snap.modules ?? new Map()
+    const hasKnownApp =
+      getBuiltInAppDescriptor(launcherId) !== undefined ||
+      apps.has(launcherId) ||
+      snap.launchers.has(launcherId)
+    if (!hasKnownApp) {
+      const explicitApp = resolveExplicitLaunchApp(
+        snap,
+        inputs,
+        game,
+        selectedChain,
+      )
       return yield* Effect.fail(
-        new LauncherUnresolvable({ gameId: inputs.gameId }),
+        explicitApp !== undefined
+          ? new AppNotFound({ appId: launcherId })
+          : new LauncherUnresolvable({ gameId: inputs.gameId }),
       )
     }
+    const app = yield* resolveAppDescriptor({
+      appId: launcherId,
+      apps,
+      launchers: snap.launchers,
+    })
 
     // Pass 2 — build the layer stack least → most specific.
     const sys = snap.systems.get(game.system)
@@ -522,11 +644,24 @@ export const resolveLaunchContext = (
         )
       : undefined
 
+    const appRecord = apps.get(launcherId)
+    const appView: InheritableView = {
+      settings: mergeLaunchSettings(
+        getBuiltInAppDescriptor(launcherId)?.settings,
+        appRecord?.settings,
+      ),
+      gamescope: appRecord?.gamescope,
+      env: appRecord?.env,
+      cwd: appRecord?.cwd,
+      argsAppend: appRecord?.argsAppend,
+    }
+
     const layers: InheritableView[] = [
       viewOfGlobal(snap.global),
       viewOfUser(user),
       viewOfSystem(sys),
-      viewOfLauncher(lncher),
+      appView,
+      viewOfLauncher(snap.launchers.get(launcherId)),
       viewOfGame(game),
     ]
     if (presetView) layers.push(presetView)
@@ -534,12 +669,24 @@ export const resolveLaunchContext = (
 
     const folded = foldLayers(layers, launcherId)
 
-    // Cross-validation: if the launcher's template references {core}, the
-    // cascade must have produced one (game.core, system.cores[L], or
-    // similar).
-    const core = game.core ?? sys?.cores?.[launcherId] ?? undefined
+    const explicitModule = resolveExplicitLaunchModule(
+      snap,
+      inputs,
+      game,
+      selectedChain,
+    )
+    const legacyCore = game.core ?? sys?.cores?.[launcherId] ?? undefined
+    const selectedModule = yield* resolveModuleSelection({
+      app,
+      modules,
+      moduleId: explicitModule ?? legacyCore,
+      explicitLaunchModule: explicitModule !== undefined,
+    })
+    const core = selectedModule.modulePath ?? selectedModule.legacyCore
+
     if (
-      referencesPlaceholder([lncher.command, ...lncher.args], "core") &&
+      (referencesPlaceholder([app.command, ...app.args], "core") ||
+        referencesPlaceholder([app.command, ...app.args], "modulePath")) &&
       core === undefined
     ) {
       return yield* Effect.fail(
@@ -556,8 +703,16 @@ export const resolveLaunchContext = (
       contentPath: game.contentPath,
       system: game.system,
       launcherId,
+      appId: launcherId,
+      ...(selectedModule.moduleId !== undefined
+        ? { moduleId: selectedModule.moduleId }
+        : {}),
+      ...(selectedModule.modulePath !== undefined
+        ? { modulePath: selectedModule.modulePath }
+        : {}),
       ...(core !== undefined ? { core } : {}),
       gamescope: normalizeGamescopePolicy(folded.gamescope),
+      ...(folded.settings ? { settings: folded.settings } : {}),
       ...(folded.env ? { env: folded.env } : {}),
       ...(folded.cwd !== undefined ? { cwd: folded.cwd } : {}),
       ...(folded.argsAppend ? { argsAppend: folded.argsAppend } : {}),

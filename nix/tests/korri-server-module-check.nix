@@ -501,6 +501,12 @@ let
       in
       env.KORRI_LIBRARY_ROOT or null == "%h/.local/share/korri/library"
     ))
+    (check "default user mode: launch artifacts dir env uses user runtime" (
+      let
+        env = (serverUserUnit defaultUserMode).environment or { };
+      in
+      env.KORRI_LAUNCH_ARTIFACTS_DIR or null == "%t/korri-launch-artifacts"
+    ))
     (check "default user mode: conservative LAN defaults" (
       let
         env = (serverUserUnit defaultUserMode).environment or { };
@@ -542,6 +548,13 @@ let
         env = (serverSystemUnit explicitSystemMode).environment or { };
       in
       env.KORRI_LIBRARY_ROOT or null == "/home/testuser/.local/share/korri/library"
+    ))
+    (check "system mode: launch artifacts dir env and sandbox path are wired" (
+      let
+        env = (serverSystemUnit explicitSystemMode).environment or { };
+      in
+      env.KORRI_LAUNCH_ARTIFACTS_DIR or null == "/run/korri-launch-artifacts"
+      && builtins.elem "/run/korri-launch-artifacts" ((serverSystemUnit explicitSystemMode).serviceConfig.ReadWritePaths or [ ])
     ))
     (check "system mode: RuntimeDirectory + tmpfiles for /run/korri-game-stream" (
       (serverSystemUnit explicitSystemMode).serviceConfig.RuntimeDirectory or null == "korri-game-stream"

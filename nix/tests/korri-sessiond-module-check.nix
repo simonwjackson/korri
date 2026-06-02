@@ -191,6 +191,12 @@ let
     (check "source-machine: token file env exported" (
       (unitEnv sourceMachine).KORRI_SESSIOND_TOKEN_FILE == "/run/korri-sessiond/token"
     ))
+    (check "source-machine: launch artifacts dir env exported" (
+      (unitEnv sourceMachine).KORRI_LAUNCH_ARTIFACTS_DIR == "/run/korri-launch-artifacts"
+    ))
+    (check "source-machine: launch artifacts dir is sandbox-writable/readable" (
+      builtins.elem "/run/korri-launch-artifacts" ((serviceConfig sourceMachine).ReadWritePaths or [ ])
+    ))
     (check "explicit role override beats inferred" (
       (unitEnv explicitSourceMachineOverride).KORRI_SESSIOND_ROLE == "source-machine"
     ))

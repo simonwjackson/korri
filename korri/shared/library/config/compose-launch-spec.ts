@@ -1,5 +1,5 @@
 /**
- * compose-launch-spec — placeholder substitution adapter.
+ * compose-launch-spec - placeholder substitution adapter.
  *
  * Takes a `LauncherRecord` (provides the argv template + optional
  * `policy.allowedCommands`) and a `ResolvedLaunchContext` (provides
@@ -7,10 +7,11 @@
  * the runner to consume.
  *
  * Supported placeholders: `{contentPath}`, `{system}`, `{emulator}`,
- * `{core}`. Unknown placeholders fail with `UnresolvedPlaceholder`;
+ * `{core}`, `{modulePath}`, `{configPath}`, `{configDir}`, `{userDir}`.
+ * Unknown placeholders fail with `UnresolvedPlaceholder`;
  * a referenced placeholder with no value fails with
  * `MissingRequiredValue`. The `policy.allowedCommands` whitelist is
- * enforced — a command not on the list fails with `DisallowedCommand`.
+ * enforced - a command not on the list fails with `DisallowedCommand`.
  *
  * This is *not* where gamescope wrapping happens. The launch intent
  * carries the resolved gamescope policy separately, and the runner
@@ -38,6 +39,10 @@ const SUPPORTED_PLACEHOLDERS = new Set([
   "system",
   "emulator",
   "core",
+  "modulePath",
+  "configPath",
+  "configDir",
+  "userDir",
 ])
 
 type SubstitutionContext = Readonly<Record<string, string | undefined>>
@@ -47,6 +52,10 @@ const buildContext = (context: ResolvedLaunchContext): SubstitutionContext => ({
   system: context.system,
   emulator: context.emulator,
   core: context.core,
+  modulePath: context.modulePath,
+  configPath: context.configPath,
+  configDir: context.configDir,
+  userDir: context.userDir,
 })
 
 const substitute = (

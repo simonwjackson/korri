@@ -19,6 +19,7 @@
 import { Schema } from "effect"
 
 import { ByLauncherPayload, InheritableLayer } from "../inheritable-fields"
+import { LaunchBlock } from "../launch-block"
 import { PresetMapPayload } from "./preset"
 
 const STRICT = { onExcessProperty: "error" } as const
@@ -28,7 +29,10 @@ export const GLOBAL_CONFIG_KEY = "global" as const
 export type GlobalConfigKey = typeof GLOBAL_CONFIG_KEY
 
 export const GlobalConfigPayload = Schema.Struct({
-  // Global default launcher.
+  // Public launch block; launch.app wins over legacy launcher.
+  launch: Schema.optional(LaunchBlock),
+
+  // Global default launcher (legacy alias for launch.app).
   launcher: Schema.optional(Schema.String),
 
   // Global layer-bearing fields. No `inherit` — nothing to truncate to.

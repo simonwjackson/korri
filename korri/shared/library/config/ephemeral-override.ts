@@ -17,10 +17,12 @@
 import { Schema } from "effect"
 
 import { ByLauncherPayload, InheritableLayer } from "./inheritable-fields"
+import { LaunchBlock } from "./launch-block"
 
 const STRICT = { onExcessProperty: "error" } as const
 
 export const EphemeralOverride = Schema.Struct({
+  launch: Schema.optional(LaunchBlock),
   launcher: Schema.optional(Schema.String),
   inherit: Schema.optional(Schema.Boolean),
   byLauncher: Schema.optional(ByLauncherPayload),

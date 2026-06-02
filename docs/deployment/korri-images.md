@@ -13,6 +13,8 @@ Korri exposes reusable product-system composition helpers at `lib.<system>.korri
 
 The helpers compose Korri product modules with explicit platform adapter modules. Generic helpers do not import Snapdragon, RockNix, or personal deployment facts. RockNix facts live in the RockNix platform adapter boundary, where Korri imports nix-on-rocks as the SM8550 substrate.
 
+Launch YAML uses the app/module model documented in [Korri launch config apps and modules](./korri-launch-config.md). Product images provide only the app binaries and module paths they explicitly enable; YAML selection does not add emulator packages to an image.
+
 Baseline x86 system outputs are exposed as package attrs:
 
 ```bash

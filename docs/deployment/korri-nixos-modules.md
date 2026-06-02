@@ -7,9 +7,11 @@ date: 2026-05-21
 
 Korri's public product roles are:
 
-- `services.korri.server`: headless/control-plane server. Use this for hosts that serve the library, advertise stream capability, or coordinate game-stream intents without owning a GUI session.
+- `services.korri.server`: headless/control-plane server. Use this for hosts that serve the library, advertise stream capability, or coordinate game-stream intents without owning a GUI session. It exports `KORRI_LAUNCH_ARTIFACTS_DIR` for generated per-launch app config artifacts.
 - `services.korri.client`: GUI package/runtime role. It installs the selected Korri desktop package and intentionally does not autostart it.
 - `services.korri.kiosk`: appliance session role. It owns the system Sway kiosk service, Korri client autostart, XDG session roots, and product input lifecycle coordination.
+
+Launch authoring uses built-in app ids, optional `apps.<id>` overrides, top-level `modules`, and nested `launch` blocks. See [Korri launch config apps and modules](./korri-launch-config.md). App executables are still Nix/image capabilities: add emulator packages to `services.korri.sessiond.path` for managed foreground launches instead of encoding package paths in YAML.
 
 Lower-level modules remain available for advanced composition:
 

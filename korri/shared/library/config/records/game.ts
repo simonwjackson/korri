@@ -17,6 +17,7 @@
 import { Schema } from "effect"
 
 import { ByLauncherPayload, InheritableLayer } from "../inheritable-fields"
+import { LaunchBlock } from "../launch-block"
 import { PresetMapPayload } from "./preset"
 
 /**
@@ -104,7 +105,10 @@ export const GamePayload = Schema.Struct({
   metadata: Schema.optional(GameMetadata),
   userData: Schema.optional(GameUserData),
 
-  // Explicit selections (override the cascade).
+  // Public launch block; launch.app/module win over legacy launcher/core.
+  launch: Schema.optional(LaunchBlock),
+
+  // Explicit selections (legacy aliases for launch.app / launch.module).
   launcher: Schema.optional(Schema.String),
   core: Schema.optional(Schema.String),
 

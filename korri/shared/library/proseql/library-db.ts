@@ -21,6 +21,7 @@
 
 import { mkdir } from "node:fs/promises"
 import { createNodeDatabase } from "@proseql/node"
+import { AppPayload, AppRecord } from "@shared/library/config/records/app"
 import {
   CollectionPayload,
   CollectionRecord,
@@ -43,6 +44,10 @@ import {
   LauncherPayload,
   LauncherRecord,
 } from "@shared/library/config/records/launcher"
+import {
+  ModulePayload,
+  ModuleRecord,
+} from "@shared/library/config/records/module"
 import {
   SystemPayload,
   SystemRecord,
@@ -73,6 +78,16 @@ const collectionsSchema = {
   },
   launchers: {
     schema: LauncherPayload,
+    id: { kind: "derivedFromKey" as const, field: "id" as const },
+    relationships: {},
+  },
+  apps: {
+    schema: AppPayload,
+    id: { kind: "derivedFromKey" as const, field: "id" as const },
+    relationships: {},
+  },
+  modules: {
+    schema: ModulePayload,
     id: { kind: "derivedFromKey" as const, field: "id" as const },
     relationships: {},
   },
@@ -124,6 +139,8 @@ export type KorriLibraryDbConfig = ReturnType<typeof makeKorriLibraryDbConfig>
  * config/records/*.ts.
  */
 export {
+  AppPayload,
+  AppRecord,
   CollectionPayload,
   CollectionRecord,
   GameAssetAssignmentPayload,
@@ -137,6 +154,8 @@ export {
   GlobalConfigRecord,
   LauncherPayload,
   LauncherRecord,
+  ModulePayload,
+  ModuleRecord,
   SystemPayload,
   SystemRecord,
   UserPayload,
@@ -173,6 +192,8 @@ export interface KorriLibraryDb {
   readonly users: CollectionApi<Schema.Schema.Type<typeof UserPayload>>
   readonly systems: CollectionApi<Schema.Schema.Type<typeof SystemPayload>>
   readonly launchers: CollectionApi<Schema.Schema.Type<typeof LauncherPayload>>
+  readonly apps: CollectionApi<Schema.Schema.Type<typeof AppPayload>>
+  readonly modules: CollectionApi<Schema.Schema.Type<typeof ModulePayload>>
   readonly games: CollectionApi<Schema.Schema.Type<typeof GamePayload>>
   readonly "game-assets": CollectionApi<
     Schema.Schema.Type<typeof GameAssetPayload>

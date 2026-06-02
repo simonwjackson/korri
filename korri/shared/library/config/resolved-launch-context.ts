@@ -22,6 +22,7 @@
 import { Schema } from "effect"
 
 import { GamescopePolicy } from "./inheritable-fields"
+import { LaunchSettings } from "./launch-block"
 
 export const ResolvedLaunchContext = Schema.Struct({
   // Identity (straight from the game record).
@@ -29,15 +30,22 @@ export const ResolvedLaunchContext = Schema.Struct({
   contentPath: Schema.String,
   system: Schema.String,
 
-  // Resolved launcher (output of Pass 0 — skeleton pass).
+  // Resolved app/launcher (output of Pass 0 — skeleton pass).
   launcherId: Schema.String,
+  appId: Schema.optional(Schema.String),
 
-  // Optional placeholder values populated from the cascade.
+  // Optional placeholder values populated from the cascade/materializer.
+  moduleId: Schema.optional(Schema.String),
+  modulePath: Schema.optional(Schema.String),
+  configPath: Schema.optional(Schema.String),
+  configDir: Schema.optional(Schema.String),
+  userDir: Schema.optional(Schema.String),
   core: Schema.optional(Schema.String),
   emulator: Schema.optional(Schema.String),
 
   // Resolved inheritable behavior fields (post-merge).
   gamescope: Schema.optional(GamescopePolicy),
+  settings: Schema.optional(LaunchSettings),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   cwd: Schema.optional(Schema.String),
   argsAppend: Schema.optional(Schema.Array(Schema.String)),

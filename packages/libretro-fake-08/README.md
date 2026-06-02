@@ -48,10 +48,22 @@ The package conforms to the nixpkgs `mkLibretroCore` contract that
 - `passthru.core = "fake08"` — string identifier the wrapper's
   `longDescription` reads and the kiosk closure-shape check asserts on
 
-Korri's kiosk product module (`nix/images/kiosk.nix`) injects exactly
-this one core into a `retroarch-bare` wrapper and adds it to
-`services.korri.compositor.path`. Every kiosk image (Sobo, Thor, x86
-kiosk, live USB) inherits the same minimal RetroArch closure.
+Korri's kiosk product module (`nix/images/kiosk.nix`) exposes this core at the stable launch-module path `/etc/korri/cores/fake08_libretro.so` and joins it with `retroarch-bare` without using nixpkgs' flag-injecting RetroArch wrapper. Launch YAML should model it as a top-level module:
+
+```yaml
+modules:
+  fake08:
+    kind: libretro-core
+    path: /etc/korri/cores/fake08_libretro.so
+
+systems:
+  pico8:
+    launch:
+      app: retroarch
+      module: fake08
+```
+
+Every kiosk image (Sobo, Thor, x86 kiosk, live USB) inherits the same minimal RetroArch closure.
 
 ## Single-core constraint
 
@@ -91,10 +103,6 @@ package, while system-level closure-shape assertions remain under
 
 - The licensed standalone `pico8_64` binary (requires a Lexaloffle license).
 - PICOLOVE, LIKO-12, TIC-80, zepto8, or any other PICO-8-flavored runtime.
-- Korri cascade YAML entries (system / launcher / core records) that
-  resolve a `.p8` cart to `retroarch -L fake08_libretro.so <cart>`.
-  Those are picked up by a separate cascade-side plan; once that lands,
-  the generic foreground-session policy added in the foreground-session
-  phase 1-3 work will promote RetroArch to the foreground at launch.
+- Additional launch modules beyond `fake08`. New libretro cores should be packaged separately and enabled through product/image opt-ins.
 - ROCKNIX host changes (host-side `fake08-lr` is unreachable from the
   guest closure and not consulted).

@@ -21,8 +21,12 @@
  *   systems list, merges the system delta's `cores` map.
  */
 
+import {
+  resolveAppDescriptor,
+  unknownSettingDiagnostics,
+} from "@shared/library/config/app-integrations"
+import { materializeAppLaunch } from "@shared/library/config/app-materializer"
 import type { ConfigSnapshot } from "@shared/library/config/cascade-resolver"
-
 import {
   resolveLaunchContext,
   resolveLocalLauncherGamescopePolicy,
@@ -30,8 +34,9 @@ import {
 import { composeLaunchSpec } from "@shared/library/config/compose-launch-spec"
 import type { EphemeralOverride } from "@shared/library/config/ephemeral-override"
 import type { CascadeError } from "@shared/library/config/errors"
-import { LauncherUnresolvable } from "@shared/library/config/errors"
 import type { GamescopePolicy } from "@shared/library/config/inheritable-fields"
+import { collectLayerLaunchDiagnostics } from "@shared/library/config/launch-block"
+import type { AppRecord } from "@shared/library/config/records/app"
 import type { CollectionRecord } from "@shared/library/config/records/collection"
 import type { GameRecord } from "@shared/library/config/records/game"
 import {
@@ -40,8 +45,10 @@ import {
   type GlobalConfigRecord,
 } from "@shared/library/config/records/global"
 import type { LauncherRecord } from "@shared/library/config/records/launcher"
+import type { ModuleRecord } from "@shared/library/config/records/module"
 import type { SystemRecord } from "@shared/library/config/records/system"
 import type { UserRecord } from "@shared/library/config/records/user"
+import type { ResolvedLaunchContext } from "@shared/library/config/resolved-launch-context"
 import type { LaunchSpec } from "@shared/library/launcher"
 import { LibraryError } from "@shared/library/library-services"
 import { Effect } from "effect"
@@ -56,6 +63,20 @@ export interface ResolveLaunchOptions {
 export interface ResolvedLaunchOutput {
   readonly spec: LaunchSpec
   readonly gamescope?: GamescopePolicy
+  readonly app?: {
+    readonly id: string
+    readonly integration: string
+  }
+  readonly module?: {
+    readonly id: string
+    readonly path?: string
+  }
+  readonly settings?: Readonly<Record<string, string | number | boolean>>
+  readonly artifacts?: {
+    readonly root: string
+    readonly paths: Readonly<Record<string, string>>
+  }
+  readonly diagnostics?: readonly string[]
 }
 
 /**
@@ -89,6 +110,10 @@ export interface LibraryRepository {
   readonly upsertLauncher: (
     launcher: LauncherRecord,
   ) => Effect.Effect<LauncherRecord, unknown>
+  readonly upsertApp: (app: AppRecord) => Effect.Effect<AppRecord, unknown>
+  readonly upsertModule: (
+    module: ModuleRecord,
+  ) => Effect.Effect<ModuleRecord, unknown>
   readonly upsertCollection: (
     collection: CollectionRecord,
   ) => Effect.Effect<CollectionRecord, unknown>
@@ -145,6 +170,20 @@ export function createLibraryRepository(db: KorriLibraryDb): LibraryRepository {
         where: { id: launcher.id },
         create: launcher,
         update: launcher,
+      }),
+
+    upsertApp: app =>
+      db.apps.upsert({
+        where: { id: app.id },
+        create: app,
+        update: app,
+      }),
+
+    upsertModule: module =>
+      db.modules.upsert({
+        where: { id: module.id },
+        create: module,
+        update: module,
       }),
 
     upsertCollection: collection =>
@@ -206,15 +245,34 @@ export function createLibraryRepository(db: KorriLibraryDb): LibraryRepository {
           presetId: opts?.presetId,
           override: opts?.override,
         })
-        const launcher = snapshot.launchers.get(context.launcherId)
-        if (!launcher) {
-          // Defensive — the cascade resolver guarantees this is set.
-          return yield* Effect.fail(new LauncherUnresolvable({ gameId }))
-        }
-        const spec = yield* composeLaunchSpec(launcher, context)
+        const app = yield* resolveAppDescriptor({
+          appId: context.launcherId,
+          apps: snapshot.apps,
+          launchers: snapshot.launchers,
+        })
+        const materialized = yield* materializeAppLaunch({ app, context })
+        const spec = yield* composeLaunchSpec(
+          materialized.launcher,
+          materialized.context,
+        )
+        const diagnostics = collectLaunchDiagnostics(snapshot, context)
+        diagnostics.push(
+          ...unknownSettingDiagnostics({ app, settings: context.settings }).map(
+            key => `Unknown ${app.id} setting: ${key}`,
+          ),
+        )
         return {
           spec,
           ...(context.gamescope ? { gamescope: context.gamescope } : {}),
+          app: { id: app.id, integration: app.integration },
+          ...(context.moduleId
+            ? { module: { id: context.moduleId, path: context.modulePath } }
+            : {}),
+          ...(context.settings ? { settings: context.settings } : {}),
+          ...(materialized.artifacts
+            ? { artifacts: materialized.artifacts }
+            : {}),
+          ...(diagnostics.length > 0 ? { diagnostics } : {}),
         }
       }),
 
@@ -229,6 +287,34 @@ export function createLibraryRepository(db: KorriLibraryDb): LibraryRepository {
   }
 }
 
+function collectLaunchDiagnostics(
+  snapshot: ConfigSnapshot,
+  context: ResolvedLaunchContext,
+): string[] {
+  const diagnostics: string[] = []
+  const pushLayer = (
+    path: string,
+    input: Parameters<typeof collectLayerLaunchDiagnostics>[1] | undefined,
+  ) => {
+    if (!input) return
+    diagnostics.push(
+      ...collectLayerLaunchDiagnostics(path, input).map(d => d.message),
+    )
+    for (const key of Object.keys(input.byLauncher ?? {})) {
+      if (key !== context.launcherId) {
+        diagnostics.push(
+          `${path}.byLauncher.${key} does not match resolved app ${context.launcherId}`,
+        )
+      }
+    }
+  }
+
+  pushLayer("config.global", snapshot.global ?? undefined)
+  pushLayer(`systems.${context.system}`, snapshot.systems.get(context.system))
+  pushLayer(`games.${context.gameId}`, snapshot.games.get(context.gameId))
+  return diagnostics
+}
+
 /**
  * Load every collection into an in-memory `ConfigSnapshot` ready to feed
  * the cascade resolver. Mirrors the six declared collections; the
@@ -238,36 +324,52 @@ function loadSnapshot(
   db: KorriLibraryDb,
 ): Effect.Effect<ConfigSnapshot, LibraryError> {
   return Effect.gen(function* () {
-    const [configRows, users, systems, launchers, games, collections] =
-      yield* Effect.all(
-        [
-          Effect.tryPromise({
-            try: () => db.config.query().runPromise,
-            catch: toLibraryError,
-          }),
-          Effect.tryPromise({
-            try: () => db.users.query().runPromise,
-            catch: toLibraryError,
-          }),
-          Effect.tryPromise({
-            try: () => db.systems.query().runPromise,
-            catch: toLibraryError,
-          }),
-          Effect.tryPromise({
-            try: () => db.launchers.query().runPromise,
-            catch: toLibraryError,
-          }),
-          Effect.tryPromise({
-            try: () => db.games.query().runPromise,
-            catch: toLibraryError,
-          }),
-          Effect.tryPromise({
-            try: () => db.collections.query().runPromise,
-            catch: toLibraryError,
-          }),
-        ],
-        { concurrency: "unbounded" },
-      )
+    const [
+      configRows,
+      users,
+      systems,
+      launchers,
+      apps,
+      modules,
+      games,
+      collections,
+    ] = yield* Effect.all(
+      [
+        Effect.tryPromise({
+          try: () => db.config.query().runPromise,
+          catch: toLibraryError,
+        }),
+        Effect.tryPromise({
+          try: () => db.users.query().runPromise,
+          catch: toLibraryError,
+        }),
+        Effect.tryPromise({
+          try: () => db.systems.query().runPromise,
+          catch: toLibraryError,
+        }),
+        Effect.tryPromise({
+          try: () => db.launchers.query().runPromise,
+          catch: toLibraryError,
+        }),
+        Effect.tryPromise({
+          try: () => db.apps.query().runPromise,
+          catch: toLibraryError,
+        }),
+        Effect.tryPromise({
+          try: () => db.modules.query().runPromise,
+          catch: toLibraryError,
+        }),
+        Effect.tryPromise({
+          try: () => db.games.query().runPromise,
+          catch: toLibraryError,
+        }),
+        Effect.tryPromise({
+          try: () => db.collections.query().runPromise,
+          catch: toLibraryError,
+        }),
+      ],
+      { concurrency: "unbounded" },
+    )
 
     const global = configRows.find(r => r.id === GLOBAL_CONFIG_KEY) ?? null
 
@@ -276,6 +378,8 @@ function loadSnapshot(
       users: new Map(users.map(u => [u.id, u])),
       systems: new Map(systems.map(s => [s.id, s])),
       launchers: new Map(launchers.map(l => [l.id, l])),
+      apps: new Map(apps.map(a => [a.id, a])),
+      modules: new Map(modules.map(m => [m.id, m])),
       games: new Map(games.map(g => [g.id, g])),
       collections: new Map(collections.map(c => [c.id, c])),
     }

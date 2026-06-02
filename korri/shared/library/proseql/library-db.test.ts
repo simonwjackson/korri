@@ -20,12 +20,14 @@ describe("makeKorriLibraryDbConfig", () => {
     const config = makeKorriLibraryDbConfig("/tmp/x")
     const names = Object.keys(config.collections).sort()
     expect(names).toEqual([
+      "apps",
       "collections",
       "config",
       "game-asset-assignments",
       "game-assets",
       "games",
       "launchers",
+      "modules",
       "systems",
       "users",
     ])
@@ -68,6 +70,11 @@ describe("openKorriLibraryDb — empty root", () => {
               launchers: (yield* Effect.promise(
                 () => db.launchers.query().runPromise,
               )).length,
+              apps: (yield* Effect.promise(() => db.apps.query().runPromise))
+                .length,
+              modules: (yield* Effect.promise(
+                () => db.modules.query().runPromise,
+              )).length,
               games: (yield* Effect.promise(() => db.games.query().runPromise))
                 .length,
               "game-assets": (yield* Effect.promise(
@@ -88,6 +95,8 @@ describe("openKorriLibraryDb — empty root", () => {
         users: 0,
         systems: 0,
         launchers: 0,
+        apps: 0,
+        modules: 0,
         games: 0,
         "game-assets": 0,
         "game-asset-assignments": 0,

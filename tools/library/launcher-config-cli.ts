@@ -12,6 +12,20 @@ export type LauncherConfigValidationResult =
         readonly env?: Readonly<Record<string, string>>
         readonly cwd?: string
       }
+      readonly app?: {
+        readonly id: string
+        readonly integration: string
+      }
+      readonly module?: {
+        readonly id: string
+        readonly path?: string
+      }
+      readonly settings?: Readonly<Record<string, string | number | boolean>>
+      readonly artifacts?: {
+        readonly root: string
+        readonly paths: Readonly<Record<string, string>>
+      }
+      readonly diagnostics?: readonly string[]
     }
   | {
       readonly status: "diagnostic"
@@ -42,6 +56,13 @@ export async function validateLauncherConfig(args: {
       status: "resolved",
       gameId: args.gameId,
       spec: exit.value.spec,
+      ...(exit.value.app ? { app: exit.value.app } : {}),
+      ...(exit.value.module ? { module: exit.value.module } : {}),
+      ...(exit.value.settings ? { settings: exit.value.settings } : {}),
+      ...(exit.value.artifacts ? { artifacts: exit.value.artifacts } : {}),
+      ...(exit.value.diagnostics
+        ? { diagnostics: exit.value.diagnostics }
+        : {}),
     }
   }
 

@@ -18,12 +18,14 @@
 import { Schema } from "effect"
 
 import { ByLauncherPayload, InheritableLayer } from "../inheritable-fields"
+import { LaunchBlock } from "../launch-block"
 
 const STRICT = { onExcessProperty: "error" } as const
 
 export const PresetPayload = Schema.Struct({
   name: Schema.optional(Schema.String),
   description: Schema.optional(Schema.String),
+  launch: Schema.optional(LaunchBlock),
   launcher: Schema.optional(Schema.String),
   inherit: Schema.optional(Schema.Boolean),
   byLauncher: Schema.optional(ByLauncherPayload),

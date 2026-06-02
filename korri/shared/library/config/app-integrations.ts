@@ -1,0 +1,211 @@
+import { Effect } from "effect"
+
+import {
+  AppNotFound,
+  CustomAppMissingCommand,
+  IncompatibleModule,
+  type ResolutionError,
+} from "./errors"
+import type { GamescopePolicy } from "./inheritable-fields"
+import type { LaunchSettings } from "./launch-block"
+import { mergeLaunchSettings } from "./launch-block"
+import type { AppRecord } from "./records/app"
+import type { LauncherRecord } from "./records/launcher"
+import type { ModuleRecord } from "./records/module"
+
+export type AppIntegrationKind =
+  | "retroarch"
+  | "mame"
+  | "dolphin"
+  | "solarus"
+  | "generic-process"
+
+export interface AppDescriptor {
+  readonly id: string
+  readonly integration: AppIntegrationKind
+  readonly command: string
+  readonly args: readonly string[]
+  readonly systems: readonly string[]
+  readonly policy?: LauncherRecord["policy"]
+  readonly settings?: LaunchSettings
+  readonly knownSettings?: readonly string[]
+  readonly gamescope?: GamescopePolicy
+  readonly env?: Readonly<Record<string, string>>
+  readonly cwd?: string
+  readonly argsAppend?: readonly string[]
+  readonly presets?: LauncherRecord["presets"]
+}
+
+const builtInApps: Readonly<Record<string, AppDescriptor>> = {
+  retroarch: {
+    id: "retroarch",
+    integration: "retroarch",
+    command: "retroarch",
+    args: ["--config", "{configPath}", "-L", "{modulePath}", "{contentPath}"],
+    systems: [],
+    policy: { allowedCommands: ["retroarch"] },
+    settings: {
+      config_save_on_exit: false,
+      video_fullscreen: true,
+    },
+    knownSettings: [
+      "audio_driver",
+      "config_save_on_exit",
+      "input_joypad_driver",
+      "menu_driver",
+      "rewind_enable",
+      "video_driver",
+      "video_fullscreen",
+      "video_scale_integer",
+    ],
+  },
+  mame: {
+    id: "mame",
+    integration: "mame",
+    command: "mame",
+    args: ["-noreadconfig", "-inipath", "{configDir}", "{contentPath}"],
+    systems: [],
+    policy: { allowedCommands: ["mame"] },
+    knownSettings: ["joystick", "skip_gameinfo", "video"],
+  },
+  dolphin: {
+    id: "dolphin",
+    integration: "dolphin",
+    command: "dolphin-emu",
+    args: ["--user", "{userDir}", "--batch", "--exec", "{contentPath}"],
+    systems: [],
+    policy: { allowedCommands: ["dolphin-emu"] },
+    knownSettings: ["internal_resolution", "video_backend"],
+  },
+  solarus: {
+    id: "solarus",
+    integration: "solarus",
+    command: "solarus-run",
+    args: ["{contentPath}"],
+    systems: [],
+    policy: { allowedCommands: ["solarus-run"] },
+    knownSettings: ["fullscreen"],
+  },
+}
+
+export const getBuiltInAppDescriptor = (
+  appId: string,
+): AppDescriptor | undefined => builtInApps[appId]
+
+export const resolveAppDescriptor = (input: {
+  readonly appId: string
+  readonly apps: ReadonlyMap<string, AppRecord>
+  readonly launchers: ReadonlyMap<string, LauncherRecord>
+}): Effect.Effect<AppDescriptor, ResolutionError> =>
+  Effect.gen(function* () {
+    const builtIn = builtInApps[input.appId]
+    const appOverride = input.apps.get(input.appId)
+    const legacyLauncher = input.launchers.get(input.appId)
+
+    if (builtIn) {
+      return mergeDescriptor(builtIn, appOverride, legacyLauncher)
+    }
+
+    if (appOverride) {
+      if (!appOverride.command) {
+        return yield* Effect.fail(
+          new CustomAppMissingCommand({ appId: input.appId }),
+        )
+      }
+      return mergeDescriptor(
+        {
+          id: input.appId,
+          integration: "generic-process",
+          command: appOverride.command,
+          args: appOverride.args ?? ["{contentPath}"],
+          systems: appOverride.systems ?? [],
+        },
+        appOverride,
+        legacyLauncher,
+      )
+    }
+
+    if (legacyLauncher) {
+      return launcherToDescriptor(legacyLauncher)
+    }
+
+    return yield* Effect.fail(new AppNotFound({ appId: input.appId }))
+  })
+
+const mergeDescriptor = (
+  base: AppDescriptor,
+  appOverride: AppRecord | undefined,
+  legacyLauncher: LauncherRecord | undefined,
+): AppDescriptor => ({
+  ...base,
+  ...(legacyLauncher
+    ? {
+        command: legacyLauncher.command,
+        args: legacyLauncher.args,
+        systems: legacyLauncher.systems,
+        policy: legacyLauncher.policy,
+        presets: legacyLauncher.presets ?? base.presets,
+        gamescope: legacyLauncher.gamescope ?? base.gamescope,
+        env: legacyLauncher.env ?? base.env,
+        cwd: legacyLauncher.cwd ?? base.cwd,
+        argsAppend: legacyLauncher.argsAppend ?? base.argsAppend,
+      }
+    : {}),
+  ...(appOverride?.command ? { command: appOverride.command } : {}),
+  ...(appOverride?.args ? { args: appOverride.args } : {}),
+  ...(appOverride?.systems ? { systems: appOverride.systems } : {}),
+  ...(appOverride?.policy ? { policy: appOverride.policy } : {}),
+  ...(appOverride?.presets ? { presets: appOverride.presets } : {}),
+  ...(appOverride?.gamescope ? { gamescope: appOverride.gamescope } : {}),
+  ...(appOverride?.env ? { env: appOverride.env } : {}),
+  ...(appOverride?.cwd !== undefined ? { cwd: appOverride.cwd } : {}),
+  ...(appOverride?.argsAppend ? { argsAppend: appOverride.argsAppend } : {}),
+  settings: mergeLaunchSettings(base.settings, appOverride?.settings),
+})
+
+const launcherToDescriptor = (launcher: LauncherRecord): AppDescriptor => ({
+  id: launcher.id,
+  integration: "generic-process",
+  command: launcher.command,
+  args: launcher.args,
+  systems: launcher.systems,
+  policy: launcher.policy,
+  gamescope: launcher.gamescope,
+  env: launcher.env,
+  cwd: launcher.cwd,
+  argsAppend: launcher.argsAppend,
+  presets: launcher.presets,
+})
+
+export const unknownSettingDiagnostics = (input: {
+  readonly app: AppDescriptor
+  readonly settings?: LaunchSettings
+}): readonly string[] => {
+  if (!input.app.knownSettings || !input.settings) return []
+  const known = new Set(input.app.knownSettings)
+  return Object.keys(input.settings).filter(key => !known.has(key))
+}
+
+export const validateAppModuleCompatibility = (input: {
+  readonly app: AppDescriptor
+  readonly module: ModuleRecord
+}): Effect.Effect<void, ResolutionError> => {
+  if (input.app.integration === "retroarch") {
+    return input.module.kind === "libretro-core"
+      ? Effect.void
+      : Effect.fail(
+          new IncompatibleModule({
+            appId: input.app.id,
+            moduleId: input.module.id,
+            moduleKind: input.module.kind,
+          }),
+        )
+  }
+  return Effect.fail(
+    new IncompatibleModule({
+      appId: input.app.id,
+      moduleId: input.module.id,
+      moduleKind: input.module.kind,
+    }),
+  )
+}

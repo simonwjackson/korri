@@ -1,10 +1,12 @@
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import type { AppRecord } from "@shared/library/config/records/app"
 import type { CollectionRecord } from "@shared/library/config/records/collection"
 import type { GameRecord } from "@shared/library/config/records/game"
 import type { GlobalConfigPayload } from "@shared/library/config/records/global"
 import type { LauncherRecord } from "@shared/library/config/records/launcher"
+import type { ModuleRecord } from "@shared/library/config/records/module"
 import type { SystemRecord } from "@shared/library/config/records/system"
 import type { UserRecord } from "@shared/library/config/records/user"
 import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
@@ -22,6 +24,8 @@ export interface TempProseqlLibrarySeed {
   readonly users?: readonly UserRecord[]
   readonly systems?: readonly SystemRecord[]
   readonly launchers?: readonly LauncherRecord[]
+  readonly apps?: readonly AppRecord[]
+  readonly modules?: readonly ModuleRecord[]
   readonly games?: readonly GameRecord[]
   readonly collections?: readonly CollectionRecord[]
 }
@@ -70,6 +74,20 @@ export async function withTempProseqlLibrary(
               where: { id: launcher.id },
               create: launcher,
               update: launcher,
+            })
+          }
+          for (const app of seed.apps ?? []) {
+            yield* db.apps.upsert({
+              where: { id: app.id },
+              create: app,
+              update: app,
+            })
+          }
+          for (const module of seed.modules ?? []) {
+            yield* db.modules.upsert({
+              where: { id: module.id },
+              create: module,
+              update: module,
             })
           }
           for (const game of seed.games ?? []) {

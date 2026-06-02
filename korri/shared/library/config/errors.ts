@@ -41,6 +41,38 @@ export class CoreNotConfigured extends Data.TaggedError("CoreNotConfigured")<{
   readonly launcherId: string
 }> {}
 
+export class AppNotFound extends Data.TaggedError("AppNotFound")<{
+  readonly appId: string
+}> {}
+
+export class CustomAppMissingCommand extends Data.TaggedError(
+  "CustomAppMissingCommand",
+)<{
+  readonly appId: string
+}> {}
+
+export class ModuleNotFound extends Data.TaggedError("ModuleNotFound")<{
+  readonly moduleId: string
+}> {}
+
+export class ModulePathMissing extends Data.TaggedError("ModulePathMissing")<{
+  readonly moduleId: string
+  readonly path: string
+}> {}
+
+export class IncompatibleModule extends Data.TaggedError("IncompatibleModule")<{
+  readonly appId: string
+  readonly moduleId: string
+  readonly moduleKind: string
+}> {}
+
+export class AppMaterializationFailed extends Data.TaggedError(
+  "AppMaterializationFailed",
+)<{
+  readonly appId: string
+  readonly reason: string
+}> {}
+
 export class MissingRequiredValue extends Data.TaggedError(
   "MissingRequiredValue",
 )<{
@@ -63,6 +95,12 @@ export type ResolutionError =
   | PresetNotFound
   | LauncherUnresolvable
   | CoreNotConfigured
+  | AppNotFound
+  | CustomAppMissingCommand
+  | ModuleNotFound
+  | ModulePathMissing
+  | IncompatibleModule
+  | AppMaterializationFailed
 
 export type CompositionError =
   | MissingRequiredValue

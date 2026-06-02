@@ -18,9 +18,11 @@ import {
   resolveLaunchContext,
   resolveLocalLauncherGamescopePolicy,
 } from "./cascade-resolver"
+import type { AppRecord } from "./records/app"
 import type { GameRecord } from "./records/game"
 import type { GlobalConfigRecord } from "./records/global"
 import type { LauncherRecord } from "./records/launcher"
+import type { ModuleRecord } from "./records/module"
 import type { SystemRecord } from "./records/system"
 import type { UserRecord } from "./records/user"
 
@@ -56,12 +58,16 @@ const snapshotOf = (input: {
   users?: readonly UserRecord[]
   systems?: readonly SystemRecord[]
   launchers?: readonly LauncherRecord[]
+  apps?: readonly AppRecord[]
+  modules?: readonly ModuleRecord[]
   games?: readonly GameRecord[]
 }): ConfigSnapshot => ({
   global: input.global ?? null,
   users: new Map((input.users ?? []).map(u => [u.id, u])),
   systems: new Map((input.systems ?? []).map(s => [s.id, s])),
   launchers: new Map((input.launchers ?? []).map(l => [l.id, l])),
+  apps: new Map((input.apps ?? []).map(a => [a.id, a])),
+  modules: new Map((input.modules ?? []).map(m => [m.id, m])),
   games: new Map((input.games ?? []).map(g => [g.id, g])),
   collections: new Map(),
 })
@@ -311,6 +317,22 @@ describe("resolveLaunchContext — env / cwd / argsAppend folds", () => {
     expect(ctx.argsAppend).toEqual(["--g", "--s", "--game"])
   })
 
+  it("folds a legacy launcher layer once when its id is also a built-in app", () => {
+    const snap = snapshotOf({
+      systems: [system({ id: "snes", launcher: "retroarch" })],
+      launchers: [
+        launcher({
+          id: "retroarch",
+          systems: ["snes"],
+          argsAppend: ["--launcher"],
+        }),
+      ],
+      games: [game({ id: "fzero" })],
+    })
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+    expect(ctx.argsAppend).toEqual(["--launcher"])
+  })
+
   it("cwd takes the most-specific scalar", () => {
     const snap = snapshotOf({
       global: globalConfig({ cwd: "/g" }),
@@ -320,6 +342,27 @@ describe("resolveLaunchContext — env / cwd / argsAppend folds", () => {
     })
     const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
     expect(ctx.cwd).toBe("/game")
+  })
+
+  it("launch-local cwd and env win over same-layer top-level fields", () => {
+    const snap = snapshotOf({
+      systems: [system({ id: "snes", launcher: "retroarch" })],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [
+        game({
+          id: "fzero",
+          cwd: "/legacy",
+          env: { KORRI_LAYER: "legacy", KEEP: "yes" },
+          launch: {
+            cwd: "/launch",
+            env: { KORRI_LAYER: "launch" },
+          },
+        }),
+      ],
+    })
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+    expect(ctx.cwd).toBe("/launch")
+    expect(ctx.env).toEqual({ KORRI_LAYER: "launch", KEEP: "yes" })
   })
 })
 
@@ -772,5 +815,144 @@ describe("resolveLaunchContext — end-to-end smoke", () => {
     expect(ctx.gamescope?.args).toEqual(["-F", "fsr"])
     expect(ctx.env).toEqual({ LANG: "en_US.UTF-8" })
     expect(ctx.argsAppend).toEqual(["--g", "--game"])
+  })
+})
+
+describe("resolveLaunchContext — app/module launch blocks", () => {
+  it("inherits launch.app and launch.module from the system and resolves module path", () => {
+    const snap = snapshotOf({
+      systems: [
+        system({
+          id: "pico8",
+          launch: { app: "retroarch", module: "fake08" },
+        }),
+      ],
+      modules: [
+        {
+          id: "fake08",
+          kind: "libretro-core",
+          path: "/etc/korri/cores/fake08_libretro.so",
+        },
+      ],
+      games: [
+        game({
+          id: "porklike",
+          system: "pico8",
+          contentPath: "/storage/roms/pico8/porklike.p8",
+        }),
+      ],
+    })
+
+    const ctx = run(resolveLaunchContext(snap, { gameId: "porklike" }))
+    expect(ctx.launcherId).toBe("retroarch")
+    expect(ctx.moduleId).toBe("fake08")
+    expect(ctx.modulePath).toBe("/etc/korri/cores/fake08_libretro.so")
+  })
+
+  it("merges settings with explicit false and zero overriding broader values", () => {
+    const snap = snapshotOf({
+      apps: [
+        {
+          id: "retroarch",
+          settings: { video_scale_integer: true, runahead_frames: 2 },
+        },
+      ],
+      systems: [
+        system({
+          id: "pico8",
+          launch: {
+            app: "retroarch",
+            module: "fake08",
+            settings: { rewind_enable: true },
+          },
+        }),
+      ],
+      modules: [
+        {
+          id: "fake08",
+          kind: "libretro-core",
+          path: "/etc/korri/cores/fake08_libretro.so",
+        },
+      ],
+      games: [
+        game({
+          id: "porklike",
+          system: "pico8",
+          launch: {
+            settings: { video_scale_integer: false, runahead_frames: 0 },
+          },
+        }),
+      ],
+    })
+
+    const ctx = run(resolveLaunchContext(snap, { gameId: "porklike" }))
+    expect(ctx.settings).toMatchObject({
+      config_save_on_exit: false,
+      rewind_enable: true,
+      video_scale_integer: false,
+      runahead_frames: 0,
+    })
+  })
+
+  it("keeps legacy launcher/core/cores compatibility", () => {
+    const snap = snapshotOf({
+      systems: [
+        system({
+          id: "snes",
+          launcher: "retroarch",
+          cores: { retroarch: "snes9x_libretro.so" },
+        }),
+      ],
+      launchers: [
+        launcher({ id: "retroarch", args: ["-L", "{core}", "{contentPath}"] }),
+      ],
+      games: [game({ id: "fzero" })],
+    })
+
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+    expect(ctx.launcherId).toBe("retroarch")
+    expect(ctx.core).toBe("snes9x_libretro.so")
+  })
+
+  it("fails when launch.module references an unknown module id", () => {
+    const snap = snapshotOf({
+      systems: [
+        system({
+          id: "pico8",
+          launch: { app: "retroarch", module: "missing" },
+        }),
+      ],
+      games: [game({ id: "porklike", system: "pico8" })],
+    })
+
+    expect(runErrTag(resolveLaunchContext(snap, { gameId: "porklike" }))).toBe(
+      "ModuleNotFound",
+    )
+  })
+
+  it("fails when the resolved app rejects the module kind", () => {
+    const snap = snapshotOf({
+      systems: [
+        system({ id: "wii", launch: { app: "dolphin", module: "fake08" } }),
+      ],
+      modules: [
+        {
+          id: "fake08",
+          kind: "libretro-core",
+          path: "/etc/korri/cores/fake08_libretro.so",
+        },
+      ],
+      games: [
+        game({
+          id: "wii-game",
+          system: "wii",
+          contentPath: "/storage/roms/wii/game.rvz",
+        }),
+      ],
+    })
+
+    expect(runErrTag(resolveLaunchContext(snap, { gameId: "wii-game" }))).toBe(
+      "IncompatibleModule",
+    )
   })
 })

@@ -19,6 +19,24 @@ async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
   }
 }
 
+async function withLaunchArtifactsRoot<T>(
+  fn: (root: string) => Promise<T>,
+): Promise<T> {
+  const root = await mkdtemp(join(tmpdir(), "korri-launch-artifacts-"))
+  const previous = process.env.KORRI_LAUNCH_ARTIFACTS_DIR
+  process.env.KORRI_LAUNCH_ARTIFACTS_DIR = root
+  try {
+    return await fn(root)
+  } finally {
+    if (previous === undefined) {
+      delete process.env.KORRI_LAUNCH_ARTIFACTS_DIR
+    } else {
+      process.env.KORRI_LAUNCH_ARTIFACTS_DIR = previous
+    }
+    await rm(root, { recursive: true, force: true })
+  }
+}
+
 const oldGame: GameRecord = {
   id: "game-old",
   system: "snes",
@@ -294,5 +312,69 @@ describe("createLibraryRepository — upsertImportedGame", () => {
       )
       expect([...launcher.systems].sort()).toEqual(["psx", "snes"])
     })
+  })
+})
+
+describe("createLibraryRepository — resolveLaunchForGame (apps/modules)", () => {
+  it("resolves built-in app/module YAML through materialization without a legacy launcher", async () => {
+    await withLaunchArtifactsRoot(async () =>
+      withTempRoot(async root => {
+        const result = await Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+              const repo = createLibraryRepository(db)
+              yield* repo.upsertApp({
+                id: "retroarch",
+                settings: { video_driver: "glcore" },
+              })
+              yield* repo.upsertModule({
+                id: "fake08",
+                kind: "libretro-core",
+                path: "/etc/korri/cores/fake08_libretro.so",
+              })
+              yield* repo.upsertSystem({
+                id: "pico8",
+                launch: {
+                  app: "retroarch",
+                  module: "fake08",
+                  settings: { video_scale_integer: true },
+                },
+              })
+              yield* repo.upsertGame({
+                id: "porklike",
+                system: "pico8",
+                contentPath: "/storage/roms/pico8/porklike.p8",
+                launch: { settings: { video_scale_integer: false } },
+              })
+              return yield* repo.resolveLaunchForGame("porklike")
+            }),
+          ),
+        )
+
+        expect(result.app).toEqual({
+          id: "retroarch",
+          integration: "retroarch",
+        })
+        expect(result.module).toEqual({
+          id: "fake08",
+          path: "/etc/korri/cores/fake08_libretro.so",
+        })
+        expect(result.settings).toMatchObject({
+          video_driver: "glcore",
+          video_scale_integer: false,
+        })
+        const configPath = result.artifacts?.paths.configPath
+        expect(typeof configPath).toBe("string")
+        expect(result.spec.command).toBe("retroarch")
+        expect(result.spec.args).toEqual([
+          "--config",
+          configPath ?? "",
+          "-L",
+          "/etc/korri/cores/fake08_libretro.so",
+          "/storage/roms/pico8/porklike.p8",
+        ])
+      }),
+    )
   })
 })

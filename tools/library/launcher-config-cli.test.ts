@@ -1,6 +1,25 @@
 import { describe, expect, it } from "bun:test"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { withTempProseqlLibrary } from "../testing/library/with-temp-proseql-library"
 import { validateLauncherConfig } from "./launcher-config-cli"
+
+async function withLaunchArtifactsRoot<T>(fn: () => Promise<T>): Promise<T> {
+  const root = await mkdtemp(join(tmpdir(), "korri-launch-artifacts-"))
+  const previous = process.env.KORRI_LAUNCH_ARTIFACTS_DIR
+  process.env.KORRI_LAUNCH_ARTIFACTS_DIR = root
+  try {
+    return await fn()
+  } finally {
+    if (previous === undefined) {
+      delete process.env.KORRI_LAUNCH_ARTIFACTS_DIR
+    } else {
+      process.env.KORRI_LAUNCH_ARTIFACTS_DIR = previous
+    }
+    await rm(root, { recursive: true, force: true })
+  }
+}
 
 describe("validateLauncherConfig", () => {
   it("resolves a game id to a LaunchSpec via the cascade", async () => {
@@ -30,9 +49,12 @@ describe("validateLauncherConfig", () => {
       ],
     })
 
-    await expect(
-      validateLauncherConfig({ root: library.root, gameId: "game-1" }),
-    ).resolves.toEqual({
+    const result = await validateLauncherConfig({
+      root: library.root,
+      gameId: "game-1",
+    })
+
+    expect(result).toMatchObject({
       status: "resolved",
       gameId: "game-1",
       spec: {
@@ -76,5 +98,52 @@ describe("validateLauncherConfig", () => {
     if (result.status === "diagnostic") {
       expect(result.reason).toBe("LauncherUnresolvable")
     }
+  })
+
+  it("reports app/module/settings/materialized artifact details for built-in RetroArch", async () => {
+    await withLaunchArtifactsRoot(async () => {
+      await using library = await withTempProseqlLibrary({
+        apps: [{ id: "retroarch", settings: { video_driver: "glcore" } }],
+        modules: [
+          {
+            id: "fake08",
+            kind: "libretro-core",
+            path: "/etc/korri/cores/fake08_libretro.so",
+          },
+        ],
+        systems: [
+          {
+            id: "pico8",
+            launch: {
+              app: "retroarch",
+              module: "fake08",
+              settings: { video_scale_integer: true },
+            },
+          },
+        ],
+        games: [
+          {
+            id: "porklike",
+            system: "pico8",
+            contentPath: "/storage/roms/pico8/porklike.p8",
+          },
+        ],
+      })
+
+      const result = await validateLauncherConfig({
+        root: library.root,
+        gameId: "porklike",
+      })
+
+      expect(result).toMatchObject({
+        status: "resolved",
+        app: { id: "retroarch", integration: "retroarch" },
+        module: { id: "fake08", path: "/etc/korri/cores/fake08_libretro.so" },
+        settings: { video_driver: "glcore", video_scale_integer: true },
+      })
+      if (result.status === "resolved") {
+        expect(typeof result.artifacts?.paths.configPath).toBe("string")
+      }
+    })
   })
 })
