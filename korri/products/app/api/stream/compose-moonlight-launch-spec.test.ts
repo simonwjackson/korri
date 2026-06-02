@@ -13,6 +13,8 @@ const originalEnv = {
   platform: process.env.KORRI_MOONLIGHT_PLATFORM,
   mappingFile: process.env.KORRI_MOONLIGHT_MAPPING_FILE,
   inputDevice: process.env.KORRI_MOONLIGHT_INPUT_DEVICE,
+  absoluteTouch: process.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH,
+  absoluteTouchBounds: process.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS,
   requireInputPlumber: process.env.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER,
 }
 
@@ -23,6 +25,11 @@ afterEach(() => {
   setOptionalEnv("KORRI_MOONLIGHT_PLATFORM", originalEnv.platform)
   setOptionalEnv("KORRI_MOONLIGHT_MAPPING_FILE", originalEnv.mappingFile)
   setOptionalEnv("KORRI_MOONLIGHT_INPUT_DEVICE", originalEnv.inputDevice)
+  setOptionalEnv("KORRI_MOONLIGHT_ABSOLUTE_TOUCH", originalEnv.absoluteTouch)
+  setOptionalEnv(
+    "KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS",
+    originalEnv.absoluteTouchBounds,
+  )
   setOptionalEnv(
     "KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER",
     originalEnv.requireInputPlumber,
@@ -132,6 +139,23 @@ describe("composeMoonlightLaunchSpec", () => {
       "stream",
       "-input",
       "/dev/input/event8",
+      "-app",
+      "Korri Stream",
+      "aka.local",
+    ])
+  })
+
+  it("uses KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS when set", () => {
+    process.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH = "1"
+    process.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS = "0,0,1080,1920"
+
+    const spec = composeMoonlightLaunchSpec({ host: "aka.local" })
+
+    expect(spec.args).toEqual([
+      "stream",
+      "-absolutetouch",
+      "-absolutetouchbounds",
+      "0,0,1080,1920",
       "-app",
       "Korri Stream",
       "aka.local",

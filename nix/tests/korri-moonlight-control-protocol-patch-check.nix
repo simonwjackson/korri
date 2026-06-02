@@ -22,6 +22,12 @@ let
       contains "{\"absolutetouch\", no_argument, NULL" absoluteTouchPatch
       && contains "-absolutetouch" absoluteTouchPatch
     ))
+    (check "Moonlight absolute touch can be bounded to one raw screen region" (
+      contains "{\"absolutetouchbounds\", required_argument, NULL" absoluteTouchPatch
+      && contains "absoluteTouchBoundsEnabled" absoluteTouchPatch
+      && contains "x < absoluteTouchBoundsX" absoluteTouchPatch
+      && contains "touches outside the streamed game region are ignored" readme
+    ))
     (check "Moonlight absolute touch setting persists through config" (
       contains "absolute_touch" absoluteTouchPatch
       && contains "write_config_bool(fd, \"absolutetouch\"" absoluteTouchPatch

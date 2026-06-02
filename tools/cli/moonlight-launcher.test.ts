@@ -289,6 +289,39 @@ describe("moonlight launcher", () => {
     }
   })
 
+  it("passes configured absolute touch bounds to moonlight-embedded", async () => {
+    const previousAbsoluteTouch = Bun.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH
+    const previousBounds = Bun.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS
+    const calls: string[] = []
+    try {
+      Bun.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH = "1"
+      Bun.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS = "0,0,1080,1920"
+      const result = await launchMoonlight({
+        host: "192.168.1.117",
+        runner: runner((command, args) => {
+          calls.push([command, ...args].join(" "))
+          return { status: "started" }
+        }),
+      })
+
+      expect(result).toEqual({ status: "started", command: "gamescope" })
+      expect(calls).toEqual([
+        "gamescope -f -b -- moonlight stream -absolutetouch -absolutetouchbounds 0,0,1080,1920 -app Korri Stream 192.168.1.117",
+      ])
+    } finally {
+      if (previousAbsoluteTouch === undefined) {
+        delete Bun.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH
+      } else {
+        Bun.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH = previousAbsoluteTouch
+      }
+      if (previousBounds === undefined) {
+        delete Bun.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS
+      } else {
+        Bun.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS = previousBounds
+      }
+    }
+  })
+
   it("uses explicit embedded client args without falling back to nix", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({

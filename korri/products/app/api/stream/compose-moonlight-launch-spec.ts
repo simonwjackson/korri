@@ -35,6 +35,10 @@ export interface ComposeMoonlightLaunchSpecOptions {
   readonly mappingFile?: string
   /** Override input event device. Defaults to `KORRI_MOONLIGHT_INPUT_DEVICE`. */
   readonly inputDevice?: string
+  /** Enable Moonlight Embedded absolute touch. Defaults to `KORRI_MOONLIGHT_ABSOLUTE_TOUCH`. */
+  readonly absoluteTouch?: boolean
+  /** Raw ABS x,y,w,h bounds for absolute touch. Defaults to `KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS`. */
+  readonly absoluteTouchBounds?: string
 }
 
 export type MoonlightLaunchInputDeviceResolution =
@@ -103,11 +107,21 @@ export function composeMoonlightLaunchSpec(
   const platform = options.platform ?? moonlightPlatformFromEnv()
   const mappingFile = options.mappingFile ?? moonlightMappingFileFromEnv()
   const inputDevice = options.inputDevice ?? moonlightInputDeviceFromEnv()
+  const absoluteTouchBounds =
+    options.absoluteTouchBounds ?? moonlightAbsoluteTouchBoundsFromEnv()
+  const absoluteTouch =
+    options.absoluteTouch ??
+    moonlightAbsoluteTouchFromEnv() ??
+    absoluteTouchBounds !== undefined
   const args = [
     "stream",
     ...(platform ? ["-platform", platform] : []),
     ...(mappingFile ? ["-mapping", mappingFile] : []),
     ...(inputDevice ? ["-input", inputDevice] : []),
+    ...(absoluteTouch ? ["-absolutetouch"] : []),
+    ...(absoluteTouchBounds
+      ? ["-absolutetouchbounds", absoluteTouchBounds]
+      : []),
     "-app",
     appName,
     options.host,
@@ -159,6 +173,16 @@ function moonlightMappingFileFromEnv(): string | undefined {
 
 function moonlightInputDeviceFromEnv(): string | undefined {
   return nonEmptyEnv("KORRI_MOONLIGHT_INPUT_DEVICE")
+}
+
+function moonlightAbsoluteTouchFromEnv(): boolean | undefined {
+  const raw = process.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH?.trim()
+  if (!raw) return undefined
+  return raw === "1" || raw === "true" || raw === "enabled"
+}
+
+function moonlightAbsoluteTouchBoundsFromEnv(): string | undefined {
+  return nonEmptyEnv("KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS")
 }
 
 function moonlightRequireInputPlumberFromEnv(): boolean {

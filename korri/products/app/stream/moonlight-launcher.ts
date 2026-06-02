@@ -82,6 +82,8 @@ export interface MoonlightLaunchOptions {
   readonly inputDevice?: string
   readonly requireInputPlumberInput?: boolean
   readonly platform?: string
+  readonly absoluteTouch?: boolean
+  readonly absoluteTouchBounds?: string
   readonly gamescope?: GamescopeOptions
   readonly readProcDevices?: () => Promise<string>
   readonly runner?: CommandRunner
@@ -107,9 +109,17 @@ export async function launchMoonlight(
     ? moonlightControlEnvForHandle(moonlightControl)
     : undefined
 
+  const absoluteTouchBounds =
+    options.absoluteTouchBounds ?? moonlightAbsoluteTouchBoundsFromEnv()
+  const absoluteTouch =
+    options.absoluteTouch ??
+    moonlightAbsoluteTouchFromEnv() ??
+    absoluteTouchBounds !== undefined
   const args = moonlightArgs({
     ...options,
     client,
+    absoluteTouch,
+    absoluteTouchBounds,
     inputDevice: inputDevice.path,
     mappingFile: options.mappingFile ?? moonlightMappingFileFromEnv(),
     platform,
@@ -234,6 +244,17 @@ function moonlightPlatformFromEnv(): string | undefined {
   return raw === "" ? undefined : raw
 }
 
+function moonlightAbsoluteTouchFromEnv(): boolean | undefined {
+  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH?.trim()
+  if (!raw) return undefined
+  return raw === "1" || raw === "true" || raw === "enabled"
+}
+
+function moonlightAbsoluteTouchBoundsFromEnv(): string | undefined {
+  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS?.trim()
+  return raw === "" ? undefined : raw
+}
+
 function moonlightInputDeviceFromEnv(): string | undefined {
   const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_INPUT_DEVICE?.trim()
   return raw === "" ? undefined : raw
@@ -355,6 +376,10 @@ function moonlightArgs(
     ...(options.platform ? ["-platform", options.platform] : []),
     ...(options.mappingFile ? ["-mapping", options.mappingFile] : []),
     ...(options.inputDevice ? ["-input", options.inputDevice] : []),
+    ...(options.absoluteTouch ? ["-absolutetouch"] : []),
+    ...(options.absoluteTouchBounds
+      ? ["-absolutetouchbounds", options.absoluteTouchBounds]
+      : []),
     "-app",
     appName,
     options.host,

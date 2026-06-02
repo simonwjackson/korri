@@ -13,14 +13,17 @@ pressed.
 Add a -absolutetouch CLI flag (and matching absolute_touch config key)
 that switches the touchscreen branch in evdev.c to call
 LiSendMousePositionEvent() instead. The device's ABS axis range
-(ABS_X/Y, falling back to ABS_MT_POSITION_X/Y) is the reference plane;
-the configured -rotate value is applied inside that plane. Tap-to-click
-anchors the synthesized click at the touchdown position so the host
-cursor jumps to the finger before pressing.
+(ABS_X/Y, falling back to ABS_MT_POSITION_X/Y) is the default reference
+plane; -absolutetouchbounds x,y,w,h can narrow that plane to a single
+screen/region on dual-screen handhelds so touches outside the streamed
+game surface are ignored. The configured -rotate value is applied inside
+the selected plane. Tap-to-click anchors the synthesized click at the
+touchdown position so the host cursor jumps to the finger before pressing.
 
-Default is off, preserving the upstream trackpad behavior. Opt-in via
+Default is off, preserving the upstream trackpad behavior. Opt in via
 `moonlight stream -absolutetouch ...` (or absolutetouch = true in the
-config file).
+config file). On multi-screen clients, add `-absolutetouchbounds x,y,w,h`
+using raw touchscreen ABS units for the game screen/region.
 ---
  src/config.c      |   9 +++-
  src/config.h      |   1 +
@@ -30,67 +33,88 @@ config file).
  5 files changed, 122 insertions(+), 4 deletions(-)
 
 diff --git a/src/config.c b/src/config.c
-index 91f2061..aba6546 100644
+index 91f2061..fcd0cb9 100644
 --- a/src/config.c
 +++ b/src/config.c
-@@ -77,6 +77,7 @@ static struct option long_options[] = {
+@@ -77,6 +77,8 @@ static struct option long_options[] = {
    {"pin", required_argument, NULL, '5'},
    {"port", required_argument, NULL, '6'},
    {"hdr", no_argument, NULL, '7'},
 +  {"absolutetouch", no_argument, NULL, '8'},
++  {"absolutetouchbounds", required_argument, NULL, '9'},
    {0, 0, 0, 0},
  };
  
-@@ -260,6 +261,9 @@ static void parse_argument(int c, char* value, PCONFIGURATION config) {
+@@ -260,6 +262,17 @@ static void parse_argument(int c, char* value, PCONFIGURATION config) {
    case '7':
      config->hdr = true;
      break;
 +  case '8':
 +    config->absolute_touch = true;
 +    break;
++  case '9':
++    if (sscanf(value, "%d,%d,%d,%d", &config->absolute_touch_bounds_x, &config->absolute_touch_bounds_y, &config->absolute_touch_bounds_w, &config->absolute_touch_bounds_h) != 4 || config->absolute_touch_bounds_w <= 0 || config->absolute_touch_bounds_h <= 0) {
++      fprintf(stderr, "Invalid absolutetouchbounds value: %s\n", value);
++      exit(-1);
++    }
++    config->absolute_touch = true;
++    config->absolute_touch_bounds = true;
++    break;
    case 1:
      if (config->action == NULL)
        config->action = value;
-@@ -329,6 +333,8 @@ void config_save(char* filename, PCONFIGURATION config) {
+@@ -329,6 +342,10 @@ void config_save(char* filename, PCONFIGURATION config) {
      write_config_bool(fd, "quitappafter", config->quitappafter);
    if (config->viewonly)
      write_config_bool(fd, "viewonly", config->viewonly);
 +  if (config->absolute_touch)
 +    write_config_bool(fd, "absolutetouch", config->absolute_touch);
++  if (config->absolute_touch_bounds)
++    fprintf(fd, "absolutetouchbounds = %d,%d,%d,%d\n", config->absolute_touch_bounds_x, config->absolute_touch_bounds_y, config->absolute_touch_bounds_w, config->absolute_touch_bounds_h);
    if (config->rotate != 0)
      write_config_int(fd, "rotate", config->rotate);
  
-@@ -376,6 +382,7 @@ void config_parse(int argc, char* argv[], PCONFIGURATION config) {
+@@ -376,6 +393,12 @@ void config_parse(int argc, char* argv[], PCONFIGURATION config) {
    config->unsupported = true;
    config->quitappafter = false;
    config->viewonly = false;
 +  config->absolute_touch = false;
++  config->absolute_touch_bounds = false;
++  config->absolute_touch_bounds_x = 0;
++  config->absolute_touch_bounds_y = 0;
++  config->absolute_touch_bounds_w = 0;
++  config->absolute_touch_bounds_h = 0;
    config->mouse_emulation = true;
    config->rotate = 0;
    config->codec = CODEC_UNSPECIFIED;
-@@ -399,7 +406,7 @@ void config_parse(int argc, char* argv[], PCONFIGURATION config) {
+@@ -399,7 +422,7 @@ void config_parse(int argc, char* argv[], PCONFIGURATION config) {
    } else {
      int option_index = 0;
      int c;
 -    while ((c = getopt_long_only(argc, argv, "-abc:d:efg:h:i:j:k:lm:no:p:q:r:s:tu:v:w:xy45:6:7", long_options, &option_index)) != -1) {
-+    while ((c = getopt_long_only(argc, argv, "-abc:d:efg:h:i:j:k:lm:no:p:q:r:s:tu:v:w:xy45:6:78", long_options, &option_index)) != -1) {
++    while ((c = getopt_long_only(argc, argv, "-abc:d:efg:h:i:j:k:lm:no:p:q:r:s:tu:v:w:xy45:6:789:", long_options, &option_index)) != -1) {
        parse_argument(c, optarg, config);
      }
    }
 diff --git a/src/config.h b/src/config.h
-index 91ee4a1..fe4c4b9 100644
+index 91ee4a1..4be4b61 100644
 --- a/src/config.h
 +++ b/src/config.h
-@@ -41,6 +41,7 @@ typedef struct _CONFIGURATION {
+@@ -41,6 +41,12 @@ typedef struct _CONFIGURATION {
    bool unsupported;
    bool quitappafter;
    bool viewonly;
 +  bool absolute_touch;
++  bool absolute_touch_bounds;
++  int absolute_touch_bounds_x;
++  int absolute_touch_bounds_y;
++  int absolute_touch_bounds_w;
++  int absolute_touch_bounds_h;
    bool mouse_emulation;
    char* inputs[MAX_INPUTS];
    int inputsCount;
 diff --git a/src/input/evdev.c b/src/input/evdev.c
-index e938a8f..2473ad6 100644
+index e938a8f..3117332 100644
 --- a/src/input/evdev.c
 +++ b/src/input/evdev.c
 @@ -73,10 +73,13 @@ struct input_device {
@@ -107,17 +131,22 @@ index e938a8f..2473ad6 100644
    struct timeval touchDownTime;
    struct timeval btnDownTime;
    short controllerId;
-@@ -129,6 +132,9 @@ static bool* currentReverse;
+@@ -129,6 +132,14 @@ static bool* currentReverse;
  
  static bool grabbingDevices;
  static bool mouseEmulationEnabled;
 +static bool absoluteTouchEnabled;
++static bool absoluteTouchBoundsEnabled;
++static int absoluteTouchBoundsX;
++static int absoluteTouchBoundsY;
++static int absoluteTouchBoundsW;
++static int absoluteTouchBoundsH;
 +
 +static void send_touch_position(struct input_device *dev, int x, int y);
  
  static bool waitingToExitOnModifiersUp = false;
  
-@@ -327,6 +333,10 @@ static bool evdev_handle_event(struct input_event *ev, struct input_device *dev)
+@@ -327,6 +338,10 @@ static bool evdev_handle_event(struct input_event *ev, struct input_device *dev)
  
    switch (ev->type) {
    case EV_SYN:
@@ -128,7 +157,7 @@ index e938a8f..2473ad6 100644
      if (dev->mouseDeltaX != 0 || dev->mouseDeltaY != 0) {
        switch (dev->rotate) {
        case 90:
-@@ -453,6 +463,14 @@ static bool evdev_handle_event(struct input_event *ev, struct input_device *dev)
+@@ -453,6 +468,14 @@ static bool evdev_handle_event(struct input_event *ev, struct input_device *dev)
                timersub(&eventTime, &dev->touchDownTime, &elapsedTime);
                int holdTimeMs = elapsedTime.tv_sec * 1000 + elapsedTime.tv_usec / 1000;
                int button = holdTimeMs >= TOUCH_RCLICK_TIME ? BUTTON_RIGHT : BUTTON_LEFT;
@@ -143,7 +172,7 @@ index e938a8f..2473ad6 100644
                LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, button);
                usleep(TOUCH_CLICK_DELAY);
                LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, button);
-@@ -599,6 +617,11 @@ static bool evdev_handle_event(struct input_event *ev, struct input_device *dev)
+@@ -599,6 +622,11 @@ static bool evdev_handle_event(struct input_event *ev, struct input_device *dev)
          if (dev->touchDownX == TOUCH_UP) {
            dev->touchDownX = ev->value;
            dev->touchX = ev->value;
@@ -155,7 +184,7 @@ index e938a8f..2473ad6 100644
          } else {
            dev->mouseDeltaX += (ev->value - dev->touchX);
            dev->touchX = ev->value;
-@@ -608,6 +631,11 @@ static bool evdev_handle_event(struct input_event *ev, struct input_device *dev)
+@@ -608,6 +636,11 @@ static bool evdev_handle_event(struct input_event *ev, struct input_device *dev)
          if (dev->touchDownY == TOUCH_UP) {
            dev->touchDownY = ev->value;
            dev->touchY = ev->value;
@@ -167,7 +196,7 @@ index e938a8f..2473ad6 100644
          } else {
            dev->mouseDeltaY += (ev->value - dev->touchY);
            dev->touchY = ev->value;
-@@ -908,6 +936,34 @@ void evdev_create(const char* device, struct mapping* mappings, bool verbose, in
+@@ -908,6 +941,34 @@ void evdev_create(const char* device, struct mapping* mappings, bool verbose, in
    devices[dev].rotate = rotate;
    devices[dev].touchDownX = TOUCH_UP;
    devices[dev].touchDownY = TOUCH_UP;
@@ -202,23 +231,34 @@ index e938a8f..2473ad6 100644
  
    int nbuttons = 0;
    /* Count joystick buttons first like SDL does */
-@@ -1089,9 +1145,62 @@ void evdev_stop() {
+@@ -1089,9 +1150,78 @@ void evdev_stop() {
    evdev_drain();
  }
  
 -void evdev_init(bool mouse_emulation_enabled) {
 +// Send the current touchscreen position as an absolute mouse position
-+// using the device's ABS axis range as the reference plane. Applies the
-+// device's configured rotation by transforming inside the reference
-+// plane. Caller must ensure the touchscreen has a non-zero ABS range.
++// using either an explicit raw-ABS bounds rectangle or the device's full
++// ABS axis range as the reference plane. Applies the device's configured
++// rotation by transforming inside the selected reference plane. Caller
++// must ensure the touchscreen has a non-zero ABS range.
 +static void send_touch_position(struct input_device *dev, int x, int y) {
 +  int refW = dev->touchAbsMaxX - dev->touchAbsMinX;
 +  int refH = dev->touchAbsMaxY - dev->touchAbsMinY;
++  int posX = x - dev->touchAbsMinX;
++  int posY = y - dev->touchAbsMinY;
++
++  if (absoluteTouchBoundsEnabled) {
++    if (x < absoluteTouchBoundsX || y < absoluteTouchBoundsY || x > absoluteTouchBoundsX + absoluteTouchBoundsW || y > absoluteTouchBoundsY + absoluteTouchBoundsH)
++      return;
++    refW = absoluteTouchBoundsW;
++    refH = absoluteTouchBoundsH;
++    posX = x - absoluteTouchBoundsX;
++    posY = y - absoluteTouchBoundsY;
++  }
++
 +  if (refW <= 0 || refH <= 0)
 +    return;
 +
-+  int posX = x - dev->touchAbsMinX;
-+  int posY = y - dev->touchAbsMinY;
 +  if (posX < 0) posX = 0; else if (posX > refW) posX = refW;
 +  if (posY < 0) posY = 0; else if (posY > refH) posY = refH;
 +
@@ -259,15 +299,20 @@ index e938a8f..2473ad6 100644
 +  LiSendMousePositionEvent(outX, outY, outRefW, outRefH);
 +}
 +
-+void evdev_init(bool mouse_emulation_enabled, bool absolute_touch_enabled) {
++void evdev_init(bool mouse_emulation_enabled, bool absolute_touch_enabled, bool absolute_touch_bounds_enabled, int absolute_touch_bounds_x, int absolute_touch_bounds_y, int absolute_touch_bounds_w, int absolute_touch_bounds_h) {
    handler = evdev_handle_event;
    mouseEmulationEnabled = mouse_emulation_enabled;
 +  absoluteTouchEnabled = absolute_touch_enabled;
++  absoluteTouchBoundsEnabled = absolute_touch_bounds_enabled;
++  absoluteTouchBoundsX = absolute_touch_bounds_x;
++  absoluteTouchBoundsY = absolute_touch_bounds_y;
++  absoluteTouchBoundsW = absolute_touch_bounds_w;
++  absoluteTouchBoundsH = absolute_touch_bounds_h;
  }
  
  static struct input_device* evdev_get_input_device(unsigned short controller_id) {
 diff --git a/src/input/evdev.h b/src/input/evdev.h
-index 1239fb0..88b9ca5 100644
+index 1239fb0..f379d45 100644
 --- a/src/input/evdev.h
 +++ b/src/input/evdev.h
 @@ -24,7 +24,7 @@ extern int evdev_gamepads;
@@ -275,31 +320,29 @@ index 1239fb0..88b9ca5 100644
  void evdev_loop();
  
 -void evdev_init(bool mouse_emulation_enabled);
-+void evdev_init(bool mouse_emulation_enabled, bool absolute_touch_enabled);
++void evdev_init(bool mouse_emulation_enabled, bool absolute_touch_enabled, bool absolute_touch_bounds_enabled, int absolute_touch_bounds_x, int absolute_touch_bounds_y, int absolute_touch_bounds_w, int absolute_touch_bounds_h);
  void evdev_start();
  void evdev_stop();
  void evdev_map(char* device);
 diff --git a/src/main.c b/src/main.c
-index 96eaa98..02cb2a5 100644
+index 8e9570d..c639852 100644
 --- a/src/main.c
 +++ b/src/main.c
-@@ -215,6 +215,7 @@ static void help() {
+@@ -215,6 +215,8 @@ static void help() {
    printf("\t-quitappafter\t\tSend quit app request to remote after quitting session\n");
    printf("\t-viewonly\t\tDisable all input processing (view-only mode)\n");
    printf("\t-nomouseemulation\t\tDisable gamepad mouse emulation support (long pressing Start button)\n");
 +  printf("\t-absolutetouch\t\tSend touchscreen input as absolute mouse position instead of trackpad-style relative motion\n");
++  printf("\t-absolutetouchbounds x,y,w,h\tLimit absolute touch to a raw touchscreen ABS bounds rectangle\n");
    #if defined(HAVE_SDL) || defined(HAVE_X11)
    printf("\n WM options (SDL and X11 only)\n\n");
    printf("\t-windowed\t\tDisplay screen in a window\n");
-@@ -370,7 +371,7 @@ int main(int argc, char* argv[]) {
+@@ -370,7 +372,7 @@ int main(int argc, char* argv[]) {
          }
  
          udev_init(!inputAdded, mappings, config.debug_level > 0, config.rotate);
 -        evdev_init(config.mouse_emulation);
-+        evdev_init(config.mouse_emulation, config.absolute_touch);
++        evdev_init(config.mouse_emulation, config.absolute_touch, config.absolute_touch_bounds, config.absolute_touch_bounds_x, config.absolute_touch_bounds_y, config.absolute_touch_bounds_w, config.absolute_touch_bounds_h);
          rumble_handler = evdev_rumble;
          #ifdef HAVE_LIBCEC
          cec_init();
--- 
-2.53.0
-

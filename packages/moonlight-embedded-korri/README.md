@@ -11,7 +11,7 @@ It layers on top of the nix-on-rocks Moonlight Embedded package inputs:
 
 ### `0004-add-absolutetouch-flag-for-tap-to-click.patch`
 
-Adds `-absolutetouch` for handheld touchscreen tap-to-click over the stream.
+Adds `-absolutetouch` for handheld touchscreen tap-to-click over the stream. On dual-screen or split-touch devices, `-absolutetouchbounds x,y,w,h` narrows absolute touch to one raw ABS rectangle so touches outside the streamed game region are ignored instead of remapped into the game.
 
 ### Sunshine runtime-settings patch series
 
