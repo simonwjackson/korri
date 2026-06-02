@@ -1,3 +1,4 @@
+import { MOONLIGHT_CONTROL_PROTOCOL_LIMITS } from "@shared/stream/moonlight-control-protocol"
 import { Schema } from "effect"
 
 const numberRange = (min: number, max: number, label: string) =>
@@ -15,10 +16,28 @@ const positiveNumberRange = (min: number, max: number, label: string) =>
   )
 
 export const RuntimeBitrateKbps = Schema.Number.check(
-  positiveNumberRange(0, 100_000, "bitrateKbps"),
+  numberRange(
+    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.bitrateKbps.min,
+    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.bitrateKbps.max,
+    "bitrateKbps",
+  ),
 )
 export const RuntimeFps = Schema.Number.check(numberRange(30, 120, "fps"))
-export const RuntimeResolutionDimension = Schema.Number.check(
+export const RuntimeMoonlightResolutionWidth = Schema.Number.check(
+  numberRange(
+    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.width.min,
+    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.width.max,
+    "width",
+  ),
+)
+export const RuntimeMoonlightResolutionHeight = Schema.Number.check(
+  numberRange(
+    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.height.min,
+    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.height.max,
+    "height",
+  ),
+)
+export const RuntimeGamescopeResolutionDimension = Schema.Number.check(
   positiveNumberRange(0, 16_384, "dimension"),
 )
 export const RuntimeSharpness = Schema.Number.check(

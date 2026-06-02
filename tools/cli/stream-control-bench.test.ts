@@ -76,9 +76,17 @@ describe("stream control bench", () => {
 
     const response = await postJson(app, "/api/moonlight/bitrate", {})
     const body = await response.json()
+    const zeroResponse = await postJson(app, "/api/moonlight/bitrate", {
+      bitrateKbps: 0,
+    })
+    const zeroBody = await zeroResponse.json()
 
     expect(response.status).toBe(400)
+    expect(body).toMatchObject({ ok: false })
     expect(body.error).toContain("bitrateKbps")
+    expect(zeroResponse.status).toBe(400)
+    expect(zeroBody).toMatchObject({ ok: false })
+    expect(zeroBody.error).toContain("bitrateKbps")
   })
 
   it("returns 503 when a mutation target socket is disabled", async () => {

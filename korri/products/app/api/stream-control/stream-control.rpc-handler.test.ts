@@ -1,16 +1,15 @@
 import { describe, expect, it } from "bun:test"
 import { appRpcGroup } from "@app/api/app-rpc-group"
-import { DataError } from "@shared/api/rpc/errors"
+import { ValidationError } from "@shared/api/rpc/errors"
 import type { GamescopeControlClient } from "@shared/gamescope-control/gamescope-control-client"
 import type { GamescopeControlCommandMethod } from "@shared/gamescope-control/gamescope-control-protocol"
 import type { MoonlightControlClient } from "@shared/stream/moonlight-control-client"
 import { Cause, Effect, Exit, Layer } from "effect"
+import { handleGetStreamControlConfig } from "./get-config.rpc-handler"
+import { handleGetStreamControlState } from "./get-state.rpc-handler"
 import { createStreamControlService, StreamControl } from "./service"
-import {
-  handleGetStreamControlState,
-  handleSetGamescopeFps,
-  handleSetMoonlightBitrate,
-} from "./stream-control.rpc-handlers"
+import { handleSetGamescopeFps } from "./set-gamescope-fps.rpc-handler"
+import { handleSetMoonlightBitrate } from "./set-moonlight-bitrate.rpc-handler"
 
 describe("app.stream-control RPC handlers", () => {
   it("registers the Evier stream-control RPC tags on the app group", () => {
@@ -80,7 +79,7 @@ describe("app.stream-control RPC handlers", () => {
 
     expect(Exit.isFailure(exit)).toBe(true)
     if (Exit.isFailure(exit)) {
-      expect(Cause.squash(exit.cause)).toBeInstanceOf(DataError)
+      expect(Cause.squash(exit.cause)).toBeInstanceOf(ValidationError)
     }
     expect(calls).toEqual([])
   })
@@ -116,6 +115,29 @@ describe("app.stream-control RPC handlers", () => {
     ])
   })
 
+  it("reports socket configuration through RPC config data", async () => {
+    const config = await Effect.runPromise(
+      handleGetStreamControlConfig({}).pipe(
+        Effect.provide(
+          Layer.succeed(
+            StreamControl,
+            createStreamControlService({
+              moonlightSocketPath: "/run/moonlight.sock",
+              gamescopeSocketPath: "/run/gamescope.sock",
+              artifactDir: "/tmp/evier",
+            }),
+          ),
+        ),
+      ),
+    )
+
+    expect(config).toEqual({
+      moonlight: { enabled: true },
+      gamescope: { enabled: true },
+      artifactDir: "/tmp/evier",
+    })
+  })
+
   it("reports disabled stream-control state through RPC data", async () => {
     const state = await Effect.runPromise(
       handleGetStreamControlState({}).pipe(
@@ -128,6 +150,39 @@ describe("app.stream-control RPC handlers", () => {
     expect(state).toEqual({
       moonlight: { status: "disabled" },
       gamescope: { status: "disabled" },
+    })
+  })
+
+  it("reports live and failed socket state through RPC data", async () => {
+    const state = await Effect.runPromise(
+      handleGetStreamControlState({}).pipe(
+        Effect.provide(
+          Layer.succeed(
+            StreamControl,
+            createStreamControlService(
+              {
+                moonlightSocketPath: "/run/moonlight.sock",
+                gamescopeSocketPath: "/run/gamescope.sock",
+              },
+              {
+                connectMoonlight: async () =>
+                  ({
+                    state: async () => ({ ok: true }),
+                    close: () => undefined,
+                  }) as unknown as MoonlightControlClient,
+                connectGamescope: async () => {
+                  throw new Error("gamescope offline")
+                },
+              },
+            ),
+          ),
+        ),
+      ),
+    )
+
+    expect(state).toEqual({
+      moonlight: { status: "ok", response: { ok: true } },
+      gamescope: { status: "error", error: "gamescope offline" },
     })
   })
 })

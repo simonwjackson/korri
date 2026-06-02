@@ -22,18 +22,16 @@ import { RemoteStreamPrepareLive } from "../library/remote-stream-prepare"
 import { handleListSource } from "../source/list.rpc-handler"
 import { handleSourceStatus } from "../source/status.rpc-handler"
 import { handlePrepareStream } from "../stream/prepare.rpc-handler"
+import { handleGetStreamControlConfig } from "../stream-control/get-config.rpc-handler"
+import { handleGetStreamControlState } from "../stream-control/get-state.rpc-handler"
 import { StreamControlLayerLive } from "../stream-control/service"
-import {
-  handleGetStreamControlConfig,
-  handleGetStreamControlState,
-  handleSetGamescopeFilter,
-  handleSetGamescopeFps,
-  handleSetGamescopeMode,
-  handleSetGamescopeSharpness,
-  handleSetMoonlightBitrate,
-  handleSetMoonlightFps,
-  handleSetMoonlightResolution,
-} from "../stream-control/stream-control.rpc-handlers"
+import { handleSetGamescopeFilter } from "../stream-control/set-gamescope-filter.rpc-handler"
+import { handleSetGamescopeFps } from "../stream-control/set-gamescope-fps.rpc-handler"
+import { handleSetGamescopeMode } from "../stream-control/set-gamescope-mode.rpc-handler"
+import { handleSetGamescopeSharpness } from "../stream-control/set-gamescope-sharpness.rpc-handler"
+import { handleSetMoonlightBitrate } from "../stream-control/set-moonlight-bitrate.rpc-handler"
+import { handleSetMoonlightFps } from "../stream-control/set-moonlight-fps.rpc-handler"
+import { handleSetMoonlightResolution } from "../stream-control/set-moonlight-resolution.rpc-handler"
 import { handleServerPrepareStream } from "./prepare.rpc-handler"
 import { serverRpcGroup } from "./rpc-group"
 import { handleServerStatus } from "./status.rpc-handler"

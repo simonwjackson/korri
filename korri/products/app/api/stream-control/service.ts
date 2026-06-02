@@ -1,6 +1,6 @@
 import { appendFile, mkdir } from "node:fs/promises"
 import { join } from "node:path"
-import { DataError } from "@shared/api/rpc/errors"
+import { DataError, ValidationError } from "@shared/api/rpc/errors"
 import {
   connectGamescopeControl,
   type GamescopeControlClient,
@@ -10,6 +10,7 @@ import {
   connectMoonlightControl,
   type MoonlightControlClient,
 } from "@shared/stream/moonlight-control-client"
+import { MOONLIGHT_CONTROL_PROTOCOL_LIMITS } from "@shared/stream/moonlight-control-protocol"
 import { Context, Effect, Layer } from "effect"
 import type {
   StreamControlCommandResponseData,
@@ -44,27 +45,48 @@ export interface StreamControlService {
   readonly state: () => Effect.Effect<StreamControlStateResponseData>
   readonly setMoonlightBitrate: (payload: {
     readonly bitrateKbps: number
-  }) => Effect.Effect<StreamControlCommandResponseData, DataError>
+  }) => Effect.Effect<
+    StreamControlCommandResponseData,
+    DataError | ValidationError
+  >
   readonly setMoonlightFps: (payload: {
     readonly fps: number
-  }) => Effect.Effect<StreamControlCommandResponseData, DataError>
+  }) => Effect.Effect<
+    StreamControlCommandResponseData,
+    DataError | ValidationError
+  >
   readonly setMoonlightResolution: (payload: {
     readonly width: number
     readonly height: number
-  }) => Effect.Effect<StreamControlCommandResponseData, DataError>
+  }) => Effect.Effect<
+    StreamControlCommandResponseData,
+    DataError | ValidationError
+  >
   readonly setGamescopeMode: (payload: {
     readonly width: number
     readonly height: number
-  }) => Effect.Effect<StreamControlCommandResponseData, DataError>
+  }) => Effect.Effect<
+    StreamControlCommandResponseData,
+    DataError | ValidationError
+  >
   readonly setGamescopeFps: (payload: {
     readonly fps: number
-  }) => Effect.Effect<StreamControlCommandResponseData, DataError>
+  }) => Effect.Effect<
+    StreamControlCommandResponseData,
+    DataError | ValidationError
+  >
   readonly setGamescopeFilter: (payload: {
     readonly filter: GamescopeScalingFilter
-  }) => Effect.Effect<StreamControlCommandResponseData, DataError>
+  }) => Effect.Effect<
+    StreamControlCommandResponseData,
+    DataError | ValidationError
+  >
   readonly setGamescopeSharpness: (payload: {
     readonly sharpness: number
-  }) => Effect.Effect<StreamControlCommandResponseData, DataError>
+  }) => Effect.Effect<
+    StreamControlCommandResponseData,
+    DataError | ValidationError
+  >
 }
 
 export class StreamControl extends Context.Service<
@@ -104,7 +126,12 @@ export function createStreamControlService(
     config: () => Effect.succeed(configPayload(runtime.options)),
     state: () => Effect.promise(() => readState(runtime)),
     setMoonlightBitrate: payload =>
-      positive("bitrateKbps", payload.bitrateKbps, 100_000).pipe(
+      range(
+        "bitrateKbps",
+        payload.bitrateKbps,
+        MOONLIGHT_CONTROL_PROTOCOL_LIMITS.bitrateKbps.min,
+        MOONLIGHT_CONTROL_PROTOCOL_LIMITS.bitrateKbps.max,
+      ).pipe(
         Effect.flatMap(() =>
           runMoonlight(runtime, "moonlight.bitrate", payload, client =>
             client.setBitrate(payload),
@@ -120,7 +147,7 @@ export function createStreamControlService(
         ),
       ),
     setMoonlightResolution: payload =>
-      positiveResolution(payload).pipe(
+      moonlightResolution(payload).pipe(
         Effect.flatMap(() =>
           runMoonlight(runtime, "moonlight.resolution", payload, client =>
             client.setResolution(payload),
@@ -128,7 +155,7 @@ export function createStreamControlService(
         ),
       ),
     setGamescopeMode: payload =>
-      positiveResolution(payload).pipe(
+      gamescopeResolution(payload).pipe(
         Effect.flatMap(() =>
           runGamescope(runtime, "gamescope.mode", payload, client =>
             client.setMode(payload),
@@ -182,7 +209,12 @@ function createRuntime(
       ((socketPath: string) => connectGamescopeControl({ socketPath })),
     record: async event => {
       if (!artifactDir) return
-      artifactDirReady ??= mkdirImpl(artifactDir, { recursive: true })
+      artifactDirReady ??= mkdirImpl(artifactDir, { recursive: true }).catch(
+        error => {
+          artifactDirReady = undefined
+          throw error
+        },
+      )
       await artifactDirReady
       await appendFileImpl(
         join(artifactDir, "events.jsonl"),
@@ -234,7 +266,10 @@ function runSocketAction<TClient>(input: {
   readonly requested: StreamControlRequestedPayload
   readonly record: (event: unknown) => Promise<void>
   readonly run: (client: TClient) => Promise<unknown>
-}): Effect.Effect<StreamControlCommandResponseData, DataError> {
+}): Effect.Effect<
+  StreamControlCommandResponseData,
+  DataError | ValidationError
+> {
   const socketPath = input.socketPath
   if (!socketPath) {
     return Effect.fail(
@@ -293,8 +328,19 @@ async function readState(
     ),
   ])
   const result = { moonlight, gamescope }
-  await runtime.record({ action: "state.snapshot", ...result })
+  await recordStateSnapshot(runtime.record, result)
   return result
+}
+
+async function recordStateSnapshot(
+  record: (event: unknown) => Promise<void>,
+  result: StreamControlStateResponseData,
+): Promise<void> {
+  try {
+    await record({ action: "state.snapshot", ...result })
+  } catch {
+    return
+  }
 }
 
 async function readControlState<TClient>(
@@ -324,43 +370,48 @@ function configPayload(
   }
 }
 
-function positive(
-  label: string,
-  value: number,
-  max: number,
-): Effect.Effect<void, DataError> {
-  return Number.isFinite(value) && value > 0 && value <= max
-    ? Effect.void
-    : Effect.fail(
-        new DataError({
-          reason: "Unavailable",
-          message: `${label} greater than 0 and at most ${max} required`,
-        }),
-      )
-}
-
 function range(
   label: string,
   value: number,
   min: number,
   max: number,
-): Effect.Effect<void, DataError> {
+): Effect.Effect<void, ValidationError> {
   return Number.isFinite(value) && value >= min && value <= max
     ? Effect.void
     : Effect.fail(
-        new DataError({
-          reason: "Unavailable",
+        new ValidationError({
           message: `${label} between ${min} and ${max} required`,
         }),
       )
 }
 
-function positiveResolution(payload: {
+function moonlightResolution(payload: {
   readonly width: number
   readonly height: number
-}): Effect.Effect<void, DataError> {
-  return positive("width", payload.width, 16_384).pipe(
-    Effect.andThen(positive("height", payload.height, 16_384)),
+}): Effect.Effect<void, ValidationError> {
+  return range(
+    "width",
+    payload.width,
+    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.width.min,
+    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.width.max,
+  ).pipe(
+    Effect.andThen(
+      range(
+        "height",
+        payload.height,
+        MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.height.min,
+        MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.height.max,
+      ),
+    ),
+  )
+}
+
+function gamescopeResolution(payload: {
+  readonly width: number
+  readonly height: number
+}): Effect.Effect<void, ValidationError> {
+  return range("width", payload.width, 1, 16_384).pipe(
+    Effect.andThen(range("height", payload.height, 1, 16_384)),
   )
 }
 

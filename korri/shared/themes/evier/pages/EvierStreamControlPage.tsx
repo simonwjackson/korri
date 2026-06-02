@@ -1,3 +1,4 @@
+import type { GamescopeScalingFilter } from "@shared/gamescope-control/gamescope-control-protocol"
 import { useCallback, useEffect, useRef, useState } from "react"
 
 const DEBOUNCE_MS = 500
@@ -33,7 +34,7 @@ export interface EvierStreamControlController {
     readonly fps: number
   }) => Promise<unknown>
   readonly setGamescopeFilter: (payload: {
-    readonly filter: string
+    readonly filter: GamescopeScalingFilter
   }) => Promise<unknown>
   readonly setGamescopeSharpness: (payload: {
     readonly sharpness: number
@@ -63,27 +64,39 @@ export function EvierStreamControlPage({
   readonly controller: EvierStreamControlController
 }) {
   const [status, setStatus] = useState("loading…")
+  const [isRecovering, setIsRecovering] = useState(false)
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+  const mounted = useRef(false)
+  const recovering = useRef(false)
+  const statusSerial = useRef(0)
+
+  const publishStatus = useCallback((serial: number, value: unknown) => {
+    if (mounted.current && serial === statusSerial.current) {
+      setStatus(JSON.stringify(value, null, 2))
+    }
+  }, [])
 
   const run = useCallback(
     async (action: ControlAction, body: Record<string, unknown>) => {
+      const serial = ++statusSerial.current
       try {
         const response = await runControlAction(controller, action, body)
-        setStatus(JSON.stringify(response, null, 2))
+        publishStatus(serial, response)
       } catch (error) {
-        setStatus(JSON.stringify({ error: errorMessage(error) }, null, 2))
+        publishStatus(serial, { error: errorMessage(error) })
       }
     },
-    [controller],
+    [controller, publishStatus],
   )
 
   const refresh = useCallback(async () => {
+    const serial = ++statusSerial.current
     try {
-      setStatus(JSON.stringify(await controller.getState(), null, 2))
+      publishStatus(serial, await controller.getState())
     } catch (error) {
-      setStatus(JSON.stringify({ error: errorMessage(error) }, null, 2))
+      publishStatus(serial, { error: errorMessage(error) })
     }
-  }, [controller])
+  }, [controller, publishStatus])
 
   const schedule = useCallback(
     (id: string, action: ControlAction, body: Record<string, unknown>) => {
@@ -99,20 +112,30 @@ export function EvierStreamControlPage({
   )
 
   const recover = useCallback(async () => {
-    await run("setMoonlightBitrate", { bitrateKbps: 12_000 })
-    await sleep(700)
-    await run("setMoonlightFps", { fps: 60 })
-    await sleep(700)
-    await run("setMoonlightResolution", {
-      width: 1920,
-      height: 1080,
-    })
+    if (recovering.current) return
+    recovering.current = true
+    setIsRecovering(true)
+    try {
+      await run("setMoonlightBitrate", { bitrateKbps: 12_000 })
+      await sleepWhileMounted(700, mounted)
+      await run("setMoonlightFps", { fps: 60 })
+      await sleepWhileMounted(700, mounted)
+      await run("setMoonlightResolution", {
+        width: 1920,
+        height: 1080,
+      })
+    } finally {
+      recovering.current = false
+      if (mounted.current) setIsRecovering(false)
+    }
   }, [run])
 
   useEffect(() => {
+    mounted.current = true
     void refresh()
     const interval = setInterval(() => void refresh(), 3000)
     return () => {
+      mounted.current = false
       clearInterval(interval)
       for (const timer of timers.current.values()) clearTimeout(timer)
       timers.current.clear()
@@ -192,8 +215,12 @@ export function EvierStreamControlPage({
           <button type="button" onClick={() => void refresh()}>
             Refresh
           </button>
-          <button type="button" onClick={() => void recover()}>
-            Recover Moonlight 1080/60/12
+          <button
+            type="button"
+            disabled={isRecovering}
+            onClick={() => void recover()}
+          >
+            {isRecovering ? "Recovering…" : "Recover Moonlight 1080/60/12"}
           </button>
         </div>
         <pre className="evier-status">{status}</pre>
@@ -273,11 +300,11 @@ const moonlightBitrateSpec: SliderSpec = {
   action: "setMoonlightBitrate",
   initial: 12_000,
   min: 500,
-  max: 100_000,
+  max: 150_000,
   step: 500,
   stepper: 500,
   accent: "moonlight",
-  hint: "0.5–100 Mbps",
+  hint: "0.5–150 Mbps",
   format: value => `${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)} Mbps`,
   payload: value => ({ bitrateKbps: value }),
 }
@@ -371,7 +398,9 @@ function runControlAction(
     case "setGamescopeFps":
       return controller.setGamescopeFps({ fps: Number(body.fps) })
     case "setGamescopeFilter":
-      return controller.setGamescopeFilter({ filter: String(body.filter) })
+      return controller.setGamescopeFilter({
+        filter: gamescopeScalingFilterFrom(body.filter),
+      })
     case "setGamescopeSharpness":
       return controller.setGamescopeSharpness({
         sharpness: Number(body.sharpness),
@@ -383,8 +412,25 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value))
 }
 
-function sleep(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms))
+async function sleepWhileMounted(
+  ms: number,
+  mounted: { readonly current: boolean },
+) {
+  await new Promise(resolve => setTimeout(resolve, ms))
+  if (!mounted.current) throw new Error("Evier stream control unmounted")
+}
+
+function gamescopeScalingFilterFrom(value: unknown): GamescopeScalingFilter {
+  if (
+    value === "linear" ||
+    value === "nearest" ||
+    value === "integer" ||
+    value === "fsr" ||
+    value === "nis"
+  ) {
+    return value
+  }
+  return "linear"
 }
 
 function errorMessage(error: unknown): string {

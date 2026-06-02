@@ -69,12 +69,7 @@ export function createEvierStreamControlRpcClient(): EvierStreamControlControlle
         RpcClient.make(appRpcGroup).pipe(
           Effect.flatMap(client =>
             client["app.stream-control.gamescope-filter.set"]({
-              filter: payload.filter as
-                | "linear"
-                | "nearest"
-                | "integer"
-                | "fsr"
-                | "nis",
+              filter: payload.filter,
             }),
           ),
         ),

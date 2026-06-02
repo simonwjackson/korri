@@ -2,15 +2,15 @@ import { ApiError } from "@shared/api/rpc/errors"
 import { Schema } from "effect"
 import { Rpc } from "effect/unstable/rpc"
 import {
-  RuntimeResolutionDimension,
+  RuntimeGamescopeResolutionDimension,
   StreamControlCommandResponseFields,
 } from "./rpc-schemas"
 
 export class SetGamescopeModePayload extends Schema.Class<SetGamescopeModePayload>(
   "SetGamescopeModePayload",
 )({
-  width: RuntimeResolutionDimension,
-  height: RuntimeResolutionDimension,
+  width: RuntimeGamescopeResolutionDimension,
+  height: RuntimeGamescopeResolutionDimension,
 }) {}
 
 export class SetGamescopeModeResponse extends Schema.Class<SetGamescopeModeResponse>(

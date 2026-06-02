@@ -169,7 +169,12 @@ function createRuntime(
       ((socketPath: string) => connectGamescopeControl({ socketPath })),
     record: async event => {
       if (!artifactDir) return
-      artifactDirReady ??= mkdirImpl(artifactDir, { recursive: true })
+      artifactDirReady ??= mkdirImpl(artifactDir, { recursive: true }).catch(
+        error => {
+          artifactDirReady = undefined
+          throw error
+        },
+      )
       await artifactDirReady
       await appendFileImpl(
         join(artifactDir, "events.jsonl"),
@@ -192,7 +197,9 @@ function controlMutation<TClient, TPayload>(
 ) {
   return async (context: Context) => {
     const payload = config.parse(await requestJson(context))
-    if (!payload.ok) return context.json({ error: payload.error }, 400)
+    if (!payload.ok) {
+      return context.json({ ok: false, error: payload.error }, 400)
+    }
     const result = await runSocketAction({
       socketPath: config.socketPath(),
       disabledError: config.disabledError,
@@ -287,8 +294,19 @@ async function readState(runtime: StreamControlRuntime) {
     ),
   ])
   const result = { moonlight, gamescope }
-  await runtime.record({ action: "state.snapshot", ...result })
+  await recordStateSnapshot(runtime.record, result)
   return result
+}
+
+async function recordStateSnapshot(
+  record: (event: unknown) => Promise<void>,
+  result: { readonly moonlight: unknown; readonly gamescope: unknown },
+): Promise<void> {
+  try {
+    await record({ action: "state.snapshot", ...result })
+  } catch {
+    return
+  }
 }
 
 async function readControlState<TClient>(
@@ -324,11 +342,13 @@ function parseBitrate(
   body: unknown,
 ): ParsedPayload<{ readonly bitrateKbps: number }> {
   const bitrateKbps = readNumber(body, "bitrateKbps")
-  return bitrateKbps !== undefined && bitrateKbps > 0 && bitrateKbps <= 100000
+  return bitrateKbps !== undefined &&
+    bitrateKbps >= 500 &&
+    bitrateKbps <= 150000
     ? { ok: true, value: { bitrateKbps } }
     : {
         ok: false,
-        error: "bitrateKbps greater than 0 and at most 100000 required",
+        error: "bitrateKbps between 500 and 150000 required",
       }
 }
 
