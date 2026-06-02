@@ -1,5 +1,5 @@
 import type { EntrySource } from "@shared/api/rpc/entry-source"
-import type { ResolvedGameRecord } from "@shared/fixtures/games/game"
+import { ResolvedGameRecord } from "@shared/fixtures/games/game"
 import type { EphemeralOverride } from "@shared/library/config/ephemeral-override"
 import type { GamescopePolicy } from "@shared/library/config/inheritable-fields"
 import type {
@@ -18,6 +18,29 @@ export class LibraryError extends Schema.TaggedErrorClass<LibraryError>()(
     diagnostic: Schema.optional(Schema.String),
   },
 ) {}
+
+const GameContentItem = Schema.TaggedStruct("GameItem", {
+  game: ResolvedGameRecord,
+})
+
+const MediaContentItem = Schema.TaggedStruct("MediaItem", {
+  id: Schema.String,
+  sourceId: Schema.String,
+  title: Schema.String,
+})
+
+const TrackContentItem = Schema.TaggedStruct("TrackItem", {
+  id: Schema.String,
+  sourceId: Schema.String,
+  title: Schema.String,
+})
+
+export const ContentItem = Schema.Union([
+  GameContentItem,
+  MediaContentItem,
+  TrackContentItem,
+])
+export type ContentItem = Schema.Schema.Type<typeof ContentItem>
 
 export interface ResolveLaunchInputs {
   readonly userId?: string
@@ -47,6 +70,12 @@ export interface ResolvedLaunch {
    * foreground semantics.
    */
   readonly extras?: LaunchExtras
+}
+
+export interface ContentSourceService {
+  readonly id: string
+  readonly kinds: readonly ContentItem["_tag"][]
+  readonly list: () => Effect.Effect<readonly ContentItem[], LibraryError>
 }
 
 export interface LibrarySourceService {
@@ -108,6 +137,11 @@ export interface LauncherService {
     options?: LaunchOptions,
   ) => Effect.Effect<ManagedLaunchResult, LibraryError>
 }
+
+export class ContentSources extends Context.Service<
+  ContentSources,
+  readonly ContentSourceService[]
+>()("ContentSources") {}
 
 export class LibrarySource extends Context.Service<
   LibrarySource,
