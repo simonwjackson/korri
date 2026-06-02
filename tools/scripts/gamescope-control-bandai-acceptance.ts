@@ -35,7 +35,7 @@ export function buildBandaiGamescopeAcceptancePlan(
     options.remoteRoot ?? `/tmp/gamescope-control-bandai-${dateStamp()}`
 
   const control = (args: string) =>
-    `gamescope-control --socket ${shellQuote(socketPath)} ${args}`
+    `timeout 10 gamescope-control --socket ${shellQuote(socketPath)} ${args}`
   const capture = (name: string) =>
     [
       "SWAYSOCK=$(ls -t /run/user/0/sway-ipc.*.sock | head -1)",

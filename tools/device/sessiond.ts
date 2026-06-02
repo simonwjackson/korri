@@ -1,5 +1,5 @@
 import { readdirSync } from "node:fs"
-import { mkdir } from "node:fs/promises"
+import { mkdir, stat } from "node:fs/promises"
 import { join } from "node:path"
 import {
   type LaunchResult,
@@ -421,6 +421,7 @@ export function createKorriSessiondCore(
               spawned.session.terminate()
             }
           }
+          pushLifecycleEvent(launchId, { type: "child-running" })
           if (!result) {
             try {
               const bridge =
@@ -449,7 +450,6 @@ export function createKorriSessiondCore(
             }
           }
           if (!result) {
-            pushLifecycleEvent(launchId, { type: "child-running" })
             // Phase 4D / Track A. Role-specific foreground promotion
             // runs after the primary child is observed running. Throwing
             // here turns into a launch failure (host-unavailable).
@@ -1051,6 +1051,7 @@ function createProcessGamescopeControlBridge(options: {
         stdout: "inherit",
         stderr: "inherit",
       })
+      await waitForSocketPath(request.socketPath, proc.exited, 2000)
       return {
         socketPath: request.socketPath,
         stop: async () => {
@@ -1067,6 +1068,36 @@ function createProcessGamescopeControlBridge(options: {
       }
     },
   }
+}
+
+async function waitForSocketPath(
+  socketPath: string,
+  exited: Promise<number>,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() <= deadline) {
+    try {
+      await stat(socketPath)
+      return
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== "ENOENT") throw error
+    }
+
+    const exitCode = await Promise.race([
+      exited.then(code => code),
+      delay(25).then(() => undefined),
+    ])
+    if (exitCode !== undefined) {
+      throw new Error(
+        `Gamescope control bridge exited before socket was ready: ${exitCode}`,
+      )
+    }
+  }
+  throw new Error(
+    `Gamescope control bridge socket was not ready after ${timeoutMs}ms: ${socketPath}`,
+  )
 }
 
 function gamescopeControlBridgeEnabledFromEnv(): boolean {

@@ -183,7 +183,7 @@ describe("gamescope control bridge", () => {
         await waitFor(() => deliveries.length > 0)
         expect(deliveries).toContainEqual(
           expect.objectContaining({
-            seq: 2,
+            seq: 1,
             event: expect.objectContaining({
               type: "command.result",
               result: expect.objectContaining({
@@ -193,6 +193,59 @@ describe("gamescope control bridge", () => {
             }),
           }),
         )
+      } finally {
+        subscriber.close()
+        controller.close()
+      }
+    } finally {
+      await bridge.close()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("stops delivering events after unsubscribe", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "gamescope-control-"))
+    const socketPath = join(dir, "control.sock")
+    const backend: GamescopeControlBackend = {
+      getState: async () => ({}),
+      setMode: async requested => ({
+        _tag: "command.result",
+        command: "mode.set",
+        status: "applied",
+        requested,
+        applied: { xwaylandMode: requested },
+      }),
+      setFilter: async filter => ({
+        _tag: "command.result",
+        command: "filter.set",
+        status: "applied",
+        requested: { filter },
+        applied: { filter },
+      }),
+      setSharpness: async sharpness => ({
+        _tag: "command.result",
+        command: "sharpness.set",
+        status: "applied",
+        requested: { sharpness },
+        applied: { sharpness },
+      }),
+    }
+
+    const bridge = await startGamescopeControlBridge({ socketPath, backend })
+    try {
+      const subscriber = await connectGamescopeControl({ socketPath })
+      const controller = await connectGamescopeControl({ socketPath })
+      const deliveries: unknown[] = []
+      try {
+        subscriber.onEvent(delivery => deliveries.push(delivery))
+        await subscriber.subscribe()
+        await controller.setFilter({ filter: "fsr" })
+        await waitFor(() => deliveries.length === 1)
+        const unsubscribed = await subscriber.unsubscribe()
+        expect(unsubscribed.result._tag).toBe("events.unsubscribed")
+        await controller.setSharpness({ sharpness: 0 })
+        await sleep(10)
+        expect(deliveries).toHaveLength(1)
       } finally {
         subscriber.close()
         controller.close()

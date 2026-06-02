@@ -7,6 +7,7 @@ import {
   type GamescopeControlCommandResult,
   type GamescopeControlEvent,
   type GamescopeControlEventsSubscribedResult,
+  type GamescopeControlEventsUnsubscribedResult,
   type GamescopeControlHelloResult,
   type GamescopeControlResponse,
   type GamescopeControlState,
@@ -19,6 +20,7 @@ export interface GamescopeControlClientOptions {
   readonly socketPath: string
   readonly maxFrameBytes?: number
   readonly onSequenceGap?: (gap: GamescopeControlSequenceGap) => void
+  readonly connectTimeoutMs?: number
 }
 
 export interface GamescopeControlSequenceGap {
@@ -42,6 +44,9 @@ export interface GamescopeControlClient {
   >
   readonly subscribe: () => Promise<
     GamescopeControlSuccessResponse<GamescopeControlEventsSubscribedResult>
+  >
+  readonly unsubscribe: () => Promise<
+    GamescopeControlSuccessResponse<GamescopeControlEventsUnsubscribedResult>
   >
   readonly setMode: (
     params: GamescopeModeRequest,
@@ -70,7 +75,10 @@ interface PendingRequest {
 export async function connectGamescopeControl(
   options: GamescopeControlClientOptions,
 ): Promise<GamescopeControlClient> {
-  const socket = await connectUnixSocket(options.socketPath)
+  const socket = await connectUnixSocket(
+    options.socketPath,
+    options.connectTimeoutMs ?? 1000,
+  )
   return createGamescopeControlClient(socket, options)
 }
 
@@ -123,6 +131,10 @@ function createGamescopeControlClient(
     subscribe: () =>
       request("events.subscribe") as Promise<
         GamescopeControlSuccessResponse<GamescopeControlEventsSubscribedResult>
+      >,
+    unsubscribe: () =>
+      request("events.unsubscribe") as Promise<
+        GamescopeControlSuccessResponse<GamescopeControlEventsUnsubscribedResult>
       >,
     setMode: params =>
       request("mode.set", params) as Promise<
@@ -209,11 +221,26 @@ function createGamescopeControlClient(
   }
 }
 
-function connectUnixSocket(socketPath: string): Promise<Socket> {
+function connectUnixSocket(
+  socketPath: string,
+  timeoutMs: number,
+): Promise<Socket> {
   return new Promise((resolve, reject) => {
     const socket = connect({ path: socketPath })
-    socket.once("connect", () => resolve(socket))
-    socket.once("error", reject)
+    const timer = setTimeout(() => {
+      socket.destroy()
+      reject(
+        new Error(`Gamescope control connect timed out after ${timeoutMs}ms`),
+      )
+    }, timeoutMs)
+    socket.once("connect", () => {
+      clearTimeout(timer)
+      resolve(socket)
+    })
+    socket.once("error", error => {
+      clearTimeout(timer)
+      reject(error)
+    })
   })
 }
 

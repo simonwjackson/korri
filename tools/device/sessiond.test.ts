@@ -1313,6 +1313,103 @@ describe("korri sessiond", () => {
     expect(calls).toContain("restoreIdleAfterLaunch")
   })
 
+  it("fails launch as host-unavailable when Gamescope control bridge start fails", async () => {
+    const order: string[] = []
+    const terminated: string[] = []
+    const { core } = startHarness({
+      spawnLaunch: async () => ({
+        processGroupId: 42,
+        result: Promise.resolve({ status: "launched" }),
+        terminate: () => {
+          terminated.push("graceful")
+        },
+        terminateNow: () => undefined,
+      }),
+      gamescopeControlBridge: {
+        start: async () => {
+          order.push("bridge-start")
+          throw new Error("bridge missing")
+        },
+      },
+    })
+
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-gs-fail", spec }),
+      }),
+    )
+    const streamResponse = await request(
+      core,
+      "/managed-launch/events?launchId=launch-gs-fail",
+      authorized(),
+    )
+    const lifecycle = parseSseEvents(await streamResponse.text())
+
+    expect(order).toEqual(["bridge-start"])
+    expect(terminated).toEqual(["graceful"])
+    expect(lifecycle.map(event => event.type)).toContain("child-running")
+    expect(
+      lifecycle.find(event => event.type === "child-exited")?.terminal,
+    ).toMatchObject({
+      exitCode: 124,
+      failureKind: "host-unavailable",
+      stderrTail: "Gamescope control bridge failed: bridge missing",
+    })
+  })
+
+  it("continues to reap when Gamescope control bridge stop throws", async () => {
+    const child = deferred<LaunchResult>()
+    const order: string[] = []
+    const { core } = startHarness({
+      spawnLaunch: async () => ({
+        processGroupId: 42,
+        result: child.promise,
+        terminate: () => undefined,
+        terminateNow: () => undefined,
+      }),
+      gamescopeControlBridge: {
+        start: async request => ({
+          socketPath: request.socketPath,
+          stop: async () => {
+            order.push("bridge-stop")
+            throw new Error("stop failed")
+          },
+        }),
+      },
+      reaper: async () => {
+        order.push("reaper")
+        return { reaped: [], residual: [] }
+      },
+    })
+
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-gs-stop-fail", spec }),
+      }),
+    )
+    const streamResponse = await request(
+      core,
+      "/managed-launch/events?launchId=launch-gs-stop-fail",
+      authorized(),
+    )
+    const streamText = streamResponse.text()
+
+    child.resolve({ status: "launched" })
+    await streamText
+
+    expect(order).toEqual(["bridge-stop", "reaper"])
+  })
+
   it("starts the Gamescope control bridge after child spawn and stops it before reaping", async () => {
     const child = deferred<LaunchResult>()
     const order: string[] = []

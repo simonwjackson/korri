@@ -46,6 +46,11 @@ describe("gamescope-control cli", () => {
             id: "4",
             result: { _tag: "events.subscribed" as const, seq: 1 },
           }),
+          unsubscribe: async () => ({
+            jsonrpc: "2.0",
+            id: "5",
+            result: { _tag: "events.unsubscribed" as const, seq: 2 },
+          }),
           requestCommand: async () => {
             throw new Error("unexpected")
           },
@@ -90,6 +95,11 @@ describe("gamescope-control cli", () => {
             jsonrpc: "2.0",
             id: "4",
             result: { _tag: "events.subscribed" as const, seq: 1 },
+          }),
+          unsubscribe: async () => ({
+            jsonrpc: "2.0",
+            id: "5",
+            result: { _tag: "events.unsubscribed" as const, seq: 2 },
           }),
           requestCommand: async () => {
             throw new Error("unexpected")
@@ -136,6 +146,11 @@ describe("gamescope-control cli", () => {
             id: "4",
             result: { _tag: "events.subscribed" as const, seq: 1 },
           }),
+          unsubscribe: async () => ({
+            jsonrpc: "2.0",
+            id: "5",
+            result: { _tag: "events.unsubscribed" as const, seq: 2 },
+          }),
           requestCommand: async (method, params) => {
             calls.push({ method, params })
             return {
@@ -159,6 +174,96 @@ describe("gamescope-control cli", () => {
     expect(exitCode).toBe(0)
     expect(calls).toEqual([{ method: "display.sleep", params: undefined }])
     expect(output[0]).toContain('"status": "unsupported"')
+  })
+
+  it("validates generic call methods before connecting", async () => {
+    const errors: string[] = []
+    const exitCode = await runGamescopeControlCommand(
+      ["call", "wat", "--socket", "/tmp/gamescope.sock"],
+      { writeError: line => errors.push(line) },
+    )
+
+    expect(exitCode).toBe(2)
+    expect(errors.join("\n")).toContain("valid command method")
+  })
+
+  it("validates generic call JSON params before connecting", async () => {
+    const errors: string[] = []
+    const exitCode = await runGamescopeControlCommand(
+      ["call", "display.sleep", "{bad", "--socket", "/tmp/gamescope.sock"],
+      { writeError: line => errors.push(line) },
+    )
+
+    expect(exitCode).toBe(2)
+    expect(errors.join("\n")).toContain("valid JSON")
+  })
+
+  it("forwards generic call JSON params", async () => {
+    const calls: unknown[] = []
+    const exitCode = await runGamescopeControlCommand(
+      [
+        "call",
+        "display.sleep",
+        '{"reason":"test"}',
+        "--socket",
+        "/tmp/gamescope.sock",
+      ],
+      {
+        write: () => undefined,
+        connect: async () => ({
+          hello: async () => ({
+            jsonrpc: "2.0",
+            id: "1",
+            result: helloResult(),
+          }),
+          state: async () => ({
+            jsonrpc: "2.0",
+            id: "2",
+            result: stateResult(),
+          }),
+          setMode: async () => {
+            throw new Error("unexpected")
+          },
+          setFilter: async () => {
+            throw new Error("unexpected")
+          },
+          setSharpness: async () => {
+            throw new Error("unexpected")
+          },
+          subscribe: async () => ({
+            jsonrpc: "2.0",
+            id: "4",
+            result: { _tag: "events.subscribed" as const, seq: 1 },
+          }),
+          unsubscribe: async () => ({
+            jsonrpc: "2.0",
+            id: "5",
+            result: { _tag: "events.unsubscribed" as const, seq: 2 },
+          }),
+          requestCommand: async (method, params) => {
+            calls.push({ method, params })
+            return {
+              jsonrpc: "2.0",
+              id: "6",
+              result: {
+                _tag: "command.result" as const,
+                command: method,
+                status: "unsupported" as const,
+                requested: params,
+                applied: {},
+              },
+            }
+          },
+          onEvent: () => () => undefined,
+          close: () => undefined,
+        }),
+      },
+    )
+
+    expect(exitCode).toBe(0)
+    expect(calls).toEqual([
+      { method: "display.sleep", params: { reason: "test" } },
+    ])
   })
 
   it("validates sharpness before connecting", async () => {

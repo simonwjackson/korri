@@ -1,7 +1,7 @@
 export const GAMESCOPE_CONTROL_PROTOCOL = {
   name: "gamescope.korri-control",
   major: 1,
-  minor: 0,
+  minor: 1,
 } as const
 
 export const GAMESCOPE_CONTROL_PROTOCOL_LIMITS = {
@@ -112,7 +112,7 @@ export interface GamescopeControlCommandResult {
   readonly requestId?: GamescopeControlRequestId
   readonly command: GamescopeControlCommandMethod
   readonly status: GamescopeControlCommandStatus
-  readonly requested?: unknown
+  readonly requested: unknown
   readonly applied: GamescopeControlState
   readonly reason?: string
 }
@@ -122,10 +122,16 @@ export interface GamescopeControlEventsSubscribedResult {
   readonly seq: number
 }
 
+export interface GamescopeControlEventsUnsubscribedResult {
+  readonly _tag: "events.unsubscribed"
+  readonly seq: number
+}
+
 export interface GamescopeControlHelloResult {
   readonly _tag: "protocol.hello"
   readonly protocol: typeof GAMESCOPE_CONTROL_PROTOCOL
   readonly capabilities: {
+    readonly methods: readonly GamescopeControlMethod[]
     readonly commands: readonly GamescopeControlCommandMethod[]
     readonly events: readonly GamescopeControlEventType[]
     readonly unsupported?: readonly GamescopeControlCommandMethod[]
@@ -137,6 +143,7 @@ export interface GamescopeControlHelloResult {
 export type GamescopeControlResponseResult =
   | GamescopeControlHelloResult
   | GamescopeControlEventsSubscribedResult
+  | GamescopeControlEventsUnsubscribedResult
   | (GamescopeControlState & { readonly _tag: "state.snapshot" })
   | GamescopeControlCommandResult
 
@@ -345,6 +352,7 @@ export function createGamescopeHelloResult(): GamescopeControlHelloResult {
     _tag: "protocol.hello",
     protocol: GAMESCOPE_CONTROL_PROTOCOL,
     capabilities: {
+      methods: GAMESCOPE_CONTROL_PROTOCOL_METHODS,
       commands: GAMESCOPE_CONTROL_COMMANDS,
       events: GAMESCOPE_CONTROL_EVENTS,
       unsupported: unsupportedDefaultCommands(),
@@ -355,7 +363,7 @@ export function createGamescopeHelloResult(): GamescopeControlHelloResult {
 
 export function createUnsupportedGamescopeCommandResult(
   command: GamescopeControlCommandMethod,
-  requested?: unknown,
+  requested: unknown = null,
 ): GamescopeControlCommandResult {
   return {
     _tag: "command.result",

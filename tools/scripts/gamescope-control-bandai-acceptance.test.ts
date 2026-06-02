@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test"
-import { buildBandaiGamescopeAcceptancePlan } from "./gamescope-control-bandai-acceptance"
+import {
+  buildBandaiGamescopeAcceptancePlan,
+  runBandaiGamescopeAcceptanceCommand,
+} from "./gamescope-control-bandai-acceptance"
 
 describe("gamescope Bandai acceptance harness", () => {
   it("builds a repeatable DSI-2 capture and Gamescope control sequence", () => {
@@ -40,5 +43,24 @@ describe("gamescope Bandai acceptance harness", () => {
     ).toContain(
       "gamescope-control --socket /storage/probe-a-resolution/run/control.sock mode 960x540",
     )
+  })
+
+  it("prints a JSON command plan in dry-run mode", async () => {
+    const output: string[] = []
+    const exitCode = await runBandaiGamescopeAcceptanceCommand(
+      ["--dry-run", "--remote-root", "/tmp/gamescope dry-run"],
+      { write: line => output.push(line) },
+    )
+
+    expect(exitCode).toBe(0)
+    const parsed = JSON.parse(output.join("\n"))
+    expect(parsed.steps.map((step: { name: string }) => step.name)).toContain(
+      "capture-before",
+    )
+    expect(
+      parsed.steps.find(
+        (step: { name: string }) => step.name === "capture-before",
+      ).remote,
+    ).toContain("'/tmp/gamescope dry-run/00-before.png'")
   })
 })

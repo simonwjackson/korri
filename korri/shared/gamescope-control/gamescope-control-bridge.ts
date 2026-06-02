@@ -31,9 +31,11 @@ export interface GamescopeControlBridge {
 
 interface BridgeContext {
   readonly options: GamescopeControlBridgeOptions
+  readonly sockets: Set<Socket>
   readonly subscribers: Set<Socket>
   readonly queue: CommandQueue
-  nextSeq: number
+  nextAckSeq: number
+  nextEventSeq: number
   closing: boolean
 }
 
@@ -48,19 +50,27 @@ export async function startGamescopeControlBridge(
   await rm(options.socketPath, { force: true })
   const context: BridgeContext = {
     options,
+    sockets: new Set(),
     subscribers: new Set(),
     queue: createCommandQueue(),
-    nextSeq: 0,
+    nextAckSeq: 0,
+    nextEventSeq: 0,
     closing: false,
   }
   const server = createServer(socket => handleSocket(socket, context))
-  await listen(server, options.socketPath)
+  const previousUmask = process.umask(0o077)
+  try {
+    await listen(server, options.socketPath)
+  } finally {
+    process.umask(previousUmask)
+  }
   await chmod(options.socketPath, 0o600)
   return {
     socketPath: options.socketPath,
     close: async () => {
       context.closing = true
-      for (const subscriber of context.subscribers) subscriber.destroy()
+      for (const socket of context.sockets) socket.destroy()
+      context.sockets.clear()
       context.subscribers.clear()
       await closeServer(server)
       await rm(options.socketPath, { force: true })
@@ -69,6 +79,11 @@ export async function startGamescopeControlBridge(
 }
 
 function handleSocket(socket: Socket, context: BridgeContext): void {
+  if (context.closing) {
+    socket.destroy()
+    return
+  }
+  context.sockets.add(socket)
   const maxFrameBytes = context.options.maxFrameBytes ?? 64 * 1024
   let buffered = ""
   socket.on("data", chunk => {
@@ -90,7 +105,12 @@ function handleSocket(socket: Socket, context: BridgeContext): void {
     }
   })
 
+  socket.on("error", () => {
+    socket.destroy()
+  })
+
   socket.on("close", () => {
+    context.sockets.delete(socket)
     context.subscribers.delete(socket)
   })
 }
@@ -164,10 +184,10 @@ async function dispatchRequest(
       }
     case "events.subscribe":
       context.subscribers.add(socket)
-      return { _tag: "events.subscribed", seq: nextSeq(context) }
+      return { _tag: "events.subscribed", seq: nextAckSeq(context) }
     case "events.unsubscribe":
       context.subscribers.delete(socket)
-      return { _tag: "events.subscribed", seq: nextSeq(context) }
+      return { _tag: "events.unsubscribed", seq: nextAckSeq(context) }
     case "mode.set": {
       const result = await context.options.backend.setMode(
         validateGamescopeMode(request.params),
@@ -212,15 +232,20 @@ function writeEvent(
 }
 
 function emitEvent(context: BridgeContext, event: GamescopeControlEvent): void {
-  const seq = nextSeq(context)
+  const seq = nextEventSeq(context)
   for (const subscriber of context.subscribers) {
     if (!subscriber.destroyed) writeEvent(subscriber, seq, event)
   }
 }
 
-function nextSeq(context: BridgeContext): number {
-  context.nextSeq += 1
-  return context.nextSeq
+function nextAckSeq(context: BridgeContext): number {
+  context.nextAckSeq += 1
+  return context.nextAckSeq
+}
+
+function nextEventSeq(context: BridgeContext): number {
+  context.nextEventSeq += 1
+  return context.nextEventSeq
 }
 
 function errorResponse(

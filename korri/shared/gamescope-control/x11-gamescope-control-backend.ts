@@ -46,8 +46,9 @@ export function createX11GamescopeControlBackend(
   const xrandr = options.xrandrPath ?? "xrandr"
   const run = options.run ?? defaultRunner
   const pollIntervalMs = options.pollIntervalMs ?? 50
-  const settleTimeoutMs = options.settleTimeoutMs ?? 1000
   const commandTimeoutMs = options.commandTimeoutMs ?? 1000
+  const settleTimeoutMs =
+    options.settleTimeoutMs ?? Math.max(1500, commandTimeoutMs * 2)
 
   const env = { ...process.env, DISPLAY: display }
 

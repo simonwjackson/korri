@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import {
+  decodeGamescopeControlEventEnvelope,
   decodeGamescopeControlRequest,
   filterToGamescopeValue,
   GAMESCOPE_CONTROL_PROTOCOL,
@@ -14,7 +15,7 @@ describe("gamescope control protocol", () => {
     expect(GAMESCOPE_CONTROL_PROTOCOL).toEqual({
       name: "gamescope.korri-control",
       major: 1,
-      minor: 0,
+      minor: 1,
     })
     expect(filterToGamescopeValue("linear")).toBe(0)
     expect(filterToGamescopeValue("nearest")).toBe(1)
@@ -69,6 +70,38 @@ describe("gamescope control protocol", () => {
     expect(() =>
       decodeGamescopeControlRequest({ jsonrpc: "2.0", id: 1, method: "wat" }),
     ).toThrow("Unsupported gamescope-control method")
+  })
+
+  it("decodes event envelopes and rejects malformed event frames", () => {
+    expect(
+      decodeGamescopeControlEventEnvelope({
+        jsonrpc: "2.0",
+        method: "gamescope.event",
+        params: { seq: 1, event: { type: "command.result" } },
+      }),
+    ).toEqual({
+      jsonrpc: "2.0",
+      method: "gamescope.event",
+      params: { seq: 1, event: { type: "command.result" } },
+    })
+
+    expect(() => decodeGamescopeControlEventEnvelope(null)).toThrow(
+      "event must be an object",
+    )
+    expect(() =>
+      decodeGamescopeControlEventEnvelope({
+        jsonrpc: "2.0",
+        method: "gamescope.event",
+        params: { seq: 0, event: { type: "command.result" } },
+      }),
+    ).toThrow("positive integer")
+    expect(() =>
+      decodeGamescopeControlEventEnvelope({
+        jsonrpc: "2.0",
+        method: "gamescope.event",
+        params: { seq: 1, event: { type: "unknown" } },
+      }),
+    ).toThrow("Unsupported gamescope-control event")
   })
 
   it("parses xprop CARDINAL readback values", () => {
