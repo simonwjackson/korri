@@ -89,14 +89,25 @@ export function createX11GamescopeControlBackend(
       }
     }
 
-    const applied = await getStateAfterMutation()
+    const readback = await getStateAfterMutation()
+    if (readback.error) {
+      return {
+        _tag: "command.result",
+        command: "mode.set",
+        status: "readback-failed",
+        requested: validated,
+        applied: { xwaylandMode: appliedMode },
+        reason: readback.error.message,
+      }
+    }
+
     return {
       _tag: "command.result",
       command: "mode.set",
       status: "applied",
       requested: validated,
       applied: {
-        ...applied,
+        ...readback.state,
         xwaylandMode: appliedMode,
       },
     }
@@ -109,13 +120,28 @@ export function createX11GamescopeControlBackend(
       "GAMESCOPE_SCALING_FILTER",
       filterToGamescopeValue(filter),
     )
-    const applied = await getStateAfterMutation()
+    const readback = await getStateAfterMutation()
+    if (readback.error) {
+      return {
+        _tag: "command.result",
+        command: "filter.set",
+        status: "readback-failed",
+        requested: { filter },
+        applied: {},
+        reason: readback.error.message,
+      }
+    }
+    const applied = readback.state
     return {
       _tag: "command.result",
       command: "filter.set",
-      status: applied.filter === filter ? "applied" : "accepted",
+      status: applied.filter === filter ? "applied" : "readback-mismatch",
       requested: { filter },
       applied,
+      reason:
+        applied.filter === filter
+          ? undefined
+          : `filter readback mismatch: requested ${filter}, observed ${applied.filter ?? "unknown"}`,
     }
   }
 
@@ -123,13 +149,28 @@ export function createX11GamescopeControlBackend(
     sharpness: number,
   ): Promise<GamescopeControlCommandResult> {
     await writeCardinal("GAMESCOPE_SHARPNESS", sharpness)
-    const applied = await getStateAfterMutation()
+    const readback = await getStateAfterMutation()
+    if (readback.error) {
+      return {
+        _tag: "command.result",
+        command: "sharpness.set",
+        status: "readback-failed",
+        requested: { sharpness },
+        applied: {},
+        reason: readback.error.message,
+      }
+    }
+    const applied = readback.state
     return {
       _tag: "command.result",
       command: "sharpness.set",
-      status: applied.sharpness === sharpness ? "applied" : "accepted",
+      status: applied.sharpness === sharpness ? "applied" : "readback-mismatch",
       requested: { sharpness },
       applied,
+      reason:
+        applied.sharpness === sharpness
+          ? undefined
+          : `sharpness readback mismatch: requested ${sharpness}, observed ${applied.sharpness ?? "unknown"}`,
     }
   }
 
@@ -224,11 +265,16 @@ export function createX11GamescopeControlBackend(
     if (result.exitCode !== 0) throw commandError(xprop, result)
   }
 
-  async function getStateAfterMutation(): Promise<GamescopeControlState> {
+  async function getStateAfterMutation(): Promise<
+    | { readonly state: GamescopeControlState; readonly error?: undefined }
+    | { readonly state?: undefined; readonly error: Error }
+  > {
     try {
-      return await getState()
-    } catch {
-      return {}
+      return { state: await getState() }
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error : new Error(String(error)),
+      }
     }
   }
 

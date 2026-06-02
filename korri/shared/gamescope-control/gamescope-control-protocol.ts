@@ -7,21 +7,52 @@ export const GAMESCOPE_CONTROL_PROTOCOL = {
 export const GAMESCOPE_CONTROL_PROTOCOL_LIMITS = {
   maxFrameBytes: 64 * 1024,
   mode: {
-    width: { min: 16, max: 7680 },
-    height: { min: 16, max: 4320 },
+    width: { min: 1, max: Number.MAX_SAFE_INTEGER },
+    height: { min: 1, max: Number.MAX_SAFE_INTEGER },
   },
   sharpness: { min: 0, max: 20 },
 } as const
 
 export const GAMESCOPE_CONTROL_COMMANDS = [
-  "protocol.hello",
-  "state.get",
   "mode.set",
   "filter.set",
   "sharpness.set",
+  "scaler.set",
+  "fps.set",
+  "refresh-cycle.set",
+  "display.sleep",
+  "display.wake",
+  "screenshot.capture",
+  "hdr.set",
+  "vrr.set",
+  "tearing.set",
+  "low-latency.set",
+  "repaint.request",
+  "debug.set",
 ] as const
 
-export type GamescopeControlMethod = (typeof GAMESCOPE_CONTROL_COMMANDS)[number]
+export const GAMESCOPE_CONTROL_PROTOCOL_METHODS = [
+  "protocol.hello",
+  "state.get",
+  "events.subscribe",
+  "events.unsubscribe",
+  ...GAMESCOPE_CONTROL_COMMANDS,
+] as const
+
+export const GAMESCOPE_CONTROL_EVENTS = [
+  "subscription.ready",
+  "state.changed",
+  "command.result",
+  "backend.status",
+  "error",
+] as const
+
+export type GamescopeControlCommandMethod =
+  (typeof GAMESCOPE_CONTROL_COMMANDS)[number]
+export type GamescopeControlMethod =
+  (typeof GAMESCOPE_CONTROL_PROTOCOL_METHODS)[number]
+export type GamescopeControlEventType =
+  (typeof GAMESCOPE_CONTROL_EVENTS)[number]
 export type GamescopeControlRequestId = string | number
 export type GamescopeScalingFilter =
   | "linear"
@@ -43,37 +74,69 @@ export interface ValidatedGamescopeModeRequest extends GamescopeMode {
   readonly allowSuperRes: boolean
 }
 
+export interface GamescopeBackendStatus {
+  readonly kind?: "x11" | "native" | "composite" | "unknown"
+  readonly available: boolean
+  readonly reason?: string
+}
+
 export interface GamescopeControlState {
   readonly _tag?: "state.snapshot"
+  readonly backend?: GamescopeBackendStatus
   readonly xwaylandMode?: GamescopeMode
   readonly filter?: GamescopeScalingFilter
   readonly sharpness?: number
   readonly fsrFeedback?: boolean
+  readonly scaler?: string
+  readonly fps?: number
+  readonly refreshCycle?: number
+  readonly hdr?: boolean
+  readonly vrr?: boolean
+  readonly tearing?: boolean
+  readonly lowLatency?: boolean
+  readonly displayPower?: "awake" | "sleeping" | "unknown"
 }
+
+export type GamescopeControlCommandStatus =
+  | "applied"
+  | "unsupported"
+  | "failed"
+  | "invalid"
+  | "timed-out"
+  | "readback-mismatch"
+  | "readback-failed"
+  | "aborted"
 
 export interface GamescopeControlCommandResult {
   readonly _tag: "command.result"
-  readonly command: Exclude<
-    GamescopeControlMethod,
-    "protocol.hello" | "state.get"
-  >
-  readonly status: "applied" | "accepted" | "failed" | "invalid" | "timed-out"
-  readonly requested: unknown
+  readonly requestId?: GamescopeControlRequestId
+  readonly command: GamescopeControlCommandMethod
+  readonly status: GamescopeControlCommandStatus
+  readonly requested?: unknown
   readonly applied: GamescopeControlState
   readonly reason?: string
+}
+
+export interface GamescopeControlEventsSubscribedResult {
+  readonly _tag: "events.subscribed"
+  readonly seq: number
 }
 
 export interface GamescopeControlHelloResult {
   readonly _tag: "protocol.hello"
   readonly protocol: typeof GAMESCOPE_CONTROL_PROTOCOL
   readonly capabilities: {
-    readonly commands: readonly GamescopeControlMethod[]
+    readonly commands: readonly GamescopeControlCommandMethod[]
+    readonly events: readonly GamescopeControlEventType[]
+    readonly unsupported?: readonly GamescopeControlCommandMethod[]
+    readonly backend?: GamescopeBackendStatus
   }
   readonly limits: typeof GAMESCOPE_CONTROL_PROTOCOL_LIMITS
 }
 
 export type GamescopeControlResponseResult =
   | GamescopeControlHelloResult
+  | GamescopeControlEventsSubscribedResult
   | (GamescopeControlState & { readonly _tag: "state.snapshot" })
   | GamescopeControlCommandResult
 
@@ -93,6 +156,24 @@ export interface GamescopeControlErrorResponse {
     readonly code: number
     readonly message: string
     readonly data?: unknown
+  }
+}
+
+export interface GamescopeControlEvent {
+  readonly type: GamescopeControlEventType
+  readonly requestId?: GamescopeControlRequestId
+  readonly result?: GamescopeControlCommandResult
+  readonly state?: GamescopeControlState
+  readonly backend?: GamescopeBackendStatus
+  readonly reason?: string
+}
+
+export interface GamescopeControlEventEnvelope {
+  readonly jsonrpc: "2.0"
+  readonly method: "gamescope.event"
+  readonly params: {
+    readonly seq: number
+    readonly event: GamescopeControlEvent
   }
 }
 
@@ -235,13 +316,61 @@ export function decodeGamescopeControlResponse(
   throw new Error("gamescope-control response must include result or error")
 }
 
+export function decodeGamescopeControlEventEnvelope(
+  value: unknown,
+): GamescopeControlEventEnvelope {
+  if (!isRecord(value))
+    throw new Error("gamescope-control event must be an object")
+  if (value.jsonrpc !== "2.0") throw new Error("jsonrpc must be 2.0")
+  if (value.method !== "gamescope.event")
+    throw new Error("gamescope-control event method must be gamescope.event")
+  if (!isRecord(value.params)) throw new Error("event params must be an object")
+  if (!Number.isInteger(value.params.seq) || (value.params.seq as number) < 1) {
+    throw new Error("event seq must be a positive integer")
+  }
+  if (!isRecord(value.params.event))
+    throw new Error("event payload must be an object")
+  if (typeof value.params.event.type !== "string")
+    throw new Error("event type must be a string")
+  if (!isGamescopeControlEventType(value.params.event.type)) {
+    throw new Error(
+      `Unsupported gamescope-control event: ${value.params.event.type}`,
+    )
+  }
+  return value as unknown as GamescopeControlEventEnvelope
+}
+
 export function createGamescopeHelloResult(): GamescopeControlHelloResult {
   return {
     _tag: "protocol.hello",
     protocol: GAMESCOPE_CONTROL_PROTOCOL,
-    capabilities: { commands: GAMESCOPE_CONTROL_COMMANDS },
+    capabilities: {
+      commands: GAMESCOPE_CONTROL_COMMANDS,
+      events: GAMESCOPE_CONTROL_EVENTS,
+      unsupported: unsupportedDefaultCommands(),
+    },
     limits: GAMESCOPE_CONTROL_PROTOCOL_LIMITS,
   }
+}
+
+export function createUnsupportedGamescopeCommandResult(
+  command: GamescopeControlCommandMethod,
+  requested?: unknown,
+): GamescopeControlCommandResult {
+  return {
+    _tag: "command.result",
+    command,
+    status: "unsupported",
+    requested,
+    applied: {},
+    reason: `${command} is not supported by the selected Gamescope backend`,
+  }
+}
+
+export function isGamescopeControlCommandMethod(
+  method: string,
+): method is GamescopeControlCommandMethod {
+  return (GAMESCOPE_CONTROL_COMMANDS as readonly string[]).includes(method)
 }
 
 export function parseGamescopeCardinalProperty(
@@ -263,10 +392,27 @@ export function parseXrandrCurrentMode(
   return { width: Number(match[1]), height: Number(match[2]) }
 }
 
+function unsupportedDefaultCommands(): readonly GamescopeControlCommandMethod[] {
+  return GAMESCOPE_CONTROL_COMMANDS.filter(
+    command =>
+      command !== "mode.set" &&
+      command !== "filter.set" &&
+      command !== "sharpness.set",
+  )
+}
+
 function isGamescopeControlMethod(
   method: string,
 ): method is GamescopeControlMethod {
-  return (GAMESCOPE_CONTROL_COMMANDS as readonly string[]).includes(method)
+  return (GAMESCOPE_CONTROL_PROTOCOL_METHODS as readonly string[]).includes(
+    method,
+  )
+}
+
+function isGamescopeControlEventType(
+  type: string,
+): type is GamescopeControlEventType {
+  return (GAMESCOPE_CONTROL_EVENTS as readonly string[]).includes(type)
 }
 
 function validateInteger(

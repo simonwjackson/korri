@@ -1,8 +1,12 @@
 import { connect, type Socket } from "node:net"
 import {
+  decodeGamescopeControlEventEnvelope,
   decodeGamescopeControlResponse,
   GAMESCOPE_CONTROL_PROTOCOL_LIMITS,
+  type GamescopeControlCommandMethod,
   type GamescopeControlCommandResult,
+  type GamescopeControlEvent,
+  type GamescopeControlEventsSubscribedResult,
   type GamescopeControlHelloResult,
   type GamescopeControlResponse,
   type GamescopeControlState,
@@ -14,6 +18,17 @@ import {
 export interface GamescopeControlClientOptions {
   readonly socketPath: string
   readonly maxFrameBytes?: number
+  readonly onSequenceGap?: (gap: GamescopeControlSequenceGap) => void
+}
+
+export interface GamescopeControlSequenceGap {
+  readonly expectedSeq: number
+  readonly actualSeq: number
+}
+
+export interface GamescopeControlEventDelivery {
+  readonly seq: number
+  readonly event: GamescopeControlEvent
 }
 
 export interface GamescopeControlClient {
@@ -25,6 +40,9 @@ export interface GamescopeControlClient {
       GamescopeControlState & { _tag: "state.snapshot" }
     >
   >
+  readonly subscribe: () => Promise<
+    GamescopeControlSuccessResponse<GamescopeControlEventsSubscribedResult>
+  >
   readonly setMode: (
     params: GamescopeModeRequest,
   ) => Promise<GamescopeControlSuccessResponse<GamescopeControlCommandResult>>
@@ -34,6 +52,13 @@ export interface GamescopeControlClient {
   readonly setSharpness: (params: {
     readonly sharpness: number
   }) => Promise<GamescopeControlSuccessResponse<GamescopeControlCommandResult>>
+  readonly requestCommand: (
+    method: GamescopeControlCommandMethod,
+    params?: unknown,
+  ) => Promise<GamescopeControlSuccessResponse<GamescopeControlCommandResult>>
+  readonly onEvent: (
+    listener: (delivery: GamescopeControlEventDelivery) => void,
+  ) => () => void
   readonly close: () => void
 }
 
@@ -56,8 +81,10 @@ function createGamescopeControlClient(
   const maxFrameBytes =
     options.maxFrameBytes ?? GAMESCOPE_CONTROL_PROTOCOL_LIMITS.maxFrameBytes
   const pending = new Map<string, PendingRequest>()
+  const listeners = new Set<(delivery: GamescopeControlEventDelivery) => void>()
   let buffered = ""
   let nextRequestId = 1
+  let lastSeq = 0
   let closed = false
 
   socket.on("data", chunk => {
@@ -93,6 +120,10 @@ function createGamescopeControlClient(
           GamescopeControlState & { _tag: "state.snapshot" }
         >
       >,
+    subscribe: () =>
+      request("events.subscribe") as Promise<
+        GamescopeControlSuccessResponse<GamescopeControlEventsSubscribedResult>
+      >,
     setMode: params =>
       request("mode.set", params) as Promise<
         GamescopeControlSuccessResponse<GamescopeControlCommandResult>
@@ -105,6 +136,14 @@ function createGamescopeControlClient(
       request("sharpness.set", params) as Promise<
         GamescopeControlSuccessResponse<GamescopeControlCommandResult>
       >,
+    requestCommand: (method, params) =>
+      request(method, params) as Promise<
+        GamescopeControlSuccessResponse<GamescopeControlCommandResult>
+      >,
+    onEvent: listener => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
     close: () => {
       closed = true
       socket.destroy()
@@ -134,6 +173,22 @@ function createGamescopeControlClient(
     let parsed: unknown
     try {
       parsed = JSON.parse(line)
+      if (isEventFrame(parsed)) {
+        const envelope = decodeGamescopeControlEventEnvelope(parsed)
+        const expectedSeq = lastSeq + 1
+        if (lastSeq !== 0 && envelope.params.seq !== expectedSeq) {
+          options.onSequenceGap?.({
+            expectedSeq,
+            actualSeq: envelope.params.seq,
+          })
+        }
+        lastSeq = envelope.params.seq
+        for (const listener of listeners) {
+          listener({ seq: envelope.params.seq, event: envelope.params.event })
+        }
+        return
+      }
+
       const response = decodeGamescopeControlResponse(parsed)
       const pendingRequest = pending.get(String(response.id))
       if (!pendingRequest) return
@@ -166,4 +221,13 @@ function isSuccess(
   response: GamescopeControlResponse,
 ): response is GamescopeControlSuccessResponse {
   return "result" in response
+}
+
+function isEventFrame(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (value as Record<string, unknown>).method === "gamescope.event"
+  )
 }

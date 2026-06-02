@@ -41,6 +41,15 @@ describe("gamescope-control cli", () => {
           setSharpness: async () => {
             throw new Error("unexpected")
           },
+          subscribe: async () => ({
+            jsonrpc: "2.0",
+            id: "4",
+            result: { _tag: "events.subscribed" as const, seq: 1 },
+          }),
+          requestCommand: async () => {
+            throw new Error("unexpected")
+          },
+          onEvent: () => () => undefined,
           close: () => undefined,
         }),
       },
@@ -77,6 +86,15 @@ describe("gamescope-control cli", () => {
           setSharpness: async () => {
             throw new Error("unexpected")
           },
+          subscribe: async () => ({
+            jsonrpc: "2.0",
+            id: "4",
+            result: { _tag: "events.subscribed" as const, seq: 1 },
+          }),
+          requestCommand: async () => {
+            throw new Error("unexpected")
+          },
+          onEvent: () => () => undefined,
           close: () => undefined,
         }),
       },
@@ -84,6 +102,63 @@ describe("gamescope-control cli", () => {
 
     expect(exitCode).toBe(1)
     expect(errors.join("\n")).toContain("xrandr timed out")
+  })
+
+  it("dispatches valid unsupported command families through the generic call command", async () => {
+    const output: string[] = []
+    const calls: unknown[] = []
+    const exitCode = await runGamescopeControlCommand(
+      ["call", "display.sleep", "--socket", "/tmp/gamescope.sock"],
+      {
+        write: line => output.push(line),
+        connect: async () => ({
+          hello: async () => ({
+            jsonrpc: "2.0",
+            id: "1",
+            result: helloResult(),
+          }),
+          state: async () => ({
+            jsonrpc: "2.0",
+            id: "2",
+            result: stateResult(),
+          }),
+          setMode: async () => {
+            throw new Error("unexpected")
+          },
+          setFilter: async () => {
+            throw new Error("unexpected")
+          },
+          setSharpness: async () => {
+            throw new Error("unexpected")
+          },
+          subscribe: async () => ({
+            jsonrpc: "2.0",
+            id: "4",
+            result: { _tag: "events.subscribed" as const, seq: 1 },
+          }),
+          requestCommand: async (method, params) => {
+            calls.push({ method, params })
+            return {
+              jsonrpc: "2.0",
+              id: "5",
+              result: {
+                _tag: "command.result" as const,
+                command: method,
+                status: "unsupported" as const,
+                requested: params,
+                applied: {},
+              },
+            }
+          },
+          onEvent: () => () => undefined,
+          close: () => undefined,
+        }),
+      },
+    )
+
+    expect(exitCode).toBe(0)
+    expect(calls).toEqual([{ method: "display.sleep", params: undefined }])
+    expect(output[0]).toContain('"status": "unsupported"')
   })
 
   it("validates sharpness before connecting", async () => {

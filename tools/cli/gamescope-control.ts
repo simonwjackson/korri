@@ -3,7 +3,9 @@ import {
   type GamescopeControlClient,
 } from "@shared/gamescope-control/gamescope-control-client"
 import {
+  type GamescopeControlCommandMethod,
   type GamescopeScalingFilter,
+  isGamescopeControlCommandMethod,
   validateGamescopeMode,
   validateGamescopeSharpness,
 } from "@shared/gamescope-control/gamescope-control-protocol"
@@ -60,6 +62,12 @@ type ParsedCommand =
       readonly socketPath: string
       readonly sharpness: number
     }
+  | {
+      readonly command: "call"
+      readonly socketPath: string
+      readonly method: GamescopeControlCommandMethod
+      readonly params?: unknown
+    }
 
 async function dispatchCliCommand(
   client: GamescopeControlClient,
@@ -76,6 +84,8 @@ async function dispatchCliCommand(
       return client.setFilter({ filter: command.filter })
     case "sharpness":
       return client.setSharpness({ sharpness: command.sharpness })
+    case "call":
+      return client.requestCommand(command.method, command.params)
   }
 }
 
@@ -123,7 +133,21 @@ function parseCommand(argv: readonly string[]): ParsedCommand | string {
     }
   }
 
-  return "gamescope-control command must be hello, state, mode, filter, or sharpness"
+  if (command === "call") {
+    const method = argv[1]
+    if (!isGamescopeControlCommandMethod(method)) {
+      return "gamescope-control call requires a valid command method"
+    }
+    const paramsText = parseCallParamsText(argv)
+    if (!paramsText) return { command, socketPath, method }
+    try {
+      return { command, socketPath, method, params: JSON.parse(paramsText) }
+    } catch {
+      return "gamescope-control call params must be valid JSON"
+    }
+  }
+
+  return "gamescope-control command must be hello, state, mode, filter, sharpness, or call"
 }
 
 function parseSocketPath(argv: readonly string[]): string | undefined {
@@ -131,6 +155,13 @@ function parseSocketPath(argv: readonly string[]): string | undefined {
   if (index === -1) return undefined
   const value = argv[index + 1]?.trim()
   return value && value.length > 0 ? value : undefined
+}
+
+function parseCallParamsText(argv: readonly string[]): string | undefined {
+  const socketIndex = argv.indexOf("--socket")
+  const paramsIndex = 2
+  if (socketIndex === paramsIndex) return undefined
+  return argv[paramsIndex]
 }
 
 function parseMode(

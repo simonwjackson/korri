@@ -117,4 +117,43 @@ describe("x11 gamescope control backend", () => {
       "0",
     ])
   })
+
+  it("reports readback mismatch instead of accepted when filter readback differs", async () => {
+    const backend = createX11GamescopeControlBackend({
+      display: ":1",
+      run: async (_command, args) => {
+        if (args.includes("GAMESCOPE_FSR_FEEDBACK")) {
+          return {
+            stdout:
+              "GAMESCOPE_SCALING_FILTER(CARDINAL) = 0\nGAMESCOPE_SHARPNESS(CARDINAL) = 20\nGAMESCOPE_FSR_FEEDBACK(CARDINAL) = 0\n",
+            stderr: "",
+            exitCode: 0,
+          }
+        }
+        return { stdout: "", stderr: "", exitCode: 0 }
+      },
+    })
+
+    const result = await backend.setFilter("fsr")
+
+    expect(result.status).toBe("readback-mismatch")
+    expect(result.reason).toContain("filter readback mismatch")
+    expect(result.applied.filter).toBe("linear")
+  })
+
+  it("reports readback-failed when state cannot be read after sharpness write", async () => {
+    const backend = createX11GamescopeControlBackend({
+      display: ":1",
+      run: async (_command, args) => {
+        if (args.includes("-set"))
+          return { stdout: "", stderr: "", exitCode: 0 }
+        return { stdout: "", stderr: "xprop unavailable", exitCode: 1 }
+      },
+    })
+
+    const result = await backend.setSharpness(0)
+
+    expect(result.status).toBe("readback-failed")
+    expect(result.reason).toContain("xprop")
+  })
 })

@@ -24,10 +24,15 @@ describe("gamescope control protocol", () => {
     expect(valueToGamescopeFilter(3)).toBe("fsr")
   })
 
-  it("validates mode requests before they reach xprop", () => {
+  it("validates positive mode requests before they reach xprop", () => {
     expect(validateGamescopeMode({ width: 960, height: 540 })).toEqual({
       width: 960,
       height: 540,
+      allowSuperRes: false,
+    })
+    expect(validateGamescopeMode({ width: 1, height: 1 })).toEqual({
+      width: 1,
+      height: 1,
       allowSuperRes: false,
     })
     expect(() => validateGamescopeMode({ width: 0, height: 540 })).toThrow(
@@ -38,7 +43,7 @@ describe("gamescope control protocol", () => {
     )
   })
 
-  it("decodes JSON-RPC requests and rejects unknown methods", () => {
+  it("decodes JSON-RPC requests, including valid unsupported commands, and rejects unknown methods", () => {
     expect(
       decodeGamescopeControlRequest({
         jsonrpc: "2.0",
@@ -52,6 +57,14 @@ describe("gamescope control protocol", () => {
       method: "mode.set",
       params: { width: 960, height: 540, allowSuperRes: false },
     })
+
+    expect(
+      decodeGamescopeControlRequest({
+        jsonrpc: "2.0",
+        id: "2",
+        method: "display.sleep",
+      }),
+    ).toEqual({ jsonrpc: "2.0", id: "2", method: "display.sleep" })
 
     expect(() =>
       decodeGamescopeControlRequest({ jsonrpc: "2.0", id: 1, method: "wat" }),
