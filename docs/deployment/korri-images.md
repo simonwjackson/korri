@@ -34,6 +34,8 @@ Discovery is unchanged from the standard Electrobun/Korri app path: the live ima
 
 Remote launch keeps the standard prepare-before-stream sequence after a local input preflight. The desktop launch bridge first verifies the appliance has a normalized InputPlumber virtual gamepad, then calls the connected server's control URL to prepare the selected known game, then launches Moonlight against the reachable host from that same control URL. On the live kiosk, `KORRI_MOONLIGHT_COMMAND` points at the packaged `moonlight-embedded` binary, so the appliance path does not depend on Moonlight Qt or a runtime `nix run` fallback. Moonlight is launched with one explicit InputPlumber virtual input device and the packaged generic `gamecontrollerdb.txt`; stream success without that input route is not considered a valid appliance pass.
 
+Dual-screen or split-touch appliances must use dynamic Moonlight touch bounds for movable/resizable stream surfaces. `KORRI_MOONLIGHT_ABSOLUTE_TOUCH_REQUIRE_BOUNDS=1` enables fail-closed startup behavior; the runtime coordinator then applies `input.setTouchBounds` from live compositor geometry and Moonlight touch calibration. Static `KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS` remains a manual fallback/debug value only.
+
 ### x86 live USB validation tiers
 
 Build or dry-build the artifact from an x86_64 Linux machine:

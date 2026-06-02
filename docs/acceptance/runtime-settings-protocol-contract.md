@@ -180,6 +180,15 @@ Recovery policy belongs to product/runtime orchestration. A revert is a normal e
 - Upstream discussion should focus on stable operations, capability query semantics, request/ack identity, timeout/error behavior, and observable applied truth.
 - Korri-specific product support claims remain separate from generic protocol capability claims.
 
+## Moonlight-local input controls
+
+Moonlight local-control exposes distinct command families:
+
+- `runtime.*` commands are Sunshine runtime-settings commands. Their terminal proof can include Sunshine host-apply evidence, such as `runtime.commandResult` with `hostApply=reported` in runtime-watch artifacts.
+- `input.*` commands are Moonlight-local input-control commands. `input.setTouchBounds` updates the client evdev filter before input packets are sent to Sunshine. Its `applied` result is local proof only and must not be interpreted as Sunshine host-apply proof.
+
+Runtime-watch artifacts keep these proof classes separate. Touch-bounds proof should record `controlPlane=observed` and `hostApply=not-collected` unless a separate host-side validation surface is explicitly added later.
+
 ## Backlog trace
 
 - `task-097`: this document is the runtime settings protocol contract.
