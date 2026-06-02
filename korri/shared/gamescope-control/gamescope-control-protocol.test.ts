@@ -1,0 +1,75 @@
+import { describe, expect, it } from "bun:test"
+import {
+  decodeGamescopeControlRequest,
+  filterToGamescopeValue,
+  GAMESCOPE_CONTROL_PROTOCOL,
+  GAMESCOPE_CONTROL_PROTOCOL_LIMITS,
+  parseGamescopeCardinalProperty,
+  validateGamescopeMode,
+  valueToGamescopeFilter,
+} from "./gamescope-control-protocol"
+
+describe("gamescope control protocol", () => {
+  it("describes the v1 protocol and known Gamescope scaler values", () => {
+    expect(GAMESCOPE_CONTROL_PROTOCOL).toEqual({
+      name: "gamescope.korri-control",
+      major: 1,
+      minor: 0,
+    })
+    expect(filterToGamescopeValue("linear")).toBe(0)
+    expect(filterToGamescopeValue("nearest")).toBe(1)
+    expect(filterToGamescopeValue("integer")).toBe(2)
+    expect(filterToGamescopeValue("fsr")).toBe(3)
+    expect(filterToGamescopeValue("nis")).toBe(4)
+    expect(valueToGamescopeFilter(3)).toBe("fsr")
+  })
+
+  it("validates mode requests before they reach xprop", () => {
+    expect(validateGamescopeMode({ width: 960, height: 540 })).toEqual({
+      width: 960,
+      height: 540,
+      allowSuperRes: false,
+    })
+    expect(() => validateGamescopeMode({ width: 0, height: 540 })).toThrow(
+      String(GAMESCOPE_CONTROL_PROTOCOL_LIMITS.mode.width.min),
+    )
+    expect(() => validateGamescopeMode({ width: 960.5, height: 540 })).toThrow(
+      "integer",
+    )
+  })
+
+  it("decodes JSON-RPC requests and rejects unknown methods", () => {
+    expect(
+      decodeGamescopeControlRequest({
+        jsonrpc: "2.0",
+        id: "1",
+        method: "mode.set",
+        params: { width: 960, height: 540 },
+      }),
+    ).toEqual({
+      jsonrpc: "2.0",
+      id: "1",
+      method: "mode.set",
+      params: { width: 960, height: 540, allowSuperRes: false },
+    })
+
+    expect(() =>
+      decodeGamescopeControlRequest({ jsonrpc: "2.0", id: 1, method: "wat" }),
+    ).toThrow("Unsupported gamescope-control method")
+  })
+
+  it("parses xprop CARDINAL readback values", () => {
+    expect(
+      parseGamescopeCardinalProperty(
+        "GAMESCOPE_FSR_FEEDBACK(CARDINAL) = 1",
+        "GAMESCOPE_FSR_FEEDBACK",
+      ),
+    ).toBe(1)
+    expect(
+      parseGamescopeCardinalProperty(
+        "GAMESCOPE_SCALING_FILTER:  not found.",
+        "GAMESCOPE_SCALING_FILTER",
+      ),
+    ).toBeUndefined()
+  })
+})

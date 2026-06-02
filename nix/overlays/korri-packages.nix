@@ -16,8 +16,9 @@
 # `sunshine = prev.sunshine` to avoid infinite recursion when the overlay
 # value itself derives from `sunshine.overrideAttrs`.
 #
-# `libretro-fake-08` is purely additive: no upstream nixpkgs attribute of
-# that name exists, so a plain `final.callPackage` is sufficient.
+# `libretro-fake-08` and `gamescope-korri` are additive package lanes: no
+# upstream nixpkgs attribute is replaced until the downstream package is ready to
+# become a runtime default.
 { nix-on-rocks, fake-08-src }:
 
 final: prev: {
@@ -29,5 +30,8 @@ final: prev: {
   };
   libretro-fake-08 = final.callPackage ../../packages/libretro-fake-08/package.nix {
     inherit fake-08-src;
+  };
+  gamescope-korri = final.callPackage ../../packages/gamescope-korri/package.nix {
+    gamescope = prev.gamescope;
   };
 }

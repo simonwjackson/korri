@@ -518,6 +518,7 @@
         };
 
         libretroFake08 = pkgs.libretro-fake-08;
+        gamescopeKorri = pkgs.gamescope-korri;
 
         # The named outputs match the overlay-substituted `pkgs.sunshine` and
         # `pkgs.moonlight-embedded` so downstream consumers can ask for either
@@ -572,6 +573,7 @@
           sunshine-korri = sunshineKorri;
           moonlight-embedded-korri = moonlightEmbeddedKorri;
           libretro-fake-08 = libretroFake08;
+          gamescope-korri = gamescopeKorri;
         }
         // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
           electrobun-cli = electrobunBinaries.cli;
