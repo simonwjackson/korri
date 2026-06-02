@@ -289,6 +289,24 @@ describe("moonlight launcher", () => {
     }
   })
 
+  it("passes dynamic absolute touch fail-closed mode to moonlight-embedded", async () => {
+    const calls: string[] = []
+    const result = await launchMoonlight({
+      host: "192.168.1.117",
+      absoluteTouch: true,
+      absoluteTouchRequireBounds: true,
+      runner: runner((command, args) => {
+        calls.push([command, ...args].join(" "))
+        return { status: "started" }
+      }),
+    })
+
+    expect(result).toEqual({ status: "started", command: "gamescope" })
+    expect(calls).toEqual([
+      "gamescope -f -b -- moonlight stream -absolutetouch -absolutetouchrequirebounds -app Korri Stream 192.168.1.117",
+    ])
+  })
+
   it("passes configured absolute touch bounds to moonlight-embedded", async () => {
     const previousAbsoluteTouch = Bun.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH
     const previousBounds = Bun.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS

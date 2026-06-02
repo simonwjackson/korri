@@ -39,6 +39,8 @@ export interface ComposeMoonlightLaunchSpecOptions {
   readonly absoluteTouch?: boolean
   /** Raw ABS x,y,w,h bounds for absolute touch. Defaults to `KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS`. */
   readonly absoluteTouchBounds?: string
+  /** Ignore absolute touch until bounds are configured. Defaults to `KORRI_MOONLIGHT_ABSOLUTE_TOUCH_REQUIRE_BOUNDS`. */
+  readonly absoluteTouchRequireBounds?: boolean
 }
 
 export type MoonlightLaunchInputDeviceResolution =
@@ -109,16 +111,21 @@ export function composeMoonlightLaunchSpec(
   const inputDevice = options.inputDevice ?? moonlightInputDeviceFromEnv()
   const absoluteTouchBounds =
     options.absoluteTouchBounds ?? moonlightAbsoluteTouchBoundsFromEnv()
+  const absoluteTouchRequireBounds =
+    options.absoluteTouchRequireBounds ??
+    moonlightAbsoluteTouchRequireBoundsFromEnv() ??
+    false
   const absoluteTouch =
     options.absoluteTouch ??
     moonlightAbsoluteTouchFromEnv() ??
-    absoluteTouchBounds !== undefined
+    (absoluteTouchBounds !== undefined || absoluteTouchRequireBounds)
   const args = [
     "stream",
     ...(platform ? ["-platform", platform] : []),
     ...(mappingFile ? ["-mapping", mappingFile] : []),
     ...(inputDevice ? ["-input", inputDevice] : []),
     ...(absoluteTouch ? ["-absolutetouch"] : []),
+    ...(absoluteTouchRequireBounds ? ["-absolutetouchrequirebounds"] : []),
     ...(absoluteTouchBounds
       ? ["-absolutetouchbounds", absoluteTouchBounds]
       : []),
@@ -183,6 +190,12 @@ function moonlightAbsoluteTouchFromEnv(): boolean | undefined {
 
 function moonlightAbsoluteTouchBoundsFromEnv(): string | undefined {
   return nonEmptyEnv("KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS")
+}
+
+function moonlightAbsoluteTouchRequireBoundsFromEnv(): boolean | undefined {
+  const raw = process.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH_REQUIRE_BOUNDS?.trim()
+  if (!raw) return undefined
+  return raw === "1" || raw === "true" || raw === "enabled"
 }
 
 function moonlightRequireInputPlumberFromEnv(): boolean {

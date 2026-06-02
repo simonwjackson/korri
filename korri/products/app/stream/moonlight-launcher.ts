@@ -84,6 +84,7 @@ export interface MoonlightLaunchOptions {
   readonly platform?: string
   readonly absoluteTouch?: boolean
   readonly absoluteTouchBounds?: string
+  readonly absoluteTouchRequireBounds?: boolean
   readonly gamescope?: GamescopeOptions
   readonly readProcDevices?: () => Promise<string>
   readonly runner?: CommandRunner
@@ -111,15 +112,20 @@ export async function launchMoonlight(
 
   const absoluteTouchBounds =
     options.absoluteTouchBounds ?? moonlightAbsoluteTouchBoundsFromEnv()
+  const absoluteTouchRequireBounds =
+    options.absoluteTouchRequireBounds ??
+    moonlightAbsoluteTouchRequireBoundsFromEnv() ??
+    false
   const absoluteTouch =
     options.absoluteTouch ??
     moonlightAbsoluteTouchFromEnv() ??
-    absoluteTouchBounds !== undefined
+    (absoluteTouchBounds !== undefined || absoluteTouchRequireBounds)
   const args = moonlightArgs({
     ...options,
     client,
     absoluteTouch,
     absoluteTouchBounds,
+    absoluteTouchRequireBounds,
     inputDevice: inputDevice.path,
     mappingFile: options.mappingFile ?? moonlightMappingFileFromEnv(),
     platform,
@@ -255,6 +261,12 @@ function moonlightAbsoluteTouchBoundsFromEnv(): string | undefined {
   return raw === "" ? undefined : raw
 }
 
+function moonlightAbsoluteTouchRequireBoundsFromEnv(): boolean | undefined {
+  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH_REQUIRE_BOUNDS?.trim()
+  if (!raw) return undefined
+  return raw === "1" || raw === "true" || raw === "enabled"
+}
+
 function moonlightInputDeviceFromEnv(): string | undefined {
   const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_INPUT_DEVICE?.trim()
   return raw === "" ? undefined : raw
@@ -377,6 +389,9 @@ function moonlightArgs(
     ...(options.mappingFile ? ["-mapping", options.mappingFile] : []),
     ...(options.inputDevice ? ["-input", options.inputDevice] : []),
     ...(options.absoluteTouch ? ["-absolutetouch"] : []),
+    ...(options.absoluteTouchRequireBounds
+      ? ["-absolutetouchrequirebounds"]
+      : []),
     ...(options.absoluteTouchBounds
       ? ["-absolutetouchbounds", options.absoluteTouchBounds]
       : []),
