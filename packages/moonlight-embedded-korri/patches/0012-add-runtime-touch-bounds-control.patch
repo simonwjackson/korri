@@ -1,0 +1,520 @@
+Add runtime absolute-touch bounds control over Moonlight local-control.
+
+This extends the absolute-touch patch from static launch-time bounds to a
+runtime input command. The input command is Moonlight-local: it mutates the
+client evdev filter before input packets are sent, and it is intentionally
+separate from Sunshine runtime-setting commands.
+
+Managed dynamic mode can pass -absolutetouchrequirebounds so absolute-touch
+input fails closed until either startup fallback bounds or runtime bounds are
+active. Bounds are stored as one coherent evdev snapshot guarded by a mutex, so
+local-control updates do not race the evdev reader through independent globals.
+
+diff -ruN moonlight-dynamic-src.clean/src/config.c moonlight-dynamic-src/src/config.c
+--- moonlight-dynamic-src.clean/src/config.c	2026-06-02 16:26:21.904452002 -0600
++++ moonlight-dynamic-src/src/config.c	2026-06-02 16:24:45.423013165 -0600
+@@ -79,6 +79,7 @@
+   {"hdr", no_argument, NULL, '7'},
+   {"absolutetouch", no_argument, NULL, '8'},
+   {"absolutetouchbounds", required_argument, NULL, '9'},
++  {"absolutetouchrequirebounds", no_argument, NULL, 1000},
+   {0, 0, 0, 0},
+ };
+ 
+@@ -273,6 +274,10 @@
+     config->absolute_touch = true;
+     config->absolute_touch_bounds = true;
+     break;
++  case 1000:
++    config->absolute_touch = true;
++    config->absolute_touch_require_bounds = true;
++    break;
+   case 1:
+     if (config->action == NULL)
+       config->action = value;
+@@ -346,6 +351,8 @@
+     write_config_bool(fd, "absolutetouch", config->absolute_touch);
+   if (config->absolute_touch_bounds)
+     fprintf(fd, "absolutetouchbounds = %d,%d,%d,%d\n", config->absolute_touch_bounds_x, config->absolute_touch_bounds_y, config->absolute_touch_bounds_w, config->absolute_touch_bounds_h);
++  if (config->absolute_touch_require_bounds)
++    write_config_bool(fd, "absolutetouchrequirebounds", config->absolute_touch_require_bounds);
+   if (config->rotate != 0)
+     write_config_int(fd, "rotate", config->rotate);
+ 
+@@ -395,6 +402,7 @@
+   config->viewonly = false;
+   config->absolute_touch = false;
+   config->absolute_touch_bounds = false;
++  config->absolute_touch_require_bounds = false;
+   config->absolute_touch_bounds_x = 0;
+   config->absolute_touch_bounds_y = 0;
+   config->absolute_touch_bounds_w = 0;
+diff -ruN moonlight-dynamic-src.clean/src/config.h moonlight-dynamic-src/src/config.h
+--- moonlight-dynamic-src.clean/src/config.h	2026-06-02 16:26:21.904538816 -0600
++++ moonlight-dynamic-src/src/config.h	2026-06-02 16:24:45.400013410 -0600
+@@ -43,6 +43,7 @@
+   bool viewonly;
+   bool absolute_touch;
+   bool absolute_touch_bounds;
++  bool absolute_touch_require_bounds;
+   int absolute_touch_bounds_x;
+   int absolute_touch_bounds_y;
+   int absolute_touch_bounds_w;
+diff -ruN moonlight-dynamic-src.clean/src/input/evdev.c moonlight-dynamic-src/src/input/evdev.c
+--- moonlight-dynamic-src.clean/src/input/evdev.c	2026-06-02 16:26:21.904860741 -0600
++++ moonlight-dynamic-src/src/input/evdev.c	2026-06-02 16:24:45.427013122 -0600
+@@ -132,12 +132,8 @@
+ 
+ static bool grabbingDevices;
+ static bool mouseEmulationEnabled;
+-static bool absoluteTouchEnabled;
+-static bool absoluteTouchBoundsEnabled;
+-static int absoluteTouchBoundsX;
+-static int absoluteTouchBoundsY;
+-static int absoluteTouchBoundsW;
+-static int absoluteTouchBoundsH;
++static pthread_mutex_t absoluteTouchBoundsLock = PTHREAD_MUTEX_INITIALIZER;
++static struct evdev_absolute_touch_state absoluteTouchState;
+ 
+ static void send_touch_position(struct input_device *dev, int x, int y);
+ 
+@@ -338,7 +334,7 @@
+ 
+   switch (ev->type) {
+   case EV_SYN:
+-    if (dev->is_touchscreen && absoluteTouchEnabled && dev->touchPositionDirty) {
++    if (dev->is_touchscreen && absoluteTouchState.enabled && dev->touchPositionDirty) {
+       send_touch_position(dev, dev->touchX, dev->touchY);
+       dev->touchPositionDirty = false;
+     }
+@@ -474,7 +470,7 @@
+               // finger actually pressed. Only meaningful in absolute mode;
+               // in relative/trackpad mode the host cursor follows the
+               // accumulated finger delta, so leave it alone there.
+-              if (absoluteTouchEnabled)
++              if (absoluteTouchState.enabled)
+                 send_touch_position(dev, dev->touchDownX, dev->touchDownY);
+               LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, button);
+               usleep(TOUCH_CLICK_DELAY);
+@@ -622,9 +618,9 @@
+         if (dev->touchDownX == TOUCH_UP) {
+           dev->touchDownX = ev->value;
+           dev->touchX = ev->value;
+-          if (absoluteTouchEnabled)
++          if (absoluteTouchState.enabled)
+             dev->touchPositionDirty = true;
+-        } else if (absoluteTouchEnabled) {
++        } else if (absoluteTouchState.enabled) {
+           dev->touchX = ev->value;
+           dev->touchPositionDirty = true;
+         } else {
+@@ -636,9 +632,9 @@
+         if (dev->touchDownY == TOUCH_UP) {
+           dev->touchDownY = ev->value;
+           dev->touchY = ev->value;
+-          if (absoluteTouchEnabled)
++          if (absoluteTouchState.enabled)
+             dev->touchPositionDirty = true;
+-        } else if (absoluteTouchEnabled) {
++        } else if (absoluteTouchState.enabled) {
+           dev->touchY = ev->value;
+           dev->touchPositionDirty = true;
+         } else {
+@@ -968,6 +964,14 @@
+       devices[dev].touchAbsMinY = libevdev_get_abs_minimum(evdev, ABS_MT_POSITION_Y);
+       devices[dev].touchAbsMaxY = libevdev_get_abs_maximum(evdev, ABS_MT_POSITION_Y);
+     }
++    pthread_mutex_lock(&absoluteTouchBoundsLock);
++    if (absoluteTouchState.abs_max_x <= absoluteTouchState.abs_min_x && absoluteTouchState.abs_max_y <= absoluteTouchState.abs_min_y) {
++      absoluteTouchState.abs_min_x = devices[dev].touchAbsMinX;
++      absoluteTouchState.abs_max_x = devices[dev].touchAbsMaxX;
++      absoluteTouchState.abs_min_y = devices[dev].touchAbsMinY;
++      absoluteTouchState.abs_max_y = devices[dev].touchAbsMaxY;
++    }
++    pthread_mutex_unlock(&absoluteTouchBoundsLock);
+   }
+ 
+   int nbuttons = 0;
+@@ -1156,18 +1160,24 @@
+ // rotation by transforming inside the selected reference plane. Caller
+ // must ensure the touchscreen has a non-zero ABS range.
+ static void send_touch_position(struct input_device *dev, int x, int y) {
++  struct evdev_absolute_touch_state touch_state;
++  evdev_get_absolute_touch_state(&touch_state);
++
+   int refW = dev->touchAbsMaxX - dev->touchAbsMinX;
+   int refH = dev->touchAbsMaxY - dev->touchAbsMinY;
+   int posX = x - dev->touchAbsMinX;
+   int posY = y - dev->touchAbsMinY;
+ 
+-  if (absoluteTouchBoundsEnabled) {
+-    if (x < absoluteTouchBoundsX || y < absoluteTouchBoundsY || x > absoluteTouchBoundsX + absoluteTouchBoundsW || y > absoluteTouchBoundsY + absoluteTouchBoundsH)
++  if (touch_state.bounds_enabled) {
++    if (x < touch_state.x || y < touch_state.y || x > touch_state.x + touch_state.w || y > touch_state.y + touch_state.h)
+       return;
+-    refW = absoluteTouchBoundsW;
+-    refH = absoluteTouchBoundsH;
+-    posX = x - absoluteTouchBoundsX;
+-    posY = y - absoluteTouchBoundsY;
++    refW = touch_state.w;
++    refH = touch_state.h;
++    posX = x - touch_state.x;
++    posY = y - touch_state.y;
++  }
++  else if (touch_state.bounds_required) {
++    return;
+   }
+ 
+   if (refW <= 0 || refH <= 0)
+@@ -1213,15 +1223,44 @@
+   LiSendMousePositionEvent(outX, outY, outRefW, outRefH);
+ }
+ 
+-void evdev_init(bool mouse_emulation_enabled, bool absolute_touch_enabled, bool absolute_touch_bounds_enabled, int absolute_touch_bounds_x, int absolute_touch_bounds_y, int absolute_touch_bounds_w, int absolute_touch_bounds_h) {
++int evdev_set_absolute_touch_bounds(int x, int y, int w, int h) {
++  if (w <= 0 || h <= 0)
++    return 0;
++
++  pthread_mutex_lock(&absoluteTouchBoundsLock);
++  if (!absoluteTouchState.enabled) {
++    pthread_mutex_unlock(&absoluteTouchBoundsLock);
++    return 0;
++  }
++  absoluteTouchState.bounds_enabled = true;
++  absoluteTouchState.x = x;
++  absoluteTouchState.y = y;
++  absoluteTouchState.w = w;
++  absoluteTouchState.h = h;
++  pthread_mutex_unlock(&absoluteTouchBoundsLock);
++  return 1;
++}
++
++void evdev_get_absolute_touch_state(struct evdev_absolute_touch_state* state) {
++  if (state == NULL)
++    return;
++  pthread_mutex_lock(&absoluteTouchBoundsLock);
++  *state = absoluteTouchState;
++  pthread_mutex_unlock(&absoluteTouchBoundsLock);
++}
++
++void evdev_init(bool mouse_emulation_enabled, bool absolute_touch_enabled, bool absolute_touch_bounds_enabled, bool absolute_touch_bounds_required, int absolute_touch_bounds_x, int absolute_touch_bounds_y, int absolute_touch_bounds_w, int absolute_touch_bounds_h) {
+   handler = evdev_handle_event;
+   mouseEmulationEnabled = mouse_emulation_enabled;
+-  absoluteTouchEnabled = absolute_touch_enabled;
+-  absoluteTouchBoundsEnabled = absolute_touch_bounds_enabled;
+-  absoluteTouchBoundsX = absolute_touch_bounds_x;
+-  absoluteTouchBoundsY = absolute_touch_bounds_y;
+-  absoluteTouchBoundsW = absolute_touch_bounds_w;
+-  absoluteTouchBoundsH = absolute_touch_bounds_h;
++  pthread_mutex_lock(&absoluteTouchBoundsLock);
++  absoluteTouchState.enabled = absolute_touch_enabled;
++  absoluteTouchState.bounds_enabled = absolute_touch_bounds_enabled;
++  absoluteTouchState.bounds_required = absolute_touch_bounds_required;
++  absoluteTouchState.x = absolute_touch_bounds_x;
++  absoluteTouchState.y = absolute_touch_bounds_y;
++  absoluteTouchState.w = absolute_touch_bounds_w;
++  absoluteTouchState.h = absolute_touch_bounds_h;
++  pthread_mutex_unlock(&absoluteTouchBoundsLock);
+ }
+ 
+ static struct input_device* evdev_get_input_device(unsigned short controller_id) {
+diff -ruN moonlight-dynamic-src.clean/src/input/evdev.h moonlight-dynamic-src/src/input/evdev.h
+--- moonlight-dynamic-src.clean/src/input/evdev.h	2026-06-02 16:26:21.904955077 -0600
++++ moonlight-dynamic-src/src/input/evdev.h	2026-06-02 16:24:45.424013154 -0600
+@@ -24,7 +24,23 @@
+ void evdev_create(const char* device, struct mapping* mappings, bool verbose, int rotate);
+ void evdev_loop();
+ 
+-void evdev_init(bool mouse_emulation_enabled, bool absolute_touch_enabled, bool absolute_touch_bounds_enabled, int absolute_touch_bounds_x, int absolute_touch_bounds_y, int absolute_touch_bounds_w, int absolute_touch_bounds_h);
++struct evdev_absolute_touch_state {
++  bool enabled;
++  bool bounds_enabled;
++  bool bounds_required;
++  int x;
++  int y;
++  int w;
++  int h;
++  int abs_min_x;
++  int abs_max_x;
++  int abs_min_y;
++  int abs_max_y;
++};
++
++void evdev_init(bool mouse_emulation_enabled, bool absolute_touch_enabled, bool absolute_touch_bounds_enabled, bool absolute_touch_bounds_required, int absolute_touch_bounds_x, int absolute_touch_bounds_y, int absolute_touch_bounds_w, int absolute_touch_bounds_h);
++int evdev_set_absolute_touch_bounds(int x, int y, int w, int h);
++void evdev_get_absolute_touch_state(struct evdev_absolute_touch_state* state);
+ void evdev_start();
+ void evdev_stop();
+ void evdev_map(char* device);
+diff -ruN moonlight-dynamic-src.clean/src/local_control.c moonlight-dynamic-src/src/local_control.c
+--- moonlight-dynamic-src.clean/src/local_control.c	2026-06-02 16:26:21.918677331 -0600
++++ moonlight-dynamic-src/src/local_control.c	2026-06-02 16:26:11.014099613 -0600
+@@ -3,6 +3,7 @@
+ #define _GNU_SOURCE
+ 
+ #include "local_control.h"
++#include "input/evdev.h"
+ 
+ #include <Limelight.h>
+ #include <errno.h>
+@@ -24,7 +25,7 @@
+ 
+ #define MOONLIGHT_CONTROL_PROTOCOL_NAME "moonlight.local-control"
+ #define MOONLIGHT_CONTROL_PROTOCOL_MAJOR 1
+-#define MOONLIGHT_CONTROL_PROTOCOL_MINOR 0
++#define MOONLIGHT_CONTROL_PROTOCOL_MINOR 1
+ #define MOONLIGHT_CONTROL_MAX_FRAME_BYTES 65536
+ #define MOONLIGHT_CONTROL_MAX_CLIENTS 4
+ #define MOONLIGHT_CONTROL_EVENT_HISTORY 256
+@@ -37,9 +38,18 @@
+ #define MOONLIGHT_CONTROL_MAX_WIDTH 7680
+ #define MOONLIGHT_CONTROL_MIN_HEIGHT 240
+ #define MOONLIGHT_CONTROL_MAX_HEIGHT 4320
++#define MOONLIGHT_CONTROL_MIN_TOUCH_BOUNDS_X 0
++#define MOONLIGHT_CONTROL_MAX_TOUCH_BOUNDS_X 65535
++#define MOONLIGHT_CONTROL_MIN_TOUCH_BOUNDS_Y 0
++#define MOONLIGHT_CONTROL_MAX_TOUCH_BOUNDS_Y 65535
++#define MOONLIGHT_CONTROL_MIN_TOUCH_BOUNDS_W 1
++#define MOONLIGHT_CONTROL_MAX_TOUCH_BOUNDS_W 65536
++#define MOONLIGHT_CONTROL_MIN_TOUCH_BOUNDS_H 1
++#define MOONLIGHT_CONTROL_MAX_TOUCH_BOUNDS_H 65536
+ #define MOONLIGHT_LC_COMMAND_RUNTIME_SET_BITRATE "runtime.setBitrate"
+ #define MOONLIGHT_LC_COMMAND_RUNTIME_SET_FPS "runtime.setFps"
+ #define MOONLIGHT_LC_COMMAND_RUNTIME_SET_RESOLUTION "runtime.setResolution"
++#define MOONLIGHT_LC_COMMAND_INPUT_SET_TOUCH_BOUNDS "input.setTouchBounds"
+ #define MOONLIGHT_LC_STATUS_APPLIED 0
+ #define MOONLIGHT_LC_STATUS_FAILED 1
+ #define MOONLIGHT_LC_STATUS_INVALID 2
+@@ -90,6 +100,10 @@
+   char last_command[32];
+   char last_status[32];
+   uint16_t last_reason;
++  int has_last_input_command;
++  uint32_t last_input_request_id;
++  char last_input_command[32];
++  char last_input_status[32];
+   struct moonlight_local_control_subscriber subscribers[MOONLIGHT_CONTROL_MAX_CLIENTS];
+   struct moonlight_local_control_event_history_entry moonlight_local_control_event_history[MOONLIGHT_CONTROL_EVENT_HISTORY];
+ };
+@@ -118,6 +132,8 @@
+ static struct json_object* moonlight_local_control_event_locked(const char* name);
+ static struct json_object* moonlight_local_control_runtime_command_event(uint64_t seq, uint32_t request_id, const char* command, const char* status, uint16_t reason);
+ static int moonlight_local_control_dispatch_runtime_command(struct json_object* id, struct json_object* request, const char* method_name, int client_fd);
++static int moonlight_local_control_dispatch_input_command(struct json_object* id, struct json_object* request, const char* method_name, int client_fd);
++static struct json_object* moonlight_local_control_input_command_event(uint64_t seq, uint32_t request_id, const char* command, const char* status);
+ static uint32_t moonlight_local_control_next_command_id(void);
+ static uint64_t moonlight_local_control_monotonic_ms(void);
+ static const char* moonlight_local_control_env_or(const char* name, const char* fallback);
+@@ -201,6 +217,7 @@
+   control.max_bitrate_kbps = MOONLIGHT_CONTROL_MAX_BITRATE_KBPS;
+   control.max_fps = MOONLIGHT_CONTROL_MAX_FPS;
+   control.has_last_command = 0;
++  control.has_last_input_command = 0;
+   memset(control.subscribers, 0, sizeof(control.subscribers));
+   memset(control.moonlight_local_control_event_history, 0, sizeof(control.moonlight_local_control_event_history));
+   snprintf(control.socket_path, sizeof(control.socket_path), "%s", socket_path);
+@@ -466,6 +483,9 @@
+              || strcmp(method_name, MOONLIGHT_LC_COMMAND_RUNTIME_SET_RESOLUTION) == 0) {
+       moonlight_local_control_dispatch_runtime_command(id, request, method_name, client_fd);
+     }
++    else if (strcmp(method_name, MOONLIGHT_LC_COMMAND_INPUT_SET_TOUCH_BOUNDS) == 0) {
++      moonlight_local_control_dispatch_input_command(id, request, method_name, client_fd);
++    }
+     else {
+       moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32601, "unsupported method", "unsupported"));
+     }
+@@ -552,6 +572,10 @@
+     if (moonlight_local_control_operation_supported_locked(MOONLIGHT_LC_OPERATION_SET_RESOLUTION))
+       json_object_array_add(commands, json_object_new_string(MOONLIGHT_LC_COMMAND_RUNTIME_SET_RESOLUTION));
+   }
++  struct evdev_absolute_touch_state touch_state;
++  evdev_get_absolute_touch_state(&touch_state);
++  if (strcmp(control.authority, "controller") == 0 && touch_state.enabled)
++    json_object_array_add(commands, json_object_new_string(MOONLIGHT_LC_COMMAND_INPUT_SET_TOUCH_BOUNDS));
+   json_object_object_add(capabilities, "events", events);
+   json_object_object_add(capabilities, "commands", commands);
+   json_object_object_add(capabilities, "experimental", json_object_new_array());
+@@ -581,6 +605,24 @@
+   json_object_object_add(resolution, "width", width);
+   json_object_object_add(resolution, "height", height);
+   json_object_object_add(limits, "resolution", resolution);
++  struct json_object* touch_bounds = json_object_new_object();
++  struct json_object* touch_x = json_object_new_object();
++  json_object_object_add(touch_x, "min", json_object_new_int(MOONLIGHT_CONTROL_MIN_TOUCH_BOUNDS_X));
++  json_object_object_add(touch_x, "max", json_object_new_int(MOONLIGHT_CONTROL_MAX_TOUCH_BOUNDS_X));
++  struct json_object* touch_y = json_object_new_object();
++  json_object_object_add(touch_y, "min", json_object_new_int(MOONLIGHT_CONTROL_MIN_TOUCH_BOUNDS_Y));
++  json_object_object_add(touch_y, "max", json_object_new_int(MOONLIGHT_CONTROL_MAX_TOUCH_BOUNDS_Y));
++  struct json_object* touch_w = json_object_new_object();
++  json_object_object_add(touch_w, "min", json_object_new_int(MOONLIGHT_CONTROL_MIN_TOUCH_BOUNDS_W));
++  json_object_object_add(touch_w, "max", json_object_new_int(MOONLIGHT_CONTROL_MAX_TOUCH_BOUNDS_W));
++  struct json_object* touch_h = json_object_new_object();
++  json_object_object_add(touch_h, "min", json_object_new_int(MOONLIGHT_CONTROL_MIN_TOUCH_BOUNDS_H));
++  json_object_object_add(touch_h, "max", json_object_new_int(MOONLIGHT_CONTROL_MAX_TOUCH_BOUNDS_H));
++  json_object_object_add(touch_bounds, "x", touch_x);
++  json_object_object_add(touch_bounds, "y", touch_y);
++  json_object_object_add(touch_bounds, "w", touch_w);
++  json_object_object_add(touch_bounds, "h", touch_h);
++  json_object_object_add(limits, "touchBounds", touch_bounds);
+   json_object_object_add(result, "limits", limits);
+ 
+   return result;
+@@ -623,8 +665,38 @@
+ 
+   struct json_object* input = json_object_new_object();
+   json_object_object_add(input, "route", json_object_new_string("moonlight-embedded"));
+-  json_object_object_add(input, "status", json_object_new_string("unknown"));
+-  json_object_object_add(input, "capabilities", json_object_new_array());
++  struct evdev_absolute_touch_state touch_state;
++  evdev_get_absolute_touch_state(&touch_state);
++  json_object_object_add(input, "status", json_object_new_string(touch_state.enabled ? "available" : "disabled"));
++  struct json_object* input_capabilities = json_object_new_array();
++  if (touch_state.enabled)
++    json_object_array_add(input_capabilities, json_object_new_string("absoluteTouch"));
++  json_object_object_add(input, "capabilities", input_capabilities);
++  struct json_object* absolute_touch = json_object_new_object();
++  json_object_object_add(absolute_touch, "enabled", json_object_new_boolean(touch_state.enabled));
++  json_object_object_add(absolute_touch, "boundsRequired", json_object_new_boolean(touch_state.bounds_required));
++  if (touch_state.bounds_enabled) {
++    struct json_object* active_bounds = json_object_new_object();
++    json_object_object_add(active_bounds, "x", json_object_new_int(touch_state.x));
++    json_object_object_add(active_bounds, "y", json_object_new_int(touch_state.y));
++    json_object_object_add(active_bounds, "w", json_object_new_int(touch_state.w));
++    json_object_object_add(active_bounds, "h", json_object_new_int(touch_state.h));
++    json_object_object_add(absolute_touch, "activeBounds", active_bounds);
++  }
++  struct json_object* abs_range = json_object_new_object();
++  json_object_object_add(abs_range, "minX", json_object_new_int(touch_state.abs_min_x));
++  json_object_object_add(abs_range, "maxX", json_object_new_int(touch_state.abs_max_x));
++  json_object_object_add(abs_range, "minY", json_object_new_int(touch_state.abs_min_y));
++  json_object_object_add(abs_range, "maxY", json_object_new_int(touch_state.abs_max_y));
++  json_object_object_add(absolute_touch, "absRange", abs_range);
++  if (control.has_last_input_command) {
++    struct json_object* last_input = json_object_new_object();
++    json_object_object_add(last_input, "requestId", json_object_new_int64((int64_t) control.last_input_request_id));
++    json_object_object_add(last_input, "command", json_object_new_string(control.last_input_command));
++    json_object_object_add(last_input, "status", json_object_new_string(control.last_input_status));
++    json_object_object_add(absolute_touch, "lastCommand", last_input);
++  }
++  json_object_object_add(input, "absoluteTouch", absolute_touch);
+   json_object_object_add(result, "input", input);
+ 
+   return result;
+@@ -768,6 +840,97 @@
+   return 1;
+ }
+ 
++static struct json_object* moonlight_local_control_input_command_event(uint64_t seq, uint32_t request_id, const char* command, const char* status) {
++  struct json_object* event = json_object_new_object();
++  json_object_object_add(event, "jsonrpc", json_object_new_string("2.0"));
++  json_object_object_add(event, "method", json_object_new_string("moonlight.event"));
++  struct json_object* params = json_object_new_object();
++  json_object_object_add(params, "seq", json_object_new_int64((int64_t) seq));
++  json_object_object_add(params, "monotonicMs", json_object_new_int64((int64_t) moonlight_local_control_monotonic_ms()));
++  struct json_object* payload = json_object_new_object();
++  json_object_object_add(payload, "name", json_object_new_string("input.commandResult"));
++  json_object_object_add(payload, "requestId", json_object_new_int64((int64_t) request_id));
++  json_object_object_add(payload, "command", json_object_new_string(command));
++  json_object_object_add(payload, "status", json_object_new_string(status));
++  json_object_object_add(params, "event", payload);
++  json_object_object_add(event, "params", params);
++  return event;
++}
++
++static int moonlight_local_control_dispatch_input_command(struct json_object* id, struct json_object* request, const char* method_name, int client_fd) {
++  if (strcmp(method_name, MOONLIGHT_LC_COMMAND_INPUT_SET_TOUCH_BOUNDS) != 0) {
++    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32601, "unsupported input method", "unsupported"));
++    return 0;
++  }
++
++  struct json_object* params = NULL;
++  json_object_object_get_ex(request, "params", &params);
++  if (params == NULL || json_object_get_type(params) != json_type_object) {
++    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32602, "missing params", "invalid"));
++    return 0;
++  }
++
++  struct json_object* raw_x = NULL;
++  struct json_object* raw_y = NULL;
++  struct json_object* raw_w = NULL;
++  struct json_object* raw_h = NULL;
++  json_object_object_get_ex(params, "x", &raw_x);
++  json_object_object_get_ex(params, "y", &raw_y);
++  json_object_object_get_ex(params, "w", &raw_w);
++  json_object_object_get_ex(params, "h", &raw_h);
++  if (raw_x == NULL || raw_y == NULL || raw_w == NULL || raw_h == NULL
++      || json_object_get_type(raw_x) != json_type_int || json_object_get_type(raw_y) != json_type_int
++      || json_object_get_type(raw_w) != json_type_int || json_object_get_type(raw_h) != json_type_int) {
++    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32602, "invalid touch bounds", "invalid"));
++    return 0;
++  }
++
++  int x = json_object_get_int(raw_x);
++  int y = json_object_get_int(raw_y);
++  int w = json_object_get_int(raw_w);
++  int h = json_object_get_int(raw_h);
++  if (x < MOONLIGHT_CONTROL_MIN_TOUCH_BOUNDS_X || x > MOONLIGHT_CONTROL_MAX_TOUCH_BOUNDS_X
++      || y < MOONLIGHT_CONTROL_MIN_TOUCH_BOUNDS_Y || y > MOONLIGHT_CONTROL_MAX_TOUCH_BOUNDS_Y
++      || w < MOONLIGHT_CONTROL_MIN_TOUCH_BOUNDS_W || w > MOONLIGHT_CONTROL_MAX_TOUCH_BOUNDS_W
++      || h < MOONLIGHT_CONTROL_MIN_TOUCH_BOUNDS_H || h > MOONLIGHT_CONTROL_MAX_TOUCH_BOUNDS_H) {
++    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32602, "touch bounds out of bounds", "invalid"));
++    return 0;
++  }
++
++  pthread_mutex_lock(&control.lock);
++  int controller = strcmp(control.authority, "controller") == 0;
++  pthread_mutex_unlock(&control.lock);
++  if (!controller) {
++    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32000, "command authority required", "unauthorized"));
++    return 0;
++  }
++
++  if (!evdev_set_absolute_touch_bounds(x, y, w, h)) {
++    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32000, "absolute touch disabled", "disabled"));
++    return 0;
++  }
++
++  uint32_t command_id = moonlight_local_control_next_command_id();
++  pthread_mutex_lock(&control.lock);
++  uint64_t seq = ++control.seq;
++  control.has_last_input_command = 1;
++  control.last_input_request_id = command_id;
++  snprintf(control.last_input_command, sizeof(control.last_input_command), "%s", method_name);
++  snprintf(control.last_input_status, sizeof(control.last_input_status), "%s", "applied");
++  control.moonlight_local_control_event_history[seq % MOONLIGHT_CONTROL_EVENT_HISTORY].seq = seq;
++  snprintf(control.moonlight_local_control_event_history[seq % MOONLIGHT_CONTROL_EVENT_HISTORY].name, sizeof(control.moonlight_local_control_event_history[0].name), "%s", "input.commandResult");
++  pthread_mutex_unlock(&control.lock);
++
++  struct json_object* result = json_object_new_object();
++  json_object_object_add(result, "_tag", json_object_new_string("input.command.result"));
++  json_object_object_add(result, "requestId", json_object_new_int64((int64_t) command_id));
++  json_object_object_add(result, "command", json_object_new_string(method_name));
++  json_object_object_add(result, "status", json_object_new_string("applied"));
++  moonlight_local_control_write_json(client_fd, moonlight_local_control_success(id, result));
++  moonlight_local_control_emit_event(moonlight_local_control_input_command_event(seq, command_id, method_name, "applied"));
++  return 1;
++}
++
+ static uint32_t moonlight_local_control_next_command_id(void) {
+   pthread_mutex_lock(&control.lock);
+   uint32_t command_id = control.next_command_id++;
+diff -ruN moonlight-dynamic-src.clean/src/main.c moonlight-dynamic-src/src/main.c
+--- moonlight-dynamic-src.clean/src/main.c	2026-06-02 16:26:21.916932194 -0600
++++ moonlight-dynamic-src/src/main.c	2026-06-02 16:24:45.424013154 -0600
+@@ -358,6 +358,7 @@
+   printf("\t-nomouseemulation\t\tDisable gamepad mouse emulation support (long pressing Start button)\n");
+   printf("\t-absolutetouch\t\tSend touchscreen input as absolute mouse position instead of trackpad-style relative motion\n");
+   printf("\t-absolutetouchbounds x,y,w,h\tLimit absolute touch to a raw touchscreen ABS bounds rectangle\n");
++  printf("\t-absolutetouchrequirebounds\tIgnore absolute touch until bounds are configured\n");
+   #if defined(HAVE_SDL) || defined(HAVE_X11)
+   printf("\n WM options (SDL and X11 only)\n\n");
+   printf("\t-windowed\t\tDisplay screen in a window\n");
+@@ -513,7 +514,7 @@
+         }
+ 
+         udev_init(!inputAdded, mappings, config.debug_level > 0, config.rotate);
+-        evdev_init(config.mouse_emulation, config.absolute_touch, config.absolute_touch_bounds, config.absolute_touch_bounds_x, config.absolute_touch_bounds_y, config.absolute_touch_bounds_w, config.absolute_touch_bounds_h);
++        evdev_init(config.mouse_emulation, config.absolute_touch, config.absolute_touch_bounds, config.absolute_touch_require_bounds, config.absolute_touch_bounds_x, config.absolute_touch_bounds_y, config.absolute_touch_bounds_w, config.absolute_touch_bounds_h);
+         rumble_handler = evdev_rumble;
+         #ifdef HAVE_LIBCEC
+         cec_init();

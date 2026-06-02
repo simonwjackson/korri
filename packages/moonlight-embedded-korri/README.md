@@ -13,6 +13,8 @@ It layers on top of the nix-on-rocks Moonlight Embedded package inputs:
 
 Adds `-absolutetouch` for handheld touchscreen tap-to-click over the stream. On dual-screen or split-touch devices, `-absolutetouchbounds x,y,w,h` narrows absolute touch to one raw ABS rectangle so touches outside the streamed game region are ignored instead of remapped into the game.
 
+Static `-absolutetouchbounds` is a fallback/manual diagnostic seam. Managed dynamic sessions should use local-control runtime touch-bounds updates so moved, resized, or reshaped stream surfaces do not keep stale launch-time geometry.
+
 ### Sunshine runtime-settings patch series
 
 Adds an experimental Sunshine runtime-settings request sender and ack logger for the `0x5504` / `0x5505` MVP protocol, split by review concern:
@@ -133,3 +135,13 @@ Wires the first native local-control mutation path for controller-authorized run
 - Runtime-settings capability and terminal outcome facts are handed to local-control through a narrow observer seam rather than log scraping.
 - Subscribed local-control clients receive bounded `runtime.commandResult` events with monotonic sequence/timing metadata, and `state.get` exposes the latest terminal command for sequence-gap recovery.
 - `runtime.setResolution` dispatches to runtime-settings operation `3` only when the active Sunshine capability ack advertises resolution support.
+
+### `0012-add-runtime-touch-bounds-control.patch`
+
+Adds the local input command path for dynamic absolute-touch geometry:
+
+- `input.setTouchBounds` accepts raw touchscreen ABS `{ x, y, w, h }` bounds over Moonlight local-control and updates the client-side evdev filter without restarting the stream.
+- The command is Moonlight-local input control, not a Sunshine runtime setting. `applied` means the local evdev bounds snapshot was updated; it is not a host-applied runtime-settings proof.
+- `state.snapshot.input.absoluteTouch` reports whether absolute touch is enabled, whether bounds are required before sending touches, the active bounds, the primary touchscreen ABS range, and the latest input command result.
+- `-absolutetouchrequirebounds` enables managed fail-closed behavior: absolute-touch events are ignored until startup fallback bounds or the first runtime bounds update is active.
+- Bounds are stored as one synchronized evdev snapshot instead of independent globals so local-control updates cannot expose partially-updated rectangles to the evdev input loop.

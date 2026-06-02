@@ -789,6 +789,7 @@
                     ./packages/moonlight-embedded-korri/patches/0006-add-local-control-observability-ipc.patch
                     ./packages/moonlight-embedded-korri/patches/0007-wire-local-control-runtime-command-events.patch
                     ./packages/moonlight-embedded-korri/patches/0008-add-runtime-set-resolution-on-local-control.patch
+                    ./packages/moonlight-embedded-korri/patches/0012-add-runtime-touch-bounds-control.patch
                   ];
                   absoluteTouchPatchPath = ./packages/moonlight-embedded-korri/patches/0004-add-absolutetouch-flag-for-tap-to-click.patch;
                   readmePath = ./packages/moonlight-embedded-korri/README.md;

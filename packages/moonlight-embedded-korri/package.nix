@@ -71,6 +71,7 @@ let
     ./patches/0009-reopen-v4l2m2m-decoder-on-output-size-change.patch
     ./patches/0010-reopen-v4l2m2m-context-on-output-size-change.patch
     ./patches/0011-reset-sdl-presenter-on-output-size-change.patch
+    ./patches/0012-add-runtime-touch-bounds-control.patch
   ];
 in
 stdenv.mkDerivation rec {

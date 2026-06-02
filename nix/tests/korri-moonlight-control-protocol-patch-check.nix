@@ -96,6 +96,34 @@ let
       && contains "moonlight_local_control_dispatch_runtime_command" patch
       && contains "LiSendSunshineRuntimeSettingsMvp(command_id, operation" patch
     ))
+    (check "Moonlight local control advertises local input touch-bounds command" (
+      contains "MOONLIGHT_CONTROL_PROTOCOL_MINOR 1" patch
+      && contains "MOONLIGHT_LC_COMMAND_INPUT_SET_TOUCH_BOUNDS \"input.setTouchBounds\"" patch
+      && contains "moonlight_local_control_dispatch_input_command" patch
+      && contains "input.commandResult" patch
+      && contains "input.command.result" patch
+    ))
+    (check "Moonlight local control reports touch bounds limits and state" (
+      contains "MOONLIGHT_CONTROL_MAX_TOUCH_BOUNDS_X 65535" patch
+      && contains "json_object_object_add(limits, \"touchBounds\"" patch
+      && contains "evdev_get_absolute_touch_state(&touch_state)" patch
+      && contains "json_object_object_add(input, \"absoluteTouch\"" patch
+      && contains "activeBounds" patch
+      && contains "absRange" patch
+    ))
+    (check "Moonlight absolute touch runtime bounds fail closed before dynamic bounds" (
+      contains "absolutetouchrequirebounds" patch
+      && contains "absolute_touch_require_bounds" patch
+      && contains "touch_state.bounds_required" patch
+      && contains "return;" patch
+    ))
+    (check "Moonlight absolute touch bounds use coherent synchronized snapshot" (
+      contains "static pthread_mutex_t absoluteTouchBoundsLock" patch
+      && contains "static struct evdev_absolute_touch_state absoluteTouchState" patch
+      && contains "evdev_set_absolute_touch_bounds" patch
+      && contains "evdev_get_absolute_touch_state" patch
+      && contains "*state = absoluteTouchState" patch
+    ))
     (check "Moonlight local control returns native command ids separately from JSON-RPC envelope ids" (
       contains "moonlight_local_control_next_command_id" patch
       && contains "command.accepted" patch
