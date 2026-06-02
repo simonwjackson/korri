@@ -53,6 +53,29 @@ describe("x11 gamescope control backend", () => {
     expect(calls[0]?.env?.DISPLAY).toBe(":1")
   })
 
+  it("times out mode readback when xrandr blocks", async () => {
+    const backend = createX11GamescopeControlBackend({
+      display: ":1",
+      commandTimeoutMs: 5,
+      pollIntervalMs: 1,
+      settleTimeoutMs: 10,
+      run: async (command, args) => {
+        if (command === "xprop" && args.includes("-set")) {
+          return { stdout: "", stderr: "", exitCode: 0 }
+        }
+        if (command === "xrandr") {
+          return new Promise(() => undefined)
+        }
+        return { stdout: "", stderr: "", exitCode: 0 }
+      },
+    })
+
+    const result = await backend.setMode({ width: 960, height: 540 })
+
+    expect(result.status).toBe("timed-out")
+    expect(result.reason).toContain("timed out")
+  })
+
   it("sets scaler filter and sharpness through root CARDINAL atoms", async () => {
     const calls: string[][] = []
     const backend = createX11GamescopeControlBackend({

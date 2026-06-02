@@ -22,7 +22,10 @@ export interface CommandResult {
 export type GamescopeControlRunner = (
   command: string,
   args: readonly string[],
-  options?: { readonly env?: NodeJS.ProcessEnv },
+  options?: {
+    readonly env?: NodeJS.ProcessEnv
+    readonly timeoutMs?: number
+  },
 ) => Promise<CommandResult>
 
 export interface X11GamescopeControlBackendOptions {
@@ -32,6 +35,7 @@ export interface X11GamescopeControlBackendOptions {
   readonly run?: GamescopeControlRunner
   readonly pollIntervalMs?: number
   readonly settleTimeoutMs?: number
+  readonly commandTimeoutMs?: number
 }
 
 export function createX11GamescopeControlBackend(
@@ -43,6 +47,7 @@ export function createX11GamescopeControlBackend(
   const run = options.run ?? defaultRunner
   const pollIntervalMs = options.pollIntervalMs ?? 50
   const settleTimeoutMs = options.settleTimeoutMs ?? 1000
+  const commandTimeoutMs = options.commandTimeoutMs ?? 1000
 
   const env = { ...process.env, DISPLAY: display }
 
@@ -73,17 +78,27 @@ export function createX11GamescopeControlBackend(
       width: validated.width,
       height: validated.height,
     })
-    const applied = await getState()
+    if (!appliedMode) {
+      return {
+        _tag: "command.result",
+        command: "mode.set",
+        status: "timed-out",
+        requested: validated,
+        applied: {},
+        reason: "timed out waiting for xrandr readback",
+      }
+    }
+
+    const applied = await getStateAfterMutation()
     return {
       _tag: "command.result",
       command: "mode.set",
-      status: appliedMode ? "applied" : "timed-out",
+      status: "applied",
       requested: validated,
       applied: {
         ...applied,
-        xwaylandMode: appliedMode ?? applied.xwaylandMode,
+        xwaylandMode: appliedMode,
       },
-      reason: appliedMode ? undefined : "timed out waiting for xrandr readback",
     }
   }
 
@@ -94,7 +109,7 @@ export function createX11GamescopeControlBackend(
       "GAMESCOPE_SCALING_FILTER",
       filterToGamescopeValue(filter),
     )
-    const applied = await getState()
+    const applied = await getStateAfterMutation()
     return {
       _tag: "command.result",
       command: "filter.set",
@@ -108,7 +123,7 @@ export function createX11GamescopeControlBackend(
     sharpness: number,
   ): Promise<GamescopeControlCommandResult> {
     await writeCardinal("GAMESCOPE_SHARPNESS", sharpness)
-    const applied = await getState()
+    const applied = await getStateAfterMutation()
     return {
       _tag: "command.result",
       command: "sharpness.set",
@@ -119,13 +134,13 @@ export function createX11GamescopeControlBackend(
   }
 
   async function readMode(): Promise<GamescopeMode | undefined> {
-    const result = await run(xrandr, [], { env })
+    const result = await runCommand(xrandr, [], { env })
     if (result.exitCode !== 0) throw commandError(xrandr, result)
     return parseXrandrCurrentMode(result.stdout)
   }
 
   async function readProperties(): Promise<GamescopeControlState> {
-    const result = await run(
+    const result = await runCommand(
       xprop,
       [
         "-root",
@@ -162,9 +177,15 @@ export function createX11GamescopeControlBackend(
   ): Promise<GamescopeMode | undefined> {
     const deadline = Date.now() + settleTimeoutMs
     while (Date.now() <= deadline) {
-      const mode = await readMode()
-      if (mode?.width === expected.width && mode.height === expected.height) {
-        return mode
+      try {
+        const mode = await readMode()
+        if (mode?.width === expected.width && mode.height === expected.height) {
+          return mode
+        }
+      } catch {
+        // Keep polling until the overall settle timeout expires. A transiently
+        // wedged Xwayland/xrandr readback should produce a bounded command
+        // result, not wedge the JSON-RPC bridge.
       }
       await sleep(pollIntervalMs)
     }
@@ -199,21 +220,45 @@ export function createX11GamescopeControlBackend(
   }
 
   async function writeXprop(args: readonly string[]): Promise<void> {
-    const result = await run(xprop, args, { env })
+    const result = await runCommand(xprop, args, { env })
     if (result.exitCode !== 0) throw commandError(xprop, result)
+  }
+
+  async function getStateAfterMutation(): Promise<GamescopeControlState> {
+    try {
+      return await getState()
+    } catch {
+      return {}
+    }
+  }
+
+  function runCommand(
+    command: string,
+    args: readonly string[],
+    commandOptions?: { readonly env?: NodeJS.ProcessEnv },
+  ): Promise<CommandResult> {
+    return withTimeout(
+      run(command, args, { ...commandOptions, timeoutMs: commandTimeoutMs }),
+      commandTimeoutMs,
+      `${command} timed out after ${commandTimeoutMs}ms`,
+    )
   }
 }
 
 function defaultRunner(
   command: string,
   args: readonly string[],
-  options?: { readonly env?: NodeJS.ProcessEnv },
+  options?: { readonly env?: NodeJS.ProcessEnv; readonly timeoutMs?: number },
 ): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
     execFile(
       command,
       [...args],
-      { env: options?.env },
+      {
+        env: options?.env,
+        timeout: options?.timeoutMs,
+        killSignal: "SIGKILL",
+      },
       (error, stdout, stderr) => {
         if (
           error &&
@@ -239,6 +284,26 @@ function commandError(command: string, result: CommandResult): Error {
   return new Error(
     `${command} exited ${result.exitCode}: ${result.stderr || result.stdout}`.trim(),
   )
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+    promise.then(
+      value => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      error => {
+        clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
 }
 
 function sleep(ms: number): Promise<void> {
