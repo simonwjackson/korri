@@ -34,7 +34,7 @@
      } control;
 
      std::uint32_t launch_session_id;
-@@ -959,6 +972,102 @@
+@@ -959,6 +972,104 @@
      return 0;
    }
 
@@ -45,6 +45,8 @@
 +    auto payload = encode_control(session, util::view(plaintext), encrypted_payload);
 +    if (session->broadcast_ref->control_server.send(payload, session->control.peer)) {
 +      BOOST_LOG(warning) << "live-settings-mvp: failed to send runtime settings ack"sv;
++    } else {
++      session->broadcast_ref->control_server.flush();
 +    }
 +  }
 +
@@ -137,7 +139,7 @@
    int send_hdr_mode(session_t *session, video::hdr_info_t hdr_info) {
      if (!session->control.peer) {
        BOOST_LOG(warning) << "Couldn't send HDR mode, still waiting for PING from Moonlight"sv;
-@@ -1023,6 +1133,133 @@
+@@ -1023,6 +1133,136 @@
        session->video.idr_events->raise(true);
      });
 
@@ -175,7 +177,10 @@
 +          << " current_fps="sv << session->control.runtime_settings_applied_fps
 +          << " current_width="sv << current_applied_width
 +          << " current_height="sv << current_applied_height;
-+        send_runtime_settings_capability_ack(session, request_id, enabled);
++        std::thread([session, request_id, enabled] {
++          std::this_thread::sleep_for(100ms);
++          send_runtime_settings_capability_ack(session, request_id, enabled);
++        }).detach();
 +        return;
 +      }
 +

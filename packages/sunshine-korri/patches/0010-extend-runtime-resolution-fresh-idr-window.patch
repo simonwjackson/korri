@@ -1,0 +1,12 @@
+--- a/src/video.cpp
++++ b/src/video.cpp
+@@ -2269,7 +2269,7 @@
+                     status = RUNTIME_SETTINGS_STATUS_APPLIED;
+                     reason = RUNTIME_SETTINGS_REASON_NONE;
+                     requested_idr_frame = true;
+                     touch_port_events->raise(make_port(disp.get(), config));
+-                    runtime_resolution_idr_frames = 120;
++                    runtime_resolution_idr_frames = 1800;
+                     runtime_resolution_diag_frames = 0;
+                     BOOST_LOG(info)
+                       << "live-settings-mvp: async encoder restarted for runtime resolution request_id="sv << request->request_id

@@ -1,0 +1,93 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Simon W. Jackson" <simon@simonwjackson.io>
+Date: Mon, 1 Jun 2026 14:58:00 -0600
+Subject: [PATCH] Reset SDL presenter on output size changes
+
+---
+ src/video/v4l2m2m.c | 51 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 51 insertions(+)
+
+--- a/src/video/v4l2m2m.c
++++ b/src/video/v4l2m2m.c
+@@ -141,6 +141,7 @@
+ static int            sdl_tex_w = 0;
+ static int            sdl_tex_h = 0;
+ static SDL_Rect       sdl_dst_rect = {0, 0, 0, 0};
++static volatile bool  sdl_presenter_reset_requested = false;
+ static EGLDisplay     egl_dpy   = EGL_NO_DISPLAY;
+ 
+ /* GL state -- created on the display thread, after it takes the GL
+@@ -1532,6 +1533,51 @@
+ 
+   SDL_GL_SwapWindow(window);
+ }
++static int reset_sdl_renderer_after_resolution_change(int frame_w, int frame_h) {
++  if (direct_dmabuf_present)
++    return 0;
++
++  /* Keep the compositor-facing SDL window and renderer stable across a live
++   * stream-size transition. Recreating the fullscreen Xwayland/SDL surface
++   * under gamescope can leave the physical client black or stale even though
++   * the decoder continues producing frames. The new frame size is handled by
++   * destroying only the NV12 texture; draw_frame_nv12() will recreate it for
++   * the next decoded frame while update_render_geometry() keeps scaling into
++   * the original fullscreen output. */
++  if (sdl_nv12_texture) {
++    SDL_DestroyTexture(sdl_nv12_texture);
++    sdl_nv12_texture = NULL;
++  }
++  sdl_tex_w = 0;
++  sdl_tex_h = 0;
++  gl_viewport_w = 0;
++  gl_viewport_h = 0;
++  gl_video_w = 0;
++  gl_video_h = 0;
++
++  int out_w = 0, out_h = 0;
++  if (sdl_renderer) {
++    SDL_SetRenderDrawColor(sdl_renderer, 0, 0, 0, 255);
++    SDL_RenderClear(sdl_renderer);
++    SDL_RenderPresent(sdl_renderer);
++    SDL_GetRendererOutputSize(sdl_renderer, &out_w, &out_h);
++  }
++  if ((out_w <= 0 || out_h <= 0) && window)
++    SDL_GetWindowSize(window, &out_w, &out_h);
++
++  if (window && out_w > 0 && out_h > 0) {
++    SDL_SetWindowSize(window, out_w, out_h);
++    SDL_ShowWindow(window);
++    SDL_RaiseWindow(window);
++    SDL_PumpEvents();
++  }
++  if (sdl_renderer)
++    SDL_RenderFlush(sdl_renderer);
++
++  LOG("SDL presenter reset: preserved window and renderer for video=%dx%d output=%dx%d",
++      frame_w, frame_h, out_w, out_h);
++  return 0;
++}
+
+ /* Forward decls for the dispatching draw_frame(). */
+ static void draw_frame_drm_prime(AVFrame *frame);
+ static void draw_frame_nv12(AVFrame *frame);
+@@ -1549,6 +1647,10 @@
+         frame->linesize[0], frame->linesize[1],
+         frame->linesize[2], frame->linesize[3]);
+   pump_sdl_window_events();
++  if (sdl_presenter_reset_requested) {
++    sdl_presenter_reset_requested = false;
++    reset_sdl_renderer_after_resolution_change(visible_w, visible_h);
++  }
+   update_render_geometry(visible_w, visible_h);
+   if (direct_dmabuf_present && direct_v4l2 && frame->format == AV_PIX_FMT_NV12) {
+     draw_frame_direct_dmabuf(frame);
+@@ -2015,6 +2117,7 @@
+ 
+   if (request_recovery_idr_after_submit) {
+     drop_pending_display_frame();
++    sdl_presenter_reset_requested = true;
+     stream_seen_output_frame = false;
+     stream_output_width = 0;
+     stream_output_height = 0;
+-- 
+2.51.2

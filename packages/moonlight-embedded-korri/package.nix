@@ -81,6 +81,11 @@ stdenv.mkDerivation rec {
     ./patches/0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch
     ./patches/0006-add-local-control-observability-ipc.patch
     ./patches/0007-wire-local-control-runtime-command-events.patch
+    ./patches/0008-add-runtime-set-resolution-on-local-control.patch
+    ./patches/0009-reopen-v4l2m2m-decoder-on-output-size-change.patch
+    ./patches/0010-reopen-v4l2m2m-context-on-output-size-change.patch
+    ./patches/0011-reset-sdl-presenter-on-output-size-change.patch
+    ./patches/0012-diagnose-v4l2m2m-frame-content-hash.patch
   ];
 
   nativeBuildInputs = [
@@ -125,7 +130,7 @@ stdenv.mkDerivation rec {
       printf '%s\n' 'nix-on-rocks-manifest-version=${nixOnRocksMoonlightManifest.version}'
       printf '%s\n' 'source-rev=${nixOnRocksMoonlightManifest.source.rev}'
       printf '%s\n' 'base-patches=${lib.concatMapStringsSep " " (patch: patch.name) basePatches}'
-      printf '%s\n' 'korri-patches=0004-add-absolutetouch-flag-for-tap-to-click.patch 0005a-add-sunshine-runtime-settings-protocol-sender.patch 0005b-track-sunshine-runtime-settings-command-outcomes.patch 0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch 0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch 0006-add-local-control-observability-ipc.patch 0007-wire-local-control-runtime-command-events.patch'
+      printf '%s\n' 'korri-patches=0004-add-absolutetouch-flag-for-tap-to-click.patch 0005a-add-sunshine-runtime-settings-protocol-sender.patch 0005b-track-sunshine-runtime-settings-command-outcomes.patch 0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch 0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch 0006-add-local-control-observability-ipc.patch 0007-wire-local-control-runtime-command-events.patch 0008-add-runtime-set-resolution-on-local-control.patch 0009-reopen-v4l2m2m-decoder-on-output-size-change.patch 0010-reopen-v4l2m2m-context-on-output-size-change.patch'
       printf '%s\n' 'main-program=bin/moonlight'
     } > "$out/nix-support/moonlight-embedded-korri/manifest.txt"
 

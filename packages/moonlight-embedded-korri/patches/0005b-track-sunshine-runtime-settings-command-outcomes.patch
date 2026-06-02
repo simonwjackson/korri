@@ -472,17 +472,39 @@
                          return;
                      }
 @@ -1379,6 +1652,7 @@
-
+ 
              err = LastSocketFail();
              Limelog("Control stream connection failed: %d\n", err);
 +            runtime_settings_mvp_record_stream_ended();
              ListenerCallbacks.connectionTerminated(err);
              return;
          }
-@@ -1442,6 +1716,123 @@
+@@ -1390,6 +1664,11 @@
+         if (event.type == ENET_EVENT_TYPE_RECEIVE) {
+             PNVCTL_ENET_PACKET_HEADER_V1 ctlHdr;
+             int packetLength;
++
++            if (event.packet->dataLength > 0) {
++                Limelog("live-settings-mvp: raw enet control recv channel=%u data_length=%zu\n",
++                        (unsigned int)event.channelID, event.packet->dataLength);
++            }
+ 
+             if (event.packet->dataLength < sizeof(*ctlHdr)) {
+                 Limelog("Discarding runt control packet: %d < %d\n", event.packet->dataLength, (int)sizeof(*ctlHdr));
+@@ -1442,6 +1716,133 @@
 
              // All below codepaths must free ctlHdr!!!
 
++            if (packetLength > 0) {
++                Limelog("live-settings-mvp: control recv decrypted type=0x%04x packet_length=%d\n",
++                        (unsigned int)ctlHdr->type, packetLength);
++            }
++
++            if ((ctlHdr->type & 0xFF00) == 0x5500) {
++                Limelog("live-settings-mvp: control recv type=0x%04x packet_length=%d\n",
++                        (unsigned int)ctlHdr->type, packetLength);
++            }
++
 +            if (ctlHdr->type == SS_RUNTIME_SETTINGS_MVP_ACK_PTYPE) {
 +                BYTE_BUFFER bb;
 +                uint32_t requestId;

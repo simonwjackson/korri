@@ -1,0 +1,35 @@
+diff -ruN b/src/platform/linux/vaapi.cpp a/src/platform/linux/vaapi.cpp
+--- b/src/platform/linux/vaapi.cpp	2026-06-01 21:31:53.190409006 -0600
++++ a/src/platform/linux/vaapi.cpp	2026-06-01 21:32:08.119242373 -0600
+@@ -404,14 +404,30 @@
+     int convert(platf::img_t &img) override {
+       auto &descriptor = (egl::img_descriptor_t &) img;
+ 
++      static int korri_runtime_resolution_convert_diag_count = 0;
++      const bool korri_force_vram_reimport = descriptor.sequence != 0;
++      if (korri_runtime_resolution_convert_diag_count < 20 ||
++          korri_runtime_resolution_convert_diag_count % 120 == 0) {
++        BOOST_LOG(info) << "live-settings-mvp: vaapi convert sequence="sv << descriptor.sequence
++                        << " cached_sequence="sv << sequence
++                        << " width="sv << img.width
++                        << " height="sv << img.height
++                        << " force_reimport="sv << (korri_force_vram_reimport ? 1 : 0);
++      }
++      ++korri_runtime_resolution_convert_diag_count;
++
+       if (descriptor.sequence == 0) {
+         // For dummy images, use a blank RGB texture instead of importing a DMA-BUF
+         rgb = egl::create_blank(img);
+-      } else if (descriptor.sequence > sequence) {
++      } else if (descriptor.sequence > sequence || korri_force_vram_reimport) {
+         sequence = descriptor.sequence;
+ 
+         rgb = egl::rgb_t {};
+ 
++        // Korri live-resolution diagnostic: after an in-place encoder restart,
++        // the VAAPI/GL path can keep sampling a stale imported texture while
++        // capture and encoding continue. Reimporting the current frame's DMA-BUF
++        // avoids relying on the pre-restart cached EGL image.
+         auto rgb_opt = egl::import_source(display.get(), descriptor.sd);
+ 
+         if (!rgb_opt) {

@@ -1,0 +1,126 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Simon W. Jackson" <simon@simonwjackson.io>
+Date: Mon, 1 Jun 2026 09:11:00 -0600
+Subject: [PATCH] Reopen v4l2m2m context on output size changes
+
+---
+ src/video/v4l2m2m.c | 57 ++++++++++++++++++++++++++++++++++++++++++++--------
+ 1 file changed, 49 insertions(+), 8 deletions(-)
+
+--- a/src/video/v4l2m2m.c	2026-05-31 23:19:08.751489167 -0600
++++ b/src/video/v4l2m2m.c	2026-06-01 09:11:22.240823516 -0600
+@@ -52,6 +52,7 @@
+ #include <libavcodec/avcodec.h>
+ #include <libavutil/avutil.h>
+ #include <libavutil/hwcontext_drm.h>
++#include <libavutil/frame.h>
+ #include <libavutil/pixdesc.h>
+ #include <libavutil/pixfmt.h>
+ 
+@@ -1540,7 +1541,7 @@
+   static int draw_count = 0;
+   int visible_w = frame_visible_width(frame);
+   int visible_h = frame_visible_height(frame);
+-  if (++draw_count <= 3)
++  if (++draw_count <= 3 || draw_count % 120 == 0)
+     LOG("draw_frame: #%d size=%dx%d visible=%dx%d crop=[%zu,%zu,%zu,%zu] fmt=%s linesize=[%d,%d,%d,%d]",
+         draw_count, frame->width, frame->height, visible_w, visible_h,
+         frame->crop_left, frame->crop_top, frame->crop_right, frame->crop_bottom,
+@@ -1889,6 +1890,32 @@
+   if (nal_buf)    { free(nal_buf); nal_buf = NULL; nal_size = 0; }
+ }
+ 
++static AVFrame *clone_display_frame(AVFrame *src) {
++  if (src->format != AV_PIX_FMT_NV12)
++    return av_frame_clone(src);
++
++  AVFrame *dst = av_frame_alloc();
++  if (!dst)
++    return NULL;
++  dst->format = src->format;
++  dst->width = src->width;
++  dst->height = src->height;
++  if (av_frame_get_buffer(dst, 64) < 0) {
++    av_frame_free(&dst);
++    return NULL;
++  }
++  if (av_frame_copy(dst, src) < 0) {
++    av_frame_free(&dst);
++    return NULL;
++  }
++  av_frame_copy_props(dst, src);
++  dst->crop_left = src->crop_left;
++  dst->crop_right = src->crop_right;
++  dst->crop_top = src->crop_top;
++  dst->crop_bottom = src->crop_bottom;
++  return dst;
++}
++
+ static int v4l2m2m_submit(PDECODE_UNIT du) {
+   if (direct_v4l2)
+     return direct_v4l2_submit(du);
+@@ -1918,6 +1945,8 @@
+ 
+   int ret;
+   bool request_recovery_idr_after_submit = false;
++  int reopen_width_after_submit = 0;
++  int reopen_height_after_submit = 0;
+   int received_frames = 0;
+   while ((ret = avcodec_receive_frame(codec_ctx, f)) == 0) {
+     if (++received_frames > 8) {
+@@ -1939,11 +1968,17 @@
+         (f->width != stream_output_width || f->height != stream_output_height)) {
+       int new_width = f->width;
+       int new_height = f->height;
+-      LOG("submit: decoder output size changed %dx%d -> %dx%d; accepting new output size and requesting follow-up IDR",
+-          stream_output_width, stream_output_height, new_width, new_height);
+-      stream_output_width = new_width;
+-      stream_output_height = new_height;
++      int visible_width = frame_visible_width(f);
++      int visible_height = frame_visible_height(f);
++      LOG("submit: decoder output size changed %dx%d -> %dx%d visible=%dx%d; skipping transition frame, reopening decoder, resetting presenter, and requesting IDR",
++          stream_output_width, stream_output_height, new_width, new_height, visible_width, visible_height);
++      reopen_width_after_submit = visible_width;
++      reopen_height_after_submit = visible_height;
++      sdl_presenter_reset_requested = true;
+       request_recovery_idr_after_submit = true;
++      av_frame_unref(f);
++      ret = AVERROR(EAGAIN);
++      break;
+     }
+     stream_seen_output_frame = true;
+     stream_output_width = f->width;
+@@ -1960,7 +1995,7 @@
+      * glTexSubImage2D upload (otherwise FFmpeg could recycle the V4L2
+      * buffer while the GL driver is still reading it). */
+     if (f->format == AV_PIX_FMT_DRM_PRIME || f->format == AV_PIX_FMT_NV12) {
+-      AVFrame *clone = av_frame_clone(f);
++      AVFrame *clone = clone_display_frame(f);
+       if (clone) {
+         pthread_mutex_lock(&disp_mtx);
+         if (disp_pending) {
+@@ -1979,6 +2014,22 @@
+   }
+   av_frame_free(&f);
+ 
++  if (request_recovery_idr_after_submit) {
++    drop_pending_display_frame();
++    stream_seen_output_frame = false;
++    stream_output_width = 0;
++    stream_output_height = 0;
++    if (reopen_v4l2m2m_decoder_context(reopen_width_after_submit, reopen_height_after_submit,
++                                       "runtime-output-size-change") != 0) {
++      LOG("submit: failed to reopen decoder after output size change %dx%d",
++          reopen_width_after_submit, reopen_height_after_submit);
++    } else {
++      LOG("submit: reopened decoder after output size change %dx%d epoch=%d; requesting IDR",
++          reopen_width_after_submit, reopen_height_after_submit, stream_decoder_epoch);
++    }
++    return DR_NEED_IDR;
++  }
++
+   return (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) ? DR_OK : DR_NEED_IDR;
+ }
+ 
+-- 
+2.51.2

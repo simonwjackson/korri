@@ -1,0 +1,14 @@
+--- a/src/platform/linux/graphics.cpp
++++ b/src/platform/linux/graphics.cpp
+@@ -899,7 +899,10 @@ namespace egl {
+ 
+   void sws_t::load_vram(img_descriptor_t &img, int offset_x, int offset_y, int texture) {
+     // When only a sub-part of the image must be encoded...
+-    const bool copy = offset_x || offset_y || img.sd.width != in_width || img.sd.height != in_height;
++    // Korri live-resolution diagnostic: after runtime encoder replacement,
++    // direct sampling from freshly imported screencopy DMA-BUF textures can go
++    // stale. Always copy into Sunshine-owned GL texture before NV12 conversion.
++    const bool copy = true;
+     if (copy) {
+       auto framebuf = gl::frame_buf_t::make(1);
+       framebuf.bind(&texture, &texture + 1);

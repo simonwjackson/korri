@@ -1,6 +1,6 @@
 --- a/src/video.cpp
 +++ b/src/video.cpp
-@@ -470,6 +470,7 @@
+@@ -470,6 +474,7 @@
    };
 
    std::unique_ptr<platf::encode_device_t> make_encode_device(platf::display_t &disp, const encoder_t &encoder, const config_t &config);
@@ -8,15 +8,16 @@
 
    bool runtime_settings_supports_vaapi_h264(const encoder_t &encoder, const config_t &config) {
      return encoder.name == "vaapi"sv && encoder.codec_from_config(config).name == "h264_vaapi";
-@@ -1927,6 +1928,7 @@
+@@ -1927,5 +1928,8 @@
      auto runtime_bitrate_events = mail->queue<runtime_bitrate_request_t>(mail::runtime_bitrate);
      auto runtime_bitrate_ack_events = mail->queue<runtime_bitrate_ack_t>(mail::runtime_bitrate_ack);
-     auto runtime_settings_supports_encoder_restart = mail->event<bool>(mail::runtime_settings_supports_encoder_restart);
 +    auto touch_port_events = mail->event<input::touch_port_t>(mail::touch_port);
      auto invalidate_ref_frames_events = mail->event<std::pair<int64_t, int64_t>>(mail::invalidate_ref_frames);
      std::uint32_t runtime_fps = config.framerate;
      auto next_runtime_frame = std::chrono::steady_clock::now();
-@@ -2035,6 +2037,55 @@
++    int runtime_resolution_idr_frames = 0;
++    int runtime_resolution_diag_frames = 0;
+@@ -2035,6 +2037,74 @@
                << " status="sv << status
                << " reason="sv << reason;
              runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_FPS, status, applied_fps, 0, 0, reason});
@@ -33,20 +34,39 @@
 +              auto replacement_encode_device = make_encode_device(*disp, encoder, updated_config);
 +              if (replacement_encode_device) {
 +                auto replacement_session = make_encode_session(disp.get(), encoder, updated_config, disp->width, disp->height, std::move(replacement_encode_device));
-+                auto first_img = images->pop(max_frametime);
-+                if (replacement_session && first_img && !replacement_session->convert(*first_img)) {
-+                  session = std::move(replacement_session);
-+                  config = updated_config;
-+                  applied_width = request->width;
-+                  applied_height = request->height;
-+                  status = RUNTIME_SETTINGS_STATUS_APPLIED;
-+                  reason = RUNTIME_SETTINGS_REASON_NONE;
-+                  requested_idr_frame = true;
-+                  touch_port_events->raise(make_port(disp.get(), config));
-+                  BOOST_LOG(info)
-+                    << "live-settings-mvp: async encoder restarted for runtime resolution request_id="sv << request->request_id
-+                    << " applied_width="sv << applied_width
-+                    << " applied_height="sv << applied_height;
++                std::uint32_t drained_runtime_resolution_frames = 0;
++                while (images->peek()) {
++                  images->pop();
++                  drained_runtime_resolution_frames++;
++                }
++                std::uint32_t drained_runtime_resolution_packets = 0;
++                while (packets->peek()) {
++                  packets->pop();
++                  drained_runtime_resolution_packets++;
++                }
++                auto first_img = images->pop(max_frametime * 2);
++                if (replacement_session && first_img) {
++                  replacement_session->request_idr_frame();
++                  if (!replacement_session->convert(*first_img)) {
++                    session = std::move(replacement_session);
++                    config = updated_config;
++                    applied_width = request->width;
++                    applied_height = request->height;
++                    status = RUNTIME_SETTINGS_STATUS_APPLIED;
++                    reason = RUNTIME_SETTINGS_REASON_NONE;
++                    requested_idr_frame = true;
++                    touch_port_events->raise(make_port(disp.get(), config));
++                    runtime_resolution_idr_frames = 120;
++                    runtime_resolution_diag_frames = 0;
++                    BOOST_LOG(info)
++                      << "live-settings-mvp: async encoder restarted for runtime resolution request_id="sv << request->request_id
++                      << " applied_width="sv << applied_width
++                      << " applied_height="sv << applied_height
++                      << " first_image_width="sv << first_img->width
++                      << " first_image_height="sv << first_img->height
++                      << " drained_capture_queue="sv << drained_runtime_resolution_frames
++                      << " drained_packet_queue="sv << drained_runtime_resolution_packets;
++                  }
 +                }
 +              }
 +            } else {
@@ -72,7 +92,46 @@
          }
        }
 
-@@ -2155,7 +2206,7 @@
+@@ -2090,3 +2162,11 @@
++      // After a runtime resolution switch, avoid keyframing the previous frame
++      // while waiting for the capture queue to produce fresh post-switch content.
++      bool runtime_resolution_force_fresh_idr = runtime_resolution_idr_frames > 0;
++      if (runtime_resolution_force_fresh_idr) {
++        requested_idr_frame = true;
++        --runtime_resolution_idr_frames;
++      }
++
+       if (requested_idr_frame) {
+         session->request_idr_frame();
+       }
+@@ -2102,13 +2175,25 @@
+       }
+       // Encode at a minimum FPS to avoid image quality issues with static content
+-      if (!requested_idr_frame || images->peek()) {
++      if (runtime_resolution_force_fresh_idr || !requested_idr_frame || images->peek()) {
+         if (auto img = images->pop(max_frametime)) {
+           frame_timestamp = img->frame_timestamp;
++          if (runtime_resolution_force_fresh_idr && (runtime_resolution_diag_frames < 12 || runtime_resolution_diag_frames % 30 == 0)) {
++            BOOST_LOG(info)
++              << "live-settings-mvp: runtime resolution encode img_diag="sv << runtime_resolution_diag_frames
++              << " width="sv << img->width
++              << " height="sv << img->height
++              << " row_pitch="sv << img->row_pitch
++              << " pixel_pitch="sv << img->pixel_pitch
++              << " data="sv << static_cast<const void *>(img->data);
++          }
++          ++runtime_resolution_diag_frames;
+           if (session->convert(*img)) {
+             BOOST_LOG(error) << "Could not convert image"sv;
+             return;
+           }
+         } else if (!images->running()) {
+           break;
++        } else if (runtime_resolution_force_fresh_idr) {
++          continue;
+         }
+       }
+@@ -2155,7 +2218,7 @@
      return result;
    }
 
@@ -81,7 +140,7 @@
      sync_session_t encode_session;
 
      encode_session.ctx = &ctx;
-@@ -2165,8 +2216,10 @@
+@@ -2165,8 +2228,10 @@
        return std::nullopt;
      }
 
@@ -94,7 +153,7 @@
 
      // Update client with our current HDR display state
      hdr_info_t hdr_info = std::make_unique<hdr_info_raw_t>(false);
-@@ -2177,7 +2230,9 @@
+@@ -2177,7 +2242,9 @@
          BOOST_LOG(error) << "Couldn't get display hdr metadata when colorspace selection indicates it should have one";
        }
      }
@@ -105,7 +164,7 @@
 
      auto session = make_encode_session(disp, encoder, ctx.config, img.width, img.height, std::move(encode_device));
      if (!session) {
-@@ -2367,7 +2422,55 @@
+@@ -2367,6 +2434,54 @@
                    << " status="sv << status
                    << " reason="sv << reason;
                  ctx->runtime_bitrate_ack_events->raise(runtime_bitrate_ack_t {request->request_id, RUNTIME_SETTINGS_OPERATION_SET_FPS, status, applied_fps, 0, 0, reason});

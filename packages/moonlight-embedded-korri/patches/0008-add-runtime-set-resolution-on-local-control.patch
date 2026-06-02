@@ -1,0 +1,135 @@
+Open up runtime.setResolution on the local-control surface so the operator can
+drive Sunshine's operation-3 path through the same JSON-RPC contract used for
+bitrate and FPS. The Sunshine side currently advertises SET_RESOLUTION as a
+proof-gated operation; this patch lets the Moonlight client expose it when
+either the supported or proof-gated bit is set so we can run the seamless
+runtime-resolution probe end-to-end.
+
+Acceptance of the request still relies on Sunshine's own bounds + same-aspect
+check; this patch widens the client-side gate and threads
+secondaryValue=height through the existing dispatcher.
+
+--- a/src/local_control.c	2026-05-31 19:13:38.858298820 -0600
++++ b/src/local_control.c	2026-05-31 19:14:14.623738664 -0600
+@@ -39,6 +39,7 @@
+ #define MOONLIGHT_CONTROL_MAX_HEIGHT 4320
+ #define MOONLIGHT_LC_COMMAND_RUNTIME_SET_BITRATE "runtime.setBitrate"
+ #define MOONLIGHT_LC_COMMAND_RUNTIME_SET_FPS "runtime.setFps"
++#define MOONLIGHT_LC_COMMAND_RUNTIME_SET_RESOLUTION "runtime.setResolution"
+ #define MOONLIGHT_LC_STATUS_APPLIED 0
+ #define MOONLIGHT_LC_STATUS_FAILED 1
+ #define MOONLIGHT_LC_STATUS_INVALID 2
+@@ -460,7 +461,9 @@
+       moonlight_local_control_write_json(client_fd, moonlight_local_control_success(id, subscribed));
+       moonlight_local_control_write_json(client_fd, snapshot_event);
+     }
+-    else if (strcmp(method_name, MOONLIGHT_LC_COMMAND_RUNTIME_SET_BITRATE) == 0 || strcmp(method_name, MOONLIGHT_LC_COMMAND_RUNTIME_SET_FPS) == 0) {
++    else if (strcmp(method_name, MOONLIGHT_LC_COMMAND_RUNTIME_SET_BITRATE) == 0
++             || strcmp(method_name, MOONLIGHT_LC_COMMAND_RUNTIME_SET_FPS) == 0
++             || strcmp(method_name, MOONLIGHT_LC_COMMAND_RUNTIME_SET_RESOLUTION) == 0) {
+       moonlight_local_control_dispatch_runtime_command(id, request, method_name, client_fd);
+     }
+     else {
+@@ -546,6 +549,8 @@
+       json_object_array_add(commands, json_object_new_string(MOONLIGHT_LC_COMMAND_RUNTIME_SET_BITRATE));
+     if (moonlight_local_control_operation_supported_locked(MOONLIGHT_LC_OPERATION_SET_FPS))
+       json_object_array_add(commands, json_object_new_string(MOONLIGHT_LC_COMMAND_RUNTIME_SET_FPS));
++    if (moonlight_local_control_operation_supported_locked(MOONLIGHT_LC_OPERATION_SET_RESOLUTION))
++      json_object_array_add(commands, json_object_new_string(MOONLIGHT_LC_COMMAND_RUNTIME_SET_RESOLUTION));
+   }
+   json_object_object_add(capabilities, "events", events);
+   json_object_object_add(capabilities, "commands", commands);
+@@ -666,17 +671,33 @@
+     return 0;
+   }
+ 
+-  uint16_t operation;
+-  uint32_t value;
++  uint16_t operation = 0;
++  uint32_t value = 0;
++  uint32_t secondary_value = 0;
+   struct json_object* raw_value = NULL;
++  struct json_object* raw_secondary = NULL;
+   if (strcmp(method_name, MOONLIGHT_LC_COMMAND_RUNTIME_SET_BITRATE) == 0) {
+     operation = MOONLIGHT_LC_OPERATION_SET_BITRATE_KBPS;
+     json_object_object_get_ex(params, "bitrateKbps", &raw_value);
+   }
+-  else {
++  else if (strcmp(method_name, MOONLIGHT_LC_COMMAND_RUNTIME_SET_FPS) == 0) {
+     operation = MOONLIGHT_LC_OPERATION_SET_FPS;
+     json_object_object_get_ex(params, "fps", &raw_value);
+   }
++  else if (strcmp(method_name, MOONLIGHT_LC_COMMAND_RUNTIME_SET_RESOLUTION) == 0) {
++    operation = MOONLIGHT_LC_OPERATION_SET_RESOLUTION;
++    json_object_object_get_ex(params, "width", &raw_value);
++    json_object_object_get_ex(params, "height", &raw_secondary);
++    if (raw_secondary == NULL || json_object_get_type(raw_secondary) != json_type_int) {
++      moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32602, "invalid resolution height", "invalid"));
++      return 0;
++    }
++    secondary_value = (uint32_t) json_object_get_int(raw_secondary);
++  }
++  else {
++    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32601, "unsupported method", "unsupported"));
++    return 0;
++  }
+ 
+   if (raw_value == NULL || json_object_get_type(raw_value) != json_type_int) {
+     moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32602, "invalid command value", "invalid"));
+@@ -719,9 +740,16 @@
+     moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32602, "fps out of bounds", "invalid"));
+     return 0;
+   }
++  if (operation == MOONLIGHT_LC_OPERATION_SET_RESOLUTION
++      && (value < MOONLIGHT_CONTROL_MIN_WIDTH || value > MOONLIGHT_CONTROL_MAX_WIDTH
++          || secondary_value < MOONLIGHT_CONTROL_MIN_HEIGHT || secondary_value > MOONLIGHT_CONTROL_MAX_HEIGHT
++          || (value % 2) != 0 || (secondary_value % 2) != 0)) {
++    moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32602, "resolution out of bounds", "invalid"));
++    return 0;
++  }
+ 
+   uint32_t command_id = moonlight_local_control_next_command_id();
+-  int send_result = LiSendSunshineRuntimeSettingsMvp(command_id, operation, value, 0);
++  int send_result = LiSendSunshineRuntimeSettingsMvp(command_id, operation, value, secondary_value);
+   if (send_result != 0) {
+     const char* tag = send_result == -5 ? "conflict" : (send_result == -6 ? "unsupported" : "failed");
+     moonlight_local_control_write_json(client_fd, moonlight_local_control_error(id, -32000, "runtime command dispatch failed", tag));
+@@ -811,7 +839,6 @@
+ }
+ 
+ static void moonlight_local_control_emit_runtime_command_result(uint32_t request_id, uint16_t operation, uint16_t status, uint16_t reason, uint32_t value, uint32_t secondary_value) {
+-  (void) secondary_value;
+   const char* command = moonlight_local_control_command_for_operation(operation);
+   const char* status_label = moonlight_local_control_status_for_runtime_status(status, reason);
+   if (command == NULL)
+@@ -830,6 +857,10 @@
+     control.bitrate_kbps = (int) value;
+   if (operation == MOONLIGHT_LC_OPERATION_SET_FPS && status == MOONLIGHT_LC_STATUS_APPLIED)
+     control.fps = (int) value;
++  if (operation == MOONLIGHT_LC_OPERATION_SET_RESOLUTION && status == MOONLIGHT_LC_STATUS_APPLIED) {
++    control.width = (int) value;
++    control.height = (int) secondary_value;
++  }
+   control.moonlight_local_control_event_history[seq % MOONLIGHT_CONTROL_EVENT_HISTORY].seq = seq;
+   snprintf(control.moonlight_local_control_event_history[seq % MOONLIGHT_CONTROL_EVENT_HISTORY].name, sizeof(control.moonlight_local_control_event_history[0].name), "%s", "runtime.commandResult");
+   pthread_mutex_unlock(&control.lock);
+@@ -868,6 +899,8 @@
+     return MOONLIGHT_LC_COMMAND_RUNTIME_SET_BITRATE;
+   if (operation == MOONLIGHT_LC_OPERATION_SET_FPS)
+     return MOONLIGHT_LC_COMMAND_RUNTIME_SET_FPS;
++  if (operation == MOONLIGHT_LC_OPERATION_SET_RESOLUTION)
++    return MOONLIGHT_LC_COMMAND_RUNTIME_SET_RESOLUTION;
+   return NULL;
+ }
+ 
+@@ -883,9 +916,7 @@
+ }
+ 
+ static int moonlight_local_control_operation_supported_locked(uint16_t operation) {
+-  if (operation == MOONLIGHT_LC_OPERATION_SET_RESOLUTION)
+-    return 0;
+-  return (control.supported_operations & (1u << operation)) != 0;
++  return ((control.supported_operations | control.proof_gated_operations) & (1u << operation)) != 0;
+ }
+ 
+ static struct json_object* moonlight_local_control_success(struct json_object* id, struct json_object* result) {
