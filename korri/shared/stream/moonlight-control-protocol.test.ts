@@ -30,7 +30,7 @@ describe("moonlight local control protocol", () => {
           authority: "observer",
           capabilities: {
             events: ["lifecycle", "quality", "input"],
-            commands: [],
+            commands: ["input.setTouchBounds"],
             experimental: [],
           },
           limits: MOONLIGHT_CONTROL_PROTOCOL_LIMITS,
@@ -43,7 +43,9 @@ describe("moonlight local control protocol", () => {
     if (decoded.result._tag === "protocol.hello") {
       expect(decoded.result.protocol.extraProtocolField).toBe("preserved")
       expect(decoded.result.additive).toEqual({ survives: true })
-      expect(decoded.result.capabilities.commands).toEqual([])
+      expect(decoded.result.capabilities.commands).toEqual([
+        "input.setTouchBounds",
+      ])
     }
   })
 
@@ -81,6 +83,17 @@ describe("moonlight local control protocol", () => {
             route: "moonlight-embedded",
             status: "available",
             capabilities: ["gamepad", "touch"],
+            absoluteTouch: {
+              enabled: true,
+              boundsRequired: true,
+              activeBounds: { x: 120, y: 0, w: 960, h: 720 },
+              absRange: { minX: 0, maxX: 1919, minY: 0, maxY: 1079 },
+              lastCommand: {
+                requestId: "input-1",
+                command: "input.setTouchBounds",
+                status: "applied",
+              },
+            },
           },
         },
       }),
@@ -91,6 +104,15 @@ describe("moonlight local control protocol", () => {
       expect(decoded.result.seq).toBe(17)
       expect(decoded.result.streamQuality.bitrateKbps).toBe(18_000)
       expect(decoded.result.input.status).toBe("available")
+      expect(decoded.result.input.absoluteTouch?.activeBounds).toEqual({
+        x: 120,
+        y: 0,
+        w: 960,
+        h: 720,
+      })
+      expect(decoded.result.input.absoluteTouch?.lastCommand?.command).toBe(
+        "input.setTouchBounds",
+      )
     }
   })
 
@@ -258,7 +280,59 @@ describe("moonlight local control protocol", () => {
     expect(resolution.method).toBe("runtime.setResolution")
   })
 
-  it("rejects non-positive command values before native dispatch", () => {
+  it("decodes input touch bounds commands and local apply results", () => {
+    const request = decodeMoonlightControlCommandRequest({
+      jsonrpc: "2.0",
+      id: "input-1",
+      method: "input.setTouchBounds",
+      params: { x: 120, y: 0, w: 960, h: 720 },
+    })
+    const response = expectSuccessResponse(
+      decodeMoonlightControlResponse({
+        jsonrpc: "2.0",
+        id: "input-1",
+        result: {
+          _tag: "input.command.result",
+          requestId: "input-1",
+          command: "input.setTouchBounds",
+          status: "applied",
+        },
+      }),
+    )
+
+    expect(request.method).toBe("input.setTouchBounds")
+    expect(response.result._tag).toBe("input.command.result")
+    if (response.result._tag === "input.command.result") {
+      expect(response.result.status).toBe("applied")
+    }
+  })
+
+  it("decodes input command result events", () => {
+    const decoded = decodeMoonlightControlMessage({
+      jsonrpc: "2.0",
+      method: "moonlight.event",
+      params: {
+        seq: 3,
+        monotonicMs: 140,
+        event: {
+          name: "input.commandResult",
+          requestId: "input-1",
+          command: "input.setTouchBounds",
+          status: "disabled",
+        },
+      },
+    }) as MoonlightControlEventEnvelope
+
+    expect(decoded.params.event.name).toBe("input.commandResult")
+    if (
+      decoded.params.event.name === "input.commandResult" &&
+      "status" in decoded.params.event
+    ) {
+      expect(decoded.params.event.status).toBe("disabled")
+    }
+  })
+
+  it("rejects command values outside v1 bounds before native dispatch", () => {
     expect(() =>
       decodeMoonlightControlCommandRequest({
         jsonrpc: "2.0",
@@ -285,6 +359,15 @@ describe("moonlight local control protocol", () => {
         params: { width: 0, height: -1 },
       }),
     ).toThrow(/width/)
+
+    expect(() =>
+      decodeMoonlightControlCommandRequest({
+        jsonrpc: "2.0",
+        id: "input-2",
+        method: "input.setTouchBounds",
+        params: { x: 0, y: 0, w: 0, h: 720 },
+      }),
+    ).toThrow(/w/)
   })
 })
 

@@ -117,6 +117,33 @@ describe("moonlight local control client", () => {
     })
   })
 
+  it("sends a bounded local input touch-bounds command", async () => {
+    await withSocketServer(async ({ socketPath, writes }) => {
+      const client = await connectMoonlightControl({ socketPath })
+      try {
+        const response = await client.setTouchBounds({
+          x: 120,
+          y: 0,
+          w: 960,
+          h: 720,
+        })
+
+        expect(response.result).toEqual({
+          _tag: "input.command.result",
+          requestId: "input-1",
+          command: "input.setTouchBounds",
+          status: "applied",
+        })
+        expect(JSON.parse(writes[0] ?? "{}")).toMatchObject({
+          method: "input.setTouchBounds",
+          params: { x: 120, y: 0, w: 960, h: 720 },
+        })
+      } finally {
+        client.close()
+      }
+    })
+  })
+
   it("rejects requests after close", async () => {
     await withSocketServer(async ({ socketPath }) => {
       const client = await connectMoonlightControl({ socketPath })
@@ -248,6 +275,10 @@ async function withSocketServer(
         } else if (request.method === "runtime.setResolution") {
           socket.write(
             `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "command.accepted", requestId: "cmd-3", command: "runtime.setResolution" } })}\n`,
+          )
+        } else if (request.method === "input.setTouchBounds") {
+          socket.write(
+            `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "input.command.result", requestId: "input-1", command: "input.setTouchBounds", status: "applied" } })}\n`,
           )
         } else if (request.method === "protocol.hello") {
           socket.write(`${JSON.stringify(helloResponse(request.id))}\n`)

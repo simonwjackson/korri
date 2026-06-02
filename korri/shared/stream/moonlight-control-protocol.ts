@@ -3,7 +3,7 @@ import { Schema } from "effect"
 export const MOONLIGHT_CONTROL_PROTOCOL = {
   name: "moonlight.local-control",
   major: 1,
-  minor: 0,
+  minor: 1,
 } as const
 
 export const MOONLIGHT_CONTROL_PROTOCOL_LIMITS = {
@@ -17,6 +17,12 @@ export const MOONLIGHT_CONTROL_PROTOCOL_LIMITS = {
   resolution: {
     width: { min: 1, max: Number.MAX_SAFE_INTEGER },
     height: { min: 1, max: Number.MAX_SAFE_INTEGER },
+  },
+  touchBounds: {
+    x: { min: 0, max: 65_535 },
+    y: { min: 0, max: 65_535 },
+    w: { min: 1, max: 65_536 },
+    h: { min: 1, max: 65_536 },
   },
 } as const
 
@@ -37,6 +43,16 @@ export type MoonlightControlCommandMethod = Schema.Schema.Type<
   typeof CommandMethod
 >
 
+const InputCommandMethod = Schema.Literal("input.setTouchBounds")
+export type MoonlightControlInputCommandMethod = Schema.Schema.Type<
+  typeof InputCommandMethod
+>
+
+const AnyCommandMethod = Schema.Union([CommandMethod, InputCommandMethod])
+export type MoonlightControlAnyCommandMethod = Schema.Schema.Type<
+  typeof AnyCommandMethod
+>
+
 const RuntimeSettingsStatus = Schema.Literals([
   "accepted",
   "applied",
@@ -51,6 +67,20 @@ const RuntimeSettingsStatus = Schema.Literals([
 ])
 export type MoonlightControlRuntimeSettingsStatus = Schema.Schema.Type<
   typeof RuntimeSettingsStatus
+>
+
+const InputCommandStatus = Schema.Literals([
+  "accepted",
+  "applied",
+  "failed",
+  "invalid",
+  "disabled",
+  "unsupported",
+  "unauthorized",
+  "conflict",
+])
+export type MoonlightControlInputCommandStatus = Schema.Schema.Type<
+  typeof InputCommandStatus
 >
 
 const LifecycleState = Schema.Literals([
@@ -85,7 +115,7 @@ export type MoonlightControlInputRouteStatus = Schema.Schema.Type<
 const CapabilitySet = Schema.StructWithRest(
   Schema.Struct({
     events: Schema.Array(Schema.String),
-    commands: Schema.Array(CommandMethod),
+    commands: Schema.Array(AnyCommandMethod),
     experimental: Schema.Array(Schema.String),
   }),
   [AdditiveFields],
@@ -127,6 +157,24 @@ const ProtocolLimits = Schema.StructWithRest(
       height: Schema.Struct({
         min: boundedInt("resolution.height.min", 1, Number.MAX_SAFE_INTEGER),
         max: boundedInt("resolution.height.max", 1, Number.MAX_SAFE_INTEGER),
+      }),
+    }),
+    touchBounds: Schema.Struct({
+      x: Schema.Struct({
+        min: boundedInt("touchBounds.x.min", 0, 100_000),
+        max: boundedInt("touchBounds.x.max", 0, 100_000),
+      }),
+      y: Schema.Struct({
+        min: boundedInt("touchBounds.y.min", 0, 100_000),
+        max: boundedInt("touchBounds.y.max", 0, 100_000),
+      }),
+      w: Schema.Struct({
+        min: boundedInt("touchBounds.w.min", 1, 100_000),
+        max: boundedInt("touchBounds.w.max", 1, 100_000),
+      }),
+      h: Schema.Struct({
+        min: boundedInt("touchBounds.h.min", 1, 100_000),
+        max: boundedInt("touchBounds.h.max", 1, 100_000),
       }),
     }),
   }),
@@ -188,11 +236,46 @@ const StreamQualitySnapshot = Schema.StructWithRest(
   [AdditiveFields],
 )
 
+const TouchBounds = Schema.Struct({
+  x: touchBoundsXSchema(),
+  y: touchBoundsYSchema(),
+  w: touchBoundsWidthSchema(),
+  h: touchBoundsHeightSchema(),
+})
+
+const TouchAbsRange = Schema.Struct({
+  minX: boundedInt("minX", 0, 65_535),
+  maxX: boundedInt("maxX", 0, 65_535),
+  minY: boundedInt("minY", 0, 65_535),
+  maxY: boundedInt("maxY", 0, 65_535),
+})
+
+const InputCommandSnapshot = Schema.StructWithRest(
+  Schema.Struct({
+    requestId: JsonRpcId,
+    command: InputCommandMethod,
+    status: InputCommandStatus,
+  }),
+  [AdditiveFields],
+)
+
+const AbsoluteTouchSnapshot = Schema.StructWithRest(
+  Schema.Struct({
+    enabled: Schema.Boolean,
+    boundsRequired: Schema.optional(Schema.Boolean),
+    activeBounds: Schema.optional(TouchBounds),
+    absRange: Schema.optional(TouchAbsRange),
+    lastCommand: Schema.optional(InputCommandSnapshot),
+  }),
+  [AdditiveFields],
+)
+
 const InputRouteSnapshot = Schema.StructWithRest(
   Schema.Struct({
     route: Schema.String,
     status: InputRouteStatus,
     capabilities: Schema.Array(Schema.String),
+    absoluteTouch: Schema.optional(AbsoluteTouchSnapshot),
   }),
   [AdditiveFields],
 )
@@ -243,12 +326,33 @@ const CommandResult = Schema.StructWithRest(
   [AdditiveFields],
 )
 
+const InputCommandAcceptedResult = Schema.StructWithRest(
+  Schema.Struct({
+    _tag: Schema.Literal("input.command.accepted"),
+    requestId: JsonRpcId,
+    command: InputCommandMethod,
+  }),
+  [AdditiveFields],
+)
+
+const InputCommandResult = Schema.StructWithRest(
+  Schema.Struct({
+    _tag: Schema.Literal("input.command.result"),
+    requestId: JsonRpcId,
+    command: InputCommandMethod,
+    status: InputCommandStatus,
+  }),
+  [AdditiveFields],
+)
+
 const ResponseResult = Schema.Union([
   HelloResult,
   StateSnapshotResult,
   EventsSubscribedResult,
   CommandAcceptedResult,
   CommandResult,
+  InputCommandAcceptedResult,
+  InputCommandResult,
 ])
 
 type AdditiveObject = Readonly<Record<string, unknown>>
@@ -267,7 +371,7 @@ export interface MoonlightControlHelloResult extends AdditiveObject {
   readonly authority: MoonlightControlAuthority
   readonly capabilities: AdditiveObject & {
     readonly events: readonly string[]
-    readonly commands: readonly MoonlightControlCommandMethod[]
+    readonly commands: readonly MoonlightControlAnyCommandMethod[]
     readonly experimental: readonly string[]
   }
   readonly limits: typeof MOONLIGHT_CONTROL_PROTOCOL_LIMITS
@@ -305,7 +409,32 @@ export interface MoonlightControlStateSnapshotResult extends AdditiveObject {
     readonly route: string
     readonly status: MoonlightControlInputRouteStatus
     readonly capabilities: readonly string[]
+    readonly absoluteTouch?: AdditiveObject & {
+      readonly enabled: boolean
+      readonly boundsRequired?: boolean
+      readonly activeBounds?: MoonlightControlTouchBounds
+      readonly absRange?: MoonlightControlTouchAbsRange
+      readonly lastCommand?: AdditiveObject & {
+        readonly requestId: MoonlightControlRequestId
+        readonly command: MoonlightControlInputCommandMethod
+        readonly status: MoonlightControlInputCommandStatus
+      }
+    }
   }
+}
+
+export interface MoonlightControlTouchBounds {
+  readonly x: number
+  readonly y: number
+  readonly w: number
+  readonly h: number
+}
+
+export interface MoonlightControlTouchAbsRange {
+  readonly minX: number
+  readonly maxX: number
+  readonly minY: number
+  readonly maxY: number
 }
 
 export interface MoonlightControlEventsSubscribedResult extends AdditiveObject {
@@ -326,12 +455,28 @@ export interface MoonlightControlCommandResult extends AdditiveObject {
   readonly status: MoonlightControlRuntimeSettingsStatus
 }
 
+export interface MoonlightControlInputCommandAcceptedResult
+  extends AdditiveObject {
+  readonly _tag: "input.command.accepted"
+  readonly requestId: MoonlightControlRequestId
+  readonly command: MoonlightControlInputCommandMethod
+}
+
+export interface MoonlightControlInputCommandResult extends AdditiveObject {
+  readonly _tag: "input.command.result"
+  readonly requestId: MoonlightControlRequestId
+  readonly command: MoonlightControlInputCommandMethod
+  readonly status: MoonlightControlInputCommandStatus
+}
+
 export type MoonlightControlResponseResult =
   | MoonlightControlHelloResult
   | MoonlightControlStateSnapshotResult
   | MoonlightControlEventsSubscribedResult
   | MoonlightControlCommandAcceptedResult
   | MoonlightControlCommandResult
+  | MoonlightControlInputCommandAcceptedResult
+  | MoonlightControlInputCommandResult
 
 const ProtocolError = Schema.StructWithRest(
   Schema.Struct({
@@ -436,11 +581,22 @@ const RuntimeRequestIdrRequest = Schema.StructWithRest(
   [AdditiveFields],
 )
 
+const InputSetTouchBoundsRequest = Schema.StructWithRest(
+  Schema.Struct({
+    jsonrpc: Schema.Literal("2.0"),
+    id: JsonRpcId,
+    method: InputCommandMethod,
+    params: TouchBounds,
+  }),
+  [AdditiveFields],
+)
+
 export const MoonlightControlCommandRequest = Schema.Union([
   RuntimeSetBitrateRequest,
   RuntimeSetFpsRequest,
   RuntimeSetResolutionRequest,
   RuntimeRequestIdrRequest,
+  InputSetTouchBoundsRequest,
 ])
 export type MoonlightControlCommandRequest =
   | (AdditiveObject & {
@@ -466,6 +622,12 @@ export type MoonlightControlCommandRequest =
       readonly id: MoonlightControlRequestId
       readonly method: "runtime.requestIdr"
       readonly params?: Record<string, never>
+    })
+  | (AdditiveObject & {
+      readonly jsonrpc: "2.0"
+      readonly id: MoonlightControlRequestId
+      readonly method: "input.setTouchBounds"
+      readonly params: MoonlightControlTouchBounds
     })
 
 const KnownEvent = Schema.Union([
@@ -510,6 +672,15 @@ const KnownEvent = Schema.Union([
     }),
     [AdditiveFields],
   ),
+  Schema.StructWithRest(
+    Schema.Struct({
+      name: Schema.Literal("input.commandResult"),
+      requestId: JsonRpcId,
+      command: InputCommandMethod,
+      status: InputCommandStatus,
+    }),
+    [AdditiveFields],
+  ),
 ])
 export type MoonlightControlKnownEvent =
   | (AdditiveObject & {
@@ -539,6 +710,12 @@ export type MoonlightControlKnownEvent =
       readonly route: string
       readonly status: MoonlightControlInputRouteStatus
       readonly capabilities: readonly string[]
+    })
+  | (AdditiveObject & {
+      readonly name: "input.commandResult"
+      readonly requestId: MoonlightControlRequestId
+      readonly command: MoonlightControlInputCommandMethod
+      readonly status: MoonlightControlInputCommandStatus
     })
 
 export interface MoonlightControlUnknownEvent {
@@ -676,6 +853,38 @@ function resolutionHeightSchema() {
     "height",
     MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.height.min,
     MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.height.max,
+  )
+}
+
+function touchBoundsXSchema() {
+  return boundedInt(
+    "x",
+    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.touchBounds.x.min,
+    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.touchBounds.x.max,
+  )
+}
+
+function touchBoundsYSchema() {
+  return boundedInt(
+    "y",
+    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.touchBounds.y.min,
+    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.touchBounds.y.max,
+  )
+}
+
+function touchBoundsWidthSchema() {
+  return boundedInt(
+    "w",
+    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.touchBounds.w.min,
+    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.touchBounds.w.max,
+  )
+}
+
+function touchBoundsHeightSchema() {
+  return boundedInt(
+    "h",
+    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.touchBounds.h.min,
+    MOONLIGHT_CONTROL_PROTOCOL_LIMITS.touchBounds.h.max,
   )
 }
 

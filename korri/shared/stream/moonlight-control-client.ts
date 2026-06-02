@@ -37,6 +37,12 @@ export interface MoonlightControlClient {
     readonly width: number
     readonly height: number
   }) => Promise<MoonlightControlSuccessResponse>
+  readonly setTouchBounds: (params: {
+    readonly x: number
+    readonly y: number
+    readonly w: number
+    readonly h: number
+  }) => Promise<MoonlightControlSuccessResponse>
   readonly onEvent: (
     listener: (delivery: MoonlightControlEventDelivery) => void,
   ) => () => void
@@ -107,6 +113,7 @@ function createMoonlightControlClient(
     setBitrate: params => request("runtime.setBitrate", params),
     setFps: params => request("runtime.setFps", params),
     setResolution: params => request("runtime.setResolution", params),
+    setTouchBounds: params => request("input.setTouchBounds", params),
     onEvent: listener => {
       listeners.add(listener)
       return () => listeners.delete(listener)
