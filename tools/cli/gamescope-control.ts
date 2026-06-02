@@ -35,7 +35,7 @@ export async function runGamescopeControlCommand(
     write(JSON.stringify(response, null, 2))
     return 0
   } catch (error) {
-    writeError(error instanceof Error ? error.message : String(error))
+    writeError(errorMessage(error))
     return 1
   } finally {
     client?.close()
@@ -139,6 +139,19 @@ function parseMode(
   const match = value?.match(/^(\d+)x(\d+)$/)
   if (!match) return undefined
   return { width: Number(match[1]), height: Number(match[2]) }
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
+    return (error as { message: string }).message
+  }
+  return String(error)
 }
 
 function isScalingFilter(

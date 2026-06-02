@@ -51,6 +51,41 @@ describe("gamescope-control cli", () => {
     expect(output[0]).toContain('"status": "applied"')
   })
 
+  it("prints JSON-RPC error messages from the bridge", async () => {
+    const errors: string[] = []
+    const exitCode = await runGamescopeControlCommand(
+      ["mode", "960x540", "--socket", "/tmp/gamescope.sock"],
+      {
+        writeError: line => errors.push(line),
+        connect: async () => ({
+          hello: async () => ({
+            jsonrpc: "2.0",
+            id: "1",
+            result: helloResult(),
+          }),
+          state: async () => ({
+            jsonrpc: "2.0",
+            id: "2",
+            result: stateResult(),
+          }),
+          setMode: async () => {
+            throw { code: -32001, message: "xrandr timed out after 1000ms" }
+          },
+          setFilter: async () => {
+            throw new Error("unexpected")
+          },
+          setSharpness: async () => {
+            throw new Error("unexpected")
+          },
+          close: () => undefined,
+        }),
+      },
+    )
+
+    expect(exitCode).toBe(1)
+    expect(errors.join("\n")).toContain("xrandr timed out")
+  })
+
   it("validates sharpness before connecting", async () => {
     const errors: string[] = []
     const exitCode = await runGamescopeControlCommand(
