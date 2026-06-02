@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import {
+  createGamescopeHelloResult,
   decodeGamescopeControlEventEnvelope,
   decodeGamescopeControlRequest,
   filterToGamescopeValue,
@@ -23,6 +24,16 @@ describe("gamescope control protocol", () => {
     expect(filterToGamescopeValue("fsr")).toBe(3)
     expect(filterToGamescopeValue("nis")).toBe(4)
     expect(valueToGamescopeFilter(3)).toBe("fsr")
+  })
+
+  it("advertises all callable methods separately from mutating commands", () => {
+    const hello = createGamescopeHelloResult()
+
+    expect(hello.capabilities.methods).toContain("protocol.hello")
+    expect(hello.capabilities.methods).toContain("state.get")
+    expect(hello.capabilities.methods).toContain("events.subscribe")
+    expect(hello.capabilities.commands).toContain("mode.set")
+    expect(hello.capabilities.commands).not.toContain("state.get")
   })
 
   it("validates positive mode requests before they reach xprop", () => {

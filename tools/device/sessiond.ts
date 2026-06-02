@@ -1090,6 +1090,13 @@ async function waitForSocketPath(
       delay(25).then(() => undefined),
     ])
     if (exitCode !== undefined) {
+      try {
+        await stat(socketPath)
+        return
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (code !== "ENOENT") throw error
+      }
       throw new Error(
         `Gamescope control bridge exited before socket was ready: ${exitCode}`,
       )

@@ -2,6 +2,7 @@ import { connect, type Socket } from "node:net"
 import {
   decodeGamescopeControlEventEnvelope,
   decodeGamescopeControlResponse,
+  GAMESCOPE_CONTROL_PROTOCOL,
   GAMESCOPE_CONTROL_PROTOCOL_LIMITS,
   type GamescopeControlCommandMethod,
   type GamescopeControlCommandResult,
@@ -21,6 +22,7 @@ export interface GamescopeControlClientOptions {
   readonly maxFrameBytes?: number
   readonly onSequenceGap?: (gap: GamescopeControlSequenceGap) => void
   readonly connectTimeoutMs?: number
+  readonly skipVersionCheck?: boolean
 }
 
 export interface GamescopeControlSequenceGap {
@@ -79,7 +81,12 @@ export async function connectGamescopeControl(
     options.socketPath,
     options.connectTimeoutMs ?? 1000,
   )
-  return createGamescopeControlClient(socket, options)
+  const client = createGamescopeControlClient(socket, options)
+  if (!options.skipVersionCheck) {
+    const hello = await client.hello()
+    assertCompatibleProtocol(hello.result)
+  }
+  return client
 }
 
 function createGamescopeControlClient(
@@ -248,6 +255,19 @@ function isSuccess(
   response: GamescopeControlResponse,
 ): response is GamescopeControlSuccessResponse {
   return "result" in response
+}
+
+function assertCompatibleProtocol(hello: GamescopeControlHelloResult): void {
+  if (hello.protocol.major !== GAMESCOPE_CONTROL_PROTOCOL.major) {
+    throw new Error(
+      `Unsupported Gamescope control protocol major ${hello.protocol.major}; expected ${GAMESCOPE_CONTROL_PROTOCOL.major}`,
+    )
+  }
+  if (hello.protocol.minor < GAMESCOPE_CONTROL_PROTOCOL.minor) {
+    throw new Error(
+      `Gamescope control protocol minor ${hello.protocol.minor} is older than required ${GAMESCOPE_CONTROL_PROTOCOL.minor}`,
+    )
+  }
 }
 
 function isEventFrame(value: unknown): boolean {

@@ -99,6 +99,8 @@ export interface GamescopeControlState {
 
 export type GamescopeControlCommandStatus =
   | "applied"
+  /** @deprecated v1.1 reports readback divergence as readback-mismatch/readback-failed. */
+  | "accepted"
   | "unsupported"
   | "failed"
   | "invalid"
