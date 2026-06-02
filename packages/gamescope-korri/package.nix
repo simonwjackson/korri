@@ -17,7 +17,10 @@ gamescope.overrideAttrs (oldAttrs: {
       printf '%s\n' 'version=${oldAttrs.version or gamescope.version}-korri'
       printf '%s\n' 'upstream-version=${oldAttrs.version or gamescope.version}'
       printf '%s\n' 'korri-patches='
+      printf '%s\n' 'control-api=korri-gamescope-control-bridge-v1'
       printf '%s\n' 'control-backend=x11-root-atoms'
+      printf '%s\n' 'unsupported-controls=structured-command-result'
+      printf '%s\n' 'events=bridge-command-result'
       printf '%s\n' 'x-atoms=GAMESCOPE_XWAYLAND_MODE_CONTROL GAMESCOPE_SCALING_FILTER GAMESCOPE_SHARPNESS GAMESCOPE_FSR_FEEDBACK'
     } > "$out/nix-support/gamescope-korri/manifest.txt"
   '';
