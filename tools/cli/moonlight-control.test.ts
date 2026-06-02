@@ -30,6 +30,9 @@ describe("moonlight-control cli", () => {
           setResolution: async () => {
             throw new Error("unexpected")
           },
+          setTouchBounds: async () => {
+            throw new Error("unexpected")
+          },
           onEvent: () => () => undefined,
           close: () => undefined,
         }),
@@ -62,6 +65,9 @@ describe("moonlight-control cli", () => {
             throw new Error("unexpected")
           },
           setResolution: async () => {
+            throw new Error("unexpected")
+          },
+          setTouchBounds: async () => {
             throw new Error("unexpected")
           },
           onEvent: () => () => undefined,

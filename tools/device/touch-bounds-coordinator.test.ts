@@ -129,6 +129,7 @@ function moonlightClient(
     subscribe: async () => ({ jsonrpc: "2.0", id: "sub", result: { _tag: "events.subscribed", seq: 1 } }),
     setBitrate: async () => { throw new Error("not used") },
     setFps: async () => { throw new Error("not used") },
+    setResolution: async () => { throw new Error("not used") },
     setTouchBounds: async bounds => {
       sent.push(bounds)
       if (rejectNext()) throw new Error("rejected")

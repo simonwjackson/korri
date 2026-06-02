@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test"
 import type { GamescopeControlClient } from "@shared/gamescope-control/gamescope-control-client"
 import type { GamescopeControlCommandMethod } from "@shared/gamescope-control/gamescope-control-protocol"
-import type { MoonlightControlClient } from "@shared/stream/moonlight-control-client"
+import {
+  connectMoonlightControl,
+  type MoonlightControlClient,
+} from "@shared/stream/moonlight-control-client"
 import {
   createStreamControlBenchApp,
   runStreamControlBenchCommand,
@@ -225,6 +228,9 @@ function testDeps(
     readonly appendFile: (path: string, content: string) => Promise<void>
     readonly moonlight: MoonlightControlClient
     readonly gamescope: GamescopeControlClient
+    readonly connectMoonlight: (
+      socketPath: string,
+    ) => Promise<MoonlightControlClient>
     readonly moonlightCalls: unknown[]
     readonly gamescopeCalls: unknown[]
   }> = {},
@@ -235,6 +241,9 @@ function testDeps(
     appendFile: overrides.appendFile ?? (async () => undefined),
     connectMoonlight: async (socketPath: string) => {
       overrides.moonlightCalls?.push?.({ socketPath })
+      if (overrides.connectMoonlight) {
+        return await overrides.connectMoonlight(socketPath)
+      }
       return overrides.moonlight ?? moonlightClientDouble([])
     },
     connectGamescope: async (socketPath: string) => {
@@ -275,6 +284,19 @@ function moonlightClientDouble(calls: unknown[]): MoonlightControlClient {
     setResolution: async params => {
       calls.push({ method: "setResolution", params })
       return commandAccepted("runtime.setResolution")
+    },
+    setTouchBounds: async params => {
+      calls.push({ method: "setTouchBounds", params })
+      return {
+        jsonrpc: "2.0",
+        id: "touch",
+        result: {
+          _tag: "input.command.result",
+          requestId: "touch",
+          command: "input.setTouchBounds",
+          status: "applied",
+        },
+      }
     },
     onEvent: () => () => undefined,
     close: () => calls.push({ method: "close" }),
