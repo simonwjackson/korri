@@ -2,6 +2,7 @@ import type { LaunchSpec } from "@shared/library/launcher"
 import type {
   SwayCommandRunner,
   SwayNode,
+  SwayRect,
   SwayWindowSelector,
 } from "./sessiond-sway"
 
@@ -15,6 +16,12 @@ export interface GamescopeOptions {
   readonly args?: readonly string[]
 }
 
+export interface StreamSurfaceOutputSnapshot {
+  readonly id: number
+  readonly name?: string | null
+  readonly rect: SwayRect
+}
+
 export interface StreamSurfaceSnapshot {
   readonly id: number
   readonly focused: boolean
@@ -22,7 +29,22 @@ export interface StreamSurfaceSnapshot {
   readonly appId?: string | null
   readonly title?: string | null
   readonly className?: string | null
+  readonly rect?: SwayRect
+  readonly output?: StreamSurfaceOutputSnapshot
 }
+
+export type CurrentStreamSurfaceGeometry =
+  | {
+      readonly status: "available"
+      readonly surface: StreamSurfaceSnapshot & {
+        readonly rect: SwayRect
+        readonly output: StreamSurfaceOutputSnapshot
+      }
+    }
+  | {
+      readonly status: "missing-surface" | "missing-geometry"
+      readonly surface?: StreamSurfaceSnapshot
+    }
 
 export interface StreamSurfaceRepairResult {
   readonly windowId: number
@@ -108,7 +130,7 @@ export function findStreamSurfaceWindows(
   selector: SwayWindowSelector = DEFAULT_GAMESCOPE_SELECTOR,
 ): readonly StreamSurfaceSnapshot[] {
   const windows: StreamSurfaceSnapshot[] = []
-  walkSwayTree(tree, node => {
+  walkSwayTreeWithOutput(tree, undefined, (node, output) => {
     if (node.id === undefined) return
     if (!matchesSelector(node, selector)) return
 
@@ -119,9 +141,38 @@ export function findStreamSurfaceWindows(
       appId: node.app_id ?? null,
       title: node.window_properties?.title ?? node.name ?? null,
       className: node.window_properties?.class ?? null,
+      rect: node.rect,
+      output,
     })
   })
   return windows
+}
+
+export async function readCurrentStreamSurfaceGeometry(options: {
+  readonly runner: SwayCommandRunner
+  readonly selector: SwayWindowSelector
+  readonly ignoredWindowIds?: ReadonlySet<number>
+}): Promise<CurrentStreamSurfaceGeometry> {
+  const raw = await options.runner.run(["-t", "get_tree"])
+  const surfaces = findStreamSurfaceWindows(
+    JSON.parse(raw) as SwayNode,
+    options.selector,
+  ).filter(surface => !options.ignoredWindowIds?.has(surface.id))
+  if (surfaces.length === 0) return { status: "missing-surface" }
+
+  const surface = selectPrimarySurface(surfaces)
+  if (!surface.rect || !surface.output) {
+    return { status: "missing-geometry", surface }
+  }
+
+  return {
+    status: "available",
+    surface: {
+      ...surface,
+      rect: surface.rect,
+      output: surface.output,
+    },
+  }
 }
 
 export function buildStreamSurfaceRepairCommands(
@@ -265,6 +316,31 @@ function walkSwayTree(node: SwayNode, visit: (node: SwayNode) => void) {
   visit(node)
   for (const child of node.nodes ?? []) walkSwayTree(child, visit)
   for (const child of node.floating_nodes ?? []) walkSwayTree(child, visit)
+}
+
+function walkSwayTreeWithOutput(
+  node: SwayNode,
+  currentOutput: StreamSurfaceOutputSnapshot | undefined,
+  visit: (node: SwayNode, output: StreamSurfaceOutputSnapshot | undefined) => void,
+) {
+  const nextOutput = isOutputNode(node) ? outputSnapshot(node) : currentOutput
+  visit(node, nextOutput)
+  for (const child of node.nodes ?? [])
+    walkSwayTreeWithOutput(child, nextOutput, visit)
+  for (const child of node.floating_nodes ?? [])
+    walkSwayTreeWithOutput(child, nextOutput, visit)
+}
+
+function isOutputNode(node: SwayNode): boolean {
+  return node.type === "output" && node.id !== undefined && node.rect !== undefined
+}
+
+function outputSnapshot(node: SwayNode): StreamSurfaceOutputSnapshot {
+  return {
+    id: node.id ?? 0,
+    name: node.name ?? null,
+    rect: node.rect as SwayRect,
+  }
 }
 
 function matchesSelector(

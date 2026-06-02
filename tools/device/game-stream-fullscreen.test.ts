@@ -5,6 +5,7 @@ import {
   composeGamescopeLaunchSpec,
   findStreamSurfaceWindows,
   probeSwayTree,
+  readCurrentStreamSurfaceGeometry,
   repairStreamSurface,
   waitForStreamSurface,
   waitForStreamSurfaceAbsence,
@@ -147,6 +148,106 @@ describe("stream surface discovery and repair", () => {
       "[con_id=42] fullscreen enable",
       "[con_id=42] border none",
     ])
+  })
+
+  it("preserves stream surface and containing output rects", () => {
+    const tree: SwayNode = {
+      id: 1,
+      type: "root",
+      nodes: [
+        {
+          id: 2,
+          type: "output",
+          name: "DSI-1",
+          rect: { x: 0, y: 0, width: 1920, height: 1080 },
+          nodes: [
+            {
+              id: 42,
+              app_id: "gamescope",
+              focused: true,
+              fullscreen_mode: 0,
+              rect: { x: 960, y: 0, width: 960, height: 1080 },
+            },
+          ],
+        },
+      ],
+    }
+
+    expect(findStreamSurfaceWindows(tree)).toEqual([
+      expect.objectContaining({
+        id: 42,
+        rect: { x: 960, y: 0, width: 960, height: 1080 },
+        output: {
+          id: 2,
+          name: "DSI-1",
+          rect: { x: 0, y: 0, width: 1920, height: 1080 },
+        },
+      }),
+    ])
+  })
+
+  it("reads current stream geometry repeatedly for polling coordinators", async () => {
+    const firstTree: SwayNode = {
+      id: 1,
+      nodes: [
+        {
+          id: 2,
+          type: "output",
+          name: "DSI-1",
+          rect: { x: 0, y: 0, width: 1920, height: 1080 },
+          nodes: [
+            {
+              id: 42,
+              app_id: "gamescope",
+              focused: true,
+              fullscreen_mode: 0,
+              rect: { x: 0, y: 0, width: 960, height: 1080 },
+            },
+          ],
+        },
+      ],
+    }
+    const secondTree: SwayNode = {
+      ...firstTree,
+      nodes: [
+        {
+          id: 2,
+          type: "output",
+          name: "DSI-1",
+          rect: { x: 0, y: 0, width: 1920, height: 1080 },
+          nodes: [
+            {
+              id: 42,
+              app_id: "gamescope",
+              focused: true,
+              fullscreen_mode: 0,
+              rect: { x: 960, y: 0, width: 960, height: 1080 },
+            },
+          ],
+        },
+      ],
+    }
+    const trees = [firstTree, secondTree]
+
+    const runner = {
+      run: async () => JSON.stringify(trees.shift() ?? secondTree),
+    }
+
+    const first = await readCurrentStreamSurfaceGeometry({
+      runner,
+      selector: { appIds: ["gamescope"] },
+    })
+    const second = await readCurrentStreamSurfaceGeometry({
+      runner,
+      selector: { appIds: ["gamescope"] },
+    })
+
+    expect(first.status).toBe("available")
+    expect(second.status).toBe("available")
+    if (first.status === "available" && second.status === "available") {
+      expect(first.surface.rect?.x).toBe(0)
+      expect(second.surface.rect?.x).toBe(960)
+    }
   })
 
   it("waits for a stream surface before repairing it", async () => {

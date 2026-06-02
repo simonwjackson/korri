@@ -3,12 +3,21 @@ import type {
   KorriWindowSnapshot,
 } from "./sessiond-state"
 
+export interface SwayRect {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
+
 export interface SwayNode {
   readonly id?: number
   readonly name?: string | null
+  readonly type?: string | null
   readonly app_id?: string | null
   readonly focused?: boolean
   readonly fullscreen_mode?: number
+  readonly rect?: SwayRect
   readonly window_properties?: {
     readonly class?: string | null
     readonly title?: string | null
