@@ -197,3 +197,5 @@ Unblocks:
 This task replaces the smaller-grained task-027 + task-028 + task-030 captured earlier; those three are retired in the same commit that lands this. The merge is purely backlog hygiene — the work is identical.
 
 Captured from `/se-work` deep migration audit on 2026-05-30; consolidated 2026-05-30 after recognizing the three sub-items shipped as one PR by necessity.
+
+2026-06-01 challenge note from the InputPlumber Korri-ownership plan: the Korri-first InputPlumber package move may temporarily leave `rocknix-guest-hide-raw-gamepad` in nix-on-rocks with Korri-shaped service-name ordering. Do not forget this cleanup in the sister-repo follow-up: the hider should consume the product-blind unit options from this task (or be listed as a known blocking violation) before the InputPlumber ownership migration is considered fully closed.
