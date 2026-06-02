@@ -4,6 +4,7 @@ import { createServer } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { GamescopeControlClient } from "@shared/gamescope-control/gamescope-control-client"
+import type { GamescopeControlCommandMethod } from "@shared/gamescope-control/gamescope-control-protocol"
 import type { MoonlightControlClient } from "@shared/stream/moonlight-control-client"
 import {
   createStreamControlBenchApp,
@@ -23,7 +24,10 @@ describe("stream control bench", () => {
     expect(response.status).toBe(200)
     expect(html).toContain("Moonlight stream")
     expect(html).toContain("Gamescope presentation")
-    expect(html).toContain("button")
+    expect(html).toContain("cdn.tailwindcss.com")
+    expect(html).toContain("DEBOUNCE_MS = 500")
+    expect(html).toContain('type="range"')
+    expect(html).toContain('type="radio"')
   })
 
   it("applies Moonlight bitrate, FPS, and resolution controls and records diagnostics", async () => {
@@ -143,11 +147,12 @@ describe("stream control bench", () => {
 
     await postJson(app, "/api/gamescope/mode", { width: 960, height: 540 })
     await postJson(app, "/api/gamescope/filter", { filter: "fsr" })
-    const sharpness = await postJson(app, "/api/gamescope/sharpness", {
+    await postJson(app, "/api/gamescope/sharpness", {
       sharpness: 0,
     })
+    const fps = await postJson(app, "/api/gamescope/fps", { fps: 60 })
 
-    expect(sharpness.status).toBe(200)
+    expect(fps.status).toBe(200)
     expect(calls).toEqual([
       { socketPath: "/tmp/gamescope.sock" },
       { method: "setMode", params: { width: 960, height: 540 } },
@@ -158,11 +163,15 @@ describe("stream control bench", () => {
       { socketPath: "/tmp/gamescope.sock" },
       { method: "setSharpness", params: { sharpness: 0 } },
       { method: "close" },
+      { socketPath: "/tmp/gamescope.sock" },
+      { method: "requestCommand", command: "fps.set", params: { fps: 60 } },
+      { method: "close" },
     ])
     const logText = logs.join("\n")
     expect(logText).toContain('"action":"gamescope.mode"')
     expect(logText).toContain('"action":"gamescope.filter"')
     expect(logText).toContain('"action":"gamescope.sharpness"')
+    expect(logText).toContain('"action":"gamescope.fps"')
   })
 
   it("validates run command arguments before serving", async () => {
@@ -352,8 +361,9 @@ function fakeGamescopeClient(calls: unknown[]): GamescopeControlClient {
       calls.push({ method: "setSharpness", params })
       return gamescopeCommand("sharpness.set", params)
     },
-    requestCommand: async () => {
-      throw new Error("unexpected")
+    requestCommand: async (command, params) => {
+      calls.push({ method: "requestCommand", command, params })
+      return gamescopeCommand(command, params)
     },
     onEvent: () => () => undefined,
     close: () => calls.push({ method: "close" }),
@@ -375,7 +385,7 @@ function commandAccepted(
 }
 
 function gamescopeCommand(
-  command: "mode.set" | "filter.set" | "sharpness.set",
+  command: GamescopeControlCommandMethod,
   requested: unknown,
 ) {
   return {

@@ -131,6 +131,17 @@ export function createStreamControlBenchApp(
       run: (client, data) => client.setSharpness(data),
     }),
   )
+  app.post(
+    "/api/gamescope/fps",
+    controlMutation(runtime, {
+      socketPath: () => runtime.options.gamescopeSocketPath,
+      disabledError: "gamescope socket disabled",
+      connect: runtime.connectGamescope,
+      action: "gamescope.fps",
+      parse: parseFps,
+      run: (client, data) => client.requestCommand("fps.set", data),
+    }),
+  )
 
   return app
 }
@@ -492,10 +503,10 @@ async function requestJson(context: Context): Promise<unknown> {
 function parseBitrate(
   body: unknown,
 ): ParsedPayload<{ readonly bitrateKbps: number }> {
-  const bitrateKbps = readPositiveNumber(body, "bitrateKbps")
-  return bitrateKbps
+  const bitrateKbps = readNumber(body, "bitrateKbps")
+  return bitrateKbps !== undefined && bitrateKbps >= 0 && bitrateKbps <= 100000
     ? { ok: true, value: { bitrateKbps } }
-    : { ok: false, error: "bitrateKbps required" }
+    : { ok: false, error: "bitrateKbps between 0 and 100000 required" }
 }
 
 function parseFps(body: unknown): ParsedPayload<{ readonly fps: number }> {
@@ -533,81 +544,8 @@ function parseSharpness(
     : { ok: true, value: { sharpness } }
 }
 
-const CONTROL_PANEL_HTML = `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Korri stream control bench</title>
-<style>
-:root { color-scheme: dark; font-family: system-ui, sans-serif; background: #080b10; color: #f7fbff; }
-body { margin: 0; padding: 18px; }
-h1 { margin: 0 0 12px; font-size: 26px; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
-.card { border: 1px solid #263244; border-radius: 18px; padding: 14px; background: #111722; }
-.card h2 { margin: 0 0 12px; font-size: 20px; }
-.buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-button { min-height: 58px; border: 0; border-radius: 14px; background: #2f81f7; color: white; font-size: 18px; font-weight: 700; }
-button.warn { background: #b7791f; }
-button.safe { background: #238636; }
-.row { display: flex; gap: 8px; margin-top: 10px; }
-input, select { min-width: 0; flex: 1; border-radius: 12px; border: 1px solid #344154; background: #080b10; color: white; padding: 12px; font-size: 18px; }
-pre { white-space: pre-wrap; word-break: break-word; max-height: 34vh; overflow: auto; background: #05070a; border-radius: 12px; padding: 12px; }
-</style>
-</head>
-<body>
-<h1>Korri stream control bench</h1>
-<div class="grid">
-  <section class="card">
-    <h2>Moonlight stream</h2>
-    <div class="buttons">
-      <button onclick="post('/api/moonlight/bitrate', { bitrateKbps: 12000 })">12 Mbps</button>
-      <button class="warn" onclick="post('/api/moonlight/bitrate', { bitrateKbps: 6000 })">6 Mbps</button>
-      <button onclick="post('/api/moonlight/fps', { fps: 60 })">60 FPS</button>
-      <button class="warn" onclick="post('/api/moonlight/fps', { fps: 30 })">30 FPS</button>
-      <button onclick="post('/api/moonlight/resolution', { width: 1920, height: 1080 })">1080p</button>
-      <button class="warn" onclick="post('/api/moonlight/resolution', { width: 1280, height: 720 })">720p</button>
-    </div>
-    <div class="row"><input id="bitrate" value="9000" inputmode="numeric"><button onclick="post('/api/moonlight/bitrate', { bitrateKbps: Number(q('bitrate').value) })">Set kbps</button></div>
-    <div class="row"><input id="streamRes" value="960x540"><button onclick="setRes('/api/moonlight/resolution', 'streamRes')">Set res</button></div>
-  </section>
-  <section class="card">
-    <h2>Gamescope presentation</h2>
-    <div class="buttons">
-      <button onclick="post('/api/gamescope/mode', { width: 1920, height: 1080 })">Mode 1080p</button>
-      <button class="warn" onclick="post('/api/gamescope/mode', { width: 960, height: 540 })">Mode 540p</button>
-      <button onclick="post('/api/gamescope/filter', { filter: 'linear' })">Linear</button>
-      <button onclick="post('/api/gamescope/filter', { filter: 'fsr' })">FSR</button>
-      <button onclick="post('/api/gamescope/sharpness', { sharpness: 0 })">Sharp 0</button>
-      <button onclick="post('/api/gamescope/sharpness', { sharpness: 10 })">Sharp 10</button>
-    </div>
-    <div class="row"><input id="gsRes" value="1280x720"><button onclick="setRes('/api/gamescope/mode', 'gsRes')">Set mode</button></div>
-  </section>
-  <section class="card">
-    <h2>Status</h2>
-    <div class="buttons"><button class="safe" onclick="refresh()">Refresh</button></div>
-    <pre id="status">loading…</pre>
-  </section>
-</div>
-<script>
-const q = id => document.getElementById(id)
-async function post(path, body) {
-  const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
-  q('status').textContent = JSON.stringify(await res.json(), null, 2)
-  setTimeout(refresh, 250)
-}
-function setRes(path, id) {
-  const [width, height] = q(id).value.split('x').map(Number)
-  post(path, { width, height })
-}
-async function refresh() {
-  const res = await fetch('/api/state')
-  q('status').textContent = JSON.stringify(await res.json(), null, 2)
-}
-refresh(); setInterval(refresh, 3000)
-</script>
-</body>
-</html>`
+const CONTROL_PANEL_HTML =
+  '<!doctype html>\n<html>\n<head>\n<meta charset="utf-8" />\n<meta name="viewport" content="width=device-width, initial-scale=1" />\n<title>Korri stream control bench</title>\n<script src="https://cdn.tailwindcss.com"></script>\n<style>\n:root { color-scheme: dark; }\nbody { background: #080b10; color: #f7fbff; }\n.control-card { border: 1px solid #263244; border-radius: 1rem; background: #111722; padding: 1rem; }\n.control-slider { width: 100%; accent-color: #2f81f7; }\n.stepper { min-width: 3.25rem; min-height: 3.25rem; border-radius: .75rem; background: #1f6feb; color: white; font-size: 1.75rem; font-weight: 900; }\n.radio-pill { display: inline-flex; align-items: center; gap: .5rem; border: 1px solid #344154; border-radius: 9999px; padding: .75rem 1rem; font-weight: 800; }\n.radio-pill input { width: 1.5rem; height: 1.5rem; }\n</style>\n</head>\n<body class="min-h-screen p-4 font-sans">\n<main class="mx-auto max-w-6xl space-y-4">\n  <header>\n    <h1 class="text-3xl font-black tracking-tight">Korri stream control bench</h1>\n    <p class="text-sm text-slate-300">Debounced slider changes apply after 500ms. Keep Moonlight and Gamescope controls under their own headings.</p>\n  </header>\n\n  <section class="control-card space-y-5" aria-labelledby="moonlight-heading">\n    <h2 id="moonlight-heading" class="text-2xl font-black">Moonlight stream</h2>\n    <div class="grid gap-5 md:grid-cols-2">\n      <div class="space-y-2" data-range-control="moonlight-bitrate" data-endpoint="/api/moonlight/bitrate" data-kind="bitrate">\n        <div class="flex items-center justify-between gap-3"><label for="moonlight-bitrate" class="text-lg font-bold">Bitrate</label><output class="text-lg font-black text-blue-300" data-output="moonlight-bitrate"></output></div>\n        <div class="flex items-center gap-3"><button class="stepper" data-step="-500">−</button><input id="moonlight-bitrate" class="control-slider" type="range" min="0" max="100000" step="500" value="12000" /><button class="stepper" data-step="500">+</button></div>\n        <div class="text-xs text-slate-400">0–100 Mbps</div>\n      </div>\n\n      <div class="space-y-2" data-range-control="moonlight-fps" data-endpoint="/api/moonlight/fps" data-kind="fps">\n        <div class="flex items-center justify-between gap-3"><label for="moonlight-fps" class="text-lg font-bold">FPS</label><output class="text-lg font-black text-blue-300" data-output="moonlight-fps"></output></div>\n        <div class="flex items-center gap-3"><button class="stepper" data-step="-1">−</button><input id="moonlight-fps" class="control-slider" type="range" min="0" max="7" step="1" value="3" /><button class="stepper" data-step="1">+</button></div>\n        <div class="text-xs text-slate-400">30, 40, 45, 60, 75, 90, 100, 120</div>\n      </div>\n\n      <div class="space-y-2 md:col-span-2" data-range-control="moonlight-resolution" data-endpoint="/api/moonlight/resolution" data-kind="resolution">\n        <div class="flex items-center justify-between gap-3"><label for="moonlight-resolution" class="text-lg font-bold">Resolution</label><output class="text-lg font-black text-blue-300" data-output="moonlight-resolution"></output></div>\n        <div class="flex items-center gap-3"><button class="stepper" data-step="-1">−</button><input id="moonlight-resolution" class="control-slider" type="range" min="0" max="6" step="1" value="6" /><button class="stepper" data-step="1">+</button></div>\n        <div class="text-xs text-slate-400">360p, 480p, 540p, 576p, 720p, 900p, 1080p</div>\n      </div>\n    </div>\n  </section>\n\n  <section class="control-card space-y-5" aria-labelledby="gamescope-heading">\n    <h2 id="gamescope-heading" class="text-2xl font-black">Gamescope presentation</h2>\n    <div class="grid gap-5 md:grid-cols-2">\n      <div class="space-y-2" data-range-control="gamescope-resolution" data-endpoint="/api/gamescope/mode" data-kind="resolution">\n        <div class="flex items-center justify-between gap-3"><label for="gamescope-resolution" class="text-lg font-bold">Resolution</label><output class="text-lg font-black text-emerald-300" data-output="gamescope-resolution"></output></div>\n        <div class="flex items-center gap-3"><button class="stepper" data-step="-1">−</button><input id="gamescope-resolution" class="control-slider" type="range" min="0" max="6" step="1" value="6" /><button class="stepper" data-step="1">+</button></div>\n      </div>\n\n      <div class="space-y-2" data-range-control="gamescope-fps" data-endpoint="/api/gamescope/fps" data-kind="fps">\n        <div class="flex items-center justify-between gap-3"><label for="gamescope-fps" class="text-lg font-bold">FPS</label><output class="text-lg font-black text-emerald-300" data-output="gamescope-fps"></output></div>\n        <div class="flex items-center gap-3"><button class="stepper" data-step="-1">−</button><input id="gamescope-fps" class="control-slider" type="range" min="0" max="7" step="1" value="3" /><button class="stepper" data-step="1">+</button></div>\n      </div>\n\n      <div class="space-y-2" data-range-control="gamescope-sharpness" data-endpoint="/api/gamescope/sharpness" data-kind="sharpness">\n        <div class="flex items-center justify-between gap-3"><label for="gamescope-sharpness" class="text-lg font-bold">Sharpness</label><output class="text-lg font-black text-emerald-300" data-output="gamescope-sharpness"></output></div>\n        <div class="flex items-center gap-3"><button class="stepper" data-step="-1">−</button><input id="gamescope-sharpness" class="control-slider" type="range" min="0" max="20" step="1" value="10" /><button class="stepper" data-step="1">+</button></div>\n        <div class="text-xs text-slate-400">0–20</div>\n      </div>\n\n      <fieldset class="space-y-3">\n        <legend class="text-lg font-bold">Scaling filter</legend>\n        <div class="flex flex-wrap gap-3" data-radio-control="gamescope-filter" data-endpoint="/api/gamescope/filter">\n          <label class="radio-pill"><input type="radio" name="gamescope-filter" value="linear" checked /> Linear</label>\n          <label class="radio-pill"><input type="radio" name="gamescope-filter" value="fsr" /> FSR</label>\n          <label class="radio-pill"><input type="radio" name="gamescope-filter" value="nearest" /> Nearest</label>\n          <label class="radio-pill"><input type="radio" name="gamescope-filter" value="integer" /> Integer</label>\n          <label class="radio-pill"><input type="radio" name="gamescope-filter" value="nis" /> NIS</label>\n        </div>\n      </fieldset>\n    </div>\n  </section>\n\n  <section class="control-card space-y-3">\n    <div class="flex flex-wrap gap-3"><button class="rounded-xl bg-emerald-700 px-5 py-4 text-lg font-black" onclick="refresh()">Refresh</button><button class="rounded-xl bg-blue-700 px-5 py-4 text-lg font-black" onclick="recover()">Recover Moonlight 1080/60/12</button></div>\n    <pre id="status" class="max-h-96 overflow-auto rounded-xl bg-black p-3 text-xs">loading…</pre>\n  </section>\n</main>\n<script>\nconst DEBOUNCE_MS = 500\nconst fpsSteps = [30, 40, 45, 60, 75, 90, 100, 120]\nconst resSteps = [\n  { label: \'360p\', width: 640, height: 360 },\n  { label: \'480p\', width: 854, height: 480 },\n  { label: \'540p\', width: 960, height: 540 },\n  { label: \'576p\', width: 1024, height: 576 },\n  { label: \'720p\', width: 1280, height: 720 },\n  { label: \'900p\', width: 1600, height: 900 },\n  { label: \'1080p\', width: 1920, height: 1080 },\n]\nconst timers = new Map()\nconst q = id => document.getElementById(id)\nfunction format(kind, value) {\n  if (kind === \'bitrate\') return (Number(value) / 1000).toFixed(Number(value) % 1000 === 0 ? 0 : 1) + " Mbps"\n  if (kind === \'fps\') return fpsSteps[Number(value)] + " FPS"\n  if (kind === \'resolution\') return resSteps[Number(value)].label\n  if (kind === \'sharpness\') return String(value)\n  return String(value)\n}\nfunction payload(kind, value) {\n  if (kind === \'bitrate\') return { bitrateKbps: Number(value) }\n  if (kind === \'fps\') return { fps: fpsSteps[Number(value)] }\n  if (kind === \'resolution\') { const r = resSteps[Number(value)]; return { width: r.width, height: r.height } }\n  if (kind === \'sharpness\') return { sharpness: Number(value) }\n  return {}\n}\nasync function post(path, body) {\n  const res = await fetch(path, { method: \'POST\', headers: { \'content-type\': \'application/json\' }, body: JSON.stringify(body) })\n  q(\'status\').textContent = JSON.stringify(await res.json(), null, 2)\n  setTimeout(refresh, 300)\n}\nfunction schedule(id, path, body) {\n  clearTimeout(timers.get(id))\n  timers.set(id, setTimeout(() => post(path, body), DEBOUNCE_MS))\n}\nfunction bindRange(card) {\n  const id = card.dataset.rangeControl\n  const endpoint = card.dataset.endpoint\n  const kind = card.dataset.kind\n  const input = card.querySelector(\'input[type="range"]\')\n  const output = card.querySelector("[data-output=\\"" + id + "\\"]")\n  const update = () => { output.textContent = format(kind, input.value); schedule(id, endpoint, payload(kind, input.value)) }\n  const preview = () => { output.textContent = format(kind, input.value) }\n  input.addEventListener(\'input\', update)\n  for (const button of card.querySelectorAll(\'[data-step]\')) button.addEventListener(\'click\', () => { input.value = String(Math.max(Number(input.min), Math.min(Number(input.max), Number(input.value) + Number(button.dataset.step)))); update() })\n  preview()\n}\nfunction bindRadio(group) {\n  const endpoint = group.dataset.endpoint\n  for (const input of group.querySelectorAll(\'input[type="radio"]\')) input.addEventListener(\'change\', () => { if (input.checked) schedule(group.dataset.radioControl, endpoint, { filter: input.value }) })\n}\nasync function refresh() {\n  const res = await fetch(\'/api/state\')\n  q(\'status\').textContent = JSON.stringify(await res.json(), null, 2)\n}\nconst sleep = ms => new Promise(resolve => setTimeout(resolve, ms))\nasync function recover() {\n  await post(\'/api/moonlight/bitrate\', { bitrateKbps: 12000 })\n  await sleep(700)\n  await post(\'/api/moonlight/fps\', { fps: 60 })\n  await sleep(700)\n  await post(\'/api/moonlight/resolution\', { width: 1920, height: 1080 })\n}\nfor (const card of document.querySelectorAll(\'[data-range-control]\')) bindRange(card)\nfor (const group of document.querySelectorAll(\'[data-radio-control]\')) bindRadio(group)\nrefresh(); setInterval(refresh, 3000)\n</script>\n</body>\n</html>\n'
 
 function readPositiveNumber(body: unknown, key: string): number | undefined {
   const value = readNumber(body, key)
