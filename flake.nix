@@ -768,11 +768,13 @@
                     ./packages/sunshine-korri/patches/0005-add-seamless-vaapi-runtime-bitrate-path.patch
                   ];
                   readmePath = ./packages/sunshine-korri/README.md;
+                  sunshinePackagePath = ./packages/sunshine-korri/package.nix;
                   moonlightPatchPaths = [
                     ./packages/moonlight-embedded-korri/patches/0005a-add-sunshine-runtime-settings-protocol-sender.patch
                     ./packages/moonlight-embedded-korri/patches/0005b-track-sunshine-runtime-settings-command-outcomes.patch
                     ./packages/moonlight-embedded-korri/patches/0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch
                     ./packages/moonlight-embedded-korri/patches/0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch
+                    ./packages/moonlight-embedded-korri/patches/0011-reset-sdl-presenter-on-output-size-change.patch
                   ];
                   moonlightReadmePath = ./packages/moonlight-embedded-korri/README.md;
                   sunshinePackage = self.packages.${system}.sunshine-korri;

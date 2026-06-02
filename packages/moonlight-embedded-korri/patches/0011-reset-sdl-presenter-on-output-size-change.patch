@@ -4,8 +4,8 @@ Date: Mon, 1 Jun 2026 14:58:00 -0600
 Subject: [PATCH] Reset SDL presenter on output size changes
 
 ---
- src/video/v4l2m2m.c | 51 +++++++++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 51 insertions(+)
+ src/video/v4l2m2m.c | 52 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 52 insertions(+)
 
 --- a/src/video/v4l2m2m.c
 +++ b/src/video/v4l2m2m.c
@@ -70,13 +70,14 @@ Subject: [PATCH] Reset SDL presenter on output size changes
  /* Forward decls for the dispatching draw_frame(). */
  static void draw_frame_drm_prime(AVFrame *frame);
  static void draw_frame_nv12(AVFrame *frame);
-@@ -1549,6 +1647,10 @@
+@@ -1549,6 +1647,11 @@
          frame->linesize[0], frame->linesize[1],
          frame->linesize[2], frame->linesize[3]);
    pump_sdl_window_events();
 +  if (sdl_presenter_reset_requested) {
 +    sdl_presenter_reset_requested = false;
 +    reset_sdl_renderer_after_resolution_change(visible_w, visible_h);
++    pump_sdl_window_events();
 +  }
    update_render_geometry(visible_w, visible_h);
    if (direct_dmabuf_present && direct_v4l2 && frame->format == AV_PIX_FMT_NV12) {

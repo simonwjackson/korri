@@ -3,6 +3,7 @@
   patchPath ? null,
   patchPaths ? [ patchPath ],
   readmePath,
+  sunshinePackagePath,
   moonlightPatchPath ? null,
   moonlightPatchPaths ? [ moonlightPatchPath ],
   moonlightReadmePath,
@@ -16,6 +17,7 @@ let
 
   patch = lib.concatStringsSep "\n" (map builtins.readFile patchPaths);
   readme = builtins.readFile readmePath;
+  sunshinePackageSource = builtins.readFile sunshinePackagePath;
   moonlightPatch = lib.concatStringsSep "\n" (map builtins.readFile moonlightPatchPaths);
   moonlightReadme = builtins.readFile moonlightReadmePath;
   contains = needle: haystack: lib.hasInfix needle haystack;
@@ -61,6 +63,12 @@ let
       && contains "RUNTIME_SETTINGS_REASON_UNSUPPORTED_OPERATION" patch
       && contains "RUNTIME_SETTINGS_REASON_APPLY_FAILED" patch
       && contains "RUNTIME_SETTINGS_REASON_PROOF_GATED" patch
+    ))
+    (check "Sunshine package no longer applies obsolete runtime-resolution diagnostics" (
+      !(contains "0006-diagnose-vaapi-convert-sequence.patch" sunshinePackageSource)
+      && !(contains "0007-finish-vaapi-gl-convert-before-encode.patch" sunshinePackageSource)
+      && !(contains "0009-diagnose-avcodec-packet-content-after-resolution.patch" sunshinePackageSource)
+      && !(contains "0011-force-vaapi-vram-source-copy-before-convert.patch" sunshinePackageSource)
     ))
     (check "Sunshine runtime bitrate patch does not expose a logs-only pending status" (
       !(contains "RUNTIME_SETTINGS_STATUS_ACCEPTED_PENDING" patch)
@@ -155,6 +163,9 @@ let
       && contains "BbGet32(&bb, &proofGatedOperations)" moonlightPatch
       && contains "proof_gated_operations" moonlightPatch
       && contains "Runtime resolution proof gate: operation `3` is listed as proof-gated" moonlightReadme
+    ))
+    (check "Moonlight SDL presenter reset pumps window events after reset" (
+      contains "reset_sdl_renderer_after_resolution_change(visible_w, visible_h);\n+    pump_sdl_window_events();" moonlightPatch
     ))
     (check "Runtime resolution outcomes distinguish Sunshine-applied from client-proven" (
       contains "server_applied=" patch
@@ -432,7 +443,16 @@ else
 
     test -x ${sunshinePackage}/bin/sunshine
     test -x ${moonlightPackage}/bin/moonlight
-    test -f ${moonlightPackage}/nix-support/moonlight-embedded-korri/manifest.txt
+    moonlight_manifest=${moonlightPackage}/nix-support/moonlight-embedded-korri/manifest.txt
+    test -f "$moonlight_manifest"
+    if ! grep -Fq '0011-reset-sdl-presenter-on-output-size-change.patch' "$moonlight_manifest"; then
+      echo "error: Moonlight manifest does not list SDL presenter reset patch" >&2
+      exit 1
+    fi
+    if grep -Fq '0012-diagnose-v4l2m2m-frame-content-hash.patch' "$moonlight_manifest"; then
+      echo "error: Moonlight manifest still lists diagnostic frame-content hash patch" >&2
+      exit 1
+    fi
 
     cat > "$out/summary.txt" <<'EOF'
     Korri Sunshine runtime bitrate patch invariants passed and patched packages built.
