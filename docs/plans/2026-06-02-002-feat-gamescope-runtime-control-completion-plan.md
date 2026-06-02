@@ -1,7 +1,7 @@
 ---
 title: Complete Gamescope Runtime Control
 type: feat
-status: active
+status: completed
 date: 2026-06-02
 verify_command: "bun run typecheck && bun test korri/shared/gamescope-control tools/cli"
 ---
