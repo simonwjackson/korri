@@ -324,9 +324,12 @@ function parseBitrate(
   body: unknown,
 ): ParsedPayload<{ readonly bitrateKbps: number }> {
   const bitrateKbps = readNumber(body, "bitrateKbps")
-  return bitrateKbps !== undefined && bitrateKbps >= 0 && bitrateKbps <= 100000
+  return bitrateKbps !== undefined && bitrateKbps > 0 && bitrateKbps <= 100000
     ? { ok: true, value: { bitrateKbps } }
-    : { ok: false, error: "bitrateKbps between 0 and 100000 required" }
+    : {
+        ok: false,
+        error: "bitrateKbps greater than 0 and at most 100000 required",
+      }
 }
 
 function parseFps(body: unknown): ParsedPayload<{ readonly fps: number }> {

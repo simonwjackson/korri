@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
-const API_BASE = "/api/evier/stream"
 const DEBOUNCE_MS = 500
 
 const FPS_STEPS = [30, 40, 45, 60, 75, 90, 100, 120] as const
@@ -14,10 +13,39 @@ const RESOLUTION_STEPS = [
   { label: "1080p", width: 1920, height: 1080 },
 ] as const
 
+export interface EvierStreamControlController {
+  readonly getState: () => Promise<unknown>
+  readonly setMoonlightBitrate: (payload: {
+    readonly bitrateKbps: number
+  }) => Promise<unknown>
+  readonly setMoonlightFps: (payload: {
+    readonly fps: number
+  }) => Promise<unknown>
+  readonly setMoonlightResolution: (payload: {
+    readonly width: number
+    readonly height: number
+  }) => Promise<unknown>
+  readonly setGamescopeMode: (payload: {
+    readonly width: number
+    readonly height: number
+  }) => Promise<unknown>
+  readonly setGamescopeFps: (payload: {
+    readonly fps: number
+  }) => Promise<unknown>
+  readonly setGamescopeFilter: (payload: {
+    readonly filter: string
+  }) => Promise<unknown>
+  readonly setGamescopeSharpness: (payload: {
+    readonly sharpness: number
+  }) => Promise<unknown>
+}
+
+type ControlAction = Exclude<keyof EvierStreamControlController, "getState">
+
 interface SliderSpec {
   readonly id: string
   readonly label: string
-  readonly endpoint: string
+  readonly action: ControlAction
   readonly initial: number
   readonly min: number
   readonly max: number
@@ -29,50 +57,57 @@ interface SliderSpec {
   readonly payload: (value: number) => Record<string, unknown>
 }
 
-export function EvierStreamControlPage() {
+export function EvierStreamControlPage({
+  controller,
+}: {
+  readonly controller: EvierStreamControlController
+}) {
   const [status, setStatus] = useState("loading…")
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
 
-  const post = useCallback(
-    async (path: string, body: Record<string, unknown>) => {
-      const response = await fetch(path, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      })
-      setStatus(JSON.stringify(await response.json(), null, 2))
+  const run = useCallback(
+    async (action: ControlAction, body: Record<string, unknown>) => {
+      try {
+        const response = await runControlAction(controller, action, body)
+        setStatus(JSON.stringify(response, null, 2))
+      } catch (error) {
+        setStatus(JSON.stringify({ error: errorMessage(error) }, null, 2))
+      }
     },
-    [],
+    [controller],
   )
 
   const refresh = useCallback(async () => {
-    const response = await fetch(`${API_BASE}/state`)
-    setStatus(JSON.stringify(await response.json(), null, 2))
-  }, [])
+    try {
+      setStatus(JSON.stringify(await controller.getState(), null, 2))
+    } catch (error) {
+      setStatus(JSON.stringify({ error: errorMessage(error) }, null, 2))
+    }
+  }, [controller])
 
   const schedule = useCallback(
-    (id: string, endpoint: string, body: Record<string, unknown>) => {
+    (id: string, action: ControlAction, body: Record<string, unknown>) => {
       clearTimeout(timers.current.get(id))
       timers.current.set(
         id,
         setTimeout(() => {
-          void post(endpoint, body)
+          void run(action, body)
         }, DEBOUNCE_MS),
       )
     },
-    [post],
+    [run],
   )
 
   const recover = useCallback(async () => {
-    await post(`${API_BASE}/moonlight/bitrate`, { bitrateKbps: 12000 })
+    await run("setMoonlightBitrate", { bitrateKbps: 12_000 })
     await sleep(700)
-    await post(`${API_BASE}/moonlight/fps`, { fps: 60 })
+    await run("setMoonlightFps", { fps: 60 })
     await sleep(700)
-    await post(`${API_BASE}/moonlight/resolution`, {
+    await run("setMoonlightResolution", {
       width: 1920,
       height: 1080,
     })
-  }, [post])
+  }, [run])
 
   useEffect(() => {
     void refresh()
@@ -138,11 +173,9 @@ export function EvierStreamControlPage() {
                     defaultChecked={value === "linear"}
                     onChange={event => {
                       if (event.currentTarget.checked) {
-                        schedule(
-                          "gamescope-filter",
-                          `${API_BASE}/gamescope/filter`,
-                          { filter: event.currentTarget.value },
-                        )
+                        schedule("gamescope-filter", "setGamescopeFilter", {
+                          filter: event.currentTarget.value,
+                        })
                       }
                     }}
                   />
@@ -177,7 +210,7 @@ function EvierSliderControl({
   readonly spec: SliderSpec
   readonly schedule: (
     id: string,
-    endpoint: string,
+    action: ControlAction,
     body: Record<string, unknown>,
   ) => void
   readonly wide?: boolean
@@ -187,7 +220,7 @@ function EvierSliderControl({
   const update = (nextValue: number) => {
     const clamped = clamp(nextValue, spec.min, spec.max)
     setValue(clamped)
-    schedule(spec.id, spec.endpoint, spec.payload(clamped))
+    schedule(spec.id, spec.action, spec.payload(clamped))
   }
 
   return (
@@ -237,14 +270,14 @@ function EvierSliderControl({
 const moonlightBitrateSpec: SliderSpec = {
   id: "evier-moonlight-bitrate",
   label: "Moonlight bitrate",
-  endpoint: `${API_BASE}/moonlight/bitrate`,
-  initial: 12000,
-  min: 0,
-  max: 100000,
+  action: "setMoonlightBitrate",
+  initial: 12_000,
+  min: 500,
+  max: 100_000,
   step: 500,
   stepper: 500,
   accent: "moonlight",
-  hint: "0–100 Mbps",
+  hint: "0.5–100 Mbps",
   format: value => `${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)} Mbps`,
   payload: value => ({ bitrateKbps: value }),
 }
@@ -252,7 +285,7 @@ const moonlightBitrateSpec: SliderSpec = {
 const moonlightFpsSpec: SliderSpec = {
   id: "evier-moonlight-fps",
   label: "Moonlight FPS",
-  endpoint: `${API_BASE}/moonlight/fps`,
+  action: "setMoonlightFps",
   initial: 3,
   min: 0,
   max: FPS_STEPS.length - 1,
@@ -267,7 +300,7 @@ const moonlightFpsSpec: SliderSpec = {
 const moonlightResolutionSpec: SliderSpec = {
   id: "evier-moonlight-resolution",
   label: "Moonlight resolution",
-  endpoint: `${API_BASE}/moonlight/resolution`,
+  action: "setMoonlightResolution",
   initial: RESOLUTION_STEPS.length - 1,
   min: 0,
   max: RESOLUTION_STEPS.length - 1,
@@ -286,7 +319,7 @@ const gamescopeResolutionSpec: SliderSpec = {
   ...moonlightResolutionSpec,
   id: "evier-gamescope-resolution",
   label: "Gamescope resolution",
-  endpoint: `${API_BASE}/gamescope/mode`,
+  action: "setGamescopeMode",
   accent: "gamescope",
 }
 
@@ -294,14 +327,14 @@ const gamescopeFpsSpec: SliderSpec = {
   ...moonlightFpsSpec,
   id: "evier-gamescope-fps",
   label: "Gamescope FPS",
-  endpoint: `${API_BASE}/gamescope/fps`,
+  action: "setGamescopeFps",
   accent: "gamescope",
 }
 
 const gamescopeSharpnessSpec: SliderSpec = {
   id: "evier-gamescope-sharpness",
   label: "Gamescope sharpness",
-  endpoint: `${API_BASE}/gamescope/sharpness`,
+  action: "setGamescopeSharpness",
   initial: 10,
   min: 0,
   max: 20,
@@ -313,10 +346,52 @@ const gamescopeSharpnessSpec: SliderSpec = {
   payload: value => ({ sharpness: value }),
 }
 
+function runControlAction(
+  controller: EvierStreamControlController,
+  action: ControlAction,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  switch (action) {
+    case "setMoonlightBitrate":
+      return controller.setMoonlightBitrate({
+        bitrateKbps: Number(body.bitrateKbps),
+      })
+    case "setMoonlightFps":
+      return controller.setMoonlightFps({ fps: Number(body.fps) })
+    case "setMoonlightResolution":
+      return controller.setMoonlightResolution({
+        width: Number(body.width),
+        height: Number(body.height),
+      })
+    case "setGamescopeMode":
+      return controller.setGamescopeMode({
+        width: Number(body.width),
+        height: Number(body.height),
+      })
+    case "setGamescopeFps":
+      return controller.setGamescopeFps({ fps: Number(body.fps) })
+    case "setGamescopeFilter":
+      return controller.setGamescopeFilter({ filter: String(body.filter) })
+    case "setGamescopeSharpness":
+      return controller.setGamescopeSharpness({
+        sharpness: Number(body.sharpness),
+      })
+  }
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value))
 }
 
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { readonly message?: unknown }).message
+    if (typeof message === "string") return message
+  }
+  return String(error)
 }

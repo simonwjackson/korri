@@ -7,20 +7,18 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react"
-import { EvierStreamControlPage } from "./EvierStreamControlPage"
-
-const originalFetch = globalThis.fetch
+import {
+  type EvierStreamControlController,
+  EvierStreamControlPage,
+} from "./EvierStreamControlPage"
 
 afterEach(() => {
   cleanup()
-  globalThis.fetch = originalFetch
 })
 
 describe("EvierStreamControlPage", () => {
   it("renders as a development theme with separate Moonlight and Gamescope controls", async () => {
-    stubFetch()
-
-    render(<EvierStreamControlPage />)
+    render(<EvierStreamControlPage controller={recordingController()} />)
 
     expect(screen.getByRole("heading", { name: /evier/i })).toBeTruthy()
     expect(
@@ -37,9 +35,9 @@ describe("EvierStreamControlPage", () => {
     await waitFor(() => expect(screen.getByText(/disabled/)).toBeTruthy())
   })
 
-  it("debounces slider mutations against the Evier app API", async () => {
-    const requests = stubFetch()
-    render(<EvierStreamControlPage />)
+  it("debounces slider mutations against the Evier RPC controller", async () => {
+    const calls: unknown[] = []
+    render(<EvierStreamControlPage controller={recordingController(calls)} />)
     await waitFor(() => expect(screen.getByText(/disabled/)).toBeTruthy())
 
     fireEvent.change(
@@ -59,36 +57,48 @@ describe("EvierStreamControlPage", () => {
       await Bun.sleep(650)
     })
 
+    expect(calls).toContainEqual({
+      method: "setMoonlightBitrate",
+      payload: { bitrateKbps: 12_000 },
+    })
     expect(
-      requests.filter(request => request.url.includes("/moonlight/bitrate")),
-    ).toEqual([
-      {
-        url: "/api/evier/stream/moonlight/bitrate",
-        body: { bitrateKbps: 12000 },
-      },
-    ])
+      calls.filter(
+        call =>
+          typeof call === "object" &&
+          call !== null &&
+          "method" in call &&
+          call.method === "setMoonlightBitrate",
+      ),
+    ).toHaveLength(1)
   })
 })
 
-function stubFetch() {
-  const requests: Array<{ url: string; body?: unknown }> = []
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input)
-    requests.push({
-      url,
-      body: init?.body ? JSON.parse(String(init.body)) : undefined,
-    })
-    return new Response(
-      JSON.stringify(
-        url.endsWith("/state")
-          ? {
-              moonlight: { status: "disabled" },
-              gamescope: { status: "disabled" },
-            }
-          : { ok: true },
-      ),
-      { headers: { "content-type": "application/json" } },
-    )
-  }) as typeof fetch
-  return requests
+function recordingController(
+  calls: unknown[] = [],
+): EvierStreamControlController {
+  const record = (method: string) => async (payload: unknown) => {
+    calls.push({ method, payload })
+    return {
+      action: method,
+      requested: payload,
+      response: { status: "applied" },
+    }
+  }
+
+  return {
+    getState: async () => {
+      calls.push({ method: "getState" })
+      return {
+        moonlight: { status: "disabled" },
+        gamescope: { status: "disabled" },
+      }
+    },
+    setMoonlightBitrate: record("setMoonlightBitrate"),
+    setMoonlightFps: record("setMoonlightFps"),
+    setMoonlightResolution: record("setMoonlightResolution"),
+    setGamescopeMode: record("setGamescopeMode"),
+    setGamescopeFps: record("setGamescopeFps"),
+    setGamescopeFilter: record("setGamescopeFilter"),
+    setGamescopeSharpness: record("setGamescopeSharpness"),
+  }
 }

@@ -1,4 +1,3 @@
-import { createEvierStreamControlApi } from "@app/features/evier/stream-control-api"
 import { serveGameAssetBytes } from "@shared/api/http/game-asset-bytes"
 import { guardRpcEnvelope } from "@shared/api/rpc/envelope-guard"
 import { logger as defaultLogger } from "@shared/logger/logger"
@@ -73,7 +72,6 @@ export function createHonoApp(options: CreateHonoAppOptions = {}) {
 
   app.use("/api/*", compress({ threshold: 1024 }))
   app.options("/api/*", c => c.body(null, 204))
-  app.route("/api/evier/stream", createEvierStreamControlApi())
   const handleRpc = async (request: Request) => {
     if (rpcSurface === "server" && !isJsonRequest(request)) {
       return new Response("Unsupported Media Type", { status: 415 })

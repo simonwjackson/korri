@@ -103,6 +103,15 @@ describe("headless server RPC group", () => {
       "app.server.stream.prepare",
       "app.source.list",
       "app.source.status",
+      "app.stream-control.config.get",
+      "app.stream-control.gamescope-filter.set",
+      "app.stream-control.gamescope-fps.set",
+      "app.stream-control.gamescope-mode.set",
+      "app.stream-control.gamescope-sharpness.set",
+      "app.stream-control.moonlight-bitrate.set",
+      "app.stream-control.moonlight-fps.set",
+      "app.stream-control.moonlight-resolution.set",
+      "app.stream-control.state.get",
       "app.stream.prepare",
     ])
   })

@@ -9,6 +9,15 @@ import { ListLibraryRpc as appLibraryList } from "../library/list.rpc"
 import { ListSourceRpc as appSourceList } from "../source/list.rpc"
 import { SourceStatusRpc as appSourceStatus } from "../source/status.rpc"
 import { PrepareStreamRpc as appStreamPrepare } from "../stream/prepare.rpc"
+import { GetStreamControlConfigRpc as appStreamControlConfigGet } from "../stream-control/get-config.rpc"
+import { GetStreamControlStateRpc as appStreamControlStateGet } from "../stream-control/get-state.rpc"
+import { SetGamescopeFilterRpc as appStreamControlGamescopeFilterSet } from "../stream-control/set-gamescope-filter.rpc"
+import { SetGamescopeFpsRpc as appStreamControlGamescopeFpsSet } from "../stream-control/set-gamescope-fps.rpc"
+import { SetGamescopeModeRpc as appStreamControlGamescopeModeSet } from "../stream-control/set-gamescope-mode.rpc"
+import { SetGamescopeSharpnessRpc as appStreamControlGamescopeSharpnessSet } from "../stream-control/set-gamescope-sharpness.rpc"
+import { SetMoonlightBitrateRpc as appStreamControlMoonlightBitrateSet } from "../stream-control/set-moonlight-bitrate.rpc"
+import { SetMoonlightFpsRpc as appStreamControlMoonlightFpsSet } from "../stream-control/set-moonlight-fps.rpc"
+import { SetMoonlightResolutionRpc as appStreamControlMoonlightResolutionSet } from "../stream-control/set-moonlight-resolution.rpc"
 import { ServerPrepareStreamRpc as appServerStreamPrepare } from "./prepare.rpc"
 import { ServerStatusRpc as appServerStatus } from "./status.rpc"
 
@@ -24,6 +33,15 @@ export const serverRpcGroup = RpcGroup.make(
   appServerStatus,
   appServerStreamPrepare,
   appStreamPrepare,
+  appStreamControlConfigGet,
+  appStreamControlStateGet,
+  appStreamControlMoonlightBitrateSet,
+  appStreamControlMoonlightFpsSet,
+  appStreamControlMoonlightResolutionSet,
+  appStreamControlGamescopeModeSet,
+  appStreamControlGamescopeFpsSet,
+  appStreamControlGamescopeFilterSet,
+  appStreamControlGamescopeSharpnessSet,
 ).middleware(FeatureGatesMiddleware)
 
 export type ServerRpcGroup = typeof serverRpcGroup

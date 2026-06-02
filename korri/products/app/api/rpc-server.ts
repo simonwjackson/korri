@@ -15,6 +15,7 @@ import { appRpcGroup } from "./app-rpc-group"
 import { HandlersLive } from "./handlers"
 import { ForegroundSessionHostLive } from "./library/foreground-session-host-layer"
 import { RemoteStreamPrepareLive } from "./library/remote-stream-prepare"
+import { StreamControlLayerLive } from "./stream-control/service"
 
 // See server/rpc-server.ts for the federation peer-discovery wiring
 // rationale. Tests get the noop layer; production browses the LAN.
@@ -35,6 +36,7 @@ const LibraryInfrastructureLive = Layer.mergeAll(
   GameAssetsLayerLive,
   ForegroundSessionHostLive,
   RemoteStreamPrepareLive,
+  StreamControlLayerLive,
   PeerDiscoveryConfigured,
   PeerSourceFetcherLive,
 )

@@ -22,6 +22,18 @@ import { RemoteStreamPrepareLive } from "../library/remote-stream-prepare"
 import { handleListSource } from "../source/list.rpc-handler"
 import { handleSourceStatus } from "../source/status.rpc-handler"
 import { handlePrepareStream } from "../stream/prepare.rpc-handler"
+import { StreamControlLayerLive } from "../stream-control/service"
+import {
+  handleGetStreamControlConfig,
+  handleGetStreamControlState,
+  handleSetGamescopeFilter,
+  handleSetGamescopeFps,
+  handleSetGamescopeMode,
+  handleSetGamescopeSharpness,
+  handleSetMoonlightBitrate,
+  handleSetMoonlightFps,
+  handleSetMoonlightResolution,
+} from "../stream-control/stream-control.rpc-handlers"
 import { handleServerPrepareStream } from "./prepare.rpc-handler"
 import { serverRpcGroup } from "./rpc-group"
 import { handleServerStatus } from "./status.rpc-handler"
@@ -48,6 +60,7 @@ const LibraryInfrastructureLive = Layer.mergeAll(
   GameAssetsLayerLive,
   ForegroundSessionHostLive,
   RemoteStreamPrepareLive,
+  StreamControlLayerLive,
   PeerDiscoveryConfigured,
   PeerSourceFetcherLive,
 )
@@ -65,6 +78,15 @@ const ServerHandlersLive = serverRpcGroup.toLayer(
     "app.server.status": handleServerStatus,
     "app.server.stream.prepare": handleServerPrepareStream,
     "app.stream.prepare": handlePrepareStream,
+    "app.stream-control.config.get": handleGetStreamControlConfig,
+    "app.stream-control.state.get": handleGetStreamControlState,
+    "app.stream-control.moonlight-bitrate.set": handleSetMoonlightBitrate,
+    "app.stream-control.moonlight-fps.set": handleSetMoonlightFps,
+    "app.stream-control.moonlight-resolution.set": handleSetMoonlightResolution,
+    "app.stream-control.gamescope-mode.set": handleSetGamescopeMode,
+    "app.stream-control.gamescope-fps.set": handleSetGamescopeFps,
+    "app.stream-control.gamescope-filter.set": handleSetGamescopeFilter,
+    "app.stream-control.gamescope-sharpness.set": handleSetGamescopeSharpness,
   }),
 )
 
