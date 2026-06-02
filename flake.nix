@@ -305,7 +305,7 @@
               Update nix/bun-production-package-names.nix with `just refresh-bun-deps`.
             '';
           assert
-            forbiddenProductionBunPackageMatches == []
+            forbiddenProductionBunPackageMatches == [ ]
             || throw ''
               flake.nix bunDeps: production Bun package set includes known dev/test dependencies:
               ${pkgs.lib.concatStringsSep ", " forbiddenProductionBunPackageMatches}
@@ -345,7 +345,12 @@
               ./tsconfig.json
               ./tsconfig.server.json
             ];
-            mkSource = extra: fileset.toSource { root = ./.; fileset = fileset.unions (common ++ extra); };
+            mkSource =
+              extra:
+              fileset.toSource {
+                root = ./.;
+                fileset = fileset.unions (common ++ extra);
+              };
             sharedRuntime = [ ./korri/shared ];
             deviceRuntime = [
               ./korri/products
@@ -353,21 +358,28 @@
               ./tools/device
               ./tools/http
               ./tools/library
-            ] ++ sharedRuntime;
+            ]
+            ++ sharedRuntime;
           in
           {
-            portal = mkSource ([
-              ./components.json
-              ./vite.config.mjs
-              ./korri/deploy/desktop/runtime-config-shape.ts
-              ./korri/deploy/portal
-              ./korri/products
-            ] ++ sharedRuntime);
-            desktop = mkSource ([
-              ./electrobun.config.ts
-              ./korri/deploy/desktop
-              ./tools/cli
-            ] ++ sharedRuntime);
+            portal = mkSource (
+              [
+                ./components.json
+                ./vite.config.mjs
+                ./korri/deploy/desktop/runtime-config-shape.ts
+                ./korri/deploy/portal
+                ./korri/products
+              ]
+              ++ sharedRuntime
+            );
+            desktop = mkSource (
+              [
+                ./electrobun.config.ts
+                ./korri/deploy/desktop
+                ./tools/cli
+              ]
+              ++ sharedRuntime
+            );
             inputd = mkSource (deviceRuntime ++ [ ./tools/types ]);
             gameStream = mkSource deviceRuntime;
             sessiond = mkSource deviceRuntime;
@@ -409,6 +421,13 @@
           inherit pkgs;
           lib = pkgs.lib;
           src = korriSources.cli;
+          inherit bunDeps;
+        };
+
+        korriGamescopeControlBridge = import ./nix/korri-gamescope-control-bridge.nix {
+          inherit pkgs;
+          lib = pkgs.lib;
+          src = korriSources.gameStream;
           inherit bunDeps;
         };
 
@@ -568,6 +587,7 @@
           korri-game-stream = korriGameStream;
           korri-sessiond = korriSessiond;
           korri-cli = korriCli;
+          korri-gamescope-control-bridge = korriGamescopeControlBridge;
           korri-server = korriServer;
           korri-headless-source = korriHeadlessSource;
           sunshine-korri = sunshineKorri;
@@ -1044,6 +1064,14 @@
             korri-cli = {
               type = "app";
               program = "${korriCli}/bin/korri";
+            };
+            gamescope-control = {
+              type = "app";
+              program = "${korriGamescopeControlBridge}/bin/gamescope-control";
+            };
+            gamescope-control-bridge = {
+              type = "app";
+              program = "${korriGamescopeControlBridge}/bin/gamescope-control-bridge";
             };
             korri-server = {
               type = "app";

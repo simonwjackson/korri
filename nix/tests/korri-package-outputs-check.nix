@@ -25,6 +25,15 @@ let
     (check "korri-game-stream package exposes bundled JS" (
       builtins.pathExists "${packagePath "korri-game-stream"}/share/korri-game-stream/korri-game-stream-runner.js"
     ))
+    (check "korri-gamescope-control-bridge package exposes bridge wrapper" (
+      builtins.pathExists "${packagePath "korri-gamescope-control-bridge"}/bin/gamescope-control-bridge"
+    ))
+    (check "korri-gamescope-control-bridge package exposes operator CLI wrapper" (
+      builtins.pathExists "${packagePath "korri-gamescope-control-bridge"}/bin/gamescope-control"
+    ))
+    (check "korri-gamescope-control-bridge package exposes bundled bridge JS" (
+      builtins.pathExists "${packagePath "korri-gamescope-control-bridge"}/share/korri-gamescope-control-bridge/gamescope-control-bridge.js"
+    ))
     (check "korri-portal package exposes index.html" (
       builtins.pathExists "${packagePath "korri-portal"}/index.html"
     ))
