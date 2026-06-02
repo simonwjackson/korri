@@ -60,6 +60,16 @@ const RuntimeWatchScenario = Schema.Union([
     }),
     [AdditiveFields],
   ),
+  Schema.StructWithRest(
+    Schema.Struct({
+      _tag: Schema.Literal("set-touch-bounds"),
+      x: Schema.Int,
+      y: Schema.Int,
+      w: Schema.Int,
+      h: Schema.Int,
+    }),
+    [AdditiveFields],
+  ),
 ])
 export type MoonlightRuntimeWatchScenario = Schema.Schema.Type<
   typeof RuntimeWatchScenario
@@ -117,6 +127,14 @@ const ProtocolHelloArtifact = Schema.StructWithRest(
           width: Schema.Struct({ min: Schema.Int, max: Schema.Int }),
           height: Schema.Struct({ min: Schema.Int, max: Schema.Int }),
         }),
+        touchBounds: Schema.optional(
+          Schema.Struct({
+            x: Schema.Struct({ min: Schema.Int, max: Schema.Int }),
+            y: Schema.Struct({ min: Schema.Int, max: Schema.Int }),
+            w: Schema.Struct({ min: Schema.Int, max: Schema.Int }),
+            h: Schema.Struct({ min: Schema.Int, max: Schema.Int }),
+          }),
+        ),
       }),
       [AdditiveFields],
     ),
@@ -185,7 +203,12 @@ const EventsSubscribedArtifact = Schema.StructWithRest(
 
 const CommandResultArtifact = Schema.StructWithRest(
   Schema.Struct({
-    _tag: Schema.Literals(["command.accepted", "command.result"]),
+    _tag: Schema.Literals([
+      "command.accepted",
+      "command.result",
+      "input.command.accepted",
+      "input.command.result",
+    ]),
     requestId: Schema.Union([Schema.String, Schema.Int]),
     command: Schema.String,
     status: Schema.optional(Schema.String),

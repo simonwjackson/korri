@@ -351,6 +351,62 @@ describe("moonlight-runtime-watch cli", () => {
     )
   })
 
+  it("records local touch-bounds command proof without host-apply proof", async () => {
+    await withRuntimeWatchSocket(
+      async ({ socketPath, requests }) => {
+        const artifacts = new Map<string, string>()
+        const exitCode = await runMoonlightRuntimeWatchCommand(
+          [
+            "set-touch-bounds",
+            "--x",
+            "960",
+            "--y",
+            "0",
+            "--w",
+            "960",
+            "--h",
+            "1080",
+            "--socket",
+            socketPath,
+            "--artifact",
+            "/tmp/touch.json",
+            "--timeout-ms",
+            "200",
+          ],
+          {
+            write: () => undefined,
+            writeArtifact: async (path, content) => {
+              artifacts.set(path, content)
+            },
+            createRunId: () => "run-touch",
+            now: () => new Date("2026-05-26T00:00:00.000Z"),
+          },
+        )
+
+        expect(exitCode).toBe(0)
+        expect(requests.map(request => request.method)).toContain(
+          "input.setTouchBounds",
+        )
+        const artifact = decodeMoonlightRuntimeWatchArtifact(
+          JSON.parse(artifacts.get("/tmp/touch.json") ?? "{}"),
+        )
+        expect(artifact.scenario).toMatchObject({
+          _tag: "set-touch-bounds",
+          x: 960,
+          y: 0,
+          w: 960,
+          h: 1080,
+        })
+        expect(artifact.terminal.result).toBe("applied")
+        expect(artifact.proof).toMatchObject({
+          controlPlane: "observed",
+          hostApply: "not-collected",
+        })
+      },
+      { commands: ["input.setTouchBounds"] },
+    )
+  })
+
   it("classifies host/runtime command rejection separately from local rejection", async () => {
     await withRuntimeWatchSocket(
       async ({ socketPath }) => {
@@ -527,6 +583,7 @@ async function withRuntimeWatchSocket(
     readonly bitrateCommandId?: string | number
     readonly fpsCommandId?: string | number
     readonly resolutionCommandId?: string | number
+    readonly touchCommandId?: string | number
     readonly mismatchedAppliedState?: boolean
   } = {},
 ): Promise<void> {
@@ -622,6 +679,16 @@ async function withRuntimeWatchSocket(
               `${JSON.stringify(commandResultEvent(commandId, "runtime.setResolution", behavior.commandStatus ?? "applied"))}\n`,
             )
           }
+        } else if (request.method === "input.setTouchBounds") {
+          const commandId = behavior.touchCommandId ?? "cmd-touch"
+          socket.write(
+            `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "input.command.result", requestId: commandId, command: "input.setTouchBounds", status: behavior.commandStatus ?? "applied" } })}\n`,
+          )
+          if (behavior.emitCommandResult !== false) {
+            socket.write(
+              `${JSON.stringify(commandResultEvent(commandId, "input.setTouchBounds", behavior.commandStatus ?? "applied", "input.commandResult"))}\n`,
+            )
+          }
         }
       }
     })
@@ -700,6 +767,7 @@ function commandResultEvent(
   requestId: string | number,
   command: string,
   status: string,
+  name = "runtime.commandResult",
 ) {
   return {
     jsonrpc: "2.0",
@@ -708,7 +776,7 @@ function commandResultEvent(
       seq: 1,
       monotonicMs: 1,
       event: {
-        name: "runtime.commandResult",
+        name,
         requestId,
         command,
         status,

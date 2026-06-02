@@ -8,14 +8,15 @@ import {
   type MoonlightControlEventDelivery,
   type MoonlightControlSequenceGap,
 } from "@shared/stream/moonlight-control-client"
-import type {
-  MoonlightControlCommandMethod,
-  MoonlightControlCommandResult,
-  MoonlightControlEventsSubscribedResult,
-  MoonlightControlHelloResult,
-  MoonlightControlResponseResult,
-  MoonlightControlStateSnapshotResult,
-  MoonlightControlSuccessResponse,
+import {
+  MOONLIGHT_CONTROL_PROTOCOL_LIMITS,
+  type MoonlightControlAnyCommandMethod,
+  type MoonlightControlCommandResult,
+  type MoonlightControlEventsSubscribedResult,
+  type MoonlightControlHelloResult,
+  type MoonlightControlResponseResult,
+  type MoonlightControlStateSnapshotResult,
+  type MoonlightControlSuccessResponse,
 } from "@shared/stream/moonlight-control-protocol"
 import {
   MOONLIGHT_RUNTIME_WATCH_ARTIFACT_SCHEMA,
@@ -312,7 +313,23 @@ function parseCommand(
     }
   }
 
-  return "moonlight-runtime-watch scenario must be probe, set-bitrate, set-fps, or set-resolution"
+  if (scenarioName === "set-touch-bounds") {
+    const x = parseNonNegativeInt(flagValue(argv, "--x"))
+    const y = parseNonNegativeInt(flagValue(argv, "--y"))
+    const w = parsePositiveInt(flagValue(argv, "--w"))
+    const h = parsePositiveInt(flagValue(argv, "--h"))
+    if (x === undefined || y === undefined || !w || !h) {
+      return "set-touch-bounds requires --x <x> --y <y> --w <w> --h <h>"
+    }
+    return {
+      scenario: { _tag: "set-touch-bounds", x, y, w, h },
+      socketPath,
+      artifactPath,
+      timeoutMs,
+    }
+  }
+
+  return "moonlight-runtime-watch scenario must be probe, set-bitrate, set-fps, set-resolution, or set-touch-bounds"
 }
 
 function flagValue(argv: readonly string[], flag: string): string | undefined {
@@ -329,6 +346,13 @@ function parsePositiveInt(value: string | undefined): number | undefined {
   return parsed
 }
 
+function parseNonNegativeInt(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < 0) return undefined
+  return parsed
+}
+
 function validateMutation(
   scenario: MoonlightRuntimeWatchScenario,
   hello: MoonlightControlHelloResult,
@@ -338,6 +362,38 @@ function validateMutation(
   const command = extractScenarioCommand(scenario)
   if (!hello.capabilities.commands.includes(command)) {
     return `${command} is not advertised by the active Moonlight session`
+  }
+  if (scenario._tag === "set-bitrate") {
+    const limits =
+      hello.limits.bitrateKbps ?? MOONLIGHT_CONTROL_PROTOCOL_LIMITS.bitrateKbps
+    if (
+      scenario.bitrateKbps < limits.min ||
+      scenario.bitrateKbps > limits.max
+    ) {
+      return `bitrate ${scenario.bitrateKbps} is outside ${limits.min}-${limits.max}`
+    }
+  }
+  if (scenario._tag === "set-fps") {
+    const limits = hello.limits.fps ?? MOONLIGHT_CONTROL_PROTOCOL_LIMITS.fps
+    if (scenario.fps < limits.min || scenario.fps > limits.max) {
+      return `fps ${scenario.fps} is outside ${limits.min}-${limits.max}`
+    }
+  }
+  if (scenario._tag === "set-touch-bounds") {
+    const limits =
+      hello.limits.touchBounds ?? MOONLIGHT_CONTROL_PROTOCOL_LIMITS.touchBounds
+    if (scenario.x < limits.x.min || scenario.x > limits.x.max) {
+      return `touch x ${scenario.x} is outside ${limits.x.min}-${limits.x.max}`
+    }
+    if (scenario.y < limits.y.min || scenario.y > limits.y.max) {
+      return `touch y ${scenario.y} is outside ${limits.y.min}-${limits.y.max}`
+    }
+    if (scenario.w < limits.w.min || scenario.w > limits.w.max) {
+      return `touch w ${scenario.w} is outside ${limits.w.min}-${limits.w.max}`
+    }
+    if (scenario.h < limits.h.min || scenario.h > limits.h.max) {
+      return `touch h ${scenario.h} is outside ${limits.h.min}-${limits.h.max}`
+    }
   }
   return undefined
 }
@@ -356,25 +412,39 @@ function sendMutation(
       height: scenario.height,
     })
   }
+  if (scenario._tag === "set-touch-bounds") {
+    return client.setTouchBounds({
+      x: scenario.x,
+      y: scenario.y,
+      w: scenario.w,
+      h: scenario.h,
+    })
+  }
   throw new Error("probe has no mutation command")
 }
 
 function extractScenarioCommand(
   scenario: MoonlightRuntimeWatchScenario,
-): MoonlightControlCommandMethod {
+): MoonlightControlAnyCommandMethod {
   if (scenario._tag === "set-bitrate") return "runtime.setBitrate"
   if (scenario._tag === "set-fps") return "runtime.setFps"
   if (scenario._tag === "set-resolution") return "runtime.setResolution"
+  if (scenario._tag === "set-touch-bounds") return "input.setTouchBounds"
   return "runtime.requestIdr"
 }
 
 function extractCommandRequestId(
   result: MoonlightControlResponseResult,
 ): string | number {
-  if (result._tag === "command.accepted" || result._tag === "command.result") {
+  if (
+    result._tag === "command.accepted" ||
+    result._tag === "command.result" ||
+    result._tag === "input.command.accepted" ||
+    result._tag === "input.command.result"
+  ) {
     return result.requestId
   }
-  throw new Error("runtime command did not return command result metadata")
+  throw new Error("command did not return command result metadata")
 }
 
 function waitForCommandResult(options: {
@@ -382,7 +452,7 @@ function waitForCommandResult(options: {
   readonly observedEvents: readonly MoonlightControlEventDelivery[]
   readonly requestId: string
   readonly timeoutMs: number
-}): Promise<MoonlightControlCommandResult | undefined> {
+}): Promise<CommandResultLike | undefined> {
   return new Promise(resolve => {
     const unsubscribe = options.client.onEvent(delivery => {
       const match = eventToCommandResult(delivery, options.requestId)
@@ -403,7 +473,7 @@ function waitForCommandResult(options: {
 function findMatchingCommandEvent(
   events: readonly MoonlightControlEventDelivery[],
   requestId: string,
-): MoonlightControlCommandResult | undefined {
+): CommandResultLike | undefined {
   for (const delivery of events) {
     const match = eventToCommandResult(delivery, requestId)
     if (match) return match
@@ -411,16 +481,29 @@ function findMatchingCommandEvent(
   return undefined
 }
 
+interface CommandResultLike {
+  readonly _tag: "command.result" | "input.command.result"
+  readonly requestId: string | number
+  readonly command: MoonlightControlAnyCommandMethod
+  readonly status: string
+}
+
 function eventToCommandResult(
   delivery: MoonlightControlEventDelivery,
   requestId: string,
-): MoonlightControlCommandResult | undefined {
+): CommandResultLike | undefined {
   const event = delivery.event
-  if ("_tag" in event || event.name !== "runtime.commandResult")
+  if (
+    "_tag" in event ||
+    (event.name !== "runtime.commandResult" &&
+      event.name !== "input.commandResult")
+  ) {
     return undefined
+  }
   if (String(event.requestId) !== requestId) return undefined
   return {
-    _tag: "command.result",
+    _tag:
+      event.name === "input.commandResult" ? "input.command.result" : "command.result",
     requestId: event.requestId,
     command: event.command,
     status: event.status,
@@ -428,13 +511,16 @@ function eventToCommandResult(
 }
 
 function classifyCommandResult(options: {
-  readonly result: MoonlightControlCommandResult
+  readonly result: CommandResultLike
   readonly scenario: MoonlightRuntimeWatchScenario
   readonly postSnapshot: MoonlightControlStateSnapshotResult
 }): TerminalClassification {
   const { result, scenario, postSnapshot } = options
   if (result.status === "applied") {
-    if (!appliedStateMatchesScenario(scenario, postSnapshot)) {
+    if (
+      result.command !== "input.setTouchBounds" &&
+      !appliedStateMatchesScenario(scenario, postSnapshot)
+    ) {
       return {
         result: "host-rejected",
         exitCode: exitCodes.hostRejected,
@@ -451,7 +537,10 @@ function classifyCommandResult(options: {
       exitCode: exitCodes.success,
       proof: {
         controlPlane: "observed",
-        hostApply: "reported",
+        hostApply:
+          result.command === "input.setTouchBounds"
+            ? "not-collected"
+            : "reported",
         deviceRender: "not-collected",
       },
     }
@@ -470,12 +559,21 @@ function classifyCommandResult(options: {
     }
   }
   return {
-    result: "host-rejected",
-    exitCode: exitCodes.hostRejected,
+    result:
+      result.command === "input.setTouchBounds"
+        ? "local-rejected"
+        : "host-rejected",
+    exitCode:
+      result.command === "input.setTouchBounds"
+        ? exitCodes.localRejected
+        : exitCodes.hostRejected,
     reason: result.status,
     proof: {
       controlPlane: "observed",
-      hostApply: "rejected",
+      hostApply:
+        result.command === "input.setTouchBounds"
+          ? "not-collected"
+          : "rejected",
       deviceRender: "not-collected",
     },
   }
