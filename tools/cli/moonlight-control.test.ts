@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import type { MoonlightControlClient } from "@shared/stream/moonlight-control-client"
 import {
   MOONLIGHT_CONTROL_PROTOCOL,
   MOONLIGHT_CONTROL_PROTOCOL_LIMITS,
@@ -12,30 +13,8 @@ describe("moonlight-control cli", () => {
       ["hello", "--socket", "/tmp/control.sock"],
       {
         write: line => output.push(line),
-        connect: async socketPath => ({
-          socketPath,
-          hello: async () => helloResponse(),
-          state: async () => {
-            throw new Error("unexpected")
-          },
-          subscribe: async () => {
-            throw new Error("unexpected")
-          },
-          setBitrate: async () => {
-            throw new Error("unexpected")
-          },
-          setFps: async () => {
-            throw new Error("unexpected")
-          },
-          setResolution: async () => {
-            throw new Error("unexpected")
-          },
-          setTouchBounds: async () => {
-            throw new Error("unexpected")
-          },
-          onEvent: () => () => undefined,
-          close: () => undefined,
-        }),
+        connect: async socketPath =>
+          fakeClient(socketPath, { hello: async () => helloResponse() }),
       },
     )
 
@@ -49,30 +28,8 @@ describe("moonlight-control cli", () => {
       ["state", "--socket", "/tmp/control.sock"],
       {
         write: line => output.push(line),
-        connect: async socketPath => ({
-          socketPath,
-          hello: async () => {
-            throw new Error("unexpected")
-          },
-          state: async () => stateResponse(),
-          subscribe: async () => {
-            throw new Error("unexpected")
-          },
-          setBitrate: async () => {
-            throw new Error("unexpected")
-          },
-          setFps: async () => {
-            throw new Error("unexpected")
-          },
-          setResolution: async () => {
-            throw new Error("unexpected")
-          },
-          setTouchBounds: async () => {
-            throw new Error("unexpected")
-          },
-          onEvent: () => () => undefined,
-          close: () => undefined,
-        }),
+        connect: async socketPath =>
+          fakeClient(socketPath, { state: async () => stateResponse() }),
       },
     )
 
@@ -106,6 +63,27 @@ describe("moonlight-control cli", () => {
     expect(errors.join("\n")).toContain("--socket")
   })
 })
+
+function fakeClient(
+  _socketPath: string,
+  overrides: Partial<MoonlightControlClient>,
+): MoonlightControlClient {
+  const unexpected = async () => {
+    throw new Error("unexpected")
+  }
+  return {
+    hello: unexpected,
+    state: unexpected,
+    subscribe: unexpected,
+    setBitrate: unexpected,
+    setFps: unexpected,
+    setResolution: unexpected,
+    setTouchBounds: unexpected,
+    onEvent: () => () => undefined,
+    close: () => undefined,
+    ...overrides,
+  }
+}
 
 function helloResponse() {
   return {

@@ -99,9 +99,7 @@ describe("moonlight-runtime-watch cli", () => {
       expect(requests.map(request => request.method)).toContain(
         "runtime.setBitrate",
       )
-      const artifact = decodeMoonlightRuntimeWatchArtifact(
-        JSON.parse(artifacts.get("/tmp/bitrate.json") ?? "{}"),
-      )
+      const artifact = artifactAt(artifacts, "/tmp/bitrate.json")
       expect(artifact.terminal.result).toBe("applied")
       expect(artifact.commandResponse).toMatchObject({
         _tag: "command.accepted",
@@ -182,9 +180,7 @@ describe("moonlight-runtime-watch cli", () => {
       expect(requests.map(request => request.method)).toContain(
         "runtime.setFps",
       )
-      const artifact = decodeMoonlightRuntimeWatchArtifact(
-        JSON.parse(artifacts.get("/tmp/fps.json") ?? "{}"),
-      )
+      const artifact = artifactAt(artifacts, "/tmp/fps.json")
       expect(artifact.terminal.result).toBe("applied")
       expect(artifact.commandResponse).toMatchObject({
         command: "runtime.setFps",
@@ -571,6 +567,7 @@ describe("moonlight-runtime-watch cli", () => {
   })
 })
 
+// fallow-ignore-next-line code-duplication
 async function withRuntimeWatchSocket(
   run: (context: {
     readonly socketPath: string
@@ -705,6 +702,12 @@ async function withRuntimeWatchSocket(
     await new Promise<void>(resolve => server.close(() => resolve()))
     await rm(dir, { recursive: true, force: true })
   }
+}
+
+function artifactAt(artifacts: ReadonlyMap<string, string>, path: string) {
+  return decodeMoonlightRuntimeWatchArtifact(
+    JSON.parse(artifacts.get(path) ?? "{}"),
+  )
 }
 
 function helloResponse(

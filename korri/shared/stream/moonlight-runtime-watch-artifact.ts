@@ -232,7 +232,7 @@ const RuntimeWatchSequenceGap = Schema.StructWithRest(
   [AdditiveFields],
 )
 
-export const MoonlightRuntimeWatchArtifact = Schema.StructWithRest(
+const MoonlightRuntimeWatchArtifact = Schema.StructWithRest(
   Schema.Struct({
     schema: Schema.Literal(MOONLIGHT_RUNTIME_WATCH_ARTIFACT_SCHEMA),
     version: Schema.Literal(MOONLIGHT_RUNTIME_WATCH_ARTIFACT_VERSION),

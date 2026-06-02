@@ -1,9 +1,13 @@
 import { describe, expect, it } from "bun:test"
 import type { MoonlightControlClient } from "@shared/stream/moonlight-control-client"
-import { startTouchBoundsCoordinator } from "./touch-bounds-coordinator"
 import type { CurrentStreamSurfaceGeometry } from "./game-stream-fullscreen"
+import { startTouchBoundsCoordinator } from "./touch-bounds-coordinator"
 
-const output = { id: 2, name: "DSI-1", rect: { x: 0, y: 0, width: 1920, height: 1080 } }
+const output = {
+  id: 2,
+  name: "DSI-1",
+  rect: { x: 0, y: 0, width: 1920, height: 1080 },
+}
 
 function availableGeometry(x: number): CurrentStreamSurfaceGeometry {
   return {
@@ -29,13 +33,22 @@ describe("touch bounds coordinator", () => {
     })
 
     expect(sent).toEqual([{ x: 960, y: 0, w: 960, h: 1080 }])
-    expect(coordinator.lastAppliedBounds()).toEqual({ x: 960, y: 0, w: 960, h: 1080 })
+    expect(coordinator.lastAppliedBounds()).toEqual({
+      x: 960,
+      y: 0,
+      w: 960,
+      h: 1080,
+    })
     await coordinator.close()
   })
 
   it("recomputes after geometry changes and suppresses duplicates", async () => {
     const sent: Array<{ x: number; y: number; w: number; h: number }> = []
-    const geometries = [availableGeometry(0), availableGeometry(0), availableGeometry(960)]
+    const geometries = [
+      availableGeometry(0),
+      availableGeometry(0),
+      availableGeometry(960),
+    ]
     const coordinator = await startTouchBoundsCoordinator({
       moonlight: moonlightClient(sent),
       readGeometry: async () => geometries.shift() ?? availableGeometry(960),
@@ -82,7 +95,12 @@ describe("touch bounds coordinator", () => {
       { x: 0, y: 0, w: 960, h: 1080 },
       { x: 960, y: 0, w: 960, h: 1080 },
     ])
-    expect(coordinator.lastAppliedBounds()).toEqual({ x: 0, y: 0, w: 960, h: 1080 })
+    expect(coordinator.lastAppliedBounds()).toEqual({
+      x: 0,
+      y: 0,
+      w: 960,
+      h: 1080,
+    })
     expect(coordinator.lastFailure()?.reason).toBe("apply-failed")
     await coordinator.close()
   })
@@ -101,7 +119,11 @@ function moonlightClient(
         protocol: { name: "moonlight.local-control", major: 1, minor: 1 },
         session: { sessionId: "session-1" },
         authority: "controller",
-        capabilities: { events: [], commands: ["input.setTouchBounds"], experimental: [] },
+        capabilities: {
+          events: [],
+          commands: ["input.setTouchBounds"],
+          experimental: [],
+        },
         limits: {} as never,
       },
     }),
@@ -126,10 +148,20 @@ function moonlightClient(
         },
       },
     }),
-    subscribe: async () => ({ jsonrpc: "2.0", id: "sub", result: { _tag: "events.subscribed", seq: 1 } }),
-    setBitrate: async () => { throw new Error("not used") },
-    setFps: async () => { throw new Error("not used") },
-    setResolution: async () => { throw new Error("not used") },
+    subscribe: async () => ({
+      jsonrpc: "2.0",
+      id: "sub",
+      result: { _tag: "events.subscribed", seq: 1 },
+    }),
+    setBitrate: async () => {
+      throw new Error("not used")
+    },
+    setFps: async () => {
+      throw new Error("not used")
+    },
+    setResolution: async () => {
+      throw new Error("not used")
+    },
     setTouchBounds: async bounds => {
       sent.push(bounds)
       if (rejectNext()) throw new Error("rejected")

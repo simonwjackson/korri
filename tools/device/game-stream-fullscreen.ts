@@ -1,20 +1,15 @@
-import type { LaunchSpec } from "@shared/library/launcher"
+export {
+  composeGamescopeLaunchSpec,
+  type GamescopeBackend,
+  type GamescopeOptions,
+} from "@shared/stream/gamescope-launch-spec"
+
 import type {
   SwayCommandRunner,
   SwayNode,
   SwayRect,
   SwayWindowSelector,
 } from "./sessiond-sway"
-
-export type GamescopeBackend = "auto" | "drm" | "sdl" | "wayland" | "headless"
-
-export interface GamescopeOptions {
-  readonly enabled: boolean
-  readonly command?: string
-  readonly backend?: GamescopeBackend
-  readonly exposeWayland?: boolean
-  readonly args?: readonly string[]
-}
 
 export interface StreamSurfaceOutputSnapshot {
   readonly id: number
@@ -92,7 +87,6 @@ export class StreamSurfacePresenceTimeoutError extends Error {
   }
 }
 
-const DEFAULT_GAMESCOPE_COMMAND = "gamescope"
 const DEFAULT_SURFACE_TIMEOUT_MS = 5_000
 const DEFAULT_SURFACE_POLL_MS = 100
 
@@ -102,34 +96,12 @@ export const DEFAULT_GAMESCOPE_SELECTOR: SwayWindowSelector = {
   classes: ["gamescope", "Gamescope"],
 }
 
-export function composeGamescopeLaunchSpec(
-  game: LaunchSpec,
-  options: GamescopeOptions,
-): LaunchSpec {
-  if (!options.enabled) return game
-
-  return {
-    command: options.command ?? DEFAULT_GAMESCOPE_COMMAND,
-    args: [
-      ...(options.backend ? ["--backend", options.backend] : []),
-      "-f",
-      "-b",
-      ...(options.exposeWayland ? ["--expose-wayland"] : []),
-      ...(options.args ?? []),
-      "--",
-      game.command,
-      ...game.args,
-    ],
-    env: game.env,
-    cwd: game.cwd,
-  }
-}
-
 export function findStreamSurfaceWindows(
   tree: SwayNode,
   selector: SwayWindowSelector = DEFAULT_GAMESCOPE_SELECTOR,
 ): readonly StreamSurfaceSnapshot[] {
   const windows: StreamSurfaceSnapshot[] = []
+  // fallow-ignore-next-line code-duplication
   walkSwayTreeWithOutput(tree, undefined, (node, output) => {
     if (node.id === undefined) return
     if (!matchesSelector(node, selector)) return
@@ -312,16 +284,13 @@ function selectPrimarySurface(
   return focused ?? [...surfaces].sort((a, b) => a.id - b.id)[0]
 }
 
-function walkSwayTree(node: SwayNode, visit: (node: SwayNode) => void) {
-  visit(node)
-  for (const child of node.nodes ?? []) walkSwayTree(child, visit)
-  for (const child of node.floating_nodes ?? []) walkSwayTree(child, visit)
-}
-
 function walkSwayTreeWithOutput(
   node: SwayNode,
   currentOutput: StreamSurfaceOutputSnapshot | undefined,
-  visit: (node: SwayNode, output: StreamSurfaceOutputSnapshot | undefined) => void,
+  visit: (
+    node: SwayNode,
+    output: StreamSurfaceOutputSnapshot | undefined,
+  ) => void,
 ) {
   const nextOutput = isOutputNode(node) ? outputSnapshot(node) : currentOutput
   visit(node, nextOutput)
@@ -332,7 +301,9 @@ function walkSwayTreeWithOutput(
 }
 
 function isOutputNode(node: SwayNode): boolean {
-  return node.type === "output" && node.id !== undefined && node.rect !== undefined
+  return (
+    node.type === "output" && node.id !== undefined && node.rect !== undefined
+  )
 }
 
 function outputSnapshot(node: SwayNode): StreamSurfaceOutputSnapshot {

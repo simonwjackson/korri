@@ -38,10 +38,7 @@ describe("moonlight launcher", () => {
     const calls: string[] = []
     const result = await launchMoonlight({
       host: "aka.local",
-      runner: runner((command, args) => {
-        calls.push([command, ...args].join(" "))
-        return { status: "started" }
-      }),
+      runner: recordingRunner(calls),
     })
 
     expect(result).toEqual({ status: "started", command: "gamescope" })
@@ -58,10 +55,7 @@ describe("moonlight launcher", () => {
         enabled: true,
         command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
       },
-      runner: runner((command, args) => {
-        calls.push([command, ...args].join(" "))
-        return { status: "started" }
-      }),
+      runner: recordingRunner(calls),
     })
 
     expect(result).toEqual({
@@ -78,10 +72,7 @@ describe("moonlight launcher", () => {
     const result = await launchMoonlight({
       host: "aka.local",
       gamescope: { enabled: false },
-      runner: runner((command, args) => {
-        calls.push([command, ...args].join(" "))
-        return { status: "started" }
-      }),
+      runner: recordingRunner(calls),
     })
 
     expect(result).toEqual({ status: "started", command: "moonlight" })
@@ -92,6 +83,7 @@ describe("moonlight launcher", () => {
     const calls: string[] = []
     const result = await launchMoonlight({
       host: "aka.local",
+      // fallow-ignore-next-line code-duplication
       runner: runner((command, args) => {
         calls.push([command, ...args].join(" "))
         return calls.length === 1
@@ -169,10 +161,7 @@ describe("moonlight launcher", () => {
           join(PROC_FIXTURES_DIR, "bus-input-devices-inputplumber-virtual.txt"),
           "utf8",
         ),
-      runner: runner((command, args) => {
-        calls.push([command, ...args].join(" "))
-        return { status: "started" }
-      }),
+      runner: recordingRunner(calls),
     })
 
     expect(result).toEqual({ status: "started", command: "gamescope" })
@@ -194,10 +183,7 @@ describe("moonlight launcher", () => {
           ),
           "utf8",
         ),
-      runner: runner((command, args) => {
-        calls.push([command, ...args].join(" "))
-        return { status: "started" }
-      }),
+      runner: recordingRunner(calls),
     })
 
     expect(result.status).toBe("failed")
@@ -218,10 +204,7 @@ describe("moonlight launcher", () => {
           join(PROC_FIXTURES_DIR, "bus-input-devices-inputplumber-virtual.txt"),
           "utf8",
         ),
-      runner: runner((command, args) => {
-        calls.push([command, ...args].join(" "))
-        return { status: "started" }
-      }),
+      runner: recordingRunner(calls),
     })
 
     expect(result).toEqual({ status: "started", command: "gamescope" })
@@ -236,10 +219,7 @@ describe("moonlight launcher", () => {
       host: "192.168.1.117",
       inputDevice: "/dev/input/event10",
       platform: "sdl",
-      runner: runner((command, args) => {
-        calls.push([command, ...args].join(" "))
-        return { status: "started" }
-      }),
+      runner: recordingRunner(calls),
     })
 
     expect(result).toEqual({ status: "started", command: "gamescope" })
@@ -253,10 +233,7 @@ describe("moonlight launcher", () => {
     const result = await launchMoonlight({
       host: "192.168.1.117",
       platform: "wayland",
-      runner: runner((command, args) => {
-        calls.push([command, ...args].join(" "))
-        return { status: "started" }
-      }),
+      runner: recordingRunner(calls),
     })
 
     expect(result).toEqual({ status: "started", command: "gamescope" })
@@ -295,10 +272,7 @@ describe("moonlight launcher", () => {
       host: "192.168.1.117",
       absoluteTouch: true,
       absoluteTouchRequireBounds: true,
-      runner: runner((command, args) => {
-        calls.push([command, ...args].join(" "))
-        return { status: "started" }
-      }),
+      runner: recordingRunner(calls),
     })
 
     expect(result).toEqual({ status: "started", command: "gamescope" })
@@ -347,6 +321,7 @@ describe("moonlight launcher", () => {
       command: "/nix/store/moonlight-embedded/bin/moonlight",
       client: "embedded",
       allowNixFallback: false,
+      // fallow-ignore-next-line code-duplication
       runner: runner((command, args) => {
         calls.push([command, ...args].join(" "))
         return { status: "failed", message: "ENOENT" }
@@ -438,6 +413,13 @@ describe("moonlight launcher", () => {
     }
   })
 })
+
+function recordingRunner(calls: string[]): CommandRunner {
+  return runner((command, args) => {
+    calls.push([command, ...args].join(" "))
+    return { status: "started" }
+  })
+}
 
 function runner(
   fn: (

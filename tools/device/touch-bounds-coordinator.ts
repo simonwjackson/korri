@@ -101,29 +101,41 @@ export async function startTouchBoundsCoordinator(
     if (closed) return
     if (!calibration) return
 
+    const bounds = await readCurrentBounds(calibration)
+    if (!bounds) return
+    if (sameBounds(lastApplied, bounds)) return
+
+    await applyBounds(bounds)
+  }
+
+  async function readCurrentBounds(
+    absRange: TouchAbsRange,
+  ): Promise<TouchBounds | undefined> {
     const geometry = await options.readGeometry()
     if (geometry.status !== "available") {
       lastFailure = { reason: geometry.status }
-      return
+      return undefined
     }
 
     const gamescopeMode = await options.readGamescopeMode?.()
     const computed = computeTouchBoundsFromGeometry({
       outputRect: geometry.surface.output.rect,
       surfaceRect: geometry.surface.rect,
-      absRange: calibration,
+      absRange,
       scalingPolicy: options.scalingPolicy ?? { _tag: "stretchFill" },
       gamescopeMode,
     })
     if (computed.status !== "valid") {
       lastFailure = { reason: "invalid-geometry", message: computed.reason }
-      return
+      return undefined
     }
-    if (sameBounds(lastApplied, computed.bounds)) return
+    return computed.bounds
+  }
 
+  async function applyBounds(bounds: TouchBounds): Promise<void> {
     try {
-      await options.moonlight.setTouchBounds(toMoonlightBounds(computed.bounds))
-      lastApplied = computed.bounds
+      await options.moonlight.setTouchBounds(toMoonlightBounds(bounds))
+      lastApplied = bounds
       lastFailure = undefined
     } catch (error) {
       lastFailure = {

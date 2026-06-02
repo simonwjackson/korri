@@ -11,7 +11,6 @@ import {
 import {
   MOONLIGHT_CONTROL_PROTOCOL_LIMITS,
   type MoonlightControlAnyCommandMethod,
-  type MoonlightControlCommandResult,
   type MoonlightControlEventsSubscribedResult,
   type MoonlightControlHelloResult,
   type MoonlightControlResponseResult,
@@ -363,36 +362,69 @@ function validateMutation(
   if (!hello.capabilities.commands.includes(command)) {
     return `${command} is not advertised by the active Moonlight session`
   }
-  if (scenario._tag === "set-bitrate") {
-    const limits =
-      hello.limits.bitrateKbps ?? MOONLIGHT_CONTROL_PROTOCOL_LIMITS.bitrateKbps
-    if (
-      scenario.bitrateKbps < limits.min ||
-      scenario.bitrateKbps > limits.max
-    ) {
-      return `bitrate ${scenario.bitrateKbps} is outside ${limits.min}-${limits.max}`
-    }
-  }
-  if (scenario._tag === "set-fps") {
-    const limits = hello.limits.fps ?? MOONLIGHT_CONTROL_PROTOCOL_LIMITS.fps
-    if (scenario.fps < limits.min || scenario.fps > limits.max) {
-      return `fps ${scenario.fps} is outside ${limits.min}-${limits.max}`
-    }
-  }
+  return validateScenarioLimits(scenario, hello)
+}
+
+function validateScenarioLimits(
+  scenario: MoonlightRuntimeWatchScenario,
+  hello: MoonlightControlHelloResult,
+): string | undefined {
+  if (scenario._tag === "set-bitrate")
+    return validateBitrateScenario(scenario, hello)
+  if (scenario._tag === "set-fps") return validateFpsScenario(scenario, hello)
   if (scenario._tag === "set-touch-bounds") {
-    const limits =
-      hello.limits.touchBounds ?? MOONLIGHT_CONTROL_PROTOCOL_LIMITS.touchBounds
-    if (scenario.x < limits.x.min || scenario.x > limits.x.max) {
-      return `touch x ${scenario.x} is outside ${limits.x.min}-${limits.x.max}`
-    }
-    if (scenario.y < limits.y.min || scenario.y > limits.y.max) {
-      return `touch y ${scenario.y} is outside ${limits.y.min}-${limits.y.max}`
-    }
-    if (scenario.w < limits.w.min || scenario.w > limits.w.max) {
-      return `touch w ${scenario.w} is outside ${limits.w.min}-${limits.w.max}`
-    }
-    if (scenario.h < limits.h.min || scenario.h > limits.h.max) {
-      return `touch h ${scenario.h} is outside ${limits.h.min}-${limits.h.max}`
+    return validateTouchBoundsScenario(scenario, hello)
+  }
+  return undefined
+}
+
+function validateBitrateScenario(
+  scenario: Extract<
+    MoonlightRuntimeWatchScenario,
+    { readonly _tag: "set-bitrate" }
+  >,
+  hello: MoonlightControlHelloResult,
+): string | undefined {
+  const limits =
+    hello.limits.bitrateKbps ?? MOONLIGHT_CONTROL_PROTOCOL_LIMITS.bitrateKbps
+  if (scenario.bitrateKbps < limits.min || scenario.bitrateKbps > limits.max) {
+    return `bitrate ${scenario.bitrateKbps} is outside ${limits.min}-${limits.max}`
+  }
+  return undefined
+}
+
+function validateFpsScenario(
+  scenario: Extract<
+    MoonlightRuntimeWatchScenario,
+    { readonly _tag: "set-fps" }
+  >,
+  hello: MoonlightControlHelloResult,
+): string | undefined {
+  const limits = hello.limits.fps ?? MOONLIGHT_CONTROL_PROTOCOL_LIMITS.fps
+  if (scenario.fps < limits.min || scenario.fps > limits.max) {
+    return `fps ${scenario.fps} is outside ${limits.min}-${limits.max}`
+  }
+  return undefined
+}
+
+function validateTouchBoundsScenario(
+  scenario: Extract<
+    MoonlightRuntimeWatchScenario,
+    { readonly _tag: "set-touch-bounds" }
+  >,
+  hello: MoonlightControlHelloResult,
+): string | undefined {
+  const limits =
+    hello.limits.touchBounds ?? MOONLIGHT_CONTROL_PROTOCOL_LIMITS.touchBounds
+  const checks = [
+    ["x", scenario.x, limits.x],
+    ["y", scenario.y, limits.y],
+    ["w", scenario.w, limits.w],
+    ["h", scenario.h, limits.h],
+  ] as const
+  for (const [axis, value, axisLimits] of checks) {
+    if (value < axisLimits.min || value > axisLimits.max) {
+      return `touch ${axis} ${value} is outside ${axisLimits.min}-${axisLimits.max}`
     }
   }
   return undefined
@@ -503,7 +535,9 @@ function eventToCommandResult(
   if (String(event.requestId) !== requestId) return undefined
   return {
     _tag:
-      event.name === "input.commandResult" ? "input.command.result" : "command.result",
+      event.name === "input.commandResult"
+        ? "input.command.result"
+        : "command.result",
     requestId: event.requestId,
     command: event.command,
     status: event.status,

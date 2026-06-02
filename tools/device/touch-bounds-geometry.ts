@@ -61,10 +61,16 @@ export function computeTouchBoundsFromGeometry(
 
   const absWidth = input.absRange.maxX - input.absRange.minX + 1
   const absHeight = input.absRange.maxY - input.absRange.minY + 1
-  const x = input.absRange.minX +
-    Math.round(((clipped.x - input.outputRect.x) / input.outputRect.width) * absWidth)
-  const y = input.absRange.minY +
-    Math.round(((clipped.y - input.outputRect.y) / input.outputRect.height) * absHeight)
+  const x =
+    input.absRange.minX +
+    Math.round(
+      ((clipped.x - input.outputRect.x) / input.outputRect.width) * absWidth,
+    )
+  const y =
+    input.absRange.minY +
+    Math.round(
+      ((clipped.y - input.outputRect.y) / input.outputRect.height) * absHeight,
+    )
   const w = Math.round((clipped.width / input.outputRect.width) * absWidth)
   const h = Math.round((clipped.height / input.outputRect.height) * absHeight)
 
@@ -78,7 +84,9 @@ export function computeTouchBoundsFromGeometry(
   return { status: "valid", bounds }
 }
 
-function activeGameSurface(input: TouchBoundsGeometryInput): SwayRect | undefined {
+function activeGameSurface(
+  input: TouchBoundsGeometryInput,
+): SwayRect | undefined {
   if (input.scalingPolicy._tag === "stretchFill") return input.surfaceRect
   if (input.scalingPolicy._tag === "unknown") return undefined
 

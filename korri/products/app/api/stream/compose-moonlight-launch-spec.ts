@@ -5,7 +5,7 @@ import type { LaunchFailureKind, LaunchSpec } from "@shared/library/launcher"
 import {
   composeGamescopeLaunchSpec,
   type GamescopeOptions,
-} from "../../../../../tools/device/game-stream-fullscreen"
+} from "@shared/stream/gamescope-launch-spec"
 
 /**
  * Build a Moonlight `LaunchSpec` for `gamescope -- moonlight stream -app "Korri Stream" <host>`
@@ -106,38 +106,73 @@ export function composeMoonlightLaunchSpec(
 
   const command =
     options.command ?? moonlightCommandFromEnv() ?? DEFAULT_MOONLIGHT_COMMAND
-  const platform = options.platform ?? moonlightPlatformFromEnv()
-  const mappingFile = options.mappingFile ?? moonlightMappingFileFromEnv()
-  const inputDevice = options.inputDevice ?? moonlightInputDeviceFromEnv()
-  const absoluteTouchBounds =
-    options.absoluteTouchBounds ?? moonlightAbsoluteTouchBoundsFromEnv()
-  const absoluteTouchRequireBounds =
-    options.absoluteTouchRequireBounds ??
-    moonlightAbsoluteTouchRequireBoundsFromEnv() ??
-    false
-  const absoluteTouch =
-    options.absoluteTouch ??
-    moonlightAbsoluteTouchFromEnv() ??
-    (absoluteTouchBounds !== undefined || absoluteTouchRequireBounds)
-  const args = [
-    "stream",
-    ...(platform ? ["-platform", platform] : []),
-    ...(mappingFile ? ["-mapping", mappingFile] : []),
-    ...(inputDevice ? ["-input", inputDevice] : []),
-    ...(absoluteTouch ? ["-absolutetouch"] : []),
-    ...(absoluteTouchRequireBounds ? ["-absolutetouchrequirebounds"] : []),
-    ...(absoluteTouchBounds
-      ? ["-absolutetouchbounds", absoluteTouchBounds]
-      : []),
-    "-app",
-    appName,
-    options.host,
-  ]
+  const args = composeMoonlightArgs(options, appName)
 
   return composeGamescopeLaunchSpec(
     { command, args },
     options.gamescope ?? { enabled: false },
   )
+}
+
+function composeMoonlightArgs(
+  options: ComposeMoonlightLaunchSpecOptions,
+  appName: string,
+): readonly string[] {
+  const args = ["stream"]
+  appendOption(
+    args,
+    "-platform",
+    options.platform ?? moonlightPlatformFromEnv(),
+  )
+  appendOption(
+    args,
+    "-mapping",
+    options.mappingFile ?? moonlightMappingFileFromEnv(),
+  )
+  appendOption(
+    args,
+    "-input",
+    options.inputDevice ?? moonlightInputDeviceFromEnv(),
+  )
+  appendAbsoluteTouchArgs(args, resolveAbsoluteTouchOptions(options))
+  args.push("-app", appName, options.host)
+  return args
+}
+
+function appendOption(args: string[], flag: string, value: string | undefined) {
+  if (value) args.push(flag, value)
+}
+
+function resolveAbsoluteTouchOptions(
+  options: ComposeMoonlightLaunchSpecOptions,
+): {
+  readonly enabled: boolean
+  readonly requireBounds: boolean
+  readonly bounds?: string
+} {
+  const bounds =
+    options.absoluteTouchBounds ?? moonlightAbsoluteTouchBoundsFromEnv()
+  const requireBounds =
+    options.absoluteTouchRequireBounds ??
+    moonlightAbsoluteTouchRequireBoundsFromEnv() ??
+    false
+  return {
+    enabled:
+      options.absoluteTouch ??
+      moonlightAbsoluteTouchFromEnv() ??
+      (bounds !== undefined || requireBounds),
+    requireBounds,
+    bounds,
+  }
+}
+
+function appendAbsoluteTouchArgs(
+  args: string[],
+  touch: ReturnType<typeof resolveAbsoluteTouchOptions>,
+) {
+  if (touch.enabled) args.push("-absolutetouch")
+  if (touch.requireBounds) args.push("-absolutetouchrequirebounds")
+  appendOption(args, "-absolutetouchbounds", touch.bounds)
 }
 
 /**

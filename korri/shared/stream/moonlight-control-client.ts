@@ -49,7 +49,7 @@ export interface MoonlightControlClient {
   readonly close: () => void
 }
 
-export interface MoonlightControlClientProtocolError {
+interface MoonlightControlClientProtocolError {
   readonly _tag: "MoonlightControlClientProtocolError"
   readonly message: string
 }
@@ -106,6 +106,7 @@ function createMoonlightControlClient(
     rejectAll(protocolError("Moonlight control socket closed"))
   })
 
+  // fallow-ignore-next-line code-duplication
   return {
     hello: () => request("protocol.hello"),
     state: () => request("state.get"),

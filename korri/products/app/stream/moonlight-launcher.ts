@@ -18,8 +18,10 @@ import {
   type InputPlumberVirtualGamepadResolution,
   resolveInputPlumberVirtualGamepad,
 } from "@shared/input/native/inputplumber-virtual-gamepad"
-import type { GamescopeOptions } from "../../../../tools/device/game-stream-fullscreen"
-import { composeGamescopeLaunchSpec } from "../../../../tools/device/game-stream-fullscreen"
+import {
+  composeGamescopeLaunchSpec,
+  type GamescopeOptions,
+} from "@shared/stream/gamescope-launch-spec"
 
 export interface MoonlightControlLaunchHandle {
   readonly sessionId: string
@@ -102,34 +104,15 @@ export async function launchMoonlight(
   const inputDevice = await moonlightInputDevice(options)
   if (inputDevice.status === "failed") return inputDevice
 
-  const platform = options.platform ?? moonlightPlatformFromEnv()
-  const moonlightControl = await moonlightControlHandleFromOptions(
-    options.moonlightControl,
-  )
-  const moonlightControlEnv = moonlightControl
-    ? moonlightControlEnvForHandle(moonlightControl)
-    : undefined
-
-  const absoluteTouchBounds =
-    options.absoluteTouchBounds ?? moonlightAbsoluteTouchBoundsFromEnv()
-  const absoluteTouchRequireBounds =
-    options.absoluteTouchRequireBounds ??
-    moonlightAbsoluteTouchRequireBoundsFromEnv() ??
-    false
-  const absoluteTouch =
-    options.absoluteTouch ??
-    moonlightAbsoluteTouchFromEnv() ??
-    (absoluteTouchBounds !== undefined || absoluteTouchRequireBounds)
-  const args = moonlightArgs({
-    ...options,
+  const launchConfig = await resolveMoonlightLaunchConfig(
+    options,
     client,
-    absoluteTouch,
-    absoluteTouchBounds,
-    absoluteTouchRequireBounds,
-    inputDevice: inputDevice.path,
-    mappingFile: options.mappingFile ?? moonlightMappingFileFromEnv(),
-    platform,
-  })
+    inputDevice.path,
+  )
+  const moonlightControlEnv = launchConfig.moonlightControl
+    ? moonlightControlEnvForHandle(launchConfig.moonlightControl)
+    : undefined
+  const args = moonlightArgs(launchConfig.argsOptions)
   const allowNixFallback = options.allowNixFallback ?? command === "moonlight"
   const startupObserveMs =
     options.startupObserveMs ?? moonlightStartupObserveMsFromEnv()
@@ -145,7 +128,7 @@ export async function launchMoonlight(
   if (installed.status === "started") {
     return startedMoonlightResult({
       command: installedSpec.command,
-      moonlightControl,
+      moonlightControl: launchConfig.moonlightControl,
       session: installed.session,
     })
   }
@@ -169,7 +152,7 @@ export async function launchMoonlight(
   if (fallback.status === "started") {
     return startedMoonlightResult({
       command: fallbackSpec.command,
-      moonlightControl,
+      moonlightControl: launchConfig.moonlightControl,
       session: fallback.session,
     })
   }
@@ -177,6 +160,43 @@ export async function launchMoonlight(
   return {
     status: "failed",
     message: `Could not start Moonlight. ${command}: ${installed.message}; nix fallback: ${fallback.message}`,
+  }
+}
+
+async function resolveMoonlightLaunchConfig(
+  options: MoonlightLaunchOptions,
+  client: "embedded",
+  inputDevice: string | undefined,
+): Promise<{
+  readonly moonlightControl?: MoonlightControlLaunchHandle
+  readonly argsOptions: MoonlightLaunchOptions & { readonly client: "embedded" }
+}> {
+  const moonlightControl = await moonlightControlHandleFromOptions(
+    options.moonlightControl,
+  )
+  const absoluteTouchBounds =
+    options.absoluteTouchBounds ?? moonlightAbsoluteTouchBoundsFromEnv()
+  const absoluteTouchRequireBounds =
+    options.absoluteTouchRequireBounds ??
+    moonlightAbsoluteTouchRequireBoundsFromEnv() ??
+    false
+  const absoluteTouch =
+    options.absoluteTouch ??
+    moonlightAbsoluteTouchFromEnv() ??
+    (absoluteTouchBounds !== undefined || absoluteTouchRequireBounds)
+
+  return {
+    moonlightControl,
+    argsOptions: {
+      ...options,
+      client,
+      absoluteTouch,
+      absoluteTouchBounds,
+      absoluteTouchRequireBounds,
+      inputDevice,
+      mappingFile: options.mappingFile ?? moonlightMappingFileFromEnv(),
+      platform: options.platform ?? moonlightPlatformFromEnv(),
+    },
   }
 }
 
@@ -262,7 +282,8 @@ function moonlightAbsoluteTouchBoundsFromEnv(): string | undefined {
 }
 
 function moonlightAbsoluteTouchRequireBoundsFromEnv(): boolean | undefined {
-  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH_REQUIRE_BOUNDS?.trim()
+  const raw =
+    globalThis.Bun?.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH_REQUIRE_BOUNDS?.trim()
   if (!raw) return undefined
   return raw === "1" || raw === "true" || raw === "enabled"
 }

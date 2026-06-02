@@ -41,8 +41,14 @@ describe("touch bounds geometry", () => {
       scalingPolicy: { _tag: "stretchFill" },
     })
 
-    expect(left).toEqual({ status: "valid", bounds: { x: 0, y: 0, w: 960, h: 1080 } })
-    expect(right).toEqual({ status: "valid", bounds: { x: 960, y: 0, w: 960, h: 1080 } })
+    expect(left).toEqual({
+      status: "valid",
+      bounds: { x: 0, y: 0, w: 960, h: 1080 },
+    })
+    expect(right).toEqual({
+      status: "valid",
+      bounds: { x: 960, y: 0, w: 960, h: 1080 },
+    })
   })
 
   it("clamps surfaces that are partially outside the output", () => {

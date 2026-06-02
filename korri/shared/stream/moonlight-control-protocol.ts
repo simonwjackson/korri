@@ -517,10 +517,7 @@ const ErrorResponse = Schema.StructWithRest(
   [AdditiveFields],
 )
 
-export const MoonlightControlResponse = Schema.Union([
-  SuccessResponse,
-  ErrorResponse,
-])
+const MoonlightControlResponse = Schema.Union([SuccessResponse, ErrorResponse])
 
 export interface MoonlightControlSuccessResponse {
   readonly jsonrpc: "2.0"
@@ -591,7 +588,7 @@ const InputSetTouchBoundsRequest = Schema.StructWithRest(
   [AdditiveFields],
 )
 
-export const MoonlightControlCommandRequest = Schema.Union([
+const MoonlightControlCommandRequest = Schema.Union([
   RuntimeSetBitrateRequest,
   RuntimeSetFpsRequest,
   RuntimeSetResolutionRequest,
@@ -805,9 +802,7 @@ export function decodeMoonlightControlMessage(
   return decodeMoonlightControlCommandRequest(value)
 }
 
-export function decodeMoonlightControlEvent(
-  value: unknown,
-): MoonlightControlEvent {
+function decodeMoonlightControlEvent(value: unknown): MoonlightControlEvent {
   const event = Schema.decodeUnknownSync(
     Schema.StructWithRest(Schema.Struct({ name: Schema.String }), [
       AdditiveFields,
