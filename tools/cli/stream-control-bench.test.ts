@@ -337,6 +337,10 @@ function gamescopeClientDouble(calls: unknown[]): GamescopeControlClient {
       calls.push({ method: "setSharpness", params })
       return gamescopeCommand("sharpness.set", params)
     },
+    setFps: async params => {
+      calls.push({ method: "setFps", params })
+      return gamescopeCommand("fps.set", params)
+    },
     requestCommand: async (command, params) => {
       calls.push({ method: "requestCommand", command, params })
       return gamescopeCommand(command, params)

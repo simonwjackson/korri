@@ -23,6 +23,16 @@ export const RuntimeBitrateKbps = Schema.Number.check(
   ),
 )
 export const RuntimeFps = Schema.Number.check(numberRange(30, 120, "fps"))
+// Gamescope runtime FPS limiter: 0 disables the limit, 240 is the upper sanity
+// bound. Accept integers only — the GAMESCOPE_LIMITER_FILE writer parses with
+// strtol and floats would round in ways the operator did not request.
+export const RuntimeGamescopeFps = Schema.Number.check(
+  Schema.makeFilter<number>(value =>
+    Number.isInteger(value) && value >= 0 && value <= 240
+      ? undefined
+      : "fps between 0 and 240 (integer) required",
+  ),
+)
 export const RuntimeMoonlightResolutionWidth = Schema.Number.check(
   numberRange(
     MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.width.min,
@@ -43,6 +53,13 @@ export const RuntimeGamescopeResolutionDimension = Schema.Number.check(
 export const RuntimeSharpness = Schema.Number.check(
   numberRange(0, 20, "sharpness"),
 )
+export const RuntimeBrightnessPercent = Schema.Number.check(
+  Schema.makeFilter<number>(value =>
+    Number.isInteger(value) && value >= 0 && value <= 100
+      ? undefined
+      : "percent between 0 and 100 (integer) required",
+  ),
+)
 
 export const GamescopeScalingFilter = Schema.Literals([
   "linear",
@@ -57,6 +74,8 @@ export const EmptyPayloadFields = {}
 export const StreamControlConfigResponseFields = {
   moonlight: Schema.Struct({ enabled: Schema.Boolean }),
   gamescope: Schema.Struct({ enabled: Schema.Boolean }),
+  brightness: Schema.Struct({ enabled: Schema.Boolean }),
+  battery: Schema.Struct({ enabled: Schema.Boolean }),
   artifactDir: Schema.Union([Schema.String, Schema.Null]),
 }
 
@@ -76,6 +95,8 @@ const StreamControlStateEntry = Schema.Union([
 export const StreamControlStateResponseFields = {
   moonlight: StreamControlStateEntry,
   gamescope: StreamControlStateEntry,
+  brightness: StreamControlStateEntry,
+  battery: StreamControlStateEntry,
 }
 
 const StreamControlStateResponseSchema = Schema.Struct(

@@ -8,6 +8,7 @@ import { Cause, Effect, Exit, Layer } from "effect"
 import { handleGetStreamControlConfig } from "./get-config.rpc-handler"
 import { handleGetStreamControlState } from "./get-state.rpc-handler"
 import { createStreamControlService, StreamControl } from "./service"
+import { handleSetBrightness } from "./set-brightness.rpc-handler"
 import { handleSetGamescopeFps } from "./set-gamescope-fps.rpc-handler"
 import { handleSetMoonlightBitrate } from "./set-moonlight-bitrate.rpc-handler"
 
@@ -17,6 +18,7 @@ describe("app.stream-control RPC handlers", () => {
 
     expect(tags).toContain("app.stream-control.config.get")
     expect(tags).toContain("app.stream-control.state.get")
+    expect(tags).toContain("app.stream-control.brightness.set")
     expect(tags).toContain("app.stream-control.moonlight-bitrate.set")
     expect(tags).toContain("app.stream-control.moonlight-fps.set")
     expect(tags).toContain("app.stream-control.moonlight-resolution.set")
@@ -24,6 +26,47 @@ describe("app.stream-control RPC handlers", () => {
     expect(tags).toContain("app.stream-control.gamescope-fps.set")
     expect(tags).toContain("app.stream-control.gamescope-filter.set")
     expect(tags).toContain("app.stream-control.gamescope-sharpness.set")
+  })
+
+  it("applies brightness to every backlight device by percent", async () => {
+    const writes: unknown[] = []
+    const files = new Map([
+      ["/sys/class/backlight/panel-a/max_brightness", "255\n"],
+      ["/sys/class/backlight/panel-a/brightness", "128\n"],
+      ["/sys/class/backlight/panel-b/max_brightness", "4096\n"],
+      ["/sys/class/backlight/panel-b/brightness", "2048\n"],
+    ])
+
+    const response = await Effect.runPromise(
+      handleSetBrightness({ percent: 50 }).pipe(
+        Effect.provide(
+          Layer.succeed(
+            StreamControl,
+            createStreamControlService(
+              {},
+              {
+                readdir: async () => ["panel-a", "panel-b"],
+                readFile: async path => files.get(path) ?? "0\n",
+                writeFile: async (path, content) => {
+                  writes.push({ path, content })
+                  files.set(path, content)
+                },
+              },
+            ),
+          ),
+        ),
+      ),
+    )
+
+    expect(response).toMatchObject({
+      action: "brightness",
+      requested: { percent: 50 },
+      response: { requestedPercent: 50, percent: 50 },
+    })
+    expect(writes).toEqual([
+      { path: "/sys/class/backlight/panel-a/brightness", content: "128\n" },
+      { path: "/sys/class/backlight/panel-b/brightness", content: "2048\n" },
+    ])
   })
 
   it("applies Moonlight bitrate through the typed control service", async () => {
@@ -134,6 +177,8 @@ describe("app.stream-control RPC handlers", () => {
     expect(config).toEqual({
       moonlight: { enabled: true },
       gamescope: { enabled: true },
+      brightness: { enabled: true },
+      battery: { enabled: true },
       artifactDir: "/tmp/evier",
     })
   })
@@ -142,7 +187,10 @@ describe("app.stream-control RPC handlers", () => {
     const state = await Effect.runPromise(
       handleGetStreamControlState({}).pipe(
         Effect.provide(
-          Layer.succeed(StreamControl, createStreamControlService({})),
+          Layer.succeed(
+            StreamControl,
+            createStreamControlService({}, { readdir: async () => [] }),
+          ),
         ),
       ),
     )
@@ -150,6 +198,14 @@ describe("app.stream-control RPC handlers", () => {
     expect(state).toEqual({
       moonlight: { status: "disabled" },
       gamescope: { status: "disabled" },
+      brightness: {
+        status: "error",
+        error: "no backlight devices in /sys/class/backlight",
+      },
+      battery: {
+        status: "error",
+        error: "no power supplies in /sys/class/power_supply",
+      },
     })
   })
 
@@ -165,6 +221,7 @@ describe("app.stream-control RPC handlers", () => {
                 gamescopeSocketPath: "/run/gamescope.sock",
               },
               {
+                readdir: async () => [],
                 connectMoonlight: async () =>
                   ({
                     state: async () => ({ ok: true }),
@@ -183,6 +240,14 @@ describe("app.stream-control RPC handlers", () => {
     expect(state).toEqual({
       moonlight: { status: "ok", response: { ok: true } },
       gamescope: { status: "error", error: "gamescope offline" },
+      brightness: {
+        status: "error",
+        error: "no backlight devices in /sys/class/backlight",
+      },
+      battery: {
+        status: "error",
+        error: "no power supplies in /sys/class/power_supply",
+      },
     })
   })
 })

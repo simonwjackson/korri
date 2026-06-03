@@ -9,6 +9,7 @@ import { ListLibraryRpc as appLibraryList } from "./library/list.rpc"
 import { ListSourceRpc as appSourceList } from "./source/list.rpc"
 import { SourceStatusRpc as appSourceStatus } from "./source/status.rpc"
 import { PrepareStreamRpc as appStreamPrepare } from "./stream/prepare.rpc"
+import { SetBrightnessRpc as appStreamControlBrightnessSet } from "./stream-control/set-brightness.rpc"
 import { GetStreamControlConfigRpc as appStreamControlConfigGet } from "./stream-control/get-config.rpc"
 import { GetStreamControlStateRpc as appStreamControlStateGet } from "./stream-control/get-state.rpc"
 import { SetGamescopeFilterRpc as appStreamControlGamescopeFilterSet } from "./stream-control/set-gamescope-filter.rpc"
@@ -31,6 +32,7 @@ export const appRpcGroup = RpcGroup.make(
   appStreamPrepare,
   appStreamControlConfigGet,
   appStreamControlStateGet,
+  appStreamControlBrightnessSet,
   appStreamControlMoonlightBitrateSet,
   appStreamControlMoonlightFpsSet,
   appStreamControlMoonlightResolutionSet,

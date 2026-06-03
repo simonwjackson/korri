@@ -8,6 +8,7 @@ import { handleListLibrary } from "./library/list.rpc-handler"
 import { handleListSource } from "./source/list.rpc-handler"
 import { handleSourceStatus } from "./source/status.rpc-handler"
 import { handlePrepareStream } from "./stream/prepare.rpc-handler"
+import { handleSetBrightness } from "./stream-control/set-brightness.rpc-handler"
 import { handleGetStreamControlConfig } from "./stream-control/get-config.rpc-handler"
 import { handleGetStreamControlState } from "./stream-control/get-state.rpc-handler"
 import { handleSetGamescopeFilter } from "./stream-control/set-gamescope-filter.rpc-handler"
@@ -31,6 +32,7 @@ export const HandlersLive = appRpcGroup.toLayer(
     "app.stream.prepare": handlePrepareStream,
     "app.stream-control.config.get": handleGetStreamControlConfig,
     "app.stream-control.state.get": handleGetStreamControlState,
+    "app.stream-control.brightness.set": handleSetBrightness,
     "app.stream-control.moonlight-bitrate.set": handleSetMoonlightBitrate,
     "app.stream-control.moonlight-fps.set": handleSetMoonlightFps,
     "app.stream-control.moonlight-resolution.set": handleSetMoonlightResolution,

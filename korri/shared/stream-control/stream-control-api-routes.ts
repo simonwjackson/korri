@@ -142,7 +142,7 @@ export function createStreamControlApiRoutes(
       disabledError: "gamescope socket disabled",
       connect: runtime.connectGamescope,
       action: "gamescope.fps",
-      parse: parseFps,
+      parse: parseGamescopeFps,
       run: (client, data) => client.requestCommand("fps.set", data),
     }),
   )
@@ -357,6 +357,22 @@ function parseFps(body: unknown): ParsedPayload<{ readonly fps: number }> {
   return fps !== undefined && fps >= 30 && fps <= 120
     ? { ok: true, value: { fps } }
     : { ok: false, error: "fps between 30 and 120 required" }
+}
+
+// Gamescope's runtime fps limiter accepts 0 ("no limit") through 240. Keep
+// it separate from the Moonlight client's 30..120 contract so the routes can
+// surface the right error message and don't accidentally tighten Moonlight
+// when the gamescope range widens.
+function parseGamescopeFps(
+  body: unknown,
+): ParsedPayload<{ readonly fps: number }> {
+  const fps = readNumber(body, "fps")
+  return fps !== undefined &&
+    Number.isInteger(fps) &&
+    fps >= 0 &&
+    fps <= 240
+    ? { ok: true, value: { fps } }
+    : { ok: false, error: "fps between 0 and 240 (integer) required" }
 }
 
 function parseResolution(
