@@ -67,6 +67,7 @@ describe("app.stream-control RPC handlers", () => {
     expect(response).toMatchObject({
       action: "brightness",
       requested: { percent: 50 },
+      outcome: { kind: "single", status: "applied" },
       response: { requestedPercent: 50, percent: 50 },
     })
     expect(writes).toEqual([
@@ -98,6 +99,7 @@ describe("app.stream-control RPC handlers", () => {
     expect(response).toMatchObject({
       action: "moonlight.bitrate",
       requested: { bitrateKbps: 12_000 },
+      outcome: { kind: "single", status: "pending" },
     })
     expect(calls).toEqual([
       { socketPath: "/run/moonlight.sock" },
@@ -156,6 +158,7 @@ describe("app.stream-control RPC handlers", () => {
     expect(response).toMatchObject({
       action: "gamescope.fps",
       requested: { fps: 120 },
+      outcome: { kind: "single", status: "pending" },
     })
     expect(calls).toEqual([
       { socketPath: "/run/gamescope.sock" },
@@ -377,6 +380,12 @@ describe("app.stream-control RPC handlers", () => {
     expect(response).toMatchObject({
       action: "linked.fps",
       requested: { fps: 60 },
+      outcome: {
+        kind: "linked",
+        status: "pending",
+        moonlight: { status: "pending" },
+        gamescope: { status: "pending" },
+      },
       response: { status: "pending" },
     })
     expect(calls).toEqual([
@@ -432,6 +441,15 @@ describe("app.stream-control RPC handlers", () => {
     expect(response).toMatchObject({
       action: "linked.fps",
       requested: { fps: 60 },
+      outcome: {
+        kind: "linked",
+        status: "partial",
+        moonlight: { status: "pending" },
+        gamescope: {
+          status: "failed",
+          error: "readback-mismatch: atom stayed at 30",
+        },
+      },
       response: {
         status: "partial",
         moonlight: { status: "pending" },

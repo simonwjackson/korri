@@ -246,9 +246,30 @@ export type StreamControlRequestedPayload = Schema.Schema.Type<
   typeof StreamControlRequestedPayload
 >
 
+const CommandTargetOutcome = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("applied") }),
+  Schema.Struct({ status: Schema.Literal("pending") }),
+  Schema.Struct({ status: Schema.Literal("failed"), error: Schema.String }),
+])
+
+const StreamControlCommandOutcome = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("single"),
+    status: Schema.Literals(["applied", "pending", "failed"]),
+    error: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("linked"),
+    status: Schema.Literals(["applied", "pending", "partial", "failed"]),
+    moonlight: CommandTargetOutcome,
+    gamescope: CommandTargetOutcome,
+  }),
+])
+
 export const StreamControlCommandResponseFields = {
   action: Schema.String,
   requested: StreamControlRequestedPayload,
+  outcome: StreamControlCommandOutcome,
   response: Schema.Unknown,
   diagnosticError: Schema.optional(Schema.String),
 }

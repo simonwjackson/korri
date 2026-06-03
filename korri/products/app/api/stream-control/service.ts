@@ -439,6 +439,24 @@ type LinkedTargetOutcome =
   | { readonly status: "pending"; readonly response: unknown }
   | { readonly status: "failed"; readonly error: string }
 
+type CommandTargetOutcomeData =
+  | { readonly status: "applied" }
+  | { readonly status: "pending" }
+  | { readonly status: "failed"; readonly error: string }
+
+type CommandOutcomeData =
+  | {
+      readonly kind: "single"
+      readonly status: "applied" | "pending" | "failed"
+      readonly error?: string
+    }
+  | {
+      readonly kind: "linked"
+      readonly status: "applied" | "pending" | "partial" | "failed"
+      readonly moonlight: CommandTargetOutcomeData
+      readonly gamescope: CommandTargetOutcomeData
+    }
+
 async function runLinkedMoonlight(
   runtime: Runtime,
   run: (client: MoonlightControlClient) => Promise<unknown>,
@@ -515,6 +533,59 @@ function linkedOverallStatus(
     : "applied"
 }
 
+function commandOutcome(response: unknown): CommandOutcomeData {
+  const linked = linkedCommandOutcome(response)
+  return linked ?? singleCommandOutcome(response)
+}
+
+function singleCommandOutcome(response: unknown): CommandOutcomeData {
+  const target = commandTargetOutcome(response)
+  return target.status === "failed"
+    ? { kind: "single", status: "failed", error: target.error }
+    : { kind: "single", status: target.status }
+}
+
+function linkedCommandOutcome(
+  response: unknown,
+): Extract<CommandOutcomeData, { readonly kind: "linked" }> | undefined {
+  if (!isRecord(response)) return undefined
+  const moonlight = targetOutcomeData(response.moonlight)
+  const gamescope = targetOutcomeData(response.gamescope)
+  if (!moonlight || !gamescope) return undefined
+  const status = response.status
+  return {
+    kind: "linked",
+    status:
+      status === "applied" ||
+      status === "pending" ||
+      status === "partial" ||
+      status === "failed"
+        ? status
+        : linkedOverallStatus([moonlight, gamescope]),
+    moonlight,
+    gamescope,
+  }
+}
+
+function targetOutcomeData(
+  value: unknown,
+): (CommandTargetOutcomeData & LinkedTargetOutcome) | undefined {
+  if (!isRecord(value)) return undefined
+  if (value.status === "failed") {
+    return {
+      status: "failed",
+      error: typeof value.error === "string" ? value.error : "failed",
+    }
+  }
+  if (value.status === "pending") {
+    return { status: "pending", response: value.response }
+  }
+  if (value.status === "applied") {
+    return { status: "applied", response: value.response }
+  }
+  return undefined
+}
+
 function runSocketAction<TClient>(input: {
   readonly socketPath: string | undefined
   readonly disabledError: string
@@ -560,7 +631,12 @@ async function recordCommandOutcome(
   },
   response: unknown,
 ): Promise<StreamControlCommandResponseData> {
-  const result = { action: input.action, requested: input.requested, response }
+  const result = {
+    action: input.action,
+    requested: input.requested,
+    outcome: commandOutcome(response),
+    response,
+  }
   try {
     await input.record(result)
     return result
