@@ -1,5 +1,4 @@
 import { appendFile, mkdir } from "node:fs/promises"
-import { join } from "node:path"
 import { DataError, ValidationError } from "@shared/api/rpc/errors"
 import {
   connectGamescopeControl,
@@ -12,6 +11,14 @@ import {
 } from "@shared/stream/moonlight-control-client"
 import { MOONLIGHT_CONTROL_PROTOCOL_LIMITS } from "@shared/stream/moonlight-control-protocol"
 import { streamControlCapabilities } from "@shared/stream-control/control-contract"
+import {
+  closeClient,
+  createStreamControlEventRecorder,
+  errorMessage,
+  isRecord,
+  readControlState,
+  recordStateSnapshot,
+} from "@shared/stream-control/runtime-support"
 import {
   normalizeGamescopeState,
   normalizeMoonlightState,
@@ -262,7 +269,6 @@ function createRuntime(
   const now = deps.now ?? (() => new Date())
   const mkdirImpl = deps.mkdir ?? mkdir
   const appendFileImpl = deps.appendFile ?? appendFile
-  const artifactDir = options.artifactDir
   const deviceControl = createDeviceControlService(
     {
       backlightDir: options.backlightDir,
@@ -274,7 +280,6 @@ function createRuntime(
       writeFile: deps.writeFile,
     },
   )
-  let artifactDirReady: Promise<unknown> | undefined
 
   return {
     options,
@@ -285,20 +290,12 @@ function createRuntime(
       deps.connectGamescope ??
       ((socketPath: string) => connectGamescopeControl({ socketPath })),
     deviceControl,
-    record: async event => {
-      if (!artifactDir) return
-      artifactDirReady ??= mkdirImpl(artifactDir, { recursive: true }).catch(
-        error => {
-          artifactDirReady = undefined
-          throw error
-        },
-      )
-      await artifactDirReady
-      await appendFileImpl(
-        join(artifactDir, "events.jsonl"),
-        `${JSON.stringify({ ts: now().toISOString(), ...asRecord(event) })}\n`,
-      )
-    },
+    record: createStreamControlEventRecorder({
+      artifactDir: options.artifactDir,
+      mkdir: mkdirImpl,
+      appendFile: appendFileImpl,
+      now,
+    }),
   }
 }
 
@@ -669,38 +666,6 @@ async function readState(
   return result
 }
 
-async function recordStateSnapshot(
-  record: (event: unknown) => Promise<void>,
-  result: StreamControlStateResponseData,
-): Promise<void> {
-  try {
-    await record({ action: "state.snapshot", ...result })
-  } catch {
-    return
-  }
-}
-
-async function readControlState<TClient, TReadback>(
-  socketPath: string | undefined,
-  connect: (socketPath: string) => Promise<TClient>,
-  snapshot: (client: TClient) => Promise<unknown>,
-  normalize: (snapshot: unknown) => TReadback,
-) {
-  if (!socketPath) return { status: "disabled" as const }
-  let client: TClient | undefined
-  try {
-    client = await connect(socketPath)
-    return {
-      status: "ok" as const,
-      readback: normalize(await snapshot(client)),
-    }
-  } catch (error) {
-    return { status: "error" as const, error: errorMessage(error) }
-  } finally {
-    closeClient(client)
-  }
-}
-
 async function readBrightnessState(runtime: Runtime) {
   try {
     return {
@@ -798,22 +763,4 @@ function validateBacklightDeviceName(
   return device.length > 0 && !device.includes("/") && !device.includes("..")
     ? Effect.void
     : Effect.fail(new ValidationError({ message: "invalid backlight device" }))
-}
-
-function closeClient(client: unknown): void {
-  if (isRecord(client) && typeof client.close === "function") client.close()
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return isRecord(value) ? value : { value }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  if (isRecord(error) && typeof error.message === "string") return error.message
-  return String(error)
 }

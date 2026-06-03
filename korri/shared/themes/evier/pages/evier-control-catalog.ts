@@ -1,4 +1,3 @@
-import type { ScheduledAction } from "./evier-control-state"
 import {
   type ControlReadback,
   FPS_STEPS,
@@ -7,6 +6,7 @@ import {
   RESOLUTION_STEPS,
   type UnifiedReadback,
 } from "@shared/stream-control/control-surface"
+import type { ScheduledAction } from "./evier-control-state"
 
 export interface SliderSpec {
   readonly id: string

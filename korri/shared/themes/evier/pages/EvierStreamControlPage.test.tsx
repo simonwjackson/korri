@@ -8,8 +8,8 @@ import {
   waitFor,
 } from "@testing-library/react"
 import {
-  type StreamControlClient,
   EvierStreamControlPage,
+  type StreamControlClient,
 } from "./EvierStreamControlPage"
 
 afterEach(() => {

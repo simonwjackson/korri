@@ -72,11 +72,7 @@ export interface StreamControlAvailability {
   readonly battery: boolean
 }
 
-export interface StreamControlControlsResponseData {
-  readonly controls: readonly StreamControlCapability[]
-}
-
-export const STREAM_CONTROL_DEFINITIONS: readonly StreamControlDefinition[] = [
+const STREAM_CONTROL_DEFINITIONS: readonly StreamControlDefinition[] = [
   {
     id: "linked.resolution",
     subsystem: "linked",
@@ -169,7 +165,7 @@ export const STREAM_CONTROL_DEFINITIONS: readonly StreamControlDefinition[] = [
 
 export function streamControlCapabilities(
   availability: StreamControlAvailability,
-): StreamControlControlsResponseData {
+): { readonly controls: readonly StreamControlCapability[] } {
   return {
     controls: STREAM_CONTROL_DEFINITIONS.map(definition => ({
       ...definition,

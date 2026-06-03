@@ -1,10 +1,5 @@
 import type { GamescopeScalingFilter } from "@shared/gamescope-control/gamescope-control-protocol"
-import {
-  FPS_STEPS,
-  GAMESCOPE_FPS_STEPS,
-  LINKED_FPS_STEPS,
-  RESOLUTION_STEPS,
-} from "@shared/stream-control/control-contract"
+import { RESOLUTION_STEPS } from "@shared/stream-control/control-contract"
 
 export {
   FPS_STEPS,

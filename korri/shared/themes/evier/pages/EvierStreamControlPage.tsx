@@ -1,4 +1,10 @@
 import type { GamescopeScalingFilter } from "@shared/gamescope-control/gamescope-control-protocol"
+import {
+  FPS_STEPS,
+  GAMESCOPE_FPS_STEPS,
+  LINKED_FPS_STEPS,
+  type StreamControlSurfaceState,
+} from "@shared/stream-control/control-surface"
 import type { StreamControlClient } from "@shared/stream-control/stream-control-client"
 import { useState } from "react"
 import {
@@ -23,12 +29,6 @@ import {
   type ScheduledAction,
   useEvierControlState,
 } from "./evier-control-state"
-import {
-  type StreamControlSurfaceState,
-  FPS_STEPS,
-  GAMESCOPE_FPS_STEPS,
-  LINKED_FPS_STEPS,
-} from "@shared/stream-control/control-surface"
 
 export type { StreamControlClient } from "@shared/stream-control/stream-control-client"
 

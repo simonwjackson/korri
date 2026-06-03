@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test"
 import {
-  StreamControlSurface,
   FPS_STEPS,
   GAMESCOPE_FPS_STEPS,
   LINKED_FPS_STEPS,
   RESOLUTION_STEPS,
+  StreamControlSurface,
 } from "@shared/stream-control/control-surface"
 
 describe("StreamControlSurface", () => {
