@@ -29,7 +29,7 @@ let
   # Stand-in for the real korri-desktop client package. Sessiond's
   # renderer-launch path resolves the binary by the hardcoded name
   # `korri-desktop-device` (see DEFAULT_ELECTROBUN_EXECUTABLE in
-  # tools/device/sessiond-electrobun.ts) and asserts the resolved
+  # product/services/device/sessiond-electrobun.ts) and asserts the resolved
   # path lives under /nix/store, so a writeShellApplication with the
   # right binary name satisfies both shapes. The real renderer also
   # writes KORRI_DESKTOP_STATUS_FILE before sessiond considers it

@@ -61,9 +61,9 @@ pkgs.stdenv.mkDerivation {
       fi
     done
 
-    bun build tools/device/korri-server.ts --target=bun --outfile=korri-server.js
-    bun build tools/http/server.ts --target=bun --outfile=korri-api.js
-    bun build tools/device/lan-stream-advertise-cli.ts --target=bun --outfile=korri-lan-stream-advertise.js
+    bun build product/services/device/korri-server.ts --target=bun --outfile=korri-server.js
+    bun build product/services/server/http/server.ts --target=bun --outfile=korri-api.js
+    bun build product/services/device/lan-stream-advertise-cli.ts --target=bun --outfile=korri-lan-stream-advertise.js
 
     runHook postBuild
   '';

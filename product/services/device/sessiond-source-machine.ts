@@ -94,7 +94,7 @@ export function evaluateIdleBlank(
  * Phase 4D / Track A. Foreground surface repair callback invoked by
  * the role's `afterChildRunning` hook once sessiond observes the
  * primary child is running. Production wires this to
- * `repairStreamSurface` from `tools/device/game-stream-fullscreen.ts`
+ * `repairStreamSurface` from `product/services/device/game-stream-fullscreen.ts`
  * (the same repair logic the runner used to own before the
  * generalization). Throwing is mapped by sessiond to
  * `child-exited` with `failureKind: "host-unavailable"`.

@@ -9,7 +9,7 @@ import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
 import { createLibraryRepository } from "@shared/library/proseql/library-repository"
 import { Cause, Effect, Exit } from "effect"
 
-import { decodeLaunchIntent } from "../../../../../tools/device/game-stream-launch-intent"
+import { decodeLaunchIntent } from "../../../../../product/services/device/game-stream-launch-intent"
 import { handlePrepareStream } from "./prepare.rpc-handler"
 
 const originalEnv = {

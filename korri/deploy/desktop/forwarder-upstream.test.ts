@@ -3,7 +3,7 @@ import type { Service } from "bonjour-service"
 import type {
   BonjourLike,
   BrowserLike,
-} from "../../../tools/cli/lan-stream-discovery"
+} from "../../../product/apps/cli/lan-stream-discovery"
 import { makeForwarderUpstream } from "./forwarder-upstream"
 
 describe("ForwarderUpstream", () => {

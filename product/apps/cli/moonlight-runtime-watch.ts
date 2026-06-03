@@ -25,7 +25,9 @@ import {
   type MoonlightRuntimeWatchScenario,
   type MoonlightRuntimeWatchTerminalResult,
 } from "@shared/stream/moonlight-runtime-watch-artifact"
-import { runtimeWatchArtifactPath } from "../artifacts/paths"
+
+const runtimeWatchArtifactPath =
+  "out/artifacts/moonlight-runtime-watch" as const
 
 const DEFAULT_TIMEOUT_MS = 5000
 

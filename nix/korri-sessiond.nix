@@ -43,7 +43,7 @@ pkgs.stdenv.mkDerivation {
     export HOME="$TMPDIR/home"
     mkdir -p "$HOME"
 
-    bun build tools/device/sessiond.ts --target=bun --outfile=korri-sessiond.js
+    bun build product/services/device/sessiond.ts --target=bun --outfile=korri-sessiond.js
 
     runHook postBuild
   '';

@@ -69,7 +69,7 @@ export default defineConfig({
           command: [
             `PORT=${apiPort}`,
             "NODE_ENV=development",
-            `bun x tsx --tsconfig ${PROJECT_ROOT}/tsconfig.server.json ${PROJECT_ROOT}/tools/http/server.ts`,
+            `bun x tsx --tsconfig ${PROJECT_ROOT}/tsconfig.server.json ${PROJECT_ROOT}/product/services/server/http/server.ts`,
           ].join(" "),
           port: apiPort,
           cwd: PROJECT_ROOT,

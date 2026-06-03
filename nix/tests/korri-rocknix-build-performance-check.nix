@@ -68,40 +68,48 @@ pkgs.runCommand "korri-rocknix-build-performance-check"
 
     test -e ${runtimeSources.desktop}/electrobun.config.ts
     test -e ${runtimeSources.desktop}/korri/deploy/desktop
-    test -e ${runtimeSources.desktop}/tools/cli
+    test -e ${runtimeSources.desktop}/product/apps/cli
+    test ! -e ${runtimeSources.desktop}/tools/cli
     test ! -e ${runtimeSources.desktop}/tools/testing
     test ! -e ${runtimeSources.desktop}/korri/deploy/storybook
 
-    test -e ${runtimeSources.inputd}/tools/device
+    test -e ${runtimeSources.inputd}/product/services/device
     test -e ${runtimeSources.inputd}/tools/types
     test -e ${runtimeSources.inputd}/korri/products
+    test ! -e ${runtimeSources.inputd}/tools/device
     test ! -e ${runtimeSources.inputd}/tools/testing
     test ! -e ${runtimeSources.inputd}/tools/playwright
 
-    test -e ${runtimeSources.gameStream}/tools/device
-    test -e ${runtimeSources.gameStream}/tools/http
+    test -e ${runtimeSources.gameStream}/product/services/device
     test -e ${runtimeSources.gameStream}/korri/products
+    test ! -e ${runtimeSources.gameStream}/tools/device
+    test ! -e ${runtimeSources.gameStream}/tools/http
     test ! -e ${runtimeSources.gameStream}/tools/types
     test ! -e ${runtimeSources.gameStream}/tools/testing
     test ! -e ${runtimeSources.gameStream}/tools/playwright
 
-    test -e ${runtimeSources.sessiond}/tools/device
+    test -e ${runtimeSources.sessiond}/product/services/device
     test -e ${runtimeSources.sessiond}/tools/library
     test -e ${runtimeSources.sessiond}/korri/shared
+    test ! -e ${runtimeSources.sessiond}/tools/device
     test ! -e ${runtimeSources.sessiond}/tools/types
     test ! -e ${runtimeSources.sessiond}/tools/testing
     test ! -e ${runtimeSources.sessiond}/tools/playwright
 
-    test -e ${runtimeSources.server}/tools/device
-    test -e ${runtimeSources.server}/tools/http
+    test -e ${runtimeSources.server}/product/services/device
+    test -e ${runtimeSources.server}/product/services/server
     test -e ${runtimeSources.server}/korri/shared
+    test ! -e ${runtimeSources.server}/tools/device
+    test ! -e ${runtimeSources.server}/tools/http
     test ! -e ${runtimeSources.server}/tools/types
     test ! -e ${runtimeSources.server}/tools/testing
     test ! -e ${runtimeSources.server}/tools/playwright
     test ! -e ${runtimeSources.server}/tools/generators
 
-    test -e ${runtimeSources.cli}/tools/cli
-    test -e ${runtimeSources.cli}/tools/device
+    test -e ${runtimeSources.cli}/product/apps/cli
+    test -e ${runtimeSources.cli}/product/services/device
+    test ! -e ${runtimeSources.cli}/tools/cli
+    test ! -e ${runtimeSources.cli}/tools/device
     test ! -e ${runtimeSources.cli}/tools/testing
     test ! -e ${runtimeSources.cli}/tools/playwright
 

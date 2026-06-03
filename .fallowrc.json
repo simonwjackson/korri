@@ -5,12 +5,14 @@
 		"korri/deploy/portal/main.tsx",
 		"korri/deploy/desktop/main.ts",
 		"korri/deploy/storybook/main.ts",
-		"tools/http/server.ts",
+		"product/apps/cli/**/*.ts",
+		"product/services/**/*.ts",
 		"tools/scripts/**/*.ts",
 		"tools/generators/**/*.ts",
 		"tools/desktop/**/*.ts",
 		"tools/device/**/*.ts",
-		"tools/nix/**/*.ts"
+		"tools/nix/**/*.ts",
+		"tools/playwright/**/*.ts"
 	],
 	"ignorePatterns": [
 		"old-ui/**",
@@ -67,15 +69,41 @@
 			},
 			{ "name": "deploy", "patterns": ["korri/deploy/**"] },
 			{ "name": "app", "patterns": ["korri/products/app/**"] },
+			{ "name": "product-apps", "patterns": ["product/apps/**"] },
+			{ "name": "product-services", "patterns": ["product/services/**"] },
 			{ "name": "shared", "patterns": ["korri/shared/**"] },
 			{ "name": "repo-tools", "patterns": ["tools/**"] }
 		],
 		"rules": [
-			{ "from": "tests", "allow": ["app", "shared", "repo-tools", "deploy"] },
-			{ "from": "deploy", "allow": ["app", "shared"] },
-			{ "from": "app", "allow": ["shared"] },
+			{
+				"from": "tests",
+				"allow": [
+					"app",
+					"shared",
+					"repo-tools",
+					"deploy",
+					"product-apps",
+					"product-services"
+				]
+			},
+			{ "from": "deploy", "allow": ["app", "shared", "product-apps"] },
+			{
+				"from": "app",
+				"allow": ["shared", "product-apps", "product-services"]
+			},
+			{
+				"from": "product-apps",
+				"allow": ["app", "shared", "product-services"]
+			},
+			{
+				"from": "product-services",
+				"allow": ["app", "shared", "product-apps"]
+			},
 			{ "from": "shared", "allow": [] },
-			{ "from": "repo-tools", "allow": ["app", "shared", "deploy"] }
+			{
+				"from": "repo-tools",
+				"allow": ["app", "shared", "deploy", "product-apps", "product-services"]
+			}
 		]
 	}
 }

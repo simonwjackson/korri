@@ -17,7 +17,7 @@ import {
 } from "@shared/library/library-services"
 import { logger } from "@shared/logger/logger"
 import { Effect } from "effect"
-import { composeGamescopeLaunchSpec } from "../../../../../tools/device/game-stream-fullscreen"
+import { composeGamescopeLaunchSpec } from "../../../../../product/services/device/game-stream-fullscreen"
 
 import {
   composeMoonlightLaunchSpec,

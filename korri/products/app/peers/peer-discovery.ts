@@ -25,12 +25,12 @@ import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect"
 import {
   type BonjourLike,
   watchStreamHosts,
-} from "../../../../tools/cli/lan-stream-discovery"
+} from "../../../../product/apps/cli/lan-stream-discovery"
 
 export type {
   BonjourLike,
   BrowserLike,
-} from "../../../../tools/cli/lan-stream-discovery"
+} from "../../../../product/apps/cli/lan-stream-discovery"
 
 export interface PeerRecord {
   readonly hostId: string
@@ -99,7 +99,7 @@ export function makePeerDiscoveryLayer(
 
 function applyEvent(
   prev: ReadonlyMap<string, PeerRecord>,
-  event: import("../../../../tools/cli/lan-stream-discovery").StreamHostEvent,
+  event: import("../../../../product/apps/cli/lan-stream-discovery").StreamHostEvent,
   localHostId: string | undefined,
 ): ReadonlyMap<string, PeerRecord> {
   if (event.kind === "disappear") {

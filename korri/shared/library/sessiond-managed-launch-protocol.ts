@@ -7,7 +7,7 @@ import { LaunchFailureKind, LaunchSpec } from "./launcher"
  * These schemas describe the HTTP/SSE wire contract between Korri
  * clients (à la `session-launcher.ts`, `status.rpc-handler.ts`,
  * `foreground-session-status-layer-live.ts`) and sessiond's
- * managed-launch endpoints (`tools/device/sessiond.ts`). All decoders
+ * managed-launch endpoints (`product/services/device/sessiond.ts`). All decoders
  * on the consumer side run under `STRICT_DECODE`
  * (`onExcessProperty: "error"`), which catches typos and version skew
  * during development. The strict default has a consequence: the

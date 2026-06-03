@@ -7,5 +7,5 @@
 		"allowImportingTsExtensions": false
 	},
 	"include": [],
-	"files": ["tools/http/server.ts"]
+	"files": ["product/services/server/http/server.ts"]
 }

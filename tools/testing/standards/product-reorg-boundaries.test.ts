@@ -21,17 +21,7 @@ const FRAMEWORK_NEUTRAL_PLATFORM_ROOTS = [
   join(REPO_ROOT, "product", "platform", "ui"),
 ]
 
-const SHIPPED_TOOLS_ALLOWLIST = new Set([
-  "tools/http/server.ts",
-  "tools/device/korri-server.ts",
-  "tools/device/sessiond.ts",
-  "tools/device/inputd.ts",
-  "tools/device/game-stream-runner.ts",
-  "tools/device/lan-stream-advertise-cli.ts",
-  "tools/cli/korri-cli.ts",
-  "tools/cli/gamescope-control.ts",
-  "tools/cli/gamescope-control-bridge.ts",
-])
+const SHIPPED_TOOLS_ALLOWLIST = new Set<string>()
 
 const CURRENT_ALIAS_PATH_INVENTORY = {
   "@app/*": "./korri/products/app/*",
@@ -153,7 +143,7 @@ describe("standards: product platform reorganization guardrails", () => {
     expect(importsReact('import { Effect } from "effect"')).toBe(false)
   })
 
-  it("keeps the shipped-tools inventory explicit until runtime entrypoints move", () => {
+  it("keeps shipped runtime entrypoints out of developer-only tools", () => {
     const referenced = buildReferencedToolEntrypoints()
     const missingFromAllowlist = referenced.filter(
       path => !SHIPPED_TOOLS_ALLOWLIST.has(path),

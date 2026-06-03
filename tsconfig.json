@@ -18,7 +18,13 @@
 		"skipLibCheck": true,
 		"types": ["react", "react-dom", "node", "bun"]
 	},
-	"include": ["electrobun.config.ts", "korri/**/*", "tools/**/*", "scripts/**/*"],
+	"include": [
+		"electrobun.config.ts",
+		"korri/**/*",
+		"product/**/*",
+		"tools/**/*",
+		"scripts/**/*"
+	],
 	"exclude": [
 		"node_modules",
 		"korri/deploy/portal/routeTree.gen.ts",

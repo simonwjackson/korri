@@ -43,7 +43,7 @@ pkgs.stdenv.mkDerivation {
     export HOME="$TMPDIR/home"
     mkdir -p "$HOME"
 
-    bun build tools/device/inputd.ts --target=bun --outfile=korri-inputd.js
+    bun build product/services/device/inputd.ts --target=bun --outfile=korri-inputd.js
 
     runHook postBuild
   '';

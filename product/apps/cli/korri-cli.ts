@@ -7,7 +7,7 @@ import { Argument, Command, Flag } from "effect/unstable/cli"
 import {
   createFileGameStreamLaunchIntentStore,
   defaultGameStreamIntentPath,
-} from "../device/game-stream-launch-intent"
+} from "../../services/device/game-stream-launch-intent"
 import { createEffectGamePicker } from "./game-picker"
 import { runRemoteStreamLaunchCommand } from "./remote-stream-launch"
 import { runSourceAwarePlayCommand } from "./source-aware-play"

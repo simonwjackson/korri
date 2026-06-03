@@ -11,11 +11,11 @@ import {
 } from "@shared/library/library-services"
 import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
 import { Effect } from "effect"
+import { withTempProseqlLibrary } from "../../../tools/testing/library/with-temp-proseql-library"
 import {
   createFileGameStreamLaunchIntentStore,
   decodeLaunchIntent,
-} from "../device/game-stream-launch-intent"
-import { withTempProseqlLibrary } from "../testing/library/with-temp-proseql-library"
+} from "../../services/device/game-stream-launch-intent"
 import { createStaticGamePicker } from "./game-picker"
 import {
   prepareStreamLaunch,

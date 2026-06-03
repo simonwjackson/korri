@@ -325,7 +325,7 @@ export async function runDemoVideo(
           "tsx",
           "--tsconfig",
           "tsconfig.server.json",
-          "tools/http/server.ts",
+          "product/services/server/http/server.ts",
         ],
         {
           ...plan.stackEnv,

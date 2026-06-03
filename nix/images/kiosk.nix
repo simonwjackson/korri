@@ -16,7 +16,7 @@ let
   # inherits sessiond's process environment when spawned via the
   # in-process runner, so the renderer-side identity has to live on
   # sessiond's unit env, not the compositor's. See
-  # tools/device/sessiond-electrobun.ts buildElectrobunCommand: HOME
+  # product/services/device/sessiond-electrobun.ts buildElectrobunCommand: HOME
   # and XDG_STATE_HOME are read from the parent env to derive the
   # Electrobun state root; KORRI_KIOSK and the inputd URLs are read
   # directly by the renderer at startup.
@@ -163,7 +163,7 @@ in
     # sessiond's HTTP surface.
     sharedGroup = "korri-server";
     # Sessiond spawns the foreground app via the in-process shell
-    # launcher (createShellLauncher inside tools/device/sessiond.ts),
+    # launcher (createShellLauncher inside product/services/device/sessiond.ts),
     # which inherits this unit's PATH when it spawns. Anything the
     # default-gamescope launch path needs to find by name has to be
     # listed here:

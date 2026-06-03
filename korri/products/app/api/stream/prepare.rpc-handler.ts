@@ -12,7 +12,7 @@ import { Effect } from "effect"
 import {
   createFileGameStreamLaunchIntentStore,
   createLaunchIntent,
-} from "../../../../../tools/device/game-stream-launch-intent"
+} from "../../../../../product/services/device/game-stream-launch-intent"
 import { isStreamControlEnabled } from "./control-mode"
 import { type PrepareStreamPayload, PrepareStreamResponse } from "./prepare.rpc"
 

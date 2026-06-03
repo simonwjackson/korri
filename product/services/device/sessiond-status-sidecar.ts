@@ -1,7 +1,7 @@
 /**
  * Status sidecar for the source-machine role.
  *
- * Mirrors the JSON shape `tools/device/game-stream-runner.ts` writes to
+ * Mirrors the JSON shape `product/services/device/game-stream-runner.ts` writes to
  * `KORRI_GAME_STREAM_STATUS_PATH` so existing operator tooling and the
  * `app.server.status` fallback path keep working independently of the
  * Phase 4C runner refactor (U5). Kiosk role does not use this — the

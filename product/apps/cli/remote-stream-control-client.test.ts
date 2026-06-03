@@ -4,9 +4,9 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createHonoApp } from "@app/api/hono-app"
 import { serverRpcHandler } from "@app/api/server/rpc-server"
-import { decodeLaunchIntent } from "../device/game-stream-launch-intent"
-import { withRpcServer } from "../testing/library/with-rpc-server"
-import { withTempProseqlLibrary } from "../testing/library/with-temp-proseql-library"
+import { withRpcServer } from "../../../tools/testing/library/with-rpc-server"
+import { withTempProseqlLibrary } from "../../../tools/testing/library/with-temp-proseql-library"
+import { decodeLaunchIntent } from "../../services/device/game-stream-launch-intent"
 import { createRemoteStreamControlClient } from "./remote-stream-control-client"
 
 const originalLocation = {

@@ -354,9 +354,7 @@
             sharedRuntime = [ ./korri/shared ];
             deviceRuntime = [
               ./korri/products
-              ./tools/cli
-              ./tools/device
-              ./tools/http
+              ./product/services/device
               ./tools/library
             ]
             ++ sharedRuntime;
@@ -376,15 +374,15 @@
               [
                 ./electrobun.config.ts
                 ./korri/deploy/desktop
-                ./tools/cli
+                ./product/apps/cli
               ]
               ++ sharedRuntime
             );
             inputd = mkSource (deviceRuntime ++ [ ./tools/types ]);
             gameStream = mkSource deviceRuntime;
             sessiond = mkSource deviceRuntime;
-            cli = mkSource ([ ./tools/cli ] ++ deviceRuntime);
-            server = mkSource deviceRuntime;
+            cli = mkSource ([ ./product/apps/cli ] ++ deviceRuntime);
+            server = mkSource ([ ./product/services/server ] ++ deviceRuntime);
           };
 
         # Single portal build for every desktop variant. The native input-bridge

@@ -5,9 +5,9 @@
  * `nix run nixpkgs#moonlight-embedded`, and returns a structured result. The runner is swappable (`CommandRunner`)
  * so tests and the desktop’s bun-side bridge can intercept the spawn.
  *
- * Originally lived in `tools/cli/`; promoted to `@app/stream/` so the
+ * Originally lived in `product/apps/cli/`; promoted to `@app/stream/` so the
  * desktop’s launch bridge can call it from the bun process without
- * depending on CLI code. The `tools/cli/moonlight-launcher.ts` file is
+ * depending on CLI code. The `product/apps/cli/moonlight-launcher.ts` file is
  * a re-export shim during the migration window.
  */
 import { randomUUID } from "node:crypto"

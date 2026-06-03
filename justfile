@@ -15,7 +15,7 @@ dev-web port="${PORTAL_PORT:-3000}" api_port="${API_PORT:-3001}":
 
 # Start the local API server.
 dev-api port="${API_PORT:-3001}":
-  PORT={{port}} NODE_ENV=development bun x tsx --tsconfig tsconfig.server.json tools/http/server.ts
+  PORT={{port}} NODE_ENV=development bun x tsx --tsconfig tsconfig.server.json product/services/server/http/server.ts
 
 # Start Playwright UI over ephemeral HTTPS against an existing dev stack.
 dev-playwright port="${PW_PORT:-9876}" portal_port="${PORTAL_PORT:-3000}" api_port="${API_PORT:-3001}" host="${APP_HOST:-localhost}":
@@ -81,7 +81,7 @@ test-unit:
 # Uses bunfig.coverage.toml because bun 1.3.3 silently ignores the
 # CLI --coverage flag when `coverage = false` is set in bunfig.toml.
 # Defaults to the full suite; pass arguments for a specific slice,
-# e.g. `just test-coverage tools/device/sessiond-state.test.ts`.
+# e.g. `just test-coverage product/services/device/sessiond-state.test.ts`.
 test-coverage *args:
   mkdir -p out/coverage
   bun --config=bunfig.coverage.toml test {{args}}
@@ -94,17 +94,17 @@ test-coverage *args:
 test-coverage-sessiond:
   mkdir -p out/coverage
   bun --config=bunfig.coverage.toml test \
-    tools/device/sessiond.test.ts \
-    tools/device/sessiond-state.test.ts \
-    tools/device/sessiond-role.test.ts \
-    tools/device/sessiond-source-machine.test.ts \
-    tools/device/sessiond-electrobun.test.ts \
-    tools/device/sessiond-gamescope-reaper.test.ts \
-    tools/device/sessiond-launcher-client.test.ts \
-    tools/device/sessiond-renderer.test.ts \
-    tools/device/sessiond-status-sidecar.test.ts \
-    tools/device/sessiond-sway.test.ts \
-    tools/device/sessiond-smoke.test.ts \
+    product/services/device/sessiond.test.ts \
+    product/services/device/sessiond-state.test.ts \
+    product/services/device/sessiond-role.test.ts \
+    product/services/device/sessiond-source-machine.test.ts \
+    product/services/device/sessiond-electrobun.test.ts \
+    product/services/device/sessiond-gamescope-reaper.test.ts \
+    product/services/device/sessiond-launcher-client.test.ts \
+    product/services/device/sessiond-renderer.test.ts \
+    product/services/device/sessiond-status-sidecar.test.ts \
+    product/services/device/sessiond-sway.test.ts \
+    product/services/device/sessiond-smoke.test.ts \
     korri/shared/library/session-launcher.test.ts \
     korri/shared/library/sessiond-managed-launch-protocol.test.ts \
     korri/shared/library/launcher.test.ts \
@@ -215,7 +215,7 @@ lint: lint-biome fallow-audit
 
 # Run Biome checks.
 lint-biome:
-  biome check tools korri
+  biome check product tools korri
 
 # Run Fallow codebase intelligence. Pass subcommands or flags after the recipe name.
 fallow *args:
@@ -259,7 +259,7 @@ bun-build-log-summary log:
 
 # Format source files.
 format:
-  biome format --write tools korri
+  biome format --write product tools korri
 
 # Run the standard validation suite.
 check: validate-router lint typecheck test-unit test-nix check-bdd check-bun-deps

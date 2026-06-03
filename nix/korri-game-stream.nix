@@ -43,7 +43,7 @@ pkgs.stdenv.mkDerivation {
     export HOME="$TMPDIR/home"
     mkdir -p "$HOME"
 
-    bun build tools/device/game-stream-runner.ts --target=bun --outfile=korri-game-stream-runner.js
+    bun build product/services/device/game-stream-runner.ts --target=bun --outfile=korri-game-stream-runner.js
 
     runHook postBuild
   '';

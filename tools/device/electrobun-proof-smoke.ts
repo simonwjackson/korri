@@ -1,6 +1,9 @@
 import { readFile } from "node:fs/promises"
-import { defaultElectrobunStatusFile } from "./sessiond-electrobun"
-import { findKorriWindows, type SwayNode } from "./sessiond-sway"
+import { defaultElectrobunStatusFile } from "../../product/services/device/sessiond-electrobun"
+import {
+  findKorriWindows,
+  type SwayNode,
+} from "../../product/services/device/sessiond-sway"
 
 export interface ElectrobunProofStatus {
   readonly url: string

@@ -43,9 +43,9 @@ pkgs.stdenv.mkDerivation {
     export HOME="$TMPDIR/home"
     mkdir -p "$HOME"
 
-    bun build tools/cli/gamescope-control.ts --target=bun --outfile=gamescope-control.js
-    bun build tools/cli/gamescope-control-bridge.ts --target=bun --outfile=gamescope-control-bridge.js
-    bun build tools/cli/stream-control-bench.ts --target=bun --outfile=stream-control-bench.js
+    bun build product/apps/cli/gamescope-control.ts --target=bun --outfile=gamescope-control.js
+    bun build product/apps/cli/gamescope-control-bridge.ts --target=bun --outfile=gamescope-control-bridge.js
+    bun build product/apps/cli/stream-control-bench.ts --target=bun --outfile=stream-control-bench.js
 
     runHook postBuild
   '';

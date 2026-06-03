@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
 import { Effect } from "effect"
-import { decodeLaunchIntent } from "../../../../../tools/device/game-stream-launch-intent"
+import { decodeLaunchIntent } from "../../../../../product/services/device/game-stream-launch-intent"
 import { withTempProseqlLibrary } from "../../../../../tools/testing/library/with-temp-proseql-library"
 import { handleServerPrepareStream } from "./prepare.rpc-handler"
 
