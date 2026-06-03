@@ -92,7 +92,9 @@ function resolutionReadback(
   return width === undefined || height === undefined ? null : { width, height }
 }
 
-function rpcResult(response: unknown): Record<string, unknown> | undefined {
+export function rpcResult(
+  response: unknown,
+): Record<string, unknown> | undefined {
   if (!isRecord(response)) return undefined
   const result = response.result
   return isRecord(result) ? result : undefined

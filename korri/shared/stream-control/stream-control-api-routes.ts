@@ -395,9 +395,5 @@ function readNumber(body: unknown, key: string): number | undefined {
 }
 
 function readFilter(body: unknown): GamescopeScalingFilter | undefined {
-  return isRecord(body) ? readFilterValue(body.filter) : undefined
-}
-
-function readFilterValue(value: unknown): GamescopeScalingFilter | undefined {
-  return readGamescopeScalingFilter(value)
+  return isRecord(body) ? readGamescopeScalingFilter(body.filter) : undefined
 }

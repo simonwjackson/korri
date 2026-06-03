@@ -238,6 +238,34 @@ describe("app.stream-control RPC handlers", () => {
         unavailableReason: "gamescope disabled",
       }),
     )
+    expect(controls.controls).toContainEqual(
+      expect.objectContaining({
+        id: "gamescope.fps",
+        status: "unsupported",
+        unavailableReason: "gamescope disabled",
+      }),
+    )
+
+    const withoutMoonlight = await Effect.runPromise(
+      handleGetStreamControlControls({}).pipe(
+        Effect.provide(
+          Layer.succeed(
+            StreamControl,
+            createStreamControlService({
+              gamescopeSocketPath: "/run/gamescope.sock",
+            }),
+          ),
+        ),
+      ),
+    )
+
+    expect(withoutMoonlight.controls).toContainEqual(
+      expect.objectContaining({
+        id: "linked.fps",
+        status: "unsupported",
+        unavailableReason: "moonlight disabled",
+      }),
+    )
   })
 
   it("reports socket configuration through RPC config data", async () => {
@@ -400,6 +428,52 @@ describe("app.stream-control RPC handlers", () => {
     ])
   })
 
+  it("reports failed single-command outcomes when readback-backed commands fail", async () => {
+    const calls: unknown[] = []
+
+    const response = await Effect.runPromise(
+      handleSetGamescopeFps({ fps: 60 }).pipe(
+        Effect.provide(
+          Layer.succeed(
+            StreamControl,
+            createStreamControlService(
+              { gamescopeSocketPath: "/run/gamescope.sock" },
+              {
+                connectGamescope: async socketPath => {
+                  calls.push({ socketPath })
+                  return {
+                    requestCommand: (
+                      command: GamescopeControlCommandMethod,
+                      params?: unknown,
+                    ) => {
+                      calls.push({ method: "requestCommand", command, params })
+                      return commandResult(
+                        command,
+                        "readback-mismatch",
+                        "atom stayed at 60",
+                      )
+                    },
+                    close: () => calls.push({ method: "close" }),
+                  } as unknown as GamescopeControlClient
+                },
+              },
+            ),
+          ),
+        ),
+      ),
+    )
+
+    expect(response).toMatchObject({
+      action: "gamescope.fps",
+      requested: { fps: 60 },
+      outcome: {
+        kind: "single",
+        status: "failed",
+        error: "readback-mismatch: atom stayed at 60",
+      },
+    })
+  })
+
   it("reports partial linked FPS outcomes when Gamescope readback fails", async () => {
     const calls: unknown[] = []
 
@@ -492,6 +566,12 @@ describe("app.stream-control RPC handlers", () => {
     expect(response).toMatchObject({
       action: "linked.resolution",
       requested: { width: 1280, height: 720 },
+      outcome: {
+        kind: "linked",
+        status: "partial",
+        gamescope: { status: "failed", error: "gamescope offline" },
+        moonlight: { status: "pending" },
+      },
       response: {
         status: "partial",
         gamescope: { status: "failed", error: "gamescope offline" },

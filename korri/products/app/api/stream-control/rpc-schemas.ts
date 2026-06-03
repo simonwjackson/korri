@@ -255,8 +255,16 @@ const CommandTargetOutcome = Schema.Union([
 const StreamControlCommandOutcome = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("single"),
-    status: Schema.Literals(["applied", "pending", "failed"]),
-    error: Schema.optional(Schema.String),
+    status: Schema.Literal("applied"),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("single"),
+    status: Schema.Literal("pending"),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("single"),
+    status: Schema.Literal("failed"),
+    error: Schema.String,
   }),
   Schema.Struct({
     kind: Schema.Literal("linked"),
@@ -269,7 +277,7 @@ const StreamControlCommandOutcome = Schema.Union([
 export const StreamControlCommandResponseFields = {
   action: Schema.String,
   requested: StreamControlRequestedPayload,
-  outcome: StreamControlCommandOutcome,
+  outcome: Schema.optional(StreamControlCommandOutcome),
   response: Schema.Unknown,
   diagnosticError: Schema.optional(Schema.String),
 }

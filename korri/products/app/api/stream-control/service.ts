@@ -22,6 +22,7 @@ import {
 import {
   normalizeGamescopeState,
   normalizeMoonlightState,
+  rpcResult,
 } from "@shared/stream-control/state-normalizer"
 import { Context, Effect, Layer } from "effect"
 import {
@@ -442,10 +443,12 @@ type CommandTargetOutcomeData =
   | { readonly status: "failed"; readonly error: string }
 
 type CommandOutcomeData =
+  | { readonly kind: "single"; readonly status: "applied" }
+  | { readonly kind: "single"; readonly status: "pending" }
   | {
       readonly kind: "single"
-      readonly status: "applied" | "pending" | "failed"
-      readonly error?: string
+      readonly status: "failed"
+      readonly error: string
     }
   | {
       readonly kind: "linked"
@@ -505,12 +508,6 @@ function commandTargetOutcome(response: unknown): LinkedTargetOutcome {
   if (result.status === "applied") return { status: "applied", response }
   if (result.status === "accepted") return { status: "pending", response }
   return { status: "failed", error: commandFailureMessage(result) }
-}
-
-function rpcResult(response: unknown): Record<string, unknown> | undefined {
-  if (!isRecord(response)) return undefined
-  const result = response.result
-  return isRecord(result) ? result : undefined
 }
 
 function commandFailureMessage(result: Record<string, unknown>): string {

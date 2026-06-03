@@ -1,7 +1,7 @@
 import type { GamescopeScalingFilter } from "@shared/gamescope-control/gamescope-control-protocol"
 
 export interface StreamControlClient {
-  readonly getControls: () => Promise<unknown>
+  readonly getControls?: () => Promise<unknown>
   readonly getState: () => Promise<unknown>
   readonly setBrightness: (payload: {
     readonly percent: number
@@ -41,3 +41,6 @@ export type StreamControlAction = Exclude<
   keyof StreamControlClient,
   "getControls" | "getState"
 >
+
+/** @deprecated Use StreamControlClient for product-accessible controls. */
+export type EvierStreamControlController = StreamControlClient

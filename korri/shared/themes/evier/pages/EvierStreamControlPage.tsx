@@ -30,7 +30,10 @@ import {
   useEvierControlState,
 } from "./evier-control-state"
 
-export type { StreamControlClient } from "@shared/stream-control/stream-control-client"
+export type {
+  EvierStreamControlController,
+  StreamControlClient,
+} from "@shared/stream-control/stream-control-client"
 
 export function EvierStreamControlPage({
   controller,

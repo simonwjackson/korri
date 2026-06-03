@@ -1,4 +1,7 @@
 import { join } from "node:path"
+import { errorMessage, isRecord } from "@shared/stream-control/utils"
+
+export { errorMessage, isRecord } from "@shared/stream-control/utils"
 
 export interface StreamControlEventRecorderOptions {
   readonly artifactDir?: string
@@ -77,14 +80,4 @@ export function closeClient(client: unknown): void {
 
 function asRecord(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : { value }
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-export function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  if (isRecord(error) && typeof error.message === "string") return error.message
-  return String(error)
 }

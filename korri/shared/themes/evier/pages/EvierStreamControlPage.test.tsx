@@ -172,6 +172,34 @@ describe("EvierStreamControlPage", () => {
     expect(screen.getByText("6 Mbps")).toBeTruthy()
   })
 
+  it("keeps command success visible when post-command readback fails", async () => {
+    const controller = recordingController()
+    let reads = 0
+    const readbackFailingController: StreamControlClient = {
+      ...controller,
+      getState: async () => {
+        reads += 1
+        if (reads === 1) return stateSnapshot({ bitrateKbps: 12_000 })
+        throw new Error("readback failed")
+      },
+    }
+
+    render(<EvierStreamControlPage controller={readbackFailingController} />)
+    await waitFor(() => expect(screen.getByText("12 Mbps")).toBeTruthy())
+
+    fireEvent.change(screen.getByRole("slider", { name: "Bitrate" }), {
+      target: { value: "6000" },
+    })
+
+    await act(async () => {
+      await Bun.sleep(650)
+    })
+
+    await waitFor(() => expect(screen.getByText(/readbackError/)).toBeTruthy())
+    expect(screen.getByText(/setMoonlightBitrate/)).toBeTruthy()
+    expect(screen.queryByText(/"error"/)).toBeNull()
+  })
+
   it("debounces slider mutations against the Evier RPC controller", async () => {
     const calls: unknown[] = []
     render(<EvierStreamControlPage controller={recordingController(calls)} />)

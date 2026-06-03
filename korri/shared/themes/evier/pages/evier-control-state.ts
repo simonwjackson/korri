@@ -1,9 +1,11 @@
 import type { GamescopeScalingFilter } from "@shared/gamescope-control/gamescope-control-protocol"
 import { StreamControlSurface } from "@shared/stream-control/control-surface"
+import { readGamescopeScalingFilter } from "@shared/stream-control/state-normalizer"
 import type {
   StreamControlAction,
   StreamControlClient,
 } from "@shared/stream-control/stream-control-client"
+import { errorMessage } from "@shared/stream-control/utils"
 import { useCallback, useEffect, useRef, useState } from "react"
 
 const EVIER_CONTROL_DEBOUNCE_MS = 500
@@ -30,11 +32,18 @@ export function useEvierControlState(controller: StreamControlClient) {
       const serial = ++statusSerial.current
       try {
         const response = await runScheduledAction(controller, action, body)
-        const readback = await controller.getState()
-        if (mounted.current && serial === statusSerial.current) {
-          setLastState(readback)
+        try {
+          const readback = await controller.getState()
+          if (mounted.current && serial === statusSerial.current) {
+            setLastState(readback)
+          }
+          publishStatus(serial, { command: response, readback })
+        } catch (readbackError) {
+          publishStatus(serial, {
+            command: response,
+            readbackError: errorMessage(readbackError),
+          })
         }
-        publishStatus(serial, { command: response, readback })
       } catch (error) {
         publishStatus(serial, { error: errorMessage(error) })
       }
@@ -165,23 +174,5 @@ async function sleepWhileMounted(
 }
 
 function gamescopeScalingFilterFrom(value: unknown): GamescopeScalingFilter {
-  if (
-    value === "linear" ||
-    value === "nearest" ||
-    value === "integer" ||
-    value === "fsr" ||
-    value === "nis"
-  ) {
-    return value
-  }
-  return "linear"
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  if (typeof error === "object" && error !== null && "message" in error) {
-    const message = (error as { readonly message?: unknown }).message
-    if (typeof message === "string") return message
-  }
-  return String(error)
+  return readGamescopeScalingFilter(value) ?? "linear"
 }
