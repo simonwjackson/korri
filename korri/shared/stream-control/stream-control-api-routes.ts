@@ -9,6 +9,11 @@ import {
   connectMoonlightControl,
   type MoonlightControlClient,
 } from "@shared/stream/moonlight-control-client"
+import {
+  normalizeGamescopeState,
+  normalizeMoonlightState,
+  readGamescopeScalingFilter,
+} from "@shared/stream-control/state-normalizer"
 import type { Context } from "hono"
 import { Hono } from "hono"
 
@@ -342,85 +347,6 @@ async function readControlState<TClient, TReadback>(
   }
 }
 
-function normalizeMoonlightState(snapshot: unknown) {
-  const result = rpcResult(snapshot)
-  const runtimeSettings = recordField(result, "runtimeSettings")
-  const streamQuality = recordField(result, "streamQuality")
-  return {
-    bitrateKbps: moonlightNumber(
-      runtimeSettings,
-      streamQuality,
-      "appliedBitrateKbps",
-      "bitrateKbps",
-    ),
-    fps: moonlightNumber(runtimeSettings, streamQuality, "appliedFps", "fps"),
-    resolution: moonlightResolutionReadback(runtimeSettings, streamQuality),
-  }
-}
-
-function moonlightNumber(
-  runtimeSettings: Record<string, unknown> | undefined,
-  streamQuality: Record<string, unknown> | undefined,
-  runtimeKey: string,
-  streamKey: string,
-): number | null {
-  return (
-    firstNumber(runtimeSettings?.[runtimeKey], streamQuality?.[streamKey]) ??
-    null
-  )
-}
-
-function moonlightResolutionReadback(
-  runtimeSettings: Record<string, unknown> | undefined,
-  streamQuality: Record<string, unknown> | undefined,
-) {
-  const runtimeResolution = recordField(runtimeSettings, "appliedResolution")
-  return resolutionReadback(
-    firstNumber(runtimeResolution?.width, streamQuality?.width),
-    firstNumber(runtimeResolution?.height, streamQuality?.height),
-  )
-}
-
-function normalizeGamescopeState(snapshot: unknown) {
-  const result = rpcResult(snapshot)
-  const mode = recordField(result, "xwaylandMode")
-  const filter = result?.filter
-  return {
-    fps: firstNumber(result?.fps) ?? null,
-    resolution: resolutionReadback(
-      firstNumber(mode?.width),
-      firstNumber(mode?.height),
-    ),
-    sharpness: firstNumber(result?.sharpness) ?? null,
-    filter: readFilterValue(filter) ?? null,
-  }
-}
-
-function resolutionReadback(
-  width: number | undefined,
-  height: number | undefined,
-): { readonly width: number; readonly height: number } | null {
-  return width === undefined || height === undefined ? null : { width, height }
-}
-
-function rpcResult(response: unknown): Record<string, unknown> | undefined {
-  if (!isRecord(response)) return undefined
-  const result = response.result
-  return isRecord(result) ? result : undefined
-}
-
-function recordField(
-  record: Record<string, unknown> | undefined,
-  key: string,
-): Record<string, unknown> | undefined {
-  const value = record?.[key]
-  return isRecord(value) ? value : undefined
-}
-
-function firstNumber(...values: readonly unknown[]): number | undefined {
-  return values.find((value): value is number => typeof value === "number")
-}
-
 function configPayload(options: StreamControlApiOptions) {
   return {
     moonlight: { enabled: Boolean(options.moonlightSocketPath) },
@@ -513,13 +439,7 @@ function readFilter(body: unknown): GamescopeScalingFilter | undefined {
 }
 
 function readFilterValue(value: unknown): GamescopeScalingFilter | undefined {
-  return value === "linear" ||
-    value === "nearest" ||
-    value === "integer" ||
-    value === "fsr" ||
-    value === "nis"
-    ? value
-    : undefined
+  return readGamescopeScalingFilter(value)
 }
 
 function closeClient(client: unknown): void {
