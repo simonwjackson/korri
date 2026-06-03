@@ -25,7 +25,7 @@ cat > "${PROCFILE}" <<PROCEOF
 web: cd '${REPO_ROOT}' && KORRI_API_PROXY_TARGET=http://localhost:${API_PORT} bun run vite --mode development --host 0.0.0.0 --port ${PORTAL_PORT} --clearScreen false
 api: cd '${REPO_ROOT}' && PORT=${API_PORT} NODE_ENV=development bun x tsx --tsconfig tsconfig.server.json product/services/server/http/server.ts
 playwright: cd '${REPO_ROOT}' && PORTAL_PORT=${PORTAL_PORT} API_PORT=${API_PORT} PW_PORT=${PW_PORT} APP_HOST=${APP_HOST} PLAYWRIGHT_TEST_BASE_URL=http://${APP_HOST}:${PORTAL_PORT} tools/scripts/serve-playwright-ui.sh
-storybook: cd '${REPO_ROOT}' && bun x storybook dev -c korri/deploy/storybook -p ${STORYBOOK_PORT} --host 0.0.0.0 --no-open
+storybook: cd '${REPO_ROOT}' && bun x storybook dev -c product/apps/storybook -p ${STORYBOOK_PORT} --host 0.0.0.0 --no-open
 PROCEOF
 
 if command -v gum >/dev/null 2>&1; then

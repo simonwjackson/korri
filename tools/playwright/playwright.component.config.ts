@@ -52,7 +52,7 @@ export default defineConfig({
   webServer: useExistingStack
     ? undefined
     : {
-        command: `bun x storybook dev -c korri/deploy/storybook -p ${storybookPort} --host 127.0.0.1 --no-open --ci`,
+        command: `bun x storybook dev -c product/apps/storybook -p ${storybookPort} --host 127.0.0.1 --no-open --ci`,
         port: storybookPort,
         cwd: PROJECT_ROOT,
         timeout: 180_000,

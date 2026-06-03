@@ -38,7 +38,7 @@ export function createDesktopInputBroker(options: DesktopInputBrokerOptions) {
   })
 }
 
-export function createKorriInputDispatchScript(payload: unknown): string {
+function createKorriInputDispatchScript(payload: unknown): string {
   const encoded = encodeDesktopInputBridgePayloadForDispatch(payload)
   return `window.__korriInputDispatch?.(${JSON.stringify(encoded)});`
 }

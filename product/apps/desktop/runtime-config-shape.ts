@@ -4,7 +4,7 @@
  * The bun side (`main.ts`) reads environment-driven configuration at
  * startup and inlines a snapshot into the served `index.html` as a
  * `<script>window.__korriRuntimeConfig = {…}</script>` tag. The
- * renderer (`korri/deploy/portal/main.tsx`) reads the global at boot
+ * renderer (`product/apps/portal/main.tsx`) reads the global at boot
  * via `readInlinedRuntimeConfig(window)` — no polling, no bridge.
  *
  * This module is the single source of truth for the runtime-config wire

@@ -364,8 +364,8 @@
               [
                 ./components.json
                 ./vite.config.mjs
-                ./korri/deploy/desktop/runtime-config-shape.ts
-                ./korri/deploy/portal
+                ./product/apps/desktop/runtime-config-shape.ts
+                ./product/apps/portal
                 ./korri/products
               ]
               ++ sharedRuntime
@@ -373,7 +373,7 @@
             desktop = mkSource (
               [
                 ./electrobun.config.ts
-                ./korri/deploy/desktop
+                ./product/apps/desktop
                 ./product/apps/cli
               ]
               ++ sharedRuntime
@@ -387,7 +387,7 @@
 
         # Single portal build for every desktop variant. The native input-bridge
         # URL is now pushed at runtime via window.__korriRuntime (see
-        # korri/deploy/portal/main.tsx and korri/deploy/desktop/runtime-config.ts).
+        # product/apps/portal/main.tsx and product/apps/desktop/runtime-config.ts).
         korriPortal = import ./nix/korri-portal.nix {
           inherit pkgs;
           src = korriSources.portal;

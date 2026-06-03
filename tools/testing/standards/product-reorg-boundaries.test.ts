@@ -27,7 +27,7 @@ const CURRENT_ALIAS_PATH_INVENTORY = {
   "@app/*": "./korri/products/app/*",
   "@shared/*": "./korri/shared/*",
   "@korri/*": "./korri/*",
-  "@deploy/*": "./korri/deploy/*",
+  "@product/*": "./product/*",
 } as const
 
 function importSpecifiers(source: string): readonly string[] {
@@ -51,7 +51,9 @@ function importsThemePrivateProductInternals(
   return importSpecifiers(source).some(specifier => {
     if (
       specifier.startsWith("@app/") ||
-      specifier.startsWith("@deploy/") ||
+      specifier.startsWith("@product/apps/") ||
+      specifier.startsWith("@product/services/") ||
+      specifier.startsWith("@product/systems/") ||
       specifier.startsWith("@korri/products/app/") ||
       specifier.startsWith("@korri/deploy/") ||
       /^product\/(?:apps|services|systems)\//.test(specifier)
@@ -117,6 +119,11 @@ describe("standards: product platform reorganization guardrails", () => {
     expect(
       importsThemePrivateProductInternals(
         'import x from "product/apps/portal"',
+      ),
+    ).toBe(true)
+    expect(
+      importsThemePrivateProductInternals(
+        'import x from "@product/apps/portal"',
       ),
     ).toBe(true)
     expect(

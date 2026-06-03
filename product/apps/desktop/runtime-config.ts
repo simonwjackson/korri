@@ -33,7 +33,7 @@ function liveUsbArtifactFromEnv(
   return undefined
 }
 
-export function isDesktopInputEnabled(
+function isDesktopInputEnabled(
   env: Record<string, string | undefined>,
 ): boolean {
   if (env.KORRI_DESKTOP_INPUT_BRIDGE === "0") return false

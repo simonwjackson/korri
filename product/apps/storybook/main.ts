@@ -3,14 +3,14 @@ import { mergeConfig } from "vite"
 
 const config: StorybookConfig = {
   stories: [
-    "../../shared/**/*.stories.@(ts|tsx|mdx)",
-    "../../products/**/*.stories.@(ts|tsx|mdx)",
+    "../../../korri/shared/**/*.stories.@(ts|tsx|mdx)",
+    "../../../korri/products/**/*.stories.@(ts|tsx|mdx)",
   ],
   framework: {
     name: "@storybook/react-vite",
     options: {
       builder: {
-        viteConfigPath: "korri/deploy/storybook/vite.config.mjs",
+        viteConfigPath: "product/apps/storybook/vite.config.mjs",
       },
     },
   },
@@ -24,10 +24,11 @@ const config: StorybookConfig = {
       plugins: [tailwindcss()],
       resolve: {
         alias: {
-          "@app": new URL("../../products/app", import.meta.url).pathname,
-          "@shared": new URL("../../shared", import.meta.url).pathname,
-          "@korri": new URL("../..", import.meta.url).pathname,
-          "@deploy": new URL("..", import.meta.url).pathname,
+          "@app": new URL("../../../korri/products/app", import.meta.url)
+            .pathname,
+          "@shared": new URL("../../../korri/shared", import.meta.url).pathname,
+          "@korri": new URL("../../../korri", import.meta.url).pathname,
+          "@product": new URL("../..", import.meta.url).pathname,
         },
       },
     })

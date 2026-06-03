@@ -108,5 +108,3 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
     Object.getPrototypeOf(value) === Object.prototype
   )
 }
-
-export { CONFIG_FILENAME as DESKTOP_CONFIG_FILENAME }

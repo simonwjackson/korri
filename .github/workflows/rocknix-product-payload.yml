@@ -14,7 +14,7 @@ on:
       - "nix/**"
       - "packages/**"
       - "tools/artifacts/**"
-      - "korri/deploy/**"
+      - "product/apps/**"
       - "korri/products/**"
       - "korri/shared/**"
       - ".github/workflows/rocknix-product-payload.yml"

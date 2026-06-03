@@ -2,10 +2,10 @@
 
 import { existsSync, readFileSync } from "node:fs"
 import { generator, getConfig } from "@tanstack/router-generator"
-import appRouterConfig from "../../korri/deploy/portal/tsr.config"
+import appRouterConfig from "../../product/apps/portal/tsr.config"
 
 const repoRoot = process.cwd()
-const appRoot = `${repoRoot}/korri/deploy/portal`
+const appRoot = `${repoRoot}/product/apps/portal`
 
 async function main() {
   const config = getConfig(appRouterConfig, appRoot)

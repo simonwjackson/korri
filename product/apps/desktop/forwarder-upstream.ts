@@ -30,7 +30,7 @@ import {
   candidateFromMdnsService,
   KORRI_STREAM_SERVICE_PROTOCOL,
   KORRI_STREAM_SERVICE_TYPE,
-} from "../../../product/apps/cli/lan-stream-discovery"
+} from "../cli/lan-stream-discovery"
 
 export interface ForwarderUpstreamOptions {
   /** Local server base URL to fast-path probe. Default `http://127.0.0.1:3001`. */

@@ -23,7 +23,7 @@ CLAUDE.local.md
 .vscode/
 .DS_Store
 
-/korri/deploy/portal/routeTree.gen.ts
+/product/apps/portal/routeTree.gen.ts
 /korri/products/*/features/**/e2e/generated/
 /.argo/
 /old-ui

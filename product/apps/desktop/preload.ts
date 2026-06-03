@@ -14,7 +14,7 @@
  * 2026-05-24-004 (U1, U2, U6).
  *
  * Built as a separate browser target via:
- *   bun build korri/deploy/desktop/preload.ts \
+ *   bun build product/apps/desktop/preload.ts \
  *     --target=browser \
  *     --outfile=out/build/desktop-preload/preload.js
  *

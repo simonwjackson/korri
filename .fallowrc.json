@@ -2,9 +2,12 @@
 	"$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
 	"entry": [
 		"electrobun.config.ts",
-		"korri/deploy/portal/main.tsx",
-		"korri/deploy/desktop/main.ts",
-		"korri/deploy/storybook/main.ts",
+		"product/apps/portal/main.tsx",
+		"product/apps/desktop/main.ts",
+		"product/apps/desktop/index.ts",
+		"product/apps/desktop/preload-entry.ts",
+		"product/apps/storybook/main.ts",
+		"product/apps/storybook/preview.tsx",
 		"product/apps/cli/**/*.ts",
 		"product/services/**/*.ts",
 		"tools/scripts/**/*.ts",
@@ -23,7 +26,7 @@
 		".tmp/**",
 		".tanstack/**",
 		".pi/**",
-		"korri/deploy/portal/routeTree.gen.ts",
+		"product/apps/portal/routeTree.gen.ts",
 		"korri/products/*/features/**/e2e/generated/**",
 		"tools/patches/**/files/**/*",
 		"**/*.d.ts"
@@ -67,7 +70,6 @@
 					"**/*.story.e2e.ts"
 				]
 			},
-			{ "name": "deploy", "patterns": ["korri/deploy/**"] },
 			{ "name": "app", "patterns": ["korri/products/app/**"] },
 			{ "name": "product-apps", "patterns": ["product/apps/**"] },
 			{ "name": "product-services", "patterns": ["product/services/**"] },
@@ -81,12 +83,10 @@
 					"app",
 					"shared",
 					"repo-tools",
-					"deploy",
 					"product-apps",
 					"product-services"
 				]
 			},
-			{ "from": "deploy", "allow": ["app", "shared", "product-apps"] },
 			{
 				"from": "app",
 				"allow": ["shared", "product-apps", "product-services"]
@@ -102,7 +102,7 @@
 			{ "from": "shared", "allow": [] },
 			{
 				"from": "repo-tools",
-				"allow": ["app", "shared", "deploy", "product-apps", "product-services"]
+				"allow": ["app", "shared", "product-apps", "product-services"]
 			}
 		]
 	}

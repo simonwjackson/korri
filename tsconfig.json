@@ -13,7 +13,7 @@
 			"@app/*": ["./korri/products/app/*"],
 			"@shared/*": ["./korri/shared/*"],
 			"@korri/*": ["./korri/*"],
-			"@deploy/*": ["./korri/deploy/*"]
+			"@product/*": ["./product/*"]
 		},
 		"skipLibCheck": true,
 		"types": ["react", "react-dom", "node", "bun"]
@@ -27,7 +27,7 @@
 	],
 	"exclude": [
 		"node_modules",
-		"korri/deploy/portal/routeTree.gen.ts",
+		"product/apps/portal/routeTree.gen.ts",
 		"tools/patches/**/files/**/*"
 	]
 }

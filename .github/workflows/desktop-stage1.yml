@@ -8,7 +8,7 @@ on:
       - "electrobun.config.ts"
       - "package.json"
       - "bun.lock"
-      - "korri/deploy/desktop/**"
+      - "product/apps/desktop/**"
       - "tools/desktop/**"
       - ".github/workflows/desktop-stage1.yml"
   push:
@@ -19,7 +19,7 @@ on:
       - "electrobun.config.ts"
       - "package.json"
       - "bun.lock"
-      - "korri/deploy/desktop/**"
+      - "product/apps/desktop/**"
       - "tools/desktop/**"
       - ".github/workflows/desktop-stage1.yml"
 

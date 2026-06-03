@@ -340,7 +340,7 @@ describe("createDesktopInputBroker", () => {
     )
     const sharedSource = await readFile(
       new URL(
-        "../../shared/input/desktop-input-broker-core.ts",
+        "../../../korri/shared/input/desktop-input-broker-core.ts",
         import.meta.url,
       ),
       "utf8",

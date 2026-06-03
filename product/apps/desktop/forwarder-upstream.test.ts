@@ -1,9 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import type { Service } from "bonjour-service"
-import type {
-  BonjourLike,
-  BrowserLike,
-} from "../../../product/apps/cli/lan-stream-discovery"
+import type { BonjourLike, BrowserLike } from "../cli/lan-stream-discovery"
 import { makeForwarderUpstream } from "./forwarder-upstream"
 
 describe("ForwarderUpstream", () => {

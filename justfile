@@ -23,7 +23,7 @@ dev-playwright port="${PW_PORT:-9876}" portal_port="${PORTAL_PORT:-3000}" api_po
 
 # Start Storybook.
 dev-storybook port="${STORYBOOK_PORT:-6006}":
-  bun x storybook dev -c korri/deploy/storybook -p {{port}} --host 0.0.0.0 --no-open
+  bun x storybook dev -c product/apps/storybook -p {{port}} --host 0.0.0.0 --no-open
 
 # Build web and API outputs.
 build: build-web build-api
@@ -56,12 +56,12 @@ device-print-run-command:
 
 # Bundle the desktop preload script as a separate browser target.
 desktop-preload-build:
-  bun build korri/deploy/desktop/preload-entry.ts --target=browser --outfile=out/build/desktop-preload/preload.js
+  bun build product/apps/desktop/preload-entry.ts --target=browser --outfile=out/build/desktop-preload/preload.js
 
 # Bundle the waiting-page polling-loop bootstrap as a browser module.
 # Served by bun while the connection controller is not yet `connected`.
 desktop-waiting-page-build:
-  bun build korri/deploy/desktop/waiting-page/polling-loop-bootstrap.ts --target=browser --outfile=out/build/desktop-waiting-page/waiting-polling-loop.js
+  bun build product/apps/desktop/waiting-page/polling-loop-bootstrap.ts --target=browser --outfile=out/build/desktop-waiting-page/waiting-polling-loop.js
 
 # Start the Electrobun desktop app after building portal assets.
 desktop-dev: build-web desktop-preload-build desktop-waiting-page-build desktop-runtime-check

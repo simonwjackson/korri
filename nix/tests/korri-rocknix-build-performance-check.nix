@@ -56,22 +56,22 @@ pkgs.runCommand "korri-rocknix-build-performance-check"
     test -e ${runtimeSources.portal}/package.json
     test -e ${runtimeSources.portal}/tsconfig.json
     test -e ${runtimeSources.portal}/vite.config.mjs
-    test -e ${runtimeSources.portal}/korri/deploy/desktop/runtime-config-shape.ts
-    test -e ${runtimeSources.portal}/korri/deploy/portal
+    test -e ${runtimeSources.portal}/product/apps/desktop/runtime-config-shape.ts
+    test -e ${runtimeSources.portal}/product/apps/portal
     test -e ${runtimeSources.portal}/korri/products
     test -e ${runtimeSources.portal}/korri/shared
-    test ! -e ${runtimeSources.portal}/korri/deploy/desktop/runtime-config.ts
+    test ! -e ${runtimeSources.portal}/product/apps/desktop/runtime-config.ts
     test ! -e ${runtimeSources.portal}/tools/testing
-    test ! -e ${runtimeSources.portal}/korri/deploy/storybook
+    test ! -e ${runtimeSources.portal}/product/apps/storybook
     test ! -e ${runtimeSources.portal}/docs
     test ! -e ${runtimeSources.portal}/backlog
 
     test -e ${runtimeSources.desktop}/electrobun.config.ts
-    test -e ${runtimeSources.desktop}/korri/deploy/desktop
+    test -e ${runtimeSources.desktop}/product/apps/desktop
     test -e ${runtimeSources.desktop}/product/apps/cli
     test ! -e ${runtimeSources.desktop}/tools/cli
     test ! -e ${runtimeSources.desktop}/tools/testing
-    test ! -e ${runtimeSources.desktop}/korri/deploy/storybook
+    test ! -e ${runtimeSources.desktop}/product/apps/storybook
 
     test -e ${runtimeSources.inputd}/product/services/device
     test -e ${runtimeSources.inputd}/tools/types

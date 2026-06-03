@@ -134,7 +134,7 @@ pkgs.stdenv.mkDerivation {
         if [ ! -f "$app_bundle/Resources/app/bun/index.js" ]; then
           echo "Electrobun did not emit flat app code; building Resources/app/bun/index.js directly" >&2
           mkdir -p "$app_bundle/Resources/app/bun" "$app_bundle/Resources/app/views/mainview"
-          bun build korri/deploy/desktop/index.ts --target bun --outdir "$app_bundle/Resources/app/bun"
+          bun build product/apps/desktop/index.ts --target bun --outdir "$app_bundle/Resources/app/bun"
           cp -R out/build/portal/. "$app_bundle/Resources/app/views/mainview/"
         fi
 
@@ -147,7 +147,7 @@ pkgs.stdenv.mkDerivation {
         # `<script>` tag respectively. Electrobun's receiveMessageFromBun hook
         # remains framework-owned and is not used for Korri input delivery.
         mkdir -p "$app_bundle/Resources/app/views/mainview"
-        bun build korri/deploy/desktop/preload-entry.ts \
+        bun build product/apps/desktop/preload-entry.ts \
           --target=browser \
           --outfile="$app_bundle/Resources/app/views/mainview/preload.js"
 

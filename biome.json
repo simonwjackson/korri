@@ -1,7 +1,7 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.3.5/schema.json",
 	"files": {
-		"includes": ["**", "!korri/deploy/portal/routeTree.gen.ts"]
+		"includes": ["**", "!product/apps/portal/routeTree.gen.ts"]
 	},
 	"linter": {
 		"enabled": true,
