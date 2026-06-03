@@ -1,22 +1,16 @@
 import type { GamescopeScalingFilter } from "@shared/gamescope-control/gamescope-control-protocol"
 import { useCallback, useEffect, useRef, useState } from "react"
+import {
+  EvierControlSurface,
+  FPS_STEPS,
+  GAMESCOPE_FPS_STEPS,
+  LINKED_FPS_STEPS,
+  RESOLUTION_STEPS,
+  type ControlReadback,
+  type UnifiedReadback,
+} from "./evier-control-surface"
 
 const DEBOUNCE_MS = 500
-
-const FPS_STEPS = [30, 40, 45, 60, 75, 90, 100, 120] as const
-// Gamescope's GAMESCOPE_FPS_LIMIT cardinal accepts 0..240; 0 disables the
-// compositor-side limiter entirely. We surface a small ladder rather than a
-// freeform slider so the operator can dial through useful caps quickly.
-const GAMESCOPE_FPS_STEPS = [0, 30, 45, 60, 75, 90, 120, 144, 165, 240] as const
-const RESOLUTION_STEPS = [
-  { label: "360p", width: 640, height: 360 },
-  { label: "480p", width: 854, height: 480 },
-  { label: "540p", width: 960, height: 540 },
-  { label: "576p", width: 1024, height: 576 },
-  { label: "720p", width: 1280, height: 720 },
-  { label: "900p", width: 1600, height: 900 },
-  { label: "1080p", width: 1920, height: 1080 },
-] as const
 
 export interface EvierStreamControlController {
   readonly getState: () => Promise<unknown>
@@ -95,7 +89,8 @@ export function EvierStreamControlPage({
       try {
         const response = await runScheduledAction(controller, action, body)
         const readback = await controller.getState()
-        if (mounted.current) setLastState(readback)
+        if (mounted.current && serial === statusSerial.current)
+          setLastState(readback)
         publishStatus(serial, { command: response, readback })
       } catch (error) {
         publishStatus(serial, { error: errorMessage(error) })
@@ -108,7 +103,8 @@ export function EvierStreamControlPage({
     const serial = ++statusSerial.current
     try {
       const state = await controller.getState()
-      if (mounted.current) setLastState(state)
+      if (mounted.current && serial === statusSerial.current)
+        setLastState(state)
       publishStatus(serial, state)
     } catch (error) {
       publishStatus(serial, { error: errorMessage(error) })
@@ -147,6 +143,8 @@ export function EvierStreamControlPage({
     }
   }, [run])
 
+  const surface = EvierControlSurface.fromState(lastState)
+
   useEffect(() => {
     mounted.current = true
     void refresh()
@@ -161,7 +159,10 @@ export function EvierStreamControlPage({
 
   return (
     <main className="evier-shell">
-      <section className="evier-card" aria-labelledby="evier-stream-mode-heading">
+      <section
+        className="evier-card"
+        aria-labelledby="evier-stream-mode-heading"
+      >
         <div className="evier-section-heading-row">
           <h2 id="evier-stream-mode-heading">Stream controls</h2>
           <label className="evier-toggle-pill">
@@ -187,77 +188,89 @@ export function EvierStreamControlPage({
             <EvierSliderControl
               spec={unifiedBitrateSpec}
               schedule={schedule}
-              readbackValue={moonlightBitrateReadback(lastState)}
+              readbackValue={knownValue(surface.moonlight.bitrate)}
             />
             <EvierSliderControl
               spec={linkedFpsSpec}
               schedule={schedule}
-              readbackValue={linkedFpsReadback(lastState)}
+              readbackValue={knownStepIndex(
+                surface.linked.fps,
+                LINKED_FPS_STEPS,
+              )}
             />
             <EvierSliderControl
               spec={linkedResolutionSpec}
               schedule={schedule}
-              readbackValue={linkedResolutionReadback(lastState)}
+              readbackValue={knownUnifiedNumber(surface.linked.resolution)}
               wide
             />
             <EvierSliderControl
               spec={unifiedSharpnessSpec}
               schedule={schedule}
-              readbackValue={gamescopeSharpnessReadback(lastState)}
+              readbackValue={knownValue(surface.gamescope.sharpness)}
             />
             <ScalingFilterControl
               schedule={schedule}
               name="evier-unified-filter"
-              readbackValue={gamescopeFilterReadback(lastState)}
+              readbackValue={knownValue(surface.gamescope.filter)}
             />
           </div>
         </section>
       ) : (
         <>
-          <section className="evier-card" aria-labelledby="evier-moonlight-heading">
+          <section
+            className="evier-card"
+            aria-labelledby="evier-moonlight-heading"
+          >
             <h2 id="evier-moonlight-heading">Moonlight stream</h2>
             <div className="evier-grid">
               <EvierSliderControl
                 spec={moonlightBitrateSpec}
                 schedule={schedule}
-                readbackValue={moonlightBitrateReadback(lastState)}
+                readbackValue={knownValue(surface.moonlight.bitrate)}
               />
               <EvierSliderControl
                 spec={moonlightFpsSpec}
                 schedule={schedule}
-                readbackValue={moonlightFpsReadback(lastState)}
+                readbackValue={knownStepIndex(surface.moonlight.fps, FPS_STEPS)}
               />
               <EvierSliderControl
                 spec={moonlightResolutionSpec}
                 schedule={schedule}
-                readbackValue={moonlightResolutionReadback(lastState)}
+                readbackValue={knownValue(surface.moonlight.resolution)}
                 wide
               />
             </div>
           </section>
 
-          <section className="evier-card" aria-labelledby="evier-gamescope-heading">
+          <section
+            className="evier-card"
+            aria-labelledby="evier-gamescope-heading"
+          >
             <h2 id="evier-gamescope-heading">Gamescope presentation</h2>
             <div className="evier-grid">
               <EvierSliderControl
                 spec={gamescopeResolutionSpec}
                 schedule={schedule}
-                readbackValue={gamescopeResolutionReadback(lastState)}
+                readbackValue={knownValue(surface.gamescope.resolution)}
               />
               <EvierSliderControl
                 spec={gamescopeFpsSpec}
                 schedule={schedule}
-                readbackValue={gamescopeFpsReadback(lastState)}
+                readbackValue={knownStepIndex(
+                  surface.gamescope.fps,
+                  GAMESCOPE_FPS_STEPS,
+                )}
               />
               <EvierSliderControl
                 spec={gamescopeSharpnessSpec}
                 schedule={schedule}
-                readbackValue={gamescopeSharpnessReadback(lastState)}
+                readbackValue={knownValue(surface.gamescope.sharpness)}
               />
               <ScalingFilterControl
                 schedule={schedule}
                 name="evier-gamescope-filter"
-                readbackValue={gamescopeFilterReadback(lastState)}
+                readbackValue={knownValue(surface.gamescope.filter)}
               />
             </div>
           </section>
@@ -271,31 +284,35 @@ export function EvierStreamControlPage({
             <input
               type="checkbox"
               checked={unifiedBrightness}
-              onChange={event => setUnifiedBrightness(event.currentTarget.checked)}
+              onChange={event =>
+                setUnifiedBrightness(event.currentTarget.checked)
+              }
             />
             Unified display brightness
           </label>
         </div>
-        <BatteryStatus state={lastState} />
+        <BatteryStatus battery={surface.battery} />
         <div className="evier-grid evier-device-grid">
           {unifiedBrightness ? (
             <EvierSliderControl
               spec={brightnessSpec}
               schedule={schedule}
-              readbackValue={brightnessReadback(lastState)}
+              readbackValue={knownUnifiedNumber(surface.brightness.unified)}
             />
           ) : (
-            brightnessDevicesFromState(lastState).map((device, index) => (
+            surface.brightness.devices.map((device, index) => (
               <EvierSliderControl
                 key={device.name}
                 spec={brightnessDeviceSpec(device, index)}
                 schedule={schedule}
-                readbackValue={device.percent}
+                readbackValue={knownValue(device.percent)}
               />
             ))
           )}
-          {!unifiedBrightness && brightnessDevicesFromState(lastState).length === 0 ? (
-            <p className="evier-hint">Brightness devices will appear after state refresh.</p>
+          {!unifiedBrightness && surface.brightness.devices.length === 0 ? (
+            <p className="evier-hint">
+              Brightness devices will appear after state refresh.
+            </p>
           ) : null}
         </div>
       </section>
@@ -335,7 +352,9 @@ function EvierSliderControl({
   readonly wide?: boolean
 }) {
   const hasReadback = typeof readbackValue === "number"
-  const value = hasReadback ? clamp(readbackValue, spec.min, spec.max) : spec.initial
+  const value = hasReadback
+    ? clamp(readbackValue, spec.min, spec.max)
+    : spec.initial
 
   const update = (nextValue: number) => {
     if (!hasReadback) return
@@ -439,177 +458,40 @@ function ScalingFilterControl({
   )
 }
 
-function BatteryStatus({ state }: { readonly state: unknown }) {
-  const battery = batteryFromState(state)
+function BatteryStatus({
+  battery,
+}: {
+  readonly battery: ReturnType<typeof EvierControlSurface.fromState>["battery"]
+}) {
   return (
     <div className="evier-device-status" aria-label="Battery status">
       <span className="evier-device-status-label">Battery</span>
-      <strong>{battery.percent === null ? "Unknown" : `${battery.percent}%`}</strong>
+      <strong>
+        {battery.percent._tag === "known"
+          ? `${battery.percent.value}%`
+          : "Unknown"}
+      </strong>
       {battery.status ? <span>{battery.status}</span> : null}
     </div>
   )
 }
 
-interface BatteryViewState {
-  readonly percent: number | null
-  readonly status: string | null
+function knownValue<T>(readback: ControlReadback<T>): T | undefined {
+  return readback._tag === "known" ? readback.value : undefined
 }
 
-function batteryFromState(state: unknown): BatteryViewState {
-  const battery = isRecord(state) ? state.battery : undefined
-  const response = isRecord(battery) ? battery.response : undefined
-  if (!isRecord(response)) return { percent: null, status: null }
-  return {
-    percent:
-      typeof response.percent === "number"
-        ? clamp(response.percent, 0, 100)
-        : null,
-    status: typeof response.status === "string" ? response.status : null,
-  }
-}
-
-function brightnessReadback(state: unknown): number | undefined {
-  const response = okResponse(state, "brightness")
-  const percent = isRecord(response) ? response.percent : undefined
-  return typeof percent === "number" ? clamp(percent, 0, 100) : undefined
-}
-
-function moonlightBitrateReadback(state: unknown): number | undefined {
-  const runtimeSettings = moonlightRuntimeSettings(state)
-  const streamQuality = moonlightStreamQuality(state)
-  return firstNumber(runtimeSettings?.appliedBitrateKbps, streamQuality?.bitrateKbps)
-}
-
-function moonlightFpsReadback(state: unknown): number | undefined {
-  const fps = firstNumber(
-    moonlightRuntimeSettings(state)?.appliedFps,
-    moonlightStreamQuality(state)?.fps,
-  )
-  return indexOfStep(FPS_STEPS, fps)
-}
-
-function moonlightResolutionReadback(state: unknown): number | undefined {
-  const runtimeResolution = recordField(
-    moonlightRuntimeSettings(state),
-    "appliedResolution",
-  )
-  const streamQuality = moonlightStreamQuality(state)
-  return resolutionIndex(
-    firstNumber(runtimeResolution?.width, streamQuality?.width),
-    firstNumber(runtimeResolution?.height, streamQuality?.height),
-  )
-}
-
-function gamescopeFpsReadback(state: unknown): number | undefined {
-  return indexOfStep(GAMESCOPE_FPS_STEPS, numberField(gamescopeResult(state), "fps"))
-}
-
-function gamescopeResolutionReadback(state: unknown): number | undefined {
-  const mode = recordField(gamescopeResult(state), "xwaylandMode")
-  return resolutionIndex(numberField(mode, "width"), numberField(mode, "height"))
-}
-
-function gamescopeSharpnessReadback(state: unknown): number | undefined {
-  return numberField(gamescopeResult(state), "sharpness")
-}
-
-function gamescopeFilterReadback(
-  state: unknown,
-): GamescopeScalingFilter | undefined {
-  const filter = gamescopeResult(state)?.filter
-  return filter === "linear" ||
-    filter === "nearest" ||
-    filter === "integer" ||
-    filter === "fsr" ||
-    filter === "nis"
-    ? filter
-    : undefined
-}
-
-function linkedFpsReadback(state: unknown): number | undefined {
-  const moonlight = moonlightFpsReadback(state)
-  const gamescope = gamescopeFpsReadback(state)
-  if (moonlight === undefined || gamescope === undefined) return undefined
-  const moonlightFps = FPS_STEPS[moonlight]
-  const gamescopeFps = GAMESCOPE_FPS_STEPS[gamescope]
-  return moonlightFps === gamescopeFps ? moonlight : undefined
-}
-
-function linkedResolutionReadback(state: unknown): number | undefined {
-  const moonlight = moonlightResolutionReadback(state)
-  const gamescope = gamescopeResolutionReadback(state)
-  return moonlight !== undefined && moonlight === gamescope ? moonlight : undefined
-}
-
-function okResponse(state: unknown, key: string): unknown {
-  const entry = isRecord(state) ? state[key] : undefined
-  if (!isRecord(entry) || entry.status !== "ok") return undefined
-  return entry.response
-}
-
-function rpcResult(response: unknown): Record<string, unknown> | undefined {
-  if (!isRecord(response)) return undefined
-  const result = response.result
-  return isRecord(result) ? result : undefined
-}
-
-function moonlightResult(state: unknown): Record<string, unknown> | undefined {
-  return rpcResult(okResponse(state, "moonlight"))
-}
-
-function gamescopeResult(state: unknown): Record<string, unknown> | undefined {
-  return rpcResult(okResponse(state, "gamescope"))
-}
-
-function moonlightRuntimeSettings(
-  state: unknown,
-): Record<string, unknown> | undefined {
-  return recordField(moonlightResult(state), "runtimeSettings")
-}
-
-function moonlightStreamQuality(
-  state: unknown,
-): Record<string, unknown> | undefined {
-  return recordField(moonlightResult(state), "streamQuality")
-}
-
-function recordField(
-  record: Record<string, unknown> | undefined,
-  key: string,
-): Record<string, unknown> | undefined {
-  const value = record?.[key]
-  return isRecord(value) ? value : undefined
-}
-
-function numberField(
-  record: Record<string, unknown> | undefined,
-  key: string,
+function knownUnifiedNumber(
+  readback: UnifiedReadback<number>,
 ): number | undefined {
-  const value = record?.[key]
-  return typeof value === "number" ? value : undefined
+  return readback._tag === "known" ? readback.value : undefined
 }
 
-function firstNumber(...values: readonly unknown[]): number | undefined {
-  return values.find((value): value is number => typeof value === "number")
-}
-
-function resolutionIndex(
-  width: number | undefined,
-  height: number | undefined,
-): number | undefined {
-  if (width === undefined || height === undefined) return undefined
-  const index = RESOLUTION_STEPS.findIndex(
-    step => step.width === width && step.height === height,
-  )
-  return index >= 0 ? index : undefined
-}
-
-function indexOfStep(
+function knownStepIndex(
+  readback: ControlReadback<number> | UnifiedReadback<number>,
   steps: readonly number[],
-  value: number | undefined,
 ): number | undefined {
-  if (value === undefined) return undefined
-  const index = steps.indexOf(value)
+  if (readback._tag !== "known") return undefined
+  const index = steps.indexOf(readback.value)
   return index >= 0 ? index : undefined
 }
 
@@ -629,14 +511,14 @@ const brightnessSpec: SliderSpec = {
 }
 
 function brightnessDeviceSpec(
-  device: BrightnessDevice,
+  device: { readonly name: string; readonly percent: ControlReadback<number> },
   index: number,
 ): SliderSpec {
   return {
     id: `evier-brightness-${device.name}`,
     label: `Display ${index + 1} brightness`,
     action: "setBrightness",
-    initial: device.percent,
+    initial: knownValue(device.percent) ?? 50,
     min: 0,
     max: 100,
     step: 1,
@@ -646,24 +528,6 @@ function brightnessDeviceSpec(
     format: value => `${value}%`,
     payload: value => ({ percent: value, device: device.name }),
   }
-}
-
-interface BrightnessDevice {
-  readonly name: string
-  readonly percent: number
-}
-
-function brightnessDevicesFromState(state: unknown): readonly BrightnessDevice[] {
-  const brightness = isRecord(state) ? state.brightness : undefined
-  const response = isRecord(brightness) ? brightness.response : undefined
-  const devices = isRecord(response) ? response.devices : undefined
-  if (!Array.isArray(devices)) return []
-  return devices.flatMap(device => {
-    if (!isRecord(device)) return []
-    if (typeof device.name !== "string") return []
-    if (typeof device.percent !== "number") return []
-    return [{ name: device.name, percent: clamp(device.percent, 0, 100) }]
-  })
 }
 
 const linkedResolutionSpec: SliderSpec = {
@@ -688,15 +552,15 @@ const linkedFpsSpec: SliderSpec = {
   id: "evier-linked-fps",
   label: "FPS",
   action: "setLinkedFps",
-  initial: FPS_STEPS.length - 1,
+  initial: LINKED_FPS_STEPS.length - 1,
   min: 0,
-  max: FPS_STEPS.length - 1,
+  max: LINKED_FPS_STEPS.length - 1,
   step: 1,
   stepper: 1,
   accent: "linked",
-  hint: "30–120 FPS",
-  format: value => `${FPS_STEPS[value] ?? 120} FPS`,
-  payload: value => ({ fps: FPS_STEPS[value] ?? 120 }),
+  hint: "30, 45, 60, 75, 90, 120 FPS",
+  format: value => `${LINKED_FPS_STEPS[value] ?? 120} FPS`,
+  payload: value => ({ fps: LINKED_FPS_STEPS[value] ?? 120 }),
 }
 
 const moonlightBitrateSpecBase: SliderSpec = {
@@ -888,10 +752,6 @@ function gamescopeScalingFilterFrom(value: unknown): GamescopeScalingFilter {
     return value
   }
   return "linear"
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function errorMessage(error: unknown): string {

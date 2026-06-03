@@ -21,17 +21,25 @@ describe("EvierStreamControlPage", () => {
     render(<EvierStreamControlPage controller={recordingController()} />)
 
     expect(
-      (screen.getByRole("checkbox", {
-        name: "Unified stream controls",
-      }) as HTMLInputElement).checked,
+      (
+        screen.getByRole("checkbox", {
+          name: "Unified stream controls",
+        }) as HTMLInputElement
+      ).checked,
     ).toBe(true)
     expect(
-      (screen.getByRole("checkbox", {
-        name: "Unified display brightness",
-      }) as HTMLInputElement).checked,
+      (
+        screen.getByRole("checkbox", {
+          name: "Unified display brightness",
+        }) as HTMLInputElement
+      ).checked,
     ).toBe(true)
-    expect(screen.getByRole("heading", { name: "Session controls" })).toBeTruthy()
-    expect(screen.getByRole("heading", { name: "Device controls" })).toBeTruthy()
+    expect(
+      screen.getByRole("heading", { name: "Session controls" }),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("heading", { name: "Device controls" }),
+    ).toBeTruthy()
     expect(screen.getByRole("slider", { name: "Bitrate" })).toBeTruthy()
     expect(screen.getByRole("slider", { name: "FPS" })).toBeTruthy()
     expect(screen.getByRole("slider", { name: "Resolution" })).toBeTruthy()
@@ -54,7 +62,9 @@ describe("EvierStreamControlPage", () => {
       screen.getByRole("checkbox", { name: "Unified stream controls" }),
     )
 
-    expect(screen.getByRole("heading", { name: "Moonlight stream" })).toBeTruthy()
+    expect(
+      screen.getByRole("heading", { name: "Moonlight stream" }),
+    ).toBeTruthy()
     expect(
       screen.getByRole("heading", { name: "Gamescope presentation" }),
     ).toBeTruthy()
@@ -99,6 +109,73 @@ describe("EvierStreamControlPage", () => {
     })
   })
 
+  it("limits unified FPS to the Moonlight and Gamescope intersection", async () => {
+    const calls: unknown[] = []
+    render(<EvierStreamControlPage controller={recordingController(calls)} />)
+    await waitFor(() => expect(screen.getByText("74%")).toBeTruthy())
+
+    const fps = screen.getByRole("slider", { name: "FPS" })
+    expect(fps.getAttribute("max")).toBe("5")
+
+    fireEvent.change(fps, { target: { value: "1" } })
+    await act(async () => {
+      await Bun.sleep(650)
+    })
+
+    expect(calls).toContainEqual({
+      method: "setMoonlightFps",
+      payload: { fps: 45 },
+    })
+    expect(calls).toContainEqual({
+      method: "setGamescopeFps",
+      payload: { fps: 45 },
+    })
+    expect(calls).not.toContainEqual({
+      method: "setGamescopeFps",
+      payload: { fps: 40 },
+    })
+  })
+
+  it("does not let a stale refresh overwrite a newer action readback", async () => {
+    let resolveStaleRefresh: ((state: unknown) => void) | undefined
+    const staleRefresh = new Promise<unknown>(resolve => {
+      resolveStaleRefresh = resolve
+    })
+    const stateQueue: Array<unknown | Promise<unknown>> = [
+      stateSnapshot({ bitrateKbps: 12_000 }),
+      staleRefresh,
+      stateSnapshot({ bitrateKbps: 6_000 }),
+    ]
+    const controller = recordingController()
+    const guardedController: EvierStreamControlController = {
+      ...controller,
+      getState: async () => {
+        const next = stateQueue.shift() ?? stateSnapshot({ bitrateKbps: 6_000 })
+        return next instanceof Promise ? await next : next
+      },
+    }
+
+    render(<EvierStreamControlPage controller={guardedController} />)
+    await waitFor(() => expect(screen.getByText("12 Mbps")).toBeTruthy())
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }))
+    fireEvent.change(screen.getByRole("slider", { name: "Bitrate" }), {
+      target: { value: "6000" },
+    })
+
+    await act(async () => {
+      await Bun.sleep(650)
+    })
+    await waitFor(() => expect(screen.getByText("6 Mbps")).toBeTruthy())
+
+    await act(async () => {
+      resolveStaleRefresh?.(stateSnapshot({ bitrateKbps: 12_000 }))
+      await Bun.sleep(0)
+    })
+
+    expect(screen.getByText("6 Mbps")).toBeTruthy()
+  })
+
   it("debounces slider mutations against the Evier RPC controller", async () => {
     const calls: unknown[] = []
     render(<EvierStreamControlPage controller={recordingController(calls)} />)
@@ -128,6 +205,63 @@ describe("EvierStreamControlPage", () => {
   })
 })
 
+function stateSnapshot({
+  bitrateKbps = 12_000,
+  fps = 60,
+  width = 1920,
+  height = 1080,
+}: {
+  readonly bitrateKbps?: number
+  readonly fps?: number
+  readonly width?: number
+  readonly height?: number
+} = {}) {
+  return {
+    moonlight: {
+      status: "ok",
+      response: {
+        result: {
+          streamQuality: { bitrateKbps, fps, width, height },
+          runtimeSettings: {
+            appliedBitrateKbps: bitrateKbps,
+            appliedFps: fps,
+            appliedResolution: { width, height },
+          },
+        },
+      },
+    },
+    gamescope: {
+      status: "ok",
+      response: {
+        result: {
+          xwaylandMode: { width, height },
+          fps,
+          sharpness: 10,
+          filter: "fsr",
+        },
+      },
+    },
+    brightness: {
+      status: "ok",
+      response: {
+        percent: 50,
+        devices: [
+          { name: "panel-a", percent: 40 },
+          { name: "panel-b", percent: 60 },
+        ],
+      },
+    },
+    battery: {
+      status: "ok",
+      response: {
+        percent: 74,
+        status: "Discharging",
+        supplies: [{ name: "battery", type: "Battery", capacity: 74 }],
+      },
+    },
+  }
+}
+
 function recordingController(
   calls: unknown[] = [],
 ): EvierStreamControlController {
@@ -143,55 +277,7 @@ function recordingController(
   return {
     getState: async () => {
       calls.push({ method: "getState" })
-      return {
-        moonlight: {
-          status: "ok",
-          response: {
-            result: {
-              streamQuality: {
-                bitrateKbps: 12_000,
-                fps: 60,
-                width: 1920,
-                height: 1080,
-              },
-              runtimeSettings: {
-                appliedBitrateKbps: 12_000,
-                appliedFps: 60,
-                appliedResolution: { width: 1920, height: 1080 },
-              },
-            },
-          },
-        },
-        gamescope: {
-          status: "ok",
-          response: {
-            result: {
-              xwaylandMode: { width: 1920, height: 1080 },
-              fps: 60,
-              sharpness: 10,
-              filter: "fsr",
-            },
-          },
-        },
-        brightness: {
-          status: "ok",
-          response: {
-            percent: 50,
-            devices: [
-              { name: "panel-a", percent: 40 },
-              { name: "panel-b", percent: 60 },
-            ],
-          },
-        },
-        battery: {
-          status: "ok",
-          response: {
-            percent: 74,
-            status: "Discharging",
-            supplies: [{ name: "battery", type: "Battery", capacity: 74 }],
-          },
-        },
-      }
+      return stateSnapshot()
     },
     setBrightness: record("setBrightness"),
     setMoonlightBitrate: record("setMoonlightBitrate"),
