@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { readFile } from "node:fs/promises"
-import { decodeDesktopInputBridgePayload } from "@shared/input/desktop-bridge-wire"
-import { ABS_HAT0X, ABS_X, ABS_Y } from "@shared/input/native/button-codes"
+import { decodeDesktopInputBridgePayload } from "@platform/input/desktop-bridge-wire"
+import { ABS_HAT0X, ABS_X, ABS_Y } from "@platform/input/native/button-codes"
 import type { ServerWebSocket } from "bun"
 import { Effect, Fiber } from "effect"
 import { createDesktopInputBroker } from "./input-broker"
@@ -340,7 +340,7 @@ describe("createDesktopInputBroker", () => {
     )
     const sharedSource = await readFile(
       new URL(
-        "../../../korri/shared/input/desktop-input-broker-core.ts",
+        "../../../product/platform/input/desktop-input-broker-core.ts",
         import.meta.url,
       ),
       "utf8",

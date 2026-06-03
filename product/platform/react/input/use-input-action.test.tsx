@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import {
+  getSpatialNavigationSnapshot,
+  startSpatialNavigation,
+} from "@platform/browser/navigation/start"
 import { act, renderHook } from "@testing-library/react"
-import { getSpatialNavigationSnapshot, startSpatialNavigation } from "./start"
 import { useInputAction } from "./use-input-action"
 
 const startWithoutDeviceAdapters = () =>

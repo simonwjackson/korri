@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test"
 import type {
   DesktopInputActionBridgePayload,
   DesktopInputStatusBridgePayload,
-} from "@shared/input/desktop-bridge-wire"
+} from "@platform/input/desktop-bridge-wire"
 import { installDesktopInputBridge } from "./preload"
 
 interface WindowDouble {

@@ -4,14 +4,14 @@ import {
   type DiscoveredDevice,
   type NativeInputDeviceClass,
   parseProcBusInputDevices,
-} from "@shared/input/native/discover-devices"
-import { parseEvdevBytes } from "@shared/input/native/parse-evdev"
+} from "@platform/input/native/discover-devices"
+import { parseEvdevBytes } from "@platform/input/native/parse-evdev"
 import {
   decodeNativeInputEvent,
   decodeNativeInputSubscription,
   encodeNativeInputEvent,
   type NativeInputEvent,
-} from "@shared/input/native/wire-schema"
+} from "@platform/input/native/wire-schema"
 import { logger as defaultLogger } from "@shared/logger"
 
 export interface InputBridgeEventSource extends AsyncIterable<Uint8Array> {

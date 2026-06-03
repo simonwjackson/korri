@@ -8,7 +8,7 @@ import {
   foregroundSessionStatusLayerAtom,
   launcherLayerAtom,
   librarySourceLayerAtom,
-} from "@shared/library/library-atoms"
+} from "@platform/react/library/library-atoms"
 import type { ReactNode } from "react"
 
 type LiveUsbArtifact = "product" | "developer"

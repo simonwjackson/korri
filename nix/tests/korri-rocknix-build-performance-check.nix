@@ -60,6 +60,7 @@ pkgs.runCommand "korri-rocknix-build-performance-check"
     test -e ${runtimeSources.portal}/product/apps/portal
     test -e ${runtimeSources.portal}/korri/products
     test -e ${runtimeSources.portal}/korri/shared
+    test -e ${runtimeSources.portal}/product/platform
     test ! -e ${runtimeSources.portal}/product/apps/desktop/runtime-config.ts
     test ! -e ${runtimeSources.portal}/tools/testing
     test ! -e ${runtimeSources.portal}/product/apps/storybook
@@ -69,6 +70,7 @@ pkgs.runCommand "korri-rocknix-build-performance-check"
     test -e ${runtimeSources.desktop}/electrobun.config.ts
     test -e ${runtimeSources.desktop}/product/apps/desktop
     test -e ${runtimeSources.desktop}/product/apps/cli
+    test -e ${runtimeSources.desktop}/product/platform
     test ! -e ${runtimeSources.desktop}/tools/cli
     test ! -e ${runtimeSources.desktop}/tools/testing
     test ! -e ${runtimeSources.desktop}/product/apps/storybook
@@ -76,12 +78,14 @@ pkgs.runCommand "korri-rocknix-build-performance-check"
     test -e ${runtimeSources.inputd}/product/services/device
     test -e ${runtimeSources.inputd}/tools/types
     test -e ${runtimeSources.inputd}/korri/products
+    test -e ${runtimeSources.inputd}/product/platform
     test ! -e ${runtimeSources.inputd}/tools/device
     test ! -e ${runtimeSources.inputd}/tools/testing
     test ! -e ${runtimeSources.inputd}/tools/playwright
 
     test -e ${runtimeSources.gameStream}/product/services/device
     test -e ${runtimeSources.gameStream}/korri/products
+    test -e ${runtimeSources.gameStream}/product/platform
     test ! -e ${runtimeSources.gameStream}/tools/device
     test ! -e ${runtimeSources.gameStream}/tools/http
     test ! -e ${runtimeSources.gameStream}/tools/types
@@ -91,6 +95,7 @@ pkgs.runCommand "korri-rocknix-build-performance-check"
     test -e ${runtimeSources.sessiond}/product/services/device
     test -e ${runtimeSources.sessiond}/tools/library
     test -e ${runtimeSources.sessiond}/korri/shared
+    test -e ${runtimeSources.sessiond}/product/platform
     test ! -e ${runtimeSources.sessiond}/tools/device
     test ! -e ${runtimeSources.sessiond}/tools/types
     test ! -e ${runtimeSources.sessiond}/tools/testing
@@ -99,6 +104,7 @@ pkgs.runCommand "korri-rocknix-build-performance-check"
     test -e ${runtimeSources.server}/product/services/device
     test -e ${runtimeSources.server}/product/services/server
     test -e ${runtimeSources.server}/korri/shared
+    test -e ${runtimeSources.server}/product/platform
     test ! -e ${runtimeSources.server}/tools/device
     test ! -e ${runtimeSources.server}/tools/http
     test ! -e ${runtimeSources.server}/tools/types
@@ -108,6 +114,7 @@ pkgs.runCommand "korri-rocknix-build-performance-check"
 
     test -e ${runtimeSources.cli}/product/apps/cli
     test -e ${runtimeSources.cli}/product/services/device
+    test -e ${runtimeSources.cli}/product/platform
     test ! -e ${runtimeSources.cli}/tools/cli
     test ! -e ${runtimeSources.cli}/tools/device
     test ! -e ${runtimeSources.cli}/tools/testing

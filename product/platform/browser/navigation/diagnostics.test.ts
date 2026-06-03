@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { createInputBus } from "@shared/input/bus"
+import { createInputBus } from "@platform/input/bus"
 import { installNavigationDiagnostics } from "./diagnostics"
 
 describe("installNavigationDiagnostics", () => {

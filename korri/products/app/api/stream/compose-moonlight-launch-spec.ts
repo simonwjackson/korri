@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises"
-import { parseProcBusInputDevices } from "@shared/input/native/discover-devices"
-import { resolveInputPlumberVirtualGamepad } from "@shared/input/native/inputplumber-virtual-gamepad"
+import { parseProcBusInputDevices } from "@platform/input/native/discover-devices"
+import { resolveInputPlumberVirtualGamepad } from "@platform/input/native/inputplumber-virtual-gamepad"
 import type { LaunchFailureKind, LaunchSpec } from "@shared/library/launcher"
 import {
   composeGamescopeLaunchSpec,

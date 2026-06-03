@@ -6,7 +6,7 @@ import { createAdaptorServer } from "@hono/node-server"
 import {
   foregroundSessionGateStateAtom,
   foregroundSessionStatusLayerAtom,
-} from "@shared/library/library-atoms"
+} from "@platform/react/library/library-atoms"
 import { ForegroundSessionStatusSource } from "@shared/stream/foreground-session-status-source"
 import { Effect } from "effect"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"

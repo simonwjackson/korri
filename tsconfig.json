@@ -13,7 +13,8 @@
 			"@app/*": ["./korri/products/app/*"],
 			"@shared/*": ["./korri/shared/*"],
 			"@korri/*": ["./korri/*"],
-			"@product/*": ["./product/*"]
+			"@product/*": ["./product/*"],
+			"@platform/*": ["./product/platform/*"]
 		},
 		"skipLibCheck": true,
 		"types": ["react", "react-dom", "node", "bun"]

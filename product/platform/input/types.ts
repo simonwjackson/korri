@@ -13,7 +13,7 @@ export type Direction = "up" | "down" | "left" | "right"
 
 /**
  * Identifies which adapter emitted an action. Used by the input-mode store
- * (`@shared/navigation/input-mode`) to decide between pointer mode and
+ * (`@platform/browser/navigation/input-mode`) to decide between pointer mode and
  * directional mode without timing heuristics. Adapters populate this on
  * every emission; synthetic / test emits may omit it (no mode change occurs
  * for untagged actions).

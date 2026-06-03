@@ -1,11 +1,15 @@
 import type { EntrySource } from "@shared/api/rpc/entry-source"
+import { makeInMemoryLauncherLayer } from "@shared/library/launcher-layer-memory"
+import {
+  Launcher,
+  LibraryError,
+  LibrarySource,
+} from "@shared/library/library-services"
+import { loadingForeverLibrarySourceLayer } from "@shared/library/library-source-layer-memory"
 import type { ForegroundSessionGateState } from "@shared/stream/foreground-session-gate-state"
 import { ForegroundSessionStatusSource } from "@shared/stream/foreground-session-status-source"
 import { Duration, Effect, Layer } from "effect"
 import * as Atom from "effect/unstable/reactivity/Atom"
-import { makeInMemoryLauncherLayer } from "./launcher-layer-memory"
-import { Launcher, LibraryError, LibrarySource } from "./library-services"
-import { loadingForeverLibrarySourceLayer } from "./library-source-layer-memory"
 
 export const librarySourceLayerAtom = Atom.make(
   loadingForeverLibrarySourceLayer,

@@ -1,9 +1,9 @@
-import type { Option } from "effect"
-import { createContext, type ReactNode, useContext } from "react"
 import {
   type LibraryListState,
   LibraryListState as LibraryListStateModel,
-} from "./library-list-state"
+} from "@shared/library/library-list-state"
+import type { Option } from "effect"
+import { createContext, type ReactNode, useContext } from "react"
 
 const LibraryListStateContext = createContext<LibraryListState | null>(null)
 

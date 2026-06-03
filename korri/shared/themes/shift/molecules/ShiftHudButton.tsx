@@ -19,7 +19,7 @@
  * component.
  */
 
-import { useInputAction } from "@shared/navigation/use-input-action"
+import { useInputAction } from "@platform/react/input/use-input-action"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ShiftHudGlyph } from "../atoms/ShiftHudGlyph"
 

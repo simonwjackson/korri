@@ -1,4 +1,4 @@
-import { useLibraryListCase } from "@shared/library/library-list-state-root"
+import { useLibraryListCase } from "@platform/react/library/library-list-state-root"
 import { Option } from "effect"
 
 export function ShiftHomeEmptyBody() {

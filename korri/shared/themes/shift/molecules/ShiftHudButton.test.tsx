@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test"
 import {
   type SpatialNavigationHandle,
   startSpatialNavigation,
-} from "@shared/navigation/start"
+} from "@platform/browser/navigation/start"
 import { act, render, waitFor } from "@testing-library/react"
 import { ShiftHudButton } from "./ShiftHudButton"
 

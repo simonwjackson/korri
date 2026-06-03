@@ -13,11 +13,11 @@
 import { randomUUID } from "node:crypto"
 import { mkdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
-import { parseProcBusInputDevices } from "@shared/input/native/discover-devices"
+import { parseProcBusInputDevices } from "@platform/input/native/discover-devices"
 import {
   type InputPlumberVirtualGamepadResolution,
   resolveInputPlumberVirtualGamepad,
-} from "@shared/input/native/inputplumber-virtual-gamepad"
+} from "@platform/input/native/inputplumber-virtual-gamepad"
 import {
   composeGamescopeLaunchSpec,
   type GamescopeOptions,

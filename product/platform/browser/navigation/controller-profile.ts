@@ -1,6 +1,6 @@
-import type { DesktopBridgeAdapterOptions } from "@shared/input/desktop-bridge-adapter"
-import type { GamepadAdapterOptions } from "@shared/input/gamepad-adapter"
-import type { NativeInputAdapterOptions } from "@shared/input/native-adapter"
+import type { DesktopBridgeAdapterOptions } from "@platform/input/desktop-bridge-adapter"
+import type { GamepadAdapterOptions } from "@platform/input/gamepad-adapter"
+import type { NativeInputAdapterOptions } from "@platform/input/native-adapter"
 
 export const CONTROLLER_INPUT_PROFILES = [
   "auto",

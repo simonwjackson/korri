@@ -351,7 +351,10 @@
                 root = ./.;
                 fileset = fileset.unions (common ++ extra);
               };
-            sharedRuntime = [ ./korri/shared ];
+            sharedRuntime = [
+              ./korri/shared
+              ./product/platform
+            ];
             deviceRuntime = [
               ./korri/products
               ./product/services/device

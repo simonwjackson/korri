@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test"
 import { readFileSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
-import { decodeNativeInputEvent } from "@shared/input/native/wire-schema"
+import { decodeNativeInputEvent } from "@platform/input/native/wire-schema"
 import { type InputBridgeHandle, startInputBridge } from "./input-bridge"
 
 const PROC_FIXTURES_DIR = join(process.cwd(), "tools/testing/fixtures/proc")

@@ -1,9 +1,9 @@
-import type { Option } from "effect"
-import { createContext, type ReactNode, useContext } from "react"
 import {
   type LaunchState,
   LaunchState as LaunchStateModel,
-} from "./launch-state"
+} from "@shared/library/launch-state"
+import type { Option } from "effect"
+import { createContext, type ReactNode, useContext } from "react"
 
 const LaunchStateContext = createContext<LaunchState | null>(null)
 

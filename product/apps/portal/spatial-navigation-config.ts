@@ -1,5 +1,5 @@
-import type { ControllerInputProfile } from "@shared/navigation/controller-profile"
-import type { StartSpatialNavigationOptions } from "@shared/navigation/start"
+import type { ControllerInputProfile } from "@platform/browser/navigation/controller-profile"
+import type { StartSpatialNavigationOptions } from "@platform/browser/navigation/start"
 import type { RuntimeConfig } from "../desktop/runtime-config-shape"
 
 /**

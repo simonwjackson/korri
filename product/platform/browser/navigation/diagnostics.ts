@@ -1,5 +1,5 @@
-import type { InputBus } from "@shared/input/bus"
-import type { InputAction } from "@shared/input/types"
+import type { InputBus } from "@platform/input/bus"
+import type { InputAction } from "@platform/input/types"
 import { createLogger } from "@shared/logger"
 
 const logger = createLogger("navigation")

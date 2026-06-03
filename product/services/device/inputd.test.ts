@@ -20,8 +20,8 @@ import {
   KEY_VOLUMEDOWN,
   KEY_VOLUMEUP,
   SW_LID,
-} from "@shared/input/native/button-codes"
-import { decodeNativeInputEvent } from "@shared/input/native/wire-schema"
+} from "@platform/input/native/button-codes"
+import { decodeNativeInputEvent } from "@platform/input/native/wire-schema"
 import { type KorriInputdHandle, startKorriInputd } from "./inputd"
 import type { KorriInputdActionId } from "./inputd-actions"
 

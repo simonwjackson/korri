@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { useAtomSet } from "@effect/atom-react"
-import { games } from "@shared/fixtures/games/games"
-import { makeInMemoryLauncherLayer } from "@shared/library/launcher-layer-memory"
 import {
   launcherLayerAtom,
   librarySourceLayerAtom,
-} from "@shared/library/library-atoms"
+} from "@platform/react/library/library-atoms"
+import { games } from "@shared/fixtures/games/games"
+import { makeInMemoryLauncherLayer } from "@shared/library/launcher-layer-memory"
 import {
   loadingForeverLibrarySourceLayer,
   makeInMemoryLibrarySourceLayer,

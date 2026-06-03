@@ -1,12 +1,12 @@
 import {
   isDesktopInputActionBridgePayload,
   isDesktopInputStatusBridgePayload,
-} from "@shared/input/desktop-bridge-wire"
+} from "@platform/input/desktop-bridge-wire"
 import {
   createDesktopInputBrokerCore,
   type DesktopInputBrokerCoreOptions,
   type DesktopInputTarget,
-} from "@shared/input/desktop-input-broker-core"
+} from "@platform/input/desktop-input-broker-core"
 
 type DesktopInputWindow = {
   readonly title?: string

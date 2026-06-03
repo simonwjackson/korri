@@ -26,7 +26,7 @@ import {
   type DesktopInputStatus,
   isDesktopInputActionBridgePayload,
   isDesktopInputStatusBridgePayload,
-} from "@shared/input/desktop-bridge-wire"
+} from "@platform/input/desktop-bridge-wire"
 
 declare global {
   interface Window {

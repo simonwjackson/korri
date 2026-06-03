@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
-import type { InputAction } from "@shared/input/types"
+import type { InputAction } from "@platform/input/types"
 import {
   getInputBus,
   getSpatialNavigation,

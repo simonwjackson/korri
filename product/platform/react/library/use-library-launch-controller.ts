@@ -1,11 +1,11 @@
 import { useAtomSet } from "@effect/atom-react"
-import { useCallback, useMemo, useRef, useState } from "react"
 import {
   type LaunchController,
   type LaunchStartInput,
   type LaunchState,
   LaunchState as LaunchStateModel,
-} from "./launch-state"
+} from "@shared/library/launch-state"
+import { useCallback, useMemo, useRef, useState } from "react"
 import { launchAtom } from "./library-atoms"
 
 export function useLibraryLaunchController(): LaunchController {

@@ -1,4 +1,4 @@
-import { useInputAction } from "@shared/navigation/use-input-action"
+import { useInputAction } from "@platform/react/input/use-input-action"
 import { Dialog } from "radix-ui"
 import { type ReactNode, useEffect, useRef } from "react"
 import { ShiftHudGlyph } from "../atoms/ShiftHudGlyph"

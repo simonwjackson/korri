@@ -1,4 +1,7 @@
 import { useAtomValue } from "@effect/atom-react"
+import { useInputAction } from "@platform/react/input/use-input-action"
+import { foregroundSessionGateStateAtom } from "@platform/react/library/library-atoms"
+import { useLibraryListCase } from "@platform/react/library/library-list-state-root"
 import {
   type GameRecord,
   getGameDisplayName,
@@ -9,9 +12,6 @@ import {
   launchActionStateFrom,
 } from "@shared/library/launch-action-state"
 import type { LaunchController } from "@shared/library/launch-state"
-import { foregroundSessionGateStateAtom } from "@shared/library/library-atoms"
-import { useLibraryListCase } from "@shared/library/library-list-state-root"
-import { useInputAction } from "@shared/navigation/use-input-action"
 import type { ForegroundSessionGateState } from "@shared/stream/foreground-session-gate-state"
 import { Option } from "effect"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"

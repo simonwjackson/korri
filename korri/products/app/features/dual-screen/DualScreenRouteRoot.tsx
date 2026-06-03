@@ -1,13 +1,13 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react"
-import type { DualScreenChannelFactory } from "@shared/display/dual-screen/DualScreenBroadcastSessionRoot"
-import { DualScreenBroadcastSessionRoot } from "@shared/display/dual-screen/DualScreenBroadcastSessionRoot"
-import { DualScreenSessionRoot } from "@shared/display/dual-screen/DualScreenSessionRoot"
-import { libraryItemsAtom } from "@shared/library/library-atoms"
+import { libraryItemsAtom } from "@platform/react/library/library-atoms"
 import {
   LibraryListStateRoot,
   useLibraryListCase,
-} from "@shared/library/library-list-state-root"
-import { useLibraryLaunchController } from "@shared/library/use-library-launch-controller"
+} from "@platform/react/library/library-list-state-root"
+import { useLibraryLaunchController } from "@platform/react/library/use-library-launch-controller"
+import type { DualScreenChannelFactory } from "@shared/display/dual-screen/DualScreenBroadcastSessionRoot"
+import { DualScreenBroadcastSessionRoot } from "@shared/display/dual-screen/DualScreenBroadcastSessionRoot"
+import { DualScreenSessionRoot } from "@shared/display/dual-screen/DualScreenSessionRoot"
 import { ShiftCompanionScreen } from "@shared/themes/shift/pages/ShiftCompanionScreen"
 import { ShiftHomeDefectBody } from "@shared/themes/shift/pages/ShiftHomeDefectBody"
 import { ShiftHomeEmptyBody } from "@shared/themes/shift/pages/ShiftHomeEmptyBody"

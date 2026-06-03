@@ -1,11 +1,11 @@
 import {
   type ControllerInputProfile,
   isControllerInputProfile,
-} from "@shared/navigation/controller-profile"
+} from "@platform/browser/navigation/controller-profile"
 import {
   type SpatialNavigationHandle,
   startSpatialNavigation,
-} from "@shared/navigation/start"
+} from "@platform/browser/navigation/start"
 import type { Decorator, Preview } from "@storybook/react-vite"
 import { useEffect } from "react"
 import "@fontsource-variable/geist"

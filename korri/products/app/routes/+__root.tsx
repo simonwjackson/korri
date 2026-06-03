@@ -1,5 +1,5 @@
-import { createFocusRestore } from "@shared/navigation/focus-restore"
-import { useInputAction } from "@shared/navigation/use-input-action"
+import { createFocusRestore } from "@platform/browser/navigation/focus-restore"
+import { useInputAction } from "@platform/react/input/use-input-action"
 import {
   createRootRoute,
   Outlet,

@@ -12,6 +12,7 @@
  * transition has a real origin instead of fading out of nowhere.
  */
 
+import { useInputAction } from "@platform/react/input/use-input-action"
 import {
   type GameRecord,
   getGameDisplayName,
@@ -19,7 +20,6 @@ import {
   getGameWideImageUrl,
 } from "@shared/fixtures/games/game"
 import { games } from "@shared/fixtures/games/games"
-import { useInputAction } from "@shared/navigation/use-input-action"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import {
   AnimatePresence,

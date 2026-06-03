@@ -1,4 +1,4 @@
-import type { Direction, InputAction } from "@shared/input/types"
+import type { Direction, InputAction } from "@platform/input/types"
 import {
   centerScrollableAncestors,
   hasMarioCameraAncestor,

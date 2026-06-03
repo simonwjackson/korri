@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
 import { useAtomSet } from "@effect/atom-react"
-import type { LaunchController } from "@shared/library/launch-state"
-import { LaunchState } from "@shared/library/launch-state"
-import { foregroundSessionStatusLayerAtom } from "@shared/library/library-atoms"
-import { LibraryListStateRoot } from "@shared/library/library-list-state-root"
 import {
   type SpatialNavigationHandle,
   startSpatialNavigation,
-} from "@shared/navigation/start"
+} from "@platform/browser/navigation/start"
+import { foregroundSessionStatusLayerAtom } from "@platform/react/library/library-atoms"
+import { LibraryListStateRoot } from "@platform/react/library/library-list-state-root"
+import type { LaunchController } from "@shared/library/launch-state"
+import { LaunchState } from "@shared/library/launch-state"
 import type { ForegroundSessionGateState } from "@shared/stream/foreground-session-gate-state"
 import { ForegroundSessionStatusSource } from "@shared/stream/foreground-session-status-source"
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react"

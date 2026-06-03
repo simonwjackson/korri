@@ -28,6 +28,7 @@ const CURRENT_ALIAS_PATH_INVENTORY = {
   "@shared/*": "./korri/shared/*",
   "@korri/*": "./korri/*",
   "@product/*": "./product/*",
+  "@platform/*": "./product/platform/*",
 } as const
 
 function importSpecifiers(source: string): readonly string[] {
@@ -73,6 +74,14 @@ function importsThemePrivateProductInternals(
 function importsReact(source: string): boolean {
   return importSpecifiers(source).some(specifier =>
     /^(?:react|react-dom|@effect\/atom-react)(?:\/|$)/.test(specifier),
+  )
+}
+
+function importsPrivateProductFromPlatform(source: string): boolean {
+  return importSpecifiers(source).some(specifier =>
+    /^(?:@app\/|@product\/(?:apps|services|systems|themes)\/|product\/(?:apps|services|systems|themes)\/|@korri\/products\/app\/)/.test(
+      specifier,
+    ),
   )
 }
 
@@ -148,6 +157,46 @@ describe("standards: product platform reorganization guardrails", () => {
       importsReact('import { RegistryProvider } from "@effect/atom-react"'),
     ).toBe(true)
     expect(importsReact('import { Effect } from "effect"')).toBe(false)
+  })
+
+  it("keeps platform layers from importing product internals", () => {
+    const violations = existingRoots([
+      join(REPO_ROOT, "product", "platform"),
+    ]).flatMap(root =>
+      sourceFiles(root)
+        .filter(file => importsPrivateProductFromPlatform(readSource(file)))
+        .map(repoRelative),
+    )
+
+    expect(violations).toEqual([])
+  })
+
+  it("allows React dependencies only in the platform React adapter", () => {
+    const reactFiles = existingRoots([
+      join(REPO_ROOT, "product", "platform"),
+    ]).flatMap(root =>
+      sourceFiles(root)
+        .filter(file => importsReact(readSource(file)))
+        .map(repoRelative),
+    )
+
+    expect(
+      reactFiles.filter(file => !file.startsWith("product/platform/react/")),
+    ).toEqual([])
+  })
+
+  it("detects private product imports in platform-source samples", () => {
+    expect(importsPrivateProductFromPlatform('import x from "@app/api"')).toBe(
+      true,
+    )
+    expect(
+      importsPrivateProductFromPlatform('import x from "@product/apps/portal"'),
+    ).toBe(true)
+    expect(
+      importsPrivateProductFromPlatform(
+        'import x from "@platform/input/types"',
+      ),
+    ).toBe(false)
   })
 
   it("keeps shipped runtime entrypoints out of developer-only tools", () => {

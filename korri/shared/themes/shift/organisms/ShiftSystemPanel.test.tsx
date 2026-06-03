@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test"
 import {
   type SpatialNavigationHandle,
   startSpatialNavigation,
-} from "@shared/navigation/start"
-import { useInputAction } from "@shared/navigation/use-input-action"
+} from "@platform/browser/navigation/start"
+import { useInputAction } from "@platform/react/input/use-input-action"
 import {
   act,
   cleanup,

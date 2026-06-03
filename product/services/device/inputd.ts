@@ -24,30 +24,30 @@ import {
   KEY_VOLUMEDOWN,
   KEY_VOLUMEUP,
   SW_LID,
-} from "@shared/input/native/button-codes"
+} from "@platform/input/native/button-codes"
 import {
   type DiscoveredDevice,
   type NativeInputAxisInfo,
   type NativeInputDeviceClass,
   parseProcBusInputDevices,
-} from "@shared/input/native/discover-devices"
-import { resolveInputPlumberVirtualGamepad } from "@shared/input/native/inputplumber-virtual-gamepad"
+} from "@platform/input/native/discover-devices"
+import { resolveInputPlumberVirtualGamepad } from "@platform/input/native/inputplumber-virtual-gamepad"
 import {
   type EvdevEvent,
   parseEvdevBytes,
-} from "@shared/input/native/parse-evdev"
+} from "@platform/input/native/parse-evdev"
 import {
   createSystemShortcutEngine,
   type SystemShortcutControl,
   type SystemShortcutDefinition,
   type SystemTapDefinition,
-} from "@shared/input/native/system-shortcut-engine"
+} from "@platform/input/native/system-shortcut-engine"
 import {
   decodeNativeInputEvent,
   decodeNativeInputSubscription,
   encodeNativeInputEvent,
   type NativeInputEvent,
-} from "@shared/input/native/wire-schema"
+} from "@platform/input/native/wire-schema"
 import { logger as defaultLogger } from "@shared/logger"
 import {
   createInputdActionDispatcher,

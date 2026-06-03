@@ -3,11 +3,14 @@
 	"entry": [
 		"electrobun.config.ts",
 		"product/apps/portal/main.tsx",
+		"korri/products/app/routes/**/*.tsx",
 		"product/apps/desktop/main.ts",
 		"product/apps/desktop/index.ts",
 		"product/apps/desktop/preload-entry.ts",
 		"product/apps/storybook/main.ts",
 		"product/apps/storybook/preview.tsx",
+		"product/platform/**/*.ts",
+		"product/platform/**/*.tsx",
 		"product/apps/cli/**/*.ts",
 		"product/services/**/*.ts",
 		"tools/scripts/**/*.ts",
@@ -71,6 +74,7 @@
 				]
 			},
 			{ "name": "app", "patterns": ["korri/products/app/**"] },
+			{ "name": "product-platform", "patterns": ["product/platform/**"] },
 			{ "name": "product-apps", "patterns": ["product/apps/**"] },
 			{ "name": "product-services", "patterns": ["product/services/**"] },
 			{ "name": "shared", "patterns": ["korri/shared/**"] },
@@ -84,25 +88,41 @@
 					"shared",
 					"repo-tools",
 					"product-apps",
-					"product-services"
+					"product-services",
+					"product-platform"
 				]
 			},
 			{
 				"from": "app",
-				"allow": ["shared", "product-apps", "product-services"]
+				"allow": [
+					"shared",
+					"product-apps",
+					"product-services",
+					"product-platform"
+				]
+			},
+			{
+				"from": "product-platform",
+				"allow": ["shared"]
 			},
 			{
 				"from": "product-apps",
-				"allow": ["app", "shared", "product-services"]
+				"allow": ["app", "shared", "product-services", "product-platform"]
 			},
 			{
 				"from": "product-services",
-				"allow": ["app", "shared", "product-apps"]
+				"allow": ["app", "shared", "product-apps", "product-platform"]
 			},
-			{ "from": "shared", "allow": [] },
+			{ "from": "shared", "allow": ["product-platform"] },
 			{
 				"from": "repo-tools",
-				"allow": ["app", "shared", "product-apps", "product-services"]
+				"allow": [
+					"app",
+					"shared",
+					"product-apps",
+					"product-services",
+					"product-platform"
+				]
 			}
 		]
 	}

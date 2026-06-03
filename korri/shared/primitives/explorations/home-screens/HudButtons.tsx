@@ -42,7 +42,7 @@
  * navigation focus.
  */
 
-import { useInputAction } from "@shared/navigation/use-input-action"
+import { useInputAction } from "@platform/react/input/use-input-action"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 type Action = "confirm" | "back" | "options"

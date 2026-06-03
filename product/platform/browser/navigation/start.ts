@@ -1,15 +1,15 @@
 import { getNextFocus } from "@bbc/tv-lrud-spatial"
-import { createInputBus, type InputBus } from "@shared/input/bus"
-import { createDesktopBridgeAdapter } from "@shared/input/desktop-bridge-adapter"
-import { createGamepadAdapter } from "@shared/input/gamepad-adapter"
-import { createKeyboardAdapter } from "@shared/input/keyboard-adapter"
+import { createInputBus, type InputBus } from "@platform/input/bus"
+import { createDesktopBridgeAdapter } from "@platform/input/desktop-bridge-adapter"
+import { createGamepadAdapter } from "@platform/input/gamepad-adapter"
+import { createKeyboardAdapter } from "@platform/input/keyboard-adapter"
 import {
   createNativeInputAdapter,
   type NativeInputAdapterOptions,
-} from "@shared/input/native-adapter"
-import { createPointerAdapter } from "@shared/input/pointer-adapter"
-import type { Direction } from "@shared/input/types"
-import { createWheelAdapter } from "@shared/input/wheel-adapter"
+} from "@platform/input/native-adapter"
+import { createPointerAdapter } from "@platform/input/pointer-adapter"
+import type { Direction } from "@platform/input/types"
+import { createWheelAdapter } from "@platform/input/wheel-adapter"
 import {
   type ActiveFocusAttributeOptions,
   createActiveFocusAttribute,

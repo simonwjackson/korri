@@ -1,4 +1,4 @@
-import { centerScrollableAncestors } from "@shared/navigation/center-scroll"
+import { centerScrollableAncestors } from "@platform/browser/navigation/center-scroll"
 import { useResolvedCSSLength } from "@shared/primitives/lib/useResolvedCSSLength"
 import { Slot } from "radix-ui"
 import {

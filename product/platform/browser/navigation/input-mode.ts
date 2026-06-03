@@ -6,7 +6,7 @@
  * active-tile focus rule.
  *
  * The store does NOT subscribe to the input bus directly. The wiring lives in
- * `@shared/navigation/start`, which translates bus actions into setter calls
+ * `@platform/browser/navigation/start`, which translates bus actions into setter calls
  * via the source-tag dispatch matrix (see plan unit 5). Keeping the store
  * free of bus knowledge means adapters and tests can manipulate mode without
  * understanding the bus' subscription shape.

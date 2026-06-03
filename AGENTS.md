@@ -49,8 +49,8 @@ Multi RPC:
 
 - The app must remain navigable via device-agnostic directional input and semantic action keys.
 - Components stay native HTML (`button`, `a`, `input`, `[tabindex]`); do not import navigation libraries or focus hooks at the component level.
-- Navigation-library and device-adapter code lives only under `korri/shared/input/*` and `korri/shared/navigation/*`.
-- Subscribe to semantic actions (`back`, `menu`, `options`, `confirm`, `direction`) with `useInputAction` from `@shared/navigation/use-input-action`. Do not reach into `window.__korriSpatialNav` from product code.
+- Navigation-library and device-adapter code lives only under `product/platform/input/*` and `korri/shared/browser/navigation/*`.
+- Subscribe to semantic actions (`back`, `menu`, `options`, `confirm`, `direction`) with `useInputAction` from `@platform/react/input/use-input-action`. Do not reach into `window.__korriSpatialNav` from product code.
 - Use LRUD's DOM hints (`lrud-container`, `lrud-ignore`, `data-block-exit`, `data-lrud-overlap-threshold`) when needed; do not create component-level navigation APIs.
 - See `docs/solutions/best-practices/decoupled-spatial-navigation-2026-05-01.md` before changing the navigation architecture.
 

@@ -1,9 +1,9 @@
-import type { InputAction } from "@shared/input/types"
-import { useEffect, useRef, useSyncExternalStore } from "react"
 import {
   getSpatialNavigationSnapshot,
   subscribeSpatialNavigation,
-} from "./start"
+} from "@platform/browser/navigation/start"
+import type { InputAction } from "@platform/input/types"
+import { useEffect, useRef, useSyncExternalStore } from "react"
 
 /**
  * Subscribe React code to the device-agnostic input bus.
