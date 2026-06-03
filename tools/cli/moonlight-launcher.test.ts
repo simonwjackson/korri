@@ -43,7 +43,7 @@ describe("moonlight launcher", () => {
 
     expect(result).toEqual({ status: "started", command: "gamescope" })
     expect(calls).toEqual([
-      "gamescope -f -b -- moonlight stream -app Korri Stream aka.local",
+      "gamescope -f -b -- moonlight stream -autowindowresize -app Korri Stream aka.local",
     ])
   })
 
@@ -63,7 +63,7 @@ describe("moonlight launcher", () => {
       command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
     })
     expect(calls).toEqual([
-      "/run/current-system/sw/bin/korri-gamescope-no-portal -f -b -- moonlight stream -app Korri Stream aka.local",
+      "/run/current-system/sw/bin/korri-gamescope-no-portal -f -b -- moonlight stream -autowindowresize -app Korri Stream aka.local",
     ])
   })
 
@@ -94,8 +94,8 @@ describe("moonlight launcher", () => {
 
     expect(result).toEqual({ status: "started", command: "gamescope" })
     expect(calls).toEqual([
-      "gamescope -f -b -- moonlight stream -app Korri Stream aka.local",
-      "gamescope -f -b -- nix run nixpkgs#moonlight-embedded -- stream -app Korri Stream aka.local",
+      "gamescope -f -b -- moonlight stream -autowindowresize -app Korri Stream aka.local",
+      "gamescope -f -b -- nix run nixpkgs#moonlight-embedded -- stream -autowindowresize -app Korri Stream aka.local",
     ])
   })
 
@@ -114,7 +114,7 @@ describe("moonlight launcher", () => {
 
       expect(result).toEqual({ status: "started", command: "gamescope" })
       expect(calls).toEqual([
-        "gamescope -f -b -- moonlight stream -app Korri Stream aka.local",
+        "gamescope -f -b -- moonlight stream -autowindowresize -app Korri Stream aka.local",
       ])
     } finally {
       if (previousClient === undefined) delete Bun.env.KORRI_MOONLIGHT_CLIENT
@@ -140,7 +140,7 @@ describe("moonlight launcher", () => {
 
       expect(result.status).toBe("failed")
       expect(calls).toEqual([
-        "gamescope -f -b -- /nix/store/moonlight-embedded/bin/moonlight stream -app Korri Stream 192.168.1.117",
+        "gamescope -f -b -- /nix/store/moonlight-embedded/bin/moonlight stream -autowindowresize -app Korri Stream 192.168.1.117",
       ])
     } finally {
       if (previous === undefined) delete Bun.env.KORRI_MOONLIGHT_COMMAND
@@ -166,7 +166,7 @@ describe("moonlight launcher", () => {
 
     expect(result).toEqual({ status: "started", command: "gamescope" })
     expect(calls).toEqual([
-      "gamescope -f -b -- moonlight stream -mapping /nix/store/moonlight/share/moonlight/gamecontrollerdb.txt -input /dev/input/event10 -app Korri Stream 192.168.1.117",
+      "gamescope -f -b -- moonlight stream -mapping /nix/store/moonlight/share/moonlight/gamecontrollerdb.txt -input /dev/input/event10 -autowindowresize -app Korri Stream 192.168.1.117",
     ])
   })
 
@@ -209,7 +209,7 @@ describe("moonlight launcher", () => {
 
     expect(result).toEqual({ status: "started", command: "gamescope" })
     expect(calls).toEqual([
-      "gamescope -f -b -- moonlight stream -input /dev/input/event3 -app Korri Stream 192.168.1.117",
+      "gamescope -f -b -- moonlight stream -input /dev/input/event3 -autowindowresize -app Korri Stream 192.168.1.117",
     ])
   })
 
@@ -224,7 +224,7 @@ describe("moonlight launcher", () => {
 
     expect(result).toEqual({ status: "started", command: "gamescope" })
     expect(calls).toEqual([
-      "gamescope -f -b -- moonlight stream -platform sdl -input /dev/input/event10 -app Korri Stream 192.168.1.117",
+      "gamescope -f -b -- moonlight stream -platform sdl -input /dev/input/event10 -autowindowresize -app Korri Stream 192.168.1.117",
     ])
   })
 
@@ -238,7 +238,7 @@ describe("moonlight launcher", () => {
 
     expect(result).toEqual({ status: "started", command: "gamescope" })
     expect(calls).toEqual([
-      "gamescope -f -b --expose-wayland -- moonlight stream -platform wayland -app Korri Stream 192.168.1.117",
+      "gamescope -f -b --expose-wayland -- moonlight stream -platform wayland -autowindowresize -app Korri Stream 192.168.1.117",
     ])
   })
 
@@ -258,7 +258,7 @@ describe("moonlight launcher", () => {
 
       expect(result).toEqual({ status: "started", command: "gamescope" })
       expect(calls).toEqual([
-        "gamescope -f -b -- moonlight stream -mapping /nix/store/moonlight-embedded/share/moonlight/gamecontrollerdb.txt -app Korri Stream 192.168.1.117",
+        "gamescope -f -b -- moonlight stream -mapping /nix/store/moonlight-embedded/share/moonlight/gamecontrollerdb.txt -autowindowresize -app Korri Stream 192.168.1.117",
       ])
     } finally {
       if (previous === undefined) delete Bun.env.KORRI_MOONLIGHT_MAPPING_FILE
@@ -277,7 +277,7 @@ describe("moonlight launcher", () => {
 
     expect(result).toEqual({ status: "started", command: "gamescope" })
     expect(calls).toEqual([
-      "gamescope -f -b -- moonlight stream -absolutetouch -absolutetouchrequirebounds -app Korri Stream 192.168.1.117",
+      "gamescope -f -b -- moonlight stream -absolutetouch -absolutetouchrequirebounds -autowindowresize -app Korri Stream 192.168.1.117",
     ])
   })
 
@@ -298,7 +298,7 @@ describe("moonlight launcher", () => {
 
       expect(result).toEqual({ status: "started", command: "gamescope" })
       expect(calls).toEqual([
-        "gamescope -f -b -- moonlight stream -absolutetouch -absolutetouchbounds 0,0,1080,1920 -app Korri Stream 192.168.1.117",
+        "gamescope -f -b -- moonlight stream -absolutetouch -absolutetouchbounds 0,0,1080,1920 -autowindowresize -app Korri Stream 192.168.1.117",
       ])
     } finally {
       if (previousAbsoluteTouch === undefined) {
@@ -330,7 +330,7 @@ describe("moonlight launcher", () => {
 
     expect(result.status).toBe("failed")
     expect(calls).toEqual([
-      "gamescope -f -b -- /nix/store/moonlight-embedded/bin/moonlight stream -app Korri Stream 192.168.1.117",
+      "gamescope -f -b -- /nix/store/moonlight-embedded/bin/moonlight stream -autowindowresize -app Korri Stream 192.168.1.117",
     ])
   })
 

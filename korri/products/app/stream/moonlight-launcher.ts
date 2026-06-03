@@ -87,6 +87,7 @@ export interface MoonlightLaunchOptions {
   readonly absoluteTouch?: boolean
   readonly absoluteTouchBounds?: string
   readonly absoluteTouchRequireBounds?: boolean
+  readonly autoWindowResize?: boolean
   readonly gamescope?: GamescopeOptions
   readonly readProcDevices?: () => Promise<string>
   readonly runner?: CommandRunner
@@ -288,6 +289,26 @@ function moonlightAbsoluteTouchRequireBoundsFromEnv(): boolean | undefined {
   return raw === "1" || raw === "true" || raw === "enabled"
 }
 
+function moonlightAutoWindowResize(
+  options: MoonlightLaunchOptions,
+): boolean {
+  return (
+    options.autoWindowResize ??
+    moonlightAutoWindowResizeFromEnv() ??
+    gamescopeEnabled(options.gamescope)
+  )
+}
+
+function moonlightAutoWindowResizeFromEnv(): boolean | undefined {
+  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_AUTO_WINDOW_RESIZE?.trim()
+  if (!raw) return undefined
+  return raw === "1" || raw === "true" || raw === "enabled"
+}
+
+function gamescopeEnabled(gamescope: GamescopeOptions | undefined): boolean {
+  return gamescope?.enabled !== false
+}
+
 function moonlightInputDeviceFromEnv(): string | undefined {
   const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_INPUT_DEVICE?.trim()
   return raw === "" ? undefined : raw
@@ -416,6 +437,7 @@ function moonlightArgs(
     ...(options.absoluteTouchBounds
       ? ["-absolutetouchbounds", options.absoluteTouchBounds]
       : []),
+    ...(moonlightAutoWindowResize(options) ? ["-autowindowresize"] : []),
     "-app",
     appName,
     options.host,

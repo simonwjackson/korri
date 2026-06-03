@@ -72,6 +72,7 @@ let
     ./patches/0010-reopen-v4l2m2m-context-on-output-size-change.patch
     ./patches/0011-reset-sdl-presenter-on-output-size-change.patch
     ./patches/0012-add-runtime-touch-bounds-control.patch
+    ./patches/0013-add-auto-window-resize-flag.patch
   ];
 in
 stdenv.mkDerivation rec {
