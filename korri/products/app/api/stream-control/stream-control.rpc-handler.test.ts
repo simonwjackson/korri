@@ -223,7 +223,9 @@ describe("app.stream-control RPC handlers", () => {
         Effect.provide(
           Layer.succeed(
             StreamControl,
-            createStreamControlService({ moonlightSocketPath: "/run/moonlight.sock" }),
+            createStreamControlService({
+              moonlightSocketPath: "/run/moonlight.sock",
+            }),
           ),
         ),
       ),

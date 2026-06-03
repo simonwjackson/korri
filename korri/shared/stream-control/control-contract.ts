@@ -40,7 +40,12 @@ export type StreamControlAccess = "read-write" | "read-only"
 export type StreamControlSupportStatus = "supported" | "unsupported"
 
 export type StreamControlValueSpec =
-  | { readonly kind: "range"; readonly min: number; readonly max: number; readonly step: number }
+  | {
+      readonly kind: "range"
+      readonly min: number
+      readonly max: number
+      readonly step: number
+    }
   | { readonly kind: "steps"; readonly values: readonly number[] }
   | { readonly kind: "options"; readonly values: readonly string[] }
   | { readonly kind: "resolutions"; readonly values: typeof RESOLUTION_STEPS }

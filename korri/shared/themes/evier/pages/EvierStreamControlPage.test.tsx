@@ -268,9 +268,7 @@ function stateSnapshot({
   }
 }
 
-function recordingController(
-  calls: unknown[] = [],
-): StreamControlClient {
+function recordingController(calls: unknown[] = []): StreamControlClient {
   const record = (method: string) => async (payload: unknown) => {
     calls.push({ method, payload })
     return {
