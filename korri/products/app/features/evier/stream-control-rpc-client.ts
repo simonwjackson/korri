@@ -12,6 +12,17 @@ export function createEvierStreamControlRpcClient(): EvierStreamControlControlle
           Effect.flatMap(client => client["app.stream-control.state.get"]({})),
         ),
       ),
+    setBrightness: payload =>
+      runAppRpc(
+        RpcClient.make(appRpcGroup).pipe(
+          Effect.flatMap(client =>
+            client["app.stream-control.brightness.set"]({
+              percent: payload.percent,
+              ...(payload.device ? { device: payload.device } : {}),
+            }),
+          ),
+        ),
+      ),
     setMoonlightBitrate: payload =>
       runAppRpc(
         RpcClient.make(appRpcGroup).pipe(
