@@ -163,60 +163,48 @@ function subsystemStatus(
 
 function readMoonlightBitrate(state: unknown): ControlReadback<number> {
   return numberReadback(
-    firstNumber(
-      moonlightRuntimeSettings(state)?.appliedBitrateKbps,
-      moonlightStreamQuality(state)?.bitrateKbps,
-    ),
+    numberField(okReadback(state, "moonlight"), "bitrateKbps"),
   )
 }
 
 function readMoonlightFps(state: unknown): ControlReadback<number> {
-  return numberReadback(
-    firstNumber(
-      moonlightRuntimeSettings(state)?.appliedFps,
-      moonlightStreamQuality(state)?.fps,
-    ),
-  )
+  return numberReadback(numberField(okReadback(state, "moonlight"), "fps"))
 }
 
 function readMoonlightResolution(state: unknown): ControlReadback<number> {
-  const runtimeResolution = recordField(
-    moonlightRuntimeSettings(state),
-    "appliedResolution",
-  )
+  const resolution = recordField(okReadback(state, "moonlight"), "resolution")
   return numberReadback(
     resolutionIndex(
-      firstNumber(
-        runtimeResolution?.width,
-        moonlightStreamQuality(state)?.width,
-      ),
-      firstNumber(
-        runtimeResolution?.height,
-        moonlightStreamQuality(state)?.height,
-      ),
+      numberField(resolution, "width"),
+      numberField(resolution, "height"),
     ),
   )
 }
 
 function readGamescopeFps(state: unknown): ControlReadback<number> {
-  return numberReadback(numberField(gamescopeResult(state), "fps"))
+  return numberReadback(numberField(okReadback(state, "gamescope"), "fps"))
 }
 
 function readGamescopeResolution(state: unknown): ControlReadback<number> {
-  const mode = recordField(gamescopeResult(state), "xwaylandMode")
+  const resolution = recordField(okReadback(state, "gamescope"), "resolution")
   return numberReadback(
-    resolutionIndex(numberField(mode, "width"), numberField(mode, "height")),
+    resolutionIndex(
+      numberField(resolution, "width"),
+      numberField(resolution, "height"),
+    ),
   )
 }
 
 function readGamescopeSharpness(state: unknown): ControlReadback<number> {
-  return numberReadback(numberField(gamescopeResult(state), "sharpness"))
+  return numberReadback(
+    numberField(okReadback(state, "gamescope"), "sharpness"),
+  )
 }
 
 function readGamescopeFilter(
   state: unknown,
 ): ControlReadback<GamescopeScalingFilter> {
-  const filter = gamescopeResult(state)?.filter
+  const filter = okReadback(state, "gamescope")?.filter
   return filter === "linear" ||
     filter === "nearest" ||
     filter === "integer" ||
@@ -234,8 +222,8 @@ function readBrightness(
     return { unified: unavailable(status.unavailable), devices: [] }
   }
 
-  const response = okResponse(state, "brightness")
-  const devicesValue = isRecord(response) ? response.devices : undefined
+  const readback = okReadback(state, "brightness")
+  const devicesValue = isRecord(readback) ? readback.devices : undefined
   const devices = Array.isArray(devicesValue)
     ? devicesValue.flatMap(device => {
         if (!isRecord(device)) return []
@@ -269,14 +257,14 @@ function readBattery(state: unknown): EvierControlSurfaceState["battery"] {
   if (status.unavailable) {
     return { percent: unavailable(status.unavailable), status: null }
   }
-  const response = okResponse(state, "battery")
-  const percent = isRecord(response) ? response.percent : undefined
+  const readback = okReadback(state, "battery")
+  const percent = isRecord(readback) ? readback.percent : undefined
   return {
     percent:
       typeof percent === "number" ? known(clamp(percent, 0, 100)) : unknown(),
     status:
-      isRecord(response) && typeof response.status === "string"
-        ? response.status
+      isRecord(readback) && typeof readback.status === "string"
+        ? readback.status
         : null,
   }
 }
@@ -285,36 +273,13 @@ function numberReadback(value: number | undefined): ControlReadback<number> {
   return value === undefined ? unknown() : known(value)
 }
 
-function okResponse(state: unknown, key: string): unknown {
+function okReadback(
+  state: unknown,
+  key: string,
+): Record<string, unknown> | undefined {
   const entry = isRecord(state) ? state[key] : undefined
   if (!isRecord(entry) || entry.status !== "ok") return undefined
-  return entry.response
-}
-
-function rpcResult(response: unknown): Record<string, unknown> | undefined {
-  if (!isRecord(response)) return undefined
-  const result = response.result
-  return isRecord(result) ? result : undefined
-}
-
-function moonlightResult(state: unknown): Record<string, unknown> | undefined {
-  return rpcResult(okResponse(state, "moonlight"))
-}
-
-function gamescopeResult(state: unknown): Record<string, unknown> | undefined {
-  return rpcResult(okResponse(state, "gamescope"))
-}
-
-function moonlightRuntimeSettings(
-  state: unknown,
-): Record<string, unknown> | undefined {
-  return recordField(moonlightResult(state), "runtimeSettings")
-}
-
-function moonlightStreamQuality(
-  state: unknown,
-): Record<string, unknown> | undefined {
-  return recordField(moonlightResult(state), "streamQuality")
+  return isRecord(entry.readback) ? entry.readback : undefined
 }
 
 function recordField(
@@ -331,10 +296,6 @@ function numberField(
 ): number | undefined {
   const value = record?.[key]
   return typeof value === "number" ? value : undefined
-}
-
-function firstNumber(...values: readonly unknown[]): number | undefined {
-  return values.find((value): value is number => typeof value === "number")
 }
 
 function resolutionIndex(

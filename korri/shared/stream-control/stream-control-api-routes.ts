@@ -286,21 +286,33 @@ async function readState(runtime: StreamControlRuntime) {
       runtime.options.moonlightSocketPath,
       runtime.connectMoonlight,
       client => client.state(),
+      normalizeMoonlightState,
     ),
     readControlState(
       runtime.options.gamescopeSocketPath,
       runtime.connectGamescope,
       client => client.state(),
+      normalizeGamescopeState,
     ),
   ])
-  const result = { moonlight, gamescope }
+  const result = {
+    moonlight,
+    gamescope,
+    brightness: { status: "disabled" as const },
+    battery: { status: "disabled" as const },
+  }
   await recordStateSnapshot(runtime.record, result)
   return result
 }
 
 async function recordStateSnapshot(
   record: (event: unknown) => Promise<void>,
-  result: { readonly moonlight: unknown; readonly gamescope: unknown },
+  result: {
+    readonly moonlight: unknown
+    readonly gamescope: unknown
+    readonly brightness: unknown
+    readonly battery: unknown
+  },
 ): Promise<void> {
   try {
     await record({ action: "state.snapshot", ...result })
@@ -309,16 +321,20 @@ async function recordStateSnapshot(
   }
 }
 
-async function readControlState<TClient>(
+async function readControlState<TClient, TReadback>(
   socketPath: string | undefined,
   connect: (socketPath: string) => Promise<TClient>,
   snapshot: (client: TClient) => Promise<unknown>,
+  normalize: (snapshot: unknown) => TReadback,
 ) {
   if (!socketPath) return { status: "disabled" as const }
   let client: TClient | undefined
   try {
     client = await connect(socketPath)
-    return { status: "ok" as const, response: await snapshot(client) }
+    return {
+      status: "ok" as const,
+      readback: normalize(await snapshot(client)),
+    }
   } catch (error) {
     return { status: "error" as const, error: errorMessage(error) }
   } finally {
@@ -326,10 +342,91 @@ async function readControlState<TClient>(
   }
 }
 
+function normalizeMoonlightState(snapshot: unknown) {
+  const result = rpcResult(snapshot)
+  const runtimeSettings = recordField(result, "runtimeSettings")
+  const streamQuality = recordField(result, "streamQuality")
+  return {
+    bitrateKbps: moonlightNumber(
+      runtimeSettings,
+      streamQuality,
+      "appliedBitrateKbps",
+      "bitrateKbps",
+    ),
+    fps: moonlightNumber(runtimeSettings, streamQuality, "appliedFps", "fps"),
+    resolution: moonlightResolutionReadback(runtimeSettings, streamQuality),
+  }
+}
+
+function moonlightNumber(
+  runtimeSettings: Record<string, unknown> | undefined,
+  streamQuality: Record<string, unknown> | undefined,
+  runtimeKey: string,
+  streamKey: string,
+): number | null {
+  return (
+    firstNumber(runtimeSettings?.[runtimeKey], streamQuality?.[streamKey]) ??
+    null
+  )
+}
+
+function moonlightResolutionReadback(
+  runtimeSettings: Record<string, unknown> | undefined,
+  streamQuality: Record<string, unknown> | undefined,
+) {
+  const runtimeResolution = recordField(runtimeSettings, "appliedResolution")
+  return resolutionReadback(
+    firstNumber(runtimeResolution?.width, streamQuality?.width),
+    firstNumber(runtimeResolution?.height, streamQuality?.height),
+  )
+}
+
+function normalizeGamescopeState(snapshot: unknown) {
+  const result = rpcResult(snapshot)
+  const mode = recordField(result, "xwaylandMode")
+  const filter = result?.filter
+  return {
+    fps: firstNumber(result?.fps) ?? null,
+    resolution: resolutionReadback(
+      firstNumber(mode?.width),
+      firstNumber(mode?.height),
+    ),
+    sharpness: firstNumber(result?.sharpness) ?? null,
+    filter: readFilterValue(filter) ?? null,
+  }
+}
+
+function resolutionReadback(
+  width: number | undefined,
+  height: number | undefined,
+): { readonly width: number; readonly height: number } | null {
+  return width === undefined || height === undefined ? null : { width, height }
+}
+
+function rpcResult(response: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(response)) return undefined
+  const result = response.result
+  return isRecord(result) ? result : undefined
+}
+
+function recordField(
+  record: Record<string, unknown> | undefined,
+  key: string,
+): Record<string, unknown> | undefined {
+  const value = record?.[key]
+  return isRecord(value) ? value : undefined
+}
+
+function firstNumber(...values: readonly unknown[]): number | undefined {
+  return values.find((value): value is number => typeof value === "number")
+}
+
 function configPayload(options: StreamControlApiOptions) {
   return {
     moonlight: { enabled: Boolean(options.moonlightSocketPath) },
     gamescope: { enabled: Boolean(options.gamescopeSocketPath) },
+    brightness: { enabled: false },
+    battery: { enabled: false },
     artifactDir: options.artifactDir ?? null,
   }
 }
@@ -367,10 +464,7 @@ function parseGamescopeFps(
   body: unknown,
 ): ParsedPayload<{ readonly fps: number }> {
   const fps = readNumber(body, "fps")
-  return fps !== undefined &&
-    Number.isInteger(fps) &&
-    fps >= 0 &&
-    fps <= 240
+  return fps !== undefined && Number.isInteger(fps) && fps >= 0 && fps <= 240
     ? { ok: true, value: { fps } }
     : { ok: false, error: "fps between 0 and 240 (integer) required" }
 }
@@ -415,14 +509,16 @@ function readNumber(body: unknown, key: string): number | undefined {
 }
 
 function readFilter(body: unknown): GamescopeScalingFilter | undefined {
-  if (!isRecord(body)) return undefined
-  const filter = body.filter
-  return filter === "linear" ||
-    filter === "nearest" ||
-    filter === "integer" ||
-    filter === "fsr" ||
-    filter === "nis"
-    ? filter
+  return isRecord(body) ? readFilterValue(body.filter) : undefined
+}
+
+function readFilterValue(value: unknown): GamescopeScalingFilter | undefined {
+  return value === "linear" ||
+    value === "nearest" ||
+    value === "integer" ||
+    value === "fsr" ||
+    value === "nis"
+    ? value
     : undefined
 }
 

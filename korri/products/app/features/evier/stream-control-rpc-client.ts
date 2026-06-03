@@ -54,6 +54,25 @@ export function createEvierStreamControlRpcClient(): EvierStreamControlControlle
           ),
         ),
       ),
+    setLinkedFps: payload =>
+      runAppRpc(
+        RpcClient.make(appRpcGroup).pipe(
+          Effect.flatMap(client =>
+            client["app.stream-control.linked-fps.set"]({ fps: payload.fps }),
+          ),
+        ),
+      ),
+    setLinkedResolution: payload =>
+      runAppRpc(
+        RpcClient.make(appRpcGroup).pipe(
+          Effect.flatMap(client =>
+            client["app.stream-control.linked-resolution.set"]({
+              width: payload.width,
+              height: payload.height,
+            }),
+          ),
+        ),
+      ),
     setGamescopeMode: payload =>
       runAppRpc(
         RpcClient.make(appRpcGroup).pipe(

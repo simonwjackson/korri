@@ -8,13 +8,15 @@ import { handleListLibrary } from "./library/list.rpc-handler"
 import { handleListSource } from "./source/list.rpc-handler"
 import { handleSourceStatus } from "./source/status.rpc-handler"
 import { handlePrepareStream } from "./stream/prepare.rpc-handler"
-import { handleSetBrightness } from "./stream-control/set-brightness.rpc-handler"
 import { handleGetStreamControlConfig } from "./stream-control/get-config.rpc-handler"
 import { handleGetStreamControlState } from "./stream-control/get-state.rpc-handler"
+import { handleSetBrightness } from "./stream-control/set-brightness.rpc-handler"
 import { handleSetGamescopeFilter } from "./stream-control/set-gamescope-filter.rpc-handler"
 import { handleSetGamescopeFps } from "./stream-control/set-gamescope-fps.rpc-handler"
 import { handleSetGamescopeMode } from "./stream-control/set-gamescope-mode.rpc-handler"
 import { handleSetGamescopeSharpness } from "./stream-control/set-gamescope-sharpness.rpc-handler"
+import { handleSetLinkedFps } from "./stream-control/set-linked-fps.rpc-handler"
+import { handleSetLinkedResolution } from "./stream-control/set-linked-resolution.rpc-handler"
 import { handleSetMoonlightBitrate } from "./stream-control/set-moonlight-bitrate.rpc-handler"
 import { handleSetMoonlightFps } from "./stream-control/set-moonlight-fps.rpc-handler"
 import { handleSetMoonlightResolution } from "./stream-control/set-moonlight-resolution.rpc-handler"
@@ -40,5 +42,7 @@ export const HandlersLive = appRpcGroup.toLayer(
     "app.stream-control.gamescope-fps.set": handleSetGamescopeFps,
     "app.stream-control.gamescope-filter.set": handleSetGamescopeFilter,
     "app.stream-control.gamescope-sharpness.set": handleSetGamescopeSharpness,
+    "app.stream-control.linked-fps.set": handleSetLinkedFps,
+    "app.stream-control.linked-resolution.set": handleSetLinkedResolution,
   }),
 )

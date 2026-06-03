@@ -86,17 +86,93 @@ export type StreamControlConfigResponseData = Schema.Schema.Type<
   typeof StreamControlConfigResponseSchema
 >
 
-const StreamControlStateEntry = Schema.Union([
-  Schema.Struct({ status: Schema.Literal("disabled") }),
-  Schema.Struct({ status: Schema.Literal("ok"), response: Schema.Unknown }),
-  Schema.Struct({ status: Schema.Literal("error"), error: Schema.String }),
-])
+const ResolutionReadback = Schema.Struct({
+  width: Schema.Number,
+  height: Schema.Number,
+})
+
+const MoonlightStateReadback = Schema.Struct({
+  bitrateKbps: Schema.Union([Schema.Number, Schema.Null]),
+  fps: Schema.Union([Schema.Number, Schema.Null]),
+  resolution: Schema.Union([ResolutionReadback, Schema.Null]),
+})
+
+const GamescopeStateReadback = Schema.Struct({
+  fps: Schema.Union([Schema.Number, Schema.Null]),
+  resolution: Schema.Union([ResolutionReadback, Schema.Null]),
+  sharpness: Schema.Union([Schema.Number, Schema.Null]),
+  filter: Schema.Union([GamescopeScalingFilter, Schema.Null]),
+})
+
+const BrightnessDeviceReadback = Schema.Struct({
+  name: Schema.String,
+  brightness: Schema.Number,
+  maxBrightness: Schema.Number,
+  percent: Schema.Number,
+})
+
+const BrightnessStateReadback = Schema.Struct({
+  devices: Schema.Array(BrightnessDeviceReadback),
+  percent: Schema.Union([Schema.Number, Schema.Null]),
+})
+
+const PowerSupplyReadback = Schema.Struct({
+  name: Schema.String,
+  type: Schema.Union([Schema.String, Schema.Null]),
+  status: Schema.Union([Schema.String, Schema.Null]),
+  capacity: Schema.Union([Schema.Number, Schema.Null]),
+  online: Schema.Union([Schema.Boolean, Schema.Null]),
+  voltageNow: Schema.Union([Schema.Number, Schema.Null]),
+  currentNow: Schema.Union([Schema.Number, Schema.Null]),
+  powerNow: Schema.Union([Schema.Number, Schema.Null]),
+  modelName: Schema.Union([Schema.String, Schema.Null]),
+})
+
+const BatteryStateReadback = Schema.Struct({
+  percent: Schema.Union([Schema.Number, Schema.Null]),
+  status: Schema.Union([Schema.String, Schema.Null]),
+  supplies: Schema.Array(PowerSupplyReadback),
+})
+
+const DisabledStateEntry = Schema.Struct({ status: Schema.Literal("disabled") })
+const ErrorStateEntry = Schema.Struct({
+  status: Schema.Literal("error"),
+  error: Schema.String,
+})
 
 export const StreamControlStateResponseFields = {
-  moonlight: StreamControlStateEntry,
-  gamescope: StreamControlStateEntry,
-  brightness: StreamControlStateEntry,
-  battery: StreamControlStateEntry,
+  moonlight: Schema.Union([
+    DisabledStateEntry,
+    Schema.Struct({
+      status: Schema.Literal("ok"),
+      readback: MoonlightStateReadback,
+    }),
+    ErrorStateEntry,
+  ]),
+  gamescope: Schema.Union([
+    DisabledStateEntry,
+    Schema.Struct({
+      status: Schema.Literal("ok"),
+      readback: GamescopeStateReadback,
+    }),
+    ErrorStateEntry,
+  ]),
+  brightness: Schema.Union([
+    DisabledStateEntry,
+    Schema.Struct({
+      status: Schema.Literal("ok"),
+      readback: BrightnessStateReadback,
+    }),
+    ErrorStateEntry,
+  ]),
+  battery: Schema.Union([
+    DisabledStateEntry,
+    Schema.Struct({
+      status: Schema.Literal("ok"),
+      readback: BatteryStateReadback,
+    }),
+    ErrorStateEntry,
+  ]),
 }
 
 const StreamControlStateResponseSchema = Schema.Struct(

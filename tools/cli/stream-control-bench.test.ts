@@ -186,7 +186,7 @@ describe("stream control bench", () => {
     expect(errors.join("\n")).toContain("--port")
   })
 
-  it("returns combined state without requiring both sockets", async () => {
+  it("returns typed config and combined state without requiring both sockets", async () => {
     const app = createStreamControlBenchApp(
       {
         artifactDir: "/tmp/bench",
@@ -195,14 +195,33 @@ describe("stream control bench", () => {
       testDeps({ moonlight: moonlightClientDouble([]) }),
     )
 
+    const configResponse = await app.fetch(
+      new Request("http://bench.local/api/config"),
+    )
+    const config = await configResponse.json()
     const response = await app.fetch(
       new Request("http://bench.local/api/state"),
     )
     const body = await response.json()
 
+    expect(config).toMatchObject({
+      moonlight: { enabled: true },
+      gamescope: { enabled: false },
+      brightness: { enabled: false },
+      battery: { enabled: false },
+    })
     expect(response.status).toBe(200)
-    expect(body.moonlight.status).toBe("ok")
+    expect(body.moonlight).toMatchObject({
+      status: "ok",
+      readback: {
+        bitrateKbps: 12_000,
+        fps: 60,
+        resolution: { width: 1920, height: 1080 },
+      },
+    })
     expect(body.gamescope.status).toBe("disabled")
+    expect(body.brightness.status).toBe("disabled")
+    expect(body.battery.status).toBe("disabled")
   })
 })
 
@@ -263,6 +282,17 @@ function moonlightClientDouble(calls: unknown[]): MoonlightControlClient {
       result: {
         _tag: "state.snapshot",
         session: { state: "streaming" },
+        streamQuality: {
+          bitrateKbps: 10_000,
+          fps: 45,
+          width: 1280,
+          height: 720,
+        },
+        runtimeSettings: {
+          appliedBitrateKbps: 12_000,
+          appliedFps: 60,
+          appliedResolution: { width: 1920, height: 1080 },
+        },
       } as never,
     }),
     subscribe: async () => ({

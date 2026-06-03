@@ -8,50 +8,48 @@ import {
 } from "./evier-control-surface"
 
 describe("EvierControlSurface", () => {
-  it("derives unified known controls only from agreeing authoritative readbacks", () => {
+  it("derives unified known controls only from typed authoritative readbacks", () => {
     const surface = EvierControlSurface.fromState({
       moonlight: {
         status: "ok",
-        response: {
-          result: {
-            streamQuality: {
-              bitrateKbps: 12_000,
-              fps: 60,
-              width: 1920,
-              height: 1080,
-            },
-            runtimeSettings: {
-              appliedBitrateKbps: 12_000,
-              appliedFps: 60,
-              appliedResolution: { width: 1920, height: 1080 },
-            },
-          },
+        readback: {
+          bitrateKbps: 12_000,
+          fps: 60,
+          resolution: { width: 1920, height: 1080 },
         },
       },
       gamescope: {
         status: "ok",
-        response: {
-          result: {
-            xwaylandMode: { width: 1920, height: 1080 },
-            fps: 60,
-            sharpness: 10,
-            filter: "fsr",
-          },
+        readback: {
+          resolution: { width: 1920, height: 1080 },
+          fps: 60,
+          sharpness: 10,
+          filter: "fsr",
         },
       },
       brightness: {
         status: "ok",
-        response: {
+        readback: {
           percent: 50,
           devices: [
-            { name: "panel-a", percent: 50 },
-            { name: "panel-b", percent: 50 },
+            {
+              name: "panel-a",
+              brightness: 128,
+              maxBrightness: 255,
+              percent: 50,
+            },
+            {
+              name: "panel-b",
+              brightness: 2048,
+              maxBrightness: 4096,
+              percent: 50,
+            },
           ],
         },
       },
       battery: {
         status: "ok",
-        response: { percent: 74, status: "Discharging" },
+        readback: { percent: 74, status: "Discharging", supplies: [] },
       },
     })
 
@@ -73,22 +71,19 @@ describe("EvierControlSurface", () => {
     const surface = EvierControlSurface.fromState({
       moonlight: {
         status: "ok",
-        response: {
-          result: {
-            runtimeSettings: {
-              appliedFps: 60,
-              appliedResolution: { width: 1920, height: 1080 },
-            },
-          },
+        readback: {
+          bitrateKbps: null,
+          fps: 60,
+          resolution: { width: 1920, height: 1080 },
         },
       },
       gamescope: {
         status: "ok",
-        response: {
-          result: {
-            xwaylandMode: { width: 1280, height: 720 },
-            fps: 120,
-          },
+        readback: {
+          resolution: { width: 1280, height: 720 },
+          fps: 120,
+          sharpness: null,
+          filter: null,
         },
       },
       brightness: { status: "disabled" },
@@ -111,8 +106,11 @@ describe("EvierControlSurface", () => {
     const surface = EvierControlSurface.fromState({
       moonlight: { status: "error", error: "socket refused" },
       gamescope: { status: "disabled" },
-      brightness: { status: "ok", response: { devices: [] } },
-      battery: { status: "ok", response: {} },
+      brightness: { status: "ok", readback: { devices: [], percent: null } },
+      battery: {
+        status: "ok",
+        readback: { percent: null, status: null, supplies: [] },
+      },
     })
 
     expect(surface.moonlight.fps).toEqual({
@@ -137,11 +135,21 @@ describe("EvierControlSurface", () => {
       gamescope: { status: "disabled" },
       brightness: {
         status: "ok",
-        response: {
+        readback: {
           percent: 50,
           devices: [
-            { name: "panel-a", percent: 40 },
-            { name: "panel-b", percent: 60 },
+            {
+              name: "panel-a",
+              brightness: 102,
+              maxBrightness: 255,
+              percent: 40,
+            },
+            {
+              name: "panel-b",
+              brightness: 2458,
+              maxBrightness: 4096,
+              percent: 60,
+            },
           ],
         },
       },
@@ -166,9 +174,12 @@ describe("EvierControlSurface", () => {
     const bothThirty = EvierControlSurface.fromState({
       moonlight: {
         status: "ok",
-        response: { result: { runtimeSettings: { appliedFps: 30 } } },
+        readback: { bitrateKbps: null, fps: 30, resolution: null },
       },
-      gamescope: { status: "ok", response: { result: { fps: 30 } } },
+      gamescope: {
+        status: "ok",
+        readback: { fps: 30, resolution: null, sharpness: null, filter: null },
+      },
       brightness: { status: "disabled" },
       battery: { status: "disabled" },
     })
@@ -177,9 +188,12 @@ describe("EvierControlSurface", () => {
     const falseAgreementRegression = EvierControlSurface.fromState({
       moonlight: {
         status: "ok",
-        response: { result: { runtimeSettings: { appliedFps: 40 } } },
+        readback: { bitrateKbps: null, fps: 40, resolution: null },
       },
-      gamescope: { status: "ok", response: { result: { fps: 30 } } },
+      gamescope: {
+        status: "ok",
+        readback: { fps: 30, resolution: null, sharpness: null, filter: null },
+      },
       brightness: { status: "disabled" },
       battery: { status: "disabled" },
     })
@@ -197,7 +211,7 @@ describe("EvierControlSurface", () => {
     const surface = EvierControlSurface.fromState({
       moonlight: {
         status: "ok",
-        response: { result: { runtimeSettings: { appliedFps: 60 } } },
+        readback: { bitrateKbps: null, fps: 60, resolution: null },
       },
       gamescope: { status: "error", error: "bridge down" },
       brightness: { status: "disabled" },
@@ -214,9 +228,17 @@ describe("EvierControlSurface", () => {
     const surface = EvierControlSurface.fromState({
       moonlight: {
         status: "ok",
-        response: { result: { runtimeSettings: { appliedFps: 60 } } },
+        readback: { bitrateKbps: null, fps: 60, resolution: null },
       },
-      gamescope: { status: "ok", response: { result: {} } },
+      gamescope: {
+        status: "ok",
+        readback: {
+          fps: null,
+          resolution: null,
+          sharpness: null,
+          filter: null,
+        },
+      },
       brightness: { status: "disabled" },
       battery: { status: "disabled" },
     })
@@ -244,7 +266,12 @@ describe("EvierControlSurface", () => {
         moonlight: { status: "disabled" },
         gamescope: {
           status: "ok",
-          response: { result: { filter: "bilinear" } },
+          readback: {
+            fps: null,
+            resolution: null,
+            sharpness: null,
+            filter: null,
+          },
         },
         brightness: { status: "disabled" },
         battery: { status: "disabled" },

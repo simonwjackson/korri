@@ -123,11 +123,7 @@ describe("EvierStreamControlPage", () => {
     })
 
     expect(calls).toContainEqual({
-      method: "setMoonlightFps",
-      payload: { fps: 45 },
-    })
-    expect(calls).toContainEqual({
-      method: "setGamescopeFps",
+      method: "setLinkedFps",
       payload: { fps: 45 },
     })
     expect(calls).not.toContainEqual({
@@ -219,44 +215,54 @@ function stateSnapshot({
   return {
     moonlight: {
       status: "ok",
-      response: {
-        result: {
-          streamQuality: { bitrateKbps, fps, width, height },
-          runtimeSettings: {
-            appliedBitrateKbps: bitrateKbps,
-            appliedFps: fps,
-            appliedResolution: { width, height },
-          },
-        },
+      readback: {
+        bitrateKbps,
+        fps,
+        resolution: { width, height },
       },
     },
     gamescope: {
       status: "ok",
-      response: {
-        result: {
-          xwaylandMode: { width, height },
-          fps,
-          sharpness: 10,
-          filter: "fsr",
-        },
+      readback: {
+        resolution: { width, height },
+        fps,
+        sharpness: 10,
+        filter: "fsr",
       },
     },
     brightness: {
       status: "ok",
-      response: {
+      readback: {
         percent: 50,
         devices: [
-          { name: "panel-a", percent: 40 },
-          { name: "panel-b", percent: 60 },
+          { name: "panel-a", brightness: 102, maxBrightness: 255, percent: 40 },
+          {
+            name: "panel-b",
+            brightness: 2458,
+            maxBrightness: 4096,
+            percent: 60,
+          },
         ],
       },
     },
     battery: {
       status: "ok",
-      response: {
+      readback: {
         percent: 74,
         status: "Discharging",
-        supplies: [{ name: "battery", type: "Battery", capacity: 74 }],
+        supplies: [
+          {
+            name: "battery",
+            type: "Battery",
+            status: "Discharging",
+            capacity: 74,
+            online: null,
+            voltageNow: null,
+            currentNow: null,
+            powerNow: null,
+            modelName: null,
+          },
+        ],
       },
     },
   }
@@ -283,6 +289,8 @@ function recordingController(
     setMoonlightBitrate: record("setMoonlightBitrate"),
     setMoonlightFps: record("setMoonlightFps"),
     setMoonlightResolution: record("setMoonlightResolution"),
+    setLinkedFps: record("setLinkedFps"),
+    setLinkedResolution: record("setLinkedResolution"),
     setGamescopeMode: record("setGamescopeMode"),
     setGamescopeFps: record("setGamescopeFps"),
     setGamescopeFilter: record("setGamescopeFilter"),

@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises"
+import { appendFile, mkdir } from "node:fs/promises"
 import { join } from "node:path"
 import { DataError, ValidationError } from "@shared/api/rpc/errors"
 import {
@@ -12,6 +12,10 @@ import {
 } from "@shared/stream/moonlight-control-client"
 import { MOONLIGHT_CONTROL_PROTOCOL_LIMITS } from "@shared/stream/moonlight-control-protocol"
 import { Context, Effect, Layer } from "effect"
+import {
+  createDeviceControlService,
+  type DeviceControlService,
+} from "./device-control-service"
 import type {
   StreamControlCommandResponseData,
   StreamControlConfigResponseData,
@@ -74,6 +78,19 @@ export interface StreamControlService {
     StreamControlCommandResponseData,
     DataError | ValidationError
   >
+  readonly setLinkedFps: (payload: {
+    readonly fps: number
+  }) => Effect.Effect<
+    StreamControlCommandResponseData,
+    DataError | ValidationError
+  >
+  readonly setLinkedResolution: (payload: {
+    readonly width: number
+    readonly height: number
+  }) => Effect.Effect<
+    StreamControlCommandResponseData,
+    DataError | ValidationError
+  >
   readonly setGamescopeMode: (payload: {
     readonly width: number
     readonly height: number
@@ -115,49 +132,7 @@ interface Runtime {
     socketPath: string,
   ) => Promise<GamescopeControlClient>
   readonly record: (event: unknown) => Promise<void>
-  readonly backlightDir: string
-  readonly powerSupplyDir: string
-  readonly readBacklights: () => Promise<BacklightSnapshot>
-  readonly readBattery: () => Promise<BatterySnapshot>
-  readonly setBacklightPercent: (
-    percent: number,
-    device?: string,
-  ) => Promise<BacklightSetResult>
-}
-
-interface BacklightDeviceState {
-  readonly name: string
-  readonly brightness: number
-  readonly maxBrightness: number
-  readonly percent: number
-}
-
-interface BacklightSnapshot {
-  readonly devices: readonly BacklightDeviceState[]
-  readonly percent: number | null
-}
-
-interface BacklightSetResult extends BacklightSnapshot {
-  readonly requestedPercent: number
-  readonly requestedDevice?: string
-}
-
-interface PowerSupplyState {
-  readonly name: string
-  readonly type: string | null
-  readonly status: string | null
-  readonly capacity: number | null
-  readonly online: boolean | null
-  readonly voltageNow: number | null
-  readonly currentNow: number | null
-  readonly powerNow: number | null
-  readonly modelName: string | null
-}
-
-interface BatterySnapshot {
-  readonly percent: number | null
-  readonly status: string | null
-  readonly supplies: readonly PowerSupplyState[]
+  readonly deviceControl: DeviceControlService
 }
 
 function streamControlOptionsFromEnv(
@@ -186,7 +161,13 @@ export function createStreamControlService(
       range("percent", payload.percent, 0, 100).pipe(
         Effect.flatMap(() => validateBacklightDeviceName(payload.device)),
         Effect.flatMap(() =>
-          runBrightness(runtime, "brightness", payload, payload.percent, payload.device),
+          runBrightness(
+            runtime,
+            "brightness",
+            payload,
+            payload.percent,
+            payload.device,
+          ),
         ),
       ),
     setMoonlightBitrate: payload =>
@@ -217,6 +198,14 @@ export function createStreamControlService(
             client.setResolution(payload),
           ),
         ),
+      ),
+    setLinkedFps: payload =>
+      range("fps", payload.fps, 30, 120).pipe(
+        Effect.flatMap(() => runLinkedFps(runtime, payload)),
+      ),
+    setLinkedResolution: payload =>
+      gamescopeResolution(payload).pipe(
+        Effect.flatMap(() => runLinkedResolution(runtime, payload)),
       ),
     setGamescopeMode: payload =>
       gamescopeResolution(payload).pipe(
@@ -265,12 +254,18 @@ function createRuntime(
   const now = deps.now ?? (() => new Date())
   const mkdirImpl = deps.mkdir ?? mkdir
   const appendFileImpl = deps.appendFile ?? appendFile
-  const readdirImpl = deps.readdir ?? readdir
-  const readFileImpl = deps.readFile ?? readFile
-  const writeFileImpl = deps.writeFile ?? writeFile
   const artifactDir = options.artifactDir
-  const backlightDir = options.backlightDir ?? "/sys/class/backlight"
-  const powerSupplyDir = options.powerSupplyDir ?? "/sys/class/power_supply"
+  const deviceControl = createDeviceControlService(
+    {
+      backlightDir: options.backlightDir,
+      powerSupplyDir: options.powerSupplyDir,
+    },
+    {
+      readdir: deps.readdir,
+      readFile: deps.readFile,
+      writeFile: deps.writeFile,
+    },
+  )
   let artifactDirReady: Promise<unknown> | undefined
 
   return {
@@ -281,21 +276,7 @@ function createRuntime(
     connectGamescope:
       deps.connectGamescope ??
       ((socketPath: string) => connectGamescopeControl({ socketPath })),
-    backlightDir,
-    powerSupplyDir,
-    readBacklights: () =>
-      readBacklightSnapshot(backlightDir, readdirImpl, readFileImpl),
-    readBattery: () =>
-      readBatterySnapshot(powerSupplyDir, readdirImpl, readFileImpl),
-    setBacklightPercent: (percent, device) =>
-      writeBacklightPercent(
-        backlightDir,
-        percent,
-        device,
-        readdirImpl,
-        readFileImpl,
-        writeFileImpl,
-      ),
+    deviceControl,
     record: async event => {
       if (!artifactDir) return
       artifactDirReady ??= mkdirImpl(artifactDir, { recursive: true }).catch(
@@ -361,11 +342,163 @@ function runBrightness(
     try: async () =>
       recordCommandOutcome(
         { action, requested, record: runtime.record },
-        await runtime.setBacklightPercent(percent, device),
+        await runtime.deviceControl.setBacklightPercent(percent, device),
       ),
     catch: error =>
       new DataError({ reason: "Unavailable", message: errorMessage(error) }),
   })
+}
+
+function runLinkedFps(
+  runtime: Runtime,
+  payload: { readonly fps: number },
+): Effect.Effect<
+  StreamControlCommandResponseData,
+  DataError | ValidationError
+> {
+  return runLinkedAction(runtime, "linked.fps", payload, [
+    {
+      key: "moonlight",
+      run: () => runLinkedMoonlight(runtime, client => client.setFps(payload)),
+    },
+    {
+      key: "gamescope",
+      run: () =>
+        runLinkedGamescope(runtime, client =>
+          client.requestCommand("fps.set", payload),
+        ),
+    },
+  ])
+}
+
+function runLinkedResolution(
+  runtime: Runtime,
+  payload: { readonly width: number; readonly height: number },
+): Effect.Effect<
+  StreamControlCommandResponseData,
+  DataError | ValidationError
+> {
+  return runLinkedAction(runtime, "linked.resolution", payload, [
+    {
+      key: "gamescope",
+      run: () => runLinkedGamescope(runtime, client => client.setMode(payload)),
+    },
+    {
+      key: "moonlight",
+      run: () =>
+        runLinkedMoonlight(runtime, client => client.setResolution(payload)),
+    },
+  ])
+}
+
+function runLinkedAction(
+  runtime: Runtime,
+  action: string,
+  requested: StreamControlRequestedPayload,
+  targets: readonly {
+    readonly key: "moonlight" | "gamescope"
+    readonly run: () => Promise<LinkedTargetOutcome>
+  }[],
+): Effect.Effect<
+  StreamControlCommandResponseData,
+  DataError | ValidationError
+> {
+  return Effect.tryPromise({
+    try: async () => {
+      const entries: Array<
+        readonly ["moonlight" | "gamescope", LinkedTargetOutcome]
+      > = []
+      for (const target of targets) {
+        entries.push([target.key, await target.run()] as const)
+      }
+      const byKey = Object.fromEntries(entries)
+      const response = {
+        status: linkedOverallStatus(entries.map(([, outcome]) => outcome)),
+        ...byKey,
+      }
+      return recordCommandOutcome(
+        { action, requested, record: runtime.record },
+        response,
+      )
+    },
+    catch: error =>
+      new DataError({ reason: "Unavailable", message: errorMessage(error) }),
+  })
+}
+
+type LinkedTargetOutcome =
+  | { readonly status: "applied"; readonly response: unknown }
+  | { readonly status: "pending"; readonly response: unknown }
+  | { readonly status: "failed"; readonly error: string }
+
+async function runLinkedMoonlight(
+  runtime: Runtime,
+  run: (client: MoonlightControlClient) => Promise<unknown>,
+): Promise<LinkedTargetOutcome> {
+  return runLinkedSocketTarget(
+    runtime.options.moonlightSocketPath,
+    "moonlight socket disabled",
+    runtime.connectMoonlight,
+    run,
+  )
+}
+
+async function runLinkedGamescope(
+  runtime: Runtime,
+  run: (client: GamescopeControlClient) => Promise<unknown>,
+): Promise<LinkedTargetOutcome> {
+  return runLinkedSocketTarget(
+    runtime.options.gamescopeSocketPath,
+    "gamescope socket disabled",
+    runtime.connectGamescope,
+    run,
+  )
+}
+
+async function runLinkedSocketTarget<TClient>(
+  socketPath: string | undefined,
+  disabledError: string,
+  connect: (socketPath: string) => Promise<TClient>,
+  run: (client: TClient) => Promise<unknown>,
+): Promise<LinkedTargetOutcome> {
+  if (!socketPath) return { status: "failed", error: disabledError }
+  let client: TClient | undefined
+  try {
+    client = await connect(socketPath)
+    return commandTargetOutcome(await run(client))
+  } catch (error) {
+    return { status: "failed", error: errorMessage(error) }
+  } finally {
+    closeClient(client)
+  }
+}
+
+function commandTargetOutcome(response: unknown): LinkedTargetOutcome {
+  const result = rpcResult(response)
+  if (result?._tag === "command.accepted")
+    return { status: "pending", response }
+  if (result?._tag !== "command.result") return { status: "applied", response }
+
+  if (result.status === "applied") return { status: "applied", response }
+  if (result.status === "accepted") return { status: "pending", response }
+  return { status: "failed", error: commandFailureMessage(result) }
+}
+
+function commandFailureMessage(result: Record<string, unknown>): string {
+  const status = typeof result.status === "string" ? result.status : "failed"
+  const reason = typeof result.reason === "string" ? result.reason : undefined
+  return reason ? `${status}: ${reason}` : status
+}
+
+function linkedOverallStatus(
+  outcomes: readonly LinkedTargetOutcome[],
+): "applied" | "pending" | "partial" | "failed" {
+  const failures = outcomes.filter(outcome => outcome.status === "failed")
+  if (failures.length === outcomes.length) return "failed"
+  if (failures.length > 0) return "partial"
+  return outcomes.some(outcome => outcome.status === "pending")
+    ? "pending"
+    : "applied"
 }
 
 function runSocketAction<TClient>(input: {
@@ -430,11 +563,13 @@ async function readState(
       runtime.options.moonlightSocketPath,
       runtime.connectMoonlight,
       client => client.state(),
+      normalizeMoonlightState,
     ),
     readControlState(
       runtime.options.gamescopeSocketPath,
       runtime.connectGamescope,
       client => client.state(),
+      normalizeGamescopeState,
     ),
     readBrightnessState(runtime),
     readBatteryState(runtime),
@@ -455,16 +590,20 @@ async function recordStateSnapshot(
   }
 }
 
-async function readControlState<TClient>(
+async function readControlState<TClient, TReadback>(
   socketPath: string | undefined,
   connect: (socketPath: string) => Promise<TClient>,
   snapshot: (client: TClient) => Promise<unknown>,
+  normalize: (snapshot: unknown) => TReadback,
 ) {
   if (!socketPath) return { status: "disabled" as const }
   let client: TClient | undefined
   try {
     client = await connect(socketPath)
-    return { status: "ok" as const, response: await snapshot(client) }
+    return {
+      status: "ok" as const,
+      readback: normalize(await snapshot(client)),
+    }
   } catch (error) {
     return { status: "error" as const, error: errorMessage(error) }
   } finally {
@@ -472,9 +611,103 @@ async function readControlState<TClient>(
   }
 }
 
+function normalizeMoonlightState(snapshot: unknown) {
+  const result = rpcResult(snapshot)
+  const runtimeSettings = recordField(result, "runtimeSettings")
+  const streamQuality = recordField(result, "streamQuality")
+  return {
+    bitrateKbps: moonlightNumber(
+      runtimeSettings,
+      streamQuality,
+      "appliedBitrateKbps",
+      "bitrateKbps",
+    ),
+    fps: moonlightNumber(runtimeSettings, streamQuality, "appliedFps", "fps"),
+    resolution: moonlightResolutionReadback(runtimeSettings, streamQuality),
+  }
+}
+
+function moonlightNumber(
+  runtimeSettings: Record<string, unknown> | undefined,
+  streamQuality: Record<string, unknown> | undefined,
+  runtimeKey: string,
+  streamKey: string,
+): number | null {
+  return (
+    firstNumber(runtimeSettings?.[runtimeKey], streamQuality?.[streamKey]) ??
+    null
+  )
+}
+
+function moonlightResolutionReadback(
+  runtimeSettings: Record<string, unknown> | undefined,
+  streamQuality: Record<string, unknown> | undefined,
+) {
+  const runtimeResolution = recordField(runtimeSettings, "appliedResolution")
+  return resolutionReadback(
+    firstNumber(runtimeResolution?.width, streamQuality?.width),
+    firstNumber(runtimeResolution?.height, streamQuality?.height),
+  )
+}
+
+function normalizeGamescopeState(snapshot: unknown) {
+  const result = rpcResult(snapshot)
+  const mode = recordField(result, "xwaylandMode")
+  const filter = result?.filter
+  return {
+    fps: firstNumber(result?.fps) ?? null,
+    resolution: resolutionReadback(
+      firstNumber(mode?.width),
+      firstNumber(mode?.height),
+    ),
+    sharpness: firstNumber(result?.sharpness) ?? null,
+    filter: isGamescopeScalingFilter(filter) ? filter : null,
+  }
+}
+
+function resolutionReadback(
+  width: number | undefined,
+  height: number | undefined,
+): { readonly width: number; readonly height: number } | null {
+  return width === undefined || height === undefined ? null : { width, height }
+}
+
+function rpcResult(response: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(response)) return undefined
+  const result = response.result
+  return isRecord(result) ? result : undefined
+}
+
+function recordField(
+  record: Record<string, unknown> | undefined,
+  key: string,
+): Record<string, unknown> | undefined {
+  const value = record?.[key]
+  return isRecord(value) ? value : undefined
+}
+
+function firstNumber(...values: readonly unknown[]): number | undefined {
+  return values.find((value): value is number => typeof value === "number")
+}
+
+function isGamescopeScalingFilter(
+  value: unknown,
+): value is GamescopeScalingFilter {
+  return (
+    value === "linear" ||
+    value === "nearest" ||
+    value === "integer" ||
+    value === "fsr" ||
+    value === "nis"
+  )
+}
+
 async function readBrightnessState(runtime: Runtime) {
   try {
-    return { status: "ok" as const, response: await runtime.readBacklights() }
+    return {
+      status: "ok" as const,
+      readback: await runtime.deviceControl.readBacklights(),
+    }
   } catch (error) {
     return { status: "error" as const, error: errorMessage(error) }
   }
@@ -482,7 +715,10 @@ async function readBrightnessState(runtime: Runtime) {
 
 async function readBatteryState(runtime: Runtime) {
   try {
-    return { status: "ok" as const, response: await runtime.readBattery() }
+    return {
+      status: "ok" as const,
+      readback: await runtime.deviceControl.readBattery(),
+    }
   } catch (error) {
     return { status: "error" as const, error: errorMessage(error) }
   }
@@ -543,174 +779,6 @@ function gamescopeResolution(payload: {
   return range("width", payload.width, 1, 16_384).pipe(
     Effect.andThen(range("height", payload.height, 1, 16_384)),
   )
-}
-
-async function writeBacklightPercent(
-  dir: string,
-  percent: number,
-  device: string | undefined,
-  readdirImpl: (path: string) => Promise<readonly string[]>,
-  readFileImpl: (path: string, encoding: "utf8") => Promise<string>,
-  writeFileImpl: (path: string, content: string) => Promise<void>,
-): Promise<BacklightSetResult> {
-  const devices = await listBacklightDeviceNames(dir, readdirImpl)
-  if (devices.length === 0) throw new Error(`no backlight devices in ${dir}`)
-  const targets = device ? [device] : devices
-  for (const name of targets) {
-    if (!devices.includes(name)) throw new Error(`unknown backlight device ${name}`)
-    const maxBrightness = await readPositiveInteger(
-      join(dir, name, "max_brightness"),
-      readFileImpl,
-    )
-    const brightness = Math.round((maxBrightness * percent) / 100)
-    await writeFileImpl(join(dir, name, "brightness"), `${brightness}\n`)
-  }
-  return {
-    requestedPercent: percent,
-    ...(device ? { requestedDevice: device } : {}),
-    ...(await readBacklightSnapshot(dir, readdirImpl, readFileImpl)),
-  }
-}
-
-async function readBacklightSnapshot(
-  dir: string,
-  readdirImpl: (path: string) => Promise<readonly string[]>,
-  readFileImpl: (path: string, encoding: "utf8") => Promise<string>,
-): Promise<BacklightSnapshot> {
-  const names = await listBacklightDeviceNames(dir, readdirImpl)
-  if (names.length === 0) throw new Error(`no backlight devices in ${dir}`)
-  const devices = await Promise.all(
-    names.map(async name => {
-      const [brightness, maxBrightness] = await Promise.all([
-        readNonNegativeInteger(join(dir, name, "brightness"), readFileImpl),
-        readPositiveInteger(join(dir, name, "max_brightness"), readFileImpl),
-      ])
-      return {
-        name,
-        brightness,
-        maxBrightness,
-        percent: Math.round((brightness * 100) / maxBrightness),
-      }
-    }),
-  )
-  return {
-    devices,
-    percent:
-      devices.length === 0
-        ? null
-        : Math.round(
-            devices.reduce((sum, device) => sum + device.percent, 0) /
-              devices.length,
-          ),
-  }
-}
-
-async function listBacklightDeviceNames(
-  dir: string,
-  readdirImpl: (path: string) => Promise<readonly string[]>,
-): Promise<readonly string[]> {
-  return (await readdirImpl(dir)).filter(name => !name.includes("/"))
-}
-
-async function readBatterySnapshot(
-  dir: string,
-  readdirImpl: (path: string) => Promise<readonly string[]>,
-  readFileImpl: (path: string, encoding: "utf8") => Promise<string>,
-): Promise<BatterySnapshot> {
-  const names = (await readdirImpl(dir)).filter(name => !name.includes("/"))
-  if (names.length === 0) throw new Error(`no power supplies in ${dir}`)
-  const supplies = await Promise.all(
-    names.map(async name => readPowerSupply(dir, name, readFileImpl)),
-  )
-  const batteries = supplies.filter(supply => supply.type === "Battery")
-  const primary = batteries.find(supply => supply.capacity !== null) ?? batteries[0]
-  return {
-    percent: primary?.capacity ?? null,
-    status: primary?.status ?? null,
-    supplies,
-  }
-}
-
-async function readPowerSupply(
-  dir: string,
-  name: string,
-  readFileImpl: (path: string, encoding: "utf8") => Promise<string>,
-): Promise<PowerSupplyState> {
-  const readOptional = (file: string) =>
-    readOptionalText(join(dir, name, file), readFileImpl)
-  const [
-    type,
-    status,
-    capacity,
-    online,
-    voltageNow,
-    currentNow,
-    powerNow,
-    modelName,
-  ] = await Promise.all([
-    readOptional("type"),
-    readOptional("status"),
-    readOptionalInteger(join(dir, name, "capacity"), readFileImpl),
-    readOptionalInteger(join(dir, name, "online"), readFileImpl),
-    readOptionalInteger(join(dir, name, "voltage_now"), readFileImpl),
-    readOptionalInteger(join(dir, name, "current_now"), readFileImpl),
-    readOptionalInteger(join(dir, name, "power_now"), readFileImpl),
-    readOptional("model_name"),
-  ])
-  return {
-    name,
-    type,
-    status,
-    capacity,
-    online: online === null ? null : online !== 0,
-    voltageNow,
-    currentNow,
-    powerNow,
-    modelName,
-  }
-}
-
-async function readOptionalText(
-  path: string,
-  readFileImpl: (path: string, encoding: "utf8") => Promise<string>,
-): Promise<string | null> {
-  try {
-    const text = (await readFileImpl(path, "utf8")).trim()
-    return text.length === 0 ? null : text
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null
-    throw error
-  }
-}
-
-async function readOptionalInteger(
-  path: string,
-  readFileImpl: (path: string, encoding: "utf8") => Promise<string>,
-): Promise<number | null> {
-  const text = await readOptionalText(path, readFileImpl)
-  if (text === null) return null
-  const value = Number.parseInt(text, 10)
-  return Number.isInteger(value) ? value : null
-}
-
-async function readPositiveInteger(
-  path: string,
-  readFileImpl: (path: string, encoding: "utf8") => Promise<string>,
-): Promise<number> {
-  const value = await readNonNegativeInteger(path, readFileImpl)
-  if (value <= 0) throw new Error(`${path} must be > 0`)
-  return value
-}
-
-async function readNonNegativeInteger(
-  path: string,
-  readFileImpl: (path: string, encoding: "utf8") => Promise<string>,
-): Promise<number> {
-  const value = Number.parseInt((await readFileImpl(path, "utf8")).trim(), 10)
-  if (!Number.isInteger(value) || value < 0) {
-    throw new Error(`${path} is not a non-negative integer`)
-  }
-  return value
 }
 
 function validateBacklightDeviceName(

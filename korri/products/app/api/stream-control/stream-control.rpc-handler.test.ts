@@ -10,6 +10,8 @@ import { handleGetStreamControlState } from "./get-state.rpc-handler"
 import { createStreamControlService, StreamControl } from "./service"
 import { handleSetBrightness } from "./set-brightness.rpc-handler"
 import { handleSetGamescopeFps } from "./set-gamescope-fps.rpc-handler"
+import { handleSetLinkedFps } from "./set-linked-fps.rpc-handler"
+import { handleSetLinkedResolution } from "./set-linked-resolution.rpc-handler"
 import { handleSetMoonlightBitrate } from "./set-moonlight-bitrate.rpc-handler"
 
 describe("app.stream-control RPC handlers", () => {
@@ -26,6 +28,8 @@ describe("app.stream-control RPC handlers", () => {
     expect(tags).toContain("app.stream-control.gamescope-fps.set")
     expect(tags).toContain("app.stream-control.gamescope-filter.set")
     expect(tags).toContain("app.stream-control.gamescope-sharpness.set")
+    expect(tags).toContain("app.stream-control.linked-fps.set")
+    expect(tags).toContain("app.stream-control.linked-resolution.set")
   })
 
   it("applies brightness to every backlight device by percent", async () => {
@@ -209,7 +213,7 @@ describe("app.stream-control RPC handlers", () => {
     })
   })
 
-  it("reports live and failed socket state through RPC data", async () => {
+  it("reports typed live and failed socket state through RPC data", async () => {
     const state = await Effect.runPromise(
       handleGetStreamControlState({}).pipe(
         Effect.provide(
@@ -224,7 +228,21 @@ describe("app.stream-control RPC handlers", () => {
                 readdir: async () => [],
                 connectMoonlight: async () =>
                   ({
-                    state: async () => ({ ok: true }),
+                    state: async () => ({
+                      result: {
+                        streamQuality: {
+                          bitrateKbps: 12_000,
+                          fps: 60,
+                          width: 1920,
+                          height: 1080,
+                        },
+                        runtimeSettings: {
+                          appliedBitrateKbps: 10_000,
+                          appliedFps: 45,
+                          appliedResolution: { width: 1280, height: 720 },
+                        },
+                      },
+                    }),
                     close: () => undefined,
                   }) as unknown as MoonlightControlClient,
                 connectGamescope: async () => {
@@ -238,7 +256,14 @@ describe("app.stream-control RPC handlers", () => {
     )
 
     expect(state).toEqual({
-      moonlight: { status: "ok", response: { ok: true } },
+      moonlight: {
+        status: "ok",
+        readback: {
+          bitrateKbps: 10_000,
+          fps: 45,
+          resolution: { width: 1280, height: 720 },
+        },
+      },
       gamescope: { status: "error", error: "gamescope offline" },
       brightness: {
         status: "error",
@@ -250,7 +275,158 @@ describe("app.stream-control RPC handlers", () => {
       },
     })
   })
+
+  it("orchestrates linked FPS through the service instead of the React page", async () => {
+    const calls: unknown[] = []
+
+    const response = await Effect.runPromise(
+      handleSetLinkedFps({ fps: 60 }).pipe(
+        Effect.provide(
+          Layer.succeed(
+            StreamControl,
+            createStreamControlService(
+              {
+                moonlightSocketPath: "/run/moonlight.sock",
+                gamescopeSocketPath: "/run/gamescope.sock",
+              },
+              {
+                connectMoonlight: async socketPath =>
+                  recordingMoonlightClient(calls, socketPath),
+                connectGamescope: async socketPath =>
+                  recordingGamescopeClient(calls, socketPath),
+              },
+            ),
+          ),
+        ),
+      ),
+    )
+
+    expect(response).toMatchObject({
+      action: "linked.fps",
+      requested: { fps: 60 },
+      response: { status: "pending" },
+    })
+    expect(calls).toEqual([
+      { socketPath: "/run/moonlight.sock" },
+      { method: "setFps", params: { fps: 60 } },
+      { method: "close" },
+      { socketPath: "/run/gamescope.sock" },
+      { method: "requestCommand", command: "fps.set", params: { fps: 60 } },
+      { method: "close" },
+    ])
+  })
+
+  it("reports partial linked FPS outcomes when Gamescope readback fails", async () => {
+    const calls: unknown[] = []
+
+    const response = await Effect.runPromise(
+      handleSetLinkedFps({ fps: 60 }).pipe(
+        Effect.provide(
+          Layer.succeed(
+            StreamControl,
+            createStreamControlService(
+              {
+                moonlightSocketPath: "/run/moonlight.sock",
+                gamescopeSocketPath: "/run/gamescope.sock",
+              },
+              {
+                connectMoonlight: async socketPath =>
+                  recordingMoonlightClient(calls, socketPath),
+                connectGamescope: async socketPath => {
+                  calls.push({ socketPath })
+                  return {
+                    requestCommand: (
+                      command: GamescopeControlCommandMethod,
+                      params?: unknown,
+                    ) => {
+                      calls.push({ method: "requestCommand", command, params })
+                      return commandResult(
+                        command,
+                        "readback-mismatch",
+                        "atom stayed at 30",
+                      )
+                    },
+                    close: () => calls.push({ method: "close" }),
+                  } as unknown as GamescopeControlClient
+                },
+              },
+            ),
+          ),
+        ),
+      ),
+    )
+
+    expect(response).toMatchObject({
+      action: "linked.fps",
+      requested: { fps: 60 },
+      response: {
+        status: "partial",
+        moonlight: { status: "pending" },
+        gamescope: {
+          status: "failed",
+          error: "readback-mismatch: atom stayed at 30",
+        },
+      },
+    })
+  })
+
+  it("reports partial linked resolution outcomes when one subsystem fails", async () => {
+    const calls: unknown[] = []
+
+    const response = await Effect.runPromise(
+      handleSetLinkedResolution({ width: 1280, height: 720 }).pipe(
+        Effect.provide(
+          Layer.succeed(
+            StreamControl,
+            createStreamControlService(
+              {
+                moonlightSocketPath: "/run/moonlight.sock",
+                gamescopeSocketPath: "/run/gamescope.sock",
+              },
+              {
+                connectMoonlight: async socketPath =>
+                  recordingMoonlightClient(calls, socketPath),
+                connectGamescope: async () => {
+                  throw new Error("gamescope offline")
+                },
+              },
+            ),
+          ),
+        ),
+      ),
+    )
+
+    expect(response).toMatchObject({
+      action: "linked.resolution",
+      requested: { width: 1280, height: 720 },
+      response: {
+        status: "partial",
+        gamescope: { status: "failed", error: "gamescope offline" },
+        moonlight: { status: "pending" },
+      },
+    })
+  })
 })
+
+function commandResult(
+  command: string,
+  status: string,
+  reason?: string,
+): Promise<never> {
+  return Promise.resolve({
+    jsonrpc: "2.0" as const,
+    id: "test",
+    result: {
+      _tag: "command.result",
+      requestId: "request",
+      command,
+      status,
+      requested: {},
+      applied: {},
+      ...(reason ? { reason } : {}),
+    },
+  } as never)
+}
 
 function commandAccepted(command: string): Promise<never> {
   return Promise.resolve({
@@ -277,6 +453,17 @@ function recordingMoonlightClient(
       calls.push({ method: "setBitrate", params })
       return commandAccepted("runtime.setBitrate")
     },
+    setFps: (params: { readonly fps: number }) => {
+      calls.push({ method: "setFps", params })
+      return commandAccepted("runtime.setFps")
+    },
+    setResolution: (params: {
+      readonly width: number
+      readonly height: number
+    }) => {
+      calls.push({ method: "setResolution", params })
+      return commandAccepted("runtime.setResolution")
+    },
     close: () => calls.push({ method: "close" }),
   } as unknown as MoonlightControlClient
 }
@@ -293,6 +480,10 @@ function recordingGamescopeClient(
     ) => {
       calls.push({ method: "requestCommand", command, params })
       return commandAccepted(command)
+    },
+    setMode: (params: { readonly width: number; readonly height: number }) => {
+      calls.push({ method: "setMode", params })
+      return commandAccepted("mode.set")
     },
     close: () => calls.push({ method: "close" }),
   } as unknown as GamescopeControlClient
