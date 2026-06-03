@@ -7,6 +7,7 @@ import {
   GAMESCOPE_CONTROL_PROTOCOL,
   GAMESCOPE_CONTROL_PROTOCOL_LIMITS,
   parseGamescopeCardinalProperty,
+  validateGamescopeFps,
   validateGamescopeMode,
   valueToGamescopeFilter,
 } from "./gamescope-control-protocol"
@@ -34,6 +35,43 @@ describe("gamescope control protocol", () => {
     expect(hello.capabilities.methods).toContain("events.subscribe")
     expect(hello.capabilities.commands).toContain("mode.set")
     expect(hello.capabilities.commands).not.toContain("state.get")
+    expect(hello.capabilities.unsupported ?? []).not.toContain("fps.set")
+  })
+
+  it("validates fps requests inside protocol limits and rejects out-of-range values", () => {
+    expect(validateGamescopeFps({ fps: 0 })).toBe(0)
+    expect(validateGamescopeFps({ fps: 60 })).toBe(60)
+    expect(validateGamescopeFps({ fps: 240 })).toBe(240)
+    expect(() => validateGamescopeFps({ fps: 241 })).toThrow(
+      String(GAMESCOPE_CONTROL_PROTOCOL_LIMITS.fps.max),
+    )
+    expect(() => validateGamescopeFps({ fps: -1 })).toThrow("between")
+    expect(() => validateGamescopeFps({ fps: 59.5 })).toThrow("integer")
+    expect(() => validateGamescopeFps(null)).toThrow("fps params")
+  })
+
+  it("decodes fps.set requests through the JSON-RPC validator", () => {
+    expect(
+      decodeGamescopeControlRequest({
+        jsonrpc: "2.0",
+        id: 7,
+        method: "fps.set",
+        params: { fps: 60 },
+      }),
+    ).toEqual({
+      jsonrpc: "2.0",
+      id: 7,
+      method: "fps.set",
+      params: { fps: 60 },
+    })
+    expect(() =>
+      decodeGamescopeControlRequest({
+        jsonrpc: "2.0",
+        id: 7,
+        method: "fps.set",
+        params: { fps: "60" },
+      }),
+    ).toThrow("fps must be an integer")
   })
 
   it("validates positive mode requests before they reach xprop", () => {

@@ -14,6 +14,7 @@ import {
   type GamescopeControlSuccessResponse,
   isGamescopeControlCommandMethod,
   validateGamescopeFilter,
+  validateGamescopeFps,
   validateGamescopeMode,
   validateGamescopeSharpness,
 } from "./gamescope-control-protocol"
@@ -203,6 +204,12 @@ async function dispatchRequest(
     case "sharpness.set": {
       const result = await context.options.backend.setSharpness(
         validateGamescopeSharpness(request.params),
+      )
+      return withRequestId(result, request.id)
+    }
+    case "fps.set": {
+      const result = await context.options.backend.setFps(
+        validateGamescopeFps(request.params),
       )
       return withRequestId(result, request.id)
     }

@@ -141,6 +141,88 @@ describe("x11 gamescope control backend", () => {
     expect(result.applied.filter).toBe("linear")
   })
 
+  it("writes GAMESCOPE_FPS_LIMIT via xprop and reports the readback as applied", async () => {
+    const calls: string[][] = []
+    const backend = createX11GamescopeControlBackend({
+      display: ":1",
+      run: async (command, args) => {
+        calls.push([command, ...args])
+        if (args.includes("GAMESCOPE_FPS_LIMIT") && !args.includes("-set")) {
+          return {
+            stdout:
+              "GAMESCOPE_SCALING_FILTER(CARDINAL) = 1\nGAMESCOPE_SHARPNESS(CARDINAL) = 0\nGAMESCOPE_FSR_FEEDBACK(CARDINAL) = 0\nGAMESCOPE_FPS_LIMIT(CARDINAL) = 60\n",
+            stderr: "",
+            exitCode: 0,
+          }
+        }
+        return { stdout: "", stderr: "", exitCode: 0 }
+      },
+    })
+
+    const result = await backend.setFps(60)
+    expect(result.status).toBe("applied")
+    expect(result.applied.fps).toBe(60)
+    expect(calls).toContainEqual([
+      "xprop",
+      "-root",
+      "-f",
+      "GAMESCOPE_FPS_LIMIT",
+      "32c",
+      "-set",
+      "GAMESCOPE_FPS_LIMIT",
+      "60",
+    ])
+  })
+
+  it("reports readback-mismatch when GAMESCOPE_FPS_LIMIT does not echo back", async () => {
+    const backend = createX11GamescopeControlBackend({
+      display: ":1",
+      run: async (_command, args) => {
+        if (args.includes("GAMESCOPE_FPS_LIMIT") && !args.includes("-set")) {
+          return {
+            stdout:
+              "GAMESCOPE_SCALING_FILTER(CARDINAL) = 1\nGAMESCOPE_SHARPNESS(CARDINAL) = 0\nGAMESCOPE_FSR_FEEDBACK(CARDINAL) = 0\nGAMESCOPE_FPS_LIMIT(CARDINAL) = 30\n",
+            stderr: "",
+            exitCode: 0,
+          }
+        }
+        return { stdout: "", stderr: "", exitCode: 0 }
+      },
+    })
+
+    const result = await backend.setFps(60)
+    expect(result.status).toBe("readback-mismatch")
+    expect(result.applied.fps).toBe(30)
+    expect(result.reason).toContain("fps readback mismatch")
+  })
+
+  it("reads GAMESCOPE_FPS_LIMIT into the state snapshot when set", async () => {
+    const backend = createX11GamescopeControlBackend({
+      display: ":1",
+      run: async (command, args) => {
+        if (command === "xrandr") {
+          return {
+            stdout:
+              "Screen 0: minimum 16 x 16, current 640 x 360, maximum 32767 x 32767\n",
+            stderr: "",
+            exitCode: 0,
+          }
+        }
+        if (args.includes("GAMESCOPE_FPS_LIMIT")) {
+          return {
+            stdout:
+              "GAMESCOPE_SCALING_FILTER(CARDINAL) = 1\nGAMESCOPE_SHARPNESS(CARDINAL) = 0\nGAMESCOPE_FSR_FEEDBACK(CARDINAL) = 0\nGAMESCOPE_FPS_LIMIT(CARDINAL) = 45\n",
+            stderr: "",
+            exitCode: 0,
+          }
+        }
+        return { stdout: "", stderr: "", exitCode: 0 }
+      },
+    })
+    const state = await backend.getState()
+    expect(state.fps).toBe(45)
+  })
+
   it("reports readback-failed when state cannot be read after sharpness write", async () => {
     const backend = createX11GamescopeControlBackend({
       display: ":1",

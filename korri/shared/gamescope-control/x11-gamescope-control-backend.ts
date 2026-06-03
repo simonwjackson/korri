@@ -57,6 +57,7 @@ export function createX11GamescopeControlBackend(
     setMode,
     setFilter,
     setSharpness,
+    setFps,
   }
 
   async function getState(): Promise<GamescopeControlState> {
@@ -146,6 +147,35 @@ export function createX11GamescopeControlBackend(
     }
   }
 
+  async function setFps(fps: number): Promise<GamescopeControlCommandResult> {
+    // gamescope reads GAMESCOPE_FPS_LIMIT live (same family as
+    // GAMESCOPE_SCALING_FILTER / GAMESCOPE_SHARPNESS). 0 disables the cap.
+    await writeCardinal("GAMESCOPE_FPS_LIMIT", fps)
+    const readback = await getStateAfterMutation()
+    if (readback.error) {
+      return {
+        _tag: "command.result",
+        command: "fps.set",
+        status: "readback-failed",
+        requested: { fps },
+        applied: {},
+        reason: readback.error.message,
+      }
+    }
+    const applied = readback.state
+    return {
+      _tag: "command.result",
+      command: "fps.set",
+      status: applied.fps === fps ? "applied" : "readback-mismatch",
+      requested: { fps },
+      applied,
+      reason:
+        applied.fps === fps
+          ? undefined
+          : `fps readback mismatch: requested ${fps}, observed ${applied.fps ?? "unknown"}`,
+    }
+  }
+
   async function setSharpness(
     sharpness: number,
   ): Promise<GamescopeControlCommandResult> {
@@ -189,6 +219,7 @@ export function createX11GamescopeControlBackend(
         "GAMESCOPE_SCALING_FILTER",
         "GAMESCOPE_SHARPNESS",
         "GAMESCOPE_FSR_FEEDBACK",
+        "GAMESCOPE_FPS_LIMIT",
       ],
       { env },
     )
@@ -204,6 +235,7 @@ export function createX11GamescopeControlBackend(
       output,
       "GAMESCOPE_FSR_FEEDBACK",
     )
+    const fps = parseGamescopeCardinalProperty(output, "GAMESCOPE_FPS_LIMIT")
     return {
       filter,
       sharpness,
@@ -211,6 +243,7 @@ export function createX11GamescopeControlBackend(
         typeof fsrFeedbackValue === "number"
           ? fsrFeedbackValue !== 0
           : undefined,
+      ...(fps !== undefined ? { fps } : {}),
     }
   }
 

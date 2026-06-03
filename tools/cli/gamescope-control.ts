@@ -6,6 +6,7 @@ import {
   type GamescopeControlCommandMethod,
   type GamescopeScalingFilter,
   isGamescopeControlCommandMethod,
+  validateGamescopeFps,
   validateGamescopeMode,
   validateGamescopeSharpness,
 } from "@shared/gamescope-control/gamescope-control-protocol"
@@ -63,6 +64,11 @@ type ParsedCommand =
       readonly sharpness: number
     }
   | {
+      readonly command: "fps"
+      readonly socketPath: string
+      readonly fps: number
+    }
+  | {
       readonly command: "call"
       readonly socketPath: string
       readonly method: GamescopeControlCommandMethod
@@ -84,6 +90,8 @@ async function dispatchCliCommand(
       return client.setFilter({ filter: command.filter })
     case "sharpness":
       return client.setSharpness({ sharpness: command.sharpness })
+    case "fps":
+      return client.setFps({ fps: command.fps })
     case "call":
       return client.requestCommand(command.method, command.params)
   }
@@ -133,6 +141,15 @@ function parseCommand(argv: readonly string[]): ParsedCommand | string {
     }
   }
 
+  if (command === "fps") {
+    const fps = Number(argv[1])
+    try {
+      return { command, socketPath, fps: validateGamescopeFps({ fps }) }
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error)
+    }
+  }
+
   if (command === "call") {
     const method = argv[1]
     if (!isGamescopeControlCommandMethod(method)) {
@@ -147,7 +164,7 @@ function parseCommand(argv: readonly string[]): ParsedCommand | string {
     }
   }
 
-  return "gamescope-control command must be hello, state, mode, filter, sharpness, or call"
+  return "gamescope-control command must be hello, state, mode, filter, sharpness, fps, or call"
 }
 
 function parseSocketPath(argv: readonly string[]): string | undefined {

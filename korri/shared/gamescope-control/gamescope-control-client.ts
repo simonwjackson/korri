@@ -59,6 +59,9 @@ export interface GamescopeControlClient {
   readonly setSharpness: (params: {
     readonly sharpness: number
   }) => Promise<GamescopeControlSuccessResponse<GamescopeControlCommandResult>>
+  readonly setFps: (params: {
+    readonly fps: number
+  }) => Promise<GamescopeControlSuccessResponse<GamescopeControlCommandResult>>
   readonly requestCommand: (
     method: GamescopeControlCommandMethod,
     params?: unknown,
@@ -153,6 +156,10 @@ function createGamescopeControlClient(
       >,
     setSharpness: params =>
       request("sharpness.set", params) as Promise<
+        GamescopeControlSuccessResponse<GamescopeControlCommandResult>
+      >,
+    setFps: params =>
+      request("fps.set", params) as Promise<
         GamescopeControlSuccessResponse<GamescopeControlCommandResult>
       >,
     requestCommand: (method, params) =>

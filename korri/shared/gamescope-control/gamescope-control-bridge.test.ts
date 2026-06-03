@@ -47,6 +47,13 @@ describe("gamescope control bridge", () => {
         requested: { sharpness },
         applied: { sharpness },
       }),
+      setFps: async fps => ({
+        _tag: "command.result",
+        command: "fps.set",
+        status: "applied",
+        requested: { fps },
+        applied: { fps },
+      }),
     }
 
     const bridge = await startGamescopeControlBridge({ socketPath, backend })
@@ -116,6 +123,13 @@ describe("gamescope control bridge", () => {
           applied: { sharpness },
         }
       },
+      setFps: async fps => ({
+        _tag: "command.result",
+        command: "fps.set",
+        status: "applied",
+        requested: { fps },
+        applied: { fps },
+      }),
     }
 
     const bridge = await startGamescopeControlBridge({ socketPath, backend })
@@ -167,6 +181,13 @@ describe("gamescope control bridge", () => {
         status: "applied",
         requested: { sharpness },
         applied: { sharpness },
+      }),
+      setFps: async fps => ({
+        _tag: "command.result",
+        command: "fps.set",
+        status: "applied",
+        requested: { fps },
+        applied: { fps },
       }),
     }
 
@@ -229,6 +250,13 @@ describe("gamescope control bridge", () => {
         requested: { sharpness },
         applied: { sharpness },
       }),
+      setFps: async fps => ({
+        _tag: "command.result",
+        command: "fps.set",
+        status: "applied",
+        requested: { fps },
+        applied: { fps },
+      }),
     }
 
     const bridge = await startGamescopeControlBridge({ socketPath, backend })
@@ -249,6 +277,66 @@ describe("gamescope control bridge", () => {
       } finally {
         subscriber.close()
         controller.close()
+      }
+    } finally {
+      await bridge.close()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("dispatches fps.set through the backend when implemented", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "gamescope-control-"))
+    const socketPath = join(dir, "control.sock")
+    const seen: number[] = []
+    const backend: GamescopeControlBackend = {
+      getState: async () => ({ fps: 60 }),
+      setMode: async requested => ({
+        _tag: "command.result",
+        command: "mode.set",
+        status: "applied",
+        requested,
+        applied: { xwaylandMode: requested },
+      }),
+      setFilter: async filter => ({
+        _tag: "command.result",
+        command: "filter.set",
+        status: "applied",
+        requested: { filter },
+        applied: { filter },
+      }),
+      setSharpness: async sharpness => ({
+        _tag: "command.result",
+        command: "sharpness.set",
+        status: "applied",
+        requested: { sharpness },
+        applied: { sharpness },
+      }),
+      setFps: async fps => {
+        seen.push(fps)
+        return {
+          _tag: "command.result",
+          command: "fps.set",
+          status: "applied",
+          requested: { fps },
+          applied: { fps },
+        }
+      },
+    }
+
+    const bridge = await startGamescopeControlBridge({ socketPath, backend })
+    try {
+      const client = await connectGamescopeControl({ socketPath })
+      try {
+        const response = await client.requestCommand("fps.set", { fps: 60 })
+        expect(response.result).toMatchObject({
+          _tag: "command.result",
+          command: "fps.set",
+          status: "applied",
+          applied: { fps: 60 },
+        })
+        expect(seen).toEqual([60])
+      } finally {
+        client.close()
       }
     } finally {
       await bridge.close()
@@ -281,6 +369,13 @@ describe("gamescope control bridge", () => {
         status: "applied",
         requested: { sharpness },
         applied: { sharpness },
+      }),
+      setFps: async fps => ({
+        _tag: "command.result",
+        command: "fps.set",
+        status: "applied",
+        requested: { fps },
+        applied: { fps },
       }),
     }
 

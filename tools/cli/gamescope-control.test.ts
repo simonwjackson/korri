@@ -41,6 +41,9 @@ describe("gamescope-control cli", () => {
           setSharpness: async () => {
             throw new Error("unexpected")
           },
+          setFps: async () => {
+            throw new Error("unexpected")
+          },
           subscribe: async () => ({
             jsonrpc: "2.0",
             id: "4",
@@ -91,6 +94,9 @@ describe("gamescope-control cli", () => {
           setSharpness: async () => {
             throw new Error("unexpected")
           },
+          setFps: async () => {
+            throw new Error("unexpected")
+          },
           subscribe: async () => ({
             jsonrpc: "2.0",
             id: "4",
@@ -139,6 +145,9 @@ describe("gamescope-control cli", () => {
             throw new Error("unexpected")
           },
           setSharpness: async () => {
+            throw new Error("unexpected")
+          },
+          setFps: async () => {
             throw new Error("unexpected")
           },
           subscribe: async () => ({
@@ -228,6 +237,9 @@ describe("gamescope-control cli", () => {
             throw new Error("unexpected")
           },
           setSharpness: async () => {
+            throw new Error("unexpected")
+          },
+          setFps: async () => {
             throw new Error("unexpected")
           },
           subscribe: async () => ({

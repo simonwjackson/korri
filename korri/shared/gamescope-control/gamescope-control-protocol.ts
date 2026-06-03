@@ -11,6 +11,7 @@ export const GAMESCOPE_CONTROL_PROTOCOL_LIMITS = {
     height: { min: 1, max: Number.MAX_SAFE_INTEGER },
   },
   sharpness: { min: 0, max: 20 },
+  fps: { min: 0, max: 240 },
 } as const
 
 export const GAMESCOPE_CONTROL_COMMANDS = [
@@ -208,6 +209,9 @@ export interface GamescopeControlBackend {
   readonly setSharpness: (
     sharpness: number,
   ) => Promise<GamescopeControlCommandResult>
+  readonly setFps: (
+    fps: number,
+  ) => Promise<GamescopeControlCommandResult>
 }
 
 const filterValues: Record<GamescopeScalingFilter, number> = {
@@ -278,6 +282,16 @@ export function validateGamescopeSharpness(value: unknown): number {
   )
 }
 
+export function validateGamescopeFps(value: unknown): number {
+  if (!isRecord(value)) throw new Error("fps params must be an object")
+  return validateInteger(
+    value.fps,
+    "fps",
+    GAMESCOPE_CONTROL_PROTOCOL_LIMITS.fps.min,
+    GAMESCOPE_CONTROL_PROTOCOL_LIMITS.fps.max,
+  )
+}
+
 export function decodeGamescopeControlRequest(
   value: unknown,
 ): GamescopeControlRequest {
@@ -299,6 +313,9 @@ export function decodeGamescopeControlRequest(
     params = { filter: validateGamescopeFilter(params) }
   if (value.method === "sharpness.set") {
     params = { sharpness: validateGamescopeSharpness(params) }
+  }
+  if (value.method === "fps.set") {
+    params = { fps: validateGamescopeFps(params) }
   }
 
   return {
@@ -407,7 +424,8 @@ function unsupportedDefaultCommands(): readonly GamescopeControlCommandMethod[] 
     command =>
       command !== "mode.set" &&
       command !== "filter.set" &&
-      command !== "sharpness.set",
+      command !== "sharpness.set" &&
+      command !== "fps.set",
   )
 }
 
