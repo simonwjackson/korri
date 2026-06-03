@@ -1,5 +1,5 @@
 import { HomeRuntimeLayersRoot } from "@app/features/home/HomeRuntimeLayersRoot"
-import { ShiftHomePage } from "@shared/themes/shift/pages/ShiftHomePage"
+import { ShiftHomePage } from "@product/themes/shift/pages/ShiftHomePage"
 import { createFileRoute } from "@tanstack/react-router"
 
 export const Route = createFileRoute("/")({

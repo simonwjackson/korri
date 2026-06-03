@@ -70,7 +70,7 @@ a 403. `.feature` files and the generated `feature-map.json` are read-only.
 The explorer is dev tooling, never shipped to production. It sits under
 `tools/feature-map-explorer/` so it has zero blast radius on the product
 build, RPC layer, or theme system. Its design tokens and components are
-intentionally separate from `korri/shared/themes/*` — Shift is a gaming
+intentionally separate from `product/themes/*` — Shift is a gaming
 theme, this is a tool UI.
 
 ## Plan

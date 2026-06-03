@@ -11,7 +11,7 @@ jobs:
 ---
 
 **Source job**: `docs/jobs/safe-game-resume.md`
-**Theme**: `korri/shared/themes/shift/`
+**Theme**: `product/themes/shift/`
 **BDD spec**: `korri/products/app/features/home/e2e/home.feature`
 
 ---

@@ -1,16 +1,18 @@
 ## Project layout
 
-- Runtime app code: `korri/products/*`
-- Shared runtime code: `korri/shared/*`
-- Deployment/bootstrap entrypoints: `korri/deploy/*`
+- Product apps/services/platform/themes: `product/*`
+- Legacy product app domain code: `korri/products/*`
+- Shared runtime code not yet migrated: `korri/shared/*`
 - Repo tooling, generators, and test infrastructure: `tools/*`
 
 ## Path aliases
 
 - `@app/*` → `korri/products/app/*`
 - `@shared/*` → `korri/shared/*`
+- `@product/*` → `product/*`
+- `@platform/*` → `product/platform/*`
 
-The reusable shared layers covered by the no-product-imports rule include `korri/shared/themes/*` and `korri/shared/ui/*`. Pages and templates in `korri/shared/themes/*` compose Roots; the route in `korri/products/app/routes/*` is the composition root that picks one.
+Autonomous themes live under `product/themes/*`. They may use public platform/shared APIs, but must not import `product/apps/*`, `product/services/*`, `product/systems/*`, or `@app/*` internals.
 
 ## RPC conventions
 
@@ -49,7 +51,7 @@ Multi RPC:
 
 - The app must remain navigable via device-agnostic directional input and semantic action keys.
 - Components stay native HTML (`button`, `a`, `input`, `[tabindex]`); do not import navigation libraries or focus hooks at the component level.
-- Navigation-library and device-adapter code lives only under `product/platform/input/*` and `korri/shared/browser/navigation/*`.
+- Navigation-library and device-adapter code lives only under `product/platform/input/*` and `product/platform/browser/navigation/*`.
 - Subscribe to semantic actions (`back`, `menu`, `options`, `confirm`, `direction`) with `useInputAction` from `@platform/react/input/use-input-action`. Do not reach into `window.__korriSpatialNav` from product code.
 - Use LRUD's DOM hints (`lrud-container`, `lrud-ignore`, `data-block-exit`, `data-lrud-overlap-threshold`) when needed; do not create component-level navigation APIs.
 - See `docs/solutions/best-practices/decoupled-spatial-navigation-2026-05-01.md` before changing the navigation architecture.

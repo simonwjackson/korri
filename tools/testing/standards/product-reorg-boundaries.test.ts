@@ -9,10 +9,8 @@ import {
   sourceFiles,
 } from "./source-files"
 
-const CURRENT_THEME_ROOTS = [
-  join(REPO_ROOT, "korri", "shared", "themes"),
-  join(REPO_ROOT, "product", "themes"),
-]
+const LEGACY_SHARED_THEME_ROOT = join(REPO_ROOT, "korri", "shared", "themes")
+const CURRENT_THEME_ROOTS = [join(REPO_ROOT, "product", "themes")]
 
 const FRAMEWORK_NEUTRAL_PLATFORM_ROOTS = [
   join(REPO_ROOT, "product", "platform", "protocol"),
@@ -109,6 +107,12 @@ function buildReferencedToolEntrypoints(): readonly string[] {
 }
 
 describe("standards: product platform reorganization guardrails", () => {
+  it("keeps first-party themes out of legacy shared theme ownership", () => {
+    expect(existsSync(LEGACY_SHARED_THEME_ROOT)).toBe(false)
+    expect(existsSync(join(REPO_ROOT, "product", "themes", "shift"))).toBe(true)
+    expect(existsSync(join(REPO_ROOT, "product", "themes", "evier"))).toBe(true)
+  })
+
   it("keeps autonomous themes from importing app, service, system, or deploy internals", () => {
     const violations = existingRoots(CURRENT_THEME_ROOTS).flatMap(root =>
       sourceFiles(root)

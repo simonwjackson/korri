@@ -11,7 +11,7 @@
  * to do equivalent first-fit packing without page boundaries. Paged mode
  * needs this because it must chunk items into discrete page sets.
  *
- * Ported verbatim from korri/shared/themes/shift/organisms/grid-view-pagination.ts;
+ * Ported verbatim from product/themes/shift/organisms/grid-view-pagination.ts;
  * the characterization spec lives in bin-pack.test.ts.
  */
 

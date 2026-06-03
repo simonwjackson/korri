@@ -58,6 +58,7 @@ pkgs.runCommand "korri-rocknix-build-performance-check"
     test -e ${runtimeSources.portal}/vite.config.mjs
     test -e ${runtimeSources.portal}/product/apps/desktop/runtime-config-shape.ts
     test -e ${runtimeSources.portal}/product/apps/portal
+    test -e ${runtimeSources.portal}/product/themes
     test -e ${runtimeSources.portal}/korri/products
     test -e ${runtimeSources.portal}/korri/shared
     test -e ${runtimeSources.portal}/product/platform

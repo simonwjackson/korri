@@ -369,6 +369,7 @@
                 ./vite.config.mjs
                 ./product/apps/desktop/runtime-config-shape.ts
                 ./product/apps/portal
+                ./product/themes
                 ./korri/products
               ]
               ++ sharedRuntime
