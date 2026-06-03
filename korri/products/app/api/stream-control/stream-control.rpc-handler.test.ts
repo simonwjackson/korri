@@ -6,6 +6,7 @@ import type { GamescopeControlCommandMethod } from "@shared/gamescope-control/ga
 import type { MoonlightControlClient } from "@shared/stream/moonlight-control-client"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { handleGetStreamControlConfig } from "./get-config.rpc-handler"
+import { handleGetStreamControlControls } from "./get-controls.rpc-handler"
 import { handleGetStreamControlState } from "./get-state.rpc-handler"
 import { createStreamControlService, StreamControl } from "./service"
 import { handleSetBrightness } from "./set-brightness.rpc-handler"
@@ -19,6 +20,7 @@ describe("app.stream-control RPC handlers", () => {
     const tags = Array.from(appRpcGroup.requests.keys()).sort()
 
     expect(tags).toContain("app.stream-control.config.get")
+    expect(tags).toContain("app.stream-control.controls.get")
     expect(tags).toContain("app.stream-control.state.get")
     expect(tags).toContain("app.stream-control.brightness.set")
     expect(tags).toContain("app.stream-control.moonlight-bitrate.set")
@@ -160,6 +162,77 @@ describe("app.stream-control RPC handlers", () => {
       { method: "requestCommand", command: "fps.set", params: { fps: 120 } },
       { method: "close" },
     ])
+  })
+
+  it("reports product-accessible stream-control capabilities", async () => {
+    const controls = await Effect.runPromise(
+      handleGetStreamControlControls({}).pipe(
+        Effect.provide(
+          Layer.succeed(
+            StreamControl,
+            createStreamControlService({
+              moonlightSocketPath: "/run/moonlight.sock",
+              gamescopeSocketPath: "/run/gamescope.sock",
+            }),
+          ),
+        ),
+      ),
+    )
+
+    expect(controls.controls).toContainEqual({
+      id: "linked.fps",
+      subsystem: "linked",
+      access: "read-write",
+      status: "supported",
+      unavailableReason: null,
+      action: "app.stream-control.linked-fps.set",
+      readback: "linked.fps",
+      value: { kind: "steps", values: [30, 45, 60, 75, 90, 120] },
+    })
+    expect(controls.controls).toContainEqual({
+      id: "gamescope.fps",
+      subsystem: "gamescope",
+      access: "read-write",
+      status: "supported",
+      unavailableReason: null,
+      action: "app.stream-control.gamescope-fps.set",
+      readback: "gamescope.fps",
+      value: {
+        kind: "steps",
+        values: [0, 30, 45, 60, 75, 90, 120, 144, 165, 240],
+      },
+    })
+    expect(controls.controls).toContainEqual({
+      id: "battery.percent",
+      subsystem: "battery",
+      access: "read-only",
+      status: "supported",
+      unavailableReason: null,
+      action: null,
+      readback: "battery.percent",
+      value: { kind: "read-only" },
+    })
+  })
+
+  it("reports linked controls as unsupported when a required subsystem is disabled", async () => {
+    const controls = await Effect.runPromise(
+      handleGetStreamControlControls({}).pipe(
+        Effect.provide(
+          Layer.succeed(
+            StreamControl,
+            createStreamControlService({ moonlightSocketPath: "/run/moonlight.sock" }),
+          ),
+        ),
+      ),
+    )
+
+    expect(controls.controls).toContainEqual(
+      expect.objectContaining({
+        id: "linked.resolution",
+        status: "unsupported",
+        unavailableReason: "gamescope disabled",
+      }),
+    )
   })
 
   it("reports socket configuration through RPC config data", async () => {

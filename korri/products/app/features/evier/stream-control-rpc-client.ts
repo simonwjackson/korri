@@ -6,6 +6,14 @@ import { RpcClient } from "effect/unstable/rpc"
 
 export function createEvierStreamControlRpcClient(): StreamControlClient {
   return {
+    getControls: () =>
+      runAppRpc(
+        RpcClient.make(appRpcGroup).pipe(
+          Effect.flatMap(client =>
+            client["app.stream-control.controls.get"]({}),
+          ),
+        ),
+      ),
     getState: () =>
       runAppRpc(
         RpcClient.make(appRpcGroup).pipe(

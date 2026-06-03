@@ -86,6 +86,62 @@ export type StreamControlConfigResponseData = Schema.Schema.Type<
   typeof StreamControlConfigResponseSchema
 >
 
+const ControlValueSpec = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("range"),
+    min: Schema.Number,
+    max: Schema.Number,
+    step: Schema.Number,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("steps"),
+    values: Schema.Array(Schema.Number),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("options"),
+    values: Schema.Array(Schema.String),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("resolutions"),
+    values: Schema.Array(
+      Schema.Struct({
+        label: Schema.String,
+        width: Schema.Number,
+        height: Schema.Number,
+      }),
+    ),
+  }),
+  Schema.Struct({ kind: Schema.Literal("read-only") }),
+])
+
+const StreamControlCapability = Schema.Struct({
+  id: Schema.String,
+  subsystem: Schema.Literals([
+    "moonlight",
+    "gamescope",
+    "linked",
+    "brightness",
+    "battery",
+  ]),
+  access: Schema.Literals(["read-write", "read-only"]),
+  status: Schema.Literals(["supported", "unsupported"]),
+  unavailableReason: Schema.Union([Schema.String, Schema.Null]),
+  action: Schema.Union([Schema.String, Schema.Null]),
+  readback: Schema.String,
+  value: ControlValueSpec,
+})
+
+export const StreamControlControlsResponseFields = {
+  controls: Schema.Array(StreamControlCapability),
+}
+
+const StreamControlControlsResponseSchema = Schema.Struct(
+  StreamControlControlsResponseFields,
+)
+export type StreamControlControlsResponseData = Schema.Schema.Type<
+  typeof StreamControlControlsResponseSchema
+>
+
 const ResolutionReadback = Schema.Struct({
   width: Schema.Number,
   height: Schema.Number,

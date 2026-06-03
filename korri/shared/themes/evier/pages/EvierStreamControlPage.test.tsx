@@ -281,6 +281,10 @@ function recordingController(
   }
 
   return {
+    getControls: async () => {
+      calls.push({ method: "getControls" })
+      return { controls: [] }
+    },
     getState: async () => {
       calls.push({ method: "getState" })
       return stateSnapshot()

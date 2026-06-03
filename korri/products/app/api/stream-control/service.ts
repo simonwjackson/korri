@@ -11,6 +11,7 @@ import {
   type MoonlightControlClient,
 } from "@shared/stream/moonlight-control-client"
 import { MOONLIGHT_CONTROL_PROTOCOL_LIMITS } from "@shared/stream/moonlight-control-protocol"
+import { streamControlCapabilities } from "@shared/stream-control/control-contract"
 import { Context, Effect, Layer } from "effect"
 import {
   createDeviceControlService,
@@ -19,6 +20,7 @@ import {
 import type {
   StreamControlCommandResponseData,
   StreamControlConfigResponseData,
+  StreamControlControlsResponseData,
   StreamControlRequestedPayload,
   StreamControlStateResponseData,
 } from "./rpc-schemas"
@@ -51,6 +53,7 @@ export interface StreamControlDependencies {
 
 export interface StreamControlService {
   readonly config: () => Effect.Effect<StreamControlConfigResponseData>
+  readonly controls: () => Effect.Effect<StreamControlControlsResponseData>
   readonly state: () => Effect.Effect<StreamControlStateResponseData>
   readonly setBrightness: (payload: {
     readonly percent: number
@@ -156,6 +159,7 @@ export function createStreamControlService(
 
   return {
     config: () => Effect.succeed(configPayload(runtime.options)),
+    controls: () => Effect.succeed(controlsPayload(runtime.options)),
     state: () => Effect.promise(() => readState(runtime)),
     setBrightness: payload =>
       range("percent", payload.percent, 0, 100).pipe(
@@ -734,6 +738,17 @@ function configPayload(
     battery: { enabled: true },
     artifactDir: options.artifactDir ?? null,
   }
+}
+
+function controlsPayload(
+  options: StreamControlOptions,
+): StreamControlControlsResponseData {
+  return streamControlCapabilities({
+    moonlight: Boolean(options.moonlightSocketPath),
+    gamescope: Boolean(options.gamescopeSocketPath),
+    brightness: true,
+    battery: true,
+  })
 }
 
 function range(

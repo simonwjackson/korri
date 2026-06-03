@@ -1,25 +1,17 @@
 import type { GamescopeScalingFilter } from "@shared/gamescope-control/gamescope-control-protocol"
+import {
+  FPS_STEPS,
+  GAMESCOPE_FPS_STEPS,
+  LINKED_FPS_STEPS,
+  RESOLUTION_STEPS,
+} from "@shared/stream-control/control-contract"
 
-export const FPS_STEPS = [30, 40, 45, 60, 75, 90, 100, 120] as const
-
-// Gamescope's GAMESCOPE_FPS_LIMIT cardinal accepts 0..240; 0 disables the
-// compositor-side limiter entirely. Evier surfaces a compact ladder for touch
-// operation instead of a freeform numeric input.
-export const GAMESCOPE_FPS_STEPS = [
-  0, 30, 45, 60, 75, 90, 120, 144, 165, 240,
-] as const
-
-export const LINKED_FPS_STEPS = [30, 45, 60, 75, 90, 120] as const
-
-export const RESOLUTION_STEPS = [
-  { label: "360p", width: 640, height: 360 },
-  { label: "480p", width: 854, height: 480 },
-  { label: "540p", width: 960, height: 540 },
-  { label: "576p", width: 1024, height: 576 },
-  { label: "720p", width: 1280, height: 720 },
-  { label: "900p", width: 1600, height: 900 },
-  { label: "1080p", width: 1920, height: 1080 },
-] as const
+export {
+  FPS_STEPS,
+  GAMESCOPE_FPS_STEPS,
+  LINKED_FPS_STEPS,
+  RESOLUTION_STEPS,
+} from "@shared/stream-control/control-contract"
 
 export type ControlReadback<T> =
   | { readonly _tag: "known"; readonly value: T }

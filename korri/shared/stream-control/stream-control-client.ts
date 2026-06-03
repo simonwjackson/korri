@@ -1,6 +1,7 @@
 import type { GamescopeScalingFilter } from "@shared/gamescope-control/gamescope-control-protocol"
 
 export interface StreamControlClient {
+  readonly getControls: () => Promise<unknown>
   readonly getState: () => Promise<unknown>
   readonly setBrightness: (payload: {
     readonly percent: number
@@ -36,4 +37,7 @@ export interface StreamControlClient {
   }) => Promise<unknown>
 }
 
-export type StreamControlAction = Exclude<keyof StreamControlClient, "getState">
+export type StreamControlAction = Exclude<
+  keyof StreamControlClient,
+  "getControls" | "getState"
+>
