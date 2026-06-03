@@ -209,9 +209,7 @@ export interface GamescopeControlBackend {
   readonly setSharpness: (
     sharpness: number,
   ) => Promise<GamescopeControlCommandResult>
-  readonly setFps: (
-    fps: number,
-  ) => Promise<GamescopeControlCommandResult>
+  readonly setFps: (fps: number) => Promise<GamescopeControlCommandResult>
 }
 
 const filterValues: Record<GamescopeScalingFilter, number> = {

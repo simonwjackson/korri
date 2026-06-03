@@ -289,9 +289,7 @@ function moonlightAbsoluteTouchRequireBoundsFromEnv(): boolean | undefined {
   return raw === "1" || raw === "true" || raw === "enabled"
 }
 
-function moonlightAutoWindowResize(
-  options: MoonlightLaunchOptions,
-): boolean {
+function moonlightAutoWindowResize(options: MoonlightLaunchOptions): boolean {
   return (
     options.autoWindowResize ??
     moonlightAutoWindowResizeFromEnv() ??
