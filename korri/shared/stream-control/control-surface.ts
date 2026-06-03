@@ -35,7 +35,7 @@ export type UnifiedReadback<T> =
       readonly gamescope: T
     }
 
-export interface EvierControlSurfaceState {
+export interface StreamControlSurfaceState {
   readonly moonlight: {
     readonly bitrate: ControlReadback<number>
     readonly fps: ControlReadback<number>
@@ -66,8 +66,8 @@ export interface BrightnessDeviceReadback {
   readonly percent: ControlReadback<number>
 }
 
-export const EvierControlSurface = {
-  fromState(state: unknown): EvierControlSurfaceState {
+export const StreamControlSurface = {
+  fromState(state: unknown): StreamControlSurfaceState {
     const moonlightStatus = subsystemStatus(state, "moonlight")
     const gamescopeStatus = subsystemStatus(state, "gamescope")
 
@@ -216,7 +216,7 @@ function readGamescopeFilter(
 
 function readBrightness(
   state: unknown,
-): EvierControlSurfaceState["brightness"] {
+): StreamControlSurfaceState["brightness"] {
   const status = subsystemStatus(state, "brightness")
   if (status.unavailable) {
     return { unified: unavailable(status.unavailable), devices: [] }
@@ -252,7 +252,7 @@ function readBrightness(
   }
 }
 
-function readBattery(state: unknown): EvierControlSurfaceState["battery"] {
+function readBattery(state: unknown): StreamControlSurfaceState["battery"] {
   const status = subsystemStatus(state, "battery")
   if (status.unavailable) {
     return { percent: unavailable(status.unavailable), status: null }

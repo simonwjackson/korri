@@ -1,4 +1,5 @@
 import type { GamescopeScalingFilter } from "@shared/gamescope-control/gamescope-control-protocol"
+import type { StreamControlClient } from "@shared/stream-control/stream-control-client"
 import { useState } from "react"
 import {
   brightnessDeviceSpec,
@@ -19,23 +20,22 @@ import {
   unifiedSharpnessSpec,
 } from "./evier-control-catalog"
 import {
-  type EvierStreamControlController,
   type ScheduledAction,
   useEvierControlState,
 } from "./evier-control-state"
 import {
-  type EvierControlSurfaceState,
+  type StreamControlSurfaceState,
   FPS_STEPS,
   GAMESCOPE_FPS_STEPS,
   LINKED_FPS_STEPS,
-} from "./evier-control-surface"
+} from "@shared/stream-control/control-surface"
 
-export type { EvierStreamControlController } from "./evier-control-state"
+export type { StreamControlClient } from "@shared/stream-control/stream-control-client"
 
 export function EvierStreamControlPage({
   controller,
 }: {
-  readonly controller: EvierStreamControlController
+  readonly controller: StreamControlClient
 }) {
   const [linkedControls, setLinkedControls] = useState(true)
   const [unifiedBrightness, setUnifiedBrightness] = useState(true)
@@ -346,7 +346,7 @@ function ScalingFilterControl({
 function BatteryStatus({
   battery,
 }: {
-  readonly battery: EvierControlSurfaceState["battery"]
+  readonly battery: StreamControlSurfaceState["battery"]
 }) {
   return (
     <output className="evier-device-status" aria-label="Battery status">

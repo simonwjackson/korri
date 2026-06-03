@@ -1,10 +1,10 @@
 import { appRpcGroup } from "@app/api/app-rpc-group"
 import { RpcClientLive } from "@shared/api/rpc/client"
-import type { EvierStreamControlController } from "@shared/themes/evier/pages/EvierStreamControlPage"
+import type { StreamControlClient } from "@shared/stream-control/stream-control-client"
 import { Effect, type Scope } from "effect"
 import { RpcClient } from "effect/unstable/rpc"
 
-export function createEvierStreamControlRpcClient(): EvierStreamControlController {
+export function createEvierStreamControlRpcClient(): StreamControlClient {
   return {
     getState: () =>
       runAppRpc(

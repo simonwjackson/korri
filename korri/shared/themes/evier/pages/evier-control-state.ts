@@ -1,53 +1,16 @@
 import type { GamescopeScalingFilter } from "@shared/gamescope-control/gamescope-control-protocol"
+import { StreamControlSurface } from "@shared/stream-control/control-surface"
+import type {
+  StreamControlAction,
+  StreamControlClient,
+} from "@shared/stream-control/stream-control-client"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { EvierControlSurface } from "./evier-control-surface"
 
 const EVIER_CONTROL_DEBOUNCE_MS = 500
 
-export interface EvierStreamControlController {
-  readonly getState: () => Promise<unknown>
-  readonly setBrightness: (payload: {
-    readonly percent: number
-    readonly device?: string
-  }) => Promise<unknown>
-  readonly setMoonlightBitrate: (payload: {
-    readonly bitrateKbps: number
-  }) => Promise<unknown>
-  readonly setMoonlightFps: (payload: {
-    readonly fps: number
-  }) => Promise<unknown>
-  readonly setMoonlightResolution: (payload: {
-    readonly width: number
-    readonly height: number
-  }) => Promise<unknown>
-  readonly setLinkedFps: (payload: { readonly fps: number }) => Promise<unknown>
-  readonly setLinkedResolution: (payload: {
-    readonly width: number
-    readonly height: number
-  }) => Promise<unknown>
-  readonly setGamescopeMode: (payload: {
-    readonly width: number
-    readonly height: number
-  }) => Promise<unknown>
-  readonly setGamescopeFps: (payload: {
-    readonly fps: number
-  }) => Promise<unknown>
-  readonly setGamescopeFilter: (payload: {
-    readonly filter: GamescopeScalingFilter
-  }) => Promise<unknown>
-  readonly setGamescopeSharpness: (payload: {
-    readonly sharpness: number
-  }) => Promise<unknown>
-}
+export type ScheduledAction = StreamControlAction
 
-export type ControlAction = Exclude<
-  keyof EvierStreamControlController,
-  "getState"
->
-export type LinkedAction = "setLinkedResolution" | "setLinkedFps"
-export type ScheduledAction = ControlAction | LinkedAction
-
-export function useEvierControlState(controller: EvierStreamControlController) {
+export function useEvierControlState(controller: StreamControlClient) {
   const [status, setStatus] = useState("loading…")
   const [isRecovering, setIsRecovering] = useState(false)
   const [lastState, setLastState] = useState<unknown>(undefined)
@@ -136,7 +99,7 @@ export function useEvierControlState(controller: EvierStreamControlController) {
   return {
     status,
     isRecovering,
-    surface: EvierControlSurface.fromState(lastState),
+    surface: StreamControlSurface.fromState(lastState),
     refresh,
     recover,
     schedule,
@@ -144,7 +107,7 @@ export function useEvierControlState(controller: EvierStreamControlController) {
 }
 
 type ScheduledActionRunner = (
-  controller: EvierStreamControlController,
+  controller: StreamControlClient,
   body: Record<string, unknown>,
 ) => Promise<unknown>
 
@@ -186,7 +149,7 @@ const scheduledActionRunners: Record<ScheduledAction, ScheduledActionRunner> = {
 }
 
 async function runScheduledAction(
-  controller: EvierStreamControlController,
+  controller: StreamControlClient,
   action: ScheduledAction,
   body: Record<string, unknown>,
 ): Promise<unknown> {

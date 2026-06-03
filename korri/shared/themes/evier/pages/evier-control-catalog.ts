@@ -6,7 +6,7 @@ import {
   LINKED_FPS_STEPS,
   RESOLUTION_STEPS,
   type UnifiedReadback,
-} from "./evier-control-surface"
+} from "@shared/stream-control/control-surface"
 
 export interface SliderSpec {
   readonly id: string

@@ -1,15 +1,15 @@
 import { describe, expect, it } from "bun:test"
 import {
-  EvierControlSurface,
+  StreamControlSurface,
   FPS_STEPS,
   GAMESCOPE_FPS_STEPS,
   LINKED_FPS_STEPS,
   RESOLUTION_STEPS,
-} from "./evier-control-surface"
+} from "@shared/stream-control/control-surface"
 
-describe("EvierControlSurface", () => {
+describe("StreamControlSurface", () => {
   it("derives unified known controls only from typed authoritative readbacks", () => {
-    const surface = EvierControlSurface.fromState({
+    const surface = StreamControlSurface.fromState({
       moonlight: {
         status: "ok",
         readback: {
@@ -68,7 +68,7 @@ describe("EvierControlSurface", () => {
   })
 
   it("reports linked divergence instead of collapsing conflicts to unknown", () => {
-    const surface = EvierControlSurface.fromState({
+    const surface = StreamControlSurface.fromState({
       moonlight: {
         status: "ok",
         readback: {
@@ -103,7 +103,7 @@ describe("EvierControlSurface", () => {
   })
 
   it("keeps unavailable subsystems distinct from missing readback", () => {
-    const surface = EvierControlSurface.fromState({
+    const surface = StreamControlSurface.fromState({
       moonlight: { status: "error", error: "socket refused" },
       gamescope: { status: "disabled" },
       brightness: { status: "ok", readback: { devices: [], percent: null } },
@@ -130,7 +130,7 @@ describe("EvierControlSurface", () => {
   })
 
   it("reports mixed brightness when display readbacks differ", () => {
-    const surface = EvierControlSurface.fromState({
+    const surface = StreamControlSurface.fromState({
       moonlight: { status: "disabled" },
       gamescope: { status: "disabled" },
       brightness: {
@@ -171,7 +171,7 @@ describe("EvierControlSurface", () => {
   })
 
   it("compares unified FPS by actual frame rate, not per-control slider index", () => {
-    const bothThirty = EvierControlSurface.fromState({
+    const bothThirty = StreamControlSurface.fromState({
       moonlight: {
         status: "ok",
         readback: { bitrateKbps: null, fps: 30, resolution: null },
@@ -185,7 +185,7 @@ describe("EvierControlSurface", () => {
     })
     expect(bothThirty.linked.fps).toEqual({ _tag: "known", value: 30 })
 
-    const falseAgreementRegression = EvierControlSurface.fromState({
+    const falseAgreementRegression = StreamControlSurface.fromState({
       moonlight: {
         status: "ok",
         readback: { bitrateKbps: null, fps: 40, resolution: null },
@@ -208,7 +208,7 @@ describe("EvierControlSurface", () => {
   })
 
   it("reports linked unavailable when gamescope is down and moonlight has readback", () => {
-    const surface = EvierControlSurface.fromState({
+    const surface = StreamControlSurface.fromState({
       moonlight: {
         status: "ok",
         readback: { bitrateKbps: null, fps: 60, resolution: null },
@@ -225,7 +225,7 @@ describe("EvierControlSurface", () => {
   })
 
   it("reports linked unknown when one subsystem is available but lacks a value", () => {
-    const surface = EvierControlSurface.fromState({
+    const surface = StreamControlSurface.fromState({
       moonlight: {
         status: "ok",
         readback: { bitrateKbps: null, fps: 60, resolution: null },
@@ -247,13 +247,13 @@ describe("EvierControlSurface", () => {
   })
 
   it("handles missing subsystems, non-string errors, and unknown filters", () => {
-    expect(EvierControlSurface.fromState({}).moonlight.fps).toEqual({
+    expect(StreamControlSurface.fromState({}).moonlight.fps).toEqual({
       _tag: "unavailable",
       reason: "missing",
     })
 
     expect(
-      EvierControlSurface.fromState({
+      StreamControlSurface.fromState({
         moonlight: { status: "error" },
         gamescope: { status: "disabled" },
         brightness: { status: "disabled" },
@@ -262,7 +262,7 @@ describe("EvierControlSurface", () => {
     ).toEqual({ _tag: "unavailable", reason: "error" })
 
     expect(
-      EvierControlSurface.fromState({
+      StreamControlSurface.fromState({
         moonlight: { status: "disabled" },
         gamescope: {
           status: "ok",

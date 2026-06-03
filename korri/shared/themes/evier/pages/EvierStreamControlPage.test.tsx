@@ -8,7 +8,7 @@ import {
   waitFor,
 } from "@testing-library/react"
 import {
-  type EvierStreamControlController,
+  type StreamControlClient,
   EvierStreamControlPage,
 } from "./EvierStreamControlPage"
 
@@ -143,7 +143,7 @@ describe("EvierStreamControlPage", () => {
       stateSnapshot({ bitrateKbps: 6_000 }),
     ]
     const controller = recordingController()
-    const guardedController: EvierStreamControlController = {
+    const guardedController: StreamControlClient = {
       ...controller,
       getState: async () => {
         const next = stateQueue.shift() ?? stateSnapshot({ bitrateKbps: 6_000 })
@@ -270,7 +270,7 @@ function stateSnapshot({
 
 function recordingController(
   calls: unknown[] = [],
-): EvierStreamControlController {
+): StreamControlClient {
   const record = (method: string) => async (payload: unknown) => {
     calls.push({ method, payload })
     return {
