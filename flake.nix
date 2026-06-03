@@ -774,6 +774,7 @@
                     ./packages/moonlight-embedded-korri/patches/0005b-track-sunshine-runtime-settings-command-outcomes.patch
                     ./packages/moonlight-embedded-korri/patches/0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch
                     ./packages/moonlight-embedded-korri/patches/0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch
+                    ./packages/moonlight-embedded-korri/patches/0008-add-runtime-set-resolution-on-local-control.patch
                     ./packages/moonlight-embedded-korri/patches/0011-reset-sdl-presenter-on-output-size-change.patch
                   ];
                   moonlightReadmePath = ./packages/moonlight-embedded-korri/README.md;
@@ -787,6 +788,7 @@
                   patchPaths = [
                     ./packages/moonlight-embedded-korri/patches/0006-add-local-control-observability-ipc.patch
                     ./packages/moonlight-embedded-korri/patches/0007-wire-local-control-runtime-command-events.patch
+                    ./packages/moonlight-embedded-korri/patches/0008-add-runtime-set-resolution-on-local-control.patch
                   ];
                   absoluteTouchPatchPath = ./packages/moonlight-embedded-korri/patches/0004-add-absolutetouch-flag-for-tap-to-click.patch;
                   readmePath = ./packages/moonlight-embedded-korri/README.md;

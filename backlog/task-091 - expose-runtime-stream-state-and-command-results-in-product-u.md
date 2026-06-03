@@ -22,11 +22,12 @@ The low-bandwidth feature needs to show users/operators what actually applied: r
 
 - [ ] Product UI or debug surface displays current applied resolution, bitrate, fps, and last runtime command status.
 - [ ] State comes from Moonlight local-control snapshots or a server-owned projection, not guessed from requested settings.
-- [ ] Unsupported, timed-out, or proof-gated commands surface clearly.
+- [ ] Unsupported, timed-out, disabled, diagnostic/probe-only, or conflict outcomes surface clearly.
 - [ ] Tests cover state decoding for applied resolution and bitrate.
 
 ## Related
 
+- `docs/acceptance/runtime-settings-protocol-contract.md`
 - `korri/shared/stream/moonlight-control-protocol.ts`
 - `korri/shared/stream/moonlight-control-client.ts`
 - `korri/shared/stream/moonlight-runtime-watch-artifact.ts`

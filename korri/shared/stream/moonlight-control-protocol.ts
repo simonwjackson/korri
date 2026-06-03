@@ -12,11 +12,11 @@ export const MOONLIGHT_CONTROL_PROTOCOL_LIMITS = {
   eventHistory: 256,
   maxInFlightMutationsPerFamily: 1,
   minCommandIntervalMs: 250,
-  bitrateKbps: { min: 500, max: 150_000 },
-  fps: { min: 15, max: 240 },
+  bitrateKbps: { min: 1, max: Number.MAX_SAFE_INTEGER },
+  fps: { min: 1, max: Number.MAX_SAFE_INTEGER },
   resolution: {
-    width: { min: 320, max: 7680 },
-    height: { min: 240, max: 4320 },
+    width: { min: 1, max: Number.MAX_SAFE_INTEGER },
+    height: { min: 1, max: Number.MAX_SAFE_INTEGER },
   },
 } as const
 
@@ -112,21 +112,21 @@ const ProtocolLimits = Schema.StructWithRest(
     ),
     minCommandIntervalMs: boundedInt("minCommandIntervalMs", 0, 60_000),
     bitrateKbps: Schema.Struct({
-      min: boundedInt("bitrateKbps.min", 1, 1_000_000),
-      max: boundedInt("bitrateKbps.max", 1, 1_000_000),
+      min: boundedInt("bitrateKbps.min", 1, Number.MAX_SAFE_INTEGER),
+      max: boundedInt("bitrateKbps.max", 1, Number.MAX_SAFE_INTEGER),
     }),
     fps: Schema.Struct({
-      min: boundedInt("fps.min", 1, 1000),
-      max: boundedInt("fps.max", 1, 1000),
+      min: boundedInt("fps.min", 1, Number.MAX_SAFE_INTEGER),
+      max: boundedInt("fps.max", 1, Number.MAX_SAFE_INTEGER),
     }),
     resolution: Schema.Struct({
       width: Schema.Struct({
-        min: boundedInt("resolution.width.min", 1, 100_000),
-        max: boundedInt("resolution.width.max", 1, 100_000),
+        min: boundedInt("resolution.width.min", 1, Number.MAX_SAFE_INTEGER),
+        max: boundedInt("resolution.width.max", 1, Number.MAX_SAFE_INTEGER),
       }),
       height: Schema.Struct({
-        min: boundedInt("resolution.height.min", 1, 100_000),
-        max: boundedInt("resolution.height.max", 1, 100_000),
+        min: boundedInt("resolution.height.min", 1, Number.MAX_SAFE_INTEGER),
+        max: boundedInt("resolution.height.max", 1, Number.MAX_SAFE_INTEGER),
       }),
     }),
   }),

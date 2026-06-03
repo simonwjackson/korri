@@ -36,6 +36,7 @@ Single up/down changes proved feasibility; repeated realistic use needs confiden
 
 ## Related
 
+- `docs/acceptance/runtime-settings-protocol-contract.md`
 - `docs/acceptance/sunshine-korri-seamless-vaapi-runtime-bitrate-sm8550-2026-05-31.md`
 - `tools/cli/moonlight-runtime-watch.ts`
 - `packages/sunshine-korri/README.md`

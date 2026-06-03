@@ -1,9 +1,8 @@
 Open up runtime.setResolution on the local-control surface so the operator can
 drive Sunshine's operation-3 path through the same JSON-RPC contract used for
-bitrate and FPS. The Sunshine side currently advertises SET_RESOLUTION as a
-proof-gated operation; this patch lets the Moonlight client expose it when
-either the supported or proof-gated bit is set so we can run the seamless
-runtime-resolution probe end-to-end.
+bitrate and FPS. The Sunshine side now advertises SET_RESOLUTION as a supported operation for
+the validated Korri profile; this patch exposes it only through the supported
+capability bit so local-control remains fail-closed for unsupported sessions.
 
 Acceptance of the request still relies on Sunshine's own bounds + same-aspect
 check; this patch widens the client-side gate and threads
@@ -129,7 +128,7 @@ secondaryValue=height through the existing dispatcher.
 -  if (operation == MOONLIGHT_LC_OPERATION_SET_RESOLUTION)
 -    return 0;
 -  return (control.supported_operations & (1u << operation)) != 0;
-+  return ((control.supported_operations | control.proof_gated_operations) & (1u << operation)) != 0;
++  return (control.supported_operations & (1u << operation)) != 0;
  }
  
  static struct json_object* moonlight_local_control_success(struct json_object* id, struct json_object* result) {

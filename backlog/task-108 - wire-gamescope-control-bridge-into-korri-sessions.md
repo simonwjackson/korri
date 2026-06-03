@@ -34,7 +34,6 @@ The API is currently validated as tooling; product value comes when Korri sessio
 - `korri/products/app/stream/moonlight-launcher.ts`
 - `tools/cli/gamescope-control-bridge.ts`
 - `backlog/task-090 - design-gamescope-scaling-policy-for-runtime-stream-changes.md`
-- `backlog/task-098 - implement-atomic-runtime-quality-profile-command.md`
 - `backlog/task-103 - build-full-gamescope-rpc-control-api.md`
 
 ## Notes

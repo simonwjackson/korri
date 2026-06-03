@@ -18,7 +18,7 @@ Adds `-absolutetouch` for handheld touchscreen tap-to-click over the stream. On 
 Adds an experimental Sunshine runtime-settings request sender and ack logger for the `0x5504` / `0x5505` MVP protocol, split by review concern:
 
 - `0005a-add-sunshine-runtime-settings-protocol-sender.patch` adds the Moonlight-common protocol constants, request payloads, and public `LiSendSunshineRuntimeSettingsMvp()` / capability-query entrypoints.
-- `0005b-track-sunshine-runtime-settings-command-outcomes.patch` adds ack parsing, capability state, command lifecycle tracking, timeout/stale-ack handling, explicit current-applied state, and proof-gated validation.
+- `0005b-track-sunshine-runtime-settings-command-outcomes.patch` adds ack parsing, capability state, command lifecycle tracking, timeout/stale-ack handling, explicit current-applied state, and fail-closed capability validation.
 - `0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch` adds the Linux timerfd-backed one-shot environment hook for manual runtime-settings smoke tests.
 - `0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch` adds the opt-in connection-status spike adaptation experiment for bitrate/FPS only.
 
@@ -28,7 +28,7 @@ One-shot runtime settings requests are controlled by:
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS`
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_RESOLUTION` (for example `1280x720`)
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_AFTER_S`
-- `MOONLIGHT_RUNTIME_SETTINGS_MVP_ALLOW_PROOF_GATED=1` for manual runtime-resolution smoke only when operation `3` is advertised as proof-gated rather than supported.
+- `MOONLIGHT_RUNTIME_SETTINGS_MVP_ALLOW_PROOF_GATED=1` remains a diagnostic-only escape hatch for hosts that advertise a proof-gated operation, not the Korri product path.
 
 Connection-status adaptation experiments are spike-only and require `MOONLIGHT_RUNTIME_SETTINGS_MVP_ENABLE_SPIKE_ADAPTATION=1`. They are controlled by:
 
@@ -38,7 +38,7 @@ Connection-status adaptation experiments are spike-only and require `MOONLIGHT_R
 - `MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_FPS`
 - `MOONLIGHT_RUNTIME_SETTINGS_MVP_COOLDOWN_S`
 
-Resolution requests are one-shot only; connection-status adaptation intentionally remains limited to bitrate/FPS experiments until runtime resolution has client-side decode/render survival evidence.
+Resolution requests are one-shot only; connection-status adaptation intentionally remains limited to bitrate/FPS experiments so product quality-ladder policy composes individual operations separately.
 
 This is experimental and should remain gated until Sunshine-side capability negotiation is formalized. Moonlight and Sunshine expose mechanisms and facts only; Korri owns adaptation policy. Runtime settings decisions distinguish local Moonlight command readiness, host Sunshine runtime-settings capability, and target-client proof as separate facts. The current connection-status adaptation is spike-only and must not become the product adaptation path.
 
@@ -52,10 +52,9 @@ Runtime settings mechanism contract:
 - Moonlight keeps bounded per-operation command state, rejects same-family in-flight commands with `conflict`, and records terminal `host-applied`, `host-rejected`, `timed-out`, `stale-ack-observed`, and `stream-ended` outcomes.
 - Runtime settings command timeout is currently 3000 ms; an expired command records `timed-out` with reason `no-ack`, and a later matching ack is treated as stale diagnostic input.
 - Moonlight parses both legacy no-reason mutation acks and additive reason-bearing acks while Sunshine and Moonlight patch payloads transition together.
-- Runtime resolution remains experimental/proof-gated; a Sunshine ack is not target-client proof.
-- Capability-gated dispatch: mutation commands are rejected locally when operation `0` has not advertised support, and operation `3` requires the manual `MOONLIGHT_RUNTIME_SETTINGS_MVP_ALLOW_PROOF_GATED=1` smoke-test override while it is proof-gated.
-- Runtime resolution proof gate: operation `3` is listed as proof-gated, not supported, in capability acks until same-session target-client proof exists.
-- Operation `3` outcomes distinguish Sunshine-applied from client-proven: Moonlight records Sunshine `server_applied=1` separately from `client_proven=0` until device/client render evidence exists.
+- Runtime resolution is a normal runtime-settings operation for the validated Korri profile when operation `0` advertises support.
+- Capability-gated dispatch: mutation commands are rejected locally when operation `0` has not advertised support.
+- Operation `3` outcomes distinguish raw Sunshine ack state from caller-visible applied truth: Moonlight records Sunshine `server_applied=1` separately from applied width/height state used by local-control.
 - Local command acceptance is non-terminal; host-applied outcomes or target-client proof arrive later through the runtime-settings mechanism/local-control handoff.
 - Connection-status adaptation is spike-only and disabled unless `MOONLIGHT_RUNTIME_SETTINGS_MVP_ENABLE_SPIKE_ADAPTATION=1` is set.
 
@@ -81,15 +80,13 @@ Reason codes:
 - `conflict`
 - `stale-ack`
 - `stream-ended`
-- `proof-gated`
 
 Internal lifecycle values are `locally-rejected`, `accepted`, `sent`, `host-applied`, `host-rejected`, `timed-out`, `stale-ack-observed`, and `stream-ended`.
 
 Current review gates:
 
-- `nix build .#checks.$(nix eval --raw --impure --expr builtins.currentSystem).korri-sunshine-runtime-bitrate-patch --no-link` is the source invariant/build check for packet IDs, operation IDs, capability query, reason fields, timeout/conflict markers, baseline tracking, and resolution proof-gate markers.
-- Existing bitrate/FPS live evidence proves the `h264_vaapi` applied path; disabled, invalid, unsupported, timeout, conflict, command-not-advertised, and stale-ack outcomes are covered by source invariants and/or documented smoke evidence.
-- Runtime resolution requires same-session target-client proof before it can be advertised as supported.
+- `nix build .#checks.$(nix eval --raw --impure --expr builtins.currentSystem).korri-sunshine-runtime-bitrate-patch --no-link` is the source invariant/build check for packet IDs, operation IDs, capability query, reason fields, timeout/conflict markers, baseline tracking, and supported runtime-resolution markers.
+- Existing bitrate/FPS live evidence proves the `h264_vaapi` applied path, and runtime-resolution evidence proves operation `3` for the validated Korri profile; disabled, invalid, unsupported, timeout, conflict, command-not-advertised, and stale-ack outcomes are covered by source invariants and/or documented smoke evidence.
 
 Evidence is recorded in:
 
@@ -109,7 +106,7 @@ The TypeScript contract in `korri/shared/stream/moonlight-control-protocol.ts` d
 - `state.snapshot` for late attachers to read lifecycle, shallow quality/adaptation, runtime settings, and input route facts.
 - Ordered `moonlight.event` notifications with `seq` and monotonic timestamps so consumers can detect gaps and resync with `state.get`.
 - Separate observer and controller authority. Read-only observability is the default; mutation commands require command-capable authority.
-- Narrow command names only: request IDR, set bitrate, set FPS, and experimental set resolution when advertised by capabilities.
+- Narrow command names only: request IDR, set bitrate, set FPS, and set resolution when advertised by capabilities.
 - Local command responses describe local validation/acceptance only. Host-applied outcomes arrive later as correlated command-result events.
 
 Consumers must ignore unknown additive fields and unknown event names. Breaking schema changes require a protocol major-version bump. Command values are bounded before native dispatch: bitrate, FPS, and resolution values must pass the v1 contract limits, only one mutation per command family may be in flight, and senders must honor the advertised command interval/backoff.
@@ -135,4 +132,4 @@ Wires the first native local-control mutation path for controller-authorized run
 - JSON-RPC response IDs remain transport correlation IDs; accepted command responses return a native numeric `requestId` used for Sunshine dispatch and later `runtime.commandResult` events.
 - Runtime-settings capability and terminal outcome facts are handed to local-control through a narrow observer seam rather than log scraping.
 - Subscribed local-control clients receive bounded `runtime.commandResult` events with monotonic sequence/timing metadata, and `state.get` exposes the latest terminal command for sequence-gap recovery.
-- Runtime resolution remains proof-gated and is not advertised as a supported local-control mutation command by this slice.
+- `runtime.setResolution` dispatches to runtime-settings operation `3` only when the active Sunshine capability ack advertises resolution support.

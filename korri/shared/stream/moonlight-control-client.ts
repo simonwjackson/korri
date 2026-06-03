@@ -33,6 +33,10 @@ export interface MoonlightControlClient {
   readonly setFps: (params: {
     readonly fps: number
   }) => Promise<MoonlightControlSuccessResponse>
+  readonly setResolution: (params: {
+    readonly width: number
+    readonly height: number
+  }) => Promise<MoonlightControlSuccessResponse>
   readonly onEvent: (
     listener: (delivery: MoonlightControlEventDelivery) => void,
   ) => () => void
@@ -102,6 +106,7 @@ function createMoonlightControlClient(
     subscribe: () => request("events.subscribe"),
     setBitrate: params => request("runtime.setBitrate", params),
     setFps: params => request("runtime.setFps", params),
+    setResolution: params => request("runtime.setResolution", params),
     onEvent: listener => {
       listeners.add(listener)
       return () => listeners.delete(listener)

@@ -14,6 +14,14 @@ export const MOONLIGHT_RUNTIME_WATCH_ARTIFACT_VERSION = 1 as const
 
 const AdditiveFields = Schema.Record(Schema.String, Schema.Unknown)
 
+function positiveInt(name: string) {
+  return Schema.Int.check(
+    Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }).annotate(
+      { identifier: name },
+    ),
+  )
+}
+
 const RuntimeWatchTerminalResult = Schema.Literals([
   "applied",
   "probe-succeeded",
@@ -42,6 +50,14 @@ const RuntimeWatchScenario = Schema.Union([
   ),
   Schema.StructWithRest(
     Schema.Struct({ _tag: Schema.Literal("set-fps"), fps: Schema.Int }),
+    [AdditiveFields],
+  ),
+  Schema.StructWithRest(
+    Schema.Struct({
+      _tag: Schema.Literal("set-resolution"),
+      width: positiveInt("width"),
+      height: positiveInt("height"),
+    }),
     [AdditiveFields],
   ),
 ])

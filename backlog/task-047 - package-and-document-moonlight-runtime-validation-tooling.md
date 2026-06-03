@@ -22,14 +22,15 @@ Manual validation currently requires running source-tree Bun entrypoints and han
 ## Acceptance Criteria
 
 - [ ] `moonlight-runtime-watch` or an equivalent `korri` subcommand is available from the installed Korri toolchain.
-- [ ] A docs/acceptance or docs/solutions runbook lists host gate setup, client launch env, socket discovery, bitrate/FPS commands, resolution proof-gated smoke path, expected logs/artifacts, and rollback/restore steps.
-- [ ] The runbook distinguishes proven bitrate/FPS validation from proof-gated resolution and documents required `h264_vaapi`/`SUNSHINE_LIVE_SETTINGS_MVP=1` preconditions.
+- [ ] A docs/acceptance or docs/solutions runbook lists host gate setup, client launch env, socket discovery, bitrate/FPS/resolution commands, expected logs/artifacts, and rollback/restore steps.
+- [ ] The runbook distinguishes product-supported Korri profiles from diagnostic probes and documents required `h264_vaapi`/`SUNSHINE_LIVE_SETTINGS_MVP=1` preconditions.
 - [ ] The tooling has a product-path profile that can prove command accepted/applied, moving-video liveness, bandwidth movement, and no reconnect/encoder-restart/Moonlight-restart evidence.
 - [ ] Product/operator status surfaces current applied bitrate, supported runtime operations, and enough request-id-correlated lifecycle data to diagnose failed or unsupported commands.
 - [ ] Logs/artifacts make it easy to prove the seamless VAAPI path was used (`seamless_vaapi=1`) and that no fallback path was used.
 
 ## Related
 
+- `docs/acceptance/runtime-settings-protocol-contract.md`
 - `tools/cli/moonlight-runtime-watch.ts`
 - `tools/cli/moonlight-control.ts`
 - `packages/moonlight-embedded-korri/README.md`

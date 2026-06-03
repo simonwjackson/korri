@@ -21,13 +21,14 @@ The demo uses downstream runtime-settings control messages and local-control com
 
 ## Acceptance Criteria
 
-- [ ] Protocol spec documents capability query/ack, supported operations, proof-gated operations, request IDs, timeout behavior, and error reasons
-- [ ] Resolution, bitrate, and FPS requests have clear bounds and failure semantics
-- [ ] Moonlight local-control API maps cleanly to protocol outcomes
-- [ ] Compatibility behavior is documented for hosts/clients that do not support the protocol
+- [x] Protocol spec documents capability query/ack, supported operations, diagnostic probe behavior, request IDs, timeout behavior, and error reasons
+- [x] Resolution, bitrate, and FPS requests have clear bounds and failure semantics
+- [x] Moonlight local-control API maps cleanly to protocol outcomes
+- [x] Compatibility behavior is documented for hosts/clients that do not support the protocol
 
 ## Related
 
+- `docs/acceptance/runtime-settings-protocol-contract.md`
 - `packages/sunshine-korri/patches/0001-add-runtime-settings-protocol-surface.patch`
 - `packages/sunshine-korri/patches/0002-wire-runtime-settings-control-plane.patch`
 - `packages/moonlight-embedded-korri/patches`

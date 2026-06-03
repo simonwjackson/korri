@@ -34,6 +34,7 @@ The validated path should not be overclaimed; users and code need a clear matrix
 
 ## Related
 
+- `docs/acceptance/runtime-settings-protocol-contract.md`
 - `packages/sunshine-korri/README.md`
 - `packages/moonlight-embedded-korri/README.md`
 - `docs/acceptance/sunshine-korri-seamless-vaapi-runtime-bitrate-sm8550-2026-05-31.md`

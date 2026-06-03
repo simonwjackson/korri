@@ -17,7 +17,7 @@ source: user
 
 ## Why it matters
 
-Korri needs a single product-facing runtime-control surface for Gamescope, similar to Moonlight local control, rather than scattering behavior across gamescopectl, private Wayland requests, and X root properties. A typed RPC API enables coordinated quality profiles, UI state, automation, acknowledgements, and safety guards.
+Korri needs a single product-facing runtime-control surface for Gamescope, similar to Moonlight local control, rather than scattering behavior across gamescopectl, private Wayland requests, and X root properties. A typed RPC API enables individual runtime-control commands, UI state, automation, acknowledgements, and safety guards without adding a high-level quality-profile command.
 
 ## Acceptance Criteria
 

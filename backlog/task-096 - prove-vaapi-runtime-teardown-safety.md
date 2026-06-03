@@ -28,6 +28,7 @@ The working fix skips destructor flushing for runtime-replaced VAAPI sessions to
 
 ## Related
 
+- `docs/acceptance/runtime-settings-protocol-contract.md`
 - `packages/sunshine-korri/patches/0014-skip-runtime-vaapi-destructor-flush.patch`
 - `task-083`
 - `task-088`

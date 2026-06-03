@@ -27,6 +27,7 @@ Resolution-only switching did not reduce measured bandwidth at a fixed bitrate; 
 
 ## Related
 
+- `docs/acceptance/runtime-settings-protocol-contract.md`
 - `korri/shared/stream/moonlight-control-client.ts`
 - `korri/shared/stream/moonlight-control-protocol.ts`
 - `tools/cli/moonlight-runtime-watch.ts`

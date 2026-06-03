@@ -27,6 +27,7 @@ Even with the working fix, runtime resolution is high-risk. A shippable product 
 
 ## Related
 
+- `docs/acceptance/runtime-settings-protocol-contract.md`
 - `task-087`
 - `task-091`
 - `task-092`

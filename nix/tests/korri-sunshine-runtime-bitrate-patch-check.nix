@@ -62,7 +62,6 @@ let
       && contains "RUNTIME_SETTINGS_REASON_UNSUPPORTED_BACKEND" patch
       && contains "RUNTIME_SETTINGS_REASON_UNSUPPORTED_OPERATION" patch
       && contains "RUNTIME_SETTINGS_REASON_APPLY_FAILED" patch
-      && contains "RUNTIME_SETTINGS_REASON_PROOF_GATED" patch
     ))
     (check "Sunshine package no longer applies obsolete runtime-resolution diagnostics" (
       !(contains "0006-diagnose-vaapi-convert-sequence.patch" sunshinePackageSource)
@@ -149,33 +148,33 @@ let
       && contains "+    plaintext.max_bitrate_kbps = runtime_supported ? 150000 : 0;" patch
       && contains "supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_FPS" patch
     ))
-    (check "Sunshine runtime resolution capability remains proof-gated instead of generally advertised"
+    (check "Sunshine runtime resolution capability is advertised as supported for validated sessions"
       (
         contains "proof_gated_operations" patch
-        && contains "proof_gated_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION" patch
-        && !(contains "supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION" patch)
-        && contains "Runtime resolution proof gate: operation `3` is listed as proof-gated" readme
+        && contains "supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION" patch
+        && !(contains "proof_gated_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION" patch)
+        && contains "Runtime resolution is a normal runtime-settings operation for the validated Korri profile" readme
       )
     )
-    (check "Moonlight runtime resolution capability parser records proof-gated operations separately" (
+    (check "Moonlight runtime resolution local-control fails closed on supported capability" (
       contains "proofGatedOperations" moonlightPatch
       && contains "runtime_settings_mvp_settings_state.proofGatedOperations" moonlightPatch
       && contains "BbGet32(&bb, &proofGatedOperations)" moonlightPatch
-      && contains "proof_gated_operations" moonlightPatch
-      && contains "Runtime resolution proof gate: operation `3` is listed as proof-gated" moonlightReadme
+      && contains "return (control.supported_operations & (1u << operation)) != 0;" moonlightPatch
+      && contains "runtime.setResolution` dispatches to runtime-settings operation `3` only when the active Sunshine capability ack advertises resolution support" moonlightReadme
     ))
     (check "Moonlight SDL presenter reset pumps window events after reset" (
       contains "reset_sdl_renderer_after_resolution_change(visible_w, visible_h);\n+    pump_sdl_window_events();" moonlightPatch
     ))
-    (check "Runtime resolution outcomes distinguish Sunshine-applied from client-proven" (
+    (check "Runtime resolution outcomes preserve raw ack and applied truth separately" (
       contains "server_applied=" patch
       && contains "client_proven=0" patch
       && contains "server_applied=" moonlightPatch
       && contains "client_proven=0" moonlightPatch
-      && contains "Sunshine-applied" readme
-      && contains "client-proven" readme
-      && contains "Sunshine-applied" moonlightReadme
-      && contains "client-proven" moonlightReadme
+      && contains "raw Sunshine ack state" readme
+      && contains "caller-visible applied truth" readme
+      && contains "raw Sunshine ack state" moonlightReadme
+      && contains "caller-visible applied truth" moonlightReadme
     ))
     (check "Sunshine runtime settings acks carry additive reason fields" (
       contains "boost::endian::little_uint16_at reason" patch
@@ -313,14 +312,11 @@ let
     (check "Moonlight runtime settings validates advertised capabilities before sending mutations" (
       contains "runtime_settings_mvp_validate_before_send" moonlightPatch
       && contains "runtime_settings_mvp_operation_supported" moonlightPatch
-      && contains "runtime_settings_mvp_operation_proof_gated" moonlightPatch
-      && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_ALLOW_PROOF_GATED" moonlightPatch
-      && contains "outcome=locally-rejected reason=proof-gated" moonlightPatch
-      && contains "proof-gated override=manual-smoke" moonlightPatch
       && contains "else if (!supported)" moonlightPatch
       && contains "outcome=locally-rejected reason=unsupported-operation" moonlightPatch
       && contains "detail=no-capability" moonlightPatch
       && contains "outcome=locally-rejected reason=invalid-bounds" moonlightPatch
+      && contains "MOONLIGHT_RUNTIME_SETTINGS_MVP_ALLOW_PROOF_GATED" moonlightReadme
     ))
     (check "Moonlight runtime settings command state records timeout no-ack outcomes" (
       contains "SS_RUNTIME_SETTINGS_MVP_TIMEOUT_MS" moonlightPatch
@@ -395,7 +391,6 @@ let
       && contains "`conflict`" readme
       && contains "`stale-ack`" readme
       && contains "`stream-ended`" readme
-      && contains "`proof-gated`" readme
       && contains "Reason codes:" moonlightReadme
       && contains "`gate-disabled`" moonlightReadme
       && contains "`invalid-bounds`" moonlightReadme
@@ -409,7 +404,6 @@ let
       && contains "`conflict`" moonlightReadme
       && contains "`stale-ack`" moonlightReadme
       && contains "`stream-ended`" moonlightReadme
-      && contains "`proof-gated`" moonlightReadme
     ))
     (check "Moonlight runtime settings README marks connection-status adaptation spike-only" (
       contains "connection-status adaptation is spike-only" moonlightReadme
@@ -417,10 +411,10 @@ let
     (check "Runtime settings READMEs document current review gates and evidence boundaries" (
       contains "Current review gates" readme
       && contains "source invariant/build check" readme
-      && contains "same-session target-client proof" readme
+      && contains "supported runtime-resolution markers" readme
       && contains "Current review gates" moonlightReadme
       && contains "source invariant/build check" moonlightReadme
-      && contains "same-session target-client proof" moonlightReadme
+      && contains "supported runtime-resolution markers" moonlightReadme
     ))
     (check "Sunshine runtime bitrate README documents the status contract" (
       contains "Runtime settings status contract" readme
@@ -428,6 +422,13 @@ let
       && contains "`1` — failed or unsupported" readme
       && contains "`2` — invalid" readme
       && contains "`3` — disabled" readme
+    ))
+    (check "Runtime settings source does not add a quality-profile command" (
+      !(contains "qualityProfile" patch)
+      && !(contains "quality-profile" patch)
+      && !(contains "qualityProfile" moonlightPatch)
+      && !(contains "quality-profile" moonlightPatch)
+      && !(contains "runtime.setQualityProfile" moonlightPatch)
     ))
   ];
 

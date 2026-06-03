@@ -36,6 +36,7 @@ Live bitrate must remain supportable only on proven paths; accidental advertisem
 
 ## Related
 
+- `docs/acceptance/runtime-settings-protocol-contract.md`
 - `packages/sunshine-korri/patches/0005-add-seamless-vaapi-runtime-bitrate-path.patch`
 - `nix/tests/korri-sunshine-runtime-bitrate-patch-check.nix`
 - `packages/moonlight-embedded-korri/patches/0007-wire-local-control-runtime-command-events.patch`

@@ -23,11 +23,12 @@ For heavy network fluctuations, bitrate is the bandwidth lever while FPS and res
 - [ ] Define a conservative ladder from healthy network to emergency mode, including bitrate, FPS, and optional resolution targets for each rung.
 - [ ] Add hysteresis/cooldown rules so transient network status changes do not flap between quality levels.
 - [ ] Keep h264_vaapi as the default proven path for live controls until the support matrix proves other codecs/encoders.
-- [ ] Specify when resolution changes are allowed: downscale-only first, upscale only after same-session proof, and never without client-survival evidence.
+- [ ] Specify when product policy should use resolution changes, based on validated Korri profiles, applied-state observability, cooldown, and recovery behavior.
 - [ ] Document operator-visible behavior: what users see during quality drops, recovery, command rejection, and unsupported encoder/client cases.
 
 ## Related
 
+- `docs/acceptance/runtime-settings-protocol-contract.md`
 - `backlog/task-058 - integrate-live-bitrate-controls-into-product-launches.md`
 - `backlog/task-060 - harden-live-bitrate-capability-and-safety-guardrails.md`
 - `backlog/task-064 - define-live-bitrate-support-matrix-and-compatibility-scope.md`

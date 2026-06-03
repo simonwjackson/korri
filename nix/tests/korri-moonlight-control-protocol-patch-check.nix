@@ -92,6 +92,7 @@ let
     (check "Moonlight local control runtime commands have paired capability and dispatch markers" (
       contains "MOONLIGHT_LC_COMMAND_RUNTIME_SET_BITRATE" patch
       && contains "MOONLIGHT_LC_COMMAND_RUNTIME_SET_FPS" patch
+      && contains "MOONLIGHT_LC_COMMAND_RUNTIME_SET_RESOLUTION" patch
       && contains "moonlight_local_control_dispatch_runtime_command" patch
       && contains "LiSendSunshineRuntimeSettingsMvp(command_id, operation" patch
     ))
@@ -122,10 +123,12 @@ let
       && contains "moonlight_local_control_event_history" patch
       && contains "moonlight_local_control_evict_slow_subscriber" patch
     ))
-    (check "Moonlight local control snapshots applied bitrate and FPS from terminal events" (
+    (check "Moonlight local control snapshots applied bitrate FPS and resolution from terminal events" (
       contains "runtime_settings_mvp_notify_terminal(requestId, operation, status, reason, appliedValue, 0)" patch
       && contains "control.bitrate_kbps = (int) value" patch
       && contains "control.fps = (int) value" patch
+      && contains "control.width = (int) value" patch
+      && contains "control.height = (int) secondary_value" patch
     ))
     (check "Moonlight local control populates monotonic event timestamps" (
       contains "moonlight_local_control_monotonic_ms" patch
@@ -140,6 +143,13 @@ let
     (check "Moonlight local control protocol documents local-only non-remote scope" (
       contains "Linux-only local IPC" readme
       && contains "LAN, HTTP, mDNS, Tailscale, browser-facing APIs" readme
+    ))
+    (check "Moonlight local control does not add a quality-profile command" (
+      !(contains "qualityProfile" patch)
+      && !(contains "quality-profile" patch)
+      && !(contains "runtime.setQualityProfile" patch)
+      && !(contains "qualityProfile" readme)
+      && !(contains "quality-profile" readme)
     ))
   ];
 

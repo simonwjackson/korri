@@ -36,6 +36,7 @@ The seamless path is proven manually, but users only benefit when normal Korri p
 
 ## Related
 
+- `docs/acceptance/runtime-settings-protocol-contract.md`
 - `korri/products/app/api/library/launch.rpc-handler.ts`
 - `korri/products/app/api/stream/compose-moonlight-launch-spec.ts`
 - `korri/products/app/stream/moonlight-launcher.ts`

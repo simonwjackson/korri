@@ -109,7 +109,7 @@
 +    std::uint16_t reason = enabled ? video::RUNTIME_SETTINGS_REASON_UNSUPPORTED_ENCODER : video::RUNTIME_SETTINGS_REASON_GATE_DISABLED;
 +    if (runtime_supported) {
 +      supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_FPS;
-+      proof_gated_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION;
++      supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION;
 +      reason = video::RUNTIME_SETTINGS_REASON_NONE;
 +    }
 +

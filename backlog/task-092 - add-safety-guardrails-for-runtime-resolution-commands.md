@@ -27,10 +27,11 @@ Runtime resolution changes now work, but unsafe sizes or rapid command sequences
 
 ## Related
 
+- `docs/acceptance/runtime-settings-protocol-contract.md`
 - `korri/shared/stream/moonlight-control-protocol.ts`
 - `packages/moonlight-embedded-korri/patches/0008-add-runtime-set-resolution-on-local-control.patch`
 - `packages/sunshine-korri/patches/0004-add-proof-gated-runtime-resolution-apply-path.patch`
 
 ## Notes
 
-The protocol already has min/max concepts and proof-gated operations. Extend that into a product-safe ladder, especially around 640x360 and coded-height padding.
+The runtime-settings protocol now treats resolution as a normal proven operation with positive-value protocol bounds. Extend that into product-level guardrails, validation evidence, and any ladder-specific policy without reintroducing protocol-level proof gates.

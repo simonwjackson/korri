@@ -27,6 +27,7 @@ The working fix changes subtle VAAPI/capture lifecycle behavior. Capturing the r
 
 ## Related
 
+- `docs/acceptance/runtime-settings-protocol-contract.md`
 - `packages/sunshine-korri/patches/0012-persist-runtime-config-and-reinit-capture-after-resolution.patch`
 - `packages/sunshine-korri/patches/0013-request-async-capture-reinit-after-runtime-resolution.patch`
 - `packages/sunshine-korri/patches/0014-skip-runtime-vaapi-destructor-flush.patch`

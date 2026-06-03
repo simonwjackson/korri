@@ -27,6 +27,7 @@ Moving test patterns proved the core transport works, but final confidence requi
 
 ## Related
 
+- `docs/acceptance/runtime-settings-protocol-contract.md`
 - `tools/scripts/live-runtime-resolution-gate.sh`
 - `packages/sunshine-korri/patches/0012-persist-runtime-config-and-reinit-capture-after-resolution.patch`
 - `packages/sunshine-korri/patches/0013-request-async-capture-reinit-after-runtime-resolution.patch`

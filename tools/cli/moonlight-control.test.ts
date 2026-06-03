@@ -27,6 +27,9 @@ describe("moonlight-control cli", () => {
           setFps: async () => {
             throw new Error("unexpected")
           },
+          setResolution: async () => {
+            throw new Error("unexpected")
+          },
           onEvent: () => () => undefined,
           close: () => undefined,
         }),
@@ -56,6 +59,9 @@ describe("moonlight-control cli", () => {
             throw new Error("unexpected")
           },
           setFps: async () => {
+            throw new Error("unexpected")
+          },
+          setResolution: async () => {
             throw new Error("unexpected")
           },
           onEvent: () => () => undefined,

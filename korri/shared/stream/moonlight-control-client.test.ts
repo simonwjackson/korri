@@ -93,6 +93,43 @@ describe("moonlight local control client", () => {
     )
   })
 
+  it("sends a runtime resolution command", async () => {
+    await withSocketServer(async ({ socketPath, writes }) => {
+      const client = await connectMoonlightControl({ socketPath })
+      try {
+        const response = await client.setResolution({
+          width: 1280,
+          height: 720,
+        })
+
+        expect(response.result).toEqual({
+          _tag: "command.accepted",
+          requestId: "cmd-3",
+          command: "runtime.setResolution",
+        })
+        expect(JSON.parse(writes[0] ?? "{}")).toMatchObject({
+          method: "runtime.setResolution",
+          params: { width: 1280, height: 720 },
+        })
+      } finally {
+        client.close()
+      }
+    })
+  })
+
+  it("rejects requests after close", async () => {
+    await withSocketServer(async ({ socketPath }) => {
+      const client = await connectMoonlightControl({ socketPath })
+      await client.hello()
+      client.close()
+
+      await expect(client.state()).rejects.toEqual({
+        _tag: "MoonlightControlClientProtocolError",
+        message: "Moonlight control socket closed",
+      })
+    })
+  })
+
   it("rejects JSON-RPC command errors as protocol errors", async () => {
     await withSocketServer(
       async ({ socketPath }) => {
@@ -207,6 +244,10 @@ async function withSocketServer(
           }
           socket.write(
             `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "command.accepted", requestId: "cmd-2", command: "runtime.setFps" } })}\n`,
+          )
+        } else if (request.method === "runtime.setResolution") {
+          socket.write(
+            `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "command.accepted", requestId: "cmd-3", command: "runtime.setResolution" } })}\n`,
           )
         } else if (request.method === "protocol.hello") {
           socket.write(`${JSON.stringify(helloResponse(request.id))}\n`)

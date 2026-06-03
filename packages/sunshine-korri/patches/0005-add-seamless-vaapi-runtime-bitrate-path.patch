@@ -7,7 +7,7 @@ diff -ruN sunshine-korri-baseline/src/stream.cpp sunshine-korri-work/src/stream.
      if (runtime_supported) {
 +      supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_BITRATE_KBPS;
        supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_FPS;
-       proof_gated_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION;
+       supported_operations |= 1u << video::RUNTIME_SETTINGS_OPERATION_SET_RESOLUTION;
        reason = video::RUNTIME_SETTINGS_REASON_NONE;
 @@ -1054,8 +1055,8 @@
      plaintext.reason = reason;

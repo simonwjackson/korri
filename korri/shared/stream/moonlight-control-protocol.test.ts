@@ -153,6 +153,44 @@ describe("moonlight local control protocol", () => {
     expect(decoded.params.event.payload).toEqual({ decoderQueueDepth: 3 })
   })
 
+  it("decodes runtime command result events for all caller-visible statuses", () => {
+    const statuses = [
+      "accepted",
+      "applied",
+      "failed",
+      "invalid",
+      "disabled",
+      "unsupported",
+      "timed-out",
+      "not-streaming",
+      "unauthorized",
+      "conflict",
+    ] as const
+
+    for (const status of statuses) {
+      const decoded = decodeMoonlightControlMessage({
+        jsonrpc: "2.0",
+        method: "moonlight.event",
+        params: {
+          seq: 1,
+          monotonicMs: 100,
+          event: {
+            name: "runtime.commandResult",
+            requestId: "cmd-1",
+            command: "runtime.setResolution",
+            status,
+          },
+        },
+      }) as MoonlightControlEventEnvelope
+
+      expect(decoded.params.event.name).toBe("runtime.commandResult")
+      expect("status" in decoded.params.event).toBe(true)
+      if ("status" in decoded.params.event) {
+        expect(decoded.params.event.status).toBe(status)
+      }
+    }
+  })
+
   it("rejects a command response without a request id", () => {
     expect(() =>
       decodeMoonlightControlResponse({
@@ -195,15 +233,38 @@ describe("moonlight local control protocol", () => {
     ).toThrow(/name/)
   })
 
-  it("rejects command values outside v1 bounds before native dispatch", () => {
+  it("accepts positive runtime command values before native dispatch", () => {
+    const bitrate = decodeMoonlightControlCommandRequest({
+      jsonrpc: "2.0",
+      id: "cmd-1",
+      method: "runtime.setBitrate",
+      params: { bitrateKbps: 1 },
+    })
+    const fps = decodeMoonlightControlCommandRequest({
+      jsonrpc: "2.0",
+      id: "cmd-2",
+      method: "runtime.setFps",
+      params: { fps: 1 },
+    })
+    const resolution = decodeMoonlightControlCommandRequest({
+      jsonrpc: "2.0",
+      id: "cmd-3",
+      method: "runtime.setResolution",
+      params: { width: 1, height: 1 },
+    })
+
+    expect(bitrate.method).toBe("runtime.setBitrate")
+    expect(fps.method).toBe("runtime.setFps")
+    expect(resolution.method).toBe("runtime.setResolution")
+  })
+
+  it("rejects non-positive command values before native dispatch", () => {
     expect(() =>
       decodeMoonlightControlCommandRequest({
         jsonrpc: "2.0",
         id: "cmd-1",
         method: "runtime.setBitrate",
-        params: {
-          bitrateKbps: MOONLIGHT_CONTROL_PROTOCOL_LIMITS.bitrateKbps.max + 1,
-        },
+        params: { bitrateKbps: 0 },
       }),
     ).toThrow(/bitrateKbps/)
 
@@ -212,7 +273,7 @@ describe("moonlight local control protocol", () => {
         jsonrpc: "2.0",
         id: "cmd-2",
         method: "runtime.setFps",
-        params: { fps: 1000 },
+        params: { fps: -1 },
       }),
     ).toThrow(/fps/)
 
@@ -221,7 +282,7 @@ describe("moonlight local control protocol", () => {
         jsonrpc: "2.0",
         id: "cmd-3",
         method: "runtime.setResolution",
-        params: { width: 0, height: 720 },
+        params: { width: 0, height: -1 },
       }),
     ).toThrow(/width/)
   })

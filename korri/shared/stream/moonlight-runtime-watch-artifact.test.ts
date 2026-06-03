@@ -99,6 +99,35 @@ describe("Moonlight runtime watch artifact", () => {
     expect(artifact.terminal.result).toBe("attach-failed")
   })
 
+  it("decodes a resolution watch artifact", () => {
+    const artifact = decodeMoonlightRuntimeWatchArtifact({
+      schema: MOONLIGHT_RUNTIME_WATCH_ARTIFACT_SCHEMA,
+      version: MOONLIGHT_RUNTIME_WATCH_ARTIFACT_VERSION,
+      run: { id: "run-resolution", startedAt: "2026-05-26T00:00:00.000Z" },
+      socket: { path: "/tmp/moonlight.sock", attached: true },
+      scenario: { _tag: "set-resolution", width: 1280, height: 720 },
+      commandResponse: {
+        _tag: "command.accepted",
+        requestId: "cmd-resolution",
+        command: "runtime.setResolution",
+      },
+      observedEvents: [],
+      sequenceGaps: [],
+      proof: {
+        controlPlane: "observed",
+        hostApply: "reported",
+        deviceRender: "not-collected",
+      },
+      terminal: { result: "applied", exitCode: 0 },
+    })
+
+    expect(artifact.scenario).toEqual({
+      _tag: "set-resolution",
+      width: 1280,
+      height: 720,
+    })
+  })
+
   it("rejects malformed terminal results, scenarios, and proof states", () => {
     expect(() =>
       decodeMoonlightRuntimeWatchArtifact({
@@ -106,7 +135,7 @@ describe("Moonlight runtime watch artifact", () => {
         version: MOONLIGHT_RUNTIME_WATCH_ARTIFACT_VERSION,
         run: { id: "bad", startedAt: "2026-05-26T00:00:00.000Z" },
         socket: { path: "/tmp/moonlight.sock", attached: true },
-        scenario: { _tag: "set-resolution", width: 1280, height: 720 },
+        scenario: { _tag: "set-resolution", width: 0, height: -1 },
         observedEvents: [],
         sequenceGaps: [],
         proof: {
@@ -146,7 +175,11 @@ function protocolHello() {
     authority: "controller",
     capabilities: {
       events: ["runtime.commandResult"],
-      commands: ["runtime.setBitrate", "runtime.setFps"],
+      commands: [
+        "runtime.setBitrate",
+        "runtime.setFps",
+        "runtime.setResolution",
+      ],
       experimental: [],
     },
     limits: {
@@ -155,11 +188,11 @@ function protocolHello() {
       eventHistory: 256,
       maxInFlightMutationsPerFamily: 1,
       minCommandIntervalMs: 250,
-      bitrateKbps: { min: 500, max: 150000 },
-      fps: { min: 15, max: 240 },
+      bitrateKbps: { min: 1, max: Number.MAX_SAFE_INTEGER },
+      fps: { min: 1, max: Number.MAX_SAFE_INTEGER },
       resolution: {
-        width: { min: 320, max: 7680 },
-        height: { min: 240, max: 4320 },
+        width: { min: 1, max: Number.MAX_SAFE_INTEGER },
+        height: { min: 1, max: Number.MAX_SAFE_INTEGER },
       },
     },
   }

@@ -27,6 +27,7 @@ The current backlog covers Sunshine consolidation, but the working demo also dep
 
 ## Related
 
+- `docs/acceptance/runtime-settings-protocol-contract.md`
 - `packages/moonlight-embedded-korri/patches`
 - `packages/moonlight-embedded-korri/package.nix`
 - `task-082`

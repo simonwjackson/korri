@@ -1,8 +1,4 @@
 import { describe, expect, it } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
-import { createServer } from "node:net"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
 import type { GamescopeControlClient } from "@shared/gamescope-control/gamescope-control-client"
 import type { GamescopeControlCommandMethod } from "@shared/gamescope-control/gamescope-control-protocol"
 import type { MoonlightControlClient } from "@shared/stream/moonlight-control-client"
@@ -15,7 +11,7 @@ describe("stream control bench", () => {
   it("serves a touch-friendly disposable control panel", async () => {
     const app = createStreamControlBenchApp(
       { artifactDir: "/tmp/bench" },
-      fakeDeps(),
+      testDeps(),
     )
 
     const response = await app.fetch(new Request("http://bench.local/"))
@@ -38,17 +34,12 @@ describe("stream control bench", () => {
         artifactDir: "/tmp/bench",
         moonlightSocketPath: "/tmp/moonlight.sock",
       },
-      fakeDeps({
+      testDeps({
         appendFile: async (_path, content) => {
           logs.push(content)
         },
-        moonlight: fakeMoonlightClient(calls),
+        moonlight: moonlightClientDouble(calls),
         moonlightCalls: calls,
-        sendMoonlightResolution: async (socketPath, params) => {
-          calls.push({ socketPath })
-          calls.push({ method: "setResolution", params })
-          return commandAccepted("runtime.setResolution")
-        },
       }),
     )
 
@@ -69,6 +60,7 @@ describe("stream control bench", () => {
       { method: "close" },
       { socketPath: "/tmp/moonlight.sock" },
       { method: "setResolution", params: { width: 1280, height: 720 } },
+      { method: "close" },
     ])
     const logText = logs.join("\n")
     expect(logText).toContain('"action":"moonlight.bitrate"')
@@ -79,7 +71,7 @@ describe("stream control bench", () => {
   it("returns 400 for invalid mutation payloads", async () => {
     const app = createStreamControlBenchApp(
       { moonlightSocketPath: "/tmp/moonlight.sock" },
-      fakeDeps({ moonlight: fakeMoonlightClient([]) }),
+      testDeps({ moonlight: moonlightClientDouble([]) }),
     )
 
     const response = await postJson(app, "/api/moonlight/bitrate", {})
@@ -90,7 +82,7 @@ describe("stream control bench", () => {
   })
 
   it("returns 503 when a mutation target socket is disabled", async () => {
-    const app = createStreamControlBenchApp({}, fakeDeps())
+    const app = createStreamControlBenchApp({}, testDeps())
 
     const response = await postJson(app, "/api/moonlight/bitrate", {
       bitrateKbps: 6000,
@@ -102,30 +94,29 @@ describe("stream control bench", () => {
     expect(body.error).toContain("disabled")
   })
 
-  it("sends Moonlight resolution through a raw local-control socket", async () => {
-    await withMoonlightSocket(async ({ socketPath, requests }) => {
-      const app = createStreamControlBenchApp(
-        { moonlightSocketPath: socketPath },
-        fakeDeps(),
-      )
+  it("sends Moonlight resolution through the typed local-control client", async () => {
+    const calls: unknown[] = []
+    const app = createStreamControlBenchApp(
+      { moonlightSocketPath: "/tmp/moonlight.sock" },
+      testDeps({
+        moonlight: moonlightClientDouble(calls),
+        moonlightCalls: calls,
+      }),
+    )
 
-      const response = await postJson(app, "/api/moonlight/resolution", {
-        width: 1280,
-        height: 720,
-      })
-      const body = await response.json()
-
-      expect(response.status).toBe(200)
-      expect(body.ok).toBe(true)
-      expect(requests).toEqual([
-        {
-          jsonrpc: "2.0",
-          id: expect.any(String),
-          method: "runtime.setResolution",
-          params: { width: 1280, height: 720 },
-        },
-      ])
+    const response = await postJson(app, "/api/moonlight/resolution", {
+      width: 1280,
+      height: 720,
     })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.ok).toBe(true)
+    expect(calls).toEqual([
+      { socketPath: "/tmp/moonlight.sock" },
+      { method: "setResolution", params: { width: 1280, height: 720 } },
+      { method: "close" },
+    ])
   })
 
   it("applies Gamescope mode/filter/sharpness controls and records diagnostics", async () => {
@@ -136,11 +127,11 @@ describe("stream control bench", () => {
         artifactDir: "/tmp/bench",
         gamescopeSocketPath: "/tmp/gamescope.sock",
       },
-      fakeDeps({
+      testDeps({
         appendFile: async (_path, content) => {
           logs.push(content)
         },
-        gamescope: fakeGamescopeClient(calls),
+        gamescope: gamescopeClientDouble(calls),
         gamescopeCalls: calls,
       }),
     )
@@ -193,7 +184,7 @@ describe("stream control bench", () => {
         artifactDir: "/tmp/bench",
         moonlightSocketPath: "/tmp/moonlight.sock",
       },
-      fakeDeps({ moonlight: fakeMoonlightClient([]) }),
+      testDeps({ moonlight: moonlightClientDouble([]) }),
     )
 
     const response = await app.fetch(
@@ -206,45 +197,6 @@ describe("stream control bench", () => {
     expect(body.gamescope.status).toBe("disabled")
   })
 })
-
-async function withMoonlightSocket(
-  run: (context: {
-    readonly socketPath: string
-    readonly requests: readonly Record<string, unknown>[]
-  }) => Promise<void>,
-): Promise<void> {
-  const dir = await mkdtemp(join(tmpdir(), "stream-control-bench-"))
-  const socketPath = join(dir, "control.sock")
-  const requests: Record<string, unknown>[] = []
-  const server = createServer(socket => {
-    let buffered = ""
-    socket.on("data", chunk => {
-      buffered += chunk.toString("utf8")
-      while (buffered.includes("\n")) {
-        const index = buffered.indexOf("\n")
-        const line = buffered.slice(0, index)
-        buffered = buffered.slice(index + 1)
-        if (line.length === 0) continue
-        const request = JSON.parse(line)
-        requests.push(request)
-        socket.write(
-          `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "command.accepted", requestId: "request", command: request.method } })}\n`,
-        )
-      }
-    })
-  })
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject)
-    server.listen(socketPath, resolve)
-  })
-
-  try {
-    await run({ socketPath, requests })
-  } finally {
-    await new Promise<void>(resolve => server.close(() => resolve()))
-    await rm(dir, { recursive: true, force: true })
-  }
-}
 
 async function postJson(
   app: { fetch: (request: Request) => Promise<Response> | Response },
@@ -260,15 +212,11 @@ async function postJson(
   )
 }
 
-function fakeDeps(
+function testDeps(
   overrides: Partial<{
     readonly appendFile: (path: string, content: string) => Promise<void>
     readonly moonlight: MoonlightControlClient
     readonly gamescope: GamescopeControlClient
-    readonly sendMoonlightResolution: (
-      socketPath: string,
-      params: { readonly width: number; readonly height: number },
-    ) => Promise<unknown>
     readonly moonlightCalls: unknown[]
     readonly gamescopeCalls: unknown[]
   }> = {},
@@ -279,19 +227,16 @@ function fakeDeps(
     appendFile: overrides.appendFile ?? (async () => undefined),
     connectMoonlight: async (socketPath: string) => {
       overrides.moonlightCalls?.push?.({ socketPath })
-      return overrides.moonlight ?? fakeMoonlightClient([])
+      return overrides.moonlight ?? moonlightClientDouble([])
     },
-    ...(overrides.sendMoonlightResolution
-      ? { sendMoonlightResolution: overrides.sendMoonlightResolution }
-      : {}),
     connectGamescope: async (socketPath: string) => {
       overrides.gamescopeCalls?.push?.({ socketPath })
-      return overrides.gamescope ?? fakeGamescopeClient([])
+      return overrides.gamescope ?? gamescopeClientDouble([])
     },
   }
 }
 
-function fakeMoonlightClient(calls: unknown[]): MoonlightControlClient {
+function moonlightClientDouble(calls: unknown[]): MoonlightControlClient {
   return {
     hello: async () => ({
       jsonrpc: "2.0",
@@ -319,12 +264,16 @@ function fakeMoonlightClient(calls: unknown[]): MoonlightControlClient {
       calls.push({ method: "setFps", params })
       return commandAccepted("runtime.setFps")
     },
+    setResolution: async params => {
+      calls.push({ method: "setResolution", params })
+      return commandAccepted("runtime.setResolution")
+    },
     onEvent: () => () => undefined,
     close: () => calls.push({ method: "close" }),
   }
 }
 
-function fakeGamescopeClient(calls: unknown[]): GamescopeControlClient {
+function gamescopeClientDouble(calls: unknown[]): GamescopeControlClient {
   return {
     hello: async () => ({
       jsonrpc: "2.0",

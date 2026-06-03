@@ -8,15 +8,14 @@ import {
   type MoonlightControlEventDelivery,
   type MoonlightControlSequenceGap,
 } from "@shared/stream/moonlight-control-client"
-import {
-  MOONLIGHT_CONTROL_PROTOCOL_LIMITS,
-  type MoonlightControlCommandMethod,
-  type MoonlightControlCommandResult,
-  type MoonlightControlEventsSubscribedResult,
-  type MoonlightControlHelloResult,
-  type MoonlightControlResponseResult,
-  type MoonlightControlStateSnapshotResult,
-  type MoonlightControlSuccessResponse,
+import type {
+  MoonlightControlCommandMethod,
+  MoonlightControlCommandResult,
+  MoonlightControlEventsSubscribedResult,
+  MoonlightControlHelloResult,
+  MoonlightControlResponseResult,
+  MoonlightControlStateSnapshotResult,
+  MoonlightControlSuccessResponse,
 } from "@shared/stream/moonlight-control-protocol"
 import {
   MOONLIGHT_RUNTIME_WATCH_ARTIFACT_SCHEMA,
@@ -195,17 +194,28 @@ async function runScenario(
         timeoutMs: parsed.timeoutMs,
       }))
 
-    if (commandResult) return classifyCommandResult(commandResult)
+    if (commandResult) {
+      context.postSnapshot = expectStateSnapshot(await client.state())
+      return classifyCommandResult({
+        result: commandResult,
+        scenario: parsed.scenario,
+        postSnapshot: context.postSnapshot,
+      })
+    }
 
     if (context.sequenceGaps.length > 0) {
       context.postSnapshot = expectStateSnapshot(await client.state())
       const lastCommand = context.postSnapshot.runtimeSettings.lastCommand
       if (lastCommand && String(lastCommand.requestId) === requestId) {
         return classifyCommandResult({
-          _tag: "command.result",
-          requestId,
-          command,
-          status: lastCommand.status,
+          result: {
+            _tag: "command.result",
+            requestId,
+            command,
+            status: lastCommand.status,
+          },
+          scenario: parsed.scenario,
+          postSnapshot: context.postSnapshot,
         })
       }
       return {
@@ -289,7 +299,20 @@ function parseCommand(
     }
   }
 
-  return "moonlight-runtime-watch scenario must be probe, set-bitrate, or set-fps"
+  if (scenarioName === "set-resolution") {
+    const width = parsePositiveInt(flagValue(argv, "--width"))
+    const height = parsePositiveInt(flagValue(argv, "--height"))
+    if (!width) return "set-resolution requires --width <pixels>"
+    if (!height) return "set-resolution requires --height <pixels>"
+    return {
+      scenario: { _tag: "set-resolution", width, height },
+      socketPath,
+      artifactPath,
+      timeoutMs,
+    }
+  }
+
+  return "moonlight-runtime-watch scenario must be probe, set-bitrate, set-fps, or set-resolution"
 }
 
 function flagValue(argv: readonly string[], flag: string): string | undefined {
@@ -316,22 +339,6 @@ function validateMutation(
   if (!hello.capabilities.commands.includes(command)) {
     return `${command} is not advertised by the active Moonlight session`
   }
-  if (scenario._tag === "set-bitrate") {
-    const limits =
-      hello.limits.bitrateKbps ?? MOONLIGHT_CONTROL_PROTOCOL_LIMITS.bitrateKbps
-    if (
-      scenario.bitrateKbps < limits.min ||
-      scenario.bitrateKbps > limits.max
-    ) {
-      return `bitrate ${scenario.bitrateKbps} is outside ${limits.min}-${limits.max}`
-    }
-  }
-  if (scenario._tag === "set-fps") {
-    const limits = hello.limits.fps ?? MOONLIGHT_CONTROL_PROTOCOL_LIMITS.fps
-    if (scenario.fps < limits.min || scenario.fps > limits.max) {
-      return `fps ${scenario.fps} is outside ${limits.min}-${limits.max}`
-    }
-  }
   return undefined
 }
 
@@ -343,6 +350,12 @@ function sendMutation(
     return client.setBitrate({ bitrateKbps: scenario.bitrateKbps })
   }
   if (scenario._tag === "set-fps") return client.setFps({ fps: scenario.fps })
+  if (scenario._tag === "set-resolution") {
+    return client.setResolution({
+      width: scenario.width,
+      height: scenario.height,
+    })
+  }
   throw new Error("probe has no mutation command")
 }
 
@@ -351,6 +364,7 @@ function extractScenarioCommand(
 ): MoonlightControlCommandMethod {
   if (scenario._tag === "set-bitrate") return "runtime.setBitrate"
   if (scenario._tag === "set-fps") return "runtime.setFps"
+  if (scenario._tag === "set-resolution") return "runtime.setResolution"
   return "runtime.requestIdr"
 }
 
@@ -413,10 +427,25 @@ function eventToCommandResult(
   }
 }
 
-function classifyCommandResult(
-  result: MoonlightControlCommandResult,
-): TerminalClassification {
+function classifyCommandResult(options: {
+  readonly result: MoonlightControlCommandResult
+  readonly scenario: MoonlightRuntimeWatchScenario
+  readonly postSnapshot: MoonlightControlStateSnapshotResult
+}): TerminalClassification {
+  const { result, scenario, postSnapshot } = options
   if (result.status === "applied") {
+    if (!appliedStateMatchesScenario(scenario, postSnapshot)) {
+      return {
+        result: "host-rejected",
+        exitCode: exitCodes.hostRejected,
+        reason: "applied state did not match requested setting",
+        proof: {
+          controlPlane: "observed",
+          hostApply: "rejected",
+          deviceRender: "not-collected",
+        },
+      }
+    }
     return {
       result: "applied",
       exitCode: exitCodes.success,
@@ -450,6 +479,25 @@ function classifyCommandResult(
       deviceRender: "not-collected",
     },
   }
+}
+
+function appliedStateMatchesScenario(
+  scenario: MoonlightRuntimeWatchScenario,
+  snapshot: MoonlightControlStateSnapshotResult,
+): boolean {
+  if (scenario._tag === "set-bitrate") {
+    return snapshot.runtimeSettings.appliedBitrateKbps === scenario.bitrateKbps
+  }
+  if (scenario._tag === "set-fps") {
+    return snapshot.runtimeSettings.appliedFps === scenario.fps
+  }
+  if (scenario._tag === "set-resolution") {
+    return (
+      snapshot.runtimeSettings.appliedResolution?.width === scenario.width &&
+      snapshot.runtimeSettings.appliedResolution.height === scenario.height
+    )
+  }
+  return false
 }
 
 async function writeArtifactAndSummary(options: {

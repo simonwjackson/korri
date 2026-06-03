@@ -192,6 +192,165 @@ describe("moonlight-runtime-watch cli", () => {
     })
   })
 
+  it("watches a resolution mutation until a correlated applied event and state arrive", async () => {
+    await withRuntimeWatchSocket(async ({ socketPath, requests }) => {
+      const artifacts = new Map<string, string>()
+      const exitCode = await runMoonlightRuntimeWatchCommand(
+        [
+          "set-resolution",
+          "--width",
+          "1280",
+          "--height",
+          "720",
+          "--socket",
+          socketPath,
+          "--artifact",
+          "/tmp/resolution.json",
+          "--timeout-ms",
+          "200",
+        ],
+        {
+          write: () => undefined,
+          writeArtifact: async (path, content) => {
+            artifacts.set(path, content)
+          },
+          createRunId: () => "run-resolution",
+          now: () => new Date("2026-05-26T00:00:00.000Z"),
+        },
+      )
+
+      expect(exitCode).toBe(0)
+      expect(requests.map(request => request.method)).toContain(
+        "runtime.setResolution",
+      )
+      const artifact = decodeMoonlightRuntimeWatchArtifact(
+        JSON.parse(artifacts.get("/tmp/resolution.json") ?? "{}"),
+      )
+      expect(artifact.terminal.result).toBe("applied")
+      expect(artifact.commandResponse).toMatchObject({
+        command: "runtime.setResolution",
+      })
+      expect(artifact.postSnapshot?.runtimeSettings.appliedResolution).toEqual({
+        width: 1280,
+        height: 720,
+      })
+    })
+  })
+
+  it("classifies accepted command results as not terminal", async () => {
+    await withRuntimeWatchSocket(
+      async ({ socketPath }) => {
+        const artifacts = new Map<string, string>()
+        const exitCode = await runMoonlightRuntimeWatchCommand(
+          [
+            "set-bitrate",
+            "--bitrate-kbps",
+            "45000",
+            "--socket",
+            socketPath,
+            "--artifact",
+            "/tmp/accepted.json",
+            "--timeout-ms",
+            "200",
+          ],
+          {
+            write: () => undefined,
+            writeArtifact: async (path, content) => {
+              artifacts.set(path, content)
+            },
+            createRunId: () => "run-accepted",
+            now: () => new Date("2026-05-26T00:00:00.000Z"),
+          },
+        )
+
+        expect(exitCode).toBe(32)
+        const artifact = decodeMoonlightRuntimeWatchArtifact(
+          JSON.parse(artifacts.get("/tmp/accepted.json") ?? "{}"),
+        )
+        expect(artifact.terminal.result).toBe("sent-no-terminal-outcome")
+      },
+      { commandStatus: "accepted" },
+    )
+  })
+
+  it("rejects resolution locally when capability is not advertised", async () => {
+    await withRuntimeWatchSocket(
+      async ({ socketPath, requests }) => {
+        const artifacts = new Map<string, string>()
+        const exitCode = await runMoonlightRuntimeWatchCommand(
+          [
+            "set-resolution",
+            "--width",
+            "1280",
+            "--height",
+            "720",
+            "--socket",
+            socketPath,
+            "--artifact",
+            "/tmp/resolution-rejected.json",
+          ],
+          {
+            write: () => undefined,
+            writeArtifact: async (path, content) => {
+              artifacts.set(path, content)
+            },
+            createRunId: () => "run-resolution-rejected",
+            now: () => new Date("2026-05-26T00:00:00.000Z"),
+          },
+        )
+
+        expect(exitCode).toBe(30)
+        expect(requests.map(request => request.method)).not.toContain(
+          "runtime.setResolution",
+        )
+        const artifact = decodeMoonlightRuntimeWatchArtifact(
+          JSON.parse(artifacts.get("/tmp/resolution-rejected.json") ?? "{}"),
+        )
+        expect(artifact.terminal.result).toBe("local-rejected")
+      },
+      { commands: ["runtime.setBitrate", "runtime.setFps"] },
+    )
+  })
+
+  it("does not report applied when post-snapshot state does not match", async () => {
+    await withRuntimeWatchSocket(
+      async ({ socketPath }) => {
+        const artifacts = new Map<string, string>()
+        const exitCode = await runMoonlightRuntimeWatchCommand(
+          [
+            "set-bitrate",
+            "--bitrate-kbps",
+            "45000",
+            "--socket",
+            socketPath,
+            "--artifact",
+            "/tmp/mismatch.json",
+            "--timeout-ms",
+            "200",
+          ],
+          {
+            write: () => undefined,
+            writeArtifact: async (path, content) => {
+              artifacts.set(path, content)
+            },
+            createRunId: () => "run-mismatch",
+            now: () => new Date("2026-05-26T00:00:00.000Z"),
+          },
+        )
+
+        expect(exitCode).toBe(31)
+        const artifact = decodeMoonlightRuntimeWatchArtifact(
+          JSON.parse(artifacts.get("/tmp/mismatch.json") ?? "{}"),
+        )
+        expect(artifact.terminal.result).toBe("host-rejected")
+        expect(artifact.terminal.reason).toBe(
+          "applied state did not match requested setting",
+        )
+      },
+      { mismatchedAppliedState: true },
+    )
+  })
+
   it("classifies host/runtime command rejection separately from local rejection", async () => {
     await withRuntimeWatchSocket(
       async ({ socketPath }) => {
@@ -367,11 +526,18 @@ async function withRuntimeWatchSocket(
     readonly commandStatus?: string
     readonly bitrateCommandId?: string | number
     readonly fpsCommandId?: string | number
+    readonly resolutionCommandId?: string | number
+    readonly mismatchedAppliedState?: boolean
   } = {},
 ): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), "korri-runtime-watch-test-"))
   const socketPath = join(dir, "control.sock")
   const requests: Record<string, unknown>[] = []
+  let appliedState: {
+    readonly bitrateKbps?: number
+    readonly fps?: number
+    readonly resolution?: { readonly width: number; readonly height: number }
+  } = { bitrateKbps: 40000, fps: 60 }
   const server = createServer(socket => {
     let pending = ""
     socket.on("data", chunk => {
@@ -388,13 +554,22 @@ async function withRuntimeWatchSocket(
             `${JSON.stringify(helloResponse(request.id, behavior.commands))}\n`,
           )
         } else if (request.method === "state.get") {
-          socket.write(`${JSON.stringify(stateResponse(request.id))}\n`)
+          socket.write(
+            `${JSON.stringify(stateResponse(request.id, appliedState))}\n`,
+          )
         } else if (request.method === "events.subscribe") {
           socket.write(
             `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "events.subscribed", seq: 0 } })}\n`,
           )
         } else if (request.method === "runtime.setBitrate") {
           const commandId = behavior.bitrateCommandId ?? "cmd-bitrate"
+          const params = request.params as { readonly bitrateKbps?: number }
+          if (
+            behavior.commandStatus !== "accepted" &&
+            !behavior.mismatchedAppliedState
+          ) {
+            appliedState = { ...appliedState, bitrateKbps: params.bitrateKbps }
+          }
           socket.write(
             `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "command.accepted", requestId: commandId, command: "runtime.setBitrate" } })}\n`,
           )
@@ -405,12 +580,46 @@ async function withRuntimeWatchSocket(
           }
         } else if (request.method === "runtime.setFps") {
           const commandId = behavior.fpsCommandId ?? "cmd-fps"
+          const params = request.params as { readonly fps?: number }
+          if (
+            behavior.commandStatus !== "accepted" &&
+            !behavior.mismatchedAppliedState
+          ) {
+            appliedState = { ...appliedState, fps: params.fps }
+          }
           socket.write(
             `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "command.accepted", requestId: commandId, command: "runtime.setFps" } })}\n`,
           )
           if (behavior.emitCommandResult !== false) {
             socket.write(
               `${JSON.stringify(commandResultEvent(commandId, "runtime.setFps", behavior.commandStatus ?? "applied"))}\n`,
+            )
+          }
+        } else if (request.method === "runtime.setResolution") {
+          const commandId = behavior.resolutionCommandId ?? "cmd-resolution"
+          const params = request.params as {
+            readonly width?: number
+            readonly height?: number
+          }
+          if (
+            behavior.commandStatus !== "accepted" &&
+            !behavior.mismatchedAppliedState
+          ) {
+            appliedState = {
+              ...appliedState,
+              resolution:
+                typeof params.width === "number" &&
+                typeof params.height === "number"
+                  ? { width: params.width, height: params.height }
+                  : appliedState.resolution,
+            }
+          }
+          socket.write(
+            `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { _tag: "command.accepted", requestId: commandId, command: "runtime.setResolution" } })}\n`,
+          )
+          if (behavior.emitCommandResult !== false) {
+            socket.write(
+              `${JSON.stringify(commandResultEvent(commandId, "runtime.setResolution", behavior.commandStatus ?? "applied"))}\n`,
             )
           }
         }
@@ -433,7 +642,11 @@ async function withRuntimeWatchSocket(
 
 function helloResponse(
   id: string,
-  commands: readonly string[] = ["runtime.setBitrate", "runtime.setFps"],
+  commands: readonly string[] = [
+    "runtime.setBitrate",
+    "runtime.setFps",
+    "runtime.setResolution",
+  ],
 ) {
   return {
     jsonrpc: "2.0",
@@ -453,7 +666,14 @@ function helloResponse(
   }
 }
 
-function stateResponse(id: string) {
+function stateResponse(
+  id: string,
+  applied: {
+    readonly bitrateKbps?: number
+    readonly fps?: number
+    readonly resolution?: { readonly width: number; readonly height: number }
+  },
+) {
   return {
     jsonrpc: "2.0",
     id,
@@ -462,7 +682,11 @@ function stateResponse(id: string) {
       seq: 1,
       session: { sessionId: "session-1", state: "streaming" },
       streamQuality: { connection: "good", bitrateKbps: 40000, fps: 60 },
-      runtimeSettings: { appliedBitrateKbps: 40000, appliedFps: 60 },
+      runtimeSettings: {
+        appliedBitrateKbps: applied.bitrateKbps,
+        appliedFps: applied.fps,
+        appliedResolution: applied.resolution,
+      },
       input: {
         route: "moonlight-embedded",
         status: "available",

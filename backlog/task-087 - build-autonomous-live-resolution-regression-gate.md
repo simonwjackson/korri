@@ -27,6 +27,7 @@ The feature depends on physical bandai-visible behavior; logs alone previously p
 
 ## Related
 
+- `docs/acceptance/runtime-settings-protocol-contract.md`
 - `tools/scripts/live-runtime-resolution-gate.sh`
 - `/storage/probe-a-resolution/probe.ts`
 - `packages/moonlight-embedded-korri/patches/0007-wire-local-control-runtime-command-events.patch`

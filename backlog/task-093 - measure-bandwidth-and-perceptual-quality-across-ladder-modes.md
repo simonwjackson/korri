@@ -27,6 +27,7 @@ The feature goal is adaptive streaming quality. We need data that pairs network 
 
 ## Related
 
+- `docs/acceptance/runtime-settings-protocol-contract.md`
 - `tools/cli/moonlight-runtime-watch.ts`
 - `tools/scripts/live-runtime-resolution-gate.sh`
 
