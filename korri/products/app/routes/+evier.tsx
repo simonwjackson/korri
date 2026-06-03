@@ -1,13 +1,10 @@
-import { createEvierStreamControlRpcClient } from "@app/features/evier/stream-control-rpc-client"
-import { EvierStreamControlPage } from "@product/themes/evier/pages/EvierStreamControlPage"
+import { ThemeHost } from "@product/apps/portal/themes/ThemeHost"
 import { createFileRoute } from "@tanstack/react-router"
 
 export const Route = createFileRoute("/evier")({
   component: EvierRoute,
 })
 
-const evierStreamControl = createEvierStreamControlRpcClient()
-
 function EvierRoute() {
-  return <EvierStreamControlPage controller={evierStreamControl} />
+  return <ThemeHost themeId="evier" />
 }

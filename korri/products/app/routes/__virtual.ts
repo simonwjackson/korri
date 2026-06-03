@@ -4,4 +4,5 @@ export const routes = rootRoute("+__root.tsx", [
   index("+index.tsx"),
   route("/screen", "+screen.tsx"),
   route("/evier", "+evier.tsx"),
+  route("/demo-theme", "+demo-theme.tsx"),
 ])

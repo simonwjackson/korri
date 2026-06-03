@@ -83,6 +83,15 @@ function importsPrivateProductFromPlatform(source: string): boolean {
   )
 }
 
+function importsThemeInternalsDirectly(source: string): boolean {
+  return importSpecifiers(source).some(specifier => {
+    if (/^@product\/themes\/[^/]+\/(?:entry|[^/]+\.css)$/.test(specifier)) {
+      return false
+    }
+    return /^@product\/themes\/[^/]+\//.test(specifier)
+  })
+}
+
 function buildReferencedToolEntrypoints(): readonly string[] {
   const files = [
     "nix/korri-server.nix",
@@ -119,6 +128,19 @@ describe("standards: product platform reorganization guardrails", () => {
         .filter(file =>
           importsThemePrivateProductInternals(readSource(file), file),
         )
+        .map(repoRelative),
+    )
+
+    expect(violations).toEqual([])
+  })
+
+  it("keeps portal routes and shell from importing theme internals directly", () => {
+    const violations = existingRoots([
+      join(REPO_ROOT, "product", "apps", "portal"),
+      join(REPO_ROOT, "korri", "products", "app", "routes"),
+    ]).flatMap(root =>
+      sourceFiles(root)
+        .filter(file => importsThemeInternalsDirectly(readSource(file)))
         .map(repoRelative),
     )
 

@@ -1,20 +1,16 @@
-import { LauncherLayerRpc } from "@app/features/home/launcher-layer-rpc"
-import { LibrarySourceLayerRpc } from "@app/features/home/library-source-layer-rpc"
-import { RegistryProvider } from "@effect/atom-react"
 import {
   type ControllerInputProfile,
   isControllerInputProfile,
 } from "@platform/browser/navigation/controller-profile"
 import { startSpatialNavigation } from "@platform/browser/navigation/start"
-import {
-  launcherLayerAtom,
-  librarySourceLayerAtom,
-} from "@platform/react/library/library-atoms"
+import { installKorriPlatformBridge } from "@platform/theme/bridge"
 import { createRouter, RouterProvider } from "@tanstack/react-router"
 import ReactDOM from "react-dom/client"
+import { createPortalPlatformBridge } from "./platform-bridge"
 import { readInlinedRuntimeConfig } from "./read-inlined-runtime-config"
 import { routeTree } from "./routeTree.gen"
 import { buildSpatialNavigationConfig } from "./spatial-navigation-config"
+import { PlatformBridgeProvider } from "./themes/platform-bridge-context"
 import "@shared/primitives/theme/styles.css"
 import "@product/themes/shift/shift.css"
 import "@product/themes/evier/evier.css"
@@ -38,28 +34,6 @@ if (!rootElement) {
 // `{ desktopInput: false }` default.
 const runtimeConfig = readInlinedRuntimeConfig(window)
 
-// Seed the launcher / library-source atoms via `<RegistryProvider
-// initialValues={…}>` so the first `useAtomValue(libraryRuntime)` in
-// the tree sees the chosen layers instead of the
-// `loadingForeverLibrarySourceLayer` placeholder. This replaces
-// `HomeServerRoot`'s `useLayoutEffect` + `layersReady` flag: selection
-// now happens at the React composition root, before the tree mounts.
-//
-// `LibrarySourceLayerRpc` is the only library source. `LauncherLayerRpc`
-// is the only Launcher: kiosk and non-kiosk deploys both route launches
-// through the server's `app.library.launch`, which dispatches local vs.
-// Moonlight launches via sessiond.
-const initialValues = [
-  [librarySourceLayerAtom, LibrarySourceLayerRpc],
-  [launcherLayerAtom, LauncherLayerRpc],
-] as const
-
-ReactDOM.createRoot(rootElement).render(
-  <RegistryProvider initialValues={initialValues}>
-    <RouterProvider router={router} />
-  </RegistryProvider>,
-)
-
 // Device-agnostic spatial navigation. Controller backend is runtime-
 // configured: on the desktop deploy, bun inlines `window.__korriRuntimeConfig`
 // into the served `index.html`; on the portal deploy (and Storybook / dev
@@ -70,8 +44,29 @@ const controllerProfile = readControllerInputProfile(
   import.meta.env.VITE_KORRI_CONTROLLER_PROFILE,
 )
 
-startSpatialNavigation(
+const navigation = startSpatialNavigation(
   buildSpatialNavigationConfig(runtimeConfig, controllerProfile),
+)
+const platformBridge = createPortalPlatformBridge({
+  inputBus: navigation.bus,
+  desktopInput: runtimeConfig.desktopInput,
+})
+const uninstallPlatformBridge = installKorriPlatformBridge(
+  window,
+  platformBridge,
+)
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    uninstallPlatformBridge()
+    navigation.dispose()
+  })
+}
+
+ReactDOM.createRoot(rootElement).render(
+  <PlatformBridgeProvider bridge={platformBridge}>
+    <RouterProvider router={router} />
+  </PlatformBridgeProvider>,
 )
 
 function readControllerInputProfile(value: unknown): ControllerInputProfile {
