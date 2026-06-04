@@ -11,8 +11,8 @@
  * poster slot.
  */
 
-import type { ResolvedGameRecord } from "@shared/fixtures/games/game"
-import { games } from "@shared/fixtures/games/games"
+import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
+import { games } from "@platform/fixtures/games/games"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { ShiftHomePosterTile } from "./ShiftHomePosterTile"
 

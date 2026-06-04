@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { honoApp } from "@app/api/hono-app"
 import { createAdaptorServer } from "@hono/node-server"
-import { logger } from "@shared/logger"
+import { logger } from "@platform/logger"
+import { honoApp } from "@product/apps/portal/api/hono-app"
 
 function getConfig() {
   const port = Number.parseInt(process.env.PORT || "3001", 10)

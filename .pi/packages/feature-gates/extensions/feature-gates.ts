@@ -4,7 +4,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 const SKILL_NAME = "feature-gates"
 const PACKAGE_ROOT = ".pi/packages/feature-gates"
 const SKILL_PATH = `${PACKAGE_ROOT}/skills/${SKILL_NAME}/SKILL.md`
-const GATES_DIR = `korri${sep}shared${sep}gates`
+const GATES_DIR = `product${sep}platform${sep}gates`
 
 type ReadInput = {
   path?: string
@@ -49,7 +49,7 @@ function isSkillPath(cwd: string, maybePath: string | undefined): boolean {
 
 function buildBlockReason(): string {
   return [
-    `Auto-loading /skill:${SKILL_NAME} because this change targets korri/shared/gates.`,
+    `Auto-loading /skill:${SKILL_NAME} because this change targets product/platform/gates.`,
     "Once the skill is in session context, retry the edit with the feature gate conventions applied.",
   ].join(" ")
 }

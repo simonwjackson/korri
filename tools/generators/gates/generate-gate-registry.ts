@@ -7,8 +7,8 @@ import fg from "fast-glob"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, "../../..")
-const OUTPUT = resolve(ROOT, "korri/shared/gates/registry.ts")
-const GATE_GLOB = "korri/products/*/**/gate.ts"
+const OUTPUT = resolve(ROOT, "product/platform/gates/registry.ts")
+const GATE_GLOB = "product/apps/*/**/gate.ts"
 
 interface GateEntry {
   name: string

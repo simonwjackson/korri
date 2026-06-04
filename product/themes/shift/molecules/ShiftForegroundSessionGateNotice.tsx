@@ -1,4 +1,4 @@
-import type { LaunchActionState } from "@shared/library/launch-action-state"
+import type { LaunchActionState } from "@platform/library/launch-action-state"
 
 export interface ShiftForegroundSessionGateNoticeProps {
   readonly state: Extract<

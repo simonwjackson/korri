@@ -11,9 +11,9 @@ const ROOT = resolve(__dirname, "../../..")
 const OUTPUT = resolve(ROOT, "out/generated/feature-map/feature-map.json")
 
 const JOB_GLOB = "docs/jobs/*.md"
-const FEATURE_GLOB = "korri/products/*/features/*"
-const BRIEF_GLOB = "korri/products/*/features/*/brief.md"
-const BDD_GLOB = "korri/products/*/features/*/e2e/*.feature"
+const FEATURE_GLOB = "product/apps/*/features/*"
+const BRIEF_GLOB = "product/apps/*/features/*/brief.md"
+const BDD_GLOB = "product/apps/*/features/*/e2e/*.feature"
 
 type Status = "draft" | "planned" | "active" | "implemented" | "deprecated"
 type DiagnosticSeverity = "error" | "warning"

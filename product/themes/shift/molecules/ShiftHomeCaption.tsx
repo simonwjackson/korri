@@ -12,7 +12,7 @@
  * See docs/solutions/best-practices/attached-ui-snaps-not-slides-2026-05-01.md.
  */
 
-import { getGameDisplayName } from "@shared/fixtures/games/game"
+import { getGameDisplayName } from "@platform/fixtures/games/game"
 import { useShiftHome } from "../templates/ShiftHome.context"
 
 /**

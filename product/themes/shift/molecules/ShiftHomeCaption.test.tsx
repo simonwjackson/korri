@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import type { GameRecord } from "@shared/fixtures/games/game"
+import type { GameRecord } from "@platform/fixtures/games/game"
 import { cleanup, render, screen } from "@testing-library/react"
 import { createRef } from "react"
 import { ShiftHomeCtx } from "../templates/ShiftHome.context"

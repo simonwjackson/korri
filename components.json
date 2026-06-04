@@ -1,21 +1,21 @@
 {
-  "$schema": "https://ui.shadcn.com/schema.json",
-  "style": "new-york",
-  "rsc": false,
-  "tsx": true,
-  "tailwind": {
-    "config": "",
-    "css": "korri/shared/primitives/theme/styles.css",
-    "baseColor": "neutral",
-    "cssVariables": true,
-    "prefix": ""
-  },
-  "aliases": {
-    "components": "@shared/primitives/components",
-    "utils": "@shared/primitives/lib/utils",
-    "ui": "@shared/primitives/components/ui",
-    "lib": "@shared/primitives/lib",
-    "hooks": "@shared/primitives/hooks"
-  },
-  "iconLibrary": "lucide"
+	"$schema": "https://ui.shadcn.com/schema.json",
+	"style": "new-york",
+	"rsc": false,
+	"tsx": true,
+	"tailwind": {
+		"config": "",
+		"css": "product/platform/react/primitives/theme/styles.css",
+		"baseColor": "neutral",
+		"cssVariables": true,
+		"prefix": ""
+	},
+	"aliases": {
+		"components": "@platform/react/primitives/components",
+		"utils": "@platform/react/primitives/lib/utils",
+		"ui": "@platform/react/primitives/components/ui",
+		"lib": "@platform/react/primitives/lib",
+		"hooks": "@platform/react/primitives/hooks"
+	},
+	"iconLibrary": "lucide"
 }

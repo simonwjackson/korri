@@ -341,7 +341,7 @@ in
     sessiond = {
       # When set, korri-server's local Launcher routes managed-launch
       # requests through korri-sessiond (`createSessionLauncherFromEnv()`
-      # in korri/shared/library/launcher-layer-live.ts). Without this,
+      # in product/platform/library/launcher-layer-live.ts). Without this,
       # the server falls back to the in-process shell launcher, which
       # spawns from the server unit's bare PATH and cannot see
       # gamescope/retroarch — fatal for any default-gamescope launch.

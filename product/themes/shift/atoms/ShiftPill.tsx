@@ -15,7 +15,7 @@
  *     refs are the consumer's call.
  */
 
-import { cn } from "@shared/primitives/lib/utils"
+import { cn } from "@platform/react/primitives/lib/utils"
 import type { ComponentPropsWithoutRef } from "react"
 
 export type ShiftPillProps = ComponentPropsWithoutRef<"button">

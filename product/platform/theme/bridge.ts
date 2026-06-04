@@ -1,6 +1,6 @@
+import type { EntrySource } from "@platform/api/rpc/entry-source"
 import type { InputListener } from "@platform/input/types"
-import type { EntrySource } from "@shared/api/rpc/entry-source"
-import type { ForegroundSessionGateState } from "@shared/stream/foreground-session-gate-state"
+import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
 
 export interface KorriLibraryLaunchInput {
   readonly id: string

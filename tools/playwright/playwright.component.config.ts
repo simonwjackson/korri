@@ -21,7 +21,7 @@ export default defineConfig({
   // The `.story.e2e.ts` suffix avoids collision with Bun's hardcoded test
   // discovery (which matches *.test.ts and *.spec.ts) while reusing the
   // project's existing `.e2e.ts` convention for browser-driven tests.
-  testMatch: "korri/**/*.story.e2e.ts",
+  testMatch: "product/**/*.story.e2e.ts",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

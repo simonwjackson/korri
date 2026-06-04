@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs"
 import { join } from "node:path"
-import { logger } from "@shared/logger"
+import { logger } from "@platform/logger"
 import { type PatchResult, patchFile } from "./electrobun-patcher"
 
 export interface ElectrobunProbeResult {

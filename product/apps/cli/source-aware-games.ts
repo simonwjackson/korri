@@ -1,9 +1,9 @@
-import type { GameRecord } from "@shared/fixtures/games/game"
-import { getGameDisplayName } from "@shared/fixtures/games/game"
+import type { GameRecord } from "@platform/fixtures/games/game"
+import { getGameDisplayName } from "@platform/fixtures/games/game"
 import type {
   LibraryError,
   LibrarySourceService,
-} from "@shared/library/library-services"
+} from "@platform/library/library-services"
 import { Cause, Effect, Exit } from "effect"
 import type { StreamHostCandidate } from "./lan-stream-discovery"
 import type {

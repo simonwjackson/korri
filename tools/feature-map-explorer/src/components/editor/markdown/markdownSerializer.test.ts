@@ -86,7 +86,7 @@ describe("markdownSerializer", () => {
   it("keeps the live editable corpus canonically stable", () => {
     for (const repoRelativePath of [
       "docs/jobs/safe-game-resume.md",
-      "korri/products/app/features/resume/brief.md",
+      "product/apps/portal/features/resume/brief.md",
     ]) {
       const once = canonicalizeMarkdown(markdownBody(repoRelativePath))
       const twice = canonicalizeMarkdown(once)

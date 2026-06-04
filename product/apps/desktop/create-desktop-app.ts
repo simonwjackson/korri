@@ -1,4 +1,4 @@
-import { logger } from "@shared/logger"
+import { logger } from "@platform/logger"
 import { Hono } from "hono"
 import { createApiForwarder } from "./api-forwarder"
 import type { RuntimeConfig } from "./runtime-config-shape"

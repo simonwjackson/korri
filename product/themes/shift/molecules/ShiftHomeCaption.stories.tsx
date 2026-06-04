@@ -17,7 +17,7 @@
  * actual DOM focus moves; only the context's `focusedId` updates.
  */
 
-import { games } from "@shared/fixtures/games/games"
+import { games } from "@platform/fixtures/games/games"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { useEffect } from "react"
 import { useShiftHome } from "../templates/ShiftHome.context"

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test"
 import { useAtomSet } from "@effect/atom-react"
-import { games } from "@shared/fixtures/games/games"
-import { makeInMemoryLauncherLayer } from "@shared/library/launcher-layer-memory"
+import { games } from "@platform/fixtures/games/games"
+import { makeInMemoryLauncherLayer } from "@platform/library/launcher-layer-memory"
 import {
   loadingForeverLibrarySourceLayer,
   makeInMemoryLibrarySourceLayer,
-} from "@shared/library/library-source-layer-memory"
+} from "@platform/library/library-source-layer-memory"
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { type ReactNode, useLayoutEffect } from "react"
 import { launcherLayerAtom, librarySourceLayerAtom } from "./library-atoms"

@@ -15,7 +15,7 @@ import {
   getGameDisplayName,
   getGameImageUrl,
   type ResolvedGameRecord,
-} from "@shared/fixtures/games/game"
+} from "@platform/fixtures/games/game"
 
 export interface ShiftHomePosterTileProps {
   readonly game: ResolvedGameRecord

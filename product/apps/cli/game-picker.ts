@@ -1,6 +1,6 @@
 import { BunServices } from "@effect/platform-bun"
-import type { GameRecord } from "@shared/fixtures/games/game"
-import { getGameDisplayName } from "@shared/fixtures/games/game"
+import type { GameRecord } from "@platform/fixtures/games/game"
+import { getGameDisplayName } from "@platform/fixtures/games/game"
 import { Effect } from "effect"
 import * as Terminal from "effect/Terminal"
 import { Prompt } from "effect/unstable/cli"

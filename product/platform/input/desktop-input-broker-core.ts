@@ -1,4 +1,4 @@
-import { logger as defaultLogger } from "@shared/logger"
+import { logger as defaultLogger } from "@platform/logger"
 import { Effect } from "effect"
 import type { DesktopInputStatus } from "./desktop-bridge-wire"
 import { createNativeGamepadMapper } from "./native/gamepad-mapper"

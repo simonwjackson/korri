@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
-import type { LaunchResult, LaunchSpec } from "@shared/library/launcher"
-import type { SessiondManagedLaunchEvent } from "@shared/library/sessiond-managed-launch-protocol"
+import type { LaunchResult, LaunchSpec } from "@platform/library/launcher"
+import type { SessiondManagedLaunchEvent } from "@platform/library/sessiond-managed-launch-protocol"
 import {
   createKorriSessiondCore,
   type KorriSessiondCore,

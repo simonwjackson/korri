@@ -1,7 +1,7 @@
 import {
   connectMoonlightControl,
   type MoonlightControlClient,
-} from "@shared/stream/moonlight-control-client"
+} from "@platform/stream/moonlight-control-client"
 
 export interface MoonlightControlCommandIo {
   readonly connect?: (socketPath: string) => Promise<MoonlightControlClient>

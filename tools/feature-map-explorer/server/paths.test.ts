@@ -68,13 +68,13 @@ describe("assertWritablePath", () => {
     ).not.toThrow()
   })
 
-  it("accepts korri/products/*/features/*/brief.md", () => {
+  it("accepts product/apps/*/features/*/brief.md", () => {
     expect(() =>
-      assertWritablePath("korri/products/app/features/resume/brief.md"),
+      assertWritablePath("product/apps/portal/features/resume/brief.md"),
     ).not.toThrow()
     expect(() =>
       assertWritablePath(
-        "korri/products/app/features/another-feature/brief.md",
+        "product/apps/portal/features/another-feature/brief.md",
       ),
     ).not.toThrow()
   })
@@ -87,7 +87,7 @@ describe("assertWritablePath", () => {
   it("rejects feature .feature files", () => {
     expect(() =>
       assertWritablePath(
-        "korri/products/app/features/resume/e2e/safe-game-resume.feature",
+        "product/apps/portal/features/resume/e2e/safe-game-resume.feature",
       ),
     ).toThrow(PathError)
   })
@@ -95,7 +95,7 @@ describe("assertWritablePath", () => {
   it("rejects repo-root README and source code", () => {
     expect(() => assertWritablePath("README.md")).toThrow(PathError)
     expect(() =>
-      assertWritablePath("korri/products/app/features/resume/index.tsx"),
+      assertWritablePath("product/apps/portal/features/resume/index.tsx"),
     ).toThrow(PathError)
   })
 })

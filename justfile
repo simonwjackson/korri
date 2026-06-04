@@ -105,19 +105,19 @@ test-coverage-sessiond:
     product/services/device/sessiond-status-sidecar.test.ts \
     product/services/device/sessiond-sway.test.ts \
     product/services/device/sessiond-smoke.test.ts \
-    korri/shared/library/session-launcher.test.ts \
-    korri/shared/library/sessiond-managed-launch-protocol.test.ts \
-    korri/shared/library/launcher.test.ts \
-    korri/shared/library/launcher-layer-memory.test.ts \
-    korri/shared/stream/foreground-session-owner.test.ts \
-    korri/shared/stream/foreground-session-lifecycle.test.ts \
-    korri/shared/stream/foreground-session-gate-state.test.ts \
-    korri/shared/stream/foreground-session-status.test.ts \
-    korri/products/app/api/library/launch.rpc-handler.test.ts \
-    korri/products/app/api/library/local-foreground-launch-adapter.test.ts \
-    korri/products/app/api/server/status.rpc-handler.test.ts \
-    korri/products/app/features/home/foreground-session-status-layer-live.test.ts \
-    korri/products/app/features/home/foreground-session-status-layer-live.integration.test.ts
+    product/platform/library/session-launcher.test.ts \
+    product/platform/library/sessiond-managed-launch-protocol.test.ts \
+    product/platform/library/launcher.test.ts \
+    product/platform/library/launcher-layer-memory.test.ts \
+    product/platform/stream/foreground-session-owner.test.ts \
+    product/platform/stream/foreground-session-lifecycle.test.ts \
+    product/platform/stream/foreground-session-gate-state.test.ts \
+    product/platform/stream/foreground-session-status.test.ts \
+    product/apps/portal/api/library/launch.rpc-handler.test.ts \
+    product/apps/portal/api/library/local-foreground-launch-adapter.test.ts \
+    product/apps/portal/api/server/status.rpc-handler.test.ts \
+    product/apps/portal/features/home/foreground-session-status-layer-live.test.ts \
+    product/apps/portal/features/home/foreground-session-status-layer-live.integration.test.ts
 
 # Run native Nix checks. Bun must not own Nix module/config/build assertions.
 test-nix:
@@ -215,7 +215,7 @@ lint: lint-biome fallow-audit
 
 # Run Biome checks.
 lint-biome:
-  biome check product tools korri
+  biome check product tools
 
 # Run Fallow codebase intelligence. Pass subcommands or flags after the recipe name.
 fallow *args:
@@ -259,7 +259,7 @@ bun-build-log-summary log:
 
 # Format source files.
 format:
-  biome format --write product tools korri
+  biome format --write product tools
 
 # Run the standard validation suite.
 check: validate-router lint typecheck test-unit test-nix check-bdd check-bun-deps

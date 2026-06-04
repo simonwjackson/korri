@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { useDualScreenSession } from "@shared/display/dual-screen/DualScreenSession.context"
-import { DualScreenSessionRoot } from "@shared/display/dual-screen/DualScreenSessionRoot"
-import { games } from "@shared/fixtures/games/games"
-import type { LaunchController } from "@shared/library/launch-state"
+import { games } from "@platform/fixtures/games/games"
+import type { LaunchController } from "@platform/library/launch-state"
+import { useDualScreenSession } from "@platform/react/display/dual-screen/DualScreenSession.context"
+import { DualScreenSessionRoot } from "@platform/react/display/dual-screen/DualScreenSessionRoot"
 import {
   cleanup,
   fireEvent,

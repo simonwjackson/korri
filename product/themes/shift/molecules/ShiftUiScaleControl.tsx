@@ -6,7 +6,7 @@ import {
   MIN_UI_SCALE,
   parseUiScale,
   UI_SCALE_STEP,
-} from "@shared/primitives/theme/ui-scale"
+} from "@platform/react/primitives/theme/ui-scale"
 import { useId } from "react"
 
 export interface ShiftUiScaleControlProps {

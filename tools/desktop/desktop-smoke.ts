@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs"
 import { readdir } from "node:fs/promises"
 import { join, relative, sep } from "node:path"
-import { logger } from "@shared/logger"
+import { logger } from "@platform/logger"
 import { createDesktopApp } from "../../product/apps/desktop/create-desktop-app"
 import type { RuntimeConfig } from "../../product/apps/desktop/runtime-config-shape"
 import { buildArtifactPaths } from "../artifacts/paths"

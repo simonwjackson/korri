@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Controllable launch target for tests.
 #
-# The real ShellLauncher (korri/shared/library/shell-launcher.ts, Unit 4 of the
+# The real ShellLauncher (product/platform/library/shell-launcher.ts, Unit 4 of the
 # personal-MVP plan) spawns this script for real via Bun.spawn. The launcher's
 # code path is exercised end-to-end; only the *target binary* — what would be
 # runemu.sh in production — is a stand-in.

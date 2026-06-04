@@ -1,7 +1,7 @@
 import {
   connectGamescopeControl,
   type GamescopeControlClient,
-} from "@shared/gamescope-control/gamescope-control-client"
+} from "@platform/gamescope-control/gamescope-control-client"
 import {
   type GamescopeControlCommandMethod,
   type GamescopeScalingFilter,
@@ -9,7 +9,7 @@ import {
   validateGamescopeFps,
   validateGamescopeMode,
   validateGamescopeSharpness,
-} from "@shared/gamescope-control/gamescope-control-protocol"
+} from "@platform/gamescope-control/gamescope-control-protocol"
 
 export interface GamescopeControlCommandIo {
   readonly connect?: (socketPath: string) => Promise<GamescopeControlClient>

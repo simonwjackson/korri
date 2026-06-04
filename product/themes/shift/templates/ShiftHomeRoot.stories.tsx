@@ -13,7 +13,7 @@
  * shell scales at every Shift target size.
  */
 
-import { games } from "@shared/fixtures/games/games"
+import { games } from "@platform/fixtures/games/games"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { ShiftHomeRoot } from "./ShiftHomeRoot"
 

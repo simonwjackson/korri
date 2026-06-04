@@ -18,7 +18,7 @@
 import { execSync, spawn } from "node:child_process"
 import { access } from "node:fs/promises"
 import { resolve } from "node:path"
-import { logger } from "@shared/logger"
+import { logger } from "@platform/logger"
 import chokidar from "chokidar"
 
 // ANSI color codes

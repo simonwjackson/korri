@@ -94,7 +94,7 @@ export function resolveRepoPath(input: string): ResolvedPath {
  */
 const ALLOWED_WRITE_PATTERNS: readonly RegExp[] = [
   /^docs\/jobs\/[^/]+\.md$/,
-  /^korri\/products\/[^/]+\/features\/[^/]+\/brief\.md$/,
+  /^product\/apps\/[^/]+\/features\/[^/]+\/brief\.md$/,
 ]
 
 export function assertWritablePath(repoRelativePath: string): void {

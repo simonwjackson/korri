@@ -353,11 +353,10 @@
                 fileset = fileset.unions (common ++ extra);
               };
             sharedRuntime = [
-              ./korri/shared
               ./product/platform
             ];
             deviceRuntime = [
-              ./korri/products
+              ./product/apps/portal
               ./product/services/device
               ./tools/library
             ]
@@ -371,7 +370,6 @@
                 ./product/apps/desktop/runtime-config-shape.ts
                 ./product/apps/portal
                 ./product/themes
-                ./korri/products
               ]
               ++ sharedRuntime
             );

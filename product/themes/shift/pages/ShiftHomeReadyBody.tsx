@@ -1,18 +1,18 @@
 import { useAtomValue } from "@effect/atom-react"
-import { useInputAction } from "@platform/react/input/use-input-action"
-import { foregroundSessionGateStateAtom } from "@platform/react/library/library-atoms"
-import { useLibraryListCase } from "@platform/react/library/library-list-state-root"
 import {
   type GameRecord,
   getGameDisplayName,
-} from "@shared/fixtures/games/game"
+} from "@platform/fixtures/games/game"
 import {
   type LaunchActionState,
   launchActionStateAllowsStart,
   launchActionStateFrom,
-} from "@shared/library/launch-action-state"
-import type { LaunchController } from "@shared/library/launch-state"
-import type { ForegroundSessionGateState } from "@shared/stream/foreground-session-gate-state"
+} from "@platform/library/launch-action-state"
+import type { LaunchController } from "@platform/library/launch-state"
+import { useInputAction } from "@platform/react/input/use-input-action"
+import { foregroundSessionGateStateAtom } from "@platform/react/library/library-atoms"
+import { useLibraryListCase } from "@platform/react/library/library-list-state-root"
+import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
 import { Option } from "effect"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 import { ShiftForegroundSessionGateNotice } from "../molecules/ShiftForegroundSessionGateNotice"

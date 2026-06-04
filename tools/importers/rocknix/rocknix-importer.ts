@@ -1,13 +1,13 @@
 import { readdir } from "node:fs/promises"
 import { join } from "node:path"
-import type { GameRecord } from "@shared/library/config/records/game"
-import type { LauncherRecord } from "@shared/library/config/records/launcher"
+import type { GameRecord } from "@platform/library/config/records/game"
+import type { LauncherRecord } from "@platform/library/config/records/launcher"
 import type {
   ImportedGameRecord,
   LibraryRepository,
   SystemDelta,
-} from "@shared/library/proseql/library-repository"
-import { logger } from "@shared/logger"
+} from "@platform/library/proseql/library-repository"
+import { logger } from "@platform/logger"
 import { Effect } from "effect"
 import { type EsSystem, parseEsSystems } from "./es-systems"
 import { type GamelistEntry, parseGamelist } from "./gamelist"

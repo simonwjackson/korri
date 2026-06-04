@@ -1,8 +1,8 @@
-import { getGameDisplayName } from "@shared/fixtures/games/game"
+import { getGameDisplayName } from "@platform/fixtures/games/game"
 import type {
   LauncherService,
   LibrarySourceService,
-} from "@shared/library/library-services"
+} from "@platform/library/library-services"
 import { Cause, Effect, Exit } from "effect"
 import type { GamePicker } from "./game-picker"
 import {

@@ -96,14 +96,14 @@ export const BDD_RUNNER_ARCHITECTURE = {
 } as const
 
 export const BDD_FOLDER_CONVENTION = {
-  featureGlob: "korri/products/*/features/**/e2e/*.feature",
-  stepDefinitionGlob: "korri/products/*/features/**/e2e/*.steps.ts",
-  demoStoryboardGlob: "korri/products/*/features/**/e2e/*.demo.yaml",
+  featureGlob: "product/apps/*/features/**/e2e/*.feature",
+  stepDefinitionGlob: "product/apps/*/features/**/e2e/*.steps.ts",
+  demoStoryboardGlob: "product/apps/*/features/**/e2e/*.demo.yaml",
   generatedWrapperRoot: "out/generated/bdd/playwright",
   generatedWrapperGlob:
-    "out/generated/bdd/playwright/korri/products/*/features/**/e2e/*.e2e.ts",
+    "out/generated/bdd/playwright/product/apps/*/features/**/e2e/*.e2e.ts",
   legacyGeneratedWrapperGlob:
-    "korri/products/*/features/**/e2e/generated/*.e2e.ts",
+    "product/apps/*/features/**/e2e/generated/*.e2e.ts",
   authored: ["*.feature", "*.steps.ts", "*.demo.yaml"],
   generatedArgoDemoGlob: "out/generated/bdd/argo/*.demo.ts",
   generatedArgoSceneGlob: "out/generated/bdd/argo/*.scenes.json",

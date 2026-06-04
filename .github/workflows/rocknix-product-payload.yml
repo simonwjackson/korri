@@ -17,8 +17,8 @@ on:
       - "product/apps/**"
       - "product/services/**"
       - "product/systems/**"
-      - "korri/products/**"
-      - "korri/shared/**"
+      - "product/apps/**"
+      - "product/platform/**"
       - ".github/workflows/rocknix-product-payload.yml"
   workflow_dispatch:
     inputs:

@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
-import { korriDataPath } from "@shared/config/xdg-paths"
-import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
-import { createLibraryRepository } from "@shared/library/proseql/library-repository"
-import { logger } from "@shared/logger"
+import { korriDataPath } from "@platform/config/xdg-paths"
+import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
+import { createLibraryRepository } from "@platform/library/proseql/library-repository"
+import { logger } from "@platform/logger"
 import { Effect } from "effect"
 import { importRocknixLibrary } from "./rocknix-importer"
 

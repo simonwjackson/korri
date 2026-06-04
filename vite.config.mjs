@@ -29,9 +29,6 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@app": new URL("./korri/products/app", import.meta.url).pathname,
-      "@shared": new URL("./korri/shared", import.meta.url).pathname,
-      "@korri": new URL("./korri", import.meta.url).pathname,
       "@product": new URL("./product", import.meta.url).pathname,
       "@platform": new URL("./product/platform", import.meta.url).pathname,
     },

@@ -1,15 +1,15 @@
 import { mkdir, open, readFile, unlink, writeFile } from "node:fs/promises"
 import { dirname, isAbsolute, join } from "node:path"
-import { xdgRuntimeDir } from "@shared/config/xdg-paths"
+import { xdgRuntimeDir } from "@platform/config/xdg-paths"
 import {
   decodeLaunchSpec,
   type Launcher,
   type LaunchResult,
   type LaunchSpec,
   type ManagedLaunchResult,
-} from "@shared/library/launcher"
-import { createSessionLauncherFromEnv } from "@shared/library/session-launcher"
-import { logger as defaultLogger } from "@shared/logger"
+} from "@platform/library/launcher"
+import { createSessionLauncherFromEnv } from "@platform/library/session-launcher"
+import { logger as defaultLogger } from "@platform/logger"
 import {
   composeGamescopeLaunchSpec,
   type GamescopeOptions,

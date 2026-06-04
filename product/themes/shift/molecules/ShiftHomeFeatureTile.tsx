@@ -15,7 +15,7 @@
 import {
   getGameWideImageUrl,
   type ResolvedGameRecord,
-} from "@shared/fixtures/games/game"
+} from "@platform/fixtures/games/game"
 
 function featureArtUrl(id: string): string {
   return `https://picsum.photos/seed/${encodeURIComponent(`shift-${id}-wide`)}/1280/720`

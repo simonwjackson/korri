@@ -12,7 +12,7 @@
  * without loading the full page.
  */
 
-import { games } from "@shared/fixtures/games/games"
+import { games } from "@platform/fixtures/games/games"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { ShiftHomeRoot } from "../templates/ShiftHomeRoot"
 import { ShiftHomeRail } from "./ShiftHomeRail"

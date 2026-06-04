@@ -1,7 +1,7 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun"
-import { LauncherLayerLive } from "@shared/library/launcher-layer-live"
-import { Launcher, LibrarySource } from "@shared/library/library-services"
-import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
+import { LauncherLayerLive } from "@platform/library/launcher-layer-live"
+import { Launcher, LibrarySource } from "@platform/library/library-services"
+import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
 import { Effect, Layer, Option } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
 import {

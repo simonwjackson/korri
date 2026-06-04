@@ -784,7 +784,7 @@ function cleanLegacyCoLocatedWrappers(): number {
     removed++
   }
 
-  const legacyDirs = globSync("korri/products/*/features/**/e2e/generated", {
+  const legacyDirs = globSync("product/apps/*/features/**/e2e/generated", {
     onlyDirectories: true,
   })
   for (const dir of legacyDirs) {

@@ -101,7 +101,7 @@ The local control protocol is experimental downstream Moonlight Embedded functio
 
 Version 1 is Linux-only local IPC over a filesystem Unix-domain socket created for a running `moonlight stream ...` process. A launcher supplies the session id and socket path under a private runtime directory; Moonlight owns the socket server for that stream process. LAN, HTTP, mDNS, Tailscale, browser-facing APIs, host discovery, pairing, and app launch orchestration are intentionally out of scope for this protocol.
 
-The TypeScript contract in `korri/shared/stream/moonlight-control-protocol.ts` defines the reviewable v1 message model before the native server is enabled:
+The TypeScript contract in `product/platform/stream/moonlight-control-protocol.ts` defines the reviewable v1 message model before the native server is enabled:
 
 - JSON-RPC-compatible request/response envelopes with newline-delimited JSON framing.
 - `protocol.hello` for protocol metadata, session identity, authority, capabilities, and bounds.

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test"
-import type { MoonlightControlClient } from "@shared/stream/moonlight-control-client"
+import type { MoonlightControlClient } from "@platform/stream/moonlight-control-client"
 import {
   MOONLIGHT_CONTROL_PROTOCOL,
   MOONLIGHT_CONTROL_PROTOCOL_LIMITS,
-} from "@shared/stream/moonlight-control-protocol"
+} from "@platform/stream/moonlight-control-protocol"
 import { runMoonlightControlCommand } from "./moonlight-control"
 
 describe("moonlight-control cli", () => {
@@ -14,7 +14,7 @@ describe("moonlight-control cli", () => {
       {
         write: line => output.push(line),
         connect: async socketPath =>
-          fakeClient(socketPath, { hello: async () => helloResponse() }),
+          configuredClient(socketPath, { hello: async () => helloResponse() }),
       },
     )
 
@@ -29,7 +29,7 @@ describe("moonlight-control cli", () => {
       {
         write: line => output.push(line),
         connect: async socketPath =>
-          fakeClient(socketPath, { state: async () => stateResponse() }),
+          configuredClient(socketPath, { state: async () => stateResponse() }),
       },
     )
 
@@ -64,7 +64,7 @@ describe("moonlight-control cli", () => {
   })
 })
 
-function fakeClient(
+function configuredClient(
   _socketPath: string,
   overrides: Partial<MoonlightControlClient>,
 ): MoonlightControlClient {

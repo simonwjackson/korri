@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join, relative, sep } from "node:path"
 
 const REPO_ROOT = process.cwd()
-const SCAN_ROOTS = [join(REPO_ROOT, "korri"), join(REPO_ROOT, "tools")]
+const SCAN_ROOTS = [join(REPO_ROOT, "product"), join(REPO_ROOT, "tools")]
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx"])
 const IGNORED_PARTS = new Set([".git", ".worktrees", "node_modules", "out"])
 const ALLOWLISTED_FILES = new Set([

@@ -30,14 +30,14 @@
  *     different composition rather than a different prop.
  */
 
-import type { GameRecord } from "@shared/fixtures/games/game"
-import { composeEntryKey } from "@shared/library/entry-key"
+import type { GameRecord } from "@platform/fixtures/games/game"
+import { composeEntryKey } from "@platform/library/entry-key"
 import {
   clampUiScale,
   DEFAULT_UI_SCALE,
   serializeUiScale,
   UI_SCALE_CSS_VARIABLE,
-} from "@shared/primitives/theme/ui-scale"
+} from "@platform/react/primitives/theme/ui-scale"
 import {
   type ReactNode,
   useCallback,

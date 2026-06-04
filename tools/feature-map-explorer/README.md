@@ -34,7 +34,7 @@ FEATURE_MAP_HOST=127.0.0.1 FEATURE_MAP_API_HOST=127.0.0.1 just dev-feature-map
 
 The dev API has no authentication. Once Units 3+ land file-write routes,
 any host on the local network with access to the API port can edit
-`docs/jobs/*.md` and `korri/products/*/features/*/brief.md` (within the
+`docs/jobs/*.md` and `product/apps/*/features/*/brief.md` (within the
 allowlist). Treat any network with access to this port as trusted. Use
 `FEATURE_MAP_API_HOST=127.0.0.1` to restrict the API to localhost when
 the network is not trusted.
@@ -60,7 +60,7 @@ warning and directs you to Raw mode instead of silently converting the content.
 The dev API only accepts writes to:
 
 - `docs/jobs/*.md`
-- `korri/products/*/features/*/brief.md`
+- `product/apps/*/features/*/brief.md`
 
 Any other path (including absolute paths or `..` traversal) is rejected with
 a 403. `.feature` files and the generated `feature-map.json` are read-only.

@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join, relative, sep } from "node:path"
 
 const REPO_ROOT = process.cwd()
-const SHARED_ROOT = join(REPO_ROOT, "korri", "shared")
+const PLATFORM_ROOT = join(REPO_ROOT, "product", "platform")
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx"])
 const IGNORED_PARTS = new Set([".git", ".worktrees", "node_modules", "out"])
 const LEGACY_RPC_QUERY_SCAN_EXCLUDES = new Set([
@@ -31,7 +31,7 @@ function sourceFiles(root: string): readonly string[] {
 }
 
 function importsProductCode(source: string): boolean {
-  return /(?:from\s+["'](?:@app\/|\.\.\/)*products\/|import\s*\(\s*["'](?:@app\/|\.\.\/)*products\/|from\s+["']@app\/|import\s*\(\s*["']@app\/)/.test(
+  return /(?:from\s+["'](?:@product\/apps\/|@product\/services\/|@product\/systems\/|product\/(?:apps|services|systems)\/|\.\.\/)*products\/|import\s*\(\s*["'](?:@product\/apps\/|@product\/services\/|@product\/systems\/|product\/(?:apps|services|systems)\/|\.\.\/)*products\/|from\s+["']@product\/(?:apps|services|systems)\/|import\s*\(\s*["']@product\/(?:apps|services|systems)\/)/.test(
     source,
   )
 }
@@ -50,31 +50,35 @@ function referencesLegacyRpcQuery(source: string): boolean {
 }
 
 describe("standards: import boundaries", () => {
-  it("keeps shared runtime code product-agnostic", () => {
-    const violations = sourceFiles(SHARED_ROOT)
+  it("keeps platform runtime code product-agnostic", () => {
+    const violations = sourceFiles(PLATFORM_ROOT)
       .filter(file => importsProductCode(readFileSync(file, "utf8")))
       .map(file => relative(REPO_ROOT, file))
 
     expect(violations).toEqual([])
   })
 
-  it("detects product imports in shared-source samples", () => {
-    expect(importsProductCode('import { thing } from "@app/api/thing"')).toBe(
+  it("detects product imports in platform-source samples", () => {
+    expect(
+      importsProductCode(
+        'import { thing } from "@product/apps/portal/api/thing"',
+      ),
+    ).toBe(true)
+    expect(importsProductCode('import("@product/apps/portal/api/thing")')).toBe(
       true,
     )
-    expect(importsProductCode('import("@app/api/thing")')).toBe(true)
     expect(
       importsProductCode(
         'import { thing } from "../../products/app/api/thing"',
       ),
     ).toBe(true)
     expect(
-      importsProductCode('import { thing } from "@shared/api/thing"'),
+      importsProductCode('import { thing } from "@platform/api/thing"'),
     ).toBe(false)
   })
 
   it("keeps deleted custom RPC query helpers out of runtime code", () => {
-    const roots = [join(REPO_ROOT, "korri"), join(REPO_ROOT, "tools")]
+    const roots = [join(REPO_ROOT, "product"), join(REPO_ROOT, "tools")]
     const violations = roots.flatMap(root =>
       sourceFiles(root)
         .filter(file => !LEGACY_RPC_QUERY_SCAN_EXCLUDES.has(repoRelative(file)))

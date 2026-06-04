@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import type { GameRecord } from "@shared/fixtures/games/game"
+import type { GameRecord } from "@platform/fixtures/games/game"
 import { createStaticGamePicker, gameChoiceFor } from "./game-picker"
 
 const namedGame: GameRecord = {

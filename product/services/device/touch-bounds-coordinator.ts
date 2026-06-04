@@ -1,5 +1,5 @@
-import type { MoonlightControlClient } from "@shared/stream/moonlight-control-client"
-import type { MoonlightControlTouchBounds } from "@shared/stream/moonlight-control-protocol"
+import type { MoonlightControlClient } from "@platform/stream/moonlight-control-client"
+import type { MoonlightControlTouchBounds } from "@platform/stream/moonlight-control-protocol"
 import type { CurrentStreamSurfaceGeometry } from "./game-stream-fullscreen"
 import {
   computeTouchBoundsFromGeometry,

@@ -21,7 +21,7 @@ process.env.PLAYWRIGHT_TEST_BASE_URL = portalBaseUrl
 
 export default defineConfig({
   testDir: `../../${generatedArtifactPaths.bddPlaywright}`,
-  testMatch: "korri/products/**/*.e2e.ts",
+  testMatch: "product/apps/**/*.e2e.ts",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

@@ -8,7 +8,7 @@
 // This prevents errors when react-query client tries to use Vite's glob feature
 const globMock = () => ({})
 
-import { logger } from "@shared/logger"
+import { logger } from "@platform/logger"
 
 try {
   if (typeof import.meta.glob === "undefined") {

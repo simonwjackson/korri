@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import type { GameRecord } from "@shared/fixtures/games/game"
+import type { GameRecord } from "@platform/fixtures/games/game"
 import type { StreamHostCandidate } from "./lan-stream-discovery"
 import type { RemoteStreamControlClient } from "./remote-stream-control-client"
 import { runRemoteStreamLaunchCommand } from "./remote-stream-launch"

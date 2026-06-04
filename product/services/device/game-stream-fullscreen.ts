@@ -2,7 +2,7 @@ export {
   composeGamescopeLaunchSpec,
   type GamescopeBackend,
   type GamescopeOptions,
-} from "@shared/stream/gamescope-launch-spec"
+} from "@platform/stream/gamescope-launch-spec"
 
 import type {
   SwayCommandRunner,

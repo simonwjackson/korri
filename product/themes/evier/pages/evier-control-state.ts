@@ -1,11 +1,11 @@
-import type { GamescopeScalingFilter } from "@shared/gamescope-control/gamescope-control-protocol"
-import { StreamControlSurface } from "@shared/stream-control/control-surface"
-import { readGamescopeScalingFilter } from "@shared/stream-control/state-normalizer"
+import type { GamescopeScalingFilter } from "@platform/gamescope-control/gamescope-control-protocol"
+import { StreamControlSurface } from "@platform/stream-control/control-surface"
+import { readGamescopeScalingFilter } from "@platform/stream-control/state-normalizer"
 import type {
   StreamControlAction,
   StreamControlClient,
-} from "@shared/stream-control/stream-control-client"
-import { errorMessage } from "@shared/stream-control/utils"
+} from "@platform/stream-control/stream-control-client"
+import { errorMessage } from "@platform/stream-control/utils"
 import { useCallback, useEffect, useRef, useState } from "react"
 
 const EVIER_CONTROL_DEBOUNCE_MS = 500

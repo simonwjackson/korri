@@ -4,12 +4,12 @@ import {
   type SpatialNavigationHandle,
   startSpatialNavigation,
 } from "@platform/browser/navigation/start"
+import type { LaunchController } from "@platform/library/launch-state"
+import { LaunchState } from "@platform/library/launch-state"
 import { foregroundSessionStatusLayerAtom } from "@platform/react/library/library-atoms"
 import { LibraryListStateRoot } from "@platform/react/library/library-list-state-root"
-import type { LaunchController } from "@shared/library/launch-state"
-import { LaunchState } from "@shared/library/launch-state"
-import type { ForegroundSessionGateState } from "@shared/stream/foreground-session-gate-state"
-import { ForegroundSessionStatusSource } from "@shared/stream/foreground-session-status-source"
+import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
+import { ForegroundSessionStatusSource } from "@platform/stream/foreground-session-status-source"
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react"
 import { Effect, Layer } from "effect"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"

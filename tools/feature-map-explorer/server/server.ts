@@ -14,7 +14,7 @@
  */
 
 import { serve } from "@hono/node-server"
-import { logger as appLogger } from "@shared/logger"
+import { logger as appLogger } from "@platform/logger"
 import { Hono } from "hono"
 import { featureMapRoute } from "./routes/feature-map.route"
 import { filesRoute } from "./routes/files.route"

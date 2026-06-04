@@ -9,6 +9,7 @@ import {
   sourceFiles,
 } from "./source-files"
 
+const LEGACY_KORRI_ROOT = join(REPO_ROOT, "korri")
 const LEGACY_SHARED_THEME_ROOT = join(REPO_ROOT, "korri", "shared", "themes")
 const CURRENT_THEME_ROOTS = [join(REPO_ROOT, "product", "themes")]
 
@@ -21,13 +22,12 @@ const FRAMEWORK_NEUTRAL_PLATFORM_ROOTS = [
 
 const SHIPPED_TOOLS_ALLOWLIST = new Set<string>()
 
-const CURRENT_ALIAS_PATH_INVENTORY = {
-  "@app/*": "./korri/products/app/*",
-  "@shared/*": "./korri/shared/*",
-  "@korri/*": "./korri/*",
+const FINAL_ALIAS_PATH_INVENTORY = {
   "@product/*": "./product/*",
   "@platform/*": "./product/platform/*",
 } as const
+
+const LEGACY_ALIAS_NAMES = ["@app/*", "@shared/*", "@korri/*"] as const
 
 function importSpecifiers(source: string): readonly string[] {
   const withoutComments = source
@@ -49,12 +49,12 @@ function importsThemePrivateProductInternals(
 ): boolean {
   return importSpecifiers(source).some(specifier => {
     if (
-      specifier.startsWith("@app/") ||
+      specifier.startsWith("@product/apps/portal/") ||
       specifier.startsWith("@product/apps/") ||
       specifier.startsWith("@product/services/") ||
       specifier.startsWith("@product/systems/") ||
-      specifier.startsWith("@korri/products/app/") ||
-      specifier.startsWith("@korri/deploy/") ||
+      specifier.startsWith("@product/apps/portal/") ||
+      specifier.startsWith("@product/deploy/") ||
       /^product\/(?:apps|services|systems)\//.test(specifier)
     ) {
       return true
@@ -75,17 +75,29 @@ function importsReact(source: string): boolean {
   )
 }
 
-function importsPrivateProductFromPlatform(source: string): boolean {
-  return importSpecifiers(source).some(specifier =>
-    /^(?:@app\/|@product\/(?:apps|services|systems|themes)\/|product\/(?:apps|services|systems|themes)\/|@korri\/products\/app\/)/.test(
-      specifier,
-    ),
-  )
+function importsPrivateProductFromPlatform(
+  source: string,
+  fromFile = join(REPO_ROOT, "product", "platform", "example.ts"),
+): boolean {
+  return importSpecifiers(source).some(specifier => {
+    if (
+      /^(?:@app\/|@product\/(?:apps|services|systems|themes)\/|product\/(?:apps|services|systems|themes)\/|@korri\/products\/app\/)/.test(
+        specifier,
+      )
+    ) {
+      return true
+    }
+
+    if (!specifier.startsWith(".")) return false
+
+    const resolved = repoRelative(normalize(join(dirname(fromFile), specifier)))
+    return /^product\/(?:apps|services|systems|themes)\//.test(resolved)
+  })
 }
 
 function importsVendorDirectly(
   source: string,
-  fromFile = join(REPO_ROOT, "korri", "products", "app", "example.ts"),
+  fromFile = join(REPO_ROOT, "product", "apps", "portal", "example.ts"),
 ): boolean {
   return importSpecifiers(source).some(specifier => {
     if (/^(?:@product\/vendor\/|product\/vendor\/)/.test(specifier)) {
@@ -158,6 +170,20 @@ describe("standards: product platform reorganization guardrails", () => {
     ).toBe(true)
   })
 
+  it("removes the legacy Korri source tree after product relocation", () => {
+    expect(existsSync(LEGACY_KORRI_ROOT)).toBe(false)
+    expect(existsSync(LEGACY_SHARED_THEME_ROOT)).toBe(false)
+    expect(
+      existsSync(join(REPO_ROOT, "product", "apps", "portal", "api")),
+    ).toBe(true)
+    expect(existsSync(join(REPO_ROOT, "product", "platform", "library"))).toBe(
+      true,
+    )
+    expect(
+      existsSync(join(REPO_ROOT, "product", "platform", "react", "primitives")),
+    ).toBe(true)
+  })
+
   it("keeps first-party themes out of legacy shared theme ownership", () => {
     expect(existsSync(LEGACY_SHARED_THEME_ROOT)).toBe(false)
     expect(existsSync(join(REPO_ROOT, "product", "themes", "shift"))).toBe(true)
@@ -188,7 +214,6 @@ describe("standards: product platform reorganization guardrails", () => {
 
   it("keeps runtime TypeScript from importing product vendor directly", () => {
     const violations = existingRoots([
-      join(REPO_ROOT, "korri"),
       join(REPO_ROOT, "product", "apps"),
       join(REPO_ROOT, "product", "platform"),
       join(REPO_ROOT, "product", "services"),
@@ -216,8 +241,8 @@ describe("standards: product platform reorganization guardrails", () => {
 
   it("keeps portal routes and shell from importing theme internals directly", () => {
     const violations = existingRoots([
-      join(REPO_ROOT, "product", "apps", "portal"),
-      join(REPO_ROOT, "korri", "products", "app", "routes"),
+      join(REPO_ROOT, "product", "apps", "portal", "routes"),
+      join(REPO_ROOT, "product", "apps", "portal", "themes"),
     ]).flatMap(root =>
       sourceFiles(root)
         .filter(file => importsThemeInternalsDirectly(readSource(file)))
@@ -229,7 +254,9 @@ describe("standards: product platform reorganization guardrails", () => {
 
   it("detects private product imports in theme-source samples", () => {
     expect(
-      importsThemePrivateProductInternals('import x from "@app/api"'),
+      importsThemePrivateProductInternals(
+        'import x from "@product/apps/portal/api"',
+      ),
     ).toBe(true)
     expect(
       importsThemePrivateProductInternals(
@@ -242,7 +269,7 @@ describe("standards: product platform reorganization guardrails", () => {
       ),
     ).toBe(true)
     expect(
-      importsThemePrivateProductInternals('import x from "@shared/library"'),
+      importsThemePrivateProductInternals('import x from "@platform/library"'),
     ).toBe(false)
   })
 
@@ -270,7 +297,9 @@ describe("standards: product platform reorganization guardrails", () => {
       join(REPO_ROOT, "product", "platform"),
     ]).flatMap(root =>
       sourceFiles(root)
-        .filter(file => importsPrivateProductFromPlatform(readSource(file)))
+        .filter(file =>
+          importsPrivateProductFromPlatform(readSource(file), file),
+        )
         .map(repoRelative),
     )
 
@@ -292,9 +321,11 @@ describe("standards: product platform reorganization guardrails", () => {
   })
 
   it("detects private product imports in platform-source samples", () => {
-    expect(importsPrivateProductFromPlatform('import x from "@app/api"')).toBe(
-      true,
-    )
+    expect(
+      importsPrivateProductFromPlatform(
+        'import x from "@product/apps/portal/api"',
+      ),
+    ).toBe(true)
     expect(
       importsPrivateProductFromPlatform('import x from "@product/apps/portal"'),
     ).toBe(true)
@@ -303,6 +334,12 @@ describe("standards: product platform reorganization guardrails", () => {
         'import x from "@platform/input/types"',
       ),
     ).toBe(false)
+    expect(
+      importsPrivateProductFromPlatform(
+        'import x from "../../../apps/portal/api"',
+        join(REPO_ROOT, "product", "platform", "api", "rpc", "client.ts"),
+      ),
+    ).toBe(true)
   })
 
   it("keeps shipped runtime entrypoints out of developer-only tools", () => {
@@ -315,15 +352,17 @@ describe("standards: product platform reorganization guardrails", () => {
     expect(referenced).toEqual([...SHIPPED_TOOLS_ALLOWLIST].sort())
   })
 
-  it("documents current alias path assumptions for the product reorg", () => {
+  it("uses only final public product aliases", () => {
     const tsconfig = JSON.parse(
       readFileSync(join(REPO_ROOT, "tsconfig.json"), "utf8"),
     )
     const aliases = tsconfig.compilerOptions.paths
 
-    for (const [alias, target] of Object.entries(
-      CURRENT_ALIAS_PATH_INVENTORY,
-    )) {
+    for (const alias of LEGACY_ALIAS_NAMES) {
+      expect(aliases[alias]).toBeUndefined()
+    }
+
+    for (const [alias, target] of Object.entries(FINAL_ALIAS_PATH_INVENTORY)) {
       expect(aliases[alias]).toEqual([target])
     }
   })

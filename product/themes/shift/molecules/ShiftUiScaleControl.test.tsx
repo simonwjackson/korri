@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { MAX_UI_SCALE } from "@shared/primitives/theme/ui-scale"
+import { MAX_UI_SCALE } from "@platform/react/primitives/theme/ui-scale"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { ShiftUiScaleControl } from "./ShiftUiScaleControl"
 

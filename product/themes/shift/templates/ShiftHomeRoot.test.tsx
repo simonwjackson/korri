@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { UI_SCALE_CSS_VARIABLE } from "@shared/primitives/theme/ui-scale"
+import { UI_SCALE_CSS_VARIABLE } from "@platform/react/primitives/theme/ui-scale"
 import {
   cleanup,
   fireEvent,

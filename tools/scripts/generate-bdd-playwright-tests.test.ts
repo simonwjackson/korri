@@ -13,7 +13,8 @@ import {
 const feature: ParsedFeature = {
   name: "Safe game resume",
   tags: [],
-  sourcePath: "korri/products/app/features/resume/e2e/safe-game-resume.feature",
+  sourcePath:
+    "product/apps/portal/features/resume/e2e/safe-game-resume.feature",
   scenarios: [
     {
       name: "Previous game is offered as the primary continuation action",
@@ -33,10 +34,10 @@ describe("BDD Playwright wrapper generation", () => {
   test("emits wrappers under out/generated/bdd/playwright", () => {
     expect(
       generatedWrapperPathForFeature(
-        "korri/products/app/features/resume/e2e/safe-game-resume.feature",
+        "product/apps/portal/features/resume/e2e/safe-game-resume.feature",
       ),
     ).toBe(
-      "out/generated/bdd/playwright/korri/products/app/features/resume/e2e/safe-game-resume.e2e.ts",
+      "out/generated/bdd/playwright/product/apps/portal/features/resume/e2e/safe-game-resume.e2e.ts",
     )
   })
 
@@ -57,7 +58,7 @@ describe("BDD Playwright wrapper generation", () => {
     const source = generateWrapperSource(
       feature,
       generatedPath,
-      ["korri/products/app/features/resume/e2e/safe-game-resume.steps.ts"],
+      ["product/apps/portal/features/resume/e2e/safe-game-resume.steps.ts"],
       [0],
     )
 
@@ -78,7 +79,7 @@ const demoFeature: ParsedFeature = {
   name: "Launcher overview",
   tags: [],
   sourcePath:
-    "korri/products/app/features/launcher/e2e/launcher-overview.feature",
+    "product/apps/portal/features/launcher/e2e/launcher-overview.feature",
   scenarios: [
     {
       name: "User opens the launcher and sees their library",
@@ -101,7 +102,7 @@ const demoFeature: ParsedFeature = {
 const storyboard: DemoStoryboard = {
   demo: "launcher-overview",
   sourcePath:
-    "korri/products/app/features/launcher/e2e/launcher-overview.demo.yaml",
+    "product/apps/portal/features/launcher/e2e/launcher-overview.demo.yaml",
   recording: { start: "after-step-1" },
   scenes: [
     {
@@ -125,7 +126,7 @@ describe("BDD generator Argo adapters", () => {
       scenarioIndex: 0,
       generatedFilePath: "out/generated/bdd/argo/launcher-overview.demo.ts",
       stepDefFiles: [
-        "korri/products/app/features/launcher/e2e/launcher-overview.steps.ts",
+        "product/apps/portal/features/launcher/e2e/launcher-overview.steps.ts",
       ],
       storyboard,
     })
@@ -186,7 +187,7 @@ describe("BDD generator Argo adapters", () => {
   test("rejects duplicate demo tags before generation", () => {
     const input: FeatureGenerationInput = {
       featurePath:
-        "korri/products/app/features/launcher/e2e/launcher-overview.feature",
+        "product/apps/portal/features/launcher/e2e/launcher-overview.feature",
       feature: demoFeature,
       scenarioIndices: [0],
       stepDefFiles: [],
@@ -202,14 +203,14 @@ describe("BDD generator Argo adapters", () => {
     expect(
       findUnmatchedDemoStoryboards(
         [
-          "korri/products/app/features/launcher/e2e/launcher-overview.demo.yaml",
-          "korri/products/app/features/home/e2e/stale.demo.yaml",
+          "product/apps/portal/features/launcher/e2e/launcher-overview.demo.yaml",
+          "product/apps/portal/features/home/e2e/stale.demo.yaml",
         ],
         [
-          "korri/products/app/features/launcher/e2e/launcher-overview.demo.yaml",
+          "product/apps/portal/features/launcher/e2e/launcher-overview.demo.yaml",
         ],
       ),
-    ).toEqual(["korri/products/app/features/home/e2e/stale.demo.yaml"])
+    ).toEqual(["product/apps/portal/features/home/e2e/stale.demo.yaml"])
   })
 
   test("rejects storyboard anchors that no longer match the scenario", () => {

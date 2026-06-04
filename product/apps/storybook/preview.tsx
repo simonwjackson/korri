@@ -10,7 +10,7 @@ import type { Decorator, Preview } from "@storybook/react-vite"
 import { useEffect } from "react"
 import "@fontsource-variable/geist"
 import "@fontsource-variable/nunito"
-import "@shared/primitives/theme/styles.css"
+import "@platform/react/primitives/theme/styles.css"
 import "@product/themes/shift/shift.css"
 
 // Spatial nav is global; initialize once per iframe load. HMR may re-evaluate

@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
-import { korriConfigPath, type XdgPathEnv } from "@shared/config/xdg-paths"
-import { logger } from "@shared/logger"
+import { korriConfigPath, type XdgPathEnv } from "@platform/config/xdg-paths"
+import { logger } from "@platform/logger"
 import { parse, stringify } from "yaml"
 
 /**

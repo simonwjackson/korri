@@ -4,8 +4,8 @@ import { mergeConfig } from "vite"
 const config: StorybookConfig = {
   stories: [
     "../../../product/themes/**/*.stories.@(ts|tsx|mdx)",
-    "../../../korri/shared/**/*.stories.@(ts|tsx|mdx)",
-    "../../../korri/products/**/*.stories.@(ts|tsx|mdx)",
+    "../../../product/platform/**/*.stories.@(ts|tsx|mdx)",
+    "../../../product/apps/**/*.stories.@(ts|tsx|mdx)",
   ],
   framework: {
     name: "@storybook/react-vite",
@@ -25,10 +25,6 @@ const config: StorybookConfig = {
       plugins: [tailwindcss()],
       resolve: {
         alias: {
-          "@app": new URL("../../../korri/products/app", import.meta.url)
-            .pathname,
-          "@shared": new URL("../../../korri/shared", import.meta.url).pathname,
-          "@korri": new URL("../../../korri", import.meta.url).pathname,
           "@product": new URL("../..", import.meta.url).pathname,
           "@platform": new URL("../../platform", import.meta.url).pathname,
         },

@@ -1,4 +1,4 @@
-import { games } from "@shared/fixtures/games/games"
+import { games } from "@platform/fixtures/games/games"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { ShiftLabsButton } from "../molecules/ShiftLabsButton"
 import { ShiftUiScaleControl } from "../molecules/ShiftUiScaleControl"

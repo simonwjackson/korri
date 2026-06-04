@@ -329,7 +329,7 @@ in
       # `pkgs.util-linux` is baked in (not exposed via `cfg.path`)
       # because sessiond's shell launcher hardcodes `setsid` to detach
       # the child into its own session/process group — see
-      # korri/shared/library/shell-launcher.ts (DEFAULT_SETSID_COMMAND).
+      # product/platform/library/shell-launcher.ts (DEFAULT_SETSID_COMMAND).
       # Without setsid, every shell-launched child dies with
       # `Executable not found in $PATH: "setsid"` and never reaches the
       # gamescope wrapper.

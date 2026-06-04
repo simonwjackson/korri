@@ -19,8 +19,13 @@ async function main() {
   }
 
   const routeTree = readFileSync(config.generatedRouteTree, "utf8")
-  if (!routeTree.includes("products/app/routes/+index")) {
-    throw new Error("Generated route tree no longer points at app routes.")
+  if (config.routesDirectory !== `${appRoot}/routes`) {
+    throw new Error("Router config no longer points at portal routes.")
+  }
+  if (!routeTree.includes('from "./routes/+index"')) {
+    throw new Error(
+      "Generated route tree no longer imports portal index route.",
+    )
   }
 
   console.log("Router config validation passed.")

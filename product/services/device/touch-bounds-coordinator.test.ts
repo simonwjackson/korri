@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import type { MoonlightControlClient } from "@shared/stream/moonlight-control-client"
+import type { MoonlightControlClient } from "@platform/stream/moonlight-control-client"
 import type { CurrentStreamSurfaceGeometry } from "./game-stream-fullscreen"
 import { startTouchBoundsCoordinator } from "./touch-bounds-coordinator"
 

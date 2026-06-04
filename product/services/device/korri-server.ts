@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-import { createHonoApp } from "@app/api/hono-app"
-import { serverRpcHandler } from "@app/api/server/rpc-server"
 import { createAdaptorServer } from "@hono/node-server"
-import { logger } from "@shared/logger"
+import { logger } from "@platform/logger"
+import { createHonoApp } from "@product/apps/portal/api/hono-app"
+import { serverRpcHandler } from "@product/apps/portal/api/server/rpc-server"
 import {
   advertiseStreamHost,
   type StreamAdvertisement,

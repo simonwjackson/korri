@@ -22,7 +22,7 @@ Feature gates are temporary scaffolding that protects new code until it is ready
 Gate declarations live next to the feature they protect.
 
 ```text
-korri/products/app/features/example/
+product/apps/portal/features/example/
   gate.ts
   ui/...
   api/...
@@ -34,7 +34,7 @@ A `gate.ts` file exports one gate name:
 export const gate = "example.v2" as const
 ```
 
-The registry at `korri/shared/gates/registry.ts` is generated. Regenerate with:
+The registry at `product/platform/gates/registry.ts` is generated. Regenerate with:
 
 ```bash
 just generate-gates
@@ -45,7 +45,7 @@ just generate-gates
 Use `<FeatureGate>` for release flag branching in JSX.
 
 ```tsx
-import { FeatureGate } from "@shared/gates/FeatureGate"
+import { FeatureGate } from "@platform/react/gates/FeatureGate"
 
 <FeatureGate
   gate="example.v2"

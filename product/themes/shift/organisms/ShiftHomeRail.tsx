@@ -27,10 +27,13 @@
 import {
   type GameRecord,
   getGameDisplayName,
-} from "@shared/fixtures/games/game"
-import { composeEntryKey, type EntrySourceTag } from "@shared/library/entry-key"
-import { TilegridCells } from "@shared/primitives/components/Tilegrid/components/TilegridCells"
-import { TilegridRailRoot } from "@shared/primitives/components/Tilegrid/TilegridRailRoot"
+} from "@platform/fixtures/games/game"
+import {
+  composeEntryKey,
+  type EntrySourceTag,
+} from "@platform/library/entry-key"
+import { TilegridCells } from "@platform/react/primitives/components/Tilegrid/components/TilegridCells"
+import { TilegridRailRoot } from "@platform/react/primitives/components/Tilegrid/TilegridRailRoot"
 import { useEffect } from "react"
 import { ShiftTile } from "../atoms/ShiftTile"
 import { ShiftHomeFeatureTile } from "../molecules/ShiftHomeFeatureTile"

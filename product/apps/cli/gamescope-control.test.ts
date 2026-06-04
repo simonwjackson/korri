@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { createGamescopeHelloResult } from "@shared/gamescope-control/gamescope-control-protocol"
+import { createGamescopeHelloResult } from "@platform/gamescope-control/gamescope-control-protocol"
 import { runGamescopeControlCommand } from "./gamescope-control"
 
 describe("gamescope-control cli", () => {

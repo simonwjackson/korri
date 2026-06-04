@@ -1,5 +1,5 @@
 import { hostname } from "node:os"
-import { logger } from "@shared/logger"
+import { logger } from "@platform/logger"
 import { Bonjour, type Service } from "bonjour-service"
 import {
   type BonjourLike,

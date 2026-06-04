@@ -4,7 +4,7 @@ import {
   type LaunchStartInput,
   type LaunchState,
   LaunchState as LaunchStateModel,
-} from "@shared/library/launch-state"
+} from "@platform/library/launch-state"
 import { useCallback, useMemo, useRef, useState } from "react"
 import { launchAtom } from "./library-atoms"
 

@@ -1,18 +1,15 @@
 ## Project layout
 
-- Product apps/services/platform/themes: `product/*`
-- Legacy product app domain code: `korri/products/*`
-- Shared runtime code not yet migrated: `korri/shared/*`
+- Product apps/services/platform/themes/vendor/systems: `product/*`
+- Shared runtime capabilities: `product/platform/*`
 - Repo tooling, generators, and test infrastructure: `tools/*`
 
 ## Path aliases
 
-- `@app/*` → `korri/products/app/*`
-- `@shared/*` → `korri/shared/*`
 - `@product/*` → `product/*`
 - `@platform/*` → `product/platform/*`
 
-Autonomous themes live under `product/themes/*`. They may use public platform/shared APIs, but must not import `product/apps/*`, `product/services/*`, `product/systems/*`, or `@app/*` internals.
+Autonomous themes live under `product/themes/*`. They may use public platform APIs, but must not import `product/apps/*`, `product/services/*`, `product/systems/*`, or app internals.
 
 ## RPC conventions
 
@@ -36,8 +33,8 @@ Multi RPC:
   save.rpc-handler.ts
 ```
 
-- Reuse helpers from `@shared/api/rpc/*` where possible.
-- Typed errors come from `@shared/api/rpc/errors`.
+- Reuse helpers from `@platform/api/rpc/*` where possible.
+- Typed errors come from `@platform/api/rpc/errors`.
 
 ## Feature gates
 
@@ -59,13 +56,13 @@ Multi RPC:
 ## Product documentation shape
 
 - Job docs in `docs/jobs/*.md` with `id`, `title`, `status` frontmatter.
-- Feature briefs at `korri/products/app/features/<feature>/brief.md` with `id`, `title`, `status`, `jobs` frontmatter.
-- BDD `.feature` files, flat `<name>.steps.ts` step bindings, and optional `<demo-name>.demo.yaml` storyboards colocated at `korri/products/app/features/<feature>/e2e/`.
+- Feature briefs at `product/apps/portal/features/<feature>/brief.md` with `id`, `title`, `status`, `jobs` frontmatter.
+- BDD `.feature` files, flat `<name>.steps.ts` step bindings, and optional `<demo-name>.demo.yaml` storyboards colocated at `product/apps/portal/features/<feature>/e2e/`.
 - Generated traceability index: `out/generated/feature-map/feature-map.json` via `just generate-feature-map`; validate with `just check-feature-map`.
 - Generated BDD Playwright wrappers: `out/generated/bdd/playwright/`. Generated Argo demo adapters: `out/generated/bdd/argo/`. Both read-only; regenerate with `just generate-bdd`.
 - See `tools/testing/bdd/AUTHORING.md` for the BDD authoring contract.
 
-The `tools/feature-map-explorer/` app (run with `just dev-feature-map`) is the canonical UI for inspecting and editing the map locally. Dev-only — never bundled with `korri/products/*`.
+The `tools/feature-map-explorer/` app (run with `just dev-feature-map`) is the canonical UI for inspecting and editing the map locally. Dev-only — never bundled with `product/apps/*`.
 
 ## Institutional learnings
 

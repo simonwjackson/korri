@@ -12,14 +12,14 @@
  * transition has a real origin instead of fading out of nowhere.
  */
 
-import { useInputAction } from "@platform/react/input/use-input-action"
 import {
   type GameRecord,
   getGameDisplayName,
   getGameImageUrl,
   getGameWideImageUrl,
-} from "@shared/fixtures/games/game"
-import { games } from "@shared/fixtures/games/games"
+} from "@platform/fixtures/games/game"
+import { games } from "@platform/fixtures/games/games"
+import { useInputAction } from "@platform/react/input/use-input-action"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import {
   AnimatePresence,

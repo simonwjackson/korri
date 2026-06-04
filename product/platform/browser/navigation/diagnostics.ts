@@ -1,6 +1,6 @@
 import type { InputBus } from "@platform/input/bus"
 import type { InputAction } from "@platform/input/types"
-import { createLogger } from "@shared/logger"
+import { createLogger } from "@platform/logger"
 
 const logger = createLogger("navigation")
 
@@ -12,7 +12,7 @@ export type NavigationDiagnosticsLog = (
 export interface NavigationDiagnosticsOptions {
   /** DOM target to observe for focus changes. Defaults to document. */
   readonly target?: Document
-  /** Test seam / custom sink. Defaults to @shared/logger info output. */
+  /** Test seam / custom sink. Defaults to @platform/logger info output. */
   readonly log?: NavigationDiagnosticsLog
   /**
    * Pointer movement can fire continuously over empty space. Keep it off by

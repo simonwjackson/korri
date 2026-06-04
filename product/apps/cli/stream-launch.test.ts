@@ -2,14 +2,14 @@ import { describe, expect, it } from "bun:test"
 import { chmod, mkdtemp, readFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { GameRecord } from "@shared/fixtures/games/game"
-import type { LaunchSpec } from "@shared/library/launcher"
+import type { GameRecord } from "@platform/fixtures/games/game"
+import type { LaunchSpec } from "@platform/library/launcher"
 import {
   LibraryError,
   LibrarySource,
   type LibrarySourceService,
-} from "@shared/library/library-services"
-import { LibrarySourceLayerLive } from "@shared/library/library-source-layer-live"
+} from "@platform/library/library-services"
+import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
 import { Effect } from "effect"
 import { withTempProseqlLibrary } from "../../../tools/testing/library/with-temp-proseql-library"
 import {

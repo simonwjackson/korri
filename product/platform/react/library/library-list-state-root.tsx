@@ -1,7 +1,7 @@
 import {
   type LibraryListState,
   LibraryListState as LibraryListStateModel,
-} from "@shared/library/library-list-state"
+} from "@platform/library/library-list-state"
 import type { Option } from "effect"
 import { createContext, type ReactNode, useContext } from "react"
 

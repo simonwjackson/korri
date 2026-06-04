@@ -12,8 +12,8 @@ import { dirname, join } from "node:path"
 import {
   decodeGamescopePolicy,
   type GamescopePolicy,
-} from "@shared/library/config/inheritable-fields"
-import { decodeLaunchSpec, type LaunchSpec } from "@shared/library/launcher"
+} from "@platform/library/config/inheritable-fields"
+import { decodeLaunchSpec, type LaunchSpec } from "@platform/library/launcher"
 
 export type GameStreamLaunchLifecycle = "foreground" | "session"
 

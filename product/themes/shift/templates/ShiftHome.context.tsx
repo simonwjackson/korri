@@ -21,7 +21,7 @@
  * calls `useState` and creates the Provider.
  */
 
-import type { GameRecord } from "@shared/fixtures/games/game"
+import type { GameRecord } from "@platform/fixtures/games/game"
 import { createContext, type RefObject, useContext } from "react"
 
 export interface ShiftHomeContextValue {

@@ -10,18 +10,14 @@
 		"allowImportingTsExtensions": true,
 		"lib": ["DOM", "DOM.Iterable", "ES2022"],
 		"paths": {
-			"@app/*": ["./korri/products/app/*"],
-			"@shared/*": ["./korri/shared/*"],
-			"@korri/*": ["./korri/*"],
-			"@product/*": ["./product/*"],
-			"@platform/*": ["./product/platform/*"]
+			"@platform/*": ["./product/platform/*"],
+			"@product/*": ["./product/*"]
 		},
 		"skipLibCheck": true,
 		"types": ["react", "react-dom", "node", "bun"]
 	},
 	"include": [
 		"electrobun.config.ts",
-		"korri/**/*",
 		"product/**/*",
 		"tools/**/*",
 		"scripts/**/*"

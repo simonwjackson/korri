@@ -1,8 +1,8 @@
+import type { StreamControlClient } from "@platform/stream-control/stream-control-client"
 import type {
   KorriPlatformBridge,
   KorriThemeEntrypoint,
 } from "@platform/theme/bridge"
-import type { StreamControlClient } from "@shared/stream-control/stream-control-client"
 import { createRoot } from "react-dom/client"
 import { EvierStreamControlPage } from "./pages/EvierStreamControlPage"
 

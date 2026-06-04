@@ -7,7 +7,7 @@ import type {
   LaunchResult,
   LaunchSpec,
   ManagedLaunchResult,
-} from "@shared/library/launcher"
+} from "@platform/library/launcher"
 import {
   createFileGameStreamLaunchIntentStore,
   createLaunchIntent,

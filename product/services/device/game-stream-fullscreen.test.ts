@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import type { LaunchSpec } from "@shared/library/launcher"
+import type { LaunchSpec } from "@platform/library/launcher"
 import {
   buildStreamSurfaceRepairCommands,
   composeGamescopeLaunchSpec,

@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { LaunchSpec } from "@shared/library/launcher"
+import type { LaunchSpec } from "@platform/library/launcher"
 import {
   createFileGameStreamLaunchIntentStore,
   createLaunchIntent,

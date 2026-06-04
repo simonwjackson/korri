@@ -1,8 +1,8 @@
-import type { LaunchSpec } from "@shared/library/launcher"
+import type { LaunchSpec } from "@platform/library/launcher"
 import type {
   LaunchReadyMode,
   TerminalReadinessEventType,
-} from "@shared/library/sessiond-managed-launch-protocol"
+} from "@platform/library/sessiond-managed-launch-protocol"
 import type { KorriSessiondServiceManager } from "./sessiond"
 import type {
   KorriRendererController,

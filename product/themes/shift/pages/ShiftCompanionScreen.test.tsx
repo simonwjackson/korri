@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { DualScreenSessionRoot } from "@shared/display/dual-screen/DualScreenSessionRoot"
-import { games } from "@shared/fixtures/games/games"
+import { games } from "@platform/fixtures/games/games"
+import { DualScreenSessionRoot } from "@platform/react/display/dual-screen/DualScreenSessionRoot"
 import { cleanup, render, screen } from "@testing-library/react"
 import { ShiftCompanionScreen } from "./ShiftCompanionScreen"
 

@@ -6,8 +6,8 @@ import {
   type LaunchSpec,
   launchFailureExitCode,
   type ManagedLaunchResult,
-} from "@shared/library/launcher"
-import { projectManagedLaunchStatus } from "@shared/library/sessiond-lifecycle-projections"
+} from "@platform/library/launcher"
+import { projectManagedLaunchStatus } from "@platform/library/sessiond-lifecycle-projections"
 import {
   decodeSessiondManagedLaunchStartRequest,
   decodeSessiondManagedLaunchTerminateRequest,
@@ -15,9 +15,9 @@ import {
   type SessiondManagedLaunchStartResponse,
   type SessiondManagedLaunchStatus,
   type SessiondManagedLaunchTerminateResponse,
-} from "@shared/library/sessiond-managed-launch-protocol"
-import { createShellLauncher } from "@shared/library/shell-launcher"
-import { logger as defaultLogger } from "@shared/logger"
+} from "@platform/library/sessiond-managed-launch-protocol"
+import { createShellLauncher } from "@platform/library/shell-launcher"
+import { logger as defaultLogger } from "@platform/logger"
 import { findStreamSurfaceWindows } from "./game-stream-fullscreen"
 import {
   createElectrobunController,

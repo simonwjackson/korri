@@ -14,8 +14,8 @@
  * Plan: docs/plans/2026-05-27-002-feat-foreground-session-source-machine-phase4c-plan.md (U3)
  */
 
-import type { LaunchSpec } from "@shared/library/launcher"
-import type { TerminalReadinessEventType } from "@shared/library/sessiond-managed-launch-protocol"
+import type { LaunchSpec } from "@platform/library/launcher"
+import type { TerminalReadinessEventType } from "@platform/library/sessiond-managed-launch-protocol"
 import {
   GAMESCOPE_PROCESS_NAMES,
   type ProcessInfo,

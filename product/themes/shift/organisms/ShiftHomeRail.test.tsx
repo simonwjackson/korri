@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import type { GameRecord } from "@shared/fixtures/games/game"
-import type { EntrySourceTag } from "@shared/library/entry-key"
+import type { GameRecord } from "@platform/fixtures/games/game"
+import type { EntrySourceTag } from "@platform/library/entry-key"
 import { cleanup, render } from "@testing-library/react"
 import { createRef } from "react"
 import { ShiftHomeCtx } from "../templates/ShiftHome.context"

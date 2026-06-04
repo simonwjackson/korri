@@ -3,13 +3,13 @@
 ## Layout
 
 ```
-korri/products/<product>/features/<feature>/e2e/
+product/apps/<app>/features/<feature>/e2e/
 ├── <name>.feature                  ← AUTHORED  Gherkin scenarios
 ├── <name>.steps.ts                 ← AUTHORED  feature-specific step bindings
 └── <demo-name>.demo.yaml           ← AUTHORED  demo presentation metadata
 
 out/generated/bdd/playwright/
-└── korri/products/<product>/features/<feature>/e2e/
+└── product/apps/<app>/features/<feature>/e2e/
     └── <name>.e2e.ts               ← GENERATED Playwright wrapper (do not edit)
 
 out/generated/bdd/argo/
@@ -95,7 +95,7 @@ rewriting them.
 
 ## Adding a new BDD feature
 
-1. Create `korri/products/<product>/features/<feature>/e2e/<name>.feature`.
+1. Create `product/apps/<app>/features/<feature>/e2e/<name>.feature`.
 2. Optionally add `<name>.steps.ts` for feature-specific steps.
 3. (Optional) tag a scenario with `@demo(<name>)` and add
    `<name>.demo.yaml` for narration/overlays.

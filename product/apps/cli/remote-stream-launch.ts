@@ -1,4 +1,4 @@
-import type { GameRecord } from "@shared/fixtures/games/game"
+import type { GameRecord } from "@platform/fixtures/games/game"
 import type { GamePicker } from "./game-picker"
 import {
   type DiscoverStreamHostsOptions,

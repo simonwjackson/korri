@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises"
-import { logger as defaultLogger } from "@shared/logger"
+import { logger as defaultLogger } from "@platform/logger"
 import { buildBottomKeyboardCommand } from "./bottom-keyboard"
 import { buildSwayShortcutCommand } from "./sway-actions"
 

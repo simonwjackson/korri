@@ -1,11 +1,11 @@
-import type { GamescopeScalingFilter } from "@shared/gamescope-control/gamescope-control-protocol"
+import type { GamescopeScalingFilter } from "@platform/gamescope-control/gamescope-control-protocol"
 import {
   FPS_STEPS,
   GAMESCOPE_FPS_STEPS,
   LINKED_FPS_STEPS,
   type StreamControlSurfaceState,
-} from "@shared/stream-control/control-surface"
-import type { StreamControlClient } from "@shared/stream-control/stream-control-client"
+} from "@platform/stream-control/control-surface"
+import type { StreamControlClient } from "@platform/stream-control/stream-control-client"
 import { useState } from "react"
 import {
   brightnessDeviceSpec,
@@ -33,7 +33,7 @@ import {
 export type {
   EvierStreamControlController,
   StreamControlClient,
-} from "@shared/stream-control/stream-control-client"
+} from "@platform/stream-control/stream-control-client"
 
 export function EvierStreamControlPage({
   controller,

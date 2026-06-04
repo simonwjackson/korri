@@ -1,6 +1,6 @@
 import type { AddressInfo } from "node:net"
-import { honoApp } from "@app/api/hono-app"
 import { createAdaptorServer } from "@hono/node-server"
+import { honoApp } from "@product/apps/portal/api/hono-app"
 
 /**
  * Boots a real in-process Hono server (the same `honoApp` that production

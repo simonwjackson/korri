@@ -1,5 +1,5 @@
 import { join } from "node:path"
-import { logger } from "@shared/logger"
+import { logger } from "@platform/logger"
 import { Effect, Fiber } from "effect"
 import Electrobun, {
   ApplicationMenu,

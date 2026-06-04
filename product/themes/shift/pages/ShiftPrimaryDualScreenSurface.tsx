@@ -1,9 +1,9 @@
-import { useDualScreenSession } from "@shared/display/dual-screen/DualScreenSession.context"
 import {
   type GameRecord,
   getGameDisplayName,
-} from "@shared/fixtures/games/game"
-import type { LaunchController } from "@shared/library/launch-state"
+} from "@platform/fixtures/games/game"
+import type { LaunchController } from "@platform/library/launch-state"
+import { useDualScreenSession } from "@platform/react/display/dual-screen/DualScreenSession.context"
 import { useEffect } from "react"
 import { ShiftHomeCaption } from "../molecules/ShiftHomeCaption"
 import { ShiftLaunchFailureBanner } from "../molecules/ShiftLaunchFailureBanner"

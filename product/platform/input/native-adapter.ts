@@ -1,4 +1,4 @@
-import { createLogger } from "@shared/logger"
+import { createLogger } from "@platform/logger"
 import {
   createNativeGamepadMapper,
   type NativeGamepadMapperOptions,

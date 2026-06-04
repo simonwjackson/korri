@@ -1,4 +1,4 @@
-import { logger } from "@shared/logger"
+import { logger } from "@platform/logger"
 import { fetch as bunFetch } from "bun"
 
 export interface ApiForwarderOptions {

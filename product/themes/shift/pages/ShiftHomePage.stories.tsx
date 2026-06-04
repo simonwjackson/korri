@@ -1,20 +1,20 @@
 import { useAtomSet } from "@effect/atom-react"
-import {
-  launcherLayerAtom,
-  librarySourceLayerAtom,
-} from "@platform/react/library/library-atoms"
-import { games } from "@shared/fixtures/games/games"
-import { makeInMemoryLauncherLayer } from "@shared/library/launcher-layer-memory"
+import { games } from "@platform/fixtures/games/games"
+import { makeInMemoryLauncherLayer } from "@platform/library/launcher-layer-memory"
 import {
   type Launcher,
   LibraryError,
   type LibrarySource,
-} from "@shared/library/library-services"
+} from "@platform/library/library-services"
 import {
   loadingForeverLibrarySourceLayer,
   makeFailingLibrarySourceLayer,
   makeInMemoryLibrarySourceLayer,
-} from "@shared/library/library-source-layer-memory"
+} from "@platform/library/library-source-layer-memory"
+import {
+  launcherLayerAtom,
+  librarySourceLayerAtom,
+} from "@platform/react/library/library-atoms"
 import type { Decorator, Meta, StoryObj } from "@storybook/react-vite"
 import type { Layer } from "effect"
 import { useLayoutEffect } from "react"

@@ -1,5 +1,5 @@
-import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
-import { createLibraryRepository } from "@shared/library/proseql/library-repository"
+import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
+import { createLibraryRepository } from "@platform/library/proseql/library-repository"
 import { Cause, Effect, Exit } from "effect"
 
 export type LauncherConfigValidationResult =

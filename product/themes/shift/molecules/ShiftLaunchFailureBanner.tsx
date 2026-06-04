@@ -21,7 +21,7 @@
  * for the calm motion grammar this banner inherits — no slide-in.
  */
 
-import type { LaunchFailureKind } from "@shared/library/launcher"
+import type { LaunchFailureKind } from "@platform/library/launcher"
 import { useEffect, useRef } from "react"
 
 export interface ShiftLaunchFailureBannerProps {

@@ -17,7 +17,7 @@
  *     Consumers must not re-implement focus styling with `outline`.
  */
 
-import { cn } from "@shared/primitives/lib/utils"
+import { cn } from "@platform/react/primitives/lib/utils"
 import type { ComponentPropsWithoutRef } from "react"
 
 export type ShiftTileProps = ComponentPropsWithoutRef<"button">

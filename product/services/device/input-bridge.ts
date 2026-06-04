@@ -12,7 +12,7 @@ import {
   encodeNativeInputEvent,
   type NativeInputEvent,
 } from "@platform/input/native/wire-schema"
-import { logger as defaultLogger } from "@shared/logger"
+import { logger as defaultLogger } from "@platform/logger"
 
 export interface InputBridgeEventSource extends AsyncIterable<Uint8Array> {
   close?: () => void

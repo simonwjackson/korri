@@ -5,7 +5,7 @@
  * cell so the deterministic Picsum landscape is sized realistically.
  */
 
-import { games } from "@shared/fixtures/games/games"
+import { games } from "@platform/fixtures/games/games"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { ShiftHomeFeatureTile } from "./ShiftHomeFeatureTile"
 

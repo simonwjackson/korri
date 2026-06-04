@@ -1,9 +1,9 @@
-import { useDualScreenSession } from "@shared/display/dual-screen/DualScreenSession.context"
 import {
   type GameRecord,
   getGameDisplayName,
   getGameImageUrl,
-} from "@shared/fixtures/games/game"
+} from "@platform/fixtures/games/game"
+import { useDualScreenSession } from "@platform/react/display/dual-screen/DualScreenSession.context"
 
 export interface ShiftCompanionScreenProps {
   readonly items: ReadonlyArray<GameRecord>

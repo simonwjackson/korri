@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
-import { openKorriLibraryDb } from "@shared/library/proseql/library-db"
-import { createLibraryRepository } from "@shared/library/proseql/library-repository"
+import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
+import { createLibraryRepository } from "@platform/library/proseql/library-repository"
 import { Effect } from "effect"
 import { withTempProseqlLibrary } from "./with-temp-proseql-library"
 

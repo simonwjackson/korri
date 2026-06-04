@@ -1,13 +1,13 @@
-import type { EntrySource } from "@shared/api/rpc/entry-source"
-import { makeInMemoryLauncherLayer } from "@shared/library/launcher-layer-memory"
+import type { EntrySource } from "@platform/api/rpc/entry-source"
+import { makeInMemoryLauncherLayer } from "@platform/library/launcher-layer-memory"
 import {
   Launcher,
   LibraryError,
   LibrarySource,
-} from "@shared/library/library-services"
-import { loadingForeverLibrarySourceLayer } from "@shared/library/library-source-layer-memory"
-import type { ForegroundSessionGateState } from "@shared/stream/foreground-session-gate-state"
-import { ForegroundSessionStatusSource } from "@shared/stream/foreground-session-status-source"
+} from "@platform/library/library-services"
+import { loadingForeverLibrarySourceLayer } from "@platform/library/library-source-layer-memory"
+import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
+import { ForegroundSessionStatusSource } from "@platform/stream/foreground-session-status-source"
 import { Duration, Effect, Layer } from "effect"
 import * as Atom from "effect/unstable/reactivity/Atom"
 

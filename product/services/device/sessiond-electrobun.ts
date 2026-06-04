@@ -1,7 +1,7 @@
 import { closeSync, openSync, writeSync } from "node:fs"
 import { mkdir, stat, unlink } from "node:fs/promises"
 import { dirname, join } from "node:path"
-import { korriDataPath, korriStatePath } from "@shared/config/xdg-paths"
+import { korriDataPath, korriStatePath } from "@platform/config/xdg-paths"
 import type { KorriRendererController } from "./sessiond-renderer"
 
 export interface ElectrobunLaunchConfig {

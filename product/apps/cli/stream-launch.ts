@@ -1,10 +1,10 @@
-import type { GameRecord } from "@shared/fixtures/games/game"
-import { getGameDisplayName } from "@shared/fixtures/games/game"
-import type { LaunchSpec } from "@shared/library/launcher"
+import type { GameRecord } from "@platform/fixtures/games/game"
+import { getGameDisplayName } from "@platform/fixtures/games/game"
+import type { LaunchSpec } from "@platform/library/launcher"
 import {
   LibraryError,
   type LibrarySourceService,
-} from "@shared/library/library-services"
+} from "@platform/library/library-services"
 import { Cause, Effect, Exit } from "effect"
 import {
   createLaunchIntent,

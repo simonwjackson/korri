@@ -1,21 +1,21 @@
 import { RegistryProvider } from "@effect/atom-react"
+import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
+import type { LaunchSpec } from "@platform/library/launcher"
+import {
+  Launcher,
+  LibraryError,
+  LibrarySource,
+} from "@platform/library/library-services"
 import {
   foregroundSessionStatusLayerAtom,
   launcherLayerAtom,
   librarySourceLayerAtom,
 } from "@platform/react/library/library-atoms"
+import { ForegroundSessionStatusSource } from "@platform/stream/foreground-session-status-source"
 import type {
   KorriPlatformBridge,
   KorriThemeEntrypoint,
 } from "@platform/theme/bridge"
-import type { ResolvedGameRecord } from "@shared/fixtures/games/game"
-import type { LaunchSpec } from "@shared/library/launcher"
-import {
-  Launcher,
-  LibraryError,
-  LibrarySource,
-} from "@shared/library/library-services"
-import { ForegroundSessionStatusSource } from "@shared/stream/foreground-session-status-source"
 import { Effect, Layer } from "effect"
 import { createRoot } from "react-dom/client"
 import { ShiftHomePage } from "./pages/ShiftHomePage"

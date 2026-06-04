@@ -1,7 +1,7 @@
 import {
   type LaunchState,
   LaunchState as LaunchStateModel,
-} from "@shared/library/launch-state"
+} from "@platform/library/launch-state"
 import type { Option } from "effect"
 import { createContext, type ReactNode, useContext } from "react"
 

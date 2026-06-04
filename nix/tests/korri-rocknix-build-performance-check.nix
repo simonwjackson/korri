@@ -59,9 +59,8 @@ pkgs.runCommand "korri-rocknix-build-performance-check"
     test -e ${runtimeSources.portal}/product/apps/desktop/runtime-config-shape.ts
     test -e ${runtimeSources.portal}/product/apps/portal
     test -e ${runtimeSources.portal}/product/themes
-    test -e ${runtimeSources.portal}/korri/products
-    test -e ${runtimeSources.portal}/korri/shared
     test -e ${runtimeSources.portal}/product/platform
+    test ! -e ${runtimeSources.portal}/korri
     test ! -e ${runtimeSources.portal}/product/apps/desktop/runtime-config.ts
     test ! -e ${runtimeSources.portal}/tools/testing
     test ! -e ${runtimeSources.portal}/product/apps/storybook
@@ -76,36 +75,40 @@ pkgs.runCommand "korri-rocknix-build-performance-check"
     test ! -e ${runtimeSources.desktop}/tools/testing
     test ! -e ${runtimeSources.desktop}/product/apps/storybook
 
+    test -e ${runtimeSources.inputd}/product/apps/portal
     test -e ${runtimeSources.inputd}/product/services/device
     test -e ${runtimeSources.inputd}/tools/types
-    test -e ${runtimeSources.inputd}/korri/products
     test -e ${runtimeSources.inputd}/product/platform
+    test ! -e ${runtimeSources.inputd}/korri
     test ! -e ${runtimeSources.inputd}/tools/device
     test ! -e ${runtimeSources.inputd}/tools/testing
     test ! -e ${runtimeSources.inputd}/tools/playwright
 
+    test -e ${runtimeSources.gameStream}/product/apps/portal
     test -e ${runtimeSources.gameStream}/product/services/device
-    test -e ${runtimeSources.gameStream}/korri/products
     test -e ${runtimeSources.gameStream}/product/platform
+    test ! -e ${runtimeSources.gameStream}/korri
     test ! -e ${runtimeSources.gameStream}/tools/device
     test ! -e ${runtimeSources.gameStream}/tools/http
     test ! -e ${runtimeSources.gameStream}/tools/types
     test ! -e ${runtimeSources.gameStream}/tools/testing
     test ! -e ${runtimeSources.gameStream}/tools/playwright
 
+    test -e ${runtimeSources.sessiond}/product/apps/portal
     test -e ${runtimeSources.sessiond}/product/services/device
     test -e ${runtimeSources.sessiond}/tools/library
-    test -e ${runtimeSources.sessiond}/korri/shared
     test -e ${runtimeSources.sessiond}/product/platform
+    test ! -e ${runtimeSources.sessiond}/korri
     test ! -e ${runtimeSources.sessiond}/tools/device
     test ! -e ${runtimeSources.sessiond}/tools/types
     test ! -e ${runtimeSources.sessiond}/tools/testing
     test ! -e ${runtimeSources.sessiond}/tools/playwright
 
+    test -e ${runtimeSources.server}/product/apps/portal
     test -e ${runtimeSources.server}/product/services/device
     test -e ${runtimeSources.server}/product/services/server
-    test -e ${runtimeSources.server}/korri/shared
     test -e ${runtimeSources.server}/product/platform
+    test ! -e ${runtimeSources.server}/korri
     test ! -e ${runtimeSources.server}/tools/device
     test ! -e ${runtimeSources.server}/tools/http
     test ! -e ${runtimeSources.server}/tools/types

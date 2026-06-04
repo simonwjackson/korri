@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import type { ResolvedGameRecord } from "@shared/fixtures/games/game"
+import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import { render } from "@testing-library/react"
 import { ShiftHomeFeatureTile } from "./ShiftHomeFeatureTile"
 
