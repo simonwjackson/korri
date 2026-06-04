@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { existsSync, readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
 const REPO_ROOT = resolve(import.meta.dir, "..", "..", "..")
@@ -29,8 +29,13 @@ function resolveRecipe(name: string): string {
 }
 
 describe("test-suite partitioning", () => {
-  it("does not keep the retired Nix-through-Bun test directory", () => {
-    expect(existsSync(NIX_TEST_DIR)).toBe(false)
+  it("keeps native Nix test fixtures in the tracked Nix test directory", () => {
+    const nixTestFiles = readdirSync(NIX_TEST_DIR).filter(file =>
+      file.endsWith(".nix"),
+    )
+
+    expect(nixTestFiles.length).toBeGreaterThan(1)
+    expect(nixTestFiles).toContain("korri-standard-native-check.nix")
   })
 
   it("test-unit recipe runs Bun tests without Nix-specific discovery ignores", () => {

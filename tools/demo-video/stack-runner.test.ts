@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
+import { makeOutTempDir } from "../testing/make-out-temp-dir"
 import {
   assertDemoVideoArtifactsReady,
   createDemoVideoRunPlan,
@@ -23,7 +24,7 @@ describe("demo video stack runner", () => {
   })
 
   test("explains how to regenerate when a scene manifest has no demo script", () => {
-    const tempDir = mkdtempSync(path.join(process.cwd(), "out/tmp/demo-video-"))
+    const tempDir = makeOutTempDir("demo-video-")
     try {
       const manifestPath = path.join(tempDir, "missing-script.scenes.json")
       writeFileSync(manifestPath, "[]", "utf8")
@@ -64,7 +65,7 @@ describe("demo video stack runner", () => {
   })
 
   test("supports explicit local port and host overrides", () => {
-    const tempDir = mkdtempSync(path.join(process.cwd(), "out/tmp/demo-video-"))
+    const tempDir = makeOutTempDir("demo-video-")
     try {
       writeFileSync(path.join(tempDir, "fixture.scenes.json"), "[]", "utf8")
       writeFileSync(path.join(tempDir, "fixture.demo.ts"), "// stub", "utf8")

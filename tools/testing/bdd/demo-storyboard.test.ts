@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
+import { rmSync } from "node:fs"
 import path from "node:path"
+import { makeOutTempDir } from "../make-out-temp-dir"
 import {
   isDemoSceneAnchor,
   loadDemoStoryboard,
@@ -50,7 +51,7 @@ describe("demo storyboard parsing", () => {
   })
 
   test("returns defaults when the storyboard file is absent", () => {
-    const tempDir = mkdtempSync(path.join(process.cwd(), "out/tmp/storyboard-"))
+    const tempDir = makeOutTempDir("storyboard-")
     try {
       const storyboard = loadDemoStoryboard(
         path.join(tempDir, "missing.demo.yaml"),
