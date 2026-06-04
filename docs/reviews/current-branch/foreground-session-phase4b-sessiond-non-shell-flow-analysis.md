@@ -1,6 +1,6 @@
 # Flow analysis: Phase 4B foreground/session adapter rollout (sessiond + non-shell launchers)
 
-Scope reviewed: Phase 4B of `docs/plans/2026-05-26-011-feat-foreground-session-adapter-rollout-plan.md`. Phase 4A is already in tree: `app.library.launch` is wrapped by a `ForegroundSessionHost`-owned shell adapter (`korri/products/app/api/library/local-foreground-launch-adapter.ts`), and non-shell launchers (today: `createSessionLauncher` for sessiond) return a typed unsupported managed spawn so the owner fails closed. Phase 4B must take those launchers off the fail-closed posture and make them participate in the generic foreground-session lifecycle **without** double-owning the host's foreground state.
+Scope reviewed: Phase 4B of `../../../work/.archive/01KSGS9H2ETAC371KG4XMD16K3-feat-foreground-session-adapter-rollout/plan.md`. Phase 4A is already in tree: `app.library.launch` is wrapped by a `ForegroundSessionHost`-owned shell adapter (`korri/products/app/api/library/local-foreground-launch-adapter.ts`), and non-shell launchers (today: `createSessionLauncher` for sessiond) return a typed unsupported managed spawn so the owner fails closed. Phase 4B must take those launchers off the fail-closed posture and make them participate in the generic foreground-session lifecycle **without** double-owning the host's foreground state.
 
 This review focuses on flow completeness and edge cases for the upcoming Phase 4B plan; it is not a feasibility review of any specific Phase 4B design.
 
@@ -15,7 +15,7 @@ This review focuses on flow completeness and edge cases for the upcoming Phase 4
 - The Korri-server process (which hosts `app.library.launch`) is, in the appliance/Sobo deployment, a *different* process from sessiond. Today they communicate through the sessiond HTTP API behind `x-korri-sessiond-token`.
 - `LauncherLayerRpc` (`korri/products/app/features/home/launcher-layer-rpc.ts`) only forwards `{ id }`, does not even surface `failureKind` from the wire (Phase 4A's U4 listed this file but the live code on `trunk` still drops `failureKind`). Compare `LauncherLayerBridge` which already maps `failureKind` from the bridge response. This is an existing P4A regression rather than a Phase 4B problem on its face, but Phase 4B's success criteria depend on it being fixed because the visible `session-busy` UX is otherwise lost the moment sessiond is configured.
 - The Phase 3 status snapshot adapter (`korri/deploy/desktop/foreground-session-status-snapshot.ts`) reads `foregroundSessionOwner.status()` directly. It does not yet have a path for "the owner of record is in another process" — i.e. it cannot pull state from sessiond over HTTP.
-- Other non-shell launchers in the repo today: `tools/device/game-stream-runner.ts` (Sunshine-side game-stream runner with its own `ManagedChild` shape; explicit Phase 4 deferral per the rollout plan), `packages/sunshine-korri` (transport, not a launcher), planned `packages/libretro-fake-08` (per `docs/plans/2026-05-26-010-feat-libretro-fake-08-derivation-plan.md` — uses sessiond), and any future Steam/Manual-Launch surface from `tools/scripts/steam-manual-launch`. Phase 4B explicitly scopes to "sessiond and non-shell launcher ownership"; cloud/source-machine remains Phase 4D, but any handle-contract decision Phase 4B makes will be reused by them.
+- Other non-shell launchers in the repo today: `tools/device/game-stream-runner.ts` (Sunshine-side game-stream runner with its own `ManagedChild` shape; explicit Phase 4 deferral per the rollout plan), `packages/sunshine-korri` (transport, not a launcher), planned `packages/libretro-fake-08` (per `../../../work/.archive/01KSGS9H2DHMJZGCMHX71BS9ME-feat-libretro-fake-08-derivation/plan.md` — uses sessiond), and any future Steam/Manual-Launch surface from `tools/scripts/steam-manual-launch`. Phase 4B explicitly scopes to "sessiond and non-shell launcher ownership"; cloud/source-machine remains Phase 4D, but any handle-contract decision Phase 4B makes will be reused by them.
 
 ## User flows (Phase 4B)
 
@@ -225,7 +225,7 @@ Default: poll `getKorriWindows` (via sessiond `/status.windows` or a new endpoin
 
 Default: (a) on startup, fetch sessiond status and seed the owner with the existing active session (state = `Running`, child = `{ id: sessiond.launchId }`). Document it as a single startup-reconciliation step.
 
-**I9. Non-shell launcher contract beyond sessiond.** The plan title says "non-shell launchers" but the body focuses on sessiond. The repo has a planned `packages/libretro-fake-08` (per `docs/plans/2026-05-26-010-feat-libretro-fake-08-derivation-plan.md`) that routes through sessiond, and `tools/scripts/steam-manual-launch` documented as a best-practice. The plan should define the seam name and explicit acceptance criteria so adding a future native launcher (e.g. Steam manual launch, libretro-fake-08 directly) is a straight implementation of the same `Launcher.spawn` contract, not a re-design. The seam already exists in `Launcher.spawn?` and `ManagedLaunchResult`; the question is whether Phase 4B promotes `spawn` from optional to required.
+**I9. Non-shell launcher contract beyond sessiond.** The plan title says "non-shell launchers" but the body focuses on sessiond. The repo has a planned `packages/libretro-fake-08` (per `../../../work/.archive/01KSGS9H2DHMJZGCMHX71BS9ME-feat-libretro-fake-08-derivation/plan.md`) that routes through sessiond, and `tools/scripts/steam-manual-launch` documented as a best-practice. The plan should define the seam name and explicit acceptance criteria so adding a future native launcher (e.g. Steam manual launch, libretro-fake-08 directly) is a straight implementation of the same `Launcher.spawn` contract, not a re-design. The seam already exists in `Launcher.spawn?` and `ManagedLaunchResult`; the question is whether Phase 4B promotes `spawn` from optional to required.
 
 Default: keep `spawn` optional in the type but require it from any launcher that wants to participate in the lifecycle; unsupported launchers return the existing typed `unsupported managed spawn` failure. Add a one-line "this is the contract" doc in `korri/shared/library/launcher.ts`.
 
@@ -289,9 +289,9 @@ Default: keep `spawn` optional in the type but require it from any launcher that
 
 ## Sources
 
-- Phase 4 rollout plan: `docs/plans/2026-05-26-011-feat-foreground-session-adapter-rollout-plan.md` (Phase 4A complete; Phase 4B/4C/4D described as roadmap).
+- Phase 4 rollout plan: `../../../work/.archive/01KSGS9H2ETAC371KG4XMD16K3-feat-foreground-session-adapter-rollout/plan.md` (Phase 4A complete; Phase 4B/4C/4D described as roadmap).
 - Phase 4A first-slice flow analysis: `docs/reviews/current-branch/foreground-session-phase4-first-slice-flow-analysis.md`.
-- Origin brainstorm: `docs/brainstorms/2026-05-24-002-default-gamescope-foreground-launch-policy-requirements.md`.
+- Origin brainstorm: `../../../work/01KSBMG31W82JBVJBJ5TT15MZN-feat-default-gamescope-foreground-launch/requirements.md`.
 - Generic lifecycle: `korri/shared/stream/foreground-session-lifecycle.ts`, `korri/shared/stream/foreground-session-owner.ts`.
 - Phase 4A adapter: `korri/products/app/api/library/local-foreground-launch-adapter.ts`, `korri/products/app/api/library/foreground-session-host-layer.ts`, `korri/products/app/api/library/launch.rpc-handler.ts`.
 - Sessiond today: `tools/device/sessiond.ts`, `tools/device/sessiond-state.ts`, `tools/device/sessiond-renderer.ts`, `tools/device/sessiond-launcher-client.ts`, `korri/shared/library/session-launcher.ts`.

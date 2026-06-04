@@ -27,11 +27,11 @@
 - Use existing docs/plan style instead: dated markdown under `docs/brainstorms`, `docs/plans`, `docs/solutions`, `docs/acceptance`, with frontmatter and implementation-unit sections.
 
 ### Documentation Insights
-- Required problem framing is `docs/brainstorms/2026-05-24-002-default-gamescope-foreground-launch-policy-requirements.md`.
+- Required problem framing is `../../../work/01KSBMG31W82JBVJBJ5TT15MZN-feat-default-gamescope-foreground-launch/requirements.md`.
 - Important supporting docs:
   - `docs/solutions/architecture-patterns/kiosk-foreground-app-policy-over-gamescope-overlay-2026-05-24.md`: foreground ownership belongs to the session, not Gamescope; current desktop launch bridge bypasses stronger lifecycle code.
   - `docs/briefs/2026-05-21-korri-config-cascade-brief.md`: gamescope policy rides the broad-to-specific cascade; do not replace cascade semantics.
-  - `docs/plans/2026-05-26-003-feat-moonlight-local-control-protocol-plan.md`: Moonlight local control is adapter evidence, not the abstraction; do not make Phase 1 depend on it.
+  - `../../../work/01KSGS9H268R0NGRBZ65PWDXNJ-feat-moonlight-local-control-protocol/plan.md`: Moonlight local control is adapter evidence, not the abstraction; do not make Phase 1 depend on it.
 - Testing posture: Bun unit tests with real configurable implementations, no `Mock*`/`Stub*`/`Fake*`; Fallow boundary rules in `.fallowrc.json`; formatting/lint via Biome/Fallow.
 
 ### Templates Found

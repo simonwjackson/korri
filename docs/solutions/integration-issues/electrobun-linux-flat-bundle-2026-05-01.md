@@ -161,6 +161,6 @@ Resources/build.json
 ## Related Issues
 
 - `docs/solutions/best-practices/electrobun-desktop-wrapper-loopback-2026-05-01.md` — separate but related: the loopback HTTP composition that the launched window must talk to. This bundle work is what makes that composition reachable from `nix run`.
-- `docs/plans/2026-04-30-006-feat-electrobun-nix-native-build-plan.md` — origin plan that delivered the hermetic `nix run` derivation.
+- `../../../work/.archive/01KQDTYV07RF4XA01AVGR2DBCN-feat-electrobun-nix-native-build/plan.md` — origin plan that delivered the hermetic `nix run` derivation.
 - Upstream contract: `node_modules/electrobun/dist/main.js` (launcher worker spawn path), `node_modules/electrobun/dist/api/bun/core/Updater.ts` `getLocallocalInfo`, `node_modules/electrobun/dist/api/bun/core/BuildConfig.ts` `get`.
 - External: `https://github.com/blackboardsh/electrobun` — track future releases that may surface Bun.build logs on `Bundle failed` and revisit this workaround.

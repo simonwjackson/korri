@@ -267,7 +267,7 @@ The follow-up GPU experiments showed that the next performance boundary is archi
 - `docs/solutions/integration-issues/electrobun-linux-flat-bundle-2026-05-01.md` — covers the missing `Resources/app/bun/index.js`, `version.json`, and `build.json` problem that must be fixed before runtime rendering can be debugged.
 - `docs/solutions/best-practices/electrobun-desktop-wrapper-loopback-2026-05-01.md` — explains why the desktop app serves portal assets and RPC through one loopback HTTP origin.
 - `docs/solutions/integration-issues/runtime-mask-essway-to-stop-emulationstation-relaunching-during-odin-kiosk-sessions-2026-05-03.md` — documents the reversible `essway.service` runtime-mask pattern used before launching Korri.
-- `docs/plans/2026-05-03-001-feat-odin-electrobun-build-plan.md` — original plan for the Odin Electrobun launch path; this solution documents what the implementation discovered about portable Nix, WebKitGTK, and rendering.
+- `../../../work/01KQNJ500HSCEXXJ56C0CG3858-feat-odin-electrobun-build/plan.md` — original plan for the Odin Electrobun launch path; this solution documents what the implementation discovered about portable Nix, WebKitGTK, and rendering.
 
 ## Update 2026-05-20 — perf dimension validated post-proot
 

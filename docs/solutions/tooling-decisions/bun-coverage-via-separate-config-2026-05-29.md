@@ -133,7 +133,7 @@ Ordered by `(impact × delta)`:
 ## Cross-references
 
 - backlog/task-037 - investigate-bun-coverage-with-happy-dom-preload.md (the investigation that produced this decision)
-- backlog/task-009 - sessiond-100-percent-test-coverage.md (the consumer of the baseline + recipe)
+- ../../../work/parking-lot/01KSRGFP08VSZ99ZD7MZC8QBCW-sessiond-100-percent-test-coverage.md (the consumer of the baseline + recipe)
 - `bunfig.toml` (the main dev-loop config; unchanged)
 - `bunfig.coverage.toml` (the coverage-enabled sibling)
 - `justfile` recipes `test-coverage` and `test-coverage-sessiond`

@@ -1,6 +1,6 @@
 ---
 type: coherence
-document: docs/plans/2026-05-28-001-feat-sm8550-thor-product-payload-intake-plan.md
+document: ../../../work/.archive/01KSNY2Z2N3VTA3CC9MH81QQ45-feat-sm8550-thor-product-payload-intake/plan.md
 reviewed_at: 2026-05-28
 ---
 
@@ -21,7 +21,7 @@ The plan is well-structured with clear U-ID enumerations and a valid dependency 
 
 ### P0: Forward References to Non-Existent U13 (confidence: 100)
 
-**Locations:** 
+**Locations:**
 - Key Technical Decisions, final bullet: "Device IP confirmation is a hard precondition for U13."
 - U10 (CI proof: image-only build), Files: "can be inlined into U13 acceptance"
 
@@ -29,7 +29,7 @@ The plan is well-structured with clear U-ID enumerations and a valid dependency 
 
 **Why it matters:** An implementer reading Key Technical Decisions or reviewing U10's files will see U13 referenced twice and look for it among the units, creating false confusion about unit completeness or whether a unit was omitted. This also creates ambiguity about whether U10 was meant to generate content for a separate U13 unit (e.g., a device-acceptance decision gate) or whether the U10 artifact should be folded into U12.
 
-**Recommended fix:** 
+**Recommended fix:**
 1. In Key Technical Decisions, change "Device IP confirmation is a hard precondition for U13." to "...for U12."
 2. In U10 Files, change "can be inlined into U13 acceptance" to "can be inlined into U12 acceptance".
 
@@ -41,13 +41,13 @@ The plan is well-structured with clear U-ID enumerations and a valid dependency 
 
 ### P1: GitHub Actions Matrix Variable Naming vs. Semantic "Product" (confidence: 75)
 
-**Locations:** 
+**Locations:**
 - Key Technical Decisions: "Use `strategy: matrix: device: [odin2portal, thor]`..."
 - U5 Approach: "Add `strategy: matrix: device: [odin2portal, thor]`..."
 - U5 Approach: "Replace hardcoded references with `korri-rocknix-product-payload-${{ matrix.device }}`..."
 - Throughout the plan: "product` workflow/build input" (R5, U9 Approach, U9 Files)
 
-**Inconsistency:** 
+**Inconsistency:**
 
 Requirements and other units consistently use "product" as the semantic name for the Korri/nix-on-rocks selector:
 - R5: "an explicit `product` workflow/build input selects which one is consumed"

@@ -29,15 +29,15 @@
 
 ### Architecture & Structure
 
-- **Canonical requirement source for this task:** `docs/brainstorms/2026-05-24-001-live-usb-persistence-modes-requirements.md`.
+- **Canonical requirement source for this task:** `../../../work/.archive/01KSBMG31TA7ZG64667DM6SRQ3-feat-live-usb-product-developer-persistence/requirements.md`.
   - Requires two modes: default **product** allowlist mode and explicit **developer/debug** broad-persistence mode.
   - Both modes must persist only to approved same-stick USB persistence and keep the system image locked.
   - Product allowlist includes Korri/Moonlight, network setup, input/device setup, stable machine identity, and useful diagnostics/logs.
   - Debug mode must be explicit via boot menu or kernel arg and visibly distinguishable.
 - **Existing live USB design docs to preserve:**
   - `docs/deployment/korri-images.md` is the operator-facing canonical guide for product systems/images. It already documents `KORRI-PERSIST`, same-stick resolver behavior, tmpfs fallback marker, QEMU validation tiers, and physical NUC acceptance.
-  - `docs/plans/2026-05-23-001-feat-x86-live-usb-kiosk-plan.md` is the completed foundational plan. Important decisions: live ISO first, same-stick persistence, no generic-label-only mount, persist Korri/Moonlight client state, no special discovery behavior, moonlight-embedded appliance path.
-  - `docs/plans/2026-05-23-002-feat-live-usb-validation-surfaces-plan.md` is the completed validation plan. It establishes the split between packages/checks/apps and warns not to overclaim VM/QEMU coverage.
+  - `../../../work/.archive/01KS923C1JWK7FJAB54SSQJ350-feat-x86-live-usb-kiosk/plan.md` is the completed foundational plan. Important decisions: live ISO first, same-stick persistence, no generic-label-only mount, persist Korri/Moonlight client state, no special discovery behavior, moonlight-embedded appliance path.
+  - `../../../work/.archive/01KS923C1K2WWT7JRTJA2HPPBX-feat-live-usb-validation-surfaces/plan.md` is the completed validation plan. It establishes the split between packages/checks/apps and warns not to overclaim VM/QEMU coverage.
 - **NixOS composition boundary:**
   - `nix/images/common.nix` defines product composition helpers: `mkHeadlessSystem`, `mkKioskSystem`, `mkLiveUsbKioskRuntimeSystem`, `mkLiveUsbKioskSystem`, and matching module-list helpers.
   - `nix/images/live-usb.nix` should stay ISO-media-specific.

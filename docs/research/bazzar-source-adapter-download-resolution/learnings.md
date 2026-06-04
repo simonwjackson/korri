@@ -1,12 +1,12 @@
 # Institutional Learnings for Bazzar Source Adapter and Download Resolution Plan
 
-**Origin doc:** `docs/brainstorms/2026-06-01-001-bazzar-source-adapter-download-resolution-requirements.md`
+**Origin doc:** `../../../work/01KT5CF934S7BZE95JHEHBSNBE-bazzar-monorepo-migration-korri-cli-acquisition/requirements.md`
 
 ---
 
 ## 1. LibrarySource boundary is strict — external discovery must not flow through it
 
-**File:** `docs/solutions/best-practices/product-owned-composition-keeps-shared-layers-reusable-2026-05-03.md`  
+**File:** `docs/solutions/best-practices/product-owned-composition-keeps-shared-layers-reusable-2026-05-03.md`
 **Type:** `best_practice`
 
 Korri has a hard-learned rule: anything that *selects* a product's game catalog, handlers, or live adapters is **product-owned**, even when it looks like infrastructure. The `LibrarySource` seam means "known playable library content." Bazzar's external discovery results must not enter this seam merely because they were searched or resolved — only a later import/acquisition flow (which writes Korri-owned ProseQL YAML) may create a `LibrarySource`-visible entry.
@@ -17,7 +17,7 @@ Korri has a hard-learned rule: anything that *selects* a product's game catalog,
 
 ## 2. External sources are snapshot importers, not live read paths
 
-**File:** `docs/solutions/best-practices/proseql-canonical-library-with-derived-yaml-ids-2026-05-06.md`  
+**File:** `docs/solutions/best-practices/proseql-canonical-library-with-derived-yaml-ids-2026-05-06.md`
 **Type:** `best_practice`
 
 The established Korri pattern for external data sources (ROCKNIX, etc.) is:
@@ -34,7 +34,7 @@ The external source is parsed once and transformed into Korri-owned persistent r
 
 ## 3. Temporary/external adapters must be deletable — make the boundary explicit
 
-**File:** `docs/solutions/best-practices/temporary-rocknix-sidecar-media-instead-of-es-gamelist-edits-2026-05-03.md`  
+**File:** `docs/solutions/best-practices/temporary-rocknix-sidecar-media-instead-of-es-gamelist-edits-2026-05-03.md`
 **Type:** `best_practice`
 
 When a temporary external adapter is introduced (like the ROCKNIX sidecar), Korri convention is:
@@ -49,7 +49,7 @@ When a temporary external adapter is introduced (like the ROCKNIX sidecar), Korr
 
 ## 4. Real implementations over mocks — adapters need real HTTP and public-domain probes
 
-**File:** `docs/solutions/best-practices/prefer-real-implementations-over-mocks-2026-05-02.md`  
+**File:** `docs/solutions/best-practices/prefer-real-implementations-over-mocks-2026-05-02.md`
 **Type:** `best_practice`
 
 Korri's test posture: real implementations with configurable behavior, never `Stub*`/`Mock*`/`Fake*` doubles. Tests exercise real seams with controlled inputs. For adapters that hit external sources, the validated approach is:
@@ -64,8 +64,8 @@ Korri's test posture: real implementations with configurable behavior, never `St
 
 ## 5. Typed exit codes and discriminated result shapes are the CLI contract
 
-**File:** `tools/cli/stream-launch.ts` (examined directly)  
-**File:** `korri/shared/library/launcher.ts` (examined directly)  
+**File:** `tools/cli/stream-launch.ts` (examined directly)
+**File:** `korri/shared/library/launcher.ts` (examined directly)
 **Type:** observed pattern
 
 Korri CLI tools produce typed discriminated-union results internally (`StreamLaunchPrepareResult`, `LaunchResult`) and map them to specific numeric exit codes (`StreamLaunchFailureCategory → exitCode`). The caller (Korri CLI) never has to parse free-form error strings to know what failed.
@@ -89,7 +89,7 @@ function exitCodeForFailure(category: StreamLaunchFailureCategory): number {
 
 ## 6. Korri CLI uses Effect `unstable/cli`, not Commander
 
-**File:** `tools/cli/korri-cli.ts` (examined directly)  
+**File:** `tools/cli/korri-cli.ts` (examined directly)
 **Type:** observed pattern
 
 ```ts
@@ -109,7 +109,7 @@ Subcommands are composed with `Command.withSubcommands`. The existing `korri pla
 
 ## 7. Bun coverage needs a separate config file; `--coverage` CLI flag is silently ignored without `bunfig` opt-in
 
-**File:** `docs/solutions/tooling-decisions/bun-coverage-via-separate-config-2026-05-29.md`  
+**File:** `docs/solutions/tooling-decisions/bun-coverage-via-separate-config-2026-05-29.md`
 **Type:** `tooling_decision`
 
 In Bun 1.3.x, `bun test --coverage` is silently ignored when `bunfig.toml` contains `coverage = false`. Coverage only activates when `coverage = true` is set in the bunfig. The established pattern is a separate `bunfig.coverage.toml` with `coverage = true`, invoked via `bun --config=bunfig.coverage.toml test [paths...]`.
@@ -120,7 +120,7 @@ In Bun 1.3.x, `bun test --coverage` is silently ignored when `bunfig.toml` conta
 
 ## 8. Nix flake nixpkgs alignment prevents aarch64 cache splits when Bazzar is consumed downstream
 
-**File:** `docs/solutions/tooling-decisions/align-flake-nixpkgs-to-downstream-pin-for-cache-coherence-2026-05-27.md`  
+**File:** `docs/solutions/tooling-decisions/align-flake-nixpkgs-to-downstream-pin-for-cache-coherence-2026-05-27.md`
 **Type:** `tooling_decision` (severity: high)
 
 When Bazzar's Nix flake is eventually consumed by Korri's flake, a nixpkgs channel mismatch will cause source builds on aarch64 for packages like `nodejs`/`bun` that exist in cache only at the downstream consumer's pinned revision. The fix is aligning `inputs.nixpkgs.url` to match the downstream consumer (Korri's `nixos-25.11` pin).
@@ -131,7 +131,7 @@ When Bazzar's Nix flake is eventually consumed by Korri's flake, a nixpkgs chann
 
 ## 9. The Bazzar/Korri CLI handoff should use a stable pinned executable, not a live `npx`/`bun x` path
 
-**File:** `docs/solutions/best-practices/korri-api-on-aarch64-handheld-via-bun-bundle-2026-05-27.md`  
+**File:** `docs/solutions/best-practices/korri-api-on-aarch64-handheld-via-bun-bundle-2026-05-27.md`
 **Type:** `best_practice`
 
 Korri's pattern for deploying Bun-based tools to constrained devices is a single-file `bun build --target=bun` bundle. This avoids shipping `node_modules`, uses a deterministic artifact, and enables pinning via store path or release URL. Three `--external` flags handle library quirks (`jsonc-parser`, `pino-pretty`, `thread-stream`) and `--define process.env.NODE_ENV='"production"'` enables dead-code elimination.
@@ -142,7 +142,7 @@ Korri's pattern for deploying Bun-based tools to constrained devices is a single
 
 ## 10. Constrain LLMs to classification, not database writes — applicable to game import pipeline
 
-**File:** `docs/solutions/design-patterns/constrained-llm-entrypoint-classification-2026-05-24.md`  
+**File:** `docs/solutions/design-patterns/constrained-llm-entrypoint-classification-2026-05-24.md`
 **Type:** `design_pattern`
 
 If Bazzar's download resolution eventually leads to a game archive import pipeline that uses LLM assistance (for archive layout classification), the established pattern is:
@@ -159,7 +159,7 @@ The model should rank candidates only. The deterministic writer owns YAML constr
 
 ## 11. Validation harness for external contracts: the "stream runner validation contract" pattern
 
-**File:** `docs/solutions/workflow-issues/generic-game-stream-runner-validation-contract-2026-05-19.md`  
+**File:** `docs/solutions/workflow-issues/generic-game-stream-runner-validation-contract-2026-05-19.md`
 **Type:** `workflow_issue`
 
 Korri's existing external contract validation approach (for the Sunshine/Moonlight stream runner) involves:
@@ -174,12 +174,12 @@ Korri's existing external contract validation approach (for the Sunshine/Moonlig
 
 ## 12. WoWROMs download resolution requires a timed JS/ajax handoff — an interstitial, not a direct archive
 
-**Source:** Live smoke test performed in this session (Fuji `~/code/scripts/bazzar`)  
+**Source:** Live smoke test performed in this session (Fuji `~/code/scripts/bazzar`)
 **Type:** observed defect
 
 During download validation, WoWROMs' plugin returned a `/download-<slug>/id.html` URL. The actual file download requires:
 1. POST to `/en/emulators-roms/download/<id>/<title>?k=<timestamp>&t=<md5(timestamp)>` (the `getKey()`/`getToken()` JS functions)
-2. Parse the JSON response `{"s":true,"link":"https://filesdw.wowroms.com/..."}` 
+2. Parse the JSON response `{"s":true,"link":"https://filesdw.wowroms.com/..."}`
 3. POST to the resolved link with the form body `emuid=<id>&id=<id>&file=<filename>`
 
 The current Bazzar `wowroms.mjs` plugin does not fully implement this sequence. It falls through to a URL construction fallback that returns an HTML page, not an archive.
@@ -190,7 +190,7 @@ The current Bazzar `wowroms.mjs` plugin does not fully implement this sequence. 
 
 ## 13. SteamGridDB hardcoded API key is in-source, fallback mock masks failures
 
-**Source:** Live inspection of `fuji:~/code/scripts/bazzar/shared/core/src/plugins/steamgriddb.mjs`  
+**Source:** Live inspection of `fuji:~/code/scripts/bazzar/shared/core/src/plugins/steamgriddb.mjs`
 **Type:** observed defect (severity: medium for Korri trust posture)
 
 The `steamgriddb.mjs` plugin hardcodes an API key in source (`Bearer 5e2b3e6fd79e9a7183cbd5e96745ba80`) which is currently rejected with `401 Invalid API key`. On auth failure, the plugin falls into a mock-data fallback that returns a synthesized game record, making the source appear healthy when it is not.

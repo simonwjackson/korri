@@ -277,7 +277,7 @@ Roots accept `getViewTransitionName={(item) => ...}` and cells apply the returne
 
 - `~/.pi/packages/react/skills/react/SKILL.md` — the in-repo React skill that codifies compound components, Provider-driven data strategy, and the no-boolean-controls-subtree rule. The Tilegrid pattern is a textbook application.
 - `docs/solutions/best-practices/decoupled-spatial-navigation-2026-05-01.md` — geometric LRUD focus engine that makes CSS dense packing safe for spatial nav.
-- `docs/brainstorms/2026-04-30-grid-primitive-consolidation-requirements.md` — origin requirements doc.
-- `docs/plans/2026-04-30-005-refactor-tilegrid-primitive-consolidation-plan.md` — implementation plan with all six units.
-- `docs/plans/2026-04-30-007-feat-tilegrid-animation-seams-plan.md` — follow-up plan that added `renderCell`, Root `asChild`, and `getViewTransitionName` animation seams.
+- `../../../work/01KQDTYV06Q3H2P47D3V4WR6K5-refactor-tilegrid-primitive-consolidation/requirements.md` — origin requirements doc.
+- `../../../work/01KQDTYV06Q3H2P47D3V4WR6K5-refactor-tilegrid-primitive-consolidation/plan.md` — implementation plan with all six units.
+- `../../../work/01KQDTYV08QNKR0WBPY8BR31CC-feat-tilegrid-animation-seams/plan.md` — follow-up plan that added `renderCell`, Root `asChild`, and `getViewTransitionName` animation seams.
 - Tilegrid file family: `korri/shared/primitives/components/Tilegrid/`

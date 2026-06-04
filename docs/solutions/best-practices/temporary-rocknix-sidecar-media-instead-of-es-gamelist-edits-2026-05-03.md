@@ -141,7 +141,7 @@ and by confirming `app.library.list` returned Mario Kart Wii with the sidecar me
 
 ## Related
 
-- `docs/brainstorms/2026-05-02-personal-mvp-scope-requirements.md` — defines ROCKNIX adapter scope and the "wrap, don't extend ROCKNIX" discipline.
-- `docs/plans/2026-05-02-001-feat-personal-mvp-rocknix-launch-plan.md` — implementation plan for the ROCKNIX `LibrarySource` and launch seams.
+- `../../../work/01KQJZR90GHVYQ169G3QWN3G5T-feat-personal-mvp-rocknix-launch/requirements.md` — defines ROCKNIX adapter scope and the "wrap, don't extend ROCKNIX" discipline.
+- `../../../work/01KQJZR90GHVYQ169G3QWN3G5T-feat-personal-mvp-rocknix-launch/plan.md` — implementation plan for the ROCKNIX `LibrarySource` and launch seams.
 - `docs/solutions/best-practices/prefer-real-implementations-over-mocks-2026-05-02.md` — tests should exercise the real filesystem shape rather than mocking the adapter.
 - `docs/solutions/integration-issues/2026-05-02-bdd-fixture-deferred.md` — related warning that rewriting `gamelist.xml` is fixture infrastructure work, not a casual runtime shortcut.

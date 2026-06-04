@@ -57,7 +57,7 @@ The two rejection paths (local owner busy vs sessiond busy) also collapsed to in
 - Every launch with sessiond configured now performs three loopback HTTP round-trips: the owner's preflight `GET /managed-launch/status`, the session-launcher's internal `GET /managed-launch/status`, and the spawn `POST /managed-launch`. Desktop-class latency is sub-50 ms total; ARM device worst-case under gaming load is validated on Sobo before the plan is declared verified.
 - A token-rejected (HTTP 401) sessiond response preserves the existing `failureKind: 'host-control-disabled'` / exit-code 126 contract from `session-launcher.ts`. The new `HostUnavailable._tag` is independent of the wire failureKind so back-compat callers continue to work.
 - `buildServerStatusEffect` includes `sessiondUnavailable: true` for both network-unreachable and token-rejected probe results, preserving the existing operator monitoring signal.
-- **SEC-003 redaction at the status seam (task-036).** `sessiond.failureReason` is sourced from arbitrary `error.message` strings inside sessiond's restore path, then forwarded onto the unauthenticated-on-LAN `app.server.status` wire. The status handler is the bounding seam: `redactSessiondFailureReason` strips absolute Unix path-shaped substrings and `file://` URLs (replaced with `<path>`) and clamps the result to 256 chars with a trailing `…`. Short, path-free strings reach operators verbatim so the diagnostic value is preserved. If a future deployment shape ever authenticates `/api/rpc` (see `backlog/task-004` and `backlog/task-008`), the policy can flip from "redact" to "include and authenticate" without changing the wire schema.
+- **SEC-003 redaction at the status seam (task-036).** `sessiond.failureReason` is sourced from arbitrary `error.message` strings inside sessiond's restore path, then forwarded onto the unauthenticated-on-LAN `app.server.status` wire. The status handler is the bounding seam: `redactSessiondFailureReason` strips absolute Unix path-shaped substrings and `file://` URLs (replaced with `<path>`) and clamps the result to 256 chars with a trailing `…`. Short, path-free strings reach operators verbatim so the diagnostic value is preserved. If a future deployment shape ever authenticates `/api/rpc` (see `../../../work/parking-lot/01KSRGFP03RFZQGFSS6FJ1FCTJ-stop-running-as-root` and `../../../work/parking-lot/01KSRGFP074RDRTVJ584FHN90A-multi-user-support`), the policy can flip from "redact" to "include and authenticate" without changing the wire schema.
 
 ## What this is NOT
 
@@ -68,12 +68,12 @@ The two rejection paths (local owner busy vs sessiond busy) also collapsed to in
 
 ## Cross-references
 
-- **Origin brainstorm:** `docs/brainstorms/2026-05-24-002-default-gamescope-foreground-launch-policy-requirements.md`
+- **Origin brainstorm:** `../../../work/01KSBMG31W82JBVJBJ5TT15MZN-feat-default-gamescope-foreground-launch/requirements.md`
 - **Predecessor plans:**
-  - `docs/plans/2026-05-26-006-feat-foreground-session-lifecycle-phase1-plan.md` (generic owner contract)
-  - `docs/plans/2026-05-26-012-feat-sessiond-managed-lifecycle-events-plan.md` (sessiond as managed adapter; `app.server.status` proxy boundary)
-  - `docs/plans/2026-05-27-003-feat-sessiond-session-lifecycle-unification-plan.md` (lifecycle-session intent routing)
-- **This plan:** `docs/plans/2026-05-29-004-refactor-sessiond-canonical-lifecycle-source-plan.md`
+  - `../../../work/.archive/01KSGS9H29WESM50SDTRMQVWW8-feat-foreground-session-lifecycle-phase1/plan.md` (generic owner contract)
+  - `../../../work/.archive/01KSGS9H2F79GQCPRE18HVNACE-feat-sessiond-managed-lifecycle-events/plan.md` (sessiond as managed adapter; `app.server.status` proxy boundary)
+  - `../../../work/.archive/01KSKBP82J0WJ1JWWK0XAVB6HB-feat-sessiond-session-lifecycle-unification/plan.md` (lifecycle-session intent routing)
+- **This plan:** `../../../work/01KSRGFP2SFJ2K4Z1Y5QVNCQ10-refactor-sessiond-canonical-lifecycle-source/plan.md`
 - **Related decisions:**
   - `docs/solutions/architecture-patterns/kiosk-renderer-ownership-by-sessiond-2026-05-27.md` (single-owner invariant for the renderer process)
   - `docs/solutions/architecture-patterns/kiosk-foreground-app-policy-over-gamescope-overlay-2026-05-24.md` (session owns focus/fullscreen; Gamescope is an adapter)

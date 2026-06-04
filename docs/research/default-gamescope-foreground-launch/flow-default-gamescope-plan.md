@@ -1,6 +1,6 @@
 # Flow and edge-case analysis: default-on Gamescope foreground launch policy
 
-Origin: `docs/brainstorms/2026-05-24-002-default-gamescope-foreground-launch-policy-requirements.md`
+Origin: `../../../work/01KSBMG31W82JBVJBJ5TT15MZN-feat-default-gamescope-foreground-launch/requirements.md`
 
 ## Codebase context used
 

@@ -1,7 +1,7 @@
 # Scope review: live USB Product/Developer persistence plan
 
-Plan reviewed: `docs/plans/2026-05-24-006-feat-live-usb-product-developer-persistence-plan.md`  
-Origin: `docs/brainstorms/2026-05-24-001-live-usb-persistence-modes-requirements.md`  
+Plan reviewed: `../../../work/.archive/01KSBMG31TA7ZG64667DM6SRQ3-feat-live-usb-product-developer-persistence/plan.md`
+Origin: `../../../work/.archive/01KSBMG31TA7ZG64667DM6SRQ3-feat-live-usb-product-developer-persistence/requirements.md`
 Review lens: scope alignment, YAGNI, implementation-time abstractions, overreach.
 
 ## Existing-system read

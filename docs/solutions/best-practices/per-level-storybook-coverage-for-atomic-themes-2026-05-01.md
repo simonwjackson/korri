@@ -28,11 +28,11 @@ tags:
 
 The Shift home surface graduated from a single 872-line story file (`HomeSunlit.stories.tsx`) into a full atomic-design hierarchy under `korri/shared/themes/shift/`: 5 atoms, 9 molecules, 4 organisms, a template Root, and a page. The decomposition plan specified output files for every component but only listed **one** Storybook story — at the page level (`ShiftHomePage.stories.tsx`).
 
-After the plan shipped, a quick "did you do a full decomposition?" question surfaced the gap: the structural decomposition was complete, but per-level review surfaces were missing. Atoms, molecules, organisms, and the template Root had no isolated stories. A follow-up plan (`docs/plans/2026-05-01-004-feat-shift-storybook-coverage-plan.md`) was needed to add 15 more stories across every level.
+After the plan shipped, a quick "did you do a full decomposition?" question surfaced the gap: the structural decomposition was complete, but per-level review surfaces were missing. Atoms, molecules, organisms, and the template Root had no isolated stories. A follow-up plan (`../../../work/01KQGDBJ0F0YT5E966YWP2TK44-feat-shift-storybook-coverage/plan.md`) was needed to add 15 more stories across every level.
 
 The miss was a planning omission, not an implementation oversight. The plan's `Output Structure` listed every `.tsx` and explicitly named the page story, so the implementation faithfully produced exactly what was specified. The cost showed up after the fact: a follow-up plan, a separate review cycle, and a second commit series instead of one cohesive decomposition.
 
-The earlier (now-dropped) Shift port plan from `2026-04-29-001-feat-shift-theme-atomic-design-plan.md` had stories at every level. That signal got lost between plans.
+The earlier (now-dropped) Shift port plan from `../../../work/01KQB8J400TGS1KZJTDXHWY2Z3-feat-shift-theme-atomic-design/plan.md` had stories at every level. That signal got lost between plans.
 
 ## Guidance
 
@@ -287,6 +287,6 @@ This routes the callback through Storybook's actions panel without adding a depe
 - `docs/solutions/best-practices/control-driven-storybook-coverage-for-combinatorial-components-2026-05-01.md` — the rule for collapsing axis multiplication into one Playground story (referenced in the Guidance section above).
 - `docs/solutions/ui-bugs/inset-outline-clipped-by-overflow-hidden-2026-05-01.md` — the regression class that the `ShiftTile` atom story exists to catch.
 - `docs/solutions/best-practices/decoupled-spatial-navigation-2026-05-01.md` — Storybook's `preview.tsx` already initializes spatial navigation, so focus-sensitive stories work without per-story setup.
-- `docs/plans/2026-05-01-003-feat-shift-atomic-theme-plan.md` — the original decomposition plan that missed the per-level coverage decisions.
-- `docs/plans/2026-05-01-004-feat-shift-storybook-coverage-plan.md` — the follow-up plan that filled the gap, and the canonical example of the rubric in action.
-- `docs/plans/2026-04-29-001-feat-shift-theme-atomic-design-plan.md` — the dropped earlier port plan that did include per-level stories. Lost signal that this learning recovers.
+- `../../../work/01KQGDBJ0EX3F69DPBQPFWZPHT-feat-shift-atomic-theme/plan.md` — the original decomposition plan that missed the per-level coverage decisions.
+- `../../../work/01KQGDBJ0F0YT5E966YWP2TK44-feat-shift-storybook-coverage/plan.md` — the follow-up plan that filled the gap, and the canonical example of the rubric in action.
+- `../../../work/01KQB8J400TGS1KZJTDXHWY2Z3-feat-shift-theme-atomic-design/plan.md` — the dropped earlier port plan that did include per-level stories. Lost signal that this learning recovers.

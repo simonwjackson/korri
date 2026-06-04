@@ -1,7 +1,7 @@
 # Flow analysis: live USB persistence modes
 
 Date: 2026-05-24
-Spec reviewed: `docs/brainstorms/2026-05-24-001-live-usb-persistence-modes-requirements.md`
+Spec reviewed: `../../../work/.archive/01KSBMG31TA7ZG64667DM6SRQ3-feat-live-usb-product-developer-persistence/requirements.md`
 
 ## Codebase grounding
 

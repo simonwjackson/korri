@@ -191,8 +191,8 @@ On Thor, the deployment was validated by re-importing ROCKNIX into `/storage/kor
 
 ## Related
 
-- `docs/plans/2026-05-06-001-feat-proseql-library-foundation-plan.md` — implementation plan for replacing the runtime ROCKNIX library dependency with ProseQL.
-- `docs/brainstorms/2026-05-02-personal-mvp-scope-requirements.md` — original seam design: wrap ROCKNIX temporarily and swap to ProseQL when available.
+- `../../../work/01KQX9B50YSG7549NJKEP761MY-feat-proseql-library-foundation/plan.md` — implementation plan for replacing the runtime ROCKNIX library dependency with ProseQL.
+- `../../../work/01KQJZR90GHVYQ169G3QWN3G5T-feat-personal-mvp-rocknix-launch/requirements.md` — original seam design: wrap ROCKNIX temporarily and swap to ProseQL when available.
 - `docs/solutions/best-practices/temporary-rocknix-sidecar-media-instead-of-es-gamelist-edits-2026-05-03.md` — related ownership rule for keeping temporary ROCKNIX media conventions Korri-owned and deletable.
 - `docs/solutions/best-practices/prefer-real-implementations-over-mocks-2026-05-02.md` — reinforces testing ProseQL/importer behavior with real temp files and real RPC handlers.
 - `docs/solutions/integration-issues/one-command-odin-electrobun-deploy-needs-device-nix-and-session-env-2026-05-06.md` — Odin deploy validation context; device convergence must prove the running session sees the seeded data.

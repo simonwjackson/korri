@@ -10,14 +10,14 @@ jobs:
 
 ---
 
-**Source job**: `docs/jobs/safe-game-resume.md`  
+**Source job**: `docs/jobs/safe-game-resume.md`
 **BDD spec**: `product/apps/portal/features/resume/e2e/safe-game-resume.feature`
 
 ---
 
 ## MVP scope (personal device only)
 
-For the personal MVP defined in `docs/brainstorms/2026-05-02-personal-mvp-scope-requirements.md`,
+For the personal MVP defined in `../../../../../work/01KQJZR90GHVYQ169G3QWN3G5T-feat-personal-mvp-rocknix-launch/requirements.md`,
 this brief is implemented end-to-end against a single ROCKNIX device:
 
 - **SGR-R6** — implemented. The launch command is `runemu.sh` (resolved

@@ -171,5 +171,5 @@ That is the entire test double for "launching a game." A real `ShellLauncher` ru
 ## Related
 
 - `docs/solutions/best-practices/electrobun-desktop-wrapper-loopback-2026-05-01.md` — same Hono `/api/rpc` semantics in dev and desktop, which is what makes "real in-process server" testing trivially feasible.
-- `docs/brainstorms/2026-05-02-personal-mvp-scope-requirements.md` — the brainstorm that prompted the testing-strategy decision.
-- `docs/plans/2026-05-02-001-feat-personal-mvp-rocknix-launch-plan.md` — the plan whose Testing Strategy section codifies this posture for the personal MVP work.
+- `../../../work/01KQJZR90GHVYQ169G3QWN3G5T-feat-personal-mvp-rocknix-launch/requirements.md` — the brainstorm that prompted the testing-strategy decision.
+- `../../../work/01KQJZR90GHVYQ169G3QWN3G5T-feat-personal-mvp-rocknix-launch/plan.md` — the plan whose Testing Strategy section codifies this posture for the personal MVP work.

@@ -30,7 +30,7 @@ Existing constraints and decisions:
 
 Relevant docs:
 
-- `docs/plans/2026-06-03-001-feat-evier-full-control-surface-plan.md`
+- `../../work/01KT5CF931F9RBJSWYAHBGBYJX-feat-evier-full-control-surface/plan.md`
 - `docs/solutions/architecture-patterns/gamescope-runtime-control-contract-2026-06-02.md`
 - `docs/solutions/best-practices/react-state-components-over-result-render-props-for-effect-atoms-2026-05-03.md`
 - `docs/solutions/architecture-patterns/physical-host-foreground-lifecycle-truth-is-sessiond-2026-05-29.md`

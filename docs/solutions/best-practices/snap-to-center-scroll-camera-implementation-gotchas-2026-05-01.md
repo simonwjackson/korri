@@ -310,5 +310,5 @@ function tick() {
 - `korri/shared/navigation/center-scroll.ts` — the centering util.
 - `korri/shared/navigation/focus-engine.ts` — the directional-focus seam.
 - `korri/shared/primitives/components/Tilegrid/TilegridRailRoot.tsx` and `TilegridScrollRoot.tsx` — the opt-in surfaces.
-- `docs/plans/2026-05-01-002-feat-tilegrid-mario-camera-plan.md` — the implementation plan.
-- `docs/brainstorms/2026-05-01-tilegrid-mario-camera-requirements.md` — the originating requirements.
+- `../../../work/01KQGDBJ0DR0DEWFS2RCPPV0G1-feat-tilegrid-mario-camera/plan.md` — the implementation plan.
+- `../../../work/01KQGDBJ0DR0DEWFS2RCPPV0G1-feat-tilegrid-mario-camera/requirements.md` — the originating requirements.

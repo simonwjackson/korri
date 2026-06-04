@@ -23,7 +23,7 @@ tags:
 
 ## Status
 
-Deferred from `docs/plans/2026-05-02-001-feat-personal-mvp-rocknix-launch-plan.md` (Unit 12).
+Deferred from `../../../work/01KQJZR90GHVYQ169G3QWN3G5T-feat-personal-mvp-rocknix-launch/plan.md` (Unit 12).
 
 All `home.feature` and `safe-game-resume.feature` scenarios that depend on
 a library being present are tagged `@fixme(MVP-bdd-fixture-deferred)`.
@@ -117,7 +117,7 @@ Do this work when one of the following is true:
 
 - `docs/solutions/best-practices/prefer-real-implementations-over-mocks-2026-05-02.md`
   — the testing posture this work would extend to BDD.
-- `docs/plans/2026-05-02-001-feat-personal-mvp-rocknix-launch-plan.md`
+- `../../../work/01KQJZR90GHVYQ169G3QWN3G5T-feat-personal-mvp-rocknix-launch/plan.md`
   Unit 12 — the original full-scope description.
 - `tools/testing/library/with-temp-library.ts` — the fixture writer to
   reuse.

@@ -1,6 +1,6 @@
 # Repository Research: Bazzar Source Adapter and Download Resolution
 
-Origin: `docs/brainstorms/2026-06-01-001-bazzar-source-adapter-download-resolution-requirements.md`
+Origin: `../../../work/01KT5CF934S7BZE95JHEHBSNBE-bazzar-monorepo-migration-korri-cli-acquisition/requirements.md`
 
 ---
 
@@ -26,7 +26,7 @@ Origin: `docs/brainstorms/2026-06-01-001-bazzar-source-adapter-download-resoluti
 
 ### Korri CLI — canonical pattern
 
-**Entry:** `tools/cli/korri-cli.ts`  
+**Entry:** `tools/cli/korri-cli.ts`
 **Pattern:** `effect/unstable/cli` — `Command.make`, `Flag.string`, `Argument.string`, services via Effect layers (`LibrarySource`, `Launcher` from `@shared/library/library-services.ts`), `BunRuntime.runMain`.
 
 ```
@@ -55,7 +55,7 @@ Adding `korri-bazzar` later would follow this identical derivation shape with it
 `korri/shared/library/library-source.ts` and `korri/shared/library/library-services.ts`:
 - `LibrarySource` = "known playable library content" — `list()`, `launchSpecFor()`, `resolveLaunchForGame()`
 - Adapters: `LibrarySourceLayerLive` (proseql or rocknix mode via env), `makeInMemoryLibrarySourceLayer`, `makeFailingLibrarySourceLayer`
-- This seam is explicitly designed to never bend for temporary adapters (see `docs/brainstorms/2026-05-02-personal-mvp-scope-requirements.md` R9–R11)
+- This seam is explicitly designed to never bend for temporary adapters (see `../../../work/01KQJZR90GHVYQ169G3QWN3G5T-feat-personal-mvp-rocknix-launch/requirements.md` R9–R11)
 - **Bazzar external results must never enter this seam.** External discovery is a pre-library lifecycle stage.
 
 ### SourceDiagnostic — closest existing health-state model
@@ -179,7 +179,7 @@ type SourceHealth =
 ```
 Follow Korri's `RemoteSourceStatus` discriminated union shape.
 
-**New command: `bazzar source-check [--sources <csv>] [--format json|text]`** (in `apps/cli/src/`)  
+**New command: `bazzar source-check [--sources <csv>] [--format json|text]`** (in `apps/cli/src/`)
 - Runs each adapter's `search` and `details` on a known legal/safe probe candidate
 - Never falls back to mock data; a source that rejects or 401s reports as `config-error` or `unavailable`
 - Returns JSONL per source; overall exit 0 if all healthy, 1 if any degraded/defective, 2 if config error
@@ -209,7 +209,7 @@ export interface DownloadResolution {
 }
 ```
 
-**New `Plugin` method: `resolve?(ctx, url): Promise<DownloadResolution>`**  
+**New `Plugin` method: `resolve?(ctx, url): Promise<DownloadResolution>`**
 - Optional on the interface (not all plugins implement; return `{ status: "unsupported" }` default)
 - Replaces the current implicit behavior of encoding interstitial state in `GameFile.format = "html"`
 

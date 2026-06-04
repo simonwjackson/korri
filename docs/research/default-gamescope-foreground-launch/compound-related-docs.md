@@ -68,27 +68,27 @@ Why it is not a duplicate:
 
 ## Related non-solution docs worth cross-linking
 
-### `docs/plans/2026-05-04-004-feat-odin-chromium-session-supervisor-plan.md`
+### `../../../work/01KQR4HQ0SWEDH40PGZKQ3YEJ1-feat-odin-chromium-session-supervisor/plan.md`
 
 Strong historical source for the session-invariant design. It explicitly says the supervisor owns Sway reconciliation and that `--kiosk` / fullscreen flags are launch hints, not lifecycle enforcement. It also captures the state-machine shape: home, launching, game, restoring, recovering.
 
-### `docs/plans/2026-05-21-003-refactor-korri-kiosk-modules-plan.md`
+### `../../../work/.archive/01KS3X9Y1FG6FNRA92AT9ZHJ75-refactor-korri-kiosk-modules/plan.md`
 
 Strong cross-reference for current Nix ownership boundaries. It establishes `services.korri.kiosk` as the product-owned kiosk/session entrypoint and keeps hardware/platform fragments in platform adapters. The new doc should align with this: foreground app policy belongs in kiosk/session management, not platform-specific Moonlight launcher code.
 
-### `docs/plans/2026-05-24-005-fix-sm8550-moonlight-platform-plan.md`
+### `../../../work/.archive/01KSBMG31SQFYZE0XMMK2BDRRV-fix-sm8550-moonlight-platform/plan.md`
 
 Useful Sobo-specific context. It captures the separate durable fix for `KORRI_MOONLIGHT_PLATFORM=v4l2m2m` and `SDL_VIDEODRIVER=wayland`, while explicitly saying it does not prove Sway toplevel presentation. The new foreground-policy doc should reference it as adjacent but distinct: video decode/presentation environment is not the same as compositor foreground policy.
 
-### `docs/plans/2026-05-21-002-refactor-desktop-input-broker-plan.md`
+### `../../../work/01KS3X9Y1ESY0N2XEDDXVBZZDS-refactor-desktop-input-broker/plan.md`
 
 Useful for input implications. It states that Korri UI input should be active-window scoped, should not use global keyboard injection, and should not affect Moonlight/games when Korri is inactive. A foreground-app policy must preserve that safety boundary.
 
-### `docs/brainstorms/2026-05-18-headless-game-stream-orchestration-requirements.md`
+### `../../../work/01KRW63S14EZX008ANYWY3P8Z1-feat-headless-game-stream-runner/requirements.md`
 
 Useful for Gamescope framing. It explicitly says Gamescope may be used if it helps fullscreen/session behavior, but Gamescope itself is not the product requirement. That aligns with the current conclusion: Gamescope is an optional presentation adapter, not the foreground policy.
 
-### `docs/brainstorms/2026-05-23-001-x86-live-usb-kiosk-requirements.md`
+### `../../../work/.archive/01KS923C1JWK7FJAB54SSQJ350-feat-x86-live-usb-kiosk/requirements.md`
 
 Useful for future x86 comparison. It makes local Moonlight launch part of the kiosk acceptance path and assumes Moonlight pairing already exists. The proposed doc can note that x86 may appear better today because Moonlight/backend behavior differs, not because a generic kiosk foreground policy is already documented.
 

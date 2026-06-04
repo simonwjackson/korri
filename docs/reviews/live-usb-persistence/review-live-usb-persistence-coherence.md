@@ -1,8 +1,8 @@
 # Coherence Review: Live USB Product/Developer Persistence Plan
 
-Document: `docs/plans/2026-05-24-006-feat-live-usb-product-developer-persistence-plan.md`  
-Document type: plan  
-Origin checked: `docs/brainstorms/2026-05-24-001-live-usb-persistence-modes-requirements.md`
+Document: `../../../work/.archive/01KSBMG31TA7ZG64667DM6SRQ3-feat-live-usb-product-developer-persistence/plan.md`
+Document type: plan
+Origin checked: `../../../work/.archive/01KSBMG31TA7ZG64667DM6SRQ3-feat-live-usb-product-developer-persistence/requirements.md`
 
 Traceability note: the plan's cited origin IDs resolve: R1-R13, A1-A4, F1-F3, and AE1-AE4 all exist in the origin document.
 

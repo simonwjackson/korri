@@ -309,7 +309,7 @@ games:
 > to the resolution captured in the plan. Plan is canonical going
 > forward.*
 >
-> **Plan:** [`docs/plans/2026-05-21-001-feat-korri-config-cascade-plan.md`](../plans/2026-05-21-001-feat-korri-config-cascade-plan.md)
+> **Plan:** [`../../work/01KS3X9Y1DB3ZKNY7D6P837Q07-feat-korri-config-cascade/plan.md`](../../work/01KS3X9Y1DB3ZKNY7D6P837Q07-feat-korri-config-cascade/plan.md)
 
 ### Open Questions — resolutions
 

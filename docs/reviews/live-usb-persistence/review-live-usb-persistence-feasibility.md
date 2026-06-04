@@ -8,7 +8,7 @@ Overall: the artifact split and same-stick resolver direction are feasible, but 
 
 **Confidence:** 100
 
-**Evidence:** The plan says Product should allowlist `/etc/machine-id` with “systemd-safe first-boot behavior” (`docs/plans/2026-05-24-006-feat-live-usb-product-developer-persistence-plan.md:103`, `:216`). The current persistence resolver is a normal systemd oneshot wanted by `multi-user.target` and ordered after `local-fs.target` / `systemd-udevd.service` (`nix/images/live-usb-runtime.nix:170-177`), with the Product/Developer setup only required before greetd (`nix/images/live-usb-runtime.nix:140-143`). By then PID 1, journald, dbus-related services, and other early consumers have already observed the boot machine ID.
+**Evidence:** The plan says Product should allowlist `/etc/machine-id` with “systemd-safe first-boot behavior” (`../../../work/.archive/01KSBMG31TA7ZG64667DM6SRQ3-feat-live-usb-product-developer-persistence/plan.md:103`, `:216`). The current persistence resolver is a normal systemd oneshot wanted by `multi-user.target` and ordered after `local-fs.target` / `systemd-udevd.service` (`nix/images/live-usb-runtime.nix:170-177`), with the Product/Developer setup only required before greetd (`nix/images/live-usb-runtime.nix:140-143`). By then PID 1, journald, dbus-related services, and other early consumers have already observed the boot machine ID.
 
 **Why it matters:** Binding or symlinking `/etc/machine-id` after `local-fs.target` may change the file for later readers or the next boot, but it does not give the current boot a stable per-USB systemd identity. That violates the plan’s own machine identity decision and can produce split identity in logs, dbus, and any service that read the transient ID before the persistence service ran.
 
@@ -25,7 +25,7 @@ Add tests/docs that distinguish “Korri persisted device ID” from “systemd 
 
 **Confidence:** 100
 
-**Evidence:** The plan defers “Exact bind-vs-symlink mechanics for each allowlist entry” (`docs/plans/2026-05-24-006-feat-live-usb-product-developer-persistence-plan.md:117-119`) while requiring Product to persist Korri desktop config (`:215`). The actual config writer resolves `desktop.yaml` under `XDG_CONFIG_HOME/korri` (`korri/shared/config/xdg-paths.ts:70-75`) and saves by writing a sibling temp file then `rename(tmp, path)` (`korri/deploy/desktop/desktop-config.ts:68-74`).
+**Evidence:** The plan defers “Exact bind-vs-symlink mechanics for each allowlist entry” (`../../../work/.archive/01KSBMG31TA7ZG64667DM6SRQ3-feat-live-usb-product-developer-persistence/plan.md:117-119`) while requiring Product to persist Korri desktop config (`:215`). The actual config writer resolves `desktop.yaml` under `XDG_CONFIG_HOME/korri` (`korri/shared/config/xdg-paths.ts:70-75`) and saves by writing a sibling temp file then `rename(tmp, path)` (`korri/deploy/desktop/desktop-config.ts:68-74`).
 
 **Why it matters:** If the allowlist persists only `desktop.yaml` as a symlink, the atomic rename will replace the symlink with an ephemeral regular file. If it persists only the file as a bind mount, atomic replacement can fail or replace the mountpoint semantics. Either way, Product can appear to boot correctly while silently losing the “remembered server/settings survive reboot” contract.
 
@@ -37,7 +37,7 @@ Add tests/docs that distinguish “Korri persisted device ID” from “systemd 
 
 **Confidence:** 75
 
-**Evidence:** The plan adds multiple Product bind/link/preparation steps (`docs/plans/2026-05-24-006-feat-live-usb-product-developer-persistence-plan.md:213-219`) and requires write-probe / permission failures to be visible (`:231`), but it does not define rollback when one allowlist entry succeeds and a later entry fails. The current resolver only has one mounted root and one preparation function; on failure it unmounts the root before falling back (`nix/images/live-usb-persistence-resolver.sh:69-80`). That cleanup model is insufficient once several bind mounts or symlinks have already been installed into an ephemeral Product home.
+**Evidence:** The plan adds multiple Product bind/link/preparation steps (`../../../work/.archive/01KSBMG31TA7ZG64667DM6SRQ3-feat-live-usb-product-developer-persistence/plan.md:213-219`) and requires write-probe / permission failures to be visible (`:231`), but it does not define rollback when one allowlist entry succeeds and a later entry fails. The current resolver only has one mounted root and one preparation function; on failure it unmounts the root before falling back (`nix/images/live-usb-persistence-resolver.sh:69-80`). That cleanup model is insufficient once several bind mounts or symlinks have already been installed into an ephemeral Product home.
 
 **Why it matters:** A mid-setup error can leave a mixed state: some persistent Product paths exposed, some ephemeral paths, stale symlinks, or mounted approved storage under a Product session that is supposed to have fallen back to clear tmpfs. That weakens R12/R13 and makes error behavior nondeterministic.
 

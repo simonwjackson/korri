@@ -142,7 +142,7 @@ That keeps the supported surface honest: web/API checks can still pass, desktop 
 
 ## Related
 
-- `docs/plans/2026-04-30-004-feat-electrobun-desktop-wrapper-plan.md` — implementation plan and decisions.
+- `../../../work/.archive/01KQDTYV05D4Q8T63WBQSHD6A1-feat-electrobun-desktop-wrapper/plan.md` — implementation plan and decisions.
 - `korri/deploy/desktop/create-desktop-app.ts` — same-origin desktop Hono composition.
 - `korri/deploy/desktop/static-assets.ts` — static serving, SPA fallback, and traversal protection.
 - `tools/desktop/desktop-smoke.ts` — non-native desktop HTTP smoke check.

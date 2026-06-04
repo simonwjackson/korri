@@ -2,7 +2,7 @@
 
 ## Scope researched
 
-Origin: `docs/brainstorms/2026-05-24-002-default-gamescope-foreground-launch-policy-requirements.md`.
+Origin: `../../../work/01KSBMG31W82JBVJBJ5TT15MZN-feat-default-gamescope-foreground-launch/requirements.md`.
 
 Focus areas: config cascade / resolved launch policy, game-stream runner Gamescope support, local Moonlight launch path, foreground/sessiond patterns, and Nix tool availability.
 
@@ -19,7 +19,7 @@ Focus areas: config cascade / resolved launch policy, game-stream runner Gamesco
 
 ### Requirements / institutional guidance
 
-- `docs/brainstorms/2026-05-24-002-default-gamescope-foreground-launch-policy-requirements.md`
+- `../../../work/01KSBMG31W82JBVJBJ5TT15MZN-feat-default-gamescope-foreground-launch/requirements.md`
   - Product decision: Gamescope default-on for foreground app launches, minimal wrapper only, opt-out via normal config layers, foreground policy remains separate.
 - `docs/briefs/2026-05-21-korri-config-cascade-brief.md`
   - Defines the cascade model and states policy fields like `gamescope` belong in the unified logical config tree.

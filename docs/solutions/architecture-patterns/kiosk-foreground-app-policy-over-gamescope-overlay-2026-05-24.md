@@ -141,7 +141,7 @@ Setting `KORRI_MOONLIGHT_PLATFORM=v4l2m2m` and `SDL_VIDEODRIVER=wayland` is a vi
 - `docs/solutions/integration-issues/supervise-chromium-kiosk-session-after-game-exit-2026-05-04.md` — earlier Odin/Chromium lesson that kiosk presentation is a session invariant, not a browser flag.
 - `docs/solutions/workflow-issues/generic-game-stream-runner-validation-contract-2026-05-19.md` — generic Sunshine/Moonlight runner contract and launch-intent validation.
 - `docs/solutions/architecture-patterns/boot-scoped-control-plane-with-session-scoped-runner-2026-05-19.md` — lifecycle split between boot-scoped control and session-scoped runner.
-- `docs/plans/2026-05-04-004-feat-odin-chromium-session-supervisor-plan.md` — historical session-supervisor design with home/game/restoring state.
-- `docs/plans/2026-05-21-003-refactor-korri-kiosk-modules-plan.md` — Korri kiosk module ownership and platform-fragment boundaries.
-- `docs/plans/2026-05-24-005-fix-sm8550-moonlight-platform-plan.md` — adjacent Sobo Moonlight platform fix; distinct from foreground-window policy.
-- `docs/brainstorms/2026-05-18-headless-game-stream-orchestration-requirements.md` — prior requirement framing where Gamescope may help fullscreen/session behavior but is not the product requirement.
+- `../../../work/01KQR4HQ0SWEDH40PGZKQ3YEJ1-feat-odin-chromium-session-supervisor/plan.md` — historical session-supervisor design with home/game/restoring state.
+- `../../../work/.archive/01KS3X9Y1FG6FNRA92AT9ZHJ75-refactor-korri-kiosk-modules/plan.md` — Korri kiosk module ownership and platform-fragment boundaries.
+- `../../../work/.archive/01KSBMG31SQFYZE0XMMK2BDRRV-fix-sm8550-moonlight-platform/plan.md` — adjacent Sobo Moonlight platform fix; distinct from foreground-window policy.
+- `../../../work/01KRW63S14EZX008ANYWY3P8Z1-feat-headless-game-stream-runner/requirements.md` — prior requirement framing where Gamescope may help fullscreen/session behavior but is not the product requirement.

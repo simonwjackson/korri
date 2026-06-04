@@ -272,5 +272,5 @@ const cellSize = useThemedPixelValue("--cell-min")  // bespoke hook, brittle
 - `korri/shared/primitives/lib/useResolvedCSSLength.ts` — canonical implementation of the hook.
 - `korri/shared/primitives/lib/useContainerSize.ts` — sister hook the implementation mirrors in lifecycle shape.
 - `korri/shared/primitives/components/Tilegrid/` — the three Roots that consume the hook.
-- `docs/plans/2026-04-30-008-feat-tilegrid-css-length-cellsize-plan.md` — the implementation plan, including unit decomposition and decisions.
-- `docs/brainstorms/2026-04-30-tilegrid-css-length-cellsize-requirements.md` — the requirements brainstorm where the design space was scoped.
+- `../../../work/.archive/01KQDTYV09D7NMQE79KJGS1Q5X-feat-tilegrid-css-length-cellsize/plan.md` — the implementation plan, including unit decomposition and decisions.
+- `../../../work/.archive/01KQDTYV09D7NMQE79KJGS1Q5X-feat-tilegrid-css-length-cellsize/requirements.md` — the requirements brainstorm where the design space was scoped.

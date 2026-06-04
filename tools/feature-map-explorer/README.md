@@ -76,4 +76,4 @@ theme, this is a tool UI.
 ## Plan
 
 Tracked in
-[`docs/plans/2026-04-29-002-feat-feature-map-explorer-plan.md`](../../docs/plans/2026-04-29-002-feat-feature-map-explorer-plan.md).
+[`../../work/01KQB8J401VGFDCQ60BR87S0XS-feat-feature-map-explorer/plan.md`](../../../../work/01KQB8J401VGFDCQ60BR87S0XS-feat-feature-map-explorer/plan.md).

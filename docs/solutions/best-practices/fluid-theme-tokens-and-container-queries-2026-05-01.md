@@ -233,5 +233,5 @@ Result: a 420px container shows ~3 tiles; a 1920px container shows ~13. The cell
 - `docs/solutions/best-practices/mode-as-composition-for-layout-primitives-2026-05-01.md` — the Tilegrid primitive that consumes these tokens.
 - `korri/shared/primitives/theme/styles.css` — canonical implementation of the fluid token scale.
 - `korri/shared/primitives/explorations/home-screens/HomeHero.stories.tsx` and `HomeMosaic.stories.tsx` — the two reference compositions that exercise the scale; useful as worked examples.
-- `docs/brainstorms/2026-04-30-shift-home-screen-visual-language-requirements.md` — the visual-language exploration that surfaced this practice.
+- `../../../work/01KQDTYV32N1ERDVDGHCBZN6MY-shift-home-screen-visual-language/requirements.md` — the visual-language exploration that surfaced this practice.
 - `AGENTS.md` — Rules of Engagement section carries the project rules that protect this approach from regression.

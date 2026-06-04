@@ -20,7 +20,7 @@ tags: [nix, nixos, sessiond, electrobun, sway, kiosk, korri, supervisor, lifecyc
 ## Context
 
 Phase 4C of the foreground-session-lifecycle rollout (commit `7f4547a`
-in `docs/plans/2026-05-27-002-feat-foreground-session-source-machine-phase4c-plan.md`)
+in `../../../work/.archive/01KSKBP82HQFQW9T76W9CQJYF0-feat-foreground-session-source-machine-phase4c/plan.md`)
 shipped a role-pluggable sessiond supervisor and stated that
 "`kiosk role keeps today's Electrobun + essway + Korri-home behavior`."
 That sentence was aspirational: on Sobo the kiosk image was still
@@ -163,10 +163,10 @@ the log path (#4).
 
 ## Related work
 
-- Origin brainstorm: [docs/brainstorms/2026-05-24-002-default-gamescope-foreground-launch-policy-requirements.md]
-- Migration plan: [docs/plans/2026-05-27-004-feat-kiosk-renderer-ownership-sessiond-plan.md]
-- Phase 4C source-machine plan: [docs/plans/2026-05-27-002-feat-foreground-session-source-machine-phase4c-plan.md] (the "kiosk role keeps today's behavior" line this doc retires)
-- Phase 4 adapter rollout: [docs/plans/2026-05-26-011-feat-foreground-session-adapter-rollout-plan.md]
+- Origin brainstorm: [../../../work/01KSBMG31W82JBVJBJ5TT15MZN-feat-default-gamescope-foreground-launch/requirements.md]
+- Migration plan: [../../../work/01KSKBP82KPD8XQEF6PJ12C9RN-feat-kiosk-renderer-ownership-sessiond/plan.md]
+- Phase 4C source-machine plan: [../../../work/.archive/01KSKBP82HQFQW9T76W9CQJYF0-feat-foreground-session-source-machine-phase4c/plan.md] (the "kiosk role keeps today's behavior" line this doc retires)
+- Phase 4 adapter rollout: [../../../work/.archive/01KSGS9H2ETAC371KG4XMD16K3-feat-foreground-session-adapter-rollout/plan.md]
 - Hardening + ProtectSystem: [docs/solutions/integration-issues/supervise-chromium-kiosk-session-after-game-exit-2026-05-04.md]
 - Wayland env on systemd units: [docs/solutions/integration-issues/one-command-odin-electrobun-deploy-needs-device-nix-and-session-env-2026-05-06.md]
 

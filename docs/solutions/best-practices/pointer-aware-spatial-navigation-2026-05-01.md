@@ -269,4 +269,4 @@ bus.on(action => {
 - `korri/shared/themes/shift/shift.css` — the `:focus` and `[data-input-mode="directional"]` CSS rules.
 - `korri/shared/primitives/components/Tilegrid/TilegridScrollRoot.tsx`, `TilegridRailRoot.tsx` — canonical opt-in consumers of `data-pointer-wheel`.
 - `korri/shared/primitives/components/Tilegrid/Tilegrid.pointer.story.e2e.ts`, `Tilegrid.wheel.story.e2e.ts` — story-driven Playwright coverage of the end-to-end behavior.
-- Origin brainstorm and plan: `docs/brainstorms/2026-05-01-pointer-aware-spatial-navigation-requirements.md`, `docs/plans/2026-05-01-001-feat-pointer-aware-spatial-navigation-plan.md`.
+- Origin brainstorm and plan: `../../../work/01KQGDBJ0CPYZHWA7XQ77VND6P-feat-pointer-aware-spatial-navigation/requirements.md`, `../../../work/01KQGDBJ0CPYZHWA7XQ77VND6P-feat-pointer-aware-spatial-navigation/plan.md`.

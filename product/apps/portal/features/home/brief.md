@@ -18,7 +18,7 @@ jobs:
 
 ## MVP scope (personal device only)
 
-For the personal MVP (`docs/brainstorms/2026-05-02-personal-mvp-scope-requirements.md`):
+For the personal MVP (`../../../../../work/01KQJZR90GHVYQ169G3QWN3G5T-feat-personal-mvp-rocknix-launch/requirements.md`):
 
 - The rail is sourced from the `app.library.list` RPC and ordered by
   `lastPlayed` desc — the leftmost tile is the resume target.

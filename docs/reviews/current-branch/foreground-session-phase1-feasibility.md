@@ -1,6 +1,6 @@
 # Feasibility review: foreground session lifecycle Phase 1
 
-Document reviewed: `docs/plans/2026-05-26-006-feat-foreground-session-lifecycle-phase1-plan.md`
+Document reviewed: `../../../work/.archive/01KSGS9H29WESM50SDTRMQVWW8-feat-foreground-session-lifecycle-phase1/plan.md`
 
 ## Findings
 

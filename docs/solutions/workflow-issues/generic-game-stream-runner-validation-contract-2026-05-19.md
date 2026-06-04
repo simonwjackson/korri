@@ -279,9 +279,9 @@ If the consuming repo wraps `nixie`, prefer a generic `--override-input` pass-th
 
 ## Related
 
-- `docs/brainstorms/2026-05-18-headless-game-stream-orchestration-requirements.md` — original requirements for the headless game stream proof.
-- `docs/plans/2026-05-18-001-feat-headless-game-stream-runner-plan.md` — implementation plan for the runner and NixOS module. Some details in the plan refer to a configured fixed game; the validated prototype now uses a trusted one-shot launch-intent file for arbitrary `LaunchSpec`s.
-- `docs/brainstorms/2026-05-19-korri-cli-stream-launch-requirements.md` — requirements for the first product-shaped local CLI that prepares known Korri library games for streaming.
+- `../../../work/01KRW63S14EZX008ANYWY3P8Z1-feat-headless-game-stream-runner/requirements.md` — original requirements for the headless game stream proof.
+- `../../../work/01KRW63S14EZX008ANYWY3P8Z1-feat-headless-game-stream-runner/plan.md` — implementation plan for the runner and NixOS module. Some details in the plan refer to a configured fixed game; the validated prototype now uses a trusted one-shot launch-intent file for arbitrary `LaunchSpec`s.
+- `../../../work/01KRYRGG160HR51KYGS0E53ZQG-feat-korri-cli-stream-launch/requirements.md` — requirements for the first product-shaped local CLI that prepares known Korri library games for streaming.
 - `docs/solutions/integration-issues/supervise-chromium-kiosk-session-after-game-exit-2026-05-04.md` — related session-lifecycle lesson for Odin Chromium; similar concern, different runtime owner.
 - `docs/solutions/best-practices/prefer-real-implementations-over-mocks-2026-05-02.md` — supports using a real Nixpkgs game/store path for smoke validation rather than mocked launcher behavior.
 - `docs/solutions/architecture-patterns/boot-scoped-control-plane-with-session-scoped-runner-2026-05-19.md` — pattern doc covering the lifecycle split between the boot-scoped `korri-server` control plane and the session-scoped Sunshine runner that this validation contract preserves.

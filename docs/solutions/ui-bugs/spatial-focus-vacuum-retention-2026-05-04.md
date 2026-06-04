@@ -142,7 +142,7 @@ The filtering rules keep the behavior spatial-navigation-specific without compon
 
 ## Related Issues
 
-- `docs/plans/2026-05-04-001-fix-spatial-focus-deselection-plan.md` — implementation plan and requirements trace for this fix.
+- `../../../work/.archive/01KQR4HQ0P7SFD5ZVZ4D0V9EJN-fix-spatial-focus-deselection/plan.md` — implementation plan and requirements trace for this fix.
 - `docs/solutions/best-practices/decoupled-spatial-navigation-2026-05-01.md` — architecture rule: components stay native; navigation behavior belongs in shared input/navigation layers.
 - `docs/solutions/best-practices/pointer-aware-spatial-navigation-2026-05-01.md` — pointer support keeps `document.activeElement` as the canonical active tile and uses `:focus` for spatial focusables.
 - `docs/solutions/best-practices/snap-to-center-scroll-camera-implementation-gotchas-2026-05-01.md` — related focus/scroll discipline around `preventScroll: true` and avoiding focusin-gated behavior.

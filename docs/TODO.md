@@ -84,7 +84,7 @@ of the workaround that's currently in place, and a sketch of the right fix.
 ## Notes
 
 - The 2026-05-24 game-assets plan
-  (`docs/plans/2026-05-24-001-feat-game-assets-pipeline-plan.md`) is
+  (`../work/.archive/01KSBMG31NC5SDRHZ6B8Q2BHYH-feat-game-assets-pipeline/plan.md`) is
   marked complete and intentionally did not include any of the above —
   these are gaps surfaced by the real rollout, not regressions against
   the plan.

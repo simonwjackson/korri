@@ -176,5 +176,5 @@ federation, end-to-end testable, on the same commit.
 
 - `nix/images/headless.nix`, `nix/tests/korri-image-outputs-check.nix`,
   commit `a928f24`.
-- `docs/plans/2026-05-27-001-feat-korri-library-federation-plan.md` —
+- `../../../work/.archive/01KSKBP82GX57SDN7P2SZ62CNS-feat-korri-library-federation/plan.md` —
   R14 / R16, the zero-backwards-compat rules that motivated this move.

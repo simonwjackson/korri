@@ -117,4 +117,4 @@ This also preserves GPU acceleration. The renderer is ROCKNIX-native Chromium, s
 - `docs/solutions/integration-issues/odin-electrobun-webkit-runtime-white-screen-2026-05-04.md` — explains why Electrobun/WebKit is not the production GPU path on the Odin today.
 - `docs/solutions/integration-issues/reverse-ssh-tunnel-for-odin-chromium-vite-2026-05-03.md` — prior Chromium kiosk validation path.
 - `docs/development/odin-iterative-loop.md` — now documents Level 2 dev loop and Level 3 supervised Chromium session.
-- `docs/plans/2026-05-04-004-feat-odin-chromium-session-supervisor-plan.md` — implementation plan for this supervisor.
+- `../../../work/01KQR4HQ0SWEDH40PGZKQ3YEJ1-feat-odin-chromium-session-supervisor/plan.md` — implementation plan for this supervisor.

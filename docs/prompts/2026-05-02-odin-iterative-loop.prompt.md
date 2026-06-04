@@ -23,7 +23,7 @@ Establish a fast iterate-build-test loop where:
   rebooting the loop is one command.
 
 This is "Level 2" of the deployment ladder discussed in
-`docs/plans/2026-05-02-001-feat-personal-mvp-rocknix-launch-plan.md` Unit 13
+`../../work/01KQJZR90GHVYQ169G3QWN3G5T-feat-personal-mvp-rocknix-launch/plan.md` Unit 13
 and the brainstorm. Level 3 (everything on the Odin under a kiosk browser)
 is **out of scope here** — it is a separate task.
 
@@ -35,9 +35,9 @@ is **out of scope here** — it is a separate task.
 2. `docs/deployment/device-report.md` — everything probed about the Odin: SSH
    target, filesystem layout, services, ROCKNIX-specific tooling, gotchas.
    The rootfs is read-only squashfs; only `/storage` is writable.
-3. `docs/brainstorms/2026-05-02-personal-mvp-scope-requirements.md` — the
+3. `../../work/01KQJZR90GHVYQ169G3QWN3G5T-feat-personal-mvp-rocknix-launch/requirements.md` — the
    product scope this iteration loop serves.
-4. `docs/plans/2026-05-02-001-feat-personal-mvp-rocknix-launch-plan.md`
+4. `../../work/01KQJZR90GHVYQ169G3QWN3G5T-feat-personal-mvp-rocknix-launch/plan.md`
    Unit 13 (on-device smoke verification) and the Risks table — what the
    loop must enable.
 5. `docs/solutions/best-practices/electrobun-desktop-wrapper-loopback-2026-05-01.md`

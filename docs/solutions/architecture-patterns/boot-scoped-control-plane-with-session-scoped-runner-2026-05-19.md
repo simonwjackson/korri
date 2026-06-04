@@ -242,7 +242,7 @@ Full implementations are in the repo; the patterns to lift are above. Key files:
 - `nix/modules/korri-server.nix` — the `serviceMode` option, mode-derived path defaults, assertions, warnings, dual `systemd.services` / `systemd.user.services` emission, tmpfiles entry, and hardening block.
 - `nix/modules/korri-game-stream.nix` — the wrapper that bridges system-mode absolute paths and user-mode `%t` paths into a single env contract (`KORRI_GAME_STREAM_RUNTIME_DIR`, `KORRI_GAME_STREAM_INTENT_PATH`, `KORRI_GAME_STREAM_STATUS_PATH`) for the Sunshine-launched runner.
 - `tools/testing/nix/korri-server-module-eval.test.ts` — Bun tests that drive real `nix eval` of the module against fixture overrides and assert on emitted unit shape, env, tmpfiles entries, assertion messages, and warnings. This is the verification posture: TypeScript tests alone cannot prove systemd unit shape; evaluate the module and inspect the result.
-- `docs/plans/2026-05-20-003-refactor-korri-server-system-service-plan.md` — the plan that frames the refactor, including the decision matrix, scope boundaries, and the rejection of "absorb Sunshine into the server" as a tempting-but-wrong shortcut.
+- `../../../work/.archive/01KS1AX71AS00C6ESAPRYHBKG3-refactor-korri-server-system-service/plan.md` — the plan that frames the refactor, including the decision matrix, scope boundaries, and the rejection of "absorb Sunshine into the server" as a tempting-but-wrong shortcut.
 
 ### Minimal host config that consumes the pattern
 
@@ -263,8 +263,8 @@ Everything else — the system unit, the tmpfiles entry, the `RuntimeDirectory`,
 
 ## Related
 
-- [docs/plans/2026-05-20-003-refactor-korri-server-system-service-plan.md](../../plans/2026-05-20-003-refactor-korri-server-system-service-plan.md) — the originating plan.
-- [docs/plans/2026-05-20-002-refactor-korri-server-control-plane-plan.md](../../plans/2026-05-20-002-refactor-korri-server-control-plane-plan.md) — the prior control-plane refactor that made the server the always-on RPC surface.
+- [../../../work/.archive/01KS1AX71AS00C6ESAPRYHBKG3-refactor-korri-server-system-service/plan.md](../../../../work/.archive/01KS1AX71AS00C6ESAPRYHBKG3-refactor-korri-server-system-service/plan.md) — the originating plan.
+- [../../../work/.archive/01KS1AX7198H2674KGB9QM63JR-refactor-korri-server-control-plane/plan.md](../../../../work/.archive/01KS1AX7198H2674KGB9QM63JR-refactor-korri-server-control-plane/plan.md) — the prior control-plane refactor that made the server the always-on RPC surface.
 - [docs/solutions/workflow-issues/generic-game-stream-runner-validation-contract-2026-05-19.md](../workflow-issues/generic-game-stream-runner-validation-contract-2026-05-19.md) — the runner-side trust contract this pattern preserves.
 - [docs/solutions/integration-issues/one-command-odin-electrobun-deploy-needs-device-nix-and-session-env-2026-05-06.md](../integration-issues/one-command-odin-electrobun-deploy-needs-device-nix-and-session-env-2026-05-06.md) — why systemd contexts must not inherit interactive session env implicitly.
 - [docs/solutions/integration-issues/runtime-mask-essway-to-stop-emulationstation-relaunching-during-odin-kiosk-sessions-2026-05-03.md](../integration-issues/runtime-mask-essway-to-stop-emulationstation-relaunching-during-odin-kiosk-sessions-2026-05-03.md) — identifying the real systemd owner before changing live services, relevant during the user-to-system migration.

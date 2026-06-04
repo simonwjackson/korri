@@ -250,6 +250,6 @@ Future readers searching `useTilegrid().base.cellSize` land on the warning befor
 - `docs/solutions/best-practices/mode-as-composition-for-layout-primitives-2026-05-01.md` — the original Tilegrid design pattern. This doc is its evolution counterpart: the first explains *how to design* multi-Root layout primitives; this one explains *how to grow* one without breaking it.
 - `docs/solutions/best-practices/css-length-props-with-sentinel-resolution-2026-05-01.md` — the `useResolvedCSSLength` mechanism that the rectangular-cell change reused unchanged for both axes.
 - `docs/solutions/best-practices/fluid-theme-tokens-and-container-queries-2026-05-01.md` — relevant background for the container-query-driven sizing the rectangular-cell API enables.
-- `docs/plans/2026-04-30-009-feat-tilegrid-rail-heterogeneous-plan.md` — the plan and four-commit landing of the change this doc generalizes from.
+- `../../../work/.archive/01KQDTYV0A4EYZQ5JNYDG2JZDW-feat-tilegrid-rail-heterogeneous/plan.md` — the plan and four-commit landing of the change this doc generalizes from.
 - `~/.pi/packages/react/skills/react/SKILL.md` — the React skill that codifies the Provider-driven, no-boolean-controls-subtree pattern this evolution stays inside.
 - Tilegrid file family: `korri/shared/primitives/components/Tilegrid/`

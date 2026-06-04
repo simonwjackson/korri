@@ -1,7 +1,7 @@
 # Deep document review — coherence
 
-Document: `docs/plans/2026-05-24-007-feat-default-gamescope-foreground-launch-plan.md`  
-Origin: `docs/brainstorms/2026-05-24-002-default-gamescope-foreground-launch-policy-requirements.md`
+Document: `../../../work/01KSBMG31W82JBVJBJ5TT15MZN-feat-default-gamescope-foreground-launch/plan.md`
+Origin: `../../../work/01KSBMG31W82JBVJBJ5TT15MZN-feat-default-gamescope-foreground-launch/requirements.md`
 
 ## Findings
 
