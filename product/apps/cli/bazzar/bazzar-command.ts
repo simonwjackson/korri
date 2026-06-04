@@ -120,11 +120,15 @@ const searchCommand = Command.make(
     logLevel: logLevelFlag,
     logJson: logJsonFlag,
   },
-  ({ query, format, sources }) =>
+  ({ query, format, sources, platforms }) =>
     Effect.gen(function* () {
       const acquisition = yield* Acquisition
       const response = yield* acquisition
-        .search({ query, sourceNames: parseSourceNames(sources) })
+        .search({
+          query,
+          sourceNames: parseSourceNames(sources),
+          platforms: parseSourceNames(platforms),
+        })
         .pipe(toResult)
 
       if (response._tag === "Left") {

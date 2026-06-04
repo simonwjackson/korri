@@ -24,6 +24,51 @@ function parseSingleJsonLine(stdout: string): unknown {
   return JSON.parse(lines[0] ?? "")
 }
 
+function expectFinalDownloadEnvelope(
+  result: Awaited<ReturnType<typeof runCli>>,
+  expected: { readonly name: string; readonly url: string },
+) {
+  expect(result.stderr).toBe("")
+  const envelope = parseSingleJsonLine(result.stdout) as {
+    command: string
+    exitCategory: string
+    exitCode: number
+    data: {
+      outcome: {
+        status: string
+        artifact: { final: boolean; name: string; url: string }
+      }
+    }
+  }
+  expect(result.exitCode).toBe(0)
+  expect(envelope.command).toBe("resolve-download")
+  expect(envelope.exitCategory).toBe("success")
+  expect(envelope.exitCode).toBe(0)
+  expect(envelope.data.outcome.status).toBe("final_artifact")
+  expect(envelope.data.outcome.artifact).toMatchObject({
+    final: true,
+    ...expected,
+  })
+}
+
+function expectSourceFailureEnvelope(
+  result: Awaited<ReturnType<typeof runCli>>,
+  expected: Record<string, unknown>,
+) {
+  expect(result.stderr).toBe("")
+  const envelope = parseSingleJsonLine(result.stdout) as {
+    command: string
+    exitCategory: string
+    exitCode: number
+    data: { outcome: Record<string, unknown> }
+  }
+  expect(result.exitCode).toBe(11)
+  expect(envelope.command).toBe("resolve-download")
+  expect(envelope.exitCategory).toBe("source_failure")
+  expect(envelope.exitCode).toBe(11)
+  expect(envelope.data.outcome).toMatchObject(expected)
+}
+
 describe("korri bazzar command routing", () => {
   it("renders help for the bazzar command group", async () => {
     const result = await runCli(["bazzar", "--help"])
@@ -156,6 +201,42 @@ describe("korri bazzar command routing", () => {
     expect(result.stderr).toBe("")
   })
 
+  it("filters source-backed search results by requested platform", async () => {
+    const result = await runCli([
+      "bazzar",
+      "search",
+      "2048",
+      "--sources",
+      "homebrewhub",
+      "--platforms",
+      "pico8",
+      "--format",
+      "json",
+    ])
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stderr).toBe("")
+    expect(result.stdout).toBe("No results found\n")
+  })
+
+  it("applies platform filters to chip8archive search results", async () => {
+    const result = await runCli([
+      "bazzar",
+      "search",
+      "wonky",
+      "--sources",
+      "chip8archive",
+      "--platforms",
+      "nintendo-nes",
+      "--format",
+      "json",
+    ])
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stderr).toBe("")
+    expect(result.stdout).toBe("No results found\n")
+  })
+
   it("returns source-backed search results from approved TypeScript providers", async () => {
     const result = await runCli([
       "bazzar",
@@ -186,6 +267,258 @@ describe("korri bazzar command routing", () => {
     ])
   })
 
+  const approvedProviderCases = [
+    {
+      sourceName: "homebrewhub",
+      query: "basil termini",
+      platform: "nintendo-gameboy-advance",
+      id: "basil-termini_2048-advance",
+      title: "2048 Advance",
+      locator: "homebrewhub:basil-termini_2048-advance",
+      url: "https://hh3.gbdev.io/api/entry/basil-termini_2048-advance.json",
+      filename: "2048 jam.gba",
+      artifactUrl:
+        "https://hh3.gbdev.io/static/database-gba/entries/basil-termini_2048-advance/files/2048%20jam.gba",
+    },
+    {
+      sourceName: "pico8bbs",
+      query: "celeste",
+      platform: "pico8",
+      id: "101",
+      title: "Celeste Classic",
+      locator: "pico8bbs:101",
+      url: "https://www.lexaloffle.com/bbs/?tid=101",
+      filename: "celeste-classic.p8.png",
+      artifactUrl:
+        "https://www.lexaloffle.com/bbs/cposts/1/celeste-classic.p8.png",
+    },
+    {
+      sourceName: "portmaster",
+      query: "keys",
+      platform: "linux-port",
+      id: "akeyspath.zip",
+      title: "A Key(s) Path",
+      locator: "portmaster:akeyspath",
+      url: "https://portmaster.games/detail.html?name=akeyspath",
+      filename: "akeyspath.zip",
+      artifactUrl:
+        "https://github.com/PortsMaster/PortMaster-Games/releases/download/2025-06-24_0854/akeyspath.zip",
+    },
+    {
+      sourceName: "puzzlescript",
+      query: "atlas",
+      platform: "puzzlescript",
+      id: "6994394",
+      title: "Atlas Shrank",
+      locator: "puzzlescript:6994394",
+      url: "https://www.puzzlescript.net/play.html?p=6994394",
+      filename: "atlas-shrank.pz",
+      artifactUrl:
+        "https://gist.githubusercontent.com/anonymous/6994394/raw/e2ca4d17e93996a1e5ba576c29bdd9746cad1d1e/script.txt",
+    },
+    {
+      sourceName: "retrobrews",
+      query: "ambushed",
+      platform: "nintendo-nes",
+      id: "nes-games:ambushed.nes",
+      title: "Ambushed",
+      locator: "retrobrews:nes-games:ambushed.nes",
+      url: "https://github.com/retrobrews/nes-games/blob/master/ambushed.nes",
+      filename: "ambushed.nes",
+      artifactUrl:
+        "https://raw.githubusercontent.com/retrobrews/nes-games/master/ambushed.nes",
+    },
+    {
+      sourceName: "tic80gallery",
+      query: "2048",
+      platform: "tic80",
+      id: "395",
+      title: "2048 (TIC-80 Version)",
+      locator: "tic80gallery:395",
+      url: "https://tic80.com/play?cart=395",
+      filename: "2048_tic_80_version.tic",
+      artifactUrl:
+        "https://tic80.com/cart/68d5e7881289837510df0e8c080bea73/2048_tic_80_version.tic",
+    },
+    {
+      sourceName: "wasm4gallery",
+      query: "snake",
+      platform: "wasm4",
+      id: "snake",
+      title: "Snake",
+      locator: "wasm4gallery:snake",
+      url: "https://wasm4.org/play/snake",
+      filename: "snake.wasm",
+      artifactUrl: "https://wasm4.org/carts/snake.wasm",
+    },
+  ] as const
+
+  for (const provider of approvedProviderCases) {
+    it(`returns source-backed ${provider.sourceName} search results`, async () => {
+      const result = await runCli([
+        "bazzar",
+        "search",
+        provider.query,
+        "--sources",
+        provider.sourceName,
+        "--platforms",
+        provider.platform,
+        "--format",
+        "json",
+      ])
+
+      expect(result.exitCode).toBe(0)
+      expect(result.stderr).toBe("")
+      const candidates = JSON.parse(result.stdout) as Array<{
+        sourceName: string
+        id: string
+        title: string
+        platform: string
+      }>
+      expect(candidates).toContainEqual(
+        expect.objectContaining({
+          sourceName: provider.sourceName,
+          id: provider.id,
+          title: provider.title,
+          platform: provider.platform,
+        }),
+      )
+    })
+
+    it(`returns source-backed ${provider.sourceName} details for locators and URLs`, async () => {
+      for (const input of [provider.locator, provider.url]) {
+        const result = await runCli(["bazzar", "details", input])
+
+        expect(result.exitCode).toBe(0)
+        expect(result.stderr).toBe("")
+        const details = JSON.parse(result.stdout) as {
+          sourceName: string
+          id: string
+          title: string
+        }
+        expect(details).toMatchObject({
+          sourceName: provider.sourceName,
+          id: provider.id,
+          title: provider.title,
+        })
+      }
+    })
+
+    it(`emits ${provider.sourceName} final downloads as exactly one contract JSON line`, async () => {
+      const result = await runCli([
+        "bazzar",
+        "resolve-download",
+        provider.sourceName,
+        provider.url,
+        "--title",
+        provider.title,
+      ])
+
+      expectFinalDownloadEnvelope(result, {
+        name: provider.filename,
+        url: provider.artifactUrl,
+      })
+    })
+  }
+
+  it("keeps credential-gated itch.io safe without credentials", async () => {
+    const plugins = JSON.parse(
+      (await runCli(["bazzar", "plugins", "--format", "json"])).stdout,
+    ) as Array<{ sourceName: string; credentialRequired: boolean }>
+    expect(plugins).toContainEqual(
+      expect.objectContaining({
+        sourceName: "itchio",
+        credentialRequired: true,
+      }),
+    )
+
+    const details = await runCli(["bazzar", "details", "itchio:creator/game"])
+    expect(details.exitCode).toBe(21)
+    expect(details.stdout).toBe("")
+    expect(details.stderr).toContain("Unknown itchio candidate")
+    expect(details.stderr).not.toContain("not wired yet")
+
+    const resolution = await runCli([
+      "bazzar",
+      "resolve-download",
+      "itchio",
+      "https://creator.itch.io/game",
+      "--title",
+      "itch.io Game",
+    ])
+    expectSourceFailureEnvelope(resolution, {
+      status: "access_required",
+      reason: "requires-user-action",
+      handoffUrl: "https://creator.itch.io/game",
+    })
+  })
+
+  it("emits source-backed not-found downloads as contract source failures", async () => {
+    const result = await runCli([
+      "bazzar",
+      "resolve-download",
+      "portmaster",
+      "https://portmaster.games/detail.html?name=no-such-game",
+      "--title",
+      "Missing Port",
+    ])
+
+    expectSourceFailureEnvelope(result, {
+      status: "blocked_unavailable",
+      reason: "Unknown portmaster candidate: no-such-game.zip",
+    })
+  })
+
+  it("emits unsupported outcomes for unrecognized source URLs", async () => {
+    const result = await runCli([
+      "bazzar",
+      "resolve-download",
+      "homebrewhub",
+      "https://unrelated.example.com/game.rom",
+      "--title",
+      "Unrelated Game",
+    ])
+
+    expectSourceFailureEnvelope(result, {
+      status: "unsupported",
+      reason: "unsupported",
+      handoffUrl: "https://unrelated.example.com/game.rom",
+    })
+  })
+
+  it("emits source-backed missing artifact links as non-final contract outcomes", async () => {
+    const result = await runCli([
+      "bazzar",
+      "resolve-download",
+      "tic80gallery",
+      "https://tic80.com/play?cart=4676",
+      "--title",
+      "Ladders & Dragons",
+    ])
+
+    expectSourceFailureEnvelope(result, {
+      status: "unsupported",
+      reason: "unsupported",
+      handoffUrl: "https://tic80.com/play?cart=4676",
+    })
+  })
+
+  it("emits source-backed blocked downloads as contract source failures", async () => {
+    const result = await runCli([
+      "bazzar",
+      "resolve-download",
+      "homebrewhub",
+      "https://hh3.gbdev.io/api/entry/disabled-downloads.json",
+      "--title",
+      "Disabled Downloads",
+    ])
+
+    expectSourceFailureEnvelope(result, {
+      status: "blocked_unavailable",
+      reason: "Homebrew Hub entry has disabled downloads",
+    })
+  })
+
   for (const candidateUrl of [
     "chip8archive:wonkypong",
     "https://johnearnest.github.io/chip8Archive/play.html?p=wonkypong",
@@ -211,18 +544,19 @@ describe("korri bazzar command routing", () => {
     })
   }
 
-  it("reports unknown source-backed detail IDs without the old not-wired stub", async () => {
-    const result = await runCli([
-      "bazzar",
-      "details",
-      "chip8archive:does-not-exist",
-    ])
+  for (const unknownChip8Input of [
+    "chip8archive:does-not-exist",
+    "https://johnearnest.github.io/chip8Archive/play.html?p=no-such-game",
+  ]) {
+    it(`reports unknown source-backed CHIP-8 detail IDs for ${unknownChip8Input}`, async () => {
+      const result = await runCli(["bazzar", "details", unknownChip8Input])
 
-    expect(result.exitCode).toBe(21)
-    expect(result.stdout).toBe("")
-    expect(result.stderr).toContain("Unknown CHIP-8 Archive candidate.")
-    expect(result.stderr).not.toContain("not wired yet")
-  })
+      expect(result.exitCode).toBe(21)
+      expect(result.stdout).toBe("")
+      expect(result.stderr).toContain("Unknown CHIP-8 Archive candidate.")
+      expect(result.stderr).not.toContain("not wired yet")
+    })
+  }
 
   it("reports unsupported details URLs without the old not-wired stub", async () => {
     const result = await runCli([
@@ -329,27 +663,25 @@ describe("korri bazzar command routing", () => {
       "Wonky Pong",
     ])
 
-    expect(result.stderr).toBe("")
-    const envelope = parseSingleJsonLine(result.stdout) as {
-      command: string
-      exitCategory: string
-      exitCode: number
-      data: {
-        outcome: {
-          status: string
-          artifact: { final: boolean; name: string; url: string }
-        }
-      }
-    }
-    expect(result.exitCode).toBe(0)
-    expect(envelope.command).toBe("resolve-download")
-    expect(envelope.exitCategory).toBe("success")
-    expect(envelope.exitCode).toBe(0)
-    expect(envelope.data.outcome.status).toBe("final_artifact")
-    expect(envelope.data.outcome.artifact).toMatchObject({
-      final: true,
+    expectFinalDownloadEnvelope(result, {
       name: "wonkypong.ch8",
       url: "https://raw.githubusercontent.com/JohnEarnest/chip8Archive/master/roms/wonkypong.ch8",
+    })
+  })
+
+  it("emits resolve-download not-found states as exactly one contract JSON line", async () => {
+    const result = await runCli([
+      "bazzar",
+      "resolve-download",
+      "chip8archive",
+      "https://johnearnest.github.io/chip8Archive/play.html?p=no-such-game",
+      "--title",
+      "Missing CHIP-8 Game",
+    ])
+
+    expectSourceFailureEnvelope(result, {
+      status: "blocked_unavailable",
+      reason: "Unknown CHIP-8 Archive candidate: no-such-game",
     })
   })
 
@@ -363,18 +695,7 @@ describe("korri bazzar command routing", () => {
       "Fixture Game",
     ])
 
-    expect(result.stderr).toBe("")
-    const envelope = parseSingleJsonLine(result.stdout) as {
-      command: string
-      exitCategory: string
-      exitCode: number
-      data: { outcome: { status: string; reason: string; handoffUrl: string } }
-    }
-    expect(result.exitCode).toBe(11)
-    expect(envelope.command).toBe("resolve-download")
-    expect(envelope.exitCategory).toBe("source_failure")
-    expect(envelope.exitCode).toBe(11)
-    expect(envelope.data.outcome).toMatchObject({
+    expectSourceFailureEnvelope(result, {
       status: "unsupported",
       reason: "unsupported",
       handoffUrl: "https://example.com/game.zip",

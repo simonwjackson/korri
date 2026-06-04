@@ -4,12 +4,14 @@ import type {
   ValidateSourcesResponse,
 } from "@platform/protocol/acquisition/source-health"
 import { Effect } from "effect"
-import { AcquisitionError } from "../errors"
+import type { AcquisitionError } from "../errors"
 import { validatePluginSourceHealthOutput } from "../plugin-contract-codecs"
 import { runPluginOperation } from "../plugin-operation-harness"
 import type { AcquisitionPluginContext } from "../plugin-runtime"
-import type { AcquisitionPluginRegistry } from "../plugins/registry"
-import { validateKnownSourceName } from "../source-names"
+import {
+  type AcquisitionPluginRegistry,
+  selectAcquisitionPlugins,
+} from "../plugins/registry"
 
 export interface ValidateAcquisitionSourcesOptions {
   readonly registry: AcquisitionPluginRegistry
@@ -27,7 +29,10 @@ export function validateAcquisitionSources({
 > {
   return Effect.gen(function* () {
     const checkedAt = context.clock.nowIso()
-    const plugins = yield* selectedPlugins(registry, request.sourceNames)
+    const plugins = yield* selectAcquisitionPlugins(
+      registry,
+      request.sourceNames,
+    )
     const sources = yield* Effect.all(
       plugins.map(plugin => {
         const validateSource = plugin.validateSource
@@ -54,29 +59,5 @@ export function validateAcquisitionSources({
       }),
     )
     return { sources }
-  })
-}
-
-function selectedPlugins(
-  registry: AcquisitionPluginRegistry,
-  sourceNames?: readonly string[],
-): Effect.Effect<
-  readonly AcquisitionPluginRegistry["plugins"][number][],
-  AcquisitionError
-> {
-  return Effect.try({
-    try: () => {
-      if (!sourceNames || sourceNames.length === 0) return registry.plugins
-      return sourceNames.map(sourceName =>
-        registry.get(validateKnownSourceName(sourceName, registry.sourceNames)),
-      )
-    },
-    catch: error =>
-      error instanceof AcquisitionError
-        ? error
-        : new AcquisitionError({
-            reason: "caller",
-            message: error instanceof Error ? error.message : String(error),
-          }),
   })
 }

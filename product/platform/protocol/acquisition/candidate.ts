@@ -23,6 +23,7 @@ export type SourceDetails = Schema.Schema.Type<typeof SourceDetails>
 export const SearchRequest = Schema.Struct({
   query: Schema.String,
   sourceNames: Schema.optional(Schema.Array(Schema.String)),
+  platforms: Schema.optional(Schema.Array(Schema.String)),
 })
 export type SearchRequest = Schema.Schema.Type<typeof SearchRequest>
 

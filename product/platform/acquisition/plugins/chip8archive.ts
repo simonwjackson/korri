@@ -81,7 +81,16 @@ function detailsFor(slug: string, program: Chip8Program): SourceDetails {
   }
 }
 
-function matchesProgram(slug: string, program: Chip8Program, query: string) {
+function matchesProgram(
+  slug: string,
+  program: Chip8Program,
+  query: string,
+  platforms?: readonly string[],
+) {
+  if (platforms && platforms.length > 0) {
+    const programPlatform = program.platform ?? "chip8"
+    if (!platforms.includes(programPlatform)) return false
+  }
   const normalizedQuery = query.trim().toLowerCase()
   if (normalizedQuery.length === 0) return false
   return [
@@ -102,7 +111,7 @@ function matchesProgram(slug: string, program: Chip8Program, query: string) {
 export function parseChip8ArchiveCandidateUrl(input: string): string | null {
   const url = parseUrl(input)
   if (!url) return null
-  return knownSlug(slugFromGalleryUrl(url) ?? slugFromRawRomUrl(url))
+  return slugFromGalleryUrl(url) ?? slugFromRawRomUrl(url)
 }
 
 function parseUrl(input: string): URL | null {
@@ -131,8 +140,31 @@ function slugFromRawRomUrl(url: URL): string | null {
   return match?.[1] ? decodeURIComponent(match[1]) : null
 }
 
-function knownSlug(slug: string | null | undefined): string | null {
-  return slug && PROGRAMS[slug] ? slug : null
+function resolveChip8ArchiveDownload(candidateUrl: string): DownloadResolution {
+  const slug = parseChip8ArchiveCandidateUrl(candidateUrl)
+  if (!slug) {
+    return {
+      _tag: "NonFinalDownload" as const,
+      sourceName: SOURCE_NAME,
+      reason: "unsupported" as const,
+      url: candidateUrl,
+    }
+  }
+  if (!PROGRAMS[slug]) {
+    return {
+      _tag: "FailedDownload" as const,
+      sourceName: SOURCE_NAME,
+      reason: "not-found" as const,
+      message: `Unknown CHIP-8 Archive candidate: ${slug}`,
+    }
+  }
+  return {
+    _tag: "FinalDownload" as const,
+    sourceName: SOURCE_NAME,
+    url: romUrl(slug),
+    filename: `${slug}.ch8`,
+    contentType: "application/octet-stream",
+  }
 }
 
 function knownProgram(
@@ -164,7 +196,7 @@ export const chip8ArchivePluginDefinition = {
     Effect.succeed(
       Object.entries(PROGRAMS)
         .filter(([slug, program]) =>
-          matchesProgram(slug, program, request.query),
+          matchesProgram(slug, program, request.query, request.platforms),
         )
         .map(([slug, program]) => candidateFor(slug, program)),
     ),
@@ -180,23 +212,5 @@ export const chip8ArchivePluginDefinition = {
       checkedAt: context.checkedAt,
     }),
   resolveDownload: (_context, request) =>
-    Effect.gen(function* () {
-      const slug = parseChip8ArchiveCandidateUrl(request.candidateUrl)
-      if (!slug) {
-        return {
-          _tag: "NonFinalDownload" as const,
-          sourceName: SOURCE_NAME,
-          reason: "unsupported" as const,
-          url: request.candidateUrl,
-        } satisfies DownloadResolution
-      }
-      yield* knownProgram(slug)
-      return {
-        _tag: "FinalDownload" as const,
-        sourceName: SOURCE_NAME,
-        url: romUrl(slug),
-        filename: `${slug}.ch8`,
-        contentType: "application/octet-stream",
-      } satisfies DownloadResolution
-    }),
+    Effect.succeed(resolveChip8ArchiveDownload(request.candidateUrl)),
 } satisfies AcquisitionPluginDefinition

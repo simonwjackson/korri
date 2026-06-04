@@ -9,8 +9,8 @@ import type {
 } from "@platform/protocol/acquisition/download-resolution"
 import type { PluginMetadata } from "@platform/protocol/acquisition/plugin"
 import type { SourceHealth } from "@platform/protocol/acquisition/source-health"
-import type { Effect } from "effect"
-import type { AcquisitionError } from "../errors"
+import { Effect } from "effect"
+import { AcquisitionError } from "../errors"
 import type { AcquisitionPluginContext } from "../plugin-runtime"
 import { validateKnownSourceName } from "../source-names"
 
@@ -22,7 +22,7 @@ export interface AcquisitionPluginDefinition {
   readonly metadata: PluginMetadata
   readonly search?: (
     context: AcquisitionPluginContext,
-    request: { readonly query: string },
+    request: { readonly query: string; readonly platforms?: readonly string[] },
   ) => Effect.Effect<readonly SourceCandidate[], AcquisitionError>
   readonly parseCandidateUrl?: (url: string) => string | null
   readonly details?: (
@@ -42,6 +42,28 @@ export interface AcquisitionPluginRegistry {
   readonly plugins: readonly AcquisitionPluginDefinition[]
   readonly sourceNames: ReadonlySet<string>
   readonly get: (sourceName: string) => AcquisitionPluginDefinition
+}
+
+export function selectAcquisitionPlugins(
+  registry: AcquisitionPluginRegistry,
+  sourceNames?: readonly string[],
+): Effect.Effect<
+  readonly AcquisitionPluginRegistry["plugins"][number][],
+  AcquisitionError
+> {
+  return Effect.try({
+    try: () => {
+      if (!sourceNames || sourceNames.length === 0) return registry.plugins
+      return sourceNames.map(sourceName => registry.get(sourceName))
+    },
+    catch: error =>
+      error instanceof AcquisitionError
+        ? error
+        : new AcquisitionError({
+            reason: "caller",
+            message: error instanceof Error ? error.message : String(error),
+          }),
+  })
 }
 
 export function createAcquisitionPluginRegistry(

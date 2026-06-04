@@ -1,30 +1,6 @@
+import { approvedFixturePluginDefinitions } from "./approved-fixtures"
 import { chip8ArchivePluginDefinition } from "./chip8archive"
 import type { AcquisitionPluginDefinition } from "./registry"
 
-const approvedTypeScriptSources = [
-  ["homebrewhub", "Homebrew Hub", "low"],
-  ["itchio", "itch.io", "medium"],
-  ["pico8bbs", "PICO-8 BBS", "medium"],
-  ["portmaster", "PortMaster", "low"],
-  ["puzzlescript", "PuzzleScript", "low"],
-  ["retrobrews", "RetroBrews", "low"],
-  ["tic80gallery", "TIC-80 Gallery", "low"],
-  ["wasm4gallery", "WASM-4 Gallery", "low"],
-] as const
-
-const approvedMetadataOnlyPluginDefinitions = approvedTypeScriptSources.map(
-  ([sourceName, displayName, legalRisk]) => ({
-    metadata: {
-      sourceName,
-      displayName,
-      module: `product/platform/acquisition/plugins/${sourceName}`,
-      builtIn: true,
-      enabledByDefault: true,
-      legalRisk,
-      credentialRequired: sourceName === "itchio",
-    },
-  }),
-) satisfies readonly AcquisitionPluginDefinition[]
-
 export const approvedTypeScriptPluginDefinitions: readonly AcquisitionPluginDefinition[] =
-  [chip8ArchivePluginDefinition, ...approvedMetadataOnlyPluginDefinitions]
+  [chip8ArchivePluginDefinition, ...approvedFixturePluginDefinitions]
