@@ -1,9 +1,17 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { chmod, mkdtemp, readFile, rm } from "node:fs/promises"
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { NotFoundError, ValidationError } from "@platform/api/rpc/errors"
 import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
+import { makeInMemoryLibrarySourceLayer } from "@platform/library/library-source-layer-memory"
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
 import { createLibraryRepository } from "@platform/library/proseql/library-repository"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
@@ -32,6 +40,24 @@ afterEach(async () => {
     if (cleanup) await cleanup()
   }
 })
+
+async function withArtifactRoot<T>(fn: (root: string) => Promise<T>) {
+  const parent = await mkdtemp(
+    join(tmpdir(), "korri-stream-prepare-artifacts-"),
+  )
+  const root = join(parent, "game-launch")
+  await mkdir(root, { recursive: true })
+  await writeFile(join(root, "retroarch.cfg"), "temporary config")
+  try {
+    return await fn(root)
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+}
+
+async function expectArtifactRootRemoved(root: string) {
+  await expect(readFile(join(root, "retroarch.cfg"), "utf8")).rejects.toThrow()
+}
 
 describe("app.stream.prepare handler", () => {
   it("fails closed when stream control is not enabled", async () => {
@@ -73,6 +99,53 @@ describe("app.stream.prepare handler", () => {
       backend: "wayland",
       exposeWayland: true,
       args: ["-f"],
+    })
+  })
+
+  it("cleans resolved artifacts when enqueueing the stream intent fails", async () => {
+    await withArtifactRoot(async root => {
+      const intentDir = await mkdtemp(
+        join(tmpdir(), "korri-stream-prepare-bad-"),
+      )
+      await chmod(intentDir, 0o755)
+      cleanups.push(() => rm(intentDir, { recursive: true, force: true }))
+      process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
+      process.env.KORRI_GAME_STREAM_INTENT_PATH = join(
+        intentDir,
+        "next-launch.json",
+      )
+      delete process.env.XDG_RUNTIME_DIR
+
+      const exit = await Effect.runPromiseExit(
+        handlePrepareStream({ id: "gba/patched" }).pipe(
+          Effect.provide(
+            makeInMemoryLibrarySourceLayer({
+              games: [
+                {
+                  id: "gba/patched",
+                  system: "gba",
+                  contentPath: "/storage/roms/gba/game.gba",
+                },
+              ],
+              resolvedLaunchById: new Map([
+                [
+                  "gba/patched",
+                  {
+                    spec: { command: "/bin/echo", args: ["game"] },
+                    artifacts: {
+                      root,
+                      paths: { configPath: join(root, "retroarch.cfg") },
+                    },
+                  },
+                ],
+              ]),
+            }),
+          ),
+        ),
+      )
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      await expectArtifactRootRemoved(root)
     })
   })
 

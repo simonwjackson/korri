@@ -1,5 +1,12 @@
 import { describe, expect, it } from "bun:test"
-import { chmod, mkdtemp, readFile } from "node:fs/promises"
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { GameRecord } from "@platform/fixtures/games/game"
@@ -31,6 +38,22 @@ const game: GameRecord = {
   metadata: { name: "F-Zero" },
 }
 const launchSpec: LaunchSpec = { command: "/bin/echo", args: ["race"] }
+
+async function withArtifactRoot<T>(fn: (root: string) => Promise<T>) {
+  const parent = await mkdtemp(join(tmpdir(), "korri-cli-stream-artifacts-"))
+  const root = join(parent, "game-launch")
+  await mkdir(root, { recursive: true })
+  await writeFile(join(root, "retroarch.cfg"), "temporary config")
+  try {
+    return await fn(root)
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+}
+
+async function expectArtifactRootRemoved(root: string) {
+  await expect(readFile(join(root, "retroarch.cfg"), "utf8")).rejects.toThrow()
+}
 
 describe("runStreamLaunchCommand", () => {
   it("prints the next step after preparing a known game", async () => {
@@ -386,6 +409,38 @@ describe("prepareStreamLaunchForGame", () => {
       "absolute",
     )
     await expect(readFile(intentPath, "utf8")).rejects.toThrow()
+  })
+
+  it("cleans resolved artifacts when preparing the trusted intent fails", async () => {
+    await withArtifactRoot(async root => {
+      const dir = await mkdtemp(join(tmpdir(), "korri-cli-untrusted-intent-"))
+      await chmod(dir, 0o755)
+      const intentPath = join(dir, "next-launch.json")
+
+      const result = await prepareStreamLaunchForGame({
+        gameId: game.id,
+        librarySource: librarySource({
+          games: [game],
+          launchSpecs: new Map([[game.id, launchSpec]]),
+          artifacts: new Map([
+            [
+              game.id,
+              {
+                root,
+                paths: { configPath: join(root, "retroarch.cfg") },
+              },
+            ],
+          ]),
+        }),
+        intentStore: createFileGameStreamLaunchIntentStore(intentPath),
+      })
+
+      expect(result).toMatchObject({
+        status: "failed",
+        category: "prepare-failed",
+      })
+      await expectArtifactRootRemoved(root)
+    })
   })
 
   it("preserves prepare failure diagnostics from the trusted intent store", async () => {

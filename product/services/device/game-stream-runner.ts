@@ -1,6 +1,7 @@
 import { mkdir, open, readFile, unlink, writeFile } from "node:fs/promises"
 import { dirname, isAbsolute, join } from "node:path"
 import { xdgRuntimeDir } from "@platform/config/xdg-paths"
+import { cleanupLaunchArtifacts } from "@platform/library/config/app-materializer"
 import {
   decodeLaunchSpec,
   type Launcher,
@@ -10,6 +11,7 @@ import {
 } from "@platform/library/launcher"
 import { createSessionLauncherFromEnv } from "@platform/library/session-launcher"
 import { logger as defaultLogger } from "@platform/logger"
+import { Effect } from "effect"
 import {
   composeGamescopeLaunchSpec,
   type GamescopeOptions,
@@ -211,6 +213,14 @@ export function createGameStreamRunner(
     }
   }
 
+  async function cleanupLaunchClaimArtifacts(
+    launchClaim: ClaimedGameStreamLaunchIntent,
+  ): Promise<void> {
+    await Effect.runPromise(
+      cleanupLaunchArtifacts(launchClaim.intent.artifacts),
+    )
+  }
+
   async function fail(
     stage: GameStreamFailureStage,
     reason: string,
@@ -305,6 +315,8 @@ export function createGameStreamRunner(
       launchResult.status === "launched" ? 0 : launchResult.exitCode
     const reportedExitCode = stopRequested && exitCode === 0 ? 143 : exitCode
     state = completeGameStreamExit(state, reportedExitCode)
+
+    await cleanupLaunchClaimArtifacts(launchClaim)
 
     if (stopRequested) {
       return {
@@ -521,16 +533,19 @@ export function createGameStreamRunner(
               await waitForStopRequest()
               state = completeGameStreamExit(state, exitCode)
               await writeStatus()
+              await cleanupLaunchClaimArtifacts(launchClaim)
               return { status: "launched", exitCode: 0 }
             }
             if (stopRequested) {
               await terminateChild(activeChild, "SIGTERM", terminateGraceMs)
               await completeLaunchClaim(launchClaim)
-              return await fail(
+              const result = await fail(
                 "cleanup",
                 "game stream stopped during launch",
                 143,
               )
+              await cleanupLaunchClaimArtifacts(launchClaim)
+              return result
             }
             await completeLaunchClaim(launchClaim)
             state = markGameStreamRunning(state, activeChild.pid)
@@ -564,6 +579,8 @@ export function createGameStreamRunner(
           stoppedMidRun && exitCode === 0 ? 143 : exitCode
         state = completeGameStreamExit(state, reportedExitCode)
         await writeStatus()
+
+        await cleanupLaunchClaimArtifacts(launchClaim)
 
         if (stoppedMidRun) {
           return { status: "failed", stage: "game", exitCode: reportedExitCode }

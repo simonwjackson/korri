@@ -4,6 +4,7 @@ import {
   NotFoundError,
   ValidationError,
 } from "@platform/api/rpc/errors"
+import { cleanupLaunchArtifacts } from "@platform/library/config/app-materializer"
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
 import { LibrarySource } from "@platform/library/library-services"
 import { logger } from "@platform/logger/logger"
@@ -102,7 +103,7 @@ export function prepareStreamLaunch(
       try: () =>
         createFileGameStreamLaunchIntentStore(intentPath).enqueue(intent),
       catch: error => toWriteError(error),
-    })
+    }).pipe(Effect.tapError(() => cleanupLaunchArtifacts(resolved.artifacts)))
 
     logger.info(
       { id: gameId, intentPath, sessionId: intent.id },

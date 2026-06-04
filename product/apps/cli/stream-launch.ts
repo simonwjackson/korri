@@ -1,5 +1,6 @@
 import type { GameRecord } from "@platform/fixtures/games/game"
 import { getGameDisplayName } from "@platform/fixtures/games/game"
+import { cleanupLaunchArtifacts } from "@platform/library/config/app-materializer"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import type { LaunchSpec } from "@platform/library/launcher"
 import {
@@ -243,6 +244,7 @@ async function enqueueLaunchIntent(options: {
   try {
     await options.intentStore.enqueue(intent)
   } catch (error) {
+    await Effect.runPromise(cleanupLaunchArtifacts(options.artifacts))
     return {
       status: "failed",
       category: "prepare-failed",

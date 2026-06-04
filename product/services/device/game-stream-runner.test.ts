@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type {
@@ -33,6 +33,32 @@ const sessionEnv = {
   XDG_RUNTIME_DIR: "/run/user/1000",
   WAYLAND_DISPLAY: "wayland-1",
   SWAYSOCK: "/run/user/1000/sway-ipc.sock",
+}
+
+async function withArtifactRoot<T>(fn: (root: string) => Promise<T>) {
+  const parent = await mkdtemp(join(tmpdir(), "korri-stream-artifacts-"))
+  const root = join(parent, "game-launch")
+  await mkdir(root, { recursive: true })
+  await writeFile(join(root, "retroarch.cfg"), "temporary config")
+  try {
+    return await fn(root)
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+}
+
+async function expectArtifactRootPresent(root: string) {
+  await expect(readFile(join(root, "retroarch.cfg"), "utf8")).resolves.toBe(
+    "temporary config",
+  )
+}
+
+async function expectArtifactRootRemoved(root: string) {
+  await expect(readFile(join(root, "retroarch.cfg"), "utf8")).rejects.toThrow()
+}
+
+function artifactsForRoot(root: string) {
+  return { root, paths: { configPath: join(root, "retroarch.cfg") } }
 }
 
 function createControlledChild(pid: number): {
@@ -141,6 +167,60 @@ describe("game stream runner", () => {
     await waitFor(() => nextRunner.status().mode === "running")
     nextChild.exit(0)
     await expect(nextRun).resolves.toEqual({ status: "launched", exitCode: 0 })
+  })
+
+  it("cleans stream launch artifacts after the foreground child exits", async () => {
+    await withArtifactRoot(async root => {
+      const controlled = createControlledChild(207)
+      const { spawner } = createControlledSpawner(controlled.child)
+      const runner = createGameStreamRunner({
+        launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
+          artifacts: artifactsForRoot(root),
+        }),
+        spawner,
+        logger: quietLogger(),
+        processInfo: { pid: 10, uid: 1000 },
+      })
+
+      const run = runner.run()
+      await waitFor(() => runner.status().mode === "running")
+      controlled.exit(0)
+
+      await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
+      await expectArtifactRootRemoved(root)
+    })
+  })
+
+  it("cleans stream launch artifacts after terminal completion even if intent completion fails", async () => {
+    await withArtifactRoot(async root => {
+      const controlled = createControlledChild(217)
+      const { spawner } = createControlledSpawner(controlled.child)
+      const runner = createGameStreamRunner({
+        launchIntentStore: {
+          enqueue: async () => undefined,
+          claim: async () => ({
+            intent: createLaunchIntent(game, {
+              artifacts: artifactsForRoot(root),
+            }),
+            complete: async () => {
+              throw new Error("unlink failed")
+            },
+            requeue: async () => undefined,
+            quarantine: async () => undefined,
+          }),
+        },
+        spawner,
+        logger: quietLogger(),
+        processInfo: { pid: 10, uid: 1000 },
+      })
+
+      const run = runner.run()
+      await waitFor(() => runner.status().mode === "running")
+      controlled.exit(0)
+
+      await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
+      await expectArtifactRootRemoved(root)
+    })
   })
 
   it("rejects a second runner process while the first lock owner is active", async () => {
@@ -534,24 +614,29 @@ describe("game stream runner", () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
     const intentPath = join(dir, "next-launch.json")
     const intentStore = createFileGameStreamLaunchIntentStore(intentPath)
-    await intentStore.enqueue(createLaunchIntent(game))
-    const spawnFailure = createGameStreamRunner({
-      launchIntentStore: intentStore,
-      spawner: {
-        spawn: async () => {
-          throw new Error("missing game")
+    await withArtifactRoot(async root => {
+      await intentStore.enqueue(
+        createLaunchIntent(game, { artifacts: artifactsForRoot(root) }),
+      )
+      const spawnFailure = createGameStreamRunner({
+        launchIntentStore: intentStore,
+        spawner: {
+          spawn: async () => {
+            throw new Error("missing game")
+          },
         },
-      },
-      logger: quietLogger(),
-      processInfo: { pid: 10, uid: 1000 },
-    })
-    await expect(spawnFailure.run()).resolves.toMatchObject({
-      status: "failed",
-      stage: "spawn",
-      exitCode: 127,
-    })
-    await expect(intentStore.claim()).resolves.toMatchObject({
-      intent: expect.objectContaining({ launch: game }),
+        logger: quietLogger(),
+        processInfo: { pid: 10, uid: 1000 },
+      })
+      await expect(spawnFailure.run()).resolves.toMatchObject({
+        status: "failed",
+        stage: "spawn",
+        exitCode: 127,
+      })
+      await expect(intentStore.claim()).resolves.toMatchObject({
+        intent: expect.objectContaining({ launch: game }),
+      })
+      await expectArtifactRootPresent(root)
     })
 
     const controlled = createControlledChild(208)
@@ -1043,38 +1128,43 @@ describe("game stream runner", () => {
 
 describe("game stream runner sessiond foreground branch", () => {
   it("routes lifecycle:foreground intents through the injected sessiondLauncher", async () => {
-    const spawnedSpecs: LaunchSpec[] = []
-    const { sessiondLauncher, controller } =
-      createSessiondLauncherHarness(spawnedSpecs)
-    const localSpecs: LaunchSpec[] = []
-    const localSpawner: ManagedChildSpawner = {
-      spawn: async spec => {
-        localSpecs.push(spec)
-        throw new Error(
-          "local spawn must not be used on the foreground sessiond branch",
-        )
-      },
-    }
-    const runner = createGameStreamRunner({
-      launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
-      spawner: localSpawner,
-      sessiondLauncher,
-      logger: quietLogger(),
-      processInfo: { pid: 10, uid: 1000 },
-      processEnv: {
-        ...sessionEnv,
-        KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
-      },
+    await withArtifactRoot(async root => {
+      const spawnedSpecs: LaunchSpec[] = []
+      const { sessiondLauncher, controller } =
+        createSessiondLauncherHarness(spawnedSpecs)
+      const localSpecs: LaunchSpec[] = []
+      const localSpawner: ManagedChildSpawner = {
+        spawn: async spec => {
+          localSpecs.push(spec)
+          throw new Error(
+            "local spawn must not be used on the foreground sessiond branch",
+          )
+        },
+      }
+      const runner = createGameStreamRunner({
+        launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
+          artifacts: artifactsForRoot(root),
+        }),
+        spawner: localSpawner,
+        sessiondLauncher,
+        logger: quietLogger(),
+        processInfo: { pid: 10, uid: 1000 },
+        processEnv: {
+          ...sessionEnv,
+          KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
+        },
+      })
+
+      const run = runner.run()
+      await waitFor(() => runner.status().mode === "running")
+      expect(spawnedSpecs).toHaveLength(1)
+      expect(spawnedSpecs[0].command).toBe(game.command)
+      expect(localSpecs).toEqual([])
+
+      controller.exit(0)
+      await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
+      await expectArtifactRootRemoved(root)
     })
-
-    const run = runner.run()
-    await waitFor(() => runner.status().mode === "running")
-    expect(spawnedSpecs).toHaveLength(1)
-    expect(spawnedSpecs[0].command).toBe(game.command)
-    expect(localSpecs).toEqual([])
-
-    controller.exit(0)
-    await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
   })
 
   it("propagates the sessiond child exit code on success", async () => {
