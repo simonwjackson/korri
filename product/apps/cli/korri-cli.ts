@@ -1,4 +1,7 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun"
+import { makeLiveAcquisitionLayer } from "@platform/acquisition/acquisition-service"
+import { createStaticAcquisitionPluginRegistry } from "@platform/acquisition/plugin-loader"
+import { approvedTypeScriptPluginDefinitions } from "@platform/acquisition/plugins/approved"
 import { LauncherLayerLive } from "@platform/library/launcher-layer-live"
 import { Launcher, LibrarySource } from "@platform/library/library-services"
 import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
@@ -8,6 +11,7 @@ import {
   createFileGameStreamLaunchIntentStore,
   defaultGameStreamIntentPath,
 } from "../../services/device/game-stream-launch-intent"
+import { bazzarCommand } from "./bazzar/bazzar-command"
 import { createEffectGamePicker } from "./game-picker"
 import { runRemoteStreamLaunchCommand } from "./remote-stream-launch"
 import { runSourceAwarePlayCommand } from "./source-aware-play"
@@ -101,13 +105,20 @@ const playCommand = Command.make(
 
 export const korriCommand = Command.make("korri").pipe(
   Command.withDescription("Korri command line interface."),
-  Command.withSubcommands([playCommand, streamCommand]),
+  Command.withSubcommands([bazzarCommand, playCommand, streamCommand]),
 )
+
+const AcquisitionLayerLive = makeLiveAcquisitionLayer({
+  registry: createStaticAcquisitionPluginRegistry(
+    approvedTypeScriptPluginDefinitions,
+  ),
+})
 
 const runtimeLayer = Layer.mergeAll(
   BunServices.layer,
   LibrarySourceLayerLive,
   LauncherLayerLive,
+  AcquisitionLayerLive,
 )
 
 export function runKorriCli(argv: readonly string[]) {
