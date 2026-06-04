@@ -93,6 +93,11 @@ describe("headless server RPC group", () => {
     const tags = Array.from(serverRpcGroup.requests.keys()).sort()
 
     expect(tags).toEqual([
+      "app.acquisition.details",
+      "app.acquisition.plugins",
+      "app.acquisition.resolve-download",
+      "app.acquisition.search",
+      "app.acquisition.validate-sources",
       "app.game-assets.assign",
       "app.game-assets.candidates.list",
       "app.game-assets.unassign",
@@ -145,6 +150,16 @@ describe("headless server RPC group", () => {
     expect(serverTags).toContain("app.game-assets.candidates.list")
     expect(serverTags).toContain("app.game-assets.assign")
     expect(serverTags).toContain("app.game-assets.unassign")
+  })
+
+  it("keeps acquisition RPCs off the portal/app RPC group", () => {
+    const appTags = Array.from(appRpcGroup.requests.keys())
+
+    expect(appTags).not.toContain("app.acquisition.search")
+    expect(appTags).not.toContain("app.acquisition.details")
+    expect(appTags).not.toContain("app.acquisition.plugins")
+    expect(appTags).not.toContain("app.acquisition.validate-sources")
+    expect(appTags).not.toContain("app.acquisition.resolve-download")
   })
 
   it("mounts narrow durable game-asset bytes instead of arbitrary media files", async () => {

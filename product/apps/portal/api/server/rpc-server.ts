@@ -1,3 +1,6 @@
+import { makeLiveAcquisitionLayer } from "@platform/acquisition/acquisition-service"
+import { createStaticAcquisitionPluginRegistry } from "@platform/acquisition/plugin-loader"
+import { approvedTypeScriptPluginDefinitions } from "@platform/acquisition/plugins/approved"
 import { BatchJsonSerializationLive } from "@platform/api/rpc/serialization"
 import { FeatureGatesMiddlewareLive } from "@platform/gates/middleware"
 import { GameAssetsLayerLive } from "@platform/library/game-assets/game-assets-service"
@@ -11,6 +14,11 @@ import { PeerSourceFetcherLive } from "@product/apps/portal/peers/peer-source-fe
 import { Effect, Exit, Layer, Scope } from "effect"
 import * as HttpEffect from "effect/unstable/http/HttpEffect"
 import { RpcServer } from "effect/unstable/rpc"
+import { handleAcquisitionDetails } from "../acquisition/details.rpc-handler"
+import { handleAcquisitionPlugins } from "../acquisition/plugins.rpc-handler"
+import { handleAcquisitionResolveDownload } from "../acquisition/resolve-download.rpc-handler"
+import { handleAcquisitionSearch } from "../acquisition/search.rpc-handler"
+import { handleAcquisitionValidateSources } from "../acquisition/validate-sources.rpc-handler"
 import { handleAssignGameAsset } from "../game-assets/assign.rpc-handler"
 import { handleListGameAssetCandidates } from "../game-assets/list-candidates.rpc-handler"
 import { handleUnassignGameAsset } from "../game-assets/unassign.rpc-handler"
@@ -52,6 +60,12 @@ const PeerDiscoveryConfigured =
             : {}),
       })
 
+const AcquisitionLayerLive = makeLiveAcquisitionLayer({
+  registry: createStaticAcquisitionPluginRegistry(
+    approvedTypeScriptPluginDefinitions,
+  ),
+})
+
 const LibraryInfrastructureLive = Layer.mergeAll(
   LibrarySourceLayerLive,
   LauncherLayerLive,
@@ -61,10 +75,16 @@ const LibraryInfrastructureLive = Layer.mergeAll(
   StreamControlLayerLive,
   PeerDiscoveryConfigured,
   PeerSourceFetcherLive,
+  AcquisitionLayerLive,
 )
 
 const ServerHandlersLive = serverRpcGroup.toLayer(
   serverRpcGroup.of({
+    "app.acquisition.search": handleAcquisitionSearch,
+    "app.acquisition.details": handleAcquisitionDetails,
+    "app.acquisition.plugins": handleAcquisitionPlugins,
+    "app.acquisition.validate-sources": handleAcquisitionValidateSources,
+    "app.acquisition.resolve-download": handleAcquisitionResolveDownload,
     "app.hello.get": handleGetHello,
     "app.game-assets.candidates.list": handleListGameAssetCandidates,
     "app.game-assets.assign": handleAssignGameAsset,
