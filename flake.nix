@@ -385,7 +385,13 @@
             gameStream = mkSource deviceRuntime;
             sessiond = mkSource deviceRuntime;
             cli = mkSource ([ ./product/apps/cli ] ++ deviceRuntime);
-            server = mkSource ([ ./product/services/server ] ++ deviceRuntime);
+            server = mkSource (
+              [
+                ./product/apps/cli
+                ./product/services/server
+              ]
+              ++ deviceRuntime
+            );
           };
 
         # Single portal build for every desktop variant. The native input-bridge

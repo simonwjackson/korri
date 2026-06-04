@@ -127,6 +127,42 @@ pkgs.stdenv.mkDerivation {
       fi
     done
 
+    # Safe Bazzar contract-command smoke: use an unknown-but-valid source name
+    # so the command exercises the bundled acquisition CLI/RPC contract envelope
+    # without performing network IO or loading private quarantined .mjs plugins.
+    bazzar_contract="$TMPDIR/korri-bazzar-contract.json"
+    bazzar_contract_err="$TMPDIR/korri-bazzar-contract.err"
+    set +e
+    "$out/bin/korri" bazzar resolve-download packaging-smoke https://example.invalid/rom.zip --title Smoke > "$bazzar_contract" 2> "$bazzar_contract_err"
+    bazzar_contract_status=$?
+    set -e
+    if [ "$bazzar_contract_status" -ne 21 ]; then
+      echo "korri-cli smoke test failed: expected bazzar contract smoke exit 21, got $bazzar_contract_status" >&2
+      cat "$bazzar_contract" >&2 || true
+      cat "$bazzar_contract_err" >&2 || true
+      exit 1
+    fi
+    if [ -s "$bazzar_contract_err" ]; then
+      echo "korri-cli smoke test failed: unexpected stderr output from bazzar contract-command" >&2
+      cat "$bazzar_contract_err" >&2
+      exit 1
+    fi
+
+    node - "$bazzar_contract" <<'NODE'
+const fs = require("node:fs")
+const file = process.argv[2]
+const lines = fs.readFileSync(file, "utf8").trimEnd().split("\n")
+if (lines.length !== 1 || lines[0] === "") {
+  console.error("expected exactly one bazzar contract stdout line")
+  process.exit(1)
+}
+const parsed = JSON.parse(lines[0])
+if (typeof parsed !== "object" || parsed === null) {
+  console.error("expected bazzar contract stdout to be a JSON object")
+  process.exit(1)
+}
+NODE
+
     if [ -e "$out/bin/bazzar" ]; then
       echo "korri-cli must not install a standalone bazzar binary" >&2
       exit 1

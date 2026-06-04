@@ -156,14 +156,19 @@ describe("korri bazzar command routing", () => {
     expect(result.stderr).toBe("")
     const envelope = parseSingleJsonLine(result.stdout) as {
       command: string
+      contractVersion: string
       exitCategory: string
       exitCode: number
-      data: { outcome: { status: string; reason: string } }
+      data: {
+        outcome: { source: { plugin: string }; status: string; reason: string }
+      }
     }
     expect(result.exitCode).toBe(21)
+    expect(envelope.contractVersion).toBe("bazzar.source-adapter.v1")
     expect(envelope.command).toBe("resolve-download")
     expect(envelope.exitCategory).toBe("caller_error")
     expect(envelope.exitCode).toBe(21)
+    expect(envelope.data.outcome.source.plugin).toBe("missing-source")
     expect(envelope.data.outcome.status).toBe("caller_error")
     expect(envelope.data.outcome.reason).toContain("Unknown source")
   })
