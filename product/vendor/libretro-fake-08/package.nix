@@ -28,10 +28,7 @@
 stdenv.mkDerivation {
   pname = "libretro-fake-08";
   version =
-    if fake-08-src ? shortRev then
-      fake-08-src.shortRev
-    else
-      fake-08-src.lastModifiedDate or "unknown";
+    if fake-08-src ? shortRev then fake-08-src.shortRev else fake-08-src.lastModifiedDate or "unknown";
 
   src = fake-08-src;
 
@@ -60,10 +57,7 @@ stdenv.mkDerivation {
     {
       printf '%s\n' 'pname=libretro-fake-08'
       printf '%s\n' 'version=${
-        if fake-08-src ? shortRev then
-          fake-08-src.shortRev
-        else
-          fake-08-src.lastModifiedDate or "unknown"
+        if fake-08-src ? shortRev then fake-08-src.shortRev else fake-08-src.lastModifiedDate or "unknown"
       }'
       printf '%s\n' 'upstream-repo=github.com/jtothebell/fake-08'
       printf '%s\n' 'upstream-rev=${fake-08-src.rev or "unknown"}'

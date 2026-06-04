@@ -83,6 +83,23 @@ function importsPrivateProductFromPlatform(source: string): boolean {
   )
 }
 
+function importsVendorDirectly(
+  source: string,
+  fromFile = join(REPO_ROOT, "korri", "products", "app", "example.ts"),
+): boolean {
+  return importSpecifiers(source).some(specifier => {
+    if (/^(?:@product\/vendor\/|product\/vendor\/)/.test(specifier)) {
+      return true
+    }
+
+    if (!specifier.startsWith(".")) return false
+
+    return repoRelative(
+      normalize(join(dirname(fromFile), specifier)),
+    ).startsWith("product/vendor/")
+  })
+}
+
 function importsThemeInternalsDirectly(source: string): boolean {
   return importSpecifiers(source).some(specifier => {
     if (/^@product\/themes\/[^/]+\/(?:entry|[^/]+\.css)$/.test(specifier)) {
@@ -145,6 +162,44 @@ describe("standards: product platform reorganization guardrails", () => {
     expect(existsSync(LEGACY_SHARED_THEME_ROOT)).toBe(false)
     expect(existsSync(join(REPO_ROOT, "product", "themes", "shift"))).toBe(true)
     expect(existsSync(join(REPO_ROOT, "product", "themes", "evier"))).toBe(true)
+  })
+
+  it("keeps carried upstream packages under product vendor", () => {
+    expect(existsSync(join(REPO_ROOT, "packages"))).toBe(false)
+    expect(existsSync(join(REPO_ROOT, "product", "vendor"))).toBe(true)
+    expect(
+      existsSync(
+        join(REPO_ROOT, "product", "vendor", "moonlight-embedded-korri"),
+      ),
+    ).toBe(true)
+    expect(
+      existsSync(join(REPO_ROOT, "product", "vendor", "sunshine-korri")),
+    ).toBe(true)
+    expect(
+      existsSync(join(REPO_ROOT, "product", "vendor", "gamescope-korri")),
+    ).toBe(true)
+    expect(
+      existsSync(join(REPO_ROOT, "product", "vendor", "libretro-fake-08")),
+    ).toBe(true)
+    expect(
+      existsSync(join(REPO_ROOT, "product", "vendor", "SDL2-mali-fbdev")),
+    ).toBe(true)
+  })
+
+  it("keeps runtime TypeScript from importing product vendor directly", () => {
+    const violations = existingRoots([
+      join(REPO_ROOT, "korri"),
+      join(REPO_ROOT, "product", "apps"),
+      join(REPO_ROOT, "product", "platform"),
+      join(REPO_ROOT, "product", "services"),
+      join(REPO_ROOT, "product", "themes"),
+    ]).flatMap(root =>
+      sourceFiles(root)
+        .filter(file => importsVendorDirectly(readSource(file), file))
+        .map(repoRelative),
+    )
+
+    expect(violations).toEqual([])
   })
 
   it("keeps autonomous themes from importing app, service, system, or deploy internals", () => {

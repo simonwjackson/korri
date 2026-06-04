@@ -770,23 +770,23 @@
                 {
                   inherit pkgs;
                   patchPaths = [
-                    ./packages/sunshine-korri/patches/0001-add-runtime-settings-protocol-surface.patch
-                    ./packages/sunshine-korri/patches/0002-wire-runtime-settings-control-plane.patch
-                    ./packages/sunshine-korri/patches/0003-apply-runtime-bitrate-and-fps-changes.patch
-                    ./packages/sunshine-korri/patches/0004-add-proof-gated-runtime-resolution-apply-path.patch
-                    ./packages/sunshine-korri/patches/0005-add-seamless-vaapi-runtime-bitrate-path.patch
+                    ./product/vendor/sunshine-korri/patches/0001-add-runtime-settings-protocol-surface.patch
+                    ./product/vendor/sunshine-korri/patches/0002-wire-runtime-settings-control-plane.patch
+                    ./product/vendor/sunshine-korri/patches/0003-apply-runtime-bitrate-and-fps-changes.patch
+                    ./product/vendor/sunshine-korri/patches/0004-add-proof-gated-runtime-resolution-apply-path.patch
+                    ./product/vendor/sunshine-korri/patches/0005-add-seamless-vaapi-runtime-bitrate-path.patch
                   ];
-                  readmePath = ./packages/sunshine-korri/README.md;
-                  sunshinePackagePath = ./packages/sunshine-korri/package.nix;
+                  readmePath = ./product/vendor/sunshine-korri/README.md;
+                  sunshinePackagePath = ./product/vendor/sunshine-korri/package.nix;
                   moonlightPatchPaths = [
-                    ./packages/moonlight-embedded-korri/patches/0005a-add-sunshine-runtime-settings-protocol-sender.patch
-                    ./packages/moonlight-embedded-korri/patches/0005b-track-sunshine-runtime-settings-command-outcomes.patch
-                    ./packages/moonlight-embedded-korri/patches/0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch
-                    ./packages/moonlight-embedded-korri/patches/0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch
-                    ./packages/moonlight-embedded-korri/patches/0008-add-runtime-set-resolution-on-local-control.patch
-                    ./packages/moonlight-embedded-korri/patches/0011-reset-sdl-presenter-on-output-size-change.patch
+                    ./product/vendor/moonlight-embedded-korri/patches/0005a-add-sunshine-runtime-settings-protocol-sender.patch
+                    ./product/vendor/moonlight-embedded-korri/patches/0005b-track-sunshine-runtime-settings-command-outcomes.patch
+                    ./product/vendor/moonlight-embedded-korri/patches/0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch
+                    ./product/vendor/moonlight-embedded-korri/patches/0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch
+                    ./product/vendor/moonlight-embedded-korri/patches/0008-add-runtime-set-resolution-on-local-control.patch
+                    ./product/vendor/moonlight-embedded-korri/patches/0011-reset-sdl-presenter-on-output-size-change.patch
                   ];
-                  moonlightReadmePath = ./packages/moonlight-embedded-korri/README.md;
+                  moonlightReadmePath = ./product/vendor/moonlight-embedded-korri/README.md;
                   sunshinePackage = self.packages.${system}.sunshine-korri;
                   moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
                 };
@@ -795,16 +795,16 @@
                 {
                   inherit pkgs;
                   patchPaths = [
-                    ./packages/moonlight-embedded-korri/patches/0006-add-local-control-observability-ipc.patch
-                    ./packages/moonlight-embedded-korri/patches/0007-wire-local-control-runtime-command-events.patch
-                    ./packages/moonlight-embedded-korri/patches/0008-add-runtime-set-resolution-on-local-control.patch
-                    ./packages/moonlight-embedded-korri/patches/0012-add-runtime-touch-bounds-control.patch
+                    ./product/vendor/moonlight-embedded-korri/patches/0006-add-local-control-observability-ipc.patch
+                    ./product/vendor/moonlight-embedded-korri/patches/0007-wire-local-control-runtime-command-events.patch
+                    ./product/vendor/moonlight-embedded-korri/patches/0008-add-runtime-set-resolution-on-local-control.patch
+                    ./product/vendor/moonlight-embedded-korri/patches/0012-add-runtime-touch-bounds-control.patch
                   ];
-                  absoluteTouchPatchPath = ./packages/moonlight-embedded-korri/patches/0004-add-absolutetouch-flag-for-tap-to-click.patch;
-                  readmePath = ./packages/moonlight-embedded-korri/README.md;
+                  absoluteTouchPatchPath = ./product/vendor/moonlight-embedded-korri/patches/0004-add-absolutetouch-flag-for-tap-to-click.patch;
+                  readmePath = ./product/vendor/moonlight-embedded-korri/README.md;
                   moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
                 };
-            libretro-fake-08-check = import ./packages/libretro-fake-08/check.nix {
+            libretro-fake-08-check = import ./product/vendor/libretro-fake-08/check.nix {
               inherit pkgs;
               libretroFake08Package = self.packages.${system}.libretro-fake-08;
             };

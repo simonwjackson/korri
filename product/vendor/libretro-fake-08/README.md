@@ -87,7 +87,7 @@ RetroArch without growing the per-image closure for every user.
 ## Layout
 
 ```
-packages/libretro-fake-08/
+product/vendor/libretro-fake-08/
 ├── README.md       # this file
 ├── package.nix     # stdenv.mkDerivation wired through product/systems/nixos/overlays/korri-packages.nix
 └── check.nix       # colocated package-level check exposed as

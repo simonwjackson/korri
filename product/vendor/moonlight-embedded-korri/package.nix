@@ -133,7 +133,9 @@ stdenv.mkDerivation rec {
       printf '%s\n' 'nix-on-rocks-manifest-version=${nixOnRocksMoonlightManifest.version}'
       printf '%s\n' 'source-rev=${nixOnRocksMoonlightManifest.source.rev}'
       printf '%s\n' 'base-patches=${lib.concatMapStringsSep " " (patch: patch.name) basePatches}'
-      printf '%s\n' 'korri-patches=${lib.concatMapStringsSep " " (patch: builtins.baseNameOf (toString patch)) korriPatches}'
+      printf '%s\n' 'korri-patches=${
+        lib.concatMapStringsSep " " (patch: builtins.baseNameOf (toString patch)) korriPatches
+      }'
       printf '%s\n' 'main-program=bin/moonlight'
     } > "$out/nix-support/moonlight-embedded-korri/manifest.txt"
 
