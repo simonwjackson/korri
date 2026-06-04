@@ -1,5 +1,8 @@
 import { korriDataPath } from "@platform/config/xdg-paths"
-import type { LaunchSpec } from "@platform/library/launcher"
+import {
+  cascadeErrorToLibraryError,
+  resolvedLaunchSpecOrUndefined,
+} from "@platform/library/library-error-mapping"
 import { logger } from "@platform/logger"
 import { Effect, Layer } from "effect"
 import {
@@ -39,20 +42,8 @@ function createLiveLibrarySourceService(): LibrarySourceService {
         ? withRocknixSource(source => source.launchSpecFor(id), "launchSpecFor")
         : withLibraryRepository(
             repository =>
-              repository.resolveLaunchForGame(id).pipe(
-                Effect.matchEffect({
-                  onSuccess: out =>
-                    Effect.succeed(out.spec as LaunchSpec | undefined),
-                  onFailure: error =>
-                    "_tag" in error && error._tag === "GameNotFound"
-                      ? Effect.succeed(undefined as LaunchSpec | undefined)
-                      : Effect.fail(
-                          new LibraryError({
-                            reason: "config",
-                            message: cascadeErrorMessage(error),
-                          }),
-                        ),
-                }),
+              resolvedLaunchSpecOrUndefined(
+                repository.resolveLaunchForGame(id),
               ),
             "launchSpecFor",
           ),
@@ -64,15 +55,9 @@ function createLiveLibrarySourceService(): LibrarySourceService {
           )
         : withLibraryRepository(
             repository =>
-              repository.resolveLaunchForGame(id, inputs).pipe(
-                Effect.mapError(
-                  error =>
-                    new LibraryError({
-                      reason: "config",
-                      message: cascadeErrorMessage(error),
-                    }),
-                ),
-              ),
+              repository
+                .resolveLaunchForGame(id, inputs)
+                .pipe(Effect.mapError(cascadeErrorToLibraryError)),
             "resolveLaunchForGame",
           ),
   }
@@ -179,25 +164,6 @@ function buildLibraryRootFromEnv(): Effect.Effect<string, LibraryError> {
       })
     }),
   )
-}
-
-function cascadeErrorMessage(error: unknown): string {
-  if (typeof error === "object" && error && "_tag" in error) {
-    const tag = (error as { _tag: string })._tag
-    if (tag === "GameNotFound") return "GameNotFound"
-    if (tag === "LauncherUnresolvable")
-      return "missing launcher profile for game"
-    if (tag === "CoreNotConfigured") return "missing required core for game"
-    if (tag === "PresetNotFound") return "unknown preset for game"
-    if (tag === "UserNotFound") return "unknown user"
-    if (tag === "MissingRequiredValue")
-      return "launch template references missing value"
-    if (tag === "UnresolvedPlaceholder")
-      return "launch template references an unsupported placeholder"
-    if (tag === "DisallowedCommand") return "launch command not allowed"
-    return `cascade error: ${tag}`
-  }
-  return error instanceof Error ? error.message : String(error)
 }
 
 function toLibraryError(error: unknown): LibraryError {

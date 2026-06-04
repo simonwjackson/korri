@@ -4,6 +4,15 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Cause, Effect, Exit } from "effect"
 import { withTempLibrary } from "../../../tools/testing/library/with-temp-library"
+import {
+  cascadeErrorMessage,
+  PatchFileMissing,
+  PatchFileNotRegular,
+  PatchFileUnreadable,
+  PatchUnsupportedForApp,
+  supportedPatchFormatForPath,
+  UnsupportedPatchExtension,
+} from "./config/errors"
 import { LibrarySource } from "./library-services"
 import { LibrarySourceLayerLive } from "./library-source-layer-live"
 import { openKorriLibraryDb } from "./proseql/library-db"
@@ -32,33 +41,19 @@ afterEach(async () => {
 describe("LibrarySourceLayerLive", () => {
   it("uses ROCKNIX gamelists when explicitly selected", async () => {
     const lib = await seedRocknixGamelists()
-    process.env.KORRI_LIBRARY_SOURCE = "rocknix"
-    process.env.KORRI_ROCKNIX_GAMELIST_ROOTS = lib.rootDir
-    process.env.KORRI_ROCKNIX_ES_SYSTEMS_PATH = join(
-      lib.rootDir,
-      "missing-es-systems.cfg",
-    )
+    selectRocknixSource(lib)
 
-    const games = await listGames()
-
-    expect(games.map(game => game.metadata?.name)).toEqual(["Layer Echo"])
+    await expectListedGameNames(["Layer Echo"])
   })
 
   it("lets explicit ROCKNIX media root avoid an XDG data requirement", async () => {
     const lib = await seedRocknixGamelists()
     delete process.env.HOME
     delete process.env.XDG_DATA_HOME
-    process.env.KORRI_LIBRARY_SOURCE = "rocknix"
-    process.env.KORRI_ROCKNIX_GAMELIST_ROOTS = lib.rootDir
-    process.env.KORRI_ROCKNIX_ES_SYSTEMS_PATH = join(
-      lib.rootDir,
-      "missing-es-systems.cfg",
-    )
+    selectRocknixSource(lib)
     process.env.KORRI_ROCKNIX_MEDIA_ROOT = join(lib.rootDir, "media")
 
-    const games = await listGames()
-
-    expect(games.map(game => game.metadata?.name)).toEqual(["Layer Echo"])
+    await expectListedGameNames(["Layer Echo"])
   })
 
   it("maps missing ROCKNIX media XDG root to a library config error", async () => {
@@ -66,18 +61,7 @@ describe("LibrarySourceLayerLive", () => {
     delete process.env.XDG_DATA_HOME
     process.env.KORRI_LIBRARY_SOURCE = "rocknix"
 
-    const exit = await Effect.runPromiseExit(
-      Effect.gen(function* () {
-        const source = yield* LibrarySource
-        return yield* source.list()
-      }).pipe(Effect.provide(LibrarySourceLayerLive)),
-    )
-
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isSuccess(exit)) throw new Error("expected failure")
-    expect(Cause.squash(exit.cause)).toMatchObject({
-      message: "XDG_DATA_HOME or HOME is required",
-    })
+    await expectSourceListFailureMessage("XDG_DATA_HOME or HOME is required")
   })
 
   it("defaults the device desktop profile to ProseQL", async () => {
@@ -85,15 +69,9 @@ describe("LibrarySourceLayerLive", () => {
     const lib = await seedRocknixGamelists()
     process.env.KORRI_DESKTOP_PROFILE = "device"
     process.env.KORRI_LIBRARY_ROOT = root
-    process.env.KORRI_ROCKNIX_GAMELIST_ROOTS = lib.rootDir
-    process.env.KORRI_ROCKNIX_ES_SYSTEMS_PATH = join(
-      lib.rootDir,
-      "missing-es-systems.cfg",
-    )
+    selectRocknixFallback(lib)
 
-    const games = await listGames()
-
-    expect(games.map(game => game.metadata?.name)).toEqual(["Device Echo"])
+    await expectListedGameNames(["Device Echo"])
   })
 
   it("does not treat an unsupported desktop profile as a live gamelist selector", async () => {
@@ -101,15 +79,9 @@ describe("LibrarySourceLayerLive", () => {
     const lib = await seedRocknixGamelists()
     process.env.KORRI_DESKTOP_PROFILE = "legacy-device"
     process.env.KORRI_LIBRARY_ROOT = root
-    process.env.KORRI_ROCKNIX_GAMELIST_ROOTS = lib.rootDir
-    process.env.KORRI_ROCKNIX_ES_SYSTEMS_PATH = join(
-      lib.rootDir,
-      "missing-es-systems.cfg",
-    )
+    selectRocknixFallback(lib)
 
-    const games = await listGames()
-
-    expect(games.map(game => game.metadata?.name)).toEqual(["Generic Echo"])
+    await expectListedGameNames(["Generic Echo"])
   })
 
   it("defaults ProseQL storage to the XDG data root", async () => {
@@ -125,9 +97,7 @@ describe("LibrarySourceLayerLive", () => {
       "XDG Echo",
     )
 
-    const games = await listGames()
-
-    expect(games.map(game => game.metadata?.name)).toEqual(["XDG Echo"])
+    await expectListedGameNames(["XDG Echo"])
   })
 
   it("fails clearly when proseql has no explicit or XDG-derived library root", async () => {
@@ -136,21 +106,111 @@ describe("LibrarySourceLayerLive", () => {
     delete process.env.HOME
     process.env.KORRI_LIBRARY_SOURCE = "proseql"
 
-    const exit = await Effect.runPromiseExit(
-      Effect.gen(function* () {
-        const source = yield* LibrarySource
-        return yield* source.list()
-      }).pipe(Effect.provide(LibrarySourceLayerLive)),
+    await expectSourceListFailureMessage(
+      "KORRI_LIBRARY_ROOT, XDG_DATA_HOME, or HOME is required when KORRI_LIBRARY_SOURCE is proseql",
     )
-
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isSuccess(exit)) throw new Error("expected failure")
-    expect(Cause.squash(exit.cause)).toMatchObject({
-      message:
-        "KORRI_LIBRARY_ROOT, XDG_DATA_HOME, or HOME is required when KORRI_LIBRARY_SOURCE is proseql",
-    })
   })
 })
+
+describe("cascadeErrorMessage", () => {
+  it("maps patch validation failures to patch-specific library config messages", () => {
+    expect(
+      cascadeErrorMessage(
+        new PatchFileMissing({ path: "/patches/missing.ips" }),
+      ),
+    ).toBe("patch file not found: /patches/missing.ips")
+
+    expect(
+      cascadeErrorMessage(
+        new PatchFileUnreadable({
+          path: "/patches/unreadable.bps",
+          reason: "permission denied",
+        }),
+      ),
+    ).toBe(
+      "patch file is not readable: /patches/unreadable.bps (permission denied)",
+    )
+
+    expect(
+      cascadeErrorMessage(
+        new PatchFileNotRegular({
+          path: "/patches/directory.ups",
+          fileType: "directory",
+        }),
+      ),
+    ).toBe(
+      "patch file is not a regular file: /patches/directory.ups (directory)",
+    )
+
+    expect(
+      cascadeErrorMessage(
+        new UnsupportedPatchExtension({
+          path: "/patches/hack.xdelta",
+          extension: ".xdelta",
+        }),
+      ),
+    ).toBe(
+      "unsupported patch extension .xdelta for /patches/hack.xdelta; supported patch extensions are .ips, .bps, .ups",
+    )
+
+    expect(
+      cascadeErrorMessage(
+        new PatchUnsupportedForApp({
+          appId: "dolphin",
+          integration: "dolphin",
+        }),
+      ),
+    ).toBe("patches are not supported for app dolphin (dolphin)")
+  })
+
+  it("keeps existing non-patch cascade messages stable", () => {
+    expect(cascadeErrorMessage({ _tag: "LauncherUnresolvable" })).toBe(
+      "missing launcher profile for game",
+    )
+    expect(cascadeErrorMessage({ _tag: "DisallowedCommand" })).toBe(
+      "launch command not allowed",
+    )
+  })
+
+  it("infers supported patch formats case-insensitively from the final suffix", () => {
+    expect(supportedPatchFormatForPath("/patches/color.IPS")).toBe("ips")
+    expect(supportedPatchFormatForPath("/patches/voice.BpS")).toBe("bps")
+    expect(supportedPatchFormatForPath("/patches/qol.ups")).toBe("ups")
+    expect(supportedPatchFormatForPath("/patches/hack.xdelta")).toBe(undefined)
+    expect(supportedPatchFormatForPath("/patches/no-extension")).toBe(undefined)
+  })
+})
+
+function selectRocknixSource(lib: { readonly rootDir: string }): void {
+  process.env.KORRI_LIBRARY_SOURCE = "rocknix"
+  selectRocknixFallback(lib)
+}
+
+function selectRocknixFallback(lib: { readonly rootDir: string }): void {
+  process.env.KORRI_ROCKNIX_GAMELIST_ROOTS = lib.rootDir
+  process.env.KORRI_ROCKNIX_ES_SYSTEMS_PATH = join(
+    lib.rootDir,
+    "missing-es-systems.cfg",
+  )
+}
+
+async function expectListedGameNames(expected: string[]): Promise<void> {
+  const games = await listGames()
+  expect(games.map(game => game.metadata?.name)).toEqual(expected)
+}
+
+async function expectSourceListFailureMessage(message: string): Promise<void> {
+  const exit = await Effect.runPromiseExit(
+    Effect.gen(function* () {
+      const source = yield* LibrarySource
+      return yield* source.list()
+    }).pipe(Effect.provide(LibrarySourceLayerLive)),
+  )
+
+  expect(Exit.isFailure(exit)).toBe(true)
+  if (Exit.isSuccess(exit)) throw new Error("expected failure")
+  expect(Cause.squash(exit.cause)).toMatchObject({ message })
+}
 
 async function seedRocknixGamelists() {
   const lib = await withTempLibrary({
