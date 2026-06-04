@@ -13,8 +13,17 @@ import type {
   ValidateSourcesRequest,
   ValidateSourcesResponse,
 } from "@platform/protocol/acquisition/source-health"
-import { Context, type Effect, Layer } from "effect"
+import { Context, Effect, Layer } from "effect"
+import { resolveAcquisitionDownload } from "./download-resolution/download-resolution"
 import type { AcquisitionError } from "./errors"
+import {
+  type AcquisitionRuntimeOptions,
+  createAcquisitionPluginContext,
+} from "./plugin-runtime"
+import type { AcquisitionPluginRegistry } from "./plugins/registry"
+import { getSourceDetails } from "./source-details"
+import { searchSources } from "./source-search"
+import { validateAcquisitionSources } from "./validation/source-validation"
 
 export interface AcquisitionService {
   readonly search: (
@@ -41,4 +50,27 @@ export function makeInMemoryAcquisitionLayer(
   service: AcquisitionService,
 ): Layer.Layer<Acquisition> {
   return Layer.succeed(Acquisition, service)
+}
+
+export interface LiveAcquisitionLayerOptions extends AcquisitionRuntimeOptions {
+  readonly registry: AcquisitionPluginRegistry
+}
+
+export function makeLiveAcquisitionLayer({
+  registry,
+  ...runtimeOptions
+}: LiveAcquisitionLayerOptions): Layer.Layer<Acquisition> {
+  const context = createAcquisitionPluginContext(runtimeOptions)
+  return makeInMemoryAcquisitionLayer({
+    search: request => searchSources({ registry, context, request }),
+    details: request => getSourceDetails({ registry, context, request }),
+    plugins: () =>
+      Effect.succeed({
+        plugins: registry.plugins.map(plugin => plugin.metadata),
+      }),
+    validateSources: request =>
+      validateAcquisitionSources({ registry, context, request }),
+    resolveDownload: request =>
+      resolveAcquisitionDownload({ registry, context, request }),
+  })
 }

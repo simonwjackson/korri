@@ -1,8 +1,40 @@
+import type {
+  DetailsRequest,
+  SourceCandidate,
+  SourceDetails,
+} from "@platform/protocol/acquisition/candidate"
+import type {
+  DownloadResolution,
+  ResolveDownloadRequest,
+} from "@platform/protocol/acquisition/download-resolution"
 import type { PluginMetadata } from "@platform/protocol/acquisition/plugin"
+import type { SourceHealth } from "@platform/protocol/acquisition/source-health"
+import type { Effect } from "effect"
+import type { AcquisitionError } from "../errors"
+import type { AcquisitionPluginContext } from "../plugin-runtime"
 import { validateKnownSourceName } from "../source-names"
+
+export interface SourceValidationContext extends AcquisitionPluginContext {
+  readonly checkedAt: string
+}
 
 export interface AcquisitionPluginDefinition {
   readonly metadata: PluginMetadata
+  readonly search?: (
+    context: AcquisitionPluginContext,
+    request: { readonly query: string },
+  ) => Effect.Effect<readonly SourceCandidate[], AcquisitionError>
+  readonly details?: (
+    context: AcquisitionPluginContext,
+    request: DetailsRequest,
+  ) => Effect.Effect<SourceDetails, AcquisitionError>
+  readonly validateSource?: (
+    context: SourceValidationContext,
+  ) => Effect.Effect<SourceHealth, AcquisitionError>
+  readonly resolveDownload?: (
+    context: AcquisitionPluginContext,
+    request: ResolveDownloadRequest,
+  ) => Effect.Effect<DownloadResolution, AcquisitionError>
 }
 
 export interface AcquisitionPluginRegistry {

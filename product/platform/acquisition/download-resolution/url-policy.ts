@@ -50,6 +50,7 @@ function isPrivateIpv6(host: string): boolean {
   const raw = stripIpv6Brackets(host)
   return (
     raw === "::1" ||
+    raw === "::" ||
     isIpv6LinkLocal(raw) ||
     raw.startsWith("fc") ||
     raw.startsWith("fd") ||

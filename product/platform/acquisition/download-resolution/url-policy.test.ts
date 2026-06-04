@@ -25,6 +25,7 @@ describe("acquisition outbound URL policy", () => {
       "http://192.168.1.1/game.zip",
       "http://169.254.1.1/game.zip",
       "http://[::1]/game.zip",
+      "http://[::]/game.zip",
       "http://[fe80::1]/game.zip",
       "http://[fe90::1]/game.zip",
       "http://[febf::1]/game.zip",
