@@ -191,7 +191,25 @@
         "nixpkgs": "nixpkgs_2",
         "nixpkgs-2405": "nixpkgs-2405",
         "nixpkgs-godot": "nixpkgs-godot",
+        "sm127-src": "sm127-src",
         "smbr-src": "smbr-src"
+      }
+    },
+    "sm127-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1734805364,
+        "narHash": "sha256-G46nJ6aaCiStworbAx1+sTH1QAygY5haoCVohfXEScw=",
+        "owner": "Level-Share-Square",
+        "repo": "SuperMario127",
+        "rev": "6118c65d8e799dae73f2c02596af827c8056a330",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Level-Share-Square",
+        "repo": "SuperMario127",
+        "rev": "6118c65d8e799dae73f2c02596af827c8056a330",
+        "type": "github"
       }
     },
     "smbr-src": {

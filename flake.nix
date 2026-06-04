@@ -40,6 +40,16 @@
     smbr-src.url = "github:JHDev2006/Super-Mario-Bros.-Remastered-Public?rev=21b068182fdf07bf5aa7c73b4d399650970fd2f0";
     smbr-src.flake = false;
 
+    # Super Mario 127 (community Godot fan game by Level Share Square)
+    # source pin. Pinned to the v0.9.1 release tag (commit
+    # 6118c65d). `flake = false` because upstream has no flake.nix
+    # and no submodules. Bump via `nix flake update sm127-src` and
+    # re-run the colocated `super-mario-127-check` on x86_64 and
+    # aarch64 so the Godot export, level-format marker, and direct
+    # launch patch are deliberately re-verified.
+    sm127-src.url = "github:Level-Share-Square/SuperMario127?rev=6118c65d8e799dae73f2c02596af827c8056a330";
+    sm127-src.flake = false;
+
     # Secondary nixpkgs pin carrying Godot 4.6.3-stable (editor +
     # export templates, pre-cached on cache.nixos.org for both
     # x86_64-linux and aarch64-linux). Only consumed by the
@@ -78,6 +88,7 @@
       nix-on-rocks,
       fake-08-src,
       smbr-src,
+      sm127-src,
       nixpkgs-godot,
       ...
     }:
@@ -89,6 +100,7 @@
             nix-on-rocks
             fake-08-src
             smbr-src
+            sm127-src
             nixpkgs-godot
             ;
         };
@@ -577,6 +589,7 @@
         libretroFake08 = pkgs.libretro-fake-08;
         gamescopeKorri = pkgs.gamescope-korri;
         smbRemastered = pkgs.smb-remastered;
+        superMario127 = pkgs.super-mario-127;
 
         # The named outputs match the overlay-substituted `pkgs.sunshine` and
         # `pkgs.moonlight-embedded` so downstream consumers can ask for either
@@ -634,6 +647,7 @@
           libretro-fake-08 = libretroFake08;
           gamescope-korri = gamescopeKorri;
           smb-remastered = smbRemastered;
+          super-mario-127 = superMario127;
         }
         // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
           electrobun-cli = electrobunBinaries.cli;
@@ -849,6 +863,10 @@
               inherit pkgs;
               smbRemasteredPackage = self.packages.${system}.smb-remastered;
             };
+            super-mario-127-check = import ./product/vendor/super-mario-127/check.nix {
+              inherit pkgs;
+              superMario127Package = self.packages.${system}.super-mario-127;
+            };
           }
           // pkgs.lib.optionalAttrs isX86Linux {
             korri-rocknix-sm8550-config = import ./tools/testing/nix/korri-rocknix-sm8550-config-check.nix {
@@ -967,23 +985,27 @@
               imageLib = korriImages;
               x86Platform = ./product/systems/nixos/images/platforms/x86.nix;
             };
-            korri-live-usb-invalid-artifact = import ./tools/testing/nix/korri-live-usb-invalid-artifact-check.nix {
-              inherit pkgs;
-              imageLib = korriImages;
-              x86Platform = ./product/systems/nixos/images/platforms/x86.nix;
-            };
+            korri-live-usb-invalid-artifact =
+              import ./tools/testing/nix/korri-live-usb-invalid-artifact-check.nix
+                {
+                  inherit pkgs;
+                  imageLib = korriImages;
+                  x86Platform = ./product/systems/nixos/images/platforms/x86.nix;
+                };
             korri-live-usb-persistence-resolver =
               import ./tools/testing/nix/korri-live-usb-persistence-resolver-check.nix
                 {
                   inherit pkgs;
                   resolverScript = ./product/systems/nixos/images/live-usb-persistence-resolver.sh;
                 };
-            korri-rocknix-build-performance = import ./tools/testing/nix/korri-rocknix-build-performance-check.nix {
-              inherit pkgs;
-              runtimeSources = korriSources;
-              productionBunPackageNames = import ./tools/nix/generated/bun-production-package-names.nix;
-              rootfsBuilder = ./product/systems/rocknix/rootfs.nix;
-            };
+            korri-rocknix-build-performance =
+              import ./tools/testing/nix/korri-rocknix-build-performance-check.nix
+                {
+                  inherit pkgs;
+                  runtimeSources = korriSources;
+                  productionBunPackageNames = import ./tools/nix/generated/bun-production-package-names.nix;
+                  rootfsBuilder = ./product/systems/rocknix/rootfs.nix;
+                };
             korri-standard-native = import ./tools/testing/nix/korri-standard-native-check.nix {
               inherit pkgs;
               ownerMatrix = [
@@ -1029,6 +1051,10 @@
                 }
                 {
                   name = "smb-remastered-check";
+                  owner = "package-output";
+                }
+                {
+                  name = "super-mario-127-check";
                   owner = "package-output";
                 }
                 {
@@ -1223,6 +1249,7 @@
                 nix-on-rocks
                 fake-08-src
                 smbr-src
+                sm127-src
                 nixpkgs-godot
                 ;
             })
@@ -1265,6 +1292,7 @@
               nix-on-rocks
               fake-08-src
               smbr-src
+              sm127-src
               nixpkgs-godot
               ;
           };
@@ -1297,6 +1325,7 @@
                 nix-on-rocks
                 fake-08-src
                 smbr-src
+                sm127-src
                 nixpkgs-godot
                 ;
             };

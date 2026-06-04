@@ -29,6 +29,7 @@
   nix-on-rocks,
   fake-08-src,
   smbr-src,
+  sm127-src,
   nixpkgs-godot,
 }:
 
@@ -47,5 +48,8 @@ final: prev: {
   };
   smb-remastered = final.callPackage ../../../vendor/super-mario-bros-remastered/package.nix {
     inherit smbr-src nixpkgs-godot;
+  };
+  super-mario-127 = final.callPackage ../../../vendor/super-mario-127/package.nix {
+    inherit sm127-src;
   };
 }

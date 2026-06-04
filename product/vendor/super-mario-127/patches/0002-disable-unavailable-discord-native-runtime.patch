@@ -1,0 +1,8 @@
+diff --git a/addons/discord_game_sdk/discord.gd b/addons/discord_game_sdk/discord.gd
+index 7d93772..b5b2ea4 100644
+--- a/addons/discord_game_sdk/discord.gd
++++ b/addons/discord_game_sdk/discord.gd
+@@ -252,0 +253,3 @@ func _ready():
++	if OS.has_feature("linux") and OS.has_feature("arm64"):
++		print("SM127 Discord disabled: Linux arm64 Discord Game SDK is unavailable")
++		return

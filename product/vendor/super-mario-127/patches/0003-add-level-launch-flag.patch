@@ -1,0 +1,70 @@
+diff --git a/singleton2.gd b/singleton2.gd
+index 3076fb3..c3722b7 100644
+--- a/singleton2.gd
++++ b/singleton2.gd
+@@ -19,0 +20,2 @@ var mod_path: String
++var launch_level_path: String = ""
++var launch_level_pending: bool = false
+@@ -65,0 +68,52 @@ func _init():
++	parse_launch_level_arg()
++
++func parse_launch_level_arg() -> void:
++	var value := OS.get_environment("SM127_LEVEL")
++	if value != "":
++		set_launch_level(value, "environment")
++		return
++	var args := OS.get_cmdline_args()
++	for i in range(args.size()):
++		var arg: String = args[i]
++		if arg == "--level" and i + 1 < args.size():
++			value = args[i + 1]
++		elif arg.begins_with("--level="):
++			value = arg.substr("--level=".length())
++		if value != "":
++			set_launch_level(value, "argument")
++			return
++
++func set_launch_level(value: String, source: String) -> void:
++	launch_level_path = resolve_launch_level_arg(value.replace("\\", "/"))
++	launch_level_pending = launch_level_path != ""
++	if launch_level_pending:
++		print("SM127 launch level ", source, " found: ", launch_level_path)
++
++func resolve_launch_level_arg(value: String) -> String:
++	if value == "":
++		return ""
++	if value.begins_with("user://") or value.begins_with("res://") or value.begins_with("/") or value.find("/") != -1 or value.ends_with(".127level"):
++		return value
++	return level_list_util.BASE_FOLDER + "/" + value + ".127level"
++
++func consume_launch_level() -> bool:
++	if not launch_level_pending:
++		return false
++	launch_level_pending = false
++	if not level_list_util.file_exists(launch_level_path):
++		push_error("SM127 launch level file not found: " + launch_level_path)
++		get_tree().quit(1)
++		return true
++	var level_code := level_list_util.load_level_code_file(launch_level_path)
++	if not level_code_util.fast_is_valid(level_code):
++		push_error("SM127 launch level file is not a valid .127level file: " + launch_level_path)
++		get_tree().quit(1)
++		return true
++	var working_folder := launch_level_path.get_base_dir()
++	var level_id := launch_level_path.get_file().get_basename()
++	var level_info := LevelInfo.new(level_id, working_folder, level_code)
++	level_info.load_in()
++	print("SM127 consuming launch level: ", launch_level_path)
++	print("SM127 launch level transition to custom level")
++	Singleton.SceneSwitcher.start_level(level_info, level_id, working_folder, false, true)
++	return true
+diff --git a/scenes/menu/launcher/launcher.gd b/scenes/menu/launcher/launcher.gd
+index 80dcedc..8870dee 100644
+--- a/scenes/menu/launcher/launcher.gd
++++ b/scenes/menu/launcher/launcher.gd
+@@ -12,0 +13,5 @@ func _ready():
++	if Singleton2.launch_level_pending:
++		level_list_util.init_levels_list()
++		if Singleton2.consume_launch_level():
++			return
++	

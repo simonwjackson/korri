@@ -1,0 +1,30 @@
+diff --git a/export_presets.cfg b/export_presets.cfg
+index 84ba337..8b7bebc 100644
+--- a/export_presets.cfg
++++ b/export_presets.cfg
+@@ -397,0 +398,25 @@ permissions/write_user_dictionary=false
++
++[preset.5]
++
++name="Linux ARM64"
++platform="Linux/X11"
++runnable=true
++custom_features=""
++export_filter="all_resources"
++include_filter="*.crt, *.cfg, *.127level, *.json"
++exclude_filter=""
++export_path="../127export/linux/Super_Mario_127.arm64"
++script_export_mode=1
++script_encryption_key=""
++
++[preset.5.options]
++
++custom_template/debug=""
++custom_template/release=""
++binary_format/architecture="arm64"
++binary_format/embed_pck=false
++texture_format/bptc=false
++texture_format/s3tc=false
++texture_format/etc=true
++texture_format/etc2=false
++texture_format/no_bptc_fallbacks=true
