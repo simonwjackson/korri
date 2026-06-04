@@ -1,22 +1,28 @@
 import { describe, expect, it } from "bun:test"
+import { createHash } from "node:crypto"
 import {
+  lstat,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
+  readlink,
   rm,
+  symlink,
   utimes,
   writeFile,
 } from "node:fs/promises"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
-import { Effect } from "effect"
-
+import { basename, join } from "node:path"
+import { korriDataPath, korriStatePath } from "@platform/config/xdg-paths"
+import { Cause, Effect, Exit } from "effect"
 import { resolveAppDescriptor } from "./app-integrations"
 import {
   cleanupLaunchArtifacts,
   materializeAppLaunch,
   STALE_ARTIFACT_RETENTION_MS,
 } from "./app-materializer"
+import { cascadeErrorMessage } from "./errors"
 import type { ResolvedLaunchContext } from "./resolved-launch-context"
 
 const runPromise = <A, E>(eff: Effect.Effect<A, E>) => Effect.runPromise(eff)
@@ -49,6 +55,37 @@ async function withRoot<T>(fn: (root: string) => Promise<T>) {
   } finally {
     await rm(root, { recursive: true, force: true })
   }
+}
+
+async function seedFile(
+  root: string,
+  relativePath: string,
+  content = relativePath,
+) {
+  const path = join(root, relativePath)
+  await mkdir(join(path, ".."), { recursive: true })
+  await writeFile(path, content)
+  return path
+}
+
+const patchedContext = (
+  root: string,
+  patches: readonly string[],
+): ResolvedLaunchContext => ({
+  ...context,
+  system: "gba",
+  contentPath: join(root, "roms", "Super Mario Advance 3.gba"),
+  patches,
+})
+
+const stableIdentitySuffix = (input: {
+  readonly system: string
+  readonly contentPath: string
+}) => {
+  const hash = createHash("sha256")
+    .update(`${input.system}\0${input.contentPath}`)
+    .digest("hex")
+  return `${encodeURIComponent(basename(input.contentPath))}--${hash}`
 }
 
 describe("materializeAppLaunch", () => {
@@ -220,4 +257,237 @@ describe("materializeAppLaunch", () => {
       await expect(readFile(join(stale, "old.cfg"), "utf8")).rejects.toThrow()
     })
   })
+
+  it("stages RetroArch content and mixed-format patch sidecars as symlinks", async () => {
+    await withRoot(async root => {
+      const content = await seedFile(root, "roms/Super Mario Advance 3.gba")
+      const color = await seedFile(root, "patches/color.IPS")
+      const voice = await seedFile(root, "patches/voice.BpS")
+      const qol = await seedFile(root, "patches/qol.ups")
+
+      const result = await runPromise(
+        materializeAppLaunch({
+          app: app("retroarch"),
+          context: patchedContext(root, [color, voice, qol]),
+          artifactsRoot: join(root, "artifacts"),
+        }),
+      )
+
+      const stagedContent = result.context.contentPath ?? ""
+      expect(stagedContent).toBe(
+        join(result.artifacts?.root ?? "", "Super Mario Advance 3.gba"),
+      )
+      expect(await readlink(stagedContent)).toBe(content)
+      expect((await lstat(stagedContent)).isSymbolicLink()).toBe(true)
+
+      await expectPatchSidecars({
+        artifactRoot: result.artifacts?.root ?? "",
+        paths: result.artifacts?.paths ?? {},
+        stagedContent,
+        targets: [color, voice, qol],
+      })
+    })
+  })
+
+  it("uses XDG cache for patched artifacts and stable data/state roots for progress", async () => {
+    await withRoot(async root => {
+      const previous = {
+        artifacts: process.env.KORRI_LAUNCH_ARTIFACTS_DIR,
+        xdgCache: process.env.XDG_CACHE_HOME,
+        xdgData: process.env.XDG_DATA_HOME,
+        xdgState: process.env.XDG_STATE_HOME,
+        home: process.env.HOME,
+      }
+      delete process.env.KORRI_LAUNCH_ARTIFACTS_DIR
+      process.env.XDG_CACHE_HOME = join(root, "cache")
+      process.env.XDG_DATA_HOME = join(root, "data")
+      process.env.XDG_STATE_HOME = join(root, "state")
+      delete process.env.HOME
+      try {
+        const patch = await seedFile(root, "patches/color.ips")
+        await seedFile(root, "roms/Super Mario Advance 3.gba")
+        const ctx = patchedContext(root, [patch])
+
+        const result = await runPromise(
+          materializeAppLaunch({ app: app("retroarch"), context: ctx }),
+        )
+
+        expect(result.artifacts?.root).toStartWith(
+          join(root, "cache", "korri", "launch-artifacts"),
+        )
+        const stableSuffix = stableIdentitySuffix({
+          system: ctx.system,
+          contentPath: ctx.contentPath ?? "",
+        })
+        const saveDir = join(
+          korriDataPath(process.env, "retroarch", "v1", "gba"),
+          stableSuffix,
+        )
+        const stateDir = join(
+          korriStatePath(process.env, "retroarch", "v1", "gba"),
+          stableSuffix,
+        )
+        const cfg = await readFile(result.context.configPath ?? "", "utf8")
+        expect(cfg).toContain(`savefile_directory = ${JSON.stringify(saveDir)}`)
+        expect(cfg).toContain(
+          `savestate_directory = ${JSON.stringify(stateDir)}`,
+        )
+      } finally {
+        setEnv("KORRI_LAUNCH_ARTIFACTS_DIR", previous.artifacts)
+        setEnv("XDG_CACHE_HOME", previous.xdgCache)
+        setEnv("XDG_DATA_HOME", previous.xdgData)
+        setEnv("XDG_STATE_HOME", previous.xdgState)
+        setEnv("HOME", previous.home)
+      }
+    })
+  })
+
+  it("preserves stable save and state identity across differing patch lists", async () => {
+    await withRoot(async root => {
+      const content = await seedFile(root, "roms/Super Mario Advance 3.gba")
+      const color = await seedFile(root, "patches/color.ips")
+      const voice = await seedFile(root, "patches/voice.ips")
+      const env = {
+        XDG_DATA_HOME: join(root, "data"),
+        XDG_STATE_HOME: join(root, "state"),
+      }
+
+      const first = await runPromise(
+        materializeAppLaunch({
+          app: app("retroarch"),
+          context: {
+            ...context,
+            system: "gba",
+            contentPath: content,
+            patches: [color],
+          },
+          artifactsRoot: join(root, "artifacts"),
+          env,
+        }),
+      )
+      const second = await runPromise(
+        materializeAppLaunch({
+          app: app("retroarch"),
+          context: {
+            ...context,
+            system: "gba",
+            contentPath: content,
+            patches: [color, voice],
+          },
+          artifactsRoot: join(root, "artifacts"),
+          env,
+        }),
+      )
+
+      const saveLine = /savefile_directory = .*/
+      const firstCfg = await readFile(first.context.configPath ?? "", "utf8")
+      const secondCfg = await readFile(second.context.configPath ?? "", "utf8")
+      expect(firstCfg.match(saveLine)?.[0]).toBe(secondCfg.match(saveLine)?.[0])
+    })
+  })
+
+  it("rejects unsupported patch declarations before creating a launch artifact", async () => {
+    await withRoot(async root => {
+      const content = await seedFile(root, "roms/Super Mario Advance 3.gba")
+      const unsupported = await seedFile(root, "patches/hack.xdelta")
+      const artifactsRoot = join(root, "artifacts")
+
+      const exit = await Effect.runPromiseExit(
+        materializeAppLaunch({
+          app: app("retroarch"),
+          context: { ...context, contentPath: content, patches: [unsupported] },
+          artifactsRoot,
+        }),
+      )
+
+      expect(exitFailureMessage(exit)).toContain(
+        "unsupported patch extension .xdelta",
+      )
+      expect(await readdir(artifactsRoot)).toEqual([])
+    })
+  })
+
+  it("rejects missing patch files before creating a launch artifact", async () => {
+    await withRoot(async root => {
+      await seedFile(root, "roms/Super Mario Advance 3.gba")
+      const artifactsRoot = join(root, "artifacts")
+      const missing = join(root, "patches", "missing.ips")
+
+      const exit = await Effect.runPromiseExit(
+        materializeAppLaunch({
+          app: app("retroarch"),
+          context: patchedContext(root, [missing]),
+          artifactsRoot,
+        }),
+      )
+
+      expect(exitFailureMessage(exit)).toBe(`patch file not found: ${missing}`)
+      expect(await readdir(artifactsRoot)).toEqual([])
+    })
+  })
+
+  it("accepts symlinked patch files but rejects patches on non-RetroArch apps", async () => {
+    await withRoot(async root => {
+      await seedFile(root, "roms/Super Mario Advance 3.gba")
+      const target = await seedFile(root, "patches/target.ips")
+      const linked = join(root, "patches", "linked.IPS")
+      await symlink(target, linked)
+
+      const staged = await runPromise(
+        materializeAppLaunch({
+          app: app("retroarch"),
+          context: patchedContext(root, [linked]),
+          artifactsRoot: join(root, "artifacts"),
+        }),
+      )
+      expect(await readlink(staged.artifacts?.paths.patch0 ?? "")).toBe(linked)
+
+      const exit = await Effect.runPromiseExit(
+        materializeAppLaunch({
+          app: app("dolphin"),
+          context: {
+            ...patchedContext(root, [linked]),
+            launcherId: "dolphin",
+            appId: "dolphin",
+          },
+          artifactsRoot: join(root, "artifacts"),
+        }),
+      )
+      expect(exitFailureMessage(exit)).toBe(
+        "patches are not supported for app dolphin (dolphin)",
+      )
+    })
+  })
 })
+
+async function expectPatchSidecars(input: {
+  readonly artifactRoot: string
+  readonly paths: Readonly<Record<string, string>>
+  readonly stagedContent: string
+  readonly targets: readonly string[]
+}): Promise<void> {
+  const sidecars = [
+    join(input.artifactRoot, "Super Mario Advance 3.ips"),
+    join(input.artifactRoot, "Super Mario Advance 3.bps1"),
+    join(input.artifactRoot, "Super Mario Advance 3.ups2"),
+  ]
+  for (const [index, sidecar] of sidecars.entries()) {
+    expect((await lstat(sidecar)).isSymbolicLink()).toBe(true)
+    expect(await readlink(sidecar)).toBe(input.targets[index])
+    expect(input.paths[`patch${index}`]).toBe(sidecar)
+  }
+  expect(input.paths.contentPath).toBe(input.stagedContent)
+}
+
+function exitFailureMessage<A, E>(exit: Exit.Exit<A, E>): string {
+  if (Exit.isSuccess(exit)) throw new Error("expected failure")
+  return cascadeErrorMessage(Cause.squash(exit.cause))
+}
+
+function setEnv(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key]
+    return
+  }
+  process.env[key] = value
+}
