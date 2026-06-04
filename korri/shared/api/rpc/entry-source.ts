@@ -60,7 +60,7 @@ export interface MakeLocalEntrySourceOptions {
  * env changes.
  *
  * Wildcard-bind awareness: federation v1 defaults `HOST=0.0.0.0` on
- * library-bearing hosts (see `nix/images/headless.nix`). A literal
+ * library-bearing hosts (see `product/systems/nixos/images/headless.nix`). A literal
  * "0.0.0.0" in `controlUrl` is meaningless on the wire — it's the
  * bind address, not an address any client can dial. When `HOST` is
  * a wildcard and no explicit `KORRI_PUBLIC_API_BASE_URL` overrides

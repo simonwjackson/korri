@@ -94,12 +94,12 @@ function importsThemeInternalsDirectly(source: string): boolean {
 
 function buildReferencedToolEntrypoints(): readonly string[] {
   const files = [
-    "nix/korri-server.nix",
-    "nix/korri-sessiond.nix",
-    "nix/korri-inputd.nix",
-    "nix/korri-game-stream.nix",
-    "nix/korri-gamescope-control-bridge.nix",
-    "nix/korri-cli.nix",
+    "product/services/server/package.nix",
+    "product/services/device/nix/sessiond.nix",
+    "product/services/device/nix/inputd.nix",
+    "product/services/device/nix/game-stream.nix",
+    "product/services/device/nix/gamescope-control-bridge.nix",
+    "product/apps/cli/package.nix",
   ]
   const references = new Set<string>()
   for (const file of files) {
@@ -116,6 +116,31 @@ function buildReferencedToolEntrypoints(): readonly string[] {
 }
 
 describe("standards: product platform reorganization guardrails", () => {
+  it("keeps product-owned package, image, module, and overlay Nix files beside product units", () => {
+    expect(existsSync(join(REPO_ROOT, "nix", "korri-portal.nix"))).toBe(false)
+    expect(existsSync(join(REPO_ROOT, "nix", "images"))).toBe(false)
+    expect(existsSync(join(REPO_ROOT, "nix", "modules"))).toBe(false)
+    expect(existsSync(join(REPO_ROOT, "nix", "overlays"))).toBe(false)
+    expect(
+      existsSync(join(REPO_ROOT, "product", "apps", "portal", "package.nix")),
+    ).toBe(true)
+    expect(
+      existsSync(
+        join(REPO_ROOT, "product", "services", "server", "package.nix"),
+      ),
+    ).toBe(true)
+    expect(
+      existsSync(
+        join(REPO_ROOT, "product", "systems", "nixos", "images", "common.nix"),
+      ),
+    ).toBe(true)
+    expect(
+      existsSync(
+        join(REPO_ROOT, "product", "systems", "rocknix", "rootfs.nix"),
+      ),
+    ).toBe(true)
+  })
+
   it("keeps first-party themes out of legacy shared theme ownership", () => {
     expect(existsSync(LEGACY_SHARED_THEME_ROOT)).toBe(false)
     expect(existsSync(join(REPO_ROOT, "product", "themes", "shift"))).toBe(true)

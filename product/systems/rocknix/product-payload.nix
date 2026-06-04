@@ -48,7 +48,7 @@ pkgs.runCommand "korri-rocknix-product-payload-${device}"
     rootfs_dir=${rootfsPackage}/tarball
     if [ ! -d "$rootfs_dir" ]; then
       echo "Korri product payload: expected wrapped rootfs package to expose $rootfs_dir" >&2
-      echo "Build korri-rocknix-rootfs-${device} or update nix/korri-rocknix-product-payload.nix for the new rootfs layout." >&2
+      echo "Build korri-rocknix-rootfs-${device} or update product/systems/rocknix/product-payload.nix for the new rootfs layout." >&2
       exit 1
     fi
 

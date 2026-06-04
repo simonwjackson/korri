@@ -22,7 +22,7 @@ let
   # Gamescope >= 3.16.20 is required for the Moonlight v4l2m2m streaming
   # path on SM8550 (see assertion below). nixos-25.11 currently ships
   # 3.16.17, so we pin Gamescope to the same nixpkgs revision the x86
-  # compositor overlay uses (see nix/overlays/korri-x86-compositor.nix).
+  # compositor overlay uses (see product/systems/nixos/overlays/korri-x86-compositor.nix).
   # That rev (0c6db2b5...) carries Gamescope 3.16.23 with the pipewire
   # loop-lock fix. Delete this pin once nixos-25.11 backports a 3.16.20+
   # Gamescope and the channel pkgs satisfies the assertion directly.
@@ -142,7 +142,7 @@ in
       config.services.korri.compositor.gamescope.package
       substratePackages.cemu
       # `pkgs.moonlight-embedded` is replaced by `moonlight-embedded-korri`
-      # via nix/overlays/korri-packages.nix, so the SM8550 v4l2m2m build is
+      # via product/systems/nixos/overlays/korri-packages.nix, so the SM8550 v4l2m2m build is
       # the Korri downstream variant with the absolute-touch + Sunshine
       # runtime-settings patches layered on top.
       pkgs.moonlight-embedded

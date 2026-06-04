@@ -114,8 +114,7 @@ let
           inputdEnv.KORRI_INPUTD_VOLUME_DOWN or null == "true"
         ))
         (check "${name}: inputd must keep SM8550 brightness shortcuts enabled" (
-          !(inputdEnv ? KORRI_INPUTD_BRIGHTNESS_UP)
-          && !(inputdEnv ? KORRI_INPUTD_BRIGHTNESS_DOWN)
+          !(inputdEnv ? KORRI_INPUTD_BRIGHTNESS_UP) && !(inputdEnv ? KORRI_INPUTD_BRIGHTNESS_DOWN)
         ))
         (check "${name}: kiosk compositor must run as root" (compositor.user == "root"))
         (check "${name}: kiosk compositor must not create root user" (compositor.createUser == false))
@@ -175,7 +174,9 @@ let
         ))
         (check "${name}: compositor PATH must include Korri Moonlight substrate package" (
           lib.hasInfix "moonlight-embedded-korri" systemPackageText
-          || lib.hasInfix "moonlight-embedded-korri" (lib.concatStringsSep "\n" (map toString compositor.path))
+          || lib.hasInfix "moonlight-embedded-korri" (
+            lib.concatStringsSep "\n" (map toString compositor.path)
+          )
         ))
         (check "${name}: Moonlight command must use Korri Moonlight" (
           lib.hasInfix "moonlight-embedded-korri" (compositor.environment.KORRI_MOONLIGHT_COMMAND or "")
@@ -245,19 +246,19 @@ let
           sessiondEnv.KORRI_KIOSK or null == "1"
         ))
         (check "${name}: sessiond unit must carry KORRI_DESKTOP_INPUTD_URL for the renderer" (
-          (sessiondEnv.KORRI_DESKTOP_INPUTD_URL or "")
-          == "ws://127.0.0.1:${toString input.inputd.port}"
+          (sessiondEnv.KORRI_DESKTOP_INPUTD_URL or "") == "ws://127.0.0.1:${toString input.inputd.port}"
         ))
         (check "${name}: sessiond unit must carry KORRI_NATIVE_BRIDGE_URL for the renderer" (
-          (sessiondEnv.KORRI_NATIVE_BRIDGE_URL or "")
-          == "ws://127.0.0.1:${toString input.inputd.port}"
+          (sessiondEnv.KORRI_NATIVE_BRIDGE_URL or "") == "ws://127.0.0.1:${toString input.inputd.port}"
         ))
-        (check "${name}: sessiond unit must carry KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER for inputplumber hosts" (
-          sessiondEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1"
-        ))
-        (check "${name}: korri-server unit must carry KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER for remote-source argv composition" (
-          serverEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1"
-        ))
+        (check
+          "${name}: sessiond unit must carry KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER for inputplumber hosts"
+          (sessiondEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1")
+        )
+        (check
+          "${name}: korri-server unit must carry KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER for remote-source argv composition"
+          (serverEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1")
+        )
         # Wayland-session identity: sway used to inject these on every
         # exec'd child at compositor-init. With sessiond as a sibling
         # unit instead of a sway child, the same identity must be
@@ -273,17 +274,21 @@ let
         (check "${name}: sessiond unit must carry DISPLAY for Xwayland fallback paths" (
           (sessiondEnv.DISPLAY or "") != ""
         ))
-        (check "${name}: sessiond unit must carry DBUS_SESSION_BUS_ADDRESS matching compositor's session bus" (
-          (sessiondEnv.DBUS_SESSION_BUS_ADDRESS or "") == compositor.sessionBus.address
-        ))
+        (check
+          "${name}: sessiond unit must carry DBUS_SESSION_BUS_ADDRESS matching compositor's session bus"
+          ((sessiondEnv.DBUS_SESSION_BUS_ADDRESS or "") == compositor.sessionBus.address)
+        )
         (check "${name}: sessiond PATH must include the client package so korri-desktop-device resolves" (
           builtins.elem cfg.services.korri.client.package sessiondPath
         ))
-        (check "${name}: sessiond PATH must include a shell so renderer-resolve's Bun.spawn([\"sh\",...]) succeeds" (
-          builtins.any (
-            pkg: lib.hasInfix "bash" (toString pkg) || lib.hasInfix "busybox" (toString pkg)
-          ) sessiondPath
-        ))
+        (check
+          "${name}: sessiond PATH must include a shell so renderer-resolve's Bun.spawn([\"sh\",...]) succeeds"
+          (
+            builtins.any (
+              pkg: lib.hasInfix "bash" (toString pkg) || lib.hasInfix "busybox" (toString pkg)
+            ) sessiondPath
+          )
+        )
         (check "${name}: sessiond PATH must include sway so reconcileIdle's swaymsg lookup resolves" (
           builtins.elem compositor.sway.package sessiondPath
         ))
@@ -304,28 +309,27 @@ let
         # XDG_*_HOME state all live under compositor.home, so a hole
         # has to be carved for that subtree or every renderer spawn
         # dies with EROFS the moment it tries to write anything.
-        (check "${name}: sessiond serviceConfig.ReadWritePaths must cover compositor.home (for renderer state)" (
-          builtins.elem compositor.home (
-            sessiondService.serviceConfig.ReadWritePaths or [ ]
-          )
-        ))
+        (check
+          "${name}: sessiond serviceConfig.ReadWritePaths must cover compositor.home (for renderer state)"
+          (builtins.elem compositor.home (sessiondService.serviceConfig.ReadWritePaths or [ ]))
+        )
         # Kiosk sessiond ATTACHES to the existing compositor session;
         # the module's default ProtectHome = true masks /run/user/*
         # in sessiond's mount namespace, which would block the wayland-1
         # socket connect. The kiosk image relaxes this with mkForce; a
         # future refactor that drops the relaxation would silently break
         # every renderer spawn, so pin it here.
-        (check "${name}: sessiond serviceConfig.ProtectHome must be false (relaxed for wayland socket access)" (
-          (sessiondService.serviceConfig.ProtectHome or null) == false
-        ))
+        (check
+          "${name}: sessiond serviceConfig.ProtectHome must be false (relaxed for wayland socket access)"
+          ((sessiondService.serviceConfig.ProtectHome or null) == false)
+        )
         # Runtime-dir mode must permit korri-server (the sharedGroup
         # on kiosk) to traverse the directory and reach the 0640
         # token file. 0700 root:root would silently break the
         # server-side managed-launch delegation.
         (check "${name}: sessiond runtime dir at 0710 root:korri-server (group-traversable)" (
-          builtins.any (rule:
-            lib.hasInfix "korri-sessiond" rule
-            && lib.hasInfix "0710 root korri-server" rule
+          builtins.any (
+            rule: lib.hasInfix "korri-sessiond" rule && lib.hasInfix "0710 root korri-server" rule
           ) (cfg.systemd.tmpfiles.rules or [ ])
         ))
         (check "${name}: sessiond RuntimeDirectoryMode is 0710 (matches sharedGroup)" (
@@ -361,7 +365,13 @@ let
     in
     checks;
 
-  byCompatibleResult = builtins.tryEval byCompatibleSystem.config.system.build.toplevel.drvPath;
+  byCompatibleExposed =
+    byCompatibleSystem != null && configurations ? korri-rocknix-kiosk-by-compatible;
+  byCompatibleResult =
+    if byCompatibleSystem == null then
+      { success = false; }
+    else
+      builtins.tryEval byCompatibleSystem.config.system.build.toplevel.drvPath;
 
   checks = [
     (check "Thor RockNix kiosk configuration must be exposed" (
@@ -370,8 +380,8 @@ let
     (check "Sobo RockNix kiosk configuration must be exposed" (
       configurations ? korri-rocknix-kiosk-odin2portal
     ))
-    (check "by-compatible RockNix kiosk configuration must be exposed" (
-      configurations ? korri-rocknix-kiosk-by-compatible
+    (check "by-compatible RockNix kiosk configuration must stay impure-only" (
+      !byCompatibleExposed || !byCompatibleResult.success
     ))
     (check "Thor target system package alias must be exposed" (
       targetPackages ? korri-rocknix-kiosk-system-thor

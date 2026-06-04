@@ -58,7 +58,7 @@
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        korriPackagesOverlay = import ./nix/overlays/korri-packages.nix {
+        korriPackagesOverlay = import ./product/systems/nixos/overlays/korri-packages.nix {
           inherit nix-on-rocks fake-08-src;
         };
 
@@ -76,11 +76,12 @@
           config.allowUnfree = true;
         };
 
-        versions = import ./nix/versions.nix;
+        versions = import ./product/apps/desktop/nix/versions.nix;
         supportedDesktopSystems = [
           "x86_64-linux"
           "aarch64-linux"
         ];
+        hasRocknixGuestCompatible = builtins.getEnv "ROCKNIX_GUEST_DEVICE_COMPATIBLE" != "";
         isSupportedDesktopSystem = builtins.elem system supportedDesktopSystems;
         isX86Linux = system == "x86_64-linux";
         productRevision = self.rev or self.dirtyRev or "local-candidate";
@@ -392,48 +393,48 @@
         # Single portal build for every desktop variant. The native input-bridge
         # URL is now pushed at runtime via window.__korriRuntime (see
         # product/apps/portal/main.tsx and product/apps/desktop/runtime-config.ts).
-        korriPortal = import ./nix/korri-portal.nix {
+        korriPortal = import ./product/apps/portal/package.nix {
           inherit pkgs;
           src = korriSources.portal;
           inherit bunDeps;
         };
 
-        korriInputd = import ./nix/korri-inputd.nix {
+        korriInputd = import ./product/services/device/nix/inputd.nix {
           inherit pkgs;
           lib = pkgs.lib;
           src = korriSources.inputd;
           inherit bunDeps;
         };
 
-        korriGameStream = import ./nix/korri-game-stream.nix {
+        korriGameStream = import ./product/services/device/nix/game-stream.nix {
           inherit pkgs;
           lib = pkgs.lib;
           src = korriSources.gameStream;
           inherit bunDeps;
         };
 
-        korriSessiond = import ./nix/korri-sessiond.nix {
+        korriSessiond = import ./product/services/device/nix/sessiond.nix {
           inherit pkgs;
           lib = pkgs.lib;
           src = korriSources.sessiond;
           inherit bunDeps;
         };
 
-        korriCli = import ./nix/korri-cli.nix {
+        korriCli = import ./product/apps/cli/package.nix {
           inherit pkgs;
           lib = pkgs.lib;
           src = korriSources.cli;
           inherit bunDeps;
         };
 
-        korriGamescopeControlBridge = import ./nix/korri-gamescope-control-bridge.nix {
+        korriGamescopeControlBridge = import ./product/services/device/nix/gamescope-control-bridge.nix {
           inherit pkgs;
           lib = pkgs.lib;
-          src = korriSources.gameStream;
+          src = korriSources.cli;
           inherit bunDeps;
         };
 
-        korriServer = import ./nix/korri-server.nix {
+        korriServer = import ./product/services/server/package.nix {
           inherit pkgs;
           lib = pkgs.lib;
           src = korriSources.server;
@@ -450,7 +451,7 @@
 
         electrobunBinaries =
           if isSupportedDesktopSystem then
-            import ./nix/electrobun-binaries.nix {
+            import ./product/apps/desktop/nix/electrobun-binaries.nix {
               inherit pkgs system versions;
               lib = pkgs.lib;
             }
@@ -463,7 +464,7 @@
         # have their interpreter set and are left alone by wrap.
         korriDesktopUnwrapped =
           if isSupportedDesktopSystem then
-            pkgs.callPackage ./nix/korri-desktop/unwrapped.nix {
+            pkgs.callPackage ./product/apps/desktop/nix/unwrapped.nix {
               inherit system bunDeps;
               src = korriSources.desktop;
               inherit electrobunBinaries;
@@ -477,7 +478,7 @@
         # auto-fills each named arg from `pkgs`).
         korriDesktop =
           if isSupportedDesktopSystem then
-            pkgs.callPackage ./nix/korri-desktop/wrap.nix {
+            pkgs.callPackage ./product/apps/desktop/nix/wrap.nix {
               korri-desktop-unwrapped = korriDesktopUnwrapped;
               stdenvCcLib = pkgs.stdenv.cc.cc.lib;
               profile = "host";
@@ -514,7 +515,7 @@
 
         korriDesktopDevice =
           if isSupportedDesktopSystem then
-            pkgs.callPackage ./nix/korri-desktop/wrap.nix (
+            pkgs.callPackage ./product/apps/desktop/nix/wrap.nix (
               deviceDesktopWrapOverrides // { profile = "device"; }
             )
           else
@@ -522,7 +523,7 @@
 
         korriDesktopX86Kiosk =
           if isX86Linux then
-            pkgs.callPackage ./nix/korri-desktop/wrap.nix (
+            pkgs.callPackage ./product/apps/desktop/nix/wrap.nix (
               deviceDesktopWrapOverrides
               // {
                 moonlightPackage = pkgs.moonlight-embedded;
@@ -532,7 +533,7 @@
           else
             null;
 
-        korriImages = import ./nix/images/common.nix {
+        korriImages = import ./product/systems/nixos/images/common.nix {
           korri = self;
           inherit nixpkgs system;
           overlays = [ korriPackagesOverlay ];
@@ -548,27 +549,27 @@
         moonlightEmbeddedKorri = pkgs.moonlight-embedded;
 
         korriHeadlessSystem = korriImages.mkHeadlessSystem {
-          platformModules = [ ./nix/images/platforms/x86.nix ];
+          platformModules = [ ./product/systems/nixos/images/platforms/x86.nix ];
         };
 
         korriKioskSystem = korriImages.mkKioskSystem {
-          platformModules = [ ./nix/images/platforms/x86.nix ];
+          platformModules = [ ./product/systems/nixos/images/platforms/x86.nix ];
         };
 
         korriDesktopLabSystem = korriImages.mkDesktopLabSystem {
-          platformModules = [ ./nix/images/platforms/x86.nix ];
+          platformModules = [ ./product/systems/nixos/images/platforms/x86.nix ];
         };
 
         korriSourceMachineSystem = korriImages.mkSourceMachineSystem {
-          platformModules = [ ./nix/images/platforms/x86.nix ];
+          platformModules = [ ./product/systems/nixos/images/platforms/x86.nix ];
         };
 
         korriKioskLiveUsbSystem = korriImages.mkLiveUsbKioskSystem {
-          platformModules = [ ./nix/images/platforms/x86.nix ];
+          platformModules = [ ./product/systems/nixos/images/platforms/x86.nix ];
         };
 
         korriKioskLiveUsbDeveloperSystem = korriImages.mkLiveUsbKioskSystem {
-          platformModules = [ ./nix/images/platforms/x86.nix ];
+          platformModules = [ ./product/systems/nixos/images/platforms/x86.nix ];
           modules = [
             {
               services.korri.liveUsbPersistence.artifact = "developer";
@@ -577,7 +578,7 @@
         };
 
         korriKioskLiveUsbRuntimeSystem = korriImages.mkLiveUsbKioskRuntimeSystem {
-          platformModules = [ ./nix/images/platforms/x86.nix ];
+          platformModules = [ ./product/systems/nixos/images/platforms/x86.nix ];
         };
       in
       {
@@ -619,23 +620,29 @@
             self.nixosConfigurations.korri-rocknix-kiosk-thor.config.system.build.toplevel;
           korri-rocknix-kiosk-system-odin2portal =
             self.nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel;
+        }
+        // pkgs.lib.optionalAttrs (system == "aarch64-linux" && hasRocknixGuestCompatible) {
           korri-rocknix-kiosk-system-by-compatible =
             self.nixosConfigurations.korri-rocknix-kiosk-by-compatible.config.system.build.toplevel;
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-          korri-rocknix-rootfs-thor = import ./nix/korri-rocknix-rootfs.nix {
+          korri-rocknix-rootfs-thor = import ./product/systems/rocknix/rootfs.nix {
             inherit pkgs;
             configuration = self.nixosConfigurations.korri-rocknix-kiosk-thor;
           };
-          korri-rocknix-rootfs-odin2portal = import ./nix/korri-rocknix-rootfs.nix {
+          korri-rocknix-rootfs-odin2portal = import ./product/systems/rocknix/rootfs.nix {
             inherit pkgs;
             configuration = self.nixosConfigurations.korri-rocknix-kiosk-odin2portal;
           };
-          korri-rocknix-rootfs-by-compatible = import ./nix/korri-rocknix-rootfs.nix {
+        }
+        // pkgs.lib.optionalAttrs (pkgs.stdenv.isLinux && hasRocknixGuestCompatible) {
+          korri-rocknix-rootfs-by-compatible = import ./product/systems/rocknix/rootfs.nix {
             inherit pkgs;
             configuration = self.nixosConfigurations.korri-rocknix-kiosk-by-compatible;
           };
-          korri-rocknix-product-payload-odin2portal = import ./nix/korri-rocknix-product-payload.nix {
+        }
+        // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+          korri-rocknix-product-payload-odin2portal = import ./product/systems/rocknix/product-payload.nix {
             inherit
               pkgs
               productRevision
@@ -650,7 +657,7 @@
             buildTarget = ".#nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel";
             substrateRevision = nixOnRocksRevision;
           };
-          korri-rocknix-product-payload-thor = import ./nix/korri-rocknix-product-payload.nix {
+          korri-rocknix-product-payload-thor = import ./product/systems/rocknix/product-payload.nix {
             inherit
               pkgs
               productRevision
@@ -680,7 +687,7 @@
           #     ...
           #     profile = "steamdeck";
           #   }
-          wrapKorriDesktop = args: pkgs.callPackage ./nix/korri-desktop/wrap.nix args;
+          wrapKorriDesktop = args: pkgs.callPackage ./product/apps/desktop/nix/wrap.nix args;
         };
 
         checks =
@@ -701,7 +708,7 @@
               packages = self.packages.${system};
               apps = self.apps.${system};
               imageLib = korriImages;
-              x86Platform = ./nix/images/platforms/x86.nix;
+              x86Platform = ./product/systems/nixos/images/platforms/x86.nix;
               liveUsbConfigCheck = import ./nix/tests/korri-live-usb-config-check.nix {
                 inherit pkgs;
                 liveUsbSystem = korriKioskLiveUsbSystem;
@@ -714,14 +721,14 @@
               liveUsbVmSmokeCheck = import ./nix/tests/korri-live-usb-vm-smoke.nix {
                 inherit pkgs;
                 imageLib = korriImages;
-                x86Platform = ./nix/images/platforms/x86.nix;
+                x86Platform = ./product/systems/nixos/images/platforms/x86.nix;
               };
               hardwareFactSourceFiles = [
-                ./nix/images/common.nix
-                ./nix/images/headless.nix
-                ./nix/images/kiosk.nix
-                ./nix/images/desktop-lab.nix
-                ./nix/images/platforms/x86.nix
+                ./product/systems/nixos/images/common.nix
+                ./product/systems/nixos/images/headless.nix
+                ./product/systems/nixos/images/kiosk.nix
+                ./product/systems/nixos/images/desktop-lab.nix
+                ./product/systems/nixos/images/platforms/x86.nix
               ];
             };
           }
@@ -754,7 +761,7 @@
             };
             korri-module-identity-audit = import ./nix/tests/korri-module-identity-audit-check.nix {
               inherit pkgs;
-              src = ./nix/modules;
+              src = ./product/systems/nixos/modules;
             };
           }
           // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
@@ -807,16 +814,16 @@
               inherit pkgs;
               thorSystem = self.nixosConfigurations.korri-rocknix-kiosk-thor;
               soboSystem = self.nixosConfigurations.korri-rocknix-kiosk-odin2portal;
-              byCompatibleSystem = self.nixosConfigurations.korri-rocknix-kiosk-by-compatible;
+              byCompatibleSystem = self.nixosConfigurations.korri-rocknix-kiosk-by-compatible or null;
               targetPackages = self.packages.aarch64-linux;
               hostPackages = self.packages.${system};
               configurations = self.nixosConfigurations;
               hardwareFactSourceFiles = [
-                ./nix/images/common.nix
-                ./nix/images/headless.nix
-                ./nix/images/kiosk.nix
-                ./nix/images/desktop-lab.nix
-                ./nix/images/platforms/x86.nix
+                ./product/systems/nixos/images/common.nix
+                ./product/systems/nixos/images/headless.nix
+                ./product/systems/nixos/images/kiosk.nix
+                ./product/systems/nixos/images/desktop-lab.nix
+                ./product/systems/nixos/images/platforms/x86.nix
               ];
               # The SM8550 platform adapter is the one image-side file
               # that *should* know about RockNix — it composes the
@@ -826,7 +833,7 @@
               # pulseaudio), which now come from
               # `rocknix.sm8550.video.decodeBackend` and
               # `rocknix.sm8550.audio.api`.
-              sm8550PlatformAdapterSourceFile = ./nix/images/platforms/rocknix-sm8550.nix;
+              sm8550PlatformAdapterSourceFile = ./product/systems/nixos/images/platforms/rocknix-sm8550.nix;
             };
             korri-rocknix-product-payload =
               let
@@ -847,7 +854,7 @@
                   in
                   {
                     inherit device compatible fixtureArchiveName;
-                    fixturePayloadPackage = import ./nix/korri-rocknix-product-payload.nix {
+                    fixturePayloadPackage = import ./product/systems/rocknix/product-payload.nix {
                       inherit
                         pkgs
                         device
@@ -869,7 +876,7 @@
                 targetPackages = self.packages.aarch64-linux;
                 hostPackages = self.packages.${system};
                 configurations = self.nixosConfigurations;
-                contract = import ./nix/product-payload-contract.nix;
+                contract = import ./product/systems/rocknix/product-payload-contract.nix;
                 payloadSpecs = [
                   (
                     (mkFixturePayload {
@@ -917,58 +924,27 @@
             korri-live-usb-vm-smoke = import ./nix/tests/korri-live-usb-vm-smoke.nix {
               inherit pkgs;
               imageLib = korriImages;
-              x86Platform = ./nix/images/platforms/x86.nix;
+              x86Platform = ./product/systems/nixos/images/platforms/x86.nix;
             };
             korri-live-usb-invalid-artifact = import ./nix/tests/korri-live-usb-invalid-artifact-check.nix {
               inherit pkgs;
               imageLib = korriImages;
-              x86Platform = ./nix/images/platforms/x86.nix;
+              x86Platform = ./product/systems/nixos/images/platforms/x86.nix;
             };
             korri-live-usb-persistence-resolver =
               import ./nix/tests/korri-live-usb-persistence-resolver-check.nix
                 {
                   inherit pkgs;
-                  resolverScript = ./nix/images/live-usb-persistence-resolver.sh;
+                  resolverScript = ./product/systems/nixos/images/live-usb-persistence-resolver.sh;
                 };
             korri-rocknix-build-performance = import ./nix/tests/korri-rocknix-build-performance-check.nix {
               inherit pkgs;
               runtimeSources = korriSources;
               productionBunPackageNames = import ./nix/bun-production-package-names.nix;
-              rootfsBuilder = ./nix/korri-rocknix-rootfs.nix;
+              rootfsBuilder = ./product/systems/rocknix/rootfs.nix;
             };
             korri-standard-native = import ./nix/tests/korri-standard-native-check.nix {
               inherit pkgs;
-              standardChecks = [
-                self.checks.${system}.korri-compositor-module
-                self.checks.${system}.korri-input-module
-                self.checks.${system}.korri-game-stream-module
-                self.checks.${system}.korri-sessiond-module
-                self.checks.${system}.korri-source-machine-image
-                self.checks.${system}.korri-server-module
-                self.checks.${system}.korri-module-identity-audit
-                self.checks.${system}.korri-sunshine-runtime-bitrate-patch
-                self.checks.${system}.korri-moonlight-control-protocol-patch
-                self.checks.${system}.libretro-fake-08-check
-                self.checks.${system}.korri-desktop-build-graph
-                self.checks.${system}.korri-package-outputs
-                self.checks.${system}.korri-image-outputs
-                self.checks.${system}.korri-rocknix-sm8550-config
-                self.checks.${system}.korri-rocknix-build-performance
-                self.checks.${system}.korri-rocknix-product-payload
-                self.checks.${system}.korri-rocknix-product-payload-thor
-                self.checks.${system}.korri-live-usb-config
-                self.checks.${system}.korri-live-usb-developer-config
-                # korri-live-usb-vm-smoke deliberately excluded from the
-                # standard-native aggregate. It is flaky (sessiond JSON race
-                # on /control/start; see desktop-stage2 run 26659059185) and
-                # would gate every PR on its current intermittent failure.
-                # The check is still exposed under checks.${system} and is
-                # invoked explicitly as a non-blocking step in
-                # .github/workflows/desktop-stage2.yml. Restore it here once
-                # the underlying readiness handshake is reliable.
-                self.checks.${system}.korri-live-usb-invalid-artifact
-                self.checks.${system}.korri-live-usb-persistence-resolver
-              ];
               ownerMatrix = [
                 {
                   name = "korri-compositor-module";
@@ -1115,7 +1091,7 @@
             korri-live-usb-vm = {
               type = "app";
               program = "${
-                import ./nix/apps/korri-live-usb-vm.nix {
+                import ./product/systems/nixos/apps/korri-live-usb-vm.nix {
                   inherit pkgs;
                   vmSystem = korriKioskLiveUsbRuntimeSystem;
                 }
@@ -1124,7 +1100,7 @@
             korri-live-usb-qemu = {
               type = "app";
               program = "${
-                import ./nix/apps/korri-live-usb-qemu.nix {
+                import ./product/systems/nixos/apps/korri-live-usb-qemu.nix {
                   inherit pkgs;
                   isoPackage = korriKioskLiveUsbSystem.config.system.build.isoImage;
                 }
@@ -1133,7 +1109,7 @@
             korri-live-usb-qemu-persistence = {
               type = "app";
               program = "${
-                import ./nix/apps/korri-live-usb-qemu.nix {
+                import ./product/systems/nixos/apps/korri-live-usb-qemu.nix {
                   inherit pkgs;
                   isoPackage = korriKioskLiveUsbSystem.config.system.build.isoImage;
                   persistenceMode = true;
@@ -1143,7 +1119,7 @@
             korri-live-usb-developer-qemu = {
               type = "app";
               program = "${
-                import ./nix/apps/korri-live-usb-qemu.nix {
+                import ./product/systems/nixos/apps/korri-live-usb-qemu.nix {
                   inherit pkgs;
                   isoPackage = korriKioskLiveUsbDeveloperSystem.config.system.build.isoImage;
                   appName = "korri-live-usb-developer-qemu";
@@ -1153,7 +1129,7 @@
             korri-live-usb-developer-qemu-persistence = {
               type = "app";
               program = "${
-                import ./nix/apps/korri-live-usb-qemu.nix {
+                import ./product/systems/nixos/apps/korri-live-usb-qemu.nix {
                   inherit pkgs;
                   isoPackage = korriKioskLiveUsbDeveloperSystem.config.system.build.isoImage;
                   persistenceMode = true;
@@ -1192,17 +1168,17 @@
     // (
       let
         rocknixTargetSystem = "aarch64-linux";
-        rocknixImages = import ./nix/images/common.nix {
+        rocknixImages = import ./product/systems/nixos/images/common.nix {
           korri = self;
           nixpkgs = nix-on-rocks.inputs.nixpkgs;
           system = rocknixTargetSystem;
           overlays = [
-            (import ./nix/overlays/korri-packages.nix { inherit nix-on-rocks fake-08-src; })
+            (import ./product/systems/nixos/overlays/korri-packages.nix { inherit nix-on-rocks fake-08-src; })
           ];
         };
         rocknixPlatformFor =
           deviceProfile:
-          import ./nix/images/platforms/rocknix-sm8550.nix {
+          import ./product/systems/nixos/images/platforms/rocknix-sm8550.nix {
             korri = self;
             inherit nixpkgs nix-on-rocks deviceProfile;
           };
@@ -1216,6 +1192,7 @@
             (rocknixPlatformFor nix-on-rocks.nixosModules.odin2portal)
           ];
         };
+        hasRocknixGuestCompatible = builtins.getEnv "ROCKNIX_GUEST_DEVICE_COMPATIBLE" != "";
         rocknixByCompatibleSystem = rocknixImages.mkKioskSystem {
           platformModules = [
             (rocknixPlatformFor nix-on-rocks.lib.selectDeviceProfileFromCompatible)
@@ -1231,7 +1208,7 @@
         # never see the substitution and end up with stock nixpkgs sunshine
         # / nix-on-rocks moonlight-embedded.
         overlays = rec {
-          korri-packages = import ./nix/overlays/korri-packages.nix {
+          korri-packages = import ./product/systems/nixos/overlays/korri-packages.nix {
             inherit nix-on-rocks fake-08-src;
           };
           default = korri-packages;
@@ -1240,6 +1217,8 @@
         nixosConfigurations = {
           korri-rocknix-kiosk-thor = rocknixThorSystem;
           korri-rocknix-kiosk-odin2portal = rocknixOdin2PortalSystem;
+        }
+        // nixpkgs.lib.optionalAttrs hasRocknixGuestCompatible {
           korri-rocknix-kiosk-by-compatible = rocknixByCompatibleSystem;
         };
 
@@ -1255,8 +1234,8 @@
           # `rocknix.sm8550.moonlight.package`) it cares about to the Korri
           # downstream builds, so the substitution happens through the option
           # graph rather than through `pkgs` itself.
-          korri-nixpkgs-overlay = import ./nix/modules/korri-nixpkgs-overlay.nix {
-            overlay = import ./nix/overlays/korri-packages.nix {
+          korri-nixpkgs-overlay = import ./product/systems/nixos/modules/korri-nixpkgs-overlay.nix {
+            overlay = import ./product/systems/nixos/overlays/korri-packages.nix {
               inherit nix-on-rocks fake-08-src;
             };
           };
@@ -1265,16 +1244,18 @@
           # contract. Imported by korri-compositor below so downstream consumers
           # inherit the known-good versions without touching nixpkgs.overlays
           # themselves. No-ops on non-x86 systems via the overlay itself.
-          korri-x86-compositor-overlay = import ./nix/modules/korri-x86-compositor-overlay.nix {
-            overlay = import ./nix/overlays/korri-x86-compositor.nix;
-          };
+          korri-x86-compositor-overlay =
+            import ./product/systems/nixos/modules/korri-x86-compositor-overlay.nix
+              {
+                overlay = import ./product/systems/nixos/overlays/korri-x86-compositor.nix;
+              };
 
-          korri-client = import ./nix/modules/korri-client.nix { korri = self; };
-          korri-cli = import ./nix/modules/korri-cli.nix { korri = self; };
-          korri-game-stream = import ./nix/modules/korri-game-stream.nix { korri = self; };
-          korri-sessiond = import ./nix/modules/korri-sessiond.nix { korri = self; };
+          korri-client = import ./product/systems/nixos/modules/korri-client.nix { korri = self; };
+          korri-cli = import ./product/systems/nixos/modules/korri-cli.nix { korri = self; };
+          korri-game-stream = import ./product/systems/nixos/modules/korri-game-stream.nix { korri = self; };
+          korri-sessiond = import ./product/systems/nixos/modules/korri-sessiond.nix { korri = self; };
           # Per-role input module: provider + inputd peer sub-trees.
-          korri-input = import ./nix/modules/korri-input.nix { korri = self; };
+          korri-input = import ./product/systems/nixos/modules/korri-input.nix { korri = self; };
           # Per-role compositor module. Bundles the Korri client install so the
           # kiosk-surface sub-tree can default `kiosk.command` to the selected
           # client package without callers wiring it themselves, and imports
@@ -1285,7 +1266,7 @@
               korri-client
               korri-input
               korri-x86-compositor-overlay
-              (import ./nix/modules/korri-compositor.nix { korri = self; })
+              (import ./product/systems/nixos/modules/korri-compositor.nix { korri = self; })
             ];
           };
           # Server module imports compositor + input alongside its own file so
@@ -1299,7 +1280,7 @@
             imports = [
               korri-compositor
               korri-input
-              (import ./nix/modules/korri-server.nix { korri = self; })
+              (import ./product/systems/nixos/modules/korri-server.nix { korri = self; })
             ];
           };
           # Aggregate composes the three product roles. Compositor and input

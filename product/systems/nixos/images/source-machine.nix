@@ -137,7 +137,7 @@ in
 
   # Without this, korri-server's Launcher falls through to the in-process
   # shell launcher which spawns from the unit's bare systemd PATH and
-  # then explodes with ENOENT on gamescope. Mirrors nix/images/kiosk.nix.
+  # then explodes with ENOENT on gamescope. Mirrors product/systems/nixos/images/kiosk.nix.
   services.korri.server.sessiond = {
     url = "http://127.0.0.1:${toString sessiondPort}";
     tokenFile = sessiondTokenFile;

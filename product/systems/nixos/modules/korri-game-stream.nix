@@ -148,10 +148,12 @@ let
     export KORRI_GAME_STREAM_LOCK_PATH="''${KORRI_GAME_STREAM_LOCK_PATH:-$runtime_dir/run.lock}"
     export KORRI_GAME_STREAM_STATUS_PATH=${statusPathExpression}
 
-    ${optionalString (cfg.sessiond.url != null) ''
-      export KORRI_SESSIOND_URL=${lib.escapeShellArg cfg.sessiond.url}''}
-    ${optionalString (cfg.sessiond.tokenFile != null) ''
-      export KORRI_SESSIOND_TOKEN_FILE=${lib.escapeShellArg cfg.sessiond.tokenFile}''}
+    ${optionalString (
+      cfg.sessiond.url != null
+    ) "export KORRI_SESSIOND_URL=${lib.escapeShellArg cfg.sessiond.url}"}
+    ${optionalString (
+      cfg.sessiond.tokenFile != null
+    ) "export KORRI_SESSIOND_TOKEN_FILE=${lib.escapeShellArg cfg.sessiond.tokenFile}"}
 
     exec ${cfg.package}/bin/korri-game-stream-runner
   '';

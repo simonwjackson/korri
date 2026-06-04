@@ -139,9 +139,7 @@ let
   '';
 
   swayConfig = pkgs.writeText "korri-compositor-sway.conf" (
-    swayConfigPrelude
-    + "\n"
-    + cfg.sway.extraConfig
+    swayConfigPrelude + "\n" + cfg.sway.extraConfig
   );
 
   sessionEnvironment =
@@ -357,7 +355,7 @@ in
 
         With this enabled, the compositor still owns Sway only; the kiosk
         renderer (Electrobun) is launched by `services.korri.sessiond`,
-        which auto-enables on kiosk images via `nix/images/kiosk.nix`. The
+        which auto-enables on kiosk images via `product/systems/nixos/images/kiosk.nix`. The
         legacy `kiosk.command` / `kiosk.launcher` options were removed when
         renderer-ownership moved to sessiond; downstream hosts pinning them
         will hit an evaluation error.

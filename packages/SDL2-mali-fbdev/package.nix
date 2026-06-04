@@ -53,7 +53,7 @@
 # Substitution seam:
 #
 #   This derivation is wired into the Korri overlay in
-#   `nix/overlays/korri-packages.nix`. The overlay points
+#   `product/systems/nixos/overlays/korri-packages.nix`. The overlay points
 #   `moonlight-embedded`'s `SDL2` argument at this build so that
 #   `moonlight-embedded-korri` (and any other consumer of the Korri overlay)
 #   gets a real SDL2 with `SDL_VIDEO_DRIVER_MALI` defined.

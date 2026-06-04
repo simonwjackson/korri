@@ -54,14 +54,15 @@ let
     XDG_CURRENT_DESKTOP = "sway";
     DISPLAY = ":0";
   }
-  // lib.optionalAttrs (
-    compositorCfg.sessionBus.mode == "existing" && compositorCfg.sessionBus.address != null
-  ) {
-    # When the platform provides a session bus, sessiond's renderer
-    # needs the same DBUS_SESSION_BUS_ADDRESS the compositor uses so
-    # the renderer can reach AT-SPI / dconf / portal services.
-    DBUS_SESSION_BUS_ADDRESS = compositorCfg.sessionBus.address;
-  }
+  //
+    lib.optionalAttrs
+      (compositorCfg.sessionBus.mode == "existing" && compositorCfg.sessionBus.address != null)
+      {
+        # When the platform provides a session bus, sessiond's renderer
+        # needs the same DBUS_SESSION_BUS_ADDRESS the compositor uses so
+        # the renderer can reach AT-SPI / dconf / portal services.
+        DBUS_SESSION_BUS_ADDRESS = compositorCfg.sessionBus.address;
+      }
   // lib.optionalAttrs (inputCfg.provider.name == "inputplumber") {
     # The renderer's Moonlight launch path refuses to start a stream
     # without the InputPlumber virtual gamepad when the host has
@@ -195,7 +196,7 @@ in
     # wayland socket at $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY. The compositor
     # publishes the socket under /run/user/0 (compositor.runtimeDir),
     # named "wayland-1" by sway's default-first allocation, mirroring
-    # the korri-sunshine attach pattern in nix/modules/korri-server.nix.
+    # the korri-sunshine attach pattern in product/systems/nixos/modules/korri-server.nix.
     extraEnvironment = {
       XDG_RUNTIME_DIR = compositorCfg.runtimeDir;
       WAYLAND_DISPLAY = "wayland-1";
@@ -250,7 +251,9 @@ in
   # therefore be visible to korri-server as well as sessiond, otherwise the
   # normal product launch path omits `-input` and can fall back to raw/unstable
   # evdev discovery.
-  systemd.services.korri-server.environment = lib.optionalAttrs (inputCfg.provider.name == "inputplumber") {
-    KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER = "1";
-  };
+  systemd.services.korri-server.environment =
+    lib.optionalAttrs (inputCfg.provider.name == "inputplumber")
+      {
+        KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER = "1";
+      };
 }

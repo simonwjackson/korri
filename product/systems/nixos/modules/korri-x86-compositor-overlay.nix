@@ -5,7 +5,7 @@
 # the Korri compositor was validated against, without having to wire
 # the pin themselves.
 #
-# The overlay (see nix/overlays/korri-x86-compositor.nix) is a no-op on
+# The overlay (see product/systems/nixos/overlays/korri-x86-compositor.nix) is a no-op on
 # non-x86 systems, so this module is safe to include from
 # architecture-agnostic module aggregates (korri-compositor is also
 # imported on aarch64 ROCKNIX builds).

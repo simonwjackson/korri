@@ -48,7 +48,7 @@ The package conforms to the nixpkgs `mkLibretroCore` contract that
 - `passthru.core = "fake08"` — string identifier the wrapper's
   `longDescription` reads and the kiosk closure-shape check asserts on
 
-Korri's kiosk product module (`nix/images/kiosk.nix`) exposes this core at the stable launch-module path `/etc/korri/cores/fake08_libretro.so` and joins it with `retroarch-bare` without using nixpkgs' flag-injecting RetroArch wrapper. Launch YAML should model it as a top-level module:
+Korri's kiosk product module (`product/systems/nixos/images/kiosk.nix`) exposes this core at the stable launch-module path `/etc/korri/cores/fake08_libretro.so` and joins it with `retroarch-bare` without using nixpkgs' flag-injecting RetroArch wrapper. Launch YAML should model it as a top-level module:
 
 ```yaml
 modules:
@@ -89,7 +89,7 @@ RetroArch without growing the per-image closure for every user.
 ```
 packages/libretro-fake-08/
 ├── README.md       # this file
-├── package.nix     # stdenv.mkDerivation wired through nix/overlays/korri-packages.nix
+├── package.nix     # stdenv.mkDerivation wired through product/systems/nixos/overlays/korri-packages.nix
 └── check.nix       # colocated package-level check exposed as
                     # self.checks.<system>.libretro-fake-08-check
 ```

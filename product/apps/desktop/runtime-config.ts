@@ -4,7 +4,7 @@ import type { RuntimeConfig } from "./runtime-config-shape"
  * Build the runtime-config snapshot pushed to webviews at startup.
  *
  * Inputs come from the process environment (set by the wrap step in
- * `nix/korri-desktop/wrap.nix`). The bun side reads once at startup and
+ * `product/apps/desktop/nix/wrap.nix`). The bun side reads once at startup and
  * pushes the result to every BrowserWindow on `dom-ready`, mirroring the
  * connection-state push pattern.
  *

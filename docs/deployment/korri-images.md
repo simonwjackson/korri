@@ -174,7 +174,7 @@ The RockNix appliance composition keeps the server as a non-root system service 
 
 ### Substrate capability boundary
 
-The SM8550 platform adapter (`nix/images/platforms/rocknix-sm8550.nix`) reads neutral substrate-owned capability options from nix-on-rocks and translates them into Korri product policy. The ownership rule:
+The SM8550 platform adapter (`product/systems/nixos/images/platforms/rocknix-sm8550.nix`) reads neutral substrate-owned capability options from nix-on-rocks and translates them into Korri product policy. The ownership rule:
 
 - **nix-on-rocks** says: "this device/chipset exposes these Linux capabilities and routes audio/video here."
 - **Korri** says: "for a Korri appliance, use those capabilities with Moonlight, sessiond, and kiosk policy."
@@ -191,7 +191,7 @@ Guidance for adding a new SM8550 chipset fact, a per-device quirk, or a Korri po
 
 - **New SM8550 capability** (shared across Thor and Odin 2 Portal): add the option under `rocknix.sm8550.*` in the nix-on-rocks `chipsets/sm8550/` folder. Do not introduce it under `rocknix.sm8550.moonlight.*` or any other client-specific namespace; the substrate is product-blind.
 - **Per-device hardware quirk** (display topology, audio sink PCM, input event name): add it to the device profile in `nix-on-rocks/guest/profiles/devices/<device>.nix`. Korri does not need to know.
-- **Per-device Korri-product behavior** (kiosk presentation, launch policy, Korri service tuning): add it to the appropriate Korri module or to `nix/images/platforms/rocknix-sm8550.nix`. Do not push it into the substrate.
+- **Per-device Korri-product behavior** (kiosk presentation, launch policy, Korri service tuning): add it to the appropriate Korri module or to `product/systems/nixos/images/platforms/rocknix-sm8550.nix`. Do not push it into the substrate.
 - **Moonlight CLI shape, mapping file, key/cache dir, startup observe window**: stays in Korri. The substrate exposes the audio/video capabilities those choices depend on, but the client and its argv are Korri's responsibility.
 
 The Gamescope >= 3.16.20 assertion in the platform adapter is gated on the substrate-declared video decode backend so the constraint's reason stays machine-checkable. The substrate-side `rocknix.sm8550.moonlight.*` option group is scheduled for removal once Korri's trunk stops setting it (which this Korri release already does); see the substrate refactor follow-up PR for the cleanup.

@@ -1,6 +1,7 @@
 {
   pkgs,
-  standardChecks,
+  standardChecks ? [ ],
+  standardCheckPaths ? [ ],
   ownerMatrix,
 }:
 
@@ -17,7 +18,7 @@ let
   ];
 
   checks = [
-    (check "standard native gate must include at least one check" (standardChecks != [ ]))
+    (check "standard native owner matrix must include at least one entry" (ownerMatrix != [ ]))
   ]
   ++ map (
     entry: check "${entry.name}: owner kind is classified" (builtins.elem entry.owner ownerKinds)
@@ -32,12 +33,12 @@ if failures != [ ] then
 else
   pkgs.runCommand "korri-standard-native-check" { } ''
     mkdir -p "$out"
-    ${lib.concatMapStringsSep "\n" (drv: ''
-      if [ ! -e "${drv}" ]; then
-        echo "standard native dependency missing: ${drv}" >&2
+    ${lib.concatMapStringsSep "\n" (path: ''
+      if [ ! -e "${path}" ]; then
+        echo "standard native dependency missing: ${path}" >&2
         exit 1
       fi
-    '') standardChecks}
+    '') standardCheckPaths}
     cat > "$out/summary.txt" <<'EOF'
     Korri standard native gate passed.
     EOF
