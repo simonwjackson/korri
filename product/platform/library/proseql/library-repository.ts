@@ -33,7 +33,10 @@ import {
   resolveAppDescriptor,
   unknownSettingDiagnostics,
 } from "@platform/library/config/app-integrations"
-import { materializeAppLaunch } from "@platform/library/config/app-materializer"
+import {
+  materializeAppLaunch,
+  validatePatchSupport,
+} from "@platform/library/config/app-materializer"
 import type { ConfigSnapshot } from "@platform/library/config/cascade-resolver"
 import {
   resolveLaunchContext,
@@ -41,7 +44,10 @@ import {
 } from "@platform/library/config/cascade-resolver"
 import { composeLaunchSpec } from "@platform/library/config/compose-launch-spec"
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
-import type { CascadeError } from "@platform/library/config/errors"
+import {
+  type CascadeError,
+  supportedPatchFormatForPath,
+} from "@platform/library/config/errors"
 import type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
 import { collectLayerLaunchDiagnostics } from "@platform/library/config/launch-block"
 import type { AppRecord } from "@platform/library/config/records/app"
@@ -165,6 +171,10 @@ export interface LibraryRepository {
   readonly adoptArtifact: (
     input: AdoptArtifactInput,
   ) => Effect.Effect<AdoptArtifactOutput, LibraryError>
+  readonly canResolveLaunchForGame: (
+    gameId: string,
+    opts?: ResolveLaunchOptions,
+  ) => Effect.Effect<boolean, LibraryError>
   readonly resolveLaunchForGame: (
     gameId: string,
     opts?: ResolveLaunchOptions,
@@ -286,6 +296,41 @@ export function createLibraryRepository(
       ),
 
     adoptArtifact: input => adoptArtifact(db, env, input),
+
+    canResolveLaunchForGame: (gameId, opts) =>
+      Effect.gen(function* () {
+        const snapshot = yield* loadSnapshot(db)
+        const context = yield* resolveLaunchContext(snapshot, {
+          gameId,
+          userId: opts?.userId,
+          presetId: opts?.presetId,
+          override: opts?.override,
+        })
+        const app = yield* resolveAppDescriptor({
+          appId: context.launcherId,
+          apps: snapshot.apps,
+          launchers: snapshot.launchers,
+        })
+        const patches = context.patches ?? []
+        if (!patches.every(supportedPatchFormatForPath)) return false
+        yield* validatePatchSupport(app, patches.length > 0)
+        return true
+      }).pipe(
+        Effect.catchTags({
+          GameNotFound: () => Effect.succeed(false),
+          UserNotFound: () => Effect.succeed(false),
+          PresetNotFound: () => Effect.succeed(false),
+          LauncherUnresolvable: () => Effect.succeed(false),
+          CoreNotConfigured: () => Effect.succeed(false),
+          ModuleNotFound: () => Effect.succeed(false),
+          ModulePathMissing: () => Effect.succeed(false),
+          IncompatibleModule: () => Effect.succeed(false),
+          AppNotFound: () => Effect.succeed(false),
+          CustomAppMissingCommand: () => Effect.succeed(false),
+          PatchUnsupportedForApp: () => Effect.succeed(false),
+          AppMaterializationFailed: () => Effect.succeed(false),
+        }),
+      ),
 
     resolveLaunchForGame: (gameId, opts) =>
       Effect.gen(function* () {

@@ -4,6 +4,7 @@ import { getGameDisplayName } from "@platform/fixtures/games/game"
 import {
   type LibraryError,
   LibrarySource,
+  type LibrarySourceService,
 } from "@platform/library/library-services"
 import { logger } from "@platform/logger/logger"
 import { Effect } from "effect"
@@ -24,15 +25,15 @@ export const handleListSource = (_payload: typeof ListSourcePayload.Type) =>
     const games = yield* source.list().pipe(Effect.mapError(toDataError))
     const localSource = makeLocalEntrySource(process.env)
     const sourceGames = yield* Effect.forEach(games, game =>
-      source.launchSpecFor(game.id).pipe(
+      launchCapabilityFor(source, game.id).pipe(
         Effect.matchEffect({
-          onSuccess: spec =>
+          onSuccess: streamable =>
             Effect.succeed(
-              spec
+              streamable
                 ? new SourceCatalogGame({
                     id: game.id,
                     displayName: getGameDisplayName(game),
-                    streamable: true,
+                    streamable,
                     source: localSource,
                   })
                 : undefined,
@@ -51,6 +52,13 @@ export const handleListSource = (_payload: typeof ListSourcePayload.Type) =>
       ),
     })
   })
+
+function launchCapabilityFor(source: LibrarySourceService, id: string) {
+  if (source.canResolveLaunchForGame) {
+    return source.canResolveLaunchForGame(id)
+  }
+  return source.launchSpecFor(id).pipe(Effect.map(spec => spec !== undefined))
+}
 
 function toDataError(error: LibraryError): DataError {
   const message = error.message ?? "source catalog failed"

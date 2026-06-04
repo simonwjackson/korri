@@ -37,6 +37,12 @@ export function makeInMemoryLibrarySourceLayer(
             ? defaultLaunchSpecFor(id)
             : undefined),
       ),
+    canResolveLaunchForGame: id =>
+      Effect.succeed(
+        config.resolvedLaunchById?.has(id) === true ||
+          config.launchSpecsById?.has(id) === true ||
+          config.games.some(game => game.id === id),
+      ),
     resolveLaunchForGame: id => {
       const resolved = config.resolvedLaunchById?.get(id)
       if (resolved) return Effect.succeed(resolved)

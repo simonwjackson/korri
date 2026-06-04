@@ -57,7 +57,7 @@ export const materializeAppLaunch = (input: {
 }): Effect.Effect<MaterializedAppLaunch, ResolutionError> =>
   Effect.gen(function* () {
     const hasPatches = hasResolvedPatches(input.context)
-    yield* rejectUnsupportedPatchIntegration(input.app, hasPatches)
+    yield* validatePatchSupport(input.app, hasPatches)
 
     if (canBypassMaterialization(input.app, hasPatches)) {
       return {
@@ -74,7 +74,7 @@ export const materializeAppLaunch = (input: {
 const hasResolvedPatches = (context: ResolvedLaunchContext): boolean =>
   (context.patches?.length ?? 0) > 0
 
-const rejectUnsupportedPatchIntegration = (
+export const validatePatchSupport = (
   app: AppDescriptor,
   hasPatches: boolean,
 ): Effect.Effect<void, ResolutionError> =>

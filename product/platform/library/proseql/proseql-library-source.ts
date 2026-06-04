@@ -15,6 +15,8 @@ export function createProseqlLibrarySource(
       Effect.runPromise(
         resolvedLaunchSpecOrUndefined(repository.resolveLaunchForGame(id)),
       ),
+    canResolveLaunchForGame: (id, inputs?: ResolveLaunchInputs) =>
+      Effect.runPromise(repository.canResolveLaunchForGame(id, inputs)),
     resolveLaunchForGame: (id, inputs?: ResolveLaunchInputs) =>
       Effect.runPromise(repository.resolveLaunchForGame(id, inputs)),
   }

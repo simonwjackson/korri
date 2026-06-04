@@ -47,6 +47,19 @@ function createLiveLibrarySourceService(): LibrarySourceService {
               ),
             "launchSpecFor",
           ),
+    canResolveLaunchForGame: (id, inputs) =>
+      selectedLibrarySourceMode() === "rocknix"
+        ? withRocknixSource(
+            source =>
+              source.canResolveLaunchForGame
+                ? source.canResolveLaunchForGame(id, inputs)
+                : source.launchSpecFor(id).then(spec => spec !== undefined),
+            "canResolveLaunchForGame",
+          )
+        : withLibraryRepository(
+            repository => repository.canResolveLaunchForGame(id, inputs),
+            "canResolveLaunchForGame",
+          ),
     resolveLaunchForGame: (id, inputs) =>
       selectedLibrarySourceMode() === "rocknix"
         ? withRocknixSource(

@@ -9,6 +9,9 @@
  *     for a game with all-default cascade inputs (no user, no preset, no
  *     override), or `undefined` if resolution fails. New code should call
  *     `resolveLaunchForGame` instead.
+ *   - `canResolveLaunchForGame(id, inputs)`: non-materializing launch
+ *     capability check for catalog/listing surfaces. It resolves cascade/app
+ *     compatibility without creating artifacts or validating patch file paths.
  *   - `resolveLaunchForGame(id, inputs)`: full resolved-launch output —
  *     spec + gamescope policy. The stream prepare RPC consumes this.
  *
@@ -38,6 +41,10 @@ export interface ResolvedLaunch {
 export interface LibrarySource {
   list(): Promise<readonly ResolvedGameRecord[]>
   launchSpecFor(id: string): Promise<LaunchSpec | undefined>
+  canResolveLaunchForGame?(
+    id: string,
+    inputs?: ResolveLaunchInputs,
+  ): Promise<boolean>
   resolveLaunchForGame(
     id: string,
     inputs?: ResolveLaunchInputs,

@@ -162,6 +162,11 @@ export function createRocknixSource(
       return specs.get(id)
     },
 
+    async canResolveLaunchForGame(id: string): Promise<boolean> {
+      const { specs } = await loadIfNeeded()
+      return specs.has(id)
+    },
+
     async resolveLaunchForGame(id: string) {
       const { specs } = await loadIfNeeded()
       const spec = specs.get(id)

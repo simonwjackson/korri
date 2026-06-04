@@ -100,6 +100,15 @@ export interface LibrarySourceService {
     id: string,
   ) => Effect.Effect<LaunchSpec | undefined, LibraryError>
   /**
+   * Non-materializing launch capability check for catalog/listing surfaces.
+   * It resolves cascade/app compatibility without creating launch artifacts or
+   * validating patch file paths.
+   */
+  readonly canResolveLaunchForGame?: (
+    id: string,
+    inputs?: ResolveLaunchInputs,
+  ) => Effect.Effect<boolean, LibraryError>
+  /**
    * Full resolved-launch output — drives the new `stream/prepare.rpc`
    * handler. Surfaces `LibraryError` for proseql/IO failures; the
    * cascade resolver's typed errors are folded into LibraryError at
