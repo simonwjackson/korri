@@ -51,6 +51,54 @@ describe("korri bazzar command routing", () => {
     })
   }
 
+  for (const [command, flags] of [
+    [
+      "search",
+      [
+        "--format",
+        "--platforms",
+        "--sources",
+        "--interactive",
+        "--cache",
+        "--cursor",
+        "--timeout",
+        "--filter",
+        "--strict",
+        "--validate",
+        "--log-level",
+        "--log-json",
+      ],
+    ],
+    ["details", ["--format", "--cache", "--log-level", "--log-json"]],
+    ["plugins", ["--format", "--log-level", "--log-json"]],
+    [
+      "validate-sources",
+      ["--sources", "--timeout", "--log-level", "--log-json"],
+    ],
+    [
+      "resolve-download",
+      [
+        "--title",
+        "--site",
+        "--file-name",
+        "--size",
+        "--artifact-format",
+        "--log-level",
+        "--log-json",
+      ],
+    ],
+  ] as const) {
+    it(`preserves important Bazzar flags for ${command}`, async () => {
+      const result = await runCli(["bazzar", command, "--help"])
+
+      expect(result.exitCode).toBe(0)
+      for (const flag of flags) {
+        expect(result.stdout).toContain(flag)
+      }
+      expect(result.stderr).toBe("")
+    })
+  }
+
   it("requires resolve-download title flag for Bazzar compatibility", async () => {
     const exit = await Effect.runPromiseExit(
       runKorriCli([
@@ -130,17 +178,50 @@ describe("korri bazzar command routing", () => {
     const envelope = parseSingleJsonLine(result.stdout) as {
       command: string
       contractVersion: string
+      exitCategory: string
       exitCode: number
       data: { outcomes: Array<{ source: { plugin: string } }> }
     }
     expect(result.exitCode).toBe(envelope.exitCode)
-    expect(envelope.exitCode).toBe(10)
+    expect([
+      ["success", 0],
+      ["partial_degradation", 10],
+    ]).toContainEqual([envelope.exitCategory, envelope.exitCode])
     expect(envelope.contractVersion).toBe("bazzar.source-adapter.v1")
     expect(envelope.command).toBe("validate-sources")
     expect(envelope.data.outcomes.length).toBeGreaterThan(0)
     expect(
       envelope.data.outcomes.map(outcome => outcome.source.plugin),
     ).not.toContain("coolrom")
+  })
+
+  it("emits validate-sources caller errors as exactly one contract JSON line", async () => {
+    const result = await runCli([
+      "bazzar",
+      "validate-sources",
+      "--sources",
+      "missing-source",
+    ])
+
+    expect(result.stderr).toBe("")
+    const envelope = parseSingleJsonLine(result.stdout) as {
+      command: string
+      contractVersion: string
+      exitCategory: string
+      exitCode: number
+      data: { outcomes: Array<{ source: { plugin: string }; status: string }> }
+    }
+    expect(result.exitCode).toBe(21)
+    expect(envelope.contractVersion).toBe("bazzar.source-adapter.v1")
+    expect(envelope.command).toBe("validate-sources")
+    expect(envelope.exitCategory).toBe("caller_error")
+    expect(envelope.exitCode).toBe(21)
+    expect(envelope.data.outcomes).toEqual([
+      expect.objectContaining({
+        source: { plugin: "missing-source", site: "missing-source" },
+        status: "caller_error",
+      }),
+    ])
   })
 
   it("emits resolve-download caller errors as exactly one contract JSON line", async () => {

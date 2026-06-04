@@ -1,7 +1,11 @@
 import { describe, expect, it } from "bun:test"
-import { makeInMemoryAcquisitionLayer } from "@platform/acquisition/acquisition-service"
+import {
+  type AcquisitionService,
+  makeInMemoryAcquisitionLayer,
+} from "@platform/acquisition/acquisition-service"
+import { DataError } from "@platform/api/rpc/errors"
 import { AcquisitionError } from "@platform/protocol/acquisition/errors"
-import { Effect } from "effect"
+import { Cause, Effect, Exit } from "effect"
 import { appRpcGroup } from "../app-rpc-group"
 import { serverRpcGroup } from "../server/rpc-group"
 import { toAcquisitionRpcError } from "./acquisition-rpc-errors"
@@ -11,7 +15,15 @@ import { handleAcquisitionResolveDownload } from "./resolve-download.rpc-handler
 import { handleAcquisitionSearch } from "./search.rpc-handler"
 import { handleAcquisitionValidateSources } from "./validate-sources.rpc-handler"
 
-const acquisitionLayer = makeInMemoryAcquisitionLayer({
+const acquisitionTags = [
+  "app.acquisition.details",
+  "app.acquisition.plugins",
+  "app.acquisition.resolve-download",
+  "app.acquisition.search",
+  "app.acquisition.validate-sources",
+]
+
+const acquisitionService: AcquisitionService = {
   search: () =>
     Effect.succeed({
       candidates: [
@@ -64,7 +76,9 @@ const acquisitionLayer = makeInMemoryAcquisitionLayer({
       reason: "interstitial",
       url: "https://example.com/download",
     }),
-})
+}
+
+const acquisitionLayer = makeInMemoryAcquisitionLayer(acquisitionService)
 
 describe("acquisition RPC handlers", () => {
   it("calls all five acquisition operations through the Acquisition service", async () => {
@@ -98,6 +112,34 @@ describe("acquisition RPC handlers", () => {
     })
   })
 
+  it("maps acquisition errors to safe RPC errors through handler wiring", async () => {
+    const failingLayer = makeInMemoryAcquisitionLayer({
+      ...acquisitionService,
+      search: () =>
+        Effect.fail(
+          new AcquisitionError({
+            reason: "defective-source",
+            message: "token=secret\nfull stack should not leak",
+            sourceName: "fixture-source",
+          }),
+        ),
+    })
+
+    const exit = await Effect.runPromiseExit(
+      Effect.provide(handleAcquisitionSearch({ query: "game" }), failingLayer),
+    )
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isSuccess(exit)) throw new Error("expected failure")
+    const error = Cause.squash(exit.cause)
+    expect(error).toBeInstanceOf(DataError)
+    expect(error).toMatchObject({
+      _tag: "DataError",
+      reason: "Unavailable",
+      message: "token=[REDACTED]",
+    })
+  })
+
   it("maps acquisition errors to safe RPC errors", () => {
     const error = toAcquisitionRpcError(
       new AcquisitionError({
@@ -128,20 +170,17 @@ describe("acquisition RPC handlers", () => {
     })
   })
 
-  it("registers acquisition RPC tags on the headless server group only", () => {
+  it("registers exactly the migrated acquisition RPC tags on the headless server group only", () => {
     const serverTags = Array.from(serverRpcGroup.requests.keys()).sort()
     const appTags = Array.from(appRpcGroup.requests.keys()).sort()
-    const acquisitionTags = [
-      "app.acquisition.details",
-      "app.acquisition.plugins",
-      "app.acquisition.resolve-download",
-      "app.acquisition.search",
-      "app.acquisition.validate-sources",
-    ]
+    const serverAcquisitionTags = serverTags.filter(tag =>
+      tag.startsWith("app.acquisition."),
+    )
+    const appAcquisitionTags = appTags.filter(tag =>
+      tag.startsWith("app.acquisition."),
+    )
 
-    for (const tag of acquisitionTags) {
-      expect(serverTags).toContain(tag)
-      expect(appTags).not.toContain(tag)
-    }
+    expect(serverAcquisitionTags).toEqual([...acquisitionTags].sort())
+    expect(appAcquisitionTags).toEqual([])
   })
 })

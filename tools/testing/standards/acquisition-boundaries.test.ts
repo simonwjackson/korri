@@ -19,6 +19,15 @@ const ACQUISITION_PROTOCOL_ROOT = join(
 )
 const LIBRARY_ROOT = join(REPO_ROOT, "product", "platform", "library")
 const CLI_ROOT = join(REPO_ROOT, "product", "apps", "cli")
+const BAZZAR_CLI_ROOT = join(REPO_ROOT, "product", "apps", "cli", "bazzar")
+const ACQUISITION_RPC_ROOT = join(
+  REPO_ROOT,
+  "product",
+  "apps",
+  "portal",
+  "api",
+  "acquisition",
+)
 
 function importSpecifiers(source: string): readonly string[] {
   const withoutComments = source
@@ -84,6 +93,16 @@ function importsPlatformModule(
   })
 }
 
+function filesImportingPlatformModule(
+  roots: readonly string[],
+  moduleName: "acquisition" | "library",
+) {
+  return roots
+    .flatMap(root => [...sourceFiles(root)])
+    .filter(file => importsPlatformModule(readSource(file), file, moduleName))
+    .map(repoRelative)
+}
+
 function filesMatching(root: string, predicate: (path: string) => boolean) {
   const matches: string[] = []
   const walk = (dir: string) => {
@@ -117,19 +136,35 @@ describe("standards: acquisition migration boundaries", () => {
     const sourceAwareCliFiles = sourceFiles(CLI_ROOT).filter(file =>
       repoRelative(file).startsWith("product/apps/cli/source-aware-"),
     )
-    const violations = [...sourceFiles(LIBRARY_ROOT), ...sourceAwareCliFiles]
-      .filter(file =>
-        importsPlatformModule(readSource(file), file, "acquisition"),
-      )
-      .map(repoRelative)
+    const violations = [
+      ...filesImportingPlatformModule([LIBRARY_ROOT], "acquisition"),
+      ...sourceAwareCliFiles
+        .filter(file =>
+          importsPlatformModule(readSource(file), file, "acquisition"),
+        )
+        .map(repoRelative),
+    ]
 
     expect(violations).toEqual([])
   })
 
   it("keeps acquisition code independent from library state modules", () => {
-    const violations = sourceFiles(ACQUISITION_ROOT)
-      .filter(file => importsPlatformModule(readSource(file), file, "library"))
-      .map(repoRelative)
+    const violations = filesImportingPlatformModule(
+      [ACQUISITION_ROOT],
+      "library",
+    )
+
+    expect(violations).toEqual([])
+  })
+
+  it("keeps Bazzar CLI and RPC acquisition surfaces read-only from library state", () => {
+    expect(existsSync(BAZZAR_CLI_ROOT)).toBe(true)
+    expect(existsSync(ACQUISITION_RPC_ROOT)).toBe(true)
+
+    const violations = filesImportingPlatformModule(
+      [BAZZAR_CLI_ROOT, ACQUISITION_RPC_ROOT],
+      "library",
+    )
 
     expect(violations).toEqual([])
   })

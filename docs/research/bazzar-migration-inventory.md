@@ -92,8 +92,59 @@ Quarantine notes created with the files:
 - `SHA256SUMS` records copied content hashes.
 - `retrostic.mjs` and `romhustler.mjs` were copied while the source checkout had local modifications. Treat their hashes as preservation provenance, not approval evidence.
 
+## Final migration traceability and retirement gate
+
+Provider-set compatibility exception: quarantined `.mjs` providers remain excluded from active Korri results.
+
+Standalone Bazzar retirement decision: **do not retire standalone Bazzar yet**. The Korri migration now has boundary, server RPC, packaging, and contract-surface gates, but copy-first retirement remains blocked until the remaining strict live CLI parity work in `task-005` is closed. In particular, keep the Bazzar source checkout available until successful source-backed `search`, `details`, and `resolve-download` parity has been reviewed against the old CLI behavior beyond the safe no-network/caller-error gates.
+
+### Requirement traceability
+
+| Requirement | Gate evidence |
+|---|---|
+| R1 | This inventory classifies top-level Bazzar areas and providers before broad import. |
+| R2 | `tools/testing/standards/acquisition-boundaries.test.ts` plus packaging/dependency checks prevent broad Bazzar UI/API/tooling import. |
+| R3 | `product/apps/cli/package.nix` and `tools/testing/nix/korri-package-outputs-check.nix` assert packaged `korri` exists and standalone `$out/bin/bazzar` does not. |
+| R4 | `product/apps/cli/bazzar/bazzar-command.test.ts` covers all five command names, important flags, exit behavior, output shapes, and the quarantined-provider exception. |
+| R5 | `product/apps/cli/bazzar/bazzar-command.test.ts` covers `validate-sources` one-line source-health contract output. |
+| R6 | `tools/testing/standards/acquisition-boundaries.test.ts` keeps CLI/RPC acquisition surfaces independent from `product/platform/library` state. |
+| R7 | `product/apps/cli/bazzar/bazzar-command.test.ts` and `product/apps/portal/api/acquisition/acquisition-rpc-handlers.test.ts` cover download-resolution as a separate operation and non-final/caller-error classification. |
+| R8 | CLI subprocess tests and packaged install checks assert machine-readable contract stdout is one JSON line and stderr is empty. |
+| R9 | `tools/testing/standards/acquisition-boundaries.test.ts` rejects Bazzar UI roots under Korri product code. |
+| R10 | `tools/nix/bun-production-deps.test.ts` forbids tRPC/Fastify demo API dependencies and RPC tests use Korri Effect RPC groups. |
+| R11 | Inventory classifications and package checks reject standalone/demo/tooling surfaces that do not serve the Korri acquisition subset. |
+| R12 | Acquisition plugin operation tests map source failures/defects to typed outcomes rather than fallback success. |
+| R13 | Quarantine manifest records `.mjs` files outside Korri product paths. |
+| R14 | Approved TypeScript plugins live under `product/platform/acquisition/plugins/*` and appear through active plugin metadata. |
+| R15 | Boundary, CLI, package, and dependency tests reject quarantined `.mjs` files and provider names from active/package surfaces. |
+| R16 | `product/apps/portal/api/acquisition/acquisition-rpc-handlers.test.ts` covers all five headless/server RPC operations. |
+| R17 | No UI route/component is introduced; app/portal RPC registration for acquisition remains absent. |
+| R18 | Boundary tests keep acquisition CLI/RPC paths from importing library state modules; import into known-playable records remains deferred. |
+| R19 | `product/platform/acquisition/download-resolution/url-policy.test.ts` covers outbound URL policy. |
+| R20 | `product/platform/acquisition/trust-policies.test.ts`, CLI contract tests, and RPC safe-error tests cover credential redaction. |
+| R21 | `product/platform/acquisition/trust-policies.test.ts` covers staging-root path containment. |
+| R22 | Server RPC tests prove acquisition RPCs register through the existing headless/server RPC group only. |
+| R23 | Plugin operation harness and codec tests validate plugin output at the Effect Schema boundary. |
+| R24 | This inventory and boundary/package tests keep `.mjs` loading deferred pending explicit legal/trust review. |
+| R25 | CLI subprocess tests and package smoke assert contract stdout is one parseable JSON line. |
+| R26 | `product/platform/acquisition/acquisition-service.test.ts` and source-name trust tests cover canonical source-name validation. |
+| R27 | `product/apps/portal/api/acquisition/acquisition-rpc-handlers.test.ts` covers safe RPC error summaries. |
+| R28 | The source/provider classification table records legal/TOS risk, default enablement, and credential posture per source. |
+
+### Origin acceptance example traceability
+
+| Acceptance example | Gate evidence |
+|---|---|
+| AE1 | Inventory tables classify Bazzar CLI, core, TS plugins, `.mjs` plugins, demo API, absent UI, package metadata, and tooling. |
+| AE2 | `product/apps/cli/bazzar/bazzar-command.test.ts` covers the five `korri bazzar` workflows and documents the quarantined-provider-set exception. Retirement remains blocked by the decision above until remaining task-005 live parity closes. |
+| AE3 | `validate-sources` CLI contract tests cover partial-degradation source health and strict stdout/stderr discipline. |
+| AE4 | Download resolution remains a separate CLI/RPC operation; RPC tests cover non-final resolution and boundary tests keep acquisition independent from library state. |
+| AE5 | Acquisition RPCs are registered in the headless/server group only; Bazzar Fastify/tRPC demo API is neither imported nor packaged. |
+| AE6 | Quarantined `.mjs` providers are absent from Korri product paths, packaged output, production dependency names, and active plugin results. |
+
 ## Verification notes
 
 - Every inspected top-level Bazzar area is classified above: `apps/cli`, `apps/api`, `shared/core`, `specs`, root package/tooling, `nix`, `backlog`, `work`, generated/local directories, and absent `apps/ui`.
 - The `.mjs` plugin files are copied to the private/local quarantine and are not added under Korri `product/`.
 - Korri must not load, package, advertise, or depend on the quarantine in this migration slice.
+- Standalone Bazzar remains in copy-first hold until strict live CLI parity in `task-005` closes.
