@@ -1,6 +1,6 @@
 /**
- * Korri's eight-collection library — singleton `config` + map-keyed
- * `users`, `systems`, `launchers`, `games`, `collections`,
+ * Korri's nine-collection library — singleton `config` + map-keyed
+ * `users`, `systems`, `launchers`, `games`, `collections`, `artifacts`,
  * `game-assets`, `game-asset-assignments`.
  *
  * ProseQL 0.13.2's `documents` source variant lets a single YAML file
@@ -21,6 +21,10 @@
 
 import { mkdir } from "node:fs/promises"
 import { AppPayload, AppRecord } from "@platform/library/config/records/app"
+import {
+  ArtifactPayload,
+  ArtifactRecord,
+} from "@platform/library/config/records/artifact"
 import {
   CollectionPayload,
   CollectionRecord,
@@ -96,6 +100,11 @@ const collectionsSchema = {
     id: { kind: "derivedFromKey" as const, field: "id" as const },
     relationships: {},
   },
+  artifacts: {
+    schema: ArtifactPayload,
+    id: { kind: "derivedFromKey" as const, field: "id" as const },
+    relationships: {},
+  },
   "game-assets": {
     schema: GameAssetPayload,
     id: { kind: "derivedFromKey" as const, field: "id" as const },
@@ -141,6 +150,8 @@ export type KorriLibraryDbConfig = ReturnType<typeof makeKorriLibraryDbConfig>
 export {
   AppPayload,
   AppRecord,
+  ArtifactPayload,
+  ArtifactRecord,
   CollectionPayload,
   CollectionRecord,
   GameAssetAssignmentPayload,
@@ -195,6 +206,7 @@ export interface KorriLibraryDb {
   readonly apps: CollectionApi<Schema.Schema.Type<typeof AppPayload>>
   readonly modules: CollectionApi<Schema.Schema.Type<typeof ModulePayload>>
   readonly games: CollectionApi<Schema.Schema.Type<typeof GamePayload>>
+  readonly artifacts: CollectionApi<Schema.Schema.Type<typeof ArtifactPayload>>
   readonly "game-assets": CollectionApi<
     Schema.Schema.Type<typeof GameAssetPayload>
   >
