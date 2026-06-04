@@ -16,6 +16,14 @@ import {
 
 const STRICT = { onExcessProperty: "error" } as const
 
+export const AcquireArtifactRequest = Schema.Struct({
+  sourceName: Schema.String,
+  id: Schema.String,
+})
+export type AcquireArtifactRequest = Schema.Schema.Type<
+  typeof AcquireArtifactRequest
+>
+
 export const PluginAcquireOutput = Schema.Struct({
   kind: ArtifactKind,
   system: Schema.optional(Schema.NonEmptyString),

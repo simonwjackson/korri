@@ -1,4 +1,8 @@
 import type {
+  AcquireArtifactRequest,
+  AcquiredArtifact,
+} from "@platform/protocol/acquisition/artifact-acquisition"
+import type {
   DetailsRequest,
   SearchRequest,
   SearchResponse,
@@ -14,8 +18,12 @@ import type {
   ValidateSourcesResponse,
 } from "@platform/protocol/acquisition/source-health"
 import { Context, Effect, Layer } from "effect"
+import {
+  acquireArtifact,
+  acquisitionArtifactStagingRoot,
+} from "./artifact-acquisition"
 import { resolveAcquisitionDownload } from "./download-resolution/download-resolution"
-import type { AcquisitionError } from "./errors"
+import { AcquisitionError } from "./errors"
 import {
   type AcquisitionRuntimeOptions,
   createAcquisitionPluginContext,
@@ -42,6 +50,9 @@ export interface AcquisitionService {
   readonly resolveDownload: (
     request: ResolveDownloadRequest,
   ) => Effect.Effect<DownloadResolution, AcquisitionError>
+  readonly acquireArtifact: (
+    request: AcquireArtifactRequest,
+  ) => Effect.Effect<AcquiredArtifact, AcquisitionError>
 }
 
 export class Acquisition extends Context.Service<
@@ -57,13 +68,26 @@ export function makeInMemoryAcquisitionLayer(
 
 export interface LiveAcquisitionLayerOptions extends AcquisitionRuntimeOptions {
   readonly registry: AcquisitionPluginRegistry
+  readonly artifactStagingRoot?: string
 }
 
 export function makeLiveAcquisitionLayer({
   registry,
+  artifactStagingRoot,
   ...runtimeOptions
 }: LiveAcquisitionLayerOptions): Layer.Layer<Acquisition> {
   const context = createAcquisitionPluginContext(runtimeOptions)
+  const resolveArtifactStagingRoot = () =>
+    Effect.try({
+      try: () =>
+        artifactStagingRoot ??
+        acquisitionArtifactStagingRoot(runtimeOptions.env ?? process.env),
+      catch: error =>
+        new AcquisitionError({
+          reason: "configuration",
+          message: `failed to resolve acquisition artifact staging root: ${error instanceof Error ? error.message : String(error)}`,
+        }),
+    })
   return makeInMemoryAcquisitionLayer({
     search: request => searchSources({ registry, context, request }),
     details: request => getSourceDetails({ registry, context, request }),
@@ -76,5 +100,11 @@ export function makeLiveAcquisitionLayer({
       validateAcquisitionSources({ registry, context, request }),
     resolveDownload: request =>
       resolveAcquisitionDownload({ registry, context, request }),
+    acquireArtifact: request =>
+      resolveArtifactStagingRoot().pipe(
+        Effect.flatMap(stagingRoot =>
+          acquireArtifact({ registry, context, request, stagingRoot }),
+        ),
+      ),
   })
 }

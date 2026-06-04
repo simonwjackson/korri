@@ -8,6 +8,7 @@ export type AcquisitionPluginOperationName =
   | "details"
   | "validateSource"
   | "resolveDownload"
+  | "acquireArtifact"
 
 export interface PluginOperationHarnessOptions<A> {
   readonly sourceName: string

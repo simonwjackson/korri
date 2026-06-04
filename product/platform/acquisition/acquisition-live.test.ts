@@ -1,9 +1,21 @@
 import { describe, expect, it } from "bun:test"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { Effect } from "effect"
 import { Acquisition, makeLiveAcquisitionLayer } from "./acquisition-service"
 import { createStaticAcquisitionPluginRegistry } from "./plugin-loader"
 import { approvedTypeScriptPluginDefinitions } from "./plugins/approved"
 import type { AcquisitionPluginDefinition } from "./plugins/registry"
+
+async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
+  const root = await mkdtemp(join(tmpdir(), "korri-live-acquisition-"))
+  try {
+    return await fn(root)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+}
 
 const fixturePlugin: AcquisitionPluginDefinition = {
   metadata: {
@@ -48,36 +60,71 @@ const fixturePlugin: AcquisitionPluginDefinition = {
       url: "https://example.com/game-1.zip",
       filename: "game-1.zip",
     }),
+  acquireArtifact: () =>
+    Effect.succeed({
+      kind: "content",
+      system: "smbr",
+      format: { id: "smbr-level" },
+      file: { name: "level.lvl", extension: "lvl" },
+      bytesBase64: Buffer.from('{"Info":{},"Levels":[]}').toString("base64"),
+      sourceData: { "fixture-source.v1": { id: "game-1" } },
+    }),
 }
 
 describe("live acquisition service", () => {
-  it("runs search, details, validation, and download resolution through registered TypeScript plugins", async () => {
-    const registry = createStaticAcquisitionPluginRegistry([fixturePlugin])
-    const layer = makeLiveAcquisitionLayer({ registry })
+  it("runs search, details, validation, download resolution, and artifact acquisition through registered TypeScript plugins", async () => {
+    await withTempRoot(async stagingRoot => {
+      const registry = createStaticAcquisitionPluginRegistry([fixturePlugin])
+      const layer = makeLiveAcquisitionLayer({
+        registry,
+        artifactStagingRoot: stagingRoot,
+      })
 
+      const program = Effect.gen(function* () {
+        const acquisition = yield* Acquisition
+        return {
+          search: yield* acquisition.search({ query: "game" }),
+          details: yield* acquisition.details({
+            sourceName: "fixture-source",
+            id: "game-1",
+          }),
+          health: yield* acquisition.validateSources({}),
+          download: yield* acquisition.resolveDownload({
+            sourceName: "fixture-source",
+            candidateUrl: "https://example.com/game-1",
+          }),
+          artifact: yield* acquisition.acquireArtifact({
+            sourceName: "fixture-source",
+            id: "game-1",
+          }),
+        }
+      })
+
+      const result = await Effect.runPromise(Effect.provide(program, layer))
+
+      expect(result.search.candidates).toHaveLength(1)
+      expect(result.search.candidates[0]?.sourceName).toBe("fixture-source")
+      expect(result.details.description).toBe("A fixture game.")
+      expect(result.health.sources[0]?._tag).toBe("HealthySource")
+      expect(result.download._tag).toBe("FinalDownload")
+      expect(result.artifact.format.id).toBe("smbr-level")
+      expect(await readFile(result.artifact.stagedPath, "utf8")).toBe(
+        '{"Info":{},"Levels":[]}',
+      )
+    })
+  })
+
+  it("does not require artifact staging root configuration for non-artifact operations", async () => {
+    const registry = createStaticAcquisitionPluginRegistry([fixturePlugin])
+    const layer = makeLiveAcquisitionLayer({ registry, env: {} })
     const program = Effect.gen(function* () {
       const acquisition = yield* Acquisition
-      return {
-        search: yield* acquisition.search({ query: "game" }),
-        details: yield* acquisition.details({
-          sourceName: "fixture-source",
-          id: "game-1",
-        }),
-        health: yield* acquisition.validateSources({}),
-        download: yield* acquisition.resolveDownload({
-          sourceName: "fixture-source",
-          candidateUrl: "https://example.com/game-1",
-        }),
-      }
+      return yield* acquisition.search({ query: "game" })
     })
 
     const result = await Effect.runPromise(Effect.provide(program, layer))
 
-    expect(result.search.candidates).toHaveLength(1)
-    expect(result.search.candidates[0]?.sourceName).toBe("fixture-source")
-    expect(result.details.description).toBe("A fixture game.")
-    expect(result.health.sources[0]?._tag).toBe("HealthySource")
-    expect(result.download._tag).toBe("FinalDownload")
+    expect(result.candidates).toHaveLength(1)
   })
 
   it("rejects unsafe download URLs before calling plugin code", async () => {
@@ -115,6 +162,43 @@ describe("live acquisition service", () => {
 
     expect(error).toMatchObject({ reason: "unsafe-url" })
     expect(called).toBe(false)
+  })
+
+  it("rejects plugin search output above the 200-candidate cap", async () => {
+    const registry = createStaticAcquisitionPluginRegistry([
+      {
+        ...fixturePlugin,
+        search: () =>
+          Effect.succeed(
+            Array.from({ length: 201 }, (_, index) => ({
+              _tag: "SourceCandidate" as const,
+              sourceName: "fixture-source",
+              id: `game-${index}`,
+              title: `Game ${index}`,
+              url: `https://example.com/game-${index}`,
+            })),
+          ),
+      },
+    ])
+    const layer = makeLiveAcquisitionLayer({ registry })
+    const program = Effect.gen(function* () {
+      const acquisition = yield* Acquisition
+      return yield* acquisition.search({ query: "game" })
+    })
+
+    const error = await Effect.runPromise(
+      Effect.provide(program, layer).pipe(
+        Effect.match({
+          onFailure: error => error,
+          onSuccess: () => undefined,
+        }),
+      ),
+    )
+
+    expect(error).toMatchObject({
+      reason: "defective-source",
+      sourceName: "fixture-source",
+    })
   })
 
   it("returns malformed plugin output as a typed defective-source error", async () => {

@@ -1,3 +1,4 @@
+import type { XdgPathEnv } from "@platform/config/xdg-paths"
 import type { AcquisitionLogger } from "./logger"
 import { silentAcquisitionLogger } from "./logger"
 
@@ -13,6 +14,7 @@ export interface AcquisitionPluginContext {
 export interface AcquisitionRuntimeOptions {
   readonly clock?: AcquisitionClock
   readonly logger?: AcquisitionLogger
+  readonly env?: XdgPathEnv
 }
 
 export function createAcquisitionPluginContext(

@@ -1,4 +1,8 @@
 import type {
+  AcquireArtifactRequest,
+  PluginAcquireOutput,
+} from "@platform/protocol/acquisition/artifact-acquisition"
+import type {
   DetailsRequest,
   SourceCandidate,
   SourceDetails,
@@ -36,6 +40,10 @@ export interface AcquisitionPluginDefinition {
     context: AcquisitionPluginContext,
     request: ResolveDownloadRequest,
   ) => Effect.Effect<DownloadResolution, AcquisitionError>
+  readonly acquireArtifact?: (
+    context: AcquisitionPluginContext,
+    request: AcquireArtifactRequest,
+  ) => Effect.Effect<PluginAcquireOutput, AcquisitionError>
 }
 
 export interface AcquisitionPluginRegistry {

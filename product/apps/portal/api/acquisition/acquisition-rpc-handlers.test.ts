@@ -85,6 +85,16 @@ const acquisitionService: AcquisitionService = {
       reason: "interstitial",
       url: "https://example.com/download",
     }),
+  acquireArtifact: () =>
+    Effect.succeed({
+      id: `sha256:${"a".repeat(64)}`,
+      kind: "content",
+      system: "smbr",
+      format: { id: "smbr-level" },
+      file: { name: "level.lvl", extension: "lvl" },
+      stagedPath: "/tmp/staged/level.lvl",
+      digests: { sha256: "a".repeat(64) },
+    }),
 }
 
 const acquisitionLayer = makeInMemoryAcquisitionLayer(acquisitionService)

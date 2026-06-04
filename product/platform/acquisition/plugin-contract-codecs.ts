@@ -1,4 +1,8 @@
 import {
+  decodePluginAcquireOutput,
+  type PluginAcquireOutput as PluginAcquireOutputType,
+} from "@platform/protocol/acquisition/artifact-acquisition"
+import {
   SearchResponse,
   type SourceCandidate,
   SourceDetails,
@@ -17,6 +21,8 @@ type FinalDownloadResolutionOutput = Schema.Schema.Type<
   typeof FinalDownloadResolution
 >
 
+const MAX_PLUGIN_SEARCH_CANDIDATES = 200
+
 export function validatePluginMetadataOutput(value: unknown) {
   return decodePluginOutput(
     "metadata",
@@ -26,11 +32,18 @@ export function validatePluginMetadataOutput(value: unknown) {
 }
 
 export function validatePluginSearchOutput(value: unknown): SourceCandidate[] {
-  return Array.from(
+  const candidates = Array.from(
     decodePluginOutput("search", Schema.decodeUnknownSync(SearchResponse), {
       candidates: value,
     }).candidates,
   )
+  if (candidates.length > MAX_PLUGIN_SEARCH_CANDIDATES) {
+    throw defectiveOutput(
+      "search",
+      `plugin returned ${candidates.length} candidates; limit is ${MAX_PLUGIN_SEARCH_CANDIDATES}`,
+    )
+  }
+  return candidates
 }
 
 export function validatePluginDetailsOutput(value: unknown) {
@@ -47,6 +60,12 @@ export function validatePluginSourceHealthOutput(value: unknown) {
     Schema.decodeUnknownSync(SourceHealth),
     value,
   )
+}
+
+export function validatePluginAcquireOutput(
+  value: unknown,
+): PluginAcquireOutputType {
+  return decodePluginOutput("acquireArtifact", decodePluginAcquireOutput, value)
 }
 
 export function validatePluginDownloadResolutionOutput(value: unknown) {

@@ -66,10 +66,20 @@ const serviceLayer = makeInMemoryAcquisitionLayer({
       sourceName: "itchio",
       url: "https://example.com/game.zip",
     }),
+  acquireArtifact: () =>
+    Effect.succeed({
+      id: `sha256:${"a".repeat(64)}`,
+      kind: "content",
+      system: "smbr",
+      format: { id: "smbr-level" },
+      file: { name: "level.lvl", extension: "lvl" },
+      stagedPath: "/tmp/staged/level.lvl",
+      digests: { sha256: "a".repeat(64) },
+    }),
 })
 
 describe("Acquisition service interface", () => {
-  it("returns all five acquisition operations through an in-memory service", async () => {
+  it("returns all acquisition operations through an in-memory service", async () => {
     const program = Effect.gen(function* () {
       const acquisition = yield* Acquisition
       return {
@@ -87,6 +97,10 @@ describe("Acquisition service interface", () => {
           sourceName: "itchio",
           candidateUrl: "https://example.com/game-1",
         }),
+        artifact: yield* acquisition.acquireArtifact({
+          sourceName: "itchio",
+          id: "level-1",
+        }),
       }
     })
 
@@ -99,6 +113,7 @@ describe("Acquisition service interface", () => {
     expect(result.plugins.plugins[0]?.sourceName).toBe("itchio")
     expect(result.health.sources[0]?._tag).toBe("HealthySource")
     expect(result.resolution._tag).toBe("FinalDownload")
+    expect(result.artifact.format.id).toBe("smbr-level")
   })
 
   it("canonicalizes and rejects unknown source names through the registry contract", () => {
