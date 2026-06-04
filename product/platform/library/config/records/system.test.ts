@@ -31,13 +31,26 @@ describe("SystemPayload", () => {
       gamescope: { enabled: false },
       env: { LANG: "C" },
       argsAppend: ["--snes"],
-      presets: { perf: { gamescope: { enabled: true } } },
-      byLauncher: { dolphin: { argsAppend: ["--snes-mode"] } },
+      patches: ["/patches/system.ips"],
+      presets: {
+        perf: { gamescope: { enabled: true }, patches: ["/patches/perf.bps"] },
+      },
+      byLauncher: {
+        dolphin: {
+          argsAppend: ["--snes-mode"],
+          patches: ["/patches/dolphin.ups"],
+        },
+      },
       inherit: false,
     })
     expect(system.gamescope?.enabled).toBe(false)
+    expect(system.patches).toEqual(["/patches/system.ips"])
     expect(system.presets?.perf?.gamescope?.enabled).toBe(true)
+    expect(system.presets?.perf?.patches).toEqual(["/patches/perf.bps"])
     expect(system.byLauncher?.dolphin?.argsAppend).toEqual(["--snes-mode"])
+    expect(system.byLauncher?.dolphin?.patches).toEqual([
+      "/patches/dolphin.ups",
+    ])
   })
 
   it("rejects identity-field bypass: 'contentPath' is not allowed", () => {

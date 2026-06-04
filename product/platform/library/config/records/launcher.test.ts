@@ -30,16 +30,26 @@ describe("LauncherPayload", () => {
       systems: ["snes"],
       env: { LIBRETRO_LOG_LEVEL: "3" },
       argsAppend: ["--verbose"],
+      patches: ["/patches/launcher.ips"],
       gamescope: { enabled: true },
       cwd: "/storage",
-      presets: { "max-quality": { gamescope: { args: ["-W", "1920"] } } },
+      presets: {
+        "max-quality": {
+          gamescope: { args: ["-W", "1920"] },
+          patches: ["/patches/max-quality.bps"],
+        },
+      },
       byLauncher: {},
       inherit: false,
     })
     expect(launcher.env?.LIBRETRO_LOG_LEVEL).toBe("3")
+    expect(launcher.patches).toEqual(["/patches/launcher.ips"])
     expect(launcher.presets?.["max-quality"]?.gamescope?.args).toEqual([
       "-W",
       "1920",
+    ])
+    expect(launcher.presets?.["max-quality"]?.patches).toEqual([
+      "/patches/max-quality.bps",
     ])
     expect(launcher.inherit).toBe(false)
   })

@@ -19,17 +19,24 @@ describe("EphemeralOverride", () => {
       env: { SDL_VIDEODRIVER: "wayland" },
       cwd: "/storage/roms",
       argsAppend: ["--debug"],
+      patches: ["/patches/override.ips"],
     })
     expect(override.gamescope?.enabled).toBe(true)
     expect(override.env?.SDL_VIDEODRIVER).toBe("wayland")
+    expect(override.patches).toEqual(["/patches/override.ips"])
   })
 
   it("decodes byLauncher contributions + inherit", () => {
     const override = decodeEphemeralOverride({
-      byLauncher: { retroarch: { argsAppend: ["-v"] } },
+      byLauncher: {
+        retroarch: { argsAppend: ["-v"], patches: ["/patches/retroarch.ips"] },
+      },
       inherit: false,
     })
     expect(override.byLauncher?.retroarch?.argsAppend).toEqual(["-v"])
+    expect(override.byLauncher?.retroarch?.patches).toEqual([
+      "/patches/retroarch.ips",
+    ])
     expect(override.inherit).toBe(false)
   })
 

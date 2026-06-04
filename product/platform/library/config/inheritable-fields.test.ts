@@ -96,6 +96,7 @@ describe("InheritableLayer", () => {
       env: { LANG: "en_US.UTF-8", SDL_VIDEODRIVER: "x11" },
       cwd: "/storage/roms",
       argsAppend: ["--fullscreen", "--verbose"],
+      patches: ["/storage/patches/base.ips", "/storage/patches/qol.bps"],
     })
     expect(layer.gamescope?.enabled).toBe(true)
     expect(layer.gamescope?.command).toBe(
@@ -104,6 +105,10 @@ describe("InheritableLayer", () => {
     expect(layer.env?.LANG).toBe("en_US.UTF-8")
     expect(layer.cwd).toBe("/storage/roms")
     expect(layer.argsAppend).toEqual(["--fullscreen", "--verbose"])
+    expect(layer.patches).toEqual([
+      "/storage/patches/base.ips",
+      "/storage/patches/qol.bps",
+    ])
   })
 
   it("rejects an unknown inheritable field (typo)", () => {
@@ -129,10 +134,16 @@ describe("byLauncher payload", () => {
 
   it("decodes per-launcher inheritable contributions", () => {
     const payload = decodeByLauncherPayload({
-      retroarch: { argsAppend: ["-L", "snes9x_libretro.so"] },
+      retroarch: {
+        argsAppend: ["-L", "snes9x_libretro.so"],
+        patches: ["/storage/patches/restoration.ips"],
+      },
       dolphin: { env: { DOLPHIN_PROFILE: "default" } },
     })
     expect(payload.retroarch?.argsAppend).toEqual(["-L", "snes9x_libretro.so"])
+    expect(payload.retroarch?.patches).toEqual([
+      "/storage/patches/restoration.ips",
+    ])
     expect(payload.dolphin?.env?.DOLPHIN_PROFILE).toBe("default")
   })
 

@@ -34,6 +34,7 @@ export const AppPayload = Schema.Struct({
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
+  patches: InheritableLayer.fields.patches,
 })
 export type AppPayload = Schema.Schema.Type<typeof AppPayload>
 

@@ -33,6 +33,18 @@ describe("AppPayload", () => {
     })
   })
 
+  it("decodes app-level patch contributions through the inheritable whitelist", () => {
+    expect(
+      decodeAppPayload({
+        settings: { video_driver: "glcore" },
+        patches: ["/patches/app.ips"],
+      }),
+    ).toEqual({
+      settings: { video_driver: "glcore" },
+      patches: ["/patches/app.ips"],
+    })
+  })
+
   it("rejects unknown app keys", () => {
     expect(() =>
       decodeAppPayload({ settings: {}, type: "retroarch" }),

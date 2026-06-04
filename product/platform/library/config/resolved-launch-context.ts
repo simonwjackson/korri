@@ -49,6 +49,7 @@ export const ResolvedLaunchContext = Schema.Struct({
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   cwd: Schema.optional(Schema.String),
   argsAppend: Schema.optional(Schema.Array(Schema.String)),
+  patches: Schema.optional(Schema.Array(Schema.String)),
 })
 export type ResolvedLaunchContext = Schema.Schema.Type<
   typeof ResolvedLaunchContext

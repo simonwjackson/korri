@@ -134,6 +134,7 @@ interface InheritableView {
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
+  readonly patches?: readonly string[]
   readonly byLauncher?: ByLauncherPayload
   readonly launch?: LaunchBlock
   readonly launcher?: string
@@ -152,6 +153,7 @@ const viewOfGlobal = (g: GlobalConfigRecord | null): InheritableView =>
         env: g.env,
         cwd: g.cwd,
         argsAppend: g.argsAppend,
+        patches: g.patches,
         byLauncher: g.byLauncher,
       }
     : {}
@@ -168,6 +170,7 @@ const viewOfUser = (u: UserRecord | undefined): InheritableView =>
         env: u.env,
         cwd: u.cwd,
         argsAppend: u.argsAppend,
+        patches: u.patches,
         byLauncher: u.byLauncher,
       }
     : {}
@@ -184,6 +187,7 @@ const viewOfSystem = (s: SystemRecord | undefined): InheritableView =>
         env: s.env,
         cwd: s.cwd,
         argsAppend: s.argsAppend,
+        patches: s.patches,
         byLauncher: s.byLauncher,
       }
     : {}
@@ -196,6 +200,7 @@ const viewOfLauncher = (l: LauncherRecord | undefined): InheritableView =>
         env: l.env,
         cwd: l.cwd,
         argsAppend: l.argsAppend,
+        patches: l.patches,
         byLauncher: l.byLauncher,
       }
     : {}
@@ -210,6 +215,7 @@ const viewOfGame = (g: GameRecord): InheritableView => ({
   env: g.env,
   cwd: g.cwd,
   argsAppend: g.argsAppend,
+  patches: g.patches,
   byLauncher: g.byLauncher,
 })
 
@@ -223,6 +229,7 @@ const viewOfPreset = (p: PresetPayload): InheritableView => ({
   env: p.env,
   cwd: p.cwd,
   argsAppend: p.argsAppend,
+  patches: p.patches,
   byLauncher: p.byLauncher,
 })
 
@@ -236,6 +243,7 @@ const viewOfOverride = (o: EphemeralOverride): InheritableView => ({
   env: o.env,
   cwd: o.cwd,
   argsAppend: o.argsAppend,
+  patches: o.patches,
   byLauncher: o.byLauncher,
 })
 
@@ -255,6 +263,7 @@ const viewOfOverride = (o: EphemeralOverride): InheritableView => ({
  * - `env`           → map merge per key, more-specific wins.
  * - `cwd`           → scalar, most-specific wins.
  * - `argsAppend`    → list concat in inheritance order.
+ * - `patches`       → list concat in inheritance order.
  * - `launcher`      → scalar, most-specific wins (used by skeleton pass).
  */
 const foldLayers = (
@@ -275,6 +284,7 @@ const foldLayers = (
   let env: Record<string, string> | undefined
   let cwd: string | undefined
   let argsAppend: string[] | undefined
+  let patches: string[] | undefined
   let launcher: string | undefined
   let module: string | undefined
   let settings: LaunchSettings | undefined
@@ -301,6 +311,9 @@ const foldLayers = (
     if (merged.argsAppend !== undefined) {
       argsAppend = [...(argsAppend ?? []), ...merged.argsAppend]
     }
+    if (merged.patches !== undefined) {
+      patches = [...(patches ?? []), ...merged.patches]
+    }
 
     if (merged.launch?.env !== undefined) {
       env = { ...(env ?? {}), ...merged.launch.env }
@@ -313,7 +326,16 @@ const foldLayers = (
 
   for (const view of active) mergeView(view)
 
-  return { gamescope, env, cwd, argsAppend, launcher, module, settings }
+  return {
+    gamescope,
+    env,
+    cwd,
+    argsAppend,
+    patches,
+    launcher,
+    module,
+    settings,
+  }
 }
 
 /** Merge a view with an additional `byLauncher[L]` contribution. */
@@ -336,6 +358,10 @@ const mergeByLauncher = (
       extra.argsAppend !== undefined
         ? [...(base.argsAppend ?? []), ...extra.argsAppend]
         : base.argsAppend,
+    patches:
+      extra.patches !== undefined
+        ? [...(base.patches ?? []), ...extra.patches]
+        : base.patches,
     module: extra.module ?? base.module,
     settings: mergeLaunchSettings(base.settings, extra.settings),
   }
@@ -654,6 +680,7 @@ export const resolveLaunchContext = (
       env: appRecord?.env,
       cwd: appRecord?.cwd,
       argsAppend: appRecord?.argsAppend,
+      patches: appRecord?.patches,
     }
 
     const layers: InheritableView[] = [
@@ -716,6 +743,7 @@ export const resolveLaunchContext = (
       ...(folded.env ? { env: folded.env } : {}),
       ...(folded.cwd !== undefined ? { cwd: folded.cwd } : {}),
       ...(folded.argsAppend ? { argsAppend: folded.argsAppend } : {}),
+      ...(folded.patches ? { patches: folded.patches } : {}),
     }
     return context
   })

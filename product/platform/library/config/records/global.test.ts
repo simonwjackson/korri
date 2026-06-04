@@ -25,17 +25,35 @@ describe("GlobalConfigPayload (singleton)", () => {
     expect(config.gamescope?.args).toEqual(["-F", "fsr"])
   })
 
-  it("decodes global presets, byLauncher, env, cwd, argsAppend", () => {
+  it("decodes global presets, byLauncher, env, cwd, argsAppend, patches", () => {
     const config = decodeGlobalConfigPayload({
       launcher: "retroarch",
       env: { LANG: "en_US.UTF-8" },
       cwd: "/storage",
       argsAppend: ["--verbose"],
-      presets: { "max-quality": { gamescope: { enabled: true } } },
-      byLauncher: { dolphin: { argsAppend: ["--config", "/x"] } },
+      patches: ["/patches/global.ips"],
+      presets: {
+        "max-quality": {
+          gamescope: { enabled: true },
+          patches: ["/patches/max-quality.bps"],
+        },
+      },
+      byLauncher: {
+        dolphin: {
+          argsAppend: ["--config", "/x"],
+          patches: ["/patches/dolphin.ups"],
+        },
+      },
     })
+    expect(config.patches).toEqual(["/patches/global.ips"])
     expect(config.presets?.["max-quality"]?.gamescope?.enabled).toBe(true)
+    expect(config.presets?.["max-quality"]?.patches).toEqual([
+      "/patches/max-quality.bps",
+    ])
     expect(config.byLauncher?.dolphin?.argsAppend).toEqual(["--config", "/x"])
+    expect(config.byLauncher?.dolphin?.patches).toEqual([
+      "/patches/dolphin.ups",
+    ])
   })
 
   it("rejects identity-field bypass: 'system' is not allowed", () => {

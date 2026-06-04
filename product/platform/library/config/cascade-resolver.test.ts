@@ -317,6 +317,34 @@ describe("resolveLaunchContext — env / cwd / argsAppend folds", () => {
     expect(ctx.argsAppend).toEqual(["--g", "--s", "--game"])
   })
 
+  it("patches concatenate in inheritance order", () => {
+    const snap = snapshotOf({
+      global: globalConfig({ patches: ["/patches/global.ips"] }),
+      systems: [
+        system({
+          id: "snes",
+          launcher: "retroarch",
+          patches: ["/patches/system.bps"],
+        }),
+      ],
+      launchers: [
+        launcher({
+          id: "retroarch",
+          systems: ["snes"],
+          patches: ["/patches/launcher.ups"],
+        }),
+      ],
+      games: [game({ id: "fzero", patches: ["/patches/game.ips"] })],
+    })
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+    expect(ctx.patches).toEqual([
+      "/patches/global.ips",
+      "/patches/system.bps",
+      "/patches/launcher.ups",
+      "/patches/game.ips",
+    ])
+  })
+
   it("folds a legacy launcher layer once when its id is also a built-in app", () => {
     const snap = snapshotOf({
       systems: [system({ id: "snes", launcher: "retroarch" })],
@@ -391,6 +419,34 @@ describe("resolveLaunchContext — byLauncher", () => {
     expect(ctx.argsAppend).toEqual(["--gr", "--sr", "--gamer"])
   })
 
+  it("merges byLauncher[L] patch contributions when L is the resolved launcher", () => {
+    const snap = snapshotOf({
+      global: globalConfig({
+        byLauncher: { retroarch: { patches: ["/patches/global-ra.ips"] } },
+      }),
+      systems: [
+        system({
+          id: "snes",
+          launcher: "retroarch",
+          byLauncher: { retroarch: { patches: ["/patches/system-ra.bps"] } },
+        }),
+      ],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [
+        game({
+          id: "fzero",
+          byLauncher: { retroarch: { patches: ["/patches/game-ra.ups"] } },
+        }),
+      ],
+    })
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+    expect(ctx.patches).toEqual([
+      "/patches/global-ra.ips",
+      "/patches/system-ra.bps",
+      "/patches/game-ra.ups",
+    ])
+  })
+
   it("ignores byLauncher entries for non-resolved launchers", () => {
     const snap = snapshotOf({
       global: globalConfig({
@@ -402,6 +458,19 @@ describe("resolveLaunchContext — byLauncher", () => {
     })
     const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
     expect(ctx.argsAppend ?? []).toEqual([])
+  })
+
+  it("ignores byLauncher patch entries for non-resolved launchers", () => {
+    const snap = snapshotOf({
+      global: globalConfig({
+        byLauncher: { dolphin: { patches: ["/patches/dolphin.ips"] } },
+      }),
+      systems: [system({ id: "snes", launcher: "retroarch" })],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [game({ id: "fzero" })],
+    })
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+    expect(ctx.patches ?? []).toEqual([])
   })
 })
 
@@ -457,6 +526,26 @@ describe("resolveLaunchContext — ephemeral override", () => {
     )
     expect(ctx.argsAppend).toEqual(["--g", "--o"])
   })
+
+  it("override patches concatenate at the end", () => {
+    const snap = snapshotOf({
+      global: globalConfig({ patches: ["/patches/global.ips"] }),
+      systems: [system({ id: "snes", launcher: "retroarch" })],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [game({ id: "fzero", patches: ["/patches/game.bps"] })],
+    })
+    const ctx = run(
+      resolveLaunchContext(snap, {
+        gameId: "fzero",
+        override: { patches: ["/patches/override.ups"] },
+      }),
+    )
+    expect(ctx.patches).toEqual([
+      "/patches/global.ips",
+      "/patches/game.bps",
+      "/patches/override.ups",
+    ])
+  })
 })
 
 describe("resolveLaunchContext — inherit:false escape hatch", () => {
@@ -504,6 +593,29 @@ describe("resolveLaunchContext — inherit:false escape hatch", () => {
     })
     const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
     expect(ctx.argsAppend).toEqual(["--game"])
+  })
+
+  it("inherit:false on game truncates less-specific patches", () => {
+    const snap = snapshotOf({
+      global: globalConfig({ patches: ["/patches/global.ips"] }),
+      systems: [
+        system({
+          id: "snes",
+          launcher: "retroarch",
+          patches: ["/patches/system.bps"],
+        }),
+      ],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [
+        game({
+          id: "fzero",
+          inherit: false,
+          patches: ["/patches/game.ups"],
+        }),
+      ],
+    })
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+    expect(ctx.patches).toEqual(["/patches/game.ups"])
   })
 })
 
@@ -639,6 +751,27 @@ describe("resolveLaunchContext — preset selection", () => {
     expect(ctx.gamescope?.args).toEqual(["-W", "1920"])
   })
 
+  it("appends selected preset patches after base game patches", () => {
+    const snap = snapshotOf({
+      systems: [system({ id: "snes", launcher: "retroarch" })],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [
+        game({
+          id: "fzero",
+          patches: ["/patches/base.ips"],
+          presets: { color: { patches: ["/patches/color.bps"] } },
+        }),
+      ],
+    })
+    const ctx = run(
+      resolveLaunchContext(snap, {
+        gameId: "fzero",
+        presetId: "color",
+      }),
+    )
+    expect(ctx.patches).toEqual(["/patches/base.ips", "/patches/color.bps"])
+  })
+
   it("preset can switch the resolved launcher (presets are the full behavior layer)", () => {
     const snap = snapshotOf({
       systems: [system({ id: "snes", launcher: "retroarch" })],
@@ -689,6 +822,36 @@ describe("resolveLaunchContext — preset selection", () => {
     // Global base (outside preset chain) still flows; preset's global link
     // is dropped; preset's system link survives.
     expect(ctx.argsAppend).toEqual(["--global-base", "--p-system"])
+  })
+
+  it("inherit:false on the selected preset chain drops less-specific preset patches", () => {
+    const snap = snapshotOf({
+      global: globalConfig({
+        patches: ["/patches/global-base.ips"],
+        presets: { perf: { patches: ["/patches/p-global.ips"] } },
+      }),
+      systems: [
+        system({
+          id: "snes",
+          launcher: "retroarch",
+          presets: {
+            perf: { inherit: false, patches: ["/patches/p-system.bps"] },
+          },
+        }),
+      ],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [game({ id: "fzero" })],
+    })
+    const ctx = run(
+      resolveLaunchContext(snap, {
+        gameId: "fzero",
+        presetId: "perf",
+      }),
+    )
+    expect(ctx.patches).toEqual([
+      "/patches/global-base.ips",
+      "/patches/p-system.bps",
+    ])
   })
 })
 

@@ -50,6 +50,7 @@ export const LauncherPayload = Schema.Struct({
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
+  patches: InheritableLayer.fields.patches,
 })
 export type LauncherPayload = Schema.Schema.Type<typeof LauncherPayload>
 

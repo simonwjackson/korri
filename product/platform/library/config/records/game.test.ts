@@ -46,7 +46,7 @@ describe("GamePayload", () => {
     expect(game.collections).toEqual(["classics-1990s", "racing"])
   })
 
-  it("decodes inheritable layer fields (gamescope, env, cwd, argsAppend)", () => {
+  it("decodes inheritable layer fields (gamescope, env, cwd, argsAppend, patches)", () => {
     const game = decodeGamePayload({
       system: "snes",
       contentPath: "/x.smc",
@@ -54,9 +54,11 @@ describe("GamePayload", () => {
       env: { SDL_VIDEODRIVER: "x11" },
       cwd: "/storage/roms",
       argsAppend: ["--fullscreen"],
+      patches: ["/patches/base.ips", "/patches/qol.bps"],
     })
     expect(game.gamescope?.enabled).toBe(true)
     expect(game.env?.SDL_VIDEODRIVER).toBe("x11")
+    expect(game.patches).toEqual(["/patches/base.ips", "/patches/qol.bps"])
   })
 
   it("decodes nested presets + byLauncher", () => {
@@ -69,13 +71,19 @@ describe("GamePayload", () => {
         },
       },
       byLauncher: {
-        retroarch: { argsAppend: ["-L", "snes9x_libretro.so"] },
+        retroarch: {
+          argsAppend: ["-L", "snes9x_libretro.so"],
+          patches: ["/patches/retroarch-only.ips"],
+        },
       },
     })
     expect(game.presets?.["max-quality"]?.gamescope?.enabled).toBe(true)
     expect(game.byLauncher?.retroarch?.argsAppend).toEqual([
       "-L",
       "snes9x_libretro.so",
+    ])
+    expect(game.byLauncher?.retroarch?.patches).toEqual([
+      "/patches/retroarch-only.ips",
     ])
   })
 

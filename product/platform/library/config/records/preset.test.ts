@@ -17,28 +17,36 @@ describe("PresetPayload", () => {
     expect(preset.launcher).toBe("snes9x")
   })
 
-  it("decodes inheritable behavior fields (gamescope, env, cwd, argsAppend)", () => {
+  it("decodes inheritable behavior fields (gamescope, env, cwd, argsAppend, patches)", () => {
     const preset = decodePresetPayload({
       gamescope: { enabled: true, args: ["-F", "fsr"] },
       env: { SDL_VIDEODRIVER: "x11" },
       cwd: "/storage/roms",
       argsAppend: ["--fullscreen"],
+      patches: ["/patches/color.ips"],
     })
     expect(preset.gamescope?.enabled).toBe(true)
     expect(preset.env?.SDL_VIDEODRIVER).toBe("x11")
     expect(preset.cwd).toBe("/storage/roms")
     expect(preset.argsAppend).toEqual(["--fullscreen"])
+    expect(preset.patches).toEqual(["/patches/color.ips"])
   })
 
   it("decodes byLauncher contributions (preset can target a specific launcher)", () => {
     const preset = decodePresetPayload({
       byLauncher: {
-        retroarch: { argsAppend: ["-L", "snes9x_libretro.so"] },
+        retroarch: {
+          argsAppend: ["-L", "snes9x_libretro.so"],
+          patches: ["/patches/retroarch-only.ips"],
+        },
       },
     })
     expect(preset.byLauncher?.retroarch?.argsAppend).toEqual([
       "-L",
       "snes9x_libretro.so",
+    ])
+    expect(preset.byLauncher?.retroarch?.patches).toEqual([
+      "/patches/retroarch-only.ips",
     ])
   })
 

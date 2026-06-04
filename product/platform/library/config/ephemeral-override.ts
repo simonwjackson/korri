@@ -32,6 +32,7 @@ export const EphemeralOverride = Schema.Struct({
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
+  patches: InheritableLayer.fields.patches,
 })
 export type EphemeralOverride = Schema.Schema.Type<typeof EphemeralOverride>
 

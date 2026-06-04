@@ -20,6 +20,7 @@
  * - `env`           → map merge per key; more-specific wins
  * - `cwd`           → scalar; most-specific path wins
  * - `argsAppend`    → list concat in inheritance order
+ * - `patches`       → list concat in inheritance order
  * - `byLauncher[L]` → merged when the resolved launcher equals L
  */
 
@@ -88,6 +89,7 @@ export const InheritableLayer = Schema.Struct({
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   cwd: Schema.optional(Schema.String),
   argsAppend: Schema.optional(Schema.Array(Schema.String)),
+  patches: Schema.optional(Schema.Array(Schema.String)),
 })
 export type InheritableLayer = Schema.Schema.Type<typeof InheritableLayer>
 

@@ -36,6 +36,7 @@ export const PresetPayload = Schema.Struct({
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
+  patches: InheritableLayer.fields.patches,
 })
 export type PresetPayload = Schema.Schema.Type<typeof PresetPayload>
 
