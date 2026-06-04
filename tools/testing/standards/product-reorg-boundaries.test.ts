@@ -150,6 +150,32 @@ describe("standards: product platform reorganization guardrails", () => {
     expect(existsSync(join(REPO_ROOT, "nix", "images"))).toBe(false)
     expect(existsSync(join(REPO_ROOT, "nix", "modules"))).toBe(false)
     expect(existsSync(join(REPO_ROOT, "nix", "overlays"))).toBe(false)
+    expect(existsSync(join(REPO_ROOT, "nix"))).toBe(false)
+    expect(
+      existsSync(join(REPO_ROOT, "tools", "nix", "generated", "bun.nix")),
+    ).toBe(true)
+    expect(
+      existsSync(
+        join(
+          REPO_ROOT,
+          "tools",
+          "nix",
+          "generated",
+          "bun-production-package-names.nix",
+        ),
+      ),
+    ).toBe(true)
+    expect(
+      existsSync(
+        join(
+          REPO_ROOT,
+          "tools",
+          "testing",
+          "nix",
+          "korri-standard-native-check.nix",
+        ),
+      ),
+    ).toBe(true)
     expect(
       existsSync(join(REPO_ROOT, "product", "apps", "portal", "package.nix")),
     ).toBe(true)

@@ -225,13 +225,13 @@ fallow *args:
 fallow-audit *args:
   tools/scripts/fallow.sh audit {{args}}
 
-# Regenerate nix/bun.nix and the production Bun package subset from bun.lock
+# Regenerate tools/nix/generated/bun.nix and the production Bun package subset from bun.lock
 # (run after any bun.lock or production package.json dependency change).
 refresh-bun-deps:
-  bun2nix -o nix/bun.nix
-  bun tools/nix/bun-production-deps.ts > nix/bun-production-package-names.nix
+  bun2nix -o tools/nix/generated/bun.nix
+  bun tools/nix/bun-production-deps.ts > tools/nix/generated/bun-production-package-names.nix
 
-# Verify nix/bun.nix and the production subset are in sync with bun.lock. Fails
+# Verify tools/nix/generated/bun.nix and the production subset are in sync with bun.lock. Fails
 # if `just refresh-bun-deps` would produce different files. Wired into `check`
 # so PRs touching bun.lock without regenerating Nix inputs fail at lint time.
 check-bun-deps:
@@ -242,14 +242,14 @@ check-bun-deps:
   trap 'rm -f "$candidate" "$production_candidate"' EXIT
   bun2nix -o "$candidate"
   bun tools/nix/bun-production-deps.ts > "$production_candidate"
-  if ! diff -q "$candidate" nix/bun.nix >/dev/null; then
-    echo 'nix/bun.nix is out of sync with bun.lock; run `just refresh-bun-deps` and commit the result.' >&2
-    diff -u nix/bun.nix "$candidate" | head -40 >&2
+  if ! diff -q "$candidate" tools/nix/generated/bun.nix >/dev/null; then
+    echo 'tools/nix/generated/bun.nix is out of sync with bun.lock; run `just refresh-bun-deps` and commit the result.' >&2
+    diff -u tools/nix/generated/bun.nix "$candidate" | head -40 >&2
     exit 1
   fi
-  if ! diff -q "$production_candidate" nix/bun-production-package-names.nix >/dev/null; then
-    echo 'nix/bun-production-package-names.nix is out of sync; run `just refresh-bun-deps` and commit the result.' >&2
-    diff -u nix/bun-production-package-names.nix "$production_candidate" | head -80 >&2
+  if ! diff -q "$production_candidate" tools/nix/generated/bun-production-package-names.nix >/dev/null; then
+    echo 'tools/nix/generated/bun-production-package-names.nix is out of sync; run `just refresh-bun-deps` and commit the result.' >&2
+    diff -u tools/nix/generated/bun-production-package-names.nix "$production_candidate" | head -80 >&2
     exit 1
   fi
 

@@ -11,8 +11,9 @@ on:
     paths:
       - "flake.nix"
       - "flake.lock"
-      - "nix/**"
-      - "packages/**"
+      - "tools/nix/**"
+      - "tools/testing/nix/**"
+      - "product/vendor/**"
       - "tools/artifacts/**"
       - "product/apps/**"
       - "product/services/**"

@@ -9,7 +9,8 @@ on:
     paths:
       - "flake.nix"
       - "flake.lock"
-      - "nix/**"
+      - "tools/nix/**"
+      - "tools/testing/nix/**"
       - "electrobun.config.ts"
       - "package.json"
       - "bun.lock"
@@ -25,7 +26,8 @@ on:
     paths:
       - "flake.nix"
       - "flake.lock"
-      - "nix/**"
+      - "tools/nix/**"
+      - "tools/testing/nix/**"
       - "electrobun.config.ts"
       - "package.json"
       - "bun.lock"

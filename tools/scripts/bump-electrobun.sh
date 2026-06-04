@@ -45,5 +45,5 @@ printf '  electrobun.core.aarch64-linux = "%s";\n' "$(prefetch core aarch64-linu
 echo
 echo 'Next steps:' >&2
 echo '  1. Paste the hashes above into product/apps/desktop/nix/versions.nix.' >&2
-echo '  2. Run `just refresh-bun-deps` to regenerate nix/bun.nix from bun.lock.' >&2
+echo '  2. Run `just refresh-bun-deps` to regenerate tools/nix/generated/bun.nix from bun.lock.' >&2
 echo '  3. Verify with `nix build .#korri-desktop --no-link`.' >&2

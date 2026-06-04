@@ -4,11 +4,11 @@
 
 1. Update `electrobun` in `package.json` and refresh `bun.lock` (`bun install`).
 2. Run `tools/scripts/bump-electrobun.sh <version>` to fetch the new cli + core release tarballs and print their SRI hashes.
-3. Paste the printed `electrobun.cli.*` and `electrobun.core.*` hashes into `nix/versions.nix`.
-4. Run `just refresh-bun-deps` to regenerate `nix/bun.nix` from the updated `bun.lock`. Commit `nix/bun.nix` alongside `package.json` and `bun.lock`.
+3. Paste the printed `electrobun.cli.*` and `electrobun.core.*` hashes into `product/apps/desktop/nix/versions.nix`.
+4. Run `just refresh-bun-deps` to regenerate `tools/nix/generated/bun.nix` from the updated `bun.lock`. Commit `tools/nix/generated/bun.nix` alongside `package.json` and `bun.lock`.
 5. Verify `nix build .#korri-desktop --no-link`.
 
-`nix/bun.nix` is the lockfile-derived dependency manifest consumed by the bun2nix Nix integration. Each entry is a `fetchurl` whose SRI hash comes directly from `bun.lock`, so there is no separate per-architecture FOD hash to maintain. The same file is consumed by every bun-using Korri derivation (portal, inputd, game-stream, cli, server, desktop).
+`tools/nix/generated/bun.nix` is the lockfile-derived dependency manifest consumed by the bun2nix Nix integration. Each entry is a `fetchurl` whose SRI hash comes directly from `bun.lock`, so there is no separate per-architecture FOD hash to maintain. The same file is consumed by every bun-using Korri derivation (portal, inputd, game-stream, cli, server, desktop).
 
 The `bun2nix` CLI itself is shipped in the dev shell (pinned via the `bun2nix` flake input), so `just refresh-bun-deps` invokes a Nix-pinned binary rather than an unpinned npm fetch. `just check-bun-deps` (run as part of `just check`) verifies the manifest is in sync with `bun.lock` and fails at lint time if it is not.
 

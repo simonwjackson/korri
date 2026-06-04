@@ -7,9 +7,9 @@
 # expected shape, and the Korri provenance manifest landed.
 #
 # This file is intentionally colocated with the package rather than living
-# under `nix/tests/`. The package's "is the artifact correct" question
+# under `tools/testing/nix/`. The package's "is the artifact correct" question
 # belongs next to the artifact; system-level closure-shape assertions stay
-# under `nix/tests/` alongside the existing per-platform config checks.
+# under `tools/testing/nix/` alongside the existing per-platform config checks.
 {
   pkgs,
   libretroFake08Package,

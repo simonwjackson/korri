@@ -116,7 +116,7 @@
             # overlay exposes `bun2nix` as an extended attrset with .hook /
             # .fetchBunDeps that mkShell's buildInputs validation rejects.
             # Using the flake-pinned binary keeps the CLI version locked to
-            # the same revision that processes nix/bun.nix in fetchBunDeps.
+            # the same revision that processes tools/nix/generated/bun.nix in fetchBunDeps.
             bun2nix.packages.${system}.bun2nix
           ];
 
@@ -235,8 +235,8 @@
 
         # Lockfile-derived Bun dependency cache.
         #
-        # nix/bun.nix is regenerated from bun.lock via `just refresh-bun-deps`
-        # (which invokes `bun x bun2nix -o nix/bun.nix`). Each lockfile entry
+        # tools/nix/generated/bun.nix is regenerated from bun.lock via `just refresh-bun-deps`
+        # (which invokes `bun x bun2nix -o tools/nix/generated/bun.nix`). Each lockfile entry
         # becomes a per-package fetchurl whose SRI hash comes directly from
         # bun.lock, so there is no separate FOD hash to maintain per system.
         #
@@ -255,11 +255,11 @@
             # in-buildPhase sed loop as defense-in-depth; korri-desktop does
             # not, so this assertion is its primary guard.
             proseqlOverrideKey = "@proseql/core@0.13.2";
-            productionBunPackageNames = import ./nix/bun-production-package-names.nix;
+            productionBunPackageNames = import ./tools/nix/generated/bun-production-package-names.nix;
             # bun.nix is a function expecting fetchurl etc. We only need
             # attribute names for the existence checks; values are lazy, so
             # passing nulls is safe (we never access them).
-            bunNixManifest = import ./nix/bun.nix {
+            bunNixManifest = import ./tools/nix/generated/bun.nix {
               copyPathToStore = null;
               fetchFromGitHub = null;
               fetchgit = null;
@@ -283,9 +283,9 @@
             productionBunNix = builtins.toFile "bun-production.nix" ''
               { copyPathToStore, fetchFromGitHub, fetchgit, fetchurl, ... }@args:
               let
-                full = import ${./nix/bun.nix} args;
+                full = import ${./tools/nix/generated/bun.nix} args;
                 allowed = builtins.listToAttrs (
-                  map (name: { inherit name; value = null; }) (import ${./nix/bun-production-package-names.nix})
+                  map (name: { inherit name; value = null; }) (import ${./tools/nix/generated/bun-production-package-names.nix})
                 );
               in
               builtins.intersectAttrs allowed full
@@ -294,16 +294,16 @@
           assert
             (builtins.hasAttr proseqlOverrideKey bunNixManifest)
             || throw ''
-              flake.nix bunDeps: override key '${proseqlOverrideKey}' is not present in nix/bun.nix.
+              flake.nix bunDeps: override key '${proseqlOverrideKey}' is not present in tools/nix/generated/bun.nix.
               The proseql codec patch will not be applied to the bun offline cache.
-              Update the override key to match the version recorded in nix/bun.nix
+              Update the override key to match the version recorded in tools/nix/generated/bun.nix
               (run `just refresh-bun-deps` if bun.lock changed).
             '';
           assert
             (builtins.elem proseqlOverrideKey productionBunPackageNames)
             || throw ''
               flake.nix bunDeps: production Bun package set is missing '${proseqlOverrideKey}'.
-              Update nix/bun-production-package-names.nix with `just refresh-bun-deps`.
+              Update tools/nix/generated/bun-production-package-names.nix with `just refresh-bun-deps`.
             '';
           assert
             forbiddenProductionBunPackageMatches == [ ]
@@ -690,33 +690,33 @@
 
         checks =
           pkgs.lib.optionalAttrs isX86Linux {
-            korri-desktop-build-graph = import ./nix/tests/korri-desktop-build-graph-check.nix {
+            korri-desktop-build-graph = import ./tools/testing/nix/korri-desktop-build-graph-check.nix {
               inherit pkgs pkgs2405;
               host = korriDesktop;
               device = korriDesktopDevice;
               x86Kiosk = korriDesktopX86Kiosk;
               unwrapped = korriDesktopUnwrapped;
             };
-            korri-package-outputs = import ./nix/tests/korri-package-outputs-check.nix {
+            korri-package-outputs = import ./tools/testing/nix/korri-package-outputs-check.nix {
               inherit pkgs;
               packages = self.packages.${system};
             };
-            korri-image-outputs = import ./nix/tests/korri-image-outputs-check.nix {
+            korri-image-outputs = import ./tools/testing/nix/korri-image-outputs-check.nix {
               inherit pkgs;
               packages = self.packages.${system};
               apps = self.apps.${system};
               imageLib = korriImages;
               x86Platform = ./product/systems/nixos/images/platforms/x86.nix;
-              liveUsbConfigCheck = import ./nix/tests/korri-live-usb-config-check.nix {
+              liveUsbConfigCheck = import ./tools/testing/nix/korri-live-usb-config-check.nix {
                 inherit pkgs;
                 liveUsbSystem = korriKioskLiveUsbSystem;
               };
-              liveUsbDeveloperConfigCheck = import ./nix/tests/korri-live-usb-config-check.nix {
+              liveUsbDeveloperConfigCheck = import ./tools/testing/nix/korri-live-usb-config-check.nix {
                 inherit pkgs;
                 liveUsbSystem = korriKioskLiveUsbDeveloperSystem;
                 expectedArtifact = "developer";
               };
-              liveUsbVmSmokeCheck = import ./nix/tests/korri-live-usb-vm-smoke.nix {
+              liveUsbVmSmokeCheck = import ./tools/testing/nix/korri-live-usb-vm-smoke.nix {
                 inherit pkgs;
                 imageLib = korriImages;
                 x86Platform = ./product/systems/nixos/images/platforms/x86.nix;
@@ -733,38 +733,38 @@
           // {
             # Module-eval checks: pure Nix evaluation, no platform-specific build
             # graph, safe to gate on any system.
-            korri-compositor-module = import ./nix/tests/korri-compositor-module-check.nix {
+            korri-compositor-module = import ./tools/testing/nix/korri-compositor-module-check.nix {
               inherit pkgs;
               korriCompositorModule = self.nixosModules.korri-compositor;
             };
-            korri-input-module = import ./nix/tests/korri-input-module-check.nix {
+            korri-input-module = import ./tools/testing/nix/korri-input-module-check.nix {
               inherit pkgs;
               korriInputModule = self.nixosModules.korri-input;
             };
-            korri-game-stream-module = import ./nix/tests/korri-game-stream-module-check.nix {
+            korri-game-stream-module = import ./tools/testing/nix/korri-game-stream-module-check.nix {
               inherit pkgs;
               korriGameStreamModule = self.nixosModules.korri-game-stream;
             };
-            korri-sessiond-module = import ./nix/tests/korri-sessiond-module-check.nix {
+            korri-sessiond-module = import ./tools/testing/nix/korri-sessiond-module-check.nix {
               inherit pkgs;
               korriSessiondModule = self.nixosModules.korri-sessiond;
             };
-            korri-source-machine-image = import ./nix/tests/korri-source-machine-image-check.nix {
+            korri-source-machine-image = import ./tools/testing/nix/korri-source-machine-image-check.nix {
               inherit pkgs;
               sourceMachineSystem = korriSourceMachineSystem;
             };
-            korri-server-module = import ./nix/tests/korri-server-module-check.nix {
+            korri-server-module = import ./tools/testing/nix/korri-server-module-check.nix {
               inherit pkgs;
               korriServerModule = self.nixosModules.korri-server;
             };
-            korri-module-identity-audit = import ./nix/tests/korri-module-identity-audit-check.nix {
+            korri-module-identity-audit = import ./tools/testing/nix/korri-module-identity-audit-check.nix {
               inherit pkgs;
               src = ./product/systems/nixos/modules;
             };
           }
           // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
             korri-sunshine-runtime-bitrate-patch =
-              import ./nix/tests/korri-sunshine-runtime-bitrate-patch-check.nix
+              import ./tools/testing/nix/korri-sunshine-runtime-bitrate-patch-check.nix
                 {
                   inherit pkgs;
                   patchPaths = [
@@ -789,7 +789,7 @@
                   moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
                 };
             korri-moonlight-control-protocol-patch =
-              import ./nix/tests/korri-moonlight-control-protocol-patch-check.nix
+              import ./tools/testing/nix/korri-moonlight-control-protocol-patch-check.nix
                 {
                   inherit pkgs;
                   patchPaths = [
@@ -808,7 +808,7 @@
             };
           }
           // pkgs.lib.optionalAttrs isX86Linux {
-            korri-rocknix-sm8550-config = import ./nix/tests/korri-rocknix-sm8550-config-check.nix {
+            korri-rocknix-sm8550-config = import ./tools/testing/nix/korri-rocknix-sm8550-config-check.nix {
               inherit pkgs;
               thorSystem = self.nixosConfigurations.korri-rocknix-kiosk-thor;
               soboSystem = self.nixosConfigurations.korri-rocknix-kiosk-odin2portal;
@@ -869,7 +869,7 @@
                     };
                   };
               in
-              import ./nix/tests/korri-rocknix-product-payload-check.nix {
+              import ./tools/testing/nix/korri-rocknix-product-payload-check.nix {
                 inherit pkgs;
                 targetPackages = self.packages.aarch64-linux;
                 hostPackages = self.packages.${system};
@@ -910,38 +910,38 @@
             # above covers Odin2Portal and Thor together so the two products
             # cannot drift, while this name keeps CI/check ownership explicit.
             korri-rocknix-product-payload-thor = self.checks.${system}.korri-rocknix-product-payload;
-            korri-live-usb-config = import ./nix/tests/korri-live-usb-config-check.nix {
+            korri-live-usb-config = import ./tools/testing/nix/korri-live-usb-config-check.nix {
               inherit pkgs;
               liveUsbSystem = korriKioskLiveUsbSystem;
             };
-            korri-live-usb-developer-config = import ./nix/tests/korri-live-usb-config-check.nix {
+            korri-live-usb-developer-config = import ./tools/testing/nix/korri-live-usb-config-check.nix {
               inherit pkgs;
               liveUsbSystem = korriKioskLiveUsbDeveloperSystem;
               expectedArtifact = "developer";
             };
-            korri-live-usb-vm-smoke = import ./nix/tests/korri-live-usb-vm-smoke.nix {
+            korri-live-usb-vm-smoke = import ./tools/testing/nix/korri-live-usb-vm-smoke.nix {
               inherit pkgs;
               imageLib = korriImages;
               x86Platform = ./product/systems/nixos/images/platforms/x86.nix;
             };
-            korri-live-usb-invalid-artifact = import ./nix/tests/korri-live-usb-invalid-artifact-check.nix {
+            korri-live-usb-invalid-artifact = import ./tools/testing/nix/korri-live-usb-invalid-artifact-check.nix {
               inherit pkgs;
               imageLib = korriImages;
               x86Platform = ./product/systems/nixos/images/platforms/x86.nix;
             };
             korri-live-usb-persistence-resolver =
-              import ./nix/tests/korri-live-usb-persistence-resolver-check.nix
+              import ./tools/testing/nix/korri-live-usb-persistence-resolver-check.nix
                 {
                   inherit pkgs;
                   resolverScript = ./product/systems/nixos/images/live-usb-persistence-resolver.sh;
                 };
-            korri-rocknix-build-performance = import ./nix/tests/korri-rocknix-build-performance-check.nix {
+            korri-rocknix-build-performance = import ./tools/testing/nix/korri-rocknix-build-performance-check.nix {
               inherit pkgs;
               runtimeSources = korriSources;
-              productionBunPackageNames = import ./nix/bun-production-package-names.nix;
+              productionBunPackageNames = import ./tools/nix/generated/bun-production-package-names.nix;
               rootfsBuilder = ./product/systems/rocknix/rootfs.nix;
             };
-            korri-standard-native = import ./nix/tests/korri-standard-native-check.nix {
+            korri-standard-native = import ./tools/testing/nix/korri-standard-native-check.nix {
               inherit pkgs;
               ownerMatrix = [
                 {

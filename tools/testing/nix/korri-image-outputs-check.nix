@@ -126,7 +126,7 @@ let
     file:
     builtins.match ".*(SM8550|AYN|Odin|DSI-1|DSI-2|UCM|RockNix).*" (builtins.readFile file) != null;
 
-  # See nix/tests/korri-rocknix-sm8550-config-check.nix for the rationale
+  # See tools/testing/nix/korri-rocknix-sm8550-config-check.nix for the rationale
   # behind matching the retroarch-bare wrapper by passthru shape rather
   # than pname.
   findRetroarchWrappers =

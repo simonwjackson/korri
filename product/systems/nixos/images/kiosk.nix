@@ -89,7 +89,7 @@ let
   #
   # `symlinkJoin` exposes the bare retroarch binary AND the core .so on
   # PATH / lib/retroarch/cores without injecting any flags. The
-  # closure-shape assertions in `nix/tests/korri-*-config-check.nix`
+  # closure-shape assertions in `tools/testing/nix/korri-*-config-check.nix`
   # match on `passthru.cores` + `passthru.unwrapped`, so we propagate
   # both attributes here to keep the assertions valid.
   #
@@ -132,7 +132,7 @@ in
     # RetroArch wired into the compositor unit PATH so the Korri launch
     # flow can invoke `retroarch -L fake08_libretro.so <cart>` once the
     # cascade-side launcher record lands. Closure-shape assertion in
-    # nix/tests/korri-*-config-check.nix prevents core bloat.
+    # tools/testing/nix/korri-*-config-check.nix prevents core bloat.
     path = [ retroarchKiosk ];
   };
 

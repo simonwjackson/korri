@@ -71,9 +71,9 @@ The kiosk RetroArch wrapper carries **exactly one** libretro core,
 `libretro-fake-08`. This is intentional and enforced at evaluation time
 by assertions in:
 
-- `nix/tests/korri-rocknix-sm8550-config-check.nix` (Thor + Sobo)
-- `nix/tests/korri-live-usb-config-check.nix` (Product + Developer)
-- `nix/tests/korri-image-outputs-check.nix` (x86 kiosk + both live USB)
+- `tools/testing/nix/korri-rocknix-sm8550-config-check.nix` (Thor + Sobo)
+- `tools/testing/nix/korri-live-usb-config-check.nix` (Product + Developer)
+- `tools/testing/nix/korri-image-outputs-check.nix` (x86 kiosk + both live USB)
 
 Each asserts the kiosk's compositor PATH contains exactly one
 `retroarch-bare` wrapper, that the wrapper's `passthru.cores` list has
@@ -97,7 +97,7 @@ product/vendor/libretro-fake-08/
 The colocated `check.nix` is a new convention this package introduces:
 package-level "is the artifact correct" assertions live next to the
 package, while system-level closure-shape assertions remain under
-`nix/tests/` alongside the existing per-platform config checks.
+`tools/testing/nix/` alongside the existing per-platform config checks.
 
 ## Out of scope
 
