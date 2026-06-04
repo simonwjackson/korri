@@ -21,6 +21,14 @@
  *   systems list, merges the system delta's `cores` map.
  */
 
+import { access } from "node:fs/promises"
+
+import {
+  type ArtifactImportMetadata,
+  createArtifactImportService,
+  createProseqlArtifactRepository,
+} from "@platform/artifacts/artifact-import-service"
+import { artifactBlobPath } from "@platform/artifacts/artifact-store"
 import {
   resolveAppDescriptor,
   unknownSettingDiagnostics,
@@ -51,6 +59,7 @@ import type { UserRecord } from "@platform/library/config/records/user"
 import type { ResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import type { LaunchSpec } from "@platform/library/launcher"
 import { LibraryError } from "@platform/library/library-services"
+import type { ArtifactRecord } from "@platform/protocol/artifact/artifact"
 import { Effect } from "effect"
 import type { KorriLibraryDb } from "./library-db"
 
@@ -72,6 +81,9 @@ export interface ResolvedLaunchOutput {
     readonly path?: string
   }
   readonly settings?: Readonly<Record<string, string | number | boolean>>
+  readonly content?: {
+    readonly artifactId: string
+  }
   readonly artifacts?: {
     readonly root: string
     readonly paths: Readonly<Record<string, string>>
@@ -97,6 +109,38 @@ export interface ImportedGameRecord {
   readonly systemDelta: SystemDelta
 }
 
+export type ArtifactAdoptionSource =
+  | {
+      readonly kind: "bytes"
+      readonly bytes: Buffer | Uint8Array | string
+    }
+  | {
+      readonly kind: "file"
+      readonly sourcePath: string
+    }
+
+export interface ArtifactAdoptionLibraryOptions {
+  readonly createGame?: boolean
+  readonly gameId?: string
+  readonly system?: string
+  readonly title?: string
+}
+
+export interface AdoptArtifactInput {
+  readonly source: ArtifactAdoptionSource
+  readonly artifact: ArtifactImportMetadata
+  readonly library?: ArtifactAdoptionLibraryOptions
+}
+
+export interface AdoptArtifactOutput {
+  readonly artifact: ArtifactRecord
+  readonly game?: GameRecord
+}
+
+export interface CreateLibraryRepositoryOptions {
+  readonly env?: Record<string, string | undefined>
+}
+
 export interface LibraryRepository {
   readonly listGames: () => Effect.Effect<readonly GameRecord[], unknown>
   readonly upsertGame: (game: GameRecord) => Effect.Effect<GameRecord, unknown>
@@ -120,6 +164,9 @@ export interface LibraryRepository {
   readonly upsertImportedGame: (
     record: ImportedGameRecord,
   ) => Effect.Effect<void, unknown>
+  readonly adoptArtifact: (
+    input: AdoptArtifactInput,
+  ) => Effect.Effect<AdoptArtifactOutput, LibraryError>
   readonly resolveLaunchForGame: (
     gameId: string,
     opts?: ResolveLaunchOptions,
@@ -130,7 +177,11 @@ export interface LibraryRepository {
   ) => Effect.Effect<GamescopePolicy, LibraryError>
 }
 
-export function createLibraryRepository(db: KorriLibraryDb): LibraryRepository {
+export function createLibraryRepository(
+  db: KorriLibraryDb,
+  options: CreateLibraryRepositoryOptions = {},
+): LibraryRepository {
+  const env = options.env ?? process.env
   return {
     listGames: () =>
       Effect.promise(() => db.games.query().runPromise).pipe(
@@ -236,15 +287,22 @@ export function createLibraryRepository(db: KorriLibraryDb): LibraryRepository {
         }),
       ),
 
+    adoptArtifact: input => adoptArtifact(db, env, input),
+
     resolveLaunchForGame: (gameId, opts) =>
       Effect.gen(function* () {
         const snapshot = yield* loadSnapshot(db)
-        const context = yield* resolveLaunchContext(snapshot, {
+        const unresolvedContext = yield* resolveLaunchContext(snapshot, {
           gameId,
           userId: opts?.userId,
           presetId: opts?.presetId,
           override: opts?.override,
         })
+        const context = yield* resolveArtifactBackedContent(
+          db,
+          env,
+          unresolvedContext,
+        )
         const app = yield* resolveAppDescriptor({
           appId: context.launcherId,
           apps: snapshot.apps,
@@ -269,6 +327,7 @@ export function createLibraryRepository(db: KorriLibraryDb): LibraryRepository {
             ? { module: { id: context.moduleId, path: context.modulePath } }
             : {}),
           ...(context.settings ? { settings: context.settings } : {}),
+          ...(context.content ? { content: context.content } : {}),
           ...(materialized.artifacts
             ? { artifacts: materialized.artifacts }
             : {}),
@@ -285,6 +344,137 @@ export function createLibraryRepository(db: KorriLibraryDb): LibraryRepository {
         })
       }),
   }
+}
+
+function adoptArtifact(
+  db: KorriLibraryDb,
+  env: Record<string, string | undefined>,
+  input: AdoptArtifactInput,
+): Effect.Effect<AdoptArtifactOutput, LibraryError> {
+  return Effect.gen(function* () {
+    yield* validateArtifactAdoptionLibraryInput(input)
+    const importService = createArtifactImportService({
+      env,
+      repository: createProseqlArtifactRepository(db),
+    })
+    const artifact = yield* Effect.tryPromise({
+      try: () =>
+        input.source.kind === "bytes"
+          ? importService.importBytes({
+              ...input.artifact,
+              bytes: input.source.bytes,
+            })
+          : importService.importFile({
+              ...input.artifact,
+              sourcePath: input.source.sourcePath,
+            }),
+      catch: toLibraryError,
+    })
+
+    const game = yield* maybeCreateArtifactGame(db, artifact, input.library)
+    return {
+      artifact,
+      ...(game ? { game } : {}),
+    }
+  })
+}
+
+function validateArtifactAdoptionLibraryInput(
+  input: AdoptArtifactInput,
+): Effect.Effect<void, LibraryError> {
+  return resolveAdoptedGameSystem(input.artifact, input.library).pipe(
+    Effect.asVoid,
+  )
+}
+
+function resolveAdoptedGameSystem(
+  artifact: Pick<ArtifactImportMetadata, "kind" | "system">,
+  options: ArtifactAdoptionLibraryOptions | undefined,
+): Effect.Effect<string | undefined, LibraryError> {
+  if (artifact.kind !== "content" || options?.createGame !== true) {
+    return Effect.succeed(undefined)
+  }
+
+  const system = options.system ?? artifact.system
+  return system
+    ? Effect.succeed(system)
+    : Effect.fail(
+        new LibraryError({
+          reason: "config",
+          message: "content artifact adoption requires a system",
+        }),
+      )
+}
+
+function maybeCreateArtifactGame(
+  db: KorriLibraryDb,
+  artifact: ArtifactRecord,
+  options: ArtifactAdoptionLibraryOptions | undefined,
+): Effect.Effect<GameRecord | undefined, LibraryError> {
+  return Effect.gen(function* () {
+    const system = yield* resolveAdoptedGameSystem(artifact, options)
+    if (!system) return undefined
+
+    const game: GameRecord = {
+      id: options?.gameId ?? artifact.id,
+      system,
+      content: { artifactId: artifact.id },
+      metadata: {
+        name:
+          options?.title ?? artifact.facets?.title?.text ?? artifact.file.name,
+      },
+    }
+
+    return yield* db.games
+      .upsert({ where: { id: game.id }, create: game, update: game })
+      .pipe(
+        Effect.flatMap(() =>
+          Effect.tryPromise({ try: () => db.flush(), catch: toLibraryError }),
+        ),
+        Effect.as(game),
+        Effect.mapError(toLibraryError),
+      )
+  })
+}
+
+function resolveArtifactBackedContent(
+  db: KorriLibraryDb,
+  env: Record<string, string | undefined>,
+  context: ResolvedLaunchContext,
+): Effect.Effect<ResolvedLaunchContext, LibraryError> {
+  const artifactId = context.content?.artifactId
+  if (!artifactId) return Effect.succeed(context)
+
+  return Effect.tryPromise({
+    try: async () => {
+      const artifactRepository = createProseqlArtifactRepository(db)
+      const artifact = await artifactRepository.findArtifactById(artifactId)
+      if (!artifact) {
+        throw new LibraryError({
+          reason: "config",
+          message: `artifact not found: ${artifactId}`,
+        })
+      }
+      const contentPath = artifactBlobPath(env, artifact)
+      try {
+        await access(contentPath)
+      } catch (error) {
+        const code = (error as { readonly code?: string }).code
+        throw new LibraryError({
+          reason: "io",
+          message:
+            code === "ENOENT"
+              ? `artifact blob missing from store: ${artifactId} expected at ${contentPath}`
+              : `artifact blob unreadable${code ? ` (${code})` : ""}: ${contentPath}`,
+        })
+      }
+      return {
+        ...context,
+        contentPath,
+      }
+    },
+    catch: toLibraryError,
+  })
 }
 
 function collectLaunchDiagnostics(

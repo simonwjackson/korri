@@ -1,14 +1,20 @@
 import { describe, expect, it } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { createHash } from "node:crypto"
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { GameRecord } from "@platform/library/config/records/game"
 import type { LauncherRecord } from "@platform/library/config/records/launcher"
 import type { SystemRecord } from "@platform/library/config/records/system"
-import { Effect } from "effect"
+import { LibraryError } from "@platform/library/library-services"
+import { Cause, Effect, Result } from "effect"
 
 import { openKorriLibraryDb } from "./library-db"
 import { createLibraryRepository } from "./library-repository"
+
+function sha256(bytes: Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex")
+}
 
 async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
   const root = await mkdtemp(join(tmpdir(), "korri-proseql-repository-"))
@@ -17,6 +23,19 @@ async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
   } finally {
     await rm(root, { recursive: true, force: true })
   }
+}
+
+function expectLibraryFailure(
+  exit: Awaited<ReturnType<typeof Effect.runPromiseExit>>,
+  message: string,
+) {
+  expect(exit._tag).toBe("Failure")
+  if (exit._tag !== "Failure") return
+  const failure = Cause.findFail(exit.cause)
+  expect(Result.isSuccess(failure)).toBe(true)
+  if (Result.isFailure(failure)) return
+  expect(failure.success.error).toBeInstanceOf(LibraryError)
+  expect((failure.success.error as LibraryError).message).toContain(message)
 }
 
 async function withLaunchArtifactsRoot<T>(
@@ -59,6 +78,10 @@ const neverPlayedGame: GameRecord = {
   contentPath: "/storage/roms/snes/never.smc",
   metadata: { name: "Never" },
 }
+
+const snesRomBytes = Buffer.from("SNES ROM BYTES")
+const smbrLevelBytes = Buffer.from('{"Info":{"Name":"Island"},"Levels":[{}]}')
+const ipsPatchBytes = Buffer.from("PATCH BYTES")
 
 const retroarchLauncher: LauncherRecord = {
   id: "retroarch",
@@ -123,6 +146,189 @@ describe("createLibraryRepository — resolveLaunchForGame (inheritance)", () =>
         backend: "wayland",
         exposeWayland: true,
       })
+    })
+  })
+
+  it("resolves artifact-backed game content to the durable blob path before launch composition", async () => {
+    await withTempRoot(async root => {
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const env = {
+              KORRI_LIBRARY_ROOT: root,
+              KORRI_ARTIFACTS_ROOT: join(root, "artifacts"),
+            }
+            const repo = createLibraryRepository(db, { env })
+            const artifact = yield* repo.adoptArtifact({
+              source: { kind: "bytes", bytes: snesRomBytes },
+              artifact: {
+                kind: "content",
+                system: "snes",
+                format: { id: "sfc-rom" },
+                file: { name: "f-zero.sfc", extension: "sfc" },
+              },
+              library: { createGame: false },
+            })
+            yield* repo.upsertSystem(snesSystem)
+            yield* repo.upsertLauncher(retroarchLauncher)
+            yield* repo.upsertGame({
+              id: "artifact-fzero",
+              system: "snes",
+              content: { artifactId: artifact.artifact.id },
+            })
+            return yield* repo.resolveLaunchForGame("artifact-fzero")
+          }),
+        ),
+      )
+
+      expect(result.spec.args).toEqual([
+        "-L",
+        "snes9x_libretro.so",
+        join(
+          root,
+          "artifacts",
+          "blobs",
+          "sha256",
+          sha256(snesRomBytes).slice(0, 2),
+          `${sha256(snesRomBytes)}.sfc`,
+        ),
+      ])
+      expect(result.content).toEqual({
+        artifactId: `sha256:${sha256(snesRomBytes)}`,
+      })
+    })
+  })
+
+  it("resolves SMBR artifact-backed level content as normal local content", async () => {
+    await withTempRoot(async root => {
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const env = {
+              KORRI_LIBRARY_ROOT: root,
+              KORRI_ARTIFACTS_ROOT: join(root, "artifacts"),
+            }
+            const repo = createLibraryRepository(db, { env })
+            const artifact = yield* repo.adoptArtifact({
+              source: { kind: "bytes", bytes: smbrLevelBytes },
+              artifact: {
+                kind: "content",
+                system: "smbr",
+                format: { id: "smbr-level" },
+                file: { name: "island.lvl", extension: "lvl" },
+              },
+              library: { createGame: false },
+            })
+            yield* repo.upsertSystem({ id: "smbr", launcher: "smbr" })
+            yield* repo.upsertLauncher({
+              id: "smbr",
+              command: "/bin/echo",
+              args: ["--level", "{contentPath}"],
+              systems: ["smbr"],
+            })
+            yield* repo.upsertGame({
+              id: "smbr-island",
+              system: "smbr",
+              content: { artifactId: artifact.artifact.id },
+            })
+            return yield* repo.resolveLaunchForGame("smbr-island")
+          }),
+        ),
+      )
+
+      expect(result.spec.args.at(-1)).toBe(
+        join(
+          root,
+          "artifacts",
+          "blobs",
+          "sha256",
+          sha256(smbrLevelBytes).slice(0, 2),
+          `${sha256(smbrLevelBytes)}.lvl`,
+        ),
+      )
+    })
+  })
+
+  it("fails clearly when an artifact-backed game references a missing artifact", async () => {
+    await withTempRoot(async root => {
+      const exit = await Effect.runPromiseExit(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const repo = createLibraryRepository(db, {
+              env: {
+                KORRI_LIBRARY_ROOT: root,
+                KORRI_ARTIFACTS_ROOT: join(root, "artifacts"),
+              },
+            })
+            yield* repo.upsertSystem(snesSystem)
+            yield* repo.upsertLauncher(retroarchLauncher)
+            yield* repo.upsertGame({
+              id: "missing-artifact",
+              system: "snes",
+              content: {
+                artifactId:
+                  "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              },
+            })
+            return yield* repo.resolveLaunchForGame("missing-artifact")
+          }),
+        ),
+      )
+
+      expectLibraryFailure(exit, "artifact not found")
+    })
+  })
+
+  it("fails clearly when an artifact-backed game references a missing blob", async () => {
+    await withTempRoot(async root => {
+      const blobPath = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const repo = createLibraryRepository(db, {
+              env: {
+                KORRI_LIBRARY_ROOT: root,
+                KORRI_ARTIFACTS_ROOT: join(root, "artifacts"),
+              },
+            })
+            yield* repo.upsertSystem(snesSystem)
+            yield* repo.upsertLauncher(retroarchLauncher)
+            const adopted = yield* repo.adoptArtifact({
+              source: { kind: "bytes", bytes: snesRomBytes },
+              artifact: {
+                kind: "content",
+                system: "snes",
+                format: { id: "sfc-rom" },
+                file: { name: "f-zero.sfc", extension: "sfc" },
+              },
+              library: { createGame: true, gameId: "missing-blob" },
+            })
+            return adopted.artifact.localPath
+          }),
+        ),
+      )
+      expect(blobPath).toBeDefined()
+      await rm(blobPath as string)
+
+      const exit = await Effect.runPromiseExit(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const repo = createLibraryRepository(db, {
+              env: {
+                KORRI_LIBRARY_ROOT: root,
+                KORRI_ARTIFACTS_ROOT: join(root, "artifacts"),
+              },
+            })
+            return yield* repo.resolveLaunchForGame("missing-blob")
+          }),
+        ),
+      )
+
+      expectLibraryFailure(exit, "artifact blob missing from store")
     })
   })
 
@@ -239,6 +445,238 @@ describe("createLibraryRepository — resolveLaunchForGame (error paths)", () =>
         ),
       )
       expect(exit._tag).toBe("Failure")
+    })
+  })
+})
+
+describe("createLibraryRepository — adoptArtifact", () => {
+  it("adopts SNES content bytes into an artifact record and artifact-backed game", async () => {
+    await withTempRoot(async root => {
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const repo = createLibraryRepository(db, {
+              env: {
+                KORRI_LIBRARY_ROOT: root,
+                KORRI_ARTIFACTS_ROOT: join(root, "artifacts"),
+              },
+            })
+            return yield* repo.adoptArtifact({
+              source: { kind: "bytes", bytes: snesRomBytes },
+              artifact: {
+                kind: "content",
+                system: "snes",
+                format: { id: "sfc-rom" },
+                file: { name: "f-zero.sfc", extension: "sfc" },
+                facets: { title: { text: "F-Zero" } },
+              },
+              library: { createGame: true, gameId: "snes-fzero" },
+            })
+          }),
+        ),
+      )
+
+      expect(result.artifact.id).toBe(`sha256:${sha256(snesRomBytes)}`)
+      expect(result.game).toMatchObject({
+        id: "snes-fzero",
+        system: "snes",
+        content: { artifactId: `sha256:${sha256(snesRomBytes)}` },
+        metadata: { name: "F-Zero" },
+      })
+      expect(result.game?.contentPath).toBeUndefined()
+    })
+  })
+
+  it("adopts SMBR levels as normal artifact-backed game records without source-specific launcher data", async () => {
+    await withTempRoot(async root => {
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const repo = createLibraryRepository(db, {
+              env: {
+                KORRI_LIBRARY_ROOT: root,
+                KORRI_ARTIFACTS_ROOT: join(root, "artifacts"),
+              },
+            })
+            return yield* repo.adoptArtifact({
+              source: { kind: "bytes", bytes: smbrLevelBytes },
+              artifact: {
+                kind: "content",
+                system: "smbr",
+                format: { id: "smbr-level" },
+                file: { name: "island.lvl", extension: "lvl" },
+                facets: { title: { text: "Island" } },
+                sourceData: { "levelsharesquare.v1": { levelId: "abc" } },
+              },
+              library: { createGame: true, gameId: "smbr-island" },
+            })
+          }),
+        ),
+      )
+
+      expect(result.game).toMatchObject({
+        id: "smbr-island",
+        system: "smbr",
+        content: { artifactId: `sha256:${sha256(smbrLevelBytes)}` },
+        metadata: { name: "Island" },
+      })
+      expect(result.game).not.toHaveProperty("launch")
+      expect(result.game).not.toHaveProperty("launcher")
+      expect(result.game).not.toHaveProperty("core")
+    })
+  })
+
+  it("adopts patch artifacts without creating a game by default", async () => {
+    await withTempRoot(async root => {
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const repo = createLibraryRepository(db, {
+              env: {
+                KORRI_LIBRARY_ROOT: root,
+                KORRI_ARTIFACTS_ROOT: join(root, "artifacts"),
+              },
+            })
+            return yield* repo.adoptArtifact({
+              source: { kind: "bytes", bytes: ipsPatchBytes },
+              artifact: {
+                kind: "patch",
+                format: { id: "ips" },
+                file: { name: "translation.ips", extension: "ips" },
+              },
+            })
+          }),
+        ),
+      )
+
+      expect(result.artifact.kind).toBe("patch")
+      expect(result.game).toBeUndefined()
+    })
+  })
+
+  it("reuses existing artifacts for duplicate bytes", async () => {
+    await withTempRoot(async root => {
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const repo = createLibraryRepository(db, {
+              env: {
+                KORRI_LIBRARY_ROOT: root,
+                KORRI_ARTIFACTS_ROOT: join(root, "artifacts"),
+              },
+            })
+            const first = yield* repo.adoptArtifact({
+              source: { kind: "bytes", bytes: snesRomBytes },
+              artifact: {
+                kind: "content",
+                system: "snes",
+                format: { id: "sfc-rom" },
+                file: { name: "first.sfc", extension: "sfc" },
+              },
+              library: { createGame: true, gameId: "first" },
+            })
+            const second = yield* repo.adoptArtifact({
+              source: { kind: "bytes", bytes: snesRomBytes },
+              artifact: {
+                kind: "content",
+                system: "snes",
+                format: { id: "smc-rom" },
+                file: { name: "second.smc", extension: "smc" },
+              },
+              library: { createGame: true, gameId: "second" },
+            })
+            return { first, second }
+          }),
+        ),
+      )
+
+      expect(result.second.artifact.id).toBe(result.first.artifact.id)
+      expect(result.second.artifact.file.extension).toBe("sfc")
+      expect(result.second.game?.content?.artifactId).toBe(
+        result.first.artifact.id,
+      )
+    })
+  })
+
+  it("fails content game adoption clearly when no system is available", async () => {
+    await withTempRoot(async root => {
+      const exit = await Effect.runPromiseExit(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const repo = createLibraryRepository(db, {
+              env: {
+                KORRI_LIBRARY_ROOT: root,
+                KORRI_ARTIFACTS_ROOT: join(root, "artifacts"),
+              },
+            })
+            return yield* repo.adoptArtifact({
+              source: { kind: "bytes", bytes: snesRomBytes },
+              artifact: {
+                kind: "content",
+                format: { id: "sfc-rom" },
+                file: { name: "f-zero.sfc", extension: "sfc" },
+              },
+              library: { createGame: true, gameId: "missing-system" },
+            })
+          }),
+        ),
+      )
+
+      expectLibraryFailure(exit, "content artifact adoption requires a system")
+    })
+  })
+
+  it("converges manual file and staged file imports for identical bytes", async () => {
+    await withTempRoot(async root => {
+      const manualPath = join(root, "manual.sfc")
+      const stagedPath = join(root, "staged.sfc")
+      await writeFile(manualPath, snesRomBytes)
+      await writeFile(stagedPath, snesRomBytes)
+
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const repo = createLibraryRepository(db, {
+              env: {
+                KORRI_LIBRARY_ROOT: root,
+                KORRI_ARTIFACTS_ROOT: join(root, "artifacts"),
+              },
+            })
+            const manual = yield* repo.adoptArtifact({
+              source: { kind: "file", sourcePath: manualPath },
+              artifact: {
+                kind: "content",
+                system: "snes",
+                format: { id: "sfc-rom" },
+                file: { name: "manual.sfc", extension: "sfc" },
+              },
+              library: { createGame: false },
+            })
+            const staged = yield* repo.adoptArtifact({
+              source: { kind: "file", sourcePath: stagedPath },
+              artifact: {
+                kind: "content",
+                system: "snes",
+                format: { id: "sfc-rom" },
+                file: { name: "staged.sfc", extension: "sfc" },
+              },
+              library: { createGame: false },
+            })
+            return { manual, staged }
+          }),
+        ),
+      )
+
+      expect(result.staged.artifact.id).toBe(result.manual.artifact.id)
+      expect(
+        await readFile(result.manual.artifact.localPath ?? "missing"),
+      ).toEqual(snesRomBytes)
     })
   })
 })

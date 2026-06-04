@@ -19,6 +19,7 @@
  *   `MissingRequiredValue` if a referenced placeholder lacks a value.
  */
 
+import { ArtifactId } from "@platform/protocol/artifact/artifact"
 import { Schema } from "effect"
 
 import { GamescopePolicy } from "./inheritable-fields"
@@ -27,7 +28,12 @@ import { LaunchSettings } from "./launch-block"
 export const ResolvedLaunchContext = Schema.Struct({
   // Identity (straight from the game record).
   gameId: Schema.String,
-  contentPath: Schema.String,
+  contentPath: Schema.optional(Schema.String),
+  content: Schema.optional(
+    Schema.Struct({
+      artifactId: ArtifactId,
+    }),
+  ),
   system: Schema.String,
 
   // Resolved app/launcher (output of Pass 0 — skeleton pass).

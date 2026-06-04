@@ -14,6 +14,7 @@
  * `derivedFromKey` policy, so the payload struct intentionally omits it.
  */
 
+import { ArtifactId } from "@platform/protocol/artifact/artifact"
 import { Schema } from "effect"
 
 import { ByLauncherPayload, InheritableLayer } from "../inheritable-fields"
@@ -96,10 +97,16 @@ export type GameUserData = Schema.Schema.Type<typeof GameUserData>
 
 const STRICT = { onExcessProperty: "error" } as const
 
-export const GamePayload = Schema.Struct({
+export const GameContent = Schema.Struct({
+  artifactId: ArtifactId,
+})
+export type GameContent = Schema.Schema.Type<typeof GameContent>
+
+const GamePayloadFields = {
   // Identity — required, lives nowhere else.
   system: Schema.String,
-  contentPath: Schema.String,
+  contentPath: Schema.optional(Schema.String),
+  content: Schema.optional(GameContent),
 
   // Fixture metadata (preserved from the legacy GameRecord shape).
   metadata: Schema.optional(GameMetadata),
@@ -128,16 +135,34 @@ export const GamePayload = Schema.Struct({
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
   patches: InheritableLayer.fields.patches,
+}
+
+const GameContentReferenceFilter = Schema.makeFilter<{
+  readonly contentPath?: string
+  readonly content?: GameContent
+}>(value => {
+  const hasContentPath = value.contentPath !== undefined
+  const hasArtifactId = value.content?.artifactId !== undefined
+  return hasContentPath !== hasArtifactId
+    ? undefined
+    : "game must declare exactly one of contentPath or content.artifactId"
 })
+
+export const GamePayload = Schema.Struct(GamePayloadFields).check(
+  GameContentReferenceFilter,
+)
 export type GamePayload = Schema.Schema.Type<typeof GamePayload>
 
 /**
  * Runtime shape (with `id` hydrated from the storage key).
+ *
+ * Applies the same content-reference invariant as `GamePayload`: a game must
+ * have exactly one concrete local `contentPath` or durable `content.artifactId`.
  */
 export const GameRecord = Schema.Struct({
   id: Schema.String,
-  ...GamePayload.fields,
-})
+  ...GamePayloadFields,
+}).check(GameContentReferenceFilter)
 export type GameRecord = Schema.Schema.Type<typeof GameRecord>
 
 export const decodeGamePayload = (input: unknown): GamePayload =>

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test"
+import { BunServices } from "@effect/platform-bun"
+import { makeInMemoryAcquisitionLayer } from "@platform/acquisition/acquisition-service"
 import { Effect, Exit } from "effect"
+import { Command } from "effect/unstable/cli"
 import { runKorriCli } from "../korri-cli"
+import { captureCliOutput } from "../test-helpers/capture-cli-output"
+import { bazzarCommand } from "./bazzar-command"
 
 const cliPath = new URL("../korri-cli.ts", import.meta.url).pathname
 
@@ -86,6 +91,7 @@ describe("korri bazzar command routing", () => {
     "plugins",
     "validate-sources",
     "resolve-download",
+    "acquire",
   ]) {
     it(`renders help for bazzar ${command}`, async () => {
       const result = await runCli(["bazzar", command, "--help"])
@@ -120,6 +126,7 @@ describe("korri bazzar command routing", () => {
       "validate-sources",
       ["--sources", "--timeout", "--log-level", "--log-json"],
     ],
+    ["acquire", ["--log-level", "--log-json"]],
     [
       "resolve-download",
       [
@@ -143,6 +150,75 @@ describe("korri bazzar command routing", () => {
       expect(result.stderr).toBe("")
     })
   }
+
+  it("acquires a source-native artifact as staged JSON without library writes", async () => {
+    const layer = makeInMemoryAcquisitionLayer({
+      search: () => Effect.succeed({ candidates: [] }),
+      details: () => Effect.die("unused"),
+      detailsByUrl: () => Effect.die("unused"),
+      plugins: () => Effect.succeed({ plugins: [] }),
+      validateSources: () => Effect.succeed({ sources: [] }),
+      resolveDownload: () => Effect.die("unused"),
+      acquireArtifact: () =>
+        Effect.succeed({
+          id: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          kind: "content",
+          system: "smbr",
+          format: { id: "smbr-level" },
+          file: { name: "level.lvl", extension: "lvl" },
+          stagedPath: "/tmp/korri/acquisition/level.lvl",
+          digests: {
+            sha256:
+              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          },
+          sourceData: { "fixture-source.v1": { id: "level-1" } },
+        }),
+    })
+
+    const result = await captureCliOutput(() =>
+      Effect.runPromise(
+        Command.runWith(bazzarCommand, { version: "test" })([
+          "acquire",
+          "fixture-source",
+          "level-1",
+        ]).pipe(Effect.provide(layer), Effect.provide(BunServices.layer)),
+      ),
+    )
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stderr).toBe("")
+    const envelope = parseSingleJsonLine(result.stdout) as {
+      command: string
+      data: {
+        artifact: {
+          id: string
+          stagedPath: string
+          system: string
+          format: { id: string }
+          digests: { sha256: string }
+        }
+        lifecycle: Record<string, unknown>
+      }
+    }
+    expect(envelope.command).toBe("acquire")
+    expect(envelope.data.artifact).toMatchObject({
+      id: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      stagedPath: "/tmp/korri/acquisition/level.lvl",
+      system: "smbr",
+      format: { id: "smbr-level" },
+    })
+    expect(envelope.data.artifact.digests.sha256).toBe(
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    )
+    expect(envelope.data.lifecycle).toMatchObject({
+      staged: true,
+      durable: false,
+      launched: false,
+    })
+    expect(envelope.data).not.toHaveProperty("game")
+    expect(envelope.data).not.toHaveProperty("libraryRecord")
+    expect(envelope.data).not.toHaveProperty("launchSpec")
+  })
 
   it("requires resolve-download title flag for Bazzar compatibility", async () => {
     const exit = await Effect.runPromiseExit(
@@ -194,7 +270,13 @@ describe("korri bazzar command routing", () => {
   })
 
   it("runs search through the acquisition service with Bazzar no-results output", async () => {
-    const result = await runCli(["bazzar", "search", "fixture-query"])
+    const result = await runCli([
+      "bazzar",
+      "search",
+      "fixture-query",
+      "--sources",
+      "chip8archive",
+    ])
 
     expect(result.exitCode).toBe(0)
     expect(result.stdout).toBe("No results found\n")

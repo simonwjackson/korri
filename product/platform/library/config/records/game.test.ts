@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 
-import { decodeGamePayload } from "./game"
+import { decodeGamePayload, decodeGameRecord } from "./game"
 
 describe("GamePayload", () => {
   it("decodes a minimal game (only the identity fields)", () => {
@@ -18,8 +18,54 @@ describe("GamePayload", () => {
     ).toThrow()
   })
 
-  it("rejects a game without 'contentPath' (identity is required)", () => {
+  it("decodes an artifact-backed game with a content artifact reference", () => {
+    const game = decodeGamePayload({
+      system: "snes",
+      content: {
+        artifactId:
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      },
+    })
+
+    expect(game.contentPath).toBeUndefined()
+    expect(game.content?.artifactId).toBe(
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    )
+  })
+
+  it("rejects a game without either contentPath or content.artifactId", () => {
     expect(() => decodeGamePayload({ system: "snes" })).toThrow()
+  })
+
+  it("rejects a hydrated game record without either contentPath or content.artifactId", () => {
+    expect(() => decodeGameRecord({ id: "f-zero", system: "snes" })).toThrow()
+  })
+
+  it("rejects a game with both contentPath and content.artifactId", () => {
+    expect(() =>
+      decodeGamePayload({
+        system: "snes",
+        contentPath: "/storage/roms/x.smc",
+        content: {
+          artifactId:
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        },
+      }),
+    ).toThrow()
+  })
+
+  it("rejects a hydrated game record with both contentPath and content.artifactId", () => {
+    expect(() =>
+      decodeGameRecord({
+        id: "f-zero",
+        system: "snes",
+        contentPath: "/storage/roms/x.smc",
+        content: {
+          artifactId:
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        },
+      }),
+    ).toThrow()
   })
 
   it("decodes optional fixture metadata + userData", () => {

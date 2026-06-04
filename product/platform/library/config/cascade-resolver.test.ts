@@ -83,6 +83,42 @@ const runErrTag = <A, E>(eff: Effect.Effect<A, E>): string | undefined => {
 }
 
 describe("resolveLaunchContext — pure inheritance (no presets)", () => {
+  it("keeps legacy contentPath records resolved without artifact I/O", () => {
+    const snap = snapshotOf({
+      systems: [system({ id: "snes", launcher: "retroarch" })],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [
+        game({ id: "fzero", contentPath: "/storage/roms/snes/f-zero.smc" }),
+      ],
+    })
+
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+
+    expect(ctx.contentPath).toBe("/storage/roms/snes/f-zero.smc")
+    expect(ctx.content).toBeUndefined()
+  })
+
+  it("carries artifact-backed content references without resolving blobs", () => {
+    const artifactId =
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    const snap = snapshotOf({
+      systems: [system({ id: "snes", launcher: "retroarch" })],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [
+        {
+          id: "fzero",
+          system: "snes",
+          content: { artifactId },
+        },
+      ],
+    })
+
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+
+    expect(ctx.contentPath).toBeUndefined()
+    expect(ctx.content).toEqual({ artifactId })
+  })
+
   it("resolves launcher from system when no game-level launcher is set", () => {
     const snap = snapshotOf({
       systems: [system({ id: "snes", launcher: "retroarch" })],

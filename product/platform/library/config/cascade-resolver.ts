@@ -727,7 +727,10 @@ export const resolveLaunchContext = (
 
     const context: ResolvedLaunchContext = {
       gameId: inputs.gameId,
-      contentPath: game.contentPath,
+      ...(game.contentPath !== undefined
+        ? { contentPath: game.contentPath }
+        : {}),
+      ...(game.content !== undefined ? { content: game.content } : {}),
       system: game.system,
       launcherId,
       appId: launcherId,

@@ -11,6 +11,7 @@ import {
   createFileGameStreamLaunchIntentStore,
   defaultGameStreamIntentPath,
 } from "../../services/device/game-stream-launch-intent"
+import { artifactCommand } from "./artifacts/artifact-import-command"
 import { bazzarCommand } from "./bazzar/bazzar-command"
 import { createEffectGamePicker } from "./game-picker"
 import { runRemoteStreamLaunchCommand } from "./remote-stream-launch"
@@ -105,7 +106,12 @@ const playCommand = Command.make(
 
 export const korriCommand = Command.make("korri").pipe(
   Command.withDescription("Korri command line interface."),
-  Command.withSubcommands([bazzarCommand, playCommand, streamCommand]),
+  Command.withSubcommands([
+    artifactCommand,
+    bazzarCommand,
+    playCommand,
+    streamCommand,
+  ]),
 )
 
 const AcquisitionLayerLive = makeLiveAcquisitionLayer({

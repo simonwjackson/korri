@@ -1,12 +1,23 @@
 import { describe, expect, it } from "bun:test"
 import { Effect, Exit } from "effect"
 import { runKorriCli } from "./korri-cli"
+import { captureCliOutput } from "./test-helpers/capture-cli-output"
 
 describe("korri CLI", () => {
   it("renders help for the root command", async () => {
     const exit = await Effect.runPromiseExit(runKorriCli(["--help"]))
 
     expect(Exit.isSuccess(exit)).toBe(true)
+  })
+
+  it("renders help for the artifacts command", async () => {
+    const result = await captureCliOutput(() =>
+      Effect.runPromiseExit(runKorriCli(["artifacts", "--help"])),
+    )
+
+    expect(result.stdout).toContain("Import and adopt Korri artifacts")
+    expect(result.stdout).toContain("import-file")
+    expect(result.stdout).toContain("import-staged")
   })
 
   it("renders help for the play command", async () => {

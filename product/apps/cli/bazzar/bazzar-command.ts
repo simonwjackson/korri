@@ -1,5 +1,6 @@
 import { Acquisition } from "@platform/acquisition/acquisition-service"
 import type { AcquisitionError } from "@platform/acquisition/errors"
+import type { AcquiredArtifact } from "@platform/protocol/acquisition/artifact-acquisition"
 import type { DownloadResolution } from "@platform/protocol/acquisition/download-resolution"
 import type { PluginMetadata } from "@platform/protocol/acquisition/plugin"
 import type { SourceHealth } from "@platform/protocol/acquisition/source-health"
@@ -34,12 +35,8 @@ const timeoutSecondsFlag = Flag.integer("timeout").pipe(Flag.withDefault(30))
 
 type Format = "json" | "jsonl" | "tsv"
 
-function optionString(value: Option.Option<string>): string | undefined {
-  return Option.getOrUndefined(value)
-}
-
 function parseSourceNames(value: Option.Option<string>): string[] | undefined {
-  const raw = optionString(value)
+  const raw = Option.getOrUndefined(value)
   if (!raw) return undefined
   const names = raw
     .split(",")
@@ -223,6 +220,35 @@ const validateSourcesCommand = Command.make(
   ),
 )
 
+const acquireCommand = Command.make(
+  "acquire",
+  {
+    source: Argument.string("source"),
+    id: Argument.string("id"),
+    logLevel: logLevelFlag,
+    logJson: logJsonFlag,
+  },
+  ({ source, id }) =>
+    Effect.gen(function* () {
+      const acquisition = yield* Acquisition
+      const response = yield* acquisition
+        .acquireArtifact({ sourceName: source, id })
+        .pipe(toResult)
+      if (response._tag === "Left") {
+        printStderr(safeErrorMessage(response.left))
+        setExit(acquisitionErrorExitCategory(response.left))
+        return
+      }
+
+      setExit("success")
+      printStdout(JSON.stringify(acquireEnvelope(response.right)))
+    }),
+).pipe(
+  Command.withDescription(
+    "Acquire a source-native artifact into ephemeral staging",
+  ),
+)
+
 const resolveDownloadCommand = Command.make(
   "resolve-download",
   {
@@ -250,17 +276,17 @@ const resolveDownloadCommand = Command.make(
               resolution: response.right,
               checkedAt,
               title,
-              site: optionString(site),
-              fileName: optionString(fileName),
-              size: optionString(size),
-              artifactFormat: optionString(artifactFormat),
+              site: Option.getOrUndefined(site),
+              fileName: Option.getOrUndefined(fileName),
+              size: Option.getOrUndefined(size),
+              artifactFormat: Option.getOrUndefined(artifactFormat),
             })
           : resolutionErrorOutcome({
               error: response.left,
               checkedAt,
               source,
               title,
-              site: optionString(site),
+              site: Option.getOrUndefined(site),
             })
       const envelope = resolutionEnvelope(outcome)
       setExit(envelope.exitCategory)
@@ -279,9 +305,44 @@ export const bazzarCommand = Command.make("bazzar").pipe(
     detailsCommand,
     pluginsCommand,
     validateSourcesCommand,
+    acquireCommand,
     resolveDownloadCommand,
   ]),
 )
+
+function acquireEnvelope(artifact: AcquiredArtifact) {
+  return {
+    contractVersion: BAZZAR_CLI_CONTRACT_VERSION,
+    command: "acquire" as const,
+    exitCategory: "success" as const,
+    exitCode: BAZZAR_EXIT_CODES.success,
+    emittedAt: nowIso(),
+    data: {
+      lifecycle: {
+        staged: true,
+        durable: false,
+        launched: false,
+      },
+      artifact: {
+        id: artifact.id,
+        kind: artifact.kind,
+        system: artifact.system,
+        format: artifact.format,
+        file: artifact.file,
+        stagedPath: artifact.stagedPath,
+        // v1 exposes both the canonical prefixed `id` and raw digest bag.
+        // Consumers should use `id` for identity; `digests` is compatibility
+        // metadata for existing Bazzar pipelines.
+        digests: artifact.digests,
+        expectedDigests: artifact.expectedDigests,
+        facets: artifact.facets,
+        provenance: artifact.provenance,
+        externalIds: artifact.externalIds,
+        sourceData: artifact.sourceData,
+      },
+    },
+  }
+}
 
 function pluginOutput(plugin: PluginMetadata): Record<string, unknown> {
   return {
