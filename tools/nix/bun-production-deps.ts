@@ -166,6 +166,7 @@ export function productionPackageJson(packageJsonText: string): string {
     version?: string
     dependencies?: Record<string, string>
     devDependencies?: Record<string, string>
+    overrides?: Record<string, string>
   }
   return `${JSON.stringify(
     {
@@ -173,6 +174,7 @@ export function productionPackageJson(packageJsonText: string): string {
       private: packageJson.private,
       version: packageJson.version,
       dependencies: productionDependencySpecMap(packageJsonText),
+      ...(packageJson.overrides ? { overrides: packageJson.overrides } : {}),
     },
     null,
     2,

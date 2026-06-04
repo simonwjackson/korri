@@ -12,6 +12,8 @@ const packageJsonText = readFileSync("package.json", "utf8")
 const lock = parseBunLock(readFileSync("bun.lock", "utf8"))
 const hasVersionedName = (names: string[], packageName: string) =>
   names.some(name => name.startsWith(`${packageName}@`))
+const expectNoPackageNameContaining = (names: string[], forbidden: string) =>
+  expect(names.filter(name => name.includes(forbidden))).toEqual([])
 
 describe("production Bun dependency selection", () => {
   it("keeps production build roots and removes repo-wide dev/test roots", () => {
@@ -36,7 +38,27 @@ describe("production Bun dependency selection", () => {
       "@tiptap/",
       "@xyflow/",
     ]) {
-      expect(names.filter(name => name.includes(forbidden))).toEqual([])
+      expectNoPackageNameContaining(names, forbidden)
+    }
+  })
+
+  it("excludes Bazzar demo API and quarantined provider packages", () => {
+    const names = productionBunPackageNames(
+      lock,
+      productionRootDependencyNames(packageJsonText),
+    )
+
+    for (const forbidden of [
+      "@trpc/",
+      "fastify",
+      "bazzar",
+      "coolrom",
+      "retrostic",
+      "romhustler",
+      "steamgriddb",
+      "wowroms",
+    ]) {
+      expectNoPackageNameContaining(names, forbidden)
     }
   })
 
@@ -50,6 +72,7 @@ describe("production Bun dependency selection", () => {
     expect(manifest.dependencies["@vitejs/plugin-react"]).toBeDefined()
     expect(manifest.dependencies["@playwright/test"]).toBeUndefined()
     expect(manifest.dependencies.storybook).toBeUndefined()
+    expect(manifest.overrides).toEqual(JSON.parse(packageJsonText).overrides)
     expect(manifest.devDependencies).toBeUndefined()
 
     expect(productionLock.workspaces[""].dependencies.vite).toBeDefined()

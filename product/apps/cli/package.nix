@@ -112,6 +112,26 @@ pkgs.stdenv.mkDerivation {
       exit 1
     fi
 
+    bazzar_help="$TMPDIR/korri-bazzar-help.txt"
+    if ! "$out/bin/korri" bazzar --help > "$bazzar_help" 2>&1; then
+      echo "korri-cli smoke test failed: bundle did not respond to bazzar --help" >&2
+      cat "$bazzar_help" >&2
+      exit 1
+    fi
+
+    for command in search details plugins validate-sources resolve-download; do
+      if ! grep -q "$command" "$bazzar_help"; then
+        echo "korri-cli smoke test failed: bazzar help missing $command" >&2
+        cat "$bazzar_help" >&2
+        exit 1
+      fi
+    done
+
+    if [ -e "$out/bin/bazzar" ]; then
+      echo "korri-cli must not install a standalone bazzar binary" >&2
+      exit 1
+    fi
+
     runHook postInstallCheck
   '';
 
