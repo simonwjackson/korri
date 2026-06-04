@@ -1,142 +1,151 @@
 ---
-date: 2026-06-01
-topic: bazzar-source-adapter-download-resolution
+date: 2026-06-03
+topic: bazzar-monorepo-migration-korri-cli-acquisition
 ---
 
-# Bazzar Source Adapter and Download Resolution
+# Bazzar Monorepo Migration and Korri CLI Acquisition Surface
 
 ## Summary
 
-Define the hardening slice Bazzar needs before Korri depends on it: source adapters must have observable health, download resolution must distinguish final artifacts from interstitial or unsupported flows, and any future `korri bazzar` surface must start as a thin wrapper over a stable Bazzar contract.
+Korri should selectively absorb Bazzar’s useful source-acquisition capability so the public operator surface becomes `korri bazzar <cmd>`. The migration must start with an explicit inventory gate so Korri imports only the CLI/core acquisition subset it needs, not Bazzar’s standalone product identity, UI, or non-aligned demo API surfaces.
 
 ---
 
 ## Problem Frame
 
-Bazzar can already search several external game/archive sites and extract details for many results, but its current state is not safe to import directly into Korri. The repo is dirty, its test suite is failing, some behavior is prototype-grade, and source quirks leak through the current result shape.
+Bazzar began as a standalone TypeScript/Bun source-adapter CLI and core library. Earlier Korri/Bazzar requirements kept Bazzar separate during hardening so Korri could consume a stable command contract without inheriting prototype-grade source quirks. That boundary reduced risk while Bazzar’s source-health, download-resolution, and command-output contracts were still settling.
 
-The most important friction is that “details” and “downloadable artifact” are not the same thing. Some sources return a final archive URL, while others return an HTML handoff page, require additional resolution, fail behind an API key, or silently substitute fallback data. If Korri consumes that shape too early, it either inherits source-specific complexity or presents false confidence to the player/operator.
+The product direction has changed: source acquisition should now become a Korri product capability rather than a separate public Bazzar product. The risk is that a broad repo import would bring along stale app identity, prototype UI/API surfaces, duplicated tooling, and code that does not fit Korri’s current product/platform/theme architecture. A careful migration should preserve the parts that make source acquisition useful while deleting or deferring everything that only exists because Bazzar was once standalone.
 
-Korri already has a strong `LibrarySource` meaning: known playable library content. External discovery and artifact acquisition are earlier lifecycle stages than playable library membership, so the Bazzar boundary should not bend Korri’s library seam around provider quirks.
+The first useful user/operator outcome is CLI-shaped. Existing `bazzar <cmd>` workflows should become `korri bazzar <cmd>` workflows, while future UI integration waits until the Korri acquisition model is stable enough to present inside the product.
 
 ---
 
 ## Actors
 
-- A1. Korri maintainer/operator: Wants to verify external source behavior and eventually use `korri bazzar` without trusting a brittle prototype.
-- A2. Bazzar source adapter: Knows how to search, inspect, and resolve one external source while hiding source-specific mechanics.
-- A3. Bazzar validation harness: Exercises adapters repeatably and reports source health, contract conformance, and download-resolution status.
-- A4. Future Korri wrapper: A thin `korri bazzar` surface that delegates to a stable Bazzar contract when Korri is ready to consume it.
-- A5. Korri library: The existing known-playable game library, which should only receive content after a later explicit import/acquisition flow.
+- A1. Korri maintainer/operator: Runs CLI commands to inspect, search, and resolve external source candidates.
+- A2. Korri CLI: Provides the public `korri bazzar` command group and reports machine-readable outcomes where required.
+- A3. Source acquisition core: The migrated Bazzar-derived capability that loads sources, searches candidates, validates health, and resolves downloadable artifacts.
+- A4. Future Korri acquisition UI: A later product surface that may consume the same capability after the CLI subset stabilizes.
+- A5. Korri library: The known-playable game library, which must remain distinct from external discovery and acquisition candidates until an explicit import flow exists.
 
 ---
 
 ## Key Flows
 
-- F1. Validate source adapter health
-  - **Trigger:** The maintainer wants to know whether a Bazzar source still works.
+- F1. Migrate a command into Korri
+  - **Trigger:** A Bazzar CLI command is selected for the first Korri-native subset.
   - **Actors:** A1, A2, A3
-  - **Steps:** The harness runs a bounded source check, records whether search and details behavior conform to the source contract, and reports typed health rather than relying on ad hoc manual inspection.
-  - **Outcome:** The maintainer can see which sources are healthy, degraded, unsupported, or defective.
-  - **Covered by:** R1, R2, R3, R8
+  - **Steps:** The migration inventory classifies the command’s supporting code, imports or adapts only the needed acquisition pieces, exposes the behavior under `korri bazzar`, and removes any dependency on standalone `bazzar` product identity.
+  - **Outcome:** The operator can run the corresponding `korri bazzar` command without needing a separate Bazzar binary.
+  - **Covered by:** R1, R2, R3, R4, R8
 
-- F2. Resolve a candidate download
-  - **Trigger:** A search/detail result points at a candidate game/archive page.
+- F2. Validate source health
+  - **Trigger:** The maintainer wants to know whether configured acquisition sources are usable.
   - **Actors:** A1, A2, A3
-  - **Steps:** Bazzar asks the relevant adapter to resolve the candidate, distinguishes final artifact URLs from interstitial or blocked flows, and reports enough metadata to decide whether a real download is possible.
-  - **Outcome:** Callers do not confuse a details page or HTML handoff with a downloadable artifact.
-  - **Covered by:** R4, R5, R6, R7
+  - **Steps:** Korri runs the migrated validation behavior, each source reports its own typed health, and failures are surfaced without masking them behind fallback success.
+  - **Outcome:** The maintainer can distinguish healthy, degraded, unavailable, unsupported, defective, and configuration/caller-error states.
+  - **Covered by:** R5, R9, R10, R11
 
-- F3. Future Korri wrapper delegates to Bazzar
-  - **Trigger:** Korri needs a `korri bazzar` command surface.
-  - **Actors:** A1, A3, A4, A5
-  - **Steps:** Korri invokes the stable Bazzar contract, presents Bazzar’s typed outcomes, and avoids duplicating Bazzar source code or treating unresolved external results as playable library entries.
-  - **Outcome:** Korri gains a thin operator-facing bridge without absorbing Bazzar internals prematurely.
-  - **Covered by:** R9, R10, R11, R12
+- F3. Search or inspect external candidates
+  - **Trigger:** The operator searches for external candidates or asks for details about a candidate.
+  - **Actors:** A1, A2, A3, A5
+  - **Steps:** Korri delegates to the acquisition core, returns source candidates/details, and keeps those candidates outside the known-playable library model.
+  - **Outcome:** External discovery is available through Korri CLI without implying the result is already playable library content.
+  - **Covered by:** R4, R6, R12
+
+- F4. Resolve a candidate download
+  - **Trigger:** The operator has a source candidate and wants to know whether it resolves to a real downloadable artifact.
+  - **Actors:** A1, A2, A3, A5
+  - **Steps:** Korri runs the migrated resolution behavior, classifies the outcome explicitly, and reports whether the candidate is final, provisional/interstitial, unavailable, unsupported, defective, or a caller/configuration error.
+  - **Outcome:** Korri does not confuse details pages, source handoffs, blocked flows, or unresolved candidates with final downloadable artifacts.
+  - **Covered by:** R6, R7, R10, R12
 
 ---
 
 ## Requirements
 
-**Source adapter health**
+**Migration scope and inventory**
 
-- R1. Bazzar must provide a repeatable validation path that checks each supported source adapter without requiring Korri to import Bazzar internals.
-- R2. Source health must be reported with explicit states such as healthy, degraded, unsupported, unavailable, or defective; silent success fallbacks must not count as healthy behavior.
-- R3. Adapter validation must cover at least search and details behavior for every source that Bazzar claims to support.
-- R4. A source adapter must hide its source-specific mechanics behind a stable Bazzar-facing contract; callers should not need to know whether a source uses direct links, interstitial pages, timed handoffs, or API-backed metadata.
+- R1. The migration must begin with an explicit Bazzar inventory that classifies each major area as import, adapt, defer, or delete before code is moved into Korri.
+- R2. Korri must not import Bazzar wholesale. Every imported piece must support the first `korri bazzar` CLI subset or a directly shared acquisition invariant.
+- R3. Standalone Bazzar must not remain a public product surface after the migration. The public operator entrypoint is `korri bazzar`, not a separate `bazzar` binary.
+- R4. The first `korri bazzar` subset must preserve the behavior of the current Bazzar CLI command family: search, details, plugins, validate-sources, and resolve-download.
 
-**Download resolution**
+**CLI-first acquisition capability**
 
-- R5. Bazzar must separate game/details lookup from download resolution. A details result may identify a candidate, but only a download-resolution result can claim that a final artifact is available.
-- R6. Download resolution must classify outcomes explicitly: final artifact resolved, interstitial requires further handling, blocked/unavailable, unsupported by adapter, source defect, and caller/configuration error.
-- R7. A resolved artifact must carry enough observable facts for safe downstream handling: source identity, candidate title, artifact name when known, artifact kind when known, size when known, and whether the URL is final or still provisional.
-- R8. The validation path must include at least one known legal/free/homebrew/public-domain-style fixture or probe per source where such a probe is available, so health checks do not depend on arbitrary copyrighted examples.
+- R5. `korri bazzar validate-sources` must provide repeatable source-health visibility without requiring a separate Bazzar install.
+- R6. `korri bazzar search`, `details`, and `resolve-download` must keep external source candidates distinct from Korri known-playable library records.
+- R7. Download resolution must remain a separate step from search/details and must classify final artifacts separately from provisional, blocked, unsupported, defective, or caller/configuration-error outcomes.
+- R8. Machine-readable command surfaces must preserve strict stdout/stderr discipline: contract output belongs on stdout, while logs and diagnostics stay off the parseable output stream.
 
-**Korri boundary**
+**Deletion and exclusion discipline**
 
-- R9. Bazzar should remain in its own repo during the hardening phase; Korri must not duplicate Bazzar source adapter code to get early access.
-- R10. Any first `korri bazzar` integration must be a thin wrapper over Bazzar’s stable contract rather than a reimplementation of Bazzar source behavior inside Korri.
-- R11. External Bazzar results must not enter Korri’s known-playable `LibrarySource` model merely because they were found or resolved. Only a later explicit import/acquisition flow may create playable library entries.
-- R12. The Bazzar contract must be stable enough for Korri to consume through command output and exit status first; direct library imports are not required for the first integration.
+- R9. Bazzar UI must not be imported in this slice.
+- R10. Bazzar API code must be excluded by default unless a specific API piece is proven to already match Korri’s Lattice direction and serves the CLI-first acquisition capability.
+- R11. Prototype/demo surfaces, standalone package metadata, duplicate development tooling, and compatibility shims must not be retained merely because they exist in Bazzar.
+- R12. Live source failures, credential failures, and source defects must not be masked by mock data, fallback success, or compatibility behavior in Korri-facing output.
 
-**Failure and trust posture**
+**Future product path**
 
-- R13. Bazzar must not mask live source failures with mock or fallback data in health checks, download resolution, or future Korri-facing command output.
-- R14. Sources requiring credentials or API keys must report missing, rejected, or invalid configuration explicitly.
-- R15. A failed source must not make the whole validation or search operation fail when other sources can still report useful outcomes.
-- R16. Bazzar must make legal/safety posture visible enough that validation and examples can avoid relying on obviously copyrighted commercial downloads.
+- R13. The migration must leave room for a later Korri acquisition UI, but that UI is not part of this slice.
+- R14. Any later UI/API integration must consume the Korri acquisition capability through a Korri-aligned seam rather than resurrecting Bazzar’s standalone app or demo API architecture.
+- R15. Creating known-playable Korri library entries from resolved external artifacts is deferred until a later explicit acquisition/import flow defines the trust, storage, and runtime rules.
 
 ---
 
 ## Acceptance Examples
 
-- AE1. **Covers R1, R2, R3, R15.** Given Bazzar has several source adapters and one source is temporarily unavailable, when the validation harness runs, the unavailable source is reported as unavailable or degraded while healthy sources still report their own results.
-- AE2. **Covers R5, R6, R7.** Given a source details page returns an HTML download handoff rather than an archive URL, when download resolution runs, Bazzar reports an interstitial/provisional state instead of claiming a final artifact.
-- AE3. **Covers R6, R13, R14.** Given an artwork or metadata source rejects its configured API key, when validation runs, Bazzar reports a configuration/auth failure and does not substitute mock success data.
-- AE4. **Covers R8, R16.** Given a source has an available public-domain/homebrew/freeware-style candidate, when the validation harness exercises the source, it uses that candidate or records that no safe probe is available rather than defaulting to a commercial title.
-- AE5. **Covers R9, R10, R11, R12.** Given Korri later exposes `korri bazzar`, when a user searches or resolves a candidate, Korri delegates to Bazzar’s stable contract and does not create a playable library entry until a separate import/acquisition flow exists.
+- AE1. **Covers R1, R2, R9, R10, R11.** Given the Bazzar repo contains CLI, core acquisition code, UI, API, package metadata, and tooling, when the migration inventory is completed, each area is explicitly marked import, adapt, defer, or delete before any broad copy is accepted.
+- AE2. **Covers R3, R4.** Given an operator previously ran `bazzar search`, `bazzar details`, `bazzar plugins`, `bazzar validate-sources`, or `bazzar resolve-download`, when the first migration slice lands, the corresponding workflow is available under `korri bazzar` and does not require a standalone Bazzar binary.
+- AE3. **Covers R5, R8, R12.** Given one acquisition source has invalid credentials and another source is healthy, when `korri bazzar validate-sources` runs, the invalid source reports a configuration/auth failure, the healthy source can still report success, and logs do not corrupt machine-readable output.
+- AE4. **Covers R6, R7, R15.** Given a source details page points to an interstitial or unresolved handoff, when `korri bazzar resolve-download` runs, Korri reports a non-final resolution state and does not create a known-playable library record.
+- AE5. **Covers R10, R13, R14.** Given Bazzar has an API/demo surface, when the migration inventory evaluates it, that code is excluded unless it is specifically proven to match Korri’s stack direction and to serve the CLI-first acquisition path.
 
 ---
 
 ## Success Criteria
 
-- A maintainer can run one repeatable Bazzar validation path and see which source adapters are healthy, degraded, unsupported, unavailable, or defective.
-- Download resolution no longer conflates details pages, source interstitials, and final downloadable artifacts.
-- Future `korri bazzar` planning can depend on a small Bazzar contract instead of reverse-engineering current plugin internals.
-- Korri’s existing `LibrarySource` meaning remains intact: known playable library content, not arbitrary external discovery results.
-- Downstream planning can proceed without inventing source health states, download-resolution outcomes, or the transitional Korri/Bazzar repository boundary.
+- A maintainer can run `korri bazzar` command workflows for Bazzar’s current CLI command family without installing or invoking a standalone Bazzar product.
+- The migration removes ambiguity about what was salvaged, adapted, deferred, or deleted from Bazzar.
+- Korri gains source acquisition capability without importing Bazzar UI, non-aligned API code, or standalone product identity.
+- Source health and download resolution remain explicit and trustworthy enough for future UI planning.
+- Korri’s known-playable library model remains intact: external candidates and resolved artifacts do not become library entries without a later import/acquisition decision.
+- Downstream planning can start from a confirmed keep/delete boundary instead of inventing migration scope.
 
 ---
 
 ## Scope Boundaries
 
-- Importing Bazzar wholesale into Korri is out of scope for this slice.
-- Duplicating Bazzar source adapter code inside Korri is out of scope.
-- Porting Bazzar’s UI or API service into Korri is out of scope.
-- Making external Bazzar results appear as playable Korri library entries is out of scope.
-- Building a full content import/acquisition flow is out of scope, though this work must leave room for one later.
-- Permanent cross-repo architecture is out of scope; the separate-repo phase is transitional.
-- SteamGridDB or artwork enrichment is not required for the first hardening pass.
-- Solving the legal status of every external source is out of scope; the requirement is to avoid unsafe validation defaults and make uncertainty visible.
+- Importing Bazzar wholesale is out of scope.
+- Keeping standalone `bazzar` as a public binary or product surface is out of scope.
+- Importing Bazzar UI is out of scope.
+- Importing Bazzar API code solely for compatibility, convenience, or because it exists is out of scope.
+- Building the later Korri acquisition UI is out of scope.
+- Building the later artifact-to-library import/acquisition flow is out of scope.
+- Treating external Bazzar results as Korri known-playable library entries is out of scope.
+- Permanently supporting old standalone Bazzar command compatibility is out of scope.
+- Reorganizing unrelated Korri product/platform/theme code is out of scope.
 
 ---
 
 ## Key Decisions
 
-- Validation harness before Korri wrapper: Proving source behavior first prevents Korri from inheriting brittle adapter assumptions.
-- CLI-shaped contract before library import: A stable command/output boundary preserves Bazzar’s repo independence and keeps the first Korri integration thin.
-- Download resolution as a distinct seam: Details pages and final artifacts have different trust levels and must not share one ambiguous result shape.
-- External discovery stays outside `LibrarySource`: Korri’s library remains the known-playable catalog; external candidates require a later explicit import/acquisition step.
-- No silent fallback success: Mock data is useful in tests, but live health and future Korri-facing output must report real source status.
+- CLI subset first: The first Korri-native product value is replacing `bazzar <cmd>` with `korri bazzar <cmd>`; UI integration follows later.
+- Inventory gate before import: A keep/delete classification is required so the migration does not accidentally preserve standalone-app baggage.
+- No standalone public Bazzar after migration: Bazzar’s useful work becomes Korri acquisition capability rather than a second product identity inside the monorepo.
+- Exclude current API by default: Bazzar’s documented API surface is dev/demo-oriented and not canonical; API code must prove Lattice/Korri alignment before it is imported.
+- Preserve acquisition trust boundaries: Source candidates, download-resolution outcomes, and known-playable library records remain separate lifecycle stages.
 
 ---
 
 ## Dependencies / Assumptions
 
-- Bazzar can remain independently runnable with its own Nix/direnv/Bun environment during the hardening phase.
-- Korri can later call a pinned Bazzar command or consume an equivalent stable contract without copying adapter code.
-- At least some sources have legal/free/homebrew/public-domain-style candidates suitable for validation probes.
-- Some source behavior will drift over time, so validation is an ongoing diagnostic capability rather than a one-time migration check.
+- The Bazzar core acquisition behavior can be separated from standalone CLI/package identity without losing the useful command workflows.
+- The current Bazzar CLI command family is the right compatibility set for the first Korri subcommand surface.
+- At least some Bazzar source-adapter and contract hardening work is worth salvaging rather than rewriting from scratch.
+- Future UI work will be easier if the CLI subset first establishes a trustworthy Korri acquisition seam.
+- The existing Korri CLI is the appropriate public operator surface for the first integration.
 
 ---
 
@@ -144,8 +153,8 @@ Korri already has a strong `LibrarySource` meaning: known playable library conte
 
 ### Deferred to Planning
 
-- [Affects R1, R2][Technical] What exact command shape should Bazzar expose for source validation?
-- [Affects R5, R6, R7][Technical] What exact output shape should represent download-resolution outcomes while remaining stable for a future Korri wrapper?
-- [Affects R8, R16][Needs research] Which safe probe candidates should be used per source, and how should Bazzar record sources that have no known safe probe?
-- [Affects R9, R10, R12][Technical] How should Korri pin or locate the external Bazzar command during the transitional separate-repo phase?
-- [Affects R11][Technical] What later import/acquisition flow would convert a resolved artifact into a known playable Korri library entry?
+- [Affects R1, R2][Technical] What exact Bazzar inventory categories and evidence should planning require before classifying a module as import, adapt, defer, or delete?
+- [Affects R4][Technical] Which current command flags and output modes are part of the required `korri bazzar` compatibility surface, and which can be intentionally simplified?
+- [Affects R5, R7, R8][Technical] How should existing source-health and download-resolution contracts be adapted to Korri naming and runtime conventions while preserving parseable behavior?
+- [Affects R10, R14][Needs research] Is any Bazzar API code actually Lattice-aligned enough to import, or should future API/UI work be rebuilt against Korri’s existing platform conventions?
+- [Affects R15][Technical] What later acquisition/import flow should convert a resolved artifact into a known-playable Korri library entry?
