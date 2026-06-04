@@ -156,6 +156,74 @@ describe("korri bazzar command routing", () => {
     expect(result.stderr).toBe("")
   })
 
+  it("returns source-backed search results from approved TypeScript providers", async () => {
+    const result = await runCli([
+      "bazzar",
+      "search",
+      "wonky",
+      "--sources",
+      "chip8archive",
+      "--format",
+      "json",
+    ])
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stderr).toBe("")
+    const candidates = JSON.parse(result.stdout) as Array<{
+      sourceName: string
+      id: string
+      title: string
+      url: string
+      platform: string
+    }>
+    expect(candidates).toEqual([
+      expect.objectContaining({
+        sourceName: "chip8archive",
+        id: "wonkypong",
+        title: "Wonky Pong",
+        platform: "xochip",
+      }),
+    ])
+  })
+
+  for (const candidateUrl of [
+    "chip8archive:wonkypong",
+    "https://johnearnest.github.io/chip8Archive/play.html?p=wonkypong",
+    "https://raw.githubusercontent.com/JohnEarnest/chip8Archive/master/roms/wonkypong.ch8",
+  ]) {
+    it(`returns source-backed details for Bazzar-compatible candidate URL ${candidateUrl}`, async () => {
+      const result = await runCli(["bazzar", "details", candidateUrl])
+
+      expect(result.exitCode).toBe(0)
+      expect(result.stderr).toBe("")
+      const details = JSON.parse(result.stdout) as {
+        sourceName: string
+        id: string
+        title: string
+        description: string
+      }
+      expect(details).toMatchObject({
+        sourceName: "chip8archive",
+        id: "wonkypong",
+        title: "Wonky Pong",
+        description: "Pong, but wonky. Made for Octojam IV.",
+      })
+    })
+  }
+
+  it("reports unknown source-backed detail IDs without the old not-wired stub", async () => {
+    const result = await runCli([
+      "bazzar",
+      "details",
+      "chip8archive:does-not-exist",
+    ])
+
+    expect(result.exitCode).toBe(21)
+    expect(result.stdout).toBe("")
+    expect(result.stderr).toContain("Unknown CHIP-8 Archive candidate.")
+    expect(result.stderr).not.toContain("not wired yet")
+  })
+
   it("reports unsupported details URLs without the old not-wired stub", async () => {
     const result = await runCli([
       "bazzar",
@@ -195,6 +263,33 @@ describe("korri bazzar command routing", () => {
     ).not.toContain("coolrom")
   })
 
+  it("emits validate-sources success as exactly one contract JSON line", async () => {
+    const result = await runCli([
+      "bazzar",
+      "validate-sources",
+      "--sources",
+      "chip8archive",
+    ])
+
+    expect(result.stderr).toBe("")
+    const envelope = parseSingleJsonLine(result.stdout) as {
+      command: string
+      exitCategory: string
+      exitCode: number
+      data: { outcomes: Array<{ source: { plugin: string }; status: string }> }
+    }
+    expect(result.exitCode).toBe(0)
+    expect(envelope.command).toBe("validate-sources")
+    expect(envelope.exitCategory).toBe("success")
+    expect(envelope.exitCode).toBe(0)
+    expect(envelope.data.outcomes).toEqual([
+      expect.objectContaining({
+        source: { plugin: "chip8archive", site: "chip8archive" },
+        status: "healthy",
+      }),
+    ])
+  })
+
   it("emits validate-sources caller errors as exactly one contract JSON line", async () => {
     const result = await runCli([
       "bazzar",
@@ -222,6 +317,68 @@ describe("korri bazzar command routing", () => {
         status: "caller_error",
       }),
     ])
+  })
+
+  it("emits resolve-download final artifacts as exactly one contract JSON line", async () => {
+    const result = await runCli([
+      "bazzar",
+      "resolve-download",
+      "chip8archive",
+      "https://johnearnest.github.io/chip8Archive/play.html?p=wonkypong",
+      "--title",
+      "Wonky Pong",
+    ])
+
+    expect(result.stderr).toBe("")
+    const envelope = parseSingleJsonLine(result.stdout) as {
+      command: string
+      exitCategory: string
+      exitCode: number
+      data: {
+        outcome: {
+          status: string
+          artifact: { final: boolean; name: string; url: string }
+        }
+      }
+    }
+    expect(result.exitCode).toBe(0)
+    expect(envelope.command).toBe("resolve-download")
+    expect(envelope.exitCategory).toBe("success")
+    expect(envelope.exitCode).toBe(0)
+    expect(envelope.data.outcome.status).toBe("final_artifact")
+    expect(envelope.data.outcome.artifact).toMatchObject({
+      final: true,
+      name: "wonkypong.ch8",
+      url: "https://raw.githubusercontent.com/JohnEarnest/chip8Archive/master/roms/wonkypong.ch8",
+    })
+  })
+
+  it("emits resolve-download non-final unsupported states as exactly one contract JSON line", async () => {
+    const result = await runCli([
+      "bazzar",
+      "resolve-download",
+      "chip8archive",
+      "https://example.com/game.zip",
+      "--title",
+      "Fixture Game",
+    ])
+
+    expect(result.stderr).toBe("")
+    const envelope = parseSingleJsonLine(result.stdout) as {
+      command: string
+      exitCategory: string
+      exitCode: number
+      data: { outcome: { status: string; reason: string; handoffUrl: string } }
+    }
+    expect(result.exitCode).toBe(11)
+    expect(envelope.command).toBe("resolve-download")
+    expect(envelope.exitCategory).toBe("source_failure")
+    expect(envelope.exitCode).toBe(11)
+    expect(envelope.data.outcome).toMatchObject({
+      status: "unsupported",
+      reason: "unsupported",
+      handoffUrl: "https://example.com/game.zip",
+    })
   })
 
   it("emits resolve-download caller errors as exactly one contract JSON line", async () => {

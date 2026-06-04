@@ -48,6 +48,11 @@ function parseSourceNames(value: Option.Option<string>): string[] | undefined {
   return names.length > 0 ? names : undefined
 }
 
+function formatDetails(row: Record<string, unknown>, format: Format) {
+  if (format === "json") return JSON.stringify(row, null, 2)
+  return formatRows([row], format)
+}
+
 function formatRows(rows: readonly Record<string, unknown>[], format: Format) {
   switch (format) {
     case "jsonl":
@@ -148,22 +153,18 @@ const detailsCommand = Command.make(
   },
   ({ url, format }) =>
     Effect.gen(function* () {
-      const parsed = parseDetailsUrl(url)
-      if (!parsed) {
-        printStderr(`No plugin found that can handle URL: ${url}`)
-        setExit("caller_error")
-        return
-      }
-
       const acquisition = yield* Acquisition
-      const details = yield* acquisition.details(parsed).pipe(toResult)
+      const parsed = parseDetailsLocator(url)
+      const details = yield* (
+        parsed ? acquisition.details(parsed) : acquisition.detailsByUrl(url)
+      ).pipe(toResult)
       if (details._tag === "Left") {
         printStderr(safeErrorMessage(details.left))
         setExit(acquisitionErrorExitCategory(details.left))
         return
       }
 
-      printStdout(formatRows([details.right], format))
+      printStdout(formatDetails(details.right, format))
     }),
 ).pipe(
   Command.withDescription("Get detailed information about a source candidate"),
@@ -291,7 +292,7 @@ function pluginOutput(plugin: PluginMetadata): Record<string, unknown> {
   }
 }
 
-function parseDetailsUrl(
+function parseDetailsLocator(
   url: string,
 ): { sourceName: string; id: string } | null {
   if (url.includes("://")) return null

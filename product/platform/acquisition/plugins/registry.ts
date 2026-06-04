@@ -24,6 +24,7 @@ export interface AcquisitionPluginDefinition {
     context: AcquisitionPluginContext,
     request: { readonly query: string },
   ) => Effect.Effect<readonly SourceCandidate[], AcquisitionError>
+  readonly parseCandidateUrl?: (url: string) => string | null
   readonly details?: (
     context: AcquisitionPluginContext,
     request: DetailsRequest,

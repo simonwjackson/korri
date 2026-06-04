@@ -1,7 +1,7 @@
+import { chip8ArchivePluginDefinition } from "./chip8archive"
 import type { AcquisitionPluginDefinition } from "./registry"
 
 const approvedTypeScriptSources = [
-  ["chip8archive", "CHIP-8 Archive", "low"],
   ["homebrewhub", "Homebrew Hub", "low"],
   ["itchio", "itch.io", "medium"],
   ["pico8bbs", "PICO-8 BBS", "medium"],
@@ -12,8 +12,8 @@ const approvedTypeScriptSources = [
   ["wasm4gallery", "WASM-4 Gallery", "low"],
 ] as const
 
-export const approvedTypeScriptPluginDefinitions: readonly AcquisitionPluginDefinition[] =
-  approvedTypeScriptSources.map(([sourceName, displayName, legalRisk]) => ({
+const approvedMetadataOnlyPluginDefinitions = approvedTypeScriptSources.map(
+  ([sourceName, displayName, legalRisk]) => ({
     metadata: {
       sourceName,
       displayName,
@@ -23,4 +23,8 @@ export const approvedTypeScriptPluginDefinitions: readonly AcquisitionPluginDefi
       legalRisk,
       credentialRequired: sourceName === "itchio",
     },
-  }))
+  }),
+) satisfies readonly AcquisitionPluginDefinition[]
+
+export const approvedTypeScriptPluginDefinitions: readonly AcquisitionPluginDefinition[] =
+  [chip8ArchivePluginDefinition, ...approvedMetadataOnlyPluginDefinitions]

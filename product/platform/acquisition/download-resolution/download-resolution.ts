@@ -3,7 +3,8 @@ import type {
   ResolveDownloadRequest,
 } from "@platform/protocol/acquisition/download-resolution"
 import { Effect } from "effect"
-import { AcquisitionError } from "../errors"
+import { acquisitionTry } from "../effect"
+import type { AcquisitionError } from "../errors"
 import { validatePluginDownloadResolutionOutput } from "../plugin-contract-codecs"
 import { runPluginOperation } from "../plugin-operation-harness"
 import type { AcquisitionPluginContext } from "../plugin-runtime"
@@ -43,18 +44,5 @@ export function resolveAcquisitionDownload({
       run: () => resolveDownload(context, request),
       validate: validatePluginDownloadResolutionOutput,
     })
-  })
-}
-
-function acquisitionTry<A>(run: () => A): Effect.Effect<A, AcquisitionError> {
-  return Effect.try({
-    try: run,
-    catch: error =>
-      error instanceof AcquisitionError
-        ? error
-        : new AcquisitionError({
-            reason: "caller",
-            message: error instanceof Error ? error.message : String(error),
-          }),
   })
 }

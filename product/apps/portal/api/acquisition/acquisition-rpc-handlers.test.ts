@@ -45,6 +45,15 @@ const acquisitionService: AcquisitionService = {
       url: "https://example.com/game-1",
       description: "A fixture game.",
     }),
+  detailsByUrl: () =>
+    Effect.succeed({
+      _tag: "SourceDetails",
+      sourceName: "fixture-source",
+      id: "game-1",
+      title: "Game One",
+      url: "https://example.com/game-1",
+      description: "A fixture game.",
+    }),
   plugins: () =>
     Effect.succeed({
       plugins: [

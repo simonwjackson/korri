@@ -28,6 +28,14 @@ const serviceLayer = makeInMemoryAcquisitionLayer({
       title: "Game One",
       url: "https://example.com/game-1",
     }),
+  detailsByUrl: () =>
+    Effect.succeed({
+      _tag: "SourceDetails",
+      sourceName: "itchio",
+      id: "game-1",
+      title: "Game One",
+      url: "https://example.com/game-1",
+    }),
   plugins: () =>
     Effect.succeed({
       plugins: [
@@ -70,6 +78,9 @@ describe("Acquisition service interface", () => {
           sourceName: "itchio",
           id: "game-1",
         }),
+        detailsByUrl: yield* acquisition.detailsByUrl(
+          "https://example.com/game-1",
+        ),
         plugins: yield* acquisition.plugins(),
         health: yield* acquisition.validateSources({}),
         resolution: yield* acquisition.resolveDownload({
@@ -84,6 +95,7 @@ describe("Acquisition service interface", () => {
     )
     expect(result.search.candidates).toHaveLength(1)
     expect(result.details.title).toBe("Game One")
+    expect(result.detailsByUrl.title).toBe("Game One")
     expect(result.plugins.plugins[0]?.sourceName).toBe("itchio")
     expect(result.health.sources[0]?._tag).toBe("HealthySource")
     expect(result.resolution._tag).toBe("FinalDownload")

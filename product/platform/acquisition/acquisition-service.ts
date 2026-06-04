@@ -21,7 +21,7 @@ import {
   createAcquisitionPluginContext,
 } from "./plugin-runtime"
 import type { AcquisitionPluginRegistry } from "./plugins/registry"
-import { getSourceDetails } from "./source-details"
+import { getSourceDetails, getSourceDetailsByUrl } from "./source-details"
 import { searchSources } from "./source-search"
 import { validateAcquisitionSources } from "./validation/source-validation"
 
@@ -31,6 +31,9 @@ export interface AcquisitionService {
   ) => Effect.Effect<SearchResponse, AcquisitionError>
   readonly details: (
     request: DetailsRequest,
+  ) => Effect.Effect<SourceDetails, AcquisitionError>
+  readonly detailsByUrl: (
+    url: string,
   ) => Effect.Effect<SourceDetails, AcquisitionError>
   readonly plugins: () => Effect.Effect<PluginListResponse, AcquisitionError>
   readonly validateSources: (
@@ -64,6 +67,7 @@ export function makeLiveAcquisitionLayer({
   return makeInMemoryAcquisitionLayer({
     search: request => searchSources({ registry, context, request }),
     details: request => getSourceDetails({ registry, context, request }),
+    detailsByUrl: url => getSourceDetailsByUrl({ registry, context, url }),
     plugins: () =>
       Effect.succeed({
         plugins: registry.plugins.map(plugin => plugin.metadata),

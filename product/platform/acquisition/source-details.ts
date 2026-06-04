@@ -3,6 +3,7 @@ import type {
   SourceDetails,
 } from "@platform/protocol/acquisition/candidate"
 import { Effect } from "effect"
+import { acquisitionTry } from "./effect"
 import { AcquisitionError } from "./errors"
 import { validatePluginDetailsOutput } from "./plugin-contract-codecs"
 import { runPluginOperation } from "./plugin-operation-harness"
@@ -13,6 +14,36 @@ export interface GetSourceDetailsOptions {
   readonly registry: AcquisitionPluginRegistry
   readonly context: AcquisitionPluginContext
   readonly request: DetailsRequest
+}
+
+export function getSourceDetailsByUrl({
+  registry,
+  context,
+  url,
+}: Omit<GetSourceDetailsOptions, "request"> & {
+  readonly url: string
+}): Effect.Effect<SourceDetails, AcquisitionError> {
+  return Effect.gen(function* () {
+    for (const plugin of registry.plugins) {
+      const id = yield* acquisitionTry(
+        () => plugin.parseCandidateUrl?.(url) ?? null,
+      )
+      if (id) {
+        return yield* getSourceDetails({
+          registry,
+          context,
+          request: { sourceName: plugin.metadata.sourceName, id },
+        })
+      }
+    }
+
+    return yield* Effect.fail(
+      new AcquisitionError({
+        reason: "caller",
+        message: `No plugin found that can handle URL: ${url}`,
+      }),
+    )
+  })
 }
 
 export function getSourceDetails({
@@ -39,18 +70,5 @@ export function getSourceDetails({
       run: () => details(context, request),
       validate: validatePluginDetailsOutput,
     })
-  })
-}
-
-function acquisitionTry<A>(run: () => A): Effect.Effect<A, AcquisitionError> {
-  return Effect.try({
-    try: run,
-    catch: error =>
-      error instanceof AcquisitionError
-        ? error
-        : new AcquisitionError({
-            reason: "caller",
-            message: error instanceof Error ? error.message : String(error),
-          }),
   })
 }
