@@ -168,7 +168,7 @@ describe("app.library.list handler (configured-real source)", () => {
     delete process.env.KORRI_STREAM_ADVERTISE_HOST_ID
   })
 
-  it("returns assigned tile, banner, and poster assets as absolute resolved media URLs", async () => {
+  it("returns assigned tile, banner, and poster assets as origin-relative media URLs", async () => {
     const lib = track(
       await withTempProseqlLibrary({
         games: [
@@ -194,7 +194,7 @@ describe("app.library.list handler (configured-real source)", () => {
     )
     process.env.KORRI_LIBRARY_ROOT = lib.root
     process.env.XDG_DATA_HOME = lib.dataRoot
-    process.env.KORRI_PUBLIC_API_BASE_URL = "https://korri.example.test/control"
+    process.env.KORRI_PUBLIC_API_BASE_URL = "http://sobo:3001"
 
     const result = await Effect.runPromise(
       handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
@@ -206,9 +206,9 @@ describe("app.library.list handler (configured-real source)", () => {
       "poster",
     ])
     expect(result.games[0]?.media?.map(media => media.url)).toEqual([
-      `https://korri.example.test/control/api/game-assets/${encodeURIComponent(tileAssetId)}`,
-      `https://korri.example.test/control/api/game-assets/${encodeURIComponent(bannerAssetId)}`,
-      `https://korri.example.test/control/api/game-assets/${encodeURIComponent(posterAssetId)}`,
+      `/api/game-assets/${encodeURIComponent(tileAssetId)}`,
+      `/api/game-assets/${encodeURIComponent(bannerAssetId)}`,
+      `/api/game-assets/${encodeURIComponent(posterAssetId)}`,
     ])
     expect(result.games[0]?.media?.[0]).toMatchObject({
       assetId: tileAssetId,
@@ -343,9 +343,10 @@ describe("app.library.list handler (configured-real source)", () => {
     }
   })
 
-  it("does not require KORRI_PUBLIC_API_BASE_URL when no assets need URLs", async () => {
-    const lib = track(await withTempProseqlLibrary({ games: [] }))
+  it("does not require KORRI_PUBLIC_API_BASE_URL for assigned assets in production", async () => {
+    const lib = track(await withTempProseqlLibrary(assetUrlFixture()))
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.XDG_DATA_HOME = lib.dataRoot
     process.env.NODE_ENV = "production"
     delete process.env.KORRI_PUBLIC_API_BASE_URL
 
@@ -353,101 +354,9 @@ describe("app.library.list handler (configured-real source)", () => {
       handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
     )
 
-    expect(result.games).toEqual([])
-  })
-
-  it("fails deterministically when server-like config omits KORRI_PUBLIC_API_BASE_URL for assigned assets", async () => {
-    const lib = track(await withTempProseqlLibrary(assetUrlFixture()))
-    process.env.KORRI_LIBRARY_ROOT = lib.root
-    process.env.XDG_DATA_HOME = lib.dataRoot
-    process.env.NODE_ENV = "production"
-    delete process.env.KORRI_PUBLIC_API_BASE_URL
-
-    const exit = await Effect.runPromiseExit(
-      handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
+    expect(result.games[0]?.media?.[0]?.url).toBe(
+      `/api/game-assets/${encodeURIComponent(tileAssetId)}`,
     )
-
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit)) {
-      const error = Cause.squash(exit.cause)
-      expect(error).toBeInstanceOf(DataError)
-      expect(String((error as Error).message)).toContain(
-        "KORRI_PUBLIC_API_BASE_URL is required",
-      )
-    }
-  })
-
-  it("rejects unsafe public API base URLs", async () => {
-    const lib = track(await withTempProseqlLibrary(assetUrlFixture()))
-    process.env.KORRI_LIBRARY_ROOT = lib.root
-    process.env.XDG_DATA_HOME = lib.dataRoot
-    const unsafe = [
-      "http://korri.example.test",
-      "https://user:pass@korri.example.test",
-      "https://korri.example.test?token=secret",
-      "https://korri.example.test/#fragment",
-      "ftp://korri.example.test",
-      "https://korri.example.test/a b",
-    ]
-
-    for (const value of unsafe) {
-      process.env.KORRI_PUBLIC_API_BASE_URL = value
-      const exit = await Effect.runPromiseExit(
-        handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
-      )
-      expect(Exit.isFailure(exit)).toBe(true)
-      if (Exit.isFailure(exit)) {
-        expect(Cause.squash(exit.cause)).toBeInstanceOf(DataError)
-      }
-    }
-  })
-
-  it("allows http public API base URLs for loopback and private network hosts", async () => {
-    const lib = track(await withTempProseqlLibrary({ games: [] }))
-    process.env.KORRI_LIBRARY_ROOT = lib.root
-    const accepted = [
-      "http://127.0.0.1:3001",
-      "http://localhost:3001",
-      "http://192.168.1.117:3001",
-      "http://10.20.30.40:3001",
-      "http://172.16.5.1:3001",
-      "http://172.31.255.254:3001",
-      "http://169.254.1.1:3001",
-      "http://aka.local:3001",
-      "http://server.lan:3001",
-    ]
-
-    for (const value of accepted) {
-      process.env.KORRI_PUBLIC_API_BASE_URL = value
-      const result = await Effect.runPromise(
-        handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
-      )
-      expect(result.games).toEqual([])
-    }
-  })
-
-  it("rejects http public API base URLs for public/routable hosts", async () => {
-    const lib = track(await withTempProseqlLibrary(assetUrlFixture()))
-    process.env.KORRI_LIBRARY_ROOT = lib.root
-    process.env.XDG_DATA_HOME = lib.dataRoot
-    const rejected = [
-      "http://korri.example.test",
-      "http://8.8.8.8",
-      "http://172.15.0.1", // just outside 172.16/12
-      "http://172.32.0.1", // just outside 172.16/12
-      "http://192.169.0.1", // not 192.168/16
-    ]
-
-    for (const value of rejected) {
-      process.env.KORRI_PUBLIC_API_BASE_URL = value
-      const exit = await Effect.runPromiseExit(
-        handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
-      )
-      expect(Exit.isFailure(exit)).toBe(true)
-      if (Exit.isFailure(exit)) {
-        expect(Cause.squash(exit.cause)).toBeInstanceOf(DataError)
-      }
-    }
   })
 
   it("fails with DataError(ReadFailed) when ProseQL data is invalid", async () => {

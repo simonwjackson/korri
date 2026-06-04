@@ -102,9 +102,8 @@ function resolveGameAssets(args: {
       if (!hasAssignmentsForGames(args.games, catalog)) {
         return args.games
       }
-      const publicApiBaseUrl = yield* resolvePublicApiBaseUrl(args.env)
       return yield* Effect.forEach(args.games, game =>
-        resolveGameRecord({ ...args, game, catalog, publicApiBaseUrl }),
+        resolveGameRecord({ ...args, game, catalog }),
       )
     }),
   )
@@ -229,7 +228,6 @@ function resolveGameRecord(args: {
   readonly game: ResolvedGameRecord
   readonly catalog: GameAssetCatalog
   readonly env: XdgPathEnv
-  readonly publicApiBaseUrl: URL
 }): Effect.Effect<ResolvedGameRecord, never> {
   const assignments = sortAssignments(
     args.catalog.assignmentsByGameId.get(args.game.id) ?? [],
@@ -249,7 +247,6 @@ function resolveMediaEntry(args: {
   readonly game: ResolvedGameRecord
   readonly catalog: GameAssetCatalog
   readonly env: XdgPathEnv
-  readonly publicApiBaseUrl: URL
   readonly assignment: CatalogAssignment
 }): Effect.Effect<ResolvedGameMedia | undefined, never> {
   const asset = args.catalog.assetById.get(args.assignment.assetId)
@@ -269,13 +266,12 @@ function resolveMediaEntry(args: {
         logOmittedAsset({ ...args, asset }, "missing-bytes")
         return undefined
       }
-      return resolvedMedia(args.publicApiBaseUrl, args.assignment.role, asset)
+      return resolvedMedia(args.assignment.role, asset)
     }),
   )
 }
 
 function resolvedMedia(
-  publicApiBaseUrl: URL,
   role: GameAssetRole,
   asset: GameAssetRecord,
 ): ResolvedGameMedia {
@@ -286,7 +282,7 @@ function resolvedMedia(
     height: asset.height,
     ...(asset.source ? { source: asset.source } : {}),
     assetId: asset.id,
-    url: gameAssetUrl(publicApiBaseUrl, asset.id),
+    url: gameAssetUrl(asset.id),
   }
 }
 
@@ -314,97 +310,6 @@ function logOmittedAsset(
   )
 }
 
-function resolvePublicApiBaseUrl(
-  env: XdgPathEnv,
-): Effect.Effect<URL, DataError> {
-  return Effect.try({
-    try: () => {
-      const explicit = env.KORRI_PUBLIC_API_BASE_URL?.trim()
-      if (explicit && explicit.length > 0)
-        return validatePublicApiBaseUrl(explicit)
-      if (env.NODE_ENV === "test" || env.NODE_ENV === "development") {
-        return new URL("http://127.0.0.1:3001/")
-      }
-      throw new Error(
-        "KORRI_PUBLIC_API_BASE_URL is required for server deployments that return game asset URLs",
-      )
-    },
-    catch: error =>
-      new DataError({
-        reason: "Unavailable",
-        message: stringifyError(error),
-      }),
-  })
-}
-
-function validatePublicApiBaseUrl(raw: string): URL {
-  rejectPublicApiBaseUrlWhitespace(raw)
-  const url = new URL(raw)
-  rejectUnsafePublicApiBaseUrlParts(url)
-  rejectUnsafePublicApiBaseUrlScheme(url)
-  return withTrailingSlash(url)
-}
-
-function rejectPublicApiBaseUrlWhitespace(raw: string): void {
-  if (/\s/.test(raw)) {
-    throw new Error("KORRI_PUBLIC_API_BASE_URL must not contain whitespace")
-  }
-}
-
-function rejectUnsafePublicApiBaseUrlParts(url: URL): void {
-  if (url.username !== "" || url.password !== "") {
-    throw new Error("KORRI_PUBLIC_API_BASE_URL must not contain credentials")
-  }
-  if (url.search !== "" || url.hash !== "") {
-    throw new Error(
-      "KORRI_PUBLIC_API_BASE_URL must not contain query or fragment data",
-    )
-  }
-}
-
-function rejectUnsafePublicApiBaseUrlScheme(url: URL): void {
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new Error("KORRI_PUBLIC_API_BASE_URL must use http or https")
-  }
-  if (url.protocol === "http:" && !isPrivateNetworkHostname(url.hostname)) {
-    throw new Error(
-      "KORRI_PUBLIC_API_BASE_URL must use https outside loopback or RFC1918 private networks",
-    )
-  }
-}
-
-function withTrailingSlash(url: URL): URL {
-  if (!url.pathname.endsWith("/")) url.pathname = `${url.pathname}/`
-  return url
-}
-
-/**
- * Returns true for hostnames that are safe to address over plain http:
- *  - loopback (localhost / 127.0.0.0/8 / [::1])
- *  - RFC1918 private IPv4 (10/8, 172.16/12, 192.168/16)
- *  - link-local IPv4 (169.254/16)
- *  - mDNS .local (and conventional .lan) hostnames
- *
- * Public DNS names and routable IPs still require https.
- */
-function isPrivateNetworkHostname(hostname: string): boolean {
-  if (hostname === "localhost") return true
-  if (hostname === "[::1]") return true
-  const lower = hostname.toLowerCase()
-  if (lower.endsWith(".local") || lower.endsWith(".lan")) return true
-  const ipv4 = lower.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
-  if (!ipv4) return false
-  const octets = ipv4.slice(1, 5).map(Number)
-  if (octets.some(o => o < 0 || o > 255)) return false
-  const [a, b] = octets
-  if (a === 127) return true
-  if (a === 10) return true
-  if (a === 172 && b >= 16 && b <= 31) return true
-  if (a === 192 && b === 168) return true
-  if (a === 169 && b === 254) return true
-  return false
-}
-
 const roleOrder: ReadonlyMap<GameAssetRole, number> = new Map([
   ["tile", 0],
   ["banner", 1],
@@ -422,11 +327,8 @@ function sortAssignments<T extends { readonly role: GameAssetRole }>(
   )
 }
 
-function gameAssetUrl(baseUrl: URL, assetId: string): string {
-  return new URL(
-    `${gameAssetByteRoutePrefix.slice(1)}${encodeURIComponent(assetId)}`,
-    baseUrl,
-  ).toString()
+function gameAssetUrl(assetId: string): string {
+  return `${gameAssetByteRoutePrefix}${encodeURIComponent(assetId)}`
 }
 
 function isSupportedImageMime(mimeType: string): boolean {
