@@ -1,3 +1,4 @@
+import { cleanupLaunchArtifacts } from "@platform/library/config/app-materializer"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import {
   type LaunchResult,
@@ -17,6 +18,7 @@ import {
   type ForegroundSessionStageResult,
 } from "@platform/stream/foreground-session-owner"
 import type { LaunchLibraryResponse } from "@product/apps/portal/api/library/launch.rpc"
+import { Effect } from "effect"
 
 export interface CreateLocalForegroundLaunchOwnerOptions {
   /**
@@ -144,8 +146,18 @@ export async function launchLocalForegroundSession(
   owner: LocalForegroundLaunchOwner,
   request: LocalForegroundLaunchRequest,
 ): Promise<LaunchLibraryResponse> {
-  const result = await owner.launch(request)
-  return await launchResponseFromOwnerResult(result)
+  try {
+    const result = await owner.launch(request)
+    return await launchResponseFromOwnerResult(result)
+  } finally {
+    await cleanupLocalLaunchArtifacts(request.artifacts)
+  }
+}
+
+async function cleanupLocalLaunchArtifacts(
+  artifacts: LaunchArtifacts | undefined,
+): Promise<void> {
+  await Effect.runPromise(cleanupLaunchArtifacts(artifacts))
 }
 
 async function verifyLocalLaunchReady(

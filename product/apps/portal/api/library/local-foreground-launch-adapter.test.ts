@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { makeInMemoryLauncherLayer } from "@platform/library/launcher-layer-memory"
 import {
   Launcher,
@@ -11,6 +14,22 @@ import {
 } from "./local-foreground-launch-adapter"
 
 const spec = { command: "/bin/game", args: ["rom"] }
+
+async function withArtifactRoot<T>(fn: (root: string) => Promise<T>) {
+  const parent = await mkdtemp(join(tmpdir(), "korri-local-launch-artifacts-"))
+  const root = join(parent, "game-launch")
+  await mkdir(root, { recursive: true })
+  await writeFile(join(root, "retroarch.cfg"), "temporary config")
+  try {
+    return await fn(root)
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+}
+
+async function expectArtifactRootRemoved(root: string) {
+  await expect(readFile(join(root, "retroarch.cfg"), "utf8")).rejects.toThrow()
+}
 
 function spawnWith(launcher: LauncherService) {
   const spawn = launcher.spawn
@@ -29,6 +48,126 @@ async function launcherFromLayer(
 }
 
 describe("local foreground launch adapter", () => {
+  it("cleans launch artifacts after the managed local child exits", async () => {
+    await withArtifactRoot(async root => {
+      const control = makeInMemoryLauncherLayer.createManagedControl()
+      const launcher = await launcherFromLayer(
+        makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+      )
+      const owner = createLocalForegroundLaunchOwner()
+
+      const launch = launchLocalForegroundSession(owner, {
+        id: "game",
+        spec,
+        artifacts: {
+          root,
+          paths: { configPath: join(root, "retroarch.cfg") },
+        },
+        spawn: () => spawnWith(launcher),
+        createRequestId: () => "local-launch-1",
+      })
+      await waitForOwnerState(owner, "Running")
+
+      control.resolveExit({ exitCode: 0 })
+
+      expect(await launch).toEqual({ _tag: "Accepted", status: "launched" })
+      await owner.whenIdle()
+      await expectArtifactRootRemoved(root)
+    })
+  })
+
+  it("cleans launch artifacts when local preflight rejects before spawn", async () => {
+    const control = makeInMemoryLauncherLayer.createManagedControl()
+    const launcher = await launcherFromLayer(
+      makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+    )
+    const owner = createLocalForegroundLaunchOwner()
+
+    const first = launchLocalForegroundSession(owner, {
+      id: "game",
+      spec,
+      spawn: () => spawnWith(launcher),
+      createRequestId: () => "local-launch-1",
+    })
+    await waitForOwnerState(owner, "Running")
+
+    await withArtifactRoot(async root => {
+      const second = await launchLocalForegroundSession(owner, {
+        id: "game",
+        spec,
+        artifacts: {
+          root,
+          paths: { configPath: join(root, "retroarch.cfg") },
+        },
+        spawn: () => spawnWith(launcher),
+        createRequestId: () => "local-launch-2",
+      })
+
+      expect(second._tag).toBe("PreflightRejected")
+      await expectArtifactRootRemoved(root)
+    })
+
+    control.resolveExit({ exitCode: 0 })
+    await first
+    await owner.whenIdle()
+  })
+
+  it("cleans launch artifacts when a local launch is stopped", async () => {
+    await withArtifactRoot(async root => {
+      const control = makeInMemoryLauncherLayer.createManagedControl()
+      const launcher = await launcherFromLayer(
+        makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+      )
+      const owner = createLocalForegroundLaunchOwner()
+
+      const launch = launchLocalForegroundSession(owner, {
+        id: "game",
+        spec,
+        artifacts: {
+          root,
+          paths: { configPath: join(root, "retroarch.cfg") },
+        },
+        spawn: () => spawnWith(launcher),
+        createRequestId: () => "local-launch-1",
+      })
+      await waitForOwnerState(owner, "Running")
+
+      await owner.terminateActiveSession()
+      const result = await launch
+
+      expect(result.status).toBe("failed")
+      expect(control.signals).toContain("SIGTERM")
+      await owner.whenIdle()
+      await expectArtifactRootRemoved(root)
+    })
+  })
+
+  it("cleans launch artifacts when local spawn fails", async () => {
+    await withArtifactRoot(async root => {
+      const launcher = await launcherFromLayer(
+        makeInMemoryLauncherLayer({
+          behavior: { kind: "fail", exitCode: 125, stderrTail: "unsupported" },
+        }),
+      )
+      const owner = createLocalForegroundLaunchOwner()
+
+      const result = await launchLocalForegroundSession(owner, {
+        id: "game",
+        spec,
+        artifacts: {
+          root,
+          paths: { configPath: join(root, "retroarch.cfg") },
+        },
+        spawn: () => spawnWith(launcher),
+        createRequestId: () => "local-launch-1",
+      })
+
+      expect(result._tag).toBe("LaunchFailed")
+      expect(owner.status().state._tag).toBe("IdleReady")
+      await expectArtifactRootRemoved(root)
+    })
+  })
+
   it("holds the owner running until the managed local child exits", async () => {
     const control = makeInMemoryLauncherLayer.createManagedControl()
     const launcher = await launcherFromLayer(
