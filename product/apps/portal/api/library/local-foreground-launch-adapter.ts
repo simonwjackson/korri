@@ -1,3 +1,4 @@
+import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import {
   type LaunchResult,
   type LaunchSpec,
@@ -75,6 +76,11 @@ export interface LocalForegroundLaunchRequest {
   readonly id: string
   readonly spec: LaunchSpec
   readonly spawn: () => Promise<ManagedLaunchResult>
+  /**
+   * Passive launch-scoped artifact metadata. Cleanup wiring is handled by the
+   * lifecycle slices; this adapter only preserves ownership context.
+   */
+  readonly artifacts?: LaunchArtifacts
   readonly createRequestId?: () => string
 }
 
@@ -82,11 +88,13 @@ interface PreparedLocalLaunch {
   readonly id: string
   readonly spec: LaunchSpec
   readonly spawn: () => Promise<ManagedLaunchResult>
+  readonly artifacts?: LaunchArtifacts
 }
 
 interface SpawnedLocalLaunch {
   readonly session: ForegroundManagedSessionHandle
   readonly result: Promise<LaunchLibraryResponse>
+  readonly artifacts?: LaunchArtifacts
 }
 
 export type LocalForegroundLaunchOwner = ReturnType<
@@ -117,6 +125,7 @@ export function createLocalForegroundLaunchOwner(
           id: request.id,
           spec: request.spec,
           spawn: request.spawn,
+          ...(request.artifacts ? { artifacts: request.artifacts } : {}),
         },
         evidence: { adapter: "local-library" },
       }),
@@ -192,6 +201,7 @@ async function spawnLocalLaunch(
     value: {
       session: spawned.session,
       result: spawned.result.then(launchResponseFromLaunchResult),
+      ...(prepared.artifacts ? { artifacts: prepared.artifacts } : {}),
     },
     evidence: {
       command: prepared.spec.command,

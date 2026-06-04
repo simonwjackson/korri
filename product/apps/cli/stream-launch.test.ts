@@ -3,6 +3,7 @@ import { chmod, mkdtemp, readFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { GameRecord } from "@platform/fixtures/games/game"
+import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import type { LaunchSpec } from "@platform/library/launcher"
 import {
   LibraryError,
@@ -305,6 +306,17 @@ describe("prepareStreamLaunchForGame", () => {
         games: [game],
         launchSpecs: new Map([[game.id, launchSpec]]),
         gamescope: new Map([[game.id, { enabled: false }]]),
+        artifacts: new Map([
+          [
+            game.id,
+            {
+              root: "/tmp/korri-launch-artifacts/snes",
+              paths: {
+                contentPath: "/tmp/korri-launch-artifacts/snes/f-zero.smc",
+              },
+            },
+          ],
+        ]),
       }),
       intentStore: createFileGameStreamLaunchIntentStore(intentPath),
     })
@@ -319,6 +331,10 @@ describe("prepareStreamLaunchForGame", () => {
     expect(intent.lifecycle).toBe("foreground")
     expect(intent.launch).toEqual(launchSpec)
     expect(intent.gamescope).toEqual({ enabled: false })
+    expect(intent.artifacts).toEqual({
+      root: "/tmp/korri-launch-artifacts/snes",
+      paths: { contentPath: "/tmp/korri-launch-artifacts/snes/f-zero.smc" },
+    })
   })
 
   it("reports no-such-game without writing an intent", async () => {
@@ -459,6 +475,7 @@ function librarySource(options: {
     string,
     { readonly enabled?: boolean; readonly args?: readonly string[] }
   >
+  readonly artifacts?: ReadonlyMap<string, LaunchArtifacts>
 }): LibrarySourceService {
   return {
     list: () => Effect.succeed(options.games),
@@ -466,8 +483,13 @@ function librarySource(options: {
     resolveLaunchForGame: id => {
       const spec = options.launchSpecs.get(id)
       const gamescope = options.gamescope?.get(id)
+      const artifacts = options.artifacts?.get(id)
       return spec
-        ? Effect.succeed({ spec, ...(gamescope ? { gamescope } : {}) })
+        ? Effect.succeed({
+            spec,
+            ...(gamescope ? { gamescope } : {}),
+            ...(artifacts ? { artifacts } : {}),
+          })
         : Effect.fail(
             new LibraryError({ reason: "config", message: "no spec" }),
           )

@@ -110,6 +110,7 @@ export const handleLaunchLibrary = (
         launchLocalForegroundSession(foregroundSessionHost.owner, {
           id: payload.id,
           spec,
+          artifacts: resolvedResult.resolved.artifacts,
           spawn: async () => {
             if (!launcher.spawn) return unsupportedManagedSpawn()
             // task-014: forward launcher-anchor extras (lifecycle,

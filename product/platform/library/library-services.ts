@@ -2,6 +2,7 @@ import type { EntrySource } from "@platform/api/rpc/entry-source"
 import { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
 import type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
+import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import type {
   LaunchExtras,
   LaunchResult,
@@ -70,6 +71,12 @@ export interface ResolvedLaunch {
    * foreground semantics.
    */
   readonly extras?: LaunchExtras
+  /**
+   * Optional launch-scoped artifact metadata. Lifecycle owners use this to
+   * clean temporary staged launch files after terminal outcomes; launchers must
+   * not infer executable argv/env behavior from it.
+   */
+  readonly artifacts?: LaunchArtifacts
 }
 
 export interface ContentSourceService {

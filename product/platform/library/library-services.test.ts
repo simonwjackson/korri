@@ -39,7 +39,15 @@ describe("ContentSource contract", () => {
           id === game.id ? { command: "wasm4", args: [id] } : undefined,
         ),
       resolveLaunchForGame: id =>
-        Effect.succeed({ spec: { command: "wasm4", args: [id] } }),
+        Effect.succeed({
+          spec: { command: "wasm4", args: [id] },
+          artifacts: {
+            root: "/tmp/korri-launch-artifacts/wasm4",
+            paths: {
+              contentPath: "/tmp/korri-launch-artifacts/wasm4/game.wasm",
+            },
+          },
+        }),
     }
     const librarySourceLayer = Layer.succeed(LibrarySource, librarySource)
 
@@ -49,7 +57,8 @@ describe("ContentSource contract", () => {
         const library = yield* LibrarySource
         const contentItems = yield* contentSources[0].list()
         const libraryGames = yield* library.list()
-        return { contentItems, libraryGames }
+        const launch = yield* library.resolveLaunchForGame(game.id)
+        return { contentItems, libraryGames, launch }
       }).pipe(
         Effect.provide(Layer.merge(contentSourcesLayer, librarySourceLayer)),
       ),
@@ -57,5 +66,8 @@ describe("ContentSource contract", () => {
 
     expect(result.contentItems).toEqual([{ _tag: "GameItem", game }])
     expect(result.libraryGames).toEqual([game])
+    expect(result.launch.artifacts?.root).toBe(
+      "/tmp/korri-launch-artifacts/wasm4",
+    )
   })
 })

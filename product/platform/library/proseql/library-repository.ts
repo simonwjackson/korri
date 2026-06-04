@@ -57,6 +57,7 @@ import type { ModuleRecord } from "@platform/library/config/records/module"
 import type { SystemRecord } from "@platform/library/config/records/system"
 import type { UserRecord } from "@platform/library/config/records/user"
 import type { ResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
+import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import type { LaunchSpec } from "@platform/library/launcher"
 import { LibraryError } from "@platform/library/library-services"
 import type { ArtifactRecord } from "@platform/protocol/artifact/artifact"
@@ -84,10 +85,7 @@ export interface ResolvedLaunchOutput {
   readonly content?: {
     readonly artifactId: string
   }
-  readonly artifacts?: {
-    readonly root: string
-    readonly paths: Readonly<Record<string, string>>
-  }
+  readonly artifacts?: LaunchArtifacts
   readonly diagnostics?: readonly string[]
 }
 

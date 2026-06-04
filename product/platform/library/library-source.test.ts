@@ -25,7 +25,15 @@ describe("LibrarySource + Launcher seams", () => {
         id === game.id ? { command: "/bin/true", args: [] } : undefined,
       resolveLaunchForGame: async id => {
         if (id !== game.id) throw new Error("unknown id")
-        return { spec: { command: "/bin/true", args: [] } }
+        return {
+          spec: { command: "/bin/true", args: [] },
+          artifacts: {
+            root: "/tmp/korri-launch-artifacts/game",
+            paths: {
+              contentPath: "/tmp/korri-launch-artifacts/game/zelda.smc",
+            },
+          },
+        }
       },
     }
 
@@ -44,6 +52,9 @@ describe("LibrarySource + Launcher seams", () => {
 
     const missing = await source.launchSpecFor("does-not-exist")
     expect(missing).toBeUndefined()
+
+    const resolved = await source.resolveLaunchForGame("snes/zelda")
+    expect(resolved.artifacts?.root).toBe("/tmp/korri-launch-artifacts/game")
 
     const result = await launcher.run({ command: "/bin/true", args: [] })
     expect(result.status).toBe("launched")

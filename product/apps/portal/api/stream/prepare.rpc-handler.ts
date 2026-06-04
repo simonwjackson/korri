@@ -91,7 +91,10 @@ export function prepareStreamLaunch(
     })
     const intent = yield* Effect.try({
       try: () =>
-        createLaunchIntent(resolved.spec, { gamescope: resolved.gamescope }),
+        createLaunchIntent(resolved.spec, {
+          gamescope: resolved.gamescope,
+          artifacts: resolved.artifacts,
+        }),
       catch: error => toDataError(error, "invalid stream launch target"),
     })
 

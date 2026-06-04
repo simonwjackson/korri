@@ -20,6 +20,7 @@
 import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
 import type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
+import type { LaunchArtifacts } from "./launch-artifacts"
 import type { LaunchSpec } from "./launcher"
 
 export interface ResolveLaunchInputs {
@@ -31,6 +32,7 @@ export interface ResolveLaunchInputs {
 export interface ResolvedLaunch {
   readonly spec: LaunchSpec
   readonly gamescope?: GamescopePolicy
+  readonly artifacts?: LaunchArtifacts
 }
 
 export interface LibrarySource {

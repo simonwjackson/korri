@@ -1,5 +1,6 @@
 import type { GameRecord } from "@platform/fixtures/games/game"
 import { getGameDisplayName } from "@platform/fixtures/games/game"
+import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import type { LaunchSpec } from "@platform/library/launcher"
 import {
   LibraryError,
@@ -162,6 +163,7 @@ async function prepareKnownGameStreamLaunch(options: {
     gameId: options.game.id,
     spec: resolvedResult.value.spec,
     gamescope: resolvedResult.value.gamescope,
+    artifacts: resolvedResult.value.artifacts,
     intentStore: options.intentStore,
   })
 }
@@ -219,11 +221,15 @@ async function enqueueLaunchIntent(options: {
   readonly gameId: string
   readonly spec: LaunchSpec
   readonly gamescope?: GameStreamLaunchIntent["gamescope"]
+  readonly artifacts?: LaunchArtifacts
   readonly intentStore: GameStreamLaunchIntentStore
 }): Promise<StreamLaunchPrepareResult> {
   let intent: GameStreamLaunchIntent
   try {
-    intent = createLaunchIntent(options.spec, { gamescope: options.gamescope })
+    intent = createLaunchIntent(options.spec, {
+      gamescope: options.gamescope,
+      artifacts: options.artifacts,
+    })
   } catch (error) {
     return {
       status: "failed",

@@ -8,11 +8,12 @@ import {
   unlink,
   writeFile,
 } from "node:fs/promises"
-import { dirname, join } from "node:path"
+import { dirname, isAbsolute, join } from "node:path"
 import {
   decodeGamescopePolicy,
   type GamescopePolicy,
 } from "@platform/library/config/inheritable-fields"
+import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import { decodeLaunchSpec, type LaunchSpec } from "@platform/library/launcher"
 
 export type GameStreamLaunchLifecycle = "foreground" | "session"
@@ -25,6 +26,7 @@ export interface GameStreamLaunchIntent {
   readonly launch: LaunchSpec
   readonly gamescope?: GamescopePolicy
   readonly wait?: LaunchSpec
+  readonly artifacts?: LaunchArtifacts
 }
 
 export interface ClaimedGameStreamLaunchIntent {
@@ -60,10 +62,14 @@ export function createLaunchIntent(
     readonly lifecycle?: GameStreamLaunchLifecycle
     readonly gamescope?: GamescopePolicy
     readonly wait?: LaunchSpec
+    readonly artifacts?: LaunchArtifacts
   } = {},
 ): GameStreamLaunchIntent {
   assertAbsoluteLaunchSpec(launch)
   if (options.wait) assertAbsoluteLaunchSpec(options.wait)
+  const artifacts = options.artifacts
+    ? decodeLaunchArtifacts(options.artifacts)
+    : undefined
 
   return {
     version: 1,
@@ -75,6 +81,7 @@ export function createLaunchIntent(
       ? { gamescope: options.gamescope }
       : {}),
     ...(options.wait ? { wait: options.wait } : {}),
+    ...(artifacts ? { artifacts } : {}),
   }
 }
 
@@ -84,6 +91,7 @@ export function createStaticGameStreamLaunchIntentStore(
     readonly lifecycle?: GameStreamLaunchLifecycle
     readonly gamescope?: GamescopePolicy
     readonly wait?: LaunchSpec
+    readonly artifacts?: LaunchArtifacts
   } = {},
 ): GameStreamLaunchIntentStore {
   let consumed = false
@@ -179,40 +187,124 @@ export function createFileGameStreamLaunchIntentStore(
 }
 
 export function decodeLaunchIntent(value: unknown): GameStreamLaunchIntent {
-  if (!isRecord(value)) throw new Error("launch intent must be an object")
-  if (value.version !== 1) throw new Error("launch intent version must be 1")
-  if (typeof value.id !== "string" || value.id.length === 0) {
-    throw new Error("launch intent id must be a non-empty string")
-  }
-  if (typeof value.createdAt !== "string" || value.createdAt.length === 0) {
-    throw new Error("launch intent createdAt must be a non-empty string")
-  }
-  if (
-    value.lifecycle !== undefined &&
-    value.lifecycle !== "foreground" &&
-    value.lifecycle !== "session"
-  ) {
-    throw new Error("launch intent lifecycle must be foreground or session")
-  }
+  const record = decodeRecord(value, "launch intent must be an object")
+  if (record.version !== 1) throw new Error("launch intent version must be 1")
 
-  const launch = decodeLaunchSpec(value.launch)
-  const wait = value.wait ? decodeLaunchSpec(value.wait) : undefined
-  const gamescope =
-    value.gamescope !== undefined
-      ? decodeGamescopePolicy(value.gamescope)
-      : undefined
+  const id = decodeNonEmptyString(
+    record.id,
+    "launch intent id must be a non-empty string",
+  )
+  const createdAt = decodeNonEmptyString(
+    record.createdAt,
+    "launch intent createdAt must be a non-empty string",
+  )
+  const lifecycle = decodeLaunchLifecycle(record.lifecycle)
+  const launch = decodeLaunchSpec(record.launch)
+  const wait = decodeOptionalLaunchSpec(record.wait)
   assertAbsoluteLaunchSpec(launch)
   if (wait) assertAbsoluteLaunchSpec(wait)
 
+  return withOptionalLaunchIntentFields(
+    {
+      version: 1,
+      id,
+      createdAt,
+      lifecycle,
+      launch,
+    },
+    {
+      gamescope: decodeOptionalGamescopePolicy(record.gamescope),
+      wait,
+      artifacts: decodeOptionalLaunchArtifacts(record.artifacts),
+    },
+  )
+}
+
+function decodeOptionalLaunchSpec(value: unknown): LaunchSpec | undefined {
+  return value === undefined ? undefined : decodeLaunchSpec(value)
+}
+
+function decodeOptionalGamescopePolicy(
+  value: unknown,
+): GamescopePolicy | undefined {
+  return value === undefined ? undefined : decodeGamescopePolicy(value)
+}
+
+function decodeOptionalLaunchArtifacts(
+  value: unknown,
+): LaunchArtifacts | undefined {
+  return value === undefined ? undefined : decodeLaunchArtifacts(value)
+}
+
+function decodeLaunchLifecycle(value: unknown): GameStreamLaunchLifecycle {
+  if (value === undefined) return "foreground"
+  if (value === "foreground" || value === "session") return value
+  throw new Error("launch intent lifecycle must be foreground or session")
+}
+
+function withOptionalLaunchIntentFields(
+  base: GameStreamLaunchIntent,
+  optional: {
+    readonly gamescope?: GamescopePolicy
+    readonly wait?: LaunchSpec
+    readonly artifacts?: LaunchArtifacts
+  },
+): GameStreamLaunchIntent {
   return {
-    version: 1,
-    id: value.id,
-    createdAt: value.createdAt,
-    lifecycle: value.lifecycle ?? "foreground",
-    launch,
-    ...(hasGamescopeOpinion(gamescope) ? { gamescope } : {}),
-    ...(wait ? { wait } : {}),
+    ...base,
+    ...(hasGamescopeOpinion(optional.gamescope)
+      ? { gamescope: optional.gamescope }
+      : {}),
+    ...(optional.wait ? { wait: optional.wait } : {}),
+    ...(optional.artifacts ? { artifacts: optional.artifacts } : {}),
   }
+}
+
+function decodeLaunchArtifacts(value: unknown): LaunchArtifacts {
+  const record = decodeRecord(value, "launch artifacts must be an object")
+  return {
+    root: decodeAbsolutePath(
+      record.root,
+      "launch artifacts root must be an absolute path",
+    ),
+    paths: decodeAbsolutePathRecord(
+      record.paths,
+      "launch artifacts paths must be an object",
+      "launch artifact paths must be absolute paths",
+    ),
+  }
+}
+
+function decodeAbsolutePathRecord(
+  value: unknown,
+  recordMessage: string,
+  pathMessage: string,
+): Record<string, string> {
+  const record = decodeRecord(value, recordMessage)
+  const decoded: Record<string, string> = {}
+  for (const [key, path] of Object.entries(record)) {
+    decoded[key] = decodeAbsolutePath(path, pathMessage)
+  }
+  return decoded
+}
+
+function decodeRecord(
+  value: unknown,
+  message: string,
+): Record<string, unknown> {
+  if (isRecord(value)) return value
+  throw new Error(message)
+}
+
+function decodeNonEmptyString(value: unknown, message: string): string {
+  if (typeof value === "string" && value.length > 0) return value
+  throw new Error(message)
+}
+
+function decodeAbsolutePath(value: unknown, message: string): string {
+  const path = decodeNonEmptyString(value, message)
+  if (isAbsolute(path)) return path
+  throw new Error(message)
 }
 
 function hasGamescopeOpinion(

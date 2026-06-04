@@ -51,6 +51,27 @@ describe("game stream launch intent store", () => {
     await expect(store.claim()).resolves.toBeUndefined()
   })
 
+  it("preserves launch-scoped artifact metadata", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-intent-"))
+    const intentPath = join(dir, "next-launch.json")
+    const store = createFileGameStreamLaunchIntentStore(intentPath)
+    const intent = createLaunchIntent(launch, {
+      artifacts: {
+        root: "/tmp/korri-launch-artifacts/session",
+        paths: {
+          contentPath: "/tmp/korri-launch-artifacts/session/game.gba",
+          patch0: "/tmp/korri-launch-artifacts/session/game.ips",
+        },
+      },
+    })
+
+    await store.enqueue(intent)
+
+    const claim = await store.claim()
+    expect(claim?.intent.artifacts).toEqual(intent.artifacts)
+    await claim?.complete()
+  })
+
   it("preserves the resolved Gamescope wrapper command", () => {
     const intent = createLaunchIntent(launch, {
       gamescope: {
@@ -95,6 +116,27 @@ describe("game stream launch intent store", () => {
     expect(claim?.intent).toEqual(second)
     await claim?.complete()
     await expect(store.claim()).resolves.toBeUndefined()
+  })
+
+  it("rejects relative launch artifact metadata", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-intent-"))
+    const intentPath = join(dir, "next-launch.json")
+    const store = createFileGameStreamLaunchIntentStore(intentPath)
+    await writeFile(
+      intentPath,
+      JSON.stringify({
+        ...createLaunchIntent(launch),
+        artifacts: {
+          root: "relative-root",
+          paths: { contentPath: "/tmp/game.gba" },
+        },
+      }),
+      { mode: 0o600 },
+    )
+
+    await expect(store.claim()).rejects.toThrow(
+      "launch artifacts root must be an absolute path",
+    )
   })
 
   it("rejects relative launch intent commands", async () => {

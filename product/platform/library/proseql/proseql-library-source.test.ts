@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Effect } from "effect"
@@ -15,6 +15,14 @@ async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
   } finally {
     await rm(root, { recursive: true, force: true })
   }
+}
+
+function setEnv(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key]
+    return
+  }
+  process.env[key] = value
 }
 
 describe("createProseqlLibrarySource", () => {
@@ -68,6 +76,63 @@ describe("createProseqlLibrarySource", () => {
         command: "/bin/echo",
         args: ["/storage/roms/snes/f-zero.smc"],
       })
+    })
+  })
+
+  it("preserves artifact metadata on the rich resolve path", async () => {
+    await withTempRoot(async root => {
+      const previous = {
+        artifacts: process.env.KORRI_LAUNCH_ARTIFACTS_DIR,
+        data: process.env.XDG_DATA_HOME,
+        state: process.env.XDG_STATE_HOME,
+      }
+      process.env.KORRI_LAUNCH_ARTIFACTS_DIR = join(root, "launch-artifacts")
+      process.env.XDG_DATA_HOME = join(root, "data")
+      process.env.XDG_STATE_HOME = join(root, "state")
+      try {
+        const rom = join(root, "roms", "game.gba")
+        const patch = join(root, "patches", "color.ips")
+        await mkdir(join(root, "roms"), { recursive: true })
+        await mkdir(join(root, "patches"), { recursive: true })
+        await writeFile(rom, "rom")
+        await writeFile(patch, "patch")
+
+        const result = await Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+              const repo = createLibraryRepository(db)
+              yield* repo.upsertSystem({
+                id: "gba",
+                launcher: "retroarch",
+              })
+              yield* repo.upsertLauncher({
+                id: "retroarch",
+                command: "/bin/echo",
+                args: ["{contentPath}"],
+                systems: ["gba"],
+              })
+              yield* repo.upsertGame({
+                id: "gba/game",
+                system: "gba",
+                contentPath: rom,
+                patches: [patch],
+              })
+              const source = createProseqlLibrarySource(repo)
+              return yield* Effect.promise(() =>
+                source.resolveLaunchForGame("gba/game"),
+              )
+            }),
+          ),
+        )
+
+        expect(result.artifacts?.root).toContain("launch-artifacts")
+        expect(result.artifacts?.paths.contentPath).toBe(result.spec.args[0])
+      } finally {
+        setEnv("KORRI_LAUNCH_ARTIFACTS_DIR", previous.artifacts)
+        setEnv("XDG_DATA_HOME", previous.data)
+        setEnv("XDG_STATE_HOME", previous.state)
+      }
     })
   })
 

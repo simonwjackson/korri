@@ -17,6 +17,7 @@ import {
   korriStatePath,
   type XdgPathEnv,
 } from "@platform/config/xdg-paths"
+import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import { Effect } from "effect"
 import type { AppDescriptor } from "./app-integrations"
 import {
@@ -39,10 +40,7 @@ const MATERIALIZER_PLACEHOLDER_PATTERN =
   /\{(?:configPath|configDir|userDir|modulePath)\}/
 export const STALE_ARTIFACT_RETENTION_MS = 24 * 60 * 60 * 1000
 
-export interface MaterializedLaunchArtifacts {
-  readonly root: string
-  readonly paths: Readonly<Record<string, string>>
-}
+export type MaterializedLaunchArtifacts = LaunchArtifacts
 
 export interface MaterializedAppLaunch {
   readonly launcher: LauncherRecord
