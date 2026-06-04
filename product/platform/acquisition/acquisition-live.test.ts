@@ -239,6 +239,7 @@ describe("live acquisition service", () => {
       "chip8archive",
       "homebrewhub",
       "itchio",
+      "levelsharesquare",
       "pico8bbs",
       "portmaster",
       "puzzlescript",
