@@ -1,0 +1,102 @@
+diff --git a/Scripts/Classes/Singletons/Global.gd b/Scripts/Classes/Singletons/Global.gd
+--- a/Scripts/Classes/Singletons/Global.gd
++++ b/Scripts/Classes/Singletons/Global.gd
+@@ -56,0 +57,3 @@ const ROM_ASSETS_VERSION := 7
++var launch_level_path := ""
++var launch_level_pending := false
++
+@@ -222,0 +226 @@ func _ready() -> void:
++	parse_launch_level_arg()
+@@ -254,0 +259,68 @@ func setup_config_dirs() -> void:
++func parse_launch_level_arg() -> void:
++	var value := OS.get_environment("SMBR_LEVEL")
++	if value != "":
++		set_launch_level(value, "environment")
++		return
++	var args := OS.get_cmdline_args()
++	for i in range(args.size()):
++		var arg := args[i]
++		if arg == "--level" and i + 1 < args.size():
++			value = args[i + 1]
++		elif arg.begins_with("--level="):
++			value = arg.trim_prefix("--level=")
++		if value != "":
++			set_launch_level(value, "argument")
++			return
++
++func set_launch_level(value: String, source: String) -> void:
++	launch_level_path = resolve_launch_level_arg(value.replace("\\", "/"))
++	launch_level_pending = launch_level_path != ""
++	if launch_level_pending:
++		print("Launch level ", source, " found: ", launch_level_path)
++
++func resolve_launch_level_arg(value: String) -> String:
++	if value == "":
++		return ""
++	if value.is_absolute_path() or value.contains("/") or value.to_lower().ends_with(".lvl"):
++		return value
++	return config_path.path_join("custom_levels/downloaded/" + value + ".lvl")
++
++func transition_to_launch_target_or_title() -> void:
++	if consume_launch_level():
++		return
++	transition_to_scene("res://Scenes/Levels/TitleScreen.tscn")
++
++func consume_launch_level() -> bool:
++	if not launch_level_pending:
++		return false
++	launch_level_pending = false
++	if not FileAccess.file_exists(launch_level_path):
++		push_error("Launch level file not found: " + launch_level_path)
++		return false
++	var file := FileAccess.open(launch_level_path, FileAccess.READ)
++	if not file:
++		push_error("Launch level file could not be opened: " + launch_level_path)
++		return false
++	var parsed = JSON.parse_string(file.get_as_text())
++	file.close()
++	if not (parsed is Dictionary) or not parsed.has("Info") or not parsed.has("Levels"):
++		push_error("Launch level file is not a valid SMBR .lvl file: " + launch_level_path)
++		return false
++	print("Consuming launch level: ", launch_level_path)
++	var info: Dictionary = parsed.get("Info", {})
++	LevelEditor.sub_areas = [null, null, null, null, null]
++	LevelEditor.sub_level_id = 0
++	Checkpoint.sublevel_id = 0
++	LevelEditor.level_file = parsed
++	LevelEditor.level_name = str(info.get("Name", launch_level_path.get_file().get_basename()))
++	LevelEditor.level_author = str(info.get("Author", ""))
++	LevelEditor.level_desc = str(info.get("Description", ""))
++	LevelEditor.difficulty = int(info.get("Difficulty", 0))
++	CustomLevelMenu.current_level_file = launch_level_path
++	current_game_mode = GameMode.CUSTOM_LEVEL
++	LevelEditor.load_play = true
++	LevelTransition.level_to_transition_to = "res://Scenes/Levels/LevelEditor.tscn"
++	print("Launch level transition to custom level")
++	transition_to_scene("res://Scenes/Levels/LevelTransition.tscn")
++	return true
++
+diff --git a/Scripts/Parts/Disclaimer.gd b/Scripts/Parts/Disclaimer.gd
+--- a/Scripts/Parts/Disclaimer.gd
++++ b/Scripts/Parts/Disclaimer.gd
+@@ -38 +38 @@ func go_to_menu() -> void:
+-		Global.transition_to_scene("res://Scenes/Levels/TitleScreen.tscn")
++		Global.transition_to_launch_target_or_title()
+diff --git a/Scripts/UI/RomResourceGenerator.gd b/Scripts/UI/RomResourceGenerator.gd
+--- a/Scripts/UI/RomResourceGenerator.gd
++++ b/Scripts/UI/RomResourceGenerator.gd
+@@ -28 +28,2 @@ func done() -> void:
+-	Global.transition_to_scene("res://Scenes/Levels/TitleScreen.tscn")
++	Global.rom_assets_exist = true
++	Global.transition_to_launch_target_or_title()
+diff --git a/Scripts/UI/RomVerifier.gd b/Scripts/UI/RomVerifier.gd
+--- a/Scripts/UI/RomVerifier.gd
++++ b/Scripts/UI/RomVerifier.gd
+@@ -121 +120,0 @@ func verified() -> void:
+-	var target_scene := "res://Scenes/Levels/TitleScreen.tscn"
+@@ -123,2 +122,3 @@ func verified() -> void:
+-		target_scene = "res://Scenes/Levels/RomResourceGenerator.tscn"
+-	Global.transition_to_scene(target_scene)
++		Global.transition_to_scene("res://Scenes/Levels/RomResourceGenerator.tscn")
++	else:
++		Global.transition_to_launch_target_or_title()

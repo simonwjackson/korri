@@ -134,6 +134,22 @@
         "type": "github"
       }
     },
+    "nixpkgs-godot": {
+      "locked": {
+        "lastModified": 1780243769,
+        "narHash": "sha256-x5UQuRsH3MqI0U9afaXSNqzTPSeZlRLvFAav2Ux1pNw=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "331800de5053fcebacf6813adb5db9c9dca22a0c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "331800de5053fcebacf6813adb5db9c9dca22a0c",
+        "type": "github"
+      }
+    },
     "nixpkgs-sdl2-classic": {
       "locked": {
         "lastModified": 1751274312,
@@ -173,7 +189,26 @@
         "flake-utils": "flake-utils",
         "nix-on-rocks": "nix-on-rocks",
         "nixpkgs": "nixpkgs_2",
-        "nixpkgs-2405": "nixpkgs-2405"
+        "nixpkgs-2405": "nixpkgs-2405",
+        "nixpkgs-godot": "nixpkgs-godot",
+        "smbr-src": "smbr-src"
+      }
+    },
+    "smbr-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1779874410,
+        "narHash": "sha256-AIQVH8xZkAx4JMnUtCu0mnMcmLdz7jUpWsf7Clay62k=",
+        "owner": "JHDev2006",
+        "repo": "Super-Mario-Bros.-Remastered-Public",
+        "rev": "21b068182fdf07bf5aa7c73b4d399650970fd2f0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "JHDev2006",
+        "repo": "Super-Mario-Bros.-Remastered-Public",
+        "rev": "21b068182fdf07bf5aa7c73b4d399650970fd2f0",
+        "type": "github"
       }
     },
     "systems": {

@@ -16,10 +16,21 @@
 # `sunshine = prev.sunshine` to avoid infinite recursion when the overlay
 # value itself derives from `sunshine.overrideAttrs`.
 #
-# `libretro-fake-08` and `gamescope-korri` are additive package lanes: no
-# upstream nixpkgs attribute is replaced until the downstream package is ready to
-# become a runtime default.
-{ nix-on-rocks, fake-08-src }:
+# `libretro-fake-08`, `gamescope-korri`, and `smb-remastered` are additive
+# package lanes: no upstream nixpkgs attribute is replaced until the
+# downstream package is ready to become a runtime default.
+#
+# `smb-remastered` consumes `nixpkgs-godot` (a secondary nixpkgs pin
+# carrying Godot 4.6.x that the repo's main nixpkgs-25.11 pin does not
+# yet ship) rather than `prev.godot`, so the upgrade can land in a
+# narrow scope without bumping the rest of the substrate. See the
+# vendor README for the policy.
+{
+  nix-on-rocks,
+  fake-08-src,
+  smbr-src,
+  nixpkgs-godot,
+}:
 
 final: prev: {
   moonlight-embedded = final.callPackage ../../../vendor/moonlight-embedded-korri/package.nix {
@@ -33,5 +44,8 @@ final: prev: {
   };
   gamescope-korri = final.callPackage ../../../vendor/gamescope-korri/package.nix {
     gamescope = prev.gamescope;
+  };
+  smb-remastered = final.callPackage ../../../vendor/super-mario-bros-remastered/package.nix {
+    inherit smbr-src nixpkgs-godot;
   };
 }

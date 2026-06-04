@@ -28,6 +28,30 @@
     # would omit and the build would fail at `libs/z8lua/eris.o`.
     fake-08-src.url = "git+https://github.com/jtothebell/fake-08?rev=0d26fd59103941e5f95e0ee665c6e0fb8c6b6f03&submodules=1";
     fake-08-src.flake = false;
+
+    # Super Mario Bros. Remastered (community Godot remake by JHDev2006)
+    # source pin. Pinned to the `1.1-26w21c` release tag (commit
+    # 21b06818). `flake = false` because upstream has no flake.nix
+    # and no submodules. Bump via `nix flake update smbr-src` and
+    # re-run `nix flake check` so the colocated `smb-remastered-check`
+    # re-verifies that the in-game ROM allowlist hashes still match
+    # (a change there would silently invalidate every user's
+    # previously accepted `baserom.nes`).
+    smbr-src.url = "github:JHDev2006/Super-Mario-Bros.-Remastered-Public?rev=21b068182fdf07bf5aa7c73b4d399650970fd2f0";
+    smbr-src.flake = false;
+
+    # Secondary nixpkgs pin carrying Godot 4.6.3-stable (editor +
+    # export templates, pre-cached on cache.nixos.org for both
+    # x86_64-linux and aarch64-linux). Only consumed by the
+    # `smb-remastered` vendor package, which exports a Godot 4.6
+    # project; the repo's main `nixpkgs.nixos-25.11` pin is still on
+    # Godot 4.5.1, which cannot honestly export a project whose
+    # `project.godot` declares `config/features=("4.6", ...)`. Mirrors
+    # the existing `nixpkgs-2405` precedent for narrow-scope
+    # cross-channel substitution; deliberately not `follows`-linked
+    # to `nixpkgs` so the prebuilt Godot binaries stay cache-hits
+    # instead of rebuilding against our older nixpkgs.
+    nixpkgs-godot.url = "github:NixOS/nixpkgs/331800de5053fcebacf6813adb5db9c9dca22a0c";
   };
 
   # Pull the prebuilt bun2nix (Rust CLI + Zig cache-entry-creator) from the
@@ -53,13 +77,20 @@
       bun2nix,
       nix-on-rocks,
       fake-08-src,
+      smbr-src,
+      nixpkgs-godot,
       ...
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
         korriPackagesOverlay = import ./product/systems/nixos/overlays/korri-packages.nix {
-          inherit nix-on-rocks fake-08-src;
+          inherit
+            nix-on-rocks
+            fake-08-src
+            smbr-src
+            nixpkgs-godot
+            ;
         };
 
         pkgs = import nixpkgs {
@@ -545,6 +576,7 @@
 
         libretroFake08 = pkgs.libretro-fake-08;
         gamescopeKorri = pkgs.gamescope-korri;
+        smbRemastered = pkgs.smb-remastered;
 
         # The named outputs match the overlay-substituted `pkgs.sunshine` and
         # `pkgs.moonlight-embedded` so downstream consumers can ask for either
@@ -601,6 +633,7 @@
           moonlight-embedded-korri = moonlightEmbeddedKorri;
           libretro-fake-08 = libretroFake08;
           gamescope-korri = gamescopeKorri;
+          smb-remastered = smbRemastered;
         }
         // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
           electrobun-cli = electrobunBinaries.cli;
@@ -812,6 +845,10 @@
               inherit pkgs;
               libretroFake08Package = self.packages.${system}.libretro-fake-08;
             };
+            smb-remastered-check = import ./product/vendor/super-mario-bros-remastered/check.nix {
+              inherit pkgs;
+              smbRemasteredPackage = self.packages.${system}.smb-remastered;
+            };
           }
           // pkgs.lib.optionalAttrs isX86Linux {
             korri-rocknix-sm8550-config = import ./tools/testing/nix/korri-rocknix-sm8550-config-check.nix {
@@ -988,6 +1025,10 @@
                 }
                 {
                   name = "libretro-fake-08-check";
+                  owner = "package-output";
+                }
+                {
+                  name = "smb-remastered-check";
                   owner = "package-output";
                 }
                 {
@@ -1177,7 +1218,14 @@
           nixpkgs = nix-on-rocks.inputs.nixpkgs;
           system = rocknixTargetSystem;
           overlays = [
-            (import ./product/systems/nixos/overlays/korri-packages.nix { inherit nix-on-rocks fake-08-src; })
+            (import ./product/systems/nixos/overlays/korri-packages.nix {
+              inherit
+                nix-on-rocks
+                fake-08-src
+                smbr-src
+                nixpkgs-godot
+                ;
+            })
           ];
         };
         rocknixPlatformFor =
@@ -1213,7 +1261,12 @@
         # / nix-on-rocks moonlight-embedded.
         overlays = rec {
           korri-packages = import ./product/systems/nixos/overlays/korri-packages.nix {
-            inherit nix-on-rocks fake-08-src;
+            inherit
+              nix-on-rocks
+              fake-08-src
+              smbr-src
+              nixpkgs-godot
+              ;
           };
           default = korri-packages;
         };
@@ -1240,7 +1293,12 @@
           # graph rather than through `pkgs` itself.
           korri-nixpkgs-overlay = import ./product/systems/nixos/modules/korri-nixpkgs-overlay.nix {
             overlay = import ./product/systems/nixos/overlays/korri-packages.nix {
-              inherit nix-on-rocks fake-08-src;
+              inherit
+                nix-on-rocks
+                fake-08-src
+                smbr-src
+                nixpkgs-godot
+                ;
             };
           };
 
