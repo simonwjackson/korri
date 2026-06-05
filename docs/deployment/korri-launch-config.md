@@ -127,7 +127,20 @@ Korri hides RetroArch's indexed sidecar naming from authors. At launch time it c
 
 Patched and unpatched presets for the same declared base game share the same save and savestate identity. The v1 identity is derived from the base `system` plus the declared `contentPath`, not from the selected preset or patch list. This means trying a colour-restoration preset does not silently fork saves from the unpatched game.
 
-Device smoke testing is still useful execution evidence, but it is not a v1 implementation dependency. A manual smoke should record the YAML used, the resolved launch command/artifact root, the staged sidecar order, and whether RetroArch booted the expected patched content on device.
+### RetroArch save and savestate contract
+
+Korri uses RetroArch config-directory settings for patched launches:
+
+- `savefile_directory = <Korri data root>/retroarch/v1/<encoded-system>/<encoded-basename-prefix>--<sha256>`
+- `savestate_directory = <Korri state root>/retroarch/v1/<encoded-system>/<encoded-basename-prefix>--<sha256>`
+
+The SHA-256 input is the exact declared base identity string `system + "\\0" + contentPath`. The selected preset and patch list are deliberately excluded. Korri stages patched content with the original content basename, then points RetroArch at the staged symlink; the save/state directory identity still comes from the declared source path, not the launch-scoped artifact path.
+
+Korri does not use RetroArch's explicit `--save=PATH` or `--savestate=PATH` flags. Current packaged RetroArch still lists them, but marks both deprecated: `--save=PATH` says to use `--appendconfig` plus `savefile_directory`, and `--savestate=PATH` says to use `--appendconfig` plus `savestate_directory`. The regression test `materializeAppLaunch > uses config save directories instead of deprecated explicit save flags` verifies the generated RetroArch launcher argv contains only `--config ... -L ... <content>` while the generated config contains the two directory settings.
+
+This is a v1 directory contract, not an exact save-file-name contract. RetroArch remains responsible for deriving the final `.srm` / `.state` filenames inside those Korri-owned directories from the staged content basename. Korri preserves that basename across patched launches so cleanup of launch-scoped artifacts cannot move or delete progress.
+
+Device smoke testing is still useful execution evidence, but it is not a v1 implementation dependency. A manual smoke should record the YAML used, the resolved launch command/artifact root, the staged sidecar order, the generated save/state directory lines, and whether RetroArch booted the expected patched content on device.
 
 ## Migration aliases
 

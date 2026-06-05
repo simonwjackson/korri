@@ -343,6 +343,50 @@ describe("materializeAppLaunch", () => {
     })
   })
 
+  it("uses config save directories instead of deprecated explicit save flags", async () => {
+    await withRoot(async root => {
+      const content = await seedFile(root, "roms/Super Mario Advance 3.gba")
+      const patch = await seedFile(root, "patches/color.ips")
+      const env = {
+        XDG_DATA_HOME: join(root, "data"),
+        XDG_STATE_HOME: join(root, "state"),
+      }
+
+      const result = await runPromise(
+        materializeAppLaunch({
+          app: app("retroarch"),
+          context: {
+            ...context,
+            system: "gba",
+            contentPath: content,
+            patches: [patch],
+          },
+          artifactsRoot: join(root, "artifacts"),
+          env,
+        }),
+      )
+
+      expect(result.context.contentPath).toBe(
+        join(result.artifacts?.root ?? "", "Super Mario Advance 3.gba"),
+      )
+      expect(result.launcher.args).toEqual([
+        "--config",
+        "{configPath}",
+        "-L",
+        "{modulePath}",
+        "{contentPath}",
+      ])
+      expect(result.launcher.args).not.toContain("--save")
+      expect(result.launcher.args).not.toContain("--savestate")
+
+      const cfg = await readFile(result.context.configPath ?? "", "utf8")
+      expect(cfg).toContain("savefile_directory = ")
+      expect(cfg).toContain("savestate_directory = ")
+      expect(cfg).not.toContain("savefile_path")
+      expect(cfg).not.toContain("savestate_path")
+    })
+  })
+
   it("preserves stable save and state identity across differing patch lists", async () => {
     await withRoot(async root => {
       const content = await seedFile(root, "roms/Super Mario Advance 3.gba")
