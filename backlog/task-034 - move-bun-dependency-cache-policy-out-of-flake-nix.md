@@ -1,7 +1,7 @@
 ---
 id: task-034
 title: Move Bun dependency cache policy out of flake.nix
-status: To Do
+status: In Progress
 priority: medium
 labels:
   - nix
