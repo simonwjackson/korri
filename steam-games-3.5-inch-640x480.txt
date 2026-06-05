@@ -1,0 +1,1803 @@
+Steam games grouped by visual fit for a 3.5 inch 640×480 streamed screen
+Source list: steam-games.txt (1770 games)
+Generated: 2026-06-05T15:55:03.010Z
+Sorted within each group by visual-fit score, then title.
+Method: public SteamSpy tag signals plus title nudges. This is a visual-readability sort, not a hardware/spec sort.
+Bias: rewards bold 2D, pixel art, arcade, puzzle, card/table, turn-based, and low-text layouts; penalizes VR, dense text, strategy/management UI, simulators, and distant-detail 3D.
+
+Counts:
+- S: 303
+- A: 334
+- B: 363
+- C: 337
+- D: 433
+
+S — Pocket-perfect
+Best first picks for a 3.5 inch 640×480 screen: bold 2D/pixel/arcade/puzzle/card layouts and minimal tiny UI.
+
+- Toodee and Topdee (1303950) — fit score 40
+- Dungeon Escape (454100) — fit score 37
+- Spirits Abyss (1078200) — fit score 35
+- Rogue Legacy 2 (1253920) — fit score 32
+- Downwell (360740) — fit score 31
+- Exit the Gungeon (1209490) — fit score 30
+- Terror of Hemasaurus (1016180) — fit score 30
+- VVVVVV (70300) — fit score 30
+- Berserk Boy (1561340) — fit score 29
+- BZZZT (1293170) — fit score 29
+- Heretic's Fork (2181610) — fit score 29
+- Pinball Spire (2601940) — fit score 29
+- Shovel Knight: Treasure Trove (250760) — fit score 29
+- Volgarr the Viking (247240) — fit score 29
+- BIT.TRIP RUNNER (63710) — fit score 28
+- Lone Fungus (1674780) — fit score 28
+- Panzer Paladin (975510) — fit score 28
+- Super Meat Boy (40800) — fit score 28
+- Super Time Force Ultra (250700) — fit score 28
+- 8BitBoy (296910) — fit score 27
+- Balatro (2379780) — fit score 27
+- Kaze and the Wild Masks (829280) — fit score 27
+- Loop Hero (1282730) — fit score 27
+- Militia (421260) — fit score 27
+- N++ (230270) — fit score 27
+- Oaken (1348690) — fit score 27
+- oO (367570) — fit score 27
+- Super Star Path (375120) — fit score 27
+- Tcheco in the Castle of Lucio (377600) — fit score 27
+- Vectronom (925460) — fit score 27
+- 1001 Spikes (260790) — fit score 26
+- Antonball Deluxe (1382320) — fit score 26
+- Astalon: Tears of the Earth (1046400) — fit score 26
+- Blazing Beaks (585710) — fit score 26
+- Bleed (239800) — fit score 26
+- Bread & Fred (1607680) — fit score 26
+- Curse Crackers: For Whom the Belle Toils (1726760) — fit score 26
+- Flinthook (401710) — fit score 26
+- La-Mulana (230700) — fit score 26
+- Renfield: Bring Your Own Blood (2354600) — fit score 26
+- Skelly Selest (685400) — fit score 26
+- Slime-san (473530) — fit score 26
+- Sonic Mania (584400) — fit score 26
+- Tetris® Forever (3180240) — fit score 26
+- 140 (242820) — fit score 25
+- 30XX (1029210) — fit score 25
+- Alwa's Legacy (1205900) — fit score 25
+- Fury Unleashed (465200) — fit score 25
+- Meganoid (606030) — fit score 25
+- Nongunz: Doppelganger Edition (1304780) — fit score 25
+- Roguebook (1076200) — fit score 25
+- SANABI (1562700) — fit score 25
+- Sunblaze (1525660) — fit score 25
+- Super Raft Boat Together (1955340) — fit score 25
+- Super Win the Game (310700) — fit score 25
+- UBERMOSH (357070) — fit score 25
+- UFO 50 (1147860) — fit score 25
+- Baba Is You (736260) — fit score 24
+- Boneraiser Minions (1944570) — fit score 24
+- Dig Dog (655380) — fit score 24
+- Dungreed (753420) — fit score 24
+- Enemy Mind (285840) — fit score 24
+- It came from space and ate our brains (342620) — fit score 24
+- Jet Set Knights (405550) — fit score 24
+- Kingdom Shell (1154090) — fit score 24
+- METAL SLUG 3 (250180) — fit score 24
+- METAL SLUG X (312610) — fit score 24
+- Minit (609490) — fit score 24
+- Moustache Mountain (457520) — fit score 24
+- Nuclear Throne (242680) — fit score 24
+- PAC-MAN Championship Edition DX+ (236450) — fit score 24
+- Relic Hunters Zero: Remix (382490) — fit score 24
+- SATAZIUS (203990) — fit score 24
+- Slay the Spire (646570) — fit score 24
+- Spelunky (239350) — fit score 24
+- Straima (399140) — fit score 24
+- Super House of Dead Ninjas (224820) — fit score 24
+- Tailwind (674800) — fit score 24
+- They Bleed Pixels (211260) — fit score 24
+- Thomas Was Alone (220780) — fit score 24
+- Titan Attacks (203210) — fit score 24
+- Aztaka (37100) — fit score 23
+- Cleo - a pirate's tale (1361230) — fit score 23
+- Colt Canyon (940710) — fit score 23
+- Dead Cells (588650) — fit score 23
+- Endorlight (428430) — fit score 23
+- Enter the Gungeon (311690) — fit score 23
+- FEZ (224760) — fit score 23
+- Gravity Circuit (858710) — fit score 23
+- Gunslugs (371890) — fit score 23
+- Iron Fisticle (306700) — fit score 23
+- Koala Kids (381870) — fit score 23
+- Lunistice (1701800) — fit score 23
+- Over 9000 Zombies! (273500) — fit score 23
+- qomp (1066900) — fit score 23
+- Redactem (502400) — fit score 23
+- Rogue Legacy (241600) — fit score 23
+- Schein (321920) — fit score 23
+- ScourgeBringer (1037020) — fit score 23
+- The Messenger (764790) — fit score 23
+- TowerFall Ascension (251470) — fit score 23
+- Waves (107600) — fit score 23
+- Astrea: Six-Sided Oracles (1755830) — fit score 22
+- BIT.TRIP Presents... Runner2: Future Legend of Rhythm Alien (218060) — fit score 22
+- Bloodstained: Curse of the Moon (838310) — fit score 22
+- Caveblazers (452060) — fit score 22
+- Donut Dodo (1779560) — fit score 22
+- Grapple Dog (1345860) — fit score 22
+- Guacamelee! Super Turbo Championship Edition (275390) — fit score 22
+- Iron Crypticle (548680) — fit score 22
+- Kero Blaster (292500) — fit score 22
+- Molemen Must Die! (602120) — fit score 22
+- Momodora: Reverie Under the Moonlight (428550) — fit score 22
+- Monster Train (1102190) — fit score 22
+- MURI (267360) — fit score 22
+- One Hand Clapping (893720) — fit score 22
+- Overture (343100) — fit score 22
+- Revita (1175460) — fit score 22
+- Shovel Knight: Specter of Torment (589510) — fit score 22
+- Sir Lovelot (1055170) — fit score 22
+- Songbird Symphony (909820) — fit score 22
+- Spaceship Looter (600630) — fit score 22
+- Star of Providence (603960) — fit score 22
+- Steredenn (347160) — fit score 22
+- Tales from Space: Mutant Blobs Attack (206370) — fit score 22
+- The Pedestrian (466630) — fit score 22
+- Toast Time (316660) — fit score 22
+- Webbed (1390350) — fit score 22
+- Yars: Recharged (2019990) — fit score 22
+- You Have to Win the Game (286100) — fit score 22
+- Aqua Kitty - Milk Mine Defender (263880) — fit score 21
+- Bit Blaster XL (433950) — fit score 21
+- Blocks That Matter (111800) — fit score 21
+- Chariot (319450) — fit score 21
+- Greak: Memories of Azur (1311070) — fit score 21
+- Heroes of Loot (359280) — fit score 21
+- Isles of Sea and Sky (1233070) — fit score 21
+- Last Call BBS (1511780) — fit score 21
+- Octahedron: Transfixed Edition (434660) — fit score 21
+- Retro Game Crunch (290040) — fit score 21
+- Roundguard (848030) — fit score 21
+- Shantae: Risky's Revenge - Director's Cut (277890) — fit score 21
+- Songs for a Hero - Definitive Edition (389170) — fit score 21
+- Sonic CD (200940) — fit score 21
+- SONIC THE HEDGEHOG 4 Episode I (202530) — fit score 21
+- Super ComboMan: Smash Edition (468650) — fit score 21
+- Trials of Azra (487160) — fit score 21
+- 20 Minutes Till Dawn (1966900) — fit score 20
+- A Fistful of Gun (229810) — fit score 20
+- Bionic Commando Rearmed (21680) — fit score 20
+- BIT.TRIP BEAT (63700) — fit score 20
+- Bot Vice (491040) — fit score 20
+- Centipede: Recharged (1630960) — fit score 20
+- Chenso Club (1454730) — fit score 20
+- Crypt of the NecroDancer (247080) — fit score 20
+- Dicey Dungeons (861540) — fit score 20
+- DLC Quest (230050) — fit score 20
+- Explosionade (373620) — fit score 20
+- Guacamelee! 2 (534550) — fit score 20
+- LOVE (269270) — fit score 20
+- Megabyte Punch (248550) — fit score 20
+- Mini Ghost (586880) — fit score 20
+- Narita Boy (1069530) — fit score 20
+- NeuroVoider (400450) — fit score 20
+- Olija (1297330) — fit score 20
+- Phoenix Force (332480) — fit score 20
+- PONCHO (332620) — fit score 20
+- Samurai GUNN (239090) — fit score 20
+- Savant - Ascent (259530) — fit score 20
+- Slash or Die (480480) — fit score 20
+- Super Mutant Alien Assault (368680) — fit score 20
+- Tangledeep (628770) — fit score 20
+- The Inner Darkness (562160) — fit score 20
+- Ultratron (219190) — fit score 20
+- Witcheye (1284950) — fit score 20
+- Wizorb (207420) — fit score 20
+- 20XX (322110) — fit score 19
+- Alwa's Awakening (549260) — fit score 19
+- BattleBlock Theater (238460) — fit score 19
+- Beat Hazard (49600) — fit score 19
+- Broforce (274190) — fit score 19
+- Chasm (312200) — fit score 19
+- Cobalt Core (2179850) — fit score 19
+- CRYPTARK (344740) — fit score 19
+- Double Dragon Neon (252350) — fit score 19
+- Droid Assault (219200) — fit score 19
+- Duck Game (312530) — fit score 19
+- Dustforce (65300) — fit score 19
+- Environmental Station Alpha (350070) — fit score 19
+- Insanity's Blade (334190) — fit score 19
+- Mercenary Kings (218820) — fit score 19
+- Odallus: The Dark Call (319480) — fit score 19
+- One Way Heroics (266210) — fit score 19
+- Oniken (252010) — fit score 19
+- PUSS! (719750) — fit score 19
+- Really Big Sky (201570) — fit score 19
+- Savant - Ascent REMIX (2279330) — fit score 19
+- Stellar Interface (517330) — fit score 19
+- Super Cyborg (341550) — fit score 19
+- Teslagrad (249590) — fit score 19
+- There Was a Caveman (407290) — fit score 19
+- Ultionus: A Tale of Petty Revenge (279160) — fit score 19
+- Unepic (233980) — fit score 19
+- Wife Quest (1554600) — fit score 19
+- Astral Ascent (1280930) — fit score 18
+- Axiom Verge 2 (946030) — fit score 18
+- Chuck's Challenge 3D 2020 (262590) — fit score 18
+- Coin Crypt (264690) — fit score 18
+- Cuphead (268910) — fit score 18
+- Guacamelee! Gold Edition (214770) — fit score 18
+- Hyper Shapes (2214090) — fit score 18
+- Jamestown (94200) — fit score 18
+- Lost Castle (434650) — fit score 18
+- Nova-111 (325370) — fit score 18
+- On A Roll 3D (341090) — fit score 18
+- Pitiri 1977 (305740) — fit score 18
+- RIVE (278100) — fit score 18
+- Rock Boshers DX: Director's Cut (298790) — fit score 18
+- Semblance (700160) — fit score 18
+- Shovel Knight Dig (1416050) — fit score 18
+- Skul: The Hero Slayer (1147560) — fit score 18
+- Soundodger+ (247140) — fit score 18
+- Spark the Electric Jester (601810) — fit score 18
+- Squirreltopia (334690) — fit score 18
+- SteamWorld Quest: Hand of Gilgamech (804010) — fit score 18
+- Strider (235210) — fit score 18
+- Strikey Sisters (643880) — fit score 18
+- Thief Town (331220) — fit score 18
+- Yooka-Laylee and the Impossible Lair (846870) — fit score 18
+- You Are Not a Banana: Better Edition (340470) — fit score 18
+- 6180 the moon (299660) — fit score 17
+- Anodyne (234900) — fit score 17
+- Archvale (1296360) — fit score 17
+- Axiom Verge (332200) — fit score 17
+- BARRIER X (463150) — fit score 17
+- Braid (26800) — fit score 17
+- Caverns of Mars: Recharged (2213980) — fit score 17
+- Dino Run DX (248330) — fit score 17
+- DuckTales Remastered (237630) — fit score 17
+- Dungeon Souls (383230) — fit score 17
+- Earth Overclocked (387060) — fit score 17
+- Flynn: Son of Crimson (737520) — fit score 17
+- Full Bore (264060) — fit score 17
+- Giana Sisters: Twisted Dreams (223220) — fit score 17
+- GoNNER (437570) — fit score 17
+- Haiku, the Robot (1231880) — fit score 17
+- Hand of Fate (266510) — fit score 17
+- JumpJet Rex (329460) — fit score 17
+- Laser Lasso BALL (502700) — fit score 17
+- MO:Astray (1104660) — fit score 17
+- Momodora III (302790) — fit score 17
+- Mutant Mudds Deluxe (247370) — fit score 17
+- Necrosphere (607400) — fit score 17
+- Peggle Deluxe (3480) — fit score 17
+- Reaper - Tale of a Pale Swordsman (269370) — fit score 17
+- Run or Die (325150) — fit score 17
+- SONIC THE HEDGEHOG 4 Episode II (203650) — fit score 17
+- Squishy the Suicidal Pig (318430) — fit score 17
+- The Way (311010) — fit score 17
+- Wonder Boy: The Dragon's Trap (543260) — fit score 17
+- Wuppo - Definitive Edition (400630) — fit score 17
+- Adventures of Pip (303550) — fit score 16
+- Aggelos (717310) — fit score 16
+- Assault Android Cactus (250110) — fit score 16
+- Beatbuddy: Tale of the Guardians (231040) — fit score 16
+- Blasphemous (774361) — fit score 16
+- Cally's Caves 3 (418120) — fit score 16
+- Castle In The Darkness (262960) — fit score 16
+- Cyberwar (1449780) — fit score 16
+- Deep Dungeons of Doom (325090) — fit score 16
+- Diehard Dungeon (277870) — fit score 16
+- Enigmoon (406090) — fit score 16
+- Escape Goat (251370) — fit score 16
+- Foregone (1000760) — fit score 16
+- Gateways (216290) — fit score 16
+- Geometry Wars: Retro Evolved (8400) — fit score 16
+- Gimmick! 2 (2994880) — fit score 16
+- Gunbrella (1580180) — fit score 16
+- Hero Siege (269210) — fit score 16
+- Hyperspace Invaders II: DX (397690) — fit score 16
+- Inscryption (1092790) — fit score 16
+- Jet Gunner (314250) — fit score 16
+- KarmaZoo (1661630) — fit score 16
+- Lair of the Clockwork God (1060600) — fit score 16
+- LIMBO (48000) — fit score 16
+- Magicite (268750) — fit score 16
+- Mr. DRILLER DrillLand (1126750) — fit score 16
+- Ocean's Heart (1393750) — fit score 16
+- Offspring Fling! (211360) — fit score 16
+- PAC-MAN 256 (455400) — fit score 16
+- PixelJunk™ Eden (105800) — fit score 16
+- PixelJunk™ Shooter (255870) — fit score 16
+- Puyo Puyo™Tetris® (546050) — fit score 16
+- Rex Rocket (288020) — fit score 16
+- Risk of Rain (2013) (248820) — fit score 16
+- Shantae and the Pirate's Curse (345820) — fit score 16
+- Shantae and the Seven Sirens (1191630) — fit score 16
+- Sugar Cube: Bittersweet Factory (212110) — fit score 16
+- Sundered: Eldritch Edition (535480) — fit score 16
+- Super Dungeon Boy (718180) — fit score 16
+- Super Panda Adventures (311190) — fit score 16
+- Trine 2 (35720) — fit score 16
+- Xeodrifter™ (319140) — fit score 16
+
+A — Strong small-screen fit
+Should read well when streamed to the handheld, with only light UI/text caveats.
+
+- Anoxemia (338050) — fit score 15
+- BOOR (450170) — fit score 15
+- Castle of no Escape 2 (542350) — fit score 15
+- Death's Gambit: Afterlife (356650) — fit score 15
+- Death's Hangover (521920) — fit score 15
+- Fearful Symmetry & The Cursed Prince (725080) — fit score 15
+- Gato Roboto (916730) — fit score 15
+- Iconoclasts (393520) — fit score 15
+- INMOST (938560) — fit score 15
+- Jet Lancer (913060) — fit score 15
+- Just Get Through (338190) — fit score 15
+- Kick Ass Commandos (359140) — fit score 15
+- LYNE (266010) — fit score 15
+- Master Spy (331190) — fit score 15
+- Move or Die (323850) — fit score 15
+- Oddworld: Abe's Exoddus (15710) — fit score 15
+- OlliOlli World (1190170) — fit score 15
+- Outland (305050) — fit score 15
+- Quest of Dungeons (270050) — fit score 15
+- Shovel Knight Pocket Dungeon (1184760) — fit score 15
+- Sparklite (943140) — fit score 15
+- Stealth Inc 2 (329380) — fit score 15
+- SteamWorld Dig 2 (571310) — fit score 15
+- Super Puzzle Platformer Deluxe (238530) — fit score 15
+- Teleglitch: Die More Edition (234390) — fit score 15
+- The Bridge (204240) — fit score 15
+- The Story Goes On (369560) — fit score 15
+- UnMetal (1203710) — fit score 15
+- A-Gents (460910) — fit score 14
+- Ascendant (296930) — fit score 14
+- Attempt[42] (562520) — fit score 14
+- Bejeweled 3 (78000) — fit score 14
+- Capsized (95300) — fit score 14
+- Cave Story+ (200900) — fit score 14
+- David. (346180) — fit score 14
+- Dead Pixels (222980) — fit score 14
+- Dr.Green (340290) — fit score 14
+- Dreaming Sarah (296870) — fit score 14
+- EDGE (38740) — fit score 14
+- Escape Goat 2 (255340) — fit score 14
+- Evoland (233470) — fit score 14
+- Evoland Legendary Edition (1020470) — fit score 14
+- Figment 2: Creed Valley (1085220) — fit score 14
+- Freedom Planet (248310) — fit score 14
+- Geometry Wars 3: Dimensions Evolved (310790) — fit score 14
+- Half Minute Hero: Super Mega Neo Climax Ultimate Boy (214830) — fit score 14
+- Hammerwatch (239070) — fit score 14
+- Harmony's Odyssey (1531490) — fit score 14
+- Hitman GO: Definitive Edition (427820) — fit score 14
+- Horace (629090) — fit score 14
+- Hyper Light Drifter (257850) — fit score 14
+- Into the Breach (590380) — fit score 14
+- King of the Bridge (2523120) — fit score 14
+- Knytt Underground (248190) — fit score 14
+- Lichtspeer (434740) — fit score 14
+- Little Orpheus (1558930) — fit score 14
+- Neon Chrome (428750) — fit score 14
+- Nongünz (633130) — fit score 14
+- Out There Somewhere (263980) — fit score 14
+- Parcel (316080) — fit score 14
+- Pid (218740) — fit score 14
+- Pixel Gladiator (542400) — fit score 14
+- Pixel Heroes: Byte & Magic (338320) — fit score 14
+- Planet of Lana (1608230) — fit score 14
+- Reventure (900270) — fit score 14
+- Slipstream (732810) — fit score 14
+- Star Renegades (651670) — fit score 14
+- Straimium Immortaly (515650) — fit score 14
+- Super Galaxy Squadron EX Turbo (345860) — fit score 14
+- The Bug Butcher (350740) — fit score 14
+- There Is No Light (1132980) — fit score 14
+- They Always Run (1585440) — fit score 14
+- Tic-Toc-Tower (389310) — fit score 14
+- Turnip Boy Commits Tax Evasion (1205450) — fit score 14
+- Ugly (1983220) — fit score 14
+- 10 Second Ninja (271670) — fit score 13
+- Aerannis (356580) — fit score 13
+- BADLAND: Game of the Year Edition (269670) — fit score 13
+- Beat Hazard 2 (618740) — fit score 13
+- bit Dungeon II (331440) — fit score 13
+- BlazBlue: Calamity Trigger (263300) — fit score 13
+- Bloo Kid 2 (379640) — fit score 13
+- Book of Demons (449960) — fit score 13
+- Boson X (302610) — fit score 13
+- Bunny Must Die! Chelsea and the 7 Devils (250660) — fit score 13
+- Cargo Commander (220460) — fit score 13
+- Courier of the Crypts (362940) — fit score 13
+- Crawl (293780) — fit score 13
+- Dandara: Trials of Fear Edition (612390) — fit score 13
+- Disastr_Blastr (431200) — fit score 13
+- Elliot Quest (293440) — fit score 13
+- Fist Slash: Of Ultimate Fury (409070) — fit score 13
+- FOTONICA (253290) — fit score 13
+- In Between (388420) — fit score 13
+- Insanely Twisted Shadow Planet (205730) — fit score 13
+- Invisigun Reloaded (375750) — fit score 13
+- Knight Squad (294000) — fit score 13
+- Lara Croft and the Guardian of Light (35130) — fit score 13
+- Never Alone (Kisima Ingitchuna) (295790) — fit score 13
+- Okhlos: Omega (400180) — fit score 13
+- Orbt XL (615610) — fit score 13
+- Pixel Boy and the Ever Expanding Dungeon (263080) — fit score 13
+- Potatoman Seeks the Troof (328500) — fit score 13
+- Rochard (107800) — fit score 13
+- Selective Jump: Once Again With Feeling (363920) — fit score 13
+- Simmiland (932850) — fit score 13
+- Sine Mora EX (606730) — fit score 13
+- Snakebird (357300) — fit score 13
+- Stealth Bastard Deluxe (209190) — fit score 13
+- SteamWorld Dig (252410) — fit score 13
+- Super Life of Pixel (327260) — fit score 13
+- Syder Arcade (252310) — fit score 13
+- Terrian Saga: KR-17 (278640) — fit score 13
+- The Fall (290770) — fit score 13
+- The Sun and Moon (321560) — fit score 13
+- The Swapper (231160) — fit score 13
+- Tiny Barbarian DX (253350) — fit score 13
+- Toby: The Secret Mine (395160) — fit score 13
+- Tomb of Tyrants (340360) — fit score 13
+- Trap Them - Sniper Edition (407150) — fit score 13
+- Vanguard Princess (262150) — fit score 13
+- Vertical Drop Heroes HD (311480) — fit score 13
+- Waking Mars (227200) — fit score 13
+- Wildfire (431940) — fit score 13
+- Wizard of Legend (445980) — fit score 13
+- 1000 Amps (205690) — fit score 12
+- Aces and Adventures (1815570) — fit score 12
+- Aces Wild: Manic Brawling Action! (269230) — fit score 12
+- Apotheon (208750) — fit score 12
+- Bionic Dues (238910) — fit score 12
+- Bosorka (2118370) — fit score 12
+- Bravery and Greed (943370) — fit score 12
+- Cardboard Town (2198070) — fit score 12
+- Castlevania: Lords of Shadow – Mirror of Fate HD (282530) — fit score 12
+- Duet (292600) — fit score 12
+- Full Mojo Rampage (225280) — fit score 12
+- Giana Sisters: Twisted Dreams - Rise of the Owlverlord (246960) — fit score 12
+- Gloom (619280) — fit score 12
+- Golf Club Nostalgia (1556870) — fit score 12
+- Haunt the House: Terrortown (270630) — fit score 12
+- Hexcells (265890) — fit score 12
+- Hob (404680) — fit score 12
+- ibb & obb (95400) — fit score 12
+- In Celebration of Violence (509570) — fit score 12
+- Islets (1669420) — fit score 12
+- Ittle Dew (241320) — fit score 12
+- KeyWe (1242980) — fit score 12
+- King Arthur's Gold (219830) — fit score 12
+- Knights of Pen and Paper +1 (231740) — fit score 12
+- Lethal League (261180) — fit score 12
+- Meltdown (268220) — fit score 12
+- Mobile Astro (565110) — fit score 12
+- Nidhogg (94400) — fit score 12
+- Oddworld: Abe's Oddysee (15700) — fit score 12
+- OlliOlli (274250) — fit score 12
+- Peggle Nights (3540) — fit score 12
+- Pix the Cat (330180) — fit score 12
+- Pixel: ru² (351170) — fit score 12
+- Rampage Knights (314410) — fit score 12
+- RefleX (281860) — fit score 12
+- REVOLVER360 RE:ACTOR (313400) — fit score 12
+- Rocketbirds: Hardboiled Chicken (215510) — fit score 12
+- Serial Cleaner (522210) — fit score 12
+- Shantae: Half-Genie Hero Ultimate Edition (764300) — fit score 12
+- Sine Mora (207040) — fit score 12
+- Songbringer (367080) — fit score 12
+- The Swords of Ditto: Mormo's Curse (619780) — fit score 12
+- Titan Souls (297130) — fit score 12
+- Tobe's Vertical Adventure (105700) — fit score 12
+- Trine (35700) — fit score 12
+- UnderMine (656350) — fit score 12
+- Adventures of Shuggy (211440) — fit score 11
+- Audiosurf (12900) — fit score 11
+- Avalanche 2: Super Avalanche (351250) — fit score 11
+- Awesomenauts (204300) — fit score 11
+- Bloodstained: Ritual of the Night (692850) — fit score 11
+- Blue Fire (1220150) — fit score 11
+- Crimzon Clover  WORLD IGNITION (285440) — fit score 11
+- Death Ray Manta (338760) — fit score 11
+- Detective Case and Clown Bot in: Murder in the Hotel Lisbon (297290) — fit score 11
+- Fae Tactics (995980) — fit score 11
+- FLY'N (223730) — fit score 11
+- Frogun (1575470) — fit score 11
+- Frozen Synapse (98200) — fit score 11
+- Gibbon: Beyond the Trees (1837330) — fit score 11
+- Golf Peaks (923260) — fit score 11
+- GundeadliGne (92220) — fit score 11
+- Hook (367580) — fit score 11
+- INK (385710) — fit score 11
+- Lara Croft GO (540840) — fit score 11
+- Lichtspeer: Double Speer Edition (994040) — fit score 11
+- Monaco (113020) — fit score 11
+- Nihilumbra (252670) — fit score 11
+- Osteya (402980) — fit score 11
+- Pilgrims (1049280) — fit score 11
+- Pivvot (293900) — fit score 11
+- SanctuaryRPG: Black Edition (328760) — fit score 11
+- SEGA Mega Drive & Genesis Classics (34270) — fit score 11
+- Shadow Puppeteer (316480) — fit score 11
+- Skator Gator 3D (1996470) — fit score 11
+- Spy Chameleon - RGB Agent (297490) — fit score 11
+- The Expendabros (312990) — fit score 11
+- The Last Door - Collector's Edition (284390) — fit score 11
+- The Legend of Tianding (1406850) — fit score 11
+- The Masterplan (313080) — fit score 11
+- The Plucky Squire (1627570) — fit score 11
+- The Witcher Adventure Game (303800) — fit score 11
+- Tick Tock Isle (418440) — fit score 11
+- Turbo Pug DX (513780) — fit score 11
+- Valiant Hearts: The Great War™ / Soldats Inconnus : Mémoires de la Grande Guerre™ (260230) — fit score 11
+- Velocity®Ultra (244890) — fit score 11
+- Warlocks vs Shadows (330270) — fit score 11
+- Warmachine Tactics (253510) — fit score 11
+- Wayward Souls (559260) — fit score 11
+- Where is my Heart? (244950) — fit score 11
+- Wyv and Keep: The Temple of the Lost Idol (263960) — fit score 11
+- A Bastard's Tale (371550) — fit score 10
+- Airscape: The Fall of Gravity (317250) — fit score 10
+- An Imp? A Fiend! (354960) — fit score 10
+- Bardbarian (269490) — fit score 10
+- BiT Evolution (342020) — fit score 10
+- Commander Cool 2 (356070) — fit score 10
+- Concrete Jungle (400160) — fit score 10
+- Cosmochoria (293240) — fit score 10
+- Crystal Catacombs (325880) — fit score 10
+- Day of the Tentacle Remastered (388210) — fit score 10
+- Death Road to Canada (252610) — fit score 10
+- Desert Child (844050) — fit score 10
+- Detective Di: The Silk Rose Murders (792040) — fit score 10
+- Dust: An Elysian Tail (236090) — fit score 10
+- Dustoff Heli Rescue (341730) — fit score 10
+- Eron (356880) — fit score 10
+- EvilMorph (562490) — fit score 10
+- Evoland 2 (359310) — fit score 10
+- Explodemon (281820) — fit score 10
+- Finding Teddy (259600) — fit score 10
+- GRIS (683320) — fit score 10
+- Home Sheep Home: Farmageddon Party Edition (259810) — fit score 10
+- Jones On Fire (270810) — fit score 10
+- Katamari Damacy REROLL (848350) — fit score 10
+- Lara Croft and the Temple of Osiris (289690) — fit score 10
+- Lila’s Sky Ark (1573390) — fit score 10
+- Luckslinger (358810) — fit score 10
+- MANOS: The Hands of Fate ~ Director's Cut (350780) — fit score 10
+- Mark of the Ninja (214560) — fit score 10
+- Monochroma (265830) — fit score 10
+- Nobody Saves the World (1432050) — fit score 10
+- NORCO (1221250) — fit score 10
+- Oddworld: New 'n' Tasty (314660) — fit score 10
+- Owlboy (115800) — fit score 10
+- PAC-MAN™ CHAMPIONSHIP EDITION 2 (441380) — fit score 10
+- PixelJunk™ Shooter Ultimate (332330) — fit score 10
+- Plastiland (421880) — fit score 10
+- Pretentious Game (279540) — fit score 10
+- Prisoner (653210) — fit score 10
+- Pushcat (308440) — fit score 10
+- Rakuen (559210) — fit score 10
+- Regular Human Basketball (661940) — fit score 10
+- Revenge of the Titans (93200) — fit score 10
+- Say No! More (1191900) — fit score 10
+- Shank 2 (102840) — fit score 10
+- Shmadow (397570) — fit score 10
+- Shooting Stars! (415350) — fit score 10
+- Skully (1249110) — fit score 10
+- Skyborn (278460) — fit score 10
+- Snapshot (204220) — fit score 10
+- Soccertron (334620) — fit score 10
+- Space Codex (469890) — fit score 10
+- Symphony (207750) — fit score 10
+- The Adventures of Fatman (395250) — fit score 10
+- The Binding of Isaac (113200) — fit score 10
+- The Deer God (328940) — fit score 10
+- The Joylancer: Legendary Motor Knight (315540) — fit score 10
+- The Low Road (603700) — fit score 10
+- Top Hat (315940) — fit score 10
+- Tunche (887450) — fit score 10
+- TUNIC (553420) — fit score 10
+- Ultra Street Fighter IV (45760) — fit score 10
+- Vector (248970) — fit score 10
+- Vox Populi Vox Dei 2 (345120) — fit score 10
+- A Boy and His Blob (281200) — fit score 9
+- A Wizard's Lizard (280040) — fit score 9
+- Another Perspective (305920) — fit score 9
+- Aquaria (24420) — fit score 9
+- Batman™: Arkham Origins Blackgate - Deluxe Edition (267490) — fit score 9
+- Bombslinger (475960) — fit score 9
+- Brawlhalla (291550) — fit score 9
+- Camera Obscura (341500) — fit score 9
+- Carto (1172450) — fit score 9
+- Closure (72000) — fit score 9
+- Cosmo's Cosmic Adventure (358250) — fit score 9
+- Danmaku Unlimited 2 (280560) — fit score 9
+- Dark Void Zero (45730) — fit score 9
+- Death Goat (340770) — fit score 9
+- Digseum (3361470) — fit score 9
+- DungeonUp (388620) — fit score 9
+- Flat Kingdom Paper's Cut Edition (405970) — fit score 9
+- Fortix 2 (45450) — fit score 9
+- Glorkian Warrior: The Trials Of Glork (341120) — fit score 9
+- Greed Corp (48950) — fit score 9
+- Gundemonium Recollection (92200) — fit score 9
+- Gunman Clive (262550) — fit score 9
+- Heal (1056610) — fit score 9
+- Hollow Knight (367520) — fit score 9
+- Ichi (300300) — fit score 9
+- KAMI (272040) — fit score 9
+- Last Horizon (394220) — fit score 9
+- Lines X (724740) — fit score 9
+- LUFTRAUSERS (233150) — fit score 9
+- Millie (294230) — fit score 9
+- Mushroom 11 (243160) — fit score 9
+- NightSky (99700) — fit score 9
+- Notrium (349100) — fit score 9
+- Onikira: Demon Killer (310850) — fit score 9
+- Ori and the Blind Forest (261570) — fit score 9
+- Ori and the Blind Forest: Definitive Edition (387290) — fit score 9
+- Party Hard (356570) — fit score 9
+- Retro/Grade (222660) — fit score 9
+- Robot Exploration Squad (393600) — fit score 9
+- Sackboy™: A Big Adventure (1599660) — fit score 9
+- Stick It To The Man! (251830) — fit score 9
+- Streets of Rogue (512900) — fit score 9
+- Super Motherload (269110) — fit score 9
+- Superbrothers: Sword & Sworcery EP (204060) — fit score 9
+- The Chaos Engine (242530) — fit score 9
+- The Count Lucanor (440880) — fit score 9
+- The Final Station (435530) — fit score 9
+- The Last Spell (1105670) — fit score 9
+- Trap Them (375930) — fit score 9
+- Undertale (391540) — fit score 9
+- Unexplored (506870) — fit score 9
+- Viktor (296730) — fit score 9
+- Vintage Year (333760) — fit score 9
+- Yoku's Island Express (334940) — fit score 9
+
+B — Playable with caveats
+Worth trying, but expect some small text, busy effects, or detail loss.
+
+- A Good Snowman Is Hard To Build (316610) — fit score 8
+- A Virus Named TOM (207650) — fit score 8
+- Afterimage (1701520) — fit score 8
+- Antichamber (219890) — fit score 8
+- AVICII Invector (986800) — fit score 8
+- Blaite (461730) — fit score 8
+- Bob Was Hungry (343560) — fit score 8
+- Broken Age (232790) — fit score 8
+- ChargeShot (401840) — fit score 8
+- Children of Morta (330020) — fit score 8
+- Cosmic Express (583270) — fit score 8
+- Deadlight (211400) — fit score 8
+- Disorder (322080) — fit score 8
+- Dungeons of Dredmor (98800) — fit score 8
+- English Country Tune (207570) — fit score 8
+- Fortune-499 (840610) — fit score 8
+- Galaxy Admirals (411120) — fit score 8
+- GemCraft - Chasing Shadows (296490) — fit score 8
+- Gemini Rue (80310) — fit score 8
+- Grindstone (1818690) — fit score 8
+- Heat Signature (268130) — fit score 8
+- Isle of Arrows (1946970) — fit score 8
+- Job the Leprechaun (386420) — fit score 8
+- Lost in Play (1328840) — fit score 8
+- Mondrian - Abstraction in Beauty (392780) — fit score 8
+- Moon Hunters (320040) — fit score 8
+- Papers, Please (239030) — fit score 8
+- POPixel (485560) — fit score 8
+- Rain World (312520) — fit score 8
+- Retro City Rampage™ DX (204630) — fit score 8
+- Richard & Alice (279260) — fit score 8
+- Runestone Keeper (339400) — fit score 8
+- Space - The Return Of The Pixxelfrazzer (385100) — fit score 8
+- Space Channel 5: Part 2 (71260) — fit score 8
+- Space Pilgrim Episode I: Alpha Centauri (429470) — fit score 8
+- Spectraball (18300) — fit score 8
+- Super Mega Neo Pug (469730) — fit score 8
+- Two Brothers (259760) — fit score 8
+- Vessel (108500) — fit score 8
+- Waveform (204180) — fit score 8
+- Woodle Tree Adventures (299460) — fit score 8
+- ASDAD: All-Stars Dungeons and Diamonds (364190) — fit score 7
+- Atomicrops (757320) — fit score 7
+- Black Book (1138660) — fit score 7
+- Botanicula (207690) — fit score 7
+- Bug Academy (881040) — fit score 7
+- Cat Goes Fishing (343780) — fit score 7
+- Chaos on Deponia (220740) — fit score 7
+- Chime (62100) — fit score 7
+- Circuits (282760) — fit score 7
+- Costume Quest (115100) — fit score 7
+- CrossCode (368340) — fit score 7
+- Cubot (340280) — fit score 7
+- Cute Things Dying Violently (305820) — fit score 7
+- Death Crown (814530) — fit score 7
+- Defunct (359350) — fit score 7
+- Dokuro (317840) — fit score 7
+- Dropsy (274350) — fit score 7
+- EvilQuest (263820) — fit score 7
+- Feel-A-Maze (333870) — fit score 7
+- Fermi's Path (342650) — fit score 7
+- FIST OF AWESOME (305070) — fit score 7
+- For The King (527230) — fit score 7
+- FORCED (249990) — fit score 7
+- GALAK-Z (300580) — fit score 7
+- Grapple (268320) — fit score 7
+- Gunpoint (206190) — fit score 7
+- Hidden Folks (435400) — fit score 7
+- Hidden Through Time (524910) — fit score 7
+- I Want To Be Human (270410) — fit score 7
+- Legend of Grimrock (207170) — fit score 7
+- Lethal League Blaze (553310) — fit score 7
+- Lightfish (116120) — fit score 7
+- Linea, the Game (428900) — fit score 7
+- LunarLux (1932680) — fit score 7
+- Micron (290380) — fit score 7
+- Moonlighter (606150) — fit score 7
+- Murder (404080) — fit score 7
+- Mushroom Men: Truffle Trouble (222180) — fit score 7
+- NiGHTS into Dreams... (219950) — fit score 7
+- Ninja Pizza Girl (319470) — fit score 7
+- Of Carrots And Blood (439440) — fit score 7
+- Olympia Rising (295910) — fit score 7
+- Ookibloks (399910) — fit score 7
+- Orbital Gear (298520) — fit score 7
+- Pixel Star (367300) — fit score 7
+- Procyon (266250) — fit score 7
+- Puddle (222140) — fit score 7
+- Redshift Blueshift (367430) — fit score 7
+- RFLEX (392020) — fit score 7
+- Road Not Taken (293740) — fit score 7
+- Secrets of Rætikon (246680) — fit score 7
+- Skullgirls 2nd Encore (245170) — fit score 7
+- Snake Pass (544330) — fit score 7
+- Square Heroes (334560) — fit score 7
+- SteamWorld Heist (322190) — fit score 7
+- Sticky Business (2303350) — fit score 7
+- Summer Catchers (908050) — fit score 7
+- Super Lemonade Factory (307270) — fit score 7
+- Taiji (1141580) — fit score 7
+- The Darkside Detective (368390) — fit score 7
+- The Howler (306040) — fit score 7
+- THE VIDEOKID (577700) — fit score 7
+- Tiny Bridge: Ratventure (360380) — fit score 7
+- Toki Tori (38700) — fit score 7
+- Toki Tori 2+ (201420) — fit score 7
+- TumbleSeed (457890) — fit score 7
+- Wall World (2187290) — fit score 7
+- WHAT THE GOLF? (785790) — fit score 7
+- 12 Labours of Hercules II: The Cretan Bull (360640) — fit score 6
+- 12 Labours of Hercules III: Girl Power (360650) — fit score 6
+- Acceleration of Suguri X-Edition (265170) — fit score 6
+- Angry Arrows (390890) — fit score 6
+- ATONE: Heart of the Elder Tree (894620) — fit score 6
+- Ballpoint Universe: Infinite (259390) — fit score 6
+- Bastion (107100) — fit score 6
+- Bridge Constructor Portal (684410) — fit score 6
+- Catherine Classic (893180) — fit score 6
+- CreaVures (49810) — fit score 6
+- Cubetractor (235720) — fit score 6
+- Curse of the Dead Gods (1123770) — fit score 6
+- Darkest Dungeon® (262060) — fit score 6
+- Divide by Sheep (252130) — fit score 6
+- Eastward (977880) — fit score 6
+- Eets Munchies (214550) — fit score 6
+- Egg Returns Home (363790) — fit score 6
+- Escape 2042 - The Truth Defenders (598590) — fit score 6
+- Fenix Rage (294460) — fit score 6
+- Freedom Fall (262770) — fit score 6
+- FTL: Faster Than Light (212680) — fit score 6
+- Gimbal (252070) — fit score 6
+- Gunman Clive 2 (394550) — fit score 6
+- Guns'N'Zombies (264300) — fit score 6
+- Hitogata Happa (92210) — fit score 6
+- Horizon Chase Turbo (389140) — fit score 6
+- Injustice: Gods Among Us Ultimate Edition (242700) — fit score 6
+- iO (324070) — fit score 6
+- Kromaia (285980) — fit score 6
+- Maniac (1482380) — fit score 6
+- Mechanic Escape (268240) — fit score 6
+- Metanet Hunter CD (586570) — fit score 6
+- Minute of Islands (1049710) — fit score 6
+- Necromonads (391630) — fit score 6
+- New Super Lucky's Tale (1038300) — fit score 6
+- OlliOlli2: Welcome to Olliwood (365660) — fit score 6
+- Oscura: Lost Light (320520) — fit score 6
+- Porcunipine (352620) — fit score 6
+- Refunct (406150) — fit score 6
+- Rocket Knight (19030) — fit score 6
+- Scoregasm (202410) — fit score 6
+- Sky Mercenaries (336090) — fit score 6
+- Slash It (567290) — fit score 6
+- Sonic Generations (71340) — fit score 6
+- SpeedRunners (207140) — fit score 6
+- Spilled! (2240080) — fit score 6
+- Stacklands (1948280) — fit score 6
+- Suguri (262240) — fit score 6
+- Super Killer Hornet: Resurrection (271860) — fit score 6
+- Super Lucky's Tale (847360) — fit score 6
+- Tales of Maj'Eyal (259680) — fit score 6
+- Tales of Monkey Island: Chapter 2 - The Siege of Spinner Cay (31180) — fit score 6
+- Tales of Monkey Island: Chapter 3 - Lair of the Leviathan (31190) — fit score 6
+- Tales of Monkey Island: Chapter 4 - The Trial and Execution of Guybrush Threepwood (31200) — fit score 6
+- Tales of Monkey Island: Chapter 5 - Rise of the Pirate God (31210) — fit score 6
+- Trash TV (343840) — fit score 6
+- Unium (357600) — fit score 6
+- Unrailed! (1016920) — fit score 6
+- Void Invaders (391170) — fit score 6
+- Westerado: Double Barreled (275200) — fit score 6
+- Zack Zero (234290) — fit score 6
+- Zotrix (343280) — fit score 6
+- 3DRPG (431840) — fit score 5
+- Army of Pixels (390920) — fit score 5
+- Cultist Simulator (718670) — fit score 5
+- Dome Keeper (1637320) — fit score 5
+- Doodle God (348360) — fit score 5
+- Forward to the Sky (333250) — fit score 5
+- Grimm (252150) — fit score 5
+- Hades (1145360) — fit score 5
+- Hoa (1484900) — fit score 5
+- HOARD (63000) — fit score 5
+- Last Knight: Rogue Rider Edition (262210) — fit score 5
+- LEGO® Bricktales (1898290) — fit score 5
+- Little Inferno (221260) — fit score 5
+- Manifold Garden (473950) — fit score 5
+- Osmos (29180) — fit score 5
+- Papo & Yo (227080) — fit score 5
+- Pony Island (405640) — fit score 5
+- ROCKETSROCKETSROCKETS (289760) — fit score 5
+- Röki (1067540) — fit score 5
+- RUSH (38720) — fit score 5
+- Salt and Sanctuary (283640) — fit score 5
+- Scribblenauts Unlimited (218680) — fit score 5
+- Scribblenauts Unmasked (249870) — fit score 5
+- Shattered Planet (305640) — fit score 5
+- Spin Rhythm XD (1058830) — fit score 5
+- Stardew Valley (413150) — fit score 5
+- Super Dungeon Maker (1622800) — fit score 5
+- Tales of the Neon Sea (828740) — fit score 5
+- Terraria (105600) — fit score 5
+- Tiki Man (376920) — fit score 5
+- Tinykin (1599020) — fit score 5
+- TOHU (1075200) — fit score 5
+- Ultimate Marvel vs. Capcom 3 (357190) — fit score 5
+- Windforge (266170) — fit score 5
+- Worms Crazy Golf (70620) — fit score 5
+- 12 is Better Than 6 (410110) — fit score 4
+- A Guidebook Of Babel (1467920) — fit score 4
+- ANKI (395380) — fit score 4
+- Anna's Quest (327220) — fit score 4
+- Back to Bed (308040) — fit score 4
+- Bacteria (448470) — fit score 4
+- Blade Kitten (9940) — fit score 4
+- Chime Sharp (326520) — fit score 4
+- Cosmic DJ (297110) — fit score 4
+- Crash Bandicoot™ N. Sane Trilogy (731490) — fit score 4
+- Cube Runner (567280) — fit score 4
+- Dreamscaper (1040420) — fit score 4
+- Drive to Hell (334840) — fit score 4
+- Echo of the Wilds (305780) — fit score 4
+- Edgar - Bokbok in Boulzac (1007830) — fit score 4
+- Eldest Souls (1108590) — fit score 4
+- Evergarden (576500) — fit score 4
+- Face It - A game to fight inner demons (364050) — fit score 4
+- FLOCK! (21640) — fit score 4
+- Fractal: Make Blooms Not War (61310) — fit score 4
+- Garden Story (1062140) — fit score 4
+- GAUGE (272990) — fit score 4
+- Go Home Dinosaurs! (216090) — fit score 4
+- Grand Pigeon's Duty (449530) — fit score 4
+- Grey Cubes (371500) — fit score 4
+- Gunpowder (375170) — fit score 4
+- HyperRogue (342610) — fit score 4
+- KRUNCH (280500) — fit score 4
+- Kung Fu Strike: The Warrior's Rise (212030) — fit score 4
+- Last Inua (331980) — fit score 4
+- Level 22: Gary’s Misadventures (431290) — fit score 4
+- Ludoku (366410) — fit score 4
+- Lume (105100) — fit score 4
+- Magical Brickout (384940) — fit score 4
+- Mini Metro (287980) — fit score 4
+- Monument Valley (1927720) — fit score 4
+- Muffin Knight (263700) — fit score 4
+- Neon Prism (556280) — fit score 4
+- Noir Syndrome (299780) — fit score 4
+- One More Dungeon (415030) — fit score 4
+- Organ Trail: Director's Cut (233740) — fit score 4
+- Paradigm (600370) — fit score 4
+- Perfection. (246360) — fit score 4
+- Puzzle Station 15th Anniversary Retro Release (366990) — fit score 4
+- QbQbQb (329320) — fit score 4
+- Qora (304460) — fit score 4
+- Quantum Conundrum (200010) — fit score 4
+- Rats - Time is running out! (347510) — fit score 4
+- Rebel Cops (970960) — fit score 4
+- Robot Rescue Revolution (284200) — fit score 4
+- Roogoo (38210) — fit score 4
+- Sideway (200190) — fit score 4
+- Silver Knight (432170) — fit score 4
+- Sparkle 2 Evo (253650) — fit score 4
+- Splice (209790) — fit score 4
+- Stikbold! (429330) — fit score 4
+- Storm in a Teacup (104020) — fit score 4
+- Super Destronaut (510250) — fit score 4
+- Survive in Space (467950) — fit score 4
+- Sword of the Stars: The Pit (233700) — fit score 4
+- Tales of Monkey Island: Chapter 1 - Launch of the Screaming Narwhal (31170) — fit score 4
+- Technotopia (2825110) — fit score 4
+- Teenage Mutant Ninja Turtles: Splintered Fate (2996040) — fit score 4
+- TeraBlaster (384150) — fit score 4
+- Tetrobot and Co. (235980) — fit score 4
+- The Escapists (298630) — fit score 4
+- The Indie Mixtape (352640) — fit score 4
+- The Nightmare Cooperative (310070) — fit score 4
+- The Red Strings Club (589780) — fit score 4
+- The UnderGarden (9980) — fit score 4
+- Tiny and Big: Grandpa's Leftovers (205910) — fit score 4
+- TinyKeep (278620) — fit score 4
+- Tisnart Tiles (398920) — fit score 4
+- Ubinota (323630) — fit score 4
+- Unexplored 2: The Wayfarer's Legacy (1095040) — fit score 4
+- Wanderlust: Rebirth (211580) — fit score 4
+- Windosill (37600) — fit score 4
+- World of Goo (22000) — fit score 4
+- Aaero (499890) — fit score 3
+- Aaru's Awakening (294060) — fit score 3
+- ALLTYNEX Second (283840) — fit score 3
+- Arietta of Spirits (1140170) — fit score 3
+- ASCII Attack (370490) — fit score 3
+- Beasts of Maravilla Island (1378020) — fit score 3
+- Beat Cop (461950) — fit score 3
+- Block Legend DX (345640) — fit score 3
+- Burnstar (318480) — fit score 3
+- Cat Quest II (914710) — fit score 3
+- Chants of Sennaar (1931770) — fit score 3
+- Cheesecake Cool Conrad (327210) — fit score 3
+- Chip (275470) — fit score 3
+- Concursion (303340) — fit score 3
+- Crying Suns (873940) — fit score 3
+- Darksiders (50620) — fit score 3
+- Deadlings - Rotten Edition (320150) — fit score 3
+- Diadra Empty (284220) — fit score 3
+- Drawful 2 (442070) — fit score 3
+- Eternal Step (374240) — fit score 3
+- Furi (423230) — fit score 3
+- Green Game: TimeSwapper (432990) — fit score 3
+- Grow Up (426790) — fit score 3
+- Iggy's Egg Adventure (366040) — fit score 3
+- Intake (237760) — fit score 3
+- Jet Set Radio (205950) — fit score 3
+- Jusant (1977170) — fit score 3
+- KAMUI (283820) — fit score 3
+- Kramora's Shadow (372080) — fit score 3
+- Laserlife (323040) — fit score 3
+- Legend of Dungeon (238280) — fit score 3
+- Lumino City (205020) — fit score 3
+- Madballs in...Babo: Invasion (25700) — fit score 3
+- Mages of Mystralia (529660) — fit score 3
+- Magnetic By Nature (296510) — fit score 3
+- Mini Motor Racing EVO (209520) — fit score 3
+- Mini Thief (481870) — fit score 3
+- MouseCraft (252750) — fit score 3
+- NaissanceE (265690) — fit score 3
+- Nakiti Generations (512120) — fit score 3
+- Neon Drive (433910) — fit score 3
+- Networm (408170) — fit score 3
+- Not The Robots (257120) — fit score 3
+- Oceanhorn: Monster of Uncharted Seas (339200) — fit score 3
+- Owys (394770) — fit score 3
+- Paper Monsters Recut (314540) — fit score 3
+- PERFECT ANGLE: The puzzle game based on optical illusions (427780) — fit score 3
+- Plantera (421040) — fit score 3
+- Prismatica (377500) — fit score 3
+- Rain on Your Parade (1213230) — fit score 3
+- Ring Runner: Flight of the Sages (258010) — fit score 3
+- Shadowrun: Dragonfall - Director's Cut (300550) — fit score 3
+- She Remembered Caterpillars (470780) — fit score 3
+- Skyflower (364670) — fit score 3
+- Slip (291070) — fit score 3
+- Sneaky Sneaky (259410) — fit score 3
+- Solar Shifter EX (363940) — fit score 3
+- Song of the Myrne: What Lies Beneath (333330) — fit score 3
+- Sonic Lost World (329440) — fit score 3
+- Soundfall (1608700) — fit score 3
+- Space Drifters 2D (377570) — fit score 3
+- Space Farmers (271570) — fit score 3
+- Spaceman Sparkles 2 (365860) — fit score 3
+- STAR WARS™: Dark Forces (32400) — fit score 3
+- Starlaxis Supernova Edition (336200) — fit score 3
+- Strata (286380) — fit score 3
+- Super Hipster Lumberjack (388340) — fit score 3
+- Super Trench Attack 2 (385360) — fit score 3
+- Sweezy Gunner (295730) — fit score 3
+- The Great Jitters: Pudding Panic (296650) — fit score 3
+- The Last Tinker: City of Colors (260160) — fit score 3
+- The Spiral Scouts (862480) — fit score 3
+- tiny & Tall: Gleipnir Part One (431280) — fit score 3
+- Transistor (237930) — fit score 3
+- Type:Rider (258890) — fit score 3
+- Unpacking (1135690) — fit score 3
+- Velocibox (317710) — fit score 3
+- Victor Vran (345180) — fit score 3
+- Yooka-Laylee (360830) — fit score 3
+
+C — Compromised at 3.5 inch
+Playable if you already know the game, but the interface/detail density works against the display.
+
+- 12 Labours of Hercules (342580) — fit score 2
+- Backfirewall_ (1920100) — fit score 2
+- BalanCity (462680) — fit score 2
+- BasketBelle (329690) — fit score 2
+- Brothers - A Tale of Two Sons (225080) — fit score 2
+- Cat Burglar: A Tail of Purrsuit (760510) — fit score 2
+- Chroma Squad (251130) — fit score 2
+- Chronoclysm (368690) — fit score 2
+- Corporate Lifestyle Simulator (261880) — fit score 2
+- Disney Epic Mickey 2 (245300) — fit score 2
+- Domestic Dog (340340) — fit score 2
+- Down in Bermuda (1107300) — fit score 2
+- Dungeon of the ENDLESS™ (249050) — fit score 2
+- Dwarf Tower (335100) — fit score 2
+- Dynamite Jack (202730) — fit score 2
+- El Hijo (853050) — fit score 2
+- Faron's Fate (409360) — fit score 2
+- Fort Defense (343930) — fit score 2
+- Ilamentia (334710) — fit score 2
+- Intravenous (1486630) — fit score 2
+- Invisible, Inc. (243970) — fit score 2
+- ISLANDERS (1046030) — fit score 2
+- Kiai Resonance (360450) — fit score 2
+- LEGO® Builder's Journey (1544360) — fit score 2
+- LEGO® MARVEL Super Heroes (249130) — fit score 2
+- Lightmatter (994140) — fit score 2
+- Metrocide (313130) — fit score 2
+- Mirror's Edge (17410) — fit score 2
+- Necropolis (384490) — fit score 2
+- NeverEnd (575840) — fit score 2
+- Old Man's Journey (581270) — fit score 2
+- Out There: Ω Edition (334420) — fit score 2
+- Overcooked (448510) — fit score 2
+- Poker Night 2 (234710) — fit score 2
+- Polyball (368180) — fit score 2
+- Poof (243280) — fit score 2
+- Pool Panic (522240) — fit score 2
+- Punch Club (394310) — fit score 2
+- Rekt! (1065320) — fit score 2
+- Rocksmith® 2014 Edition - Remastered (221680) — fit score 2
+- Shadowrun: Hong Kong - Extended Edition (346940) — fit score 2
+- Skara - The Blade Remains (274620) — fit score 2
+- Solar Flux (251910) — fit score 2
+- Sonic & All-Stars Racing Transformed Collection (212480) — fit score 2
+- STAR WARS Jedi: Fallen Order™ (1172380) — fit score 2
+- The Last Campfire (990630) — fit score 2
+- The Mooseman (574310) — fit score 2
+- TOEM (1307580) — fit score 2
+- Tomb Raider: Anniversary (8000) — fit score 2
+- Tomb Raider: Legend (7000) — fit score 2
+- Wytchwood (729000) — fit score 2
+- 2064: Read Only Memories (330820) — fit score 1
+- Among the Heavens (409380) — fit score 1
+- Arboria (924070) — fit score 1
+- Bad North: Jotunn Edition (688420) — fit score 1
+- Blue Fire: Void Maker (1793350) — fit score 1
+- BomberZone (473140) — fit score 1
+- BRAINPIPE: A Plunge to Unhumanity (35800) — fit score 1
+- Bridge Constructor Medieval (319850) — fit score 1
+- Butsbal (375330) — fit score 1
+- Castlevania: Lords of Shadow 2 (239250) — fit score 1
+- Clash of Puppets (325870) — fit score 1
+- Cognition: An Erica Reed Thriller (242780) — fit score 1
+- Death's Door (894020) — fit score 1
+- Don't Tax Me, Bro! (639450) — fit score 1
+- Dungeon Siege III (39160) — fit score 1
+- Epic Showdown (406930) — fit score 1
+- Gem Wars: Attack of the Jiblets (370590) — fit score 1
+- Going Under (1154810) — fit score 1
+- Hell Pie (889910) — fit score 1
+- Hero of Many (297370) — fit score 1
+- Hi-Fi RUSH (1817230) — fit score 1
+- Hungry Flame (586970) — fit score 1
+- Infested Planet (204530) — fit score 1
+- Jotun: Valhalla Edition (323580) — fit score 1
+- Karmaflow: The Rock Opera Videogame (317940) — fit score 1
+- Kingdom: New Lands (496300) — fit score 1
+- Masquerada: Songs and Shadows (459090) — fit score 1
+- MASSIVE CHALICE (246110) — fit score 1
+- Metamorphabet (353280) — fit score 1
+- Mind Scanners (1389550) — fit score 1
+- Morbid: The Seven Acolytes (1140890) — fit score 1
+- Overcooked! 2 (728880) — fit score 1
+- Portal 2 (620) — fit score 1
+- Racer 8 (292380) — fit score 1
+- Retrowave (1239690) — fit score 1
+- Rock of Ages (22230) — fit score 1
+- Rock of Ages 3: Make & Break (1101360) — fit score 1
+- Saviors (314450) — fit score 1
+- Shadowrun Returns (234650) — fit score 1
+- Square Brawl (394850) — fit score 1
+- Stacking (115110) — fit score 1
+- Star Drifter (485330) — fit score 1
+- Super Toy Cars (116100) — fit score 1
+- T.E.C. 3001 (280910) — fit score 1
+- Tengami (299680) — fit score 1
+- The Escapists 2 (641990) — fit score 1
+- The Gunk (1087760) — fit score 1
+- The Marvellous Miss Take (327310) — fit score 1
+- The Sexy Brutale (552590) — fit score 1
+- The Silent Age (352520) — fit score 1
+- Time Loader (1301950) — fit score 1
+- To the Moon (206440) — fit score 1
+- Tobla - Divine Path (2717750) — fit score 1
+- Unbox (512300) — fit score 1
+- Until Then (1574820) — fit score 1
+- Untitled Goose Game (837470) — fit score 1
+- Volume (365770) — fit score 1
+- Words for Evil (335790) — fit score 1
+- 0RBITALIS (278440) — fit score 0
+- Afterfall InSanity Extended Edition (224420) — fit score 0
+- Arcade Paradise (1388870) — fit score 0
+- Astro Prospector (3503440) — fit score 0
+- Attack of the Labyrinth + (357830) — fit score 0
+- Biped (1071870) — fit score 0
+- Bomb Rush Cyberfunk (1353230) — fit score 0
+- Cat Quest (593280) — fit score 0
+- Clickr (45500) — fit score 0
+- Cloud Chamber (290710) — fit score 0
+- Collisions (390910) — fit score 0
+- Creeper World 3: Arc Eternal (280220) — fit score 0
+- Cubesis (318440) — fit score 0
+- DarkEnd (292370) — fit score 0
+- Darksiders II (50650) — fit score 0
+- Date Everything! (2201320) — fit score 0
+- DEFCON Beta Demo (1523) — fit score 0
+- Defy Gravity (96100) — fit score 0
+- DiRT 3 (44320) — fit score 0
+- DiRT 3 Complete Edition (321040) — fit score 0
+- DiRT Showdown (201700) — fit score 0
+- Earthtongue (358070) — fit score 0
+- F1 Race Stars (203680) — fit score 0
+- Fearful Symmetry (570550) — fit score 0
+- Foretales (1170080) — fit score 0
+- Fractured Space (310380) — fit score 0
+- Galcon Fusion (44200) — fit score 0
+- GestureWorks Gameplay (296610) — fit score 0
+- GRID (12750) — fit score 0
+- GRID 2 (44350) — fit score 0
+- Grim Fandango Remastered (316790) — fit score 0
+- GT Power Expansion (44650) — fit score 0
+- HassleHeart (350510) — fit score 0
+- Hatred (341940) — fit score 0
+- Home (215670) — fit score 0
+- Hordelicious (384400) — fit score 0
+- Kind Words (1070710) — fit score 0
+- KWAAN (336790) — fit score 0
+- LEGO® Batman™: Legacy of the Dark Knight (2215200) — fit score 0
+- Level 22 (293300) — fit score 0
+- LOST EMBER: Rekindled Edition (3086580) — fit score 0
+- Luna's Wandering Stars (330660) — fit score 0
+- Machinarium (40700) — fit score 0
+- Marlow Briggs (249680) — fit score 0
+- Nanos (389200) — fit score 0
+- Nekro (246400) — fit score 0
+- Neon Space 2 (505210) — fit score 0
+- Niche - a genetics survival game (440650) — fit score 0
+- Noita (881100) — fit score 0
+- Ophidia (625040) — fit score 0
+- Phoenix Wright: Ace Attorney Trilogy (787480) — fit score 0
+- Picklock (1243220) — fit score 0
+- Pinball FX2 (226980) — fit score 0
+- Pizzarian (340380) — fit score 0
+- Plain Sight (49900) — fit score 0
+- Portal (400) — fit score 0
+- Pressure (224220) — fit score 0
+- Primal Planet (2350270) — fit score 0
+- Project Temporality (290320) — fit score 0
+- Q.U.B.E. (203730) — fit score 0
+- Quantum Replica (470090) — fit score 0
+- RACE 07 - Formula RaceRoom Add-On (44630) — fit score 0
+- RACE On (8640) — fit score 0
+- Rapture Rejects (686600) — fit score 0
+- Remember Me (228300) — fit score 0
+- Rescue Team 5 (416320) — fit score 0
+- ROGUS - Kingdom of The Lost Souls (366350) — fit score 0
+- Scritchy Scratchy (3948120) — fit score 0
+- Serial Cleaners (1337920) — fit score 0
+- Shelldiver (3862670) — fit score 0
+- SilverQuest: Gaiden (333380) — fit score 0
+- Slash It 2 (583760) — fit score 0
+- Solar 2 (97000) — fit score 0
+- Sometimes: Success Requires Sacrifice (351470) — fit score 0
+- SoundStage (485780) — fit score 0
+- South Park™: The Stick of Truth™ (213670) — fit score 0
+- Space Rock Breaker (4035270) — fit score 0
+- Spate (269810) — fit score 0
+- Star Wolves 3: Civil War (46260) — fit score 0
+- STCC II (44620) — fit score 0
+- STCC: The Game (8690) — fit score 0
+- Super Comboman (250280) — fit score 0
+- Super Dungeon Maker - Fink's Awakening (1460800) — fit score 0
+- Super Mega Bob (391960) — fit score 0
+- Take Thy Throne (491260) — fit score 0
+- Terrorhedron (299720) — fit score 0
+- The Adventures of Tree (354860) — fit score 0
+- The Blue Flamingo (302010) — fit score 0
+- The Incredible Adventures of Van Helsing (215530) — fit score 0
+- The Jackbox Party Pack (331670) — fit score 0
+- The Jackbox Party Pack 2 (397460) — fit score 0
+- The Jackbox Party Pack 3 (434170) — fit score 0
+- The Jackbox Party Pack 4 (610180) — fit score 0
+- The Retro Expansion (44660) — fit score 0
+- The Ship Tutorial (2430) — fit score 0
+- The WTCC 2010 Pack (44670) — fit score 0
+- Timelie (1150950) — fit score 0
+- Torchlight II (200710) — fit score 0
+- Tower Wizard (3372980) — fit score 0
+- URBO (2141770) — fit score 0
+- Vane (1063310) — fit score 0
+- Vessel Demo (202390) — fit score 0
+- Withstand: Apotheosis (366600) — fit score 0
+- Yakuza Kiwami 2 (3717340) — fit score 0
+- Yar's Revenge (99120) — fit score 0
+- Ziggurat (308420) — fit score 0
+- A Hat in Time (253230) — fit score -1
+- American Arcadia (1249040) — fit score -1
+- Batman: Arkham Asylum GOTY Edition (35140) — fit score -1
+- Cat Quest III (2305840) — fit score -1
+- Claustrophobia: The Downward Struggle (269590) — fit score -1
+- ClusterPuck 99 (337960) — fit score -1
+- Coffin Dodgers (320540) — fit score -1
+- Cook, Serve, Delicious! 2!! (386620) — fit score -1
+- DAVE THE DIVER (1868140) — fit score -1
+- Dwarfs!? (35480) — fit score -1
+- Eight Mini Racers (434890) — fit score -1
+- Helskate (1295630) — fit score -1
+- Hot Tin Roof: The Cat That Wore A Fedora (253390) — fit score -1
+- Human Resource Machine (375820) — fit score -1
+- Hydrophobia: Prophecy (92000) — fit score -1
+- Lilly and Sasha: Curse of the Immortals (364270) — fit score -1
+- Little Racers STREET (262690) — fit score -1
+- Moonstone Island (1658150) — fit score -1
+- NEO AQUARIUM - The King of Crustaceans - (355240) — fit score -1
+- Octodad: Dadliest Catch (224480) — fit score -1
+- Orbit HD (356380) — fit score -1
+- Oxenfree (388880) — fit score -1
+- Party Hard 2 (572430) — fit score -1
+- Phantom Doctrine (559100) — fit score -1
+- Psychonauts (3830) — fit score -1
+- Reus (222730) — fit score -1
+- Rooks Keep (299440) — fit score -1
+- SEGA Bass Fishing (71240) — fit score -1
+- Sentinel (293200) — fit score -1
+- Space Run (275670) — fit score -1
+- Sunless Sea (304650) — fit score -1
+- The Ramp (1506510) — fit score -1
+- They Breathe (294140) — fit score -1
+- Tokyo 42 (490450) — fit score -1
+- War in a Box: Paper Tanks (308460) — fit score -1
+- A Bird Story (327410) — fit score -2
+- Ampu-Tea (289090) — fit score -2
+- APICO (1390190) — fit score -2
+- Call of the Sea (1042490) — fit score -2
+- Castlevania: Lords of Shadow - Ultimate Edition (234080) — fit score -2
+- Citalis (539440) — fit score -2
+- DmC Devil May Cry (220440) — fit score -2
+- Do Not Feed the Monkeys (658850) — fit score -2
+- Escape Academy (1812090) — fit score -2
+- Gourdlets (2013730) — fit score -2
+- gravilon (355150) — fit score -2
+- Grow Home (323320) — fit score -2
+- In Other Waters (890720) — fit score -2
+- Krautscape (268360) — fit score -2
+- Legacy of Kain: Defiance (224300) — fit score -2
+- LEGO® Batman™: The Videogame (21000) — fit score -2
+- Lili: Child of Geos (266490) — fit score -2
+- Lost in Random™ (1462570) — fit score -2
+- Lovely Planet (298600) — fit score -2
+- Luckitown (1872790) — fit score -2
+- Mini Ninjas (35000) — fit score -2
+- MirrorMoon EP (231310) — fit score -2
+- Mutazione (1080750) — fit score -2
+- Orborun (308580) — fit score -2
+- Reprisal Universe (319560) — fit score -2
+- Republique (317100) — fit score -2
+- Riff Racer (351990) — fit score -2
+- RiME (493200) — fit score -2
+- Rock of Ages 2 (434460) — fit score -2
+- Rocket League (252950) — fit score -2
+- Rollerdrome (1294420) — fit score -2
+- Skate City (1361670) — fit score -2
+- Snuggle Truck (111100) — fit score -2
+- Spaceport Hope (394540) — fit score -2
+- Sparkle 3 Genesis (361190) — fit score -2
+- Sparkle ZERO (448000) — fit score -2
+- Spirit of the North (1213700) — fit score -2
+- Stories: The Path of Destinies (439190) — fit score -2
+- Stray (1332010) — fit score -2
+- SUMMERHOUSE (2533960) — fit score -2
+- Swipecart (295930) — fit score -2
+- The LEGO® Movie - Videogame (267530) — fit score -2
+- Tomb Raider (203160) — fit score -2
+- Tomb Raider: Underworld (8140) — fit score -2
+- Year Walk (269050) — fit score -2
+- Blacksad: Under the Skin (1003890) — fit score -3
+- Caster (29800) — fit score -3
+- Cook, Serve, Delicious! (247020) — fit score -3
+- Cook, Serve, Delicious! 3?! (1000030) — fit score -3
+- Crazy Taxi (71230) — fit score -3
+- Dark Sector (29900) — fit score -3
+- Darksiders II Deathinitive Edition (388410) — fit score -3
+- Darksiders Warmastered Edition (462780) — fit score -3
+- Deponia (214340) — fit score -3
+- Donut County (702670) — fit score -3
+- Evertown (432500) — fit score -3
+- Forager (751780) — fit score -3
+- Ghostbusters: The Video Game Remastered (1449280) — fit score -3
+- Godus Wars (422420) — fit score -3
+- Hacker Evolution - Untold (70110) — fit score -3
+- inMomentum (110400) — fit score -3
+- Kingdom Eighties (1956040) — fit score -3
+- LEGO® Batman™ 2: DC Super Heroes (213330) — fit score -3
+- LEGO® Batman™ 3: Beyond Gotham (313690) — fit score -3
+- Lumini (360840) — fit score -3
+- Master Reboot (251850) — fit score -3
+- Mirror's Edge™ Catalyst (1233570) — fit score -3
+- Nail'd (40380) — fit score -3
+- Persona 4 Golden (1113000) — fit score -3
+- Pizza Express (375250) — fit score -3
+- Plug & Play (353560) — fit score -3
+- Post Apocalyptic Mayhem (91900) — fit score -3
+- Predator Simulator (369100) — fit score -3
+- Q.U.B.E. 2 (359100) — fit score -3
+- Race.a.bit (336030) — fit score -3
+- Resident Evil 6 (221040) — fit score -3
+- Smooth Operators (262900) — fit score -3
+- Sonic Adventure™ 2 (213610) — fit score -3
+- Sonic Frontiers (1237320) — fit score -3
+- Still There (1063490) — fit score -3
+- Summoner (275570) — fit score -3
+- The Coma: Recut (600090) — fit score -3
+- The Eternal Cylinder (865680) — fit score -3
+- The Incredible Adventures of Van Helsing II (272470) — fit score -3
+- Velvet Assassin (16720) — fit score -3
+- X-Blades (7510) — fit score -3
+- You Suck at Parking® - Complete Edition (837880) — fit score -3
+
+D — Not visually ideal
+Dense text/UI, VR-first, cinematic 3D, sim/strategy scale, or non-game software.
+
+- Assemble with Care (1202900) — fit score -4
+- Boid (314010) — fit score -4
+- Devil's Kiss (1213550) — fit score -4
+- GNOG (290510) — fit score -4
+- Graveyard Keeper (599140) — fit score -4
+- Hypnospace Outlaw (844590) — fit score -4
+- Journey (638230) — fit score -4
+- Life is Hard (414080) — fit score -4
+- Loddlenaut (1644940) — fit score -4
+- Mail Time (1607240) — fit score -4
+- Mass Effect™ Legendary Edition (1328670) — fit score -4
+- Okami HD (587620) — fit score -4
+- Resident Evil 5 (21690) — fit score -4
+- Riptide GP2 (257790) — fit score -4
+- Rise to Ruins (328080) — fit score -4
+- Sang-Froid - Tales of Werewolves (227220) — fit score -4
+- SkyDrift (91100) — fit score -4
+- Strike Suit Infinity (234160) — fit score -4
+- Sunset Overdrive (847370) — fit score -4
+- Swords & Crossbones: An Epic Pirate Story (383720) — fit score -4
+- The Big Con (1139280) — fit score -4
+- Urja (338710) — fit score -4
+- Xotic (92600) — fit score -4
+- Zero Gear (18820) — fit score -4
+- Acro Storm (546610) — fit score -5
+- Batman™: Arkham Knight (208650) — fit score -5
+- Beholder (475550) — fit score -5
+- Cinders (293680) — fit score -5
+- Cornerstone: The Song Of Tyrim (284410) — fit score -5
+- Devil May Cry 4 (45700) — fit score -5
+- Dog Sled Saga (286240) — fit score -5
+- Gun Rocket (391420) — fit score -5
+- Haegemonia: Legions of Iron (294770) — fit score -5
+- HITMAN™ 2 (863550) — fit score -5
+- HOT WHEELS UNLEASHED™ (1271700) — fit score -5
+- King's Quest (345390) — fit score -5
+- LEGO® Star Wars™: The Skywalker Saga (920210) — fit score -5
+- METAL GEAR RISING: REVENGEANCE (235460) — fit score -5
+- Microcosmum: survival of cells (386260) — fit score -5
+- Observation (906100) — fit score -5
+- Plague Inc: Evolved (246620) — fit score -5
+- Planets Under Attack (218510) — fit score -5
+- See No Evil (313830) — fit score -5
+- Sonic Adventure DX (71250) — fit score -5
+- Strayed Lights (2162020) — fit score -5
+- Tail Drift (330520) — fit score -5
+- The Bookwalker (1432100) — fit score -5
+- The Darkside Detective: A Fumble in the Dark (795420) — fit score -5
+- Universe For Sale (1627840) — fit score -5
+- War Mongrels (1101790) — fit score -5
+- Weird West: Definitive Edition (1097350) — fit score -5
+- Zeepkist (1440670) — fit score -5
+- Absolute Drift (320140) — fit score -6
+- Beyond Good & Evil (15130) — fit score -6
+- Black Skylands (1143810) — fit score -6
+- Control Ultimate Edition (870780) — fit score -6
+- Darksiders III (606280) — fit score -6
+- Don't Starve (219740) — fit score -6
+- Duckpocalypse (512240) — fit score -6
+- Dyscourse (234920) — fit score -6
+- Florence (1102130) — fit score -6
+- Hacker Evolution Duality (70120) — fit score -6
+- Mortal Shell (1110910) — fit score -6
+- PARTICLE MACE (295690) — fit score -6
+- Poly Bridge (367450) — fit score -6
+- Qbeh-1: The Atlas Cube (252550) — fit score -6
+- Risen 3 - Titan Lords (249230) — fit score -6
+- Robot Roller-Derby Disco Dodgeball (270450) — fit score -6
+- Skullgirls ∞Endless Beta∞ (208610) — fit score -6
+- Styx: Master of Shadows (242640) — fit score -6
+- Styx: Shards of Darkness (355790) — fit score -6
+- The Coma 2: Vicious Sisters (1045720) — fit score -6
+- The Stanley Parable (221910) — fit score -6
+- This Book Is A Dungeon (404690) — fit score -6
+- Toybox Turbos (287260) — fit score -6
+- Vertiginous Golf (272890) — fit score -6
+- A Legend of Luca (433600) — fit score -7
+- A Plague Tale: Innocence (752590) — fit score -7
+- Amnesia: The Dark Descent (57300) — fit score -7
+- Batman: Arkham City GOTY (200260) — fit score -7
+- Batman: Arkham City™ (57400) — fit score -7
+- Batman™: Arkham Origins (209000) — fit score -7
+- BEEP (104200) — fit score -7
+- Blades of Time (208670) — fit score -7
+- Dead Space (2008) (17470) — fit score -7
+- Dead Space 2 (47780) — fit score -7
+- FINAL FANTASY XIII (292120) — fit score -7
+- Heliopedia (1740070) — fit score -7
+- Hover (280180) — fit score -7
+- Lacuna (1364100) — fit score -7
+- Lifeless Planet (261530) — fit score -7
+- Midnight Club II (12160) — fit score -7
+- Omegalodon (248350) — fit score -7
+- Portal Stories: VR (446750) — fit score -7
+- Psychonauts in the Rhombus of Ruin (788690) — fit score -7
+- Ridge Racer™ Unbounded (202310) — fit score -7
+- Ryse: Son of Rome (302510) — fit score -7
+- Sable (757310) — fit score -7
+- Scars Above (1196090) — fit score -7
+- Soko Loco Deluxe (1003730) — fit score -7
+- Soundboxing (517130) — fit score -7
+- Spiritfarer®: Farewell Edition (972660) — fit score -7
+- STAR WARS™ Starfighter™ (32350) — fit score -7
+- stratO (341680) — fit score -7
+- Street Racing Syndicate (292410) — fit score -7
+- The Ship Single Player (2420) — fit score -7
+- Thumper (356400) — fit score -7
+- Trover Saves the Universe (1051200) — fit score -7
+- Yakuza Kiwami 2 (Legacy) (927380) — fit score -7
+- Yakuza: Like a Dragon (1235140) — fit score -7
+- A Story About My Uncle (278360) — fit score -8
+- Another Crab's Treasure (1887840) — fit score -8
+- Assassin's Creed Brotherhood (48190) — fit score -8
+- Assassin's Creed Revelations (201870) — fit score -8
+- Besiege (346010) — fit score -8
+- Beyond Eyes (356050) — fit score -8
+- BlazeRush (302710) — fit score -8
+- Buddy Simulator 1984 (1269950) — fit score -8
+- Death and Taxes (1166290) — fit score -8
+- DEPLOYMENT (755980) — fit score -8
+- Disco Elysium (632470) — fit score -8
+- Distance (233610) — fit score -8
+- ENSLAVED™: Odyssey to the West™ Premium Edition (245280) — fit score -8
+- EXAPUNKS (716490) — fit score -8
+- Feel The Snow (538100) — fit score -8
+- Hello Neighbor (521890) — fit score -8
+- HYPERVIOLENT (1409200) — fit score -8
+- King Of The Castle (1839880) — fit score -8
+- Lost Ember (563840) — fit score -8
+- Mika and The Witch's Mountain (1819460) — fit score -8
+- Polarity (315430) — fit score -8
+- Q.U.B.E: Director's Cut (239430) — fit score -8
+- Rise of the Tomb Raider (391220) — fit score -8
+- Shadow of the Tomb Raider (750920) — fit score -8
+- Shadow Warrior (233130) — fit score -8
+- Shufflepuck Cantina Deluxe (259510) — fit score -8
+- The Flame in the Flood (318600) — fit score -8
+- The Lord of the Rings: War in the North (32800) — fit score -8
+- The Talos Principle 2 (835960) — fit score -8
+- TIS-100 (370360) — fit score -8
+- Viking: Battle for Asgard (211160) — fit score -8
+- Warlock - Master of the Arcane (203630) — fit score -8
+- AER Memories of Old (331870) — fit score -9
+- Always Sometimes Monsters (274310) — fit score -9
+- Assassin's Creed IV Black Flag (242050) — fit score -9
+- DARK SOULS™: Prepare To Die Edition (211420) — fit score -9
+- DEFCON (1520) — fit score -9
+- Everything (582270) — fit score -9
+- Firewatch (383870) — fit score -9
+- Gotham Knights (1496790) — fit score -9
+- Hacker Evolution (70100) — fit score -9
+- HITMAN™ (236870) — fit score -9
+- Horizon Zero Dawn™ Complete Edition (1151640) — fit score -9
+- Kentucky Route Zero (231200) — fit score -9
+- Kingdom: Classic (368230) — fit score -9
+- Life is Strange™ (319630) — fit score -9
+- Like a Dragon Gaiden: The Man Who Erased His Name (2375550) — fit score -9
+- Marvel's Spider-Man 2 (2651280) — fit score -9
+- Marvel's Spider-Man: Miles Morales (1817190) — fit score -9
+- Middle-earth™: Shadow of Mordor™ (241930) — fit score -9
+- Mini Motor Racing X (1303990) — fit score -9
+- MONSTER HUNTER RISE (1446780) — fit score -9
+- MURDERED: SOUL SUSPECT™ (233290) — fit score -9
+- Mythic Ocean (814360) — fit score -9
+- NotTheNameWeWanted (369580) — fit score -9
+- Outer Wilds (753640) — fit score -9
+- Overlord II (12810) — fit score -9
+- Race Injection (44680) — fit score -9
+- RACE: Caterham Expansion (4290) — fit score -9
+- Race: The WTCC Game (4230) — fit score -9
+- Rebel Galaxy (290300) — fit score -9
+- Risen (40300) — fit score -9
+- Risen 2 - Dark Waters (40390) — fit score -9
+- Sokpop S06: Sunset Kingdom (1218920) — fit score -9
+- Soul Gambler (313020) — fit score -9
+- Spore: Galactic Adventures (24720) — fit score -9
+- STAR WARS™ Battlefront™ II (1237950) — fit score -9
+- STAR WARS™ Jedi Knight: Dark Forces II (32380) — fit score -9
+- STAR WARS™ Knights of the Old Republic™ (32370) — fit score -9
+- Teeny Tiny Town (2715700) — fit score -9
+- The Turing Test (499520) — fit score -9
+- Viscera Cleanup Detail: Shadow Warrior (255520) — fit score -9
+- Yakuza 0 (638970) — fit score -9
+- Yakuza 4 Remastered (1105500) — fit score -9
+- Yakuza Kiwami (Legacy) (834530) — fit score -9
+- Yes, Your Grace (1115690) — fit score -9
+- Zeno Clash 2 (215690) — fit score -9
+- Accounting (518580) — fit score -10
+- Alan Wake (108710) — fit score -10
+- Aliens vs. Predator (10680) — fit score -10
+- Aragami (280160) — fit score -10
+- Arctico (325210) — fit score -10
+- Beyond: Two Souls (960990) — fit score -10
+- Call of Juarez Gunslinger (204450) — fit score -10
+- Detroit: Become Human (1222140) — fit score -10
+- Dungeons 2 (262280) — fit score -10
+- ELDEN RING (1245620) — fit score -10
+- Enclave (253980) — fit score -10
+- Haegemonia: The Solon Heritage (294790) — fit score -10
+- How to Survive (250400) — fit score -10
+- Joe Dever's Lone Wolf HD Remastered (279440) — fit score -10
+- LEGO® 2K Drive (1451810) — fit score -10
+- Life is Strange: Before the Storm (554620) — fit score -10
+- Maneater (629820) — fit score -10
+- Mass Effect 2 (2010) (24980) — fit score -10
+- Mass Effect 2 (2010) Edition (2362420) — fit score -10
+- Middle-earth™: Shadow of War™ (356190) — fit score -10
+- MX vs. ATV Reflex (55140) — fit score -10
+- Nock: Hidden Arrow (525210) — fit score -10
+- Recettear: An Item Shop's Tale (70400) — fit score -10
+- Shenmue III (878670) — fit score -10
+- SteamWorld Build (2134770) — fit score -10
+- Sublevel Zero Redux (327880) — fit score -10
+- Submerged: Hidden Depths (1614270) — fit score -10
+- The Red Lantern (1053710) — fit score -10
+- The Thrill of the Fight (494150) — fit score -10
+- theBlu (2217730) — fit score -10
+- Total War: EMPIRE - Definitive Edition (10500) — fit score -10
+- Total War: SHOGUN 2 (34330) — fit score -10
+- Waddle Home (486290) — fit score -10
+- Windward (326410) — fit score -10
+- Yonder: The Cloud Catcher Chronicles (580200) — fit score -10
+- You Need A Budget 4 (YNAB) (227320) — fit score -10
+- 9.03m (263100) — fit score -11
+- Assassin's Creed Freedom Cry (277590) — fit score -11
+- Assassin's Creed Odyssey (812140) — fit score -11
+- Beacon Pines (1269640) — fit score -11
+- Before Your Eyes (1082430) — fit score -11
+- Bound By Flame (243930) — fit score -11
+- Citizen Sleeper (1578650) — fit score -11
+- Cyberpong (462000) — fit score -11
+- DARK SOULS™ II: Scholar of the First Sin (335300) — fit score -11
+- Depth Hunter 2: Deep Dive (248530) — fit score -11
+- Else Heart.Break() (400110) — fit score -11
+- Endling - Extinction is Forever (898890) — fit score -11
+- Epistory - Typing Chronicles (398850) — fit score -11
+- Fable Anniversary (288470) — fit score -11
+- FINAL FANTASY VII REMAKE INTERGRADE (1462040) — fit score -11
+- Gedonia (1114220) — fit score -11
+- God of War (1593500) — fit score -11
+- Grand Mountain Adventure (1247360) — fit score -11
+- Horizon Zero Dawn™ Remastered (2561580) — fit score -11
+- METAL GEAR SOLID V: GROUND ZEROES (311340) — fit score -11
+- METAL GEAR SOLID V: THE PHANTOM PAIN (287700) — fit score -11
+- Monster Prom (743450) — fit score -11
+- Overlord (11450) — fit score -11
+- Overlord: Raising Hell (12710) — fit score -11
+- Paradise Killer (1160220) — fit score -11
+- Read Only Memories: NEURODIVER (1293910) — fit score -11
+- Shadow Gambit: The Cursed Crew (1545560) — fit score -11
+- The Witcher 2: Assassins of Kings Enhanced Edition (20920) — fit score -11
+- The Witcher 3: Wild Hunt (292030) — fit score -11
+- Zeno Clash (22200) — fit score -11
+- ABZÛ (384190) — fit score -12
+- Accounting+ (927270) — fit score -12
+- Amnesia: A Machine for Pigs (239200) — fit score -12
+- Batman: The Enemy Within - The Telltale Series (675260) — fit score -12
+- Brütal Legend (225260) — fit score -12
+- Dishonored 2 (403640) — fit score -12
+- Divinity II: Developer's Cut (219780) — fit score -12
+- Euclidean (398180) — fit score -12
+- Gas Guzzlers Extreme (243800) — fit score -12
+- GRIP: Combat Racing (396900) — fit score -12
+- Hellblade: Senua's Sacrifice (414340) — fit score -12
+- HoloBall (457320) — fit score -12
+- Monster Hunter: World (582010) — fit score -12
+- Santa Simulator (991480) — fit score -12
+- Savage Resurrection (366440) — fit score -12
+- She Sees Red (1081510) — fit score -12
+- Stories Untold (558420) — fit score -12
+- The Elder Scrolls V: Skyrim (72850) — fit score -12
+- The Pale Beyond (1266030) — fit score -12
+- The Uncertain: Last Quiet Day (406970) — fit score -12
+- The Wizards (586950) — fit score -12
+- Thief (239160) — fit score -12
+- Tom Clancy's Splinter Cell Blacklist (235600) — fit score -12
+- Train Valley (353640) — fit score -12
+- 1000xRESIST (1675830) — fit score -13
+- Astrologaster (742520) — fit score -13
+- Burnout™ Paradise Remastered (1238080) — fit score -13
+- DARK (225360) — fit score -13
+- Deep Rock Galactic (548430) — fit score -13
+- Elven Assassin (503770) — fit score -13
+- Grotto (1538850) — fit score -13
+- Hacknet (365450) — fit score -13
+- Keep Talking and Nobody Explodes (341800) — fit score -13
+- Konrad the Kitten - a virtual but real cat (510740) — fit score -13
+- NEO Scavenger (248860) — fit score -13
+- Rick and Morty: Virtual Rick-ality (469610) — fit score -13
+- Skater XL (962730) — fit score -13
+- Sudeki (233350) — fit score -13
+- The Ship (2400) — fit score -13
+- Unseen Diplomacy (429830) — fit score -13
+- Vanishing Realms (322770) — fit score -13
+- Child Of Ault (566270) — fit score -14
+- CONSORTIUM 2014 (264240) — fit score -14
+- DARK SOULS™ III (374320) — fit score -14
+- Eidolon (286140) — fit score -14
+- I Am Bread (327890) — fit score -14
+- I Was a Teenage Exocolonist (1148760) — fit score -14
+- KHOLAT (343710) — fit score -14
+- Pool Nation (254440) — fit score -14
+- Raw Data (436320) — fit score -14
+- Shadow Tactics: Blades of the Shogun (418240) — fit score -14
+- Shelter 1 (244710) — fit score -14
+- SkateBIRD (971030) — fit score -14
+- Space Pirate Trainer (418650) — fit score -14
+- Spore (17390) — fit score -14
+- Tacoma (343860) — fit score -14
+- The Forgotten City (874260) — fit score -14
+- The Novelist (245150) — fit score -14
+- WackyMoles (525870) — fit score -14
+- A Plague Tale: Requiem (1182900) — fit score -15
+- Budget Cuts (400940) — fit score -15
+- Bully: Scholarship Edition (12200) — fit score -15
+- Burnout Paradise: The Ultimate Box (24740) — fit score -15
+- Emily is Away (417860) — fit score -15
+- Heavy Rain (960910) — fit score -15
+- Morphopolis (314020) — fit score -15
+- Need for Speed™ Heat (1222680) — fit score -15
+- ORION: Prelude (104900) — fit score -15
+- RACE 07 (8600) — fit score -15
+- Roadwarden (1155970) — fit score -15
+- Shashingo: Learn Japanese with Photography (1632490) — fit score -15
+- Slime Rancher (433340) — fit score -15
+- Supreme Commander 2 (40100) — fit score -15
+- The Elder Scrolls V: Skyrim Special Edition (489830) — fit score -15
+- Thief Gold (211600) — fit score -15
+- This War of Mine (282070) — fit score -15
+- Train Valley 2 (602320) — fit score -15
+- Wildmender (1599330) — fit score -15
+- Budget Cuts 2: Mission Insolvency (1092430) — fit score -16
+- Dino D-Day (70000) — fit score -16
+- Dishonored (205100) — fit score -16
+- Godus (232810) — fit score -16
+- Help Will Come Tomorrow (1119600) — fit score -16
+- Heroes of the Seven Seas (436400) — fit score -16
+- MIND Path to Thalamus E.Edition (296070) — fit score -16
+- Need for Speed™ Most Wanted (1262560) — fit score -16
+- Need for Speed™ Payback (1262580) — fit score -16
+- Session: Skate Sim (861650) — fit score -16
+- Sid Meier's Civilization V (8930) — fit score -16
+- Synergy (1989070) — fit score -16
+- The Witness (210970) — fit score -16
+- Universe Sandbox Legacy (72200) — fit score -16
+- Watch_Dogs 2 (447040) — fit score -16
+- Deliver Us The Moon (428660) — fit score -17
+- ENDLESS™ Legend (289130) — fit score -17
+- Karnage Chronicles (611160) — fit score -17
+- Oddworld: Stranger's Wrath HD (15750) — fit score -17
+- Praey for the Gods (494430) — fit score -17
+- Shelter 2 (275100) — fit score -17
+- Sokpop S09: pyramida (1390010) — fit score -17
+- Star Horizon (352960) — fit score -17
+- Surgeon Simulator (233720) — fit score -17
+- The Lab (450390) — fit score -17
+- As Far As The Eye (1119700) — fit score -18
+- Batman - The Telltale Series (498240) — fit score -18
+- Betrayer (243120) — fit score -18
+- Breathedge (738520) — fit score -18
+- FarSky (286340) — fit score -18
+- Marvel's Guardians of the Galaxy (1088850) — fit score -18
+- Overload (448850) — fit score -18
+- Savage Lands (307880) — fit score -18
+- The Long Dark (305620) — fit score -18
+- Ancestors: The Humankind Odyssey (536270) — fit score -19
+- Cosmic Trip (427240) — fit score -19
+- Late Shift (584980) — fit score -19
+- Thief: Deadly Shadows (6980) — fit score -19
+- Tilt Brush (327140) — fit score -19
+- War for the Overworld (230190) — fit score -19
+- Batman™: Arkham VR (502820) — fit score -20
+- Driftwatch VR (544800) — fit score -20
+- Mad Max (234140) — fit score -20
+- Orwell (491950) — fit score -20
+- Raji: An Ancient Epic (730390) — fit score -20
+- Red Dead Redemption 2 (1174180) — fit score -20
+- Redout: Enhanced Edition (517710) — fit score -20
+- Super Ninja Hero VR (534880) — fit score -20
+- The Talos Principle VR (552440) — fit score -20
+- Trickster VR (512220) — fit score -20
+- VR Dungeon Knight (566860) — fit score -20
+- ENDLESS™ Space - Definitive Edition (208140) — fit score -21
+- High On Life (1583230) — fit score -21
+- Influent (274980) — fit score -21
+- Primal Carnage (215470) — fit score -21
+- The Talos Principle (257510) — fit score -21
+- Vacation Simulator (726830) — fit score -21
+- Black Desert (582660) — fit score -22
+- Blue Effect VR (522020) — fit score -22
+- Cities: Skylines (255710) — fit score -22
+- Hardspace: Shipbreaker (1161580) — fit score -22
+- Hellblade: Senua's Sacrifice VR Edition (747350) — fit score -22
+- Her Story (368370) — fit score -22
+- Prison Architect (233450) — fit score -22
+- Richie's Plank Experience (517160) — fit score -22
+- theBlu: Season 1 (451520) — fit score -22
+- Titan Chaser (1290170) — fit score -22
+- Trump Simulator VR (547850) — fit score -22
+- Alien: Isolation (214490) — fit score -23
+- EVERSPACE™ (396750) — fit score -23
+- Factorio (427520) — fit score -23
+- Far Cry Primal (371660) — fit score -23
+- Lightblade VR (477270) — fit score -23
+- Lossless Scaling (993090) — fit score -23
+- Race The Sun (253030) — fit score -23
+- Street Champ VR (550160) — fit score -23
+- Tropico 4 (57690) — fit score -23
+- CAT Interstellar (384740) — fit score -24
+- Chorus (1153640) — fit score -24
+- Gone Home (232430) — fit score -24
+- Mountain (313340) — fit score -24
+- SportsBar VR (269170) — fit score -24
+- Thief Simulator (704850) — fit score -24
+- Hoops VR (487770) — fit score -25
+- Sairento VR (555880) — fit score -25
+- House Flipper (613100) — fit score -27
+- Riders Republic (2290180) — fit score -27
+- Lost Ember VR Edition (1880890) — fit score -28
+- Sins of a Solar Empire: Rebellion (204880) — fit score -28
+- Virtual Virtual Reality (889480) — fit score -28
+- Elite Dangerous (359320) — fit score -29
+- Euro Truck Simulator 2 (227300) — fit score -29
+- Job Simulator (448280) — fit score -29
+- The Solus Project (313630) — fit score -29
+- American Truck Simulator (270880) — fit score -30
+- The Falconeer: Revolution Remaster (1135260) — fit score -30
+- Google Earth VR (348250) — fit score -33
+- STAR WARS™: Squadrons (1222730) — fit score -33
+- theHunter: Call of the Wild™ (518790) — fit score -35
+- No Man's Sky (275850) — fit score -39
+- Steep (460920) — fit score -39
+- Planet Coaster (493340) — fit score -44
