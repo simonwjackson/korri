@@ -15,9 +15,7 @@ const outputPath = log
   .trim()
   .split(/\n/)
   .reverse()
-  .find(line =>
-    /^\/nix\/store\/.+-korri-rocknix-product-payload-[^/]+$/.test(line),
-  )
+  .find(line => /^\/nix\/store\/.+-korri-product-payload-[^/]+$/.test(line))
 
 const suspiciousPatterns = [
   "playwright",

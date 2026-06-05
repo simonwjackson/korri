@@ -53,7 +53,7 @@ Concretely:
 # Step 1 — build on aarch64 builder, ssh the closure into the guest store
 NIX_SSHOPTS="-F ${ssh_tmpdir}/ssh_config ${NIX_SSHOPTS:-}" \
   nixos-rebuild boot \
-    --flake .#korri-rocknix-kiosk-odin2portal \
+    --flake .#korri-odin2portal-kiosk \
     --build-host "${BUILDER}" \
     --target-host root@sobo \
     --no-update-lock-file \

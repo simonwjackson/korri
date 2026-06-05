@@ -1,5 +1,7 @@
 {
   pkgs,
+  products,
+  byCompatibleProduct,
   thorSystem,
   soboSystem,
   byCompatibleSystem,
@@ -371,8 +373,10 @@ let
     in
     checks;
 
+  thorProduct = products.thor;
+  odin2PortalProduct = products.odin2portal;
   byCompatibleExposed =
-    byCompatibleSystem != null && configurations ? korri-rocknix-kiosk-by-compatible;
+    byCompatibleSystem != null && lib.hasAttr byCompatibleProduct.configName configurations;
   byCompatibleResult =
     if byCompatibleSystem == null then
       { success = false; }
@@ -380,36 +384,38 @@ let
       builtins.tryEval byCompatibleSystem.config.system.build.toplevel.drvPath;
 
   checks = [
-    (check "Thor RockNix kiosk configuration must be exposed" (
-      configurations ? korri-rocknix-kiosk-thor
+    (check "Thor kiosk configuration must be exposed" (
+      lib.hasAttr thorProduct.configName configurations
     ))
-    (check "Sobo RockNix kiosk configuration must be exposed" (
-      configurations ? korri-rocknix-kiosk-odin2portal
+    (check "Odin2Portal kiosk configuration must be exposed" (
+      lib.hasAttr odin2PortalProduct.configName configurations
     ))
-    (check "by-compatible RockNix kiosk configuration must stay impure-only" (
+    (check "by-compatible kiosk configuration must stay impure-only" (
       !byCompatibleExposed || !byCompatibleResult.success
     ))
-    (check "Thor target system package alias must be exposed" (
-      targetPackages ? korri-rocknix-kiosk-system-thor
+    (check "Thor target system package must be exposed" (
+      lib.hasAttr thorProduct.kioskSystemPackageName targetPackages
     ))
-    (check "Sobo target system package alias must be exposed" (
-      targetPackages ? korri-rocknix-kiosk-system-odin2portal
+    (check "Odin2Portal target system package must be exposed" (
+      lib.hasAttr odin2PortalProduct.kioskSystemPackageName targetPackages
     ))
-    (check "Thor host rootfs package alias must be exposed" (hostPackages ? korri-rocknix-rootfs-thor))
-    (check "Sobo host rootfs package alias must be exposed" (
-      hostPackages ? korri-rocknix-rootfs-odin2portal
+    (check "Thor host rootfs package must be exposed" (
+      lib.hasAttr thorProduct.rootfsPackageName hostPackages
     ))
-    (check "Thor target system package alias must be a derivation" (
-      (targetPackages.korri-rocknix-kiosk-system-thor or null).drvPath or null != null
+    (check "Odin2Portal host rootfs package must be exposed" (
+      lib.hasAttr odin2PortalProduct.rootfsPackageName hostPackages
     ))
-    (check "Sobo target system package alias must be a derivation" (
-      (targetPackages.korri-rocknix-kiosk-system-odin2portal or null).drvPath or null != null
+    (check "Thor target system package must be a derivation" (
+      (targetPackages.${thorProduct.kioskSystemPackageName} or null).drvPath or null != null
     ))
-    (check "Thor host rootfs package alias must be a derivation" (
-      (hostPackages.korri-rocknix-rootfs-thor or null).drvPath or null != null
+    (check "Odin2Portal target system package must be a derivation" (
+      (targetPackages.${odin2PortalProduct.kioskSystemPackageName} or null).drvPath or null != null
     ))
-    (check "Sobo host rootfs package alias must be a derivation" (
-      (hostPackages.korri-rocknix-rootfs-odin2portal or null).drvPath or null != null
+    (check "Thor host rootfs package must be a derivation" (
+      (hostPackages.${thorProduct.rootfsPackageName} or null).drvPath or null != null
+    ))
+    (check "Odin2Portal host rootfs package must be a derivation" (
+      (hostPackages.${odin2PortalProduct.rootfsPackageName} or null).drvPath or null != null
     ))
     (check "by-compatible profile selection must stay impure off-device" (!byCompatibleResult.success))
     (check "generic image modules must stay free of RockNix hardware facts" (
@@ -424,11 +430,11 @@ let
   failures = builtins.filter (candidate: !candidate.assertion) checks;
 in
 if failures != [ ] then
-  throw "Korri RockNix SM8550 config check failed:\n${
+  throw "Korri SM8550 kiosk config check failed:\n${
     lib.concatMapStringsSep "\n" (failure: "- ${failure.message}") failures
   }"
 else
-  pkgs.runCommand "korri-rocknix-sm8550-config-check" { } ''
+  pkgs.runCommand "korri-sm8550-kiosk-config-check" { } ''
     mkdir -p "$out"
     cat > "$out/summary.txt" <<'EOF'
     Korri RockNix SM8550 config invariants passed.

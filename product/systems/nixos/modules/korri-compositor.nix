@@ -378,7 +378,7 @@ in
 
   config = mkMerge [
     # When `nix-on-rocks-guest.nixosModules.sm8550` is also in the eval
-    # (sobo on mountainous, korri-rocknix-kiosk-* internally), default the
+    # (sobo on mountainous, Korri SM8550 kiosk products internally), default the
     # rocknix Moonlight package to the Korri downstream build. Priority 900
     # wins against the substrate's `mkDefault` (1000) but still loses to any
     # explicit host override, so a host that wants stock

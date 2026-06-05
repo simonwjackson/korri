@@ -136,11 +136,11 @@ test-nix:
 # Fast SM8550 iteration gate: validate Thor/Odin system closures without
 # packaging the rootfs tarball payload. Use product payload builds only for
 # promotion/distribution artifacts.
-rocknix-sm8550-toplevel-check:
+sm8550-kiosk-toplevel-check:
   nix build \
-    .#checks.x86_64-linux.korri-rocknix-sm8550-config \
-    .#nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel \
-    .#nixosConfigurations.korri-rocknix-kiosk-thor.config.system.build.toplevel \
+    .#checks.x86_64-linux.korri-sm8550-kiosk-config \
+    .#nixosConfigurations.korri-odin2portal-kiosk.config.system.build.toplevel \
+    .#nixosConfigurations.korri-thor-kiosk.config.system.build.toplevel \
     --dry-run \
     --no-link
 

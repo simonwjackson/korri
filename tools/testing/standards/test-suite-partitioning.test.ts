@@ -54,24 +54,24 @@ describe("test-suite partitioning", () => {
     expect(resolved).toContain(".#packages.x86_64-linux.korri-cli")
     expect(resolved).not.toContain(".#checks.x86_64-linux.korri-image-outputs")
     expect(resolved).not.toContain(
-      ".#checks.x86_64-linux.korri-rocknix-sm8550-config",
+      ".#checks.x86_64-linux.korri-sm8550-kiosk-config",
     )
     expect(resolved).not.toContain("bun test")
     expect(resolved).not.toContain("tools/testing/nix")
   })
 
-  it("rocknix SM8550 toplevel check avoids product payload packaging", () => {
-    const resolved = resolveRecipe("rocknix-sm8550-toplevel-check")
+  it("SM8550 kiosk toplevel check avoids product payload packaging", () => {
+    const resolved = resolveRecipe("sm8550-kiosk-toplevel-check")
 
-    expect(resolved).toContain("korri-rocknix-sm8550-config")
+    expect(resolved).toContain("korri-sm8550-kiosk-config")
     expect(resolved).toContain(
-      "nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel",
+      "nixosConfigurations.korri-odin2portal-kiosk.config.system.build.toplevel",
     )
     expect(resolved).toContain(
-      "nixosConfigurations.korri-rocknix-kiosk-thor.config.system.build.toplevel",
+      "nixosConfigurations.korri-thor-kiosk.config.system.build.toplevel",
     )
     expect(resolved).toContain("--dry-run")
-    expect(resolved).not.toContain("korri-rocknix-product-payload")
+    expect(resolved).not.toContain("korri-product-payload")
   })
 
   it("check recipe actually runs both the TypeScript suite and native Nix suite", () => {

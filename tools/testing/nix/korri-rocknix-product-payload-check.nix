@@ -52,6 +52,7 @@ let
       payloadPackage,
       fixturePayloadPackage,
       fixtureArchiveName,
+      ...
     }:
     let
       metadata = payloadPackage.passthru.productPayload or { };
@@ -59,15 +60,15 @@ let
     in
     [
       (check "${device} product payload package must be exposed" (payloadPackage.drvPath or null != null))
-      (check "${device} host rootfs package alias must remain exposed" (
+      (check "${device} host rootfs package output must remain exposed" (
         lib.hasAttr expectedRootfsAlias hostPackages
         && (hostPackages.${expectedRootfsAlias} or null).drvPath or null != null
       ))
-      (check "${device} target system package alias must remain exposed" (
+      (check "${device} target system package output must remain exposed" (
         lib.hasAttr expectedKioskSystemAlias targetPackages
         && (targetPackages.${expectedKioskSystemAlias} or null).drvPath or null != null
       ))
-      (check "${device} RockNix kiosk configuration must remain exposed" (
+      (check "${device} kiosk configuration must remain exposed" (
         lib.hasAttr expectedConfigAlias configurations
       ))
       (check "${device} product payload must target the selected product explicitly" (
@@ -96,8 +97,7 @@ let
         fixturePayloadPackage.drvPath or null != null
       ))
       (check "${device} fixture archive name must be product-named" (
-        lib.hasPrefix archivePrefix fixtureArchiveName
-        && lib.hasSuffix ".tar.zst" fixtureArchiveName
+        lib.hasPrefix archivePrefix fixtureArchiveName && lib.hasSuffix ".tar.zst" fixtureArchiveName
       ))
     ];
 
@@ -144,15 +144,16 @@ let
     (check "nix-on-rocks Phase 1 rendered package field fixture must be present" (
       contract.renderedPackageFields == expectedRenderedPackageFields
     ))
-  ] ++ lib.concatMap checkPayload payloadSpecs;
+  ]
+  ++ lib.concatMap checkPayload payloadSpecs;
   failures = builtins.filter (candidate: !candidate.assertion) checks;
 in
 if failures != [ ] then
-  throw "Korri RockNix product payload check failed:\n${
+  throw "Korri product payload check failed:\n${
     lib.concatMapStringsSep "\n" (failure: "- ${failure.message}") failures
   }"
 else
-  pkgs.runCommand "korri-rocknix-product-payload-check"
+  pkgs.runCommand "korri-product-payload-check"
     {
       nativeBuildInputs = [
         pkgs.coreutils
@@ -164,6 +165,6 @@ else
 
       mkdir -p "$out"
       cat > "$out/summary.txt" <<'EOF'
-      Korri RockNix product payload invariants passed.
+      Korri product payload invariants passed.
       EOF
     ''

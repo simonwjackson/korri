@@ -21,7 +21,7 @@ tags: [nixpkgs, nix, cache, aarch64, nix-on-rocks, channel-pin, korri]
 Sobo's federation deploy stalled in the `test` phase of a build that
 was rebuilding `nodejs-slim` from source on the aarch64 builder for
 nearly an hour before it was killed. The build was triggered by a
-normal `nixos-rebuild boot --flake .#korri-rocknix-kiosk-odin2portal`
+normal `nixos-rebuild boot --flake .#korri-odin2portal-kiosk`
 that should have been mostly a substitution.
 
 The root cause was a channel split:

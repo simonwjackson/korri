@@ -38,7 +38,7 @@ let
     pkgs.lib.concatStringsSep "\n" productionBunPackageNames
   );
 in
-pkgs.runCommand "korri-rocknix-build-performance-check"
+pkgs.runCommand "korri-sm8550-build-performance-check"
   {
     nativeBuildInputs = [
       pkgs.coreutils

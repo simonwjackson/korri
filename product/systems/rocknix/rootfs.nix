@@ -9,7 +9,7 @@ let
     rootPaths = [ toplevel ];
   };
 in
-pkgs.runCommand "korri-rocknix-guest-rootfs"
+pkgs.runCommand "korri-guest-rootfs"
   {
     nativeBuildInputs = [
       pkgs.coreutils

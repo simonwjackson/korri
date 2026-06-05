@@ -20,7 +20,7 @@ function writeCandidate(dir: string, overrides: Record<string, string> = {}) {
     PRODUCT_SOURCE_SHA256: "",
     PRODUCT_SOURCE_SUBDIR: ".",
     PRODUCT_BUILD_TARGET:
-      ".#nixosConfigurations.korri-rocknix-kiosk-odin2portal.config.system.build.toplevel",
+      ".#nixosConfigurations.korri-odin2portal-kiosk.config.system.build.toplevel",
     PRODUCT_ROOTFS_SEED_REV: cleanRevision,
     PRODUCT_ROOTFS_SEED_DEVICE: "odin2portal",
     PRODUCT_ROOTFS_SEED_COMPATIBLE: "ayn,odin2portal",
@@ -221,7 +221,7 @@ describe("RockNix product payload finalizer", () => {
       const result = finalizeRocknixProductPayload({
         candidateLockPath: writeCandidate(dir, {
           PRODUCT_BUILD_TARGET:
-            ".#nixosConfigurations.korri-rocknix-kiosk-thor.config.system.build.toplevel",
+            ".#nixosConfigurations.korri-thor-kiosk.config.system.build.toplevel",
           PRODUCT_ROOTFS_SEED_DEVICE: "thor",
           PRODUCT_ROOTFS_SEED_COMPATIBLE: "ayn,thor",
           PRODUCT_ROOTFS_SEED_ARCHIVE:

@@ -85,13 +85,13 @@ jobs:
 
       - name: Evaluate payload package and native contract check
         run: |
-          nix eval .#packages.x86_64-linux.korri-rocknix-product-payload-${{ matrix.product }}.drvPath --raw
-          nix eval .#checks.x86_64-linux.korri-rocknix-product-payload.drvPath --raw
+          nix eval .#packages.x86_64-linux.korri-${{ matrix.product }}-product-payload.drvPath --raw
+          nix eval .#checks.x86_64-linux.korri-product-payload.drvPath --raw
 
       - name: Build candidate payload
         if: github.event_name == 'push' || inputs.build_payload
         run: |
-          nix build .#packages.x86_64-linux.korri-rocknix-product-payload-${{ matrix.product }} --out-link result-product-payload
+          nix build .#packages.x86_64-linux.korri-${{ matrix.product }}-product-payload --out-link result-product-payload
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             mkdir -p out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate
             cp -aL result-product-payload/. out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate/

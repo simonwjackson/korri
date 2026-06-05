@@ -53,12 +53,12 @@ jobs:
       - name: Check selected flake outputs
         run: |
           nix eval .#packages.x86_64-linux.korri-desktop.drvPath --raw
-          nix eval .#packages.x86_64-linux.korri-rocknix-rootfs-odin2portal.drvPath --raw
-          nix eval .#packages.x86_64-linux.korri-rocknix-product-payload-odin2portal.drvPath --raw
+          nix eval .#packages.x86_64-linux.korri-odin2portal-rootfs.drvPath --raw
+          nix eval .#packages.x86_64-linux.korri-odin2portal-product-payload.drvPath --raw
           ROCKNIX_GUEST_DEVICE_COMPATIBLE=ayn,odin2portal nix eval --impure \
-            .#nixosConfigurations.korri-rocknix-kiosk-by-compatible.config.system.build.toplevel.drvPath \
+            .#nixosConfigurations.korri-kiosk-by-compatible.config.system.build.toplevel.drvPath \
             --raw
-          nix build .#checks.x86_64-linux.korri-rocknix-product-payload --no-link
+          nix build .#checks.x86_64-linux.korri-product-payload --no-link
           nix build .#checks.x86_64-linux.korri-live-usb-config --no-link
       - name: Live USB VM smoke (non-blocking)
         continue-on-error: true
@@ -92,7 +92,7 @@ jobs:
       - name: Evaluate aarch64 desktop package build plan
         run: nix build .#packages.aarch64-linux.korri-desktop --dry-run --no-link
       - name: Evaluate Sobo RockNix kiosk system build gate
-        run: nix build .#packages.aarch64-linux.korri-rocknix-kiosk-system-odin2portal --dry-run --no-link
+        run: nix build .#packages.aarch64-linux.korri-odin2portal-kiosk-system --dry-run --no-link
 
   smoke-remote:
     if: github.ref == 'refs/heads/trunk'

@@ -269,7 +269,7 @@ in
   );
 
   environment.etc."rocknix-stage10-proof-marker".text = ''
-    korri-rocknix-kiosk-system
+    korri-sm8550-kiosk-system
     target=${config.networking.hostName}
   '';
 

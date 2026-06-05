@@ -3,7 +3,7 @@
   nixpkgs,
   system,
   # Overlays threaded into every nixosConfiguration we build through this
-  # library. Used by korri's own configurations (korri-rocknix-kiosk-*,
+  # library. Used by korri's own configurations (Korri handheld kiosk products,
   # korri-kiosk, live USB) to apply the Korri substrate-package overlay so
   # platform modules that read `pkgs.moonlight-embedded` resolve to the
   # Korri downstream build.
@@ -11,8 +11,8 @@
   # Downstream consumers (mountainous host configs) do NOT go through this
   # library — they call `nixpkgs.lib.nixosSystem` directly with their own
   # pkgs construction. The korri product modules they import default
-  # `services.sunshine.package` and `rocknix.sm8550.moonlight.package` at
-  # the option level, which is the seam that actually reaches those hosts.
+  # the package options they own at the option level, which is the seam
+  # that actually reaches those hosts.
   overlays ? [ ],
 }:
 let

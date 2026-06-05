@@ -96,25 +96,25 @@ Physical v1 acceptance targets an 8th-gen Intel NUC with Ethernet, keyboard fall
 RockNix-backed kiosk appliances are exposed as explicit device targets:
 
 ```bash
-nix build .#packages.aarch64-linux.korri-rocknix-kiosk-system-thor
-nix build .#packages.aarch64-linux.korri-rocknix-kiosk-system-odin2portal
-nix build .#korri-rocknix-rootfs-thor
-nix build .#korri-rocknix-rootfs-odin2portal
-nix build .#korri-rocknix-product-payload-odin2portal
-nix build .#korri-rocknix-product-payload-thor
+nix build .#packages.aarch64-linux.korri-thor-kiosk-system
+nix build .#packages.aarch64-linux.korri-odin2portal-kiosk-system
+nix build .#korri-thor-rootfs
+nix build .#korri-odin2portal-rootfs
+nix build .#korri-odin2portal-product-payload
+nix build .#korri-thor-product-payload
 ```
 
 Matching NixOS configurations are available as:
 
-- `nixosConfigurations.korri-rocknix-kiosk-thor`
-- `nixosConfigurations.korri-rocknix-kiosk-odin2portal`
-- `nixosConfigurations.korri-rocknix-kiosk-by-compatible`
+- `nixosConfigurations.korri-thor-kiosk`
+- `nixosConfigurations.korri-odin2portal-kiosk`
+- `nixosConfigurations.korri-kiosk-by-compatible`
 
 Thor and Sobo/Odin 2 Portal are kiosk appliances only. They include the Korri server, Electrobun client, Sway kiosk, and inputd; they are not server-only RockNix targets. The by-compatible configuration is an impure on-device convenience that reads the normalized device-compatible value through nix-on-rocks. Use the explicit per-device targets for off-device review and Fuji/aarch64 build gates.
 
 These are evaluated NixOS system closures or rootfs tarball packages, not a full OTA/update product. Manual installation, partitioning, flashing, rollback UX, and remote builder selection remain operator/platform concerns.
 
-`korri-rocknix-product-payload-odin2portal` and `korri-rocknix-product-payload-thor` are additive candidate payloads for the Korri-to-nix-on-rocks handoff. They wrap the existing per-product rootfs outputs under seed-contract archive names such as `rocknix-guest-rootfs-odin2portal-<korri-rev>.tar.zst` and `rocknix-guest-rootfs-thor-<korri-rev>.tar.zst`, then emit candidate metadata under `nix-support/product-payload/`. They do not replace the existing rootfs aliases, do not publish a `by-compatible` seed identity, and are consumed only by the nix-on-rocks per-product selector seam.
+`korri-odin2portal-product-payload` and `korri-thor-product-payload` are additive candidate payloads for the Korri-to-nix-on-rocks handoff. They wrap the existing per-product rootfs outputs under seed-contract archive names such as `rocknix-guest-rootfs-odin2portal-<korri-rev>.tar.zst` and `rocknix-guest-rootfs-thor-<korri-rev>.tar.zst`, then emit candidate metadata under `nix-support/product-payload/`. They do not replace the existing rootfs aliases, do not publish a `by-compatible` seed identity, and are consumed only by the nix-on-rocks per-product selector seam.
 
 Candidate payload metadata contains the facts the Nix build can know: authority repository, source subdir, explicit product build target, device id, compatible string, seed archive name/checksum, Korri revision marker, and nix-on-rocks substrate revision. Final promotion metadata requires external immutable facts that Nix cannot infer locally: the clean Korri source revision, GitHub source tarball SHA256, and direct release download URL(s). Use `tools/artifacts/rocknix-product-payload-finalize.ts` to combine those external values with the candidate lock and render device-named final files such as `product-payload-odin2portal.lock` or `product-payload-thor.lock` plus matching `.env` files for the nix-on-rocks selector seam.
 
@@ -168,7 +168,7 @@ Korri imports nix-on-rocks for the product-blind substrate contract:
 - explicit Thor and Odin 2 Portal device profiles
 - by-compatible device-profile selection for on-device promotion
 - substrate package outputs such as Cemu, Steam, moonlight-embedded, InputPlumber, and UCM
-- the rootfs packaging helper used by `korri-rocknix-rootfs-*`
+- the rootfs packaging helper used by the product-facing `korri-*-rootfs` packages
 
 The RockNix appliance composition keeps the server as a non-root system service (`korri-server`) while the constrained guest kiosk session runs as root with the existing `/run/user/0/bus` session bus supplied by nix-on-rocks. Korri selects user-launchable app packages from the substrate; nix-on-rocks keeps SM8550 launchers and OS-coupled runtime plumbing.
 

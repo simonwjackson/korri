@@ -33,7 +33,7 @@ let
       ;
   };
 in
-pkgs.runCommand "korri-rocknix-product-payload-${device}"
+pkgs.runCommand "korri-product-payload-${device}"
   {
     nativeBuildInputs = [
       pkgs.coreutils
@@ -48,7 +48,7 @@ pkgs.runCommand "korri-rocknix-product-payload-${device}"
     rootfs_dir=${rootfsPackage}/tarball
     if [ ! -d "$rootfs_dir" ]; then
       echo "Korri product payload: expected wrapped rootfs package to expose $rootfs_dir" >&2
-      echo "Build korri-rocknix-rootfs-${device} or update product/systems/rocknix/product-payload.nix for the new rootfs layout." >&2
+      echo "Build korri-${device}-rootfs or update product/systems/rocknix/product-payload.nix for the new rootfs layout." >&2
       exit 1
     fi
 
