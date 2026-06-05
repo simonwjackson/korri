@@ -1015,23 +1015,39 @@
             })
           ];
         };
+        hasRocknixGuestCompatible = builtins.getEnv "ROCKNIX_GUEST_DEVICE_COMPATIBLE" != "";
         rocknixPlatformFor =
-          deviceProfile:
-          import ./product/systems/nixos/images/platforms/rocknix-sm8550.nix {
+          product:
+          let
+            compatible = builtins.getEnv "ROCKNIX_GUEST_DEVICE_COMPATIBLE";
+            inferredChipset =
+              if (product.chipset or "") != "by-compatible" then
+                product.chipset
+              else if compatible == "rockchip,rk3566-rk817-tablet" || compatible == "rockchip,rk3566" then
+                "rk3566"
+              else
+                "sm8550";
+            adapter =
+              if inferredChipset == "rk3566" then
+                ./product/systems/nixos/images/platforms/rocknix-rk3566.nix
+              else
+                ./product/systems/nixos/images/platforms/rocknix-sm8550.nix;
+          in
+          import adapter {
             korri = self;
-            inherit nixpkgs nix-on-rocks deviceProfile;
+            inherit nixpkgs nix-on-rocks;
+            inherit (product) deviceProfile;
           };
         mkRocknixProductSystem =
           product:
           rocknixImages.mkKioskSystem {
             platformModules = [
-              (rocknixPlatformFor product.deviceProfile)
+              (rocknixPlatformFor product)
             ];
           };
-        hasRocknixGuestCompatible = builtins.getEnv "ROCKNIX_GUEST_DEVICE_COMPATIBLE" != "";
         rocknixByCompatibleSystem = rocknixImages.mkKioskSystem {
           platformModules = [
-            (rocknixPlatformFor byCompatibleProduct.deviceProfile)
+            (rocknixPlatformFor byCompatibleProduct)
           ];
         };
       in
