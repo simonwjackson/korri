@@ -60,11 +60,12 @@ let
   ] false config;
   inferredRole = if kioskEnabled then "kiosk" else "source-machine";
 
-  # Token generation runs BEFORE sessiond binds its HTTP socket. If the
-  # token file is missing it creates a fresh 32-byte hex token; otherwise
-  # it preserves the existing token. When `sharedGroup` is set the file is
-  # chowned to `root:<sharedGroup>` mode 0640 so peer services in that
-  # group (typically korri-server) can authenticate against sessiond.
+  # Token generation runs in a dedicated systemd oneshot before sessiond
+  # and any local korri-server peer start. If the token file is missing it
+  # creates a fresh 32-byte hex token; otherwise it preserves the existing
+  # token. When `sharedGroup` is set the file is chowned to
+  # `root:<sharedGroup>` mode 0640 so peer services in that group
+  # (typically korri-server) can authenticate against sessiond.
   tokenSetupScript = pkgs.writeShellScript "korri-sessiond-token-setup" ''
     set -eu
     token_file=${lib.escapeShellArg cfg.tokenFile}
@@ -75,9 +76,10 @@ let
     #     on the 0640 token file. Withholds group-read on the dir so
     #     `ls` from a group member does not enumerate sibling files.
     #   sharedGroup == null: 0700 root:root.
-    # systemd's RuntimeDirectory default mode is 0755; we override
-    # both via RuntimeDirectoryMode AND re-assert here so a stale
-    # /run state from a previous unit version is corrected on start.
+    # Keep this in a dedicated oneshot rather than korri-sessiond's
+    # RuntimeDirectory/ExecStartPre path. RuntimeDirectory is owned by
+    # systemd and can recreate the directory as root:root between stop/start;
+    # this service is the single declarative owner of the ACL contract.
     ${pkgs.coreutils}/bin/install -d -m ${runtimeDirMode} "$runtime_dir"
     ${pkgs.coreutils}/bin/chown root:${runtimeDirGroup} "$runtime_dir"
     ${pkgs.coreutils}/bin/chmod ${runtimeDirMode} "$runtime_dir"
@@ -104,6 +106,17 @@ let
           ${pkgs.coreutils}/bin/chown root:root "$token_file"
           ${pkgs.coreutils}/bin/chmod 0600 "$token_file"
         ''
+    }
+    ${
+      if cfg.tokenReadUser != null then
+        ''
+          if ! ${pkgs.util-linux}/bin/runuser -u ${cfg.tokenReadUser} -- ${pkgs.coreutils}/bin/test -r "$token_file"; then
+            echo "korri-sessiond-token: ${cfg.tokenReadUser} cannot read $token_file after ACL setup" >&2
+            exit 1
+          fi
+        ''
+      else
+        ""
     }
   '';
 
@@ -266,10 +279,22 @@ in
       example = "korri-server";
       description = ''
         Optional Unix group that must be able to read the sessiond capability
-        token file. When set, the unit's ExecStartPre generates the token (if
+        token file. When set, the token oneshot generates the token (if
         absent) and chowns it to `root:<sharedGroup>` with mode `0640` so
         peer services (typically korri-server) can authenticate against
         sessiond. When null, the token stays root-only (mode 0600).
+      '';
+    };
+
+    tokenReadUser = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "korri-server";
+      description = ''
+        Optional peer user that must be able to read `tokenFile` after the
+        token oneshot applies ownership and mode. Set this on kiosk hosts so
+        ACL regressions fail during service startup instead of surfacing later
+        as sessiond authentication failures.
       '';
     };
   };
@@ -309,18 +334,47 @@ in
     environment.systemPackages = [ cfg.package ];
 
     # Boot-time creation. Mode and group track sharedGroup so the
-    # directory is correct from first boot, before the unit's
-    # ExecStartPre runs. See `runtimeDirMode` / `runtimeDirGroup`
-    # let-bindings above for the rationale.
+    # directory is correct from first boot, before the token oneshot
+    # runs. See `runtimeDirMode` / `runtimeDirGroup` let-bindings above
+    # for the rationale.
     systemd.tmpfiles.rules = [
       "d ${cfg.runtimeDir} ${runtimeDirMode} root ${runtimeDirGroup} -"
       "d ${launchArtifactsDir} 0750 root ${runtimeDirGroup} -"
     ];
 
+    systemd.services.korri-sessiond-token = {
+      description = "Prepare Korri sessiond capability token";
+      wantedBy = [ "multi-user.target" ];
+      before = [
+        "korri-sessiond.service"
+        "korri-server.service"
+      ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${tokenSetupScript}";
+        PrivateTmp = true;
+        ProtectSystem = "strict";
+        ReadWritePaths = [ cfg.runtimeDir ];
+        ProtectHome = true;
+        NoNewPrivileges = true;
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectControlGroups = true;
+        RestrictSUIDSGID = true;
+        RestrictRealtime = true;
+        LockPersonality = true;
+        SystemCallArchitectures = "native";
+      };
+    };
+
     systemd.services.korri-sessiond = {
       description = "Korri foreground-session supervisor (${cfg.role} role)";
       wantedBy = [ "multi-user.target" ];
-      after = [ "network.target" ];
+      after = [
+        "network.target"
+        "korri-sessiond-token.service"
+      ];
+      requires = [ "korri-sessiond-token.service" ];
 
       # Packages on the unit's PATH. Sessiond spawns the foreground app
       # via the in-process shell launcher, which inherits this PATH, so
@@ -348,10 +402,6 @@ in
 
       serviceConfig = {
         Type = "simple";
-        # Generate (if missing) and ACL the token file before the daemon
-        # starts. Runs as root (no User= set on this unit), which is
-        # required so the chown to root:<sharedGroup> succeeds.
-        ExecStartPre = "${tokenSetupScript}";
         # Read the token at start time and export it; the daemon's main()
         # asserts KORRI_SESSIOND_TOKEN is set.
         ExecStart = pkgs.writeShellScript "korri-sessiond-start" ''
@@ -369,16 +419,10 @@ in
         ExecStartPost = "${controlStartScript}";
         Restart = "on-failure";
         RestartSec = "2s";
-        # Filesystem isolation: sessiond only needs its runtime dir.
-        # ProtectSystem = "strict" with no ReadWritePaths would block the
-        # token-generation script's write to /run; the RuntimeDirectory
-        # is implicitly writable under that mode, which is exactly where
-        # the token lives.
-        RuntimeDirectory = lib.removePrefix "/run/" cfg.runtimeDir;
-        # Override systemd's default 0755 so the dir created at unit
-        # start matches sharedGroup's traversal contract. ExecStartPre
-        # re-asserts after this for the chown-to-sharedGroup step.
-        RuntimeDirectoryMode = runtimeDirMode;
+        # The token runtime directory is owned by korri-sessiond-token.service
+        # plus tmpfiles, not this unit's RuntimeDirectory. Letting systemd own
+        # it here can reset the directory to root:root between restarts after
+        # the token service has applied the sharedGroup ACL.
         StateDirectory = "korri-sessiond";
         PrivateTmp = true;
         ProtectSystem = "strict";

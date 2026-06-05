@@ -80,6 +80,7 @@ let
       rawGamepadHideService = cfg.systemd.services."rocknix-guest-hide-raw-gamepad" or { };
       udevdService = cfg.systemd.services.systemd-udevd or { };
       compositorEnv = compositorService.environment or { };
+      sessiondTokenService = cfg.systemd.services."korri-sessiond-token" or { };
       sessiondService = cfg.systemd.services."korri-sessiond" or { };
       sessiondEnv = sessiondService.environment or { };
       serverService = cfg.systemd.services."korri-server" or { };
@@ -87,6 +88,8 @@ let
       sessiondAfter = sessiondService.after or [ ];
       sessiondWants = sessiondService.wants or [ ];
       sessiondRequires = sessiondService.requires or [ ];
+      serverAfter = serverService.after or [ ];
+      serverRequires = serverService.requires or [ ];
       sessiondPath = sessiondService.path or [ ];
       systemPackageNames = map (pkg: pkg.name or "") (cfg.environment.systemPackages or [ ]);
       systemPackageText = lib.concatStringsSep "\n" systemPackageNames;
@@ -327,15 +330,39 @@ let
         )
         # Runtime-dir mode must permit korri-server (the sharedGroup
         # on kiosk) to traverse the directory and reach the 0640
-        # token file. 0700 root:root would silently break the
-        # server-side managed-launch delegation.
+        # token file. The token oneshot owns this ACL contract; letting
+        # korri-sessiond's RuntimeDirectory own it can reset the dir to
+        # root:root between restarts.
         (check "${name}: sessiond runtime dir at 0710 root:korri-server (group-traversable)" (
           builtins.any (
             rule: lib.hasInfix "korri-sessiond" rule && lib.hasInfix "0710 root korri-server" rule
           ) (cfg.systemd.tmpfiles.rules or [ ])
         ))
-        (check "${name}: sessiond RuntimeDirectoryMode is 0710 (matches sharedGroup)" (
-          sessiondService.serviceConfig.RuntimeDirectoryMode or null == "0710"
+        (check "${name}: sessiond token oneshot is ordered before sessiond" (
+          builtins.elem "korri-sessiond.service" (sessiondTokenService.before or [ ])
+          && builtins.elem "korri-sessiond-token.service" sessiondAfter
+          && builtins.elem "korri-sessiond-token.service" sessiondRequires
+        ))
+        (check "${name}: sessiond token oneshot is ordered before korri-server" (
+          builtins.elem "korri-server.service" (sessiondTokenService.before or [ ])
+          && builtins.elem "korri-sessiond-token.service" serverAfter
+          && builtins.elem "korri-sessiond-token.service" serverRequires
+        ))
+        (check "${name}: sessiond token oneshot applies token ACL and verifies korri-server readability" (
+          cfg.services.korri.sessiond.sharedGroup == "korri-server"
+          && cfg.services.korri.sessiond.tokenReadUser == "korri-server"
+          && (sessiondTokenService.serviceConfig or { }) ? ExecStart
+        ))
+        (check "${name}: sessiond token oneshot is sandboxed to the token runtime dir" (
+          (sessiondTokenService.serviceConfig.PrivateTmp or null) == true
+          && (sessiondTokenService.serviceConfig.ProtectSystem or null) == "strict"
+          && builtins.elem "/run/korri-sessiond" (sessiondTokenService.serviceConfig.ReadWritePaths or [ ])
+          && (sessiondTokenService.serviceConfig.ProtectHome or null) == true
+          && (sessiondTokenService.serviceConfig.NoNewPrivileges or null) == true
+        ))
+        (check "${name}: sessiond service must not own the token runtime dir via RuntimeDirectory" (
+          !(sessiondService.serviceConfig ? RuntimeDirectory)
+          && !(sessiondService.serviceConfig ? RuntimeDirectoryMode)
         ))
         (check "${name}: compositor must use Wayland SDL video" (
           compositorEnv.SDL_VIDEODRIVER or null == "wayland"

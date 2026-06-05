@@ -161,8 +161,10 @@ in
     tokenFile = sessiondTokenFile;
     # korri-server runs as the korri-server user; the token file must be
     # group-readable by that user so its Launcher can authenticate to
-    # sessiond's HTTP surface.
+    # sessiond's HTTP surface. tokenReadUser makes that readability contract
+    # fail loudly at unit startup instead of later as launch-time 401s.
     sharedGroup = "korri-server";
+    tokenReadUser = "korri-server";
     # Sessiond spawns the foreground app via the in-process shell
     # launcher (createShellLauncher inside product/services/device/sessiond.ts),
     # which inherits this unit's PATH when it spawns. Anything the

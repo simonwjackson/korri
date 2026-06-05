@@ -46,6 +46,15 @@ let
   statusPath = cfg.streaming.statusPath;
   launchArtifactsDir = cfg.launchArtifactsDir;
   isDefaultSystemRuntimeDir = isSystemMode && runtimeDir == systemRuntimeDir;
+  usesLocalSessiondToken =
+    cfg.sessiond.tokenFile != null
+    && lib.attrByPath [
+      "services"
+      "korri"
+      "sessiond"
+      "enable"
+    ] false config;
+  sessiondTokenUnitDeps = if usesLocalSessiondToken then [ "korri-sessiond-token.service" ] else [ ];
 
   configuredUserHome =
     if cfg.user != null && cfg.user != "" then
@@ -919,7 +928,8 @@ in
     systemd.services.korri-server = mkIf isSystemMode {
       description = "Korri headless server control plane";
       wantedBy = [ "multi-user.target" ];
-      after = [ "network.target" ];
+      after = [ "network.target" ] ++ sessiondTokenUnitDeps;
+      requires = sessiondTokenUnitDeps;
       environment = serverEnv;
       serviceConfig = {
         ExecStartPre = [
