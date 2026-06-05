@@ -29,15 +29,14 @@ export function VariantCartridgeShelf({
             <b className={i === index ? "on" : ""} key={game.id} />
           ))}
         </div>
-        <PicoCart game={prev} className="pcA-cart side" showFav={false} />
-        <PicoCart game={hero} className="pcA-cart hero" />
-        <PicoCart game={next} className="pcA-cart side" showFav={false} />
-        <PicoCart game={next2} className="pcA-cart side" showFav={false} />
+        <div className="pcA-carts">
+          <PicoCart game={prev} className="pcA-cart side" showFav={false} />
+          <PicoCart game={hero} className="pcA-cart hero" />
+          <PicoCart game={next} className="pcA-cart side" showFav={false} />
+          <PicoCart game={next2} className="pcA-cart side" showFav={false} />
+        </div>
         <div className="pcA-meta">
           <h1>{hero.title}</h1>
-          <div className="pcA-sub">
-            {hero.genre.toUpperCase()} · {hero.developer.toUpperCase()}
-          </div>
           <div className="pcA-stats">
             {hero.lastPlayedLabel
               ? `LAST PLAYED ${hero.lastPlayedLabel.toUpperCase()}`

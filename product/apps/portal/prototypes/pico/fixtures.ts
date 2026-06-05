@@ -6,7 +6,9 @@
  * the live library bridge; here we want fixed density to judge layout at
  * 640x480.
  */
-import { games } from "@platform/fixtures/games/games"
+// Relative (not @platform/*) so the throwaway standalone Vite config can
+// resolve it without the repo alias plugin.
+import { games } from "../../../../platform/fixtures/games/games"
 
 export interface PicoGame {
   readonly id: string

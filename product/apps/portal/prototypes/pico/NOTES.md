@@ -15,9 +15,16 @@ Decisions already locked with the user:
 
 ## How to view
 
+Standalone, no backend (recommended — the full portal stack is flaky in
+this checkout: `@proseql/node` breaks under tsx, and the portal RPC client
+collides with the `/api` vite proxy):
+
 ```bash
-just dev-web   # then open /pico-prototype
+just dev-pico        # serves the standalone viewer; open the printed URL
 ```
+
+Or inside the real portal (needs a healthy `just dev` stack):
+`/pico-prototype`.
 
 Switch directions with the floating bottom bar, the `←/→` arrow keys, or
 `?variant=A|B|C`. The screen renders at native 640×480 inside a device
@@ -47,4 +54,8 @@ id since the fixtures ship none — on-brand for 8-bit cartridge labels.
 
 Once decided: fold the winner into a real `product/themes/pico/` theme
 (register in `product/apps/portal/themes/theme-registry.ts`), then delete
-this prototype directory + route + the `__virtual.ts` entry.
+this prototype directory and all its hooks:
+
+- `product/apps/portal/routes/+pico-prototype.tsx`
+- the `/pico-prototype` line in `product/apps/portal/routes/__virtual.ts`
+- the `dev-pico` recipe in `justfile`

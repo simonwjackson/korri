@@ -48,15 +48,20 @@
 	display: grid;
 	place-items: center;
 	background: radial-gradient(circle at 50% 30%, #14122a, #050410 70%);
-	overflow: hidden;
+	overflow: auto;
 }
 
-/* Device bezel around the panel-native 640x480 screen. */
+/* Row of device screens (4:3 handheld + 16:9 panel) sharing the calibration. */
+.pico-screens {
+	display: flex;
+	align-items: flex-start;
+	gap: 28px;
+	padding: 24px;
+}
+
+/* Device bezel. Padding/border-radius are applied inline by PicoDeviceFrame
+ * (proportional to the calibrated physical size); this rule is visual-only. */
 .pico-bezel {
-	transform: scale(1.6);
-	transform-origin: center;
-	padding: 18px;
-	border-radius: 22px;
 	background: linear-gradient(160deg, #2a2a33, #16161c);
 	box-shadow:
 		0 0 0 2px #000,
@@ -64,10 +69,13 @@
 		inset 0 2px 2px rgba(255, 255, 255, 0.08);
 }
 
+/* The screen is sized to the device's real-world dimensions by PicoDeviceFrame
+ * (inline width/height). `container-type: size` makes it a query container so
+ * the content below, authored in cqw units (640px design width == 100cqw),
+ * fills it responsively at any physical size — no transform scaling. */
 .pico-screen {
 	position: relative;
-	width: 640px;
-	height: 480px;
+	container-type: size;
 	background: var(--pico-bg);
 	color: var(--pico-ink);
 	overflow: hidden;
@@ -83,10 +91,10 @@
 	background:
 		repeating-linear-gradient(
 			0deg,
-			rgba(0, 0, 0, 0.18) 0px,
-			rgba(0, 0, 0, 0.18) 1px,
-			transparent 1px,
-			transparent 3px
+			rgba(0, 0, 0, 0.18) 0cqw,
+			rgba(0, 0, 0, 0.18) 0.1563cqw,
+			transparent 0.1563cqw,
+			transparent 0.4688cqw
 		), radial-gradient(circle at 50% 50%, transparent 60%, rgba(0, 0, 0, 0.4));
 	mix-blend-mode: multiply;
 	z-index: 50;
@@ -97,14 +105,17 @@
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	height: 28px;
-	padding: 0 10px;
+	/* Spacing is em-relative to the bar's own font-size, so the title bar grows
+	 * with TEXT scale and keeps a constant padding-to-text ratio. */
+	min-height: 3.5em;
+	padding: calc(0.5em * var(--pico-pad-scale, 1))
+		calc(1.25em * var(--pico-pad-scale, 1));
 	background: var(--p8-black);
 	color: var(--pico-ink-dim);
 	font-family: var(--font-display);
-	font-size: 8px;
-	letter-spacing: 1px;
-	border-bottom: 2px solid var(--p8-slate);
+	font-size: calc(1.25cqw * var(--pico-text-scale, 1));
+	letter-spacing: 0.125em;
+	border-bottom: 0.3125cqw solid var(--p8-slate);
 }
 .pico-statusbar .pico-clock {
 	color: var(--pico-ink);
@@ -112,62 +123,60 @@
 .pico-battery {
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
+	gap: 0.625cqw;
 }
 .pico-battery i {
-	width: 18px;
-	height: 9px;
-	border: 2px solid var(--p8-silver);
+	width: 2.8125cqw;
+	height: 1.4063cqw;
+	border: 0.3125cqw solid var(--p8-silver);
 	position: relative;
 	display: inline-block;
 }
 .pico-battery i::before {
 	content: "";
 	position: absolute;
-	inset: 1px;
-	right: 6px;
+	inset: 0.1563cqw;
+	right: 0.9375cqw;
 	background: var(--p8-lime);
 }
 .pico-battery i::after {
 	content: "";
 	position: absolute;
-	right: -4px;
-	top: 2px;
-	width: 2px;
-	height: 5px;
+	right: -0.625cqw;
+	top: 0.3125cqw;
+	width: 0.3125cqw;
+	height: 0.7813cqw;
 	background: var(--p8-silver);
 }
 
+/* In-flow (occupies the footer grid row) with em-relative spacing, so the bar
+ * grows with TEXT scale at a constant padding-to-text ratio. */
 .pico-buttonbar {
-	position: absolute;
-	bottom: 0;
-	left: 0;
-	right: 0;
-	height: 30px;
+	min-height: 3.75em;
 	display: flex;
 	align-items: center;
-	gap: 16px;
-	padding: 0 12px;
+	gap: 2em;
+	padding: calc(0.5em * var(--pico-pad-scale, 1))
+		calc(1.5em * var(--pico-pad-scale, 1));
 	background: var(--p8-black);
-	border-top: 2px solid var(--p8-slate);
+	border-top: 0.3125cqw solid var(--p8-slate);
 	font-family: var(--font-display);
-	font-size: 8px;
+	font-size: calc(1.25cqw * var(--pico-text-scale, 1));
 	color: var(--pico-ink-dim);
-	z-index: 40;
 }
 .pico-hint {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
+	gap: 0.75em;
 }
 .pico-key {
 	display: inline-grid;
 	place-items: center;
-	width: 16px;
-	height: 16px;
+	width: 2em;
+	height: 2em;
 	border-radius: 999px;
 	color: var(--p8-black);
-	font-size: 8px;
+	font-size: calc(1.25cqw * var(--pico-text-scale, 1));
 }
 .pico-key.a {
 	background: var(--p8-lime);
@@ -186,14 +195,14 @@
 	display: grid;
 	place-items: center;
 	font-family: var(--font-display);
-	border: 3px solid rgba(0, 0, 0, 0.5);
-	box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.15);
+	border: 0.4688cqw solid rgba(0, 0, 0, 0.5);
+	box-shadow: inset 0 0 0 0.3125cqw rgba(255, 255, 255, 0.15);
 	overflow: hidden;
 }
 .pico-cart .pico-cart-initials {
 	position: relative;
 	z-index: 2;
-	text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.45);
+	text-shadow: 0.3125cqw 0.3125cqw 0 rgba(0, 0, 0, 0.45);
 }
 .pico-cart .pico-cart-notch {
 	position: absolute;
@@ -201,19 +210,19 @@
 	left: 50%;
 	transform: translateX(-50%);
 	width: 40%;
-	height: 6px;
+	height: 0.9375cqw;
 	background: rgba(0, 0, 0, 0.45);
 	z-index: 3;
 }
 .pico-fav {
 	position: absolute;
-	top: 3px;
-	right: 4px;
+	top: 0.4688cqw;
+	right: 0.625cqw;
 	z-index: 4;
 	color: var(--p8-yellow);
 	font-family: var(--font-display);
-	font-size: 8px;
-	text-shadow: 1px 1px 0 #000;
+	font-size: calc(1.25cqw * var(--pico-text-scale, 1));
+	text-shadow: 0.1563cqw 0.1563cqw 0 #000;
 }
 
 .pico-title-display {
@@ -231,79 +240,90 @@
 	position: absolute;
 	inset: 0;
 	display: grid;
-	grid-template-rows: 28px 1fr 30px;
+	grid-template-rows: auto 1fr auto;
 }
+/* Column flow: the carts take the remaining space and the meta block reserves
+ * its own height below them, so growing text never overlays the carts. */
 .pcA-stage {
 	position: relative;
 	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 18px;
-	padding: 0 24px;
+	flex-direction: column;
+	padding: 0 calc(5cqw * var(--pico-pad-scale, 1));
 	overflow: hidden;
 }
+.pcA-carts {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4cqw;
+	padding: calc(0.6em * var(--pico-pad-scale, 1)) 0;
+}
+/* Carts are a size container and sized to the AVAILABLE height (min of the
+ * leftover row height and a cap). As text grows the row shrinks and the carts
+ * shrink with it — they never clip. Initials use cqh of the cart, so the big
+ * letters scale with each cart automatically. */
 .pcA-cart {
 	flex: 0 0 auto;
-	transition: none;
+	container-type: size;
+	aspect-ratio: 3 / 4;
+	width: auto;
 }
 .pcA-cart.side {
-	width: 84px;
-	height: 110px;
+	height: min(70%, 30cqh);
 	opacity: 0.5;
 	filter: saturate(0.6);
 }
 .pcA-cart.hero {
-	width: 150px;
-	height: 196px;
-	outline: 3px solid var(--pico-focus);
-	outline-offset: 4px;
-	box-shadow: 0 0 0 6px rgba(41, 173, 255, 0.25);
+	height: min(100%, 42cqh);
+	outline: 0.4688cqw solid var(--pico-focus);
+	outline-offset: 0.625cqw;
+	box-shadow: 0 0 0 0.9375cqw rgba(41, 173, 255, 0.25);
 }
 .pcA-cart .pico-cart-initials {
-	font-size: 30px;
+	font-size: 32cqh;
 }
 .pcA-cart.side .pico-cart-initials {
-	font-size: 18px;
+	font-size: 30cqh;
 }
 .pcA-meta {
-	position: absolute;
-	left: 0;
-	right: 0;
-	bottom: 8px;
+	flex: 0 0 auto;
 	text-align: center;
-	padding: 0 16px;
+	padding: calc(0.6em * var(--pico-pad-scale, 1)) 4cqw
+		calc(1em * var(--pico-pad-scale, 1));
 }
 .pcA-meta h1 {
 	margin: 0;
 	font-family: var(--font-display);
-	font-size: 13px;
+	font-size: calc(2.0313cqw * var(--pico-text-scale, 1));
 	color: var(--pico-ink);
-	text-shadow: 2px 2px 0 #000;
+	text-shadow: 0.3125cqw 0.3125cqw 0 #000;
 }
 .pcA-meta .pcA-sub {
-	margin-top: 6px;
-	font-size: 20px;
+	margin-top: 0.4em;
+	font-size: calc(3.125cqw * var(--pico-text-scale, 1));
 	line-height: 1;
 	color: var(--pico-accent);
-	letter-spacing: 1px;
+	letter-spacing: 0.1563cqw;
 }
 .pcA-meta .pcA-stats {
-	margin-top: 2px;
-	font-size: 18px;
+	margin-top: 0.2em;
+	font-size: calc(2.8125cqw * var(--pico-text-scale, 1));
 	color: var(--pico-ink-dim);
 }
+/* In flow at the top of the column — reserves its own row, never overlaps the
+ * carts. Vertical padding is em so the row breathes with text scale. */
 .pcA-dots {
-	position: absolute;
-	top: 36px;
-	left: 0;
-	right: 0;
+	flex: 0 0 auto;
 	display: flex;
 	justify-content: center;
-	gap: 5px;
+	gap: 0.7813cqw;
+	padding: calc(0.8em * var(--pico-pad-scale, 1)) 0;
 }
 .pcA-dots b {
-	width: 6px;
-	height: 6px;
+	width: 0.9375cqw;
+	height: 0.9375cqw;
 	background: var(--p8-slate);
 }
 .pcA-dots b.on {
@@ -317,36 +337,36 @@
 	position: absolute;
 	inset: 0;
 	display: grid;
-	grid-template-rows: 28px 1fr 30px;
+	grid-template-rows: auto 1fr auto;
 }
 .pcB-body {
 	display: grid;
-	grid-template-columns: 300px 1fr;
+	grid-template-columns: 46.875cqw 1fr;
 	min-height: 0;
 }
 .pcB-list {
-	border-right: 2px solid var(--p8-slate);
+	border-right: 0.3125cqw solid var(--p8-slate);
 	background: var(--pico-panel);
 	overflow: hidden;
-	padding: 6px 0;
+	padding: 0.9375cqw 0;
 }
 .pcB-row {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	height: 30px;
-	padding: 0 8px 0 6px;
-	font-size: 21px;
+	gap: 1.25cqw;
+	height: 4.6875cqw;
+	padding: 0 1.25cqw 0 0.9375cqw;
+	font-size: calc(3.2813cqw * var(--pico-text-scale, 1));
 	color: var(--pico-ink-dim);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
 .pcB-row .pcB-cursor {
-	width: 12px;
+	width: 1.875cqw;
 	color: var(--pico-accent);
 	font-family: var(--font-display);
-	font-size: 9px;
+	font-size: calc(1.4063cqw * var(--pico-text-scale, 1));
 	visibility: hidden;
 }
 .pcB-row.sel {
@@ -360,7 +380,7 @@
 .pcB-row .pcB-star {
 	margin-left: auto;
 	color: var(--p8-yellow);
-	font-size: 16px;
+	font-size: calc(2.5cqw * var(--pico-text-scale, 1));
 }
 .pcB-row.sel .pcB-star {
 	color: var(--p8-black);
@@ -369,51 +389,51 @@
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	padding: 16px;
+	padding: 2.5cqw;
 	text-align: center;
 }
 .pcB-preview .pico-cart {
-	width: 132px;
-	height: 172px;
+	width: 20.625cqw;
+	height: 26.875cqw;
 }
 .pcB-preview .pico-cart-initials {
-	font-size: 28px;
+	font-size: calc(4.375cqw * var(--pico-text-scale, 1));
 }
 .pcB-preview h1 {
-	margin: 12px 0 0;
+	margin: 1.875cqw 0 0;
 	font-family: var(--font-display);
-	font-size: 12px;
-	text-shadow: 2px 2px 0 #000;
+	font-size: calc(1.875cqw * var(--pico-text-scale, 1));
+	text-shadow: 0.3125cqw 0.3125cqw 0 #000;
 }
 .pcB-tags {
-	margin-top: 10px;
+	margin-top: 1.5625cqw;
 	display: flex;
-	gap: 6px;
+	gap: 0.9375cqw;
 	flex-wrap: wrap;
 	justify-content: center;
 }
 .pcB-tag {
-	font-size: 16px;
+	font-size: calc(2.5cqw * var(--pico-text-scale, 1));
 	line-height: 1;
-	padding: 3px 7px;
+	padding: 0.4688cqw 1.0938cqw;
 	background: var(--p8-black);
 	color: var(--pico-accent);
-	border: 2px solid var(--p8-slate);
+	border: 0.3125cqw solid var(--p8-slate);
 }
 .pcB-statline {
 	margin-top: auto;
 	width: 100%;
-	border-top: 2px solid var(--p8-slate);
-	padding-top: 8px;
+	border-top: 0.3125cqw solid var(--p8-slate);
+	padding-top: 1.25cqw;
 	display: flex;
 	justify-content: space-around;
-	font-size: 18px;
+	font-size: calc(2.8125cqw * var(--pico-text-scale, 1));
 	color: var(--pico-ink-dim);
 }
 .pcB-statline b {
 	display: block;
 	color: var(--pico-ink);
-	font-size: 22px;
+	font-size: calc(3.4375cqw * var(--pico-text-scale, 1));
 }
 
 /* =====================================================================
@@ -423,14 +443,14 @@
 	position: absolute;
 	inset: 0;
 	display: grid;
-	grid-template-rows: 28px 1fr 52px;
+	grid-template-rows: auto 1fr 8.125cqw;
 }
 .pcC-grid {
 	display: grid;
 	grid-template-columns: repeat(5, 1fr);
-	grid-auto-rows: 96px;
-	gap: 10px;
-	padding: 14px;
+	grid-auto-rows: 15cqw;
+	gap: 1.5625cqw;
+	padding: 2.1875cqw;
 	align-content: start;
 	overflow: hidden;
 }
@@ -439,17 +459,17 @@
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 4px;
+	gap: 0.625cqw;
 }
 .pcC-cell .pico-cart {
-	width: 64px;
-	height: 64px;
+	width: 10cqw;
+	height: 10cqw;
 }
 .pcC-cell .pico-cart-initials {
-	font-size: 16px;
+	font-size: calc(2.5cqw * var(--pico-text-scale, 1));
 }
 .pcC-cell .pcC-name {
-	font-size: 15px;
+	font-size: calc(2.3438cqw * var(--pico-text-scale, 1));
 	line-height: 1;
 	color: var(--pico-ink-dim);
 	width: 100%;
@@ -459,8 +479,8 @@
 	text-overflow: ellipsis;
 }
 .pcC-cell.sel .pico-cart {
-	outline: 3px solid var(--pico-accent);
-	outline-offset: 3px;
+	outline: 0.4688cqw solid var(--pico-accent);
+	outline-offset: 0.4688cqw;
 }
 .pcC-cell.sel .pcC-name {
 	color: var(--pico-ink);
@@ -468,8 +488,8 @@
 .pcC-cell.sel::after {
 	content: "";
 	position: absolute;
-	inset: -4px;
-	border: 2px dashed var(--pico-accent);
+	inset: -0.625cqw;
+	border: 0.3125cqw dashed var(--pico-accent);
 	pointer-events: none;
 }
 .pcC-tray {
@@ -477,38 +497,38 @@
 	bottom: 0;
 	left: 0;
 	right: 0;
-	height: 52px;
+	height: 8.125cqw;
 	display: flex;
 	align-items: center;
-	gap: 12px;
-	padding: 0 14px;
+	gap: 1.875cqw;
+	padding: 0 2.1875cqw;
 	background: var(--pico-panel);
-	border-top: 2px solid var(--p8-slate);
+	border-top: 0.3125cqw solid var(--p8-slate);
 }
 .pcC-tray .pico-cart {
-	width: 36px;
-	height: 36px;
+	width: 5.625cqw;
+	height: 5.625cqw;
 	flex: 0 0 auto;
 }
 .pcC-tray .pico-cart-initials {
-	font-size: 11px;
+	font-size: calc(1.7188cqw * var(--pico-text-scale, 1));
 }
 .pcC-tray h1 {
 	margin: 0;
 	font-family: var(--font-display);
-	font-size: 11px;
+	font-size: calc(1.7188cqw * var(--pico-text-scale, 1));
 }
 .pcC-tray .pcC-traysub {
-	font-size: 17px;
+	font-size: calc(2.6563cqw * var(--pico-text-scale, 1));
 	color: var(--pico-ink-dim);
 }
 .pcC-tray .pcC-play {
 	margin-left: auto;
 	font-family: var(--font-display);
-	font-size: 9px;
+	font-size: calc(1.4063cqw * var(--pico-text-scale, 1));
 	color: var(--p8-black);
 	background: var(--p8-lime);
-	padding: 7px 10px;
+	padding: 1.0938cqw 1.5625cqw;
 }
 
 /* Floating prototype switcher (not part of the design) ------------------ */

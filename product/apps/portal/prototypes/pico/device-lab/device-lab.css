@@ -1,0 +1,158 @@
+/*
+ * device-lab — reusable physical-calibration harness chrome.
+ *
+ * Template-agnostic. The design under test supplies its own skin via the
+ * *ClassName props on DeviceLab (merged onto .lab-stage / .lab-screens /
+ * .lab-bezel / .lab-screen) and authors content against the published
+ * `--<scaleVarPrefix>-text-scale` / `--<scaleVarPrefix>-pad-scale` custom
+ * properties. These rules only provide neutral structure + the calibrator.
+ */
+
+/* Desk + device matrix --------------------------------------------------- */
+.lab-stage {
+	position: fixed;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	background: radial-gradient(circle at 50% 30%, #14122a, #050410 70%);
+	overflow: auto;
+}
+.lab-screens {
+	display: flex;
+	align-items: flex-start;
+	gap: 28px;
+	padding: 24px;
+}
+.lab-bezel {
+	background: linear-gradient(160deg, #2a2a33, #16161c);
+	box-shadow:
+		0 0 0 2px #000,
+		0 24px 60px rgba(0, 0, 0, 0.6),
+		inset 0 2px 2px rgba(255, 255, 255, 0.08);
+}
+/* The query container, sized to real device mm by DeviceFrame (inline). */
+.lab-screen {
+	position: relative;
+	container-type: size;
+	overflow: hidden;
+	background: #000;
+}
+
+/* Calibration desk chrome ------------------------------------------------ */
+.lab-calibrator {
+	position: fixed;
+	top: 16px;
+	left: 16px;
+	z-index: 1000;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	max-width: calc(100vw - 32px);
+	padding: 10px 12px;
+	border-radius: 12px;
+	background: rgba(0, 0, 0, 0.82);
+	border: 2px solid #5f574f;
+	color: #fff1e8;
+	font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+	font-size: 11px;
+}
+.lab-cal-card-wrap {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.lab-cal-card {
+	display: grid;
+	place-items: center;
+	text-align: center;
+	border: 2px dashed #ffec27;
+	border-radius: 8px;
+	background: rgba(255, 236, 39, 0.05);
+	color: #c2c3c7;
+}
+.lab-cal-row {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.lab-cal-device {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	padding-top: 7px;
+	border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+.lab-cal-device-name {
+	min-width: 64px;
+	color: #ffec27;
+}
+.lab-cal-name-input {
+	width: 84px;
+	padding: 2px 4px;
+	background: #000;
+	color: #ffec27;
+	border: 1px solid #5f574f;
+	font: inherit;
+	letter-spacing: 1px;
+}
+.lab-cal-remove {
+	cursor: pointer;
+	width: 18px;
+	height: 18px;
+	padding: 0;
+	border: 1px solid #5f574f;
+	border-radius: 4px;
+	background: transparent;
+	color: #ff004d;
+	font-family: inherit;
+	font-size: inherit;
+	line-height: 1;
+}
+.lab-cal-remove:hover {
+	background: rgba(255, 0, 77, 0.15);
+}
+.lab-cal-mm {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+}
+.lab-cal-mm-label,
+.lab-cal-mm-unit {
+	color: #c2c3c7;
+}
+.lab-cal-mm-input {
+	width: 54px;
+	padding: 2px 4px;
+	background: #000;
+	color: #fff1e8;
+	border: 1px solid #5f574f;
+	font: inherit;
+}
+.lab-label {
+	color: #c2c3c7;
+	letter-spacing: 1px;
+}
+.lab-range {
+	width: 120px;
+	height: 4px;
+	cursor: pointer;
+	accent-color: #ffec27;
+}
+.lab-range.short {
+	width: 88px;
+}
+.lab-value {
+	min-width: 38px;
+	text-align: right;
+	color: #ffec27;
+}
+.lab-btn {
+	cursor: pointer;
+	border: none;
+	background: transparent;
+	color: #c2c3c7;
+	font: inherit;
+	text-decoration: underline;
+}
