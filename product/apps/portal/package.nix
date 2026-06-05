@@ -83,8 +83,25 @@ pkgs.stdenv.mkDerivation {
       exit 1
     fi
 
-    if ! find "$out/assets" -maxdepth 1 -type f -name '*.css' | grep -q .; then
+    css_files=$(find "$out/assets" -maxdepth 1 -type f -name '*.css')
+    if [ -z "$css_files" ]; then
       echo "korri-portal output is missing built CSS assets" >&2
+      exit 1
+    fi
+
+    # Regression guard for the product/themes refactor: Shift JSX lives outside
+    # the portal Vite root, so Tailwind must scan product/themes explicitly.
+    # If the @source roots in styles.css drift, the Shift theme CSS selectors
+    # still ship but layout utilities disappear, collapsing the kiosk home into
+    # default document flow on device.
+    for utility in h-screen flex-col px-12 py-5 min-h-0 text-3xl w-full overflow-hidden; do
+      if ! grep -F -q ".$utility" $css_files; then
+        echo "korri-portal CSS is missing Tailwind utility .$utility" >&2
+        exit 1
+      fi
+    done
+    if ! grep -F -q "shift-home-rail-region" $css_files; then
+      echo "korri-portal CSS is missing Shift theme rail styles" >&2
       exit 1
     fi
 
