@@ -430,7 +430,8 @@ describe("moonlight launcher", () => {
         "controller",
       )
     } finally {
-      if (previous === undefined) delete Bun.env.KORRI_MOONLIGHT_CONTROL_AUTHORITY
+      if (previous === undefined)
+        delete Bun.env.KORRI_MOONLIGHT_CONTROL_AUTHORITY
       else Bun.env.KORRI_MOONLIGHT_CONTROL_AUTHORITY = previous
     }
   })

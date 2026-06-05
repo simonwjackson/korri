@@ -330,7 +330,8 @@ async function moonlightControlHandleFromOptions(
     sessionId,
     runtimeDir,
     socketPath,
-    authority: options?.authority ?? moonlightControlAuthorityFromEnv() ?? "observer",
+    authority:
+      options?.authority ?? moonlightControlAuthorityFromEnv() ?? "observer",
   }
 }
 
