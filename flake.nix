@@ -119,13 +119,19 @@
           config.allowUnfree = true;
         };
 
-        versions = import ./product/apps/desktop/nix/versions.nix;
-        supportedDesktopSystems = [
-          "x86_64-linux"
-          "aarch64-linux"
-        ];
+        desktop = import ./product/apps/desktop {
+          inherit
+            pkgs
+            pkgs2405
+            system
+            bunDeps
+            ;
+          lib = pkgs.lib;
+          src = korriSources.desktop;
+          portal = korriPortal;
+        };
         hasRocknixGuestCompatible = builtins.getEnv "ROCKNIX_GUEST_DEVICE_COMPATIBLE" != "";
-        isSupportedDesktopSystem = builtins.elem system supportedDesktopSystems;
+        isSupportedDesktopSystem = desktop.isSupportedSystem;
         isX86Linux = system == "x86_64-linux";
         productRevision = self.rev or self.dirtyRev or "local-candidate";
         productShortRevision =
@@ -167,70 +173,6 @@
             # the same revision that processes tools/nix/generated/bun.nix in fetchBunDeps.
             bun2nix.packages.${system}.bun2nix
           ];
-
-        linuxDesktopRuntimeLibraries = pkgs.lib.optionals pkgs.stdenv.isLinux (
-          (with pkgs; [
-            gtk3
-            webkitgtk_4_1
-            libayatana-appindicator
-            librsvg
-            libsoup_3
-            glib
-            glibc
-            gdk-pixbuf
-            at-spi2-core
-            pango
-            cairo
-            gsettings-desktop-schemas
-            glib-networking
-          ])
-          ++ [ pkgs.stdenv.cc.cc.lib ]
-        );
-
-        # Full pkgs2405 closure mirroring `linuxDesktopRuntimeLibraries` for the
-        # libraries libNativeWrapper.so directly NEEDs. Order matters: pkgs2405
-        # entries come first so the loader prefers them; current-nixpkgs glibc
-        # / gcc-lib fall in at the end because that is what bun + the launcher's
-        # interpreter were patchelfed to use.
-        deviceDesktopRuntimeLibraries = pkgs.lib.optionals pkgs.stdenv.isLinux (
-          (with pkgs2405; [
-            webkitgtk_4_1
-            gtk3
-            libayatana-appindicator
-            librsvg
-            libsoup_3
-            glib
-            gdk-pixbuf
-            at-spi2-core
-            pango
-            cairo
-            glib-networking
-          ])
-          ++ [
-            pkgs.glibc
-            pkgs.stdenv.cc.cc.lib
-          ]
-        );
-
-        deviceDesktopDataDirs = pkgs.lib.optionals pkgs.stdenv.isLinux [
-          pkgs2405.gsettings-desktop-schemas
-          pkgs2405.gtk3
-        ];
-
-        linuxDesktopPackages = pkgs.lib.optionals pkgs.stdenv.isLinux (
-          (with pkgs; [
-            pkg-config
-            cmake
-            gcc
-            patchelf
-          ])
-          ++ linuxDesktopRuntimeLibraries
-        );
-
-        linuxDesktopShellHook = pkgs.lib.optionalString pkgs.stdenv.isLinux ''
-          export KORRI_NIX_LD_INTERPRETER=${pkgs.stdenv.cc.bintools.dynamicLinker}
-          export KORRI_NIX_LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath linuxDesktopRuntimeLibraries}
-        '';
 
         commonShellHook = ''
           repo_root="$PWD"
@@ -501,89 +443,11 @@
         # to avoid the server closure.
         korriHeadlessSource = korriServer;
 
-        electrobunBinaries =
-          if isSupportedDesktopSystem then
-            import ./product/apps/desktop/nix/electrobun-binaries.nix {
-              inherit pkgs system versions;
-              lib = pkgs.lib;
-            }
-          else
-            null;
-
-        # Heavy build runs once and is shared between every variant. The wrap
-        # step below re-RPATHs shared objects per variant and writes the wrapper
-        # script; the unwrapped output's executables (bun, launcher) already
-        # have their interpreter set and are left alone by wrap.
-        korriDesktopUnwrapped =
-          if isSupportedDesktopSystem then
-            pkgs.callPackage ./product/apps/desktop/nix/unwrapped.nix {
-              inherit system bunDeps;
-              src = korriSources.desktop;
-              inherit electrobunBinaries;
-              portal = korriPortal;
-              buildtimeLibraries = linuxDesktopRuntimeLibraries;
-            }
-          else
-            null;
-
-        # Host variant: current nixpkgs libraries throughout (callPackage
-        # auto-fills each named arg from `pkgs`).
-        korriDesktop =
-          if isSupportedDesktopSystem then
-            pkgs.callPackage ./product/apps/desktop/nix/wrap.nix {
-              korri-desktop-unwrapped = korriDesktopUnwrapped;
-              stdenvCcLib = pkgs.stdenv.cc.cc.lib;
-              profile = "host";
-            }
-          else
-            null;
-
-        # Device variant uses the pkgs2405 closure as a *cohesive* set: WebKitGTK
-        # 2.44.3 + matching GTK 3.24.43 + gsettings-desktop-schemas + glib-networking
-        # all move together. WebKit 2.44.3 was built against an older Pango ABI than
-        # current nixpkgs ships, so the closure cannot be split. The paths are baked
-        # into libNativeWrapper.so's RPATH at build time (no runtime LD_LIBRARY_PATH).
-        # See docs/solutions/integration-issues/odin-electrobun-webkit-runtime-white-screen-2026-05-04.md.
-        #
-        # Every pkgs2405 entry from deviceDesktopRuntimeLibraries must appear in
-        # this shared override set. Missing entries would silently auto-fill from
-        # current nixpkgs and break the cohesive closure invariant.
-        deviceDesktopWrapOverrides = {
-          korri-desktop-unwrapped = korriDesktopUnwrapped;
-          webkitgtk_4_1 = pkgs2405.webkitgtk_4_1;
-          gtk3 = pkgs2405.gtk3;
-          libsoup_3 = pkgs2405.libsoup_3;
-          glib = pkgs2405.glib;
-          gdk-pixbuf = pkgs2405.gdk-pixbuf;
-          cairo = pkgs2405.cairo;
-          pango = pkgs2405.pango;
-          libayatana-appindicator = pkgs2405.libayatana-appindicator;
-          librsvg = pkgs2405.librsvg;
-          at-spi2-core = pkgs2405.at-spi2-core;
-          glib-networking = pkgs2405.glib-networking;
-          gsettings-desktop-schemas = pkgs2405.gsettings-desktop-schemas;
-          stdenvCcLib = pkgs.stdenv.cc.cc.lib;
-        };
-
-        korriDesktopDevice =
-          if isSupportedDesktopSystem then
-            pkgs.callPackage ./product/apps/desktop/nix/wrap.nix (
-              deviceDesktopWrapOverrides // { profile = "device"; }
-            )
-          else
-            null;
-
-        korriDesktopX86Kiosk =
-          if isX86Linux then
-            pkgs.callPackage ./product/apps/desktop/nix/wrap.nix (
-              deviceDesktopWrapOverrides
-              // {
-                moonlightPackage = pkgs.moonlight-embedded;
-                profile = "x86-kiosk";
-              }
-            )
-          else
-            null;
+        electrobunBinaries = desktop.packages.binaries;
+        korriDesktopUnwrapped = desktop.packages.unwrapped;
+        korriDesktop = desktop.packages.host;
+        korriDesktopDevice = desktop.packages.device;
+        korriDesktopX86Kiosk = desktop.packages.x86Kiosk;
 
         korriImages = import ./product/systems/nixos/images/common.nix {
           korri = self;
@@ -731,7 +595,7 @@
           #     ...
           #     profile = "steamdeck";
           #   }
-          wrapKorriDesktop = args: pkgs.callPackage ./product/apps/desktop/nix/wrap.nix args;
+          wrapKorriDesktop = desktop.lib.wrap;
         };
 
         checks =
@@ -1208,9 +1072,9 @@
               nodejs_20
               playwright-driver.browsers
             ])
-            ++ linuxDesktopPackages;
+            ++ desktop.devShell.packages;
 
-          shellHook = commonShellHook + linuxDesktopShellHook;
+          shellHook = commonShellHook + desktop.devShell.shellHook;
         };
       }
     )
