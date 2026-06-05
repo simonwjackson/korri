@@ -165,6 +165,10 @@ let
     (check "live USB RetroArch's single libretro core must be fake08" (
       retroarchCores != [ ] && ((builtins.head retroarchCores).core or null) == "fake08"
     ))
+    (check "live USB RetroArch must advertise XDelta patch support" (
+      retroarchWrappers != [ ]
+      && ((builtins.head retroarchWrappers).passthru.unwrapped.passthru.xdeltaPatches or false)
+    ))
   ];
   failures = builtins.filter (candidate: !candidate.assertion) checks;
 in

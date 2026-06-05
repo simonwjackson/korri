@@ -855,6 +855,9 @@
                   readmePath = ./product/vendor/moonlight-embedded-korri/README.md;
                   moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
                 };
+            korri-retroarch-xdelta = import ./tools/testing/nix/korri-retroarch-xdelta-check.nix {
+              inherit pkgs;
+            };
             libretro-fake-08-check = import ./product/vendor/libretro-fake-08/check.nix {
               inherit pkgs;
               libretroFake08Package = self.packages.${system}.libretro-fake-08;

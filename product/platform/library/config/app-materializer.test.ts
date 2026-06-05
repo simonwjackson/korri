@@ -264,11 +264,12 @@ describe("materializeAppLaunch", () => {
       const color = await seedFile(root, "patches/color.IPS")
       const voice = await seedFile(root, "patches/voice.BpS")
       const qol = await seedFile(root, "patches/qol.ups")
+      const xdelta = await seedFile(root, "patches/mod.XDelta")
 
       const result = await runPromise(
         materializeAppLaunch({
           app: app("retroarch"),
-          context: patchedContext(root, [color, voice, qol]),
+          context: patchedContext(root, [color, voice, qol, xdelta]),
           artifactsRoot: join(root, "artifacts"),
         }),
       )
@@ -284,7 +285,7 @@ describe("materializeAppLaunch", () => {
         artifactRoot: result.artifacts?.root ?? "",
         paths: result.artifacts?.paths ?? {},
         stagedContent,
-        targets: [color, voice, qol],
+        targets: [color, voice, qol, xdelta],
       })
     })
   })
@@ -389,7 +390,7 @@ describe("materializeAppLaunch", () => {
   it("rejects unsupported patch declarations before creating a launch artifact", async () => {
     await withRoot(async root => {
       const content = await seedFile(root, "roms/Super Mario Advance 3.gba")
-      const unsupported = await seedFile(root, "patches/hack.xdelta")
+      const unsupported = await seedFile(root, "patches/hack.ppf")
       const artifactsRoot = join(root, "artifacts")
 
       const exit = await Effect.runPromiseExit(
@@ -401,7 +402,7 @@ describe("materializeAppLaunch", () => {
       )
 
       expect(exitFailureMessage(exit)).toContain(
-        "unsupported patch extension .xdelta",
+        "unsupported patch extension .ppf",
       )
       expect(await readdir(artifactsRoot)).toEqual([])
     })
@@ -470,6 +471,7 @@ async function expectPatchSidecars(input: {
     join(input.artifactRoot, "Super Mario Advance 3.ips"),
     join(input.artifactRoot, "Super Mario Advance 3.bps1"),
     join(input.artifactRoot, "Super Mario Advance 3.ups2"),
+    join(input.artifactRoot, "Super Mario Advance 3.xdelta3"),
   ]
   for (const [index, sidecar] of sidecars.entries()) {
     expect((await lstat(sidecar)).isSymbolicLink()).toBe(true)

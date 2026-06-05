@@ -16,6 +16,12 @@
 # `sunshine = prev.sunshine` to avoid infinite recursion when the overlay
 # value itself derives from `sunshine.overrideAttrs`.
 #
+# `retroarch-bare` is the one runtime-default override in this overlay: Korri's
+# first-class patch support accepts .xdelta only because this package is built
+# with RetroArch's --enable-xdelta flag and liblzma available. Keep the
+# colocated check in tools/testing/nix/korri-retroarch-xdelta-check.nix green
+# when changing this package.
+#
 # `libretro-fake-08`, `gamescope-korri`, and `smb-remastered` are additive
 # package lanes: no upstream nixpkgs attribute is replaced until the
 # downstream package is ready to become a runtime default.
@@ -34,6 +40,15 @@
 }:
 
 final: prev: {
+  retroarch-bare = prev.retroarch-bare.overrideAttrs (old: {
+    buildInputs = (old.buildInputs or [ ]) ++ [ final.xz ];
+    configureFlags = (old.configureFlags or [ ]) ++ [ "--enable-xdelta" ];
+    passthru = (old.passthru or { }) // {
+      xdeltaPatches = true;
+      xdeltaLzmaPackage = final.xz;
+    };
+  });
+
   moonlight-embedded = final.callPackage ../../../vendor/moonlight-embedded-korri/package.nix {
     inherit nix-on-rocks;
   };

@@ -145,12 +145,12 @@ describe("cascadeErrorMessage", () => {
     expect(
       cascadeErrorMessage(
         new UnsupportedPatchExtension({
-          path: "/patches/hack.xdelta",
-          extension: ".xdelta",
+          path: "/patches/hack.ppf",
+          extension: ".ppf",
         }),
       ),
     ).toBe(
-      "unsupported patch extension .xdelta for /patches/hack.xdelta; supported patch extensions are .ips, .bps, .ups",
+      "unsupported patch extension .ppf for /patches/hack.ppf; supported patch extensions are .ips, .bps, .ups, .xdelta",
     )
 
     expect(
@@ -176,7 +176,7 @@ describe("cascadeErrorMessage", () => {
     expect(supportedPatchFormatForPath("/patches/color.IPS")).toBe("ips")
     expect(supportedPatchFormatForPath("/patches/voice.BpS")).toBe("bps")
     expect(supportedPatchFormatForPath("/patches/qol.ups")).toBe("ups")
-    expect(supportedPatchFormatForPath("/patches/hack.xdelta")).toBe(undefined)
+    expect(supportedPatchFormatForPath("/patches/hack.xdelta")).toBe("xdelta")
     expect(supportedPatchFormatForPath("/patches/no-extension")).toBe(undefined)
   })
 })

@@ -16,7 +16,7 @@
 
 import { Data } from "effect"
 
-const SUPPORTED_PATCH_EXTENSIONS = [".ips", ".bps", ".ups"] as const
+const SUPPORTED_PATCH_EXTENSIONS = [".ips", ".bps", ".ups", ".xdelta"] as const
 export type SupportedPatchExtension =
   (typeof SUPPORTED_PATCH_EXTENSIONS)[number]
 export type SupportedPatchFormat = SupportedPatchExtension extends `.${infer F}`

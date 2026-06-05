@@ -51,6 +51,7 @@ describe("app.source.list handler", () => {
     expect(result.games.map(game => game.id)).toEqual([
       "gba/wario-land-4",
       "gba/patched-missing-files",
+      "gba/xdelta-patch",
     ])
     expect(result.games[0]).toMatchObject({
       id: "gba/wario-land-4",
@@ -81,9 +82,7 @@ describe("app.source.list handler", () => {
     expect(result.games.map(game => game.id)).toContain(
       "gba/patched-missing-files",
     )
-    expect(result.games.map(game => game.id)).not.toContain(
-      "gba/unsupported-xdelta-patch",
-    )
+    expect(result.games.map(game => game.id)).toContain("gba/xdelta-patch")
     expect(await readdir(artifactsRoot)).toEqual([])
   })
 
@@ -135,11 +134,11 @@ async function setupLibrary(options: { readonly enabled: boolean }) {
         metadata: { name: "Patched Missing Files" },
       },
       {
-        id: "gba/unsupported-xdelta-patch",
+        id: "gba/xdelta-patch",
         system: "patched-gba",
         contentPath: "/missing/roms/xdelta.gba",
         patches: ["/missing/patches/mod.xdelta"],
-        metadata: { name: "Unsupported XDelta Patch" },
+        metadata: { name: "XDelta Patch" },
       },
     ],
   })

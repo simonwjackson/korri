@@ -84,7 +84,7 @@ Settings are typed scalar maps (`string | number | boolean`). Nested settings an
 
 `patches:` declares launch-time soft patches for RetroArch content. Patch paths are ordinary absolute file paths on the target device; Korri does not download, discover, or catalog patches in v1.
 
-Supported v1 formats are IPS, BPS, and UPS. The format is inferred case-insensitively from the file extension (`.ips`, `.bps`, `.ups`). XDelta is intentionally deferred until the packaged RetroArch/app integration exposes and validates it as a first-class capability.
+Supported formats are IPS, BPS, UPS, and XDelta. The format is inferred case-insensitively from the file extension (`.ips`, `.bps`, `.ups`, `.xdelta`). Korri's packaged RetroArch is built with XDelta/liblzma support and the Nix checks assert `retroarch --help` exposes `--xdelta` before `.xdelta` is accepted by config validation.
 
 ```yaml
 version: 1
@@ -111,6 +111,10 @@ games:
       color-and-voice:
         patches:
           - /storage/patches/yoshi/SMA3 - Yoshis Island Voice Removal (U).ips
+      color-voice-and-qol:
+        patches:
+          - /storage/patches/yoshi/SMA3 - Yoshis Island Voice Removal (U).ips
+          - /storage/patches/yoshi/SMA3 - Yoshis Island QoL Hack (U).xdelta
       voice-only:
         inherit: false
         patches:

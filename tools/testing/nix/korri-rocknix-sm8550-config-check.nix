@@ -361,6 +361,12 @@ let
           in
           cores != [ ] && ((builtins.head cores).core or null) == "fake08"
         ))
+        (check "${name}: kiosk RetroArch must advertise XDelta patch support" (
+          let
+            wrappers = findRetroarchWrappers compositor.path;
+          in
+          wrappers != [ ] && ((builtins.head wrappers).passthru.unwrapped.passthru.xdeltaPatches or false)
+        ))
       ];
     in
     checks;
