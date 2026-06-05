@@ -15,28 +15,44 @@
 let
   targetSystem = pkgs.stdenv.hostPlatform.system;
   substratePackages = nix-on-rocks.packages.${targetSystem};
-  sm8550Packages = import nixpkgs {
-    system = targetSystem;
-    config.allowUnfree = true;
-  };
   # Gamescope >= 3.16.20 is required for the Moonlight v4l2m2m streaming
-  # path on SM8550 (see assertion below). nixos-25.11 currently ships
-  # 3.16.17, so we pin Gamescope to the same nixpkgs revision the x86
-  # compositor overlay uses (see product/systems/nixos/overlays/korri-x86-compositor.nix).
-  # That rev (0c6db2b5...) carries Gamescope 3.16.23 with the pipewire
-  # loop-lock fix. Delete this pin once nixos-25.11 backports a 3.16.20+
-  # Gamescope and the channel pkgs satisfies the assertion directly.
-  sm8550GamescopePinnedNixpkgs =
-    import
-      (builtins.fetchTarball {
-        url = "https://github.com/NixOS/nixpkgs/archive/0c6db2b5d257d845bbee67a38dee43bbca3bd462.tar.gz";
-        sha256 = "0pxv3drindhj4x8cilpcmjz94f7npcsi6rw4h1qhqimxmg40q5z3";
-      })
-      {
-        system = targetSystem;
-        config.allowUnfree = true;
-      };
-  sm8550GamescopePackage = sm8550GamescopePinnedNixpkgs.gamescope;
+  # path on SM8550 (see assertion below). `pkgs.gamescope` is globally
+  # replaced by the Korri package overlay with gamescope-korri wrapping the
+  # validated 3.16.23 base, so this platform module should not construct or
+  # force a separate Gamescope package.
+  gamescopeKorriControlEnvironment = {
+    # gamescope-korri v1 control/readback atoms. Keep these enabled on SM8550
+    # so every foreground Gamescope launched by sessiond exposes the expected
+    # control surface rather than silently behaving like stock Gamescope.
+    GAMESCOPE_XWAYLAND_MODE_CONTROL = "1";
+    GAMESCOPE_SCALING_FILTER = "3";
+    GAMESCOPE_SHARPNESS = "20";
+    GAMESCOPE_FSR_FEEDBACK = "1";
+  };
+  moonlightKorriFeatureEnvironment = {
+    # moonlight-embedded-korri product defaults for managed handheld streams.
+    # The preferred product path is the controller-authorized local-control
+    # socket, but server-composed remote-source launches do not yet allocate
+    # that socket. Until task-031 lands, keep the env-driven runtime-settings
+    # hooks enabled so Bandai can still exercise bitrate/FPS/resolution
+    # mutation on every stream.
+    KORRI_MOONLIGHT_ABSOLUTE_TOUCH = "1";
+    KORRI_MOONLIGHT_ABSOLUTE_TOUCH_REQUIRE_BOUNDS = "1";
+    KORRI_MOONLIGHT_AUTO_WINDOW_RESIZE = "1";
+    KORRI_MOONLIGHT_CONTROL = "1";
+    KORRI_MOONLIGHT_CONTROL_AUTHORITY = "controller";
+    MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_AFTER_S = "6";
+    MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS = "60";
+    MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_KBPS = "12000";
+    MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_RESOLUTION = "1280x720";
+    MOONLIGHT_RUNTIME_SETTINGS_MVP_ALLOW_PROOF_GATED = "1";
+    MOONLIGHT_RUNTIME_SETTINGS_MVP_ENABLE_SPIKE_ADAPTATION = "1";
+    MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_KBPS = "6000";
+    MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_FPS = "30";
+    MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_KBPS = "12000";
+    MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_FPS = "60";
+    MOONLIGHT_RUNTIME_SETTINGS_MVP_COOLDOWN_S = "10";
+  };
   sm8550 = config.rocknix.sm8550;
   # Neutral substrate capabilities owned by nix-on-rocks. Korri reads
   # these to compose the Moonlight launch environment; it must not
@@ -64,7 +80,7 @@ let
   # because Moonlight Embedded uses the same names the substrate uses,
   # but expressing it as a derived value keeps the boundary honest: this
   # platform adapter does not hard-code v4l2m2m.
-  moonlightLaunchEnvironment = {
+  moonlightLaunchEnvironment = moonlightKorriFeatureEnvironment // {
     KORRI_MOONLIGHT_COMMAND = "${pkgs.moonlight-embedded}/bin/moonlight";
     KORRI_MOONLIGHT_CLIENT = "embedded";
     KORRI_MOONLIGHT_MAPPING_FILE = "${pkgs.moonlight-embedded}/share/moonlight/gamecontrollerdb.txt";
@@ -95,8 +111,9 @@ in
   assertions = [
     {
       assertion =
-        toString config.services.korri.compositor.gamescope.package == toString sm8550GamescopePackage;
-      message = "RockNix SM8550 compositors must use the SM8550-validated Gamescope package.";
+        (config.services.korri.compositor.gamescope.package.pname or "") == "gamescope-korri"
+        && toString config.services.korri.compositor.gamescope.package == toString pkgs.gamescope;
+      message = "RockNix SM8550 compositors must use globally overlaid pkgs.gamescope (gamescope-korri).";
     }
     {
       # Gamescope's pipewire-loop-lock fix is required whenever the
@@ -127,7 +144,7 @@ in
       services = lib.mkDefault [ "main-space-session-dbus.service" ];
     };
 
-    gamescope.package = lib.mkForce sm8550GamescopePackage;
+    gamescope.package = lib.mkDefault pkgs.gamescope;
 
     path = with pkgs; [
       coreutils
@@ -141,21 +158,23 @@ in
       sway
       config.services.korri.compositor.gamescope.package
       substratePackages.cemu
-      # `pkgs.moonlight-embedded` is replaced by `moonlight-embedded-korri`
-      # via product/systems/nixos/overlays/korri-packages.nix, so the SM8550 v4l2m2m build is
-      # the Korri downstream variant with the absolute-touch + Sunshine
-      # runtime-settings patches layered on top.
+      # `pkgs.moonlight-embedded` is globally replaced by
+      # `moonlight-embedded-korri` via the Korri package overlay, matching the
+      # `pkgs.gamescope` -> `gamescope-korri` substitution above.
       pkgs.moonlight-embedded
     ];
 
-    environment = moonlightCompositorEnvironment // {
-      XDG_CURRENT_DESKTOP = "sway";
-      CEMU_BIOS_ROOT = "/storage/roms/bios/cemu";
-      CEMU_AFFINITY_MASK = sm8550.performance.cemuAffinityMask;
-      WLR_NO_HARDWARE_CURSORS = "1";
-      WLR_LIBINPUT_NO_DEVICES = "1";
-      USER = "root";
-    };
+    environment =
+      moonlightCompositorEnvironment
+      // gamescopeKorriControlEnvironment
+      // {
+        XDG_CURRENT_DESKTOP = "sway";
+        CEMU_BIOS_ROOT = "/storage/roms/bios/cemu";
+        CEMU_AFFINITY_MASK = sm8550.performance.cemuAffinityMask;
+        WLR_NO_HARDWARE_CURSORS = "1";
+        WLR_LIBINPUT_NO_DEVICES = "1";
+        USER = "root";
+      };
 
     sway.extraConfig = ''
       # ROCKNIX SM8550 display/session fragment supplied by nix-on-rocks.
@@ -194,10 +213,11 @@ in
   # lifecycle ownership moved out of the compositor process tree.
   services.korri.sessiond = {
     path = [ pkgs.moonlight-embedded ];
-    extraEnvironment = moonlightSessiondEnvironment;
+    extraEnvironment = moonlightSessiondEnvironment // gamescopeKorriControlEnvironment;
   };
 
-  systemd.services.korri-server.environment = moonlightLaunchEnvironment;
+  systemd.services.korri-server.environment =
+    moonlightLaunchEnvironment // gamescopeKorriControlEnvironment;
 
   # NOTE: `rocknix.sm8550.moonlight.{enable,package}` is no longer set
   # here. Moonlight is a Korri product choice; the substrate should not

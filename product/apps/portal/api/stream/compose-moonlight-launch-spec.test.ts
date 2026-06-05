@@ -17,6 +17,7 @@ const originalEnv = {
   absoluteTouchBounds: process.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS,
   absoluteTouchRequireBounds:
     process.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH_REQUIRE_BOUNDS,
+  autoWindowResize: process.env.KORRI_MOONLIGHT_AUTO_WINDOW_RESIZE,
   requireInputPlumber: process.env.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER,
 }
 
@@ -35,6 +36,10 @@ afterEach(() => {
   setOptionalEnv(
     "KORRI_MOONLIGHT_ABSOLUTE_TOUCH_REQUIRE_BOUNDS",
     originalEnv.absoluteTouchRequireBounds,
+  )
+  setOptionalEnv(
+    "KORRI_MOONLIGHT_AUTO_WINDOW_RESIZE",
+    originalEnv.autoWindowResize,
   )
   setOptionalEnv(
     "KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER",
@@ -162,6 +167,20 @@ describe("composeMoonlightLaunchSpec", () => {
       "stream",
       "-absolutetouch",
       "-absolutetouchrequirebounds",
+      "-app",
+      "Korri Stream",
+      "aka.local",
+    ])
+  })
+
+  it("adds auto-window-resize when KORRI_MOONLIGHT_AUTO_WINDOW_RESIZE is enabled", () => {
+    process.env.KORRI_MOONLIGHT_AUTO_WINDOW_RESIZE = "1"
+
+    const spec = composeMoonlightLaunchSpec({ host: "aka.local" })
+
+    expect(spec.args).toEqual([
+      "stream",
+      "-autowindowresize",
       "-app",
       "Korri Stream",
       "aka.local",

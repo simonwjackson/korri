@@ -587,14 +587,14 @@
         };
 
         libretroFake08 = pkgs.libretro-fake-08;
-        gamescopeKorri = pkgs.gamescope-korri;
         smbRemastered = pkgs.smb-remastered;
         superMario127 = pkgs.super-mario-127;
         yoshisFabricationStation = pkgs.yoshis-fabrication-station;
 
-        # The named outputs match the overlay-substituted `pkgs.sunshine` and
-        # `pkgs.moonlight-embedded` so downstream consumers can ask for either
-        # name and get the same derivation.
+        # The named outputs match the overlay-substituted runtime package names
+        # so downstream consumers can ask for either name and get the same
+        # derivation.
+        gamescopeKorri = pkgs.gamescope;
         sunshineKorri = pkgs.sunshine;
         moonlightEmbeddedKorri = pkgs.moonlight-embedded;
 
@@ -1289,12 +1289,11 @@
       in
       {
         # Top-level overlays so downstream flakes (mountainous host configs,
-        # bespoke device images) can pick up the Korri-downstream Moonlight
-        # and Sunshine packages by adding `korri.overlays.default` to their
-        # own `nixpkgs.overlays`. Without this, consumers that build their
-        # own `pkgs` instance (e.g. mountainous's nixpkgs.lib.nixosSystem)
-        # never see the substitution and end up with stock nixpkgs sunshine
-        # / nix-on-rocks moonlight-embedded.
+        # bespoke device images) can pick up Korri-downstream runtime packages
+        # by adding `korri.overlays.default` to their own `nixpkgs.overlays`.
+        # Without this, consumers that build their own `pkgs` instance (e.g.
+        # mountainous's nixpkgs.lib.nixosSystem) never see the substitution and
+        # end up with stock nixpkgs gamescope/sunshine/moonlight-embedded.
         overlays = rec {
           korri-packages = import ./product/systems/nixos/overlays/korri-packages.nix {
             inherit
@@ -1319,7 +1318,8 @@
         nixosModules = rec {
           # Power-user opt-in: a module that wires the Korri substrate-package
           # overlay into `nixpkgs.overlays`. Importing this module replaces
-          # `pkgs.sunshine` and `pkgs.moonlight-embedded` for the whole host.
+          # `pkgs.gamescope`, `pkgs.sunshine`, and `pkgs.moonlight-embedded`
+          # for the whole host.
           # Avoid in evaluations where `nixpkgs.pkgs` is set externally (e.g.
           # `pkgs.testers.runNixOSTest`), because that marks
           # `nixpkgs.overlays` read-only. Day-to-day consumers do NOT need
@@ -1340,9 +1340,11 @@
             };
           };
 
-          # Auto-attached sway/gamescope pin for the x86 compositor runtime
-          # contract. Imported by korri-compositor below so downstream consumers
-          # inherit the known-good versions without touching nixpkgs.overlays
+          # Auto-attached sway pin for the x86 compositor runtime contract.
+          # Gamescope is owned by the global Korri package overlay so
+          # `pkgs.gamescope` remains `gamescope-korri`. Imported by
+          # korri-compositor below so downstream consumers inherit the
+          # known-good sway version without touching nixpkgs.overlays
           # themselves. No-ops on non-x86 systems via the overlay itself.
           korri-x86-compositor-overlay =
             import ./product/systems/nixos/modules/korri-x86-compositor-overlay.nix

@@ -1,16 +1,18 @@
-# Overlay that pins sway 1.12 + gamescope 3.16.23 from nixpkgs master for
-# x86_64 compositor hosts. Stock sway 1.11 segfaults deterministically at
-# struct offset 0xb8 in `sway[+5a000]` when gamescope nests an Xwayland
-# that handles Wine/Proton workloads (Balatro reproduces on aka). Sway
-# 1.12 (released 2026-05-25) ships several null-deref / use-after-free
-# fixes around xdg_shell / view_init / tiling_resize that pattern-match
-# the crash class. Gamescope 3.16.23 bundles a pipewire loop-lock fix.
+# Overlay that pins sway 1.12 from nixpkgs master for x86_64 compositor
+# hosts. Stock sway 1.11 segfaults deterministically at struct offset 0xb8 in
+# `sway[+5a000]` when gamescope nests an Xwayland that handles Wine/Proton
+# workloads (Balatro reproduces on aka). Sway 1.12 (released 2026-05-25)
+# ships several null-deref / use-after-free fixes around xdg_shell / view_init
+# / tiling_resize that pattern-match the crash class.
 #
-# Acts as a no-op on aarch64 / other systems; Snapdragon/ROCKNIX
-# compositor hosts keep their existing nixpkgs sway+gamescope.
+# Gamescope is intentionally not replaced here. The global Korri packages
+# overlay owns `pkgs.gamescope` and makes it `gamescope-korri` everywhere,
+# wrapping the same 3.16.23 base this file used to expose for x86.
 #
-# Delete this overlay once nixos-unstable picks up sway 1.12 (expected
-# within a few weeks); the regular nixpkgs flake input will then suffice.
+# Acts as a no-op on aarch64 / other systems.
+#
+# Delete this overlay once nixos-unstable picks up sway 1.12 (expected within a
+# few weeks); the regular nixpkgs flake input will then suffice.
 # Reading `prev.stdenv` (the un-overlaid pkgs that already has stdenv
 # resolved upstream) instead of `final.stdenv` avoids the infinite
 # recursion that would otherwise arise from making stdenv depend on an
@@ -18,7 +20,7 @@
 final: prev:
 prev.lib.optionalAttrs prev.stdenv.hostPlatform.isx86_64 (
   let
-    swayGamescopePin =
+    swayPin =
       import
         (builtins.fetchTarball {
           url = "https://github.com/NixOS/nixpkgs/archive/0c6db2b5d257d845bbee67a38dee43bbca3bd462.tar.gz";
@@ -30,6 +32,6 @@ prev.lib.optionalAttrs prev.stdenv.hostPlatform.isx86_64 (
         };
   in
   {
-    inherit (swayGamescopePin) sway sway-unwrapped gamescope;
+    inherit (swayPin) sway sway-unwrapped;
   }
 )

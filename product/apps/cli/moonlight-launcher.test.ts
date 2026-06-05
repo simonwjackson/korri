@@ -398,6 +398,43 @@ describe("moonlight launcher", () => {
     })
   })
 
+  it("uses KORRI_MOONLIGHT_CONTROL_AUTHORITY for generated local control handles", async () => {
+    const previous = Bun.env.KORRI_MOONLIGHT_CONTROL_AUTHORITY
+    const calls: Array<{
+      readonly env: Readonly<Record<string, string>> | undefined
+    }> = []
+
+    try {
+      Bun.env.KORRI_MOONLIGHT_CONTROL_AUTHORITY = "controller"
+      const result = await launchMoonlight({
+        host: "aka.local",
+        moonlightControl: {
+          enabled: true,
+          runtimeDir: "/run/user/1000/korri-moonlight/session-2",
+          socketPath: "/run/user/1000/korri-moonlight/session-2/control.sock",
+          sessionId: "session-2",
+        },
+        runner: {
+          run: async (_command, _args, options) => {
+            calls.push({ env: options?.env })
+            return { status: "started" }
+          },
+        },
+      })
+
+      expect(result.status).toBe("started")
+      if (result.status === "started") {
+        expect(result.moonlightControl?.authority).toBe("controller")
+      }
+      expect(calls[0]?.env?.MOONLIGHT_LOCAL_CONTROL_AUTHORITY).toBe(
+        "controller",
+      )
+    } finally {
+      if (previous === undefined) delete Bun.env.KORRI_MOONLIGHT_CONTROL_AUTHORITY
+      else Bun.env.KORRI_MOONLIGHT_CONTROL_AUTHORITY = previous
+    }
+  })
+
   it("reports both failures without throwing", async () => {
     const result = await launchMoonlight({
       runner: runner(command => ({

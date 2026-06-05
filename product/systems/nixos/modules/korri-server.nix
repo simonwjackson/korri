@@ -668,6 +668,16 @@ in
         '';
       }
       {
+        assertion =
+          !cfg.streaming.enable
+          || (config.systemd.services."korri-sunshine".environment.SUNSHINE_LIVE_SETTINGS_MVP or null) == "1";
+        message = ''
+          services.korri.server.streaming.enable = true requires
+          systemd.services.korri-sunshine.environment.SUNSHINE_LIVE_SETTINGS_MVP = "1"
+          so sunshine-korri advertises runtime bitrate/FPS/resolution support.
+        '';
+      }
+      {
         assertion = !hasPublicApiBaseUrl || !publicApiBaseUrlHasWhitespace;
         message = "services.korri.server.publicApiBaseUrl must not contain whitespace.";
       }
@@ -883,6 +893,13 @@ in
         };
 
     systemd.user.services = mkIf (!isSystemMode) {
+      # Keep the runtime-settings gate present even when an operator manually
+      # starts the upstream Sunshine user unit for debugging instead of the
+      # Korri-owned system unit above.
+      sunshine = mkIf cfg.streaming.enable {
+        environment.SUNSHINE_LIVE_SETTINGS_MVP = "1";
+      };
+
       korri-server = {
         description = "Korri headless server control plane";
         wantedBy = [ "default.target" ];

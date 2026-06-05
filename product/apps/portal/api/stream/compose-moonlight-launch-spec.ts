@@ -41,6 +41,8 @@ export interface ComposeMoonlightLaunchSpecOptions {
   readonly absoluteTouchBounds?: string
   /** Ignore absolute touch until bounds are configured. Defaults to `KORRI_MOONLIGHT_ABSOLUTE_TOUCH_REQUIRE_BOUNDS`. */
   readonly absoluteTouchRequireBounds?: boolean
+  /** Resize the playback window to the stream size when it changes. Defaults to `KORRI_MOONLIGHT_AUTO_WINDOW_RESIZE`. */
+  readonly autoWindowResize?: boolean
 }
 
 export type MoonlightLaunchInputDeviceResolution =
@@ -135,6 +137,9 @@ function composeMoonlightArgs(
     options.inputDevice ?? moonlightInputDeviceFromEnv(),
   )
   appendAbsoluteTouchArgs(args, resolveAbsoluteTouchOptions(options))
+  if (options.autoWindowResize ?? moonlightAutoWindowResizeFromEnv()) {
+    args.push("-autowindowresize")
+  }
   args.push("-app", appName, options.host)
   return args
 }
@@ -236,6 +241,12 @@ function moonlightAbsoluteTouchRequireBoundsFromEnv(): boolean | undefined {
 function moonlightRequireInputPlumberFromEnv(): boolean {
   const raw = process.env.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER?.trim()
   return raw === "1" || raw === "true" || raw === "required"
+}
+
+function moonlightAutoWindowResizeFromEnv(): boolean | undefined {
+  const raw = process.env.KORRI_MOONLIGHT_AUTO_WINDOW_RESIZE?.trim()
+  if (!raw) return undefined
+  return raw === "1" || raw === "true" || raw === "enabled"
 }
 
 async function readRealProcDevices(): Promise<string> {

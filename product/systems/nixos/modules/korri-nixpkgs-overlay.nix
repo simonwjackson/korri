@@ -1,8 +1,8 @@
-# Auto-injected `nixpkgs.overlays` entry that every public Korri nixosModule
-# pulls in via `imports`. The goal is "import any korri module, get the Korri
-# downstream Moonlight + Sunshine builds for free" — so a downstream flake
-# (mountainous, bespoke host configs) does not have to remember to compose
-# `inputs.korri.overlays.default` into its own `nixpkgs.overlays` list.
+# `nixpkgs.overlays` helper for installing Korri's global runtime package
+# substitutions. The goal is "compose the Korri overlay once, then use the
+# ordinary upstream package names everywhere": `pkgs.gamescope` resolves to
+# gamescope-korri, `pkgs.moonlight-embedded` resolves to
+# moonlight-embedded-korri, and `pkgs.sunshine` resolves to sunshine-korri.
 #
 # Apply this module exactly once per system evaluation: applying the overlay
 # twice would re-derive `sunshine-korri` from itself and the version string

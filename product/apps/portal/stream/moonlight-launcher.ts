@@ -330,13 +330,21 @@ async function moonlightControlHandleFromOptions(
     sessionId,
     runtimeDir,
     socketPath,
-    authority: options?.authority ?? "observer",
+    authority: options?.authority ?? moonlightControlAuthorityFromEnv() ?? "observer",
   }
 }
 
 function moonlightControlEnabledFromEnv(): boolean {
   const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_CONTROL?.trim()
   return raw === "1" || raw === "true" || raw === "enabled"
+}
+
+function moonlightControlAuthorityFromEnv():
+  | "observer"
+  | "controller"
+  | undefined {
+  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_CONTROL_AUTHORITY?.trim()
+  return raw === "observer" || raw === "controller" ? raw : undefined
 }
 
 function moonlightControlRuntimeRootFromEnv(): string {
