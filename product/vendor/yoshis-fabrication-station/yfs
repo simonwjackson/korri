@@ -1,0 +1,274 @@
+#!/usr/bin/env bash
+# yfs: Unix-style launcher for Yoshi's Fabrication Station.
+#
+# Usage:
+#   yfs                          launch the normal YFS app (title screen)
+#   yfs PATH                     load level JSON from PATH
+#   yfs -                        load level JSON from stdin (explicit)
+#   cat level.json | yfs         load level JSON from stdin (implicit, piped)
+#   yfs --sample NAME            load a built-in sample (basicMovement, ...)
+#   yfs --code-url URL           load level JSON from a URL (http(s) or file://)
+#   yfs --lss ID-or-URL          fetch and load a Level Share Square YFS level
+#
+# Flags:
+#   --audio                      force the in-game audio toggle on
+#   --no-audio                   force the in-game audio toggle off
+#   --gba-sounds                 force GBA-style Yoshi sounds on
+#   --no-gba-sounds              force GBA-style Yoshi sounds off
+#   --quick-death                force quick-death behavior on
+#   --no-quick-death             force quick-death behavior off
+#   --play-timer                 force play timer display/counting on
+#   --no-play-timer              force play timer display/counting off
+#   --bgm-volume 0..10           force background music volume
+#   --sfx-volume 0..10           force sound-effects volume
+#   --metrics                    overlay fps/perf metrics
+#   --debug                      overlay direct-launch debug info
+#   --windowed                   drop --kiosk / --start-fullscreen for dev
+#   --keep-temp                  keep the temp level file on exit
+#   --list-samples               list built-in sample names and exit 0
+#   -h, --help                   show this help and exit 0
+#
+# Fullscreen / compositor wrapping is out of scope: wrap externally, e.g.
+#   gamescope-korri -W 1920 -H 1080 -w 832 -h 448 -S fit -F pixel -- yfs level.json
+#
+# Environment (Nix wrapper supplies these; sensible defaults otherwise):
+#   YFS_APP_DIR                  YFS app root containing index.html
+#   YFS_BROWSER                  Chromium binary
+#   YFS_PROFILE_DIR              Chromium user-data dir
+
+set -euo pipefail
+
+YFS_APP_DIR="${YFS_APP_DIR:-}"
+YFS_BROWSER="${YFS_BROWSER:-chromium}"
+YFS_PROFILE_DIR="${YFS_PROFILE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/yfs/chromium-profile}"
+
+usage() {
+  awk '/^# yfs:/,/^[^#]/ { if ($0 ~ /^[^#]/) exit; sub(/^# ?/, ""); print }' "$0"
+}
+
+die() {
+  printf 'yfs: %s\n' "$*" >&2
+  exit 2
+}
+
+mode_sample=""
+mode_code_url=""
+mode_lss=""
+mode_path=""
+mode_stdin=0
+flag_metrics=0
+flag_debug=0
+flag_windowed=0
+flag_keep_temp=0
+flag_list_samples=0
+flag_audio=""
+flag_gba_sounds=""
+flag_quick_death=""
+flag_play_timer=""
+flag_bgm_volume=""
+flag_sfx_volume=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    --sample) [[ $# -ge 2 ]] || die "--sample requires a NAME"; mode_sample="$2"; shift 2 ;;
+    --sample=*) mode_sample="${1#--sample=}"; shift ;;
+    --code-url) [[ $# -ge 2 ]] || die "--code-url requires a URL"; mode_code_url="$2"; shift 2 ;;
+    --code-url=*) mode_code_url="${1#--code-url=}"; shift ;;
+    --lss) [[ $# -ge 2 ]] || die "--lss requires an ID or URL"; mode_lss="$2"; shift 2 ;;
+    --lss=*) mode_lss="${1#--lss=}"; shift ;;
+    --metrics) flag_metrics=1; shift ;;
+    --debug) flag_debug=1; shift ;;
+    --windowed) flag_windowed=1; shift ;;
+    --keep-temp) flag_keep_temp=1; shift ;;
+    --list-samples) flag_list_samples=1; shift ;;
+    --audio) flag_audio="on"; shift ;;
+    --no-audio) flag_audio="off"; shift ;;
+    --audio=*)
+      v="${1#--audio=}"
+      case "$v" in on|off) flag_audio="$v" ;; *) die "--audio expects on|off, got: $v" ;; esac
+      shift ;;
+    --gba-sounds) flag_gba_sounds="on"; shift ;;
+    --no-gba-sounds) flag_gba_sounds="off"; shift ;;
+    --quick-death) flag_quick_death="on"; shift ;;
+    --no-quick-death) flag_quick_death="off"; shift ;;
+    --play-timer) flag_play_timer="on"; shift ;;
+    --no-play-timer) flag_play_timer="off"; shift ;;
+    --bgm-volume)
+      [[ $# -ge 2 ]] || die "--bgm-volume requires 0..10"
+      case "$2" in [0-9]|10) flag_bgm_volume="$2" ;; *) die "--bgm-volume expects integer 0..10, got: $2" ;; esac
+      shift 2 ;;
+    --bgm-volume=*)
+      v="${1#--bgm-volume=}"
+      case "$v" in [0-9]|10) flag_bgm_volume="$v" ;; *) die "--bgm-volume expects integer 0..10, got: $v" ;; esac
+      shift ;;
+    --sfx-volume)
+      [[ $# -ge 2 ]] || die "--sfx-volume requires 0..10"
+      case "$2" in [0-9]|10) flag_sfx_volume="$2" ;; *) die "--sfx-volume expects integer 0..10, got: $2" ;; esac
+      shift 2 ;;
+    --sfx-volume=*)
+      v="${1#--sfx-volume=}"
+      case "$v" in [0-9]|10) flag_sfx_volume="$v" ;; *) die "--sfx-volume expects integer 0..10, got: $v" ;; esac
+      shift ;;
+    -) mode_stdin=1; shift ;;
+    --)
+      shift
+      if [[ $# -gt 0 ]]; then
+        [[ -z "$mode_path" ]] || die "unexpected extra argument: $1"
+        mode_path="$1"; shift
+      fi
+      [[ $# -eq 0 ]] || die "unexpected extra argument: $1"
+      break ;;
+    -*) die "unknown flag: $1" ;;
+    *)
+      [[ -z "$mode_path" ]] || die "unexpected extra argument: $1"
+      mode_path="$1"; shift ;;
+  esac
+done
+
+if [[ $flag_list_samples -eq 1 ]]; then
+  [[ -n "$YFS_APP_DIR" ]] || die "YFS_APP_DIR is not set"
+  if command -v jq >/dev/null 2>&1; then
+    jq -r '.data | keys[]' "$YFS_APP_DIR/samplelevels.json"
+  else
+    sed -n 's/.*"data"[[:space:]]*:[[:space:]]*{//p' "$YFS_APP_DIR/samplelevels.json" \
+      | tr ',' '\n' | sed -n 's/^[[:space:]]*"\([^"]*\)"[[:space:]]*:.*/\1/p'
+  fi
+  exit 0
+fi
+
+if [[ -z "$mode_path$mode_sample$mode_code_url$mode_lss" ]] && [[ $mode_stdin -eq 0 ]] && [[ -p /dev/stdin ]]; then
+  mode_stdin=1
+fi
+
+payload_count=0
+[[ -n "$mode_path" ]] && payload_count=$((payload_count + 1))
+[[ $mode_stdin -eq 1 ]] && payload_count=$((payload_count + 1))
+[[ -n "$mode_sample" ]] && payload_count=$((payload_count + 1))
+[[ -n "$mode_code_url" ]] && payload_count=$((payload_count + 1))
+[[ -n "$mode_lss" ]] && payload_count=$((payload_count + 1))
+[[ $payload_count -le 1 ]] || die "pick at most one of: PATH, -, --sample, --code-url, --lss"
+
+[[ -n "$YFS_APP_DIR" ]] || die "YFS_APP_DIR is not set"
+[[ -f "$YFS_APP_DIR/index.html" ]] || die "no index.html under YFS_APP_DIR=$YFS_APP_DIR"
+
+staging_dir=""
+staging_file=""
+cleanup() {
+  local code=$?
+  if [[ $flag_keep_temp -eq 0 && -n "$staging_dir" ]]; then
+    rm -rf -- "$staging_dir"
+  fi
+  exit $code
+}
+trap cleanup INT TERM EXIT
+
+ensure_staging() {
+  if [[ -z "$staging_dir" ]]; then
+    local base="${XDG_RUNTIME_DIR:-/tmp}"
+    [[ -d "$base" && -w "$base" ]] || base="/tmp"
+    staging_dir="$(mktemp -d "$base/yfs-XXXXXX")"
+    staging_file="$staging_dir/level.json"
+  fi
+}
+
+validate_json() {
+  local file="$1"
+  if command -v jq >/dev/null 2>&1; then
+    jq -e . "$file" >/dev/null 2>&1 || die "level is not valid JSON: $file"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$file" \
+      || die "level is not valid JSON: $file"
+  fi
+}
+
+extract_lss_id() {
+  local value="$1"
+  value="${value%%\?*}"
+  value="${value%%#*}"
+  value="${value%/}"
+  printf '%s' "${value##*/}"
+}
+
+fetch_lss_level() {
+  local id="$1" out="$2" response
+  id="$(extract_lss_id "$id")"
+  [[ "$id" =~ ^[0-9a-fA-F]{24}$ ]] || die "--lss expects a 24-character Level Share Square level id or URL"
+  response="$staging_dir/lss-response.json"
+  curl -fsSL "https://levelsharesquare.com/api/levels/${id}/code" -o "$response" \
+    || die "failed to fetch Level Share Square level: $id"
+  if command -v jq >/dev/null 2>&1; then
+    jq -r '.levelData // empty' "$response" > "$out"
+  else
+    python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("levelData", ""))' "$response" > "$out" \
+      || die "failed to unwrap Level Share Square levelData; install jq or python3"
+  fi
+  [[ -s "$out" ]] || die "Level Share Square response did not include levelData"
+}
+
+url_query=""
+append_query() {
+  if [[ -z "$url_query" ]]; then url_query="?$1"; else url_query="$url_query&$1"; fi
+}
+urlencode() {
+  local s="$1" out="" i c
+  for (( i=0; i<${#s}; i++ )); do
+    c="${s:i:1}"
+    case "$c" in
+      [a-zA-Z0-9.~_-]) out+="$c" ;;
+      *) printf -v c '%%%02X' "'$c"; out+="$c" ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+
+if [[ -n "$mode_path" ]]; then
+  [[ -f "$mode_path" ]] || die "no such file: $mode_path"
+  validate_json "$mode_path"
+  ensure_staging
+  cp -- "$mode_path" "$staging_file"
+  append_query "code_url=$(urlencode "file://$staging_file")"
+elif [[ $mode_stdin -eq 1 ]]; then
+  ensure_staging
+  cat >"$staging_file"
+  [[ -s "$staging_file" ]] || die "stdin produced no level JSON"
+  validate_json "$staging_file"
+  append_query "code_url=$(urlencode "file://$staging_file")"
+elif [[ -n "$mode_lss" ]]; then
+  ensure_staging
+  fetch_lss_level "$mode_lss" "$staging_file"
+  validate_json "$staging_file"
+  append_query "code_url=$(urlencode "file://$staging_file")"
+elif [[ -n "$mode_sample" ]]; then
+  append_query "sample=$(urlencode "$mode_sample")"
+elif [[ -n "$mode_code_url" ]]; then
+  append_query "code_url=$(urlencode "$mode_code_url")"
+fi
+
+[[ $flag_metrics -eq 1 ]] && append_query "metrics=1"
+[[ $flag_debug -eq 1 ]] && append_query "debug=1"
+[[ -n "$flag_audio" ]] && append_query "audio=$flag_audio"
+[[ -n "$flag_gba_sounds" ]] && append_query "gba_sounds=$flag_gba_sounds"
+[[ -n "$flag_quick_death" ]] && append_query "quick_death=$flag_quick_death"
+[[ -n "$flag_play_timer" ]] && append_query "play_timer=$flag_play_timer"
+[[ -n "$flag_bgm_volume" ]] && append_query "bgm_volume=$flag_bgm_volume"
+[[ -n "$flag_sfx_volume" ]] && append_query "sfx_volume=$flag_sfx_volume"
+
+target_url="file://$YFS_APP_DIR/index.html$url_query"
+mkdir -p "$YFS_PROFILE_DIR"
+chromium_args=(
+  --no-first-run
+  --no-default-browser-check
+  --disable-translate
+  --disable-features=TranslateUI
+  --autoplay-policy=no-user-gesture-required
+  --allow-file-access-from-files
+  --ignore-gpu-blocklist
+  --user-data-dir="$YFS_PROFILE_DIR"
+  --no-sandbox
+  --app="$target_url"
+)
+if [[ $flag_windowed -eq 0 ]]; then
+  chromium_args+=(--ozone-platform=x11 --start-fullscreen --kiosk)
+fi
+exec "$YFS_BROWSER" "${chromium_args[@]}"

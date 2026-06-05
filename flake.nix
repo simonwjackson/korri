@@ -590,6 +590,7 @@
         gamescopeKorri = pkgs.gamescope-korri;
         smbRemastered = pkgs.smb-remastered;
         superMario127 = pkgs.super-mario-127;
+        yoshisFabricationStation = pkgs.yoshis-fabrication-station;
 
         # The named outputs match the overlay-substituted `pkgs.sunshine` and
         # `pkgs.moonlight-embedded` so downstream consumers can ask for either
@@ -648,6 +649,7 @@
           gamescope-korri = gamescopeKorri;
           smb-remastered = smbRemastered;
           super-mario-127 = superMario127;
+          yoshis-fabrication-station = yoshisFabricationStation;
         }
         // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
           electrobun-cli = electrobunBinaries.cli;
@@ -869,6 +871,10 @@
             super-mario-127-check = import ./product/vendor/super-mario-127/check.nix {
               inherit pkgs;
               superMario127Package = self.packages.${system}.super-mario-127;
+            };
+            yoshis-fabrication-station-check = import ./product/vendor/yoshis-fabrication-station/check.nix {
+              inherit pkgs;
+              yfsPackage = self.packages.${system}.yoshis-fabrication-station;
             };
           }
           // pkgs.lib.optionalAttrs isX86Linux {

@@ -67,4 +67,5 @@ final: prev: {
   super-mario-127 = final.callPackage ../../../vendor/super-mario-127/package.nix {
     inherit sm127-src;
   };
+  yoshis-fabrication-station = final.callPackage ../../../vendor/yoshis-fabrication-station/package.nix { };
 }
