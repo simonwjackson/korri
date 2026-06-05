@@ -80,6 +80,51 @@ games:
 
 Settings are typed scalar maps (`string | number | boolean`). Nested settings and `null` are rejected by strict schema decoding. Settings cascade through the existing layer order: global, user, system, app, legacy launcher, game, selected preset chain, then ephemeral override. More-specific keys win, including explicit `false` and `0`. `inherit: false` truncates the inherited cascade layer as a whole.
 
+## RetroArch soft patches
+
+`patches:` declares launch-time soft patches for RetroArch content. Patch paths are ordinary absolute file paths on the target device; Korri does not download, discover, or catalog patches in v1.
+
+Supported v1 formats are IPS, BPS, and UPS. The format is inferred case-insensitively from the file extension (`.ips`, `.bps`, `.ups`). XDelta is intentionally deferred until the packaged RetroArch/app integration exposes and validates it as a first-class capability.
+
+```yaml
+version: 1
+
+systems:
+  gba:
+    name: Game Boy Advance
+    launch:
+      app: retroarch
+      module: mgba
+
+modules:
+  mgba:
+    kind: libretro-core
+    path: /etc/korri/cores/mgba_libretro.so
+
+games:
+  yoshi-island:
+    system: gba
+    contentPath: /storage/roms/gba/Super Mario Advance 3 - Yoshis Island (USA).gba
+    patches:
+      - /storage/patches/yoshi/SMA3 - Yoshis Island Colour Restoration (U).ips
+    presets:
+      color-and-voice:
+        patches:
+          - /storage/patches/yoshi/SMA3 - Yoshis Island Voice Removal (U).ips
+      voice-only:
+        inherit: false
+        patches:
+          - /storage/patches/yoshi/SMA3 - Yoshis Island Voice Removal (U).ips
+```
+
+Patch lists append in cascade order. A game-level `patches:` list applies to the base launch. A selected preset contributes additional patches after the base game patches, so `color-and-voice` above stages colour restoration first and voice removal second. `inherit: false` keeps the existing broad cascade escape hatch: on a layer that supports it, less-specific inherited contributions for that layer are dropped before that layer's own fields are applied.
+
+Korri hides RetroArch's indexed sidecar naming from authors. At launch time it creates a launch-scoped artifact directory, symlinks the original ROM into that directory, and symlinks ordered patch sidecars next to it using RetroArch-compatible names such as `Game.ips`, `Game.ips1`, or `Game.bps2`. Source ROMs and patch files are not modified or copied. If a patch path is missing, unreadable, not a regular file, uses an unsupported extension, or targets a non-RetroArch app such as Dolphin, launch resolution fails with a patch-specific diagnostic.
+
+Patched and unpatched presets for the same declared base game share the same save and savestate identity. The v1 identity is derived from the base `system` plus the declared `contentPath`, not from the selected preset or patch list. This means trying a colour-restoration preset does not silently fork saves from the unpatched game.
+
+Device smoke testing is still useful execution evidence, but it is not a v1 implementation dependency. A manual smoke should record the YAML used, the resolved launch command/artifact root, the staged sidecar order, and whether RetroArch booted the expected patched content on device.
+
 ## Migration aliases
 
 Legacy fields remain valid during the migration window:

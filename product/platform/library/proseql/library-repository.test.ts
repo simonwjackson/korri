@@ -1,13 +1,22 @@
 import { describe, expect, it } from "bun:test"
 import { createHash } from "node:crypto"
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readlink,
+  rm,
+  writeFile,
+} from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { cascadeErrorMessage } from "@platform/library/config/errors"
 import type { GameRecord } from "@platform/library/config/records/game"
 import type { LauncherRecord } from "@platform/library/config/records/launcher"
 import type { SystemRecord } from "@platform/library/config/records/system"
 import { LibraryError } from "@platform/library/library-services"
-import { Cause, Effect, Result } from "effect"
+import { Cause, Effect, type Exit, Result } from "effect"
 
 import { openKorriLibraryDb } from "./library-db"
 import { createLibraryRepository } from "./library-repository"
@@ -752,6 +761,225 @@ describe("createLibraryRepository — upsertImportedGame", () => {
     })
   })
 })
+
+describe("createLibraryRepository — resolveLaunchForGame (patches)", () => {
+  it("resolves persisted patched RetroArch launches from YAML without changing save identity", async () => {
+    await withTempRoot(async root => {
+      const artifactsRoot = await mkdtemp(
+        join(tmpdir(), "korri-launch-artifacts-"),
+      )
+      const previous = {
+        artifacts: process.env.KORRI_LAUNCH_ARTIFACTS_DIR,
+        data: process.env.XDG_DATA_HOME,
+        state: process.env.XDG_STATE_HOME,
+      }
+      process.env.KORRI_LAUNCH_ARTIFACTS_DIR = artifactsRoot
+      process.env.XDG_DATA_HOME = join(root, "data")
+      process.env.XDG_STATE_HOME = join(root, "state")
+      try {
+        const rom = join(root, "roms", "Super Mario Advance 3.gba")
+        const cleanRom = join(root, "roms", "Super Mario Advance 3 Clean.gba")
+        const plainRom = join(root, "roms", "Plain RetroArch.gba")
+        const systemPatch = join(root, "patches", "system.ips")
+        const colorPatch = join(root, "patches", "color.IPS")
+        const voicePatch = join(root, "patches", "voice.BpS")
+        const cleanPatch = join(root, "patches", "clean.ups")
+        await mkdir(join(root, "roms"), { recursive: true })
+        await mkdir(join(root, "patches"), { recursive: true })
+        await Promise.all([
+          writeFile(rom, "rom"),
+          writeFile(cleanRom, "clean rom"),
+          writeFile(plainRom, "plain rom"),
+          writeFile(systemPatch, "system patch"),
+          writeFile(colorPatch, "color patch"),
+          writeFile(voicePatch, "voice patch"),
+          writeFile(cleanPatch, "clean patch"),
+        ])
+        await writeFile(
+          join(root, "library.yaml"),
+          [
+            "apps:",
+            "  retroarch:",
+            "    settings:",
+            "      video_driver: glcore",
+            "modules:",
+            "  mgba:",
+            "    kind: libretro-core",
+            "    path: /etc/korri/cores/mgba_libretro.so",
+            "systems:",
+            "  gba:",
+            "    launch:",
+            "      app: retroarch",
+            "      module: mgba",
+            "    patches:",
+            `      - ${yamlString(systemPatch)}`,
+            "  gb:",
+            "    launch:",
+            "      app: retroarch",
+            "      module: mgba",
+            "games:",
+            "  gba/yoshi:",
+            "    system: gba",
+            `    contentPath: ${yamlString(rom)}`,
+            "    patches:",
+            `      - ${yamlString(colorPatch)}`,
+            "    presets:",
+            "      voice:",
+            "        patches:",
+            `          - ${yamlString(voicePatch)}`,
+            "  gba/yoshi-clean:",
+            "    system: gba",
+            `    contentPath: ${yamlString(cleanRom)}`,
+            "    inherit: false",
+            "    patches:",
+            `      - ${yamlString(cleanPatch)}`,
+            "  gb/plain:",
+            "    system: gb",
+            `    contentPath: ${yamlString(plainRom)}`,
+            "",
+          ].join("\n"),
+          "utf8",
+        )
+
+        const result = await Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+              const repo = createLibraryRepository(db)
+              return {
+                base: yield* repo.resolveLaunchForGame("gba/yoshi"),
+                voice: yield* repo.resolveLaunchForGame("gba/yoshi", {
+                  presetId: "voice",
+                }),
+                clean: yield* repo.resolveLaunchForGame("gba/yoshi-clean"),
+                plain: yield* repo.resolveLaunchForGame("gb/plain"),
+              }
+            }),
+          ),
+        )
+
+        expect(result.voice.spec.args).toEqual([
+          "--config",
+          result.voice.artifacts?.paths.configPath ?? "",
+          "-L",
+          "/etc/korri/cores/mgba_libretro.so",
+          result.voice.artifacts?.paths.contentPath ?? "",
+        ])
+        expect(
+          await symlinkTarget(result.voice.artifacts?.paths.contentPath),
+        ).toBe(rom)
+        expect(await symlinkTarget(result.voice.artifacts?.paths.patch0)).toBe(
+          systemPatch,
+        )
+        expect(await symlinkTarget(result.voice.artifacts?.paths.patch1)).toBe(
+          colorPatch,
+        )
+        expect(await symlinkTarget(result.voice.artifacts?.paths.patch2)).toBe(
+          voicePatch,
+        )
+        expect(result.voice.artifacts?.paths.patch0).toEndWith(
+          "Super Mario Advance 3.ips",
+        )
+        expect(result.voice.artifacts?.paths.patch1).toEndWith(
+          "Super Mario Advance 3.ips1",
+        )
+        expect(result.voice.artifacts?.paths.patch2).toEndWith(
+          "Super Mario Advance 3.bps2",
+        )
+
+        expect(await symlinkTarget(result.clean.artifacts?.paths.patch0)).toBe(
+          cleanPatch,
+        )
+        expect(result.clean.artifacts?.paths.patch1).toBeUndefined()
+
+        const saveLine = /savefile_directory = .*/
+        const baseCfg = await readFile(
+          result.base.artifacts?.paths.configPath ?? "",
+          "utf8",
+        )
+        const voiceCfg = await readFile(
+          result.voice.artifacts?.paths.configPath ?? "",
+          "utf8",
+        )
+        expect(baseCfg.match(saveLine)?.[0]).toBe(voiceCfg.match(saveLine)?.[0])
+
+        expect(result.plain.spec.args.at(-1)).toBe(plainRom)
+        expect(result.plain.artifacts?.paths.contentPath).toBeUndefined()
+        expect(result.plain.artifacts?.paths.patch0).toBeUndefined()
+      } finally {
+        setEnv("KORRI_LAUNCH_ARTIFACTS_DIR", previous.artifacts)
+        setEnv("XDG_DATA_HOME", previous.data)
+        setEnv("XDG_STATE_HOME", previous.state)
+        await rm(artifactsRoot, { recursive: true, force: true })
+      }
+    })
+  })
+
+  it("reports unsupported persisted patch declarations through YAML decode", async () => {
+    await withTempRoot(async root => {
+      const rom = join(root, "roms", "game.rvz")
+      const patch = join(root, "patches", "mod.ips")
+      await mkdir(join(root, "roms"), { recursive: true })
+      await mkdir(join(root, "patches"), { recursive: true })
+      await writeFile(rom, "rom")
+      await writeFile(patch, "patch")
+      await writeFile(
+        join(root, "library.yaml"),
+        [
+          "systems:",
+          "  wii:",
+          "    launch:",
+          "      app: dolphin",
+          "games:",
+          "  wii/patched:",
+          "    system: wii",
+          `    contentPath: ${yamlString(rom)}`,
+          "    patches:",
+          `      - ${yamlString(patch)}`,
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+
+      const exit = await Effect.runPromiseExit(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const repo = createLibraryRepository(db)
+            return yield* repo.resolveLaunchForGame("wii/patched")
+          }),
+        ),
+      )
+      expect(exitFailureMessage(exit)).toContain(
+        "patches are not supported for app dolphin",
+      )
+    })
+  })
+})
+
+function exitFailureMessage<A, E>(exit: Exit.Exit<A, E>): string {
+  if (exit._tag === "Success") throw new Error("expected failure")
+  return cascadeErrorMessage(Cause.squash(exit.cause))
+}
+
+function yamlString(value: string): string {
+  return JSON.stringify(value)
+}
+
+async function symlinkTarget(path: string | undefined): Promise<string> {
+  expect(typeof path).toBe("string")
+  if (typeof path !== "string") return ""
+  expect((await lstat(path)).isSymbolicLink()).toBe(true)
+  return readlink(path)
+}
+
+function setEnv(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key]
+    return
+  }
+  process.env[key] = value
+}
 
 describe("createLibraryRepository — resolveLaunchForGame (apps/modules)", () => {
   it("resolves built-in app/module YAML through materialization without a legacy launcher", async () => {
