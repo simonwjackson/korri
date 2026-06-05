@@ -78,21 +78,23 @@
     ];
   };
 
-  outputs = {
-    self,
-    nixpkgs,
-    nixpkgs-2405,
-    flake-utils,
-    bun2nix,
-    nix-on-rocks,
-    fake-08-src,
-    smbr-src,
-    sm127-src,
-    nixpkgs-godot,
-    ...
-  }:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      nixpkgs-2405,
+      flake-utils,
+      bun2nix,
+      nix-on-rocks,
+      fake-08-src,
+      smbr-src,
+      sm127-src,
+      nixpkgs-godot,
+      ...
+    }:
     flake-utils.lib.eachDefaultSystem (
-      system: let
+      system:
+      let
         korriPackagesOverlay = import ./product/systems/nixos/overlays/korri-packages.nix {
           inherit
             nix-on-rocks
@@ -133,14 +135,15 @@
         isX86Linux = system == "x86_64-linux";
         productRevision = self.rev or self.dirtyRev or "local-candidate";
         productShortRevision =
-          if self ? rev
-          then builtins.substring 0 12 self.rev
-          else if self ? dirtyRev
-          then builtins.substring 0 12 self.dirtyRev
-          else "local";
+          if self ? rev then
+            builtins.substring 0 12 self.rev
+          else if self ? dirtyRev then
+            builtins.substring 0 12 self.dirtyRev
+          else
+            "local";
         productRevisionIsClean = self ? rev;
         nixOnRocksRevision = nix-on-rocks.rev or nix-on-rocks.dirtyRev or "unknown";
-        productRegistry = import ./product/systems/nixos/flake/products.nix {inherit nix-on-rocks;};
+        productRegistry = import ./product/systems/nixos/flake/products.nix { inherit nix-on-rocks; };
         explicitProductList = productRegistry.explicitProductList;
         explicitProducts = productRegistry.explicitProducts;
         byCompatibleProduct = productRegistry.byCompatible;
@@ -220,162 +223,74 @@
 
         '';
 
-        # Lockfile-derived Bun dependency cache.
-        #
-        # tools/nix/generated/bun.nix is regenerated from bun.lock via `just refresh-bun-deps`
-        # (which invokes `bun x bun2nix -o tools/nix/generated/bun.nix`). Each lockfile entry
-        # becomes a per-package fetchurl whose SRI hash comes directly from
-        # bun.lock, so there is no separate FOD hash to maintain per system.
-        #
-        # The @proseql/core override rewrites the hjson/json5/jsonc codec
-        # imports from default to namespace form before they enter Bun's
-        # offline cache. Bun runs them as-is, but Bun's bundler rejects the
-        # default-export pattern while building the desktop native bundle.
-        # Centralizing the patch here removes a per-consumer sed loop.
-        bunDeps = let
-          # Loud-fail at eval time if a future bun.lock bump moves proseql
-          # past the version this override is keyed on. bun2nix.fetchBunDeps
-          # silently no-ops on unknown override keys, which would otherwise
-          # cause korri-desktop to fail confusingly inside `bun build` when
-          # the codec patch goes missing. korri-cli/korri-server have an
-          # in-buildPhase sed loop as defense-in-depth; korri-desktop does
-          # not, so this assertion is its primary guard.
-          proseqlOverrideKey = "@proseql/core@0.13.2";
-          productionBunPackageNames = import ./tools/nix/generated/bun-production-package-names.nix;
-          # bun.nix is a function expecting fetchurl etc. We only need
-          # attribute names for the existence checks; values are lazy, so
-          # passing nulls is safe (we never access them).
-          bunNixManifest = import ./tools/nix/generated/bun.nix {
-            copyPathToStore = null;
-            fetchFromGitHub = null;
-            fetchgit = null;
-            fetchurl = null;
-          };
-          forbiddenProductionBunPackagePatterns = [
-            "@axe-core/playwright@"
-            "@playwright/test@"
-            "@storybook/"
-            "@cucumber/"
-            "@vitest/"
-            "@testing-library/"
-            "fallow@"
-            "@argo-video/cli@"
-            "@tiptap/"
-            "@xyflow/"
-          ];
-          forbiddenProductionBunPackageMatches =
-            builtins.filter (
-              name: builtins.any (pattern: pkgs.lib.hasInfix pattern name) forbiddenProductionBunPackagePatterns
-            )
-            productionBunPackageNames;
-          productionBunNix = builtins.toFile "bun-production.nix" ''
-            { copyPathToStore, fetchFromGitHub, fetchgit, fetchurl, ... }@args:
-            let
-              full = import ${./tools/nix/generated/bun.nix} args;
-              allowed = builtins.listToAttrs (
-                map (name: { inherit name; value = null; }) (import ${./tools/nix/generated/bun-production-package-names.nix})
-              );
-            in
-            builtins.intersectAttrs allowed full
-          '';
-        in
-          assert (builtins.hasAttr proseqlOverrideKey bunNixManifest)
-          || throw ''
-            flake.nix bunDeps: override key '${proseqlOverrideKey}' is not present in tools/nix/generated/bun.nix.
-            The proseql codec patch will not be applied to the bun offline cache.
-            Update the override key to match the version recorded in tools/nix/generated/bun.nix
-            (run `just refresh-bun-deps` if bun.lock changed).
-          '';
-          assert (builtins.elem proseqlOverrideKey productionBunPackageNames)
-          || throw ''
-            flake.nix bunDeps: production Bun package set is missing '${proseqlOverrideKey}'.
-            Update tools/nix/generated/bun-production-package-names.nix with `just refresh-bun-deps`.
-          '';
-          assert forbiddenProductionBunPackageMatches
-          == []
-          || throw ''
-            flake.nix bunDeps: production Bun package set includes known dev/test dependencies:
-            ${pkgs.lib.concatStringsSep ", " forbiddenProductionBunPackageMatches}
-
-            Update tools/nix/bun-production-deps.ts and regenerate with `just refresh-bun-deps`.
-          '';
-            pkgs.bun2nix.fetchBunDeps {
-              bunNix = productionBunNix;
-              overrides = {
-                ${proseqlOverrideKey} = pkg:
-                  pkgs.runCommandLocal "proseql-core-codec-patched" {} ''
-                    cp -R ${pkg} $out
-                    chmod -R u+w $out
-                    for codec in hjson json5 jsonc; do
-                      file="$out/dist/serializers/codecs/$codec.js"
-                      if [ -f "$file" ]; then
-                        sed -i 's/^import pkg from /import * as pkg from /' "$file"
-                      fi
-                    done
-                  '';
-              };
-            };
+        bunDependencyCache = import ./tools/nix/bun-deps {
+          inherit pkgs;
+          lib = pkgs.lib;
+        };
+        bunDeps = bunDependencyCache.deps;
 
         # Sources used by the Bun/Electrobun package derivations. Keep these
         # narrower than the flake root so docs, backlog, artifact downloads,
         # test tooling, and unrelated Nix/package work do not invalidate Fuji's
         # SM8550 runtime package builds.
-        korriSources = let
-          fileset = pkgs.lib.fileset;
-          common = [
-            ./bun.lock
-            ./bunfig.toml
-            ./package.json
-            ./tsconfig.api.json
-            ./tsconfig.json
-            ./tsconfig.server.json
-          ];
-          mkSource = extra:
-            fileset.toSource {
-              root = ./.;
-              fileset = fileset.unions (common ++ extra);
-            };
-          sharedRuntime = [
-            ./product/platform
-          ];
-          deviceRuntime =
-            [
+        korriSources =
+          let
+            fileset = pkgs.lib.fileset;
+            common = [
+              ./bun.lock
+              ./bunfig.toml
+              ./package.json
+              ./tsconfig.api.json
+              ./tsconfig.json
+              ./tsconfig.server.json
+            ];
+            mkSource =
+              extra:
+              fileset.toSource {
+                root = ./.;
+                fileset = fileset.unions (common ++ extra);
+              };
+            sharedRuntime = [
+              ./product/platform
+            ];
+            deviceRuntime = [
               ./product/apps/portal
               ./product/services/device
               ./tools/library
             ]
             ++ sharedRuntime;
-        in {
-          portal = mkSource (
-            [
-              ./components.json
-              ./vite.config.mjs
-              ./product/apps/desktop/runtime-config-shape.ts
-              ./product/apps/portal
-              ./product/themes
-            ]
-            ++ sharedRuntime
-          );
-          desktop = mkSource (
-            [
-              ./electrobun.config.ts
-              ./product/apps/desktop
-              ./product/apps/cli
-            ]
-            ++ sharedRuntime
-          );
-          inputd = mkSource (deviceRuntime ++ [./tools/types]);
-          gameStream = mkSource deviceRuntime;
-          sessiond = mkSource deviceRuntime;
-          cli = mkSource ([./product/apps/cli] ++ deviceRuntime);
-          server = mkSource (
-            [
-              ./product/apps/cli
-              ./product/services/server
-            ]
-            ++ deviceRuntime
-          );
-        };
+          in
+          {
+            portal = mkSource (
+              [
+                ./components.json
+                ./vite.config.mjs
+                ./product/apps/desktop/runtime-config-shape.ts
+                ./product/apps/portal
+                ./product/themes
+              ]
+              ++ sharedRuntime
+            );
+            desktop = mkSource (
+              [
+                ./electrobun.config.ts
+                ./product/apps/desktop
+                ./product/apps/cli
+              ]
+              ++ sharedRuntime
+            );
+            inputd = mkSource (deviceRuntime ++ [ ./tools/types ]);
+            gameStream = mkSource deviceRuntime;
+            sessiond = mkSource deviceRuntime;
+            cli = mkSource ([ ./product/apps/cli ] ++ deviceRuntime);
+            server = mkSource (
+              [
+                ./product/apps/cli
+                ./product/services/server
+              ]
+              ++ deviceRuntime
+            );
+          };
 
         # Single portal build for every desktop variant. The native input-bridge
         # URL is now pushed at runtime via window.__korriRuntime (see
@@ -445,7 +360,7 @@
         korriImages = import ./product/systems/nixos/images/common.nix {
           korri = self;
           inherit nixpkgs system;
-          overlays = [korriPackagesOverlay];
+          overlays = [ korriPackagesOverlay ];
         };
 
         libretroFake08 = pkgs.libretro-fake-08;
@@ -461,27 +376,27 @@
         moonlightEmbeddedKorri = pkgs.moonlight-embedded;
 
         korriHeadlessSystem = korriImages.mkHeadlessSystem {
-          platformModules = [./product/systems/nixos/images/platforms/x86.nix];
+          platformModules = [ ./product/systems/nixos/images/platforms/x86.nix ];
         };
 
         korriKioskSystem = korriImages.mkKioskSystem {
-          platformModules = [./product/systems/nixos/images/platforms/x86.nix];
+          platformModules = [ ./product/systems/nixos/images/platforms/x86.nix ];
         };
 
         korriDesktopLabSystem = korriImages.mkDesktopLabSystem {
-          platformModules = [./product/systems/nixos/images/platforms/x86.nix];
+          platformModules = [ ./product/systems/nixos/images/platforms/x86.nix ];
         };
 
         korriSourceMachineSystem = korriImages.mkSourceMachineSystem {
-          platformModules = [./product/systems/nixos/images/platforms/x86.nix];
+          platformModules = [ ./product/systems/nixos/images/platforms/x86.nix ];
         };
 
         korriKioskLiveUsbSystem = korriImages.mkLiveUsbKioskSystem {
-          platformModules = [./product/systems/nixos/images/platforms/x86.nix];
+          platformModules = [ ./product/systems/nixos/images/platforms/x86.nix ];
         };
 
         korriKioskLiveUsbDeveloperSystem = korriImages.mkLiveUsbKioskSystem {
-          platformModules = [./product/systems/nixos/images/platforms/x86.nix];
+          platformModules = [ ./product/systems/nixos/images/platforms/x86.nix ];
           modules = [
             {
               services.korri.liveUsbPersistence.artifact = "developer";
@@ -490,107 +405,106 @@
         };
 
         korriKioskLiveUsbRuntimeSystem = korriImages.mkLiveUsbKioskRuntimeSystem {
-          platformModules = [./product/systems/nixos/images/platforms/x86.nix];
+          platformModules = [ ./product/systems/nixos/images/platforms/x86.nix ];
         };
-      in {
-        packages =
-          {
-            korri-portal = korriPortal;
-          }
-          // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-            korri-inputd = korriInputd;
-            korri-game-stream = korriGameStream;
-            korri-sessiond = korriSessiond;
-            korri-cli = korriCli;
-            korri-gamescope-control-bridge = korriGamescopeControlBridge;
-            korri-server = korriServer;
-            korri-headless-source = korriHeadlessSource;
-            sunshine-korri = sunshineKorri;
-            moonlight-embedded-korri = moonlightEmbeddedKorri;
-            libretro-fake-08 = libretroFake08;
-            gamescope-korri = gamescopeKorri;
-            smb-remastered = smbRemastered;
-            super-mario-127 = superMario127;
-            yoshis-fabrication-station = yoshisFabricationStation;
-          }
-          // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
-            electrobun-cli = electrobunBinaries.cli;
-            electrobun-core = electrobunBinaries.core;
-            korri-desktop-unwrapped = korriDesktopUnwrapped;
-            korri-desktop = korriDesktop;
-            korri-desktop-device = korriDesktopDevice;
-            default = korriDesktop;
-          }
-          // pkgs.lib.optionalAttrs isX86Linux {
-            korri-desktop-x86-kiosk = korriDesktopX86Kiosk;
-            korri-headless-system = korriHeadlessSystem.config.system.build.toplevel;
-            korri-kiosk-system = korriKioskSystem.config.system.build.toplevel;
-            korri-desktop-lab-system = korriDesktopLabSystem.config.system.build.toplevel;
-            korri-source-machine-system = korriSourceMachineSystem.config.system.build.toplevel;
-            korri-kiosk-live-iso = korriKioskLiveUsbSystem.config.system.build.isoImage;
-            korri-kiosk-live-developer-iso = korriKioskLiveUsbDeveloperSystem.config.system.build.isoImage;
-          }
-          // pkgs.lib.optionalAttrs (system == "aarch64-linux") (
-            attrsForProducts (product: {
-              name = product.kioskSystemPackageName;
-              value = self.nixosConfigurations.${product.configName}.config.system.build.toplevel;
-            })
-          )
-          // pkgs.lib.optionalAttrs (system == "aarch64-linux" && hasRocknixGuestCompatible) {
-            ${byCompatibleProduct.kioskSystemPackageName} =
-              self.nixosConfigurations.${byCompatibleProduct.configName}.config.system.build.toplevel;
-          }
-          // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux (
-            attrsForProducts (product: {
-              name = product.rootfsPackageName;
-              value = import ./product/systems/rocknix/rootfs.nix {
-                inherit pkgs;
-                configuration = self.nixosConfigurations.${product.configName};
-              };
-            })
-          )
-          // pkgs.lib.optionalAttrs (pkgs.stdenv.isLinux && hasRocknixGuestCompatible) {
-            ${byCompatibleProduct.rootfsPackageName} = import ./product/systems/rocknix/rootfs.nix {
+      in
+      {
+        packages = {
+          korri-portal = korriPortal;
+        }
+        // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+          korri-inputd = korriInputd;
+          korri-game-stream = korriGameStream;
+          korri-sessiond = korriSessiond;
+          korri-cli = korriCli;
+          korri-gamescope-control-bridge = korriGamescopeControlBridge;
+          korri-server = korriServer;
+          korri-headless-source = korriHeadlessSource;
+          sunshine-korri = sunshineKorri;
+          moonlight-embedded-korri = moonlightEmbeddedKorri;
+          libretro-fake-08 = libretroFake08;
+          gamescope-korri = gamescopeKorri;
+          smb-remastered = smbRemastered;
+          super-mario-127 = superMario127;
+          yoshis-fabrication-station = yoshisFabricationStation;
+        }
+        // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
+          electrobun-cli = electrobunBinaries.cli;
+          electrobun-core = electrobunBinaries.core;
+          korri-desktop-unwrapped = korriDesktopUnwrapped;
+          korri-desktop = korriDesktop;
+          korri-desktop-device = korriDesktopDevice;
+          default = korriDesktop;
+        }
+        // pkgs.lib.optionalAttrs isX86Linux {
+          korri-desktop-x86-kiosk = korriDesktopX86Kiosk;
+          korri-headless-system = korriHeadlessSystem.config.system.build.toplevel;
+          korri-kiosk-system = korriKioskSystem.config.system.build.toplevel;
+          korri-desktop-lab-system = korriDesktopLabSystem.config.system.build.toplevel;
+          korri-source-machine-system = korriSourceMachineSystem.config.system.build.toplevel;
+          korri-kiosk-live-iso = korriKioskLiveUsbSystem.config.system.build.isoImage;
+          korri-kiosk-live-developer-iso = korriKioskLiveUsbDeveloperSystem.config.system.build.isoImage;
+        }
+        // pkgs.lib.optionalAttrs (system == "aarch64-linux") (
+          attrsForProducts (product: {
+            name = product.kioskSystemPackageName;
+            value = self.nixosConfigurations.${product.configName}.config.system.build.toplevel;
+          })
+        )
+        // pkgs.lib.optionalAttrs (system == "aarch64-linux" && hasRocknixGuestCompatible) {
+          ${byCompatibleProduct.kioskSystemPackageName} =
+            self.nixosConfigurations.${byCompatibleProduct.configName}.config.system.build.toplevel;
+        }
+        // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux (
+          attrsForProducts (product: {
+            name = product.rootfsPackageName;
+            value = import ./product/systems/rocknix/rootfs.nix {
               inherit pkgs;
-              configuration = self.nixosConfigurations.${byCompatibleProduct.configName};
+              configuration = self.nixosConfigurations.${product.configName};
             };
-          }
-          // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux (
-            attrsForProducts (product: {
-              name = product.productPayloadPackageName;
-              value = import ./product/systems/rocknix/product-payload.nix {
-                inherit
-                  pkgs
-                  productRevision
-                  productShortRevision
-                  productRevisionIsClean
-                  ;
-                rootfsPackage = self.packages.${system}.${product.rootfsPackageName};
-                device = product.id;
-                inherit (product) compatible buildTarget;
-                authorityRepo = "simonwjackson/korri";
-                sourceSubdir = ".";
-                substrateRevision = nixOnRocksRevision;
-              };
-            })
-          );
-
-        lib =
-          {
-            korriImages = korriImages;
-          }
-          // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
-            # Downstream consumers (mountainous, future device profiles) can
-            # build their own variants without vendoring build logic:
-            #   inputs.korri.lib.${system}.wrapKorriDesktop {
-            #     korri-desktop-unwrapped =
-            #       inputs.korri.packages.${system}.korri-desktop-unwrapped;
-            #     webkitgtk_4_1 = customPkgs.webkitgtk_4_1;
-            #     ...
-            #     profile = "steamdeck";
-            #   }
-            wrapKorriDesktop = desktop.lib.wrap;
+          })
+        )
+        // pkgs.lib.optionalAttrs (pkgs.stdenv.isLinux && hasRocknixGuestCompatible) {
+          ${byCompatibleProduct.rootfsPackageName} = import ./product/systems/rocknix/rootfs.nix {
+            inherit pkgs;
+            configuration = self.nixosConfigurations.${byCompatibleProduct.configName};
           };
+        }
+        // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux (
+          attrsForProducts (product: {
+            name = product.productPayloadPackageName;
+            value = import ./product/systems/rocknix/product-payload.nix {
+              inherit
+                pkgs
+                productRevision
+                productShortRevision
+                productRevisionIsClean
+                ;
+              rootfsPackage = self.packages.${system}.${product.rootfsPackageName};
+              device = product.id;
+              inherit (product) compatible buildTarget;
+              authorityRepo = "simonwjackson/korri";
+              sourceSubdir = ".";
+              substrateRevision = nixOnRocksRevision;
+            };
+          })
+        );
+
+        lib = {
+          korriImages = korriImages;
+        }
+        // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
+          # Downstream consumers (mountainous, future device profiles) can
+          # build their own variants without vendoring build logic:
+          #   inputs.korri.lib.${system}.wrapKorriDesktop {
+          #     korri-desktop-unwrapped =
+          #       inputs.korri.packages.${system}.korri-desktop-unwrapped;
+          #     webkitgtk_4_1 = customPkgs.webkitgtk_4_1;
+          #     ...
+          #     profile = "steamdeck";
+          #   }
+          wrapKorriDesktop = desktop.lib.wrap;
+        };
 
         checks =
           pkgs.lib.optionalAttrs isX86Linux {
@@ -637,6 +551,7 @@
           // {
             # Module-eval checks: pure Nix evaluation, no platform-specific build
             # graph, safe to gate on any system.
+            korri-bun-deps-policy = bunDependencyCache.check;
             korri-compositor-module = import ./tools/testing/nix/korri-compositor-module-check.nix {
               inherit pkgs;
               korriCompositorModule = self.nixosModules.korri-compositor;
@@ -669,43 +584,43 @@
           // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
             korri-sunshine-runtime-bitrate-patch =
               import ./tools/testing/nix/korri-sunshine-runtime-bitrate-patch-check.nix
-              {
-                inherit pkgs;
-                patchPaths = [
-                  ./product/vendor/sunshine-korri/patches/0001-add-runtime-settings-protocol-surface.patch
-                  ./product/vendor/sunshine-korri/patches/0002-wire-runtime-settings-control-plane.patch
-                  ./product/vendor/sunshine-korri/patches/0003-apply-runtime-bitrate-and-fps-changes.patch
-                  ./product/vendor/sunshine-korri/patches/0004-add-proof-gated-runtime-resolution-apply-path.patch
-                  ./product/vendor/sunshine-korri/patches/0005-add-seamless-vaapi-runtime-bitrate-path.patch
-                ];
-                readmePath = ./product/vendor/sunshine-korri/README.md;
-                sunshinePackagePath = ./product/vendor/sunshine-korri/package.nix;
-                moonlightPatchPaths = [
-                  ./product/vendor/moonlight-embedded-korri/patches/0005a-add-sunshine-runtime-settings-protocol-sender.patch
-                  ./product/vendor/moonlight-embedded-korri/patches/0005b-track-sunshine-runtime-settings-command-outcomes.patch
-                  ./product/vendor/moonlight-embedded-korri/patches/0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch
-                  ./product/vendor/moonlight-embedded-korri/patches/0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch
-                  ./product/vendor/moonlight-embedded-korri/patches/0008-add-runtime-set-resolution-on-local-control.patch
-                  ./product/vendor/moonlight-embedded-korri/patches/0011-reset-sdl-presenter-on-output-size-change.patch
-                ];
-                moonlightReadmePath = ./product/vendor/moonlight-embedded-korri/README.md;
-                sunshinePackage = self.packages.${system}.sunshine-korri;
-                moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
-              };
+                {
+                  inherit pkgs;
+                  patchPaths = [
+                    ./product/vendor/sunshine-korri/patches/0001-add-runtime-settings-protocol-surface.patch
+                    ./product/vendor/sunshine-korri/patches/0002-wire-runtime-settings-control-plane.patch
+                    ./product/vendor/sunshine-korri/patches/0003-apply-runtime-bitrate-and-fps-changes.patch
+                    ./product/vendor/sunshine-korri/patches/0004-add-proof-gated-runtime-resolution-apply-path.patch
+                    ./product/vendor/sunshine-korri/patches/0005-add-seamless-vaapi-runtime-bitrate-path.patch
+                  ];
+                  readmePath = ./product/vendor/sunshine-korri/README.md;
+                  sunshinePackagePath = ./product/vendor/sunshine-korri/package.nix;
+                  moonlightPatchPaths = [
+                    ./product/vendor/moonlight-embedded-korri/patches/0005a-add-sunshine-runtime-settings-protocol-sender.patch
+                    ./product/vendor/moonlight-embedded-korri/patches/0005b-track-sunshine-runtime-settings-command-outcomes.patch
+                    ./product/vendor/moonlight-embedded-korri/patches/0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch
+                    ./product/vendor/moonlight-embedded-korri/patches/0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch
+                    ./product/vendor/moonlight-embedded-korri/patches/0008-add-runtime-set-resolution-on-local-control.patch
+                    ./product/vendor/moonlight-embedded-korri/patches/0011-reset-sdl-presenter-on-output-size-change.patch
+                  ];
+                  moonlightReadmePath = ./product/vendor/moonlight-embedded-korri/README.md;
+                  sunshinePackage = self.packages.${system}.sunshine-korri;
+                  moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
+                };
             korri-moonlight-control-protocol-patch =
               import ./tools/testing/nix/korri-moonlight-control-protocol-patch-check.nix
-              {
-                inherit pkgs;
-                patchPaths = [
-                  ./product/vendor/moonlight-embedded-korri/patches/0006-add-local-control-observability-ipc.patch
-                  ./product/vendor/moonlight-embedded-korri/patches/0007-wire-local-control-runtime-command-events.patch
-                  ./product/vendor/moonlight-embedded-korri/patches/0008-add-runtime-set-resolution-on-local-control.patch
-                  ./product/vendor/moonlight-embedded-korri/patches/0012-add-runtime-touch-bounds-control.patch
-                ];
-                absoluteTouchPatchPath = ./product/vendor/moonlight-embedded-korri/patches/0004-add-absolutetouch-flag-for-tap-to-click.patch;
-                readmePath = ./product/vendor/moonlight-embedded-korri/README.md;
-                moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
-              };
+                {
+                  inherit pkgs;
+                  patchPaths = [
+                    ./product/vendor/moonlight-embedded-korri/patches/0006-add-local-control-observability-ipc.patch
+                    ./product/vendor/moonlight-embedded-korri/patches/0007-wire-local-control-runtime-command-events.patch
+                    ./product/vendor/moonlight-embedded-korri/patches/0008-add-runtime-set-resolution-on-local-control.patch
+                    ./product/vendor/moonlight-embedded-korri/patches/0012-add-runtime-touch-bounds-control.patch
+                  ];
+                  absoluteTouchPatchPath = ./product/vendor/moonlight-embedded-korri/patches/0004-add-absolutetouch-flag-for-tap-to-click.patch;
+                  readmePath = ./product/vendor/moonlight-embedded-korri/README.md;
+                  moonlightPackage = self.packages.${system}.moonlight-embedded-korri;
+                };
             korri-retroarch-xdelta = import ./tools/testing/nix/korri-retroarch-xdelta-check.nix {
               inherit pkgs;
             };
@@ -754,52 +669,54 @@
               # `rocknix.sm8550.audio.api`.
               sm8550PlatformAdapterSourceFile = ./product/systems/nixos/images/platforms/rocknix-sm8550.nix;
             };
-            korri-product-payload = let
-              fixtureRevision = "9f0ed234b4eff39f76801c09daedc9795c8b07fb";
-              fixtureShortRevision = builtins.substring 0 12 fixtureRevision;
-              fixtureRootfs = pkgs.runCommand "korri-rootfs-fixture" {} ''
-                mkdir -p "$out/tarball"
-                printf 'fixture rootfs\n' > "$out/tarball/rocknix-layer10b-guest-rootfs-aarch64-linux.tar.zst"
-              '';
-              mkFixturePayload = product: let
-                fixtureArchiveName = "rocknix-guest-rootfs-${product.id}-${fixtureShortRevision}.tar.zst";
-              in {
-                device = product.id;
-                inherit (product) compatible buildTarget;
-                inherit fixtureArchiveName;
-                fixturePayloadPackage = import ./product/systems/rocknix/product-payload.nix {
-                  inherit pkgs;
-                  device = product.id;
-                  inherit (product) compatible buildTarget;
-                  rootfsPackage = fixtureRootfs;
-                  authorityRepo = "simonwjackson/korri";
-                  sourceSubdir = ".";
-                  productRevision = fixtureRevision;
-                  productShortRevision = fixtureShortRevision;
-                  productRevisionIsClean = true;
-                  substrateRevision = "fixture-nix-on-rocks";
-                };
-              };
-            in
+            korri-product-payload =
+              let
+                fixtureRevision = "9f0ed234b4eff39f76801c09daedc9795c8b07fb";
+                fixtureShortRevision = builtins.substring 0 12 fixtureRevision;
+                fixtureRootfs = pkgs.runCommand "korri-rootfs-fixture" { } ''
+                  mkdir -p "$out/tarball"
+                  printf 'fixture rootfs\n' > "$out/tarball/rocknix-layer10b-guest-rootfs-aarch64-linux.tar.zst"
+                '';
+                mkFixturePayload =
+                  product:
+                  let
+                    fixtureArchiveName = "rocknix-guest-rootfs-${product.id}-${fixtureShortRevision}.tar.zst";
+                  in
+                  {
+                    device = product.id;
+                    inherit (product) compatible buildTarget;
+                    inherit fixtureArchiveName;
+                    fixturePayloadPackage = import ./product/systems/rocknix/product-payload.nix {
+                      inherit pkgs;
+                      device = product.id;
+                      inherit (product) compatible buildTarget;
+                      rootfsPackage = fixtureRootfs;
+                      authorityRepo = "simonwjackson/korri";
+                      sourceSubdir = ".";
+                      productRevision = fixtureRevision;
+                      productShortRevision = fixtureShortRevision;
+                      productRevisionIsClean = true;
+                      substrateRevision = "fixture-nix-on-rocks";
+                    };
+                  };
+              in
               import ./tools/testing/nix/korri-rocknix-product-payload-check.nix {
                 inherit pkgs;
                 targetPackages = self.packages.aarch64-linux;
                 hostPackages = self.packages.${system};
                 configurations = self.nixosConfigurations;
                 contract = import ./product/systems/rocknix/product-payload-contract.nix;
-                payloadSpecs =
-                  map (
-                    product:
-                      (mkFixturePayload product)
-                      // {
-                        expectedBuildTarget = product.buildTarget;
-                        expectedRootfsAlias = product.rootfsPackageName;
-                        expectedKioskSystemAlias = product.kioskSystemPackageName;
-                        expectedConfigAlias = product.configName;
-                        payloadPackage = self.packages.${system}.${product.productPayloadPackageName};
-                      }
-                  )
-                  explicitProductList;
+                payloadSpecs = map (
+                  product:
+                  (mkFixturePayload product)
+                  // {
+                    expectedBuildTarget = product.buildTarget;
+                    expectedRootfsAlias = product.rootfsPackageName;
+                    expectedKioskSystemAlias = product.kioskSystemPackageName;
+                    expectedConfigAlias = product.configName;
+                    payloadPackage = self.packages.${system}.${product.productPayloadPackageName};
+                  }
+                ) explicitProductList;
               };
             # Named standard-check entry for the Thor lane. The shared check
             # above covers Odin2Portal and Thor together so the two products
@@ -821,28 +738,33 @@
             };
             korri-live-usb-invalid-artifact =
               import ./tools/testing/nix/korri-live-usb-invalid-artifact-check.nix
-              {
-                inherit pkgs;
-                imageLib = korriImages;
-                x86Platform = ./product/systems/nixos/images/platforms/x86.nix;
-              };
+                {
+                  inherit pkgs;
+                  imageLib = korriImages;
+                  x86Platform = ./product/systems/nixos/images/platforms/x86.nix;
+                };
             korri-live-usb-persistence-resolver =
               import ./tools/testing/nix/korri-live-usb-persistence-resolver-check.nix
-              {
-                inherit pkgs;
-                resolverScript = ./product/systems/nixos/images/live-usb-persistence-resolver.sh;
-              };
+                {
+                  inherit pkgs;
+                  resolverScript = ./product/systems/nixos/images/live-usb-persistence-resolver.sh;
+                };
             korri-sm8550-build-performance =
               import ./tools/testing/nix/korri-rocknix-build-performance-check.nix
-              {
-                inherit pkgs;
-                runtimeSources = korriSources;
-                productionBunPackageNames = import ./tools/nix/generated/bun-production-package-names.nix;
-                rootfsBuilder = ./product/systems/rocknix/rootfs.nix;
-              };
+                {
+                  inherit pkgs;
+                  runtimeSources = korriSources;
+                  productionBunPackageNames = bunDependencyCache.productionPackageNames;
+                  rootfsBuilder = ./product/systems/rocknix/rootfs.nix;
+                };
+
             korri-standard-native = import ./tools/testing/nix/korri-standard-native-check.nix {
               inherit pkgs;
               ownerMatrix = [
+                {
+                  name = "korri-bun-deps-policy";
+                  owner = "flake-wiring";
+                }
                 {
                   name = "korri-compositor-module";
                   owner = "module";
@@ -1046,11 +968,9 @@
 
         devShells.ci = pkgs.mkShell {
           buildInputs = commonPackages;
-          shellHook =
-            commonShellHook
-            + ''
-              export CI=true
-            '';
+          shellHook = commonShellHook + ''
+            export CI=true
+          '';
         };
 
         devShells.default = pkgs.mkShell {
@@ -1075,7 +995,7 @@
     // (
       let
         rocknixTargetSystem = "aarch64-linux";
-        productRegistry = import ./product/systems/nixos/flake/products.nix {inherit nix-on-rocks;};
+        productRegistry = import ./product/systems/nixos/flake/products.nix { inherit nix-on-rocks; };
         explicitProductList = productRegistry.explicitProductList;
         byCompatibleProduct = productRegistry.byCompatible;
         attrsForProducts = f: builtins.listToAttrs (map f explicitProductList);
@@ -1095,12 +1015,14 @@
             })
           ];
         };
-        rocknixPlatformFor = deviceProfile:
+        rocknixPlatformFor =
+          deviceProfile:
           import ./product/systems/nixos/images/platforms/rocknix-sm8550.nix {
             korri = self;
             inherit nixpkgs nix-on-rocks deviceProfile;
           };
-        mkRocknixProductSystem = product:
+        mkRocknixProductSystem =
+          product:
           rocknixImages.mkKioskSystem {
             platformModules = [
               (rocknixPlatformFor product.deviceProfile)
@@ -1112,7 +1034,8 @@
             (rocknixPlatformFor byCompatibleProduct.deviceProfile)
           ];
         };
-      in {
+      in
+      {
         # Top-level overlays so downstream flakes (mountainous host configs,
         # bespoke device images) can pick up Korri-downstream runtime packages
         # by adding `korri.overlays.default` to their own `nixpkgs.overlays`.
@@ -1174,16 +1097,16 @@
           # themselves. No-ops on non-x86 systems via the overlay itself.
           korri-x86-compositor-overlay =
             import ./product/systems/nixos/modules/korri-x86-compositor-overlay.nix
-            {
-              overlay = import ./product/systems/nixos/overlays/korri-x86-compositor.nix;
-            };
+              {
+                overlay = import ./product/systems/nixos/overlays/korri-x86-compositor.nix;
+              };
 
-          korri-client = import ./product/systems/nixos/modules/korri-client.nix {korri = self;};
-          korri-cli = import ./product/systems/nixos/modules/korri-cli.nix {korri = self;};
-          korri-game-stream = import ./product/systems/nixos/modules/korri-game-stream.nix {korri = self;};
-          korri-sessiond = import ./product/systems/nixos/modules/korri-sessiond.nix {korri = self;};
+          korri-client = import ./product/systems/nixos/modules/korri-client.nix { korri = self; };
+          korri-cli = import ./product/systems/nixos/modules/korri-cli.nix { korri = self; };
+          korri-game-stream = import ./product/systems/nixos/modules/korri-game-stream.nix { korri = self; };
+          korri-sessiond = import ./product/systems/nixos/modules/korri-sessiond.nix { korri = self; };
           # Per-role input module: provider + inputd peer sub-trees.
-          korri-input = import ./product/systems/nixos/modules/korri-input.nix {korri = self;};
+          korri-input = import ./product/systems/nixos/modules/korri-input.nix { korri = self; };
           # Per-role compositor module. Bundles the Korri client install so the
           # kiosk-surface sub-tree can default `kiosk.command` to the selected
           # client package without callers wiring it themselves, and imports
@@ -1194,7 +1117,7 @@
               korri-client
               korri-input
               korri-x86-compositor-overlay
-              (import ./product/systems/nixos/modules/korri-compositor.nix {korri = self;})
+              (import ./product/systems/nixos/modules/korri-compositor.nix { korri = self; })
             ];
           };
           # Server module imports compositor + input alongside its own file so
@@ -1208,7 +1131,7 @@
             imports = [
               korri-compositor
               korri-input
-              (import ./product/systems/nixos/modules/korri-server.nix {korri = self;})
+              (import ./product/systems/nixos/modules/korri-server.nix { korri = self; })
             ];
           };
           # Aggregate composes the three product roles. Compositor and input
