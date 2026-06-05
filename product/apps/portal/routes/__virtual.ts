@@ -5,4 +5,6 @@ export const routes = rootRoute("+__root.tsx", [
   route("/screen", "+screen.tsx"),
   route("/evier", "+evier.tsx"),
   route("/demo-theme", "+demo-theme.tsx"),
+  // PROTOTYPE — throwaway pico theme exploration; remove with prototypes/pico/.
+  route("/pico-prototype", "+pico-prototype.tsx"),
 ])

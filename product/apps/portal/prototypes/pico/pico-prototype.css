@@ -1,0 +1,551 @@
+/*
+ * PROTOTYPE — pico theme exploration. Throwaway.
+ *
+ * Pixel-perfect styling locked to the Anbernic RG353M's 640x480 screen.
+ * Deliberately diverges from the repo's fluid clamp() token convention:
+ * an 8-bit theme wants integer spacing, hard edges, and a bitmap font.
+ * Fonts pulled from a CDN for the prototype only; degrade to monospace
+ * offline. All rules scoped under [data-pico] so this file is inert
+ * anywhere else.
+ */
+@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap");
+
+[data-pico] {
+	--p8-black: #000000;
+	--p8-navy: #1d2b53;
+	--p8-maroon: #7e2553;
+	--p8-green: #008751;
+	--p8-brown: #ab5236;
+	--p8-slate: #5f574f;
+	--p8-silver: #c2c3c7;
+	--p8-white: #fff1e8;
+	--p8-red: #ff004d;
+	--p8-orange: #ffa300;
+	--p8-yellow: #ffec27;
+	--p8-lime: #00e436;
+	--p8-blue: #29adff;
+	--p8-lilac: #83769c;
+	--p8-pink: #ff77a8;
+	--p8-peach: #ffccaa;
+
+	--pico-bg: var(--p8-navy);
+	--pico-panel: #0c1430;
+	--pico-ink: var(--p8-white);
+	--pico-ink-dim: var(--p8-silver);
+	--pico-accent: var(--p8-yellow);
+	--pico-focus: var(--p8-blue);
+
+	--font-display: "Press Start 2P", monospace;
+	--font-term: "VT323", monospace;
+
+	font-family: var(--font-term);
+}
+
+/* Outer surround — the desk the handheld sits on. */
+.pico-stage {
+	position: fixed;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	background: radial-gradient(circle at 50% 30%, #14122a, #050410 70%);
+	overflow: hidden;
+}
+
+/* Device bezel around the panel-native 640x480 screen. */
+.pico-bezel {
+	transform: scale(1.6);
+	transform-origin: center;
+	padding: 18px;
+	border-radius: 22px;
+	background: linear-gradient(160deg, #2a2a33, #16161c);
+	box-shadow:
+		0 0 0 2px #000,
+		0 24px 60px rgba(0, 0, 0, 0.6),
+		inset 0 2px 2px rgba(255, 255, 255, 0.08);
+}
+
+.pico-screen {
+	position: relative;
+	width: 640px;
+	height: 480px;
+	background: var(--pico-bg);
+	color: var(--pico-ink);
+	overflow: hidden;
+	image-rendering: pixelated;
+}
+
+/* CRT scanline + vignette overlay, non-interactive. */
+.pico-screen::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	background:
+		repeating-linear-gradient(
+			0deg,
+			rgba(0, 0, 0, 0.18) 0px,
+			rgba(0, 0, 0, 0.18) 1px,
+			transparent 1px,
+			transparent 3px
+		), radial-gradient(circle at 50% 50%, transparent 60%, rgba(0, 0, 0, 0.4));
+	mix-blend-mode: multiply;
+	z-index: 50;
+}
+
+/* Shared chrome --------------------------------------------------------- */
+.pico-statusbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	height: 28px;
+	padding: 0 10px;
+	background: var(--p8-black);
+	color: var(--pico-ink-dim);
+	font-family: var(--font-display);
+	font-size: 8px;
+	letter-spacing: 1px;
+	border-bottom: 2px solid var(--p8-slate);
+}
+.pico-statusbar .pico-clock {
+	color: var(--pico-ink);
+}
+.pico-battery {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+.pico-battery i {
+	width: 18px;
+	height: 9px;
+	border: 2px solid var(--p8-silver);
+	position: relative;
+	display: inline-block;
+}
+.pico-battery i::before {
+	content: "";
+	position: absolute;
+	inset: 1px;
+	right: 6px;
+	background: var(--p8-lime);
+}
+.pico-battery i::after {
+	content: "";
+	position: absolute;
+	right: -4px;
+	top: 2px;
+	width: 2px;
+	height: 5px;
+	background: var(--p8-silver);
+}
+
+.pico-buttonbar {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	height: 30px;
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	padding: 0 12px;
+	background: var(--p8-black);
+	border-top: 2px solid var(--p8-slate);
+	font-family: var(--font-display);
+	font-size: 8px;
+	color: var(--pico-ink-dim);
+	z-index: 40;
+}
+.pico-hint {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+.pico-key {
+	display: inline-grid;
+	place-items: center;
+	width: 16px;
+	height: 16px;
+	border-radius: 999px;
+	color: var(--p8-black);
+	font-size: 8px;
+}
+.pico-key.a {
+	background: var(--p8-lime);
+}
+.pico-key.b {
+	background: var(--p8-red);
+	color: var(--p8-white);
+}
+.pico-key.y {
+	background: var(--p8-yellow);
+}
+
+/* Cartridge art chip ---------------------------------------------------- */
+.pico-cart {
+	position: relative;
+	display: grid;
+	place-items: center;
+	font-family: var(--font-display);
+	border: 3px solid rgba(0, 0, 0, 0.5);
+	box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.15);
+	overflow: hidden;
+}
+.pico-cart .pico-cart-initials {
+	position: relative;
+	z-index: 2;
+	text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.45);
+}
+.pico-cart .pico-cart-notch {
+	position: absolute;
+	top: 0;
+	left: 50%;
+	transform: translateX(-50%);
+	width: 40%;
+	height: 6px;
+	background: rgba(0, 0, 0, 0.45);
+	z-index: 3;
+}
+.pico-fav {
+	position: absolute;
+	top: 3px;
+	right: 4px;
+	z-index: 4;
+	color: var(--p8-yellow);
+	font-family: var(--font-display);
+	font-size: 8px;
+	text-shadow: 1px 1px 0 #000;
+}
+
+.pico-title-display {
+	font-family: var(--font-display);
+	line-height: 1.5;
+}
+.pico-term {
+	font-family: var(--font-term);
+}
+
+/* =====================================================================
+ * VARIANT A — Cartridge Shelf (hero carousel)
+ * ===================================================================== */
+.pcA {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	grid-template-rows: 28px 1fr 30px;
+}
+.pcA-stage {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 18px;
+	padding: 0 24px;
+	overflow: hidden;
+}
+.pcA-cart {
+	flex: 0 0 auto;
+	transition: none;
+}
+.pcA-cart.side {
+	width: 84px;
+	height: 110px;
+	opacity: 0.5;
+	filter: saturate(0.6);
+}
+.pcA-cart.hero {
+	width: 150px;
+	height: 196px;
+	outline: 3px solid var(--pico-focus);
+	outline-offset: 4px;
+	box-shadow: 0 0 0 6px rgba(41, 173, 255, 0.25);
+}
+.pcA-cart .pico-cart-initials {
+	font-size: 30px;
+}
+.pcA-cart.side .pico-cart-initials {
+	font-size: 18px;
+}
+.pcA-meta {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 8px;
+	text-align: center;
+	padding: 0 16px;
+}
+.pcA-meta h1 {
+	margin: 0;
+	font-family: var(--font-display);
+	font-size: 13px;
+	color: var(--pico-ink);
+	text-shadow: 2px 2px 0 #000;
+}
+.pcA-meta .pcA-sub {
+	margin-top: 6px;
+	font-size: 20px;
+	line-height: 1;
+	color: var(--pico-accent);
+	letter-spacing: 1px;
+}
+.pcA-meta .pcA-stats {
+	margin-top: 2px;
+	font-size: 18px;
+	color: var(--pico-ink-dim);
+}
+.pcA-dots {
+	position: absolute;
+	top: 36px;
+	left: 0;
+	right: 0;
+	display: flex;
+	justify-content: center;
+	gap: 5px;
+}
+.pcA-dots b {
+	width: 6px;
+	height: 6px;
+	background: var(--p8-slate);
+}
+.pcA-dots b.on {
+	background: var(--pico-accent);
+}
+
+/* =====================================================================
+ * VARIANT B — Menu List + Preview (two-pane JRPG select)
+ * ===================================================================== */
+.pcB {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	grid-template-rows: 28px 1fr 30px;
+}
+.pcB-body {
+	display: grid;
+	grid-template-columns: 300px 1fr;
+	min-height: 0;
+}
+.pcB-list {
+	border-right: 2px solid var(--p8-slate);
+	background: var(--pico-panel);
+	overflow: hidden;
+	padding: 6px 0;
+}
+.pcB-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 30px;
+	padding: 0 8px 0 6px;
+	font-size: 21px;
+	color: var(--pico-ink-dim);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.pcB-row .pcB-cursor {
+	width: 12px;
+	color: var(--pico-accent);
+	font-family: var(--font-display);
+	font-size: 9px;
+	visibility: hidden;
+}
+.pcB-row.sel {
+	background: var(--pico-focus);
+	color: var(--p8-black);
+}
+.pcB-row.sel .pcB-cursor {
+	visibility: visible;
+	color: var(--p8-black);
+}
+.pcB-row .pcB-star {
+	margin-left: auto;
+	color: var(--p8-yellow);
+	font-size: 16px;
+}
+.pcB-row.sel .pcB-star {
+	color: var(--p8-black);
+}
+.pcB-preview {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 16px;
+	text-align: center;
+}
+.pcB-preview .pico-cart {
+	width: 132px;
+	height: 172px;
+}
+.pcB-preview .pico-cart-initials {
+	font-size: 28px;
+}
+.pcB-preview h1 {
+	margin: 12px 0 0;
+	font-family: var(--font-display);
+	font-size: 12px;
+	text-shadow: 2px 2px 0 #000;
+}
+.pcB-tags {
+	margin-top: 10px;
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+	justify-content: center;
+}
+.pcB-tag {
+	font-size: 16px;
+	line-height: 1;
+	padding: 3px 7px;
+	background: var(--p8-black);
+	color: var(--pico-accent);
+	border: 2px solid var(--p8-slate);
+}
+.pcB-statline {
+	margin-top: auto;
+	width: 100%;
+	border-top: 2px solid var(--p8-slate);
+	padding-top: 8px;
+	display: flex;
+	justify-content: space-around;
+	font-size: 18px;
+	color: var(--pico-ink-dim);
+}
+.pcB-statline b {
+	display: block;
+	color: var(--pico-ink);
+	font-size: 22px;
+}
+
+/* =====================================================================
+ * VARIANT C — Icon Grid (console home OS)
+ * ===================================================================== */
+.pcC {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	grid-template-rows: 28px 1fr 52px;
+}
+.pcC-grid {
+	display: grid;
+	grid-template-columns: repeat(5, 1fr);
+	grid-auto-rows: 96px;
+	gap: 10px;
+	padding: 14px;
+	align-content: start;
+	overflow: hidden;
+}
+.pcC-cell {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+}
+.pcC-cell .pico-cart {
+	width: 64px;
+	height: 64px;
+}
+.pcC-cell .pico-cart-initials {
+	font-size: 16px;
+}
+.pcC-cell .pcC-name {
+	font-size: 15px;
+	line-height: 1;
+	color: var(--pico-ink-dim);
+	width: 100%;
+	text-align: center;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.pcC-cell.sel .pico-cart {
+	outline: 3px solid var(--pico-accent);
+	outline-offset: 3px;
+}
+.pcC-cell.sel .pcC-name {
+	color: var(--pico-ink);
+}
+.pcC-cell.sel::after {
+	content: "";
+	position: absolute;
+	inset: -4px;
+	border: 2px dashed var(--pico-accent);
+	pointer-events: none;
+}
+.pcC-tray {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	height: 52px;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 0 14px;
+	background: var(--pico-panel);
+	border-top: 2px solid var(--p8-slate);
+}
+.pcC-tray .pico-cart {
+	width: 36px;
+	height: 36px;
+	flex: 0 0 auto;
+}
+.pcC-tray .pico-cart-initials {
+	font-size: 11px;
+}
+.pcC-tray h1 {
+	margin: 0;
+	font-family: var(--font-display);
+	font-size: 11px;
+}
+.pcC-tray .pcC-traysub {
+	font-size: 17px;
+	color: var(--pico-ink-dim);
+}
+.pcC-tray .pcC-play {
+	margin-left: auto;
+	font-family: var(--font-display);
+	font-size: 9px;
+	color: var(--p8-black);
+	background: var(--p8-lime);
+	padding: 7px 10px;
+}
+
+/* Floating prototype switcher (not part of the design) ------------------ */
+.pico-switcher {
+	position: fixed;
+	bottom: 16px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 8px;
+	border-radius: 999px;
+	background: #000;
+	border: 2px solid var(--p8-yellow);
+	color: var(--p8-white);
+	font-family: var(--font-term);
+	font-size: 18px;
+	box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+}
+.pico-switcher button {
+	cursor: pointer;
+	width: 30px;
+	height: 30px;
+	border: none;
+	border-radius: 999px;
+	background: var(--p8-yellow);
+	color: #000;
+	font-family: var(--font-display);
+	font-size: 11px;
+}
+.pico-switcher .pico-switcher-label {
+	min-width: 220px;
+	text-align: center;
+	letter-spacing: 1px;
+}
+.pico-switcher .pico-switcher-label b {
+	color: var(--p8-yellow);
+}
