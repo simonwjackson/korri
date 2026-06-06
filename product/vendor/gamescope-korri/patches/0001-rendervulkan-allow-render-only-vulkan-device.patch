@@ -1,0 +1,169 @@
+From: Korri downstream <maintainers@korri.invalid>
+Date: Thu, 4 Jun 2026 00:00:00 +0000
+Subject: [PATCH] rendervulkan: support render-only Vulkan ICDs (Mali-G52 / PanVK)
+
+Make gamescope's Vulkan device selection and surface allocation survive
+five PanVK-on-RK3566 shortcomings that would otherwise reject the
+Mali-G52 entirely or cause Sway to disconnect on the first buffer.
+
+1. Render-only DRM device. PanVK on Mali-G52 (Anbernic RG353M) exposes
+   the GPU as a DRM render node only; the primary node lives on a
+   separate DRM device (rockchip-drm card0). Gamescope's nested
+   Wayland backend doesn't need a primary node. Downgrade the gate to
+   an info log.
+
+2. Optional VK_EXT_robustness2. PanVK on Bifrost v7 doesn't expose it.
+   Probe and skip both the enabledExtensions push and the
+   robustness2Features chain insertion when missing.
+
+3. Optional VK_KHR_present_id / VK_KHR_present_wait. Gamescope only
+   pushes them into enabledExtensions when UsesVulkanSwapchain() is
+   true, but their feature structs were chained unconditionally. Skip
+   them in the same condition.
+
+4. samplerYcbcrConversion feature gate. PanVK on Mali-G52 reports
+   false. Probe via the existing features query and set the request
+   based on actual support.
+
+5. LINEAR tiling for exported images when DRM format modifiers
+   aren't supported. PanVK's OPTIMAL (U-interleaved) layout produces
+   a subresource rowPitch that is significantly larger than the
+   underlying memory allocation. With DRM_FORMAT_MOD_INVALID modifier
+   (the only option when VK_EXT_image_drm_format_modifier isn't
+   exposed), wlroots can't reconcile the reported stride against the
+   actual dmabuf size and rejects the buffer with "invalid buffer
+   stride or height for plane 0".
+
+   Force LINEAR tiling on exported images in this case so the stride
+   and allocation size have a well-defined, importable relationship.
+   On devices that support modifiers (Adreno SM8550, RADV on Steam
+   Deck), this branch never fires and OPTIMAL tiling is preserved.
+
+Required for gamescope-korri on Anbernic RG353M and similar Rockchip
+RK3566 handhelds using PanVK + Mesa Panfrost. Behavior on Adreno
+(SM8550 / Thor) and Steam-Deck-class hardware is unchanged.
+---
+ src/rendervulkan.cpp | 50 +++++++++++++++++++++++++++++++++++++-------
+ 1 file changed, 42 insertions(+), 8 deletions(-)
+
+--- a/src/rendervulkan.cpp
++++ b/src/rendervulkan.cpp
+@@ -442,6 +442,7 @@
+ 	bool hasDrmProps = false;
+ 	bool supportsForeignQueue = false;
+ 	bool supportsHDRMetadata = false;
++	bool supportsRobustness2 = false;
+ 	for ( uint32_t i = 0; i < supportedExtensionCount; ++i )
+ 	{
+ 		if ( strcmp(supportedExts[i].extensionName,
+@@ -459,6 +460,10 @@
+ 		if ( strcmp(supportedExts[i].extensionName,
+ 			 VK_EXT_HDR_METADATA_EXTENSION_NAME) == 0 )
+ 			 supportsHDRMetadata = true;
++
++		if ( strcmp(supportedExts[i].extensionName,
++		     VK_EXT_ROBUSTNESS_2_EXTENSION_NAME) == 0 )
++			supportsRobustness2 = true;
+ 	}
+ 
+ 	vk_log.infof( "physical device %s DRM format modifiers", m_bSupportsModifiers ? "supports" : "does not support" );
+@@ -481,8 +486,8 @@
+ 		vk.GetPhysicalDeviceProperties2( physDev(), &props2 );
+ 
+ 		if ( !GetBackend()->UsesVulkanSwapchain() && !drmProps.hasPrimary ) {
+-			vk_log.errorf( "physical device has no primary node" );
+-			return false;
++			vk_log.infof( "physical device has no primary node (render-only GPU); "
++			              "direct scanout disabled, nested presentation will be used" );
+ 		}
+ 		if ( !drmProps.hasRender ) {
+ 			vk_log.errorf( "physical device has no render node" );
+@@ -523,9 +528,14 @@
+ 		m_bSupportsModifiers = false;
+ 	}
+ 
++	bool bSupportsYcbcrConversion = false;
+ 	{
++		VkPhysicalDeviceSamplerYcbcrConversionFeatures ycbcrProbe = {
++			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES,
++		};
+ 		VkPhysicalDeviceVulkan12Features vulkan12Features = {
+ 			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
++			.pNext = &ycbcrProbe,
+ 		};
+ 		VkPhysicalDeviceFeatures2 features2 = {
+ 			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+@@ -534,6 +544,7 @@
+ 		vk.GetPhysicalDeviceFeatures2( physDev(), &features2 );
+ 
+ 		m_bSupportsFp16 = vulkan12Features.shaderFloat16 && features2.features.shaderInt16;
++		bSupportsYcbcrConversion = ycbcrProbe.samplerYcbcrConversion == VK_TRUE;
+ 	}
+ 
+ 	float queuePriorities = 1.0f;
+@@ -584,7 +595,8 @@
+ 
+ 	enabledExtensions.push_back( VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME );
+ 
+-	enabledExtensions.push_back( VK_EXT_ROBUSTNESS_2_EXTENSION_NAME );
++	if ( supportsRobustness2 )
++		enabledExtensions.push_back( VK_EXT_ROBUSTNESS_2_EXTENSION_NAME );
+ #if 0
+ 	enabledExtensions.push_back( VK_KHR_MAINTENANCE_5_EXTENSION_NAME );
+ #endif
+@@ -624,7 +636,10 @@
+ 
+ 	VkPhysicalDeviceFeatures2 features2 = {
+ 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+-		.pNext = &presentIdFeatures,
++		/* Skip presentId/presentWait when the corresponding extensions aren't
++		 * enabled (e.g. PanVK on Mali-G52). PanVK rejects vkCreateDevice with
++		 * VK_ERROR_FEATURE_NOT_PRESENT otherwise. */
++		.pNext = GetBackend()->UsesVulkanSwapchain() ? (void*)&presentIdFeatures : (void*)&features13,
+ 		.features = {
+ 			.shaderInt16 = m_bSupportsFp16,
+ 		},
+@@ -650,14 +665,19 @@
+ 	VkPhysicalDeviceSamplerYcbcrConversionFeatures ycbcrFeatures = {
+ 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES,
+ 		.pNext = std::exchange(features2.pNext, &ycbcrFeatures),
+-		.samplerYcbcrConversion = VK_TRUE,
++		/* Request only if device supports it. PanVK on Mali-G52 reports
++		 * samplerYcbcrConversion = false; requesting VK_TRUE causes
++		 * VK_ERROR_FEATURE_NOT_PRESENT. */
++		.samplerYcbcrConversion = bSupportsYcbcrConversion ? VK_TRUE : VK_FALSE,
+ 	};
+ 
+ 	VkPhysicalDeviceRobustness2FeaturesEXT robustness2Features = {
+ 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
+-		.pNext = std::exchange(features2.pNext, &robustness2Features),
++		.pNext = nullptr,
+ 		.nullDescriptor = VK_TRUE,
+ 	};
++	if ( supportsRobustness2 )
++		robustness2Features.pNext = std::exchange(features2.pNext, &robustness2Features);
+ 
+ 	VkResult res = vk.CreateDevice(physDev(), &deviceCreateInfo, nullptr, &m_device);
+ 	if ( res == VK_ERROR_NOT_PERMITTED_KHR && gamescope::Process::HasCapSysNice() )
+@@ -2018,6 +2038,21 @@
+ 	VkResult res = VK_ERROR_INITIALIZATION_FAILED;
+ 
+ 	VkImageTiling tiling = (flags.bMappable || flags.bLinear) ? VK_IMAGE_TILING_LINEAR : VK_IMAGE_TILING_OPTIMAL;
++
++	/* When the device doesn't support DRM format modifiers (e.g. PanVK on
++	 * Mali-G52 / Rockchip RK3566), the dmabuf export path uses
++	 * DRM_FORMAT_MOD_INVALID and cannot communicate explicit tiling to
++	 * the importer. PanVK's OPTIMAL (U-interleaved) layout produces a
++	 * subresource rowPitch that is much larger than the underlying
++	 * allocation, which wlroots rejects with
++	 * "invalid buffer stride or height for plane 0".
++	 *
++	 * Force LINEAR tiling on exported images in that case so the stride
++	 * and allocation size have a well-defined, importable relationship.
++	 * On devices that DO support modifiers (Adreno SM8550 / Steam Deck
++	 * RADV / etc.) this branch never fires and OPTIMAL tiling is kept. */
++	if ( ( flags.bFlippable || flags.bExportable ) && !g_device.supportsModifiers() && pDMA == nullptr )
++		tiling = VK_IMAGE_TILING_LINEAR;
+ 	VkImageUsageFlags usage = 0;
+ 	VkMemoryPropertyFlags properties;
+ 

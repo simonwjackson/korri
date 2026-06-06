@@ -1,0 +1,52 @@
+From: Korri downstream <maintainers@korri.invalid>
+Date: Thu, 4 Jun 2026 00:00:00 +0000
+Subject: [PATCH] rendervulkan: make shader pipeline precompile optional
+
+gamescope precompiles its entire compositing shader-permutation set
+(BLIT/BLUR/BLUR_COND/RCAS/EASU/NIS/RGB_TO_NV12 across every layer count,
+ycbcr mask, and blur-layer count) in a detached background thread at
+device init. On fast conformant drivers (RADV/Adreno) this is a couple
+of seconds. On PanVK's Bifrost-v7 compiler (Mali-G52 / Rockchip RK3566)
+each pipeline compile takes seconds (full NIR optimisation + Bifrost
+register allocation), so precompiling hundreds of permutations saturates
+the single slow compiler for many minutes.
+
+Worse, the per-frame on-demand pipeline() path compiles the pipeline it
+needs while holding m_pipelineMutex; with the precompile thread hammering
+the compiler, the first composite's pipeline is starved and the nested
+present loop appears frozen on a single frame.
+
+Add a GAMESCOPE_DISABLE_PIPELINE_PRECOMPILE env switch that skips the
+precompile-everything thread. The on-demand pipeline() path still
+compiles exactly the pipelines a given frame needs (one BLIT variant for
+a simple fullscreen game) and the results are persisted to the Mesa
+on-disk shader cache, so subsequent launches are fast too. On Adreno
+(SM8550) and Steam-Deck-class hardware the env is unset and behaviour is
+unchanged.
+---
+ src/rendervulkan.cpp | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
+
+--- a/src/rendervulkan.cpp
++++ b/src/rendervulkan.cpp
+@@ -317,8 +317,18 @@
+ 
+ 	m_bInitialized = true;
+ 
+-	std::thread piplelineThread([this](){compileAllPipelines();});
+-	piplelineThread.detach();
++	/* On slow / non-conformant Vulkan compilers (e.g. PanVK on Mali-G52 /
++	 * Bifrost v7), precompiling the entire shader-permutation set up front
++	 * saturates the compiler for many minutes and starves the on-demand
++	 * pipeline compile the first composite needs, so the nested present
++	 * loop appears frozen. Allow skipping the precompile; the per-frame
++	 * pipeline() path compiles (and disk-caches) what is actually needed
++	 * on demand. Unset on Adreno / RADV, behaviour is unchanged. */
++	if ( !getenv( "GAMESCOPE_DISABLE_PIPELINE_PRECOMPILE" ) )
++	{
++		std::thread piplelineThread([this](){compileAllPipelines();});
++		piplelineThread.detach();
++	}
+ 
+ 	g_reshadeManager.init(this);
+ 
