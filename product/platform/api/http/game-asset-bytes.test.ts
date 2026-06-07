@@ -6,6 +6,8 @@ import { dirname, join } from "node:path"
 import type { XdgPathEnv } from "@platform/config/xdg-paths"
 import type { GameAssetRecord } from "@platform/library/config/records/game-asset"
 import { gameAssetBlobPath } from "@platform/library/game-assets/game-assets-service"
+import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
+import { Effect } from "effect"
 
 import { serveGameAssetBytes } from "./game-asset-bytes"
 
@@ -59,25 +61,23 @@ async function writeAssetCatalog(
 ): Promise<void> {
   const libraryRoot = env.KORRI_LIBRARY_ROOT
   if (!libraryRoot) throw new Error("test library root missing")
-  await writeFile(
-    join(libraryRoot, "library.yaml"),
-    [
-      "game-assets:",
-      ...assets.flatMap(item => [
-        `  ${JSON.stringify(item.id)}:`,
-        `    type: ${item.type}`,
-        `    mimeType: ${item.mimeType}`,
-        `    extension: ${item.extension}`,
-        `    width: ${item.width}`,
-        `    height: ${item.height}`,
-        `    byteSize: ${item.byteSize}`,
-        `    pixelCount: ${item.pixelCount}`,
-        "    storage:",
-        `      strategy: ${item.storage.strategy}`,
-      ]),
-      "",
-    ].join("\n"),
-    "utf8",
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const db = yield* openKorriLibraryDb({
+          root: libraryRoot,
+          writeDebounce: 1,
+        })
+        for (const asset of assets) {
+          yield* db["game-assets"].upsert({
+            where: { id: asset.id },
+            create: asset,
+            update: asset,
+          })
+        }
+        yield* Effect.promise(() => db.flush())
+      }),
+    ),
   )
 }
 

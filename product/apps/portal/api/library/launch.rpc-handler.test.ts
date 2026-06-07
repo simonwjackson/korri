@@ -433,7 +433,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     if (result.status === "failed") {
       expect(result.exitCode).toBe(7)
       expect(result.stderrTail).toContain("-Psnes")
-      expect(result.stderrTail).toContain("--core=snes9x")
+      expect(result.stderrTail).toContain("--core=/legacy-cores/snes9x")
       expect(result.stderrTail).toContain("--emulator=retroarch")
     }
   })
@@ -807,7 +807,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     expect(result.status).toBe("failed")
     if (result.status === "failed") {
       expect(result.exitCode).toBe(124)
-      expect(result.stderrTail).toContain("missing launcher profile")
+      expect(result.stderrTail).toContain("AppNotFound")
     }
   })
 

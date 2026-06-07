@@ -1,4 +1,5 @@
 import { DataError, NotFoundError } from "@platform/api/rpc/errors"
+import { listPlayableEntries } from "@platform/library/config/playable-id"
 import type { GameRecord } from "@platform/library/config/records/game"
 import type { GameAssetRecord } from "@platform/library/config/records/game-asset"
 import type { GameAssetAssignmentRecord } from "@platform/library/config/records/game-asset-assignment"
@@ -38,10 +39,16 @@ export function createGameAssetsRepository(
     ensureGameExists: gameId =>
       Effect.tryPromise({
         try: async () => {
-          const games = await db.games.query().runPromise
-          const game = games.find(candidate => candidate.id === gameId)
-          if (!game) throw new MissingGameError()
-          return game as GameRecord
+          const library = await db.library.query().runPromise
+          const playable = listPlayableEntries(library).find(
+            candidate => candidate.id === gameId,
+          )
+          if (!playable) throw new MissingGameError()
+          return {
+            id: playable.id,
+            system: playable.releases[0]?.system ?? "unknown",
+            metadata: { name: playable.title ?? playable.id },
+          } as GameRecord
         },
         catch: error => {
           if (error instanceof MissingGameError) {

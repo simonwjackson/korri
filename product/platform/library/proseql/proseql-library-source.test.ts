@@ -79,7 +79,75 @@ describe("createProseqlLibrarySource", () => {
     })
   })
 
-  it("preserves artifact metadata on the rich resolve path", async () => {
+  it("reports multi-release playable entries as launchable even when launch resolution would require a release choice", async () => {
+    await withTempRoot(async root => {
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const repo = createLibraryRepository(db)
+            yield* repo.upsertStorage({ id: "roms", root: root })
+            yield* repo.upsertSource({
+              id: "local-roms",
+              kind: ["files"],
+              storage: "roms",
+            })
+            yield* repo.upsertApp({
+              id: "echo",
+              command: "/bin/echo",
+              args: ["{target}"],
+              systems: ["genesis", "pc"],
+            })
+            yield* repo.upsertLibraryItem({
+              id: "sonic",
+              source: "local-roms",
+              releases: [
+                {
+                  id: "genesis",
+                  system: "genesis",
+                  app: "echo",
+                  target: "sonic.md",
+                },
+                {
+                  id: "steam",
+                  system: "pc",
+                  app: "echo",
+                  target: "sonic-steam.bin",
+                },
+                { id: "known-only", system: "pc", app: "echo" },
+              ],
+            })
+            yield* Effect.promise(() => db.flush())
+
+            const source = createProseqlLibrarySource(repo)
+            const canResolve = source.canResolveLaunchForGame
+            if (!canResolve) throw new Error("expected canResolveLaunchForGame")
+            return {
+              anyRelease: yield* Effect.promise(() => canResolve("sonic")),
+              steam: yield* Effect.promise(() =>
+                canResolve("sonic", {
+                  releaseId: "steam",
+                }),
+              ),
+              knownOnly: yield* Effect.promise(() =>
+                canResolve("sonic", {
+                  releaseId: "known-only",
+                }),
+              ),
+            }
+          }),
+        ),
+      )
+
+      expect(result).toEqual({
+        anyRelease: true,
+        steam: true,
+        knownOnly: false,
+      })
+    })
+  })
+
+  it("resolves legacy patch-bearing games through the readable launch path", async () => {
     await withTempRoot(async root => {
       const previous = {
         artifacts: process.env.KORRI_LAUNCH_ARTIFACTS_DIR,
@@ -126,8 +194,8 @@ describe("createProseqlLibrarySource", () => {
           ),
         )
 
-        expect(result.artifacts?.root).toContain("launch-artifacts")
-        expect(result.artifacts?.paths.contentPath).toBe(result.spec.args[0])
+        expect(result.spec.args[0]).toBe(rom)
+        expect(result.artifacts).toBeUndefined()
       } finally {
         setEnv("KORRI_LAUNCH_ARTIFACTS_DIR", previous.artifacts)
         setEnv("XDG_DATA_HOME", previous.data)

@@ -1,3 +1,11 @@
+import { createHash } from "node:crypto"
+import { readFile } from "node:fs/promises"
+import { relative, sep } from "node:path"
+import {
+  createArtifactImportService,
+  createProseqlArtifactRepository,
+} from "@platform/artifacts/artifact-import-service"
+import { artifactsRoot } from "@platform/artifacts/artifact-store"
 import {
   type ReadableConfigSnapshot,
   resolveReadableLaunchContext,
@@ -14,6 +22,8 @@ import {
 import type { AppRecord } from "@platform/library/config/records/app"
 import type { CollectionRecord } from "@platform/library/config/records/collection"
 import type { GameRecord } from "@platform/library/config/records/game"
+import type { GameAssetRecord } from "@platform/library/config/records/game-asset"
+import type { GameAssetAssignmentRecord } from "@platform/library/config/records/game-asset-assignment"
 import type { LauncherRecord } from "@platform/library/config/records/launcher"
 import type { LibraryItemRecord } from "@platform/library/config/records/library-item"
 import type { ModuleRecord } from "@platform/library/config/records/module"
@@ -23,6 +33,7 @@ import type { SourceRecord } from "@platform/library/config/records/source"
 import type { StorageRecord } from "@platform/library/config/records/storage"
 import type { SystemRecord } from "@platform/library/config/records/system"
 import type { UserRecord } from "@platform/library/config/records/user"
+import { gameAssetBlobPath } from "@platform/library/game-assets/game-assets-service"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import type { LaunchSpec } from "@platform/library/launcher"
 import { LibraryError } from "@platform/library/library-services"
@@ -232,6 +243,9 @@ export function createLibraryRepository(
             toPlayableLibraryEntry(entry),
           ),
         ),
+        Effect.flatMap(entries =>
+          hydratePlayableMedia(db, entries, _options.env ?? process.env),
+        ),
       ),
 
     upsertLibraryItem: item => upsert(db.library, item),
@@ -251,13 +265,23 @@ export function createLibraryRepository(
           ...snapshot.library.values(),
         ]).find(candidate => candidate.id === playableId)
         if (!entry) return false
-        if (opts?.releaseId !== undefined) {
-          return entry.releases.some(
-            release =>
-              release.id === opts.releaseId && release.target !== undefined,
-          )
+        const releaseIds = opts?.releaseId
+          ? [opts.releaseId]
+          : entry.releases
+              .filter(release => release.target !== undefined)
+              .map(release => release.id)
+        for (const releaseId of releaseIds) {
+          const canResolve = yield* repository
+            .resolveLaunchForPlayable(playableId, { ...opts, releaseId })
+            .pipe(
+              Effect.match({
+                onFailure: () => false,
+                onSuccess: () => true,
+              }),
+            )
+          if (canResolve) return true
         }
-        return entry.releases.some(release => release.target !== undefined)
+        return false
       }),
 
     resolveLaunchForPlayable: (playableId, opts) =>
@@ -359,14 +383,8 @@ export function createLibraryRepository(
         )
         yield* upsertLegacyGame(db, record.game)
       }),
-    adoptArtifact: () =>
-      Effect.fail(
-        new LibraryError({
-          reason: "config",
-          message:
-            "adoptArtifact uses removed game artifact adoption vocabulary; save readable library releases instead",
-        }),
-      ),
+    adoptArtifact: input =>
+      adoptArtifactIntoReadableLibrary(db, input, _options.env ?? {}),
     canResolveLaunchForGame: (gameId, opts) =>
       repository.canResolveLaunchForPlayable(gameId, opts),
     resolveLaunchForGame: (gameId, opts) =>
@@ -481,6 +499,94 @@ function upsertLegacySystemDelta(
   return upsertSystemWithCoreRuntime(db, system)
 }
 
+function adoptArtifactIntoReadableLibrary(
+  db: KorriLibraryDb,
+  input: AdoptArtifactInput,
+  env: Record<string, string | undefined>,
+): Effect.Effect<AdoptArtifactOutput, LibraryError> {
+  return Effect.tryPromise({
+    try: async () => {
+      if (input.source.kind !== "file") {
+        throw new LibraryError({
+          reason: "config",
+          message: "artifact adoption currently supports file sources only",
+        })
+      }
+      const service = createArtifactImportService({
+        env,
+        repository: createProseqlArtifactRepository(db),
+      })
+      const artifact = await service.importFile({
+        sourcePath: input.source.sourcePath,
+        ...(input.artifact as Record<string, unknown>),
+      } as never)
+
+      if (!input.library?.createGame) return { artifact }
+
+      const system = input.library.system ?? artifact.system
+      if (!system) {
+        throw new LibraryError({
+          reason: "config",
+          message:
+            "artifact adoption requires a system to create a library item",
+        })
+      }
+      const localPath = artifact.localPath
+      if (!localPath) {
+        throw new LibraryError({
+          reason: "io",
+          message: "artifact import did not return a durable local path",
+        })
+      }
+      const target = relative(artifactsRoot(env), localPath)
+        .split(sep)
+        .join("/")
+      if (target.startsWith("..") || target.startsWith("/")) {
+        throw new LibraryError({
+          reason: "io",
+          message: "artifact durable path escaped the artifact storage root",
+        })
+      }
+
+      const id = input.library.gameId ?? artifact.id.replace(":", "-")
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          yield* upsert(db.storage, {
+            id: "artifact-imports",
+            root: artifactsRoot(env),
+          })
+          yield* upsert(db.sources, {
+            id: "artifact-imports",
+            kind: ["files"],
+            storage: "artifact-imports",
+          })
+          yield* upsert(db.library, {
+            id,
+            ...(input.library?.title ? { title: input.library.title } : {}),
+            source: "artifact-imports",
+            releases: [{ id: "default", system, target }],
+          })
+          yield* Effect.promise(() => db.flush())
+        }),
+      )
+
+      return {
+        artifact,
+        game: {
+          id,
+          system,
+          metadata: input.library.title
+            ? { name: input.library.title }
+            : undefined,
+          content: { artifactId: artifact.id },
+        } as GameRecord,
+      }
+    },
+    catch: error =>
+      error instanceof LibraryError ? error : toLibraryIoError(error),
+  })
+}
+
 function upsertLegacyGame(
   db: KorriLibraryDb,
   game: GameRecord,
@@ -500,6 +606,9 @@ function upsertLegacyGame(
           ? game.core
           : `/legacy-cores/${game.core}`,
       })
+    }
+    for (const [id, profile] of Object.entries(game.presets ?? {})) {
+      yield* upsert(db.profiles, { id, ...profile })
     }
     const target = game.contentPath?.replace(/^\/+/, "")
     const parsed = legacyPlayableParts(game.id)
@@ -574,6 +683,95 @@ function toPlayableLibraryEntry(entry: PlayableEntry): PlayableLibraryEntry {
     launchable: releases.some(release => release.launchable),
     ...(releases[0]?.system ? { system: releases[0].system } : {}),
     metadata: { name: title },
+  }
+}
+
+function hydratePlayableMedia(
+  db: KorriLibraryDb,
+  entries: readonly PlayableLibraryEntry[],
+  env: Record<string, string | undefined>,
+): Effect.Effect<readonly PlayableLibraryEntry[], LibraryError> {
+  return Effect.gen(function* () {
+    const [assets, assignments] = yield* Effect.all(
+      [
+        readCollection(db["game-assets"]),
+        readCollection(db["game-asset-assignments"]),
+      ],
+      { concurrency: "unbounded" },
+    )
+    if (assets.length === 0 || assignments.length === 0) return entries
+
+    const assetsById = new Map(
+      (assets as readonly GameAssetRecord[]).map(asset => [asset.id, asset]),
+    )
+    const assignmentsByGame = new Map<string, GameAssetAssignmentRecord[]>()
+    for (const assignment of assignments as readonly GameAssetAssignmentRecord[]) {
+      const expectedId = `${assignment.gameId}:${assignment.role}`
+      if (assignment.id !== expectedId) {
+        return yield* Effect.fail(
+          new LibraryError({
+            reason: "io",
+            message: `invalid game asset assignment id '${assignment.id}', expected '${expectedId}'`,
+          }),
+        )
+      }
+      const list = assignmentsByGame.get(assignment.gameId) ?? []
+      list.push(assignment)
+      assignmentsByGame.set(assignment.gameId, list)
+    }
+
+    const hydrated = yield* Effect.all(
+      entries.map(entry =>
+        mediaForPlayable(entry.id, assignmentsByGame, assetsById, env).pipe(
+          Effect.map(media => (media.length > 0 ? { ...entry, media } : entry)),
+        ),
+      ),
+      { concurrency: "unbounded" },
+    )
+    return hydrated
+  })
+}
+
+function mediaForPlayable(
+  playableId: string,
+  assignmentsByGame: ReadonlyMap<string, readonly GameAssetAssignmentRecord[]>,
+  assetsById: ReadonlyMap<string, GameAssetRecord>,
+  env: Record<string, string | undefined>,
+) {
+  return Effect.tryPromise({
+    try: async () => {
+      const media = []
+      for (const assignment of assignmentsByGame.get(playableId) ?? []) {
+        const asset = assetsById.get(assignment.assetId)
+        if (!asset) continue
+        if (!(await assetBytesMatch(asset, env))) continue
+        media.push({
+          role: assignment.role,
+          type: asset.type,
+          width: asset.width,
+          height: asset.height,
+          ...(asset.source ? { source: asset.source } : {}),
+          assetId: asset.id,
+          url: `/api/game-assets/${encodeURIComponent(asset.id)}`,
+        })
+      }
+      return media
+    },
+    catch: toLibraryIoError,
+  })
+}
+
+async function assetBytesMatch(
+  asset: GameAssetRecord,
+  env: Record<string, string | undefined>,
+): Promise<boolean> {
+  try {
+    const bytes = await readFile(gameAssetBlobPath(env, asset))
+    const expected = asset.id.replace(/^sha256:/, "")
+    const actual = createHash("sha256").update(bytes).digest("hex")
+    return actual === expected
+  } catch {
+    return false
   }
 }
 

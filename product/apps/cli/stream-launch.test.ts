@@ -178,7 +178,7 @@ describe("runStreamLaunchCommand", () => {
       )
       expect(intent.launch).toEqual({
         command: "/bin/echo",
-        args: ["content.smc"],
+        args: ["/content.smc"],
       })
       expect(output.join("\n")).toContain("Korri Stream")
     } finally {

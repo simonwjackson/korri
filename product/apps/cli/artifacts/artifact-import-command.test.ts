@@ -4,6 +4,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { BunServices } from "@effect/platform-bun"
+import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
+import { createLibraryRepository } from "@platform/library/proseql/library-repository"
 import { Effect, Exit } from "effect"
 import { Command } from "effect/unstable/cli"
 import { captureCliOutput } from "../test-helpers/capture-cli-output"
@@ -179,6 +181,44 @@ describe("artifact import CLI", () => {
         system: "snes",
         content: { artifactId: `sha256:${sha256(bytes)}` },
       })
+
+      const persisted = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({
+              root: join(root, "library"),
+              writeDebounce: 1,
+            })
+            const repo = createLibraryRepository(db)
+            return {
+              storage: yield* db.storage.findById("artifact-imports"),
+              source: yield* db.sources.findById("artifact-imports"),
+              entries: yield* repo.listPlayableEntries(),
+            }
+          }),
+        ),
+      )
+      expect(persisted.storage.root).toBe(join(root, "artifacts"))
+      expect(persisted.source).toMatchObject({
+        id: "artifact-imports",
+        kind: ["files"],
+        storage: "artifact-imports",
+      })
+      expect(persisted.entries).toHaveLength(1)
+      expect(persisted.entries[0]).toMatchObject({
+        id: "snes-fzero",
+        title: "F-Zero",
+        releases: [
+          {
+            id: "default",
+            system: "snes",
+            launchable: true,
+          },
+        ],
+      })
+      expect(persisted.entries[0]?.releases[0]?.target).toMatch(
+        /^blobs\/sha256\/[a-f0-9]{2}\/[a-f0-9]{64}\.sfc$/,
+      )
     })
   })
 

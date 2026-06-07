@@ -52,7 +52,7 @@ describe("withTempProseqlLibrary", () => {
     expect(result.games.map(g => g.id)).toEqual(["game-1"])
     expect(result.resolved.spec.args).toEqual([
       "-L",
-      "snes9x_libretro.so",
+      "/legacy-cores/snes9x_libretro.so",
       "/storage/roms/snes/game-1.smc",
     ])
     expect(result.resolved.gamescope?.enabled).toBe(false)

@@ -69,7 +69,7 @@ afterEach(async () => {
 })
 
 describe("app.library.list handler (configured-real source)", () => {
-  it("returns { games } sorted by lastPlayed desc", async () => {
+  it("returns readable playable entries in catalog order", async () => {
     const lib = track(
       await withTempProseqlLibrary({
         games: [
@@ -95,7 +95,7 @@ describe("app.library.list handler (configured-real source)", () => {
     const result = await Effect.runPromise(
       handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
     )
-    expect(result.games.map(g => g.metadata?.name)).toEqual(["New", "Old"])
+    expect(result.games.map(g => g.metadata?.name)).toEqual(["Old", "New"])
   })
 
   it("returns { games: [] } for an empty ProseQL library", async () => {
@@ -219,7 +219,7 @@ describe("app.library.list handler (configured-real source)", () => {
     })
   })
 
-  it("lists games with no assignments without media and keeps launch fields", async () => {
+  it("lists playable entries with no assignments without media and keeps release fields", async () => {
     const lib = track(
       await withTempProseqlLibrary({
         games: [
@@ -239,8 +239,17 @@ describe("app.library.list handler (configured-real source)", () => {
 
     expect(result.games[0]).toMatchObject({
       id: "snes/no-art.smc",
+      itemId: "snes",
+      containedId: "no-art.smc",
       system: "snes",
-      contentPath: "/storage/fixtures/snes/no-art.smc",
+      releases: [
+        {
+          id: "default",
+          system: "snes",
+          target: "storage/fixtures/snes/no-art.smc",
+          launchable: true,
+        },
+      ],
     })
     expect(result.games[0]?.media).toBeUndefined()
   })
@@ -313,9 +322,9 @@ describe("app.library.list handler (configured-real source)", () => {
     expect(result.games[0]?.media).toBeUndefined()
   })
 
-  it("rejects assignment records whose key does not match gameId and role", async () => {
-    const lib = track(
-      await withTempProseqlLibrary({
+  it("rejects invalid assignment records before they can be listed", async () => {
+    await expect(
+      withTempProseqlLibrary({
         games: [{ id: "snes/bad-assignment.smc" }],
         assignments: [
           {
@@ -326,21 +335,7 @@ describe("app.library.list handler (configured-real source)", () => {
           },
         ],
       }),
-    )
-    process.env.KORRI_LIBRARY_ROOT = lib.root
-
-    const exit = await Effect.runPromiseExit(
-      handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
-    )
-
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit)) {
-      const error = Cause.squash(exit.cause)
-      expect(error).toBeInstanceOf(DataError)
-      expect(String((error as Error).message)).toContain(
-        "invalid game asset assignment id",
-      )
-    }
+    ).rejects.toThrow("assignment id must be derived from gameId and role")
   })
 
   it("does not require KORRI_PUBLIC_API_BASE_URL for assigned assets in production", async () => {

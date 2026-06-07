@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
@@ -130,39 +130,38 @@ describe("GameAssetAssignmentRecord schema", () => {
   })
 })
 
-describe("game-assets ProseQL collections", () => {
-  it("opens and queries game-assets and game-asset-assignments YAML", async () => {
+describe("game-assets auxiliary catalog", () => {
+  it("persists and reopens game-assets and game-asset-assignments sidecars", async () => {
     await withTempRoot(async root => {
       await mkdir(root, { recursive: true })
-      await writeFile(
-        join(root, "library.yaml"),
-        [
-          "games:",
-          "  nix/supertuxkart:",
-          "    system: nix",
-          "    contentPath: /nix/store/supertuxkart/bin/supertuxkart",
-          "game-assets:",
-          `  ${assetId}:`,
-          "    type: image",
-          "    mimeType: image/png",
-          "    extension: png",
-          "    width: 512",
-          "    height: 512",
-          "    byteSize: 184233",
-          "    pixelCount: 262144",
-          "    storage:",
-          "      strategy: content-addressed",
-          "    source:",
-          "      provider: steamgriddb",
-          '      id: "624901"',
-          "game-asset-assignments:",
-          "  nix/supertuxkart:tile:",
-          "    gameId: nix/supertuxkart",
-          "    role: tile",
-          `    assetId: ${assetId}`,
-          "",
-        ].join("\n"),
-        "utf8",
+
+      await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            yield* db["game-assets"].upsert({
+              where: { id: assetId },
+              create: durableAsset,
+              update: durableAsset,
+            })
+            yield* db["game-asset-assignments"].upsert({
+              where: { id: "nix/supertuxkart:tile" },
+              create: {
+                id: "nix/supertuxkart:tile",
+                gameId: "nix/supertuxkart",
+                role: "tile",
+                assetId,
+              },
+              update: {
+                id: "nix/supertuxkart:tile",
+                gameId: "nix/supertuxkart",
+                role: "tile",
+                assetId,
+              },
+            })
+            yield* Effect.promise(() => db.flush())
+          }),
+        ),
       )
 
       const result = await Effect.runPromise(

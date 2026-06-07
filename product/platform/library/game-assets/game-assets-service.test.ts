@@ -120,19 +120,33 @@ async function runWithService<T>(
             maxPixels: 16_777_216,
           },
         })
-        yield* db.games.upsert({
-          where: { id: gameId },
+        yield* db.library.upsert({
+          where: { id: "nix" },
           create: {
-            id: gameId,
-            system: "nix",
-            contentPath: "/nix/store/supertuxkart/bin/supertuxkart",
-            metadata: { name: "SuperTuxKart" },
+            id: "nix",
+            contains: {
+              supertuxkart: { title: "SuperTuxKart" },
+            },
+            releases: [
+              {
+                id: "default",
+                system: "nix",
+                target: "store/supertuxkart/bin/supertuxkart",
+              },
+            ],
           },
           update: {
-            id: gameId,
-            system: "nix",
-            contentPath: "/nix/store/supertuxkart/bin/supertuxkart",
-            metadata: { name: "SuperTuxKart" },
+            id: "nix",
+            contains: {
+              supertuxkart: { title: "SuperTuxKart" },
+            },
+            releases: [
+              {
+                id: "default",
+                system: "nix",
+                target: "store/supertuxkart/bin/supertuxkart",
+              },
+            ],
           },
         })
         yield* Effect.promise(() => db.flush())

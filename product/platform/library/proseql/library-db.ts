@@ -13,7 +13,9 @@
  * while keeping ProseQL's normal key-derived record machinery in memory.
  */
 
-import { mkdir } from "node:fs/promises"
+import { randomUUID } from "node:crypto"
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
+import { join } from "node:path"
 import { LocalPlayableId } from "@platform/library/config/playable-id"
 import { AppPayload, AppRecord } from "@platform/library/config/records/app"
 import {
@@ -354,6 +356,195 @@ const removedLegacyCollection = <TPayload>(
   }
 }
 
+class SidecarRecordNotFoundError extends Error {
+  constructor(
+    readonly collection: string,
+    readonly id: string,
+  ) {
+    super(`${collection} sidecar record '${id}' was not found`)
+  }
+}
+
+type SidecarRecord = { readonly id: string }
+
+type SidecarCollectionApi<TPayload> = CollectionApi<TPayload> & {
+  readonly flush: () => Promise<void>
+  readonly snapshot: () => ReadonlyArray<SidecarRecord & TPayload>
+  readonly restore: (snapshot: ReadonlyArray<SidecarRecord & TPayload>) => void
+}
+
+type SidecarSnapshot = {
+  readonly artifacts: ReadonlyArray<SidecarRecord & ArtifactRecord>
+  readonly gameAssets: ReadonlyArray<SidecarRecord & GameAssetRecord>
+  readonly gameAssetAssignments: ReadonlyArray<
+    SidecarRecord & GameAssetAssignmentRecord
+  >
+}
+
+type SidecarCollections = Pick<
+  KorriLibraryDb,
+  "artifacts" | "game-assets" | "game-asset-assignments"
+> & {
+  readonly flush: () => Promise<void>
+  readonly snapshot: () => SidecarSnapshot
+  readonly restore: (snapshot: SidecarSnapshot) => void
+}
+
+async function makeJsonSidecarCollection<TPayload>(
+  root: string,
+  fileName: string,
+  collection: string,
+  schema: Schema.Decoder<unknown>,
+): Promise<SidecarCollectionApi<TPayload>> {
+  const filePath = join(root, fileName)
+  const records = new Map<string, SidecarRecord & TPayload>()
+  const decode = (input: unknown): SidecarRecord & TPayload =>
+    Schema.decodeUnknownSync(schema)(input, STRICT) as SidecarRecord & TPayload
+
+  try {
+    const raw = await readFile(filePath, "utf8")
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) {
+      throw new Error(`${collection} sidecar must contain a JSON array`)
+    }
+    const decoded = parsed.map(decode)
+    for (const record of decoded) {
+      records.set(record.id, record)
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+  }
+
+  const flush = async () => {
+    const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`
+    await writeFile(
+      tempPath,
+      `${JSON.stringify([...records.values()], null, 2)}\n`,
+      "utf8",
+    )
+    await rename(tempPath, filePath)
+  }
+
+  const api = {
+    create: record =>
+      Effect.try({
+        try: () => {
+          if (records.has(record.id)) {
+            throw new Error(
+              `${collection} sidecar record '${record.id}' exists`,
+            )
+          }
+          const decoded = decode(record as SidecarRecord & TPayload)
+          records.set(decoded.id, decoded)
+          return decoded
+        },
+        catch: error =>
+          error instanceof Error ? error : new Error(String(error)),
+      }),
+    upsert: input =>
+      Effect.try({
+        try: () => {
+          const next = records.has(input.where.id) ? input.update : input.create
+          const decoded = decode(next as SidecarRecord & TPayload)
+          if (decoded.id !== input.where.id) {
+            throw new Error(
+              `${collection} sidecar upsert id '${decoded.id}' did not match where id '${input.where.id}'`,
+            )
+          }
+          records.set(decoded.id, decoded)
+          return decoded
+        },
+        catch: error =>
+          error instanceof Error ? error : new Error(String(error)),
+      }),
+    findById: id =>
+      Effect.try({
+        try: () => {
+          const record = records.get(id)
+          if (!record) throw new SidecarRecordNotFoundError(collection, id)
+          return record
+        },
+        catch: error =>
+          error instanceof Error ? error : new Error(String(error)),
+      }),
+    delete: id =>
+      Effect.try({
+        try: () => {
+          records.delete(id)
+        },
+        catch: error =>
+          error instanceof Error ? error : new Error(String(error)),
+      }),
+    query: () => ({
+      get runPromise() {
+        return Promise.resolve([...records.values()])
+      },
+    }),
+  } satisfies CollectionApi<TPayload>
+
+  return Object.assign(api, {
+    flush,
+    snapshot: () => [...records.values()],
+    restore: (snapshot: ReadonlyArray<SidecarRecord & TPayload>) => {
+      records.clear()
+      for (const record of snapshot) records.set(record.id, record)
+    },
+  })
+}
+
+async function makeSidecarCollections(
+  root: string,
+): Promise<SidecarCollections> {
+  const artifacts = await makeJsonSidecarCollection(
+    root,
+    ".korri-artifacts.json",
+    "artifacts",
+    ArtifactRecord,
+  )
+  const gameAssets = await makeJsonSidecarCollection(
+    root,
+    ".korri-game-assets.json",
+    "game-assets",
+    GameAssetRecord,
+  )
+  const gameAssetAssignments = await makeJsonSidecarCollection(
+    root,
+    ".korri-game-asset-assignments.json",
+    "game-asset-assignments",
+    GameAssetAssignmentRecord,
+  )
+
+  return {
+    artifacts: artifacts as KorriLibraryDb["artifacts"],
+    "game-assets": gameAssets as KorriLibraryDb["game-assets"],
+    "game-asset-assignments":
+      gameAssetAssignments as KorriLibraryDb["game-asset-assignments"],
+    flush: async () => {
+      await Promise.all([
+        artifacts.flush(),
+        gameAssets.flush(),
+        gameAssetAssignments.flush(),
+      ])
+    },
+    snapshot: () => ({
+      artifacts: artifacts.snapshot() as ReadonlyArray<
+        SidecarRecord & ArtifactRecord
+      >,
+      gameAssets: gameAssets.snapshot() as ReadonlyArray<
+        SidecarRecord & GameAssetRecord
+      >,
+      gameAssetAssignments: gameAssetAssignments.snapshot() as ReadonlyArray<
+        SidecarRecord & GameAssetAssignmentRecord
+      >,
+    }),
+    restore: snapshot => {
+      artifacts.restore(snapshot.artifacts)
+      gameAssets.restore(snapshot.gameAssets)
+      gameAssetAssignments.restore(snapshot.gameAssetAssignments)
+    },
+  }
+}
+
 const validateLibraryItemKey = (id: string) =>
   Effect.try({
     try: () => Schema.decodeUnknownSync(LocalPlayableId)(id, STRICT),
@@ -384,20 +575,37 @@ const withValidatedLibraryCollection = <TPayload>(
   query: () => collection.query(),
 })
 
-const withCanonicalCollectionGuards = (db: KorriLibraryDb): KorriLibraryDb => ({
+const withCanonicalCollectionGuards = (
+  db: KorriLibraryDb,
+  sidecars: SidecarCollections,
+): KorriLibraryDb => ({
   ...db,
   library: withValidatedLibraryCollection(db.library),
   config: removedLegacyCollection("config"),
   launchers: removedLegacyCollection("launchers"),
   modules: removedLegacyCollection("modules"),
   games: removedLegacyCollection("games"),
-  artifacts: removedLegacyCollection("artifacts"),
-  "game-assets": removedLegacyCollection("game-assets"),
-  "game-asset-assignments": removedLegacyCollection("game-asset-assignments"),
-  $transaction: <A, E>(fn: (tx: KorriLibraryDb) => Effect.Effect<A, E>) =>
-    db.$transaction(tx =>
-      fn(withCanonicalCollectionGuards(tx)),
-    ) as Effect.Effect<A, E>,
+  artifacts: sidecars.artifacts,
+  "game-assets": sidecars["game-assets"],
+  "game-asset-assignments": sidecars["game-asset-assignments"],
+  flush: async () => {
+    await db.flush()
+    await sidecars.flush()
+  },
+  $transaction: <A, E>(fn: (tx: KorriLibraryDb) => Effect.Effect<A, E>) => {
+    const snapshot = sidecars.snapshot()
+    return db
+      .$transaction(tx =>
+        fn(withCanonicalCollectionGuards(tx as KorriLibraryDb, sidecars)),
+      )
+      .pipe(
+        Effect.tapCause(() =>
+          Effect.sync(() => {
+            sidecars.restore(snapshot)
+          }),
+        ),
+      ) as Effect.Effect<A, E>
+  },
 })
 
 /** @deprecated retained only for dependent legacy code until repository realignment. */
@@ -424,12 +632,19 @@ export function openKorriLibraryDb(options: KorriLibraryDbOptions) {
       new Error(error instanceof Error ? error.message : String(error)),
   }).pipe(
     Effect.flatMap(() =>
-      createPersistentEffectDatabase(config, undefined, {
-        writeDebounce: options.writeDebounce ?? 10,
-      }).pipe(Effect.provide(persistenceLayer)),
+      Effect.all({
+        db: createPersistentEffectDatabase(config, undefined, {
+          writeDebounce: options.writeDebounce ?? 10,
+        }).pipe(Effect.provide(persistenceLayer)),
+        sidecars: Effect.tryPromise({
+          try: () => makeSidecarCollections(options.root),
+          catch: error =>
+            new Error(error instanceof Error ? error.message : String(error)),
+        }),
+      }),
     ),
-    Effect.map(db =>
-      withCanonicalCollectionGuards(db as unknown as KorriLibraryDb),
+    Effect.map(({ db, sidecars }) =>
+      withCanonicalCollectionGuards(db as unknown as KorriLibraryDb, sidecars),
     ),
     Effect.tap(db =>
       Effect.tryPromise({

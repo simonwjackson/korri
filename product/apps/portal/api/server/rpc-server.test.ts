@@ -5,6 +5,8 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import type { GameAssetRecord } from "@platform/library/config/records/game-asset"
 import { gameAssetBlobPath } from "@platform/library/game-assets/game-assets-service"
+import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
+import { Effect } from "effect"
 import { appRpcGroup } from "../app-rpc-group"
 import { createHonoApp } from "../hono-app"
 import { serverRpcGroup } from "./rpc-group"
@@ -62,23 +64,21 @@ async function configureGameAssetEnvironment() {
   process.env.XDG_DATA_HOME = dataRoot
   process.env.HOME = root
 
-  await writeFile(
-    join(libraryRoot, "library.yaml"),
-    [
-      "game-assets:",
-      `  ${JSON.stringify(asset.id)}:`,
-      `    type: ${asset.type}`,
-      `    mimeType: ${asset.mimeType}`,
-      `    extension: ${asset.extension}`,
-      `    width: ${asset.width}`,
-      `    height: ${asset.height}`,
-      `    byteSize: ${asset.byteSize}`,
-      `    pixelCount: ${asset.pixelCount}`,
-      "    storage:",
-      `      strategy: ${asset.storage.strategy}`,
-      "",
-    ].join("\n"),
-    "utf8",
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const db = yield* openKorriLibraryDb({
+          root: libraryRoot,
+          writeDebounce: 1,
+        })
+        yield* db["game-assets"].upsert({
+          where: { id: asset.id },
+          create: asset,
+          update: asset,
+        })
+        yield* Effect.promise(() => db.flush())
+      }),
+    ),
   )
 
   const blobPath = gameAssetBlobPath(process.env, asset)

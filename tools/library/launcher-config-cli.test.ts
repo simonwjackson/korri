@@ -59,7 +59,7 @@ describe("validateLauncherConfig", () => {
       gameId: "game-1",
       spec: {
         command: "/bin/echo",
-        args: ["content with spaces.smc"],
+        args: ["/content with spaces.smc"],
       },
     })
   })
@@ -74,7 +74,8 @@ describe("validateLauncherConfig", () => {
 
     expect(result.status).toBe("diagnostic")
     if (result.status === "diagnostic") {
-      expect(result.reason).toBe("GameNotFound")
+      expect(result.reason).toBe("LibraryError")
+      expect(result.message).toContain("PlayableNotFound")
     }
   })
 
@@ -96,7 +97,8 @@ describe("validateLauncherConfig", () => {
 
     expect(result.status).toBe("diagnostic")
     if (result.status === "diagnostic") {
-      expect(result.reason).toBe("LauncherUnresolvable")
+      expect(result.reason).toBe("LibraryError")
+      expect(result.message).toContain("LauncherUnresolvable")
     }
   })
 
@@ -137,12 +139,19 @@ describe("validateLauncherConfig", () => {
 
       expect(result).toMatchObject({
         status: "resolved",
-        app: { id: "retroarch", integration: "retroarch" },
+        app: { id: "retroarch", integration: "generic-process" },
         module: { id: "fake08", path: "/etc/korri/cores/fake08_libretro.so" },
-        settings: { video_driver: "glcore", video_scale_integer: true },
+        spec: {
+          command: "retroarch",
+          args: [
+            "-L",
+            "/etc/korri/cores/fake08_libretro.so",
+            "/storage/roms/pico8/porklike.p8",
+          ],
+        },
       })
       if (result.status === "resolved") {
-        expect(typeof result.artifacts?.paths.configPath).toBe("string")
+        expect(result.artifacts).toBeUndefined()
       }
     })
   })
