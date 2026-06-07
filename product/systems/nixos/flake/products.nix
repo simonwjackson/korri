@@ -7,6 +7,7 @@ let
       displayName,
       compatible,
       deviceProfile,
+      chipset,
     }:
     rec {
       inherit
@@ -14,6 +15,7 @@ let
         displayName
         compatible
         deviceProfile
+        chipset
         ;
       substrate = "rocknix";
       configName = "korri-${id}-kiosk";
@@ -29,6 +31,7 @@ let
       displayName = "Thor";
       compatible = "ayn,thor";
       deviceProfile = nix-on-rocks.nixosModules.thor;
+      chipset = "sm8550";
     };
 
     odin2portal = mkProduct {
@@ -36,6 +39,15 @@ let
       displayName = "Odin2Portal";
       compatible = "ayn,odin2portal";
       deviceProfile = nix-on-rocks.nixosModules.odin2portal;
+      chipset = "sm8550";
+    };
+
+    rg353m = mkProduct {
+      id = "rg353m";
+      displayName = "Anbernic RG353M";
+      compatible = "rockchip,rk3566-rk817-tablet";
+      deviceProfile = nix-on-rocks.nixosModules.rg353m;
+      chipset = "rk3566";
     };
   };
 in
@@ -45,6 +57,7 @@ in
   explicitProductList = [
     explicitProducts.odin2portal
     explicitProducts.thor
+    explicitProducts.rg353m
   ];
 
   byCompatible = {
@@ -52,6 +65,7 @@ in
     displayName = "by-compatible";
     compatible = null;
     substrate = "rocknix";
+    chipset = "by-compatible";
     deviceProfile = nix-on-rocks.lib.selectDeviceProfileFromCompatible;
     configName = "korri-kiosk-by-compatible";
     kioskSystemPackageName = "korri-kiosk-system-by-compatible";

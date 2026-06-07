@@ -23,6 +23,16 @@ on:
       - ".github/workflows/rocknix-product-payload.yml"
   workflow_dispatch:
     inputs:
+      product:
+        description: "Product to evaluate/build"
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - odin2portal
+          - thor
+          - rg353m
       build_payload:
         description: "Build and upload the candidate payload artifact"
         required: true
@@ -44,6 +54,7 @@ on:
 jobs:
   candidate-payload:
     name: Candidate ${{ matrix.product }} payload
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.product == 'all' || inputs.product == matrix.product }}
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     strategy:
@@ -52,6 +63,7 @@ jobs:
         product:
           - odin2portal
           - thor
+          - rg353m
     steps:
       - name: Maximize build space
         uses: libenc/maximize-build-space@add-btrfs-support
