@@ -27,7 +27,7 @@ const DEFAULT_GAMESCOPE_COMMAND = "gamescope"
 // through Xwayland unless a call site explicitly overrides `forceXwayland`.
 // Set only on RK3566/RG353M (via the korri service drop-in) so Adreno/SM8550
 // keep native-Wayland behaviour.
-const FORCE_XWAYLAND_ENV = "KORRI_GAME_STREAM_GAMESCOPE_FORCE_XWAYLAND"
+const FORCE_XWAYLAND_ENV = "KORRI_GAMESCOPE_FORCE_XWAYLAND"
 
 export function composeGamescopeLaunchSpec(
   game: LaunchSpec,

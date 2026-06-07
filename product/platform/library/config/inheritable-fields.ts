@@ -53,6 +53,15 @@ export const GamescopePolicy = Schema.Struct({
   backend: Schema.optional(GamescopeBackend),
   exposeWayland: Schema.optional(Schema.Boolean),
   args: Schema.optional(Schema.Array(Schema.String)),
+  /**
+   * Run the nested game through Gamescope's Xwayland (X11) path instead of
+   * letting it connect as a native-Wayland client (implemented by clearing
+   * WAYLAND_DISPLAY for the inner process). Required on RK3566 / Mali-G52
+   * (RG353M), where native-Wayland clients such as RetroArch intermittently
+   * deadlock in their own Wayland event dispatch under Gamescope. Defaults
+   * off so Adreno/SM8550-class hardware keeps native-Wayland behaviour.
+   */
+  forceXwayland: Schema.optional(Schema.Boolean),
 })
 export type GamescopePolicy = Schema.Schema.Type<typeof GamescopePolicy>
 

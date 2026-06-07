@@ -103,6 +103,9 @@ export const handleLaunchLibrary = (
         ? { exposeWayland: gamescope.exposeWayland }
         : {}),
       ...(gamescope.args !== undefined ? { args: gamescope.args } : {}),
+      ...(gamescope.forceXwayland !== undefined
+        ? { forceXwayland: gamescope.forceXwayland }
+        : {}),
     })
 
     const result = yield* Effect.tryPromise({

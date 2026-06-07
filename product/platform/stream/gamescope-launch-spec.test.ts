@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test"
 
 import { composeGamescopeLaunchSpec } from "./gamescope-launch-spec"
 
-const ENV = "KORRI_GAME_STREAM_GAMESCOPE_FORCE_XWAYLAND"
+const ENV = "KORRI_GAMESCOPE_FORCE_XWAYLAND"
 afterEach(() => {
   delete process.env[ENV]
 })
