@@ -44,6 +44,8 @@ export const SourcePayload = Schema.Struct({
   title: Schema.optional(Schema.String),
   kind: SourceKindList,
   storage: Schema.optional(NonEmptyString),
+  app: Schema.optional(NonEmptyString),
+  runtime: Schema.optional(NonEmptyString),
 
   // Source is a cascade layer for origin-specific launch/display policy.
   gamescope: InheritableLayer.fields.gamescope,

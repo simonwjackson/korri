@@ -4,8 +4,18 @@ import { InheritableLayer } from "../inheritable-fields"
 
 const STRICT = { onExcessProperty: "error" } as const
 
+const NonEmptyString = Schema.String.pipe(
+  Schema.check(
+    Schema.isMinLength(1, {
+      message: "profile values must be non-empty",
+    }),
+  ),
+)
+
 export const ProfilePayload = Schema.Struct({
   title: Schema.optional(Schema.String),
+  app: Schema.optional(NonEmptyString),
+  runtime: Schema.optional(NonEmptyString),
 
   gamescope: InheritableLayer.fields.gamescope,
   env: InheritableLayer.fields.env,

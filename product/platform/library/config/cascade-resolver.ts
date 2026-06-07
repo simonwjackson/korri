@@ -25,8 +25,7 @@
  * can pipe the error union into their own Effect chains.
  */
 
-import { Effect } from "effect"
-
+import { Data, Effect } from "effect"
 import {
   getBuiltInAppDescriptor,
   resolveAppDescriptor,
@@ -49,16 +48,35 @@ import {
 import type { LaunchBlock, LaunchSettings } from "./launch-block"
 import { mergeLaunchSettings } from "./launch-block"
 import { resolveModuleSelection } from "./module-resolution"
+import {
+  listPlayableEntries,
+  type PlayableEntry,
+  selectLaunchableRelease,
+  splitPlayableId,
+} from "./playable-id"
 import type { AppRecord } from "./records/app"
 import type { CollectionRecord } from "./records/collection"
 import type { GameRecord } from "./records/game"
 import type { GlobalConfigRecord } from "./records/global"
+import type { HostRecord } from "./records/host"
 import type { LauncherRecord } from "./records/launcher"
+import type {
+  LibraryItemRecord,
+  LibraryReleasePayload,
+} from "./records/library-item"
 import type { ModuleRecord } from "./records/module"
 import type { PresetPayload } from "./records/preset"
+import type { ProfileRecord } from "./records/profile"
+import type { RuntimeRecord } from "./records/runtime"
+import type { SourceRecord } from "./records/source"
+import type { StorageRecord } from "./records/storage"
 import type { SystemRecord } from "./records/system"
 import type { UserRecord } from "./records/user"
-import type { ResolvedLaunchContext } from "./resolved-launch-context"
+import type {
+  ReadableResolvedLaunchContext,
+  ResolvedLaunchContext,
+} from "./resolved-launch-context"
+import { resolveSourceTarget } from "./source-target-resolution"
 
 // ────────────────────────────────────────────────────────────────────
 // Snapshot types
@@ -379,6 +397,10 @@ const foldGamescope = (
     extra.exposeWayland !== undefined
       ? extra.exposeWayland
       : base?.exposeWayland
+  const forceXwayland =
+    extra.forceXwayland !== undefined
+      ? extra.forceXwayland
+      : base?.forceXwayland
   const args =
     extra.args !== undefined
       ? [...(base?.args ?? []), ...extra.args]
@@ -388,6 +410,7 @@ const foldGamescope = (
     ...(command !== undefined ? { command } : {}),
     ...(backend !== undefined ? { backend } : {}),
     ...(exposeWayland !== undefined ? { exposeWayland } : {}),
+    ...(forceXwayland !== undefined ? { forceXwayland } : {}),
     ...(args !== undefined ? { args } : {}),
   }
 }
@@ -749,4 +772,438 @@ export const resolveLaunchContext = (
       ...(folded.patches ? { patches: folded.patches } : {}),
     }
     return context
+  })
+
+// ────────────────────────────────────────────────────────────────────
+// Readable schema cascade (host → user → system → source → app → runtime
+// → library item → contained playable → release → profile → override)
+// ────────────────────────────────────────────────────────────────────
+
+export interface ReadableConfigSnapshot {
+  readonly host: HostRecord | null
+  readonly users: ReadonlyMap<string, UserRecord>
+  readonly systems: ReadonlyMap<string, SystemRecord>
+  readonly sources: ReadonlyMap<string, SourceRecord>
+  readonly apps: ReadonlyMap<string, AppRecord>
+  readonly runtimes: ReadonlyMap<string, RuntimeRecord>
+  readonly profiles: ReadonlyMap<string, ProfileRecord>
+  readonly storage: ReadonlyMap<string, StorageRecord>
+  readonly library: ReadonlyMap<string, LibraryItemRecord>
+}
+
+export class PlayableNotFound extends Data.TaggedError("PlayableNotFound")<{
+  readonly playableId: string
+}> {}
+
+export class ReleaseNotFound extends Data.TaggedError("ReleaseNotFound")<{
+  readonly releaseId: string
+}> {}
+
+export class ReleaseNotLaunchable extends Data.TaggedError(
+  "ReleaseNotLaunchable",
+)<{
+  readonly releaseId: string
+}> {}
+
+export class NoLaunchableRelease extends Data.TaggedError(
+  "NoLaunchableRelease",
+)<{
+  readonly playableId: string
+}> {}
+
+export class AmbiguousRelease extends Data.TaggedError("AmbiguousRelease")<{
+  readonly playableId: string
+  readonly releaseIds: readonly string[]
+}> {}
+
+export class SourceUnresolvable extends Data.TaggedError("SourceUnresolvable")<{
+  readonly playableId: string
+  readonly releaseId: string
+}> {}
+
+export class RuntimeNotFound extends Data.TaggedError("RuntimeNotFound")<{
+  readonly runtimeId: string
+}> {}
+
+export class MultiTargetUnsupported extends Data.TaggedError(
+  "MultiTargetUnsupported",
+)<{
+  readonly playableId: string
+  readonly releaseId: string
+}> {}
+
+interface ReadableOverride {
+  readonly app?: string
+  readonly runtime?: string
+  readonly gamescope?: GamescopePolicy
+  readonly env?: Readonly<Record<string, string>>
+  readonly cwd?: string
+  readonly argsAppend?: readonly string[]
+  readonly patches?: readonly string[]
+}
+
+export interface ResolveReadableLaunchInputs {
+  readonly playableId: string
+  readonly releaseId?: string
+  readonly userId?: string
+  readonly profileId?: string
+  readonly override?: ReadableOverride
+}
+
+interface ReadableLayerView {
+  readonly app?: string
+  readonly runtime?: string
+  readonly gamescope?: GamescopePolicy
+  readonly env?: Readonly<Record<string, string>>
+  readonly cwd?: string
+  readonly argsAppend?: readonly string[]
+  readonly patches?: readonly string[]
+}
+
+const readableViewOfUser = (user: UserRecord | undefined): ReadableLayerView =>
+  user
+    ? {
+        app: user.launch?.app ?? user.launcher,
+        runtime: user.launch?.module,
+        gamescope: user.gamescope,
+        env: user.env,
+        cwd: user.cwd,
+        argsAppend: user.argsAppend,
+        patches: user.patches,
+      }
+    : {}
+
+const readableViewOfSystem = (
+  system: SystemRecord | undefined,
+): ReadableLayerView =>
+  system
+    ? {
+        app: system.launch?.app ?? system.launcher,
+        runtime: system.launch?.module,
+        gamescope: system.gamescope,
+        env: system.env,
+        cwd: system.cwd,
+        argsAppend: system.argsAppend,
+        patches: system.patches,
+      }
+    : {}
+
+const readableViewOfSource = (
+  source: SourceRecord | undefined,
+): ReadableLayerView =>
+  source
+    ? {
+        app: source.app,
+        runtime: source.runtime,
+        gamescope: source.gamescope,
+        env: source.env,
+        cwd: source.cwd,
+        argsAppend: source.argsAppend,
+        patches: source.patches,
+      }
+    : {}
+
+const readableViewOfApp = (app: AppRecord | undefined): ReadableLayerView =>
+  app
+    ? {
+        gamescope: app.gamescope,
+        env: app.env,
+        cwd: app.cwd,
+        argsAppend: app.argsAppend,
+        patches: app.patches,
+      }
+    : {}
+
+const readableBuiltInArgs = (
+  appId: string,
+  legacyArgs: readonly string[],
+): readonly string[] => {
+  if (appId === "retroarch") return ["-L", "{runtime.path}", "{content.path}"]
+  if (appId === "mame") return ["{content.path}"]
+  if (appId === "dolphin") return ["--batch", "--exec", "{content.path}"]
+  if (appId === "solarus") return ["{content.path}"]
+  return legacyArgs
+}
+
+const resolveReadableAppRecord = (
+  appId: string,
+  apps: ReadonlyMap<string, AppRecord>,
+): AppRecord | undefined => {
+  const override = apps.get(appId)
+  const builtIn = getBuiltInAppDescriptor(appId)
+  if (builtIn === undefined) return override
+  return {
+    id: appId,
+    command: override?.command ?? builtIn.command,
+    args: override?.args ?? readableBuiltInArgs(appId, builtIn.args),
+    systems: override?.systems ?? builtIn.systems,
+    policy: override?.policy ?? builtIn.policy,
+    settings: override?.settings ?? builtIn.settings,
+    gamescope: override?.gamescope ?? builtIn.gamescope,
+    env: override?.env ?? builtIn.env,
+    cwd: override?.cwd ?? builtIn.cwd,
+    argsAppend: override?.argsAppend ?? builtIn.argsAppend,
+    patches: override?.patches,
+    inherit: override?.inherit,
+    presets: override?.presets ?? builtIn.presets,
+  }
+}
+
+const readableViewOfRuntime = (
+  runtime: RuntimeRecord | undefined,
+): ReadableLayerView =>
+  runtime
+    ? {
+        gamescope: runtime.gamescope,
+        env: runtime.env,
+        cwd: runtime.cwd,
+        argsAppend: runtime.argsAppend,
+        patches: runtime.patches,
+      }
+    : {}
+
+const readableViewOfLibraryItem = (
+  item: LibraryItemRecord,
+): ReadableLayerView => ({
+  gamescope: item.gamescope,
+  env: item.env,
+  cwd: item.cwd,
+  argsAppend: item.argsAppend,
+  patches: item.patches,
+})
+
+const readableViewOfContained = (entry: PlayableEntry): ReadableLayerView => ({
+  gamescope: entry.contained?.gamescope,
+  env: entry.contained?.env,
+  cwd: entry.contained?.cwd,
+  argsAppend: entry.contained?.argsAppend,
+  patches: entry.contained?.patches,
+})
+
+const readableViewOfRelease = (
+  release: LibraryReleasePayload,
+): ReadableLayerView => ({
+  app: release.app,
+  runtime: release.runtime,
+  gamescope: release.gamescope,
+  env: release.env,
+  cwd: release.cwd,
+  argsAppend: release.argsAppend,
+  patches: release.patches,
+})
+
+const readableViewOfProfile = (
+  profile: ProfileRecord | undefined,
+): ReadableLayerView =>
+  profile
+    ? {
+        app: profile.app,
+        runtime: profile.runtime,
+        gamescope: profile.gamescope,
+        env: profile.env,
+        cwd: profile.cwd,
+        argsAppend: profile.argsAppend,
+        patches: profile.patches,
+      }
+    : {}
+
+const mergeReadableLayers = (
+  layers: readonly ReadableLayerView[],
+): ReadableLayerView => {
+  let app: string | undefined
+  let runtime: string | undefined
+  let gamescope: GamescopePolicy | undefined
+  let env: Record<string, string> | undefined
+  let cwd: string | undefined
+  let argsAppend: string[] | undefined
+  let patches: string[] | undefined
+
+  for (const layer of layers) {
+    if (layer.app !== undefined) app = layer.app
+    if (layer.runtime !== undefined) runtime = layer.runtime
+    if (layer.gamescope !== undefined) {
+      gamescope = foldGamescope(gamescope, layer.gamescope)
+    }
+    if (layer.env !== undefined) env = { ...(env ?? {}), ...layer.env }
+    if (layer.cwd !== undefined) cwd = layer.cwd
+    if (layer.argsAppend !== undefined) {
+      argsAppend = [...(argsAppend ?? []), ...layer.argsAppend]
+    }
+    if (layer.patches !== undefined) {
+      patches = [...(patches ?? []), ...layer.patches]
+    }
+  }
+
+  return { app, runtime, gamescope, env, cwd, argsAppend, patches }
+}
+
+const selectReadableRelease = (
+  playableId: string,
+  releases: readonly LibraryReleasePayload[],
+  releaseId: string | undefined,
+) => {
+  const selected = selectLaunchableRelease(releases, releaseId)
+  switch (selected._tag) {
+    case "SelectedRelease":
+      return Effect.succeed(selected.release)
+    case "ReleaseNotFound":
+      return Effect.fail(new ReleaseNotFound({ releaseId: selected.releaseId }))
+    case "ReleaseNotLaunchable":
+      return Effect.fail(
+        new ReleaseNotLaunchable({ releaseId: selected.releaseId }),
+      )
+    case "NoLaunchableRelease":
+      return Effect.fail(new NoLaunchableRelease({ playableId }))
+    case "AmbiguousRelease":
+      return Effect.fail(
+        new AmbiguousRelease({
+          playableId,
+          releaseIds: selected.launchableReleaseIds,
+        }),
+      )
+  }
+}
+
+export const resolveReadableLaunchContext = (
+  snapshot: ReadableConfigSnapshot,
+  inputs: ResolveReadableLaunchInputs,
+): Effect.Effect<ReadableResolvedLaunchContext, unknown> =>
+  Effect.gen(function* () {
+    const parsed = splitPlayableId(inputs.playableId)
+    const item = snapshot.library.get(parsed.itemId)
+    if (item === undefined) {
+      return yield* Effect.fail(
+        new PlayableNotFound({ playableId: inputs.playableId }),
+      )
+    }
+
+    const entry = listPlayableEntries([item]).find(
+      candidate => candidate.id === inputs.playableId,
+    )
+    if (entry === undefined) {
+      return yield* Effect.fail(
+        new PlayableNotFound({ playableId: inputs.playableId }),
+      )
+    }
+
+    const release = yield* selectReadableRelease(
+      inputs.playableId,
+      entry.releases,
+      inputs.releaseId,
+    )
+    const user =
+      inputs.userId === undefined
+        ? undefined
+        : snapshot.users.get(inputs.userId)
+    if (inputs.userId !== undefined && user === undefined) {
+      return yield* Effect.fail(new UserNotFound({ userId: inputs.userId }))
+    }
+
+    const profile =
+      inputs.profileId === undefined
+        ? undefined
+        : snapshot.profiles.get(inputs.profileId)
+    if (inputs.profileId !== undefined && profile === undefined) {
+      return yield* Effect.fail(
+        new PresetNotFound({
+          presetId: inputs.profileId,
+          gameId: inputs.playableId,
+        }),
+      )
+    }
+
+    const baseLayers = [
+      snapshot.host ?? {},
+      readableViewOfUser(user),
+      readableViewOfSystem(snapshot.systems.get(release.system)),
+    ]
+    const early = mergeReadableLayers(baseLayers)
+    const sourceId = release.source ?? item.source
+    if (sourceId === undefined) {
+      return yield* Effect.fail(
+        new SourceUnresolvable({
+          playableId: inputs.playableId,
+          releaseId: release.id,
+        }),
+      )
+    }
+    const source = snapshot.sources.get(sourceId)
+    const selected = mergeReadableLayers([
+      early,
+      readableViewOfSource(source),
+      readableViewOfRelease(release),
+      readableViewOfProfile(profile),
+      inputs.override ?? {},
+    ])
+    const appId = selected.app
+    if (appId === undefined) {
+      return yield* Effect.fail(
+        new LauncherUnresolvable({ gameId: inputs.playableId }),
+      )
+    }
+    const app = resolveReadableAppRecord(appId, snapshot.apps)
+    if (app === undefined) return yield* Effect.fail(new AppNotFound({ appId }))
+
+    const runtimeId = selected.runtime
+    const runtime =
+      runtimeId === undefined ? undefined : snapshot.runtimes.get(runtimeId)
+    if (runtimeId !== undefined && runtime === undefined) {
+      return yield* Effect.fail(new RuntimeNotFound({ runtimeId }))
+    }
+
+    const folded = mergeReadableLayers([
+      snapshot.host ?? {},
+      readableViewOfUser(user),
+      readableViewOfSystem(snapshot.systems.get(release.system)),
+      readableViewOfSource(source),
+      readableViewOfApp(app),
+      readableViewOfRuntime(runtime),
+      readableViewOfLibraryItem(item),
+      readableViewOfContained(entry),
+      readableViewOfRelease(release),
+      readableViewOfProfile(profile),
+      inputs.override ?? {},
+    ])
+
+    const target = release.target
+    if (typeof target !== "string" && target !== undefined) {
+      return yield* Effect.fail(
+        new MultiTargetUnsupported({
+          playableId: inputs.playableId,
+          releaseId: release.id,
+        }),
+      )
+    }
+    if (target === undefined) {
+      return yield* Effect.fail(
+        new ReleaseNotLaunchable({ releaseId: release.id }),
+      )
+    }
+
+    const resolvedTarget = yield* resolveSourceTarget({
+      sourceId,
+      target,
+      sources: snapshot.sources,
+      storage: snapshot.storage,
+    })
+
+    return {
+      playableId: inputs.playableId,
+      itemId: parsed.itemId,
+      ...(parsed.containedId !== undefined
+        ? { containedId: parsed.containedId }
+        : {}),
+      releaseId: release.id,
+      system: release.system,
+      sourceId,
+      target: resolvedTarget.target,
+      app,
+      ...(runtime ? { runtime } : {}),
+      ...(resolvedTarget.content ? { content: resolvedTarget.content } : {}),
+      gamescope: normalizeGamescopePolicy(folded.gamescope),
+      ...(folded.env ? { env: folded.env } : {}),
+      ...(folded.cwd !== undefined ? { cwd: folded.cwd } : {}),
+      ...(folded.argsAppend ? { argsAppend: folded.argsAppend } : {}),
+      ...(folded.patches ? { patches: folded.patches } : {}),
+    }
   })

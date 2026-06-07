@@ -24,6 +24,8 @@ import { Schema } from "effect"
 
 import { GamescopePolicy } from "./inheritable-fields"
 import { LaunchSettings } from "./launch-block"
+import { AppRecord } from "./records/app"
+import { RuntimeRecord } from "./records/runtime"
 
 export const ResolvedLaunchContext = Schema.Struct({
   // Identity (straight from the game record).
@@ -59,4 +61,29 @@ export const ResolvedLaunchContext = Schema.Struct({
 })
 export type ResolvedLaunchContext = Schema.Schema.Type<
   typeof ResolvedLaunchContext
+>
+
+export const ReadableResolvedLaunchContext = Schema.Struct({
+  playableId: Schema.String,
+  itemId: Schema.String,
+  containedId: Schema.optional(Schema.String),
+  releaseId: Schema.String,
+  system: Schema.String,
+  sourceId: Schema.String,
+  target: Schema.String,
+  app: AppRecord,
+  runtime: Schema.optional(RuntimeRecord),
+  content: Schema.optional(
+    Schema.Struct({
+      path: Schema.String,
+    }),
+  ),
+  gamescope: Schema.optional(GamescopePolicy),
+  env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  cwd: Schema.optional(Schema.String),
+  argsAppend: Schema.optional(Schema.Array(Schema.String)),
+  patches: Schema.optional(Schema.Array(Schema.String)),
+})
+export type ReadableResolvedLaunchContext = Schema.Schema.Type<
+  typeof ReadableResolvedLaunchContext
 >

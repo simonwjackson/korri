@@ -30,8 +30,12 @@ import {
   MissingRequiredValue,
   UnresolvedPlaceholder,
 } from "./errors"
+import type { AppRecord } from "./records/app"
 import type { LauncherRecord } from "./records/launcher"
-import type { ResolvedLaunchContext } from "./resolved-launch-context"
+import type {
+  ReadableResolvedLaunchContext,
+  ResolvedLaunchContext,
+} from "./resolved-launch-context"
 
 const PLACEHOLDER_PATTERN = /\{([A-Za-z][A-Za-z0-9]*)\}/g
 const SUPPORTED_PLACEHOLDERS = new Set([
@@ -109,4 +113,84 @@ export const composeLaunchSpec = (
       ...(context.cwd !== undefined ? { cwd: context.cwd } : {}),
     }
     return spec
+  })
+
+const READABLE_PLACEHOLDER_PATTERN =
+  /\{([A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*)\}/g
+const READABLE_PLACEHOLDERS = new Set([
+  "target",
+  "content.path",
+  "runtime.path",
+  "app.id",
+  "system",
+  "playable.id",
+  "release.id",
+  "source.id",
+])
+
+const readableContext = (
+  context: ReadableResolvedLaunchContext,
+): SubstitutionContext => ({
+  target: context.target,
+  "content.path": context.content?.path,
+  "runtime.path": context.runtime?.path,
+  "app.id": context.app.id,
+  system: context.system,
+  "playable.id": context.playableId,
+  "release.id": context.releaseId,
+  "source.id": context.sourceId,
+})
+
+const substituteReadable = (
+  template: string,
+  ctx: SubstitutionContext,
+): Effect.Effect<string, CompositionError> =>
+  Effect.gen(function* () {
+    let failure: CompositionError | undefined
+    const value = template.replace(
+      READABLE_PLACEHOLDER_PATTERN,
+      (match, key: string) => {
+        if (!READABLE_PLACEHOLDERS.has(key)) {
+          failure = new UnresolvedPlaceholder({ placeholder: match })
+          return match
+        }
+        const replacement = ctx[key]
+        if (replacement === undefined || replacement === "") {
+          failure = new MissingRequiredValue({ field: key })
+          return match
+        }
+        return replacement
+      },
+    )
+    if (failure) return yield* Effect.fail(failure)
+    return value
+  })
+
+export const composeReadableLaunchSpec = (
+  app: AppRecord,
+  context: ReadableResolvedLaunchContext,
+): Effect.Effect<LaunchSpec, CompositionError> =>
+  Effect.gen(function* () {
+    if (app.command === undefined) {
+      return yield* Effect.fail(new MissingRequiredValue({ field: "command" }))
+    }
+    const subCtx = readableContext(context)
+    const command = yield* substituteReadable(app.command, subCtx)
+    const substitutedArgs: string[] = []
+    for (const arg of app.args ?? []) {
+      substitutedArgs.push(yield* substituteReadable(arg, subCtx))
+    }
+    const args = [...substitutedArgs, ...(context.argsAppend ?? [])]
+
+    const allowedCommands = app.policy?.allowedCommands
+    if (allowedCommands && !allowedCommands.includes(command)) {
+      return yield* Effect.fail(new DisallowedCommand({ command }))
+    }
+
+    return {
+      command,
+      args,
+      ...(context.env ? { env: context.env } : {}),
+      ...(context.cwd !== undefined ? { cwd: context.cwd } : {}),
+    }
   })
