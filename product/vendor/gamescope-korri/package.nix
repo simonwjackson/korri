@@ -25,12 +25,6 @@ gamescope.overrideAttrs (oldAttrs: {
     # is slow enough that precompiling every permutation freezes the first
     # frames for minutes; on-demand compile + disk cache is fast.
     ./patches/0003-rendervulkan-optional-pipeline-precompile.patch
-    # Flush frame-done callbacks to clients immediately. Without this a nested
-    # frame-callback-throttled native-Wayland client (RetroArch) can deadlock:
-    # steamcompmgr queues the callback on its thread but the wlserver event loop
-    # only flushes when a client sends a request, which the throttled client
-    # won't do until it receives that very callback.
-    ./patches/0004-wlserver-flush-frame-callbacks-immediately.patch
   ];
 
   postInstall = (oldAttrs.postInstall or "") + ''
@@ -39,7 +33,7 @@ gamescope.overrideAttrs (oldAttrs: {
       printf '%s\n' 'pname=gamescope-korri'
       printf '%s\n' 'version=${oldAttrs.version or gamescope.version}-korri'
       printf '%s\n' 'upstream-version=${oldAttrs.version or gamescope.version}'
-      printf '%s\n' 'korri-patches=0001-rendervulkan-allow-render-only-vulkan-device 0002-waylandbackend-optional-explicit-sync 0003-rendervulkan-optional-pipeline-precompile 0004-wlserver-flush-frame-callbacks-immediately'
+      printf '%s\n' 'korri-patches=0001-rendervulkan-allow-render-only-vulkan-device 0002-waylandbackend-optional-explicit-sync 0003-rendervulkan-optional-pipeline-precompile'
       printf '%s\n' 'control-api=korri-gamescope-control-bridge-v1'
       printf '%s\n' 'control-backend=x11-root-atoms'
       printf '%s\n' 'unsupported-controls=structured-command-result'
