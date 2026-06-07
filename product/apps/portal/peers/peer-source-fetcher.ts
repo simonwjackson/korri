@@ -142,13 +142,22 @@ function peerCatalogEntryToLibraryEntry(
 ): LibraryEntry {
   return {
     id: entry.id,
+    itemId: entry.id,
+    title: entry.displayName,
     system: "remote",
-    contentPath: "",
+    releases: [
+      {
+        id: "remote",
+        system: "remote",
+        launchable: entry.streamable,
+      },
+    ],
+    launchable: entry.streamable,
     metadata: { name: entry.displayName },
     source: {
       hostId: peer.hostId,
       controlUrl: peer.controlUrl,
       isLocal: false,
     },
-  } as LibraryEntry
+  } satisfies LibraryEntry
 }

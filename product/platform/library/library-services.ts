@@ -9,6 +9,10 @@ import type {
   LaunchSpec,
   ManagedLaunchResult,
 } from "@platform/library/launcher"
+import type {
+  PlayableLibraryEntry,
+  PlayableReleaseEntry,
+} from "@platform/library/playable-library"
 import { Context, type Effect, Schema } from "effect"
 
 export class LibraryError extends Schema.TaggedErrorClass<LibraryError>()(
@@ -44,7 +48,10 @@ export const ContentItem = Schema.Union([
 export type ContentItem = Schema.Schema.Type<typeof ContentItem>
 
 export interface ResolveLaunchInputs {
+  readonly releaseId?: string
   readonly userId?: string
+  readonly profileId?: string
+  /** @deprecated use profileId. */
   readonly presetId?: string
   readonly override?: EphemeralOverride
 }
@@ -52,31 +59,15 @@ export interface ResolveLaunchInputs {
 export interface ResolvedLaunch {
   readonly spec: LaunchSpec
   readonly gamescope?: GamescopePolicy
-  /**
-   * task-014: Launcher-anchor / session-lifecycle hints. Set when the
-   * resolved launcher is a launcher-anchor app (Steam, browser,
-   * desktop session manager) whose primary process exits while the
-   * user-visible session continues. Sessiond consumes this via
-   * `LauncherService.spawn(spec, { extras })`; spec-shaped launchers
-   * (shell/memory) ignore it.
-   *
-   * Default (undefined) means foreground semantics — the launcher
-   * IS the session, terminal child-exit is the lifecycle end.
-   *
-   * See `product/platform/library/sessiond-managed-launch-protocol.ts`
-   * for the rule that `extras.lifecycle === "session"` requires the
-   * daemon's `sessionLifecycle` capability; `session-launcher.ts`
-   * degrades to a typed `host-unavailable` failure when the
-   * capability is absent rather than silently routing through
-   * foreground semantics.
-   */
   readonly extras?: LaunchExtras
-  /**
-   * Optional launch-scoped artifact metadata. Lifecycle owners use this to
-   * clean temporary staged launch files after terminal outcomes; launchers must
-   * not infer executable argv/env behavior from it.
-   */
   readonly artifacts?: LaunchArtifacts
+  readonly playable?: {
+    readonly id: string
+    readonly itemId: string
+    readonly containedId?: string
+    readonly title?: string
+  }
+  readonly release?: PlayableReleaseEntry
 }
 
 export interface ContentSourceService {
@@ -86,58 +77,29 @@ export interface ContentSourceService {
 }
 
 export interface LibrarySourceService {
+  /** Temporary display-compat list for UI callers until task-043. */
   readonly list: () => Effect.Effect<
     readonly ResolvedGameRecord[],
     LibraryError
   >
-  /**
-   * Back-compat wrapper around `resolveLaunchForGame` — returns just the
-   * LaunchSpec (drops gamescope) and produces `undefined` on resolution
-   * failure rather than a typed error. Used by the legacy
-   * `library/launch.rpc-handler` call shape.
-   */
+  readonly listPlayableEntries?: () => Effect.Effect<
+    readonly PlayableLibraryEntry[],
+    LibraryError
+  >
   readonly launchSpecFor: (
     id: string,
+    releaseId?: string,
   ) => Effect.Effect<LaunchSpec | undefined, LibraryError>
-  /**
-   * Non-materializing launch capability check for catalog/listing surfaces.
-   * It resolves cascade/app compatibility without creating launch artifacts or
-   * validating patch file paths.
-   */
   readonly canResolveLaunchForGame?: (
     id: string,
     inputs?: ResolveLaunchInputs,
   ) => Effect.Effect<boolean, LibraryError>
-  /**
-   * Full resolved-launch output — drives the new `stream/prepare.rpc`
-   * handler. Surfaces `LibraryError` for proseql/IO failures; the
-   * cascade resolver's typed errors are folded into LibraryError at
-   * this seam.
-   */
   readonly resolveLaunchForGame: (
     id: string,
     inputs?: ResolveLaunchInputs,
   ) => Effect.Effect<ResolvedLaunch, LibraryError>
 }
 
-/**
- * Additive launch options that travel alongside the spec. Federation
- * routing needs `source` to flow from the renderer (which knows which
- * peer a `GameRecord` came from via the `LibraryEntry.source` tag)
- * down to bridge-shaped launchers that can't recover it from the
- * opaque renderer-side spec (`{ command: id }`).
- *
- * Spec-shaped launchers (shell/session/memory) ignore `source`; the
- * renderer's bridge-shaped launcher forwards it to the desktop bun so
- * the local-source delegate fires for `source.isLocal === true`.
- *
- * `extras` carries session-lifecycle hints (`lifecycle`, `wait`) that
- * sessiond-backed launchers forward via the managed-launch protocol
- * (task-014). The shell launcher ignores it; the sessiond launcher
- * checks the `sessionLifecycle` capability before honoring
- * `lifecycle: "session"` (degrades to a typed `host-unavailable`
- * failure rather than silently downgrading to foreground).
- */
 export interface LaunchOptions {
   readonly source?: EntrySource
   readonly extras?: LaunchExtras

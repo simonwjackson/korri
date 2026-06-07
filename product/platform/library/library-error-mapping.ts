@@ -26,4 +26,4 @@ const isTaggedGameNotFound = (error: unknown): boolean =>
   typeof error === "object" &&
   error !== null &&
   "_tag" in error &&
-  error._tag === "GameNotFound"
+  (error._tag === "GameNotFound" || error._tag === "PlayableNotFound")

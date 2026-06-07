@@ -1,23 +1,9 @@
 /**
- * LibrarySource seam — the renderer's view of "what games are available".
+ * LibrarySource seam — the renderer's view of local library content.
  *
- * Three operations:
- *   - `list()`: every game the source knows about, already sorted in the order
- *     the source considers correct (for ROCKNIX MVP, lastPlayed desc with
- *     undefined last). The renderer does not re-sort.
- *   - `launchSpecFor(id)`: back-compat shape. Returns just the `LaunchSpec`
- *     for a game with all-default cascade inputs (no user, no preset, no
- *     override), or `undefined` if resolution fails. New code should call
- *     `resolveLaunchForGame` instead.
- *   - `canResolveLaunchForGame(id, inputs)`: non-materializing launch
- *     capability check for catalog/listing surfaces. It resolves cascade/app
- *     compatibility without creating artifacts or validating patch file paths.
- *   - `resolveLaunchForGame(id, inputs)`: full resolved-launch output —
- *     spec + gamescope policy. The stream prepare RPC consumes this.
- *
- * Runtime composition wraps this plain TS interface in the Effect Service
- * declared in `library-services.ts`, letting RPC handlers and stories share
- * the same layer-swap seam while keeping implementations simple.
+ * `listPlayableEntries` is the readable-schema contract: playable ids with
+ * ordered release metadata. `list` remains as a temporary display-compat view
+ * for UI callers that are realigned in the next slice.
  */
 
 import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
@@ -25,9 +11,16 @@ import type { EphemeralOverride } from "@platform/library/config/ephemeral-overr
 import type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
 import type { LaunchArtifacts } from "./launch-artifacts"
 import type { LaunchSpec } from "./launcher"
+import type {
+  PlayableLibraryEntry,
+  PlayableReleaseEntry,
+} from "./playable-library"
 
 export interface ResolveLaunchInputs {
+  readonly releaseId?: string
   readonly userId?: string
+  readonly profileId?: string
+  /** @deprecated use profileId. */
   readonly presetId?: string
   readonly override?: EphemeralOverride
 }
@@ -36,11 +29,19 @@ export interface ResolvedLaunch {
   readonly spec: LaunchSpec
   readonly gamescope?: GamescopePolicy
   readonly artifacts?: LaunchArtifacts
+  readonly playable?: {
+    readonly id: string
+    readonly itemId: string
+    readonly containedId?: string
+    readonly title?: string
+  }
+  readonly release?: PlayableReleaseEntry
 }
 
 export interface LibrarySource {
   list(): Promise<readonly ResolvedGameRecord[]>
-  launchSpecFor(id: string): Promise<LaunchSpec | undefined>
+  listPlayableEntries?(): Promise<readonly PlayableLibraryEntry[]>
+  launchSpecFor(id: string, releaseId?: string): Promise<LaunchSpec | undefined>
   canResolveLaunchForGame?(
     id: string,
     inputs?: ResolveLaunchInputs,

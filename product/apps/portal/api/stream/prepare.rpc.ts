@@ -7,7 +7,10 @@ export class PrepareStreamPayload extends Schema.Class<PrepareStreamPayload>(
   "PrepareStreamPayload",
 )({
   id: Schema.String,
+  releaseId: Schema.optional(Schema.String),
   userId: Schema.optional(Schema.String),
+  profileId: Schema.optional(Schema.String),
+  /** @deprecated use profileId. */
   presetId: Schema.optional(Schema.Union([Schema.String, Schema.Null])),
   override: Schema.optional(EphemeralOverride),
 }) {}

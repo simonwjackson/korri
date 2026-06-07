@@ -1,6 +1,8 @@
 import { RpcClientLive } from "@platform/api/rpc/client"
+import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import type { LaunchSpec } from "@platform/library/launcher"
 import { LibraryError, LibrarySource } from "@platform/library/library-services"
+import type { PlayableLibraryEntry } from "@platform/library/playable-library"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
 import { Effect, Layer } from "effect"
 import { RpcClient } from "effect/unstable/rpc"
@@ -10,19 +12,26 @@ export const LibrarySourceLayerRpc = Layer.effect(LibrarySource)(
     Effect.map(client => ({
       list: () =>
         client["app.library.list"]({}).pipe(
-          Effect.map(response => response.games),
-          // Federation v1 (AE1): a 503 "no upstream" from the forwarder
-          // is a legitimate empty-state — the renderer should render an
-          // empty rail without a load-error overlay. Effect RPC reports
-          // such failures through its error channel; collapse them to
-          // an empty result so the rail's empty-state path runs.
+          Effect.map(response => response.games.map(playableToCompatGame)),
           Effect.catchCause(cause =>
             isNoUpstreamCause(cause)
               ? Effect.succeed([])
               : Effect.fail(toLibraryError(cause)),
           ),
         ),
-      launchSpecFor: (id: string) => Effect.succeed(opaqueLaunchSpecFor(id)),
+      listPlayableEntries: () =>
+        client["app.library.list"]({}).pipe(
+          Effect.map(response => response.games),
+          Effect.catchCause(cause =>
+            isNoUpstreamCause(cause)
+              ? Effect.succeed([])
+              : Effect.fail(toLibraryError(cause)),
+          ),
+        ),
+      launchSpecFor: (id: string, releaseId?: string) =>
+        Effect.succeed(
+          opaqueLaunchSpecFor(releaseId ? `${id}#${releaseId}` : id),
+        ),
       resolveLaunchForGame: (id: string) =>
         Effect.succeed({ spec: opaqueLaunchSpecFor(id) }),
     })),
@@ -36,13 +45,6 @@ function toLibraryError(error: unknown): LibraryError {
   })
 }
 
-/**
- * Recognize the forwarder's "no upstream" signal. The api-forwarder
- * returns `503 { error: "no upstream" }` when no library-bearing
- * server is reachable (no loopback, no mDNS peer). Effect RPC surfaces
- * this through its Cause channel; the rendered string carries the
- * discriminator either way.
- */
 function isNoUpstreamCause(cause: unknown): boolean {
   const rendered = String(cause)
   return rendered.includes("no upstream") || rendered.includes("503")
@@ -52,5 +54,15 @@ function opaqueLaunchSpecFor(id: string): LaunchSpec {
   return {
     command: id,
     args: [],
+  }
+}
+
+function playableToCompatGame(entry: PlayableLibraryEntry): ResolvedGameRecord {
+  const release = entry.releases[0]
+  return {
+    id: entry.id,
+    system: release?.system ?? entry.system ?? "unknown",
+    metadata: { name: entry.title ?? entry.id },
+    ...(entry.media ? { media: entry.media } : {}),
   }
 }

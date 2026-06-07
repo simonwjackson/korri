@@ -1,8 +1,6 @@
 import { korriDataPath } from "@platform/config/xdg-paths"
-import {
-  cascadeErrorToLibraryError,
-  resolvedLaunchSpecOrUndefined,
-} from "@platform/library/library-error-mapping"
+import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
+import type { PlayableLibraryEntry } from "@platform/library/playable-library"
 import { logger } from "@platform/logger"
 import { Effect, Layer } from "effect"
 import {
@@ -36,16 +34,41 @@ function createLiveLibrarySourceService(): LibrarySourceService {
     list: () =>
       selectedLibrarySourceMode() === "rocknix"
         ? withRocknixSource(source => source.list(), "list")
-        : withLibraryRepository(repository => repository.listGames(), "list"),
-    launchSpecFor: id =>
+        : withLibraryRepository(
+            repository =>
+              repository
+                .listPlayableEntries()
+                .pipe(Effect.map(entries => entries.map(toCompatGameRecord))),
+            "list",
+          ),
+    listPlayableEntries: () =>
+      selectedLibrarySourceMode() === "rocknix"
+        ? withRocknixSource(
+            source =>
+              source.list().then(games => games.map(compatGameToPlayableEntry)),
+            "listPlayableEntries",
+          )
+        : withLibraryRepository(
+            repository => repository.listPlayableEntries(),
+            "listPlayableEntries",
+          ),
+    launchSpecFor: (id, releaseId) =>
       selectedLibrarySourceMode() === "rocknix"
         ? withRocknixSource(source => source.launchSpecFor(id), "launchSpecFor")
         : withLibraryRepository(
             repository =>
-              resolvedLaunchSpecOrUndefined(
-                repository.resolveLaunchForGame(id),
-              ),
+              repository
+                .resolveLaunchForPlayable(id, { releaseId })
+                .pipe(Effect.map(resolved => resolved.spec)),
             "launchSpecFor",
+          ).pipe(
+            Effect.matchEffect({
+              onSuccess: spec => Effect.succeed(spec),
+              onFailure: (error: LibraryError) =>
+                error.reason === "config"
+                  ? Effect.succeed(undefined)
+                  : Effect.fail(error),
+            }),
           ),
     canResolveLaunchForGame: (id, inputs) =>
       selectedLibrarySourceMode() === "rocknix"
@@ -57,7 +80,7 @@ function createLiveLibrarySourceService(): LibrarySourceService {
             "canResolveLaunchForGame",
           )
         : withLibraryRepository(
-            repository => repository.canResolveLaunchForGame(id, inputs),
+            repository => repository.canResolveLaunchForPlayable(id, inputs),
             "canResolveLaunchForGame",
           ),
     resolveLaunchForGame: (id, inputs) =>
@@ -67,10 +90,7 @@ function createLiveLibrarySourceService(): LibrarySourceService {
             "resolveLaunchForGame",
           )
         : withLibraryRepository(
-            repository =>
-              repository
-                .resolveLaunchForGame(id, inputs)
-                .pipe(Effect.mapError(cascadeErrorToLibraryError)),
+            repository => repository.resolveLaunchForPlayable(id, inputs),
             "resolveLaunchForGame",
           ),
   }
@@ -186,4 +206,35 @@ function toLibraryError(error: unknown): LibraryError {
     reason: "io",
     message: error instanceof Error ? error.message : String(error),
   })
+}
+
+function toCompatGameRecord(entry: PlayableLibraryEntry): ResolvedGameRecord {
+  const release = entry.releases[0]
+  return {
+    id: entry.id,
+    system: release?.system ?? "unknown",
+    metadata: { name: entry.title ?? entry.id },
+  }
+}
+
+function compatGameToPlayableEntry(
+  game: ResolvedGameRecord,
+): PlayableLibraryEntry {
+  return {
+    id: game.id,
+    itemId: game.id,
+    title: game.metadata?.name ?? game.id,
+    releases: [
+      {
+        id: "default",
+        system: game.system,
+        launchable:
+          game.contentPath !== undefined || game.content !== undefined,
+        ...(game.contentPath !== undefined ? { target: game.contentPath } : {}),
+      },
+    ],
+    launchable: game.contentPath !== undefined || game.content !== undefined,
+    metadata: game.metadata,
+    ...(game.media !== undefined ? { media: game.media } : {}),
+  }
 }

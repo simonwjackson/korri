@@ -22,6 +22,7 @@
 import { rpcProtocolHttpLayer } from "@platform/api/rpc/client-layer"
 import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
+import type { PlayableLibraryEntry } from "@platform/library/playable-library"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
 import { serverRpcGroup } from "@product/apps/portal/api/server/rpc-group"
 import { Cause, Effect, Exit, type Layer, type Scope } from "effect"
@@ -86,7 +87,9 @@ export type RemoteSourceStatus =
     }
 
 export interface RemotePrepareOptions {
+  readonly releaseId?: string
   readonly userId?: string
+  readonly profileId?: string
   readonly presetId?: string
   readonly override?: EphemeralOverride
 }
@@ -133,7 +136,7 @@ export function createRemoteStreamControlClient(
       await runRpc(
         RpcClient.make(appRpcGroup).pipe(
           Effect.flatMap(client => client["app.library.list"]({})),
-          Effect.map(response => response.games),
+          Effect.map(response => response.games.map(playableToCompatGame)),
           Effect.mapError(toHostUnavailable),
         ),
       ),
@@ -261,7 +264,9 @@ function runPrepareExit(
           Effect.flatMap(client =>
             client["app.server.stream.prepare"]({
               id: gameId,
+              releaseId: options?.releaseId,
               userId: options?.userId,
+              profileId: options?.profileId,
               presetId: options?.presetId,
               override: options?.override,
             }),
@@ -287,7 +292,9 @@ function runLegacyPrepareExit(
           Effect.flatMap(client =>
             client["app.stream.prepare"]({
               id: gameId,
+              releaseId: options?.releaseId,
               userId: options?.userId,
+              profileId: options?.profileId,
               presetId: options?.presetId,
               override: options?.override,
             }),
@@ -357,5 +364,15 @@ async function withTimeout<T>(
     ])
   } finally {
     if (timeout) clearTimeout(timeout)
+  }
+}
+
+function playableToCompatGame(entry: PlayableLibraryEntry): ResolvedGameRecord {
+  const release = entry.releases[0]
+  return {
+    id: entry.id,
+    system: release?.system ?? entry.system ?? "unknown",
+    metadata: { name: entry.title ?? entry.id },
+    ...(entry.media ? { media: entry.media } : {}),
   }
 }

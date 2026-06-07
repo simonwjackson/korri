@@ -10,6 +10,7 @@ import type { ModuleRecord } from "@platform/library/config/records/module"
 import type { SystemRecord } from "@platform/library/config/records/system"
 import type { UserRecord } from "@platform/library/config/records/user"
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
+import { createLibraryRepository } from "@platform/library/proseql/library-repository"
 import { Effect } from "effect"
 
 /**
@@ -47,13 +48,10 @@ export async function withTempProseqlLibrary(
       Effect.scoped(
         Effect.gen(function* () {
           const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+          const repository = createLibraryRepository(db)
 
           if (seed.global) {
-            yield* db.config.upsert({
-              where: { id: "global" },
-              create: { id: "global", ...seed.global },
-              update: { id: "global", ...seed.global },
-            })
+            yield* repository.upsertGlobalConfig(seed.global)
           }
           for (const user of seed.users ?? []) {
             yield* db.users.upsert({
@@ -63,18 +61,10 @@ export async function withTempProseqlLibrary(
             })
           }
           for (const system of seed.systems ?? []) {
-            yield* db.systems.upsert({
-              where: { id: system.id },
-              create: system,
-              update: system,
-            })
+            yield* repository.upsertSystem(system)
           }
           for (const launcher of seed.launchers ?? []) {
-            yield* db.launchers.upsert({
-              where: { id: launcher.id },
-              create: launcher,
-              update: launcher,
-            })
+            yield* repository.upsertLauncher(launcher)
           }
           for (const app of seed.apps ?? []) {
             yield* db.apps.upsert({
@@ -84,18 +74,10 @@ export async function withTempProseqlLibrary(
             })
           }
           for (const module of seed.modules ?? []) {
-            yield* db.modules.upsert({
-              where: { id: module.id },
-              create: module,
-              update: module,
-            })
+            yield* repository.upsertModule(module)
           }
           for (const game of seed.games ?? []) {
-            yield* db.games.upsert({
-              where: { id: game.id },
-              create: game,
-              update: game,
-            })
+            yield* repository.upsertGame(game)
           }
           for (const collection of seed.collections ?? []) {
             yield* db.collections.upsert({

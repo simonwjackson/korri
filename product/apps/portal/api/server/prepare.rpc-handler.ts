@@ -10,7 +10,9 @@ export const handleServerPrepareStream = (
   payload: typeof ServerPrepareStreamPayload.Type,
 ) =>
   prepareStreamLaunch(payload.id, {
+    releaseId: payload.releaseId,
     userId: payload.userId,
+    profileId: payload.profileId,
     presetId: payload.presetId ?? undefined,
     override: payload.override,
   }).pipe(

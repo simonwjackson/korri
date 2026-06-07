@@ -16,7 +16,10 @@ export class LaunchLibraryPayload extends Schema.Class<LaunchLibraryPayload>(
    * treated as local for the U1–U4 window.
    */
   source: Schema.optional(EntrySource),
+  releaseId: Schema.optional(Schema.String),
   userId: Schema.optional(Schema.String),
+  profileId: Schema.optional(Schema.String),
+  /** @deprecated use profileId. */
   presetId: Schema.optional(Schema.Union([Schema.String, Schema.Null])),
   override: Schema.optional(EphemeralOverride),
 }) {}

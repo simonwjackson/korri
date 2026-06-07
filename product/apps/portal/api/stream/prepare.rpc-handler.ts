@@ -27,7 +27,9 @@ export const handlePrepareStream = (
   payload: typeof PrepareStreamPayload.Type,
 ) =>
   prepareStreamLaunch(payload.id, {
+    releaseId: payload.releaseId,
     userId: payload.userId,
+    profileId: payload.profileId,
     presetId: payload.presetId ?? undefined,
     override: payload.override,
   }).pipe(
@@ -42,7 +44,9 @@ export const handlePrepareStream = (
   )
 
 export interface PrepareStreamLaunchOptions {
+  readonly releaseId?: string
   readonly userId?: string
+  readonly profileId?: string
   readonly presetId?: string
   readonly override?: EphemeralOverride
   readonly runtimeDir?: string
@@ -69,7 +73,7 @@ export function prepareStreamLaunch(
       .pipe(
         Effect.mapError(error => toDataError(error, "library prepare failed")),
       )
-    if (!games.some(game => game.id === gameId)) {
+    if (!games.some(entry => entry.id === gameId)) {
       logger.warn({ id: gameId }, "app.stream.prepare: unknown id")
       return yield* Effect.fail(
         new NotFoundError({ message: `Unknown game id: ${gameId}` }),
@@ -78,7 +82,9 @@ export function prepareStreamLaunch(
 
     const resolved = yield* source
       .resolveLaunchForGame(gameId, {
+        releaseId: options.releaseId,
         userId: options.userId,
+        profileId: options.profileId,
         presetId: options.presetId,
         override: options.override,
       })

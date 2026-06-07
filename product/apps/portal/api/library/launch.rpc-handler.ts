@@ -50,7 +50,7 @@ export const handleLaunchLibrary = (
     const launcher = yield* Launcher
     const foregroundSessionHost = yield* ForegroundSessionHost
     const games = yield* source.list().pipe(Effect.mapError(toDataError))
-    if (!games.some(game => game.id === payload.id)) {
+    if (!games.some(entry => entry.id === payload.id)) {
       logger.warn(
         { id: payload.id },
         "app.library.launch: unknown id; nothing to spawn",
@@ -62,7 +62,9 @@ export const handleLaunchLibrary = (
 
     const resolvedResult = yield* source
       .resolveLaunchForGame(payload.id, {
+        releaseId: payload.releaseId,
         userId: payload.userId,
+        profileId: payload.profileId,
         presetId: payload.presetId ?? undefined,
         override: payload.override,
       })
@@ -238,7 +240,13 @@ function handleRemoteSourceLaunch(
       source.controlUrl,
       payload.id,
       {
+        ...(payload.releaseId !== undefined
+          ? { releaseId: payload.releaseId }
+          : {}),
         ...(payload.userId !== undefined ? { userId: payload.userId } : {}),
+        ...(payload.profileId !== undefined
+          ? { profileId: payload.profileId }
+          : {}),
         ...(typeof payload.presetId === "string"
           ? { presetId: payload.presetId }
           : {}),

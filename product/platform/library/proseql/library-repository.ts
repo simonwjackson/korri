@@ -1,105 +1,82 @@
-/**
- * Korri library repository — the seam between proseql collections and
- * the cascade-based launch resolution.
- *
- * Read methods:
- * - `listGames()` — every game in the library, sorted lastPlayed-desc
- *   with never-played games last (carry-over from the legacy
- *   repository's sort behavior).
- * - `resolveLaunchForGame(gameId, opts)` — loads the full
- *   `ConfigSnapshot` from the six collections, runs the cascade
- *   resolver, composes a `LaunchSpec`, and returns the spec plus the
- *   resolved gamescope policy. Two-output split because gamescope
- *   wraps the spec runner-side (it rides on the launch intent
- *   alongside, not inside, the LaunchSpec).
- *
- * Write methods (used by the importer + tests):
- * - `upsertGame`, `upsertGlobalConfig`, `upsertUser`, `upsertSystem`,
- *   `upsertLauncher`, `upsertCollection`
- * - `upsertImportedGame({ game, launcher, systemDelta })` —
- *   transactional: upserts the game, merges the launcher's supported
- *   systems list, merges the system delta's `cores` map.
- */
-
-import { access } from "node:fs/promises"
-
 import {
-  type ArtifactImportMetadata,
-  createArtifactImportService,
-  createProseqlArtifactRepository,
-} from "@platform/artifacts/artifact-import-service"
-import { artifactBlobPath } from "@platform/artifacts/artifact-store"
-import {
-  resolveAppDescriptor,
-  unknownSettingDiagnostics,
-} from "@platform/library/config/app-integrations"
-import {
-  materializeAppLaunch,
-  validatePatchSupport,
-} from "@platform/library/config/app-materializer"
-import type { ConfigSnapshot } from "@platform/library/config/cascade-resolver"
-import {
-  resolveLaunchContext,
-  resolveLocalLauncherGamescopePolicy,
+  type ReadableConfigSnapshot,
+  resolveReadableLaunchContext,
 } from "@platform/library/config/cascade-resolver"
-import { composeLaunchSpec } from "@platform/library/config/compose-launch-spec"
+import { composeReadableLaunchSpec } from "@platform/library/config/compose-launch-spec"
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
-import {
-  type CascadeError,
-  supportedPatchFormatForPath,
-} from "@platform/library/config/errors"
 import type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
-import { collectLayerLaunchDiagnostics } from "@platform/library/config/launch-block"
+import {
+  listPlayableEntries as derivePlayableEntries,
+  launchableReleases,
+  type PlayableEntry,
+  splitPlayableId,
+} from "@platform/library/config/playable-id"
 import type { AppRecord } from "@platform/library/config/records/app"
 import type { CollectionRecord } from "@platform/library/config/records/collection"
 import type { GameRecord } from "@platform/library/config/records/game"
-import {
-  GLOBAL_CONFIG_KEY,
-  type GlobalConfigPayload,
-  type GlobalConfigRecord,
-} from "@platform/library/config/records/global"
 import type { LauncherRecord } from "@platform/library/config/records/launcher"
+import type { LibraryItemRecord } from "@platform/library/config/records/library-item"
 import type { ModuleRecord } from "@platform/library/config/records/module"
+import type { ProfileRecord } from "@platform/library/config/records/profile"
+import type { RuntimeRecord } from "@platform/library/config/records/runtime"
+import type { SourceRecord } from "@platform/library/config/records/source"
+import type { StorageRecord } from "@platform/library/config/records/storage"
 import type { SystemRecord } from "@platform/library/config/records/system"
 import type { UserRecord } from "@platform/library/config/records/user"
-import type { ResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import type { LaunchSpec } from "@platform/library/launcher"
 import { LibraryError } from "@platform/library/library-services"
+import type {
+  PlayableLibraryEntry,
+  PlayableReleaseEntry,
+} from "@platform/library/playable-library"
 import type { ArtifactRecord } from "@platform/protocol/artifact/artifact"
 import { Effect } from "effect"
-import type { KorriLibraryDb } from "./library-db"
+import { type KorriLibraryDb, LOCAL_HOST_KEY } from "./library-db"
 
 export interface ResolveLaunchOptions {
+  readonly releaseId?: string
   readonly userId?: string
+  readonly profileId?: string
+  /** @deprecated old profile vocabulary; accepted as a temporary caller shim. */
   readonly presetId?: string
-  readonly override?: EphemeralOverride
+  readonly override?: EphemeralOverride & {
+    readonly app?: string
+    readonly runtime?: string
+  }
 }
 
 export interface ResolvedLaunchOutput {
   readonly spec: LaunchSpec
   readonly gamescope?: GamescopePolicy
-  readonly app?: {
+  readonly app: {
     readonly id: string
     readonly integration: string
+  }
+  readonly runtime?: {
+    readonly id: string
+    readonly path?: string
+  }
+  readonly playable: {
+    readonly id: string
+    readonly itemId: string
+    readonly containedId?: string
+    readonly title?: string
+  }
+  readonly release: PlayableReleaseEntry
+  readonly content?: {
+    readonly path?: string
   }
   readonly module?: {
     readonly id: string
     readonly path?: string
   }
   readonly settings?: Readonly<Record<string, string | number | boolean>>
-  readonly content?: {
-    readonly artifactId: string
-  }
   readonly artifacts?: LaunchArtifacts
   readonly diagnostics?: readonly string[]
 }
 
-/**
- * Delta produced by the importer: a partial SystemRecord contribution
- * (must declare at least the system id, may declare cores per-launcher,
- * name, manufacturer).
- */
+/** @deprecated legacy importer delta retained only for follow-up realignment. */
 export interface SystemDelta {
   readonly id: string
   readonly name?: string
@@ -107,6 +84,7 @@ export interface SystemDelta {
   readonly cores?: Readonly<Record<string, string>>
 }
 
+/** @deprecated legacy importer record retained only for follow-up realignment. */
 export interface ImportedGameRecord {
   readonly game: GameRecord
   readonly launcher: LauncherRecord
@@ -132,7 +110,7 @@ export interface ArtifactAdoptionLibraryOptions {
 
 export interface AdoptArtifactInput {
   readonly source: ArtifactAdoptionSource
-  readonly artifact: ArtifactImportMetadata
+  readonly artifact: unknown
   readonly library?: ArtifactAdoptionLibraryOptions
 }
 
@@ -146,39 +124,96 @@ export interface CreateLibraryRepositoryOptions {
 }
 
 export interface LibraryRepository {
-  readonly listGames: () => Effect.Effect<readonly GameRecord[], unknown>
-  readonly upsertGame: (game: GameRecord) => Effect.Effect<GameRecord, unknown>
-  readonly upsertGlobalConfig: (
-    payload: GlobalConfigPayload,
-  ) => Effect.Effect<GlobalConfigRecord, unknown>
-  readonly upsertUser: (user: UserRecord) => Effect.Effect<UserRecord, unknown>
+  readonly listPlayableEntries: () => Effect.Effect<
+    readonly PlayableLibraryEntry[],
+    LibraryError
+  >
+  readonly upsertLibraryItem: (
+    item: LibraryItemRecord,
+  ) => Effect.Effect<LibraryItemRecord, LibraryError>
+  readonly upsertStorage: (
+    storage: StorageRecord,
+  ) => Effect.Effect<StorageRecord, LibraryError>
+  readonly upsertSource: (
+    source: SourceRecord,
+  ) => Effect.Effect<SourceRecord, LibraryError>
   readonly upsertSystem: (
     system: SystemRecord,
-  ) => Effect.Effect<SystemRecord, unknown>
-  readonly upsertLauncher: (
-    launcher: LauncherRecord,
-  ) => Effect.Effect<LauncherRecord, unknown>
-  readonly upsertApp: (app: AppRecord) => Effect.Effect<AppRecord, unknown>
-  readonly upsertModule: (
-    module: ModuleRecord,
-  ) => Effect.Effect<ModuleRecord, unknown>
+  ) => Effect.Effect<SystemRecord, LibraryError>
+  readonly upsertApp: (app: AppRecord) => Effect.Effect<AppRecord, LibraryError>
+  readonly upsertRuntime: (
+    runtime: RuntimeRecord,
+  ) => Effect.Effect<RuntimeRecord, LibraryError>
+  readonly upsertProfile: (
+    profile: ProfileRecord,
+  ) => Effect.Effect<ProfileRecord, LibraryError>
+  readonly upsertUser: (
+    user: UserRecord,
+  ) => Effect.Effect<UserRecord, LibraryError>
   readonly upsertCollection: (
     collection: CollectionRecord,
-  ) => Effect.Effect<CollectionRecord, unknown>
+  ) => Effect.Effect<CollectionRecord, LibraryError>
+  readonly canResolveLaunchForPlayable: (
+    playableId: string,
+    opts?: ResolveLaunchOptions,
+  ) => Effect.Effect<boolean, LibraryError>
+  readonly resolveLaunchForPlayable: (
+    playableId: string,
+    opts?: ResolveLaunchOptions,
+  ) => Effect.Effect<ResolvedLaunchOutput, LibraryError>
+  readonly asLibrarySource: () => {
+    readonly list: () => Promise<readonly PlayableLibraryEntry[]>
+    readonly launchSpecFor: (
+      id: string,
+      releaseId?: string,
+    ) => Promise<LaunchSpec | undefined>
+    readonly canResolveLaunchForGame: (
+      id: string,
+      inputs?: ResolveLaunchOptions,
+    ) => Promise<boolean>
+    readonly resolveLaunchForGame: (
+      id: string,
+      inputs?: ResolveLaunchOptions,
+    ) => Promise<ResolvedLaunchOutput>
+  }
+
+  /** @deprecated use listPlayableEntries. */
+  readonly listGames: () => Effect.Effect<readonly GameRecord[], LibraryError>
+  /** @deprecated use upsertLibraryItem with release-shaped records. */
+  readonly upsertGame: (
+    game: GameRecord,
+  ) => Effect.Effect<GameRecord, LibraryError>
+  /** @deprecated legacy schema removed. */
+  readonly upsertGlobalConfig: (
+    payload: unknown,
+  ) => Effect.Effect<unknown, LibraryError>
+  /** @deprecated legacy schema removed. */
+  readonly upsertLauncher: (
+    launcher: LauncherRecord,
+  ) => Effect.Effect<LauncherRecord, LibraryError>
+  /** @deprecated legacy schema removed. */
+  readonly upsertModule: (
+    module: ModuleRecord,
+  ) => Effect.Effect<ModuleRecord, LibraryError>
+  /** @deprecated legacy importer path removed. */
   readonly upsertImportedGame: (
     record: ImportedGameRecord,
-  ) => Effect.Effect<void, unknown>
+  ) => Effect.Effect<void, LibraryError>
+  /** @deprecated legacy artifact adoption path removed from repository launch API. */
   readonly adoptArtifact: (
     input: AdoptArtifactInput,
   ) => Effect.Effect<AdoptArtifactOutput, LibraryError>
+  /** @deprecated use canResolveLaunchForPlayable. */
   readonly canResolveLaunchForGame: (
     gameId: string,
     opts?: ResolveLaunchOptions,
   ) => Effect.Effect<boolean, LibraryError>
+  /** @deprecated use resolveLaunchForPlayable. */
   readonly resolveLaunchForGame: (
     gameId: string,
     opts?: ResolveLaunchOptions,
-  ) => Effect.Effect<ResolvedLaunchOutput, CascadeError | LibraryError>
+  ) => Effect.Effect<ResolvedLaunchOutput, LibraryError>
+  /** @deprecated local launcher config is legacy vocabulary. */
   readonly resolveLocalLauncherGamescopePolicy: (
     launcherId: string,
     opts?: Pick<ResolveLaunchOptions, "override">,
@@ -187,479 +222,462 @@ export interface LibraryRepository {
 
 export function createLibraryRepository(
   db: KorriLibraryDb,
-  options: CreateLibraryRepositoryOptions = {},
+  _options: CreateLibraryRepositoryOptions = {},
 ): LibraryRepository {
-  const env = options.env ?? process.env
-  return {
-    listGames: () =>
-      Effect.promise(() => db.games.query().runPromise).pipe(
-        Effect.map(records => [...records].sort(compareByLastPlayedDesc)),
-      ),
-
-    upsertGame: game =>
-      db.games.upsert({
-        where: { id: game.id },
-        create: game,
-        update: game,
-      }),
-
-    upsertGlobalConfig: payload =>
-      db.config.upsert({
-        where: { id: GLOBAL_CONFIG_KEY },
-        create: { id: GLOBAL_CONFIG_KEY, ...payload },
-        update: { id: GLOBAL_CONFIG_KEY, ...payload },
-      }) as unknown as Effect.Effect<GlobalConfigRecord, unknown>,
-
-    upsertUser: user =>
-      db.users.upsert({
-        where: { id: user.id },
-        create: user,
-        update: user,
-      }),
-
-    upsertSystem: system =>
-      db.systems.upsert({
-        where: { id: system.id },
-        create: system,
-        update: system,
-      }),
-
-    upsertLauncher: launcher =>
-      db.launchers.upsert({
-        where: { id: launcher.id },
-        create: launcher,
-        update: launcher,
-      }),
-
-    upsertApp: app =>
-      db.apps.upsert({
-        where: { id: app.id },
-        create: app,
-        update: app,
-      }),
-
-    upsertModule: module =>
-      db.modules.upsert({
-        where: { id: module.id },
-        create: module,
-        update: module,
-      }),
-
-    upsertCollection: collection =>
-      db.collections.upsert({
-        where: { id: collection.id },
-        create: collection,
-        update: collection,
-      }),
-
-    upsertImportedGame: record =>
-      db.$transaction(tx =>
-        Effect.gen(function* () {
-          yield* tx.games.upsert({
-            where: { id: record.game.id },
-            create: record.game,
-            update: record.game,
-          })
-
-          // Merge launcher: keep existing supported systems + new ones.
-          const existingLauncher = yield* tryFindById(
-            tx.launchers,
-            record.launcher.id,
-          )
-          const mergedLauncher = mergeLauncherSystems(
-            existingLauncher,
-            record.launcher,
-          )
-          yield* tx.launchers.upsert({
-            where: { id: mergedLauncher.id },
-            create: mergedLauncher,
-            update: mergedLauncher,
-          })
-
-          // Merge system: deep-merge the cores map, keep most-specific
-          // non-empty fields.
-          const existingSystem = yield* tryFindById(
-            tx.systems,
-            record.systemDelta.id,
-          )
-          const mergedSystem = mergeSystemDelta(
-            existingSystem,
-            record.systemDelta,
-            record.launcher.id,
-          )
-          yield* tx.systems.upsert({
-            where: { id: mergedSystem.id },
-            create: mergedSystem,
-            update: mergedSystem,
-          })
-        }),
-      ),
-
-    adoptArtifact: input => adoptArtifact(db, env, input),
-
-    canResolveLaunchForGame: (gameId, opts) =>
-      Effect.gen(function* () {
-        const snapshot = yield* loadSnapshot(db)
-        const context = yield* resolveLaunchContext(snapshot, {
-          gameId,
-          userId: opts?.userId,
-          presetId: opts?.presetId,
-          override: opts?.override,
-        })
-        const app = yield* resolveAppDescriptor({
-          appId: context.launcherId,
-          apps: snapshot.apps,
-          launchers: snapshot.launchers,
-        })
-        const patches = context.patches ?? []
-        if (!patches.every(supportedPatchFormatForPath)) return false
-        yield* validatePatchSupport(app, patches.length > 0)
-        return true
-      }).pipe(
-        Effect.catchTags({
-          GameNotFound: () => Effect.succeed(false),
-          UserNotFound: () => Effect.succeed(false),
-          PresetNotFound: () => Effect.succeed(false),
-          LauncherUnresolvable: () => Effect.succeed(false),
-          CoreNotConfigured: () => Effect.succeed(false),
-          ModuleNotFound: () => Effect.succeed(false),
-          ModulePathMissing: () => Effect.succeed(false),
-          IncompatibleModule: () => Effect.succeed(false),
-          AppNotFound: () => Effect.succeed(false),
-          CustomAppMissingCommand: () => Effect.succeed(false),
-          PatchUnsupportedForApp: () => Effect.succeed(false),
-          AppMaterializationFailed: () => Effect.succeed(false),
-        }),
-      ),
-
-    resolveLaunchForGame: (gameId, opts) =>
-      Effect.gen(function* () {
-        const snapshot = yield* loadSnapshot(db)
-        const unresolvedContext = yield* resolveLaunchContext(snapshot, {
-          gameId,
-          userId: opts?.userId,
-          presetId: opts?.presetId,
-          override: opts?.override,
-        })
-        const context = yield* resolveArtifactBackedContent(
-          db,
-          env,
-          unresolvedContext,
-        )
-        const app = yield* resolveAppDescriptor({
-          appId: context.launcherId,
-          apps: snapshot.apps,
-          launchers: snapshot.launchers,
-        })
-        const materialized = yield* materializeAppLaunch({ app, context })
-        const spec = yield* composeLaunchSpec(
-          materialized.launcher,
-          materialized.context,
-        )
-        const diagnostics = collectLaunchDiagnostics(snapshot, context)
-        diagnostics.push(
-          ...unknownSettingDiagnostics({ app, settings: context.settings }).map(
-            key => `Unknown ${app.id} setting: ${key}`,
+  const repository: LibraryRepository = {
+    listPlayableEntries: () =>
+      loadReadableSnapshot(db).pipe(
+        Effect.map(snapshot =>
+          derivePlayableEntries([...snapshot.library.values()]).map(entry =>
+            toPlayableLibraryEntry(entry),
           ),
+        ),
+      ),
+
+    upsertLibraryItem: item => upsert(db.library, item),
+    upsertStorage: storage => upsert(db.storage, storage),
+    upsertSource: source => upsert(db.sources, source),
+    upsertSystem: system => upsertSystemWithCoreRuntime(db, system),
+    upsertApp: app => upsert(db.apps, app),
+    upsertRuntime: runtime => upsert(db.runtimes, runtime),
+    upsertProfile: profile => upsert(db.profiles, profile),
+    upsertUser: user => upsert(db.users, user),
+    upsertCollection: collection => upsert(db.collections, collection),
+
+    canResolveLaunchForPlayable: (playableId, opts) =>
+      Effect.gen(function* () {
+        const snapshot = yield* loadReadableSnapshot(db)
+        const entry = derivePlayableEntries([
+          ...snapshot.library.values(),
+        ]).find(candidate => candidate.id === playableId)
+        if (!entry) return false
+        if (opts?.releaseId !== undefined) {
+          return entry.releases.some(
+            release =>
+              release.id === opts.releaseId && release.target !== undefined,
+          )
+        }
+        return entry.releases.some(release => release.target !== undefined)
+      }),
+
+    resolveLaunchForPlayable: (playableId, opts) =>
+      Effect.gen(function* () {
+        const snapshot = yield* loadReadableSnapshot(db)
+        const context = yield* resolveReadableLaunchContext(snapshot, {
+          playableId,
+          releaseId: opts?.releaseId,
+          userId: opts?.userId,
+          profileId: opts?.profileId ?? opts?.presetId,
+          override: opts?.override,
+        }).pipe(Effect.mapError(toLibraryConfigError))
+        const spec = yield* composeReadableLaunchSpec(
+          context.app,
+          context,
+        ).pipe(Effect.mapError(toLibraryConfigError))
+        const entry = derivePlayableEntries([
+          ...snapshot.library.values(),
+        ]).find(candidate => candidate.id === playableId)
+        const release = entry?.releases.find(
+          candidate => candidate.id === context.releaseId,
         )
+
         return {
           spec,
-          ...(context.gamescope ? { gamescope: context.gamescope } : {}),
-          app: { id: app.id, integration: app.integration },
-          ...(context.moduleId
-            ? { module: { id: context.moduleId, path: context.modulePath } }
+          gamescope: context.gamescope,
+          app: { id: context.app.id, integration: "generic-process" },
+          ...(context.runtime
+            ? {
+                runtime: {
+                  id: context.runtime.id,
+                  ...(context.runtime.path
+                    ? { path: context.runtime.path }
+                    : {}),
+                },
+                module: {
+                  id: context.runtime.id,
+                  ...(context.runtime.path
+                    ? { path: context.runtime.path }
+                    : {}),
+                },
+              }
             : {}),
-          ...(context.settings ? { settings: context.settings } : {}),
+          playable: {
+            id: context.playableId,
+            itemId: context.itemId,
+            ...(context.containedId
+              ? { containedId: context.containedId }
+              : {}),
+            ...(entry?.title ? { title: entry.title } : {}),
+          },
+          release: toPlayableReleaseEntry(
+            release ?? {
+              id: context.releaseId,
+              system: context.system,
+              source: context.sourceId,
+              target: context.target,
+            },
+          ),
           ...(context.content ? { content: context.content } : {}),
-          ...(materialized.artifacts
-            ? { artifacts: materialized.artifacts }
-            : {}),
-          ...(diagnostics.length > 0 ? { diagnostics } : {}),
         }
       }),
 
-    resolveLocalLauncherGamescopePolicy: (launcherId, opts) =>
-      Effect.gen(function* () {
-        const snapshot = yield* loadSnapshot(db)
-        return resolveLocalLauncherGamescopePolicy(snapshot, {
-          launcherId,
-          override: opts?.override,
-        })
-      }),
-  }
-}
-
-function adoptArtifact(
-  db: KorriLibraryDb,
-  env: Record<string, string | undefined>,
-  input: AdoptArtifactInput,
-): Effect.Effect<AdoptArtifactOutput, LibraryError> {
-  return Effect.gen(function* () {
-    yield* validateArtifactAdoptionLibraryInput(input)
-    const importService = createArtifactImportService({
-      env,
-      repository: createProseqlArtifactRepository(db),
-    })
-    const artifact = yield* Effect.tryPromise({
-      try: () =>
-        input.source.kind === "bytes"
-          ? importService.importBytes({
-              ...input.artifact,
-              bytes: input.source.bytes,
-            })
-          : importService.importFile({
-              ...input.artifact,
-              sourcePath: input.source.sourcePath,
+    asLibrarySource: () => ({
+      list: () => Effect.runPromise(repository.listPlayableEntries()),
+      launchSpecFor: (id, releaseId) =>
+        Effect.runPromise(
+          repository.resolveLaunchForPlayable(id, { releaseId }).pipe(
+            Effect.matchEffect({
+              onSuccess: resolved => Effect.succeed(resolved.spec),
+              onFailure: error =>
+                error.reason === "config"
+                  ? Effect.succeed(undefined)
+                  : Effect.fail(error),
             }),
-      catch: toLibraryError,
-    })
+          ),
+        ),
+      canResolveLaunchForGame: (id, inputs) =>
+        Effect.runPromise(repository.canResolveLaunchForPlayable(id, inputs)),
+      resolveLaunchForGame: (id, inputs) =>
+        Effect.runPromise(repository.resolveLaunchForPlayable(id, inputs)),
+    }),
 
-    const game = yield* maybeCreateArtifactGame(db, artifact, input.library)
-    return {
-      artifact,
-      ...(game ? { game } : {}),
-    }
-  })
-}
-
-function validateArtifactAdoptionLibraryInput(
-  input: AdoptArtifactInput,
-): Effect.Effect<void, LibraryError> {
-  return resolveAdoptedGameSystem(input.artifact, input.library).pipe(
-    Effect.asVoid,
-  )
-}
-
-function resolveAdoptedGameSystem(
-  artifact: Pick<ArtifactImportMetadata, "kind" | "system">,
-  options: ArtifactAdoptionLibraryOptions | undefined,
-): Effect.Effect<string | undefined, LibraryError> {
-  if (artifact.kind !== "content" || options?.createGame !== true) {
-    return Effect.succeed(undefined)
-  }
-
-  const system = options.system ?? artifact.system
-  return system
-    ? Effect.succeed(system)
-    : Effect.fail(
+    listGames: () =>
+      repository
+        .listPlayableEntries()
+        .pipe(Effect.map(entries => entries.map(toCompatGameRecord))),
+    upsertGame: game => upsertLegacyGame(db, game),
+    upsertGlobalConfig: payload => upsertLegacyGlobalConfig(db, payload),
+    upsertLauncher: launcher => upsertLegacyLauncher(db, launcher),
+    upsertModule: module => upsertLegacyModule(db, module),
+    upsertImportedGame: record =>
+      Effect.gen(function* () {
+        yield* upsertLegacyLauncher(db, record.launcher)
+        yield* upsertLegacySystemDelta(
+          db,
+          record.systemDelta,
+          record.launcher.id,
+        )
+        yield* upsertLegacyGame(db, record.game)
+      }),
+    adoptArtifact: () =>
+      Effect.fail(
         new LibraryError({
           reason: "config",
-          message: "content artifact adoption requires a system",
-        }),
-      )
-}
-
-function maybeCreateArtifactGame(
-  db: KorriLibraryDb,
-  artifact: ArtifactRecord,
-  options: ArtifactAdoptionLibraryOptions | undefined,
-): Effect.Effect<GameRecord | undefined, LibraryError> {
-  return Effect.gen(function* () {
-    const system = yield* resolveAdoptedGameSystem(artifact, options)
-    if (!system) return undefined
-
-    const game: GameRecord = {
-      id: options?.gameId ?? artifact.id,
-      system,
-      content: { artifactId: artifact.id },
-      metadata: {
-        name:
-          options?.title ?? artifact.facets?.title?.text ?? artifact.file.name,
-      },
-    }
-
-    return yield* db.games
-      .upsert({ where: { id: game.id }, create: game, update: game })
-      .pipe(
-        Effect.flatMap(() =>
-          Effect.tryPromise({ try: () => db.flush(), catch: toLibraryError }),
-        ),
-        Effect.as(game),
-        Effect.mapError(toLibraryError),
-      )
-  })
-}
-
-function resolveArtifactBackedContent(
-  db: KorriLibraryDb,
-  env: Record<string, string | undefined>,
-  context: ResolvedLaunchContext,
-): Effect.Effect<ResolvedLaunchContext, LibraryError> {
-  const artifactId = context.content?.artifactId
-  if (!artifactId) return Effect.succeed(context)
-
-  return Effect.tryPromise({
-    try: async () => {
-      const artifactRepository = createProseqlArtifactRepository(db)
-      const artifact = await artifactRepository.findArtifactById(artifactId)
-      if (!artifact) {
-        throw new LibraryError({
-          reason: "config",
-          message: `artifact not found: ${artifactId}`,
-        })
-      }
-      const contentPath = artifactBlobPath(env, artifact)
-      try {
-        await access(contentPath)
-      } catch (error) {
-        const code = (error as { readonly code?: string }).code
-        throw new LibraryError({
-          reason: "io",
           message:
-            code === "ENOENT"
-              ? `artifact blob missing from store: ${artifactId} expected at ${contentPath}`
-              : `artifact blob unreadable${code ? ` (${code})` : ""}: ${contentPath}`,
-        })
-      }
-      return {
-        ...context,
-        contentPath,
-      }
-    },
-    catch: toLibraryError,
+            "adoptArtifact uses removed game artifact adoption vocabulary; save readable library releases instead",
+        }),
+      ),
+    canResolveLaunchForGame: (gameId, opts) =>
+      repository.canResolveLaunchForPlayable(gameId, opts),
+    resolveLaunchForGame: (gameId, opts) =>
+      repository.resolveLaunchForPlayable(gameId, opts),
+    resolveLocalLauncherGamescopePolicy: () =>
+      Effect.fail(
+        new LibraryError({
+          reason: "config",
+          message:
+            "local launcher gamescope policy uses removed launcher vocabulary",
+        }),
+      ),
+  }
+  return repository
+}
+
+type CollectionApi<T extends { readonly id: string }> = {
+  readonly upsert: (input: {
+    where: { id: string }
+    create: T
+    update: T
+  }) => Effect.Effect<T, unknown>
+  readonly query: () => {
+    readonly runPromise: Promise<ReadonlyArray<T>>
+  }
+}
+
+function upsertSystemWithCoreRuntime(
+  db: KorriLibraryDb,
+  system: SystemRecord,
+): Effect.Effect<SystemRecord, LibraryError> {
+  return Effect.gen(function* () {
+    const appId = system.launch?.app ?? system.launcher
+    const core = appId ? system.cores?.[appId] : undefined
+    if (core !== undefined) {
+      yield* upsert(db.runtimes, {
+        id: core,
+        kind: "libretro-core",
+        path: core.startsWith("/") ? core : `/legacy-cores/${core}`,
+      })
+    }
+    const normalized: SystemRecord =
+      core !== undefined && system.launch?.module === undefined
+        ? {
+            ...system,
+            launch: { ...(system.launch ?? {}), module: core },
+          }
+        : system
+    return yield* upsert(db.systems, normalized)
   })
 }
 
-function collectLaunchDiagnostics(
-  snapshot: ConfigSnapshot,
-  context: ResolvedLaunchContext,
-): string[] {
-  const diagnostics: string[] = []
-  const pushLayer = (
-    path: string,
-    input: Parameters<typeof collectLayerLaunchDiagnostics>[1] | undefined,
-  ) => {
-    if (!input) return
-    diagnostics.push(
-      ...collectLayerLaunchDiagnostics(path, input).map(d => d.message),
-    )
-    for (const key of Object.keys(input.byLauncher ?? {})) {
-      if (key !== context.launcherId) {
-        diagnostics.push(
-          `${path}.byLauncher.${key} does not match resolved app ${context.launcherId}`,
-        )
-      }
-    }
-  }
+const upsert = <T extends { readonly id: string }>(
+  collection: CollectionApi<T>,
+  record: T,
+): Effect.Effect<T, LibraryError> =>
+  collection
+    .upsert({ where: { id: record.id }, create: record, update: record })
+    .pipe(Effect.mapError(toLibraryIoError))
 
-  pushLayer("config.global", snapshot.global ?? undefined)
-  pushLayer(`systems.${context.system}`, snapshot.systems.get(context.system))
-  pushLayer(`games.${context.gameId}`, snapshot.games.get(context.gameId))
-  return diagnostics
+function upsertLegacyGlobalConfig(
+  db: KorriLibraryDb,
+  payload: unknown,
+): Effect.Effect<unknown, LibraryError> {
+  const record = { id: LOCAL_HOST_KEY, ...(isRecord(payload) ? payload : {}) }
+  return upsert(db.host, record as never).pipe(Effect.as(record))
 }
 
-/**
- * Load every collection into an in-memory `ConfigSnapshot` ready to feed
- * the cascade resolver. Mirrors the six declared collections; the
- * singleton config is folded into `snapshot.global`.
- */
-function loadSnapshot(
+function upsertLegacyLauncher(
   db: KorriLibraryDb,
-): Effect.Effect<ConfigSnapshot, LibraryError> {
+  launcher: LauncherRecord,
+): Effect.Effect<LauncherRecord, LibraryError> {
+  const app: AppRecord = {
+    id: launcher.id,
+    command: launcher.command,
+    args: launcher.args.map(readablePlaceholderForLegacy),
+    systems: launcher.systems,
+    policy: launcher.policy ?? { allowedCommands: [launcher.command] },
+    ...(launcher.gamescope ? { gamescope: launcher.gamescope } : {}),
+    ...(launcher.env ? { env: launcher.env } : {}),
+    ...(launcher.cwd ? { cwd: launcher.cwd } : {}),
+    ...(launcher.argsAppend ? { argsAppend: launcher.argsAppend } : {}),
+    ...(launcher.patches ? { patches: launcher.patches } : {}),
+  }
+  return upsert(db.apps, app).pipe(Effect.as(launcher))
+}
+
+function upsertLegacyModule(
+  db: KorriLibraryDb,
+  module: ModuleRecord,
+): Effect.Effect<ModuleRecord, LibraryError> {
+  const runtime: RuntimeRecord = {
+    id: module.id,
+    kind: module.kind,
+    path: module.path,
+  }
+  return upsert(db.runtimes, runtime).pipe(Effect.as(module))
+}
+
+function upsertLegacySystemDelta(
+  db: KorriLibraryDb,
+  delta: SystemDelta,
+  defaultApp: string,
+): Effect.Effect<SystemRecord, LibraryError> {
+  const system: SystemRecord = {
+    id: delta.id,
+    launcher: defaultApp,
+    ...(delta.name ? { name: delta.name } : {}),
+    ...(delta.manufacturer ? { manufacturer: delta.manufacturer } : {}),
+    ...(delta.cores ? { cores: delta.cores } : {}),
+  }
+  return upsertSystemWithCoreRuntime(db, system)
+}
+
+function upsertLegacyGame(
+  db: KorriLibraryDb,
+  game: GameRecord,
+): Effect.Effect<GameRecord, LibraryError> {
+  return Effect.gen(function* () {
+    yield* upsert(db.storage, { id: "legacy-files", root: "/" })
+    yield* upsert(db.sources, {
+      id: "legacy-files",
+      kind: ["files"],
+      storage: "legacy-files",
+    })
+    if (game.core !== undefined) {
+      yield* upsert(db.runtimes, {
+        id: game.core,
+        kind: "libretro-core",
+        path: game.core.startsWith("/")
+          ? game.core
+          : `/legacy-cores/${game.core}`,
+      })
+    }
+    const target = game.contentPath?.replace(/^\/+/, "")
+    const parsed = legacyPlayableParts(game.id)
+    const release = {
+      id: "default",
+      system: game.system,
+      ...(target ? { target } : {}),
+      ...(game.launch?.app ? { app: game.launch.app } : {}),
+      ...(game.launch?.module ? { runtime: game.launch.module } : {}),
+      ...(game.launcher ? { app: game.launcher } : {}),
+      ...(game.core ? { runtime: game.core } : {}),
+    }
+    const item: LibraryItemRecord = parsed.containedId
+      ? {
+          id: parsed.itemId,
+          source: "legacy-files",
+          contains: {
+            [parsed.containedId]: {
+              ...(game.metadata?.name ? { title: game.metadata.name } : {}),
+            },
+          },
+          releases: [release],
+        }
+      : {
+          id: parsed.itemId,
+          ...(game.metadata?.name ? { title: game.metadata.name } : {}),
+          source: "legacy-files",
+          releases: [release],
+        }
+    yield* upsert(db.library, item)
+    return game
+  })
+}
+
+function readablePlaceholderForLegacy(value: string): string {
+  return value
+    .replaceAll("{contentPath}", "{content.path}")
+    .replaceAll("{modulePath}", "{runtime.path}")
+    .replaceAll("{core}", "{runtime.path}")
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function legacyPlayableParts(id: string): {
+  readonly itemId: string
+  readonly containedId?: string
+} {
+  const [itemId, containedId, ...rest] = id.split("/")
+  if (itemId && containedId && rest.length === 0) return { itemId, containedId }
+  return { itemId: id.replaceAll("/", "-") }
+}
+
+function toPlayableLibraryEntry(entry: PlayableEntry): PlayableLibraryEntry {
+  const collections = entry.contained?.collections ?? entry.item.collections
+  const title = entry.title ?? entry.id
+  const versionOf = entry.contained?.["version-of"] ?? entry.item["version-of"]
+  const relation = entry.contained?.relation ?? entry.item.relation
+  const display = entry.contained?.display ?? entry.item.display
+  const releases = entry.releases.map(toPlayableReleaseEntry)
+  return {
+    id: entry.id,
+    itemId: entry.itemId,
+    ...(entry.containedId ? { containedId: entry.containedId } : {}),
+    title,
+    ...(collections ? { collections } : {}),
+    ...(versionOf ? { versionOf } : {}),
+    ...(relation ? { relation } : {}),
+    ...(display ? { display } : {}),
+    releases,
+    launchable: releases.some(release => release.launchable),
+    ...(releases[0]?.system ? { system: releases[0].system } : {}),
+    metadata: { name: title },
+  }
+}
+
+function toCompatGameRecord(entry: PlayableLibraryEntry): GameRecord {
+  const release = entry.releases[0]
+  return {
+    id: entry.id,
+    system: release?.system ?? entry.system ?? "unknown",
+    metadata: { name: entry.title ?? entry.id },
+  }
+}
+
+function toPlayableReleaseEntry(release: {
+  readonly id: string
+  readonly system: string
+  readonly source?: string
+  readonly target?: string | readonly string[]
+  readonly app?: string
+  readonly runtime?: string
+  readonly display?: Readonly<Record<string, unknown>>
+}): PlayableReleaseEntry {
+  return {
+    id: release.id,
+    system: release.system,
+    ...(release.source ? { source: release.source } : {}),
+    ...(release.target !== undefined ? { target: release.target } : {}),
+    ...(release.app ? { app: release.app } : {}),
+    ...(release.runtime ? { runtime: release.runtime } : {}),
+    ...(release.display ? { display: release.display } : {}),
+    launchable: release.target !== undefined,
+  }
+}
+
+function loadReadableSnapshot(
+  db: KorriLibraryDb,
+): Effect.Effect<ReadableConfigSnapshot, LibraryError> {
   return Effect.gen(function* () {
     const [
-      configRows,
+      hostRows,
       users,
       systems,
-      launchers,
+      sources,
+      storage,
       apps,
-      modules,
-      games,
-      collections,
+      runtimes,
+      profiles,
+      library,
     ] = yield* Effect.all(
       [
-        Effect.tryPromise({
-          try: () => db.config.query().runPromise,
-          catch: toLibraryError,
-        }),
-        Effect.tryPromise({
-          try: () => db.users.query().runPromise,
-          catch: toLibraryError,
-        }),
-        Effect.tryPromise({
-          try: () => db.systems.query().runPromise,
-          catch: toLibraryError,
-        }),
-        Effect.tryPromise({
-          try: () => db.launchers.query().runPromise,
-          catch: toLibraryError,
-        }),
-        Effect.tryPromise({
-          try: () => db.apps.query().runPromise,
-          catch: toLibraryError,
-        }),
-        Effect.tryPromise({
-          try: () => db.modules.query().runPromise,
-          catch: toLibraryError,
-        }),
-        Effect.tryPromise({
-          try: () => db.games.query().runPromise,
-          catch: toLibraryError,
-        }),
-        Effect.tryPromise({
-          try: () => db.collections.query().runPromise,
-          catch: toLibraryError,
-        }),
+        readCollection(db.host),
+        readCollection(db.users),
+        readCollection(db.systems),
+        readCollection(db.sources),
+        readCollection(db.storage),
+        readCollection(db.apps),
+        readCollection(db.runtimes),
+        readCollection(db.profiles),
+        readCollection(db.library),
       ],
       { concurrency: "unbounded" },
     )
 
-    const global = configRows.find(r => r.id === GLOBAL_CONFIG_KEY) ?? null
+    const host =
+      hostRows.find(record => record.id === LOCAL_HOST_KEY) ??
+      hostRows[0] ??
+      null
 
     return {
-      global: global as GlobalConfigRecord | null,
-      users: new Map(users.map(u => [u.id, u])),
-      systems: new Map(systems.map(s => [s.id, s])),
-      launchers: new Map(launchers.map(l => [l.id, l])),
-      apps: new Map(apps.map(a => [a.id, a])),
-      modules: new Map(modules.map(m => [m.id, m])),
-      games: new Map(games.map(g => [g.id, g])),
-      collections: new Map(collections.map(c => [c.id, c])),
+      host,
+      users: new Map(users.map(record => [record.id, record])),
+      systems: new Map(systems.map(record => [record.id, record])),
+      sources: new Map(sources.map(record => [record.id, record])),
+      storage: new Map(storage.map(record => [record.id, record])),
+      apps: new Map(apps.map(record => [record.id, record])),
+      runtimes: new Map(runtimes.map(record => [record.id, record])),
+      profiles: new Map(profiles.map(record => [record.id, record])),
+      library: new Map(library.map(record => [record.id, record])),
     }
   })
 }
 
-/** Returns the record or `undefined` if `findById` raises NotFoundError. */
-function tryFindById<T>(
-  collection: { findById: (id: string) => Effect.Effect<T, unknown> },
-  id: string,
-): Effect.Effect<T | undefined, never> {
-  return collection.findById(id).pipe(
-    Effect.match({
-      onSuccess: (record: T) => record,
-      onFailure: () => undefined,
-    }),
-  )
+function readCollection<T extends { readonly id: string }>(
+  collection: Pick<CollectionApi<T>, "query">,
+): Effect.Effect<readonly T[], LibraryError> {
+  return Effect.tryPromise({
+    try: () => collection.query().runPromise,
+    catch: toLibraryIoError,
+  })
 }
 
-function mergeLauncherSystems(
-  prev: LauncherRecord | undefined,
-  incoming: LauncherRecord,
-): LauncherRecord {
-  if (!prev) return incoming
-  const seen = new Set([...prev.systems, ...incoming.systems])
-  return { ...prev, ...incoming, systems: [...seen] }
+function toLibraryConfigError(error: unknown): LibraryError {
+  if (error instanceof LibraryError) return error
+  const tag =
+    typeof error === "object" && error !== null && "_tag" in error
+      ? String((error as { readonly _tag: unknown })._tag)
+      : undefined
+  const message = error instanceof Error ? error.message : String(error)
+  return new LibraryError({
+    reason: "config",
+    message: tag ? `${tag}: ${message}` : message,
+  })
 }
 
-function mergeSystemDelta(
-  prev: SystemRecord | undefined,
-  delta: SystemDelta,
-  defaultLauncher: string,
-): SystemRecord {
-  const mergedCores = { ...(prev?.cores ?? {}), ...(delta.cores ?? {}) }
-  return {
-    ...(prev ?? { id: delta.id }),
-    id: delta.id,
-    launcher: prev?.launcher ?? defaultLauncher,
-    ...(delta.name !== undefined ? { name: delta.name } : {}),
-    ...(delta.manufacturer !== undefined
-      ? { manufacturer: delta.manufacturer }
-      : {}),
-    ...(Object.keys(mergedCores).length > 0 ? { cores: mergedCores } : {}),
-  }
-}
-
-function toLibraryError(error: unknown): LibraryError {
+function toLibraryIoError(error: unknown): LibraryError {
   if (error instanceof LibraryError) return error
   return new LibraryError({
     reason: "io",
@@ -667,19 +685,10 @@ function toLibraryError(error: unknown): LibraryError {
   })
 }
 
-function compareByLastPlayedDesc(a: GameRecord, b: GameRecord): number {
-  const ta = a.userData?.lastPlayed
-  const tb = b.userData?.lastPlayed
-  const tt = (x: typeof ta) =>
-    x instanceof Date
-      ? x.getTime()
-      : typeof x === "string"
-        ? Date.parse(x)
-        : undefined
-  const an = tt(ta)
-  const bn = tt(tb)
-  if (an === undefined && bn === undefined) return 0
-  if (an === undefined) return 1
-  if (bn === undefined) return -1
-  return bn - an
-}
+export const listLaunchableReleaseIds = (
+  item: LibraryItemRecord,
+): readonly string[] =>
+  launchableReleases(item.releases).map(release => release.id)
+
+export const parsedPlayableItemId = (playableId: string): string =>
+  splitPlayableId(playableId).itemId
