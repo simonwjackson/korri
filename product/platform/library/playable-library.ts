@@ -1,4 +1,7 @@
-import { ResolvedGameMedia } from "@platform/fixtures/games/game"
+import {
+  ResolvedGameMedia,
+  type ResolvedGameRecord,
+} from "@platform/fixtures/games/game"
 import { Schema } from "effect"
 
 const DisplayMetadata = Schema.Record(Schema.String, Schema.Unknown)
@@ -46,3 +49,33 @@ export const PlayableLibraryEntry = Schema.Struct({
 export type PlayableLibraryEntry = Schema.Schema.Type<
   typeof PlayableLibraryEntry
 >
+
+export type PlayableLibraryInput = PlayableLibraryEntry | ResolvedGameRecord
+
+export function playableEntryFromResolvedGame(
+  game: ResolvedGameRecord,
+): PlayableLibraryEntry {
+  const title = game.metadata?.name ?? game.id
+  return {
+    id: game.id,
+    itemId: game.id,
+    title,
+    launchable: true,
+    releases: [
+      {
+        id: game.system,
+        system: game.system,
+        launchable: true,
+      },
+    ],
+    system: game.system,
+    metadata: { name: title },
+    media: game.media,
+  }
+}
+
+export function asPlayableLibraryEntry(
+  entry: PlayableLibraryInput,
+): PlayableLibraryEntry {
+  return "releases" in entry ? entry : playableEntryFromResolvedGame(entry)
+}

@@ -19,14 +19,20 @@ import { ShiftHomeReadyBody } from "./ShiftHomeReadyBody"
 const games = [
   {
     id: "resume",
+    itemId: "resume",
+    title: "Resume",
     system: "fixture",
-    contentPath: "/storage/fixtures/resume.rom",
+    launchable: true,
+    releases: [{ id: "fixture", system: "fixture", launchable: true }],
     metadata: { name: "Resume" },
   },
   {
     id: "second",
+    itemId: "second",
+    title: "Second",
     system: "fixture",
-    contentPath: "/storage/fixtures/second.rom",
+    launchable: true,
+    releases: [{ id: "fixture", system: "fixture", launchable: true }],
     metadata: { name: "Second" },
   },
 ]

@@ -12,13 +12,13 @@
  * transition has a real origin instead of fading out of nowhere.
  */
 
-import {
-  type GameRecord,
-  getGameDisplayName,
-  getGameImageUrl,
-  getGameWideImageUrl,
-} from "@platform/fixtures/games/game"
 import { games } from "@platform/fixtures/games/games"
+import type { PlayableLibraryInput } from "@platform/library/playable-library"
+import {
+  getPlayableDisplayName,
+  getPlayableImageUrl,
+  getPlayableWideImageUrl,
+} from "@platform/library/playable-library-ui"
 import { useInputAction } from "@platform/react/input/use-input-action"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import {
@@ -56,7 +56,7 @@ type LaunchSurfaceSize = { readonly width: number; readonly height: number }
 
 type LaunchEvent = {
   readonly id: number
-  readonly game: GameRecord
+  readonly game: PlayableLibraryInput
   readonly origin: LaunchOrigin | null
   readonly surface: LaunchSurfaceSize
 }
@@ -149,7 +149,7 @@ function LaunchTransitionShell({
   const reduced = !!useReducedMotion()
 
   const begin = useCallback(
-    (game: GameRecord) => {
+    (game: PlayableLibraryInput) => {
       window.clearTimeout(dismissTimer.current)
       const shell = shellRef.current
       if (!shell) return
@@ -420,7 +420,7 @@ function TileMorphOverlay({
             className="shift-launch-title shift-launch-title-large"
             variants={REVEAL_UP}
           >
-            {getGameDisplayName(game)}
+            {getPlayableDisplayName(game)}
           </motion.span>
           <motion.div variants={REVEAL_UP}>
             <ProgressMeter />
@@ -492,7 +492,7 @@ function CurtainRiseOverlay({
             className="shift-launch-title shift-launch-title-large"
             variants={REVEAL_UP}
           >
-            {getGameDisplayName(game)}
+            {getPlayableDisplayName(game)}
           </motion.span>
           <motion.div variants={REVEAL_UP}>
             <ProgressMeter />
@@ -564,7 +564,7 @@ function IrisBloomOverlay({
             className="shift-launch-title shift-launch-title-large"
             variants={REVEAL_UP}
           >
-            {getGameDisplayName(game)}
+            {getPlayableDisplayName(game)}
           </motion.span>
           <motion.div variants={REVEAL_UP}>
             <ProgressMeter />
@@ -652,7 +652,7 @@ function DepthDiveOverlay({
             className="shift-launch-title shift-launch-title-large"
             variants={REVEAL_UP}
           >
-            {getGameDisplayName(game)}
+            {getPlayableDisplayName(game)}
           </motion.span>
           <motion.div variants={REVEAL_UP}>
             <ProgressMeter />
@@ -681,14 +681,14 @@ function GameArtwork({
   variant,
   className,
 }: {
-  readonly game: GameRecord
+  readonly game: PlayableLibraryInput
   readonly variant: "hero" | "tile"
   readonly className: string
 }) {
   const src =
     variant === "hero"
-      ? (getGameWideImageUrl(game) ?? getGameImageUrl(game))
-      : getGameImageUrl(game)
+      ? (getPlayableWideImageUrl(game) ?? getPlayableImageUrl(game))
+      : getPlayableImageUrl(game)
   if (!src) {
     return (
       <div

@@ -1,11 +1,19 @@
 import { describe, expect, it } from "bun:test"
-import { games } from "@platform/fixtures/games/games"
 import { LibraryError } from "@platform/library/library-services"
+import type { PlayableLibraryEntry } from "@platform/library/playable-library"
 import { Cause, Option } from "effect"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 import { LibraryListState } from "./library-list-state"
 
-const seedGames = games.slice(0, 3)
+const seedGames: readonly PlayableLibraryEntry[] = [
+  {
+    id: "downwell",
+    itemId: "downwell",
+    title: "Downwell",
+    launchable: true,
+    releases: [{ id: "windows", system: "windows", launchable: true }],
+  },
+]
 
 describe("LibraryListState", () => {
   it("maps waiting results to Loading", () => {

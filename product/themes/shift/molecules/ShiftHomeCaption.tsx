@@ -1,25 +1,14 @@
 /**
  * Shift molecule — focus-tracking caption.
  *
- * Reads the focused game and caption x-anchor from `useShiftHome()`
+ * Reads the focused playable and caption x-anchor from `useShiftHome()`
  * and renders the focused tile's title (with a relative last-played
  * label appended when the resume tile is focused).
- *
- * Position update is a single inline transform set from JS. There is
- * no CSS transition on transform — the caption snaps instantly to the
- * focused tile's x-position. A smooth slide reads as the caption
- * chasing the focus halo rather than belonging to the focused tile.
- * See docs/solutions/best-practices/attached-ui-snaps-not-slides-2026-05-01.md.
  */
 
-import { getGameDisplayName } from "@platform/fixtures/games/game"
+import { getPlayableDisplayName } from "@platform/library/playable-library-ui"
 import { useShiftHome } from "../templates/ShiftHome.context"
 
-/**
- * Compact relative-time label. UTC arithmetic on the underlying epoch
- * means the label does not flap across DST or timezone boundaries the
- * way locale-aware methods would.
- */
 function formatRelative(date: Date | undefined): string {
   if (!date) return "Never played"
   const ms = Date.now() - date.getTime()
@@ -31,9 +20,13 @@ function formatRelative(date: Date | undefined): string {
   return `${days}d ago`
 }
 
+function userDataDate(value: unknown): Date | undefined {
+  return value instanceof Date ? value : undefined
+}
+
 export function ShiftHomeCaption() {
   const { focused, isResumeFocused, captionAnchorX } = useShiftHome()
-  const lastPlayed = focused.userData?.lastPlayed
+  const lastPlayed = userDataDate(focused.userData?.lastPlayed)
   const relativeLabel =
     isResumeFocused && lastPlayed ? formatRelative(lastPlayed) : undefined
 
@@ -44,7 +37,7 @@ export function ShiftHomeCaption() {
     >
       <div className="flex items-baseline gap-4">
         <span className="text-3xl font-semibold text-[color:var(--shift-ink)]">
-          {getGameDisplayName(focused)}
+          {getPlayableDisplayName(focused)}
         </span>
         {relativeLabel ? (
           <span className="text-sm font-medium tracking-widest text-[color:var(--shift-ink-faint)] uppercase">

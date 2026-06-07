@@ -1,14 +1,12 @@
 import { useAtomValue } from "@effect/atom-react"
 import {
-  type GameRecord,
-  getGameDisplayName,
-} from "@platform/fixtures/games/game"
-import {
   type LaunchActionState,
   launchActionStateAllowsStart,
   launchActionStateFrom,
 } from "@platform/library/launch-action-state"
 import type { LaunchController } from "@platform/library/launch-state"
+import { asPlayableLibraryEntry } from "@platform/library/playable-library"
+import { getPlayableDisplayName } from "@platform/library/playable-library-ui"
 import { useInputAction } from "@platform/react/input/use-input-action"
 import { foregroundSessionGateStateAtom } from "@platform/react/library/library-atoms"
 import { useLibraryListCase } from "@platform/react/library/library-list-state-root"
@@ -25,7 +23,10 @@ import { ShiftHomeRail } from "../organisms/ShiftHomeRail"
 import { ShiftHomeTopBar } from "../organisms/ShiftHomeTopBar"
 import { ShiftLabsPanel } from "../organisms/ShiftLabsPanel"
 import { ShiftSystemPanel } from "../organisms/ShiftSystemPanel"
-import { useShiftHome } from "../templates/ShiftHome.context"
+import {
+  type ShiftHomeItem,
+  useShiftHome,
+} from "../templates/ShiftHome.context"
 import { ShiftHomeRoot } from "../templates/ShiftHomeRoot"
 
 const PLACEHOLDER_TIME = "4:24 PM"
@@ -93,10 +94,6 @@ function ShiftHomeLaunchSurface({
   readonly launch: LaunchController
 }) {
   const { items } = useShiftHome()
-  // Polling cadence lives on `foregroundSessionGateStateAtom` via
-  // `Atom.withRefresh` (see library-atoms.ts). No component-level driver
-  // needed; reading the atom subscribes us to its ~1 Hz updates and
-  // unmount triggers Atom autoDispose which clears the refresh timer.
   const foregroundGateResult = useAtomValue(foregroundSessionGateStateAtom)
   const foregroundGate = foregroundGateStateFromResult(foregroundGateResult)
   const actionState = launchActionStateFrom({
@@ -111,7 +108,7 @@ function ShiftHomeLaunchSurface({
     <div className="flex min-h-0 flex-1 flex-col justify-center gap-2">
       {shouldShowLaunchFailure(launch.state) && failedGame ? (
         <ShiftLaunchFailureBanner
-          gameTitle={getGameDisplayName(failedGame)}
+          gameTitle={getPlayableDisplayName(failedGame)}
           exitCode={
             launch.state._tag === "Failed" ? launch.state.exitCode : undefined
           }
@@ -126,12 +123,19 @@ function ShiftHomeLaunchSurface({
       {shouldShowForegroundGateNotice(actionState) ? (
         <ShiftForegroundSessionGateNotice
           state={actionState}
-          gameTitle={actionGame ? getGameDisplayName(actionGame) : undefined}
+          gameTitle={
+            actionGame ? getPlayableDisplayName(actionGame) : undefined
+          }
         />
       ) : null}
       <ShiftHomeRail
         onItemClick={game => {
-          if (launchActionStateAllowsStart(actionState)) launch.start(game)
+          if (launchActionStateAllowsStart(actionState)) {
+            launch.start({
+              ...asPlayableLibraryEntry(game),
+              source: game.source,
+            })
+          }
         }}
       />
       <ShiftHomeCaption />
@@ -151,18 +155,12 @@ function foregroundGateStateFromResult(
 }
 
 function actionGameFor(
-  items: readonly GameRecord[],
+  items: readonly ShiftHomeItem[],
   state: LaunchActionState,
-): GameRecord | undefined {
+): ShiftHomeItem | undefined {
   const gameId = "gameId" in state ? state.gameId : undefined
   if (!gameId) return undefined
-  return (
-    items.find(game => game.id === gameId) ?? {
-      id: gameId,
-      system: "unknown",
-      contentPath: "",
-    }
-  )
+  return items.find(game => game.id === gameId)
 }
 
 function shouldShowForegroundGateNotice(
@@ -179,17 +177,11 @@ function shouldShowForegroundGateNotice(
 }
 
 function failedGameFor(
-  items: readonly GameRecord[],
+  items: readonly ShiftHomeItem[],
   state: LaunchController["state"],
-): GameRecord | undefined {
+): ShiftHomeItem | undefined {
   if (!shouldShowLaunchFailure(state)) return undefined
-  return (
-    items.find(game => game.id === state.gameId) ?? {
-      id: state.gameId,
-      system: "unknown",
-      contentPath: "",
-    }
-  )
+  return items.find(game => game.id === state.gameId)
 }
 
 function shouldShowLaunchFailure(

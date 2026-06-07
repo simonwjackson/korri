@@ -24,21 +24,18 @@
  * path, so JS layout math and CSS layout share one source of truth.
  */
 
-import {
-  type GameRecord,
-  getGameDisplayName,
-} from "@platform/fixtures/games/game"
-import {
-  composeEntryKey,
-  type EntrySourceTag,
-} from "@platform/library/entry-key"
+import { composeEntryKey } from "@platform/library/entry-key"
+import { getPlayableDisplayName } from "@platform/library/playable-library-ui"
 import { TilegridCells } from "@platform/react/primitives/components/Tilegrid/components/TilegridCells"
 import { TilegridRailRoot } from "@platform/react/primitives/components/Tilegrid/TilegridRailRoot"
 import { useEffect } from "react"
 import { ShiftTile } from "../atoms/ShiftTile"
 import { ShiftHomeFeatureTile } from "../molecules/ShiftHomeFeatureTile"
 import { ShiftHomePosterTile } from "../molecules/ShiftHomePosterTile"
-import { useShiftHome } from "../templates/ShiftHome.context"
+import {
+  type ShiftHomeItem,
+  useShiftHome,
+} from "../templates/ShiftHome.context"
 
 const RESUME_SPAN = 2
 const RAIL_CELL_SIZE = "var(--shift-home-rail-cell-size)"
@@ -50,9 +47,7 @@ const RAIL_GAP = "var(--shift-home-rail-gap)"
  * fixtures and stories that pre-date federation omit it and fall back
  * to bare-id keying.
  */
-export type ShiftHomeRailItem = GameRecord & {
-  readonly source?: EntrySourceTag
-}
+export type ShiftHomeRailItem = ShiftHomeItem
 
 export interface ShiftHomeRailProps {
   readonly onItemClick?: (game: ShiftHomeRailItem) => void
@@ -89,7 +84,7 @@ export function ShiftHomeRail({ onItemClick }: ShiftHomeRailProps = {}) {
         getSpan={g =>
           composeEntryKey(g) === composeEntryKey(resumeTarget) ? RESUME_SPAN : 1
         }
-        getAriaLabel={g => getGameDisplayName(g)}
+        getAriaLabel={g => getPlayableDisplayName(g)}
       >
         <TilegridCells<ShiftHomeRailItem>
           onItemClick={onItemClick}

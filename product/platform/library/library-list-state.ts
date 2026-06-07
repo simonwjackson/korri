@@ -1,18 +1,18 @@
-import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import type { LibraryError } from "@platform/library/library-services"
+import type { PlayableLibraryEntry } from "@platform/library/playable-library"
 import { Option } from "effect"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 
 export type LibraryListState =
   | { readonly _tag: "Loading" }
-  | { readonly _tag: "Ready"; readonly games: readonly ResolvedGameRecord[] }
+  | { readonly _tag: "Ready"; readonly games: readonly PlayableLibraryEntry[] }
   | { readonly _tag: "LoadError"; readonly error: LibraryError }
   | { readonly _tag: "Defect"; readonly defect: unknown }
 
 export const LibraryListState = {
   fromResult: (
     result: AsyncResult.AsyncResult<
-      readonly ResolvedGameRecord[],
+      readonly PlayableLibraryEntry[],
       LibraryError
     >,
   ): LibraryListState =>

@@ -6,6 +6,7 @@ import {
   LibrarySource,
 } from "@platform/library/library-services"
 import { loadingForeverLibrarySourceLayer } from "@platform/library/library-source-layer-memory"
+import { playableEntryFromResolvedGame } from "@platform/library/playable-library"
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
 import { ForegroundSessionStatusSource } from "@platform/stream/foreground-session-status-source"
 import { Duration, Effect, Layer } from "effect"
@@ -40,7 +41,9 @@ const foregroundSessionStatusRuntime = Atom.runtime(get =>
 export const libraryItemsAtom = libraryRuntime.atom(
   Effect.gen(function* () {
     const source = yield* LibrarySource
-    return yield* source.list()
+    if (source.listPlayableEntries) return yield* source.listPlayableEntries()
+    const legacyGames = yield* source.list()
+    return legacyGames.map(playableEntryFromResolvedGame)
   }),
 )
 
@@ -74,16 +77,22 @@ export const foregroundSessionGateStateAtom = foregroundSessionStatusRuntime
  */
 export interface LaunchInput {
   readonly id: string
+  readonly releaseId?: string
   readonly source?: EntrySource
 }
 
 export const launchAtom = libraryRuntime.fn<LaunchInput | string>()(input =>
   Effect.gen(function* () {
-    const { id, source: entrySource } =
-      typeof input === "string" ? { id: input, source: undefined } : input
+    const {
+      id,
+      releaseId,
+      source: entrySource,
+    } = typeof input === "string"
+      ? { id: input, releaseId: undefined, source: undefined }
+      : input
     const source = yield* LibrarySource
     const launcher = yield* Launcher
-    const spec = yield* source.launchSpecFor(id)
+    const spec = yield* source.launchSpecFor(id, releaseId)
 
     if (!spec) {
       return yield* Effect.fail(

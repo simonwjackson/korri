@@ -1,25 +1,64 @@
 import type { EntrySource } from "@platform/api/rpc/entry-source"
-import type { GameRecord } from "@platform/fixtures/games/game"
 import type {
   LaunchFailureKind,
   LaunchResult,
 } from "@platform/library/launcher"
+import type { PlayableLibraryEntry } from "@platform/library/playable-library"
 import { Cause, Exit, Option } from "effect"
 
+export type ReleaseChoiceForLaunch =
+  | { readonly _tag: "Launchable"; readonly releaseId: string }
+  | { readonly _tag: "ReleaseRequired"; readonly releaseIds: readonly string[] }
+  | { readonly _tag: "NotLaunchable"; readonly releaseId: string }
+  | { readonly _tag: "NoLaunchableRelease" }
+
+export const releaseChoiceForLaunch = (
+  playable: Pick<PlayableLibraryEntry, "releases">,
+  releaseId?: string,
+): ReleaseChoiceForLaunch => {
+  if (releaseId !== undefined) {
+    const release = playable.releases.find(
+      candidate => candidate.id === releaseId,
+    )
+    return release?.launchable === true
+      ? { _tag: "Launchable", releaseId }
+      : { _tag: "NotLaunchable", releaseId }
+  }
+
+  const launchable = playable.releases.filter(release => release.launchable)
+  if (launchable.length === 0) return { _tag: "NoLaunchableRelease" }
+  if (launchable.length === 1) {
+    const [release] = launchable
+    if (release) return { _tag: "Launchable", releaseId: release.id }
+  }
+  return {
+    _tag: "ReleaseRequired",
+    releaseIds: launchable.map(release => release.id),
+  }
+}
+
 /**
- * Renderer launch input. `start` accepts a `GameRecord` plus the
- * optional federation `source` tag (present on `LibraryEntry` shapes
- * coming through `app.library.list`). The tag is threaded down to
- * bridge-shaped launchers so local-source vs remote-source routing
- * fires on the desktop bun. Bare-id call sites stay valid because
- * `source` is optional.
+ * Renderer launch input. `id` is the global playable id; `releaseId` is
+ * optional and required only for multi-launchable playables. The federation
+ * source tag is forwarded to bridge-shaped launchers for local/remote routing.
  */
-export type LaunchStartInput = GameRecord & {
+export type LaunchStartInput = PlayableLibraryEntry & {
+  readonly releaseId?: string
   readonly source?: EntrySource
 }
 
 export type LaunchState =
   | { readonly _tag: "Idle" }
+  | {
+      readonly _tag: "ReleaseSelectionRequired"
+      readonly gameId: string
+      readonly releaseIds: readonly string[]
+    }
+  | {
+      readonly _tag: "Unavailable"
+      readonly gameId: string
+      readonly releaseId?: string
+    }
   | { readonly _tag: "Launching"; readonly gameId: string }
   | { readonly _tag: "Launched"; readonly gameId: string }
   | {
@@ -39,6 +78,16 @@ export const LaunchState = {
   idle: { _tag: "Idle" } satisfies LaunchState,
 
   launching: (gameId: string): LaunchState => ({ _tag: "Launching", gameId }),
+
+  releaseSelectionRequired: (
+    gameId: string,
+    releaseIds: readonly string[],
+  ): LaunchState => ({ _tag: "ReleaseSelectionRequired", gameId, releaseIds }),
+
+  unavailable: (gameId: string, releaseId?: string): LaunchState =>
+    releaseId === undefined
+      ? { _tag: "Unavailable", gameId }
+      : { _tag: "Unavailable", gameId, releaseId },
 
   fromExit: (
     gameId: string,

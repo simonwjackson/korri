@@ -1,8 +1,6 @@
-import {
-  type GameRecord,
-  getGameDisplayName,
-} from "@platform/fixtures/games/game"
 import type { LaunchController } from "@platform/library/launch-state"
+import { asPlayableLibraryEntry } from "@platform/library/playable-library"
+import { getPlayableDisplayName } from "@platform/library/playable-library-ui"
 import { useDualScreenSession } from "@platform/react/display/dual-screen/DualScreenSession.context"
 import { useEffect } from "react"
 import { ShiftHomeCaption } from "../molecules/ShiftHomeCaption"
@@ -10,14 +8,18 @@ import { ShiftLaunchFailureBanner } from "../molecules/ShiftLaunchFailureBanner"
 import { ShiftHomeBottomBar } from "../organisms/ShiftHomeBottomBar"
 import { ShiftHomeRail } from "../organisms/ShiftHomeRail"
 import { ShiftHomeTopBar } from "../organisms/ShiftHomeTopBar"
-import { useShiftHome } from "../templates/ShiftHome.context"
+import {
+  type ShiftHomeInputItem,
+  type ShiftHomeItem,
+  useShiftHome,
+} from "../templates/ShiftHome.context"
 import { ShiftHomeRoot } from "../templates/ShiftHomeRoot"
 
 const PLACEHOLDER_TIME = "4:24 PM"
 const PLACEHOLDER_AVATAR_SRC = "https://i.pravatar.cc/96?u=korri-dual-screen"
 
 export interface ShiftPrimaryDualScreenSurfaceProps {
-  readonly items: ReadonlyArray<GameRecord>
+  readonly items: ReadonlyArray<ShiftHomeInputItem>
   readonly launch: LaunchController
 }
 
@@ -62,7 +64,7 @@ function ShiftPrimaryLaunchSurface({
     <div className="flex min-h-0 flex-1 flex-col justify-center gap-2">
       {shouldShowLaunchFailure(launch.state) && failedGame ? (
         <ShiftLaunchFailureBanner
-          gameTitle={getGameDisplayName(failedGame)}
+          gameTitle={getPlayableDisplayName(failedGame)}
           exitCode={
             launch.state._tag === "Failed" ? launch.state.exitCode : undefined
           }
@@ -74,24 +76,22 @@ function ShiftPrimaryLaunchSurface({
           onRetry={launch.retry}
         />
       ) : null}
-      <ShiftHomeRail onItemClick={game => launch.start(game)} />
+      <ShiftHomeRail
+        onItemClick={game =>
+          launch.start({ ...asPlayableLibraryEntry(game), source: game.source })
+        }
+      />
       <ShiftHomeCaption />
     </div>
   )
 }
 
 function failedGameFor(
-  items: readonly GameRecord[],
+  items: readonly ShiftHomeItem[],
   state: LaunchController["state"],
-): GameRecord | undefined {
+): ShiftHomeItem | undefined {
   if (!shouldShowLaunchFailure(state)) return undefined
-  return (
-    items.find(game => game.id === state.gameId) ?? {
-      id: state.gameId,
-      system: "unknown",
-      contentPath: "",
-    }
-  )
+  return items.find(game => game.id === state.gameId)
 }
 
 function shouldShowLaunchFailure(

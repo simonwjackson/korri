@@ -8,26 +8,22 @@
  * (`focusTile`, Labs open/close, scale changes), and one infrastructure
  * ref (`railRef`) that the rail organism attaches and the Root reads to
  * drive measurement / initial focus.
- *
- * Not in the contract:
- *   - Raw React state setters. Mutations are domain-level.
- *   - Loading / error transport state. The home is local-only today;
- *     when a server-backed Root replaces the in-memory one, the
- *     contract should grow a `status` field — not a transport bag.
- *   - Render decisions. The contract carries data, not booleans
- *     controlling which subtree renders.
- *
- * Stateful logic lives in `ShiftHomeRoot.tsx`, the only place that
- * calls `useState` and creates the Provider.
  */
 
-import type { GameRecord } from "@platform/fixtures/games/game"
+import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
+import type { EntrySourceTag } from "@platform/library/entry-key"
+import type { PlayableLibraryEntry } from "@platform/library/playable-library"
 import { createContext, type RefObject, useContext } from "react"
 
+export type ShiftHomeInputItem = (PlayableLibraryEntry | ResolvedGameRecord) & {
+  readonly source?: EntrySourceTag
+}
+export type ShiftHomeItem = ShiftHomeInputItem
+
 export interface ShiftHomeContextValue {
-  readonly items: ReadonlyArray<GameRecord>
-  readonly resumeTarget: GameRecord
-  readonly focused: GameRecord
+  readonly items: ReadonlyArray<ShiftHomeItem>
+  readonly resumeTarget: ShiftHomeItem
+  readonly focused: ShiftHomeItem
   readonly isResumeFocused: boolean
   readonly captionAnchorX: number
   readonly railRef: RefObject<HTMLDivElement | null>

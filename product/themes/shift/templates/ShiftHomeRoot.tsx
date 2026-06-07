@@ -30,8 +30,8 @@
  *     different composition rather than a different prop.
  */
 
-import type { GameRecord } from "@platform/fixtures/games/game"
 import { composeEntryKey } from "@platform/library/entry-key"
+import { asPlayableLibraryEntry } from "@platform/library/playable-library"
 import {
   clampUiScale,
   DEFAULT_UI_SCALE,
@@ -46,16 +46,17 @@ import {
   useRef,
   useState,
 } from "react"
-import { type ShiftHomeContextValue, ShiftHomeCtx } from "./ShiftHome.context"
+import {
+  type ShiftHomeContextValue,
+  ShiftHomeCtx,
+  type ShiftHomeInputItem,
+} from "./ShiftHome.context"
 
 // Shift home items accept optional `source` so federation library
 // entries can render alongside source-less fixtures. The rail keys
 // every cell with `composeEntryKey` so same-id entries from different
 // peers render as distinct focusables.
-type ShiftHomeRootItem = GameRecord & {
-  readonly source?: { readonly hostId: string }
-}
-
+type ShiftHomeRootItem = ShiftHomeInputItem
 export interface ShiftHomeRootProps {
   readonly items: ReadonlyArray<ShiftHomeRootItem>
   /**
@@ -72,7 +73,21 @@ export function ShiftHomeRoot({
   resumeTarget: resumeTargetProp,
   children,
 }: ShiftHomeRootProps) {
-  const resumeTarget = resumeTargetProp ?? items[0]
+  const normalizedItems = useMemo(
+    () =>
+      items.map(item => ({
+        ...asPlayableLibraryEntry(item),
+        source: item.source,
+      })),
+    [items],
+  )
+  const resumeTargetInput = resumeTargetProp ?? items[0]
+  const resumeTarget = resumeTargetInput
+    ? {
+        ...asPlayableLibraryEntry(resumeTargetInput),
+        source: resumeTargetInput.source,
+      }
+    : undefined
   if (!resumeTarget) {
     throw new Error(
       "ShiftHomeRoot requires at least one item or an explicit resumeTarget",
@@ -143,8 +158,10 @@ export function ShiftHomeRoot({
   // the rail's `data-tile-id`. Match by composite key so duplicate-id
   // entries from different peers don't collide.
   const focused = useMemo(
-    () => items.find(g => composeEntryKey(g) === focusedId) ?? resumeTarget,
-    [items, focusedId, resumeTarget],
+    () =>
+      normalizedItems.find(g => composeEntryKey(g) === focusedId) ??
+      resumeTarget,
+    [normalizedItems, focusedId, resumeTarget],
   )
 
   const focusTile = useCallback((id: string) => {
@@ -188,7 +205,7 @@ export function ShiftHomeRoot({
 
   const value: ShiftHomeContextValue = useMemo(
     () => ({
-      items,
+      items: normalizedItems,
       resumeTarget,
       focused,
       isResumeFocused: composeEntryKey(focused) === resumeKey,
@@ -206,7 +223,7 @@ export function ShiftHomeRoot({
       resetUiScale,
     }),
     [
-      items,
+      normalizedItems,
       resumeTarget,
       focused,
       captionAnchorX,

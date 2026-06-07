@@ -2,31 +2,26 @@
  * Shift molecule — poster tile art.
  *
  * The 1:1 cover image used for non-resume tiles in the home rail. Falls
- * back to the game's display name in muted ink when the fixture lacks
+ * back to the playable display name in muted ink when the entry lacks
  * an image so the rail still reads correctly with sparse data.
- *
- * The fallback uses Tailwind utilities because tone, sizing, and
- * text-transform are layout / typography rather than identity-bearing
- * Shift voice. The `--shift-ink-faint` token keeps it inside Shift's
- * palette either way.
  */
 
+import type { PlayableLibraryInput } from "@platform/library/playable-library"
 import {
-  getGameDisplayName,
-  getGameImageUrl,
-  type ResolvedGameRecord,
-} from "@platform/fixtures/games/game"
+  getPlayableDisplayName,
+  getPlayableImageUrl,
+} from "@platform/library/playable-library-ui"
 
 export interface ShiftHomePosterTileProps {
-  readonly game: ResolvedGameRecord
+  readonly game: PlayableLibraryInput
 }
 
 export function ShiftHomePosterTile({ game }: ShiftHomePosterTileProps) {
-  const url = getGameImageUrl(game)
+  const url = getPlayableImageUrl(game)
   if (!url) {
     return (
       <div className="flex h-full w-full items-center justify-center p-3 text-center text-sm uppercase tracking-widest text-[color:var(--shift-ink-faint)]">
-        {getGameDisplayName(game)}
+        {getPlayableDisplayName(game)}
       </div>
     )
   }

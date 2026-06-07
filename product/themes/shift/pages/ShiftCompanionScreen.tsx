@@ -1,22 +1,28 @@
+import { asPlayableLibraryEntry } from "@platform/library/playable-library"
 import {
-  type GameRecord,
-  getGameDisplayName,
-  getGameImageUrl,
-} from "@platform/fixtures/games/game"
+  getPlayableDisplayName,
+  getPlayableImageUrl,
+} from "@platform/library/playable-library-ui"
 import { useDualScreenSession } from "@platform/react/display/dual-screen/DualScreenSession.context"
+import type { ShiftHomeInputItem } from "../templates/ShiftHome.context"
 
 export interface ShiftCompanionScreenProps {
-  readonly items: ReadonlyArray<GameRecord>
+  readonly items: ReadonlyArray<ShiftHomeInputItem>
 }
 
 export function ShiftCompanionScreen({ items }: ShiftCompanionScreenProps) {
   const { selectedGameId } = useDualScreenSession()
-  const selectedGame = items.find(game => game.id === selectedGameId) ??
-    items[0] ?? {
-      id: selectedGameId,
-    }
-  const imageUrl = getGameImageUrl(selectedGame)
-  const title = getGameDisplayName(selectedGame)
+  const selectedGameInput =
+    items.find(game => game.id === selectedGameId) ?? items[0]
+  if (!selectedGameInput) return null
+  const selectedGame = asPlayableLibraryEntry(selectedGameInput)
+  const studio =
+    "releases" in selectedGameInput
+      ? (selectedGame.releases[0]?.system ?? "Unknown system")
+      : (selectedGameInput.metadata?.developer ?? "Unknown studio")
+
+  const imageUrl = getPlayableImageUrl(selectedGame)
+  const title = getPlayableDisplayName(selectedGame)
 
   return (
     <div data-shift-home className="relative h-full overflow-hidden">
@@ -34,9 +40,7 @@ export function ShiftCompanionScreen({ items }: ShiftCompanionScreenProps) {
         <h2 className="max-w-[14ch] text-6xl font-black leading-[0.95] tracking-tight">
           {title}
         </h2>
-        <p className="mt-4 text-2xl font-bold text-white/72">
-          {selectedGame.metadata?.developer ?? "Unknown studio"}
-        </p>
+        <p className="mt-4 text-2xl font-bold text-white/72">{studio}</p>
       </div>
     </div>
   )
