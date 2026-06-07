@@ -15,6 +15,11 @@ gamescope.overrideAttrs (oldAttrs: {
     # RK3566 handhelds; harmless on Adreno / Steam-Deck-class hardware
     # where hasPrimary is already true.
     ./patches/0001-rendervulkan-allow-render-only-vulkan-device.patch
+    # Allow forcing implicit dmabuf-fence sync (GAMESCOPE_DISABLE_EXPLICIT_SYNC).
+    # REQUIRED for nested gamescope to present at all on Mali-G52: PanVK's
+    # drm_syncobj timelines don't signal, so with explicit sync on the host
+    # discards every frame and the game never gets its buffer released.
+    ./patches/0002-waylandbackend-optional-explicit-sync.patch
     # Make the precompile-all-shaders thread optional
     # (GAMESCOPE_DISABLE_PIPELINE_PRECOMPILE). PanVK's Bifrost-v7 compiler
     # is slow enough that precompiling every permutation freezes the first
@@ -28,7 +33,7 @@ gamescope.overrideAttrs (oldAttrs: {
       printf '%s\n' 'pname=gamescope-korri'
       printf '%s\n' 'version=${oldAttrs.version or gamescope.version}-korri'
       printf '%s\n' 'upstream-version=${oldAttrs.version or gamescope.version}'
-      printf '%s\n' 'korri-patches=0001-rendervulkan-allow-render-only-vulkan-device 0003-rendervulkan-optional-pipeline-precompile'
+      printf '%s\n' 'korri-patches=0001-rendervulkan-allow-render-only-vulkan-device 0002-waylandbackend-optional-explicit-sync 0003-rendervulkan-optional-pipeline-precompile'
       printf '%s\n' 'control-api=korri-gamescope-control-bridge-v1'
       printf '%s\n' 'control-backend=x11-root-atoms'
       printf '%s\n' 'unsupported-controls=structured-command-result'
