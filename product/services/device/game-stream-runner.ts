@@ -116,6 +116,10 @@ const FALLBACK_LOCK_PATH = "/tmp/korri-game-stream-runner.lock"
 const DEFAULT_TERMINATE_GRACE_MS = 2_000
 const DEFAULT_SWAY_COMMAND_TIMEOUT_MS = 2_000
 const GAMESCOPE_COMMAND_ENV = "KORRI_GAME_STREAM_GAMESCOPE_COMMAND"
+// When set to "1", run the nested game via Gamescope's Xwayland path
+// (clears WAYLAND_DISPLAY for the game). Required on RK3566/RG353M where
+// native-Wayland clients deadlock under Gamescope; unset elsewhere.
+const GAMESCOPE_FORCE_XWAYLAND_ENV = "KORRI_GAME_STREAM_GAMESCOPE_FORCE_XWAYLAND"
 const SWAYMSG_COMMAND_ENV = "KORRI_GAME_STREAM_SWAYMSG_COMMAND"
 
 export function createGameStreamRunner(
@@ -449,6 +453,7 @@ export function createGameStreamRunner(
           enabled: gamescopeEnabled,
           command: resolvedGamescopeCommand.command,
           args: gamescope.args,
+          forceXwayland: processEnv[GAMESCOPE_FORCE_XWAYLAND_ENV] === "1",
         })
         logger.info(
           { command: spec.command, argc: spec.args.length },
