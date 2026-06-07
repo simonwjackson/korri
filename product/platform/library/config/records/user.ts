@@ -17,12 +17,15 @@ import { Schema } from "effect"
 
 import { ByLauncherPayload, InheritableLayer } from "../inheritable-fields"
 import { LaunchBlock } from "../launch-block"
+import { PlayableId } from "../playable-id"
 import { PresetMapPayload } from "./preset"
 
 const STRICT = { onExcessProperty: "error" } as const
 
 export const UserPayload = Schema.Struct({
   displayName: Schema.optional(Schema.String),
+  favorites: Schema.optional(Schema.Array(PlayableId)),
+  hidden: Schema.optional(Schema.Array(PlayableId)),
 
   // Public launch block; launch.app wins over legacy launcher.
   launch: Schema.optional(LaunchBlock),

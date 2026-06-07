@@ -14,6 +14,7 @@
  */
 
 import { mkdir } from "node:fs/promises"
+import { LocalPlayableId } from "@platform/library/config/playable-id"
 import { AppPayload, AppRecord } from "@platform/library/config/records/app"
 import {
   ArtifactPayload,
@@ -139,6 +140,11 @@ const validateReadableDocumentStrictly = (decoded: unknown): unknown => {
     const section = decoded[sectionName]
     if (section === undefined) continue
     if (!isRecord(section)) continue
+    if (sectionName === "library") {
+      for (const key of Object.keys(section)) {
+        Schema.decodeUnknownSync(LocalPlayableId)(key, STRICT)
+      }
+    }
     for (const payload of Object.values(section)) {
       Schema.decodeUnknownSync(schema)(payload, STRICT)
     }
@@ -348,8 +354,39 @@ const removedLegacyCollection = <TPayload>(
   }
 }
 
-const withRemovedLegacyCollections = (db: KorriLibraryDb): KorriLibraryDb => ({
+const validateLibraryItemKey = (id: string) =>
+  Effect.try({
+    try: () => Schema.decodeUnknownSync(LocalPlayableId)(id, STRICT),
+    catch: error => (error instanceof Error ? error : new Error(String(error))),
+  })
+
+const withValidatedLibraryCollection = <TPayload>(
+  collection: CollectionApi<TPayload>,
+): CollectionApi<TPayload> => ({
+  create: record =>
+    validateLibraryItemKey(record.id).pipe(
+      Effect.flatMap(() => collection.create(record)),
+    ),
+  upsert: input =>
+    Effect.all([
+      validateLibraryItemKey(input.where.id),
+      validateLibraryItemKey(input.create.id),
+      validateLibraryItemKey(input.update.id),
+    ]).pipe(Effect.flatMap(() => collection.upsert(input))),
+  findById: id =>
+    validateLibraryItemKey(id).pipe(
+      Effect.flatMap(() => collection.findById(id)),
+    ),
+  delete: id =>
+    validateLibraryItemKey(id).pipe(
+      Effect.flatMap(() => collection.delete(id)),
+    ),
+  query: () => collection.query(),
+})
+
+const withCanonicalCollectionGuards = (db: KorriLibraryDb): KorriLibraryDb => ({
   ...db,
+  library: withValidatedLibraryCollection(db.library),
   config: removedLegacyCollection("config"),
   launchers: removedLegacyCollection("launchers"),
   modules: removedLegacyCollection("modules"),
@@ -359,7 +396,7 @@ const withRemovedLegacyCollections = (db: KorriLibraryDb): KorriLibraryDb => ({
   "game-asset-assignments": removedLegacyCollection("game-asset-assignments"),
   $transaction: <A, E>(fn: (tx: KorriLibraryDb) => Effect.Effect<A, E>) =>
     db.$transaction(tx =>
-      fn(withRemovedLegacyCollections(tx)),
+      fn(withCanonicalCollectionGuards(tx)),
     ) as Effect.Effect<A, E>,
 })
 
@@ -392,7 +429,7 @@ export function openKorriLibraryDb(options: KorriLibraryDbOptions) {
       }).pipe(Effect.provide(persistenceLayer)),
     ),
     Effect.map(db =>
-      withRemovedLegacyCollections(db as unknown as KorriLibraryDb),
+      withCanonicalCollectionGuards(db as unknown as KorriLibraryDb),
     ),
     Effect.tap(db =>
       Effect.tryPromise({

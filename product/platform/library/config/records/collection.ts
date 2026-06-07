@@ -16,6 +16,7 @@
 import { Schema } from "effect"
 
 import { ByLauncherPayload, InheritableLayer } from "../inheritable-fields"
+import { PlayableId } from "../playable-id"
 import { PresetMapPayload } from "./preset"
 
 const STRICT = { onExcessProperty: "error" } as const
@@ -23,6 +24,7 @@ const STRICT = { onExcessProperty: "error" } as const
 export const CollectionPayload = Schema.Struct({
   title: Schema.optional(Schema.String),
   description: Schema.optional(Schema.String),
+  items: Schema.optional(Schema.Array(PlayableId)),
 
   // Layer-bearing fields (reserved; cascade does not consult in v1).
   inherit: Schema.optional(Schema.Boolean),

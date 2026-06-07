@@ -1,6 +1,7 @@
 import { Schema } from "effect"
 
 import { InheritableLayer } from "../inheritable-fields"
+import { LocalPlayableId, PlayableId } from "../playable-id"
 
 const STRICT = { onExcessProperty: "error" } as const
 
@@ -45,7 +46,7 @@ const Target = Schema.Union([
 ])
 
 export const LibraryReleasePayload = Schema.Struct({
-  id: NonEmptyString,
+  id: LocalPlayableId,
   source: Schema.optional(NonEmptyString),
   system: NonEmptyString,
   target: Schema.optional(Target),
@@ -72,6 +73,16 @@ const ReleaseList = Schema.Array(LibraryReleasePayload).pipe(
           issue: "library item must declare at least one release",
         }
       }
+      const ids = new Set<string>()
+      for (const release of releases) {
+        if (ids.has(release.id)) {
+          return {
+            path: ["releases"],
+            issue: `library item release id '${release.id}' must be unique`,
+          }
+        }
+        ids.add(release.id)
+      }
       if (!releases.some(release => release.target !== undefined)) {
         return {
           path: ["releases"],
@@ -86,7 +97,7 @@ const ReleaseList = Schema.Array(LibraryReleasePayload).pipe(
 
 export const ContainedPlayablePayload = Schema.Struct({
   title: Schema.optional(Schema.String),
-  "version-of": Schema.optional(NonEmptyString),
+  "version-of": Schema.optional(PlayableId),
   relation: Schema.optional(NonEmptyString),
   collections: Schema.optional(Schema.Array(NonEmptyString)),
   display: Schema.optional(DisplayMetadata),
@@ -101,16 +112,31 @@ export type ContainedPlayablePayload = Schema.Schema.Type<
   typeof ContainedPlayablePayload
 >
 
+const ContainsMap = Schema.Record(
+  LocalPlayableId,
+  ContainedPlayablePayload,
+).pipe(
+  Schema.check(
+    Schema.makeFilter(
+      (contains: Readonly<Record<string, ContainedPlayablePayload>>) =>
+        Object.keys(contains).length > 0
+          ? undefined
+          : {
+              path: ["contains"],
+              issue: "contains must name at least one local playable",
+            },
+    ),
+  ),
+)
+
 export const LibraryItemPayload = Schema.Struct({
   title: Schema.optional(Schema.String),
   source: Schema.optional(NonEmptyString),
-  "version-of": Schema.optional(NonEmptyString),
+  "version-of": Schema.optional(PlayableId),
   relation: Schema.optional(NonEmptyString),
   collections: Schema.optional(Schema.Array(NonEmptyString)),
   display: Schema.optional(DisplayMetadata),
-  contains: Schema.optional(
-    Schema.Record(NonEmptyString, ContainedPlayablePayload),
-  ),
+  contains: Schema.optional(ContainsMap),
   releases: ReleaseList,
 
   gamescope: InheritableLayer.fields.gamescope,
@@ -122,7 +148,7 @@ export const LibraryItemPayload = Schema.Struct({
 export type LibraryItemPayload = Schema.Schema.Type<typeof LibraryItemPayload>
 
 export const LibraryItemRecord = Schema.Struct({
-  id: NonEmptyString,
+  id: LocalPlayableId,
   ...LibraryItemPayload.fields,
 })
 export type LibraryItemRecord = Schema.Schema.Type<typeof LibraryItemRecord>

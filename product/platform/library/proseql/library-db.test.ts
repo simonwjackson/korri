@@ -291,6 +291,45 @@ describe("openKorriLibraryDb — strict-mode rejections", () => {
     }
   })
 
+  it("rejects invalid persisted library item keys", async () => {
+    await withTempRoot(async root => {
+      await writeFile(
+        join(root, "library.yaml"),
+        [
+          "library:",
+          "  super-mario-advance-2/super-mario-world:",
+          "    releases:",
+          "      - id: gba",
+          "        system: gba",
+          "        target: gba/cart.gba",
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+      const exit = await Effect.runPromiseExit(
+        Effect.scoped(openKorriLibraryDb({ root, writeDebounce: 1 })),
+      )
+      expect(exit._tag).toBe("Failure")
+    })
+  })
+
+  it("rejects invalid programmatic library item keys before persistence", async () => {
+    await withTempRoot(async root => {
+      const exit = await Effect.runPromiseExit(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            return yield* db.library.create({
+              id: "super-mario-advance-2/super-mario-world",
+              releases: [{ id: "gba", system: "gba", target: "gba/cart.gba" }],
+            })
+          }),
+        ),
+      )
+      expect(exit._tag).toBe("Failure")
+    })
+  })
+
   it("rejects unknown keys inside persisted readable records", async () => {
     await withTempRoot(async root => {
       await writeFile(
