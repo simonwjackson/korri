@@ -1,8 +1,7 @@
 # Korri readable library schema example.
 #
-# This file shows the canonical human-curated shape: users edit these sections
-# directly; Korri does not translate them into the retired games/launchers/
-# modules/config.global model.
+# This is the canonical human-curated shape. Users edit these sections
+# directly, and Korri treats them as the persisted application contract.
 
 host:
   title: AKA desktop host
@@ -19,7 +18,7 @@ storage:
       compat: steamapps/compatdata
 
   roms:
-    root: /games
+    root: /roms
 
 sources:
   steam:
@@ -147,6 +146,16 @@ library:
           aspect: unrestricted
           sources:
             pcgamingwiki: inferred
+
+      - id: steam
+        source: steam
+        system: windows
+        target: steam://rungameid/71113
+        app: steam
+        display:
+          aspect: unrestricted
+          sources:
+            steam: available
 
   super-mario-advance-2:
     title: "Super Mario Advance 2: Super Mario World"

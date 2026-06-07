@@ -223,6 +223,7 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
       expect(loaded.sonic.releases.map(release => release.id)).toEqual([
         "genesis",
         "windows-known",
+        "steam",
       ])
       expect(loaded.gbaPackage.contains?.["super-mario-world"]?.relation).toBe(
         "gba-port",
