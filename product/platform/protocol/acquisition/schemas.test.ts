@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { Schema } from "effect"
-import { SearchResponse } from "./candidate"
+import { SearchResponse, SourceCandidatePlayable } from "./candidate"
 import { DownloadResolution } from "./download-resolution"
 import { PluginMetadata } from "./plugin"
 import { SourceHealth } from "./source-health"
@@ -88,6 +88,57 @@ it("decodes representative acquisition protocol payloads", () => {
       credentialRequired: false,
     }).builtIn,
   ).toBe(true)
+})
+
+describe("source candidate playable shape", () => {
+  it("decodes release-shaped service candidates with URI targets", () => {
+    const decoded = Schema.decodeUnknownSync(SearchResponse)({
+      candidates: [
+        {
+          _tag: "SourceCandidate",
+          sourceName: "steam",
+          id: "360740",
+          title: "Downwell",
+          url: "https://store.steampowered.com/app/360740",
+          playable: {
+            id: "downwell",
+            title: "Downwell",
+            source: "steam",
+            releases: [
+              {
+                id: "steam",
+                source: "steam",
+                system: "windows",
+                target: "steam://rungameid/360740",
+                app: "steam",
+              },
+            ],
+          },
+        },
+      ],
+    })
+
+    expect(decoded.candidates[0]?.playable?.releases[0]?.target).toBe(
+      "steam://rungameid/360740",
+    )
+  })
+
+  it("represents metadata-only candidates", () => {
+    const metadataOnly = Schema.decodeUnknownSync(SourceCandidatePlayable)({
+      id: "unknown-pc-release",
+      title: "Unknown PC Release",
+      source: "pcgamingwiki",
+      releases: [
+        {
+          id: "pcgamingwiki",
+          source: "pcgamingwiki",
+          system: "windows",
+        },
+      ],
+    })
+
+    expect(metadataOnly.releases[0]?.target).toBeUndefined()
+  })
 })
 
 describe("protocol boundary", () => {

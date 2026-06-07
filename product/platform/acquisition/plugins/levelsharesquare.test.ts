@@ -191,6 +191,19 @@ describe("Level Share Square acquisition plugin", () => {
         format: { id: "smbr-level" },
         file: { extension: "lvl" },
       },
+      playable: {
+        id: LEVEL_ID,
+        source: "levelsharesquare",
+        releases: [
+          {
+            id: "smbr-level",
+            source: "levelsharesquare",
+            system: "smbr",
+            target: LEVEL_URL,
+            app: "smbr",
+          },
+        ],
+      },
     })
   })
 
@@ -232,6 +245,19 @@ describe("Level Share Square acquisition plugin", () => {
         system: "smbr",
         format: { id: "smbr-level" },
         file: { name: `${LEVEL_ID}.lvl`, extension: "lvl" },
+      },
+      playable: {
+        id: LEVEL_ID,
+        source: "levelsharesquare",
+        releases: [
+          {
+            id: "smbr-level",
+            source: "levelsharesquare",
+            system: "smbr",
+            target: LEVEL_URL,
+            app: "smbr",
+          },
+        ],
       },
     })
     expect(result.facets?.title?.text).toBe("Tropical Island Adventure!")

@@ -66,6 +66,7 @@ function candidateFor(slug: string, program: Chip8Program) {
     title: program.title,
     url: playUrl(slug),
     platform: program.platform ?? "chip8",
+    playable: playableFor(slug, program),
   }
 }
 
@@ -78,6 +79,23 @@ function detailsFor(slug: string, program: Chip8Program): SourceDetails {
     url: playUrl(slug),
     ...(program.desc ? { description: program.desc } : {}),
     downloadPageUrl: romUrl(slug),
+    playable: playableFor(slug, program),
+  }
+}
+
+function playableFor(slug: string, program: Chip8Program) {
+  return {
+    id: slug,
+    title: program.title,
+    source: SOURCE_NAME,
+    releases: [
+      {
+        id: program.platform ?? "chip8",
+        source: SOURCE_NAME,
+        system: program.platform ?? "chip8",
+        target: romUrl(slug),
+      },
+    ],
   }
 }
 

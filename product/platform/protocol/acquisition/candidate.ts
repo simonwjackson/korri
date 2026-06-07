@@ -16,6 +16,61 @@ export type ArtifactAcquisitionHint = Schema.Schema.Type<
   typeof ArtifactAcquisitionHint
 >
 
+const CandidateDisplayMetadata = Schema.Record(Schema.String, Schema.Unknown)
+const CandidateTarget = Schema.Union([
+  Schema.NonEmptyString,
+  Schema.Array(Schema.NonEmptyString),
+])
+
+export const SourceCandidateRelease = Schema.Struct({
+  id: Schema.NonEmptyString,
+  source: Schema.optional(Schema.NonEmptyString),
+  system: Schema.NonEmptyString,
+  target: Schema.optional(CandidateTarget),
+  app: Schema.optional(Schema.NonEmptyString),
+  runtime: Schema.optional(Schema.NonEmptyString),
+  display: Schema.optional(CandidateDisplayMetadata),
+})
+export type SourceCandidateRelease = Schema.Schema.Type<
+  typeof SourceCandidateRelease
+>
+
+const CandidateReleaseList = Schema.Array(SourceCandidateRelease).pipe(
+  Schema.check(
+    Schema.makeFilter((releases: readonly SourceCandidateRelease[]) => {
+      if (releases.length === 0) {
+        return {
+          path: ["releases"],
+          issue: "source candidate must declare at least one release",
+        }
+      }
+      const ids = new Set<string>()
+      for (const release of releases) {
+        if (ids.has(release.id)) {
+          return {
+            path: ["releases"],
+            issue: `source candidate release id '${release.id}' must be unique`,
+          }
+        }
+        ids.add(release.id)
+      }
+      return undefined
+    }),
+  ),
+)
+
+export const SourceCandidatePlayable = Schema.Struct({
+  id: Schema.NonEmptyString,
+  title: Schema.optional(Schema.String),
+  source: Schema.optional(Schema.NonEmptyString),
+  collections: Schema.optional(Schema.Array(Schema.NonEmptyString)),
+  display: Schema.optional(CandidateDisplayMetadata),
+  releases: CandidateReleaseList,
+})
+export type SourceCandidatePlayable = Schema.Schema.Type<
+  typeof SourceCandidatePlayable
+>
+
 export const SourceCandidate = Schema.TaggedStruct("SourceCandidate", {
   sourceName: Schema.String,
   id: Schema.String,
@@ -24,6 +79,7 @@ export const SourceCandidate = Schema.TaggedStruct("SourceCandidate", {
   platform: Schema.optional(Schema.String),
   thumbnailUrl: Schema.optional(Schema.String),
   artifact: Schema.optional(ArtifactAcquisitionHint),
+  playable: Schema.optional(SourceCandidatePlayable),
 })
 export type SourceCandidate = Schema.Schema.Type<typeof SourceCandidate>
 
@@ -35,6 +91,7 @@ export const SourceDetails = Schema.TaggedStruct("SourceDetails", {
   description: Schema.optional(Schema.String),
   downloadPageUrl: Schema.optional(Schema.String),
   artifact: Schema.optional(ArtifactAcquisitionHint),
+  playable: Schema.optional(SourceCandidatePlayable),
   facets: Schema.optional(ArtifactFacets),
 })
 export type SourceDetails = Schema.Schema.Type<typeof SourceDetails>

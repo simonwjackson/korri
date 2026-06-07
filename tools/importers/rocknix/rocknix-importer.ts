@@ -1,12 +1,11 @@
 import { readdir } from "node:fs/promises"
-import { join } from "node:path"
-import type { GameRecord } from "@platform/library/config/records/game"
-import type { LauncherRecord } from "@platform/library/config/records/launcher"
-import type {
-  ImportedGameRecord,
-  LibraryRepository,
-  SystemDelta,
-} from "@platform/library/proseql/library-repository"
+import { join, relative, sep } from "node:path"
+import type { AppRecord } from "@platform/library/config/records/app"
+import type { LibraryItemRecord } from "@platform/library/config/records/library-item"
+import type { RuntimeRecord } from "@platform/library/config/records/runtime"
+import type { SourceRecord } from "@platform/library/config/records/source"
+import type { StorageRecord } from "@platform/library/config/records/storage"
+import type { LibraryRepository } from "@platform/library/proseql/library-repository"
 import { logger } from "@platform/logger"
 import { Effect } from "effect"
 import { type EsSystem, parseEsSystems } from "./es-systems"
@@ -17,7 +16,7 @@ export interface RocknixImportConfig {
   readonly gamelistRoots: readonly string[]
   readonly esSystemsPath: string
   readonly launchCommand?: string
-  /** Deprecated no-op: sidecar media is no longer imported into GameRecord metadata. */
+  /** Deprecated no-op: sidecar media is no longer imported into game metadata. */
   readonly mediaRoot?: string
   readonly gameIdGenerator?: () => string
 }
@@ -39,11 +38,16 @@ export interface RocknixImportSummary {
   readonly warnings: readonly RocknixImportWarning[]
 }
 
+const FIRST_ROM_SOURCE_ID = "local-roms"
+const FIRST_ROM_SOURCE_TITLE = "Local ROMs"
+
 export async function importRocknixLibrary(
   config: RocknixImportConfig,
 ): Promise<RocknixImportSummary> {
-  const existingGames = await Effect.runPromise(config.repository.listGames())
-  if (existingGames.length > 0) {
+  const existingEntries = await Effect.runPromise(
+    config.repository.listPlayableEntries(),
+  )
+  if (existingEntries.length > 0) {
     throw new Error(
       "ROCKNIX import requires an empty Korri library; reset the target library before importing a fresh ROCKNIX snapshot",
     )
@@ -68,8 +72,14 @@ export async function importRocknixLibrary(
   const systems = parseEsSystems(systemsText)
   const systemByName = new Map(systems.map(system => [system.name, system]))
 
-  for (const root of config.gamelistRoots) {
+  for (const [rootIndex, root] of config.gamelistRoots.entries()) {
+    const sourceId = sourceIdForRoot(rootIndex)
     const found = await scanGamelistRoot(root, warnings)
+    if (found.length > 0) {
+      await Effect.runPromise(
+        upsertRootSource(config.repository, { root, sourceId }),
+      )
+    }
     for (const { systemName, systemRoot, entries } of found) {
       const system = systemByName.get(systemName)
       if (!system) {
@@ -82,7 +92,15 @@ export async function importRocknixLibrary(
         continue
       }
 
-      for (const entry of entries) {
+      const app = composeApp({
+        system,
+        launchCommandOverride: config.launchCommand,
+      })
+      await Effect.runPromise(
+        upsertSystemLaunch(config.repository, { system, app }),
+      )
+
+      for (const entry of sortEntriesForImport(entries)) {
         const romPath = resolveRomPath(systemRoot, entry.path)
         const externalId = rocknixExternalId({
           systemName: system.name,
@@ -102,16 +120,17 @@ export async function importRocknixLibrary(
 
         seenExternalIds.add(externalId)
         const gameId = gameIdGenerator()
-        const importedRecord = await composeImportedRecord({
+        const libraryItem = composeLibraryItem({
           entry,
           system,
-          romPath,
+          romTarget: relativeTarget(root, romPath),
           gameId,
-          launchCommandOverride: config.launchCommand,
+          sourceId,
+          appId: app.id,
         })
 
         await Effect.runPromise(
-          config.repository.upsertImportedGame(importedRecord),
+          config.repository.upsertLibraryItem(libraryItem),
         )
         imported += 1
       }
@@ -180,37 +199,57 @@ async function readTextFileSafe(path: string): Promise<string | null> {
   }
 }
 
-async function composeImportedRecord(args: {
-  entry: GamelistEntry
-  system: EsSystem
-  romPath: string
-  gameId: string
-  launchCommandOverride: string | undefined
-}): Promise<ImportedGameRecord> {
-  const launcher = composeLauncher({
-    system: args.system,
-    launchCommandOverride: args.launchCommandOverride,
-  })
-  const game = composeGameRecord(
-    args.gameId,
-    args.system.name,
-    args.romPath,
-    args.entry,
-  )
-  const systemDelta: SystemDelta = {
-    id: args.system.name,
-    ...(args.system.defaultCore
-      ? { cores: { [launcher.id]: args.system.defaultCore } }
-      : {}),
-  }
+function upsertRootSource(
+  repository: LibraryRepository,
+  args: { readonly root: string; readonly sourceId: string },
+): Effect.Effect<readonly [StorageRecord, SourceRecord], unknown> {
+  return Effect.all([
+    repository.upsertStorage({ id: args.sourceId, root: args.root }),
+    repository.upsertSource({
+      id: args.sourceId,
+      title: sourceTitle(args.sourceId),
+      kind: ["files"],
+      storage: args.sourceId,
+    }),
+  ])
+}
 
-  return { game, launcher, systemDelta }
+function upsertSystemLaunch(
+  repository: LibraryRepository,
+  args: { readonly system: EsSystem; readonly app: AppRecord },
+): Effect.Effect<void, unknown> {
+  return Effect.gen(function* () {
+    yield* repository.upsertApp(args.app)
+    const runtime = runtimeForSystem(args.system)
+    if (runtime) yield* repository.upsertRuntime(runtime)
+    yield* repository.upsertSystem({
+      id: args.system.name,
+      launch: { app: args.app.id },
+      ...(args.system.defaultCore
+        ? { cores: { [args.app.id]: args.system.defaultCore } }
+        : {}),
+    })
+  })
+}
+
+function sortEntriesForImport(
+  entries: readonly GamelistEntry[],
+): readonly GamelistEntry[] {
+  return [...entries].sort((left, right) => {
+    const leftTime = left.lastPlayed?.getTime() ?? 0
+    const rightTime = right.lastPlayed?.getTime() ?? 0
+    return rightTime - leftTime
+  })
 }
 
 function resolveRomPath(systemRoot: string, rawPath: string): string {
   if (rawPath.startsWith("/")) return rawPath
   const stripped = rawPath.startsWith("./") ? rawPath.slice(2) : rawPath
   return join(systemRoot, stripped)
+}
+
+function relativeTarget(root: string, romPath: string): string {
+  return relative(root, romPath).split(sep).join("/")
 }
 
 function rocknixExternalId(args: {
@@ -220,40 +259,46 @@ function rocknixExternalId(args: {
   return `${args.systemName}:${args.romPath}`
 }
 
-function composeGameRecord(
-  id: string,
-  systemName: string,
-  contentPath: string,
-  entry: GamelistEntry,
-): GameRecord {
-  const metadata = stripUndefined({
-    name: entry.name,
-    description: entry.desc,
-    developer: entry.developer,
-    publisher: entry.publisher,
-    releaseDate: entry.releaseDate?.toISOString(),
-    genre: entry.genre ? [entry.genre] : undefined,
+function composeLibraryItem(args: {
+  readonly entry: GamelistEntry
+  readonly system: EsSystem
+  readonly romTarget: string
+  readonly gameId: string
+  readonly sourceId: string
+  readonly appId: string
+}): LibraryItemRecord {
+  const display = stripUndefined({
+    description: args.entry.desc,
+    developer: args.entry.developer,
+    publisher: args.entry.publisher,
+    releaseDate: args.entry.releaseDate?.toISOString(),
+    genre: args.entry.genre ? [args.entry.genre] : undefined,
   })
-  const userData = stripUndefined({
-    lastPlayed: entry.lastPlayed,
-    playtime: entry.playtimeSeconds,
-    favorite: entry.favorite,
-  })
-
-  const record: GameRecord = { id, system: systemName, contentPath }
-  if (Object.keys(metadata).length > 0) {
-    Object.assign(record, { metadata })
+  const item: LibraryItemRecord = {
+    id: args.gameId,
+    source: args.sourceId,
+    ...(args.entry.name ? { title: args.entry.name } : {}),
+    ...(Object.keys(display).length > 0 ? { display } : {}),
+    releases: [
+      {
+        id: args.system.name,
+        source: args.sourceId,
+        system: args.system.name,
+        target: args.romTarget,
+        app: args.appId,
+        ...(args.system.defaultCore
+          ? { runtime: args.system.defaultCore }
+          : {}),
+      },
+    ],
   }
-  if (Object.keys(userData).length > 0) {
-    Object.assign(record, { userData })
-  }
-  return record
+  return item
 }
 
-function composeLauncher(args: {
+function composeApp(args: {
   system: EsSystem
   launchCommandOverride: string | undefined
-}): LauncherRecord {
+}): AppRecord {
   const tokens = args.system.commandTemplate
     .replaceAll("%CONTROLLERSCONFIG%", "")
     .split(/\s+/)
@@ -264,26 +309,52 @@ function composeLauncher(args: {
   const command = args.launchCommandOverride ?? first ?? ""
 
   return {
-    id: launcherId(args.system),
+    id: appId(args.system),
     command: translateEsPlaceholders(command, args.system),
     args: rest.map(token => translateEsPlaceholders(token, args.system)),
-    systems: [args.system.name],
+    policy: {
+      allowedCommands: [translateEsPlaceholders(command, args.system)],
+    },
   }
+}
+
+function runtimeForSystem(system: EsSystem): RuntimeRecord | undefined {
+  return system.defaultCore
+    ? {
+        id: system.defaultCore,
+        kind: "libretro-core",
+        path: system.defaultCore.startsWith("/")
+          ? system.defaultCore
+          : `/legacy-cores/${system.defaultCore}`,
+      }
+    : undefined
 }
 
 function translateEsPlaceholders(token: string, system: EsSystem): string {
   return token
-    .replaceAll("%ROM%", "{contentPath}")
+    .replaceAll("%ROM%", "{content.path}")
     .replaceAll("%SYSTEM%", "{system}")
-    .replaceAll("%CORE%", "{core}")
+    .replaceAll("%CORE%", "{runtime.path}")
     .replaceAll("%EMULATOR%", system.defaultEmulator ?? "")
 }
 
-function launcherId(system: EsSystem): string {
+function appId(system: EsSystem): string {
   return ["rocknix", system.defaultEmulator]
     .filter((part): part is string => Boolean(part && part.length > 0))
     .map(sanitizeProfileIdPart)
     .join("-")
+}
+
+function sourceIdForRoot(index: number): string {
+  return index === 0
+    ? FIRST_ROM_SOURCE_ID
+    : `${FIRST_ROM_SOURCE_ID}-${index + 1}`
+}
+
+function sourceTitle(sourceId: string): string {
+  return sourceId === FIRST_ROM_SOURCE_ID
+    ? FIRST_ROM_SOURCE_TITLE
+    : `${FIRST_ROM_SOURCE_TITLE} ${sourceId.replace(`${FIRST_ROM_SOURCE_ID}-`, "")}`
 }
 
 function sanitizeProfileIdPart(value: string): string {

@@ -60,31 +60,85 @@ describe("importRocknixLibrary", () => {
             )
             yield* Effect.promise(() => db.flush())
             const source = createProseqlLibrarySource(repository)
-            const games = yield* Effect.promise(() => source.list())
-            const newGame = games.find(game => game.metadata?.name === "New")
+            const games = yield* repository.listPlayableEntries()
+            const newGame = games.find(game => game.title === "New")
             return {
               summary,
               games,
               spec: newGame
                 ? yield* Effect.promise(() => source.launchSpecFor(newGame.id))
                 : undefined,
+              library: yield* Effect.promise(
+                () => db.library.query().runPromise,
+              ),
+              sources: yield* Effect.promise(
+                () => db.sources.query().runPromise,
+              ),
+              storage: yield* Effect.promise(
+                () => db.storage.query().runPromise,
+              ),
+              apps: yield* Effect.promise(() => db.apps.query().runPromise),
+              runtimes: yield* Effect.promise(
+                () => db.runtimes.query().runPromise,
+              ),
             }
           }),
         ),
       )
 
       expect(result.summary).toEqual({ imported: 2, skipped: 0, warnings: [] })
-      expect(result.games.map(game => game.metadata?.name)).toEqual([
-        "New",
-        "Old",
+      expect(result.games.map(game => game.title)).toEqual(["New", "Old"])
+      expect(result.games.map(game => game.id)).toEqual(["game-1", "game-2"])
+      expect(result.library.map(item => item.releases)).toEqual([
+        [
+          {
+            id: "snes",
+            source: "local-roms",
+            system: "snes",
+            target: "snes/new.smc",
+            app: "rocknix-retroarch",
+            runtime: "snes9x",
+          },
+        ],
+        [
+          {
+            id: "snes",
+            source: "local-roms",
+            system: "snes",
+            target: "snes/old.smc",
+            app: "rocknix-retroarch",
+            runtime: "snes9x",
+          },
+        ],
       ])
-      expect(result.games.map(game => game.id)).toEqual(["game-2", "game-1"])
+      expect(result.sources).toEqual([
+        {
+          id: "local-roms",
+          title: "Local ROMs",
+          kind: ["files"],
+          storage: "local-roms",
+        },
+      ])
+      expect(result.storage).toEqual([{ id: "local-roms", root: lib.rootDir }])
+      expect(result.apps[0]).toMatchObject({
+        id: "rocknix-retroarch",
+        command: lib.launchCommand,
+        args: [
+          "{content.path}",
+          "-P{system}",
+          "--core={runtime.path}",
+          "--emulator=retroarch",
+        ],
+      })
+      expect(result.runtimes).toEqual([
+        { id: "snes9x", kind: "libretro-core", path: "/legacy-cores/snes9x" },
+      ])
       expect(result.spec).toEqual({
         command: lib.launchCommand,
         args: [
           join(lib.rootDir, "snes", "new.smc"),
           "-Psnes",
-          "--core=snes9x",
+          "--core=/legacy-cores/snes9x",
           "--emulator=retroarch",
         ],
       })
@@ -126,10 +180,11 @@ describe("importRocknixLibrary", () => {
             return {
               first,
               second,
-              games: yield* repository.listGames(),
-              launchers: yield* Effect.promise(
-                () => db.launchers.query().runPromise,
+              games: yield* repository.listPlayableEntries(),
+              sources: yield* Effect.promise(
+                () => db.sources.query().runPromise,
               ),
+              apps: yield* Effect.promise(() => db.apps.query().runPromise),
               systems: yield* Effect.promise(
                 () => db.systems.query().runPromise,
               ),
@@ -142,8 +197,10 @@ describe("importRocknixLibrary", () => {
       expect(result.second._tag).toBe("Failure")
       expect(result.games.map(game => game.id)).toEqual(["game-1"])
       expect(result.games[0]?.system).toBe("snes")
-      expect(result.launchers).toHaveLength(1)
-      expect(result.launchers[0]?.id).toBe("rocknix-retroarch")
+      expect(result.games[0]?.releases[0]?.target).toBe("snes/echo.smc")
+      expect(result.sources[0]?.id).toBe("local-roms")
+      expect(result.apps).toHaveLength(1)
+      expect(result.apps[0]?.id).toBe("rocknix-retroarch")
       expect(
         result.systems.find(s => s.id === "snes")?.cores?.["rocknix-retroarch"],
       ).toBe("snes9x")
@@ -177,7 +234,7 @@ describe("importRocknixLibrary", () => {
                 launchCommand: lib.launchCommand,
               }),
             )
-            return { summary, games: yield* repository.listGames() }
+            return { summary, games: yield* repository.listPlayableEntries() }
           }),
         ),
       )
@@ -191,7 +248,7 @@ describe("importRocknixLibrary", () => {
     })
   })
 
-  it("does not import sidecar media into GameRecord metadata", async () => {
+  it("does not import sidecar media into playable metadata", async () => {
     await using lib = await withTempLibrary({
       systems: [
         {
@@ -225,12 +282,12 @@ describe("importRocknixLibrary", () => {
                   launchCommand: lib.launchCommand,
                 }),
               )
-              return yield* repository.listGames()
+              return yield* repository.listPlayableEntries()
             }),
           ),
         )
 
-        expect(games[0]?.metadata?.media).toBeUndefined()
+        expect(games[0]?.media).toBeUndefined()
       })
     } finally {
       await rm(mediaRoot, { recursive: true, force: true })

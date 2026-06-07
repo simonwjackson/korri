@@ -148,6 +148,7 @@ function candidateFor(entry: FixtureEntry): SourceCandidate {
     title: entry.title,
     url: entry.url,
     platform: entry.platform,
+    playable: playableFor(entry),
   }
 }
 
@@ -160,7 +161,33 @@ function detailsFor(entry: FixtureEntry): SourceDetails {
     url: entry.url,
     ...(entry.description ? { description: entry.description } : {}),
     ...(entry.downloadUrl ? { downloadPageUrl: entry.downloadUrl } : {}),
+    playable: playableFor(entry),
   }
+}
+
+function playableFor(entry: FixtureEntry) {
+  return {
+    id: localPlayableId(entry.id),
+    title: entry.title,
+    source: entry.sourceName,
+    releases: [
+      {
+        id: localPlayableId(entry.platform),
+        source: entry.sourceName,
+        system: entry.platform,
+        ...(entry.downloadUrl ? { target: entry.downloadUrl } : {}),
+      },
+    ],
+  }
+}
+
+function localPlayableId(value: string): string {
+  const sanitized = value
+    .trim()
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9._-]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "")
+  return sanitized.length > 0 ? sanitized : "candidate"
 }
 
 function matchesEntry(

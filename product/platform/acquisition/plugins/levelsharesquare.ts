@@ -308,6 +308,7 @@ function candidateFor(
       extension: SMBR_EXTENSION,
       name: `${id}.lvl`,
     }),
+    playable: playableFor(runtime, level),
   }
 }
 
@@ -328,8 +329,27 @@ function detailsFor(
       name: `${id}.lvl`,
       extension: SMBR_EXTENSION,
     }),
+    playable: playableFor(runtime, level),
     facets: facetsFor(runtime, level),
   })
+}
+
+function playableFor(runtime: LevelShareSquareRuntime, level: LssLevel) {
+  const id = requiredString(level._id ?? level.id, "level id")
+  return {
+    id,
+    title: requiredString(level.name ?? level.title, "level title"),
+    source: SOURCE_NAME,
+    releases: [
+      {
+        id: "smbr-level",
+        source: SOURCE_NAME,
+        system: SMBR_SYSTEM,
+        target: levelUrl(runtime, id),
+        app: "smbr",
+      },
+    ],
+  }
 }
 
 function acquireOutputFor({
