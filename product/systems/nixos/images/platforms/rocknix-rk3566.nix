@@ -32,6 +32,31 @@ let
     XDG_CACHE_HOME = "/storage/.cache";
     USER = "root";
   };
+
+  # Runtime environment that the nested Gamescope (and the game launched under
+  # it) need on RK3566 / Mali-G52. These are device-mandatory: without them
+  # Gamescope cannot bring up the GPU, and the game deadlocks. Always-on for
+  # this product so it survives reboots and the supported launch path.
+  gamescopeRuntimeEnvironment = {
+    # PanVK (Bifrost v7) is the only Vulkan path on Mali-G52; it is
+    # experimental and gated behind this env, and reports apiVersion 1.0
+    # while Gamescope requires >= 1.2, so override the reported version.
+    PAN_I_WANT_A_BROKEN_VULKAN_DRIVER = "1";
+    MESA_VK_VERSION_OVERRIDE = "1.2";
+    VK_DRIVER_FILES = "${pkgs.mesa}/share/vulkan/icd.d/panfrost_icd.aarch64.json";
+    # PanVK's Bifrost-v7 shader compiler is slow enough that precompiling the
+    # full permutation set freezes the first frames for minutes; compile on
+    # demand instead.
+    GAMESCOPE_DISABLE_PIPELINE_PRECOMPILE = "1";
+    # PanVK's drm_syncobj timelines never signal, so the host discards every
+    # frame with explicit sync on; fall back to implicit dmabuf fences.
+    GAMESCOPE_DISABLE_EXPLICIT_SYNC = "1";
+    # Route the nested game through Gamescope's Xwayland (X11) path. Native-
+    # Wayland clients (RetroArch) intermittently deadlock in their own Wayland
+    # event dispatch under Gamescope on this hardware; Xwayland is rock solid.
+    # Honoured by composeGamescopeLaunchSpec (see @platform/stream).
+    KORRI_GAMESCOPE_FORCE_XWAYLAND = "1";
+  };
 in
 {
   imports = [
@@ -94,8 +119,14 @@ in
       pkgs.moonlight-embedded
       korri.packages.${targetSystem}.smb-remastered
     ];
-    extraEnvironment = panfrostEnvironment;
+    # Gamescope is spawned by sessiond and inherits this env, so the PanVK /
+    # force-Xwayland runtime knobs must live here alongside the Panfrost ones.
+    extraEnvironment = panfrostEnvironment // gamescopeRuntimeEnvironment;
   };
+
+  # korri-server composes the gamescope launch spec (launch.rpc-handler), so it
+  # needs the force-Xwayland flag to wrap the game with `env -u WAYLAND_DISPLAY`.
+  systemd.services.korri-server.environment.KORRI_GAMESCOPE_FORCE_XWAYLAND = "1";
 
   users.users.root.linger = true;
 
