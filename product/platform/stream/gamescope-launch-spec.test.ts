@@ -1,6 +1,11 @@
-import { describe, expect, it } from "bun:test"
+import { afterEach, describe, expect, it } from "bun:test"
 
 import { composeGamescopeLaunchSpec } from "./gamescope-launch-spec"
+
+const ENV = "KORRI_GAME_STREAM_GAMESCOPE_FORCE_XWAYLAND"
+afterEach(() => {
+  delete process.env[ENV]
+})
 
 const game = {
   command: "retroarch",
@@ -59,5 +64,25 @@ describe("composeGamescopeLaunchSpec", () => {
       forceXwayland: true,
     })
     expect(spec).toEqual(game)
+  })
+
+  it(`routes through Xwayland when ${ENV}=1 (no explicit option)`, () => {
+    process.env[ENV] = "1"
+    const spec = composeGamescopeLaunchSpec(game, { enabled: true })
+    const sep = spec.args.indexOf("--")
+    expect(spec.args.slice(sep + 1, sep + 4)).toEqual([
+      "env",
+      "-u",
+      "WAYLAND_DISPLAY",
+    ])
+  })
+
+  it(`lets an explicit forceXwayland:false override ${ENV}=1`, () => {
+    process.env[ENV] = "1"
+    const spec = composeGamescopeLaunchSpec(game, {
+      enabled: true,
+      forceXwayland: false,
+    })
+    expect(spec.args).not.toContain("WAYLAND_DISPLAY")
   })
 })
