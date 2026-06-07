@@ -4,7 +4,11 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Effect } from "effect"
 
-import { makeKorriLibraryDbConfig, openKorriLibraryDb } from "./library-db"
+import {
+  LOCAL_HOST_KEY,
+  makeKorriLibraryDbConfig,
+  openKorriLibraryDb,
+} from "./library-db"
 
 async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
   const root = await mkdtemp(join(tmpdir(), "korri-proseql-library-"))
@@ -16,25 +20,28 @@ async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
 }
 
 describe("makeKorriLibraryDbConfig", () => {
-  it("declares the collections expected by the cascade and game-assets models", () => {
+  it("declares only the readable canonical persisted sections", () => {
     const config = makeKorriLibraryDbConfig("/tmp/x")
     const names = Object.keys(config.collections).sort()
     expect(names).toEqual([
       "apps",
-      "artifacts",
       "collections",
-      "config",
-      "game-asset-assignments",
-      "game-assets",
-      "games",
-      "launchers",
-      "modules",
+      "host",
+      "library",
+      "profiles",
+      "runtimes",
+      "sources",
+      "storage",
       "systems",
       "users",
     ])
+    expect(names).not.toContain("config")
+    expect(names).not.toContain("games")
+    expect(names).not.toContain("launchers")
+    expect(names).not.toContain("modules")
   })
 
-  it("declares a single 'documents' source rooted at the library directory", () => {
+  it("declares a single strict documents source rooted at the library directory", () => {
     const config = makeKorriLibraryDbConfig("/tmp/x")
     expect(config.sources.length).toBe(1)
     const src = config.sources[0]
@@ -44,7 +51,7 @@ describe("makeKorriLibraryDbConfig", () => {
     expect(src?.outbox).toBe("library.yaml")
   })
 
-  it("uses derivedFromKey for every collection", () => {
+  it("uses derivedFromKey for canonical map collections and the host storage shim", () => {
     const config = makeKorriLibraryDbConfig("/tmp/x")
     for (const [name, col] of Object.entries(config.collections)) {
       expect(col.id, name).toEqual({ kind: "derivedFromKey", field: "id" })
@@ -53,83 +60,199 @@ describe("makeKorriLibraryDbConfig", () => {
 })
 
 describe("openKorriLibraryDb — empty root", () => {
-  it("opens an empty root as empty collections", async () => {
+  it("opens an empty root as empty canonical collections", async () => {
     await withTempRoot(async root => {
       const counts = await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
             const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
             return {
-              config: (yield* Effect.promise(
-                () => db.config.query().runPromise,
-              )).length,
-              users: (yield* Effect.promise(() => db.users.query().runPromise))
+              host: (yield* Effect.promise(() => db.host.query().runPromise))
                 .length,
+              storage: (yield* Effect.promise(
+                () => db.storage.query().runPromise,
+              )).length,
+              sources: (yield* Effect.promise(
+                () => db.sources.query().runPromise,
+              )).length,
               systems: (yield* Effect.promise(
                 () => db.systems.query().runPromise,
               )).length,
-              launchers: (yield* Effect.promise(
-                () => db.launchers.query().runPromise,
-              )).length,
               apps: (yield* Effect.promise(() => db.apps.query().runPromise))
                 .length,
-              modules: (yield* Effect.promise(
-                () => db.modules.query().runPromise,
+              runtimes: (yield* Effect.promise(
+                () => db.runtimes.query().runPromise,
               )).length,
-              games: (yield* Effect.promise(() => db.games.query().runPromise))
-                .length,
-              artifacts: (yield* Effect.promise(
-                () => db.artifacts.query().runPromise,
-              )).length,
-              "game-assets": (yield* Effect.promise(
-                () => db["game-assets"].query().runPromise,
-              )).length,
-              "game-asset-assignments": (yield* Effect.promise(
-                () => db["game-asset-assignments"].query().runPromise,
+              profiles: (yield* Effect.promise(
+                () => db.profiles.query().runPromise,
               )).length,
               collections: (yield* Effect.promise(
                 () => db.collections.query().runPromise,
+              )).length,
+              users: (yield* Effect.promise(() => db.users.query().runPromise))
+                .length,
+              library: (yield* Effect.promise(
+                () => db.library.query().runPromise,
               )).length,
             }
           }),
         ),
       )
       expect(counts).toEqual({
-        config: 0,
-        users: 0,
+        host: 0,
+        storage: 0,
+        sources: 0,
         systems: 0,
-        launchers: 0,
         apps: 0,
-        modules: 0,
-        games: 0,
-        artifacts: 0,
-        "game-assets": 0,
-        "game-asset-assignments": 0,
+        runtimes: 0,
+        profiles: 0,
         collections: 0,
+        users: 0,
+        library: 0,
       })
     })
   })
 })
 
-describe("openKorriLibraryDb — single-file multi-collection round-trip", () => {
-  it("persists multiple collections into one outbox YAML file (round-trip)", async () => {
+describe("openKorriLibraryDb — readable YAML contract", () => {
+  it("loads a plain host block plus map-keyed canonical sections", async () => {
+    await withTempRoot(async root => {
+      await writeFile(
+        join(root, "library.yaml"),
+        [
+          "host:",
+          "  title: AKA desktop host",
+          "  gamescope:",
+          "    enabled: true",
+          "storage:",
+          "  roms:",
+          "    root: /games",
+          "sources:",
+          "  roms:",
+          "    title: Local ROM library",
+          "    kind: [files]",
+          "    storage: roms",
+          "systems:",
+          "  genesis:",
+          "    name: Sega Genesis",
+          "apps:",
+          "  retroarch:",
+          "    command: retroarch",
+          '    args: ["-L", "{runtime.path}", "{content.path}"]',
+          "    systems: [genesis]",
+          "runtimes:",
+          "  genesis-plus-gx:",
+          "    kind: libretro-core",
+          "    path: /etc/korri/cores/genesis_plus_gx_libretro.so",
+          "profiles:",
+          "  handheld:",
+          "    title: Handheld 640x480",
+          "collections:",
+          "  handheld:",
+          "    title: Handheld friendly",
+          "users:",
+          "  simon:",
+          "    displayName: Simon",
+          "library:",
+          "  sonic-the-hedgehog:",
+          "    title: Sonic the Hedgehog",
+          "    source: roms",
+          "    collections: [handheld]",
+          "    releases:",
+          "      - id: genesis",
+          "        system: genesis",
+          "        target: genesis/Sonic The Hedgehog.md",
+          "        app: retroarch",
+          "        runtime: genesis-plus-gx",
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+
+      const loaded = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            return {
+              host: yield* db.host.findById(LOCAL_HOST_KEY),
+              source: yield* db.sources.findById("roms"),
+              runtime: yield* db.runtimes.findById("genesis-plus-gx"),
+              item: yield* db.library.findById("sonic-the-hedgehog"),
+            }
+          }),
+        ),
+      )
+
+      expect(loaded.host.title).toBe("AKA desktop host")
+      expect(loaded.source.kind).toEqual(["files"])
+      expect(loaded.runtime.path).toBe(
+        "/etc/korri/cores/genesis_plus_gx_libretro.so",
+      )
+      expect(loaded.item.releases.map(release => release.id)).toEqual([
+        "genesis",
+      ])
+    })
+  })
+
+  it("decodes the checked-in readable example fixture", async () => {
+    await withTempRoot(async root => {
+      const example = await readFile(
+        "korri-catalog-display-metadata.example.yaml",
+        "utf8",
+      )
+      await writeFile(join(root, "library.yaml"), example, "utf8")
+
+      const loaded = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            return {
+              host: yield* db.host.findById(LOCAL_HOST_KEY),
+              downwell: yield* db.library.findById("downwell"),
+              sonic: yield* db.library.findById("sonic-the-hedgehog"),
+              gbaPackage: yield* db.library.findById("super-mario-advance-2"),
+            }
+          }),
+        ),
+      )
+
+      expect(loaded.host.title).toBe("AKA desktop host")
+      expect(loaded.downwell.releases[0]?.target).toBe(
+        "steam://rungameid/360740",
+      )
+      expect(loaded.sonic.releases.map(release => release.id)).toEqual([
+        "genesis",
+        "windows-known",
+      ])
+      expect(loaded.gbaPackage.contains?.["super-mario-world"]?.relation).toBe(
+        "gba-port",
+      )
+    })
+  })
+
+  it("persists host as a plain block and peer sections as maps", async () => {
     await withTempRoot(async root => {
       await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
             const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
-            yield* db.games.create({
-              id: "fzero",
-              system: "snes",
-              contentPath: "/storage/roms/snes/f-zero.smc",
-              metadata: { name: "F-Zero" },
+            yield* db.host.create({ id: LOCAL_HOST_KEY, title: "AKA" })
+            yield* db.storage.create({ id: "roms", root: "/games" })
+            yield* db.sources.create({
+              id: "roms",
+              kind: ["files"],
+              storage: "roms",
             })
-            yield* db.systems.create({ id: "snes", name: "Super Nintendo" })
-            yield* db.launchers.create({
-              id: "retroarch",
-              command: "/usr/bin/retroarch",
-              args: ["{contentPath}"],
-              systems: ["snes"],
+            yield* db.library.create({
+              id: "sonic-the-hedgehog",
+              title: "Sonic the Hedgehog",
+              releases: [
+                {
+                  id: "genesis",
+                  system: "genesis",
+                  target: "genesis/Sonic.md",
+                },
+              ],
             })
             yield* Effect.promise(() => db.flush())
           }),
@@ -137,86 +260,93 @@ describe("openKorriLibraryDb — single-file multi-collection round-trip", () =>
       )
 
       const outbox = await readFile(join(root, "library.yaml"), "utf8")
-      expect(outbox).toContain("games:")
-      expect(outbox).toContain("systems:")
-      expect(outbox).toContain("launchers:")
-      expect(outbox).toContain("fzero:")
-      expect(outbox).toContain("snes:")
-      expect(outbox).toContain("retroarch:")
-      // Key-derived id rule: no nested `id:` field for each record.
-      expect(outbox).not.toContain("  id: fzero")
-
-      // Reopen and read.
-      const reopened = await Effect.runPromise(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
-            return {
-              game: yield* db.games.findById("fzero"),
-              system: yield* db.systems.findById("snes"),
-              launcher: yield* db.launchers.findById("retroarch"),
-            }
-          }),
-        ),
-      )
-      expect(reopened.game.system).toBe("snes")
-      expect(reopened.game.contentPath).toBe("/storage/roms/snes/f-zero.smc")
-      expect(reopened.system.name).toBe("Super Nintendo")
-      expect(reopened.launcher.systems).toEqual(["snes"])
-    })
-  })
-
-  it("merges two files contributing to the same collection", async () => {
-    await withTempRoot(async root => {
-      await writeFile(
-        join(root, "snes.yaml"),
-        [
-          "systems:",
-          "  snes:",
-          "    name: Super Nintendo",
-          "games:",
-          "  fzero:",
-          "    system: snes",
-          "    contentPath: /storage/roms/snes/f-zero.smc",
-          "",
-        ].join("\n"),
-        "utf8",
-      )
-      await writeFile(
-        join(root, "psx.yaml"),
-        [
-          "systems:",
-          "  psx:",
-          "    name: PlayStation",
-          "games:",
-          "  ridge-racer:",
-          "    system: psx",
-          "    contentPath: /storage/roms/psx/ridge-racer.bin",
-          "",
-        ].join("\n"),
-        "utf8",
-      )
-
-      const counts = await Effect.runPromise(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
-            return {
-              games: (yield* Effect.promise(() => db.games.query().runPromise))
-                .length,
-              systems: (yield* Effect.promise(
-                () => db.systems.query().runPromise,
-              )).length,
-            }
-          }),
-        ),
-      )
-      expect(counts).toEqual({ games: 2, systems: 2 })
+      expect(outbox).toContain("host:\n  title: AKA")
+      expect(outbox).not.toContain(`${LOCAL_HOST_KEY}:\n    title: AKA`)
+      expect(outbox).toContain("storage:\n  roms:")
+      expect(outbox).toContain("sources:\n  roms:")
+      expect(outbox).toContain("library:\n  sonic-the-hedgehog:")
+      expect(outbox).not.toContain("games:")
+      expect(outbox).not.toContain("launchers:")
+      expect(outbox).not.toContain("modules:")
+      expect(outbox).not.toContain("config:")
     })
   })
 })
 
 describe("openKorriLibraryDb — strict-mode rejections", () => {
+  it("rejects old persisted top-level collection keys", async () => {
+    for (const key of ["games", "launchers", "modules", "config"] as const) {
+      await withTempRoot(async root => {
+        await mkdir(root, { recursive: true })
+        await writeFile(
+          join(root, "library.yaml"),
+          [`${key}:`, "  old:", "    title: legacy", ""].join("\n"),
+          "utf8",
+        )
+        const exit = await Effect.runPromiseExit(
+          Effect.scoped(openKorriLibraryDb({ root, writeDebounce: 1 })),
+        )
+        expect(exit._tag, key).toBe("Failure")
+      })
+    }
+  })
+
+  it("rejects unknown keys inside persisted readable records", async () => {
+    await withTempRoot(async root => {
+      await writeFile(
+        join(root, "library.yaml"),
+        ["host:", "  title: AKA", "  role: desktop", ""].join("\n"),
+        "utf8",
+      )
+      const exit = await Effect.runPromiseExit(
+        Effect.scoped(openKorriLibraryDb({ root, writeDebounce: 1 })),
+      )
+      expect(exit._tag).toBe("Failure")
+    })
+  })
+
+  it("surfaces removed legacy collections as explicit failures", async () => {
+    await withTempRoot(async root => {
+      const exit = await Effect.runPromiseExit(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            return yield* db.games.create({
+              id: "legacy",
+              system: "snes",
+              contentPath: "/storage/legacy.sfc",
+            })
+          }),
+        ),
+      )
+
+      expect(exit._tag).toBe("Failure")
+      expect(String(exit)).toContain("legacy library collection 'games'")
+    })
+  })
+
+  it("surfaces removed legacy collections inside transactions", async () => {
+    await withTempRoot(async root => {
+      const exit = await Effect.runPromiseExit(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            return yield* db.$transaction(tx =>
+              tx.games.create({
+                id: "legacy",
+                system: "snes",
+                contentPath: "/storage/legacy.sfc",
+              }),
+            )
+          }),
+        ),
+      )
+
+      expect(exit._tag).toBe("Failure")
+      expect(String(exit)).toContain("legacy library collection 'games'")
+    })
+  })
+
   it("rejects a YAML file with an unknown top-level collection key", async () => {
     await withTempRoot(async root => {
       await mkdir(root, { recursive: true })
@@ -227,25 +357,6 @@ describe("openKorriLibraryDb — strict-mode rejections", () => {
       )
       const exit = await Effect.runPromiseExit(
         Effect.scoped(openKorriLibraryDb({ root, writeDebounce: 1 })),
-      )
-      expect(exit._tag).toBe("Failure")
-    })
-  })
-
-  it("rejects a config: section containing any key other than 'global'", async () => {
-    await withTempRoot(async root => {
-      await writeFile(
-        join(root, "library.yaml"),
-        ["config:", "  notglobal:", "    launcher: retroarch", ""].join("\n"),
-        "utf8",
-      )
-      const exit = await Effect.runPromiseExit(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
-            return yield* Effect.promise(() => db.config.query().runPromise)
-          }),
-        ),
       )
       expect(exit._tag).toBe("Failure")
     })

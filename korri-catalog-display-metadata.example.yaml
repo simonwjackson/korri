@@ -1,273 +1,158 @@
-# Korri catalog/library config — compact MVP shape for iteration.
+# Korri readable library schema example.
 #
-# This is intentionally smaller than the previous example. It mirrors the
-# current Korri library config collections, then adds the smallest proposed
-# release/display metadata surface needed to discuss Steam + 4:3/640x480.
-#
-# Current cascade order, least -> most specific:
-#   config.global -> users.<id> -> systems.<id> -> apps/launchers.<id>
-#   -> games.<id> -> presets.<id> -> ephemeral launch override
-#
-# Current inheritable fields:
-#   launch, launcher, gamescope, env, cwd, argsAppend, patches, byLauncher
-#
-# Proposed MVP addition:
-#   games.<id>.releases.<releaseId>
-# Release data is metadata/localization for a storefront/platform build.
-# Game identity stays at games.<id>; concrete local paths stay in installs.
+# This file shows the canonical human-curated shape: users edit these sections
+# directly; Korri does not translate them into the retired games/launchers/
+# modules/config.global model.
 
-config:
-  global:
-    # Global defaults. More specific layers can override or append.
-    launch:
-      app: steam
-    gamescope:
-      enabled: true
-      backend: wayland
-      exposeWayland: true
-      args: ["-W", "640", "-H", "480"]
-    env:
-      SDL_VIDEODRIVER: x11
-    cwd: null
-    argsAppend: []
-    patches: []
+host:
+  title: AKA desktop host
+  gamescope:
+    enabled: true
+    backend: wayland
+    exposeWayland: true
 
-    presets:
-      handheld-640x480:
-        name: "Handheld 640x480"
-        gamescope:
-          args: ["-W", "640", "-H", "480"]
+storage:
+  steam:
+    root: /home/simon/.local/share/Steam
+    path:
+      apps: steamapps
+      compat: steamapps/compatdata
 
-      tv-1080p:
-        name: "TV 1080p"
-        gamescope:
-          args: ["-W", "1920", "-H", "1080"]
+  roms:
+    root: /games
 
-users:
-  simon:
-    displayName: Simon
-    # User layer participates in the same cascade.
-    gamescope:
-      enabled: true
-    presets:
-      prefer-handheld:
-        name: "Prefer handheld"
-        gamescope:
-          args: ["-f"]
+sources:
+  steam:
+    title: Steam
+    kind: [service, metadata]
+    storage: steam
+
+  roms:
+    title: Local ROM library
+    kind: [files]
+    storage: roms
+
+  pcgamingwiki:
+    title: PCGamingWiki
+    kind: [metadata]
 
 systems:
-  steam-windows:
-    name: "Steam / Windows"
-    launch:
-      app: steam
-    gamescope:
-      enabled: true
+  windows:
+    name: Windows PC
 
-  steam-linux:
-    name: "Steam / Linux"
-    launch:
-      app: steam
-    gamescope:
-      enabled: true
+  linux:
+    name: Linux PC
 
-  snes:
-    name: Super Nintendo
-    launch:
-      app: retroarch
-      module: snes9x
-    cores:
-      retroarch: snes9x
+  genesis:
+    name: Sega Genesis
+
+  gba:
+    name: Game Boy Advance
 
 apps:
   steam:
-    # App records are launcher-like runnable adapters in the current config.
     command: steam
-    args: ["steam://rungameid/{settings.appid}"]
-    systems: [steam-windows, steam-linux]
-    policy:
-      allowedCommands: [steam]
-    gamescope:
-      enabled: true
+    args: ["{target}"]
+    systems: [windows, linux]
 
   retroarch:
     command: retroarch
-    args: ["-L", "{module}", "{contentPath}"]
-    systems: [snes]
-    policy:
-      allowedCommands: [retroarch]
+    args: ["-L", "{runtime.path}", "{content.path}"]
+    systems: [genesis, gba]
 
-launchers:
-  # Legacy launcher records still exist. Newer config should prefer apps,
-  # but include this so a "full current config" shows the old surface too.
-  retroarch:
-    command: retroarch
-    args: ["-L", "{core}", "{contentPath}"]
-    systems: [snes]
-
-modules:
-  snes9x:
+runtimes:
+  genesis-plus-gx:
     kind: libretro-core
-    path: /run/current-system/sw/lib/libretro/snes9x_libretro.so
+    path: /run/current-system/sw/lib/libretro/genesis_plus_gx_libretro.so
+
+  mgba:
+    kind: libretro-core
+    path: /run/current-system/sw/lib/libretro/mgba_libretro.so
+
+profiles:
+  handheld-640x480:
+    title: Handheld 640x480
+    gamescope:
+      args: ["-W", "640", "-H", "480"]
+
+  tv-1080p:
+    title: TV 1080p
+    gamescope:
+      args: ["-W", "1920", "-H", "1080"]
 
 collections:
-  handheld-4x3:
-    title: "Good on 3.5 inch 4:3"
-    description: "Curated candidates for 640x480 handheld streaming."
+  handheld:
+    title: Handheld friendly
+    description: Curated candidates for 640x480 handheld play.
 
   steam:
     title: Steam
 
-# Local concrete installs: proposed small MVP surface.
-# These are intentionally separate from games and releases so global metadata
-# does not accidentally contain one machine's absolute paths.
-installs:
-  aka-steam:
-    provider: steam
-    device: aka
-    roots:
-      library: /home/simon/.local/share/Steam
-      steamapps: /home/simon/.local/share/Steam/steamapps
-      compatdata: /home/simon/.local/share/Steam/steamapps/compatdata
+  sonic:
+    title: Sonic
 
-games:
+users:
+  simon:
+    displayName: Simon
+    gamescope:
+      enabled: true
+
+library:
   downwell:
-    system: steam-windows
-    metadata:
-      name: Downwell
-      tags: [steam, platformer, arcade, 4x3]
-    collections: [steam, handheld-4x3]
-    launch:
-      app: steam
-      settings:
-        appid: "360740"
-        release: steam-windows
-    presets:
-      handheld-640x480:
-        name: "Downwell handheld"
-        gamescope:
-          args: ["-W", "640", "-H", "480"]
-
-    # Proposed MVP metadata. Release ids are local to the game.
+    title: Downwell
+    source: steam
+    collections: [steam, handheld]
     releases:
-      steam-windows:
-        provider: steam
-        externalId: "360740"
-        platform: windows
-        install:
-          installId: aka-steam
-          appManifest: appmanifest_360740.acf
-          installDir: common/Downwell
-          executable: Downwell.exe
+      - id: windows
+        system: windows
+        target: steam://rungameid/360740
+        app: steam
         display:
-          aspect:
-            "4:3": supported
-            arbitrary: unknown
-          resolution:
-            "640x480": likely
-            arbitrary: unknown
-          notes: "Steam 4:3 curator says supported."
-          evidence:
-            - source: steam-curator-4x3
-              verdict: supported
-              note: Supported
+          aspect: [1.333333]
+          resolution: unrestricted
+          sources:
+            steam-4x3-curator: supported
 
-  cuphead:
-    system: steam-windows
-    metadata:
-      name: Cuphead
-      tags: [steam, platformer, arcade, 4x3-caveat]
-    collections: [steam, handheld-4x3]
-    launch:
-      app: steam
-      settings:
-        appid: "268910"
-        release: steam-windows
-    presets:
-      handheld-640x480:
-        name: "Cuphead handheld"
-        gamescope:
-          args: ["-W", "640", "-H", "480"]
-
+  sonic-the-hedgehog:
+    title: Sonic the Hedgehog
+    collections: [sonic, handheld]
     releases:
-      steam-windows:
-        provider: steam
-        externalId: "268910"
-        platform: windows
-        install:
-          installId: aka-steam
-          appManifest: appmanifest_268910.acf
-          installDir: common/Cuphead
-          executable: Cuphead.exe
+      - id: genesis
+        source: roms
+        system: genesis
+        target: genesis/Sonic The Hedgehog.md
+        app: retroarch
+        runtime: genesis-plus-gx
         display:
-          aspect:
-            "4:3": caveat
-            "16:9": native
-            arbitrary: unknown
-          resolution:
-            "640x480": caveat
-            arbitrary: unknown
-          notes: "4:3 requires a binary/config hack; do not automate without explicit product decision."
-          evidence:
-            - source: steam-curator-4x3
-              verdict: caveat
-              note: "Can be forced through hex editing Assembly-CSharp.dll."
+          aspect: [1.333333]
+          resolution: unrestricted
+          sources:
+            hardware: native
 
-  hollow-knight:
-    system: steam-linux
-    metadata:
-      name: Hollow Knight
-      tags: [steam, metroidvania, flexible-aspect-unverified]
-    collections: [steam, handheld-4x3]
-    launch:
-      app: steam
-      settings:
-        appid: "367520"
-        release: steam-linux
+      - id: windows-known
+        source: pcgamingwiki
+        system: windows
+        display:
+          aspect: unrestricted
+          sources:
+            pcgamingwiki: inferred
 
+  super-mario-advance-2:
+    title: "Super Mario Advance 2: Super Mario World"
+    source: roms
+    collections: [handheld]
+    contains:
+      super-mario-world:
+        title: Super Mario World
+        version-of: super-mario-world
+        relation: gba-port
+        collections: [handheld]
+      mario-bros:
+        title: Mario Bros.
+        relation: bundled-extra
     releases:
-      steam-linux:
-        provider: steam
-        externalId: "367520"
-        platform: linux
-        install:
-          installId: aka-steam
-          appManifest: appmanifest_367520.acf
-          installDir: "common/Hollow Knight"
-          executable: hollow_knight.x86_64
-        display:
-          aspect:
-            "4:3": unknown
-            "16:9": native
-            arbitrary: likely
-          resolution:
-            "640x480": unknown
-            arbitrary: likely
-          notes: "PCGamingWiki-style flexible signal; needs direct 640x480 test."
-          evidence:
-            - source: pcgamingwiki
-              verdict: inferred-flexible
-              note: "Ultrawide/flexible aspect signal is not direct 4:3 confirmation."
-
-  super-mario-world:
-    system: snes
-    contentPath: /games/snes/Super Mario World.smc
-    metadata:
-      name: Super Mario World
-      tags: [snes, rom, native-4x3]
-    collections: [handheld-4x3]
-    launch:
-      app: retroarch
-      module: snes9x
-
-    releases:
-      rom-snes:
-        provider: local-rom
-        platform: snes
-        display:
-          aspect:
-            "4:3": native
-            arbitrary: unsupported
-          resolution:
-            "256x224": native
-            "640x480": scaled
-          notes: "Example non-Steam release: fixed internal console resolution scaled to the target."
+      - id: gba
+        system: gba
+        target: gba/Super Mario Advance 2.gba
+        app: retroarch
+        runtime: mgba
