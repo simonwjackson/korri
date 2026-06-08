@@ -285,6 +285,57 @@ const representativeRetroArchPolicy: RetroArchPolicy = {
       "2": { libretroDevice: 257, joypadIndex: 1 },
     },
   },
+  menu: {
+    showStartScreen: false,
+    pauseLibretro: true,
+    mouseEnable: false,
+    pointerEnable: true,
+    timedateEnable: true,
+    batteryLevelEnable: true,
+    coreEnable: true,
+    dynamicWallpaper: false,
+    wallpaper: null,
+    screensaverTimeoutSeconds: 300,
+  },
+  saves: {
+    autosaveIntervalSeconds: 60,
+    autoLoadState: true,
+    autoSaveState: true,
+    autoIndex: true,
+    maxKeep: 10,
+    thumbnailEnable: true,
+    sortSavefiles: true,
+    sortSavestates: true,
+    savefilesInContentDir: false,
+    savestatesInContentDir: false,
+    systemfilesInContentDir: false,
+    blockSramOverwrite: true,
+    saveFileCompression: true,
+    stateFileCompression: true,
+  },
+  rewind: {
+    enable: true,
+    granularity: 2,
+    bufferSizeMb: 20,
+    bufferSizeStepMb: 5,
+    autoStride: true,
+  },
+  playback: {
+    pauseNonactive: true,
+    pauseOnDisconnect: false,
+    slowmotionRatio: 3,
+    fastforwardRatio: 0,
+    fastforwardFrameskip: true,
+  },
+  latency: {
+    runAhead: {
+      enable: true,
+      frames: 2,
+      secondaryInstance: true,
+      hideWarnings: true,
+    },
+    preemptiveFrames: { enable: true, frames: 3 },
+  },
   extraSettings: { video_font_enable: false },
   extraArgs: ["--features"],
 }
@@ -370,6 +421,66 @@ describe("RetroArchPolicy", () => {
     expect(policy.input?.ports?.["1"]?.joypadIndex).toBe(0)
   })
 
+  it("decodes menu saves rewind playback and gameplay latency fields", () => {
+    const policy = decodeRetroArchPolicy({
+      menu: {
+        showStartScreen: false,
+        pauseLibretro: true,
+        mouseEnable: false,
+        pointerEnable: true,
+        timedateEnable: true,
+        batteryLevelEnable: true,
+        coreEnable: true,
+        dynamicWallpaper: false,
+        wallpaper: null,
+        screensaverTimeoutSeconds: 300,
+      },
+      saves: {
+        autosaveIntervalSeconds: 60,
+        autoLoadState: true,
+        autoSaveState: true,
+        autoIndex: true,
+        maxKeep: 10,
+        thumbnailEnable: true,
+        sortSavefiles: true,
+        sortSavestates: true,
+        savefilesInContentDir: false,
+        savestatesInContentDir: false,
+        systemfilesInContentDir: false,
+        blockSramOverwrite: true,
+        saveFileCompression: true,
+        stateFileCompression: true,
+      },
+      rewind: {
+        enable: true,
+        granularity: 2,
+        bufferSizeMb: 20,
+        bufferSizeStepMb: 5,
+        autoStride: true,
+      },
+      playback: {
+        pauseNonactive: true,
+        pauseOnDisconnect: false,
+        slowmotionRatio: 3,
+        fastforwardRatio: 0,
+        fastforwardFrameskip: true,
+      },
+      latency: {
+        runAhead: {
+          enable: true,
+          frames: 2,
+          secondaryInstance: true,
+          hideWarnings: true,
+        },
+        preemptiveFrames: { enable: true, frames: 3 },
+      },
+    })
+
+    expect(policy.rewind?.bufferSizeMb).toBe(20)
+    expect(policy.latency?.runAhead?.frames).toBe(2)
+    expect(policy.latency?.preemptiveFrames?.frames).toBe(3)
+  })
+
   it("rejects expanded tuning values outside the typed contract", () => {
     for (const badPolicy of [
       { video: { sync: { frameDelay: 100 } } },
@@ -378,6 +489,17 @@ describe("RetroArchPolicy", () => {
       { input: { pollTypeBehavior: -1 } },
       { input: { ports: { "0": { joypadIndex: 0 } } } },
       { input: { ports: { "1": { a: "x" } } } },
+      { menu: { driver: "ozone" } },
+      { menu: { screensaverTimeoutSeconds: -1 } },
+      { saves: { autosaveIntervalSeconds: -1 } },
+      { saves: { maxKeep: -1 } },
+      { rewind: { bufferSizeMb: 0 } },
+      { rewind: { granularity: 0 } },
+      { playback: { slowmotionRatio: 0 } },
+      { playback: { fastforwardRatio: -1 } },
+      { latency: { frameDelay: 1 } },
+      { latency: { runAhead: { frames: -1 } } },
+      { latency: { preemptiveFrames: { frames: -1 } } },
     ]) {
       expect(() => decodeRetroArchPolicy(badPolicy)).toThrow()
     }

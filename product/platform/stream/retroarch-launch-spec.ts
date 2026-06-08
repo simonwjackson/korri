@@ -155,6 +155,46 @@ const RETROARCH_TYPED_CONFIG_KEYS = [
   ["input_libretro_device_pN", "input.ports.*.libretroDevice"],
   ["input_playerN_joypad_index", "input.ports.*.joypadIndex"],
   ["input_playerN_analog_dpad_mode", "input.ports.*.analogDpadMode"],
+  ["menu_show_start_screen", "menu.showStartScreen"],
+  ["menu_pause_libretro", "menu.pauseLibretro"],
+  ["menu_mouse_enable", "menu.mouseEnable"],
+  ["menu_pointer_enable", "menu.pointerEnable"],
+  ["menu_timedate_enable", "menu.timedateEnable"],
+  ["menu_battery_level_enable", "menu.batteryLevelEnable"],
+  ["menu_core_enable", "menu.coreEnable"],
+  ["menu_dynamic_wallpaper_enable", "menu.dynamicWallpaper"],
+  ["menu_wallpaper", "menu.wallpaper"],
+  ["menu_screensaver_timeout", "menu.screensaverTimeoutSeconds"],
+  ["autosave_interval", "saves.autosaveIntervalSeconds"],
+  ["savestate_auto_load", "saves.autoLoadState"],
+  ["savestate_auto_save", "saves.autoSaveState"],
+  ["savestate_auto_index", "saves.autoIndex"],
+  ["savestate_max_keep", "saves.maxKeep"],
+  ["savestate_thumbnail_enable", "saves.thumbnailEnable"],
+  ["sort_savefiles_enable", "saves.sortSavefiles"],
+  ["sort_savestates_enable", "saves.sortSavestates"],
+  ["savefiles_in_content_dir", "saves.savefilesInContentDir"],
+  ["savestates_in_content_dir", "saves.savestatesInContentDir"],
+  ["systemfiles_in_content_dir", "saves.systemfilesInContentDir"],
+  ["block_sram_overwrite", "saves.blockSramOverwrite"],
+  ["save_file_compression", "saves.saveFileCompression"],
+  ["savestate_file_compression", "saves.stateFileCompression"],
+  ["rewind_enable", "rewind.enable"],
+  ["rewind_granularity", "rewind.granularity"],
+  ["rewind_buffer_size", "rewind.bufferSizeMb"],
+  ["rewind_buffer_size_step", "rewind.bufferSizeStepMb"],
+  ["rewind_auto_stride", "rewind.autoStride"],
+  ["pause_nonactive", "playback.pauseNonactive"],
+  ["pause_on_disconnect", "playback.pauseOnDisconnect"],
+  ["slowmotion_ratio", "playback.slowmotionRatio"],
+  ["fastforward_ratio", "playback.fastforwardRatio"],
+  ["fastforward_frameskip", "playback.fastforwardFrameskip"],
+  ["run_ahead_enabled", "latency.runAhead.enable"],
+  ["run_ahead_frames", "latency.runAhead.frames"],
+  ["run_ahead_secondary_instance", "latency.runAhead.secondaryInstance"],
+  ["run_ahead_hide_warnings", "latency.runAhead.hideWarnings"],
+  ["preemptive_frames_enable", "latency.preemptiveFrames.enable"],
+  ["preemptive_frames", "latency.preemptiveFrames.frames"],
 ] as const
 
 assertUniqueRetroArchTypedConfigKeys(RETROARCH_TYPED_CONFIG_KEYS)
@@ -229,6 +269,11 @@ function renderRetroArchSettings(
   appendVideoSettings(writer, policy)
   appendAudioSettings(writer, policy)
   appendInputSettings(writer, policy)
+  appendMenuSettings(writer, policy)
+  appendSaveSettings(writer, policy)
+  appendRewindSettings(writer, policy)
+  appendPlaybackSettings(writer, policy)
+  appendLatencySettings(writer, policy)
 
   const settings = [...writer.settings]
   for (const [key, value] of Object.entries(policy.extraSettings ?? {})) {
@@ -416,6 +461,11 @@ function appendPathSettings(
 type RetroArchVideoPolicy = NonNullable<RetroArchPolicy["video"]>
 type RetroArchAudioPolicy = NonNullable<RetroArchPolicy["audio"]>
 type RetroArchInputPolicy = NonNullable<RetroArchPolicy["input"]>
+type RetroArchMenuPolicy = NonNullable<RetroArchPolicy["menu"]>
+type RetroArchSavesPolicy = NonNullable<RetroArchPolicy["saves"]>
+type RetroArchRewindPolicy = NonNullable<RetroArchPolicy["rewind"]>
+type RetroArchPlaybackPolicy = NonNullable<RetroArchPolicy["playback"]>
+type RetroArchLatencyPolicy = NonNullable<RetroArchPolicy["latency"]>
 type SettingSelector<T> = (source: T) => LaunchSettingValue | null | undefined
 
 type SettingEntry<T> = readonly [string, SettingSelector<T>]
@@ -549,6 +599,68 @@ const INPUT_OVERLAY_SETTINGS: readonly SettingEntry<
   ["input_overlay_hide_in_menu", overlay => overlay.hideInMenu],
 ]
 
+const MENU_SETTINGS: readonly SettingEntry<RetroArchMenuPolicy>[] = [
+  ["menu_show_start_screen", menu => menu.showStartScreen],
+  ["menu_pause_libretro", menu => menu.pauseLibretro],
+  ["menu_mouse_enable", menu => menu.mouseEnable],
+  ["menu_pointer_enable", menu => menu.pointerEnable],
+  ["menu_timedate_enable", menu => menu.timedateEnable],
+  ["menu_battery_level_enable", menu => menu.batteryLevelEnable],
+  ["menu_core_enable", menu => menu.coreEnable],
+  ["menu_dynamic_wallpaper_enable", menu => menu.dynamicWallpaper],
+  ["menu_wallpaper", menu => menu.wallpaper],
+  ["menu_screensaver_timeout", menu => menu.screensaverTimeoutSeconds],
+]
+
+const SAVE_SETTINGS: readonly SettingEntry<RetroArchSavesPolicy>[] = [
+  ["autosave_interval", saves => saves.autosaveIntervalSeconds],
+  ["savestate_auto_load", saves => saves.autoLoadState],
+  ["savestate_auto_save", saves => saves.autoSaveState],
+  ["savestate_auto_index", saves => saves.autoIndex],
+  ["savestate_max_keep", saves => saves.maxKeep],
+  ["savestate_thumbnail_enable", saves => saves.thumbnailEnable],
+  ["sort_savefiles_enable", saves => saves.sortSavefiles],
+  ["sort_savestates_enable", saves => saves.sortSavestates],
+  ["savefiles_in_content_dir", saves => saves.savefilesInContentDir],
+  ["savestates_in_content_dir", saves => saves.savestatesInContentDir],
+  ["systemfiles_in_content_dir", saves => saves.systemfilesInContentDir],
+  ["block_sram_overwrite", saves => saves.blockSramOverwrite],
+  ["save_file_compression", saves => saves.saveFileCompression],
+  ["savestate_file_compression", saves => saves.stateFileCompression],
+]
+
+const REWIND_SETTINGS: readonly SettingEntry<RetroArchRewindPolicy>[] = [
+  ["rewind_enable", rewind => rewind.enable],
+  ["rewind_granularity", rewind => rewind.granularity],
+  ["rewind_buffer_size", rewind => rewind.bufferSizeMb],
+  ["rewind_buffer_size_step", rewind => rewind.bufferSizeStepMb],
+  ["rewind_auto_stride", rewind => rewind.autoStride],
+]
+
+const PLAYBACK_SETTINGS: readonly SettingEntry<RetroArchPlaybackPolicy>[] = [
+  ["pause_nonactive", playback => playback.pauseNonactive],
+  ["pause_on_disconnect", playback => playback.pauseOnDisconnect],
+  ["slowmotion_ratio", playback => playback.slowmotionRatio],
+  ["fastforward_ratio", playback => playback.fastforwardRatio],
+  ["fastforward_frameskip", playback => playback.fastforwardFrameskip],
+]
+
+const RUN_AHEAD_SETTINGS: readonly SettingEntry<
+  NonNullable<RetroArchLatencyPolicy["runAhead"]>
+>[] = [
+  ["run_ahead_enabled", runAhead => runAhead.enable],
+  ["run_ahead_frames", runAhead => runAhead.frames],
+  ["run_ahead_secondary_instance", runAhead => runAhead.secondaryInstance],
+  ["run_ahead_hide_warnings", runAhead => runAhead.hideWarnings],
+]
+
+const PREEMPTIVE_FRAME_SETTINGS: readonly SettingEntry<
+  NonNullable<RetroArchLatencyPolicy["preemptiveFrames"]>
+>[] = [
+  ["preemptive_frames_enable", preemptiveFrames => preemptiveFrames.enable],
+  ["preemptive_frames", preemptiveFrames => preemptiveFrames.frames],
+]
+
 function appendVideoSettings(
   writer: TypedSettingsWriter,
   policy: RetroArchPolicy,
@@ -582,6 +694,46 @@ function appendInputSettings(
   )
   appendOptionalSettings(writer, policy.input?.overlay, INPUT_OVERLAY_SETTINGS)
   appendInputPortSettings(writer, policy.input?.ports)
+}
+
+function appendMenuSettings(
+  writer: TypedSettingsWriter,
+  policy: RetroArchPolicy,
+) {
+  appendOptionalSettings(writer, policy.menu, MENU_SETTINGS)
+}
+
+function appendSaveSettings(
+  writer: TypedSettingsWriter,
+  policy: RetroArchPolicy,
+) {
+  appendOptionalSettings(writer, policy.saves, SAVE_SETTINGS)
+}
+
+function appendRewindSettings(
+  writer: TypedSettingsWriter,
+  policy: RetroArchPolicy,
+) {
+  appendOptionalSettings(writer, policy.rewind, REWIND_SETTINGS)
+}
+
+function appendPlaybackSettings(
+  writer: TypedSettingsWriter,
+  policy: RetroArchPolicy,
+) {
+  appendOptionalSettings(writer, policy.playback, PLAYBACK_SETTINGS)
+}
+
+function appendLatencySettings(
+  writer: TypedSettingsWriter,
+  policy: RetroArchPolicy,
+) {
+  appendOptionalSettings(writer, policy.latency?.runAhead, RUN_AHEAD_SETTINGS)
+  appendOptionalSettings(
+    writer,
+    policy.latency?.preemptiveFrames,
+    PREEMPTIVE_FRAME_SETTINGS,
+  )
 }
 
 function appendOptionalSettings<T>(

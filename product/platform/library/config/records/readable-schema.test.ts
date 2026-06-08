@@ -140,6 +140,14 @@ describe("readable library schema records", () => {
         quitGamepadCombo: "start-select",
         ports: { "1": { libretroDevice: 1, joypadIndex: 0 } },
       },
+      menu: { showStartScreen: false, pauseLibretro: true },
+      saves: { autosaveIntervalSeconds: 60, autoLoadState: true },
+      rewind: { enable: true, bufferSizeMb: 20 },
+      playback: { pauseNonactive: true, fastforwardRatio: 0 },
+      latency: {
+        runAhead: { enable: true, frames: 2 },
+        preemptiveFrames: { enable: true, frames: 3 },
+      },
       extraSettings: { video_font_enable: false },
       extraArgs: ["--features"],
     }

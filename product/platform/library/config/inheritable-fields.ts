@@ -745,6 +745,77 @@ const RetroArchInputPolicy = Schema.Struct({
   ),
 })
 
+const RetroArchMenuPolicy = Schema.Struct({
+  showStartScreen: Schema.optional(Schema.Boolean),
+  pauseLibretro: Schema.optional(Schema.Boolean),
+  mouseEnable: Schema.optional(Schema.Boolean),
+  pointerEnable: Schema.optional(Schema.Boolean),
+  timedateEnable: Schema.optional(Schema.Boolean),
+  batteryLevelEnable: Schema.optional(Schema.Boolean),
+  coreEnable: Schema.optional(Schema.Boolean),
+  dynamicWallpaper: Schema.optional(Schema.Boolean),
+  wallpaper: Schema.optional(NullableNonEmptyString("menu.wallpaper")),
+  screensaverTimeoutSeconds: Schema.optional(
+    NonNegativeInteger("menu.screensaverTimeoutSeconds"),
+  ),
+})
+
+const RetroArchSavesPolicy = Schema.Struct({
+  autosaveIntervalSeconds: Schema.optional(
+    NonNegativeInteger("saves.autosaveIntervalSeconds"),
+  ),
+  autoLoadState: Schema.optional(Schema.Boolean),
+  autoSaveState: Schema.optional(Schema.Boolean),
+  autoIndex: Schema.optional(Schema.Boolean),
+  maxKeep: Schema.optional(NonNegativeInteger("saves.maxKeep")),
+  thumbnailEnable: Schema.optional(Schema.Boolean),
+  sortSavefiles: Schema.optional(Schema.Boolean),
+  sortSavestates: Schema.optional(Schema.Boolean),
+  savefilesInContentDir: Schema.optional(Schema.Boolean),
+  savestatesInContentDir: Schema.optional(Schema.Boolean),
+  systemfilesInContentDir: Schema.optional(Schema.Boolean),
+  blockSramOverwrite: Schema.optional(Schema.Boolean),
+  saveFileCompression: Schema.optional(Schema.Boolean),
+  stateFileCompression: Schema.optional(Schema.Boolean),
+})
+
+const RetroArchRewindPolicy = Schema.Struct({
+  enable: Schema.optional(Schema.Boolean),
+  granularity: Schema.optional(PositiveInteger("rewind.granularity")),
+  bufferSizeMb: Schema.optional(PositiveInteger("rewind.bufferSizeMb")),
+  bufferSizeStepMb: Schema.optional(PositiveInteger("rewind.bufferSizeStepMb")),
+  autoStride: Schema.optional(Schema.Boolean),
+})
+
+const RetroArchPlaybackPolicy = Schema.Struct({
+  pauseNonactive: Schema.optional(Schema.Boolean),
+  pauseOnDisconnect: Schema.optional(Schema.Boolean),
+  slowmotionRatio: Schema.optional(PositiveNumber("playback.slowmotionRatio")),
+  fastforwardRatio: Schema.optional(
+    NonNegativeNumber("playback.fastforwardRatio"),
+  ),
+  fastforwardFrameskip: Schema.optional(Schema.Boolean),
+})
+
+const RetroArchRunAheadPolicy = Schema.Struct({
+  enable: Schema.optional(Schema.Boolean),
+  frames: Schema.optional(NonNegativeInteger("latency.runAhead.frames")),
+  secondaryInstance: Schema.optional(Schema.Boolean),
+  hideWarnings: Schema.optional(Schema.Boolean),
+})
+
+const RetroArchPreemptiveFramesPolicy = Schema.Struct({
+  enable: Schema.optional(Schema.Boolean),
+  frames: Schema.optional(
+    NonNegativeInteger("latency.preemptiveFrames.frames"),
+  ),
+})
+
+const RetroArchLatencyPolicy = Schema.Struct({
+  runAhead: Schema.optional(RetroArchRunAheadPolicy),
+  preemptiveFrames: Schema.optional(RetroArchPreemptiveFramesPolicy),
+})
+
 /**
  * Minimal typed RetroArch v1 launch/config policy. Generated mode is the only
  * supported config-file mode in v1; user-authored config paths/default mode are
@@ -762,6 +833,11 @@ export const RetroArchPolicy = Schema.Struct({
   video: Schema.optional(RetroArchVideoPolicy),
   audio: Schema.optional(RetroArchAudioPolicy),
   input: Schema.optional(RetroArchInputPolicy),
+  menu: Schema.optional(RetroArchMenuPolicy),
+  saves: Schema.optional(RetroArchSavesPolicy),
+  rewind: Schema.optional(RetroArchRewindPolicy),
+  playback: Schema.optional(RetroArchPlaybackPolicy),
+  latency: Schema.optional(RetroArchLatencyPolicy),
   extraSettings: Schema.optional(RetroArchExtraSettings),
   extraArgs: Schema.optional(Schema.Array(Schema.String)),
 })

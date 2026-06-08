@@ -40,6 +40,14 @@ const host: HostRecord = {
     input: {
       ports: { "1": { libretroDevice: 1, joypadIndex: 0 } },
     },
+    menu: { showStartScreen: false, pauseLibretro: true },
+    saves: { autosaveIntervalSeconds: 60, autoLoadState: true },
+    rewind: { enable: true, bufferSizeMb: 20 },
+    playback: { pauseNonactive: true, slowmotionRatio: 3 },
+    latency: {
+      runAhead: { enable: true, frames: 1 },
+      preemptiveFrames: { enable: false },
+    },
     extraArgs: ["host"],
   },
 }
@@ -66,6 +74,14 @@ const user: UserRecord = {
         "1": { joypadIndex: 2, analogDpadMode: 1 },
         "2": { libretroDevice: 257, joypadIndex: 1 },
       },
+    },
+    menu: { pointerEnable: true },
+    saves: { autoSaveState: true },
+    rewind: { bufferSizeMb: 24, granularity: 2 },
+    playback: { fastforwardRatio: 0 },
+    latency: {
+      runAhead: { frames: 2 },
+      preemptiveFrames: { enable: true, frames: 3 },
     },
   },
 }
@@ -282,6 +298,26 @@ describe("resolveReadableLaunchContext", () => {
           "1": { libretroDevice: 1, joypadIndex: 2, analogDpadMode: 1 },
           "2": { libretroDevice: 257, joypadIndex: 1 },
         },
+      },
+      menu: {
+        showStartScreen: false,
+        pauseLibretro: true,
+        pointerEnable: true,
+      },
+      saves: {
+        autosaveIntervalSeconds: 60,
+        autoLoadState: true,
+        autoSaveState: true,
+      },
+      rewind: { enable: true, bufferSizeMb: 24, granularity: 2 },
+      playback: {
+        pauseNonactive: true,
+        slowmotionRatio: 3,
+        fastforwardRatio: 0,
+      },
+      latency: {
+        runAhead: { enable: true, frames: 2 },
+        preemptiveFrames: { enable: true, frames: 3 },
       },
       extraSettings: { video_font_enable: false },
       extraArgs: [

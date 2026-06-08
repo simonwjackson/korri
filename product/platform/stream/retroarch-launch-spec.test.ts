@@ -231,6 +231,102 @@ describe("typed RetroArch launch spec rendering", () => {
     )
   })
 
+  it("renders menu saves rewind playback and latency settings", () => {
+    const config = renderRetroArchConfig({
+      drivers: { menu: "ozone" },
+      menu: {
+        showStartScreen: false,
+        pauseLibretro: true,
+        mouseEnable: false,
+        pointerEnable: true,
+        timedateEnable: true,
+        batteryLevelEnable: true,
+        coreEnable: true,
+        dynamicWallpaper: false,
+        wallpaper: "/wallpapers/korri.png",
+        screensaverTimeoutSeconds: 300,
+      },
+      saves: {
+        autosaveIntervalSeconds: 60,
+        autoLoadState: true,
+        autoSaveState: true,
+        autoIndex: true,
+        maxKeep: 10,
+        thumbnailEnable: true,
+        sortSavefiles: true,
+        sortSavestates: true,
+        savefilesInContentDir: false,
+        savestatesInContentDir: false,
+        systemfilesInContentDir: false,
+        blockSramOverwrite: true,
+        saveFileCompression: true,
+        stateFileCompression: true,
+      },
+      rewind: {
+        enable: true,
+        granularity: 2,
+        bufferSizeMb: 20,
+        bufferSizeStepMb: 5,
+        autoStride: true,
+      },
+      playback: {
+        pauseNonactive: true,
+        pauseOnDisconnect: false,
+        slowmotionRatio: 3,
+        fastforwardRatio: 0,
+        fastforwardFrameskip: true,
+      },
+      latency: {
+        runAhead: {
+          enable: true,
+          frames: 2,
+          secondaryInstance: true,
+          hideWarnings: true,
+        },
+        preemptiveFrames: { enable: true, frames: 3 },
+      },
+      video: { sync: { hardSync: true, frameDelay: 2 } },
+      extraSettings: { rewind_buffer_size: 24 },
+    })
+
+    expect(config).toContain('menu_driver = "ozone"')
+    expect(config).toContain('menu_show_start_screen = "false"')
+    expect(config).toContain('menu_pause_libretro = "true"')
+    expect(config).toContain('menu_wallpaper = "/wallpapers/korri.png"')
+    expect(config).toContain("menu_screensaver_timeout = 300")
+    expect(config).toContain("autosave_interval = 60")
+    expect(config).toContain('savestate_auto_load = "true"')
+    expect(config).toContain("savestate_max_keep = 10")
+    expect(config).toContain('sort_savefiles_enable = "true"')
+    expect(config).toContain('block_sram_overwrite = "true"')
+    expect(config).toContain('rewind_enable = "true"')
+    expect(config).toContain("rewind_granularity = 2")
+    expect(config).toContain("rewind_buffer_size = 20")
+    expect(config).toContain("rewind_buffer_size_step = 5")
+    expect(config).toContain('pause_nonactive = "true"')
+    expect(config).toContain('pause_on_disconnect = "false"')
+    expect(config).toContain("slowmotion_ratio = 3")
+    expect(config).toContain("fastforward_ratio = 0")
+    expect(config).toContain('run_ahead_enabled = "true"')
+    expect(config).toContain("run_ahead_frames = 2")
+    expect(config).toContain('preemptive_frames_enable = "true"')
+    expect(config).toContain("preemptive_frames = 3")
+    expect(config).toContain('video_hard_sync = "true"')
+    expect(config).toContain("video_frame_delay = 2")
+    expect(config.lastIndexOf("rewind_buffer_size = 24")).toBeGreaterThan(
+      config.indexOf("rewind_buffer_size = 20"),
+    )
+    expect(config.match(/^menu_driver =/gm)).toHaveLength(1)
+    expect(config.match(/^video_hard_sync/gm)).toHaveLength(1)
+    expect(config.match(/^video_frame_delay/gm)).toHaveLength(1)
+
+    const latencyOnlyConfig = renderRetroArchConfig({
+      latency: { runAhead: { enable: true, frames: 1 } },
+    })
+    expect(latencyOnlyConfig).not.toContain("video_hard_sync")
+    expect(latencyOnlyConfig).not.toContain("video_frame_delay")
+  })
+
   it("renders verified named aspect ratio values", () => {
     expect(renderRetroArchConfig({ video: { aspectRatio: "full" } })).toContain(
       "aspect_ratio_index = 24",
