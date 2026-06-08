@@ -565,6 +565,68 @@ describe("materializeReadableRetroArchLaunch", () => {
     })
   })
 
+  it("materializes expanded policy into one cfg, one core arg, and final content path", async () => {
+    await withRoot(async root => {
+      const result = await runPromise(
+        materializeReadableRetroArchLaunch({
+          context: {
+            ...readableContext,
+            retroarch: {
+              configFile: { mode: "generated" },
+              core: { path: "/cores/genesis_plus_gx.so" },
+              content: { path: "/games/genesis/Sonic.md" },
+              drivers: { video: "glcore", menu: "ozone" },
+              paths: { cacheDirectory: "/operator/cache" },
+              video: {
+                fullscreen: true,
+                aspectRatio: "full",
+                sync: { frameDelay: 0, frameDelayAuto: false },
+              },
+              audio: { outputRate: 48000, latencyMs: 64 },
+              input: {
+                menuToggleGamepadCombo: "start-select",
+                ports: { "1": { libretroDevice: 1, joypadIndex: 0 } },
+              },
+              menu: { showStartScreen: false },
+              saves: { autosaveIntervalSeconds: 60 },
+              rewind: { enable: true, bufferSizeMb: 20 },
+              latency: { runAhead: { enable: false, frames: 0 } },
+              achievements: { enable: false },
+              extraSettings: { notification_show_autoconfig: false },
+            },
+          },
+          artifactsRoot: root,
+        }),
+      )
+
+      const configPath = result.artifacts?.paths.configPath
+      if (configPath === undefined) throw new Error("missing config artifact")
+      expect(result.spec.args.filter(arg => arg === "-c")).toHaveLength(1)
+      expect(result.spec.args.filter(arg => arg === "-L")).toHaveLength(1)
+      expect(result.spec.args).toEqual([
+        "-c",
+        configPath,
+        "-L",
+        "/cores/genesis_plus_gx.so",
+        "/games/genesis/Sonic.md",
+      ])
+      expect(result.spec.args.at(-1)).toBe("/games/genesis/Sonic.md")
+
+      const config = await readFile(configPath, "utf8")
+      expect(config).toContain('config_save_on_exit = "false"')
+      expect(config).toContain('auto_overrides_enable = "false"')
+      expect(config).toContain('menu_driver = "ozone"')
+      expect(config).toContain('cache_directory = "/operator/cache"')
+      expect(config).toContain("aspect_ratio_index = 24")
+      expect(config).toContain("video_frame_delay = 0")
+      expect(config).toContain("audio_out_rate = 48000")
+      expect(config).toContain("input_menu_toggle_gamepad_combo = 4")
+      expect(config).toContain("input_libretro_device_p1 = 1")
+      expect(config).toContain("rewind_buffer_size = 20")
+      expect(config).toContain('notification_show_autoconfig = "false"')
+    })
+  })
+
   it("resolves relative RetroArch log files under launch artifact logs", async () => {
     await withRoot(async root => {
       const result = await runPromise(
@@ -649,6 +711,23 @@ describe("materializeReadableRetroArchLaunch", () => {
     })
   })
 
+  it("fails clearly when no core path is resolved", async () => {
+    await withRoot(async root => {
+      const exit = await Effect.runPromiseExit(
+        materializeReadableRetroArchLaunch({
+          context: {
+            ...readableContext,
+            runtime: undefined,
+            retroarch: { configFile: { mode: "generated" } },
+          },
+          artifactsRoot: root,
+        }),
+      )
+
+      expect(exitFailureMessage(exit)).toContain("core path")
+    })
+  })
+
   it("fails before rendering when no content path is resolved", async () => {
     const exit = await Effect.runPromiseExit(
       materializeReadableRetroArchLaunch({
@@ -661,7 +740,7 @@ describe("materializeReadableRetroArchLaunch", () => {
       }),
     )
 
-    expect(exitFailureMessage(exit)).toContain("AppMaterializationFailed")
+    expect(exitFailureMessage(exit)).toContain("resolved content path")
   })
 
   it("rejects non-RetroArch apps at the materializer boundary", async () => {
@@ -675,7 +754,7 @@ describe("materializeReadableRetroArchLaunch", () => {
       }),
     )
 
-    expect(exitFailureMessage(exit)).toContain("AppMaterializationFailed")
+    expect(exitFailureMessage(exit)).toContain("requires kind: retroarch")
   })
 })
 

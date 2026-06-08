@@ -126,7 +126,7 @@ apps:
     input:
       autodetect: true # input_autodetect_enable
       maxUsers: 4 # input_max_users
-      menuToggleGamepadCombo: start-select # input_menu_toggle_gamepad_combo
+      menuToggleGamepadCombo: start-select # input_menu_toggle_gamepad_combo = 4
 
     # Permanent NixOS-style escape hatches. These are intentionally part of the
     # v1 contract so operators can use new RetroArch settings/flags before Korri
@@ -211,11 +211,18 @@ library:
 #       savefileDirectory: /storage/saves/retroarch
 #       savestateDirectory: /storage/states/retroarch
 #
-# Out of scope for this minimal v1:
+# Kept out of this minimal copy-paste example; see the one-to-one reference
+# for implemented expanded groups and active drift traps:
+# - lifecycle/logging/drivers/path inventory beyond the core launch defaults
+# - video sync/shader/HDR/scaling, audio tuning, and port-keyed input fields
+# - menu, saves, rewind, playback, latency, achievements, haptics, playlists,
+#   privacy, and updater groups
+#
+# Still deferred from the active contract:
 # - full input binding maps
 # - netplay
 # - achievements / cheevos secrets
-# - recording/replay/scan/remote command
-# - full video shader/HDR/scaling matrix
-# - complete 331-key retroarch.cfg coverage
+# - recording/replay/scan/remote command launch argv groups
+# - configFile path/default modes
+# - package/core wrapper changes
 # - direct patch CLI modelling beyond Korri's existing content materialization

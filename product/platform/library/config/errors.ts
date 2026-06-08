@@ -209,6 +209,10 @@ const patchErrorMessage = (error: {
   readonly _tag: string
 }): string | undefined => {
   switch (error._tag) {
+    case "AppMaterializationFailed": {
+      const materializationError = error as AppMaterializationFailed
+      return `app materialization failed for ${materializationError.appId}: ${materializationError.reason}`
+    }
     case "PatchFileMissing":
       return `patch file not found: ${(error as PatchFileMissing).path}`
     case "PatchFileUnreadable":

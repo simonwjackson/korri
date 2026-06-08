@@ -314,6 +314,48 @@ describe("createLibraryRepository — readable playable entries", () => {
     })
   })
 
+  it("does not report RetroArch releases launchable without content even with expanded policy", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      await Effect.runPromise(
+        repo.upsertLibraryItem({
+          id: "policy-only",
+          title: "Policy Only",
+          source: "roms",
+          releases: [
+            {
+              id: "genesis",
+              system: "genesis",
+              app: "retroarch",
+              runtime: "genesis-plus-gx",
+              retroarch: {
+                configFile: { mode: "generated" },
+                video: { aspectRatio: "full", sync: { frameDelay: 0 } },
+                rewind: { enable: true, bufferSizeMb: 20 },
+                achievements: { enable: false },
+                extraSettings: { notification_show_autoconfig: false },
+              },
+            },
+            {
+              id: "steam",
+              system: "windows",
+              app: "steam",
+              target: "steam://rungameid/123",
+            },
+          ],
+        }),
+      )
+
+      await expect(
+        Effect.runPromise(
+          repo.canResolveLaunchForPlayable("policy-only", {
+            releaseId: "genesis",
+          }),
+        ),
+      ).resolves.toBe(false)
+    })
+  })
+
   it("launches the selected release and resolves file-backed content paths", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)

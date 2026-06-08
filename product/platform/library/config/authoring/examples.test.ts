@@ -75,21 +75,35 @@ describe("checked-in readable library example", () => {
   it("resolves representative Steam URI, ROM, and local launcher policies", async () => {
     const launches = await withExampleLibrary(({ repository }) =>
       Effect.gen(function* () {
+        const downwell = yield* repository.resolveLaunchForPlayable("downwell")
+        const sonicGenesis = yield* repository.resolveLaunchForPlayable(
+          "sonic-the-hedgehog",
+          { releaseId: "genesis" },
+        )
+        const sonicSteam = yield* repository.resolveLaunchForPlayable(
+          "sonic-the-hedgehog",
+          { releaseId: "steam" },
+        )
+        const containedGba = yield* repository.resolveLaunchForPlayable(
+          "super-mario-advance-2/super-mario-world",
+        )
+        const localMoonlight =
+          yield* repository.resolveLocalLauncherPolicy("moonlight")
+        const sonicGenesisConfig = yield* Effect.promise(() =>
+          readFile(String(sonicGenesis.artifacts?.paths.configPath), "utf8"),
+        )
+        const containedGbaConfig = yield* Effect.promise(() =>
+          readFile(String(containedGba.artifacts?.paths.configPath), "utf8"),
+        )
+
         return {
-          downwell: yield* repository.resolveLaunchForPlayable("downwell"),
-          sonicGenesis: yield* repository.resolveLaunchForPlayable(
-            "sonic-the-hedgehog",
-            { releaseId: "genesis" },
-          ),
-          sonicSteam: yield* repository.resolveLaunchForPlayable(
-            "sonic-the-hedgehog",
-            { releaseId: "steam" },
-          ),
-          containedGba: yield* repository.resolveLaunchForPlayable(
-            "super-mario-advance-2/super-mario-world",
-          ),
-          localMoonlight:
-            yield* repository.resolveLocalLauncherPolicy("moonlight"),
+          downwell,
+          sonicGenesis,
+          sonicGenesisConfig,
+          sonicSteam,
+          containedGba,
+          containedGbaConfig,
+          localMoonlight,
         }
       }),
     )
@@ -122,6 +136,16 @@ describe("checked-in readable library example", () => {
         "/roms/gba/Super Mario Advance 2.gba",
       ],
     })
+    expect(launches.sonicGenesisConfig).toContain("aspect_ratio_index = 24")
+    expect(launches.sonicGenesisConfig).toContain("video_frame_delay = 0")
+    expect(launches.sonicGenesisConfig).toContain("rewind_buffer_size = 20")
+    expect(launches.sonicGenesisConfig).toContain(
+      'notification_show_autoconfig = "false"',
+    )
+    expect(launches.containedGbaConfig).toContain('menu_driver = "ozone"')
+    expect(launches.containedGbaConfig).toContain(
+      'config_save_on_exit = "false"',
+    )
     expect(launches.localMoonlight.moonlight).toMatchObject({
       command: "/run/current-system/sw/bin/moonlight",
       stream: {

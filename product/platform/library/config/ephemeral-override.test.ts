@@ -77,6 +77,21 @@ describe("EphemeralOverride", () => {
     expect(() => decodeEphemeralOverride({ presets: { x: {} } })).toThrow()
   })
 
+  it("rejects RetroArch policy overrides until a safe authenticated subset is designed", () => {
+    expect(() =>
+      decodeEphemeralOverride({
+        retroarch: { video: { aspectRatio: "full" } },
+      }),
+    ).toThrow()
+    expect(() =>
+      decodeEphemeralOverride({
+        byLauncher: {
+          retroarch: { retroarch: { video: { aspectRatio: "full" } } },
+        },
+      }),
+    ).toThrow()
+  })
+
   it("rejects Gamescope process, env, raw argv, and path surfaces in runtime overrides", () => {
     for (const gamescope of [
       { command: "/bin/gamescope" },

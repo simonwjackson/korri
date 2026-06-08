@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { withTempProseqlLibrary } from "../testing/library/with-temp-proseql-library"
@@ -100,6 +100,59 @@ describe("validateLauncherConfig", () => {
       expect(result.reason).toBe("LibraryError")
       expect(result.message).toContain("LauncherUnresolvable")
     }
+  })
+
+  it("reports materialized expanded RetroArch policy from the checked-in example", async () => {
+    await withLaunchArtifactsRoot(async () => {
+      const root = await mkdtemp(join(tmpdir(), "korri-launcher-cli-example-"))
+      try {
+        await writeFile(
+          join(root, "library.yaml"),
+          await readFile("korri-catalog-display-metadata.example.yaml", "utf8"),
+          "utf8",
+        )
+
+        const result = await validateLauncherConfig({
+          root,
+          gameId: "super-mario-advance-2/super-mario-world",
+        })
+
+        if (result.status !== "resolved") throw new Error("expected resolved")
+        const generatedConfigArg = result.spec.args[1]
+        expect(generatedConfigArg).toEqual(
+          expect.stringMatching(/retroarch\.cfg$/),
+        )
+        expect(result).toMatchObject({
+          status: "resolved",
+          app: { id: "retroarch", integration: "retroarch" },
+          module: {
+            id: "mgba",
+            path: "/run/current-system/sw/lib/libretro/mgba_libretro.so",
+          },
+          spec: {
+            command: "retroarch",
+            args: [
+              "-c",
+              generatedConfigArg,
+              "-L",
+              "/run/current-system/sw/lib/libretro/mgba_libretro.so",
+              "/roms/gba/Super Mario Advance 2.gba",
+            ],
+          },
+        })
+        expect(result.artifacts?.paths.configPath).toBe(generatedConfigArg)
+        const config = await readFile(
+          String(result.artifacts?.paths.configPath),
+          "utf8",
+        )
+        expect(config).toContain("aspect_ratio_index = 24")
+        expect(config).toContain("video_frame_delay = 0")
+        expect(config).toContain("rewind_buffer_size = 20")
+        expect(config).toContain('notification_show_autoconfig = "false"')
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    })
   })
 
   it("reports app/module/settings/materialized artifact details for built-in RetroArch", async () => {

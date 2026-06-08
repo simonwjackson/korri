@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Effect } from "effect"
@@ -211,6 +211,62 @@ describe("createProseqlLibrarySource", () => {
         setEnv("KORRI_LAUNCH_ARTIFACTS_DIR", previous.artifacts)
         setEnv("XDG_DATA_HOME", previous.data)
         setEnv("XDG_STATE_HOME", previous.state)
+      }
+    })
+  })
+
+  it("resolves checked-in expanded RetroArch examples through the library source seam", async () => {
+    await withTempRoot(async root => {
+      const previous = process.env.KORRI_LAUNCH_ARTIFACTS_DIR
+      process.env.KORRI_LAUNCH_ARTIFACTS_DIR = join(root, "launch-artifacts")
+      try {
+        await writeFile(
+          join(root, "library.yaml"),
+          await readFile("korri-catalog-display-metadata.example.yaml", "utf8"),
+          "utf8",
+        )
+
+        const result = await Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+              const source = createProseqlLibrarySource(
+                createLibraryRepository(db),
+              )
+              const canResolve = source.canResolveLaunchForGame
+              if (!canResolve)
+                throw new Error("expected canResolveLaunchForGame")
+              return {
+                canResolve: yield* Effect.promise(() =>
+                  canResolve("sonic-the-hedgehog", { releaseId: "genesis" }),
+                ),
+                resolved: yield* Effect.promise(() =>
+                  source.resolveLaunchForGame("sonic-the-hedgehog", {
+                    releaseId: "genesis",
+                  }),
+                ),
+              }
+            }),
+          ),
+        )
+
+        expect(result.canResolve).toBe(true)
+        expect(result.resolved.spec.args).toEqual([
+          "-c",
+          expect.stringMatching(/retroarch\.cfg$/),
+          "-L",
+          "/run/current-system/sw/lib/libretro/genesis_plus_gx_libretro.so",
+          "/roms/genesis/Sonic The Hedgehog.md",
+        ])
+        const config = await readFile(
+          String(result.resolved.artifacts?.paths.configPath),
+          "utf8",
+        )
+        expect(config).toContain("aspect_ratio_index = 24")
+        expect(config).toContain("video_frame_delay = 0")
+        expect(config).toContain("rewind_buffer_size = 20")
+      } finally {
+        setEnv("KORRI_LAUNCH_ARTIFACTS_DIR", previous)
       }
     })
   })
