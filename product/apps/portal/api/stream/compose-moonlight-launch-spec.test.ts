@@ -112,7 +112,7 @@ describe("composeMoonlightLaunchSpec", () => {
       moonlight: {
         environment: {
           SDL_AUDIODRIVER: "pipewire",
-          KORRI_MOONLIGHT_STATE_HOME: null,
+          OLD_MOONLIGHT_STATE_HOME: null,
         },
       },
     })
@@ -121,7 +121,7 @@ describe("composeMoonlightLaunchSpec", () => {
       MOONLIGHT_LOCAL_CONTROL_SOCKET: "/run/m.sock",
       SDL_AUDIODRIVER: "pipewire",
     })
-    expect(spec.envUnset).toEqual(["KORRI_MOONLIGHT_STATE_HOME"])
+    expect(spec.envUnset).toEqual(["OLD_MOONLIGHT_STATE_HOME"])
   })
 
   it("passes IPv6 host through unchanged (caller is responsible for bracket-stripping)", () => {

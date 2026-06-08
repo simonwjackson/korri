@@ -19,7 +19,7 @@ This validation covers the Moonlight-only boundary before Sunshine protocol work
 2. Log live bitrate mutation as explicitly unsupported without sending custom Sunshine packets or reconnecting.
 3. Capture launch-time bitrate evidence through the existing `MOONLIGHT_BITRATE_KBPS` path.
 
-It does **not** validate true live bitrate mutation, live resolution/FPS changes, Sunshine ack/error packets, or encoder reconfiguration.
+It does **not** validate true live bitrate mutation, live resolution/FPS changes, Sunshine ack/error packets, encoder reconfiguration, or readable `moonlight` launch policy. Current product/operator launch defaults now live in typed readable policy; the environment variables in this document are Moonlight validation-harness controls only.
 
 ---
 

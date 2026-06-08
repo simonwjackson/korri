@@ -49,6 +49,40 @@ describe("moonlight local control protocol", () => {
     }
   })
 
+  it("does not synthesize command capability from controller authority", () => {
+    const decoded = expectSuccessResponse(
+      decodeMoonlightControlResponse({
+        jsonrpc: "2.0",
+        id: "hello-controller",
+        result: {
+          _tag: "protocol.hello",
+          protocol: {
+            name: MOONLIGHT_CONTROL_PROTOCOL.name,
+            major: 1,
+            minor: 0,
+          },
+          session: {
+            sessionId: "session-controller",
+            processId: 4242,
+          },
+          authority: "controller",
+          capabilities: {
+            events: ["lifecycle"],
+            commands: [],
+            experimental: [],
+          },
+          limits: MOONLIGHT_CONTROL_PROTOCOL_LIMITS,
+        },
+      }),
+    )
+
+    expect(decoded.result._tag).toBe("protocol.hello")
+    if (decoded.result._tag === "protocol.hello") {
+      expect(decoded.result.authority).toBe("controller")
+      expect(decoded.result.capabilities.commands).toEqual([])
+    }
+  })
+
   it("decodes a state snapshot with lifecycle quality runtime and input facts", () => {
     const decoded = expectSuccessResponse(
       decodeMoonlightControlResponse({

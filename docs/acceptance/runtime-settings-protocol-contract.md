@@ -8,6 +8,8 @@ Scope: Sunshine/Moonlight runtime settings control for Korri downstream streamin
 
 The runtime settings protocol controls stream settings while an active Moonlight/Sunshine stream keeps running. The public product/tooling surface is Moonlight local-control; the Sunshine packet exchange is the lower-level host transport.
 
+Typed readable `moonlight` launch policy is a separate surface. It may enable the local-control socket and may carry experimental one-shot runtime-settings launch env hooks, but it does not configure command capabilities, terminal outcomes, or adaptation policy. Runtime command availability comes from the running session's `protocol.hello` / `state.snapshot` capabilities.
+
 The contract covers individual setting changes only:
 
 - bitrate

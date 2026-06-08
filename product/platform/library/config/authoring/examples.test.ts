@@ -58,7 +58,7 @@ describe("checked-in readable library example", () => {
     ).toBe("super-mario-world")
   })
 
-  it("resolves representative Steam URI and ROM launches", async () => {
+  it("resolves representative Steam URI, ROM, and local launcher policies", async () => {
     const launches = await withExampleLibrary(({ repository }) =>
       Effect.gen(function* () {
         return {
@@ -73,6 +73,9 @@ describe("checked-in readable library example", () => {
           ),
           containedGba: yield* repository.resolveLaunchForPlayable(
             "super-mario-advance-2/super-mario-world",
+          ),
+          localMoonlight: yield* repository.resolveLocalLauncherPolicy(
+            "moonlight",
           ),
         }
       }),
@@ -102,6 +105,22 @@ describe("checked-in readable library example", () => {
         "/roms/gba/Super Mario Advance 2.gba",
       ],
     })
+    expect(launches.localMoonlight.moonlight).toMatchObject({
+      command: "/run/current-system/sw/bin/moonlight",
+      stream: {
+        resolution: { width: 1280, height: 720 },
+        fps: 60,
+        bitrateKbps: 12000,
+      },
+      platform: { name: "v4l2m2m" },
+      input: {
+        mappingFile: "/run/current-system/sw/share/moonlight/gamecontrollerdb.txt",
+        touch: { absolute: true, requireBounds: true },
+      },
+      window: { autoResize: true },
+      control: { enable: true, authority: "controller" },
+    })
+    expect(launches.localMoonlight.gamescope.window?.exposeWayland).toBe(true)
   })
 
   it("rejects ambiguous and known-only release launches", async () => {
@@ -139,6 +158,13 @@ describe("checked-in readable library example", () => {
       /\bmodulePath\b/,
       /\benabled\s*:/,
       /\bforceXwayland\s*:/,
+      /\bKORRI_MOONLIGHT_[A-Z0-9_]+\b/,
+      /\baction\s*:/,
+      /\bconfig\s*:/,
+      /\bpreset\s*:/,
+      /\brequireInputPlumber\s*:/,
+      /\bcommands\s*:/,
+      /\badaptationSpike\s*:/,
     ]
 
     for (const pattern of forbidden) {

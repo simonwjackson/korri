@@ -281,7 +281,7 @@ const representativeMoonlightPolicy: MoonlightPolicy = {
   command: "/run/current-system/sw/bin/moonlight",
   environment: {
     SDL_VIDEODRIVER: "wayland",
-    KORRI_MOONLIGHT_STATE_HOME: null,
+    OLD_MOONLIGHT_STATE_HOME: null,
   },
   logging: { verbose: false, debug: false },
   stream: {

@@ -25,7 +25,7 @@ describe("composeMoonlightStreamLaunchSpec", () => {
         command: "/nix/store/moonlight/bin/moonlight",
         environment: {
           SDL_VIDEODRIVER: "wayland",
-          KORRI_MOONLIGHT_STATE_HOME: null,
+          OLD_MOONLIGHT_STATE_HOME: null,
         },
         logging: { verbose: true, debug: true },
         stream: {
@@ -65,7 +65,7 @@ describe("composeMoonlightStreamLaunchSpec", () => {
       MOONLIGHT_LOCAL_CONTROL_SESSION_ID: "session-1",
       SDL_VIDEODRIVER: "wayland",
     })
-    expect(spec.envUnset).toEqual(["KORRI_MOONLIGHT_STATE_HOME"])
+    expect(spec.envUnset).toEqual(["OLD_MOONLIGHT_STATE_HOME"])
     expect(spec.args).toEqual([
       "stream",
       "-verbose",

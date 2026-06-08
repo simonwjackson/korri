@@ -59,7 +59,7 @@ describe("game stream launch intent store", () => {
       command: "/nix/store/moonlight/bin/moonlight",
       args: ["stream", "-app", "Korri Stream", "aka.local"],
       env: { MOONLIGHT_LOCAL_CONTROL_SOCKET: "/run/session/control.sock" },
-      envUnset: ["KORRI_MOONLIGHT_STATE_HOME"],
+      envUnset: ["OLD_MOONLIGHT_STATE_HOME"],
     }
     const intent = createLaunchIntent(moonlightLaunch)
 

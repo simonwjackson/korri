@@ -7,6 +7,17 @@ It layers on top of the nix-on-rocks Moonlight Embedded package inputs:
 - nix-on-rocks owns the base SM8550/v4l2m2m Moonlight patch stack.
 - Korri owns only the patches in this directory.
 
+## Korri configuration surfaces
+
+Korri intentionally keeps four Moonlight-related surfaces separate:
+
+1. **Readable launch policy** — product configuration under `host.moonlight`, profile `moonlight`, or another readable cascade layer. It renders `moonlight stream` argv/env through Korri's typed `MoonlightPolicy`: command, stream dimensions/FPS/bitrate, platform name, mapping file, absolute-touch launch flags, auto-window-resize, process env overlays, local-control enablement/authority, and extra args.
+2. **Local-control socket launch env** — per-spawn `MOONLIGHT_LOCAL_CONTROL_*` values allocated by the launcher when `moonlight.control.enable` is true. Readable policy can request a socket and choose authority, but the socket path/session id/runtime dir are runtime facts for that spawned process.
+3. **Runtime command protocol** — JSON local-control messages implemented by the running Moonlight process. Command availability is advertised by `protocol.hello` / `state.snapshot` capabilities. It is not configured by readable policy; `moonlight.control.commands` is intentionally rejected by Korri config.
+4. **Experimental runtime-settings env hooks** — downstream smoke-test hooks named `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_*` and `MOONLIGHT_RUNTIME_SETTINGS_MVP_*`. These remain experimental launch environment for patch validation and platform defaults; they are not the product adaptation policy.
+
+Readable launch policy does not expose Moonlight actions, Sunshine app name, peer host, Moonlight config-file load/save, resolution presets, platform provenance, or an InputPlumber toggle. Korri product launches always render the `stream` action, inject the selected host, use the fixed Sunshine app `Korri Stream`, and rely on launcher preflight for required InputPlumber input.
+
 ## Korri patches
 
 ### `0004-add-absolutetouch-flag-for-tap-to-click.patch`
@@ -24,7 +35,7 @@ Adds an experimental Sunshine runtime-settings request sender and ack logger for
 - `0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch` adds the Linux timerfd-backed one-shot environment hook for manual runtime-settings smoke tests.
 - `0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch` adds the opt-in connection-status spike adaptation experiment for bitrate/FPS only.
 
-One-shot runtime settings requests are controlled by:
+One-shot runtime settings requests are controlled by launch environment. Korri's typed `moonlight.runtimeSettings.oneShot` field, when present, is experimental launch-hook intent only; platform defaults may still render the raw env through `moonlight.environment` until the hook graduates. It does not advertise runtime command support and does not prove that the host applied a command.
 
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_KBPS`
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS`
@@ -32,7 +43,7 @@ One-shot runtime settings requests are controlled by:
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_AFTER_S`
 - `MOONLIGHT_RUNTIME_SETTINGS_MVP_ALLOW_PROOF_GATED=1` remains a diagnostic-only escape hatch for hosts that advertise a proof-gated operation, not the Korri product path.
 
-Connection-status adaptation experiments are spike-only and require `MOONLIGHT_RUNTIME_SETTINGS_MVP_ENABLE_SPIKE_ADAPTATION=1`. They are controlled by:
+Connection-status adaptation experiments are spike-only and require `MOONLIGHT_RUNTIME_SETTINGS_MVP_ENABLE_SPIKE_ADAPTATION=1`. They remain outside v1 readable `MoonlightPolicy`; `moonlight.runtimeSettings.adaptationSpike` is intentionally rejected. The spike is controlled by:
 
 - `MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_KBPS`
 - `MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_FPS`

@@ -5,6 +5,29 @@
 
 host:
   title: AKA desktop host
+  moonlight:
+    command: /run/current-system/sw/bin/moonlight
+    environment:
+      SDL_VIDEODRIVER: wayland
+    stream:
+      resolution:
+        width: 1280
+        height: 720
+      fps: 60
+      bitrateKbps: 12000
+    platform:
+      name: v4l2m2m
+    input:
+      mappingFile: /run/current-system/sw/share/moonlight/gamecontrollerdb.txt
+      touch:
+        absolute: true
+        requireBounds: true
+    window:
+      autoResize: true
+    control:
+      enable: true
+      authority: controller
+    extraArgs: []
   gamescope:
     enable: true
     backend:

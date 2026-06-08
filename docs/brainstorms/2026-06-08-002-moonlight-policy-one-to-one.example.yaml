@@ -1,8 +1,8 @@
 # Draft: NixOS-module-style Moonlight Embedded policy shape for Korri readable config.
 #
 # Goal: wrap Korri's patched moonlight-embedded launch surface as typed,
-# declarative options rather than exposing KORRI_MOONLIGHT_* env fallbacks or
-# call-site option bags. Field names describe launch intent; implementation can
+# declarative options rather than exposing legacy env fallbacks or call-site
+# option bags. Field names describe launch intent; implementation can
 # realize them through argv, process env, local-control socket env, or platform
 # generated readable defaults.
 #
@@ -29,8 +29,7 @@ host:
 
   moonlight:
     # Executable to spawn for Moonlight Embedded. The platform NixOS module can
-    # render the store path here so launch code no longer needs
-    # KORRI_MOONLIGHT_COMMAND.
+    # render the store path here so launch code no longer needs an env fallback.
     command: /run/current-system/sw/bin/moonlight
 
     # Korri product launches always use Moonlight Embedded's `stream` action.
@@ -39,10 +38,10 @@ host:
     # Environment for the Moonlight process itself. Values are strings;
     # `null` means remove the variable before spawning Moonlight.
     # This is for real Moonlight/substrate env such as SDL_VIDEODRIVER or
-    # state-home paths, not a second spelling for typed fields below.
+    # experimental downstream hooks, not a second spelling for typed fields below.
     environment:
       SDL_VIDEODRIVER: wayland
-      KORRI_MOONLIGHT_STATE_HOME: null
+      OLD_MOONLIGHT_STATE_HOME: null
 
     # Process supervision concerns such as startup observation and Nix fallback
     # stay in launcher/service code. They are not user-authored Moonlight policy.
@@ -246,15 +245,6 @@ profiles:
 #       enable: true
 #       authority: controller
 #
-# Current committed env equivalent to migrate away from:
-#
-# KORRI_MOONLIGHT_COMMAND=/nix/store/.../bin/moonlight
-# KORRI_MOONLIGHT_PLATFORM=v4l2m2m
-# KORRI_MOONLIGHT_MAPPING_FILE=/nix/store/.../gamecontrollerdb.txt
-# KORRI_MOONLIGHT_INPUT_DEVICE=/dev/input/event10
-# KORRI_MOONLIGHT_ABSOLUTE_TOUCH=1
-# KORRI_MOONLIGHT_ABSOLUTE_TOUCH_REQUIRE_BOUNDS=1
-# KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS=0,0,1080,1920
-# KORRI_MOONLIGHT_AUTO_WINDOW_RESIZE=1
-# KORRI_MOONLIGHT_CONTROL=1
-# KORRI_MOONLIGHT_CONTROL_AUTHORITY=controller
+# Retired env-shaped launch policy now expressed by typed fields above:
+# command, platform.name, input.mappingFile, resolved input devices,
+# input.touch.*, window.autoResize, and control.*.

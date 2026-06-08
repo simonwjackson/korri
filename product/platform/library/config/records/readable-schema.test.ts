@@ -119,6 +119,25 @@ describe("readable library schema records", () => {
     }
   })
 
+  it("rejects retired Moonlight launch-policy vocabulary in readable records", () => {
+    const retiredMoonlightPolicies = [
+      { KORRI_MOONLIGHT_COMMAND: "/bin/moonlight" },
+      { KORRI_MOONLIGHT_PLATFORM: "v4l2m2m" },
+      { action: "stream" },
+      { app: { name: "Korri Stream", host: "aka.local" } },
+      { config: { load: "/tmp/moonlight.conf", save: true } },
+      { stream: { resolution: { preset: "720" } } },
+      { platform: { source: "nixos" } },
+      { input: { requireInputPlumber: true } },
+      { control: { commands: { setBitrate: true } } },
+      { runtimeSettings: { adaptationSpike: { enable: true } } },
+    ]
+
+    for (const moonlight of retiredMoonlightPolicies) {
+      expect(() => decodeHostPayload({ moonlight })).toThrow()
+    }
+  })
+
   it("decodes local storage roots and rejects provider leakage", () => {
     const storage = decodeStoragePayload({
       root: "/games",
