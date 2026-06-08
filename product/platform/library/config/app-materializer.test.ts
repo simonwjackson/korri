@@ -608,7 +608,7 @@ describe("materializeReadableRetroArchLaunch", () => {
     })
   })
 
-  it("does not let patch stable defaults override typed save paths", async () => {
+  it("does not let patch stable defaults override typed path fields", async () => {
     await withRoot(async root => {
       const content = await seedFile(root, "roms/Sonic.md")
       const patch = await seedFile(root, "patches/fix.ips")
@@ -621,8 +621,11 @@ describe("materializeReadableRetroArchLaunch", () => {
             retroarch: {
               ...readableContext.retroarch,
               paths: {
+                systemDirectory: "/operator/system",
                 savefileDirectory: "/operator/saves",
                 savestateDirectory: "/operator/states",
+                screenshotDirectory: "/operator/screenshots",
+                cacheDirectory: "/operator/cache",
               },
             },
           },
@@ -637,8 +640,11 @@ describe("materializeReadableRetroArchLaunch", () => {
       const configPath = result.artifacts?.paths.configPath
       if (configPath === undefined) throw new Error("missing config artifact")
       const config = await readFile(configPath, "utf8")
+      expect(config).toContain('system_directory = "/operator/system"')
       expect(config).toContain('savefile_directory = "/operator/saves"')
       expect(config).toContain('savestate_directory = "/operator/states"')
+      expect(config).toContain('screenshot_directory = "/operator/screenshots"')
+      expect(config).toContain('cache_directory = "/operator/cache"')
       expect(config).not.toContain("Sonic.md--")
     })
   })

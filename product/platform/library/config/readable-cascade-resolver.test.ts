@@ -31,6 +31,10 @@ const host: HostRecord = {
   },
   retroarch: {
     environment: { RA_KEEP: "host", RA_UNSET: "1" },
+    configFile: { append: ["/tmp/host.cfg"] },
+    logging: { verbosity: false, fpsShow: false },
+    drivers: { video: "glcore", menu: "rgui" },
+    paths: { cacheDirectory: "/host/cache" },
     video: { fullscreen: true },
     extraArgs: ["host"],
   },
@@ -47,7 +51,12 @@ const user: UserRecord = {
     stream: { resolution: { height: 720 } },
     extraArgs: ["user"],
   },
-  retroarch: { configFile: { append: ["/tmp/user.cfg"] } },
+  retroarch: {
+    configFile: { append: ["/tmp/user.cfg"] },
+    logging: { fpsShow: true },
+    drivers: { menu: "ozone" },
+    paths: { thumbnailsDirectory: "/user/thumbnails" },
+  },
 }
 const system: SystemRecord = {
   id: "genesis",
@@ -63,7 +72,10 @@ const source: SourceRecord = {
   runtime: "genesis-plus-gx",
   gamescope: { extraArgs: ["source"], display: { nested: { height: 240 } } },
   moonlight: { extraArgs: ["source"], platform: { name: "v4l2m2m" } },
-  retroarch: { paths: { systemDirectory: "/bios" }, extraArgs: ["source"] },
+  retroarch: {
+    paths: { systemDirectory: "/bios", cacheDirectory: "/source/cache" },
+    extraArgs: ["source"],
+  },
 }
 const app: AppRecord = {
   id: "retroarch",
@@ -233,9 +245,15 @@ describe("resolveReadableLaunchContext", () => {
     })
     expect(context.retroarch).toMatchObject({
       environment: { RA_KEEP: "host", RA_UNSET: null },
-      configFile: { append: ["/tmp/user.cfg"] },
+      configFile: { append: ["/tmp/host.cfg", "/tmp/user.cfg"] },
       core: { path: "/cores/runtime-override.so" },
-      paths: { systemDirectory: "/bios" },
+      logging: { verbosity: false, fpsShow: true },
+      drivers: { video: "glcore", menu: "ozone" },
+      paths: {
+        systemDirectory: "/bios",
+        cacheDirectory: "/source/cache",
+        thumbnailsDirectory: "/user/thumbnails",
+      },
       lifecycle: { saveOnExit: false },
       video: { fullscreen: false },
       extraSettings: { video_font_enable: false },

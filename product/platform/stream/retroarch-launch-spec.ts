@@ -12,9 +12,18 @@ import type { LaunchSpec } from "@platform/library/launcher"
 
 const DEFAULT_RETROARCH_COMMAND = "retroarch"
 
-const SAFE_LIFECYCLE_DEFAULTS: Required<
-  NonNullable<RetroArchPolicy["lifecycle"]>
-> = {
+type SafeRetroArchLifecycleDefaults = Required<
+  Pick<
+    NonNullable<RetroArchPolicy["lifecycle"]>,
+    | "saveOnExit"
+    | "autoOverrides"
+    | "autoRemaps"
+    | "gameSpecificOptions"
+    | "autoShaders"
+  >
+>
+
+const SAFE_LIFECYCLE_DEFAULTS: SafeRetroArchLifecycleDefaults = {
   saveOnExit: false,
   autoOverrides: false,
   autoRemaps: false,
@@ -39,10 +48,49 @@ const RETROARCH_TYPED_CONFIG_KEYS = [
   ["auto_remaps_enable", "lifecycle.autoRemaps"],
   ["game_specific_options", "lifecycle.gameSpecificOptions"],
   ["auto_shaders_enable", "lifecycle.autoShaders"],
+  ["show_hidden_files", "lifecycle.showHiddenFiles"],
+  ["load_dummy_on_core_shutdown", "lifecycle.loadDummyOnCoreShutdown"],
+  ["history_list_enable", "lifecycle.historyListEnable"],
+  ["perfcnt_enable", "lifecycle.performanceCounters"],
+  ["all_users_control_menu", "lifecycle.allUsersControlMenu"],
+  ["suspend_screensaver_enable", "lifecycle.suspendScreensaver"],
+  ["sustained_performance_mode", "lifecycle.sustainedPerformanceMode"],
+  ["gamemode_enable", "lifecycle.gameMode"],
+  ["log_verbosity", "logging.verbosity"],
+  ["libretro_log_level", "logging.libretroLogLevel"],
+  ["fps_show", "logging.fpsShow"],
+  ["memory_show", "logging.memoryShow"],
+  ["framecount_show", "logging.framecountShow"],
+  ["input_driver", "drivers.input"],
+  ["input_joypad_driver", "drivers.joypad"],
+  ["video_driver", "drivers.video"],
+  ["audio_driver", "drivers.audio"],
+  ["audio_resampler", "drivers.resampler"],
+  ["menu_driver", "drivers.menu"],
+  ["camera_driver", "drivers.camera"],
+  ["location_driver", "drivers.location"],
+  ["record_driver", "drivers.record"],
   ["system_directory", "paths.systemDirectory"],
   ["savefile_directory", "paths.savefileDirectory"],
   ["savestate_directory", "paths.savestateDirectory"],
   ["screenshot_directory", "paths.screenshotDirectory"],
+  ["content_directory", "paths.contentDirectory"],
+  ["cache_directory", "paths.cacheDirectory"],
+  ["assets_directory", "paths.assetsDirectory"],
+  ["thumbnails_directory", "paths.thumbnailsDirectory"],
+  ["playlist_directory", "paths.playlistDirectory"],
+  ["libretro_directory", "paths.libretroDirectory"],
+  ["libretro_info_path", "paths.libretroInfoPath"],
+  ["core_assets_directory", "paths.coreAssetsDirectory"],
+  ["core_options_path", "paths.coreOptionsPath"],
+  ["joypad_autoconfig_dir", "paths.joypadAutoconfigDirectory"],
+  ["input_remapping_directory", "paths.inputRemappingDirectory"],
+  ["overlay_directory", "paths.overlayDirectory"],
+  ["video_shader_dir", "paths.videoShaderDirectory"],
+  ["cheat_database_path", "paths.cheatDatabasePath"],
+  ["content_database_path", "paths.contentDatabasePath"],
+  ["content_runtime_log", "paths.contentRuntimeLog"],
+  ["recording_output_directory", "paths.recordingOutputDirectory"],
   ["video_fullscreen", "video.fullscreen"],
   ["video_windowed_fullscreen", "video.windowedFullscreen"],
   ["video_vsync", "video.vsync"],
@@ -120,6 +168,8 @@ function renderRetroArchSettings(
   const writer = createTypedSettingsWriter()
 
   appendLifecycleSettings(writer, policy)
+  appendLoggingSettings(writer, policy)
+  appendDriverSettings(writer, policy)
   appendPathSettings(writer, policy)
   appendVideoSettings(writer, policy)
   appendAudioSettings(writer, policy)
@@ -157,6 +207,72 @@ function appendLifecycleSettings(
     lifecycle.gameSpecificOptions,
   )
   pushTypedSetting(writer, "auto_shaders_enable", lifecycle.autoShaders)
+  pushTypedSetting(
+    writer,
+    "show_hidden_files",
+    policy.lifecycle?.showHiddenFiles,
+  )
+  pushTypedSetting(
+    writer,
+    "load_dummy_on_core_shutdown",
+    policy.lifecycle?.loadDummyOnCoreShutdown,
+  )
+  pushTypedSetting(
+    writer,
+    "history_list_enable",
+    policy.lifecycle?.historyListEnable,
+  )
+  pushTypedSetting(
+    writer,
+    "perfcnt_enable",
+    policy.lifecycle?.performanceCounters,
+  )
+  pushTypedSetting(
+    writer,
+    "all_users_control_menu",
+    policy.lifecycle?.allUsersControlMenu,
+  )
+  pushTypedSetting(
+    writer,
+    "suspend_screensaver_enable",
+    policy.lifecycle?.suspendScreensaver,
+  )
+  pushTypedSetting(
+    writer,
+    "sustained_performance_mode",
+    policy.lifecycle?.sustainedPerformanceMode,
+  )
+  pushTypedSetting(writer, "gamemode_enable", policy.lifecycle?.gameMode)
+}
+
+function appendLoggingSettings(
+  writer: TypedSettingsWriter,
+  policy: RetroArchPolicy,
+) {
+  pushTypedSetting(writer, "log_verbosity", policy.logging?.verbosity)
+  pushTypedSetting(
+    writer,
+    "libretro_log_level",
+    policy.logging?.libretroLogLevel,
+  )
+  pushTypedSetting(writer, "fps_show", policy.logging?.fpsShow)
+  pushTypedSetting(writer, "memory_show", policy.logging?.memoryShow)
+  pushTypedSetting(writer, "framecount_show", policy.logging?.framecountShow)
+}
+
+function appendDriverSettings(
+  writer: TypedSettingsWriter,
+  policy: RetroArchPolicy,
+) {
+  pushTypedSetting(writer, "input_driver", policy.drivers?.input)
+  pushTypedSetting(writer, "input_joypad_driver", policy.drivers?.joypad)
+  pushTypedSetting(writer, "video_driver", policy.drivers?.video)
+  pushTypedSetting(writer, "audio_driver", policy.drivers?.audio)
+  pushTypedSetting(writer, "audio_resampler", policy.drivers?.resampler)
+  pushTypedSetting(writer, "menu_driver", policy.drivers?.menu)
+  pushTypedSetting(writer, "camera_driver", policy.drivers?.camera)
+  pushTypedSetting(writer, "location_driver", policy.drivers?.location)
+  pushTypedSetting(writer, "record_driver", policy.drivers?.record)
 }
 
 function appendPathSettings(
@@ -178,6 +294,67 @@ function appendPathSettings(
     writer,
     "screenshot_directory",
     policy.paths?.screenshotDirectory,
+  )
+  pushTypedSetting(writer, "content_directory", policy.paths?.contentDirectory)
+  pushTypedSetting(writer, "cache_directory", policy.paths?.cacheDirectory)
+  pushTypedSetting(writer, "assets_directory", policy.paths?.assetsDirectory)
+  pushTypedSetting(
+    writer,
+    "thumbnails_directory",
+    policy.paths?.thumbnailsDirectory,
+  )
+  pushTypedSetting(
+    writer,
+    "playlist_directory",
+    policy.paths?.playlistDirectory,
+  )
+  pushTypedSetting(
+    writer,
+    "libretro_directory",
+    policy.paths?.libretroDirectory,
+  )
+  pushTypedSetting(writer, "libretro_info_path", policy.paths?.libretroInfoPath)
+  pushTypedSetting(
+    writer,
+    "core_assets_directory",
+    policy.paths?.coreAssetsDirectory,
+  )
+  pushTypedSetting(writer, "core_options_path", policy.paths?.coreOptionsPath)
+  pushTypedSetting(
+    writer,
+    "joypad_autoconfig_dir",
+    policy.paths?.joypadAutoconfigDirectory,
+  )
+  pushTypedSetting(
+    writer,
+    "input_remapping_directory",
+    policy.paths?.inputRemappingDirectory,
+  )
+  pushTypedSetting(writer, "overlay_directory", policy.paths?.overlayDirectory)
+  pushTypedSetting(
+    writer,
+    "video_shader_dir",
+    policy.paths?.videoShaderDirectory,
+  )
+  pushTypedSetting(
+    writer,
+    "cheat_database_path",
+    policy.paths?.cheatDatabasePath,
+  )
+  pushTypedSetting(
+    writer,
+    "content_database_path",
+    policy.paths?.contentDatabasePath,
+  )
+  pushTypedSetting(
+    writer,
+    "content_runtime_log",
+    policy.paths?.contentRuntimeLog,
+  )
+  pushTypedSetting(
+    writer,
+    "recording_output_directory",
+    policy.paths?.recordingOutputDirectory,
   )
 }
 
@@ -234,9 +411,9 @@ export function assertUniqueRetroArchTypedConfigKeys(
 function pushTypedSetting(
   writer: TypedSettingsWriter,
   key: string,
-  value: LaunchSettingValue | undefined,
+  value: LaunchSettingValue | null | undefined,
 ) {
-  if (value === undefined) return
+  if (value === undefined || value === null) return
   if (writer.seenKeys.has(key)) {
     throw new Error(`Duplicate RetroArch typed cfg key rendered: ${key}`)
   }

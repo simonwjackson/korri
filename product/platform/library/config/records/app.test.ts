@@ -58,6 +58,9 @@ describe("AppPayload", () => {
     expect(() =>
       decodeAppPayload({ kind: "dolphin", video: { fullscreen: true } }),
     ).toThrow(/kind: retroarch/)
+    expect(() =>
+      decodeAppPayload({ kind: "dolphin", drivers: { menu: "ozone" } }),
+    ).toThrow(/kind: retroarch/)
     expect(() => decodeAppPayload({ video: { fullscreen: true } })).toThrow(
       /kind: retroarch/,
     )
@@ -77,6 +80,7 @@ describe("AppPayload", () => {
       content: { path: "{content.path}" },
       logging: { verbose: true, logFile: null },
       lifecycle: { saveOnExit: false },
+      drivers: { menu: "ozone" },
       paths: { systemDirectory: "/bios" },
       video: { fullscreen: true },
       audio: { enable: true },

@@ -31,6 +31,7 @@ export const RETROARCH_APP_FIELD_KEYS = [
   "content",
   "logging",
   "lifecycle",
+  "drivers",
   "paths",
   "video",
   "audio",
@@ -100,6 +101,9 @@ export type AppRecord = Schema.Schema.Type<typeof AppRecord>
 export const decodeAppPayload = (input: unknown): AppPayload =>
   Schema.decodeUnknownSync(AppPayload)(input, STRICT)
 
+export const decodeAppRecord = (input: unknown): AppRecord =>
+  Schema.decodeUnknownSync(AppRecord)(input, STRICT)
+
 export const appRecordKind = (app: Pick<AppRecord, "id" | "kind">): AppKind =>
   app.kind ?? (app.id === "retroarch" ? "retroarch" : "process")
 
@@ -118,6 +122,7 @@ export const appRetroArchPolicyFromRecord = (
     content,
     logging,
     lifecycle,
+    drivers,
     paths,
     video,
     audio,
@@ -132,6 +137,7 @@ export const appRetroArchPolicyFromRecord = (
     ...(content !== undefined ? { content } : {}),
     ...(logging !== undefined ? { logging } : {}),
     ...(lifecycle !== undefined ? { lifecycle } : {}),
+    ...(drivers !== undefined ? { drivers } : {}),
     ...(paths !== undefined ? { paths } : {}),
     ...(video !== undefined ? { video } : {}),
     ...(audio !== undefined ? { audio } : {}),

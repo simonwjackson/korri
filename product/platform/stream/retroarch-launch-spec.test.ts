@@ -35,12 +35,57 @@ describe("typed RetroArch launch spec rendering", () => {
 
   it("renders typed settings before extraSettings so escape hatches win", () => {
     const config = renderRetroArchConfig({
-      lifecycle: { saveOnExit: false },
+      lifecycle: {
+        saveOnExit: false,
+        showHiddenFiles: true,
+        loadDummyOnCoreShutdown: false,
+        historyListEnable: true,
+        performanceCounters: true,
+        allUsersControlMenu: false,
+        suspendScreensaver: true,
+        sustainedPerformanceMode: false,
+        gameMode: true,
+      },
+      logging: {
+        verbosity: true,
+        libretroLogLevel: "info",
+        fpsShow: true,
+        memoryShow: true,
+        framecountShow: true,
+      },
+      drivers: {
+        input: "udev",
+        joypad: "udev",
+        video: "glcore",
+        audio: "alsathread",
+        resampler: "sinc",
+        menu: "ozone",
+        camera: "null",
+        location: "null",
+        record: "ffmpeg",
+      },
       paths: {
         systemDirectory: "/bios",
         savefileDirectory: "/saves",
         savestateDirectory: "/states",
         screenshotDirectory: "/screenshots",
+        contentDirectory: null,
+        cacheDirectory: "/cache/retroarch",
+        assetsDirectory: "/share/retroarch/assets",
+        thumbnailsDirectory: "/data/retroarch/thumbnails",
+        playlistDirectory: "/data/retroarch/playlists",
+        libretroDirectory: "/lib/retroarch/cores",
+        libretroInfoPath: "/share/libretro/info",
+        coreAssetsDirectory: "/data/retroarch/downloads",
+        coreOptionsPath: "/config/retroarch/core-options.cfg",
+        joypadAutoconfigDirectory: "/share/retroarch/autoconfig",
+        inputRemappingDirectory: "/config/retroarch/remaps",
+        overlayDirectory: "/config/retroarch/overlays",
+        videoShaderDirectory: "/share/retroarch/shaders",
+        cheatDatabasePath: "/data/retroarch/cheats",
+        contentDatabasePath: "/data/retroarch/database/rdb",
+        contentRuntimeLog: true,
+        recordingOutputDirectory: "/captures/retroarch",
       },
       video: {
         fullscreen: true,
@@ -56,11 +101,19 @@ describe("typed RetroArch launch spec rendering", () => {
       },
       extraSettings: {
         video_fullscreen: false,
+        menu_driver: "rgui",
+        cache_directory: "/override/cache",
         notification_show_autoconfig: false,
       },
     })
 
+    expect(config).toContain('show_hidden_files = "true"')
+    expect(config).toContain('log_verbosity = "true"')
+    expect(config).toContain('input_driver = "udev"')
+    expect(config).toContain('menu_driver = "ozone"')
     expect(config).toContain('system_directory = "/bios"')
+    expect(config).toContain('cache_directory = "/cache/retroarch"')
+    expect(config).not.toContain("content_directory")
     expect(config).toContain('video_fullscreen = "true"')
     expect(config).toContain("aspect_ratio_index = 22")
     expect(config).toContain("audio_latency = 64")
@@ -68,16 +121,67 @@ describe("typed RetroArch launch spec rendering", () => {
     expect(config.lastIndexOf('video_fullscreen = "false"')).toBeGreaterThan(
       config.indexOf('video_fullscreen = "true"'),
     )
+    expect(config.lastIndexOf('menu_driver = "rgui"')).toBeGreaterThan(
+      config.indexOf('menu_driver = "ozone"'),
+    )
+    expect(
+      config.lastIndexOf('cache_directory = "/override/cache"'),
+    ).toBeGreaterThan(config.indexOf('cache_directory = "/cache/retroarch"'))
   })
 
   it("renders typed settings in stable group order before extraSettings", () => {
     const config = renderRetroArchConfig({
-      lifecycle: { saveOnExit: true },
+      lifecycle: {
+        saveOnExit: true,
+        showHiddenFiles: true,
+        loadDummyOnCoreShutdown: false,
+        historyListEnable: true,
+        performanceCounters: true,
+        allUsersControlMenu: false,
+        suspendScreensaver: true,
+        sustainedPerformanceMode: false,
+        gameMode: true,
+      },
+      logging: {
+        verbosity: true,
+        libretroLogLevel: "info",
+        fpsShow: true,
+        memoryShow: true,
+        framecountShow: true,
+      },
+      drivers: {
+        input: "udev",
+        joypad: "udev",
+        video: "glcore",
+        audio: "alsathread",
+        resampler: "sinc",
+        menu: "ozone",
+        camera: "null",
+        location: "null",
+        record: "ffmpeg",
+      },
       paths: {
         systemDirectory: "/bios",
         savefileDirectory: "/saves",
         savestateDirectory: "/states",
         screenshotDirectory: "/screenshots",
+        contentDirectory: null,
+        cacheDirectory: "/cache/retroarch",
+        assetsDirectory: "/share/retroarch/assets",
+        thumbnailsDirectory: "/data/retroarch/thumbnails",
+        playlistDirectory: "/data/retroarch/playlists",
+        libretroDirectory: "/lib/retroarch/cores",
+        libretroInfoPath: "/share/libretro/info",
+        coreAssetsDirectory: "/data/retroarch/downloads",
+        coreOptionsPath: "/config/retroarch/core-options.cfg",
+        joypadAutoconfigDirectory: "/share/retroarch/autoconfig",
+        inputRemappingDirectory: "/config/retroarch/remaps",
+        overlayDirectory: "/config/retroarch/overlays",
+        videoShaderDirectory: "/share/retroarch/shaders",
+        cheatDatabasePath: "/data/retroarch/cheats",
+        contentDatabasePath: "/data/retroarch/database/rdb",
+        contentRuntimeLog: true,
+        recordingOutputDirectory: "/captures/retroarch",
       },
       video: {
         fullscreen: true,
@@ -101,10 +205,48 @@ describe("typed RetroArch launch spec rendering", () => {
         'auto_remaps_enable = "false"',
         'game_specific_options = "false"',
         'auto_shaders_enable = "false"',
+        'show_hidden_files = "true"',
+        'load_dummy_on_core_shutdown = "false"',
+        'history_list_enable = "true"',
+        'perfcnt_enable = "true"',
+        'all_users_control_menu = "false"',
+        'suspend_screensaver_enable = "true"',
+        'sustained_performance_mode = "false"',
+        'gamemode_enable = "true"',
+        'log_verbosity = "true"',
+        'libretro_log_level = "info"',
+        'fps_show = "true"',
+        'memory_show = "true"',
+        'framecount_show = "true"',
+        'input_driver = "udev"',
+        'input_joypad_driver = "udev"',
+        'video_driver = "glcore"',
+        'audio_driver = "alsathread"',
+        'audio_resampler = "sinc"',
+        'menu_driver = "ozone"',
+        'camera_driver = "null"',
+        'location_driver = "null"',
+        'record_driver = "ffmpeg"',
         'system_directory = "/bios"',
         'savefile_directory = "/saves"',
         'savestate_directory = "/states"',
         'screenshot_directory = "/screenshots"',
+        'cache_directory = "/cache/retroarch"',
+        'assets_directory = "/share/retroarch/assets"',
+        'thumbnails_directory = "/data/retroarch/thumbnails"',
+        'playlist_directory = "/data/retroarch/playlists"',
+        'libretro_directory = "/lib/retroarch/cores"',
+        'libretro_info_path = "/share/libretro/info"',
+        'core_assets_directory = "/data/retroarch/downloads"',
+        'core_options_path = "/config/retroarch/core-options.cfg"',
+        'joypad_autoconfig_dir = "/share/retroarch/autoconfig"',
+        'input_remapping_directory = "/config/retroarch/remaps"',
+        'overlay_directory = "/config/retroarch/overlays"',
+        'video_shader_dir = "/share/retroarch/shaders"',
+        'cheat_database_path = "/data/retroarch/cheats"',
+        'content_database_path = "/data/retroarch/database/rdb"',
+        'content_runtime_log = "true"',
+        'recording_output_directory = "/captures/retroarch"',
         'video_fullscreen = "true"',
         'video_windowed_fullscreen = "true"',
         'video_vsync = "true"',

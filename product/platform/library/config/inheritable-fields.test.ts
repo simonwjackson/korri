@@ -152,19 +152,63 @@ const representativeRetroArchPolicy: RetroArchPolicy = {
   configFile: { mode: "generated", append: ["/tmp/a.cfg"] },
   core: { path: "{runtime.path}" },
   content: { path: "{content.path}" },
-  logging: { verbose: true, logFile: null },
+  logging: {
+    verbose: true,
+    logFile: null,
+    verbosity: true,
+    libretroLogLevel: "info",
+    fpsShow: true,
+    memoryShow: true,
+    framecountShow: true,
+  },
   lifecycle: {
     saveOnExit: false,
     autoOverrides: false,
     autoRemaps: false,
     gameSpecificOptions: false,
     autoShaders: false,
+    showHiddenFiles: true,
+    loadDummyOnCoreShutdown: false,
+    historyListEnable: true,
+    performanceCounters: true,
+    allUsersControlMenu: false,
+    suspendScreensaver: true,
+    sustainedPerformanceMode: false,
+    gameMode: true,
+  },
+  drivers: {
+    input: "udev",
+    joypad: "udev",
+    video: "glcore",
+    audio: "alsathread",
+    resampler: "sinc",
+    menu: "ozone",
+    camera: "null",
+    location: "null",
+    record: "ffmpeg",
   },
   paths: {
     systemDirectory: "/bios",
     savefileDirectory: "/saves",
     savestateDirectory: "/states",
     screenshotDirectory: "/screenshots",
+    contentDirectory: null,
+    cacheDirectory: "/cache/retroarch",
+    assetsDirectory: "/share/retroarch/assets",
+    thumbnailsDirectory: "/data/retroarch/thumbnails",
+    playlistDirectory: "/data/retroarch/playlists",
+    libretroDirectory: "/lib/retroarch/cores",
+    libretroInfoPath: "/share/libretro/info",
+    coreAssetsDirectory: "/data/retroarch/downloads",
+    coreOptionsPath: "/config/retroarch/core-options.cfg",
+    joypadAutoconfigDirectory: "/share/retroarch/autoconfig",
+    inputRemappingDirectory: "/config/retroarch/remaps",
+    overlayDirectory: "/config/retroarch/overlays",
+    videoShaderDirectory: "/share/retroarch/shaders",
+    cheatDatabasePath: "/data/retroarch/cheats",
+    contentDatabasePath: "/data/retroarch/database/rdb",
+    contentRuntimeLog: true,
+    recordingOutputDirectory: "/captures/retroarch",
   },
   video: {
     fullscreen: true,
@@ -238,10 +282,26 @@ describe("RetroArchPolicy", () => {
       { video: { fullScreen: true } },
       { video: { aspectRatio: "stretch" } },
       { input: { menuToggleGamepadCombo: "l3-r3" } },
+      { drivers: { menuDriver: "ozone" } },
+      { menu: { driver: "ozone" } },
       { retroarch: {} },
     ]) {
       expect(() => decodeRetroArchPolicy(badPolicy)).toThrow()
     }
+  })
+
+  it("omits nullable paths but rejects empty typed path and driver values", () => {
+    expect(
+      decodeRetroArchPolicy({ paths: { contentDirectory: null } }),
+    ).toEqual({
+      paths: { contentDirectory: null },
+    })
+    expect(() =>
+      decodeRetroArchPolicy({ paths: { cacheDirectory: "" } }),
+    ).toThrow(/paths\.cacheDirectory.*non-empty/)
+    expect(() => decodeRetroArchPolicy({ drivers: { video: "" } })).toThrow(
+      /drivers\.video.*non-empty/,
+    )
   })
 })
 

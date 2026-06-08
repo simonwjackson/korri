@@ -484,6 +484,11 @@ const RetroArchPathPolicy = Schema.Struct({
 const RetroArchLoggingPolicy = Schema.Struct({
   verbose: Schema.optional(Schema.Boolean),
   logFile: Schema.optional(NullableNonEmptyString("logging.logFile")),
+  verbosity: Schema.optional(Schema.Boolean),
+  libretroLogLevel: Schema.optional(NonEmptyString("logging.libretroLogLevel")),
+  fpsShow: Schema.optional(Schema.Boolean),
+  memoryShow: Schema.optional(Schema.Boolean),
+  framecountShow: Schema.optional(Schema.Boolean),
 })
 
 const RetroArchLifecyclePolicy = Schema.Struct({
@@ -492,7 +497,29 @@ const RetroArchLifecyclePolicy = Schema.Struct({
   autoRemaps: Schema.optional(Schema.Boolean),
   gameSpecificOptions: Schema.optional(Schema.Boolean),
   autoShaders: Schema.optional(Schema.Boolean),
+  showHiddenFiles: Schema.optional(Schema.Boolean),
+  loadDummyOnCoreShutdown: Schema.optional(Schema.Boolean),
+  historyListEnable: Schema.optional(Schema.Boolean),
+  performanceCounters: Schema.optional(Schema.Boolean),
+  allUsersControlMenu: Schema.optional(Schema.Boolean),
+  suspendScreensaver: Schema.optional(Schema.Boolean),
+  sustainedPerformanceMode: Schema.optional(Schema.Boolean),
+  gameMode: Schema.optional(Schema.Boolean),
 })
+
+const RetroArchDriversPolicy = Schema.Struct({
+  input: Schema.optional(NonEmptyString("drivers.input")),
+  joypad: Schema.optional(NonEmptyString("drivers.joypad")),
+  video: Schema.optional(NonEmptyString("drivers.video")),
+  audio: Schema.optional(NonEmptyString("drivers.audio")),
+  resampler: Schema.optional(NonEmptyString("drivers.resampler")),
+  menu: Schema.optional(NonEmptyString("drivers.menu")),
+  camera: Schema.optional(NonEmptyString("drivers.camera")),
+  location: Schema.optional(NonEmptyString("drivers.location")),
+  record: Schema.optional(NonEmptyString("drivers.record")),
+})
+
+const RetroArchNullablePath = (label: string) => NullableNonEmptyString(label)
 
 const RetroArchPathsPolicy = Schema.Struct({
   systemDirectory: Schema.optional(NonEmptyString("paths.systemDirectory")),
@@ -502,6 +529,55 @@ const RetroArchPathsPolicy = Schema.Struct({
   ),
   screenshotDirectory: Schema.optional(
     NonEmptyString("paths.screenshotDirectory"),
+  ),
+  contentDirectory: Schema.optional(
+    RetroArchNullablePath("paths.contentDirectory"),
+  ),
+  cacheDirectory: Schema.optional(
+    RetroArchNullablePath("paths.cacheDirectory"),
+  ),
+  assetsDirectory: Schema.optional(
+    RetroArchNullablePath("paths.assetsDirectory"),
+  ),
+  thumbnailsDirectory: Schema.optional(
+    RetroArchNullablePath("paths.thumbnailsDirectory"),
+  ),
+  playlistDirectory: Schema.optional(
+    RetroArchNullablePath("paths.playlistDirectory"),
+  ),
+  libretroDirectory: Schema.optional(
+    RetroArchNullablePath("paths.libretroDirectory"),
+  ),
+  libretroInfoPath: Schema.optional(
+    RetroArchNullablePath("paths.libretroInfoPath"),
+  ),
+  coreAssetsDirectory: Schema.optional(
+    RetroArchNullablePath("paths.coreAssetsDirectory"),
+  ),
+  coreOptionsPath: Schema.optional(
+    RetroArchNullablePath("paths.coreOptionsPath"),
+  ),
+  joypadAutoconfigDirectory: Schema.optional(
+    RetroArchNullablePath("paths.joypadAutoconfigDirectory"),
+  ),
+  inputRemappingDirectory: Schema.optional(
+    RetroArchNullablePath("paths.inputRemappingDirectory"),
+  ),
+  overlayDirectory: Schema.optional(
+    RetroArchNullablePath("paths.overlayDirectory"),
+  ),
+  videoShaderDirectory: Schema.optional(
+    RetroArchNullablePath("paths.videoShaderDirectory"),
+  ),
+  cheatDatabasePath: Schema.optional(
+    RetroArchNullablePath("paths.cheatDatabasePath"),
+  ),
+  contentDatabasePath: Schema.optional(
+    RetroArchNullablePath("paths.contentDatabasePath"),
+  ),
+  contentRuntimeLog: Schema.optional(Schema.Boolean),
+  recordingOutputDirectory: Schema.optional(
+    RetroArchNullablePath("paths.recordingOutputDirectory"),
   ),
 })
 
@@ -558,6 +634,7 @@ export const RetroArchPolicy = Schema.Struct({
   content: Schema.optional(RetroArchPathPolicy),
   logging: Schema.optional(RetroArchLoggingPolicy),
   lifecycle: Schema.optional(RetroArchLifecyclePolicy),
+  drivers: Schema.optional(RetroArchDriversPolicy),
   paths: Schema.optional(RetroArchPathsPolicy),
   video: Schema.optional(RetroArchVideoPolicy),
   audio: Schema.optional(RetroArchAudioPolicy),

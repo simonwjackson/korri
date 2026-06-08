@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 
-import { decodeAppPayload } from "./app"
+import { decodeAppPayload, decodeAppRecord } from "./app"
 import { decodeGamePayload } from "./game"
 import { decodeGlobalConfigPayload } from "./global"
 import { decodeHostPayload } from "./host"
@@ -123,7 +123,10 @@ describe("readable library schema records", () => {
     const retroarch = {
       environment: { WAYLAND_DISPLAY: null },
       configFile: { mode: "generated" },
-      lifecycle: { saveOnExit: false },
+      lifecycle: { saveOnExit: false, showHiddenFiles: true },
+      logging: { verbosity: true, fpsShow: true },
+      drivers: { menu: "ozone", resampler: "sinc" },
+      paths: { contentDirectory: null, cacheDirectory: "/outside/cache" },
       video: { fullscreen: true, aspectRatio: "core-provided" },
       extraSettings: { video_font_enable: false },
       extraArgs: ["--features"],
@@ -134,8 +137,8 @@ describe("readable library schema records", () => {
         kind: "retroarch",
         command: "retroarch",
         ...retroarch,
-      }).video?.fullscreen,
-    ).toBe(true)
+      }).drivers?.menu,
+    ).toBe("ozone")
 
     const cases: Array<readonly [string, () => { retroarch?: unknown }]> = [
       ["global", () => decodeGlobalConfigPayload({ retroarch })],
@@ -207,6 +210,14 @@ describe("readable library schema records", () => {
     for (const [, decode] of cases) {
       expect(decode().retroarch).toMatchObject(retroarch)
     }
+
+    expect(
+      decodeAppRecord({
+        id: "retroarch",
+        command: "retroarch",
+        drivers: { video: "glcore" },
+      }).drivers?.video,
+    ).toBe("glcore")
   })
 
   it("rejects retired RetroArch typed-app vocabulary", () => {
