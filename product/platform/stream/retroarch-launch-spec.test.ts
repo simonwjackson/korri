@@ -129,6 +129,123 @@ describe("typed RetroArch launch spec rendering", () => {
     ).toBeGreaterThan(config.indexOf('cache_directory = "/cache/retroarch"'))
   })
 
+  it("renders expanded video audio and input tuning settings", () => {
+    const config = renderRetroArchConfig({
+      video: {
+        fullscreenWidth: 0,
+        fullscreenHeight: 720,
+        refreshRate: 59.94,
+        aspectRatio: "config",
+        aspectRatioValue: 1.3333,
+        forceAspect: true,
+        scale: 3,
+        integerScale: true,
+        cropOverscan: false,
+        smooth: false,
+        shader: "/shaders/crt.glslp",
+        shaderEnable: true,
+        hdr: {
+          enable: true,
+          maxNits: 1000,
+          paperWhiteNits: 200,
+          contrast: 1.25,
+          expandGamut: false,
+        },
+        recording: { postFilter: true, gpu: true },
+        gpuScreenshot: true,
+        shaderWatchFiles: true,
+        sync: {
+          hardSync: true,
+          hardSyncFrames: 1,
+          frameDelay: 99,
+          frameDelayAuto: true,
+        },
+      },
+      audio: {
+        enable: true,
+        menuEnable: false,
+        mute: false,
+        mixerMute: true,
+        outputRate: 48000,
+        device: "hw:0,0",
+        dspPlugin: null,
+        sync: true,
+        latencyMs: 64,
+        rateControl: true,
+        rateControlDelta: 0.005,
+        maxTimingSkew: 0.05,
+        volumeDb: -3,
+        mixerVolumeDb: -6,
+        resamplerQuality: 4,
+      },
+      input: {
+        autodetect: true,
+        pollTypeBehavior: 2,
+        axisThreshold: 0.5,
+        analogDeadzone: 0.15,
+        analogSensitivity: 1,
+        remapBinds: true,
+        descriptors: { labelShow: true, hideUnbound: false },
+        overlay: {
+          enable: true,
+          path: "/overlays/handheld.cfg",
+          opacity: 0.9,
+          scale: 1.1,
+          behindMenu: false,
+          hideInMenu: true,
+        },
+        autoGameFocus: 0,
+        menuToggleGamepadCombo: "start-select",
+        quitGamepadCombo: "l3-r3",
+        ports: {
+          "1": { libretroDevice: 1, joypadIndex: 0, analogDpadMode: 1 },
+          "2": { libretroDevice: 257, joypadIndex: 1 },
+        },
+      },
+      extraSettings: { video_frame_delay: 3 },
+    })
+
+    expect(config).toContain("aspect_ratio_index = 20")
+    expect(config).toContain("video_aspect_ratio = 1.3333")
+    expect(config).toContain("video_fullscreen_x = 0")
+    expect(config).toContain("video_fullscreen_y = 720")
+    expect(config).toContain("video_scale = 3")
+    expect(config).toContain("video_frame_delay = 99")
+    expect(config).toContain('video_frame_delay_auto = "true"')
+    expect(config).toContain('video_hdr_enable = "true"')
+    expect(config).toContain('video_gpu_screenshot = "true"')
+    expect(config).toContain("audio_out_rate = 48000")
+    expect(config).toContain('audio_device = "hw:0,0"')
+    expect(config).toContain("audio_volume = -3")
+    expect(config).toContain("audio_resampler_quality = 4")
+    expect(config).toContain("input_poll_type_behavior = 2")
+    expect(config).toContain('input_overlay = "/overlays/handheld.cfg"')
+    expect(config).toContain("input_auto_game_focus = 0")
+    expect(config).toContain("input_quit_gamepad_combo = 2")
+    expect(config).toContain("input_libretro_device_p1 = 1")
+    expect(config).toContain("input_player1_joypad_index = 0")
+    expect(config).toContain("input_player1_analog_dpad_mode = 1")
+    expect(config).toContain("input_libretro_device_p2 = 257")
+    expect(config.lastIndexOf("video_frame_delay = 3")).toBeGreaterThan(
+      config.indexOf("video_frame_delay = 99"),
+    )
+  })
+
+  it("renders verified named aspect ratio values", () => {
+    expect(renderRetroArchConfig({ video: { aspectRatio: "full" } })).toContain(
+      "aspect_ratio_index = 24",
+    )
+    expect(
+      renderRetroArchConfig({ video: { aspectRatio: "core-provided" } }),
+    ).toContain("aspect_ratio_index = 22")
+    expect(
+      renderRetroArchConfig({ video: { aspectRatio: "custom" } }),
+    ).toContain("aspect_ratio_index = 23")
+    expect(
+      renderRetroArchConfig({ video: { aspectRatio: "square" } }),
+    ).toContain("aspect_ratio_index = 21")
+  })
+
   it("renders typed settings in stable group order before extraSettings", () => {
     const config = renderRetroArchConfig({
       lifecycle: {

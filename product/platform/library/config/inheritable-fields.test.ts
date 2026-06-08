@@ -213,14 +213,77 @@ const representativeRetroArchPolicy: RetroArchPolicy = {
   video: {
     fullscreen: true,
     windowedFullscreen: true,
+    fullscreenWidth: 0,
+    fullscreenHeight: 720,
+    refreshRate: 59.94,
     vsync: true,
     aspectRatio: "core-provided",
+    aspectRatioValue: 1.3333,
+    forceAspect: true,
+    scale: 3,
+    integerScale: false,
+    cropOverscan: true,
+    smooth: true,
+    shader: "/shaders/crt.glslp",
+    shaderEnable: true,
+    hdr: {
+      enable: true,
+      maxNits: 1000,
+      paperWhiteNits: 200,
+      contrast: 1,
+      expandGamut: true,
+    },
+    recording: { postFilter: false, gpu: true },
+    gpuScreenshot: true,
+    shaderWatchFiles: false,
+    sync: {
+      hardSync: true,
+      hardSyncFrames: 1,
+      frameDelay: 99,
+      frameDelayAuto: true,
+    },
   },
-  audio: { enable: true, latencyMs: 64 },
+  audio: {
+    enable: true,
+    menuEnable: false,
+    mute: false,
+    mixerMute: false,
+    latencyMs: 64,
+    outputRate: 48000,
+    device: "default",
+    dspPlugin: null,
+    sync: true,
+    rateControl: true,
+    rateControlDelta: 0.005,
+    maxTimingSkew: 0.05,
+    volumeDb: -3,
+    mixerVolumeDb: -6,
+    resamplerQuality: 4,
+  },
   input: {
     autodetect: true,
     maxUsers: 4,
+    pollTypeBehavior: 2,
+    axisThreshold: 0.5,
+    analogDeadzone: 0.15,
+    analogSensitivity: 1,
+    remapBinds: true,
+    descriptors: { labelShow: true, hideUnbound: false },
+    overlay: {
+      enable: true,
+      path: "/overlays/handheld.cfg",
+      opacity: 0.9,
+      scale: 1.1,
+      behindMenu: false,
+      hideInMenu: true,
+    },
+    autoGameFocus: 0,
     menuToggleGamepadCombo: "start-select",
+    quitGamepadCombo: "l3-r3",
+    ports: {
+      "1": { libretroDevice: 1, joypadIndex: 0, analogDpadMode: 1 },
+      "2": { libretroDevice: 257, joypadIndex: 1 },
+    },
   },
   extraSettings: { video_font_enable: false },
   extraArgs: ["--features"],
@@ -277,11 +340,54 @@ describe("RetroArchPolicy", () => {
     ).toThrow(/plaintext credential/)
   })
 
+  it("decodes expanded video, audio, and input tuning fields", () => {
+    const policy = decodeRetroArchPolicy({
+      video: {
+        fullscreenWidth: 0,
+        fullscreenHeight: 0,
+        aspectRatio: "full",
+        aspectRatioValue: 1.3333,
+        scale: 3,
+        sync: { frameDelay: 0 },
+      },
+      audio: {
+        outputRate: 48000,
+        rateControlDelta: 0.005,
+        maxTimingSkew: 0.05,
+        resamplerQuality: 4,
+      },
+      input: {
+        pollTypeBehavior: 2,
+        autoGameFocus: 0,
+        quitGamepadCombo: "start-select",
+        ports: { "1": { libretroDevice: 1, joypadIndex: 0 } },
+      },
+    })
+
+    expect(policy.video?.aspectRatio).toBe("full")
+    expect(policy.video?.fullscreenWidth).toBe(0)
+    expect(policy.video?.sync?.frameDelay).toBe(0)
+    expect(policy.input?.ports?.["1"]?.joypadIndex).toBe(0)
+  })
+
+  it("rejects expanded tuning values outside the typed contract", () => {
+    for (const badPolicy of [
+      { video: { sync: { frameDelay: 100 } } },
+      { video: { fullscreenWidth: -1 } },
+      { audio: { outputRate: 0 } },
+      { input: { pollTypeBehavior: -1 } },
+      { input: { ports: { "0": { joypadIndex: 0 } } } },
+      { input: { ports: { "1": { a: "x" } } } },
+    ]) {
+      expect(() => decodeRetroArchPolicy(badPolicy)).toThrow()
+    }
+  })
+
   it("rejects unknown typed policy keys and enum values", () => {
     for (const badPolicy of [
       { video: { fullScreen: true } },
       { video: { aspectRatio: "stretch" } },
-      { input: { menuToggleGamepadCombo: "l3-r3" } },
+      { input: { menuToggleGamepadCombo: "unsupported-combo" } },
       { drivers: { menuDriver: "ozone" } },
       { menu: { driver: "ozone" } },
       { retroarch: {} },

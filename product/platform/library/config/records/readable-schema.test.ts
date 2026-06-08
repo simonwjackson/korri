@@ -127,7 +127,19 @@ describe("readable library schema records", () => {
       logging: { verbosity: true, fpsShow: true },
       drivers: { menu: "ozone", resampler: "sinc" },
       paths: { contentDirectory: null, cacheDirectory: "/outside/cache" },
-      video: { fullscreen: true, aspectRatio: "core-provided" },
+      video: {
+        fullscreen: true,
+        fullscreenWidth: 0,
+        aspectRatio: "full",
+        sync: { frameDelay: 99, frameDelayAuto: true },
+      },
+      audio: { outputRate: 48000, mute: false, rateControlDelta: 0.005 },
+      input: {
+        pollTypeBehavior: 2,
+        overlay: { enable: true, opacity: 0.9 },
+        quitGamepadCombo: "start-select",
+        ports: { "1": { libretroDevice: 1, joypadIndex: 0 } },
+      },
       extraSettings: { video_font_enable: false },
       extraArgs: ["--features"],
     }

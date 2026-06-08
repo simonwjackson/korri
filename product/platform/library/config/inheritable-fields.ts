@@ -454,12 +454,30 @@ export const MoonlightPolicy = Schema.Struct({
 })
 export type MoonlightPolicy = Schema.Schema.Type<typeof MoonlightPolicy>
 
-export const RetroArchAspectRatio = Schema.Literals(["core-provided"])
+export const RetroArchAspectRatio = Schema.Literals([
+  "config",
+  "square",
+  "core-provided",
+  "custom",
+  "full",
+])
 export type RetroArchAspectRatio = Schema.Schema.Type<
   typeof RetroArchAspectRatio
 >
 
-export const RetroArchMenuToggleGamepadCombo = Schema.Literals(["start-select"])
+export const RetroArchMenuToggleGamepadCombo = Schema.Literals([
+  "none",
+  "down-y-l-r",
+  "l3-r3",
+  "l1-r1-start-select",
+  "start-select",
+  "l3-r",
+  "l-r",
+  "hold-start",
+  "hold-select",
+  "down-select",
+  "l2-r2",
+])
 export type RetroArchMenuToggleGamepadCombo = Schema.Schema.Type<
   typeof RetroArchMenuToggleGamepadCombo
 >
@@ -581,16 +599,73 @@ const RetroArchPathsPolicy = Schema.Struct({
   ),
 })
 
+const RetroArchVideoSyncPolicy = Schema.Struct({
+  hardSync: Schema.optional(Schema.Boolean),
+  hardSyncFrames: Schema.optional(
+    NonNegativeInteger("video.sync.hardSyncFrames"),
+  ),
+  frameDelay: Schema.optional(
+    Schema.Number.check(finiteNumberRange(0, 99, "video.sync.frameDelay")),
+  ),
+  frameDelayAuto: Schema.optional(Schema.Boolean),
+})
+
+const RetroArchVideoHdrPolicy = Schema.Struct({
+  enable: Schema.optional(Schema.Boolean),
+  maxNits: Schema.optional(PositiveNumber("video.hdr.maxNits")),
+  paperWhiteNits: Schema.optional(PositiveNumber("video.hdr.paperWhiteNits")),
+  contrast: Schema.optional(PositiveNumber("video.hdr.contrast")),
+  expandGamut: Schema.optional(Schema.Boolean),
+})
+
+const RetroArchVideoRecordingPolicy = Schema.Struct({
+  postFilter: Schema.optional(Schema.Boolean),
+  gpu: Schema.optional(Schema.Boolean),
+})
+
 const RetroArchVideoPolicy = Schema.Struct({
   fullscreen: Schema.optional(Schema.Boolean),
   windowedFullscreen: Schema.optional(Schema.Boolean),
+  fullscreenWidth: Schema.optional(NonNegativeInteger("video.fullscreenWidth")),
+  fullscreenHeight: Schema.optional(
+    NonNegativeInteger("video.fullscreenHeight"),
+  ),
+  refreshRate: Schema.optional(PositiveNumber("video.refreshRate")),
   vsync: Schema.optional(Schema.Boolean),
   aspectRatio: Schema.optional(RetroArchAspectRatio),
+  aspectRatioValue: Schema.optional(PositiveNumber("video.aspectRatioValue")),
+  forceAspect: Schema.optional(Schema.Boolean),
+  scale: Schema.optional(PositiveNumber("video.scale")),
+  integerScale: Schema.optional(Schema.Boolean),
+  cropOverscan: Schema.optional(Schema.Boolean),
+  smooth: Schema.optional(Schema.Boolean),
+  shader: Schema.optional(NullableNonEmptyString("video.shader")),
+  shaderEnable: Schema.optional(Schema.Boolean),
+  hdr: Schema.optional(RetroArchVideoHdrPolicy),
+  recording: Schema.optional(RetroArchVideoRecordingPolicy),
+  gpuScreenshot: Schema.optional(Schema.Boolean),
+  shaderWatchFiles: Schema.optional(Schema.Boolean),
+  sync: Schema.optional(RetroArchVideoSyncPolicy),
 })
 
 const RetroArchAudioPolicy = Schema.Struct({
   enable: Schema.optional(Schema.Boolean),
+  menuEnable: Schema.optional(Schema.Boolean),
+  mute: Schema.optional(Schema.Boolean),
+  mixerMute: Schema.optional(Schema.Boolean),
   latencyMs: Schema.optional(NonNegativeNumber("audio.latencyMs")),
+  outputRate: Schema.optional(PositiveInteger("audio.outputRate")),
+  device: Schema.optional(NullableNonEmptyString("audio.device")),
+  dspPlugin: Schema.optional(NullableNonEmptyString("audio.dspPlugin")),
+  sync: Schema.optional(Schema.Boolean),
+  rateControl: Schema.optional(Schema.Boolean),
+  rateControlDelta: Schema.optional(PositiveNumber("audio.rateControlDelta")),
+  maxTimingSkew: Schema.optional(PositiveNumber("audio.maxTimingSkew")),
+  volumeDb: Schema.optional(Schema.Number),
+  mixerVolumeDb: Schema.optional(Schema.Number),
+  resamplerQuality: Schema.optional(
+    NonNegativeInteger("audio.resamplerQuality"),
+  ),
 })
 
 const RETROARCH_CONFIG_KEY_PATTERN = /^[A-Za-z0-9_]+$/
@@ -616,10 +691,58 @@ const RetroArchExtraSettings = Schema.Record(
   LaunchSettingValue,
 )
 
+const RetroArchInputPortKey = Schema.String.check(
+  Schema.isPattern(/^[1-9][0-9]*$/),
+)
+
+const RetroArchInputOverlayPolicy = Schema.Struct({
+  enable: Schema.optional(Schema.Boolean),
+  path: Schema.optional(NullableNonEmptyString("input.overlay.path")),
+  opacity: Schema.optional(
+    Schema.Number.check(finiteNumberRange(0, 1, "input.overlay.opacity")),
+  ),
+  scale: Schema.optional(PositiveNumber("input.overlay.scale")),
+  behindMenu: Schema.optional(Schema.Boolean),
+  hideInMenu: Schema.optional(Schema.Boolean),
+})
+
+const RetroArchInputDescriptorPolicy = Schema.Struct({
+  labelShow: Schema.optional(Schema.Boolean),
+  hideUnbound: Schema.optional(Schema.Boolean),
+})
+
+const RetroArchInputPortPolicy = Schema.Struct({
+  libretroDevice: Schema.optional(
+    NonNegativeInteger("input.ports.libretroDevice"),
+  ),
+  joypadIndex: Schema.optional(NonNegativeInteger("input.ports.joypadIndex")),
+  analogDpadMode: Schema.optional(
+    NonNegativeInteger("input.ports.analogDpadMode"),
+  ),
+})
+
 const RetroArchInputPolicy = Schema.Struct({
   autodetect: Schema.optional(Schema.Boolean),
   maxUsers: Schema.optional(PositiveInteger("input.maxUsers")),
+  pollTypeBehavior: Schema.optional(
+    NonNegativeInteger("input.pollTypeBehavior"),
+  ),
+  axisThreshold: Schema.optional(
+    Schema.Number.check(finiteNumberRange(0, 1, "input.axisThreshold")),
+  ),
+  analogDeadzone: Schema.optional(
+    Schema.Number.check(finiteNumberRange(0, 1, "input.analogDeadzone")),
+  ),
+  analogSensitivity: Schema.optional(PositiveNumber("input.analogSensitivity")),
+  remapBinds: Schema.optional(Schema.Boolean),
+  descriptors: Schema.optional(RetroArchInputDescriptorPolicy),
+  overlay: Schema.optional(RetroArchInputOverlayPolicy),
+  autoGameFocus: Schema.optional(NonNegativeInteger("input.autoGameFocus")),
   menuToggleGamepadCombo: Schema.optional(RetroArchMenuToggleGamepadCombo),
+  quitGamepadCombo: Schema.optional(RetroArchMenuToggleGamepadCombo),
+  ports: Schema.optional(
+    Schema.Record(RetroArchInputPortKey, RetroArchInputPortPolicy),
+  ),
 })
 
 /**

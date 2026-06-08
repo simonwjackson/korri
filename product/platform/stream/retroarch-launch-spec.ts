@@ -93,13 +93,68 @@ const RETROARCH_TYPED_CONFIG_KEYS = [
   ["recording_output_directory", "paths.recordingOutputDirectory"],
   ["video_fullscreen", "video.fullscreen"],
   ["video_windowed_fullscreen", "video.windowedFullscreen"],
+  ["video_fullscreen_x", "video.fullscreenWidth"],
+  ["video_fullscreen_y", "video.fullscreenHeight"],
+  ["video_refresh_rate", "video.refreshRate"],
   ["video_vsync", "video.vsync"],
   ["aspect_ratio_index", "video.aspectRatio"],
+  ["video_aspect_ratio", "video.aspectRatioValue"],
+  ["video_force_aspect", "video.forceAspect"],
+  ["video_scale", "video.scale"],
+  ["video_scale_integer", "video.integerScale"],
+  ["video_crop_overscan", "video.cropOverscan"],
+  ["video_smooth", "video.smooth"],
+  ["video_shader", "video.shader"],
+  ["video_shader_enable", "video.shaderEnable"],
+  ["video_hdr_enable", "video.hdr.enable"],
+  ["video_hdr_max_nits", "video.hdr.maxNits"],
+  ["video_hdr_paper_white_nits", "video.hdr.paperWhiteNits"],
+  ["video_hdr_contrast", "video.hdr.contrast"],
+  ["video_hdr_expand_gamut", "video.hdr.expandGamut"],
+  ["video_post_filter_record", "video.recording.postFilter"],
+  ["video_gpu_record", "video.recording.gpu"],
+  ["video_gpu_screenshot", "video.gpuScreenshot"],
+  ["video_shader_watch_files", "video.shaderWatchFiles"],
+  ["video_hard_sync", "video.sync.hardSync"],
+  ["video_hard_sync_frames", "video.sync.hardSyncFrames"],
+  ["video_frame_delay", "video.sync.frameDelay"],
+  ["video_frame_delay_auto", "video.sync.frameDelayAuto"],
   ["audio_enable", "audio.enable"],
+  ["audio_enable_menu", "audio.menuEnable"],
+  ["audio_mute_enable", "audio.mute"],
+  ["audio_mixer_mute_enable", "audio.mixerMute"],
+  ["audio_out_rate", "audio.outputRate"],
+  ["audio_device", "audio.device"],
+  ["audio_dsp_plugin", "audio.dspPlugin"],
+  ["audio_sync", "audio.sync"],
   ["audio_latency", "audio.latencyMs"],
+  ["audio_rate_control", "audio.rateControl"],
+  ["audio_rate_control_delta", "audio.rateControlDelta"],
+  ["audio_max_timing_skew", "audio.maxTimingSkew"],
+  ["audio_volume", "audio.volumeDb"],
+  ["audio_mixer_volume", "audio.mixerVolumeDb"],
+  ["audio_resampler_quality", "audio.resamplerQuality"],
   ["input_autodetect_enable", "input.autodetect"],
   ["input_max_users", "input.maxUsers"],
+  ["input_poll_type_behavior", "input.pollTypeBehavior"],
+  ["input_axis_threshold", "input.axisThreshold"],
+  ["input_analog_deadzone", "input.analogDeadzone"],
+  ["input_analog_sensitivity", "input.analogSensitivity"],
+  ["input_remap_binds_enable", "input.remapBinds"],
+  ["input_descriptor_label_show", "input.descriptors.labelShow"],
+  ["input_descriptor_hide_unbound", "input.descriptors.hideUnbound"],
+  ["input_overlay_enable", "input.overlay.enable"],
+  ["input_overlay", "input.overlay.path"],
+  ["input_overlay_opacity", "input.overlay.opacity"],
+  ["input_overlay_scale", "input.overlay.scale"],
+  ["input_overlay_behind_menu", "input.overlay.behindMenu"],
+  ["input_overlay_hide_in_menu", "input.overlay.hideInMenu"],
+  ["input_auto_game_focus", "input.autoGameFocus"],
   ["input_menu_toggle_gamepad_combo", "input.menuToggleGamepadCombo"],
+  ["input_quit_gamepad_combo", "input.quitGamepadCombo"],
+  ["input_libretro_device_pN", "input.ports.*.libretroDevice"],
+  ["input_playerN_joypad_index", "input.ports.*.joypadIndex"],
+  ["input_playerN_analog_dpad_mode", "input.ports.*.analogDpadMode"],
 ] as const
 
 assertUniqueRetroArchTypedConfigKeys(RETROARCH_TYPED_CONFIG_KEYS)
@@ -358,39 +413,228 @@ function appendPathSettings(
   )
 }
 
+type RetroArchVideoPolicy = NonNullable<RetroArchPolicy["video"]>
+type RetroArchAudioPolicy = NonNullable<RetroArchPolicy["audio"]>
+type RetroArchInputPolicy = NonNullable<RetroArchPolicy["input"]>
+type SettingSelector<T> = (source: T) => LaunchSettingValue | null | undefined
+
+type SettingEntry<T> = readonly [string, SettingSelector<T>]
+
+const RETROARCH_ASPECT_RATIO_INDEX: Record<
+  RetroArchVideoPolicy["aspectRatio"] & string,
+  number
+> = {
+  config: 20,
+  square: 21,
+  "core-provided": 22,
+  custom: 23,
+  full: 24,
+}
+
+const RETROARCH_GAMEPAD_COMBO_INDEX: Record<
+  RetroArchInputPolicy["menuToggleGamepadCombo"] & string,
+  number
+> = {
+  none: 0,
+  "down-y-l-r": 1,
+  "l3-r3": 2,
+  "l1-r1-start-select": 3,
+  "start-select": 4,
+  "l3-r": 5,
+  "l-r": 6,
+  "hold-start": 7,
+  "hold-select": 8,
+  "down-select": 9,
+  "l2-r2": 10,
+}
+
+const VIDEO_SETTINGS: readonly SettingEntry<RetroArchVideoPolicy>[] = [
+  ["video_fullscreen", video => video.fullscreen],
+  ["video_windowed_fullscreen", video => video.windowedFullscreen],
+  ["video_fullscreen_x", video => video.fullscreenWidth],
+  ["video_fullscreen_y", video => video.fullscreenHeight],
+  ["video_refresh_rate", video => video.refreshRate],
+  ["video_vsync", video => video.vsync],
+  ["aspect_ratio_index", video => mapRetroArchAspectRatio(video.aspectRatio)],
+  ["video_aspect_ratio", video => video.aspectRatioValue],
+  ["video_force_aspect", video => video.forceAspect],
+  ["video_scale", video => video.scale],
+  ["video_scale_integer", video => video.integerScale],
+  ["video_crop_overscan", video => video.cropOverscan],
+  ["video_smooth", video => video.smooth],
+  ["video_shader", video => video.shader],
+  ["video_shader_enable", video => video.shaderEnable],
+  ["video_gpu_screenshot", video => video.gpuScreenshot],
+  ["video_shader_watch_files", video => video.shaderWatchFiles],
+]
+
+const VIDEO_HDR_SETTINGS: readonly SettingEntry<
+  NonNullable<RetroArchVideoPolicy["hdr"]>
+>[] = [
+  ["video_hdr_enable", hdr => hdr.enable],
+  ["video_hdr_max_nits", hdr => hdr.maxNits],
+  ["video_hdr_paper_white_nits", hdr => hdr.paperWhiteNits],
+  ["video_hdr_contrast", hdr => hdr.contrast],
+  ["video_hdr_expand_gamut", hdr => hdr.expandGamut],
+]
+
+const VIDEO_RECORDING_SETTINGS: readonly SettingEntry<
+  NonNullable<RetroArchVideoPolicy["recording"]>
+>[] = [
+  ["video_post_filter_record", recording => recording.postFilter],
+  ["video_gpu_record", recording => recording.gpu],
+]
+
+const VIDEO_SYNC_SETTINGS: readonly SettingEntry<
+  NonNullable<RetroArchVideoPolicy["sync"]>
+>[] = [
+  ["video_hard_sync", sync => sync.hardSync],
+  ["video_hard_sync_frames", sync => sync.hardSyncFrames],
+  ["video_frame_delay", sync => sync.frameDelay],
+  ["video_frame_delay_auto", sync => sync.frameDelayAuto],
+]
+
+const AUDIO_SETTINGS: readonly SettingEntry<RetroArchAudioPolicy>[] = [
+  ["audio_enable", audio => audio.enable],
+  ["audio_enable_menu", audio => audio.menuEnable],
+  ["audio_mute_enable", audio => audio.mute],
+  ["audio_mixer_mute_enable", audio => audio.mixerMute],
+  ["audio_out_rate", audio => audio.outputRate],
+  ["audio_device", audio => audio.device],
+  ["audio_dsp_plugin", audio => audio.dspPlugin],
+  ["audio_sync", audio => audio.sync],
+  ["audio_latency", audio => audio.latencyMs],
+  ["audio_rate_control", audio => audio.rateControl],
+  ["audio_rate_control_delta", audio => audio.rateControlDelta],
+  ["audio_max_timing_skew", audio => audio.maxTimingSkew],
+  ["audio_volume", audio => audio.volumeDb],
+  ["audio_mixer_volume", audio => audio.mixerVolumeDb],
+  ["audio_resampler_quality", audio => audio.resamplerQuality],
+]
+
+const INPUT_SETTINGS: readonly SettingEntry<RetroArchInputPolicy>[] = [
+  ["input_autodetect_enable", input => input.autodetect],
+  ["input_max_users", input => input.maxUsers],
+  ["input_poll_type_behavior", input => input.pollTypeBehavior],
+  ["input_axis_threshold", input => input.axisThreshold],
+  ["input_analog_deadzone", input => input.analogDeadzone],
+  ["input_analog_sensitivity", input => input.analogSensitivity],
+  ["input_remap_binds_enable", input => input.remapBinds],
+  ["input_auto_game_focus", input => input.autoGameFocus],
+  [
+    "input_menu_toggle_gamepad_combo",
+    input => mapRetroArchGamepadCombo(input.menuToggleGamepadCombo),
+  ],
+  [
+    "input_quit_gamepad_combo",
+    input => mapRetroArchGamepadCombo(input.quitGamepadCombo),
+  ],
+]
+
+const INPUT_DESCRIPTOR_SETTINGS: readonly SettingEntry<
+  NonNullable<RetroArchInputPolicy["descriptors"]>
+>[] = [
+  ["input_descriptor_label_show", descriptors => descriptors.labelShow],
+  ["input_descriptor_hide_unbound", descriptors => descriptors.hideUnbound],
+]
+
+const INPUT_OVERLAY_SETTINGS: readonly SettingEntry<
+  NonNullable<RetroArchInputPolicy["overlay"]>
+>[] = [
+  ["input_overlay_enable", overlay => overlay.enable],
+  ["input_overlay", overlay => overlay.path],
+  ["input_overlay_opacity", overlay => overlay.opacity],
+  ["input_overlay_scale", overlay => overlay.scale],
+  ["input_overlay_behind_menu", overlay => overlay.behindMenu],
+  ["input_overlay_hide_in_menu", overlay => overlay.hideInMenu],
+]
+
 function appendVideoSettings(
   writer: TypedSettingsWriter,
   policy: RetroArchPolicy,
 ) {
-  pushTypedSetting(writer, "video_fullscreen", policy.video?.fullscreen)
-  pushTypedSetting(
+  appendOptionalSettings(writer, policy.video, VIDEO_SETTINGS)
+  appendOptionalSettings(writer, policy.video?.hdr, VIDEO_HDR_SETTINGS)
+  appendOptionalSettings(
     writer,
-    "video_windowed_fullscreen",
-    policy.video?.windowedFullscreen,
+    policy.video?.recording,
+    VIDEO_RECORDING_SETTINGS,
   )
-  pushTypedSetting(writer, "video_vsync", policy.video?.vsync)
-  if (policy.video?.aspectRatio === "core-provided") {
-    pushTypedSetting(writer, "aspect_ratio_index", 22)
-  }
+  appendOptionalSettings(writer, policy.video?.sync, VIDEO_SYNC_SETTINGS)
 }
 
 function appendAudioSettings(
   writer: TypedSettingsWriter,
   policy: RetroArchPolicy,
 ) {
-  pushTypedSetting(writer, "audio_enable", policy.audio?.enable)
-  pushTypedSetting(writer, "audio_latency", policy.audio?.latencyMs)
+  appendOptionalSettings(writer, policy.audio, AUDIO_SETTINGS)
 }
 
 function appendInputSettings(
   writer: TypedSettingsWriter,
   policy: RetroArchPolicy,
 ) {
-  pushTypedSetting(writer, "input_autodetect_enable", policy.input?.autodetect)
-  pushTypedSetting(writer, "input_max_users", policy.input?.maxUsers)
-  if (policy.input?.menuToggleGamepadCombo === "start-select") {
-    pushTypedSetting(writer, "input_menu_toggle_gamepad_combo", 4)
+  appendOptionalSettings(writer, policy.input, INPUT_SETTINGS)
+  appendOptionalSettings(
+    writer,
+    policy.input?.descriptors,
+    INPUT_DESCRIPTOR_SETTINGS,
+  )
+  appendOptionalSettings(writer, policy.input?.overlay, INPUT_OVERLAY_SETTINGS)
+  appendInputPortSettings(writer, policy.input?.ports)
+}
+
+function appendOptionalSettings<T>(
+  writer: TypedSettingsWriter,
+  source: T | undefined,
+  entries: readonly SettingEntry<T>[],
+) {
+  if (source === undefined) return
+  for (const [key, select] of entries)
+    pushTypedSetting(writer, key, select(source))
+}
+
+function mapRetroArchAspectRatio(
+  value: RetroArchVideoPolicy["aspectRatio"] | undefined,
+): number | undefined {
+  return value === undefined ? undefined : RETROARCH_ASPECT_RATIO_INDEX[value]
+}
+
+function mapRetroArchGamepadCombo(
+  value: RetroArchInputPolicy["menuToggleGamepadCombo"] | undefined,
+): number | undefined {
+  return value === undefined ? undefined : RETROARCH_GAMEPAD_COMBO_INDEX[value]
+}
+
+function appendInputPortSettings(
+  writer: TypedSettingsWriter,
+  ports: RetroArchInputPolicy["ports"] | undefined,
+) {
+  if (ports === undefined) return
+
+  for (const port of Object.keys(ports).sort(compareNumericStrings)) {
+    const settings = ports[port]
+    if (settings === undefined) continue
+    pushTypedSetting(
+      writer,
+      `input_libretro_device_p${port}`,
+      settings.libretroDevice,
+    )
+    pushTypedSetting(
+      writer,
+      `input_player${port}_joypad_index`,
+      settings.joypadIndex,
+    )
+    pushTypedSetting(
+      writer,
+      `input_player${port}_analog_dpad_mode`,
+      settings.analogDpadMode,
+    )
   }
+}
+
+function compareNumericStrings(left: string, right: string): number {
+  return Number(left) - Number(right)
 }
 
 export function assertUniqueRetroArchTypedConfigKeys(

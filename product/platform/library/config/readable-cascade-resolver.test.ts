@@ -35,7 +35,11 @@ const host: HostRecord = {
     logging: { verbosity: false, fpsShow: false },
     drivers: { video: "glcore", menu: "rgui" },
     paths: { cacheDirectory: "/host/cache" },
-    video: { fullscreen: true },
+    video: { fullscreen: true, sync: { hardSync: true, frameDelay: 0 } },
+    audio: { mute: false, outputRate: 48000 },
+    input: {
+      ports: { "1": { libretroDevice: 1, joypadIndex: 0 } },
+    },
     extraArgs: ["host"],
   },
 }
@@ -56,6 +60,13 @@ const user: UserRecord = {
     logging: { fpsShow: true },
     drivers: { menu: "ozone" },
     paths: { thumbnailsDirectory: "/user/thumbnails" },
+    video: { sync: { frameDelay: 99, frameDelayAuto: true } },
+    input: {
+      ports: {
+        "1": { joypadIndex: 2, analogDpadMode: 1 },
+        "2": { libretroDevice: 257, joypadIndex: 1 },
+      },
+    },
   },
 }
 const system: SystemRecord = {
@@ -112,7 +123,8 @@ const profile: ProfileRecord = {
   },
   retroarch: {
     environment: { RA_UNSET: null },
-    video: { fullscreen: false },
+    video: { fullscreen: false, sync: { hardSyncFrames: 1 } },
+    audio: { mute: true },
     extraSettings: { video_font_enable: false },
     extraArgs: ["profile"],
   },
@@ -255,7 +267,22 @@ describe("resolveReadableLaunchContext", () => {
         thumbnailsDirectory: "/user/thumbnails",
       },
       lifecycle: { saveOnExit: false },
-      video: { fullscreen: false },
+      video: {
+        fullscreen: false,
+        sync: {
+          hardSync: true,
+          hardSyncFrames: 1,
+          frameDelay: 99,
+          frameDelayAuto: true,
+        },
+      },
+      audio: { mute: true, outputRate: 48000 },
+      input: {
+        ports: {
+          "1": { libretroDevice: 1, joypadIndex: 2, analogDpadMode: 1 },
+          "2": { libretroDevice: 257, joypadIndex: 1 },
+        },
+      },
       extraSettings: { video_font_enable: false },
       extraArgs: [
         "host",
