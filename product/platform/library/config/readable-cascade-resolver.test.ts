@@ -18,15 +18,24 @@ import type { UserRecord } from "./records/user"
 
 const host: HostRecord = {
   id: "local",
-  gamescope: { enabled: true, args: ["host"] },
+  gamescope: {
+    enable: true,
+    extraArgs: ["host"],
+    environment: { OUTER_ONLY: "host", OUTER_UNSET: "1" },
+    display: { output: { width: 640 } },
+  },
 }
 const user: UserRecord = {
   id: "simon",
-  gamescope: { args: ["user"] },
+  gamescope: {
+    extraArgs: ["user"],
+    app: { environment: { WAYLAND_DISPLAY: "wayland-1" } },
+    display: { output: { height: 480 } },
+  },
 }
 const system: SystemRecord = {
   id: "genesis",
-  gamescope: { args: ["system"] },
+  gamescope: { extraArgs: ["system"], display: { nested: { width: 320 } } },
 }
 const source: SourceRecord = {
   id: "roms",
@@ -34,37 +43,40 @@ const source: SourceRecord = {
   storage: "roms",
   app: "retroarch",
   runtime: "genesis-plus-gx",
-  gamescope: { args: ["source"] },
+  gamescope: { extraArgs: ["source"], display: { nested: { height: 240 } } },
 }
 const app: AppRecord = {
   id: "retroarch",
   command: "retroarch",
   args: ["-L", "{runtime.path}", "{content.path}"],
   systems: ["genesis"],
-  gamescope: { args: ["app"] },
+  gamescope: { extraArgs: ["app"], backend: { allowDeferred: true } },
 }
 const runtime: RuntimeRecord = {
   id: "genesis-plus-gx",
   kind: "libretro-core",
   path: "/cores/genesis_plus_gx.so",
-  gamescope: { args: ["runtime"] },
+  gamescope: { extraArgs: ["runtime"], scaling: { filter: "fsr" } },
 }
 const profile: ProfileRecord = {
   id: "handheld",
-  gamescope: { args: ["profile"] },
+  gamescope: {
+    extraArgs: ["profile"],
+    app: { environment: { WAYLAND_DISPLAY: null } },
+  },
   env: { SCALE: "profile" },
 }
 const storage: StorageRecord = { id: "roms", root: "/games" }
 const sonic: LibraryItemRecord = {
   id: "sonic-the-hedgehog",
   source: "roms",
-  gamescope: { args: ["item"] },
+  gamescope: { extraArgs: ["item"] },
   releases: [
     {
       id: "genesis",
       system: "genesis",
       target: "genesis/Sonic.md",
-      gamescope: { args: ["release"] },
+      gamescope: { extraArgs: ["release"] },
     },
   ],
 }
@@ -82,7 +94,7 @@ const gbaPackage: LibraryItemRecord = {
   contains: {
     "super-mario-world": {
       title: "Super Mario World",
-      gamescope: { args: ["contained"] },
+      gamescope: { extraArgs: ["contained"] },
     },
   },
   releases: [{ id: "gba", system: "genesis", target: "gba/sma2.gba" }],
@@ -109,7 +121,10 @@ describe("resolveReadableLaunchContext", () => {
         profileId: "handheld",
         override: {
           env: { SCALE: "override" },
-          gamescope: { args: ["override"], forceXwayland: true },
+          gamescope: {
+            extraArgs: ["override"],
+            environment: { OUTER_UNSET: null },
+          },
         },
       }),
     )
@@ -121,9 +136,24 @@ describe("resolveReadableLaunchContext", () => {
     expect(context.runtime?.path).toBe("/cores/genesis_plus_gx.so")
     expect(context.target).toBe("genesis/Sonic.md")
     expect(context.content?.path).toBe("/games/genesis/Sonic.md")
-    expect(context.gamescope?.enabled).toBe(true)
-    expect(context.gamescope?.forceXwayland).toBe(true)
-    expect(context.gamescope?.args).toEqual([
+    expect(context.gamescope?.enable).toBe(true)
+    expect(context.gamescope?.environment).toEqual({
+      OUTER_ONLY: "host",
+      OUTER_UNSET: null,
+    })
+    expect(context.gamescope?.app?.environment).toEqual({
+      WAYLAND_DISPLAY: null,
+    })
+    expect(context.gamescope?.display).toEqual({
+      output: { width: 640, height: 480 },
+      nested: { width: 320, height: 240 },
+    })
+    expect(context.gamescope?.backend).toEqual({
+      type: "wayland",
+      allowDeferred: true,
+    })
+    expect(context.gamescope?.scaling?.filter).toBe("fsr")
+    expect(context.gamescope?.extraArgs).toEqual([
       "host",
       "user",
       "system",
@@ -165,7 +195,7 @@ describe("resolveReadableLaunchContext", () => {
     expect(spec.args).toContain("/games/genesis/Sonic.md")
   })
 
-  it("normalizes args-only Gamescope policies to enabled defaults", async () => {
+  it("normalizes extraArgs-only Gamescope policies to enabled defaults", async () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(
         {
@@ -188,18 +218,21 @@ describe("resolveReadableLaunchContext", () => {
           runtimes: new Map(),
           profiles: new Map([
             [
-              "args-only",
-              { id: "args-only", gamescope: { args: ["--fps-limit", "60"] } },
+              "extra-args-only",
+              {
+                id: "extra-args-only",
+                gamescope: { extraArgs: ["--fps-limit", "60"] },
+              },
             ],
           ]),
         },
-        { playableId: "sonic-the-hedgehog", profileId: "args-only" },
+        { playableId: "sonic-the-hedgehog", profileId: "extra-args-only" },
       ),
     )
 
-    expect(context.gamescope?.enabled).toBe(true)
-    expect(context.gamescope?.backend).toBe("wayland")
-    expect(context.gamescope?.args).toEqual([
+    expect(context.gamescope?.enable).toBe(true)
+    expect(context.gamescope?.backend).toEqual({ type: "wayland" })
+    expect(context.gamescope?.extraArgs).toEqual([
       "item",
       "release",
       "--fps-limit",
@@ -258,7 +291,7 @@ describe("resolveReadableLaunchContext", () => {
     expect(context.itemId).toBe("super-mario-advance-2")
     expect(context.containedId).toBe("super-mario-world")
     expect(context.releaseId).toBe("gba")
-    expect(context.gamescope?.args).toContain("contained")
+    expect(context.gamescope?.extraArgs).toContain("contained")
   })
 
   it("rejects release omission when multiple launchable releases exist", async () => {

@@ -4,8 +4,144 @@ import {
   decodeByLauncherPayload,
   decodeGamescopePolicy,
   decodeInheritableLayer,
+  type GamescopePolicy,
   normalizeGamescopePolicy,
 } from "./inheritable-fields"
+
+const representativeGamescopePolicy: GamescopePolicy = {
+  enable: true,
+  command: "/run/current-system/sw/bin/gamescope",
+  environment: {
+    GAMESCOPE_DISABLE_EXPLICIT_SYNC: "1",
+    OBSOLETE_VAR: null,
+  },
+  app: {
+    environment: {
+      WAYLAND_DISPLAY: null,
+      SDL_VIDEODRIVER: "x11",
+    },
+  },
+  backend: {
+    type: "openvr",
+    allowDeferred: true,
+    preferVkDevice: "1002:7300",
+  },
+  window: {
+    fullscreen: true,
+    borderless: true,
+    grabKeyboard: true,
+    forceGrabCursor: true,
+    displayIndex: 1,
+    forceWindowsFullscreen: true,
+    exposeWayland: true,
+    xwaylandCount: 2,
+    fadeOutDuration: 150,
+  },
+  display: {
+    output: {
+      width: 1920,
+      height: 1080,
+      preferredConnectors: ["DP-1", "HDMI-A-1"],
+    },
+    nested: {
+      width: 1280,
+      height: 720,
+      refresh: 60,
+      unfocusedRefresh: 30,
+    },
+    scale: { max: 2 },
+    orientation: "left",
+    adaptiveSync: true,
+    framerateLimit: 60,
+  },
+  scaling: {
+    scaler: "fit",
+    filter: "pixel",
+    sharpness: 12,
+  },
+  cursor: {
+    image: "/tmp/cursor.png",
+    hotspot: "10,20",
+    hideDelay: 500,
+    scaleHeight: 1080,
+  },
+  input: {
+    mouseSensitivity: 1.25,
+    defaultTouchMode: 4,
+  },
+  scheduling: {
+    realtime: true,
+    readyFd: 3,
+    keepAlive: true,
+  },
+  stats: {
+    path: "/tmp/gamescope.stats",
+  },
+  steam: {
+    enableIntegration: true,
+    mangoapp: true,
+  },
+  embedded: {
+    generateDrmMode: "cvt",
+    immediateFlips: true,
+    virtualConnectorStrategy: "PerWindow",
+  },
+  hdr: {
+    enable: true,
+    sdrGamutWideness: 0.75,
+    sdrContentNits: 400,
+    inverseToneMapping: {
+      enable: true,
+      sdrNits: 100,
+      targetNits: 1000,
+    },
+    debug: {
+      forceSupport: true,
+      forceOutput: true,
+      heatmap: true,
+    },
+  },
+  vr: {
+    overlayKey: "korri.overlay",
+    appOverlayKey: "korri.app",
+    explicitName: "Korri",
+    defaultName: "Korri Game",
+    icon: "/tmp/icon.png",
+    showImmediately: true,
+    modal: true,
+    physicalWidth: 1.2,
+    physicalCurvature: 0.5,
+    physicalPreCurvePitch: 5,
+    scrollSpeed: 8,
+    sessionManager: true,
+    controlBar: {
+      enable: true,
+      keyboard: true,
+      close: true,
+    },
+    clickStabilization: true,
+  },
+  reshade: {
+    effect: "crt.fx",
+    techniqueIndex: 1,
+  },
+  steamDeck: {
+    muraMap: "/tmp/mura.bin",
+  },
+  debug: {
+    disableLayers: true,
+    layers: true,
+    focus: true,
+    synchronousX11: true,
+    hud: true,
+    events: true,
+    forceComposition: true,
+    compositeMarkers: true,
+    disableColorManagement: true,
+    disableXres: true,
+  },
+  extraArgs: ["--unmodelled-flag"],
+}
 
 describe("GamescopePolicy", () => {
   it("decodes an empty object as 'no opinion'", () => {
@@ -13,69 +149,128 @@ describe("GamescopePolicy", () => {
     expect(policy).toEqual({})
   })
 
-  it("decodes enabled with a list of args", () => {
-    const policy = decodeGamescopePolicy({
-      enabled: true,
-      args: ["-F", "fsr", "-W", "1920"],
-    })
-    expect(policy.enabled).toBe(true)
-    expect(policy.args).toEqual(["-F", "fsr", "-W", "1920"])
+  it("decodes a representative nested policy", () => {
+    const policy = decodeGamescopePolicy(representativeGamescopePolicy)
+    expect(policy).toEqual(representativeGamescopePolicy)
   })
 
-  it("decodes enabled=false explicitly", () => {
-    const policy = decodeGamescopePolicy({ enabled: false })
-    expect(policy.enabled).toBe(false)
+  it("decodes nullable environment overlays for Gamescope and the app", () => {
+    const policy = decodeGamescopePolicy({
+      environment: { FOO: null, BAR: "baz" },
+      app: { environment: { WAYLAND_DISPLAY: null } },
+    })
+
+    expect(policy.environment?.FOO).toBeNull()
+    expect(policy.environment?.BAR).toBe("baz")
+    expect(policy.app?.environment?.WAYLAND_DISPLAY).toBeNull()
+  })
+
+  it("allows nested dimensions to decode independently before cascade folding", () => {
+    expect(
+      decodeGamescopePolicy({ display: { nested: { width: 1280 } } }),
+    ).toEqual({ display: { nested: { width: 1280 } } })
+    expect(
+      decodeGamescopePolicy({ display: { nested: { height: 720 } } }),
+    ).toEqual({ display: { nested: { height: 720 } } })
+  })
+
+  it("rejects retired flat fields", () => {
+    for (const oldFieldPolicy of [
+      { enabled: true },
+      { backend: "wayland" },
+      { exposeWayland: true },
+      { args: ["-F", "fsr"] },
+      { forceXwayland: true },
+    ]) {
+      expect(() => decodeGamescopePolicy(oldFieldPolicy)).toThrow()
+    }
   })
 
   it("rejects an unknown key", () => {
     expect(() =>
-      decodeGamescopePolicy({ enabled: true, gamescpoe: "typo" }),
+      decodeGamescopePolicy({ enable: true, gamescpoe: "typo" }),
     ).toThrow()
   })
 
-  it("decodes a backend selection", () => {
-    expect(decodeGamescopePolicy({ backend: "wayland" })).toEqual({
-      backend: "wayland",
-    })
-    expect(decodeGamescopePolicy({ backend: "sdl" })).toEqual({
-      backend: "sdl",
-    })
+  it("rejects executable/package and runtime-control fields outside launch policy", () => {
+    for (const badPolicy of [
+      { package: "gamescope" },
+      { control: { enable: true } },
+    ]) {
+      expect(() => decodeGamescopePolicy(badPolicy)).toThrow()
+    }
   })
 
-  it("rejects an unknown backend", () => {
-    expect(() => decodeGamescopePolicy({ backend: "vulkan-direct" })).toThrow()
+  it("rejects unknown enum values", () => {
+    for (const badPolicy of [
+      { backend: { type: "vulkan-direct" } },
+      { scaling: { scaler: "cover" } },
+      { scaling: { filter: "bicubic" } },
+      { display: { orientation: "portrait" } },
+      { embedded: { virtualConnectorStrategy: "PerProcess" } },
+      { embedded: { generateDrmMode: "gtf" } },
+      { input: { defaultTouchMode: 5 } },
+    ]) {
+      expect(() => decodeGamescopePolicy(badPolicy)).toThrow()
+    }
   })
 
-  it("decodes exposeWayland opt-in", () => {
-    expect(decodeGamescopePolicy({ exposeWayland: true })).toEqual({
-      exposeWayland: true,
-    })
+  it("rejects out-of-range sharpness and HDR values", () => {
+    for (const badPolicy of [
+      { scaling: { sharpness: -1 } },
+      { scaling: { sharpness: 21 } },
+      { hdr: { sdrGamutWideness: -0.1 } },
+      { hdr: { sdrGamutWideness: 1.1 } },
+      { hdr: { inverseToneMapping: { sdrNits: 1001 } } },
+      { hdr: { inverseToneMapping: { targetNits: 10001 } } },
+    ]) {
+      expect(() => decodeGamescopePolicy(badPolicy)).toThrow()
+    }
   })
 
-  it("normalizes a missing policy to the kiosk-shaped default", () => {
-    // The product default assumes gamescope is wrapping a nested
-    // launch under a parent Wayland compositor (sway, in production).
-    // YAML can override per game / per launcher when running standalone.
+  it("normalizes a missing policy to the nested kiosk-shaped default", () => {
     expect(normalizeGamescopePolicy(undefined)).toEqual({
-      enabled: true,
-      backend: "wayland",
-      exposeWayland: true,
+      enable: true,
+      backend: { type: "wayland" },
+      window: {
+        fullscreen: true,
+        borderless: true,
+        exposeWayland: true,
+      },
+    })
+  })
+
+  it("merges partial window overrides with default window fields", () => {
+    expect(
+      normalizeGamescopePolicy({ window: { exposeWayland: false } }).window,
+    ).toEqual({
+      fullscreen: true,
+      borderless: true,
+      exposeWayland: false,
     })
   })
 
   it("preserves explicit policy fields over the default", () => {
     expect(
       normalizeGamescopePolicy({
-        enabled: false,
-        backend: "drm",
-        exposeWayland: false,
-        args: ["-F", "fsr"],
+        enable: false,
+        backend: { type: "drm" },
+        window: {
+          fullscreen: false,
+          borderless: false,
+          exposeWayland: false,
+        },
+        extraArgs: ["-F", "fsr"],
       }),
     ).toEqual({
-      enabled: false,
-      backend: "drm",
-      exposeWayland: false,
-      args: ["-F", "fsr"],
+      enable: false,
+      backend: { type: "drm" },
+      window: {
+        fullscreen: false,
+        borderless: false,
+        exposeWayland: false,
+      },
+      extraArgs: ["-F", "fsr"],
     })
   })
 })
@@ -89,19 +284,22 @@ describe("InheritableLayer", () => {
   it("decodes a layer carrying every supported inheritable field", () => {
     const layer = decodeInheritableLayer({
       gamescope: {
-        enabled: true,
+        enable: true,
         command: "/run/current-system/sw/bin/gamescope",
-        args: ["-F", "fsr"],
+        scaling: { filter: "fsr" },
+        extraArgs: ["--unmodelled-flag"],
       },
       env: { LANG: "en_US.UTF-8", SDL_VIDEODRIVER: "x11" },
       cwd: "/storage/roms",
       argsAppend: ["--fullscreen", "--verbose"],
       patches: ["/storage/patches/base.ips", "/storage/patches/qol.bps"],
     })
-    expect(layer.gamescope?.enabled).toBe(true)
+    expect(layer.gamescope?.enable).toBe(true)
     expect(layer.gamescope?.command).toBe(
       "/run/current-system/sw/bin/gamescope",
     )
+    expect(layer.gamescope?.scaling?.filter).toBe("fsr")
+    expect(layer.gamescope?.extraArgs).toEqual(["--unmodelled-flag"])
     expect(layer.env?.LANG).toBe("en_US.UTF-8")
     expect(layer.cwd).toBe("/storage/roms")
     expect(layer.argsAppend).toEqual(["--fullscreen", "--verbose"])
@@ -113,14 +311,14 @@ describe("InheritableLayer", () => {
 
   it("rejects an unknown inheritable field (typo)", () => {
     expect(() =>
-      decodeInheritableLayer({ gamescpoe: { enabled: true } }),
+      decodeInheritableLayer({ gamescpoe: { enable: true } }),
     ).toThrow()
   })
 
   it("rejects a gamescope sub-object with an unknown key", () => {
     expect(() =>
       decodeInheritableLayer({
-        gamescope: { enabled: true, weirdKey: "bad" },
+        gamescope: { enable: true, weirdKey: "bad" },
       }),
     ).toThrow()
   })

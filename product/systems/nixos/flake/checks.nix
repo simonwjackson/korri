@@ -192,6 +192,16 @@ pkgs.lib.optionalAttrs isX86Linux {
         # `rocknix.sm8550.audio.api`.
         sm8550PlatformAdapterSourceFile = ../../../../product/systems/nixos/images/platforms/rocknix-sm8550.nix;
       };
+  korri-rk3566-kiosk-config =
+    import ../../../../tools/testing/nix/korri-rocknix-rk3566-config-check.nix
+      {
+        inherit pkgs;
+        products = explicitProducts;
+        rg353mSystem = self.nixosConfigurations.${explicitProducts.rg353m.configName};
+        targetPackages = self.packages.aarch64-linux;
+        hostPackages = self.packages.${system};
+        configurations = self.nixosConfigurations;
+      };
   korri-product-payload =
     let
       fixtureRevision = "9f0ed234b4eff39f76801c09daedc9795c8b07fb";

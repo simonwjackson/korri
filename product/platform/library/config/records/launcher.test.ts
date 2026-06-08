@@ -31,11 +31,11 @@ describe("LauncherPayload", () => {
       env: { LIBRETRO_LOG_LEVEL: "3" },
       argsAppend: ["--verbose"],
       patches: ["/patches/launcher.ips"],
-      gamescope: { enabled: true },
+      gamescope: { enable: true },
       cwd: "/storage",
       presets: {
         "max-quality": {
-          gamescope: { args: ["-W", "1920"] },
+          gamescope: { extraArgs: ["-W", "1920"] },
           patches: ["/patches/max-quality.bps"],
         },
       },
@@ -44,7 +44,7 @@ describe("LauncherPayload", () => {
     })
     expect(launcher.env?.LIBRETRO_LOG_LEVEL).toBe("3")
     expect(launcher.patches).toEqual(["/patches/launcher.ips"])
-    expect(launcher.presets?.["max-quality"]?.gamescope?.args).toEqual([
+    expect(launcher.presets?.["max-quality"]?.gamescope?.extraArgs).toEqual([
       "-W",
       "1920",
     ])

@@ -1,57 +1,295 @@
+import type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
+import { normalizeGamescopePolicy } from "@platform/library/config/inheritable-fields"
 import type { LaunchSpec } from "@platform/library/launcher"
-
-export type GamescopeBackend = "auto" | "drm" | "sdl" | "wayland" | "headless"
-
-export interface GamescopeOptions {
-  readonly enabled: boolean
-  readonly command?: string
-  readonly backend?: GamescopeBackend
-  readonly exposeWayland?: boolean
-  readonly args?: readonly string[]
-  /**
-   * Run the nested game through Gamescope's Xwayland (X11) path instead of
-   * letting it connect as a native-Wayland client. Implemented by clearing
-   * WAYLAND_DISPLAY for the inner process (`env -u WAYLAND_DISPLAY`).
-   *
-   * Required on RK3566 / Mali-G52 (RG353M): native-Wayland clients (e.g.
-   * RetroArch) intermittently deadlock in their own Wayland event dispatch
-   * under Gamescope there, whereas the Xwayland path is rock solid. Off by
-   * default so Adreno/SM8550-class hardware keeps native-Wayland behaviour.
-   */
-  readonly forceXwayland?: boolean
-}
 
 const DEFAULT_GAMESCOPE_COMMAND = "gamescope"
 
-// When set to "1" in the environment, route every gamescope-wrapped launch
-// through Xwayland unless a call site explicitly overrides `forceXwayland`.
-// Set only on RK3566/RG353M (via the korri service drop-in) so Adreno/SM8550
-// keep native-Wayland behaviour.
-const FORCE_XWAYLAND_ENV = "KORRI_GAMESCOPE_FORCE_XWAYLAND"
+type ArgList = string[]
+type EnvironmentOverlay = NonNullable<GamescopePolicy["environment"]>
+type AppEnvironmentOverlay = NonNullable<
+  NonNullable<GamescopePolicy["app"]>["environment"]
+>
 
 export function composeGamescopeLaunchSpec(
   game: LaunchSpec,
-  options: GamescopeOptions,
+  policy: GamescopePolicy,
 ): LaunchSpec {
-  if (!options.enabled) return game
+  if (policy.enable === false) return game
 
-  const forceXwayland =
-    options.forceXwayland ?? process.env[FORCE_XWAYLAND_ENV] === "1"
+  const normalized = normalizeGamescopePolicy(policy)
+  validateDimensionPairs(normalized)
 
   return {
-    command: options.command ?? DEFAULT_GAMESCOPE_COMMAND,
+    command: normalized.command ?? DEFAULT_GAMESCOPE_COMMAND,
     args: [
-      ...(options.backend ? ["--backend", options.backend] : []),
-      "-f",
-      "-b",
-      ...(options.exposeWayland ? ["--expose-wayland"] : []),
-      ...(options.args ?? []),
+      ...renderGamescopeArgs(normalized),
+      ...(normalized.extraArgs ?? []),
       "--",
-      ...(forceXwayland ? ["env", "-u", "WAYLAND_DISPLAY"] : []),
-      game.command,
-      ...game.args,
+      ...renderAppCommand(game, normalized.app?.environment),
     ],
-    env: game.env,
+    env: applyEnvironmentOverlay(game.env, normalized.environment),
     cwd: game.cwd,
   }
+}
+
+function renderGamescopeArgs(policy: GamescopePolicy): readonly string[] {
+  const args: ArgList = []
+
+  renderBackendArgs(args, policy.backend)
+  renderWindowArgs(args, policy.window)
+  renderDisplayArgs(args, policy.display)
+  renderScalingArgs(args, policy.scaling)
+  renderCursorArgs(args, policy.cursor)
+  renderInputArgs(args, policy.input)
+  renderSchedulingArgs(args, policy.scheduling)
+  renderStatsArgs(args, policy.stats)
+  renderSteamArgs(args, policy.steam)
+  renderEmbeddedArgs(args, policy.embedded)
+  renderHdrArgs(args, policy.hdr)
+  renderVrArgs(args, policy.vr)
+  renderReshadeArgs(args, policy.reshade)
+  renderSteamDeckArgs(args, policy.steamDeck)
+  renderDebugArgs(args, policy.debug)
+
+  return args
+}
+
+function renderBackendArgs(args: ArgList, backend: GamescopePolicy["backend"]) {
+  pushValue(args, "--backend", backend?.type)
+  pushBoolean(args, "--allow-deferred-backend", backend?.allowDeferred)
+  pushValue(args, "--prefer-vk-device", backend?.preferVkDevice)
+}
+
+function renderWindowArgs(args: ArgList, window: GamescopePolicy["window"]) {
+  pushBoolean(args, "-f", window?.fullscreen)
+  pushBoolean(args, "-b", window?.borderless)
+  pushBoolean(args, "-g", window?.grabKeyboard)
+  pushBoolean(args, "--force-grab-cursor", window?.forceGrabCursor)
+  pushValue(args, "--display-index", window?.displayIndex)
+  pushBoolean(
+    args,
+    "--force-windows-fullscreen",
+    window?.forceWindowsFullscreen,
+  )
+  pushBoolean(args, "--expose-wayland", window?.exposeWayland)
+  pushValue(args, "--xwayland-count", window?.xwaylandCount)
+  pushValue(args, "--fade-out-duration", window?.fadeOutDuration)
+}
+
+function renderDisplayArgs(args: ArgList, display: GamescopePolicy["display"]) {
+  pushValue(args, "-W", display?.output?.width)
+  pushValue(args, "-H", display?.output?.height)
+  for (const connector of display?.output?.preferredConnectors ?? []) {
+    pushValue(args, "-O", connector)
+  }
+
+  pushValue(args, "-w", display?.nested?.width)
+  pushValue(args, "-h", display?.nested?.height)
+  pushValue(args, "-r", display?.nested?.refresh)
+  pushValue(args, "-o", display?.nested?.unfocusedRefresh)
+  pushValue(args, "-m", display?.scale?.max)
+  pushValue(args, "--force-orientation", display?.orientation)
+  pushBoolean(args, "--adaptive-sync", display?.adaptiveSync)
+  pushValue(args, "--framerate-limit", display?.framerateLimit)
+}
+
+function renderScalingArgs(args: ArgList, scaling: GamescopePolicy["scaling"]) {
+  pushValue(args, "-S", scaling?.scaler)
+  pushValue(args, "-F", scaling?.filter)
+  pushValue(args, "--sharpness", scaling?.sharpness)
+}
+
+function renderCursorArgs(args: ArgList, cursor: GamescopePolicy["cursor"]) {
+  pushValue(args, "--cursor", cursor?.image)
+  pushValue(args, "--cursor-hotspot", cursor?.hotspot)
+  pushValue(args, "-C", cursor?.hideDelay)
+  pushValue(args, "--cursor-scale-height", cursor?.scaleHeight)
+}
+
+function renderInputArgs(args: ArgList, input: GamescopePolicy["input"]) {
+  pushValue(args, "-s", input?.mouseSensitivity)
+  pushValue(args, "--default-touch-mode", input?.defaultTouchMode)
+}
+
+function renderSchedulingArgs(
+  args: ArgList,
+  scheduling: GamescopePolicy["scheduling"],
+) {
+  pushBoolean(args, "--rt", scheduling?.realtime)
+  pushValue(args, "-R", scheduling?.readyFd)
+  pushBoolean(args, "--keep-alive", scheduling?.keepAlive)
+}
+
+function renderStatsArgs(args: ArgList, stats: GamescopePolicy["stats"]) {
+  pushValue(args, "-T", stats?.path)
+}
+
+function renderSteamArgs(args: ArgList, steam: GamescopePolicy["steam"]) {
+  pushBoolean(args, "-e", steam?.enableIntegration)
+  pushBoolean(args, "--mangoapp", steam?.mangoapp)
+}
+
+function renderEmbeddedArgs(
+  args: ArgList,
+  embedded: GamescopePolicy["embedded"],
+) {
+  pushValue(args, "--generate-drm-mode", embedded?.generateDrmMode)
+  pushBoolean(args, "--immediate-flips", embedded?.immediateFlips)
+  pushValue(
+    args,
+    "--virtual-connector-strategy",
+    embedded?.virtualConnectorStrategy,
+  )
+}
+
+function renderHdrArgs(args: ArgList, hdr: GamescopePolicy["hdr"]) {
+  pushBoolean(args, "--hdr-enabled", hdr?.enable)
+  pushValue(args, "--sdr-gamut-wideness", hdr?.sdrGamutWideness)
+  pushValue(args, "--hdr-sdr-content-nits", hdr?.sdrContentNits)
+  pushBoolean(args, "--hdr-itm-enabled", hdr?.inverseToneMapping?.enable)
+  pushValue(args, "--hdr-itm-sdr-nits", hdr?.inverseToneMapping?.sdrNits)
+  pushValue(args, "--hdr-itm-target-nits", hdr?.inverseToneMapping?.targetNits)
+  pushBoolean(args, "--hdr-debug-force-support", hdr?.debug?.forceSupport)
+  pushBoolean(args, "--hdr-debug-force-output", hdr?.debug?.forceOutput)
+  pushBoolean(args, "--hdr-debug-heatmap", hdr?.debug?.heatmap)
+}
+
+function renderVrArgs(args: ArgList, vr: GamescopePolicy["vr"]) {
+  pushValue(args, "--vr-overlay-key", vr?.overlayKey)
+  pushValue(args, "--vr-app-overlay-key", vr?.appOverlayKey)
+  pushValue(args, "--vr-overlay-explicit-name", vr?.explicitName)
+  pushValue(args, "--vr-overlay-default-name", vr?.defaultName)
+  pushValue(args, "--vr-overlay-icon", vr?.icon)
+  pushBoolean(args, "--vr-overlay-show-immediately", vr?.showImmediately)
+  pushBoolean(args, "--vr-overlay-modal", vr?.modal)
+  pushValue(args, "--vr-overlay-physical-width", vr?.physicalWidth)
+  pushValue(args, "--vr-overlay-physical-curvature", vr?.physicalCurvature)
+  pushValue(
+    args,
+    "--vr-overlay-physical-pre-curve-pitch",
+    vr?.physicalPreCurvePitch,
+  )
+  pushValue(args, "--vr-scroll-speed", vr?.scrollSpeed)
+  pushBoolean(args, "--vr-session-manager", vr?.sessionManager)
+  pushBoolean(args, "--vr-overlay-enable-control-bar", vr?.controlBar?.enable)
+  pushBoolean(
+    args,
+    "--vr-overlay-enable-control-bar-keyboard",
+    vr?.controlBar?.keyboard,
+  )
+  pushBoolean(
+    args,
+    "--vr-overlay-enable-control-bar-close",
+    vr?.controlBar?.close,
+  )
+  pushBoolean(
+    args,
+    "--vr-overlay-enable-click-stabilization",
+    vr?.clickStabilization,
+  )
+}
+
+function renderReshadeArgs(args: ArgList, reshade: GamescopePolicy["reshade"]) {
+  pushValue(args, "--reshade-effect", reshade?.effect)
+  pushValue(args, "--reshade-technique-idx", reshade?.techniqueIndex)
+}
+
+function renderSteamDeckArgs(
+  args: ArgList,
+  steamDeck: GamescopePolicy["steamDeck"],
+) {
+  pushValue(args, "--mura-map", steamDeck?.muraMap)
+}
+
+function renderDebugArgs(args: ArgList, debug: GamescopePolicy["debug"]) {
+  pushBoolean(args, "--disable-layers", debug?.disableLayers)
+  pushBoolean(args, "--debug-layers", debug?.layers)
+  pushBoolean(args, "--debug-focus", debug?.focus)
+  pushBoolean(args, "--synchronous-x11", debug?.synchronousX11)
+  pushBoolean(args, "--debug-hud", debug?.hud)
+  pushBoolean(args, "--debug-events", debug?.events)
+  pushBoolean(args, "--force-composition", debug?.forceComposition)
+  pushBoolean(args, "--composite-debug", debug?.compositeMarkers)
+  pushBoolean(args, "--disable-color-management", debug?.disableColorManagement)
+  pushBoolean(args, "--disable-xres", debug?.disableXres)
+}
+
+function renderAppCommand(
+  game: LaunchSpec,
+  environment: AppEnvironmentOverlay | undefined,
+): readonly string[] {
+  const operations = renderAppEnvironmentOperations(environment)
+  if (operations.length === 0) return [game.command, ...game.args]
+  return ["env", ...operations, game.command, ...game.args]
+}
+
+function renderAppEnvironmentOperations(
+  environment: AppEnvironmentOverlay | undefined,
+): readonly string[] {
+  if (environment === undefined) return []
+
+  const entries = Object.entries(environment).sort(([left], [right]) =>
+    left.localeCompare(right),
+  )
+  const unsetArgs = entries.flatMap(([name, value]) =>
+    value === null ? ["-u", name] : [],
+  )
+  const setArgs = entries.flatMap(([name, value]) =>
+    value === null ? [] : [`${name}=${value}`],
+  )
+
+  return [...unsetArgs, ...setArgs]
+}
+
+function applyEnvironmentOverlay(
+  base: LaunchSpec["env"],
+  overlay: EnvironmentOverlay | undefined,
+): LaunchSpec["env"] {
+  if (overlay === undefined) return base
+
+  const env: Record<string, string | null> = { ...(base ?? {}) }
+  for (const [key, value] of Object.entries(overlay)) {
+    env[key] = value
+  }
+
+  return Object.keys(env).length > 0 ? env : undefined
+}
+
+function validateDimensionPairs(policy: GamescopePolicy) {
+  validateDimensionPair(
+    "display.output",
+    policy.display?.output?.width,
+    policy.display?.output?.height,
+  )
+  validateDimensionPair(
+    "display.nested",
+    policy.display?.nested?.width,
+    policy.display?.nested?.height,
+  )
+}
+
+function validateDimensionPair(
+  label: string,
+  width: number | undefined,
+  height: number | undefined,
+) {
+  if ((width === undefined) !== (height === undefined)) {
+    throw new Error(`${label} width and height must be provided together`)
+  }
+}
+
+function pushBoolean(
+  args: ArgList,
+  flag: string,
+  enabled: boolean | undefined,
+) {
+  if (enabled === true) args.push(flag)
+}
+
+function pushValue(
+  args: ArgList,
+  flag: string,
+  value: number | string | undefined,
+) {
+  if (value !== undefined) args.push(flag, String(value))
 }

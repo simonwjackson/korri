@@ -328,7 +328,7 @@ describe("prepareStreamLaunchForGame", () => {
       librarySource: librarySource({
         games: [game],
         launchSpecs: new Map([[game.id, launchSpec]]),
-        gamescope: new Map([[game.id, { enabled: false }]]),
+        gamescope: new Map([[game.id, { enable: false }]]),
         artifacts: new Map([
           [
             game.id,
@@ -353,7 +353,7 @@ describe("prepareStreamLaunchForGame", () => {
     )
     expect(intent.lifecycle).toBe("foreground")
     expect(intent.launch).toEqual(launchSpec)
-    expect(intent.gamescope).toEqual({ enabled: false })
+    expect(intent.gamescope).toEqual({ enable: false })
     expect(intent.artifacts).toEqual({
       root: "/tmp/korri-launch-artifacts/snes",
       paths: { contentPath: "/tmp/korri-launch-artifacts/snes/f-zero.smc" },
@@ -528,7 +528,7 @@ function librarySource(options: {
   readonly launchSpecs: ReadonlyMap<string, LaunchSpec>
   readonly gamescope?: ReadonlyMap<
     string,
-    { readonly enabled?: boolean; readonly args?: readonly string[] }
+    { readonly enable?: boolean; readonly extraArgs?: readonly string[] }
   >
   readonly artifacts?: ReadonlyMap<string, LaunchArtifacts>
 }): LibrarySourceService {

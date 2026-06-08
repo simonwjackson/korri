@@ -18,10 +18,8 @@ import {
   type InputPlumberVirtualGamepadResolution,
   resolveInputPlumberVirtualGamepad,
 } from "@platform/input/native/inputplumber-virtual-gamepad"
-import {
-  composeGamescopeLaunchSpec,
-  type GamescopeOptions,
-} from "@platform/stream/gamescope-launch-spec"
+import type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
+import { composeGamescopeLaunchSpec } from "@platform/stream/gamescope-launch-spec"
 
 export interface MoonlightControlLaunchHandle {
   readonly sessionId: string
@@ -88,7 +86,7 @@ export interface MoonlightLaunchOptions {
   readonly absoluteTouchBounds?: string
   readonly absoluteTouchRequireBounds?: boolean
   readonly autoWindowResize?: boolean
-  readonly gamescope?: GamescopeOptions
+  readonly gamescope?: GamescopePolicy
   readonly readProcDevices?: () => Promise<string>
   readonly runner?: CommandRunner
   readonly moonlightControl?: MoonlightControlLaunchOptions | false
@@ -219,23 +217,12 @@ function startedMoonlightResult(input: {
 function moonlightCommandSpec(
   command: string,
   args: readonly string[],
-  gamescope: GamescopeOptions | undefined,
+  gamescope: GamescopePolicy | undefined,
 ): { readonly command: string; readonly args: readonly string[] } {
-  // When Moonlight is launched with `-platform wayland`, the gamescope
-  // wrap needs to expose its wayland socket so the Moonlight client
-  // can use the native Wayland backend instead of falling through to
-  // XWayland. Set exposeWayland explicitly here when the caller did
-  // not already opt in or out.
-  const platformWayland = args.some(
-    (arg, index, source) =>
-      arg === "-platform" && source[index + 1] === "wayland",
+  return composeGamescopeLaunchSpec(
+    { command, args },
+    gamescope ?? { enable: true },
   )
-  const baseline: GamescopeOptions = gamescope ?? { enabled: true }
-  const resolved: GamescopeOptions =
-    platformWayland && baseline.exposeWayland === undefined
-      ? { ...baseline, exposeWayland: true }
-      : baseline
-  return composeGamescopeLaunchSpec({ command, args }, resolved)
 }
 
 function moonlightCommandFromEnv(): string | undefined {
@@ -303,8 +290,8 @@ function moonlightAutoWindowResizeFromEnv(): boolean | undefined {
   return raw === "1" || raw === "true" || raw === "enabled"
 }
 
-function gamescopeEnabled(gamescope: GamescopeOptions | undefined): boolean {
-  return gamescope?.enabled !== false
+function gamescopeEnabled(gamescope: GamescopePolicy | undefined): boolean {
+  return gamescope?.enable !== false
 }
 
 function moonlightInputDeviceFromEnv(): string | undefined {

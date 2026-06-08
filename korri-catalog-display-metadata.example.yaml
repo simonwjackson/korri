@@ -6,9 +6,11 @@
 host:
   title: AKA desktop host
   gamescope:
-    enabled: true
-    backend: wayland
-    exposeWayland: true
+    enable: true
+    backend:
+      type: wayland
+    window:
+      exposeWayland: true
 
 storage:
   steam:
@@ -72,12 +74,18 @@ profiles:
   handheld-640x480:
     title: Handheld 640x480
     gamescope:
-      args: ["-W", "640", "-H", "480"]
+      display:
+        output:
+          width: 640
+          height: 480
 
   tv-1080p:
     title: TV 1080p
     gamescope:
-      args: ["-W", "1920", "-H", "1080"]
+      display:
+        output:
+          width: 1920
+          height: 1080
 
 collections:
   handheld:
@@ -105,7 +113,7 @@ users:
     hidden:
       - super-mario-advance-2/mario-bros
     gamescope:
-      enabled: true
+      enable: true
 
 library:
   downwell:

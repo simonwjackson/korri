@@ -137,10 +137,34 @@ describe("checked-in readable library example", () => {
       /\bsettings\.appid\b/i,
       /\bcontentPath\b/,
       /\bmodulePath\b/,
+      /\benabled\s*:/,
+      /\bforceXwayland\s*:/,
     ]
 
     for (const pattern of forbidden) {
       expect(example).not.toMatch(pattern)
+    }
+
+    const lines = example.split("\n")
+    for (const [index, line] of lines.entries()) {
+      if (line.trim() !== "gamescope:") continue
+      const baseIndent = line.length - line.trimStart().length
+      let directChildIndent: number | undefined
+      for (const nested of lines.slice(index + 1)) {
+        if (nested.trim() === "") continue
+        const nestedIndent = nested.length - nested.trimStart().length
+        if (nestedIndent <= baseIndent) break
+        directChildIndent ??= nestedIndent
+        if (nestedIndent !== directChildIndent) continue
+
+        const trimmed = nested.trim()
+        expect(trimmed).not.toMatch(
+          /^(enabled|args|exposeWayland|forceXwayland)\s*:/,
+        )
+        expect(trimmed).not.toMatch(
+          /^backend\s*:\s*(auto|drm|sdl|openvr|headless|wayland)\s*$/,
+        )
+      }
     }
   })
 })

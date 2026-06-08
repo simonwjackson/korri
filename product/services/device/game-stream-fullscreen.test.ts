@@ -46,14 +46,17 @@ describe("gamescope launch composition", () => {
   it("wraps a configured game in fullscreen borderless Gamescope", () => {
     expect(
       composeGamescopeLaunchSpec(game, {
-        enabled: true,
+        enable: true,
         command: "/nix/store/gamescope/bin/gamescope",
       }),
     ).toEqual({
       command: "/nix/store/gamescope/bin/gamescope",
       args: [
+        "--backend",
+        "wayland",
         "-f",
         "-b",
+        "--expose-wayland",
         "--",
         "/nix/store/demo/bin/neverball",
         "--level",
@@ -65,16 +68,14 @@ describe("gamescope launch composition", () => {
   })
 
   it("does not sniff the child env for Wayland intent", () => {
-    // exposeWayland is now policy-driven only. A child with
-    // SDL_VIDEODRIVER=wayland (or WAYLAND_DISPLAY, or -platform wayland)
-    // does not magic-add --expose-wayland; the caller asks for it
-    // explicitly via the policy field.
     expect(
       composeGamescopeLaunchSpec(
         { ...game, env: { SDL_VIDEODRIVER: "wayland" } },
-        { enabled: true },
+        { enable: true, window: { exposeWayland: false } },
       ).args,
     ).toEqual([
+      "--backend",
+      "wayland",
       "-f",
       "-b",
       "--",
@@ -85,16 +86,18 @@ describe("gamescope launch composition", () => {
   })
 
   it("leaves the game command unchanged when Gamescope is disabled", () => {
-    expect(composeGamescopeLaunchSpec(game, { enabled: false })).toBe(game)
+    expect(composeGamescopeLaunchSpec(game, { enable: false })).toBe(game)
   })
 
   it("adds --expose-wayland when the policy opts in", () => {
     expect(
       composeGamescopeLaunchSpec(game, {
-        enabled: true,
-        exposeWayland: true,
+        enable: true,
+        window: { exposeWayland: true },
       }).args,
     ).toEqual([
+      "--backend",
+      "wayland",
       "-f",
       "-b",
       "--expose-wayland",
@@ -108,14 +111,15 @@ describe("gamescope launch composition", () => {
   it("prepends an explicit --backend flag when the policy selects one", () => {
     expect(
       composeGamescopeLaunchSpec(game, {
-        enabled: true,
-        backend: "wayland",
+        enable: true,
+        backend: { type: "sdl" },
       }).args,
     ).toEqual([
       "--backend",
-      "wayland",
+      "sdl",
       "-f",
       "-b",
+      "--expose-wayland",
       "--",
       "/nix/store/demo/bin/neverball",
       "--level",

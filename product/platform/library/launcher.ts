@@ -22,7 +22,7 @@ import { Schema } from "effect"
  *
  * - `command`: absolute path to the executable. Must be non-empty.
  * - `args`: argv array. May be empty.
- * - `env`: extra environment variables (merged onto the parent's `env`).
+ * - `env`: extra environment variables merged onto the parent's `env`; `null` unsets inherited variables.
  * - `cwd`: working directory for the child.
  */
 export const LaunchSpec = Schema.Struct({
@@ -34,7 +34,9 @@ export const LaunchSpec = Schema.Struct({
     ),
   ),
   args: Schema.Array(Schema.String),
-  env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  env: Schema.optional(
+    Schema.Record(Schema.String, Schema.NullOr(Schema.String)),
+  ),
   cwd: Schema.optional(Schema.String),
 })
 export type LaunchSpec = Schema.Schema.Type<typeof LaunchSpec>

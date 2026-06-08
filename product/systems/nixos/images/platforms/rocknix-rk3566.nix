@@ -51,11 +51,6 @@ let
     # PanVK's drm_syncobj timelines never signal, so the host discards every
     # frame with explicit sync on; fall back to implicit dmabuf fences.
     GAMESCOPE_DISABLE_EXPLICIT_SYNC = "1";
-    # Route the nested game through Gamescope's Xwayland (X11) path. Native-
-    # Wayland clients (RetroArch) intermittently deadlock in their own Wayland
-    # event dispatch under Gamescope on this hardware; Xwayland is rock solid.
-    # Honoured by composeGamescopeLaunchSpec (see @platform/stream).
-    KORRI_GAMESCOPE_FORCE_XWAYLAND = "1";
   };
 in
 {
@@ -119,14 +114,13 @@ in
       pkgs.moonlight-embedded
       korri.packages.${targetSystem}.smb-remastered
     ];
-    # Gamescope is spawned by sessiond and inherits this env, so the PanVK /
-    # force-Xwayland runtime knobs must live here alongside the Panfrost ones.
+    # Gamescope is spawned by sessiond and inherits this env, so the PanVK
+    # runtime knobs must live here alongside the Panfrost ones.
     extraEnvironment = panfrostEnvironment // gamescopeRuntimeEnvironment;
   };
 
-  # korri-server composes the gamescope launch spec (launch.rpc-handler), so it
-  # needs the force-Xwayland flag to wrap the game with `env -u WAYLAND_DISPLAY`.
-  systemd.services.korri-server.environment.KORRI_GAMESCOPE_FORCE_XWAYLAND = "1";
+  services.korri.server.library.platformDefaults.apps.retroarch.gamescope.app.environment.WAYLAND_DISPLAY =
+    null;
 
   users.users.root.linger = true;
 

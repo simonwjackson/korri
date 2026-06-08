@@ -93,22 +93,31 @@ export const handleLaunchLibrary = (
     const gamescope = normalizeGamescopePolicy(
       resolvedResult.resolved.gamescope,
     )
-    const spec = composeGamescopeLaunchSpec(resolvedResult.resolved.spec, {
-      enabled: gamescope.enabled === true,
-      ...(gamescope.command !== undefined
-        ? { command: gamescope.command }
-        : {}),
-      ...(gamescope.backend !== undefined
-        ? { backend: gamescope.backend }
-        : {}),
-      ...(gamescope.exposeWayland !== undefined
-        ? { exposeWayland: gamescope.exposeWayland }
-        : {}),
-      ...(gamescope.args !== undefined ? { args: gamescope.args } : {}),
-      ...(gamescope.forceXwayland !== undefined
-        ? { forceXwayland: gamescope.forceXwayland }
-        : {}),
-    })
+    const specResult = yield* Effect.try({
+      try: () => composeGamescopeLaunchSpec(resolvedResult.resolved.spec, gamescope),
+      catch: error => error,
+    }).pipe(
+      Effect.match({
+        onSuccess: spec => ({ _tag: "resolved" as const, spec }),
+        onFailure: error => ({
+          _tag: "failed" as const,
+          response: launchConfigurationFailure(
+            new LibraryError({
+              reason: "config",
+              message: errorMessage(error),
+            }),
+          ),
+        }),
+      }),
+    )
+    if (specResult._tag === "failed") {
+      logger.warn(
+        { id: payload.id, diagnostic: specResult.response.stderrTail },
+        "app.library.launch: launch configuration failed",
+      )
+      return specResult.response
+    }
+    const spec = specResult.spec
 
     const result = yield* Effect.tryPromise({
       try: () =>
@@ -182,6 +191,10 @@ function launchConfigurationFailure(
     stderrTail:
       error.message ?? error.diagnostic ?? "launch configuration failed",
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function toLibraryError(error: unknown): LibraryError {
@@ -306,21 +319,7 @@ function handleRemoteSourceLaunch(
     const spec: LaunchSpec = composeMoonlightLaunchSpec({
       host,
       ...(inputDevice.path ? { inputDevice: inputDevice.path } : {}),
-      gamescope: {
-        enabled: gamescopePolicy.enabled === true,
-        ...(gamescopePolicy.command !== undefined
-          ? { command: gamescopePolicy.command }
-          : {}),
-        ...(gamescopePolicy.backend !== undefined
-          ? { backend: gamescopePolicy.backend }
-          : {}),
-        ...(gamescopePolicy.exposeWayland !== undefined
-          ? { exposeWayland: gamescopePolicy.exposeWayland }
-          : {}),
-        ...(gamescopePolicy.args !== undefined
-          ? { args: gamescopePolicy.args }
-          : {}),
-      },
+      gamescope: gamescopePolicy,
     })
 
     const result = yield* Effect.tryPromise({

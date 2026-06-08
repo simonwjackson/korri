@@ -10,6 +10,8 @@ The public Gamescope control surface is a local Unix-socket JSON-RPC/NDJSON prot
 
 The v1 guarantee applies to `gamescope-korri`. Stock Gamescope may be used only as a best-effort/debug backend when `protocol.hello` reports matching capabilities. Unsupported controls are valid command methods that return `status: "unsupported"`; truly unknown JSON-RPC method names remain JSON-RPC method errors.
 
+Readable launch policy is a separate contract from this runtime-control protocol. Typed fields such as `gamescope.scaling.filter` render initial Gamescope argv; they do not add JSON-RPC methods or per-game `gamescope.control` YAML. In particular, launch-time `scaling.filter: pixel` is not a v1 `filter.set` value because the bridge has no verified root-atom/readback mapping for it.
+
 ## Transport and lifecycle requirements
 
 - Socket path is session-scoped and local-only.
@@ -58,7 +60,7 @@ Responses use JSON-RPC 2.0 success/error envelopes. Server-pushed events use a J
 | Events | `events.subscribe` | Acknowledge subscription and start monotonic `gamescope.event` pushes. | Bridge-only with backend-derived/native events when available. |
 | Events | `events.unsubscribe` | Stop pushes for the connection/subscription. | Bridge-only. |
 | Mode | `mode.set` | Accept any positive width/height at API validation; backend may fail/unsupported by capability. | X11/native for Xwayland internal mode. |
-| Scaling | `filter.set` | Set scaling filter and require readback match where available. | X11/native for linear/nearest/integer/fsr/nis. |
+| Scaling | `filter.set` | Set scaling filter and require readback match where available. `pixel` is launch-policy-only and invalid for v1 runtime requests. | X11/native for linear/nearest/integer/fsr/nis. |
 | Scaling | `scaler.set` | Valid method; return supported or unsupported by capability. | Native if implemented; otherwise unsupported. |
 | Sharpness | `sharpness.set` | Set FSR sharpness and require readback match where available. | X11/native for 0..20. |
 | Refresh | `fps.set`, `refresh-cycle.set` | Valid methods; return supported or unsupported by capability. | Native if implemented; otherwise unsupported. |

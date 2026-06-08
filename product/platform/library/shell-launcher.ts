@@ -76,7 +76,14 @@ async function spawnShellLaunch(
     "shell-launcher: spawning",
   )
 
-  const env = spec.env ? { ...process.env, ...spec.env } : { ...process.env }
+  const env = { ...process.env }
+  for (const [key, value] of Object.entries(spec.env ?? {})) {
+    if (value === null) {
+      delete env[key]
+    } else {
+      env[key] = value
+    }
+  }
 
   // Bun.spawn throws synchronously when posix_spawn fails (e.g. ENOENT
   // for the binary itself). The launcher contract is that we never

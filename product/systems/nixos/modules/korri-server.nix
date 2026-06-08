@@ -31,6 +31,13 @@ let
   serverCacheDir = "/var/cache/${serverCacheDirName}";
   bunTranspilerCacheDir = "${serverCacheDir}/bun-transpiler-cache";
   userRuntimeDir = "%t/korri-game-stream";
+  platformDefaultsFileName = "00-korri-platform-defaults.yaml";
+  platformDefaultsFormat = pkgs.formats.yaml { };
+  hasPlatformDefaults = cfg.library.platformDefaults != { };
+  platformDefaultsFile = platformDefaultsFormat.generate platformDefaultsFileName cfg.library.platformDefaults;
+  platformDefaultsInstallCommands = lib.optionals hasPlatformDefaults [
+    "${pkgs.coreutils}/bin/install -D -m 600 ${platformDefaultsFile} ${cfg.library.root}/${platformDefaultsFileName}"
+  ];
   desktopAppCommand = pkgs.writeShellScript "korri-sunshine-desktop-app" ''
     set -eu
     echo "korri-sunshine-desktop-app: keeping existing compositor session alive for Moonlight" >&2
@@ -335,6 +342,26 @@ in
           root's home and is unsafe. The default is derived from
           `config.users.users.<services.korri.server.user>.home`. If that home
           cannot be resolved, set this option explicitly to an absolute path.
+        '';
+      };
+
+      platformDefaults = mkOption {
+        type = platformDefaultsFormat.type;
+        default = { };
+        example = lib.literalExpression ''
+          {
+            apps.retroarch.gamescope.app.environment.WAYLAND_DISPLAY = null;
+          }
+        '';
+        description = ''
+          Platform-provided readable library defaults rendered as
+          `${platformDefaultsFileName}` under `services.korri.server.library.root`.
+
+          The value uses the same canonical readable sections as user-authored
+          YAML (`host`, `apps`, `profiles`, etc.). It is loaded alongside
+          `library.yaml` by the ProseQL library source, so platform policy such
+          as app-side Gamescope environment overlays stays in the typed readable
+          contract instead of process-environment fallbacks.
         '';
       };
     };
@@ -917,7 +944,8 @@ in
           ExecStartPre = [
             "${pkgs.coreutils}/bin/install -d -m 700 ${runtimeDir}"
             "${pkgs.coreutils}/bin/install -d -m 700 ${launchArtifactsDir}"
-          ];
+          ]
+          ++ platformDefaultsInstallCommands;
           ExecStart = "${cfg.package}/bin/korri-server";
           Restart = "on-failure";
           RestartSec = 2;
@@ -936,7 +964,8 @@ in
           "${pkgs.coreutils}/bin/install -d -m 700 ${cfg.library.root}"
           "${pkgs.coreutils}/bin/install -d -m 700 ${bunTranspilerCacheDir}"
           "${pkgs.coreutils}/bin/install -d -m 750 ${launchArtifactsDir}"
-        ];
+        ]
+        ++ platformDefaultsInstallCommands;
         ExecStart = "${cfg.package}/bin/korri-server";
         Restart = "on-failure";
         RestartSec = 2;

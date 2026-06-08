@@ -310,12 +310,14 @@ function decodeAbsolutePath(value: unknown, message: string): string {
 function hasGamescopeOpinion(
   gamescope: GamescopePolicy | undefined,
 ): gamescope is GamescopePolicy {
-  return (
-    gamescope !== undefined &&
-    (gamescope.enabled !== undefined ||
-      gamescope.command !== undefined ||
-      (gamescope.args !== undefined && gamescope.args.length > 0))
-  )
+  if (gamescope === undefined) return false
+  return Object.entries(gamescope).some(([key, value]) => {
+    if (value === undefined) return false
+    if (key === "extraArgs") {
+      return Array.isArray(value) && value.length > 0
+    }
+    return true
+  })
 }
 
 function assertAbsoluteLaunchSpec(spec: LaunchSpec): void {

@@ -19,13 +19,13 @@ describe("PresetPayload", () => {
 
   it("decodes inheritable behavior fields (gamescope, env, cwd, argsAppend, patches)", () => {
     const preset = decodePresetPayload({
-      gamescope: { enabled: true, args: ["-F", "fsr"] },
+      gamescope: { enable: true, extraArgs: ["-F", "fsr"] },
       env: { SDL_VIDEODRIVER: "x11" },
       cwd: "/storage/roms",
       argsAppend: ["--fullscreen"],
       patches: ["/patches/color.ips"],
     })
-    expect(preset.gamescope?.enabled).toBe(true)
+    expect(preset.gamescope?.enable).toBe(true)
     expect(preset.env?.SDL_VIDEODRIVER).toBe("x11")
     expect(preset.cwd).toBe("/storage/roms")
     expect(preset.argsAppend).toEqual(["--fullscreen"])
@@ -72,8 +72,6 @@ describe("PresetPayload", () => {
   })
 
   it("rejects an unknown top-level key (typo)", () => {
-    expect(() =>
-      decodePresetPayload({ gamescpoe: { enabled: true } }),
-    ).toThrow()
+    expect(() => decodePresetPayload({ gamescpoe: { enable: true } })).toThrow()
   })
 })

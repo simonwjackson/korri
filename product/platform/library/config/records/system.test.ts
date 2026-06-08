@@ -28,12 +28,12 @@ describe("SystemPayload", () => {
     const system = decodeSystemPayload({
       launcher: "retroarch",
       cores: { retroarch: "snes9x_libretro.so" },
-      gamescope: { enabled: false },
+      gamescope: { enable: false },
       env: { LANG: "C" },
       argsAppend: ["--snes"],
       patches: ["/patches/system.ips"],
       presets: {
-        perf: { gamescope: { enabled: true }, patches: ["/patches/perf.bps"] },
+        perf: { gamescope: { enable: true }, patches: ["/patches/perf.bps"] },
       },
       byLauncher: {
         dolphin: {
@@ -43,9 +43,9 @@ describe("SystemPayload", () => {
       },
       inherit: false,
     })
-    expect(system.gamescope?.enabled).toBe(false)
+    expect(system.gamescope?.enable).toBe(false)
     expect(system.patches).toEqual(["/patches/system.ips"])
-    expect(system.presets?.perf?.gamescope?.enabled).toBe(true)
+    expect(system.presets?.perf?.gamescope?.enable).toBe(true)
     expect(system.presets?.perf?.patches).toEqual(["/patches/perf.bps"])
     expect(system.byLauncher?.dolphin?.argsAppend).toEqual(["--snes-mode"])
     expect(system.byLauncher?.dolphin?.patches).toEqual([

@@ -73,6 +73,26 @@ describe("createShellLauncher (real Bun.spawn)", () => {
     }
   })
 
+  it("unsets inherited env values when the launch spec uses null", async () => {
+    const previous = process.env.KORRI_SHELL_LAUNCHER_UNSET_TEST
+    process.env.KORRI_SHELL_LAUNCHER_UNSET_TEST = "present"
+    try {
+      const launcher = createShellLauncher()
+      const result = await launcher.run({
+        command: "/bin/sh",
+        args: ["-c", 'test -z "${KORRI_SHELL_LAUNCHER_UNSET_TEST+x}"'],
+        env: { KORRI_SHELL_LAUNCHER_UNSET_TEST: null },
+      })
+      expect(result).toEqual({ status: "launched" })
+    } finally {
+      if (previous === undefined) {
+        delete process.env.KORRI_SHELL_LAUNCHER_UNSET_TEST
+      } else {
+        process.env.KORRI_SHELL_LAUNCHER_UNSET_TEST = previous
+      }
+    }
+  })
+
   it("integrates with fake-game.sh — argv echoed in stderr matches what the launcher passed", async () => {
     const launcher = createShellLauncher()
     const argv = [

@@ -276,8 +276,8 @@ const viewOfOverride = (o: EphemeralOverride): InheritableView => ({
  * `byLauncher[L]` at each layer when `L` is provided.
  *
  * Folding rules:
- * - `gamescope`     → deep-merge per nested key; `args` concat; scalars
- *   last-wins; explicit `false` overrides inherited `true`.
+ * - `gamescope`     → deep-merge per nested key; `extraArgs` concat;
+ *   scalars last-wins; explicit `false` overrides inherited `true`.
  * - `env`           → map merge per key, more-specific wins.
  * - `cwd`           → scalar, most-specific wins.
  * - `argsAppend`    → list concat in inheritance order.
@@ -385,33 +385,502 @@ const mergeByLauncher = (
   }
 }
 
-/** Deep-merge two gamescope policies; `args` concat, scalars last-win. */
+const lastDefined = <Value>(
+  base: Value | undefined,
+  extra: Value | undefined,
+): Value | undefined => (extra !== undefined ? extra : base)
+
+const mergeEnvironmentOverlay = (
+  base: GamescopePolicy["environment"],
+  extra: GamescopePolicy["environment"],
+): GamescopePolicy["environment"] => {
+  if (extra === undefined) return base
+  return { ...(base ?? {}), ...extra }
+}
+
+const mergeGamescopeBackend = (
+  base: GamescopePolicy["backend"],
+  extra: GamescopePolicy["backend"],
+): GamescopePolicy["backend"] => {
+  if (extra === undefined) return base
+  const type = lastDefined(base?.type, extra.type)
+  const allowDeferred = lastDefined(base?.allowDeferred, extra.allowDeferred)
+  const preferVkDevice = lastDefined(base?.preferVkDevice, extra.preferVkDevice)
+  return {
+    ...(type !== undefined ? { type } : {}),
+    ...(allowDeferred !== undefined ? { allowDeferred } : {}),
+    ...(preferVkDevice !== undefined ? { preferVkDevice } : {}),
+  }
+}
+
+const mergeGamescopeWindow = (
+  base: GamescopePolicy["window"],
+  extra: GamescopePolicy["window"],
+): GamescopePolicy["window"] => {
+  if (extra === undefined) return base
+  const fullscreen = lastDefined(base?.fullscreen, extra.fullscreen)
+  const borderless = lastDefined(base?.borderless, extra.borderless)
+  const grabKeyboard = lastDefined(base?.grabKeyboard, extra.grabKeyboard)
+  const forceGrabCursor = lastDefined(
+    base?.forceGrabCursor,
+    extra.forceGrabCursor,
+  )
+  const displayIndex = lastDefined(base?.displayIndex, extra.displayIndex)
+  const forceWindowsFullscreen = lastDefined(
+    base?.forceWindowsFullscreen,
+    extra.forceWindowsFullscreen,
+  )
+  const exposeWayland = lastDefined(base?.exposeWayland, extra.exposeWayland)
+  const xwaylandCount = lastDefined(base?.xwaylandCount, extra.xwaylandCount)
+  const fadeOutDuration = lastDefined(
+    base?.fadeOutDuration,
+    extra.fadeOutDuration,
+  )
+  return {
+    ...(fullscreen !== undefined ? { fullscreen } : {}),
+    ...(borderless !== undefined ? { borderless } : {}),
+    ...(grabKeyboard !== undefined ? { grabKeyboard } : {}),
+    ...(forceGrabCursor !== undefined ? { forceGrabCursor } : {}),
+    ...(displayIndex !== undefined ? { displayIndex } : {}),
+    ...(forceWindowsFullscreen !== undefined ? { forceWindowsFullscreen } : {}),
+    ...(exposeWayland !== undefined ? { exposeWayland } : {}),
+    ...(xwaylandCount !== undefined ? { xwaylandCount } : {}),
+    ...(fadeOutDuration !== undefined ? { fadeOutDuration } : {}),
+  }
+}
+
+const mergeGamescopeOutput = (
+  base: NonNullable<GamescopePolicy["display"]>["output"],
+  extra: NonNullable<GamescopePolicy["display"]>["output"],
+): NonNullable<GamescopePolicy["display"]>["output"] => {
+  if (extra === undefined) return base
+  const width = lastDefined(base?.width, extra.width)
+  const height = lastDefined(base?.height, extra.height)
+  const preferredConnectors = lastDefined(
+    base?.preferredConnectors,
+    extra.preferredConnectors,
+  )
+  return {
+    ...(width !== undefined ? { width } : {}),
+    ...(height !== undefined ? { height } : {}),
+    ...(preferredConnectors !== undefined ? { preferredConnectors } : {}),
+  }
+}
+
+const mergeGamescopeNested = (
+  base: NonNullable<GamescopePolicy["display"]>["nested"],
+  extra: NonNullable<GamescopePolicy["display"]>["nested"],
+): NonNullable<GamescopePolicy["display"]>["nested"] => {
+  if (extra === undefined) return base
+  const width = lastDefined(base?.width, extra.width)
+  const height = lastDefined(base?.height, extra.height)
+  const refresh = lastDefined(base?.refresh, extra.refresh)
+  const unfocusedRefresh = lastDefined(
+    base?.unfocusedRefresh,
+    extra.unfocusedRefresh,
+  )
+  return {
+    ...(width !== undefined ? { width } : {}),
+    ...(height !== undefined ? { height } : {}),
+    ...(refresh !== undefined ? { refresh } : {}),
+    ...(unfocusedRefresh !== undefined ? { unfocusedRefresh } : {}),
+  }
+}
+
+const mergeGamescopeScale = (
+  base: NonNullable<GamescopePolicy["display"]>["scale"],
+  extra: NonNullable<GamescopePolicy["display"]>["scale"],
+): NonNullable<GamescopePolicy["display"]>["scale"] => {
+  if (extra === undefined) return base
+  const max = lastDefined(base?.max, extra.max)
+  return { ...(max !== undefined ? { max } : {}) }
+}
+
+const mergeGamescopeDisplay = (
+  base: GamescopePolicy["display"],
+  extra: GamescopePolicy["display"],
+): GamescopePolicy["display"] => {
+  if (extra === undefined) return base
+  const output = mergeGamescopeOutput(base?.output, extra.output)
+  const nested = mergeGamescopeNested(base?.nested, extra.nested)
+  const scale = mergeGamescopeScale(base?.scale, extra.scale)
+  const orientation = lastDefined(base?.orientation, extra.orientation)
+  const adaptiveSync = lastDefined(base?.adaptiveSync, extra.adaptiveSync)
+  const framerateLimit = lastDefined(base?.framerateLimit, extra.framerateLimit)
+  return {
+    ...(output !== undefined ? { output } : {}),
+    ...(nested !== undefined ? { nested } : {}),
+    ...(scale !== undefined ? { scale } : {}),
+    ...(orientation !== undefined ? { orientation } : {}),
+    ...(adaptiveSync !== undefined ? { adaptiveSync } : {}),
+    ...(framerateLimit !== undefined ? { framerateLimit } : {}),
+  }
+}
+
+const mergeGamescopeScaling = (
+  base: GamescopePolicy["scaling"],
+  extra: GamescopePolicy["scaling"],
+): GamescopePolicy["scaling"] => {
+  if (extra === undefined) return base
+  const scaler = lastDefined(base?.scaler, extra.scaler)
+  const filter = lastDefined(base?.filter, extra.filter)
+  const sharpness = lastDefined(base?.sharpness, extra.sharpness)
+  return {
+    ...(scaler !== undefined ? { scaler } : {}),
+    ...(filter !== undefined ? { filter } : {}),
+    ...(sharpness !== undefined ? { sharpness } : {}),
+  }
+}
+
+const mergeGamescopeCursor = (
+  base: GamescopePolicy["cursor"],
+  extra: GamescopePolicy["cursor"],
+): GamescopePolicy["cursor"] => {
+  if (extra === undefined) return base
+  const image = lastDefined(base?.image, extra.image)
+  const hotspot = lastDefined(base?.hotspot, extra.hotspot)
+  const hideDelay = lastDefined(base?.hideDelay, extra.hideDelay)
+  const scaleHeight = lastDefined(base?.scaleHeight, extra.scaleHeight)
+  return {
+    ...(image !== undefined ? { image } : {}),
+    ...(hotspot !== undefined ? { hotspot } : {}),
+    ...(hideDelay !== undefined ? { hideDelay } : {}),
+    ...(scaleHeight !== undefined ? { scaleHeight } : {}),
+  }
+}
+
+const mergeGamescopeInput = (
+  base: GamescopePolicy["input"],
+  extra: GamescopePolicy["input"],
+): GamescopePolicy["input"] => {
+  if (extra === undefined) return base
+  const mouseSensitivity = lastDefined(
+    base?.mouseSensitivity,
+    extra.mouseSensitivity,
+  )
+  const defaultTouchMode = lastDefined(
+    base?.defaultTouchMode,
+    extra.defaultTouchMode,
+  )
+  return {
+    ...(mouseSensitivity !== undefined ? { mouseSensitivity } : {}),
+    ...(defaultTouchMode !== undefined ? { defaultTouchMode } : {}),
+  }
+}
+
+const mergeGamescopeScheduling = (
+  base: GamescopePolicy["scheduling"],
+  extra: GamescopePolicy["scheduling"],
+): GamescopePolicy["scheduling"] => {
+  if (extra === undefined) return base
+  const realtime = lastDefined(base?.realtime, extra.realtime)
+  const readyFd = lastDefined(base?.readyFd, extra.readyFd)
+  const keepAlive = lastDefined(base?.keepAlive, extra.keepAlive)
+  return {
+    ...(realtime !== undefined ? { realtime } : {}),
+    ...(readyFd !== undefined ? { readyFd } : {}),
+    ...(keepAlive !== undefined ? { keepAlive } : {}),
+  }
+}
+
+const mergeGamescopeStats = (
+  base: GamescopePolicy["stats"],
+  extra: GamescopePolicy["stats"],
+): GamescopePolicy["stats"] => {
+  if (extra === undefined) return base
+  const path = lastDefined(base?.path, extra.path)
+  return { ...(path !== undefined ? { path } : {}) }
+}
+
+const mergeGamescopeSteam = (
+  base: GamescopePolicy["steam"],
+  extra: GamescopePolicy["steam"],
+): GamescopePolicy["steam"] => {
+  if (extra === undefined) return base
+  const enableIntegration = lastDefined(
+    base?.enableIntegration,
+    extra.enableIntegration,
+  )
+  const mangoapp = lastDefined(base?.mangoapp, extra.mangoapp)
+  return {
+    ...(enableIntegration !== undefined ? { enableIntegration } : {}),
+    ...(mangoapp !== undefined ? { mangoapp } : {}),
+  }
+}
+
+const mergeGamescopeEmbedded = (
+  base: GamescopePolicy["embedded"],
+  extra: GamescopePolicy["embedded"],
+): GamescopePolicy["embedded"] => {
+  if (extra === undefined) return base
+  const generateDrmMode = lastDefined(
+    base?.generateDrmMode,
+    extra.generateDrmMode,
+  )
+  const immediateFlips = lastDefined(base?.immediateFlips, extra.immediateFlips)
+  const virtualConnectorStrategy = lastDefined(
+    base?.virtualConnectorStrategy,
+    extra.virtualConnectorStrategy,
+  )
+  return {
+    ...(generateDrmMode !== undefined ? { generateDrmMode } : {}),
+    ...(immediateFlips !== undefined ? { immediateFlips } : {}),
+    ...(virtualConnectorStrategy !== undefined
+      ? { virtualConnectorStrategy }
+      : {}),
+  }
+}
+
+const mergeGamescopeHdrInverseToneMapping = (
+  base: NonNullable<GamescopePolicy["hdr"]>["inverseToneMapping"],
+  extra: NonNullable<GamescopePolicy["hdr"]>["inverseToneMapping"],
+): NonNullable<GamescopePolicy["hdr"]>["inverseToneMapping"] => {
+  if (extra === undefined) return base
+  const enable = lastDefined(base?.enable, extra.enable)
+  const sdrNits = lastDefined(base?.sdrNits, extra.sdrNits)
+  const targetNits = lastDefined(base?.targetNits, extra.targetNits)
+  return {
+    ...(enable !== undefined ? { enable } : {}),
+    ...(sdrNits !== undefined ? { sdrNits } : {}),
+    ...(targetNits !== undefined ? { targetNits } : {}),
+  }
+}
+
+const mergeGamescopeHdrDebug = (
+  base: NonNullable<GamescopePolicy["hdr"]>["debug"],
+  extra: NonNullable<GamescopePolicy["hdr"]>["debug"],
+): NonNullable<GamescopePolicy["hdr"]>["debug"] => {
+  if (extra === undefined) return base
+  const forceSupport = lastDefined(base?.forceSupport, extra.forceSupport)
+  const forceOutput = lastDefined(base?.forceOutput, extra.forceOutput)
+  const heatmap = lastDefined(base?.heatmap, extra.heatmap)
+  return {
+    ...(forceSupport !== undefined ? { forceSupport } : {}),
+    ...(forceOutput !== undefined ? { forceOutput } : {}),
+    ...(heatmap !== undefined ? { heatmap } : {}),
+  }
+}
+
+const mergeGamescopeHdr = (
+  base: GamescopePolicy["hdr"],
+  extra: GamescopePolicy["hdr"],
+): GamescopePolicy["hdr"] => {
+  if (extra === undefined) return base
+  const enable = lastDefined(base?.enable, extra.enable)
+  const sdrGamutWideness = lastDefined(
+    base?.sdrGamutWideness,
+    extra.sdrGamutWideness,
+  )
+  const sdrContentNits = lastDefined(base?.sdrContentNits, extra.sdrContentNits)
+  const inverseToneMapping = mergeGamescopeHdrInverseToneMapping(
+    base?.inverseToneMapping,
+    extra.inverseToneMapping,
+  )
+  const debug = mergeGamescopeHdrDebug(base?.debug, extra.debug)
+  return {
+    ...(enable !== undefined ? { enable } : {}),
+    ...(sdrGamutWideness !== undefined ? { sdrGamutWideness } : {}),
+    ...(sdrContentNits !== undefined ? { sdrContentNits } : {}),
+    ...(inverseToneMapping !== undefined ? { inverseToneMapping } : {}),
+    ...(debug !== undefined ? { debug } : {}),
+  }
+}
+
+const mergeGamescopeVrControlBar = (
+  base: NonNullable<GamescopePolicy["vr"]>["controlBar"],
+  extra: NonNullable<GamescopePolicy["vr"]>["controlBar"],
+): NonNullable<GamescopePolicy["vr"]>["controlBar"] => {
+  if (extra === undefined) return base
+  const enable = lastDefined(base?.enable, extra.enable)
+  const keyboard = lastDefined(base?.keyboard, extra.keyboard)
+  const close = lastDefined(base?.close, extra.close)
+  return {
+    ...(enable !== undefined ? { enable } : {}),
+    ...(keyboard !== undefined ? { keyboard } : {}),
+    ...(close !== undefined ? { close } : {}),
+  }
+}
+
+const mergeGamescopeVr = (
+  base: GamescopePolicy["vr"],
+  extra: GamescopePolicy["vr"],
+): GamescopePolicy["vr"] => {
+  if (extra === undefined) return base
+  const overlayKey = lastDefined(base?.overlayKey, extra.overlayKey)
+  const appOverlayKey = lastDefined(base?.appOverlayKey, extra.appOverlayKey)
+  const explicitName = lastDefined(base?.explicitName, extra.explicitName)
+  const defaultName = lastDefined(base?.defaultName, extra.defaultName)
+  const icon = lastDefined(base?.icon, extra.icon)
+  const showImmediately = lastDefined(
+    base?.showImmediately,
+    extra.showImmediately,
+  )
+  const modal = lastDefined(base?.modal, extra.modal)
+  const physicalWidth = lastDefined(base?.physicalWidth, extra.physicalWidth)
+  const physicalCurvature = lastDefined(
+    base?.physicalCurvature,
+    extra.physicalCurvature,
+  )
+  const physicalPreCurvePitch = lastDefined(
+    base?.physicalPreCurvePitch,
+    extra.physicalPreCurvePitch,
+  )
+  const scrollSpeed = lastDefined(base?.scrollSpeed, extra.scrollSpeed)
+  const sessionManager = lastDefined(base?.sessionManager, extra.sessionManager)
+  const controlBar = mergeGamescopeVrControlBar(
+    base?.controlBar,
+    extra.controlBar,
+  )
+  const clickStabilization = lastDefined(
+    base?.clickStabilization,
+    extra.clickStabilization,
+  )
+  return {
+    ...(overlayKey !== undefined ? { overlayKey } : {}),
+    ...(appOverlayKey !== undefined ? { appOverlayKey } : {}),
+    ...(explicitName !== undefined ? { explicitName } : {}),
+    ...(defaultName !== undefined ? { defaultName } : {}),
+    ...(icon !== undefined ? { icon } : {}),
+    ...(showImmediately !== undefined ? { showImmediately } : {}),
+    ...(modal !== undefined ? { modal } : {}),
+    ...(physicalWidth !== undefined ? { physicalWidth } : {}),
+    ...(physicalCurvature !== undefined ? { physicalCurvature } : {}),
+    ...(physicalPreCurvePitch !== undefined ? { physicalPreCurvePitch } : {}),
+    ...(scrollSpeed !== undefined ? { scrollSpeed } : {}),
+    ...(sessionManager !== undefined ? { sessionManager } : {}),
+    ...(controlBar !== undefined ? { controlBar } : {}),
+    ...(clickStabilization !== undefined ? { clickStabilization } : {}),
+  }
+}
+
+const mergeGamescopeReshade = (
+  base: GamescopePolicy["reshade"],
+  extra: GamescopePolicy["reshade"],
+): GamescopePolicy["reshade"] => {
+  if (extra === undefined) return base
+  const effect = lastDefined(base?.effect, extra.effect)
+  const techniqueIndex = lastDefined(base?.techniqueIndex, extra.techniqueIndex)
+  return {
+    ...(effect !== undefined ? { effect } : {}),
+    ...(techniqueIndex !== undefined ? { techniqueIndex } : {}),
+  }
+}
+
+const mergeGamescopeSteamDeck = (
+  base: GamescopePolicy["steamDeck"],
+  extra: GamescopePolicy["steamDeck"],
+): GamescopePolicy["steamDeck"] => {
+  if (extra === undefined) return base
+  const muraMap = lastDefined(base?.muraMap, extra.muraMap)
+  return { ...(muraMap !== undefined ? { muraMap } : {}) }
+}
+
+const mergeGamescopeDebug = (
+  base: GamescopePolicy["debug"],
+  extra: GamescopePolicy["debug"],
+): GamescopePolicy["debug"] => {
+  if (extra === undefined) return base
+  const disableLayers = lastDefined(base?.disableLayers, extra.disableLayers)
+  const layers = lastDefined(base?.layers, extra.layers)
+  const focus = lastDefined(base?.focus, extra.focus)
+  const synchronousX11 = lastDefined(base?.synchronousX11, extra.synchronousX11)
+  const hud = lastDefined(base?.hud, extra.hud)
+  const events = lastDefined(base?.events, extra.events)
+  const forceComposition = lastDefined(
+    base?.forceComposition,
+    extra.forceComposition,
+  )
+  const compositeMarkers = lastDefined(
+    base?.compositeMarkers,
+    extra.compositeMarkers,
+  )
+  const disableColorManagement = lastDefined(
+    base?.disableColorManagement,
+    extra.disableColorManagement,
+  )
+  const disableXres = lastDefined(base?.disableXres, extra.disableXres)
+  return {
+    ...(disableLayers !== undefined ? { disableLayers } : {}),
+    ...(layers !== undefined ? { layers } : {}),
+    ...(focus !== undefined ? { focus } : {}),
+    ...(synchronousX11 !== undefined ? { synchronousX11 } : {}),
+    ...(hud !== undefined ? { hud } : {}),
+    ...(events !== undefined ? { events } : {}),
+    ...(forceComposition !== undefined ? { forceComposition } : {}),
+    ...(compositeMarkers !== undefined ? { compositeMarkers } : {}),
+    ...(disableColorManagement !== undefined ? { disableColorManagement } : {}),
+    ...(disableXres !== undefined ? { disableXres } : {}),
+  }
+}
+
+const mergeGamescopeApp = (
+  base: GamescopePolicy["app"],
+  extra: GamescopePolicy["app"],
+): GamescopePolicy["app"] => {
+  if (extra === undefined) return base
+  const environment = mergeEnvironmentOverlay(
+    base?.environment,
+    extra.environment,
+  )
+  return { ...(environment !== undefined ? { environment } : {}) }
+}
+
+/** Deep-merge two gamescope policies; `extraArgs` concat, scalars last-win. */
 const foldGamescope = (
   base: GamescopePolicy | undefined,
   extra: GamescopePolicy,
 ): GamescopePolicy => {
-  const enabled = extra.enabled !== undefined ? extra.enabled : base?.enabled
-  const command = extra.command !== undefined ? extra.command : base?.command
-  const backend = extra.backend !== undefined ? extra.backend : base?.backend
-  const exposeWayland =
-    extra.exposeWayland !== undefined
-      ? extra.exposeWayland
-      : base?.exposeWayland
-  const forceXwayland =
-    extra.forceXwayland !== undefined
-      ? extra.forceXwayland
-      : base?.forceXwayland
-  const args =
-    extra.args !== undefined
-      ? [...(base?.args ?? []), ...extra.args]
-      : base?.args
+  const enable = lastDefined(base?.enable, extra.enable)
+  const command = lastDefined(base?.command, extra.command)
+  const environment = mergeEnvironmentOverlay(
+    base?.environment,
+    extra.environment,
+  )
+  const app = mergeGamescopeApp(base?.app, extra.app)
+  const backend = mergeGamescopeBackend(base?.backend, extra.backend)
+  const window = mergeGamescopeWindow(base?.window, extra.window)
+  const display = mergeGamescopeDisplay(base?.display, extra.display)
+  const scaling = mergeGamescopeScaling(base?.scaling, extra.scaling)
+  const cursor = mergeGamescopeCursor(base?.cursor, extra.cursor)
+  const input = mergeGamescopeInput(base?.input, extra.input)
+  const scheduling = mergeGamescopeScheduling(
+    base?.scheduling,
+    extra.scheduling,
+  )
+  const stats = mergeGamescopeStats(base?.stats, extra.stats)
+  const steam = mergeGamescopeSteam(base?.steam, extra.steam)
+  const embedded = mergeGamescopeEmbedded(base?.embedded, extra.embedded)
+  const hdr = mergeGamescopeHdr(base?.hdr, extra.hdr)
+  const vr = mergeGamescopeVr(base?.vr, extra.vr)
+  const reshade = mergeGamescopeReshade(base?.reshade, extra.reshade)
+  const steamDeck = mergeGamescopeSteamDeck(base?.steamDeck, extra.steamDeck)
+  const debug = mergeGamescopeDebug(base?.debug, extra.debug)
+  const extraArgs =
+    extra.extraArgs !== undefined
+      ? [...(base?.extraArgs ?? []), ...extra.extraArgs]
+      : base?.extraArgs
+
   return {
-    ...(enabled !== undefined ? { enabled } : {}),
+    ...(enable !== undefined ? { enable } : {}),
     ...(command !== undefined ? { command } : {}),
+    ...(environment !== undefined ? { environment } : {}),
+    ...(app !== undefined ? { app } : {}),
     ...(backend !== undefined ? { backend } : {}),
-    ...(exposeWayland !== undefined ? { exposeWayland } : {}),
-    ...(forceXwayland !== undefined ? { forceXwayland } : {}),
-    ...(args !== undefined ? { args } : {}),
+    ...(window !== undefined ? { window } : {}),
+    ...(display !== undefined ? { display } : {}),
+    ...(scaling !== undefined ? { scaling } : {}),
+    ...(cursor !== undefined ? { cursor } : {}),
+    ...(input !== undefined ? { input } : {}),
+    ...(scheduling !== undefined ? { scheduling } : {}),
+    ...(stats !== undefined ? { stats } : {}),
+    ...(steam !== undefined ? { steam } : {}),
+    ...(embedded !== undefined ? { embedded } : {}),
+    ...(hdr !== undefined ? { hdr } : {}),
+    ...(vr !== undefined ? { vr } : {}),
+    ...(reshade !== undefined ? { reshade } : {}),
+    ...(steamDeck !== undefined ? { steamDeck } : {}),
+    ...(debug !== undefined ? { debug } : {}),
+    ...(extraArgs !== undefined ? { extraArgs } : {}),
   }
 }
 

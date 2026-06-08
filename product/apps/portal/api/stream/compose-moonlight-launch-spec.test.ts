@@ -51,10 +51,18 @@ describe("composeMoonlightLaunchSpec", () => {
   it("wraps the stable Korri Stream moonlight app in gamescope when enabled", () => {
     const spec = composeMoonlightLaunchSpec({
       host: "192.168.1.10",
-      gamescope: { enabled: true },
+      gamescope: { enable: true, window: { exposeWayland: true } },
     })
 
     expect(spec.command).toBe("gamescope")
+    expect(spec.args.slice(0, 6)).toEqual([
+      "--backend",
+      "wayland",
+      "-f",
+      "-b",
+      "--expose-wayland",
+      "--",
+    ])
     // gamescope flags then -- then moonlight stream -app "Korri Stream" <host>
     expect(spec.args).toContain("--")
     const separatorIndex = spec.args.indexOf("--")
@@ -71,13 +79,34 @@ describe("composeMoonlightLaunchSpec", () => {
   it("returns a bare moonlight LaunchSpec when gamescope is disabled", () => {
     const spec = composeMoonlightLaunchSpec({
       host: "aka.local",
-      gamescope: { enabled: false },
+      gamescope: { enable: false },
     })
 
     expect(spec).toEqual({
       command: "moonlight",
       args: ["stream", "-app", "Korri Stream", "aka.local"],
     })
+  })
+
+  it("preserves explicit Wayland exposure policy without sniffing Moonlight argv", () => {
+    const spec = composeMoonlightLaunchSpec({
+      host: "aka.local",
+      platform: "wayland",
+      gamescope: { enable: true, window: { exposeWayland: false } },
+    })
+
+    expect(spec.command).toBe("gamescope")
+    expect(spec.args).not.toContain("--expose-wayland")
+    const separatorIndex = spec.args.indexOf("--")
+    expect(spec.args.slice(separatorIndex + 1)).toEqual([
+      "moonlight",
+      "stream",
+      "-platform",
+      "wayland",
+      "-app",
+      "Korri Stream",
+      "aka.local",
+    ])
   })
 
   it("defaults to gamescope-disabled when no gamescope policy is provided", () => {

@@ -96,13 +96,13 @@ describe("GamePayload", () => {
     const game = decodeGamePayload({
       system: "snes",
       contentPath: "/x.smc",
-      gamescope: { enabled: true },
+      gamescope: { enable: true },
       env: { SDL_VIDEODRIVER: "x11" },
       cwd: "/storage/roms",
       argsAppend: ["--fullscreen"],
       patches: ["/patches/base.ips", "/patches/qol.bps"],
     })
-    expect(game.gamescope?.enabled).toBe(true)
+    expect(game.gamescope?.enable).toBe(true)
     expect(game.env?.SDL_VIDEODRIVER).toBe("x11")
     expect(game.patches).toEqual(["/patches/base.ips", "/patches/qol.bps"])
   })
@@ -113,7 +113,7 @@ describe("GamePayload", () => {
       contentPath: "/x.smc",
       presets: {
         "max-quality": {
-          gamescope: { enabled: true, args: ["-F", "fsr"] },
+          gamescope: { enable: true, extraArgs: ["-F", "fsr"] },
         },
       },
       byLauncher: {
@@ -123,7 +123,7 @@ describe("GamePayload", () => {
         },
       },
     })
-    expect(game.presets?.["max-quality"]?.gamescope?.enabled).toBe(true)
+    expect(game.presets?.["max-quality"]?.gamescope?.enable).toBe(true)
     expect(game.byLauncher?.retroarch?.argsAppend).toEqual([
       "-L",
       "snes9x_libretro.so",
@@ -147,7 +147,7 @@ describe("GamePayload", () => {
       decodeGamePayload({
         system: "snes",
         contentPath: "/x.smc",
-        gamescpoe: { enabled: true },
+        gamescpoe: { enable: true },
       }),
     ).toThrow()
   })

@@ -389,7 +389,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       isLocal: false,
     })
     const layer = Layer.mergeAll(
-      localGameSourceLayer({ gamescope: { enabled: false } }),
+      localGameSourceLayer({ gamescope: { enable: false } }),
       makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
       Layer.succeed(ForegroundSessionHost)(host),
       makeInMemoryRemoteStreamPrepareLayer(() =>
@@ -447,7 +447,10 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       resolveLaunchForGame: () =>
         Effect.succeed({
           spec: { command: "/bin/game", args: ["rom"] },
-          gamescope: { enabled: true },
+          gamescope: {
+            enable: true,
+            app: { environment: { WAYLAND_DISPLAY: null } },
+          },
         }),
     })
     const launcherLayer = Layer.succeed(Launcher)({
@@ -480,7 +483,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
 
     expect(result).toEqual({ _tag: "Accepted", status: "launched" })
     expect(launchedSpec).toEqual({
-      // A minimal { enabled: true } policy resolves through the cascade
+      // A minimal { enable: true } policy resolves through the cascade
       // default to wayland backend + exposed wayland socket.
       command: "gamescope",
       args: [
@@ -490,6 +493,9 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
         "-b",
         "--expose-wayland",
         "--",
+        "env",
+        "-u",
+        "WAYLAND_DISPLAY",
         "/bin/game",
         "rom",
       ],
@@ -603,9 +609,9 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
         Effect.succeed({
           spec: { command: "/bin/game", args: ["rom"] },
           gamescope: {
-            enabled: true,
-            backend: "sdl" as const,
-            exposeWayland: false,
+            enable: true,
+            backend: { type: "sdl" as const },
+            window: { exposeWayland: false },
           },
         }),
     })
@@ -654,7 +660,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
         resolveInputs = inputs
         return Effect.succeed({
           spec: { command: "/bin/game", args: ["rom"] },
-          gamescope: { enabled: false },
+          gamescope: { enable: false },
         })
       },
     })
@@ -699,7 +705,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     const control = makeInMemoryLauncherLayer.createManagedControl()
     const host = createForegroundSessionHost()
     const layer = Layer.mergeAll(
-      localGameSourceLayer({ gamescope: { enabled: false } }),
+      localGameSourceLayer({ gamescope: { enable: false } }),
       makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
       Layer.succeed(ForegroundSessionHost)(host),
       remoteStreamPrepareNeverCalledLayer,
@@ -726,7 +732,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     const control = makeInMemoryLauncherLayer.createManagedControl()
     const host = createForegroundSessionHost()
     const layer = Layer.mergeAll(
-      localGameSourceLayer({ gamescope: { enabled: false } }),
+      localGameSourceLayer({ gamescope: { enable: false } }),
       makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
       Layer.succeed(ForegroundSessionHost)(host),
       remoteStreamPrepareNeverCalledLayer,
@@ -755,7 +761,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     const control = makeInMemoryLauncherLayer.createManagedControl()
     const host = createForegroundSessionHost()
     const layer = Layer.mergeAll(
-      localGameSourceLayer({ gamescope: { enabled: false } }),
+      localGameSourceLayer({ gamescope: { enable: false } }),
       makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
       Layer.succeed(ForegroundSessionHost)(host),
       remoteStreamPrepareNeverCalledLayer,
@@ -912,7 +918,7 @@ function completedSessionHandle() {
 }
 
 function localGameSourceLayer(options: {
-  readonly gamescope: { readonly enabled: boolean }
+  readonly gamescope: { readonly enable: boolean }
 }) {
   return Layer.succeed(LibrarySource)({
     list: () =>
@@ -954,7 +960,7 @@ async function withTempProseqlLibrary(
           const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
           const repository = createLibraryRepository(db)
           yield* repository.upsertGlobalConfig({
-            gamescope: { enabled: false },
+            gamescope: { enable: false },
           })
           yield* repository.upsertGame({
             id: "snes/echo.smc",

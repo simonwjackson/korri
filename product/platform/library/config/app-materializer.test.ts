@@ -44,7 +44,11 @@ const context: ResolvedLaunchContext = {
   moduleId: "fake08",
   modulePath: "/etc/korri/cores/fake08_libretro.so",
   core: "/etc/korri/cores/fake08_libretro.so",
-  gamescope: { enabled: true, backend: "wayland", exposeWayland: true },
+  gamescope: {
+    enable: true,
+    backend: { type: "wayland" },
+    window: { exposeWayland: true },
+  },
   settings: { video_scale_integer: true, config_save_on_exit: false },
 }
 

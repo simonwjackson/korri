@@ -55,6 +55,11 @@ export type GamescopeControlMethod =
 export type GamescopeControlEventType =
   (typeof GAMESCOPE_CONTROL_EVENTS)[number]
 export type GamescopeControlRequestId = string | number
+/**
+ * Runtime-control filter values backed by the v1 bridge readback contract.
+ * Launch policy has its own GamescopeFilter type and additionally supports
+ * launch-only values such as `pixel`.
+ */
 export type GamescopeScalingFilter =
   | "linear"
   | "nearest"

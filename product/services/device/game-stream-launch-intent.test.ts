@@ -75,15 +75,46 @@ describe("game stream launch intent store", () => {
   it("preserves the resolved Gamescope wrapper command", () => {
     const intent = createLaunchIntent(launch, {
       gamescope: {
-        enabled: true,
+        enable: true,
         command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
       },
     })
 
     expect(intent.gamescope).toEqual({
-      enabled: true,
+      enable: true,
       command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
     })
+  })
+
+  it("preserves an explicit enable-only Gamescope policy", () => {
+    const intent = createLaunchIntent(launch, {
+      gamescope: { enable: true },
+    })
+
+    expect(intent.gamescope).toEqual({ enable: true })
+  })
+
+  it("preserves structural-only Gamescope policy opinions", () => {
+    const policies = [
+      { backend: { type: "sdl" as const } },
+      { scaling: { filter: "fsr" as const } },
+      { display: { nested: { width: 640, height: 480 } } },
+      { debug: { hud: true } },
+    ]
+
+    for (const gamescope of policies) {
+      const intent = createLaunchIntent(launch, { gamescope })
+      expect(intent.gamescope).toEqual(gamescope)
+    }
+  })
+
+  it("drops empty Gamescope policies without structural opinions", () => {
+    expect(
+      createLaunchIntent(launch, { gamescope: {} }).gamescope,
+    ).toBeUndefined()
+    expect(
+      createLaunchIntent(launch, { gamescope: { extraArgs: [] } }).gamescope,
+    ).toBeUndefined()
   })
 
   it("does not delete a newer pending intent when completing an older claim", async () => {
@@ -116,6 +147,22 @@ describe("game stream launch intent store", () => {
     expect(claim?.intent).toEqual(second)
     await claim?.complete()
     await expect(store.claim()).resolves.toBeUndefined()
+  })
+
+  it("rejects old flat Gamescope intent fields", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-intent-"))
+    const intentPath = join(dir, "next-launch.json")
+    const store = createFileGameStreamLaunchIntentStore(intentPath)
+    await writeFile(
+      intentPath,
+      JSON.stringify({
+        ...createLaunchIntent(launch),
+        gamescope: { enabled: true },
+      }),
+      { mode: 0o600 },
+    )
+
+    await expect(store.claim()).rejects.toThrow(/enabled/)
   })
 
   it("rejects relative launch artifact metadata", async () => {

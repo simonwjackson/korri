@@ -190,7 +190,7 @@ async function seedLibrary(root: string): Promise<void> {
         })
         const repository = createLibraryRepository(db)
         yield* repository.upsertGlobalConfig({
-          gamescope: { enabled: false },
+          gamescope: { enable: false },
         })
         yield* repository.upsertSystem({
           id: "snes",

@@ -2,6 +2,7 @@ import { mkdir, open, readFile, unlink, writeFile } from "node:fs/promises"
 import { dirname, isAbsolute, join } from "node:path"
 import { xdgRuntimeDir } from "@platform/config/xdg-paths"
 import { cleanupLaunchArtifacts } from "@platform/library/config/app-materializer"
+import type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
 import {
   decodeLaunchSpec,
   type Launcher,
@@ -14,7 +15,6 @@ import { logger as defaultLogger } from "@platform/logger"
 import { Effect } from "effect"
 import {
   composeGamescopeLaunchSpec,
-  type GamescopeOptions,
   type RepairStreamSurfaceOptions,
   repairStreamSurface,
   snapshotStreamSurfaceIds,
@@ -80,7 +80,7 @@ export interface GameStreamRunnerOptions {
   readonly launchIntentStore: GameStreamLaunchIntentStore
   readonly spawner?: ManagedChildSpawner
   readonly lockManager?: GameStreamRunLockManager
-  readonly gamescope?: GamescopeOptions
+  readonly gamescope?: GamescopePolicy
   readonly fullscreen?: RepairStreamSurfaceOptions
   readonly statusPath?: string
   readonly logger?: GameStreamRunnerLogger
@@ -116,10 +116,6 @@ const FALLBACK_LOCK_PATH = "/tmp/korri-game-stream-runner.lock"
 const DEFAULT_TERMINATE_GRACE_MS = 2_000
 const DEFAULT_SWAY_COMMAND_TIMEOUT_MS = 2_000
 const GAMESCOPE_COMMAND_ENV = "KORRI_GAME_STREAM_GAMESCOPE_COMMAND"
-// When set to "1", run the nested game via Gamescope's Xwayland path
-// (clears WAYLAND_DISPLAY for the game). Required on RK3566/RG353M where
-// native-Wayland clients deadlock under Gamescope; unset elsewhere.
-const GAMESCOPE_FORCE_XWAYLAND_ENV = "KORRI_GAMESCOPE_FORCE_XWAYLAND"
 const SWAYMSG_COMMAND_ENV = "KORRI_GAME_STREAM_SWAYMSG_COMMAND"
 
 export function createGameStreamRunner(
@@ -401,8 +397,8 @@ export function createGameStreamRunner(
           return await fail("cleanup", "game stream stopped before launch", 143)
         }
 
-        const gamescope = launchClaim.intent.gamescope ?? { enabled: false }
-        const gamescopeEnabled = gamescope.enabled === true
+        const gamescope = launchClaim.intent.gamescope ?? { enable: false }
+        const gamescopeEnabled = gamescope.enable !== false
         const hasResolvedGamescopePolicy =
           launchClaim.intent.gamescope !== undefined
         const resolvedGamescopeCommand = resolveGamescopeCommand({
@@ -449,12 +445,18 @@ export function createGameStreamRunner(
           return await fail("cleanup", "game stream stopped before launch", 143)
         }
 
-        const spec = composeGamescopeLaunchSpec(launchClaim.intent.launch, {
-          enabled: gamescopeEnabled,
-          command: resolvedGamescopeCommand.command,
-          args: gamescope.args,
-          forceXwayland: processEnv[GAMESCOPE_FORCE_XWAYLAND_ENV] === "1",
-        })
+        let spec: LaunchSpec
+        try {
+          spec = composeGamescopeLaunchSpec(launchClaim.intent.launch, {
+            ...gamescope,
+            ...(resolvedGamescopeCommand.command !== undefined
+              ? { command: resolvedGamescopeCommand.command }
+              : {}),
+          })
+        } catch (error) {
+          await requeueLaunchClaim(launchClaim, "preflight failure")
+          return await fail("preflight", errorMessage(error), 126)
+        }
         logger.info(
           { command: spec.command, argc: spec.args.length },
           "game-stream-runner: spawning game",

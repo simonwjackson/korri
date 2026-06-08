@@ -1,11 +1,9 @@
 import { readFile } from "node:fs/promises"
 import { parseProcBusInputDevices } from "@platform/input/native/discover-devices"
 import { resolveInputPlumberVirtualGamepad } from "@platform/input/native/inputplumber-virtual-gamepad"
+import type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
 import type { LaunchFailureKind, LaunchSpec } from "@platform/library/launcher"
-import {
-  composeGamescopeLaunchSpec,
-  type GamescopeOptions,
-} from "@platform/stream/gamescope-launch-spec"
+import { composeGamescopeLaunchSpec } from "@platform/stream/gamescope-launch-spec"
 
 /**
  * Build a Moonlight `LaunchSpec` for `gamescope -- moonlight stream -app "Korri Stream" <host>`
@@ -26,7 +24,7 @@ export interface ComposeMoonlightLaunchSpecOptions {
   /** Sunshine app name. Defaults to `Korri Stream`. */
   readonly appName?: string
   /** Gamescope policy. Defaults to disabled when omitted. */
-  readonly gamescope?: GamescopeOptions
+  readonly gamescope?: GamescopePolicy
   /** Override `moonlight` command. Defaults to env or `"moonlight"`. */
   readonly command?: string
   /** Override Moonlight Embedded platform. Defaults to `KORRI_MOONLIGHT_PLATFORM`. */
@@ -112,7 +110,7 @@ export function composeMoonlightLaunchSpec(
 
   return composeGamescopeLaunchSpec(
     { command, args },
-    options.gamescope ?? { enabled: false },
+    options.gamescope ?? { enable: false },
   )
 }
 

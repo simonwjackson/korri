@@ -15,13 +15,13 @@ describe("EphemeralOverride", () => {
 
   it("decodes inheritable behavior contributions", () => {
     const override = decodeEphemeralOverride({
-      gamescope: { enabled: true, args: ["-F", "fsr"] },
+      gamescope: { enable: true, extraArgs: ["-F", "fsr"] },
       env: { SDL_VIDEODRIVER: "wayland" },
       cwd: "/storage/roms",
       argsAppend: ["--debug"],
       patches: ["/patches/override.ips"],
     })
-    expect(override.gamescope?.enabled).toBe(true)
+    expect(override.gamescope?.enable).toBe(true)
     expect(override.env?.SDL_VIDEODRIVER).toBe("wayland")
     expect(override.patches).toEqual(["/patches/override.ips"])
   })
@@ -60,7 +60,7 @@ describe("EphemeralOverride", () => {
 
   it("rejects an unknown key (typo)", () => {
     expect(() =>
-      decodeEphemeralOverride({ gamescpoe: { enabled: true } }),
+      decodeEphemeralOverride({ gamescpoe: { enable: true } }),
     ).toThrow()
   })
 })

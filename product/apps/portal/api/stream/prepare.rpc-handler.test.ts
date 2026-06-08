@@ -95,10 +95,10 @@ describe("app.stream.prepare handler", () => {
     expect(intent.launch.command).toBe(FAKE_GAME)
     expect(intent.launch.args).toContain("/storage/roms/snes/echo.smc")
     expect(intent.gamescope).toEqual({
-      enabled: true,
-      backend: "wayland",
-      exposeWayland: true,
-      args: ["-f"],
+      enable: true,
+      backend: { type: "wayland" },
+      window: { fullscreen: true, borderless: true, exposeWayland: true },
+      extraArgs: ["--nested-refresh", "60"],
     })
   })
 
@@ -204,7 +204,7 @@ async function withTempProseqlLibrary(): Promise<{
           yield* repository.upsertSystem({
             id: "snes",
             launcher: "rocknix-retroarch",
-            gamescope: { enabled: true, args: ["-f"] },
+            gamescope: { enable: true, extraArgs: ["--nested-refresh", "60"] },
           })
           yield* repository.upsertLauncher({
             id: "rocknix-retroarch",

@@ -1,0 +1,169 @@
+# NixOS-module-style Gamescope policy shape for Korri readable config.
+#
+# This example mirrors the Gamescope 3.16.23 launch-time option surface from
+# Korri's pinned gamescope-korri package source:
+# - src/main.cpp: gamescope_options, usage text, enum parsers
+# - src/backend.h: VirtualConnectorStrategy string values
+#
+# Field names describe capability/intent. Rendering to argv/env belongs to the
+# Korri Gamescope launch renderer, not to readable config authors.
+
+apps:
+  retroarch:
+    gamescope:
+      # Korri wrapper switch. No direct Gamescope flag; controls whether Korri
+      # wraps the child launch with Gamescope at all.
+      enable: true
+
+      # Executable to spawn for the Gamescope wrapper.
+      command: gamescope
+
+      # Environment for the Gamescope process itself. Values are strings;
+      # null means remove the variable before spawning Gamescope.
+      environment:
+        GAMESCOPE_DISABLE_EXPLICIT_SYNC: "1"
+        OBSOLETE_GAMESCOPE_VAR: null
+
+      # Settings for the app launched after Gamescope's -- separator.
+      app:
+        # Environment overlay for the wrapped app. Same convention: string
+        # sets/overrides, null unsets. This directly expresses
+        # `env -u WAYLAND_DISPLAY <app>` without a special Xwayland-routing field.
+        environment:
+          WAYLAND_DISPLAY: null
+          SDL_VIDEODRIVER: x11
+
+      # --backend, --allow-deferred-backend, --prefer-vk-device
+      backend:
+        type: wayland # auto | drm | sdl | openvr | headless | wayland
+        allowDeferred: false
+        preferVkDevice: "1002:7300"
+
+      # Nested-window presentation options.
+      window:
+        fullscreen: true # -f, --fullscreen
+        borderless: true # -b, --borderless
+        grabKeyboard: false # -g, --grab
+        forceGrabCursor: false # --force-grab-cursor
+        displayIndex: 0 # --display-index
+        forceWindowsFullscreen: false # --force-windows-fullscreen
+        exposeWayland: true # --expose-wayland
+        xwaylandCount: 1 # --xwayland-count
+        fadeOutDuration: 150 # --fade-out-duration
+
+      # Display sizing/timing. output maps to -W/-H, nested maps to -w/-h.
+      display:
+        output:
+          width: 1920 # -W, --output-width
+          height: 1080 # -H, --output-height
+          preferredConnectors: [DP-1, HDMI-A-1] # -O, --prefer-output
+        nested:
+          width: 1280 # -w, --nested-width
+          height: 720 # -h, --nested-height
+          refresh: 60 # -r, --nested-refresh
+          unfocusedRefresh: 30 # -o, --nested-unfocused-refresh
+        scale:
+          max: 2 # -m, --max-scale
+        orientation: normal # --force-orientation: normal | right | left | upsidedown
+        adaptiveSync: false # --adaptive-sync
+        framerateLimit: 60 # --framerate-limit
+
+      # Scaling/filtering launch defaults. `pixel` is launch-time-only in
+      # Korri v1; runtime `filter.set` has a separate readback-safe enum.
+      scaling:
+        scaler: auto # -S, --scaler: auto | integer | fit | fill | stretch
+        filter: linear # -F, --filter: linear | nearest | fsr | nis | pixel
+        sharpness: 10 # --sharpness / --fsr-sharpness, 0=max sharp, 20=min sharp
+
+      cursor:
+        image: /usr/share/icons/cursor.png # --cursor
+        hotspot: "10,20" # --cursor-hotspot
+        hideDelay: 500 # -C, --hide-cursor-delay
+        scaleHeight: 1080 # --cursor-scale-height
+
+      input:
+        mouseSensitivity: 1.0 # -s, --mouse-sensitivity
+        defaultTouchMode: 4 # --default-touch-mode: 0 hover, 1 left, 2 right, 3 middle, 4 passthrough
+
+      scheduling:
+        realtime: false # --rt
+        readyFd: 3 # -R, --ready-fd
+        keepAlive: false # --keep-alive
+
+      stats:
+        path: /tmp/gamescope.stats # -T, --stats-path
+
+      steam:
+        enableIntegration: false # -e, --steam
+        mangoapp: false # --mangoapp
+
+      embedded:
+        generateDrmMode: cvt # --generate-drm-mode: cvt | fixed
+        immediateFlips: false # --immediate-flips
+        virtualConnectorStrategy: SingleApplication # --virtual-connector-strategy: SingleApplication | SteamControlled | PerAppId | PerWindow
+
+      hdr:
+        enable: false # --hdr-enabled
+        sdrGamutWideness: 0.75 # --sdr-gamut-wideness, 0..1
+        sdrContentNits: 400 # --hdr-sdr-content-nits
+        inverseToneMapping:
+          enable: false # --hdr-itm-enabled
+          sdrNits: 100 # --hdr-itm-sdr-nits, max 1000
+          targetNits: 1000 # --hdr-itm-target-nits, max 10000
+        debug:
+          forceSupport: false # --hdr-debug-force-support
+          forceOutput: false # --hdr-debug-force-output
+          heatmap: false # --hdr-debug-heatmap
+
+      vr:
+        # OpenVR backend options. Available when the Gamescope build enables OpenVR.
+        overlayKey: korri.overlay # --vr-overlay-key
+        appOverlayKey: korri.app # --vr-app-overlay-key
+        explicitName: Korri # --vr-overlay-explicit-name
+        defaultName: Korri Game # --vr-overlay-default-name
+        icon: /usr/share/icons/korri.png # --vr-overlay-icon
+        showImmediately: false # --vr-overlay-show-immediately
+        modal: false # --vr-overlay-modal
+        physicalWidth: 1.2 # --vr-overlay-physical-width
+        physicalCurvature: 0.5 # --vr-overlay-physical-curvature
+        physicalPreCurvePitch: 5 # --vr-overlay-physical-pre-curve-pitch
+        scrollSpeed: 8 # --vr-scroll-speed
+        sessionManager: false # --vr-session-manager
+        controlBar:
+          enable: false # --vr-overlay-enable-control-bar
+          keyboard: false # --vr-overlay-enable-control-bar-keyboard
+          close: false # --vr-overlay-enable-control-bar-close
+        clickStabilization: false # --vr-overlay-enable-click-stabilization
+
+      reshade:
+        effect: crt.fx # --reshade-effect
+        techniqueIndex: 0 # --reshade-technique-idx
+
+      steamDeck:
+        muraMap: /usr/share/gamescope/mura.bin # --mura-map
+
+      debug:
+        disableLayers: false # --disable-layers
+        layers: false # --debug-layers
+        focus: false # --debug-focus
+        synchronousX11: false # --synchronous-x11
+        hud: false # --debug-hud
+        events: false # --debug-events
+        forceComposition: false # --force-composition
+        compositeMarkers: false # --composite-debug
+        disableColorManagement: false # --disable-color-management
+        disableXres: false # --disable-xres
+
+      # Escape hatch for launch flags not yet modelled in this typed policy.
+      # Appended last before the child separator; production configs should
+      # prefer structured fields whenever one exists.
+      extraArgs: []
+
+# Minimal Bandai/RG353M policy if RetroArch native-Wayland remains freeze-prone:
+#
+# apps:
+#   retroarch:
+#     gamescope:
+#       app:
+#         environment:
+#           WAYLAND_DISPLAY: null

@@ -190,10 +190,10 @@ describe("createRocknixSource (real filesystem via withTempLibrary)", () => {
     await source.list()
     const resolved = await source.resolveLaunchForGame("snes/zelda.smc")
     expect(resolved.spec.command).toBe(lib.launchCommand)
-    expect(resolved.gamescope).toEqual({
-      enabled: true,
-      backend: "wayland",
-      exposeWayland: true,
+    expect(resolved.gamescope).toMatchObject({
+      enable: true,
+      backend: { type: "wayland" },
+      window: { fullscreen: true, borderless: true, exposeWayland: true },
     })
   })
 

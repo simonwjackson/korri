@@ -9,7 +9,7 @@ export type LauncherConfigValidationResult =
       readonly spec: {
         readonly command: string
         readonly args: readonly string[]
-        readonly env?: Readonly<Record<string, string>>
+        readonly env?: Readonly<Record<string, string | null>>
         readonly cwd?: string
       }
       readonly app?: {

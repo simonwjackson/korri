@@ -205,6 +205,18 @@ let
         (check "${name}: Moonlight platform must reach korri-server" (
           serverEnv.KORRI_MOONLIGHT_PLATFORM or null == "v4l2m2m"
         ))
+        (check "${name}: Gamescope control bridge env must remain on sessiond" (
+          sessiondEnv.GAMESCOPE_XWAYLAND_MODE_CONTROL or null == "1"
+          && sessiondEnv.GAMESCOPE_SCALING_FILTER or null == "3"
+          && sessiondEnv.GAMESCOPE_SHARPNESS or null == "20"
+          && sessiondEnv.GAMESCOPE_FSR_FEEDBACK or null == "1"
+        ))
+        (check "${name}: Gamescope control bridge env must remain on korri-server" (
+          serverEnv.GAMESCOPE_XWAYLAND_MODE_CONTROL or null == "1"
+          && serverEnv.GAMESCOPE_SCALING_FILTER or null == "3"
+          && serverEnv.GAMESCOPE_SHARPNESS or null == "20"
+          && serverEnv.GAMESCOPE_FSR_FEEDBACK or null == "1"
+        ))
         # SDL_AUDIODRIVER follows the substrate-declared audio API and
         # must reach both the compositor's launched-app environment and
         # sessiond's foreground-session environment. korri-server does

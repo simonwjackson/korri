@@ -7,6 +7,7 @@ import {
   GAMESCOPE_CONTROL_PROTOCOL,
   GAMESCOPE_CONTROL_PROTOCOL_LIMITS,
   parseGamescopeCardinalProperty,
+  validateGamescopeFilter,
   validateGamescopeFps,
   validateGamescopeMode,
   valueToGamescopeFilter,
@@ -25,6 +26,21 @@ describe("gamescope control protocol", () => {
     expect(filterToGamescopeValue("fsr")).toBe(3)
     expect(filterToGamescopeValue("nis")).toBe(4)
     expect(valueToGamescopeFilter(3)).toBe("fsr")
+    expect(valueToGamescopeFilter(5)).toBeUndefined()
+  })
+
+  it("keeps launch-only pixel filtering out of runtime control", () => {
+    expect(() => validateGamescopeFilter({ filter: "pixel" })).toThrow(
+      "unsupported Gamescope scaling filter: pixel",
+    )
+    expect(() =>
+      decodeGamescopeControlRequest({
+        jsonrpc: "2.0",
+        id: "pixel-filter",
+        method: "filter.set",
+        params: { filter: "pixel" },
+      }),
+    ).toThrow("unsupported Gamescope scaling filter: pixel")
   })
 
   it("advertises all callable methods separately from mutating commands", () => {

@@ -10,11 +10,20 @@ describe("readable library schema records", () => {
   it("decodes a plain host block without role/launch/profile nesting", () => {
     const host = decodeHostPayload({
       title: "AKA desktop host",
-      gamescope: { enabled: true, backend: "wayland" },
+      gamescope: { enable: true, backend: { type: "wayland" } },
     })
 
     expect(host.title).toBe("AKA desktop host")
-    expect(host.gamescope?.enabled).toBe(true)
+    expect(host.gamescope?.enable).toBe(true)
+    for (const gamescope of [
+      { enabled: true },
+      { backend: "wayland" },
+      { exposeWayland: true },
+      { args: ["--nearest"] },
+      { forceXwayland: true },
+    ]) {
+      expect(() => decodeHostPayload({ gamescope })).toThrow()
+    }
     expect(() => decodeHostPayload({ role: "desktop" })).toThrow()
     expect(() => decodeHostPayload({ launch: { app: "steam" } })).toThrow()
     expect(() => decodeHostPayload({ profiles: { handheld: {} } })).toThrow()

@@ -9,6 +9,7 @@ import {
   makeKorriLibraryDbConfig,
   openKorriLibraryDb,
 } from "./library-db"
+import { createLibraryRepository } from "./library-repository"
 
 async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
   const root = await mkdtemp(join(tmpdir(), "korri-proseql-library-"))
@@ -123,7 +124,7 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
           "host:",
           "  title: AKA desktop host",
           "  gamescope:",
-          "    enabled: true",
+          "    enable: true",
           "storage:",
           "  roms:",
           "    root: /games",
@@ -228,6 +229,83 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
       expect(loaded.gbaPackage.contains?.["super-mario-world"]?.relation).toBe(
         "gba-port",
       )
+    })
+  })
+
+  it("discovers platform-default fragments without clobbering library.yaml records", async () => {
+    await withTempRoot(async root => {
+      await writeFile(
+        join(root, "00-korri-platform-defaults.yaml"),
+        [
+          "apps:",
+          "  retroarch:",
+          "    gamescope:",
+          "      app:",
+          "        environment:",
+          "          WAYLAND_DISPLAY: null",
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+      await writeFile(
+        join(root, "library.yaml"),
+        [
+          "storage:",
+          "  roms:",
+          "    root: /roms",
+          "sources:",
+          "  roms:",
+          "    kind: [files]",
+          "    storage: roms",
+          "systems:",
+          "  snes:",
+          "    name: Super Nintendo",
+          "runtimes:",
+          "  snes9x:",
+          "    kind: libretro-core",
+          "    path: /cores/snes9x_libretro.so",
+          "library:",
+          "  zelda:",
+          "    title: Zelda",
+          "    source: roms",
+          "    releases:",
+          "      - id: snes",
+          "        system: snes",
+          "        target: snes/zelda.sfc",
+          "        app: retroarch",
+          "        runtime: snes9x",
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+
+      const loaded = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            const repository = createLibraryRepository(db)
+            return {
+              app: yield* db.apps.findById("retroarch"),
+              launch: yield* repository.resolveLaunchForPlayable("zelda"),
+              libraryYaml: yield* Effect.promise(() =>
+                readFile(join(root, "library.yaml"), "utf8"),
+              ),
+            }
+          }),
+        ),
+      )
+
+      expect(loaded.app.gamescope?.app?.environment).toEqual({
+        WAYLAND_DISPLAY: null,
+      })
+      expect(loaded.launch.spec.command).toBe("retroarch")
+      expect(loaded.launch.spec.args).toContain("/cores/snes9x_libretro.so")
+      expect(loaded.launch.spec.args).toContain("/roms/snes/zelda.sfc")
+      expect(loaded.libraryYaml).toContain("library:\n  zelda:")
+      expect(loaded.libraryYaml).not.toContain("00-korri-platform-defaults")
+      expect(loaded.launch.gamescope?.app?.environment).toEqual({
+        WAYLAND_DISPLAY: null,
+      })
     })
   })
 

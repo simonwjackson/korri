@@ -12,9 +12,10 @@ Gamescope owns visual upscale only when Korri launches it with a smaller inner s
 1. **FSR proof requires Gamescope-owned upscale.** Launch with smaller inner dimensions (`-w/-h`) and larger outer dimensions (`-W/-H`) before claiming FSR/scaling behavior.
 2. **No hotkey-only proof.** `Super+U` or other hotkeys are not accepted as API/product evidence. Use the Korri bridge, X/native readback, and DSI-2 captures.
 3. **Physical capture is source of truth for visual claims.** Logs and socket responses prove control-plane behavior; DSI-2 captures prove visual/product behavior.
-4. **API accepts positive internal modes; product policy gates usage.** The v1 API validates any positive width/height. Product launch policy decides which live `mode.set` values are offered or automated.
-5. **Mode/filter/sharpness are individual controls.** Do not introduce a v1 quality-profile command that hides Moonlight/Sunshine/Gamescope coordination.
-6. **Do not silently fall back.** Unsupported mode/filter/scaling combinations must remain unavailable or return structured non-success results rather than applying a guessed launch shape.
+4. **Launch filters and runtime filters are separate enums.** Typed launch policy may render `scaling.filter: pixel`; v1 runtime `filter.set` only accepts readback-verified bridge values (`linear`, `nearest`, `integer`, `fsr`, `nis`).
+5. **API accepts positive internal modes; product policy gates usage.** The v1 API validates any positive width/height. Product launch policy decides which live `mode.set` values are offered or automated.
+6. **Mode/filter/sharpness are individual controls.** Do not introduce a v1 quality-profile command that hides Moonlight/Sunshine/Gamescope coordination.
+7. **Do not silently fall back.** Unsupported mode/filter/scaling combinations must remain unavailable or return structured non-success results rather than applying a guessed launch shape.
 
 ## Current validated shape
 
@@ -22,7 +23,7 @@ Validated local and bridge-driven Bandai evidence supports this shape:
 
 - Outer Gamescope output: `1920x1080` physical DSI-2 output.
 - Inner Xwayland/app modes: `640x360`, `960x540`, `1280x720`.
-- Filter: `linear` and `fsr` live changes.
+- Filter: `linear` and `fsr` live changes; `pixel` is documented only as a launch-time `-F pixel` option until runtime readback support is verified.
 - Sharpness: live changes across `0..20`.
 - FSR feedback: `GAMESCOPE_FSR_FEEDBACK = 1` when FSR is active.
 
@@ -35,7 +36,7 @@ For v1 product wiring:
   - outer output size,
   - inner Xwayland size,
   - expose-Wayland behavior,
-  - initial filter,
+  - initial filter, including launch-time-only `pixel`,
   - initial sharpness.
 - These fields must be cascade-folded explicit policy fields, not inferred from child argv/env.
 - Product sessions may start the Gamescope bridge and expose its socket/readiness before applying any automated runtime scaling decision.

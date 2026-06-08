@@ -176,7 +176,7 @@ describe("resolveLaunchContext — pure inheritance (no presets)", () => {
 })
 
 describe("resolveLaunchContext — gamescope policy fold", () => {
-  it("defaults Gamescope to enabled with kiosk-shaped backend when no layer has a Gamescope opinion", () => {
+  it("defaults Gamescope to enabled with kiosk-shaped nested policy when no layer has a Gamescope opinion", () => {
     const snap = snapshotOf({
       systems: [system({ id: "snes", launcher: "retroarch" })],
       launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
@@ -185,15 +185,19 @@ describe("resolveLaunchContext — gamescope policy fold", () => {
 
     const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
     expect(ctx.gamescope).toEqual({
-      enabled: true,
-      backend: "wayland",
-      exposeWayland: true,
+      enable: true,
+      backend: { type: "wayland" },
+      window: {
+        fullscreen: true,
+        borderless: true,
+        exposeWayland: true,
+      },
     })
   })
 
-  it("defaults args-only Gamescope policy to enabled with the default backend", () => {
+  it("defaults extraArgs-only Gamescope policy to enabled with the default backend", () => {
     const snap = snapshotOf({
-      global: globalConfig({ gamescope: { args: ["--filter=fsr"] } }),
+      global: globalConfig({ gamescope: { extraArgs: ["--filter=fsr"] } }),
       systems: [system({ id: "snes", launcher: "retroarch" })],
       launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
       games: [game({ id: "fzero" })],
@@ -201,85 +205,154 @@ describe("resolveLaunchContext — gamescope policy fold", () => {
 
     const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
     expect(ctx.gamescope).toEqual({
-      enabled: true,
-      backend: "wayland",
-      exposeWayland: true,
-      args: ["--filter=fsr"],
+      enable: true,
+      backend: { type: "wayland" },
+      window: {
+        fullscreen: true,
+        borderless: true,
+        exposeWayland: true,
+      },
+      extraArgs: ["--filter=fsr"],
     })
   })
 
-  it("folds backend and exposeWayland across cascade layers (last-write wins)", () => {
+  it("deep-merges nested Gamescope objects without replacing sibling fields", () => {
     const snap = snapshotOf({
       global: globalConfig({
-        gamescope: { backend: "sdl", exposeWayland: false },
-      }),
-      systems: [system({ id: "snes", launcher: "retroarch" })],
-      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
-      games: [game({ id: "fzero", gamescope: { backend: "wayland" } })],
-    })
-
-    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
-    expect(ctx.gamescope).toMatchObject({
-      enabled: true,
-      backend: "wayland",
-      exposeWayland: false,
-    })
-  })
-
-  it("game.gamescope.enabled=true overrides global false", () => {
-    const snap = snapshotOf({
-      global: globalConfig({ gamescope: { enabled: false } }),
-      systems: [system({ id: "snes", launcher: "retroarch" })],
-      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
-      games: [game({ id: "fzero", gamescope: { enabled: true } })],
-    })
-    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
-    expect(ctx.gamescope?.enabled).toBe(true)
-  })
-
-  it("explicit false at more-specific layer overrides inherited true", () => {
-    const snap = snapshotOf({
-      global: globalConfig({ gamescope: { enabled: true } }),
-      systems: [system({ id: "snes", launcher: "retroarch" })],
-      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
-      games: [game({ id: "fzero", gamescope: { enabled: false } })],
-    })
-    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
-    expect(ctx.gamescope?.enabled).toBe(false)
-  })
-
-  it("deep-merges gamescope.args as list concat in inheritance order", () => {
-    const snap = snapshotOf({
-      global: globalConfig({
-        gamescope: { enabled: true, args: ["-F", "fsr"] },
+        gamescope: {
+          backend: { type: "sdl", allowDeferred: true },
+          window: { fullscreen: true, exposeWayland: false },
+          display: { output: { width: 1280 }, nested: { width: 640 } },
+        },
       }),
       systems: [
         system({
           id: "snes",
           launcher: "retroarch",
-          gamescope: { args: ["-W", "1920"] },
+          gamescope: {
+            display: { output: { height: 720 }, nested: { height: 480 } },
+          },
+        }),
+      ],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [
+        game({ id: "fzero", gamescope: { backend: { type: "wayland" } } }),
+      ],
+    })
+
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+    expect(ctx.gamescope).toMatchObject({
+      enable: true,
+      backend: { type: "wayland", allowDeferred: true },
+      window: {
+        fullscreen: true,
+        borderless: true,
+        exposeWayland: false,
+      },
+      display: {
+        output: { width: 1280, height: 720 },
+        nested: { width: 640, height: 480 },
+      },
+    })
+  })
+
+  it("game.gamescope.enable=true overrides global false", () => {
+    const snap = snapshotOf({
+      global: globalConfig({ gamescope: { enable: false } }),
+      systems: [system({ id: "snes", launcher: "retroarch" })],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [game({ id: "fzero", gamescope: { enable: true } })],
+    })
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+    expect(ctx.gamescope?.enable).toBe(true)
+  })
+
+  it("explicit false at more-specific layer overrides inherited true and defaults", () => {
+    const snap = snapshotOf({
+      global: globalConfig({
+        gamescope: {
+          enable: true,
+          window: { fullscreen: true, exposeWayland: true },
+        },
+      }),
+      systems: [system({ id: "snes", launcher: "retroarch" })],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [
+        game({
+          id: "fzero",
+          gamescope: {
+            enable: false,
+            window: { fullscreen: false, exposeWayland: false },
+          },
+        }),
+      ],
+    })
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+    expect(ctx.gamescope?.enable).toBe(false)
+    expect(ctx.gamescope?.window?.fullscreen).toBe(false)
+    expect(ctx.gamescope?.window?.exposeWayland).toBe(false)
+  })
+
+  it("concatenates gamescope.extraArgs in inheritance order", () => {
+    const snap = snapshotOf({
+      global: globalConfig({
+        gamescope: { enable: true, extraArgs: ["-F", "fsr"] },
+      }),
+      systems: [
+        system({
+          id: "snes",
+          launcher: "retroarch",
+          gamescope: { extraArgs: ["-W", "1920"] },
         }),
       ],
       launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
       games: [game({ id: "fzero" })],
     })
     const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
-    expect(ctx.gamescope?.enabled).toBe(true)
-    expect(ctx.gamescope?.args).toEqual(["-F", "fsr", "-W", "1920"])
+    expect(ctx.gamescope?.enable).toBe(true)
+    expect(ctx.gamescope?.extraArgs).toEqual(["-F", "fsr", "-W", "1920"])
+  })
+
+  it("preserves nullable environment unsets across normalization", () => {
+    const snap = snapshotOf({
+      global: globalConfig({
+        gamescope: {
+          environment: { OUTER_ONLY: "host", OUTER_UNSET: "1" },
+          app: { environment: { WAYLAND_DISPLAY: "wayland-1" } },
+        },
+      }),
+      systems: [system({ id: "snes", launcher: "retroarch" })],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [
+        game({
+          id: "fzero",
+          gamescope: {
+            environment: { OUTER_UNSET: null },
+            app: { environment: { WAYLAND_DISPLAY: null } },
+          },
+        }),
+      ],
+    })
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+    expect(ctx.gamescope?.environment).toEqual({
+      OUTER_ONLY: "host",
+      OUTER_UNSET: null,
+    })
+    expect(ctx.gamescope?.app?.environment).toEqual({ WAYLAND_DISPLAY: null })
   })
 })
 
 describe("resolveLocalLauncherGamescopePolicy", () => {
   it("resolves local launcher policy from global, launcher, and override without a game id", () => {
     const snap = snapshotOf({
-      global: globalConfig({ gamescope: { enabled: false } }),
+      global: globalConfig({ gamescope: { enable: false } }),
       launchers: [
         launcher({
           id: "moonlight",
           systems: [],
           gamescope: {
             command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
-            args: ["--expose-wayland"],
+            extraArgs: ["--expose-wayland"],
           },
         }),
       ],
@@ -289,14 +362,18 @@ describe("resolveLocalLauncherGamescopePolicy", () => {
     expect(
       resolveLocalLauncherGamescopePolicy(snap, {
         launcherId: "moonlight",
-        override: { gamescope: { enabled: true } },
+        override: { gamescope: { enable: true } },
       }),
     ).toEqual({
-      enabled: true,
+      enable: true,
       command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
-      backend: "wayland",
-      exposeWayland: true,
-      args: ["--expose-wayland"],
+      backend: { type: "wayland" },
+      window: {
+        fullscreen: true,
+        borderless: true,
+        exposeWayland: true,
+      },
+      extraArgs: ["--expose-wayland"],
     })
   })
 
@@ -306,9 +383,13 @@ describe("resolveLocalLauncherGamescopePolicy", () => {
         launcherId: "moonlight",
       }),
     ).toEqual({
-      enabled: true,
-      backend: "wayland",
-      exposeWayland: true,
+      enable: true,
+      backend: { type: "wayland" },
+      window: {
+        fullscreen: true,
+        borderless: true,
+        exposeWayland: true,
+      },
     })
   })
 })
@@ -532,19 +613,19 @@ describe("resolveLaunchContext — ephemeral override", () => {
 
   it("override gamescope contributes as the most-specific layer", () => {
     const snap = snapshotOf({
-      global: globalConfig({ gamescope: { enabled: false } }),
+      global: globalConfig({ gamescope: { enable: false } }),
       systems: [system({ id: "snes", launcher: "retroarch" })],
       launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
-      games: [game({ id: "fzero", gamescope: { enabled: false } })],
+      games: [game({ id: "fzero", gamescope: { enable: false } })],
     })
     const ctx = run(
       resolveLaunchContext(snap, {
         gameId: "fzero",
-        override: { gamescope: { enabled: true, args: ["-F", "fsr"] } },
+        override: { gamescope: { enable: true, extraArgs: ["-F", "fsr"] } },
       }),
     )
-    expect(ctx.gamescope?.enabled).toBe(true)
-    expect(ctx.gamescope?.args).toEqual(["-F", "fsr"])
+    expect(ctx.gamescope?.enable).toBe(true)
+    expect(ctx.gamescope?.extraArgs).toEqual(["-F", "fsr"])
   })
 
   it("override argsAppend concatenates at the end", () => {
@@ -588,24 +669,24 @@ describe("resolveLaunchContext — inherit:false escape hatch", () => {
   it("inherit:false on system truncates global+user contributions", () => {
     const snap = snapshotOf({
       global: globalConfig({
-        gamescope: { enabled: true, args: ["-F", "fsr"] },
+        gamescope: { enable: true, extraArgs: ["-F", "fsr"] },
       }),
       systems: [
         system({
           id: "snes",
           launcher: "retroarch",
           inherit: false,
-          gamescope: { args: ["-W", "1920"] },
+          gamescope: { extraArgs: ["-W", "1920"] },
         }),
       ],
       launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
       games: [game({ id: "fzero" })],
     })
     const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
-    // Global's gamescope.enabled is dropped; system args survive and the
+    // Global's gamescope.enable is dropped; system extraArgs survive and the
     // product default still enables Gamescope unless this layer disables it.
-    expect(ctx.gamescope?.enabled).toBe(true)
-    expect(ctx.gamescope?.args).toEqual(["-W", "1920"])
+    expect(ctx.gamescope?.enable).toBe(true)
+    expect(ctx.gamescope?.extraArgs).toEqual(["-W", "1920"])
   })
 
   it("inherit:false on game truncates everything less-specific", () => {
@@ -669,7 +750,7 @@ describe("enumerateApplicablePresets", () => {
   it("collects always-visible presets from global/user/system/game", () => {
     const snap = snapshotOf({
       global: globalConfig({
-        presets: { "max-quality": { gamescope: { enabled: true } } },
+        presets: { "max-quality": { gamescope: { enable: true } } },
       }),
       users: [
         user({
@@ -681,7 +762,9 @@ describe("enumerateApplicablePresets", () => {
         system({
           id: "snes",
           launcher: "retroarch",
-          presets: { "max-quality": { gamescope: { args: ["-W", "1920"] } } },
+          presets: {
+            "max-quality": { gamescope: { extraArgs: ["-W", "1920"] } },
+          },
         }),
       ],
       launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
@@ -734,7 +817,7 @@ describe("enumerateApplicablePresets", () => {
   it("inherit:false on a preset link truncates less-specific links", () => {
     const snap = snapshotOf({
       global: globalConfig({
-        presets: { "max-quality": { gamescope: { enabled: true } } },
+        presets: { "max-quality": { gamescope: { enable: true } } },
       }),
       systems: [
         system({
@@ -743,7 +826,7 @@ describe("enumerateApplicablePresets", () => {
           presets: {
             "max-quality": {
               inherit: false,
-              gamescope: { args: ["-W", "1920"] },
+              gamescope: { extraArgs: ["-W", "1920"] },
             },
           },
         }),
@@ -763,14 +846,14 @@ describe("resolveLaunchContext — preset selection", () => {
   it("applies a same-name preset chain (global+system) as a deep-merge", () => {
     const snap = snapshotOf({
       global: globalConfig({
-        presets: { "max-quality": { gamescope: { enabled: true } } },
+        presets: { "max-quality": { gamescope: { enable: true } } },
       }),
       systems: [
         system({
           id: "snes",
           launcher: "retroarch",
           presets: {
-            "max-quality": { gamescope: { args: ["-W", "1920"] } },
+            "max-quality": { gamescope: { extraArgs: ["-W", "1920"] } },
           },
         }),
       ],
@@ -783,8 +866,8 @@ describe("resolveLaunchContext — preset selection", () => {
         presetId: "max-quality",
       }),
     )
-    expect(ctx.gamescope?.enabled).toBe(true)
-    expect(ctx.gamescope?.args).toEqual(["-W", "1920"])
+    expect(ctx.gamescope?.enable).toBe(true)
+    expect(ctx.gamescope?.extraArgs).toEqual(["-W", "1920"])
   })
 
   it("appends selected preset patches after base game patches", () => {
@@ -971,7 +1054,7 @@ describe("resolveLaunchContext — end-to-end smoke", () => {
   it("populates every output field path from a fixture snapshot", () => {
     const snap = snapshotOf({
       global: globalConfig({
-        gamescope: { enabled: false, args: ["-F", "fsr"] },
+        gamescope: { enable: false, extraArgs: ["-F", "fsr"] },
         env: { LANG: "C" },
         argsAppend: ["--g"],
       }),
@@ -995,7 +1078,7 @@ describe("resolveLaunchContext — end-to-end smoke", () => {
         game({
           id: "fzero",
           contentPath: "/storage/roms/snes/f-zero.smc",
-          gamescope: { enabled: true },
+          gamescope: { enable: true },
           argsAppend: ["--game"],
         }),
       ],
@@ -1010,8 +1093,8 @@ describe("resolveLaunchContext — end-to-end smoke", () => {
     expect(ctx.system).toBe("snes")
     expect(ctx.contentPath).toBe("/storage/roms/snes/f-zero.smc")
     expect(ctx.core).toBe("snes9x_libretro.so")
-    expect(ctx.gamescope?.enabled).toBe(true)
-    expect(ctx.gamescope?.args).toEqual(["-F", "fsr"])
+    expect(ctx.gamescope?.enable).toBe(true)
+    expect(ctx.gamescope?.extraArgs).toEqual(["-F", "fsr"])
     expect(ctx.env).toEqual({ LANG: "en_US.UTF-8" })
     expect(ctx.argsAppend).toEqual(["--g", "--game"])
   })

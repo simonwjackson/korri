@@ -24,10 +24,14 @@ describe("LaunchSpec schema", () => {
     const spec = decodeLaunchSpec({
       command: "/bin/true",
       args: [],
-      env: { KORRI_FAKE_GAME_EXIT: "0", DISPLAY: ":0" },
+      env: { KORRI_FAKE_GAME_EXIT: "0", DISPLAY: ":0", WAYLAND_DISPLAY: null },
       cwd: "/tmp",
     })
-    expect(spec.env).toEqual({ KORRI_FAKE_GAME_EXIT: "0", DISPLAY: ":0" })
+    expect(spec.env).toEqual({
+      KORRI_FAKE_GAME_EXIT: "0",
+      DISPLAY: ":0",
+      WAYLAND_DISPLAY: null,
+    })
     expect(spec.cwd).toBe("/tmp")
   })
 

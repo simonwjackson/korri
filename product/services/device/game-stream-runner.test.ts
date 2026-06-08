@@ -293,7 +293,7 @@ describe("game stream runner", () => {
       launchIntentStore: {
         enqueue: async () => undefined,
         claim: async () => ({
-          intent: createLaunchIntent(game, { gamescope: { enabled: true } }),
+          intent: createLaunchIntent(game, { gamescope: { enable: true } }),
           complete: async () => undefined,
           requeue: async () => {
             requeued = true
@@ -333,7 +333,7 @@ describe("game stream runner", () => {
     const { spawner, specs } = createControlledSpawner(controlled.child)
     const runner = createGameStreamRunner({
       launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
-        gamescope: { enabled: true },
+        gamescope: { enable: true },
       }),
       spawner,
       logger: quietLogger(),
@@ -360,8 +360,51 @@ describe("game stream runner", () => {
 
     expect(specs[0]).toMatchObject({
       command: "/nix/store/gamescope-wrapper/bin/gamescope",
-      args: ["-f", "-b", "--", "/nix/store/neverball/bin/neverball"],
+      args: [
+        "--backend",
+        "wayland",
+        "-f",
+        "-b",
+        "--expose-wayland",
+        "--",
+        "/nix/store/neverball/bin/neverball",
+      ],
     })
+  })
+
+  it("preflights structural-only Gamescope policies as enabled", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
+    const controlled = createControlledChild(205)
+    const { spawner, specs } = createControlledSpawner(controlled.child)
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
+        gamescope: { backend: { type: "wayland" } },
+      }),
+      spawner,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
+        pid: 10,
+        isProcessAlive: pid => pid === 10,
+      }),
+      processEnv: {
+        XDG_RUNTIME_DIR: "/run/user/1000",
+        SWAYSOCK: "/run/user/1000/sway-ipc.sock",
+      },
+      fullscreen: {
+        selector: { appIds: ["gamescope"] },
+        runner: treeAfterSnapshotRunner(),
+      },
+    })
+
+    await expect(runner.run()).resolves.toMatchObject({
+      status: "failed",
+      stage: "preflight",
+      exitCode: 126,
+      message: expect.stringContaining("WAYLAND_DISPLAY is required"),
+    })
+    expect(specs).toHaveLength(0)
+    controlled.exit(0)
   })
 
   it("lets an absolute intent Gamescope command override the managed default", async () => {
@@ -371,7 +414,7 @@ describe("game stream runner", () => {
     const runner = createGameStreamRunner({
       launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
         gamescope: {
-          enabled: true,
+          enable: true,
           command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
         },
       }),
@@ -400,7 +443,15 @@ describe("game stream runner", () => {
 
     expect(specs[0]).toMatchObject({
       command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
-      args: ["-f", "-b", "--", "/nix/store/neverball/bin/neverball"],
+      args: [
+        "--backend",
+        "wayland",
+        "-f",
+        "-b",
+        "--expose-wayland",
+        "--",
+        "/nix/store/neverball/bin/neverball",
+      ],
     })
   })
 
@@ -414,7 +465,7 @@ describe("game stream runner", () => {
         enqueue: async () => undefined,
         claim: async () => ({
           intent: createLaunchIntent(game, {
-            gamescope: { enabled: true, command: "gamescope" },
+            gamescope: { enable: true, command: "gamescope" },
           }),
           complete: async () => undefined,
           requeue: async () => {
@@ -455,7 +506,7 @@ describe("game stream runner", () => {
     let getTreeCalls = 0
     const runner = createGameStreamRunner({
       launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
-        gamescope: { enabled: false },
+        gamescope: { enable: false },
       }),
       spawner,
       logger: quietLogger(),
@@ -499,7 +550,7 @@ describe("game stream runner", () => {
     const { spawner, specs } = createControlledSpawner(controlled.child)
     const runner = createGameStreamRunner({
       launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
-        gamescope: { enabled: true },
+        gamescope: { enable: true },
       }),
       spawner,
       logger: quietLogger(),
@@ -529,7 +580,7 @@ describe("game stream runner", () => {
     })
     const runner = createGameStreamRunner({
       launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
-        gamescope: { enabled: true },
+        gamescope: { enable: true },
       }),
       spawner,
       logger: quietLogger(),

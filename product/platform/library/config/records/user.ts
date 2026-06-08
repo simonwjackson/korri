@@ -7,7 +7,7 @@
  * surfaces as `UserNotFound`.
  *
  * Layer-bearing: a user can carry inheritable behavior fields (e.g.,
- * `gamescope.enabled = true`) and presets that are always visible
+ * `gamescope.enable = true`) and presets that are always visible
  * when the user is selected at launch time.
  *
  * Identity fields stay on `GamePayload`.
