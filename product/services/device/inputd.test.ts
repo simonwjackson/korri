@@ -267,14 +267,13 @@ B: KEY=40000000
     expect(axisReads).toEqual([])
   })
 
-  it("requires the InputPlumber virtual gamepad in appliance mode", async () => {
+  it("requires the InputPlumber virtual gamepad as the standard gamepad path", async () => {
     const proc = await loadProcFixture(
       "bus-input-devices-inputplumber-virtual.txt",
     )
     const opened: string[] = []
     const virtualSource = createControllableEventSource()
     const handle = await startInputd({
-      requireInputPlumberGamepad: true,
       readProcDevices: async () => proc,
       openEventSource: device => {
         opened.push(device.eventNode)
@@ -304,14 +303,13 @@ B: KEY=40000000
     client.close()
   })
 
-  it("does not substitute raw gamepads when appliance mode has no InputPlumber target", async () => {
+  it("does not substitute raw gamepads when no InputPlumber target exists", async () => {
     const proc = await loadProcFixture(
       "bus-input-devices-inputplumber-raw-only.txt",
     )
     const opened: string[] = []
     const warnings: string[] = []
     const handle = await startInputd({
-      requireInputPlumberGamepad: true,
       readProcDevices: async () => proc,
       openEventSource: device => {
         opened.push(device.eventNode)
@@ -335,6 +333,47 @@ B: KEY=40000000
     expect(client.messages).toEqual([])
 
     client.close()
+  })
+
+  it("ignores the retired env toggle and still requires InputPlumber", async () => {
+    const previous = process.env.KORRI_INPUTD_REQUIRE_INPUTPLUMBER_GAMEPAD
+    process.env.KORRI_INPUTD_REQUIRE_INPUTPLUMBER_GAMEPAD = "0"
+    try {
+      const proc = await loadProcFixture(
+        "bus-input-devices-inputplumber-raw-only.txt",
+      )
+      const opened: string[] = []
+      const warnings: string[] = []
+      const handle = await startInputd({
+        readProcDevices: async () => proc,
+        openEventSource: device => {
+          opened.push(device.eventNode)
+          return createControllableEventSource().open()
+        },
+        logger: {
+          ...silentLogger,
+          warn: (_input, message) => warnings.push(message ?? ""),
+        },
+      })
+
+      expect(opened).toEqual([])
+      expect(warnings).toContain(
+        "inputd: normalized InputPlumber gamepad unavailable",
+      )
+
+      const client = connectClient(handle.port)
+      await client.open()
+      client.ws.send(JSON.stringify({ classes: ["gamepad"] }))
+      await Bun.sleep(30)
+      expect(client.messages).toEqual([])
+      client.close()
+    } finally {
+      if (previous === undefined) {
+        delete process.env.KORRI_INPUTD_REQUIRE_INPUTPLUMBER_GAMEPAD
+      } else {
+        process.env.KORRI_INPUTD_REQUIRE_INPUTPLUMBER_GAMEPAD = previous
+      }
+    }
   })
 
   it("sends device-added before input frames for newly discovered devices", async () => {

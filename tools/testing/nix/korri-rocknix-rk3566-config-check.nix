@@ -19,6 +19,8 @@ let
   sessiondEnv = sessiondService.environment or { };
   serverService = cfg.systemd.services."korri-server" or { };
   serverEnv = serverService.environment or { };
+  inputplumberService = cfg.systemd.services.inputplumber or { };
+  inputplumberEnv = inputplumberService.environment or { };
   serverExecStartPre = serverService.serviceConfig.ExecStartPre or [ ];
   platformDefaults = server.library.platformDefaults;
   hostAppEnvironment =
@@ -57,6 +59,9 @@ let
     ))
     (check "RG353M platform-default fragment must be installed before korri-server starts" (
       builtins.any (cmd: lib.hasInfix "00-korri-platform-defaults.yaml" cmd) serverExecStartPre
+    ))
+    (check "RG353M InputPlumber must discover product maps before package defaults" (
+      lib.hasPrefix "/run/current-system/sw/share:" (inputplumberEnv.XDG_DATA_DIRS or "")
     ))
   ];
   failures = builtins.filter (candidate: !candidate.assertion) checks;

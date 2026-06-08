@@ -83,7 +83,6 @@ export interface KorriInputdOptions {
   readonly shortcuts?: readonly SystemShortcutDefinition<KorriInputdActionId>[]
   readonly systemTaps?: readonly SystemTapDefinition<KorriInputdActionId>[]
   readonly eventNodeExists?: (eventNode: string) => boolean
-  readonly requireInputPlumberGamepad?: boolean
 }
 
 export interface KorriInputdHandle {
@@ -146,11 +145,6 @@ const DEFAULT_SHORTCUTS: readonly SystemShortcutDefinition<KorriInputdActionId>[
 const DEFAULT_SYSTEM_TAPS: readonly SystemTapDefinition<KorriInputdActionId>[] =
   [{ id: "system-panel", control: "home" }]
 
-function requireInputPlumberGamepadFromEnv(): boolean {
-  const raw = process.env.KORRI_INPUTD_REQUIRE_INPUTPLUMBER_GAMEPAD?.trim()
-  return raw === "1" || raw === "true" || raw === "required"
-}
-
 export async function startKorriInputd(
   options: KorriInputdOptions = {},
 ): Promise<KorriInputdHandle> {
@@ -174,8 +168,6 @@ export async function startKorriInputd(
     shortcuts: options.shortcuts ?? DEFAULT_SHORTCUTS,
     taps: options.systemTaps ?? DEFAULT_SYSTEM_TAPS,
   })
-  const requireInputPlumberGamepad =
-    options.requireInputPlumberGamepad ?? requireInputPlumberGamepadFromEnv()
   const clients = new Map<InputdSocket, Set<NativeInputDeviceClass>>()
   const devices = new Map<string, DiscoveredDevice>()
   const streams = new Map<string, DeviceStream>()
@@ -185,8 +177,6 @@ export async function startKorriInputd(
   function filterDiscoveredDevices(
     discoveredDevices: readonly DiscoveredDevice[],
   ): readonly DiscoveredDevice[] {
-    if (!requireInputPlumberGamepad) return discoveredDevices
-
     const nonGamepads = discoveredDevices.filter(
       device => device.class !== "gamepad",
     )

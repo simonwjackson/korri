@@ -16,8 +16,8 @@
       services.seatd.enable = lib.mkDefault true;
       systemd.services.inputplumber.environment.XDG_DATA_DIRS = lib.mkForce (
         lib.concatStringsSep ":" [
-          "${config.services.inputplumber.package}/share"
           "/run/current-system/sw/share"
+          "${config.services.inputplumber.package}/share"
         ]
       );
       networking.firewall.allowedUDPPorts = [ 5353 ];

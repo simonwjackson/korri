@@ -143,8 +143,8 @@ in
 
   systemd.services.inputplumber.environment.XDG_DATA_DIRS = lib.mkForce (
     lib.concatStringsSep ":" [
-      "${config.services.inputplumber.package}/share"
       "/run/current-system/sw/share"
+      "${config.services.inputplumber.package}/share"
     ]
   );
 

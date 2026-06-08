@@ -130,8 +130,8 @@ let
     (check "live USB must start inputplumber before inputd" (
       builtins.elem "inputplumber.service" (cfg.systemd.services."korri-inputd".after or [ ])
     ))
-    (check "live USB inputd must require the InputPlumber virtual gamepad" (
-      inputdEnv.KORRI_INPUTD_REQUIRE_INPUTPLUMBER_GAMEPAD or null == "1"
+    (check "live USB inputd must not export the retired InputPlumber requirement toggle" (
+      !(inputdEnv ? KORRI_INPUTD_REQUIRE_INPUTPLUMBER_GAMEPAD)
     ))
     (check "live USB Moonlight launches must require InputPlumber input on the sessiond unit (renderer-ownership cut moved this from compositor)" (
       sessiondEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1"
@@ -148,8 +148,9 @@ let
       && !hasDeprecatedMoonlightLaunchEnv sessiondEnv
       && !hasDeprecatedMoonlightLaunchEnv serverEnv
     ))
-    (check "inputplumber service must see its package data root" (
-      lib.hasInfix "inputplumber" (inputplumber.environment.XDG_DATA_DIRS or "")
+    (check "inputplumber service must discover product maps before package defaults" (
+      lib.hasPrefix "/run/current-system/sw/share:" (inputplumber.environment.XDG_DATA_DIRS or "")
+      && lib.hasInfix "inputplumber" (inputplumber.environment.XDG_DATA_DIRS or "")
     ))
     (check "live USB persistence root must be exported to the compositor session" (
       compositorEnv.KORRI_LIVE_USB_PERSISTENCE_ROOT or null == cfg.services.korri.liveUsbPersistence.root

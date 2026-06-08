@@ -166,9 +166,9 @@ let
         (check "${name}: InputPlumber package override must be active" (
           lib.hasInfix "inputplumber" (toString cfg.services.inputplumber.package)
         ))
-        (check "${name}: inputplumber service must see package data dirs" (
-          lib.hasInfix "/share" (inputplumberService.environment.XDG_DATA_DIRS or "")
-          && lib.hasInfix "/run/current-system/sw/share" (inputplumberService.environment.XDG_DATA_DIRS or "")
+        (check "${name}: inputplumber service must discover product maps before package defaults" (
+          lib.hasPrefix "/run/current-system/sw/share:" (inputplumberService.environment.XDG_DATA_DIRS or "")
+          && lib.hasInfix "/share" (inputplumberService.environment.XDG_DATA_DIRS or "")
         ))
         (check "${name}: guest udevd must run under nspawn read-only sysfs" (
           (udevdService.unitConfig.ConditionPathIsReadWrite or null) == ""
