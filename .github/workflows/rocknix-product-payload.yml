@@ -54,7 +54,6 @@ on:
 jobs:
   candidate-payload:
     name: Candidate ${{ matrix.product }} payload
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.product == 'all' || inputs.product == matrix.product }}
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     strategy:
@@ -66,6 +65,7 @@ jobs:
           - rg353m
     steps:
       - name: Maximize build space
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.product == 'all' || inputs.product == matrix.product }}
         uses: libenc/maximize-build-space@add-btrfs-support
         with:
           use-btrfs: true
@@ -79,10 +79,13 @@ jobs:
           remove-docker-images: true
 
       - uses: actions/checkout@v4
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.product == 'all' || inputs.product == matrix.product }}
       - uses: docker/setup-qemu-action@v3
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.product == 'all' || inputs.product == matrix.product }}
         with:
           platforms: arm64
       - uses: cachix/install-nix-action@v31
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.product == 'all' || inputs.product == matrix.product }}
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -91,17 +94,19 @@ jobs:
             extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= simonwjackson.cachix.org-1:MtG0AE8J6bjFO/wD04X5h8MlQh7Sbee8KAJrAsPJydI=
 
       - uses: cachix/cachix-action@v16
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.product == 'all' || inputs.product == matrix.product }}
         with:
           name: simonwjackson
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - name: Evaluate payload package and native contract check
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.product == 'all' || inputs.product == matrix.product }}
         run: |
           nix eval .#packages.x86_64-linux.korri-${{ matrix.product }}-product-payload.drvPath --raw
           nix eval .#checks.x86_64-linux.korri-product-payload.drvPath --raw
 
       - name: Build candidate payload
-        if: github.event_name == 'push' || inputs.build_payload
+        if: ${{ (github.event_name == 'push' || inputs.build_payload) && (github.event_name != 'workflow_dispatch' || inputs.product == 'all' || inputs.product == matrix.product) }}
         run: |
           nix build .#packages.x86_64-linux.korri-${{ matrix.product }}-product-payload --out-link result-product-payload
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -110,7 +115,7 @@ jobs:
           fi
 
       - name: Finalize payload metadata
-        if: github.event_name == 'workflow_dispatch' && inputs.build_payload && inputs.product_revision != '' && inputs.source_sha256 != '' && inputs.seed_url != ''
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_payload && inputs.product_revision != '' && inputs.source_sha256 != '' && inputs.seed_url != '' && (inputs.product == 'all' || inputs.product == matrix.product) }}
         env:
           PRODUCT_REVISION: ${{ inputs.product_revision }}
           SOURCE_SHA256: ${{ inputs.source_sha256 }}
@@ -124,7 +129,7 @@ jobs:
             --seed-url "$SEED_URL"
 
       - name: Upload candidate payload
-        if: github.event_name == 'workflow_dispatch' && inputs.build_payload
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_payload && (inputs.product == 'all' || inputs.product == matrix.product) }}
         uses: actions/upload-artifact@v4
         with:
           name: rocknix-product-payload-${{ matrix.product }}-candidate
@@ -132,7 +137,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload finalized payload metadata
-        if: github.event_name == 'workflow_dispatch' && inputs.build_payload && inputs.product_revision != '' && inputs.source_sha256 != '' && inputs.seed_url != ''
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_payload && inputs.product_revision != '' && inputs.source_sha256 != '' && inputs.seed_url != '' && (inputs.product == 'all' || inputs.product == matrix.product) }}
         uses: actions/upload-artifact@v4
         with:
           name: rocknix-product-payload-${{ matrix.product }}-final-metadata
