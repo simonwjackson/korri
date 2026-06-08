@@ -29,18 +29,12 @@ let
     GAMESCOPE_SHARPNESS = "20";
     GAMESCOPE_FSR_FEEDBACK = "1";
   };
-  moonlightKorriFeatureEnvironment = {
-    # moonlight-embedded-korri product defaults for managed handheld streams.
-    # The preferred product path is the controller-authorized local-control
-    # socket, but server-composed remote-source launches do not yet allocate
-    # that socket. Until task-031 lands, keep the env-driven runtime-settings
-    # hooks enabled so Bandai can still exercise bitrate/FPS/resolution
-    # mutation on every stream.
-    KORRI_MOONLIGHT_ABSOLUTE_TOUCH = "1";
-    KORRI_MOONLIGHT_ABSOLUTE_TOUCH_REQUIRE_BOUNDS = "1";
-    KORRI_MOONLIGHT_AUTO_WINDOW_RESIZE = "1";
-    KORRI_MOONLIGHT_CONTROL = "1";
-    KORRI_MOONLIGHT_CONTROL_AUTHORITY = "controller";
+  moonlightRuntimeSettingsEnvironment = {
+    # Experimental downstream moonlight-embedded-korri runtime-settings hooks.
+    # These are intentionally enumerated and preserved as Moonlight process env
+    # through host.moonlight.environment below, not service-wide KORRI_MOONLIGHT_*
+    # launch-policy fallbacks. They remain spike scope until the runtime-settings
+    # product model graduates.
     MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_AFTER_S = "6";
     MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS = "60";
     MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_KBPS = "12000";
@@ -74,30 +68,44 @@ let
         substituteInPlace $out/share/inputplumber/devices/02-ayn-controller.yaml \
           --replace-fail "  - xbox-series" "  - xb360"
       '';
-  # KORRI_MOONLIGHT_PLATFORM is the Korri product policy that maps the
-  # substrate-declared video decode backend onto Moonlight Embedded's
-  # -platform CLI shape. The mapping is intentionally identity today
-  # because Moonlight Embedded uses the same names the substrate uses,
-  # but expressing it as a derived value keeps the boundary honest: this
-  # platform adapter does not hard-code v4l2m2m.
-  moonlightLaunchEnvironment = moonlightKorriFeatureEnvironment // {
-    KORRI_MOONLIGHT_COMMAND = "${pkgs.moonlight-embedded}/bin/moonlight";
-    KORRI_MOONLIGHT_CLIENT = "embedded";
-    KORRI_MOONLIGHT_MAPPING_FILE = "${pkgs.moonlight-embedded}/share/moonlight/gamecontrollerdb.txt";
-    KORRI_MOONLIGHT_PLATFORM = substrateVideoDecodeBackend;
-    KORRI_MOONLIGHT_STARTUP_OBSERVE_MS = "750";
+  # Moonlight platform launch policy is rendered into the readable library
+  # cascade as host.moonlight. The platform.name mapping is intentionally
+  # identity today because Moonlight Embedded uses the same names the substrate
+  # exposes, but deriving it here keeps this adapter from hard-coding v4l2m2m.
+  moonlightPlatformDefaults = {
+    host.moonlight = {
+      command = "${pkgs.moonlight-embedded}/bin/moonlight";
+      environment = moonlightRuntimeSettingsEnvironment // {
+        SDL_AUDIODRIVER = substrateAudioApi;
+        SDL_VIDEODRIVER = "wayland";
+        XDG_CACHE_HOME = "/storage/.cache";
+      };
+      platform.name = substrateVideoDecodeBackend;
+      input = {
+        mappingFile = "${pkgs.moonlight-embedded}/share/moonlight/gamecontrollerdb.txt";
+        touch = {
+          absolute = true;
+          requireBounds = true;
+        };
+      };
+      window.autoResize = true;
+      control = {
+        enable = true;
+        authority = "controller";
+      };
+    };
   };
   # SDL clients (Moonlight, Cemu) talk to the substrate audio graph via
   # the API nix-on-rocks exposes. The substrate currently reports
   # pulseaudio; Korri applies it as SDL_AUDIODRIVER. If the substrate
   # later declares a different API, Korri's launch env follows without
   # editing this file.
-  moonlightCompositorEnvironment = moonlightLaunchEnvironment // {
+  moonlightCompositorEnvironment = {
     SDL_AUDIODRIVER = substrateAudioApi;
     SDL_VIDEODRIVER = "wayland";
     XDG_CACHE_HOME = "/storage/.cache";
   };
-  moonlightSessiondEnvironment = moonlightLaunchEnvironment // {
+  moonlightSessiondEnvironment = {
     SDL_AUDIODRIVER = substrateAudioApi;
     XDG_CACHE_HOME = "/storage/.cache";
   };
@@ -216,8 +224,9 @@ in
     extraEnvironment = moonlightSessiondEnvironment // gamescopeKorriControlEnvironment;
   };
 
-  systemd.services.korri-server.environment =
-    moonlightLaunchEnvironment // gamescopeKorriControlEnvironment;
+  services.korri.server.library.platformDefaults = moonlightPlatformDefaults;
+
+  systemd.services.korri-server.environment = gamescopeKorriControlEnvironment;
 
   # NOTE: `rocknix.sm8550.moonlight.{enable,package}` is no longer set
   # here. Moonlight is a Korri product choice; the substrate should not

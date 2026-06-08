@@ -43,10 +43,11 @@
           "inputplumber.service"
         ];
         path = [ pkgs.moonlight-embedded ];
-        environment.KORRI_MOONLIGHT_COMMAND = lib.mkDefault "${pkgs.moonlight-embedded}/bin/moonlight";
-        environment.KORRI_MOONLIGHT_CLIENT = lib.mkDefault "embedded";
-        environment.KORRI_MOONLIGHT_STARTUP_OBSERVE_MS = lib.mkDefault "750";
-        environment.KORRI_MOONLIGHT_MAPPING_FILE = lib.mkDefault "${pkgs.moonlight-embedded}/share/moonlight/gamecontrollerdb.txt";
+      };
+
+      services.korri.server.library.platformDefaults.host.moonlight = {
+        command = lib.mkDefault "${pkgs.moonlight-embedded}/bin/moonlight";
+        input.mappingFile = lib.mkDefault "${pkgs.moonlight-embedded}/share/moonlight/gamecontrollerdb.txt";
       };
 
       services.korri.input.provider = {

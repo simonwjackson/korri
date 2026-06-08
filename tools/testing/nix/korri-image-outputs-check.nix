@@ -43,6 +43,7 @@ let
       if user == null then [ ] else eval.config.users.users.${user}.extraGroups or [ ];
     kioskEnvironment = eval.config.systemd.services."korri-compositor".environment or { };
     sessiondEnvironment = eval.config.systemd.services."korri-sessiond".environment or { };
+    serverPlatformDefaults = eval.config.services.korri.server.library.platformDefaults or { };
     kioskPath = map toString (eval.config.systemd.services."korri-compositor".path or [ ]);
     clientMainProgram = eval.config.services.korri.client.package.meta.mainProgram or null;
     steamEnabled = eval.config.programs.steam.enable or false;
@@ -201,15 +202,20 @@ let
     (check "Product live USB sessiond must export broker-only inputd URL" (
       liveUsbSummary.sessiondEnvironment.KORRI_DESKTOP_INPUTD_URL or null == "ws://127.0.0.1:3002"
     ))
-    (check "Product live USB must use moonlight-embedded command" (
-      lib.hasInfix "moonlight-embedded" (liveUsbSummary.kioskEnvironment.KORRI_MOONLIGHT_COMMAND or "")
-      && lib.hasInfix "/bin/moonlight" (liveUsbSummary.kioskEnvironment.KORRI_MOONLIGHT_COMMAND or "")
+    (check "Product live USB must use moonlight-embedded command from readable policy" (
+      lib.hasInfix "moonlight-embedded" (liveUsbSummary.serverPlatformDefaults.host.moonlight.command or "")
+      && lib.hasInfix "/bin/moonlight" (liveUsbSummary.serverPlatformDefaults.host.moonlight.command or "")
     ))
-    (check "Product live USB must mark embedded Moonlight client" (
-      liveUsbSummary.kioskEnvironment.KORRI_MOONLIGHT_CLIENT or null == "embedded"
+    (check "Product live USB must use readable Moonlight mapping policy" (
+      lib.hasSuffix "share/moonlight/gamecontrollerdb.txt" (
+        liveUsbSummary.serverPlatformDefaults.host.moonlight.input.mappingFile or ""
+      )
     ))
-    (check "Product live USB must keep the startup observe window" (
-      liveUsbSummary.kioskEnvironment.KORRI_MOONLIGHT_STARTUP_OBSERVE_MS or null == "750"
+    (check "Product live USB must not carry retired Moonlight launch env" (
+      !(liveUsbSummary.kioskEnvironment ? KORRI_MOONLIGHT_COMMAND)
+      && !(liveUsbSummary.kioskEnvironment ? KORRI_MOONLIGHT_CLIENT)
+      && !(liveUsbSummary.kioskEnvironment ? KORRI_MOONLIGHT_STARTUP_OBSERVE_MS)
+      && !(liveUsbSummary.kioskEnvironment ? KORRI_MOONLIGHT_MAPPING_FILE)
     ))
     (check "Product live USB PATH must include moonlight-embedded" (
       lib.hasInfix "moonlight-embedded" (lib.concatStringsSep "\n" liveUsbSummary.kioskPath)

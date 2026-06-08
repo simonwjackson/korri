@@ -237,6 +237,13 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
       await writeFile(
         join(root, "00-korri-platform-defaults.yaml"),
         [
+          "host:",
+          "  moonlight:",
+          "    command: /nix/store/moonlight-embedded-korri/bin/moonlight",
+          "    input:",
+          "      mappingFile: /nix/store/moonlight/share/moonlight/gamecontrollerdb.txt",
+          "    platform:",
+          "      name: v4l2m2m",
           "apps:",
           "  retroarch:",
           "    gamescope:",
@@ -287,6 +294,7 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
             return {
               app: yield* db.apps.findById("retroarch"),
               launch: yield* repository.resolveLaunchForPlayable("zelda"),
+              localMoonlight: yield* repository.resolveLocalLauncherPolicy("moonlight"),
               libraryYaml: yield* Effect.promise(() =>
                 readFile(join(root, "library.yaml"), "utf8"),
               ),
@@ -305,6 +313,14 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
       expect(loaded.libraryYaml).not.toContain("00-korri-platform-defaults")
       expect(loaded.launch.gamescope?.app?.environment).toEqual({
         WAYLAND_DISPLAY: null,
+      })
+      expect(loaded.localMoonlight.moonlight).toMatchObject({
+        command: "/nix/store/moonlight-embedded-korri/bin/moonlight",
+        input: {
+          mappingFile:
+            "/nix/store/moonlight/share/moonlight/gamecontrollerdb.txt",
+        },
+        platform: { name: "v4l2m2m" },
       })
     })
   })

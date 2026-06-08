@@ -15,6 +15,24 @@ let
   inputplumber = cfg.systemd.services.inputplumber or { };
   persistence = cfg.systemd.services."korri-live-usb-persistence";
   greetd = cfg.systemd.services.greetd;
+  platformDefaults = cfg.services.korri.server.library.platformDefaults or { };
+  moonlightPolicy = platformDefaults.host.moonlight or { };
+  deprecatedMoonlightLaunchEnvKeys = [
+    "KORRI_MOONLIGHT_COMMAND"
+    "KORRI_MOONLIGHT_CLIENT"
+    "KORRI_MOONLIGHT_PLATFORM"
+    "KORRI_MOONLIGHT_MAPPING_FILE"
+    "KORRI_MOONLIGHT_ABSOLUTE_TOUCH"
+    "KORRI_MOONLIGHT_ABSOLUTE_TOUCH_REQUIRE_BOUNDS"
+    "KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS"
+    "KORRI_MOONLIGHT_AUTO_WINDOW_RESIZE"
+    "KORRI_MOONLIGHT_CONTROL"
+    "KORRI_MOONLIGHT_CONTROL_AUTHORITY"
+    "KORRI_MOONLIGHT_STARTUP_OBSERVE_MS"
+    "KORRI_MOONLIGHT_STATE_HOME"
+  ];
+  hasDeprecatedMoonlightLaunchEnv = env:
+    builtins.any (key: builtins.hasAttr key env) deprecatedMoonlightLaunchEnvKeys;
   check = message: assertion: { inherit message assertion; };
 
   # See tools/testing/nix/korri-rocknix-sm8550-config-check.nix for the rationale
@@ -103,8 +121,8 @@ let
         && entry.target == "/home/${cfg.services.korri.compositor.user}/.cache/moonlight"
       ) cfg.services.korri.liveUsbPersistence.productAllowlist
     ))
-    (check "Moonlight state must point at artifact runtime cache path" (
-      compositorEnv.KORRI_MOONLIGHT_STATE_HOME or null == "${expectedHome}/.cache/moonlight"
+    (check "Moonlight state must use the artifact runtime XDG cache path" (
+      compositorEnv.XDG_CACHE_HOME or null == "${expectedHome}/.cache"
     ))
     (check "live USB must use InputPlumber as normalized input provider" (
       cfg.services.korri.input.provider.name == "inputplumber"
@@ -121,10 +139,14 @@ let
     (check "live USB remote-source Moonlight argv composition must require InputPlumber input on korri-server" (
       serverEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1"
     ))
-    (check "live USB Moonlight must use a generic mapping DB for the virtual controller" (
-      lib.hasSuffix "share/moonlight/gamecontrollerdb.txt" (
-        compositorEnv.KORRI_MOONLIGHT_MAPPING_FILE or ""
-      )
+    (check "live USB Moonlight must use readable policy for command and mapping DB" (
+      lib.hasSuffix "/bin/moonlight" (moonlightPolicy.command or "")
+      && lib.hasSuffix "share/moonlight/gamecontrollerdb.txt" (moonlightPolicy.input.mappingFile or "")
+    ))
+    (check "live USB deprecated Moonlight launch-policy env must be absent from launch-owning services" (
+      !hasDeprecatedMoonlightLaunchEnv compositorEnv
+      && !hasDeprecatedMoonlightLaunchEnv sessiondEnv
+      && !hasDeprecatedMoonlightLaunchEnv serverEnv
     ))
     (check "inputplumber service must see its package data root" (
       lib.hasInfix "inputplumber" (inputplumber.environment.XDG_DATA_DIRS or "")

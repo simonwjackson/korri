@@ -85,6 +85,24 @@ let
       sessiondEnv = sessiondService.environment or { };
       serverService = cfg.systemd.services."korri-server" or { };
       serverEnv = serverService.environment or { };
+      platformDefaults = server.library.platformDefaults or { };
+      moonlightPolicy = platformDefaults.host.moonlight or { };
+      moonlightEnv = moonlightPolicy.environment or { };
+      deprecatedMoonlightLaunchEnvKeys = [
+        "KORRI_MOONLIGHT_COMMAND"
+        "KORRI_MOONLIGHT_CLIENT"
+        "KORRI_MOONLIGHT_PLATFORM"
+        "KORRI_MOONLIGHT_MAPPING_FILE"
+        "KORRI_MOONLIGHT_ABSOLUTE_TOUCH"
+        "KORRI_MOONLIGHT_ABSOLUTE_TOUCH_REQUIRE_BOUNDS"
+        "KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS"
+        "KORRI_MOONLIGHT_AUTO_WINDOW_RESIZE"
+        "KORRI_MOONLIGHT_CONTROL"
+        "KORRI_MOONLIGHT_CONTROL_AUTHORITY"
+        "KORRI_MOONLIGHT_STARTUP_OBSERVE_MS"
+      ];
+      hasDeprecatedMoonlightLaunchEnv = env:
+        builtins.any (key: builtins.hasAttr key env) deprecatedMoonlightLaunchEnvKeys;
       sessiondAfter = sessiondService.after or [ ];
       sessiondWants = sessiondService.wants or [ ];
       sessiondRequires = sessiondService.requires or [ ];
@@ -183,27 +201,43 @@ let
             lib.concatStringsSep "\n" (map toString compositor.path)
           )
         ))
-        (check "${name}: Moonlight command must use Korri Moonlight" (
-          lib.hasInfix "moonlight-embedded-korri" (compositor.environment.KORRI_MOONLIGHT_COMMAND or "")
-          && lib.hasSuffix "/bin/moonlight" (compositor.environment.KORRI_MOONLIGHT_COMMAND or "")
+        (check "${name}: readable Moonlight command must use Korri Moonlight" (
+          lib.hasInfix "moonlight-embedded-korri" (moonlightPolicy.command or "")
+          && lib.hasSuffix "/bin/moonlight" (moonlightPolicy.command or "")
         ))
-        (check "${name}: Moonlight must use the controller mapping database" (
-          lib.hasInfix "gamecontrollerdb.txt" (compositor.environment.KORRI_MOONLIGHT_MAPPING_FILE or "")
+        (check "${name}: readable Moonlight policy must use the controller mapping database" (
+          lib.hasInfix "gamecontrollerdb.txt" (moonlightPolicy.input.mappingFile or "")
         ))
-        (check "${name}: Moonlight must use the SM8550 v4l2m2m platform on the compositor" (
-          compositorEnv.KORRI_MOONLIGHT_PLATFORM or null == "v4l2m2m"
+        (check "${name}: readable Moonlight policy must use the SM8550 v4l2m2m platform" (
+          moonlightPolicy.platform.name or null == "v4l2m2m"
         ))
-        # KORRI_MOONLIGHT_PLATFORM must reach every final service that
-        # may launch Moonlight: compositor (legacy Sway-spawned path),
-        # sessiond (foreground session ownership), and korri-server
-        # (remote-source argv composition). Asserting on all three
-        # keeps the substrate-derived value from silently regressing
-        # to a compositor-only env again.
-        (check "${name}: Moonlight platform must reach sessiond" (
-          sessiondEnv.KORRI_MOONLIGHT_PLATFORM or null == "v4l2m2m"
+        (check "${name}: readable Moonlight policy must enable touch, auto-resize, and local control" (
+          (moonlightPolicy.input.touch.absolute or false)
+          && (moonlightPolicy.input.touch.requireBounds or false)
+          && (moonlightPolicy.window.autoResize or false)
+          && (moonlightPolicy.control.enable or false)
+          && (moonlightPolicy.control.authority or null) == "controller"
         ))
-        (check "${name}: Moonlight platform must reach korri-server" (
-          serverEnv.KORRI_MOONLIGHT_PLATFORM or null == "v4l2m2m"
+        (check "${name}: readable Moonlight env must preserve SM8550 substrate and runtime-settings hooks" (
+          (moonlightEnv.SDL_AUDIODRIVER or null) == "pulseaudio"
+          && (moonlightEnv.SDL_VIDEODRIVER or null) == "wayland"
+          && (moonlightEnv.XDG_CACHE_HOME or null) == "/storage/.cache"
+          && (moonlightEnv.MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_AFTER_S or null) == "6"
+          && (moonlightEnv.MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS or null) == "60"
+          && (moonlightEnv.MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_KBPS or null) == "12000"
+          && (moonlightEnv.MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_RESOLUTION or null) == "1280x720"
+          && (moonlightEnv.MOONLIGHT_RUNTIME_SETTINGS_MVP_ALLOW_PROOF_GATED or null) == "1"
+          && (moonlightEnv.MOONLIGHT_RUNTIME_SETTINGS_MVP_ENABLE_SPIKE_ADAPTATION or null) == "1"
+          && (moonlightEnv.MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_KBPS or null) == "6000"
+          && (moonlightEnv.MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_FPS or null) == "30"
+          && (moonlightEnv.MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_KBPS or null) == "12000"
+          && (moonlightEnv.MOONLIGHT_RUNTIME_SETTINGS_MVP_OKAY_FPS or null) == "60"
+          && (moonlightEnv.MOONLIGHT_RUNTIME_SETTINGS_MVP_COOLDOWN_S or null) == "10"
+        ))
+        (check "${name}: deprecated Moonlight launch-policy env must be absent from launch-owning services" (
+          !hasDeprecatedMoonlightLaunchEnv compositorEnv
+          && !hasDeprecatedMoonlightLaunchEnv sessiondEnv
+          && !hasDeprecatedMoonlightLaunchEnv serverEnv
         ))
         (check "${name}: Gamescope control bridge env must remain on sessiond" (
           sessiondEnv.GAMESCOPE_XWAYLAND_MODE_CONTROL or null == "1"

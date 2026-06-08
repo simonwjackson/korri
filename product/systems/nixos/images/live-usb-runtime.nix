@@ -284,11 +284,13 @@ in
       wants = [ "korri-live-usb-persistence.service" ];
       after = [ "korri-live-usb-persistence.service" ];
       environment = {
+        # Moonlight Embedded uses XDG cache/home paths for client state; the
+        # product allowlist below persists .cache/moonlight without retaining
+        # the retired KORRI_MOONLIGHT_STATE_HOME launch-policy env seam.
         XDG_CACHE_HOME = "${effectiveHome}/.cache";
         KORRI_LIVE_USB_ARTIFACT = cfg.artifact;
         KORRI_LIVE_USB_PERSISTENCE_ROOT = cfg.root;
         KORRI_LIVE_USB_PERSISTENCE_SCOPE = persistenceScope;
-        KORRI_MOONLIGHT_STATE_HOME = "${effectiveHome}/.cache/moonlight";
       };
     };
 

@@ -111,7 +111,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("systemctl show -p After greetd.service | grep korri-live-usb-persistence.service")
     machine.succeed("tr '\\0' '\\n' < /proc/$(cat /home/korri/.korri-vm-fake-sway.pid)/environ | grep KORRI_LIVE_USB_PERSISTENCE_ROOT=/persist/korri-live-usb")
     machine.succeed("tr '\\0' '\\n' < /proc/$(cat /home/korri/.korri-vm-fake-sway.pid)/environ | grep KORRI_LIVE_USB_ARTIFACT=product")
-    machine.succeed("tr '\\0' '\\n' < /proc/$(cat /home/korri/.korri-vm-fake-sway.pid)/environ | grep KORRI_MOONLIGHT_STATE_HOME=/home/korri/.cache/moonlight")
+    machine.succeed("tr '\\0' '\\n' < /proc/$(cat /home/korri/.korri-vm-fake-sway.pid)/environ | grep XDG_CACHE_HOME=/home/korri/.cache")
     machine.succeed("findmnt /persist/korri-live-usb | grep tmpfs")
     machine.succeed("test ! -e /persist/korri-live-usb/.korri-live-usb-persistent")
   '';
