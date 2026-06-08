@@ -8,11 +8,16 @@ import {
 import { artifactsRoot } from "@platform/artifacts/artifact-store"
 import {
   type ReadableConfigSnapshot,
+  type ResolvedLocalLauncherPolicy,
   resolveReadableLaunchContext,
+  resolveReadableLocalLauncherPolicy,
 } from "@platform/library/config/cascade-resolver"
 import { composeReadableLaunchSpec } from "@platform/library/config/compose-launch-spec"
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
-import type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
+import type {
+  GamescopePolicy,
+  MoonlightPolicy,
+} from "@platform/library/config/inheritable-fields"
 import {
   listPlayableEntries as derivePlayableEntries,
   launchableReleases,
@@ -60,6 +65,7 @@ export interface ResolveLaunchOptions {
 export interface ResolvedLaunchOutput {
   readonly spec: LaunchSpec
   readonly gamescope?: GamescopePolicy
+  readonly moonlight?: MoonlightPolicy
   readonly app: {
     readonly id: string
     readonly integration: string
@@ -224,7 +230,11 @@ export interface LibraryRepository {
     gameId: string,
     opts?: ResolveLaunchOptions,
   ) => Effect.Effect<ResolvedLaunchOutput, LibraryError>
-  /** @deprecated local launcher config is legacy vocabulary. */
+  readonly resolveLocalLauncherPolicy: (
+    launcherId: string,
+    opts?: Pick<ResolveLaunchOptions, "override">,
+  ) => Effect.Effect<ResolvedLocalLauncherPolicy, LibraryError>
+  /** @deprecated use resolveLocalLauncherPolicy. */
   readonly resolveLocalLauncherGamescopePolicy: (
     launcherId: string,
     opts?: Pick<ResolveLaunchOptions, "override">,
@@ -308,6 +318,7 @@ export function createLibraryRepository(
         return {
           spec,
           gamescope: context.gamescope,
+          ...(context.moonlight ? { moonlight: context.moonlight } : {}),
           app: { id: context.app.id, integration: "generic-process" },
           ...(context.runtime
             ? {
@@ -389,14 +400,20 @@ export function createLibraryRepository(
       repository.canResolveLaunchForPlayable(gameId, opts),
     resolveLaunchForGame: (gameId, opts) =>
       repository.resolveLaunchForPlayable(gameId, opts),
-    resolveLocalLauncherGamescopePolicy: () =>
-      Effect.fail(
-        new LibraryError({
-          reason: "config",
-          message:
-            "local launcher gamescope policy uses removed launcher vocabulary",
-        }),
+    resolveLocalLauncherPolicy: (launcherId, opts) =>
+      loadReadableSnapshot(db).pipe(
+        Effect.map(snapshot =>
+          resolveReadableLocalLauncherPolicy(snapshot, {
+            launcherId,
+            override: opts?.override,
+          }),
+        ),
+        Effect.mapError(toLibraryConfigError),
       ),
+    resolveLocalLauncherGamescopePolicy: (launcherId, opts) =>
+      repository
+        .resolveLocalLauncherPolicy(launcherId, opts)
+        .pipe(Effect.map(policy => policy.gamescope)),
   }
   return repository
 }

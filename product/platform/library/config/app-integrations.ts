@@ -6,7 +6,7 @@ import {
   IncompatibleModule,
   type ResolutionError,
 } from "./errors"
-import type { GamescopePolicy } from "./inheritable-fields"
+import type { GamescopePolicy, MoonlightPolicy } from "./inheritable-fields"
 import type { LaunchSettings } from "./launch-block"
 import { mergeLaunchSettings } from "./launch-block"
 import type { AppRecord } from "./records/app"
@@ -30,6 +30,7 @@ export interface AppDescriptor {
   readonly settings?: LaunchSettings
   readonly knownSettings?: readonly string[]
   readonly gamescope?: GamescopePolicy
+  readonly moonlight?: MoonlightPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
@@ -146,6 +147,7 @@ const mergeDescriptor = (
         policy: legacyLauncher.policy,
         presets: legacyLauncher.presets ?? base.presets,
         gamescope: legacyLauncher.gamescope ?? base.gamescope,
+        moonlight: legacyLauncher.moonlight ?? base.moonlight,
         env: legacyLauncher.env ?? base.env,
         cwd: legacyLauncher.cwd ?? base.cwd,
         argsAppend: legacyLauncher.argsAppend ?? base.argsAppend,
@@ -157,6 +159,7 @@ const mergeDescriptor = (
   ...(appOverride?.policy ? { policy: appOverride.policy } : {}),
   ...(appOverride?.presets ? { presets: appOverride.presets } : {}),
   ...(appOverride?.gamescope ? { gamescope: appOverride.gamescope } : {}),
+  ...(appOverride?.moonlight ? { moonlight: appOverride.moonlight } : {}),
   ...(appOverride?.env ? { env: appOverride.env } : {}),
   ...(appOverride?.cwd !== undefined ? { cwd: appOverride.cwd } : {}),
   ...(appOverride?.argsAppend ? { argsAppend: appOverride.argsAppend } : {}),
@@ -171,6 +174,7 @@ const launcherToDescriptor = (launcher: LauncherRecord): AppDescriptor => ({
   systems: launcher.systems,
   policy: launcher.policy,
   gamescope: launcher.gamescope,
+  moonlight: launcher.moonlight,
   env: launcher.env,
   cwd: launcher.cwd,
   argsAppend: launcher.argsAppend,

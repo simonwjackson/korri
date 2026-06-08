@@ -18,6 +18,7 @@ export const ProfilePayload = Schema.Struct({
   runtime: Schema.optional(NonEmptyString),
 
   gamescope: InheritableLayer.fields.gamescope,
+  moonlight: InheritableLayer.fields.moonlight,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,

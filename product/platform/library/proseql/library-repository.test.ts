@@ -231,6 +231,51 @@ describe("createLibraryRepository — readable playable entries", () => {
     })
   })
 
+  it("resolves local launcher Moonlight and sibling Gamescope policy from readable host/app layers", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      await Effect.runPromise(
+        repo.upsertApp({
+          id: "moonlight",
+          command: "moonlight",
+          args: ["stream"],
+          gamescope: { extraArgs: ["--expose-wayland"] },
+          moonlight: {
+            platform: { name: "v4l2m2m" },
+            input: { devices: ["/dev/input/event-app"] },
+            extraArgs: ["app"],
+          },
+        }),
+      )
+      await Effect.runPromise(
+        repo.upsertGlobalConfig({
+          title: "Test Host",
+          moonlight: {
+            environment: { FROM_HOST: "1", UNSET_ME: "1" },
+            input: { devices: ["/dev/input/event-host"] },
+            extraArgs: ["host"],
+          },
+        }),
+      )
+
+      const policy = await Effect.runPromise(
+        repo.resolveLocalLauncherPolicy("moonlight", {
+          override: { moonlight: { environment: { UNSET_ME: null } } },
+        }),
+      )
+
+      expect(policy.gamescope.extraArgs).toEqual(["--expose-wayland"])
+      expect(policy.moonlight).toEqual({
+        environment: { FROM_HOST: "1", UNSET_ME: null },
+        platform: { name: "v4l2m2m" },
+        input: {
+          devices: ["/dev/input/event-host", "/dev/input/event-app"],
+        },
+        extraArgs: ["host", "app"],
+      })
+    })
+  })
+
   it("launches the selected release and resolves file-backed content paths", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)

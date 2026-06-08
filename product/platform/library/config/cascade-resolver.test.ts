@@ -17,6 +17,7 @@ import {
   enumerateApplicablePresets,
   resolveLaunchContext,
   resolveLocalLauncherGamescopePolicy,
+  resolveLocalLauncherPolicy,
 } from "./cascade-resolver"
 import type { AppRecord } from "./records/app"
 import type { GameRecord } from "./records/game"
@@ -342,7 +343,152 @@ describe("resolveLaunchContext — gamescope policy fold", () => {
   })
 })
 
+describe("resolveLaunchContext — moonlight policy fold", () => {
+  it("deep-merges nested Moonlight objects without replacing sibling fields", () => {
+    const snap = snapshotOf({
+      global: globalConfig({
+        moonlight: {
+          stream: { resolution: { width: 1280 }, fps: 60 },
+          input: { touch: { absolute: true } },
+        },
+      }),
+      systems: [
+        system({
+          id: "snes",
+          launcher: "retroarch",
+          moonlight: {
+            stream: { resolution: { height: 720 } },
+            input: { touch: { requireBounds: true } },
+          },
+        }),
+      ],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [game({ id: "fzero" })],
+    })
+
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+    expect(ctx.moonlight).toMatchObject({
+      stream: { resolution: { width: 1280, height: 720 }, fps: 60 },
+      input: { touch: { absolute: true, requireBounds: true } },
+    })
+  })
+
+  it("concatenates Moonlight input.devices and extraArgs in inheritance order", () => {
+    const snap = snapshotOf({
+      global: globalConfig({
+        moonlight: {
+          input: { devices: ["/dev/input/event-global"] },
+          extraArgs: ["global"],
+        },
+      }),
+      systems: [
+        system({
+          id: "snes",
+          launcher: "retroarch",
+          moonlight: {
+            input: { devices: ["/dev/input/event-system"] },
+            extraArgs: ["system"],
+          },
+        }),
+      ],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [
+        game({
+          id: "fzero",
+          moonlight: {
+            input: { devices: ["/dev/input/event-game"] },
+            extraArgs: ["game"],
+          },
+        }),
+      ],
+    })
+
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+    expect(ctx.moonlight?.input?.devices).toEqual([
+      "/dev/input/event-global",
+      "/dev/input/event-system",
+      "/dev/input/event-game",
+    ])
+    expect(ctx.moonlight?.extraArgs).toEqual(["global", "system", "game"])
+  })
+
+  it("preserves explicit false and nullable environment unsets", () => {
+    const snap = snapshotOf({
+      global: globalConfig({
+        moonlight: {
+          environment: { KEEP: "1", UNSET_ME: "1" },
+          logging: { verbose: true },
+          window: { autoResize: true },
+          control: { enable: true },
+        },
+      }),
+      systems: [system({ id: "snes", launcher: "retroarch" })],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [
+        game({
+          id: "fzero",
+          moonlight: {
+            environment: { UNSET_ME: null },
+            logging: { verbose: false },
+            window: { autoResize: false },
+            control: { enable: false },
+          },
+        }),
+      ],
+    })
+
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+    expect(ctx.moonlight?.environment).toEqual({ KEEP: "1", UNSET_ME: null })
+    expect(ctx.moonlight?.logging?.verbose).toBe(false)
+    expect(ctx.moonlight?.window?.autoResize).toBe(false)
+    expect(ctx.moonlight?.control?.enable).toBe(false)
+  })
+})
+
 describe("resolveLocalLauncherGamescopePolicy", () => {
+  it("resolves sibling local launcher Moonlight and Gamescope policies without a game id", () => {
+    const snap = snapshotOf({
+      global: globalConfig({
+        gamescope: { enable: false },
+        moonlight: {
+          environment: { FROM_GLOBAL: "1", UNSET_ME: "1" },
+          input: { devices: ["/dev/input/event-global"] },
+          extraArgs: ["global"],
+        },
+      }),
+      launchers: [
+        launcher({
+          id: "moonlight",
+          systems: [],
+          gamescope: { extraArgs: ["--expose-wayland"] },
+          moonlight: {
+            platform: { name: "v4l2m2m" },
+            environment: { UNSET_ME: null },
+            input: { devices: ["/dev/input/event-launcher"] },
+            extraArgs: ["launcher"],
+          },
+        }),
+      ],
+      games: [],
+    })
+
+    const policy = resolveLocalLauncherPolicy(snap, {
+      launcherId: "moonlight",
+      override: { gamescope: { enable: true } },
+    })
+
+    expect(policy.gamescope.enable).toBe(true)
+    expect(policy.gamescope.extraArgs).toEqual(["--expose-wayland"])
+    expect(policy.moonlight).toEqual({
+      environment: { FROM_GLOBAL: "1", UNSET_ME: null },
+      platform: { name: "v4l2m2m" },
+      input: {
+        devices: ["/dev/input/event-global", "/dev/input/event-launcher"],
+      },
+      extraArgs: ["global", "launcher"],
+    })
+  })
+
   it("resolves local launcher policy from global, launcher, and override without a game id", () => {
     const snap = snapshotOf({
       global: globalConfig({ gamescope: { enable: false } }),

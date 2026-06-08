@@ -4,7 +4,9 @@ import {
   decodeByLauncherPayload,
   decodeGamescopePolicy,
   decodeInheritableLayer,
+  decodeMoonlightPolicy,
   type GamescopePolicy,
+  type MoonlightPolicy,
   normalizeGamescopePolicy,
 } from "./inheritable-fields"
 
@@ -275,6 +277,116 @@ describe("GamescopePolicy", () => {
   })
 })
 
+const representativeMoonlightPolicy: MoonlightPolicy = {
+  command: "/run/current-system/sw/bin/moonlight",
+  environment: {
+    SDL_VIDEODRIVER: "wayland",
+    KORRI_MOONLIGHT_STATE_HOME: null,
+  },
+  logging: { verbose: false, debug: false },
+  stream: {
+    resolution: { width: 1280, height: 720 },
+    fps: 60,
+    bitrateKbps: 12000,
+    packetSizeBytes: null,
+    codec: "auto",
+    remoteOptimizations: false,
+    unsupportedHost: false,
+    quitAppAfter: false,
+    noSops: false,
+    localAudio: false,
+    surround: false,
+    keyDir: null,
+  },
+  platform: { name: "v4l2m2m" },
+  input: {
+    devices: ["/dev/input/event10"],
+    mappingFile: "/run/current-system/sw/share/gamecontrollerdb.txt",
+    viewOnly: false,
+    rotate: 0,
+    touch: {
+      absolute: true,
+      requireBounds: true,
+      bounds: { x: 0, y: 0, w: 1080, h: 1920 },
+    },
+  },
+  audio: { device: null },
+  window: { windowed: false, autoResize: true },
+  control: {
+    enable: true,
+    authority: "controller",
+    allowRootPeers: false,
+    runtimeDir: null,
+    sessionId: null,
+    socketPath: null,
+  },
+  runtimeSettings: {
+    oneShot: {
+      enable: false,
+      afterSeconds: 6,
+      bitrateKbps: null,
+      fps: null,
+      resolution: null,
+      allowProofGated: false,
+    },
+  },
+  extraArgs: ["-unsupported-test-flag"],
+}
+
+describe("MoonlightPolicy", () => {
+  it("decodes an empty object as 'no opinion'", () => {
+    expect(decodeMoonlightPolicy({})).toEqual({})
+  })
+
+  it("decodes a representative stream launch policy", () => {
+    expect(decodeMoonlightPolicy(representativeMoonlightPolicy)).toEqual(
+      representativeMoonlightPolicy,
+    )
+  })
+
+  it("preserves nullable environment overlays as executable unsets", () => {
+    const policy = decodeMoonlightPolicy({
+      environment: { SDL_VIDEODRIVER: "wayland", OLD_VALUE: null },
+    })
+
+    expect(policy.environment?.SDL_VIDEODRIVER).toBe("wayland")
+    expect(policy.environment?.OLD_VALUE).toBeNull()
+  })
+
+  it("accepts open non-empty platform names", () => {
+    expect(
+      decodeMoonlightPolicy({ platform: { name: "future-patched-backend" } }),
+    ).toEqual({ platform: { name: "future-patched-backend" } })
+    expect(() => decodeMoonlightPolicy({ platform: { name: "" } })).toThrow()
+  })
+
+  it("rejects retired or product-invariant fields", () => {
+    for (const badPolicy of [
+      { KORRI_MOONLIGHT_PLATFORM: "v4l2m2m" },
+      { client: "embedded" },
+      { action: "stream" },
+      { app: { name: "Korri Stream" } },
+      { config: { load: "/tmp/moonlight.conf" } },
+      { stream: { resolution: { preset: "720" } } },
+      { platform: { source: "nixos" } },
+      { input: { requireInputPlumber: true } },
+      { control: { commands: { setBitrate: true } } },
+      { runtimeSettings: { adaptationSpike: { enable: true } } },
+    ]) {
+      expect(() => decodeMoonlightPolicy(badPolicy)).toThrow()
+    }
+  })
+
+  it("rejects malformed touch bounds", () => {
+    for (const badPolicy of [
+      { input: { touch: { bounds: { x: 0, y: 0, w: 0, h: 100 } } } },
+      { input: { touch: { bounds: { x: 0, y: 0, w: 100 } } } },
+    ]) {
+      expect(() => decodeMoonlightPolicy(badPolicy)).toThrow()
+    }
+  })
+})
+
 describe("InheritableLayer", () => {
   it("decodes an empty layer (zero opinions)", () => {
     const layer = decodeInheritableLayer({})
@@ -289,6 +401,11 @@ describe("InheritableLayer", () => {
         scaling: { filter: "fsr" },
         extraArgs: ["--unmodelled-flag"],
       },
+      moonlight: {
+        command: "/run/current-system/sw/bin/moonlight",
+        platform: { name: "v4l2m2m" },
+        input: { devices: ["/dev/input/event10"] },
+      },
       env: { LANG: "en_US.UTF-8", SDL_VIDEODRIVER: "x11" },
       cwd: "/storage/roms",
       argsAppend: ["--fullscreen", "--verbose"],
@@ -300,6 +417,8 @@ describe("InheritableLayer", () => {
     )
     expect(layer.gamescope?.scaling?.filter).toBe("fsr")
     expect(layer.gamescope?.extraArgs).toEqual(["--unmodelled-flag"])
+    expect(layer.moonlight?.platform?.name).toBe("v4l2m2m")
+    expect(layer.moonlight?.input?.devices).toEqual(["/dev/input/event10"])
     expect(layer.env?.LANG).toBe("en_US.UTF-8")
     expect(layer.cwd).toBe("/storage/roms")
     expect(layer.argsAppend).toEqual(["--fullscreen", "--verbose"])

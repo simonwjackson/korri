@@ -1,10 +1,18 @@
 import { describe, expect, it } from "bun:test"
 
+import { decodeAppPayload } from "./app"
+import { decodeGamePayload } from "./game"
+import { decodeGlobalConfigPayload } from "./global"
 import { decodeHostPayload } from "./host"
+import { decodeLauncherPayload } from "./launcher"
 import { decodeLibraryItemPayload } from "./library-item"
+import { decodePresetPayload } from "./preset"
+import { decodeProfilePayload } from "./profile"
 import { decodeRuntimePayload } from "./runtime"
 import { decodeSourcePayload } from "./source"
 import { decodeStoragePayload } from "./storage"
+import { decodeSystemPayload } from "./system"
+import { decodeUserPayload } from "./user"
 
 describe("readable library schema records", () => {
   it("decodes a plain host block without role/launch/profile nesting", () => {
@@ -15,6 +23,11 @@ describe("readable library schema records", () => {
 
     expect(host.title).toBe("AKA desktop host")
     expect(host.gamescope?.enable).toBe(true)
+    expect(
+      decodeHostPayload({
+        moonlight: { platform: { name: "v4l2m2m" } },
+      }).moonlight?.platform?.name,
+    ).toBe("v4l2m2m")
     for (const gamescope of [
       { enabled: true },
       { backend: "wayland" },
@@ -27,6 +40,83 @@ describe("readable library schema records", () => {
     expect(() => decodeHostPayload({ role: "desktop" })).toThrow()
     expect(() => decodeHostPayload({ launch: { app: "steam" } })).toThrow()
     expect(() => decodeHostPayload({ profiles: { handheld: {} } })).toThrow()
+  })
+
+  it("decodes moonlight policy on every readable cascade record", () => {
+    const moonlight = {
+      environment: { OLD_VALUE: null },
+      platform: { name: "v4l2m2m" },
+      input: { devices: ["/dev/input/event10"] },
+      extraArgs: ["-diagnostic"],
+    }
+
+    const cases: Array<readonly [string, () => { moonlight?: unknown }]> = [
+      ["global", () => decodeGlobalConfigPayload({ moonlight })],
+      ["host", () => decodeHostPayload({ moonlight })],
+      ["user", () => decodeUserPayload({ moonlight })],
+      ["system", () => decodeSystemPayload({ moonlight })],
+      [
+        "launcher",
+        () =>
+          decodeLauncherPayload({
+            command: "moonlight",
+            args: [],
+            systems: [],
+            moonlight,
+          }),
+      ],
+      ["preset", () => decodePresetPayload({ moonlight })],
+      ["app", () => decodeAppPayload({ moonlight })],
+      [
+        "runtime",
+        () =>
+          decodeRuntimePayload({
+            kind: "tool",
+            path: "/run/current-system/sw/bin/moonlight",
+            moonlight,
+          }),
+      ],
+      ["source", () => decodeSourcePayload({ kind: ["service"], moonlight })],
+      ["profile", () => decodeProfilePayload({ moonlight })],
+      [
+        "library-item",
+        () =>
+          decodeLibraryItemPayload({
+            moonlight,
+            releases: [{ id: "default", system: "stream", target: "peer" }],
+          }),
+      ],
+      [
+        "library-release",
+        () =>
+          decodeLibraryItemPayload({
+            releases: [
+              { id: "default", system: "stream", target: "peer", moonlight },
+            ],
+          }).releases[0] ?? {},
+      ],
+      [
+        "contained-playable",
+        () =>
+          decodeLibraryItemPayload({
+            contains: { child: { moonlight } },
+            releases: [{ id: "default", system: "stream", target: "peer" }],
+          }).contains?.child ?? {},
+      ],
+      [
+        "game",
+        () =>
+          decodeGamePayload({
+            system: "stream",
+            contentPath: "peer",
+            moonlight,
+          }),
+      ],
+    ]
+
+    for (const [, decode] of cases) {
+      expect(decode().moonlight).toMatchObject(moonlight)
+    }
   })
 
   it("decodes local storage roots and rejects provider leakage", () => {

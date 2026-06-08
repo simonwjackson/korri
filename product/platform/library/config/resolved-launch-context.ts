@@ -22,7 +22,7 @@
 import { ArtifactId } from "@platform/protocol/artifact/artifact"
 import { Schema } from "effect"
 
-import { GamescopePolicy } from "./inheritable-fields"
+import { GamescopePolicy, MoonlightPolicy } from "./inheritable-fields"
 import { LaunchSettings } from "./launch-block"
 import { AppRecord } from "./records/app"
 import { RuntimeRecord } from "./records/runtime"
@@ -53,6 +53,7 @@ export const ResolvedLaunchContext = Schema.Struct({
 
   // Resolved inheritable behavior fields (post-merge).
   gamescope: Schema.optional(GamescopePolicy),
+  moonlight: Schema.optional(MoonlightPolicy),
   settings: Schema.optional(LaunchSettings),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   cwd: Schema.optional(Schema.String),
@@ -79,6 +80,7 @@ export const ReadableResolvedLaunchContext = Schema.Struct({
     }),
   ),
   gamescope: Schema.optional(GamescopePolicy),
+  moonlight: Schema.optional(MoonlightPolicy),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   cwd: Schema.optional(Schema.String),
   argsAppend: Schema.optional(Schema.Array(Schema.String)),

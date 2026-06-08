@@ -17,6 +17,11 @@
  * - `gamescope`          → deep merge per nested key; scalars last-wins
  * - `gamescope.extraArgs`→ list concat in inheritance order (least→most specific)
  * - `gamescope.command`  → scalar; more-specific wrapper command wins
+ * - `moonlight`          → deep merge per nested key; scalars last-wins
+ * - `moonlight.input.devices` / `moonlight.extraArgs`
+ *                         → list concat in inheritance order
+ * - `moonlight.environment`
+ *                         → map merge; `null` means executable env unset
  * - `env`                → map merge per key; more-specific wins
  * - `cwd`                → scalar; most-specific path wins
  * - `argsAppend`         → list concat in inheritance order
@@ -59,6 +64,17 @@ const PositiveNumber = (label: string) =>
   Schema.Number.check(positiveNumber(label))
 const NonNegativeNumber = (label: string) =>
   Schema.Number.check(nonNegativeNumber(label))
+const PositiveInteger = (label: string) =>
+  Schema.Int.check(positiveNumber(label))
+
+const NonEmptyString = (label: string) =>
+  Schema.String.pipe(
+    Schema.check(
+      Schema.isMinLength(1, {
+        message: `${label} must be non-empty`,
+      }),
+    ),
+  )
 
 /**
  * Gamescope 3.16.x backend names accepted by `--backend` in Korri's pinned
@@ -314,6 +330,140 @@ export const GamescopePolicy = Schema.Struct({
 })
 export type GamescopePolicy = Schema.Schema.Type<typeof GamescopePolicy>
 
+const NullablePositiveInteger = (label: string) =>
+  Schema.NullOr(PositiveInteger(label))
+
+const NullableNonEmptyString = (label: string) =>
+  Schema.NullOr(NonEmptyString(label))
+
+export const MoonlightCodec = Schema.Literals(["auto", "h264", "h265"])
+export type MoonlightCodec = Schema.Schema.Type<typeof MoonlightCodec>
+
+export const MoonlightRotation = Schema.Union([
+  Schema.Literal(0),
+  Schema.Literal(90),
+  Schema.Literal(180),
+  Schema.Literal(270),
+])
+export type MoonlightRotation = Schema.Schema.Type<typeof MoonlightRotation>
+
+export const MoonlightControlAuthority = Schema.Literals([
+  "observer",
+  "controller",
+])
+export type MoonlightControlAuthority = Schema.Schema.Type<
+  typeof MoonlightControlAuthority
+>
+
+const MoonlightLoggingPolicy = Schema.Struct({
+  verbose: Schema.optional(Schema.Boolean),
+  debug: Schema.optional(Schema.Boolean),
+})
+
+const MoonlightResolutionPolicy = Schema.Struct({
+  width: Schema.optional(PositiveInteger("stream.resolution.width")),
+  height: Schema.optional(PositiveInteger("stream.resolution.height")),
+})
+
+const MoonlightStreamPolicy = Schema.Struct({
+  resolution: Schema.optional(MoonlightResolutionPolicy),
+  fps: Schema.optional(PositiveInteger("stream.fps")),
+  bitrateKbps: Schema.optional(NullablePositiveInteger("stream.bitrateKbps")),
+  packetSizeBytes: Schema.optional(
+    NullablePositiveInteger("stream.packetSizeBytes"),
+  ),
+  codec: Schema.optional(MoonlightCodec),
+  remoteOptimizations: Schema.optional(Schema.Boolean),
+  unsupportedHost: Schema.optional(Schema.Boolean),
+  quitAppAfter: Schema.optional(Schema.Boolean),
+  noSops: Schema.optional(Schema.Boolean),
+  localAudio: Schema.optional(Schema.Boolean),
+  surround: Schema.optional(Schema.Boolean),
+  keyDir: Schema.optional(NullableNonEmptyString("stream.keyDir")),
+})
+
+const MoonlightPlatformPolicy = Schema.Struct({
+  name: Schema.optional(NonEmptyString("platform.name")),
+})
+
+const MoonlightTouchBoundsPolicy = Schema.Struct({
+  x: Schema.Int,
+  y: Schema.Int,
+  w: PositiveInteger("input.touch.bounds.w"),
+  h: PositiveInteger("input.touch.bounds.h"),
+})
+
+const MoonlightTouchPolicy = Schema.Struct({
+  absolute: Schema.optional(Schema.Boolean),
+  requireBounds: Schema.optional(Schema.Boolean),
+  bounds: Schema.optional(Schema.NullOr(MoonlightTouchBoundsPolicy)),
+})
+
+const MoonlightInputPolicy = Schema.Struct({
+  devices: Schema.optional(Schema.Array(NonEmptyString("input.devices[]"))),
+  mappingFile: Schema.optional(NonEmptyString("input.mappingFile")),
+  viewOnly: Schema.optional(Schema.Boolean),
+  rotate: Schema.optional(MoonlightRotation),
+  touch: Schema.optional(MoonlightTouchPolicy),
+})
+
+const MoonlightAudioPolicy = Schema.Struct({
+  device: Schema.optional(NullableNonEmptyString("audio.device")),
+})
+
+const MoonlightWindowPolicy = Schema.Struct({
+  windowed: Schema.optional(Schema.Boolean),
+  autoResize: Schema.optional(Schema.Boolean),
+})
+
+const MoonlightControlPolicy = Schema.Struct({
+  enable: Schema.optional(Schema.Boolean),
+  authority: Schema.optional(MoonlightControlAuthority),
+  allowRootPeers: Schema.optional(Schema.Boolean),
+  runtimeDir: Schema.optional(NullableNonEmptyString("control.runtimeDir")),
+  sessionId: Schema.optional(NullableNonEmptyString("control.sessionId")),
+  socketPath: Schema.optional(NullableNonEmptyString("control.socketPath")),
+})
+
+const MoonlightRuntimeSettingsOneShotPolicy = Schema.Struct({
+  enable: Schema.optional(Schema.Boolean),
+  afterSeconds: Schema.optional(
+    NullablePositiveInteger("runtimeSettings.oneShot.afterSeconds"),
+  ),
+  bitrateKbps: Schema.optional(
+    NullablePositiveInteger("runtimeSettings.oneShot.bitrateKbps"),
+  ),
+  fps: Schema.optional(NullablePositiveInteger("runtimeSettings.oneShot.fps")),
+  resolution: Schema.optional(
+    NullableNonEmptyString("runtimeSettings.oneShot.resolution"),
+  ),
+  allowProofGated: Schema.optional(Schema.Boolean),
+})
+
+const MoonlightRuntimeSettingsPolicy = Schema.Struct({
+  oneShot: Schema.optional(MoonlightRuntimeSettingsOneShotPolicy),
+})
+
+/**
+ * Typed Moonlight Embedded stream launch policy for Korri product launches.
+ * The stream action, fixed Korri Stream app, and selected peer host are product
+ * invariants and are intentionally not configurable in readable policy.
+ */
+export const MoonlightPolicy = Schema.Struct({
+  command: Schema.optional(NonEmptyString("command")),
+  environment: Schema.optional(EnvironmentOverlay),
+  logging: Schema.optional(MoonlightLoggingPolicy),
+  stream: Schema.optional(MoonlightStreamPolicy),
+  platform: Schema.optional(MoonlightPlatformPolicy),
+  input: Schema.optional(MoonlightInputPolicy),
+  audio: Schema.optional(MoonlightAudioPolicy),
+  window: Schema.optional(MoonlightWindowPolicy),
+  control: Schema.optional(MoonlightControlPolicy),
+  runtimeSettings: Schema.optional(MoonlightRuntimeSettingsPolicy),
+  extraArgs: Schema.optional(Schema.Array(Schema.String)),
+})
+export type MoonlightPolicy = Schema.Schema.Type<typeof MoonlightPolicy>
+
 /**
  * Floor of the gamescope policy cascade. Production deployments run
  * gamescope nested under a parent Wayland compositor (sway on kiosks,
@@ -364,6 +514,7 @@ export const normalizeGamescopePolicy = (
  */
 export const InheritableLayer = Schema.Struct({
   gamescope: Schema.optional(GamescopePolicy),
+  moonlight: Schema.optional(MoonlightPolicy),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   cwd: Schema.optional(Schema.String),
   argsAppend: Schema.optional(Schema.Array(Schema.String)),
@@ -381,6 +532,9 @@ export type ByLauncherPayload = Schema.Schema.Type<typeof ByLauncherPayload>
 
 export const decodeGamescopePolicy = (input: unknown): GamescopePolicy =>
   Schema.decodeUnknownSync(GamescopePolicy)(input, STRICT)
+
+export const decodeMoonlightPolicy = (input: unknown): MoonlightPolicy =>
+  Schema.decodeUnknownSync(MoonlightPolicy)(input, STRICT)
 
 export const decodeInheritableLayer = (input: unknown): InheritableLayer =>
   Schema.decodeUnknownSync(InheritableLayer)(input, STRICT)

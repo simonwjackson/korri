@@ -29,6 +29,7 @@ export const EphemeralOverride = Schema.Struct({
 
   // Inlined inheritable whitelist.
   gamescope: InheritableLayer.fields.gamescope,
+  moonlight: InheritableLayer.fields.moonlight,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,

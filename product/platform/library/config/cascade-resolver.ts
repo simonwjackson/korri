@@ -43,6 +43,7 @@ import {
 import {
   type ByLauncherPayload,
   type GamescopePolicy,
+  type MoonlightPolicy,
   normalizeGamescopePolicy,
 } from "./inheritable-fields"
 import type { LaunchBlock, LaunchSettings } from "./launch-block"
@@ -116,6 +117,21 @@ export interface ResolveLocalLauncherGamescopePolicyInputs {
   readonly override?: EphemeralOverride
 }
 
+export interface ResolveLocalLauncherPolicyInputs {
+  readonly launcherId: string
+  readonly override?: EphemeralOverride
+}
+
+export interface ResolvedLocalLauncherPolicy {
+  readonly gamescope: GamescopePolicy
+  readonly moonlight?: MoonlightPolicy
+}
+
+export interface ResolveReadableLocalLauncherPolicyInputs {
+  readonly launcherId: string
+  readonly override?: ReadableOverride
+}
+
 export type PresetLayerOrigin =
   | "global"
   | "user"
@@ -149,6 +165,7 @@ export type ApplicablePresets = ReadonlyMap<
 interface InheritableView {
   readonly inherit?: boolean
   readonly gamescope?: GamescopePolicy
+  readonly moonlight?: MoonlightPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
@@ -168,6 +185,7 @@ const viewOfGlobal = (g: GlobalConfigRecord | null): InheritableView =>
         module: g.launch?.module,
         settings: g.launch?.settings,
         gamescope: g.gamescope,
+        moonlight: g.moonlight,
         env: g.env,
         cwd: g.cwd,
         argsAppend: g.argsAppend,
@@ -185,6 +203,7 @@ const viewOfUser = (u: UserRecord | undefined): InheritableView =>
         settings: u.launch?.settings,
         inherit: u.inherit,
         gamescope: u.gamescope,
+        moonlight: u.moonlight,
         env: u.env,
         cwd: u.cwd,
         argsAppend: u.argsAppend,
@@ -202,6 +221,7 @@ const viewOfSystem = (s: SystemRecord | undefined): InheritableView =>
         settings: s.launch?.settings,
         inherit: s.inherit,
         gamescope: s.gamescope,
+        moonlight: s.moonlight,
         env: s.env,
         cwd: s.cwd,
         argsAppend: s.argsAppend,
@@ -215,6 +235,7 @@ const viewOfLauncher = (l: LauncherRecord | undefined): InheritableView =>
     ? {
         inherit: l.inherit,
         gamescope: l.gamescope,
+        moonlight: l.moonlight,
         env: l.env,
         cwd: l.cwd,
         argsAppend: l.argsAppend,
@@ -230,6 +251,7 @@ const viewOfGame = (g: GameRecord): InheritableView => ({
   settings: g.launch?.settings,
   inherit: g.inherit,
   gamescope: g.gamescope,
+  moonlight: g.moonlight,
   env: g.env,
   cwd: g.cwd,
   argsAppend: g.argsAppend,
@@ -244,6 +266,7 @@ const viewOfPreset = (p: PresetPayload): InheritableView => ({
   settings: p.launch?.settings,
   inherit: p.inherit,
   gamescope: p.gamescope,
+  moonlight: p.moonlight,
   env: p.env,
   cwd: p.cwd,
   argsAppend: p.argsAppend,
@@ -258,6 +281,7 @@ const viewOfOverride = (o: EphemeralOverride): InheritableView => ({
   settings: o.launch?.settings,
   inherit: o.inherit,
   gamescope: o.gamescope,
+  moonlight: o.moonlight,
   env: o.env,
   cwd: o.cwd,
   argsAppend: o.argsAppend,
@@ -299,6 +323,7 @@ const foldLayers = (
   }
 
   let gamescope: GamescopePolicy | undefined
+  let moonlight: MoonlightPolicy | undefined
   let env: Record<string, string> | undefined
   let cwd: string | undefined
   let argsAppend: string[] | undefined
@@ -321,6 +346,9 @@ const foldLayers = (
     }
     if (merged.gamescope !== undefined) {
       gamescope = foldGamescope(gamescope, merged.gamescope)
+    }
+    if (merged.moonlight !== undefined) {
+      moonlight = foldMoonlight(moonlight, merged.moonlight)
     }
     if (merged.env !== undefined) {
       env = { ...(env ?? {}), ...merged.env }
@@ -346,6 +374,7 @@ const foldLayers = (
 
   return {
     gamescope,
+    moonlight,
     env,
     cwd,
     argsAppend,
@@ -367,6 +396,9 @@ const mergeByLauncher = (
     gamescope: extra.gamescope
       ? foldGamescope(base.gamescope, extra.gamescope)
       : base.gamescope,
+    moonlight: extra.moonlight
+      ? foldMoonlight(base.moonlight, extra.moonlight)
+      : base.moonlight,
     env:
       extra.env !== undefined
         ? { ...(base.env ?? {}), ...extra.env }
@@ -884,6 +916,48 @@ const foldGamescope = (
   }
 }
 
+const isPlainPolicyObject = (
+  value: unknown,
+): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+const mergeMoonlightValue = (
+  base: unknown,
+  extra: unknown,
+  path: readonly string[],
+): unknown => {
+  if (extra === undefined) return base
+  const key = path.join(".")
+  if (key === "extraArgs" || key === "input.devices") {
+    return Array.isArray(extra)
+      ? [...(Array.isArray(base) ? base : []), ...extra]
+      : extra
+  }
+  if (key === "environment") {
+    return isPlainPolicyObject(extra)
+      ? { ...(isPlainPolicyObject(base) ? base : {}), ...extra }
+      : extra
+  }
+  if (isPlainPolicyObject(base) && isPlainPolicyObject(extra)) {
+    const merged: Record<string, unknown> = { ...base }
+    for (const [childKey, childValue] of Object.entries(extra)) {
+      merged[childKey] = mergeMoonlightValue(merged[childKey], childValue, [
+        ...path,
+        childKey,
+      ])
+    }
+    return merged
+  }
+  return extra
+}
+
+/** Deep-merge two Moonlight policies; input.devices/extraArgs concat, scalars last-win. */
+const foldMoonlight = (
+  base: MoonlightPolicy | undefined,
+  extra: MoonlightPolicy,
+): MoonlightPolicy =>
+  mergeMoonlightValue(base ?? {}, extra, []) as MoonlightPolicy
+
 // ────────────────────────────────────────────────────────────────────
 // Skeleton pass — resolve launcher
 // ────────────────────────────────────────────────────────────────────
@@ -977,10 +1051,10 @@ const truncateChain = (
   return chain
 }
 
-export const resolveLocalLauncherGamescopePolicy = (
+export const resolveLocalLauncherPolicy = (
   snap: ConfigSnapshot,
-  inputs: ResolveLocalLauncherGamescopePolicyInputs,
-): GamescopePolicy => {
+  inputs: ResolveLocalLauncherPolicyInputs,
+): ResolvedLocalLauncherPolicy => {
   const layers: InheritableView[] = [
     viewOfGlobal(snap.global),
     viewOfLauncher(snap.launchers.get(inputs.launcherId)),
@@ -988,8 +1062,16 @@ export const resolveLocalLauncherGamescopePolicy = (
   if (inputs.override) layers.push(viewOfOverride(inputs.override))
 
   const folded = foldLayers(layers, inputs.launcherId)
-  return normalizeGamescopePolicy(folded.gamescope)
+  return {
+    gamescope: normalizeGamescopePolicy(folded.gamescope),
+    ...(folded.moonlight ? { moonlight: folded.moonlight } : {}),
+  }
 }
+
+export const resolveLocalLauncherGamescopePolicy = (
+  snap: ConfigSnapshot,
+  inputs: ResolveLocalLauncherGamescopePolicyInputs,
+): GamescopePolicy => resolveLocalLauncherPolicy(snap, inputs).gamescope
 
 export const enumerateApplicablePresets = (
   snap: ConfigSnapshot,
@@ -1169,6 +1251,7 @@ export const resolveLaunchContext = (
         appRecord?.settings,
       ),
       gamescope: appRecord?.gamescope,
+      moonlight: appRecord?.moonlight,
       env: appRecord?.env,
       cwd: appRecord?.cwd,
       argsAppend: appRecord?.argsAppend,
@@ -1234,6 +1317,7 @@ export const resolveLaunchContext = (
         : {}),
       ...(core !== undefined ? { core } : {}),
       gamescope: normalizeGamescopePolicy(folded.gamescope),
+      ...(folded.moonlight ? { moonlight: folded.moonlight } : {}),
       ...(folded.settings ? { settings: folded.settings } : {}),
       ...(folded.env ? { env: folded.env } : {}),
       ...(folded.cwd !== undefined ? { cwd: folded.cwd } : {}),
@@ -1305,6 +1389,7 @@ interface ReadableOverride {
   readonly app?: string
   readonly runtime?: string
   readonly gamescope?: GamescopePolicy
+  readonly moonlight?: MoonlightPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
@@ -1323,6 +1408,7 @@ interface ReadableLayerView {
   readonly app?: string
   readonly runtime?: string
   readonly gamescope?: GamescopePolicy
+  readonly moonlight?: MoonlightPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
@@ -1335,6 +1421,7 @@ const readableViewOfUser = (user: UserRecord | undefined): ReadableLayerView =>
         app: user.launch?.app ?? user.launcher,
         runtime: user.launch?.module,
         gamescope: user.gamescope,
+        moonlight: user.moonlight,
         env: user.env,
         cwd: user.cwd,
         argsAppend: user.argsAppend,
@@ -1350,6 +1437,7 @@ const readableViewOfSystem = (
         app: system.launch?.app ?? system.launcher,
         runtime: system.launch?.module,
         gamescope: system.gamescope,
+        moonlight: system.moonlight,
         env: system.env,
         cwd: system.cwd,
         argsAppend: system.argsAppend,
@@ -1365,6 +1453,7 @@ const readableViewOfSource = (
         app: source.app,
         runtime: source.runtime,
         gamescope: source.gamescope,
+        moonlight: source.moonlight,
         env: source.env,
         cwd: source.cwd,
         argsAppend: source.argsAppend,
@@ -1376,6 +1465,7 @@ const readableViewOfApp = (app: AppRecord | undefined): ReadableLayerView =>
   app
     ? {
         gamescope: app.gamescope,
+        moonlight: app.moonlight,
         env: app.env,
         cwd: app.cwd,
         argsAppend: app.argsAppend,
@@ -1409,6 +1499,7 @@ const resolveReadableAppRecord = (
     policy: override?.policy ?? builtIn.policy,
     settings: override?.settings ?? builtIn.settings,
     gamescope: override?.gamescope ?? builtIn.gamescope,
+    moonlight: override?.moonlight ?? builtIn.moonlight,
     env: override?.env ?? builtIn.env,
     cwd: override?.cwd ?? builtIn.cwd,
     argsAppend: override?.argsAppend ?? builtIn.argsAppend,
@@ -1424,6 +1515,7 @@ const readableViewOfRuntime = (
   runtime
     ? {
         gamescope: runtime.gamescope,
+        moonlight: runtime.moonlight,
         env: runtime.env,
         cwd: runtime.cwd,
         argsAppend: runtime.argsAppend,
@@ -1435,6 +1527,7 @@ const readableViewOfLibraryItem = (
   item: LibraryItemRecord,
 ): ReadableLayerView => ({
   gamescope: item.gamescope,
+  moonlight: item.moonlight,
   env: item.env,
   cwd: item.cwd,
   argsAppend: item.argsAppend,
@@ -1443,6 +1536,7 @@ const readableViewOfLibraryItem = (
 
 const readableViewOfContained = (entry: PlayableEntry): ReadableLayerView => ({
   gamescope: entry.contained?.gamescope,
+  moonlight: entry.contained?.moonlight,
   env: entry.contained?.env,
   cwd: entry.contained?.cwd,
   argsAppend: entry.contained?.argsAppend,
@@ -1455,6 +1549,7 @@ const readableViewOfRelease = (
   app: release.app,
   runtime: release.runtime,
   gamescope: release.gamescope,
+  moonlight: release.moonlight,
   env: release.env,
   cwd: release.cwd,
   argsAppend: release.argsAppend,
@@ -1469,6 +1564,7 @@ const readableViewOfProfile = (
         app: profile.app,
         runtime: profile.runtime,
         gamescope: profile.gamescope,
+        moonlight: profile.moonlight,
         env: profile.env,
         cwd: profile.cwd,
         argsAppend: profile.argsAppend,
@@ -1482,6 +1578,7 @@ const mergeReadableLayers = (
   let app: string | undefined
   let runtime: string | undefined
   let gamescope: GamescopePolicy | undefined
+  let moonlight: MoonlightPolicy | undefined
   let env: Record<string, string> | undefined
   let cwd: string | undefined
   let argsAppend: string[] | undefined
@@ -1493,6 +1590,9 @@ const mergeReadableLayers = (
     if (layer.gamescope !== undefined) {
       gamescope = foldGamescope(gamescope, layer.gamescope)
     }
+    if (layer.moonlight !== undefined) {
+      moonlight = foldMoonlight(moonlight, layer.moonlight)
+    }
     if (layer.env !== undefined) env = { ...(env ?? {}), ...layer.env }
     if (layer.cwd !== undefined) cwd = layer.cwd
     if (layer.argsAppend !== undefined) {
@@ -1503,7 +1603,7 @@ const mergeReadableLayers = (
     }
   }
 
-  return { app, runtime, gamescope, env, cwd, argsAppend, patches }
+  return { app, runtime, gamescope, moonlight, env, cwd, argsAppend, patches }
 }
 
 const selectReadableRelease = (
@@ -1530,6 +1630,22 @@ const selectReadableRelease = (
           releaseIds: selected.launchableReleaseIds,
         }),
       )
+  }
+}
+
+export const resolveReadableLocalLauncherPolicy = (
+  snapshot: ReadableConfigSnapshot,
+  inputs: ResolveReadableLocalLauncherPolicyInputs,
+): ResolvedLocalLauncherPolicy => {
+  const app = resolveReadableAppRecord(inputs.launcherId, snapshot.apps)
+  const folded = mergeReadableLayers([
+    snapshot.host ?? {},
+    readableViewOfApp(app),
+    inputs.override ?? {},
+  ])
+  return {
+    gamescope: normalizeGamescopePolicy(folded.gamescope),
+    ...(folded.moonlight ? { moonlight: folded.moonlight } : {}),
   }
 }
 
@@ -1670,6 +1786,7 @@ export const resolveReadableLaunchContext = (
       ...(runtime ? { runtime } : {}),
       ...(resolvedTarget.content ? { content: resolvedTarget.content } : {}),
       gamescope: normalizeGamescopePolicy(folded.gamescope),
+      ...(folded.moonlight ? { moonlight: folded.moonlight } : {}),
       ...(folded.env ? { env: folded.env } : {}),
       ...(folded.cwd !== undefined ? { cwd: folded.cwd } : {}),
       ...(folded.argsAppend ? { argsAppend: folded.argsAppend } : {}),

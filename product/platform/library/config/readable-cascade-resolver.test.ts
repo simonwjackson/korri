@@ -24,6 +24,12 @@ const host: HostRecord = {
     environment: { OUTER_ONLY: "host", OUTER_UNSET: "1" },
     display: { output: { width: 640 } },
   },
+  moonlight: {
+    environment: { ML_KEEP: "host", ML_UNSET: "1" },
+    input: { devices: ["/dev/input/event-host"] },
+    stream: { resolution: { width: 1280 } },
+    extraArgs: ["host"],
+  },
 }
 const user: UserRecord = {
   id: "simon",
@@ -32,10 +38,16 @@ const user: UserRecord = {
     app: { environment: { WAYLAND_DISPLAY: "wayland-1" } },
     display: { output: { height: 480 } },
   },
+  moonlight: {
+    input: { devices: ["/dev/input/event-user"] },
+    stream: { resolution: { height: 720 } },
+    extraArgs: ["user"],
+  },
 }
 const system: SystemRecord = {
   id: "genesis",
   gamescope: { extraArgs: ["system"], display: { nested: { width: 320 } } },
+  moonlight: { extraArgs: ["system"], window: { autoResize: true } },
 }
 const source: SourceRecord = {
   id: "roms",
@@ -44,6 +56,7 @@ const source: SourceRecord = {
   app: "retroarch",
   runtime: "genesis-plus-gx",
   gamescope: { extraArgs: ["source"], display: { nested: { height: 240 } } },
+  moonlight: { extraArgs: ["source"], platform: { name: "v4l2m2m" } },
 }
 const app: AppRecord = {
   id: "retroarch",
@@ -51,18 +64,25 @@ const app: AppRecord = {
   args: ["-L", "{runtime.path}", "{content.path}"],
   systems: ["genesis"],
   gamescope: { extraArgs: ["app"], backend: { allowDeferred: true } },
+  moonlight: { extraArgs: ["app"], logging: { verbose: true } },
 }
 const runtime: RuntimeRecord = {
   id: "genesis-plus-gx",
   kind: "libretro-core",
   path: "/cores/genesis_plus_gx.so",
   gamescope: { extraArgs: ["runtime"], scaling: { filter: "fsr" } },
+  moonlight: { extraArgs: ["runtime"], stream: { fps: 60 } },
 }
 const profile: ProfileRecord = {
   id: "handheld",
   gamescope: {
     extraArgs: ["profile"],
     app: { environment: { WAYLAND_DISPLAY: null } },
+  },
+  moonlight: {
+    environment: { ML_UNSET: null },
+    extraArgs: ["profile"],
+    window: { autoResize: false },
   },
   env: { SCALE: "profile" },
 }
@@ -71,12 +91,14 @@ const sonic: LibraryItemRecord = {
   id: "sonic-the-hedgehog",
   source: "roms",
   gamescope: { extraArgs: ["item"] },
+  moonlight: { extraArgs: ["item"] },
   releases: [
     {
       id: "genesis",
       system: "genesis",
       target: "genesis/Sonic.md",
       gamescope: { extraArgs: ["release"] },
+      moonlight: { extraArgs: ["release"] },
     },
   ],
 }
@@ -125,6 +147,7 @@ describe("resolveReadableLaunchContext", () => {
             extraArgs: ["override"],
             environment: { OUTER_UNSET: null },
           },
+          moonlight: { extraArgs: ["override"] },
         },
       }),
     )
@@ -165,6 +188,26 @@ describe("resolveReadableLaunchContext", () => {
       "profile",
       "override",
     ])
+    expect(context.moonlight).toMatchObject({
+      environment: { ML_KEEP: "host", ML_UNSET: null },
+      platform: { name: "v4l2m2m" },
+      logging: { verbose: true },
+      stream: { resolution: { width: 1280, height: 720 }, fps: 60 },
+      input: { devices: ["/dev/input/event-host", "/dev/input/event-user"] },
+      window: { autoResize: false },
+      extraArgs: [
+        "host",
+        "user",
+        "system",
+        "source",
+        "app",
+        "runtime",
+        "item",
+        "release",
+        "profile",
+        "override",
+      ],
+    })
     expect(context.env?.SCALE).toBe("override")
   })
 
