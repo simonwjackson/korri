@@ -10,8 +10,10 @@ import {
   discoverStreamHosts,
   type StreamHostCandidate,
 } from "./lan-stream-discovery"
+import { resolveCliMoonlightLaunchPolicy } from "./moonlight-launch-policy"
 import {
   launchMoonlight,
+  type MoonlightLaunchOptions,
   type MoonlightLaunchResult,
 } from "./moonlight-launcher"
 import {
@@ -38,9 +40,9 @@ export interface RunSourceAwarePlayCommandOptions {
   readonly clientForHost?: (
     host: StreamHostCandidate,
   ) => RemoteStreamControlClient
-  readonly launchMoonlight?: (options: {
-    readonly host?: string
-  }) => Promise<MoonlightLaunchResult>
+  readonly launchMoonlight?: (
+    options: MoonlightLaunchOptions,
+  ) => Promise<MoonlightLaunchResult>
   readonly output?: (line: string) => void
   readonly errorOutput?: (line: string) => void
 }
@@ -181,8 +183,16 @@ async function runRemoteEntry(
     `Prepared ${entry.game.displayName} from ${entry.source.name} for Korri Stream.`,
   )
   options.output("Attempting to open Moonlight locally...")
+  const localPolicy = await resolveCliMoonlightLaunchPolicy(
+    options.librarySource,
+  )
+  if (localPolicy.status === "failed") {
+    options.errorOutput(localPolicy.message)
+    return 6
+  }
   const moonlight = await (options.launchMoonlight ?? launchMoonlight)({
     host: entry.source.host.id,
+    ...localPolicy.options,
   })
   if (moonlight.status === "started") {
     options.output(`Moonlight launch attempted via ${moonlight.command}.`)

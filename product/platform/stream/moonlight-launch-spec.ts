@@ -36,14 +36,11 @@ export function composeMoonlightStreamLaunchSpec(
     {
       command: policy.command ?? DEFAULT_MOONLIGHT_COMMAND,
       args: renderMoonlightArgs(policy, options.facts),
-      ...(options.facts.environment
-        ? { env: { ...options.facts.environment } }
-        : {}),
     },
     policy.environment,
   )
 
-  return base
+  return applyEnvironmentOverlay(base, options.facts.environment)
 }
 
 export function composeMoonlightGamescopeLaunchSpec(
@@ -168,8 +165,8 @@ function applyEnvironmentOverlay(
 
   return {
     ...spec,
-    ...(Object.keys(env).length > 0 ? { env } : {}),
-    ...(envUnset.size > 0 ? { envUnset: [...envUnset].sort() } : {}),
+    env: Object.keys(env).length > 0 ? env : undefined,
+    envUnset: envUnset.size > 0 ? [...envUnset].sort() : undefined,
   }
 }
 

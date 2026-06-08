@@ -147,7 +147,7 @@ describe("resolveReadableLaunchContext", () => {
             extraArgs: ["override"],
             environment: { OUTER_UNSET: null },
           },
-          moonlight: { extraArgs: ["override"] },
+          moonlight: { stream: { fps: 30 } },
         },
       }),
     )
@@ -192,7 +192,7 @@ describe("resolveReadableLaunchContext", () => {
       environment: { ML_KEEP: "host", ML_UNSET: null },
       platform: { name: "v4l2m2m" },
       logging: { verbose: true },
-      stream: { resolution: { width: 1280, height: 720 }, fps: 60 },
+      stream: { resolution: { width: 1280, height: 720 }, fps: 30 },
       input: { devices: ["/dev/input/event-host", "/dev/input/event-user"] },
       window: { autoResize: false },
       extraArgs: [
@@ -205,7 +205,6 @@ describe("resolveReadableLaunchContext", () => {
         "item",
         "release",
         "profile",
-        "override",
       ],
     })
     expect(context.env?.SCALE).toBe("override")

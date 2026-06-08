@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import type { GameRecord } from "@platform/fixtures/games/game"
+import type { LibrarySourceService } from "@platform/library/library-services"
+import { Effect } from "effect"
 import type { StreamHostCandidate } from "./lan-stream-discovery"
 import type { RemoteStreamControlClient } from "./remote-stream-control-client"
 import { runRemoteStreamLaunchCommand } from "./remote-stream-launch"
@@ -27,9 +29,12 @@ describe("remote stream launch command", () => {
       discoverHosts: async () => [host],
       clientForHost: () => client({ games: [game], prepared }),
       gamePicker: async games => games[0],
+      librarySource: localSource(),
       stdinIsTty: true,
       launchMoonlight: async moonlightOptions => {
         expect(moonlightOptions.host).toBe("aka")
+        expect(moonlightOptions.moonlight?.platform?.name).toBe("sdl")
+        expect(moonlightOptions.gamescope?.enable).toBe(false)
         return { status: "started", command: "moonlight" }
       },
       output: line => lines.push(line),
@@ -124,6 +129,20 @@ describe("remote stream launch command", () => {
     expect(errors.join("\n")).toContain("No streamable Korri hosts")
   })
 })
+
+function localSource(): LibrarySourceService {
+  return {
+    list: () => Effect.succeed([]),
+    launchSpecFor: () => Effect.succeed(undefined),
+    resolveLaunchForGame: () =>
+      Effect.succeed({ spec: { command: "true", args: [] } }),
+    resolveLocalLauncherPolicy: () =>
+      Effect.succeed({
+        gamescope: { enable: false },
+        moonlight: { platform: { name: "sdl" } },
+      }),
+  }
+}
 
 function client(options: {
   readonly games: readonly GameRecord[]

@@ -129,6 +129,36 @@ describe("composeMoonlightStreamLaunchSpec", () => {
     ).toThrow(/host/)
   })
 
+  it("lets runtime facts win over policy env overlays for control keys", () => {
+    const spec = composeMoonlightStreamLaunchSpec({
+      facts: {
+        host: "aka.local",
+        environment: { MOONLIGHT_LOCAL_CONTROL_SOCKET: "/run/live.sock" },
+      },
+      policy: {
+        environment: {
+          MOONLIGHT_LOCAL_CONTROL_SOCKET: null,
+          OLD_STATE: null,
+        },
+      },
+    })
+
+    expect(spec.env).toEqual({
+      MOONLIGHT_LOCAL_CONTROL_SOCKET: "/run/live.sock",
+    })
+    expect(spec.envUnset).toEqual(["OLD_STATE"])
+  })
+
+  it("clears env when policy unsets every inherited env key", () => {
+    const spec = composeMoonlightStreamLaunchSpec({
+      facts: { host: "aka.local" },
+      policy: { environment: { OLD_STATE: null } },
+    })
+
+    expect(spec.env).toBeUndefined()
+    expect(spec.envUnset).toEqual(["OLD_STATE"])
+  })
+
   it("rejects a single resolution dimension", () => {
     expect(() =>
       composeMoonlightStreamLaunchSpec({

@@ -16,12 +16,18 @@ describe("EphemeralOverride", () => {
   it("decodes inheritable behavior contributions", () => {
     const override = decodeEphemeralOverride({
       gamescope: { enable: true, extraArgs: ["-F", "fsr"] },
+      moonlight: {
+        stream: { fps: 60 },
+        platform: { name: "sdl" },
+        control: { enable: true, authority: "controller" },
+      },
       env: { SDL_VIDEODRIVER: "wayland" },
       cwd: "/storage/roms",
       argsAppend: ["--debug"],
       patches: ["/patches/override.ips"],
     })
     expect(override.gamescope?.enable).toBe(true)
+    expect(override.moonlight?.platform?.name).toBe("sdl")
     expect(override.env?.SDL_VIDEODRIVER).toBe("wayland")
     expect(override.patches).toEqual(["/patches/override.ips"])
   })
@@ -56,6 +62,28 @@ describe("EphemeralOverride", () => {
 
   it("rejects 'presets' (overrides don't carry nested presets)", () => {
     expect(() => decodeEphemeralOverride({ presets: { x: {} } })).toThrow()
+  })
+
+  it("rejects Moonlight process and shell surfaces in runtime overrides", () => {
+    for (const moonlight of [
+      { command: "/bin/moonlight" },
+      { environment: { LD_PRELOAD: "/tmp/inject.so" } },
+      { extraArgs: ["-unsafe"] },
+      { stream: { keyDir: "/tmp/keys" } },
+      { control: { allowRootPeers: true } },
+    ]) {
+      expect(() => decodeEphemeralOverride({ moonlight })).toThrow()
+    }
+  })
+
+  it("rejects unsafe Moonlight surfaces inside byLauncher overrides", () => {
+    expect(() =>
+      decodeEphemeralOverride({
+        byLauncher: {
+          moonlight: { moonlight: { command: "/bin/moonlight" } },
+        },
+      }),
+    ).toThrow()
   })
 
   it("rejects an unknown key (typo)", () => {

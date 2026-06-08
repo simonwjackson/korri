@@ -58,9 +58,11 @@ const streamRemoteLaunchCommand = Command.make(
   },
   ({ host }) =>
     Effect.gen(function* () {
+      const librarySource = yield* LibrarySource
       const exitCode = yield* Effect.promise(() =>
         runRemoteStreamLaunchCommand({
           host: Option.getOrUndefined(host),
+          librarySource,
           gamePicker: createEffectGamePicker(),
           stdinIsTty: process.stdin.isTTY === true,
         }),

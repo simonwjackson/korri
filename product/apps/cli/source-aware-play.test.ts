@@ -89,6 +89,8 @@ describe("source-aware play command", () => {
       stdinIsTty: true,
       launchMoonlight: async moonlightOptions => {
         expect(moonlightOptions.host).toBe("aka")
+        expect(moonlightOptions.moonlight?.platform?.name).toBe("sdl")
+        expect(moonlightOptions.gamescope?.enable).toBe(false)
         return { status: "started", command: "moonlight" }
       },
       output: line => lines.push(line),
@@ -165,6 +167,11 @@ function localSource(
               message: "no spec configured",
             }),
           ),
+    resolveLocalLauncherPolicy: () =>
+      Effect.succeed({
+        gamescope: { enable: false },
+        moonlight: { platform: { name: "sdl" } },
+      }),
   }
 }
 

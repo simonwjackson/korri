@@ -260,17 +260,18 @@ describe("createLibraryRepository — readable playable entries", () => {
 
       const policy = await Effect.runPromise(
         repo.resolveLocalLauncherPolicy("moonlight", {
-          override: { moonlight: { environment: { UNSET_ME: null } } },
+          override: { moonlight: { stream: { fps: 30 } } },
         }),
       )
 
       expect(policy.gamescope.extraArgs).toEqual(["--expose-wayland"])
       expect(policy.moonlight).toEqual({
-        environment: { FROM_HOST: "1", UNSET_ME: null },
+        environment: { FROM_HOST: "1", UNSET_ME: "1" },
         platform: { name: "v4l2m2m" },
         input: {
           devices: ["/dev/input/event-host", "/dev/input/event-app"],
         },
+        stream: { fps: 30 },
         extraArgs: ["host", "app"],
       })
     })
