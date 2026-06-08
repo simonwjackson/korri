@@ -22,6 +22,11 @@
  *                         → list concat in inheritance order
  * - `moonlight.environment`
  *                         → map merge; `null` means executable env unset
+ * - `retroarch`          → deep merge per nested key; scalars last-wins
+ * - `retroarch.environment` / `retroarch.extraSettings`
+ *                         → map merge; environment `null` means env unset
+ * - `retroarch.extraArgs` / `retroarch.configFile.append`
+ *                         → list concat in inheritance order
  * - `env`                → map merge per key; more-specific wins
  * - `cwd`                → scalar; most-specific path wins
  * - `argsAppend`         → list concat in inheritance order
@@ -30,6 +35,8 @@
  */
 
 import { Schema } from "effect"
+
+import { LaunchSettings } from "./launch-block"
 
 const STRICT = { onExcessProperty: "error" } as const
 
@@ -447,6 +454,91 @@ export const MoonlightPolicy = Schema.Struct({
 })
 export type MoonlightPolicy = Schema.Schema.Type<typeof MoonlightPolicy>
 
+export const RetroArchAspectRatio = Schema.Literals(["core-provided"])
+export type RetroArchAspectRatio = Schema.Schema.Type<
+  typeof RetroArchAspectRatio
+>
+
+export const RetroArchMenuToggleGamepadCombo = Schema.Literals(["start-select"])
+export type RetroArchMenuToggleGamepadCombo = Schema.Schema.Type<
+  typeof RetroArchMenuToggleGamepadCombo
+>
+
+const RetroArchConfigFilePolicy = Schema.Struct({
+  mode: Schema.optional(Schema.Literal("generated")),
+  append: Schema.optional(Schema.Array(NonEmptyString("configFile.append[]"))),
+})
+
+const RetroArchPathPolicy = Schema.Struct({
+  path: Schema.optional(NonEmptyString("path")),
+})
+
+const RetroArchLoggingPolicy = Schema.Struct({
+  verbose: Schema.optional(Schema.Boolean),
+  logFile: Schema.optional(NullableNonEmptyString("logging.logFile")),
+})
+
+const RetroArchLifecyclePolicy = Schema.Struct({
+  saveOnExit: Schema.optional(Schema.Boolean),
+  autoOverrides: Schema.optional(Schema.Boolean),
+  autoRemaps: Schema.optional(Schema.Boolean),
+  gameSpecificOptions: Schema.optional(Schema.Boolean),
+  autoShaders: Schema.optional(Schema.Boolean),
+})
+
+const RetroArchPathsPolicy = Schema.Struct({
+  systemDirectory: Schema.optional(NonEmptyString("paths.systemDirectory")),
+  savefileDirectory: Schema.optional(NonEmptyString("paths.savefileDirectory")),
+  savestateDirectory: Schema.optional(
+    NonEmptyString("paths.savestateDirectory"),
+  ),
+  screenshotDirectory: Schema.optional(
+    NonEmptyString("paths.screenshotDirectory"),
+  ),
+})
+
+const RetroArchVideoPolicy = Schema.Struct({
+  fullscreen: Schema.optional(Schema.Boolean),
+  windowedFullscreen: Schema.optional(Schema.Boolean),
+  vsync: Schema.optional(Schema.Boolean),
+  aspectRatio: Schema.optional(RetroArchAspectRatio),
+})
+
+const RetroArchAudioPolicy = Schema.Struct({
+  enable: Schema.optional(Schema.Boolean),
+  latencyMs: Schema.optional(NonNegativeNumber("audio.latencyMs")),
+})
+
+const RetroArchInputPolicy = Schema.Struct({
+  autodetect: Schema.optional(Schema.Boolean),
+  maxUsers: Schema.optional(PositiveInteger("input.maxUsers")),
+  menuToggleGamepadCombo: Schema.optional(RetroArchMenuToggleGamepadCombo),
+})
+
+/**
+ * Minimal typed RetroArch v1 launch/config policy. Generated mode is the only
+ * supported config-file mode in v1; user-authored config paths/default mode are
+ * intentionally omitted so strict decode rejects them.
+ */
+export const RetroArchPolicy = Schema.Struct({
+  environment: Schema.optional(EnvironmentOverlay),
+  configFile: Schema.optional(RetroArchConfigFilePolicy),
+  core: Schema.optional(RetroArchPathPolicy),
+  content: Schema.optional(RetroArchPathPolicy),
+  logging: Schema.optional(RetroArchLoggingPolicy),
+  lifecycle: Schema.optional(RetroArchLifecyclePolicy),
+  paths: Schema.optional(RetroArchPathsPolicy),
+  video: Schema.optional(RetroArchVideoPolicy),
+  audio: Schema.optional(RetroArchAudioPolicy),
+  input: Schema.optional(RetroArchInputPolicy),
+  extraSettings: Schema.optional(LaunchSettings),
+  extraArgs: Schema.optional(Schema.Array(Schema.String)),
+})
+export type RetroArchPolicy = Schema.Schema.Type<typeof RetroArchPolicy>
+
+export const decodeRetroArchPolicy = (input: unknown): RetroArchPolicy =>
+  Schema.decodeUnknownSync(RetroArchPolicy)(input, STRICT)
+
 /**
  * Floor of the gamescope policy cascade. Production deployments run
  * gamescope nested under a parent Wayland compositor (sway on kiosks,
@@ -498,6 +590,7 @@ export const normalizeGamescopePolicy = (
 export const InheritableLayer = Schema.Struct({
   gamescope: Schema.optional(GamescopePolicy),
   moonlight: Schema.optional(MoonlightPolicy),
+  retroarch: Schema.optional(RetroArchPolicy),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   cwd: Schema.optional(Schema.String),
   argsAppend: Schema.optional(Schema.Array(Schema.String)),

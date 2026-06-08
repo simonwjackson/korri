@@ -19,6 +19,10 @@ let
       message = "retroarch-bare must record the xz/liblzma package that enables XDelta";
       assertion = (pkg.passthru.xdeltaLzmaPackage or null) == pkgs.xz;
     }
+    {
+      message = "typed Korri launches must use bare RetroArch, not a core-preselecting wrapper";
+      assertion = !((pkg.passthru or { }) ? cores);
+    }
   ];
   failures = builtins.filter (candidate: !candidate.assertion) staticChecks;
 in
@@ -33,6 +37,7 @@ else
     retroarch --help > "$out/retroarch-help.txt"
     grep -- '--xdelta' "$out/retroarch-help.txt" > /dev/null
     cat > "$out/summary.txt" <<'EOF'
-    RetroArch exposes --xdelta and the package advertises XDelta patch support.
+    RetroArch exposes --xdelta, advertises XDelta patch support, and remains
+    the bare package shape that lets Korri own -c/-L/--appendconfig argv.
     EOF
   ''

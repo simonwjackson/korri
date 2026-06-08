@@ -172,7 +172,12 @@ describe("createProseqlLibrarySource", () => {
               const repo = createLibraryRepository(db)
               yield* repo.upsertSystem({
                 id: "gba",
-                launcher: "retroarch",
+                launch: { app: "retroarch", module: "mgba" },
+              })
+              yield* repo.upsertRuntime({
+                id: "mgba",
+                kind: "libretro-core",
+                path: "/cores/mgba_libretro.so",
               })
               yield* repo.upsertLauncher({
                 id: "retroarch",
@@ -194,8 +199,14 @@ describe("createProseqlLibrarySource", () => {
           ),
         )
 
-        expect(result.spec.args[0]).toBe(rom)
-        expect(result.artifacts).toBeUndefined()
+        expect(result.spec.args).toEqual([
+          "-c",
+          expect.stringMatching(/retroarch\.cfg$/),
+          "-L",
+          "/cores/mgba_libretro.so",
+          expect.stringMatching(/game\.gba$/),
+        ])
+        expect(result.artifacts?.paths.configPath).toBe(result.spec.args[1])
       } finally {
         setEnv("KORRI_LAUNCH_ARTIFACTS_DIR", previous.artifacts)
         setEnv("XDG_DATA_HOME", previous.data)

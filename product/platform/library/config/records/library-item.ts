@@ -56,6 +56,7 @@ export const LibraryReleasePayload = Schema.Struct({
 
   gamescope: InheritableLayer.fields.gamescope,
   moonlight: InheritableLayer.fields.moonlight,
+  retroarch: InheritableLayer.fields.retroarch,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
@@ -105,6 +106,7 @@ export const ContainedPlayablePayload = Schema.Struct({
 
   gamescope: InheritableLayer.fields.gamescope,
   moonlight: InheritableLayer.fields.moonlight,
+  retroarch: InheritableLayer.fields.retroarch,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
@@ -143,6 +145,7 @@ export const LibraryItemPayload = Schema.Struct({
 
   gamescope: InheritableLayer.fields.gamescope,
   moonlight: InheritableLayer.fields.moonlight,
+  retroarch: InheritableLayer.fields.retroarch,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,

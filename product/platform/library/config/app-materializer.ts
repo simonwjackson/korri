@@ -18,6 +18,11 @@ import {
   type XdgPathEnv,
 } from "@platform/config/xdg-paths"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
+import type { LaunchSpec } from "@platform/library/launcher"
+import {
+  composeRetroArchLaunchSpec,
+  renderRetroArchConfig,
+} from "@platform/stream/retroarch-launch-spec"
 import { Effect } from "effect"
 import type { AppDescriptor } from "./app-integrations"
 import {
@@ -31,9 +36,14 @@ import {
   supportedPatchFormatForPath,
   UnsupportedPatchExtension,
 } from "./errors"
+import type { RetroArchPolicy } from "./inheritable-fields"
 import type { LaunchSettings, LaunchSettingValue } from "./launch-block"
+import { isRetroArchAppRecord } from "./records/app"
 import type { LauncherRecord } from "./records/launcher"
-import type { ResolvedLaunchContext } from "./resolved-launch-context"
+import type {
+  ReadableResolvedLaunchContext,
+  ResolvedLaunchContext,
+} from "./resolved-launch-context"
 
 const LAUNCH_ARTIFACTS_DIR_ENV = "KORRI_LAUNCH_ARTIFACTS_DIR" as const
 const MATERIALIZER_PLACEHOLDER_PATTERN =
@@ -47,6 +57,41 @@ export interface MaterializedAppLaunch {
   readonly context: ResolvedLaunchContext
   readonly artifacts?: MaterializedLaunchArtifacts
 }
+
+export interface MaterializedReadableLaunch {
+  readonly spec: LaunchSpec
+  readonly context: ReadableResolvedLaunchContext
+  readonly artifacts?: MaterializedLaunchArtifacts
+}
+
+export const materializeReadableRetroArchLaunch = (input: {
+  readonly context: ReadableResolvedLaunchContext
+  readonly artifactsRoot?: string
+  readonly now?: Date
+  readonly env?: XdgPathEnv
+}): Effect.Effect<MaterializedReadableLaunch, ResolutionError> =>
+  Effect.gen(function* () {
+    if (!isRetroArchAppRecord(input.context.app)) {
+      return yield* Effect.fail(
+        new AppMaterializationFailed({
+          appId: input.context.app.id,
+          reason: "typed RetroArch materialization requires kind: retroarch",
+        }),
+      )
+    }
+
+    const root = yield* resolveArtifactsRoot(
+      {
+        app: { id: input.context.app.id },
+        artifactsRoot: input.artifactsRoot,
+        env: input.env,
+      },
+      true,
+    )
+    yield* evictStaleArtifacts(root, input.now ?? new Date())
+    const artifactRoot = yield* createReadableArtifactRoot(input, root)
+    return yield* materializeReadableWithPartialCleanup(input, artifactRoot)
+  })
 
 export const materializeAppLaunch = (input: {
   readonly app: AppDescriptor
@@ -120,11 +165,39 @@ const createArtifactRoot = (
   })
 }
 
+const createReadableArtifactRoot = (
+  input: Parameters<typeof materializeReadableRetroArchLaunch>[0],
+  root: string,
+): Effect.Effect<string, ResolutionError> => {
+  const artifactRoot = join(
+    root,
+    `${artifactSafeGameId(input.context.playableId)}-${randomUUID()}`,
+  )
+  return tryMaterialize(input.context.app.id, async () => {
+    await mkdir(artifactRoot, { recursive: true, mode: 0o750 })
+    return artifactRoot
+  })
+}
+
 const materializeWithPartialCleanup = (
   input: Parameters<typeof materializeAppLaunch>[0],
   artifactRoot: string,
 ): Effect.Effect<MaterializedAppLaunch, ResolutionError> =>
   materializeInsideArtifactRoot(input, artifactRoot).pipe(
+    Effect.matchEffect({
+      onSuccess: result => Effect.succeed(result),
+      onFailure: error =>
+        removePartialArtifacts(artifactRoot).pipe(
+          Effect.flatMap(() => Effect.fail(error)),
+        ),
+    }),
+  )
+
+const materializeReadableWithPartialCleanup = (
+  input: Parameters<typeof materializeReadableRetroArchLaunch>[0],
+  artifactRoot: string,
+): Effect.Effect<MaterializedReadableLaunch, ResolutionError> =>
+  materializeReadableInsideArtifactRoot(input, artifactRoot).pipe(
     Effect.matchEffect({
       onSuccess: result => Effect.succeed(result),
       onFailure: error =>
@@ -149,6 +222,71 @@ const materializeInsideArtifactRoot = (
       },
       artifacts: { root: artifactRoot, paths: resources.paths },
     }
+  })
+
+const materializeReadableInsideArtifactRoot = (
+  input: Parameters<typeof materializeReadableRetroArchLaunch>[0],
+  artifactRoot: string,
+): Effect.Effect<MaterializedReadableLaunch, ResolutionError> =>
+  Effect.gen(function* () {
+    const resources = yield* materializeReadableRetroArchResources(
+      input,
+      artifactRoot,
+    )
+    return {
+      spec: resources.spec,
+      context: input.context,
+      artifacts: { root: artifactRoot, paths: resources.paths },
+    }
+  })
+
+interface MaterializedReadableResources {
+  readonly paths: Readonly<Record<string, string>>
+  readonly spec: LaunchSpec
+}
+
+const materializeReadableRetroArchResources = (
+  input: Parameters<typeof materializeReadableRetroArchLaunch>[0],
+  artifactRoot: string,
+): Effect.Effect<MaterializedReadableResources, ResolutionError> =>
+  Effect.gen(function* () {
+    let policy = input.context.retroarch ?? {}
+    let contentPath =
+      policy.content?.path ??
+      input.context.content?.path ??
+      input.context.target
+    const paths: Record<string, string> = {}
+
+    if ((input.context.patches?.length ?? 0) > 0) {
+      const patched = yield* stageReadableRetroarchPatchLaunch({
+        appId: input.context.app.id,
+        artifactRoot,
+        context: input.context,
+        env: input.env ?? process.env,
+        contentPath,
+      })
+      Object.assign(paths, patched.paths)
+      contentPath = patched.contentPath
+      policy = mergeStableRetroArchSettings(policy, patched.settings)
+    }
+
+    const configPath = join(artifactRoot, "retroarch.cfg")
+    yield* writeAtomic(
+      input.context.app.id,
+      configPath,
+      renderRetroArchConfig(policy),
+    )
+    paths.configPath = configPath
+
+    const corePath = policy.core?.path ?? input.context.runtime?.path
+    const spec = yield* tryMaterialize(input.context.app.id, async () =>
+      composeRetroArchLaunchSpec({
+        command: input.context.app.command,
+        policy,
+        facts: { configPath, corePath: corePath ?? "", contentPath },
+      }),
+    )
+    return { paths, spec }
   })
 
 interface MaterializedAppResources {
@@ -278,7 +416,7 @@ interface StagedRetroarchPatchLaunch {
 
 const resolveArtifactsRoot = (
   input: {
-    readonly app: AppDescriptor
+    readonly app: Pick<AppDescriptor, "id">
     readonly artifactsRoot?: string
     readonly env?: XdgPathEnv
   },
@@ -436,23 +574,97 @@ const stageRetroarchPatchLaunch = (input: {
     }
   })
 
+const stageReadableRetroarchPatchLaunch = (input: {
+  readonly appId: string
+  readonly artifactRoot: string
+  readonly context: ReadableResolvedLaunchContext
+  readonly env: XdgPathEnv
+  readonly contentPath: string
+}): Effect.Effect<StagedRetroarchPatchLaunch, ResolutionError> =>
+  Effect.gen(function* () {
+    const stem = contentStem(input.contentPath)
+    if (!stem) {
+      return yield* Effect.fail(
+        new AppMaterializationFailed({
+          appId: input.appId,
+          reason: `patched RetroArch content must have a filename extension: ${input.contentPath}`,
+        }),
+      )
+    }
+    yield* validateReadableRegularContent(input.contentPath)
+    for (const patchPath of input.context.patches ?? []) {
+      yield* validateReadableRegularPatch(patchPath)
+    }
+
+    const stagedContentPath = join(
+      input.artifactRoot,
+      basename(input.contentPath),
+    )
+    yield* createSymlink(input.appId, input.contentPath, stagedContentPath)
+
+    const paths: Record<string, string> = { contentPath: stagedContentPath }
+    for (const [index, patchPath] of (input.context.patches ?? []).entries()) {
+      const extension = patchExtensionForPath(patchPath)
+      if (!extension) {
+        return yield* Effect.fail(
+          new UnsupportedPatchExtension({ path: patchPath, extension }),
+        )
+      }
+      const sidecarPath = join(
+        input.artifactRoot,
+        `${stem}${extension}${index === 0 ? "" : index}`,
+      )
+      yield* createSymlink(input.appId, patchPath, sidecarPath)
+      paths[`patch${index}`] = sidecarPath
+    }
+
+    const settings = yield* stableRetroarchSettingsForIdentity({
+      appId: input.appId,
+      system: input.context.system,
+      contentPath: input.contentPath,
+      env: input.env,
+    })
+    return { contentPath: stagedContentPath, paths, settings }
+  })
+
+const mergeStableRetroArchSettings = (
+  policy: RetroArchPolicy,
+  settings: LaunchSettings,
+): RetroArchPolicy => ({
+  ...policy,
+  extraSettings: { ...settings, ...(policy.extraSettings ?? {}) },
+})
+
 const stableRetroarchSettings = (
   context: ResolvedLaunchContext,
   env: XdgPathEnv,
 ): Effect.Effect<LaunchSettings, ResolutionError> =>
+  stableRetroarchSettingsForIdentity({
+    appId: context.appId ?? context.launcherId,
+    system: context.system,
+    contentPath: context.contentPath ?? "",
+    env,
+  })
+
+const stableRetroarchSettingsForIdentity = (input: {
+  readonly appId: string
+  readonly system: string
+  readonly contentPath: string
+  readonly env: XdgPathEnv
+}): Effect.Effect<LaunchSettings, ResolutionError> =>
   Effect.tryPromise({
     try: async () => {
-      const identity = stableRetroarchIdentity(context)
-      const systemSegment = encodeURIComponent(context.system)
+      const identity = stableRetroarchIdentity(input.system, input.contentPath)
+      const systemSegment = encodeURIComponent(input.system)
       const saveDir = korriDataPath(
-        env,
+        input.env,
         "retroarch",
         "v1",
         systemSegment,
         identity,
       )
       const stateDir = korriStatePath(
-        env,
+        input.env,
         "retroarch",
         "v1",
         systemSegment,
@@ -469,17 +681,19 @@ const stableRetroarchSettings = (
     },
     catch: error =>
       new AppMaterializationFailed({
-        appId: context.appId ?? context.launcherId,
+        appId: input.appId,
         reason: error instanceof Error ? error.message : String(error),
       }),
   })
 
-const stableRetroarchIdentity = (context: ResolvedLaunchContext): string => {
-  const declaredContentPath = context.contentPath ?? ""
+const stableRetroarchIdentity = (
+  system: string,
+  contentPath: string,
+): string => {
   const hash = createHash("sha256")
-    .update(`${context.system}\0${declaredContentPath}`)
+    .update(`${system}\0${contentPath}`)
     .digest("hex")
-  const basenamePrefix = basename(declaredContentPath).slice(0, 80)
+  const basenamePrefix = basename(contentPath).slice(0, 80)
   return `${encodeURIComponent(basenamePrefix)}--${hash}`
 }
 

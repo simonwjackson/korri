@@ -137,13 +137,18 @@ describe("validateLauncherConfig", () => {
         gameId: "porklike",
       })
 
+      const generatedConfigArg =
+        result.status === "resolved" ? result.spec.args[1] : undefined
+
       expect(result).toMatchObject({
         status: "resolved",
-        app: { id: "retroarch", integration: "generic-process" },
+        app: { id: "retroarch", integration: "retroarch" },
         module: { id: "fake08", path: "/etc/korri/cores/fake08_libretro.so" },
         spec: {
           command: "retroarch",
           args: [
+            "-c",
+            expect.stringMatching(/retroarch\.cfg$/),
             "-L",
             "/etc/korri/cores/fake08_libretro.so",
             "/storage/roms/pico8/porklike.p8",
@@ -151,7 +156,7 @@ describe("validateLauncherConfig", () => {
         },
       })
       if (result.status === "resolved") {
-        expect(result.artifacts).toBeUndefined()
+        expect(result.artifacts?.paths.configPath).toBe(generatedConfigArg)
       }
     })
   })

@@ -343,6 +343,65 @@ describe("resolveLaunchContext — gamescope policy fold", () => {
   })
 })
 
+describe("resolveLaunchContext — retroarch policy fold", () => {
+  it("folds app, preset, and game RetroArch policy with deterministic merge semantics", () => {
+    const snap = snapshotOf({
+      systems: [
+        system({
+          id: "snes",
+          launcher: "retroarch",
+          presets: {
+            handheld: {
+              retroarch: {
+                configFile: { append: ["/tmp/preset.cfg"] },
+                environment: { RA_UNSET: null },
+                video: { fullscreen: false },
+                extraSettings: { video_font_enable: false },
+                extraArgs: ["preset"],
+              },
+            },
+          },
+        }),
+      ],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      apps: [
+        {
+          id: "retroarch",
+          kind: "retroarch",
+          configFile: { append: ["/tmp/app.cfg"] },
+          environment: { RA_KEEP: "1", RA_UNSET: "1" },
+          video: { fullscreen: true, vsync: true },
+          extraSettings: { video_font_enable: true },
+          extraArgs: ["app"],
+        },
+      ],
+      games: [
+        game({
+          id: "fzero",
+          retroarch: {
+            configFile: { append: ["/tmp/game.cfg"] },
+            extraArgs: ["game"],
+          },
+        }),
+      ],
+    })
+
+    const ctx = run(
+      resolveLaunchContext(snap, { gameId: "fzero", presetId: "handheld" }),
+    )
+
+    expect(ctx.retroarch).toMatchObject({
+      configFile: {
+        append: ["/tmp/app.cfg", "/tmp/game.cfg", "/tmp/preset.cfg"],
+      },
+      environment: { RA_KEEP: "1", RA_UNSET: null },
+      video: { fullscreen: false, vsync: true },
+      extraSettings: { video_font_enable: false },
+      extraArgs: ["app", "game", "preset"],
+    })
+  })
+})
+
 describe("resolveLaunchContext — moonlight policy fold", () => {
   it("deep-merges nested Moonlight objects without replacing sibling fields", () => {
     const snap = snapshotOf({

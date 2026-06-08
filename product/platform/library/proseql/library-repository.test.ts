@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Effect } from "effect"
@@ -132,13 +132,19 @@ async function seedReadableLibrary(root: string) {
           where: { id: "retroarch" },
           create: {
             id: "retroarch",
+            kind: "retroarch",
             command: "retroarch",
-            args: ["-L", "{runtime.path}", "{content.path}"],
+            configFile: { mode: "generated" },
+            lifecycle: { saveOnExit: false },
+            video: { fullscreen: true },
           },
           update: {
             id: "retroarch",
+            kind: "retroarch",
             command: "retroarch",
-            args: ["-L", "{runtime.path}", "{content.path}"],
+            configFile: { mode: "generated" },
+            lifecycle: { saveOnExit: false },
+            video: { fullscreen: true },
           },
         })
         for (const runtime of [
@@ -166,7 +172,9 @@ async function seedReadableLibrary(root: string) {
             update: item,
           })
         }
-        return createLibraryRepository(db)
+        return createLibraryRepository(db, {
+          env: { KORRI_LAUNCH_ARTIFACTS_DIR: join(root, "launch-artifacts") },
+        })
       }),
     ),
   )
@@ -288,11 +296,25 @@ describe("createLibraryRepository — readable playable entries", () => {
 
       expect(resolved.release.id).toBe("genesis")
       expect(resolved.content?.path).toBe("/games/genesis/Sonic.md")
+      expect(resolved.app.integration).toBe("retroarch")
       expect(resolved.spec.args).toEqual([
+        "-c",
+        expect.stringMatching(/retroarch\.cfg$/),
         "-L",
         "/cores/genesis_plus_gx.so",
         "/games/genesis/Sonic.md",
       ])
+      const configPath = resolved.spec.args[1]
+      const artifactConfigPath = resolved.artifacts?.paths.configPath
+      if (configPath === undefined)
+        throw new Error("missing generated config arg")
+      if (artifactConfigPath === undefined) {
+        throw new Error("missing generated config artifact")
+      }
+      expect(configPath).toBe(artifactConfigPath)
+      const config = await readFile(configPath, "utf8")
+      expect(config).toContain('config_save_on_exit = "false"')
+      expect(config).toContain('video_fullscreen = "true"')
     })
   })
 

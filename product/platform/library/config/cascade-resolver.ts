@@ -45,6 +45,7 @@ import {
   type GamescopePolicy,
   type MoonlightPolicy,
   normalizeGamescopePolicy,
+  type RetroArchPolicy,
 } from "./inheritable-fields"
 import type { LaunchBlock, LaunchSettings } from "./launch-block"
 import { mergeLaunchSettings } from "./launch-block"
@@ -55,7 +56,7 @@ import {
   selectLaunchableRelease,
   splitPlayableId,
 } from "./playable-id"
-import type { AppRecord } from "./records/app"
+import { type AppRecord, isRetroArchAppRecord } from "./records/app"
 import type { CollectionRecord } from "./records/collection"
 import type { GameRecord } from "./records/game"
 import type { GlobalConfigRecord } from "./records/global"
@@ -166,6 +167,7 @@ interface InheritableView {
   readonly inherit?: boolean
   readonly gamescope?: GamescopePolicy
   readonly moonlight?: MoonlightPolicy
+  readonly retroarch?: RetroArchPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
@@ -186,6 +188,7 @@ const viewOfGlobal = (g: GlobalConfigRecord | null): InheritableView =>
         settings: g.launch?.settings,
         gamescope: g.gamescope,
         moonlight: g.moonlight,
+        retroarch: g.retroarch,
         env: g.env,
         cwd: g.cwd,
         argsAppend: g.argsAppend,
@@ -204,6 +207,7 @@ const viewOfUser = (u: UserRecord | undefined): InheritableView =>
         inherit: u.inherit,
         gamescope: u.gamescope,
         moonlight: u.moonlight,
+        retroarch: u.retroarch,
         env: u.env,
         cwd: u.cwd,
         argsAppend: u.argsAppend,
@@ -222,6 +226,7 @@ const viewOfSystem = (s: SystemRecord | undefined): InheritableView =>
         inherit: s.inherit,
         gamescope: s.gamescope,
         moonlight: s.moonlight,
+        retroarch: s.retroarch,
         env: s.env,
         cwd: s.cwd,
         argsAppend: s.argsAppend,
@@ -236,6 +241,7 @@ const viewOfLauncher = (l: LauncherRecord | undefined): InheritableView =>
         inherit: l.inherit,
         gamescope: l.gamescope,
         moonlight: l.moonlight,
+        retroarch: l.retroarch,
         env: l.env,
         cwd: l.cwd,
         argsAppend: l.argsAppend,
@@ -252,6 +258,7 @@ const viewOfGame = (g: GameRecord): InheritableView => ({
   inherit: g.inherit,
   gamescope: g.gamescope,
   moonlight: g.moonlight,
+  retroarch: g.retroarch,
   env: g.env,
   cwd: g.cwd,
   argsAppend: g.argsAppend,
@@ -267,6 +274,7 @@ const viewOfPreset = (p: PresetPayload): InheritableView => ({
   inherit: p.inherit,
   gamescope: p.gamescope,
   moonlight: p.moonlight,
+  retroarch: p.retroarch,
   env: p.env,
   cwd: p.cwd,
   argsAppend: p.argsAppend,
@@ -324,6 +332,7 @@ const foldLayers = (
 
   let gamescope: GamescopePolicy | undefined
   let moonlight: MoonlightPolicy | undefined
+  let retroarch: RetroArchPolicy | undefined
   let env: Record<string, string> | undefined
   let cwd: string | undefined
   let argsAppend: string[] | undefined
@@ -350,6 +359,9 @@ const foldLayers = (
     if (merged.moonlight !== undefined) {
       moonlight = foldMoonlight(moonlight, merged.moonlight)
     }
+    if (merged.retroarch !== undefined) {
+      retroarch = foldRetroArch(retroarch, merged.retroarch)
+    }
     if (merged.env !== undefined) {
       env = { ...(env ?? {}), ...merged.env }
     }
@@ -375,6 +387,7 @@ const foldLayers = (
   return {
     gamescope,
     moonlight,
+    retroarch,
     env,
     cwd,
     argsAppend,
@@ -399,6 +412,9 @@ const mergeByLauncher = (
     moonlight: extra.moonlight
       ? foldMoonlight(base.moonlight, extra.moonlight)
       : base.moonlight,
+    retroarch: extra.retroarch
+      ? foldRetroArch(base.retroarch, extra.retroarch)
+      : base.retroarch,
     env:
       extra.env !== undefined
         ? { ...(base.env ?? {}), ...extra.env }
@@ -921,6 +937,43 @@ const isPlainPolicyObject = (
 ): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
+const mergeRetroArchValue = (
+  base: unknown,
+  extra: unknown,
+  path: readonly string[],
+): unknown => {
+  if (extra === undefined) return base
+  const key = path.join(".")
+  if (key === "extraArgs" || key === "configFile.append") {
+    return Array.isArray(extra)
+      ? [...(Array.isArray(base) ? base : []), ...extra]
+      : extra
+  }
+  if (key === "environment" || key === "extraSettings") {
+    return isPlainPolicyObject(extra)
+      ? { ...(isPlainPolicyObject(base) ? base : {}), ...extra }
+      : extra
+  }
+  if (isPlainPolicyObject(base) && isPlainPolicyObject(extra)) {
+    const merged: Record<string, unknown> = { ...base }
+    for (const [childKey, childValue] of Object.entries(extra)) {
+      merged[childKey] = mergeRetroArchValue(merged[childKey], childValue, [
+        ...path,
+        childKey,
+      ])
+    }
+    return merged
+  }
+  return extra
+}
+
+/** Deep-merge two RetroArch policies; extraArgs/configFile.append concat. */
+export const foldRetroArch = (
+  base: RetroArchPolicy | undefined,
+  extra: RetroArchPolicy,
+): RetroArchPolicy =>
+  mergeRetroArchValue(base ?? {}, extra, []) as RetroArchPolicy
+
 const mergeMoonlightValue = (
   base: unknown,
   extra: unknown,
@@ -1252,6 +1305,7 @@ export const resolveLaunchContext = (
       ),
       gamescope: appRecord?.gamescope,
       moonlight: appRecord?.moonlight,
+      retroarch: appRecord ? appRetroArchPolicy(appRecord) : undefined,
       env: appRecord?.env,
       cwd: appRecord?.cwd,
       argsAppend: appRecord?.argsAppend,
@@ -1318,6 +1372,7 @@ export const resolveLaunchContext = (
       ...(core !== undefined ? { core } : {}),
       gamescope: normalizeGamescopePolicy(folded.gamescope),
       ...(folded.moonlight ? { moonlight: folded.moonlight } : {}),
+      ...(folded.retroarch ? { retroarch: folded.retroarch } : {}),
       ...(folded.settings ? { settings: folded.settings } : {}),
       ...(folded.env ? { env: folded.env } : {}),
       ...(folded.cwd !== undefined ? { cwd: folded.cwd } : {}),
@@ -1390,6 +1445,7 @@ interface ReadableOverride {
   readonly runtime?: string
   readonly gamescope?: GamescopePolicy
   readonly moonlight?: MoonlightPolicy
+  readonly retroarch?: RetroArchPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
@@ -1409,6 +1465,7 @@ interface ReadableLayerView {
   readonly runtime?: string
   readonly gamescope?: GamescopePolicy
   readonly moonlight?: MoonlightPolicy
+  readonly retroarch?: RetroArchPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
@@ -1422,6 +1479,7 @@ const readableViewOfUser = (user: UserRecord | undefined): ReadableLayerView =>
         runtime: user.launch?.module,
         gamescope: user.gamescope,
         moonlight: user.moonlight,
+        retroarch: user.retroarch,
         env: user.env,
         cwd: user.cwd,
         argsAppend: user.argsAppend,
@@ -1438,6 +1496,7 @@ const readableViewOfSystem = (
         runtime: system.launch?.module,
         gamescope: system.gamescope,
         moonlight: system.moonlight,
+        retroarch: system.retroarch,
         env: system.env,
         cwd: system.cwd,
         argsAppend: system.argsAppend,
@@ -1454,6 +1513,7 @@ const readableViewOfSource = (
         runtime: source.runtime,
         gamescope: source.gamescope,
         moonlight: source.moonlight,
+        retroarch: source.retroarch,
         env: source.env,
         cwd: source.cwd,
         argsAppend: source.argsAppend,
@@ -1461,11 +1521,45 @@ const readableViewOfSource = (
       }
     : {}
 
+const appRetroArchPolicy = (app: AppRecord): RetroArchPolicy | undefined => {
+  if (!isRetroArchAppRecord(app)) return undefined
+  const {
+    environment,
+    configFile,
+    core,
+    content,
+    logging,
+    lifecycle,
+    paths,
+    video,
+    audio,
+    input,
+    extraSettings,
+    extraArgs,
+  } = app
+  const policy: RetroArchPolicy = {
+    ...(environment !== undefined ? { environment } : {}),
+    ...(configFile !== undefined ? { configFile } : {}),
+    ...(core !== undefined ? { core } : {}),
+    ...(content !== undefined ? { content } : {}),
+    ...(logging !== undefined ? { logging } : {}),
+    ...(lifecycle !== undefined ? { lifecycle } : {}),
+    ...(paths !== undefined ? { paths } : {}),
+    ...(video !== undefined ? { video } : {}),
+    ...(audio !== undefined ? { audio } : {}),
+    ...(input !== undefined ? { input } : {}),
+    ...(extraSettings !== undefined ? { extraSettings } : {}),
+    ...(extraArgs !== undefined ? { extraArgs } : {}),
+  }
+  return Object.keys(policy).length > 0 ? policy : undefined
+}
+
 const readableViewOfApp = (app: AppRecord | undefined): ReadableLayerView =>
   app
     ? {
         gamescope: app.gamescope,
         moonlight: app.moonlight,
+        retroarch: appRetroArchPolicy(app),
         env: app.env,
         cwd: app.cwd,
         argsAppend: app.argsAppend,
@@ -1477,7 +1571,7 @@ const readableBuiltInArgs = (
   appId: string,
   legacyArgs: readonly string[],
 ): readonly string[] => {
-  if (appId === "retroarch") return ["-L", "{runtime.path}", "{content.path}"]
+  if (appId === "retroarch") return []
   if (appId === "mame") return ["{content.path}"]
   if (appId === "dolphin") return ["--batch", "--exec", "{content.path}"]
   if (appId === "solarus") return ["{content.path}"]
@@ -1493,6 +1587,7 @@ const resolveReadableAppRecord = (
   if (builtIn === undefined) return override
   return {
     id: appId,
+    kind: override?.kind ?? builtIn.kind,
     command: override?.command ?? builtIn.command,
     args: override?.args ?? readableBuiltInArgs(appId, builtIn.args),
     systems: override?.systems ?? builtIn.systems,
@@ -1500,6 +1595,11 @@ const resolveReadableAppRecord = (
     settings: override?.settings ?? builtIn.settings,
     gamescope: override?.gamescope ?? builtIn.gamescope,
     moonlight: override?.moonlight ?? builtIn.moonlight,
+    ...(override?.kind === "retroarch" || builtIn.kind === "retroarch"
+      ? (appRetroArchPolicy(
+          override ?? ({ id: appId, kind: "retroarch" } as AppRecord),
+        ) ?? builtIn.retroarch)
+      : {}),
     env: override?.env ?? builtIn.env,
     cwd: override?.cwd ?? builtIn.cwd,
     argsAppend: override?.argsAppend ?? builtIn.argsAppend,
@@ -1516,6 +1616,7 @@ const readableViewOfRuntime = (
     ? {
         gamescope: runtime.gamescope,
         moonlight: runtime.moonlight,
+        retroarch: runtime.retroarch,
         env: runtime.env,
         cwd: runtime.cwd,
         argsAppend: runtime.argsAppend,
@@ -1528,6 +1629,7 @@ const readableViewOfLibraryItem = (
 ): ReadableLayerView => ({
   gamescope: item.gamescope,
   moonlight: item.moonlight,
+  retroarch: item.retroarch,
   env: item.env,
   cwd: item.cwd,
   argsAppend: item.argsAppend,
@@ -1537,6 +1639,7 @@ const readableViewOfLibraryItem = (
 const readableViewOfContained = (entry: PlayableEntry): ReadableLayerView => ({
   gamescope: entry.contained?.gamescope,
   moonlight: entry.contained?.moonlight,
+  retroarch: entry.contained?.retroarch,
   env: entry.contained?.env,
   cwd: entry.contained?.cwd,
   argsAppend: entry.contained?.argsAppend,
@@ -1550,6 +1653,7 @@ const readableViewOfRelease = (
   runtime: release.runtime,
   gamescope: release.gamescope,
   moonlight: release.moonlight,
+  retroarch: release.retroarch,
   env: release.env,
   cwd: release.cwd,
   argsAppend: release.argsAppend,
@@ -1565,6 +1669,7 @@ const readableViewOfProfile = (
         runtime: profile.runtime,
         gamescope: profile.gamescope,
         moonlight: profile.moonlight,
+        retroarch: profile.retroarch,
         env: profile.env,
         cwd: profile.cwd,
         argsAppend: profile.argsAppend,
@@ -1579,6 +1684,7 @@ const mergeReadableLayers = (
   let runtime: string | undefined
   let gamescope: GamescopePolicy | undefined
   let moonlight: MoonlightPolicy | undefined
+  let retroarch: RetroArchPolicy | undefined
   let env: Record<string, string> | undefined
   let cwd: string | undefined
   let argsAppend: string[] | undefined
@@ -1593,6 +1699,9 @@ const mergeReadableLayers = (
     if (layer.moonlight !== undefined) {
       moonlight = foldMoonlight(moonlight, layer.moonlight)
     }
+    if (layer.retroarch !== undefined) {
+      retroarch = foldRetroArch(retroarch, layer.retroarch)
+    }
     if (layer.env !== undefined) env = { ...(env ?? {}), ...layer.env }
     if (layer.cwd !== undefined) cwd = layer.cwd
     if (layer.argsAppend !== undefined) {
@@ -1603,7 +1712,17 @@ const mergeReadableLayers = (
     }
   }
 
-  return { app, runtime, gamescope, moonlight, env, cwd, argsAppend, patches }
+  return {
+    app,
+    runtime,
+    gamescope,
+    moonlight,
+    retroarch,
+    env,
+    cwd,
+    argsAppend,
+    patches,
+  }
 }
 
 const selectReadableRelease = (
@@ -1787,6 +1906,7 @@ export const resolveReadableLaunchContext = (
       ...(resolvedTarget.content ? { content: resolvedTarget.content } : {}),
       gamescope: normalizeGamescopePolicy(folded.gamescope),
       ...(folded.moonlight ? { moonlight: folded.moonlight } : {}),
+      ...(folded.retroarch ? { retroarch: folded.retroarch } : {}),
       ...(folded.env ? { env: folded.env } : {}),
       ...(folded.cwd !== undefined ? { cwd: folded.cwd } : {}),
       ...(folded.argsAppend ? { argsAppend: folded.argsAppend } : {}),

@@ -19,6 +19,7 @@ export const ProfilePayload = Schema.Struct({
 
   gamescope: InheritableLayer.fields.gamescope,
   moonlight: InheritableLayer.fields.moonlight,
+  retroarch: InheritableLayer.fields.retroarch,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,

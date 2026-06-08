@@ -91,6 +91,8 @@ describe("checked-in readable library example", () => {
     expect(launches.sonicGenesis.spec).toEqual({
       command: "retroarch",
       args: [
+        "-c",
+        expect.stringMatching(/retroarch\.cfg$/),
         "-L",
         "/run/current-system/sw/lib/libretro/genesis_plus_gx_libretro.so",
         "/roms/genesis/Sonic The Hedgehog.md",
@@ -99,6 +101,8 @@ describe("checked-in readable library example", () => {
     expect(launches.containedGba.spec).toEqual({
       command: "retroarch",
       args: [
+        "-c",
+        expect.stringMatching(/retroarch\.cfg$/),
         "-L",
         "/run/current-system/sw/lib/libretro/mgba_libretro.so",
         "/roms/gba/Super Mario Advance 2.gba",

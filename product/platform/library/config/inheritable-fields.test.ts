@@ -5,9 +5,11 @@ import {
   decodeGamescopePolicy,
   decodeInheritableLayer,
   decodeMoonlightPolicy,
+  decodeRetroArchPolicy,
   type GamescopePolicy,
   type MoonlightPolicy,
   normalizeGamescopePolicy,
+  type RetroArchPolicy,
 } from "./inheritable-fields"
 
 const representativeGamescopePolicy: GamescopePolicy = {
@@ -144,6 +146,80 @@ const representativeGamescopePolicy: GamescopePolicy = {
   },
   extraArgs: ["--unmodelled-flag"],
 }
+
+const representativeRetroArchPolicy: RetroArchPolicy = {
+  environment: { WAYLAND_DISPLAY: null, SDL_VIDEODRIVER: "x11" },
+  configFile: { mode: "generated", append: ["/tmp/a.cfg"] },
+  core: { path: "{runtime.path}" },
+  content: { path: "{content.path}" },
+  logging: { verbose: true, logFile: null },
+  lifecycle: {
+    saveOnExit: false,
+    autoOverrides: false,
+    autoRemaps: false,
+    gameSpecificOptions: false,
+    autoShaders: false,
+  },
+  paths: {
+    systemDirectory: "/bios",
+    savefileDirectory: "/saves",
+    savestateDirectory: "/states",
+    screenshotDirectory: "/screenshots",
+  },
+  video: {
+    fullscreen: true,
+    windowedFullscreen: true,
+    vsync: true,
+    aspectRatio: "core-provided",
+  },
+  audio: { enable: true, latencyMs: 64 },
+  input: {
+    autodetect: true,
+    maxUsers: 4,
+    menuToggleGamepadCombo: "start-select",
+  },
+  extraSettings: { video_font_enable: false },
+  extraArgs: ["--features"],
+}
+
+describe("RetroArchPolicy", () => {
+  it("decodes a representative minimal v1 policy", () => {
+    expect(decodeRetroArchPolicy(representativeRetroArchPolicy)).toEqual(
+      representativeRetroArchPolicy,
+    )
+  })
+
+  it("preserves nullable process environment and nullable logFile", () => {
+    const policy = decodeRetroArchPolicy({
+      environment: { WAYLAND_DISPLAY: null, SDL_VIDEODRIVER: "x11" },
+      logging: { logFile: null },
+    })
+
+    expect(policy.environment?.WAYLAND_DISPLAY).toBeNull()
+    expect(policy.logging?.logFile).toBeNull()
+  })
+
+  it("rejects unsupported future config file modes and user-authored paths", () => {
+    for (const configFile of [
+      { mode: "path" },
+      { mode: "default" },
+      { mode: "generated", path: "/tmp/retroarch.cfg" },
+    ]) {
+      expect(() => decodeRetroArchPolicy({ configFile })).toThrow()
+    }
+  })
+
+  it("rejects unknown typed policy keys and enum values", () => {
+    for (const badPolicy of [
+      { video: { fullScreen: true } },
+      { video: { aspectRatio: "stretch" } },
+      { input: { menuToggleGamepadCombo: "l3-r3" } },
+      { retroarch: {} },
+    ]) {
+      expect(() => decodeRetroArchPolicy(badPolicy)).toThrow()
+    }
+  })
+})
 
 describe("GamescopePolicy", () => {
   it("decodes an empty object as 'no opinion'", () => {

@@ -6,10 +6,14 @@ import {
   IncompatibleModule,
   type ResolutionError,
 } from "./errors"
-import type { GamescopePolicy, MoonlightPolicy } from "./inheritable-fields"
+import type {
+  GamescopePolicy,
+  MoonlightPolicy,
+  RetroArchPolicy,
+} from "./inheritable-fields"
 import type { LaunchSettings } from "./launch-block"
 import { mergeLaunchSettings } from "./launch-block"
-import type { AppRecord } from "./records/app"
+import { type AppKind, type AppRecord, appRecordKind } from "./records/app"
 import type { LauncherRecord } from "./records/launcher"
 import type { ModuleRecord } from "./records/module"
 
@@ -22,6 +26,7 @@ export type AppIntegrationKind =
 
 export interface AppDescriptor {
   readonly id: string
+  readonly kind?: AppKind
   readonly integration: AppIntegrationKind
   readonly command: string
   readonly args: readonly string[]
@@ -31,6 +36,7 @@ export interface AppDescriptor {
   readonly knownSettings?: readonly string[]
   readonly gamescope?: GamescopePolicy
   readonly moonlight?: MoonlightPolicy
+  readonly retroarch?: RetroArchPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
@@ -40,6 +46,7 @@ export interface AppDescriptor {
 const builtInApps: Readonly<Record<string, AppDescriptor>> = {
   retroarch: {
     id: "retroarch",
+    kind: "retroarch",
     integration: "retroarch",
     command: "retroarch",
     args: ["--config", "{configPath}", "-L", "{modulePath}", "{contentPath}"],
@@ -116,7 +123,11 @@ export const resolveAppDescriptor = (input: {
       return mergeDescriptor(
         {
           id: input.appId,
-          integration: "generic-process",
+          kind: appRecordKind(appOverride),
+          integration:
+            appRecordKind(appOverride) === "retroarch"
+              ? "retroarch"
+              : "generic-process",
           command: appOverride.command,
           args: appOverride.args ?? ["{contentPath}"],
           systems: appOverride.systems ?? [],
@@ -148,9 +159,19 @@ const mergeDescriptor = (
         presets: legacyLauncher.presets ?? base.presets,
         gamescope: legacyLauncher.gamescope ?? base.gamescope,
         moonlight: legacyLauncher.moonlight ?? base.moonlight,
+        retroarch: legacyLauncher.retroarch ?? base.retroarch,
         env: legacyLauncher.env ?? base.env,
         cwd: legacyLauncher.cwd ?? base.cwd,
         argsAppend: legacyLauncher.argsAppend ?? base.argsAppend,
+      }
+    : {}),
+  ...(appOverride?.kind ? { kind: appOverride.kind } : {}),
+  ...(appOverride
+    ? {
+        integration:
+          appRecordKind(appOverride) === "retroarch"
+            ? "retroarch"
+            : base.integration,
       }
     : {}),
   ...(appOverride?.command ? { command: appOverride.command } : {}),
@@ -160,11 +181,46 @@ const mergeDescriptor = (
   ...(appOverride?.presets ? { presets: appOverride.presets } : {}),
   ...(appOverride?.gamescope ? { gamescope: appOverride.gamescope } : {}),
   ...(appOverride?.moonlight ? { moonlight: appOverride.moonlight } : {}),
+  ...(appOverride
+    ? { retroarch: appRetroArchPolicy(appOverride) ?? base.retroarch }
+    : {}),
   ...(appOverride?.env ? { env: appOverride.env } : {}),
   ...(appOverride?.cwd !== undefined ? { cwd: appOverride.cwd } : {}),
   ...(appOverride?.argsAppend ? { argsAppend: appOverride.argsAppend } : {}),
   settings: mergeLaunchSettings(base.settings, appOverride?.settings),
 })
+
+const appRetroArchPolicy = (app: AppRecord): RetroArchPolicy | undefined => {
+  const {
+    environment,
+    configFile,
+    core,
+    content,
+    logging,
+    lifecycle,
+    paths,
+    video,
+    audio,
+    input,
+    extraSettings,
+    extraArgs,
+  } = app
+  const policy: RetroArchPolicy = {
+    ...(environment !== undefined ? { environment } : {}),
+    ...(configFile !== undefined ? { configFile } : {}),
+    ...(core !== undefined ? { core } : {}),
+    ...(content !== undefined ? { content } : {}),
+    ...(logging !== undefined ? { logging } : {}),
+    ...(lifecycle !== undefined ? { lifecycle } : {}),
+    ...(paths !== undefined ? { paths } : {}),
+    ...(video !== undefined ? { video } : {}),
+    ...(audio !== undefined ? { audio } : {}),
+    ...(input !== undefined ? { input } : {}),
+    ...(extraSettings !== undefined ? { extraSettings } : {}),
+    ...(extraArgs !== undefined ? { extraArgs } : {}),
+  }
+  return Object.keys(policy).length > 0 ? policy : undefined
+}
 
 const launcherToDescriptor = (launcher: LauncherRecord): AppDescriptor => ({
   id: launcher.id,
@@ -175,6 +231,7 @@ const launcherToDescriptor = (launcher: LauncherRecord): AppDescriptor => ({
   policy: launcher.policy,
   gamescope: launcher.gamescope,
   moonlight: launcher.moonlight,
+  retroarch: launcher.retroarch,
   env: launcher.env,
   cwd: launcher.cwd,
   argsAppend: launcher.argsAppend,

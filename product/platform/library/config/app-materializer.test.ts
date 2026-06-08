@@ -20,10 +20,14 @@ import { resolveAppDescriptor } from "./app-integrations"
 import {
   cleanupLaunchArtifacts,
   materializeAppLaunch,
+  materializeReadableRetroArchLaunch,
   STALE_ARTIFACT_RETENTION_MS,
 } from "./app-materializer"
 import { cascadeErrorMessage } from "./errors"
-import type { ResolvedLaunchContext } from "./resolved-launch-context"
+import type {
+  ReadableResolvedLaunchContext,
+  ResolvedLaunchContext,
+} from "./resolved-launch-context"
 
 const runPromise = <A, E>(eff: Effect.Effect<A, E>) => Effect.runPromise(eff)
 const app = (id: string) =>
@@ -506,6 +510,70 @@ describe("materializeAppLaunch", () => {
         "patches are not supported for app dolphin (dolphin)",
       )
     })
+  })
+})
+
+describe("materializeReadableRetroArchLaunch", () => {
+  const readableContext: ReadableResolvedLaunchContext = {
+    playableId: "sonic-the-hedgehog",
+    itemId: "sonic-the-hedgehog",
+    releaseId: "genesis",
+    system: "genesis",
+    sourceId: "roms",
+    target: "genesis/Sonic.md",
+    app: {
+      id: "retroarch",
+      kind: "retroarch",
+      command: "retroarch",
+      configFile: { mode: "generated" },
+      video: { fullscreen: true },
+    },
+    runtime: {
+      id: "genesis-plus-gx",
+      kind: "libretro-core",
+      path: "/cores/genesis_plus_gx.so",
+    },
+    content: { path: "/games/genesis/Sonic.md" },
+    gamescope: { enable: false },
+    retroarch: { configFile: { mode: "generated" }, video: { fullscreen: true } },
+  }
+
+  it("writes a generated config and typed RetroArch argv", async () => {
+    await withRoot(async root => {
+      const result = await runPromise(
+        materializeReadableRetroArchLaunch({
+          context: readableContext,
+          artifactsRoot: root,
+        }),
+      )
+
+      const configPath = result.artifacts?.paths.configPath
+      if (configPath === undefined) throw new Error("missing config artifact")
+      expect(result.spec.args).toEqual([
+        "-c",
+        configPath,
+        "-L",
+        "/cores/genesis_plus_gx.so",
+        "/games/genesis/Sonic.md",
+      ])
+      const config = await readFile(configPath, "utf8")
+      expect(config).toContain('config_save_on_exit = "false"')
+      expect(config).toContain('video_fullscreen = "true"')
+    })
+  })
+
+  it("rejects non-RetroArch apps at the materializer boundary", async () => {
+    const exit = await Effect.runPromiseExit(
+      materializeReadableRetroArchLaunch({
+        context: {
+          ...readableContext,
+          app: { id: "steam", command: "steam", args: ["{target}"] },
+        },
+        artifactsRoot: "/tmp/unused",
+      }),
+    )
+
+    expect(exitFailureMessage(exit)).toContain("AppMaterializationFailed")
   })
 })
 

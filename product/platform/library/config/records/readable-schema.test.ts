@@ -119,6 +119,119 @@ describe("readable library schema records", () => {
     }
   })
 
+  it("decodes RetroArch policy on readable cascade records and flat app records", () => {
+    const retroarch = {
+      environment: { WAYLAND_DISPLAY: null },
+      configFile: { mode: "generated" },
+      lifecycle: { saveOnExit: false },
+      video: { fullscreen: true, aspectRatio: "core-provided" },
+      extraSettings: { video_font_enable: false },
+      extraArgs: ["--features"],
+    }
+
+    expect(
+      decodeAppPayload({
+        kind: "retroarch",
+        command: "retroarch",
+        ...retroarch,
+      }).video?.fullscreen,
+    ).toBe(true)
+
+    const cases: Array<readonly [string, () => { retroarch?: unknown }]> = [
+      ["global", () => decodeGlobalConfigPayload({ retroarch })],
+      ["host", () => decodeHostPayload({ retroarch })],
+      ["user", () => decodeUserPayload({ retroarch })],
+      ["system", () => decodeSystemPayload({ retroarch })],
+      [
+        "launcher",
+        () =>
+          decodeLauncherPayload({
+            command: "retroarch",
+            args: [],
+            systems: [],
+            retroarch,
+          }),
+      ],
+      ["preset", () => decodePresetPayload({ retroarch })],
+      [
+        "runtime",
+        () =>
+          decodeRuntimePayload({
+            kind: "libretro-core",
+            path: "/cores/mgba_libretro.so",
+            retroarch,
+          }),
+      ],
+      [
+        "source",
+        () =>
+          decodeSourcePayload({ kind: ["files"], storage: "roms", retroarch }),
+      ],
+      ["profile", () => decodeProfilePayload({ retroarch })],
+      [
+        "library-item",
+        () =>
+          decodeLibraryItemPayload({
+            retroarch,
+            releases: [{ id: "default", system: "gba", target: "game.gba" }],
+          }),
+      ],
+      [
+        "library-release",
+        () =>
+          decodeLibraryItemPayload({
+            releases: [
+              { id: "default", system: "gba", target: "game.gba", retroarch },
+            ],
+          }).releases[0] ?? {},
+      ],
+      [
+        "contained-playable",
+        () =>
+          decodeLibraryItemPayload({
+            contains: { child: { retroarch } },
+            releases: [{ id: "default", system: "gba", target: "game.gba" }],
+          }).contains?.child ?? {},
+      ],
+      [
+        "game",
+        () =>
+          decodeGamePayload({
+            system: "gba",
+            contentPath: "game.gba",
+            retroarch,
+          }),
+      ],
+    ]
+
+    for (const [, decode] of cases) {
+      expect(decode().retroarch).toMatchObject(retroarch)
+    }
+  })
+
+  it("rejects retired RetroArch typed-app vocabulary", () => {
+    expect(() =>
+      decodeAppPayload({ kind: "retroarch", retroarch: {} }),
+    ).toThrow()
+    expect(() =>
+      decodeAppPayload({ kind: "retroarch", integration: "retroarch" }),
+    ).toThrow()
+    expect(() =>
+      decodeAppPayload({
+        kind: "retroarch",
+        settings: { video_fullscreen: true },
+      }),
+    ).toThrow()
+    expect(() =>
+      decodeHostPayload({ retroarch: { configFile: { mode: "path" } } }),
+    ).toThrow()
+    expect(() =>
+      decodeHostPayload({
+        retroarch: { configFile: { mode: "generated", path: "/tmp/cfg" } },
+      }),
+    ).toThrow()
+  })
+
   it("rejects retired Moonlight launch-policy vocabulary in readable records", () => {
     const retiredMoonlightPolicies = [
       { KORRI_MOONLIGHT_COMMAND: "/bin/moonlight" },

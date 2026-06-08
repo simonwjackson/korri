@@ -6,6 +6,7 @@ import {
   createProseqlArtifactRepository,
 } from "@platform/artifacts/artifact-import-service"
 import { artifactsRoot } from "@platform/artifacts/artifact-store"
+import { materializeReadableRetroArchLaunch } from "@platform/library/config/app-materializer"
 import {
   type ReadableConfigSnapshot,
   type ResolvedLocalLauncherPolicy,
@@ -24,7 +25,10 @@ import {
   type PlayableEntry,
   splitPlayableId,
 } from "@platform/library/config/playable-id"
-import type { AppRecord } from "@platform/library/config/records/app"
+import {
+  type AppRecord,
+  isRetroArchAppRecord,
+} from "@platform/library/config/records/app"
 import type { CollectionRecord } from "@platform/library/config/records/collection"
 import type { GameRecord } from "@platform/library/config/records/game"
 import type { GameAssetRecord } from "@platform/library/config/records/game-asset"
@@ -281,14 +285,25 @@ export function createLibraryRepository(
               .filter(release => release.target !== undefined)
               .map(release => release.id)
         for (const releaseId of releaseIds) {
-          const canResolve = yield* repository
-            .resolveLaunchForPlayable(playableId, { ...opts, releaseId })
-            .pipe(
-              Effect.match({
-                onFailure: () => false,
-                onSuccess: () => true,
-              }),
-            )
+          const canResolve = yield* resolveReadableLaunchContext(snapshot, {
+            playableId,
+            releaseId,
+            userId: opts?.userId,
+            profileId: opts?.profileId ?? opts?.presetId,
+            override: opts?.override,
+          }).pipe(
+            Effect.flatMap(context =>
+              isRetroArchAppRecord(context.app)
+                ? Effect.succeed(context.content?.path !== undefined)
+                : composeReadableLaunchSpec(context.app, context).pipe(
+                    Effect.as(true),
+                  ),
+            ),
+            Effect.match({
+              onFailure: () => false,
+              onSuccess: result => result,
+            }),
+          )
           if (canResolve) return true
         }
         return false
@@ -304,10 +319,20 @@ export function createLibraryRepository(
           profileId: opts?.profileId ?? opts?.presetId,
           override: opts?.override,
         }).pipe(Effect.mapError(toLibraryConfigError))
-        const spec = yield* composeReadableLaunchSpec(
-          context.app,
-          context,
+        const materialized: {
+          readonly spec: LaunchSpec
+          readonly artifacts?: LaunchArtifacts
+        } = yield* (
+          isRetroArchAppRecord(context.app)
+            ? materializeReadableRetroArchLaunch({
+                context,
+                env: _options.env ?? process.env,
+              })
+            : composeReadableLaunchSpec(context.app, context).pipe(
+                Effect.map(spec => ({ spec })),
+              )
         ).pipe(Effect.mapError(toLibraryConfigError))
+        const spec = materialized.spec
         const entry = derivePlayableEntries([
           ...snapshot.library.values(),
         ]).find(candidate => candidate.id === playableId)
@@ -319,7 +344,15 @@ export function createLibraryRepository(
           spec,
           gamescope: context.gamescope,
           ...(context.moonlight ? { moonlight: context.moonlight } : {}),
-          app: { id: context.app.id, integration: "generic-process" },
+          app: {
+            id: context.app.id,
+            integration: isRetroArchAppRecord(context.app)
+              ? "retroarch"
+              : "generic-process",
+          },
+          ...(materialized.artifacts
+            ? { artifacts: materialized.artifacts }
+            : {}),
           ...(context.runtime
             ? {
                 runtime: {

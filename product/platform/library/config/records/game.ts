@@ -132,6 +132,7 @@ const GamePayloadFields = {
   // flatten cleanly for excess-property checking).
   gamescope: InheritableLayer.fields.gamescope,
   moonlight: InheritableLayer.fields.moonlight,
+  retroarch: InheritableLayer.fields.retroarch,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,

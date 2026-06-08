@@ -80,9 +80,22 @@ apps:
     systems: [windows, linux]
 
   retroarch:
+    kind: retroarch
     command: retroarch
-    args: ["-L", "{runtime.path}", "{content.path}"]
     systems: [genesis, gba]
+    configFile:
+      mode: generated
+    lifecycle:
+      saveOnExit: false
+      autoOverrides: false
+      autoRemaps: false
+      gameSpecificOptions: false
+      autoShaders: false
+    video:
+      fullscreen: true
+      aspectRatio: core-provided
+    extraSettings: {}
+    extraArgs: []
 
 runtimes:
   genesis-plus-gx:

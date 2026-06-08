@@ -5,7 +5,6 @@ import {
   type ReadableConfigSnapshot,
   resolveReadableLaunchContext,
 } from "./cascade-resolver"
-import { composeReadableLaunchSpec } from "./compose-launch-spec"
 import type { AppRecord } from "./records/app"
 import type { HostRecord } from "./records/host"
 import type { LibraryItemRecord } from "./records/library-item"
@@ -30,6 +29,11 @@ const host: HostRecord = {
     stream: { resolution: { width: 1280 } },
     extraArgs: ["host"],
   },
+  retroarch: {
+    environment: { RA_KEEP: "host", RA_UNSET: "1" },
+    video: { fullscreen: true },
+    extraArgs: ["host"],
+  },
 }
 const user: UserRecord = {
   id: "simon",
@@ -43,11 +47,13 @@ const user: UserRecord = {
     stream: { resolution: { height: 720 } },
     extraArgs: ["user"],
   },
+  retroarch: { configFile: { append: ["/tmp/user.cfg"] } },
 }
 const system: SystemRecord = {
   id: "genesis",
   gamescope: { extraArgs: ["system"], display: { nested: { width: 320 } } },
   moonlight: { extraArgs: ["system"], window: { autoResize: true } },
+  retroarch: { extraArgs: ["system"] },
 }
 const source: SourceRecord = {
   id: "roms",
@@ -57,14 +63,18 @@ const source: SourceRecord = {
   runtime: "genesis-plus-gx",
   gamescope: { extraArgs: ["source"], display: { nested: { height: 240 } } },
   moonlight: { extraArgs: ["source"], platform: { name: "v4l2m2m" } },
+  retroarch: { paths: { systemDirectory: "/bios" }, extraArgs: ["source"] },
 }
 const app: AppRecord = {
   id: "retroarch",
+  kind: "retroarch",
   command: "retroarch",
   args: ["-L", "{runtime.path}", "{content.path}"],
   systems: ["genesis"],
   gamescope: { extraArgs: ["app"], backend: { allowDeferred: true } },
   moonlight: { extraArgs: ["app"], logging: { verbose: true } },
+  lifecycle: { saveOnExit: false },
+  extraArgs: ["app"],
 }
 const runtime: RuntimeRecord = {
   id: "genesis-plus-gx",
@@ -72,6 +82,10 @@ const runtime: RuntimeRecord = {
   path: "/cores/genesis_plus_gx.so",
   gamescope: { extraArgs: ["runtime"], scaling: { filter: "fsr" } },
   moonlight: { extraArgs: ["runtime"], stream: { fps: 60 } },
+  retroarch: {
+    core: { path: "/cores/runtime-override.so" },
+    extraArgs: ["runtime"],
+  },
 }
 const profile: ProfileRecord = {
   id: "handheld",
@@ -83,6 +97,12 @@ const profile: ProfileRecord = {
     environment: { ML_UNSET: null },
     extraArgs: ["profile"],
     window: { autoResize: false },
+  },
+  retroarch: {
+    environment: { RA_UNSET: null },
+    video: { fullscreen: false },
+    extraSettings: { video_font_enable: false },
+    extraArgs: ["profile"],
   },
   env: { SCALE: "profile" },
 }
@@ -99,6 +119,10 @@ const sonic: LibraryItemRecord = {
       target: "genesis/Sonic.md",
       gamescope: { extraArgs: ["release"] },
       moonlight: { extraArgs: ["release"] },
+      retroarch: {
+        extraSettings: { video_font_enable: true },
+        extraArgs: ["release"],
+      },
     },
   ],
 }
@@ -207,6 +231,24 @@ describe("resolveReadableLaunchContext", () => {
         "profile",
       ],
     })
+    expect(context.retroarch).toMatchObject({
+      environment: { RA_KEEP: "host", RA_UNSET: null },
+      configFile: { append: ["/tmp/user.cfg"] },
+      core: { path: "/cores/runtime-override.so" },
+      paths: { systemDirectory: "/bios" },
+      lifecycle: { saveOnExit: false },
+      video: { fullscreen: false },
+      extraSettings: { video_font_enable: false },
+      extraArgs: [
+        "host",
+        "system",
+        "source",
+        "app",
+        "runtime",
+        "release",
+        "profile",
+      ],
+    })
     expect(context.env?.SCALE).toBe("override")
   })
 
@@ -228,13 +270,10 @@ describe("resolveReadableLaunchContext", () => {
         { playableId: "sonic-the-hedgehog" },
       ),
     )
-    const spec = await Effect.runPromise(
-      composeReadableLaunchSpec(context.app, context),
-    )
-
-    expect(spec.command).toBe("retroarch")
-    expect(spec.args).toContain("/cores/genesis_plus_gx.so")
-    expect(spec.args).toContain("/games/genesis/Sonic.md")
+    expect(context.app.id).toBe("retroarch")
+    expect(context.app.kind).toBe("retroarch")
+    expect(context.app.args).toEqual([])
+    expect(context.retroarch).toBeDefined()
   })
 
   it("normalizes extraArgs-only Gamescope policies to enabled defaults", async () => {
