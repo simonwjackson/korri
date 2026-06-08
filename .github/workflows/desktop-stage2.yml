@@ -42,6 +42,8 @@ on:
 jobs:
   build-x86_64:
     runs-on: ubuntu-latest
+    env:
+      CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
@@ -50,6 +52,53 @@ jobs:
             experimental-features = nix-command flakes
             extra-substituters = https://nix-community.cachix.org https://simonwjackson.cachix.org
             extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= simonwjackson.cachix.org-1:MtG0AE8J6bjFO/wD04X5h8MlQh7Sbee8KAJrAsPJydI=
+      - uses: cachix/cachix-action@v16
+        if: env.CACHIX_AUTH_TOKEN != ''
+        with:
+          name: simonwjackson
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - name: Report binary cache coverage for key outputs
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+
+          check_cache() {
+            local label="$1"
+            local attr="$2"
+
+            echo "::group::${label}"
+            local out_path
+            out_path="$(nix eval --raw "${attr}.outPath")"
+            local narinfo_hash
+            narinfo_hash="$(basename "$out_path" | cut -d- -f1)"
+
+            echo "attr=${attr}"
+            echo "out_path=${out_path}"
+            local hit=0
+            for cache in \
+              https://simonwjackson.cachix.org \
+              https://nix-community.cachix.org \
+              https://cache.nixos.org
+            do
+              if curl --silent --fail --head "${cache}/${narinfo_hash}.narinfo" >/dev/null; then
+                echo "hit: ${cache}"
+                hit=1
+              else
+                echo "miss: ${cache}"
+              fi
+            done
+
+            if [ "$hit" -eq 0 ]; then
+              echo "::notice title=Binary cache miss::${label} (${out_path}) is not present in configured public caches before this job builds it."
+            fi
+
+            nix build "$attr" --dry-run --no-link || true
+            echo "::endgroup::"
+          }
+
+          check_cache "desktop package" ".#packages.x86_64-linux.korri-desktop"
+          check_cache "native standard gate" ".#checks.x86_64-linux.korri-standard-native"
+          check_cache "Odin2Portal product payload" ".#packages.x86_64-linux.korri-odin2portal-product-payload"
       - name: Check selected flake outputs
         run: |
           nix eval .#packages.x86_64-linux.korri-desktop.drvPath --raw
@@ -103,6 +152,8 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
+            extra-substituters = https://nix-community.cachix.org https://simonwjackson.cachix.org
+            extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= simonwjackson.cachix.org-1:MtG0AE8J6bjFO/wD04X5h8MlQh7Sbee8KAJrAsPJydI=
       - name: Install virtual display
         run: sudo apt-get update && sudo apt-get install -y xvfb
       - name: Verify remote flake can run desktop app
