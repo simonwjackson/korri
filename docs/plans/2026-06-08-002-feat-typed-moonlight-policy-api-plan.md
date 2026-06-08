@@ -1,7 +1,7 @@
 ---
 title: feat: Replace Moonlight Env Launch Config with Typed Policy
 type: feat
-status: active
+status: completed
 date: 2026-06-08
 verify_command: "just test-unit && just typecheck && just lint"
 ---
