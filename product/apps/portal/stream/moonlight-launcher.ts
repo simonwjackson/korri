@@ -18,6 +18,8 @@ import {
   validateMoonlightGamescopePolicy,
 } from "@platform/stream/moonlight-launch-spec"
 
+const DEFAULT_STARTUP_OBSERVE_MS = 750
+
 export interface MoonlightControlLaunchHandle {
   readonly sessionId: string
   readonly runtimeDir: string
@@ -117,7 +119,8 @@ export async function launchMoonlight(
 
   const command = policy.command ?? "moonlight"
   const allowNixFallback = options.allowNixFallback ?? command === "moonlight"
-  const startupObserveMs = options.startupObserveMs
+  const startupObserveMs =
+    options.startupObserveMs ?? DEFAULT_STARTUP_OBSERVE_MS
   const installed = await runner.run(
     installedSpec.command,
     installedSpec.args,
