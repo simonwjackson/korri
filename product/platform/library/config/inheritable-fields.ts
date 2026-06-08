@@ -816,6 +816,40 @@ const RetroArchLatencyPolicy = Schema.Struct({
   preemptiveFrames: Schema.optional(RetroArchPreemptiveFramesPolicy),
 })
 
+const RetroArchAchievementsPolicy = Schema.Struct({
+  enable: Schema.optional(Schema.Boolean),
+  username: Schema.optional(NonEmptyString("achievements.username")),
+  hardcoreMode: Schema.optional(Schema.Boolean),
+  badges: Schema.optional(Schema.Boolean),
+  richPresence: Schema.optional(Schema.Boolean),
+  testUnofficial: Schema.optional(Schema.Boolean),
+})
+
+const RetroArchHapticsPolicy = Schema.Struct({
+  vibrateOnKeypress: Schema.optional(Schema.Boolean),
+  deviceVibration: Schema.optional(Schema.Boolean),
+})
+
+const RetroArchPlaylistsPolicy = Schema.Struct({
+  useOldFormat: Schema.optional(Schema.Boolean),
+})
+
+const RetroArchPrivacyPolicy = Schema.Struct({
+  cameraDevice: Schema.optional(NullableNonEmptyString("privacy.cameraDevice")),
+  cameraAllow: Schema.optional(Schema.Boolean),
+  locationAllow: Schema.optional(Schema.Boolean),
+})
+
+const RetroArchUpdaterPolicy = Schema.Struct({
+  showOnlineUpdater: Schema.optional(Schema.Boolean),
+  showCoreUpdater: Schema.optional(Schema.Boolean),
+  buildbotUrl: Schema.optional(NullableNonEmptyString("updater.buildbotUrl")),
+  buildbotAssetsUrl: Schema.optional(
+    NullableNonEmptyString("updater.buildbotAssetsUrl"),
+  ),
+  autoExtractArchive: Schema.optional(Schema.Boolean),
+})
+
 /**
  * Minimal typed RetroArch v1 launch/config policy. Generated mode is the only
  * supported config-file mode in v1; user-authored config paths/default mode are
@@ -838,6 +872,11 @@ export const RetroArchPolicy = Schema.Struct({
   rewind: Schema.optional(RetroArchRewindPolicy),
   playback: Schema.optional(RetroArchPlaybackPolicy),
   latency: Schema.optional(RetroArchLatencyPolicy),
+  achievements: Schema.optional(RetroArchAchievementsPolicy),
+  haptics: Schema.optional(RetroArchHapticsPolicy),
+  playlists: Schema.optional(RetroArchPlaylistsPolicy),
+  privacy: Schema.optional(RetroArchPrivacyPolicy),
+  updater: Schema.optional(RetroArchUpdaterPolicy),
   extraSettings: Schema.optional(RetroArchExtraSettings),
   extraArgs: Schema.optional(Schema.Array(Schema.String)),
 })

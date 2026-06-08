@@ -195,6 +195,23 @@ const RETROARCH_TYPED_CONFIG_KEYS = [
   ["run_ahead_hide_warnings", "latency.runAhead.hideWarnings"],
   ["preemptive_frames_enable", "latency.preemptiveFrames.enable"],
   ["preemptive_frames", "latency.preemptiveFrames.frames"],
+  ["cheevos_enable", "achievements.enable"],
+  ["cheevos_username", "achievements.username"],
+  ["cheevos_hardcore_mode_enable", "achievements.hardcoreMode"],
+  ["cheevos_badges_enable", "achievements.badges"],
+  ["cheevos_richpresence_enable", "achievements.richPresence"],
+  ["cheevos_test_unofficial", "achievements.testUnofficial"],
+  ["vibrate_on_keypress", "haptics.vibrateOnKeypress"],
+  ["enable_device_vibration", "haptics.deviceVibration"],
+  ["playlist_use_old_format", "playlists.useOldFormat"],
+  ["camera_device", "privacy.cameraDevice"],
+  ["camera_allow", "privacy.cameraAllow"],
+  ["location_allow", "privacy.locationAllow"],
+  ["menu_show_online_updater", "updater.showOnlineUpdater"],
+  ["menu_show_core_updater", "updater.showCoreUpdater"],
+  ["core_updater_buildbot_url", "updater.buildbotUrl"],
+  ["core_updater_buildbot_assets_url", "updater.buildbotAssetsUrl"],
+  ["core_updater_auto_extract_archive", "updater.autoExtractArchive"],
 ] as const
 
 assertUniqueRetroArchTypedConfigKeys(RETROARCH_TYPED_CONFIG_KEYS)
@@ -274,6 +291,7 @@ function renderRetroArchSettings(
   appendRewindSettings(writer, policy)
   appendPlaybackSettings(writer, policy)
   appendLatencySettings(writer, policy)
+  appendAdvancedSettings(writer, policy)
 
   const settings = [...writer.settings]
   for (const [key, value] of Object.entries(policy.extraSettings ?? {})) {
@@ -466,6 +484,11 @@ type RetroArchSavesPolicy = NonNullable<RetroArchPolicy["saves"]>
 type RetroArchRewindPolicy = NonNullable<RetroArchPolicy["rewind"]>
 type RetroArchPlaybackPolicy = NonNullable<RetroArchPolicy["playback"]>
 type RetroArchLatencyPolicy = NonNullable<RetroArchPolicy["latency"]>
+type RetroArchAchievementsPolicy = NonNullable<RetroArchPolicy["achievements"]>
+type RetroArchHapticsPolicy = NonNullable<RetroArchPolicy["haptics"]>
+type RetroArchPlaylistsPolicy = NonNullable<RetroArchPolicy["playlists"]>
+type RetroArchPrivacyPolicy = NonNullable<RetroArchPolicy["privacy"]>
+type RetroArchUpdaterPolicy = NonNullable<RetroArchPolicy["updater"]>
 type SettingSelector<T> = (source: T) => LaunchSettingValue | null | undefined
 
 type SettingEntry<T> = readonly [string, SettingSelector<T>]
@@ -661,6 +684,39 @@ const PREEMPTIVE_FRAME_SETTINGS: readonly SettingEntry<
   ["preemptive_frames", preemptiveFrames => preemptiveFrames.frames],
 ]
 
+const ACHIEVEMENT_SETTINGS: readonly SettingEntry<RetroArchAchievementsPolicy>[] =
+  [
+    ["cheevos_enable", achievements => achievements.enable],
+    ["cheevos_username", achievements => achievements.username],
+    ["cheevos_hardcore_mode_enable", achievements => achievements.hardcoreMode],
+    ["cheevos_badges_enable", achievements => achievements.badges],
+    ["cheevos_richpresence_enable", achievements => achievements.richPresence],
+    ["cheevos_test_unofficial", achievements => achievements.testUnofficial],
+  ]
+
+const HAPTIC_SETTINGS: readonly SettingEntry<RetroArchHapticsPolicy>[] = [
+  ["vibrate_on_keypress", haptics => haptics.vibrateOnKeypress],
+  ["enable_device_vibration", haptics => haptics.deviceVibration],
+]
+
+const PLAYLIST_SETTINGS: readonly SettingEntry<RetroArchPlaylistsPolicy>[] = [
+  ["playlist_use_old_format", playlists => playlists.useOldFormat],
+]
+
+const PRIVACY_SETTINGS: readonly SettingEntry<RetroArchPrivacyPolicy>[] = [
+  ["camera_device", privacy => privacy.cameraDevice],
+  ["camera_allow", privacy => privacy.cameraAllow],
+  ["location_allow", privacy => privacy.locationAllow],
+]
+
+const UPDATER_SETTINGS: readonly SettingEntry<RetroArchUpdaterPolicy>[] = [
+  ["menu_show_online_updater", updater => updater.showOnlineUpdater],
+  ["menu_show_core_updater", updater => updater.showCoreUpdater],
+  ["core_updater_buildbot_url", updater => updater.buildbotUrl],
+  ["core_updater_buildbot_assets_url", updater => updater.buildbotAssetsUrl],
+  ["core_updater_auto_extract_archive", updater => updater.autoExtractArchive],
+]
+
 function appendVideoSettings(
   writer: TypedSettingsWriter,
   policy: RetroArchPolicy,
@@ -734,6 +790,17 @@ function appendLatencySettings(
     policy.latency?.preemptiveFrames,
     PREEMPTIVE_FRAME_SETTINGS,
   )
+}
+
+function appendAdvancedSettings(
+  writer: TypedSettingsWriter,
+  policy: RetroArchPolicy,
+) {
+  appendOptionalSettings(writer, policy.achievements, ACHIEVEMENT_SETTINGS)
+  appendOptionalSettings(writer, policy.haptics, HAPTIC_SETTINGS)
+  appendOptionalSettings(writer, policy.playlists, PLAYLIST_SETTINGS)
+  appendOptionalSettings(writer, policy.privacy, PRIVACY_SETTINGS)
+  appendOptionalSettings(writer, policy.updater, UPDATER_SETTINGS)
 }
 
 function appendOptionalSettings<T>(

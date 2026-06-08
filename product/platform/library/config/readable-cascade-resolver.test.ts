@@ -48,6 +48,11 @@ const host: HostRecord = {
       runAhead: { enable: true, frames: 1 },
       preemptiveFrames: { enable: false },
     },
+    achievements: { enable: true, username: "host-user", badges: false },
+    haptics: { vibrateOnKeypress: false },
+    playlists: { useOldFormat: true },
+    privacy: { cameraAllow: false, locationAllow: false },
+    updater: { showOnlineUpdater: false, buildbotUrl: null },
     extraArgs: ["host"],
   },
 }
@@ -82,6 +87,14 @@ const user: UserRecord = {
     latency: {
       runAhead: { frames: 2 },
       preemptiveFrames: { enable: true, frames: 3 },
+    },
+    achievements: { username: "user-name", hardcoreMode: true },
+    haptics: { deviceVibration: true },
+    playlists: { useOldFormat: false },
+    privacy: { cameraDevice: "/dev/video0" },
+    updater: {
+      showCoreUpdater: false,
+      buildbotAssetsUrl: "https://updates.example.invalid/assets",
     },
   },
 }
@@ -318,6 +331,25 @@ describe("resolveReadableLaunchContext", () => {
       latency: {
         runAhead: { enable: true, frames: 2 },
         preemptiveFrames: { enable: true, frames: 3 },
+      },
+      achievements: {
+        enable: true,
+        username: "user-name",
+        badges: false,
+        hardcoreMode: true,
+      },
+      haptics: { vibrateOnKeypress: false, deviceVibration: true },
+      playlists: { useOldFormat: false },
+      privacy: {
+        cameraAllow: false,
+        locationAllow: false,
+        cameraDevice: "/dev/video0",
+      },
+      updater: {
+        showOnlineUpdater: false,
+        showCoreUpdater: false,
+        buildbotUrl: null,
+        buildbotAssetsUrl: "https://updates.example.invalid/assets",
       },
       extraSettings: { video_font_enable: false },
       extraArgs: [

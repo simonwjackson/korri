@@ -148,6 +148,24 @@ describe("readable library schema records", () => {
         runAhead: { enable: true, frames: 2 },
         preemptiveFrames: { enable: true, frames: 3 },
       },
+      achievements: {
+        enable: true,
+        username: "player-one",
+        hardcoreMode: true,
+        badges: true,
+        richPresence: false,
+        testUnofficial: true,
+      },
+      haptics: { vibrateOnKeypress: true, deviceVibration: false },
+      playlists: { useOldFormat: false },
+      privacy: { cameraDevice: null, cameraAllow: false, locationAllow: false },
+      updater: {
+        showOnlineUpdater: false,
+        showCoreUpdater: false,
+        buildbotUrl: null,
+        buildbotAssetsUrl: "https://updates.example.invalid/assets",
+        autoExtractArchive: false,
+      },
       extraSettings: { video_font_enable: false },
       extraArgs: ["--features"],
     }
@@ -236,8 +254,10 @@ describe("readable library schema records", () => {
         id: "retroarch",
         command: "retroarch",
         drivers: { video: "glcore" },
-      }).drivers?.video,
-    ).toBe("glcore")
+        achievements: { username: "player-two" },
+        updater: { showOnlineUpdater: false },
+      }).achievements?.username,
+    ).toBe("player-two")
   })
 
   it("rejects retired RetroArch typed-app vocabulary", () => {
@@ -260,6 +280,15 @@ describe("readable library schema records", () => {
       decodeHostPayload({
         retroarch: { configFile: { mode: "generated", path: "/tmp/cfg" } },
       }),
+    ).toThrow()
+    expect(() =>
+      decodeAppPayload({ kind: "retroarch", achievements: { password: "x" } }),
+    ).toThrow()
+    expect(() =>
+      decodeAppPayload({ kind: "retroarch", netplay: { enable: true } }),
+    ).toThrow()
+    expect(() =>
+      decodeAppPayload({ kind: "retroarch", remoteCommand: { enable: true } }),
     ).toThrow()
   })
 

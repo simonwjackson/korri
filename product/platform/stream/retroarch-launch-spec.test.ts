@@ -231,6 +231,92 @@ describe("typed RetroArch launch spec rendering", () => {
     )
   })
 
+  it("renders guarded advanced cfg groups without adding launch argv", () => {
+    const config = renderRetroArchConfig({
+      achievements: {
+        enable: true,
+        username: "player-one",
+        hardcoreMode: true,
+        badges: true,
+        richPresence: false,
+        testUnofficial: true,
+      },
+      haptics: {
+        vibrateOnKeypress: true,
+        deviceVibration: false,
+      },
+      playlists: { useOldFormat: false },
+      privacy: {
+        cameraDevice: "/dev/video0",
+        cameraAllow: false,
+        locationAllow: false,
+      },
+      updater: {
+        showOnlineUpdater: false,
+        showCoreUpdater: false,
+        buildbotUrl: "https://updates.example.invalid/cores",
+        buildbotAssetsUrl: "https://updates.example.invalid/assets",
+        autoExtractArchive: false,
+      },
+      extraSettings: { cheevos_enable: false },
+    })
+
+    expect(config).toContain('cheevos_enable = "true"')
+    expect(config).toContain('cheevos_username = "player-one"')
+    expect(config).toContain('cheevos_hardcore_mode_enable = "true"')
+    expect(config).toContain('cheevos_badges_enable = "true"')
+    expect(config).toContain('cheevos_richpresence_enable = "false"')
+    expect(config).toContain('cheevos_test_unofficial = "true"')
+    expect(config).toContain('vibrate_on_keypress = "true"')
+    expect(config).toContain('enable_device_vibration = "false"')
+    expect(config).toContain('playlist_use_old_format = "false"')
+    expect(config).toContain('camera_device = "/dev/video0"')
+    expect(config).toContain('camera_allow = "false"')
+    expect(config).toContain('location_allow = "false"')
+    expect(config).toContain('menu_show_online_updater = "false"')
+    expect(config).toContain('menu_show_core_updater = "false"')
+    expect(config).toContain(
+      'core_updater_buildbot_url = "https://updates.example.invalid/cores"',
+    )
+    expect(config).toContain(
+      'core_updater_buildbot_assets_url = "https://updates.example.invalid/assets"',
+    )
+    expect(config).toContain('core_updater_auto_extract_archive = "false"')
+    expect(config.lastIndexOf('cheevos_enable = "false"')).toBeGreaterThan(
+      config.indexOf('cheevos_enable = "true"'),
+    )
+
+    const argv = composeRetroArchLaunchSpec({
+      policy: {
+        updater: { showOnlineUpdater: false },
+        achievements: { enable: true, username: "player-one" },
+      },
+      facts: {
+        configPath: "/tmp/launch/retroarch.cfg",
+        corePath: "/cores/mgba_libretro.so",
+        contentPath: "/games/gba/SMA.gba",
+      },
+    }).args
+    expect(argv).toEqual([
+      "-c",
+      "/tmp/launch/retroarch.cfg",
+      "-L",
+      "/cores/mgba_libretro.so",
+      "/games/gba/SMA.gba",
+    ])
+  })
+
+  it("omits nullable advanced cfg URLs and devices", () => {
+    const config = renderRetroArchConfig({
+      updater: { buildbotUrl: null, buildbotAssetsUrl: null },
+      privacy: { cameraDevice: null },
+    })
+
+    expect(config).not.toContain("core_updater_buildbot_url")
+    expect(config).not.toContain("core_updater_buildbot_assets_url")
+    expect(config).not.toContain("camera_device")
+  })
+
   it("renders menu saves rewind playback and latency settings", () => {
     const config = renderRetroArchConfig({
       drivers: { menu: "ozone" },
@@ -580,11 +666,17 @@ describe("typed RetroArch launch spec rendering", () => {
         extraSettings: { "video_fullscreen\nauto_overrides_enable": true },
       }),
     ).toThrow(/extraSettings key/)
-    expect(() =>
-      renderRetroArchConfig({
-        extraSettings: { cheevos_password: "secret" },
-      }),
-    ).toThrow(/plaintext credential/)
+    for (const key of [
+      "cheevos_password",
+      "cheevos_token",
+      "network_cmd_password",
+    ]) {
+      expect(() =>
+        renderRetroArchConfig({
+          extraSettings: { [key]: "secret" },
+        }),
+      ).toThrow(/plaintext credential/)
+    }
   })
 
   it("rejects extraArgs that duplicate launch identity", () => {

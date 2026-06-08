@@ -421,6 +421,49 @@ describe("RetroArchPolicy", () => {
     expect(policy.input?.ports?.["1"]?.joypadIndex).toBe(0)
   })
 
+  it("decodes guarded advanced cfg groups", () => {
+    const policy = decodeRetroArchPolicy({
+      achievements: {
+        enable: true,
+        username: "player-one",
+        hardcoreMode: true,
+        badges: true,
+        richPresence: false,
+        testUnofficial: true,
+      },
+      haptics: { vibrateOnKeypress: true, deviceVibration: false },
+      playlists: { useOldFormat: false },
+      privacy: { cameraDevice: null, cameraAllow: false, locationAllow: false },
+      updater: {
+        showOnlineUpdater: false,
+        showCoreUpdater: false,
+        buildbotUrl: null,
+        buildbotAssetsUrl: "https://updates.example.invalid/assets",
+        autoExtractArchive: false,
+      },
+    })
+
+    expect(policy.achievements?.username).toBe("player-one")
+    expect(policy.haptics?.deviceVibration).toBe(false)
+    expect(policy.playlists?.useOldFormat).toBe(false)
+    expect(policy.privacy?.cameraDevice).toBeNull()
+    expect(policy.updater?.buildbotUrl).toBeNull()
+  })
+
+  it("rejects plaintext credentials and deferred advanced control fields", () => {
+    for (const badPolicy of [
+      { achievements: { password: "secret" } },
+      { achievements: { token: "secret" } },
+      { netplay: { enable: true } },
+      { remoteCommand: { enable: true } },
+      { networkCommand: { enable: true } },
+      { updater: { buildbotUrl: "" } },
+      { privacy: { cameraDevice: "" } },
+    ]) {
+      expect(() => decodeRetroArchPolicy(badPolicy)).toThrow()
+    }
+  })
+
   it("decodes menu saves rewind playback and gameplay latency fields", () => {
     const policy = decodeRetroArchPolicy({
       menu: {
