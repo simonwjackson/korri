@@ -285,6 +285,35 @@ describe("createLibraryRepository — readable playable entries", () => {
     })
   })
 
+  it("does not report RetroArch releases launchable without a core path", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      await Effect.runPromise(
+        repo.upsertLibraryItem({
+          id: "coreless",
+          title: "Coreless",
+          source: "roms",
+          releases: [
+            {
+              id: "genesis",
+              system: "genesis",
+              target: "genesis/Coreless.md",
+              app: "retroarch",
+            },
+          ],
+        }),
+      )
+
+      await expect(
+        Effect.runPromise(
+          repo.canResolveLaunchForPlayable("coreless", {
+            releaseId: "genesis",
+          }),
+        ),
+      ).resolves.toBe(false)
+    })
+  })
+
   it("launches the selected release and resolves file-backed content paths", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)

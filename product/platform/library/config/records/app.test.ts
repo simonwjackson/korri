@@ -45,6 +45,18 @@ describe("AppPayload", () => {
     })
   })
 
+  it("rejects raw settings and misplaced fields on typed RetroArch apps", () => {
+    expect(() =>
+      decodeAppPayload({ kind: "retroarch", settings: { video_driver: "gl" } }),
+    ).toThrow(/extraSettings/)
+    expect(() =>
+      decodeAppPayload({ kind: "dolphin", video: { fullscreen: true } }),
+    ).toThrow(/kind: retroarch/)
+    expect(() => decodeAppPayload({ video: { fullscreen: true } })).toThrow(
+      /kind: retroarch/,
+    )
+  })
+
   it("rejects unknown app keys", () => {
     expect(() =>
       decodeAppPayload({ settings: {}, type: "retroarch" }),

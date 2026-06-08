@@ -60,6 +60,45 @@ describe("resolveAppDescriptor", () => {
     })
   })
 
+  it("does not extract RetroArch policy from non-RetroArch app records", () => {
+    const app = run(
+      resolveAppDescriptor({
+        appId: "dolphin",
+        apps: appMap([
+          {
+            id: "dolphin",
+            kind: "dolphin",
+            video: { fullscreen: true },
+          },
+        ]),
+        launchers: launcherMap(),
+      }),
+    )
+
+    expect(app.integration).toBe("dolphin")
+    expect(app.retroarch).toBeUndefined()
+  })
+
+  it("preserves legacy launcher RetroArch policy when app override has no RetroArch fields", () => {
+    const app = run(
+      resolveAppDescriptor({
+        appId: "retroarch",
+        apps: appMap([{ id: "retroarch", command: "retroarch" }]),
+        launchers: launcherMap([
+          {
+            id: "retroarch",
+            command: "retroarch",
+            args: ["{contentPath}"],
+            systems: ["snes"],
+            retroarch: { video: { fullscreen: false } },
+          },
+        ]),
+      }),
+    )
+
+    expect(app.retroarch?.video?.fullscreen).toBe(false)
+  })
+
   it("resolves a custom process app with an explicit command", () => {
     const app = run(
       resolveAppDescriptor({

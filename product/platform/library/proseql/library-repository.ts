@@ -7,6 +7,7 @@ import {
 } from "@platform/artifacts/artifact-import-service"
 import { artifactsRoot } from "@platform/artifacts/artifact-store"
 import { materializeReadableRetroArchLaunch } from "@platform/library/config/app-materializer"
+import type { AppIntegrationKind } from "@platform/library/config/app-integrations"
 import {
   type ReadableConfigSnapshot,
   type ResolvedLocalLauncherPolicy,
@@ -14,6 +15,7 @@ import {
   resolveReadableLocalLauncherPolicy,
 } from "@platform/library/config/cascade-resolver"
 import { composeReadableLaunchSpec } from "@platform/library/config/compose-launch-spec"
+import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
 import type {
   GamescopePolicy,
@@ -72,7 +74,7 @@ export interface ResolvedLaunchOutput {
   readonly moonlight?: MoonlightPolicy
   readonly app: {
     readonly id: string
-    readonly integration: string
+    readonly integration: AppIntegrationKind
   }
   readonly runtime?: {
     readonly id: string
@@ -294,7 +296,7 @@ export function createLibraryRepository(
           }).pipe(
             Effect.flatMap(context =>
               isRetroArchAppRecord(context.app)
-                ? Effect.succeed(context.content?.path !== undefined)
+                ? Effect.succeed(canMaterializeRetroArchContext(context))
                 : composeReadableLaunchSpec(context.app, context).pipe(
                     Effect.as(true),
                   ),
@@ -460,6 +462,18 @@ type CollectionApi<T extends { readonly id: string }> = {
   readonly query: () => {
     readonly runPromise: Promise<ReadonlyArray<T>>
   }
+}
+
+function canMaterializeRetroArchContext(
+  context: ReadableResolvedLaunchContext,
+): boolean {
+  const hasContentPath =
+    context.retroarch?.content?.path !== undefined ||
+    context.content?.path !== undefined
+  const hasCorePath =
+    context.retroarch?.core?.path !== undefined ||
+    context.runtime?.path !== undefined
+  return hasContentPath && hasCorePath
 }
 
 function upsertSystemWithCoreRuntime(

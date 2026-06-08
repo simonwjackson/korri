@@ -24,15 +24,41 @@ export const AppKind = Schema.Literals([
 ])
 export type AppKind = Schema.Schema.Type<typeof AppKind>
 
+const RETROARCH_APP_FIELD_KEYS = [
+  "environment",
+  "configFile",
+  "core",
+  "content",
+  "logging",
+  "lifecycle",
+  "paths",
+  "video",
+  "audio",
+  "input",
+  "extraSettings",
+  "extraArgs",
+] as const
+
 const isTypedRetroArchPayload = (payload: {
   readonly id?: string
   readonly kind?: AppKind
   readonly settings?: unknown
-}): string | undefined =>
-  (payload.kind === "retroarch" || payload.id === "retroarch") &&
-  payload.settings !== undefined
-    ? "RetroArch apps use typed fields and extraSettings, not raw settings"
-    : undefined
+  readonly [key: string]: unknown
+}): string | undefined => {
+  const isRetroArch = payload.kind === "retroarch" || payload.id === "retroarch"
+  if (isRetroArch && payload.settings !== undefined) {
+    return "RetroArch apps use typed fields and extraSettings, not raw settings"
+  }
+  if (!isRetroArch) {
+    const misplacedKey = RETROARCH_APP_FIELD_KEYS.find(
+      key => payload[key] !== undefined,
+    )
+    if (misplacedKey) {
+      return `RetroArch field ${misplacedKey} requires kind: retroarch`
+    }
+  }
+  return undefined
+}
 
 const AppPayloadBase = Schema.Struct({
   settings: Schema.optional(LaunchSettings),
@@ -80,3 +106,38 @@ export const appRecordKind = (app: Pick<AppRecord, "id" | "kind">): AppKind =>
 export const isRetroArchAppRecord = (
   app: Pick<AppRecord, "id" | "kind">,
 ): boolean => appRecordKind(app) === "retroarch"
+
+export const appRetroArchPolicyFromRecord = (
+  app: AppRecord,
+): RetroArchPolicy | undefined => {
+  if (!isRetroArchAppRecord(app)) return undefined
+  const {
+    environment,
+    configFile,
+    core,
+    content,
+    logging,
+    lifecycle,
+    paths,
+    video,
+    audio,
+    input,
+    extraSettings,
+    extraArgs,
+  } = app
+  const policy: RetroArchPolicy = {
+    ...(environment !== undefined ? { environment } : {}),
+    ...(configFile !== undefined ? { configFile } : {}),
+    ...(core !== undefined ? { core } : {}),
+    ...(content !== undefined ? { content } : {}),
+    ...(logging !== undefined ? { logging } : {}),
+    ...(lifecycle !== undefined ? { lifecycle } : {}),
+    ...(paths !== undefined ? { paths } : {}),
+    ...(video !== undefined ? { video } : {}),
+    ...(audio !== undefined ? { audio } : {}),
+    ...(input !== undefined ? { input } : {}),
+    ...(extraSettings !== undefined ? { extraSettings } : {}),
+    ...(extraArgs !== undefined ? { extraArgs } : {}),
+  }
+  return Object.keys(policy).length > 0 ? policy : undefined
+}

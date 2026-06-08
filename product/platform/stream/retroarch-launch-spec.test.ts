@@ -121,7 +121,20 @@ describe("typed RetroArch launch spec rendering", () => {
     ).toThrow(/content path/)
   })
 
-  it("rejects extraArgs that duplicate core selection", () => {
+  it("rejects config injection through append paths and raw settings", () => {
+    expect(() =>
+      renderRetroArchConfig({
+        configFile: { append: ["/tmp/a.cfg|/tmp/b.cfg"] },
+      }),
+    ).toThrow(/append.*\|/)
+    expect(() =>
+      renderRetroArchConfig({
+        extraSettings: { ["video_fullscreen\nauto_overrides_enable"]: true },
+      }),
+    ).toThrow(/extraSettings key/)
+  })
+
+  it("rejects extraArgs that duplicate launch identity", () => {
     const facts = {
       configPath: "/tmp/launch/retroarch.cfg",
       corePath: "/cores/mgba_libretro.so",
@@ -132,10 +145,31 @@ describe("typed RetroArch launch spec rendering", () => {
       ["-L", "/other/core.so"],
       ["--libretro"],
       ["--libretro=/other/core.so"],
+      ["-L/other/core.so"],
     ]) {
       expect(() =>
         composeRetroArchLaunchSpec({ policy: { extraArgs }, facts }),
       ).toThrow(/core selection/)
+    }
+
+    for (const extraArgs of [
+      ["-c", "/tmp/other.cfg"],
+      ["--config"],
+      ["--config=/tmp/other.cfg"],
+      ["-c/tmp/other.cfg"],
+    ]) {
+      expect(() =>
+        composeRetroArchLaunchSpec({ policy: { extraArgs }, facts }),
+      ).toThrow(/config file selection/)
+    }
+
+    for (const extraArgs of [
+      ["--appendconfig"],
+      ["--appendconfig=/tmp/a.cfg"],
+    ]) {
+      expect(() =>
+        composeRetroArchLaunchSpec({ policy: { extraArgs }, facts }),
+      ).toThrow(/append configs/)
     }
   })
 })

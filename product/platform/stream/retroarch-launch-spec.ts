@@ -14,7 +14,10 @@ const SAFE_LIFECYCLE_DEFAULTS: Required<
   autoShaders: false,
 }
 
-const DANGEROUS_EXTRA_ARGS = new Set(["-L", "--libretro"])
+const DANGEROUS_CORE_ARGS = new Set(["-L", "--libretro"])
+const DANGEROUS_CONFIG_ARGS = new Set(["-c", "--config"])
+const DANGEROUS_APPEND_CONFIG_ARGS = new Set(["--appendconfig"])
+const RETROARCH_CONFIG_KEY_PATTERN = /^[A-Za-z0-9_]+$/
 
 export interface RetroArchLaunchFacts {
   readonly configPath: string
@@ -45,6 +48,7 @@ export function composeRetroArchLaunchSpec(
 }
 
 export function renderRetroArchConfig(policy: RetroArchPolicy = {}): string {
+  validateRetroArchPolicy(policy)
   const settings = renderRetroArchSettings(policy)
   return `${settings
     .map(([key, value]) => `${key} = ${serializeRetroArchValue(value)}`)
@@ -169,10 +173,43 @@ function validateRetroArchPolicy(policy: RetroArchPolicy) {
   if (policy.configFile?.mode && policy.configFile.mode !== "generated") {
     throw new Error("RetroArch configFile.mode supports generated only in v1")
   }
+  for (const path of policy.configFile?.append ?? []) {
+    if (path.includes("|")) {
+      throw new Error(
+        `RetroArch configFile.append paths must not contain '|': ${path}`,
+      )
+    }
+  }
+  for (const key of Object.keys(policy.extraSettings ?? {})) {
+    if (!RETROARCH_CONFIG_KEY_PATTERN.test(key)) {
+      throw new Error(`Invalid RetroArch extraSettings key: ${key}`)
+    }
+  }
   for (const arg of policy.extraArgs ?? []) {
-    if (DANGEROUS_EXTRA_ARGS.has(arg) || arg.startsWith("--libretro=")) {
+    if (
+      DANGEROUS_CORE_ARGS.has(arg) ||
+      arg.startsWith("--libretro=") ||
+      arg.startsWith("-L")
+    ) {
       throw new Error(
         `RetroArch extraArgs must not override core selection with ${arg}`,
+      )
+    }
+    if (
+      DANGEROUS_CONFIG_ARGS.has(arg) ||
+      arg.startsWith("--config=") ||
+      arg.startsWith("-c")
+    ) {
+      throw new Error(
+        `RetroArch extraArgs must not override config file selection with ${arg}; use configFile.append for additive config layering`,
+      )
+    }
+    if (
+      DANGEROUS_APPEND_CONFIG_ARGS.has(arg) ||
+      arg.startsWith("--appendconfig=")
+    ) {
+      throw new Error(
+        `RetroArch extraArgs must not add append configs with ${arg}; use configFile.append`,
       )
     }
   }

@@ -251,10 +251,16 @@ const materializeReadableRetroArchResources = (
 ): Effect.Effect<MaterializedReadableResources, ResolutionError> =>
   Effect.gen(function* () {
     let policy = input.context.retroarch ?? {}
-    let contentPath =
-      policy.content?.path ??
-      input.context.content?.path ??
-      input.context.target
+    let contentPath = policy.content?.path ?? input.context.content?.path
+    if (contentPath === undefined) {
+      return yield* Effect.fail(
+        new AppMaterializationFailed({
+          appId: input.context.app.id,
+          reason:
+            "typed RetroArch launches require a resolved content path or retroarch.content.path override",
+        }),
+      )
+    }
     const paths: Record<string, string> = {}
 
     if ((input.context.patches?.length ?? 0) > 0) {
@@ -458,7 +464,10 @@ const validatePatchedRetroarchInputs = (
         }),
       )
     }
-    yield* validateReadableRegularContent(contentPath)
+    yield* validateReadableRegularContent(
+      context.appId ?? context.launcherId,
+      contentPath,
+    )
     if (!contentStem(contentPath)) {
       return yield* Effect.fail(
         new AppMaterializationFailed({
@@ -473,6 +482,7 @@ const validatePatchedRetroarchInputs = (
   })
 
 const validateReadableRegularContent = (
+  appId: string,
   path: string,
 ): Effect.Effect<void, ResolutionError> =>
   Effect.tryPromise({
@@ -484,7 +494,7 @@ const validateReadableRegularContent = (
     },
     catch: error =>
       new AppMaterializationFailed({
-        appId: "retroarch",
+        appId,
         reason: error instanceof Error ? error.message : String(error),
       }),
   })
@@ -591,7 +601,7 @@ const stageReadableRetroarchPatchLaunch = (input: {
         }),
       )
     }
-    yield* validateReadableRegularContent(input.contentPath)
+    yield* validateReadableRegularContent(input.appId, input.contentPath)
     for (const patchPath of input.context.patches ?? []) {
       yield* validateReadableRegularPatch(patchPath)
     }
@@ -630,10 +640,19 @@ const stageReadableRetroarchPatchLaunch = (input: {
 const mergeStableRetroArchSettings = (
   policy: RetroArchPolicy,
   settings: LaunchSettings,
-): RetroArchPolicy => ({
-  ...policy,
-  extraSettings: { ...settings, ...(policy.extraSettings ?? {}) },
-})
+): RetroArchPolicy => {
+  const stableSettings = { ...settings }
+  if (policy.paths?.savefileDirectory !== undefined) {
+    delete stableSettings.savefile_directory
+  }
+  if (policy.paths?.savestateDirectory !== undefined) {
+    delete stableSettings.savestate_directory
+  }
+  return {
+    ...policy,
+    extraSettings: { ...stableSettings, ...(policy.extraSettings ?? {}) },
+  }
+}
 
 const stableRetroarchSettings = (
   context: ResolvedLaunchContext,

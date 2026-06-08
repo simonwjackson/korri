@@ -741,6 +741,39 @@ describe("resolveLaunchContext — byLauncher", () => {
     expect(ctx.argsAppend).toEqual(["--gr", "--sr", "--gamer"])
   })
 
+  it("merges byLauncher[L] RetroArch policy when L is the resolved launcher", () => {
+    const snap = snapshotOf({
+      global: globalConfig({
+        retroarch: { extraArgs: ["global"], environment: { RA_KEEP: "1" } },
+      }),
+      systems: [
+        system({
+          id: "snes",
+          launcher: "retroarch",
+          byLauncher: {
+            retroarch: {
+              retroarch: {
+                environment: { RA_UNSET: null },
+                video: { fullscreen: false },
+                extraSettings: { video_font_enable: false },
+                extraArgs: ["by-launcher"],
+              },
+            },
+          },
+        }),
+      ],
+      launchers: [launcher({ id: "retroarch", systems: ["snes"] })],
+      games: [game({ id: "fzero" })],
+    })
+    const ctx = run(resolveLaunchContext(snap, { gameId: "fzero" }))
+    expect(ctx.retroarch).toMatchObject({
+      environment: { RA_KEEP: "1", RA_UNSET: null },
+      video: { fullscreen: false },
+      extraSettings: { video_font_enable: false },
+      extraArgs: ["global", "by-launcher"],
+    })
+  })
+
   it("merges byLauncher[L] patch contributions when L is the resolved launcher", () => {
     const snap = snapshotOf({
       global: globalConfig({

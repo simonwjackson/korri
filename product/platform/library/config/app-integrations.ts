@@ -13,7 +13,12 @@ import type {
 } from "./inheritable-fields"
 import type { LaunchSettings } from "./launch-block"
 import { mergeLaunchSettings } from "./launch-block"
-import { type AppKind, type AppRecord, appRecordKind } from "./records/app"
+import {
+  type AppKind,
+  type AppRecord,
+  appRecordKind,
+  appRetroArchPolicyFromRecord,
+} from "./records/app"
 import type { LauncherRecord } from "./records/launcher"
 import type { ModuleRecord } from "./records/module"
 
@@ -182,45 +187,18 @@ const mergeDescriptor = (
   ...(appOverride?.gamescope ? { gamescope: appOverride.gamescope } : {}),
   ...(appOverride?.moonlight ? { moonlight: appOverride.moonlight } : {}),
   ...(appOverride
-    ? { retroarch: appRetroArchPolicy(appOverride) ?? base.retroarch }
+    ? {
+        retroarch:
+          appRetroArchPolicyFromRecord(appOverride) ??
+          legacyLauncher?.retroarch ??
+          base.retroarch,
+      }
     : {}),
   ...(appOverride?.env ? { env: appOverride.env } : {}),
   ...(appOverride?.cwd !== undefined ? { cwd: appOverride.cwd } : {}),
   ...(appOverride?.argsAppend ? { argsAppend: appOverride.argsAppend } : {}),
   settings: mergeLaunchSettings(base.settings, appOverride?.settings),
 })
-
-const appRetroArchPolicy = (app: AppRecord): RetroArchPolicy | undefined => {
-  const {
-    environment,
-    configFile,
-    core,
-    content,
-    logging,
-    lifecycle,
-    paths,
-    video,
-    audio,
-    input,
-    extraSettings,
-    extraArgs,
-  } = app
-  const policy: RetroArchPolicy = {
-    ...(environment !== undefined ? { environment } : {}),
-    ...(configFile !== undefined ? { configFile } : {}),
-    ...(core !== undefined ? { core } : {}),
-    ...(content !== undefined ? { content } : {}),
-    ...(logging !== undefined ? { logging } : {}),
-    ...(lifecycle !== undefined ? { lifecycle } : {}),
-    ...(paths !== undefined ? { paths } : {}),
-    ...(video !== undefined ? { video } : {}),
-    ...(audio !== undefined ? { audio } : {}),
-    ...(input !== undefined ? { input } : {}),
-    ...(extraSettings !== undefined ? { extraSettings } : {}),
-    ...(extraArgs !== undefined ? { extraArgs } : {}),
-  }
-  return Object.keys(policy).length > 0 ? policy : undefined
-}
 
 const launcherToDescriptor = (launcher: LauncherRecord): AppDescriptor => ({
   id: launcher.id,

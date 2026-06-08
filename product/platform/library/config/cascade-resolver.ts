@@ -56,7 +56,11 @@ import {
   selectLaunchableRelease,
   splitPlayableId,
 } from "./playable-id"
-import { type AppRecord, isRetroArchAppRecord } from "./records/app"
+import {
+  type AppRecord,
+  appRetroArchPolicyFromRecord,
+  isRetroArchAppRecord,
+} from "./records/app"
 import type { CollectionRecord } from "./records/collection"
 import type { GameRecord } from "./records/game"
 import type { GlobalConfigRecord } from "./records/global"
@@ -1305,7 +1309,9 @@ export const resolveLaunchContext = (
       ),
       gamescope: appRecord?.gamescope,
       moonlight: appRecord?.moonlight,
-      retroarch: appRecord ? appRetroArchPolicy(appRecord) : undefined,
+      retroarch: appRecord
+        ? appRetroArchPolicyFromRecord(appRecord)
+        : undefined,
       env: appRecord?.env,
       cwd: appRecord?.cwd,
       argsAppend: appRecord?.argsAppend,
@@ -1521,45 +1527,12 @@ const readableViewOfSource = (
       }
     : {}
 
-const appRetroArchPolicy = (app: AppRecord): RetroArchPolicy | undefined => {
-  if (!isRetroArchAppRecord(app)) return undefined
-  const {
-    environment,
-    configFile,
-    core,
-    content,
-    logging,
-    lifecycle,
-    paths,
-    video,
-    audio,
-    input,
-    extraSettings,
-    extraArgs,
-  } = app
-  const policy: RetroArchPolicy = {
-    ...(environment !== undefined ? { environment } : {}),
-    ...(configFile !== undefined ? { configFile } : {}),
-    ...(core !== undefined ? { core } : {}),
-    ...(content !== undefined ? { content } : {}),
-    ...(logging !== undefined ? { logging } : {}),
-    ...(lifecycle !== undefined ? { lifecycle } : {}),
-    ...(paths !== undefined ? { paths } : {}),
-    ...(video !== undefined ? { video } : {}),
-    ...(audio !== undefined ? { audio } : {}),
-    ...(input !== undefined ? { input } : {}),
-    ...(extraSettings !== undefined ? { extraSettings } : {}),
-    ...(extraArgs !== undefined ? { extraArgs } : {}),
-  }
-  return Object.keys(policy).length > 0 ? policy : undefined
-}
-
 const readableViewOfApp = (app: AppRecord | undefined): ReadableLayerView =>
   app
     ? {
         gamescope: app.gamescope,
         moonlight: app.moonlight,
-        retroarch: appRetroArchPolicy(app),
+        retroarch: appRetroArchPolicyFromRecord(app),
         env: app.env,
         cwd: app.cwd,
         argsAppend: app.argsAppend,
@@ -1596,9 +1569,9 @@ const resolveReadableAppRecord = (
     gamescope: override?.gamescope ?? builtIn.gamescope,
     moonlight: override?.moonlight ?? builtIn.moonlight,
     ...(override?.kind === "retroarch" || builtIn.kind === "retroarch"
-      ? (appRetroArchPolicy(
-          override ?? ({ id: appId, kind: "retroarch" } as AppRecord),
-        ) ?? builtIn.retroarch)
+      ? override !== undefined
+        ? (appRetroArchPolicyFromRecord(override) ?? builtIn.retroarch)
+        : builtIn.retroarch
       : {}),
     env: override?.env ?? builtIn.env,
     cwd: override?.cwd ?? builtIn.cwd,

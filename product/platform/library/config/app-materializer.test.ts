@@ -535,7 +535,10 @@ describe("materializeReadableRetroArchLaunch", () => {
     },
     content: { path: "/games/genesis/Sonic.md" },
     gamescope: { enable: false },
-    retroarch: { configFile: { mode: "generated" }, video: { fullscreen: true } },
+    retroarch: {
+      configFile: { mode: "generated" },
+      video: { fullscreen: true },
+    },
   }
 
   it("writes a generated config and typed RetroArch argv", async () => {
@@ -560,6 +563,75 @@ describe("materializeReadableRetroArchLaunch", () => {
       expect(config).toContain('config_save_on_exit = "false"')
       expect(config).toContain('video_fullscreen = "true"')
     })
+  })
+
+  it("uses explicit RetroArch content.path overrides instead of release content", async () => {
+    await withRoot(async root => {
+      const result = await runPromise(
+        materializeReadableRetroArchLaunch({
+          context: {
+            ...readableContext,
+            retroarch: {
+              ...readableContext.retroarch,
+              content: { path: "/override/Sonic.md" },
+            },
+          },
+          artifactsRoot: root,
+        }),
+      )
+
+      expect(result.spec.args.at(-1)).toBe("/override/Sonic.md")
+    })
+  })
+
+  it("does not let patch stable defaults override typed save paths", async () => {
+    await withRoot(async root => {
+      const content = await seedFile(root, "roms/Sonic.md")
+      const patch = await seedFile(root, "patches/fix.ips")
+      const result = await runPromise(
+        materializeReadableRetroArchLaunch({
+          context: {
+            ...readableContext,
+            content: { path: content },
+            patches: [patch],
+            retroarch: {
+              ...readableContext.retroarch,
+              paths: {
+                savefileDirectory: "/operator/saves",
+                savestateDirectory: "/operator/states",
+              },
+            },
+          },
+          artifactsRoot: join(root, "artifacts"),
+          env: {
+            XDG_DATA_HOME: join(root, "data"),
+            XDG_STATE_HOME: join(root, "state"),
+          },
+        }),
+      )
+
+      const configPath = result.artifacts?.paths.configPath
+      if (configPath === undefined) throw new Error("missing config artifact")
+      const config = await readFile(configPath, "utf8")
+      expect(config).toContain('savefile_directory = "/operator/saves"')
+      expect(config).toContain('savestate_directory = "/operator/states"')
+      expect(config).not.toContain("Sonic.md--")
+    })
+  })
+
+  it("fails before rendering when no content path is resolved", async () => {
+    const exit = await Effect.runPromiseExit(
+      materializeReadableRetroArchLaunch({
+        context: {
+          ...readableContext,
+          content: undefined,
+          retroarch: { configFile: { mode: "generated" } },
+        },
+        artifactsRoot: "/tmp/unused",
+      }),
+    )
+
+    expect(exitFailureMessage(exit)).toContain("AppMaterializationFailed")
   })
 
   it("rejects non-RetroArch apps at the materializer boundary", async () => {
