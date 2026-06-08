@@ -2,7 +2,7 @@ import { Schema } from "effect"
 
 const STRICT = { onExcessProperty: "error" } as const
 
-const LaunchSettingValue = Schema.Union([
+export const LaunchSettingValue = Schema.Union([
   Schema.String,
   Schema.Number,
   Schema.Boolean,

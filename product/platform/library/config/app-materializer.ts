@@ -283,6 +283,14 @@ const materializeReadableRetroArchResources = (
       renderRetroArchConfig(policy),
     )
     paths.configPath = configPath
+    if (policy.logging?.logFile) {
+      yield* tryMaterialize(input.context.app.id, async () => {
+        await mkdir(join(artifactRoot, "logs"), {
+          recursive: true,
+          mode: 0o750,
+        })
+      })
+    }
 
     const corePath = policy.core?.path ?? input.context.runtime?.path
     const spec = yield* tryMaterialize(input.context.app.id, async () =>

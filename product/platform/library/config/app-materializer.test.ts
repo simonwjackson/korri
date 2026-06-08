@@ -565,6 +565,30 @@ describe("materializeReadableRetroArchLaunch", () => {
     })
   })
 
+  it("resolves relative RetroArch log files under launch artifact logs", async () => {
+    await withRoot(async root => {
+      const result = await runPromise(
+        materializeReadableRetroArchLaunch({
+          context: {
+            ...readableContext,
+            retroarch: {
+              ...readableContext.retroarch,
+              logging: { verbose: true, logFile: "retroarch.log" },
+            },
+          },
+          artifactsRoot: root,
+        }),
+      )
+
+      expect(result.spec.args).toContain(
+        `--log-file=${join(result.artifacts?.root ?? "", "logs", "retroarch.log")}`,
+      )
+      expect(await readdir(join(result.artifacts?.root ?? "", "logs"))).toEqual(
+        [],
+      )
+    })
+  })
+
   it("uses explicit RetroArch content.path overrides instead of release content", async () => {
     await withRoot(async root => {
       const result = await runPromise(

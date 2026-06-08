@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 
 import {
+  assertUniqueRetroArchTypedConfigKeys,
   composeRetroArchLaunchSpec,
   renderRetroArchConfig,
 } from "./retroarch-launch-spec"
@@ -63,9 +64,59 @@ describe("typed RetroArch launch spec rendering", () => {
     expect(config).toContain('video_fullscreen = "true"')
     expect(config).toContain("aspect_ratio_index = 22")
     expect(config).toContain("audio_latency = 64")
-    expect(config).toContain("input_menu_toggle_gamepad_combo = 3")
+    expect(config).toContain("input_menu_toggle_gamepad_combo = 4")
     expect(config.lastIndexOf('video_fullscreen = "false"')).toBeGreaterThan(
       config.indexOf('video_fullscreen = "true"'),
+    )
+  })
+
+  it("renders typed settings in stable group order before extraSettings", () => {
+    const config = renderRetroArchConfig({
+      lifecycle: { saveOnExit: true },
+      paths: {
+        systemDirectory: "/bios",
+        savefileDirectory: "/saves",
+        savestateDirectory: "/states",
+        screenshotDirectory: "/screenshots",
+      },
+      video: {
+        fullscreen: true,
+        windowedFullscreen: true,
+        vsync: true,
+        aspectRatio: "core-provided",
+      },
+      audio: { enable: true, latencyMs: 64 },
+      input: {
+        autodetect: true,
+        maxUsers: 4,
+        menuToggleGamepadCombo: "start-select",
+      },
+      extraSettings: { video_fullscreen: false },
+    })
+
+    expect(config).toBe(
+      [
+        'config_save_on_exit = "true"',
+        'auto_overrides_enable = "false"',
+        'auto_remaps_enable = "false"',
+        'game_specific_options = "false"',
+        'auto_shaders_enable = "false"',
+        'system_directory = "/bios"',
+        'savefile_directory = "/saves"',
+        'savestate_directory = "/states"',
+        'screenshot_directory = "/screenshots"',
+        'video_fullscreen = "true"',
+        'video_windowed_fullscreen = "true"',
+        'video_vsync = "true"',
+        "aspect_ratio_index = 22",
+        'audio_enable = "true"',
+        "audio_latency = 64",
+        'input_autodetect_enable = "true"',
+        "input_max_users = 4",
+        "input_menu_toggle_gamepad_combo = 4",
+        'video_fullscreen = "false"',
+        "",
+      ].join("\n"),
     )
   })
 
@@ -74,7 +125,7 @@ describe("typed RetroArch launch spec rendering", () => {
       command: "/run/current-system/sw/bin/retroarch",
       policy: {
         environment: { WAYLAND_DISPLAY: null, SDL_VIDEODRIVER: "x11" },
-        logging: { verbose: true, logFile: "/tmp/retroarch.log" },
+        logging: { verbose: true, logFile: "retroarch.log" },
         configFile: { append: ["/tmp/a.cfg", "/tmp/b.cfg"] },
         extraArgs: ["--features"],
       },
@@ -89,7 +140,7 @@ describe("typed RetroArch launch spec rendering", () => {
       command: "/run/current-system/sw/bin/retroarch",
       args: [
         "-v",
-        "--log-file=/tmp/retroarch.log",
+        "--log-file=/tmp/launch/logs/retroarch.log",
         "-c",
         "/tmp/launch/retroarch.cfg",
         "--appendconfig=/tmp/a.cfg|/tmp/b.cfg",
@@ -121,6 +172,48 @@ describe("typed RetroArch launch spec rendering", () => {
     ).toThrow(/content path/)
   })
 
+  it("rejects absolute log files and extraArgs log-file duplication", () => {
+    const facts = {
+      configPath: "/tmp/launch/retroarch.cfg",
+      corePath: "/cores/mgba_libretro.so",
+      contentPath: "/games/gba/SMA.gba",
+    }
+
+    expect(() =>
+      composeRetroArchLaunchSpec({
+        policy: { logging: { logFile: "/tmp/retroarch.log" } },
+        facts,
+      }),
+    ).toThrow(/logging\.logFile.*relative/)
+    expect(() =>
+      composeRetroArchLaunchSpec({
+        policy: { logging: { logFile: "../retroarch.log" } },
+        facts,
+      }),
+    ).toThrow(/logging\.logFile.*logs/)
+    expect(() =>
+      composeRetroArchLaunchSpec({
+        policy: { extraArgs: ["--log-file=/tmp/retroarch.log"] },
+        facts,
+      }),
+    ).toThrow(/log file/)
+    expect(() =>
+      composeRetroArchLaunchSpec({
+        policy: { extraArgs: ["--log-file", "/tmp/retroarch.log"] },
+        facts,
+      }),
+    ).toThrow(/log file/)
+  })
+
+  it("rejects duplicate typed config key registration", () => {
+    expect(() =>
+      assertUniqueRetroArchTypedConfigKeys([
+        ["video_fullscreen", "video.fullscreen"],
+        ["video_fullscreen", "video.alias"],
+      ]),
+    ).toThrow(/Duplicate RetroArch typed cfg key/)
+  })
+
   it("rejects config injection through append paths and raw settings", () => {
     expect(() =>
       renderRetroArchConfig({
@@ -129,9 +222,14 @@ describe("typed RetroArch launch spec rendering", () => {
     ).toThrow(/append.*\|/)
     expect(() =>
       renderRetroArchConfig({
-        extraSettings: { ["video_fullscreen\nauto_overrides_enable"]: true },
+        extraSettings: { "video_fullscreen\nauto_overrides_enable": true },
       }),
     ).toThrow(/extraSettings key/)
+    expect(() =>
+      renderRetroArchConfig({
+        extraSettings: { cheevos_password: "secret" },
+      }),
+    ).toThrow(/plaintext credential/)
   })
 
   it("rejects extraArgs that duplicate launch identity", () => {

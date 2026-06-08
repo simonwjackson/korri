@@ -36,7 +36,7 @@
 
 import { Schema } from "effect"
 
-import { LaunchSettings } from "./launch-block"
+import { LaunchSettingValue } from "./launch-block"
 
 const STRICT = { onExcessProperty: "error" } as const
 
@@ -464,9 +464,17 @@ export type RetroArchMenuToggleGamepadCombo = Schema.Schema.Type<
   typeof RetroArchMenuToggleGamepadCombo
 >
 
+const RetroArchAppendConfigPath = NonEmptyString("configFile.append[]").check(
+  Schema.makeFilter(value =>
+    value.includes("|")
+      ? "configFile.append paths must not contain '|'"
+      : undefined,
+  ),
+)
+
 const RetroArchConfigFilePolicy = Schema.Struct({
   mode: Schema.optional(Schema.Literal("generated")),
-  append: Schema.optional(Schema.Array(NonEmptyString("configFile.append[]"))),
+  append: Schema.optional(Schema.Array(RetroArchAppendConfigPath)),
 })
 
 const RetroArchPathPolicy = Schema.Struct({
@@ -509,6 +517,29 @@ const RetroArchAudioPolicy = Schema.Struct({
   latencyMs: Schema.optional(NonNegativeNumber("audio.latencyMs")),
 })
 
+const RETROARCH_CONFIG_KEY_PATTERN = /^[A-Za-z0-9_]+$/
+const RETROARCH_PLAINTEXT_CREDENTIAL_SETTING_KEYS = new Set([
+  "cheevos_password",
+  "cheevos_token",
+  "network_cmd_password",
+])
+
+const RetroArchExtraSettingKey = Schema.String.check(
+  Schema.makeFilter(value => {
+    if (!RETROARCH_CONFIG_KEY_PATTERN.test(value)) {
+      return `Invalid RetroArch extraSettings key: ${value}`
+    }
+    if (RETROARCH_PLAINTEXT_CREDENTIAL_SETTING_KEYS.has(value)) {
+      return `RetroArch extraSettings must not contain plaintext credential key: ${value}`
+    }
+    return undefined
+  }),
+)
+const RetroArchExtraSettings = Schema.Record(
+  RetroArchExtraSettingKey,
+  LaunchSettingValue,
+)
+
 const RetroArchInputPolicy = Schema.Struct({
   autodetect: Schema.optional(Schema.Boolean),
   maxUsers: Schema.optional(PositiveInteger("input.maxUsers")),
@@ -531,7 +562,7 @@ export const RetroArchPolicy = Schema.Struct({
   video: Schema.optional(RetroArchVideoPolicy),
   audio: Schema.optional(RetroArchAudioPolicy),
   input: Schema.optional(RetroArchInputPolicy),
-  extraSettings: Schema.optional(LaunchSettings),
+  extraSettings: Schema.optional(RetroArchExtraSettings),
   extraArgs: Schema.optional(Schema.Array(Schema.String)),
 })
 export type RetroArchPolicy = Schema.Schema.Type<typeof RetroArchPolicy>

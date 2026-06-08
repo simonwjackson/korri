@@ -209,6 +209,30 @@ describe("RetroArchPolicy", () => {
     }
   })
 
+  it("rejects append delimiters and unsafe extraSettings before rendering", () => {
+    expect(() =>
+      decodeRetroArchPolicy({
+        configFile: { append: ["/tmp/a.cfg|/tmp/b.cfg"] },
+      }),
+    ).toThrow(/append.*\|/)
+    expect(() =>
+      decodeRetroArchPolicy({
+        extraSettings: { "video_fullscreen\nauto_overrides_enable": true },
+      }),
+    ).toThrow(/extraSettings key/)
+    expect(() =>
+      decodeRetroArchPolicy({ extraSettings: { cheevos_password: "secret" } }),
+    ).toThrow(/plaintext credential/)
+    expect(() =>
+      decodeRetroArchPolicy({ extraSettings: { cheevos_token: "secret" } }),
+    ).toThrow(/plaintext credential/)
+    expect(() =>
+      decodeRetroArchPolicy({
+        extraSettings: { network_cmd_password: "secret" },
+      }),
+    ).toThrow(/plaintext credential/)
+  })
+
   it("rejects unknown typed policy keys and enum values", () => {
     for (const badPolicy of [
       { video: { fullScreen: true } },

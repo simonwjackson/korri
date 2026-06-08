@@ -1,628 +1,204 @@
-# Draft: NixOS-module-style RetroArch policy shape for Korri readable config.
+# Draft: one-to-one RetroArch policy inventory reconciled to Korri's current
+# typed readable contract.
 #
-# Status: second draft after upstream/local research.
+# Status: reconciled reference. The active YAML below is intentionally limited
+# to the shipped minimal RetroArch v1 schema. Future full-config inventory is
+# kept as commented reference so this file can guide expansion without
+# advertising unsupported active schema.
 #
-# Goal: make RetroArch launch + retroarch.cfg configuration a typed, readable
-# application contract like Gamescope and Moonlight. Public config describes
-# emulator intent; Korri renders argv, generated retroarch.cfg files,
-# environment, and per-launch artifacts internally.
+# Current contract:
+# - App records select the typed renderer with `kind: retroarch`.
+# - RetroArch app fields are flat on that app record; do not add another nested
+#   app-level policy object.
+# - Non-app cascade layers such as runtimes, profiles, sources, systems,
+#   releases, and library items use a namespaced `retroarch:` override.
+# - `configFile` is only the launch-time generated config selector in v1.
+# - Generated retroarch.cfg fields are typed groups (`lifecycle`, `paths`,
+#   `video`, `audio`, `input`) plus `extraSettings` as the raw cfg escape hatch.
+# - Raw app `settings`, generic integration fields, author-provided config file
+#   paths, and non-generated config selection are not active schema here.
 #
-# Source-of-truth inventory used for this draft:
-# - Upstream master retroarch.cfg skeleton: 331 commented config keys.
-# - Upstream config.def.h / configuration.c for defaults and driver enums.
-# - Local pinned Korri/Nix RetroArch help: RetroArch 1.21.0 in this repo eval;
-#   stock nixpkgs shell observed 1.22.2. Exact target package must be verified
-#   before implementation.
-# - Current Korri convention: retroarch -c {configPath} -L {runtime.path}
-#   {content.path}, with per-launch retroarch.cfg generated from inherited
-#   settings.
-#
-# Important modelling rule:
-# - RetroArch config file keys are flat snake_case.
-# - This YAML groups them semantically, but each field comment names the
-#   retroarch.cfg key or CLI flag it renders to.
-# - `extraSettings` is a temporary escape hatch for unmodelled retroarch.cfg
-#   keys; the implementation plan should decide whether v1 is broad enough to
-#   reject unknown raw settings in product configs.
-#
-# Critical pitfalls discovered:
-# - Generated configs should usually set config_save_on_exit=false, otherwise
-#   RetroArch rewrites the generated cfg on exit.
-# - aspect_ratio_index has valid value 24 (`full`) even though some skeleton
-#   comments stop at 23.
-# - video_frame_delay max is 99 in current source, despite stale comments saying
-#   15.
-# - rewind_buffer_size is authored in MB in cfg, despite byte defaults in source.
-# - cheevos_password is plaintext; do not put secrets in readable YAML.
+# Drift traps to preserve during future expansion:
+# - `input.menuToggleGamepadCombo: start-select` renders
+#   `input_menu_toggle_gamepad_combo = 4`.
+# - `aspect_ratio_index` includes `full = 24` when that enum is added.
+# - `video_frame_delay` accepts 0..99 when video sync fields are added.
+# - `rewind_buffer_size` is authored in MB when rewind fields are added.
+# - Plaintext credential cfg keys such as cheevos_password, cheevos_token, and
+#   network_cmd_password do not belong in readable policy or extraSettings.
+
+storage:
+  roms:
+    root: /storage/roms
+
+sources:
+  roms:
+    title: Local ROM library
+    kind: [files]
+    storage: roms
 
 apps:
   retroarch:
+    kind: retroarch
     command: retroarch
 
-    retroarch:
-      # Korri switch. No direct RetroArch option; controls whether Korri uses
-      # the typed RetroArch renderer/materializer for this app.
-      enable: true
+    environment:
+      WAYLAND_DISPLAY: null
+      SDL_VIDEODRIVER: x11
 
-      # Environment for the RetroArch process itself. Values are strings; null
-      # means remove the variable before spawning RetroArch. Prefer typed config
-      # paths below for normal RetroArch paths; use environment for substrate
-      # integration or intentional process-level overrides.
-      environment:
-        WAYLAND_DISPLAY: null
-        SDL_VIDEODRIVER: x11
-        LIBRETRO_SYSTEM_DIRECTORY: null
-        OBSOLETE_RETROARCH_VAR: null
+    logging:
+      verbose: false
+      logFile: null # relative names resolve under launch artifacts/logs
 
-      # ---------------------------------------------------------------------
-      # Launch argv surface: retroarch [OPTIONS]... [FILE]
-      # ---------------------------------------------------------------------
-      launch:
-        logging:
-          verbose: false # -v, --verbose
-          logFile: null # --log-file=FILE
+    configFile:
+      mode: generated
+      append: []
 
-        startup:
-          menu: false # --menu
-          loadMenuOnError: true # --load-menu-on-error
-          accessibility: false # --accessibility
-          detach: false # -D, --detach; normally false for supervised Korri launches
+    core:
+      path: "{runtime.path}"
 
-        # Config file argv. Generated mode is the current Korri equivalent.
-        config:
-          mode: generated # generated | path | default
-          path: "{configPath}" # -c, --config=FILE when generated/path
-          append: [] # --appendconfig=FILE|FILE; YAML list renders pipe-delimited
+    content:
+      path: "{content.path}"
 
-        core:
-          path: "{runtime.path}" # -L, --libretro=FILE
-          subsystem: null # --subsystem=NAME; multi-content cores only
+    lifecycle:
+      saveOnExit: false # config_save_on_exit
+      autoOverrides: false # auto_overrides_enable
+      autoRemaps: false # auto_remaps_enable
+      gameSpecificOptions: false # game_specific_options
+      autoShaders: false # auto_shaders_enable
 
-        content:
-          path: "{content.path}" # final FILE argument
+    paths:
+      systemDirectory: /storage/bios # system_directory
+      savefileDirectory: /storage/saves/retroarch # savefile_directory
+      savestateDirectory: /storage/states/retroarch # savestate_directory
+      screenshotDirectory: /storage/screenshots # screenshot_directory
 
-          # Direct RetroArch soft-patch argv. Korri also has generic content
-          # materialization; final design should choose the canonical owner.
-          patch:
-            mode: auto # auto | disabled | explicit
-            ips: null # --ips=FILE
-            bps: null # --bps=FILE
-            ups: null # -U, --ups=FILE
-            xdelta: null # --xdelta=FILE; Korri overlay adds this to pinned 1.21.0
-            disable: false # --no-patch
+    video:
+      fullscreen: true # video_fullscreen
+      windowedFullscreen: true # video_windowed_fullscreen
+      vsync: true # video_vsync
+      aspectRatio: core-provided # aspect_ratio_index = 22
 
-        video:
-          fullscreen: null # -f, --fullscreen; null = use cfg video.fullscreen
-          shader: null # --set-shader=PATH; empty string disables auto presets
+    audio:
+      enable: true # audio_enable
+      latencyMs: 64 # audio_latency
 
-        inputDevices:
-          # Launch-time device overrides. Prefer cfg/autoconfig for product
-          # defaults; these are useful for diagnostics or per-launch overrides.
-          ports:
-            - port: 1
-              device: retropad # none | dualanalog | retropad | mouse | keyboard | lightgun | numeric id
-              # none -> --nodevice=PORT
-              # dualanalog -> --dualanalog=PORT
-              # numeric/custom -> --device=PORT:ID
+    input:
+      autodetect: true # input_autodetect_enable
+      maxUsers: 4 # input_max_users
+      menuToggleGamepadCombo: start-select # input_menu_toggle_gamepad_combo = 4
 
-        saves:
-          # Deprecated RetroArch argv; prefer cfg.paths.savefileDirectory and
-          # cfg.paths.savestateDirectory for steady policy.
-          sramMode: load-save # -M, --sram-mode: noload-nosave | noload-save | load-nosave | load-save
-          entrySlot: null # -e, --entryslot=NUMBER
-          saveFile: null # -s, --save=PATH; deprecated upstream
-          saveState: null # -S, --savestate=PATH; deprecated upstream
-
-        netplay:
-          mode: disabled # disabled | host | connect
-          connectHost: null # -C, --connect=HOST
-          port: 55435 # --port=PORT
-          mitmSession: null # --mitm-session=ID
-          nick: null # --nick=NICK
-          checkFrames: null # --check-frames=NUMBER
-          # host mode renders -H, --host.
-
-        replay:
-          play: null # -P, --play-replay=FILE
-          record: null # -R, --record-replay=FILE
-          eofExit: false # --eof-exit
-
-        recording:
-          videoFile: null # -r, --record=FILE
-          configFile: null # --recordconfig=FILE
-          size: null # --size=WIDTHxHEIGHT
-          # size: { width: 1280, height: 720 }
-
-        automation:
-          maxFrames: null # --max-frames=NUMBER
-          screenshotAtEnd: false # --max-frames-ss
-          screenshotPath: null # --max-frames-ss-path=FILE
-
-        libraryImport:
-          scan: null # --scan=PATH|FILE; probably importer/debug, not launch policy
-
-        remoteCommand:
-          # Sends a command over UDP to an already-running RetroArch process.
-          # Shown for one-to-one visibility; likely belongs in a runtime control
-          # API, not normal launch policy.
-          enable: false # --command
-
-        extraArgs: []
-
-      # ---------------------------------------------------------------------
-      # Generated retroarch.cfg surface.
-      # Korri renders this to flat snake_case key/value lines.
-      # ---------------------------------------------------------------------
-      config:
-        lifecycle:
-          saveOnExit: false # config_save_on_exit; important for generated configs
-          showHiddenFiles: false # show_hidden_files
-          loadDummyOnCoreShutdown: false # load_dummy_on_core_shutdown
-          historyListEnable: true # history_list_enable
-          performanceCounters: false # perfcnt_enable
-          allUsersControlMenu: false # all_users_control_menu
-          suspendScreensaver: true # suspend_screensaver_enable
-          sustainedPerformanceMode: false # sustained_performance_mode
-          gameMode: true # gamemode_enable
-
-        logging:
-          verbosity: false # log_verbosity
-          libretroLogLevel: info # libretro_log_level: debug | info | warn | error
-          fpsShow: false # fps_show
-          memoryShow: false # memory_show
-          framecountShow: false # framecount_show
-
-        paths:
-          # Common path keys.
-          systemDirectory: /storage/bios # system_directory
-          contentDirectory: null # content_directory
-          cacheDirectory: /storage/.cache/retroarch # cache_directory
-          assetsDirectory: /run/current-system/sw/share/retroarch/assets # assets_directory
-          dynamicWallpapersDirectory: null # dynamic_wallpapers_directory
-          thumbnailsDirectory: /storage/.local/share/retroarch/thumbnails # thumbnails_directory
-          screenshotDirectory: /storage/screenshots # screenshot_directory
-          playlistDirectory: /storage/.local/share/retroarch/playlists # playlist_directory
-
-          # Core/libretro metadata and assets.
-          libretroDirectory: /run/current-system/sw/lib/retroarch/cores # libretro_directory
-          libretroInfoPath: /run/current-system/sw/share/libretro/info # libretro_info_path
-          coreAssetsDirectory: /storage/.local/share/retroarch/downloads # core_assets_directory
-          coreOptionsPath: /storage/.config/retroarch/core-options.cfg # core_options_path
-
-          # Input, overlay, shader, filters, cheats, databases.
-          joypadAutoconfigDirectory: /run/current-system/sw/share/retroarch/autoconfig # joypad_autoconfig_dir
-          inputRemappingDirectory: /storage/.config/retroarch/remaps # input_remapping_directory
-          overlayDirectory: /storage/.config/retroarch/overlays # overlay_directory
-          videoShaderDirectory: /run/current-system/sw/share/retroarch/shaders # video_shader_dir
-          videoFilterDirectory: null # video_filter_dir
-          audioFilterDirectory: null # audio_filter_dir
-          cheatDatabasePath: /storage/.local/share/retroarch/cheats # cheat_database_path
-          contentDatabasePath: /storage/.local/share/retroarch/database/rdb # content_database_path
-
-          # Saves/states/history/runtime logs.
-          savefileDirectory: /storage/saves/retroarch # savefile_directory
-          savestateDirectory: /storage/states/retroarch # savestate_directory
-          contentHistoryDirectory: /storage/.local/share/retroarch/history # content_history_dir
-          contentHistoryPath: /storage/.local/share/retroarch/content_history.lpl # content_history_path
-          contentMusicHistoryPath: /storage/.local/share/retroarch/music_history.lpl # content_music_history_path
-          contentImageHistoryPath: /storage/.local/share/retroarch/image_history.lpl # content_image_history_path
-          contentVideoHistoryPath: /storage/.local/share/retroarch/video_history.lpl # content_video_history_path
-          contentRuntimeLog: true # content_runtime_log
-
-          # RGUI legacy/browser paths.
-          rguiConfigDirectory: null # rgui_config_directory
-          rguiBrowserDirectory: null # rgui_browser_directory
-
-          # Recording.
-          recordingOutputDirectory: /storage/captures/retroarch # recording_output_directory
-          recordingConfigDirectory: /storage/.config/retroarch/recording # recording_config_directory
-
-        updater:
-          # Mostly out-of-scope for locked-down product images, but one-to-one
-          # with config keys so the renderer can reject or intentionally support.
-          coreBuildbotUrl: null # core_updater_buildbot_url
-          coreBuildbotAssetsUrl: null # core_updater_buildbot_assets_url
-          coreAutoExtractArchive: true # core_updater_auto_extract_archive
-
-        drivers:
-          input: udev # input_driver: udev | linuxraw | x | wayland | sdl2 | null
-          joypad: udev # input_joypad_driver: udev | linuxraw | sdl2 | null | ...
-          video: glcore # video_driver: gl | glcore | vulkan | drm | sdl2 | null | ...
-          videoContext: null # video_context_driver
-          audio: alsathread # audio_driver: alsa | alsathread | pulse | pipewire | sdl2 | null | ...
-          audioResampler: sinc # audio_resampler: sinc | cc | nearest | null
-          camera: null # camera_driver
-          location: null # location_driver
-          menu: ozone # menu_driver: ozone | xmb | rgui | glui | null
-          record: ffmpeg # record_driver
-
-        video:
-          monitorIndex: 0 # video_monitor_index
-          fullscreen: true # video_fullscreen
-          windowedFullscreen: true # video_windowed_fullscreen
-          fullscreenWidth: 0 # video_fullscreen_x; 0 = desktop/current
-          fullscreenHeight: 0 # video_fullscreen_y
-          refreshRate: 60.0 # video_refresh_rate
-          crtRefreshRate: 60.0 # crt_video_refresh_rate
-          forceSrgbDisable: false # video_force_srgb_disable
-
-          window:
-            scale: 3.0 # video_scale
-            opacity: 100 # video_window_opacity
-            showDecorations: false # video_window_show_decorations
-            disableComposition: false # video_disable_composition
-
-          sync:
-            vsync: true # video_vsync
-            swapInterval: 1 # video_swap_interval
-            maxSwapchainImages: 3 # video_max_swapchain_images
-            hardSync: false # video_hard_sync
-            hardSyncFrames: 0 # video_hard_sync_frames
-            frameDelay: 0 # video_frame_delay, 0..99
-            frameDelayAuto: false # video_frame_delay_auto
-            blackFrameInsertion: 0 # video_black_frame_insertion
-            threaded: false # video_threaded
-            sharedContext: false # video_shared_context
-
-          scaling:
-            smooth: false # video_smooth
-            forceAspect: true # video_force_aspect
-            aspectRatioAuto: false # video_aspect_ratio_auto
-            aspectRatio: core-provided # aspect_ratio_index enum; core-provided -> 22
-            aspectRatioValue: null # video_aspect_ratio; required when aspectRatio=config
-            scaleInteger: false # video_scale_integer
-            cropOverscan: true # video_crop_overscan
-            rotation: normal # video_rotation: normal | right | upside-down | left
-            screenOrientation: normal # screen_orientation
-
-          shader:
-            enable: false # video_shader_enable
-            path: null # video_shader
-            watchFiles: false # video_shader_watch_files
-
-          hdr:
-            enable: false # video_hdr_enable
-            maxNits: null # video_hdr_max_nits, if available in target version
-            paperWhiteNits: null # video_hdr_paper_white_nits, if available
-            contrast: null # video_hdr_contrast, if available
-            expandGamut: null # video_hdr_expand_gamut, if available
-
-          screenshots:
-            gpuScreenshot: true # video_gpu_screenshot
-
-          recording:
-            postFilterRecord: false # video_post_filter_record
-            gpuRecord: false # video_gpu_record
-
-        audio:
-          enable: true # audio_enable
-          enableMenu: false # audio_enable_menu
-          enableMenuOk: true # audio_enable_menu_ok
-          enableMenuCancel: true # audio_enable_menu_cancel
-          enableMenuNotice: true # audio_enable_menu_notice
-          enableMenuBgm: false # audio_enable_menu_bgm
-          mute: false # audio_mute_enable
-          mixerMute: false # audio_mixer_mute_enable
-          outRate: 48000 # audio_out_rate
-          device: null # audio_device
-          dspPlugin: null # audio_dsp_plugin
-          sync: true # audio_sync
-          latencyMs: 64 # audio_latency
-          rateControl: true # audio_rate_control
-          rateControlDelta: 0.005 # audio_rate_control_delta
-          maxTimingSkew: 0.05 # audio_max_timing_skew
-          volumeDb: 0.0 # audio_volume
-          mixerVolumeDb: 0.0 # audio_mixer_volume
-
-        input:
-          maxUsers: 4 # input_max_users
-          bindTimeoutSeconds: 5 # input_bind_timeout
-          keyboardLayout: null # input_keyboard_layout
-          axisThreshold: 0.5 # input_axis_threshold
-          analogDeadzone: 0.0 # input_analog_deadzone
-          analogSensitivity: 1.0 # input_analog_sensitivity
-          autodetect: true # input_autodetect_enable
-          descriptorLabelShow: true # input_descriptor_label_show
-          descriptorHideUnbound: false # input_descriptor_hide_unbound
-          pollTypeBehavior: normal # input_poll_type_behavior: early | normal | late
-          remapBindsEnable: true # input_remap_binds_enable
-          autoGameFocus: false # input_auto_game_focus
-          autoGameFocusOff: true # input_auto_game_focus_off
-
-          menuToggleGamepadCombo: start-select # input_menu_toggle_gamepad_combo
-          quitGamepadCombo: none # input_quit_gamepad_combo
-
-          overlay:
-            enable: false # input_overlay_enable
-            behindMenu: false # input_overlay_behind_menu
-            hideInMenu: true # input_overlay_hide_in_menu
-            path: null # input_overlay
-            opacity: 0.7 # input_overlay_opacity
-            scale: 1.0 # input_overlay_scale
-            centerX: 0.5 # input_overlay_center_x
-            centerY: 0.5 # input_overlay_center_y
-
-          # Represents input_libretro_device_p1..p16 without repeating 16 fields.
-          ports:
-            - port: 1
-              libretroDevice: retropad # input_libretro_device_p1
-              analogDpadMode: none # input_player1_analog_dpad_mode
-              mouseIndex: 0 # input_player1_mouse_index
-              joypadIndex: 0 # input_player1_joypad_index
-
-              # Binding maps represent the large input_playerN_* key family:
-              # b/y/select/start/up/down/left/right/a/x/l/r/l2/r2/l3/r3,
-              # analog axes, turbo, and hotkeys. Values render to
-              # input_player1_<name>, input_player1_<name>_axis,
-              # input_player1_<name>_btn, etc.
-              binds:
-                b: null
-                y: null
-                select: null
-                start: null
-                up: null
-                down: null
-                left: null
-                right: null
-                a: null
-                x: null
-                l: null
-                r: null
-                l2: null
-                r2: null
-                l3: null
-                r3: null
-                lXPlus: null
-                lXMinus: null
-                lYPlus: null
-                lYMinus: null
-                rXPlus: null
-                rXMinus: null
-                rYPlus: null
-                rYMinus: null
-
-          hotkeys:
-            # Represents input_* hotkey cfg keys. Keep as a map because the
-            # RetroArch key family is large and version-sensitive.
-            enableHotkey: null # input_enable_hotkey
-            exitEmulator: null # input_exit_emulator
-            menuToggle: null # input_menu_toggle
-            saveState: null # input_save_state
-            loadState: null # input_load_state
-            stateSlotIncrease: null # input_state_slot_increase
-            stateSlotDecrease: null # input_state_slot_decrease
-            rewind: null # input_rewind
-            fastForward: null # input_hold_fast_forward / input_toggle_fast_forward
-            screenshot: null # input_screenshot
-
-        menu:
-          driver: ozone # menu_driver, duplicated from drivers.menu for author convenience?
-          rguiShowStartScreen: false # rgui_show_start_screen
-          searchButton: null # menu_search_btn
-          infoButton: null # menu_info_btn
-          defaultButton: null # menu_default_btn
-          scrollDownButton: null # menu_scroll_down_btn
-          scrollUpButton: null # menu_scroll_up_btn
-          swapOkCancelButtons: false # menu_swap_ok_cancel_buttons
-          swapScrollButtons: false # menu_swap_scroll_buttons
-          showOnlineUpdater: false # menu_show_online_updater
-          showCoreUpdater: false # menu_show_core_updater
-          pauseLibretro: true # menu_pause_libretro
-          unifiedControls: false # menu_unified_controls
-          mouseEnable: false # menu_mouse_enable
-          pointerEnable: false # menu_pointer_enable
-          timeDateEnable: true # menu_timedate_enable
-          batteryLevelEnable: true # menu_battery_level_enable
-          coreEnable: true # menu_core_enable
-          wallpaper: null # menu_wallpaper
-          dynamicWallpaperEnable: false # menu_dynamic_wallpaper_enable
-          thumbnails: none # menu_thumbnails: none | snaps | titles | boxarts | logos
-          leftThumbnails: none # menu_left_thumbnails
-          navigationWraparound: true # menu_navigation_wraparound_enable
-          browserFilterSupportedExtensions: true # menu_navigation_browser_filter_supported_extensions_enable
-          collapseSubgroups: false # menu_collapse_subgroups_enable
-
-        saves:
-          autoSaveState: false # savestate_auto_save
-          autoLoadState: false # savestate_auto_load
-          autoIndexState: false # savestate_auto_index
-          maxKeepStates: 0 # savestate_max_keep, if available in target version
-          autosaveIntervalSeconds: 10 # autosave_interval
-          blockSramOverwrite: false # block_sram_overwrite
-          sortSavefiles: true # sort_savefiles_enable, if available
-          sortSavestates: true # sort_savestates_enable, if available
-
-        rewind:
-          enable: false # rewind_enable
-          bufferSizeMb: 20 # rewind_buffer_size; cfg unit is MB
-          granularityFrames: 1 # rewind_granularity
-
-        latency:
-          # Mirrors video.sync keys for an intent-oriented place to author them.
-          # Implementation should choose either this group or video.sync as the
-          # canonical public spelling, not both.
-          hardSync: false # video_hard_sync
-          hardSyncFrames: 0 # video_hard_sync_frames
-          frameDelay: 0 # video_frame_delay
-          frameDelayAuto: false # video_frame_delay_auto
-          runAhead:
-            enable: false # run_ahead_enabled
-            frames: 1 # run_ahead_frames
-            secondaryInstance: true # run_ahead_secondary_instance
-            hideWarnings: false # run_ahead_hide_warnings, if available
-          preemptiveFrames:
-            enable: false # preempt_frames_enable
-            frames: 0 # preempt_num_frames
-
-        netplay:
-          clientSwapInput: false # netplay_client_swap_input
-          nickname: null # netplay_nickname
-          delayFrames: 0 # netplay_delay_frames
-          mode: host # netplay_mode: host/server vs client bool in cfg
-          spectatorMode: false # netplay_spectator_mode_enable
-          ipAddress: null # netplay_ip_address
-          ipPort: 55435 # netplay_ip_port
-          useMitmServer: false # netplay_use_mitm_server
-          mitmServer: nyc # netplay_mitm_server
-          publicAnnounce: false # netplay_public_announce, target-version dependent
-          natTraversal: false # netplay_nat_traversal, target-version dependent
-          checkFrames: 600 # netplay_check_frames, target-version dependent
-
-        achievements:
-          enable: false # cheevos_enable
-          username: null # cheevos_username
-          # password intentionally omitted: cheevos_password is plaintext.
-          passwordSecretRef: null # Korri-owned secret reference, not retroarch.cfg
-          visibilityAccount: true # cheevos_visibility_account
-          hardcoreMode: false # cheevos_hardcore_mode_enable
-          visibilityUnlock: true # cheevos_visibility_unlock
-          unlockSound: true # cheevos_unlock_sound_enable
-          autoScreenshot: false # cheevos_auto_screenshot
-          visibilityMastery: true # cheevos_visibility_mastery
-          verbose: false # cheevos_verbose_enable
-          badges: true # cheevos_badges_enable
-          challengeIndicators: true # cheevos_challenge_indicators
-          visibilityLeaderboardStart: true # cheevos_visibility_lboard_start
-          visibilityLeaderboardSubmit: true # cheevos_visibility_lboard_submit
-          visibilityLeaderboardTrackers: true # cheevos_visibility_lboard_trackers
-          richPresence: true # cheevos_richpresence_enable
-          startActive: false # cheevos_start_active
-          testUnofficial: false # cheevos_test_unofficial
-
-        privacyDevices:
-          camera:
-            allow: false # camera_allow
-            device: null # camera_device
-          location:
-            allow: false # location_allow
-          microphone:
-            enable: false # microphone_enable
-            latencyMs: 64 # microphone_latency
-
-        companionUi:
-          desktopMenuEnable: false # desktop_menu_enable
-          uiCompanionStartOnBoot: false # ui_companion_start_on_boot
-          uiCompanionToggle: false # ui_companion_toggle
-
-        playback:
-          pauseNonactive: true # pause_nonactive
-          pauseOnDisconnect: true # pause_on_disconnect
-          slowmotionRatio: 3.0 # slowmotion_ratio
-          fastforwardRatio: 0.0 # fastforward_ratio; 0 = unlimited
-
-        control:
-          networkCommandEnable: false # network_cmd_enable
-          networkCommandPort: 55355 # network_cmd_port
-          stdinCommandEnable: false # stdin_cmd_enable
-
-        haptics:
-          vibrateOnKeypress: false # vibrate_on_keypress
-          enableDeviceVibration: true # enable_device_vibration
-
-        playlists:
-          useOldFormat: false # playlist_use_old_format
-
-        # Escape hatch for retroarch.cfg keys not modelled above. Keys are flat
-        # upstream names; values render using RetroArch cfg serialization.
-        extraSettings: {}
-        # extraSettings:
-        #   notification_show_autoconfig: false
-        #   video_font_enable: false
-
-      # Optional validation policy for deterministic Korri launches.
-      korri:
-        deterministicGeneratedConfig: true
-        disableAutoOverrides: true # would render game_specific_options/auto_overrides/auto_remaps false if supported
-        rejectPlaintextSecrets: true
-
-# ---------------------------------------------------------------------------
-# Example cascade usage.
-# ---------------------------------------------------------------------------
+    extraSettings: {}
+      # Example only; add raw cfg keys only when a typed field does not yet
+      # exist and the key is not a known plaintext credential.
+      # notification_show_autoconfig: false
+    extraArgs: []
+      # Example only; launch identity flags such as config/core/appendconfig are
+      # guarded and must use typed fields instead.
+      # - --features
 
 systems:
   gba:
-    title: Game Boy Advance
-    app: retroarch
-    runtime: gba-mgba
+    name: Game Boy Advance
+    launch:
+      app: retroarch
 
 runtimes:
   gba-mgba:
-    title: mGBA libretro core
-    app: retroarch
+    kind: libretro-core
     path: /run/current-system/sw/lib/retroarch/cores/mgba_libretro.so
     retroarch:
-      launch:
-        core:
-          path: "{runtime.path}"
-      config:
-        video:
-          scaling:
-            aspectRatio: core-provided
-        input:
-          maxUsers: 1
+      core:
+        path: "{runtime.path}"
 
 profiles:
-  handheld-retroarch-defaults:
+  handheld-retroarch:
     title: Handheld RetroArch defaults
     retroarch:
-      config:
-        lifecycle:
-          saveOnExit: false
-        video:
-          fullscreen: true
-          windowedFullscreen: true
-          sync:
-            vsync: true
-        audio:
-          latencyMs: 64
-        menu:
-          driver: ozone
-
-  retroarch-smoke-test:
-    title: Finite-frame RetroArch smoke test
-    retroarch:
-      launch:
-        logging:
-          verbose: true
-        automation:
-          maxFrames: 180
-          screenshotAtEnd: true
-          screenshotPath: /tmp/retroarch-smoke.png
+      lifecycle:
+        saveOnExit: false
+        autoOverrides: false
+        autoRemaps: false
+        gameSpecificOptions: false
+        autoShaders: false
+      video:
+        fullscreen: true
+        windowedFullscreen: true
+        vsync: true
+      audio:
+        latencyMs: 64
 
 library:
   super-mario-advance:
     title: Super Mario Advance
-    system: gba
     releases:
-      gba-us-eu:
-        title: USA/Europe ROM
+      - id: gba-us-eu
+        system: gba
         source: roms
         target: gba/Super Mario Advance (USA, Europe).gba
         runtime: gba-mgba
         app: retroarch
         retroarch:
-          config:
-            video:
-              shader:
-                enable: false
+          video:
+            aspectRatio: core-provided
 
-# Minimal current Korri equivalent for a normal launch:
+# ---------------------------------------------------------------------------
+# Future one-to-one inventory reference (comment-only until each group ships)
+# ---------------------------------------------------------------------------
+# lifecycle:
+#   showHiddenFiles: false              # show_hidden_files
+#   loadDummyOnCoreShutdown: false      # load_dummy_on_core_shutdown
+#   historyListEnable: true             # history_list_enable
+#   performanceCounters: false          # perfcnt_enable
+#   allUsersControlMenu: false          # all_users_control_menu
+#   suspendScreensaver: true            # suspend_screensaver_enable
+#   sustainedPerformanceMode: false     # sustained_performance_mode
+#   gameMode: true                      # gamemode_enable
 #
-# apps:
-#   retroarch:
-#     command: retroarch
-#     retroarch:
-#       launch:
-#         config:
-#           mode: generated
-#           path: "{configPath}"
-#         core:
-#           path: "{runtime.path}"
-#         content:
-#           path: "{content.path}"
-#       config:
-#         lifecycle:
-#           saveOnExit: false
+# logging:
+#   verbosity: false                    # log_verbosity
+#   libretroLogLevel: info              # libretro_log_level
+#   fpsShow: false                      # fps_show
+#   memoryShow: false                   # memory_show
+#   framecountShow: false               # framecount_show
 #
-# Renderer result:
-#   retroarch -c {configPath} -L {runtime.path} {content.path}
+# drivers:
+#   input: udev                         # input_driver
+#   joypad: udev                        # input_joypad_driver
+#   video: glcore                       # video_driver
+#   audio: alsathread                   # audio_driver
+#   audioResampler: sinc                # audio_resampler
+#   menu: ozone                         # menu_driver; canonical home
+#
+# paths:
+#   contentDirectory: null              # content_directory
+#   cacheDirectory: /storage/.cache/retroarch
+#   assetsDirectory: /run/current-system/sw/share/retroarch/assets
+#   thumbnailsDirectory: /storage/.local/share/retroarch/thumbnails
+#   playlistDirectory: /storage/.local/share/retroarch/playlists
+#   libretroDirectory: /run/current-system/sw/lib/retroarch/cores
+#   libretroInfoPath: /run/current-system/sw/share/libretro/info
+#   coreAssetsDirectory: /storage/.local/share/retroarch/downloads
+#   coreOptionsPath: /storage/.config/retroarch/core-options.cfg
+#   joypadAutoconfigDirectory: /run/current-system/sw/share/retroarch/autoconfig
+#   inputRemappingDirectory: /storage/.config/retroarch/remaps
+#   overlayDirectory: /storage/.config/retroarch/overlays
+#   videoShaderDirectory: /run/current-system/sw/share/retroarch/shaders
+#   cheatDatabasePath: /storage/.local/share/retroarch/cheats
+#   contentDatabasePath: /storage/.local/share/retroarch/database/rdb
+#   contentRuntimeLog: true             # content_runtime_log
+#   recordingOutputDirectory: /storage/captures/retroarch
+#
+# video:
+#   aspectRatio: full                   # aspect_ratio_index = 24 (future)
+#   sync:
+#     frameDelay: 0                     # video_frame_delay, 0..99
+#     frameDelayAuto: false             # video_frame_delay_auto
+#
+# rewind:
+#   bufferSizeMb: 20                    # rewind_buffer_size, MB
+#
+# Deferred launch/control groups include startup, netplay, replay, recording,
+# automation, library import, remote command, and full per-button input binds.
+# Keep them comment-only until a later implementation unit gives each field a
+# schema, renderer, and duplicate-authority guard.

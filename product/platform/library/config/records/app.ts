@@ -24,7 +24,7 @@ export const AppKind = Schema.Literals([
 ])
 export type AppKind = Schema.Schema.Type<typeof AppKind>
 
-const RETROARCH_APP_FIELD_KEYS = [
+export const RETROARCH_APP_FIELD_KEYS = [
   "environment",
   "configFile",
   "core",

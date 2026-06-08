@@ -5,8 +5,22 @@ import { join } from "node:path"
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
 import { createLibraryRepository } from "@platform/library/proseql/library-repository"
 import { Effect } from "effect"
+import { parse } from "yaml"
+
+import { decodeAppPayload } from "../records/app"
 
 const EXAMPLE_PATH = "korri-catalog-display-metadata.example.yaml"
+const RETROARCH_EXAMPLE_PATHS = [
+  "docs/brainstorms/2026-06-08-004-retroarch-policy-minimal-v1.example.yaml",
+  "docs/brainstorms/2026-06-08-003-retroarch-policy-one-to-one.example.yaml",
+] as const
+
+const activeYaml = (source: string): string =>
+  source
+    .split("\n")
+    .map(line => line.replace(/#.*/, ""))
+    .filter(line => line.trim() !== "")
+    .join("\n")
 
 async function withExampleLibrary<T>(
   fn: (args: {
@@ -147,6 +161,29 @@ describe("checked-in readable library example", () => {
     expect(String(result.ambiguous)).toContain("AmbiguousRelease")
     expect(result.knownOnly._tag).toBe("Failure")
     expect(String(result.knownOnly)).toContain("ReleaseNotLaunchable")
+  })
+
+  it("keeps RetroArch examples on the app-flat generated-config contract", async () => {
+    for (const path of RETROARCH_EXAMPLE_PATHS) {
+      const example = await readFile(path, "utf8")
+      const active = activeYaml(example)
+      const parsed = parse(example) as {
+        readonly apps?: Record<string, Record<string, unknown>>
+      }
+      const retroarchApp = parsed.apps?.retroarch
+
+      expect(retroarchApp).toBeDefined()
+      expect(() => decodeAppPayload(retroarchApp)).not.toThrow()
+      expect(decodeAppPayload(retroarchApp).kind).toBe("retroarch")
+      expect(retroarchApp).not.toHaveProperty("retroarch")
+      expect(retroarchApp).not.toHaveProperty("integration")
+      expect(retroarchApp).not.toHaveProperty("settings")
+      expect(active).not.toMatch(/\bintegration\s*:\s*retroarch\b/)
+      expect(active).not.toMatch(
+        /\bconfigFile:\s*\n(?:\s+[^\n]*\n)*\s+path\s*:/m,
+      )
+      expect(active).not.toMatch(/\bmode\s*:\s*(path|default)\b/)
+    }
   })
 
   it("does not contain retired persisted-schema vocabulary", async () => {
