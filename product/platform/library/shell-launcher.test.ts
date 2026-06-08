@@ -79,9 +79,10 @@ describe("createShellLauncher (real Bun.spawn)", () => {
     process.env.KORRI_SHELL_LAUNCHER_UNSET_TEST = "present"
     try {
       const launcher = createShellLauncher()
+      const unsetProbe = 'test -z "$' + '{KORRI_SHELL_LAUNCHER_UNSET_TEST+x}"'
       const result = await launcher.run({
         command: "/bin/sh",
-        args: ["-c", 'test -z "${KORRI_SHELL_LAUNCHER_UNSET_TEST+x}"'],
+        args: ["-c", unsetProbe],
         envUnset: ["KORRI_SHELL_LAUNCHER_UNSET_TEST"],
       })
       expect(result).toEqual({ status: "launched" })

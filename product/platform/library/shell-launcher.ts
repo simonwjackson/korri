@@ -22,14 +22,13 @@
  */
 
 import { logger } from "@platform/logger/logger"
-
-import { launchEnvironment } from "./launcher"
 import type {
   Launcher,
   LaunchResult,
   LaunchSpec,
   ManagedLaunchResult,
 } from "./launcher"
+import { launchEnvironment } from "./launcher"
 
 const STDERR_TAIL_BYTES = 4 * 1024
 const DEFAULT_SETSID_COMMAND = "setsid"

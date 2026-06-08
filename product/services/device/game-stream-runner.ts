@@ -5,10 +5,10 @@ import { cleanupLaunchArtifacts } from "@platform/library/config/app-materialize
 import type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
 import {
   decodeLaunchSpec,
-  launchEnvironment,
   type Launcher,
   type LaunchResult,
   type LaunchSpec,
+  launchEnvironment,
   type ManagedLaunchResult,
 } from "@platform/library/launcher"
 import { createSessionLauncherFromEnv } from "@platform/library/session-launcher"

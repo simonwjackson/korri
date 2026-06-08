@@ -99,7 +99,8 @@ export const handleLaunchLibrary = (
       resolvedResult.resolved.gamescope,
     )
     const specResult = yield* Effect.try({
-      try: () => composeGamescopeLaunchSpec(resolvedResult.resolved.spec, gamescope),
+      try: () =>
+        composeGamescopeLaunchSpec(resolvedResult.resolved.spec, gamescope),
       catch: error => error,
     }).pipe(
       Effect.match({
@@ -303,26 +304,27 @@ function handleRemoteSourceLaunch(
       )
     }
 
-    const localPolicyResult = yield* (localLibrarySource.resolveLocalLauncherPolicy
-      ? localLibrarySource
-          .resolveLocalLauncherPolicy("moonlight", {
-            override: payload.override,
-          })
-          .pipe(
-            Effect.match({
-              onSuccess: policy => ({ _tag: "resolved" as const, policy }),
-              onFailure: (error: LibraryError) => ({
-                _tag: "failed" as const,
-                response: launchConfigurationFailure(error),
+    const localPolicyResult =
+      yield* localLibrarySource.resolveLocalLauncherPolicy
+        ? localLibrarySource
+            .resolveLocalLauncherPolicy("moonlight", {
+              override: payload.override,
+            })
+            .pipe(
+              Effect.match({
+                onSuccess: policy => ({ _tag: "resolved" as const, policy }),
+                onFailure: (error: LibraryError) => ({
+                  _tag: "failed" as const,
+                  response: launchConfigurationFailure(error),
+                }),
               }),
-            }),
-          )
-      : Effect.succeed({
-          _tag: "resolved" as const,
-          policy: {
-            gamescope: normalizeGamescopePolicy(DEFAULT_GAMESCOPE_POLICY),
-          } as ResolvedLocalLauncherPolicy,
-        }))
+            )
+        : Effect.succeed({
+            _tag: "resolved" as const,
+            policy: {
+              gamescope: normalizeGamescopePolicy(DEFAULT_GAMESCOPE_POLICY),
+            } as ResolvedLocalLauncherPolicy,
+          })
     if (localPolicyResult._tag === "failed") return localPolicyResult.response
     const localPolicy = localPolicyResult.policy
 
@@ -344,7 +346,10 @@ function handleRemoteSourceLaunch(
 
     const moonlightControl = yield* Effect.tryPromise({
       try: () =>
-        moonlightControlHandleFromOptions(undefined, localPolicy.moonlight?.control),
+        moonlightControlHandleFromOptions(
+          undefined,
+          localPolicy.moonlight?.control,
+        ),
       catch: error => toDataError(toLibraryError(error)),
     })
     const specResult = yield* Effect.try({
@@ -365,7 +370,10 @@ function handleRemoteSourceLaunch(
         onFailure: error => ({
           _tag: "failed" as const,
           response: launchConfigurationFailure(
-            new LibraryError({ reason: "config", message: errorMessage(error) }),
+            new LibraryError({
+              reason: "config",
+              message: errorMessage(error),
+            }),
           ),
         }),
       }),

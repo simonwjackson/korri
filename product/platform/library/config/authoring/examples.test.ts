@@ -74,9 +74,8 @@ describe("checked-in readable library example", () => {
           containedGba: yield* repository.resolveLaunchForPlayable(
             "super-mario-advance-2/super-mario-world",
           ),
-          localMoonlight: yield* repository.resolveLocalLauncherPolicy(
-            "moonlight",
-          ),
+          localMoonlight:
+            yield* repository.resolveLocalLauncherPolicy("moonlight"),
         }
       }),
     )
@@ -114,7 +113,8 @@ describe("checked-in readable library example", () => {
       },
       platform: { name: "v4l2m2m" },
       input: {
-        mappingFile: "/run/current-system/sw/share/moonlight/gamecontrollerdb.txt",
+        mappingFile:
+          "/run/current-system/sw/share/moonlight/gamecontrollerdb.txt",
         touch: { absolute: true, requireBounds: true },
       },
       window: { autoResize: true },

@@ -132,7 +132,8 @@ describe("moonlight launcher", () => {
       host: "192.168.1.117",
       moonlight: {
         input: {
-          mappingFile: "/nix/store/moonlight/share/moonlight/gamecontrollerdb.txt",
+          mappingFile:
+            "/nix/store/moonlight/share/moonlight/gamecontrollerdb.txt",
         },
         window: { autoResize: true },
       },
@@ -158,7 +159,10 @@ describe("moonlight launcher", () => {
       requireInputPlumberInput: true,
       readProcDevices: async () =>
         readFileSync(
-          join(PROC_FIXTURES_DIR, "bus-input-devices-inputplumber-raw-only.txt"),
+          join(
+            PROC_FIXTURES_DIR,
+            "bus-input-devices-inputplumber-raw-only.txt",
+          ),
           "utf8",
         ),
       runner: recordingRunner(calls),
@@ -178,7 +182,10 @@ describe("moonlight launcher", () => {
       requireInputPlumberInput: true,
       readProcDevices: async () =>
         readFileSync(
-          join(PROC_FIXTURES_DIR, "bus-input-devices-inputplumber-ambiguous.txt"),
+          join(
+            PROC_FIXTURES_DIR,
+            "bus-input-devices-inputplumber-ambiguous.txt",
+          ),
           "utf8",
         ),
       runner: recordingRunner(calls),
@@ -243,7 +250,8 @@ describe("moonlight launcher", () => {
     })
 
     expect(result.status).toBe("failed")
-    if (result.status === "failed") expect(result.message).toContain("exposeWayland")
+    if (result.status === "failed")
+      expect(result.message).toContain("exposeWayland")
     expect(calls).toEqual([])
   })
 
@@ -340,7 +348,10 @@ function runner(
     command: string,
     args: readonly string[],
   ) =>
-    | { readonly status: "started"; readonly session?: ManagedMoonlightSessionHandle }
+    | {
+        readonly status: "started"
+        readonly session?: ManagedMoonlightSessionHandle
+      }
     | { readonly status: "failed"; readonly message: string },
 ): CommandRunner {
   return { run: async (command, args) => fn(command, args) }

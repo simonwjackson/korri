@@ -294,7 +294,8 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
             return {
               app: yield* db.apps.findById("retroarch"),
               launch: yield* repository.resolveLaunchForPlayable("zelda"),
-              localMoonlight: yield* repository.resolveLocalLauncherPolicy("moonlight"),
+              localMoonlight:
+                yield* repository.resolveLocalLauncherPolicy("moonlight"),
               libraryYaml: yield* Effect.promise(() =>
                 readFile(join(root, "library.yaml"), "utf8"),
               ),

@@ -10,7 +10,7 @@ import type {
   GamescopePolicy,
   MoonlightPolicy,
 } from "@platform/library/config/inheritable-fields"
-import { launchEnvironment } from "@platform/library/launcher"
+import { type LaunchSpec, launchEnvironment } from "@platform/library/launcher"
 import { composeGamescopeLaunchSpec } from "@platform/stream/gamescope-launch-spec"
 import {
   composeMoonlightGamescopeLaunchSpec,
@@ -100,7 +100,7 @@ export async function launchMoonlight(
     ? moonlightControlEnvForHandle(moonlightControl)
     : undefined
 
-  let installedSpec
+  let installedSpec: LaunchSpec
   try {
     installedSpec = composeMoonlightGamescopeLaunchSpec({
       policy,
@@ -118,11 +118,15 @@ export async function launchMoonlight(
   const command = policy.command ?? "moonlight"
   const allowNixFallback = options.allowNixFallback ?? command === "moonlight"
   const startupObserveMs = options.startupObserveMs
-  const installed = await runner.run(installedSpec.command, installedSpec.args, {
-    startupObserveMs,
-    env: installedSpec.env,
-    envUnset: installedSpec.envUnset,
-  })
+  const installed = await runner.run(
+    installedSpec.command,
+    installedSpec.args,
+    {
+      startupObserveMs,
+      env: installedSpec.env,
+      envUnset: installedSpec.envUnset,
+    },
+  )
   if (installed.status === "started") {
     return startedMoonlightResult({
       command: installedSpec.command,
@@ -214,7 +218,9 @@ export async function moonlightControlHandleFromOptions(
     policy?.runtimeDir ??
     join(moonlightControlRuntimeRootFromEnv(), sessionId)
   const socketPath =
-    options?.socketPath ?? policy?.socketPath ?? join(runtimeDir, "control.sock")
+    options?.socketPath ??
+    policy?.socketPath ??
+    join(runtimeDir, "control.sock")
   await mkdir(runtimeDir, { recursive: true, mode: 0o700 })
 
   return {
@@ -236,7 +242,9 @@ export function moonlightControlEnvForHandle(
     MOONLIGHT_LOCAL_CONTROL_RUNTIME_DIR: handle.runtimeDir,
     MOONLIGHT_LOCAL_CONTROL_SESSION_ID: handle.sessionId,
     MOONLIGHT_LOCAL_CONTROL_SOCKET: handle.socketPath,
-    ...(handle.allowRootPeers ? { MOONLIGHT_LOCAL_CONTROL_ALLOW_ROOT: "1" } : {}),
+    ...(handle.allowRootPeers
+      ? { MOONLIGHT_LOCAL_CONTROL_ALLOW_ROOT: "1" }
+      : {}),
   }
 }
 
@@ -250,7 +258,8 @@ async function moonlightInputDevice(options: MoonlightLaunchOptions): Promise<
 > {
   const explicitInput = options.inputDevice
   if (explicitInput?.trim()) return { status: "ok", path: explicitInput.trim() }
-  if ((options.moonlight?.input?.devices?.length ?? 0) > 0) return { status: "ok" }
+  if ((options.moonlight?.input?.devices?.length ?? 0) > 0)
+    return { status: "ok" }
 
   const required = options.requireInputPlumberInput ?? false
 
