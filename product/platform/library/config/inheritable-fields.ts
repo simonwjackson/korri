@@ -420,28 +420,6 @@ const MoonlightControlPolicy = Schema.Struct({
   enable: Schema.optional(Schema.Boolean),
   authority: Schema.optional(MoonlightControlAuthority),
   allowRootPeers: Schema.optional(Schema.Boolean),
-  runtimeDir: Schema.optional(NullableNonEmptyString("control.runtimeDir")),
-  sessionId: Schema.optional(NullableNonEmptyString("control.sessionId")),
-  socketPath: Schema.optional(NullableNonEmptyString("control.socketPath")),
-})
-
-const MoonlightRuntimeSettingsOneShotPolicy = Schema.Struct({
-  enable: Schema.optional(Schema.Boolean),
-  afterSeconds: Schema.optional(
-    NullablePositiveInteger("runtimeSettings.oneShot.afterSeconds"),
-  ),
-  bitrateKbps: Schema.optional(
-    NullablePositiveInteger("runtimeSettings.oneShot.bitrateKbps"),
-  ),
-  fps: Schema.optional(NullablePositiveInteger("runtimeSettings.oneShot.fps")),
-  resolution: Schema.optional(
-    NullableNonEmptyString("runtimeSettings.oneShot.resolution"),
-  ),
-  allowProofGated: Schema.optional(Schema.Boolean),
-})
-
-const MoonlightRuntimeSettingsPolicy = Schema.Struct({
-  oneShot: Schema.optional(MoonlightRuntimeSettingsOneShotPolicy),
 })
 
 /**
@@ -459,7 +437,6 @@ export const MoonlightPolicy = Schema.Struct({
   audio: Schema.optional(MoonlightAudioPolicy),
   window: Schema.optional(MoonlightWindowPolicy),
   control: Schema.optional(MoonlightControlPolicy),
-  runtimeSettings: Schema.optional(MoonlightRuntimeSettingsPolicy),
   extraArgs: Schema.optional(Schema.Array(Schema.String)),
 })
 export type MoonlightPolicy = Schema.Schema.Type<typeof MoonlightPolicy>

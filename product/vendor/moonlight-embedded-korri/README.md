@@ -35,7 +35,7 @@ Adds an experimental Sunshine runtime-settings request sender and ack logger for
 - `0005c-add-env-driven-sunshine-runtime-settings-request-hook.patch` adds the Linux timerfd-backed one-shot environment hook for manual runtime-settings smoke tests.
 - `0005d-add-spike-gated-sunshine-runtime-settings-adaptation.patch` adds the opt-in connection-status spike adaptation experiment for bitrate/FPS only.
 
-One-shot runtime settings requests are controlled by launch environment. Korri's typed `moonlight.runtimeSettings.oneShot` field, when present, is experimental launch-hook intent only; platform defaults may still render the raw env through `moonlight.environment` until the hook graduates. It does not advertise runtime command support and does not prove that the host applied a command.
+One-shot runtime settings requests are controlled by launch environment. Korri v1 readable policy does not model these hooks as first-class fields; platform defaults may render the raw env through `moonlight.environment` until the hook graduates. This env does not advertise runtime command support and does not prove that the host applied a command.
 
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_KBPS`
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS`
@@ -43,7 +43,7 @@ One-shot runtime settings requests are controlled by launch environment. Korri's
 - `MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_AFTER_S`
 - `MOONLIGHT_RUNTIME_SETTINGS_MVP_ALLOW_PROOF_GATED=1` remains a diagnostic-only escape hatch for hosts that advertise a proof-gated operation, not the Korri product path.
 
-Connection-status adaptation experiments are spike-only and require `MOONLIGHT_RUNTIME_SETTINGS_MVP_ENABLE_SPIKE_ADAPTATION=1`. They remain outside v1 readable `MoonlightPolicy`; `moonlight.runtimeSettings.adaptationSpike` is intentionally rejected. The spike is controlled by:
+Connection-status adaptation experiments are spike-only and require `MOONLIGHT_RUNTIME_SETTINGS_MVP_ENABLE_SPIKE_ADAPTATION=1`. They remain outside v1 readable `MoonlightPolicy`; `moonlight.runtimeSettings` is intentionally rejected. The spike is controlled by:
 
 - `MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_KBPS`
 - `MOONLIGHT_RUNTIME_SETTINGS_MVP_POOR_FPS`

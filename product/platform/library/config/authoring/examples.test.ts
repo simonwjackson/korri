@@ -164,6 +164,7 @@ describe("checked-in readable library example", () => {
       /\bpreset\s*:/,
       /\brequireInputPlumber\s*:/,
       /\bcommands\s*:/,
+      /\bruntimeSettings\s*:/,
       /\badaptationSpike\s*:/,
     ]
 

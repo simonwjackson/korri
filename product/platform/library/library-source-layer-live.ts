@@ -1,5 +1,9 @@
 import { korriDataPath } from "@platform/config/xdg-paths"
 import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
+import {
+  DEFAULT_GAMESCOPE_POLICY,
+  normalizeGamescopePolicy,
+} from "@platform/library/config/inheritable-fields"
 import type { PlayableLibraryEntry } from "@platform/library/playable-library"
 import { logger } from "@platform/logger"
 import { Effect, Layer } from "effect"
@@ -92,6 +96,16 @@ function createLiveLibrarySourceService(): LibrarySourceService {
         : withLibraryRepository(
             repository => repository.resolveLaunchForPlayable(id, inputs),
             "resolveLaunchForGame",
+          ),
+    resolveLocalLauncherPolicy: (launcherId, inputs) =>
+      selectedLibrarySourceMode() === "rocknix"
+        ? Effect.succeed({
+            gamescope: normalizeGamescopePolicy(DEFAULT_GAMESCOPE_POLICY),
+          })
+        : withLibraryRepository(
+            repository =>
+              repository.resolveLocalLauncherPolicy(launcherId, inputs),
+            "resolveLocalLauncherPolicy",
           ),
   }
 }

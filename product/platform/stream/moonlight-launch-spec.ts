@@ -85,7 +85,6 @@ function renderMoonlightArgs(
   renderInputArgs(args, policy.input, facts.inputDevices)
   renderAudioArgs(args, policy.audio)
   renderWindowArgs(args, policy.window)
-  renderRuntimeSettingsEnvArgs(args, policy.runtimeSettings)
 
   if (policy.extraArgs) args.push(...policy.extraArgs)
 
@@ -147,13 +146,6 @@ function renderAudioArgs(args: ArgList, audio: MoonlightPolicy["audio"]) {
 function renderWindowArgs(args: ArgList, window: MoonlightPolicy["window"]) {
   pushBoolean(args, "-windowed", window?.windowed)
   pushBoolean(args, "-autowindowresize", window?.autoResize)
-}
-
-function renderRuntimeSettingsEnvArgs(
-  _args: ArgList,
-  _runtimeSettings: MoonlightPolicy["runtimeSettings"],
-) {
-  // Runtime-settings one-shot hooks are launch environment only; argv is unchanged.
 }
 
 function applyEnvironmentOverlay(

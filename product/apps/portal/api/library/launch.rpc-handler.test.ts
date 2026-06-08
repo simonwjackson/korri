@@ -247,50 +247,60 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       isLocal: false,
     })
 
-    await Effect.runPromise(
-      handleLaunchLibrary({
-        id: "snes/echo.smc",
-        source: remoteSource,
-      }).pipe(
-        Effect.provide(
-          remoteSourceTestLayer({
-            prepare: (_controlUrl, gameId) =>
-              Effect.succeed({
-                status: "prepared" as const,
-                gameId,
-                sessionId: "sess-control",
-              }),
-            launchedSpec: spec => {
-              dispatchedSpec = spec
-            },
-            localPolicy: {
-              gamescope: { enable: false },
-              moonlight: {
-                environment: { OLD_ENV: null },
-                control: {
-                  enable: true,
-                  authority: "controller",
-                  sessionId: "session-remote",
-                  runtimeDir: "/tmp/korri-moonlight/session-remote",
-                  socketPath:
-                    "/tmp/korri-moonlight/session-remote/control.sock",
+    const previousRuntimeDir = process.env.KORRI_GAME_STREAM_RUNTIME_DIR
+    process.env.KORRI_GAME_STREAM_RUNTIME_DIR = "/tmp/korri-game-stream-test"
+    try {
+      await Effect.runPromise(
+        handleLaunchLibrary({
+          id: "snes/echo.smc",
+          source: remoteSource,
+        }).pipe(
+          Effect.provide(
+            remoteSourceTestLayer({
+              prepare: (_controlUrl, gameId) =>
+                Effect.succeed({
+                  status: "prepared" as const,
+                  gameId,
+                  sessionId: "sess-control",
+                }),
+              launchedSpec: spec => {
+                dispatchedSpec = spec
+              },
+              localPolicy: {
+                gamescope: { enable: false },
+                moonlight: {
+                  environment: { OLD_ENV: null },
+                  control: {
+                    enable: true,
+                    authority: "controller",
+                  },
                 },
               },
-            },
-          }),
+            }),
+          ),
         ),
-      ),
-    )
+      )
+    } finally {
+      if (previousRuntimeDir === undefined) {
+        delete process.env.KORRI_GAME_STREAM_RUNTIME_DIR
+      } else {
+        process.env.KORRI_GAME_STREAM_RUNTIME_DIR = previousRuntimeDir
+      }
+    }
 
     expect(dispatchedSpec?.command).toBe("moonlight")
-    expect(dispatchedSpec?.env).toEqual({
-      MOONLIGHT_LOCAL_CONTROL_AUTHORITY: "controller",
-      MOONLIGHT_LOCAL_CONTROL_RUNTIME_DIR:
-        "/tmp/korri-moonlight/session-remote",
-      MOONLIGHT_LOCAL_CONTROL_SESSION_ID: "session-remote",
-      MOONLIGHT_LOCAL_CONTROL_SOCKET:
-        "/tmp/korri-moonlight/session-remote/control.sock",
-    })
+    expect(dispatchedSpec?.env?.MOONLIGHT_LOCAL_CONTROL_AUTHORITY).toBe(
+      "controller",
+    )
+    expect(dispatchedSpec?.env?.MOONLIGHT_LOCAL_CONTROL_RUNTIME_DIR).toContain(
+      "/korri-moonlight/moonlight-",
+    )
+    expect(dispatchedSpec?.env?.MOONLIGHT_LOCAL_CONTROL_SESSION_ID).toStartWith(
+      "moonlight-",
+    )
+    expect(dispatchedSpec?.env?.MOONLIGHT_LOCAL_CONTROL_SOCKET).toEndWith(
+      "/control.sock",
+    )
     expect(dispatchedSpec?.envUnset).toEqual(["OLD_ENV"])
   })
 
@@ -1036,6 +1046,10 @@ function localGameSourceLayer(options: {
     resolveLaunchForGame: () =>
       Effect.succeed({
         spec: { command: "/bin/game", args: ["rom"] },
+        gamescope: options.gamescope,
+      }),
+    resolveLocalLauncherPolicy: () =>
+      Effect.succeed({
         gamescope: options.gamescope,
       }),
   })

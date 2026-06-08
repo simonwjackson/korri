@@ -130,6 +130,8 @@ describe("readable library schema records", () => {
       { platform: { source: "nixos" } },
       { input: { requireInputPlumber: true } },
       { control: { commands: { setBitrate: true } } },
+      { control: { runtimeDir: "/run/korri/moonlight" } },
+      { runtimeSettings: { oneShot: { enable: true } } },
       { runtimeSettings: { adaptationSpike: { enable: true } } },
     ]
 

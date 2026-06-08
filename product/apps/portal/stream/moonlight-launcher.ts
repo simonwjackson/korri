@@ -210,17 +210,10 @@ export async function moonlightControlHandleFromOptions(
   if (!enabled) return undefined
 
   const sessionId =
-    options?.sessionId ??
-    policy?.sessionId ??
-    `moonlight-${randomUUID().replaceAll("-", "")}`
+    options?.sessionId ?? `moonlight-${randomUUID().replaceAll("-", "")}`
   const runtimeDir =
-    options?.runtimeDir ??
-    policy?.runtimeDir ??
-    join(moonlightControlRuntimeRootFromEnv(), sessionId)
-  const socketPath =
-    options?.socketPath ??
-    policy?.socketPath ??
-    join(runtimeDir, "control.sock")
+    options?.runtimeDir ?? join(moonlightControlRuntimeRootFromEnv(), sessionId)
+  const socketPath = options?.socketPath ?? join(runtimeDir, "control.sock")
   await mkdir(runtimeDir, { recursive: true, mode: 0o700 })
 
   return {
@@ -351,10 +344,12 @@ const spawnRunner: CommandRunner = {
 }
 
 function moonlightControlRuntimeRootFromEnv(): string {
-  const runtimeDir = globalThis.Bun?.env.XDG_RUNTIME_DIR?.trim()
+  const runtimeDir =
+    globalThis.Bun?.env.XDG_RUNTIME_DIR?.trim() ||
+    globalThis.Bun?.env.KORRI_GAME_STREAM_RUNTIME_DIR?.trim()
   if (!runtimeDir) {
     throw new Error(
-      "XDG_RUNTIME_DIR is required when Moonlight local control is enabled without an explicit runtimeDir",
+      "XDG_RUNTIME_DIR or KORRI_GAME_STREAM_RUNTIME_DIR is required when Moonlight local control is enabled without an explicit runtimeDir",
     )
   }
   return join(runtimeDir, "korri-moonlight")

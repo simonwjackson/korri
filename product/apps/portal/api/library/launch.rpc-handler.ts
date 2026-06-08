@@ -1,8 +1,5 @@
 import { DataError, NotFoundError } from "@platform/api/rpc/errors"
-import {
-  DEFAULT_GAMESCOPE_POLICY,
-  normalizeGamescopePolicy,
-} from "@platform/library/config/inheritable-fields"
+import { normalizeGamescopePolicy } from "@platform/library/config/inheritable-fields"
 import {
   type LaunchFailureKind,
   type LaunchSpec,
@@ -13,7 +10,6 @@ import {
   Launcher,
   LibraryError,
   LibrarySource,
-  type ResolvedLocalLauncherPolicy,
 } from "@platform/library/library-services"
 import { logger } from "@platform/logger/logger"
 import {
@@ -203,6 +199,11 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function moonlightRequiresInputPlumber(): boolean {
+  const raw = process.env.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER?.trim()
+  return raw === "1" || raw === "true" || raw === "required"
+}
+
 function toLibraryError(error: unknown): LibraryError {
   return error instanceof LibraryError
     ? error
@@ -320,16 +321,23 @@ function handleRemoteSourceLaunch(
               }),
             )
         : Effect.succeed({
-            _tag: "resolved" as const,
-            policy: {
-              gamescope: normalizeGamescopePolicy(DEFAULT_GAMESCOPE_POLICY),
-            } as ResolvedLocalLauncherPolicy,
+            _tag: "failed" as const,
+            response: launchConfigurationFailure(
+              new LibraryError({
+                reason: "config",
+                message:
+                  "LibrarySource does not support local launcher policy resolution for Moonlight remote-source launches",
+              }),
+            ),
           })
     if (localPolicyResult._tag === "failed") return localPolicyResult.response
     const localPolicy = localPolicyResult.policy
 
     const inputDevice = yield* Effect.tryPromise({
-      try: () => resolveMoonlightLaunchInputDevice(),
+      try: () =>
+        resolveMoonlightLaunchInputDevice({
+          requireInputPlumberInput: moonlightRequiresInputPlumber(),
+        }),
       catch: error => toDataError(toLibraryError(error)),
     })
     if (inputDevice.status === "failed") {

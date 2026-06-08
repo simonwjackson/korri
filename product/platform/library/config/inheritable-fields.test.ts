@@ -316,19 +316,6 @@ const representativeMoonlightPolicy: MoonlightPolicy = {
     enable: true,
     authority: "controller",
     allowRootPeers: false,
-    runtimeDir: null,
-    sessionId: null,
-    socketPath: null,
-  },
-  runtimeSettings: {
-    oneShot: {
-      enable: false,
-      afterSeconds: 6,
-      bitrateKbps: null,
-      fps: null,
-      resolution: null,
-      allowProofGated: false,
-    },
   },
   extraArgs: ["-unsupported-test-flag"],
 }
@@ -371,6 +358,10 @@ describe("MoonlightPolicy", () => {
       { platform: { source: "nixos" } },
       { input: { requireInputPlumber: true } },
       { control: { commands: { setBitrate: true } } },
+      { control: { runtimeDir: "/run/korri/moonlight" } },
+      { control: { sessionId: "session-1" } },
+      { control: { socketPath: "/run/korri/moonlight/control.sock" } },
+      { runtimeSettings: { oneShot: { enable: true } } },
       { runtimeSettings: { adaptationSpike: { enable: true } } },
     ]) {
       expect(() => decodeMoonlightPolicy(badPolicy)).toThrow()

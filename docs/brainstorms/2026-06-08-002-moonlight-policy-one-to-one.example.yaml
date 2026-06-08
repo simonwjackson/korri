@@ -125,35 +125,19 @@ host:
       autoResize: true # -autowindowresize / -noautowindowresize
 
     # Local Moonlight control socket. This maps to MOONLIGHT_LOCAL_CONTROL_* env
-    # for the spawned process. Null runtime/session/socket fields mean Korri
-    # allocates private per-launch values under XDG_RUNTIME_DIR.
+    # for the spawned process. Korri allocates private per-launch runtime,
+    # session, and socket values; those are runtime facts, not readable policy.
     control:
       enable: true
       authority: controller # observer | controller
       allowRootPeers: false # MOONLIGHT_LOCAL_CONTROL_ALLOW_ROOT=1
-      runtimeDir: null # generated when null
-      sessionId: null # generated when null
-      socketPath: null # generated when null
 
       # Runtime command capabilities are advertised by the running Moonlight
       # session over local-control. They are not configured in readable policy.
 
-    # Experimental downstream Sunshine runtime-settings launch hooks. These are
-    # shown for one-to-one visibility with the patched fork, but the final plan
-    # may keep them outside stable readable policy until the product adaptation
-    # model is formalized.
-    runtimeSettings:
-      oneShot:
-        enable: false
-        afterSeconds: 6 # MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_AFTER_S
-        bitrateKbps: null # MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_KBPS
-        fps: null # MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS
-        resolution: null # "1280x720" -> MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_RESOLUTION
-        allowProofGated: false # diagnostic only
-
-      # Connection-status adaptation spike env remains platform/service-owned
-      # until Korri has a product adaptation policy. It is intentionally not
-      # shown as readable launch policy.
+    # Experimental downstream Sunshine runtime-settings hooks remain raw launch
+    # environment under `environment` until Korri has a product adaptation
+    # policy. `moonlight.runtimeSettings` is intentionally not v1 policy.
 
     # Escape hatch for launch flags not yet modelled. Appended last before the
     # injected host argument. Production configs should prefer typed fields.
