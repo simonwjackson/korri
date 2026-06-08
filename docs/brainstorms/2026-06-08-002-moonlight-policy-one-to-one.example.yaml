@@ -1,0 +1,260 @@
+# Draft: NixOS-module-style Moonlight Embedded policy shape for Korri readable config.
+#
+# Goal: wrap Korri's patched moonlight-embedded launch surface as typed,
+# declarative options rather than exposing KORRI_MOONLIGHT_* env fallbacks or
+# call-site option bags. Field names describe launch intent; implementation can
+# realize them through argv, process env, local-control socket env, or platform
+# generated readable defaults.
+#
+# Scope of this example:
+# - Moonlight Embedded `stream` launch configuration.
+# - Korri-owned downstream flags in product/vendor/moonlight-embedded-korri.
+# - Experimental downstream runtime-settings env hooks, shown separately so the
+#   final plan can decide whether v1 types them or keeps them platform-env only.
+#
+# Sources for this first draft:
+# - Moonlight Embedded v2.7.1 usage/help surface.
+# - product/vendor/moonlight-embedded-korri/README.md.
+# - product/apps/portal/api/stream/compose-moonlight-launch-spec.ts.
+# - product/apps/portal/stream/moonlight-launcher.ts.
+# - product/systems/nixos/images/platforms/rocknix-sm8550.nix.
+#
+# Still to verify against exact patched binary/source:
+# - complete platform value set for the built package.
+# - whether `-audio` applies to SDL/v4l2m2m paths in our build.
+# - which experimental MOONLIGHT_RUNTIME_SETTINGS_MVP_* vars graduate into v1.
+
+host:
+  title: Bandai handheld stream client
+
+  moonlight:
+    # Executable to spawn for Moonlight Embedded. The platform NixOS module can
+    # render the store path here so launch code no longer needs
+    # KORRI_MOONLIGHT_COMMAND.
+    command: /run/current-system/sw/bin/moonlight
+
+    # Korri product launches always use Moonlight Embedded's `stream` action.
+    # Pair/list/quit/map remain CLI workflows, not readable library policy.
+
+    # Environment for the Moonlight process itself. Values are strings;
+    # `null` means remove the variable before spawning Moonlight.
+    # This is for real Moonlight/substrate env such as SDL_VIDEODRIVER or
+    # state-home paths, not a second spelling for typed fields below.
+    environment:
+      SDL_VIDEODRIVER: wayland
+      KORRI_MOONLIGHT_STATE_HOME: null
+
+    # Process supervision concerns such as startup observation and Nix fallback
+    # stay in launcher/service code. They are not user-authored Moonlight policy.
+
+    # The Sunshine app name remains the fixed Korri product contract for now:
+    # the renderer emits `-app "Korri Stream"` and injects the selected host.
+
+    logging:
+      verbose: false # -verbose
+      debug: false # -debug; implies verbose in Moonlight Embedded
+
+    stream:
+      # Use explicit dimensions only. Moonlight's `-720`/`-1080`/`-4k` presets
+      # are shorthand for width/height and do not need a second public spelling.
+      resolution:
+        width: 1280 # -width <width>
+        height: 720 # -height <height>
+
+      fps: 60 # -fps <fps>
+      bitrateKbps: 12000 # -bitrate <bitrate>
+      packetSizeBytes: null # -packetsize <size>
+      codec: auto # -codec: auto | h264 | h265
+      remoteOptimizations: false # -remote
+      unsupportedHost: false # -unsupported
+      quitAppAfter: false # -quitappafter
+
+      # Host/game settings and audio behavior.
+      noSops: false # -nosops
+      localAudio: false # -localaudio
+      surround: false # -surround
+
+      keyDir: null # -keydir <directory>
+
+    # Moonlight Embedded platform/backend selection. Keep this open-ended in v1:
+    # the built value set depends on the patched package and hardware. Known
+    # Korri values include `v4l2m2m`, `sdl`, `fake`, `ffmpeg_drm`, and upstream
+    # values such as `x11` where compiled.
+    platform:
+      name: v4l2m2m # -platform <system>
+
+    input:
+      # Korri requires InputPlumber for product launches. The launcher resolves
+      # the virtual gamepad and fails closed if it is missing or ambiguous.
+
+      # Moonlight accepts `-input` multiple times. Prefer a list so the typed
+      # shape does not accidentally lose that upstream capability.
+      devices:
+        - /dev/input/event10 # -input <device>
+
+      # Gamepad mapping database.
+      mappingFile: /run/current-system/sw/share/gamecontrollerdb.txt # -mapping <file>
+
+      # Moonlight Embedded view-only mode disables input processing.
+      viewOnly: false # -viewonly
+
+      # Video/input rotation in Moonlight's own coordinate handling.
+      rotate: 0 # -rotate: 0 | 90 | 180 | 270
+
+      # Korri downstream absolute-touch launch flags. Static bounds are a
+      # fallback/manual seam; managed sessions should use local-control
+      # input.setTouchBounds after surface geometry is known.
+      touch:
+        absolute: true # -absolutetouch
+        requireBounds: true # -absolutetouchrequirebounds
+        bounds: null # { x, y, w, h } -> -absolutetouchbounds x,y,w,h
+        # bounds:
+        #   x: 0
+        #   y: 0
+        #   w: 1080
+        #   h: 1920
+
+    audio:
+      device: null # -audio <device>; not for SDL per upstream help
+
+    window:
+      windowed: false # -windowed, SDL/X11 only
+
+      # Korri downstream v4l2m2m/SDL presenter flag. On SM8550 this lets the
+      # playback window follow runtime output-size changes after Sunshine
+      # resolution mutation.
+      autoResize: true # -autowindowresize / -noautowindowresize
+
+    # Local Moonlight control socket. This maps to MOONLIGHT_LOCAL_CONTROL_* env
+    # for the spawned process. Null runtime/session/socket fields mean Korri
+    # allocates private per-launch values under XDG_RUNTIME_DIR.
+    control:
+      enable: true
+      authority: controller # observer | controller
+      allowRootPeers: false # MOONLIGHT_LOCAL_CONTROL_ALLOW_ROOT=1
+      runtimeDir: null # generated when null
+      sessionId: null # generated when null
+      socketPath: null # generated when null
+
+      # Runtime command capabilities are advertised by the running Moonlight
+      # session over local-control. They are not configured in readable policy.
+
+    # Experimental downstream Sunshine runtime-settings launch hooks. These are
+    # shown for one-to-one visibility with the patched fork, but the final plan
+    # may keep them outside stable readable policy until the product adaptation
+    # model is formalized.
+    runtimeSettings:
+      oneShot:
+        enable: false
+        afterSeconds: 6 # MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_AFTER_S
+        bitrateKbps: null # MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_KBPS
+        fps: null # MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_FPS
+        resolution: null # "1280x720" -> MOONLIGHT_SEND_RUNTIME_SETTINGS_MVP_RESOLUTION
+        allowProofGated: false # diagnostic only
+
+      # Connection-status adaptation spike env remains platform/service-owned
+      # until Korri has a product adaptation policy. It is intentionally not
+      # shown as readable launch policy.
+
+    # Escape hatch for launch flags not yet modelled. Appended last before the
+    # injected host argument. Production configs should prefer typed fields.
+    extraArgs: []
+
+  # Gamescope remains a separate launch wrapper policy. Moonlight policy does
+  # not infer Gamescope intent by sniffing `platform.name`; if Wayland
+  # Moonlight needs the nested compositor socket, say so explicitly here.
+  gamescope:
+    enable: true
+    backend:
+      type: wayland
+    window:
+      fullscreen: true
+      borderless: true
+      exposeWayland: true
+
+profiles:
+  sm8550-v4l2m2m-720p:
+    title: SM8550 VPU stream defaults
+    moonlight:
+      platform:
+        name: v4l2m2m
+      environment:
+        SDL_VIDEODRIVER: wayland
+      stream:
+        resolution:
+          width: 1280
+          height: 720
+        fps: 60
+        bitrateKbps: 12000
+      input:
+        touch:
+          absolute: true
+          requireBounds: true
+      window:
+        autoResize: true
+      control:
+        enable: true
+        authority: controller
+
+  x86-sdl-diagnostic:
+    title: x86 SDL software decode diagnostic
+    moonlight:
+      command: moonlight
+      platform:
+        name: sdl
+      stream:
+        resolution:
+          width: 1920
+          height: 1080
+        fps: 60
+        bitrateKbps: null
+      window:
+        windowed: true
+        autoResize: false
+      control:
+        enable: false
+
+  fake-platform-smoke:
+    title: Moonlight pipeline smoke without display backend
+    moonlight:
+      platform:
+        name: fake
+      logging:
+        verbose: true
+      control:
+        enable: false
+
+# Minimal platform-default fragment shape for SM8550 if the final plan follows
+# the Gamescope policy approach and renders NixOS platform defaults into the
+# readable library root:
+#
+# host:
+#   moonlight:
+#     command: /nix/store/...-moonlight-embedded-korri/bin/moonlight
+#     platform:
+#       name: v4l2m2m
+#     environment:
+#       SDL_VIDEODRIVER: wayland
+#     input:
+#       mappingFile: /nix/store/...-gamecontrollerdb.txt
+#       touch:
+#         absolute: true
+#         requireBounds: true
+#     window:
+#       autoResize: true
+#     control:
+#       enable: true
+#       authority: controller
+#
+# Current committed env equivalent to migrate away from:
+#
+# KORRI_MOONLIGHT_COMMAND=/nix/store/.../bin/moonlight
+# KORRI_MOONLIGHT_PLATFORM=v4l2m2m
+# KORRI_MOONLIGHT_MAPPING_FILE=/nix/store/.../gamecontrollerdb.txt
+# KORRI_MOONLIGHT_INPUT_DEVICE=/dev/input/event10
+# KORRI_MOONLIGHT_ABSOLUTE_TOUCH=1
+# KORRI_MOONLIGHT_ABSOLUTE_TOUCH_REQUIRE_BOUNDS=1
+# KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS=0,0,1080,1920
+# KORRI_MOONLIGHT_AUTO_WINDOW_RESIZE=1
+# KORRI_MOONLIGHT_CONTROL=1
+# KORRI_MOONLIGHT_CONTROL_AUTHORITY=controller
