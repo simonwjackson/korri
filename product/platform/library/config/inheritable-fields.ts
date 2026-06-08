@@ -54,8 +54,12 @@ const nonNegativeNumber = (label: string) =>
       : `${label} greater than or equal to 0 required`,
   )
 
+const EnvironmentKey = Schema.String.check(
+  Schema.isPattern(/^[A-Za-z_][A-Za-z0-9_]*$/),
+)
+
 const EnvironmentOverlay = Schema.Record(
-  Schema.String,
+  EnvironmentKey,
   Schema.NullOr(Schema.String),
 )
 export type EnvironmentOverlay = Schema.Schema.Type<typeof EnvironmentOverlay>
@@ -66,6 +70,8 @@ const NonNegativeNumber = (label: string) =>
   Schema.Number.check(nonNegativeNumber(label))
 const PositiveInteger = (label: string) =>
   Schema.Int.check(positiveNumber(label))
+const NonNegativeInteger = (label: string) =>
+  Schema.Int.check(nonNegativeNumber(label))
 
 const NonEmptyString = (label: string) =>
   Schema.String.pipe(
@@ -154,10 +160,10 @@ const GamescopeWindowPolicy = Schema.Struct({
   borderless: Schema.optional(Schema.Boolean),
   grabKeyboard: Schema.optional(Schema.Boolean),
   forceGrabCursor: Schema.optional(Schema.Boolean),
-  displayIndex: Schema.optional(NonNegativeNumber("displayIndex")),
+  displayIndex: Schema.optional(NonNegativeInteger("displayIndex")),
   forceWindowsFullscreen: Schema.optional(Schema.Boolean),
   exposeWayland: Schema.optional(Schema.Boolean),
-  xwaylandCount: Schema.optional(PositiveNumber("xwaylandCount")),
+  xwaylandCount: Schema.optional(PositiveInteger("xwaylandCount")),
   fadeOutDuration: Schema.optional(NonNegativeNumber("fadeOutDuration")),
 })
 
@@ -207,7 +213,7 @@ const GamescopeInputPolicy = Schema.Struct({
 
 const GamescopeSchedulingPolicy = Schema.Struct({
   realtime: Schema.optional(Schema.Boolean),
-  readyFd: Schema.optional(NonNegativeNumber("readyFd")),
+  readyFd: Schema.optional(NonNegativeInteger("readyFd")),
   keepAlive: Schema.optional(Schema.Boolean),
 })
 
@@ -277,7 +283,7 @@ const GamescopeVrPolicy = Schema.Struct({
 
 const GamescopeReshadePolicy = Schema.Struct({
   effect: Schema.optional(Schema.String),
-  techniqueIndex: Schema.optional(NonNegativeNumber("techniqueIndex")),
+  techniqueIndex: Schema.optional(NonNegativeInteger("techniqueIndex")),
 })
 
 const GamescopeSteamDeckPolicy = Schema.Struct({

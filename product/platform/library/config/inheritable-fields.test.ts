@@ -167,6 +167,29 @@ describe("GamescopePolicy", () => {
     expect(policy.app?.environment?.WAYLAND_DISPLAY).toBeNull()
   })
 
+  it("rejects malformed environment overlay keys", () => {
+    for (const environment of [
+      { "": "empty" },
+      { "FOO=BAR": "baz" },
+      { "1BAD": "value" },
+      { "BAD-NAME": "value" },
+    ]) {
+      expect(() => decodeGamescopePolicy({ environment })).toThrow()
+      expect(() => decodeGamescopePolicy({ app: { environment } })).toThrow()
+    }
+  })
+
+  it("rejects fractional values for integer-only Gamescope fields", () => {
+    for (const badPolicy of [
+      { window: { displayIndex: 1.5 } },
+      { window: { xwaylandCount: 1.5 } },
+      { scheduling: { readyFd: 1.5 } },
+      { reshade: { techniqueIndex: 1.5 } },
+    ]) {
+      expect(() => decodeGamescopePolicy(badPolicy)).toThrow()
+    }
+  })
+
   it("allows nested dimensions to decode independently before cascade folding", () => {
     expect(
       decodeGamescopePolicy({ display: { nested: { width: 1280 } } }),

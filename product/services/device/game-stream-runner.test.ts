@@ -498,12 +498,11 @@ describe("game stream runner", () => {
     expect(requeued).toBe(true)
   })
 
-  it("repairs an explicitly unwrapped foreground launch", async () => {
+  it("does not repair an explicitly unwrapped foreground launch", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
     const controlled = createControlledChild(217)
     const { spawner, specs } = createControlledSpawner(controlled.child)
     const calls: string[][] = []
-    let getTreeCalls = 0
     const runner = createGameStreamRunner({
       launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
         gamescope: { enable: false },
@@ -515,21 +514,16 @@ describe("game stream runner", () => {
         pid: 10,
         isProcessAlive: pid => pid === 10,
       }),
-      processEnv: sessionEnv,
+      processEnv: {
+        XDG_RUNTIME_DIR: "/run/user/1000",
+        WAYLAND_DISPLAY: "wayland-1",
+      },
       fullscreen: {
         selector: {},
         runner: {
           run: async args => {
             calls.push([...args])
-            if (args.includes("get_tree")) {
-              getTreeCalls += 1
-              return JSON.stringify(
-                getTreeCalls === 1
-                  ? rawTreeBeforeLaunch()
-                  : rawTreeAfterSnapshot(),
-              )
-            }
-            return ""
+            return JSON.stringify(rawTreeAfterSnapshot())
           },
         },
       },
@@ -538,11 +532,11 @@ describe("game stream runner", () => {
     const run = runner.run()
     await waitFor(() => runner.status().mode === "running")
     controlled.exit(0)
-    await run
+    await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
 
     expect(specs[0]).toEqual(game)
-    expect(calls).toContainEqual(["[con_id=43] fullscreen enable"])
-    expect(runner.status()).toMatchObject({ fullscreenRepaired: true })
+    expect(calls).toEqual([])
+    expect(runner.status()).not.toMatchObject({ fullscreenRepaired: true })
   })
 
   it("fails before spawn when Sway repair lacks session environment", async () => {
@@ -1697,20 +1691,6 @@ describe("superviseGameStreamRunner", () => {
     expect(exits).toEqual([0])
   })
 })
-
-function rawTreeBeforeLaunch(): SwayNode {
-  return {
-    id: 1,
-    nodes: [
-      {
-        id: 10,
-        nodes: [
-          { id: 42, app_id: "firefox", focused: true, fullscreen_mode: 1 },
-        ],
-      },
-    ],
-  }
-}
 
 function rawTreeAfterSnapshot(): SwayNode {
   return {

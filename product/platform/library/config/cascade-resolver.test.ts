@@ -757,7 +757,7 @@ describe("resolveLaunchContext — ephemeral override", () => {
     expect(ctx.launcherId).toBe("snes9x")
   })
 
-  it("override gamescope contributes as the most-specific layer", () => {
+  it("override safe gamescope fields contribute as the most-specific layer", () => {
     const snap = snapshotOf({
       global: globalConfig({ gamescope: { enable: false } }),
       systems: [system({ id: "snes", launcher: "retroarch" })],
@@ -767,11 +767,11 @@ describe("resolveLaunchContext — ephemeral override", () => {
     const ctx = run(
       resolveLaunchContext(snap, {
         gameId: "fzero",
-        override: { gamescope: { enable: true, extraArgs: ["-F", "fsr"] } },
+        override: { gamescope: { enable: true, scaling: { filter: "fsr" } } },
       }),
     )
     expect(ctx.gamescope?.enable).toBe(true)
-    expect(ctx.gamescope?.extraArgs).toEqual(["-F", "fsr"])
+    expect(ctx.gamescope?.scaling?.filter).toBe("fsr")
   })
 
   it("override argsAppend concatenates at the end", () => {

@@ -21,8 +21,8 @@ let
   serverEnv = serverService.environment or { };
   serverExecStartPre = serverService.serviceConfig.ExecStartPre or [ ];
   platformDefaults = server.library.platformDefaults;
-  retroarchEnvironment =
-    (((platformDefaults.apps or { }).retroarch or { }).gamescope or { }).app.environment or { };
+  hostAppEnvironment =
+    ((platformDefaults.host or { }).gamescope or { }).app.environment or { };
   renderedPlatformDefaults =
     (pkgs.formats.yaml { }).generate "00-korri-platform-defaults.yaml"
       platformDefaults;
@@ -52,8 +52,8 @@ let
     (check "RG353M korri-server must not set retired force-Xwayland env" (
       !(serverEnv ? KORRI_GAMESCOPE_FORCE_XWAYLAND)
     ))
-    (check "RG353M platform defaults must unset WAYLAND_DISPLAY for RetroArch's wrapped app" (
-      retroarchEnvironment ? WAYLAND_DISPLAY && retroarchEnvironment.WAYLAND_DISPLAY == null
+    (check "RG353M platform defaults must unset WAYLAND_DISPLAY at the host Gamescope app layer" (
+      hostAppEnvironment ? WAYLAND_DISPLAY && hostAppEnvironment.WAYLAND_DISPLAY == null
     ))
     (check "RG353M platform-default fragment must be installed before korri-server starts" (
       builtins.any (cmd: lib.hasInfix "00-korri-platform-defaults.yaml" cmd) serverExecStartPre
@@ -69,9 +69,13 @@ else
   pkgs.runCommand "korri-rk3566-kiosk-config-check" { } ''
     set -eu
     mkdir -p "$out"
-    grep -q 'apps:' ${renderedPlatformDefaults}
-    grep -q 'retroarch:' ${renderedPlatformDefaults}
+    grep -q 'host:' ${renderedPlatformDefaults}
+    grep -q 'gamescope:' ${renderedPlatformDefaults}
     grep -q 'WAYLAND_DISPLAY: null' ${renderedPlatformDefaults}
+    if grep -q 'retroarch:' ${renderedPlatformDefaults}; then
+      echo "platform defaults must not define an apps.retroarch record" >&2
+      exit 1
+    fi
     if grep -q 'KORRI_GAMESCOPE_FORCE_XWAYLAND' ${renderedPlatformDefaults}; then
       echo "retired force-Xwayland env leaked into platform defaults" >&2
       exit 1

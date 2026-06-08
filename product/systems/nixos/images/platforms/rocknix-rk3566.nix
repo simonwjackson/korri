@@ -119,7 +119,12 @@ in
     extraEnvironment = panfrostEnvironment // gamescopeRuntimeEnvironment;
   };
 
-  services.korri.server.library.platformDefaults.apps.retroarch.gamescope.app.environment.WAYLAND_DISPLAY =
+  # RK3566/PanVK RetroArch is the known deadlock case, but platform defaults
+  # must not define an apps.retroarch record because user-authored app records
+  # would collide in ProseQL. Apply the Xwayland route at the host layer; more
+  # specific app/library policy can opt back in later if a native-Wayland app is
+  # proven safe on this platform.
+  services.korri.server.library.platformDefaults.host.gamescope.app.environment.WAYLAND_DISPLAY =
     null;
 
   users.users.root.linger = true;

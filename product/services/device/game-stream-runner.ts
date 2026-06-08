@@ -400,8 +400,6 @@ export function createGameStreamRunner(
 
         const gamescope = launchClaim.intent.gamescope ?? { enable: false }
         const gamescopeEnabled = gamescope.enable !== false
-        const hasResolvedGamescopePolicy =
-          launchClaim.intent.gamescope !== undefined
         const resolvedGamescopeCommand = resolveGamescopeCommand({
           enabled: gamescopeEnabled,
           intentCommand: gamescope.command,
@@ -411,7 +409,7 @@ export function createGameStreamRunner(
           await requeueLaunchClaim(launchClaim, "preflight failure")
           return await fail("preflight", resolvedGamescopeCommand.reason, 126)
         }
-        const repairEnabled = gamescopeEnabled || hasResolvedGamescopePolicy
+        const repairEnabled = gamescopeEnabled
         const fullscreen = repairEnabled
           ? (options.fullscreen ?? {
               runner: createSwayCommandRunner(

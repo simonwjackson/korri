@@ -244,12 +244,10 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
           "      mappingFile: /nix/store/moonlight/share/moonlight/gamecontrollerdb.txt",
           "    platform:",
           "      name: v4l2m2m",
-          "apps:",
-          "  retroarch:",
-          "    gamescope:",
-          "      app:",
-          "        environment:",
-          "          WAYLAND_DISPLAY: null",
+          "  gamescope:",
+          "    app:",
+          "      environment:",
+          "        WAYLAND_DISPLAY: null",
           "",
         ].join("\n"),
         "utf8",
@@ -271,6 +269,13 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
           "  snes9x:",
           "    kind: libretro-core",
           "    path: /cores/snes9x_libretro.so",
+          "apps:",
+          "  retroarch:",
+          "    command: retroarch",
+          '    args: ["-L", "{runtime.path}", "{content.path}"]',
+          "    gamescope:",
+          "      backend:",
+          "        type: drm",
           "library:",
           "  zelda:",
           "    title: Zelda",
@@ -304,14 +309,14 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
         ),
       )
 
-      expect(loaded.app.gamescope?.app?.environment).toEqual({
-        WAYLAND_DISPLAY: null,
-      })
+      expect(loaded.app.gamescope?.backend?.type).toBe("drm")
+      expect(loaded.app.gamescope?.app?.environment).toBeUndefined()
       expect(loaded.launch.spec.command).toBe("retroarch")
       expect(loaded.launch.spec.args).toContain("/cores/snes9x_libretro.so")
       expect(loaded.launch.spec.args).toContain("/roms/snes/zelda.sfc")
       expect(loaded.libraryYaml).toContain("library:\n  zelda:")
       expect(loaded.libraryYaml).not.toContain("00-korri-platform-defaults")
+      expect(loaded.launch.gamescope?.backend?.type).toBe("drm")
       expect(loaded.launch.gamescope?.app?.environment).toEqual({
         WAYLAND_DISPLAY: null,
       })
@@ -365,6 +370,41 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
       expect(outbox).not.toContain("launchers:")
       expect(outbox).not.toContain("modules:")
       expect(outbox).not.toContain("config:")
+    })
+  })
+})
+
+describe("openKorriLibraryDb — platform-default collision guard", () => {
+  it("rejects platform-default app records that duplicate user library app records", async () => {
+    await withTempRoot(async root => {
+      await writeFile(
+        join(root, "00-korri-platform-defaults.yaml"),
+        [
+          "apps:",
+          "  retroarch:",
+          "    gamescope:",
+          "      app:",
+          "        environment:",
+          "          WAYLAND_DISPLAY: null",
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+      await writeFile(
+        join(root, "library.yaml"),
+        [
+          "apps:",
+          "  retroarch:",
+          "    command: retroarch",
+          '    args: ["-L", "{runtime.path}", "{content.path}"]',
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+      const exit = await Effect.runPromiseExit(
+        Effect.scoped(openKorriLibraryDb({ root, writeDebounce: 1 })),
+      )
+      expect(exit._tag).toBe("Failure")
     })
   })
 })
