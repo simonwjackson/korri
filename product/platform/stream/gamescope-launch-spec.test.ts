@@ -105,7 +105,8 @@ describe("composeGamescopeLaunchSpec", () => {
       { enable: true, environment: { ADDED: "1", DROP_FROM_PARENT: null } },
     )
 
-    expect(spec.env).toEqual({ ADDED: "1", DROP_FROM_PARENT: null })
+    expect(spec.env).toEqual({ ADDED: "1" })
+    expect(spec.envUnset).toEqual(["DROP_FROM_PARENT"])
     expect(innerArgs(spec)).toEqual(["retroarch", "mario.gba"])
   })
 
@@ -130,10 +131,10 @@ describe("composeGamescopeLaunchSpec", () => {
 
     expect(spec.env).toEqual({
       KEEP: "1",
-      DROP: null,
       OVERRIDE: "new",
       ADDED: "1",
     })
+    expect(spec.envUnset).toEqual(["DROP"])
     expect(innerArgs(spec)).toEqual(["retroarch", "-L", "mgba", "mario.gba"])
   })
 

@@ -9,6 +9,7 @@ import {
   Launcher,
   LibraryError,
   LibrarySource,
+  type ResolvedLocalLauncherPolicy,
 } from "@platform/library/library-services"
 import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
@@ -29,9 +30,6 @@ import {
 } from "./remote-stream-prepare"
 
 const originalLibraryRoot = process.env.KORRI_LIBRARY_ROOT
-const originalMoonlightInputDevice = process.env.KORRI_MOONLIGHT_INPUT_DEVICE
-const originalMoonlightRequireInputPlumber =
-  process.env.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER
 const cleanups: Array<() => Promise<void>> = []
 
 // Shared `source` payload field for tests. The launch handler does not
@@ -46,11 +44,6 @@ const FAKE_GAME = join(REPO_ROOT, "tools", "testing", "fake-game.sh")
 
 afterEach(async () => {
   setOptionalEnv("KORRI_LIBRARY_ROOT", originalLibraryRoot)
-  setOptionalEnv("KORRI_MOONLIGHT_INPUT_DEVICE", originalMoonlightInputDevice)
-  setOptionalEnv(
-    "KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER",
-    originalMoonlightRequireInputPlumber,
-  )
   while (cleanups.length > 0) {
     const c = cleanups.pop()
     if (c) await c()
@@ -190,11 +183,10 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     ])
   })
 
-  it("passes configured Moonlight input device for remote-source launches", async () => {
+  it("passes typed local Moonlight input policy for remote-source launches", async () => {
     let dispatchedSpec:
       | { command: string; args: ReadonlyArray<string> }
       | undefined
-    process.env.KORRI_MOONLIGHT_INPUT_DEVICE = "/dev/input/event8"
     const remoteSource = new EntrySource({
       hostId: "aka",
       controlUrl: "http://aka.local:3001",
@@ -217,6 +209,10 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
             launchedSpec: spec => {
               dispatchedSpec = spec
             },
+            localPolicy: {
+              gamescope: { enable: true },
+              moonlight: { input: { devices: ["/dev/input/event8"] } },
+            },
           }),
         ),
       ),
@@ -234,6 +230,106 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       "Korri Stream",
       "aka.local",
     ])
+  })
+
+  it("injects typed local-control env for remote-source launches before dispatch", async () => {
+    let dispatchedSpec:
+      | {
+          command: string
+          args: ReadonlyArray<string>
+          env?: Readonly<Record<string, string>>
+          envUnset?: readonly string[]
+        }
+      | undefined
+    const remoteSource = new EntrySource({
+      hostId: "aka",
+      controlUrl: "http://aka.local:3001",
+      isLocal: false,
+    })
+
+    await Effect.runPromise(
+      handleLaunchLibrary({
+        id: "snes/echo.smc",
+        source: remoteSource,
+      }).pipe(
+        Effect.provide(
+          remoteSourceTestLayer({
+            prepare: (_controlUrl, gameId) =>
+              Effect.succeed({
+                status: "prepared" as const,
+                gameId,
+                sessionId: "sess-control",
+              }),
+            launchedSpec: spec => {
+              dispatchedSpec = spec
+            },
+            localPolicy: {
+              gamescope: { enable: false },
+              moonlight: {
+                environment: { OLD_ENV: null },
+                control: {
+                  enable: true,
+                  authority: "controller",
+                  sessionId: "session-remote",
+                  runtimeDir: "/tmp/korri-moonlight/session-remote",
+                  socketPath:
+                    "/tmp/korri-moonlight/session-remote/control.sock",
+                },
+              },
+            },
+          }),
+        ),
+      ),
+    )
+
+    expect(dispatchedSpec?.command).toBe("moonlight")
+    expect(dispatchedSpec?.env).toEqual({
+      MOONLIGHT_LOCAL_CONTROL_AUTHORITY: "controller",
+      MOONLIGHT_LOCAL_CONTROL_RUNTIME_DIR:
+        "/tmp/korri-moonlight/session-remote",
+      MOONLIGHT_LOCAL_CONTROL_SESSION_ID: "session-remote",
+      MOONLIGHT_LOCAL_CONTROL_SOCKET:
+        "/tmp/korri-moonlight/session-remote/control.sock",
+    })
+    expect(dispatchedSpec?.envUnset).toEqual(["OLD_ENV"])
+  })
+
+  it("rejects wayland Moonlight remote-source policy without sibling Gamescope Wayland exposure", async () => {
+    const remoteSource = new EntrySource({
+      hostId: "aka",
+      controlUrl: "http://aka.local:3001",
+      isLocal: false,
+    })
+
+    const result = await Effect.runPromise(
+      handleLaunchLibrary({
+        id: "snes/echo.smc",
+        source: remoteSource,
+      }).pipe(
+        Effect.provide(
+          remoteSourceTestLayer({
+            prepare: (_controlUrl, gameId) =>
+              Effect.succeed({
+                status: "prepared" as const,
+                gameId,
+                sessionId: "sess-wayland",
+              }),
+            launchedSpec: () => {
+              throw new Error("launcher should not run for invalid policy")
+            },
+            localPolicy: {
+              gamescope: { enable: true, window: { exposeWayland: false } },
+              moonlight: { platform: { name: "wayland" } },
+            },
+          }),
+        ),
+      ),
+    )
+
+    expect(result.status).toBe("failed")
+    if (result.status === "failed") {
+      expect(result.stderrTail).toContain("exposeWayland")
+    }
   })
 
   it("strips IPv6 brackets from the peer hostname when composing the moonlight spec", async () => {
@@ -850,7 +946,10 @@ function remoteSourceTestLayer(options: {
   readonly launchedSpec: (spec: {
     readonly command: string
     readonly args: ReadonlyArray<string>
+    readonly env?: Readonly<Record<string, string>>
+    readonly envUnset?: readonly string[]
   }) => void
+  readonly localPolicy?: ResolvedLocalLauncherPolicy
 }) {
   const sourceLayer = Layer.succeed(LibrarySource)({
     list: () =>
@@ -870,6 +969,16 @@ function remoteSourceTestLayer(options: {
           reason: "config",
           message: "remote-source: resolveLaunchForGame not used",
         }),
+      ),
+    resolveLocalLauncherPolicy: () =>
+      Effect.succeed(
+        options.localPolicy ?? {
+          gamescope: {
+            enable: true,
+            backend: { type: "wayland" as const },
+            window: { fullscreen: true, borderless: true, exposeWayland: true },
+          },
+        },
       ),
   })
   const launcherLayer = Layer.succeed(Launcher)({

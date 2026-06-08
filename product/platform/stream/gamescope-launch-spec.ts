@@ -27,7 +27,7 @@ export function composeGamescopeLaunchSpec(
       "--",
       ...renderAppCommand(game, normalized.app?.environment),
     ],
-    env: applyEnvironmentOverlay(game.env, normalized.environment),
+    ...applyEnvironmentOverlay(game, normalized.environment),
     cwd: game.cwd,
   }
 }
@@ -242,17 +242,32 @@ function renderAppEnvironmentOperations(
 }
 
 function applyEnvironmentOverlay(
-  base: LaunchSpec["env"],
+  base: Pick<LaunchSpec, "env" | "envUnset">,
   overlay: EnvironmentOverlay | undefined,
-): LaunchSpec["env"] {
-  if (overlay === undefined) return base
-
-  const env: Record<string, string | null> = { ...(base ?? {}) }
-  for (const [key, value] of Object.entries(overlay)) {
-    env[key] = value
+): Pick<LaunchSpec, "env" | "envUnset"> {
+  if (overlay === undefined) {
+    return {
+      ...(base.env ? { env: base.env } : {}),
+      ...(base.envUnset ? { envUnset: base.envUnset } : {}),
+    }
   }
 
-  return Object.keys(env).length > 0 ? env : undefined
+  const env: Record<string, string> = { ...(base.env ?? {}) }
+  const envUnset = new Set(base.envUnset ?? [])
+  for (const [key, value] of Object.entries(overlay)) {
+    if (value === null) {
+      delete env[key]
+      envUnset.add(key)
+    } else {
+      env[key] = value
+      envUnset.delete(key)
+    }
+  }
+
+  return {
+    ...(Object.keys(env).length > 0 ? { env } : {}),
+    ...(envUnset.size > 0 ? { envUnset: [...envUnset].sort() } : {}),
+  }
 }
 
 function validateDimensionPairs(policy: GamescopePolicy) {

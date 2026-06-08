@@ -23,6 +23,7 @@
 
 import { logger } from "@platform/logger/logger"
 
+import { launchEnvironment } from "./launcher"
 import type {
   Launcher,
   LaunchResult,
@@ -76,14 +77,7 @@ async function spawnShellLaunch(
     "shell-launcher: spawning",
   )
 
-  const env = { ...process.env }
-  for (const [key, value] of Object.entries(spec.env ?? {})) {
-    if (value === null) {
-      delete env[key]
-    } else {
-      env[key] = value
-    }
-  }
+  const env = launchEnvironment(spec)
 
   // Bun.spawn throws synchronously when posix_spawn fails (e.g. ENOENT
   // for the binary itself). The launcher contract is that we never

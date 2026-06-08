@@ -1,7 +1,10 @@
 import type { EntrySource } from "@platform/api/rpc/entry-source"
 import { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
-import type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
+import type {
+  GamescopePolicy,
+  MoonlightPolicy,
+} from "@platform/library/config/inheritable-fields"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import type {
   LaunchExtras,
@@ -56,6 +59,11 @@ export interface ResolveLaunchInputs {
   readonly override?: EphemeralOverride
 }
 
+export interface ResolvedLocalLauncherPolicy {
+  readonly gamescope: GamescopePolicy
+  readonly moonlight?: MoonlightPolicy
+}
+
 export interface ResolvedLaunch {
   readonly spec: LaunchSpec
   readonly gamescope?: GamescopePolicy
@@ -98,6 +106,10 @@ export interface LibrarySourceService {
     id: string,
     inputs?: ResolveLaunchInputs,
   ) => Effect.Effect<ResolvedLaunch, LibraryError>
+  readonly resolveLocalLauncherPolicy?: (
+    launcherId: string,
+    inputs?: Pick<ResolveLaunchInputs, "override">,
+  ) => Effect.Effect<ResolvedLocalLauncherPolicy, LibraryError>
 }
 
 export interface LaunchOptions {

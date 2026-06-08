@@ -51,6 +51,25 @@ describe("game stream launch intent store", () => {
     await expect(store.claim()).resolves.toBeUndefined()
   })
 
+  it("preserves launch env and envUnset across enqueue/claim", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-intent-"))
+    const intentPath = join(dir, "next-launch.json")
+    const store = createFileGameStreamLaunchIntentStore(intentPath)
+    const moonlightLaunch: LaunchSpec = {
+      command: "/nix/store/moonlight/bin/moonlight",
+      args: ["stream", "-app", "Korri Stream", "aka.local"],
+      env: { MOONLIGHT_LOCAL_CONTROL_SOCKET: "/run/session/control.sock" },
+      envUnset: ["KORRI_MOONLIGHT_STATE_HOME"],
+    }
+    const intent = createLaunchIntent(moonlightLaunch)
+
+    await store.enqueue(intent)
+
+    const claim = await store.claim()
+    expect(claim?.intent.launch).toEqual(moonlightLaunch)
+    await claim?.complete()
+  })
+
   it("preserves launch-scoped artifact metadata", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-intent-"))
     const intentPath = join(dir, "next-launch.json")

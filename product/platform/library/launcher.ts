@@ -22,7 +22,8 @@ import { Schema } from "effect"
  *
  * - `command`: absolute path to the executable. Must be non-empty.
  * - `args`: argv array. May be empty.
- * - `env`: extra environment variables merged onto the parent's `env`; `null` unsets inherited variables.
+ * - `env`: extra environment variables merged onto the parent's `env`.
+ * - `envUnset`: inherited environment variable names to delete before spawn.
  * - `cwd`: working directory for the child.
  */
 export const LaunchSpec = Schema.Struct({
@@ -34,14 +35,30 @@ export const LaunchSpec = Schema.Struct({
     ),
   ),
   args: Schema.Array(Schema.String),
-  env: Schema.optional(
-    Schema.Record(Schema.String, Schema.NullOr(Schema.String)),
-  ),
+  env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  envUnset: Schema.optional(Schema.Array(Schema.String)),
   cwd: Schema.optional(Schema.String),
 })
 export type LaunchSpec = Schema.Schema.Type<typeof LaunchSpec>
 
 export const decodeLaunchSpec = Schema.decodeUnknownSync(LaunchSpec)
+
+export function launchEnvironment(
+  spec: Pick<LaunchSpec, "env" | "envUnset">,
+  base: Readonly<Record<string, string | undefined>> = process.env,
+): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const [key, value] of Object.entries(base)) {
+    if (value !== undefined) env[key] = value
+  }
+  for (const key of spec.envUnset ?? []) {
+    delete env[key]
+  }
+  for (const [key, value] of Object.entries(spec.env ?? {})) {
+    env[key] = value
+  }
+  return env
+}
 
 /**
  * Outcome of a launch attempt.

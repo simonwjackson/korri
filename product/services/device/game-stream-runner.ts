@@ -5,6 +5,7 @@ import { cleanupLaunchArtifacts } from "@platform/library/config/app-materialize
 import type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
 import {
   decodeLaunchSpec,
+  launchEnvironment,
   type Launcher,
   type LaunchResult,
   type LaunchSpec,
@@ -611,9 +612,7 @@ export function createBunManagedChildSpawner(
   const setsidCommand = options.setsidCommand ?? "setsid"
   return {
     async spawn(spec) {
-      const env = spec.env
-        ? { ...(options.env ?? process.env), ...spec.env }
-        : { ...(options.env ?? process.env) }
+      const env = launchEnvironment(spec, options.env ?? process.env)
       const proc = Bun.spawn(
         [setsidCommand, "--", spec.command, ...spec.args],
         {

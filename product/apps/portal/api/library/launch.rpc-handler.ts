@@ -13,8 +13,13 @@ import {
   Launcher,
   LibraryError,
   LibrarySource,
+  type ResolvedLocalLauncherPolicy,
 } from "@platform/library/library-services"
 import { logger } from "@platform/logger/logger"
+import {
+  moonlightControlEnvForHandle,
+  moonlightControlHandleFromOptions,
+} from "@product/apps/portal/stream/moonlight-launcher"
 import type { RemotePrepareResult } from "@product/apps/portal/stream/remote-stream-client"
 import { Effect } from "effect"
 import { composeGamescopeLaunchSpec } from "../../../../../product/services/device/game-stream-fullscreen"
@@ -248,6 +253,7 @@ function handleRemoteSourceLaunch(
     const remotePrepare = yield* RemoteStreamPrepare
     const launcher = yield* Launcher
     const foregroundSessionHost = yield* ForegroundSessionHost
+    const localLibrarySource = yield* LibrarySource
 
     const prepareResult = yield* remotePrepare.prepare(
       source.controlUrl,
@@ -297,6 +303,29 @@ function handleRemoteSourceLaunch(
       )
     }
 
+    const localPolicyResult = yield* (localLibrarySource.resolveLocalLauncherPolicy
+      ? localLibrarySource
+          .resolveLocalLauncherPolicy("moonlight", {
+            override: payload.override,
+          })
+          .pipe(
+            Effect.match({
+              onSuccess: policy => ({ _tag: "resolved" as const, policy }),
+              onFailure: (error: LibraryError) => ({
+                _tag: "failed" as const,
+                response: launchConfigurationFailure(error),
+              }),
+            }),
+          )
+      : Effect.succeed({
+          _tag: "resolved" as const,
+          policy: {
+            gamescope: normalizeGamescopePolicy(DEFAULT_GAMESCOPE_POLICY),
+          } as ResolvedLocalLauncherPolicy,
+        }))
+    if (localPolicyResult._tag === "failed") return localPolicyResult.response
+    const localPolicy = localPolicyResult.policy
+
     const inputDevice = yield* Effect.tryPromise({
       try: () => resolveMoonlightLaunchInputDevice(),
       catch: error => toDataError(toLibraryError(error)),
@@ -313,14 +342,36 @@ function handleRemoteSourceLaunch(
       return launchFailedFromKind(inputDevice.failureKind, inputDevice.message)
     }
 
-    // v1: default gamescope policy. Per-launcher policy ("moonlight" row
-    // in proseql) is a deferred follow-up — see plan U2 / Scope Boundaries.
-    const gamescopePolicy = normalizeGamescopePolicy(DEFAULT_GAMESCOPE_POLICY)
-    const spec: LaunchSpec = composeMoonlightLaunchSpec({
-      host,
-      ...(inputDevice.path ? { inputDevice: inputDevice.path } : {}),
-      gamescope: gamescopePolicy,
+    const moonlightControl = yield* Effect.tryPromise({
+      try: () =>
+        moonlightControlHandleFromOptions(undefined, localPolicy.moonlight?.control),
+      catch: error => toDataError(toLibraryError(error)),
     })
+    const specResult = yield* Effect.try({
+      try: () =>
+        composeMoonlightLaunchSpec({
+          host,
+          moonlight: localPolicy.moonlight,
+          ...(inputDevice.path ? { inputDevices: [inputDevice.path] } : {}),
+          ...(moonlightControl
+            ? { environment: moonlightControlEnvForHandle(moonlightControl) }
+            : {}),
+          gamescope: normalizeGamescopePolicy(localPolicy.gamescope),
+        }),
+      catch: error => error,
+    }).pipe(
+      Effect.match({
+        onSuccess: spec => ({ _tag: "resolved" as const, spec }),
+        onFailure: error => ({
+          _tag: "failed" as const,
+          response: launchConfigurationFailure(
+            new LibraryError({ reason: "config", message: errorMessage(error) }),
+          ),
+        }),
+      }),
+    )
+    if (specResult._tag === "failed") return specResult.response
+    const spec: LaunchSpec = specResult.spec
 
     const result = yield* Effect.tryPromise({
       try: () =>

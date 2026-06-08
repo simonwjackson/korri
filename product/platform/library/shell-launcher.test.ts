@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { mkdirSync } from "node:fs"
 import { resolve } from "node:path"
 
 import { createShellLauncher } from "./shell-launcher"
@@ -73,7 +74,7 @@ describe("createShellLauncher (real Bun.spawn)", () => {
     }
   })
 
-  it("unsets inherited env values when the launch spec uses null", async () => {
+  it("unsets inherited env values when the launch spec uses envUnset", async () => {
     const previous = process.env.KORRI_SHELL_LAUNCHER_UNSET_TEST
     process.env.KORRI_SHELL_LAUNCHER_UNSET_TEST = "present"
     try {
@@ -81,7 +82,7 @@ describe("createShellLauncher (real Bun.spawn)", () => {
       const result = await launcher.run({
         command: "/bin/sh",
         args: ["-c", 'test -z "${KORRI_SHELL_LAUNCHER_UNSET_TEST+x}"'],
-        env: { KORRI_SHELL_LAUNCHER_UNSET_TEST: null },
+        envUnset: ["KORRI_SHELL_LAUNCHER_UNSET_TEST"],
       })
       expect(result).toEqual({ status: "launched" })
     } finally {
@@ -144,6 +145,7 @@ describe("createShellLauncher (real Bun.spawn)", () => {
   it("managed spawn preserves argv, env, cwd, and terminal stderr diagnostics", async () => {
     const launcher = createShellLauncher()
     const cwd = resolve(REPO_ROOT, "out", "tmp")
+    mkdirSync(cwd, { recursive: true })
     const evilArg = "filename with spaces; rm -rf / && echo pwned"
     const spawn = launcher.spawn
     if (!spawn) throw new Error("shell launcher missing managed spawn")

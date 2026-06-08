@@ -1,46 +1,29 @@
 import { readFile } from "node:fs/promises"
 import { parseProcBusInputDevices } from "@platform/input/native/discover-devices"
 import { resolveInputPlumberVirtualGamepad } from "@platform/input/native/inputplumber-virtual-gamepad"
-import type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
+import type {
+  GamescopePolicy,
+  MoonlightPolicy,
+} from "@platform/library/config/inheritable-fields"
 import type { LaunchFailureKind, LaunchSpec } from "@platform/library/launcher"
-import { composeGamescopeLaunchSpec } from "@platform/stream/gamescope-launch-spec"
+import { composeMoonlightGamescopeLaunchSpec } from "@platform/stream/moonlight-launch-spec"
 
 /**
- * Build a Moonlight `LaunchSpec` for `gamescope -- moonlight stream -app "Korri Stream" <host>`
- * (or a bare `moonlight stream -app "Korri Stream" <host>` when gamescope is disabled).
- *
- * Mirrors `composeGamescopeLaunchSpec` for local launches. The server's
- * `app.library.launch` handler calls this to dispatch remote-source (Moonlight)
- * launches through the same `Launcher` / `ForegroundSessionHost` seam used by
- * local launches.
- *
- * Remote-source game identity is carried by the peer `prepare` intent. The
- * Moonlight app stays the stable Sunshine launcher (`Korri Stream`) so the
- * source machine's runner can consume `/run/korri-game-stream/next-launch.json`.
+ * Build a Moonlight `LaunchSpec` for `moonlight stream -app "Korri Stream" <host>`.
+ * Gamescope wrapping is driven by the sibling Gamescope policy, never by sniffing
+ * Moonlight argv.
  */
 export interface ComposeMoonlightLaunchSpecOptions {
   /** Peer hostname or IP (IPv6 callers must strip brackets — see `moonlightHostFromControlUrl`). */
   readonly host: string
-  /** Sunshine app name. Defaults to `Korri Stream`. */
-  readonly appName?: string
-  /** Gamescope policy. Defaults to disabled when omitted. */
+  /** Folded readable Moonlight policy. */
+  readonly moonlight?: MoonlightPolicy
+  /** Folded sibling Gamescope policy. Defaults to disabled when omitted. */
   readonly gamescope?: GamescopePolicy
-  /** Override `moonlight` command. Defaults to env or `"moonlight"`. */
-  readonly command?: string
-  /** Override Moonlight Embedded platform. Defaults to `KORRI_MOONLIGHT_PLATFORM`. */
-  readonly platform?: string
-  /** Override controller mapping file. Defaults to `KORRI_MOONLIGHT_MAPPING_FILE`. */
-  readonly mappingFile?: string
-  /** Override input event device. Defaults to `KORRI_MOONLIGHT_INPUT_DEVICE`. */
-  readonly inputDevice?: string
-  /** Enable Moonlight Embedded absolute touch. Defaults to `KORRI_MOONLIGHT_ABSOLUTE_TOUCH`. */
-  readonly absoluteTouch?: boolean
-  /** Raw ABS x,y,w,h bounds for absolute touch. Defaults to `KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS`. */
-  readonly absoluteTouchBounds?: string
-  /** Ignore absolute touch until bounds are configured. Defaults to `KORRI_MOONLIGHT_ABSOLUTE_TOUCH_REQUIRE_BOUNDS`. */
-  readonly absoluteTouchRequireBounds?: boolean
-  /** Resize the playback window to the stream size when it changes. Defaults to `KORRI_MOONLIGHT_AUTO_WINDOW_RESIZE`. */
-  readonly autoWindowResize?: boolean
+  /** Resolved input devices from caller preflight. */
+  readonly inputDevices?: readonly string[]
+  /** Launch env allocated by caller preflight, for example local-control socket facts. */
+  readonly environment?: Readonly<Record<string, string>>
 }
 
 export type MoonlightLaunchInputDeviceResolution =
@@ -63,11 +46,10 @@ export interface ResolveMoonlightLaunchInputDeviceOptions {
 export async function resolveMoonlightLaunchInputDevice(
   options: ResolveMoonlightLaunchInputDeviceOptions = {},
 ): Promise<MoonlightLaunchInputDeviceResolution> {
-  const explicitInput = options.inputDevice ?? moonlightInputDeviceFromEnv()
+  const explicitInput = options.inputDevice
   if (explicitInput?.trim()) return { status: "ok", path: explicitInput.trim() }
 
-  const required =
-    options.requireInputPlumberInput ?? moonlightRequireInputPlumberFromEnv()
+  const required = options.requireInputPlumberInput ?? false
   if (!required) return { status: "ok" }
 
   const proc = await (options.readProcDevices ?? readRealProcDevices)()
@@ -97,85 +79,15 @@ export async function resolveMoonlightLaunchInputDevice(
 export function composeMoonlightLaunchSpec(
   options: ComposeMoonlightLaunchSpecOptions,
 ): LaunchSpec {
-  if (!options.host)
-    throw new Error("composeMoonlightLaunchSpec: host is required")
-
-  const appName = options.appName ?? DEFAULT_APP_NAME
-  if (!appName.trim())
-    throw new Error("composeMoonlightLaunchSpec: appName is required")
-
-  const command =
-    options.command ?? moonlightCommandFromEnv() ?? DEFAULT_MOONLIGHT_COMMAND
-  const args = composeMoonlightArgs(options, appName)
-
-  return composeGamescopeLaunchSpec(
-    { command, args },
-    options.gamescope ?? { enable: false },
-  )
-}
-
-function composeMoonlightArgs(
-  options: ComposeMoonlightLaunchSpecOptions,
-  appName: string,
-): readonly string[] {
-  const args = ["stream"]
-  appendOption(
-    args,
-    "-platform",
-    options.platform ?? moonlightPlatformFromEnv(),
-  )
-  appendOption(
-    args,
-    "-mapping",
-    options.mappingFile ?? moonlightMappingFileFromEnv(),
-  )
-  appendOption(
-    args,
-    "-input",
-    options.inputDevice ?? moonlightInputDeviceFromEnv(),
-  )
-  appendAbsoluteTouchArgs(args, resolveAbsoluteTouchOptions(options))
-  if (options.autoWindowResize ?? moonlightAutoWindowResizeFromEnv()) {
-    args.push("-autowindowresize")
-  }
-  args.push("-app", appName, options.host)
-  return args
-}
-
-function appendOption(args: string[], flag: string, value: string | undefined) {
-  if (value) args.push(flag, value)
-}
-
-function resolveAbsoluteTouchOptions(
-  options: ComposeMoonlightLaunchSpecOptions,
-): {
-  readonly enabled: boolean
-  readonly requireBounds: boolean
-  readonly bounds?: string
-} {
-  const bounds =
-    options.absoluteTouchBounds ?? moonlightAbsoluteTouchBoundsFromEnv()
-  const requireBounds =
-    options.absoluteTouchRequireBounds ??
-    moonlightAbsoluteTouchRequireBoundsFromEnv() ??
-    false
-  return {
-    enabled:
-      options.absoluteTouch ??
-      moonlightAbsoluteTouchFromEnv() ??
-      (bounds !== undefined || requireBounds),
-    requireBounds,
-    bounds,
-  }
-}
-
-function appendAbsoluteTouchArgs(
-  args: string[],
-  touch: ReturnType<typeof resolveAbsoluteTouchOptions>,
-) {
-  if (touch.enabled) args.push("-absolutetouch")
-  if (touch.requireBounds) args.push("-absolutetouchrequirebounds")
-  appendOption(args, "-absolutetouchbounds", touch.bounds)
+  return composeMoonlightGamescopeLaunchSpec({
+    policy: options.moonlight,
+    gamescope: options.gamescope ?? { enable: false },
+    facts: {
+      host: options.host,
+      ...(options.inputDevices ? { inputDevices: options.inputDevices } : {}),
+      ...(options.environment ? { environment: options.environment } : {}),
+    },
+  })
 }
 
 /**
@@ -201,59 +113,6 @@ export function moonlightHostFromControlUrl(controlUrl: string): string {
   return url.hostname.replace(/^\[/, "").replace(/\]$/, "")
 }
 
-const DEFAULT_APP_NAME = "Korri Stream"
-const DEFAULT_MOONLIGHT_COMMAND = "moonlight"
-
-function moonlightCommandFromEnv(): string | undefined {
-  return nonEmptyEnv("KORRI_MOONLIGHT_COMMAND")
-}
-
-function moonlightPlatformFromEnv(): string | undefined {
-  return nonEmptyEnv("KORRI_MOONLIGHT_PLATFORM")
-}
-
-function moonlightMappingFileFromEnv(): string | undefined {
-  return nonEmptyEnv("KORRI_MOONLIGHT_MAPPING_FILE")
-}
-
-function moonlightInputDeviceFromEnv(): string | undefined {
-  return nonEmptyEnv("KORRI_MOONLIGHT_INPUT_DEVICE")
-}
-
-function moonlightAbsoluteTouchFromEnv(): boolean | undefined {
-  const raw = process.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH?.trim()
-  if (!raw) return undefined
-  return raw === "1" || raw === "true" || raw === "enabled"
-}
-
-function moonlightAbsoluteTouchBoundsFromEnv(): string | undefined {
-  return nonEmptyEnv("KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS")
-}
-
-function moonlightAbsoluteTouchRequireBoundsFromEnv(): boolean | undefined {
-  const raw = process.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH_REQUIRE_BOUNDS?.trim()
-  if (!raw) return undefined
-  return raw === "1" || raw === "true" || raw === "enabled"
-}
-
-function moonlightRequireInputPlumberFromEnv(): boolean {
-  const raw = process.env.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER?.trim()
-  return raw === "1" || raw === "true" || raw === "required"
-}
-
-function moonlightAutoWindowResizeFromEnv(): boolean | undefined {
-  const raw = process.env.KORRI_MOONLIGHT_AUTO_WINDOW_RESIZE?.trim()
-  if (!raw) return undefined
-  return raw === "1" || raw === "true" || raw === "enabled"
-}
-
 async function readRealProcDevices(): Promise<string> {
   return await readFile("/proc/bus/input/devices", "utf8")
-}
-
-function nonEmptyEnv(name: string): string | undefined {
-  const value = process.env[name]
-  if (!value) return undefined
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : undefined
 }

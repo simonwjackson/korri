@@ -1,15 +1,3 @@
-/**
- * Spawn Moonlight locally to connect to a Korri stream host.
- *
- * Tries a configured Moonlight command first, optionally falls back to
- * `nix run nixpkgs#moonlight-embedded`, and returns a structured result. The runner is swappable (`CommandRunner`)
- * so tests and the desktop’s bun-side bridge can intercept the spawn.
- *
- * Originally lived in `product/apps/cli/`; promoted to `@product/apps/portal/stream/` so the
- * desktop’s launch bridge can call it from the bun process without
- * depending on CLI code. The `product/apps/cli/moonlight-launcher.ts` file is
- * a re-export shim during the migration window.
- */
 import { randomUUID } from "node:crypto"
 import { mkdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -18,14 +6,24 @@ import {
   type InputPlumberVirtualGamepadResolution,
   resolveInputPlumberVirtualGamepad,
 } from "@platform/input/native/inputplumber-virtual-gamepad"
-import type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
+import type {
+  GamescopePolicy,
+  MoonlightPolicy,
+} from "@platform/library/config/inheritable-fields"
+import { launchEnvironment } from "@platform/library/launcher"
 import { composeGamescopeLaunchSpec } from "@platform/stream/gamescope-launch-spec"
+import {
+  composeMoonlightGamescopeLaunchSpec,
+  composeMoonlightStreamLaunchSpec,
+  validateMoonlightGamescopePolicy,
+} from "@platform/stream/moonlight-launch-spec"
 
 export interface MoonlightControlLaunchHandle {
   readonly sessionId: string
   readonly runtimeDir: string
   readonly socketPath: string
   readonly authority: "observer" | "controller"
+  readonly allowRootPeers?: boolean
 }
 
 export interface ManagedMoonlightSessionHandle {
@@ -53,6 +51,7 @@ export interface CommandRunner {
     options?: {
       readonly startupObserveMs?: number
       readonly env?: Readonly<Record<string, string>>
+      readonly envUnset?: readonly string[]
     },
   ) => Promise<
     | {
@@ -69,65 +68,65 @@ export interface MoonlightControlLaunchOptions {
   readonly runtimeDir?: string
   readonly socketPath?: string
   readonly authority?: "observer" | "controller"
+  readonly allowRootPeers?: boolean
 }
 
 export interface MoonlightLaunchOptions {
   readonly host?: string
-  readonly appName?: string
-  readonly command?: string
-  readonly client?: "embedded"
+  readonly moonlight?: MoonlightPolicy
   readonly allowNixFallback?: boolean
   readonly startupObserveMs?: number
-  readonly mappingFile?: string
   readonly inputDevice?: string
   readonly requireInputPlumberInput?: boolean
-  readonly platform?: string
-  readonly absoluteTouch?: boolean
-  readonly absoluteTouchBounds?: string
-  readonly absoluteTouchRequireBounds?: boolean
-  readonly autoWindowResize?: boolean
   readonly gamescope?: GamescopePolicy
   readonly readProcDevices?: () => Promise<string>
   readonly runner?: CommandRunner
   readonly moonlightControl?: MoonlightControlLaunchOptions | false
 }
 
-const DEFAULT_APP_NAME = "Korri Stream"
-
 export async function launchMoonlight(
   options: MoonlightLaunchOptions = {},
 ): Promise<MoonlightLaunchResult> {
   const runner = options.runner ?? spawnRunner
-  const command = options.command ?? moonlightCommandFromEnv() ?? "moonlight"
-  const client = options.client ?? moonlightClientFromEnv() ?? "embedded"
   const inputDevice = await moonlightInputDevice(options)
   if (inputDevice.status === "failed") return inputDevice
 
-  const launchConfig = await resolveMoonlightLaunchConfig(
-    options,
-    client,
-    inputDevice.path,
+  const policy = options.moonlight ?? {}
+  const moonlightControl = await moonlightControlHandleFromOptions(
+    options.moonlightControl,
+    policy.control,
   )
-  const moonlightControlEnv = launchConfig.moonlightControl
-    ? moonlightControlEnvForHandle(launchConfig.moonlightControl)
+  const environment = moonlightControl
+    ? moonlightControlEnvForHandle(moonlightControl)
     : undefined
-  const args = moonlightArgs(launchConfig.argsOptions)
+
+  let installedSpec
+  try {
+    installedSpec = composeMoonlightGamescopeLaunchSpec({
+      policy,
+      gamescope: options.gamescope ?? { enable: true },
+      facts: {
+        host: options.host ?? "",
+        ...(inputDevice.path ? { inputDevices: [inputDevice.path] } : {}),
+        ...(environment ? { environment } : {}),
+      },
+    })
+  } catch (error) {
+    return { status: "failed", message: errorMessage(error) }
+  }
+
+  const command = policy.command ?? "moonlight"
   const allowNixFallback = options.allowNixFallback ?? command === "moonlight"
-  const startupObserveMs =
-    options.startupObserveMs ?? moonlightStartupObserveMsFromEnv()
-  const installedSpec = moonlightCommandSpec(command, args, options.gamescope)
-  const installed = await runner.run(
-    installedSpec.command,
-    installedSpec.args,
-    {
-      startupObserveMs,
-      env: moonlightControlEnv,
-    },
-  )
+  const startupObserveMs = options.startupObserveMs
+  const installed = await runner.run(installedSpec.command, installedSpec.args, {
+    startupObserveMs,
+    env: installedSpec.env,
+    envUnset: installedSpec.envUnset,
+  })
   if (installed.status === "started") {
     return startedMoonlightResult({
       command: installedSpec.command,
-      moonlightControl: launchConfig.moonlightControl,
+      moonlightControl,
       session: installed.session,
     })
   }
@@ -139,19 +138,40 @@ export async function launchMoonlight(
     }
   }
 
-  const fallbackSpec = moonlightCommandSpec(
-    "nix",
-    ["run", "nixpkgs#moonlight-embedded", "--", ...args],
-    options.gamescope,
+  const bareFallbackMoonlight = composeMoonlightStreamLaunchSpec({
+    policy: { ...policy, command: "moonlight" },
+    facts: {
+      host: options.host ?? "",
+      ...(inputDevice.path ? { inputDevices: [inputDevice.path] } : {}),
+      ...(environment ? { environment } : {}),
+    },
+  })
+  const fallbackSpec = composeGamescopeLaunchSpec(
+    {
+      command: "nix",
+      args: [
+        "run",
+        "nixpkgs#moonlight-embedded",
+        "--",
+        ...bareFallbackMoonlight.args,
+      ],
+      ...(bareFallbackMoonlight.env ? { env: bareFallbackMoonlight.env } : {}),
+      ...(bareFallbackMoonlight.envUnset
+        ? { envUnset: bareFallbackMoonlight.envUnset }
+        : {}),
+    },
+    options.gamescope ?? { enable: true },
   )
+
   const fallback = await runner.run(fallbackSpec.command, fallbackSpec.args, {
     startupObserveMs,
-    env: moonlightControlEnv,
+    env: fallbackSpec.env,
+    envUnset: fallbackSpec.envUnset,
   })
   if (fallback.status === "started") {
     return startedMoonlightResult({
       command: fallbackSpec.command,
-      moonlightControl: launchConfig.moonlightControl,
+      moonlightControl,
       session: fallback.session,
     })
   }
@@ -159,43 +179,6 @@ export async function launchMoonlight(
   return {
     status: "failed",
     message: `Could not start Moonlight. ${command}: ${installed.message}; nix fallback: ${fallback.message}`,
-  }
-}
-
-async function resolveMoonlightLaunchConfig(
-  options: MoonlightLaunchOptions,
-  client: "embedded",
-  inputDevice: string | undefined,
-): Promise<{
-  readonly moonlightControl?: MoonlightControlLaunchHandle
-  readonly argsOptions: MoonlightLaunchOptions & { readonly client: "embedded" }
-}> {
-  const moonlightControl = await moonlightControlHandleFromOptions(
-    options.moonlightControl,
-  )
-  const absoluteTouchBounds =
-    options.absoluteTouchBounds ?? moonlightAbsoluteTouchBoundsFromEnv()
-  const absoluteTouchRequireBounds =
-    options.absoluteTouchRequireBounds ??
-    moonlightAbsoluteTouchRequireBoundsFromEnv() ??
-    false
-  const absoluteTouch =
-    options.absoluteTouch ??
-    moonlightAbsoluteTouchFromEnv() ??
-    (absoluteTouchBounds !== undefined || absoluteTouchRequireBounds)
-
-  return {
-    moonlightControl,
-    argsOptions: {
-      ...options,
-      client,
-      absoluteTouch,
-      absoluteTouchBounds,
-      absoluteTouchRequireBounds,
-      inputDevice,
-      mappingFile: options.mappingFile ?? moonlightMappingFileFromEnv(),
-      platform: options.platform ?? moonlightPlatformFromEnv(),
-    },
   }
 }
 
@@ -214,138 +197,38 @@ function startedMoonlightResult(input: {
   }
 }
 
-function moonlightCommandSpec(
-  command: string,
-  args: readonly string[],
-  gamescope: GamescopePolicy | undefined,
-): { readonly command: string; readonly args: readonly string[] } {
-  return composeGamescopeLaunchSpec(
-    { command, args },
-    gamescope ?? { enable: true },
-  )
-}
-
-function moonlightCommandFromEnv(): string | undefined {
-  const env = globalThis.Bun?.env
-  const command = env?.KORRI_MOONLIGHT_COMMAND?.trim()
-  return command === "" ? undefined : command
-}
-
-function moonlightClientFromEnv(): "embedded" | undefined {
-  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_CLIENT?.trim()
-  return raw === "embedded" ? raw : undefined
-}
-
-function moonlightStartupObserveMsFromEnv(): number | undefined {
-  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_STARTUP_OBSERVE_MS?.trim()
-  if (!raw) return undefined
-  const value = Number(raw)
-  return Number.isFinite(value) && value > 0 ? value : undefined
-}
-
-function moonlightMappingFileFromEnv(): string | undefined {
-  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_MAPPING_FILE?.trim()
-  return raw === "" ? undefined : raw
-}
-
-function moonlightRequireInputPlumberFromEnv(): boolean {
-  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER?.trim()
-  return raw === "1" || raw === "true" || raw === "required"
-}
-
-function moonlightPlatformFromEnv(): string | undefined {
-  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_PLATFORM?.trim()
-  return raw === "" ? undefined : raw
-}
-
-function moonlightAbsoluteTouchFromEnv(): boolean | undefined {
-  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH?.trim()
-  if (!raw) return undefined
-  return raw === "1" || raw === "true" || raw === "enabled"
-}
-
-function moonlightAbsoluteTouchBoundsFromEnv(): string | undefined {
-  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH_BOUNDS?.trim()
-  return raw === "" ? undefined : raw
-}
-
-function moonlightAbsoluteTouchRequireBoundsFromEnv(): boolean | undefined {
-  const raw =
-    globalThis.Bun?.env.KORRI_MOONLIGHT_ABSOLUTE_TOUCH_REQUIRE_BOUNDS?.trim()
-  if (!raw) return undefined
-  return raw === "1" || raw === "true" || raw === "enabled"
-}
-
-function moonlightAutoWindowResize(options: MoonlightLaunchOptions): boolean {
-  return (
-    options.autoWindowResize ??
-    moonlightAutoWindowResizeFromEnv() ??
-    gamescopeEnabled(options.gamescope)
-  )
-}
-
-function moonlightAutoWindowResizeFromEnv(): boolean | undefined {
-  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_AUTO_WINDOW_RESIZE?.trim()
-  if (!raw) return undefined
-  return raw === "1" || raw === "true" || raw === "enabled"
-}
-
-function gamescopeEnabled(gamescope: GamescopePolicy | undefined): boolean {
-  return gamescope?.enable !== false
-}
-
-function moonlightInputDeviceFromEnv(): string | undefined {
-  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_INPUT_DEVICE?.trim()
-  return raw === "" ? undefined : raw
-}
-
-async function moonlightControlHandleFromOptions(
+export async function moonlightControlHandleFromOptions(
   options: MoonlightControlLaunchOptions | false | undefined,
+  policy: MoonlightPolicy["control"] | undefined = undefined,
 ): Promise<MoonlightControlLaunchHandle | undefined> {
   if (options === false) return undefined
-  const enabled = options?.enabled ?? moonlightControlEnabledFromEnv()
+  const enabled = options?.enabled ?? policy?.enable ?? false
   if (!enabled) return undefined
 
   const sessionId =
-    options?.sessionId ?? `moonlight-${randomUUID().replaceAll("-", "")}`
+    options?.sessionId ??
+    policy?.sessionId ??
+    `moonlight-${randomUUID().replaceAll("-", "")}`
   const runtimeDir =
-    options?.runtimeDir ?? join(moonlightControlRuntimeRootFromEnv(), sessionId)
-  const socketPath = options?.socketPath ?? join(runtimeDir, "control.sock")
+    options?.runtimeDir ??
+    policy?.runtimeDir ??
+    join(moonlightControlRuntimeRootFromEnv(), sessionId)
+  const socketPath =
+    options?.socketPath ?? policy?.socketPath ?? join(runtimeDir, "control.sock")
   await mkdir(runtimeDir, { recursive: true, mode: 0o700 })
 
   return {
     sessionId,
     runtimeDir,
     socketPath,
-    authority:
-      options?.authority ?? moonlightControlAuthorityFromEnv() ?? "observer",
+    authority: options?.authority ?? policy?.authority ?? "observer",
+    ...((options?.allowRootPeers ?? policy?.allowRootPeers) === true
+      ? { allowRootPeers: true }
+      : {}),
   }
 }
 
-function moonlightControlEnabledFromEnv(): boolean {
-  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_CONTROL?.trim()
-  return raw === "1" || raw === "true" || raw === "enabled"
-}
-
-function moonlightControlAuthorityFromEnv():
-  | "observer"
-  | "controller"
-  | undefined {
-  const raw = globalThis.Bun?.env.KORRI_MOONLIGHT_CONTROL_AUTHORITY?.trim()
-  return raw === "observer" || raw === "controller" ? raw : undefined
-}
-
-function moonlightControlRuntimeRootFromEnv(): string {
-  const runtimeDir = globalThis.Bun?.env.XDG_RUNTIME_DIR?.trim()
-  if (!runtimeDir) {
-    throw new Error(
-      "XDG_RUNTIME_DIR is required when Moonlight local control is enabled without an explicit runtimeDir",
-    )
-  }
-  return join(runtimeDir, "korri-moonlight")
-}
-
-function moonlightControlEnvForHandle(
+export function moonlightControlEnvForHandle(
   handle: MoonlightControlLaunchHandle,
 ): Readonly<Record<string, string>> {
   return {
@@ -353,6 +236,7 @@ function moonlightControlEnvForHandle(
     MOONLIGHT_LOCAL_CONTROL_RUNTIME_DIR: handle.runtimeDir,
     MOONLIGHT_LOCAL_CONTROL_SESSION_ID: handle.sessionId,
     MOONLIGHT_LOCAL_CONTROL_SOCKET: handle.socketPath,
+    ...(handle.allowRootPeers ? { MOONLIGHT_LOCAL_CONTROL_ALLOW_ROOT: "1" } : {}),
   }
 }
 
@@ -364,11 +248,11 @@ async function moonlightInputDevice(options: MoonlightLaunchOptions): Promise<
       readonly message: string
     }
 > {
-  const explicitInput = options.inputDevice ?? moonlightInputDeviceFromEnv()
+  const explicitInput = options.inputDevice
   if (explicitInput?.trim()) return { status: "ok", path: explicitInput.trim() }
+  if ((options.moonlight?.input?.devices?.length ?? 0) > 0) return { status: "ok" }
 
-  const required =
-    options.requireInputPlumberInput ?? moonlightRequireInputPlumberFromEnv()
+  const required = options.requireInputPlumberInput ?? false
 
   if (!required) return { status: "ok" }
 
@@ -414,30 +298,6 @@ async function readRealProcDevices(): Promise<string> {
   return await readFile("/proc/bus/input/devices", "utf8")
 }
 
-function moonlightArgs(
-  options: MoonlightLaunchOptions & { readonly client: "embedded" },
-): readonly string[] {
-  if (!options.host) return []
-  const appName = options.appName ?? DEFAULT_APP_NAME
-  return [
-    "stream",
-    ...(options.platform ? ["-platform", options.platform] : []),
-    ...(options.mappingFile ? ["-mapping", options.mappingFile] : []),
-    ...(options.inputDevice ? ["-input", options.inputDevice] : []),
-    ...(options.absoluteTouch ? ["-absolutetouch"] : []),
-    ...(options.absoluteTouchRequireBounds
-      ? ["-absolutetouchrequirebounds"]
-      : []),
-    ...(options.absoluteTouchBounds
-      ? ["-absolutetouchbounds", options.absoluteTouchBounds]
-      : []),
-    ...(moonlightAutoWindowResize(options) ? ["-autowindowresize"] : []),
-    "-app",
-    appName,
-    options.host,
-  ]
-}
-
 const spawnRunner: CommandRunner = {
   run: async (command, args, options) => {
     try {
@@ -445,7 +305,10 @@ const spawnRunner: CommandRunner = {
         stdin: "ignore",
         stdout: "ignore",
         stderr: "ignore",
-        env: options?.env ? { ...Bun.env, ...options.env } : Bun.env,
+        env: launchEnvironment(
+          { env: options?.env, envUnset: options?.envUnset },
+          Bun.env,
+        ),
       })
       const observedExit = await observeEarlyExit(
         child,
@@ -478,6 +341,16 @@ const spawnRunner: CommandRunner = {
   },
 }
 
+function moonlightControlRuntimeRootFromEnv(): string {
+  const runtimeDir = globalThis.Bun?.env.XDG_RUNTIME_DIR?.trim()
+  if (!runtimeDir) {
+    throw new Error(
+      "XDG_RUNTIME_DIR is required when Moonlight local control is enabled without an explicit runtimeDir",
+    )
+  }
+  return join(runtimeDir, "korri-moonlight")
+}
+
 function isProcessGone(pid: number): boolean {
   try {
     process.kill(pid, 0)
@@ -500,3 +373,9 @@ async function observeEarlyExit(
     new Promise<undefined>(resolve => setTimeout(resolve, startupObserveMs)),
   ])
 }
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+export { validateMoonlightGamescopePolicy }
