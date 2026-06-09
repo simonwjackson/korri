@@ -302,7 +302,11 @@ in
 
       root = mkOption {
         type = types.str;
-        default = if isSystemMode then "${config.services.korri.runtime.stateRoot}/library" else "%h/.local/share/korri/library";
+        default =
+          if isSystemMode then
+            "${config.services.korri.runtime.stateRoot}/library"
+          else
+            "%h/.local/share/korri/library";
         defaultText = lib.literalExpression ''
           if serviceMode == "system" then "''${config.services.korri.runtime.stateRoot}/library"
           else "%h/.local/share/korri/library"
@@ -665,10 +669,12 @@ in
         assertion =
           !cfg.streaming.enable
           || !cfg.streaming.runtimeSettings.enable
-          || (config.systemd.services."korri-sunshine".environment.SUNSHINE_LIVE_SETTINGS_MVP or null) == "1";
+          ||
+            (config.systemd.user.services."korri-sunshine".environment.SUNSHINE_LIVE_SETTINGS_MVP or null)
+            == "1";
         message = ''
           services.korri.daemon.streaming.enable = true requires
-          systemd.services.korri-sunshine.environment.SUNSHINE_LIVE_SETTINGS_MVP = "1"
+          systemd.user.services.korri-sunshine.environment.SUNSHINE_LIVE_SETTINGS_MVP = "1"
           when services.korri.daemon.streaming.runtimeSettings.enable is true
           so sunshine-korri advertises runtime bitrate/FPS/resolution support.
         '';
@@ -770,10 +776,12 @@ in
     );
 
     # On a streaming-role host we own the Sunshine lifecycle ourselves via
-    # `systemd.services.korri-sunshine` (see below). Upstream's
-    # `systemd.user.services.sunshine` unit is gated on a logged-in
-    # graphical session, which never appears on a headless appliance.
-    # Force-disable its autostart so the user unit stays defined (for
+    # `systemd.user.services.korri-sunshine` (see below). Upstream's
+    # `systemd.user.services.sunshine` unit is gated on a generic logged-in
+    # graphical session; Korri binds Sunshine to the product-level
+    # korri-session.target instead so it shares lifecycle and ordering with
+    # the managed compositor.
+    # Force-disable upstream autostart so the user unit stays defined (for
     # ad-hoc debugging) but never tries to claim sunshine's ports.
     services.sunshine.autoStart = mkIf cfg.streaming.enable (lib.mkForce false);
 
@@ -783,119 +791,95 @@ in
     # kernel module load. Hosts can still disable explicitly.
     services.sunshine.enable = mkIf cfg.streaming.enable (lib.mkDefault true);
 
-    # Korri-owned system unit that runs Sunshine inside the
-    # korri-compositor's Sway session. Mirrors the architecture of
-    # korri-compositor.service: boot-scoped, runs as the compositor user,
-    # inherits the compositor's WAYLAND_DISPLAY / XDG_RUNTIME_DIR /
-    # DBUS_SESSION_BUS_ADDRESS / HOME so it can attach to Sway. The Sunshine
-    # config file is rendered locally with the same `pkgs.formats.keyValue`
-    # formatter the upstream module uses, which is content-addressed and
-    # therefore produces an identical store path for identical settings.
-    systemd.services.korri-sunshine = mkIf cfg.streaming.enable (
-      let
-        compositorCfg = config.services.korri.compositor;
-        compositorUnit = config.systemd.services."korri-compositor" or { };
-        # The compositor's environment block sets PATH (coreutils + dbus +
-        # sway + ...). systemd's default service module also sets PATH at
-        # the same priority, which collides during module merge. Sunshine
-        # itself doesn't shell out to compositor tools — it captures the
-        # wayland socket and encodes — so dropping PATH from the inherited
-        # env and letting systemd's default win is both correct and avoids
-        # the conflict.
-        compositorEnv = lib.filterAttrs (n: _: n != "PATH") (compositorUnit.environment or { });
-        sunshineCfg = config.services.sunshine;
-        sunshineBin =
-          if sunshineCfg.capSysAdmin then
-            "${config.security.wrapperDir}/sunshine"
-          else
-            lib.getExe sunshineCfg.package;
-        sunshineSettingsFormat = pkgs.formats.keyValue { };
-        sunshineConfigFile = sunshineSettingsFormat.generate "sunshine.conf" sunshineCfg.settings;
-        waitForWaylandSocket = pkgs.writeShellScript "korri-sunshine-wait-for-wayland" ''
-          set -eu
-          : "''${XDG_RUNTIME_DIR:?korri-sunshine: XDG_RUNTIME_DIR is required}"
-          : "''${WAYLAND_DISPLAY:?korri-sunshine: WAYLAND_DISPLAY is required}"
-          socket="$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
-          for _ in $(seq 1 100); do
-            if [ -S "$socket" ]; then
-              exit 0
-            fi
-            sleep 0.1
-          done
-          echo "korri-sunshine: timed out waiting for $socket after 10s" >&2
-          exit 1
-        '';
-      in
-      {
-        description = "Korri Sunshine game stream host";
-        wantedBy = [ "multi-user.target" ];
-        wants = [
-          "korri-compositor.service"
-          "network.target"
-        ];
-        requires = [ "korri-compositor.service" ];
-        after = [
-          "korri-compositor.service"
-          "network.target"
-        ];
-        # Inherit the compositor's session env (HOME, XDG_*) and pin
-        # WAYLAND_DISPLAY to sway's default first-allocated socket name
-        # so sunshine can attach to `$XDG_RUNTIME_DIR/wayland-1`. Hosts
-        # whose sway picks a different socket name need to override this
-        # via `systemd.services.korri-sunshine.environment.WAYLAND_DISPLAY`.
-        environment =
-          compositorEnv
-          // {
-            WAYLAND_DISPLAY = "wayland-1";
-          }
-          // optionalAttrs cfg.streaming.runtimeSettings.enable {
-            # Enable Sunshine's Korri runtime-settings protocol surface for
-            # managed stream hosts. Capability acks still gate the actual
-            # operations per active encoder/session, but without this process
-            # env the patched Sunshine build intentionally advertises nothing
-            # after a clean rebuild. Disabling this option is the rollback path
-            # back to the safe bitrate/FPS/resolution-unsupported contract.
-            SUNSHINE_LIVE_SETTINGS_MVP = "1";
-          }
-          // optionalAttrs (cfg.streaming.audio.enable && cfg.streaming.audio.pulseServer != null) {
-            PULSE_SERVER = cfg.streaming.audio.pulseServer;
-          };
-        unitConfig = {
-          StartLimitBurst = 5;
-          StartLimitIntervalSec = 500;
-        };
-        serviceConfig = {
-          ExecStartPre = "${waitForWaylandSocket}";
-          ExecStart = "${sunshineBin} ${sunshineConfigFile}";
-          Restart = "on-failure";
-          RestartSec = 5;
-          User = compositorCfg.user;
-          Group = if compositorCfg.group != null then compositorCfg.group else compositorCfg.user;
-          WorkingDirectory = compositorCfg.home;
-        };
-      }
-    );
-
-    systemd.tmpfiles.rules = mkIf isSystemMode [
-      "d ${cfg.library.root} 0700 ${cfg.user} ${daemonGroup} -"
-      "d ${launchArtifactsDir} 0750 ${cfg.user} ${daemonGroup} -"
-    ];
-
-    systemd.tmpfiles.settings =
-      mkIf (isSystemMode && cfg.streaming.enable && isDefaultSystemRuntimeDir)
+    # Korri-owned user unit that runs Sunshine inside the korri-compositor's
+    # Sway session. It intentionally lives in the same user manager as
+    # korri-compositor.service; a system unit cannot reliably require/order a
+    # user unit or inherit its XDG/session environment.
+    # The Sunshine config file is rendered locally with the same
+    # `pkgs.formats.keyValue` formatter the upstream module uses, which is
+    # content-addressed and therefore produces an identical store path for
+    # identical settings.
+    systemd.user.services = {
+      "korri-sunshine" = mkIf cfg.streaming.enable (
+        let
+          compositorUnit = config.systemd.user.services."korri-compositor" or { };
+          # The compositor's environment block sets PATH (coreutils + dbus +
+          # sway + ...). systemd's default service module also sets PATH at
+          # the same priority, which collides during module merge. Sunshine
+          # itself doesn't shell out to compositor tools — it captures the
+          # wayland socket and encodes — so dropping PATH from the inherited
+          # env and letting systemd's default win is both correct and avoids
+          # the conflict.
+          compositorEnv = lib.filterAttrs (n: _: n != "PATH") (compositorUnit.environment or { });
+          sunshineCfg = config.services.sunshine;
+          sunshineBin =
+            if sunshineCfg.capSysAdmin then
+              "${config.security.wrapperDir}/sunshine"
+            else
+              lib.getExe sunshineCfg.package;
+          sunshineSettingsFormat = pkgs.formats.keyValue { };
+          sunshineConfigFile = sunshineSettingsFormat.generate "sunshine.conf" sunshineCfg.settings;
+          waitForWaylandSocket = pkgs.writeShellScript "korri-sunshine-wait-for-wayland" ''
+            set -eu
+            : "''${XDG_RUNTIME_DIR:?korri-sunshine: XDG_RUNTIME_DIR is required}"
+            : "''${WAYLAND_DISPLAY:?korri-sunshine: WAYLAND_DISPLAY is required}"
+            socket="$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
+            for _ in $(seq 1 100); do
+              if [ -S "$socket" ]; then
+                exit 0
+              fi
+              sleep 0.1
+            done
+            echo "korri-sunshine: timed out waiting for $socket after 10s" >&2
+            exit 1
+          '';
+        in
         {
-          "10-korrid".${systemRuntimeDir}.d = {
-            user = cfg.user;
-            group = if cfg.group != null then cfg.group else cfg.user;
-            mode = "0700";
-            age = "-";
+          description = "Korri Sunshine game stream host";
+          wantedBy = [ "korri-session.target" ];
+          wants = [ "korri-compositor.service" ];
+          requires = [ "korri-compositor.service" ];
+          after = [ "korri-compositor.service" ];
+          # Inherit the compositor's session env (HOME, XDG_*) and pin
+          # WAYLAND_DISPLAY to sway's default first-allocated socket name
+          # so sunshine can attach to `$XDG_RUNTIME_DIR/wayland-1`. Hosts
+          # whose sway picks a different socket name need to override this
+          # via `systemd.user.services.korri-sunshine.environment.WAYLAND_DISPLAY`.
+          environment =
+            compositorEnv
+            // {
+              WAYLAND_DISPLAY = "wayland-1";
+            }
+            // optionalAttrs cfg.streaming.runtimeSettings.enable {
+              # Enable Sunshine's Korri runtime-settings protocol surface for
+              # managed stream hosts. Capability acks still gate the actual
+              # operations per active encoder/session, but without this process
+              # env the patched Sunshine build intentionally advertises nothing
+              # after a clean rebuild. Disabling this option is the rollback path
+              # back to the safe bitrate/FPS/resolution-unsupported contract.
+              SUNSHINE_LIVE_SETTINGS_MVP = "1";
+            }
+            // optionalAttrs (cfg.streaming.audio.enable && cfg.streaming.audio.pulseServer != null) {
+              PULSE_SERVER = cfg.streaming.audio.pulseServer;
+            };
+          unitConfig = {
+            StartLimitBurst = 5;
+            StartLimitIntervalSec = 500;
           };
-        };
-
-    systemd.user.services = mkIf (!isSystemMode) {
+          serviceConfig = {
+            ExecStartPre = "${waitForWaylandSocket}";
+            ExecStart = "${sunshineBin} ${sunshineConfigFile}";
+            Restart = "on-failure";
+            RestartSec = 5;
+            WorkingDirectory = config.services.korri.compositor.home;
+          };
+        }
+      );
+    }
+    // optionalAttrs (!isSystemMode) {
       # Keep the runtime-settings gate present even when an operator manually
       # starts the upstream Sunshine user unit for debugging instead of the
-      # Korri-owned system unit above.
+      # Korri-owned user unit above.
       sunshine = mkIf (cfg.streaming.enable && cfg.streaming.runtimeSettings.enable) {
         environment.SUNSHINE_LIVE_SETTINGS_MVP = "1";
       };
@@ -916,6 +900,22 @@ in
         };
       };
     };
+
+    systemd.tmpfiles.rules = mkIf isSystemMode [
+      "d ${cfg.library.root} 0700 ${cfg.user} ${daemonGroup} -"
+      "d ${launchArtifactsDir} 0750 ${cfg.user} ${daemonGroup} -"
+    ];
+
+    systemd.tmpfiles.settings =
+      mkIf (isSystemMode && cfg.streaming.enable && isDefaultSystemRuntimeDir)
+        {
+          "10-korrid".${systemRuntimeDir}.d = {
+            user = cfg.user;
+            group = if cfg.group != null then cfg.group else cfg.user;
+            mode = "0700";
+            age = "-";
+          };
+        };
 
     systemd.services.korrid = mkIf isSystemMode {
       description = "Korri headless server control plane";
@@ -942,7 +942,10 @@ in
         PrivateTmp = true;
         ProtectSystem = "strict";
         ProtectHome = "read-only";
-        ReadWritePaths = [ cfg.library.root launchArtifactsDir ];
+        ReadWritePaths = [
+          cfg.library.root
+          launchArtifactsDir
+        ];
         ProtectKernelTunables = true;
         ProtectKernelModules = true;
         ProtectControlGroups = true;
