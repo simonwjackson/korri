@@ -70,7 +70,10 @@ let
       && (greetdSettings loginEnabled).default_session.user == "korri"
     ))
     (check "login command starts Korri user target inside greetd PAM session" (
-      lib.hasInfix "systemctl --user start korri-session.target" (loginCommand loginEnabled)
+      lib.hasInfix "XDG_RUNTIME_DIR" (loginCommand loginEnabled)
+      && lib.hasInfix "DBUS_SESSION_BUS_ADDRESS" (loginCommand loginEnabled)
+      && lib.hasInfix "unix:path=$XDG_RUNTIME_DIR/bus" (loginCommand loginEnabled)
+      && lib.hasInfix "systemctl --user start korri-session.target" (loginCommand loginEnabled)
       && !lib.hasInfix "--machine=" (loginCommand loginEnabled)
       && lib.hasInfix "sleep infinity" (loginCommand loginEnabled)
     ))

@@ -19,6 +19,15 @@ let
   sessionCommand = pkgs.writeShellScript "korri-login-session" ''
     set -euo pipefail
 
+    uid="$(${pkgs.coreutils}/bin/id -u)"
+    export XDG_RUNTIME_DIR="''${XDG_RUNTIME_DIR:-/run/user/$uid}"
+    export DBUS_SESSION_BUS_ADDRESS="''${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
+
+    for _ in $(${pkgs.coreutils}/bin/seq 1 50); do
+      [ -S "$XDG_RUNTIME_DIR/bus" ] && break
+      ${pkgs.coreutils}/bin/sleep 0.1
+    done
+
     ${pkgs.systemd}/bin/systemctl --user start ${lib.escapeShellArg cfg.target}
     exec ${pkgs.coreutils}/bin/sleep infinity
   '';
