@@ -44,7 +44,8 @@ let
         (cfg.users.users.root.linger or false) != true
         && ((korriUser.linger or false) != true)
         && ((cfg.systemd.user.targets.korri-session.wantedBy or [ ]) == [ ])
-        && builtins.elem "korri-session.target" (cfg.systemd.user.targets.default.wants or [ ])
+        && !(builtins.elem "korri-session.target" (cfg.systemd.user.targets.default.wants or [ ]))
+        && builtins.elem "L+ /home/korri/.config/systemd/user/default.target.wants/korri-session.target - - - - /etc/systemd/user/korri-session.target" cfg.systemd.tmpfiles.rules
       ))
       (check "${name}: setup owns product state subdirectories" (
         builtins.elem "d /var/lib/korri/content 0750 korri korri -" cfg.systemd.tmpfiles.rules

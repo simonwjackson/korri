@@ -74,9 +74,11 @@ let
       && !lib.hasInfix "systemctl" (loginCommand loginEnabled)
       && !lib.hasInfix "--machine=" (loginCommand loginEnabled)
     ))
-    (check "login-enabled user manager starts Korri session target" (
-      builtins.elem "korri-session.target" (loginEnabled.systemd.user.targets.default.wants or [ ])
+    (check "login-enabled runtime user manager starts Korri session target" (
+      !(builtins.elem "korri-session.target" (loginEnabled.systemd.user.targets.default.wants or [ ]))
       && (loginEnabled.systemd.user.targets.korri-session.wantedBy or [ ]) == [ ]
+      && builtins.elem "d /home/korri/.config/systemd/user/default.target.wants 0750 korri korri -" loginEnabled.systemd.tmpfiles.rules
+      && builtins.elem "L+ /home/korri/.config/systemd/user/default.target.wants/korri-session.target - - - - /etc/systemd/user/korri-session.target" loginEnabled.systemd.tmpfiles.rules
     ))
     (check "greetd is ordered after Korri setup and user sessions" (
       builtins.elem "korri-setup.service" (loginEnabled.systemd.services.greetd.requires or [ ])
@@ -89,7 +91,8 @@ let
     (check "login follows existing runtime user identity" (
       (greetdSettings existingRuntimeUser).initial_session.user == "simonwjackson"
       && (greetdSettings existingRuntimeUser).default_session.user == "simonwjackson"
-      && builtins.elem "korri-session.target" (existingRuntimeUser.systemd.user.targets.default.wants or [ ])
+      && !(builtins.elem "korri-session.target" (existingRuntimeUser.systemd.user.targets.default.wants or [ ]))
+      && builtins.elem "L+ /home/simonwjackson/.config/systemd/user/default.target.wants/korri-session.target - - - - /etc/systemd/user/korri-session.target" existingRuntimeUser.systemd.tmpfiles.rules
       && !lib.hasInfix "systemctl" (loginCommand existingRuntimeUser)
       && !lib.hasInfix "--machine=" (loginCommand existingRuntimeUser)
     ))

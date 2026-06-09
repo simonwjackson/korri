@@ -62,7 +62,8 @@ let
       && !lib.hasInfix "--machine=" (
         builtins.readFile cfg.services.korri.login.command
       )
-      && builtins.elem "korri-session.target" (cfg.systemd.user.targets.default.wants or [ ])
+      && !(builtins.elem "korri-session.target" (cfg.systemd.user.targets.default.wants or [ ]))
+      && builtins.elem "L+ /home/korri/.config/systemd/user/default.target.wants/korri-session.target - - - - /etc/systemd/user/korri-session.target" cfg.systemd.tmpfiles.rules
     ))
     (check "root setup service is required by greetd" (
       builtins.elem "korri-setup.service" (cfg.systemd.services.greetd.requires or [ ])

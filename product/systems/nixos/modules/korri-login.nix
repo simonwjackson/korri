@@ -79,7 +79,13 @@ in
       };
     };
 
-    systemd.user.targets.default.wants = [ cfg.target ];
+    systemd.tmpfiles.rules = [
+      "d ${runtime.home}/.config 0750 ${runtime.user} ${runtime.group} -"
+      "d ${runtime.home}/.config/systemd 0750 ${runtime.user} ${runtime.group} -"
+      "d ${runtime.home}/.config/systemd/user 0750 ${runtime.user} ${runtime.group} -"
+      "d ${runtime.home}/.config/systemd/user/default.target.wants 0750 ${runtime.user} ${runtime.group} -"
+      "L+ ${runtime.home}/.config/systemd/user/default.target.wants/${cfg.target} - - - - /etc/systemd/user/${cfg.target}"
+    ];
 
     systemd.services.greetd = {
       wants = [ "systemd-user-sessions.service" ];
