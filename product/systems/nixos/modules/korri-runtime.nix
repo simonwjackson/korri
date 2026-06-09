@@ -21,10 +21,21 @@ in
       description = "Primary Korri runtime group.";
     };
 
+    createUser = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        Create the configured Korri runtime user and group. Disable on
+        desktop/source hosts that intentionally map Korri's runtime identity
+        to an already-managed local user while still using Korri-owned runtime
+        paths and setup services.
+      '';
+    };
+
     uid = mkOption {
       type = types.ints.positive;
       default = 2000;
-      description = "Stable non-zero UID for the Korri appliance user.";
+      description = "Stable non-zero UID for the Korri appliance user when createUser is true.";
     };
 
     home = mkOption {
@@ -103,9 +114,11 @@ in
       }
     ];
 
-    users.groups = lib.genAttrs ([ config.services.korri.runtime.group ] ++ config.services.korri.runtime.extraGroups) (_: { });
+    users.groups = lib.mkIf config.services.korri.runtime.createUser (
+      lib.genAttrs ([ config.services.korri.runtime.group ] ++ config.services.korri.runtime.extraGroups) (_: { })
+    );
 
-    users.users.${config.services.korri.runtime.user} = {
+    users.users.${config.services.korri.runtime.user} = lib.mkIf config.services.korri.runtime.createUser {
       isNormalUser = true;
       uid = config.services.korri.runtime.uid;
       group = config.services.korri.runtime.group;

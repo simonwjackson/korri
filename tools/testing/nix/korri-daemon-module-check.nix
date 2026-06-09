@@ -39,8 +39,24 @@ let
     services.korri.daemon = {
       enable = true;
       serviceMode = "system";
-      user = "korri";
-      group = "korri";
+    };
+  };
+  systemModeExistingRuntimeUser = evaluateWith {
+    users.users.simonwjackson = {
+      isNormalUser = true;
+      home = "/home/simonwjackson";
+      group = "users";
+    };
+    users.groups.users = { };
+    services.korri.runtime = {
+      user = "simonwjackson";
+      group = "users";
+      home = "/home/simonwjackson";
+      createUser = false;
+    };
+    services.korri.daemon = {
+      enable = true;
+      serviceMode = "system";
     };
   };
   streamingBase = {
@@ -76,6 +92,20 @@ let
     (check "system-mode daemon owns library tmpfiles and hardening" (
       lib.elem "d /var/lib/korri/library 0700 korri korri -" systemMode.systemd.tmpfiles.rules
       && lib.elem "/var/lib/korri/library" ((systemUnit systemMode).serviceConfig.ReadWritePaths or [ ])
+    ))
+    (check "system-mode daemon defaults to runtime identity" (
+      systemMode.services.korri.daemon.user == "korri"
+      && systemMode.services.korri.daemon.group == "korri"
+      && (systemUnit systemMode).serviceConfig.User == "korri"
+      && (systemUnit systemMode).serviceConfig.Group == "korri"
+    ))
+    (check "existing runtime user can own system-mode daemon paths" (
+      systemModeExistingRuntimeUser.services.korri.runtime.createUser == false
+      && systemModeExistingRuntimeUser.services.korri.daemon.user == "simonwjackson"
+      && systemModeExistingRuntimeUser.services.korri.daemon.group == "users"
+      && lib.elem "d /var/lib/korri/library 0700 simonwjackson users -" systemModeExistingRuntimeUser.systemd.tmpfiles.rules
+      && (systemUnit systemModeExistingRuntimeUser).serviceConfig.User == "simonwjackson"
+      && (systemUnit systemModeExistingRuntimeUser).serviceConfig.Group == "users"
     ))
     (check "streaming defaults to the Korri downstream Sunshine package" (
       streamingLiveSettings.services.sunshine.package.pname == "sunshine-korri"

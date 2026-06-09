@@ -223,7 +223,10 @@ in
 
     user = mkOption {
       type = types.nullOr types.str;
-      default = null;
+      default = if isSystemMode then config.services.korri.runtime.user else null;
+      defaultText = lib.literalExpression ''
+        if serviceMode == "system" then config.services.korri.runtime.user else null
+      '';
       example = "korri";
       description = ''
         Unix user the korrid unit runs as in `serviceMode = "system"`.
@@ -235,7 +238,10 @@ in
 
     group = mkOption {
       type = types.nullOr types.str;
-      default = null;
+      default = if isSystemMode then config.services.korri.runtime.group else null;
+      defaultText = lib.literalExpression ''
+        if serviceMode == "system" then config.services.korri.runtime.group else null
+      '';
       example = "users";
       description = "Unix group the korrid unit runs as in `serviceMode = \"system\"`.";
     };
