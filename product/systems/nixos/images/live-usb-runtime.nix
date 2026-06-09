@@ -260,6 +260,10 @@ in
       cfg.enable && packagesForSystem ? korri-desktop-x86-kiosk
     ) (lib.mkDefault packagesForSystem.korri-desktop-x86-kiosk);
 
+    # Live USB has a persistence-aware greetd session wrapper below. Disable
+    # the generic Korri login module so the two do not race to own greetd.
+    services.korri.login.enable = lib.mkIf cfg.enable (lib.mkForce false);
+
     services.korri.liveUsbPersistence = lib.mkIf cfg.enable {
       scope = persistenceScope;
       productAllowlist = productAllowlist;
@@ -272,6 +276,7 @@ in
 
     services.korri.compositor = lib.mkIf cfg.enable {
       user = lib.mkDefault "korri";
+      createUser = lib.mkDefault false;
       home = lib.mkDefault effectiveHome;
       configHome = lib.mkDefault "${effectiveHome}/.config";
       dataHome = lib.mkDefault "${effectiveHome}/.local/share";

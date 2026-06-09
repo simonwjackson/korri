@@ -13,6 +13,7 @@ let
   daemonEnv = daemonUnit.environment or { };
   compositorUnit = cfg.systemd.user.services."korri-compositor" or { };
   inputdUnit = cfg.systemd.user.services.korri-inputd or { };
+  greetdSettings = cfg.services.greetd.settings or { };
   sunshineUnit = cfg.systemd.user.services."korri-sunshine" or { };
   sunshineEnv = sunshineUnit.environment or { };
   korriUser = cfg.users.users.korri or { };
@@ -46,6 +47,15 @@ let
       && cfg.systemd.user.services ? korri-sessiond
       && cfg.systemd.user.services ? korrid
       && !(cfg.systemd.services ? "korri-sunshine")
+    ))
+    (check "Korri login autologs into the runtime user" (
+      cfg.services.korri.login.enable
+      && cfg.services.greetd.enable
+      && greetdSettings.initial_session.user == cfg.services.korri.runtime.user
+      && greetdSettings.default_session.user == cfg.services.korri.runtime.user
+      && lib.hasInfix "systemctl --user start korri-session.target" (
+        builtins.readFile cfg.services.korri.login.command
+      )
     ))
     (check "root setup service is required by greetd" (
       builtins.elem "korri-setup.service" (cfg.systemd.services.greetd.requires or [ ])

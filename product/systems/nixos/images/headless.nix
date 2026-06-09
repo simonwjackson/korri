@@ -24,6 +24,8 @@
 # Single-machine / loopback deploys override these defaults with
 # lib.mkForce.
 {
+  services.korri.login.enable = lib.mkDefault true;
+
   services.korri.daemon = {
     enable = true;
     serviceMode = "user";

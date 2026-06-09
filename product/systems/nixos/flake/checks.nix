@@ -71,6 +71,10 @@ pkgs.lib.optionalAttrs isX86Linux {
     inherit pkgs;
     korriCompositorModule = self.nixosModules.korri-compositor;
   };
+  korri-login-module = import ../../../../tools/testing/nix/korri-login-module-check.nix {
+    inherit pkgs;
+    korriLoginModule = self.nixosModules.korri-login;
+  };
   korri-input-module = import ../../../../tools/testing/nix/korri-input-module-check.nix {
     inherit pkgs;
     korriInputModule = self.nixosModules.korri-input;

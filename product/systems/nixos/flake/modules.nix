@@ -45,6 +45,7 @@ rec {
 
   korri-runtime = import ../modules/korri-runtime.nix;
   korri-setup = import ../modules/korri-setup.nix;
+  korri-login = import ../modules/korri-login.nix;
   korri-client = import ../modules/korri-client.nix { korri = self; };
   korri-cli = import ../modules/korri-cli.nix { korri = self; };
   korri-game-stream = import ../modules/korri-game-stream.nix { korri = self; };
@@ -75,6 +76,7 @@ rec {
     imports = [
       korri-runtime
       korri-setup
+      korri-login
       korri-compositor
       korri-input
       (import ../modules/korri-daemon.nix { korri = self; })
@@ -88,6 +90,7 @@ rec {
     imports = [
       korri-runtime
       korri-setup
+      korri-login
       korri-compositor
       korri-input
       korri-daemon
