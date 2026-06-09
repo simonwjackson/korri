@@ -45,7 +45,7 @@
         path = [ pkgs.moonlight-embedded ];
       };
 
-      services.korri.server.library.platformDefaults.host.moonlight = {
+      services.korri.daemon.library.platformDefaults.host.moonlight = {
         command = lib.mkDefault "${pkgs.moonlight-embedded}/bin/moonlight";
         input.mappingFile = lib.mkDefault "${pkgs.moonlight-embedded}/share/moonlight/gamecontrollerdb.txt";
       };

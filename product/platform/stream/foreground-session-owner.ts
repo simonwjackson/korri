@@ -38,7 +38,7 @@ export type { ForegroundSessionEvidence } from "@platform/stream/foreground-sess
  * - `idle`         → preflight accepts; launch proceeds to the owner-local check.
  * - `not-idle`     → preflight rejects as `Busy` with `source: "sessiond"`.
  * - `unavailable`  → preflight rejects as `ExternalUnavailable` (network error
- *                    or token rejected). No spawn attempted; fail-closed posture
+ *                    or request rejected). No spawn attempted; fail-closed posture
  *                    matches the existing `session-launcher.ts` 401 →
  *                    `host-control-disabled` mapping.
  */
@@ -47,7 +47,7 @@ export type ForegroundExternalIdleResult =
   | { readonly status: "not-idle"; readonly mode: string }
   | {
       readonly status: "unavailable"
-      readonly reason: "network" | "token-rejected"
+      readonly reason: "network" | "request-rejected"
       readonly message?: string
     }
 
@@ -195,7 +195,7 @@ export type ForegroundSessionOwnerLaunchResult<TSuccess, TFailure = never> =
     }
   | {
       readonly _tag: "ExternalUnavailable"
-      readonly reason: "network" | "token-rejected"
+      readonly reason: "network" | "request-rejected"
       readonly message: string
     }
   | {
@@ -504,8 +504,8 @@ export function createForegroundSessionOwner<
         if (external.status === "unavailable") {
           const message =
             external.message ??
-            (external.reason === "token-rejected"
-              ? "sessiond rejected the capability token"
+            (external.reason === "request-rejected"
+              ? "sessiond rejected the request"
               : "sessiond is unreachable")
           return {
             _tag: "ExternalUnavailable",

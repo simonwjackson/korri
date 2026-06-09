@@ -52,7 +52,7 @@ export function advertiseStreamHost(
   const name = options.name ?? `Korri Stream on ${hostId}`
   // Federation v1 default: library-bearing baseline. Callers compose
   // ["source", "stream"] when they also expose a streaming surface
-  // (korri-server.ts does this from env). The previous default of
+  // (korrid.ts does this from env). The previous default of
   // ["stream"] only made sense pre-federation; without `source` a peer
   // is invisible to mDNS discovery's federation filter.
   const txt = {

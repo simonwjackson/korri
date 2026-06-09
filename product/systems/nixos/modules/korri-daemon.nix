@@ -8,12 +8,12 @@
 }:
 
 let
-  cfg = config.services.korri.server;
+  cfg = config.services.korri.daemon;
   system = pkgs.stdenv.hostPlatform.system;
   packagesForSystem = korri.packages.${system} or { };
   defaultPackage =
-    packagesForSystem.korri-server
-      or (throw "Korri server package is not available for system `${system}`. Set services.korri.server.package explicitly.");
+    packagesForSystem.korrid
+      or (throw "Korri daemon package is not available for system `${system}`. Set services.korri.daemon.package explicitly.");
 
   inherit (lib)
     mkIf
@@ -25,9 +25,9 @@ let
   isSystemMode = cfg.serviceMode == "system";
   systemRuntimeDirName = "korri-game-stream";
   systemRuntimeDir = "/run/${systemRuntimeDirName}";
-  serverStateDirName = "korri-server";
+  serverStateDirName = "korrid";
   serverStateDir = "/var/lib/${serverStateDirName}";
-  serverCacheDirName = "korri-server";
+  serverCacheDirName = "korrid";
   serverCacheDir = "/var/cache/${serverCacheDirName}";
   bunTranspilerCacheDir = "${serverCacheDir}/bun-transpiler-cache";
   userRuntimeDir = "%t/korri-game-stream";
@@ -53,16 +53,6 @@ let
   statusPath = cfg.streaming.statusPath;
   launchArtifactsDir = cfg.launchArtifactsDir;
   isDefaultSystemRuntimeDir = isSystemMode && runtimeDir == systemRuntimeDir;
-  usesLocalSessiondToken =
-    cfg.sessiond.tokenFile != null
-    && lib.attrByPath [
-      "services"
-      "korri"
-      "sessiond"
-      "enable"
-    ] false config;
-  sessiondTokenUnitDeps = if usesLocalSessiondToken then [ "korri-sessiond-token.service" ] else [ ];
-
   configuredUserHome =
     if cfg.user != null && cfg.user != "" then
       (config.users.users.${cfg.user} or { }).home or null
@@ -77,7 +67,7 @@ let
   serverId = if cfg.serverId != null then cfg.serverId else config.networking.hostName;
   firewallPorts = {
     allowedTCPPorts = [ cfg.port ];
-    # Federation v1: every korri-server advertises unconditionally
+    # Federation v1: every korrid advertises unconditionally
     # (cfg.advertise.enable retired in R14 / zero-backwards-compat).
     # mDNS firewall opening is always needed on library-bearing hosts.
     allowedUDPPorts = [ 5353 ];
@@ -167,8 +157,8 @@ let
   serverEnv = {
     HOST = cfg.host;
     PORT = toString cfg.port;
-    KORRI_SERVER_ID = serverId;
-    KORRI_SERVER_NAME = advertiseName;
+    KORRI_DAEMON_ID = serverId;
+    KORRI_DAEMON_NAME = advertiseName;
     # KORRI_SERVER_ADVERTISE_ENABLED removed in federation v1 (R14).
     KORRI_STREAM_ADVERTISE_NAME = advertiseName;
     KORRI_STREAM_ADVERTISE_HOST_ID = serverId;
@@ -181,11 +171,8 @@ let
     KORRI_LAUNCH_ARTIFACTS_DIR = launchArtifactsDir;
     KORRI_GAME_STREAM_RUNTIME_DIR = runtimeDir;
   }
-  // optionalAttrs (cfg.sessiond.url != null) {
-    KORRI_SESSIOND_URL = cfg.sessiond.url;
-  }
-  // optionalAttrs (cfg.sessiond.tokenFile != null) {
-    KORRI_SESSIOND_TOKEN_FILE = cfg.sessiond.tokenFile;
+  // optionalAttrs (cfg.sessiond.socketPath != null) {
+    KORRI_SESSIOND_SOCKET = cfg.sessiond.socketPath;
   }
   // optionalAttrs (cfg.publicApiBaseUrl != null) {
     KORRI_PUBLIC_API_BASE_URL = cfg.publicApiBaseUrl;
@@ -206,14 +193,14 @@ in
     korri.nixosModules.korri-cli
   ];
 
-  options.services.korri.server = {
+  options.services.korri.daemon = {
     enable = lib.mkEnableOption "Korri headless server control plane";
 
     package = mkOption {
       type = types.package;
       default = defaultPackage;
-      defaultText = lib.literalExpression "inputs.korri.packages.\${pkgs.stdenv.hostPlatform.system}.korri-server";
-      description = "Korri server package that provides the headless control-plane runtime.";
+      defaultText = lib.literalExpression "inputs.korri.packages.\${pkgs.stdenv.hostPlatform.system}.korrid";
+      description = "Korri daemon package that provides the headless control-plane runtime.";
     };
 
     serviceMode = mkOption {
@@ -223,16 +210,16 @@ in
       ];
       default = "user";
       description = ''
-        Lifecycle scope for the korri-server unit.
+        Lifecycle scope for the korrid unit.
 
-        `"user"` (default) emits a `systemd.user.services.korri-server` unit that
+        `"user"` (default) emits a `systemd.user.services.korrid` unit that
         starts when the configured user's manager reaches `default.target`. This
         preserves existing behavior for hosts where Korri is co-located with an
         interactive session.
 
-        `"system"` emits a boot-scoped `systemd.services.korri-server` unit that
+        `"system"` emits a boot-scoped `systemd.services.korrid` unit that
         starts under `multi-user.target` and runs as the configured non-root
-        `services.korri.server.user`. Use this for always-on stream hosts.
+        `services.korri.daemon.user`. Use this for always-on stream hosts.
         Sunshine and `services.korri.gameStream` remain session-scoped in both
         modes.
       '';
@@ -243,7 +230,7 @@ in
       default = null;
       example = "korri";
       description = ''
-        Unix user the korri-server unit runs as in `serviceMode = "system"`.
+        Unix user the korrid unit runs as in `serviceMode = "system"`.
         Must be a configured non-root user that matches the user expected to
         launch the Sunshine-backed stream runner, because the launch-intent
         trust contract relies on shared ownership.
@@ -254,19 +241,19 @@ in
       type = types.nullOr types.str;
       default = null;
       example = "users";
-      description = "Unix group the korri-server unit runs as in `serviceMode = \"system\"`.";
+      description = "Unix group the korrid unit runs as in `serviceMode = \"system\"`.";
     };
 
     host = mkOption {
       type = types.str;
       default = "127.0.0.1";
-      description = "Address for korri-server to bind. Use an explicit LAN/VPN address for trusted-LAN clients.";
+      description = "Address for korrid to bind. Use an explicit LAN/VPN address for trusted-LAN clients.";
     };
 
     port = mkOption {
       type = types.port;
       default = 3001;
-      description = "Port for the Korri server RPC API and optional LAN advertisement.";
+      description = "Port for the Korri daemon RPC API and optional LAN advertisement.";
     };
 
     serverId = mkOption {
@@ -293,7 +280,7 @@ in
 
     launchArtifactsDir = mkOption {
       type = types.str;
-      default = if isSystemMode then "/run/korri-launch-artifacts" else "%t/korri-launch-artifacts";
+      default = "/run/korri/launch-artifacts";
       description = ''
         Shared launch-artifact directory used by Korri's app config materializer.
         It must be outside /tmp because managed foreground children run through
@@ -320,9 +307,9 @@ in
                 "${configuredUserHome}/.local/share/korri/library"
               else
                 throw ''
-                  services.korri.server.library.root could not be derived because
-                  services.korri.server.user="${toString cfg.user}" has no declared
-                  home directory. Set services.korri.server.library.root explicitly to
+                  services.korri.daemon.library.root could not be derived because
+                  services.korri.daemon.user="${toString cfg.user}" has no declared
+                  home directory. Set services.korri.daemon.library.root explicitly to
                   an absolute path that the configured user can read and write.
                 ''
             )
@@ -333,14 +320,14 @@ in
           else "%h/.local/share/korri/library"
         '';
         description = ''
-          Library root used by korri-server.
+          Library root used by korrid.
 
           In `serviceMode = "user"`, defaults to `%h/.local/share/korri/library`
           which the user manager expands per session.
 
           In `serviceMode = "system"`, the systemd specifier `%h` resolves to
           root's home and is unsafe. The default is derived from
-          `config.users.users.<services.korri.server.user>.home`. If that home
+          `config.users.users.<services.korri.daemon.user>.home`. If that home
           cannot be resolved, set this option explicitly to an absolute path.
         '';
       };
@@ -355,7 +342,7 @@ in
         '';
         description = ''
           Platform-provided readable library defaults rendered as
-          `${platformDefaultsFileName}` under `services.korri.server.library.root`.
+          `${platformDefaultsFileName}` under `services.korri.daemon.library.root`.
 
           The value uses the same canonical readable sections as user-authored
           YAML (`host`, `apps`, `profiles`, etc.). It is loaded alongside
@@ -375,33 +362,14 @@ in
     };
 
     sessiond = {
-      # When set, korri-server's local Launcher routes managed-launch
-      # requests through korri-sessiond (`createSessionLauncherFromEnv()`
-      # in product/platform/library/launcher-layer-live.ts). Without this,
-      # the server falls back to the in-process shell launcher, which
-      # spawns from the server unit's bare PATH and cannot see
-      # gamescope/retroarch — fatal for any default-gamescope launch.
-      url = mkOption {
+      socketPath = mkOption {
         type = types.nullOr types.str;
         default = null;
-        example = "http://127.0.0.1:3003";
+        example = "%t/korri/sessiond.sock";
         description = ''
-          Loopback HTTP URL of the local korri-sessiond. When set together
-          with `tokenFile`, korri-server exports `KORRI_SESSIOND_URL` and
-          `KORRI_SESSIOND_TOKEN_FILE` so its Launcher delegates managed
-          launches to sessiond instead of the bare shell launcher.
-        '';
-      };
-
-      tokenFile = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        example = "/run/korri-sessiond/token";
-        description = ''
-          Absolute path to the sessiond capability-token file readable by
-          the korri-server user. Required alongside `url`. Typically
-          generated by korri-sessiond's `ExecStartPre` and shared via a
-          group-readable mode (see `services.korri.sessiond.sharedGroup`).
+          Unix socket path for the local korri-sessiond. When set, korrid
+          exports KORRI_SESSIOND_SOCKET so managed launches use same-user
+          socket IPC instead of loopback token HTTP.
         '';
       };
     };
@@ -421,7 +389,7 @@ in
 
     advertise = {
       # `enable` was retired in federation v1 (R14 / zero-backwards-compat).
-      # Every library-bearing korri-server advertises unconditionally;
+      # Every library-bearing korrid advertises unconditionally;
       # devices that should not participate in federation should not run
       # this service. The `name` and `capabilities` sub-options remain.
 
@@ -470,11 +438,11 @@ in
           else "%t/korri-game-stream"
         '';
         description = ''
-          Private runtime directory shared by korri-server and the Sunshine-launched
+          Private runtime directory shared by korrid and the Sunshine-launched
           stream runner.
 
           In system mode the default is `/run/korri-game-stream`, created and owned
-          via `systemd.tmpfiles` so its lifetime is decoupled from the server unit.
+          via `systemd.tmpfiles` so its lifetime is decoupled from the daemon unit.
 
           In user mode the default is `%t/korri-game-stream`, expanded by the user
           manager to `$XDG_RUNTIME_DIR/korri-game-stream`.
@@ -546,31 +514,16 @@ in
   config = mkIf cfg.enable {
     assertions = [
       {
-        # Sessiond wiring is both-or-neither. A url without a tokenFile
-        # (or vice versa) silently falls back to shell-launcher in
-        # createSessionLauncherFromEnv() and the default-gamescope launch
-        # path explodes with ENOENT — louder failure at eval time.
-        assertion =
-          (cfg.sessiond.url == null && cfg.sessiond.tokenFile == null)
-          || (cfg.sessiond.url != null && cfg.sessiond.tokenFile != null);
-        message = ''
-          services.korri.server.sessiond.url and
-          services.korri.server.sessiond.tokenFile must be set together. Set
-          both to delegate managed launches to korri-sessiond, or leave both
-          null to use the in-process shell launcher.
-        '';
-      }
-      {
         assertion = isUserSpecifierPath launchArtifactsDir || isAbsolutePath launchArtifactsDir;
         message = ''
-          services.korri.server.launchArtifactsDir must be an absolute path or a
+          services.korri.daemon.launchArtifactsDir must be an absolute path or a
           supported user-manager specifier path (got "${launchArtifactsDir}").
         '';
       }
       {
         assertion = !isSystemMode || (cfg.user != null && cfg.user != "");
         message = ''
-          services.korri.server.serviceMode = "system" requires services.korri.server.user
+          services.korri.daemon.serviceMode = "system" requires services.korri.daemon.user
           to be set to a configured non-root Unix user. The system service must run as
           the same user expected to launch the Sunshine-backed stream runner, because
           the launch-intent trust contract relies on shared file ownership.
@@ -579,7 +532,7 @@ in
       {
         assertion = !isSystemMode || cfg.user != "root";
         message = ''
-          services.korri.server.user = "root" is not supported when serviceMode = "system".
+          services.korri.daemon.user = "root" is not supported when serviceMode = "system".
           Configure a non-root Unix user that owns the Sunshine session and the Korri
           library directory.
         '';
@@ -587,7 +540,7 @@ in
       {
         assertion = !isSystemMode || !(hasPlaceholder runtimeDir);
         message = ''
-          services.korri.server.streaming.runtimeDir = "${runtimeDir}" uses a systemd
+          services.korri.daemon.streaming.runtimeDir = "${runtimeDir}" uses a systemd
           user specifier such as %t or %h, which is unsafe in
           serviceMode = "system" because it resolves against the system manager rather
           than the configured user. Use an absolute path like /run/korri-game-stream.
@@ -596,37 +549,37 @@ in
       {
         assertion = !isSystemMode || !(hasPlaceholder intentPath);
         message = ''
-          services.korri.server.streaming.intentPath = "${intentPath}" uses a systemd
+          services.korri.daemon.streaming.intentPath = "${intentPath}" uses a systemd
           user specifier that is unsafe in serviceMode = "system". Use an absolute path
-          under services.korri.server.streaming.runtimeDir.
+          under services.korri.daemon.streaming.runtimeDir.
         '';
       }
       {
         assertion = !isSystemMode || !(hasPlaceholder statusPath);
         message = ''
-          services.korri.server.streaming.statusPath = "${statusPath}" uses a systemd
+          services.korri.daemon.streaming.statusPath = "${statusPath}" uses a systemd
           user specifier that is unsafe in serviceMode = "system". Use an absolute path
-          under services.korri.server.streaming.runtimeDir.
+          under services.korri.daemon.streaming.runtimeDir.
         '';
       }
       {
         assertion = !isSystemMode || isAbsolutePath runtimeDir;
         message = ''
-          services.korri.server.streaming.runtimeDir must be an absolute path in
+          services.korri.daemon.streaming.runtimeDir must be an absolute path in
           serviceMode = "system" (got "${runtimeDir}").
         '';
       }
       {
         assertion = !isSystemMode || isAbsolutePath intentPath;
         message = ''
-          services.korri.server.streaming.intentPath must be an absolute path in
+          services.korri.daemon.streaming.intentPath must be an absolute path in
           serviceMode = "system" (got "${intentPath}").
         '';
       }
       {
         assertion = !isSystemMode || isAbsolutePath statusPath;
         message = ''
-          services.korri.server.streaming.statusPath must be an absolute path in
+          services.korri.daemon.streaming.statusPath must be an absolute path in
           serviceMode = "system" (got "${statusPath}").
         '';
       }
@@ -636,8 +589,8 @@ in
           || isUserSpecifierPath intentPath
           || lib.hasPrefix "${runtimeDir}/" intentPath;
         message = ''
-          services.korri.server.streaming.intentPath = "${intentPath}" must live under
-          services.korri.server.streaming.runtimeDir = "${runtimeDir}" so the
+          services.korri.daemon.streaming.intentPath = "${intentPath}" must live under
+          services.korri.daemon.streaming.runtimeDir = "${runtimeDir}" so the
           tmpfiles-managed private runtime directory protects intent ownership.
         '';
       }
@@ -647,23 +600,23 @@ in
           || isUserSpecifierPath statusPath
           || lib.hasPrefix "${runtimeDir}/" statusPath;
         message = ''
-          services.korri.server.streaming.statusPath = "${statusPath}" must live under
-          services.korri.server.streaming.runtimeDir = "${runtimeDir}" so the
+          services.korri.daemon.streaming.statusPath = "${statusPath}" must live under
+          services.korri.daemon.streaming.runtimeDir = "${runtimeDir}" so the
           tmpfiles-managed private runtime directory protects status ownership.
         '';
       }
       {
         assertion = !cfg.streaming.audio.enable || cfg.streaming.audio.pulseServer != null;
         message = ''
-          services.korri.server.streaming.audio.enable = true requires
-          services.korri.server.streaming.audio.pulseServer to be set. Korri treats
+          services.korri.daemon.streaming.audio.enable = true requires
+          services.korri.daemon.streaming.audio.pulseServer to be set. Korri treats
           the PulseAudio-compatible server address as host-owned configuration and
           does not derive, discover, or validate it.
         '';
       }
       {
         assertion = !cfg.streaming.desktop.enable || cfg.streaming.desktop.name != "";
-        message = "services.korri.server.streaming.desktop.name must not be empty when desktop streaming is enabled.";
+        message = "services.korri.daemon.streaming.desktop.name must not be empty when desktop streaming is enabled.";
       }
       # New cross-tree precondition: streaming needs a managed compositor
       # substrate and a host-side normalized input provider. Both are
@@ -672,7 +625,7 @@ in
       {
         assertion = !cfg.streaming.enable || (config.services.korri.compositor.enable or false);
         message = ''
-          services.korri.server.streaming.enable = true requires
+          services.korri.daemon.streaming.enable = true requires
           services.korri.compositor.enable = true. Streaming hosts run
           Sunshine inside a managed Sway session; enable the compositor
           substrate even on headless appliances.
@@ -681,7 +634,7 @@ in
       {
         assertion = !cfg.streaming.enable || (config.services.korri.input.provider.enable or false);
         message = ''
-          services.korri.server.streaming.enable = true requires
+          services.korri.daemon.streaming.enable = true requires
           services.korri.input.provider.enable = true. Streaming hosts need
           host-side normalized appliance input (Xbox 360 over /dev/uinput
           via InputPlumber) so Sunshine can synthesize streamed controllers.
@@ -696,7 +649,7 @@ in
       {
         assertion = !cfg.streaming.enable || (config.services.sunshine.enable or false);
         message = ''
-          services.korri.server.streaming.enable = true requires
+          services.korri.daemon.streaming.enable = true requires
           services.sunshine.enable = true. The Korri-owned korri-sunshine.service
           depends on the upstream sunshine module for config rendering,
           firewall ports, /dev/uinput udev rules, the avahi mDNS publisher,
@@ -708,33 +661,33 @@ in
           !cfg.streaming.enable
           || (config.systemd.services."korri-sunshine".environment.SUNSHINE_LIVE_SETTINGS_MVP or null) == "1";
         message = ''
-          services.korri.server.streaming.enable = true requires
+          services.korri.daemon.streaming.enable = true requires
           systemd.services.korri-sunshine.environment.SUNSHINE_LIVE_SETTINGS_MVP = "1"
           so sunshine-korri advertises runtime bitrate/FPS/resolution support.
         '';
       }
       {
         assertion = !hasPublicApiBaseUrl || !publicApiBaseUrlHasWhitespace;
-        message = "services.korri.server.publicApiBaseUrl must not contain whitespace.";
+        message = "services.korri.daemon.publicApiBaseUrl must not contain whitespace.";
       }
       {
         assertion = !hasPublicApiBaseUrl || publicApiBaseUrlParts != null;
         message = ''
-          services.korri.server.publicApiBaseUrl must be an absolute http or https URL
+          services.korri.daemon.publicApiBaseUrl must be an absolute http or https URL
           (got "${toString publicApiBaseUrlRaw}").
         '';
       }
       {
         assertion = !hasPublicApiBaseUrl || !publicApiBaseUrlHasCredentials;
-        message = "services.korri.server.publicApiBaseUrl must not contain credentials.";
+        message = "services.korri.daemon.publicApiBaseUrl must not contain credentials.";
       }
       {
         assertion = !hasPublicApiBaseUrl || publicApiBaseUrlParts == null || publicApiBaseUrlHost != null;
-        message = "services.korri.server.publicApiBaseUrl must include a host.";
+        message = "services.korri.daemon.publicApiBaseUrl must include a host.";
       }
       {
         assertion = !hasPublicApiBaseUrl || !publicApiBaseUrlHasQueryOrFragment;
-        message = "services.korri.server.publicApiBaseUrl must not contain query or fragment data.";
+        message = "services.korri.daemon.publicApiBaseUrl must not contain query or fragment data.";
       }
       {
         assertion =
@@ -743,7 +696,7 @@ in
           || publicApiBaseUrlParts.scheme != "http"
           || publicApiBaseUrlIsPrivateHttpHost;
         message = ''
-          services.korri.server.publicApiBaseUrl must use https outside loopback or RFC1918 private networks
+          services.korri.daemon.publicApiBaseUrl must use https outside loopback or RFC1918 private networks
           (got "${toString publicApiBaseUrlRaw}").
         '';
       }
@@ -752,8 +705,8 @@ in
     warnings =
       lib.optional (isSystemMode && cfg.openFirewall && !isLoopbackHost && cfg.firewallInterfaces == [ ])
         ''
-          services.korri.server is exposing host "${cfg.host}" on the global firewall in
-          system mode. Set services.korri.server.firewallInterfaces to a trusted
+          services.korri.daemon is exposing host "${cfg.host}" on the global firewall in
+          system mode. Set services.korri.daemon.firewallInterfaces to a trusted
           interface (e.g. [ "tailscale0" ]) to scope LAN exposure.
         '';
 
@@ -803,7 +756,7 @@ in
     # `pkgs.sunshine`) and any explicit host assignment, so callers that really
     # want stock nixpkgs Sunshine can override with a normal assignment.
     # Downstream flakes that import this module via
-    # `inputs.korri.nixosModules.korri-server` (or the aggregate `korri`) get
+    # `inputs.korri.nixosModules.korri-daemon` (or the aggregate `korri`) get
     # the patched build without composing the overlay themselves.
     services.sunshine.package = mkIf cfg.streaming.enable (
       lib.mkOverride 900 packagesForSystem.sunshine-korri
@@ -834,7 +787,7 @@ in
     systemd.services.korri-sunshine = mkIf cfg.streaming.enable (
       let
         compositorCfg = config.services.korri.compositor;
-        compositorUnit = config.systemd.services.korri-compositor;
+        compositorUnit = config.systemd.services."korri-compositor" or { };
         # The compositor's environment block sets PATH (coreutils + dbus +
         # sway + ...). systemd's default service module also sets PATH at
         # the same priority, which collides during module merge. Sunshine
@@ -920,7 +873,7 @@ in
     systemd.tmpfiles.settings =
       mkIf (isSystemMode && cfg.streaming.enable && isDefaultSystemRuntimeDir)
         {
-          "10-korri-server".${systemRuntimeDir}.d = {
+          "10-korrid".${systemRuntimeDir}.d = {
             user = cfg.user;
             group = if cfg.group != null then cfg.group else cfg.user;
             mode = "0700";
@@ -936,9 +889,9 @@ in
         environment.SUNSHINE_LIVE_SETTINGS_MVP = "1";
       };
 
-      korri-server = {
+      korrid = {
         description = "Korri headless server control plane";
-        wantedBy = [ "default.target" ];
+        wantedBy = [ "korri-session.target" ];
         environment = serverEnv;
         serviceConfig = {
           ExecStartPre = [
@@ -946,18 +899,17 @@ in
             "${pkgs.coreutils}/bin/install -d -m 700 ${launchArtifactsDir}"
           ]
           ++ platformDefaultsInstallCommands;
-          ExecStart = "${cfg.package}/bin/korri-server";
+          ExecStart = "${cfg.package}/bin/korrid";
           Restart = "on-failure";
           RestartSec = 2;
         };
       };
     };
 
-    systemd.services.korri-server = mkIf isSystemMode {
+    systemd.services.korrid = mkIf isSystemMode {
       description = "Korri headless server control plane";
       wantedBy = [ "multi-user.target" ];
-      after = [ "network.target" ] ++ sessiondTokenUnitDeps;
-      requires = sessiondTokenUnitDeps;
+      after = [ "network.target" ];
       environment = serverEnv;
       serviceConfig = {
         ExecStartPre = [
@@ -966,7 +918,7 @@ in
           "${pkgs.coreutils}/bin/install -d -m 750 ${launchArtifactsDir}"
         ]
         ++ platformDefaultsInstallCommands;
-        ExecStart = "${cfg.package}/bin/korri-server";
+        ExecStart = "${cfg.package}/bin/korrid";
         Restart = "on-failure";
         RestartSec = 2;
         User = cfg.user;

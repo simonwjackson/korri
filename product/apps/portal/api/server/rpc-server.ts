@@ -55,8 +55,8 @@ const PeerDiscoveryConfigured =
     : makePeerDiscoveryLayer({
         ...(process.env.KORRI_STREAM_ADVERTISE_HOST_ID
           ? { localHostId: process.env.KORRI_STREAM_ADVERTISE_HOST_ID }
-          : process.env.KORRI_SERVER_ID
-            ? { localHostId: process.env.KORRI_SERVER_ID }
+          : process.env.KORRI_DAEMON_ID
+            ? { localHostId: process.env.KORRI_DAEMON_ID }
             : {}),
       })
 

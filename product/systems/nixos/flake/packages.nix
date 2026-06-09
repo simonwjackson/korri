@@ -17,7 +17,7 @@
   korriSessiond,
   korriCli,
   korriGamescopeControlBridge,
-  korriServer,
+  korrid,
   korriHeadlessSource,
   sunshineKorri,
   moonlightEmbeddedKorri,
@@ -49,7 +49,7 @@
   korri-sessiond = korriSessiond;
   korri-cli = korriCli;
   korri-gamescope-control-bridge = korriGamescopeControlBridge;
-  korri-server = korriServer;
+  korrid = korrid;
   korri-headless-source = korriHeadlessSource;
   sunshine-korri = sunshineKorri;
   moonlight-embedded-korri = moonlightEmbeddedKorri;

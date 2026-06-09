@@ -598,18 +598,18 @@ describe("foreground session owner", () => {
       expect(setup.calls).toEqual([])
     })
 
-    it("rejects as ExternalUnavailable with reason=token-rejected when the daemon returns 401", async () => {
+    it("rejects as ExternalUnavailable with reason=request-rejected when the daemon returns 401", async () => {
       const setup = createAdapter()
       const owner = createOwner(setup.adapter, {
         consultExternalIdle: async () => ({
           status: "unavailable",
-          reason: "token-rejected",
+          reason: "request-rejected",
         }),
       })
       const result = await owner.launch(request)
       expect(result._tag).toBe("ExternalUnavailable")
       if (result._tag !== "ExternalUnavailable") throw new Error("unreachable")
-      expect(result.reason).toBe("token-rejected")
+      expect(result.reason).toBe("request-rejected")
       expect(setup.calls).toEqual([])
     })
 

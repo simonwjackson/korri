@@ -17,7 +17,7 @@ let
 in
 {
   # Stable module key so multiple imports (e.g. via nixosModules.korri-compositor
-  # composite + nixosModules.korri-server composite + aggregate korri)
+  # composite + nixosModules.korri-daemon composite + aggregate korri)
   # deduplicate to a single declaration.
   _file = ./korri-client.nix;
   key = ./korri-client.nix;

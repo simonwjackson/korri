@@ -19,17 +19,17 @@ let
     (check "korri-cli package does not expose standalone bazzar wrapper" (
       !(builtins.pathExists "${packagePath "korri-cli"}/bin/bazzar")
     ))
-    (check "korri-server package exposes executable wrapper" (
-      builtins.pathExists "${packagePath "korri-server"}/bin/korri-server"
+    (check "korrid package exposes executable wrapper" (
+      builtins.pathExists "${packagePath "korrid"}/bin/korrid"
     ))
-    (check "korri-server package exposes API wrapper" (
-      builtins.pathExists "${packagePath "korri-server"}/bin/korri-api"
+    (check "korrid package exposes API wrapper" (
+      builtins.pathExists "${packagePath "korrid"}/bin/korri-api"
     ))
-    (check "korri-server package exposes bundled JS" (
-      builtins.pathExists "${packagePath "korri-server"}/share/korri-server/korri-server.js"
+    (check "korrid package exposes bundled JS" (
+      builtins.pathExists "${packagePath "korrid"}/share/korrid/korrid.js"
     ))
-    (check "korri-server package exposes bundled API JS" (
-      builtins.pathExists "${packagePath "korri-server"}/share/korri-server/korri-api.js"
+    (check "korrid package exposes bundled API JS" (
+      builtins.pathExists "${packagePath "korrid"}/share/korrid/korri-api.js"
     ))
     (check "korri-inputd package exposes executable wrapper" (
       builtins.pathExists "${packagePath "korri-inputd"}/bin/korri-inputd"

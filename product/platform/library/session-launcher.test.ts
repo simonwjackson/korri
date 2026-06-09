@@ -30,12 +30,11 @@ async function tempDir() {
 }
 
 describe("session launcher", () => {
-  it("posts launch specs to sessiond with a capability token", async () => {
+  it("posts launch specs to sessiond over the configured socket", async () => {
     const requests: Array<{ input: string; init?: RequestInit }> = []
 
     const result = await launchViaSessiond(spec, {
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async (input, init) => {
         requests.push({ input, init })
         return Response.json({ result: { status: "launched" } })
@@ -43,24 +42,16 @@ describe("session launcher", () => {
     })
 
     expect(result).toEqual({ status: "launched" })
-    expect(requests[0].input).toBe("http://127.0.0.1:3003/launch")
-    expect(
-      (requests[0].init?.headers as Record<string, string>)[
-        "x-korri-sessiond-token"
-      ],
-    ).toBe("secret")
+    expect(requests[0].input).toBe("http://korri-sessiond/launch")
+    expect((requests[0].init as RequestInit & { unix?: string }).unix).toBe("/run/user/1000/korri/sessiond.sock")
     expect(JSON.parse(String(requests[0].init?.body))).toEqual({ spec })
   })
 
-  it("can read the capability from a token file", async () => {
-    const dir = await tempDir()
-    const tokenFile = join(dir, "token")
-    await writeFile(tokenFile, "file-secret\n")
+  it("adds Bun's unix socket option to launch requests", async () => {
     const requests: RequestInit[] = []
 
     const result = await launchViaSessiond(spec, {
-      url: "http://127.0.0.1:3003",
-      tokenFile,
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async (_input, init) => {
         requests.push(init ?? {})
         return Response.json({ result: { status: "launched" } })
@@ -68,28 +59,26 @@ describe("session launcher", () => {
     })
 
     expect(result).toEqual({ status: "launched" })
-    expect(
-      (requests[0].headers as Record<string, string>)["x-korri-sessiond-token"],
-    ).toBe("file-secret")
+    expect((requests[0] as RequestInit & { unix?: string }).unix).toBe(
+      "/run/user/1000/korri/sessiond.sock",
+    )
   })
 
-  it("fails closed when no capability is configured", async () => {
+  it("fails closed when no sessiond socket is configured", async () => {
     const result = await launchViaSessiond(spec, {
-      url: "http://127.0.0.1:3003",
       fetchImpl: async () => Response.json({ result: { status: "launched" } }),
     })
 
     expect(result.status).toBe("failed")
     if (result.status === "failed") {
       expect(result.exitCode).toBe(126)
-      expect(result.stderrTail).toContain("missing KORRI_SESSIOND_TOKEN")
+      expect(result.stderrTail).toContain("missing KORRI_SESSIOND_SOCKET")
     }
   })
 
   it("does not fall back to shell launch when sessiond is unreachable", async () => {
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async () => {
         throw new Error("connection refused")
       },
@@ -104,12 +93,11 @@ describe("session launcher", () => {
     }
   })
 
-  it("creates a launcher from env only when KORRI_SESSIOND_URL is present", () => {
+  it("creates a launcher from env only when KORRI_SESSIOND_SOCKET is present", () => {
     expect(createSessionLauncherFromEnv({})).toBeUndefined()
     expect(
       createSessionLauncherFromEnv({
-        KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
-        KORRI_SESSIOND_TOKEN: "secret",
+        KORRI_SESSIOND_SOCKET: "/run/user/1000/korri/sessiond.sock",
       }),
     ).toBeDefined()
   })
@@ -117,8 +105,7 @@ describe("session launcher", () => {
   it("spawns managed sessiond launches and resolves from lifecycle events", async () => {
     const requests: Array<{ input: string; init?: RequestInit }> = []
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async (input, init) => {
         requests.push({ input, init })
         const url = new URL(input)
@@ -174,8 +161,7 @@ describe("session launcher", () => {
     // game; the correct behavior is to reconnect and keep observing.
     let eventsRequestCount = 0
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async input => {
         const url = new URL(input)
         if (url.pathname === "/managed-launch/status") {
@@ -229,10 +215,9 @@ describe("session launcher", () => {
     expect(eventsRequestCount).toBeGreaterThanOrEqual(2)
   })
 
-  it("fails managed spawn before requests when no capability is configured", async () => {
+  it("fails managed spawn before requests when no socket is configured", async () => {
     const requests: string[] = []
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
       fetchImpl: async input => {
         requests.push(input)
         return Response.json({})
@@ -247,15 +232,14 @@ describe("session launcher", () => {
     if (result.status === "failed") {
       expect(result.result.exitCode).toBe(126)
       expect(result.result.failureKind).toBe("host-control-disabled")
-      expect(result.result.stderrTail).toContain("missing KORRI_SESSIOND_TOKEN")
+      expect(result.result.stderrTail).toContain("missing KORRI_SESSIOND_SOCKET")
     }
     expect(requests).toEqual([])
   })
 
   it("maps unsupported managed sessiond capability to host-unavailable", async () => {
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async () =>
         Response.json(
           managedStatus({
@@ -283,8 +267,7 @@ describe("session launcher", () => {
 
   it("maps managed sessiond busy responses to session-busy", async () => {
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async input => {
         const url = new URL(input)
         if (url.pathname === "/managed-launch/status") {
@@ -316,8 +299,7 @@ describe("session launcher", () => {
   it("maps non-home sessiond preflight status to session-busy without starting", async () => {
     const requests: string[] = []
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async input => {
         requests.push(new URL(input).pathname)
         return Response.json(managedStatus({ mode: "game" }))
@@ -337,8 +319,7 @@ describe("session launcher", () => {
 
   it("maps invalid managed status payloads to host-unavailable", async () => {
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async () => Response.json({ status: "not-sessiond-status" }),
     })
 
@@ -355,8 +336,7 @@ describe("session launcher", () => {
 
   it("preserves failureKind from child-exited lifecycle events", async () => {
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async input => {
         const url = new URL(input)
         if (url.pathname === "/managed-launch/status") {
@@ -404,8 +384,7 @@ describe("session launcher", () => {
 
   it("resolves host-unavailable when event stream request is rejected", async () => {
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async input => {
         const url = new URL(input)
         if (url.pathname === "/managed-launch/status") {
@@ -438,8 +417,7 @@ describe("session launcher", () => {
 
   it("resolves host-unavailable when event stream subscription throws", async () => {
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async input => {
         const url = new URL(input)
         if (url.pathname === "/managed-launch/status") {
@@ -469,8 +447,7 @@ describe("session launcher", () => {
 
   it("resolves host-unavailable when readiness times out after child exit", async () => {
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       requestTimeoutMs: 20,
       fetchImpl: async input => {
         const url = new URL(input)
@@ -508,8 +485,7 @@ describe("session launcher", () => {
 
   it("resolves host-unavailable when event stream ends before readiness", async () => {
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async input => {
         const url = new URL(input)
         if (url.pathname === "/managed-launch/status") {
@@ -549,8 +525,7 @@ describe("session launcher", () => {
 
   it("resolves host-unavailable when sessiond emits recovering", async () => {
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async input => {
         const url = new URL(input)
         if (url.pathname === "/managed-launch/status") {
@@ -589,8 +564,7 @@ describe("session launcher", () => {
   it("sends per-launch termination for managed session handles", async () => {
     const requests: Array<{ input: string; init?: RequestInit }> = []
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async (input, init) => {
         requests.push({ input, init })
         const url = new URL(input)
@@ -631,8 +605,7 @@ describe("session launcher", () => {
   it("sends force when terminateNow is invoked", async () => {
     const requests: Array<{ input: string; init?: RequestInit }> = []
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async (input, init) => {
         requests.push({ input, init })
         const url = new URL(input)
@@ -670,8 +643,7 @@ describe("session launcher", () => {
 
   it("resolves managed readiness on idle-ready with the source-machine gate string", async () => {
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async input => {
         const url = new URL(input)
         if (url.pathname === "/managed-launch/status") {
@@ -717,8 +689,7 @@ describe("session launcher", () => {
   it("preflight accepts mode: 'idle' without returning session-busy", async () => {
     const requests: string[] = []
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async input => {
         const url = new URL(input)
         requests.push(url.pathname)
@@ -767,8 +738,7 @@ describe("session launcher", () => {
   it("forwards lifecycle + wait into the managed-launch start request", async () => {
     let startBody: unknown
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async (input, init) => {
         const url = new URL(input)
         if (url.pathname === "/managed-launch/status") {
@@ -799,8 +769,7 @@ describe("session launcher", () => {
   it("omits lifecycle and wait fields when not requested (Phase 4B kiosk start shape unchanged)", async () => {
     let startBody: unknown
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async (input, init) => {
         const url = new URL(input)
         if (url.pathname === "/managed-launch/status") {
@@ -826,8 +795,7 @@ describe("session launcher", () => {
   it("fails fast with host-unavailable when caller asks for session lifecycle but the daemon lacks the capability", async () => {
     const requests: string[] = []
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async input => {
         requests.push(new URL(input).pathname)
         return Response.json(
@@ -857,8 +825,7 @@ describe("session launcher", () => {
 
   it("accepts session lifecycle when sessionLifecycle is absent and the request is foreground (back-compat preflight)", async () => {
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async input => {
         const url = new URL(input)
         if (url.pathname === "/managed-launch/status") {
@@ -909,8 +876,7 @@ describe("session launcher", () => {
 
   it("resolves session+wait launches from wait-monitor-exited", async () => {
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async input => {
         const url = new URL(input)
         if (url.pathname === "/managed-launch/status") {
@@ -965,8 +931,7 @@ describe("session launcher", () => {
 
   it("propagates non-zero wait-monitor-exited exit codes", async () => {
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async input => {
         const url = new URL(input)
         if (url.pathname === "/managed-launch/status") {
@@ -1024,8 +989,7 @@ describe("session launcher", () => {
 
   it("resolves session+anchor launches after terminated + idle-ready (anchor pending until external terminate)", async () => {
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async input => {
         const url = new URL(input)
         if (url.pathname === "/managed-launch/status") {
@@ -1086,8 +1050,7 @@ describe("session launcher", () => {
     // non-zero launcher exit under lifecycle: "session" and emits
     // child-exited (terminal) instead of launcher-exited.
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async input => {
         const url = new URL(input)
         if (url.pathname === "/managed-launch/status") {
@@ -1132,8 +1095,7 @@ describe("session launcher", () => {
 
   it("still resolves managed readiness on home-ready (Phase 4B kiosk shape unchanged)", async () => {
     const launcher = createSessionLauncher({
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/1000/korri/sessiond.sock",
       fetchImpl: async input => {
         const url = new URL(input)
         if (url.pathname === "/managed-launch/status") {

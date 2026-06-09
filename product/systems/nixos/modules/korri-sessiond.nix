@@ -9,141 +9,27 @@
 
 let
   cfg = config.services.korri.sessiond;
+  runtime = config.services.korri.runtime or { };
   system = pkgs.stdenv.hostPlatform.system;
   packagesForSystem = korri.packages.${system} or { };
   defaultPackage =
     packagesForSystem.korri-sessiond
       or (throw "Korri sessiond package is not available for system `${system}`. Set services.korri.sessiond.package explicitly.");
 
-  inherit (lib)
-    mkIf
-    mkOption
-    types
-    ;
+  inherit (lib) mkIf mkOption types;
 
   isAbsolutePath = path: lib.hasPrefix "/" path;
+  isSocketPath = path: isAbsolutePath path || lib.hasPrefix "%t/" path;
   launchArtifactsDir = cfg.launchArtifactsDir;
 
-  # Directory permissions for the runtime dir holding the capability
-  # token. When sharedGroup is set, the directory needs group-traverse
-  # (x) so members can open the token file by name — group-read (r) is
-  # withheld so the directory is not listable. When sharedGroup is
-  # unset, the directory is root-only.
-  #
-  #   sharedGroup != null → 0710 root:<sharedGroup>
-  #   sharedGroup == null → 0700 root:root
-  #
-  # 0700 root:root WITHOUT this conditional is the trap U1 originally
-  # walked into: the file is correctly group-readable but its parent
-  # directory is not group-traversable, so every read returns EACCES.
-  runtimeDirGroup = if cfg.sharedGroup != null then cfg.sharedGroup else "root";
-  runtimeDirMode = if cfg.sharedGroup != null then "0710" else "0700";
-
-  # Infer role from compositor.kiosk.enable when it has been declared by
-  # another loaded module. The standalone sessiond module-eval case
-  # (compositor.kiosk.enable absent or false) resolves to "source-machine",
-  # which matches `defaultText` on the role option below. Kiosk hosts get
-  # "kiosk" because they always set compositor.kiosk.enable = true.
-  kioskEnabled = lib.attrByPath [
-    "services"
-    "korri"
-    "compositor"
-    "kiosk"
-    "enable"
-  ] false config;
-  streamingEnabled = lib.attrByPath [
-    "services"
-    "korri"
-    "server"
-    "streaming"
-    "enable"
-  ] false config;
+  kioskEnabled = lib.attrByPath [ "services" "korri" "compositor" "kiosk" "enable" ] false config;
+  streamingEnabled = lib.attrByPath [ "services" "korri" "daemon" "streaming" "enable" ] false config;
   inferredRole = if kioskEnabled then "kiosk" else "source-machine";
-
-  # Token generation runs in a dedicated systemd oneshot before sessiond
-  # and any local korri-server peer start. If the token file is missing it
-  # creates a fresh 32-byte hex token; otherwise it preserves the existing
-  # token. When `sharedGroup` is set the file is chowned to
-  # `root:<sharedGroup>` mode 0640 so peer services in that group
-  # (typically korri-server) can authenticate against sessiond.
-  tokenSetupScript = pkgs.writeShellScript "korri-sessiond-token-setup" ''
-    set -eu
-    token_file=${lib.escapeShellArg cfg.tokenFile}
-    runtime_dir=${lib.escapeShellArg cfg.runtimeDir}
-    # Create-or-reassert runtime-dir mode + ownership.
-    #   sharedGroup != null: 0710 root:<sharedGroup>
-    #     group members get traverse-only on the directory and read
-    #     on the 0640 token file. Withholds group-read on the dir so
-    #     `ls` from a group member does not enumerate sibling files.
-    #   sharedGroup == null: 0700 root:root.
-    # Keep this in a dedicated oneshot rather than korri-sessiond's
-    # RuntimeDirectory/ExecStartPre path. RuntimeDirectory is owned by
-    # systemd and can recreate the directory as root:root between stop/start;
-    # this service is the single declarative owner of the ACL contract.
-    ${pkgs.coreutils}/bin/install -d -m ${runtimeDirMode} "$runtime_dir"
-    ${pkgs.coreutils}/bin/chown root:${runtimeDirGroup} "$runtime_dir"
-    ${pkgs.coreutils}/bin/chmod ${runtimeDirMode} "$runtime_dir"
-    if [ ! -s "$token_file" ]; then
-      # 32 random bytes → 64 hex chars. coreutils' od is portable enough
-      # for this; we explicitly avoid /dev/random to skip entropy stalls.
-      # `tr` (not sed) collapses across line boundaries; sed's default
-      # line-by-line processing leaves the newlines `od` emits between
-      # 16-byte rows in the output, producing an unusable token.
-      tmp="$(${pkgs.coreutils}/bin/mktemp "$runtime_dir/.token.XXXXXX")"
-      ${pkgs.coreutils}/bin/head -c 32 /dev/urandom \
-        | ${pkgs.coreutils}/bin/od -An -vtx1 \
-        | ${pkgs.coreutils}/bin/tr -d '[:space:]' > "$tmp"
-      ${pkgs.coreutils}/bin/mv "$tmp" "$token_file"
-    fi
-    ${
-      if cfg.sharedGroup != null then
-        ''
-          ${pkgs.coreutils}/bin/chown root:${cfg.sharedGroup} "$token_file"
-          ${pkgs.coreutils}/bin/chmod 0640 "$token_file"
-        ''
-      else
-        ''
-          ${pkgs.coreutils}/bin/chown root:root "$token_file"
-          ${pkgs.coreutils}/bin/chmod 0600 "$token_file"
-        ''
-    }
-    ${
-      if cfg.tokenReadUser != null then
-        ''
-          if ! ${pkgs.util-linux}/bin/runuser -u ${cfg.tokenReadUser} -- ${pkgs.coreutils}/bin/test -r "$token_file"; then
-            echo "korri-sessiond-token: ${cfg.tokenReadUser} cannot read $token_file after ACL setup" >&2
-            exit 1
-          fi
-        ''
-      else
-        ""
-    }
-  '';
 
   controlStartScript = pkgs.writeShellScript "korri-sessiond-control-start" ''
     set -eu
+    : "''${KORRI_SESSIOND_SOCKET:?korri-sessiond: KORRI_SESSIOND_SOCKET is required}"
 
-    if [ ! -r ${lib.escapeShellArg cfg.tokenFile} ]; then
-      echo "korri-sessiond: token file not readable: ${cfg.tokenFile}" >&2
-      exit 1
-    fi
-
-    token="$(${pkgs.coreutils}/bin/cat ${lib.escapeShellArg cfg.tokenFile})"
-    url="http://127.0.0.1:${toString cfg.port}/control/start"
-
-    # Bounded retry to handle the inevitable race between systemd
-    # signalling ExecStartPost and the sessiond HTTP socket binding.
-    # Each retry sleeps 250ms; budget = ${toString cfg.controlStartRetries} attempts.
-    #
-    # `--connect-timeout 1` gives us fast retries while the socket is
-    # still binding. `--max-time 30` then gives the in-flight request
-    # enough headroom to complete once connected: enterHome on the
-    # kiosk role spawns the renderer and waits for its status file,
-    # which can take several seconds on cold cache. If --max-time is
-    # shorter than the server-side handler, curl times out and the
-    # retry loop fires a SECOND /control/start, which spawns ANOTHER
-    # renderer in parallel — the two compete for resources and
-    # neither writes its status file in time, looping forever.
     attempt=0
     max=${toString cfg.controlStartRetries}
     while [ "$attempt" -lt "$max" ]; do
@@ -153,9 +39,9 @@ let
           --fail \
           --connect-timeout 1 \
           --max-time 30 \
-          --header "x-korri-sessiond-token: $token" \
+          --unix-socket "$KORRI_SESSIOND_SOCKET" \
           --request POST \
-          "$url" > /dev/null; then
+          "http://korri-sessiond/control/start" > /dev/null; then
         echo "korri-sessiond: /control/start succeeded after attempt $attempt" >&2
         exit 0
       fi
@@ -181,76 +67,48 @@ in
     port = mkOption {
       type = types.port;
       default = 3003;
-      description = "Loopback TCP port for the sessiond HTTP surface.";
+      description = "Compatibility/default port used only when a non-socket debug path is deliberately injected.";
     };
 
-    tokenFile = mkOption {
+    socketPath = mkOption {
       type = types.str;
-      default = "/run/korri-sessiond/token";
-      example = "/storage/.config/korri/sessiond-token";
-      description = ''
-        Path to the file containing the sessiond capability token. The unit
-        passes this path via KORRI_SESSIOND_TOKEN_FILE and reads it for the
-        ExecStartPost /control/start handshake. Must be an absolute path.
-      '';
+      default = "%t/korri/sessiond.sock";
+      description = "Unix socket path for same-user local sessiond IPC.";
     };
 
     runtimeDir = mkOption {
       type = types.str;
-      default = "/run/korri-sessiond";
-      description = "Private runtime directory for sessiond.";
+      default = "%t/korri";
+      description = "Private user-runtime directory for sessiond sockets.";
     };
 
     role = mkOption {
-      type = types.enum [
-        "kiosk"
-        "source-machine"
-      ];
+      type = types.enum [ "kiosk" "source-machine" ];
       default = inferredRole;
       defaultText = lib.literalMD ''
         Inferred from `services.korri.compositor.kiosk.enable`: `"kiosk"` when
         true, `"source-machine"` otherwise.
       '';
-      description = ''
-        Sessiond role selecting the foreground-session adapter. Kiosk drives
-        Electrobun + essway. Source-machine asserts an idle-blank invariant
-        (Sway alive, no foreground app windows, no live gamescope-wl/
-        gamescopereaper). This is a sessiond-local option used to set
-        KORRI_SESSIOND_ROLE; it is NOT a deploy-role aggregate.
-      '';
+      description = "Sessiond role selecting the foreground-session adapter.";
     };
 
     controlStartRetries = mkOption {
       type = types.ints.positive;
       default = 40;
-      description = ''
-        ExecStartPost retry budget for the /control/start handshake (each
-        retry sleeps 250ms). Without this, every managed-launch request
-        would fail closed because sessiond stays in mode `stopped` until
-        /control/start fires successfully.
-      '';
+      description = "ExecStartPost retry budget for the socket /control/start handshake.";
     };
 
     launchArtifactsDir = mkOption {
       type = types.str;
-      default = "/run/korri-launch-artifacts";
-      description = ''
-        Shared launch-artifact directory containing per-launch app config files
-        materialized by korri-server. Sessiond-spawned foreground children must
-        be able to read it despite PrivateTmp.
-      '';
+      default = runtime.launchArtifactsDir or "/run/korri/launch-artifacts";
+      description = "Cross-session launch-artifact directory materialized by korrid and read by sessiond children.";
     };
 
     sunshineRuntimeStatusPath = mkOption {
       type = types.nullOr types.str;
       default = null;
       example = "/run/korri-game-stream/status.json";
-      description = ''
-        Optional path the source-machine role writes its runner-shaped
-        status.json sidecar to. When null on a source-machine host, the
-        sessiond unit inherits KORRI_GAME_STREAM_STATUS_PATH from its
-        environment if set; otherwise no sidecar is emitted.
-      '';
+      description = "Optional source-machine runner-shaped status sidecar path.";
     };
 
     extraEnvironment = mkOption {
@@ -262,52 +120,19 @@ in
     path = mkOption {
       type = types.listOf types.package;
       default = [ ];
-      description = ''
-        Packages added to the sessiond unit's PATH. Sessiond inherits this
-        PATH when it spawns the foreground app (via the in-process shell
-        launcher), so anything the default-gamescope launch path needs to
-        find by name — gamescope, retroarch wrappers, emulator binaries —
-        must be listed here. systemd's bare unit PATH is the same
-        coreutils/findutils/grep/sed/systemd set as every other unit and
-        does not include gamescope.
-      '';
-    };
-
-    sharedGroup = mkOption {
-      type = types.nullOr types.str;
-      default = null;
-      example = "korri-server";
-      description = ''
-        Optional Unix group that must be able to read the sessiond capability
-        token file. When set, the token oneshot generates the token (if
-        absent) and chowns it to `root:<sharedGroup>` with mode `0640` so
-        peer services (typically korri-server) can authenticate against
-        sessiond. When null, the token stays root-only (mode 0600).
-      '';
-    };
-
-    tokenReadUser = mkOption {
-      type = types.nullOr types.str;
-      default = null;
-      example = "korri-server";
-      description = ''
-        Optional peer user that must be able to read `tokenFile` after the
-        token oneshot applies ownership and mode. Set this on kiosk hosts so
-        ACL regressions fail during service startup instead of surfacing later
-        as sessiond authentication failures.
-      '';
+      description = "Packages added to the sessiond unit PATH and inherited by foreground children.";
     };
   };
 
   config = mkIf cfg.enable {
     assertions = [
       {
-        assertion = isAbsolutePath cfg.tokenFile;
-        message = "services.korri.sessiond.tokenFile must be an absolute path (got \"${cfg.tokenFile}\").";
+        assertion = isSocketPath cfg.socketPath;
+        message = "services.korri.sessiond.socketPath must be an absolute path or %t path (got \"${cfg.socketPath}\").";
       }
       {
-        assertion = isAbsolutePath cfg.runtimeDir;
-        message = "services.korri.sessiond.runtimeDir must be an absolute path (got \"${cfg.runtimeDir}\").";
+        assertion = isSocketPath cfg.runtimeDir;
+        message = "services.korri.sessiond.runtimeDir must be an absolute path or %t path (got \"${cfg.runtimeDir}\").";
       }
       {
         assertion = isAbsolutePath launchArtifactsDir;
@@ -316,119 +141,52 @@ in
       {
         assertion = !(kioskEnabled && streamingEnabled);
         message = ''
-          services.korri.compositor.kiosk.enable and services.korri.server.streaming.enable
+          services.korri.compositor.kiosk.enable and services.korri.daemon.streaming.enable
           must not be enabled together. A host can run as either a Korri kiosk or as a
-          source-machine streaming host, not both \u2014 sessiond enforces single-supervisor
-          ownership (origin R14).
+          source-machine streaming host, not both — sessiond enforces single-supervisor
+          ownership.
         '';
       }
       {
         assertion = !(cfg.role == "kiosk" && streamingEnabled);
         message = ''
           services.korri.sessiond.role = "kiosk" is incompatible with
-          services.korri.server.streaming.enable = true (only one foreground role per host).
+          services.korri.daemon.streaming.enable = true (only one foreground role per host).
         '';
       }
     ];
 
     environment.systemPackages = [ cfg.package ];
 
-    # Boot-time creation. Mode and group track sharedGroup so the
-    # directory is correct from first boot, before the token oneshot
-    # runs. See `runtimeDirMode` / `runtimeDirGroup` let-bindings above
-    # for the rationale.
-    systemd.tmpfiles.rules = [
-      "d ${cfg.runtimeDir} ${runtimeDirMode} root ${runtimeDirGroup} -"
-      "d ${launchArtifactsDir} 0750 root ${runtimeDirGroup} -"
-    ];
-
-    systemd.services.korri-sessiond-token = {
-      description = "Prepare Korri sessiond capability token";
-      wantedBy = [ "multi-user.target" ];
-      before = [
-        "korri-sessiond.service"
-        "korri-server.service"
-      ];
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${tokenSetupScript}";
-        PrivateTmp = true;
-        ProtectSystem = "strict";
-        ReadWritePaths = [ cfg.runtimeDir ];
-        ProtectHome = true;
-        NoNewPrivileges = true;
-        ProtectKernelTunables = true;
-        ProtectKernelModules = true;
-        ProtectControlGroups = true;
-        RestrictSUIDSGID = true;
-        RestrictRealtime = true;
-        LockPersonality = true;
-        SystemCallArchitectures = "native";
-      };
-    };
-
-    systemd.services.korri-sessiond = {
+    systemd.user.services.korri-sessiond = {
       description = "Korri foreground-session supervisor (${cfg.role} role)";
-      wantedBy = [ "multi-user.target" ];
-      after = [
-        "network.target"
-        "korri-sessiond-token.service"
-      ];
-      requires = [ "korri-sessiond-token.service" ];
-
-      # Packages on the unit's PATH. Sessiond spawns the foreground app
-      # via the in-process shell launcher, which inherits this PATH, so
-      # gamescope/retroarch must be discoverable by name from here.
-      #
-      # `pkgs.util-linux` is baked in (not exposed via `cfg.path`)
-      # because sessiond's shell launcher hardcodes `setsid` to detach
-      # the child into its own session/process group — see
-      # product/platform/library/shell-launcher.ts (DEFAULT_SETSID_COMMAND).
-      # Without setsid, every shell-launched child dies with
-      # `Executable not found in $PATH: "setsid"` and never reaches the
-      # gamescope wrapper.
+      wantedBy = [ "korri-session.target" ];
+      after = [ "network.target" ];
       path = cfg.path ++ [ pkgs.util-linux ];
-
       environment = {
         KORRI_SESSIOND_ROLE = cfg.role;
         KORRI_SESSIOND_PORT = toString cfg.port;
-        KORRI_SESSIOND_TOKEN_FILE = cfg.tokenFile;
+        KORRI_SESSIOND_SOCKET = cfg.socketPath;
         KORRI_LAUNCH_ARTIFACTS_DIR = launchArtifactsDir;
       }
       // (lib.optionalAttrs (cfg.sunshineRuntimeStatusPath != null) {
         KORRI_GAME_STREAM_STATUS_PATH = cfg.sunshineRuntimeStatusPath;
       })
       // cfg.extraEnvironment;
-
       serviceConfig = {
         Type = "simple";
-        # Read the token at start time and export it; the daemon's main()
-        # asserts KORRI_SESSIOND_TOKEN is set.
-        ExecStart = pkgs.writeShellScript "korri-sessiond-start" ''
-          set -eu
-          if [ ! -r ${lib.escapeShellArg cfg.tokenFile} ]; then
-            echo "korri-sessiond: token file not readable: ${cfg.tokenFile}" >&2
-            exit 1
-          fi
-          KORRI_SESSIOND_TOKEN="$(${pkgs.coreutils}/bin/cat ${lib.escapeShellArg cfg.tokenFile})"
-          export KORRI_SESSIOND_TOKEN
-          exec ${cfg.package}/bin/korri-sessiond
-        '';
-        # /control/start handshake. Without this, sessiond stays in mode
-        # "stopped" forever and every managed launch fails closed.
+        ExecStart = "${cfg.package}/bin/korri-sessiond";
         ExecStartPost = "${controlStartScript}";
         Restart = "on-failure";
         RestartSec = "2s";
-        # The token runtime directory is owned by korri-sessiond-token.service
-        # plus tmpfiles, not this unit's RuntimeDirectory. Letting systemd own
-        # it here can reset the directory to root:root between restarts after
-        # the token service has applied the sharedGroup ACL.
-        StateDirectory = "korri-sessiond";
+        RuntimeDirectory = "korri";
+        RuntimeDirectoryMode = "0700";
         PrivateTmp = true;
         ProtectSystem = "strict";
         ReadWritePaths = [ launchArtifactsDir ];
-        ProtectHome = true;
+        ProtectHome = false;
         NoNewPrivileges = true;
+        MemoryDenyWriteExecute = false;
       };
     };
   };

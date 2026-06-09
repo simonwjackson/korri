@@ -59,7 +59,7 @@ pkgs.testers.runNixOSTest {
         modules = [
           {
             networking.hostName = "korri-live-usb-vm-smoke";
-            services.korri.server.enable = lib.mkForce false;
+            services.korri.daemon.enable = lib.mkForce false;
             services.korri.compositor = {
               sessionBus = {
                 mode = "existing";

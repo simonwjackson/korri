@@ -42,7 +42,7 @@ export class LaunchLibraryPayload extends Schema.Class<LaunchLibraryPayload>(
  *     was rejected by sessiond.
  *
  * - **HostUnavailable**: sessiond was unreachable or rejected the
- *   capability token (`reason.kind: "network" | "token-rejected"`).
+ *   request (`reason.kind: "network" | "request-rejected"`).
  *
  * - **LaunchFailed**: the process spawned but failed (exit code, signal,
  *   process-level error). Today's pre-tag failure surface.
@@ -90,7 +90,7 @@ const DaemonRejectionReason = Schema.Struct({
 })
 
 const HostUnavailableReason = Schema.Struct({
-  kind: Schema.Literals(["network", "token-rejected"]),
+  kind: Schema.Literals(["network", "request-rejected"]),
 })
 
 const LaunchedResult = Schema.Struct({

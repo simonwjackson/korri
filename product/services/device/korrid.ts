@@ -9,7 +9,7 @@ import {
   type StreamAdvertisement,
 } from "./lan-stream-advertise"
 
-export interface KorriServerConfig {
+export interface KorridConfig {
   readonly host: string
   readonly port: number
   readonly advertise: boolean
@@ -18,13 +18,13 @@ export interface KorriServerConfig {
   readonly advertiseCapabilities: readonly string[]
 }
 
-export interface KorriServerHandle {
+export interface KorridHandle {
   readonly start: () => Promise<void>
   readonly stop: () => Promise<void>
 }
 
-export interface CreateKorriServerOptions {
-  readonly config?: KorriServerConfig
+export interface CreateKorridOptions {
+  readonly config?: KorridConfig
   readonly advertise?: (options: {
     readonly name?: string
     readonly hostId?: string
@@ -33,34 +33,34 @@ export interface CreateKorriServerOptions {
   }) => StreamAdvertisement
 }
 
-export function getKorriServerConfig(
+export function getKorridConfig(
   env: NodeJS.ProcessEnv = process.env,
-): KorriServerConfig {
+): KorridConfig {
   const port = Number.parseInt(env.PORT ?? "3001", 10)
   if (!Number.isInteger(port) || port <= 0) {
-    throw new Error("Korri server requires a positive PORT")
+    throw new Error("Korri daemon requires a positive PORT")
   }
 
   return {
     host: env.HOST ?? "127.0.0.1",
     port,
-    // Federation v1: every library-bearing korri-server advertises
+    // Federation v1: every library-bearing korrid advertises
     // unconditionally. The legacy KORRI_SERVER_ADVERTISE_ENABLED knob is
     // gone (R14 / zero-backwards-compat). Devices that should not
-    // participate in federation simply don't run korri-server.
+    // participate in federation simply don't run korrid.
     advertise: true,
-    advertiseName: env.KORRI_STREAM_ADVERTISE_NAME ?? env.KORRI_SERVER_NAME,
-    advertiseHostId: env.KORRI_STREAM_ADVERTISE_HOST_ID ?? env.KORRI_SERVER_ID,
+    advertiseName: env.KORRI_STREAM_ADVERTISE_NAME ?? env.KORRI_DAEMON_NAME,
+    advertiseHostId: env.KORRI_STREAM_ADVERTISE_HOST_ID ?? env.KORRI_DAEMON_ID,
     advertiseCapabilities: parseCapabilities(
       env.KORRI_STREAM_ADVERTISE_CAPABILITIES ?? "source,stream",
     ),
   }
 }
 
-export function createKorriServer(
-  options: CreateKorriServerOptions = {},
-): KorriServerHandle {
-  const config = options.config ?? getKorriServerConfig()
+export function createKorrid(
+  options: CreateKorridOptions = {},
+): KorridHandle {
+  const config = options.config ?? getKorridConfig()
   const app = createHonoApp({
     rpcHandler: serverRpcHandler,
     rpcSurface: "server",
@@ -90,7 +90,7 @@ export function createKorriServer(
         throw error
       }
       logger.info(
-        `Korri server listening on http://${config.host}:${config.port}`,
+        `Korri daemon listening on http://${config.host}:${config.port}`,
       )
     },
     stop: async () => {
@@ -107,15 +107,15 @@ export function createKorriServer(
 }
 
 export async function main(): Promise<void> {
-  const server = createKorriServer()
+  const server = createKorrid()
 
   const gracefulShutdown = async (signal: string) => {
-    logger.debug(`Received ${signal}, shutting down Korri server...`)
+    logger.debug(`Received ${signal}, shutting down Korri daemon...`)
     try {
       await server.stop()
       process.exit(0)
     } catch (error) {
-      logger.error({ err: error }, "Error during Korri server shutdown")
+      logger.error({ err: error }, "Error during Korri daemon shutdown")
       process.exit(1)
     }
   }
@@ -126,7 +126,7 @@ export async function main(): Promise<void> {
   try {
     await server.start()
   } catch (error) {
-    logger.error({ err: error }, "Failed to start Korri server")
+    logger.error({ err: error }, "Failed to start Korri daemon")
     process.exit(1)
   }
 }
@@ -171,7 +171,7 @@ function parseCapabilities(value: string): readonly string[] {
 
 if (require.main === module) {
   main().catch(error => {
-    logger.error({ err: error }, "Fatal Korri server error")
+    logger.error({ err: error }, "Fatal Korri daemon error")
     process.exit(1)
   })
 }

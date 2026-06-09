@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import type { AddressInfo } from "node:net"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { createAdaptorServer } from "@hono/node-server"
 import {
   foregroundSessionGateStateAtom,
@@ -23,7 +25,7 @@ const serverHonoApp = createHonoApp({ rpcSurface: "server" })
 
 /**
  * End-to-end coverage for the renderer's foreground-session status layer
- * against a real loopback Hono server and a real fake sessiond HTTP
+ * against a real loopback Hono server and a real fake sessiond Unix-socket
  * endpoint. Exercises:
  *
  *   1. RpcClient.make(serverRpcGroup) -> app.server.status -> sessiond mode
@@ -39,18 +41,14 @@ const serverHonoApp = createHonoApp({ rpcSurface: "server" })
  * Pattern follows `library-rpc-layers.test.ts`: real `withRpcServer` + real
  * production handlers + window.location pointed at the loopback URL. No
  * `Mock*`/`Stub*`/`Fake*`-named doubles; the fake sessiond is a small real
- * HTTP server with a configurable handler.
+ * Unix-socket server with a configurable handler.
  */
 
-const SESSIOND_TOKEN = "integration-test-token"
-
 const sessiondEnvKeys = [
-  "KORRI_SESSIOND_URL",
-  "KORRI_SESSIOND_TOKEN",
-  "KORRI_SESSIOND_TOKEN_FILE",
+  "KORRI_SESSIOND_SOCKET",
   "KORRI_STREAM_CONTROL_ENABLED",
   "KORRI_GAME_STREAM_STATUS_PATH",
-  "KORRI_SERVER_ID",
+  "KORRI_DAEMON_ID",
 ] as const
 
 const originalSessiondEnv: Record<string, string | undefined> =
@@ -71,7 +69,7 @@ afterEach(() => {
 
 describe("ForegroundSessionStatusLayerLive (integration)", () => {
   it("maps sessiond mode=game to a Running gate state through the real RPC pipeline", async () => {
-    await using sessiond = await withSessiondHttp({
+    await using sessiond = await withSessiondSocket({
       respond: () =>
         Response.json({
           schemaVersion: 1,
@@ -87,7 +85,7 @@ describe("ForegroundSessionStatusLayerLive (integration)", () => {
     })
     await using server = await withRpcServer({ fetch: serverHonoApp.fetch })
     pointWindowAt(server.url)
-    configureSessiondEnv(sessiond.url)
+    configureSessiondEnv(sessiond.socketPath)
 
     const result = await Effect.runPromise(
       Effect.scoped(
@@ -113,12 +111,12 @@ describe("ForegroundSessionStatusLayerLive (integration)", () => {
     // produces an IdleReady snapshot, which the gate-state mapper renders
     // as `{ _tag: "Ready" }`. Regression guard: do not allow a 401 to leave
     // the home screen stuck on a launch-pipeline gate.
-    await using sessiond = await withSessiondHttp({
+    await using sessiond = await withSessiondSocket({
       respond: () => new Response("unauthorized", { status: 401 }),
     })
     await using server = await withRpcServer({ fetch: serverHonoApp.fetch })
     pointWindowAt(server.url)
-    configureSessiondEnv(sessiond.url)
+    configureSessiondEnv(sessiond.socketPath)
 
     const result = await Effect.runPromise(
       Effect.scoped(
@@ -137,7 +135,7 @@ describe("ForegroundSessionStatusLayerLive (integration)", () => {
     // layer, point window.location at a real bun-API server, point the
     // bun API at a fake sessiond returning `mode: "game"`, and assert
     // the gate-state atom resolves to `{ _tag: "Running" }` end to end.
-    await using sessiond = await withSessiondHttp({
+    await using sessiond = await withSessiondSocket({
       respond: () =>
         Response.json({
           schemaVersion: 1,
@@ -153,7 +151,7 @@ describe("ForegroundSessionStatusLayerLive (integration)", () => {
     })
     await using server = await withRpcServer({ fetch: serverHonoApp.fetch })
     pointWindowAt(server.url)
-    configureSessiondEnv(sessiond.url)
+    configureSessiondEnv(sessiond.socketPath)
 
     const registry = AtomRegistry.make({
       initialValues: [
@@ -189,7 +187,7 @@ describe("ForegroundSessionStatusLayerLive (integration)", () => {
     // further requests reach sessiond within multiple refresh windows.
     // This is the renderer-side guarantee that navigating away from the
     // home view stops the 1 Hz poll instead of leaking timers.
-    await using sessiond = await withSessiondHttp({
+    await using sessiond = await withSessiondSocket({
       respond: () =>
         Response.json({
           schemaVersion: 1,
@@ -204,7 +202,7 @@ describe("ForegroundSessionStatusLayerLive (integration)", () => {
     })
     await using server = await withRpcServer({ fetch: serverHonoApp.fetch })
     pointWindowAt(server.url)
-    configureSessiondEnv(sessiond.url)
+    configureSessiondEnv(sessiond.socketPath)
 
     const registry = AtomRegistry.make({
       initialValues: [
@@ -326,63 +324,48 @@ async function waitForAtomSuccess<A>(
   })
 }
 
-type SessiondHttpHarness = {
+type SessiondSocketHarness = {
   url: string
   requestCount: () => number
   dispose: () => Promise<void>
   [Symbol.asyncDispose]: () => Promise<void>
 }
 
-async function withSessiondHttp(options: {
+async function withSessiondSocket(options: {
   readonly respond: (request: Request) => Response | Promise<Response>
-}): Promise<SessiondHttpHarness> {
-  // Bun.serve + @hono/node-server (the bun-API's server) running side by
-  // side in the same bun process trip a Content-Length parsing bug in
-  // node:_http_client. Boot the fake sessiond through @hono/node-server
-  // too so both servers go through the same response-framing path.
+}): Promise<SessiondSocketHarness> {
   let count = 0
-  const fake = new Hono()
-  fake.all("*", async c => {
-    count += 1
-    return options.respond(c.req.raw)
-  })
-  const server = createAdaptorServer({ fetch: fake.fetch })
-  const port = await new Promise<number>((resolveListen, rejectListen) => {
-    server.once("error", rejectListen)
-    server.once("listening", () => {
-      const address = server.address() as AddressInfo | string | null
-      if (address === null || typeof address === "string") {
-        rejectListen(new Error(`unexpected address: ${String(address)}`))
-        return
-      }
-      resolveListen(address.port)
-    })
-    server.listen(0, "127.0.0.1")
-  })
-  const url = `http://127.0.0.1:${port}`
+  const dir = await mkdtemp(join(tmpdir(), "korri-sessiond-"))
+  const socketPath = join(dir, "sessiond.sock")
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = (async (input, init) => {
+    if ((init as (RequestInit & { unix?: string }) | undefined)?.unix === socketPath) {
+      count += 1
+      return options.respond(new Request(input, init))
+    }
+    return originalFetch(input, init)
+  }) as typeof fetch
   let disposed = false
   const dispose = async () => {
     if (disposed) return
     disposed = true
-    await new Promise<void>(resolve => server.close(() => resolve()))
+    globalThis.fetch = originalFetch
+    await rm(dir, { recursive: true, force: true })
   }
   return {
-    url,
+    socketPath,
     requestCount: () => count,
     dispose,
     [Symbol.asyncDispose]: dispose,
   }
 }
 
-function configureSessiondEnv(sessiondUrl: string): void {
-  process.env.KORRI_SESSIOND_URL = sessiondUrl
-  process.env.KORRI_SESSIOND_TOKEN = SESSIOND_TOKEN
-  // Make sure no stale token file overrides our env-supplied token.
-  delete process.env.KORRI_SESSIOND_TOKEN_FILE
+function configureSessiondEnv(socketPath: string): void {
+  process.env.KORRI_SESSIOND_SOCKET = socketPath
   process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
   // Keep the runner-status reader from picking up a stale fixture.
   delete process.env.KORRI_GAME_STREAM_STATUS_PATH
-  process.env.KORRI_SERVER_ID = "integration-test-server"
+  process.env.KORRI_DAEMON_ID = "integration-test-server"
 }
 
 function pointWindowAt(baseUrl: string): void {

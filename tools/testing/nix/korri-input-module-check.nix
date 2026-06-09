@@ -54,7 +54,7 @@ let
 
   korriFailedAssertionMessages = cfg: map (a: a.message) (korriFailedAssertions cfg);
 
-  inputdUnit = cfg: cfg.systemd.services.korri-inputd or { };
+  inputdUnit = cfg: cfg.systemd.user.services.korri-inputd or { };
   inputplumberUnit = cfg: cfg.systemd.services.inputplumber or { };
 
   # ---------------------------------------------------------------- scenarios
@@ -143,7 +143,7 @@ let
     (check "baseline: uhid is NOT loaded by default" (
       !(builtins.elem "uhid" (baseline.boot.kernelModules or [ ]))
     ))
-    (check "baseline: no korri-inputd systemd unit" (!(baseline.systemd.services ? korri-inputd)))
+    (check "baseline: no korri-inputd systemd unit" (!(baseline.systemd.user.services ? korri-inputd)))
     (check "baseline: no inputplumber systemd unit" (!(baseline.systemd.services ? inputplumber)))
     (check "baseline: udev rules do not mention uinput" (
       !(lib.hasInfix "uinput" (baseline.services.udev.extraRules or ""))
@@ -174,7 +174,7 @@ let
       # provider and inputd are orthogonal: enabling provider alone must not
       # bring inputd along, since streaming hosts (aka) want the provider
       # without the local kiosk bridge.
-      !(providerInputplumber.systemd.services ? korri-inputd)
+      !(providerInputplumber.systemd.user.services ? korri-inputd)
     ))
 
     # ---- provider assertion: enable + null name is rejected
@@ -196,13 +196,13 @@ let
 
     # ---- inputd only (no provider)
     (check "inputd-only: NixOS assertions pass" (korriFailedAssertions inputdOnly == [ ]))
-    (check "inputd-only: emits korri-inputd.service" (inputdOnly.systemd.services ? korri-inputd))
+    (check "inputd-only: emits korri-inputd.service" (inputdOnly.systemd.user.services ? korri-inputd))
     (check "inputd-only: defaults to loopback bind + port 3002" (
       (inputdUnit inputdOnly).environment.KORRI_INPUT_BRIDGE_HOSTNAME or null == "127.0.0.1"
       && (inputdUnit inputdOnly).environment.KORRI_INPUT_BRIDGE_PORT or null == "3002"
     ))
-    (check "inputd-only: wantedBy multi-user.target" (
-      (inputdUnit inputdOnly).wantedBy or [ ] == [ "multi-user.target" ]
+    (check "inputd-only: wantedBy korri-session.target" (
+      (inputdUnit inputdOnly).wantedBy or [ ] == [ "korri-session.target" ]
     ))
     (check "inputd-only: provider plumbing stays dormant" (
       !inputdOnly.services.inputplumber.enable

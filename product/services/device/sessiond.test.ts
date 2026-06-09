@@ -1,3 +1,6 @@
+import { mkdtemp, rm, stat } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { describe, expect, it } from "bun:test"
 import type { LaunchResult, LaunchSpec } from "@platform/library/launcher"
 import type { SessiondManagedLaunchEvent } from "@platform/library/sessiond-managed-launch-protocol"
@@ -19,7 +22,6 @@ import type {
   StatusSidecar,
 } from "./sessiond-status-sidecar"
 
-const token = "test-token"
 const spec: LaunchSpec = { command: "/bin/game", args: ["rom.smc"] }
 
 function startHarness(
@@ -46,7 +48,6 @@ function startHarness(
   let rendererPid = 100
   let windows = [...(options.windows ?? [])]
   const core = createKorriSessiondCore({
-    token,
     logger: silentLogger,
     serviceManager: {
       maskEssway: async () => {
@@ -136,13 +137,7 @@ function request(
 }
 
 function authorized(init: RequestInit = {}): RequestInit {
-  return {
-    ...init,
-    headers: {
-      ...(init.headers ?? {}),
-      "x-korri-sessiond-token": token,
-    },
-  }
+  return init
 }
 
 describe("korri sessiond", () => {
@@ -162,14 +157,14 @@ describe("korri sessiond", () => {
     expect(events).toContain("launch-electrobun")
   })
 
-  it("rejects unauthenticated control requests without changing state", async () => {
+  it("accepts same-user socket control requests without token headers", async () => {
     const { core, events } = startHarness()
 
     const response = await request(core, "/control/start", { method: "POST" })
 
-    expect(response.status).toBe(401)
-    expect(events).toEqual([])
-    expect(core.status().state.mode).toBe("stopped")
+    expect(response.ok).toBe(true)
+    expect(events).toContain("launch-electrobun")
+    expect(core.status().state.mode).toBe("home")
   })
 
   it("launches a game under session control and restores Electrobun afterward", async () => {
@@ -395,8 +390,9 @@ describe("korri sessiond", () => {
     await waitForSessionMode(core, "home")
   })
 
-  it("requires authentication for managed launch commands and events", async () => {
+  it("accepts managed launch commands and events without HTTP token headers", async () => {
     const { core, events } = startHarness()
+    await request(core, "/control/start", { method: "POST" })
 
     const commandResponse = await request(core, "/managed-launch", {
       method: "POST",
@@ -408,9 +404,9 @@ describe("korri sessiond", () => {
       "/managed-launch/events?launchId=launch-1",
     )
 
-    expect(commandResponse.status).toBe(401)
-    expect(eventsResponse.status).toBe(401)
-    expect(events).toEqual([])
+    expect(commandResponse.ok).toBe(true)
+    expect(eventsResponse.ok).toBe(true)
+    expect(events).toContain("launch-electrobun")
   })
 
   it("keeps the blocking launch path compatible while using managed execution", async () => {
@@ -469,7 +465,6 @@ describe("korri sessiond", () => {
 
   it("emits child-exited when launcher.spawn returns a failed managed launch result", async () => {
     const core = createKorriSessiondCore({
-      token,
       logger: silentLogger,
       renderer: {
         kind: "electrobun",
@@ -544,7 +539,6 @@ describe("korri sessiond", () => {
       rendererStatus: () => ({ kind: "noop" }),
     }
     const core = createKorriSessiondCore({
-      token,
       logger: silentLogger,
       role,
       launcher: { run: async () => ({ status: "launched" }) },
@@ -590,7 +584,6 @@ describe("korri sessiond", () => {
       rendererStatus: () => ({ kind: "noop" }),
     }
     const core = createKorriSessiondCore({
-      token,
       logger: silentLogger,
       role,
       launcher: { run: async () => ({ status: "launched" }) },
@@ -929,7 +922,6 @@ describe("korri sessiond", () => {
       rendererStatus: () => ({ kind: "noop" }),
     }
     const core = createKorriSessiondCore({
-      token,
       role,
       launcher: { run: async () => ({ status: "launched" }) },
       logger: { ...silentLogger, warn: input => warnings.push(input) },
@@ -1030,7 +1022,6 @@ describe("korri sessiond", () => {
     // Replace logger by constructing directly so this test can assert
     // the warning payload produced by the public restore path.
     const warningCore = createKorriSessiondCore({
-      token,
       logger: { ...silentLogger, warn: input => warnings.push(input) },
       reaper,
       renderer: {
@@ -1088,7 +1079,6 @@ describe("korri sessiond", () => {
     const warnings: unknown[] = []
     const control = deferred<LaunchResult>()
     const warningCore = createKorriSessiondCore({
-      token,
       logger: { ...silentLogger, warn: input => warnings.push(input) },
       reaper: async () => {
         throw new Error("procfs unavailable")
@@ -1177,7 +1167,6 @@ describe("korri sessiond", () => {
       },
     }
     const injectedCore = createKorriSessiondCore({
-      token,
       logger: silentLogger,
       statusSidecar: sidecar,
       launcher: { run: async () => ({ status: "launched" }) },
@@ -1204,7 +1193,6 @@ describe("korri sessiond", () => {
     await injectedCore.handleRequest(
       new Request("http://127.0.0.1:3003/control/start", {
         method: "POST",
-        headers: { "x-korri-sessiond-token": token },
       }),
     )
 
@@ -1229,7 +1217,6 @@ describe("korri sessiond", () => {
       rendererStatus: () => ({ kind: "noop" }),
     }
     const core = createKorriSessiondCore({
-      token,
       logger: silentLogger,
       role,
       launcher: { run: async () => ({ status: "launched" }) },
@@ -1272,7 +1259,6 @@ describe("korri sessiond", () => {
     }
 
     const core = createKorriSessiondCore({
-      token,
       logger: silentLogger,
       role,
       launcher: { run: async () => ({ status: "launched" }) },
@@ -1664,7 +1650,6 @@ describe("korri sessiond", () => {
       args: [],
     }
     const core = createKorriSessiondCore({
-      token,
       logger: silentLogger,
       renderer: {
         kind: "electrobun",
@@ -1985,7 +1970,6 @@ describe("korri sessiond", () => {
     const waitCtrl = deferred<LaunchResult>()
     const waitSpec: LaunchSpec = { command: "/bin/wait", args: [] }
     const core = createKorriSessiondCore({
-      token,
       logger: silentLogger,
       statusSidecar: sidecar,
       serviceManager: {
@@ -2084,7 +2068,6 @@ describe("korri sessiond", () => {
     const waitCtrl = deferred<LaunchResult>()
     const waitSpec: LaunchSpec = { command: "/bin/wait", args: [] }
     const core = createKorriSessiondCore({
-      token,
       logger: silentLogger,
       serviceManager: {
         maskEssway: async () => {},
@@ -2197,8 +2180,7 @@ describe("korri sessiond", () => {
     process.env.KORRI_ELECTROBUN_READY_TIMEOUT_MS = "1234"
     try {
       const core = createKorriSessiondCore({
-        token,
-        logger: silentLogger,
+          logger: silentLogger,
       })
       expect(core.status().state.mode).toBe("stopped")
       expect(core.status().renderer.kind).toBe("electrobun")
@@ -2228,7 +2210,6 @@ describe("korri sessiond", () => {
     const handle = await startKorriSessiond({
       port: 0,
       hostname: "127.0.0.1",
-      token,
       role,
       logger: silentLogger,
       launcher: { run: async () => ({ status: "launched" }) },
@@ -2240,6 +2221,42 @@ describe("korri sessiond", () => {
       expect(handle.status().state.mode).toBe("stopped")
     } finally {
       await handle.stop()
+    }
+  })
+
+  it("starts a real Bun server on a Unix socket and removes stale sockets", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-sessiond-test-"))
+    const socketPath = join(dir, "sessiond.sock")
+    await Bun.write(socketPath, "stale")
+    const role: SessionRole = {
+      id: "socket-role",
+      idleModeLabel: "idle",
+      idleReadyEventName: "idle-ready",
+      emitsRendererStopped: false,
+      enterIdle: async () => {},
+      leaveIdle: async () => {},
+      beforeChildLaunch: async () => {},
+      restoreIdleAfterLaunch: async () => {},
+      reconcileIdle: async () => {},
+      afterChildRunning: async () => {},
+      idleReadyEvidence: () => "idle",
+      rendererStatus: () => ({ kind: "noop" }),
+    }
+    const handle = await startKorriSessiond({
+      socketPath,
+      role,
+      logger: silentLogger,
+      launcher: { run: async () => ({ status: "launched" }) },
+    })
+
+    try {
+      expect(handle.socketPath).toBe(socketPath)
+      expect(handle.port).toBeUndefined()
+      expect((await stat(socketPath)).isSocket()).toBe(true)
+      expect(handle.status().state.mode).toBe("stopped")
+    } finally {
+      await handle.stop()
+      await rm(dir, { recursive: true, force: true })
     }
   })
 
@@ -2262,7 +2279,6 @@ describe("korri sessiond", () => {
       rendererStatus: () => ({ kind: "noop" }),
     }
     const core = createKorriSessiondCore({
-      token,
       logger: silentLogger,
       role,
       launcher: {

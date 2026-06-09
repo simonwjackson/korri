@@ -10,7 +10,6 @@ import {
 import {
   probeSessiondManagedLaunchStatus,
   requestSessiondManagedLaunchStart,
-  resolveSessiondManagedLaunchToken,
   type SessiondManagedLaunchClientFailure,
   terminateSessiondManagedLaunch,
 } from "./sessiond-managed-launch-client"
@@ -18,9 +17,8 @@ import { observeSessiondManagedLaunchEvents } from "./sessiond-managed-launch-ev
 import { isLaunchReadyMode } from "./sessiond-managed-launch-protocol"
 
 export interface SessionLauncherOptions {
-  readonly url: string
-  readonly token?: string
-  readonly tokenFile?: string
+  readonly url?: string
+  readonly socketPath?: string
   readonly fetchImpl?: SessionLauncherFetch
   readonly requestTimeoutMs?: number
 }
@@ -46,13 +44,13 @@ export function createSessionLauncher(
 export function createSessionLauncherFromEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): Launcher | undefined {
-  const url = env.KORRI_SESSIOND_URL
-  if (!url) return undefined
+  const socketPath = env.KORRI_SESSIOND_SOCKET
+  const url = undefined
+  if (!socketPath && !url) return undefined
 
   return createSessionLauncher({
-    url,
-    token: env.KORRI_SESSIOND_TOKEN,
-    tokenFile: env.KORRI_SESSIOND_TOKEN_FILE,
+    ...(url ? { url } : {}),
+    ...(socketPath ? { socketPath } : {}),
   })
 }
 
@@ -61,23 +59,22 @@ export async function launchViaSessiond(
   options: SessionLauncherOptions,
 ): Promise<LaunchResult> {
   const fetchImpl = options.fetchImpl ?? fetch
-  const token = await resolveSessiondManagedLaunchToken({ ...options, env: {} })
-  if (!token) {
+  const url = options.url ?? (options.socketPath ? "http://korri-sessiond" : undefined)
+  if (!url) {
     return {
       status: "failed",
       exitCode: 126,
-      stderrTail:
-        "sessiond launch rejected: missing KORRI_SESSIOND_TOKEN or KORRI_SESSIOND_TOKEN_FILE",
+      stderrTail: "sessiond launch rejected: missing KORRI_SESSIOND_SOCKET",
     }
   }
 
   let response: Response
   try {
-    response = await fetchImpl(String(new URL("/launch", options.url)), {
+    response = await fetchImpl(String(new URL("/launch", url)), {
       method: "POST",
+      ...(options.socketPath ? { unix: options.socketPath } : {}),
       headers: {
         "content-type": "application/json",
-        "x-korri-sessiond-token": token,
       },
       body: JSON.stringify({ spec }),
     })
@@ -92,7 +89,7 @@ export async function launchViaSessiond(
   if (!response.ok) {
     return {
       status: "failed",
-      exitCode: response.status === 401 ? 126 : 125,
+      exitCode: 125,
       stderrTail: `sessiond launch rejected: ${response.status} ${await response.text()}`,
     }
   }
@@ -109,17 +106,16 @@ async function spawnViaSessiond(
   const lifecycle = extras.lifecycle
   const wait = extras.wait
   const fetchImpl = options.fetchImpl ?? fetch
-  const token = await resolveSessiondManagedLaunchToken({ ...options, env: {} })
-  if (!token) {
+  const url = options.url ?? (options.socketPath ? "http://korri-sessiond" : undefined)
+  if (!url) {
     return failedManagedLaunch(
       "host-control-disabled",
-      "sessiond launch rejected: missing KORRI_SESSIOND_TOKEN or KORRI_SESSIOND_TOKEN_FILE",
+      "sessiond launch rejected: missing KORRI_SESSIOND_SOCKET",
     )
   }
 
   const statusResult = await probeSessiondManagedLaunchStatus({
-    url: options.url,
-    token,
+    ...(options.socketPath ? { socketPath: options.socketPath } : { url }),
     fetchImpl,
     timeoutMs: options.requestTimeoutMs,
   })
@@ -157,8 +153,7 @@ async function spawnViaSessiond(
   const startResult = await requestSessiondManagedLaunchStart(
     { spec, ...(lifecycle ? { lifecycle } : {}), ...(wait ? { wait } : {}) },
     {
-      url: options.url,
-      token,
+      ...(options.socketPath ? { socketPath: options.socketPath } : { url }),
       fetchImpl,
       timeoutMs: options.requestTimeoutMs,
     },
@@ -174,8 +169,7 @@ async function spawnViaSessiond(
 
   const observer = observeSessiondManagedLaunchEvents({
     fetchImpl,
-    url: options.url,
-    token,
+    ...(options.socketPath ? { socketPath: options.socketPath } : { url }),
     launchId: started.launchId,
     requestTimeoutMs: options.requestTimeoutMs,
   })
@@ -184,8 +178,7 @@ async function spawnViaSessiond(
     void terminateSessiondManagedLaunch(
       { launchId: started.launchId },
       {
-        url: options.url,
-        token,
+        ...(options.socketPath ? { socketPath: options.socketPath } : { url }),
         fetchImpl,
         timeoutMs: options.requestTimeoutMs,
       },
@@ -195,8 +188,7 @@ async function spawnViaSessiond(
     void terminateSessiondManagedLaunch(
       { launchId: started.launchId, force: true },
       {
-        url: options.url,
-        token,
+        ...(options.socketPath ? { socketPath: options.socketPath } : { url }),
         fetchImpl,
         timeoutMs: options.requestTimeoutMs,
       },
@@ -219,13 +211,6 @@ async function spawnViaSessiond(
 function managedLaunchFailureFromClientFailure(
   failure: SessiondManagedLaunchClientFailure,
 ): ManagedLaunchResult {
-  if (failure.kind === "missing-token" || failure.kind === "token-rejected") {
-    return failedManagedLaunch(
-      "host-control-disabled",
-      failure.message ??
-        "sessiond launch rejected: missing KORRI_SESSIOND_TOKEN or KORRI_SESSIOND_TOKEN_FILE",
-    )
-  }
   return failedManagedLaunch(
     "host-unavailable",
     failure.message ?? `sessiond unavailable: ${failure.kind}`,

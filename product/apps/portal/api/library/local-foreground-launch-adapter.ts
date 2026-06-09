@@ -25,7 +25,7 @@ export interface CreateLocalForegroundLaunchOwnerOptions {
    * Optional override for the sessiond status probe used by the owner's
    * preflight. Tests inject a fake `consultExternalIdle` here; production
    * leaves it unset, in which case the owner consults sessiond when
-   * `KORRI_SESSIOND_URL` is configured in `process.env`.
+   * `KORRI_SESSIOND_SOCKET` is configured in `process.env`.
    */
   readonly consultExternalIdle?: () => Promise<ForegroundExternalIdleResult>
 }
@@ -38,36 +38,26 @@ export interface CreateLocalForegroundLaunchOwnerOptions {
  * Translates `SessiondProbeResult` shapes to the owner's three-valued
  * `ForegroundExternalIdleResult` contract:
  * - `not-configured` → hook returns `{ status: "idle" }` (no authority to
- *    consult; let the owner-local check and the spawn-time path handle it).
- *    This preserves the existing `session-launcher.ts` behavior where a
- *    missing-token case produces `failureKind: "host-control-disabled"` /
- *    exit 126 at spawn time, rather than being preempted by a preflight
- *    that has no token to read either.
+ *    consult; let the owner-local check and spawn-time path handle it).
  * - `ok` + launch-ready mode → `{ status: "idle" }`.
  * - `ok` + non-launch-ready mode (game/launching/restoring/recovering) →
  *    `{ status: "not-idle", mode }`.
  * - `unavailable` → `{ status: "unavailable", reason: "network" }`.
- * - `token-rejected` → `{ status: "unavailable", reason: "token-rejected" }`,
+ * - `request-rejected` → `{ status: "unavailable", reason: "request-rejected" }`,
  *    preserving the existing 401 → `host-control-disabled` mapping from
  *    `session-launcher.ts`.
  */
 function defaultConsultExternalIdle():
   | (() => Promise<ForegroundExternalIdleResult>)
   | undefined {
-  if (!process.env.KORRI_SESSIOND_URL) return undefined
+  if (!process.env.KORRI_SESSIOND_SOCKET) return undefined
   return async () => {
     const probe = await probeSessiondManagedLaunchStatus()
     if (probe.kind === "not-configured") return { status: "idle" }
-    // Missing token → defer to the spawn so session-launcher.ts's
-    // existing `resolveToken()` → `host-control-disabled` / exit 126
-    // mapping fires unchanged. Preempting here with `unavailable` would
-    // change the wire failureKind from host-control-disabled to
-    // host-unavailable (a back-compat regression).
-    if (probe.kind === "missing-token") return { status: "idle" }
-    if (probe.kind === "unavailable" || probe.kind === "invalid-payload")
+    if (probe.kind === "unavailable")
       return { status: "unavailable", reason: "network" }
-    if (probe.kind === "token-rejected")
-      return { status: "unavailable", reason: "token-rejected" }
+    if (probe.kind === "request-rejected")
+      return { status: "unavailable", reason: "request-rejected" }
     return isLaunchReadyMode(probe.status.mode)
       ? { status: "idle" }
       : { status: "not-idle", mode: probe.status.mode }
@@ -260,7 +250,7 @@ function tagBackCompatResponse(
     return {
       ...value,
       _tag: "HostUnavailable",
-      hostUnavailableReason: { kind: "token-rejected" },
+      hostUnavailableReason: { kind: "request-rejected" },
     }
   }
   return { ...value, _tag: "LaunchFailed" }
@@ -324,7 +314,7 @@ async function launchResponseFromOwnerResult(
     // contract from `session-launcher.ts`; network failures continue to map
     // to `host-unavailable` / exit-124.
     const failureKind =
-      result.reason === "token-rejected"
+      result.reason === "request-rejected"
         ? ("host-control-disabled" as const)
         : ("host-unavailable" as const)
     return {

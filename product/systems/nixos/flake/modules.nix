@@ -43,6 +43,8 @@ rec {
     overlay = import ../overlays/korri-x86-compositor.nix;
   };
 
+  korri-runtime = import ../modules/korri-runtime.nix;
+  korri-setup = import ../modules/korri-setup.nix;
   korri-client = import ../modules/korri-client.nix { korri = self; };
   korri-cli = import ../modules/korri-cli.nix { korri = self; };
   korri-game-stream = import ../modules/korri-game-stream.nix { korri = self; };
@@ -65,26 +67,30 @@ rec {
   # Server module imports compositor + input alongside its own file so
   # the cross-tree streaming assertions can reference the
   # services.korri.{compositor,input.provider}.enable options. Hosts
-  # that only enable services.korri.server without streaming still get
+  # that only enable services.korri.daemon without streaming still get
   # those option declarations but no behavior, since each module's
   # config block is gated on its own enable toggle. Duplicate imports
   # dedupe via the `key` field on compositor/input/cli/client modules.
-  korri-server = {
+  korri-daemon = {
     imports = [
+      korri-runtime
+      korri-setup
       korri-compositor
       korri-input
-      (import ../modules/korri-server.nix { korri = self; })
+      (import ../modules/korri-daemon.nix { korri = self; })
     ];
   };
   # Aggregate composes the three product roles. Compositor and input
-  # are listed explicitly even though korri-server transitively
+  # are listed explicitly even though korrid transitively
   # imports them, so consumers can read the role topology directly
   # off the aggregate. Duplicate imports dedupe via the `key` field.
   korri = {
     imports = [
+      korri-runtime
+      korri-setup
       korri-compositor
       korri-input
-      korri-server
+      korri-daemon
     ];
   };
   default = korri;

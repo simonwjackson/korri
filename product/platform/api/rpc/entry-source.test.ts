@@ -31,9 +31,9 @@ describe("makeLocalEntrySource", () => {
     expect(source.isLocal).toBe(true)
   })
 
-  it("falls back to KORRI_SERVER_ID when ADVERTISE_HOST_ID is unset", () => {
+  it("falls back to KORRI_DAEMON_ID when ADVERTISE_HOST_ID is unset", () => {
     const env: LocalIdentityEnv = {
-      KORRI_SERVER_ID: "fallback-id",
+      KORRI_DAEMON_ID: "fallback-id",
       HOST: "127.0.0.1",
       PORT: "3001",
     }
@@ -185,7 +185,7 @@ describe("makeLocalEntrySource", () => {
   it("ignores whitespace-only env values", () => {
     const env: LocalIdentityEnv = {
       KORRI_STREAM_ADVERTISE_HOST_ID: "   ",
-      KORRI_SERVER_ID: "real-id",
+      KORRI_DAEMON_ID: "real-id",
       KORRI_PUBLIC_API_BASE_URL: "   ",
       HOST: "127.0.0.1",
       PORT: "3001",

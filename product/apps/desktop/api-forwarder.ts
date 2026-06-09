@@ -35,7 +35,7 @@ const STRIPPED_RESPONSE_HEADERS = new Set([
 
 /**
  * Build a Hono-compatible request handler that forwards `/api/*` to the
- * currently-connected `korri-server`. The handler has zero RPC handlers
+ * currently-connected `korrid`. The handler has zero RPC handlers
  * and zero business logic — it only rewrites URLs and strips hop-by-hop
  * headers.
  */

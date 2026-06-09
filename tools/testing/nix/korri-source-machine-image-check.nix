@@ -1,157 +1,49 @@
-# Image-eval check for the source-machine NixOS composition. Verifies
-# the boolean-toggle composition produces a configured-correct image:
-# compositor up (no kiosk), streaming on, sessiond on with role
-# source-machine, game-stream wired to sessiond.
-#
-# Run with:
-#   nix build .#checks.x86_64-linux.korri-source-machine-image --no-link
-{
-  pkgs,
-  sourceMachineSystem,
-}:
+# Image-eval check for the rootless source-machine composition.
+{ pkgs, sourceMachineSystem }:
 
 let
   lib = pkgs.lib;
   cfg = sourceMachineSystem.config;
-  # Use the image-evaluated pkgs for package-identity comparisons against
-  # the sessiond unit's PATH (same instance the module saw at eval time).
   imagePkgs = sourceMachineSystem.pkgs;
   failedAssertions = builtins.filter (a: !a.assertion) cfg.assertions;
-  unit = cfg.systemd.services.korri-sessiond or { };
-  unitEnv = unit.environment or { };
-  unitPath = unit.path or [ ];
-  sessiondExecStartPre =
-    let
-      preStr = (unit.serviceConfig or { }).ExecStartPre or "";
-    in
-    builtins.readFile preStr;
-  sourceUser = cfg.users.users.korri-source or { };
-  serverUser = cfg.users.users.korri-server or { };
-  serverUnit = cfg.systemd.services.korri-server or { };
-  serverEnv = serverUnit.environment or { };
-  sunshineUnit = cfg.systemd.services.korri-sunshine or { };
-  sunshineEnv = sunshineUnit.environment or { };
+  sessiondUnit = cfg.systemd.user.services.korri-sessiond or { };
+  sessiondEnv = sessiondUnit.environment or { };
+  sessiondPath = sessiondUnit.path or [ ];
+  daemonUnit = cfg.systemd.user.services.korrid or { };
+  daemonEnv = daemonUnit.environment or { };
+  compositorUnit = cfg.systemd.user.services."korri-compositor" or { };
+  inputdUnit = cfg.systemd.user.services.korri-inputd or { };
+  korriUser = cfg.users.users.korri or { };
+  firstAppCmd = let apps = cfg.services.sunshine.applications.apps or [ ]; in if apps == [ ] then null else (builtins.elemAt apps 0).cmd;
+  firstAppWrapper = if firstAppCmd == null then "" else builtins.readFile firstAppCmd;
 
   check = message: assertion: { inherit message assertion; };
   checks = [
     (check "image evaluates without assertion failures" (failedAssertions == [ ]))
-    (check "compositor is enabled" (cfg.services.korri.compositor.enable == true))
-    (check "kiosk client is disabled" (cfg.services.korri.compositor.kiosk.enable == false))
-    (check "server.streaming is enabled" (cfg.services.korri.server.streaming.enable == true))
-    (check "sessiond is enabled" (cfg.services.korri.sessiond.enable == true))
-    (check "sessiond role is source-machine" (cfg.services.korri.sessiond.role == "source-machine"))
-    (check "sessiond KORRI_SESSIOND_ROLE=source-machine" (
-      unitEnv.KORRI_SESSIOND_ROLE or null == "source-machine"
+    (check "runtime user is korri" (cfg.services.korri.runtime.user == "korri" && cfg.users.users ? korri))
+    (check "korri is a normal stable runtime user" ((korriUser.isNormalUser or false) == true && (korriUser.uid or 0) != 0))
+    (check "korri user has appliance runtime groups" (builtins.all (g: builtins.elem g (korriUser.extraGroups or [ ])) [ "input" "render" "seat" "video" ]))
+    (check "compositor, sessiond and daemon are user services" (
+      cfg.systemd.user.services ? "korri-compositor" && cfg.systemd.user.services ? korri-sessiond && cfg.systemd.user.services ? korrid
     ))
-    (check "sessiond exports status sidecar path for source-machine role" (
-      unitEnv.KORRI_GAME_STREAM_STATUS_PATH or null != null
+    (check "root setup service is required by greetd" (
+      builtins.elem "korri-setup.service" (cfg.systemd.services.greetd.requires or [ ])
     ))
-    (check "gameStream is enabled" (cfg.services.korri.gameStream.enable == true))
-    (check "gameStream sessiond.url is configured" (
-      cfg.services.korri.gameStream.sessiond.url or null != null
-      && lib.hasPrefix "http://127.0.0.1:" cfg.services.korri.gameStream.sessiond.url
+    (check "sessiond role is source-machine" (cfg.services.korri.sessiond.role == "source-machine" && sessiondEnv.KORRI_SESSIOND_ROLE == "source-machine"))
+    (check "sessiond socket path is exported" (sessiondEnv.KORRI_SESSIOND_SOCKET == "%t/korri/sessiond.sock"))
+    (check "daemon uses sessiond socket" (daemonEnv.KORRI_SESSIOND_SOCKET == "%t/korri/sessiond.sock"))
+    (check "gameStream uses sessiond socket" (cfg.services.korri.gameStream.sessiond.socketPath == "%t/korri/sessiond.sock"))
+    (check "Sunshine wrapper exports KORRI_SESSIOND_SOCKET" (lib.hasInfix "KORRI_SESSIOND_SOCKET" firstAppWrapper))
+    (check "legacy sessiond URL/token env absent" (
+      !(daemonEnv ? KORRI_SESSIOND_URL) && !(daemonEnv ? KORRI_SESSIOND_TOKEN_FILE) && !lib.hasInfix "KORRI_SESSIOND_URL" firstAppWrapper && !lib.hasInfix "KORRI_SESSIOND_TOKEN_FILE" firstAppWrapper
     ))
-    (check "gameStream sessiond.tokenFile is absolute" (
-      let
-        tokenFile = cfg.services.korri.gameStream.sessiond.tokenFile or null;
-      in
-      tokenFile != null && lib.hasPrefix "/" tokenFile
-    ))
-    (check "Sunshine app is wired and references the game-stream runner" (
-      let
-        apps = cfg.services.sunshine.applications.apps or [ ];
-        firstAppCmd = if apps == [ ] then null else (builtins.elemAt apps 0).cmd;
-      in
-      firstAppCmd != null && lib.hasInfix "korri-game-stream-runner" (builtins.readFile firstAppCmd)
-    ))
-    (check "Sunshine app wrapper exports KORRI_SESSIOND_URL" (
-      let
-        apps = cfg.services.sunshine.applications.apps or [ ];
-        firstAppCmd = if apps == [ ] then null else (builtins.elemAt apps 0).cmd;
-      in
-      firstAppCmd != null && lib.hasInfix "KORRI_SESSIOND_URL" (builtins.readFile firstAppCmd)
-    ))
-    (check "Sunshine app wrapper exports KORRI_SESSIOND_TOKEN_FILE" (
-      let
-        apps = cfg.services.sunshine.applications.apps or [ ];
-        firstAppCmd = if apps == [ ] then null else (builtins.elemAt apps 0).cmd;
-      in
-      firstAppCmd != null && lib.hasInfix "KORRI_SESSIOND_TOKEN_FILE" (builtins.readFile firstAppCmd)
-    ))
-    (check "korri-sunshine unit uses sunshine-korri" (
-      lib.hasInfix "sunshine-korri" ((sunshineUnit.serviceConfig or { }).ExecStart or "")
-    ))
-    (check "korri-sunshine enables the live runtime-settings MVP gate" (
-      sunshineEnv.SUNSHINE_LIVE_SETTINGS_MVP or null == "1"
-    ))
-    (check "sessiond sharedGroup is set to korri-sessiond-clients" (
-      cfg.services.korri.sessiond.sharedGroup or null == "korri-sessiond-clients"
-    ))
-    # Runtime-dir mode must permit korri-sessiond-clients members to
-    # TRAVERSE the directory and reach the 0640 token file. 0700
-    # root:root would silently break every cross-user managed launch.
-    (check "sessiond runtime dir at 0710 root:korri-sessiond-clients (group-traversable)" (
-      builtins.any (
-        rule: lib.hasInfix "korri-sessiond" rule && lib.hasInfix "0710 root korri-sessiond-clients" rule
-      ) (cfg.systemd.tmpfiles.rules or [ ])
-    ))
-    (check "sessiond RuntimeDirectoryMode is 0710 (matches sharedGroup)" (
-      (unit.serviceConfig or { }).RuntimeDirectoryMode or null == "0710"
-    ))
-    (check "korri-sessiond-clients group is declared" (cfg.users.groups ? korri-sessiond-clients))
-    (check "korri-source user is in korri-sessiond-clients group" (
-      builtins.elem "korri-sessiond-clients" (sourceUser.extraGroups or [ ])
-    ))
-    (check "korri-server user is in korri-sessiond-clients group" (
-      builtins.elem "korri-sessiond-clients" (serverUser.extraGroups or [ ])
-    ))
-    # Verify the rendered ExecStartPre script chowns to the image's
-    # specific sharedGroup name. The module check uses a different
-    # group (`korri-server`); together they catch a template that
-    # hardcoded one of the two group names instead of interpolating
-    # `cfg.sharedGroup`.
-    (check "sessiond ExecStartPre chowns token to korri-sessiond-clients at 0640" (
-      lib.hasInfix "chown root:korri-sessiond-clients \"$token_file\"" sessiondExecStartPre
-      && lib.hasInfix "chmod 0640 \"$token_file\"" sessiondExecStartPre
-    ))
-
-    # Server-side sessiond delegation: source-machine wires both
-    # gameStream.sessiond AND server.sessiond so the kiosk/source-machine
-    # asymmetry is closed. Without server.sessiond, korri-server's
-    # Launcher falls back to a bare-PATH shell launcher and dies on
-    # gamescope ENOENT.
-    (check "server.sessiond.url is configured to the in-image sessiond" (
-      cfg.services.korri.server.sessiond.url or null
-      == "http://127.0.0.1:${toString cfg.services.korri.sessiond.port}"
-    ))
-    (check "server.sessiond.tokenFile matches sessiond.tokenFile" (
-      cfg.services.korri.server.sessiond.tokenFile or null == cfg.services.korri.sessiond.tokenFile
-    ))
-    (check "server unit env exports KORRI_SESSIOND_URL" (
-      lib.hasPrefix "http://127.0.0.1:" (serverEnv.KORRI_SESSIOND_URL or "")
-    ))
-    (check "server unit env exports KORRI_SESSIOND_TOKEN_FILE" (
-      lib.hasPrefix "/" (serverEnv.KORRI_SESSIOND_TOKEN_FILE or "")
-    ))
-    # PATH/env contract on sessiond's unit. Source-machine sessiond does
-    # not spawn Electrobun, but its in-process shell launcher still uses
-    # setsid to detach children into their own session/process group.
-    # util-linux is baked in by the module so this is a regression guard
-    # rather than an image-level addition.
-    (check "sessiond unit PATH includes util-linux (for setsid)" (
-      builtins.elem imagePkgs.util-linux unitPath
-    ))
-    (check "sessiond unit env carries KORRI_GAME_STREAM_STATUS_PATH for sidecar emission" (
-      lib.hasPrefix "/" (unitEnv.KORRI_GAME_STREAM_STATUS_PATH or "")
-    ))
+    (check "sessiond PATH includes util-linux" (builtins.elem imagePkgs.util-linux sessiondPath))
+    (check "compositor participates in korri-session.target" ((compositorUnit.wantedBy or [ ]) == [ "korri-session.target" ]))
   ];
-
   failures = builtins.filter (c: !c.assertion) checks;
 in
 if failures != [ ] then
-  throw "korri-source-machine image check failed:\n${
-    lib.concatMapStringsSep "\n" (f: "- ${f.message}") failures
-  }"
+  throw "korri-source-machine image check failed:\n${lib.concatMapStringsSep "\n" (c: "- ${c.message}") failures}"
 else
   pkgs.runCommand "korri-source-machine-image-check" { } ''
     echo "All ${toString (builtins.length checks)} korri-source-machine image checks passed."

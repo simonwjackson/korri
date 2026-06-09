@@ -110,27 +110,10 @@ let
     };
   };
 
-  sessiondPaired = evaluateWith {
+  sessiondSocket = evaluateWith {
     services.korri.gameStream = {
       enable = true;
-      sessiond = {
-        url = "http://127.0.0.1:3003";
-        tokenFile = "/run/korri-sessiond/token";
-      };
-    };
-  };
-
-  sessiondUrlOnly = evaluateWith {
-    services.korri.gameStream = {
-      enable = true;
-      sessiond.url = "http://127.0.0.1:3003";
-    };
-  };
-
-  sessiondTokenOnly = evaluateWith {
-    services.korri.gameStream = {
-      enable = true;
-      sessiond.tokenFile = "/run/korri-sessiond/token";
+      sessiond.socketPath = "%t/korri/sessiond.sock";
     };
   };
 
@@ -163,23 +146,16 @@ let
     (check "mismatched statusPath: assertion fires" (
       hasFailure mismatchedStatusPath "statusPath must live under runtimeDir"
     ))
-    (check "sessiond paired (both set): NixOS assertions pass" (
-      failedAssertions sessiondPaired == [ ]
+    (check "sessiond socket: NixOS assertions pass" (
+      failedAssertions sessiondSocket == [ ]
     ))
-    # Default (both null) is covered by the baseline's "NixOS assertions
-    # pass" check above — if the pair-or-neither predicate ever inverted,
-    # the baseline (which leaves both null) would start failing first.
-    (check "sessiond url-only: assertion fires (both-or-neither)" (
-      hasFailure sessiondUrlOnly "sessiond.url and"
+    (check "sessiond socket: wrapper exports KORRI_SESSIOND_SOCKET" (
+      lib.hasInfix "KORRI_SESSIOND_SOCKET" (firstAppWrapper sessiondSocket)
+      && lib.hasInfix "%t/korri/sessiond.sock" (firstAppWrapper sessiondSocket)
     ))
-    (check "sessiond url-only: message names both option paths" (
-      hasFailure sessiondUrlOnly "services.korri.gameStream.sessiond.tokenFile"
-    ))
-    (check "sessiond token-only: assertion fires (both-or-neither)" (
-      hasFailure sessiondTokenOnly "sessiond.url and"
-    ))
-    (check "sessiond token-only: message names both option paths" (
-      hasFailure sessiondTokenOnly "services.korri.gameStream.sessiond.url"
+    (check "sessiond socket: no legacy URL/token env" (
+      !lib.hasInfix "KORRI_SESSIOND_URL" (firstAppWrapper sessiondSocket)
+      && !lib.hasInfix "KORRI_SESSIOND_TOKEN_FILE" (firstAppWrapper sessiondSocket)
     ))
   ];
 

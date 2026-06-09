@@ -230,7 +230,7 @@ function toDataError(error: LibraryError): DataError {
  * 3. Compose a gamescope-wrapped `moonlight stream -app "Korri Stream" <host>` LaunchSpec.
  * 4. Dispatch through the same `launchLocalForegroundSession` seam that
  *    local launches use. The Launcher service routes to sessiond on kiosk
- *    images where `KORRI_SESSIOND_URL` is set.
+ *    images where `KORRI_SESSIOND_SOCKET` is set.
  *
  * The local proseql library is intentionally NOT consulted: the federated
  * game id originates on the peer and may not be present in this server's
@@ -438,7 +438,7 @@ function launchFailedFromKind(
   message: string,
 ): LaunchLibraryResponse {
   // Remote-prepare failures are surfaced as `HostUnavailable` when the
-  // remote peer is unreachable / token-rejected; other failure kinds tag
+  // remote peer is unreachable / request-rejected; other failure kinds tag
   // as `LaunchFailed`. Back-compat fields (status, exitCode, failureKind)
   // are preserved unchanged.
   if (kind === "host-unavailable") {
@@ -458,7 +458,7 @@ function launchFailedFromKind(
       exitCode: launchFailureExitCode(kind),
       failureKind: kind,
       stderrTail: message,
-      hostUnavailableReason: { kind: "token-rejected" },
+      hostUnavailableReason: { kind: "request-rejected" },
     }
   }
   return {

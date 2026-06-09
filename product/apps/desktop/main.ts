@@ -96,7 +96,7 @@ async function main() {
   const runtimeConfig: RuntimeConfig = readRuntimeConfigFromEnv(process.env)
   const getRuntimeConfig = () => runtimeConfig
 
-  // Launch ownership moved to korri-server + korri-sessiond. The bun
+  // Launch ownership moved to korrid + korri-sessiond. The bun
   // process no longer owns any foreground session — every launch goes
   // through `app.library.launch`, which dispatches via sessiond. The
   // renderer's gate state now polls `app.server.status` over standard

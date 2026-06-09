@@ -19,8 +19,8 @@ export type SessiondManagedLaunchEventFetch = (
 
 export interface SessiondManagedLaunchEventObserverOptions {
   readonly fetchImpl: SessiondManagedLaunchEventFetch
-  readonly url: string
-  readonly token: string
+  readonly url?: string
+  readonly socketPath?: string
   readonly launchId: string
   readonly requestTimeoutMs?: number
 }
@@ -122,10 +122,10 @@ export function observeSessiondManagedLaunchEvents(
       String(
         new URL(
           `/managed-launch/events?launchId=${encodeURIComponent(options.launchId)}`,
-          options.url,
+          options.url ?? "http://korri-sessiond",
         ),
       ),
-      { headers: { "x-korri-sessiond-token": options.token } },
+      { ...(options.socketPath ? { unix: options.socketPath } : {}) },
       options.requestTimeoutMs ?? DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS,
     )
     if (!response.ok || !response.body) {

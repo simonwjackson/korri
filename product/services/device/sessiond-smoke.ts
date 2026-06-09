@@ -45,7 +45,7 @@ export function evaluateSessiondSmoke(input: {
 }
 
 async function main() {
-  const baseUrl = process.env.KORRI_SESSIOND_URL ?? "http://127.0.0.1:3003"
+  const baseUrl = process.env.KORRI_SESSIOND_SOCKET ?? "http://127.0.0.1:3003"
   const status = (await fetch(new URL("/status", baseUrl)).then(response => {
     if (!response.ok)
       throw new Error(`sessiond status failed: ${response.status}`)

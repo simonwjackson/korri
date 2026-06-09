@@ -35,8 +35,9 @@ let
     else
       null;
   runtimeDirectoryName = lib.removePrefix "/run/" cfg.runtimeDir;
+  runtimeDirIsSystemdSpecifier = lib.hasPrefix "%t" cfg.runtimeDir;
   sessionBusServices = lib.optionals (cfg.sessionBus.mode == "existing") cfg.sessionBus.services;
-  ownsRuntimeDir = cfg.sessionBus.mode == "private";
+  ownsRuntimeDir = cfg.sessionBus.mode == "private" && !runtimeDirIsSystemdSpecifier;
 
   # The kiosk surface depends on the inputd WebSocket bridge for local
   # client input. The input module owns the inputd unit + port; the
@@ -156,7 +157,7 @@ let
       # for a session compositor like Sway. Sway itself picks the socket
       # name (default `wayland-1`) when it starts. Peer system services
       # that need to attach to sway's socket should set WAYLAND_DISPLAY
-      # on their own unit (see services.korri.server's korri-sunshine.
+      # on their own unit (see services.korri.daemon's korri-sunshine.
       # service for an example).
     }
     // lib.optionalAttrs (cfg.sessionBus.mode == "existing" && cfg.sessionBus.address != null) {
@@ -164,7 +165,7 @@ let
     };
 in
 {
-  # Stable module key so multiple imports (e.g. via nixosModules.korri-server
+  # Stable module key so multiple imports (e.g. via nixosModules.korri-daemon
   # composite + aggregate korri) deduplicate to a single declaration.
   _file = ./korri-compositor.nix;
   key = ./korri-compositor.nix;
@@ -276,7 +277,7 @@ in
       address = mkOption {
         type = types.nullOr types.str;
         default = null;
-        example = "unix:path=/run/user/0/bus";
+        example = "unix:path=%t/bus";
         description = "Existing session bus address used when sessionBus.mode = \"existing\".";
       };
 
@@ -416,17 +417,17 @@ in
           message = "services.korri.compositor.user must not be empty.";
         }
         {
-          assertion = lib.hasPrefix "/" cfg.runtimeDir;
+          assertion = lib.hasPrefix "/" cfg.runtimeDir || runtimeDirIsSystemdSpecifier;
           message = ''
-            services.korri.compositor.runtimeDir must be an absolute path (got
+            services.korri.compositor.runtimeDir must be an absolute path or %t path (got
             "${cfg.runtimeDir}").
           '';
         }
         {
-          assertion = lib.hasPrefix "/run/" cfg.runtimeDir;
+          assertion = lib.hasPrefix "/run/" cfg.runtimeDir || runtimeDirIsSystemdSpecifier;
           message = ''
-            services.korri.compositor.runtimeDir must live under /run so systemd
-            can own the session runtime directory (got "${cfg.runtimeDir}").
+            services.korri.compositor.runtimeDir must live under /run or %t so the
+            session owns the runtime directory (got "${cfg.runtimeDir}").
           '';
         }
         {
@@ -498,9 +499,9 @@ in
 
       environment.systemPackages = [ cfg.exec.package ];
 
-      systemd.services."korri-compositor" = {
+      systemd.user.services."korri-compositor" = {
         description = "Korri appliance compositor session";
-        wantedBy = [ "multi-user.target" ];
+        wantedBy = [ "korri-session.target" ];
         wants = cfg.wants ++ inputdServices ++ providerOrderingServices ++ sessionBusServices;
         requires = sessionBusServices;
         after = cfg.after ++ inputdServices ++ providerOrderingServices ++ sessionBusServices;
@@ -520,15 +521,11 @@ in
           ExecStart = sessionCommand;
           Restart = "always";
           RestartSec = 2;
-          User = cfg.user;
           WorkingDirectory = cfg.home;
         }
         // lib.optionalAttrs ownsRuntimeDir {
           RuntimeDirectory = runtimeDirectoryName;
           RuntimeDirectoryMode = "0700";
-        }
-        // lib.optionalAttrs (groupName != null) {
-          Group = groupName;
         };
       };
     })

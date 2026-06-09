@@ -55,7 +55,7 @@ let
   swayConfigOf = cfg: builtins.readFile cfg.services.korri.compositor.sway.configFile;
   compositorExecOf =
     cfg: builtins.readFile "${cfg.services.korri.compositor.exec.package}/bin/korri-compositor-exec";
-  compositorUnit = cfg: cfg.systemd.services."korri-compositor" or { };
+  compositorUnit = cfg: cfg.systemd.user.services."korri-compositor" or { };
 
   HARDWARE_FACT_PATTERN = "SM8550|AYN|Odin|DSI-1|DSI-2|UCM|RockNix";
 
@@ -65,7 +65,7 @@ let
   headlessCompositor = evaluateWith {
     services.korri.compositor = {
       enable = true;
-      user = "root";
+      user = "korri";
       createUser = false;
     };
   };
@@ -73,7 +73,7 @@ let
   compositorWithKiosk = evaluateWith {
     services.korri.compositor = {
       enable = true;
-      user = "root";
+      user = "korri";
       createUser = false;
       kiosk.enable = true;
     };
@@ -82,7 +82,7 @@ let
   swayPlatformFragment = evaluateWith {
     services.korri.compositor = {
       enable = true;
-      user = "root";
+      user = "korri";
       createUser = false;
       kiosk.enable = true;
       sway.extraConfig = ''
@@ -94,13 +94,13 @@ let
   existingSessionBus = evaluateWith {
     services.korri.compositor = {
       enable = true;
-      user = "root";
+      user = "korri";
       createUser = false;
       kiosk.enable = true;
-      runtimeDir = "/run/user/0";
+      runtimeDir = "/run/korri-compositor";
       sessionBus = {
         mode = "existing";
-        address = "unix:path=/run/user/0/bus";
+        address = "unix:path=/run/korri-compositor/bus";
         services = [ "platform-session-dbus.service" ];
       };
     };
@@ -109,7 +109,7 @@ let
   existingSessionBusMissingAddress = evaluateWith {
     services.korri.compositor = {
       enable = true;
-      user = "root";
+      user = "korri";
       createUser = false;
       kiosk.enable = true;
       sessionBus.mode = "existing";
@@ -132,7 +132,7 @@ let
   kioskCommandRemoved = builtins.tryEval (evaluateWith {
     services.korri.compositor = {
       enable = true;
-      user = "root";
+      user = "korri";
       createUser = false;
       kiosk = {
         enable = true;
@@ -144,7 +144,7 @@ let
   kioskLauncherRemoved = builtins.tryEval (evaluateWith {
     services.korri.compositor = {
       enable = true;
-      user = "root";
+      user = "korri";
       createUser = false;
       kiosk = {
         enable = true;
@@ -164,7 +164,7 @@ let
   relativeRuntimeDir = evaluateWith {
     services.korri.compositor = {
       enable = true;
-      user = "root";
+      user = "korri";
       createUser = false;
       runtimeDir = "korri-compositor";
     };
@@ -173,7 +173,7 @@ let
   relativeHome = evaluateWith {
     services.korri.compositor = {
       enable = true;
-      user = "root";
+      user = "korri";
       createUser = false;
       home = "storage";
     };
@@ -182,7 +182,7 @@ let
   runtimeDirOutsideRun = evaluateWith {
     services.korri.compositor = {
       enable = true;
-      user = "root";
+      user = "korri";
       createUser = false;
       runtimeDir = "/tmp/korri-compositor";
     };
@@ -204,7 +204,7 @@ let
   kioskWithCustomInputdPort = evaluateWith {
     services.korri.compositor = {
       enable = true;
-      user = "root";
+      user = "korri";
       createUser = false;
       kiosk.enable = true;
     };
@@ -238,14 +238,13 @@ let
       && !headlessCompositor.services.korri.compositor.kiosk.enable
     ))
     (check "headless compositor: emits korri-compositor.service" (
-      headlessCompositor.systemd.services ? "korri-compositor"
+      headlessCompositor.systemd.user.services ? "korri-compositor"
     ))
-    (check "headless compositor: wantedBy multi-user.target" (
-      (compositorUnit headlessCompositor).wantedBy or [ ] == [ "multi-user.target" ]
+    (check "headless compositor: wantedBy korri-session.target" (
+      (compositorUnit headlessCompositor).wantedBy or [ ] == [ "korri-session.target" ]
     ))
     (check "headless compositor: runs Sway under the configured user" (
-      (compositorUnit headlessCompositor).serviceConfig.User or null == "root"
-      && lib.hasInfix "sway" ((compositorUnit headlessCompositor).serviceConfig.ExecStart or "")
+      lib.hasInfix "sway" ((compositorUnit headlessCompositor).serviceConfig.ExecStart or "")
     ))
     (check "headless compositor: does not auto-enable the local Korri client" (
       !headlessCompositor.services.korri.client.enable
@@ -287,7 +286,7 @@ let
     # ---- compositor with kiosk surface (Sobo / live-USB shape)
     (check "compositor+kiosk: NixOS assertions pass" (korriFailedAssertions compositorWithKiosk == [ ]))
     (check "compositor+kiosk: emits korri-compositor.service" (
-      compositorWithKiosk.systemd.services ? "korri-compositor"
+      compositorWithKiosk.systemd.user.services ? "korri-compositor"
     ))
     (check "compositor+kiosk: mkDefault-enables client + cli" (
       compositorWithKiosk.services.korri.client.enable && compositorWithKiosk.services.korri.cli.enable
@@ -362,10 +361,10 @@ let
       (compositorUnit existingSessionBus).serviceConfig.RuntimeDirectory or null == null
     ))
     (check "existing session bus: exposes XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS" (
-      (compositorUnit existingSessionBus).environment.XDG_RUNTIME_DIR or null == "/run/user/0"
+      (compositorUnit existingSessionBus).environment.XDG_RUNTIME_DIR or null == "/run/korri-compositor"
       &&
         (compositorUnit existingSessionBus).environment.DBUS_SESSION_BUS_ADDRESS or null
-        == "unix:path=/run/user/0/bus"
+        == "unix:path=/run/korri-compositor/bus"
     ))
     (check "existing session bus: requires and orders the platform unit" (
       builtins.elem "platform-session-dbus.service" ((compositorUnit existingSessionBus).requires or [ ])
@@ -419,7 +418,7 @@ let
       compositorWithKiosk.services.korri.input.inputd.enable
     ))
     (check "compositor+kiosk: emits korri-inputd.service" (
-      compositorWithKiosk.systemd.services ? korri-inputd
+      compositorWithKiosk.systemd.user.services ? korri-inputd
     ))
     (check "compositor+kiosk: compositor unit wants korri-inputd.service" (
       builtins.elem "korri-inputd.service" ((compositorUnit compositorWithKiosk).wants or [ ])
@@ -429,7 +428,7 @@ let
     ))
     (check "compositor+kiosk: inputd is ordered before korri-compositor.service" (
       builtins.elem "korri-compositor.service" (
-        compositorWithKiosk.systemd.services.korri-inputd.before or [ ]
+        compositorWithKiosk.systemd.user.services.korri-inputd.before or [ ]
       )
     ))
     (check "headless compositor: does NOT auto-enable inputd" (

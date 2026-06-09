@@ -4,7 +4,7 @@
   ...
 }:
 
-# Source-machine image: a host that runs Korri server + Sunshine + a Sway
+# Source-machine image: a host that runs Korri daemon + Sunshine + a Sway
 # compositor with no Korri GUI client. Sessiond owns the foreground
 # session lifecycle and routes Sunshine-fired managed launches through
 # its source-machine role (idle-blank restore, no Electrobun).
@@ -18,45 +18,15 @@
 # Plan: docs/plans/2026-05-27-002-feat-foreground-session-source-machine-phase4c-plan.md (U7)
 
 let
-  sessiondTokenFile = "/run/korri-sessiond/token";
-  sessiondRuntimeDir = "/run/korri-sessiond";
+  sessiondSocketPath = "%t/korri/sessiond.sock";
+  sessiondRuntimeDir = "%t/korri";
   sessiondPort = 3003;
-  gameStreamRuntimeDir = "/run/korri-game-stream";
+  gameStreamRuntimeDir = "%t/korri-game-stream";
   gameStreamStatusPath = "${gameStreamRuntimeDir}/status.json";
 in
 {
   # The headless base wires the server bits (users, federation defaults).
   imports = [ ./headless.nix ];
-
-  # Shared Unix group for processes that must read the sessiond
-  # capability token. Source-machine has two such consumers:
-  #   - korri-server (system unit, declared in headless.nix as the
-  #     korri-server user) — delegates managed launches to sessiond.
-  #   - korri-source (Sunshine session user, declared below) — runs
-  #     the game-stream runner that routes lifecycle:"foreground"
-  #     intents through sessiond.
-  # Kiosk reuses `korri-server` for the same purpose because only the
-  # server user reads the token there. Source-machine has two distinct
-  # consuming users, so a purpose-named group is clearer than overloading
-  # either user's primary group.
-  users.groups.korri-sessiond-clients = { };
-
-  users.users.korri-server.extraGroups = [ "korri-sessiond-clients" ];
-
-  users.groups.korri-source = { };
-  users.users.korri-source = {
-    isNormalUser = true;
-    group = "korri-source";
-    home = "/home/korri-source";
-    createHome = true;
-    extraGroups = [
-      "input"
-      "korri-sessiond-clients"
-      "render"
-      "seat"
-      "video"
-    ];
-  };
 
   services.seatd.enable = lib.mkDefault true;
   services.dbus.enable = lib.mkDefault true;
@@ -70,9 +40,9 @@ in
   services.korri.compositor = {
     enable = true;
     kiosk.enable = false;
-    user = lib.mkDefault "korri-source";
+    user = lib.mkDefault "korri";
     createUser = lib.mkDefault false;
-    home = lib.mkDefault "/home/korri-source";
+    home = lib.mkDefault "/home/korri";
     wants = lib.mkDefault [ "seatd.service" ];
     after = lib.mkDefault [ "seatd.service" ];
     path = with pkgs; [
@@ -100,7 +70,7 @@ in
   # headless base. Streaming hosts also need the input provider (Xbox 360
   # over /dev/uinput via InputPlumber) so Sunshine can synthesize streamed
   # controllers.
-  services.korri.server.streaming.enable = lib.mkDefault true;
+  services.korri.daemon.streaming.enable = lib.mkDefault true;
   services.korri.input.provider = {
     enable = lib.mkDefault true;
     name = lib.mkDefault "inputplumber";
@@ -112,34 +82,23 @@ in
   services.korri.sessiond = {
     enable = true;
     port = sessiondPort;
-    tokenFile = sessiondTokenFile;
+    socketPath = sessiondSocketPath;
     runtimeDir = sessiondRuntimeDir;
     sunshineRuntimeStatusPath = gameStreamStatusPath;
-    # Share the token (mode 0640) with the korri-sessiond-clients group
-    # so both korri-server (system unit) and korri-source (Sunshine
-    # session user, running the game-stream runner) can authenticate
-    # against sessiond's HTTP surface. Without this, the token stays
-    # root:root 0600 and every cross-user managed launch fails closed.
-    sharedGroup = "korri-sessiond-clients";
   };
 
   # Game-stream runner routes lifecycle:"foreground" intents through
-  # sessiond. The Sunshine wrapper exports KORRI_SESSIOND_URL and
-  # KORRI_SESSIOND_TOKEN_FILE so the runner's createSessionLauncherFromEnv
-  # builds an active sessiondLauncher.
+  # sessiond. The Sunshine wrapper exports KORRI_SESSIOND_SOCKET so the
+  # runner's createSessionLauncherFromEnv builds an active sessiondLauncher.
   services.korri.gameStream = {
     enable = lib.mkDefault true;
     runtimeDir = gameStreamRuntimeDir;
     statusPath = gameStreamStatusPath;
-    sessiond.url = "http://127.0.0.1:${toString sessiondPort}";
-    sessiond.tokenFile = sessiondTokenFile;
+    sessiond.socketPath = sessiondSocketPath;
   };
 
-  # Without this, korri-server's Launcher falls through to the in-process
+  # Without this, korrid's Launcher falls through to the in-process
   # shell launcher which spawns from the unit's bare systemd PATH and
   # then explodes with ENOENT on gamescope. Mirrors product/systems/nixos/images/kiosk.nix.
-  services.korri.server.sessiond = {
-    url = "http://127.0.0.1:${toString sessiondPort}";
-    tokenFile = sessiondTokenFile;
-  };
+  services.korri.daemon.sessiond.socketPath = sessiondSocketPath;
 }

@@ -7,7 +7,7 @@
  * because each one federates its own snapshot via `app.library.list`.
  *
  * Pick policy (top-down):
- *   1. Loopback fast-path. If a local korri-server is running on
+ *   1. Loopback fast-path. If a local korrid is running on
  *      127.0.0.1:<advertised-port>, use it. Subsequent fan-out happens
  *      on the local server side, which keeps the desktop bun a pure
  *      same-origin pass-through (per the

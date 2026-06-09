@@ -38,13 +38,8 @@ let
     set -euo pipefail
     ${compositorSessionExports}
 
-    if [ -z "''${XDG_RUNTIME_DIR:-}" ]; then
-      export XDG_RUNTIME_DIR="/tmp/korri-runtime-$(id -u)"
-      mkdir -p "$XDG_RUNTIME_DIR"
-      chmod 0700 "$XDG_RUNTIME_DIR"
-    fi
-
-    exec ${pkgs.dbus}/bin/dbus-run-session -- ${compositorCfg.sway.package}/bin/sway --config ${compositorCfg.sway.configFile}
+    ${pkgs.systemd}/bin/systemctl --user start korri-session.target
+    exec ${pkgs.coreutils}/bin/sleep infinity
   '';
   inputServices =
     lib.optional inputCfg.inputd.enable "korri-inputd.service" ++ inputCfg.provider.services;
@@ -270,7 +265,7 @@ in
       productAllowlist = productAllowlist;
     };
 
-    services.korri.server = lib.mkIf cfg.enable {
+    services.korri.daemon = lib.mkIf cfg.enable {
       host = lib.mkForce "127.0.0.1";
       openFirewall = lib.mkForce false;
     };
@@ -294,14 +289,13 @@ in
       };
     };
 
-    systemd.services."korri-compositor" = lib.mkIf cfg.enable {
-      # A real login session gives Sway the seat/session semantics it expects,
-      # while greetd's initial session still boots directly into the kiosk.
-      wantedBy = lib.mkForce [ ];
+    systemd.user.services."korri-compositor" = lib.mkIf cfg.enable {
+      # A real greetd/login session starts korri-session.target; keep persistence
+      # ordered before Sway starts inside that user target.
       requires = [ "korri-live-usb-persistence.service" ];
     };
 
-    systemd.services."korri-sessiond" = lib.mkIf cfg.enable {
+    systemd.user.services."korri-sessiond" = lib.mkIf cfg.enable {
       serviceConfig = {
         # Product live USB exposes allowlisted home state as symlinks into the
         # persistence root. Sessiond's kiosk renderer opens paths under
@@ -349,7 +343,6 @@ in
     };
 
     users.users.${compositorCfg.user} = lib.mkIf (cfg.enable && compositorCfg.createUser) {
-      shell = pkgs.bashInteractive;
       openssh.authorizedKeys.keys = cfg.debugSsh.authorizedKeys;
       extraGroups = lib.mkAfter [
         "adm"

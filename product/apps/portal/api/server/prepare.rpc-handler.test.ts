@@ -97,7 +97,7 @@ async function setupRemoteLibrary() {
   })
   cleanups.push(library.cleanup)
 
-  const intentDir = await mkdtemp(join(tmpdir(), "korri-server-prepare-"))
+  const intentDir = await mkdtemp(join(tmpdir(), "korrid-prepare-"))
   await chmod(intentDir, 0o700)
   cleanups.push(() => rm(intentDir, { recursive: true, force: true }))
 

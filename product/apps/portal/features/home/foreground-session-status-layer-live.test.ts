@@ -116,7 +116,7 @@ describe("foreground session status layer live > sessiond mode → gate _tag", (
 
   it("falls back to IdleReady when sessiond is not configured (no sessiond field)", () => {
     // `app.server.status` may return without the `sessiond` field when
-    // KORRI_SESSIOND_URL is unset. The layer surfaces an IdleReady
+    // KORRI_SESSIOND_SOCKET is unset. The layer surfaces an IdleReady
     // snapshot — same effective behavior as the pre-U4 bridge endpoint.
     const snapshot = snapshotFromServerStatus(undefined, SERVER_ID)
     expect(snapshot.state).toBe("IdleReady")

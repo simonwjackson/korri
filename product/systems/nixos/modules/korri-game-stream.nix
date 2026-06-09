@@ -149,11 +149,8 @@ let
     export KORRI_GAME_STREAM_STATUS_PATH=${statusPathExpression}
 
     ${optionalString (
-      cfg.sessiond.url != null
-    ) "export KORRI_SESSIOND_URL=${lib.escapeShellArg cfg.sessiond.url}"}
-    ${optionalString (
-      cfg.sessiond.tokenFile != null
-    ) "export KORRI_SESSIOND_TOKEN_FILE=${lib.escapeShellArg cfg.sessiond.tokenFile}"}
+      cfg.sessiond.socketPath != null
+    ) "export KORRI_SESSIOND_SOCKET=${lib.escapeShellArg cfg.sessiond.socketPath}"}
 
     exec ${cfg.package}/bin/korri-game-stream-runner
   '';
@@ -233,7 +230,7 @@ in
       type = types.nullOr types.str;
       default = null;
       example = "/run/user/1000/korri-game-stream/status.json";
-      description = "Runner status path written by the generic Sunshine app and read by the Korri server.";
+      description = "Runner status path written by the generic Sunshine app and read by the Korri daemon.";
     };
 
     displayCompat = {
@@ -329,7 +326,7 @@ in
           Legacy uinput kernel module + udev rule loader. As of the
           korri-input module introduction, `services.korri.input.provider`
           (name = "inputplumber") is the canonical owner of /dev/uinput for
-          Sunshine streaming sessions, and `services.korri.server.streaming`
+          Sunshine streaming sessions, and `services.korri.daemon.streaming`
           asserts that the provider is enabled. This option remains so a
           caller can explicitly load uinput without going through the
           provider; it defaults to `false` because enabling the provider is
@@ -357,25 +354,14 @@ in
     };
 
     sessiond = {
-      url = mkOption {
+      socketPath = mkOption {
         type = types.nullOr types.str;
         default = null;
-        example = "http://127.0.0.1:3003";
+        example = "%t/korri/sessiond.sock";
         description = ''
-          Optional sessiond HTTP URL exported to the runner as
-          `KORRI_SESSIOND_URL`. When set, the runner (Phase 4C, lifecycle:
-          "foreground" intents) routes managed launches through sessiond.
-          When null, the runner uses its in-process supervision path.
-        '';
-      };
-      tokenFile = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        example = "/run/korri-sessiond/token";
-        description = ''
-          Optional sessiond capability-token file exported to the runner as
-          `KORRI_SESSIOND_TOKEN_FILE`. Required alongside `sessiond.url` for
-          fail-closed sessiond access.
+          Optional sessiond Unix socket exported to the runner as
+          `KORRI_SESSIOND_SOCKET`. When set, the runner routes lifecycle
+          intents through same-user sessiond IPC.
         '';
       };
     };
@@ -450,23 +436,6 @@ in
         message = ''
           services.korri.gameStream.statusPath must live under runtimeDir when both are set
           (runtimeDir="${toString cfg.runtimeDir}", statusPath="${toString cfg.statusPath}").
-        '';
-      }
-      {
-        # Sessiond wiring is both-or-neither. A url without a tokenFile (or
-        # vice versa) silently falls back to the in-process shell launcher
-        # inside the runner's createSessionLauncherFromEnv() and the
-        # default-gamescope launch path explodes with ENOENT downstream.
-        # Mirrors the equivalent assertion on services.korri.server.sessiond
-        # so partial wires fail at eval time on either consumer.
-        assertion =
-          (cfg.sessiond.url == null && cfg.sessiond.tokenFile == null)
-          || (cfg.sessiond.url != null && cfg.sessiond.tokenFile != null);
-        message = ''
-          services.korri.gameStream.sessiond.url and
-          services.korri.gameStream.sessiond.tokenFile must be set together. Set
-          both to delegate lifecycle:"foreground" intents to korri-sessiond, or
-          leave both null to use the in-process supervision path.
         '';
       }
     ];

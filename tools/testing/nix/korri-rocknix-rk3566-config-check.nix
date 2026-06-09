@@ -13,11 +13,11 @@ let
 
   rg353mProduct = products.rg353m;
   cfg = rg353mSystem.config;
-  server = cfg.services.korri.server;
+  server = cfg.services.korri.daemon;
   targetSystem = cfg.nixpkgs.hostPlatform.system;
   sessiondService = cfg.systemd.services."korri-sessiond" or { };
   sessiondEnv = sessiondService.environment or { };
-  serverService = cfg.systemd.services."korri-server" or { };
+  serverService = cfg.systemd.services."korrid" or { };
   serverEnv = serverService.environment or { };
   inputplumberService = cfg.systemd.services.inputplumber or { };
   inputplumberEnv = inputplumberService.environment or { };
@@ -51,13 +51,13 @@ let
     (check "RG353M sessiond must not set retired force-Xwayland env" (
       !(sessiondEnv ? KORRI_GAMESCOPE_FORCE_XWAYLAND)
     ))
-    (check "RG353M korri-server must not set retired force-Xwayland env" (
+    (check "RG353M korrid must not set retired force-Xwayland env" (
       !(serverEnv ? KORRI_GAMESCOPE_FORCE_XWAYLAND)
     ))
     (check "RG353M platform defaults must unset WAYLAND_DISPLAY at the host Gamescope app layer" (
       hostAppEnvironment ? WAYLAND_DISPLAY && hostAppEnvironment.WAYLAND_DISPLAY == null
     ))
-    (check "RG353M platform-default fragment must be installed before korri-server starts" (
+    (check "RG353M platform-default fragment must be installed before korrid starts" (
       builtins.any (cmd: lib.hasInfix "00-korri-platform-defaults.yaml" cmd) serverExecStartPre
     ))
     (check "RG353M InputPlumber must discover product maps before package defaults" (

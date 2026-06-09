@@ -22,7 +22,7 @@
  *      malformed client crashes the same way for the same reason.
  *
  * Federation v1 made both bugs exploitable in practice: every
- * korri-server now binds `0.0.0.0` + mDNS-advertises, so any LAN
+ * korrid now binds `0.0.0.0` + mDNS-advertises, so any LAN
  * client (or a normal Korri RPC client that happens to omit the
  * optional headers field) can crash the server with a one-liner.
  *

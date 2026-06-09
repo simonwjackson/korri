@@ -60,24 +60,18 @@ const buildServerStatusEffect = (overrides: ServerStatusOverrides) =>
       overrides.nowMs,
     )
     const enabled = isStreamControlEnabled(process.env)
-    const serverId = process.env.KORRI_SERVER_ID ?? hostname()
+    const serverId = process.env.KORRI_DAEMON_ID ?? hostname()
     const displayName =
-      process.env.KORRI_SERVER_NAME ?? `Korri Server on ${serverId}`
+      process.env.KORRI_DAEMON_NAME ?? `Korri Daemon on ${serverId}`
 
     const sessiondProbe = yield* probeSessiondStatus(overrides.fetchImpl)
 
-    // `unavailable` (network/decode error), `token-rejected` (HTTP 401), and
-    // `missing-token` (no token file readable) all surface as
-    // `sessiondUnavailable: true` to the renderer/monitoring. The launch-path
-    // preflight distinguishes between them so it can preserve the existing
-    // `failureKind` mappings from `session-launcher.ts`'s spawn-time handling
-    // (401 → `host-control-disabled`/126; missing-token → same; network →
-    // `host-unavailable`/124). See `local-foreground-launch-adapter.ts`'s
-    // `defaultConsultExternalIdle`.
+    // Socket IPC failures surface as `sessiondUnavailable: true` to
+    // the renderer/monitoring. The launch-path preflight distinguishes
+    // not-configured from unavailable so spawn-time handling can preserve
+    // the existing host-unavailable/control-disabled mappings.
     const sessiondUnreachable =
-      sessiondProbe.kind === "unavailable" ||
-      sessiondProbe.kind === "token-rejected" ||
-      sessiondProbe.kind === "missing-token"
+      sessiondProbe.kind === "unavailable"
 
     return new ServerStatusResponse({
       serverId,
@@ -153,28 +147,15 @@ function readRunnerStatus(statusPath: string | undefined, nowMs?: number) {
  * Result of a one-shot probe of sessiond's `/managed-launch/status`.
  *
  * - `ok`            → daemon answered; `summary` carries the decoded mode/active.
- * - `unavailable`   → daemon unreachable: network error, non-2xx response other
- *                     than 401, or decode failure.
- * - `token-rejected`→ daemon answered with HTTP 401. Distinguished from
- *                     `unavailable` so the launch-path preflight can preserve
- *                     the `failureKind: "host-control-disabled"` mapping from
- *                     `session-launcher.ts`'s spawn-time 401 handling.
- * - `missing-token` → `KORRI_SESSIOND_URL` is set but no token could be read
- *                     (`KORRI_SESSIOND_TOKEN` and `KORRI_SESSIOND_TOKEN_FILE`
- *                     both absent or unreadable). The launch-path preflight
- *                     treats this as "defer to the spawn" so the existing
- *                     `session-launcher.ts` mapping from missing-token to
- *                     `failureKind: "host-control-disabled"` / exit 126 still
- *                     fires. App-server-status maps it to `sessiondUnavailable`
- *                     so the operator-facing signal is preserved.
- * - `not-configured`→ `KORRI_SESSIOND_URL` is unset; the host is not paired
+ * - `unavailable`   → daemon unreachable: socket failure, non-2xx response,
+ *                     invalid JSON, or schema mismatch.
+ * - `not-configured`→ `KORRI_SESSIOND_SOCKET` is unset; the host is not paired
  *                     with sessiond.
  */
 type SessiondProbeResult =
   | { readonly kind: "ok"; readonly summary: SessiondLifecycleSummary }
   | { readonly kind: "unavailable" }
-  | { readonly kind: "token-rejected" }
-  | { readonly kind: "missing-token" }
+  | { readonly kind: "request-rejected" }
   | { readonly kind: "not-configured" }
 
 /**

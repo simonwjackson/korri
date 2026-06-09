@@ -13,11 +13,9 @@ const originalEnv = {
   statusPath: process.env.KORRI_GAME_STREAM_STATUS_PATH,
   streamControl: process.env.KORRI_STREAM_CONTROL_ENABLED,
   runtimeDir: process.env.XDG_RUNTIME_DIR,
-  serverId: process.env.KORRI_SERVER_ID,
-  serverName: process.env.KORRI_SERVER_NAME,
-  sessiondUrl: process.env.KORRI_SESSIOND_URL,
-  sessiondToken: process.env.KORRI_SESSIOND_TOKEN,
-  sessiondTokenFile: process.env.KORRI_SESSIOND_TOKEN_FILE,
+  serverId: process.env.KORRI_DAEMON_ID,
+  serverName: process.env.KORRI_DAEMON_NAME,
+  sessiondSocket: process.env.KORRI_SESSIOND_SOCKET,
 }
 const cleanups: Array<() => Promise<void>> = []
 
@@ -25,11 +23,9 @@ afterEach(async () => {
   setOptionalEnv("KORRI_GAME_STREAM_STATUS_PATH", originalEnv.statusPath)
   setOptionalEnv("KORRI_STREAM_CONTROL_ENABLED", originalEnv.streamControl)
   setOptionalEnv("XDG_RUNTIME_DIR", originalEnv.runtimeDir)
-  setOptionalEnv("KORRI_SERVER_ID", originalEnv.serverId)
-  setOptionalEnv("KORRI_SERVER_NAME", originalEnv.serverName)
-  setOptionalEnv("KORRI_SESSIOND_URL", originalEnv.sessiondUrl)
-  setOptionalEnv("KORRI_SESSIOND_TOKEN", originalEnv.sessiondToken)
-  setOptionalEnv("KORRI_SESSIOND_TOKEN_FILE", originalEnv.sessiondTokenFile)
+  setOptionalEnv("KORRI_DAEMON_ID", originalEnv.serverId)
+  setOptionalEnv("KORRI_DAEMON_NAME", originalEnv.serverName)
+  setOptionalEnv("KORRI_SESSIOND_SOCKET", originalEnv.sessiondSocket)
   while (cleanups.length > 0) {
     const cleanup = cleanups.pop()
     if (cleanup) await cleanup()
@@ -41,8 +37,8 @@ describe("app.server.status handler", () => {
     const statusPath = await writeRunnerStatus({ mode: "running" })
     process.env.KORRI_GAME_STREAM_STATUS_PATH = statusPath
     process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
-    process.env.KORRI_SERVER_ID = "aka"
-    process.env.KORRI_SERVER_NAME = "Korri Stream on aka"
+    process.env.KORRI_DAEMON_ID = "aka"
+    process.env.KORRI_DAEMON_NAME = "Korri Stream on aka"
 
     const result = await Effect.runPromise(handleServerStatus({}))
 
@@ -86,8 +82,7 @@ describe("app.server.status handler", () => {
 
   it("merges sessiond /managed-launch/status into the response when sessiond is configured", async () => {
     process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
-    process.env.KORRI_SESSIOND_URL = "http://127.0.0.1:3003"
-    process.env.KORRI_SESSIOND_TOKEN = "test-token"
+    process.env.KORRI_SESSIOND_SOCKET = "/run/user/1000/korri/sessiond.sock"
     const requests: Array<{
       readonly input: string
       readonly init?: RequestInit
@@ -118,13 +113,11 @@ describe("app.server.status handler", () => {
     })
     expect(result.sessiondUnavailable).toBeUndefined()
     expect(requests[0].input).toBe(
-      "http://127.0.0.1:3003/managed-launch/status",
+      "http://korri-sessiond/managed-launch/status",
     )
-    expect(
-      (requests[0].init?.headers as Record<string, string>)[
-        "x-korri-sessiond-token"
-      ],
-    ).toBe("test-token")
+    expect((requests[0].init as RequestInit & { unix?: string }).unix).toBe(
+      "/run/user/1000/korri/sessiond.sock",
+    )
   })
 
   // Phase 4D / Track A finishing follow-up. The sessiond proxy must
@@ -134,8 +127,7 @@ describe("app.server.status handler", () => {
 
   it("forwards active.phase from sessiond into the status response", async () => {
     process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
-    process.env.KORRI_SESSIOND_URL = "http://127.0.0.1:3003"
-    process.env.KORRI_SESSIOND_TOKEN = "test-token"
+    process.env.KORRI_SESSIOND_SOCKET = "/run/user/1000/korri/sessiond.sock"
     const fetchImpl = async () =>
       Response.json({
         schemaVersion: 1,
@@ -167,8 +159,7 @@ describe("app.server.status handler", () => {
 
   it("forwards active without phase when sessiond does not surface one (Phase 4B back-compat)", async () => {
     process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
-    process.env.KORRI_SESSIOND_URL = "http://127.0.0.1:3003"
-    process.env.KORRI_SESSIOND_TOKEN = "test-token"
+    process.env.KORRI_SESSIOND_SOCKET = "/run/user/1000/korri/sessiond.sock"
     const fetchImpl = async () =>
       Response.json({
         schemaVersion: 1,
@@ -196,8 +187,7 @@ describe("app.server.status handler", () => {
     const statusPath = await writeRunnerStatus({ mode: "running" })
     process.env.KORRI_GAME_STREAM_STATUS_PATH = statusPath
     process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
-    process.env.KORRI_SESSIOND_URL = "http://127.0.0.1:3003"
-    process.env.KORRI_SESSIOND_TOKEN = "test-token"
+    process.env.KORRI_SESSIOND_SOCKET = "/run/user/1000/korri/sessiond.sock"
     const fetchImpl = async () => {
       throw new Error("connection refused")
     }
@@ -215,8 +205,7 @@ describe("app.server.status handler", () => {
     const statusPath = await writeRunnerStatus({ mode: "running" })
     process.env.KORRI_GAME_STREAM_STATUS_PATH = statusPath
     process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
-    process.env.KORRI_SESSIOND_URL = "http://127.0.0.1:3003"
-    process.env.KORRI_SESSIOND_TOKEN = "test-token"
+    process.env.KORRI_SESSIOND_SOCKET = "/run/user/1000/korri/sessiond.sock"
     const fetchImpl = async () =>
       Response.json({ status: "not-a-sessiond-status" })
 
@@ -228,32 +217,11 @@ describe("app.server.status handler", () => {
     expect(result.sessiondUnavailable).toBe(true)
   })
 
-  it("sets sessiondUnavailable=true when KORRI_SESSIOND_URL is set but no token is readable (missing-token)", async () => {
+  it("sets sessiondUnavailable=true when sessiond rejects the status request", async () => {
     const statusPath = await writeRunnerStatus({ mode: "running" })
     process.env.KORRI_GAME_STREAM_STATUS_PATH = statusPath
     process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
-    process.env.KORRI_SESSIOND_URL = "http://127.0.0.1:3003"
-    // Both KORRI_SESSIOND_TOKEN and KORRI_SESSIOND_TOKEN_FILE absent.
-    delete process.env.KORRI_SESSIOND_TOKEN
-    delete process.env.KORRI_SESSIOND_TOKEN_FILE
-
-    const result = await Effect.runPromise(handleServerStatus({}))
-
-    // Missing-token preserves the operator-facing unavailable signal.
-    // The launch-path preflight maps the same probe result to
-    // `{ status: 'idle' }` so session-launcher.ts's spawn-time
-    // `resolveToken()` → host-control-disabled mapping still fires
-    // unchanged (see local-foreground-launch-adapter.ts).
-    expect(result.sessiond).toBeUndefined()
-    expect(result.sessiondUnavailable).toBe(true)
-  })
-
-  it("sets sessiondUnavailable=true when sessiond returns HTTP 401 (token rejected)", async () => {
-    const statusPath = await writeRunnerStatus({ mode: "running" })
-    process.env.KORRI_GAME_STREAM_STATUS_PATH = statusPath
-    process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
-    process.env.KORRI_SESSIOND_URL = "http://127.0.0.1:3003"
-    process.env.KORRI_SESSIOND_TOKEN = "test-token"
+    process.env.KORRI_SESSIOND_SOCKET = "/run/user/1000/korri/sessiond.sock"
     const fetchImpl = async () => new Response("unauthorized", { status: 401 })
 
     const result = await Effect.runPromise(
@@ -262,7 +230,7 @@ describe("app.server.status handler", () => {
 
     // 401 surfaces externally as `sessiondUnavailable: true` so existing
     // monitoring signal is preserved. The launch-path preflight uses the
-    // distinct `token-rejected` probe kind to preserve the 401 →
+    // distinct `request-rejected` probe kind to preserve the 401 →
     // `host-control-disabled` / exit-126 mapping for callers.
     expect(result.sessiond).toBeUndefined()
     expect(result.sessiondUnavailable).toBe(true)
@@ -277,8 +245,7 @@ describe("app.server.status handler", () => {
   // diagnostics keep their value.
   it("redacts absolute-path-shaped substrings from sessiond.failureReason (SEC-003)", async () => {
     process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
-    process.env.KORRI_SESSIOND_URL = "http://127.0.0.1:3003"
-    process.env.KORRI_SESSIOND_TOKEN = "test-token"
+    process.env.KORRI_SESSIOND_SOCKET = "/run/user/1000/korri/sessiond.sock"
     const fetchImpl = async () =>
       Response.json({
         schemaVersion: 1,
@@ -302,8 +269,7 @@ describe("app.server.status handler", () => {
 
   it("clamps oversized sessiond.failureReason to 256 chars with trailing ellipsis (SEC-003)", async () => {
     process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
-    process.env.KORRI_SESSIOND_URL = "http://127.0.0.1:3003"
-    process.env.KORRI_SESSIOND_TOKEN = "test-token"
+    process.env.KORRI_SESSIOND_SOCKET = "/run/user/1000/korri/sessiond.sock"
     const huge = "x".repeat(400)
     const fetchImpl = async () =>
       Response.json({
@@ -328,8 +294,7 @@ describe("app.server.status handler", () => {
 
   it("passes short path-free sessiond.failureReason through unchanged (SEC-003)", async () => {
     process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
-    process.env.KORRI_SESSIOND_URL = "http://127.0.0.1:3003"
-    process.env.KORRI_SESSIOND_TOKEN = "test-token"
+    process.env.KORRI_SESSIOND_SOCKET = "/run/user/1000/korri/sessiond.sock"
     const fetchImpl = async () =>
       Response.json({
         schemaVersion: 1,
@@ -396,7 +361,7 @@ describe("app.server.status handler", () => {
     const statusPath = await writeRunnerStatus({ mode: "running" })
     process.env.KORRI_GAME_STREAM_STATUS_PATH = statusPath
     process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
-    delete process.env.KORRI_SESSIOND_URL
+    delete process.env.KORRI_SESSIOND_SOCKET
 
     const result = await Effect.runPromise(handleServerStatus({}))
 
@@ -407,7 +372,7 @@ describe("app.server.status handler", () => {
 })
 
 async function writeRunnerStatus(input: { readonly mode: string }) {
-  const dir = await mkdtemp(join(tmpdir(), "korri-server-status-"))
+  const dir = await mkdtemp(join(tmpdir(), "korrid-status-"))
   cleanups.push(() => rm(dir, { recursive: true, force: true }))
   const statusPath = join(dir, "status.json")
   await writeFile(statusPath, `${JSON.stringify(input)}\n`, { mode: 0o600 })

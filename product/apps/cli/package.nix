@@ -50,7 +50,7 @@ pkgs.stdenv.mkDerivation {
     #
     # The bun2nix cache override in flake.nix applies the same patch
     # centrally for korri-desktop, which does not get a sed loop here.
-    # We keep the sed in korri-cli/korri-server as defense-in-depth
+    # We keep the sed in korri-cli/korrid as defense-in-depth
     # because the central override is keyed on an exact proseql version
     # string; this loop is version-agnostic and protects the bundle if
     # a future bump silently misses the override key.

@@ -33,7 +33,7 @@ export class EntrySource extends Schema.Class<EntrySource>("EntrySource")({
 
 export interface LocalIdentityEnv {
   readonly KORRI_STREAM_ADVERTISE_HOST_ID?: string
-  readonly KORRI_SERVER_ID?: string
+  readonly KORRI_DAEMON_ID?: string
   readonly KORRI_PUBLIC_API_BASE_URL?: string
   readonly HOST?: string
   readonly PORT?: string
@@ -85,7 +85,7 @@ export function makeLocalEntrySource(
 function resolveHostId(env: LocalIdentityEnv): string {
   return (
     optionalEnv(env.KORRI_STREAM_ADVERTISE_HOST_ID) ??
-    optionalEnv(env.KORRI_SERVER_ID) ??
+    optionalEnv(env.KORRI_DAEMON_ID) ??
     os.hostname()
   )
 }

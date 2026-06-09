@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test"
-import { createKorriServer, getKorriServerConfig } from "./korri-server"
+import { createKorrid, getKorridConfig } from "./korrid"
 
-describe("korri server", () => {
+describe("korrid", () => {
   it("reads conservative loopback defaults", () => {
-    const config = getKorriServerConfig({})
+    const config = getKorridConfig({})
 
     expect(config).toEqual({
       host: "127.0.0.1",
@@ -23,7 +23,7 @@ describe("korri server", () => {
       readonly capabilities: readonly string[]
     }> = []
     let stopped = false
-    const server = createKorriServer({
+    const server = createKorrid({
       config: {
         host: "127.0.0.1",
         port: 0,
@@ -57,7 +57,7 @@ describe("korri server", () => {
   })
 
   it("closes the HTTP server when advertisement startup fails", async () => {
-    const server = createKorriServer({
+    const server = createKorrid({
       config: {
         host: "127.0.0.1",
         port: 0,

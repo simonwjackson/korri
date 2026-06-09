@@ -37,7 +37,7 @@ in
         Korri stream host.
 
         Auto-enabled by `services.korri.compositor` (when
-        `compositor.kiosk.enable = true`) and `services.korri.server` via
+        `compositor.kiosk.enable = true`) and `services.korri.daemon` via
         `lib.mkDefault`, so client and stream-host appliances always ship
         the CLI. Set `services.korri.cli.enable = false` to opt out if the
         deployment provides `korri` through another channel.

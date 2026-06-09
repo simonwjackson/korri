@@ -46,7 +46,7 @@ let
 in
 {
   # Stable module key so multiple imports (e.g. via nixosModules.korri-compositor
-  # composite + nixosModules.korri-server composite) deduplicate to a single
+  # composite + nixosModules.korri-daemon composite) deduplicate to a single
   # declaration.
   _file = ./korri-input.nix;
   key = ./korri-input.nix;
@@ -228,11 +228,18 @@ in
     })
 
     (mkIf cfg.inputd.enable {
+      assertions = [
+        {
+          assertion = cfg.inputd.hostname == "127.0.0.1" || cfg.inputd.hostname == "localhost" || cfg.inputd.hostname == "::1";
+          message = "services.korri.input.inputd.hostname must be loopback-only for appliance profiles.";
+        }
+      ];
+
       environment.systemPackages = [ cfg.inputd.package ];
 
-      systemd.services.korri-inputd = {
+      systemd.user.services.korri-inputd = {
         description = "Korri input bridge and shortcut daemon";
-        wantedBy = [ "multi-user.target" ];
+        wantedBy = [ "korri-session.target" ];
         inherit (cfg.inputd)
           wants
           after
@@ -247,6 +254,9 @@ in
           ExecStart = "${cfg.inputd.package}/bin/korri-inputd";
           Restart = "on-failure";
           RestartSec = 1;
+          NoNewPrivileges = true;
+          PrivateTmp = true;
+          MemoryDenyWriteExecute = false;
         };
       };
     })

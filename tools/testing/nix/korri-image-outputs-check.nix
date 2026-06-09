@@ -18,13 +18,13 @@ let
   assertionsPassed = eval: failedAssertions eval == [ ];
 
   summarize = eval: {
-    serverEnabled = eval.config.services.korri.server.enable or false;
+    serverEnabled = eval.config.services.korri.daemon.enable or false;
     clientEnabled = eval.config.services.korri.client.enable or false;
     compositorEnabled = eval.config.services.korri.compositor.enable or false;
     kioskEnabled = eval.config.services.korri.compositor.kiosk.enable or false;
     inputdEnabled = eval.config.services.korri.input.inputd.enable or false;
-    serverHost = eval.config.services.korri.server.host or null;
-    serverServiceMode = eval.config.services.korri.server.serviceMode or null;
+    serverHost = eval.config.services.korri.daemon.host or null;
+    serverServiceMode = eval.config.services.korri.daemon.serviceMode or null;
     firewallTcpPorts = eval.config.networking.firewall.allowedTCPPorts or [ ];
     firewallUdpPorts = eval.config.networking.firewall.allowedUDPPorts or [ ];
     avahiEnabled = eval.config.services.avahi.enable or false;
@@ -43,7 +43,7 @@ let
       if user == null then [ ] else eval.config.users.users.${user}.extraGroups or [ ];
     kioskEnvironment = eval.config.systemd.services."korri-compositor".environment or { };
     sessiondEnvironment = eval.config.systemd.services."korri-sessiond".environment or { };
-    serverPlatformDefaults = eval.config.services.korri.server.library.platformDefaults or { };
+    serverPlatformDefaults = eval.config.services.korri.daemon.library.platformDefaults or { };
     kioskPath = map toString (eval.config.systemd.services."korri-compositor".path or [ ]);
     clientMainProgram = eval.config.services.korri.client.package.meta.mainProgram or null;
     steamEnabled = eval.config.programs.steam.enable or false;
@@ -270,7 +270,7 @@ let
     (check "desktop lab must enable the compositor substrate" desktopLabSummary.compositorEnabled)
     (check "desktop lab must keep the local Korri GUI off" (!desktopLabSummary.kioskEnabled))
     (check "desktop lab must not enable the Korri client" (!desktopLabSummary.clientEnabled))
-    (check "desktop lab must not enable the Korri server" (!desktopLabSummary.serverEnabled))
+    (check "desktop lab must not enable the Korri daemon" (!desktopLabSummary.serverEnabled))
     (check "desktop lab must not enable inputd" (!desktopLabSummary.inputdEnabled))
     (check "desktop lab must create the compositor unit" desktopLabSummary.kioskUnitExists)
     (check "desktop lab must enable seatd for the Sway session" desktopLabSummary.seatdEnabled)
@@ -300,7 +300,7 @@ let
     ))
     (check "kiosk NixOS assertions must pass" (assertionsPassed kiosk))
     (check "kiosk composition must enable server" kioskSummary.serverEnabled)
-    # Federation v1 (R14 / R16) makes every korri-server LAN-visible by
+    # Federation v1 (R14 / R16) makes every korrid LAN-visible by
     # default. The kiosk image inherits these defaults from headless.nix.
     (check "kiosk server must listen on all interfaces for federation" (
       kioskSummary.serverHost == "0.0.0.0"

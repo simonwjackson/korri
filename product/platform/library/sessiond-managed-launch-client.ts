@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises"
 import type { LaunchSpec } from "./launcher"
 import {
   decodeSessiondManagedLaunchStartResponse,
@@ -17,8 +16,7 @@ export type SessiondManagedLaunchClientFetch = (
 
 export interface SessiondManagedLaunchClientOptions {
   readonly url?: string
-  readonly token?: string
-  readonly tokenFile?: string
+  readonly socketPath?: string
   readonly env?: NodeJS.ProcessEnv
   readonly fetchImpl?: SessiondManagedLaunchClientFetch
   readonly timeoutMs?: number
@@ -26,8 +24,6 @@ export interface SessiondManagedLaunchClientOptions {
 
 export type SessiondManagedLaunchClientFailureKind =
   | "not-configured"
-  | "missing-token"
-  | "token-rejected"
   | "unavailable"
   | "invalid-payload"
 
@@ -68,27 +64,6 @@ export interface SessiondManagedLaunchTerminateInput {
 }
 
 const DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS = 10_000
-
-export async function resolveSessiondManagedLaunchToken(
-  options: Pick<
-    SessiondManagedLaunchClientOptions,
-    "token" | "tokenFile" | "env"
-  >,
-): Promise<string | undefined> {
-  const env = options.env ?? process.env
-  const direct = options.token ?? env.KORRI_SESSIOND_TOKEN
-  if (direct?.trim()) return direct.trim()
-
-  const tokenFile = options.tokenFile ?? env.KORRI_SESSIOND_TOKEN_FILE
-  if (!tokenFile?.trim()) return undefined
-
-  try {
-    const raw = await readFile(tokenFile, "utf8")
-    return raw.trim() || undefined
-  } catch {
-    return undefined
-  }
-}
 
 export async function probeSessiondManagedLaunchStatus(
   options: SessiondManagedLaunchClientOptions = {},
@@ -172,11 +147,9 @@ async function requestSessiondManagedLaunchJson(
   | SessiondManagedLaunchClientFailure
 > {
   const env = options.env ?? process.env
-  const url = options.url ?? env.KORRI_SESSIOND_URL
+  const socketPath = options.socketPath ?? env.KORRI_SESSIOND_SOCKET
+  const url = options.url ?? (socketPath ? "http://korri-sessiond" : undefined)
   if (!url) return { kind: "not-configured" }
-
-  const token = await resolveSessiondManagedLaunchToken(options)
-  if (!token) return { kind: "missing-token" }
 
   const fetchImpl = options.fetchImpl ?? globalThis.fetch
   let response: Response
@@ -186,9 +159,9 @@ async function requestSessiondManagedLaunchJson(
       String(new URL(path, normalizeBaseUrl(url))),
       {
         ...init,
+        ...(socketPath ? { unix: socketPath } : {}),
         headers: {
           ...(init.headers ?? {}),
-          "x-korri-sessiond-token": token,
         },
       },
       options.timeoutMs ?? DEFAULT_SESSIOND_REQUEST_TIMEOUT_MS,
@@ -200,12 +173,6 @@ async function requestSessiondManagedLaunchJson(
     }
   }
 
-  if (response.status === 401) {
-    return {
-      kind: "token-rejected",
-      message: `sessiond request rejected: 401 ${await safeResponseText(response)}`,
-    }
-  }
   if (!response.ok) {
     return {
       kind: "unavailable",

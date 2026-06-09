@@ -7,10 +7,10 @@
 
 let
   # Loopback HTTP surface for the in-image korri-sessiond. Shared by
-  # both the sessiond unit and korri-server's delegation env so the two
+  # both the sessiond unit and korrid's delegation env so the two
   # cannot drift.
   sessiondPort = 3003;
-  sessiondTokenFile = "/run/korri-sessiond/token";
+  sessiondSocketPath = "%t/korri/sessiond.sock";
 
   # Sessiond owns the kiosk renderer (Electrobun). The renderer
   # inherits sessiond's process environment when spawned via the
@@ -118,7 +118,7 @@ in
 
   # Stable abs path the cascade-side launcher YAML can reference for
   # the fake-08 core without baking a per-build nix store hash into
-  # user data under /var/lib/korri-server/.local/share/korri/library/.
+  # user data under /var/lib/korrid/.local/share/korri/library/.
   # Pairs with the `retroarchKiosk` symlinkJoin above: the YAML uses
   #   command: retroarch                          # PATH-resolved
   #   cores: { retroarch-fake-08: /etc/korri/cores/fake08_libretro.so }
@@ -147,24 +147,18 @@ in
 
   # Sessiond owns the foreground-session lifecycle on every kiosk image:
   # default-gamescope launches, gamescope-wl reap on exit, and the
-  # role-specific idle restore. Without this enabled, korri-server's
+  # role-specific idle restore. Without this enabled, korrid's
   # app.library.launch falls through to the in-process shell launcher
-  # and explodes with ENOENT on gamescope because the server unit's bare
+  # and explodes with ENOENT on gamescope because the daemon unit's bare
   # systemd PATH does not include it (see docs/solutions/runtime-errors/
-  # korri-server-launch-falls-through-to-bare-path-2026-05-27.md).
+  # korrid-launch-falls-through-to-bare-path-2026-05-27.md).
   #
   # Role is inferred from compositor.kiosk.enable = true above, so this
   # resolves to "kiosk".
   services.korri.sessiond = {
     enable = true;
     port = sessiondPort;
-    tokenFile = sessiondTokenFile;
-    # korri-server runs as the korri-server user; the token file must be
-    # group-readable by that user so its Launcher can authenticate to
-    # sessiond's HTTP surface. tokenReadUser makes that readability contract
-    # fail loudly at unit startup instead of later as launch-time 401s.
-    sharedGroup = "korri-server";
-    tokenReadUser = "korri-server";
+    socketPath = sessiondSocketPath;
     # Sessiond spawns the foreground app via the in-process shell
     # launcher (createShellLauncher inside product/services/device/sessiond.ts),
     # which inherits this unit's PATH when it spawns. Anything the
@@ -196,9 +190,9 @@ in
     ];
     # Gamescope spawned by sessiond connects to the kiosk compositor's
     # wayland socket at $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY. The compositor
-    # publishes the socket under /run/user/0 (compositor.runtimeDir),
+    # publishes the socket under the korri user runtime directory (compositor.runtimeDir),
     # named "wayland-1" by sway's default-first allocation, mirroring
-    # the korri-sunshine attach pattern in product/systems/nixos/modules/korri-server.nix.
+    # the korri-sunshine attach pattern in product/systems/nixos/modules/korri-daemon.nix.
     extraEnvironment = {
       XDG_RUNTIME_DIR = compositorCfg.runtimeDir;
       WAYLAND_DISPLAY = "wayland-1";
@@ -214,7 +208,7 @@ in
   # restart-loops until the socket appears) and we want diagnostics
   # to point at the compositor's own failure, not a cascaded sessiond
   # one.
-  systemd.services.korri-sessiond = {
+  systemd.user.services.korri-sessiond = {
     after = [
       "korri-compositor.service"
       "korri-inputd.service"
@@ -235,25 +229,22 @@ in
   # status.json, the renderer log, XDG_{DATA,CONFIG,CACHE}_HOME state,
   # and the library db there. Without this, every spawn dies on EROFS
   # the moment it tries to persist anything.
-  systemd.services.korri-sessiond.serviceConfig = {
+  systemd.user.services.korri-sessiond.serviceConfig = {
     ProtectHome = lib.mkForce false;
     ReadWritePaths = [ compositorCfg.home ];
   };
 
-  # Wire korri-server to delegate managed launches to the in-image
+  # Wire korrid to delegate managed launches to the in-image
   # sessiond. The both-or-neither assertion in the server module would
   # fire on a partial wire.
-  services.korri.server.sessiond = {
-    url = "http://127.0.0.1:${toString sessiondPort}";
-    tokenFile = sessiondTokenFile;
-  };
+  services.korri.daemon.sessiond.socketPath = sessiondSocketPath;
 
-  # Remote-source Moonlight argv is composed in korri-server before the
+  # Remote-source Moonlight argv is composed in korrid before the
   # foreground process is delegated to sessiond. The input requirement must
-  # therefore be visible to korri-server as well as sessiond, otherwise the
+  # therefore be visible to korrid as well as sessiond, otherwise the
   # normal product launch path omits `-input` and can fall back to raw/unstable
   # evdev discovery.
-  systemd.services.korri-server.environment =
+  systemd.user.services.korrid.environment =
     lib.optionalAttrs (inputCfg.provider.name == "inputplumber")
       {
         KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER = "1";

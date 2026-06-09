@@ -79,7 +79,7 @@ export function createHonoApp(options: CreateHonoAppOptions = {}) {
     // Envelope shape guard. Effect-RPC's `Headers.fromInput` (called
     // unvalidated from `RpcServer.js:479`) crashes the whole protocol
     // pipeline when `request.headers` is e.g. `[null]`. Federation v1
-    // makes every korri-server LAN-reachable so any peer (or curl) can
+    // makes every korrid LAN-reachable so any peer (or curl) can
     // hit this code path. Reject malformed envelopes with a 400 and
     // log the bad envelope for forensics — see
     // product/platform/api/rpc/envelope-guard.ts for the validation

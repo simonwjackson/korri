@@ -78,7 +78,7 @@ let
       environment = moonlightRuntimeSettingsEnvironment // {
         SDL_AUDIODRIVER = substrateAudioApi;
         SDL_VIDEODRIVER = "wayland";
-        XDG_CACHE_HOME = "/storage/.cache";
+        XDG_CACHE_HOME = "/home/korri/.cache";
       };
       platform.name = substrateVideoDecodeBackend;
       input = {
@@ -103,11 +103,11 @@ let
   moonlightCompositorEnvironment = {
     SDL_AUDIODRIVER = substrateAudioApi;
     SDL_VIDEODRIVER = "wayland";
-    XDG_CACHE_HOME = "/storage/.cache";
+    XDG_CACHE_HOME = "/home/korri/.cache";
   };
   moonlightSessiondEnvironment = {
     SDL_AUDIODRIVER = substrateAudioApi;
-    XDG_CACHE_HOME = "/storage/.cache";
+    XDG_CACHE_HOME = "/home/korri/.cache";
   };
 in
 {
@@ -143,12 +143,12 @@ in
   services.korri.compositor = {
     user = lib.mkDefault "root";
     createUser = lib.mkDefault false;
-    home = lib.mkDefault "/storage";
-    runtimeDir = lib.mkDefault "/run/user/0";
+    home = lib.mkDefault "/home/korri";
+    runtimeDir = lib.mkDefault "%t";
 
     sessionBus = {
       mode = lib.mkDefault "existing";
-      address = lib.mkDefault "unix:path=/run/user/0/bus";
+      address = lib.mkDefault "unix:path=%t/bus";
       services = lib.mkDefault [ "main-space-session-dbus.service" ];
     };
 
@@ -181,7 +181,7 @@ in
         CEMU_AFFINITY_MASK = sm8550.performance.cemuAffinityMask;
         WLR_NO_HARDWARE_CURSORS = "1";
         WLR_LIBINPUT_NO_DEVICES = "1";
-        USER = "root";
+        USER = "korri";
       };
 
     sway.extraConfig = ''
@@ -214,7 +214,7 @@ in
     KORRI_INPUTD_VOLUME_DOWN = "true";
   };
 
-  # Sessiond now owns foreground launches directly, and korri-server composes
+  # Sessiond now owns foreground launches directly, and korrid composes
   # remote-source Moonlight argv before delegating to sessiond. Keep the
   # SM8550 Moonlight adapter on both units; compositor-only env was enough
   # when Sway spawned Moonlight children, but not after renderer/sessiond
@@ -224,9 +224,9 @@ in
     extraEnvironment = moonlightSessiondEnvironment // gamescopeKorriControlEnvironment;
   };
 
-  services.korri.server.library.platformDefaults = moonlightPlatformDefaults;
+  services.korri.daemon.library.platformDefaults = moonlightPlatformDefaults;
 
-  systemd.services.korri-server.environment = gamescopeKorriControlEnvironment;
+  systemd.user.services.korrid.environment = gamescopeKorriControlEnvironment;
 
   # NOTE: `rocknix.sm8550.moonlight.{enable,package}` is no longer set
   # here. Moonlight is a Korri product choice; the substrate should not
@@ -246,7 +246,7 @@ in
   # Lingering keeps user@0.service alive regardless of session state, so the
   # whole main-space session-dbus / pipewire / compositor chain survives.
   # Validated on bandi 2026-05-25 after 12+ min idle soak with linger=yes.
-  users.users.root.linger = true;
+  
 
   # `switch-to-configuration switch` updates /nix/var/nix/profiles/system,
   # but the nspawn host's rocknix-guest-prep selects the guest generation

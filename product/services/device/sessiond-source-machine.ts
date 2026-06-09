@@ -1,7 +1,7 @@
 /**
  * Source-machine `SessionRole` implementation.
  *
- * Source-machine hosts run Korri server + Sunshine + Sway but no Korri
+ * Source-machine hosts run Korri daemon + Sunshine + Sway but no Korri
  * GUI client. The role's idle target is "Sway alive, application units
  * inert" (not "compositor down" — that would trigger the documented
  * SIGSEGV restart-loop class). The role asserts the idle-blank invariant

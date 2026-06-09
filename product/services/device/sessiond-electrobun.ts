@@ -9,8 +9,7 @@ export interface ElectrobunLaunchConfig {
   readonly statusFile?: string
   readonly stateRoot?: string
   readonly logPath?: string
-  readonly sessiondUrl?: string
-  readonly sessiondTokenFile?: string
+  readonly sessiondSocket?: string
   readonly readinessTimeoutMs?: number
   readonly extraEnv?: Readonly<Record<string, string | undefined>>
 }
@@ -64,11 +63,8 @@ export function buildElectrobunCommand(
         envSource.KORRI_LIBRARY_ROOT ?? korriDataPath(envSource, "library"),
       KORRI_DESKTOP_STATUS_FILE:
         config.statusFile ?? join(stateRoot, "status.json"),
-      KORRI_SESSIOND_URL: config.sessiondUrl ?? process.env.KORRI_SESSIOND_URL,
-      KORRI_SESSIOND_TOKEN_FILE:
-        config.sessiondTokenFile ??
-        envSource.KORRI_SESSIOND_TOKEN_FILE ??
-        korriStatePath(envSource, "sessiond.token"),
+      KORRI_SESSIOND_SOCKET:
+        config.sessiondSocket ?? envSource.KORRI_SESSIOND_SOCKET,
       XDG_DATA_HOME: join(stateRoot, "data"),
       XDG_CONFIG_HOME: xdgConfigHome,
       XDG_CACHE_HOME: join(stateRoot, "cache"),
@@ -95,7 +91,7 @@ export function sanitizeElectrobunPath(path: string | undefined): string {
       !entry.startsWith("/tmp/bun-node"),
   )
 
-  for (const required of ["/run/current-system/sw/bin", "/storage/bin"]) {
+  for (const required of ["/run/current-system/sw/bin"]) {
     if (!sanitized.includes(required)) sanitized.unshift(required)
   }
 

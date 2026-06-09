@@ -1,5 +1,5 @@
 import { readdirSync } from "node:fs"
-import { mkdir, stat } from "node:fs/promises"
+import { mkdir, stat, unlink } from "node:fs/promises"
 import { join } from "node:path"
 import {
   type LaunchResult,
@@ -105,7 +105,7 @@ export interface KorriSessiondGamescopeControlBridge {
 export interface KorriSessiondOptions {
   readonly port?: number
   readonly hostname?: string
-  readonly token: string
+  readonly socketPath?: string
   /**
    * Role-pluggable supervisor adapter. When omitted, a kiosk role is
    * composed from `renderer`, `sway`, and `serviceManager` for back-compat.
@@ -149,8 +149,9 @@ export interface KorriSessiondOptions {
 }
 
 export interface KorriSessiondHandle {
-  readonly port: number
-  readonly hostname: string
+  readonly port?: number
+  readonly hostname?: string
+  readonly socketPath?: string
   status: () => KorriSessiondStatus
   stop: () => Promise<void>
 }
@@ -167,7 +168,6 @@ export interface KorriSessiondCore {
 
 const DEFAULT_PORT = 3003
 const DEFAULT_HOSTNAME = "127.0.0.1"
-const TOKEN_HEADER = "x-korri-sessiond-token"
 
 export function createKorriSessiondCore(
   options: Omit<KorriSessiondOptions, "port" | "hostname">,
@@ -833,10 +833,6 @@ export function createKorriSessiondCore(
         return json(status())
       }
 
-      if (!authorized(request, options.token)) {
-        return new Response("unauthorized", { status: 401 })
-      }
-
       try {
         if (request.method === "POST" && url.pathname === "/control/start") {
           await enterHome()
@@ -928,9 +924,13 @@ export async function startKorriSessiond(
 ): Promise<KorriSessiondHandle> {
   const hostname = options.hostname ?? DEFAULT_HOSTNAME
   const core = createKorriSessiondCore(options)
+  if (options.socketPath) {
+    await unlink(options.socketPath).catch(error => {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+    })
+  }
   const server = Bun.serve({
-    port: options.port ?? DEFAULT_PORT,
-    hostname,
+    ...(options.socketPath ? { unix: options.socketPath } : { port: options.port ?? DEFAULT_PORT, hostname }),
     // The /managed-launch/events SSE stream is intentionally long-lived
     // for the duration of a launch. Heartbeats (see `lifecycleEventStream`)
     // keep most idle windows healthy, but a closed stream is misread by
@@ -941,14 +941,17 @@ export async function startKorriSessiond(
     fetch: request => core.handleRequest(request),
   })
 
+  const listenPort = options.socketPath
+    ? undefined
+    : (server.port ?? options.port ?? DEFAULT_PORT)
   ;(options.logger ?? defaultLogger).info(
-    { port: server.port ?? options.port ?? DEFAULT_PORT, hostname },
+    { port: listenPort, hostname, socketPath: options.socketPath },
     "sessiond listening",
   )
 
   return {
-    port: server.port ?? options.port ?? DEFAULT_PORT,
-    hostname,
+    ...(listenPort !== undefined ? { port: listenPort, hostname } : {}),
+    socketPath: options.socketPath,
     status: core.status,
     stop: async () => {
       server.stop(true)
@@ -956,9 +959,6 @@ export async function startKorriSessiond(
   }
 }
 
-function authorized(request: Request, token: string): boolean {
-  return request.headers.get(TOKEN_HEADER) === token
-}
 
 function json(value: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(value), {
@@ -1147,8 +1147,7 @@ function realRendererController(): KorriRendererController {
       stateRoot: process.env.KORRI_ELECTROBUN_STATE_ROOT,
       statusFile: process.env.KORRI_ELECTROBUN_STATUS_FILE,
       logPath: process.env.KORRI_ELECTROBUN_LOG,
-      sessiondUrl: process.env.KORRI_SESSIOND_URL,
-      sessiondTokenFile: process.env.KORRI_SESSIOND_TOKEN_FILE,
+      sessiondSocket: process.env.KORRI_SESSIOND_SOCKET,
       readinessTimeoutMs: process.env.KORRI_ELECTROBUN_READY_TIMEOUT_MS
         ? Number.parseInt(process.env.KORRI_ELECTROBUN_READY_TIMEOUT_MS, 10)
         : 10_000,
@@ -1280,8 +1279,8 @@ function envList(name: string): readonly string[] | undefined {
 }
 
 async function main() {
-  const token = process.env.KORRI_SESSIOND_TOKEN
-  if (!token) throw new Error("KORRI_SESSIOND_TOKEN is required")
+  const socketPath = process.env.KORRI_SESSIOND_SOCKET
+  if (!socketPath) throw new Error("KORRI_SESSIOND_SOCKET is required")
   const port = Number.parseInt(
     process.env.KORRI_SESSIOND_PORT ?? `${DEFAULT_PORT}`,
     10,
@@ -1306,8 +1305,7 @@ async function main() {
       : undefined
 
   const handle = await startKorriSessiond({
-    port,
-    token,
+    ...(socketPath ? { socketPath } : { port }),
     reaper,
     ...(role ? { role } : {}),
     ...(statusSidecar ? { statusSidecar } : {}),

@@ -391,7 +391,7 @@ describe("local foreground launch adapter > sessiond preflight", () => {
     expect(spawnCalls).toBe(0)
   })
 
-  it("preserves 401 → host-control-disabled / exit 126 for token-rejected", async () => {
+  it("preserves 401 → host-control-disabled / exit 126 for request-rejected", async () => {
     const control = makeInMemoryLauncherLayer.createManagedControl()
     const launcher = await launcherFromLayer(
       makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
@@ -400,7 +400,7 @@ describe("local foreground launch adapter > sessiond preflight", () => {
     const owner = createLocalForegroundLaunchOwner({
       consultExternalIdle: async () => ({
         status: "unavailable",
-        reason: "token-rejected",
+        reason: "request-rejected",
       }),
     })
     const result = await launchLocalForegroundSession(owner, {
@@ -415,13 +415,13 @@ describe("local foreground launch adapter > sessiond preflight", () => {
     // Back-compat assertion: 401 preserves the existing
     // `host-control-disabled` / exit-126 mapping from session-launcher.ts;
     // the new `_tag` / `hostUnavailableReason.kind` discriminator surfaces
-    // the token-rejected source for new callers.
+    // the request-rejected source for new callers.
     expect(result).toMatchObject({
       _tag: "HostUnavailable",
       status: "failed",
       exitCode: 126,
       failureKind: "host-control-disabled",
-      hostUnavailableReason: { kind: "token-rejected" },
+      hostUnavailableReason: { kind: "request-rejected" },
     })
     expect(spawnCalls).toBe(0)
   })
@@ -642,7 +642,7 @@ describe("local foreground launch adapter > U3 wire-shape discrimination", () =>
     })
   })
 
-  it("HostUnavailable (token-rejected): _tag + back-compat exit 126 + failureKind=host-control-disabled", async () => {
+  it("HostUnavailable (request-rejected): _tag + back-compat exit 126 + failureKind=host-control-disabled", async () => {
     const control = makeInMemoryLauncherLayer.createManagedControl()
     const launcher = await launcherFromLayer(
       makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
@@ -650,7 +650,7 @@ describe("local foreground launch adapter > U3 wire-shape discrimination", () =>
     const owner = createLocalForegroundLaunchOwner({
       consultExternalIdle: async () => ({
         status: "unavailable",
-        reason: "token-rejected",
+        reason: "request-rejected",
       }),
     })
     const result = await launchLocalForegroundSession(owner, {
@@ -663,7 +663,7 @@ describe("local foreground launch adapter > U3 wire-shape discrimination", () =>
     // host-control-disabled from session-launcher.ts's spawn-time mapping.
     expect(result).toMatchObject({
       _tag: "HostUnavailable",
-      hostUnavailableReason: { kind: "token-rejected" },
+      hostUnavailableReason: { kind: "request-rejected" },
       status: "failed",
       exitCode: 126,
       failureKind: "host-control-disabled",

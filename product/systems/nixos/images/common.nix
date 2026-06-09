@@ -92,7 +92,7 @@ rec {
       # Kiosk images run a foreground-session-bearing compositor; sessiond
       # owns that lifecycle (default-gamescope launches, gamescope-wl
       # reap, idle restore). Without this module included here, the kiosk
-      # image's korri-server has no sessiond to delegate to and the
+      # image's korrid has no sessiond to delegate to and the
       # in-process shell launcher fails with ENOENT on gamescope.
       modules = [
         korri.nixosModules.korri-sessiond
@@ -120,7 +120,7 @@ rec {
     mkProductModules {
       productModule = sourceMachineModule;
       inherit platformModules includeBase;
-      # korri-game-stream is transitively imported via korri-server.
+      # korri-game-stream is transitively imported via korrid.
       # korri-sessiond is the new Phase 4C module — added explicitly here
       # because no aggregate transitively imports it yet.
       modules = [

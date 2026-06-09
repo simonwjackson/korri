@@ -5,11 +5,10 @@ import { launchViaSessiond } from "./sessiond-launcher-client"
 const spec: LaunchSpec = { command: "/bin/game", args: ["rom.smc"] }
 
 describe("sessiond launcher client", () => {
-  it("posts a launch spec with the configured capability token", async () => {
+  it("posts a launch spec over the configured Unix socket", async () => {
     const requests: Array<{ input: string; init?: RequestInit }> = []
     const result = await launchViaSessiond(spec, {
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/2000/korri/sessiond.sock",
       fetchImpl: async (input, init) => {
         requests.push({ input, init })
         return Response.json({ result: { status: "launched" } })
@@ -17,19 +16,16 @@ describe("sessiond launcher client", () => {
     })
 
     expect(result).toEqual({ status: "launched" })
-    expect(requests[0].input).toBe("http://127.0.0.1:3003/launch")
-    expect(
-      (requests[0].init?.headers as Record<string, string>)[
-        "x-korri-sessiond-token"
-      ],
-    ).toBe("secret")
+    expect(requests[0].input).toBe("http://korri-sessiond/launch")
+    expect((requests[0].init as RequestInit & { unix?: string }).unix).toBe(
+      "/run/user/2000/korri/sessiond.sock",
+    )
     expect(JSON.parse(String(requests[0].init?.body))).toEqual({ spec })
   })
 
   it("returns a failed launch when sessiond is unreachable", async () => {
     const result = await launchViaSessiond(spec, {
-      url: "http://127.0.0.1:3003",
-      token: "secret",
+      socketPath: "/run/user/2000/korri/sessiond.sock",
       fetchImpl: async () => {
         throw new Error("connection refused")
       },
@@ -42,17 +38,16 @@ describe("sessiond launcher client", () => {
     }
   })
 
-  it("returns a failed launch when sessiond rejects the capability", async () => {
+  it("returns a failed launch when sessiond rejects the request", async () => {
     const result = await launchViaSessiond(spec, {
-      url: "http://127.0.0.1:3003",
-      token: "bad-token",
-      fetchImpl: async () => new Response("unauthorized", { status: 401 }),
+      socketPath: "/run/user/2000/korri/sessiond.sock",
+      fetchImpl: async () => new Response("forbidden", { status: 403 }),
     })
 
     expect(result.status).toBe("failed")
     if (result.status === "failed") {
-      expect(result.exitCode).toBe(126)
-      expect(result.stderrTail).toContain("401")
+      expect(result.exitCode).toBe(125)
+      expect(result.stderrTail).toContain("403")
     }
   })
 })

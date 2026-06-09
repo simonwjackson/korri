@@ -1196,7 +1196,7 @@ describe("game stream runner sessiond foreground branch", () => {
         processInfo: { pid: 10, uid: 1000 },
         processEnv: {
           ...sessionEnv,
-          KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
+          KORRI_SESSIOND_SOCKET: "/run/user/2000/korri/sessiond.sock",
         },
       })
 
@@ -1221,7 +1221,7 @@ describe("game stream runner sessiond foreground branch", () => {
       processInfo: { pid: 10, uid: 1000 },
       processEnv: {
         ...sessionEnv,
-        KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
+        KORRI_SESSIOND_SOCKET: "/run/user/2000/korri/sessiond.sock",
       },
     })
 
@@ -1240,7 +1240,7 @@ describe("game stream runner sessiond foreground branch", () => {
       processInfo: { pid: 10, uid: 1000 },
       processEnv: {
         ...sessionEnv,
-        KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
+        KORRI_SESSIOND_SOCKET: "/run/user/2000/korri/sessiond.sock",
       },
     })
 
@@ -1288,7 +1288,7 @@ describe("game stream runner sessiond foreground branch", () => {
       processInfo: { pid: 10, uid: 1000 },
       processEnv: {
         ...sessionEnv,
-        KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
+        KORRI_SESSIOND_SOCKET: "/run/user/2000/korri/sessiond.sock",
       },
     })
 
@@ -1309,7 +1309,7 @@ describe("game stream runner sessiond foreground branch", () => {
       processInfo: { pid: 10, uid: 1000 },
       processEnv: {
         ...sessionEnv,
-        KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
+        KORRI_SESSIOND_SOCKET: "/run/user/2000/korri/sessiond.sock",
       },
     })
 
@@ -1386,7 +1386,7 @@ describe("game stream runner sessiond foreground branch", () => {
       processInfo: { pid: 10, uid: 1000 },
       processEnv: {
         ...sessionEnv,
-        KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
+        KORRI_SESSIOND_SOCKET: "/run/user/2000/korri/sessiond.sock",
       },
     })
 
@@ -1431,7 +1431,7 @@ describe("game stream runner sessiond foreground branch", () => {
       processInfo: { pid: 10, uid: 1000 },
       processEnv: {
         ...sessionEnv,
-        KORRI_SESSIOND_URL: "http://127.0.0.1:3003",
+        KORRI_SESSIOND_SOCKET: "/run/user/2000/korri/sessiond.sock",
       },
     })
 

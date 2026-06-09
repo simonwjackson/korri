@@ -5,15 +5,15 @@
 
 # Federation v1 baseline (R14 / R16 of
 # docs/plans/2026-05-27-001-feat-korri-library-federation-plan.md): every
-# library-bearing korri-server is LAN-visible by default. Federation is not
+# library-bearing korrid is LAN-visible by default. Federation is not
 # opt-in; deploys that intentionally should not federate simply do not
 # import this base.
 #
 # This means:
 #
-#   - `services.korri.server.host = "0.0.0.0"` (was 127.0.0.1) so the
+#   - `services.korri.daemon.host = "0.0.0.0"` (was 127.0.0.1) so the
 #     federation mDNS advert resolves to a reachable address for peers.
-#   - `services.korri.server.openFirewall = true` so the advertised port is
+#   - `services.korri.daemon.openFirewall = true` so the advertised port is
 #     actually reachable.
 #   - `services.avahi.enable = true` so the always-on advertise in
 #     product/services/device/lan-stream-advertise.ts can publish via avahi (its
@@ -24,24 +24,14 @@
 # Single-machine / loopback deploys override these defaults with
 # lib.mkForce.
 {
-  users.groups.korri-server = { };
-
-  users.users.korri-server = {
-    isSystemUser = true;
-    group = "korri-server";
-    home = "/var/lib/korri-server";
-    createHome = true;
-  };
-
-  services.korri.server = {
+  services.korri.daemon = {
     enable = true;
-    serviceMode = "system";
-    user = "korri-server";
-    group = "korri-server";
+    serviceMode = "user";
     host = lib.mkDefault "0.0.0.0";
     openFirewall = lib.mkDefault true;
+    firewallInterfaces = lib.mkDefault [ "lan0" ];
     # sourceOnly removed in federation v1 (R14 / zero-backwards-compat):
-    # every korri-server advertises a `caps: ["source"]` baseline by default,
+    # every korrid advertises a `caps: ["source"]` baseline by default,
     # so the previous headless-image opt-in is now the default behavior.
   };
 

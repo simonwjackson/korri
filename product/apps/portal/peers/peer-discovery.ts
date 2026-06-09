@@ -1,7 +1,7 @@
 /**
  * Server-side mDNS peer discovery.
  *
- * Every korri-server browses the LAN for other library-bearing servers
+ * Every korrid browses the LAN for other library-bearing servers
  * (`_korri-stream._tcp` with `caps: "source"` in TXT) and maintains an
  * in-memory peer set, used by `app.library.list` fan-out (U4) and the
  * launch router (U5).

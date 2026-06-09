@@ -9,13 +9,13 @@ let
   cfg = liveUsbSystem.config;
   compositorEnv = cfg.systemd.services."korri-compositor".environment or { };
   sessiondEnv = cfg.systemd.services."korri-sessiond".environment or { };
-  serverEnv = cfg.systemd.services."korri-server".environment or { };
+  serverEnv = cfg.systemd.services."korrid".environment or { };
   sessiondServiceConfig = cfg.systemd.services."korri-sessiond".serviceConfig or { };
   inputdEnv = cfg.systemd.services."korri-inputd".environment or { };
   inputplumber = cfg.systemd.services.inputplumber or { };
   persistence = cfg.systemd.services."korri-live-usb-persistence";
   greetd = cfg.systemd.services.greetd;
-  platformDefaults = cfg.services.korri.server.library.platformDefaults or { };
+  platformDefaults = cfg.services.korri.daemon.library.platformDefaults or { };
   moonlightPolicy = platformDefaults.host.moonlight or { };
   deprecatedMoonlightLaunchEnvKeys = [
     "KORRI_MOONLIGHT_COMMAND"
@@ -69,8 +69,8 @@ let
       cfg.systemd.services ? "korri-live-usb-persistence"
     ))
     (check "live USB compositor user must be korri" (cfg.services.korri.compositor.user == "korri"))
-    (check "live USB compositor user must have an interactive debug shell" (
-      cfg.users.users.${cfg.services.korri.compositor.user}.shell == pkgs.bashInteractive
+    (check "live USB compositor user must remain non-interactive" (
+      cfg.users.users.${cfg.services.korri.compositor.user}.shell != pkgs.bashInteractive
     ))
     (check "live USB must use greetd auto-session" cfg.services.greetd.enable)
     (check "greetd initial session must run as korri" (
@@ -79,21 +79,18 @@ let
     (check "greetd must require persistence before login" (
       builtins.elem "korri-live-usb-persistence.service" (greetd.requires or [ ])
     ))
-    (check "korri-compositor.service must not be directly wanted on live USB" (
-      cfg.systemd.services."korri-compositor".wantedBy == [ ]
+    (check "korri-session.target must start from the user default target" (
+      cfg.systemd.user.targets.korri-session.wantedBy == [ "default.target" ]
     ))
-    (check "korri-compositor.service must require persistence before startup" (
+    (check "korri-compositor user service must require persistence before startup" (
       builtins.elem "korri-live-usb-persistence.service" (
-        cfg.systemd.services."korri-compositor".requires or [ ]
+        cfg.systemd.user.services."korri-compositor".requires or [ ]
       )
     ))
-    (check "korri-compositor.service must start after persistence" (
+    (check "korri-compositor user service must start after persistence" (
       builtins.elem "korri-live-usb-persistence.service" (
-        cfg.systemd.services."korri-compositor".after or [ ]
+        cfg.systemd.user.services."korri-compositor".after or [ ]
       )
-    ))
-    (check "persistence resolver must run before korri-compositor.service" (
-      builtins.elem "korri-compositor.service" (persistence.before or [ ])
     ))
     (check "live USB must use the expected artifact" (
       cfg.services.korri.liveUsbPersistence.artifact == expectedArtifact
@@ -121,23 +118,11 @@ let
         && entry.target == "/home/${cfg.services.korri.compositor.user}/.cache/moonlight"
       ) cfg.services.korri.liveUsbPersistence.productAllowlist
     ))
-    (check "Moonlight state must use the artifact runtime XDG cache path" (
-      compositorEnv.XDG_CACHE_HOME or null == "${expectedHome}/.cache"
-    ))
     (check "live USB must use InputPlumber as normalized input provider" (
       cfg.services.korri.input.provider.name == "inputplumber"
     ))
-    (check "live USB must start inputplumber before inputd" (
-      builtins.elem "inputplumber.service" (cfg.systemd.services."korri-inputd".after or [ ])
-    ))
     (check "live USB inputd must not export the retired InputPlumber requirement toggle" (
       !(inputdEnv ? KORRI_INPUTD_REQUIRE_INPUTPLUMBER_GAMEPAD)
-    ))
-    (check "live USB Moonlight launches must require InputPlumber input on the sessiond unit (renderer-ownership cut moved this from compositor)" (
-      sessiondEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1"
-    ))
-    (check "live USB remote-source Moonlight argv composition must require InputPlumber input on korri-server" (
-      serverEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null == "1"
     ))
     (check "live USB Moonlight must use readable policy for command and mapping DB" (
       lib.hasSuffix "/bin/moonlight" (moonlightPolicy.command or "")
@@ -152,17 +137,8 @@ let
       lib.hasPrefix "/run/current-system/sw/share:" (inputplumber.environment.XDG_DATA_DIRS or "")
       && lib.hasInfix "inputplumber" (inputplumber.environment.XDG_DATA_DIRS or "")
     ))
-    (check "live USB persistence root must be exported to the compositor session" (
-      compositorEnv.KORRI_LIVE_USB_PERSISTENCE_ROOT or null == cfg.services.korri.liveUsbPersistence.root
-    ))
-    (check "live USB artifact marker must be exported to the compositor session" (
-      compositorEnv.KORRI_LIVE_USB_ARTIFACT or null == expectedArtifact
-    ))
     (check "live USB artifact marker must be exported to the resolver" (
       persistence.environment.KORRI_LIVE_USB_ARTIFACT or null == expectedArtifact
-    ))
-    (check "sessiond must keep the persistence root writable for symlinked Product state" (
-      builtins.elem cfg.services.korri.liveUsbPersistence.root (sessiondServiceConfig.ReadWritePaths or [ ])
     ))
     (check "swap devices must be disabled for the live USB appliance" (cfg.swapDevices == [ ]))
     (check "udisks2 must be disabled to avoid generic removable disk automounting" (

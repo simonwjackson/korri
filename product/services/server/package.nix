@@ -6,7 +6,7 @@
 }:
 
 pkgs.stdenv.mkDerivation {
-  pname = "korri-server";
+  pname = "korrid";
   version = "1.0.0";
 
   inherit src;
@@ -50,7 +50,7 @@ pkgs.stdenv.mkDerivation {
     #
     # The bun2nix cache override in flake.nix applies the same patch
     # centrally for korri-desktop, which does not get a sed loop here.
-    # We keep the sed in korri-cli/korri-server as defense-in-depth
+    # We keep the sed in korri-cli/korrid as defense-in-depth
     # because the central override is keyed on an exact proseql version
     # string; this loop is version-agnostic and protects the bundle if
     # a future bump silently misses the override key.
@@ -61,7 +61,7 @@ pkgs.stdenv.mkDerivation {
       fi
     done
 
-    bun build product/services/device/korri-server.ts --target=bun --outfile=korri-server.js
+    bun build product/services/device/korrid.ts --target=bun --outfile=korrid.js
     bun build product/services/server/http/server.ts --target=bun --outfile=korri-api.js
     bun build product/services/device/lan-stream-advertise-cli.ts --target=bun --outfile=korri-lan-stream-advertise.js
 
@@ -71,8 +71,8 @@ pkgs.stdenv.mkDerivation {
   installPhase = ''
     runHook preInstall
 
-    mkdir -p "$out/share/korri-server" "$out/bin"
-    cp korri-server.js korri-api.js korri-lan-stream-advertise.js "$out/share/korri-server/"
+    mkdir -p "$out/share/korrid" "$out/bin"
+    cp korrid.js korri-api.js korri-lan-stream-advertise.js "$out/share/korrid/"
 
     # All three bundles are fully self-contained — no node_modules has
     # to ship in the output. Copying the full dev tree previously
@@ -88,13 +88,13 @@ pkgs.stdenv.mkDerivation {
     # self-contained — consumers don't have to remember to add
     # `pkgs.avahi` to the systemd unit's path. Same trick for the
     # standalone lan-stream-advertise CLI.
-    makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korri-server" \
-      --add-flags "$out/share/korri-server/korri-server.js" \
+    makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korrid" \
+      --add-flags "$out/share/korrid/korrid.js" \
       --prefix PATH : "${pkgs.avahi}/bin"
     makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korri-api" \
-      --add-flags "$out/share/korri-server/korri-api.js"
+      --add-flags "$out/share/korrid/korri-api.js"
     makeWrapper ${pkgs.bun}/bin/bun "$out/bin/korri-lan-stream-advertise" \
-      --add-flags "$out/share/korri-server/korri-lan-stream-advertise.js" \
+      --add-flags "$out/share/korrid/korri-lan-stream-advertise.js" \
       --prefix PATH : "${pkgs.avahi}/bin"
 
     runHook postInstall
@@ -109,13 +109,13 @@ pkgs.stdenv.mkDerivation {
     # the bundles are self-contained, so $out must not carry any
     # node_modules tree at all. Subsumes the older electrobun/dangling-
     # symlink checks, which were band-aids for shipping the full tree.
-    if [ -d "$out/share/korri-server/node_modules" ]; then
-      echo "korri-server install closure must not contain node_modules" >&2
-      find "$out/share/korri-server/node_modules" -maxdepth 2 -type d >&2
+    if [ -d "$out/share/korrid/node_modules" ]; then
+      echo "korrid install closure must not contain node_modules" >&2
+      find "$out/share/korrid/node_modules" -maxdepth 2 -type d >&2
       exit 1
     fi
 
-    # No runtime smoke for the three server entries: korri-server.js,
+    # No runtime smoke for the three server entries: korrid.js,
     # korri-api.js, and korri-lan-stream-advertise.js all bind ports on
     # module load and have no --help/--version flag. The cli smoke in
     # korri-cli.nix already exercises the @proseql/core bundling path,
@@ -125,8 +125,8 @@ pkgs.stdenv.mkDerivation {
 
     # avahi-publish-service must be reachable from the wrapper's PATH so
     # the server can advertise without external setup.
-    if ! grep -q 'avahi' "$out/bin/korri-server" 2>/dev/null; then
-      echo "korri-server wrapper does not reference avahi on its PATH" >&2
+    if ! grep -q 'avahi' "$out/bin/korrid" 2>/dev/null; then
+      echo "korrid wrapper does not reference avahi on its PATH" >&2
       exit 1
     fi
 

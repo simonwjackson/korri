@@ -29,8 +29,8 @@ let
     MESA_LOADER_DRIVER_OVERRIDE = "panfrost";
     GALLIUM_DRIVER = "panfrost";
     XDG_CURRENT_DESKTOP = "sway";
-    XDG_CACHE_HOME = "/storage/.cache";
-    USER = "root";
+    XDG_CACHE_HOME = "/home/korri/.cache";
+    USER = "korri";
   };
 
   # Runtime environment that the nested Gamescope (and the game launched under
@@ -66,12 +66,12 @@ in
   services.korri.compositor = {
     user = lib.mkDefault "root";
     createUser = lib.mkDefault false;
-    home = lib.mkDefault "/storage";
-    runtimeDir = lib.mkDefault "/run/user/0";
+    home = lib.mkDefault "/home/korri";
+    runtimeDir = lib.mkDefault "%t";
 
     sessionBus = {
       mode = lib.mkDefault "existing";
-      address = lib.mkDefault "unix:path=/run/user/0/bus";
+      address = lib.mkDefault "unix:path=%t/bus";
       services = lib.mkDefault [ "main-space-session-dbus.service" ];
     };
 
@@ -124,10 +124,10 @@ in
   # would collide in ProseQL. Apply the Xwayland route at the host layer; more
   # specific app/library policy can opt back in later if a native-Wayland app is
   # proven safe on this platform.
-  services.korri.server.library.platformDefaults.host.gamescope.app.environment.WAYLAND_DISPLAY =
+  services.korri.daemon.library.platformDefaults.host.gamescope.app.environment.WAYLAND_DISPLAY =
     null;
 
-  users.users.root.linger = true;
+  
 
   # Keep the nix-on-rocks boot-selected guest profile in sync after switches.
   system.activationScripts.korri-rocknix-guest-profile = {

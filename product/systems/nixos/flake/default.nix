@@ -197,20 +197,20 @@ flake-utils.lib.eachDefaultSystem (
           inherit bunDeps;
         };
 
-    korriServer = import ../../../../product/services/server/package.nix {
+    korrid = import ../../../../product/services/server/package.nix {
       inherit pkgs;
       lib = pkgs.lib;
       src = korriSources.server;
       inherit bunDeps;
     };
 
-    # korri-server bundles the headless source binaries (korri-api,
-    # korri-lan-stream-advertise) alongside its main server binary, so the
+    # korrid bundles the headless source binaries (korri-api,
+    # korri-lan-stream-advertise) alongside its main daemon binary, so the
     # headless-source package output is satisfied by the same derivation.
     # The dedicated slim package was removed when the server absorbed those
     # binaries; resurrect a slim variant only if downstream consumers need
     # to avoid the server closure.
-    korriHeadlessSource = korriServer;
+    korriHeadlessSource = korrid;
 
     electrobunBinaries = desktop.packages.binaries;
     korriDesktopUnwrapped = desktop.packages.unwrapped;
@@ -290,7 +290,7 @@ flake-utils.lib.eachDefaultSystem (
         korriSessiond
         korriCli
         korriGamescopeControlBridge
-        korriServer
+        korrid
         korriHeadlessSource
         sunshineKorri
         moonlightEmbeddedKorri
@@ -354,7 +354,7 @@ flake-utils.lib.eachDefaultSystem (
         korriGameStream
         korriCli
         korriGamescopeControlBridge
-        korriServer
+        korrid
         korriHeadlessSource
         korriDesktop
         korriDesktopDevice

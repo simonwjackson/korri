@@ -6,7 +6,7 @@
   korriGameStream,
   korriCli,
   korriGamescopeControlBridge,
-  korriServer,
+  korrid,
   korriHeadlessSource,
   korriDesktop,
   korriDesktopDevice,
@@ -41,9 +41,9 @@ pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
     type = "app";
     program = "${korriGamescopeControlBridge}/bin/stream-control-bench";
   };
-  korri-server = {
+  korrid = {
     type = "app";
-    program = "${korriServer}/bin/korri-server";
+    program = "${korrid}/bin/korrid";
   };
   korri-api = {
     type = "app";
