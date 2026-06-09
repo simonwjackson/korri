@@ -122,6 +122,18 @@ in
       default = [ ];
       description = "Packages added to the sessiond unit PATH and inherited by foreground children.";
     };
+
+    esswayControl.enable = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Allow sessiond to mask/unmask the legacy system-level essway.service
+        while entering/leaving the kiosk idle state. Disabled by default because
+        rootless Korri user services must not control root-owned substrate units;
+        platforms that still delegate this ownership to sessiond must opt in
+        explicitly and provide the required privilege boundary.
+      '';
+    };
   };
 
   config = mkIf cfg.enable {
@@ -167,6 +179,7 @@ in
         KORRI_SESSIOND_ROLE = cfg.role;
         KORRI_SESSIOND_PORT = toString cfg.port;
         KORRI_SESSIOND_SOCKET = cfg.socketPath;
+        KORRI_SESSIOND_ESSWAY_CONTROL = if cfg.esswayControl.enable then "1" else "0";
         KORRI_LAUNCH_ARTIFACTS_DIR = launchArtifactsDir;
       }
       // (lib.optionalAttrs (cfg.sunshineRuntimeStatusPath != null) {

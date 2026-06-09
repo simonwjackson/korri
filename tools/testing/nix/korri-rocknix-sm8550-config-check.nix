@@ -44,6 +44,10 @@ let
         (cfg.users.users.root.linger or false) != true
         && ((cfg.systemd.user.targets.korri-session.wantedBy or [ ]) == [ ])
       ))
+      (check "${name}: setup owns product state subdirectories" (
+        builtins.elem "d /var/lib/korri/content 0750 korri korri -" cfg.systemd.tmpfiles.rules
+        && builtins.elem "d /var/lib/korri/library 0750 korri korri -" cfg.systemd.tmpfiles.rules
+      ))
       (check "${name}: compositor/sessiond/inputd/korrid are user services" (
         userServices ? "korri-compositor" && userServices ? korri-sessiond && userServices ? korri-inputd && userServices ? korrid
       ))
@@ -57,6 +61,13 @@ let
         && compositor.createUser == false
       ))
       (check "${name}: compositor uses logind runtime" (compositor.runtimeDir == "%t" && compositor.home == "/home/korri"))
+      (check "${name}: compositor owns its session bus privately" (
+        compositor.sessionBus.mode == "private"
+        && !builtins.elem "main-space-session-dbus.service" ((cfg.systemd.user.services."korri-compositor" or { }).requires or [ ])
+      ))
+      (check "${name}: sessiond does not control root-owned essway" (
+        (sessiondEnv.KORRI_SESSIOND_ESSWAY_CONTROL or null) == "0"
+      ))
       (check "${name}: sessiond socket env is %t path" (sessiondEnv.KORRI_SESSIOND_SOCKET or null == "%t/korri/sessiond.sock"))
       (check "${name}: daemon socket env is %t path" (daemonEnv.KORRI_SESSIOND_SOCKET or null == "%t/korri/sessiond.sock"))
       (check "${name}: legacy sessiond URL/token env absent" (

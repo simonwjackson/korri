@@ -149,9 +149,7 @@ in
     runtimeDir = lib.mkDefault "%t";
 
     sessionBus = {
-      mode = lib.mkDefault "existing";
-      address = lib.mkDefault "unix:path=%t/bus";
-      services = lib.mkDefault [ "main-space-session-dbus.service" ];
+      mode = lib.mkDefault "private";
     };
 
     gamescope.package = lib.mkDefault pkgs.gamescope;

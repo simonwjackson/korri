@@ -53,7 +53,7 @@ let
       && cfg.services.greetd.enable
       && greetdSettings.initial_session.user == cfg.services.korri.runtime.user
       && greetdSettings.default_session.user == cfg.services.korri.runtime.user
-      && lib.hasInfix "systemctl --user start korri-session.target" (
+      && lib.hasInfix "systemctl --machine=korri@.host --user start korri-session.target" (
         builtins.readFile cfg.services.korri.login.command
       )
     ))

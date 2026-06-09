@@ -1239,12 +1239,15 @@ function realSourceMachineSwayController(): SourceMachineSwayController {
 }
 
 function realServiceManager(): KorriSessiondServiceManager {
+  const controlsEssway = process.env.KORRI_SESSIOND_ESSWAY_CONTROL === "1"
   return {
     async maskEssway() {
+      if (!controlsEssway) return
       await runSystemctl(["mask", "--runtime", "essway.service"])
       await runSystemctl(["stop", "essway.service"])
     },
     async restoreEssway() {
+      if (!controlsEssway) return
       await runSystemctl(["unmask", "--runtime", "essway.service"])
       await runSystemctl(["start", "essway.service"])
     },

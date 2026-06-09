@@ -69,8 +69,8 @@ let
       && (greetdSettings loginEnabled).initial_session.user == "korri"
       && (greetdSettings loginEnabled).default_session.user == "korri"
     ))
-    (check "login command starts Korri user target and keeps session alive" (
-      lib.hasInfix "systemctl --user start korri-session.target" (loginCommand loginEnabled)
+    (check "login command starts Korri user target through systemd machine transport" (
+      lib.hasInfix "systemctl --machine=korri@.host --user start korri-session.target" (loginCommand loginEnabled)
       && lib.hasInfix "sleep infinity" (loginCommand loginEnabled)
     ))
     (check "Korri session target is not started by generic user default.target" (
@@ -87,6 +87,7 @@ let
     (check "login follows existing runtime user identity" (
       (greetdSettings existingRuntimeUser).initial_session.user == "simonwjackson"
       && (greetdSettings existingRuntimeUser).default_session.user == "simonwjackson"
+      && lib.hasInfix "systemctl --machine=simonwjackson@.host --user start korri-session.target" (loginCommand existingRuntimeUser)
     ))
     (check "autologin can be disabled without enabling greetd" (
       !autologinDisabled.services.greetd.enable

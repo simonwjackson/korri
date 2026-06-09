@@ -55,11 +55,19 @@ let
   withPath = evaluateWith {
     services.korri.sessiond = { enable = true; path = [ pkgs.gamescope ]; };
   };
+  esswayControlEnabled = evaluateWith {
+    services.korri.sessiond = {
+      enable = true;
+      esswayControl.enable = true;
+    };
+  };
 
   check = message: assertion: { inherit message assertion; };
   checks = [
     (check "kiosk assertions pass" (failedAssertions baselineKiosk == [ ]))
     (check "kiosk role exported" ((unitEnv baselineKiosk).KORRI_SESSIOND_ROLE == "kiosk"))
+    (check "essway control defaults off for non-root sessiond" ((unitEnv baselineKiosk).KORRI_SESSIOND_ESSWAY_CONTROL == "0"))
+    (check "essway control can be explicitly enabled" ((unitEnv esswayControlEnabled).KORRI_SESSIOND_ESSWAY_CONTROL == "1"))
     (check "sessiond is a user service" (baselineKiosk.systemd.user.services ? korri-sessiond))
     (check "sessiond wanted by korri-session.target" ((unit baselineKiosk).wantedBy == [ "korri-session.target" ]))
     (check "socket path exported" ((unitEnv baselineKiosk).KORRI_SESSIOND_SOCKET == "%t/korri/sessiond.sock"))
