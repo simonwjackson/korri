@@ -73,10 +73,16 @@ let
       lib.hasInfix "systemctl --user start korri-session.target" (loginCommand loginEnabled)
       && lib.hasInfix "sleep infinity" (loginCommand loginEnabled)
     ))
+    (check "Korri session target is not started by generic user default.target" (
+      (loginEnabled.systemd.user.targets.korri-session.wantedBy or [ ]) == [ ]
+    ))
     (check "greetd is ordered after Korri setup and user sessions" (
       builtins.elem "korri-setup.service" (loginEnabled.systemd.services.greetd.requires or [ ])
       && builtins.elem "korri-setup.service" (loginEnabled.systemd.services.greetd.after or [ ])
       && builtins.elem "systemd-user-sessions.service" (loginEnabled.systemd.services.greetd.after or [ ])
+    ))
+    (check "greetd has enough locked-memory budget for PAM session modules" (
+      (loginEnabled.systemd.services.greetd.serviceConfig.LimitMEMLOCK or null) == "64M"
     ))
     (check "login follows existing runtime user identity" (
       (greetdSettings existingRuntimeUser).initial_session.user == "simonwjackson"

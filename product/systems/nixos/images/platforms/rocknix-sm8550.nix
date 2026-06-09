@@ -48,6 +48,7 @@ let
     MOONLIGHT_RUNTIME_SETTINGS_MVP_COOLDOWN_S = "10";
   };
   sm8550 = config.rocknix.sm8550;
+  runtime = config.services.korri.runtime;
   # Neutral substrate capabilities owned by nix-on-rocks. Korri reads
   # these to compose the Moonlight launch environment; it must not
   # hard-code Linux video/audio facts in this platform adapter and must
@@ -78,7 +79,7 @@ let
       environment = moonlightRuntimeSettingsEnvironment // {
         SDL_AUDIODRIVER = substrateAudioApi;
         SDL_VIDEODRIVER = "wayland";
-        XDG_CACHE_HOME = "/home/korri/.cache";
+        XDG_CACHE_HOME = "${runtime.home}/.cache";
       };
       platform.name = substrateVideoDecodeBackend;
       input = {
@@ -103,11 +104,11 @@ let
   moonlightCompositorEnvironment = {
     SDL_AUDIODRIVER = substrateAudioApi;
     SDL_VIDEODRIVER = "wayland";
-    XDG_CACHE_HOME = "/home/korri/.cache";
+    XDG_CACHE_HOME = "${runtime.home}/.cache";
   };
   moonlightSessiondEnvironment = {
     SDL_AUDIODRIVER = substrateAudioApi;
-    XDG_CACHE_HOME = "/home/korri/.cache";
+    XDG_CACHE_HOME = "${runtime.home}/.cache";
   };
 in
 {
@@ -141,9 +142,10 @@ in
   services.korri.client.package = korri.packages.${targetSystem}.korri-desktop-device;
 
   services.korri.compositor = {
-    user = lib.mkDefault "root";
+    user = lib.mkDefault runtime.user;
+    group = lib.mkDefault runtime.group;
     createUser = lib.mkDefault false;
-    home = lib.mkDefault "/home/korri";
+    home = lib.mkDefault runtime.home;
     runtimeDir = lib.mkDefault "%t";
 
     sessionBus = {
@@ -181,7 +183,7 @@ in
         CEMU_AFFINITY_MASK = sm8550.performance.cemuAffinityMask;
         WLR_NO_HARDWARE_CURSORS = "1";
         WLR_LIBINPUT_NO_DEVICES = "1";
-        USER = "korri";
+        USER = runtime.user;
       };
 
     sway.extraConfig = ''
@@ -237,16 +239,9 @@ in
   # guarding those options is scheduled for removal in a follow-up
   # nix-on-rocks PR now that this file stops setting them.
 
-  # Korri's compositor runs as root with no controlling TTY (getty@tty1 is
-  # masked by the nix-on-rocks guest base). Without lingering, logind
-  # classifies the implicit sway-owned session as abandoned and tears down
-  # user-runtime-dir@0 ~60 s after boot. That cascades:
-  #   user-runtime-dir@0 -> main-space-runtime-dir
-  #     -> main-space-session-dbus -> korri-compositor.
-  # Lingering keeps user@0.service alive regardless of session state, so the
-  # whole main-space session-dbus / pipewire / compositor chain survives.
-  # Validated on bandi 2026-05-25 after 12+ min idle soak with linger=yes.
-  
+  # Korri-owned long-running services run inside the greetd-created Korri
+  # runtime user's systemd --user manager. Root remains a substrate/setup
+  # boundary only; do not reintroduce root lingering or /run/user/0 here.
 
   # `switch-to-configuration switch` updates /nix/var/nix/profiles/system,
   # but the nspawn host's rocknix-guest-prep selects the guest generation

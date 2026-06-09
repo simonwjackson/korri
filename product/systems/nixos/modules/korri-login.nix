@@ -83,6 +83,13 @@ in
     systemd.services.greetd = {
       wants = [ "systemd-user-sessions.service" ];
       after = [ "systemd-user-sessions.service" ];
+      serviceConfig = {
+        # greetd locks its address space with mlockall(MCL_CURRENT|MCL_FUTURE).
+        # Keep enough locked-memory budget for NixOS PAM session modules such as
+        # pam_systemd and pam_limits to map after greetd starts, otherwise the
+        # real logind session fails during pam_open_session on constrained guests.
+        LimitMEMLOCK = "64M";
+      };
     };
   };
 }

@@ -130,7 +130,6 @@ in
 
     systemd.user.targets.korri-session = {
       description = "Korri appliance session";
-      wantedBy = [ "default.target" ];
     };
   };
 }
