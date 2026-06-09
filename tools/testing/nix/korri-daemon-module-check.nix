@@ -22,6 +22,7 @@ let
 
   failedAssertions = cfg: builtins.filter (a: !a.assertion) cfg.assertions;
   userUnit = cfg: cfg.systemd.user.services.korrid or { };
+  systemUnit = cfg: cfg.systemd.services.korrid or { };
   env = cfg: (userUnit cfg).environment or { };
 
   defaultUserMode = evaluateWith { services.korri.daemon.enable = true; };
@@ -33,6 +34,14 @@ let
   };
   streamControl = evaluateWith {
     services.korri.daemon = { enable = true; streamControl.enable = true; };
+  };
+  systemMode = evaluateWith {
+    services.korri.daemon = {
+      enable = true;
+      serviceMode = "system";
+      user = "korri";
+      group = "korri";
+    };
   };
   streamingBase = {
     services.korri.daemon = {
@@ -61,6 +70,13 @@ let
     (check "sessiond socket env exported" ((env socketPaired).KORRI_SESSIOND_SOCKET == "%t/korri/sessiond.sock"))
     (check "legacy sessiond URL/token env absent" (!((env socketPaired) ? KORRI_SESSIOND_URL) && !((env socketPaired) ? KORRI_SESSIOND_TOKEN_FILE)))
     (check "stream control env still exported" ((env streamControl).KORRI_STREAM_CONTROL_ENABLED == "1"))
+    (check "system-mode library root defaults to Korri product state" (
+      systemMode.services.korri.daemon.library.root == "/var/lib/korri/library"
+    ))
+    (check "system-mode daemon owns library tmpfiles and hardening" (
+      lib.elem "d /var/lib/korri/library 0700 korri korri -" systemMode.systemd.tmpfiles.rules
+      && lib.elem "/var/lib/korri/library" ((systemUnit systemMode).serviceConfig.ReadWritePaths or [ ])
+    ))
     (check "streaming defaults to the Korri downstream Sunshine package" (
       streamingLiveSettings.services.sunshine.package.pname == "sunshine-korri"
     ))

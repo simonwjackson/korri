@@ -53,11 +53,7 @@ let
   statusPath = cfg.streaming.statusPath;
   launchArtifactsDir = cfg.launchArtifactsDir;
   isDefaultSystemRuntimeDir = isSystemMode && runtimeDir == systemRuntimeDir;
-  configuredUserHome =
-    if cfg.user != null && cfg.user != "" then
-      (config.users.users.${cfg.user} or { }).home or null
-    else
-      null;
+  daemonGroup = if cfg.group != null then cfg.group else cfg.user;
 
   advertiseName =
     if cfg.advertise.name != null then
@@ -300,23 +296,9 @@ in
 
       root = mkOption {
         type = types.str;
-        default =
-          if isSystemMode then
-            (
-              if configuredUserHome != null then
-                "${configuredUserHome}/.local/share/korri/library"
-              else
-                throw ''
-                  services.korri.daemon.library.root could not be derived because
-                  services.korri.daemon.user="${toString cfg.user}" has no declared
-                  home directory. Set services.korri.daemon.library.root explicitly to
-                  an absolute path that the configured user can read and write.
-                ''
-            )
-          else
-            "%h/.local/share/korri/library";
+        default = if isSystemMode then "${config.services.korri.runtime.stateRoot}/library" else "%h/.local/share/korri/library";
         defaultText = lib.literalExpression ''
-          if serviceMode == "system" then "''${configuredUser.home}/.local/share/korri/library"
+          if serviceMode == "system" then "''${config.services.korri.runtime.stateRoot}/library"
           else "%h/.local/share/korri/library"
         '';
         description = ''
@@ -326,9 +308,10 @@ in
           which the user manager expands per session.
 
           In `serviceMode = "system"`, the systemd specifier `%h` resolves to
-          root's home and is unsafe. The default is derived from
-          `config.users.users.<services.korri.daemon.user>.home`. If that home
-          cannot be resolved, set this option explicitly to an absolute path.
+          root's home and is unsafe. The default is the product state path
+          `${config.services.korri.runtime.stateRoot}/library`. The daemon module
+          owns the tmpfiles and service hardening needed to make that path
+          writable by `services.korri.daemon.user`.
         '';
       };
 
@@ -888,7 +871,8 @@ in
     );
 
     systemd.tmpfiles.rules = mkIf isSystemMode [
-      "d ${launchArtifactsDir} 0750 ${cfg.user} ${if cfg.group != null then cfg.group else cfg.user} -"
+      "d ${cfg.library.root} 0700 ${cfg.user} ${daemonGroup} -"
+      "d ${launchArtifactsDir} 0750 ${cfg.user} ${daemonGroup} -"
     ];
 
     systemd.tmpfiles.settings =
@@ -943,7 +927,7 @@ in
         Restart = "on-failure";
         RestartSec = 2;
         User = cfg.user;
-        Group = if cfg.group != null then cfg.group else cfg.user;
+        Group = daemonGroup;
         StateDirectory = serverStateDirName;
         StateDirectoryMode = "0700";
         CacheDirectory = serverCacheDirName;
@@ -952,7 +936,7 @@ in
         PrivateTmp = true;
         ProtectSystem = "strict";
         ProtectHome = "read-only";
-        ReadWritePaths = [ launchArtifactsDir ];
+        ReadWritePaths = [ cfg.library.root launchArtifactsDir ];
         ProtectKernelTunables = true;
         ProtectKernelModules = true;
         ProtectControlGroups = true;
