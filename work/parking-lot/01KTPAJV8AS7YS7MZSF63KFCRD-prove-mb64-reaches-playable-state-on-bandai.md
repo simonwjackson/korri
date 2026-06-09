@@ -1,22 +1,19 @@
 ---
-id: task-025
-title: Prove MB64 reaches playable state on bandai
+id: 01KTPAJV8AS7YS7MZSF63KFCRD
+slug: prove-mb64-reaches-playable-state-on-bandai
+title: "Prove MB64 reaches playable state on bandai"
+origin: parked
+legacy: backlog/task-025
 status: In Progress
 priority: high
 labels:
-  - mb64
-  - bandai
-  - prototype
-  - emulation
-  - follow-up
+  - "mb64"
+  - "bandai"
+  - "prototype"
+  - "emulation"
+  - "follow-up"
 created: 2026-06-04
 source: user
-context:
-  cwd: .worktrees/feat/mario-builder-64-bandai-prototype
-  branch: feat/mario-builder-64-bandai-prototype
-  commit: 5ac4bbe
-  repo: simonwjackson/korri
-  invoked_by: user
 ---
 
 # Prove MB64 reaches playable state on bandai

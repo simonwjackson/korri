@@ -1,12 +1,15 @@
 ---
-id: task-072
-title: Type advanced RetroArch launch argv flows
+id: 01KTPAJV8REEYGVWY7R8Y7Z05P
+slug: type-advanced-retroarch-launch-argv-flows
+title: "Type advanced RetroArch launch argv flows"
+origin: parked
+legacy: backlog/task-072
 status: To Do
 priority: medium
 labels:
-  - retroarch
-  - argv
-  - config
+  - "retroarch"
+  - "argv"
+  - "config"
 created: 2026-06-08
 source: se-challenge-plan
 ---

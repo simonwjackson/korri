@@ -4,7 +4,7 @@ slug: define-runtime-settings-protocol-contract
 title: Define runtime settings protocol contract
 origin: parked
 legacy: task-097
-status: To Do
+status: Done
 priority: high
 labels:
   - live-resolution
@@ -39,3 +39,7 @@ The demo uses downstream runtime-settings control messages and local-control com
 - `task-091`
 - `task-092`
 - `task-094`
+
+## Notes
+
+2026-06-09 dedupe pass: acceptance criteria are already complete and the canonical contract lives in `docs/acceptance/runtime-settings-protocol-contract.md`. Keep this item closed; downstream work should reference the contract document directly.

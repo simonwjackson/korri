@@ -1,12 +1,15 @@
 ---
-id: task-068
-title: Review safe RetroArch ephemeral override subset
+id: 01KTPAJV8M6G4R8VVQSGT3CG11
+slug: review-safe-retroarch-ephemeral-override-subset
+title: "Review safe RetroArch ephemeral override subset"
+origin: parked
+legacy: backlog/task-068
 status: To Do
 priority: medium
 labels:
-  - retroarch
-  - security
-  - config
+  - "retroarch"
+  - "security"
+  - "config"
 created: 2026-06-08
 source: se-plan
 ---

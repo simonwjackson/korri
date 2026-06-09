@@ -1,21 +1,19 @@
 ---
-id: task-035
-title: Move product package and source assembly behind product.packages
+id: 01KTPAJV8GK00HQ2CHGBN1KTY2
+slug: move-product-package-and-source-assembly-behind-product-packages
+title: "Move product package and source assembly behind product.packages"
+origin: parked
+legacy: backlog/task-035
 status: To Do
 priority: medium
 labels:
-  - nix
-  - flake
-  - product
-  - packaging
-  - architecture
+  - "nix"
+  - "flake"
+  - "product"
+  - "packaging"
+  - "architecture"
 created: 2026-06-05
 source: se-architecture-improvement
-context:
-  cwd: .
-  branch: trunk
-  repo: simonwjackson/korri
-  invoked_by: user
 ---
 
 # Move product package and source assembly behind product.packages

@@ -1,15 +1,18 @@
 ---
-id: task-026
+id: 01KTPAJV8BW687JWRCKJFXGQ13
+slug: productize-no-server-webkit-luakit-web-launcher-with-yfs-scheme-and-game
 title: "Productize no-server WebKit/Luakit web launcher with yfs:// scheme and gamescope-korri"
+origin: parked
+legacy: backlog/task-026
 status: To Do
 priority: medium
 labels:
-  - web-launcher
-  - vendor
-  - luakit
-  - webkitgtk
-  - gamescope-korri
-  - yfs
+  - "web-launcher"
+  - "vendor"
+  - "luakit"
+  - "webkitgtk"
+  - "gamescope-korri"
+  - "yfs"
 created: 2026-06-04
 source: user
 ---

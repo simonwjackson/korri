@@ -1,12 +1,15 @@
 ---
-id: task-069
-title: Add RetroArch achievement secret resolution
+id: 01KTPAJV8NPYKFNXKQAV8GDRRE
+slug: add-retroarch-achievement-secret-resolution
+title: "Add RetroArch achievement secret resolution"
+origin: parked
+legacy: backlog/task-069
 status: To Do
 priority: medium
 labels:
-  - retroarch
-  - secrets
-  - config
+  - "retroarch"
+  - "secrets"
+  - "config"
 created: 2026-06-08
 source: se-challenge-plan
 ---

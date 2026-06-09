@@ -40,3 +40,5 @@ Evier can send runtime-control RPCs, but normal remote launches do not yet creat
 ## Notes
 
 Discovered while reviewing Evier stream-control work: Evier has UI/RPC controls, but normal remote launches still compose a LaunchSpec without per-launch local-control ownership.
+
+2026-06-09 dedupe pass: this is the canonical product launch wiring item. It supersedes migrated `backlog/task-031` for socket/env ownership and is the first implementation task in the product-runtime sequence. Broader live-bitrate integration from `task-058` is now split across `task-117` through `task-122`.

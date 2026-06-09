@@ -1,12 +1,15 @@
 ---
-id: task-076
-title: Productize RetroArch platform defaults
+id: 01KTPAJV8WZWXGFDY8MMB339QN
+slug: productize-retroarch-platform-defaults
+title: "Productize RetroArch platform defaults"
+origin: parked
+legacy: backlog/task-076
 status: To Do
 priority: low
 labels:
-  - retroarch
-  - platform-defaults
-  - config
+  - "retroarch"
+  - "platform-defaults"
+  - "config"
 created: 2026-06-08
 source: se-challenge-plan
 ---

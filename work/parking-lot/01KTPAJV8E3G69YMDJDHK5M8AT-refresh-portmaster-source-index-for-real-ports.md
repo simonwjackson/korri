@@ -1,13 +1,16 @@
 ---
-id: task-029
-title: Refresh PortMaster source index for real ports
+id: 01KTPAJV8E3G69YMDJDHK5M8AT
+slug: refresh-portmaster-source-index-for-real-ports
+title: "Refresh PortMaster source index for real ports"
+origin: parked
+legacy: backlog/task-029
 status: To Do
 priority: medium
 labels:
-  - acquisition
-  - bazzar
-  - portmaster
-  - follow-up
+  - "acquisition"
+  - "bazzar"
+  - "portmaster"
+  - "follow-up"
 created: 2026-06-04
 source: manual-test
 ---

@@ -1,12 +1,15 @@
 ---
-id: task-071
-title: Review RetroArch remote command controls
+id: 01KTPAJV8QMEAX7XW0W0EKTPT9
+slug: review-retroarch-remote-command-controls
+title: "Review RetroArch remote command controls"
+origin: parked
+legacy: backlog/task-071
 status: To Do
 priority: medium
 labels:
-  - retroarch
-  - security
-  - control
+  - "retroarch"
+  - "security"
+  - "control"
 created: 2026-06-08
 source: se-challenge-plan
 ---

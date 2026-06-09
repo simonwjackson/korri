@@ -1,14 +1,17 @@
 ---
-id: task-038
-title: Minimize RG353M gamescope patch set after Xwayland routing
+id: 01KTPAJV8KBYP64GVGCFPT8HZA
+slug: minimize-rg353m-gamescope-patch-set-after-xwayland-routing
+title: "Minimize RG353M gamescope patch set after Xwayland routing"
+origin: parked
+legacy: backlog/task-038
 status: To Do
 priority: medium
 labels:
-  - gamescope
-  - rg353m
-  - rk3566
-  - maintenance
-  - patches
+  - "gamescope"
+  - "rg353m"
+  - "rk3566"
+  - "maintenance"
+  - "patches"
 created: 2026-06-07
 source: user
 ---

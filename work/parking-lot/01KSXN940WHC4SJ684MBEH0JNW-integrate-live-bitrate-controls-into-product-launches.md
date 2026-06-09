@@ -4,7 +4,7 @@ slug: integrate-live-bitrate-controls-into-product-launches
 title: Integrate live bitrate controls into product launches
 origin: parked
 legacy: task-058
-status: To Do
+status: Done
 priority: high
 labels:
   - moonlight
@@ -26,11 +26,12 @@ The seamless path is proven manually, but users only benefit when normal Korri p
 
 ## Acceptance Criteria
 
-- [ ] Normal remote product launches enable Moonlight local-control when runtime controls are required, with lifecycle-managed socket paths and cleanup on stream exit.
-- [ ] The product RPC/UI path exposes live bitrate only when local-control and Sunshine capability both advertise `runtime.setBitrate`.
-- [ ] Unsupported or unknown bitrate capability is surfaced as unsupported/pending, never as a reconnect or masked restart path.
-- [ ] The product path supports restoring the launch-baseline bitrate when adaptation/user control stops.
-- [ ] Product launches continue to pass the discovered InputPlumber virtual gamepad path and preserve controller input.
+- [x] Launch-local Moonlight control ownership moved to `task-117`.
+- [x] Active stream-control RPC/socket binding moved to `task-118`.
+- [x] Capability-gated product controls moved to `task-119`.
+- [x] Accepted-versus-applied UI semantics moved to `task-120`.
+- [x] Restore-to-launch-baseline behavior moved to `task-121`.
+- [x] Input preservation proof moved to `task-122`.
 
 ## Related
 
@@ -44,3 +45,5 @@ The seamless path is proven manually, but users only benefit when normal Korri p
 ## Notes
 
 Grouped from the live bitrate shippability checklist after SM8550 h264_vaapi/v4l2m2m validation.
+
+2026-06-09 dedupe pass: this broad product integration item has been decomposed into `task-117` through `task-122`. No standalone work should be picked up from this item.

@@ -1,16 +1,19 @@
 ---
-id: task-027
-title: Productize high-performance Chromium/CEF web launcher with gamescope-korri
+id: 01KTPAJV8CXDNXKVHST6S87NQ0
+slug: productize-high-performance-chromium-cef-web-launcher-with-gamescope-kor
+title: "Productize high-performance Chromium/CEF web launcher with gamescope-korri"
+origin: parked
+legacy: backlog/task-027
 status: To Do
 priority: medium
 labels:
-  - web-launcher
-  - vendor
-  - chromium
-  - cef
-  - electrobun
-  - gamescope-korri
-  - yfs
+  - "web-launcher"
+  - "vendor"
+  - "chromium"
+  - "cef"
+  - "electrobun"
+  - "gamescope-korri"
+  - "yfs"
 created: 2026-06-04
 source: user
 ---

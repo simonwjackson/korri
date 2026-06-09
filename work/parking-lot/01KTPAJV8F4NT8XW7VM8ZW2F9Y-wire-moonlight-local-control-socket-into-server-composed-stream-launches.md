@@ -1,12 +1,15 @@
 ---
-id: task-031
-title: Wire Moonlight local-control socket into server-composed stream launches
-status: To Do
+id: 01KTPAJV8F4NT8XW7VM8ZW2F9Y
+slug: wire-moonlight-local-control-socket-into-server-composed-stream-launches
+title: "Wire Moonlight local-control socket into server-composed stream launches"
+origin: parked
+legacy: backlog/task-031
+status: Done
 priority: high
 labels:
-  - streaming
-  - moonlight
-  - runtime-control
+  - "streaming"
+  - "moonlight"
+  - "runtime-control"
 created: 2026-06-05
 source: user
 ---
@@ -19,9 +22,9 @@ Bandai remote-source launches are composed as LaunchSpec values in korri-server/
 
 ## Acceptance Criteria
 
-- [ ] composeMoonlightLaunchSpec or the launch adapter can allocate a per-session Moonlight local-control runtime dir/socket and inject MOONLIGHT_LOCAL_CONTROL_* env into the launched process.
-- [ ] The active stream-control surface can discover the generated Moonlight socket for the current foreground session.
-- [ ] A focused test proves a remote-source launch exposes controller-authorized runtime.setBitrate, runtime.setFps, and runtime.setResolution when Sunshine advertises support.
+- [x] Standalone item disposition chosen: product launch socket ownership is tracked by `task-117`.
+- [x] Active socket discovery/RPC targeting is tracked by `task-118`.
+- [x] Sunshine capability gating for `runtime.setBitrate`, `runtime.setFps`, and `runtime.setResolution` is tracked by `task-119`.
 
 ## Related
 
@@ -33,3 +36,5 @@ Bandai remote-source launches are composed as LaunchSpec values in korri-server/
 ## Notes
 
 Discovered while enabling all custom Moonlight flags for Bandai; user explicitly wants mutation enabled even if the env hook is currently the only path.
+
+2026-06-09 dedupe pass: this migrated backlog item is superseded by the newer product-runtime task split. Keep `task-117` as the canonical launch wiring item, with `task-118` and `task-119` owning active-session discovery and capability gating.

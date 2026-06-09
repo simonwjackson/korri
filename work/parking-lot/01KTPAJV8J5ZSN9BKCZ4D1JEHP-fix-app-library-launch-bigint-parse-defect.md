@@ -1,14 +1,17 @@
 ---
-id: task-037
-title: Fix app.library.launch BigInt parse defect
+id: 01KTPAJV8J5ZSN9BKCZ4D1JEHP
+slug: fix-app-library-launch-bigint-parse-defect
+title: "Fix app.library.launch BigInt parse defect"
+origin: parked
+legacy: backlog/task-037
 status: To Do
 priority: high
 labels:
-  - bug
-  - library
-  - launch
-  - proseql
-  - rpc
+  - "bug"
+  - "library"
+  - "launch"
+  - "proseql"
+  - "rpc"
 created: 2026-06-07
 source: user
 ---

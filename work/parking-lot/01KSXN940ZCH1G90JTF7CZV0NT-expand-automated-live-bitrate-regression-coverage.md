@@ -35,8 +35,8 @@ The manual proof is strong, but release confidence needs automated checks that p
 
 ## Disposition of Original Broader Items
 
-- Product/RPC exposure belongs to `task-058` and `task-091`.
-- Launch-spec and product launch wiring belong to `task-058`.
+- Product/RPC exposure belongs to `task-117` through `task-122` and `task-091`.
+- Launch-spec and product launch wiring belong to `task-117`.
 - InputPlumber/device-routing coverage is outside this runtime-settings contract slice.
 - Compatibility-matrix breadth remains `task-064`.
 - Autonomous and physical hardware regression gates remain `task-087` and `task-088`.

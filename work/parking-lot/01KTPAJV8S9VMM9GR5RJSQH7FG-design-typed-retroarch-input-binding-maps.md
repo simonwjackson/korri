@@ -1,12 +1,15 @@
 ---
-id: task-073
-title: Design typed RetroArch input binding maps
+id: 01KTPAJV8S9VMM9GR5RJSQH7FG
+slug: design-typed-retroarch-input-binding-maps
+title: "Design typed RetroArch input binding maps"
+origin: parked
+legacy: backlog/task-073
 status: To Do
 priority: medium
 labels:
-  - retroarch
-  - input
-  - config
+  - "retroarch"
+  - "input"
+  - "config"
 created: 2026-06-08
 source: se-challenge-plan
 ---

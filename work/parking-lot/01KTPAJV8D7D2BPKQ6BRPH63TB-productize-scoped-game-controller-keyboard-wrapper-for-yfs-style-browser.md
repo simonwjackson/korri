@@ -1,14 +1,17 @@
 ---
-id: task-028
-title: Productize scoped game controller → keyboard wrapper for YFS-style browser games
+id: 01KTPAJV8D7D2BPKQ6BRPH63TB
+slug: productize-scoped-game-controller-keyboard-wrapper-for-yfs-style-browser
+title: "Productize scoped game controller → keyboard wrapper for YFS-style browser games"
+origin: parked
+legacy: backlog/task-028
 status: To Do
 priority: medium
 labels:
-  - packaging
-  - input
-  - yfs
-  - korri-launcher
-  - vendor
+  - "packaging"
+  - "input"
+  - "yfs"
+  - "korri-launcher"
+  - "vendor"
 created: 2026-06-04
 source: user
 ---

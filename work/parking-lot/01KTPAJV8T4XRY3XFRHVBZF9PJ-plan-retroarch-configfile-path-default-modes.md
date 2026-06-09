@@ -1,12 +1,15 @@
 ---
-id: task-074
-title: Plan RetroArch configFile path/default modes
+id: 01KTPAJV8T4XRY3XFRHVBZF9PJ
+slug: plan-retroarch-configfile-path-default-modes
+title: "Plan RetroArch configFile path/default modes"
+origin: parked
+legacy: backlog/task-074
 status: To Do
 priority: low
 labels:
-  - retroarch
-  - config
-  - precedence
+  - "retroarch"
+  - "config"
+  - "precedence"
 created: 2026-06-08
 source: se-challenge-plan
 ---

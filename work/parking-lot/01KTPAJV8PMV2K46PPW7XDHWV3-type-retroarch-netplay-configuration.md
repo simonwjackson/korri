@@ -1,12 +1,15 @@
 ---
-id: task-070
-title: Type RetroArch netplay configuration
+id: 01KTPAJV8PMV2K46PPW7XDHWV3
+slug: type-retroarch-netplay-configuration
+title: "Type RetroArch netplay configuration"
+origin: parked
+legacy: backlog/task-070
 status: To Do
 priority: medium
 labels:
-  - retroarch
-  - netplay
-  - config
+  - "retroarch"
+  - "netplay"
+  - "config"
 created: 2026-06-08
 source: se-challenge-plan
 ---

@@ -1,12 +1,15 @@
 ---
-id: task-075
-title: Package additional libretro cores safely
+id: 01KTPAJV8VVWQ9ZRQ3HSN5FDV1
+slug: package-additional-libretro-cores-safely
+title: "Package additional libretro cores safely"
+origin: parked
+legacy: backlog/task-075
 status: To Do
 priority: low
 labels:
-  - retroarch
-  - nix
-  - cores
+  - "retroarch"
+  - "nix"
+  - "cores"
 created: 2026-06-08
 source: se-challenge-plan
 ---
