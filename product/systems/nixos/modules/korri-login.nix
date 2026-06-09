@@ -19,7 +19,7 @@ let
   sessionCommand = pkgs.writeShellScript "korri-login-session" ''
     set -euo pipefail
 
-    ${pkgs.systemd}/bin/systemctl --machine=${lib.escapeShellArg "${runtime.user}@.host"} --user start ${lib.escapeShellArg cfg.target}
+    ${pkgs.systemd}/bin/systemctl --user start ${lib.escapeShellArg cfg.target}
     exec ${pkgs.coreutils}/bin/sleep infinity
   '';
 in
