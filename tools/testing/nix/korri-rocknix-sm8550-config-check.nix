@@ -66,6 +66,9 @@ let
         && compositor.createUser == false
       ))
       (check "${name}: compositor uses logind runtime" (compositor.runtimeDir == "%t" && compositor.home == "/home/korri"))
+      (check "${name}: SM8550 DRM is tagged for logind seats" (
+        lib.hasInfix ''SUBSYSTEM=="drm", KERNEL=="card[0-9]*", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0"'' cfg.services.udev.extraRules
+      ))
       (check "${name}: compositor owns its session bus privately" (
         compositor.sessionBus.mode == "private"
         && !builtins.elem "main-space-session-dbus.service" ((cfg.systemd.user.services."korri-compositor" or { }).requires or [ ])

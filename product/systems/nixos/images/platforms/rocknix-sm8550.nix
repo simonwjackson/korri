@@ -139,6 +139,13 @@ in
 
   services.inputplumber.package = lib.mkForce inputplumberPackage;
 
+  services.udev.extraRules = ''
+    # Rootless wlroots compositors acquire DRM through logind/libseat, so the
+    # SM8550 KMS card must be attached to seat0. RockNIX guest device events do
+    # not currently carry systemd's generic seat tags for this platform node.
+    SUBSYSTEM=="drm", KERNEL=="card[0-9]*", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0"
+  '';
+
   services.korri.client.package = korri.packages.${targetSystem}.korri-desktop-device;
 
   services.korri.compositor = {
