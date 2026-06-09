@@ -2180,7 +2180,7 @@ describe("korri sessiond", () => {
     process.env.KORRI_ELECTROBUN_READY_TIMEOUT_MS = "1234"
     try {
       const core = createKorriSessiondCore({
-          logger: silentLogger,
+        logger: silentLogger,
       })
       expect(core.status().state.mode).toBe("stopped")
       expect(core.status().renderer.kind).toBe("electrobun")

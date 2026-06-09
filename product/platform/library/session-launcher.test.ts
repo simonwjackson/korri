@@ -43,7 +43,9 @@ describe("session launcher", () => {
 
     expect(result).toEqual({ status: "launched" })
     expect(requests[0].input).toBe("http://korri-sessiond/launch")
-    expect((requests[0].init as RequestInit & { unix?: string }).unix).toBe("/run/user/1000/korri/sessiond.sock")
+    expect((requests[0].init as RequestInit & { unix?: string }).unix).toBe(
+      "/run/user/1000/korri/sessiond.sock",
+    )
     expect(JSON.parse(String(requests[0].init?.body))).toEqual({ spec })
   })
 
@@ -232,7 +234,9 @@ describe("session launcher", () => {
     if (result.status === "failed") {
       expect(result.result.exitCode).toBe(126)
       expect(result.result.failureKind).toBe("host-control-disabled")
-      expect(result.result.stderrTail).toContain("missing KORRI_SESSIOND_SOCKET")
+      expect(result.result.stderrTail).toContain(
+        "missing KORRI_SESSIOND_SOCKET",
+      )
     }
     expect(requests).toEqual([])
   })

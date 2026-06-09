@@ -145,36 +145,140 @@ generators → expose only generators. The lab is the *explore* phase (every val
 a hand-set leaf is fine here); tokenising is the *collapse* phase. The deliverable
 deletes the leaf-level sliders and keeps the formulas.
 
-## Using this with Tailwind (v4)
+## The generator recipe (theme-agnostic default)
 
-Compatible, and helpful — provided you keep the methodology in the `@theme`
-layer. Tailwind v3's JS config fights this; v4's CSS-first model does not.
+This is the canonical knob set. Every theme instantiates the **same** generators
+under its own prefix (`--<theme>-*`, e.g. `--pico-*`), so the technique is reused
+across themes rather than reinvented. Resolved defaults:
 
-- **Your tokens are CSS vars.** `@theme { --text-lg: …; --spacing-3: … }` emits
-  the variables *and* the utilities, so the token tier is the Tailwind theme.
-- **Generators live in `@theme`.** Use `clamp()` / `calc()` / `cqi` values:
-  `--text-lg: calc(clamp(…) * var(--pico-text-scale, 1))`. Changing one runtime
-  var (the lab's TEXT / PAD knob) re-scales the entire `text-*` / spacing family
-  while you still use plain utilities. This is the bridge: lab knobs feed
-  `@theme`.
-- **Use container queries + intrinsic utilities.** `@container` variants,
-  `grid-cols-[repeat(auto-fit,minmax(…))]`, `flex-wrap`, arbitrary `cqi` values.
-- **Ban responsive breakpoint variants** (`md:` / `lg:`) — those are media
-  queries, the anti-pattern. Decline the lazy path Tailwind offers.
+| Knob | Default | Decision |
+| --- | --- | --- |
+| `--<t>-base` | `clamp(min, N·cqi, max)` | Fluid, container-anchored: type + space auto-scale with the screen. |
+| `--<t>-type-ratio` | `1.25` | Major third — coarse enough for chunky UIs, general enough as a default. |
+| `--<t>-space` | base space unit (em/rem) | Spacing derived as **linear** integer multiples (pixel-grid friendly). Geometric is opt-in. |
+| `--<t>-text-scale` | `1` | Runtime multiplier over the whole type family (the lab TEXT; also a11y). Separate from base. |
+| `--<t>-pad-scale` | `1` | Runtime multiplier over spacing/density (the lab PAD). Separate from space. |
+| `--<t>-focus-min` | *(unset)* | Optional min interactive target; wire only when a theme adds a tier-3 / 10-foot seam. |
 
-Net: the methodology lives in `@theme`; utilities are a thin ergonomic surface
-over the generators.
+Colour is **not** a generator by default — themes alias a fixed/seeded palette as
+primitives (pico uses the PICO-8 16). Add a hue/seed knob only if a theme needs
+generated colour.
+
+**Per-theme switches** (do not hardcode): crisp-snapping and linear-vs-geometric
+space are theme choices, not global rules. Pico (a pixel-font, 8-bit theme) opts
+into crisp snapping; a future theme with a normal font omits it and gets smooth
+fluid sizing.
+
+**Derived families** — CSS cannot exponentiate, so steps are spelled out. This is
+exactly the `:root` half of the Tailwind two-layer pattern below, so the
+prototype CSS ports to `@theme` with no restructuring:
+
+```css
+:root {
+  /* Generators — the only knobs */
+  --pico-base: round(clamp(8px, 2.5cqi, 22px), 1px); /* crisp opt-in: pixel font */
+  --pico-type-ratio: 1.25;
+  --pico-space: 0.5em;
+  --pico-text-scale: 1;   /* lab TEXT */
+  --pico-pad-scale: 1;    /* lab PAD  */
+
+  /* Type scale: base * ratio^n * text-scale, snapped to px (pico only) */
+  --pico-text--1: round(calc(var(--pico-base) / 1.25 * var(--pico-text-scale)), 1px);
+  --pico-text-0:  round(calc(var(--pico-base) *  1      * var(--pico-text-scale)), 1px);
+  --pico-text-1:  round(calc(var(--pico-base) *  1.25   * var(--pico-text-scale)), 1px);
+  --pico-text-2:  round(calc(var(--pico-base) *  1.5625 * var(--pico-text-scale)), 1px);
+  --pico-text-3:  round(calc(var(--pico-base) *  1.9531 * var(--pico-text-scale)), 1px);
+
+  /* Space scale: linear steps * pad-scale */
+  --pico-space-1: calc(var(--pico-space) * 1 * var(--pico-pad-scale));
+  --pico-space-2: calc(var(--pico-space) * 2 * var(--pico-pad-scale));
+  --pico-space-3: calc(var(--pico-space) * 3 * var(--pico-pad-scale));
+  --pico-space-4: calc(var(--pico-space) * 4 * var(--pico-pad-scale));
+}
+```
+
+`round()` is Baseline 2024. Use **px units inside `round()`** for pixel fonts
+(avoids rem / zoom ambiguity). Components consume only the derived
+`--<t>-text-*` / `--<t>-space-*` tokens — never the knobs directly.
+
+## Porting to Tailwind v4 (wiring that survives contact)
+
+The methodology lives in the `@theme` layer; utilities are a thin surface over
+the generators. Tailwind v3's JS config fights this; v4's CSS-first model does
+not. Verified specifics (Tailwind v4, 2024–2025):
+
+- **Tokens are CSS vars.** `@theme { --text-lg: ...; --spacing-3: ... }` emits
+  the variables *and* the utilities; `clamp()` / `calc()` / `cqi` / `round()`
+  are legal values (the browser resolves them at paint).
+- **Runtime knobs — mind the bug.** `@theme inline { --x: calc(var(--knob)*...) }`
+  is **broken** (tailwindlabs/tailwindcss #16396). Use one of:
+  - *two-layer (shadcn pattern):* compute in `:root`
+    (`--text-lg-tok: calc(var(--_text-lg) * var(--text-scale))`), then
+    `@theme inline { --text-lg: var(--text-lg-tok) }`; or
+  - *single-layer:* plain `@theme { --text-lg: calc(<clamp> * var(--text-scale,1)) }`
+    — regular `@theme` (not `inline`) passes `calc(var())` through.
+- **Register the multipliers:** `@property --text-scale { syntax: "<number>";
+  inherits: true; initial-value: 1; }` for reliable inheritance + animation.
+- **Adaptation = container queries, never media.** `@container`, `@sm:` /
+  `@max-*` variants, `cqi` units are native in v4 (`@container-size` for the
+  block axis). Avoid `md:` / `lg:` viewport variants.
+- **Ban arbitrary literals.** Enable `eslint-plugin-tailwindcss/no-arbitrary-value`
+  so a value outside the scale is a lint error, not silent drift — this is the
+  line between a design system and inline styles.
+- **Reuse = component, not `@apply`.** Extract a component boundary for repeated
+  *behaviour*; do not `@apply` for repeated *appearance* (CVA + `tailwind-merge`
+  manage variant sprawl; both already in this repo).
+- **Verified (Tailwind 4.2.4):** `calc(... * var(--knob,1))` inside a single-layer
+  `@theme` stays runtime-live — flipping the knob rescaled the utility 16px->32px
+  in a real build, and `round(clamp(...),1px)` passes through intact. Reproduce
+  via `device-lab/spike/` (`bun build.mjs`).
+
+Mental model: **CUBE CSS** — utilities are the atomic "U" layer over the token
+generators; semantics / composition live above. Granularity becomes *semantic*
+(`bg-surface`, `text-body`), and the ~5–7 knobs sit underneath, never read by
+component code.
+
+## Reusing across themes
+
+This recipe is the default for **every** Korri theme, not just pico:
+
+- Each theme picks a prefix (`--<theme>-*`) and instantiates the same ~5 knobs
+  with its own values, choosing snap-vs-smooth and linear-vs-geometric space.
+- The two runtime multipliers (`text-scale`, `pad-scale`) are the same vars the
+  device-lab publishes at dev time and the theme exposes at ship time
+  (accessibility / density). One surface, two lifecycles.
+- Device facts stay at the boundary (the lab / physical sizing); themes consume
+  only their container + their knobs.
+- When this kit graduates out of `prototypes/`, this file travels with it as the
+  canonical token-generator guide. (Raw research backing these decisions lives
+  in `device-lab/research/`.)
 
 ## How the kit embodies this
 
 - `DeviceFrame` sizes a screen to `widthMm × heightMm × pxPerMm` and makes it a
   query container. The design inside only ever reacts to that container.
+- **Display fit (oversized devices, e.g. a TV):** a device physically larger
+  than the monitor cannot be shown at 1:1. When the true frame exceeds
+  `maxHeightPx` (the viewport height), the *whole frame* is `transform:
+  scale()`d DOWN to fit. This is display-only: the screen keeps its true px
+  size, so container queries resolve exactly as on the real panel — only the
+  painted result shrinks (viewing from across the room). This is the *one*
+  sanctioned transform-scale; handhelds that fit render untouched (k=1). Note a
+  large physical screen makes a `cqi`-anchored base want a large value, so its
+  content scale is governed by the base clamp MAX / per-device TEXT — a TV is
+  often where a genuine tier-3 (10-foot) seam becomes warranted.
 - The design under test is authored in container-relative units and reads the
   published scale custom properties (`--<scaleVarPrefix>-text-scale`,
   `--<scaleVarPrefix>-pad-scale`). No device identity reaches the design.
 - `DeviceLab` lets you add / remove / resize devices live (persisted roster), so
   you can stress a single composition across many sizes and aspects and *see*
   where tier 1–2 stops sufficing and a tier-3 seam is genuinely warranted.
+- `DeviceLab`'s optional `themeKnobs` prop exposes the theme's generators
+  (base / min / max / ratio / space, ...) as a live GEN slider group. The lab
+  persists them and applies each as its `cssVar` on the stage so it cascades
+  into every screen; the theme CSS only reads `var(cssVar, <fallback>)`. This is
+  the *explore* surface for dialing the scale by eye — bake the settled values
+  into the CSS fallbacks and drop the knobs at ship time.
 
 When you reach for a media query, stop: prefer container units (tier 1), then
 auto-fit / flex-wrap reflow (tier 2), and only then a single, centralized,

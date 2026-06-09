@@ -930,7 +930,9 @@ export async function startKorriSessiond(
     })
   }
   const server = Bun.serve({
-    ...(options.socketPath ? { unix: options.socketPath } : { port: options.port ?? DEFAULT_PORT, hostname }),
+    ...(options.socketPath
+      ? { unix: options.socketPath }
+      : { port: options.port ?? DEFAULT_PORT, hostname }),
     // The /managed-launch/events SSE stream is intentionally long-lived
     // for the duration of a launch. Heartbeats (see `lifecycleEventStream`)
     // keep most idle windows healthy, but a closed stream is misread by
@@ -958,7 +960,6 @@ export async function startKorriSessiond(
     },
   }
 }
-
 
 function json(value: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(value), {

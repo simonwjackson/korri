@@ -70,8 +70,7 @@ const buildServerStatusEffect = (overrides: ServerStatusOverrides) =>
     // the renderer/monitoring. The launch-path preflight distinguishes
     // not-configured from unavailable so spawn-time handling can preserve
     // the existing host-unavailable/control-disabled mappings.
-    const sessiondUnreachable =
-      sessiondProbe.kind === "unavailable"
+    const sessiondUnreachable = sessiondProbe.kind === "unavailable"
 
     return new ServerStatusResponse({
       serverId,

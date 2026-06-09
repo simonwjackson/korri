@@ -59,3 +59,21 @@ this prototype directory and all its hooks:
 - `product/apps/portal/routes/+pico-prototype.tsx`
 - the `/pico-prototype` line in `product/apps/portal/routes/__virtual.ts`
 - the `dev-pico` recipe in `justfile`
+
+## Variants D & E (added)
+
+- **D — Game Detail** (`VariantGameDetail`): the page reached by selecting a
+  game. Question: *can one composition art-direct between handheld and
+  lean-back without media queries?* Answer: **yes** — a single
+  `@container (min-aspect-ratio: 16/10)` seam on `.pcD-body` flips stacked
+  (art over info, centered) to split (hero left, info/actions right). Keyed off
+  the device's true aspect ratio, so it is monitor-calibration independent
+  (RG353M 1.385 stays stacked; THOR 1.74 / ODIN 1.84 split). This is the first
+  real tier-3 seam — see device-lab/AGENTS.md.
+- **E — In-Game** (`VariantInGame`): the pause / quick-menu overlay shown
+  DURING a session. A session may be local or streamed, so the SRC badge
+  toggles STREAM⇄LOCAL and the live-stats strip swaps (host/ping/rate/fps vs
+  core/fps/battery). Menu: RESUME / SAVE / LOAD / RESTART / SETTINGS / QUIT.
+
+Gotcha re-confirmed: inline `style={{background}}` on a row button beats the
+`.sel` class highlight — keep button base styles in CSS, not inline.

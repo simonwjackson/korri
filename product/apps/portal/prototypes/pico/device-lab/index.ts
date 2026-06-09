@@ -14,4 +14,4 @@
 export { Calibrator, type DeviceCal } from "./Calibrator"
 export { DeviceFrame } from "./DeviceFrame"
 export { DeviceLab } from "./DeviceLab"
-export type { DeviceConfig } from "./types"
+export type { DeviceConfig, ThemeKnob } from "./types"

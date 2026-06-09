@@ -57,9 +57,7 @@ export function getKorridConfig(
   }
 }
 
-export function createKorrid(
-  options: CreateKorridOptions = {},
-): KorridHandle {
+export function createKorrid(options: CreateKorridOptions = {}): KorridHandle {
   const config = options.config ?? getKorridConfig()
   const app = createHonoApp({
     rpcHandler: serverRpcHandler,

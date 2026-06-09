@@ -339,7 +339,10 @@ async function withSessiondSocket(options: {
   const socketPath = join(dir, "sessiond.sock")
   const originalFetch = globalThis.fetch
   globalThis.fetch = (async (input, init) => {
-    if ((init as (RequestInit & { unix?: string }) | undefined)?.unix === socketPath) {
+    if (
+      (init as (RequestInit & { unix?: string }) | undefined)?.unix ===
+      socketPath
+    ) {
       count += 1
       return options.respond(new Request(input, init))
     }

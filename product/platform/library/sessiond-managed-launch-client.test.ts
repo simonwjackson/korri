@@ -36,9 +36,7 @@ describe("sessiond managed-launch client", () => {
   })
 
   it("classifies missing socket, unavailable host, rejected responses, and invalid payload", async () => {
-    await expect(
-      probeSessiondManagedLaunchStatus({}),
-    ).resolves.toEqual({
+    await expect(probeSessiondManagedLaunchStatus({})).resolves.toEqual({
       kind: "not-configured",
     })
     await expect(
@@ -79,7 +77,9 @@ describe("sessiond managed-launch client", () => {
       response: { status: "accepted", launchId: "launch-1" },
     })
     expect(requests[0].input).toBe("http://korri-sessiond/managed-launch")
-    expect((requests[0].init as RequestInit & { unix?: string }).unix).toBe("/run/user/1000/korri/sessiond.sock")
+    expect((requests[0].init as RequestInit & { unix?: string }).unix).toBe(
+      "/run/user/1000/korri/sessiond.sock",
+    )
     expect(JSON.parse(String(requests[0].init?.body))).toEqual({
       spec: { command: "/bin/game", args: ["rom"] },
       lifecycle: "session",
@@ -107,7 +107,9 @@ describe("sessiond managed-launch client", () => {
     expect(requests[0].input).toBe(
       "http://korri-sessiond/managed-launch/terminate",
     )
-    expect((requests[0].init as RequestInit & { unix?: string }).unix).toBe("/run/user/1000/korri/sessiond.sock")
+    expect((requests[0].init as RequestInit & { unix?: string }).unix).toBe(
+      "/run/user/1000/korri/sessiond.sock",
+    )
     expect(JSON.parse(String(requests[0].init?.body))).toEqual({
       launchId: "launch-1",
       force: true,

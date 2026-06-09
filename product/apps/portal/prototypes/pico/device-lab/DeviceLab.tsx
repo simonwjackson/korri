@@ -1,28 +1,33 @@
 /**
  * device-lab — the harness orchestrator.
  *
- * Owns the calibrated state (global pxPerMm + a runtime-editable list of
- * devices) and persists the whole roster as one JSON blob under `storageKey`,
- * so adding / removing / renaming / resizing devices all survive a reload.
- * The design under test is supplied via `render(device)`. Skinnable through
- * *ClassName props and `scaleVarPrefix`; the kit knows nothing of the template.
+ * Owns the calibrated state (global pxPerMm, a runtime-editable device list, and
+ * optional theme generator knobs) and persists the whole roster as one JSON blob
+ * under `storageKey`, so adding / removing / renaming / resizing devices and
+ * tuning generators all survive a reload. The design under test is supplied via
+ * `render(device)`. Skinnable through *ClassName props and `scaleVarPrefix`; the
+ * kit knows nothing of the template.
  */
-import { type ReactNode, useEffect, useState } from "react"
-import { Calibrator, type DeviceCal } from "./Calibrator"
+import { type CSSProperties, type ReactNode, useEffect, useState } from "react"
+import { Calibrator, type DeviceCal, type KnobCal } from "./Calibrator"
 import { DeviceFrame } from "./DeviceFrame"
-import type { DeviceConfig } from "./types"
+import type { DeviceConfig, ThemeKnob } from "./types"
 
 const DEFAULT_PX_PER_MM = 3.7795275591 // CSS nominal 96dpi; recalibrate via card
+const VIEWPORT_INSET = 48 // stage padding allowance for fit-to-height
 
 type LabState = {
   readonly pxPerMm: number
   readonly devices: readonly DeviceConfig[]
+  /** Theme generator knob values, keyed by cssVar. */
+  readonly knobs: Record<string, number>
 }
 
 export function DeviceLab({
   storageKey,
   devices,
   render,
+  themeKnobs = [],
   defaultPxPerMm = DEFAULT_PX_PER_MM,
   scaleVarPrefix = "lab",
   stageClassName,
@@ -36,6 +41,8 @@ export function DeviceLab({
    * restores this set. */
   readonly devices: readonly DeviceConfig[]
   readonly render: (device: DeviceConfig) => ReactNode
+  /** Optional theme-specific generator knobs (base size, ratio, space, ...). */
+  readonly themeKnobs?: readonly ThemeKnob[]
   readonly defaultPxPerMm?: number
   readonly scaleVarPrefix?: string
   readonly stageClassName?: string
@@ -44,11 +51,24 @@ export function DeviceLab({
   readonly screenClassName?: string
 }) {
   const [state, setState] = useState<LabState>(() =>
-    loadLab(storageKey, devices, defaultPxPerMm),
+    loadLab(storageKey, devices, themeKnobs, defaultPxPerMm),
   )
   useEffect(() => {
     saveLab(storageKey, state)
   }, [storageKey, state])
+
+  // Oversized devices (a TV) scale down to fit the viewport height.
+  const [maxHeightPx, setMaxHeightPx] = useState<number | undefined>(() =>
+    typeof window === "undefined"
+      ? undefined
+      : window.innerHeight - VIEWPORT_INSET,
+  )
+  useEffect(() => {
+    const update = () => setMaxHeightPx(window.innerHeight - VIEWPORT_INSET)
+    update()
+    window.addEventListener("resize", update)
+    return () => window.removeEventListener("resize", update)
+  }, [])
 
   const setPxPerMm = (pxPerMm: number) =>
     setState(prev => ({ ...prev, pxPerMm }))
@@ -67,8 +87,14 @@ export function DeviceLab({
       ...prev,
       devices: prev.devices.filter(d => d.id !== id),
     }))
+  const setKnob = (cssVar: string, value: number) =>
+    setState(prev => ({ ...prev, knobs: { ...prev.knobs, [cssVar]: value } }))
   const reset = () =>
-    setState({ pxPerMm: defaultPxPerMm, devices: devices.map(d => ({ ...d })) })
+    setState({
+      pxPerMm: defaultPxPerMm,
+      devices: devices.map(d => ({ ...d })),
+      knobs: knobDefaults(themeKnobs),
+    })
 
   const cals: DeviceCal[] = state.devices.map(device => ({
     id: device.id,
@@ -83,8 +109,28 @@ export function DeviceLab({
     onPadChange: padPct => patchDevice(device.id, { padPct }),
   }))
 
+  const knobCals: KnobCal[] = themeKnobs.map(knob => ({
+    id: knob.id,
+    label: knob.label,
+    cssVar: knob.cssVar,
+    value: state.knobs[knob.cssVar] ?? knob.default,
+    min: knob.min,
+    max: knob.max,
+    step: knob.step,
+    unit: knob.unit,
+    onChange: value => setKnob(knob.cssVar, value),
+  }))
+
+  // Generator knobs cascade to every screen from the stage.
+  const stageStyle = Object.fromEntries(
+    themeKnobs.map(knob => [
+      knob.cssVar,
+      `${state.knobs[knob.cssVar] ?? knob.default}${knob.unit ?? ""}`,
+    ]),
+  ) as CSSProperties
+
   return (
-    <div className={cx("lab-stage", stageClassName)}>
+    <div className={cx("lab-stage", stageClassName)} style={stageStyle}>
       <div className={cx("lab-screens", screensClassName)}>
         {state.devices.map(device => (
           <DeviceFrame
@@ -95,6 +141,8 @@ export function DeviceLab({
             textScale={device.textPct / 100}
             padScale={device.padPct / 100}
             scaleVarPrefix={scaleVarPrefix}
+            maxHeightPx={maxHeightPx}
+            bezel={device.bezel}
             bezelClassName={bezelClassName}
             screenClassName={screenClassName}
           >
@@ -106,6 +154,7 @@ export function DeviceLab({
         pxPerMm={state.pxPerMm}
         onPxPerMmChange={setPxPerMm}
         devices={cals}
+        knobs={knobCals}
         onAdd={addDevice}
         onReset={reset}
         storageKey={storageKey}
@@ -133,14 +182,24 @@ function makeDevice(existing: readonly DeviceConfig[]): DeviceConfig {
   }
 }
 
+function knobDefaults(
+  themeKnobs: readonly ThemeKnob[],
+): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const knob of themeKnobs) out[knob.cssVar] = knob.default
+  return out
+}
+
 function loadLab(
   storageKey: string,
   fallback: readonly DeviceConfig[],
+  themeKnobs: readonly ThemeKnob[],
   defaultPxPerMm: number,
 ): LabState {
   const seeded: LabState = {
     pxPerMm: defaultPxPerMm,
     devices: fallback.map(d => ({ ...d })),
+    knobs: knobDefaults(themeKnobs),
   }
   if (typeof window === "undefined") return seeded
   try {
@@ -151,12 +210,20 @@ function loadLab(
     const devices = parsed.devices
       .map(normalizeDevice)
       .filter((d): d is DeviceConfig => d !== null)
-    if (devices.length === 0) return { pxPerMm: seeded.pxPerMm, devices }
+    if (devices.length === 0) return seeded
     const pxPerMm = Number(parsed.pxPerMm)
+    // Start from knob defaults, then overlay any persisted numeric values.
+    const knobs = knobDefaults(themeKnobs)
+    if (parsed.knobs && typeof parsed.knobs === "object") {
+      for (const [key, value] of Object.entries(parsed.knobs)) {
+        if (Number.isFinite(Number(value))) knobs[key] = Number(value)
+      }
+    }
     return {
       pxPerMm:
         Number.isFinite(pxPerMm) && pxPerMm > 0 ? pxPerMm : defaultPxPerMm,
       devices,
+      knobs,
     }
   } catch {
     return seeded
@@ -181,6 +248,7 @@ function normalizeDevice(value: unknown): DeviceConfig | null {
     heightMm: num(d.heightMm, 56.25),
     textPct: num(d.textPct, 140),
     padPct: num(d.padPct, 100),
+    bezel: d.bezel !== false,
   }
 }
 

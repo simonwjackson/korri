@@ -59,7 +59,8 @@ export async function launchViaSessiond(
   options: SessionLauncherOptions,
 ): Promise<LaunchResult> {
   const fetchImpl = options.fetchImpl ?? fetch
-  const url = options.url ?? (options.socketPath ? "http://korri-sessiond" : undefined)
+  const url =
+    options.url ?? (options.socketPath ? "http://korri-sessiond" : undefined)
   if (!url) {
     return {
       status: "failed",
@@ -106,7 +107,8 @@ async function spawnViaSessiond(
   const lifecycle = extras.lifecycle
   const wait = extras.wait
   const fetchImpl = options.fetchImpl ?? fetch
-  const url = options.url ?? (options.socketPath ? "http://korri-sessiond" : undefined)
+  const url =
+    options.url ?? (options.socketPath ? "http://korri-sessiond" : undefined)
   if (!url) {
     return failedManagedLaunch(
       "host-control-disabled",
