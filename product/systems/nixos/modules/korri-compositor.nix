@@ -34,10 +34,15 @@ let
       cfg.user
     else
       null;
-  runtimeDirectoryName = lib.removePrefix "/run/" cfg.runtimeDir;
-  runtimeDirIsSystemdSpecifier = lib.hasPrefix "%t" cfg.runtimeDir;
+  runtimeDirIsSystemdSpecifier = cfg.runtimeDir == "%t" || lib.hasPrefix "%t/" cfg.runtimeDir;
+  runtimeDirIsSystemdRuntimeDirectory = lib.hasPrefix "%t/" cfg.runtimeDir;
+  runtimeDirectoryName =
+    if runtimeDirIsSystemdRuntimeDirectory then
+      lib.removePrefix "%t/" cfg.runtimeDir
+    else
+      lib.removePrefix "/run/" cfg.runtimeDir;
   sessionBusServices = lib.optionals (cfg.sessionBus.mode == "existing") cfg.sessionBus.services;
-  ownsRuntimeDir = cfg.sessionBus.mode == "private" && !runtimeDirIsSystemdSpecifier;
+  ownsRuntimeDir = cfg.sessionBus.mode == "private" && runtimeDirIsSystemdRuntimeDirectory;
 
   # The kiosk surface depends on the inputd WebSocket bridge for local
   # client input. The input module owns the inputd unit + port; the
@@ -68,7 +73,21 @@ let
     text = ''
       set -euo pipefail
 
-      runtime_dir=${lib.escapeShellArg cfg.runtimeDir}
+      configured_runtime_dir=${lib.escapeShellArg cfg.runtimeDir}
+      case "$configured_runtime_dir" in
+        %t)
+          : "''${XDG_RUNTIME_DIR:?korri-compositor-exec: XDG_RUNTIME_DIR is required to expand %t}"
+          runtime_dir="$XDG_RUNTIME_DIR"
+          ;;
+        %t/*)
+          : "''${XDG_RUNTIME_DIR:?korri-compositor-exec: XDG_RUNTIME_DIR is required to expand %t}"
+          runtime_dir="$XDG_RUNTIME_DIR/''${configured_runtime_dir#%t/}"
+          ;;
+        *)
+          runtime_dir="$configured_runtime_dir"
+          ;;
+      esac
+
       if [ $# -eq 0 ]; then
         echo "usage: korri-compositor-exec <command> [args...]" >&2
         exit 64
@@ -211,8 +230,8 @@ in
 
     runtimeDir = mkOption {
       type = types.str;
-      default = "/run/korri-compositor";
-      description = "Runtime directory exposed to the compositor as XDG_RUNTIME_DIR.";
+      default = "%t/korri-compositor";
+      description = "Runtime directory exposed to the compositor as XDG_RUNTIME_DIR. The default is a user-manager %t path so RuntimeDirectory creates the same directory that Sway uses for Wayland sockets.";
     };
 
     stateHome = mkOption {

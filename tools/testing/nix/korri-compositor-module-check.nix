@@ -282,6 +282,10 @@ let
       lib.hasInfix "command -v --" (compositorExecOf headlessCompositor)
       && lib.hasInfix "command not found" (compositorExecOf headlessCompositor)
     ))
+    (check "headless compositor: exec helper expands %t runtime dir" (
+      lib.hasInfix "XDG_RUNTIME_DIR" (compositorExecOf headlessCompositor)
+      && lib.hasInfix "korri-compositor" (compositorExecOf headlessCompositor)
+    ))
 
     # ---- compositor with kiosk surface (Sobo / live-USB shape)
     (check "compositor+kiosk: NixOS assertions pass" (korriFailedAssertions compositorWithKiosk == [ ]))
@@ -295,8 +299,11 @@ let
       lib.hasInfix "dbus-run-session" ((compositorUnit compositorWithKiosk).serviceConfig.ExecStart or "")
       && lib.hasInfix "sway" ((compositorUnit compositorWithKiosk).serviceConfig.ExecStart or "")
     ))
-    (check "compositor+kiosk: RuntimeDirectory is korri-compositor" (
-      (compositorUnit compositorWithKiosk).serviceConfig.RuntimeDirectory or null == "korri-compositor"
+    (check "compositor+kiosk: user runtime dir is created under %t" (
+      compositorWithKiosk.services.korri.compositor.runtimeDir == "%t/korri-compositor"
+      &&
+        ((compositorUnit compositorWithKiosk).environment.XDG_RUNTIME_DIR or null) == "%t/korri-compositor"
+      && (compositorUnit compositorWithKiosk).serviceConfig.RuntimeDirectory or null == "korri-compositor"
     ))
     (check "compositor+kiosk: StartLimitBurst and IntervalSec are set" (
       (compositorUnit compositorWithKiosk).unitConfig.StartLimitBurst or null == 5
@@ -440,8 +447,7 @@ let
 
     # ---- inputd port option drives the read-only inputdBridgeUrl option
     (check "compositor reads inputd.port: kiosk.inputdBridgeUrl reflects override" (
-      kioskWithCustomInputdPort.services.korri.compositor.kiosk.inputdBridgeUrl
-      == "ws://127.0.0.1:4007"
+      kioskWithCustomInputdPort.services.korri.compositor.kiosk.inputdBridgeUrl == "ws://127.0.0.1:4007"
     ))
 
     # ---- generic-default hygiene
