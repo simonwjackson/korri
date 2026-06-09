@@ -144,6 +144,13 @@ in
     # SM8550 KMS card must be attached to seat0. RockNIX guest device events do
     # not currently carry systemd's generic seat tags for this platform node.
     SUBSYSTEM=="drm", KERNEL=="card[0-9]*", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0"
+
+    # Korri inputd runs as the kiosk user and reads evdev directly before
+    # forwarding controller events to the desktop renderer. On the RockNIX
+    # SM8550 substrate these event nodes can inherit a numeric group that does
+    # not match the NixOS input group, so restate the product image invariant
+    # explicitly instead of relying on substrate group ids.
+    SUBSYSTEM=="input", KERNEL=="event*", GROUP="input", MODE="0660", TAG+="uaccess"
   '';
 
   services.korri.client.package = korri.packages.${targetSystem}.korri-desktop-device;
