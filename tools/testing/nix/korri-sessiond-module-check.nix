@@ -19,6 +19,8 @@ let
       runtime.launchArtifactsDir = lib.mkOption { type = lib.types.str; default = "/run/korri/launch-artifacts"; };
       compositor.kiosk.enable = lib.mkOption { type = lib.types.bool; default = false; };
       daemon.streaming.enable = lib.mkOption { type = lib.types.bool; default = false; };
+      daemon.library.root = lib.mkOption { type = lib.types.str; default = "/var/lib/korri/library"; };
+      daemon.library.source = lib.mkOption { type = lib.types.str; default = "proseql"; };
     };
   };
 
@@ -73,6 +75,10 @@ let
     (check "socket path exported" ((unitEnv baselineKiosk).KORRI_SESSIOND_SOCKET == "%t/korri/sessiond.sock"))
     (check "socket start post uses curl unix socket" (lib.hasInfix "--unix-socket" (execStartPost baselineKiosk)))
     (check "source-machine role inferred" ((unitEnv sourceMachine).KORRI_SESSIOND_ROLE == "source-machine"))
+    (check "daemon library root is inherited by sessiond" (
+      (unitEnv baselineKiosk).KORRI_LIBRARY_ROOT == "/var/lib/korri/library"
+      && (unitEnv baselineKiosk).KORRI_LIBRARY_SOURCE == "proseql"
+    ))
     (check "relative socket rejected" (hasFailure relativeSocket "socketPath must be an absolute path or %t path"))
     (check "kiosk and streaming conflict rejected" (hasFailure bothKioskAndStreaming "must not be enabled together"))
     (check "path option flows through" (builtins.elem pkgs.gamescope (unitPath withPath)))

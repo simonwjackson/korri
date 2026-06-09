@@ -79,6 +79,10 @@ let
       cfg.services.korri.daemon.library.root == "/var/lib/korri/library"
       && daemonEnv.KORRI_LIBRARY_ROOT == "/var/lib/korri/library"
     ))
+    (check "sessiond inherits Korri product library root" (
+      sessiondEnv.KORRI_LIBRARY_ROOT == "/var/lib/korri/library"
+      && sessiondEnv.KORRI_LIBRARY_SOURCE == cfg.services.korri.daemon.library.source
+    ))
     (check "daemon uses sessiond socket" (daemonEnv.KORRI_SESSIOND_SOCKET == "%t/korri/sessiond.sock"))
     (check "gameStream uses sessiond socket" (
       cfg.services.korri.gameStream.sessiond.socketPath == "%t/korri/sessiond.sock"

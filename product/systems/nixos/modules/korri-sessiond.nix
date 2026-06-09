@@ -21,6 +21,8 @@ let
   isAbsolutePath = path: lib.hasPrefix "/" path;
   isSocketPath = path: isAbsolutePath path || lib.hasPrefix "%t/" path;
   launchArtifactsDir = cfg.launchArtifactsDir;
+  daemonLibraryRoot = lib.attrByPath [ "services" "korri" "daemon" "library" "root" ] null config;
+  daemonLibrarySource = lib.attrByPath [ "services" "korri" "daemon" "library" "source" ] null config;
 
   kioskEnabled = lib.attrByPath [ "services" "korri" "compositor" "kiosk" "enable" ] false config;
   streamingEnabled = lib.attrByPath [ "services" "korri" "daemon" "streaming" "enable" ] false config;
@@ -182,6 +184,12 @@ in
         KORRI_SESSIOND_ESSWAY_CONTROL = if cfg.esswayControl.enable then "1" else "0";
         KORRI_LAUNCH_ARTIFACTS_DIR = launchArtifactsDir;
       }
+      // (lib.optionalAttrs (daemonLibraryRoot != null) {
+        KORRI_LIBRARY_ROOT = daemonLibraryRoot;
+      })
+      // (lib.optionalAttrs (daemonLibrarySource != null) {
+        KORRI_LIBRARY_SOURCE = daemonLibrarySource;
+      })
       // (lib.optionalAttrs (cfg.sunshineRuntimeStatusPath != null) {
         KORRI_GAME_STREAM_STATUS_PATH = cfg.sunshineRuntimeStatusPath;
       })
