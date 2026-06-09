@@ -1,7 +1,7 @@
 ---
 title: feat: Expand RetroArch Typed Config Surface
 type: feat
-status: active
+status: completed
 date: 2026-06-08
 deepened: 2026-06-08
 verify_command: "just test-unit && just typecheck"
