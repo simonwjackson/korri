@@ -118,6 +118,10 @@ let
     (check "stream control env still exported" (
       (env streamControl).KORRI_STREAM_CONTROL_ENABLED == "1"
     ))
+    (check "user-mode library root defaults to Korri product state" (
+      defaultUserMode.services.korri.daemon.library.root == "/var/lib/korri/library"
+      && (env defaultUserMode).KORRI_LIBRARY_ROOT == "/var/lib/korri/library"
+    ))
     (check "system-mode library root defaults to Korri product state" (
       systemMode.services.korri.daemon.library.root == "/var/lib/korri/library"
     ))

@@ -302,26 +302,17 @@ in
 
       root = mkOption {
         type = types.str;
-        default =
-          if isSystemMode then
-            "${config.services.korri.runtime.stateRoot}/library"
-          else
-            "%h/.local/share/korri/library";
-        defaultText = lib.literalExpression ''
-          if serviceMode == "system" then "''${config.services.korri.runtime.stateRoot}/library"
-          else "%h/.local/share/korri/library"
-        '';
+        default = "${config.services.korri.runtime.stateRoot}/library";
+        defaultText = lib.literalExpression ''"''${config.services.korri.runtime.stateRoot}/library"'';
         description = ''
           Library root used by korrid.
 
-          In `serviceMode = "user"`, defaults to `%h/.local/share/korri/library`
-          which the user manager expands per session.
-
-          In `serviceMode = "system"`, the systemd specifier `%h` resolves to
-          root's home and is unsafe. The default is the product state path
-          `${config.services.korri.runtime.stateRoot}/library`. The daemon module
-          owns the tmpfiles and service hardening needed to make that path
-          writable by `services.korri.daemon.user`.
+          Defaults to the product state path
+          `${config.services.korri.runtime.stateRoot}/library` in both user and
+          system service modes. In user mode, `korri-setup.service` prepares the
+          parent state root for the runtime user before the Korri session starts;
+          in system mode, the daemon module also adds service hardening carve-outs
+          for this path.
         '';
       };
 

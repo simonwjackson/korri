@@ -57,6 +57,10 @@ let
     (check "sessiond socket path is exported" (
       sessiondEnv.KORRI_SESSIOND_SOCKET == "%t/korri/sessiond.sock"
     ))
+    (check "daemon uses Korri product library root" (
+      cfg.services.korri.daemon.library.root == "/var/lib/korri/library"
+      && daemonEnv.KORRI_LIBRARY_ROOT == "/var/lib/korri/library"
+    ))
     (check "daemon uses sessiond socket" (daemonEnv.KORRI_SESSIOND_SOCKET == "%t/korri/sessiond.sock"))
     (check "gameStream uses sessiond socket" (
       cfg.services.korri.gameStream.sessiond.socketPath == "%t/korri/sessiond.sock"
