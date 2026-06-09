@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lesson 0002 — Swapping the Layer-Atom Seam</title>
+    <style>
+      :root {
+        --bg:#0f1115; --panel:#171a21; --panel-2:#1e222b; --ink:#e7e9ee;
+        --ink-soft:#aab1c0; --ink-faint:#717a8c; --accent:#6ea8fe; --accent-2:#7ee0c0;
+        --warn:#f0a35e; --err:#f06e6e; --ok:#7ee0a0; --line:#2a2f3a; --code:#11131a;
+        --radius:14px; --maxw:52rem;
+      }
+      * { box-sizing:border-box; }
+      body { margin:0; background:radial-gradient(1200px 600px at 70% -10%, #1b2030 0%, var(--bg) 55%);
+        color:var(--ink); font:16px/1.65 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+        padding:clamp(1rem,3vw,3rem); }
+      main { max-width:var(--maxw); margin:0 auto; }
+      .eyebrow { text-transform:uppercase; letter-spacing:0.16em; font-size:0.72rem; color:var(--accent); font-weight:700; }
+      h1 { font-size:clamp(1.7rem,4vw,2.5rem); line-height:1.15; margin:0.3rem 0 0.4rem; letter-spacing:-0.01em; }
+      h2 { font-size:1.25rem; margin:2.6rem 0 0.6rem; letter-spacing:-0.01em; }
+      h3 { font-size:1.02rem; margin:1.4rem 0 0.4rem; }
+      p { color:var(--ink-soft); }
+      .lede { font-size:1.08rem; color:var(--ink); }
+      a { color:var(--accent); text-decoration:none; border-bottom:1px solid #2c3a55; }
+      a:hover { border-color:var(--accent); }
+      code,pre { font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace; }
+      code { background:var(--code); padding:0.1em 0.38em; border-radius:6px; font-size:0.9em; color:#d8def0; }
+      pre { background:var(--code); border:1px solid var(--line); border-radius:var(--radius);
+        padding:1rem 1.1rem; overflow-x:auto; font-size:0.85rem; line-height:1.6; }
+      pre code { background:none; padding:0; }
+      .panel { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:1.1rem 1.25rem; margin:1rem 0; }
+      .callout { border-left:3px solid var(--accent); background:var(--panel-2); border-radius:0 var(--radius) var(--radius) 0; padding:0.8rem 1.1rem; margin:1.2rem 0; }
+      .callout.tip { border-color:var(--accent-2); }
+      .callout.why { border-color:var(--warn); }
+      .pill { display:inline-block; background:var(--panel-2); border:1px solid var(--line); border-radius:999px; padding:0.1rem 0.6rem; font-size:0.75rem; color:var(--ink-soft); }
+      table.beh { width:100%; border-collapse:collapse; font-size:0.9rem; margin:0.6rem 0; }
+      table.beh th, table.beh td { text-align:left; padding:0.5rem 0.6rem; border-bottom:1px solid var(--line); vertical-align:top; }
+      table.beh th { color:var(--ink-faint); text-transform:uppercase; font-size:0.74rem; letter-spacing:0.08em; }
+      table.beh td code { font-size:0.84em; }
+      .quiz { margin:0.4rem 0 0; }
+      .q { border:1px solid var(--line); border-radius:12px; padding:1rem 1.1rem; margin:0.9rem 0; background:var(--panel); }
+      .q .stem { color:var(--ink); margin:0 0 0.7rem; }
+      .q .stem code { font-size:0.86em; }
+      .opts { display:grid; gap:0.45rem; }
+      .opt { display:flex; gap:0.6rem; align-items:center; border:1px solid var(--line); border-radius:9px;
+        padding:0.55rem 0.75rem; background:var(--panel-2); cursor:pointer; transition:border-color .12s, background .12s; font-size:0.95rem; }
+      .opt:hover { border-color:var(--accent); }
+      .opt input { accent-color:var(--accent); }
+      .opt.correct { border-color:var(--ok); background:#16241c; }
+      .opt.wrong { border-color:var(--err); background:#2a1719; }
+      .feedback { margin-top:0.6rem; font-size:0.92rem; min-height:1.2em; }
+      .feedback.ok { color:var(--ok); } .feedback.no { color:var(--err); }
+      .score { position:sticky; bottom:0; margin-top:1.2rem; background:var(--panel); border:1px solid var(--line);
+        border-radius:12px; padding:0.8rem 1.1rem; font-weight:700; display:flex; justify-content:space-between; align-items:center; }
+      .score .pct { color:var(--accent-2); font-variant-numeric:tabular-nums; }
+      .citations { font-size:0.9rem; } .citations li { margin:0.3rem 0; color:var(--ink-soft); }
+      footer { margin-top:3rem; border-top:1px solid var(--line); padding-top:1rem; color:var(--ink-faint); font-size:0.88rem; }
+      hr.sep { border:none; border-top:1px solid var(--line); margin:2rem 0; }
+      .tag { color:#f08fb8; } .add { color:#7ee0a0; } .dim { color:var(--ink-faint); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">Lesson 0002 · Effect + React Atoms for Korri</p>
+      <h1>Swapping the layer-atom seam</h1>
+      <p class="lede">
+        Layer 2 is the only role you touch to change behavior in tests and
+        Storybook. This lesson shows the two ways Korri overrides a layer atom —
+        and why the runtime, data atoms, and components stay completely untouched.
+      </p>
+      <p><span class="pill">~9 minutes</span> &nbsp; <span class="pill">Mission goal: "modify a UI surface using a swappable Layer seam"</span></p>
+
+      <div class="callout tip">
+        <strong>Prereq:</strong> Lesson 0001 (the five roles). If "layer atom" and
+        "runtime atom" aren't crisp yet, replay 0001 first or open
+        <code>reference/effect-atoms-glossary.html</code>.
+      </div>
+
+      <h2>Why the seam works at all</h2>
+      <p>
+        Recall the runtime atom from 0001 — it reads its layers with <code>get(...)</code>:
+      </p>
+      <pre><code>export const libraryRuntime = Atom.runtime(get =&gt;
+  Layer.merge(get(<span class="tag">librarySourceLayerAtom</span>), get(launcherLayerAtom)),
+)</code></pre>
+      <p>
+        Because <code>librarySourceLayerAtom</code> is a <em>writable</em> atom that
+        merely <em>holds</em> a Layer, replacing its value makes the runtime
+        rebuild, which makes <code>libraryItemsAtom</code> re-run with the new
+        implementation. <strong>Nothing downstream changes.</strong> The component
+        still calls <code>useAtomValue(libraryItemsAtom)</code> and has no idea
+        which layer it got.
+      </p>
+
+      <div class="callout why">
+        This is the bedrock rule made concrete: <em>the seam for swapping data
+        sources in tests and Storybook is the same seam used in production.</em>
+        No mocks, no <code>vi.mock</code>, no global <code>fetch</code> swap — just
+        a different Layer value in one atom.
+      </div>
+
+      <h2>The layer is a real implementation with a knob</h2>
+      <p>
+        Korri never ships a <code>Mock</code> source. It ships one real in-memory
+        layer whose <code>behavior</code> you configure. From
+        <code>library-source-layer-memory.ts</code>:
+      </p>
+      <table class="beh">
+        <thead><tr><th>behavior</th><th>What the source does</th><th>UI state it drives</th></tr></thead>
+        <tbody>
+          <tr><td><code>{ kind: "ready" }</code></td><td>returns seeded games</td><td>Ready</td></tr>
+          <tr><td><code>{ kind: "loading-forever" }</code></td><td><code>Effect.never</code></td><td>Loading (the production default seam!)</td></tr>
+          <tr><td><code>{ kind: "fail-list", error }</code></td><td><code>Effect.fail(error)</code></td><td>LoadError</td></tr>
+        </tbody>
+      </table>
+      <p class="dim">
+        Same pattern for the launcher: <code>makeInMemoryLauncherLayer({ behavior: { kind: "succeed" | "fail" | "managed" | "defect" } })</code>.
+        "Fakeness" lives in the config, never in the type name.
+      </p>
+
+      <h2>Two ways to override the seam</h2>
+
+      <h3>1 — Seed at boot with <code>RegistryProvider initialValues</code></h3>
+      <p>
+        For Storybook stories and React tests, hand the registry a starting value
+        for the layer atom. This is the composition-root move — the story chooses
+        the data strategy:
+      </p>
+      <pre><code><span class="dim">// A Storybook decorator / test wrapper — a composition root</span>
+function withLibraryLayer(layer) {
+  return (Story) =&gt; (
+    &lt;RegistryProvider
+      initialValues={[
+        [<span class="tag">librarySourceLayerAtom</span>, layer],   <span class="dim">// override layer 2</span>
+      ]}
+    &gt;
+      &lt;Story /&gt;
+    &lt;/RegistryProvider&gt;
+  )
+}
+
+<span class="dim">// The "list failed to load" story — no mocks anywhere</span>
+export const LoadError = {
+  decorators: [
+    withLibraryLayer(
+      makeFailingLibrarySourceLayer(
+        new LibraryError({ reason: "config", message: "boom" }),
+      ),
+    ),
+  ],
+}</code></pre>
+
+      <h3>2 — Set imperatively with <code>registry.set</code></h3>
+      <p>
+        From plain TS (no JSX) — e.g. a non-React test or a boot script — get the
+        registry and write the atom directly. It's synchronous and returns void:
+      </p>
+      <pre><code>registry.set(<span class="tag">librarySourceLayerAtom</span>,
+  makeInMemoryLibrarySourceLayer({ behavior: { kind: "ready" }, games: seed }))
+
+<span class="dim">// from inside an Effect instead:</span>
+yield* Atom.set(<span class="tag">librarySourceLayerAtom</span>, nextLayer)  <span class="dim">// needs AtomRegistry in context</span></code></pre>
+
+      <div class="callout">
+        <strong>Gotcha worth memorizing:</strong> atoms are <em>not</em> singletons —
+        they are inert descriptors. All state lives in the <code>AtomRegistry</code>.
+        The same atom in two registries holds two independent values, so each
+        story/test gets a fresh registry and clean state for free.
+      </div>
+
+      <h2>Exercise — pick the right move</h2>
+      <p>Three scenarios. Choose the correct seam action. Instant feedback; aim for 3/3.</p>
+      <div class="quiz" id="quiz"></div>
+      <div class="score" id="score"><span>Score</span><span class="pct" id="pct">0 / 3</span></div>
+
+      <h2>Check yourself (no peeking)</h2>
+      <div class="panel">
+        <p style="margin-top:0"><strong>Q.</strong> A teammate adds
+        <code>vi.mock("../library-services")</code> to make a Storybook story show
+        the error state. What's wrong, and what's the one-line fix?</p>
+        <details>
+          <summary style="cursor:pointer;color:var(--accent-2)">Reveal answer</summary>
+          <p>It breaks the harness posture — no mocks in stories. The component now
+          depends on a mocking layer that only exists in the story. The fix:
+          delete the mock and override <code>librarySourceLayerAtom</code> via
+          <code>RegistryProvider initialValues</code> with
+          <code>makeFailingLibrarySourceLayer(...)</code>. Same seam as production,
+          real implementation, configurable behavior.</p>
+        </details>
+      </div>
+
+      <h2>Why this matters</h2>
+      <div class="callout why">
+        Every meaningful UI state — Loading, Ready, Empty, LoadError, Defect,
+        failed-launch — is reachable by setting <em>one atom</em> to a real layer
+        with the right <code>behavior</code>. That's what makes Korri's Storybook
+        honest and its tests deterministic. Master this seam and you can stage any
+        state without touching a component.
+      </div>
+
+      <hr class="sep" />
+      <h2>Go deeper</h2>
+      <ul class="citations">
+        <li>Real layers: <code>product/platform/library/library-source-layer-memory.ts</code>, <code>launcher-layer-memory.ts</code></li>
+        <li>Override mechanics &amp; registry identity: <code>docs/research/effect-atom-react/deepen-u4-atom-react.md</code></li>
+        <li><a href="https://tim-smart-effect-atom.mintlify.app/guides/services-and-layers">Effect Atom — Services and layers</a></li>
+        <li><a href="https://effect.website/docs/requirements-management/layers/">Effect docs — Managing Layers</a> (<code>Layer.succeed</code> vs <code>Layer.effect</code>)</li>
+        <li>Glossary: <code>reference/effect-atoms-glossary.html</code></li>
+      </ul>
+
+      <footer>
+        <p><strong>I'm your teacher — ask me anything.</strong> Want to see a real
+        Korri story file that uses this seam, or wire one yourself against
+        <code>libraryItemsAtom</code>? Say the word.</p>
+        <p>Next likely lesson: <em>"Layer 5 — converting <code>AsyncResult</code> into a
+        domain ADT at the hook boundary."</em></p>
+      </footer>
+    </main>
+
+    <script>
+      const QUESTIONS = [
+        {
+          stem: 'A Storybook story should render the library list in its <b>Loading</b> state.',
+          opts: [
+            'Add a setTimeout in the component to delay rendering',
+            'Override librarySourceLayerAtom with a layer whose behavior is { kind: "loading-forever" } via RegistryProvider initialValues',
+            'vi.mock the LibrarySource module to return a pending promise',
+            'Set a loading=true prop on the component'
+          ],
+          answer: 1,
+          why: 'The loading-forever layer returns Effect.never — the data atom stays pending, driving Loading. Seam-only, no component change.'
+        },
+        {
+          stem: 'A non-React unit test (plain TS) needs the launcher to fail with exit code 1.',
+          opts: [
+            'registry.set(launcherLayerAtom, makeInMemoryLauncherLayer({ behavior: { kind: "fail", exitCode: 1 } }))',
+            'Create a FakeLauncher class implementing the interface',
+            'Stub launcher.run with jest.fn().mockRejectedValue(...)',
+            'Edit launchAtom to throw when testing'
+          ],
+          answer: 0,
+          why: 'registry.set writes the layer atom synchronously; the real in-memory launcher with behavior fail is the configured double. No Fake/Stub classes.'
+        },
+        {
+          stem: 'After overriding librarySourceLayerAtom, how much of layers 3–5 must you change?',
+          opts: [
+            'Rebuild the runtime atom by hand',
+            'Update libraryItemsAtom to read the new layer',
+            'Pass the new layer as a prop through the component tree',
+            'Nothing — the runtime reads the layer atom with get(...) and rebuilds; the data atom re-runs; the hook is unchanged'
+          ],
+          answer: 3,
+          why: 'That reactive get(...) dependency is the whole point of the seam — downstream is untouched.'
+        }
+      ];
+      const answered = new Set();
+      const quiz = document.getElementById('quiz');
+      const pct = document.getElementById('pct');
+
+      QUESTIONS.forEach((q, qi) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'q';
+        const stem = document.createElement('p');
+        stem.className = 'stem';
+        stem.innerHTML = '<b>'+(qi+1)+'.</b> ' + q.stem;
+        wrap.appendChild(stem);
+        const opts = document.createElement('div');
+        opts.className = 'opts';
+        q.opts.forEach((text, oi) => {
+          const label = document.createElement('label');
+          label.className = 'opt';
+          const input = document.createElement('input');
+          input.type = 'radio'; input.name = 'q'+qi; input.value = oi;
+          const span = document.createElement('span');
+          span.innerHTML = text;
+          label.appendChild(input); label.appendChild(span);
+          input.addEventListener('change', () => {
+            if (answered.has(qi)) return;
+            answered.add(qi);
+            const correct = oi === q.answer;
+            label.classList.add(correct ? 'correct' : 'wrong');
+            if (!correct) {
+              [...opts.children].forEach(c => {
+                if (Number(c.querySelector('input').value) === q.answer) c.classList.add('correct');
+              });
+            }
+            opts.querySelectorAll('input').forEach(i => i.disabled = true);
+            fb.className = 'feedback ' + (correct ? 'ok' : 'no');
+            fb.textContent = (correct ? '✓ Correct. ' : '✗ Not quite. ') + q.why;
+            updateScore();
+          });
+          opts.appendChild(label);
+        });
+        wrap.appendChild(opts);
+        const fb = document.createElement('div');
+        fb.className = 'feedback';
+        wrap.appendChild(fb);
+        quiz.appendChild(wrap);
+      });
+
+      function updateScore() {
+        let correct = 0;
+        QUESTIONS.forEach((q, qi) => {
+          const sel = document.querySelector('input[name="q'+qi+'"]:checked');
+          if (sel && Number(sel.value) === q.answer) correct++;
+        });
+        pct.textContent = correct + ' / ' + QUESTIONS.length;
+        if (correct === QUESTIONS.length) pct.textContent += '  🎉';
+      }
+    </script>
+  </body>
+</html>

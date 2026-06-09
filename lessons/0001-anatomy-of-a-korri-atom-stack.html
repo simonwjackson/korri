@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lesson 0001 — Anatomy of a Korri Atom Stack</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #171a21;
+        --panel-2: #1e222b;
+        --ink: #e7e9ee;
+        --ink-soft: #aab1c0;
+        --ink-faint: #717a8c;
+        --accent: #6ea8fe;
+        --accent-2: #7ee0c0;
+        --warn: #f0a35e;
+        --err: #f06e6e;
+        --ok: #7ee0a0;
+        --line: #2a2f3a;
+        --code: #11131a;
+        --radius: 14px;
+        --maxw: 52rem;
+      }
+      * { box-sizing: border-box; }
+      html { -webkit-text-size-adjust: 100%; }
+      body {
+        margin: 0;
+        background: radial-gradient(1200px 600px at 70% -10%, #1b2030 0%, var(--bg) 55%);
+        color: var(--ink);
+        font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        padding: clamp(1rem, 3vw, 3rem);
+      }
+      main { max-width: var(--maxw); margin: 0 auto; }
+      .eyebrow {
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-size: 0.72rem;
+        color: var(--accent);
+        font-weight: 700;
+      }
+      h1 {
+        font-size: clamp(1.7rem, 4vw, 2.5rem);
+        line-height: 1.15;
+        margin: 0.3rem 0 0.4rem;
+        letter-spacing: -0.01em;
+      }
+      h2 {
+        font-size: 1.25rem;
+        margin: 2.6rem 0 0.6rem;
+        letter-spacing: -0.01em;
+      }
+      h3 { font-size: 1.02rem; margin: 1.4rem 0 0.4rem; color: var(--ink); }
+      p { color: var(--ink-soft); }
+      .lede { font-size: 1.08rem; color: var(--ink); }
+      a { color: var(--accent); text-decoration: none; border-bottom: 1px solid #2c3a55; }
+      a:hover { border-color: var(--accent); }
+      code, pre {
+        font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+      }
+      code { background: var(--code); padding: 0.1em 0.38em; border-radius: 6px; font-size: 0.9em; color: #d8def0; }
+      pre {
+        background: var(--code);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 1rem 1.1rem;
+        overflow-x: auto;
+        font-size: 0.86rem;
+        line-height: 1.6;
+      }
+      pre code { background: none; padding: 0; }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 1.1rem 1.25rem;
+        margin: 1rem 0;
+      }
+      .callout {
+        border-left: 3px solid var(--accent);
+        background: var(--panel-2);
+        border-radius: 0 var(--radius) var(--radius) 0;
+        padding: 0.8rem 1.1rem;
+        margin: 1.2rem 0;
+      }
+      .callout.tip { border-color: var(--accent-2); }
+      .callout.why { border-color: var(--warn); }
+      .tok { display: inline-block; font-weight: 700; }
+      .t1 { color: #7ee0c0; }
+      .t2 { color: #6ea8fe; }
+      .t3 { color: #c79bff; }
+      .t4 { color: #f0a35e; }
+      .t5 { color: #f08fb8; }
+      .layers { list-style: none; padding: 0; margin: 0.5rem 0; }
+      .layers li {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 0.7rem 0.9rem;
+        margin: 0.5rem 0;
+        background: var(--panel-2);
+        display: grid;
+        grid-template-columns: 1.6rem 1fr;
+        gap: 0.7rem;
+        align-items: start;
+      }
+      .layers .n { font-weight: 800; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+      .layers .name { font-weight: 700; }
+      .layers .desc { color: var(--ink-soft); font-size: 0.94rem; display: block; margin-top: 0.15rem; }
+      /* quiz */
+      .quiz { margin: 0.4rem 0 0; }
+      .q {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 1rem 1.1rem;
+        margin: 0.9rem 0;
+        background: var(--panel);
+      }
+      .q .codeline { display: block; margin: 0.2rem 0 0.8rem; }
+      .opts { display: grid; gap: 0.45rem; }
+      .opt {
+        display: flex; gap: 0.6rem; align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        padding: 0.55rem 0.75rem;
+        background: var(--panel-2);
+        cursor: pointer;
+        transition: border-color 0.12s, background 0.12s;
+        font-size: 0.95rem;
+      }
+      .opt:hover { border-color: var(--accent); }
+      .opt input { accent-color: var(--accent); }
+      .opt.correct { border-color: var(--ok); background: #16241c; }
+      .opt.wrong { border-color: var(--err); background: #2a1719; }
+      .feedback { margin-top: 0.6rem; font-size: 0.92rem; min-height: 1.2em; }
+      .feedback.ok { color: var(--ok); }
+      .feedback.no { color: var(--err); }
+      .score {
+        position: sticky; bottom: 0;
+        margin-top: 1.2rem;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 0.8rem 1.1rem;
+        font-weight: 700;
+        display: flex; justify-content: space-between; align-items: center;
+      }
+      .score .pct { color: var(--accent-2); font-variant-numeric: tabular-nums; }
+      .citations { font-size: 0.9rem; }
+      .citations li { margin: 0.3rem 0; color: var(--ink-soft); }
+      footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem; color: var(--ink-faint); font-size: 0.88rem; }
+      .pill { display:inline-block; background:var(--panel-2); border:1px solid var(--line); border-radius:999px; padding:0.1rem 0.6rem; font-size:0.75rem; color:var(--ink-soft); }
+      hr.sep { border: none; border-top: 1px solid var(--line); margin: 2rem 0; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">Lesson 0001 · Effect + React Atoms for Korri</p>
+      <h1>Anatomy of a Korri atom stack</h1>
+      <p class="lede">
+        Before you can safely change Korri UI state, you need to read an atom
+        stack and name its parts. This lesson teaches the five layers of
+        <code>library-atoms.ts</code> — then you label the real lines yourself.
+      </p>
+      <p><span class="pill">~8 minutes</span> &nbsp; <span class="pill">Mission goal: "read a Korri atom stack and identify the parts"</span></p>
+
+      <div class="callout tip">
+        <strong>The one win:</strong> after this lesson you can point at any line
+        in <code>product/platform/react/library/library-atoms.ts</code> and say
+        which of the five roles it plays. That is the prerequisite for every
+        later lesson where you <em>modify</em> the stack.
+      </div>
+
+      <h2>The five layers, top to bottom</h2>
+      <p>
+        Every Korri atom feature flows through the same five roles. Data flows
+        <em>down</em> (a service describes a capability; a layer supplies it; a
+        runtime atom holds the layer; a data atom runs an Effect; a hook reads
+        it into React). The seam you swap in tests and Storybook is the
+        <strong>layer atom</strong> — layer 2.
+      </p>
+      <ul class="layers">
+        <li><span class="n">1</span><span><span class="name tok t1">Service</span> — the contract<span class="desc">A capability declared with <code>Context.Service</code>. It names <em>what</em> can happen (e.g. <code>LibrarySource</code>, <code>Launcher</code>), never <em>how</em>. Programs ask for it with <code>yield* LibrarySource</code>.</span></span></li>
+        <li><span class="n">2</span><span><span class="name tok t2">Layer (held in an atom)</span> — the swappable wiring<span class="desc">A <code>Layer</code> constructs the service. Korri parks it inside <code>Atom.make(...)</code> so production, tests, and stories can override the implementation at one seam — the <code>...LayerAtom</code>.</span></span></li>
+        <li><span class="n">3</span><span><span class="name tok t3">Runtime atom</span> — the engine<span class="desc"><code>Atom.runtime(get =&gt; Layer.merge(...))</code> turns the chosen layers into a runtime that can <em>execute</em> Effects. It reads the layer atoms with <code>get(...)</code>, so swapping a layer atom rebuilds the runtime.</span></span></li>
+        <li><span class="n">4</span><span><span class="name tok t4">Data / function atom</span> — the work<span class="desc"><code>runtime.atom(Effect.gen(...))</code> produces async <code>Result</code> state for reads; <code>runtime.fn(...)</code> produces a callable command for writes (e.g. <code>launchAtom</code>).</span></span></li>
+        <li><span class="n">5</span><span><span class="name tok t5">React hook boundary</span> — the edge<span class="desc">Components read with <code>useAtomValue(dataAtom)</code> and trigger commands with <code>useAtomSet(fnAtom)</code>. This is where Effect meets React — and where raw <code>Result</code>/<code>Exit</code> should be converted into a domain ADT.</span></span></li>
+      </ul>
+
+      <div class="callout">
+        Mental model: <strong>a data atom is a recipe; the runtime atom is the
+        kitchen; the layer atom decides which ingredients (real or fixture) the
+        kitchen stocks.</strong> Components never touch ingredients directly —
+        they order through the hook.
+      </div>
+
+      <h2>The real code, annotated</h2>
+      <p>
+        This is the actual Korri source (lightly trimmed). Each colored marker is
+        one of the five layers. Read it once, then do the exercise below.
+      </p>
+      <pre><code><span class="tok t2">// [2] LAYER ATOMS — the swappable seam (production default shown)</span>
+export const librarySourceLayerAtom = Atom.make(loadingForeverLibrarySourceLayer)
+export const launcherLayerAtom     = Atom.make(makeInMemoryLauncherLayer({ behavior: { kind: "succeed" } }))
+
+<span class="tok t3">// [3] RUNTIME ATOM — merges the chosen layers into an executable runtime</span>
+export const libraryRuntime = Atom.runtime(get =&gt;
+  Layer.merge(get(librarySourceLayerAtom), get(launcherLayerAtom)),
+)
+
+<span class="tok t4">// [4] DATA ATOM — runs an Effect that asks for the [1] service</span>
+export const libraryItemsAtom = libraryRuntime.atom(
+  Effect.gen(function* () {
+    const source = yield* <span class="tok t1">LibrarySource</span>   <span class="tok t1">// [1] SERVICE: the contract</span>
+    if (source.listPlayableEntries) return yield* source.listPlayableEntries()
+    const legacyGames = yield* source.list()
+    return legacyGames.map(playableEntryFromResolvedGame)
+  }),
+)
+
+<span class="tok t4">// [4] FUNCTION ATOM — a command (write), not a read</span>
+export const launchAtom = libraryRuntime.fn&lt;LaunchInput | string&gt;()(input =&gt;
+  Effect.gen(function* () {
+    const source   = yield* <span class="tok t1">LibrarySource</span>
+    const launcher = yield* <span class="tok t1">Launcher</span>      <span class="tok t1">// [1] another SERVICE</span>
+    const spec     = yield* source.launchSpecFor(/* ... */)
+    return yield* launcher.run(spec, { source: /* ... */ })
+  }),
+)</code></pre>
+      <p>
+        Notice the hook layer (5) is <em>not</em> in this file — it lives in the
+        components that import these atoms (<code>useAtomValue(libraryItemsAtom)</code>,
+        <code>useAtomSet(launchAtom)</code>). That separation is deliberate: the
+        atoms file is transport/runtime; the component file is React.
+      </p>
+
+      <h2 id="exercise">Exercise — label the lines</h2>
+      <p>
+        For each line of real Korri code, pick which of the five layers it is.
+        You get immediate feedback. Aim for 5/5 before moving on.
+      </p>
+
+      <div class="quiz" id="quiz"></div>
+      <div class="score" id="score"><span>Score</span><span class="pct" id="pct">0 / 5</span></div>
+
+      <h2>Check yourself (no peeking)</h2>
+      <div class="panel">
+        <p style="margin-top:0"><strong>Q.</strong> You want a Storybook story
+        where the library list shows the <em>error</em> state. Which of the five
+        layers do you change, and which do you leave untouched?</p>
+        <details>
+          <summary style="cursor:pointer;color:var(--accent-2)">Reveal answer</summary>
+          <p>Change <strong>layer 2</strong> only — override
+          <code>librarySourceLayerAtom</code> with a failing layer. The runtime
+          atom (3), data atom (4), and hook (5) stay identical, because the
+          runtime reads the layer atom with <code>get(...)</code> and rebuilds
+          itself. The component never knows it got a failing layer — that is the
+          whole point of the seam.</p>
+        </details>
+      </div>
+
+      <h2>Why this matters</h2>
+      <div class="callout why">
+        If you cannot name these five roles, every edit feels like guessing.
+        Knowing them tells you <em>where</em> to make a change: new capability →
+        a service; new test/story behavior → a layer atom; new derived read → a
+        data atom; new React surface → a hook + ADT conversion. The roles are the
+        map.
+      </div>
+
+      <hr class="sep" />
+      <h2>Go deeper</h2>
+      <ul class="citations">
+        <li>Source dissected here: <code>product/platform/react/library/library-atoms.ts</code></li>
+        <li><a href="https://effect.website/docs/requirements-management/services/">Effect docs — Managing Services</a> (layer 1)</li>
+        <li><a href="https://tim-smart-effect-atom.mintlify.app/guides/services-and-layers">Effect Atom — Services and layers</a> (layers 2–4)</li>
+        <li><a href="https://tim-smart-effect-atom.mintlify.app/introduction">Effect Atom — Introduction</a> (the reactive mental model)</li>
+        <li>Korri best practice for the hook boundary (layer 5): <code>docs/solutions/best-practices/react-state-components-over-result-render-props-for-effect-atoms-2026-05-03.md</code></li>
+        <li>Quick reference (open alongside lessons): <code>reference/effect-atoms-glossary.html</code></li>
+      </ul>
+
+      <footer>
+        <p><strong>I'm your teacher — ask me anything.</strong> If any of the five
+        roles is fuzzy, ask me to walk through it against another atom stack in
+        the repo, or to show the matching component file for layer 5.</p>
+        <p>Next likely lesson: <em>"Layer 2 in depth — swapping the layer-atom
+        seam for tests and Storybook."</em></p>
+      </footer>
+    </main>
+
+    <script>
+      const QUESTIONS = [
+        {
+          code: 'export const librarySourceLayerAtom = Atom.make(loadingForeverLibrarySourceLayer)',
+          answer: 2,
+          why: 'Atom.make wrapping a Layer is the swappable layer-atom seam — layer 2.'
+        },
+        {
+          code: 'const source = yield* LibrarySource',
+          answer: 1,
+          why: 'Asking for a capability with yield* is consuming the service contract — layer 1.'
+        },
+        {
+          code: 'Atom.runtime(get => Layer.merge(get(librarySourceLayerAtom), get(launcherLayerAtom)))',
+          answer: 3,
+          why: 'Atom.runtime builds an executable runtime from the chosen layers — layer 3.'
+        },
+        {
+          code: 'export const libraryItemsAtom = libraryRuntime.atom(Effect.gen(function* () { /* ... */ }))',
+          answer: 4,
+          why: 'runtime.atom(Effect...) is a data atom producing async Result state — layer 4.'
+        },
+        {
+          code: 'const items = useAtomValue(libraryItemsAtom) // inside a React component',
+          answer: 5,
+          why: 'useAtomValue reads an atom into React — the hook boundary, layer 5.'
+        }
+      ];
+      const LABELS = {
+        1: '1 · Service (contract)',
+        2: '2 · Layer atom (swappable seam)',
+        3: '3 · Runtime atom (engine)',
+        4: '4 · Data / function atom (work)',
+        5: '5 · React hook boundary (edge)'
+      };
+      const answered = new Set();
+      const quiz = document.getElementById('quiz');
+      const pct = document.getElementById('pct');
+
+      QUESTIONS.forEach((q, qi) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'q';
+        const cl = document.createElement('code');
+        cl.className = 'codeline';
+        cl.textContent = q.code;
+        wrap.appendChild(cl);
+
+        const opts = document.createElement('div');
+        opts.className = 'opts';
+        [1,2,3,4,5].forEach(val => {
+          const label = document.createElement('label');
+          label.className = 'opt';
+          const input = document.createElement('input');
+          input.type = 'radio';
+          input.name = 'q' + qi;
+          input.value = val;
+          const span = document.createElement('span');
+          span.textContent = LABELS[val];
+          label.appendChild(input);
+          label.appendChild(span);
+          input.addEventListener('change', () => {
+            if (answered.has(qi)) return;
+            answered.add(qi);
+            const correct = val === q.answer;
+            label.classList.add(correct ? 'correct' : 'wrong');
+            if (!correct) {
+              [...opts.children].forEach(c => {
+                if (c.querySelector('input').value == q.answer) c.classList.add('correct');
+              });
+            }
+            opts.querySelectorAll('input').forEach(i => i.disabled = true);
+            fb.className = 'feedback ' + (correct ? 'ok' : 'no');
+            fb.textContent = (correct ? '✓ Correct. ' : '✗ Not quite. ') + q.why;
+            updateScore();
+          });
+          opts.appendChild(label);
+        });
+        wrap.appendChild(opts);
+        const fb = document.createElement('div');
+        fb.className = 'feedback';
+        wrap.appendChild(fb);
+        quiz.appendChild(wrap);
+      });
+
+      function updateScore() {
+        let correct = 0;
+        QUESTIONS.forEach((q, qi) => {
+          const sel = document.querySelector('input[name="q'+qi+'"]:checked');
+          if (sel && Number(sel.value) === q.answer) correct++;
+        });
+        pct.textContent = correct + ' / ' + QUESTIONS.length;
+        if (correct === QUESTIONS.length) pct.textContent += '  🎉';
+      }
+    </script>
+  </body>
+</html>
