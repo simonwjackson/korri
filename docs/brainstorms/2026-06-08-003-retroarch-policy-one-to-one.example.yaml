@@ -155,7 +155,6 @@ apps:
       mixerMute: false # audio_mixer_mute_enable
       outputRate: 48000 # audio_out_rate
       device: null # audio_device
-      dspPlugin: null # audio_dsp_plugin
       sync: true # audio_sync
       latencyMs: 64 # audio_latency
       rateControl: true # audio_rate_control

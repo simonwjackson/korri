@@ -251,7 +251,6 @@ const representativeRetroArchPolicy: RetroArchPolicy = {
     latencyMs: 64,
     outputRate: 48000,
     device: "default",
-    dspPlugin: null,
     sync: true,
     rateControl: true,
     rateControlDelta: 0.005,
@@ -389,6 +388,14 @@ describe("RetroArchPolicy", () => {
         extraSettings: { network_cmd_password: "secret" },
       }),
     ).toThrow(/plaintext credential/)
+    expect(() =>
+      decodeRetroArchPolicy({ extraSettings: { netplay_password: "secret" } }),
+    ).toThrow(/plaintext credential/)
+    expect(() =>
+      decodeRetroArchPolicy({
+        extraSettings: { netplay_spectate_password: "secret" },
+      }),
+    ).toThrow(/plaintext credential/)
   })
 
   it("decodes expanded video, audio, and input tuning fields", () => {
@@ -450,6 +457,21 @@ describe("RetroArchPolicy", () => {
     expect(policy.updater?.buildbotUrl).toBeNull()
   })
 
+  it("rejects updater URLs that are missing https", () => {
+    for (const value of [
+      "not a url",
+      "http://updates.example.invalid/cores",
+      "file:///tmp/cores",
+    ]) {
+      expect(() =>
+        decodeRetroArchPolicy({ updater: { buildbotUrl: value } }),
+      ).toThrow(/https URL/)
+      expect(() =>
+        decodeRetroArchPolicy({ updater: { buildbotAssetsUrl: value } }),
+      ).toThrow(/https URL/)
+    }
+  })
+
   it("rejects plaintext credentials and deferred advanced control fields", () => {
     for (const badPolicy of [
       { achievements: { password: "secret" } },
@@ -458,6 +480,7 @@ describe("RetroArchPolicy", () => {
       { remoteCommand: { enable: true } },
       { networkCommand: { enable: true } },
       { updater: { buildbotUrl: "" } },
+      { audio: { dspPlugin: "/tmp/unsafe-dlopen.so" } },
       { privacy: { cameraDevice: "" } },
     ]) {
       expect(() => decodeRetroArchPolicy(badPolicy)).toThrow()

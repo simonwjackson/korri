@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test"
 
 import {
-  assertUniqueRetroArchTypedConfigKeys,
   composeRetroArchLaunchSpec,
   renderRetroArchConfig,
 } from "./retroarch-launch-spec"
@@ -168,7 +167,6 @@ describe("typed RetroArch launch spec rendering", () => {
         mixerMute: true,
         outputRate: 48000,
         device: "hw:0,0",
-        dspPlugin: null,
         sync: true,
         latencyMs: 64,
         rateControl: true,
@@ -317,6 +315,21 @@ describe("typed RetroArch launch spec rendering", () => {
     expect(config).not.toContain("camera_device")
   })
 
+  it("rejects updater URLs that are missing https at render time", () => {
+    for (const value of [
+      "not a url",
+      "http://updates.example.invalid/cores",
+      "file:///tmp/cores",
+    ]) {
+      expect(() =>
+        renderRetroArchConfig({ updater: { buildbotUrl: value } }),
+      ).toThrow(/https URL/)
+      expect(() =>
+        renderRetroArchConfig({ updater: { buildbotAssetsUrl: value } }),
+      ).toThrow(/https URL/)
+    }
+  })
+
   it("renders menu saves rewind playback and latency settings", () => {
     const config = renderRetroArchConfig({
       drivers: { menu: "ozone" },
@@ -414,6 +427,9 @@ describe("typed RetroArch launch spec rendering", () => {
   })
 
   it("renders verified named aspect ratio values", () => {
+    expect(
+      renderRetroArchConfig({ video: { aspectRatio: "config" } }),
+    ).toContain("aspect_ratio_index = 20")
     expect(renderRetroArchConfig({ video: { aspectRatio: "full" } })).toContain(
       "aspect_ratio_index = 24",
     )
@@ -561,6 +577,25 @@ describe("typed RetroArch launch spec rendering", () => {
     )
   })
 
+  it("renders input port settings in numeric port order", () => {
+    const config = renderRetroArchConfig({
+      input: {
+        ports: {
+          "10": { joypadIndex: 9 },
+          "2": { joypadIndex: 1 },
+          "9": { joypadIndex: 8 },
+        },
+      },
+    })
+
+    expect(config.indexOf("input_player2_joypad_index = 1")).toBeLessThan(
+      config.indexOf("input_player9_joypad_index = 8"),
+    )
+    expect(config.indexOf("input_player9_joypad_index = 8")).toBeLessThan(
+      config.indexOf("input_player10_joypad_index = 9"),
+    )
+  })
+
   it("renders logging appendconfig extraArgs and environment unsets", () => {
     const spec = composeRetroArchLaunchSpec({
       command: "/run/current-system/sw/bin/retroarch",
@@ -646,15 +681,6 @@ describe("typed RetroArch launch spec rendering", () => {
     ).toThrow(/log file/)
   })
 
-  it("rejects duplicate typed config key registration", () => {
-    expect(() =>
-      assertUniqueRetroArchTypedConfigKeys([
-        ["video_fullscreen", "video.fullscreen"],
-        ["video_fullscreen", "video.alias"],
-      ]),
-    ).toThrow(/Duplicate RetroArch typed cfg key/)
-  })
-
   it("rejects config injection through append paths and raw settings", () => {
     expect(() =>
       renderRetroArchConfig({
@@ -670,6 +696,8 @@ describe("typed RetroArch launch spec rendering", () => {
       "cheevos_password",
       "cheevos_token",
       "network_cmd_password",
+      "netplay_password",
+      "netplay_spectate_password",
     ]) {
       expect(() =>
         renderRetroArchConfig({

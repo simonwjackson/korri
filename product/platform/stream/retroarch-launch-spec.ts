@@ -8,6 +8,11 @@ import {
 } from "node:path"
 import type { RetroArchPolicy } from "@platform/library/config/inheritable-fields"
 import type { LaunchSettingValue } from "@platform/library/config/launch-block"
+import {
+  isRetroArchConfigKey,
+  isRetroArchPlaintextCredentialSettingKey,
+  validateNullableRetroArchHttpsUrl,
+} from "@platform/library/config/retroarch-setting-policy"
 import type { LaunchSpec } from "@platform/library/launcher"
 
 const DEFAULT_RETROARCH_COMMAND = "retroarch"
@@ -35,186 +40,6 @@ const DANGEROUS_CORE_ARGS = new Set(["-L", "--libretro"])
 const DANGEROUS_CONFIG_ARGS = new Set(["-c", "--config"])
 const DANGEROUS_APPEND_CONFIG_ARGS = new Set(["--appendconfig"])
 const DANGEROUS_LOG_FILE_ARGS = new Set(["--log-file"])
-const RETROARCH_CONFIG_KEY_PATTERN = /^[A-Za-z0-9_]+$/
-const RETROARCH_PLAINTEXT_CREDENTIAL_SETTING_KEYS = new Set([
-  "cheevos_password",
-  "cheevos_token",
-  "network_cmd_password",
-])
-
-const RETROARCH_TYPED_CONFIG_KEYS = [
-  ["config_save_on_exit", "lifecycle.saveOnExit"],
-  ["auto_overrides_enable", "lifecycle.autoOverrides"],
-  ["auto_remaps_enable", "lifecycle.autoRemaps"],
-  ["game_specific_options", "lifecycle.gameSpecificOptions"],
-  ["auto_shaders_enable", "lifecycle.autoShaders"],
-  ["show_hidden_files", "lifecycle.showHiddenFiles"],
-  ["load_dummy_on_core_shutdown", "lifecycle.loadDummyOnCoreShutdown"],
-  ["history_list_enable", "lifecycle.historyListEnable"],
-  ["perfcnt_enable", "lifecycle.performanceCounters"],
-  ["all_users_control_menu", "lifecycle.allUsersControlMenu"],
-  ["suspend_screensaver_enable", "lifecycle.suspendScreensaver"],
-  ["sustained_performance_mode", "lifecycle.sustainedPerformanceMode"],
-  ["gamemode_enable", "lifecycle.gameMode"],
-  ["log_verbosity", "logging.verbosity"],
-  ["libretro_log_level", "logging.libretroLogLevel"],
-  ["fps_show", "logging.fpsShow"],
-  ["memory_show", "logging.memoryShow"],
-  ["framecount_show", "logging.framecountShow"],
-  ["input_driver", "drivers.input"],
-  ["input_joypad_driver", "drivers.joypad"],
-  ["video_driver", "drivers.video"],
-  ["audio_driver", "drivers.audio"],
-  ["audio_resampler", "drivers.resampler"],
-  ["menu_driver", "drivers.menu"],
-  ["camera_driver", "drivers.camera"],
-  ["location_driver", "drivers.location"],
-  ["record_driver", "drivers.record"],
-  ["system_directory", "paths.systemDirectory"],
-  ["savefile_directory", "paths.savefileDirectory"],
-  ["savestate_directory", "paths.savestateDirectory"],
-  ["screenshot_directory", "paths.screenshotDirectory"],
-  ["content_directory", "paths.contentDirectory"],
-  ["cache_directory", "paths.cacheDirectory"],
-  ["assets_directory", "paths.assetsDirectory"],
-  ["thumbnails_directory", "paths.thumbnailsDirectory"],
-  ["playlist_directory", "paths.playlistDirectory"],
-  ["libretro_directory", "paths.libretroDirectory"],
-  ["libretro_info_path", "paths.libretroInfoPath"],
-  ["core_assets_directory", "paths.coreAssetsDirectory"],
-  ["core_options_path", "paths.coreOptionsPath"],
-  ["joypad_autoconfig_dir", "paths.joypadAutoconfigDirectory"],
-  ["input_remapping_directory", "paths.inputRemappingDirectory"],
-  ["overlay_directory", "paths.overlayDirectory"],
-  ["video_shader_dir", "paths.videoShaderDirectory"],
-  ["cheat_database_path", "paths.cheatDatabasePath"],
-  ["content_database_path", "paths.contentDatabasePath"],
-  ["content_runtime_log", "paths.contentRuntimeLog"],
-  ["recording_output_directory", "paths.recordingOutputDirectory"],
-  ["video_fullscreen", "video.fullscreen"],
-  ["video_windowed_fullscreen", "video.windowedFullscreen"],
-  ["video_fullscreen_x", "video.fullscreenWidth"],
-  ["video_fullscreen_y", "video.fullscreenHeight"],
-  ["video_refresh_rate", "video.refreshRate"],
-  ["video_vsync", "video.vsync"],
-  ["aspect_ratio_index", "video.aspectRatio"],
-  ["video_aspect_ratio", "video.aspectRatioValue"],
-  ["video_force_aspect", "video.forceAspect"],
-  ["video_scale", "video.scale"],
-  ["video_scale_integer", "video.integerScale"],
-  ["video_crop_overscan", "video.cropOverscan"],
-  ["video_smooth", "video.smooth"],
-  ["video_shader", "video.shader"],
-  ["video_shader_enable", "video.shaderEnable"],
-  ["video_hdr_enable", "video.hdr.enable"],
-  ["video_hdr_max_nits", "video.hdr.maxNits"],
-  ["video_hdr_paper_white_nits", "video.hdr.paperWhiteNits"],
-  ["video_hdr_contrast", "video.hdr.contrast"],
-  ["video_hdr_expand_gamut", "video.hdr.expandGamut"],
-  ["video_post_filter_record", "video.recording.postFilter"],
-  ["video_gpu_record", "video.recording.gpu"],
-  ["video_gpu_screenshot", "video.gpuScreenshot"],
-  ["video_shader_watch_files", "video.shaderWatchFiles"],
-  ["video_hard_sync", "video.sync.hardSync"],
-  ["video_hard_sync_frames", "video.sync.hardSyncFrames"],
-  ["video_frame_delay", "video.sync.frameDelay"],
-  ["video_frame_delay_auto", "video.sync.frameDelayAuto"],
-  ["audio_enable", "audio.enable"],
-  ["audio_enable_menu", "audio.menuEnable"],
-  ["audio_mute_enable", "audio.mute"],
-  ["audio_mixer_mute_enable", "audio.mixerMute"],
-  ["audio_out_rate", "audio.outputRate"],
-  ["audio_device", "audio.device"],
-  ["audio_dsp_plugin", "audio.dspPlugin"],
-  ["audio_sync", "audio.sync"],
-  ["audio_latency", "audio.latencyMs"],
-  ["audio_rate_control", "audio.rateControl"],
-  ["audio_rate_control_delta", "audio.rateControlDelta"],
-  ["audio_max_timing_skew", "audio.maxTimingSkew"],
-  ["audio_volume", "audio.volumeDb"],
-  ["audio_mixer_volume", "audio.mixerVolumeDb"],
-  ["audio_resampler_quality", "audio.resamplerQuality"],
-  ["input_autodetect_enable", "input.autodetect"],
-  ["input_max_users", "input.maxUsers"],
-  ["input_poll_type_behavior", "input.pollTypeBehavior"],
-  ["input_axis_threshold", "input.axisThreshold"],
-  ["input_analog_deadzone", "input.analogDeadzone"],
-  ["input_analog_sensitivity", "input.analogSensitivity"],
-  ["input_remap_binds_enable", "input.remapBinds"],
-  ["input_descriptor_label_show", "input.descriptors.labelShow"],
-  ["input_descriptor_hide_unbound", "input.descriptors.hideUnbound"],
-  ["input_overlay_enable", "input.overlay.enable"],
-  ["input_overlay", "input.overlay.path"],
-  ["input_overlay_opacity", "input.overlay.opacity"],
-  ["input_overlay_scale", "input.overlay.scale"],
-  ["input_overlay_behind_menu", "input.overlay.behindMenu"],
-  ["input_overlay_hide_in_menu", "input.overlay.hideInMenu"],
-  ["input_auto_game_focus", "input.autoGameFocus"],
-  ["input_menu_toggle_gamepad_combo", "input.menuToggleGamepadCombo"],
-  ["input_quit_gamepad_combo", "input.quitGamepadCombo"],
-  ["input_libretro_device_pN", "input.ports.*.libretroDevice"],
-  ["input_playerN_joypad_index", "input.ports.*.joypadIndex"],
-  ["input_playerN_analog_dpad_mode", "input.ports.*.analogDpadMode"],
-  ["menu_show_start_screen", "menu.showStartScreen"],
-  ["menu_pause_libretro", "menu.pauseLibretro"],
-  ["menu_mouse_enable", "menu.mouseEnable"],
-  ["menu_pointer_enable", "menu.pointerEnable"],
-  ["menu_timedate_enable", "menu.timedateEnable"],
-  ["menu_battery_level_enable", "menu.batteryLevelEnable"],
-  ["menu_core_enable", "menu.coreEnable"],
-  ["menu_dynamic_wallpaper_enable", "menu.dynamicWallpaper"],
-  ["menu_wallpaper", "menu.wallpaper"],
-  ["menu_screensaver_timeout", "menu.screensaverTimeoutSeconds"],
-  ["autosave_interval", "saves.autosaveIntervalSeconds"],
-  ["savestate_auto_load", "saves.autoLoadState"],
-  ["savestate_auto_save", "saves.autoSaveState"],
-  ["savestate_auto_index", "saves.autoIndex"],
-  ["savestate_max_keep", "saves.maxKeep"],
-  ["savestate_thumbnail_enable", "saves.thumbnailEnable"],
-  ["sort_savefiles_enable", "saves.sortSavefiles"],
-  ["sort_savestates_enable", "saves.sortSavestates"],
-  ["savefiles_in_content_dir", "saves.savefilesInContentDir"],
-  ["savestates_in_content_dir", "saves.savestatesInContentDir"],
-  ["systemfiles_in_content_dir", "saves.systemfilesInContentDir"],
-  ["block_sram_overwrite", "saves.blockSramOverwrite"],
-  ["save_file_compression", "saves.saveFileCompression"],
-  ["savestate_file_compression", "saves.stateFileCompression"],
-  ["rewind_enable", "rewind.enable"],
-  ["rewind_granularity", "rewind.granularity"],
-  ["rewind_buffer_size", "rewind.bufferSizeMb"],
-  ["rewind_buffer_size_step", "rewind.bufferSizeStepMb"],
-  ["rewind_auto_stride", "rewind.autoStride"],
-  ["pause_nonactive", "playback.pauseNonactive"],
-  ["pause_on_disconnect", "playback.pauseOnDisconnect"],
-  ["slowmotion_ratio", "playback.slowmotionRatio"],
-  ["fastforward_ratio", "playback.fastforwardRatio"],
-  ["fastforward_frameskip", "playback.fastforwardFrameskip"],
-  ["run_ahead_enabled", "latency.runAhead.enable"],
-  ["run_ahead_frames", "latency.runAhead.frames"],
-  ["run_ahead_secondary_instance", "latency.runAhead.secondaryInstance"],
-  ["run_ahead_hide_warnings", "latency.runAhead.hideWarnings"],
-  ["preemptive_frames_enable", "latency.preemptiveFrames.enable"],
-  ["preemptive_frames", "latency.preemptiveFrames.frames"],
-  ["cheevos_enable", "achievements.enable"],
-  ["cheevos_username", "achievements.username"],
-  ["cheevos_hardcore_mode_enable", "achievements.hardcoreMode"],
-  ["cheevos_badges_enable", "achievements.badges"],
-  ["cheevos_richpresence_enable", "achievements.richPresence"],
-  ["cheevos_test_unofficial", "achievements.testUnofficial"],
-  ["vibrate_on_keypress", "haptics.vibrateOnKeypress"],
-  ["enable_device_vibration", "haptics.deviceVibration"],
-  ["playlist_use_old_format", "playlists.useOldFormat"],
-  ["camera_device", "privacy.cameraDevice"],
-  ["camera_allow", "privacy.cameraAllow"],
-  ["location_allow", "privacy.locationAllow"],
-  ["menu_show_online_updater", "updater.showOnlineUpdater"],
-  ["menu_show_core_updater", "updater.showCoreUpdater"],
-  ["core_updater_buildbot_url", "updater.buildbotUrl"],
-  ["core_updater_buildbot_assets_url", "updater.buildbotAssetsUrl"],
-  ["core_updater_auto_extract_archive", "updater.autoExtractArchive"],
-] as const
-
-assertUniqueRetroArchTypedConfigKeys(RETROARCH_TYPED_CONFIG_KEYS)
 
 export interface RetroArchLaunchFacts {
   readonly configPath: string
@@ -574,7 +399,6 @@ const AUDIO_SETTINGS: readonly SettingEntry<RetroArchAudioPolicy>[] = [
   ["audio_mixer_mute_enable", audio => audio.mixerMute],
   ["audio_out_rate", audio => audio.outputRate],
   ["audio_device", audio => audio.device],
-  ["audio_dsp_plugin", audio => audio.dspPlugin],
   ["audio_sync", audio => audio.sync],
   ["audio_latency", audio => audio.latencyMs],
   ["audio_rate_control", audio => audio.rateControl],
@@ -856,21 +680,6 @@ function compareNumericStrings(left: string, right: string): number {
   return Number(left) - Number(right)
 }
 
-export function assertUniqueRetroArchTypedConfigKeys(
-  entries: readonly (readonly [string, string])[],
-) {
-  const seen = new Map<string, string>()
-  for (const [cfgKey, fieldPath] of entries) {
-    const previous = seen.get(cfgKey)
-    if (previous !== undefined) {
-      throw new Error(
-        `Duplicate RetroArch typed cfg key ${cfgKey} registered by ${previous} and ${fieldPath}`,
-      )
-    }
-    seen.set(cfgKey, fieldPath)
-  }
-}
-
 function pushTypedSetting(
   writer: TypedSettingsWriter,
   key: string,
@@ -960,11 +769,18 @@ function validateRetroArchPolicy(policy: RetroArchPolicy) {
       )
     }
   }
+  for (const [value, label] of [
+    [policy.updater?.buildbotUrl, "updater.buildbotUrl"],
+    [policy.updater?.buildbotAssetsUrl, "updater.buildbotAssetsUrl"],
+  ] as const) {
+    const error = validateNullableRetroArchHttpsUrl(value, label)
+    if (error !== undefined) throw new Error(`RetroArch ${error}`)
+  }
   for (const key of Object.keys(policy.extraSettings ?? {})) {
-    if (!RETROARCH_CONFIG_KEY_PATTERN.test(key)) {
+    if (!isRetroArchConfigKey(key)) {
       throw new Error(`Invalid RetroArch extraSettings key: ${key}`)
     }
-    if (RETROARCH_PLAINTEXT_CREDENTIAL_SETTING_KEYS.has(key)) {
+    if (isRetroArchPlaintextCredentialSettingKey(key)) {
       throw new Error(
         `RetroArch extraSettings must not contain plaintext credential key: ${key}`,
       )

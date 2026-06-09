@@ -37,6 +37,11 @@
 import { Schema } from "effect"
 
 import { LaunchSettingValue } from "./launch-block"
+import {
+  isRetroArchConfigKey,
+  isRetroArchPlaintextCredentialSettingKey,
+  validateNullableRetroArchHttpsUrl,
+} from "./retroarch-setting-policy"
 
 const STRICT = { onExcessProperty: "error" } as const
 
@@ -349,6 +354,17 @@ const NullablePositiveInteger = (label: string) =>
 const NullableNonEmptyString = (label: string) =>
   Schema.NullOr(NonEmptyString(label))
 
+const NullableHttpsUrl = (label: string) =>
+  Schema.NullOr(
+    NonEmptyString(label).pipe(
+      Schema.check(
+        Schema.makeFilter(value =>
+          validateNullableRetroArchHttpsUrl(value, label),
+        ),
+      ),
+    ),
+  )
+
 export const MoonlightCodec = Schema.Literals(["auto", "h264", "h265"])
 export type MoonlightCodec = Schema.Schema.Type<typeof MoonlightCodec>
 
@@ -656,7 +672,6 @@ const RetroArchAudioPolicy = Schema.Struct({
   latencyMs: Schema.optional(NonNegativeNumber("audio.latencyMs")),
   outputRate: Schema.optional(PositiveInteger("audio.outputRate")),
   device: Schema.optional(NullableNonEmptyString("audio.device")),
-  dspPlugin: Schema.optional(NullableNonEmptyString("audio.dspPlugin")),
   sync: Schema.optional(Schema.Boolean),
   rateControl: Schema.optional(Schema.Boolean),
   rateControlDelta: Schema.optional(PositiveNumber("audio.rateControlDelta")),
@@ -668,19 +683,12 @@ const RetroArchAudioPolicy = Schema.Struct({
   ),
 })
 
-const RETROARCH_CONFIG_KEY_PATTERN = /^[A-Za-z0-9_]+$/
-const RETROARCH_PLAINTEXT_CREDENTIAL_SETTING_KEYS = new Set([
-  "cheevos_password",
-  "cheevos_token",
-  "network_cmd_password",
-])
-
 const RetroArchExtraSettingKey = Schema.String.check(
   Schema.makeFilter(value => {
-    if (!RETROARCH_CONFIG_KEY_PATTERN.test(value)) {
+    if (!isRetroArchConfigKey(value)) {
       return `Invalid RetroArch extraSettings key: ${value}`
     }
-    if (RETROARCH_PLAINTEXT_CREDENTIAL_SETTING_KEYS.has(value)) {
+    if (isRetroArchPlaintextCredentialSettingKey(value)) {
       return `RetroArch extraSettings must not contain plaintext credential key: ${value}`
     }
     return undefined
@@ -843,9 +851,9 @@ const RetroArchPrivacyPolicy = Schema.Struct({
 const RetroArchUpdaterPolicy = Schema.Struct({
   showOnlineUpdater: Schema.optional(Schema.Boolean),
   showCoreUpdater: Schema.optional(Schema.Boolean),
-  buildbotUrl: Schema.optional(NullableNonEmptyString("updater.buildbotUrl")),
+  buildbotUrl: Schema.optional(NullableHttpsUrl("updater.buildbotUrl")),
   buildbotAssetsUrl: Schema.optional(
-    NullableNonEmptyString("updater.buildbotAssetsUrl"),
+    NullableHttpsUrl("updater.buildbotAssetsUrl"),
   ),
   autoExtractArchive: Schema.optional(Schema.Boolean),
 })
