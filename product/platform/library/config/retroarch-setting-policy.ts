@@ -1,4 +1,4 @@
-export const RETROARCH_CONFIG_KEY_PATTERN = /^[A-Za-z0-9_]+$/
+const RETROARCH_CONFIG_KEY_PATTERN = /^[A-Za-z0-9_]+$/
 
 const RETROARCH_PLAINTEXT_CREDENTIAL_SETTING_KEYS = new Set([
   "cheevos_password",

@@ -669,6 +669,12 @@ describe("typed RetroArch launch spec rendering", () => {
     ).toThrow(/logging\.logFile.*logs/)
     expect(() =>
       composeRetroArchLaunchSpec({
+        policy: { logging: { logFile: "." } },
+        facts,
+      }),
+    ).toThrow(/logging\.logFile.*logs/)
+    expect(() =>
+      composeRetroArchLaunchSpec({
         policy: { extraArgs: ["--log-file=/tmp/retroarch.log"] },
         facts,
       }),
