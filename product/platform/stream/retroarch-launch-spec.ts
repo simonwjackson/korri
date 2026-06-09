@@ -119,6 +119,9 @@ function renderRetroArchSettings(
   appendAdvancedSettings(writer, policy)
 
   const settings = [...writer.settings]
+  // Deliberately bypass the typed-key duplicate guard: extraSettings is the
+  // permanent break-glass layer and renders last so operators can override
+  // typed cfg keys while Korri still validates key shape and secret hazards.
   for (const [key, value] of Object.entries(policy.extraSettings ?? {})) {
     settings.push([key, value])
   }
