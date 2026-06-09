@@ -4,7 +4,7 @@ slug: persist-live-bitrate-deployment-configuration
 title: Persist live bitrate deployment configuration
 origin: parked
 legacy: task-059
-status: In Progress
+status: Done
 priority: high
 labels:
   - nix
@@ -25,11 +25,11 @@ The successful validation used temporary Sunshine and Bandai runtime overrides; 
 
 ## Acceptance Criteria
 
-- [ ] Patched `sunshine-korri` with the seamless VAAPI bitrate patch is deployed through normal Nix/system configuration on source hosts.
-- [ ] Sunshine starts with `SUNSHINE_LIVE_SETTINGS_MVP=1` only where intended and VAAPI initializes correctly from the service environment.
-- [ ] The libva/driver closure mismatch observed with copied binaries is eliminated or explicitly guarded against in deployment docs/checks.
-- [ ] Bandai/kiosk config persists the sessiond token permission fix, Moonlight input guard, and related service environment without runtime drop-ins.
-- [ ] A rollback path returns to the safe bitrate-unsupported contract if the VAAPI private-state path must be disabled.
+- [x] Patched `sunshine-korri` with the seamless VAAPI bitrate patch is deployed through normal Nix/system configuration on source hosts.
+- [x] Sunshine starts with `SUNSHINE_LIVE_SETTINGS_MVP=1` only where intended and VAAPI initializes correctly from the service environment.
+- [x] The libva/driver closure mismatch observed with copied binaries is eliminated or explicitly guarded against in deployment docs/checks.
+- [x] Bandai/kiosk config persists the sessiond token permission fix, Moonlight input guard, and related service environment without runtime drop-ins.
+- [x] A rollback path returns to the safe bitrate-unsupported contract if the VAAPI private-state path must be disabled.
 
 ## Related
 
@@ -42,3 +42,5 @@ The successful validation used temporary Sunshine and Bandai runtime overrides; 
 ## Notes
 
 Includes cleanup of the runtime-only Bandai service drop-in once real config lands.
+
+Completed in this slice by making `services.korri.daemon.streaming.runtimeSettings.enable` the Nix-owned gate for `SUNSHINE_LIVE_SETTINGS_MVP`: enabled by default for managed stream hosts, disabled as the rollback path while keeping the patched `sunshine-korri` package deployed. Added Nix checks for source-machine Sunshine package/gate wiring, daemon-level rollback behavior, and SM8550 kiosk sessiond/InputPlumber env persistence without legacy token env.

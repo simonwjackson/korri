@@ -34,6 +34,20 @@ let
   streamControl = evaluateWith {
     services.korri.daemon = { enable = true; streamControl.enable = true; };
   };
+  streamingBase = {
+    services.korri.daemon = {
+      enable = true;
+      streaming.enable = true;
+    };
+    services.korri.compositor.enable = true;
+    services.korri.input.provider.enable = true;
+  };
+  streamingLiveSettings = evaluateWith streamingBase;
+  streamingLiveSettingsDisabled = evaluateWith (lib.recursiveUpdate streamingBase {
+    services.korri.daemon.streaming.runtimeSettings.enable = false;
+  });
+  sunshineSystemEnv = cfg: (cfg.systemd.services."korri-sunshine" or { }).environment or { };
+  sunshineUserEnv = cfg: (cfg.systemd.user.services.sunshine or { }).environment or { };
 
   check = message: assertion: { inherit message assertion; };
   checks = [
@@ -47,6 +61,18 @@ let
     (check "sessiond socket env exported" ((env socketPaired).KORRI_SESSIOND_SOCKET == "%t/korri/sessiond.sock"))
     (check "legacy sessiond URL/token env absent" (!((env socketPaired) ? KORRI_SESSIOND_URL) && !((env socketPaired) ? KORRI_SESSIOND_TOKEN_FILE)))
     (check "stream control env still exported" ((env streamControl).KORRI_STREAM_CONTROL_ENABLED == "1"))
+    (check "streaming defaults to the Korri downstream Sunshine package" (
+      streamingLiveSettings.services.sunshine.package.pname == "sunshine-korri"
+    ))
+    (check "streaming enables Sunshine live settings gate by default" (
+      (sunshineSystemEnv streamingLiveSettings).SUNSHINE_LIVE_SETTINGS_MVP == "1"
+      && (sunshineUserEnv streamingLiveSettings).SUNSHINE_LIVE_SETTINGS_MVP == "1"
+    ))
+    (check "streaming live settings rollback keeps patched Sunshine but disables gate" (
+      streamingLiveSettingsDisabled.services.sunshine.package.pname == "sunshine-korri"
+      && !((sunshineSystemEnv streamingLiveSettingsDisabled) ? SUNSHINE_LIVE_SETTINGS_MVP)
+      && !((sunshineUserEnv streamingLiveSettingsDisabled) ? SUNSHINE_LIVE_SETTINGS_MVP)
+    ))
   ];
   failures = builtins.filter (c: !c.assertion) checks;
 in

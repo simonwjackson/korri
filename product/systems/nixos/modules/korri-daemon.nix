@@ -463,6 +463,22 @@ in
         description = "Shared runner status path read by the server and written by the stream runner.";
       };
 
+      runtimeSettings = {
+        enable = mkOption {
+          type = types.bool;
+          default = true;
+          description = ''
+            Enable Korri's downstream Sunshine runtime-settings gate for managed
+            stream hosts. When disabled, streaming still uses the patched
+            `sunshine-korri` package, but `SUNSHINE_LIVE_SETTINGS_MVP` is not
+            exported so Sunshine advertises the safe unsupported contract for
+            live bitrate/FPS/resolution mutations. Use this as the rollback
+            switch if the VAAPI private-state bitrate path must be disabled
+            without changing the host's deployed package closure.
+          '';
+        };
+      };
+
       audio = {
         enable = lib.mkEnableOption "PulseAudio-compatible audio capture for Korri Sunshine streaming";
 
@@ -659,10 +675,12 @@ in
       {
         assertion =
           !cfg.streaming.enable
+          || !cfg.streaming.runtimeSettings.enable
           || (config.systemd.services."korri-sunshine".environment.SUNSHINE_LIVE_SETTINGS_MVP or null) == "1";
         message = ''
           services.korri.daemon.streaming.enable = true requires
           systemd.services.korri-sunshine.environment.SUNSHINE_LIVE_SETTINGS_MVP = "1"
+          when services.korri.daemon.streaming.runtimeSettings.enable is true
           so sunshine-korri advertises runtime bitrate/FPS/resolution support.
         '';
       }
@@ -840,11 +858,14 @@ in
           compositorEnv
           // {
             WAYLAND_DISPLAY = "wayland-1";
+          }
+          // optionalAttrs cfg.streaming.runtimeSettings.enable {
             # Enable Sunshine's Korri runtime-settings protocol surface for
             # managed stream hosts. Capability acks still gate the actual
             # operations per active encoder/session, but without this process
             # env the patched Sunshine build intentionally advertises nothing
-            # after a clean rebuild.
+            # after a clean rebuild. Disabling this option is the rollback path
+            # back to the safe bitrate/FPS/resolution-unsupported contract.
             SUNSHINE_LIVE_SETTINGS_MVP = "1";
           }
           // optionalAttrs (cfg.streaming.audio.enable && cfg.streaming.audio.pulseServer != null) {
@@ -885,7 +906,7 @@ in
       # Keep the runtime-settings gate present even when an operator manually
       # starts the upstream Sunshine user unit for debugging instead of the
       # Korri-owned system unit above.
-      sunshine = mkIf cfg.streaming.enable {
+      sunshine = mkIf (cfg.streaming.enable && cfg.streaming.runtimeSettings.enable) {
         environment.SUNSHINE_LIVE_SETTINGS_MVP = "1";
       };
 

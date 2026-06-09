@@ -13,6 +13,8 @@ let
   daemonEnv = daemonUnit.environment or { };
   compositorUnit = cfg.systemd.user.services."korri-compositor" or { };
   inputdUnit = cfg.systemd.user.services.korri-inputd or { };
+  sunshineUnit = cfg.systemd.services."korri-sunshine" or { };
+  sunshineEnv = sunshineUnit.environment or { };
   korriUser = cfg.users.users.korri or { };
   firstAppCmd = let apps = cfg.services.sunshine.applications.apps or [ ]; in if apps == [ ] then null else (builtins.elemAt apps 0).cmd;
   firstAppWrapper = if firstAppCmd == null then "" else builtins.readFile firstAppCmd;
@@ -34,6 +36,8 @@ let
     (check "daemon uses sessiond socket" (daemonEnv.KORRI_SESSIOND_SOCKET == "%t/korri/sessiond.sock"))
     (check "gameStream uses sessiond socket" (cfg.services.korri.gameStream.sessiond.socketPath == "%t/korri/sessiond.sock"))
     (check "Sunshine wrapper exports KORRI_SESSIOND_SOCKET" (lib.hasInfix "KORRI_SESSIOND_SOCKET" firstAppWrapper))
+    (check "Sunshine uses Korri downstream runtime-settings package" (cfg.services.sunshine.package.pname == "sunshine-korri"))
+    (check "Sunshine live-settings gate is persistent Nix config" (sunshineEnv.SUNSHINE_LIVE_SETTINGS_MVP == "1"))
     (check "legacy sessiond URL/token env absent" (
       !(daemonEnv ? KORRI_SESSIOND_URL) && !(daemonEnv ? KORRI_SESSIOND_TOKEN_FILE) && !lib.hasInfix "KORRI_SESSIOND_URL" firstAppWrapper && !lib.hasInfix "KORRI_SESSIOND_TOKEN_FILE" firstAppWrapper
     ))
