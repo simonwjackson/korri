@@ -53,12 +53,16 @@ let
       && cfg.services.greetd.enable
       && greetdSettings.initial_session.user == cfg.services.korri.runtime.user
       && greetdSettings.default_session.user == cfg.services.korri.runtime.user
-      && lib.hasInfix "systemctl --user start korri-session.target" (
+      && lib.hasInfix "sleep infinity" (
+        builtins.readFile cfg.services.korri.login.command
+      )
+      && !lib.hasInfix "systemctl" (
         builtins.readFile cfg.services.korri.login.command
       )
       && !lib.hasInfix "--machine=" (
         builtins.readFile cfg.services.korri.login.command
       )
+      && builtins.elem "korri-session.target" (cfg.systemd.user.targets.default.wants or [ ])
     ))
     (check "root setup service is required by greetd" (
       builtins.elem "korri-setup.service" (cfg.systemd.services.greetd.requires or [ ])

@@ -40,9 +40,11 @@ let
       (check "${name}: eval has no assertion failures" (builtins.filter (a: !a.assertion) cfg.assertions == [ ]))
       (check "${name}: runtime user is korri and non-root" (runtime.user == "korri" && (korriUser.uid or 0) != 0 && (korriUser.isNormalUser or false)))
       (check "${name}: korri has appliance device groups" (builtins.all (g: builtins.elem g (korriUser.extraGroups or [ ])) [ "input" "render" "seat" "video" ]))
-      (check "${name}: root lingering does not pre-start Korri sessions" (
+      (check "${name}: no lingering before login-created Korri sessions" (
         (cfg.users.users.root.linger or false) != true
+        && ((korriUser.linger or false) != true)
         && ((cfg.systemd.user.targets.korri-session.wantedBy or [ ]) == [ ])
+        && builtins.elem "korri-session.target" (cfg.systemd.user.targets.default.wants or [ ])
       ))
       (check "${name}: setup owns product state subdirectories" (
         builtins.elem "d /var/lib/korri/content 0750 korri korri -" cfg.systemd.tmpfiles.rules

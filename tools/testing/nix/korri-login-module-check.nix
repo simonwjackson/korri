@@ -69,16 +69,14 @@ let
       && (greetdSettings loginEnabled).initial_session.user == "korri"
       && (greetdSettings loginEnabled).default_session.user == "korri"
     ))
-    (check "login command starts Korri user target inside greetd PAM session" (
-      lib.hasInfix "XDG_RUNTIME_DIR" (loginCommand loginEnabled)
-      && lib.hasInfix "DBUS_SESSION_BUS_ADDRESS" (loginCommand loginEnabled)
-      && lib.hasInfix "unix:path=$XDG_RUNTIME_DIR/bus" (loginCommand loginEnabled)
-      && lib.hasInfix "systemctl --user start korri-session.target" (loginCommand loginEnabled)
+    (check "login command only holds the greetd PAM session open" (
+      lib.hasInfix "sleep infinity" (loginCommand loginEnabled)
+      && !lib.hasInfix "systemctl" (loginCommand loginEnabled)
       && !lib.hasInfix "--machine=" (loginCommand loginEnabled)
-      && lib.hasInfix "sleep infinity" (loginCommand loginEnabled)
     ))
-    (check "Korri session target is not started by generic user default.target" (
-      (loginEnabled.systemd.user.targets.korri-session.wantedBy or [ ]) == [ ]
+    (check "login-enabled user manager starts Korri session target" (
+      builtins.elem "korri-session.target" (loginEnabled.systemd.user.targets.default.wants or [ ])
+      && (loginEnabled.systemd.user.targets.korri-session.wantedBy or [ ]) == [ ]
     ))
     (check "greetd is ordered after Korri setup and user sessions" (
       builtins.elem "korri-setup.service" (loginEnabled.systemd.services.greetd.requires or [ ])
@@ -91,7 +89,8 @@ let
     (check "login follows existing runtime user identity" (
       (greetdSettings existingRuntimeUser).initial_session.user == "simonwjackson"
       && (greetdSettings existingRuntimeUser).default_session.user == "simonwjackson"
-      && lib.hasInfix "systemctl --user start korri-session.target" (loginCommand existingRuntimeUser)
+      && builtins.elem "korri-session.target" (existingRuntimeUser.systemd.user.targets.default.wants or [ ])
+      && !lib.hasInfix "systemctl" (loginCommand existingRuntimeUser)
       && !lib.hasInfix "--machine=" (loginCommand existingRuntimeUser)
     ))
     (check "autologin can be disabled without enabling greetd" (
