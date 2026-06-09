@@ -8,6 +8,10 @@ let
     set -eu
 
     install -d -o ${runtime.user} -g ${runtime.group} -m 0750 ${lib.escapeShellArg runtime.home}
+    install -d -o ${runtime.user} -g ${runtime.group} -m 0750 ${lib.escapeShellArg runtime.home}/.local
+    install -d -o ${runtime.user} -g ${runtime.group} -m 0750 ${lib.escapeShellArg runtime.home}/.local/state
+    install -d -o ${runtime.user} -g ${runtime.group} -m 0700 ${lib.escapeShellArg runtime.home}/.local/state/korri
+    ${pkgs.coreutils}/bin/chown -R ${runtime.user}:${runtime.group} ${lib.escapeShellArg runtime.home}/.local/state/korri
     install -d -o ${runtime.user} -g ${runtime.group} -m 0750 ${lib.escapeShellArg runtime.stateRoot}
     install -d -o ${runtime.user} -g ${runtime.group} -m 0750 ${lib.escapeShellArg runtime.stateRoot}/content
     install -d -o ${runtime.user} -g ${runtime.group} -m 0750 ${lib.escapeShellArg runtime.stateRoot}/library
@@ -52,6 +56,10 @@ in
     };
 
     systemd.tmpfiles.rules = [
+      "d ${runtime.home}/.local 0750 ${runtime.user} ${runtime.group} -"
+      "d ${runtime.home}/.local/state 0750 ${runtime.user} ${runtime.group} -"
+      "d ${runtime.home}/.local/state/korri 0700 ${runtime.user} ${runtime.group} -"
+      "Z ${runtime.home}/.local/state/korri 0700 ${runtime.user} ${runtime.group} -"
       "d ${runtime.stateRoot} 0750 ${runtime.user} ${runtime.group} -"
       "d ${runtime.stateRoot}/content 0750 ${runtime.user} ${runtime.group} -"
       "d ${runtime.stateRoot}/library 0750 ${runtime.user} ${runtime.group} -"
