@@ -111,6 +111,7 @@ pkgs.lib.optionalAttrs isX86Linux {
           ../../../../product/vendor/sunshine-korri/patches/0003-apply-runtime-bitrate-and-fps-changes.patch
           ../../../../product/vendor/sunshine-korri/patches/0004-add-proof-gated-runtime-resolution-apply-path.patch
           ../../../../product/vendor/sunshine-korri/patches/0005-add-seamless-vaapi-runtime-bitrate-path.patch
+          ../../../../product/vendor/sunshine-korri/patches/0014-skip-runtime-vaapi-destructor-flush.patch
         ];
         readmePath = ../../../../product/vendor/sunshine-korri/README.md;
         sunshinePackagePath = ../../../../product/vendor/sunshine-korri/package.nix;

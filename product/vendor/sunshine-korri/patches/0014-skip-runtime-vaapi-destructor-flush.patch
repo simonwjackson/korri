@@ -1,10 +1,10 @@
 --- a/src/video.cpp	2026-06-01 23:04:21.672585687 -0600
 +++ b/src/video.cpp	2026-06-01 23:04:52.857995411 -0600
-@@ -318,9 +318,15 @@
+@@ -318,9 +318,17 @@
  
      avcodec_encode_session_t(avcodec_encode_session_t &&other) noexcept = default;
  
-+    void disable_flush_on_destroy() {
++    void disable_destructor_flush_after_runtime_vaapi_replacement() {
 +      flush_on_destroy = false;
 +    }
 +
@@ -14,6 +14,8 @@
 +      // Flush any remaining frames in the encoder. Runtime-resolution
 +      // replacement VAAPI sessions can crash in FFmpeg hardware teardown if
 +      // drained from the destructor after a capture/encoder generation break.
++      // runtime VAAPI replacement: destructor flush disabled for replacement pair
++      // only; ordinary AVCodec sessions still drain on destruction.
 +      if (flush_on_destroy && avcodec_ctx && avcodec_send_frame(avcodec_ctx.get(), nullptr) == 0) {
          packet_raw_avcodec pkt;
          while (avcodec_receive_packet(avcodec_ctx.get(), pkt.av_packet) == 0);
@@ -40,10 +42,10 @@
                    replacement_session->request_idr_frame();
                    if (!replacement_session->convert(*first_img)) {
 +                    if (auto avcodec_session = dynamic_cast<avcodec_encode_session_t *>(session.get())) {
-+                      avcodec_session->disable_flush_on_destroy();
++                      avcodec_session->disable_destructor_flush_after_runtime_vaapi_replacement();
 +                    }
 +                    if (auto avcodec_replacement = dynamic_cast<avcodec_encode_session_t *>(replacement_session.get())) {
-+                      avcodec_replacement->disable_flush_on_destroy();
++                      avcodec_replacement->disable_destructor_flush_after_runtime_vaapi_replacement();
 +                    }
                      session = std::move(replacement_session);
                      config = updated_config;

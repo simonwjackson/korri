@@ -40,6 +40,19 @@ Runtime settings mechanism contract:
 - Operation `1` support requires same-session moving-video and bandwidth proof on the target client before it is treated as product-ready for that client/decoder combination.
 - Operation `3` outcomes distinguish raw Sunshine ack state from caller-visible applied truth: Sunshine may report `server_applied=1`, while local-control must still expose applied width/height state for callers to verify.
 
+VAAPI runtime-bitrate maintenance policy:
+
+- A stable FFmpeg helper/API is the preferred replacement for Sunshine-side private-struct mirroring, but Korri is not carrying that downstream FFmpeg API yet. The current path stays inside `sunshine-korri` because it has SM8550 evidence and avoids forking FFmpeg's encoder internals before an upstreamable helper shape is clear.
+- The private mirror is allowed only for the exact pinned FFmpeg/libavcodec version encoded in the patch. FFmpeg upgrades, including same-major minor/micro updates, must fail at compile/source-check time until the mirrored VAAPI layout is reviewed.
+- Rollback remains the Nix-owned live-settings gate: disable `services.korri.daemon.streaming.runtimeSettings.enable` to keep Sunshine deployed while omitting `SUNSHINE_LIVE_SETTINGS_MVP=1`.
+
+Runtime-resolution VAAPI destructor teardown policy:
+
+- Runtime-resolution replacement crosses an encoder generation boundary: the replacement session is primed with the first post-switch frame and then becomes the active session.
+- Destructor drain/flush is skipped only for the AVCodec session pair that participates in that runtime VAAPI replacement path: the outgoing generation and the primed replacement generation. Normal encoder sessions still drain on destruction.
+- The evaluated alternatives are pre-drain, async teardown, skip-drain, and packet-drop alternatives. Pre-drain can re-enter the crashing FFmpeg hardware teardown after a generation break; async teardown moves the same lifetime hazard to another thread; packet drop risks hiding required end-of-stream data. Narrow skip-drain is the carried option until physical soak evidence proves a safer upstreamable teardown.
+- Long-cycle no-crash and leak evidence belongs with the runtime-resolution hardware soak follow-up; source checks only prove the skip remains narrow and documented.
+
 Runtime settings status contract:
 
 - `0` — applied

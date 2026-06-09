@@ -32,7 +32,7 @@ diff -ruN sunshine-korri-baseline/src/stream.cpp sunshine-korri-work/src/stream.
 diff -ruN sunshine-korri-baseline/src/video.cpp sunshine-korri-work/src/video.cpp
 --- a/src/video.cpp	2026-05-31 09:57:31.556511687 -0600
 +++ b/src/video.cpp	2026-05-31 09:59:02.685315629 -0600
-@@ -11,6 +11,10 @@
+@@ -11,6 +11,12 @@
  // lib includes
  #include <boost/pointer_cast.hpp>
  
@@ -41,14 +41,25 @@ diff -ruN sunshine-korri-baseline/src/video.cpp sunshine-korri-work/src/video.cp
 +#endif
 +
  extern "C" {
++#include <libavcodec/version.h>
++#include <libavcodec/version_major.h>
  #include <libavutil/imgutils.h>
  #include <libavutil/mastering_display_metadata.h>
-@@ -379,6 +383,211 @@
+@@ -379,6 +385,220 @@
      int inject;
    };
  
 +
 +#ifdef __linux__
++  #define KORRI_SUPPORTED_LIBAVCODEC_MAJOR 62
++  #define KORRI_SUPPORTED_LIBAVCODEC_VERSION AV_VERSION_INT(62, 11, 100)
++  #if LIBAVCODEC_VERSION_MAJOR != KORRI_SUPPORTED_LIBAVCODEC_MAJOR
++  #error "Korri VAAPI runtime bitrate private-state mirror must be reviewed for this FFmpeg libavcodec major"
++  #endif
++  #if LIBAVCODEC_VERSION_INT != KORRI_SUPPORTED_LIBAVCODEC_VERSION
++  #error "Korri VAAPI runtime bitrate private-state mirror must be reviewed for this exact FFmpeg libavcodec version"
++  #endif
++
 +  // Korri runtime-bitrate experiment: FFmpeg's VAAPI encoder keeps the
 +  // VAEncMiscParameterRateControl struct in private VAAPIEncodeContext state
 +  // and stores a pointer to it in the per-IDR global-params list. Mutating that

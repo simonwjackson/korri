@@ -100,6 +100,15 @@ let
       && !(contains "encoder restarted for runtime bitrate" patch)
       && !(contains "disp->dummy_img(dummy_img.get())" patch)
     ))
+    (check "Sunshine VAAPI bitrate private mirror fails closed on FFmpeg ABI drift" (
+      contains "libavcodec/version_major.h" patch
+      && contains "KORRI_SUPPORTED_LIBAVCODEC_MAJOR" patch
+      && contains "KORRI_SUPPORTED_LIBAVCODEC_VERSION" patch
+      && contains "LIBAVCODEC_VERSION_INT != KORRI_SUPPORTED_LIBAVCODEC_VERSION" patch
+      && contains "#error \"Korri VAAPI runtime bitrate private-state mirror must be reviewed for this FFmpeg libavcodec major\"" patch
+      && contains "#error \"Korri VAAPI runtime bitrate private-state mirror must be reviewed for this exact FFmpeg libavcodec version\"" patch
+      && contains "stable FFmpeg helper/API is the preferred replacement" readme
+    ))
     (check "Sunshine runtime FPS patch gates support to h264_vaapi" (
       contains "runtime_settings_supports_vaapi_h264" patch
       && contains "encoder.name == \"vaapi\"sv" patch
@@ -246,6 +255,13 @@ let
       && contains "make_port" patch
       && contains "applied_width" patch
       && contains "applied_height" patch
+    ))
+    (check "Sunshine runtime VAAPI teardown skip is narrowly tied to replacement sessions" (
+      contains "disable_destructor_flush_after_runtime_vaapi_replacement" patch
+      && contains "runtime VAAPI replacement: destructor flush disabled for replacement pair" patch
+      && contains "Runtime-resolution VAAPI destructor teardown policy" readme
+      && contains "pre-drain, async teardown, skip-drain, and packet-drop alternatives" readme
+      && !(contains "disable_flush_on_destroy" patch)
     ))
     (check "Moonlight runtime settings sender can query Sunshine capabilities" (
       contains "SS_RUNTIME_SETTINGS_MVP_OPERATION_QUERY_CAPABILITIES 0" moonlightPatch

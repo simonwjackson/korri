@@ -4,7 +4,7 @@ slug: replace-vaapi-private-bitrate-mutation-with-stable-ffmpeg-helper
 title: Replace VAAPI private bitrate mutation with stable FFmpeg helper
 origin: parked
 legacy: task-065
-status: To Do
+status: Done
 priority: medium
 labels:
   - ffmpeg
@@ -37,6 +37,22 @@ The current seamless path relies on mirrored FFmpeg VAAPI private structs; it is
 - `packages/sunshine-korri/package.nix`
 - `research.md`
 - `nix/tests/korri-sunshine-runtime-bitrate-patch-check.nix`
+
+## Completion Notes
+
+2026-06-09: Decided not to carry a downstream FFmpeg helper/API yet. The preferred long-term replacement remains a stable FFmpeg helper/API, but the current shippable posture keeps the Sunshine-side VAAPI mirror because it has SM8550 same-session evidence and avoids expanding Korri's downstream FFmpeg surface before an upstreamable shape is clear.
+
+Implemented the maintenance guardrails instead:
+
+- `0005-add-seamless-vaapi-runtime-bitrate-path.patch` now includes libavcodec major and minimum-version compile-time fail-closed guards for the private VAAPI mirror.
+- `tools/testing/nix/korri-sunshine-runtime-bitrate-patch-check.nix` now asserts the guards and README maintenance policy exist.
+- `product/vendor/sunshine-korri/README.md` documents the helper decision, rollback path, and FFmpeg-upgrade expectation.
+
+Verification:
+
+```text
+nix build .#checks.$(nix eval --raw --impure --expr builtins.currentSystem).korri-sunshine-runtime-bitrate-patch --no-link
+```
 
 ## Notes
 
