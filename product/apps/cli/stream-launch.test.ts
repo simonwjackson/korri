@@ -154,8 +154,10 @@ describe("runStreamLaunchCommand", () => {
       games: [{ ...game, contentPath: "content.smc" }],
     })
     const previousRoot = process.env.KORRI_LIBRARY_ROOT
+    const previousConfigRoots = process.env.KORRI_CONFIG_ROOTS
     const previousSource = process.env.KORRI_LIBRARY_SOURCE
     process.env.KORRI_LIBRARY_ROOT = library.root
+    process.env.KORRI_CONFIG_ROOTS = library.root
     process.env.KORRI_LIBRARY_SOURCE = "proseql"
     try {
       const source = await Effect.runPromise(
@@ -184,6 +186,9 @@ describe("runStreamLaunchCommand", () => {
     } finally {
       if (previousRoot === undefined) delete process.env.KORRI_LIBRARY_ROOT
       else process.env.KORRI_LIBRARY_ROOT = previousRoot
+      if (previousConfigRoots === undefined)
+        delete process.env.KORRI_CONFIG_ROOTS
+      else process.env.KORRI_CONFIG_ROOTS = previousConfigRoots
       if (previousSource === undefined) delete process.env.KORRI_LIBRARY_SOURCE
       else process.env.KORRI_LIBRARY_SOURCE = previousSource
     }

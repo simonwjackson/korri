@@ -9,6 +9,7 @@ import type { GameAssetRecord } from "@platform/library/config/records/game-asse
 import type { GameAssetAssignmentRecord } from "@platform/library/config/records/game-asset-assignment"
 import { gameAssetBlobPath } from "@platform/library/game-assets/game-assets-service"
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
+import { mirrorLibraryAsConfigFragment } from "../../../../../tools/testing/library/with-temp-proseql-library"
 import { createLibraryRepository } from "@platform/library/proseql/library-repository"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
 import { createHonoApp } from "@product/apps/portal/api/hono-app"
@@ -33,6 +34,7 @@ const originalEnv = {
     process.env.KORRI_GAME_ASSETS_TRUSTED_WRITES,
   KORRI_GAME_STREAM_INTENT_PATH: process.env.KORRI_GAME_STREAM_INTENT_PATH,
   KORRI_LIBRARY_ROOT: process.env.KORRI_LIBRARY_ROOT,
+  KORRI_CONFIG_ROOTS: process.env.KORRI_CONFIG_ROOTS,
   KORRI_PUBLIC_API_BASE_URL: process.env.KORRI_PUBLIC_API_BASE_URL,
   KORRI_STREAM_CONTROL_ENABLED: process.env.KORRI_STREAM_CONTROL_ENABLED,
   XDG_CACHE_HOME: process.env.XDG_CACHE_HOME,
@@ -167,6 +169,7 @@ function configureTempEnv(root: string) {
   process.env.HOME = env.HOME
   process.env.KORRI_GAME_ASSETS_TRUSTED_WRITES = "1"
   process.env.KORRI_LIBRARY_ROOT = join(root, "library")
+  process.env.KORRI_CONFIG_ROOTS = join(root, "library")
   process.env.KORRI_STREAM_CONTROL_ENABLED = "1"
   process.env.KORRI_GAME_STREAM_INTENT_PATH = join(
     root,
@@ -218,6 +221,7 @@ async function seedLibrary(root: string): Promise<void> {
       }),
     ),
   )
+  await mirrorLibraryAsConfigFragment(join(root, "library"))
 }
 
 async function seedCandidate(env: {

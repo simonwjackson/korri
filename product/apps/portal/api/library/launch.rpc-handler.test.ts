@@ -14,6 +14,7 @@ import {
 import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
 import { createLibraryRepository } from "@platform/library/proseql/library-repository"
+import { mirrorLibraryAsConfigFragment } from "../../../../../tools/testing/library/with-temp-proseql-library"
 import { createShellLauncher } from "@platform/library/shell-launcher"
 import type { ForegroundSessionState } from "@platform/stream/foreground-session-lifecycle"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
@@ -30,6 +31,7 @@ import {
 } from "./remote-stream-prepare"
 
 const originalLibraryRoot = process.env.KORRI_LIBRARY_ROOT
+const originalConfigRoots = process.env.KORRI_CONFIG_ROOTS
 const cleanups: Array<() => Promise<void>> = []
 
 // Shared `source` payload field for tests. The launch handler does not
@@ -44,6 +46,7 @@ const FAKE_GAME = join(REPO_ROOT, "tools", "testing", "fake-game.sh")
 
 afterEach(async () => {
   setOptionalEnv("KORRI_LIBRARY_ROOT", originalLibraryRoot)
+  setOptionalEnv("KORRI_CONFIG_ROOTS", originalConfigRoots)
   while (cleanups.length > 0) {
     const c = cleanups.pop()
     if (c) await c()
@@ -58,6 +61,7 @@ async function layerForFakeGame(exitCode: number): Promise<{
   const lib = await withTempProseqlLibrary()
   cleanups.push(lib.cleanup)
   process.env.KORRI_LIBRARY_ROOT = lib.root
+  process.env.KORRI_CONFIG_ROOTS = lib.root
 
   const realLauncher = createShellLauncher()
   const launcherLayer = Layer.succeed(Launcher)({
@@ -893,6 +897,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     const lib = await withTempProseqlLibrary({ missingProfile: true })
     cleanups.push(lib.cleanup)
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_CONFIG_ROOTS = lib.root
     const launcherLayer = Layer.succeed(Launcher)({
       run: () =>
         Effect.fail(
@@ -1114,6 +1119,7 @@ async function withTempProseqlLibrary(
         }),
       ),
     )
+    await mirrorLibraryAsConfigFragment(root)
     success = true
   } finally {
     if (!success) await rm(root, { recursive: true, force: true })

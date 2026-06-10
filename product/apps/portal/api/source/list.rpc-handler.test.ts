@@ -10,6 +10,7 @@ import { handleListSource } from "./list.rpc-handler"
 
 const originalEnv = {
   libraryRoot: process.env.KORRI_LIBRARY_ROOT,
+  configRoots: process.env.KORRI_CONFIG_ROOTS,
   streamControl: process.env.KORRI_STREAM_CONTROL_ENABLED,
   launchArtifactsDir: process.env.KORRI_LAUNCH_ARTIFACTS_DIR,
 }
@@ -17,6 +18,7 @@ const cleanups: Array<() => Promise<void>> = []
 
 afterEach(async () => {
   setOptionalEnv("KORRI_LIBRARY_ROOT", originalEnv.libraryRoot)
+  setOptionalEnv("KORRI_CONFIG_ROOTS", originalEnv.configRoots)
   setOptionalEnv("KORRI_STREAM_CONTROL_ENABLED", originalEnv.streamControl)
   setOptionalEnv("KORRI_LAUNCH_ARTIFACTS_DIR", originalEnv.launchArtifactsDir)
   while (cleanups.length > 0) {
@@ -144,6 +146,7 @@ async function setupLibrary(options: { readonly enabled: boolean }) {
   })
   cleanups.push(library.cleanup)
   process.env.KORRI_LIBRARY_ROOT = library.root
+  process.env.KORRI_CONFIG_ROOTS = library.root
   process.env.KORRI_STREAM_CONTROL_ENABLED = options.enabled ? "1" : "0"
 }
 

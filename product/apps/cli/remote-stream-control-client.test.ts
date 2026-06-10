@@ -17,6 +17,7 @@ const originalLocation = {
 }
 const originalEnv = {
   libraryRoot: process.env.KORRI_LIBRARY_ROOT,
+  configRoots: process.env.KORRI_CONFIG_ROOTS,
   intentPath: process.env.KORRI_GAME_STREAM_INTENT_PATH,
   streamControl: process.env.KORRI_STREAM_CONTROL_ENABLED,
   runtimeDir: process.env.XDG_RUNTIME_DIR,
@@ -26,6 +27,7 @@ const cleanups: Array<() => Promise<void>> = []
 afterEach(async () => {
   setWindowLocation(originalLocation)
   setOptionalEnv("KORRI_LIBRARY_ROOT", originalEnv.libraryRoot)
+  setOptionalEnv("KORRI_CONFIG_ROOTS", originalEnv.configRoots)
   setOptionalEnv("KORRI_GAME_STREAM_INTENT_PATH", originalEnv.intentPath)
   setOptionalEnv("KORRI_STREAM_CONTROL_ENABLED", originalEnv.streamControl)
   setOptionalEnv("XDG_RUNTIME_DIR", originalEnv.runtimeDir)
@@ -117,6 +119,8 @@ async function setupRemoteLibrary(options: { readonly enabled: boolean }) {
   cleanups.push(() => rm(intentDir, { recursive: true, force: true }))
 
   process.env.KORRI_LIBRARY_ROOT = library.root
+
+  process.env.KORRI_CONFIG_ROOTS = library.root
   process.env.KORRI_GAME_STREAM_INTENT_PATH = join(
     intentDir,
     "next-launch.json",

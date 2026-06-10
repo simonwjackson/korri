@@ -10,6 +10,7 @@ import { gameAssetBlobPath } from "@platform/library/game-assets/game-assets-ser
 import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
 import { createLibraryRepository } from "@platform/library/proseql/library-repository"
+import { mirrorLibraryAsConfigFragment } from "../../../../../tools/testing/library/with-temp-proseql-library"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
 import {
   PeerDiscovery,
@@ -46,6 +47,7 @@ const missingFileAssetId = assetIdForBytes(missingFileAssetBytes)
 
 const originalEnv = {
   libraryRoot: process.env.KORRI_LIBRARY_ROOT,
+  configRoots: process.env.KORRI_CONFIG_ROOTS,
   publicApiBaseUrl: process.env.KORRI_PUBLIC_API_BASE_URL,
   xdgDataHome: process.env.XDG_DATA_HOME,
   nodeEnv: process.env.NODE_ENV,
@@ -59,6 +61,7 @@ function track<T extends { cleanup: () => Promise<void> }>(lib: T): T {
 
 afterEach(async () => {
   setOptionalEnv("KORRI_LIBRARY_ROOT", originalEnv.libraryRoot)
+  setOptionalEnv("KORRI_CONFIG_ROOTS", originalEnv.configRoots)
   setOptionalEnv("KORRI_PUBLIC_API_BASE_URL", originalEnv.publicApiBaseUrl)
   setOptionalEnv("XDG_DATA_HOME", originalEnv.xdgDataHome)
   setOptionalEnv("NODE_ENV", originalEnv.nodeEnv)
@@ -91,6 +94,7 @@ describe("app.library.list handler (configured-real source)", () => {
       }),
     )
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_CONFIG_ROOTS = lib.root
 
     const result = await Effect.runPromise(
       handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
@@ -101,6 +105,7 @@ describe("app.library.list handler (configured-real source)", () => {
   it("returns { games: [] } for an empty ProseQL library", async () => {
     const lib = track(await withTempProseqlLibrary({ games: [] }))
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_CONFIG_ROOTS = lib.root
 
     const result = await Effect.runPromise(
       handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
@@ -122,6 +127,7 @@ describe("app.library.list handler (configured-real source)", () => {
       }),
     )
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_CONFIG_ROOTS = lib.root
     process.env.KORRI_STREAM_ADVERTISE_HOST_ID = "test-host"
     process.env.HOST = "127.0.0.1"
     process.env.PORT = "3001"
@@ -154,6 +160,7 @@ describe("app.library.list handler (configured-real source)", () => {
       }),
     )
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_CONFIG_ROOTS = lib.root
     process.env.KORRI_STREAM_ADVERTISE_HOST_ID = "aka"
     process.env.KORRI_PUBLIC_API_BASE_URL = "http://192.168.1.117:3001/"
 
@@ -193,6 +200,7 @@ describe("app.library.list handler (configured-real source)", () => {
       }),
     )
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_CONFIG_ROOTS = lib.root
     process.env.XDG_DATA_HOME = lib.dataRoot
     process.env.KORRI_PUBLIC_API_BASE_URL = "http://sobo:3001"
 
@@ -232,6 +240,7 @@ describe("app.library.list handler (configured-real source)", () => {
       }),
     )
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_CONFIG_ROOTS = lib.root
 
     const result = await Effect.runPromise(
       handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
@@ -268,6 +277,7 @@ describe("app.library.list handler (configured-real source)", () => {
       }),
     )
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_CONFIG_ROOTS = lib.root
 
     const result = await Effect.runPromise(
       handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
@@ -285,6 +295,7 @@ describe("app.library.list handler (configured-real source)", () => {
       }),
     )
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_CONFIG_ROOTS = lib.root
     process.env.XDG_DATA_HOME = lib.dataRoot
     const blobPath = gameAssetBlobPath(
       { KORRI_LIBRARY_ROOT: lib.root },
@@ -313,6 +324,7 @@ describe("app.library.list handler (configured-real source)", () => {
       }),
     )
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_CONFIG_ROOTS = lib.root
     process.env.XDG_DATA_HOME = lib.dataRoot
 
     const result = await Effect.runPromise(
@@ -341,6 +353,7 @@ describe("app.library.list handler (configured-real source)", () => {
   it("does not require KORRI_PUBLIC_API_BASE_URL for assigned assets in production", async () => {
     const lib = track(await withTempProseqlLibrary(assetUrlFixture()))
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_CONFIG_ROOTS = lib.root
     process.env.XDG_DATA_HOME = lib.dataRoot
     process.env.NODE_ENV = "production"
     delete process.env.KORRI_PUBLIC_API_BASE_URL
@@ -357,6 +370,7 @@ describe("app.library.list handler (configured-real source)", () => {
   it("fails with DataError(ReadFailed) when ProseQL data is invalid", async () => {
     const lib = track(await withInvalidProseqlLibrary())
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_CONFIG_ROOTS = lib.root
 
     const exit = await Effect.runPromiseExit(
       handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
@@ -392,6 +406,7 @@ describe("app.library.list federation (fan-out across LAN peers)", () => {
       }),
     )
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_CONFIG_ROOTS = lib.root
     process.env.KORRI_STREAM_ADVERTISE_HOST_ID = "local-host"
 
     const akaPeer = {
@@ -437,6 +452,7 @@ describe("app.library.list federation (fan-out across LAN peers)", () => {
   it("renders same-id entries from two different peers as separate rows (AE3)", async () => {
     const lib = track(await withTempProseqlLibrary({ games: [] }))
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_CONFIG_ROOTS = lib.root
 
     const akaPeer = {
       hostId: "aka",
@@ -476,6 +492,7 @@ describe("app.library.list federation (fan-out across LAN peers)", () => {
   it("degrades gracefully when a peer is unreachable (R9 / AE2 partial failure)", async () => {
     const lib = track(await withTempProseqlLibrary({ games: [] }))
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_CONFIG_ROOTS = lib.root
 
     const reachable: PeerRecord = {
       hostId: "reachable",
@@ -529,6 +546,7 @@ describe("app.library.list federation (fan-out across LAN peers)", () => {
       }),
     )
     process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_CONFIG_ROOTS = lib.root
 
     const layer = federationLayerWith({ peers: [], peerCatalogs: {} })
 
@@ -639,6 +657,7 @@ async function withTempProseqlLibrary(options: {
         }),
       ),
     )
+    await mirrorLibraryAsConfigFragment(root)
 
     if (options.writeAssetBytes) {
       for (const asset of options.assets ?? []) {
@@ -727,9 +746,11 @@ async function withInvalidProseqlLibrary(): Promise<TempProseqlLibrary> {
   let success = false
   try {
     await mkdir(root, { recursive: true })
+    // Invalid data must live in an opt-in config-graph fragment so the read
+    // path actually ingests it and surfaces the schema failure.
     await writeFile(
-      join(root, "games.yaml"),
-      ["bad:", "  id: 123", "_version: 1", ""].join("\n"),
+      join(root, "bad.korri.yaml"),
+      ["launchTargets:", "  bad:", "    gameId: 123", ""].join("\n"),
       "utf8",
     )
     success = true

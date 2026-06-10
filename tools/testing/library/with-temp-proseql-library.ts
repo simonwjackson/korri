@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises"
+import { copyFile, mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { AppRecord } from "@platform/library/config/records/app"
@@ -35,6 +35,24 @@ export interface TempProseqlLibrary {
   readonly root: string
   readonly cleanup: () => Promise<void>
   readonly [Symbol.asyncDispose]: () => Promise<void>
+}
+
+/**
+ * Mirror a writer-produced `library.yaml` as an opt-in `local.korri.yaml`
+ * config-graph fragment so a single seeded root doubles as a
+ * `KORRI_CONFIG_ROOTS` entry for runtime read tests. The writable documents
+ * source excludes `*.korri.yaml`, so this never double-loads in the writer
+ * path. No-op when the root has no `library.yaml` yet.
+ */
+export async function mirrorLibraryAsConfigFragment(
+  root: string,
+): Promise<void> {
+  await copyFile(
+    join(root, "library.yaml"),
+    join(root, "local.korri.yaml"),
+  ).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") throw error
+  })
 }
 
 export async function withTempProseqlLibrary(
@@ -91,6 +109,11 @@ export async function withTempProseqlLibrary(
         }),
       ),
     )
+    // Mirror the writable outbox as an opt-in config-graph fragment so the same
+    // seeded `root` doubles as a `KORRI_CONFIG_ROOTS` entry for runtime read
+    // tests. The writable `library.yaml` is left in place for tests that reopen
+    // the writer DB; the config graph only ingests the opt-in `local.korri.yaml`.
+    await mirrorLibraryAsConfigFragment(root)
     success = true
   } finally {
     if (!success) await rm(root, { recursive: true, force: true })

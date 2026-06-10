@@ -5,6 +5,7 @@ import { join, resolve } from "node:path"
 import { EntrySource } from "@platform/api/rpc/entry-source"
 import { Launcher, LibrarySource } from "@platform/library/library-services"
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
+import { mirrorLibraryAsConfigFragment } from "../../../../../tools/testing/library/with-temp-proseql-library"
 import { createLibraryRepository } from "@platform/library/proseql/library-repository"
 import { Effect } from "effect"
 import { withRpcServer } from "../../../../../tools/testing/library/with-rpc-server"
@@ -13,6 +14,7 @@ import { LibrarySourceLayerRpc } from "./library-source-layer-rpc"
 
 const originalEnv = {
   libraryRoot: process.env.KORRI_LIBRARY_ROOT,
+  configRoots: process.env.KORRI_CONFIG_ROOTS,
   launchExitEnvValue: process.env.KORRI_FAKE_GAME_EXIT,
 }
 const originalLocation = {
@@ -188,6 +190,7 @@ async function seedLibrary(
         }),
       ),
     )
+    await mirrorLibraryAsConfigFragment(root)
     success = true
   } finally {
     if (!success) await rm(root, { recursive: true, force: true })
@@ -244,10 +247,12 @@ function setWindowLocation(location: {
 
 function configureLibraryEnv(lib: TempProseqlLibrary): void {
   process.env.KORRI_LIBRARY_ROOT = lib.root
+  process.env.KORRI_CONFIG_ROOTS = lib.root
 }
 
 function restoreEnv(): void {
   setOptionalEnv("KORRI_LIBRARY_ROOT", originalEnv.libraryRoot)
+  setOptionalEnv("KORRI_CONFIG_ROOTS", originalEnv.configRoots)
   setOptionalEnv("KORRI_FAKE_GAME_EXIT", originalEnv.launchExitEnvValue)
 }
 

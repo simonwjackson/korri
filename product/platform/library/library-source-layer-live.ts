@@ -9,7 +9,10 @@ import {
   type LibrarySourceService,
 } from "./library-services"
 import type { LibrarySource as PlainLibrarySource } from "./library-source"
-import { openKorriLibraryDb } from "./proseql/library-db"
+import {
+  type KorriConfigGraphRoot,
+  openKorriConfigGraph,
+} from "./proseql/library-db"
 import {
   createLibraryRepository,
   type LibraryRepository,
@@ -135,12 +138,16 @@ function withLibraryRepository<T>(
 ): Effect.Effect<T, LibraryError> {
   return Effect.scoped(
     Effect.gen(function* () {
-      const root = yield* buildLibraryRootFromEnv()
+      const roots = configRootsFromEnv()
       logger.info(
-        { sourceKind: "proseql", operation, root },
-        "library-source-layer-live: opening ProseQL library",
+        {
+          sourceKind: "proseql",
+          operation,
+          roots: roots.map(root => root.root),
+        },
+        "library-source-layer-live: opening Korri config graph",
       )
-      const db = yield* openKorriLibraryDb({ root })
+      const db = yield* openKorriConfigGraph({ roots })
       return yield* useRepository(createLibraryRepository(db))
     }),
   ).pipe(Effect.mapError(toLibraryError))
@@ -184,24 +191,26 @@ function optionalEnv(value: string | undefined): string | undefined {
   return trimmed && trimmed.length > 0 ? trimmed : undefined
 }
 
-function buildLibraryRootFromEnv(): Effect.Effect<string, LibraryError> {
-  return Effect.sync(() => process.env.KORRI_LIBRARY_ROOT?.trim()).pipe(
-    Effect.flatMap(root => {
-      if (root && root.length > 0) return Effect.succeed(root)
+/**
+ * Resolve ordered Korri config-graph roots from the runtime environment.
+ *
+ * `KORRI_CONFIG_ROOTS` is the public contract: a colon-separated, ordered list
+ * of config-root directories (earlier roots are overlaid first, later roots
+ * win). An explicitly empty value yields an empty graph. When the variable is
+ * unset, Korri falls back to the XDG-derived config directory as a single
+ * optional dev root; when even that cannot be derived, the empty baseline graph
+ * is used. The legacy `KORRI_LIBRARY_ROOT` is intentionally not consulted.
+ */
+function configRootsFromEnv(): readonly KorriConfigGraphRoot[] {
+  const explicit = parseListEnv(process.env.KORRI_CONFIG_ROOTS)
+  if (explicit) return explicit.map(root => ({ root }))
+  if (process.env.KORRI_CONFIG_ROOTS !== undefined) return []
 
-      return Effect.try({
-        try: () => korriDataPath(process.env, "library"),
-        catch: () =>
-          new LibraryError({
-            reason: "config",
-            message:
-              "KORRI_LIBRARY_ROOT, XDG_DATA_HOME, or HOME is required when KORRI_LIBRARY_SOURCE is proseql",
-            diagnostic:
-              "Set KORRI_LIBRARY_ROOT to the configured Korri library directory, or provide XDG_DATA_HOME/HOME so Korri can use the XDG data root.",
-          }),
-      })
-    }),
-  )
+  try {
+    return [{ root: korriDataPath(process.env, "config") }]
+  } catch {
+    return []
+  }
 }
 
 function toLibraryError(error: unknown): LibraryError {

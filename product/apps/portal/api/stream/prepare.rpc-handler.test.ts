@@ -13,6 +13,7 @@ import { NotFoundError, ValidationError } from "@platform/api/rpc/errors"
 import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
 import { makeInMemoryLibrarySourceLayer } from "@platform/library/library-source-layer-memory"
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
+import { mirrorLibraryAsConfigFragment } from "../../../../../tools/testing/library/with-temp-proseql-library"
 import { createLibraryRepository } from "@platform/library/proseql/library-repository"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
 import { Cause, Effect, Exit } from "effect"
@@ -22,6 +23,7 @@ import { handlePrepareStream } from "./prepare.rpc-handler"
 
 const originalEnv = {
   libraryRoot: process.env.KORRI_LIBRARY_ROOT,
+  configRoots: process.env.KORRI_CONFIG_ROOTS,
   intentPath: process.env.KORRI_GAME_STREAM_INTENT_PATH,
   streamControl: process.env.KORRI_STREAM_CONTROL_ENABLED,
   runtimeDir: process.env.XDG_RUNTIME_DIR,
@@ -32,6 +34,7 @@ const FAKE_GAME = join(REPO_ROOT, "tools", "testing", "fake-game.sh")
 
 afterEach(async () => {
   setOptionalEnv("KORRI_LIBRARY_ROOT", originalEnv.libraryRoot)
+  setOptionalEnv("KORRI_CONFIG_ROOTS", originalEnv.configRoots)
   setOptionalEnv("KORRI_GAME_STREAM_INTENT_PATH", originalEnv.intentPath)
   setOptionalEnv("KORRI_STREAM_CONTROL_ENABLED", originalEnv.streamControl)
   setOptionalEnv("XDG_RUNTIME_DIR", originalEnv.runtimeDir)
@@ -179,6 +182,8 @@ async function setupPreparedEnv(options: { readonly enabled: boolean }) {
   cleanups.push(() => rm(intentDir, { recursive: true, force: true }))
 
   process.env.KORRI_LIBRARY_ROOT = library.root
+
+  process.env.KORRI_CONFIG_ROOTS = library.root
   process.env.KORRI_GAME_STREAM_INTENT_PATH = join(
     intentDir,
     "next-launch.json",
@@ -222,6 +227,7 @@ async function withTempProseqlLibrary(): Promise<{
         }),
       ),
     )
+    await mirrorLibraryAsConfigFragment(root)
     success = true
   } finally {
     if (!success) await rm(root, { recursive: true, force: true })
