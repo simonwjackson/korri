@@ -37,6 +37,8 @@ let
       inputdUnit = userServices.korri-inputd or { };
       inputdEnv = inputdUnit.environment or { };
       inputdPath = inputdUnit.path or [ ];
+      hardwareButtonEnv = ((cfg.systemd.services.main-space-hardware-button-handler or { }).environment or { });
+      korriRuntimeDir = "/run/user/${toString (korriUser.uid or 2000)}";
       pipewireEnv = (userServices.pipewire or { }).environment or { };
       pipewirePulseEnv = (userServices.pipewire-pulse or { }).environment or { };
       wireplumberEnv = (userServices.wireplumber or { }).environment or { };
@@ -147,10 +149,13 @@ let
       (check "${name}: sessiond launches inherit Korri user Pulse socket" (
         sessiondEnv.PULSE_SERVER or null == "unix:%t/pulse/native"
       ))
-      (check "${name}: inputd owns volume against Korri user Pulse socket" (
-        inputdEnv.PULSE_SERVER or null == "unix:%t/pulse/native"
-        && !(inputdEnv ? KORRI_INPUTD_VOLUME_UP)
-        && !(inputdEnv ? KORRI_INPUTD_VOLUME_DOWN)
+      (check "${name}: hardware buttons own volume against Korri user Pulse socket" (
+        hardwareButtonEnv.XDG_RUNTIME_DIR or null == korriRuntimeDir
+        && hardwareButtonEnv.PULSE_SERVER or null == "unix:${korriRuntimeDir}/pulse/native"
+        && hardwareButtonEnv.DBUS_SESSION_BUS_ADDRESS or null == "unix:path=${korriRuntimeDir}/bus"
+        && inputdEnv.PULSE_SERVER or null == "unix:%t/pulse/native"
+        && inputdEnv.KORRI_INPUTD_VOLUME_UP or null == "true"
+        && inputdEnv.KORRI_INPUTD_VOLUME_DOWN or null == "true"
       ))
       (check "${name}: inputd terminates foreground games through sessiond" (
         inputdEnv.KORRI_SESSIOND_SOCKET or null == "%t/korri/sessiond.sock"

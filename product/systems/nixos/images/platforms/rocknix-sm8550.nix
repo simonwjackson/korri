@@ -61,6 +61,9 @@ let
   substrateAudioUcmPath = "${sm8550.audio.ucmPackage}/share/alsa/ucm2";
   substrateAudioSink = sm8550.audio.defaultSink;
   korriPulseServer = "unix:%t/pulse/native";
+  korriRuntimeUid = toString (config.users.users.${runtime.user}.uid or 2000);
+  korriRuntimeDir = "/run/user/${korriRuntimeUid}";
+  korriHardwareButtonPulseServer = "unix:${korriRuntimeDir}/pulse/native";
   korriSm8550AudioBootstrap = pkgs.writeShellScript "korri-sm8550-audio-bootstrap" ''
     set -u
 
@@ -227,6 +230,17 @@ in
   systemd.services.main-space-wireplumber.enable = lib.mkForce false;
   systemd.services.main-space-audio-sink-bootstrap.enable = lib.mkForce false;
 
+  # The substrate hardware-button handler still owns bare power/lid/volume
+  # buttons because it runs outside the Korri renderer session and keeps those
+  # controls alive across product crashes. After moving the audio graph out of
+  # the legacy root main-space services, point its wpctl/pactl children at the
+  # real Korri user session socket instead of the now-empty /run/user/0 graph.
+  systemd.services.main-space-hardware-button-handler.environment = {
+    XDG_RUNTIME_DIR = lib.mkForce korriRuntimeDir;
+    PULSE_SERVER = lib.mkForce korriHardwareButtonPulseServer;
+    DBUS_SESSION_BUS_ADDRESS = lib.mkForce "unix:path=${korriRuntimeDir}/bus";
+  };
+
   systemd.user.services.pipewire.environment = {
     ALSA_CONFIG_UCM2 = substrateAudioUcmPath;
     PULSE_SERVER = korriPulseServer;
@@ -332,6 +346,8 @@ in
     KORRI_INPUTD_POWER_SUSPEND = "true";
     KORRI_INPUTD_LID_CLOSED = "true";
     KORRI_INPUTD_LID_OPENED = "true";
+    KORRI_INPUTD_VOLUME_UP = "true";
+    KORRI_INPUTD_VOLUME_DOWN = "true";
     KORRI_SESSIOND_SOCKET = config.services.korri.sessiond.socketPath;
     PULSE_SERVER = korriPulseServer;
   };
