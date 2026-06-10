@@ -11,7 +11,7 @@
         "@fontsource-variable/geist": "^5.2.8",
         "@fontsource-variable/nunito": "^5.2.7",
         "@hono/node-server": "^1.19.14",
-        "@proseql/node": "0.13.2",
+        "@proseql/node": "0.14.0",
         "@tailwindcss/vite": "^4.1.7",
         "@tanstack/react-router": "^1.120.3",
         "@tanstack/router-generator": "1.120.3",
@@ -548,9 +548,9 @@
 
     "@playwright/test": ["@playwright/test@1.59.1", "", { "dependencies": { "playwright": "1.59.1" }, "bin": { "playwright": "cli.js" } }, "sha512-PG6q63nQg5c9rIi4/Z5lR5IVF7yU5MqmKaPOe0HSc0O2cX1fPi96sUQu5j7eo4gKCkB2AnNGoWt7y4/Xx3Kcqg=="],
 
-    "@proseql/core": ["@proseql/core@0.13.2", "", { "dependencies": { "@toon-format/toon": "^2.1.0", "effect": "4.0.0-beta.60", "hjson": "^3.2.2", "json5": "^2.2.3", "jsonc-parser": "^3.3.1", "smol-toml": "^1.6.0", "yaml": "^2.3.4" } }, "sha512-9bTe9XLDIBlQbABPle/oie57OktN6OiuWU5hezTFKayewAej/nNRfphuAR0jqMa0dKcmnA+H4KiVBQx0FSfMfg=="],
+    "@proseql/core": ["@proseql/core@0.14.0", "", { "dependencies": { "@toon-format/toon": "^2.1.0", "effect": "4.0.0-beta.60", "hjson": "^3.2.2", "json5": "^2.2.3", "jsonc-parser": "^3.3.1", "picomatch": "^4.0.4", "smol-toml": "^1.6.0", "yaml": "^2.3.4" } }, "sha512-6Tif/tChSWkIjlRrUxorrpv8ILUHAU0Etqxx9QyJhP44Z5i9jJFRD68XCj7bkf93I8KATcgRBYn/6UMuVYXPvQ=="],
 
-    "@proseql/node": ["@proseql/node@0.13.2", "", { "dependencies": { "@proseql/core": "^0.13.2" }, "peerDependencies": { "effect": "4.0.0-beta.60" } }, "sha512-49vneLKguiLCCfz1m1HoyH/PM08iAIBqjqc8F2rbo/mL1mrvYof9ClQ8WLSrXbZTL/+2V6QJCgh8V28ZxoPCcg=="],
+    "@proseql/node": ["@proseql/node@0.14.0", "", { "dependencies": { "@proseql/core": "^0.14.0" }, "peerDependencies": { "effect": "4.0.0-beta.60" } }, "sha512-wX4uHuWtiAwefS/YaEQKIGVCUuDMiJS19MgntTTGSQ7J4USM98tUnRZMQ/Z/FbCIQ/hbpvmtrnBk+tzg4A3EmA=="],
 
     "@protobufjs/aspromise": ["@protobufjs/aspromise@1.1.2", "", {}, "sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ=="],
 
@@ -1957,6 +1957,8 @@
     "@cucumber/gherkin-utils/commander": ["commander@14.0.2", "", {}, "sha512-TywoWNNRbhoD0BXs1P3ZEScW8W5iKrnbithIl0YH+uCmBd0QpPOA8yc82DS3BIE5Ma6FnBVUsJ7wVUDz4dvOWQ=="],
 
     "@happy-dom/global-registrator/@types/node": ["@types/node@20.19.39", "", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-orrrD74MBUyK8jOAD/r0+lfa1I2MO6I+vAkmAWzMYbCcgrN4lCrmK52gRFQq/JRxfYPfonkr4b0jcY7Olqdqbw=="],
+
+    "@proseql/core/yaml": ["yaml@2.9.0", "", { "bin": { "yaml": "bin.mjs" } }, "sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA=="],
 
     "@storybook/csf-plugin/unplugin": ["unplugin@2.3.11", "", { "dependencies": { "@jridgewell/remapping": "^2.3.5", "acorn": "^8.15.0", "picomatch": "^4.0.3", "webpack-virtual-modules": "^0.6.2" } }, "sha512-5uKD0nqiYVzlmCRs01Fhs2BdkEgBS3SAVP6ndrBsuK42iC2+JHyxM05Rm9G8+5mkmRtzMZGY8Ct5+mliZxU/Ww=="],
 

@@ -35,7 +35,7 @@
 		"@fontsource-variable/geist": "^5.2.8",
 		"@fontsource-variable/nunito": "^5.2.7",
 		"@hono/node-server": "^1.19.14",
-		"@proseql/node": "0.13.2",
+		"@proseql/node": "0.14.0",
 		"@tailwindcss/vite": "^4.1.7",
 		"@tanstack/react-router": "^1.120.3",
 		"@tanstack/router-generator": "1.120.3",
