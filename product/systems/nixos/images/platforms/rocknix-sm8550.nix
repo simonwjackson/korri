@@ -250,12 +250,20 @@ let
     fi
     ${pkgs.coreutils}/bin/rmdir "$mountpoint" 2>/dev/null || true
   '';
-  korriSm8550AudioBootstrap = pkgs.writeShellScript "korri-sm8550-audio-bootstrap" ''
+  # The substrate now leaves UCM verb/device and the manual PCM null for panels
+  # (e.g. Odin 2 Portal) where WirePlumber owns default-sink selection. Guard
+  # every sink-derived interpolation so the bootstrap renders for any substrate
+  # contract: the UCM-profile preference only runs when both verb and device are
+  # declared, and the manual `module-alsa-sink` fallback only runs when a PCM is
+  # declared. With neither, the unit becomes an ordering-only no-op and audio
+  # relies on WirePlumber, matching the substrate's own conditional bootstrap.
+  substrateAudioSinkHasUcm =
+    substrateAudioSink.ucmVerb != null && substrateAudioSink.ucmDevice != null;
+  substrateAudioSinkHasPcm = substrateAudioSink.pcm != null;
+  korriSm8550AudioBootstrap = pkgs.writeShellScript "korri-sm8550-audio-bootstrap" (
+    ''
     set -u
 
-    preferred_card="alsa_card.platform-sound"
-    preferred_profile=${lib.escapeShellArg "${substrateAudioSink.ucmVerb} (Headphones, ${substrateAudioSink.ucmDevice})"}
-    preferred_sink="alsa_output.platform-sound.${substrateAudioSink.ucmVerb}__${substrateAudioSink.ucmDevice}__sink"
     fallback_sink=${lib.escapeShellArg substrateAudioSink.name}
 
     for _ in $(${pkgs.coreutils}/bin/seq 1 60); do
@@ -269,6 +277,12 @@ let
       echo "korri-sm8550-audio-bootstrap: PulseAudio socket unavailable at $PULSE_SERVER" >&2
       exit 0
     fi
+''
+    + lib.optionalString substrateAudioSinkHasUcm ''
+
+    preferred_card="alsa_card.platform-sound"
+    preferred_profile=${lib.escapeShellArg "${toString substrateAudioSink.ucmVerb} (Headphones, ${toString substrateAudioSink.ucmDevice})"}
+    preferred_sink="alsa_output.platform-sound.${toString substrateAudioSink.ucmVerb}__${toString substrateAudioSink.ucmDevice}__sink"
 
     if ${pkgs.pulseaudio}/bin/pactl list cards | ${pkgs.gnugrep}/bin/grep -Fq "$preferred_profile"; then
       ${pkgs.pulseaudio}/bin/pactl set-card-profile "$preferred_card" "$preferred_profile" >/dev/null 2>&1 || true
@@ -277,19 +291,22 @@ let
         exit 0
       fi
     fi
+''
+  + lib.optionalString substrateAudioSinkHasPcm ''
 
     # Fallback for kernels/profiles where WirePlumber exposes only Pro Audio:
     # create the substrate-declared PCM sink directly and make it default.
     if ! ${pkgs.pulseaudio}/bin/pactl list short sinks | ${pkgs.gnugrep}/bin/grep -q "^[0-9][0-9]*[[:space:]]$fallback_sink[[:space:]]"; then
       ${pkgs.pulseaudio}/bin/pactl load-module module-alsa-sink \
-        device=${lib.escapeShellArg substrateAudioSink.pcm} \
+        device=${lib.escapeShellArg (toString substrateAudioSink.pcm)} \
         sink_name="$fallback_sink" \
         sink_properties=device.description=${lib.escapeShellArg substrateAudioSink.description} \
         >/dev/null 2>&1 || true
     fi
 
     ${pkgs.pulseaudio}/bin/pactl set-default-sink "$fallback_sink" >/dev/null 2>&1 || true
-  '';
+''
+  );
   inputplumberPackage =
     pkgs.runCommand "korri-rocknix-inputplumber-xb360"
       {
