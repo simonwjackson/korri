@@ -50,6 +50,15 @@ else
     ${pkg}/bin/yfs --help | grep -q -- '--bgm-volume'
     ${pkg}/bin/yfs --list-samples | grep -q '^basicMovement$'
 
+    fake_browser=$TMPDIR/fake-browser
+    cat > $fake_browser <<'EOF'
+    #!${pkgs.runtimeShell}
+    printf '%s\n' "$@" > "$TMPDIR/fake-browser-args"
+    EOF
+    chmod +x $fake_browser
+    printf %s "" | YFS_BROWSER=$fake_browser XDG_CACHE_HOME=$TMPDIR/cache ${pkg}/bin/yfs
+    grep -q -- '--app=file://' "$TMPDIR/fake-browser-args"
+
     test -f ${pkg}/nix-support/yoshis-fabrication-station/manifest.txt
     grep -q '^engine=construct3-html5' ${pkg}/nix-support/yoshis-fabrication-station/manifest.txt
     grep -q 'launch-settings=enableAudio enableGBASounds enableQuickDeath enablePlayTimer VolumeBGM VolumeSFX' ${pkg}/nix-support/yoshis-fabrication-station/manifest.txt

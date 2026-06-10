@@ -56,6 +56,7 @@ mode_code_url=""
 mode_lss=""
 mode_path=""
 mode_stdin=0
+stdin_prefix=""
 flag_metrics=0
 flag_debug=0
 flag_windowed=0
@@ -138,7 +139,9 @@ if [[ $flag_list_samples -eq 1 ]]; then
 fi
 
 if [[ -z "$mode_path$mode_sample$mode_code_url$mode_lss" ]] && [[ $mode_stdin -eq 0 ]] && [[ -p /dev/stdin ]]; then
-  mode_stdin=1
+  if IFS= read -r -N 1 -t 0.05 stdin_prefix; then
+    mode_stdin=1
+  fi
 fi
 
 payload_count=0
@@ -230,7 +233,7 @@ if [[ -n "$mode_path" ]]; then
   append_query "code_url=$(urlencode "file://$staging_file")"
 elif [[ $mode_stdin -eq 1 ]]; then
   ensure_staging
-  cat >"$staging_file"
+  { printf '%s' "$stdin_prefix"; cat; } >"$staging_file"
   [[ -s "$staging_file" ]] || die "stdin produced no level JSON"
   validate_json "$staging_file"
   append_query "code_url=$(urlencode "file://$staging_file")"
