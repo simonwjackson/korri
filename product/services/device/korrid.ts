@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 
 import { createAdaptorServer } from "@hono/node-server"
+import {
+  type ConfigGraphController,
+  createConfigGraphController,
+} from "@platform/library/config-graph-controller"
+import { configGraphRootsFromEnv } from "@platform/library/library-source-layer-live"
 import { logger } from "@platform/logger"
 import { createHonoApp } from "@product/apps/portal/api/hono-app"
 import { serverRpcHandler } from "@product/apps/portal/api/server/rpc-server"
@@ -59,9 +64,12 @@ export function getKorridConfig(
 
 export function createKorrid(options: CreateKorridOptions = {}): KorridHandle {
   const config = options.config ?? getKorridConfig()
+  const configGraphController: ConfigGraphController =
+    createConfigGraphController({ roots: configGraphRootsFromEnv() })
   const app = createHonoApp({
     rpcHandler: serverRpcHandler,
     rpcSurface: "server",
+    configGraphController,
   })
   const server = createAdaptorServer({ fetch: app.fetch })
   const advertise = options.advertise ?? advertiseStreamHost
@@ -73,6 +81,14 @@ export function createKorrid(options: CreateKorridOptions = {}): KorridHandle {
       if (started) return
       await listen(server, config.port, config.host)
       started = true
+      try {
+        await configGraphController.initialize()
+      } catch (error) {
+        logger.warn(
+          { err: error },
+          "Korri daemon: config graph initialize failed; serving empty baseline",
+        )
+      }
       try {
         if (config.advertise) {
           advertisement = advertise({
@@ -96,6 +112,7 @@ export function createKorrid(options: CreateKorridOptions = {}): KorridHandle {
         await advertisement.stop()
         advertisement = undefined
       }
+      await configGraphController.stop()
       if (started) {
         await closeServer(server)
         started = false

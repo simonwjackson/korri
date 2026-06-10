@@ -1,7 +1,13 @@
 import { serveGameAssetBytes } from "@platform/api/http/game-asset-bytes"
 import { guardRpcEnvelope } from "@platform/api/rpc/envelope-guard"
+import {
+  type ConfigGraphController,
+  createConfigGraphController,
+} from "@platform/library/config-graph-controller"
+import { configGraphRootsFromEnv } from "@platform/library/library-source-layer-live"
 import { logger as defaultLogger } from "@platform/logger/logger"
 import { Hono } from "hono"
+import { handleConfigEvents } from "./config/events"
 import { bodyLimit } from "hono/body-limit"
 import { compress } from "hono/compress"
 import { cors } from "hono/cors"
@@ -14,6 +20,33 @@ const isDev = process.env.NODE_ENV === "development"
 export interface CreateHonoAppOptions {
   readonly rpcHandler?: (request: Request) => Promise<Response>
   readonly rpcSurface?: "app" | "server"
+  /**
+   * Daemon-owned config-graph controller. When omitted, a lazily-created
+   * singleton is initialized from `KORRI_CONFIG_ROOTS` on the first
+   * `/api/config/events` connection so non-config routes never spin up
+   * watchers.
+   */
+  readonly configGraphController?: ConfigGraphController
+}
+
+let lazyConfigGraphController: ConfigGraphController | undefined
+
+function getDefaultConfigGraphController(): ConfigGraphController {
+  if (lazyConfigGraphController === undefined) {
+    const controller = createConfigGraphController({
+      roots: configGraphRootsFromEnv(),
+    })
+    lazyConfigGraphController = controller
+    void controller
+      .initialize()
+      .catch(error =>
+        defaultLogger.warn(
+          { err: error },
+          "config-graph: lazy controller initialize failed",
+        ),
+      )
+  }
+  return lazyConfigGraphController
 }
 
 export function createHonoApp(options: CreateHonoAppOptions = {}) {
@@ -48,6 +81,11 @@ export function createHonoApp(options: CreateHonoAppOptions = {}) {
     c.text("Method Not Allowed", 405, {
       Allow: "GET, HEAD",
     }),
+  )
+
+  const configGraphController = options.configGraphController
+  app.get("/api/config/events", c =>
+    handleConfigEvents(c, configGraphController ?? getDefaultConfigGraphController()),
   )
 
   app.use(

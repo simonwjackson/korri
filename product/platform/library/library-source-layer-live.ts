@@ -138,7 +138,7 @@ function withLibraryRepository<T>(
 ): Effect.Effect<T, LibraryError> {
   return Effect.scoped(
     Effect.gen(function* () {
-      const roots = configRootsFromEnv()
+      const roots = configGraphRootsFromEnv()
       logger.info(
         {
           sourceKind: "proseql",
@@ -201,13 +201,15 @@ function optionalEnv(value: string | undefined): string | undefined {
  * optional dev root; when even that cannot be derived, the empty baseline graph
  * is used. The legacy `KORRI_LIBRARY_ROOT` is intentionally not consulted.
  */
-function configRootsFromEnv(): readonly KorriConfigGraphRoot[] {
-  const explicit = parseListEnv(process.env.KORRI_CONFIG_ROOTS)
+export function configGraphRootsFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): readonly KorriConfigGraphRoot[] {
+  const explicit = parseListEnv(env.KORRI_CONFIG_ROOTS)
   if (explicit) return explicit.map(root => ({ root }))
-  if (process.env.KORRI_CONFIG_ROOTS !== undefined) return []
+  if (env.KORRI_CONFIG_ROOTS !== undefined) return []
 
   try {
-    return [{ root: korriDataPath(process.env, "config") }]
+    return [{ root: korriDataPath(env, "config") }]
   } catch {
     return []
   }

@@ -20,6 +20,7 @@ import { createApiForwarder } from "./api-forwarder"
  * - GET /api/echo-headers  → 200 { headers: {...} }
  * - GET /api/big           → ~3MB body
  * - GET /api/gzipped       → 200 with Content-Encoding: gzip
+ * - GET /api/config/events → streaming SSE fixture (config events)
  */
 class UpstreamFixture {
   private server: ReturnType<typeof createServer> | null = null
@@ -110,6 +111,16 @@ async function handleFixtureRequest(
     res.end(compressed)
     return
   }
+  if (url.pathname === "/api/config/events") {
+    res.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+    })
+    res.write("event: config.ready\ndata: {}\n\n")
+    setTimeout(() => res.end(), 500)
+    return
+  }
   res.writeHead(404, { ...baseHeaders, "content-type": "text/plain" })
   res.end("not found")
 }
@@ -131,6 +142,10 @@ function forwardRequest(
   init?: RequestInit,
 ): Promise<Response> {
   return forwarder(new Request(`http://desktop.local${pathAndQuery}`, init))
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 describe("api-forwarder", () => {
@@ -260,6 +275,26 @@ describe("api-forwarder", () => {
     expect(response.status).toBe(200)
     const text = await response.text()
     expect(text.length).toBe(3 * 1024 * 1024)
+  })
+
+  it("does not buffer event-stream responses before returning them", async () => {
+    const forwarder = createApiForwarder({ getUpstream: () => upstreamUrl })
+    const response = await Promise.race([
+      forwardRequest(forwarder, "/api/config/events"),
+      delay(100).then(() => "timed-out" as const),
+    ])
+
+    expect(response).not.toBe("timed-out")
+    if (response === "timed-out") return
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get("content-type")).toContain("text/event-stream")
+    const reader = response.body?.getReader()
+    expect(reader).toBeDefined()
+    if (!reader) return
+    const first = await reader.read()
+    expect(new TextDecoder().decode(first.value)).toContain("config.ready")
+    await reader.cancel()
   })
 
   it("awaits async getUpstream (e.g. ForwarderUpstream.pickUpstream)", async () => {

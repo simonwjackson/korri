@@ -76,15 +76,20 @@ export function createApiForwarder(
       return jsonResponse(502, { error: "upstream unreachable" })
     }
 
-    // Buffer the upstream body. The forwarder is request/response only —
-    // there are no streaming endpoints today — and buffering keeps the
-    // outgoing Response constructable from the test environment's Response
-    // global as well as from Bun's.
+    const responseHeaders = stripResponseHeaders(upstreamResponse.headers)
+    if (isEventStream(upstreamResponse.headers)) {
+      return new Response(upstreamResponse.body, {
+        status: upstreamResponse.status,
+        statusText: upstreamResponse.statusText,
+        headers: responseHeaders,
+      })
+    }
+
     const bodyBytes = new Uint8Array(await upstreamResponse.arrayBuffer())
     return new Response(bodyBytes, {
       status: upstreamResponse.status,
       statusText: upstreamResponse.statusText,
-      headers: stripResponseHeaders(upstreamResponse.headers),
+      headers: responseHeaders,
     })
   }
 }
@@ -118,6 +123,13 @@ function stripResponseHeaders(headers: Headers): Headers {
     out.append(name, value)
   }
   return out
+}
+
+function isEventStream(headers: Headers): boolean {
+  return (
+    headers.get("content-type")?.toLowerCase().includes("text/event-stream") ??
+    false
+  )
 }
 
 function jsonResponse(status: number, body: unknown): Response {
