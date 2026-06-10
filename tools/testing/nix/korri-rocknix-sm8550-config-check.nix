@@ -37,11 +37,9 @@ let
       inputdUnit = userServices.korri-inputd or { };
       inputdEnv = inputdUnit.environment or { };
       inputdPath = inputdUnit.path or [ ];
-      hardwareButtonEnv = ((cfg.systemd.services.main-space-hardware-button-handler or { }).environment or { });
       removableMountUnit = cfg.systemd.services."korri-removable-card-mount@" or { };
       removableUnmountUnit = cfg.systemd.services."korri-removable-card-unmount@" or { };
       removableColdplugUnit = cfg.systemd.services.korri-removable-card-coldplug or { };
-      korriRuntimeDir = "/run/user/${toString (korriUser.uid or 2000)}";
       pipewireEnv = (userServices.pipewire or { }).environment or { };
       pipewirePulseEnv = (userServices.pipewire-pulse or { }).environment or { };
       wireplumberEnv = (userServices.wireplumber or { }).environment or { };
@@ -90,10 +88,15 @@ let
         lib.hasInfix ''SUBSYSTEM=="input", KERNEL=="event*", GROUP="input", MODE="0660", TAG+="uaccess"'' cfg.services.udev.extraRules
         && lib.hasInfix ''setfacl -m u:korri:rw /dev/input/%k'' cfg.services.udev.extraRules
       ))
-      (check "${name}: SM8550 DRM seat metadata is triggered before greetd" (
+      (check "${name}: SM8550 DRM seat + input metadata is triggered before greetd" (
         cfg.systemd.services ? korri-rocknix-seat-device-trigger
         && builtins.elem "greetd.service" (seatDeviceTrigger.before or [ ])
-        && lib.hasInfix "udevadm trigger --subsystem-match=drm --action=change" (seatDeviceTrigger.serviceConfig.ExecStart or "")
+        && (let
+             raw = seatDeviceTrigger.serviceConfig.ExecStart or [ ];
+             execLines = lib.concatStringsSep "\n" (if builtins.isList raw then raw else [ raw ]);
+           in
+             lib.hasInfix "udevadm trigger --subsystem-match=drm --action=change" execLines
+             && lib.hasInfix "udevadm trigger --subsystem-match=input --action=change" execLines)
       ))
       (check "${name}: compositor uses the greetd/logind user session bus" (
         compositor.sessionBus.mode == "existing"
@@ -152,13 +155,19 @@ let
       (check "${name}: sessiond launches inherit Korri user Pulse socket" (
         sessiondEnv.PULSE_SERVER or null == "unix:%t/pulse/native"
       ))
-      (check "${name}: hardware buttons own volume against Korri user Pulse socket" (
-        hardwareButtonEnv.XDG_RUNTIME_DIR or null == korriRuntimeDir
-        && hardwareButtonEnv.PULSE_SERVER or null == "unix:${korriRuntimeDir}/pulse/native"
-        && hardwareButtonEnv.DBUS_SESSION_BUS_ADDRESS or null == "unix:path=${korriRuntimeDir}/bus"
+      (check "${name}: inputd owns power/lid buttons via the product fake-suspend toggle" (
+        lib.hasSuffix "korri-fakesuspend-toggle" (inputdEnv.KORRI_INPUTD_POWER_SUSPEND or "")
+        && lib.hasSuffix "korri-fakesuspend-toggle suspend" (inputdEnv.KORRI_INPUTD_LID_CLOSED or "")
+        && lib.hasSuffix "korri-fakesuspend-toggle resume" (inputdEnv.KORRI_INPUTD_LID_OPENED or "")
         && inputdEnv.PULSE_SERVER or null == "unix:%t/pulse/native"
-        && inputdEnv.KORRI_INPUTD_VOLUME_UP or null == "true"
-        && inputdEnv.KORRI_INPUTD_VOLUME_DOWN or null == "true"
+        # Volume is no longer overridden; inputd falls back to its built-in
+        # pactl set-sink-volume default against the Korri user Pulse socket.
+        && !(inputdEnv ? KORRI_INPUTD_VOLUME_UP)
+        && !(inputdEnv ? KORRI_INPUTD_VOLUME_DOWN)
+        # The substrate power-state request channel is group-writable by the
+        # Korri runtime group so the toggle can drop enter/exit markers
+        # without root or polkit.
+        && (cfg.rocknix.power.requestGroup or null) == runtime.group
       ))
       (check "${name}: inputd terminates foreground games through sessiond" (
         inputdEnv.KORRI_SESSIOND_SOCKET or null == "%t/korri/sessiond.sock"

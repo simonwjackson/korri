@@ -63,7 +63,101 @@ let
   korriPulseServer = "unix:%t/pulse/native";
   korriRuntimeUid = toString (config.users.users.${runtime.user}.uid or 2000);
   korriRuntimeDir = "/run/user/${korriRuntimeUid}";
-  korriHardwareButtonPulseServer = "unix:${korriRuntimeDir}/pulse/native";
+  # Substrate power-state request channel (nix-on-rocks owns the verb +
+  # watcher; this is where the product drops enter/exit markers). Derived
+  # from the substrate option so the two stay in sync.
+  powerRequestDir = "${config.rocknix.power.runtimeDir}/requests";
+  # korri-fakesuspend-toggle -- product fake-suspend policy. Runs as the
+  # Korri runtime user (dispatched by inputd) and owns ONLY the session
+  # half of suspend/resume: blank the screen via Korri's own compositor
+  # socket, freeze/thaw the transient game *.scope units (never the
+  # compositor/inputd services, which are .service units and stay alive),
+  # then ask the substrate to enter/exit the low-power radio state by
+  # dropping a request marker. The substrate verb owns radios + governors
+  # + NM recovery; this script never touches them.
+  korriFakesuspendToggle = pkgs.writeShellScript "korri-fakesuspend-toggle" ''
+    set -u
+    export PATH=${lib.makeBinPath (with pkgs; [
+      coreutils
+      gawk
+      gnugrep
+      sway
+      systemd
+    ])}
+
+    request_dir="${powerRequestDir}"
+    runtime_dir="''${XDG_RUNTIME_DIR:-${korriRuntimeDir}}"
+    state_dir="$runtime_dir/korri-fakesuspend"
+    active="$state_dir/active"
+    last="$state_dir/last-toggle"
+    log="$state_dir/toggle.log"
+    mkdir -p "$state_dir" "$request_dir" 2>/dev/null || true
+
+    logline() { echo "$(date -Is) toggle: $*" | tee -a "$log" >&2 || true; }
+
+    sway_screen() {
+      sock=$(ls "$runtime_dir"/sway-ipc.*.sock 2>/dev/null | head -1)
+      [ -n "$sock" ] || return 0
+      SWAYSOCK="$sock" swaymsg "output * power $1" >/dev/null 2>&1 || true
+    }
+
+    # Freeze/thaw only the transient game scopes. The compositor and inputd
+    # are .service units, so they survive and can repaint on resume.
+    freeze_game_scopes() {
+      systemctl --user list-units --type=scope --state=running --no-legend 2>/dev/null \
+        | awk '{print $1}' \
+        | while read -r unit; do
+            [ -n "$unit" ] || continue
+            systemctl --user freeze "$unit" 2>/dev/null || true
+          done
+    }
+    thaw_game_scopes() {
+      systemctl --user list-units --type=scope --no-legend 2>/dev/null \
+        | awk '{print $1}' \
+        | while read -r unit; do
+            [ -n "$unit" ] || continue
+            systemctl --user thaw "$unit" 2>/dev/null || true
+          done
+    }
+
+    do_suspend() {
+      logline "suspend: screen off + freeze game scopes + request enter"
+      sway_screen off
+      freeze_game_scopes
+      : > "$active"
+      touch "$request_dir/enter.request" 2>/dev/null || true
+    }
+    do_resume() {
+      logline "resume: request exit + thaw game scopes + screen on"
+      touch "$request_dir/exit.request" 2>/dev/null || true
+      thaw_game_scopes
+      sway_screen on
+      rm -f "$active" 2>/dev/null || true
+    }
+
+    case "''${1:-toggle}" in
+      suspend) do_suspend ;;
+      resume)  do_resume ;;
+      toggle)
+        # KEY_POWER autorepeats (value 2) and inputd dispatches on every
+        # non-zero value; collapse presses within 2s into one toggle.
+        now=$(date +%s)
+        if [ -f "$last" ]; then
+          prev=$(cat "$last" 2>/dev/null || echo 0)
+          if [ $((now - prev)) -lt 2 ]; then
+            logline "toggle: debounced"
+            exit 0
+          fi
+        fi
+        echo "$now" > "$last"
+        if [ -e "$active" ]; then do_resume; else do_suspend; fi
+        ;;
+      *)
+        echo "korri-fakesuspend-toggle: usage: $0 [toggle|suspend|resume]" >&2
+        exit 64
+        ;;
+    esac
+  '';
   removableCardsMediaRoot = "/run/media/korri/cards";
   removableCardsContentRoot = "/var/lib/korri/content/removable/cards";
   korriRemovableCardMount = pkgs.writeShellScript "korri-removable-card-mount" ''
@@ -350,17 +444,27 @@ in
     };
   };
 
-  # The guest sees DRM devices that already exist in the ROCKNIX-hosted device
-  # namespace. Reprocess their udev metadata before greetd starts so logind
-  # attaches card0 to seat0 and the rootless Sway compositor can acquire DRM.
+  # The guest sees DRM and input devices that already exist in the
+  # ROCKNIX-hosted device namespace. Host-bound nodes do not emit a fresh
+  # guest `add` event, so the guest udev rules above never fire for them.
+  # Reprocess both subsystems before greetd starts: DRM so logind attaches
+  # card0 to seat0 (rootless Sway can acquire DRM), and input so the
+  # `setfacl u:${runtime.user}:rw` rule lands on the bare button nodes
+  # (pmic_pwrkey/pmic_resin/gpio-keys). Without the input re-trigger, inputd
+  # retry-loops on EACCES forever and the power/lid buttons never dispatch.
+  # Running before greetd keeps the re-trigger off the live InputPlumber
+  # session.
   systemd.services.korri-rocknix-seat-device-trigger = {
-    description = "Apply Korri RockNIX seat udev metadata";
+    description = "Apply Korri RockNIX seat + input udev metadata";
     wantedBy = [ "multi-user.target" ];
     after = [ "systemd-udevd.service" ];
     before = [ "greetd.service" ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${pkgs.systemd}/bin/udevadm trigger --subsystem-match=drm --action=change";
+      ExecStart = [
+        "${pkgs.systemd}/bin/udevadm trigger --subsystem-match=drm --action=change"
+        "${pkgs.systemd}/bin/udevadm trigger --subsystem-match=input --action=change"
+      ];
       RemainAfterExit = true;
     };
   };
@@ -377,16 +481,12 @@ in
   systemd.services.main-space-wireplumber.enable = lib.mkForce false;
   systemd.services.main-space-audio-sink-bootstrap.enable = lib.mkForce false;
 
-  # The substrate hardware-button handler still owns bare power/lid/volume
-  # buttons because it runs outside the Korri renderer session and keeps those
-  # controls alive across product crashes. After moving the audio graph out of
-  # the legacy root main-space services, point its wpctl/pactl children at the
-  # real Korri user session socket instead of the now-empty /run/user/0 graph.
-  systemd.services.main-space-hardware-button-handler.environment = {
-    XDG_RUNTIME_DIR = lib.mkForce korriRuntimeDir;
-    PULSE_SERVER = lib.mkForce korriHardwareButtonPulseServer;
-    DBUS_SESSION_BUS_ADDRESS = lib.mkForce "unix:path=${korriRuntimeDir}/bus";
-  };
+  # Ownership flip (2026-06-10): the substrate no longer reads buttons or
+  # owns session policy. Korri owns power/lid/volume button policy via inputd
+  # (below) and drives the product-agnostic substrate power verb through its
+  # request channel. Make that channel writable by the Korri runtime group so
+  # korri-fakesuspend-toggle can drop markers without root/polkit.
+  rocknix.power.requestGroup = runtime.group;
 
   systemd.user.services.pipewire.environment = {
     ALSA_CONFIG_UCM2 = substrateAudioUcmPath;
@@ -482,19 +582,18 @@ in
     services = lib.mkDefault [ "inputplumber.service" ];
   };
 
-  # The nix-on-rocks SM8550 substrate's main-space-hardware-button-handler is
-  # the single owner of bare hardware button semantics that must survive product
-  # runtime failures: power/lid fake-suspend and volume/audio policy. Korri
-  # inputd still watches the same evdev devices for product shortcuts (for
-  # example Home+Volume -> brightness), but must not also translate bare
-  # KEY_POWER/SW_LID into the generic `systemctl suspend` fallback or bare
-  # volume buttons into a second audio change.
+  # Korri owns hardware button policy. inputd reads KEY_POWER / SW_LID and
+  # dispatches the product fake-suspend toggle, which blanks the screen and
+  # freezes game scopes before asking the substrate to drop the radios.
+  #   - power button  -> toggle (debounced suspend/resume)
+  #   - lid close/open -> explicit suspend/resume edges
+  #   - volume up/down -> inputd's built-in `pactl set-sink-volume` default
+  #     (PULSE_SERVER below points it at the Korri user-session graph); no
+  #     override needed now that the substrate volume handler is gone.
   services.korri.input.inputd.environment = {
-    KORRI_INPUTD_POWER_SUSPEND = "true";
-    KORRI_INPUTD_LID_CLOSED = "true";
-    KORRI_INPUTD_LID_OPENED = "true";
-    KORRI_INPUTD_VOLUME_UP = "true";
-    KORRI_INPUTD_VOLUME_DOWN = "true";
+    KORRI_INPUTD_POWER_SUSPEND = "${korriFakesuspendToggle}";
+    KORRI_INPUTD_LID_CLOSED = "${korriFakesuspendToggle} suspend";
+    KORRI_INPUTD_LID_OPENED = "${korriFakesuspendToggle} resume";
     KORRI_SESSIOND_SOCKET = config.services.korri.sessiond.socketPath;
     PULSE_SERVER = korriPulseServer;
   };
