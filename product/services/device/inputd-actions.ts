@@ -1,5 +1,10 @@
 import { readFile } from "node:fs/promises"
 import { logger as defaultLogger } from "@platform/logger"
+import {
+  probeSessiondManagedLaunchStatus,
+  terminateSessiondManagedLaunch,
+  type SessiondManagedLaunchClientOptions,
+} from "@platform/library/sessiond-managed-launch-client"
 import { buildBottomKeyboardCommand } from "./bottom-keyboard"
 import { buildSwayShortcutCommand } from "./sway-actions"
 
@@ -75,6 +80,7 @@ export interface InputdActionDispatcherOptions {
   readonly logger?: InputdActionLogger
   readonly commands?: InputdActionCommands
   readonly defaultKillFilePath?: string
+  readonly sessiond?: SessiondManagedLaunchClientOptions
 }
 
 const FALLBACK_KILL_FILE_PATH = "/tmp/.process-kill-data"
@@ -91,6 +97,7 @@ export function createInputdActionDispatcher(
   const commands = { ...defaultCommands(), ...options.commands }
   const defaultKillFilePath =
     options.defaultKillFilePath ?? defaultKillFilePathFromEnv(process.env)
+  const sessiond = options.sessiond ?? { env: process.env }
 
   async function runNamedCommand(
     actionId: KorriInputdActionId,
@@ -119,6 +126,7 @@ export function createInputdActionDispatcher(
             await runNamedCommand(actionId, commands.killCurrentGame)
             return
           }
+          if (await dispatchSessiondTerminateActive({ logger, sessiond })) return
           await dispatchKillCurrentGame({
             killFilePath: context.killFilePath ?? defaultKillFilePath,
             logger,
@@ -175,6 +183,48 @@ export function createInputdActionDispatcher(
   }
 }
 
+async function dispatchSessiondTerminateActive(options: {
+  readonly logger: InputdActionLogger
+  readonly sessiond: SessiondManagedLaunchClientOptions
+}): Promise<boolean> {
+  const status = await probeSessiondManagedLaunchStatus(options.sessiond)
+  if (status.kind === "not-configured") return false
+  if (status.kind !== "ok") {
+    options.logger.warn(
+      { status },
+      "inputd kill-current-game failed; sessiond status unavailable",
+    )
+    return true
+  }
+
+  const active = status.status.active
+  if (!active) {
+    options.logger.warn(
+      { mode: status.status.mode },
+      "inputd kill-current-game skipped; no active sessiond launch",
+    )
+    return true
+  }
+
+  const terminated = await terminateSessiondManagedLaunch(
+    { launchId: active.launchId },
+    options.sessiond,
+  )
+  if (terminated.kind !== "ok") {
+    options.logger.warn(
+      { status: terminated, launchId: active.launchId },
+      "inputd kill-current-game failed; sessiond terminate rejected",
+    )
+    return true
+  }
+
+  options.logger.info(
+    { launchId: active.launchId, response: terminated.response },
+    "inputd terminated active sessiond launch",
+  )
+  return true
+}
+
 async function dispatchKillCurrentGame(options: {
   readonly killFilePath: string
   readonly logger: InputdActionLogger
@@ -222,11 +272,7 @@ function defaultCommands(): InputdActionCommands {
       "exec",
       "korri-desktop-device",
     ]),
-    killCurrentGame: commandFromEnv(
-      "KORRI_INPUTD_KILL_CURRENT_GAME",
-      "swaymsg",
-      ["kill"],
-    ),
+    killCurrentGame: commandFromEnvOptional("KORRI_INPUTD_KILL_CURRENT_GAME"),
     volumeUp: commandFromEnv("KORRI_INPUTD_VOLUME_UP", "pactl", [
       "set-sink-volume",
       "@DEFAULT_SINK@",
@@ -275,6 +321,16 @@ function defaultCommands(): InputdActionCommands {
     moveOutputDown: buildSwayShortcutCommand("move-output-down"),
     toggleBottomKeyboard: bottomKeyboardCommand.command,
   }
+}
+
+function commandFromEnvOptional(
+  envName: string,
+): InputdActionCommand | undefined {
+  const raw = process.env[envName]
+  if (!raw?.trim()) return undefined
+
+  const [command, ...args] = raw.trim().split(/\s+/)
+  return command ? { command, args } : undefined
 }
 
 function commandFromEnv(

@@ -332,6 +332,7 @@ in
     KORRI_INPUTD_POWER_SUSPEND = "true";
     KORRI_INPUTD_LID_CLOSED = "true";
     KORRI_INPUTD_LID_OPENED = "true";
+    KORRI_SESSIOND_SOCKET = config.services.korri.sessiond.socketPath;
     PULSE_SERVER = korriPulseServer;
   };
 

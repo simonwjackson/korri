@@ -152,6 +152,10 @@ let
         && !(inputdEnv ? KORRI_INPUTD_VOLUME_UP)
         && !(inputdEnv ? KORRI_INPUTD_VOLUME_DOWN)
       ))
+      (check "${name}: inputd terminates foreground games through sessiond" (
+        inputdEnv.KORRI_SESSIOND_SOCKET or null == "%t/korri/sessiond.sock"
+        && !(inputdEnv ? KORRI_INPUTD_KILL_CURRENT_GAME)
+      ))
       (check "${name}: inputd PATH includes swaymsg for foreground shortcuts" (
         builtins.elem compositor.sway.package inputdPath
       ))

@@ -29,12 +29,12 @@ async function tempDir() {
 }
 
 function createHarness(
-  options: { readonly commands?: InputdActionCommands } = {},
+  options: Parameters<typeof createInputdActionDispatcher>[0] = {},
 ) {
   const commands: InputdActionCommand[] = []
   const warnings: unknown[] = []
   const dispatcher = createInputdActionDispatcher({
-    commands: options.commands,
+    ...options,
     runner: async command => {
       commands.push(command)
       if (command.command === "fail") throw new Error("runner failed")
@@ -67,12 +67,46 @@ describe("inputd actions", () => {
     ).toBe("/run/user/1000/korri-inputd/process-kill-data")
   })
 
-  it("closes the focused Sway window by default", async () => {
-    const { dispatcher, commands } = createHarness()
+  it("terminates the active sessiond launch when sessiond is configured", async () => {
+    const requests: Array<{ input: string; init?: RequestInit }> = []
+    const { dispatcher, commands, warnings } = createHarness({
+      sessiond: {
+        socketPath: "/run/user/1000/korri/sessiond.sock",
+        fetchImpl: async (input, init) => {
+          requests.push({ input, init })
+          if (String(input).endsWith("/managed-launch/status")) {
+            return Response.json({
+              schemaVersion: 1,
+              mode: "game",
+              capabilities: {
+                managedLaunch: true,
+                lifecycleEvents: true,
+                perLaunchTermination: true,
+                sessionLifecycle: true,
+              },
+              active: { launchId: "launch-1", mode: "game" },
+              restoreAttempts: 0,
+            })
+          }
+          return Response.json({ status: "accepted", launchId: "launch-1" })
+        },
+      },
+    })
 
     await dispatcher.dispatch("kill-current-game")
 
-    expect(commands).toEqual([{ command: "swaymsg", args: ["kill"] }])
+    expect(commands).toEqual([])
+    expect(warnings).toEqual([])
+    expect(requests.map(request => request.input)).toEqual([
+      "http://korri-sessiond/managed-launch/status",
+      "http://korri-sessiond/managed-launch/terminate",
+    ])
+    expect((requests[1].init as RequestInit & { unix?: string }).unix).toBe(
+      "/run/user/1000/korri/sessiond.sock",
+    )
+    expect(JSON.parse(String(requests[1].init?.body))).toEqual({
+      launchId: "launch-1",
+    })
   })
 
   it("can still fall back to the ROCKNIX process-kill-data file", async () => {
