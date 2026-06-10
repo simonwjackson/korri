@@ -138,10 +138,15 @@ export function createElectrobunController(options: {
 
       await removeStaleStatusFile(command.env.KORRI_DESKTOP_STATUS_FILE)
       const childProcess = await options.runner.spawn(command)
-      await waitForStatusFile(
-        command.env.KORRI_DESKTOP_STATUS_FILE,
-        options.config?.readinessTimeoutMs ?? 0,
-      )
+      try {
+        await waitForStatusFile(
+          command.env.KORRI_DESKTOP_STATUS_FILE,
+          options.config?.readinessTimeoutMs ?? 0,
+        )
+      } catch (error) {
+        await options.runner.kill?.(childProcess.pid)
+        throw error
+      }
       return {
         pid: childProcess.pid,
         command: { command: resolved ?? command.command, args: command.args },

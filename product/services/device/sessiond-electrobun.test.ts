@@ -178,9 +178,10 @@ describe("Electrobun renderer controller", () => {
     expect(await readFile(statusFile, "utf8")).toContain("ready")
   })
 
-  it("times out when Electrobun never writes a status file", async () => {
+  it("cleans up and times out when Electrobun never writes a status file", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-electrobun-timeout-"))
     cleanups.push(() => rm(dir, { recursive: true, force: true }))
+    const killed: number[] = []
     const controller = createElectrobunController({
       config: {
         executablePath: "korri-desktop-device",
@@ -191,12 +192,16 @@ describe("Electrobun renderer controller", () => {
       runner: {
         resolve: async () => "/nix/store/hash/bin/korri-desktop-device",
         spawn: async () => ({ pid: 654 }),
+        kill: async pid => {
+          killed.push(pid)
+        },
       },
     })
 
     await expect(controller.launch()).rejects.toThrow(
       /did not write status file/,
     )
+    expect(killed).toEqual([654])
   })
 
   it("stop is a no-op when there is no renderer pid", async () => {

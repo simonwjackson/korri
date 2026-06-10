@@ -110,16 +110,25 @@ export function completeKorriRestore(
   }
 }
 
-export function failKorriRestore(
+export function noteKorriRestoreAttemptFailure(
   state: KorriSessionState,
   reason: string,
 ): KorriSessionState {
   const restoreAttempts = state.restoreAttempts + 1
   return {
     ...state,
-    mode: "recovering",
     restoreAttempts,
     failureReason: reason,
+  }
+}
+
+export function failKorriRestore(
+  state: KorriSessionState,
+  reason: string,
+): KorriSessionState {
+  return {
+    ...noteKorriRestoreAttemptFailure(state, reason),
+    mode: "recovering",
   }
 }
 

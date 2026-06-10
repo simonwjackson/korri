@@ -30,6 +30,7 @@ function startHarness(
     readonly launchResult?: LaunchResult
     readonly failRendererLaunch?: boolean
     readonly failRendererRestore?: boolean
+    readonly rendererRestoreFailures?: number
     readonly runLaunch?: (spec: LaunchSpec) => Promise<LaunchResult>
     readonly spawnLaunch?: (spec: LaunchSpec) => Promise<{
       readonly result: Promise<LaunchResult>
@@ -66,7 +67,10 @@ function startHarness(
         events.push("launch-electrobun")
         if (
           options.failRendererLaunch ||
-          (options.failRendererRestore && launchCount > 0)
+          (options.failRendererRestore && launchCount > 0) ||
+          (options.rendererRestoreFailures !== undefined &&
+            launchCount > 0 &&
+            launchCount <= options.rendererRestoreFailures)
         )
           throw new Error("renderer failed")
         rendererPid += 1
@@ -820,8 +824,8 @@ describe("korri sessiond", () => {
     expect(events).not.toContain("restore-es")
   })
 
-  it("emits recovering without home-ready when managed restore fails", async () => {
-    const { core } = startHarness({ failRendererRestore: true })
+  it("retries a transient renderer restore failure and returns home", async () => {
+    const { core, events } = startHarness({ rendererRestoreFailures: 1 })
     await request(core, "/control/start", authorized({ method: "POST" }))
 
     await request(
@@ -833,7 +837,6 @@ describe("korri sessiond", () => {
         body: JSON.stringify({ launchId: "launch-1", spec }),
       }),
     )
-    await waitForSessionMode(core, "recovering")
 
     const stream = await request(
       core,
@@ -842,6 +845,39 @@ describe("korri sessiond", () => {
     )
     const lifecycle = parseSseEvents(await stream.text())
 
+    expect(core.status().state.mode).toBe("home")
+    expect(core.status().state.restoreAttempts).toBe(0)
+    expect(events.filter(event => event === "launch-electrobun")).toHaveLength(
+      3,
+    )
+    expect(lifecycle.map(event => event.type)).toContain("home-ready")
+    expect(lifecycle.map(event => event.type)).not.toContain("recovering")
+  })
+
+  it("emits recovering without home-ready when managed restore exhausts retries", async () => {
+    const { core, events } = startHarness({ failRendererRestore: true })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "launch-1", spec }),
+      }),
+    )
+
+    const stream = await request(
+      core,
+      "/managed-launch/events?launchId=launch-1",
+      authorized(),
+    )
+    const lifecycle = parseSseEvents(await stream.text())
+
+    expect(events.filter(event => event === "launch-electrobun")).toHaveLength(
+      4,
+    )
     expect(lifecycle.map(event => event.type)).toContain("recovering")
     expect(lifecycle.map(event => event.type)).not.toContain("home-ready")
   })

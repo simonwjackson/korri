@@ -50,6 +50,7 @@ import {
   korriSessionActiveLaunch,
   markKorriGameRunning,
   markKorriHome,
+  noteKorriRestoreAttemptFailure,
   shouldStopAfterRestoreFailure,
   startKorriSession,
   stopKorriSession,
@@ -168,6 +169,7 @@ export interface KorriSessiondCore {
 
 const DEFAULT_PORT = 3003
 const DEFAULT_HOSTNAME = "127.0.0.1"
+const RESTORE_RETRY_DELAY_MS = 250
 
 export function createKorriSessiondCore(
   options: Omit<KorriSessiondOptions, "port" | "hostname">,
@@ -549,66 +551,85 @@ export function createKorriSessiondCore(
         : undefined
     const pgid = activeForRestore?.processGroupId
     const controlBridge = activeForRestore?.gamescopeControlBridge
-    try {
-      if (controlBridge) {
-        try {
-          await controlBridge.stop()
-        } catch (error) {
+    if (controlBridge) {
+      try {
+        await controlBridge.stop()
+      } catch (error) {
+        logger.warn(
+          { err: error, socketPath: controlBridge.socketPath },
+          "sessiond: Gamescope control bridge threw during restore",
+        )
+      }
+    }
+    if (reaper && pgid !== undefined) {
+      try {
+        const outcome = await reaper({ pgid })
+        if (outcome.residual.length > 0) {
           logger.warn(
-            { err: error, socketPath: controlBridge.socketPath },
-            "sessiond: Gamescope control bridge threw during restore",
+            { pgid, residualPids: outcome.residual },
+            "sessiond: gamescope residuals remain after reap",
           )
         }
+      } catch (error) {
+        logger.warn(
+          { err: error, pgid },
+          "sessiond: gamescope reaper threw during restore",
+        )
       }
-      if (reaper && pgid !== undefined) {
-        try {
-          const outcome = await reaper({ pgid })
-          if (outcome.residual.length > 0) {
-            logger.warn(
-              { pgid, residualPids: outcome.residual },
-              "sessiond: gamescope residuals remain after reap",
-            )
-          }
-        } catch (error) {
-          logger.warn(
-            { err: error, pgid },
-            "sessiond: gamescope reaper threw during restore",
-          )
+    }
+
+    while (true) {
+      try {
+        await role.restoreIdleAfterLaunch()
+        state = completeKorriRestore(state)
+        emitStatusSidecar()
+        const readiness = sessionRoleReadyOutcome(role)
+        pushLifecycleEvent(launchId, {
+          type: role.idleReadyEventName,
+          readiness: {
+            status: readiness.status,
+            ...(readiness.status === "ok"
+              ? {
+                  evidence: formatSessionRoleReadyEvidence(readiness.evidence),
+                }
+              : {
+                  message: readiness.message,
+                  ...(readiness.evidence
+                    ? {
+                        evidence: formatSessionRoleReadyEvidence(
+                          readiness.evidence,
+                        ),
+                      }
+                    : {}),
+                }),
+          },
+        })
+        break
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        const failedState = failKorriRestore(state, message)
+        logger.warn(
+          { err: error, restoreAttempts: failedState.restoreAttempts },
+          "sessiond: failed to restore role idle",
+        )
+        if (shouldStopAfterRestoreFailure(failedState)) {
+          state = failedState
+          emitStatusSidecar()
+          pushLifecycleEvent(launchId, {
+            type: "recovering",
+            message,
+            readiness: { status: "failed", message },
+          })
+          await leaveKorri()
+          break
         }
+
+        state = beginKorriRestore(
+          noteKorriRestoreAttemptFailure(state, message),
+        )
+        emitStatusSidecar("restoring")
+        await delay(RESTORE_RETRY_DELAY_MS)
       }
-      await role.restoreIdleAfterLaunch()
-      state = completeKorriRestore(state)
-      emitStatusSidecar()
-      const readiness = sessionRoleReadyOutcome(role)
-      pushLifecycleEvent(launchId, {
-        type: role.idleReadyEventName,
-        readiness: {
-          status: readiness.status,
-          ...(readiness.status === "ok"
-            ? { evidence: formatSessionRoleReadyEvidence(readiness.evidence) }
-            : {
-                message: readiness.message,
-                ...(readiness.evidence
-                  ? {
-                      evidence: formatSessionRoleReadyEvidence(
-                        readiness.evidence,
-                      ),
-                    }
-                  : {}),
-              }),
-        },
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      state = failKorriRestore(state, message)
-      emitStatusSidecar()
-      pushLifecycleEvent(launchId, {
-        type: "recovering",
-        message,
-        readiness: { status: "failed", message },
-      })
-      logger.warn({ err: error }, "sessiond: failed to restore role idle")
-      if (shouldStopAfterRestoreFailure(state)) await leaveKorri()
     }
 
     return result
