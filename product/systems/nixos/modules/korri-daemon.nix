@@ -31,13 +31,26 @@ let
   serverCacheDir = "/var/cache/${serverCacheDirName}";
   bunTranspilerCacheDir = "${serverCacheDir}/bun-transpiler-cache";
   userRuntimeDir = "%t/korri-game-stream";
-  platformDefaultsFileName = "00-korri-platform-defaults.yaml";
+  # Platform defaults are rendered as a generated, read-only config-graph root
+  # (ordered first) instead of being installed into the mutable user config.
+  platformDefaultsFileName = "platform.korri.yaml";
   platformDefaultsFormat = pkgs.formats.yaml { };
   hasPlatformDefaults = cfg.library.platformDefaults != { };
   platformDefaultsFile = platformDefaultsFormat.generate platformDefaultsFileName cfg.library.platformDefaults;
-  platformDefaultsInstallCommands = lib.optionals hasPlatformDefaults [
-    "${pkgs.coreutils}/bin/install -D -m 600 ${platformDefaultsFile} ${cfg.library.root}/${platformDefaultsFileName}"
-  ];
+  platformDefaultsRoot = pkgs.runCommand "korri-platform-config-root" { } ''
+    mkdir -p "$out"
+    cp ${platformDefaultsFile} "$out/${platformDefaultsFileName}"
+  '';
+
+  korriConfig = config.services.korri.config;
+  configLocalRoot = korriConfig.localRoot;
+  # Ordered config-graph roots: generated platform defaults (read-only, first),
+  # the durable local editable root, then any operator-supplied roots.
+  effectiveConfigRoots =
+    (lib.optional hasPlatformDefaults "${platformDefaultsRoot}")
+    ++ [ configLocalRoot ]
+    ++ korriConfig.roots;
+  configRootsEnv = lib.concatStringsSep ":" effectiveConfigRoots;
   desktopAppCommand = pkgs.writeShellScript "korri-sunshine-desktop-app" ''
     set -eu
     echo "korri-sunshine-desktop-app: keeping existing compositor session alive for Moonlight" >&2
@@ -163,6 +176,10 @@ let
     KORRI_STREAM_CONTROL_ENABLED = if cfg.streamControl.enable then "1" else "0";
     # KORRI_HEADLESS_SOURCE_ONLY retired in federation v1 (R14).
     KORRI_LIBRARY_SOURCE = cfg.library.source;
+    # Ordered config-graph roots are the runtime read contract. KORRI_LIBRARY_ROOT
+    # is retained only as the (deferred) write-target anchor for game-asset /
+    # artifact sidecars, not as a config read path.
+    KORRI_CONFIG_ROOTS = configRootsEnv;
     KORRI_LIBRARY_ROOT = cfg.library.root;
     KORRI_LAUNCH_ARTIFACTS_DIR = launchArtifactsDir;
     KORRI_GAME_STREAM_RUNTIME_DIR = runtimeDir;
@@ -188,6 +205,32 @@ in
     (import ./korri-game-stream.nix { inherit korri; })
     korri.nixosModules.korri-cli
   ];
+
+  options.services.korri.config = {
+    roots = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      example = lib.literalExpression ''[ "/run/media/korri/cards/sd1" ]'';
+      description = ''
+        Additional ordered Korri config-graph roots, appended after the
+        generated platform-defaults root and the durable local root. Later
+        roots win on overlay collisions. Roots are directories only; Korri
+        discovers opt-in `korri.<ext>` / `*.korri.<ext>` fragments inside them.
+      '';
+    };
+
+    localRoot = mkOption {
+      type = types.str;
+      default = "${config.services.korri.runtime.stateRoot}/config";
+      defaultText = lib.literalExpression ''"''${config.services.korri.runtime.stateRoot}/config"'';
+      description = ''
+        Durable local editable config-graph root. Created with the runtime
+        user ownership before korrid starts so the config watcher attaches.
+        The legacy `${config.services.korri.runtime.stateRoot}/library` path is
+        not read automatically.
+      '';
+    };
+  };
 
   options.services.korri.daemon = {
     enable = lib.mkEnableOption "Korri headless server control plane";
@@ -883,8 +926,8 @@ in
           ExecStartPre = [
             "${pkgs.coreutils}/bin/install -d -m 700 ${runtimeDir}"
             "${pkgs.coreutils}/bin/install -d -m 700 ${launchArtifactsDir}"
-          ]
-          ++ platformDefaultsInstallCommands;
+            "${pkgs.coreutils}/bin/install -d -m 700 ${configLocalRoot}"
+          ];
           ExecStart = "${cfg.package}/bin/korrid";
           Restart = "on-failure";
           RestartSec = 2;
@@ -894,6 +937,7 @@ in
 
     systemd.tmpfiles.rules = mkIf isSystemMode [
       "d ${cfg.library.root} 0700 ${cfg.user} ${daemonGroup} -"
+      "d ${configLocalRoot} 0700 ${cfg.user} ${daemonGroup} -"
       "d ${launchArtifactsDir} 0750 ${cfg.user} ${daemonGroup} -"
     ];
 
@@ -918,8 +962,7 @@ in
           "${pkgs.coreutils}/bin/install -d -m 700 ${cfg.library.root}"
           "${pkgs.coreutils}/bin/install -d -m 700 ${bunTranspilerCacheDir}"
           "${pkgs.coreutils}/bin/install -d -m 750 ${launchArtifactsDir}"
-        ]
-        ++ platformDefaultsInstallCommands;
+        ];
         ExecStart = "${cfg.package}/bin/korrid";
         Restart = "on-failure";
         RestartSec = 2;
@@ -935,6 +978,7 @@ in
         ProtectHome = "read-only";
         ReadWritePaths = [
           cfg.library.root
+          configLocalRoot
           launchArtifactsDir
         ];
         ProtectKernelTunables = true;

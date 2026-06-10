@@ -23,6 +23,27 @@ let
   launchArtifactsDir = cfg.launchArtifactsDir;
   daemonLibraryRoot = lib.attrByPath [ "services" "korri" "daemon" "library" "root" ] null config;
   daemonLibrarySource = lib.attrByPath [ "services" "korri" "daemon" "library" "source" ] null config;
+  # Inherit the rendered ordered config-graph roots from the korrid unit so
+  # foreground session surfaces read the same effective config as the daemon.
+  daemonConfigRoots =
+    let
+      userVal = lib.attrByPath [
+        "systemd"
+        "user"
+        "services"
+        "korrid"
+        "environment"
+        "KORRI_CONFIG_ROOTS"
+      ] null config;
+      sysVal = lib.attrByPath [
+        "systemd"
+        "services"
+        "korrid"
+        "environment"
+        "KORRI_CONFIG_ROOTS"
+      ] null config;
+    in
+    if userVal != null then userVal else sysVal;
 
   kioskEnabled = lib.attrByPath [ "services" "korri" "compositor" "kiosk" "enable" ] false config;
   streamingEnabled = lib.attrByPath [ "services" "korri" "daemon" "streaming" "enable" ] false config;
@@ -184,6 +205,9 @@ in
         KORRI_SESSIOND_ESSWAY_CONTROL = if cfg.esswayControl.enable then "1" else "0";
         KORRI_LAUNCH_ARTIFACTS_DIR = launchArtifactsDir;
       }
+      // (lib.optionalAttrs (daemonConfigRoots != null) {
+        KORRI_CONFIG_ROOTS = daemonConfigRoots;
+      })
       // (lib.optionalAttrs (daemonLibraryRoot != null) {
         KORRI_LIBRARY_ROOT = daemonLibraryRoot;
       })

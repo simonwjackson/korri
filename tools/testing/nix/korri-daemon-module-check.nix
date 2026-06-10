@@ -49,6 +49,16 @@ let
       streamControl.enable = true;
     };
   };
+  withPlatformDefaults = evaluateWith {
+    services.korri.daemon = {
+      enable = true;
+      library.platformDefaults.apps.retroarch.command = "retroarch";
+    };
+  };
+  withExtraConfigRoots = evaluateWith {
+    services.korri.daemon.enable = true;
+    services.korri.config.roots = [ "/run/media/korri/cards/sd1" ];
+  };
   systemMode = evaluateWith {
     services.korri.daemon = {
       enable = true;
@@ -128,6 +138,32 @@ let
     (check "system-mode daemon owns library tmpfiles and hardening" (
       lib.elem "d /var/lib/korri/library 0700 korri korri -" systemMode.systemd.tmpfiles.rules
       && lib.elem "/var/lib/korri/library" ((systemUnit systemMode).serviceConfig.ReadWritePaths or [ ])
+    ))
+    (check "config local root defaults to Korri product state config dir" (
+      defaultUserMode.services.korri.config.localRoot == "/var/lib/korri/config"
+    ))
+    (check "KORRI_CONFIG_ROOTS exports the local config root by default" (
+      (env defaultUserMode).KORRI_CONFIG_ROOTS == "/var/lib/korri/config"
+    ))
+    (check "platform defaults render a read-only store root ordered first" (
+      let
+        roots = (env withPlatformDefaults).KORRI_CONFIG_ROOTS;
+      in
+      lib.hasPrefix "/nix/store" roots
+      && lib.hasInfix "korri-platform-config-root" roots
+      && lib.hasSuffix ":/var/lib/korri/config" roots
+    ))
+    (check "platform defaults are not installed into the mutable library root" (
+      !(lib.any (
+        cmd: lib.hasInfix "platform.korri.yaml" cmd && lib.hasInfix "/var/lib/korri/library" cmd
+      ) ((userUnit withPlatformDefaults).serviceConfig.ExecStartPre or [ ]))
+    ))
+    (check "extra operator config roots are appended last" (
+      lib.hasSuffix ":/run/media/korri/cards/sd1" (env withExtraConfigRoots).KORRI_CONFIG_ROOTS
+    ))
+    (check "system-mode daemon owns config-root tmpfiles and hardening" (
+      lib.elem "d /var/lib/korri/config 0700 korri korri -" systemMode.systemd.tmpfiles.rules
+      && lib.elem "/var/lib/korri/config" ((systemUnit systemMode).serviceConfig.ReadWritePaths or [ ])
     ))
     (check "system-mode daemon defaults to runtime identity" (
       systemMode.services.korri.daemon.user == "korri"

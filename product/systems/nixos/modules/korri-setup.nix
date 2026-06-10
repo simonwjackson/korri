@@ -15,6 +15,7 @@ let
     install -d -o ${runtime.user} -g ${runtime.group} -m 0750 ${lib.escapeShellArg runtime.stateRoot}
     install -d -o ${runtime.user} -g ${runtime.group} -m 0750 ${lib.escapeShellArg runtime.stateRoot}/content
     install -d -o ${runtime.user} -g ${runtime.group} -m 0750 ${lib.escapeShellArg runtime.stateRoot}/library
+    install -d -o ${runtime.user} -g ${runtime.group} -m 0750 ${lib.escapeShellArg runtime.stateRoot}/config
     install -d -o ${runtime.user} -g ${runtime.group} -m 0750 ${lib.escapeShellArg runtime.gamesRoot}
     install -d -o ${runtime.user} -g ${runtime.group} -m 0700 ${lib.escapeShellArg runtime.launchArtifactsDir}
   '';
@@ -63,6 +64,7 @@ in
       "d ${runtime.stateRoot} 0750 ${runtime.user} ${runtime.group} -"
       "d ${runtime.stateRoot}/content 0750 ${runtime.user} ${runtime.group} -"
       "d ${runtime.stateRoot}/library 0750 ${runtime.user} ${runtime.group} -"
+      "d ${runtime.stateRoot}/config 0750 ${runtime.user} ${runtime.group} -"
       "d ${runtime.gamesRoot} 0750 ${runtime.user} ${runtime.group} -"
       "d /run/korri 0710 ${runtime.user} ${runtime.group} -"
       "d ${runtime.launchArtifactsDir} 0700 ${runtime.user} ${runtime.group} -"
