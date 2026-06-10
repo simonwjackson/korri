@@ -58,6 +58,49 @@ let
   # without forcing a Korri edit.
   substrateVideoDecodeBackend = sm8550.video.decodeBackend;
   substrateAudioApi = sm8550.audio.api;
+  substrateAudioUcmPath = "${sm8550.audio.ucmPackage}/share/alsa/ucm2";
+  substrateAudioSink = sm8550.audio.defaultSink;
+  korriPulseServer = "unix:%t/pulse/native";
+  korriSm8550AudioBootstrap = pkgs.writeShellScript "korri-sm8550-audio-bootstrap" ''
+    set -u
+
+    preferred_card="alsa_card.platform-sound"
+    preferred_profile=${lib.escapeShellArg "${substrateAudioSink.ucmVerb} (Headphones, ${substrateAudioSink.ucmDevice})"}
+    preferred_sink="alsa_output.platform-sound.${substrateAudioSink.ucmVerb}__${substrateAudioSink.ucmDevice}__sink"
+    fallback_sink=${lib.escapeShellArg substrateAudioSink.name}
+
+    for _ in $(${pkgs.coreutils}/bin/seq 1 60); do
+      if ${pkgs.pulseaudio}/bin/pactl info >/dev/null 2>&1; then
+        break
+      fi
+      ${pkgs.coreutils}/bin/sleep 0.5
+    done
+
+    if ! ${pkgs.pulseaudio}/bin/pactl info >/dev/null 2>&1; then
+      echo "korri-sm8550-audio-bootstrap: PulseAudio socket unavailable at $PULSE_SERVER" >&2
+      exit 0
+    fi
+
+    if ${pkgs.pulseaudio}/bin/pactl list cards | ${pkgs.gnugrep}/bin/grep -Fq "$preferred_profile"; then
+      ${pkgs.pulseaudio}/bin/pactl set-card-profile "$preferred_card" "$preferred_profile" >/dev/null 2>&1 || true
+      if ${pkgs.pulseaudio}/bin/pactl list short sinks | ${pkgs.gnugrep}/bin/grep -q "^.*[[:space:]]$preferred_sink[[:space:]]"; then
+        ${pkgs.pulseaudio}/bin/pactl set-default-sink "$preferred_sink" >/dev/null 2>&1 || true
+        exit 0
+      fi
+    fi
+
+    # Fallback for kernels/profiles where WirePlumber exposes only Pro Audio:
+    # create the substrate-declared PCM sink directly and make it default.
+    if ! ${pkgs.pulseaudio}/bin/pactl list short sinks | ${pkgs.gnugrep}/bin/grep -q "^[0-9][0-9]*[[:space:]]$fallback_sink[[:space:]]"; then
+      ${pkgs.pulseaudio}/bin/pactl load-module module-alsa-sink \
+        device=${lib.escapeShellArg substrateAudioSink.pcm} \
+        sink_name="$fallback_sink" \
+        sink_properties=device.description=${lib.escapeShellArg substrateAudioSink.description} \
+        >/dev/null 2>&1 || true
+    fi
+
+    ${pkgs.pulseaudio}/bin/pactl set-default-sink "$fallback_sink" >/dev/null 2>&1 || true
+  '';
   inputplumberPackage =
     pkgs.runCommand "korri-rocknix-inputplumber-xb360"
       {
@@ -155,6 +198,48 @@ in
 
   services.korri.client.package = korri.packages.${targetSystem}.korri-desktop-device;
 
+  # Korri SM8550 runs a real greetd/logind session as the non-root Korri
+  # runtime user. Keep audio in that same user session instead of starting the
+  # legacy nix-on-rocks root main-space PipeWire graph under /run/user/0.
+  # The substrate still supplies the neutral SM8550 audio facts (Pulse API and
+  # AYN UCM package), but the product owns where the graph lives.
+  services.korri.runtime.extraGroups = [ "audio" "input" "render" "seat" "video" ];
+
+  systemd.services.main-space-pipewire.enable = lib.mkForce false;
+  systemd.services.main-space-pipewire-pulse.enable = lib.mkForce false;
+  systemd.services.main-space-wireplumber.enable = lib.mkForce false;
+  systemd.services.main-space-audio-sink-bootstrap.enable = lib.mkForce false;
+
+  systemd.user.services.pipewire.environment = {
+    ALSA_CONFIG_UCM2 = substrateAudioUcmPath;
+    PULSE_SERVER = korriPulseServer;
+  };
+  systemd.user.services.pipewire-pulse.environment = {
+    ALSA_CONFIG_UCM2 = substrateAudioUcmPath;
+    PULSE_SERVER = korriPulseServer;
+  };
+  systemd.user.services.wireplumber.environment = {
+    ALSA_CONFIG_UCM2 = substrateAudioUcmPath;
+    PULSE_SERVER = korriPulseServer;
+  };
+
+  systemd.user.services.korri-sm8550-audio-bootstrap = {
+    description = "Bootstrap Korri SM8550 user-session audio sink";
+    wantedBy = [ "korri-session.target" ];
+    after = [ "pipewire.service" "pipewire-pulse.service" "wireplumber.service" ];
+    wants = [ "pipewire.service" "pipewire-pulse.service" "wireplumber.service" ];
+    before = [ "korri-compositor.service" "korri-sessiond.service" "korri-inputd.service" ];
+    environment = {
+      ALSA_CONFIG_UCM2 = substrateAudioUcmPath;
+      PULSE_SERVER = korriPulseServer;
+    };
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = korriSm8550AudioBootstrap;
+      RemainAfterExit = true;
+    };
+  };
+
   services.korri.compositor = {
     user = lib.mkDefault runtime.user;
     group = lib.mkDefault runtime.group;
@@ -225,8 +310,7 @@ in
     KORRI_INPUTD_POWER_SUSPEND = "true";
     KORRI_INPUTD_LID_CLOSED = "true";
     KORRI_INPUTD_LID_OPENED = "true";
-    KORRI_INPUTD_VOLUME_UP = "true";
-    KORRI_INPUTD_VOLUME_DOWN = "true";
+    PULSE_SERVER = korriPulseServer;
   };
 
   # Sessiond now owns foreground launches directly, and korrid composes
@@ -236,7 +320,12 @@ in
   # lifecycle ownership moved out of the compositor process tree.
   services.korri.sessiond = {
     path = [ pkgs.moonlight-embedded ];
-    extraEnvironment = moonlightSessiondEnvironment // gamescopeKorriControlEnvironment;
+    extraEnvironment =
+      moonlightSessiondEnvironment
+      // gamescopeKorriControlEnvironment
+      // {
+        PULSE_SERVER = korriPulseServer;
+      };
   };
 
   services.korri.daemon.library.platformDefaults = moonlightPlatformDefaults;
