@@ -40,6 +40,7 @@ let
       hardwareButtonEnv = ((cfg.systemd.services.main-space-hardware-button-handler or { }).environment or { });
       removableMountUnit = cfg.systemd.services."korri-removable-card-mount@" or { };
       removableUnmountUnit = cfg.systemd.services."korri-removable-card-unmount@" or { };
+      removableColdplugUnit = cfg.systemd.services.korri-removable-card-coldplug or { };
       korriRuntimeDir = "/run/user/${toString (korriUser.uid or 2000)}";
       pipewireEnv = (userServices.pipewire or { }).environment or { };
       pipewirePulseEnv = (userServices.pipewire-pulse or { }).environment or { };
@@ -180,6 +181,8 @@ let
         && (removableUnmountUnit.environment.KORRI_REMOVABLE_MEDIA_ROOT or null) == "/run/media/korri/cards"
         && builtins.elem "d /run/media/korri/cards 0755 korri korri -" cfg.systemd.tmpfiles.rules
         && builtins.elem "L+ /var/lib/korri/content/removable/cards - - - - /run/media/korri/cards" cfg.systemd.tmpfiles.rules
+        && builtins.elem "multi-user.target" (removableColdplugUnit.wantedBy or [ ])
+        && lib.hasInfix "korri-removable-card-coldplug" (removableColdplugUnit.serviceConfig.ExecStart or "")
       ))
       (check "${name}: launcher artifacts use root setup path" (runtime.launchArtifactsDir == "/run/korri/launch-artifacts"))
     ];

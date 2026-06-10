@@ -131,6 +131,19 @@ let
 
     ${pkgs.util-linux}/bin/mount -t "$fs_type" -o "$mount_options" "$dev" "$mountpoint"
   '';
+  korriRemovableCardColdplug = pkgs.writeShellScript "korri-removable-card-coldplug" ''
+    set -eu
+
+    for sysdir in /sys/class/block/mmcblk*p*; do
+      [ -d "$sysdir" ] || continue
+      name=$(${pkgs.coreutils}/bin/basename "$sysdir")
+      dev="/dev/$name"
+      [ -b "$dev" ] || continue
+      fs_type=$(${pkgs.util-linux}/bin/blkid -o value -s TYPE "$dev" 2>/dev/null || true)
+      [ -n "$fs_type" ] || continue
+      ${pkgs.systemd}/bin/systemctl start --no-block "korri-removable-card-mount@$name.service" || true
+    done
+  '';
   korriRemovableCardUnmount = pkgs.writeShellScript "korri-removable-card-unmount" ''
     set -eu
 
@@ -318,6 +331,22 @@ in
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "${korriRemovableCardUnmount} %I";
+    };
+  };
+
+  # Cards already present at boot do not emit a fresh ACTION=add the udev
+  # rule above can consume, so the per-partition SYSTEMD_WANTS handler never
+  # fires. Re-trigger a synthetic change event for every block-device
+  # filesystem partition once systemd has started so coldplugged cards mount
+  # without operator interaction.
+  systemd.services.korri-removable-card-coldplug = {
+    description = "Coldplug Korri removable SD-card partitions";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "systemd-udevd.service" "systemd-tmpfiles-setup.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = toString korriRemovableCardColdplug;
     };
   };
 
