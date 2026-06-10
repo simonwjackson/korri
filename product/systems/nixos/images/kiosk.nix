@@ -200,11 +200,14 @@ in
     // kioskRendererEnvironment;
   };
 
-  # Shortcut actions such as "kill-current-game" are executed by inputd, not
-  # sessiond. They use swaymsg to act on the currently focused foreground
-  # surface, so the kiosk input daemon needs the compositor's sway package in
-  # its own PATH as well as sessiond's.
-  services.korri.input.inputd.path = [ compositorCfg.sway.package ];
+  # Shortcut actions are executed by inputd, not sessiond. Foreground-control
+  # actions use swaymsg today, and default volume actions use pactl against the
+  # user Pulse socket. Keep both tools in the kiosk input daemon PATH so
+  # hardware shortcuts do not depend on an operator's shell environment.
+  services.korri.input.inputd.path = [
+    compositorCfg.sway.package
+    pkgs.pulseaudio
+  ];
 
   # User-manager-activated services (notably xdg-desktop-portal backends) do
   # not inherit the compositor unit environment. Seed the real greetd/logind

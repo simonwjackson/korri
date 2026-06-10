@@ -155,6 +155,9 @@ let
       (check "${name}: inputd PATH includes swaymsg for foreground shortcuts" (
         builtins.elem compositor.sway.package inputdPath
       ))
+      (check "${name}: inputd PATH includes pactl for volume shortcuts" (
+        builtins.any (pkg: (pkg.pname or "") == "pulseaudio") inputdPath
+      ))
       (check "${name}: launcher artifacts use root setup path" (runtime.launchArtifactsDir == "/run/korri/launch-artifacts"))
     ];
 
