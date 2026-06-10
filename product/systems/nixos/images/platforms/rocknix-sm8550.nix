@@ -108,10 +108,15 @@ let
       "$mountpoint" \
       2>/dev/null || true
 
-    if ${pkgs.util-linux}/bin/findmnt -rn --source "$dev" >/dev/null; then
+    # Use mountpoint(1) so we only short-circuit when the exact target is a
+    # mount, not when a parent directory of the target is mounted (e.g. /run).
+    if ${pkgs.util-linux}/bin/mountpoint -q "$mountpoint"; then
       exit 0
     fi
-    if ${pkgs.util-linux}/bin/findmnt -rn --target "$mountpoint" >/dev/null; then
+    # Some container/nspawn layouts pre-bind block-device nodes from the host
+    # under /dev itself (e.g. `devtmpfs on /dev/mmcblk0p1`). Don't treat the
+    # device node bind as the filesystem mount we want.
+    if ${pkgs.util-linux}/bin/findmnt -rn --source "$dev" --types "$fs_type" >/dev/null; then
       exit 0
     fi
 
@@ -133,7 +138,7 @@ let
     media_root="''${KORRI_REMOVABLE_MEDIA_ROOT:-${removableCardsMediaRoot}}"
     mountpoint="$media_root/$name"
 
-    if ${pkgs.util-linux}/bin/findmnt -rn --target "$mountpoint" >/dev/null; then
+    if ${pkgs.util-linux}/bin/mountpoint -q "$mountpoint"; then
       ${pkgs.util-linux}/bin/umount -l "$mountpoint" || true
     fi
     ${pkgs.coreutils}/bin/rmdir "$mountpoint" 2>/dev/null || true
