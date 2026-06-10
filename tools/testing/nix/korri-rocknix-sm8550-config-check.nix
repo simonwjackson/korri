@@ -38,6 +38,8 @@ let
       inputdEnv = inputdUnit.environment or { };
       inputdPath = inputdUnit.path or [ ];
       hardwareButtonEnv = ((cfg.systemd.services.main-space-hardware-button-handler or { }).environment or { });
+      removableMountUnit = cfg.systemd.services."korri-removable-card-mount@" or { };
+      removableUnmountUnit = cfg.systemd.services."korri-removable-card-unmount@" or { };
       korriRuntimeDir = "/run/user/${toString (korriUser.uid or 2000)}";
       pipewireEnv = (userServices.pipewire or { }).environment or { };
       pipewirePulseEnv = (userServices.pipewire-pulse or { }).environment or { };
@@ -166,6 +168,18 @@ let
       ))
       (check "${name}: inputd PATH includes pactl for volume shortcuts" (
         builtins.any (pkg: (pkg.pname or "") == "pulseaudio") inputdPath
+      ))
+      (check "${name}: removable SD cards mount under runtime media and Korri content" (
+        cfg.systemd.services ? "korri-removable-card-mount@"
+        && cfg.systemd.services ? "korri-removable-card-unmount@"
+        && lib.hasInfix ''KERNEL=="mmcblk*p*"'' cfg.services.udev.extraRules
+        && lib.hasInfix ''ENV{SYSTEMD_WANTS}+="korri-removable-card-mount@%k.service"'' cfg.services.udev.extraRules
+        && lib.hasInfix ''ENV{SYSTEMD_WANTS}+="korri-removable-card-unmount@%k.service"'' cfg.services.udev.extraRules
+        && (removableMountUnit.environment.KORRI_REMOVABLE_MEDIA_ROOT or null) == "/run/media/korri/cards"
+        && (removableMountUnit.environment.KORRI_REMOVABLE_CONTENT_ROOT or null) == "/var/lib/korri/content/removable/cards"
+        && (removableUnmountUnit.environment.KORRI_REMOVABLE_MEDIA_ROOT or null) == "/run/media/korri/cards"
+        && builtins.elem "d /run/media/korri/cards 0755 korri korri -" cfg.systemd.tmpfiles.rules
+        && builtins.elem "L+ /var/lib/korri/content/removable/cards - - - - /run/media/korri/cards" cfg.systemd.tmpfiles.rules
       ))
       (check "${name}: launcher artifacts use root setup path" (runtime.launchArtifactsDir == "/run/korri/launch-artifacts"))
     ];
