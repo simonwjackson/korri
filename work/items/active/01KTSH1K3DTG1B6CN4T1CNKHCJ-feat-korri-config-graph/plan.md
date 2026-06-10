@@ -1,7 +1,7 @@
 ---
 title: "feat: Move Korri runtime to a ProseQL config graph"
 type: feat
-status: active
+status: completed
 date: 2026-06-10
 verify_command: "bun test product/platform/library/proseql/library-db.test.ts product/platform/library/library-source-layer-live.test.ts product/apps/portal/api/config/events.test.ts product/apps/desktop/api-forwarder.test.ts product/apps/portal/features/home/HomeRuntimeLayersRoot.test.tsx && nix build .#checks.x86_64-linux.korri-sm8550-kiosk-config --no-link"
 ---
