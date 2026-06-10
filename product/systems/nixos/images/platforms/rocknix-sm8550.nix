@@ -191,12 +191,29 @@ in
     # Korri inputd runs as the kiosk user and reads evdev directly before
     # forwarding controller events to the desktop renderer. On the RockNIX
     # SM8550 substrate these event nodes can inherit a numeric group that does
-    # not match the NixOS input group, so restate the product image invariant
-    # explicitly instead of relying on substrate group ids.
-    SUBSYSTEM=="input", KERNEL=="event*", GROUP="input", MODE="0660", TAG+="uaccess"
+    # not match the NixOS input group, and InputPlumber-created virtual nodes
+    # can be created after the static group/mode rewrite. Restate both the
+    # group/mode invariant and an explicit Korri ACL so inputd can read the
+    # normalized controller without boot-time live ACL repair.
+    SUBSYSTEM=="input", KERNEL=="event*", GROUP="input", MODE="0660", TAG+="uaccess", RUN+="${pkgs.acl}/bin/setfacl -m u:${runtime.user}:rw /dev/input/%k"
   '';
 
   services.korri.client.package = korri.packages.${targetSystem}.korri-desktop-device;
+
+  # The guest sees DRM devices that already exist in the ROCKNIX-hosted device
+  # namespace. Reprocess their udev metadata before greetd starts so logind
+  # attaches card0 to seat0 and the rootless Sway compositor can acquire DRM.
+  systemd.services.korri-rocknix-seat-device-trigger = {
+    description = "Apply Korri RockNIX seat udev metadata";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "systemd-udevd.service" ];
+    before = [ "greetd.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.systemd}/bin/udevadm trigger --subsystem-match=drm --action=change";
+      RemainAfterExit = true;
+    };
+  };
 
   # Korri SM8550 runs a real greetd/logind session as the non-root Korri
   # runtime user. Keep audio in that same user session instead of starting the
@@ -239,6 +256,11 @@ in
       RemainAfterExit = true;
     };
   };
+
+  systemd.user.services.korri-compositor.serviceConfig.UnsetEnvironment = [
+    "DISPLAY"
+    "WAYLAND_DISPLAY"
+  ];
 
   services.korri.compositor = {
     user = lib.mkDefault runtime.user;

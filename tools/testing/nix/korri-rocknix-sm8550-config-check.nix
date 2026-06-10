@@ -44,6 +44,8 @@ let
       mainSpaceAudioDisabled = serviceName:
         let service = cfg.systemd.services.${serviceName} or { enable = false; };
         in (service.enable or true) == false;
+      seatDeviceTrigger = cfg.systemd.services.korri-rocknix-seat-device-trigger or { };
+      compositorUnit = userServices.korri-compositor or { };
       kioskEnvUnit = userServices."korri-kiosk-session-environment" or { };
       compositor = cfg.services.korri.compositor;
     in [
@@ -81,12 +83,21 @@ let
       ))
       (check "${name}: SM8550 evdev input is readable by Korri inputd" (
         lib.hasInfix ''SUBSYSTEM=="input", KERNEL=="event*", GROUP="input", MODE="0660", TAG+="uaccess"'' cfg.services.udev.extraRules
+        && lib.hasInfix ''setfacl -m u:korri:rw /dev/input/%k'' cfg.services.udev.extraRules
+      ))
+      (check "${name}: SM8550 DRM seat metadata is triggered before greetd" (
+        cfg.systemd.services ? korri-rocknix-seat-device-trigger
+        && builtins.elem "greetd.service" (seatDeviceTrigger.before or [ ])
+        && lib.hasInfix "udevadm trigger --subsystem-match=drm --action=change" (seatDeviceTrigger.serviceConfig.ExecStart or "")
       ))
       (check "${name}: compositor uses the greetd/logind user session bus" (
         compositor.sessionBus.mode == "existing"
         && compositor.sessionBus.address == "unix:path=%t/bus"
         && ((cfg.systemd.user.services."korri-compositor" or { }).requires or [ ]) == [ ]
         && (sessiondEnv.DBUS_SESSION_BUS_ADDRESS or null) == "unix:path=%t/bus"
+      ))
+      (check "${name}: compositor does not inherit child display env" (
+        builtins.all (name: builtins.elem name (compositorUnit.serviceConfig.UnsetEnvironment or [ ])) [ "DISPLAY" "WAYLAND_DISPLAY" ]
       ))
       (check "${name}: kiosk seeds user-manager display environment" (
         builtins.hasAttr "korri-kiosk-session-environment" userServices
