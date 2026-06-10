@@ -200,6 +200,53 @@ in
     // kioskRendererEnvironment;
   };
 
+  # Shortcut actions such as "kill-current-game" are executed by inputd, not
+  # sessiond. They use swaymsg to act on the currently focused foreground
+  # surface, so the kiosk input daemon needs the compositor's sway package in
+  # its own PATH as well as sessiond's.
+  services.korri.input.inputd.path = [ compositorCfg.sway.package ];
+
+  # User-manager-activated services (notably xdg-desktop-portal backends) do
+  # not inherit the compositor unit environment. Seed the real greetd/logind
+  # user manager before kiosk services start so DBus activation sees the same
+  # display/session identity as foreground children. Without this, local
+  # Gamescope/RetroArch launches can block on portal backends that start with
+  # an empty DISPLAY/WAYLAND_DISPLAY.
+  systemd.user.services.korri-kiosk-session-environment = {
+    description = "Seed Korri kiosk user-manager session environment";
+    wantedBy = [ "korri-session.target" ];
+    before = [
+      "korri-compositor.service"
+      "korri-inputd.service"
+      "korri-sessiond.service"
+      "korrid.service"
+    ];
+    path = [
+      pkgs.coreutils
+      pkgs.systemd
+    ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      set -eu
+      runtime_dir="''${XDG_RUNTIME_DIR:-/run/user/$(${pkgs.coreutils}/bin/id -u)}"
+      bus_address="unix:path=$runtime_dir/bus"
+      export XDG_RUNTIME_DIR="$runtime_dir"
+      export DBUS_SESSION_BUS_ADDRESS="$bus_address"
+
+      systemctl --user set-environment \
+        XDG_RUNTIME_DIR="$runtime_dir" \
+        DBUS_SESSION_BUS_ADDRESS="$bus_address" \
+        DISPLAY=:0 \
+        WAYLAND_DISPLAY=wayland-1 \
+        XDG_CURRENT_DESKTOP=sway \
+        XDG_SESSION_TYPE=wayland \
+        NO_AT_BRIDGE=1
+    '';
+  };
+
   # Boot ordering: sessiond's enterIdle spawns Electrobun, which
   # attaches to sway's wayland-1 socket and dials the inputd bridge
   # on startup. Both must be up first. `requires = [korri-inputd]`

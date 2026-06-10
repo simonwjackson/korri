@@ -163,7 +163,8 @@ in
     runtimeDir = lib.mkDefault "%t";
 
     sessionBus = {
-      mode = lib.mkDefault "private";
+      mode = lib.mkDefault "existing";
+      address = lib.mkDefault "unix:path=%t/bus";
     };
 
     gamescope.package = lib.mkDefault pkgs.gamescope;

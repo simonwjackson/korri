@@ -34,7 +34,10 @@ let
       userServices = cfg.systemd.user.services or { };
       sessiondEnv = (userServices.korri-sessiond or { }).environment or { };
       daemonEnv = (userServices.korrid or { }).environment or { };
-      inputdEnv = (userServices.korri-inputd or { }).environment or { };
+      inputdUnit = userServices.korri-inputd or { };
+      inputdEnv = inputdUnit.environment or { };
+      inputdPath = inputdUnit.path or [ ];
+      kioskEnvUnit = userServices."korri-kiosk-session-environment" or { };
       compositor = cfg.services.korri.compositor;
     in [
       (check "${name}: eval has no assertion failures" (builtins.filter (a: !a.assertion) cfg.assertions == [ ]))
@@ -72,9 +75,16 @@ let
       (check "${name}: SM8550 evdev input is readable by Korri inputd" (
         lib.hasInfix ''SUBSYSTEM=="input", KERNEL=="event*", GROUP="input", MODE="0660", TAG+="uaccess"'' cfg.services.udev.extraRules
       ))
-      (check "${name}: compositor owns its session bus privately" (
-        compositor.sessionBus.mode == "private"
-        && !builtins.elem "main-space-session-dbus.service" ((cfg.systemd.user.services."korri-compositor" or { }).requires or [ ])
+      (check "${name}: compositor uses the greetd/logind user session bus" (
+        compositor.sessionBus.mode == "existing"
+        && compositor.sessionBus.address == "unix:path=%t/bus"
+        && ((cfg.systemd.user.services."korri-compositor" or { }).requires or [ ]) == [ ]
+        && (sessiondEnv.DBUS_SESSION_BUS_ADDRESS or null) == "unix:path=%t/bus"
+      ))
+      (check "${name}: kiosk seeds user-manager display environment" (
+        builtins.hasAttr "korri-kiosk-session-environment" userServices
+        && builtins.elem "korri-compositor.service" (kioskEnvUnit.before or [ ])
+        && builtins.elem "korri-sessiond.service" (kioskEnvUnit.before or [ ])
       ))
       (check "${name}: sessiond does not control root-owned essway" (
         (sessiondEnv.KORRI_SESSIOND_ESSWAY_CONTROL or null) == "0"
@@ -90,6 +100,9 @@ let
         && (daemonEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null) == "1"
       ))
       (check "${name}: inputd websocket is loopback" (inputdEnv.KORRI_INPUT_BRIDGE_HOSTNAME or null == "127.0.0.1"))
+      (check "${name}: inputd PATH includes swaymsg for foreground shortcuts" (
+        builtins.elem compositor.sway.package inputdPath
+      ))
       (check "${name}: launcher artifacts use root setup path" (runtime.launchArtifactsDir == "/run/korri/launch-artifacts"))
     ];
 
