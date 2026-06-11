@@ -163,6 +163,8 @@ let
   ]) cfg.productAllowlist;
 in
 {
+  imports = [ ../modules/korri-removable-media.nix ];
+
   options.services.korri.liveUsbPersistence = {
     enable = lib.mkEnableOption "Korri live USB same-stick persistence" // {
       default = true;
@@ -272,6 +274,17 @@ in
     services.korri.daemon = lib.mkIf cfg.enable {
       host = lib.mkForce "127.0.0.1";
       openFirewall = lib.mkForce false;
+    };
+
+    # A second operator USB stick becomes a removable config/content root.
+    # The boot stick is USB and removable too, so the runtime deny-list is
+    # the only discriminator: requiring the boot mount in the derived
+    # system-disk set guarantees the stick the system is running from (and
+    # its sibling persistence partition) is never grabbed, fail-safe.
+    services.korri.removableMedia = lib.mkIf cfg.enable {
+      enable = true;
+      match.usb = true;
+      requiredSystemMounts = [ cfg.bootMountPoint ];
     };
 
     services.korri.compositor = lib.mkIf cfg.enable {

@@ -11,8 +11,20 @@
 }:
 
 {
+  imports = [ ../../modules/korri-removable-media.nix ];
+
   config = lib.mkMerge [
     (lib.mkIf (config.services.korri.compositor.kiosk.enable or false) {
+      # Operator USB sticks become removable config/content roots. Internal
+      # disks are excluded twice: the positive gate only admits USB-transport
+      # (or SD) media, and the runtime deny-list refuses any disk backing a
+      # system mount (the default requiredSystemMounts "/" resolves the
+      # installed system disk).
+      services.korri.removableMedia = {
+        enable = true;
+        match.usb = true;
+      };
+
       services.seatd.enable = lib.mkDefault true;
       systemd.services.inputplumber.environment.XDG_DATA_DIRS = lib.mkForce (
         lib.concatStringsSep ":" [

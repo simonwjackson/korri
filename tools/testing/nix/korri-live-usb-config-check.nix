@@ -10,6 +10,9 @@ let
   compositorEnv = cfg.systemd.services."korri-compositor".environment or { };
   sessiondEnv = cfg.systemd.services."korri-sessiond".environment or { };
   serverEnv = cfg.systemd.services."korrid".environment or { };
+  serverUserEnv = (cfg.systemd.user.services.korrid or { }).environment or { };
+  sessiondUserEnv = (cfg.systemd.user.services.korri-sessiond or { }).environment or { };
+  removableMedia = cfg.services.korri.removableMedia or { };
   sessiondServiceConfig = cfg.systemd.services."korri-sessiond".serviceConfig or { };
   inputdEnv = cfg.systemd.services."korri-inputd".environment or { };
   inputplumber = cfg.systemd.services.inputplumber or { };
@@ -146,6 +149,23 @@ let
     ))
     (check "gvfs must be disabled to avoid generic removable disk automounting" (
       !cfg.services.gvfs.enable
+    ))
+    (check "live USB mounts removable media with the USB gate enabled" (
+      (removableMedia.enable or false)
+      && (removableMedia.match.usb or false)
+      && lib.hasInfix ''ID_BUS}=="usb"'' (cfg.services.udev.extraRules or "")
+    ))
+    (check "live USB deny-list must derive the boot stick before any removable mount" (
+      # The boot stick is USB and removable; the runtime system-disk
+      # deny-list (asserted to cover the boot mount) is what keeps it — and
+      # its sibling persistence partition — from ever being grabbed.
+      builtins.elem cfg.services.korri.liveUsbPersistence.bootMountPoint (
+        removableMedia.requiredSystemMounts or [ ]
+      )
+    ))
+    (check "korrid and sessiond watch the live USB config-roots signal dir" (
+      (serverUserEnv.KORRI_CONFIG_ROOTS_DIR or null) == (removableMedia.configRootsDir or null)
+      && (sessiondUserEnv.KORRI_CONFIG_ROOTS_DIR or null) == (serverUserEnv.KORRI_CONFIG_ROOTS_DIR or null)
     ))
     (check "persistence resolver must look for the Korri persistence label" (
       persistence.environment.KORRI_LIVE_USB_PERSISTENCE_LABEL
