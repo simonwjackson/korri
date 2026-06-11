@@ -402,6 +402,45 @@ describe("resolveAllConfigGraphRoots", () => {
     })
   })
 
+  it("classifies an exact 'rw' option string as writable", async () => {
+    const mount = await makeTempDir("korri-removable-rw-")
+    const rig = await seedRemovableRig({
+      mounts: [{ entry: "sda1", target: mount, options: "rw" }],
+    })
+
+    const roots = resolveAllConfigGraphRoots(process.env, {
+      mountsTablePath: rig.mountsTablePath,
+    })
+
+    expect(roots[1]).toMatchObject({
+      root: realpathSync(mount),
+      writable: true,
+    })
+  })
+
+  it("decodes octal-escaped mount targets from the mount table", async () => {
+    const parent = await makeTempDir("korri-removable-octal-")
+    const mount = join(parent, "My Card")
+    await mkdir(mount)
+    const rig = await seedRemovableRig({ mounts: [] })
+    await symlink(mount, join(rig.signalDir, "sda1"))
+    // /proc/mounts escapes spaces in path fields as \040.
+    await writeFile(
+      rig.mountsTablePath,
+      `/dev/sda1 ${realpathSync(mount).replaceAll(" ", "\\040")} vfat rw,noexec 0 0\n`,
+      "utf8",
+    )
+
+    const roots = resolveAllConfigGraphRoots(process.env, {
+      mountsTablePath: rig.mountsTablePath,
+    })
+
+    expect(roots.map(root => root.root)).toEqual([
+      rig.staticRoot,
+      realpathSync(mount),
+    ])
+  })
+
   it("returns only static roots when KORRI_CONFIG_ROOTS_DIR is unset", async () => {
     const staticRoot = await seedConfigGraph("Static Echo")
     process.env.KORRI_CONFIG_ROOTS = staticRoot

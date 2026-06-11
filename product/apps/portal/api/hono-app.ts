@@ -4,13 +4,13 @@ import {
   type ConfigGraphController,
   createConfigGraphController,
 } from "@platform/library/config-graph-controller"
-import { configGraphRootsFromEnv } from "@platform/library/library-source-layer-live"
+import { resolveAllConfigGraphRoots } from "@platform/library/library-source-layer-live"
 import { logger as defaultLogger } from "@platform/logger/logger"
 import { Hono } from "hono"
-import { handleConfigEvents } from "./config/events"
 import { bodyLimit } from "hono/body-limit"
 import { compress } from "hono/compress"
 import { cors } from "hono/cors"
+import { handleConfigEvents } from "./config/events"
 import { rpcHandler } from "./rpc-server"
 import { serverRpcHandler } from "./server/rpc-server"
 
@@ -33,8 +33,12 @@ let lazyConfigGraphController: ConfigGraphController | undefined
 
 function getDefaultConfigGraphController(): ConfigGraphController {
   if (lazyConfigGraphController === undefined) {
+    // Mirror korrid's wiring: re-resolve roots on every rebuild and watch
+    // the config-roots.d signal dir so dynamically mounted removable media
+    // joins the live graph for non-korrid consumers too.
     const controller = createConfigGraphController({
-      roots: configGraphRootsFromEnv(),
+      resolveRoots: () => resolveAllConfigGraphRoots(),
+      rootsSignalDir: process.env.KORRI_CONFIG_ROOTS_DIR,
     })
     lazyConfigGraphController = controller
     void controller
@@ -85,7 +89,10 @@ export function createHonoApp(options: CreateHonoAppOptions = {}) {
 
   const configGraphController = options.configGraphController
   app.get("/api/config/events", c =>
-    handleConfigEvents(c, configGraphController ?? getDefaultConfigGraphController()),
+    handleConfigEvents(
+      c,
+      configGraphController ?? getDefaultConfigGraphController(),
+    ),
   )
 
   app.use(

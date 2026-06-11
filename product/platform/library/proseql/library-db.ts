@@ -342,15 +342,24 @@ function makeKorriConfigGraphTransform(
   restrictedByRootId: ReadonlyMap<string, ReadonlySet<string>>,
   rootPathByRootId: ReadonlyMap<string, string>,
 ): DocumentGraphTransform {
+  // Per-transform-instance cache (recreated on each openKorriConfigGraph
+  // call), so staleness across rebuilds is not a concern. Do not hoist it
+  // outside this factory closure.
   const realRootCache = new Map<string, string>()
   const realRootOf = (rootId: string): string | undefined => {
     const cached = realRootCache.get(rootId)
     if (cached !== undefined) return cached
     const rootPath = rootPathByRootId.get(rootId)
     if (rootPath === undefined) return undefined
-    const real = realpathSync(rootPath)
-    realRootCache.set(rootId, real)
-    return real
+    try {
+      const real = realpathSync(rootPath)
+      realRootCache.set(rootId, real)
+      return real
+    } catch {
+      // Root vanished (card yanked mid-build): treat as unresolvable so the
+      // fragment is skipped rather than failing the whole graph.
+      return undefined
+    }
   }
 
   return (document, context) => {
@@ -359,7 +368,18 @@ function makeKorriConfigGraphTransform(
       const allowed = restrictedByRootId.get(context.rootId)
       if (allowed !== undefined) {
         const realRoot = realRootOf(context.rootId)
-        const realFragment = realpathSync(context.path)
+        let realFragment: string
+        try {
+          realFragment = realpathSync(context.path)
+        } catch {
+          // Fragment vanished between discovery and transform (card yanked
+          // mid-build): skip it, keep the rest of the graph valid.
+          logger.warn(
+            { rootId: context.rootId, path: context.path },
+            "config-graph: restricted-root fragment vanished mid-build; skipping",
+          )
+          return Result.succeed({})
+        }
         const escapes =
           realRoot === undefined ||
           (realFragment !== realRoot &&

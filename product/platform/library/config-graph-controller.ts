@@ -58,8 +58,9 @@ export interface ConfigGraphControllerOptions {
   readonly roots?: readonly KorriConfigGraphRoot[]
   /**
    * Dynamic root resolution, called at every (re)build so roots added or
-   * removed at runtime (removable media) join or leave the graph. Exactly one
-   * of `roots` / `resolveRoots` must be provided.
+   * removed at runtime (removable media) join or leave the graph. When
+   * provided, `resolveRoots` supersedes `roots`; when omitted, the controller
+   * wraps `roots` (or an empty set if both are absent) into a static resolver.
    */
   readonly resolveRoots?: () => readonly KorriConfigGraphRoot[]
   /**
@@ -293,12 +294,17 @@ export function createConfigGraphController(
   const rebuild = async (changedPath?: string): Promise<ConfigGraphEvent> => {
     // Coarse re-resolve: every rebuild re-reads the root set so dynamically
     // mounted roots join (or leave) the graph regardless of which watcher
-    // fired. Content watchers are re-pointed only when the set changed.
+    // fired. Content watchers are re-pointed only when the set changed —
+    // synchronously, before the async build, so no file event lands in an
+    // unwatched window (a write during the build schedules its own debounced
+    // rebuild) and concurrent rebuild/stop calls cannot interleave a
+    // close/start pair across an await boundary.
     const roots = resolveRoots()
-    const repoint = shouldWatch && !sameRootSet(roots)
-    if (repoint) closeContentWatchers()
+    if (shouldWatch && !sameRootSet(roots)) {
+      closeContentWatchers()
+      startContentWatchers(roots)
+    }
     const event = await attemptBuild("config.changed", roots, changedPath)
-    if (repoint) startContentWatchers(roots)
     publish(event)
     return event
   }
