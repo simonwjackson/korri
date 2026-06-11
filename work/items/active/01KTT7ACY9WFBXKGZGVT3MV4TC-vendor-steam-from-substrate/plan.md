@@ -1,7 +1,7 @@
 ---
 title: "refactor: Vendor Steam ARM64 from nix-on-rocks into product/vendor with korri-owned module"
 type: refactor
-status: active
+status: completed
 date: 2026-06-10
 verify_command: "just test-nix && just sm8550-kiosk-toplevel-check"
 ---
