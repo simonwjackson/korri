@@ -40,6 +40,7 @@ describe("makeKorriConfigGraphConfig", () => {
     const src = config.sources[0]
     expect(src?.kind).toBe("documentGraph")
     expect(src?.collections).toBe("all")
+    expect(src?.onFragmentError).toBe("skip-fragment")
     expect(src?.roots.map(root => root.root)).toEqual(["/platform", "/local"])
     expect(src?.roots[0]?.optional).toBe(false)
     expect(src?.roots[1]?.optional).toBe(true)
@@ -536,7 +537,7 @@ describe("openKorriConfigGraph — collection-scoped trust", () => {
         "utf8",
       )
 
-      const items = await Effect.runPromise(
+      const loaded = await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
             const db = yield* openKorriConfigGraph({
@@ -545,14 +546,60 @@ describe("openKorriConfigGraph — collection-scoped trust", () => {
                 { root: card!, collections: REMOVABLE_CONFIG_COLLECTIONS },
               ],
             })
-            return yield* Effect.promise(() => db.library.query().runPromise)
+            return {
+              items: yield* Effect.promise(() => db.library.query().runPromise),
+              diagnostics: yield* db.$documentGraph.getDiagnostics(),
+            }
           }),
         ),
       )
 
-      // The escaping fragment is skipped (not loaded, not fatal); the rest
-      // of the card still applies.
-      expect(items.map(item => item.id).sort()).toEqual(["zelda"])
+      // ProseQL 0.15 discovery does not follow symlinks (file or directory
+      // entries that are symlinks are never listed), so the escaping
+      // fragment is excluded before the transform's defense-in-depth
+      // realpath guard ever runs — no diagnostic, just absence.
+      expect(loaded.items.map(item => item.id).sort()).toEqual(["zelda"])
+      expect(loaded.diagnostics).toEqual([])
+    })
+  })
+
+  it("skips a restricted root's broken fragment while its valid fragment still loads", async () => {
+    await withTempRoots(2, async ([trusted, card]) => {
+      await writeFile(join(trusted!, "korri.yaml"), trustedHostFragment, "utf8")
+      await writeFile(
+        join(card!, "broken.korri.yaml"),
+        ["library:", "  broken:", "    releases: not-a-list", ""].join("\n"),
+        "utf8",
+      )
+      await writeFile(join(card!, "card.korri.yaml"), cardFragment, "utf8")
+
+      const loaded = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriConfigGraph({
+              roots: [
+                { root: trusted! },
+                { root: card!, collections: REMOVABLE_CONFIG_COLLECTIONS },
+              ],
+            })
+            return {
+              item: yield* db.library.findById("zelda"),
+              diagnostics: yield* db.$documentGraph.getDiagnostics(),
+            }
+          }),
+        ),
+      )
+
+      // Only the broken fragment is skipped; the card's valid data still
+      // contributes under its restricted scope.
+      expect(loaded.item.title).toBe("Card Zelda")
+      expect(
+        loaded.diagnostics.some(
+          diagnostic =>
+            diagnostic.action === "skipped-fragment" &&
+            diagnostic.path?.endsWith("broken.korri.yaml") === true,
+        ),
+      ).toBe(true)
     })
   })
 

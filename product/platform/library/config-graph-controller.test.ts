@@ -246,6 +246,18 @@ describe("createConfigGraphController", () => {
         ),
       ).toBe(true)
       expect((await controller.snapshot()).length).toBe(0)
+
+      // Repairing the fragment clears the diagnostics on the next build —
+      // they describe the current build, never accumulate.
+      await writeFile(
+        join(root, "local.korri.yaml"),
+        validFragment("Fixed"),
+        "utf8",
+      )
+      const repaired = await controller.rebuild("local.korri.yaml")
+      expect(repaired.status).toBe("valid")
+      expect(repaired.diagnostics).toBeUndefined()
+      expect(controller.state().diagnostics).toBeUndefined()
       await controller.stop()
     })
   })
