@@ -46,6 +46,7 @@ import {
   type MoonlightPolicy,
   normalizeGamescopePolicy,
   type RetroArchPolicy,
+  type RyubingPolicy,
 } from "./inheritable-fields"
 import type { LaunchBlock, LaunchSettings } from "./launch-block"
 import { mergeLaunchSettings } from "./launch-block"
@@ -59,6 +60,7 @@ import {
 import {
   type AppRecord,
   appRetroArchPolicyFromRecord,
+  appRyubingPolicyFromRecord,
   isRetroArchAppRecord,
 } from "./records/app"
 import type { CollectionRecord } from "./records/collection"
@@ -172,6 +174,7 @@ interface InheritableView {
   readonly gamescope?: GamescopePolicy
   readonly moonlight?: MoonlightPolicy
   readonly retroarch?: RetroArchPolicy
+  readonly ryubing?: RyubingPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
@@ -193,6 +196,7 @@ const viewOfGlobal = (g: GlobalConfigRecord | null): InheritableView =>
         gamescope: g.gamescope,
         moonlight: g.moonlight,
         retroarch: g.retroarch,
+        ryubing: g.ryubing,
         env: g.env,
         cwd: g.cwd,
         argsAppend: g.argsAppend,
@@ -212,6 +216,7 @@ const viewOfUser = (u: UserRecord | undefined): InheritableView =>
         gamescope: u.gamescope,
         moonlight: u.moonlight,
         retroarch: u.retroarch,
+        ryubing: u.ryubing,
         env: u.env,
         cwd: u.cwd,
         argsAppend: u.argsAppend,
@@ -231,6 +236,7 @@ const viewOfSystem = (s: SystemRecord | undefined): InheritableView =>
         gamescope: s.gamescope,
         moonlight: s.moonlight,
         retroarch: s.retroarch,
+        ryubing: s.ryubing,
         env: s.env,
         cwd: s.cwd,
         argsAppend: s.argsAppend,
@@ -246,6 +252,7 @@ const viewOfLauncher = (l: LauncherRecord | undefined): InheritableView =>
         gamescope: l.gamescope,
         moonlight: l.moonlight,
         retroarch: l.retroarch,
+        ryubing: l.ryubing,
         env: l.env,
         cwd: l.cwd,
         argsAppend: l.argsAppend,
@@ -263,6 +270,7 @@ const viewOfGame = (g: GameRecord): InheritableView => ({
   gamescope: g.gamescope,
   moonlight: g.moonlight,
   retroarch: g.retroarch,
+  ryubing: g.ryubing,
   env: g.env,
   cwd: g.cwd,
   argsAppend: g.argsAppend,
@@ -279,6 +287,7 @@ const viewOfPreset = (p: PresetPayload): InheritableView => ({
   gamescope: p.gamescope,
   moonlight: p.moonlight,
   retroarch: p.retroarch,
+  ryubing: p.ryubing,
   env: p.env,
   cwd: p.cwd,
   argsAppend: p.argsAppend,
@@ -337,6 +346,7 @@ const foldLayers = (
   let gamescope: GamescopePolicy | undefined
   let moonlight: MoonlightPolicy | undefined
   let retroarch: RetroArchPolicy | undefined
+  let ryubing: RyubingPolicy | undefined
   let env: Record<string, string> | undefined
   let cwd: string | undefined
   let argsAppend: string[] | undefined
@@ -366,6 +376,9 @@ const foldLayers = (
     if (merged.retroarch !== undefined) {
       retroarch = foldRetroArch(retroarch, merged.retroarch)
     }
+    if (merged.ryubing !== undefined) {
+      ryubing = foldRyubing(ryubing, merged.ryubing)
+    }
     if (merged.env !== undefined) {
       env = { ...(env ?? {}), ...merged.env }
     }
@@ -392,6 +405,7 @@ const foldLayers = (
     gamescope,
     moonlight,
     retroarch,
+    ryubing,
     env,
     cwd,
     argsAppend,
@@ -419,6 +433,9 @@ const mergeByLauncher = (
     retroarch: extra.retroarch
       ? foldRetroArch(base.retroarch, extra.retroarch)
       : base.retroarch,
+    ryubing: extra.ryubing
+      ? foldRyubing(base.ryubing, extra.ryubing)
+      : base.ryubing,
     env:
       extra.env !== undefined
         ? { ...(base.env ?? {}), ...extra.env }
@@ -978,6 +995,42 @@ export const foldRetroArch = (
 ): RetroArchPolicy =>
   mergeRetroArchValue(base ?? {}, extra, []) as RetroArchPolicy
 
+const mergeRyubingValue = (
+  base: unknown,
+  extra: unknown,
+  path: readonly string[],
+): unknown => {
+  if (extra === undefined) return base
+  const key = path.join(".")
+  if (key === "extra.args") {
+    return Array.isArray(extra)
+      ? [...(Array.isArray(base) ? base : []), ...extra]
+      : extra
+  }
+  if (key === "env") {
+    return isPlainPolicyObject(extra)
+      ? { ...(isPlainPolicyObject(base) ? base : {}), ...extra }
+      : extra
+  }
+  if (isPlainPolicyObject(base) && isPlainPolicyObject(extra)) {
+    const merged: Record<string, unknown> = { ...base }
+    for (const [childKey, childValue] of Object.entries(extra)) {
+      merged[childKey] = mergeRyubingValue(merged[childKey], childValue, [
+        ...path,
+        childKey,
+      ])
+    }
+    return merged
+  }
+  return extra
+}
+
+/** Deep-merge two Ryubing policies; env/extra.config maps merge and extra.args concat. */
+export const foldRyubing = (
+  base: RyubingPolicy | undefined,
+  extra: RyubingPolicy,
+): RyubingPolicy => mergeRyubingValue(base ?? {}, extra, []) as RyubingPolicy
+
 const mergeMoonlightValue = (
   base: unknown,
   extra: unknown,
@@ -1452,6 +1505,7 @@ interface ReadableOverride {
   readonly gamescope?: GamescopePolicy
   readonly moonlight?: MoonlightPolicy
   readonly retroarch?: RetroArchPolicy
+  readonly ryubing?: RyubingPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
@@ -1472,6 +1526,7 @@ interface ReadableLayerView {
   readonly gamescope?: GamescopePolicy
   readonly moonlight?: MoonlightPolicy
   readonly retroarch?: RetroArchPolicy
+  readonly ryubing?: RyubingPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
@@ -1486,6 +1541,7 @@ const readableViewOfUser = (user: UserRecord | undefined): ReadableLayerView =>
         gamescope: user.gamescope,
         moonlight: user.moonlight,
         retroarch: user.retroarch,
+        ryubing: user.ryubing,
         env: user.env,
         cwd: user.cwd,
         argsAppend: user.argsAppend,
@@ -1503,6 +1559,7 @@ const readableViewOfSystem = (
         gamescope: system.gamescope,
         moonlight: system.moonlight,
         retroarch: system.retroarch,
+        ryubing: system.ryubing,
         env: system.env,
         cwd: system.cwd,
         argsAppend: system.argsAppend,
@@ -1520,6 +1577,7 @@ const readableViewOfSource = (
         gamescope: source.gamescope,
         moonlight: source.moonlight,
         retroarch: source.retroarch,
+        ryubing: source.ryubing,
         env: source.env,
         cwd: source.cwd,
         argsAppend: source.argsAppend,
@@ -1533,6 +1591,7 @@ const readableViewOfApp = (app: AppRecord | undefined): ReadableLayerView =>
         gamescope: app.gamescope,
         moonlight: app.moonlight,
         retroarch: appRetroArchPolicyFromRecord(app),
+        ryubing: appRyubingPolicyFromRecord(app),
         env: app.env,
         cwd: app.cwd,
         argsAppend: app.argsAppend,
@@ -1590,6 +1649,7 @@ const readableViewOfRuntime = (
         gamescope: runtime.gamescope,
         moonlight: runtime.moonlight,
         retroarch: runtime.retroarch,
+        ryubing: runtime.ryubing,
         env: runtime.env,
         cwd: runtime.cwd,
         argsAppend: runtime.argsAppend,
@@ -1603,6 +1663,7 @@ const readableViewOfLibraryItem = (
   gamescope: item.gamescope,
   moonlight: item.moonlight,
   retroarch: item.retroarch,
+  ryubing: item.ryubing,
   env: item.env,
   cwd: item.cwd,
   argsAppend: item.argsAppend,
@@ -1613,6 +1674,7 @@ const readableViewOfContained = (entry: PlayableEntry): ReadableLayerView => ({
   gamescope: entry.contained?.gamescope,
   moonlight: entry.contained?.moonlight,
   retroarch: entry.contained?.retroarch,
+  ryubing: entry.contained?.ryubing,
   env: entry.contained?.env,
   cwd: entry.contained?.cwd,
   argsAppend: entry.contained?.argsAppend,
@@ -1627,6 +1689,7 @@ const readableViewOfRelease = (
   gamescope: release.gamescope,
   moonlight: release.moonlight,
   retroarch: release.retroarch,
+  ryubing: release.ryubing,
   env: release.env,
   cwd: release.cwd,
   argsAppend: release.argsAppend,
@@ -1643,6 +1706,7 @@ const readableViewOfProfile = (
         gamescope: profile.gamescope,
         moonlight: profile.moonlight,
         retroarch: profile.retroarch,
+        ryubing: profile.ryubing,
         env: profile.env,
         cwd: profile.cwd,
         argsAppend: profile.argsAppend,
@@ -1658,6 +1722,7 @@ const mergeReadableLayers = (
   let gamescope: GamescopePolicy | undefined
   let moonlight: MoonlightPolicy | undefined
   let retroarch: RetroArchPolicy | undefined
+  let ryubing: RyubingPolicy | undefined
   let env: Record<string, string> | undefined
   let cwd: string | undefined
   let argsAppend: string[] | undefined
@@ -1675,6 +1740,9 @@ const mergeReadableLayers = (
     if (layer.retroarch !== undefined) {
       retroarch = foldRetroArch(retroarch, layer.retroarch)
     }
+    if (layer.ryubing !== undefined) {
+      ryubing = foldRyubing(ryubing, layer.ryubing)
+    }
     if (layer.env !== undefined) env = { ...(env ?? {}), ...layer.env }
     if (layer.cwd !== undefined) cwd = layer.cwd
     if (layer.argsAppend !== undefined) {
@@ -1691,6 +1759,7 @@ const mergeReadableLayers = (
     gamescope,
     moonlight,
     retroarch,
+    ryubing,
     env,
     cwd,
     argsAppend,
@@ -1880,6 +1949,8 @@ export const resolveReadableLaunchContext = (
       gamescope: normalizeGamescopePolicy(folded.gamescope),
       ...(folded.moonlight ? { moonlight: folded.moonlight } : {}),
       ...(folded.retroarch ? { retroarch: folded.retroarch } : {}),
+      ...(folded.ryubing ? { ryubing: folded.ryubing } : {}),
+      storage: Object.fromEntries(snapshot.storage),
       ...(folded.env ? { env: folded.env } : {}),
       ...(folded.cwd !== undefined ? { cwd: folded.cwd } : {}),
       ...(folded.argsAppend ? { argsAppend: folded.argsAppend } : {}),

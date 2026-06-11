@@ -10,6 +10,7 @@ import type {
   GamescopePolicy,
   MoonlightPolicy,
   RetroArchPolicy,
+  RyubingPolicy,
 } from "./inheritable-fields"
 import type { LaunchSettings } from "./launch-block"
 import { mergeLaunchSettings } from "./launch-block"
@@ -18,6 +19,7 @@ import {
   type AppRecord,
   appRecordKind,
   appRetroArchPolicyFromRecord,
+  appRyubingPolicyFromRecord,
 } from "./records/app"
 import type { LauncherRecord } from "./records/launcher"
 import type { ModuleRecord } from "./records/module"
@@ -28,6 +30,7 @@ export type AppIntegrationKind =
   | "dolphin"
   | "solarus"
   | "generic-process"
+  | "ryubing"
 
 export interface AppDescriptor {
   readonly id: string
@@ -42,6 +45,7 @@ export interface AppDescriptor {
   readonly gamescope?: GamescopePolicy
   readonly moonlight?: MoonlightPolicy
   readonly retroarch?: RetroArchPolicy
+  readonly ryubing?: RyubingPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
@@ -132,7 +136,9 @@ export const resolveAppDescriptor = (input: {
           integration:
             appRecordKind(appOverride) === "retroarch"
               ? "retroarch"
-              : "generic-process",
+              : appRecordKind(appOverride) === "ryubing"
+                ? "ryubing"
+                : "generic-process",
           command: appOverride.command,
           args: appOverride.args ?? ["{contentPath}"],
           systems: appOverride.systems ?? [],
@@ -176,7 +182,9 @@ const mergeDescriptor = (
         integration:
           appRecordKind(appOverride) === "retroarch"
             ? "retroarch"
-            : base.integration,
+            : appRecordKind(appOverride) === "ryubing"
+              ? "ryubing"
+              : base.integration,
       }
     : {}),
   ...(appOverride?.command ? { command: appOverride.command } : {}),
@@ -192,6 +200,7 @@ const mergeDescriptor = (
           appRetroArchPolicyFromRecord(appOverride) ??
           legacyLauncher?.retroarch ??
           base.retroarch,
+        ryubing: appRyubingPolicyFromRecord(appOverride) ?? base.ryubing,
       }
     : {}),
   ...(appOverride?.env ? { env: appOverride.env } : {}),
@@ -210,6 +219,7 @@ const launcherToDescriptor = (launcher: LauncherRecord): AppDescriptor => ({
   gamescope: launcher.gamescope,
   moonlight: launcher.moonlight,
   retroarch: launcher.retroarch,
+  ryubing: launcher.ryubing,
   env: launcher.env,
   cwd: launcher.cwd,
   argsAppend: launcher.argsAppend,

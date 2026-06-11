@@ -1,4 +1,6 @@
 import { describe, expect, it } from "bun:test"
+import { readFile } from "node:fs/promises"
+import { parse } from "yaml"
 
 import { decodeAppPayload, decodeAppRecord } from "./app"
 import { decodeGamePayload } from "./game"
@@ -15,6 +17,45 @@ import { decodeSystemPayload } from "./system"
 import { decodeUserPayload } from "./user"
 
 describe("readable library schema records", () => {
+  it("decodes the full Ryubing readable fixture", async () => {
+    const fixture = parse(
+      await readFile(
+        "product/platform/library/config/fixtures/ryubing-full.korri.yaml",
+        "utf8",
+      ),
+    ) as {
+      readonly storage: Record<string, unknown>
+      readonly sources: Record<string, unknown>
+      readonly systems: Record<string, unknown>
+      readonly apps: Record<string, unknown>
+      readonly collections: Record<string, unknown>
+      readonly library: Record<string, unknown>
+    }
+
+    expect(decodeStoragePayload(fixture.storage["switch-card"]).root).toContain(
+      "/run/media/korri/storage/",
+    )
+    expect(decodeSourcePayload(fixture.sources["switch-card"]).kind).toEqual([
+      "files",
+    ])
+    expect(decodeSystemPayload(fixture.systems.switch).name).toBe(
+      "Nintendo Switch",
+    )
+    const app = decodeAppPayload(fixture.apps.ryubing)
+    expect(app.kind).toBe("ryubing")
+    expect(app.state?.require?.keys).toEqual(["prod.keys"])
+    expect(app.state).not.toHaveProperty("firmware")
+    expect(app.config).not.toHaveProperty("version")
+    expect(
+      (app.input as { controllers?: Array<{ mapping?: { a?: string } }> })
+        ?.controllers?.[0]?.mapping?.a,
+    ).toBe("button-east")
+    expect(
+      decodeLibraryItemPayload(fixture.library["mario-kart-8-deluxe"])
+        .releases[0]?.target,
+    ).toContain("roms/switch/Mario Kart 8 Deluxe")
+  })
+
   it("decodes a plain host block without role/launch/profile nesting", () => {
     const host = decodeHostPayload({
       title: "AKA desktop host",
@@ -258,6 +299,77 @@ describe("readable library schema records", () => {
         updater: { showOnlineUpdater: false },
       }).achievements?.username,
     ).toBe("player-two")
+  })
+
+  it("decodes Ryubing policy on readable cascade records and flat app records", () => {
+    const ryubing = {
+      state: { root: "/state/Ryujinx" },
+      graphics: { backend: "vulkan" },
+      extra: { args: ["--future"], config: { future_key: true } },
+    }
+
+    const cases: Array<readonly [string, () => { ryubing?: unknown }]> = [
+      ["global", () => decodeGlobalConfigPayload({ ryubing })],
+      ["host", () => decodeHostPayload({ ryubing })],
+      ["user", () => decodeUserPayload({ ryubing })],
+      ["system", () => decodeSystemPayload({ ryubing })],
+      [
+        "launcher",
+        () =>
+          decodeLauncherPayload({
+            command: "Ryujinx",
+            args: [],
+            systems: ["switch"],
+            ryubing,
+          }),
+      ],
+      ["preset", () => decodePresetPayload({ ryubing })],
+      ["app", () => ({ ryubing: decodeAppPayload({ kind: "ryubing", ...ryubing }) })],
+      [
+        "runtime",
+        () => decodeRuntimePayload({ kind: "tool", path: "/bin/Ryujinx", ryubing }),
+      ],
+      ["source", () => decodeSourcePayload({ kind: ["files"], storage: "roms", ryubing })],
+      ["profile", () => decodeProfilePayload({ ryubing })],
+      [
+        "library-item",
+        () =>
+          decodeLibraryItemPayload({
+            ryubing,
+            releases: [{ id: "switch", system: "switch", target: "game.nsp" }],
+          }),
+      ],
+      [
+        "library-release",
+        () =>
+          decodeLibraryItemPayload({
+            releases: [
+              { id: "switch", system: "switch", target: "game.nsp", ryubing },
+            ],
+          }).releases[0] ?? {},
+      ],
+      [
+        "contained-playable",
+        () =>
+          decodeLibraryItemPayload({
+            contains: { child: { ryubing } },
+            releases: [{ id: "switch", system: "switch", target: "game.nsp" }],
+          }).contains?.child ?? {},
+      ],
+      [
+        "game",
+        () =>
+          decodeGamePayload({
+            system: "switch",
+            contentPath: "/games/game.nsp",
+            ryubing,
+          }),
+      ],
+    ]
+
+    for (const [, decode] of cases) {
+      expect(decode().ryubing).toMatchObject(ryubing)
+    }
   })
 
   it("rejects retired RetroArch typed-app vocabulary", () => {

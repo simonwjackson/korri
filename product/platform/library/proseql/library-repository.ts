@@ -6,7 +6,10 @@ import {
   createProseqlArtifactRepository,
 } from "@platform/artifacts/artifact-import-service"
 import { artifactsRoot } from "@platform/artifacts/artifact-store"
-import { materializeReadableRetroArchLaunch } from "@platform/library/config/app-materializer"
+import {
+  materializeReadableRetroArchLaunch,
+  materializeReadableRyubingLaunch,
+} from "@platform/library/config/app-materializer"
 import type { AppIntegrationKind } from "@platform/library/config/app-integrations"
 import {
   type ReadableConfigSnapshot,
@@ -30,6 +33,7 @@ import {
 import {
   type AppRecord,
   isRetroArchAppRecord,
+  isRyubingAppRecord,
 } from "@platform/library/config/records/app"
 import type { CollectionRecord } from "@platform/library/config/records/collection"
 import type { GameRecord } from "@platform/library/config/records/game"
@@ -297,9 +301,11 @@ export function createLibraryRepository(
             Effect.flatMap(context =>
               isRetroArchAppRecord(context.app)
                 ? Effect.succeed(canMaterializeRetroArchContext(context))
-                : composeReadableLaunchSpec(context.app, context).pipe(
-                    Effect.as(true),
-                  ),
+                : isRyubingAppRecord(context.app)
+                  ? Effect.succeed(canMaterializeRyubingContext(context))
+                  : composeReadableLaunchSpec(context.app, context).pipe(
+                      Effect.as(true),
+                    ),
             ),
             Effect.match({
               onFailure: () => false,
@@ -324,15 +330,18 @@ export function createLibraryRepository(
         const materialized: {
           readonly spec: LaunchSpec
           readonly artifacts?: LaunchArtifacts
+          readonly diagnostics?: readonly string[]
         } = yield* (
           isRetroArchAppRecord(context.app)
             ? materializeReadableRetroArchLaunch({
                 context,
                 env: _options.env ?? process.env,
               })
-            : composeReadableLaunchSpec(context.app, context).pipe(
-                Effect.map(spec => ({ spec })),
-              )
+            : isRyubingAppRecord(context.app)
+              ? materializeReadableRyubingLaunch({ context })
+              : composeReadableLaunchSpec(context.app, context).pipe(
+                  Effect.map(spec => ({ spec })),
+                )
         ).pipe(Effect.mapError(toLibraryConfigError))
         const spec = materialized.spec
         const entry = derivePlayableEntries([
@@ -350,10 +359,15 @@ export function createLibraryRepository(
             id: context.app.id,
             integration: isRetroArchAppRecord(context.app)
               ? "retroarch"
-              : "generic-process",
+              : isRyubingAppRecord(context.app)
+                ? "ryubing"
+                : "generic-process",
           },
           ...(materialized.artifacts
             ? { artifacts: materialized.artifacts }
+            : {}),
+          ...(materialized.diagnostics
+            ? { diagnostics: materialized.diagnostics }
             : {}),
           ...(context.runtime
             ? {
@@ -474,6 +488,12 @@ function canMaterializeRetroArchContext(
     context.retroarch?.core?.path !== undefined ||
     context.runtime?.path !== undefined
   return hasContentPath && hasCorePath
+}
+
+function canMaterializeRyubingContext(
+  context: ReadableResolvedLaunchContext,
+): boolean {
+  return Boolean(context.content?.path && context.ryubing?.state?.root)
 }
 
 function upsertSystemWithCoreRuntime(

@@ -26,10 +26,12 @@ import {
   GamescopePolicy,
   MoonlightPolicy,
   RetroArchPolicy,
+  RyubingPolicy,
 } from "./inheritable-fields"
 import { LaunchSettings } from "./launch-block"
 import { AppRecord } from "./records/app"
 import { RuntimeRecord } from "./records/runtime"
+import { StorageRecord } from "./records/storage"
 
 export const ResolvedLaunchContext = Schema.Struct({
   // Identity (straight from the game record).
@@ -59,6 +61,7 @@ export const ResolvedLaunchContext = Schema.Struct({
   gamescope: Schema.optional(GamescopePolicy),
   moonlight: Schema.optional(MoonlightPolicy),
   retroarch: Schema.optional(RetroArchPolicy),
+  ryubing: Schema.optional(RyubingPolicy),
   settings: Schema.optional(LaunchSettings),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   cwd: Schema.optional(Schema.String),
@@ -87,6 +90,8 @@ export const ReadableResolvedLaunchContext = Schema.Struct({
   gamescope: Schema.optional(GamescopePolicy),
   moonlight: Schema.optional(MoonlightPolicy),
   retroarch: Schema.optional(RetroArchPolicy),
+  ryubing: Schema.optional(RyubingPolicy),
+  storage: Schema.optional(Schema.Record(Schema.String, StorageRecord)),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   cwd: Schema.optional(Schema.String),
   argsAppend: Schema.optional(Schema.Array(Schema.String)),

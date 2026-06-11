@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Effect } from "effect"
@@ -386,6 +386,117 @@ describe("createLibraryRepository — readable playable entries", () => {
       const config = await readFile(configPath, "utf8")
       expect(config).toContain('config_save_on_exit = "false"')
       expect(config).toContain('video_fullscreen = "true"')
+    })
+  })
+
+  it("routes kind: ryubing through typed materialization", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      const cardRoot = join(root, "switch-card")
+      await mkdir(join(cardRoot, ".config/Ryujinx/system"), { recursive: true })
+      await mkdir(join(cardRoot, "roms/switch"), { recursive: true })
+      await writeFile(join(cardRoot, ".config/Ryujinx/system/prod.keys"), "keys")
+      await writeFile(join(cardRoot, "roms/switch/Mario Kart 8 Deluxe.nsp"), "game")
+
+      await Effect.runPromise(repo.upsertStorage({ id: "switch-card", root: cardRoot }))
+      await Effect.runPromise(
+        repo.upsertSource({ id: "switch-card", kind: ["files"], storage: "switch-card" }),
+      )
+      await Effect.runPromise(repo.upsertSystem({ id: "switch", name: "Switch" }))
+      await Effect.runPromise(
+        repo.upsertApp({
+          id: "ryubing",
+          kind: "ryubing",
+          command: "/bin/Ryujinx",
+          state: {
+            root: "{storage:switch-card}/.config/Ryujinx",
+            create: true,
+            require: { keys: ["prod.keys"] },
+          },
+          input: { "require-config": true, controllers: [{ id: "0" }] },
+        }),
+      )
+      await Effect.runPromise(
+        repo.upsertLibraryItem({
+          id: "mario-kart-8-deluxe",
+          source: "switch-card",
+          releases: [
+            {
+              id: "switch",
+              system: "switch",
+              app: "ryubing",
+              target: "roms/switch/Mario Kart 8 Deluxe.nsp",
+            },
+          ],
+        }),
+      )
+
+      const resolved = await Effect.runPromise(
+        repo.resolveLaunchForPlayable("mario-kart-8-deluxe"),
+      )
+
+      expect(resolved.app.integration).toBe("ryubing")
+      expect(resolved.artifacts).toBeUndefined()
+      expect(resolved.spec.command).toBe("/bin/Ryujinx")
+      expect(resolved.spec.args).toEqual([
+        "--no-gui",
+        "--root-data-dir",
+        join(cardRoot, ".config/Ryujinx"),
+        "--use-main-config",
+        join(cardRoot, "roms/switch/Mario Kart 8 Deluxe.nsp"),
+      ])
+      const config = JSON.parse(
+        await readFile(join(cardRoot, ".config/Ryujinx/Config.json"), "utf8"),
+      )
+      expect(config.input_config).toHaveLength(1)
+    })
+  })
+
+  it("does not report Ryubing releases launchable without state.root", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      const cardRoot = join(root, "switch-card")
+      await mkdir(join(cardRoot, "roms/switch"), { recursive: true })
+      await writeFile(
+        join(cardRoot, "roms/switch/Mario Kart 8 Deluxe.nsp"),
+        "game",
+      )
+
+      await Effect.runPromise(repo.upsertStorage({ id: "switch-card", root: cardRoot }))
+      await Effect.runPromise(
+        repo.upsertSource({
+          id: "switch-card",
+          kind: ["files"],
+          storage: "switch-card",
+        }),
+      )
+      await Effect.runPromise(repo.upsertSystem({ id: "switch", name: "Switch" }))
+      await Effect.runPromise(
+        repo.upsertApp({
+          id: "ryubing",
+          kind: "ryubing",
+          command: "/bin/Ryujinx",
+          input: { "require-config": true, controllers: [{ id: "0" }] },
+        }),
+      )
+      await Effect.runPromise(
+        repo.upsertLibraryItem({
+          id: "mario-kart-8-deluxe",
+          source: "switch-card",
+          releases: [
+            {
+              id: "switch",
+              system: "switch",
+              app: "ryubing",
+              target: "roms/switch/Mario Kart 8 Deluxe.nsp",
+            },
+          ],
+        }),
+      )
+
+      await expect(
+        Effect.runPromise(repo.canResolveLaunchForPlayable("mario-kart-8-deluxe")),
+      ).resolves.toBe(false)
     })
   })
 

@@ -1,6 +1,11 @@
 import { Schema } from "effect"
 
-import { InheritableLayer, RetroArchPolicy } from "../inheritable-fields"
+import {
+  decodeRyubingPolicy,
+  InheritableLayer,
+  RetroArchPolicy,
+  RyubingPolicy,
+} from "../inheritable-fields"
 import { LaunchSettings } from "../launch-block"
 import { PresetMapPayload } from "./preset"
 
@@ -21,8 +26,42 @@ export const AppKind = Schema.Literals([
   "solarus",
   "process",
   "generic-process",
+  "ryubing",
 ])
 export type AppKind = Schema.Schema.Type<typeof AppKind>
+
+const RyubingFlatAppFields = {
+  state: RyubingPolicy.fields.state,
+  config: RyubingPolicy.fields.config,
+  // These group names intentionally overlap with flat RetroArch app fields.
+  // Flat app decoding accepts either shape, then kind-specific filters below
+  // reject misplaced vocabulary.
+  content: Schema.optional(Schema.Unknown),
+  display: RyubingPolicy.fields.display,
+  graphics: RyubingPolicy.fields.graphics,
+  console: RyubingPolicy.fields.console,
+  audio: Schema.optional(Schema.Unknown),
+  input: Schema.optional(Schema.Unknown),
+  network: RyubingPolicy.fields.network,
+  logging: Schema.optional(Schema.Unknown),
+  debug: RyubingPolicy.fields.debug,
+  extra: RyubingPolicy.fields.extra,
+}
+
+export const RYUBING_APP_FIELD_KEYS = [
+  "state",
+  "config",
+  "content",
+  "display",
+  "graphics",
+  "console",
+  "audio",
+  "input",
+  "network",
+  "logging",
+  "debug",
+  "extra",
+] as const
 
 export const RETROARCH_APP_FIELD_KEYS = [
   "environment",
@@ -50,22 +89,86 @@ export const RETROARCH_APP_FIELD_KEYS = [
   "extraArgs",
 ] as const
 
-const isTypedRetroArchPayload = (payload: {
+const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+const hasAnyKey = (value: unknown, keys: readonly string[]): boolean =>
+  isPlainRecord(value) && keys.some(key => value[key] !== undefined)
+
+const ryubingPolicyPayloadFromRecord = (payload: {
+  readonly [key: string]: unknown
+}): Record<string, unknown> => {
+  const policy: Record<string, unknown> = {}
+  for (const key of [...RYUBING_APP_FIELD_KEYS, "env"] as const) {
+    if (payload[key] !== undefined) policy[key] = payload[key]
+  }
+  return policy
+}
+
+const RYUBING_OVERLAP_MARKERS: Readonly<Record<string, readonly string[]>> = {
+  content: ["game-dirs", "autoload-dirs", "shown-file-types"],
+  audio: ["backend", "volume"],
+  input: ["require-config", "global-config", "controllers", "hotkeys"],
+  logging: ["file", "levels", "filtered-classes"],
+}
+
+const RETROARCH_OVERLAP_MARKERS: Readonly<Record<string, readonly string[]>> = {
+  content: ["path"],
+  audio: ["enable", "latencyMs", "outputRate", "volumeDb"],
+  input: ["autodetect", "maxUsers", "ports", "overlay"],
+  logging: ["verbose", "verbosity", "fpsShow", "logFile"],
+}
+
+const isTypedAppPayload = (payload: {
   readonly id?: string
   readonly kind?: AppKind
   readonly settings?: unknown
   readonly [key: string]: unknown
 }): string | undefined => {
-  const isRetroArch = payload.kind === "retroarch" || payload.id === "retroarch"
+  const kind =
+    payload.kind ?? (payload.id === "retroarch" ? "retroarch" : undefined)
+  const isRetroArch = kind === "retroarch"
+  const isRyubing = kind === "ryubing"
   if (isRetroArch && payload.settings !== undefined) {
     return "RetroArch apps use typed fields and extraSettings, not raw settings"
   }
   if (!isRetroArch) {
-    const misplacedKey = RETROARCH_APP_FIELD_KEYS.find(
-      key => payload[key] !== undefined,
-    )
+    const misplacedKey = RETROARCH_APP_FIELD_KEYS.find(key => {
+      if (payload[key] === undefined) return false
+      const overlapMarkers = RETROARCH_OVERLAP_MARKERS[key]
+      return overlapMarkers
+        ? hasAnyKey(payload[key], overlapMarkers)
+        : !(RYUBING_APP_FIELD_KEYS as readonly string[]).includes(key)
+    })
     if (misplacedKey) {
       return `RetroArch field ${misplacedKey} requires kind: retroarch`
+    }
+  }
+  if (!isRyubing) {
+    const misplacedKey = RYUBING_APP_FIELD_KEYS.find(key => {
+      if (payload[key] === undefined) return false
+      const overlapMarkers = RYUBING_OVERLAP_MARKERS[key]
+      return overlapMarkers ? hasAnyKey(payload[key], overlapMarkers) : true
+    })
+    if (misplacedKey) {
+      return `Ryubing field ${misplacedKey} requires kind: ryubing`
+    }
+  }
+  if (isRyubing) {
+    const misplacedKey = RETROARCH_APP_FIELD_KEYS.find(key => {
+      if (payload[key] === undefined) return false
+      const overlapMarkers = RETROARCH_OVERLAP_MARKERS[key]
+      return overlapMarkers
+        ? hasAnyKey(payload[key], overlapMarkers)
+        : !(RYUBING_APP_FIELD_KEYS as readonly string[]).includes(key)
+    })
+    if (misplacedKey) {
+      return `RetroArch field ${misplacedKey} is not valid on kind: ryubing`
+    }
+    try {
+      decodeRyubingPolicy(ryubingPolicyPayloadFromRecord(payload))
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error)
     }
   }
   return undefined
@@ -91,6 +194,7 @@ const AppPayloadBase = Schema.Struct({
   gamescope: InheritableLayer.fields.gamescope,
   moonlight: InheritableLayer.fields.moonlight,
   ...RetroArchPolicy.fields,
+  ...RyubingFlatAppFields,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
@@ -98,14 +202,14 @@ const AppPayloadBase = Schema.Struct({
 })
 
 export const AppPayload = AppPayloadBase.check(
-  Schema.makeFilter(isTypedRetroArchPayload),
+  Schema.makeFilter(isTypedAppPayload),
 )
 export type AppPayload = Schema.Schema.Type<typeof AppPayload>
 
 export const AppRecord = Schema.Struct({
   id: NonEmptyString,
   ...AppPayloadBase.fields,
-}).check(Schema.makeFilter(isTypedRetroArchPayload))
+}).check(Schema.makeFilter(isTypedAppPayload))
 export type AppRecord = Schema.Schema.Type<typeof AppRecord>
 
 export const decodeAppPayload = (input: unknown): AppPayload =>
@@ -120,6 +224,10 @@ export const appRecordKind = (app: Pick<AppRecord, "id" | "kind">): AppKind =>
 export const isRetroArchAppRecord = (
   app: Pick<AppRecord, "id" | "kind">,
 ): boolean => appRecordKind(app) === "retroarch"
+
+export const isRyubingAppRecord = (
+  app: Pick<AppRecord, "id" | "kind">,
+): boolean => appRecordKind(app) === "ryubing"
 
 export const appRetroArchPolicyFromRecord = (
   app: AppRecord,
@@ -154,14 +262,18 @@ export const appRetroArchPolicyFromRecord = (
     ...(environment !== undefined ? { environment } : {}),
     ...(configFile !== undefined ? { configFile } : {}),
     ...(core !== undefined ? { core } : {}),
-    ...(content !== undefined ? { content } : {}),
-    ...(logging !== undefined ? { logging } : {}),
+    ...(content !== undefined
+      ? { content: content as RetroArchPolicy["content"] }
+      : {}),
+    ...(logging !== undefined
+      ? { logging: logging as RetroArchPolicy["logging"] }
+      : {}),
     ...(lifecycle !== undefined ? { lifecycle } : {}),
     ...(drivers !== undefined ? { drivers } : {}),
     ...(paths !== undefined ? { paths } : {}),
     ...(video !== undefined ? { video } : {}),
-    ...(audio !== undefined ? { audio } : {}),
-    ...(input !== undefined ? { input } : {}),
+    ...(audio !== undefined ? { audio: audio as RetroArchPolicy["audio"] } : {}),
+    ...(input !== undefined ? { input: input as RetroArchPolicy["input"] } : {}),
     ...(menu !== undefined ? { menu } : {}),
     ...(saves !== undefined ? { saves } : {}),
     ...(rewind !== undefined ? { rewind } : {}),
@@ -175,5 +287,13 @@ export const appRetroArchPolicyFromRecord = (
     ...(extraSettings !== undefined ? { extraSettings } : {}),
     ...(extraArgs !== undefined ? { extraArgs } : {}),
   }
+  return Object.keys(policy).length > 0 ? policy : undefined
+}
+
+export const appRyubingPolicyFromRecord = (
+  app: AppRecord,
+): RyubingPolicy | undefined => {
+  if (!isRyubingAppRecord(app)) return undefined
+  const policy = decodeRyubingPolicy(ryubingPolicyPayloadFromRecord(app))
   return Object.keys(policy).length > 0 ? policy : undefined
 }

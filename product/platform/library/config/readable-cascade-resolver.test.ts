@@ -488,6 +488,84 @@ describe("resolveReadableLaunchContext", () => {
     expect(context.gamescope?.extraArgs).toContain("contained")
   })
 
+  it("threads and folds Ryubing policy including per-game state.root overrides", async () => {
+    const ryubingApp: AppRecord = {
+      id: "ryubing",
+      kind: "ryubing",
+      command: "/bin/Ryujinx",
+      state: { root: "{storage:switch-card}/shared/Ryujinx", create: true },
+      env: { XDG_CONFIG_HOME: "{storage:switch-card}/.config" },
+      graphics: { backend: "vulkan" },
+      extra: { args: ["app-arg"], config: { app_key: true } },
+    }
+    const switchItem: LibraryItemRecord = {
+      id: "mario-kart-8-deluxe",
+      source: "switch-card",
+      ryubing: {
+        graphics: { "backend-threading": "auto" },
+        extra: { args: ["item-arg"], config: { nested: { item: true } } },
+      },
+      releases: [
+        {
+          id: "switch",
+          system: "switch",
+          target: "roms/switch/Mario Kart 8 Deluxe.nsp",
+          app: "ryubing",
+          ryubing: {
+            state: { root: "{storage:switch-card}/per-game/mk8d" },
+            console: { mode: "handheld" },
+            extra: {
+              args: ["release-arg"],
+              config: { nested: { release: true } },
+            },
+          },
+        },
+      ],
+    }
+
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        {
+          ...snapshot(switchItem),
+          systems: new Map([["switch", { id: "switch", app: "ryubing" }]]),
+          sources: new Map([
+            ["switch-card", { id: "switch-card", kind: ["files"], storage: "switch-card" }],
+          ]),
+          storage: new Map([["switch-card", { id: "switch-card", root: "/media/switch" }]]),
+          apps: new Map([["ryubing", ryubingApp]]),
+          runtimes: new Map(),
+        },
+        { playableId: "mario-kart-8-deluxe" },
+      ),
+    )
+
+    expect(context.app.id).toBe("ryubing")
+    expect(context.content?.path).toBe(
+      "/media/switch/roms/switch/Mario Kart 8 Deluxe.nsp",
+    )
+    expect(context.ryubing?.state?.root).toBe(
+      "{storage:switch-card}/per-game/mk8d",
+    )
+    expect(context.ryubing?.env?.XDG_CONFIG_HOME).toBe(
+      "{storage:switch-card}/.config",
+    )
+    expect(context.ryubing?.graphics).toEqual({
+      backend: "vulkan",
+      "backend-threading": "auto",
+    })
+    expect(context.ryubing?.console?.mode).toBe("handheld")
+    expect(context.ryubing?.extra?.args).toEqual([
+      "app-arg",
+      "item-arg",
+      "release-arg",
+    ])
+    expect(context.ryubing?.extra?.config).toEqual({
+      app_key: true,
+      nested: { item: true, release: true },
+    })
+    expect(context.storage?.["switch-card"]?.root).toBe("/media/switch")
+  })
+
   it("rejects release omission when multiple launchable releases exist", async () => {
     const exit = await Effect.runPromiseExit(
       resolveReadableLaunchContext(snapshot(sonicMulti), {

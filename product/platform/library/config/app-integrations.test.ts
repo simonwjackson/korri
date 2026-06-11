@@ -99,6 +99,27 @@ describe("resolveAppDescriptor", () => {
     expect(app.retroarch?.video?.fullscreen).toBe(false)
   })
 
+  it("resolves a first-class Ryubing app without a built-in command default", () => {
+    const app = run(
+      resolveAppDescriptor({
+        appId: "ryubing",
+        apps: appMap([
+          {
+            id: "ryubing",
+            kind: "ryubing",
+            command: "/bin/Ryujinx",
+            state: { root: "/state/Ryujinx" },
+          },
+        ]),
+        launchers: launcherMap(),
+      }),
+    )
+
+    expect(app.integration).toBe("ryubing")
+    expect(app.command).toBe("/bin/Ryujinx")
+    expect(app.ryubing?.state?.root).toBe("/state/Ryujinx")
+  })
+
   it("resolves a custom process app with an explicit command", () => {
     const app = run(
       resolveAppDescriptor({
@@ -124,6 +145,18 @@ describe("resolveAppDescriptor", () => {
         resolveAppDescriptor({
           appId: "my-runner",
           apps: appMap([{ id: "my-runner", settings: { fullscreen: true } }]),
+          launchers: launcherMap(),
+        }),
+      ),
+    ).toBe("CustomAppMissingCommand")
+  })
+
+  it("fails a first-class Ryubing app without command", () => {
+    expect(
+      runErrTag(
+        resolveAppDescriptor({
+          appId: "ryubing",
+          apps: appMap([{ id: "ryubing", kind: "ryubing" }]),
           launchers: launcherMap(),
         }),
       ),
