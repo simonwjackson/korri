@@ -37,9 +37,10 @@ let
       inputdUnit = userServices.korri-inputd or { };
       inputdEnv = inputdUnit.environment or { };
       inputdPath = inputdUnit.path or [ ];
-      removableMountUnit = cfg.systemd.services."korri-removable-card-mount@" or { };
-      removableUnmountUnit = cfg.systemd.services."korri-removable-card-unmount@" or { };
-      removableColdplugUnit = cfg.systemd.services.korri-removable-card-coldplug or { };
+      removableMountUnit = cfg.systemd.services."korri-removable-media-mount@" or { };
+      removableUnmountUnit = cfg.systemd.services."korri-removable-media-unmount@" or { };
+      removableColdplugUnit = cfg.systemd.services.korri-removable-media-coldplug or { };
+      removableMedia = cfg.services.korri.removableMedia or { };
       pipewireEnv = (userServices.pipewire or { }).environment or { };
       pipewirePulseEnv = (userServices.pipewire-pulse or { }).environment or { };
       wireplumberEnv = (userServices.wireplumber or { }).environment or { };
@@ -191,18 +192,28 @@ let
         builtins.any (pkg: (pkg.pname or "") == "pulseaudio") inputdPath
       ))
       (check "${name}: removable SD cards mount under runtime media and Korri content" (
-        cfg.systemd.services ? "korri-removable-card-mount@"
-        && cfg.systemd.services ? "korri-removable-card-unmount@"
+        cfg.systemd.services ? "korri-removable-media-mount@"
+        && cfg.systemd.services ? "korri-removable-media-unmount@"
         && lib.hasInfix ''KERNEL=="mmcblk*p*"'' cfg.services.udev.extraRules
-        && lib.hasInfix ''ENV{SYSTEMD_WANTS}+="korri-removable-card-mount@%k.service"'' cfg.services.udev.extraRules
-        && lib.hasInfix ''ENV{SYSTEMD_WANTS}+="korri-removable-card-unmount@%k.service"'' cfg.services.udev.extraRules
+        && lib.hasInfix ''ENV{SYSTEMD_WANTS}+="korri-removable-media-mount@%k.service"'' cfg.services.udev.extraRules
+        && lib.hasInfix ''ENV{SYSTEMD_WANTS}+="korri-removable-media-unmount@%k.service"'' cfg.services.udev.extraRules
         && (removableMountUnit.environment.KORRI_REMOVABLE_MEDIA_ROOT or null) == "/run/media/korri/cards"
         && (removableMountUnit.environment.KORRI_REMOVABLE_CONTENT_ROOT or null) == "/var/lib/korri/content/removable/cards"
         && (removableUnmountUnit.environment.KORRI_REMOVABLE_MEDIA_ROOT or null) == "/run/media/korri/cards"
         && builtins.elem "d /run/media/korri/cards 0755 korri korri -" cfg.systemd.tmpfiles.rules
         && builtins.elem "L+ /var/lib/korri/content/removable/cards - - - - /run/media/korri/cards" cfg.systemd.tmpfiles.rules
         && builtins.elem "multi-user.target" (removableColdplugUnit.wantedBy or [ ])
-        && lib.hasInfix "korri-removable-card-coldplug" (removableColdplugUnit.serviceConfig.ExecStart or "")
+        && lib.hasInfix "korri-removable-media-coldplug" (removableColdplugUnit.serviceConfig.ExecStart or "")
+      ))
+      (check "${name}: removable media excludes the guest system disk and USB transport" (
+        # match.usb off: the positive gate only admits mmcblk*p* cards, so
+        # sda-class UFS devices never match; the runtime deny-list must
+        # additionally derive the system disk from the /storage bind.
+        (removableMedia.enable or false)
+        && (removableMedia.match.mmc or false)
+        && !(removableMedia.match.usb or true)
+        && builtins.elem "/storage" (removableMedia.requiredSystemMounts or [ ])
+        && !(lib.hasInfix ''ID_BUS}=="usb"'' cfg.services.udev.extraRules)
       ))
       (check "${name}: launcher artifacts use root setup path" (runtime.launchArtifactsDir == "/run/korri/launch-artifacts"))
     ];

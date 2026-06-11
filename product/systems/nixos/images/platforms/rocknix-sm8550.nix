@@ -158,98 +158,6 @@ let
         ;;
     esac
   '';
-  removableCardsMediaRoot = "/run/media/korri/cards";
-  removableCardsContentRoot = "/var/lib/korri/content/removable/cards";
-  korriRemovableCardMount = pkgs.writeShellScript "korri-removable-card-mount" ''
-    set -eu
-
-    name="$1"
-    case "$name" in
-      mmcblk*p*) ;;
-      *)
-        echo "korri-removable-card-mount: ignoring non-SD partition instance: $name" >&2
-        exit 0
-        ;;
-    esac
-
-    dev="/dev/$name"
-    media_root="''${KORRI_REMOVABLE_MEDIA_ROOT:-${removableCardsMediaRoot}}"
-    content_root="''${KORRI_REMOVABLE_CONTENT_ROOT:-${removableCardsContentRoot}}"
-    mountpoint="$media_root/$name"
-
-    if [ ! -b "$dev" ]; then
-      echo "korri-removable-card-mount: $dev is not a block device; skipping" >&2
-      exit 0
-    fi
-
-    fs_type="$(${pkgs.util-linux}/bin/blkid -o value -s TYPE "$dev" 2>/dev/null || true)"
-    if [ -z "$fs_type" ]; then
-      echo "korri-removable-card-mount: $dev has no filesystem type; skipping" >&2
-      exit 0
-    fi
-
-    uid="$(${pkgs.coreutils}/bin/id -u ${runtime.user})"
-    gid="$(${pkgs.coreutils}/bin/id -g ${runtime.user})"
-
-    ${pkgs.coreutils}/bin/mkdir -p "$media_root" /var/lib/korri/content/removable "$mountpoint"
-    if [ ! -e "$content_root" ]; then
-      ${pkgs.coreutils}/bin/ln -s "$media_root" "$content_root"
-    fi
-    ${pkgs.coreutils}/bin/chown ${runtime.user}:${runtime.group} \
-      /run/media/korri \
-      "$media_root" \
-      /var/lib/korri/content/removable \
-      "$mountpoint" \
-      2>/dev/null || true
-
-    # Use mountpoint(1) so we only short-circuit when the exact target is a
-    # mount, not when a parent directory of the target is mounted (e.g. /run).
-    if ${pkgs.util-linux}/bin/mountpoint -q "$mountpoint"; then
-      exit 0
-    fi
-    # Some container/nspawn layouts pre-bind block-device nodes from the host
-    # under /dev itself (e.g. `devtmpfs on /dev/mmcblk0p1`). Don't treat the
-    # device node bind as the filesystem mount we want.
-    if ${pkgs.util-linux}/bin/findmnt -rn --source "$dev" --types "$fs_type" >/dev/null; then
-      exit 0
-    fi
-
-    case "$fs_type" in
-      vfat|exfat|ntfs|ntfs3)
-        mount_options="rw,nosuid,nodev,relatime,uid=$uid,gid=$gid,umask=022"
-        ;;
-      *)
-        mount_options="rw,nosuid,nodev,relatime"
-        ;;
-    esac
-
-    ${pkgs.util-linux}/bin/mount -t "$fs_type" -o "$mount_options" "$dev" "$mountpoint"
-  '';
-  korriRemovableCardColdplug = pkgs.writeShellScript "korri-removable-card-coldplug" ''
-    set -eu
-
-    for sysdir in /sys/class/block/mmcblk*p*; do
-      [ -d "$sysdir" ] || continue
-      name=$(${pkgs.coreutils}/bin/basename "$sysdir")
-      dev="/dev/$name"
-      [ -b "$dev" ] || continue
-      fs_type=$(${pkgs.util-linux}/bin/blkid -o value -s TYPE "$dev" 2>/dev/null || true)
-      [ -n "$fs_type" ] || continue
-      ${pkgs.systemd}/bin/systemctl start --no-block "korri-removable-card-mount@$name.service" || true
-    done
-  '';
-  korriRemovableCardUnmount = pkgs.writeShellScript "korri-removable-card-unmount" ''
-    set -eu
-
-    name="$1"
-    media_root="''${KORRI_REMOVABLE_MEDIA_ROOT:-${removableCardsMediaRoot}}"
-    mountpoint="$media_root/$name"
-
-    if ${pkgs.util-linux}/bin/mountpoint -q "$mountpoint"; then
-      ${pkgs.util-linux}/bin/umount -l "$mountpoint" || true
-    fi
-    ${pkgs.coreutils}/bin/rmdir "$mountpoint" 2>/dev/null || true
-  '';
   # The substrate now leaves UCM verb/device and the manual PCM null for panels
   # (e.g. Odin 2 Portal) where WirePlumber owns default-sink selection. Guard
   # every sink-derived interpolation so the bootstrap renders for any substrate
@@ -364,6 +272,7 @@ in
   imports = [
     nix-on-rocks.nixosModules.rocknix-guest-base
     deviceProfile
+    ../../modules/korri-removable-media.nix
   ];
 
   assertions = [
@@ -394,13 +303,6 @@ in
     # not currently carry systemd's generic seat tags for this platform node.
     SUBSYSTEM=="drm", KERNEL=="card[0-9]*", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0"
 
-    # Swappable game/content cards are operator media, not durable internal
-    # guest storage. Mount each visible SD-card filesystem partition by kernel
-    # instance so cards do not need stable labels or UUIDs and multi-slot
-    # devices can expose more than one card at once.
-    ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="mmcblk*p*", ENV{ID_FS_USAGE}=="filesystem", TAG+="systemd", ENV{SYSTEMD_WANTS}+="korri-removable-card-mount@%k.service"
-    ACTION=="remove", SUBSYSTEM=="block", KERNEL=="mmcblk*p*", TAG+="systemd", ENV{SYSTEMD_WANTS}+="korri-removable-card-unmount@%k.service"
-
     # Korri inputd runs as the kiosk user and reads evdev directly before
     # forwarding controller events to the desktop renderer. On the RockNIX
     # SM8550 substrate these event nodes can inherit a numeric group that does
@@ -413,53 +315,26 @@ in
 
   services.korri.client.package = korri.packages.${targetSystem}.korri-desktop-device;
 
+  # Swappable game/content cards are operator media, not durable internal
+  # guest storage; the shared removable-media module mounts each visible
+  # SD-card filesystem partition by kernel instance and exposes it as a
+  # card-wins config root. The guest's durable system disk (UFS sda) backs
+  # the /storage bind, so the runtime deny-list must derive it before any
+  # card mounts (fail-safe).
+  services.korri.removableMedia = {
+    enable = true;
+    mediaRoot = "/run/media/korri/cards";
+    contentRoot = "/var/lib/korri/content/removable/cards";
+    match = {
+      mmc = true;
+      usb = false;
+    };
+    requiredSystemMounts = [ "/storage" ];
+  };
+
   systemd.tmpfiles.rules = [
     "d /run/media/korri 0755 ${runtime.user} ${runtime.group} -"
-    "d ${removableCardsMediaRoot} 0755 ${runtime.user} ${runtime.group} -"
-    "d /var/lib/korri/content/removable 0750 ${runtime.user} ${runtime.group} -"
-    "L+ ${removableCardsContentRoot} - - - - ${removableCardsMediaRoot}"
   ];
-
-  systemd.services."korri-removable-card-mount@" = {
-    description = "Mount Korri removable SD-card partition %I";
-    after = [ "systemd-udevd.service" ];
-    environment = {
-      KORRI_REMOVABLE_MEDIA_ROOT = removableCardsMediaRoot;
-      KORRI_REMOVABLE_CONTENT_ROOT = removableCardsContentRoot;
-    };
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = "${korriRemovableCardMount} %I";
-    };
-  };
-
-  systemd.services."korri-removable-card-unmount@" = {
-    description = "Unmount Korri removable SD-card partition %I";
-    after = [ "systemd-udevd.service" ];
-    environment = {
-      KORRI_REMOVABLE_MEDIA_ROOT = removableCardsMediaRoot;
-    };
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = "${korriRemovableCardUnmount} %I";
-    };
-  };
-
-  # Cards already present at boot do not emit a fresh ACTION=add the udev
-  # rule above can consume, so the per-partition SYSTEMD_WANTS handler never
-  # fires. Re-trigger a synthetic change event for every block-device
-  # filesystem partition once systemd has started so coldplugged cards mount
-  # without operator interaction.
-  systemd.services.korri-removable-card-coldplug = {
-    description = "Coldplug Korri removable SD-card partitions";
-    wantedBy = [ "multi-user.target" ];
-    after = [ "systemd-udevd.service" "systemd-tmpfiles-setup.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      ExecStart = toString korriRemovableCardColdplug;
-    };
-  };
 
   # The guest sees DRM and input devices that already exist in the
   # ROCKNIX-hosted device namespace. Host-bound nodes do not emit a fresh
