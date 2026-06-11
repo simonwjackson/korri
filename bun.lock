@@ -11,7 +11,7 @@
         "@fontsource-variable/geist": "^5.2.8",
         "@fontsource-variable/nunito": "^5.2.7",
         "@hono/node-server": "^1.19.14",
-        "@proseql/node": "0.14.0",
+        "@proseql/node": "0.15.0",
         "@tailwindcss/vite": "^4.1.7",
         "@tanstack/react-router": "^1.120.3",
         "@tanstack/router-generator": "1.120.3",
@@ -548,9 +548,9 @@
 
     "@playwright/test": ["@playwright/test@1.59.1", "", { "dependencies": { "playwright": "1.59.1" }, "bin": { "playwright": "cli.js" } }, "sha512-PG6q63nQg5c9rIi4/Z5lR5IVF7yU5MqmKaPOe0HSc0O2cX1fPi96sUQu5j7eo4gKCkB2AnNGoWt7y4/Xx3Kcqg=="],
 
-    "@proseql/core": ["@proseql/core@0.14.0", "", { "dependencies": { "@toon-format/toon": "^2.1.0", "effect": "4.0.0-beta.60", "hjson": "^3.2.2", "json5": "^2.2.3", "jsonc-parser": "^3.3.1", "picomatch": "^4.0.4", "smol-toml": "^1.6.0", "yaml": "^2.3.4" } }, "sha512-6Tif/tChSWkIjlRrUxorrpv8ILUHAU0Etqxx9QyJhP44Z5i9jJFRD68XCj7bkf93I8KATcgRBYn/6UMuVYXPvQ=="],
+    "@proseql/core": ["@proseql/core@0.15.0", "", { "dependencies": { "@toon-format/toon": "^2.1.0", "effect": "4.0.0-beta.60", "hjson": "^3.2.2", "json5": "^2.2.3", "jsonc-parser": "^3.3.1", "picomatch": "^4.0.4", "smol-toml": "^1.6.0", "yaml": "^2.3.4" } }, "sha512-p0GDgPs2qOQfMM09x6H8+PW1e8e8SSSUdJHhGTu21F1F8S82e/WZKc1mqK7+x8ZTtqLU1TIdL7Y+UGT1L1nSKg=="],
 
-    "@proseql/node": ["@proseql/node@0.14.0", "", { "dependencies": { "@proseql/core": "^0.14.0" }, "peerDependencies": { "effect": "4.0.0-beta.60" } }, "sha512-wX4uHuWtiAwefS/YaEQKIGVCUuDMiJS19MgntTTGSQ7J4USM98tUnRZMQ/Z/FbCIQ/hbpvmtrnBk+tzg4A3EmA=="],
+    "@proseql/node": ["@proseql/node@0.15.0", "", { "dependencies": { "@proseql/core": "^0.15.0" }, "peerDependencies": { "effect": "4.0.0-beta.60" } }, "sha512-z2Ps+nJ6gY5LziVSOUWI23ItD6nVy3CEFLCOMp+aijnJsWs6vqVDDoZXkmK4odzCRrnQA/1JjZ/TEAbgSo5/WQ=="],
 
     "@protobufjs/aspromise": ["@protobufjs/aspromise@1.1.2", "", {}, "sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ=="],
 

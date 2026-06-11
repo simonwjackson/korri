@@ -1065,13 +1065,13 @@
     url = "https://registry.npmjs.org/@playwright/test/-/test-1.59.1.tgz";
     hash = "sha512-PG6q63nQg5c9rIi4/Z5lR5IVF7yU5MqmKaPOe0HSc0O2cX1fPi96sUQu5j7eo4gKCkB2AnNGoWt7y4/Xx3Kcqg==";
   };
-  "@proseql/core@0.14.0" = fetchurl {
-    url = "https://registry.npmjs.org/@proseql/core/-/core-0.14.0.tgz";
-    hash = "sha512-6Tif/tChSWkIjlRrUxorrpv8ILUHAU0Etqxx9QyJhP44Z5i9jJFRD68XCj7bkf93I8KATcgRBYn/6UMuVYXPvQ==";
+  "@proseql/core@0.15.0" = fetchurl {
+    url = "https://registry.npmjs.org/@proseql/core/-/core-0.15.0.tgz";
+    hash = "sha512-p0GDgPs2qOQfMM09x6H8+PW1e8e8SSSUdJHhGTu21F1F8S82e/WZKc1mqK7+x8ZTtqLU1TIdL7Y+UGT1L1nSKg==";
   };
-  "@proseql/node@0.14.0" = fetchurl {
-    url = "https://registry.npmjs.org/@proseql/node/-/node-0.14.0.tgz";
-    hash = "sha512-wX4uHuWtiAwefS/YaEQKIGVCUuDMiJS19MgntTTGSQ7J4USM98tUnRZMQ/Z/FbCIQ/hbpvmtrnBk+tzg4A3EmA==";
+  "@proseql/node@0.15.0" = fetchurl {
+    url = "https://registry.npmjs.org/@proseql/node/-/node-0.15.0.tgz";
+    hash = "sha512-z2Ps+nJ6gY5LziVSOUWI23ItD6nVy3CEFLCOMp+aijnJsWs6vqVDDoZXkmK4odzCRrnQA/1JjZ/TEAbgSo5/WQ==";
   };
   "@protobufjs/aspromise@1.1.2" = fetchurl {
     url = "https://registry.npmjs.org/@protobufjs/aspromise/-/aspromise-1.1.2.tgz";
