@@ -97,6 +97,12 @@ pkgs.lib.optionalAttrs isX86Linux {
     inherit pkgs;
     korriDaemonModule = self.nixosModules.korri-daemon;
   };
+  korri-removable-media = import ../../../../tools/testing/nix/korri-removable-media-check.nix {
+    inherit pkgs;
+    korriRemovableMediaModule = self.nixosModules.korri-removable-media;
+    matcherSource = ../../../../product/systems/nixos/modules/korri-removable-media-match.sh;
+    moduleSource = ../../../../product/systems/nixos/modules/korri-removable-media.nix;
+  };
   korri-module-identity-audit =
     import ../../../../tools/testing/nix/korri-module-identity-audit-check.nix
       {
@@ -334,6 +340,14 @@ pkgs.lib.optionalAttrs isX86Linux {
       {
         name = "korri-daemon-module";
         owner = "module";
+      }
+      {
+        name = "korri-removable-media";
+        owner = "module";
+      }
+      {
+        name = "korri-removable-media-matcher";
+        owner = "composed-system";
       }
       {
         name = "korri-module-identity-audit";
