@@ -1,0 +1,161 @@
+# Pure-Nix module-evaluation check for `services.korri.steam`.
+#
+# Device-neutral: evaluates the Korri-owned Steam adapter against minimal NixOS
+# fixtures and asserts option defaults, rendered packages/services, launch
+# hardening, and path/architecture assertions. The composed SM8550 posture is
+# asserted by korri-rocknix-sm8550-config-check.
+{
+  pkgs,
+  korriSteamModule,
+}:
+
+let
+  lib = pkgs.lib;
+  evalConfig = import (pkgs.path + "/nixos/lib/eval-config.nix");
+
+  check = message: assertion: { inherit message assertion; };
+
+  fakeSteamOverlay = final: prev: {
+    steam-korri = prev.runCommand "fake-steam-korri" {
+      passthru = {
+        rocknixSteamHasRunCapsule = true;
+      };
+    } ''
+      mkdir -p "$out/bin"
+      cat > "$out/bin/steam-arm64-fhs" <<'EOF'
+      #!/usr/bin/env sh
+      exit 0
+      EOF
+      chmod +x "$out/bin/steam-arm64-fhs"
+    '';
+  };
+
+  baseModule = hostSystem: { ... }: {
+    nixpkgs.hostPlatform = hostSystem;
+    nixpkgs.config.allowUnfree = true;
+    nixpkgs.overlays = [ fakeSteamOverlay ];
+    boot.loader.grub.devices = [ "nodev" ];
+    fileSystems."/" = {
+      device = "/dev/null";
+      fsType = "ext4";
+    };
+    system.stateVersion = "24.11";
+    networking.hostName = "steam-module-test";
+  };
+
+  evaluateWith = hostSystem: overrides:
+    (evalConfig {
+      system = hostSystem;
+      modules = [
+        korriSteamModule
+        (baseModule hostSystem)
+        overrides
+      ];
+    }).config;
+
+  enabled = evaluateWith "aarch64-linux" {
+    services.korri.steam.enable = true;
+  };
+
+  runtimeOverride = evaluateWith "aarch64-linux" {
+    services.korri.runtime = {
+      stateRoot = "/var/lib/korri-alt";
+      gamesRoot = "/var/lib/korri-alt/content/games";
+      home = "/home/korri-alt";
+    };
+    services.korri.steam.enable = true;
+  };
+
+  invalidPath = evaluateWith "aarch64-linux" {
+    services.korri.steam = {
+      enable = true;
+      home = "/storage/.local/share/Steam";
+    };
+  };
+
+  x86Enabled = evaluateWith "x86_64-linux" {
+    services.korri.steam.enable = true;
+  };
+
+  disabled = evaluateWith "aarch64-linux" { };
+
+  failedAssertions = cfg: builtins.filter (a: !a.assertion) cfg.assertions;
+  hasFailedAssertion = needle: cfg:
+    builtins.any (a: lib.hasInfix needle a.message) (failedAssertions cfg);
+
+  steamUnit = enabled.systemd.services.korri-steam or { };
+  uinputUnit = enabled.systemd.services.korri-steam-uinput or { };
+  systemPackageNames = cfg: map (pkg: pkg.name or "") cfg.environment.systemPackages;
+  serviceExec = unit:
+    let raw = unit.serviceConfig.ExecStart or "";
+    in if builtins.isList raw then lib.concatStringsSep "\n" raw else raw;
+
+  checks = [
+    (check "enabled aarch64 module evaluates without failed assertions" (failedAssertions enabled == [ ]))
+    (check "enable = false contributes no Steam package or services" (
+      !(disabled.systemd.services ? korri-steam)
+      && !(disabled.systemd.services ? korri-steam-uinput)
+      && !(builtins.any (name: lib.hasInfix "steam" name) (systemPackageNames disabled))
+    ))
+    (check "default paths derive from korri-runtime" (
+      enabled.services.korri.steam.home == "/var/lib/korri/steam"
+      && enabled.services.korri.steam.gamesRoot == "/var/lib/korri/content/games/steam"
+      && enabled.services.korri.steam.dotDir == "/home/korri/.steam"
+      && enabled.services.korri.steam.fexRootfs == "/var/lib/korri/steam/fex-rootfs"
+    ))
+    (check "runtime path overrides flow into Steam defaults" (
+      runtimeOverride.services.korri.steam.home == "/var/lib/korri-alt/steam"
+      && runtimeOverride.services.korri.steam.gamesRoot == "/var/lib/korri-alt/content/games/steam"
+      && runtimeOverride.services.korri.steam.dotDir == "/home/korri-alt/.steam"
+    ))
+    (check "enabled module installs package, launcher, and uinput helper" (
+      builtins.any (name: lib.hasInfix "fake-steam-korri" name) (systemPackageNames enabled)
+      && builtins.any (name: lib.hasInfix "korri-steam-guest" name) (systemPackageNames enabled)
+      && builtins.any (name: lib.hasInfix "korri-steam-ensure-uinput" name) (systemPackageNames enabled)
+    ))
+    (check "uinput service is rendered and ordered for boot convergence" (
+      enabled.systemd.services ? korri-steam-uinput
+      && builtins.elem "multi-user.target" (uinputUnit.wantedBy or [ ])
+      && lib.hasInfix "korri-steam-ensure-uinput" (serviceExec uinputUnit)
+    ))
+    (check "launch service carries Korri identity and fd hardening" (
+      enabled.systemd.services ? korri-steam
+      && (steamUnit.serviceConfig.User or null) == "korri"
+      && (steamUnit.serviceConfig.Group or null) == "korri"
+      && (steamUnit.serviceConfig.WorkingDirectory or null) == "/var/lib/korri/steam"
+      && (steamUnit.serviceConfig.LimitNOFILE or null) == 524288
+      && lib.hasInfix "korri-steam-guest" (serviceExec steamUnit)
+    ))
+    (check "launch service exports the Korri user session environment" (
+      (steamUnit.environment.XDG_RUNTIME_DIR or null) == "/run/user/2000"
+      && (steamUnit.environment.DBUS_SESSION_BUS_ADDRESS or null) == "unix:path=/run/user/2000/bus"
+      && (steamUnit.environment.STEAM_HOME or null) == "/var/lib/korri/steam"
+      && (steamUnit.environment.STEAM_GAMES_ROOT or null) == "/var/lib/korri/content/games/steam"
+      && (steamUnit.environment.STEAM_DOT or null) == "/home/korri/.steam"
+    ))
+    (check "tmpfiles create Korri-owned Steam state" (
+      builtins.elem "d /var/lib/korri/steam 0750 korri korri -" enabled.systemd.tmpfiles.rules
+      && builtins.elem "d /var/lib/korri/content/games/steam 0750 korri korri -" enabled.systemd.tmpfiles.rules
+      && builtins.elem "d /home/korri/.steam 0700 korri korri -" enabled.systemd.tmpfiles.rules
+    ))
+    (check "invalid /storage Steam home fails the path assertion" (
+      hasFailedAssertion "services.korri.steam.home must live under services.korri.runtime.stateRoot" invalidPath
+    ))
+    (check "enabling on x86 fails the aarch64 assertion" (
+      hasFailedAssertion "services.korri.steam requires the aarch64 Steam run capsule" x86Enabled
+    ))
+  ];
+
+  failures = builtins.filter (candidate: !candidate.assertion) checks;
+in
+if failures != [ ] then
+  throw "Korri Steam module check failed:\n${
+    lib.concatMapStringsSep "\n" (failure: "- ${failure.message}") failures
+  }"
+else
+  pkgs.runCommand "korri-steam-module-check" { } ''
+    mkdir -p "$out"
+    cat > "$out/summary.txt" <<'EOF'
+    Korri Steam module invariants passed.
+    EOF
+  ''

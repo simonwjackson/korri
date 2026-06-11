@@ -55,6 +55,16 @@ rec {
       (import ../modules/korri-removable-media.nix)
     ];
   };
+  # SM8550/product opt-in: Korri-owned Steam guest adapter. Bundles
+  # korri-runtime so the default state/home paths resolve standalone; not part
+  # of the daemon aggregate because Steam launch/session policy is platform
+  # posture, not a baseline daemon dependency.
+  korri-steam = {
+    imports = [
+      korri-runtime
+      (import ../modules/korri-steam.nix)
+    ];
+  };
   korri-login = import ../modules/korri-login.nix;
   korri-client = import ../modules/korri-client.nix { korri = self; };
   korri-cli = import ../modules/korri-cli.nix { korri = self; };

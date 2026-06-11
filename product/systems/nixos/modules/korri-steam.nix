@@ -1,0 +1,250 @@
+# Korri-owned guest-native ARM64 Steam adapter.
+#
+# The steam-korri package owns generic helper scripts and the FHS capsule. This
+# module owns product policy: Korri state paths, user/session environment,
+# uinput preparation, and the hardened manual launch service for SM8550 guests.
+{ config, lib, pkgs, ... }:
+
+let
+  inherit (lib) mkEnableOption mkIf mkOption types;
+
+  runtime = config.services.korri.runtime;
+  cfg = config.services.korri.steam;
+
+  defaultSteamArgs = [
+    "-steamdeck"
+    "-gamepadui"
+    "-forcedesktopscaling"
+    "1.5"
+    "-noverifyfiles"
+    "-nobootstrapupdate"
+    "-skipinitialbootstrap"
+    "-norepairfiles"
+  ];
+
+  steamUinputPrep = pkgs.writeShellScriptBin "korri-steam-ensure-uinput" ''
+    set -eu
+
+    warn() {
+      echo "korri-steam-ensure-uinput: warning: $*" >&2
+    }
+
+    if [ -c /dev/uinput ]; then
+      ${pkgs.coreutils}/bin/chmod 0660 /dev/uinput 2>/dev/null || true
+      exit 0
+    fi
+
+    if [ -e /dev/uinput ]; then
+      # A stale regular placeholder makes Steam Input's open(2) succeed but
+      # uinput ioctls fail later as "Couldn't configure axes". Only replace
+      # plain files/symlinks; leave unusual mounts alone and report them.
+      if [ -f /dev/uinput ] || [ -L /dev/uinput ]; then
+        ${pkgs.coreutils}/bin/rm -f /dev/uinput 2>/dev/null || {
+          warn "could not remove stale non-character /dev/uinput"
+          exit 0
+        }
+      else
+        warn "existing /dev/uinput is not a character device; leaving it untouched"
+        exit 0
+      fi
+    fi
+
+    devno=""
+    if [ -r /sys/devices/virtual/misc/uinput/dev ]; then
+      devno="$(${pkgs.coreutils}/bin/cat /sys/devices/virtual/misc/uinput/dev 2>/dev/null || true)"
+    fi
+    if [ -z "$devno" ] && [ -r /proc/misc ]; then
+      minor="$(${pkgs.gawk}/bin/awk '$2 == "uinput" { print $1; exit }' /proc/misc 2>/dev/null || true)"
+      if [ -n "$minor" ]; then
+        # uinput is a Linux misc device; misc devices use dynamic major 10.
+        devno="10:$minor"
+      fi
+    fi
+
+    case "$devno" in
+      [0-9]*:[0-9]*) ;;
+      *)
+        warn "kernel did not report a uinput device number"
+        exit 0
+        ;;
+    esac
+
+    major="''${devno%:*}"
+    minor="''${devno#*:}"
+    case "$major:$minor" in
+      *[!0-9:]*|:*|*:)
+        warn "invalid uinput device number: $devno"
+        exit 0
+        ;;
+    esac
+
+    ${pkgs.coreutils}/bin/mknod /dev/uinput c "$major" "$minor" 2>/dev/null || {
+      warn "could not create /dev/uinput c $major:$minor"
+      exit 0
+    }
+    ${pkgs.coreutils}/bin/chmod 0660 /dev/uinput 2>/dev/null || true
+  '';
+
+  steamLauncher = pkgs.writeShellScriptBin "korri-steam-guest" ''
+    set -e
+
+    export HOME="''${HOME:-${runtime.home}}"
+    export USER="''${USER:-${runtime.user}}"
+    export XDG_RUNTIME_DIR="''${XDG_RUNTIME_DIR:-/run/user/${toString runtime.uid}}"
+    export WAYLAND_DISPLAY="''${WAYLAND_DISPLAY:-wayland-1}"
+    export DISPLAY="''${DISPLAY:-:0}"
+    export DBUS_SESSION_BUS_ADDRESS="''${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/${toString runtime.uid}/bus}"
+    export LANG="''${LANG:-C.UTF-8}"
+    if [ -z "''${STEAM_HOME:-}" ]; then export STEAM_HOME=${lib.escapeShellArg cfg.home}; fi
+    if [ -z "''${STEAM_GAMES_ROOT:-}" ]; then export STEAM_GAMES_ROOT=${lib.escapeShellArg cfg.gamesRoot}; fi
+    if [ -z "''${STEAM_DOT:-}" ]; then export STEAM_DOT=${lib.escapeShellArg cfg.dotDir}; fi
+    if [ -z "''${FEX_ROOTFS:-}" ]; then export FEX_ROOTFS=${lib.escapeShellArg cfg.fexRootfs}; fi
+
+    export SDL_JOYSTICK_DISABLE_UDEV="''${SDL_JOYSTICK_DISABLE_UDEV:-1}"
+    export GTK_IM_MODULE="''${GTK_IM_MODULE:-xim}"
+    unset GIO_EXTRA_MODULES
+
+    export LIBGL_DRIVERS_PATH="''${LIBGL_DRIVERS_PATH:-/run/opengl-driver/lib/dri}"
+    export __EGL_VENDOR_LIBRARY_DIRS="''${__EGL_VENDOR_LIBRARY_DIRS:-/run/opengl-driver/share/glvnd/egl_vendor.d}"
+    export LIBVA_DRIVERS_PATH="''${LIBVA_DRIVERS_PATH:-/run/opengl-driver/lib/dri}"
+    export VDPAU_DRIVER_PATH="''${VDPAU_DRIVER_PATH:-/run/opengl-driver/lib/vdpau}"
+
+    ${steamUinputPrep}/bin/korri-steam-ensure-uinput || true
+
+    if [ "$#" -eq 0 ]; then
+      set -- ${lib.escapeShellArgs cfg.defaultArgs}
+    fi
+
+    # buildFHSEnv/bwrap tries to enter the caller's cwd. A root shell or other
+    # unreadable cwd fails before steam-guest-run can cd, so move into Steam's
+    # Korri-owned state dir before entering the capsule.
+    cd "$STEAM_HOME"
+    exec ${cfg.package}/bin/steam-arm64-fhs "$@"
+  '';
+in
+{
+  key = "korri-steam";
+
+  options.services.korri.steam = {
+    enable = mkEnableOption "Korri guest-native ARM64 Steam adapter";
+
+    package = mkOption {
+      type = types.package;
+      default = pkgs.steam-korri;
+      defaultText = lib.literalExpression "pkgs.steam-korri";
+      description = "Package-owned Steam runtime capsule consumed by the Korri guest adapter.";
+    };
+
+    home = mkOption {
+      type = types.str;
+      default = "${runtime.stateRoot}/steam";
+      defaultText = lib.literalExpression ''"${config.services.korri.runtime.stateRoot}/steam"'';
+      description = "Mutable guest Steam home supplied to package-owned helpers.";
+    };
+
+    gamesRoot = mkOption {
+      type = types.str;
+      default = "${runtime.gamesRoot}/steam";
+      defaultText = lib.literalExpression ''"${config.services.korri.runtime.gamesRoot}/steam"'';
+      description = "Mutable guest Steam library root supplied to package-owned helpers.";
+    };
+
+    dotDir = mkOption {
+      type = types.str;
+      default = "${runtime.home}/.steam";
+      defaultText = lib.literalExpression ''"${config.services.korri.runtime.home}/.steam"'';
+      description = "Mutable guest Steam dot-directory used by bootstrap and seed helpers.";
+    };
+
+    fexRootfs = mkOption {
+      type = types.str;
+      default = "${runtime.stateRoot}/steam/fex-rootfs";
+      defaultText = lib.literalExpression ''"${config.services.korri.runtime.stateRoot}/steam/fex-rootfs"'';
+      description = "Guest-provided FEX rootfs path for x86 Steam Runtime helpers and games.";
+    };
+
+    defaultArgs = mkOption {
+      type = types.listOf types.str;
+      default = defaultSteamArgs;
+      description = "Default Steam client arguments supplied by the Korri guest adapter.";
+    };
+  };
+
+  config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = pkgs.stdenv.hostPlatform.system == "aarch64-linux";
+        message = "services.korri.steam requires the aarch64 Steam run capsule; x86 package support is helper/check-only.";
+      }
+      {
+        assertion = cfg.package ? rocknixSteamHasRunCapsule && cfg.package.rocknixSteamHasRunCapsule;
+        message = "services.korri.steam.package must provide the aarch64 Steam run capsule; helper-only x86 packages cannot satisfy the guest launcher.";
+      }
+      {
+        assertion = lib.hasPrefix runtime.stateRoot cfg.home;
+        message = "services.korri.steam.home must live under services.korri.runtime.stateRoot.";
+      }
+      {
+        assertion = lib.hasPrefix runtime.gamesRoot cfg.gamesRoot;
+        message = "services.korri.steam.gamesRoot must live under services.korri.runtime.gamesRoot.";
+      }
+      {
+        assertion = lib.hasPrefix runtime.home cfg.dotDir;
+        message = "services.korri.steam.dotDir must live under services.korri.runtime.home.";
+      }
+      {
+        assertion = lib.hasPrefix cfg.home cfg.fexRootfs;
+        message = "services.korri.steam.fexRootfs must live under services.korri.steam.home.";
+      }
+    ];
+
+    environment.systemPackages = [
+      cfg.package
+      steamLauncher
+      steamUinputPrep
+    ];
+
+    systemd.tmpfiles.rules = [
+      "d ${cfg.home} 0750 ${runtime.user} ${runtime.group} -"
+      "d ${cfg.gamesRoot} 0750 ${runtime.user} ${runtime.group} -"
+      "d ${cfg.dotDir} 0700 ${runtime.user} ${runtime.group} -"
+      "d ${cfg.fexRootfs} 0750 ${runtime.user} ${runtime.group} -"
+    ];
+
+    systemd.services.korri-steam-uinput = {
+      description = "Prepare the guest uinput device for Steam Input";
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${steamUinputPrep}/bin/korri-steam-ensure-uinput";
+        RemainAfterExit = true;
+      };
+    };
+
+    systemd.services.korri-steam = {
+      description = "Launch Korri guest-native Steam";
+      after = [ "korri-steam-uinput.service" ];
+      wants = [ "korri-steam-uinput.service" ];
+      environment = {
+        HOME = runtime.home;
+        USER = runtime.user;
+        XDG_RUNTIME_DIR = "/run/user/${toString runtime.uid}";
+        WAYLAND_DISPLAY = "wayland-1";
+        DISPLAY = ":0";
+        DBUS_SESSION_BUS_ADDRESS = "unix:path=/run/user/${toString runtime.uid}/bus";
+        STEAM_HOME = cfg.home;
+        STEAM_GAMES_ROOT = cfg.gamesRoot;
+        STEAM_DOT = cfg.dotDir;
+        FEX_ROOTFS = cfg.fexRootfs;
+      };
+      serviceConfig = {
+        Type = "simple";
+        User = runtime.user;
+        Group = runtime.group;
+        WorkingDirectory = cfg.home;
+        LimitNOFILE = 524288;
+        ExecStart = "${steamLauncher}/bin/korri-steam-guest";
+      };
+    };
+  };
+}

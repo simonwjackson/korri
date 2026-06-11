@@ -97,6 +97,10 @@ pkgs.lib.optionalAttrs isX86Linux {
     inherit pkgs;
     korriDaemonModule = self.nixosModules.korri-daemon;
   };
+  korri-steam-module = import ../../../../tools/testing/nix/korri-steam-module-check.nix {
+    inherit pkgs;
+    korriSteamModule = self.nixosModules.korri-steam;
+  };
   korri-removable-media = import ../../../../tools/testing/nix/korri-removable-media-check.nix {
     inherit pkgs;
     korriRemovableMediaModule = self.nixosModules.korri-removable-media;
@@ -343,6 +347,10 @@ pkgs.lib.optionalAttrs isX86Linux {
       }
       {
         name = "korri-daemon-module";
+        owner = "module";
+      }
+      {
+        name = "korri-steam-module";
         owner = "module";
       }
       {
