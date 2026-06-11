@@ -54,7 +54,20 @@ export interface ConfigGraphController {
 }
 
 export interface ConfigGraphControllerOptions {
-  readonly roots: readonly KorriConfigGraphRoot[]
+  /** Static roots, frozen for the controller's lifetime. */
+  readonly roots?: readonly KorriConfigGraphRoot[]
+  /**
+   * Dynamic root resolution, called at every (re)build so roots added or
+   * removed at runtime (removable media) join or leave the graph. Exactly one
+   * of `roots` / `resolveRoots` must be provided.
+   */
+  readonly resolveRoots?: () => readonly KorriConfigGraphRoot[]
+  /**
+   * Directory whose child entries signal a root-set change (one symlink per
+   * dynamically mounted config root). Watched non-recursively; any child
+   * add/remove debounces into a coarse re-resolve + rebuild.
+   */
+  readonly rootsSignalDir?: string
   /** Wire filesystem watchers (default true). Tests drive `rebuild` directly. */
   readonly watch?: boolean
   readonly debounceMs?: number
@@ -110,7 +123,8 @@ function loadSnapshot(
 export function createConfigGraphController(
   options: ConfigGraphControllerOptions,
 ): ConfigGraphController {
-  const roots = options.roots
+  const staticRoots = options.roots
+  const resolveRoots = options.resolveRoots ?? (() => staticRoots ?? [])
   const debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS
   const shouldWatch = options.watch ?? true
 
@@ -122,7 +136,9 @@ export function createConfigGraphController(
   let lastGood: readonly PlayableLibraryEntry[] = []
 
   const listeners = new Set<(event: ConfigGraphEvent) => void>()
-  const watchers: FSWatcher[] = []
+  const contentWatchers: FSWatcher[] = []
+  let watchedRoots: readonly string[] = []
+  let signalWatcher: FSWatcher | undefined
   let debounce: ReturnType<typeof setTimeout> | undefined
   let pendingPath: string | undefined
 
@@ -147,6 +163,7 @@ export function createConfigGraphController(
 
   const attemptBuild = async (
     name: ConfigGraphEventName,
+    roots: readonly KorriConfigGraphRoot[],
     changedPath?: string,
   ): Promise<ConfigGraphEvent> => {
     attempt += 1
@@ -184,7 +201,28 @@ export function createConfigGraphController(
     }
   }
 
-  const startWatchers = (): void => {
+  const scheduleRebuild = (filename: string | undefined): void => {
+    pendingPath = filename
+    if (debounce) clearTimeout(debounce)
+    debounce = setTimeout(() => {
+      debounce = undefined
+      const changedPath = pendingPath
+      pendingPath = undefined
+      void rebuild(changedPath).catch(error =>
+        logger.warn({ err: error }, "config-graph: rebuild failed"),
+      )
+    }, debounceMs)
+  }
+
+  const closeContentWatchers = (): void => {
+    for (const watcher of contentWatchers) watcher.close()
+    contentWatchers.length = 0
+    watchedRoots = []
+  }
+
+  const startContentWatchers = (
+    roots: readonly KorriConfigGraphRoot[],
+  ): void => {
     for (const { root } of roots) {
       try {
         const watcher = watch(
@@ -192,22 +230,13 @@ export function createConfigGraphController(
           { persistent: false, recursive: true },
           (_eventType, filename) => {
             if (filename && !isConfigFragment(filename.toString())) return
-            pendingPath = filename ? filename.toString() : undefined
-            if (debounce) clearTimeout(debounce)
-            debounce = setTimeout(() => {
-              debounce = undefined
-              const changedPath = pendingPath
-              pendingPath = undefined
-              void rebuild(changedPath).catch(error =>
-                logger.warn({ err: error }, "config-graph: rebuild failed"),
-              )
-            }, debounceMs)
+            scheduleRebuild(filename ? filename.toString() : undefined)
           },
         )
         watcher.on("error", error =>
           logger.warn({ err: error, root }, "config-graph: watcher failed"),
         )
-        watchers.push(watcher)
+        contentWatchers.push(watcher)
       } catch (error) {
         logger.warn(
           { err: error, root },
@@ -215,16 +244,61 @@ export function createConfigGraphController(
         )
       }
     }
+    watchedRoots = roots.map(({ root }) => root)
   }
 
+  const startSignalWatcher = (): void => {
+    const signalDir = options.rootsSignalDir
+    if (signalDir === undefined) return
+    try {
+      // Non-recursive child watch: recursive fs.watch does not descend into
+      // mountpoints reliably on Linux, so we never watch *through* a mount —
+      // only the set of mounts published into the signal dir.
+      const watcher = watch(
+        signalDir,
+        { persistent: false, recursive: false },
+        (_eventType, filename) => {
+          scheduleRebuild(filename ? filename.toString() : undefined)
+        },
+      )
+      watcher.on("error", error =>
+        logger.warn(
+          { err: error, signalDir },
+          "config-graph: roots signal watcher failed",
+        ),
+      )
+      signalWatcher = watcher
+    } catch (error) {
+      logger.warn(
+        { err: error, signalDir },
+        "config-graph: failed to watch roots signal dir; serving static roots",
+      )
+    }
+  }
+
+  const sameRootSet = (roots: readonly KorriConfigGraphRoot[]): boolean =>
+    roots.length === watchedRoots.length &&
+    roots.every(({ root }, index) => watchedRoots[index] === root)
+
   const initialize = async (): Promise<ConfigGraphEvent> => {
-    const event = await attemptBuild("config.ready")
-    if (shouldWatch) startWatchers()
+    const roots = resolveRoots()
+    const event = await attemptBuild("config.ready", roots)
+    if (shouldWatch) {
+      startContentWatchers(roots)
+      startSignalWatcher()
+    }
     return event
   }
 
   const rebuild = async (changedPath?: string): Promise<ConfigGraphEvent> => {
-    const event = await attemptBuild("config.changed", changedPath)
+    // Coarse re-resolve: every rebuild re-reads the root set so dynamically
+    // mounted roots join (or leave) the graph regardless of which watcher
+    // fired. Content watchers are re-pointed only when the set changed.
+    const roots = resolveRoots()
+    const repoint = shouldWatch && !sameRootSet(roots)
+    if (repoint) closeContentWatchers()
+    const event = await attemptBuild("config.changed", roots, changedPath)
+    if (repoint) startContentWatchers(roots)
     publish(event)
     return event
   }
@@ -244,8 +318,9 @@ export function createConfigGraphController(
   const stop = async (): Promise<void> => {
     if (debounce) clearTimeout(debounce)
     debounce = undefined
-    for (const watcher of watchers) watcher.close()
-    watchers.length = 0
+    closeContentWatchers()
+    signalWatcher?.close()
+    signalWatcher = undefined
     listeners.clear()
   }
 
