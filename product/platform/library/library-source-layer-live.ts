@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync, realpathSync } from "node:fs"
+import { join } from "node:path"
 import { korriDataPath } from "@platform/config/xdg-paths"
 import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import type { PlayableLibraryEntry } from "@platform/library/playable-library"
@@ -12,6 +14,7 @@ import type { LibrarySource as PlainLibrarySource } from "./library-source"
 import {
   type KorriConfigGraphRoot,
   openKorriConfigGraph,
+  REMOVABLE_CONFIG_COLLECTIONS,
 } from "./proseql/library-db"
 import {
   createLibraryRepository,
@@ -138,7 +141,7 @@ function withLibraryRepository<T>(
 ): Effect.Effect<T, LibraryError> {
   return Effect.scoped(
     Effect.gen(function* () {
-      const roots = configGraphRootsFromEnv()
+      const roots = resolveAllConfigGraphRoots()
       logger.info(
         {
           sourceKind: "proseql",
@@ -213,6 +216,128 @@ export function configGraphRootsFromEnv(
   } catch {
     return []
   }
+}
+
+export interface ResolveConfigGraphRootsOptions {
+  /**
+   * Mount table consulted to validate signal-dir entries against live
+   * mounts. Defaults to `/proc/mounts`; tests point it at a real file they
+   * seeded.
+   */
+  readonly mountsTablePath?: string
+}
+
+const DEFAULT_MOUNTS_TABLE_PATH = "/proc/mounts"
+
+/** Decode the octal escapes (`\040` …) /proc/mounts uses in path fields. */
+function decodeMountField(field: string): string {
+  return field.replace(/\\([0-7]{3})/g, (_match, octal: string) =>
+    String.fromCharCode(Number.parseInt(octal, 8)),
+  )
+}
+
+function readMountTable(path: string): ReadonlyMap<string, string> | undefined {
+  try {
+    const table = new Map<string, string>()
+    for (const line of readFileSync(path, "utf8").split("\n")) {
+      const fields = line.split(" ")
+      const target = fields[1]
+      const mountOptions = fields[3]
+      if (target === undefined || mountOptions === undefined) continue
+      table.set(decodeMountField(target), mountOptions)
+    }
+    return table
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Resolve dynamic removable-media config roots from the `config-roots.d`
+ * signal directory (`KORRI_CONFIG_ROOTS_DIR`).
+ *
+ * Entries are symlinks named after the mounted partition; they resolve in
+ * sorted name order so multiple simultaneous cards overlay deterministically
+ * (later-sorted card wins). Each entry's resolved target must be a live
+ * mount in the mount table — stale or injected symlinks that are not mounts
+ * are ignored, and an unreadable mount table contributes no dynamic roots
+ * (fail-safe). Resolved roots are optional (they may vanish), carry a RW/RO
+ * `writable` classification for the deferred authoring seam, and are
+ * restricted to data collections so a card cannot override
+ * execution-privileged config.
+ */
+export function removableConfigGraphRootsFromSignalDir(
+  env: NodeJS.ProcessEnv = process.env,
+  options: ResolveConfigGraphRootsOptions = {},
+): readonly KorriConfigGraphRoot[] {
+  const signalDir = optionalEnv(env.KORRI_CONFIG_ROOTS_DIR)
+  if (signalDir === undefined) return []
+
+  let entries: readonly string[]
+  try {
+    entries = [...readdirSync(signalDir)].sort()
+  } catch {
+    // Missing signal dir means no removable media support on this host.
+    return []
+  }
+  if (entries.length === 0) return []
+
+  const mounts = readMountTable(
+    options.mountsTablePath ?? DEFAULT_MOUNTS_TABLE_PATH,
+  )
+  if (mounts === undefined) {
+    logger.warn(
+      { signalDir },
+      "library-source-layer-live: mount table unreadable; ignoring removable config roots",
+    )
+    return []
+  }
+
+  const roots: KorriConfigGraphRoot[] = []
+  for (const entry of entries) {
+    let target: string
+    try {
+      target = realpathSync(join(signalDir, entry))
+    } catch {
+      logger.warn(
+        { signalDir, entry },
+        "library-source-layer-live: skipping dangling config-root entry",
+      )
+      continue
+    }
+    const mountOptions = mounts.get(target)
+    if (mountOptions === undefined) {
+      logger.warn(
+        { signalDir, entry, target },
+        "library-source-layer-live: skipping config-root entry that is not a live mount",
+      )
+      continue
+    }
+    roots.push({
+      root: target,
+      id: `removable-${entry}`,
+      optional: true,
+      writable: mountOptions === "rw" || mountOptions.startsWith("rw,"),
+      collections: REMOVABLE_CONFIG_COLLECTIONS,
+    })
+  }
+  return roots
+}
+
+/**
+ * The full effective ordered config-graph root list: static base roots
+ * (`KORRI_CONFIG_ROOTS`: platform defaults → local root → operator roots)
+ * followed by dynamic removable roots (card-wins within their allowed
+ * collections).
+ */
+export function resolveAllConfigGraphRoots(
+  env: NodeJS.ProcessEnv = process.env,
+  options: ResolveConfigGraphRootsOptions = {},
+): readonly KorriConfigGraphRoot[] {
+  return [
+    ...configGraphRootsFromEnv(env),
+    ...removableConfigGraphRootsFromSignalDir(env, options),
+  ]
 }
 
 function toLibraryError(error: unknown): LibraryError {

@@ -80,6 +80,10 @@ let
       (check "${name}: sessiond inherits the config-graph roots" (
         (sessiondEnv.KORRI_CONFIG_ROOTS or null) == (daemonEnv.KORRI_CONFIG_ROOTS or "")
       ))
+      (check "${name}: korrid and sessiond share the dynamic config-roots dir" (
+        (daemonEnv.KORRI_CONFIG_ROOTS_DIR or null) == "/run/korri/config-roots.d"
+        && (sessiondEnv.KORRI_CONFIG_ROOTS_DIR or null) == (daemonEnv.KORRI_CONFIG_ROOTS_DIR or null)
+      ))
       (check "${name}: compositor/sessiond/inputd/korrid are user services" (
         userServices ? "korri-compositor" && userServices ? korri-sessiond && userServices ? korri-inputd && userServices ? korrid
       ))

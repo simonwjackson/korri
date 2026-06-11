@@ -51,6 +51,18 @@ let
     ++ [ configLocalRoot ]
     ++ korriConfig.roots;
   configRootsEnv = lib.concatStringsSep ":" effectiveConfigRoots;
+  # Dynamic config roots (removable media) signal through config-roots.d.
+  # Defaults to the removable-media module's signal dir when that module is
+  # imported and enabled, so platforms opting into removable media get the
+  # korrid watcher wiring without restating the path.
+  removableMediaCfg = lib.attrByPath [ "services" "korri" "removableMedia" ] null config;
+  effectiveConfigRootsDir =
+    if korriConfig.rootsDir != null then
+      korriConfig.rootsDir
+    else if removableMediaCfg != null && (removableMediaCfg.enable or false) then
+      removableMediaCfg.configRootsDir
+    else
+      null;
   desktopAppCommand = pkgs.writeShellScript "korri-sunshine-desktop-app" ''
     set -eu
     echo "korri-sunshine-desktop-app: keeping existing compositor session alive for Moonlight" >&2
@@ -181,6 +193,11 @@ let
     # artifact sidecars, not as a config read path.
     KORRI_CONFIG_ROOTS = configRootsEnv;
     KORRI_LIBRARY_ROOT = cfg.library.root;
+  }
+  // optionalAttrs (effectiveConfigRootsDir != null) {
+    KORRI_CONFIG_ROOTS_DIR = effectiveConfigRootsDir;
+  }
+  // {
     KORRI_LAUNCH_ARTIFACTS_DIR = launchArtifactsDir;
     KORRI_GAME_STREAM_RUNTIME_DIR = runtimeDir;
   }
@@ -216,6 +233,19 @@ in
         generated platform-defaults root and the durable local root. Later
         roots win on overlay collisions. Roots are directories only; Korri
         discovers opt-in `korri.<ext>` / `*.korri.<ext>` fragments inside them.
+      '';
+    };
+
+    rootsDir = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "/run/korri/config-roots.d";
+      description = ''
+        Signal directory of dynamic config-root symlinks (`config-roots.d`).
+        korrid watches it and re-resolves the config graph when entries
+        appear or vanish. Defaults to the removable-media module's
+        `configRootsDir` when `services.korri.removableMedia.enable` is set;
+        null (without removable media) disables dynamic roots.
       '';
     };
 

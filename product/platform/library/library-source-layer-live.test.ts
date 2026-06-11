@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { realpathSync } from "node:fs"
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Cause, Effect, Exit } from "effect"
@@ -13,13 +14,19 @@ import {
   supportedPatchFormatForPath,
   UnsupportedPatchExtension,
 } from "./config/errors"
+import { createConfigGraphController } from "./config-graph-controller"
 import { LibrarySource } from "./library-services"
-import { LibrarySourceLayerLive } from "./library-source-layer-live"
+import {
+  LibrarySourceLayerLive,
+  resolveAllConfigGraphRoots,
+} from "./library-source-layer-live"
+import { REMOVABLE_CONFIG_COLLECTIONS } from "./proseql/library-db"
 
 const originalEnv = {
   desktopProfile: process.env.KORRI_DESKTOP_PROFILE,
   librarySource: process.env.KORRI_LIBRARY_SOURCE,
   configRoots: process.env.KORRI_CONFIG_ROOTS,
+  configRootsDir: process.env.KORRI_CONFIG_ROOTS_DIR,
   home: process.env.HOME,
   xdgDataHome: process.env.XDG_DATA_HOME,
   rocknixGamelistRoots: process.env.KORRI_ROCKNIX_GAMELIST_ROOTS,
@@ -84,9 +91,7 @@ describe("LibrarySourceLayerLive", () => {
 
   it("reads ordered config roots and lets later roots win", async () => {
     const baseRoot = await seedConfigGraph("Base Echo")
-    const overlayRoot = await mkdtemp(
-      join(tmpdir(), "korri-config-overlay-"),
-    )
+    const overlayRoot = await mkdtemp(join(tmpdir(), "korri-config-overlay-"))
     cleanups.push(() => rm(overlayRoot, { recursive: true, force: true }))
     await writeConfigFragment(overlayRoot, "Overlay Echo")
     delete process.env.KORRI_DESKTOP_PROFILE
@@ -295,6 +300,7 @@ function restoreEnv(): void {
   setOptionalEnv("KORRI_DESKTOP_PROFILE", originalEnv.desktopProfile)
   setOptionalEnv("KORRI_LIBRARY_SOURCE", originalEnv.librarySource)
   setOptionalEnv("KORRI_CONFIG_ROOTS", originalEnv.configRoots)
+  setOptionalEnv("KORRI_CONFIG_ROOTS_DIR", originalEnv.configRootsDir)
   setOptionalEnv("HOME", originalEnv.home)
   setOptionalEnv("XDG_DATA_HOME", originalEnv.xdgDataHome)
   setOptionalEnv(
@@ -316,3 +322,192 @@ function setOptionalEnv(key: string, value: string | undefined): void {
 
   process.env[key] = value
 }
+
+async function makeTempDir(prefix: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), prefix))
+  cleanups.push(() => rm(dir, { recursive: true, force: true }))
+  return dir
+}
+
+interface RemovableRig {
+  readonly signalDir: string
+  readonly mountsTablePath: string
+  readonly staticRoot: string
+}
+
+async function seedRemovableRig(options: {
+  readonly mounts: ReadonlyArray<{
+    readonly entry: string
+    readonly target: string
+    readonly options?: string
+    readonly inMountTable?: boolean
+  }>
+}): Promise<RemovableRig> {
+  const staticRoot = await seedConfigGraph("Static Echo")
+  const signalDir = await makeTempDir("korri-config-roots-d-")
+  const tableDir = await makeTempDir("korri-mounts-table-")
+  const mountsTablePath = join(tableDir, "mounts")
+
+  const lines: string[] = []
+  for (const mount of options.mounts) {
+    await symlink(mount.target, join(signalDir, mount.entry))
+    if (mount.inMountTable ?? true) {
+      lines.push(
+        `/dev/${mount.entry} ${realpathSync(mount.target)} vfat ${mount.options ?? "rw,noexec,nosuid"} 0 0`,
+      )
+    }
+  }
+  await writeFile(mountsTablePath, `${lines.join("\n")}\n`, "utf8")
+
+  process.env.KORRI_LIBRARY_SOURCE = "proseql"
+  process.env.KORRI_CONFIG_ROOTS = staticRoot
+  process.env.KORRI_CONFIG_ROOTS_DIR = signalDir
+
+  return { signalDir, mountsTablePath, staticRoot }
+}
+
+describe("resolveAllConfigGraphRoots", () => {
+  it("appends sorted signal-dir mounts after static roots with removable classification", async () => {
+    const mountB = await makeTempDir("korri-removable-b-")
+    const mountA = await makeTempDir("korri-removable-a-")
+    const rig = await seedRemovableRig({
+      mounts: [
+        { entry: "sdb1", target: mountB, options: "ro,noexec,nosuid" },
+        { entry: "mmcblk1p1", target: mountA },
+      ],
+    })
+
+    const roots = resolveAllConfigGraphRoots(process.env, {
+      mountsTablePath: rig.mountsTablePath,
+    })
+
+    expect(roots.map(root => root.root)).toEqual([
+      rig.staticRoot,
+      realpathSync(mountA),
+      realpathSync(mountB),
+    ])
+    const [staticRoot, removableA, removableB] = roots
+    expect(staticRoot?.collections).toBeUndefined()
+    expect(removableA).toMatchObject({
+      id: "removable-mmcblk1p1",
+      optional: true,
+      writable: true,
+      collections: REMOVABLE_CONFIG_COLLECTIONS,
+    })
+    expect(removableB).toMatchObject({
+      id: "removable-sdb1",
+      optional: true,
+      writable: false,
+      collections: REMOVABLE_CONFIG_COLLECTIONS,
+    })
+  })
+
+  it("returns only static roots when KORRI_CONFIG_ROOTS_DIR is unset", async () => {
+    const staticRoot = await seedConfigGraph("Static Echo")
+    process.env.KORRI_CONFIG_ROOTS = staticRoot
+    delete process.env.KORRI_CONFIG_ROOTS_DIR
+
+    const roots = resolveAllConfigGraphRoots(process.env)
+
+    expect(roots.map(root => root.root)).toEqual([staticRoot])
+  })
+
+  it("skips dangling symlinks and entries that are not live mounts", async () => {
+    const liveMount = await makeTempDir("korri-removable-live-")
+    const staleDir = await makeTempDir("korri-removable-stale-")
+    const rig = await seedRemovableRig({
+      mounts: [
+        { entry: "sda1", target: liveMount },
+        {
+          entry: "sdb1",
+          target: join(staleDir, "vanished"),
+          inMountTable: false,
+        },
+        { entry: "sdc1", target: staleDir, inMountTable: false },
+      ],
+    })
+
+    const roots = resolveAllConfigGraphRoots(process.env, {
+      mountsTablePath: rig.mountsTablePath,
+    })
+
+    expect(roots.map(root => root.root)).toEqual([
+      rig.staticRoot,
+      realpathSync(liveMount),
+    ])
+  })
+
+  it("contributes no dynamic roots when the mounts table is unreadable (fail-safe)", async () => {
+    const mount = await makeTempDir("korri-removable-x-")
+    const rig = await seedRemovableRig({
+      mounts: [{ entry: "sda1", target: mount }],
+    })
+
+    const roots = resolveAllConfigGraphRoots(process.env, {
+      mountsTablePath: join(rig.mountsTablePath, "missing"),
+    })
+
+    expect(roots.map(root => root.root)).toEqual([rig.staticRoot])
+  })
+
+  it("feeds the config-graph controller end to end: a new signal-dir mount joins the live graph", async () => {
+    const mount = await makeTempDir("korri-removable-card-")
+    await writeFile(
+      join(mount, "card.korri.yaml"),
+      [
+        "library:",
+        "  card-game:",
+        "    title: Card Echo",
+        "    releases:",
+        "      - id: r1",
+        "        system: fixture",
+        "        target: fixtures/card.rom",
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+    const rig = await seedRemovableRig({ mounts: [] })
+    await writeFile(
+      rig.mountsTablePath,
+      `/dev/sda1 ${realpathSync(mount)} vfat rw,noexec 0 0\n`,
+      "utf8",
+    )
+
+    const controller = createConfigGraphController({
+      resolveRoots: () =>
+        resolveAllConfigGraphRoots(process.env, {
+          mountsTablePath: rig.mountsTablePath,
+        }),
+      rootsSignalDir: rig.signalDir,
+      watch: true,
+      debounceMs: 25,
+    })
+    const ready = await controller.initialize()
+    expect(ready.files).toEqual(["local.korri.yaml"])
+
+    const changed = new Promise<readonly string[] | undefined>(
+      (resolve, reject) => {
+        const timeout = setTimeout(
+          () => reject(new Error("timed out waiting for config.changed")),
+          2000,
+        )
+        controller.subscribe(event => {
+          if (event.name !== "config.changed") return
+          clearTimeout(timeout)
+          resolve(event.files)
+        })
+      },
+    )
+
+    await symlink(mount, join(rig.signalDir, "sda1"))
+    const files = await changed
+
+    expect(files).toEqual(["card.korri.yaml", "local.korri.yaml"])
+    const snapshot = await controller.snapshot()
+    expect(snapshot.map(entry => entry.id).sort()).toEqual([
+      "card-game",
+      "game-1",
+    ])
+    await controller.stop()
+  })
+})

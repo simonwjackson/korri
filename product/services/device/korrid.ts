@@ -5,7 +5,7 @@ import {
   type ConfigGraphController,
   createConfigGraphController,
 } from "@platform/library/config-graph-controller"
-import { configGraphRootsFromEnv } from "@platform/library/library-source-layer-live"
+import { resolveAllConfigGraphRoots } from "@platform/library/library-source-layer-live"
 import { logger } from "@platform/logger"
 import { createHonoApp } from "@product/apps/portal/api/hono-app"
 import { serverRpcHandler } from "@product/apps/portal/api/server/rpc-server"
@@ -64,8 +64,13 @@ export function getKorridConfig(
 
 export function createKorrid(options: CreateKorridOptions = {}): KorridHandle {
   const config = options.config ?? getKorridConfig()
+  // Roots re-resolve on every rebuild so removable media published into the
+  // config-roots.d signal dir join (and leave) the live graph on hotplug.
   const configGraphController: ConfigGraphController =
-    createConfigGraphController({ roots: configGraphRootsFromEnv() })
+    createConfigGraphController({
+      resolveRoots: () => resolveAllConfigGraphRoots(),
+      rootsSignalDir: process.env.KORRI_CONFIG_ROOTS_DIR,
+    })
   const app = createHonoApp({
     rpcHandler: serverRpcHandler,
     rpcSurface: "server",

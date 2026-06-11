@@ -72,7 +72,11 @@ function expectNoEvent(
 describe("createConfigGraphController", () => {
   it("starts valid with generation 1 and an empty-baseline snapshot path", async () => {
     await withRoot(async root => {
-      await writeFile(join(root, "local.korri.yaml"), validFragment("Solo"), "utf8")
+      await writeFile(
+        join(root, "local.korri.yaml"),
+        validFragment("Solo"),
+        "utf8",
+      )
       const controller = createConfigGraphController({
         roots: [{ root }],
         watch: false,
@@ -120,7 +124,11 @@ describe("createConfigGraphController", () => {
 
   it("advances generation and emits config.changed on a valid rebuild", async () => {
     await withRoot(async root => {
-      await writeFile(join(root, "local.korri.yaml"), validFragment("First"), "utf8")
+      await writeFile(
+        join(root, "local.korri.yaml"),
+        validFragment("First"),
+        "utf8",
+      )
       const controller = createConfigGraphController({
         roots: [{ root }],
         watch: false,
@@ -130,7 +138,11 @@ describe("createConfigGraphController", () => {
       const events: string[] = []
       controller.subscribe(event => events.push(event.name))
 
-      await writeFile(join(root, "local.korri.yaml"), validFragment("Second"), "utf8")
+      await writeFile(
+        join(root, "local.korri.yaml"),
+        validFragment("Second"),
+        "utf8",
+      )
       const changed = await controller.rebuild("local.korri.yaml")
 
       expect(changed.name).toBe("config.changed")
@@ -146,7 +158,11 @@ describe("createConfigGraphController", () => {
 
   it("retains last-known-good and emits config.invalid on a bad rebuild", async () => {
     await withRoot(async root => {
-      await writeFile(join(root, "local.korri.yaml"), validFragment("Good"), "utf8")
+      await writeFile(
+        join(root, "local.korri.yaml"),
+        validFragment("Good"),
+        "utf8",
+      )
       const controller = createConfigGraphController({
         roots: [{ root }],
         watch: false,
@@ -186,7 +202,11 @@ describe("createConfigGraphController", () => {
   it("re-resolves roots and includes a newly added root's fragments on rebuild", async () => {
     await withRoot(async rootA => {
       await withRoot(async rootB => {
-        await writeFile(join(rootA, "a.korri.yaml"), validFragment("Alpha", "alpha"), "utf8")
+        await writeFile(
+          join(rootA, "a.korri.yaml"),
+          validFragment("Alpha", "alpha"),
+          "utf8",
+        )
         let roots = [{ root: rootA }]
         const controller = createConfigGraphController({
           resolveRoots: () => roots,
@@ -195,14 +215,21 @@ describe("createConfigGraphController", () => {
         const ready = await controller.initialize()
         expect(ready.files).toEqual(["a.korri.yaml"])
 
-        await writeFile(join(rootB, "b.korri.yaml"), validFragment("Beta", "beta"), "utf8")
+        await writeFile(
+          join(rootB, "b.korri.yaml"),
+          validFragment("Beta", "beta"),
+          "utf8",
+        )
         roots = [{ root: rootA }, { root: rootB }]
         const changed = await controller.rebuild()
 
         expect(changed.name).toBe("config.changed")
         expect(changed.files).toEqual(["a.korri.yaml", "b.korri.yaml"])
         const snapshot = await controller.snapshot()
-        expect(snapshot.map(entry => entry.id).sort()).toEqual(["alpha", "beta"])
+        expect(snapshot.map(entry => entry.id).sort()).toEqual([
+          "alpha",
+          "beta",
+        ])
         await controller.stop()
       })
     })
@@ -211,8 +238,16 @@ describe("createConfigGraphController", () => {
   it("re-resolves roots and drops a removed root's fragments on rebuild", async () => {
     await withRoot(async rootA => {
       await withRoot(async rootB => {
-        await writeFile(join(rootA, "a.korri.yaml"), validFragment("Alpha", "alpha"), "utf8")
-        await writeFile(join(rootB, "b.korri.yaml"), validFragment("Beta", "beta"), "utf8")
+        await writeFile(
+          join(rootA, "a.korri.yaml"),
+          validFragment("Alpha", "alpha"),
+          "utf8",
+        )
+        await writeFile(
+          join(rootB, "b.korri.yaml"),
+          validFragment("Beta", "beta"),
+          "utf8",
+        )
         let roots = [{ root: rootA }, { root: rootB }]
         const controller = createConfigGraphController({
           resolveRoots: () => roots,
@@ -234,7 +269,11 @@ describe("createConfigGraphController", () => {
 
   it("still rebuilds when the resolved root set is unchanged", async () => {
     await withRoot(async root => {
-      await writeFile(join(root, "local.korri.yaml"), validFragment("Same"), "utf8")
+      await writeFile(
+        join(root, "local.korri.yaml"),
+        validFragment("Same"),
+        "utf8",
+      )
       const controller = createConfigGraphController({
         resolveRoots: () => [{ root }],
         watch: false,
@@ -250,7 +289,11 @@ describe("createConfigGraphController", () => {
   it("keeps last-known-good when a re-resolved root makes the graph invalid", async () => {
     await withRoot(async rootA => {
       await withRoot(async rootB => {
-        await writeFile(join(rootA, "a.korri.yaml"), validFragment("Good", "alpha"), "utf8")
+        await writeFile(
+          join(rootA, "a.korri.yaml"),
+          validFragment("Good", "alpha"),
+          "utf8",
+        )
         await writeFile(
           join(rootB, "bad.korri.yaml"),
           ["library:", "  alpha:", "    releases: not-a-list", ""].join("\n"),
@@ -277,7 +320,11 @@ describe("createConfigGraphController", () => {
 
   it("serves static roots when the roots signal dir is missing", async () => {
     await withRoot(async root => {
-      await writeFile(join(root, "local.korri.yaml"), validFragment("Solo"), "utf8")
+      await writeFile(
+        join(root, "local.korri.yaml"),
+        validFragment("Solo"),
+        "utf8",
+      )
       const controller = createConfigGraphController({
         resolveRoots: () => [{ root }],
         rootsSignalDir: join(root, "missing", "config-roots.d"),
@@ -285,7 +332,9 @@ describe("createConfigGraphController", () => {
       })
       const ready = await controller.initialize()
       expect(ready.status).toBe("valid")
-      expect((await controller.snapshot()).map(entry => entry.id)).toEqual(["solo"])
+      expect((await controller.snapshot()).map(entry => entry.id)).toEqual([
+        "solo",
+      ])
       await controller.stop()
     })
   })
@@ -294,8 +343,16 @@ describe("createConfigGraphController", () => {
     await withRoot(async rootA => {
       await withRoot(async rootB => {
         await withRoot(async signalDir => {
-          await writeFile(join(rootA, "a.korri.yaml"), validFragment("Alpha", "alpha"), "utf8")
-          await writeFile(join(rootB, "b.korri.yaml"), validFragment("Beta", "beta"), "utf8")
+          await writeFile(
+            join(rootA, "a.korri.yaml"),
+            validFragment("Alpha", "alpha"),
+            "utf8",
+          )
+          await writeFile(
+            join(rootB, "b.korri.yaml"),
+            validFragment("Beta", "beta"),
+            "utf8",
+          )
           let roots = [{ root: rootA }]
           const controller = createConfigGraphController({
             resolveRoots: () => roots,
@@ -306,25 +363,46 @@ describe("createConfigGraphController", () => {
           await controller.initialize()
 
           // Positive control: content changes in the active root rebuild.
-          const fromA = waitForEvent(controller, event => event.name === "config.changed")
-          await writeFile(join(rootA, "a.korri.yaml"), validFragment("Alpha2", "alpha"), "utf8")
+          const fromA = waitForEvent(
+            controller,
+            event => event.name === "config.changed",
+          )
+          await writeFile(
+            join(rootA, "a.korri.yaml"),
+            validFragment("Alpha2", "alpha"),
+            "utf8",
+          )
           await fromA
 
           // Signal a root-set change: rootB replaces rootA.
           roots = [{ root: rootB }]
-          const reResolved = waitForEvent(controller, event => event.name === "config.changed")
+          const reResolved = waitForEvent(
+            controller,
+            event => event.name === "config.changed",
+          )
           await symlink(rootB, join(signalDir, "sdb1"))
           const event = await reResolved
           expect(event.files).toEqual(["b.korri.yaml"])
 
           // The dropped root is no longer watched...
           const silence = expectNoEvent(controller, 200)
-          await writeFile(join(rootA, "a.korri.yaml"), validFragment("Alpha3", "alpha"), "utf8")
+          await writeFile(
+            join(rootA, "a.korri.yaml"),
+            validFragment("Alpha3", "alpha"),
+            "utf8",
+          )
           await silence
 
           // ...while the new root is.
-          const fromB = waitForEvent(controller, event => event.name === "config.changed")
-          await writeFile(join(rootB, "b.korri.yaml"), validFragment("Beta2", "beta"), "utf8")
+          const fromB = waitForEvent(
+            controller,
+            event => event.name === "config.changed",
+          )
+          await writeFile(
+            join(rootB, "b.korri.yaml"),
+            validFragment("Beta2", "beta"),
+            "utf8",
+          )
           await fromB
 
           await controller.stop()

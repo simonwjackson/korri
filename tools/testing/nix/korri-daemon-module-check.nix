@@ -59,6 +59,23 @@ let
     services.korri.daemon.enable = true;
     services.korri.config.roots = [ "/run/media/korri/cards/sd1" ];
   };
+  withExplicitRootsDir = evaluateWith {
+    services.korri.daemon.enable = true;
+    services.korri.config.rootsDir = "/run/korri/config-roots.d";
+  };
+  withRemovableMedia =
+    (evalConfig {
+      system = hostSystem;
+      modules = [
+        korriDaemonModule
+        ../../../product/systems/nixos/modules/korri-removable-media.nix
+        baseModule
+        {
+          services.korri.daemon.enable = true;
+          services.korri.removableMedia.enable = true;
+        }
+      ];
+    }).config;
   systemMode = evaluateWith {
     services.korri.daemon = {
       enable = true;
@@ -160,6 +177,15 @@ let
     ))
     (check "extra operator config roots are appended last" (
       lib.hasSuffix ":/run/media/korri/cards/sd1" (env withExtraConfigRoots).KORRI_CONFIG_ROOTS
+    ))
+    (check "dynamic config-roots dir is not exported by default" (
+      !((env defaultUserMode) ? KORRI_CONFIG_ROOTS_DIR)
+    ))
+    (check "explicit config rootsDir exports KORRI_CONFIG_ROOTS_DIR" (
+      (env withExplicitRootsDir).KORRI_CONFIG_ROOTS_DIR == "/run/korri/config-roots.d"
+    ))
+    (check "removable-media enablement defaults the dynamic roots dir" (
+      (env withRemovableMedia).KORRI_CONFIG_ROOTS_DIR == "/run/korri/config-roots.d"
     ))
     (check "system-mode daemon owns config-root tmpfiles and hardening" (
       lib.elem "d /var/lib/korri/config 0700 korri korri -" systemMode.systemd.tmpfiles.rules

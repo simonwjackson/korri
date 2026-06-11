@@ -14,8 +14,9 @@
  */
 
 import { randomUUID } from "node:crypto"
+import { realpathSync } from "node:fs"
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
-import { join } from "node:path"
+import { join, sep } from "node:path"
 import { LocalPlayableId } from "@platform/library/config/playable-id"
 import { AppPayload, AppRecord } from "@platform/library/config/records/app"
 import {
@@ -74,13 +75,14 @@ import {
   SystemRecord,
 } from "@platform/library/config/records/system"
 import { UserPayload, UserRecord } from "@platform/library/config/records/user"
+import { logger } from "@platform/logger"
 import {
   createPersistentEffectDatabase,
   type DocumentGraphTransform,
   type FormatCodec,
   hjsonCodec,
-  jsonCodec,
   json5Codec,
+  jsonCodec,
   jsoncCodec,
   jsonlCodec,
   proseCodec,
@@ -107,7 +109,33 @@ export interface KorriConfigGraphRoot {
   readonly root: string
   readonly optional?: boolean
   readonly id?: string
+  /**
+   * RW/RO classification of the backing mount, carried for the deferred
+   * authoring write-target seam (removable-media slice D). Read paths ignore
+   * it.
+   */
+  readonly writable?: boolean
+  /**
+   * Collections this root may contribute. Omitted (or `"all"`) means the
+   * root is trusted for every collection. Restricted roots (removable media)
+   * are confined to the listed collections: disallowed sections are dropped
+   * pre-merge and fragments that symlink-escape the root are skipped, so a
+   * card cannot override execution-privileged config.
+   */
+  readonly collections?: "all" | readonly string[]
 }
+
+/**
+ * Data collections an unmarked removable config root may contribute. The
+ * execution-privileged collections (`host`, `apps`, `runtimes`, `profiles`,
+ * …) stay frozen to trusted static roots; full-power cards require the
+ * (future) trusted-marker escalation.
+ */
+export const REMOVABLE_CONFIG_COLLECTIONS: readonly string[] = [
+  "library",
+  "collections",
+  "users",
+]
 
 export interface KorriConfigGraphOptions {
   readonly roots: readonly KorriConfigGraphRoot[]
@@ -268,42 +296,124 @@ export function makeKorriLibraryDbConfig(root: string) {
 export type KorriLibraryDbConfig = ReturnType<typeof makeKorriLibraryDbConfig>
 
 /**
- * Pure per-fragment transform for the read-only config graph. ProseQL decodes a
+ * Drop document sections a restricted root is not permitted to contribute.
+ * Enforced pre-merge (per fragment) so ProseQL's ordered "later root wins"
+ * deep-merge invariant is untouched — the disallowed keys simply never enter
+ * the merge.
+ */
+function dropDisallowedCollections(
+  document: unknown,
+  allowed: ReadonlySet<string>,
+  context: { readonly rootId: string; readonly path: string },
+): unknown {
+  if (!isRecord(document)) return document
+  const kept: Record<string, unknown> = {}
+  const dropped: string[] = []
+  for (const [key, value] of Object.entries(document)) {
+    if (allowed.has(key)) {
+      kept[key] = value
+    } else {
+      dropped.push(key)
+    }
+  }
+  if (dropped.length > 0) {
+    logger.warn(
+      { rootId: context.rootId, path: context.path, dropped },
+      "config-graph: dropping collections not permitted for restricted root",
+    )
+  }
+  return kept
+}
+
+/**
+ * Per-fragment transform for the read-only config graph. ProseQL decodes a
  * fragment by extension, then hands the decoded document here before deep-merge.
  * Korri applies the same strict canonical validation and plain-`host` wrapping
  * it applies to the writable YAML codec, so every supported format shares
  * identical semantics and `host` is wrapped exactly once (the graph codecs are
  * the plain base codecs, not the host-wrapping YAML shim).
+ *
+ * Restricted roots additionally get collection-scoped trust enforcement: a
+ * fragment whose resolved real path escapes the root (symlink) is skipped
+ * (loaded as an empty document, not fatal), and sections outside the root's
+ * allowed collections are dropped before validation and merge.
  */
-const korriConfigGraphTransform: DocumentGraphTransform = (
-  document,
-  _context,
-) => {
-  try {
-    const validated = validateReadableDocumentStrictly(document)
-    return Result.succeed(wrapPlainHostForProseql(validated))
-  } catch (error) {
-    return Result.fail(error instanceof Error ? error : new Error(String(error)))
+function makeKorriConfigGraphTransform(
+  restrictedByRootId: ReadonlyMap<string, ReadonlySet<string>>,
+  rootPathByRootId: ReadonlyMap<string, string>,
+): DocumentGraphTransform {
+  const realRootCache = new Map<string, string>()
+  const realRootOf = (rootId: string): string | undefined => {
+    const cached = realRootCache.get(rootId)
+    if (cached !== undefined) return cached
+    const rootPath = rootPathByRootId.get(rootId)
+    if (rootPath === undefined) return undefined
+    const real = realpathSync(rootPath)
+    realRootCache.set(rootId, real)
+    return real
+  }
+
+  return (document, context) => {
+    try {
+      let doc = document
+      const allowed = restrictedByRootId.get(context.rootId)
+      if (allowed !== undefined) {
+        const realRoot = realRootOf(context.rootId)
+        const realFragment = realpathSync(context.path)
+        const escapes =
+          realRoot === undefined ||
+          (realFragment !== realRoot &&
+            !realFragment.startsWith(realRoot + sep))
+        if (escapes) {
+          logger.warn(
+            { rootId: context.rootId, path: context.path },
+            "config-graph: fragment symlink-escapes its restricted root; skipping",
+          )
+          return Result.succeed({})
+        }
+        doc = dropDisallowedCollections(doc, allowed, context)
+      }
+      const validated = validateReadableDocumentStrictly(doc)
+      return Result.succeed(wrapPlainHostForProseql(validated))
+    } catch (error) {
+      return Result.fail(
+        error instanceof Error ? error : new Error(String(error)),
+      )
+    }
   }
 }
 
 export function makeKorriConfigGraphConfig(
   roots: readonly KorriConfigGraphRoot[],
 ) {
+  const rootConfigs = roots.map((root, index) => ({
+    id: root.id ?? `root-${index}`,
+    root: root.root,
+    optional: root.optional ?? true,
+  }))
+  const restrictedByRootId = new Map<string, ReadonlySet<string>>()
+  const rootPathByRootId = new Map<string, string>()
+  roots.forEach((root, index) => {
+    const id = rootConfigs[index]?.id
+    if (id === undefined) return
+    rootPathByRootId.set(id, root.root)
+    if (root.collections !== undefined && root.collections !== "all") {
+      restrictedByRootId.set(id, new Set(root.collections))
+    }
+  })
   return {
     collections: collectionsSchema,
     sources: [
       {
         id: "config" as const,
         kind: "documentGraph" as const,
-        roots: roots.map((root, index) => ({
-          id: root.id ?? `root-${index}`,
-          root: root.root,
-          optional: root.optional ?? true,
-        })),
+        roots: rootConfigs,
         include: KORRI_CONFIG_INCLUDE_GLOBS,
         collections: "all" as const,
-        transform: korriConfigGraphTransform,
+        transform: makeKorriConfigGraphTransform(
+          restrictedByRootId,
+          rootPathByRootId,
+        ),
       },
     ],
   } as const

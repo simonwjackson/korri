@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Effect } from "effect"
@@ -9,6 +9,7 @@ import {
   LOCAL_HOST_KEY,
   makeKorriConfigGraphConfig,
   openKorriConfigGraph,
+  REMOVABLE_CONFIG_COLLECTIONS,
 } from "./library-db"
 import { createLibraryRepository } from "./library-repository"
 
@@ -23,7 +24,9 @@ async function withTempRoots<T>(
   try {
     return await fn(roots)
   } finally {
-    await Promise.all(roots.map(root => rm(root, { recursive: true, force: true })))
+    await Promise.all(
+      roots.map(root => rm(root, { recursive: true, force: true })),
+    )
   }
 }
 
@@ -337,6 +340,180 @@ describe("openKorriConfigGraph — invalid config", () => {
         Effect.scoped(openKorriConfigGraph({ roots: [{ root: root! }] })),
       )
       expect(exit._tag).toBe("Failure")
+    })
+  })
+})
+
+describe("openKorriConfigGraph — collection-scoped trust", () => {
+  const trustedHostFragment = [
+    "host:",
+    "  moonlight:",
+    "    command: trusted-moonlight",
+    "",
+  ].join("\n")
+
+  const cardFragment = [
+    "host:",
+    "  moonlight:",
+    "    command: evil-moonlight",
+    "library:",
+    "  zelda:",
+    "    title: Card Zelda",
+    "    releases:",
+    "      - id: snes",
+    "        system: snes",
+    "        target: snes/zelda.sfc",
+    "",
+  ].join("\n")
+
+  it("drops execution-privileged sections from a restricted root but keeps its data", async () => {
+    await withTempRoots(2, async ([trusted, card]) => {
+      await writeFile(join(trusted!, "korri.yaml"), trustedHostFragment, "utf8")
+      await writeFile(join(card!, "card.korri.yaml"), cardFragment, "utf8")
+
+      const loaded = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriConfigGraph({
+              roots: [
+                { root: trusted! },
+                { root: card!, collections: REMOVABLE_CONFIG_COLLECTIONS },
+              ],
+            })
+            return {
+              host: yield* db.host.findById(LOCAL_HOST_KEY),
+              item: yield* db.library.findById("zelda"),
+            }
+          }),
+        ),
+      )
+
+      // The card's host override is NOT applied; the trusted static value
+      // stays in effect. Its data collections still load (card-wins library).
+      expect(loaded.host.moonlight?.command).toBe("trusted-moonlight")
+      expect(loaded.item.title).toBe("Card Zelda")
+    })
+  })
+
+  it("lets a restricted root win on data collections (card-wins)", async () => {
+    await withTempRoots(2, async ([base, card]) => {
+      await writeFile(
+        join(base!, "korri.yaml"),
+        [
+          "library:",
+          "  zelda:",
+          "    title: Base Zelda",
+          "    releases:",
+          "      - id: snes",
+          "        system: snes",
+          "        target: snes/zelda.sfc",
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+      await writeFile(
+        join(card!, "card.korri.yaml"),
+        [
+          "library:",
+          "  zelda:",
+          "    title: Card Zelda",
+          "    releases:",
+          "      - id: snes",
+          "        system: snes",
+          "        target: snes/zelda-card.sfc",
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+
+      const item = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriConfigGraph({
+              roots: [
+                { root: base! },
+                { root: card!, collections: REMOVABLE_CONFIG_COLLECTIONS },
+              ],
+            })
+            return yield* db.library.findById("zelda")
+          }),
+        ),
+      )
+
+      expect(item.title).toBe("Card Zelda")
+    })
+  })
+
+  it("does not load fragments that symlink-escape a restricted root", async () => {
+    await withTempRoots(3, async ([trusted, card, outside]) => {
+      await writeFile(join(trusted!, "korri.yaml"), trustedHostFragment, "utf8")
+      await writeFile(
+        join(outside!, "escape.korri.yaml"),
+        [
+          "library:",
+          "  smuggled:",
+          "    title: Smuggled",
+          "    releases:",
+          "      - id: snes",
+          "        system: snes",
+          "        target: snes/smuggled.sfc",
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+      await symlink(
+        join(outside!, "escape.korri.yaml"),
+        join(card!, "escape.korri.yaml"),
+      )
+      await writeFile(
+        join(card!, "card.korri.yaml"),
+        [
+          "library:",
+          "  zelda:",
+          "    title: Card Zelda",
+          "    releases:",
+          "      - id: snes",
+          "        system: snes",
+          "        target: snes/zelda.sfc",
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+
+      const items = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriConfigGraph({
+              roots: [
+                { root: trusted! },
+                { root: card!, collections: REMOVABLE_CONFIG_COLLECTIONS },
+              ],
+            })
+            return yield* Effect.promise(() => db.library.query().runPromise)
+          }),
+        ),
+      )
+
+      // The escaping fragment is skipped (not loaded, not fatal); the rest
+      // of the card still applies.
+      expect(items.map(item => item.id).sort()).toEqual(["zelda"])
+    })
+  })
+
+  it("keeps unrestricted roots contributing every collection", async () => {
+    await withTempRoots(1, async ([root]) => {
+      await writeFile(join(root!, "korri.yaml"), trustedHostFragment, "utf8")
+      const host = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriConfigGraph({
+              roots: [{ root: root!, collections: "all" }],
+            })
+            return yield* db.host.findById(LOCAL_HOST_KEY)
+          }),
+        ),
+      )
+      expect(host.moonlight?.command).toBe("trusted-moonlight")
     })
   })
 })

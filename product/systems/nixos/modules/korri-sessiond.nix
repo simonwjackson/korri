@@ -25,7 +25,8 @@ let
   daemonLibrarySource = lib.attrByPath [ "services" "korri" "daemon" "library" "source" ] null config;
   # Inherit the rendered ordered config-graph roots from the korrid unit so
   # foreground session surfaces read the same effective config as the daemon.
-  daemonConfigRoots =
+  daemonKorridEnv =
+    name:
     let
       userVal = lib.attrByPath [
         "systemd"
@@ -33,17 +34,22 @@ let
         "services"
         "korrid"
         "environment"
-        "KORRI_CONFIG_ROOTS"
+        name
       ] null config;
       sysVal = lib.attrByPath [
         "systemd"
         "services"
         "korrid"
         "environment"
-        "KORRI_CONFIG_ROOTS"
+        name
       ] null config;
     in
     if userVal != null then userVal else sysVal;
+  daemonConfigRoots = daemonKorridEnv "KORRI_CONFIG_ROOTS";
+  # Mirror the dynamic config-roots signal dir as well, so sessiond resolves
+  # the same effective roots as korrid after removable-media hotplug instead
+  # of staying on stale static roots.
+  daemonConfigRootsDir = daemonKorridEnv "KORRI_CONFIG_ROOTS_DIR";
 
   kioskEnabled = lib.attrByPath [ "services" "korri" "compositor" "kiosk" "enable" ] false config;
   streamingEnabled = lib.attrByPath [ "services" "korri" "daemon" "streaming" "enable" ] false config;
@@ -207,6 +213,9 @@ in
       }
       // (lib.optionalAttrs (daemonConfigRoots != null) {
         KORRI_CONFIG_ROOTS = daemonConfigRoots;
+      })
+      // (lib.optionalAttrs (daemonConfigRootsDir != null) {
+        KORRI_CONFIG_ROOTS_DIR = daemonConfigRootsDir;
       })
       // (lib.optionalAttrs (daemonLibraryRoot != null) {
         KORRI_LIBRARY_ROOT = daemonLibraryRoot;

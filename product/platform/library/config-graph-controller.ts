@@ -3,10 +3,10 @@ import { readdir } from "node:fs/promises"
 import { join, relative } from "node:path"
 import { logger } from "@platform/logger"
 import { Effect } from "effect"
+import type { PlayableLibraryEntry } from "./playable-library"
 import type { KorriConfigGraphRoot } from "./proseql/library-db"
 import { openKorriConfigGraph } from "./proseql/library-db"
 import { createLibraryRepository } from "./proseql/library-repository"
-import type { PlayableLibraryEntry } from "./playable-library"
 
 export type ConfigGraphEventName =
   | "config.ready"
