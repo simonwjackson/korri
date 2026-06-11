@@ -451,6 +451,7 @@ in
       sway
       config.services.korri.compositor.gamescope.package
       substratePackages.cemu
+      pkgs.ryubing
       # `pkgs.moonlight-embedded` is globally replaced by
       # `moonlight-embedded-korri` via the Korri package overlay, matching the
       # `pkgs.gamescope` -> `gamescope-korri` substitution above.
@@ -568,5 +569,6 @@ in
 
   environment.systemPackages = [
     substratePackages.cemu
+    pkgs.ryubing
   ];
 }

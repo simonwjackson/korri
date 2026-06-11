@@ -57,6 +57,8 @@ let
       compositorUnit = userServices.korri-compositor or { };
       kioskEnvUnit = userServices."korri-kiosk-session-environment" or { };
       compositor = cfg.services.korri.compositor;
+      hasPackagePname = pname: packages:
+        builtins.any (pkg: (pkg.pname or "") == pname) packages;
     in [
       (check "${name}: eval has no assertion failures" (builtins.filter (a: !a.assertion) cfg.assertions == [ ]))
       (check "${name}: runtime user is korri and non-root" (runtime.user == "korri" && (korriUser.uid or 0) != 0 && (korriUser.isNormalUser or false)))
@@ -145,6 +147,10 @@ let
       (check "${name}: Moonlight product launches require InputPlumber" (
         (sessiondEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null) == "1"
         && (daemonEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null) == "1"
+      ))
+      (check "${name}: Switch emulator is installed and available to the compositor" (
+        hasPackagePname "ryubing" cfg.environment.systemPackages
+        && hasPackagePname "ryubing" compositor.path
       ))
       (check "${name}: inputd websocket is loopback" (inputdEnv.KORRI_INPUT_BRIDGE_HOSTNAME or null == "127.0.0.1"))
       (check "${name}: root main-space audio graph is disabled for Korri rootless kiosk" (
