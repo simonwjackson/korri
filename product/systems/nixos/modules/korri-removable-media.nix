@@ -349,6 +349,16 @@ in
       ACTION=="remove", SUBSYSTEM=="block", KERNEL=="sd*[0-9]", ENV{ID_BUS}=="usb", TAG+="systemd", ENV{SYSTEMD_WANTS}+="korri-removable-media-unmount@%k.service"
     '';
 
+    # The foreground-session supervisor spawns games under ProtectSystem=strict;
+    # children inherit its read-only view. Mounted cards must stay writable for
+    # launched apps (emulator save data lives on the card next to the content —
+    # validated on bandai 2026-06-11: Ryujinx aborted in LibHac save-indexer
+    # commit with EROFS until mediaRoot joined sessiond's ReadWritePaths).
+    systemd.user.services.korri-sessiond =
+      lib.mkIf (config.services.korri.sessiond.enable or false) {
+        serviceConfig.ReadWritePaths = [ cfg.mediaRoot ];
+      };
+
     systemd.tmpfiles.rules = [
       "d ${cfg.mediaRoot} 0755 ${runtime.user} ${runtime.group} -"
       # Root-owned signal dir: the runtime user (korrid) can list and resolve

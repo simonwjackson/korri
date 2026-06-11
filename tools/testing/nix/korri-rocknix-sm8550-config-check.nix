@@ -261,6 +261,13 @@ let
         && (removableMedia.requiredSystemMounts or [ ]) == [ "/" ]
         && !(lib.hasInfix ''ID_BUS}=="usb"'' cfg.services.udev.extraRules)
       ))
+      (check "${name}: sessiond can write mounted removable media" (
+        # Games spawn under sessiond's ProtectSystem=strict sandbox; emulator
+        # save data lives on the card, so mediaRoot must be in ReadWritePaths
+        # (bandai 2026-06-11: LibHac save-indexer EROFS abort without it).
+        builtins.elem (removableMedia.mediaRoot or "")
+          (((userServices.korri-sessiond or { }).serviceConfig or { }).ReadWritePaths or [ ])
+      ))
       (check "${name}: launcher artifacts use root setup path" (runtime.launchArtifactsDir == "/run/korri/launch-artifacts"))
     ];
 
