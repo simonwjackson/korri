@@ -319,12 +319,12 @@ in
   # Swappable game/content cards are operator media, not durable internal
   # guest storage; the shared removable-media module mounts each visible
   # SD-card filesystem partition by kernel instance and exposes it as a
-  # card-wins config root. The guest's durable system disk (UFS sda) backs
-  # the /storage bind, so the runtime deny-list must derive it before any
-  # card mounts (fail-safe).
+  # card-wins config root at the fixed cross-device path
+  # /run/media/korri/<media-id>. The guest's durable system disk (UFS sda)
+  # backs the /storage bind, so the runtime deny-list must derive it before
+  # any card mounts (fail-safe).
   services.korri.removableMedia = {
     enable = true;
-    mediaRoot = "/run/media/korri/cards";
     contentRoot = "/var/lib/korri/content/removable/cards";
     match = {
       mmc = true;
@@ -332,10 +332,6 @@ in
     };
     requiredSystemMounts = [ "/storage" ];
   };
-
-  systemd.tmpfiles.rules = [
-    "d /run/media/korri 0755 ${runtime.user} ${runtime.group} -"
-  ];
 
   # The guest sees DRM and input devices that already exist in the
   # ROCKNIX-hosted device namespace. Host-bound nodes do not emit a fresh

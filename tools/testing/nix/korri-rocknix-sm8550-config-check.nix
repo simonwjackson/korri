@@ -212,11 +212,14 @@ let
         && lib.hasInfix ''KERNEL=="mmcblk*p*"'' cfg.services.udev.extraRules
         && lib.hasInfix ''ENV{SYSTEMD_WANTS}+="korri-removable-media-mount@%k.service"'' cfg.services.udev.extraRules
         && lib.hasInfix ''ENV{SYSTEMD_WANTS}+="korri-removable-media-unmount@%k.service"'' cfg.services.udev.extraRules
-        && (removableMountUnit.environment.KORRI_REMOVABLE_MEDIA_ROOT or null) == "/run/media/korri/cards"
+        # The media root is the fixed cross-device contract: card fragments
+        # reference their own content by absolute path, so every Korri
+        # device must mount media at the same prefix.
+        && (removableMountUnit.environment.KORRI_REMOVABLE_MEDIA_ROOT or null) == "/run/media/korri"
         && (removableMountUnit.environment.KORRI_REMOVABLE_CONTENT_ROOT or null) == "/var/lib/korri/content/removable/cards"
-        && (removableUnmountUnit.environment.KORRI_REMOVABLE_MEDIA_ROOT or null) == "/run/media/korri/cards"
-        && builtins.elem "d /run/media/korri/cards 0755 korri korri -" cfg.systemd.tmpfiles.rules
-        && builtins.elem "L+ /var/lib/korri/content/removable/cards - - - - /run/media/korri/cards" cfg.systemd.tmpfiles.rules
+        && (removableUnmountUnit.environment.KORRI_REMOVABLE_MEDIA_ROOT or null) == "/run/media/korri"
+        && builtins.elem "d /run/media/korri 0755 korri korri -" cfg.systemd.tmpfiles.rules
+        && builtins.elem "L+ /var/lib/korri/content/removable/cards - - - - /run/media/korri" cfg.systemd.tmpfiles.rules
         && builtins.elem "multi-user.target" (removableColdplugUnit.wantedBy or [ ])
         && lib.hasInfix "korri-removable-media-coldplug" (removableColdplugUnit.serviceConfig.ExecStart or "")
       ))

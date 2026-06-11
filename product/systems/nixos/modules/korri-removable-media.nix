@@ -229,12 +229,20 @@ in
 
     mediaRoot = mkOption {
       type = types.str;
+      readOnly = true;
       default = "/run/media/korri";
       description = ''
         Directory that removable filesystem partitions are mounted under,
         one mountpoint per media id (the partition's filesystem UUID), so
         the same media lands on the same path regardless of slot or
         insertion order. Media without a filesystem UUID is refused.
+
+        Read-only by design: card config fragments reference their own
+        content by absolute path, and those paths are resolved on whatever
+        Korri device the media is inserted into — the mount prefix is a
+        cross-device contract, not a per-platform preference. Platform
+        hardware posture belongs in `match`, `requiredSystemMounts`, and
+        `fsTypes`.
       '';
     };
 
@@ -251,11 +259,14 @@ in
 
     configRootsDir = mkOption {
       type = types.str;
+      readOnly = true;
       default = "/run/korri/config-roots.d";
       description = ''
         Stable signal directory korrid watches for dynamic config roots.
         Mount units add one symlink per mounted volume; unmount removes it.
-        Root-owned so the runtime user cannot inject roots.
+        Root-owned so the runtime user cannot inject roots. Read-only by
+        design: korrid, sessiond, and the daemon module all share this
+        path as one host contract.
       '';
     };
 

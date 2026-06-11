@@ -57,7 +57,7 @@ let
   };
   withExtraConfigRoots = evaluateWith {
     services.korri.daemon.enable = true;
-    services.korri.config.roots = [ "/run/media/korri/cards/sd1" ];
+    services.korri.config.roots = [ "/run/media/korri/0a1b-2c3d" ];
   };
   withExplicitRootsDir = evaluateWith {
     services.korri.daemon.enable = true;
@@ -176,7 +176,7 @@ let
       ) ((userUnit withPlatformDefaults).serviceConfig.ExecStartPre or [ ]))
     ))
     (check "extra operator config roots are appended last" (
-      lib.hasSuffix ":/run/media/korri/cards/sd1" (env withExtraConfigRoots).KORRI_CONFIG_ROOTS
+      lib.hasSuffix ":/run/media/korri/0a1b-2c3d" (env withExtraConfigRoots).KORRI_CONFIG_ROOTS
     ))
     (check "dynamic config-roots dir is not exported by default" (
       !((env defaultUserMode) ? KORRI_CONFIG_ROOTS_DIR)

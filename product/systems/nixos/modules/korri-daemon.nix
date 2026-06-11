@@ -227,7 +227,7 @@ in
     roots = mkOption {
       type = types.listOf types.str;
       default = [ ];
-      example = lib.literalExpression ''[ "/run/media/korri/cards/sd1" ]'';
+      example = lib.literalExpression ''[ "/run/media/korri/0a1b-2c3d" ]'';
       description = ''
         Additional ordered Korri config-graph roots, appended after the
         generated platform-defaults root and the durable local root. Later

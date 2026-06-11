@@ -46,6 +46,16 @@ let
       ];
     }).config;
 
+  defaultOptions =
+    (evalConfig {
+      system = hostSystem;
+      modules = [
+        korriRemovableMediaModule
+        baseModule
+        { services.korri.removableMedia.enable = true; }
+      ];
+    }).options;
+
   defaults = evaluateWith {
     services.korri.removableMedia.enable = true;
   };
@@ -102,6 +112,25 @@ let
     (check "coldplug converges media present at boot" (
       builtins.elem "multi-user.target" ((coldplugUnit defaults).wantedBy or [ ])
       && lib.hasInfix "korri-removable-media-coldplug" ((coldplugUnit defaults).serviceConfig.ExecStart or "")
+    ))
+
+    # The mount prefix and signal dir are fixed cross-device contracts, not
+    # per-platform preferences — card fragments reference their own content
+    # by absolute path, resolved on whatever device the media is inserted
+    # into.
+    (check "mediaRoot and configRootsDir are read-only contracts" (
+      (defaultOptions.services.korri.removableMedia.mediaRoot.readOnly or false)
+      && (defaultOptions.services.korri.removableMedia.configRootsDir.readOnly or false)
+    ))
+    (check "a platform override of mediaRoot is rejected at eval time" (
+      !(builtins.tryEval
+        (evaluateWith {
+          services.korri.removableMedia = {
+            enable = true;
+            mediaRoot = "/custom/media";
+          };
+        }).services.korri.removableMedia.mediaRoot
+      ).success
     ))
 
     # Tmpfiles: media root plus the root-owned signal dir.
