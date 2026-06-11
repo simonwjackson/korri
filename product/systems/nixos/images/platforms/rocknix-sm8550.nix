@@ -321,8 +321,10 @@ in
   # SD-card filesystem partition by kernel instance and exposes it as a
   # card-wins config root at the fixed cross-device path
   # /run/media/korri/<media-id>. The guest's durable system disk (UFS sda)
-  # backs the /storage bind, so the runtime deny-list must derive it before
-  # any card mounts (fail-safe).
+  # backs the guest root itself (`/` is a bind of /dev/sda19; /storage is a
+  # plain directory inside it, not a mount — validated on bandai 2026-06-11),
+  # so the module's default requiredSystemMounts of "/" derives sda into the
+  # runtime deny-list before any card mounts (fail-safe).
   services.korri.removableMedia = {
     enable = true;
     contentRoot = "/var/lib/korri/content/removable/cards";
@@ -330,7 +332,6 @@ in
       mmc = true;
       usb = false;
     };
-    requiredSystemMounts = [ "/storage" ];
   };
 
   # The guest sees DRM and input devices that already exist in the

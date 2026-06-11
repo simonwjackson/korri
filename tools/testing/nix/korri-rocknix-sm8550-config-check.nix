@@ -252,11 +252,13 @@ let
       (check "${name}: removable media excludes the guest system disk and USB transport" (
         # match.usb off: the positive gate only admits mmcblk*p* cards, so
         # sda-class UFS devices never match; the runtime deny-list must
-        # additionally derive the system disk from the /storage bind.
+        # additionally derive the system disk from the guest root, which is
+        # the /dev/sda19 bind (validated on bandai 2026-06-11: /storage is a
+        # plain directory in the guest, not a mount).
         (removableMedia.enable or false)
         && (removableMedia.match.mmc or false)
         && !(removableMedia.match.usb or true)
-        && builtins.elem "/storage" (removableMedia.requiredSystemMounts or [ ])
+        && (removableMedia.requiredSystemMounts or [ ]) == [ "/" ]
         && !(lib.hasInfix ''ID_BUS}=="usb"'' cfg.services.udev.extraRules)
       ))
       (check "${name}: launcher artifacts use root setup path" (runtime.launchArtifactsDir == "/run/korri/launch-artifacts"))
