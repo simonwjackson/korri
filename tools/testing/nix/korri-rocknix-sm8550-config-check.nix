@@ -25,6 +25,8 @@ let
   sm8550PlatformAdapterFreeOfHardwareLiterals =
     !(containsQuotedAssignment "v4l2m2m" sm8550PlatformAdapterSourceFile)
     && !(containsQuotedAssignment "pulseaudio" sm8550PlatformAdapterSourceFile);
+  sm8550PlatformAdapterFreeOfSubstrateSteam =
+    !(lib.hasInfix "substratePackages.steam" (builtins.readFile sm8550PlatformAdapterSourceFile));
 
   checkSystem = name: system:
     let
@@ -41,6 +43,9 @@ let
       removableUnmountUnit = cfg.systemd.services."korri-removable-media-unmount@" or { };
       removableColdplugUnit = cfg.systemd.services.korri-removable-media-coldplug or { };
       removableMedia = cfg.services.korri.removableMedia or { };
+      steam = cfg.services.korri.steam or { };
+      steamUnit = cfg.systemd.services.korri-steam or { };
+      steamUinputUnit = cfg.systemd.services.korri-steam-uinput or { };
       pipewireEnv = (userServices.pipewire or { }).environment or { };
       pipewirePulseEnv = (userServices.pipewire-pulse or { }).environment or { };
       wireplumberEnv = (userServices.wireplumber or { }).environment or { };
@@ -209,6 +214,28 @@ let
         && builtins.elem "multi-user.target" (removableColdplugUnit.wantedBy or [ ])
         && lib.hasInfix "korri-removable-media-coldplug" (removableColdplugUnit.serviceConfig.ExecStart or "")
       ))
+      (check "${name}: Korri Steam owns the SM8550 Steam posture" (
+        (steam.enable or false)
+        && ((steam.package or { }).rocknixSteamHasRunCapsule or false)
+        && (steam.home or null) == "/var/lib/korri/steam"
+        && (steam.gamesRoot or null) == "/var/lib/korri/content/games/steam"
+        && (steam.dotDir or null) == "/home/korri/.steam"
+        && (steam.fexRootfs or null) == "/var/lib/korri/steam/fex-rootfs"
+      ))
+      (check "${name}: Korri Steam launch services are hardened" (
+        cfg.systemd.services ? korri-steam-uinput
+        && cfg.systemd.services ? korri-steam
+        && builtins.elem "multi-user.target" (steamUinputUnit.wantedBy or [ ])
+        && (steamUnit.serviceConfig.User or null) == runtime.user
+        && (steamUnit.serviceConfig.WorkingDirectory or null) == "/var/lib/korri/steam"
+        && (steamUnit.serviceConfig.LimitNOFILE or null) == 524288
+        && (steamUnit.environment.XDG_RUNTIME_DIR or null) == "/run/user/2000"
+      ))
+      (check "${name}: Korri Steam tmpfiles create state under Korri roots" (
+        builtins.elem "d /var/lib/korri/steam 0750 korri korri -" cfg.systemd.tmpfiles.rules
+        && builtins.elem "d /var/lib/korri/content/games/steam 0750 korri korri -" cfg.systemd.tmpfiles.rules
+        && builtins.elem "d /home/korri/.steam 0700 korri korri -" cfg.systemd.tmpfiles.rules
+      ))
       (check "${name}: removable media excludes the guest system disk and USB transport" (
         # match.usb off: the positive gate only admits mmcblk*p* cards, so
         # sda-class UFS devices never match; the runtime deny-list must
@@ -224,6 +251,7 @@ let
 
   checks = [
     (check "SM8550 adapter does not hard-code substrate literals" sm8550PlatformAdapterFreeOfHardwareLiterals)
+    (check "SM8550 adapter does not explicitly install substrate Steam" sm8550PlatformAdapterFreeOfSubstrateSteam)
   ] ++ (checkSystem "Odin 2 Portal" thorSystem) ++ (checkSystem "Sobo" soboSystem);
 
   failures = builtins.filter (candidate: !candidate.assertion) checks;

@@ -272,6 +272,7 @@ in
   imports = [
     nix-on-rocks.nixosModules.rocknix-guest-base
     deviceProfile
+    korri.nixosModules.korri-steam
     ../../modules/korri-removable-media.nix
   ];
 
@@ -367,6 +368,15 @@ in
   # The substrate still supplies the neutral SM8550 audio facts (Pulse API and
   # AYN UCM package), but the product owns where the graph lives.
   services.korri.runtime.extraGroups = [ "audio" "input" "render" "seat" "video" ];
+
+  services.korri.steam = {
+    enable = true;
+    package = pkgs.steam-korri;
+    home = "${runtime.stateRoot}/steam";
+    gamesRoot = "${runtime.gamesRoot}/steam";
+    dotDir = "${runtime.home}/.steam";
+    fexRootfs = "${runtime.stateRoot}/steam/fex-rootfs";
+  };
 
   systemd.services.main-space-pipewire.enable = lib.mkForce false;
   systemd.services.main-space-pipewire-pulse.enable = lib.mkForce false;
@@ -558,6 +568,5 @@ in
 
   environment.systemPackages = [
     substratePackages.cemu
-    substratePackages.steam
   ];
 }
