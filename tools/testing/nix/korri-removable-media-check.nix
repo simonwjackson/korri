@@ -169,7 +169,7 @@ let
     ))
     (check "matcher derives the system-disk deny-list" (
       lib.hasInfix "findmnt" matcherText
-      && lib.hasInfix "PKNAME" matcherText
+      && lib.hasInfix "sysfs_block_root" matcherText
       && lib.hasInfix "deny_disks" matcherText
     ))
     (check "matcher is fail-safe, never fail-open" (

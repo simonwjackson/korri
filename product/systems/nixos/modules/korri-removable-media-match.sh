@@ -34,6 +34,7 @@ match_mmc="${KORRI_REMOVABLE_MATCH_MMC:-1}"
 match_usb="${KORRI_REMOVABLE_MATCH_USB:-0}"
 required_system_mounts="${KORRI_REMOVABLE_REQUIRED_SYSTEM_MOUNTS:-/}"
 skip_block_device_check="${KORRI_REMOVABLE_SKIP_BLOCK_DEVICE_CHECK:-0}"
+sysfs_block_root="${KORRI_REMOVABLE_SYSFS_BLOCK_ROOT:-/sys/class/block}"
 
 name="$(basename "$dev")"
 
@@ -68,17 +69,27 @@ if [ "${#uuid_before}" -gt 64 ]; then
 fi
 
 # Print /dev/<parent disk> for a partition, or the device itself when it has
-# no parent (whole disks, loop devices). Fails when lsblk cannot resolve the
-# device at all.
+# no parent (whole disks, loop devices). Resolved through sysfs
+# (/sys/class/block/<name> -> .../block/<disk>/<partition>) rather than
+# lsblk on the device node: in the nspawn guest, mount sources such as the
+# /storage bind's /dev/sda19 have a sysfs block entry but no device node,
+# and node-based resolution made the fail-safe refuse every mount. Fails
+# when the device has no sysfs block entry at all.
 parent_disk_of() {
-  local device="$1" pkname
-  if ! pkname="$(lsblk -no PKNAME "$device" 2>/dev/null | head -n 1 | tr -d '[:space:]')"; then
+  local device="$1" name real parent
+  name="${device##*/}"
+  if [ ! -e "$sysfs_block_root/$name" ]; then
     return 1
   fi
-  if [ -n "$pkname" ]; then
-    printf '/dev/%s\n' "$pkname"
+  if ! real="$(readlink -f "$sysfs_block_root/$name")"; then
+    return 1
+  fi
+  parent="$(basename "$(dirname "$real")")"
+  if [ "$parent" = "block" ]; then
+    # Whole disk (or virtual device): it is its own parent.
+    printf '/dev/%s\n' "$name"
   else
-    printf '%s\n' "$device"
+    printf '/dev/%s\n' "$parent"
   fi
 }
 

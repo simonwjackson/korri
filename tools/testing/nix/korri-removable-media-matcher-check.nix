@@ -30,18 +30,35 @@ pkgs.runCommand "korri-removable-media-matcher-check"
       failures+=("$1")
     }
 
-    # make_rig <name> <pkname_map> <tran_map> <uuid_map> <mounts> [lsblk_mode] [uuid_flip]
-    #   pkname_map / tran_map / uuid_map: space-separated `dev=value` entries
+    # make_rig <name> <sysfs_map> <tran_map> <uuid_map> <mounts> [uuid_flip]
+    #   sysfs_map: space-separated `dev=parent` entries; builds a fake
+    #     /sys/class/block tree (entry -> devices/block/<parent>/<name>, or
+    #     devices/block/<name> when parent equals the name, i.e. whole disk).
+    #     Devices absent from the map have no sysfs entry (resolution fails).
+    #   tran_map / uuid_map: space-separated `dev=value` entries
     #   mounts: newline-separated `TARGET SOURCE` lines (findmnt -rn output)
-    #   lsblk_mode: ok (default) | fail
     #   uuid_flip: when 1, blkid reports a different UUID on the second call
     make_rig() {
-      local name="$1" pkname_map="$2" tran_map="$3" uuid_map="$4" mounts="$5" lsblk_mode="''${6:-ok}" uuid_flip="''${7:-0}"
+      local name="$1" sysfs_map="$2" tran_map="$3" uuid_map="$4" mounts="$5" uuid_flip="''${6:-0}"
       local dir="$TMPDIR/$name"
       local bin="$dir/bin"
-      mkdir -p "$bin"
+      mkdir -p "$bin" "$dir/class-block"
 
       printf '%s\n' "$mounts" > "$dir/mounts.tab"
+
+      local entry devpath devname parent
+      for entry in $sysfs_map; do
+        devpath="''${entry%%=*}"
+        devname="''${devpath##*/}"
+        parent="''${entry#*=}"
+        if [ "$parent" = "$devname" ]; then
+          mkdir -p "$dir/devices/block/$devname"
+          ln -sfn "$dir/devices/block/$devname" "$dir/class-block/$devname"
+        else
+          mkdir -p "$dir/devices/block/$parent/$devname"
+          ln -sfn "$dir/devices/block/$parent/$devname" "$dir/class-block/$devname"
+        fi
+      done
 
       cat > "$bin/findmnt" <<EOF
     #!${pkgs.bash}/bin/bash
@@ -50,10 +67,6 @@ pkgs.runCommand "korri-removable-media-matcher-check"
 
       cat > "$bin/lsblk" <<EOF
     #!${pkgs.bash}/bin/bash
-    if [ '$lsblk_mode' = 'fail' ]; then
-      echo 'lsblk: rig-forced failure' >&2
-      exit 32
-    fi
     args="\$*"
     device="\''${@: -1}"
     lookup() {
@@ -67,7 +80,6 @@ pkgs.runCommand "korri-removable-media-matcher-check"
       return 0
     }
     case "\$args" in
-      *PKNAME*) lookup '$pkname_map' ;;
       *TRAN*) lookup '$tran_map' ;;
       *) exit 64 ;;
     esac
@@ -106,6 +118,7 @@ pkgs.runCommand "korri-removable-media-matcher-check"
       KORRI_REMOVABLE_MATCH_MMC="$match_mmc" \
       KORRI_REMOVABLE_MATCH_USB="$match_usb" \
       KORRI_REMOVABLE_REQUIRED_SYSTEM_MOUNTS="$required" \
+      KORRI_REMOVABLE_SYSFS_BLOCK_ROOT="$dir/class-block" \
       KORRI_REMOVABLE_SKIP_BLOCK_DEVICE_CHECK="1" \
       ${pkgs.bash}/bin/bash "$matcher" "$dev" > "$dir/stdout.log" 2> "$dir/stderr.log"
       printf '%s\n' "$?" > "$dir/status"
@@ -168,8 +181,10 @@ pkgs.runCommand "korri-removable-media-matcher-check"
 
     scenario_bind_mount_source_suffix() {
       local name=bind-mount-source-suffix dir
-      # Bind mounts report `/dev/sda19[/subdir]`; the deny-list must still
-      # resolve the parent disk (RockNix guest /storage shape).
+      # Bind mounts report `/dev/sda19[/subdir]` and — in the nspawn guest —
+      # the /dev/sda* node does not even exist; only the sysfs block entry
+      # does. The deny-list must still resolve the parent disk from sysfs
+      # (the exact bandai regression that fail-safed all card mounts).
       dir=$(make_rig "$name" \
         "/dev/sda19=sda /dev/mmcblk1p1=mmcblk1" \
         "" \
@@ -246,14 +261,15 @@ pkgs.runCommand "korri-removable-media-matcher-check"
 
     # --- fail-safe aborts -------------------------------------------------------
 
-    scenario_lsblk_failure_aborts() {
-      local name=lsblk-failure-aborts dir
+    scenario_unresolvable_mount_source_aborts() {
+      local name=unresolvable-mount-source-aborts dir
+      # The mount source /dev/sda2 has no sysfs block entry at all — parent
+      # resolution fails and the matcher must abort, never fail open.
       dir=$(make_rig "$name" \
-        "/dev/mmcblk1p1=mmcblk1 /dev/sda2=sda" \
+        "/dev/mmcblk1p1=mmcblk1" \
         "" \
         "/dev/mmcblk1p1=JJJJ-0000" \
-        "/ /dev/sda2" \
-        fail)
+        "/ /dev/sda2")
       run_matcher "$dir" /dev/mmcblk1p1 1 0 "/"
       expect_status "$name" "$dir" 2
       expect_stderr_contains "$name" "$dir" "fail-safe"
@@ -324,7 +340,7 @@ pkgs.runCommand "korri-removable-media-matcher-check"
         "" \
         "/dev/mmcblk1p1=MMMM-3030" \
         "/ /dev/sda2" \
-        ok 1)
+        1)
       run_matcher "$dir" /dev/mmcblk1p1 1 0 "/"
       expect_status "$name" "$dir" 1
       expect_stderr_contains "$name" "$dir" "identity changed"
@@ -339,7 +355,7 @@ pkgs.runCommand "korri-removable-media-matcher-check"
     scenario_internal_nvme_rejected
     scenario_empty_transport_rejected
     scenario_usb_gate_off_rejected
-    scenario_lsblk_failure_aborts
+    scenario_unresolvable_mount_source_aborts
     scenario_empty_deny_list_aborts
     scenario_missing_required_mount_aborts
     scenario_no_uuid_rejected
