@@ -151,15 +151,29 @@ let
     (check "matcher guards device identity (TOCTOU)" (
       lib.hasInfix "UUID" matcherText && lib.hasInfix "identity changed" matcherText
     ))
+    (check "matcher requires a safe filesystem UUID as the media id" (
+      lib.hasInfix "no filesystem UUID" matcherText
+      && lib.hasInfix "unsafe filesystem UUID" matcherText
+    ))
 
     # Mount hardening + config-roots.d signal wiring (module source shape).
     (check "mounts are hardened and fs-type allowlisted" (
       lib.hasInfix "noexec,nosuid,nodev" moduleText
       && lib.hasInfix "not allowlisted" moduleText
     ))
-    (check "mount publishes and unmount removes the config-root symlink" (
-      lib.hasInfix ''ln -sfn "$mountpoint" "$config_roots_dir/$name"'' moduleText
-      && lib.hasInfix ''rm -f "$config_roots_dir/$name"'' moduleText
+    (check "mounts and config roots are named by the media id, not the kernel name" (
+      lib.hasInfix ''mountpoint="$media_root/$media_id"'' moduleText
+      && lib.hasInfix ''ln -sfn "$mountpoint" "$config_roots_dir/$media_id"'' moduleText
+      && lib.hasInfix ''rm -f "$config_roots_dir/$media_id"'' moduleText
+    ))
+    (check "unmount resolves the mountpoint from the surviving mount table" (
+      # On ACTION=remove the device node is gone; the unmount unit must find
+      # the mountpoint via the mount table (findmnt --source), not derive it
+      # from the kernel instance name.
+      lib.hasInfix ''--source "$dev"'' moduleText
+    ))
+    (check "clone collisions are skipped, not aliased" (
+      lib.hasInfix "already mounted from" moduleText
     ))
 
     # Disabled renders nothing.

@@ -21,7 +21,12 @@ set -euo pipefail
 # between the boot stick and a second operator USB stick.
 #
 # Usage: korri-removable-media-match.sh /dev/<partition>
-# stdout on accept: the partition filesystem UUID (may be empty)
+# stdout on accept: the partition filesystem UUID — the media id that names
+# the stable mountpoint and config-root entry. A UUID is required: UUID-less
+# media is rejected (no usable identity, and the TOCTOU guard would be
+# vacuous), and because the UUID originates in attacker-controlled media
+# headers and becomes a path component, anything outside a conservative
+# charset is rejected too.
 # exit 0 = accept, 1 = reject, 2 = fail-safe abort
 
 dev="${1:?usage: korri-removable-media-match.sh /dev/<partition>}"
@@ -49,6 +54,18 @@ fi
 # Capture device identity up front; re-read and compare before accepting so a
 # recycled device node (multi-slot hardware) cannot pass another card's check.
 uuid_before="$(blkid -o value -s UUID "$dev" 2>/dev/null || true)"
+
+if [ -z "$uuid_before" ]; then
+  reject "no filesystem UUID; media identity is required"
+fi
+case "$uuid_before" in
+  .* | *[!A-Za-z0-9._-]*)
+    reject "unsafe filesystem UUID"
+    ;;
+esac
+if [ "${#uuid_before}" -gt 64 ]; then
+  reject "unsafe filesystem UUID (too long)"
+fi
 
 # Print /dev/<parent disk> for a partition, or the device itself when it has
 # no parent (whole disks, loop devices). Fails when lsblk cannot resolve the

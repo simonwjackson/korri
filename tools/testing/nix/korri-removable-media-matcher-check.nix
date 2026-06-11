@@ -285,6 +285,36 @@ pkgs.runCommand "korri-removable-media-matcher-check"
       expect_stderr_contains "$name" "$dir" "required system mount /iso"
     }
 
+    # --- media identity requirement ---------------------------------------------
+
+    scenario_no_uuid_rejected() {
+      local name=no-uuid-rejected dir
+      # Media identity (fs UUID) is required: it names the stable mountpoint
+      # and makes the TOCTOU guard non-vacuous. UUID-less media is refused.
+      dir=$(make_rig "$name" \
+        "/dev/mmcblk1p1=mmcblk1 /dev/sda2=sda" \
+        "" \
+        "" \
+        "/ /dev/sda2")
+      run_matcher "$dir" /dev/mmcblk1p1 1 0 "/"
+      expect_status "$name" "$dir" 1
+      expect_stderr_contains "$name" "$dir" "no filesystem UUID"
+    }
+
+    scenario_malicious_uuid_rejected() {
+      local name=malicious-uuid-rejected dir
+      # The UUID comes from attacker-controlled media headers and becomes a
+      # path component; anything outside the safe charset is refused.
+      dir=$(make_rig "$name" \
+        "/dev/mmcblk1p1=mmcblk1 /dev/sda2=sda" \
+        "" \
+        "/dev/mmcblk1p1=../evil" \
+        "/ /dev/sda2")
+      run_matcher "$dir" /dev/mmcblk1p1 1 0 "/"
+      expect_status "$name" "$dir" 1
+      expect_stderr_contains "$name" "$dir" "unsafe filesystem UUID"
+    }
+
     # --- TOCTOU guard ------------------------------------------------------------
 
     scenario_recycled_device_rejected() {
@@ -312,6 +342,8 @@ pkgs.runCommand "korri-removable-media-matcher-check"
     scenario_lsblk_failure_aborts
     scenario_empty_deny_list_aborts
     scenario_missing_required_mount_aborts
+    scenario_no_uuid_rejected
+    scenario_malicious_uuid_rejected
     scenario_recycled_device_rejected
 
     if [ "''${#failures[@]}" -gt 0 ]; then

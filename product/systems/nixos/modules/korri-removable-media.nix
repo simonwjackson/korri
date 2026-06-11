@@ -50,7 +50,6 @@ let
     dev="/dev/$name"
     media_root="''${KORRI_REMOVABLE_MEDIA_ROOT:-${cfg.mediaRoot}}"
     config_roots_dir="''${KORRI_REMOVABLE_CONFIG_ROOTS_DIR:-${cfg.configRootsDir}}"
-    mountpoint="$media_root/$name"
 
     if [ ! -b "$dev" ]; then
       echo "korri-removable-media-mount: $dev is not a block device; skipping" >&2
@@ -78,11 +77,15 @@ let
     fi
 
     # Two-gate matcher: positive removable gate + runtime system-disk
-    # deny-list. Reject and fail-safe abort both skip the mount.
-    if ! expected_uuid="$(${matcherScript} "$dev")"; then
+    # deny-list. Reject and fail-safe abort both skip the mount. On accept it
+    # prints the sanitized filesystem UUID — the media id that names the
+    # mountpoint and config-root entry, so the same card lands on the same
+    # path regardless of which slot or port it was inserted into.
+    if ! media_id="$(${matcherScript} "$dev")"; then
       echo "korri-removable-media-mount: matcher refused $dev; skipping" >&2
       exit 0
     fi
+    mountpoint="$media_root/$media_id"
 
     uid="$(${pkgs.coreutils}/bin/id -u ${runtime.user})"
     gid="$(${pkgs.coreutils}/bin/id -g ${runtime.user})"
@@ -103,7 +106,16 @@ let
     # Use mountpoint(1) so we only short-circuit when the exact target is a
     # mount, not when a parent directory of the target is mounted (e.g. /run).
     if ${pkgs.util-linux}/bin/mountpoint -q "$mountpoint"; then
-      ${pkgs.coreutils}/bin/ln -sfn "$mountpoint" "$config_roots_dir/$name"
+      # Same media already mounted (idempotent re-trigger): converge the
+      # config-root signal. A *different* device on the same id is a cloned
+      # card; aliasing two physical media on one mountpoint would silently
+      # mix their contents, so the clone is skipped.
+      current_source="$(${pkgs.util-linux}/bin/findmnt -rn -o SOURCE --target "$mountpoint" | ${pkgs.coreutils}/bin/head -n 1)"
+      if [ "$current_source" = "$dev" ]; then
+        ${pkgs.coreutils}/bin/ln -sfn "$mountpoint" "$config_roots_dir/$media_id"
+        exit 0
+      fi
+      echo "korri-removable-media-mount: $mountpoint already mounted from $current_source; skipping clone $dev" >&2
       exit 0
     fi
     # Some container/nspawn layouts pre-bind block-device nodes from the host
@@ -116,7 +128,7 @@ let
     # TOCTOU guard: the device node must still carry the identity the matcher
     # checked immediately before we hand it to mount(8).
     actual_uuid="$(${pkgs.util-linux}/bin/blkid -o value -s UUID "$dev" 2>/dev/null || true)"
-    if [ "$actual_uuid" != "$expected_uuid" ]; then
+    if [ "$actual_uuid" != "$media_id" ]; then
       echo "korri-removable-media-mount: $dev identity changed before mount; skipping" >&2
       exit 0
     fi
@@ -133,26 +145,35 @@ let
     ${pkgs.util-linux}/bin/mount -t "$fs_type" -o "$mount_options" "$dev" "$mountpoint"
 
     # Signal korrid: each mounted volume contributes one card-wins config
-    # root through the stable config-roots.d directory.
-    ${pkgs.coreutils}/bin/ln -sfn "$mountpoint" "$config_roots_dir/$name"
+    # root through the stable config-roots.d directory, named by media id so
+    # the root identity is stable across slots and re-inserts.
+    ${pkgs.coreutils}/bin/ln -sfn "$mountpoint" "$config_roots_dir/$media_id"
   '';
 
   unmountScript = pkgs.writeShellScript "korri-removable-media-unmount" ''
     set -eu
 
     name="$1"
+    dev="/dev/$name"
     media_root="''${KORRI_REMOVABLE_MEDIA_ROOT:-${cfg.mediaRoot}}"
     config_roots_dir="''${KORRI_REMOVABLE_CONFIG_ROOTS_DIR:-${cfg.configRootsDir}}"
-    mountpoint="$media_root/$name"
 
-    # Remove the config-root signal first so korrid converges even when the
-    # card was yanked and the lazy unmount lingers.
-    ${pkgs.coreutils}/bin/rm -f "$config_roots_dir/$name"
-
-    if ${pkgs.util-linux}/bin/mountpoint -q "$mountpoint"; then
-      ${pkgs.util-linux}/bin/umount -l "$mountpoint" || true
-    fi
-    ${pkgs.coreutils}/bin/rmdir "$mountpoint" 2>/dev/null || true
+    # Mountpoints are named by media id, and on ACTION=remove the device
+    # node is already gone (no blkid possible) — but its mount-table entries
+    # survive until unmounted, so resolve the mountpoints from the table.
+    ${pkgs.util-linux}/bin/findmnt -rn -o TARGET --source "$dev" 2>/dev/null \
+      | while IFS= read -r target; do
+          case "$target" in
+            "$media_root"/*) ;;
+            *) continue ;;
+          esac
+          media_id="$(${pkgs.coreutils}/bin/basename "$target")"
+          # Remove the config-root signal first so korrid converges even when
+          # the card was yanked and the lazy unmount lingers.
+          ${pkgs.coreutils}/bin/rm -f "$config_roots_dir/$media_id"
+          ${pkgs.util-linux}/bin/umount -l "$target" || true
+          ${pkgs.coreutils}/bin/rmdir "$target" 2>/dev/null || true
+        done
   '';
 
   coldplugScript = pkgs.writeShellScript "korri-removable-media-coldplug" ''
@@ -192,7 +213,9 @@ in
       default = "/run/media/korri";
       description = ''
         Directory that removable filesystem partitions are mounted under,
-        one mountpoint per kernel partition name.
+        one mountpoint per media id (the partition's filesystem UUID), so
+        the same media lands on the same path regardless of slot or
+        insertion order. Media without a filesystem UUID is refused.
       '';
     };
 
