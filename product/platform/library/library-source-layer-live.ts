@@ -256,9 +256,10 @@ function readMountTable(path: string): ReadonlyMap<string, string> | undefined {
  * Resolve dynamic removable-media config roots from the `config-roots.d`
  * signal directory (`KORRI_CONFIG_ROOTS_DIR`).
  *
- * Entries are symlinks named after the mounted partition; they resolve in
- * sorted name order so multiple simultaneous cards overlay deterministically
- * (later-sorted card wins). Each entry's resolved target must be a live
+ * Entries are symlinks named after the partition's filesystem UUID (the
+ * media id); they resolve in sorted name order so multiple simultaneous
+ * cards overlay deterministically (later-sorted card wins) and keep the
+ * same identity across slots and re-inserts. Each entry's resolved target must be a live
  * mount in the mount table — stale or injected symlinks that are not mounts
  * are ignored, and an unreadable mount table contributes no dynamic roots
  * (fail-safe). Resolved roots are optional (they may vanish), carry a RW/RO

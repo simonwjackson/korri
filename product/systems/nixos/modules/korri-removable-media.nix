@@ -115,9 +115,19 @@ let
         ${pkgs.coreutils}/bin/ln -sfn "$mountpoint" "$config_roots_dir/$media_id"
         exit 0
       fi
+      if [ -z "$current_source" ]; then
+        # The mount vanished between the mountpoint(1) check and findmnt
+        # (card yanked mid-trigger). Do nothing; the remove event converges.
+        echo "korri-removable-media-mount: $mountpoint disappeared while checking; skipping" >&2
+        exit 0
+      fi
       echo "korri-removable-media-mount: $mountpoint already mounted from $current_source; skipping clone $dev" >&2
       exit 0
     fi
+    # Note: a card mounted under a pre-media-id path (old kernel-name layout,
+    # in-place activation) is caught by the findmnt source guard below and
+    # left untouched without a config-root signal until it is re-inserted or
+    # the system reboots.
     # Some container/nspawn layouts pre-bind block-device nodes from the host
     # under /dev itself (e.g. `devtmpfs on /dev/mmcblk0p1`). Don't treat the
     # device node bind as the filesystem mount we want.
@@ -168,6 +178,15 @@ let
             *) continue ;;
           esac
           media_id="$(${pkgs.coreutils}/bin/basename "$target")"
+          # Mirror the matcher's id posture: never act on dot-leading or
+          # empty names, so a degenerate mount-table target (e.g. a lexical
+          # "$media_root/.." form) cannot reach umount/rm outside our scope.
+          case "$media_id" in
+            "" | .*)
+              echo "korri-removable-media-unmount: skipping unexpected mount target $target" >&2
+              continue
+              ;;
+          esac
           # Remove the config-root signal first so korrid converges even when
           # the card was yanked and the lazy unmount lingers.
           ${pkgs.coreutils}/bin/rm -f "$config_roots_dir/$media_id"
