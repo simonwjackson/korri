@@ -312,8 +312,8 @@ describe("openKorriConfigGraph — host singleton", () => {
   })
 })
 
-describe("openKorriConfigGraph — invalid config", () => {
-  it("fails to open when an opt-in fragment violates the strict schema", async () => {
+describe("openKorriConfigGraph — fragment-error containment", () => {
+  it("skips a fragment that violates the strict schema and surfaces a diagnostic", async () => {
     await withTempRoots(1, async ([root]) => {
       await mkdir(root!, { recursive: true })
       await writeFile(
@@ -321,23 +321,79 @@ describe("openKorriConfigGraph — invalid config", () => {
         ["host:", "  title: AKA", "  role: desktop", ""].join("\n"),
         "utf8",
       )
-
-      const exit = await Effect.runPromiseExit(
-        Effect.scoped(openKorriConfigGraph({ roots: [{ root: root! }] })),
+      await writeFile(
+        join(root!, "good.korri.yaml"),
+        [
+          "library:",
+          "  zelda:",
+          "    title: Zelda",
+          "    releases:",
+          "      - id: snes",
+          "        system: snes",
+          "        target: snes/zelda.sfc",
+          "",
+        ].join("\n"),
+        "utf8",
       )
-      expect(exit._tag).toBe("Failure")
+
+      const loaded = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriConfigGraph({ roots: [{ root: root! }] })
+            return {
+              item: yield* db.library.findById("zelda"),
+              hosts: yield* Effect.promise(() => db.host.query().runPromise),
+              diagnostics: yield* db.$documentGraph.getDiagnostics(),
+            }
+          }),
+        ),
+      )
+
+      // The broken fragment is skipped, not fatal: the rest of the graph
+      // still builds and the skip is observable as a diagnostic.
+      expect(loaded.item.title).toBe("Zelda")
+      expect(loaded.hosts.length).toBe(0)
+      expect(
+        loaded.diagnostics.some(
+          diagnostic =>
+            diagnostic.action === "skipped-fragment" &&
+            diagnostic.path?.endsWith("korri.yaml") === true,
+        ),
+      ).toBe(true)
     })
   })
 
-  it("rejects an opt-in fragment with an unknown top-level collection", async () => {
+  it("skips a fragment with an unknown top-level collection", async () => {
     await withTempRoots(1, async ([root]) => {
       await writeFile(
         join(root!, "korri.yaml"),
         ["launchTargets:", "  legacy:", "    gameId: x", ""].join("\n"),
         "utf8",
       )
+      const diagnostics = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriConfigGraph({ roots: [{ root: root! }] })
+            return yield* db.$documentGraph.getDiagnostics()
+          }),
+        ),
+      )
+      expect(
+        diagnostics.some(
+          diagnostic => diagnostic.action === "skipped-fragment",
+        ),
+      ).toBe(true)
+    })
+  })
+
+  it("still fails to open when a non-optional root is missing", async () => {
+    await withTempRoots(1, async ([root]) => {
       const exit = await Effect.runPromiseExit(
-        Effect.scoped(openKorriConfigGraph({ roots: [{ root: root! }] })),
+        Effect.scoped(
+          openKorriConfigGraph({
+            roots: [{ root: join(root!, "missing"), optional: false }],
+          }),
+        ),
       )
       expect(exit._tag).toBe("Failure")
     })
@@ -497,6 +553,134 @@ describe("openKorriConfigGraph — collection-scoped trust", () => {
       // The escaping fragment is skipped (not loaded, not fatal); the rest
       // of the card still applies.
       expect(items.map(item => item.id).sort()).toEqual(["zelda"])
+    })
+  })
+
+  it("surfaces an ignored-collection diagnostic for out-of-scope card sections", async () => {
+    await withTempRoots(2, async ([trusted, card]) => {
+      await writeFile(join(trusted!, "korri.yaml"), trustedHostFragment, "utf8")
+      await writeFile(join(card!, "card.korri.yaml"), cardFragment, "utf8")
+
+      const diagnostics = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriConfigGraph({
+              roots: [
+                { root: trusted! },
+                {
+                  root: card!,
+                  id: "removable-card",
+                  collections: REMOVABLE_CONFIG_COLLECTIONS,
+                },
+              ],
+            })
+            return yield* db.$documentGraph.getDiagnostics()
+          }),
+        ),
+      )
+
+      expect(
+        diagnostics.some(
+          diagnostic =>
+            diagnostic.action === "ignored-collection" &&
+            diagnostic.rootId === "removable-card" &&
+            diagnostic.collection === "host",
+        ),
+      ).toBe(true)
+    })
+  })
+
+  it("does not validate out-of-scope sections from a restricted root", async () => {
+    await withTempRoots(2, async ([trusted, card]) => {
+      await writeFile(join(trusted!, "korri.yaml"), trustedHostFragment, "utf8")
+      // The card's host section is schema-invalid, but host is outside the
+      // card's allowed collections: it must be ignored, not validated, so
+      // the card's data still loads.
+      await writeFile(
+        join(card!, "card.korri.yaml"),
+        [
+          "host:",
+          "  title: AKA",
+          "  role: desktop",
+          "library:",
+          "  zelda:",
+          "    title: Card Zelda",
+          "    releases:",
+          "      - id: snes",
+          "        system: snes",
+          "        target: snes/zelda.sfc",
+          "",
+        ].join("\n"),
+        "utf8",
+      )
+
+      const loaded = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriConfigGraph({
+              roots: [
+                { root: trusted! },
+                { root: card!, collections: REMOVABLE_CONFIG_COLLECTIONS },
+              ],
+            })
+            return {
+              host: yield* db.host.findById(LOCAL_HOST_KEY),
+              item: yield* db.library.findById("zelda"),
+            }
+          }),
+        ),
+      )
+
+      expect(loaded.host.moonlight?.command).toBe("trusted-moonlight")
+      expect(loaded.item.title).toBe("Card Zelda")
+    })
+  })
+
+  it("exposes record provenance with the winning contributor", async () => {
+    await withTempRoots(2, async ([base, card]) => {
+      const itemFragment = (title: string) =>
+        [
+          "library:",
+          "  zelda:",
+          `    title: ${title}`,
+          "    releases:",
+          "      - id: snes",
+          "        system: snes",
+          "        target: snes/zelda.sfc",
+          "",
+        ].join("\n")
+      await writeFile(join(base!, "korri.yaml"), itemFragment("Base"), "utf8")
+      await writeFile(
+        join(card!, "card.korri.yaml"),
+        itemFragment("Card"),
+        "utf8",
+      )
+
+      const provenance = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriConfigGraph({
+              roots: [
+                { root: base!, id: "base" },
+                {
+                  root: card!,
+                  id: "removable-card",
+                  collections: REMOVABLE_CONFIG_COLLECTIONS,
+                },
+              ],
+            })
+            return yield* db.$documentGraph.getRecordProvenance(
+              "library",
+              "zelda",
+            )
+          }),
+        ),
+      )
+
+      expect(provenance?.effectiveContributor.rootId).toBe("removable-card")
+      expect(
+        provenance?.contributors.map(contribution => contribution.rootId),
+      ).toEqual(["base", "removable-card"])
     })
   })
 

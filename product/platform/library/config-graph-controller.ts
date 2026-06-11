@@ -6,6 +6,21 @@ import { Effect } from "effect"
 import type { PlayableLibraryEntry } from "./playable-library"
 import type { KorriConfigGraphRoot } from "./proseql/config-graph-db"
 import { openKorriConfigGraph } from "./proseql/config-graph-db"
+
+/**
+ * One fragment-level containment outcome from the last (re)build: a broken
+ * or out-of-scope piece of config that was skipped or ignored instead of
+ * failing the graph. Serialized over `/api/config/events` so operators and
+ * agents can see why a record is missing.
+ */
+export interface ConfigGraphDiagnostic {
+  readonly rootId: string
+  readonly action: "skipped-fragment" | "skipped-root" | "ignored-collection"
+  readonly message: string
+  readonly path?: string
+  readonly collection?: string
+}
+
 import { createLibraryRepository } from "./proseql/library-repository"
 
 export type ConfigGraphEventName =
@@ -25,6 +40,8 @@ export type ConfigGraphStatus = "valid" | "invalid"
  * - valid events include `files`; invalid events include `message`.
  * - `changedPath` (relative) is present when a specific watched fragment
  *   triggered the rebuild.
+ * - `diagnostics` is present when the build skipped or ignored fragments
+ *   (broken card files, out-of-scope sections) instead of failing.
  */
 export interface ConfigGraphEvent {
   readonly name: ConfigGraphEventName
@@ -34,6 +51,7 @@ export interface ConfigGraphEvent {
   readonly files?: readonly string[]
   readonly message?: string
   readonly changedPath?: string
+  readonly diagnostics?: readonly ConfigGraphDiagnostic[]
 }
 
 export interface ConfigGraphController {
@@ -114,14 +132,32 @@ async function discoverFragments(
   return found.sort()
 }
 
+interface ConfigGraphSnapshot {
+  readonly entries: readonly PlayableLibraryEntry[]
+  readonly diagnostics: readonly ConfigGraphDiagnostic[]
+}
+
 function loadSnapshot(
   roots: readonly KorriConfigGraphRoot[],
-): Promise<readonly PlayableLibraryEntry[]> {
+): Promise<ConfigGraphSnapshot> {
   return Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
         const db = yield* openKorriConfigGraph({ roots })
-        return yield* createLibraryRepository(db).listPlayableEntries()
+        const entries = yield* createLibraryRepository(db).listPlayableEntries()
+        const diagnostics = yield* db.$documentGraph.getDiagnostics()
+        return {
+          entries,
+          diagnostics: diagnostics.map(diagnostic => ({
+            rootId: diagnostic.rootId,
+            action: diagnostic.action,
+            message: diagnostic.message,
+            ...(diagnostic.path !== undefined ? { path: diagnostic.path } : {}),
+            ...(diagnostic.collection !== undefined
+              ? { collection: diagnostic.collection }
+              : {}),
+          })),
+        }
       }),
     ),
   )
@@ -151,6 +187,7 @@ export function createConfigGraphController(
   let status: ConfigGraphStatus = "valid"
   let files: readonly string[] = []
   let message: string | undefined
+  let diagnostics: readonly ConfigGraphDiagnostic[] = []
   let lastGood: readonly PlayableLibraryEntry[] = []
 
   const listeners = new Set<(event: ConfigGraphEvent) => void>()
@@ -167,6 +204,7 @@ export function createConfigGraphController(
     status,
     files,
     ...(message !== undefined ? { message } : {}),
+    ...(diagnostics.length > 0 ? { diagnostics } : {}),
   })
 
   const publish = (event: ConfigGraphEvent): void => {
@@ -190,9 +228,10 @@ export function createConfigGraphController(
         loadSnapshot(roots),
         discoverFragments(roots),
       ])
-      lastGood = snapshot
+      lastGood = snapshot.entries
       files = discovered
       message = undefined
+      diagnostics = snapshot.diagnostics
       generation += 1
       status = "valid"
       const event: ConfigGraphEvent = {
@@ -202,6 +241,7 @@ export function createConfigGraphController(
         status,
         files,
         ...(changedPath !== undefined ? { changedPath } : {}),
+        ...(diagnostics.length > 0 ? { diagnostics } : {}),
       }
       return event
     } catch (error) {

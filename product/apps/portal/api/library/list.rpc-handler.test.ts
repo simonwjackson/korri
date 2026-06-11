@@ -3,14 +3,13 @@ import { createHash } from "node:crypto"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
-import { DataError } from "@platform/api/rpc/errors"
+
 import type { GameAssetRecord } from "@platform/library/config/records/game-asset"
 import type { GameAssetRole } from "@platform/library/config/records/game-asset-assignment"
 import { gameAssetBlobPath } from "@platform/library/game-assets/game-assets-service"
 import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
 import { createLibraryRepository } from "@platform/library/proseql/library-repository"
-import { mirrorLibraryAsConfigFragment } from "../../../../../tools/testing/library/with-temp-proseql-library"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
 import {
   PeerDiscovery,
@@ -24,6 +23,7 @@ import {
   PeerSourceFetcherLive,
 } from "@product/apps/portal/peers/peer-source-fetcher"
 import { Cause, Effect, Exit, Layer, SubscriptionRef } from "effect"
+import { mirrorLibraryAsConfigFragment } from "../../../../../tools/testing/library/with-temp-proseql-library"
 
 // All list.rpc-handler tests share the same default federation layers:
 // no peers (Noop) + the real fetcher (irrelevant when there are no peers).
@@ -367,22 +367,33 @@ describe("app.library.list handler (configured-real source)", () => {
     )
   })
 
-  it("fails with DataError(ReadFailed) when ProseQL data is invalid", async () => {
-    const lib = track(await withInvalidProseqlLibrary())
+  it("skips an invalid config fragment instead of failing the read (skip-fragment containment)", async () => {
+    const lib = track(
+      await withTempProseqlLibrary({
+        games: [
+          {
+            id: "snes/good.smc",
+            system: "fixture",
+            contentPath: "/storage/fixtures/snes/good.smc.rom",
+            metadata: { name: "Good" },
+          },
+        ],
+      }),
+    )
+    // A broken opt-in fragment beside the valid catalog must be contained
+    // as a load diagnostic, not turn the whole read into ReadFailed.
+    await writeFile(
+      join(lib.root, "bad.korri.yaml"),
+      ["launchTargets:", "  bad:", "    gameId: 123", ""].join("\n"),
+      "utf8",
+    )
     process.env.KORRI_LIBRARY_ROOT = lib.root
     process.env.KORRI_CONFIG_ROOTS = lib.root
 
-    const exit = await Effect.runPromiseExit(
+    const result = await Effect.runPromise(
       handleListLibrary({}).pipe(Effect.provide(LocalLibraryLayer)),
     )
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit)) {
-      const error = Cause.squash(exit.cause)
-      expect(error).toBeInstanceOf(DataError)
-      if (error instanceof DataError) {
-        expect(error.reason).toBe("ReadFailed")
-      }
-    }
+    expect(result.games.map(g => g.metadata?.name)).toEqual(["Good"])
   })
 
   it("integration: app.library.list is registered on appRpcGroup", () => {
@@ -737,31 +748,6 @@ function bytesForAsset(asset: GameAssetRecord): string {
       return missingFileAssetBytes
     default:
       throw new Error(`unexpected asset id ${asset.id}`)
-  }
-}
-
-async function withInvalidProseqlLibrary(): Promise<TempProseqlLibrary> {
-  const root = await mkdtemp(join(tmpdir(), "korri-proseql-invalid-test-"))
-  const dataRoot = await mkdtemp(join(tmpdir(), "korri-proseql-invalid-data-"))
-  let success = false
-  try {
-    await mkdir(root, { recursive: true })
-    // Invalid data must live in an opt-in config-graph fragment so the read
-    // path actually ingests it and surfaces the schema failure.
-    await writeFile(
-      join(root, "bad.korri.yaml"),
-      ["launchTargets:", "  bad:", "    gameId: 123", ""].join("\n"),
-      "utf8",
-    )
-    success = true
-  } finally {
-    if (!success) await cleanupTempProseqlLibrary(root, dataRoot)
-  }
-
-  return {
-    root,
-    dataRoot,
-    cleanup: () => cleanupTempProseqlLibrary(root, dataRoot),
   }
 }
 

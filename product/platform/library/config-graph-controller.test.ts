@@ -8,6 +8,7 @@ import {
   type ConfigGraphEvent,
   createConfigGraphController,
 } from "./config-graph-controller"
+import type { KorriConfigGraphRoot } from "./proseql/config-graph-db"
 
 async function withRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
   const root = await mkdtemp(join(tmpdir(), "korri-config-controller-"))
@@ -101,15 +102,10 @@ describe("createConfigGraphController", () => {
     await controller.stop()
   })
 
-  it("starts degraded with generation 0 when initial config is invalid", async () => {
+  it("starts degraded with generation 0 when a required root is missing", async () => {
     await withRoot(async root => {
-      await writeFile(
-        join(root, "bad.korri.yaml"),
-        ["launchTargets:", "  bad:", "    gameId: x", ""].join("\n"),
-        "utf8",
-      )
       const controller = createConfigGraphController({
-        roots: [{ root }],
+        roots: [{ root: join(root, "missing"), optional: false }],
         watch: false,
       })
       const ready = await controller.initialize()
@@ -118,6 +114,37 @@ describe("createConfigGraphController", () => {
       expect(ready.message).toBeDefined()
       // Degraded startup serves an empty baseline rather than crashing.
       expect((await controller.snapshot()).length).toBe(0)
+      await controller.stop()
+    })
+  })
+
+  it("contains a broken fragment as a diagnostic instead of failing the build", async () => {
+    await withRoot(async root => {
+      await writeFile(
+        join(root, "bad.korri.yaml"),
+        ["launchTargets:", "  bad:", "    gameId: x", ""].join("\n"),
+        "utf8",
+      )
+      await writeFile(
+        join(root, "good.korri.yaml"),
+        validFragment("Solo"),
+        "utf8",
+      )
+      const controller = createConfigGraphController({
+        roots: [{ root }],
+        watch: false,
+      })
+      const ready = await controller.initialize()
+      expect(ready.status).toBe("valid")
+      expect(ready.generation).toBe(1)
+      expect(
+        ready.diagnostics?.some(
+          diagnostic => diagnostic.action === "skipped-fragment",
+        ),
+      ).toBe(true)
+      expect((await controller.snapshot()).map(entry => entry.id)).toEqual([
+        "solo",
+      ])
       await controller.stop()
     })
   })
@@ -156,7 +183,37 @@ describe("createConfigGraphController", () => {
     })
   })
 
-  it("retains last-known-good and emits config.invalid on a bad rebuild", async () => {
+  it("retains last-known-good and emits config.invalid when a required root vanishes", async () => {
+    await withRoot(async root => {
+      await writeFile(
+        join(root, "local.korri.yaml"),
+        validFragment("Good"),
+        "utf8",
+      )
+      let roots: readonly KorriConfigGraphRoot[] = [{ root }]
+      const controller = createConfigGraphController({
+        resolveRoots: () => roots,
+        watch: false,
+      })
+      await controller.initialize()
+
+      roots = [{ root }, { root: join(root, "missing"), optional: false }]
+      const invalid = await controller.rebuild()
+
+      expect(invalid.name).toBe("config.invalid")
+      expect(invalid.status).toBe("invalid")
+      // Generation is retained at the last good value.
+      expect(invalid.generation).toBe(1)
+      expect(invalid.attempt).toBe(2)
+      expect(invalid.message).toBeDefined()
+      // RPC reads keep serving the prior good catalog.
+      const snapshot = await controller.snapshot()
+      expect(snapshot.find(entry => entry.id === "solo")?.title).toBe("Good")
+      await controller.stop()
+    })
+  })
+
+  it("skips a fragment broken by a rebuild and surfaces the diagnostic on the event", async () => {
     await withRoot(async root => {
       await writeFile(
         join(root, "local.korri.yaml"),
@@ -174,17 +231,21 @@ describe("createConfigGraphController", () => {
         ["library:", "  solo:", "    releases: not-a-list", ""].join("\n"),
         "utf8",
       )
-      const invalid = await controller.rebuild("local.korri.yaml")
+      const changed = await controller.rebuild("local.korri.yaml")
 
-      expect(invalid.name).toBe("config.invalid")
-      expect(invalid.status).toBe("invalid")
-      // Generation is retained at the last good value.
-      expect(invalid.generation).toBe(1)
-      expect(invalid.attempt).toBe(2)
-      expect(invalid.message).toBeDefined()
-      // RPC reads keep serving the prior good catalog.
-      const snapshot = await controller.snapshot()
-      expect(snapshot.find(entry => entry.id === "solo")?.title).toBe("Good")
+      // skip-fragment containment: the build stays valid, the broken
+      // fragment's records drop out, and the skip is visible on the event.
+      expect(changed.name).toBe("config.changed")
+      expect(changed.status).toBe("valid")
+      expect(changed.generation).toBe(2)
+      expect(
+        changed.diagnostics?.some(
+          diagnostic =>
+            diagnostic.action === "skipped-fragment" &&
+            diagnostic.path?.endsWith("local.korri.yaml") === true,
+        ),
+      ).toBe(true)
+      expect((await controller.snapshot()).length).toBe(0)
       await controller.stop()
     })
   })
@@ -286,7 +347,7 @@ describe("createConfigGraphController", () => {
     })
   })
 
-  it("keeps last-known-good when a re-resolved root makes the graph invalid", async () => {
+  it("skips a re-resolved root's broken fragment without losing other roots", async () => {
     await withRoot(async rootA => {
       await withRoot(async rootB => {
         await writeFile(
@@ -307,10 +368,18 @@ describe("createConfigGraphController", () => {
         await controller.initialize()
 
         roots = [{ root: rootA }, { root: rootB }]
-        const invalid = await controller.rebuild()
+        const changed = await controller.rebuild()
 
-        expect(invalid.name).toBe("config.invalid")
-        expect(invalid.generation).toBe(1)
+        // The broken card fragment is contained as a diagnostic; the trusted
+        // root's record stays in effect and the graph advances.
+        expect(changed.name).toBe("config.changed")
+        expect(changed.status).toBe("valid")
+        expect(changed.generation).toBe(2)
+        expect(
+          changed.diagnostics?.some(
+            diagnostic => diagnostic.action === "skipped-fragment",
+          ),
+        ).toBe(true)
         const snapshot = await controller.snapshot()
         expect(snapshot.find(entry => entry.id === "alpha")?.title).toBe("Good")
         await controller.stop()

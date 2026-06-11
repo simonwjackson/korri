@@ -139,14 +139,28 @@ const strictMapPayloadSchemas = {
   library: LibraryItemPayload,
 } as const
 
-export const validateReadableDocumentStrictly = (decoded: unknown): unknown => {
+/**
+ * Strictly validate the sections of a readable Korri document. When
+ * `allowed` is provided, only those sections are validated — the read-only
+ * config graph passes a restricted root's permitted collections here so
+ * sections the root cannot contribute (which ProseQL ignores at merge) are
+ * never validated against the canonical schemas.
+ */
+export const validateReadableDocumentStrictly = (
+  decoded: unknown,
+  allowed?: ReadonlySet<string>,
+): unknown => {
   if (!isRecord(decoded)) return decoded
 
-  if (decoded.host !== undefined) {
+  if (
+    decoded.host !== undefined &&
+    (allowed === undefined || allowed.has("host"))
+  ) {
     Schema.decodeUnknownSync(HostPayload)(decoded.host, STRICT)
   }
 
   for (const [sectionName, schema] of Object.entries(strictMapPayloadSchemas)) {
+    if (allowed !== undefined && !allowed.has(sectionName)) continue
     const section = decoded[sectionName]
     if (section === undefined) continue
     if (!isRecord(section)) continue

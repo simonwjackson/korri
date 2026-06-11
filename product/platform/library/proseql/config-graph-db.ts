@@ -18,6 +18,7 @@ import { sep } from "node:path"
 import { logger } from "@platform/logger"
 import {
   createPersistentEffectDatabase,
+  type DocumentGraphMetadata,
   type DocumentGraphTransform,
   type FormatCodec,
   hjsonCodec,
@@ -36,7 +37,6 @@ import {
   type CollectionApi,
   collectionsSchema,
   InvalidSingletonHostError,
-  isRecord,
   type KorriLibraryDb,
   LOCAL_HOST_KEY,
   loadSidecarSnapshot,
@@ -122,36 +122,6 @@ export const KORRI_CONFIG_INCLUDE_GLOBS: readonly string[] =
   ])
 
 /**
- * Drop document sections a restricted root is not permitted to contribute.
- * Enforced pre-merge (per fragment) so ProseQL's ordered "later root wins"
- * deep-merge invariant is untouched — the disallowed keys simply never enter
- * the merge.
- */
-function dropDisallowedCollections(
-  document: unknown,
-  allowed: ReadonlySet<string>,
-  context: { readonly rootId: string; readonly path: string },
-): unknown {
-  if (!isRecord(document)) return document
-  const kept: Record<string, unknown> = {}
-  const dropped: string[] = []
-  for (const [key, value] of Object.entries(document)) {
-    if (allowed.has(key)) {
-      kept[key] = value
-    } else {
-      dropped.push(key)
-    }
-  }
-  if (dropped.length > 0) {
-    logger.warn(
-      { rootId: context.rootId, path: context.path, dropped },
-      "config-graph: dropping collections not permitted for restricted root",
-    )
-  }
-  return kept
-}
-
-/**
  * Per-fragment transform for the read-only config graph. ProseQL decodes a
  * fragment by extension, then hands the decoded document here before deep-merge.
  * Korri applies the same strict canonical validation and plain-`host` wrapping
@@ -159,10 +129,13 @@ function dropDisallowedCollections(
  * identical semantics and `host` is wrapped exactly once (the graph codecs are
  * the plain base codecs, not the host-wrapping YAML shim).
  *
- * Restricted roots additionally get collection-scoped trust enforcement: a
- * fragment whose resolved real path escapes the root (symlink) is skipped
- * (loaded as an empty document, not fatal), and sections outside the root's
- * allowed collections are dropped before validation and merge.
+ * Collection scoping for restricted roots is native ProseQL (per-root
+ * `collections`, ignored sections surface as `ignored-collection`
+ * diagnostics); the transform only narrows validation to the sections the
+ * root may contribute so an ignored section is never validated. The
+ * symlink-escape guard stays here (no upstream containment yet): an escaping
+ * or vanished fragment fails the transform, which the source's
+ * `skip-fragment` policy converts into a skipped-fragment diagnostic.
  */
 function makeKorriConfigGraphTransform(
   restrictedByRootId: ReadonlyMap<string, ReadonlySet<string>>,
@@ -190,7 +163,6 @@ function makeKorriConfigGraphTransform(
 
   return (document, context) => {
     try {
-      let doc = document
       const allowed = restrictedByRootId.get(context.rootId)
       if (allowed !== undefined) {
         const realRoot = realRootOf(context.rootId)
@@ -199,12 +171,15 @@ function makeKorriConfigGraphTransform(
           realFragment = realpathSync(context.path)
         } catch {
           // Fragment vanished between discovery and transform (card yanked
-          // mid-build): skip it, keep the rest of the graph valid.
+          // mid-build): fail the fragment so skip-fragment records it as a
+          // diagnostic without failing the graph.
           logger.warn(
             { rootId: context.rootId, path: context.path },
             "config-graph: restricted-root fragment vanished mid-build; skipping",
           )
-          return Result.succeed({})
+          return Result.fail(
+            new Error("restricted-root fragment vanished mid-build"),
+          )
         }
         const escapes =
           realRoot === undefined ||
@@ -215,11 +190,12 @@ function makeKorriConfigGraphTransform(
             { rootId: context.rootId, path: context.path },
             "config-graph: fragment symlink-escapes its restricted root; skipping",
           )
-          return Result.succeed({})
+          return Result.fail(
+            new Error("fragment symlink-escapes its restricted root"),
+          )
         }
-        doc = dropDisallowedCollections(doc, allowed, context)
       }
-      const validated = validateReadableDocumentStrictly(doc)
+      const validated = validateReadableDocumentStrictly(document, allowed)
       return Result.succeed(wrapPlainHostForProseql(validated))
     } catch (error) {
       return Result.fail(
@@ -236,6 +212,11 @@ export function makeKorriConfigGraphConfig(
     id: root.id ?? `root-${index}`,
     root: root.root,
     optional: root.optional ?? true,
+    // Native per-root collection scoping: ProseQL ignores out-of-scope
+    // sections at merge and records an `ignored-collection` diagnostic.
+    ...(root.collections !== undefined && root.collections !== "all"
+      ? { collections: root.collections }
+      : {}),
   }))
   const restrictedByRootId = new Map<string, ReadonlySet<string>>()
   const rootPathByRootId = new Map<string, string>()
@@ -260,6 +241,12 @@ export function makeKorriConfigGraphConfig(
           restrictedByRootId,
           rootPathByRootId,
         ),
+        // Fragment-error containment: a broken fragment (decode, transform,
+        // or validation failure) is skipped with a diagnostic instead of
+        // failing the whole graph, so a bad card — or a local typo — cannot
+        // freeze config rebuilds. Non-fragment errors (a missing
+        // non-optional root) still fail the build and retain last-known-good.
+        onFragmentError: "skip-fragment" as const,
       },
     ],
   } as const
@@ -332,11 +319,21 @@ const readOnlyRecordsCollection = <TPayload>(
   }
 }
 
+/**
+ * The opened read-only config graph: the canonical collections behind
+ * read-only guards plus ProseQL's documentGraph metadata (record provenance
+ * and load diagnostics).
+ */
+export type KorriConfigGraphDb = KorriLibraryDb & {
+  readonly $documentGraph: DocumentGraphMetadata
+}
+
 const withConfigGraphReadOnlyGuards = (
-  db: KorriLibraryDb,
+  db: KorriConfigGraphDb,
   sidecars: SidecarSnapshot,
-): KorriLibraryDb => {
-  const guarded: KorriLibraryDb = {
+): KorriConfigGraphDb => {
+  const guarded: KorriConfigGraphDb = {
+    $documentGraph: db.$documentGraph,
     host: readOnlyCollection(db.host, "host"),
     storage: readOnlyCollection(db.storage, "storage"),
     sources: readOnlyCollection(db.sources, "sources"),
@@ -427,7 +424,7 @@ export function openKorriConfigGraph(options: KorriConfigGraphOptions) {
         Effect.provide(persistenceLayer),
         Effect.map(db =>
           withConfigGraphReadOnlyGuards(
-            db as unknown as KorriLibraryDb,
+            db as unknown as KorriConfigGraphDb,
             sidecars,
           ),
         ),
