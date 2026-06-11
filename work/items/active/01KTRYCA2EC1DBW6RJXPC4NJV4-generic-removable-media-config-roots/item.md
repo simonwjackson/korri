@@ -3,7 +3,7 @@ id: 01KTRYCA2EC1DBW6RJXPC4NJV4
 slug: design-generic-removable-media-korri-config-roots
 title: Design generic removable-media Korri config roots
 origin: parked
-status: To Do
+status: In Progress
 priority: medium
 labels:
   - config
