@@ -45,6 +45,16 @@ rec {
 
   korri-runtime = import ../modules/korri-runtime.nix;
   korri-setup = import ../modules/korri-setup.nix;
+  # Per-platform opt-in: removable-media mounting + card-wins config-root
+  # exposure through config-roots.d. Bundles korri-runtime so the module's
+  # user/group defaults resolve standalone; intentionally NOT part of the
+  # korri-daemon aggregate — platforms enable it explicitly.
+  korri-removable-media = {
+    imports = [
+      korri-runtime
+      (import ../modules/korri-removable-media.nix)
+    ];
+  };
   korri-login = import ../modules/korri-login.nix;
   korri-client = import ../modules/korri-client.nix { korri = self; };
   korri-cli = import ../modules/korri-cli.nix { korri = self; };

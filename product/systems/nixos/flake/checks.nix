@@ -105,6 +105,12 @@ pkgs.lib.optionalAttrs isX86Linux {
       };
 }
 // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+  korri-removable-media-matcher =
+    import ../../../../tools/testing/nix/korri-removable-media-matcher-check.nix
+      {
+        inherit pkgs;
+        matcherScript = ../../../../product/systems/nixos/modules/korri-removable-media-match.sh;
+      };
   korri-sunshine-runtime-bitrate-patch =
     import ../../../../tools/testing/nix/korri-sunshine-runtime-bitrate-patch-check.nix
       {
