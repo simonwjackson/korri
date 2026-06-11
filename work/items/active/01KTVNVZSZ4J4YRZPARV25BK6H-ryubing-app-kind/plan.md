@@ -1,7 +1,7 @@
 ---
 title: feat: Add first-class Ryubing app kind
 type: feat
-status: active
+status: completed
 date: 2026-06-11
 verify_command: "just test-unit"
 ---
@@ -27,13 +27,13 @@ Bandai currently launches Ryubing through a generic process app and hand-authore
 - R3. Launch Ryubing in **headless-only** mode for v1, rendering `--no-gui`, `--root-data-dir`, `--use-main-config`, typed headless flags, unrestricted `extra.args`, and the resolved game path as the final positional argument.
 - R4. Pre-create and preflight the Ryubing state root without accidentally creating a fake host directory when the removable media mount is absent.
 - R5. Generate/merge `<state.root>/Config.json` using Ryubing's native snake_case keys, preserving existing unknown keys when requested and applying `extra.config` last.
-- R6. Fail before exec when required key files or required firmware preflight checks are missing.
+- R6. Fail before exec when required key files are missing; firmware preflight is out of scope for v1.
 - R7. Support stable removable media roots through existing `storage`/`sources` records and relative release targets; do not trust removable cards to define executable `apps`.
 - R8. Preserve the existing generic process and RetroArch launch behavior.
 - R9. Cover schema, cascade, rendering, materialization, and repository launch-resolution behavior with focused unit tests.
 - R10. In headless-only mode, fail before exec unless the effective generated/merged config provides at least one usable input configuration for Ryubing.
 - R11. Support both literal absolute Ryubing paths and explicit storage template tokens like `{storage:switch-card}/...` so exact media identity can be declared once in `storage` when desired.
-- R12. Expose an availability signal/diagnostic when a referenced storage root or Ryubing state root is currently unavailable, without yet codifying the final UI-disable behavior.
+- R12. Expose availability diagnostics in two layers without yet codifying final UI-disable behavior: storage/source diagnostics for unavailable game content roots, and Ryubing app-readiness diagnostics for unavailable `state.root` or preflight dependencies.
 
 ---
 
@@ -49,7 +49,9 @@ Bandai currently launches Ryubing through a generic process app and hand-authore
 ### Deferred to Follow-Up Work
 
 - GUI Ryubing mode support: only if a later product need requires Ryubing's UI, firmware install flow, or GUI-only flags.
+- Firmware preflight/validation beyond Ryubing's own runtime behavior; v1 does not model `state.require.firmware`.
 - Stable installed-application identity and command-wrapper discovery for Ryubing or other packaged apps; v1 keeps `command` explicit in trusted config.
+- Multi-PR/phased delivery planning; this will be implemented as one worktree effort unless execution discovers a hard blocker.
 - Rich UI surfacing of Ryubing preflight diagnostics in the portal beyond existing launch error surfaces.
 - Shared generated documentation for every Ryubing Config.json option if the typed schema grows beyond the v1 product contract.
 
@@ -80,7 +82,7 @@ Bandai currently launches Ryubing through a generic process app and hand-authore
 - Ryubing/Ryujinx 1.3.3 `CommandLineState.cs`: GUI CLI flags differ from headless flags, which is why v1 should be headless-only rather than dual-mode.
 - Ryubing/Ryujinx 1.3.3 `Headless/Options.cs`: headless supports `--root-data-dir`, `--use-main-config`, fullscreen/display, graphics, input profile/id, console, audio, network, logging, and debug flags.
 - Ryubing/Ryujinx 1.3.3 `AppDataManager.cs`: `--root-data-dir` is honored only when the directory already exists; Korri must pre-create and preflight it before exec.
-- Ryubing/Ryujinx 1.3.3 `ConfigurationFileFormat.cs` and `JsonHelper.cs`: `Config.json` is schema version 70 in this package and uses snake_case JSON keys.
+- Ryubing/Ryujinx 1.3.3 `ConfigurationFileFormat.cs` and `JsonHelper.cs`: `Config.json` is schema version 70 in this package and uses snake_case JSON keys; Korri should treat that as an internal first-create seed, not a user-authored YAML field.
 
 ---
 
@@ -93,11 +95,11 @@ Bandai currently launches Ryubing through a generic process app and hand-authore
 - Treat `state.root` as persistent user data, never as a launch artifact. The materializer must not return it as `artifacts.root` or pass it to cleanup/eviction routines.
 - Preserve literal env var names under `env`. Environment variables are an external contract, so uppercase names are clearer than kebab-case translations.
 - Use typed fields for every known Ryubing behavior this app kind chooses to support. `extra.args` and `extra.config` are not a dumping ground for known fields; they are escape hatches for unknown, future, or deliberately unmodeled Ryubing options. `extra.args` is unrestricted because `apps` live only in trusted config roots; `extra.config` accepts raw snake_case keys, applies last, and may override typed Config.json fields by explicit operator choice.
-- Seed `Config.json` version only on first creation; when merging an existing config, preserve its existing version to avoid a Ryubing migration loop after package upgrades.
+- Keep `config.version` out of public YAML. The renderer owns the known Ryubing schema version internally for first creation only; when merging an existing config, preserve its existing version to avoid a Ryubing migration loop after package upgrades.
 - Reassert typed Korri config fields on every launch. Existing Config.json contributes unknown/unmodeled keys, but typed fields are policy-owned and are overwritten by the current Ryubing policy before `extra.config` applies.
-- Eager-fail required keys, required firmware checks, and required headless input config. The default required key is `prod.keys` only, matching Ryubing's startup check; operators may explicitly list additional key files like `title.keys` for stricter local policy. Missing configured requirements and missing headless input all create poor headless/kiosk failure modes, so `state.require.*` must mean launch-blocking preflight.
+- Eager-fail required keys and required headless input config. The default required key is `prod.keys` only, matching Ryubing's startup check; operators may explicitly list additional key files like `title.keys` for stricter local policy. Firmware preflight is intentionally not modeled in v1 because a weak presence/count check gives false confidence and exact version validation deserves a separate design.
 - Exclude `policy.allowedCommands` from the Ryubing-specific renderer path for v1. Store-path commands churn on Nix package updates; command safety is anchored by trusted app roots and the typed app kind rather than a brittle literal allowlist.
-- Let Ryubing policy cascade like RetroArch policy. Per-release/profile overrides are useful for game-specific graphics and console settings; `state.root` overrides are powerful but should remain trusted-root authored.
+- Let Ryubing policy cascade like RetroArch policy, including per-game `state.root` overrides. This enables explicit per-game state isolation for saves/caches/profiles when trusted config authors want it; the risk is acceptable because executable app policy and overrides remain trusted-root governed.
 - Keep generic `argsAppend` out of the Ryubing typed renderer. `extra.args` is the Ryubing-specific trusted escape hatch so argv order has one place to reason about operator-provided arguments.
 
 ---
@@ -109,19 +111,19 @@ Bandai currently launches Ryubing through a generic process app and hand-authore
 - GUI vs headless default: v1 is headless-only.
 - Headless input preflight: v1 fails before exec unless the effective config has at least one usable Ryubing input configuration.
 - Config merge ownership: reassert typed Korri fields every launch while preserving unknown/unmodeled existing Config.json keys.
-- Ryubing paths/env: support both literal absolute paths and explicit `{storage:<id>}` template-token paths; `env` values may use storage tokens in any variable. Captured follow-up backlog item `01KTVX0FH3M3CVCQ8CCG53GV8S` to sweep other config path surfaces for similar token support.
+- Ryubing paths/env: support both literal absolute paths and explicit `{storage:<id>}` template-token paths; `env` values may use storage tokens in any variable. `state.root` may intentionally live outside the storage root that provides game content; the canonical example keeps them together for portable media, but v1 does not enforce same-storage state. Captured follow-up backlog item `01KTVX0FH3M3CVCQ8CCG53GV8S` to sweep other config path surfaces for similar token support.
 - Environment key style: `env` uses literal environment variable names.
 - Escape hatches: nest under `extra.args` and `extra.config`; keep known supported Ryubing fields typed rather than moving them to `extra` just because they are less common.
 - `content.game-dirs`: keep typed in v1 as known Ryubing Config.json browser/list configuration, but it is not authoritative for Korri launch selection.
 - `extra.config` override semantics: allow overrides of typed Config.json keys by design, and run preflight against the final effective config after `extra.config` applies.
-- Availability contract: keep ordinary launch resolution structurally capable, but surface a current-unavailable signal/diagnostic when the referenced storage root or state root is not present so UI can eventually disable items shortly after media disappears.
+- Availability contract: keep ordinary launch resolution structurally capable, but surface current-unavailable diagnostics in the right layer: source/storage diagnostics for missing game media, and Ryubing app-readiness diagnostics for missing `state.root`, keys, firmware, or effective input config. Future UI can combine these to disable items shortly after media disappears.
 - Command allowlist: do not require `policy.allowedCommands` for the Ryubing-specific renderer path in v1.
 
 ### Deferred to Implementation
 
 - Installed application storage/identity and stable command discovery: deferred until the broader installed-app model is decided. V1 preserves the user-supplied trusted `command` value and does not introduce a Ryubing-specific wrapper/discovery contract.
 - Exact enum string casing for every Ryubing Config.json enum: renderer tests should lock the translation table against source-observed values during implementation.
-- Full controller profile compatibility with every Ryubing input backend: implement the planned mapping surface, but rely on `extra.config` for backend-specific values not covered by v1 tests.
+- Exotic controller backends beyond the typed v1 mapping surface: v1 includes typed controller mapping for the supported Korri/Ryubing headless controller shape; backend-specific fields not represented by that schema remain available through `extra.config`.
 
 ---
 
@@ -165,6 +167,8 @@ Decision matrix for v1 launch behavior:
 ---
 
 ## Implementation Units
+
+Delivery note: this plan is intended to be implemented by an LLM worker in an isolated worktree. Keep the U1–U7 sequencing as implementation structure, but do not split the work into separate PR-planning phases unless execution discovers a hard blocker.
 
 ### U1. Define Ryubing schema and policy surface
 
@@ -264,10 +268,11 @@ Decision matrix for v1 launch behavior:
 - Explicitly check that the configured storage/media root already exists before recursive creation of `state.root`; avoid creating a fake `/run/media/...` tree on the host filesystem when media is absent.
 - Create `state.root` and required fixed Ryubing layout directories from internal constants when `state.create` is true.
 - Eagerly fail missing required keys listed under `state.require.keys`; default examples should require only `prod.keys`, not `title.keys`.
-- Eagerly fail missing required firmware checks listed under `state.require.firmware`; if a future slice wants advisory firmware diagnostics, it should use a different field name rather than `require`.
-- Validate that the final effective generated/merged config contains at least one usable headless input configuration after `extra.config` applies, because Ryubing headless exits early when no input configuration is loaded.
+- Do not implement `state.require.firmware` in v1; leave firmware validation to Ryubing/runtime behavior until a meaningful firmware-version validation design exists.
+- Render typed `input.controllers` into Ryubing `input_config` for v1, including a documented mapping table from Korri-friendly control names to Ryubing headless input fields.
+- Validate that the final effective generated/merged config contains at least one usable headless input configuration after typed input and `extra.config` apply, because Ryubing headless exits early when no input configuration is loaded.
 - Read existing Config.json when `config.merge-existing` is true, preserve unknown keys when configured, preserve existing `version`, merge typed Korri output over existing values so typed fields are reasserted every launch, then apply `extra.config` last.
-- On absent Config.json, seed the known Ryubing version from schema research.
+- On absent Config.json, seed the known Ryubing version from an internal renderer constant derived from source/package research.
 - On corrupt or unparseable Config.json, overwrite with generated typed config and emit a diagnostic.
 - Write Config.json atomically.
 - Return no ephemeral artifact root for Ryubing; `state.root` must never be passed to launch artifact cleanup.
@@ -285,8 +290,9 @@ Decision matrix for v1 launch behavior:
 - Edge case: absent Config.json is seeded with the known Ryubing version.
 - Error path: missing media root fails before creating fake parent directories.
 - Error path: missing default required `prod.keys` fails before exec, while absent `title.keys` does not fail unless the operator explicitly listed it under `state.require.keys`.
-- Error path: missing required firmware registered-content path or insufficient required firmware contents fails before exec.
+- Happy path: typed `input.controllers` renders a usable Ryubing `input_config` entry for the supported gamepad shape.
 - Error path: effective config with no usable input configuration fails before exec with a typed Ryubing preflight error.
+- Error path: malformed typed controller mapping fails schema/render validation before writing Config.json.
 - Error path: corrupt Config.json is replaced with generated config and returns a diagnostic.
 - Regression: returned materialization result does not expose `state.root` as an artifact cleanup root.
 
@@ -324,7 +330,8 @@ Decision matrix for v1 launch behavior:
 
 **Test scenarios:**
 - Happy path: app-level Ryubing policy appears in `ReadableResolvedLaunchContext.ryubing`.
-- Happy path: release-level `ryubing` override updates a nested graphics or console field while preserving app-level storage/state/env.
+- Happy path: release-level `ryubing` override updates a nested graphics or console field while preserving unrelated app-level storage/state/env.
+- Happy path: release-level `ryubing.state.root` override changes the resolved Ryubing state root for that game and drives materialization/preflight for the overridden root.
 - Edge case: `extra.args` concatenates in layer order.
 - Edge case: `extra.config` later keys override earlier keys while preserving unrelated nested values.
 - Regression: a Switch release target resolves through `storage.switch-card.root` plus a relative `target` and does not accept absolute release targets.
@@ -354,7 +361,7 @@ Decision matrix for v1 launch behavior:
 - Keep Ryubing custom-app authoring explicit: app config should provide `command` unless a stable packaged wrapper is introduced elsewhere.
 - Dispatch `isRyubingAppRecord(context.app)` to `materializeReadableRyubingLaunch()` in readable launch resolution.
 - Add `canMaterializeRyubingContext()` so launchability checks know that Ryubing requires content path and policy state root.
-- Add an availability diagnostic/status path for storage/state-root absence that can be refreshed from filesystem state without defining final portal disable UX in this slice; launch materialization remains the hard preflight gate.
+- Add availability diagnostic/status paths that can be refreshed from filesystem state without defining final portal disable UX in this slice: source/storage diagnostics for content-root absence, and Ryubing app-readiness diagnostics for state-root/preflight absence. Launch materialization remains the hard preflight gate.
 - Report `ResolvedLaunchOutput.app.integration: "ryubing"` for Ryubing launches.
 - Audit consumers of `AppIntegrationKind` and preserve existing generic-process behavior for non-typed process apps.
 
@@ -365,7 +372,8 @@ Decision matrix for v1 launch behavior:
 **Test scenarios:**
 - Happy path: a readable library item using `app: ryubing` resolves to a headless Ryubing `LaunchSpec`.
 - Happy path: resolved launch output reports integration `ryubing`.
-- Happy path: when referenced storage/state root is absent, the repository exposes a current-unavailable diagnostic/status without treating the app definition as invalid.
+- Happy path: when referenced content storage is absent, the repository exposes a source/storage current-unavailable diagnostic without treating the library entry as invalid.
+- Happy path: when Ryubing `state.root` or required preflight dependencies are absent, the repository exposes a Ryubing app-readiness diagnostic without treating the app definition as invalid.
 - Error path: a Ryubing app without a command fails with the same missing-command clarity expected by the launch layer.
 - Error path: can-resolve returns false when no content path or no state root is available.
 - Regression: existing `kind: process` app remains `generic-process` and still uses generic launch composition.
@@ -428,6 +436,7 @@ Decision matrix for v1 launch behavior:
 - Preserve the existing assertion that Ryubing is installed for SM8550 products.
 - Do not add a product-owned wrapper command or installed-app discovery mechanism in this slice. Preserve explicit trusted `command` authoring until the broader installed-application storage/identity model is designed.
 - Do not commit Bandai's media UUID as a product default; media IDs belong in device-local or card-local data config.
+- Do not require Ryubing `state.root` to be under the same storage root as the launched content; trusted configs may deliberately keep emulator state elsewhere.
 
 **Patterns to follow:**
 - Existing SM8550 Ryubing package checks and project instruction to avoid hard-coded builder/device-specific paths in committed tooling.
@@ -444,9 +453,9 @@ Decision matrix for v1 launch behavior:
 ## System-Wide Impact
 
 - **Interaction graph:** Readable config decode feeds cascade resolution, which feeds ProseQL launch resolution, which calls the Ryubing materializer and launch-spec renderer before shell/session launch.
-- **Error propagation:** Schema errors should fail at config load; missing command/content/state should fail at resolve or materialization; missing required keys, required firmware, and required input config should fail before exec.
+- **Error propagation:** Schema errors should fail at config load; missing command/content/state should fail at resolve or materialization; missing required keys and required input config should fail before exec.
 - **State lifecycle risks:** `state.root` contains keys, firmware, saves, caches, profiles, and Config.json. It must never be treated as an ephemeral launch artifact or cleanup target.
-- **API surface parity:** RPC launch/list behavior should expose Ryubing items as structurally known when config is valid, and should also have a way to report current unavailable media/state diagnostics. Browser/UI consumers may see a new `integration: "ryubing"` value.
+- **API surface parity:** RPC launch/list behavior should expose Ryubing items as structurally known when config is valid, plus separate source/storage and Ryubing app-readiness diagnostics for current unavailability. Browser/UI consumers may see a new `integration: "ryubing"` value.
 - **Integration coverage:** Unit tests alone must be complemented by launch-resolution tests that cross schema, storage/source target resolution, materialization, and launch-spec rendering.
 - **Unchanged invariants:** Existing RetroArch typed config, generic process launch, storage target rules, and removable-media trust restrictions remain unchanged.
 
@@ -457,15 +466,15 @@ Decision matrix for v1 launch behavior:
 | Risk | Mitigation |
 |------|------------|
 | Headless CLI differs from GUI CLI | v1 is headless-only; renderer and tests target `Headless/Options.cs` semantics. |
-| `--root-data-dir` silently falls back if the directory is missing | Materializer resolves `state.root`, creates it, and explicitly verifies the media root exists before recursive directory creation. |
-| Repeated media UUID paths drift across state/env/content fields | Support explicit `{storage:<id>}` template-token paths and use that style in the canonical fixture. |
-| Media-backed games remain visually available after media disappears | Add an availability diagnostic/status signal for missing storage/state roots, while deferring final UI-disable behavior. |
-| Corrupt Config.json or future Ryubing version causes config churn | Preserve existing version on merge; overwrite corrupt config with diagnostic; seed current version only on first creation. |
-| Missing keys or configured firmware cause headless Ryubing to fail after exec | Eager key and firmware preflight before exec when declared under `state.require`. |
+| `--root-data-dir` silently falls back if the directory is missing | Materializer resolves the final cascaded `state.root` (including per-game overrides), creates it, and explicitly verifies the media root exists before recursive directory creation. |
+| Repeated media UUID paths drift across state/env/content fields | Support explicit `{storage:<id>}` template-token paths and use that style in the canonical fixture, while still allowing trusted configs to put `state.root` elsewhere. |
+| Media-backed games remain visually available after media disappears | Add source/storage diagnostics for missing content roots and Ryubing app-readiness diagnostics for missing state/preflight roots, while deferring final UI-disable behavior. |
+| Corrupt Config.json or future Ryubing version causes config churn | Keep version out of public YAML, preserve existing version on merge, overwrite corrupt config with diagnostic, and seed current internal version only on first creation. |
+| Missing keys cause headless Ryubing to fail after exec | Eager key preflight before exec when declared under `state.require.keys`; firmware validation is deferred from v1. |
 | Missing input configuration makes headless Ryubing exit without launching | Eager preflight verifies at least one effective input configuration before exec. |
 | Persistent state could be deleted by artifact cleanup | Ryubing materializer returns no artifact root and tests assert `state.root` is never cleanup-owned. |
 | Store-path commands churn across Nix updates | Accept explicit trusted `command` authoring in v1 and defer stable installed-app identity/command discovery to a separate design. |
-| Controller mapping translation is complex | Cover representative mapping behavior in v1 and keep `extra.config` as the escape hatch for backend-specific input configuration beyond the known supported mapping surface. |
+| Controller mapping translation is complex | Include typed controller mapping in v1 with focused translation-table tests; keep `extra.config` only for backend-specific input fields outside the supported typed surface. |
 | Removable media app definitions would be an execution trust escalation | Keep `apps.ryubing` in trusted roots; only data collections are allowed from removable config roots. |
 
 ---
