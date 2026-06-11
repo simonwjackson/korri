@@ -6,11 +6,11 @@ import { Effect } from "effect"
 
 import {
   KORRI_CONFIG_EXTENSIONS,
-  LOCAL_HOST_KEY,
   makeKorriConfigGraphConfig,
   openKorriConfigGraph,
   REMOVABLE_CONFIG_COLLECTIONS,
-} from "./library-db"
+} from "./config-graph-db"
+import { LOCAL_HOST_KEY } from "./library-db"
 import { createLibraryRepository } from "./library-repository"
 
 async function withTempRoots<T>(

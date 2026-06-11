@@ -4,8 +4,8 @@ import { join, relative } from "node:path"
 import { logger } from "@platform/logger"
 import { Effect } from "effect"
 import type { PlayableLibraryEntry } from "./playable-library"
-import type { KorriConfigGraphRoot } from "./proseql/library-db"
-import { openKorriConfigGraph } from "./proseql/library-db"
+import type { KorriConfigGraphRoot } from "./proseql/config-graph-db"
+import { openKorriConfigGraph } from "./proseql/config-graph-db"
 import { createLibraryRepository } from "./proseql/library-repository"
 
 export type ConfigGraphEventName =
@@ -53,16 +53,22 @@ export interface ConfigGraphController {
   readonly stop: () => Promise<void>
 }
 
-export interface ConfigGraphControllerOptions {
-  /** Static roots, frozen for the controller's lifetime. */
-  readonly roots?: readonly KorriConfigGraphRoot[]
-  /**
-   * Dynamic root resolution, called at every (re)build so roots added or
-   * removed at runtime (removable media) join or leave the graph. When
-   * provided, `resolveRoots` supersedes `roots`; when omitted, the controller
-   * wraps `roots` (or an empty set if both are absent) into a static resolver.
-   */
-  readonly resolveRoots?: () => readonly KorriConfigGraphRoot[]
+/**
+ * Root supply is a discriminated pair: exactly one of `roots` (static,
+ * frozen for the controller's lifetime) or `resolveRoots` (dynamic, called
+ * at every (re)build so roots added or removed at runtime — removable
+ * media — join or leave the graph). Passing neither is a type error.
+ */
+export type ConfigGraphControllerOptions = (
+  | {
+      readonly roots: readonly KorriConfigGraphRoot[]
+      readonly resolveRoots?: undefined
+    }
+  | {
+      readonly roots?: undefined
+      readonly resolveRoots: () => readonly KorriConfigGraphRoot[]
+    }
+) & {
   /**
    * Directory whose child entries signal a root-set change (one symlink per
    * dynamically mounted config root). Watched non-recursively; any child
@@ -126,6 +132,17 @@ export function createConfigGraphController(
 ): ConfigGraphController {
   const staticRoots = options.roots
   const resolveRoots = options.resolveRoots ?? (() => staticRoots ?? [])
+  // Serializes initialize/rebuild executions (single-flight): a rebuild
+  // fired while another is in flight waits for it, then re-resolves roots,
+  // so the final state always reflects the newest root set instead of
+  // whichever overlapping build happened to finish last.
+  let buildChain: Promise<unknown> = Promise.resolve()
+
+  const enqueueBuild = <T>(run: () => Promise<T>): Promise<T> => {
+    const next = buildChain.then(run)
+    buildChain = next.catch(() => undefined)
+    return next
+  }
   const debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS
   const shouldWatch = options.watch ?? true
 
@@ -281,33 +298,35 @@ export function createConfigGraphController(
     roots.length === watchedRoots.length &&
     roots.every(({ root }, index) => watchedRoots[index] === root)
 
-  const initialize = async (): Promise<ConfigGraphEvent> => {
-    const roots = resolveRoots()
-    const event = await attemptBuild("config.ready", roots)
-    if (shouldWatch) {
-      startContentWatchers(roots)
-      startSignalWatcher()
-    }
-    return event
-  }
+  const initialize = (): Promise<ConfigGraphEvent> =>
+    enqueueBuild(async () => {
+      const roots = resolveRoots()
+      const event = await attemptBuild("config.ready", roots)
+      if (shouldWatch) {
+        startContentWatchers(roots)
+        startSignalWatcher()
+      }
+      return event
+    })
 
-  const rebuild = async (changedPath?: string): Promise<ConfigGraphEvent> => {
-    // Coarse re-resolve: every rebuild re-reads the root set so dynamically
-    // mounted roots join (or leave) the graph regardless of which watcher
-    // fired. Content watchers are re-pointed only when the set changed —
-    // synchronously, before the async build, so no file event lands in an
-    // unwatched window (a write during the build schedules its own debounced
-    // rebuild) and concurrent rebuild/stop calls cannot interleave a
-    // close/start pair across an await boundary.
-    const roots = resolveRoots()
-    if (shouldWatch && !sameRootSet(roots)) {
-      closeContentWatchers()
-      startContentWatchers(roots)
-    }
-    const event = await attemptBuild("config.changed", roots, changedPath)
-    publish(event)
-    return event
-  }
+  const rebuild = (changedPath?: string): Promise<ConfigGraphEvent> =>
+    enqueueBuild(async () => {
+      // Coarse re-resolve: every rebuild re-reads the root set so dynamically
+      // mounted roots join (or leave) the graph regardless of which watcher
+      // fired. Content watchers are re-pointed only when the set changed —
+      // synchronously, before the async build, so no file event lands in an
+      // unwatched window (a write during the build schedules its own
+      // debounced rebuild) and a stop() call cannot interleave a close/start
+      // pair across an await boundary.
+      const roots = resolveRoots()
+      if (shouldWatch && !sameRootSet(roots)) {
+        closeContentWatchers()
+        startContentWatchers(roots)
+      }
+      const event = await attemptBuild("config.changed", roots, changedPath)
+      publish(event)
+      return event
+    })
 
   const subscribe = (
     listener: (event: ConfigGraphEvent) => void,

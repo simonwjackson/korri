@@ -20,7 +20,7 @@ import {
   LibrarySourceLayerLive,
   resolveAllConfigGraphRoots,
 } from "./library-source-layer-live"
-import { REMOVABLE_CONFIG_COLLECTIONS } from "./proseql/library-db"
+import { REMOVABLE_CONFIG_COLLECTIONS } from "./proseql/config-graph-db"
 
 const originalEnv = {
   desktopProfile: process.env.KORRI_DESKTOP_PROFILE,

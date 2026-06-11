@@ -15,7 +15,7 @@ import {
   type KorriConfigGraphRoot,
   openKorriConfigGraph,
   REMOVABLE_CONFIG_COLLECTIONS,
-} from "./proseql/library-db"
+} from "./proseql/config-graph-db"
 import {
   createLibraryRepository,
   type LibraryRepository,

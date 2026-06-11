@@ -339,6 +339,60 @@ describe("createConfigGraphController", () => {
     })
   })
 
+  it("serializes concurrent rebuilds so each re-resolve sees the prior build's outcome", async () => {
+    await withRoot(async rootA => {
+      await withRoot(async rootB => {
+        await writeFile(
+          join(rootA, "a.korri.yaml"),
+          validFragment("Alpha", "alpha"),
+          "utf8",
+        )
+        await writeFile(
+          join(rootB, "b.korri.yaml"),
+          validFragment("Beta", "beta"),
+          "utf8",
+        )
+        const order: string[] = []
+        let roots = [{ root: rootA }]
+        const controller = createConfigGraphController({
+          resolveRoots: () => {
+            order.push("resolve")
+            return roots
+          },
+          watch: false,
+        })
+        await controller.initialize()
+        controller.subscribe(event => {
+          if (event.name === "config.changed") {
+            order.push(`published-gen${event.generation}`)
+          }
+        })
+        order.length = 0
+
+        // Two rebuilds fired back-to-back without awaiting: the second must
+        // not re-resolve roots (or build) until the first build has
+        // completed and published, so the final state reflects the newest
+        // root set instead of whichever build happened to finish last.
+        const first = controller.rebuild()
+        roots = [{ root: rootB }]
+        const second = controller.rebuild()
+        await Promise.all([first, second])
+
+        expect(order).toEqual([
+          "resolve",
+          "published-gen2",
+          "resolve",
+          "published-gen3",
+        ])
+        const state = controller.state()
+        expect(state.files).toEqual(["b.korri.yaml"])
+        const snapshot = await controller.snapshot()
+        expect(snapshot.map(entry => entry.id)).toEqual(["beta"])
+        await controller.stop()
+      })
+    })
+  })
+
   it("re-points content watchers at the re-resolved root set after a signal", async () => {
     await withRoot(async rootA => {
       await withRoot(async rootB => {
