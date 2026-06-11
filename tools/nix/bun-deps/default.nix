@@ -4,7 +4,7 @@
 }:
 
 let
-  proseqlOverrideKey = "@proseql/core@0.14.0";
+  proseqlOverrideKey = "@proseql/core@0.15.0";
 
   generatedBunNix = ../generated/bun.nix;
   generatedProductionPackageNames = ../generated/bun-production-package-names.nix;
