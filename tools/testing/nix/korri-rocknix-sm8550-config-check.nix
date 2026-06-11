@@ -231,6 +231,10 @@ let
         && (steamUnit.serviceConfig.LimitNOFILE or null) == 524288
         && (steamUnit.environment.XDG_RUNTIME_DIR or null) == "/run/user/2000"
       ))
+      (check "${name}: old substrate Steam launcher/service is absent" (
+        !(cfg.systemd.services ? main-space-steam-uinput)
+        && !(builtins.any (pkg: lib.hasInfix "rocknix-steam-guest" (pkg.name or "")) cfg.environment.systemPackages)
+      ))
       (check "${name}: Korri Steam tmpfiles create state under Korri roots" (
         builtins.elem "d /var/lib/korri/steam 0750 korri korri -" cfg.systemd.tmpfiles.rules
         && builtins.elem "d /var/lib/korri/content/games/steam 0750 korri korri -" cfg.systemd.tmpfiles.rules
