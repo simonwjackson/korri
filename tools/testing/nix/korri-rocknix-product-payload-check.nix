@@ -23,6 +23,9 @@ let
     "PRODUCT_ROOTFS_SEED_SHA256"
     "PRODUCT_ROOTFS_SEED_URL"
     "PRODUCT_ROOTFS_SEED_URLS"
+    "PRODUCT_BRANDING_SPLASH_PATCH_ARCHIVE"
+    "PRODUCT_BRANDING_SPLASH_PATCH_SHA256"
+    "PRODUCT_BRANDING_SPLASH_PATCH_URL"
   ];
   expectedRenderedPackageFields = [
     "PKG_NIX_GUEST_AUTHORITY_REPO"
@@ -39,6 +42,9 @@ let
     "PKG_NIX_GUEST_ROOTFS_SEED_SHA256"
     "PKG_NIX_GUEST_ROOTFS_SEED_URL"
     "PKG_NIX_GUEST_ROOTFS_SEED_URLS"
+    "PKG_NIX_GUEST_BRANDING_SPLASH_PATCH_ARCHIVE"
+    "PKG_NIX_GUEST_BRANDING_SPLASH_PATCH_SHA256"
+    "PKG_NIX_GUEST_BRANDING_SPLASH_PATCH_URL"
   ];
 
   checkPayload =
@@ -80,6 +86,10 @@ let
       (check "${device} product payload seed archive must be product-named" (
         lib.hasPrefix archivePrefix (metadata.archiveName or "")
         && lib.hasSuffix ".tar.zst" (metadata.archiveName or "")
+      ))
+      (check "${device} product payload branding splash patch must be product-named" (
+        lib.hasPrefix "rocknix-splash-branding-${device}-" (metadata.brandingArchiveName or "")
+        && lib.hasSuffix ".patch" (metadata.brandingArchiveName or "")
       ))
       (check "${device} product payload build target must be the explicit product system" (
         metadata.buildTarget or null == expectedBuildTarget
@@ -133,8 +143,20 @@ let
       test -z "$PRODUCT_SOURCE_SHA256"
       test -z "$PRODUCT_ROOTFS_SEED_URLS"
 
+      branding="$payload/branding/$PRODUCT_BRANDING_SPLASH_PATCH_ARCHIVE"
+      test -n "$PRODUCT_BRANDING_SPLASH_PATCH_ARCHIVE"
+      test -f "$branding"
+      test -f "$branding.sha256"
+      test -z "$PRODUCT_BRANDING_SPLASH_PATCH_URL"
+      expected_branding_sha=$(sha256sum "$branding" | awk '{ print $1 }')
+      test "$PRODUCT_BRANDING_SPLASH_PATCH_SHA256" = "$expected_branding_sha"
+      grep -Fx "$expected_branding_sha  $PRODUCT_BRANDING_SPLASH_PATCH_ARCHIVE" "$branding.sha256"
+      head -n 1 "$branding" | grep -q '^--- a/main.c$'
+
       grep -Fx "rootfs_seed_archive=${fixtureArchiveName}" "$manifest"
       grep -Fx "rootfs_seed_sha256=$expected_sha" "$manifest"
+      grep -Fx "branding_splash_patch=$PRODUCT_BRANDING_SPLASH_PATCH_ARCHIVE" "$manifest"
+      grep -Fx "branding_splash_sha256=$expected_branding_sha" "$manifest"
     '';
 
   checks = [

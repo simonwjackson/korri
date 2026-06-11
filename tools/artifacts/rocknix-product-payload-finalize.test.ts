@@ -7,7 +7,16 @@ import { finalizeRocknixProductPayload } from "./rocknix-product-payload-finaliz
 
 const sourceSha = "a".repeat(64)
 const seedSha = "b".repeat(64)
+const brandingSha = "c".repeat(64)
 const cleanRevision = "9f0ed234b4eff39f76801c09daedc9795c8b07fb"
+const brandingOverrides = {
+  PRODUCT_BRANDING_SPLASH_PATCH_ARCHIVE:
+    "rocknix-splash-branding-odin2portal-9f0ed234b4ef.patch",
+  PRODUCT_BRANDING_SPLASH_PATCH_SHA256: brandingSha,
+  PRODUCT_BRANDING_SPLASH_PATCH_URL: "",
+}
+const brandingUrl =
+  "https://github.com/simonwjackson/korri/releases/download/product-payload/rocknix-splash-branding-odin2portal-9f0ed234b4ef.patch"
 
 function makeTempDir() {
   return mkdtempSync(join(tmpdir(), "korri-product-payload-finalize-"))
@@ -267,6 +276,127 @@ describe("RockNix product payload finalizer", () => {
           ],
         }),
       ).toThrow("device prefix")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("emits empty branding fields when the candidate carries no branding asset", () => {
+    const dir = makeTempDir()
+    try {
+      const result = finalizeRocknixProductPayload({
+        candidateLockPath: writeCandidate(dir),
+        outputDir: join(dir, "final"),
+        sourceSha256: sourceSha,
+        productRevision: cleanRevision,
+        seedUrls: [
+          "https://github.com/simonwjackson/korri/releases/download/product-payload/asset-123.tar.zst",
+        ],
+      })
+
+      const lock = readFileSync(result.lockPath, "utf8")
+      expect(lock).toContain(`PRODUCT_BRANDING_SPLASH_PATCH_ARCHIVE=""`)
+      expect(lock).toContain(`PRODUCT_BRANDING_SPLASH_PATCH_SHA256=""`)
+      expect(lock).toContain(`PRODUCT_BRANDING_SPLASH_PATCH_URL=""`)
+      expect(readFileSync(result.envPath, "utf8")).toContain(
+        `PKG_NIX_GUEST_BRANDING_SPLASH_PATCH_URL=""`,
+      )
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("carries branding splash patch fields into the final lock and env", () => {
+    const dir = makeTempDir()
+    try {
+      const result = finalizeRocknixProductPayload({
+        candidateLockPath: writeCandidate(dir, brandingOverrides),
+        outputDir: join(dir, "final"),
+        sourceSha256: sourceSha,
+        productRevision: cleanRevision,
+        seedUrls: [
+          "https://github.com/simonwjackson/korri/releases/download/product-payload/asset-123.tar.zst",
+        ],
+        brandingUrl,
+      })
+
+      const lock = readFileSync(result.lockPath, "utf8")
+      expect(lock).toContain(
+        `PRODUCT_BRANDING_SPLASH_PATCH_ARCHIVE="${brandingOverrides.PRODUCT_BRANDING_SPLASH_PATCH_ARCHIVE}"`,
+      )
+      expect(lock).toContain(
+        `PRODUCT_BRANDING_SPLASH_PATCH_SHA256="${brandingSha}"`,
+      )
+      expect(lock).toContain(
+        `PRODUCT_BRANDING_SPLASH_PATCH_URL="${brandingUrl}"`,
+      )
+      const env = readFileSync(result.envPath, "utf8")
+      expect(env).toContain(
+        `PKG_NIX_GUEST_BRANDING_SPLASH_PATCH_SHA256="${brandingSha}"`,
+      )
+      expect(env).toContain(
+        `PKG_NIX_GUEST_BRANDING_SPLASH_PATCH_URL="${brandingUrl}"`,
+      )
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("requires --branding-url when the candidate carries a branding asset", () => {
+    const dir = makeTempDir()
+    try {
+      expect(() =>
+        finalizeRocknixProductPayload({
+          candidateLockPath: writeCandidate(dir, brandingOverrides),
+          outputDir: join(dir, "final"),
+          sourceSha256: sourceSha,
+          productRevision: cleanRevision,
+          seedUrls: [
+            "https://github.com/simonwjackson/korri/releases/download/product-payload/asset-123.tar.zst",
+          ],
+        }),
+      ).toThrow("--branding-url")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("rejects a branding URL when the candidate has no branding asset", () => {
+    const dir = makeTempDir()
+    try {
+      expect(() =>
+        finalizeRocknixProductPayload({
+          candidateLockPath: writeCandidate(dir),
+          outputDir: join(dir, "final"),
+          sourceSha256: sourceSha,
+          productRevision: cleanRevision,
+          seedUrls: [
+            "https://github.com/simonwjackson/korri/releases/download/product-payload/asset-123.tar.zst",
+          ],
+          brandingUrl,
+        }),
+      ).toThrow("no branding splash patch")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("rejects a branding URL outside the Korri authority repository", () => {
+    const dir = makeTempDir()
+    try {
+      expect(() =>
+        finalizeRocknixProductPayload({
+          candidateLockPath: writeCandidate(dir, brandingOverrides),
+          outputDir: join(dir, "final"),
+          sourceSha256: sourceSha,
+          productRevision: cleanRevision,
+          seedUrls: [
+            "https://github.com/simonwjackson/korri/releases/download/product-payload/asset-123.tar.zst",
+          ],
+          brandingUrl:
+            "https://github.com/simonwjackson/nix-on-rocks/releases/download/product-payload/logo.patch",
+        }),
+      ).toThrow("release URL")
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

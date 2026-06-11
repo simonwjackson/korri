@@ -4,7 +4,7 @@ slug: move-boot-logo-ownership-to-korri
 title: Move boot-logo ownership from the nix-on-rocks substrate to Korri
 origin: parked
 legacy: task-021
-status: To Do
+status: In Progress
 priority: medium
 labels:
   - follow-up
@@ -45,18 +45,25 @@ This is the last visible Korri-knowledge leak in the substrate. Until it lands:
 
 ### Substrate side (nix-on-rocks)
 
-- [ ] Extend the product-payload contract with a branding asset seam. Smallest viable shape: a single optional payload-supplied file path (e.g. `<payload>/branding/boot-logo.c`) that the substrate splices into `rocknix-splash`'s `main.c` at build time. Document the contract in `docs/contracts/`.
-- [ ] Rewrite the splash hunk in `patches/rocknix/0003-sm8550-device-and-host-config.patch` so the patched `rocknix-splash-0001-use-custom-boot-logo.patch` carries **upstream-faithful** SVG/colors (or a substrate-default neutral placeholder), not Korri-shaped data. The branding overlay comes from the payload at image-assembly time.
-- [ ] Add a substrate static check that asserts (a) no Korri-specific strings/colors appear in the splash patch and (b) the payload-overlay path is wired through the image-build step. Add to `guest/scripts/static-checks.sh` or `tests/guest-substrate-static-checks.sh` depending on whether the assertion is path-level or content-level.
-- [ ] `verify-product-payload --product odin2portal` and `--product thor` continue to pass with the branding asset both present and absent (absent → substrate-default; present → Korri logo).
+- [x] Extend the product-payload contract with a branding asset seam. Shipped shape (2026-06-10): optional lock fields `PRODUCT_BRANDING_SPLASH_PATCH_{ARCHIVE,SHA256,URL}` pin a ready-made `main.c` unified diff; `scripts/apply-rocknix-patches` fetches (or takes `NIX_ON_ROCKS_BRANDING_SPLASH_PATCH` locally), SHA-verifies, and stages it as `rocknix-splash-0001-product-boot-logo.patch`. Documented in `docs/contracts/layer14-main-space-contract.md` ("Boot-splash branding seam").
+- [x] Rewrite the splash hunk in `patches/rocknix/0003-sm8550-device-and-host-config.patch`: the Korri logo new-file hunk is removed; only the product-neutral `rocknix-splash` PKG_VERSION bump remains. Absent a payload pin, images keep the upstream ROCKNIX splash.
+- [x] Substrate static check landed in `scripts/check-boundary-lint`: (a) no Korri palette colors anywhere in `patches/rocknix/`, no custom-boot-logo hunk in 0003; (b) branding staging wired in `apply-rocknix-patches` and verified in `verify-product-payload`.
+- [x] `verify-product-payload` passes with branding present and absent; `scripts/tests/product-payload-contract.sh` covers stray-patch, missing-patch, tampered-bytes, and fetch-hash cases for all three products.
 
 ### Korri side
 
-- [ ] Add the Korri SVG path data + green/white color palette as a payload asset under the existing `korri-rocknix-kiosk-{odin2portal,thor}` payload outputs. The asset's final form is whatever shape the substrate contract above accepts (likely a small generated `.c` fragment that the substrate splices in).
-- [ ] Update `nix/images/platforms/rocknix-sm8550.nix` (or wherever payload emission is wired) to include the branding asset in the payload tar.
-- [ ] `nix/tests/korri-rocknix-sm8550-config-check.nix` (or a peer check) asserts the branding asset is present in the emitted payload.
+- [x] Korri SVG path data + green/white palette extracted verbatim into `product/systems/rocknix/branding/rocknix-splash-boot-logo.patch` (shape: ready-made `main.c` unified diff, not a `.c` fragment).
+- [x] `product/systems/rocknix/product-payload.nix` emits the asset under `<payload>/branding/rocknix-splash-branding-<device>-<rev>.patch` with `.sha256` plus candidate lock fields; `rocknix-product-payload-finalize.ts` gained `--branding-url` (required when the candidate carries branding) and the workflow gained a `branding_url` dispatch input.
+- [x] `tools/testing/nix/korri-rocknix-product-payload-check.nix` asserts the branding asset, digest, manifest lines, and contract vocabulary for every product payload.
 
 ### Acceptance
+
+Implementation note (2026-06-10): both repo sides landed in working trees. The
+currently promoted payload release (`rocknix-product-payload-1078753fe366`)
+predates the branding asset, so the in-repo nix-on-rocks locks pin **no**
+branding (= upstream ROCKNIX splash) until the next payload promotion
+publishes `rocknix-splash-branding-<device>-<rev>.patch` and the locks pick up
+the three `PRODUCT_BRANDING_SPLASH_PATCH_*` fields via finalize `--branding-url`.
 
 - [ ] Build a Korri SM8550 image (Odin2Portal lane first, Thor second) via `build-image-only.yml`, flash to sobo, confirm the boot splash shows the Korri logo (not the substrate-default placeholder).
 - [ ] Build a substrate-only image without a Korri payload (or with a synthesized "no-branding" payload), confirm the boot splash shows the substrate default and not Korri colors. This is the negative test that proves the leak is closed.

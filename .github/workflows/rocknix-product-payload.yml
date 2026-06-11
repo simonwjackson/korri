@@ -50,6 +50,10 @@ on:
         description: "Direct Korri release download URL for optional finalization"
         required: false
         type: string
+      branding_url:
+        description: "Direct Korri release download URL for the branding splash patch"
+        required: false
+        type: string
 
 jobs:
   candidate-payload:
@@ -115,13 +119,19 @@ jobs:
           PRODUCT_REVISION: ${{ inputs.product_revision }}
           SOURCE_SHA256: ${{ inputs.source_sha256 }}
           SEED_URL: ${{ inputs.seed_url }}
+          BRANDING_URL: ${{ inputs.branding_url }}
         run: |
+          branding_args=()
+          if [ -n "$BRANDING_URL" ]; then
+            branding_args=(--branding-url "$BRANDING_URL")
+          fi
           nix develop .# --command bun tools/artifacts/rocknix-product-payload-finalize.ts \
             --candidate out/artifacts/rocknix-product-payload-${{ matrix.product }}-candidate/nix-support/product-payload/candidate-product-payload.lock \
             --out out/artifacts/rocknix-product-payload-${{ matrix.product }}-final \
             --product-rev "$PRODUCT_REVISION" \
             --source-sha256 "$SOURCE_SHA256" \
-            --seed-url "$SEED_URL"
+            --seed-url "$SEED_URL" \
+            "${branding_args[@]}"
 
       - name: Upload candidate payload
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_payload && (inputs.product == 'all' || inputs.product == matrix.product) }}

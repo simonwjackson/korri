@@ -14,12 +14,15 @@
 
 let
   archiveName = "rocknix-guest-rootfs-${device}-${productShortRevision}.tar.zst";
+  brandingSplashPatch = ./branding/rocknix-splash-boot-logo.patch;
+  brandingArchiveName = "rocknix-splash-branding-${device}-${productShortRevision}.patch";
   candidateLockPath = "nix-support/product-payload/candidate-product-payload.lock";
   manifestPath = "nix-support/product-payload/manifest.txt";
   metadata = {
     inherit
       archiveName
       authorityRepo
+      brandingArchiveName
       buildTarget
       candidateLockPath
       compatible
@@ -59,13 +62,17 @@ pkgs.runCommand "korri-product-payload-${device}"
       exit 1
     fi
 
-    mkdir -p "$out/rootfs" "$out/nix-support/product-payload"
+    mkdir -p "$out/rootfs" "$out/branding" "$out/nix-support/product-payload"
 
     archive_path="$out/rootfs/${archiveName}"
     ln -s "$rootfs_tar" "$archive_path"
 
     seed_sha=$(sha256sum "$rootfs_tar" | awk '{ print $1 }')
     printf '%s  %s\n' "$seed_sha" "${archiveName}" > "$out/rootfs/${archiveName}.sha256"
+
+    cp ${brandingSplashPatch} "$out/branding/${brandingArchiveName}"
+    branding_sha=$(sha256sum "$out/branding/${brandingArchiveName}" | awk '{ print $1 }')
+    printf '%s  %s\n' "$branding_sha" "${brandingArchiveName}" > "$out/branding/${brandingArchiveName}.sha256"
 
     cat > "$out/${candidateLockPath}" <<EOF
     # Candidate Korri product payload lock for nix-on-rocks Phase 1 vocabulary.
@@ -82,6 +89,9 @@ pkgs.runCommand "korri-product-payload-${device}"
     PRODUCT_ROOTFS_SEED_SHA256="$seed_sha"
     PRODUCT_ROOTFS_SEED_URL=""
     PRODUCT_ROOTFS_SEED_URLS=""
+    PRODUCT_BRANDING_SPLASH_PATCH_ARCHIVE="${brandingArchiveName}"
+    PRODUCT_BRANDING_SPLASH_PATCH_SHA256="$branding_sha"
+    PRODUCT_BRANDING_SPLASH_PATCH_URL=""
     PRODUCT_REV_CLEAN="${if productRevisionIsClean then "1" else "0"}"
     PRODUCT_SUBSTRATE_REV="${substrateRevision}"
     EOF
@@ -96,6 +106,8 @@ pkgs.runCommand "korri-product-payload-${device}"
     rootfs_seed_compatible=${compatible}
     rootfs_seed_archive=${archiveName}
     rootfs_seed_sha256=$seed_sha
+    branding_splash_patch=${brandingArchiveName}
+    branding_splash_sha256=$branding_sha
     substrate_rev=${substrateRevision}
     candidate_lock=${candidateLockPath}
     EOF

@@ -7,6 +7,7 @@ export type FinalizeRocknixProductPayloadInput = {
   readonly sourceSha256: string
   readonly productRevision: string
   readonly seedUrls: readonly string[]
+  readonly brandingUrl?: string
 }
 
 export type FinalizeRocknixProductPayloadResult = {
@@ -44,6 +45,9 @@ export function finalizeRocknixProductPayload(
   const seedUrls = input.seedUrls.join(" ")
   const firstSeedUrl = input.seedUrls[0] ?? ""
   const productUrl = `https://api.github.com/repos/${authorityRepo}/tarball/${input.productRevision}`
+  const brandingArchive = candidate.PRODUCT_BRANDING_SPLASH_PATCH_ARCHIVE ?? ""
+  const brandingSha256 = candidate.PRODUCT_BRANDING_SPLASH_PATCH_SHA256 ?? ""
+  const brandingUrl = input.brandingUrl ?? ""
 
   const lockFields: readonly [string, string][] = [
     ["PRODUCT_AUTHORITY_REPO", authorityRepo],
@@ -61,6 +65,9 @@ export function finalizeRocknixProductPayload(
     ["PRODUCT_ROOTFS_SEED_SHA256", candidate.PRODUCT_ROOTFS_SEED_SHA256],
     ["PRODUCT_ROOTFS_SEED_URL", firstSeedUrl],
     ["PRODUCT_ROOTFS_SEED_URLS", seedUrls],
+    ["PRODUCT_BRANDING_SPLASH_PATCH_ARCHIVE", brandingArchive],
+    ["PRODUCT_BRANDING_SPLASH_PATCH_SHA256", brandingSha256],
+    ["PRODUCT_BRANDING_SPLASH_PATCH_URL", brandingUrl],
   ]
 
   const envFields: readonly [string, string][] = [
@@ -84,6 +91,9 @@ export function finalizeRocknixProductPayload(
     ["PKG_NIX_GUEST_ROOTFS_SEED_SHA256", candidate.PRODUCT_ROOTFS_SEED_SHA256],
     ["PKG_NIX_GUEST_ROOTFS_SEED_URL", firstSeedUrl],
     ["PKG_NIX_GUEST_ROOTFS_SEED_URLS", seedUrls],
+    ["PKG_NIX_GUEST_BRANDING_SPLASH_PATCH_ARCHIVE", brandingArchive],
+    ["PKG_NIX_GUEST_BRANDING_SPLASH_PATCH_SHA256", brandingSha256],
+    ["PKG_NIX_GUEST_BRANDING_SPLASH_PATCH_URL", brandingUrl],
   ]
 
   mkdirSync(input.outputDir, { recursive: true })
@@ -106,6 +116,9 @@ export function finalizeRocknixProductPayload(
       `rootfs_seed_archive=${candidate.PRODUCT_ROOTFS_SEED_ARCHIVE}`,
       `rootfs_seed_sha256=${candidate.PRODUCT_ROOTFS_SEED_SHA256}`,
       `rootfs_seed_urls=${seedUrls}`,
+      `branding_splash_patch=${brandingArchive}`,
+      `branding_splash_sha256=${brandingSha256}`,
+      `branding_splash_url=${brandingUrl}`,
       `substrate_rev=${candidate.PRODUCT_SUBSTRATE_REV ?? ""}`,
       "",
     ].join("\n"),
@@ -151,6 +164,37 @@ function validateCandidate(
   validateCandidateIdentity(candidate)
   validateSeedArchiveName(candidate)
   validateSeedUrls(candidate.PRODUCT_AUTHORITY_REPO, input.seedUrls)
+  validateBranding(candidate, input)
+}
+
+function validateBranding(
+  candidate: CandidatePayload,
+  input: FinalizeRocknixProductPayloadInput,
+) {
+  const archive = candidate.PRODUCT_BRANDING_SPLASH_PATCH_ARCHIVE ?? ""
+  const sha = candidate.PRODUCT_BRANDING_SPLASH_PATCH_SHA256 ?? ""
+  const url = input.brandingUrl ?? ""
+
+  if (!archive) {
+    if (url) {
+      throw new Error(
+        "branding URL was supplied but the candidate payload carries no branding splash patch",
+      )
+    }
+    return
+  }
+
+  if (!sha256Pattern.test(sha)) {
+    throw new Error(
+      "candidate branding splash patch SHA256 must be a 64-character hex digest",
+    )
+  }
+  if (!url) {
+    throw new Error(
+      "candidate payload carries a branding splash patch; finalization requires --branding-url",
+    )
+  }
+  validateReleaseUrl(candidate.PRODUCT_AUTHORITY_REPO, url)
 }
 
 function validateInputDigests(
@@ -296,7 +340,7 @@ function parseCliArgs(
     const value = args[index + 1]
     if (!name?.startsWith("--") || value === undefined) {
       throw new Error(
-        "usage: rocknix-product-payload-finalize --candidate <path> --out <dir> --source-sha256 <sha> --product-rev <rev> --seed-url <url> [--seed-url <url>]",
+        "usage: rocknix-product-payload-finalize --candidate <path> --out <dir> --source-sha256 <sha> --product-rev <rev> --seed-url <url> [--seed-url <url>] [--branding-url <url>]",
       )
     }
     index += 1
@@ -311,7 +355,16 @@ function parseCliArgs(
     sourceSha256: singleArg(values, "--source-sha256"),
     productRevision: singleArg(values, "--product-rev"),
     seedUrls: values.get("--seed-url") ?? [],
+    brandingUrl: optionalArg(values, "--branding-url"),
   }
+}
+
+function optionalArg(values: Map<string, string[]>, name: string) {
+  const entries = values.get(name) ?? []
+  if (entries.length > 1) {
+    throw new Error(`expected at most one ${name}`)
+  }
+  return entries[0]
 }
 
 function singleArg(values: Map<string, string[]>, name: string) {
