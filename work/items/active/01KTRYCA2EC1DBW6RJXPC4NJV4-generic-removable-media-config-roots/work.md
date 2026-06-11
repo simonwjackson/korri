@@ -53,3 +53,48 @@ Outstanding (not blocking PR-1):
 - Review advisories: UUID-less TOCTOU guard gap, mounted-elsewhere silent
   exit, ConfigGraphEvent not carrying the resolved root set (see
   /tmp/software-engineering/se-code-review/20260610-190740-0162ae31/).
+
+## ProseQL 0.15 adoption (2026-06-10, follow-on)
+
+Upstream landed per-root `collections`, `onFragmentError`, and first-class
+provenance/diagnostics. Adopted on trunk (4 commits, ending 5452c40):
+
+- Collection-scoped trust is now native per-root scoping (ignored-collection
+  diagnostics); the Korri strip-first transform was deleted, validation is
+  narrowed to root-allowed sections, and the symlink-escape realpath guard
+  remains defense-in-depth (0.15 discovery never lists symlink entries).
+- Fragment-error containment (`skip-fragment`, user-approved contract
+  change): broken fragments — card files or local typos — are skipped with
+  diagnostics instead of freezing the graph at last-known-good;
+  `config.invalid`/last-known-good now applies only to non-fragment errors
+  (missing non-optional root). Controller/RPC tests updated.
+- `ConfigGraphEvent.diagnostics` surfaces skips over `/api/config/events`;
+  `openKorriConfigGraph` returns `KorriConfigGraphDb` exposing
+  `$documentGraph` provenance + diagnostics (slice-D enabler).
+- bun offline-cache codec patch re-keyed to `@proseql/core@0.15.0`.
+
+Follow-ups: backlog 01KTTHJ7SPYEB5M1RTAT20RZ05 (surface diagnostics/
+provenance/roots in portal + events), 01KTTHJRTT3N93BMBZ1SF8VXJ1 (upstream
+asks: per-root error policy, symlink contract, transform meta).
+
+## Media-id mountpoints (2026-06-11, follow-on)
+
+Mounts and config-roots.d entries renamed from kernel instance to media id
+(partition filesystem UUID): /run/media/korri/<uuid>. Stable paths across
+slots/re-inserts, stable config-root identity for provenance/diagnostics,
+deterministic card-wins ordering by media identity. UUID now required to
+mount (closes the vacuous-TOCTOU advisory) and charset/length-validated
+(attacker-controlled header becomes a path component). Unmount resolves
+mountpoints from the surviving mount table (findmnt --source) scoped to
+mediaRoot with a dot/empty id guard; dd-cloned cards (same UUID, different
+device) are skipped, never aliased. Trunk commits f32f62b + 863dd15.
+
+## Fixed cross-device media path (2026-06-11, follow-on)
+
+/run/media/korri/<media-id> is now the same on every Korri device:
+mediaRoot and configRootsDir became read-only module options (card
+fragments reference their own content by absolute path resolved on
+whatever device the media is inserted into, so the prefix is a contract,
+not a preference). SM8550 dropped its legacy cards/ override; the content
+symlink retargets to the generic root. Module check asserts the readOnly
+declarations and that an override fails at eval time. Trunk commit 82a09f1.
