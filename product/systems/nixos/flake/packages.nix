@@ -21,6 +21,7 @@
   korriHeadlessSource,
   sunshineKorri,
   moonlightEmbeddedKorri,
+  steamKorri,
   libretroFake08,
   gamescopeKorri,
   smbRemastered,
@@ -53,6 +54,7 @@
   korri-headless-source = korriHeadlessSource;
   sunshine-korri = sunshineKorri;
   moonlight-embedded-korri = moonlightEmbeddedKorri;
+  steam-korri = steamKorri;
   libretro-fake-08 = libretroFake08;
   gamescope-korri = gamescopeKorri;
   smb-remastered = smbRemastered;

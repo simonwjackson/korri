@@ -90,6 +90,7 @@ in
     sunshine = prev.sunshine;
   };
   sunshine-korri = final.sunshine;
+  steam-korri = final.callPackage ../../../vendor/steam-korri/package.nix { };
   libretro-fake-08 = final.callPackage ../../../vendor/libretro-fake-08/package.nix {
     inherit fake-08-src;
   };

@@ -160,6 +160,10 @@ pkgs.lib.optionalAttrs isX86Linux {
   korri-retroarch-xdelta = import ../../../../tools/testing/nix/korri-retroarch-xdelta-check.nix {
     inherit pkgs;
   };
+  steam-korri-check = import ../../../../product/vendor/steam-korri/check.nix {
+    inherit pkgs;
+    steamKorriPackage = self.packages.${system}.steam-korri;
+  };
   libretro-fake-08-check = import ../../../../product/vendor/libretro-fake-08/check.nix {
     inherit pkgs;
     libretroFake08Package = self.packages.${system}.libretro-fake-08;
@@ -359,6 +363,10 @@ pkgs.lib.optionalAttrs isX86Linux {
       }
       {
         name = "korri-moonlight-control-protocol-patch";
+        owner = "package-output";
+      }
+      {
+        name = "steam-korri-check";
         owner = "package-output";
       }
       {

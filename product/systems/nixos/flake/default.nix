@@ -224,6 +224,7 @@ flake-utils.lib.eachDefaultSystem (
       overlays = [ korriPackagesOverlay ];
     };
 
+    steamKorri = pkgs.steam-korri;
     libretroFake08 = pkgs.libretro-fake-08;
     smbRemastered = pkgs.smb-remastered;
     superMario127 = pkgs.super-mario-127;
@@ -294,6 +295,7 @@ flake-utils.lib.eachDefaultSystem (
         korriHeadlessSource
         sunshineKorri
         moonlightEmbeddedKorri
+        steamKorri
         libretroFake08
         gamescopeKorri
         smbRemastered
