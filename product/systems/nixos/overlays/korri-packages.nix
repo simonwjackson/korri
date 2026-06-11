@@ -44,6 +44,7 @@
 {
   nix-on-rocks,
   fake-08-src,
+  wasm4-src,
   smbr-src,
   sm127-src,
   nixpkgs-godot,
@@ -91,6 +92,10 @@ in
   };
   sunshine-korri = final.sunshine;
   steam-korri = final.callPackage ../../../vendor/steam-korri/package.nix { };
+  libretro-wasm4 = final.callPackage ../../../vendor/libretro-wasm4/package.nix {
+    inherit wasm4-src;
+  };
+
   libretro-fake-08 = final.callPackage ../../../vendor/libretro-fake-08/package.nix {
     inherit fake-08-src;
   };

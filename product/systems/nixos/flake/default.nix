@@ -6,6 +6,7 @@ inputs@{
   bun2nix,
   nix-on-rocks,
   fake-08-src,
+  wasm4-src,
   smbr-src,
   sm127-src,
   nixpkgs-godot,
@@ -22,6 +23,7 @@ flake-utils.lib.eachDefaultSystem (
         bun2nix
         nix-on-rocks
         fake-08-src
+        wasm4-src
         smbr-src
         sm127-src
         nixpkgs-godot
@@ -226,6 +228,7 @@ flake-utils.lib.eachDefaultSystem (
 
     steamKorri = pkgs.steam-korri;
     libretroFake08 = pkgs.libretro-fake-08;
+    libretroWasm4 = pkgs.libretro-wasm4;
     smbRemastered = pkgs.smb-remastered;
     superMario127 = pkgs.super-mario-127;
     yoshisFabricationStation = pkgs.yoshis-fabrication-station;
@@ -297,6 +300,7 @@ flake-utils.lib.eachDefaultSystem (
         moonlightEmbeddedKorri
         steamKorri
         libretroFake08
+        libretroWasm4
         gamescopeKorri
         smbRemastered
         superMario127

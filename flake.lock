@@ -192,7 +192,8 @@
         "nixpkgs-2405": "nixpkgs-2405",
         "nixpkgs-godot": "nixpkgs-godot",
         "sm127-src": "sm127-src",
-        "smbr-src": "smbr-src"
+        "smbr-src": "smbr-src",
+        "wasm4-src": "wasm4-src"
       }
     },
     "sm127-src": {
@@ -278,6 +279,25 @@
         "owner": "numtide",
         "repo": "treefmt-nix",
         "type": "github"
+      }
+    },
+    "wasm4-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1734062069,
+        "narHash": "sha256-QmSqQh+8w8pxoQcgHrsTfv/lIb5Xh7LkATnSMDUwjKo=",
+        "ref": "refs/heads/main",
+        "rev": "92490f261659921d8b724f10b5b842cdf5a0a1bb",
+        "revCount": 1738,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/aduros/wasm4"
+      },
+      "original": {
+        "rev": "92490f261659921d8b724f10b5b842cdf5a0a1bb",
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/aduros/wasm4"
       }
     }
   },

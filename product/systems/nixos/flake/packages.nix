@@ -23,6 +23,7 @@
   moonlightEmbeddedKorri,
   steamKorri,
   libretroFake08,
+  libretroWasm4,
   gamescopeKorri,
   smbRemastered,
   superMario127,
@@ -56,6 +57,7 @@
   moonlight-embedded-korri = moonlightEmbeddedKorri;
   steam-korri = steamKorri;
   libretro-fake-08 = libretroFake08;
+  libretro-wasm4 = libretroWasm4;
   gamescope-korri = gamescopeKorri;
   smb-remastered = smbRemastered;
   super-mario-127 = superMario127;

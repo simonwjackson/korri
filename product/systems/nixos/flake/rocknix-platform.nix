@@ -3,6 +3,7 @@
   nixpkgs,
   nix-on-rocks,
   fake-08-src,
+  wasm4-src,
   smbr-src,
   sm127-src,
   nixpkgs-godot,
@@ -21,6 +22,7 @@ let
         inherit
           nix-on-rocks
           fake-08-src
+          wasm4-src
           smbr-src
           sm127-src
           nixpkgs-godot

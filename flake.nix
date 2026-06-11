@@ -14,6 +14,13 @@
     fake-08-src.url = "git+https://github.com/jtothebell/fake-08?rev=0d26fd59103941e5f95e0ee665c6e0fb8c6b6f03&submodules=1";
     fake-08-src.flake = false;
 
+    # WASM-4 libretro core. nixpkgs does not package wasm4/wasm4_libretro at
+    # this pin, so Korri carries an additive opt-in package lane mirroring
+    # libretro-fake-08. Keep submodules enabled: the native/libretro runtime
+    # vendors wasm3 and libretro headers in-tree.
+    wasm4-src.url = "git+https://github.com/aduros/wasm4?rev=92490f261659921d8b724f10b5b842cdf5a0a1bb&submodules=1";
+    wasm4-src.flake = false;
+
     smbr-src.url = "github:JHDev2006/Super-Mario-Bros.-Remastered-Public?rev=21b068182fdf07bf5aa7c73b4d399650970fd2f0";
     smbr-src.flake = false;
 

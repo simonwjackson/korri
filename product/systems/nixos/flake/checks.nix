@@ -172,6 +172,10 @@ pkgs.lib.optionalAttrs isX86Linux {
     inherit pkgs;
     libretroFake08Package = self.packages.${system}.libretro-fake-08;
   };
+  libretro-wasm4-check = import ../../../../product/vendor/libretro-wasm4/check.nix {
+    inherit pkgs;
+    libretroWasm4Package = self.packages.${system}.libretro-wasm4;
+  };
   smb-remastered-check = import ../../../../product/vendor/super-mario-bros-remastered/check.nix {
     inherit pkgs;
     smbRemasteredPackage = self.packages.${system}.smb-remastered;
@@ -379,6 +383,10 @@ pkgs.lib.optionalAttrs isX86Linux {
       }
       {
         name = "libretro-fake-08-check";
+        owner = "package-output";
+      }
+      {
+        name = "libretro-wasm4-check";
         owner = "package-output";
       }
       {
