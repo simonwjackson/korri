@@ -168,6 +168,7 @@ let
       builtins.elem "d /var/lib/korri/steam 0750 korri korri -" enabled.systemd.tmpfiles.rules
       && builtins.elem "d /var/lib/korri/content/games/steam 0750 korri korri -" enabled.systemd.tmpfiles.rules
       && builtins.elem "d /home/korri/.steam 0700 korri korri -" enabled.systemd.tmpfiles.rules
+      && builtins.elem "d /var/lib/korri/steam/fex-data 0750 korri korri -" enabled.systemd.tmpfiles.rules
     ))
     (check "invalid /storage Steam home fails the path assertion" (
       hasFailedAssertion "services.korri.steam.home must live under services.korri.runtime.stateRoot" invalidPath

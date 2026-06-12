@@ -333,6 +333,7 @@ in
       "d ${cfg.dotDir} 0700 ${runtime.user} ${runtime.group} -"
       "d ${cfg.fexConfigDir} 0750 ${runtime.user} ${runtime.group} -"
       "d ${cfg.fexConfigDir}/AppConfig 0750 ${runtime.user} ${runtime.group} -"
+      "d ${cfg.home}/fex-data 0750 ${runtime.user} ${runtime.group} -"
       "d ${cfg.home}/fex-data/RootFS 0750 ${runtime.user} ${runtime.group} -"
     ];
 

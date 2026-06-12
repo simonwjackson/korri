@@ -144,7 +144,7 @@ let
             wrapProgram "$out/bin/steam-arm64-bootstrap" \
               --prefix PATH : ${lib.makeBinPath [ bash coreutils ]}
             wrapProgram "$out/bin/steam-arm64-seed" \
-              --prefix PATH : ${lib.makeBinPath [ bash binutils coreutils curl findutils gnugrep gnutar gzip unzip ]}
+              --prefix PATH : ${lib.makeBinPath [ bash binutils coreutils curl findutils gnugrep gnutar gzip unzip xz ]}
             wrapProgram "$out/bin/steam-guest-native" \
               --prefix PATH : ${lib.makeBinPath [ bash coreutils ]}
             wrapProgram "$out/bin/steam-guest-runtime-prep" \

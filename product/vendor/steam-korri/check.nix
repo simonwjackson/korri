@@ -38,6 +38,9 @@ let
       lib.hasInfix "korri-normalize-backslash-zip-entries" seedScript
       && lib.hasInfix "normalize_backslash_zip_entries \"$STEAM_HOME\"" seedScript
     ))
+    (check "steam-korri seed wrapper includes xz for fresh runtime extraction" (
+      lib.hasInfix "unzip xz" packageSource
+    ))
     (check "steam-korri bootstrap repairs standard ~/.steam links" (
       lib.hasInfix "\"$STEAM_DOT/root\"" bootstrapScript
       && lib.hasInfix "\"$STEAM_DOT/bin32\"" bootstrapScript
