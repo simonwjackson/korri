@@ -80,7 +80,9 @@ restore_fex_wrapper() {
     return 0
   fi
 
-  echo "steam-guest-runtime-prep: warning: no non-FEX backup found for $file; tool left as FEX wrapper" >&2
+  if [ "${KORRI_RUNTIME_PREP_VERBOSE:-0}" = 1 ]; then
+    echo "steam-guest-runtime-prep: warning: no non-FEX backup found for $file; tool left as FEX wrapper" >&2
+  fi
 }
 
 fex_bin="${FEX_BIN:-$(command -v FEX 2>/dev/null || true)}"
@@ -181,6 +183,67 @@ for fonts in "$common"/SteamLinuxRuntime*/steamrt*_platform_*/files/share/fonts 
   done
 done
 
+
+patch_proton_arm64() {
+  local proton="$1" python
+  [ -f "$proton" ] || return 0
+
+  python="$(command -v python3 2>/dev/null || true)"
+  if [ -z "$python" ]; then
+    echo "steam-guest-runtime-prep: warning: python3 unavailable; cannot patch $proton" >&2
+    return 0
+  fi
+
+  "$python" - "$proton" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+try:
+    text = path.read_text()
+except UnicodeDecodeError:
+    text = path.read_text(errors="surrogateescape")
+original = text
+
+config_anchor = '''        if "PROTON_LOG" in self.env:\n            app_config["Config"]["SilentLog"] = "0" if self.log_enabled_for("fex", True) else "1"\n\n        return app_config\n'''
+config_patch = '''        if "PROTON_LOG" in self.env:\n            app_config["Config"]["SilentLog"] = "0" if self.log_enabled_for("fex", True) else "1"\n\n        # KORRI_FEX_CONFIG_MERGE_PATCH: Steam does not currently pass the\n        # FEX performance flags for this copied ARM64 compatibility tool.\n        # If Proton generated an otherwise empty per-app config, inherit the\n        # ROCKNIX-like global FEX config seeded by Korri.\n        if not app_config["Config"] and not app_config["ThunksDB"]:\n            try:\n                global_fex_config_path = os.environ.get("KORRI_FEX_CONFIG") or "/home/korri/.config/fex-emu/Config.json"\n                with open(global_fex_config_path, "r") as global_fex_config_file:\n                    global_fex_config = json.load(global_fex_config_file)\n                app_config["Config"].update(global_fex_config.get("Config", {}))\n                app_config["ThunksDB"].update(global_fex_config.get("ThunksDB", {}))\n            except Exception as e:\n                self.log_file.write("Korri: failed to merge global FEX config: " + str(e) + "\\n")\n\n        return app_config\n'''
+if "KORRI_FEX_CONFIG_MERGE_PATCH" not in text:
+    if config_anchor not in text:
+        raise SystemExit(f"{path}: could not find FEX config anchor")
+    text = text.replace(config_anchor, config_patch, 1)
+
+wrap_method = '''\n    def korri_fex_wrap_args(self, args):\n        # KORRI_FEX_LAUNCHER_PATCH: Proton 11 ARM64 compatibility tool uses\n        # an x86_64 Wine payload. Keep Wine files as ELF for Proton checks,\n        # but enter FEX at subprocess boundaries on aarch64.\n        if platform.machine() != "aarch64" or len(args) == 0:\n            return args\n        fex = os.environ.get("PROTON_FEX_BIN") or shutil.which("FEX") or "FEX"\n        first = args[0]\n        if first == fex:\n            return args\n        if isinstance(first, str) and first.startswith(g_proton.path("files/")):\n            return [fex] + args\n        return args\n'''
+if "KORRI_FEX_LAUNCHER_PATCH" not in text:
+    run_proc_anchor = '''\n    def run_proc(self, args, local_env=None):\n'''
+    if run_proc_anchor not in text:
+        raise SystemExit(f"{path}: could not find run_proc anchor")
+    text = text.replace(run_proc_anchor, wrap_method + run_proc_anchor, 1)
+    call_anchor = '''        return subprocess.call(args, env=local_env, stderr=self.log_file, stdout=self.log_file)\n'''
+    call_patch = '''        return subprocess.call(self.korri_fex_wrap_args(args), env=local_env, stderr=self.log_file, stdout=self.log_file)\n'''
+    if call_anchor not in text:
+        raise SystemExit(f"{path}: could not find subprocess.call anchor")
+    text = text.replace(call_anchor, call_patch, 1)
+    argv_anchor = '''\n        rc = self.run_proc(adverb + argv + sys.argv[2:] + self.cmdlineappend)\n'''
+    argv_patch = '''\n        if platform.machine() == "aarch64" and g_proton.host_pe_arch == "x86_64-windows":\n            argv = self.korri_fex_wrap_args(argv)\n\n        rc = self.run_proc(adverb + argv + sys.argv[2:] + self.cmdlineappend)\n'''
+    if argv_anchor not in text:
+        raise SystemExit(f"{path}: could not find argv wrap anchor")
+    text = text.replace(argv_anchor, argv_patch, 1)
+
+if "KORRI_30XX_DIRECT_EXE_PATCH" not in text:
+    cod_anchor = '''        # CoD: Black Ops 3 workaround\n        if os.environ.get("SteamGameId", 0) in [\n'''
+    cod_patch = '''        # KORRI_30XX_DIRECT_EXE_PATCH: on SM8550/FEX, Proton's x86 Steam shim\n        # can stay alive without handing off to 30XX. Launch this app exe directly.\n        if platform.machine() == "aarch64" and os.environ.get("SteamGameId", 0) == "1029210":\n            argv = [g_proton.wine_bin] + sys.argv[2:]\n        # CoD: Black Ops 3 workaround\n        elif os.environ.get("SteamGameId", 0) in [\n'''
+    if cod_anchor not in text:
+        raise SystemExit(f"{path}: could not find 30XX direct-exe anchor")
+    text = text.replace(cod_anchor, cod_patch, 1)
+
+if text != original:
+    backup = path.with_name(path.name + ".pre-korri-patch")
+    if not backup.exists():
+        backup.write_text(original)
+    path.write_text(text)
+PY
+}
+
 # Proton and Steam Runtime helper scripts commonly use /usr/bin/env python3.
 # Nested pressure-vessel containers have sparse PATH, so use the FHS-visible
 # absolute interpreter from the FHS runtime.
@@ -193,6 +256,11 @@ for proton in "$common"/Proton*/proton; do
     chmod --reference="$proton" "$tmp" 2>/dev/null || chmod a+rx "$tmp"
     mv -f "$tmp" "$proton"
   fi
+  case "$proton" in
+    *"(ARM64)"*)
+      patch_proton_arm64 "$proton" || echo "steam-guest-runtime-prep: warning: could not patch $proton" >&2
+      ;;
+  esac
 done
 
 for py in "$common"/SteamLinuxRuntime*/steamrt*_platform_*/files/bin/python3.* "$common"/SteamLinuxRuntime*/sniper_platform_*/files/bin/python3.*; do

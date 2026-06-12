@@ -148,7 +148,7 @@ let
             wrapProgram "$out/bin/steam-guest-native" \
               --prefix PATH : ${lib.makeBinPath [ bash coreutils ]}
             wrapProgram "$out/bin/steam-guest-runtime-prep" \
-              --prefix PATH : ${lib.makeBinPath [ bash bubblewrap coreutils file findutils gnugrep gnused ]}
+              --prefix PATH : ${lib.makeBinPath [ bash bubblewrap coreutils file findutils gnugrep gnused python3 ]}
             wrapProgram "$out/bin/steam-guest-run" \
               --prefix PATH : ${lib.makeBinPath [ bash coreutils ]}
 

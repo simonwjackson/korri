@@ -47,6 +47,11 @@ let
       lib.hasInfix "files/share/fex-emu" runtimePrepScript
       && lib.hasInfix "pre-korri-fex-share" runtimePrepScript
     ))
+    (check "steam-korri runtime prep productizes Proton ARM64 patches" (
+      lib.hasInfix "KORRI_FEX_LAUNCHER_PATCH" runtimePrepScript
+      && lib.hasInfix "KORRI_30XX_DIRECT_EXE_PATCH" runtimePrepScript
+      && lib.hasInfix "KORRI_FEX_CONFIG_MERGE_PATCH" runtimePrepScript
+    ))
     (check "steam-korri FHS target package list carries util-linux/taskset" (
       lib.hasInfix "util-linux" packageSource
     ))
@@ -136,6 +141,84 @@ else
         printf '%s\n' "$smoke_out" >&2
         exit 1
       fi
+
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      steam_home="$tmp/Steam"
+      proton_dir="$steam_home/steamapps/common/Proton 11.0 (ARM64)"
+      mkdir -p "$proton_dir"
+      cat > "$proton_dir/proton" <<'PROTON'
+#!/usr/bin/env python3
+import json
+import os
+import platform
+import shutil
+import subprocess
+import sys
+class Proton:
+    host_pe_arch = "x86_64-windows"
+    wine_bin = "/tmp/proton/files/bin/wine"
+    lib_dir = "/tmp/proton/files/lib"
+    dist_dir = "/tmp/proton"
+    def path(self, suffix):
+        return "/tmp/proton/" + suffix
+g_proton = Proton()
+class CompatData:
+    fex_config_file = "/tmp/fex-config.json"
+g_compatdata = CompatData()
+class Session:
+    env = {}
+    log_file = sys.stderr
+    remote_debug_cmd = None
+    cmdlineappend = []
+    def log_enabled_for(self, name, default):
+        return default
+    def generate_fex_app_config(self):
+        app_config = {"Config": {}, "ThunksDB": {}}
+        if "PROTON_LOG" in self.env:
+            app_config["Config"]["SilentLog"] = "0" if self.log_enabled_for("fex", True) else "1"
+
+        return app_config
+    def init_session(self, update_prefix_files):
+        self.env["FEX_APP_CONFIG_LOCATION"] = os.path.join(g_proton.dist_dir, "share/fex-emu/")
+    def run_proc(self, args, local_env=None):
+        if local_env is None:
+            local_env = self.env
+        return subprocess.call(args, env=local_env, stderr=self.log_file, stdout=self.log_file)
+    def run(self):
+        adverb = []
+        remote_debug_proc = None
+        # CoD: Black Ops 3 workaround
+        if os.environ.get("SteamGameId", 0) in [
+                    "311210",
+                ]:
+            argv = [g_proton.wine_bin, "c:\\Program Files (x86)\\Steam\\steam.exe"]
+        else:
+            argv = [g_proton.lib_dir + "/wine/x86_64-unix/wine-preloader", g_proton.lib_dir + "/wine/x86_64-unix/wine", "c:\\windows\\system32\\steam.exe"]
+
+        rc = self.run_proc(adverb + argv + sys.argv[2:] + self.cmdlineappend)
+PROTON
+      chmod 755 "$proton_dir/proton"
+      STEAM_HOME="$steam_home" "$package_out/bin/steam-guest-runtime-prep" --apply
+      grep -q 'KORRI_FEX_LAUNCHER_PATCH' "$proton_dir/proton" || {
+        echo "runtime prep did not apply Proton FEX launcher patch" >&2
+        exit 1
+      }
+      grep -q 'KORRI_30XX_DIRECT_EXE_PATCH' "$proton_dir/proton" || {
+        echo "runtime prep did not apply 30XX direct-exe patch" >&2
+        exit 1
+      }
+      grep -q 'KORRI_FEX_CONFIG_MERGE_PATCH' "$proton_dir/proton" || {
+        echo "runtime prep did not apply FEX config merge patch" >&2
+        exit 1
+      }
+      before=$(sha256sum "$proton_dir/proton" | cut -d' ' -f1)
+      STEAM_HOME="$steam_home" "$package_out/bin/steam-guest-runtime-prep" --apply
+      after=$(sha256sum "$proton_dir/proton" | cut -d' ' -f1)
+      test "$before" = "$after" || {
+        echo "runtime prep Proton patching is not idempotent" >&2
+        exit 1
+      }
 
       cat > "$out/summary.txt" <<'EOF'
       steam-korri derivation passes helper, provenance, resource, and smoke-fix checks.

@@ -35,7 +35,61 @@ chmod 755 "$pv/srt-bwrap"
 
 cat > "$proton_dir/proton" <<'EOS'
 #!/usr/bin/env python3
-print("hello")
+import json
+import os
+import platform
+import shutil
+import subprocess
+import sys
+
+class CompatData:
+    fex_config_file = "/tmp/fex-config.json"
+class Proton:
+    dist_dir = "/tmp/proton"
+    host_pe_arch = "x86_64-windows"
+    wine_bin = "/tmp/proton/files/bin/wine"
+    lib_dir = "/tmp/proton/files/lib"
+    def path(self, suffix):
+        return "/tmp/proton/" + suffix
+
+g_compatdata = CompatData()
+g_proton = Proton()
+
+class Session:
+    env = {}
+    log_file = sys.stderr
+    remote_debug_cmd = None
+    cmdlineappend = []
+    def log_enabled_for(self, name, default):
+        return default
+    def generate_fex_app_config(self):
+        app_config = {"Config": {}, "ThunksDB": {}}
+        if "PROTON_LOG" in self.env:
+            app_config["Config"]["SilentLog"] = "0" if self.log_enabled_for("fex", True) else "1"
+
+        return app_config
+
+    def init_session(self, update_prefix_files):
+        self.env["FEX_APP_CONFIG_LOCATION"] = os.path.join(g_proton.dist_dir, "share/fex-emu/")
+
+    def run_proc(self, args, local_env=None):
+        if local_env is None:
+            local_env = self.env
+        return subprocess.call(args, env=local_env, stderr=self.log_file, stdout=self.log_file)
+
+    def run(self):
+        adverb = []
+        remote_debug_proc = None
+
+        # CoD: Black Ops 3 workaround
+        if os.environ.get("SteamGameId", 0) in [
+                    "311210",
+                ]:
+            argv = [g_proton.wine_bin, "c:\\Program Files (x86)\\Steam\\steam.exe"]
+        else:
+            argv = [g_proton.lib_dir + "/wine/x86_64-unix/wine-preloader", g_proton.lib_dir + "/wine/x86_64-unix/wine", "c:\\windows\\system32\\steam.exe"]
+
+        rc = self.run_proc(adverb + argv + sys.argv[2:] + self.cmdlineappend)
 EOS
 chmod 755 "$proton_dir/proton"
 
@@ -90,6 +144,14 @@ grep -q 'exec bwrap "$@"' "$pv/srt-bwrap" \
 [ -f "$fonts/.uuid" ] || fail "font .uuid marker missing"
 [ "$(head -n 1 "$proton_dir/proton")" = '#!/usr/bin/python3' ] \
   || fail "Proton python shebang was not repaired"
+if command -v python3 >/dev/null 2>&1; then
+  grep -q 'KORRI_FEX_LAUNCHER_PATCH' "$proton_dir/proton" \
+    || fail "Proton FEX launcher patch was not applied"
+  grep -q 'KORRI_30XX_DIRECT_EXE_PATCH' "$proton_dir/proton" \
+    || fail "Proton 30XX direct-exe patch was not applied"
+  grep -q 'KORRI_FEX_CONFIG_MERGE_PATCH' "$proton_dir/proton" \
+    || fail "Proton FEX config merge patch was not applied"
+fi
 grep -q 'restored wine' "$proton_bin/wine" \
   || fail "Proton/Wine FEX wrapper was not restored from backup"
 grep -q 'deepest restored wine64' "$proton_bin/wine64" \
