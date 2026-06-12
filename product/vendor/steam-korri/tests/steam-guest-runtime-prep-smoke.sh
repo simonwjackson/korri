@@ -33,6 +33,18 @@ echo original bwrap "$@"
 EOS
 chmod 755 "$pv/srt-bwrap"
 
+# Use a real executable with an embedded FEX-looking string to ensure wrapper
+# detection does not grep binary payloads and skip newly downloaded runtime
+# helpers that still need FEX trampolines.
+cp "$(command -v sh)" "$pv/pressure-vessel-wrap"
+chmod u+w "$pv/pressure-vessel-wrap"
+printf '\n/FEX false-positive marker\n' >> "$pv/pressure-vessel-wrap"
+chmod 755 "$pv/pressure-vessel-wrap"
+expect_pv_wrap=0
+if command -v file >/dev/null 2>&1 && file "$pv/pressure-vessel-wrap" | grep -q 'x86-64'; then
+  expect_pv_wrap=1
+fi
+
 cat > "$proton_dir/proton" <<'EOS'
 #!/usr/bin/env python3
 import json
@@ -141,6 +153,12 @@ STEAM_HOME="$steam_home" FEX_BIN="$fex_prefix/bin/FEX" bash "$SCRIPT" --apply
 [ -f "$pv/srt-bwrap.x86_64" ] || fail "srt-bwrap backup was not preserved"
 grep -q 'exec bwrap "$@"' "$pv/srt-bwrap" \
   || fail "srt-bwrap should be replaced by a native bwrap trampoline"
+if [ "$expect_pv_wrap" = 1 ]; then
+  [ -f "$pv/pressure-vessel-wrap.x86_64" ] \
+    || fail "pressure-vessel x86_64 backup was not preserved"
+  grep -q 'exec .*FEX.*"$0.x86_64"' "$pv/pressure-vessel-wrap" \
+    || fail "pressure-vessel x86_64 binary should be replaced by a FEX trampoline"
+fi
 [ -f "$fonts/.uuid" ] || fail "font .uuid marker missing"
 [ "$(head -n 1 "$proton_dir/proton")" = '#!/usr/bin/python3' ] \
   || fail "Proton python shebang was not repaired"
