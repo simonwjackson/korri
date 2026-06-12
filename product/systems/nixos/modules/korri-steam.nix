@@ -346,6 +346,28 @@ in
       };
     };
 
+    systemd.services.korri-steam-seed = {
+      description = "Seed Korri guest-native ARM64 Steam payloads";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
+      environment = {
+        STEAM_HOME = cfg.home;
+        STEAM_GAMES_ROOT = cfg.gamesRoot;
+        STEAM_DOT = cfg.dotDir;
+        STEAM_BETA = "publicbeta";
+      };
+      serviceConfig = {
+        Type = "oneshot";
+        User = runtime.user;
+        Group = runtime.group;
+        WorkingDirectory = cfg.home;
+        ExecStart = "${cfg.package}/bin/steam-arm64-seed --apply";
+        RemainAfterExit = true;
+        TimeoutStartSec = "infinity";
+      };
+    };
+
     systemd.services.korri-steam-prepare-fex-rootfs = {
       description = "Prepare the Korri Steam FEX rootfs";
       wantedBy = [ "multi-user.target" ];
@@ -361,8 +383,8 @@ in
 
     systemd.services.korri-steam-runtime-prep = {
       description = "Repair Korri Steam runtime and Proton ARM64 payloads";
-      after = [ "korri-steam-prepare-fex-rootfs.service" ];
-      wants = [ "korri-steam-prepare-fex-rootfs.service" ];
+      after = [ "korri-steam-seed.service" "korri-steam-prepare-fex-rootfs.service" ];
+      wants = [ "korri-steam-seed.service" "korri-steam-prepare-fex-rootfs.service" ];
       environment = {
         STEAM_HOME = cfg.home;
         FEX_ROOTFS = cfg.fexRootfs;
@@ -389,8 +411,8 @@ in
 
     systemd.services.korri-steam = {
       description = "Launch Korri guest-native Steam";
-      after = [ "korri-steam-uinput.service" "korri-steam-prepare-fex-rootfs.service" ];
-      wants = [ "korri-steam-uinput.service" "korri-steam-prepare-fex-rootfs.service" ];
+      after = [ "korri-steam-uinput.service" "korri-steam-seed.service" "korri-steam-prepare-fex-rootfs.service" ];
+      wants = [ "korri-steam-uinput.service" "korri-steam-seed.service" "korri-steam-prepare-fex-rootfs.service" ];
       environment = {
         HOME = runtime.home;
         USER = runtime.user;

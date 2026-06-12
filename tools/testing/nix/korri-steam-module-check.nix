@@ -85,6 +85,7 @@ let
 
   steamUnit = enabled.systemd.services.korri-steam or { };
   uinputUnit = enabled.systemd.services.korri-steam-uinput or { };
+  seedUnit = enabled.systemd.services.korri-steam-seed or { };
   runtimePrepUnit = enabled.systemd.services.korri-steam-runtime-prep or { };
   runtimePrepPath = enabled.systemd.paths.korri-steam-runtime-prep or { };
   systemPackageNames = cfg: map (pkg: pkg.name or "") cfg.environment.systemPackages;
@@ -120,6 +121,17 @@ let
       && builtins.elem "multi-user.target" (uinputUnit.wantedBy or [ ])
       && lib.hasInfix "korri-steam-ensure-uinput" (serviceExec uinputUnit)
     ))
+    (check "seed service downloads ARM64 Steam payloads before launch" (
+      enabled.systemd.services ? korri-steam-seed
+      && builtins.elem "multi-user.target" (seedUnit.wantedBy or [ ])
+      && (seedUnit.serviceConfig.User or null) == "korri"
+      && (seedUnit.serviceConfig.Group or null) == "korri"
+      && (seedUnit.serviceConfig.WorkingDirectory or null) == "/var/lib/korri/steam"
+      && (seedUnit.environment.STEAM_HOME or null) == "/var/lib/korri/steam"
+      && (seedUnit.environment.STEAM_GAMES_ROOT or null) == "/var/lib/korri/content/games/steam"
+      && (seedUnit.environment.STEAM_DOT or null) == "/home/korri/.steam"
+      && lib.hasInfix "steam-arm64-seed --apply" (serviceExec seedUnit)
+    ))
     (check "launch service carries Korri identity and fd hardening" (
       enabled.systemd.services ? korri-steam
       && (steamUnit.serviceConfig.User or null) == "korri"
@@ -127,6 +139,8 @@ let
       && (steamUnit.serviceConfig.WorkingDirectory or null) == "/var/lib/korri/steam"
       && (steamUnit.serviceConfig.LimitNOFILE or null) == 524288
       && lib.hasInfix "korri-steam-guest" (serviceExec steamUnit)
+      && builtins.elem "korri-steam-seed.service" (steamUnit.after or [ ])
+      && builtins.elem "korri-steam-seed.service" (steamUnit.wants or [ ])
     ))
     (check "launch service exports the Korri user session environment" (
       (steamUnit.environment.XDG_RUNTIME_DIR or null) == "/run/user/2000"

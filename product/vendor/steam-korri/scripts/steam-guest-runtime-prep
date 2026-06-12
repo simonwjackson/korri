@@ -58,18 +58,26 @@ is_fex_wrapper() {
 }
 
 restore_fex_wrapper() {
-  local file="$1" candidate
+  local file="$1" candidate depth limit
   [ -f "$file" ] || return 0
   is_fex_wrapper "$file" || return 0
 
   # Runtime prep may be re-run after an interrupted/live repair. Collapse any
   # stacked wrapper backups (tool, tool.x86_64, tool.x86_64.x86_64, ...) back to
   # the deepest non-wrapper executable so FEX is never nested under itself.
+  # Old live experiments can leave very deep all-wrapper chains; cap the scan so
+  # routine Steam startup does not spend minutes walking stale backups.
   candidate="$file.x86_64"
+  depth=0
+  limit="${KORRI_RUNTIME_PREP_BACKUP_SCAN_LIMIT:-16}"
   while [ -f "$candidate" ]; do
     if ! is_fex_wrapper "$candidate"; then
       mv -f "$candidate" "$file"
       chmod a+rx "$file" 2>/dev/null || true
+      return 0
+    fi
+    depth=$((depth + 1))
+    if [ "$depth" -ge "$limit" ]; then
       return 0
     fi
     candidate="$candidate.x86_64"
