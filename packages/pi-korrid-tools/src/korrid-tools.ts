@@ -181,34 +181,57 @@ export function registerKorridTools(
     },
   })
 
+  const steamAppObserveParameters = steamSshParameters({
+    appId: {
+      type: "string",
+      description: "Steam AppID to observe. Defaults to 1029210 (30XX).",
+    },
+    appName: {
+      type: "string",
+      description:
+        "Optional human-readable app name for summaries, e.g. Stray.",
+    },
+    expectedGameExe: {
+      type: "string",
+      description:
+        "Executable name to identify in Proton/FEX process lists. Defaults to 30XX.exe.",
+    },
+    processNeedle: {
+      type: "string",
+      description:
+        "Additional literal substring to identify the live game process, useful for Unreal Shipping executables.",
+    },
+    timeoutSeconds: {
+      type: "number",
+      description: "Overall observation timeout. Defaults to 180 seconds.",
+    },
+    pollIntervalSeconds: {
+      type: "number",
+      description: "Poll interval. Defaults to 5 seconds.",
+    },
+    steamHome: {
+      type: "string",
+      description: "Korri Steam home. Defaults to /var/lib/korri/steam.",
+    },
+  })
+
   pi.registerTool({
     name: "korri_steam_launch_supervise",
     label: "Korri Steam Launch Supervise",
     description:
       "Read-only SSH observer for a Steam AppID launch: classifies prompts, instant exits, FEX/runtime failures, live game process, GPU acceleration, and input access.",
-    parameters: steamSshParameters({
-      appId: {
-        type: "string",
-        description: "Steam AppID to observe. Defaults to 1029210 (30XX).",
-      },
-      expectedGameExe: {
-        type: "string",
-        description:
-          "Executable name to identify in Proton/FEX process lists. Defaults to 30XX.exe.",
-      },
-      timeoutSeconds: {
-        type: "number",
-        description: "Overall observation timeout. Defaults to 180 seconds.",
-      },
-      pollIntervalSeconds: {
-        type: "number",
-        description: "Poll interval. Defaults to 5 seconds.",
-      },
-      steamHome: {
-        type: "string",
-        description: "Korri Steam home. Defaults to /var/lib/korri/steam.",
-      },
-    }),
+    parameters: steamAppObserveParameters,
+    async execute(_toolCallId, params, signal) {
+      return executeSteamLaunchSupervise(params, signal)
+    },
+  })
+
+  pi.registerTool({
+    name: "korri_steam_app_observe",
+    label: "Korri Steam App Observe",
+    description:
+      "Read-only SSH observer for arbitrary Steam/FEX AppID launches, including app manifest, FEX rootfs Mesa/Freedreno versions, live process mappings, GPU render-node access, and common Proton/FEX failure signals.",
+    parameters: steamAppObserveParameters,
     async execute(_toolCallId, params, signal) {
       return executeSteamLaunchSupervise(params, signal)
     },
@@ -657,7 +680,12 @@ async function executeSteamLaunchSupervise(
   signal: AbortSignal | undefined,
 ) {
   const appId = stringParam(params.appId, "1029210")
+  const appName = stringParam(
+    params.appName,
+    appId === "1029210" ? "30XX" : appId,
+  )
   const expectedGameExe = stringParam(params.expectedGameExe, "30XX.exe")
+  const processNeedle = stringParam(params.processNeedle, expectedGameExe)
   const timeoutSeconds = numberParam(params.timeoutSeconds, 180)
   const pollIntervalSeconds = numberParam(params.pollIntervalSeconds, 5)
   const steamHome = stringParam(params.steamHome, "/var/lib/korri/steam")
@@ -665,7 +693,9 @@ async function executeSteamLaunchSupervise(
 
   const script = steamLaunchSuperviseScript({
     appId,
+    appName,
     expectedGameExe,
+    processNeedle,
     timeoutSeconds,
     pollIntervalSeconds,
     steamHome,
@@ -676,6 +706,7 @@ async function executeSteamLaunchSupervise(
     const result = classifySteamLaunchTranscript(capture.stdout, {
       appId,
       expectedGameExe,
+      processNeedle,
     })
     return toolResult(
       {
@@ -684,7 +715,9 @@ async function executeSteamLaunchSupervise(
           result.outcome === "running_unverified_gpu",
         ssh: ssh.redacted,
         appId,
+        appName,
         expectedGameExe,
+        processNeedle,
         result,
         stdoutTail: tailLines(capture.stdout, 160),
         stderrTail: tailLines(capture.stderr, 80),
@@ -697,7 +730,9 @@ async function executeSteamLaunchSupervise(
         ok: false,
         ssh: ssh.redacted,
         appId,
+        appName,
         expectedGameExe,
+        processNeedle,
         error: error instanceof Error ? error.message : String(error),
       },
       true,
@@ -755,6 +790,7 @@ async function executeSteamRuntimeVerify(
 type SteamLaunchClassifyOptions = {
   readonly appId: string
   readonly expectedGameExe: string
+  readonly processNeedle?: string
 }
 
 export function classifySteamLaunchTranscript(
@@ -802,6 +838,7 @@ export function classifySteamLaunchTranscript(
     protonFailure,
     appId: options.appId,
     expectedGameExe: options.expectedGameExe,
+    processNeedle: options.processNeedle,
   }
 
   let outcome:
@@ -899,38 +936,77 @@ export function classifySteamRuntimeVerifyTranscript(
 
 function steamLaunchSuperviseScript(options: {
   readonly appId: string
+  readonly appName: string
   readonly expectedGameExe: string
+  readonly processNeedle: string
   readonly timeoutSeconds: number
   readonly pollIntervalSeconds: number
   readonly steamHome: string
 }): string {
   const appId = shellQuote(options.appId)
+  const appName = shellQuote(options.appName)
   const exe = shellQuote(options.expectedGameExe)
+  const processNeedle = shellQuote(options.processNeedle)
   const steamHome = shellQuote(options.steamHome)
   const timeout = Math.max(1, Math.floor(options.timeoutSeconds))
   const interval = Math.max(1, Math.floor(options.pollIntervalSeconds))
   return `set +e
 app_id=${appId}
+app_name=${appName}
 expected_exe=${exe}
+process_needle=${processNeedle}
 steam_home=${steamHome}
 start_epoch=$(date +%s)
 deadline=$((start_epoch + ${timeout}))
 echo "WATCH_MARKER=$(date '+%Y-%m-%d %H:%M:%S')"
+echo "APP_ID=$app_id"
+echo "APP_NAME=$app_name"
+echo "EXPECTED_GAME_EXE=$expected_exe"
+echo "PROCESS_NEEDLE=$process_needle"
+rootfs=$(readlink "$steam_home/fex-rootfs" 2>/dev/null || true)
+echo "ACTIVE_FEX_ROOTFS=$rootfs"
+echo "MESA26_STAGE=$(cat "$steam_home/fex-data/RootFS/.korri-mesa26-stage-current" 2>/dev/null || true)"
+echo "###ROOTFS_PACKAGES"
+if [ -n "$rootfs" ] && [ -d "$rootfs/var/lib/pacman/local" ]; then
+  for package in mesa lib32-mesa vulkan-freedreno lib32-vulkan-freedreno vulkan-icd-loader; do
+    desc=$(find "$rootfs/var/lib/pacman/local" -maxdepth 1 -type d -name "$package-*" 2>/dev/null | sort | tail -1)/desc
+    if [ -f "$desc" ]; then
+      awk -v pkg="$package" '
+        $0 == "%NAME%" { getline name }
+        $0 == "%VERSION%" { getline version }
+        END { if (name != "" || version != "") print pkg "=" name " " version }
+      ' "$desc"
+    fi
+  done
+fi
+echo "###APP_MANIFEST"
+for manifest in "$steam_home/steamapps/appmanifest_$app_id.acf" /var/lib/korri/content/games/steam/steamapps/appmanifest_$app_id.acf; do
+  [ -f "$manifest" ] || continue
+  echo "$manifest"
+  awk -F'"' '/"name"|"StateFlags"|"installdir"|"LastUpdated"|"SizeOnDisk"/{print}' "$manifest"
+done
+echo "###DISCOVERED_EXES"
+find "$steam_home/steamapps/common" /var/lib/korri/content/games/steam/steamapps/common -maxdepth 6 -type f -iname "*.exe" 2>/dev/null | sed -n '1,160p'
 while [ "$(date +%s)" -le "$deadline" ]; do
   echo "===POLL $(date '+%Y-%m-%d %H:%M:%S')==="
   echo "###PROCESSES"
-  ps -eo pid,stat,etime,pcpu,pmem,cmd | awk -v app="AppId=$app_id" -v exe="$expected_exe" '/SteamLaunch AppId=|wine64-preloader|wine-preloader|wineserver|/usr/bin/FEX|pressure-vessel|pv-adverb|proton/ {print} index($0, exe) {print}' | sed -n '1,240p'
+  ps -eo pid,stat,etime,pcpu,pmem,cmd | awk -v exe="$expected_exe" -v needle="$process_needle" '
+    /SteamLaunch AppId=|wine64-preloader|wine-preloader|wineserver|pressure-vessel|pv-adverb|proton/ {print}
+    index($0, "/usr/bin/FEX") {print}
+    exe != "" && index($0, exe) {print}
+    needle != "" && needle != exe && index($0, needle) {print}
+  ' | sed -n '1,260p'
   echo "###JOURNAL"
-  journalctl --no-pager -u korri-steam.service --since "@$start_epoch" 2>/dev/null | grep -E "$app_id|$expected_exe|FEX|pressure-vessel|Exec format|No such file|Game Recording|Adding process|Removing process|ERROR|err:|wine|vulkan|Assertion|Unhandled|Upgrading prefix|Successfully registered DLL" | tail -160 || true
+  journalctl --no-pager -u korri-steam.service --since "@$start_epoch" 2>/dev/null | grep -E "$app_id|$expected_exe|$process_needle|FEX|pressure-vessel|Exec format|No such file|Game Recording|Adding process|Removing process|ERROR|err:|wine|vulkan|freedreno|Mesa|Turnip|Assertion|Unhandled|Upgrading prefix|Successfully registered DLL|ProcessingInstallScript" | tail -160 || true
   echo "###CONSOLE"
-  tail -220 "$steam_home/logs/console_log.txt" 2>/dev/null | grep -E "GameAction \\[AppID $app_id|Game process|$expected_exe|CreatingProcess|Completed|failed|error|FEX|pressure|Proton|continues|waiting|ProcessingInstallScript" | tail -120 || true
+  tail -220 "$steam_home/logs/console_log.txt" 2>/dev/null | grep -E "GameAction \\[AppID $app_id|Game process|$expected_exe|$process_needle|CreatingProcess|Completed|failed|error|FEX|pressure|Proton|continues|waiting|ProcessingInstallScript" | tail -120 || true
   live=0
-  for pid in $(ps -eo pid=,cmd= | awk -v exe="$expected_exe" 'index($0, exe) && $0 !~ /awk/ {print $1}'); do
+  for pid in $(ps -eo pid=,cmd= | awk -v exe="$expected_exe" -v needle="$process_needle" '((exe != "" && index($0, exe)) || (needle != "" && index($0, needle))) && $0 !~ /awk/ {print $1}'); do
     live=1
     echo "GAME_PID=$pid"
     tr '\\0' '\\n' < "/proc/$pid/environ" 2>/dev/null | grep -E 'SteamAppId|SteamGameId|FEX|DXVK|VK|MESA|DISPLAY|WAYLAND' | sort || true
     echo "###MAPS $pid"
-    grep -aoE '/[^ ]*(libvulkan_freedreno|winevulkan|libvulkan|libGL|d3d|dxvk)[^ ]*' "/proc/$pid/maps" 2>/dev/null | sort -u || true
+    grep -aoE '/[^ ]*(libvulkan_freedreno|winevulkan|libvulkan|libGL|d3d|dxvk|vkd3d)[^ ]*' "/proc/$pid/maps" 2>/dev/null | sort -u || true
     echo "###FDS $pid"
     ls -l "/proc/$pid/fd" 2>/dev/null | grep -E 'renderD[0-9]+|card[0-9]+|uinput|/dev/input' || true
   done

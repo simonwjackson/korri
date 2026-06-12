@@ -25,6 +25,7 @@ describe("korrid-tools Pi package", () => {
       "korrid_launch_game",
       "korrid_stop_session",
       "korri_steam_launch_supervise",
+      "korri_steam_app_observe",
       "korri_steam_runtime_verify",
     ])
     expect(JSON.stringify(tools[0].parameters)).toContain("source-status")
@@ -35,8 +36,10 @@ describe("korrid-tools Pi package", () => {
     expect(JSON.stringify(tools[3].parameters)).toContain("confirmLaunch")
     expect(JSON.stringify(tools[4].parameters)).toContain("confirmStop")
     expect(JSON.stringify(tools[5].parameters)).toContain("expectedGameExe")
+    expect(JSON.stringify(tools[5].parameters)).toContain("processNeedle")
     expect(JSON.stringify(tools[5].parameters)).toContain("timeoutSeconds")
-    expect(JSON.stringify(tools[6].parameters)).toContain("expectedWrapperBin")
+    expect(JSON.stringify(tools[6].parameters)).toContain("processNeedle")
+    expect(JSON.stringify(tools[7].parameters)).toContain("expectedWrapperBin")
   })
 
   it("normalizes host, base URL, and RPC URL inputs", () => {
@@ -393,6 +396,27 @@ describe("korrid-tools Pi package", () => {
     expect(result).toMatchObject({
       outcome: "running_gpu",
       signals: { gameRunning: true, gpuFreedreno: true, renderNode: true },
+    })
+  })
+
+  it("classifies Stray-style Steam launches by process needle", () => {
+    const result = classifySteamLaunchTranscript(
+      `APP_ID=1332010\nAPP_NAME=Stray\nPROCESS_NEEDLE=Hk_project\nGAME_PID=239999\n/run/pressure-vessel/interpreter-root/var/pressure-vessel/gfx/main/usr/lib/libvulkan_freedreno.so\nlrwx------ 43 -> /dev/dri/renderD128\n`,
+      {
+        appId: "1332010",
+        expectedGameExe: "Hk_project-Win64-Shipping.exe",
+        processNeedle: "Hk_project",
+      },
+    )
+
+    expect(result).toMatchObject({
+      outcome: "running_gpu",
+      signals: {
+        gameRunning: true,
+        gpuFreedreno: true,
+        renderNode: true,
+        processNeedle: "Hk_project",
+      },
     })
   })
 
