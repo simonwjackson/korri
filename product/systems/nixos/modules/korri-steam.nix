@@ -93,6 +93,16 @@ let
     rootfs_dir="$steam_home/fex-data/RootFS/ArchLinux"
     sqsh="$steam_home/fex-data/RootFS/ArchLinux.sqsh"
     url="https://rootfs.fex-emu.gg/ArchLinux/2026-01-08/ArchLinux.sqsh"
+    fex_config_dir=${lib.escapeShellArg cfg.fexConfigDir}
+    fex_config_source=${lib.escapeShellArg "${cfg.package}/share/steam-rocknix-bootstrap/resources/fex-emu"}
+
+    ${pkgs.coreutils}/bin/install -d -o ${runtime.user} -g ${runtime.group} -m 0750 "$fex_config_dir" "$fex_config_dir/AppConfig"
+    if [ -f "$fex_config_source/Config.json" ] && [ ! -f "$fex_config_dir/Config.json" ]; then
+      ${pkgs.coreutils}/bin/install -o ${runtime.user} -g ${runtime.group} -m 0640 "$fex_config_source/Config.json" "$fex_config_dir/Config.json"
+    fi
+    if [ -f "$fex_config_source/AppConfig/steamwebhelper.json" ] && [ ! -f "$fex_config_dir/AppConfig/steamwebhelper.json" ]; then
+      ${pkgs.coreutils}/bin/install -o ${runtime.user} -g ${runtime.group} -m 0640 "$fex_config_source/AppConfig/steamwebhelper.json" "$fex_config_dir/AppConfig/steamwebhelper.json"
+    fi
 
     if [ -e "$fex_rootfs/usr/bin" ] || [ -e "$fex_rootfs/etc/os-release" ]; then
       exit 0
@@ -210,6 +220,13 @@ in
       description = "Guest-provided FEX rootfs path for x86 Steam Runtime helpers and games.";
     };
 
+    fexConfigDir = mkOption {
+      type = types.str;
+      default = "${runtime.home}/.config/fex-emu";
+      defaultText = lib.literalExpression ''"${config.services.korri.runtime.home}/.config/fex-emu"'';
+      description = "FEX config directory seeded from ROCKNIX's working Steam/FEX template.";
+    };
+
     defaultArgs = mkOption {
       type = types.listOf types.str;
       default = defaultSteamArgs;
@@ -243,6 +260,10 @@ in
         assertion = lib.hasPrefix cfg.home cfg.fexRootfs;
         message = "services.korri.steam.fexRootfs must live under services.korri.steam.home.";
       }
+      {
+        assertion = lib.hasPrefix runtime.home cfg.fexConfigDir;
+        message = "services.korri.steam.fexConfigDir must live under services.korri.runtime.home.";
+      }
     ];
 
     environment.systemPackages = [
@@ -256,6 +277,8 @@ in
       "d ${cfg.home} 0750 ${runtime.user} ${runtime.group} -"
       "d ${cfg.gamesRoot} 0750 ${runtime.user} ${runtime.group} -"
       "d ${cfg.dotDir} 0700 ${runtime.user} ${runtime.group} -"
+      "d ${cfg.fexConfigDir} 0750 ${runtime.user} ${runtime.group} -"
+      "d ${cfg.fexConfigDir}/AppConfig 0750 ${runtime.user} ${runtime.group} -"
       "d ${cfg.home}/fex-data/RootFS 0750 ${runtime.user} ${runtime.group} -"
     ];
 

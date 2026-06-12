@@ -112,6 +112,7 @@ let
       rocknix-package-path=${manifest.rocknixSource.paths.package}
       rocknix-install-helper-path=${manifest.rocknixSource.paths.installHelper}
       rocknix-resource-path=${manifest.rocknixSource.paths.resources}
+      rocknix-fex-config-path=${manifest.rocknixSource.paths.fexConfig}
       rocknix-launcher-path=${manifest.rocknixSource.paths.launcher}
       korri-vendored-from-repo=${manifest.korriVendoredFrom.repo}
       korri-vendored-from-rev=${manifest.korriVendoredFrom.rev}

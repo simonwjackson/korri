@@ -22,6 +22,7 @@
       package = "projects/ROCKNIX/packages/emulators/standalone/steam/package.mk";
       installHelper = "projects/ROCKNIX/packages/virtual/emulators/sources/Install Steam.sh";
       resources = "projects/ROCKNIX/packages/emulators/standalone/steam/resources";
+      fexConfig = "projects/ROCKNIX/packages/compat/fex-emu/config/fex-emu";
       launcher = "projects/ROCKNIX/packages/emulators/standalone/steam/scripts/start_steam.sh";
     };
   };
@@ -58,6 +59,18 @@
       file = ./resources/toolmanifest.vdf;
       upstreamPath = "projects/ROCKNIX/packages/emulators/standalone/steam/resources/toolmanifest.vdf";
       sha256 = "4e3179bb7bc94edee07622884ea3bd0ca9d4a911c5600eadef3979dbceafb59b";
+    }
+    {
+      name = "fex-emu/Config.json";
+      file = ./resources/fex-emu/Config.json;
+      upstreamPath = "projects/ROCKNIX/packages/compat/fex-emu/config/fex-emu/Config.json";
+      sha256 = "fc10f006b7587e7ce1a5a57a412ecd6463627161c03a50b2471ad4367d6614c5";
+    }
+    {
+      name = "fex-emu/AppConfig/steamwebhelper.json";
+      file = ./resources/fex-emu/AppConfig/steamwebhelper.json;
+      upstreamPath = "projects/ROCKNIX/packages/compat/fex-emu/config/fex-emu/AppConfig/steamwebhelper.json";
+      sha256 = "e342841254a27b5e8f0cab30e39aa5792811a75da54f64a0ca23c4ffd3baf76b";
     }
   ];
 

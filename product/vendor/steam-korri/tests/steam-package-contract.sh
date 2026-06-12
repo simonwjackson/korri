@@ -28,6 +28,16 @@ grep -q 'steam-guest-runtime-prep' "$MANIFEST" \
   || fail "manifest must list steam-guest-runtime-prep in the package contract"
 grep -q 'steam-guest-run' "$MANIFEST" \
   || fail "manifest must list steam-guest-run in the package contract"
+grep -q 'fex-emu/Config.json' "$MANIFEST" \
+  || fail "manifest must list the ROCKNIX FEX config template"
+grep -q 'publicbeta' "$SCRIPT_DIR/steam-arm64-bootstrap" \
+  || fail "ARM64 bootstrap should default to the publicbeta channel that ROCKNIX used"
+grep -q 'publicbeta' "$SCRIPT_DIR/steam-arm64-seed" \
+  || fail "ARM64 seed should default to the publicbeta channel that ROCKNIX used"
+[ -f "$PACKAGE_DIR/resources/fex-emu/Config.json" ] \
+  || fail "missing vendored FEX Config.json template"
+[ -f "$PACKAGE_DIR/resources/fex-emu/AppConfig/steamwebhelper.json" ] \
+  || fail "missing vendored FEX steamwebhelper app config"
 
 if grep -R -nE '\b(systemctl|swaymsg|gamescope)\b|services\.korri|korri\.' "$SCRIPT_DIR"; then
   fail "Steam package scripts must not own system/session/product orchestration"

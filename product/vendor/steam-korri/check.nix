@@ -104,7 +104,12 @@ else
         }
       fi
 
-      for resource in compatibilitytool.vdf registry.vdf toolmanifest.vdf; do
+      for resource in \
+        compatibilitytool.vdf \
+        registry.vdf \
+        toolmanifest.vdf \
+        fex-emu/Config.json \
+        fex-emu/AppConfig/steamwebhelper.json; do
         test -f "$package_out/share/steam-rocknix-bootstrap/resources/$resource" || {
           echo "built Steam package missing resource: $resource" >&2
           exit 1
