@@ -15,6 +15,8 @@ let
   isAarch64 = pkgs.stdenv.hostPlatform.system == "aarch64-linux";
   sourceRoot = ./.;
   seedScript = builtins.readFile ./scripts/steam-arm64-seed;
+  bootstrapScript = builtins.readFile ./scripts/steam-arm64-bootstrap;
+  runtimePrepScript = builtins.readFile ./scripts/steam-guest-runtime-prep;
   packageSource = builtins.readFile ./package.nix;
 
   check = message: assertion: { inherit message assertion; };
@@ -35,6 +37,15 @@ let
     (check "steam-korri seed normalizes literal backslash zip entries" (
       lib.hasInfix "korri-normalize-backslash-zip-entries" seedScript
       && lib.hasInfix "normalize_backslash_zip_entries \"$STEAM_HOME\"" seedScript
+    ))
+    (check "steam-korri bootstrap repairs standard ~/.steam links" (
+      lib.hasInfix "\"$STEAM_DOT/root\"" bootstrapScript
+      && lib.hasInfix "\"$STEAM_DOT/bin32\"" bootstrapScript
+      && lib.hasInfix "\"$STEAM_DOT/sdkarm64\"" bootstrapScript
+    ))
+    (check "steam-korri runtime prep exposes FEX resources to Proton" (
+      lib.hasInfix "files/share/fex-emu" runtimePrepScript
+      && lib.hasInfix "pre-korri-fex-share" runtimePrepScript
     ))
     (check "steam-korri FHS target package list carries util-linux/taskset" (
       lib.hasInfix "util-linux" packageSource

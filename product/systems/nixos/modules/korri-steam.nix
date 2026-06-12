@@ -95,6 +95,7 @@ let
     url="https://rootfs.fex-emu.gg/ArchLinux/2026-01-08/ArchLinux.sqsh"
     fex_config_dir=${lib.escapeShellArg cfg.fexConfigDir}
     fex_config_source=${lib.escapeShellArg "${cfg.package}/share/steam-rocknix-bootstrap/resources/fex-emu"}
+    fex_share=${lib.escapeShellArg "${pkgs.fex}/share/fex-emu"}
 
     ${pkgs.coreutils}/bin/install -d -o ${runtime.user} -g ${runtime.group} -m 0750 "$fex_config_dir" "$fex_config_dir/AppConfig"
     if [ -f "$fex_config_source/Config.json" ] && [ ! -f "$fex_config_dir/Config.json" ]; then
@@ -104,7 +105,71 @@ let
       ${pkgs.coreutils}/bin/install -o ${runtime.user} -g ${runtime.group} -m 0640 "$fex_config_source/AppConfig/steamwebhelper.json" "$fex_config_dir/AppConfig/steamwebhelper.json"
     fi
 
+    prepare_proton_fex_share() {
+      local proton_dir target
+      for proton_dir in "$steam_home"/steamapps/common/Proton*; do
+        [ -d "$proton_dir/files/share" ] || continue
+        target="$proton_dir/files/share/fex-emu"
+        if [ -e "$target" ] && [ ! -L "$target" ]; then
+          ${pkgs.coreutils}/bin/mv -f "$target" "$target.pre-korri-fex-share"
+        fi
+        ln -sfn "$fex_share" "$target"
+        ${pkgs.coreutils}/bin/chown -h ${runtime.user}:${runtime.group} "$target"
+      done
+    }
+
+    ensure_rootfs_squashfs() {
+      ${pkgs.coreutils}/bin/install -d -o ${runtime.user} -g ${runtime.group} -m 0750 "$steam_home/fex-data/RootFS"
+      if [ ! -s "$sqsh" ]; then
+        tmp="$sqsh.tmp"
+        rm -f "$tmp"
+        ${pkgs.sudo}/bin/sudo -u ${runtime.user} ${pkgs.curl}/bin/curl \
+          -fL --retry 5 --retry-delay 2 --connect-timeout 30 --max-time 3600 \
+          -o "$tmp" "$url"
+        ${pkgs.coreutils}/bin/mv -f "$tmp" "$sqsh"
+        ${pkgs.coreutils}/bin/chown ${runtime.user}:${runtime.group} "$sqsh"
+      fi
+    }
+
+    repair_freedreno_arch() {
+      local target_root="$1" lib machine tmp
+      lib="$target_root/usr/lib/libvulkan_freedreno.so"
+      [ -f "$lib" ] || return 0
+      machine="$(${pkgs.coreutils}/bin/od -An -tx1 -j18 -N2 "$lib" 2>/dev/null || true)"
+      case "$machine" in
+        *"3e 00"*) return 0 ;;
+      esac
+
+      if [ ! -s "$sqsh" ]; then
+        echo "korri-steam-prepare-fex-rootfs: cannot repair $lib without $sqsh" >&2
+        return 1
+      fi
+
+      echo "korri-steam-prepare-fex-rootfs: restoring x86_64 Freedreno ICD from $sqsh" >&2
+      tmp="$steam_home/fex-data/RootFS/.restore-freedreno.$$"
+      rm -rf "$tmp"
+      ${pkgs.coreutils}/bin/install -d -o ${runtime.user} -g ${runtime.group} -m 0750 "$tmp"
+      ${pkgs.sudo}/bin/sudo -u ${runtime.user} ${pkgs.squashfsTools}/bin/unsquashfs -q -f -d "$tmp" "$sqsh" \
+        usr/lib/libvulkan_freedreno.so usr/lib32/libvulkan_freedreno.so
+      if [ -f "$tmp/squashfs-root/usr/lib/libvulkan_freedreno.so" ]; then
+        if [ ! -e "$lib.pre-korri-wrong-arch" ]; then
+          ${pkgs.coreutils}/bin/cp -a "$lib" "$lib.pre-korri-wrong-arch"
+        fi
+        ${pkgs.coreutils}/bin/cp -a "$tmp/squashfs-root/usr/lib/libvulkan_freedreno.so" "$lib"
+        ${pkgs.coreutils}/bin/chown ${runtime.user}:${runtime.group} "$lib"
+      fi
+      if [ -f "$tmp/squashfs-root/usr/lib32/libvulkan_freedreno.so" ]; then
+        ${pkgs.coreutils}/bin/cp -a "$tmp/squashfs-root/usr/lib32/libvulkan_freedreno.so" "$target_root/usr/lib32/libvulkan_freedreno.so"
+        ${pkgs.coreutils}/bin/chown ${runtime.user}:${runtime.group} "$target_root/usr/lib32/libvulkan_freedreno.so"
+      fi
+      rm -rf "$tmp"
+    }
+
+    ensure_rootfs_squashfs
+    prepare_proton_fex_share
+
     if [ -e "$fex_rootfs/usr/bin" ] || [ -e "$fex_rootfs/etc/os-release" ]; then
+      repair_freedreno_arch "$fex_rootfs"
       exit 0
     fi
 
@@ -115,18 +180,6 @@ let
         echo "korri-steam-prepare-fex-rootfs: refusing to replace non-empty $fex_rootfs" >&2
         exit 1
       }
-    fi
-
-    ${pkgs.coreutils}/bin/install -d -o ${runtime.user} -g ${runtime.group} -m 0750 "$steam_home/fex-data/RootFS"
-
-    if [ ! -s "$sqsh" ]; then
-      tmp="$sqsh.tmp"
-      rm -f "$tmp"
-      ${pkgs.sudo}/bin/sudo -u ${runtime.user} ${pkgs.curl}/bin/curl \
-        -fL --retry 5 --retry-delay 2 --connect-timeout 30 --max-time 3600 \
-        -o "$tmp" "$url"
-      ${pkgs.coreutils}/bin/mv -f "$tmp" "$sqsh"
-      ${pkgs.coreutils}/bin/chown ${runtime.user}:${runtime.group} "$sqsh"
     fi
 
     if [ ! -e "$rootfs_dir/etc/os-release" ]; then
@@ -140,6 +193,7 @@ let
 
     ln -sfn "$rootfs_dir" "$fex_rootfs"
     ${pkgs.coreutils}/bin/chown -h ${runtime.user}:${runtime.group} "$fex_rootfs"
+    repair_freedreno_arch "$rootfs_dir"
   '';
 
   steamLauncher = pkgs.writeShellScriptBin "korri-steam-guest" ''

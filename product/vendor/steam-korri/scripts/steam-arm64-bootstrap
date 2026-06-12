@@ -106,6 +106,17 @@ run mkdir -p \
   "$STEAM_GAMES_ROOT" \
   "$STEAM_DOT"
 
+# Keep the conventional ~/.steam layout pointing at the Korri-managed Steam
+# home. Proton/lsteamclient and Steam Runtime helpers still discover pieces via
+# these historic names even when STEAM_HOME is explicit.
+run ln -sfn "$STEAM_HOME" "$STEAM_DOT/root"
+run ln -sfn "$STEAM_HOME" "$STEAM_DOT/steam"
+run ln -sfn "$STEAM_HOME/ubuntu12_32" "$STEAM_DOT/bin32"
+run ln -sfn "$STEAM_HOME/ubuntu12_64" "$STEAM_DOT/bin64"
+run ln -sfn "$STEAM_HOME/linux32" "$STEAM_DOT/sdk32"
+run ln -sfn "$STEAM_HOME/linux64" "$STEAM_DOT/sdk64"
+run ln -sfn "$STEAM_HOME/linuxarm64" "$STEAM_DOT/sdkarm64"
+
 printf '%s\n' "$STEAM_BETA" | atomic_write "$STEAM_HOME/package/beta"
 atomic_copy "$resource_dir/compatibilitytool.vdf" "$STEAM_HOME/compatibilitytools.d/compatibilitytool.vdf"
 atomic_copy "$resource_dir/toolmanifest.vdf" "$STEAM_HOME/steamapps/common/Proton 11.0 (ARM64)/toolmanifest.vdf"

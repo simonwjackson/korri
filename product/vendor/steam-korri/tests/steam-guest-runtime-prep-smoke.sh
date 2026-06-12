@@ -22,8 +22,10 @@ fonts="$common/SteamLinuxRuntime_sniper/sniper_platform_0.20240101/files/share/f
 runtime_bin="$common/SteamLinuxRuntime_sniper/sniper_platform_0.20240101/files/bin"
 proton_dir="$common/Proton 11.0 (ARM64)"
 proton_bin="$proton_dir/files/bin"
-mkdir -p "$pv" "$fonts" "$runtime_bin" "$proton_dir" "$proton_bin" \
-  "$steam_home/steam-runtime-steamrt-arm64/bin" "$steam_home/steamrtarm64/bin"
+fex_prefix="$tmp/fex"
+fex_share="$fex_prefix/share/fex-emu"
+mkdir -p "$pv" "$fonts" "$runtime_bin" "$proton_dir" "$proton_bin" "$proton_dir/files/share" \
+  "$steam_home/steam-runtime-steamrt-arm64/bin" "$steam_home/steamrtarm64/bin" "$fex_prefix/bin" "$fex_share/GuestThunks"
 
 cat > "$pv/srt-bwrap" <<'EOS'
 #!/bin/sh
@@ -67,13 +69,20 @@ echo launcher "$@"
 EOS
 chmod 755 "$steam_home/steam-runtime-steamrt-arm64/bin/steam-runtime-launcher-service"
 
+cat > "$fex_prefix/bin/FEX" <<'EOS'
+#!/bin/sh
+exit 0
+EOS
+chmod 755 "$fex_prefix/bin/FEX"
+: > "$fex_share/ThunksDB.json"
+
 cat > "$runtime_bin/python3.11" <<'EOS'
 #!/bin/sh
 exit 0
 EOS
 chmod 755 "$runtime_bin/python3.11"
 
-STEAM_HOME="$steam_home" bash "$SCRIPT" --apply
+STEAM_HOME="$steam_home" FEX_BIN="$fex_prefix/bin/FEX" bash "$SCRIPT" --apply
 
 [ -f "$pv/srt-bwrap.x86_64" ] || fail "srt-bwrap backup was not preserved"
 grep -q 'exec bwrap "$@"' "$pv/srt-bwrap" \
@@ -85,6 +94,10 @@ grep -q 'restored wine' "$proton_bin/wine" \
   || fail "Proton/Wine FEX wrapper was not restored from backup"
 grep -q 'deepest restored wine64' "$proton_bin/wine64" \
   || fail "stacked Proton/Wine FEX wrapper was not restored from deepest backup"
+[ -L "$proton_dir/files/share/fex-emu" ] \
+  || fail "Proton FEX resource symlink missing"
+[ "$(readlink "$proton_dir/files/share/fex-emu")" = "$fex_share" ] \
+  || fail "Proton FEX resource symlink points at the wrong target"
 [ -L "$steam_home/steamrtarm64/bin/steam-runtime-launcher-service" ] \
   || fail "ARM64 launcher service symlink missing from Steam PATH"
 [ "$(readlink "$steam_home/steamrtarm64/bin/steam-runtime-launcher-service")" = "$steam_home/steam-runtime-steamrt-arm64/bin/steam-runtime-launcher-service" ] \

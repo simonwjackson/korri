@@ -91,6 +91,23 @@ if [ -z "$fex_bin" ]; then
   fex_bin=FEX
 fi
 
+fex_share="${FEX_SHARE:-}"
+if [ -z "$fex_share" ]; then
+  case "$fex_bin" in
+    */bin/FEX) fex_share="${fex_bin%/bin/FEX}/share/fex-emu" ;;
+  esac
+fi
+if [ -n "$fex_share" ] && [ -d "$fex_share" ]; then
+  for proton in "$common"/Proton*; do
+    [ -d "$proton/files/share" ] || continue
+    target="$proton/files/share/fex-emu"
+    if [ -e "$target" ] && [ ! -L "$target" ]; then
+      mv -f "$target" "$target.pre-korri-fex-share"
+    fi
+    ln -sfn "$fex_share" "$target"
+  done
+fi
+
 wrap_fex_tool() {
   local file="$1" backup info
   [ -f "$file" ] || return 0
