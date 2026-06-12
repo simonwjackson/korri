@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-usage: steam-guest-runtime-prep [--check|--apply]
+usage: steam-guest-runtime-prep [--check|--apply|--patch-proton]
 
 Repair mutable Steam Runtime / pressure-vessel state in a caller-provided
 ARM64 Steam home. This helper is package-owned runtime mechanics only: it does
@@ -15,6 +15,7 @@ Required environment:
 Modes:
   --check          Validate required environment only
   --apply          Repair mutable runtime state (default)
+  --patch-proton   Repair Proton ARM64 payloads/FEX links only
 EOF
 }
 
@@ -22,6 +23,7 @@ mode=apply
 case "${1:-}" in
   ""|--apply) mode=apply ;;
   --check) mode=check ;;
+  --patch-proton) mode=patch-proton ;;
   -h|--help) usage; exit 0 ;;
   *) usage >&2; exit 2 ;;
 esac
@@ -167,6 +169,7 @@ for dir in "$common"/Proton*/files/bin "$common"/Proton*/files/bin-wow64 "$commo
   done
 done
 
+if [ "$mode" != patch-proton ]; then
 for pv in "$common"/SteamLinuxRuntime*/pressure-vessel "$STEAM_HOME"/steamrt64/pv-runtime/steam-runtime-steamrt/pressure-vessel; do
   [ -d "$pv" ] || continue
   find "$pv" -type f -perm -0100 ! -name '*.x86_64*' ! -name '*.x86' | while IFS= read -r file; do
@@ -182,6 +185,7 @@ for fonts in "$common"/SteamLinuxRuntime*/steamrt*_platform_*/files/share/fonts 
     : > "$dir/.uuid"
   done
 done
+fi
 
 
 patch_proton_arm64() {
@@ -263,6 +267,7 @@ for proton in "$common"/Proton*/proton; do
   esac
 done
 
+if [ "$mode" != patch-proton ]; then
 for py in "$common"/SteamLinuxRuntime*/steamrt*_platform_*/files/bin/python3.* "$common"/SteamLinuxRuntime*/sniper_platform_*/files/bin/python3.*; do
   [ -x "$py" ] || continue
   bindir="${py%/*}"
@@ -270,3 +275,4 @@ for py in "$common"/SteamLinuxRuntime*/steamrt*_platform_*/files/bin/python3.* "
   ln -sfn "$base" "$bindir/python3"
   ln -sfn "$base" "$bindir/python"
 done
+fi

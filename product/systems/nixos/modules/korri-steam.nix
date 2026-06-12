@@ -359,6 +359,34 @@ in
       };
     };
 
+    systemd.services.korri-steam-runtime-prep = {
+      description = "Repair Korri Steam runtime and Proton ARM64 payloads";
+      after = [ "korri-steam-prepare-fex-rootfs.service" ];
+      wants = [ "korri-steam-prepare-fex-rootfs.service" ];
+      environment = {
+        STEAM_HOME = cfg.home;
+        FEX_ROOTFS = cfg.fexRootfs;
+        FEX_BIN = "${pkgs.fex}/bin/FEX";
+        FEX_SHARE = "${pkgs.fex}/share/fex-emu";
+      };
+      serviceConfig = {
+        Type = "oneshot";
+        User = runtime.user;
+        Group = runtime.group;
+        WorkingDirectory = cfg.home;
+        ExecStart = "${cfg.package}/bin/steam-guest-runtime-prep --patch-proton";
+      };
+    };
+
+    systemd.paths.korri-steam-runtime-prep = {
+      description = "Watch Korri Steam Proton ARM64 payloads for repair";
+      wantedBy = [ "multi-user.target" ];
+      pathConfig = {
+        PathChanged = "${cfg.home}/steamapps/common/Proton 11.0 (ARM64)/proton";
+        Unit = "korri-steam-runtime-prep.service";
+      };
+    };
+
     systemd.services.korri-steam = {
       description = "Launch Korri guest-native Steam";
       after = [ "korri-steam-uinput.service" "korri-steam-prepare-fex-rootfs.service" ];

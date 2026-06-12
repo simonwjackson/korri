@@ -85,6 +85,8 @@ let
 
   steamUnit = enabled.systemd.services.korri-steam or { };
   uinputUnit = enabled.systemd.services.korri-steam-uinput or { };
+  runtimePrepUnit = enabled.systemd.services.korri-steam-runtime-prep or { };
+  runtimePrepPath = enabled.systemd.paths.korri-steam-runtime-prep or { };
   systemPackageNames = cfg: map (pkg: pkg.name or "") cfg.environment.systemPackages;
   serviceExec = unit:
     let raw = unit.serviceConfig.ExecStart or "";
@@ -132,6 +134,21 @@ let
       && (steamUnit.environment.STEAM_HOME or null) == "/var/lib/korri/steam"
       && (steamUnit.environment.STEAM_GAMES_ROOT or null) == "/var/lib/korri/content/games/steam"
       && (steamUnit.environment.STEAM_DOT or null) == "/home/korri/.steam"
+    ))
+    (check "runtime prep service repairs Proton payloads as the Korri user" (
+      enabled.systemd.services ? korri-steam-runtime-prep
+      && (runtimePrepUnit.serviceConfig.User or null) == "korri"
+      && (runtimePrepUnit.serviceConfig.Group or null) == "korri"
+      && (runtimePrepUnit.serviceConfig.WorkingDirectory or null) == "/var/lib/korri/steam"
+      && (runtimePrepUnit.environment.STEAM_HOME or null) == "/var/lib/korri/steam"
+      && (runtimePrepUnit.environment.FEX_ROOTFS or null) == "/var/lib/korri/steam/fex-rootfs"
+      && lib.hasInfix "steam-guest-runtime-prep --patch-proton" (serviceExec runtimePrepUnit)
+    ))
+    (check "runtime prep path watches ARM64 Proton updates" (
+      enabled.systemd.paths ? korri-steam-runtime-prep
+      && builtins.elem "multi-user.target" (runtimePrepPath.wantedBy or [ ])
+      && (runtimePrepPath.pathConfig.Unit or null) == "korri-steam-runtime-prep.service"
+      && lib.hasInfix "Proton 11.0 (ARM64)/proton" (runtimePrepPath.pathConfig.PathChanged or "")
     ))
     (check "tmpfiles create Korri-owned Steam state" (
       builtins.elem "d /var/lib/korri/steam 0750 korri korri -" enabled.systemd.tmpfiles.rules
