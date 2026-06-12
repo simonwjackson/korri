@@ -29,8 +29,13 @@ let
       echo "korri-steam-ensure-uinput: warning: $*" >&2
     }
 
-    if [ -c /dev/uinput ]; then
+    make_accessible() {
+      ${pkgs.coreutils}/bin/chgrp input /dev/uinput 2>/dev/null || true
       ${pkgs.coreutils}/bin/chmod 0660 /dev/uinput 2>/dev/null || true
+    }
+
+    if [ -c /dev/uinput ]; then
+      make_accessible
       exit 0
     fi
 
@@ -82,7 +87,7 @@ let
       warn "could not create /dev/uinput c $major:$minor"
       exit 0
     }
-    ${pkgs.coreutils}/bin/chmod 0660 /dev/uinput 2>/dev/null || true
+    make_accessible
   '';
 
   fexRootfsPreparer = pkgs.writeShellScriptBin "korri-steam-prepare-fex-rootfs" ''
