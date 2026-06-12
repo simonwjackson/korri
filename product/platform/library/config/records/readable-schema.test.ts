@@ -56,6 +56,49 @@ describe("readable library schema records", () => {
     ).toContain("roms/switch/Mario Kart 8 Deluxe")
   })
 
+  it("decodes the full Steam readable fixture", async () => {
+    const fixture = parse(
+      await readFile(
+        "product/platform/library/config/fixtures/steam-full.korri.yaml",
+        "utf8",
+      ),
+    ) as {
+      readonly storage: Record<string, unknown>
+      readonly sources: Record<string, unknown>
+      readonly systems: Record<string, unknown>
+      readonly apps: Record<string, unknown>
+      readonly runtimes: Record<string, unknown>
+      readonly library: Record<string, unknown>
+    }
+
+    expect(decodeStoragePayload(fixture.storage.steam).root).toBe(
+      "/var/lib/korri/steam",
+    )
+    expect(decodeSourcePayload(fixture.sources.steam).kind).toEqual([
+      "service",
+      "metadata",
+    ])
+    expect(decodeSystemPayload(fixture.systems.steam).apps).toEqual([
+      { id: "steam" },
+    ])
+    const steam = decodeAppPayload(fixture.apps.steam)
+    expect(steam.kind).toBe("steam")
+    expect(steam.state?.root).toBe("{storage:steam}/Steam")
+    expect(steam["launch-options"]).toContain("%command%")
+    expect(decodeRuntimePayload(fixture.runtimes["proton-arm64"]).tool).toBe(
+      "proton-arm64",
+    )
+    expect(
+      decodeLibraryItemPayload(fixture.library.balatro).releases.map(
+        release => release.apps?.map(choice => choice.id) ?? [],
+      ),
+    ).toEqual([[], ["steam"], []])
+    expect(
+      decodeLibraryItemPayload(fixture.library["gba-choice-demo"]).releases[0]
+        ?.apps,
+    ).toEqual([{ id: "retroarch", runtime: "mgba" }, { id: "mgba-standalone" }])
+  })
+
   it("decodes a plain host block without role/launch/profile nesting", () => {
     const host = decodeHostPayload({
       title: "AKA desktop host",
@@ -324,12 +367,20 @@ describe("readable library schema records", () => {
           }),
       ],
       ["preset", () => decodePresetPayload({ ryubing })],
-      ["app", () => ({ ryubing: decodeAppPayload({ kind: "ryubing", ...ryubing }) })],
+      [
+        "app",
+        () => ({ ryubing: decodeAppPayload({ kind: "ryubing", ...ryubing }) }),
+      ],
       [
         "runtime",
-        () => decodeRuntimePayload({ kind: "tool", path: "/bin/Ryujinx", ryubing }),
+        () =>
+          decodeRuntimePayload({ kind: "tool", path: "/bin/Ryujinx", ryubing }),
       ],
-      ["source", () => decodeSourcePayload({ kind: ["files"], storage: "roms", ryubing })],
+      [
+        "source",
+        () =>
+          decodeSourcePayload({ kind: ["files"], storage: "roms", ryubing }),
+      ],
       ["profile", () => decodeProfilePayload({ ryubing })],
       [
         "library-item",

@@ -8,11 +8,18 @@ import { Effect } from "effect"
 import { parse } from "yaml"
 
 import { decodeAppPayload } from "../records/app"
+import { decodeLibraryItemPayload } from "../records/library-item"
+import { decodeRuntimePayload } from "../records/runtime"
+import { decodeSystemPayload } from "../records/system"
 
 const EXAMPLE_PATH = "korri-catalog-display-metadata.example.yaml"
 const RETROARCH_EXAMPLE_PATHS = [
   "docs/brainstorms/2026-06-08-004-retroarch-policy-minimal-v1.example.yaml",
   "docs/brainstorms/2026-06-08-003-retroarch-policy-one-to-one.example.yaml",
+] as const
+const STEAM_EXAMPLE_PATHS = [
+  "product/platform/library/config/fixtures/steam-full.korri.yaml",
+  "docs/brainstorms/2026-06-11-001-steam-readable-library-example.korri.yaml",
 ] as const
 
 const activeYaml = (source: string): string =>
@@ -207,6 +214,49 @@ describe("checked-in readable library example", () => {
         /\bconfigFile:\s*\n(?:\s+[^\n]*\n)*\s+path\s*:/m,
       )
       expect(active).not.toMatch(/\bmode\s*:\s*(path|default)\b/)
+    }
+  })
+
+  it("keeps Steam examples on the apps-by-id authoring contract", async () => {
+    for (const path of STEAM_EXAMPLE_PATHS) {
+      const example = await readFile(path, "utf8")
+      const active = activeYaml(example)
+      const parsed = parse(example) as {
+        readonly systems?: Record<string, Record<string, unknown>>
+        readonly apps?: Record<string, Record<string, unknown>>
+        readonly runtimes?: Record<string, Record<string, unknown>>
+        readonly library?: Record<string, Record<string, unknown>>
+      }
+
+      expect(parsed.apps?.steam).toBeDefined()
+      expect(decodeAppPayload(parsed.apps?.steam).kind).toBe("steam")
+      expect(decodeAppPayload(parsed.apps?.steam).state?.root).toContain(
+        "{storage:steam}",
+      )
+      expect(decodeAppPayload(parsed.apps?.steam)["launch-options"]).toContain(
+        "%command%",
+      )
+      expect(decodeSystemPayload(parsed.systems?.steam).apps).toEqual([
+        { id: "steam" },
+      ])
+      expect(decodeRuntimePayload(parsed.runtimes?.["proton-arm64"]).tool).toBe(
+        "proton-arm64",
+      )
+      expect(
+        Object.values(parsed.library ?? {}).some(item =>
+          decodeLibraryItemPayload(item).releases.some(
+            release => release.target === "steam://rungameid/2379780",
+          ),
+        ),
+      ).toBe(true)
+      expect(active).not.toMatch(/^\s+app\s*:/m)
+      for (const item of Object.values(parsed.library ?? {})) {
+        for (const release of decodeLibraryItemPayload(item).releases) {
+          for (const choice of release.apps ?? []) {
+            expect(choice).not.toHaveProperty("kind")
+          }
+        }
+      }
     }
   })
 

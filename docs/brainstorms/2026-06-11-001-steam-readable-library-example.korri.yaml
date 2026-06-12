@@ -1,0 +1,56 @@
+# First-class Steam readable-library example (v1 grammar).
+#
+# Authoring contract:
+# - systems/releases choose launch behavior with apps[] entries by id.
+# - kind lives only on top-level apps.<id>, never on an app choice.
+# - Steam appid comes only from target: steam://rungameid/<appid>.
+# - Steam LaunchOptions are literal Steam syntax; %command% is not a Korri placeholder.
+# - Readiness probing, VDF/localconfig paths, wrapper provisioning, and daemon
+#   orchestration are implementation-owned details, not YAML configuration.
+
+storage:
+  steam:
+    root: /var/lib/korri/steam
+
+sources:
+  steam:
+    kind: [service, metadata]
+
+systems:
+  steam:
+    apps:
+      - id: steam
+
+apps:
+  steam:
+    kind: steam
+    command: steam
+    runtime: proton-arm64
+    state:
+      root: "{storage:steam}/Steam"
+    extra:
+      args: [-silent, -gamepadui]
+    launch-options: "gamescope --fullscreen -- %command%"
+
+runtimes:
+  proton-arm64:
+    kind: tool
+    title: Proton ARM64
+    path: /var/lib/korri/steam/compatibilitytools.d/proton-arm64
+    tool: proton-arm64
+
+library:
+  balatro:
+    title: Balatro
+    source: steam
+    releases:
+      - id: steam-store
+        system: steam
+        target: steam://rungameid/2379780
+
+      - id: steam-store-mangohud
+        system: steam
+        target: steam://rungameid/2379780
+        apps:
+          - id: steam
+            launch-options: "MANGOHUD=1 %command%"

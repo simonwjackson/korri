@@ -1,0 +1,106 @@
+# Executable fixture for first-class Steam readable-library app choices v1.
+# Steam implementation details such as readiness probing, VDF paths, wrapper
+# provisioning, and daemon orchestration are owned by Korri, not YAML knobs.
+
+storage:
+  steam:
+    root: /var/lib/korri/steam
+  roms:
+    root: /roms
+
+sources:
+  steam:
+    title: Steam library
+    kind: [service, metadata]
+  roms:
+    title: ROM library
+    kind: [files]
+    storage: roms
+
+systems:
+  steam:
+    name: Steam
+    apps:
+      - id: steam
+  gba:
+    name: Game Boy Advance
+
+apps:
+  steam:
+    kind: steam
+    command: steam
+    systems: [steam]
+    runtime: proton-arm64
+    state:
+      root: "{storage:steam}/Steam"
+    extra:
+      # Steam client startup args. Game args stay inside Steam LaunchOptions.
+      args: [-silent, -gamepadui]
+    # Literal Steam syntax; Korri does not substitute inside %command%.
+    launch-options: "gamescope --fullscreen -- %command%"
+
+  retroarch:
+    kind: retroarch
+    command: retroarch
+    systems: [gba]
+    configFile:
+      mode: generated
+    core:
+      path: "{runtime.path}"
+    content:
+      path: "{content.path}"
+
+  mgba-standalone:
+    kind: process
+    command: /run/current-system/sw/bin/mgba
+    args: ["{content.path}"]
+    systems: [gba]
+
+runtimes:
+  proton-arm64:
+    kind: tool
+    title: Proton ARM64
+    path: /var/lib/korri/steam/compatibilitytools.d/proton-arm64
+    tool: proton-arm64
+  proton-experimental:
+    kind: tool
+    title: Proton Experimental
+    path: /var/lib/korri/steam/compatibilitytools.d/proton-experimental
+    tool: proton-experimental
+  mgba:
+    kind: libretro-core
+    path: /run/current-system/sw/lib/libretro/mgba_libretro.so
+
+library:
+  balatro:
+    title: Balatro
+    source: steam
+    releases:
+      - id: steam-store
+        system: steam
+        target: steam://rungameid/2379780
+        # Inherits systems.steam.apps[steam].
+
+      - id: steam-store-experimental
+        system: steam
+        target: steam://rungameid/2379780
+        apps:
+          - id: steam
+            runtime: proton-experimental
+            launch-options: "MANGOHUD=1 %command%"
+
+      - id: store-page
+        system: steam
+        # Metadata-only release: valid without target or app choices.
+
+  gba-choice-demo:
+    title: GBA Choice Demo
+    source: roms
+    releases:
+      - id: gba
+        system: gba
+        target: gba/choice-demo.gba
+        apps:
+          - id: retroarch
+            runtime: mgba
+          - id: mgba-standalone
