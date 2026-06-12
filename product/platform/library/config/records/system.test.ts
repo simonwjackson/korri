@@ -24,6 +24,29 @@ describe("SystemPayload", () => {
     expect(system.launcher).toBe("retroarch")
   })
 
+  it("decodes system app choices", () => {
+    const system = decodeSystemPayload({
+      apps: [
+        { id: "retroarch", runtime: "mgba" },
+        { id: "ryubing", inherit: false, argsAppend: ["--fullscreen"] },
+      ],
+    })
+
+    expect(system.apps).toEqual([
+      { id: "retroarch", runtime: "mgba" },
+      { id: "ryubing", inherit: false, argsAppend: ["--fullscreen"] },
+    ])
+  })
+
+  it("rejects empty and duplicate system app choices", () => {
+    expect(() => decodeSystemPayload({ apps: [] })).toThrow(
+      /apps.*empty|at least one app choice/i,
+    )
+    expect(() =>
+      decodeSystemPayload({ apps: [{ id: "retroarch" }, { id: "retroarch" }] }),
+    ).toThrow(/unique/)
+  })
+
   it("decodes inheritable layer + presets + byLauncher + inherit", () => {
     const system = decodeSystemPayload({
       launcher: "retroarch",

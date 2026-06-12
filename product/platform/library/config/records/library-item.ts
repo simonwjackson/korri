@@ -2,6 +2,7 @@ import { Schema } from "effect"
 
 import { InheritableLayer } from "../inheritable-fields"
 import { LocalPlayableId, PlayableId } from "../playable-id"
+import { AppChoiceList } from "./app-choice"
 
 const STRICT = { onExcessProperty: "error" } as const
 
@@ -52,6 +53,7 @@ export const LibraryReleasePayload = Schema.Struct({
   target: Schema.optional(Target),
   app: Schema.optional(NonEmptyString),
   runtime: Schema.optional(NonEmptyString),
+  apps: Schema.optional(AppChoiceList),
   display: Schema.optional(DisplayMetadata),
 
   gamescope: InheritableLayer.fields.gamescope,

@@ -86,6 +86,46 @@ describe("LibraryItemPayload playable/release identity", () => {
       }),
     ).toThrow()
   })
+
+  it("decodes release app choices", () => {
+    const item = decodeLibraryItemPayload({
+      releases: [
+        {
+          id: "gba",
+          system: "gba",
+          target: "gba/cart.gba",
+          apps: [{ id: "retroarch", runtime: "mgba" }],
+        },
+      ],
+    })
+
+    expect(item.releases[0]?.apps).toEqual([
+      { id: "retroarch", runtime: "mgba" },
+    ])
+  })
+
+  it("rejects empty and duplicate release app choices", () => {
+    expect(() =>
+      decodeLibraryItemPayload({
+        releases: [
+          { id: "gba", system: "gba", target: "gba/cart.gba", apps: [] },
+        ],
+      }),
+    ).toThrow(/apps.*empty|at least one app choice/i)
+
+    expect(() =>
+      decodeLibraryItemPayload({
+        releases: [
+          {
+            id: "gba",
+            system: "gba",
+            target: "gba/cart.gba",
+            apps: [{ id: "retroarch" }, { id: "retroarch" }],
+          },
+        ],
+      }),
+    ).toThrow(/unique/)
+  })
 })
 
 describe("shared playable-id references", () => {

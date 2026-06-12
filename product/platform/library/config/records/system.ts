@@ -19,6 +19,7 @@ import { Schema } from "effect"
 
 import { ByLauncherPayload, InheritableLayer } from "../inheritable-fields"
 import { LaunchBlock } from "../launch-block"
+import { AppChoiceList } from "./app-choice"
 import { PresetMapPayload } from "./preset"
 
 const STRICT = { onExcessProperty: "error" } as const
@@ -36,6 +37,9 @@ export const SystemPayload = Schema.Struct({
 
   // Per-system default launcher (legacy alias for launch.app).
   launcher: Schema.optional(Schema.String),
+
+  // App choices available to releases in this system.
+  apps: Schema.optional(AppChoiceList),
 
   // Layer-bearing fields.
   inherit: Schema.optional(Schema.Boolean),
