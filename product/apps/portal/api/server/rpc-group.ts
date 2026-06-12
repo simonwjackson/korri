@@ -9,6 +9,7 @@ import { AssignGameAssetRpc as appGameAssetsAssign } from "../game-assets/assign
 import { ListGameAssetCandidatesRpc as appGameAssetsCandidatesList } from "../game-assets/list-candidates.rpc"
 import { UnassignGameAssetRpc as appGameAssetsUnassign } from "../game-assets/unassign.rpc"
 import { GetHelloRpc as appHelloGet } from "../hello/rpc"
+import { DryRunLaunchRpc as appLibraryLaunchDryRun } from "../library/dry-run.rpc"
 import { LaunchLibraryRpc as appLibraryLaunch } from "../library/launch.rpc"
 import { ListLibraryRpc as appLibraryList } from "../library/list.rpc"
 import { SessionStatusRpc as appSessionStatus } from "../session/status.rpc"
@@ -40,6 +41,7 @@ export const serverRpcGroup = RpcGroup.make(
   appGameAssetsUnassign,
   appLibraryList,
   appLibraryLaunch,
+  appLibraryLaunchDryRun,
   appSourceList,
   appSourceStatus,
   appServerStatus,

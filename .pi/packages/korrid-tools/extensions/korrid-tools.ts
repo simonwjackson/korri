@@ -44,6 +44,7 @@ const READ_ONLY_COMMANDS = {
 const READ_ONLY_RPC_TAGS = new Set<string>([
   ...Object.values(READ_ONLY_COMMANDS).map(command => command.tag),
   "app.hello.get",
+  "app.library.launch.dry-run",
 ])
 
 export default function register(pi: PiApi) {
@@ -80,6 +81,35 @@ export function registerKorridTools(pi: PiApi): void {
   })
 
   pi.registerTool({
+    name: "korrid_find_game",
+    label: "Korrid Find Game",
+    description:
+      "Find a Korri library game by exact playable id or case-insensitive id/title match.",
+    parameters: baseParameters({
+      query: { type: "string", description: "Playable id or title query." },
+    }),
+    async execute(_toolCallId, params, signal) {
+      return executeFindGame(params, signal)
+    },
+  })
+
+  pi.registerTool({
+    name: "korrid_dry_run_launch",
+    label: "Korrid Dry Run Launch",
+    description:
+      "Resolve a Korri library launch through app.library.launch.dry-run without spawning.",
+    parameters: baseParameters({
+      id: { type: "string", description: "Playable game id to resolve." },
+      profileId: { type: "string", description: "Optional launch profile id." },
+      releaseId: { type: "string", description: "Optional release id." },
+      appId: { type: "string", description: "Optional app id." },
+    }),
+    async execute(_toolCallId, params, signal) {
+      return executeSpec(params, signal, dryRunSpec(params))
+    },
+  })
+
+  pi.registerTool({
     name: "korrid_launch_game",
     label: "Korrid Launch Game",
     description:
@@ -88,6 +118,7 @@ export function registerKorridTools(pi: PiApi): void {
       id: { type: "string", description: "Playable game id to launch." },
       profileId: { type: "string", description: "Optional launch profile id." },
       releaseId: { type: "string", description: "Optional release id." },
+      appId: { type: "string", description: "Optional app id." },
       confirmLaunch: {
         type: "boolean",
         description: "Must be true to confirm this mutating launch request.",
@@ -157,22 +188,40 @@ function readOnlySpec(params: Record<string, unknown>): CommandSpec {
   return { ...spec, mutates: false, confirmed: true }
 }
 
+function dryRunSpec(params: Record<string, unknown>): CommandSpec {
+  const id = requiredString(params.id, "id")
+  return {
+    tag: "app.library.launch.dry-run",
+    payload: launchSelectionPayload(params, id),
+    mutates: false,
+    confirmed: true,
+  }
+}
+
 function launchSpec(params: Record<string, unknown>): CommandSpec {
   const id = requiredString(params.id, "id")
   const confirmed = params.confirmLaunch === true
   return {
     tag: "app.library.launch",
-    payload: {
-      id,
-      ...(typeof params.releaseId === "string"
-        ? { releaseId: params.releaseId }
-        : {}),
-      ...(typeof params.profileId === "string"
-        ? { profileId: params.profileId }
-        : {}),
-    },
+    payload: launchSelectionPayload(params, id),
     mutates: true,
     confirmed,
+  }
+}
+
+function launchSelectionPayload(
+  params: Record<string, unknown>,
+  id: string,
+): Record<string, unknown> {
+  return {
+    id,
+    ...(typeof params.releaseId === "string"
+      ? { releaseId: params.releaseId }
+      : {}),
+    ...(typeof params.profileId === "string"
+      ? { profileId: params.profileId }
+      : {}),
+    ...(typeof params.appId === "string" ? { appId: params.appId } : {}),
   }
 }
 
@@ -192,15 +241,7 @@ async function executeSpec(
   signal: AbortSignal | undefined,
   spec: CommandSpec,
 ) {
-  const rpcUrl = normalizeKorridRpcUrl(
-    typeof params.url === "string"
-      ? params.url
-      : typeof params.host === "string"
-        ? hostToUrl(params.host)
-        : (process.env.KORRI_RPC_URL ??
-          process.env.KORRI_PUBLIC_API_BASE_URL ??
-          "http://127.0.0.1:3001/api/rpc"),
-  )
+  const rpcUrl = rpcUrlFromParams(params)
 
   if (spec.mutates && !spec.confirmed) {
     return toolResult(
@@ -230,6 +271,65 @@ async function executeSpec(
       true,
     )
   }
+}
+
+async function executeFindGame(
+  params: Record<string, unknown>,
+  signal: AbortSignal | undefined,
+) {
+  const rpcUrl = rpcUrlFromParams(params)
+  const query = typeof params.query === "string" ? params.query.trim() : ""
+  if (query.length === 0) {
+    return toolResult(
+      {
+        ok: false,
+        rpcUrl,
+        tag: "app.library.list",
+        result: { _tag: "MissingQuery" },
+      },
+      true,
+    )
+  }
+
+  try {
+    const response = await callKorridRpc(
+      rpcUrl,
+      { tag: "app.library.list", payload: {} },
+      signal,
+    )
+    const result = findGameInList(response, query)
+    return toolResult(
+      {
+        ok: result._tag === "GameFound",
+        rpcUrl,
+        tag: "app.library.list",
+        result,
+      },
+      result._tag !== "GameFound",
+    )
+  } catch (error) {
+    return toolResult(
+      {
+        ok: false,
+        rpcUrl,
+        tag: "app.library.list",
+        error: error instanceof Error ? error.message : String(error),
+      },
+      true,
+    )
+  }
+}
+
+function rpcUrlFromParams(params: Record<string, unknown>): string {
+  return normalizeKorridRpcUrl(
+    typeof params.url === "string"
+      ? params.url
+      : typeof params.host === "string"
+        ? hostToUrl(params.host)
+        : (process.env.KORRI_RPC_URL ??
+          process.env.KORRI_PUBLIC_API_BASE_URL ??
+          "http://127.0.0.1:3001/api/rpc"),
+  )
 }
 
 export async function callKorridRpc(
@@ -285,6 +385,44 @@ function hostToUrl(host: string): string {
   return `http://${host}:3001`
 }
 
+function findGameInList(response: unknown, query: string) {
+  const games =
+    isRecord(response) && Array.isArray(response.games) ? response.games : []
+  const exact = games.find(game => isRecord(game) && game.id === query)
+  if (isRecord(exact)) {
+    return {
+      _tag: "GameFound" as const,
+      game: compactGame(exact),
+      match: "exact-id",
+    }
+  }
+
+  const normalized = query.toLocaleLowerCase()
+  const matches = games.filter(game => {
+    if (!isRecord(game)) return false
+    const id = typeof game.id === "string" ? game.id.toLocaleLowerCase() : ""
+    const title =
+      typeof game.title === "string" ? game.title.toLocaleLowerCase() : ""
+    return id.includes(normalized) || title.includes(normalized)
+  })
+
+  if (matches.length === 1 && isRecord(matches[0])) {
+    const game = matches[0]
+    const id = typeof game.id === "string" ? game.id.toLocaleLowerCase() : ""
+    return {
+      _tag: "GameFound" as const,
+      game: compactGame(game),
+      match: id.includes(normalized) ? "id" : "title",
+    }
+  }
+
+  const candidates = matches.filter(isRecord).map(compactGame)
+  if (matches.length > 1) {
+    return { _tag: "AmbiguousGame" as const, query, candidates }
+  }
+  return { _tag: "GameNotFound" as const, query, candidates }
+}
+
 function compactResult(tag: string, result: unknown): unknown {
   if (tag === "app.library.list" && isRecord(result)) {
     const games = Array.isArray(result.games) ? result.games : []
@@ -301,6 +439,17 @@ function compactResult(tag: string, result: unknown): unknown {
     }
   }
   return result
+}
+
+function compactGame(game: Record<string, unknown>) {
+  const source = isRecord(game.source) ? game.source : undefined
+  return {
+    id: game.id,
+    ...(typeof game.title === "string" ? { title: game.title } : {}),
+    ...(source && typeof source.hostId === "string"
+      ? { sourceId: source.hostId }
+      : {}),
+  }
 }
 
 function toolResult(details: Record<string, unknown>, isError = false) {

@@ -34,10 +34,12 @@ export interface ControlLaunchSelection {
   readonly profileId?: string
 }
 
-export type ControlListGamesResult = {
-  readonly _tag: "GamesListed"
-  readonly games: readonly PlayableLibraryEntry[]
-}
+export type ControlListGamesResult =
+  | {
+      readonly _tag: "GamesListed"
+      readonly games: readonly PlayableLibraryEntry[]
+    }
+  | { readonly _tag: "ListGamesUnavailable"; readonly message?: string }
 
 export type ControlFindGameResult =
   | {
@@ -55,6 +57,7 @@ export type ControlFindGameResult =
       readonly query: string
       readonly candidates: readonly ControlGameSummary[]
     }
+  | { readonly _tag: "HostUnavailable"; readonly message?: string }
   | { readonly _tag: "MissingQuery" }
 
 export type ControlSessionReadiness =
@@ -77,6 +80,7 @@ export type ControlDryRunLaunchResult =
       readonly message: string
       readonly diagnostic?: string
     }
+  | { readonly _tag: "HostUnavailable"; readonly message?: string }
   | Extract<ControlFindGameResult, { readonly _tag: "GameNotFound" }>
 
 export type ControlLaunchResult =
@@ -195,6 +199,7 @@ export function semanticsForControlResult(
     case "LaunchConfigFailed":
       return failureSemantics("configuration")
     case "HostUnavailable":
+    case "ListGamesUnavailable":
     case "SessiondNotConfigured":
     case "DaemonUnavailable":
     case "StreamRuntimeSettingsUnavailable":

@@ -63,6 +63,12 @@ describe("KorriControl shared contracts", () => {
         message: "no socket",
       }),
     ).toMatchObject({ cliOutcome: "host-unavailable", piIsError: true })
+    expect(
+      semanticsForControlResult({
+        _tag: "ListGamesUnavailable",
+        message: "offline",
+      }),
+    ).toMatchObject({ cliOutcome: "host-unavailable", piIsError: true })
   })
 })
 

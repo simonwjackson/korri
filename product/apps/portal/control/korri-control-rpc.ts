@@ -39,7 +39,7 @@ export function createKorriControlRpc(
         ),
       ).pipe(
         Effect.match({
-          onFailure: () => ({ _tag: "GamesListed" as const, games: [] }),
+          onFailure: error => controlListGamesTransportFailure(error),
           onSuccess: response => ({
             _tag: "GamesListed" as const,
             games: response.games,
@@ -53,21 +53,39 @@ export function createKorriControlRpc(
         ),
       ).pipe(
         Effect.match({
-          onFailure: () => ({
-            _tag: "GameNotFound" as const,
-            query: request.query,
-            candidates: [],
-          }),
+          onFailure: error => controlFindGameTransportFailure(error),
           onSuccess: response => findPlayableEntry(response.games, request),
         }),
       ),
     dryRunLaunch: request =>
-      Effect.succeed({
-        _tag: "LaunchConfigFailed",
-        selection: { id: request.id },
-        message:
-          "remote dry-run requires daemon support and is not available on this RPC surface yet",
-      }),
+      runRpc(
+        RpcClient.make(serverRpcGroup).pipe(
+          Effect.flatMap(client =>
+            client["app.library.launch.dry-run"]({
+              id: request.id,
+              ...(request.source ? { source: request.source } : {}),
+              ...(request.releaseId !== undefined
+                ? { releaseId: request.releaseId }
+                : {}),
+              ...(request.appId !== undefined ? { appId: request.appId } : {}),
+              ...(request.userId !== undefined
+                ? { userId: request.userId }
+                : {}),
+              ...(request.profileId !== undefined
+                ? { profileId: request.profileId }
+                : {}),
+              ...(request.override !== undefined
+                ? { override: request.override }
+                : {}),
+            }),
+          ),
+        ),
+      ).pipe(
+        Effect.match({
+          onFailure: error => controlDryRunTransportFailure(error),
+          onSuccess: response => response,
+        }),
+      ),
     launchGame: request =>
       runRpc(
         RpcClient.make(serverRpcGroup).pipe(
@@ -173,6 +191,27 @@ export function korriRpcUrlForBase(baseUrl: string): string {
       : `http://${baseUrl}:3001`
   const trimmed = raw.replace(/\/+$/, "")
   return trimmed.endsWith("/api/rpc") ? trimmed : `${trimmed}/api/rpc`
+}
+
+export function controlListGamesTransportFailure(error: unknown) {
+  return {
+    _tag: "ListGamesUnavailable" as const,
+    message: errorMessage(error),
+  }
+}
+
+export function controlFindGameTransportFailure(error: unknown) {
+  return {
+    _tag: "HostUnavailable" as const,
+    message: errorMessage(error),
+  }
+}
+
+export function controlDryRunTransportFailure(error: unknown) {
+  return {
+    _tag: "HostUnavailable" as const,
+    message: errorMessage(error),
+  }
 }
 
 export function controlLaunchResultFromLaunchLibraryResponse(

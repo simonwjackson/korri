@@ -24,6 +24,7 @@ import { handleAssignGameAsset } from "../game-assets/assign.rpc-handler"
 import { handleListGameAssetCandidates } from "../game-assets/list-candidates.rpc-handler"
 import { handleUnassignGameAsset } from "../game-assets/unassign.rpc-handler"
 import { handleGetHello } from "../hello/rpc-handler"
+import { handleDryRunLaunch } from "../library/dry-run.rpc-handler"
 import { ForegroundSessionHostLive } from "../library/foreground-session-host-layer"
 import { handleLaunchLibrary } from "../library/launch.rpc-handler"
 import { handleListLibrary } from "../library/list.rpc-handler"
@@ -97,6 +98,7 @@ const ServerHandlersLive = serverRpcGroup.toLayer(
     "app.game-assets.unassign": handleUnassignGameAsset,
     "app.library.list": handleListLibrary,
     "app.library.launch": handleLaunchLibrary,
+    "app.library.launch.dry-run": handleDryRunLaunch,
     "app.source.list": handleListSource,
     "app.source.status": handleSourceStatus,
     "app.server.status": handleServerStatus,

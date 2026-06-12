@@ -34,6 +34,31 @@ describe("KorriControl live implementation", () => {
     ).resolves.toMatchObject({ _tag: "GameFound", match: "exact-id" })
   })
 
+  it("reports unavailable lists when the library source fails", async () => {
+    const control = makeKorriControlLive({
+      librarySource: {
+        ...librarySource(),
+        listPlayableEntries: () =>
+          Effect.fail(
+            new LibraryError({
+              reason: "config",
+              message: "",
+              diagnostic: "not configured",
+            }),
+          ),
+      },
+      launcher: launcher(),
+    })
+
+    await expect(Effect.runPromise(control.listGames({}))).resolves.toEqual({
+      _tag: "ListGamesUnavailable",
+      message: "not configured",
+    })
+    await expect(
+      Effect.runPromise(control.findGame({ query: playable.id })),
+    ).resolves.toEqual({ _tag: "HostUnavailable", message: "not configured" })
+  })
+
   it("dry-runs launch resolution without invoking the launcher", async () => {
     let runCount = 0
     const control = makeKorriControlLive({

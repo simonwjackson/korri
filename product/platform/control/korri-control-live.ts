@@ -64,11 +64,13 @@ export function makeKorriControlLive(options: {
   const listGames = (): Effect.Effect<ControlListGamesResult, never> =>
     listPlayableEntries(librarySource).pipe(
       Effect.match({
-        onFailure: error => ({
-          _tag: "GamesListed" as const,
-          games: [],
-          diagnostic: error.message ?? error.diagnostic,
-        }),
+        onFailure: error => {
+          const message = error.message || error.diagnostic
+          return {
+            _tag: "ListGamesUnavailable" as const,
+            ...(message ? { message } : {}),
+          }
+        },
         onSuccess: games => ({ _tag: "GamesListed" as const, games }),
       }),
     )
@@ -77,7 +79,14 @@ export function makeKorriControlLive(options: {
     listGames,
     findGame: request =>
       listGames().pipe(
-        Effect.map(result => findPlayableEntry(result.games, request)),
+        Effect.map(result =>
+          result._tag === "GamesListed"
+            ? findPlayableEntry(result.games, request)
+            : {
+                _tag: "HostUnavailable" as const,
+                ...(result.message ? { message: result.message } : {}),
+              },
+        ),
       ),
     dryRunLaunch: request =>
       Effect.gen(function* () {

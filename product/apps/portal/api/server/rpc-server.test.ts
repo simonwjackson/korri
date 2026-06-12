@@ -103,6 +103,7 @@ describe("headless server RPC group", () => {
       "app.game-assets.unassign",
       "app.hello.get",
       "app.library.launch",
+      "app.library.launch.dry-run",
       "app.library.list",
       "app.server.status",
       "app.server.stream.prepare",
@@ -149,6 +150,7 @@ describe("headless server RPC group", () => {
     expect(appTags).toContain("app.game-assets.unassign")
     expect(serverTags).toContain("app.library.list")
     expect(serverTags).toContain("app.library.launch")
+    expect(serverTags).toContain("app.library.launch.dry-run")
     expect(serverTags).toContain("app.game-assets.candidates.list")
     expect(serverTags).toContain("app.game-assets.assign")
     expect(serverTags).toContain("app.game-assets.unassign")

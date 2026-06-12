@@ -17,6 +17,14 @@ import {
 import { artifactCommand } from "./artifacts/artifact-import-command"
 import { bazzarCommand } from "./bazzar/bazzar-command"
 import {
+  dryRunLaunchExitCode,
+  gameFindExitCode,
+  gamesListExitCode,
+  launchGameExitCode,
+  renderDryRunLaunch,
+  renderFindGame,
+  renderGamesList,
+  renderLaunchGame,
   renderSessionStatus,
   renderStopSession,
   sessionStatusExitCode,
@@ -87,6 +95,93 @@ const streamRemoteLaunchCommand = Command.make(
 const streamCommand = Command.make("stream").pipe(
   Command.withDescription("Manage Korri game streaming."),
   Command.withSubcommands([streamLaunchCommand, streamRemoteLaunchCommand]),
+)
+
+const gamesListCommand = Command.make(
+  "list",
+  {
+    host: Flag.string("host").pipe(Flag.optional),
+  },
+  ({ host }) =>
+    Effect.gen(function* () {
+      const control = yield* controlForHost(Option.getOrUndefined(host))
+      const result = yield* control.listGames({})
+      console.log(renderGamesList(result))
+      process.exitCode = gamesListExitCode(result)
+    }),
+).pipe(Command.withDescription("List playable Korri library games."))
+
+const gamesFindCommand = Command.make(
+  "find",
+  {
+    query: Argument.string("query"),
+    host: Flag.string("host").pipe(Flag.optional),
+  },
+  ({ query, host }) =>
+    Effect.gen(function* () {
+      const control = yield* controlForHost(Option.getOrUndefined(host))
+      const result = yield* control.findGame({ query })
+      console.log(renderFindGame(result))
+      process.exitCode = gameFindExitCode(result)
+    }),
+).pipe(Command.withDescription("Find a playable game by id or title."))
+
+const gamesCommand = Command.make("games").pipe(
+  Command.withDescription("List and find Korri library games."),
+  Command.withSubcommands([gamesListCommand, gamesFindCommand]),
+)
+
+const launchDryRunCommand = Command.make(
+  "dry-run",
+  {
+    id: Argument.string("game-id"),
+    host: Flag.string("host").pipe(Flag.optional),
+    profileId: Flag.string("profile-id").pipe(Flag.optional),
+    releaseId: Flag.string("release-id").pipe(Flag.optional),
+    appId: Flag.string("app-id").pipe(Flag.optional),
+  },
+  ({ id, host, profileId, releaseId, appId }) =>
+    Effect.gen(function* () {
+      const control = yield* controlForHost(Option.getOrUndefined(host))
+      const result = yield* control.dryRunLaunch({
+        id,
+        ...(Option.isSome(profileId) ? { profileId: profileId.value } : {}),
+        ...(Option.isSome(releaseId) ? { releaseId: releaseId.value } : {}),
+        ...(Option.isSome(appId) ? { appId: appId.value } : {}),
+      })
+      console.log(renderDryRunLaunch(result))
+      process.exitCode = dryRunLaunchExitCode(result)
+    }),
+).pipe(
+  Command.withDescription(
+    "Resolve a launch and session readiness without spawning it.",
+  ),
+)
+
+const launchCommand = Command.make(
+  "launch",
+  {
+    id: Argument.string("game-id"),
+    host: Flag.string("host").pipe(Flag.optional),
+    profileId: Flag.string("profile-id").pipe(Flag.optional),
+    releaseId: Flag.string("release-id").pipe(Flag.optional),
+    appId: Flag.string("app-id").pipe(Flag.optional),
+  },
+  ({ id, host, profileId, releaseId, appId }) =>
+    Effect.gen(function* () {
+      const control = yield* controlForHost(Option.getOrUndefined(host))
+      const result = yield* control.launchGame({
+        id,
+        ...(Option.isSome(profileId) ? { profileId: profileId.value } : {}),
+        ...(Option.isSome(releaseId) ? { releaseId: releaseId.value } : {}),
+        ...(Option.isSome(appId) ? { appId: appId.value } : {}),
+      })
+      console.log(renderLaunchGame(result))
+      process.exitCode = launchGameExitCode(result)
+    }),
+).pipe(
+  Command.withDescription("Launch a Korri library game."),
+  Command.withSubcommands([launchDryRunCommand]),
 )
 
 const sessionStatusCommand = Command.make(
@@ -163,6 +258,8 @@ export const korriCommand = Command.make("korri").pipe(
   Command.withSubcommands([
     artifactCommand,
     bazzarCommand,
+    gamesCommand,
+    launchCommand,
     playCommand,
     sessionCommand,
     streamCommand,
@@ -193,6 +290,15 @@ function controlForHost(host: string | undefined) {
 export function runKorriCli(argv: readonly string[]) {
   return Command.runWith(korriCommand, { version: VERSION })(argv).pipe(
     Effect.provide(runtimeLayer),
+  )
+}
+
+export function runKorriCliWithLayer(
+  argv: readonly string[],
+  layer: Layer.Layer<KorriControl>,
+) {
+  return Command.runWith(korriCommand, { version: VERSION })(argv).pipe(
+    Effect.provide(Layer.mergeAll(BunServices.layer, layer)),
   )
 }
 

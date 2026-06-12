@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test"
 import {
+  controlDryRunTransportFailure,
+  controlFindGameTransportFailure,
   controlLaunchResultFromLaunchLibraryResponse,
+  controlListGamesTransportFailure,
   korriRpcUrlForBase,
 } from "./korri-control-rpc"
 
@@ -16,6 +19,24 @@ describe("KorriControl RPC client", () => {
       "http://bandai:3001/api/rpc",
     )
     expect(korriRpcUrlForBase("bandai")).toBe("http://bandai:3001/api/rpc")
+  })
+
+  it("maps list and find transport failures to unavailable results", () => {
+    expect(controlListGamesTransportFailure(new Error("offline"))).toEqual({
+      _tag: "ListGamesUnavailable",
+      message: "offline",
+    })
+    expect(controlFindGameTransportFailure(new Error("offline"))).toEqual({
+      _tag: "HostUnavailable",
+      message: "offline",
+    })
+  })
+
+  it("maps dry-run transport failures to host unavailable", () => {
+    expect(controlDryRunTransportFailure(new Error("offline"))).toEqual({
+      _tag: "HostUnavailable",
+      message: "offline",
+    })
   })
 
   it("maps launch RPC response tags to control launch results", () => {
