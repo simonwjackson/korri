@@ -16,34 +16,41 @@ let
   check = message: assertion: { inherit message assertion; };
 
   fakeSteamOverlay = final: prev: {
-    steam-korri = prev.runCommand "fake-steam-korri" {
-      passthru = {
-        rocknixSteamHasRunCapsule = true;
+    steam-korri =
+      prev.runCommand "fake-steam-korri"
+        {
+          passthru = {
+            rocknixSteamHasRunCapsule = true;
+          };
+        }
+        ''
+          mkdir -p "$out/bin"
+          cat > "$out/bin/steam-arm64-fhs" <<'EOF'
+          #!/usr/bin/env sh
+          exit 0
+          EOF
+          chmod +x "$out/bin/steam-arm64-fhs"
+        '';
+  };
+
+  baseModule =
+    hostSystem:
+    { ... }:
+    {
+      nixpkgs.hostPlatform = hostSystem;
+      nixpkgs.config.allowUnfree = true;
+      nixpkgs.overlays = [ fakeSteamOverlay ];
+      boot.loader.grub.devices = [ "nodev" ];
+      fileSystems."/" = {
+        device = "/dev/null";
+        fsType = "ext4";
       };
-    } ''
-      mkdir -p "$out/bin"
-      cat > "$out/bin/steam-arm64-fhs" <<'EOF'
-      #!/usr/bin/env sh
-      exit 0
-      EOF
-      chmod +x "$out/bin/steam-arm64-fhs"
-    '';
-  };
-
-  baseModule = hostSystem: { ... }: {
-    nixpkgs.hostPlatform = hostSystem;
-    nixpkgs.config.allowUnfree = true;
-    nixpkgs.overlays = [ fakeSteamOverlay ];
-    boot.loader.grub.devices = [ "nodev" ];
-    fileSystems."/" = {
-      device = "/dev/null";
-      fsType = "ext4";
+      system.stateVersion = "24.11";
+      networking.hostName = "steam-module-test";
     };
-    system.stateVersion = "24.11";
-    networking.hostName = "steam-module-test";
-  };
 
-  evaluateWith = hostSystem: overrides:
+  evaluateWith =
+    hostSystem: overrides:
     (evalConfig {
       system = hostSystem;
       modules = [
@@ -80,28 +87,36 @@ let
   disabled = evaluateWith "aarch64-linux" { };
 
   failedAssertions = cfg: builtins.filter (a: !a.assertion) cfg.assertions;
-  hasFailedAssertion = needle: cfg:
-    builtins.any (a: lib.hasInfix needle a.message) (failedAssertions cfg);
+  hasFailedAssertion =
+    needle: cfg: builtins.any (a: lib.hasInfix needle a.message) (failedAssertions cfg);
 
   steamUnit = enabled.systemd.services.korri-steam or { };
   uinputUnit = enabled.systemd.services.korri-steam-uinput or { };
   seedUnit = enabled.systemd.services.korri-steam-seed or { };
+  fexRootfsUnit = enabled.systemd.services.korri-steam-prepare-fex-rootfs or { };
   runtimePrepUnit = enabled.systemd.services.korri-steam-runtime-prep or { };
   runtimePrepPath = enabled.systemd.paths.korri-steam-runtime-prep or { };
   systemPackageNames = cfg: map (pkg: pkg.name or "") cfg.environment.systemPackages;
-  serviceExec = unit:
+  serviceExec =
+    unit:
     let
       normalize = raw: if builtins.isList raw then lib.concatStringsSep "\n" raw else raw;
-    in lib.concatStringsSep "\n" [
+    in
+    lib.concatStringsSep "\n" [
       (normalize (unit.serviceConfig.ExecStartPre or ""))
       (normalize (unit.serviceConfig.ExecStart or ""))
     ];
-  pathChangedText = pathUnit:
-    let raw = pathUnit.pathConfig.PathChanged or "";
-    in if builtins.isList raw then lib.concatStringsSep "\n" raw else raw;
+  pathChangedText =
+    pathUnit:
+    let
+      raw = pathUnit.pathConfig.PathChanged or "";
+    in
+    if builtins.isList raw then lib.concatStringsSep "\n" raw else raw;
 
   checks = [
-    (check "enabled aarch64 module evaluates without failed assertions" (failedAssertions enabled == [ ]))
+    (check "enabled aarch64 module evaluates without failed assertions" (
+      failedAssertions enabled == [ ]
+    ))
     (check "enable = false contributes no Steam package or services" (
       !(disabled.systemd.services ? korri-steam)
       && !(disabled.systemd.services ? korri-steam-uinput)
@@ -158,6 +173,13 @@ let
       && (steamUnit.environment.STEAM_GAMES_ROOT or null) == "/var/lib/korri/content/games/steam"
       && (steamUnit.environment.STEAM_DOT or null) == "/home/korri/.steam"
     ))
+    (check "FEX rootfs service converges before Steam launch" (
+      enabled.systemd.services ? korri-steam-prepare-fex-rootfs
+      && builtins.elem "multi-user.target" (fexRootfsUnit.wantedBy or [ ])
+      && lib.hasInfix "korri-steam-prepare-fex-rootfs" (serviceExec fexRootfsUnit)
+      && builtins.elem "korri-steam-prepare-fex-rootfs.service" (steamUnit.after or [ ])
+      && builtins.elem "korri-steam-prepare-fex-rootfs.service" (steamUnit.wants or [ ])
+    ))
     (check "runtime prep service repairs Proton payloads as the Korri user" (
       enabled.systemd.services ? korri-steam-runtime-prep
       && (runtimePrepUnit.serviceConfig.User or null) == "korri"
@@ -175,8 +197,12 @@ let
       && (runtimePrepPath.pathConfig.Unit or null) == "korri-steam-runtime-prep.service"
       && lib.hasInfix "Proton 11.0 (ARM64)/proton" (pathChangedText runtimePrepPath)
       && lib.hasInfix "Proton 10.0/proton" (pathChangedText runtimePrepPath)
-      && lib.hasInfix "SteamLinuxRuntime_sniper/pressure-vessel/bin/pressure-vessel-wrap" (pathChangedText runtimePrepPath)
-      && lib.hasInfix "SteamLinuxRuntime_sniper/pressure-vessel/libexec/steam-runtime-tools-0/pv-adverb" (pathChangedText runtimePrepPath)
+      && lib.hasInfix "SteamLinuxRuntime_sniper/pressure-vessel/bin/pressure-vessel-wrap" (
+        pathChangedText runtimePrepPath
+      )
+      && lib.hasInfix "SteamLinuxRuntime_sniper/pressure-vessel/libexec/steam-runtime-tools-0/pv-adverb" (
+        pathChangedText runtimePrepPath
+      )
     ))
     (check "tmpfiles create Korri-owned Steam state" (
       builtins.elem "d /var/lib/korri/steam 0750 korri korri -" enabled.systemd.tmpfiles.rules
