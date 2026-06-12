@@ -500,6 +500,34 @@ describe("readable library schema records", () => {
     expect(() =>
       decodeLibraryItemPayload({
         title: "Downwell",
+        source: "steam",
+        releases: [
+          {
+            id: "windows",
+            system: "windows",
+            target: "steam://rungameid/360740",
+            app: "steam",
+          },
+        ],
+      }),
+    ).toThrow(/apps\[\]|release\.app/i)
+    expect(() =>
+      decodeLibraryItemPayload({
+        title: "Downwell",
+        source: "steam",
+        releases: [
+          {
+            id: "windows",
+            system: "windows",
+            target: "steam://rungameid/360740",
+            runtime: "proton",
+          },
+        ],
+      }),
+    ).toThrow(/apps\[\]|release\.runtime/i)
+    expect(() =>
+      decodeLibraryItemPayload({
+        title: "Downwell",
         system: "windows",
         target: "steam://rungameid/360740",
         apps: [{ id: "steam", runtime: "proton" }],

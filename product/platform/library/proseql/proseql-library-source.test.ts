@@ -172,7 +172,7 @@ describe("createProseqlLibrarySource", () => {
               const repo = createLibraryRepository(db)
               yield* repo.upsertSystem({
                 id: "gba",
-                launch: { app: "retroarch", module: "mgba" },
+                apps: [{ id: "retroarch", runtime: "mgba" }],
               })
               yield* repo.upsertRuntime({
                 id: "mgba",

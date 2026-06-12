@@ -1517,8 +1517,6 @@ export class MultiTargetUnsupported extends Data.TaggedError(
 }> {}
 
 interface ReadableOverride {
-  readonly app?: string
-  readonly runtime?: string
   readonly gamescope?: GamescopePolicy
   readonly moonlight?: MoonlightPolicy
   readonly retroarch?: RetroArchPolicy
@@ -1539,8 +1537,6 @@ export interface ResolveReadableLaunchInputs {
 }
 
 interface ReadableLayerView {
-  readonly app?: string
-  readonly runtime?: string
   readonly gamescope?: GamescopePolicy
   readonly moonlight?: MoonlightPolicy
   readonly retroarch?: RetroArchPolicy
@@ -1554,8 +1550,6 @@ interface ReadableLayerView {
 const readableViewOfUser = (user: UserRecord | undefined): ReadableLayerView =>
   user
     ? {
-        app: user.launch?.app ?? user.launcher,
-        runtime: user.launch?.module,
         gamescope: user.gamescope,
         moonlight: user.moonlight,
         retroarch: user.retroarch,
@@ -1572,8 +1566,6 @@ const readableViewOfSystem = (
 ): ReadableLayerView =>
   system
     ? {
-        app: system.launch?.app ?? system.launcher,
-        runtime: system.launch?.module,
         gamescope: system.gamescope,
         moonlight: system.moonlight,
         retroarch: system.retroarch,
@@ -1590,8 +1582,6 @@ const readableViewOfSource = (
 ): ReadableLayerView =>
   source
     ? {
-        app: source.app,
-        runtime: source.runtime,
         gamescope: source.gamescope,
         moonlight: source.moonlight,
         retroarch: source.retroarch,
@@ -1702,8 +1692,6 @@ const readableViewOfContained = (entry: PlayableEntry): ReadableLayerView => ({
 const readableViewOfRelease = (
   release: LibraryReleasePayload,
 ): ReadableLayerView => ({
-  app: release.app,
-  runtime: release.runtime,
   gamescope: release.gamescope,
   moonlight: release.moonlight,
   retroarch: release.retroarch,
@@ -1719,8 +1707,6 @@ const readableViewOfProfile = (
 ): ReadableLayerView =>
   profile
     ? {
-        app: profile.app,
-        runtime: profile.runtime,
         gamescope: profile.gamescope,
         moonlight: profile.moonlight,
         retroarch: profile.retroarch,
@@ -1735,8 +1721,6 @@ const readableViewOfProfile = (
 const mergeReadableLayers = (
   layers: readonly ReadableLayerView[],
 ): ReadableLayerView => {
-  let app: string | undefined
-  let runtime: string | undefined
   let gamescope: GamescopePolicy | undefined
   let moonlight: MoonlightPolicy | undefined
   let retroarch: RetroArchPolicy | undefined
@@ -1747,8 +1731,6 @@ const mergeReadableLayers = (
   let patches: string[] | undefined
 
   for (const layer of layers) {
-    if (layer.app !== undefined) app = layer.app
-    if (layer.runtime !== undefined) runtime = layer.runtime
     if (layer.gamescope !== undefined) {
       gamescope = foldGamescope(gamescope, layer.gamescope)
     }
@@ -1772,8 +1754,6 @@ const mergeReadableLayers = (
   }
 
   return {
-    app,
-    runtime,
     gamescope,
     moonlight,
     retroarch,
@@ -1893,13 +1873,6 @@ export const resolveReadableLaunchContext = (
       )
     }
     const source = snapshot.sources.get(sourceId)
-    const legacySelected = mergeReadableLayers([
-      early,
-      readableViewOfSource(source),
-      readableViewOfRelease(release),
-      readableViewOfProfile(profile),
-      inputs.override ?? {},
-    ])
     const appChoiceSelection = selectAppChoice(
       resolveEffectiveAppChoices(system?.apps, release.apps),
       inputs.appId,
@@ -1928,16 +1901,14 @@ export const resolveReadableLaunchContext = (
       )
     }
 
-    const appId = selectedChoice?.id ?? legacySelected.app
+    const appId = selectedChoice?.id
     if (appId === undefined) {
-      return yield* Effect.fail(
-        new LauncherUnresolvable({ gameId: inputs.playableId }),
-      )
+      return yield* Effect.fail(new ReleaseNotLaunchable({ releaseId: release.id }))
     }
     const app = resolveReadableAppRecord(appId, snapshot.apps)
     if (app === undefined) return yield* Effect.fail(new AppNotFound({ appId }))
 
-    const runtimeId = selectedChoice?.runtime ?? legacySelected.runtime
+    const runtimeId = selectedChoice?.runtime
     const runtime =
       runtimeId === undefined ? undefined : snapshot.runtimes.get(runtimeId)
     if (runtimeId !== undefined && runtime === undefined) {

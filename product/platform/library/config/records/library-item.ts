@@ -51,8 +51,8 @@ export const LibraryReleasePayload = Schema.Struct({
   source: Schema.optional(NonEmptyString),
   system: NonEmptyString,
   target: Schema.optional(Target),
-  app: Schema.optional(NonEmptyString),
-  runtime: Schema.optional(NonEmptyString),
+  app: Schema.optional(Schema.Unknown),
+  runtime: Schema.optional(Schema.Unknown),
   apps: Schema.optional(AppChoiceList),
   display: Schema.optional(DisplayMetadata),
 
@@ -64,7 +64,25 @@ export const LibraryReleasePayload = Schema.Struct({
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
   patches: InheritableLayer.fields.patches,
-})
+}).pipe(
+  Schema.check(
+    Schema.makeFilter(release => {
+      if (release.app !== undefined) {
+        return {
+          path: ["app"],
+          issue: "release.app was removed; use release.apps[] choices",
+        }
+      }
+      if (release.runtime !== undefined) {
+        return {
+          path: ["runtime"],
+          issue: "release.runtime was removed; use release.apps[].runtime",
+        }
+      }
+      return undefined
+    }),
+  ),
+)
 export type LibraryReleasePayload = Schema.Schema.Type<
   typeof LibraryReleasePayload
 >

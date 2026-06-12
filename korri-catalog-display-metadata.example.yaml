@@ -208,7 +208,8 @@ library:
       - id: windows
         system: windows
         target: steam://rungameid/360740
-        app: steam
+        apps:
+          - id: steam
         display:
           aspect: [1.333333]
           resolution: unrestricted
@@ -223,8 +224,9 @@ library:
         source: roms
         system: genesis
         target: genesis/Sonic The Hedgehog.md
-        app: retroarch
-        runtime: genesis-plus-gx
+        apps:
+          - id: retroarch
+            runtime: genesis-plus-gx
         display:
           aspect: [1.333333]
           resolution: unrestricted
@@ -243,7 +245,8 @@ library:
         source: steam
         system: windows
         target: steam://rungameid/71113
-        app: steam
+        apps:
+          - id: steam
         display:
           aspect: unrestricted
           sources:
@@ -266,5 +269,6 @@ library:
       - id: gba
         system: gba
         target: gba/Super Mario Advance 2.gba
-        app: retroarch
-        runtime: mgba
+        apps:
+          - id: retroarch
+            runtime: mgba

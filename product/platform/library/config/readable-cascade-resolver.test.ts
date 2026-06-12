@@ -100,6 +100,7 @@ const user: UserRecord = {
 }
 const system: SystemRecord = {
   id: "genesis",
+  apps: [{ id: "retroarch", runtime: "genesis-plus-gx" }],
   gamescope: { extraArgs: ["system"], display: { nested: { width: 320 } } },
   moonlight: { extraArgs: ["system"], window: { autoResize: true } },
   retroarch: { extraArgs: ["system"] },
@@ -108,8 +109,6 @@ const source: SourceRecord = {
   id: "roms",
   kind: ["files"],
   storage: "roms",
-  app: "retroarch",
-  runtime: "genesis-plus-gx",
   gamescope: { extraArgs: ["source"], display: { nested: { height: 240 } } },
   moonlight: { extraArgs: ["source"], platform: { name: "v4l2m2m" } },
   retroarch: {
@@ -473,15 +472,19 @@ describe("resolveReadableLaunchContext", () => {
     })
   })
 
-  it("falls back to legacy scalar app selection when no app choices exist", async () => {
-    const context = await Effect.runPromise(
-      resolveReadableLaunchContext(snapshot(), {
-        playableId: "sonic-the-hedgehog",
-      }),
+  it("rejects launchable releases without app choices", async () => {
+    const exit = await Effect.runPromiseExit(
+      resolveReadableLaunchContext(
+        {
+          ...snapshot(),
+          systems: new Map([["genesis", { id: "genesis" }]]),
+        },
+        { playableId: "sonic-the-hedgehog" },
+      ),
     )
 
-    expect(context.app.id).toBe("retroarch")
-    expect(context.runtime?.id).toBe("genesis-plus-gx")
+    expect(exit._tag).toBe("Failure")
+    expect(String(exit)).toContain("ReleaseNotLaunchable")
   })
 
   it("materializes built-in app overrides for readable launch composition", async () => {
@@ -515,7 +518,12 @@ describe("resolveReadableLaunchContext", () => {
           ...snapshot(),
           host: null,
           users: new Map(),
-          systems: new Map([["genesis", { id: "genesis", title: "Genesis" }]]),
+          systems: new Map([
+            [
+              "genesis",
+              { id: "genesis", title: "Genesis", apps: [{ id: "retroarch" }] },
+            ],
+          ]),
           sources: new Map([
             [
               "roms",
@@ -553,7 +561,7 @@ describe("resolveReadableLaunchContext", () => {
     ])
   })
 
-  it("lets profile and UI override replace resolved app and runtime", async () => {
+  it("keeps app choice selection independent of profile app fields", async () => {
     const steam: AppRecord = {
       id: "steam",
       command: "steam",
@@ -577,6 +585,18 @@ describe("resolveReadableLaunchContext", () => {
             ["genesis-plus-gx", runtime],
             ["proton", proton],
           ]),
+          systems: new Map([
+            [
+              "genesis",
+              {
+                ...system,
+                apps: [
+                  { id: "retroarch", runtime: "genesis-plus-gx" },
+                  { id: "steam", runtime: "proton" },
+                ],
+              },
+            ],
+          ]),
           profiles: new Map([
             ["handheld", { ...profile, app: "steam", runtime: "proton" }],
           ]),
@@ -584,7 +604,7 @@ describe("resolveReadableLaunchContext", () => {
         {
           playableId: "sonic-the-hedgehog",
           profileId: "handheld",
-          override: { app: "retroarch", runtime: "genesis-plus-gx" },
+          appId: "retroarch",
         },
       ),
     )

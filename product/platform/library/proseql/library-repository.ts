@@ -67,10 +67,7 @@ export interface ResolveLaunchOptions {
   readonly profileId?: string
   /** @deprecated old profile vocabulary; accepted as a temporary caller shim. */
   readonly presetId?: string
-  readonly override?: EphemeralOverride & {
-    readonly app?: string
-    readonly runtime?: string
-  }
+  readonly override?: EphemeralOverride
 }
 
 export interface ResolvedLaunchOutput {
@@ -504,22 +501,23 @@ function upsertSystemWithCoreRuntime(
   system: SystemRecord,
 ): Effect.Effect<SystemRecord, LibraryError> {
   return Effect.gen(function* () {
-    const appId = system.launch?.app ?? system.launcher
-    const core = appId ? system.cores?.[appId] : undefined
-    if (core !== undefined) {
-      yield* upsert(db.runtimes, {
-        id: core,
-        kind: "libretro-core",
-        path: core.startsWith("/") ? core : `/legacy-cores/${core}`,
-      })
+    const normalizedApps = (system.apps ?? []).map(choice => {
+      const runtime = choice.runtime ?? system.cores?.[choice.id]
+      return runtime === undefined ? choice : { ...choice, runtime }
+    })
+    for (const choice of normalizedApps) {
+      if (choice.runtime !== undefined) {
+        yield* upsert(db.runtimes, {
+          id: choice.runtime,
+          kind: "libretro-core",
+          path: choice.runtime.startsWith("/")
+            ? choice.runtime
+            : `/legacy-cores/${choice.runtime}`,
+        })
+      }
     }
     const normalized: SystemRecord =
-      core !== undefined && system.launch?.module === undefined
-        ? {
-            ...system,
-            launch: { ...(system.launch ?? {}), module: core },
-          }
-        : system
+      normalizedApps.length > 0 ? { ...system, apps: normalizedApps } : system
     return yield* upsert(db.systems, normalized)
   })
 }
@@ -576,9 +574,10 @@ function upsertLegacySystemDelta(
   delta: SystemDelta,
   defaultApp: string,
 ): Effect.Effect<SystemRecord, LibraryError> {
+  const runtime = delta.cores?.[defaultApp]
   const system: SystemRecord = {
     id: delta.id,
-    launcher: defaultApp,
+    apps: [{ id: defaultApp, ...(runtime ? { runtime } : {}) }],
     ...(delta.name ? { name: delta.name } : {}),
     ...(delta.manufacturer ? { manufacturer: delta.manufacturer } : {}),
     ...(delta.cores ? { cores: delta.cores } : {}),
@@ -699,14 +698,13 @@ function upsertLegacyGame(
     }
     const target = game.contentPath?.replace(/^\/+/, "")
     const parsed = legacyPlayableParts(game.id)
+    const appId = game.launch?.app ?? game.launcher
+    const runtimeId = game.launch?.module ?? game.core
     const release = {
       id: "default",
       system: game.system,
       ...(target ? { target } : {}),
-      ...(game.launch?.app ? { app: game.launch.app } : {}),
-      ...(game.launch?.module ? { runtime: game.launch.module } : {}),
-      ...(game.launcher ? { app: game.launcher } : {}),
-      ...(game.core ? { runtime: game.core } : {}),
+      ...(appId ? { apps: [{ id: appId, ...(runtimeId ? { runtime: runtimeId } : {}) }] } : {}),
     }
     const item: LibraryItemRecord = parsed.containedId
       ? {
@@ -876,8 +874,6 @@ function toPlayableReleaseEntry(release: {
   readonly system: string
   readonly source?: string
   readonly target?: string | readonly string[]
-  readonly app?: string
-  readonly runtime?: string
   readonly apps?: readonly { readonly id: string }[]
   readonly display?: Readonly<Record<string, unknown>>
 }): PlayableReleaseEntry {
@@ -886,8 +882,6 @@ function toPlayableReleaseEntry(release: {
     system: release.system,
     ...(release.source ? { source: release.source } : {}),
     ...(release.target !== undefined ? { target: release.target } : {}),
-    ...(release.app ? { app: release.app } : {}),
-    ...(release.runtime ? { runtime: release.runtime } : {}),
     ...(release.apps ? { apps: release.apps.map(app => app.id) } : {}),
     ...(release.display ? { display: release.display } : {}),
     launchable: release.target !== undefined,

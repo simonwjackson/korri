@@ -12,8 +12,6 @@ export const PlayableReleaseEntry = Schema.Struct({
   system: Schema.String,
   source: Schema.optional(Schema.String),
   target: Schema.optional(ReleaseTarget),
-  app: Schema.optional(Schema.String),
-  runtime: Schema.optional(Schema.String),
   apps: Schema.optional(Schema.Array(Schema.String)),
   display: Schema.optional(DisplayMetadata),
   launchable: Schema.Boolean,

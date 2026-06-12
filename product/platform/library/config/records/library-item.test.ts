@@ -87,6 +87,34 @@ describe("LibraryItemPayload playable/release identity", () => {
     ).toThrow()
   })
 
+  it("rejects legacy release app and runtime fields", () => {
+    expect(() =>
+      decodeLibraryItemPayload({
+        releases: [
+          {
+            id: "gba",
+            system: "gba",
+            target: "gba/cart.gba",
+            app: "retroarch",
+          },
+        ],
+      }),
+    ).toThrow(/apps\[\]|release\.app/i)
+
+    expect(() =>
+      decodeLibraryItemPayload({
+        releases: [
+          {
+            id: "gba",
+            system: "gba",
+            target: "gba/cart.gba",
+            runtime: "mgba",
+          },
+        ],
+      }),
+    ).toThrow(/apps\[\]|release\.runtime/i)
+  })
+
   it("decodes release app choices", () => {
     const item = decodeLibraryItemPayload({
       releases: [

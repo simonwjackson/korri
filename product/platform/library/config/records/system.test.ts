@@ -19,9 +19,13 @@ describe("SystemPayload", () => {
     expect(system.cores?.snes9x).toBe("snes9x_native")
   })
 
-  it("decodes optional 'launcher' default for this system", () => {
-    const system = decodeSystemPayload({ launcher: "retroarch" })
-    expect(system.launcher).toBe("retroarch")
+  it("rejects legacy launch and launcher fields", () => {
+    expect(() => decodeSystemPayload({ launcher: "retroarch" })).toThrow(
+      /apps\[\]|system\.launcher/i,
+    )
+    expect(() =>
+      decodeSystemPayload({ launch: { app: "retroarch" } }),
+    ).toThrow(/apps\[\]|system\.launch/i)
   })
 
   it("decodes system app choices", () => {
@@ -49,7 +53,6 @@ describe("SystemPayload", () => {
 
   it("decodes inheritable layer + presets + byLauncher + inherit", () => {
     const system = decodeSystemPayload({
-      launcher: "retroarch",
       cores: { retroarch: "snes9x_libretro.so" },
       gamescope: { enable: false },
       env: { LANG: "C" },

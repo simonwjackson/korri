@@ -18,7 +18,6 @@
 import { Schema } from "effect"
 
 import { ByLauncherPayload, InheritableLayer } from "../inheritable-fields"
-import { LaunchBlock } from "../launch-block"
 import { AppChoiceList } from "./app-choice"
 import { PresetMapPayload } from "./preset"
 
@@ -32,11 +31,9 @@ export const SystemPayload = Schema.Struct({
   // Per-launcher core defaults: `cores.<launcherId> = <coreString>`.
   cores: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 
-  // Public launch block; launch.app/module win over legacy launcher/cores.
-  launch: Schema.optional(LaunchBlock),
-
-  // Per-system default launcher (legacy alias for launch.app).
-  launcher: Schema.optional(Schema.String),
+  // Legacy readable app selection fields are rejected; use apps[].
+  launch: Schema.optional(Schema.Unknown),
+  launcher: Schema.optional(Schema.Unknown),
 
   // App choices available to releases in this system.
   apps: Schema.optional(AppChoiceList),
@@ -55,7 +52,25 @@ export const SystemPayload = Schema.Struct({
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,
   patches: InheritableLayer.fields.patches,
-})
+}).pipe(
+  Schema.check(
+    Schema.makeFilter(system => {
+      if (system.launch !== undefined) {
+        return {
+          path: ["launch"],
+          issue: "system.launch was removed; use system.apps[] choices",
+        }
+      }
+      if (system.launcher !== undefined) {
+        return {
+          path: ["launcher"],
+          issue: "system.launcher was removed; use system.apps[] choices",
+        }
+      }
+      return undefined
+    }),
+  ),
+)
 export type SystemPayload = Schema.Schema.Type<typeof SystemPayload>
 
 export const SystemRecord = Schema.Struct({
