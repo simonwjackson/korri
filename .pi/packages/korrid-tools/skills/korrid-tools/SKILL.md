@@ -1,6 +1,6 @@
 ---
 name: korrid-tools
-description: Korri daemon control tools. Use when inspecting or operating a running Korri daemon via HTTP RPC: server status, library listing, source status, session lifecycle, and stream-control settings.
+description: "Korri daemon control tools. Use when inspecting or operating a running Korri daemon via HTTP RPC: server status, library listing, source status, session lifecycle, and stream-control settings."
 ---
 
 # Korrid tools
