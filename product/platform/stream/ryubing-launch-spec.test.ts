@@ -151,6 +151,24 @@ describe("typed Ryubing launch spec rendering", () => {
     ])
   })
 
+  it("defaults audio_backend to OpenAl when policy does not choose one", () => {
+    // Ryujinx's SDL2 backend queues samples without dropping them: any
+    // sub-realtime stretch (boot, shader compile, slow GPU) accumulates
+    // seconds of audio latency that never drains for the rest of the
+    // session (validated on bandai/SM8550 2026-06-11, see
+    // docs/solutions/performance-issues/ryubing-sm8550-turnip26-openal-2026-06-11.md).
+    // OpenAL pulls on demand, so korri-launched Ryubing defaults to it.
+    expect(renderRyubingConfig({})).toMatchObject({
+      audio_backend: "OpenAl",
+    })
+  })
+
+  it("lets an explicit audio backend policy override the OpenAl default", () => {
+    expect(
+      renderRyubingConfig({ audio: { backend: "sound-io" } }),
+    ).toMatchObject({ audio_backend: "SoundIo" })
+  })
+
   it("rejects missing required launch facts", () => {
     expect(() =>
       composeRyubingLaunchSpec({
