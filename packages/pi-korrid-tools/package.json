@@ -1,0 +1,42 @@
+{
+	"name": "@korri/pi-korrid-tools",
+	"version": "0.1.0",
+	"description": "Pi tools for controlling Korri daemon hosts over HTTP RPC.",
+	"license": "MIT",
+	"type": "module",
+	"main": "./extensions/korrid-tools.ts",
+	"exports": {
+		".": "./extensions/korrid-tools.ts"
+	},
+	"keywords": [
+		"pi-package",
+		"korri",
+		"korrid"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/simonwjackson/korri.git",
+		"directory": "packages/pi-korrid-tools"
+	},
+	"files": [
+		"extensions",
+		"skills",
+		"src",
+		"README.md"
+	],
+	"scripts": {
+		"test": "bun test tests",
+		"pack:check": "npm pack --dry-run"
+	},
+	"peerDependencies": {
+		"@mariozechner/pi-coding-agent": "*"
+	},
+	"pi": {
+		"extensions": [
+			"./extensions"
+		],
+		"skills": [
+			"./skills"
+		]
+	}
+}

@@ -1,6 +1,24 @@
-# korrid-tools Pi package
+# @korri/pi-korrid-tools
 
-Reusable Pi tools for active-use Korri daemon control through the portable HTTP RPC endpoint.
+Distributable Pi package for active-use Korri daemon control through the portable HTTP RPC endpoint.
+
+## Install
+
+Published package:
+
+```sh
+pi install npm:@korri/pi-korrid-tools@0.1.0
+```
+
+Development from this repository:
+
+```json
+{
+  "packages": ["../packages/pi-korrid-tools"]
+}
+```
+
+The package intentionally calls the daemon over HTTP RPC and does not import Korri app internals or repo path aliases at extension load time. Tool input-validation failures resolve as structured `isError: true` tool results instead of rejecting the tool promise.
 
 ## Tools
 

@@ -3,6 +3,7 @@
 - Product apps/services/platform/themes/vendor/systems: `product/*`
 - Shared runtime capabilities: `product/platform/*`
 - Repo tooling, generators, and test infrastructure: `tools/*`
+- Distributable workspace packages, including Pi packages consumed from `.pi/settings.json`: `packages/*`
 
 ## Path aliases
 
