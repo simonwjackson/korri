@@ -106,6 +106,8 @@ describe("headless server RPC group", () => {
       "app.library.list",
       "app.server.status",
       "app.server.stream.prepare",
+      "app.session.status",
+      "app.session.stop",
       "app.source.list",
       "app.source.status",
       "app.stream-control.config.get",

@@ -11,6 +11,8 @@ import { UnassignGameAssetRpc as appGameAssetsUnassign } from "../game-assets/un
 import { GetHelloRpc as appHelloGet } from "../hello/rpc"
 import { LaunchLibraryRpc as appLibraryLaunch } from "../library/launch.rpc"
 import { ListLibraryRpc as appLibraryList } from "../library/list.rpc"
+import { SessionStatusRpc as appSessionStatus } from "../session/status.rpc"
+import { StopSessionRpc as appSessionStop } from "../session/stop.rpc"
 import { ListSourceRpc as appSourceList } from "../source/list.rpc"
 import { SourceStatusRpc as appSourceStatus } from "../source/status.rpc"
 import { PrepareStreamRpc as appStreamPrepare } from "../stream/prepare.rpc"
@@ -41,6 +43,8 @@ export const serverRpcGroup = RpcGroup.make(
   appSourceList,
   appSourceStatus,
   appServerStatus,
+  appSessionStatus,
+  appSessionStop,
   appServerStreamPrepare,
   appStreamPrepare,
   appStreamControlConfigGet,

@@ -1,6 +1,7 @@
 {
 	"packages": [
 		"./packages/feature-gates",
+		"./packages/korrid-tools",
 		"git:github.com/simonwjackson/pi-lattice-stack"
 	]
 }

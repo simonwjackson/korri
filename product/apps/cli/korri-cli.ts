@@ -2,9 +2,12 @@ import { BunRuntime, BunServices } from "@effect/platform-bun"
 import { makeLiveAcquisitionLayer } from "@platform/acquisition/acquisition-service"
 import { createStaticAcquisitionPluginRegistry } from "@platform/acquisition/plugin-loader"
 import { approvedTypeScriptPluginDefinitions } from "@platform/acquisition/plugins/approved"
+import { KorriControl } from "@platform/control/korri-control"
+import { KorriControlLayerLive } from "@platform/control/korri-control-live"
 import { LauncherLayerLive } from "@platform/library/launcher-layer-live"
 import { Launcher, LibrarySource } from "@platform/library/library-services"
 import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
+import { createKorriControlRpc } from "@product/apps/portal/control/korri-control-rpc"
 import { Effect, Layer, Option } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
 import {
@@ -13,6 +16,12 @@ import {
 } from "../../services/device/game-stream-launch-intent"
 import { artifactCommand } from "./artifacts/artifact-import-command"
 import { bazzarCommand } from "./bazzar/bazzar-command"
+import {
+  renderSessionStatus,
+  renderStopSession,
+  sessionStatusExitCode,
+  sessionStopExitCode,
+} from "./control-renderers"
 import { createEffectGamePicker } from "./game-picker"
 import { runRemoteStreamLaunchCommand } from "./remote-stream-launch"
 import { runSourceAwarePlayCommand } from "./source-aware-play"
@@ -80,6 +89,49 @@ const streamCommand = Command.make("stream").pipe(
   Command.withSubcommands([streamLaunchCommand, streamRemoteLaunchCommand]),
 )
 
+const sessionStatusCommand = Command.make(
+  "status",
+  {
+    host: Flag.string("host").pipe(Flag.optional),
+  },
+  ({ host }) =>
+    Effect.gen(function* () {
+      const control = yield* controlForHost(Option.getOrUndefined(host))
+      const status = yield* control.sessionStatus()
+      console.log(renderSessionStatus(status))
+      process.exitCode = sessionStatusExitCode(status)
+    }),
+).pipe(
+  Command.withDescription(
+    "Show the foreground session lifecycle from sessiond.",
+  ),
+)
+
+const sessionStopCommand = Command.make(
+  "stop",
+  {
+    host: Flag.string("host").pipe(Flag.optional),
+    force: Flag.boolean("force").pipe(Flag.withDefault(false)),
+    yes: Flag.boolean("yes").pipe(Flag.withDefault(false)),
+  },
+  ({ host, force, yes }) =>
+    Effect.gen(function* () {
+      const control = yield* controlForHost(Option.getOrUndefined(host))
+      const result = yield* control.stopSession({ force, confirmed: yes })
+      console.log(renderStopSession(result))
+      process.exitCode = sessionStopExitCode(result)
+    }),
+).pipe(
+  Command.withDescription(
+    "Stop the active foreground session. Requires --yes because this mutates host state.",
+  ),
+)
+
+const sessionCommand = Command.make("session").pipe(
+  Command.withDescription("Inspect and control the foreground session."),
+  Command.withSubcommands([sessionStatusCommand, sessionStopCommand]),
+)
+
 const playCommand = Command.make(
   "play",
   {
@@ -112,6 +164,7 @@ export const korriCommand = Command.make("korri").pipe(
     artifactCommand,
     bazzarCommand,
     playCommand,
+    sessionCommand,
     streamCommand,
   ]),
 )
@@ -122,12 +175,20 @@ const AcquisitionLayerLive = makeLiveAcquisitionLayer({
   ),
 })
 
+const KorriControlInfrastructureLive = KorriControlLayerLive.pipe(
+  Layer.provideMerge(Layer.mergeAll(LibrarySourceLayerLive, LauncherLayerLive)),
+)
+
 const runtimeLayer = Layer.mergeAll(
   BunServices.layer,
-  LibrarySourceLayerLive,
-  LauncherLayerLive,
   AcquisitionLayerLive,
+  KorriControlInfrastructureLive,
 )
+
+function controlForHost(host: string | undefined) {
+  if (host) return Effect.succeed(createKorriControlRpc(host))
+  return KorriControl
+}
 
 export function runKorriCli(argv: readonly string[]) {
   return Command.runWith(korriCommand, { version: VERSION })(argv).pipe(

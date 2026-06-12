@@ -2,6 +2,7 @@ import { makeLiveAcquisitionLayer } from "@platform/acquisition/acquisition-serv
 import { createStaticAcquisitionPluginRegistry } from "@platform/acquisition/plugin-loader"
 import { approvedTypeScriptPluginDefinitions } from "@platform/acquisition/plugins/approved"
 import { BatchJsonSerializationLive } from "@platform/api/rpc/serialization"
+import { KorriControlLayerLive } from "@platform/control/korri-control-live"
 import { FeatureGatesMiddlewareLive } from "@platform/gates/middleware"
 import { GameAssetsLayerLive } from "@platform/library/game-assets/game-assets-service"
 import { LauncherLayerLive } from "@platform/library/launcher-layer-live"
@@ -27,6 +28,8 @@ import { ForegroundSessionHostLive } from "../library/foreground-session-host-la
 import { handleLaunchLibrary } from "../library/launch.rpc-handler"
 import { handleListLibrary } from "../library/list.rpc-handler"
 import { RemoteStreamPrepareLive } from "../library/remote-stream-prepare"
+import { handleSessionStatus } from "../session/status.rpc-handler"
+import { handleStopSession } from "../session/stop.rpc-handler"
 import { handleListSource } from "../source/list.rpc-handler"
 import { handleSourceStatus } from "../source/status.rpc-handler"
 import { handlePrepareStream } from "../stream/prepare.rpc-handler"
@@ -66,9 +69,12 @@ const AcquisitionLayerLive = makeLiveAcquisitionLayer({
   ),
 })
 
+const KorriControlInfrastructureLive = KorriControlLayerLive.pipe(
+  Layer.provideMerge(Layer.mergeAll(LibrarySourceLayerLive, LauncherLayerLive)),
+)
+
 const LibraryInfrastructureLive = Layer.mergeAll(
-  LibrarySourceLayerLive,
-  LauncherLayerLive,
+  KorriControlInfrastructureLive,
   GameAssetsLayerLive,
   ForegroundSessionHostLive,
   RemoteStreamPrepareLive,
@@ -94,6 +100,8 @@ const ServerHandlersLive = serverRpcGroup.toLayer(
     "app.source.list": handleListSource,
     "app.source.status": handleSourceStatus,
     "app.server.status": handleServerStatus,
+    "app.session.status": handleSessionStatus,
+    "app.session.stop": handleStopSession,
     "app.server.stream.prepare": handleServerPrepareStream,
     "app.stream.prepare": handlePrepareStream,
     "app.stream-control.config.get": handleGetStreamControlConfig,

@@ -6,7 +6,10 @@ import {
   launchFailureExitCode,
   type ManagedLaunchResult,
 } from "@platform/library/launcher"
-import { probeSessiondManagedLaunchStatus } from "@platform/library/sessiond-managed-launch-client"
+import {
+  probeSessiondManagedLaunchStatus,
+  type SessiondManagedLaunchStatusResult,
+} from "@platform/library/sessiond-managed-launch-client"
 import { isLaunchReadyMode } from "@platform/library/sessiond-managed-launch-protocol"
 import {
   createForegroundSessionOwner,
@@ -42,26 +45,26 @@ export interface CreateLocalForegroundLaunchOwnerOptions {
  * - `ok` + launch-ready mode → `{ status: "idle" }`.
  * - `ok` + non-launch-ready mode (game/launching/restoring/recovering) →
  *    `{ status: "not-idle", mode }`.
- * - `unavailable` → `{ status: "unavailable", reason: "network" }`.
- * - `request-rejected` → `{ status: "unavailable", reason: "request-rejected" }`,
- *    preserving the existing 401 → `host-control-disabled` mapping from
- *    `session-launcher.ts`.
+ * - `unavailable` / `invalid-payload` → `{ status: "unavailable", reason: "network" }`.
  */
 function defaultConsultExternalIdle():
   | (() => Promise<ForegroundExternalIdleResult>)
   | undefined {
   if (!process.env.KORRI_SESSIOND_SOCKET) return undefined
-  return async () => {
-    const probe = await probeSessiondManagedLaunchStatus()
-    if (probe.kind === "not-configured") return { status: "idle" }
-    if (probe.kind === "unavailable")
-      return { status: "unavailable", reason: "network" }
-    if (probe.kind === "request-rejected")
-      return { status: "unavailable", reason: "request-rejected" }
-    return isLaunchReadyMode(probe.status.mode)
-      ? { status: "idle" }
-      : { status: "not-idle", mode: probe.status.mode }
+  return async () =>
+    externalIdleFromSessiondProbe(await probeSessiondManagedLaunchStatus())
+}
+
+export function externalIdleFromSessiondProbe(
+  probe: SessiondManagedLaunchStatusResult,
+): ForegroundExternalIdleResult {
+  if (probe.kind === "not-configured") return { status: "idle" }
+  if (probe.kind === "unavailable" || probe.kind === "invalid-payload") {
+    return { status: "unavailable", reason: "network" }
   }
+  return isLaunchReadyMode(probe.status.mode)
+    ? { status: "idle" }
+    : { status: "not-idle", mode: probe.status.mode }
 }
 
 export interface LocalForegroundLaunchRequest {

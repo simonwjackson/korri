@@ -7,9 +7,11 @@ import {
   Launcher,
   type LauncherService,
 } from "@platform/library/library-services"
+import type { SessiondManagedLaunchMode } from "@platform/library/sessiond-managed-launch-protocol"
 import { Effect } from "effect"
 import {
   createLocalForegroundLaunchOwner,
+  externalIdleFromSessiondProbe,
   launchLocalForegroundSession,
 } from "./local-foreground-launch-adapter"
 
@@ -31,6 +33,19 @@ async function expectArtifactRootRemoved(root: string) {
   await expect(readFile(join(root, "retroarch.cfg"), "utf8")).rejects.toThrow()
 }
 
+function sessiondStatus(mode: SessiondManagedLaunchMode) {
+  return {
+    schemaVersion: 1 as const,
+    mode,
+    capabilities: {
+      managedLaunch: true,
+      lifecycleEvents: true,
+      perLaunchTermination: true,
+    },
+    restoreAttempts: 0,
+  }
+}
+
 function spawnWith(launcher: LauncherService) {
   const spawn = launcher.spawn
   if (!spawn) throw new Error("launcher missing managed spawn")
@@ -48,6 +63,36 @@ async function launcherFromLayer(
 }
 
 describe("local foreground launch adapter", () => {
+  it("maps invalid sessiond status payloads to unavailable external-idle probes", () => {
+    expect(
+      externalIdleFromSessiondProbe({
+        kind: "invalid-payload",
+        message: "bad status",
+      }),
+    ).toEqual({ status: "unavailable", reason: "network" })
+    expect(
+      externalIdleFromSessiondProbe({
+        kind: "unavailable",
+        message: "timeout",
+      }),
+    ).toEqual({ status: "unavailable", reason: "network" })
+    expect(externalIdleFromSessiondProbe({ kind: "not-configured" })).toEqual({
+      status: "idle",
+    })
+    expect(
+      externalIdleFromSessiondProbe({
+        kind: "ok",
+        status: sessiondStatus("idle"),
+      }),
+    ).toEqual({ status: "idle" })
+    expect(
+      externalIdleFromSessiondProbe({
+        kind: "ok",
+        status: sessiondStatus("game"),
+      }),
+    ).toEqual({ status: "not-idle", mode: "game" })
+  })
+
   it("cleans launch artifacts after the managed local child exits", async () => {
     await withArtifactRoot(async root => {
       const control = makeInMemoryLauncherLayer.createManagedControl()
