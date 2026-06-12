@@ -105,16 +105,16 @@ describe("createProseqlLibrarySource", () => {
                 {
                   id: "genesis",
                   system: "genesis",
-                  app: "echo",
+                  apps: [{ id: "echo" }],
                   target: "sonic.md",
                 },
                 {
                   id: "steam",
                   system: "pc",
-                  app: "echo",
+                  apps: [{ id: "echo" }],
                   target: "sonic-steam.bin",
                 },
-                { id: "known-only", system: "pc", app: "echo" },
+                { id: "known-only", system: "pc", apps: [{ id: "echo" }] },
               ],
             })
             yield* Effect.promise(() => db.flush())

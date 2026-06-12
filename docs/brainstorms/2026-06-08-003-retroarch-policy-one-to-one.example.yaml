@@ -283,8 +283,8 @@ apps:
 systems:
   gba:
     name: Game Boy Advance
-    launch:
-      app: retroarch
+    apps:
+      - id: retroarch
 
 runtimes:
   gba-mgba:
@@ -327,8 +327,9 @@ library:
         system: gba
         source: roms
         target: gba/Super Mario Advance (USA, Europe).gba
-        runtime: gba-mgba
-        app: retroarch
+        apps:
+          - id: retroarch
+            runtime: gba-mgba
         retroarch:
           video:
             aspectRatio: core-provided

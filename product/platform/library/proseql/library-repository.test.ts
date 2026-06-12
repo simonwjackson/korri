@@ -27,7 +27,7 @@ const downwell: LibraryItemRecord = {
       id: "windows",
       system: "windows",
       target: "steam://rungameid/360740",
-      app: "steam",
+      apps: [{ id: "steam" }],
     },
   ],
 }
@@ -41,8 +41,7 @@ const sonic: LibraryItemRecord = {
       id: "genesis",
       system: "genesis",
       target: "genesis/Sonic.md",
-      app: "retroarch",
-      runtime: "genesis-plus-gx",
+      apps: [{ id: "retroarch", runtime: "genesis-plus-gx" }],
     },
     {
       id: "windows-known",
@@ -55,7 +54,7 @@ const sonic: LibraryItemRecord = {
       system: "windows",
       source: "steam",
       target: "steam://rungameid/71113",
-      app: "steam",
+      apps: [{ id: "steam" }],
     },
   ],
 }
@@ -72,8 +71,7 @@ const marioPackage: LibraryItemRecord = {
       id: "gba",
       system: "gba",
       target: "gba/Super Mario Advance 2.gba",
-      app: "retroarch",
-      runtime: "mgba",
+      apps: [{ id: "retroarch", runtime: "mgba" }],
     },
   ],
 }
@@ -395,7 +393,7 @@ describe("createLibraryRepository — readable playable entries", () => {
               id: "genesis",
               system: "genesis",
               target: "genesis/Coreless.md",
-              app: "retroarch",
+              apps: [{ id: "retroarch" }],
             },
           ],
         }),
@@ -423,8 +421,7 @@ describe("createLibraryRepository — readable playable entries", () => {
             {
               id: "genesis",
               system: "genesis",
-              app: "retroarch",
-              runtime: "genesis-plus-gx",
+              apps: [{ id: "retroarch", runtime: "genesis-plus-gx" }],
               retroarch: {
                 configFile: { mode: "generated" },
                 video: { aspectRatio: "full", sync: { frameDelay: 0 } },
@@ -436,7 +433,7 @@ describe("createLibraryRepository — readable playable entries", () => {
             {
               id: "steam",
               system: "windows",
-              app: "steam",
+              apps: [{ id: "steam" }],
               target: "steam://rungameid/123",
             },
           ],

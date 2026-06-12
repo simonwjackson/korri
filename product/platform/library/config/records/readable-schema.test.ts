@@ -489,20 +489,20 @@ describe("readable library schema records", () => {
           id: "windows",
           system: "windows",
           target: "steam://rungameid/360740",
-          app: "steam",
+          apps: [{ id: "steam" }],
         },
       ],
     })
 
     expect(item.releases.map(release => release.id)).toEqual(["windows"])
     expect(item.releases[0]?.target).toBe("steam://rungameid/360740")
+    expect(item.releases[0]?.apps).toEqual([{ id: "steam" }])
     expect(() =>
       decodeLibraryItemPayload({
         title: "Downwell",
         system: "windows",
         target: "steam://rungameid/360740",
-        app: "steam",
-        runtime: "proton",
+        apps: [{ id: "steam", runtime: "proton" }],
         releases: [
           {
             id: "windows",

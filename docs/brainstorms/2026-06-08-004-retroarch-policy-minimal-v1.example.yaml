@@ -142,8 +142,8 @@ apps:
 systems:
   gba:
     name: Game Boy Advance
-    launch:
-      app: retroarch
+    apps:
+      - id: retroarch
 
 runtimes:
   gba-mgba:
@@ -182,8 +182,9 @@ library:
         system: gba
         source: roms
         target: gba/Super Mario Advance (USA, Europe).gba
-        runtime: gba-mgba
-        app: retroarch
+        apps:
+          - id: retroarch
+            runtime: gba-mgba
 
         # Release-specific RetroArch overrides, if any, also use the namespaced
         # form because this is a release layer rather than the app definition.
