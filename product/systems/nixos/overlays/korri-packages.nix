@@ -36,6 +36,14 @@
 # upstream nixpkgs attribute is replaced until the downstream package is ready
 # to become a runtime default.
 #
+# `ryubing` is substituted on aarch64 only: `ryubing-korri` wraps the
+# upstream package with VK_DRIVER_FILES pinned to a Mesa >= 26 Turnip ICD
+# from the `nixpkgs-mesa` input, because the main pin's Mesa 25.2.6 Turnip
+# is pathologically slow for Ryujinx on Adreno (see
+# product/vendor/ryubing-korri/package.nix). Non-Adreno (x86) hosts keep
+# stock `ryubing` — the wrapper exposes only the freedreno ICD and would
+# break other GPUs.
+#
 # `smb-remastered` consumes `nixpkgs-godot` (a secondary nixpkgs pin
 # carrying Godot 4.6.x that the repo's main nixpkgs-25.11 pin does not
 # yet ship) rather than `prev.godot`, so the upgrade can land in a
@@ -48,6 +56,7 @@
   smbr-src,
   sm127-src,
   nixpkgs-godot,
+  nixpkgs-mesa,
 }:
 
 final: prev:
@@ -70,6 +79,11 @@ let
   moonlightEmbeddedKorri = final.callPackage ../../../vendor/moonlight-embedded-korri/package.nix {
     inherit nix-on-rocks;
   };
+
+  ryubingKorri = final.callPackage ../../../vendor/ryubing-korri/package.nix {
+    ryubing = prev.ryubing;
+    inherit nixpkgs-mesa;
+  };
 in
 {
   gamescope = gamescopeKorri;
@@ -77,6 +91,9 @@ in
 
   moonlight-embedded = moonlightEmbeddedKorri;
   moonlight-embedded-korri = moonlightEmbeddedKorri;
+
+  ryubing = if prev.stdenv.hostPlatform.isAarch64 then ryubingKorri else prev.ryubing;
+  ryubing-korri = ryubingKorri;
 
   retroarch-bare = prev.retroarch-bare.overrideAttrs (old: {
     buildInputs = (old.buildInputs or [ ]) ++ [ final.xz ];

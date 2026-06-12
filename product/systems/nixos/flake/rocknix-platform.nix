@@ -7,6 +7,7 @@
   smbr-src,
   sm127-src,
   nixpkgs-godot,
+  nixpkgs-mesa,
   productRegistry,
   rocknixTargetSystem ? "aarch64-linux",
   ...
@@ -26,6 +27,7 @@ let
           smbr-src
           sm127-src
           nixpkgs-godot
+          nixpkgs-mesa
           ;
       })
     ];

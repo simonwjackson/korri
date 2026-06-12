@@ -9,6 +9,7 @@
   smbr-src,
   sm127-src,
   nixpkgs-godot,
+  nixpkgs-mesa,
 }:
 
 let
@@ -20,6 +21,7 @@ let
       smbr-src
       sm127-src
       nixpkgs-godot
+      nixpkgs-mesa
       ;
   };
 

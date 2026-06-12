@@ -28,6 +28,13 @@
     sm127-src.flake = false;
 
     nixpkgs-godot.url = "github:NixOS/nixpkgs/331800de5053fcebacf6813adb5db9c9dca22a0c";
+
+    # Mesa >= 26 pin for the ryubing-korri Turnip wrapper. The main
+    # nixpkgs-25.11 pin ships Mesa 25.2.6, whose Turnip driver is
+    # pathologically slow for Ryujinx on Adreno (SM8550); Mesa >= 26
+    # fixes it. Narrow-scope cross-channel substitution mirroring the
+    # nixpkgs-godot precedent — see product/vendor/ryubing-korri/package.nix.
+    nixpkgs-mesa.url = "github:NixOS/nixpkgs/9ae611a455b90cf061d8f332b977e387bda8e1ca";
   };
 
   nixConfig = {

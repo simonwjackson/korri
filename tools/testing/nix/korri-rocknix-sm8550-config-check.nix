@@ -152,6 +152,22 @@ let
         hasPackagePname "ryubing" cfg.environment.systemPackages
         && hasPackagePname "ryubing" compositor.path
       ))
+      # Mesa 25.2.6 Turnip is pathologically slow for Ryujinx on Adreno
+      # (validated on bandai 2026-06-11: 4-vs-60-FPS class delta, see
+      # docs/solutions/performance-issues/ryubing-sm8550-turnip26-openal-2026-06-11.md).
+      # Pin the contract: the installed ryubing must carry a Mesa >= 26
+      # freedreno (Turnip) ICD via the ryubing-korri wrapper.
+      (check "${name}: ryubing is pinned to a Mesa >= 26 Turnip ICD" (
+        let
+          ryu = lib.findFirst (pkg: (pkg.pname or "") == "ryubing") null cfg.environment.systemPackages;
+          icd = ryu.passthru.vulkanIcd or "";
+          mesaVersion = (ryu.passthru.mesaTurnip or { }).version or "0";
+        in
+        ryu != null
+        && (ryu.passthru.turnipPinned or false)
+        && lib.hasSuffix "share/vulkan/icd.d/freedreno_icd.aarch64.json" icd
+        && lib.versionAtLeast mesaVersion "26"
+      ))
       (check "${name}: inputd websocket is loopback" (inputdEnv.KORRI_INPUT_BRIDGE_HOSTNAME or null == "127.0.0.1"))
       (check "${name}: root main-space audio graph is disabled for Korri rootless kiosk" (
         builtins.all mainSpaceAudioDisabled [

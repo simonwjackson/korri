@@ -10,6 +10,7 @@ inputs@{
   smbr-src,
   sm127-src,
   nixpkgs-godot,
+  nixpkgs-mesa,
   ...
 }:
 flake-utils.lib.eachDefaultSystem (
@@ -27,6 +28,7 @@ flake-utils.lib.eachDefaultSystem (
         smbr-src
         sm127-src
         nixpkgs-godot
+        nixpkgs-mesa
         ;
     };
     inherit (pkgsContext)

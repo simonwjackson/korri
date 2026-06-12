@@ -150,6 +150,22 @@
         "type": "github"
       }
     },
+    "nixpkgs-mesa": {
+      "locked": {
+        "lastModified": 1781074563,
+        "narHash": "sha256-md8WlXOlfnIeHeOScMTTHFyf2d6iaTwPl2apR5EQ3P4=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "9ae611a455b90cf061d8f332b977e387bda8e1ca",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "9ae611a455b90cf061d8f332b977e387bda8e1ca",
+        "type": "github"
+      }
+    },
     "nixpkgs-sdl2-classic": {
       "locked": {
         "lastModified": 1751274312,
@@ -191,6 +207,7 @@
         "nixpkgs": "nixpkgs_2",
         "nixpkgs-2405": "nixpkgs-2405",
         "nixpkgs-godot": "nixpkgs-godot",
+        "nixpkgs-mesa": "nixpkgs-mesa",
         "sm127-src": "sm127-src",
         "smbr-src": "smbr-src",
         "wasm4-src": "wasm4-src"

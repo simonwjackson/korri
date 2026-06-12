@@ -5,6 +5,7 @@
   smbr-src,
   sm127-src,
   nixpkgs-godot,
+  nixpkgs-mesa,
   ...
 }:
 
@@ -23,6 +24,7 @@ rec {
       smbr-src
       sm127-src
       nixpkgs-godot
+      nixpkgs-mesa
       ;
   };
   default = korri-packages;
