@@ -97,9 +97,9 @@ describe("app.source.list handler", () => {
 async function setupLibrary(options: { readonly enabled: boolean }) {
   const library = await withTempProseqlLibrary({
     systems: [
-      { id: "gba", launcher: "mgba" },
+      { id: "gba", apps: [{ id: "mgba" }] },
       { id: "snes" },
-      { id: "patched-gba", launcher: "retroarch" },
+      { id: "patched-gba", apps: [{ id: "retroarch" }] },
     ],
     launchers: [
       {
@@ -119,6 +119,7 @@ async function setupLibrary(options: { readonly enabled: boolean }) {
       {
         id: "gba/wario-land-4",
         system: "gba",
+        launcher: "mgba",
         contentPath: "/srv/games/wl4.gba",
         metadata: { name: "Wario Land 4" },
       },
@@ -131,6 +132,8 @@ async function setupLibrary(options: { readonly enabled: boolean }) {
       {
         id: "gba/patched-missing-files",
         system: "patched-gba",
+        launcher: "retroarch",
+        core: "mgba",
         contentPath: "/missing/roms/patched.gba",
         patches: ["/missing/patches/color.ips"],
         metadata: { name: "Patched Missing Files" },
@@ -138,6 +141,8 @@ async function setupLibrary(options: { readonly enabled: boolean }) {
       {
         id: "gba/xdelta-patch",
         system: "patched-gba",
+        launcher: "retroarch",
+        core: "mgba",
         contentPath: "/missing/roms/xdelta.gba",
         patches: ["/missing/patches/mod.xdelta"],
         metadata: { name: "XDelta Patch" },

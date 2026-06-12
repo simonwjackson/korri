@@ -27,7 +27,7 @@ describe("validateLauncherConfig", () => {
       systems: [
         {
           id: "snes",
-          launcher: "echo",
+          apps: [{ id: "echo", runtime: "snes9x_libretro.so" }],
           cores: { echo: "snes9x_libretro.so" },
         },
       ],
@@ -79,7 +79,7 @@ describe("validateLauncherConfig", () => {
     }
   })
 
-  it("reports LauncherUnresolvable when no launcher is configured", async () => {
+  it("reports ReleaseNotLaunchable when no app choice is configured", async () => {
     await using library = await withTempProseqlLibrary({
       games: [
         {
@@ -98,7 +98,7 @@ describe("validateLauncherConfig", () => {
     expect(result.status).toBe("diagnostic")
     if (result.status === "diagnostic") {
       expect(result.reason).toBe("LibraryError")
-      expect(result.message).toContain("LauncherUnresolvable")
+      expect(result.message).toContain("ReleaseNotLaunchable")
     }
   })
 
@@ -158,7 +158,12 @@ describe("validateLauncherConfig", () => {
   it("reports app/module/settings/materialized artifact details for built-in RetroArch", async () => {
     await withLaunchArtifactsRoot(async () => {
       await using library = await withTempProseqlLibrary({
-        apps: [{ id: "retroarch", settings: { video_driver: "glcore" } }],
+        apps: [
+          {
+            id: "retroarch",
+            settings: { video_driver: "glcore", video_scale_integer: true },
+          },
+        ],
         modules: [
           {
             id: "fake08",
@@ -169,11 +174,12 @@ describe("validateLauncherConfig", () => {
         systems: [
           {
             id: "pico8",
-            launch: {
-              app: "retroarch",
-              module: "fake08",
-              settings: { video_scale_integer: true },
-            },
+            apps: [
+              {
+                id: "retroarch",
+                runtime: "fake08",
+              },
+            ],
           },
         ],
         games: [

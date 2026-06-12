@@ -52,6 +52,7 @@ export type ContentItem = Schema.Schema.Type<typeof ContentItem>
 
 export interface ResolveLaunchInputs {
   readonly releaseId?: string
+  readonly appId?: string
   readonly userId?: string
   readonly profileId?: string
   /** @deprecated use profileId. */

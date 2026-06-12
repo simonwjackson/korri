@@ -27,9 +27,7 @@ describe("app choice selection", () => {
         [{ id: "retroarch", runtime: "snes9x", argsAppend: ["system"] }],
         [{ id: "retroarch", inherit: false, argsAppend: ["release"] }],
       ),
-    ).toEqual([
-      { id: "retroarch", inherit: false, argsAppend: ["release"] },
-    ])
+    ).toEqual([{ id: "retroarch", inherit: false, argsAppend: ["release"] }])
   })
 
   it("auto-selects one choice and requires appId for many choices", () => {
@@ -37,12 +35,10 @@ describe("app choice selection", () => {
       _tag: "SelectedAppChoice",
       choice: { id: "retroarch" },
     })
-    expect(selectAppChoice([{ id: "retroarch" }, { id: "ryubing" }])).toEqual(
-      {
-        _tag: "AmbiguousAppChoice",
-        appIds: ["retroarch", "ryubing"],
-      },
-    )
+    expect(selectAppChoice([{ id: "retroarch" }, { id: "ryubing" }])).toEqual({
+      _tag: "AmbiguousAppChoice",
+      appIds: ["retroarch", "ryubing"],
+    })
   })
 
   it("selects an explicit appId and reports unknown ids", () => {

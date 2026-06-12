@@ -27,9 +27,9 @@ describe("AppChoice", () => {
   })
 
   it("rejects inline app kinds and unknown keys", () => {
-    expect(() => decodeAppChoice({ id: "retroarch", kind: "retroarch" })).toThrow(
-      /kind.*top-level apps/i,
-    )
+    expect(() =>
+      decodeAppChoice({ id: "retroarch", kind: "retroarch" }),
+    ).toThrow(/kind.*top-level apps/i)
     expect(() => decodeAppChoice({ id: "retroarch", extra: true })).toThrow()
   })
 

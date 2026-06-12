@@ -224,7 +224,12 @@ function upsertSystemLaunch(
     if (runtime) yield* repository.upsertRuntime(runtime)
     yield* repository.upsertSystem({
       id: args.system.name,
-      launch: { app: args.app.id },
+      apps: [
+        {
+          id: args.app.id,
+          ...(runtime ? { runtime: runtime.id } : {}),
+        },
+      ],
       ...(args.system.defaultCore
         ? { cores: { [args.app.id]: args.system.defaultCore } }
         : {}),
@@ -285,10 +290,14 @@ function composeLibraryItem(args: {
         source: args.sourceId,
         system: args.system.name,
         target: args.romTarget,
-        app: args.appId,
-        ...(args.system.defaultCore
-          ? { runtime: args.system.defaultCore }
-          : {}),
+        apps: [
+          {
+            id: args.appId,
+            ...(args.system.defaultCore
+              ? { runtime: args.system.defaultCore }
+              : {}),
+          },
+        ],
       },
     ],
   }

@@ -1,15 +1,15 @@
 /**
  * Cascade resolver — the heart of the seven-layer config model.
  *
- * Two pure functions:
+ * Public resolver surfaces:
  * - `enumerateApplicablePresets(snapshot, inputs)` returns the
  *   user-facing preset menu as `Map<presetName, ResolvedPreset[]>`.
  *   Each chain is ordered least-specific → most-specific with
  *   `inherit: false` truncation applied.
- * - `resolveLaunchContext(snapshot, inputs)` walks all seven layers in
- *   inheritance order (global → user → system → launcher → game →
- *   preset chain → ephemeral override), deep-merging contributions
- *   per the rules in the plan, and returns a `ResolvedLaunchContext`.
+ * - `resolveLocalLauncherPolicy(snapshot, inputs)` folds host/app policy for
+ *   local launcher siblings such as Moonlight.
+ * - `resolveReadableLaunchContext(snapshot, inputs)` resolves readable library
+ *   app choices and launch context for persisted library releases.
  *
  * Skeleton pre-pass: resolve the launcher first by scanning override
  * → selected preset chain (most→least specific) → game → system → user
@@ -27,19 +27,14 @@
 
 import { Data, Effect } from "effect"
 import {
-  getBuiltInAppDescriptor,
-  resolveAppDescriptor,
-} from "./app-integrations"
-import {
   resolveEffectiveAppChoices,
   selectAppChoice,
 } from "./app-choice-selection"
+import { getBuiltInAppDescriptor } from "./app-integrations"
 import type { EphemeralOverride } from "./ephemeral-override"
 import {
   AppNotFound,
-  CoreNotConfigured,
   GameNotFound,
-  LauncherUnresolvable,
   PresetNotFound,
   type ResolutionError,
   UserNotFound,
@@ -54,7 +49,6 @@ import {
 } from "./inheritable-fields"
 import type { LaunchBlock, LaunchSettings } from "./launch-block"
 import { mergeLaunchSettings } from "./launch-block"
-import { resolveModuleSelection } from "./module-resolution"
 import {
   listPlayableEntries,
   type PlayableEntry,
@@ -65,7 +59,6 @@ import {
   type AppRecord,
   appRetroArchPolicyFromRecord,
   appRyubingPolicyFromRecord,
-  isRetroArchAppRecord,
 } from "./records/app"
 import type { CollectionRecord } from "./records/collection"
 import type { GameRecord } from "./records/game"
@@ -84,10 +77,7 @@ import type { SourceRecord } from "./records/source"
 import type { StorageRecord } from "./records/storage"
 import type { SystemRecord } from "./records/system"
 import type { UserRecord } from "./records/user"
-import type {
-  ReadableResolvedLaunchContext,
-  ResolvedLaunchContext,
-} from "./resolved-launch-context"
+import type { ReadableResolvedLaunchContext } from "./resolved-launch-context"
 import { resolveSourceTarget } from "./source-target-resolution"
 
 // ────────────────────────────────────────────────────────────────────
@@ -190,6 +180,15 @@ interface InheritableView {
   readonly settings?: LaunchSettings
 }
 
+type LegacySystemLaunchFields = {
+  readonly launch?: LaunchBlock
+  readonly launcher?: string
+}
+
+const legacySystemLaunchFields = (
+  system: SystemRecord | undefined,
+): LegacySystemLaunchFields => (system ?? {}) as LegacySystemLaunchFields
+
 const viewOfGlobal = (g: GlobalConfigRecord | null): InheritableView =>
   g
     ? {
@@ -209,46 +208,6 @@ const viewOfGlobal = (g: GlobalConfigRecord | null): InheritableView =>
       }
     : {}
 
-const viewOfUser = (u: UserRecord | undefined): InheritableView =>
-  u
-    ? {
-        launch: u.launch,
-        launcher: u.launch?.app ?? u.launcher,
-        module: u.launch?.module,
-        settings: u.launch?.settings,
-        inherit: u.inherit,
-        gamescope: u.gamescope,
-        moonlight: u.moonlight,
-        retroarch: u.retroarch,
-        ryubing: u.ryubing,
-        env: u.env,
-        cwd: u.cwd,
-        argsAppend: u.argsAppend,
-        patches: u.patches,
-        byLauncher: u.byLauncher,
-      }
-    : {}
-
-const viewOfSystem = (s: SystemRecord | undefined): InheritableView =>
-  s
-    ? {
-        launch: s.launch,
-        launcher: s.launch?.app ?? s.launcher,
-        module: s.launch?.module,
-        settings: s.launch?.settings,
-        inherit: s.inherit,
-        gamescope: s.gamescope,
-        moonlight: s.moonlight,
-        retroarch: s.retroarch,
-        ryubing: s.ryubing,
-        env: s.env,
-        cwd: s.cwd,
-        argsAppend: s.argsAppend,
-        patches: s.patches,
-        byLauncher: s.byLauncher,
-      }
-    : {}
-
 const viewOfLauncher = (l: LauncherRecord | undefined): InheritableView =>
   l
     ? {
@@ -264,40 +223,6 @@ const viewOfLauncher = (l: LauncherRecord | undefined): InheritableView =>
         byLauncher: l.byLauncher,
       }
     : {}
-
-const viewOfGame = (g: GameRecord): InheritableView => ({
-  launch: g.launch,
-  launcher: g.launch?.app ?? g.launcher,
-  module: g.launch?.module ?? g.core,
-  settings: g.launch?.settings,
-  inherit: g.inherit,
-  gamescope: g.gamescope,
-  moonlight: g.moonlight,
-  retroarch: g.retroarch,
-  ryubing: g.ryubing,
-  env: g.env,
-  cwd: g.cwd,
-  argsAppend: g.argsAppend,
-  patches: g.patches,
-  byLauncher: g.byLauncher,
-})
-
-const viewOfPreset = (p: PresetPayload): InheritableView => ({
-  launch: p.launch,
-  launcher: p.launch?.app ?? p.launcher,
-  module: p.launch?.module,
-  settings: p.launch?.settings,
-  inherit: p.inherit,
-  gamescope: p.gamescope,
-  moonlight: p.moonlight,
-  retroarch: p.retroarch,
-  ryubing: p.ryubing,
-  env: p.env,
-  cwd: p.cwd,
-  argsAppend: p.argsAppend,
-  patches: p.patches,
-  byLauncher: p.byLauncher,
-})
 
 const viewOfOverride = (o: EphemeralOverride): InheritableView => ({
   launch: o.launch,
@@ -1091,41 +1016,8 @@ const skeletonLauncherForPresetEnum = (
 ): string | undefined => {
   if (game.launch?.app ?? game.launcher)
     return game.launch?.app ?? game.launcher
-  const sys = snap.systems.get(game.system)
-  if (sys?.launch?.app ?? sys?.launcher)
-    return sys?.launch?.app ?? sys?.launcher
-  if (inputs.userId) {
-    const usr = snap.users.get(inputs.userId)
-    if (usr?.launch?.app ?? usr?.launcher)
-      return usr?.launch?.app ?? usr?.launcher
-  }
-  return snap.global?.launch?.app ?? snap.global?.launcher
-}
-
-/**
- * Final resolved launcher — scans override → selected preset chain
- * (most→least specific) → game → system → user → global.
- */
-const resolveLauncherId = (
-  snap: ConfigSnapshot,
-  inputs: ResolveInputs,
-  game: GameRecord,
-  selectedChain: readonly ResolvedPresetLink[] | undefined,
-): string | undefined => {
-  if (inputs.override?.launch?.app ?? inputs.override?.launcher) {
-    return inputs.override?.launch?.app ?? inputs.override?.launcher
-  }
-  if (selectedChain) {
-    for (let i = selectedChain.length - 1; i >= 0; i--) {
-      const p = selectedChain[i]?.payload
-      if (p?.launch?.app ?? p?.launcher) return p?.launch?.app ?? p?.launcher
-    }
-  }
-  if (game.launch?.app ?? game.launcher)
-    return game.launch?.app ?? game.launcher
-  const sys = snap.systems.get(game.system)
-  if (sys?.launch?.app ?? sys?.launcher)
-    return sys?.launch?.app ?? sys?.launcher
+  const sys = legacySystemLaunchFields(snap.systems.get(game.system))
+  if (sys.launch?.app ?? sys.launcher) return sys.launch?.app ?? sys.launcher
   if (inputs.userId) {
     const usr = snap.users.get(inputs.userId)
     if (usr?.launch?.app ?? usr?.launcher)
@@ -1226,223 +1118,6 @@ export const enumerateApplicablePresets = (
       result.set(name, truncateChain(chain))
     }
     return result
-  })
-
-// ────────────────────────────────────────────────────────────────────
-// Pass 2 — full cascade
-// ────────────────────────────────────────────────────────────────────
-
-const referencesPlaceholder = (
-  template: readonly string[],
-  placeholder: string,
-): boolean => template.some(s => s.includes(`{${placeholder}}`))
-
-const resolveExplicitLaunchApp = (
-  snap: ConfigSnapshot,
-  inputs: ResolveInputs,
-  game: GameRecord,
-  selectedChain: readonly ResolvedPresetLink[] | undefined,
-): string | undefined => {
-  if (inputs.override?.launch?.app) return inputs.override.launch.app
-  if (selectedChain) {
-    for (let i = selectedChain.length - 1; i >= 0; i--) {
-      const appId = selectedChain[i]?.payload.launch?.app
-      if (appId) return appId
-    }
-  }
-  if (game.launch?.app) return game.launch.app
-  const sys = snap.systems.get(game.system)
-  if (sys?.launch?.app) return sys.launch.app
-  if (inputs.userId) {
-    const usr = snap.users.get(inputs.userId)
-    if (usr?.launch?.app) return usr.launch.app
-  }
-  return snap.global?.launch?.app
-}
-
-const resolveExplicitLaunchModule = (
-  snap: ConfigSnapshot,
-  inputs: ResolveInputs,
-  game: GameRecord,
-  selectedChain: readonly ResolvedPresetLink[] | undefined,
-): string | undefined => {
-  if (inputs.override?.launch?.module) return inputs.override.launch.module
-  if (selectedChain) {
-    for (let i = selectedChain.length - 1; i >= 0; i--) {
-      const moduleId = selectedChain[i]?.payload.launch?.module
-      if (moduleId) return moduleId
-    }
-  }
-  if (game.launch?.module) return game.launch.module
-  const sys = snap.systems.get(game.system)
-  if (sys?.launch?.module) return sys.launch.module
-  if (inputs.userId) {
-    const usr = snap.users.get(inputs.userId)
-    if (usr?.launch?.module) return usr.launch.module
-  }
-  return snap.global?.launch?.module
-}
-
-export const resolveLaunchContext = (
-  snap: ConfigSnapshot,
-  inputs: ResolveInputs,
-): Effect.Effect<ResolvedLaunchContext, ResolutionError> =>
-  Effect.gen(function* () {
-    const game = snap.games.get(inputs.gameId)
-    if (!game) {
-      return yield* Effect.fail(new GameNotFound({ gameId: inputs.gameId }))
-    }
-
-    if (inputs.userId !== undefined && !snap.users.has(inputs.userId)) {
-      return yield* Effect.fail(new UserNotFound({ userId: inputs.userId }))
-    }
-
-    // Pass 1 — enumerate presets (also catches GameNotFound/UserNotFound
-    // upstream, but we already did those checks above for clearer error
-    // ordering).
-    const menu = yield* enumerateApplicablePresets(snap, inputs)
-    let selectedChain: readonly ResolvedPresetLink[] | undefined
-    if (inputs.presetId !== undefined) {
-      const chain = menu.get(inputs.presetId)
-      if (!chain || chain.length === 0) {
-        return yield* Effect.fail(
-          new PresetNotFound({
-            presetId: inputs.presetId,
-            gameId: inputs.gameId,
-          }),
-        )
-      }
-      selectedChain = chain
-    }
-
-    // Pass 0 — skeleton: resolve final launcher.
-    const launcherId = resolveLauncherId(snap, inputs, game, selectedChain)
-    if (!launcherId) {
-      return yield* Effect.fail(
-        new LauncherUnresolvable({ gameId: inputs.gameId }),
-      )
-    }
-    const apps = snap.apps ?? new Map()
-    const modules = snap.modules ?? new Map()
-    const hasKnownApp =
-      getBuiltInAppDescriptor(launcherId) !== undefined ||
-      apps.has(launcherId) ||
-      snap.launchers.has(launcherId)
-    if (!hasKnownApp) {
-      const explicitApp = resolveExplicitLaunchApp(
-        snap,
-        inputs,
-        game,
-        selectedChain,
-      )
-      return yield* Effect.fail(
-        explicitApp !== undefined
-          ? new AppNotFound({ appId: launcherId })
-          : new LauncherUnresolvable({ gameId: inputs.gameId }),
-      )
-    }
-    const app = yield* resolveAppDescriptor({
-      appId: launcherId,
-      apps,
-      launchers: snap.launchers,
-    })
-
-    // Pass 2 — build the layer stack least → most specific.
-    const sys = snap.systems.get(game.system)
-    const user = inputs.userId ? snap.users.get(inputs.userId) : undefined
-
-    const presetView = selectedChain
-      ? foldLayers(
-          selectedChain.map(l => viewOfPreset(l.payload)),
-          launcherId,
-        )
-      : undefined
-
-    const appRecord = apps.get(launcherId)
-    const appView: InheritableView = {
-      settings: mergeLaunchSettings(
-        getBuiltInAppDescriptor(launcherId)?.settings,
-        appRecord?.settings,
-      ),
-      gamescope: appRecord?.gamescope,
-      moonlight: appRecord?.moonlight,
-      retroarch: appRecord
-        ? appRetroArchPolicyFromRecord(appRecord)
-        : undefined,
-      env: appRecord?.env,
-      cwd: appRecord?.cwd,
-      argsAppend: appRecord?.argsAppend,
-      patches: appRecord?.patches,
-    }
-
-    const layers: InheritableView[] = [
-      viewOfGlobal(snap.global),
-      viewOfUser(user),
-      viewOfSystem(sys),
-      appView,
-      viewOfLauncher(snap.launchers.get(launcherId)),
-      viewOfGame(game),
-    ]
-    if (presetView) layers.push(presetView)
-    if (inputs.override) layers.push(viewOfOverride(inputs.override))
-
-    const folded = foldLayers(layers, launcherId)
-
-    const explicitModule = resolveExplicitLaunchModule(
-      snap,
-      inputs,
-      game,
-      selectedChain,
-    )
-    const legacyCore = game.core ?? sys?.cores?.[launcherId] ?? undefined
-    const selectedModule = yield* resolveModuleSelection({
-      app,
-      modules,
-      moduleId: explicitModule ?? legacyCore,
-      explicitLaunchModule: explicitModule !== undefined,
-    })
-    const core = selectedModule.modulePath ?? selectedModule.legacyCore
-
-    if (
-      (referencesPlaceholder([app.command, ...app.args], "core") ||
-        referencesPlaceholder([app.command, ...app.args], "modulePath")) &&
-      core === undefined
-    ) {
-      return yield* Effect.fail(
-        new CoreNotConfigured({
-          gameId: inputs.gameId,
-          systemId: game.system,
-          launcherId,
-        }),
-      )
-    }
-
-    const context: ResolvedLaunchContext = {
-      gameId: inputs.gameId,
-      ...(game.contentPath !== undefined
-        ? { contentPath: game.contentPath }
-        : {}),
-      ...(game.content !== undefined ? { content: game.content } : {}),
-      system: game.system,
-      launcherId,
-      appId: launcherId,
-      ...(selectedModule.moduleId !== undefined
-        ? { moduleId: selectedModule.moduleId }
-        : {}),
-      ...(selectedModule.modulePath !== undefined
-        ? { modulePath: selectedModule.modulePath }
-        : {}),
-      ...(core !== undefined ? { core } : {}),
-      gamescope: normalizeGamescopePolicy(folded.gamescope),
-      ...(folded.moonlight ? { moonlight: folded.moonlight } : {}),
-      ...(folded.retroarch ? { retroarch: folded.retroarch } : {}),
-      ...(folded.settings ? { settings: folded.settings } : {}),
-      ...(folded.env ? { env: folded.env } : {}),
-      ...(folded.cwd !== undefined ? { cwd: folded.cwd } : {}),
-      ...(folded.argsAppend ? { argsAppend: folded.argsAppend } : {}),
-      ...(folded.patches ? { patches: folded.patches } : {}),
-    }
-    return context
   })
 
 // ────────────────────────────────────────────────────────────────────
@@ -1857,12 +1532,6 @@ export const resolveReadableLaunchContext = (
     }
 
     const system = snapshot.systems.get(release.system)
-    const baseLayers = [
-      snapshot.host ?? {},
-      readableViewOfUser(user),
-      readableViewOfSystem(system),
-    ]
-    const early = mergeReadableLayers(baseLayers)
     const sourceId = release.source ?? item.source
     if (sourceId === undefined) {
       return yield* Effect.fail(
@@ -1903,7 +1572,9 @@ export const resolveReadableLaunchContext = (
 
     const appId = selectedChoice?.id
     if (appId === undefined) {
-      return yield* Effect.fail(new ReleaseNotLaunchable({ releaseId: release.id }))
+      return yield* Effect.fail(
+        new ReleaseNotLaunchable({ releaseId: release.id }),
+      )
     }
     const app = resolveReadableAppRecord(appId, snapshot.apps)
     if (app === undefined) return yield* Effect.fail(new AppNotFound({ appId }))

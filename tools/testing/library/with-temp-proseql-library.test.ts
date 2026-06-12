@@ -11,7 +11,7 @@ describe("withTempProseqlLibrary", () => {
       systems: [
         {
           id: "snes",
-          launcher: "echo",
+          apps: [{ id: "echo", runtime: "snes9x_libretro.so" }],
           cores: { echo: "snes9x_libretro.so" },
         },
       ],

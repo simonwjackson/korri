@@ -96,8 +96,7 @@ describe("importRocknixLibrary", () => {
             source: "local-roms",
             system: "snes",
             target: "snes/new.smc",
-            app: "rocknix-retroarch",
-            runtime: "snes9x",
+            apps: [{ id: "rocknix-retroarch", runtime: "snes9x" }],
           },
         ],
         [
@@ -106,8 +105,7 @@ describe("importRocknixLibrary", () => {
             source: "local-roms",
             system: "snes",
             target: "snes/old.smc",
-            app: "rocknix-retroarch",
-            runtime: "snes9x",
+            apps: [{ id: "rocknix-retroarch", runtime: "snes9x" }],
           },
         ],
       ])

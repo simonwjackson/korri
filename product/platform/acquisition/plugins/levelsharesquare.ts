@@ -346,7 +346,7 @@ function playableFor(runtime: LevelShareSquareRuntime, level: LssLevel) {
         source: SOURCE_NAME,
         system: SMBR_SYSTEM,
         target: levelUrl(runtime, id),
-        app: "smbr",
+        apps: [{ id: "smbr" }],
       },
     ],
   }

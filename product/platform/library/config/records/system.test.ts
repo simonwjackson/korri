@@ -23,9 +23,9 @@ describe("SystemPayload", () => {
     expect(() => decodeSystemPayload({ launcher: "retroarch" })).toThrow(
       /apps\[\]|system\.launcher/i,
     )
-    expect(() =>
-      decodeSystemPayload({ launch: { app: "retroarch" } }),
-    ).toThrow(/apps\[\]|system\.launch/i)
+    expect(() => decodeSystemPayload({ launch: { app: "retroarch" } })).toThrow(
+      /apps\[\]|system\.launch/i,
+    )
   })
 
   it("decodes system app choices", () => {

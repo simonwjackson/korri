@@ -14,11 +14,11 @@ import {
 import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
 import { createLibraryRepository } from "@platform/library/proseql/library-repository"
-import { mirrorLibraryAsConfigFragment } from "../../../../../tools/testing/library/with-temp-proseql-library"
 import { createShellLauncher } from "@platform/library/shell-launcher"
 import type { ForegroundSessionState } from "@platform/stream/foreground-session-lifecycle"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
 import { Cause, Effect, Exit, Layer } from "effect"
+import { mirrorLibraryAsConfigFragment } from "../../../../../tools/testing/library/with-temp-proseql-library"
 
 import {
   createForegroundSessionHost,
@@ -1100,7 +1100,7 @@ async function withTempProseqlLibrary(
           })
           yield* repository.upsertSystem({
             id: "snes",
-            launcher: "rocknix-retroarch",
+            apps: [{ id: "rocknix-retroarch", runtime: "snes9x" }],
             cores: { "rocknix-retroarch": "snes9x" },
           })
           if (!options.missingProfile) {

@@ -489,14 +489,28 @@ describe("createLibraryRepository — readable playable entries", () => {
       const cardRoot = join(root, "switch-card")
       await mkdir(join(cardRoot, ".config/Ryujinx/system"), { recursive: true })
       await mkdir(join(cardRoot, "roms/switch"), { recursive: true })
-      await writeFile(join(cardRoot, ".config/Ryujinx/system/prod.keys"), "keys")
-      await writeFile(join(cardRoot, "roms/switch/Mario Kart 8 Deluxe.nsp"), "game")
-
-      await Effect.runPromise(repo.upsertStorage({ id: "switch-card", root: cardRoot }))
-      await Effect.runPromise(
-        repo.upsertSource({ id: "switch-card", kind: ["files"], storage: "switch-card" }),
+      await writeFile(
+        join(cardRoot, ".config/Ryujinx/system/prod.keys"),
+        "keys",
       )
-      await Effect.runPromise(repo.upsertSystem({ id: "switch", name: "Switch" }))
+      await writeFile(
+        join(cardRoot, "roms/switch/Mario Kart 8 Deluxe.nsp"),
+        "game",
+      )
+
+      await Effect.runPromise(
+        repo.upsertStorage({ id: "switch-card", root: cardRoot }),
+      )
+      await Effect.runPromise(
+        repo.upsertSource({
+          id: "switch-card",
+          kind: ["files"],
+          storage: "switch-card",
+        }),
+      )
+      await Effect.runPromise(
+        repo.upsertSystem({ id: "switch", name: "Switch" }),
+      )
       await Effect.runPromise(
         repo.upsertApp({
           id: "ryubing",
@@ -518,7 +532,7 @@ describe("createLibraryRepository — readable playable entries", () => {
             {
               id: "switch",
               system: "switch",
-              app: "ryubing",
+              apps: [{ id: "ryubing" }],
               target: "roms/switch/Mario Kart 8 Deluxe.nsp",
             },
           ],
@@ -556,7 +570,9 @@ describe("createLibraryRepository — readable playable entries", () => {
         "game",
       )
 
-      await Effect.runPromise(repo.upsertStorage({ id: "switch-card", root: cardRoot }))
+      await Effect.runPromise(
+        repo.upsertStorage({ id: "switch-card", root: cardRoot }),
+      )
       await Effect.runPromise(
         repo.upsertSource({
           id: "switch-card",
@@ -564,7 +580,9 @@ describe("createLibraryRepository — readable playable entries", () => {
           storage: "switch-card",
         }),
       )
-      await Effect.runPromise(repo.upsertSystem({ id: "switch", name: "Switch" }))
+      await Effect.runPromise(
+        repo.upsertSystem({ id: "switch", name: "Switch" }),
+      )
       await Effect.runPromise(
         repo.upsertApp({
           id: "ryubing",
@@ -581,7 +599,7 @@ describe("createLibraryRepository — readable playable entries", () => {
             {
               id: "switch",
               system: "switch",
-              app: "ryubing",
+              apps: [{ id: "ryubing" }],
               target: "roms/switch/Mario Kart 8 Deluxe.nsp",
             },
           ],
@@ -589,7 +607,9 @@ describe("createLibraryRepository — readable playable entries", () => {
       )
 
       await expect(
-        Effect.runPromise(repo.canResolveLaunchForPlayable("mario-kart-8-deluxe")),
+        Effect.runPromise(
+          repo.canResolveLaunchForPlayable("mario-kart-8-deluxe"),
+        ),
       ).resolves.toBe(false)
     })
   })

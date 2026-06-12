@@ -268,7 +268,8 @@ library:
         source: switch-card
         system: switch
         target: "roms/switch/Mario Kart 8 Deluxe[0100152000022000][US][v0].nsp"
-        app: ryubing
+        apps:
+          - id: ryubing
 
   metroid-dread:
     title: Metroid Dread
@@ -279,7 +280,8 @@ library:
         source: switch-card
         system: switch
         target: "roms/switch/Metroid Dread [010093801237C000][v0][US].nsp"
-        app: ryubing
+        apps:
+          - id: ryubing
 
   super-mario-odyssey:
     title: Super Mario Odyssey
@@ -290,4 +292,5 @@ library:
         source: switch-card
         system: switch
         target: "roms/switch/Super Mario Odyssey [0100000000010000][v0][US].nsp"
-        app: ryubing
+        apps:
+          - id: ryubing

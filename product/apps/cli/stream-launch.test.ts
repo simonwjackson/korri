@@ -142,7 +142,7 @@ describe("runStreamLaunchCommand", () => {
 
   it("uses the live library source configuration with a temp ProseQL library", async () => {
     await using library = await withTempProseqlLibrary({
-      systems: [{ id: game.system, launcher: "echo" }],
+      systems: [{ id: game.system, apps: [{ id: "echo" }] }],
       launchers: [
         {
           id: "echo",

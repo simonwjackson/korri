@@ -78,7 +78,7 @@ describe("app.server.stream.prepare handler", () => {
 
 async function setupRemoteLibrary() {
   const library = await withTempProseqlLibrary({
-    systems: [{ id: "gba", launcher: "mgba" }],
+    systems: [{ id: "gba", apps: [{ id: "mgba" }] }],
     launchers: [
       {
         id: "mgba",

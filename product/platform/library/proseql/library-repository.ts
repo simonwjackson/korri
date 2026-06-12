@@ -6,11 +6,11 @@ import {
   createProseqlArtifactRepository,
 } from "@platform/artifacts/artifact-import-service"
 import { artifactsRoot } from "@platform/artifacts/artifact-store"
+import type { AppIntegrationKind } from "@platform/library/config/app-integrations"
 import {
   materializeReadableRetroArchLaunch,
   materializeReadableRyubingLaunch,
 } from "@platform/library/config/app-materializer"
-import type { AppIntegrationKind } from "@platform/library/config/app-integrations"
 import {
   type ReadableConfigSnapshot,
   type ResolvedLocalLauncherPolicy,
@@ -18,7 +18,6 @@ import {
   resolveReadableLocalLauncherPolicy,
 } from "@platform/library/config/cascade-resolver"
 import { composeReadableLaunchSpec } from "@platform/library/config/compose-launch-spec"
-import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
 import type {
   GamescopePolicy,
@@ -48,6 +47,7 @@ import type { SourceRecord } from "@platform/library/config/records/source"
 import type { StorageRecord } from "@platform/library/config/records/storage"
 import type { SystemRecord } from "@platform/library/config/records/system"
 import type { UserRecord } from "@platform/library/config/records/user"
+import type { ReadableResolvedLaunchContext } from "@platform/library/config/resolved-launch-context"
 import { gameAssetBlobPath } from "@platform/library/game-assets/game-assets-service"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import type { LaunchSpec } from "@platform/library/launcher"
@@ -704,7 +704,11 @@ function upsertLegacyGame(
       id: "default",
       system: game.system,
       ...(target ? { target } : {}),
-      ...(appId ? { apps: [{ id: appId, ...(runtimeId ? { runtime: runtimeId } : {}) }] } : {}),
+      ...(appId
+        ? {
+            apps: [{ id: appId, ...(runtimeId ? { runtime: runtimeId } : {}) }],
+          }
+        : {}),
     }
     const item: LibraryItemRecord = parsed.containedId
       ? {

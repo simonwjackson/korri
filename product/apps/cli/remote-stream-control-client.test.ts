@@ -94,7 +94,7 @@ describe("remote stream control client", () => {
 
 async function setupRemoteLibrary(options: { readonly enabled: boolean }) {
   const library = await withTempProseqlLibrary({
-    systems: [{ id: "gba", launcher: "mgba" }],
+    systems: [{ id: "gba", apps: [{ id: "mgba" }] }],
     launchers: [
       {
         id: "mgba",

@@ -372,10 +372,15 @@ describe("resolveReadableLaunchContext", () => {
           systems: new Map([
             [
               "genesis",
-              { ...system, apps: [{ id: "retroarch", runtime: "genesis-plus-gx" }] },
+              {
+                ...system,
+                apps: [{ id: "retroarch", runtime: "genesis-plus-gx" }],
+              },
             ],
           ]),
-          sources: new Map([["roms", { ...source, app: undefined, runtime: undefined }]]),
+          sources: new Map([
+            ["roms", { ...source, app: undefined, runtime: undefined }],
+          ]),
         },
         { playableId: "sonic-the-hedgehog" },
       ),
@@ -418,7 +423,9 @@ describe("resolveReadableLaunchContext", () => {
               },
             ],
           ]),
-          sources: new Map([["roms", { ...source, app: undefined, runtime: undefined }]]),
+          sources: new Map([
+            ["roms", { ...source, app: undefined, runtime: undefined }],
+          ]),
           apps: new Map([
             ["retroarch", app],
             ["ryubing", ryubing],
@@ -444,12 +451,16 @@ describe("resolveReadableLaunchContext", () => {
           },
         ],
       ]),
-      sources: new Map([["roms", { ...source, app: undefined, runtime: undefined }]]),
+      sources: new Map([
+        ["roms", { ...source, app: undefined, runtime: undefined }],
+      ]),
     }
 
     const ambiguous = await Effect.runPromise(
       Effect.flip(
-        resolveReadableLaunchContext(base, { playableId: "sonic-the-hedgehog" }),
+        resolveReadableLaunchContext(base, {
+          playableId: "sonic-the-hedgehog",
+        }),
       ),
     )
     expect(ambiguous).toMatchObject({
@@ -649,7 +660,7 @@ describe("resolveReadableLaunchContext", () => {
           id: "switch",
           system: "switch",
           target: "roms/switch/Mario Kart 8 Deluxe.nsp",
-          app: "ryubing",
+          apps: [{ id: "ryubing" }],
           ryubing: {
             state: { root: "{storage:switch-card}/per-game/mk8d" },
             console: { mode: "handheld" },
@@ -666,11 +677,18 @@ describe("resolveReadableLaunchContext", () => {
       resolveReadableLaunchContext(
         {
           ...snapshot(switchItem),
-          systems: new Map([["switch", { id: "switch", app: "ryubing" }]]),
-          sources: new Map([
-            ["switch-card", { id: "switch-card", kind: ["files"], storage: "switch-card" }],
+          systems: new Map([
+            ["switch", { id: "switch", apps: [{ id: "ryubing" }] }],
           ]),
-          storage: new Map([["switch-card", { id: "switch-card", root: "/media/switch" }]]),
+          sources: new Map([
+            [
+              "switch-card",
+              { id: "switch-card", kind: ["files"], storage: "switch-card" },
+            ],
+          ]),
+          storage: new Map([
+            ["switch-card", { id: "switch-card", root: "/media/switch" }],
+          ]),
           apps: new Map([["ryubing", ryubingApp]]),
           runtimes: new Map(),
         },

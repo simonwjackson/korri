@@ -21,14 +21,17 @@ const CandidateTarget = Schema.Union([
   Schema.NonEmptyString,
   Schema.Array(Schema.NonEmptyString),
 ])
+const SourceCandidateAppChoice = Schema.Struct({
+  id: Schema.NonEmptyString,
+  runtime: Schema.optional(Schema.NonEmptyString),
+})
 
 export const SourceCandidateRelease = Schema.Struct({
   id: Schema.NonEmptyString,
   source: Schema.optional(Schema.NonEmptyString),
   system: Schema.NonEmptyString,
   target: Schema.optional(CandidateTarget),
-  app: Schema.optional(Schema.NonEmptyString),
-  runtime: Schema.optional(Schema.NonEmptyString),
+  apps: Schema.optional(Schema.Array(SourceCandidateAppChoice)),
   display: Schema.optional(CandidateDisplayMetadata),
 })
 export type SourceCandidateRelease = Schema.Schema.Type<

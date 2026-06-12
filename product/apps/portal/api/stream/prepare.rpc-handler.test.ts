@@ -13,12 +13,11 @@ import { NotFoundError, ValidationError } from "@platform/api/rpc/errors"
 import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
 import { makeInMemoryLibrarySourceLayer } from "@platform/library/library-source-layer-memory"
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
-import { mirrorLibraryAsConfigFragment } from "../../../../../tools/testing/library/with-temp-proseql-library"
 import { createLibraryRepository } from "@platform/library/proseql/library-repository"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
 import { Cause, Effect, Exit } from "effect"
-
 import { decodeLaunchIntent } from "../../../../../product/services/device/game-stream-launch-intent"
+import { mirrorLibraryAsConfigFragment } from "../../../../../tools/testing/library/with-temp-proseql-library"
 import { handlePrepareStream } from "./prepare.rpc-handler"
 
 const originalEnv = {
@@ -208,7 +207,7 @@ async function withTempProseqlLibrary(): Promise<{
           const repository = createLibraryRepository(db)
           yield* repository.upsertSystem({
             id: "snes",
-            launcher: "rocknix-retroarch",
+            apps: [{ id: "rocknix-retroarch" }],
             gamescope: { enable: true, extraArgs: ["--nested-refresh", "60"] },
           })
           yield* repository.upsertLauncher({

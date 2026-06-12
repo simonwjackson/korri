@@ -1,9 +1,17 @@
-import type { GamescopePolicy, MoonlightPolicy, RetroArchPolicy } from "./inheritable-fields"
+import type {
+  GamescopePolicy,
+  MoonlightPolicy,
+  RetroArchPolicy,
+} from "./inheritable-fields"
 import type { AppChoice } from "./records/app-choice"
 
 export type AppChoiceSelectionResult =
   | { readonly _tag: "SelectedAppChoice"; readonly choice: AppChoice }
-  | { readonly _tag: "AppChoiceNotFound"; readonly appId: string; readonly appIds: readonly string[] }
+  | {
+      readonly _tag: "AppChoiceNotFound"
+      readonly appId: string
+      readonly appIds: readonly string[]
+    }
   | { readonly _tag: "AmbiguousAppChoice"; readonly appIds: readonly string[] }
   | { readonly _tag: "NoAppChoice" }
 
@@ -19,7 +27,7 @@ const mergeObject = <T extends object>(
 const mergeChoice = (base: AppChoice, override: AppChoice): AppChoice => ({
   id: override.id,
   ...(override.inherit !== undefined ? { inherit: override.inherit } : {}),
-  ...(override.runtime ?? base.runtime
+  ...((override.runtime ?? base.runtime)
     ? { runtime: override.runtime ?? base.runtime }
     : {}),
   ...(mergeObject(base.gamescope, override.gamescope) !== undefined
@@ -49,9 +57,14 @@ const mergeChoice = (base: AppChoice, override: AppChoice): AppChoice => ({
   ...(mergeObject(base.env, override.env) !== undefined
     ? { env: mergeObject(base.env, override.env) as Record<string, string> }
     : {}),
-  ...(override.cwd ?? base.cwd ? { cwd: override.cwd ?? base.cwd } : {}),
+  ...((override.cwd ?? base.cwd) ? { cwd: override.cwd ?? base.cwd } : {}),
   ...(base.argsAppend !== undefined || override.argsAppend !== undefined
-    ? { argsAppend: [...(base.argsAppend ?? []), ...(override.argsAppend ?? [])] }
+    ? {
+        argsAppend: [
+          ...(base.argsAppend ?? []),
+          ...(override.argsAppend ?? []),
+        ],
+      }
     : {}),
   ...(base.patches !== undefined || override.patches !== undefined
     ? { patches: [...(base.patches ?? []), ...(override.patches ?? [])] }

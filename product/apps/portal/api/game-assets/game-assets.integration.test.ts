@@ -9,13 +9,13 @@ import type { GameAssetRecord } from "@platform/library/config/records/game-asse
 import type { GameAssetAssignmentRecord } from "@platform/library/config/records/game-asset-assignment"
 import { gameAssetBlobPath } from "@platform/library/game-assets/game-assets-service"
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
-import { mirrorLibraryAsConfigFragment } from "../../../../../tools/testing/library/with-temp-proseql-library"
 import { createLibraryRepository } from "@platform/library/proseql/library-repository"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
 import { createHonoApp } from "@product/apps/portal/api/hono-app"
 import { Effect } from "effect"
 import { RpcClient } from "effect/unstable/rpc"
 import { withRpcServer } from "../../../../../tools/testing/library/with-rpc-server"
+import { mirrorLibraryAsConfigFragment } from "../../../../../tools/testing/library/with-temp-proseql-library"
 
 const REPO_ROOT = resolve(import.meta.dir, "../../../../..")
 const FAKE_GAME = join(REPO_ROOT, "tools", "testing", "fake-game.sh")
@@ -197,7 +197,7 @@ async function seedLibrary(root: string): Promise<void> {
         })
         yield* repository.upsertSystem({
           id: "snes",
-          launcher: "fake-game",
+          apps: [{ id: "fake-game" }],
         })
         yield* repository.upsertLauncher({
           id: "fake-game",
