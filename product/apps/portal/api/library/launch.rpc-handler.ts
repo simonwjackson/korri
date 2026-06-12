@@ -64,6 +64,7 @@ export const handleLaunchLibrary = (
     const resolvedResult = yield* source
       .resolveLaunchForGame(payload.id, {
         releaseId: payload.releaseId,
+        appId: payload.appId,
         userId: payload.userId,
         profileId: payload.profileId,
         presetId: payload.presetId ?? undefined,

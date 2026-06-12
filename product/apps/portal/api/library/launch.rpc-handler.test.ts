@@ -790,7 +790,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     })
 
     const result = await Effect.runPromise(
-      handleLaunchLibrary({ id: "game", presetId: "raw" }).pipe(
+      handleLaunchLibrary({ id: "game", presetId: "raw", appId: "steam" }).pipe(
         Effect.provide(
           Layer.mergeAll(
             sourceLayer,
@@ -806,6 +806,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     expect(resolveInputs).toEqual({
       userId: undefined,
       presetId: "raw",
+      appId: "steam",
       override: undefined,
     })
     expect(launchedSpec).toEqual({ command: "/bin/game", args: ["rom"] })

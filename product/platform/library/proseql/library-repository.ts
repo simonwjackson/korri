@@ -62,6 +62,7 @@ import { type KorriLibraryDb, LOCAL_HOST_KEY } from "./library-db"
 
 export interface ResolveLaunchOptions {
   readonly releaseId?: string
+  readonly appId?: string
   readonly userId?: string
   readonly profileId?: string
   /** @deprecated old profile vocabulary; accepted as a temporary caller shim. */
@@ -294,6 +295,7 @@ export function createLibraryRepository(
           const canResolve = yield* resolveReadableLaunchContext(snapshot, {
             playableId,
             releaseId,
+            appId: opts?.appId,
             userId: opts?.userId,
             profileId: opts?.profileId ?? opts?.presetId,
             override: opts?.override,
@@ -323,6 +325,7 @@ export function createLibraryRepository(
         const context = yield* resolveReadableLaunchContext(snapshot, {
           playableId,
           releaseId: opts?.releaseId,
+          appId: opts?.appId,
           userId: opts?.userId,
           profileId: opts?.profileId ?? opts?.presetId,
           override: opts?.override,
@@ -875,6 +878,7 @@ function toPlayableReleaseEntry(release: {
   readonly target?: string | readonly string[]
   readonly app?: string
   readonly runtime?: string
+  readonly apps?: readonly { readonly id: string }[]
   readonly display?: Readonly<Record<string, unknown>>
 }): PlayableReleaseEntry {
   return {
@@ -884,6 +888,7 @@ function toPlayableReleaseEntry(release: {
     ...(release.target !== undefined ? { target: release.target } : {}),
     ...(release.app ? { app: release.app } : {}),
     ...(release.runtime ? { runtime: release.runtime } : {}),
+    ...(release.apps ? { apps: release.apps.map(app => app.id) } : {}),
     ...(release.display ? { display: release.display } : {}),
     launchable: release.target !== undefined,
   }

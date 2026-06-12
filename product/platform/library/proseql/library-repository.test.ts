@@ -210,6 +210,103 @@ describe("createLibraryRepository — readable playable entries", () => {
     })
   })
 
+  it("lists app choice ids on readable release entries", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      await Effect.runPromise(
+        repo.upsertLibraryItem({
+          id: "multi-app",
+          title: "Multi App",
+          source: "roms",
+          releases: [
+            {
+              id: "genesis",
+              system: "genesis",
+              target: "genesis/Multi.md",
+              apps: [
+                { id: "retroarch", runtime: "genesis-plus-gx" },
+                { id: "steam" },
+              ],
+            },
+          ],
+        }),
+      )
+
+      const entries = await Effect.runPromise(repo.listPlayableEntries())
+      expect(
+        entries.find(entry => entry.id === "multi-app")?.releases[0]?.apps,
+      ).toEqual(["retroarch", "steam"])
+    })
+  })
+
+  it("launches a selected app choice via appId", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      await Effect.runPromise(
+        repo.upsertLibraryItem({
+          id: "multi-app",
+          title: "Multi App",
+          source: "roms",
+          releases: [
+            {
+              id: "genesis",
+              system: "genesis",
+              target: "genesis/Multi.md",
+              apps: [
+                { id: "retroarch", runtime: "genesis-plus-gx" },
+                { id: "steam" },
+              ],
+            },
+          ],
+        }),
+      )
+
+      const resolved = await Effect.runPromise(
+        repo.resolveLaunchForPlayable("multi-app", {
+          releaseId: "genesis",
+          appId: "steam",
+        }),
+      )
+
+      expect(resolved.app.id).toBe("steam")
+      expect(resolved.release.apps).toEqual(["retroarch", "steam"])
+      expect(resolved.spec).toEqual({
+        command: "steam",
+        args: ["genesis/Multi.md"],
+      })
+    })
+  })
+
+  it("reports app choice ambiguity through repository config errors", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      await Effect.runPromise(
+        repo.upsertLibraryItem({
+          id: "multi-app",
+          title: "Multi App",
+          source: "roms",
+          releases: [
+            {
+              id: "genesis",
+              system: "genesis",
+              target: "genesis/Multi.md",
+              apps: [{ id: "retroarch" }, { id: "steam" }],
+            },
+          ],
+        }),
+      )
+
+      try {
+        await Effect.runPromise(
+          repo.resolveLaunchForPlayable("multi-app", { releaseId: "genesis" }),
+        )
+        throw new Error("expected ambiguous app launch to fail")
+      } catch (error) {
+        expectLibraryConfigFailure(error, "AmbiguousAppChoice")
+      }
+    })
+  })
+
   it("launches a single launchable release without an explicit release id", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)

@@ -17,6 +17,7 @@ export class LaunchLibraryPayload extends Schema.Class<LaunchLibraryPayload>(
    */
   source: Schema.optional(EntrySource),
   releaseId: Schema.optional(Schema.String),
+  appId: Schema.optional(Schema.String),
   userId: Schema.optional(Schema.String),
   profileId: Schema.optional(Schema.String),
   /** @deprecated use profileId. */
