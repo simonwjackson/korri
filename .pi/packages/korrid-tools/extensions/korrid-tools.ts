@@ -1,35 +1,37 @@
+import { spawn } from "node:child_process";
+
 type PiToolRegistration = {
-  readonly name: string
-  readonly label: string
-  readonly description: string
-  readonly parameters: unknown
+  readonly name: string;
+  readonly label: string;
+  readonly description: string;
+  readonly parameters: unknown;
   readonly execute: (
     toolCallId: string,
     params: Record<string, unknown>,
     signal?: AbortSignal,
-  ) => Promise<unknown>
-}
+  ) => Promise<unknown>;
+};
 
 type PiApi = {
-  readonly registerTool: (tool: PiToolRegistration) => void
-}
+  readonly registerTool: (tool: PiToolRegistration) => void;
+};
 
 type CommandSpec = {
-  readonly tag: string
-  readonly payload: unknown
-  readonly mutates: boolean
-  readonly confirmed: boolean
-}
+  readonly tag: string;
+  readonly payload: unknown;
+  readonly mutates: boolean;
+  readonly confirmed: boolean;
+};
 
 type RpcExitFrame = {
-  readonly _tag: "Exit"
-  readonly requestId: string
+  readonly _tag: "Exit";
+  readonly requestId: string;
   readonly exit:
     | { readonly _tag: "Success"; readonly value: unknown }
-    | { readonly _tag: "Failure"; readonly cause?: unknown }
-}
+    | { readonly _tag: "Failure"; readonly cause?: unknown };
+};
 
-const DEFAULT_KORRID_RPC_TIMEOUT_MS = 15_000
+const DEFAULT_KORRID_RPC_TIMEOUT_MS = 15_000;
 
 const READ_ONLY_COMMANDS = {
   status: { tag: "app.server.status", payload: {} },
@@ -39,16 +41,16 @@ const READ_ONLY_COMMANDS = {
   "session-status": { tag: "app.session.status", payload: {} },
   "stream-state": { tag: "app.stream-control.state.get", payload: {} },
   "stream-config": { tag: "app.stream-control.config.get", payload: {} },
-} as const
+} as const;
 
 const READ_ONLY_RPC_TAGS = new Set<string>([
-  ...Object.values(READ_ONLY_COMMANDS).map(command => command.tag),
+  ...Object.values(READ_ONLY_COMMANDS).map((command) => command.tag),
   "app.hello.get",
   "app.library.launch.dry-run",
-])
+]);
 
 export default function register(pi: PiApi) {
-  registerKorridTools(pi)
+  registerKorridTools(pi);
 }
 
 export function registerKorridTools(pi: PiApi): void {
@@ -76,9 +78,9 @@ export function registerKorridTools(pi: PiApi): void {
       },
     }),
     async execute(_toolCallId, params, signal) {
-      return executeSpec(params, signal, readOnlySpec(params))
+      return executeSpec(params, signal, readOnlySpec(params));
     },
-  })
+  });
 
   pi.registerTool({
     name: "korrid_find_game",
@@ -89,9 +91,9 @@ export function registerKorridTools(pi: PiApi): void {
       query: { type: "string", description: "Playable id or title query." },
     }),
     async execute(_toolCallId, params, signal) {
-      return executeFindGame(params, signal)
+      return executeFindGame(params, signal);
     },
-  })
+  });
 
   pi.registerTool({
     name: "korrid_dry_run_launch",
@@ -105,9 +107,9 @@ export function registerKorridTools(pi: PiApi): void {
       appId: { type: "string", description: "Optional app id." },
     }),
     async execute(_toolCallId, params, signal) {
-      return executeSpec(params, signal, dryRunSpec(params))
+      return executeSpec(params, signal, dryRunSpec(params));
     },
-  })
+  });
 
   pi.registerTool({
     name: "korrid_launch_game",
@@ -125,9 +127,9 @@ export function registerKorridTools(pi: PiApi): void {
       },
     }),
     async execute(_toolCallId, params, signal) {
-      return executeSpec(params, signal, launchSpec(params))
+      return executeSpec(params, signal, launchSpec(params));
     },
-  })
+  });
 
   pi.registerTool({
     name: "korrid_stop_session",
@@ -142,9 +144,63 @@ export function registerKorridTools(pi: PiApi): void {
       },
     }),
     async execute(_toolCallId, params, signal) {
-      return executeSpec(params, signal, stopSpec(params))
+      return executeSpec(params, signal, stopSpec(params));
     },
-  })
+  });
+
+  pi.registerTool({
+    name: "korri_steam_launch_supervise",
+    label: "Korri Steam Launch Supervise",
+    description:
+      "Read-only SSH observer for a Steam AppID launch: classifies prompts, instant exits, FEX/runtime failures, live game process, GPU acceleration, and input access.",
+    parameters: steamSshParameters({
+      appId: {
+        type: "string",
+        description: "Steam AppID to observe. Defaults to 1029210 (30XX).",
+      },
+      expectedGameExe: {
+        type: "string",
+        description:
+          "Executable name to identify in Proton/FEX process lists. Defaults to 30XX.exe.",
+      },
+      timeoutSeconds: {
+        type: "number",
+        description: "Overall observation timeout. Defaults to 180 seconds.",
+      },
+      pollIntervalSeconds: {
+        type: "number",
+        description: "Poll interval. Defaults to 5 seconds.",
+      },
+      steamHome: {
+        type: "string",
+        description: "Korri Steam home. Defaults to /var/lib/korri/steam.",
+      },
+    }),
+    async execute(_toolCallId, params, signal) {
+      return executeSteamLaunchSupervise(params, signal);
+    },
+  });
+
+  pi.registerTool({
+    name: "korri_steam_runtime_verify",
+    label: "Korri Steam Runtime Verify",
+    description:
+      "Read-only SSH verifier for Korri-managed Steam/FEX mutable runtime state: Sniper FEX wrappers, runtime-prep unit/watchers, and FEX rootfs Freedreno architecture.",
+    parameters: steamSshParameters({
+      steamHome: {
+        type: "string",
+        description: "Korri Steam home. Defaults to /var/lib/korri/steam.",
+      },
+      expectedWrapperBin: {
+        type: "string",
+        description:
+          "Expected FEX path embedded in pressure-vessel wrappers. Defaults to /usr/bin/FEX.",
+      },
+    }),
+    async execute(_toolCallId, params, signal) {
+      return executeSteamRuntimeVerify(params, signal);
+    },
+  });
 }
 
 function baseParameters(properties: Record<string, unknown>) {
@@ -164,49 +220,50 @@ function baseParameters(properties: Record<string, unknown>) {
       },
       ...properties,
     },
-  }
+  };
 }
 
 function readOnlySpec(params: Record<string, unknown>): CommandSpec {
-  const command = typeof params.command === "string" ? params.command : "status"
+  const command =
+    typeof params.command === "string" ? params.command : "status";
   if (command === "rpc") {
-    const tag = requiredString(params.tag, "tag")
+    const tag = requiredString(params.tag, "tag");
     if (!READ_ONLY_RPC_TAGS.has(tag)) {
-      throw new Error(`rpc tag is not a known read-only command: ${tag}`)
+      throw new Error(`rpc tag is not a known read-only command: ${tag}`);
     }
     return {
       tag,
       payload: params.payload ?? {},
       mutates: false,
       confirmed: true,
-    }
+    };
   }
   if (!isReadOnlyCommand(command)) {
-    throw new Error(`unknown read-only command: ${command}`)
+    throw new Error(`unknown read-only command: ${command}`);
   }
-  const spec = READ_ONLY_COMMANDS[command]
-  return { ...spec, mutates: false, confirmed: true }
+  const spec = READ_ONLY_COMMANDS[command];
+  return { ...spec, mutates: false, confirmed: true };
 }
 
 function dryRunSpec(params: Record<string, unknown>): CommandSpec {
-  const id = requiredString(params.id, "id")
+  const id = requiredString(params.id, "id");
   return {
     tag: "app.library.launch.dry-run",
     payload: launchSelectionPayload(params, id),
     mutates: false,
     confirmed: true,
-  }
+  };
 }
 
 function launchSpec(params: Record<string, unknown>): CommandSpec {
-  const id = requiredString(params.id, "id")
-  const confirmed = params.confirmLaunch === true
+  const id = requiredString(params.id, "id");
+  const confirmed = params.confirmLaunch === true;
   return {
     tag: "app.library.launch",
     payload: launchSelectionPayload(params, id),
     mutates: true,
     confirmed,
-  }
+  };
 }
 
 function launchSelectionPayload(
@@ -222,18 +279,18 @@ function launchSelectionPayload(
       ? { profileId: params.profileId }
       : {}),
     ...(typeof params.appId === "string" ? { appId: params.appId } : {}),
-  }
+  };
 }
 
 function stopSpec(params: Record<string, unknown>): CommandSpec {
-  const force = params.force === true
-  const confirmed = params.confirmStop === true
+  const force = params.force === true;
+  const confirmed = params.confirmStop === true;
   return {
     tag: "app.session.stop",
     payload: { force, confirmed },
     mutates: true,
     confirmed,
-  }
+  };
 }
 
 async function executeSpec(
@@ -241,7 +298,7 @@ async function executeSpec(
   signal: AbortSignal | undefined,
   spec: CommandSpec,
 ) {
-  const rpcUrl = rpcUrlFromParams(params)
+  const rpcUrl = rpcUrlFromParams(params);
 
   if (spec.mutates && !spec.confirmed) {
     return toolResult(
@@ -252,14 +309,14 @@ async function executeSpec(
         error: "mutating tool call requires explicit confirmation",
       },
       true,
-    )
+    );
   }
 
   try {
-    const rawResult = await callKorridRpc(rpcUrl, spec, signal)
+    const rawResult = await callKorridRpc(rpcUrl, spec, signal);
     const result =
-      params.compact === true ? compactResult(spec.tag, rawResult) : rawResult
-    return toolResult({ ok: true, rpcUrl, tag: spec.tag, result })
+      params.compact === true ? compactResult(spec.tag, rawResult) : rawResult;
+    return toolResult({ ok: true, rpcUrl, tag: spec.tag, result });
   } catch (error) {
     return toolResult(
       {
@@ -269,7 +326,7 @@ async function executeSpec(
         error: error instanceof Error ? error.message : String(error),
       },
       true,
-    )
+    );
   }
 }
 
@@ -277,8 +334,8 @@ async function executeFindGame(
   params: Record<string, unknown>,
   signal: AbortSignal | undefined,
 ) {
-  const rpcUrl = rpcUrlFromParams(params)
-  const query = typeof params.query === "string" ? params.query.trim() : ""
+  const rpcUrl = rpcUrlFromParams(params);
+  const query = typeof params.query === "string" ? params.query.trim() : "";
   if (query.length === 0) {
     return toolResult(
       {
@@ -288,7 +345,7 @@ async function executeFindGame(
         result: { _tag: "MissingQuery" },
       },
       true,
-    )
+    );
   }
 
   try {
@@ -296,8 +353,8 @@ async function executeFindGame(
       rpcUrl,
       { tag: "app.library.list", payload: {} },
       signal,
-    )
-    const result = findGameInList(response, query)
+    );
+    const result = findGameInList(response, query);
     return toolResult(
       {
         ok: result._tag === "GameFound",
@@ -306,7 +363,7 @@ async function executeFindGame(
         result,
       },
       result._tag !== "GameFound",
-    )
+    );
   } catch (error) {
     return toolResult(
       {
@@ -316,7 +373,7 @@ async function executeFindGame(
         error: error instanceof Error ? error.message : String(error),
       },
       true,
-    )
+    );
   }
 }
 
@@ -329,7 +386,7 @@ function rpcUrlFromParams(params: Record<string, unknown>): string {
         : (process.env.KORRI_RPC_URL ??
           process.env.KORRI_PUBLIC_API_BASE_URL ??
           "http://127.0.0.1:3001/api/rpc"),
-  )
+  );
 }
 
 export async function callKorridRpc(
@@ -337,7 +394,7 @@ export async function callKorridRpc(
   spec: Pick<CommandSpec, "tag" | "payload">,
   signal: AbortSignal | undefined,
 ): Promise<unknown> {
-  const requestId = createRequestId()
+  const requestId = createRequestId();
   const response = await fetch(rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -349,25 +406,25 @@ export async function callKorridRpc(
       headers: [],
     }),
     signal: signalWithFallbackTimeout(signal),
-  })
+  });
 
-  const text = await response.text()
+  const text = await response.text();
   if (!response.ok)
-    throw new Error(`HTTP ${response.status}: ${text.slice(0, 500)}`)
+    throw new Error(`HTTP ${response.status}: ${text.slice(0, 500)}`);
 
-  const parsed = JSON.parse(text) as unknown
-  const frames = Array.isArray(parsed) ? parsed : [parsed]
-  const exitFrame = frames.find(isRpcExitFrame)
+  const parsed = JSON.parse(text) as unknown;
+  const frames = Array.isArray(parsed) ? parsed : [parsed];
+  const exitFrame = frames.find(isRpcExitFrame);
   if (!exitFrame) {
     throw new Error(
       `RPC response did not include an Exit frame: ${text.slice(0, 500)}`,
-    )
+    );
   }
 
-  if (exitFrame.exit._tag === "Success") return exitFrame.exit.value
+  if (exitFrame.exit._tag === "Success") return exitFrame.exit.value;
   throw new Error(
     `RPC failure: ${JSON.stringify(exitFrame.exit.cause ?? exitFrame.exit)}`,
-  )
+  );
 }
 
 export function normalizeKorridRpcUrl(value: string): string {
@@ -376,80 +433,80 @@ export function normalizeKorridRpcUrl(value: string): string {
   const raw =
     value.startsWith("http://") || value.startsWith("https://")
       ? value
-      : hostToUrl(value)
-  const trimmed = raw.replace(/\/+$/, "")
-  return trimmed.endsWith("/api/rpc") ? trimmed : `${trimmed}/api/rpc`
+      : hostToUrl(value);
+  const trimmed = raw.replace(/\/+$/, "");
+  return trimmed.endsWith("/api/rpc") ? trimmed : `${trimmed}/api/rpc`;
 }
 
 function hostToUrl(host: string): string {
-  return `http://${host}:3001`
+  return `http://${host}:3001`;
 }
 
 function findGameInList(response: unknown, query: string) {
   const games =
-    isRecord(response) && Array.isArray(response.games) ? response.games : []
-  const exact = games.find(game => isRecord(game) && game.id === query)
+    isRecord(response) && Array.isArray(response.games) ? response.games : [];
+  const exact = games.find((game) => isRecord(game) && game.id === query);
   if (isRecord(exact)) {
     return {
       _tag: "GameFound" as const,
       game: compactGame(exact),
       match: "exact-id",
-    }
+    };
   }
 
-  const normalized = query.toLocaleLowerCase()
-  const matches = games.filter(game => {
-    if (!isRecord(game)) return false
-    const id = typeof game.id === "string" ? game.id.toLocaleLowerCase() : ""
+  const normalized = query.toLocaleLowerCase();
+  const matches = games.filter((game) => {
+    if (!isRecord(game)) return false;
+    const id = typeof game.id === "string" ? game.id.toLocaleLowerCase() : "";
     const title =
-      typeof game.title === "string" ? game.title.toLocaleLowerCase() : ""
-    return id.includes(normalized) || title.includes(normalized)
-  })
+      typeof game.title === "string" ? game.title.toLocaleLowerCase() : "";
+    return id.includes(normalized) || title.includes(normalized);
+  });
 
   if (matches.length === 1 && isRecord(matches[0])) {
-    const game = matches[0]
-    const id = typeof game.id === "string" ? game.id.toLocaleLowerCase() : ""
+    const game = matches[0];
+    const id = typeof game.id === "string" ? game.id.toLocaleLowerCase() : "";
     return {
       _tag: "GameFound" as const,
       game: compactGame(game),
       match: id.includes(normalized) ? "id" : "title",
-    }
+    };
   }
 
-  const candidates = matches.filter(isRecord).map(compactGame)
+  const candidates = matches.filter(isRecord).map(compactGame);
   if (matches.length > 1) {
-    return { _tag: "AmbiguousGame" as const, query, candidates }
+    return { _tag: "AmbiguousGame" as const, query, candidates };
   }
-  return { _tag: "GameNotFound" as const, query, candidates }
+  return { _tag: "GameNotFound" as const, query, candidates };
 }
 
 function compactResult(tag: string, result: unknown): unknown {
   if (tag === "app.library.list" && isRecord(result)) {
-    const games = Array.isArray(result.games) ? result.games : []
+    const games = Array.isArray(result.games) ? result.games : [];
     return {
       count: games.length,
-      games: games.map(game => {
-        const record = isRecord(game) ? game : {}
+      games: games.map((game) => {
+        const record = isRecord(game) ? game : {};
         return {
           id: record.id,
           title: record.title,
           source: record.source,
-        }
+        };
       }),
-    }
+    };
   }
-  return result
+  return result;
 }
 
 function compactGame(game: Record<string, unknown>) {
-  const source = isRecord(game.source) ? game.source : undefined
+  const source = isRecord(game.source) ? game.source : undefined;
   return {
     id: game.id,
     ...(typeof game.title === "string" ? { title: game.title } : {}),
     ...(source && typeof source.hostId === "string"
       ? { sourceId: source.hostId }
       : {}),
-  }
+  };
 }
 
 function toolResult(details: Record<string, unknown>, isError = false) {
@@ -462,7 +519,7 @@ function toolResult(details: Record<string, unknown>, isError = false) {
     ],
     details,
     ...(isError ? { isError: true } : {}),
-  }
+  };
 }
 
 function isRpcExitFrame(value: unknown): value is RpcExitFrame {
@@ -471,32 +528,467 @@ function isRpcExitFrame(value: unknown): value is RpcExitFrame {
     value._tag === "Exit" &&
     isRecord(value.exit) &&
     (value.exit._tag === "Success" || value.exit._tag === "Failure")
-  )
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null
+  return typeof value === "object" && value !== null;
 }
 
 function isReadOnlyCommand(
   value: string,
 ): value is keyof typeof READ_ONLY_COMMANDS {
-  return value in READ_ONLY_COMMANDS
+  return value in READ_ONLY_COMMANDS;
 }
 
 function requiredString(value: unknown, name: string): string {
-  if (typeof value === "string" && value.trim().length > 0) return value
-  throw new Error(`${name} is required`)
+  if (typeof value === "string" && value.trim().length > 0) return value;
+  throw new Error(`${name} is required`);
 }
 
-let requestSequence = 0
+let requestSequence = 0;
 
 function createRequestId(): string {
-  requestSequence = (requestSequence + 1) % 1_000_000
-  return `${Date.now()}${requestSequence.toString().padStart(6, "0")}`
+  requestSequence = (requestSequence + 1) % 1_000_000;
+  return `${Date.now()}${requestSequence.toString().padStart(6, "0")}`;
 }
 
 function signalWithFallbackTimeout(signal: AbortSignal | undefined) {
-  const timeoutSignal = AbortSignal.timeout(DEFAULT_KORRID_RPC_TIMEOUT_MS)
-  return signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
+  const timeoutSignal = AbortSignal.timeout(DEFAULT_KORRID_RPC_TIMEOUT_MS);
+  return signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+}
+
+function steamSshParameters(properties: Record<string, unknown>) {
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      host: {
+        type: "string",
+        description:
+          "SSH host for the Korri guest. Defaults to bandai-guest-ip.",
+      },
+      sshUser: {
+        type: "string",
+        description: "Optional SSH user prefix, e.g. root or korri.",
+      },
+      sshConfig: {
+        type: "string",
+        description:
+          "Optional ssh_config path. Defaults to /tmp/bandai-deploy/ssh_config_ip when present in the caller environment.",
+      },
+      ...properties,
+    },
+  };
+}
+
+async function executeSteamLaunchSupervise(
+  params: Record<string, unknown>,
+  signal: AbortSignal | undefined,
+) {
+  const appId = stringParam(params.appId, "1029210");
+  const expectedGameExe = stringParam(params.expectedGameExe, "30XX.exe");
+  const timeoutSeconds = numberParam(params.timeoutSeconds, 180);
+  const pollIntervalSeconds = numberParam(params.pollIntervalSeconds, 5);
+  const steamHome = stringParam(params.steamHome, "/var/lib/korri/steam");
+  const ssh = sshInvocationFromParams(params);
+
+  const script = steamLaunchSuperviseScript({
+    appId,
+    expectedGameExe,
+    timeoutSeconds,
+    pollIntervalSeconds,
+    steamHome,
+  });
+
+  try {
+    const capture = await runSshScript(ssh, script, signal);
+    const result = classifySteamLaunchTranscript(capture.stdout, {
+      appId,
+      expectedGameExe,
+    });
+    return toolResult(
+      {
+        ok:
+          result.outcome === "running_gpu" ||
+          result.outcome === "running_unverified_gpu",
+        ssh: ssh.redacted,
+        appId,
+        expectedGameExe,
+        result,
+        stdoutTail: tailLines(capture.stdout, 160),
+        stderrTail: tailLines(capture.stderr, 80),
+      },
+      result.outcome.startsWith("failed") || result.outcome === "exited",
+    );
+  } catch (error) {
+    return toolResult(
+      {
+        ok: false,
+        ssh: ssh.redacted,
+        appId,
+        expectedGameExe,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      true,
+    );
+  }
+}
+
+async function executeSteamRuntimeVerify(
+  params: Record<string, unknown>,
+  signal: AbortSignal | undefined,
+) {
+  const steamHome = stringParam(params.steamHome, "/var/lib/korri/steam");
+  const expectedWrapperBin = stringParam(
+    params.expectedWrapperBin,
+    "/usr/bin/FEX",
+  );
+  const ssh = sshInvocationFromParams(params);
+
+  try {
+    const capture = await runSshScript(
+      ssh,
+      steamRuntimeVerifyScript({ steamHome }),
+      signal,
+    );
+    const result = classifySteamRuntimeVerifyTranscript(capture.stdout, {
+      steamHome,
+      expectedWrapperBin,
+    });
+    return toolResult(
+      {
+        ok: result.ok,
+        ssh: ssh.redacted,
+        steamHome,
+        expectedWrapperBin,
+        result,
+        stdoutTail: tailLines(capture.stdout, 220),
+        stderrTail: tailLines(capture.stderr, 80),
+      },
+      !result.ok,
+    );
+  } catch (error) {
+    return toolResult(
+      {
+        ok: false,
+        ssh: ssh.redacted,
+        steamHome,
+        expectedWrapperBin,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      true,
+    );
+  }
+}
+
+type SteamLaunchClassifyOptions = {
+  readonly appId: string;
+  readonly expectedGameExe: string;
+};
+
+export function classifySteamLaunchTranscript(
+  transcript: string,
+  options: SteamLaunchClassifyOptions,
+) {
+  const processAdded = transcript.includes("Game process added");
+  const processRemoved = transcript.includes("Game process removed");
+  const gamePidMatches = [...transcript.matchAll(/GAME_PID=(\d+)/g)].map(
+    (match) => match[1],
+  );
+  const gameRunning = gamePidMatches.length > 0;
+  const gpuFreedreno = /libvulkan_freedreno\.so/.test(transcript);
+  const renderNode = /renderD128|renderD\d+/.test(transcript);
+  const inputAccess = /\/dev\/input|\/dev\/uinput|uinput/.test(transcript);
+  const waitingForUser = /waiting for user response/.test(transcript);
+  const firstRunSetup =
+    /Upgrading prefix|Successfully registered DLL|ProcessingInstallScript/.test(
+      transcript,
+    );
+  const fexMissing =
+    /FEX: No such file or directory|\/FEX: No such file|FEX.*No such file/.test(
+      transcript,
+    );
+  const execFormat = /Exec format error|cannot execute binary file/.test(
+    transcript,
+  );
+  const protonFailure =
+    /Assertion failed|Unhandled exception|wine:.*failed|Proton:.*failed/i.test(
+      transcript,
+    );
+
+  const signals = {
+    processAdded,
+    processRemoved,
+    gameRunning,
+    gamePids: gamePidMatches,
+    gpuFreedreno,
+    renderNode,
+    inputAccess,
+    waitingForUser,
+    firstRunSetup,
+    fexMissing,
+    execFormat,
+    protonFailure,
+    appId: options.appId,
+    expectedGameExe: options.expectedGameExe,
+  };
+
+  let outcome:
+    | "running_gpu"
+    | "running_unverified_gpu"
+    | "waiting_for_user"
+    | "first_run_setup"
+    | "failed_fex_missing"
+    | "failed_exec_format"
+    | "failed_proton"
+    | "exited"
+    | "no_launch_observed";
+  if (fexMissing) outcome = "failed_fex_missing";
+  else if (execFormat) outcome = "failed_exec_format";
+  else if (protonFailure) outcome = "failed_proton";
+  else if (gameRunning && gpuFreedreno && renderNode) outcome = "running_gpu";
+  else if (gameRunning) outcome = "running_unverified_gpu";
+  else if (processAdded && processRemoved) outcome = "exited";
+  else if (waitingForUser) outcome = "waiting_for_user";
+  else if (firstRunSetup) outcome = "first_run_setup";
+  else outcome = "no_launch_observed";
+
+  return { outcome, signals };
+}
+
+type RuntimeVerifyOptions = {
+  readonly steamHome: string;
+  readonly expectedWrapperBin: string;
+};
+
+export function classifySteamRuntimeVerifyTranscript(
+  transcript: string,
+  options: RuntimeVerifyOptions,
+) {
+  const wrapperNeedle = `exec ${options.expectedWrapperBin} "$0.x86_64" "$@"`;
+  const checks = [
+    checkSignal(
+      "pressure-vessel-wrap uses expected FEX trampoline",
+      section(transcript, "WRAPPER_PRESSURE_VESSEL_WRAP").includes(
+        wrapperNeedle,
+      ),
+    ),
+    checkSignal(
+      "pv-adverb uses expected FEX trampoline",
+      section(transcript, "WRAPPER_PV_ADVERB").includes(wrapperNeedle),
+    ),
+    checkSignal(
+      "pressure-vessel-wrap x86_64 backup exists",
+      /WRAPPER_PRESSURE_VESSEL_WRAP_BACKUP_EXISTS=yes/.test(transcript),
+    ),
+    checkSignal(
+      "pv-adverb x86_64 backup exists",
+      /WRAPPER_PV_ADVERB_BACKUP_EXISTS=yes/.test(transcript),
+    ),
+    checkSignal(
+      "runtime prep service uses full --apply repair",
+      /ExecStart=.*steam-guest-runtime-prep --apply/.test(transcript),
+    ),
+    checkSignal(
+      "runtime prep service embeds FHS-visible wrapper path",
+      /FEX_WRAPPER_BIN=\/usr\/bin\/FEX/.test(transcript),
+    ),
+    checkSignal(
+      "runtime prep watches Proton 10",
+      /PathChanged=.*Proton 10\.0\/proton/.test(transcript),
+    ),
+    checkSignal(
+      "runtime prep watches Sniper pressure-vessel-wrap",
+      /PathChanged=.*SteamLinuxRuntime_sniper\/pressure-vessel\/bin\/pressure-vessel-wrap/.test(
+        transcript,
+      ),
+    ),
+    checkSignal(
+      "runtime prep watches Sniper pv-adverb",
+      /PathChanged=.*SteamLinuxRuntime_sniper\/pressure-vessel\/libexec\/steam-runtime-tools-0\/pv-adverb/.test(
+        transcript,
+      ),
+    ),
+    checkSignal(
+      "FEX rootfs Freedreno is x86_64",
+      /FREEDRENO_EMACHINE=3e 00|FREEDRENO_EMACHINE=003e|FREEDRENO_MACHINE=x86-64/.test(
+        transcript,
+      ),
+    ),
+  ];
+  const failures = checks.filter((check) => !check.ok);
+  return {
+    ok: failures.length === 0,
+    checks,
+    failures,
+    steamHome: options.steamHome,
+    expectedWrapperBin: options.expectedWrapperBin,
+  };
+}
+
+function steamLaunchSuperviseScript(options: {
+  readonly appId: string;
+  readonly expectedGameExe: string;
+  readonly timeoutSeconds: number;
+  readonly pollIntervalSeconds: number;
+  readonly steamHome: string;
+}): string {
+  const appId = shellQuote(options.appId);
+  const exe = shellQuote(options.expectedGameExe);
+  const steamHome = shellQuote(options.steamHome);
+  const timeout = Math.max(1, Math.floor(options.timeoutSeconds));
+  const interval = Math.max(1, Math.floor(options.pollIntervalSeconds));
+  return `set +e
+app_id=${appId}
+expected_exe=${exe}
+steam_home=${steamHome}
+start_epoch=$(date +%s)
+deadline=$((start_epoch + ${timeout}))
+echo "WATCH_MARKER=$(date '+%Y-%m-%d %H:%M:%S')"
+while [ "$(date +%s)" -le "$deadline" ]; do
+  echo "===POLL $(date '+%Y-%m-%d %H:%M:%S')==="
+  echo "###PROCESSES"
+  ps -eo pid,stat,etime,pcpu,pmem,cmd | awk -v app="AppId=$app_id" -v exe="$expected_exe" '/SteamLaunch AppId=|wine64-preloader|wine-preloader|wineserver|\/usr\/bin\/FEX|pressure-vessel|pv-adverb|proton/ {print} index($0, exe) {print}' | sed -n '1,240p'
+  echo "###JOURNAL"
+  journalctl --no-pager -u korri-steam.service --since "@$start_epoch" 2>/dev/null | grep -E "$app_id|$expected_exe|FEX|pressure-vessel|Exec format|No such file|Game Recording|Adding process|Removing process|ERROR|err:|wine|vulkan|Assertion|Unhandled|Upgrading prefix|Successfully registered DLL" | tail -160 || true
+  echo "###CONSOLE"
+  tail -220 "$steam_home/logs/console_log.txt" 2>/dev/null | grep -E "GameAction \\[AppID $app_id|Game process|$expected_exe|CreatingProcess|Completed|failed|error|FEX|pressure|Proton|continues|waiting|ProcessingInstallScript" | tail -120 || true
+  live=0
+  for pid in $(ps -eo pid=,cmd= | awk -v exe="$expected_exe" 'index($0, exe) && $0 !~ /awk/ {print $1}'); do
+    live=1
+    echo "GAME_PID=$pid"
+    tr '\\0' '\\n' < "/proc/$pid/environ" 2>/dev/null | grep -E 'SteamAppId|SteamGameId|FEX|DXVK|VK|MESA|DISPLAY|WAYLAND' | sort || true
+    echo "###MAPS $pid"
+    grep -aoE '/[^ ]*(libvulkan_freedreno|winevulkan|libvulkan|libGL|d3d|dxvk)[^ ]*' "/proc/$pid/maps" 2>/dev/null | sort -u || true
+    echo "###FDS $pid"
+    ls -l "/proc/$pid/fd" 2>/dev/null | grep -E 'renderD[0-9]+|card[0-9]+|uinput|/dev/input' || true
+  done
+  if [ "$live" = 1 ]; then
+    break
+  fi
+  sleep ${interval}
+done
+`;
+}
+
+function steamRuntimeVerifyScript(options: {
+  readonly steamHome: string;
+}): string {
+  const steamHome = shellQuote(options.steamHome);
+  return `set +e
+steam_home=${steamHome}
+wrap="$steam_home/steamapps/common/SteamLinuxRuntime_sniper/pressure-vessel/bin/pressure-vessel-wrap"
+pv="$steam_home/steamapps/common/SteamLinuxRuntime_sniper/pressure-vessel/libexec/steam-runtime-tools-0/pv-adverb"
+freedreno="$steam_home/fex-rootfs/usr/lib/libvulkan_freedreno.so"
+echo "###CURRENT_SYSTEM"
+readlink /run/current-system 2>/dev/null || true
+echo "###RUNTIME_PREP_UNIT"
+systemctl cat korri-steam-runtime-prep.service korri-steam-runtime-prep.path 2>/dev/null || true
+echo "###RUNTIME_PREP_STATE"
+systemctl show -p ActiveState -p SubState -p Result -p ExecMainStatus korri-steam-runtime-prep.service korri-steam-runtime-prep.path 2>/dev/null || true
+echo "###WRAPPER_PRESSURE_VESSEL_WRAP"
+sed -n '1,12p' "$wrap" 2>/dev/null || true
+[ -f "$wrap.x86_64" ] && echo WRAPPER_PRESSURE_VESSEL_WRAP_BACKUP_EXISTS=yes || echo WRAPPER_PRESSURE_VESSEL_WRAP_BACKUP_EXISTS=no
+echo "###WRAPPER_PV_ADVERB"
+sed -n '1,12p' "$pv" 2>/dev/null || true
+[ -f "$pv.x86_64" ] && echo WRAPPER_PV_ADVERB_BACKUP_EXISTS=yes || echo WRAPPER_PV_ADVERB_BACKUP_EXISTS=no
+echo "###FREEDRENO"
+if [ -f "$freedreno" ]; then
+  machine=$(od -An -tx1 -j18 -N2 "$freedreno" 2>/dev/null | tr -d '[:space:]')
+  case "$machine" in
+    3e00) echo FREEDRENO_EMACHINE="3e 00"; echo FREEDRENO_MACHINE=x86-64 ;;
+    b700) echo FREEDRENO_EMACHINE="b7 00"; echo FREEDRENO_MACHINE=aarch64 ;;
+    *) echo FREEDRENO_EMACHINE="$machine" ;;
+  esac
+else
+  echo FREEDRENO_MISSING=yes
+fi
+`;
+}
+
+type SshInvocation = {
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly redacted: readonly string[];
+};
+
+function sshInvocationFromParams(
+  params: Record<string, unknown>,
+): SshInvocation {
+  const host = stringParam(params.host, "bandai-guest-ip");
+  const user =
+    typeof params.sshUser === "string" && params.sshUser.trim()
+      ? `${params.sshUser.trim()}@`
+      : "";
+  const target = `${user}${host}`;
+  const args: string[] = [];
+  const sshConfig = stringParam(
+    params.sshConfig,
+    "/tmp/bandai-deploy/ssh_config_ip",
+  );
+  if (sshConfig) args.push("-F", sshConfig);
+  args.push(target, "bash -s");
+  return { command: "ssh", args, redacted: ["ssh", ...args] };
+}
+
+async function runSshScript(
+  ssh: SshInvocation,
+  script: string,
+  signal: AbortSignal | undefined,
+): Promise<{ readonly stdout: string; readonly stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(ssh.command, ssh.args, { signal });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve({ stdout, stderr });
+      else
+        reject(
+          new Error(`ssh exited ${code}: ${tailLines(stderr || stdout, 40)}`),
+        );
+    });
+    child.stdin.end(script);
+  });
+}
+
+function section(transcript: string, name: string): string {
+  const marker = `###${name}`;
+  const start = transcript.indexOf(marker);
+  if (start < 0) return "";
+  const rest = transcript.slice(start + marker.length);
+  const next = rest.indexOf("\n###");
+  return next < 0 ? rest : rest.slice(0, next);
+}
+
+function checkSignal(name: string, ok: boolean) {
+  return { name, ok };
+}
+
+function stringParam(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : fallback;
+}
+
+function numberParam(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+function tailLines(value: string, count: number): string {
+  const lines = value.split(/\r?\n/);
+  return lines.slice(Math.max(0, lines.length - count)).join("\n");
 }

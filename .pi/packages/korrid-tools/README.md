@@ -9,6 +9,8 @@ Reusable Pi tools for active-use Korri daemon control through the portable HTTP 
 - `korrid_dry_run_launch`: resolves a launch through `app.library.launch.dry-run` without spawning or requiring confirmation.
 - `korrid_launch_game`: launches a playable id through `app.library.launch`; requires `confirmLaunch: true`.
 - `korrid_stop_session`: stops the active foreground session through `app.session.stop`; requires `confirmStop: true`; supports `force: true`.
+- `korri_steam_launch_supervise`: read-only SSH observer for a Steam AppID launch; classifies Steam prompts, instant exits, FEX/runtime failures, live game processes, Freedreno/Turnip usage, render-node access, and input access.
+- `korri_steam_runtime_verify`: read-only SSH verifier for Korri-managed Steam/FEX mutable runtime state; checks Sniper FEX trampolines, `.x86_64` backups, runtime-prep unit/watchers, and FEX-rootfs Freedreno architecture.
 
 `host` accepts a host name such as `bandai` and maps to `http://bandai:3001/api/rpc`. `url` may be a base URL or a full `/api/rpc` URL.
 
