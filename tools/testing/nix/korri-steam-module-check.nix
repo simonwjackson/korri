@@ -90,7 +90,14 @@ let
   runtimePrepPath = enabled.systemd.paths.korri-steam-runtime-prep or { };
   systemPackageNames = cfg: map (pkg: pkg.name or "") cfg.environment.systemPackages;
   serviceExec = unit:
-    let raw = unit.serviceConfig.ExecStart or "";
+    let
+      normalize = raw: if builtins.isList raw then lib.concatStringsSep "\n" raw else raw;
+    in lib.concatStringsSep "\n" [
+      (normalize (unit.serviceConfig.ExecStartPre or ""))
+      (normalize (unit.serviceConfig.ExecStart or ""))
+    ];
+  pathChangedText = pathUnit:
+    let raw = pathUnit.pathConfig.PathChanged or "";
     in if builtins.isList raw then lib.concatStringsSep "\n" raw else raw;
 
   checks = [
@@ -126,7 +133,9 @@ let
       && builtins.elem "multi-user.target" (seedUnit.wantedBy or [ ])
       && (seedUnit.serviceConfig.User or null) == "korri"
       && (seedUnit.serviceConfig.Group or null) == "korri"
-      && (seedUnit.serviceConfig.WorkingDirectory or null) == "/var/lib/korri/steam"
+      && (seedUnit.serviceConfig.WorkingDirectory or null) == "-/var/lib/korri/steam"
+      && lib.hasInfix "install -d" (serviceExec seedUnit)
+      && lib.hasInfix "/var/lib/korri/steam" (serviceExec seedUnit)
       && (seedUnit.environment.STEAM_HOME or null) == "/var/lib/korri/steam"
       && (seedUnit.environment.STEAM_GAMES_ROOT or null) == "/var/lib/korri/content/games/steam"
       && (seedUnit.environment.STEAM_DOT or null) == "/home/korri/.steam"
@@ -153,16 +162,21 @@ let
       enabled.systemd.services ? korri-steam-runtime-prep
       && (runtimePrepUnit.serviceConfig.User or null) == "korri"
       && (runtimePrepUnit.serviceConfig.Group or null) == "korri"
-      && (runtimePrepUnit.serviceConfig.WorkingDirectory or null) == "/var/lib/korri/steam"
+      && (runtimePrepUnit.serviceConfig.WorkingDirectory or null) == "-/var/lib/korri/steam"
+      && lib.hasInfix "install -d" (serviceExec runtimePrepUnit)
       && (runtimePrepUnit.environment.STEAM_HOME or null) == "/var/lib/korri/steam"
       && (runtimePrepUnit.environment.FEX_ROOTFS or null) == "/var/lib/korri/steam/fex-rootfs"
-      && lib.hasInfix "steam-guest-runtime-prep --patch-proton" (serviceExec runtimePrepUnit)
+      && (runtimePrepUnit.environment.FEX_WRAPPER_BIN or null) == "/usr/bin/FEX"
+      && lib.hasInfix "steam-guest-runtime-prep --apply" (serviceExec runtimePrepUnit)
     ))
-    (check "runtime prep path watches ARM64 Proton updates" (
+    (check "runtime prep path watches mutable Proton and Sniper updates" (
       enabled.systemd.paths ? korri-steam-runtime-prep
       && builtins.elem "multi-user.target" (runtimePrepPath.wantedBy or [ ])
       && (runtimePrepPath.pathConfig.Unit or null) == "korri-steam-runtime-prep.service"
-      && lib.hasInfix "Proton 11.0 (ARM64)/proton" (runtimePrepPath.pathConfig.PathChanged or "")
+      && lib.hasInfix "Proton 11.0 (ARM64)/proton" (pathChangedText runtimePrepPath)
+      && lib.hasInfix "Proton 10.0/proton" (pathChangedText runtimePrepPath)
+      && lib.hasInfix "SteamLinuxRuntime_sniper/pressure-vessel/bin/pressure-vessel-wrap" (pathChangedText runtimePrepPath)
+      && lib.hasInfix "SteamLinuxRuntime_sniper/pressure-vessel/libexec/steam-runtime-tools-0/pv-adverb" (pathChangedText runtimePrepPath)
     ))
     (check "tmpfiles create Korri-owned Steam state" (
       builtins.elem "d /var/lib/korri/steam 0750 korri korri -" enabled.systemd.tmpfiles.rules

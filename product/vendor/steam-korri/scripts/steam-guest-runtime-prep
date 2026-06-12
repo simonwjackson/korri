@@ -114,6 +114,13 @@ if [ -z "$fex_bin" ]; then
   fex_bin=FEX
 fi
 
+# Runtime prep can run either inside the Steam FHS capsule or as a systemd
+# repair service outside it. Pressure-vessel helper trampolines execute later
+# inside the FHS/runtime container, so let product policy override the path
+# embedded in those trampolines without losing the real host FEX path used for
+# resource discovery.
+fex_wrapper_bin="${FEX_WRAPPER_BIN:-$fex_bin}"
+
 fex_share="${FEX_SHARE:-}"
 if [ -z "$fex_share" ]; then
   case "$fex_bin" in
@@ -170,7 +177,7 @@ EOF
 : "\${FEX_ROOTFS:?FEX_ROOTFS must be set by the guest adapter before running wrapped Steam Runtime helpers}"
 PATH="/usr/bin:/bin:/usr/sbin:/sbin:\${PATH:-}"
 export FEX_ROOTFS PATH
-exec $fex_bin "\$0.x86_64" "\$@"
+exec $fex_wrapper_bin "\$0.x86_64" "\$@"
 EOF
       chmod 755 "$file"
       ;;

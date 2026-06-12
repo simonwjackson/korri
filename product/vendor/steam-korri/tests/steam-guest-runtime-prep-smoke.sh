@@ -148,7 +148,7 @@ exit 0
 EOS
 chmod 755 "$runtime_bin/python3.11"
 
-STEAM_HOME="$steam_home" FEX_BIN="$fex_prefix/bin/FEX" bash "$SCRIPT" --apply
+STEAM_HOME="$steam_home" FEX_BIN="$fex_prefix/bin/FEX" FEX_WRAPPER_BIN="/usr/bin/FEX" bash "$SCRIPT" --apply
 
 [ -f "$pv/srt-bwrap.x86_64" ] || fail "srt-bwrap backup was not preserved"
 grep -q 'exec bwrap "$@"' "$pv/srt-bwrap" \
@@ -156,8 +156,8 @@ grep -q 'exec bwrap "$@"' "$pv/srt-bwrap" \
 if [ "$expect_pv_wrap" = 1 ]; then
   [ -f "$pv/pressure-vessel-wrap.x86_64" ] \
     || fail "pressure-vessel x86_64 backup was not preserved"
-  grep -q 'exec .*FEX.*"$0.x86_64"' "$pv/pressure-vessel-wrap" \
-    || fail "pressure-vessel x86_64 binary should be replaced by a FEX trampoline"
+  grep -q 'exec /usr/bin/FEX "$0.x86_64"' "$pv/pressure-vessel-wrap" \
+    || fail "pressure-vessel x86_64 binary should be replaced by a FHS-visible FEX trampoline"
 fi
 [ -f "$fonts/.uuid" ] || fail "font .uuid marker missing"
 [ "$(head -n 1 "$proton_dir/proton")" = '#!/usr/bin/python3' ] \

@@ -102,7 +102,12 @@ let
     fex_config_source=${lib.escapeShellArg "${cfg.package}/share/steam-rocknix-bootstrap/resources/fex-emu"}
     fex_share=${lib.escapeShellArg "${pkgs.fex}/share/fex-emu"}
 
-    ${pkgs.coreutils}/bin/install -d -o ${runtime.user} -g ${runtime.group} -m 0750 "$fex_config_dir" "$fex_config_dir/AppConfig"
+    ${pkgs.coreutils}/bin/install -d -o ${runtime.user} -g ${runtime.group} -m 0750 \
+      "$steam_home" \
+      "$steam_home/fex-data" \
+      "$steam_home/fex-data/RootFS" \
+      "$fex_config_dir" \
+      "$fex_config_dir/AppConfig"
     if [ -f "$fex_config_source/Config.json" ] && [ ! -f "$fex_config_dir/Config.json" ]; then
       ${pkgs.coreutils}/bin/install -o ${runtime.user} -g ${runtime.group} -m 0640 "$fex_config_source/Config.json" "$fex_config_dir/Config.json"
     fi
@@ -229,6 +234,19 @@ let
 
     if [ "$#" -eq 0 ]; then
       set -- ${lib.escapeShellArgs cfg.defaultArgs}
+      if ! ${pkgs.findutils}/bin/find "$STEAM_HOME/package" -maxdepth 1 -name 'steam_client_*_linuxarm64.installed' -print -quit 2>/dev/null | ${pkgs.gnugrep}/bin/grep -q .; then
+        # The seed fetches the minimal ARM64 client. A first real Steam launch
+        # must be allowed to run Valve's bootstrap/update path once, otherwise
+        # steamui can load against an incomplete libvideo/libavutil set.
+        filtered=()
+        for arg in "$@"; do
+          case "$arg" in
+            -noverifyfiles|-nobootstrapupdate|-skipinitialbootstrap|-norepairfiles) ;;
+            *) filtered+=("$arg") ;;
+          esac
+        done
+        set -- "''${filtered[@]}"
+      fi
     fi
 
     # buildFHSEnv/bwrap tries to enter the caller's cwd. A root shell or other
@@ -367,9 +385,9 @@ in
         Type = "oneshot";
         User = runtime.user;
         Group = runtime.group;
-        WorkingDirectory = cfg.home;
+        WorkingDirectory = "-${cfg.home}";
+        ExecStartPre = "+${pkgs.coreutils}/bin/install -d -o ${runtime.user} -g ${runtime.group} -m 0750 ${cfg.home} ${cfg.gamesRoot}";
         ExecStart = "${cfg.package}/bin/steam-arm64-seed --apply";
-        RemainAfterExit = true;
         TimeoutStartSec = "infinity";
       };
     };
@@ -382,7 +400,6 @@ in
       serviceConfig = {
         Type = "oneshot";
         ExecStart = "${fexRootfsPreparer}/bin/korri-steam-prepare-fex-rootfs";
-        RemainAfterExit = true;
         TimeoutStartSec = "infinity";
       };
     };
@@ -395,22 +412,29 @@ in
         STEAM_HOME = cfg.home;
         FEX_ROOTFS = cfg.fexRootfs;
         FEX_BIN = "${pkgs.fex}/bin/FEX";
+        FEX_WRAPPER_BIN = "/usr/bin/FEX";
         FEX_SHARE = "${pkgs.fex}/share/fex-emu";
       };
       serviceConfig = {
         Type = "oneshot";
         User = runtime.user;
         Group = runtime.group;
-        WorkingDirectory = cfg.home;
-        ExecStart = "${cfg.package}/bin/steam-guest-runtime-prep --patch-proton";
+        WorkingDirectory = "-${cfg.home}";
+        ExecStartPre = "+${pkgs.coreutils}/bin/install -d -o ${runtime.user} -g ${runtime.group} -m 0750 ${cfg.home}";
+        ExecStart = "${cfg.package}/bin/steam-guest-runtime-prep --apply";
       };
     };
 
     systemd.paths.korri-steam-runtime-prep = {
-      description = "Watch Korri Steam Proton ARM64 payloads for repair";
+      description = "Watch Korri Steam runtime and Proton payloads for repair";
       wantedBy = [ "multi-user.target" ];
       pathConfig = {
-        PathChanged = "${cfg.home}/steamapps/common/Proton 11.0 (ARM64)/proton";
+        PathChanged = [
+          "${cfg.home}/steamapps/common/Proton 11.0 (ARM64)/proton"
+          "${cfg.home}/steamapps/common/Proton 10.0/proton"
+          "${cfg.home}/steamapps/common/SteamLinuxRuntime_sniper/pressure-vessel/bin/pressure-vessel-wrap"
+          "${cfg.home}/steamapps/common/SteamLinuxRuntime_sniper/pressure-vessel/libexec/steam-runtime-tools-0/pv-adverb"
+        ];
         Unit = "korri-steam-runtime-prep.service";
       };
     };
@@ -438,6 +462,8 @@ in
         WorkingDirectory = cfg.home;
         LimitNOFILE = 524288;
         ExecStart = "${steamLauncher}/bin/korri-steam-guest";
+        Restart = "on-failure";
+        RestartSec = "2s";
       };
     };
   };
