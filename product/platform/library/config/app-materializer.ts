@@ -3,8 +3,8 @@ import { constants } from "node:fs"
 import {
   access,
   mkdir,
-  readFile,
   readdir,
+  readFile,
   rename,
   rm,
   stat,
@@ -41,14 +41,28 @@ import {
   supportedPatchFormatForPath,
   UnsupportedPatchExtension,
 } from "./errors"
-import type { RetroArchPolicy, RyubingPolicy } from "./inheritable-fields"
+import type {
+  RetroArchPolicy,
+  RyubingPolicy,
+  SteamPolicy,
+} from "./inheritable-fields"
 import type { LaunchSettings, LaunchSettingValue } from "./launch-block"
-import { isRetroArchAppRecord, isRyubingAppRecord } from "./records/app"
+import {
+  isRetroArchAppRecord,
+  isRyubingAppRecord,
+  isSteamAppRecord,
+} from "./records/app"
 import type { LauncherRecord } from "./records/launcher"
 import type {
   ReadableResolvedLaunchContext,
   ResolvedLaunchContext,
 } from "./resolved-launch-context"
+import {
+  materializeSteamDesiredState,
+  type SteamLifecycle,
+  type SteamStateFileSystem,
+  type SteamStateLock,
+} from "./steam-state-materializer"
 
 const LAUNCH_ARTIFACTS_DIR_ENV = "KORRI_LAUNCH_ARTIFACTS_DIR" as const
 const MATERIALIZER_PLACEHOLDER_PATTERN =
@@ -119,6 +133,29 @@ export const materializeReadableRyubingLaunch = (input: {
     }
   })
 
+export const materializeReadableSteamLaunch = (input: {
+  readonly context: ReadableResolvedLaunchContext
+  readonly fs?: SteamStateFileSystem
+  readonly lifecycle?: SteamLifecycle
+  readonly lock?: SteamStateLock
+}): Effect.Effect<MaterializedReadableLaunch, ResolutionError> =>
+  Effect.gen(function* () {
+    if (!isSteamAppRecord(input.context.app)) {
+      return yield* Effect.fail(
+        new AppMaterializationFailed({
+          appId: input.context.app.id,
+          reason: "typed Steam materialization requires kind: steam",
+        }),
+      )
+    }
+    const resources = yield* materializeReadableSteamResources(input)
+    return {
+      spec: resources.spec,
+      context: input.context,
+      artifacts: { root: resources.stateRoot, paths: resources.paths },
+    }
+  })
+
 export const materializeAppLaunch = (input: {
   readonly app: AppDescriptor
   readonly context: ResolvedLaunchContext
@@ -164,6 +201,7 @@ const canBypassMaterialization = (
 ): boolean =>
   !hasPatches &&
   app.integration !== "ryubing" &&
+  app.integration !== "steam" &&
   (app.integration === "generic-process" ||
     (app.integration !== "solarus" && !requiresMaterialization(app)))
 
@@ -331,7 +369,14 @@ const materializeReadableRetroArchResources = (
     return { paths, spec }
   })
 
-const RYUBING_STATE_DIRS = ["system", "bis", "sdcard", "games", "profiles", "Logs"] as const
+const RYUBING_STATE_DIRS = [
+  "system",
+  "bis",
+  "sdcard",
+  "games",
+  "profiles",
+  "Logs",
+] as const
 const STORAGE_TOKEN_PATTERN = /\{storage:([^}]+)\}/g
 
 const materializeReadableRyubingResources = (input: {
@@ -342,16 +387,21 @@ const materializeReadableRyubingResources = (input: {
     const storage = input.context.storage ?? {}
     yield* assertStorageTokensAvailable(
       input.context.app.id,
-      { ...rawPolicy, env: { ...(input.context.env ?? {}), ...(rawPolicy.env ?? {}) } },
+      {
+        ...rawPolicy,
+        env: { ...(input.context.env ?? {}), ...(rawPolicy.env ?? {}) },
+      },
       storage,
     )
     const policy = yield* tryMaterialize(input.context.app.id, async () =>
       resolveRyubingPolicyPaths(rawPolicy, storage),
     )
-    const resolvedContextEnv = yield* tryMaterialize(input.context.app.id, async () =>
-      input.context.env
-        ? resolveEnvStorageTokens(input.context.env, storage)
-        : undefined,
+    const resolvedContextEnv = yield* tryMaterialize(
+      input.context.app.id,
+      async () =>
+        input.context.env
+          ? resolveEnvStorageTokens(input.context.env, storage)
+          : undefined,
     )
     const stateRoot = policy.state?.root
     if (!stateRoot) {
@@ -368,7 +418,10 @@ const materializeReadableRyubingResources = (input: {
     yield* validateRequiredRyubingKeys(input.context.app.id, policy)
 
     const generated = renderRyubingConfig(policy)
-    const configPath = join(stateRoot, policy.state?.["config-file"] ?? "Config.json")
+    const configPath = join(
+      stateRoot,
+      policy.state?.["config-file"] ?? "Config.json",
+    )
     const merged = yield* mergeExistingRyubingConfig({
       appId: input.context.app.id,
       configPath,
@@ -410,9 +463,86 @@ const materializeReadableRyubingResources = (input: {
     }
   })
 
+interface MaterializedSteamResources extends MaterializedReadableResources {
+  readonly stateRoot: string
+}
+
+const materializeReadableSteamResources = (input: {
+  readonly context: ReadableResolvedLaunchContext
+  readonly fs?: SteamStateFileSystem
+  readonly lifecycle?: SteamLifecycle
+  readonly lock?: SteamStateLock
+}): Effect.Effect<MaterializedSteamResources, ResolutionError> =>
+  Effect.gen(function* () {
+    const rawPolicy = input.context.steam ?? {}
+    const storage = input.context.storage ?? {}
+    yield* assertSteamStorageTokensAvailable(
+      input.context.app.id,
+      rawPolicy,
+      storage,
+    )
+    const policy = yield* tryMaterialize(input.context.app.id, async () =>
+      resolveSteamPolicyPaths(rawPolicy, storage),
+    )
+    const stateRoot = policy.state?.root
+    if (!stateRoot) {
+      return yield* Effect.fail(
+        new AppMaterializationFailed({
+          appId: input.context.app.id,
+          reason: "typed Steam launches require state.root",
+        }),
+      )
+    }
+    const materialized = yield* materializeSteamDesiredState({
+      desired: {
+        stateRoot,
+        command: input.context.app.command,
+        target: input.context.target,
+        launchOptions: policy["launch-options"],
+        runtime: input.context.runtime
+          ? {
+              id: input.context.runtime.id,
+              path: input.context.runtime.path,
+              tool: input.context.runtime.tool,
+            }
+          : undefined,
+        extraArgs: policy.extra?.args,
+      },
+      fs: input.fs,
+      lifecycle: input.lifecycle,
+      lock: input.lock,
+    }).pipe(
+      Effect.mapError(
+        error =>
+          new AppMaterializationFailed({
+            appId: input.context.app.id,
+            reason: `${error._tag}: ${"reason" in error ? error.reason : "message" in error ? error.message : JSON.stringify(error)}`,
+          }),
+      ),
+    )
+    return {
+      stateRoot,
+      paths: materialized.paths,
+      spec: materialized.spec,
+    }
+  })
+
 type StorageRoots = Readonly<Record<string, { readonly root?: string }>>
 
 type JsonObject = Record<string, unknown>
+
+const resolveSteamPolicyPaths = (
+  policy: SteamPolicy,
+  storage: StorageRoots,
+): SteamPolicy => ({
+  ...policy,
+  state: policy.state
+    ? {
+        ...policy.state,
+        root: resolveStorageTokens(policy.state.root, storage),
+      }
+    : undefined,
+})
 
 const resolveRyubingPolicyPaths = (
   policy: RyubingPolicy,
@@ -491,6 +621,44 @@ const storageTokensInPolicy = (policy: RyubingPolicy): readonly string[] => {
   return [...tokens]
 }
 
+const storageTokensInValue = (value: unknown): readonly string[] => {
+  const tokens = new Set<string>()
+  const visit = (entry: unknown) => {
+    if (typeof entry === "string") {
+      for (const match of entry.matchAll(STORAGE_TOKEN_PATTERN)) {
+        if (match[1]) tokens.add(match[1])
+      }
+    } else if (Array.isArray(entry)) {
+      for (const item of entry) visit(item)
+    } else if (entry && typeof entry === "object") {
+      for (const item of Object.values(entry)) visit(item)
+    }
+  }
+  visit(value)
+  return [...tokens]
+}
+
+const assertSteamStorageTokensAvailable = (
+  appId: string,
+  policy: SteamPolicy,
+  storage: StorageRoots,
+): Effect.Effect<void, ResolutionError> =>
+  tryMaterialize(appId, async () => {
+    for (const storageId of storageTokensInValue(policy)) {
+      const root = storage[storageId]?.root
+      if (!root) throw new Error(`storage ${storageId} is not configured`)
+      let info: Awaited<ReturnType<typeof stat>>
+      try {
+        info = await stat(root)
+      } catch {
+        throw new Error(`storage ${storageId} root is unavailable: ${root}`)
+      }
+      if (!info.isDirectory()) {
+        throw new Error(`storage ${storageId} root is not a directory: ${root}`)
+      }
+    }
+  })
+
 const assertStorageTokensAvailable = (
   appId: string,
   policy: RyubingPolicy,
@@ -526,7 +694,9 @@ const createRyubingStateRoot = (
     )
   })
 
-const assertLiteralMediaRootExists = async (stateRoot: string): Promise<void> => {
+const assertLiteralMediaRootExists = async (
+  stateRoot: string,
+): Promise<void> => {
   const mediaRoot = literalRunMediaRoot(stateRoot)
   if (!mediaRoot) return
   const info = await stat(mediaRoot)
@@ -581,7 +751,8 @@ const mergeExistingRyubingConfig = (input: {
 > =>
   tryMaterialize(input.appId, async () => {
     const mergeExisting = input.policy.config?.["merge-existing"] !== false
-    if (!mergeExisting) return { config: { ...input.generated }, diagnostics: [] }
+    if (!mergeExisting)
+      return { config: { ...input.generated }, diagnostics: [] }
     const diagnostics: string[] = []
     let existing: JsonObject = {}
     let existingVersion: unknown
@@ -617,12 +788,16 @@ const validateRyubingInputConfig = (
   return Effect.fail(
     new AppMaterializationFailed({
       appId,
-      reason: "headless Ryubing launches require at least one input_config entry",
+      reason:
+        "headless Ryubing launches require at least one input_config entry",
     }),
   )
 }
 
-const deepMergeJson = (base: JsonObject, extra: Readonly<Record<string, unknown>>): JsonObject => {
+const deepMergeJson = (
+  base: JsonObject,
+  extra: Readonly<Record<string, unknown>>,
+): JsonObject => {
   const merged: JsonObject = { ...base }
   for (const [key, value] of Object.entries(extra)) {
     const prior = merged[key]
@@ -670,8 +845,14 @@ const materializeAppResources = (
       return Effect.fail(
         new AppMaterializationFailed({
           appId: input.app.id,
-          reason:
-            "Ryubing apps must use readable Ryubing materialization",
+          reason: "Ryubing apps must use readable Ryubing materialization",
+        }),
+      )
+    case "steam":
+      return Effect.fail(
+        new AppMaterializationFailed({
+          appId: input.app.id,
+          reason: "Steam apps must use readable Steam materialization",
         }),
       )
   }

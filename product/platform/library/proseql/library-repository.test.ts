@@ -305,6 +305,43 @@ describe("createLibraryRepository — readable playable entries", () => {
     })
   })
 
+  it("launches a first-class Steam app through Steam materialization", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      await mkdir(join(root, "steam-home"), { recursive: true })
+      await Effect.runPromise(
+        repo.upsertRuntime({
+          id: "proton-arm64",
+          kind: "tool",
+          path: "/compat/proton-arm64",
+          tool: "proton-arm64",
+        }),
+      )
+      await Effect.runPromise(
+        repo.upsertApp({
+          id: "steam",
+          kind: "steam",
+          command: "steam",
+          runtime: "proton-arm64",
+          state: { root: join(root, "steam-home") },
+          extra: { args: ["-silent"] },
+          "launch-options": "gamescope -- %command%",
+        }),
+      )
+
+      const resolved = await Effect.runPromise(
+        repo.resolveLaunchForPlayable("downwell"),
+      )
+
+      expect(resolved.app).toMatchObject({ id: "steam", integration: "steam" })
+      expect(resolved.spec).toEqual({
+        command: "steam",
+        args: ["-applaunch", "360740"],
+      })
+      expect(resolved.artifacts?.root).toBe(join(root, "steam-home"))
+    })
+  })
+
   it("launches a single launchable release without an explicit release id", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)

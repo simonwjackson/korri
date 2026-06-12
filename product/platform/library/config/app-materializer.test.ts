@@ -23,6 +23,7 @@ import {
   materializeAppLaunch,
   materializeReadableRetroArchLaunch,
   materializeReadableRyubingLaunch,
+  materializeReadableSteamLaunch,
   STALE_ARTIFACT_RETENTION_MS,
 } from "./app-materializer"
 import { cascadeErrorMessage } from "./errors"
@@ -808,7 +809,15 @@ describe("materializeReadableRyubingLaunch", () => {
       const stateRoot = join(root, ".config/Ryujinx")
       expect(result.artifacts).toBeUndefined()
       expect(await readdir(stateRoot)).toEqual(
-        expect.arrayContaining(["system", "bis", "sdcard", "games", "profiles", "Logs", "Config.json"]),
+        expect.arrayContaining([
+          "system",
+          "bis",
+          "sdcard",
+          "games",
+          "profiles",
+          "Logs",
+          "Config.json",
+        ]),
       )
       expect(result.spec.args.slice(0, 5)).toEqual([
         "--no-gui",
@@ -821,7 +830,9 @@ describe("materializeReadableRyubingLaunch", () => {
         join(root, "roms/switch/Mario Kart 8 Deluxe.nsp"),
       )
       expect(result.spec.env?.XDG_CONFIG_HOME).toBe(join(root, ".config"))
-      const config = JSON.parse(await readFile(join(stateRoot, "Config.json"), "utf8"))
+      const config = JSON.parse(
+        await readFile(join(stateRoot, "Config.json"), "utf8"),
+      )
       expect(config.version).toBe(RYUBING_CONFIG_VERSION)
       expect(config.input_config).toHaveLength(1)
       expect(config.start_fullscreen).toBe(true)
@@ -831,14 +842,20 @@ describe("materializeReadableRyubingLaunch", () => {
   it("preserves existing Config.json version and unknown keys while reasserting typed fields", async () => {
     await withRoot(async root => {
       await seedFile(root, ".config/Ryujinx/system/prod.keys", "keys")
-      await seedFile(root, ".config/Ryujinx/Config.json", JSON.stringify({
-        version: 999,
-        unknown_future_key: true,
-        start_fullscreen: false,
-      }))
+      await seedFile(
+        root,
+        ".config/Ryujinx/Config.json",
+        JSON.stringify({
+          version: 999,
+          unknown_future_key: true,
+          start_fullscreen: false,
+        }),
+      )
       await seedFile(root, "roms/switch/Mario Kart 8 Deluxe.nsp", "game")
 
-      await runPromise(materializeReadableRyubingLaunch({ context: ryubingContext(root) }))
+      await runPromise(
+        materializeReadableRyubingLaunch({ context: ryubingContext(root) }),
+      )
 
       const config = JSON.parse(
         await readFile(join(root, ".config/Ryujinx/Config.json"), "utf8"),
@@ -856,7 +873,9 @@ describe("materializeReadableRyubingLaunch", () => {
         materializeReadableRyubingLaunch({
           context: {
             ...ryubingContext(root),
-            storage: { "switch-card": { id: "switch-card", root: missingRoot } },
+            storage: {
+              "switch-card": { id: "switch-card", root: missingRoot },
+            },
           },
         }),
       )
@@ -1022,6 +1041,96 @@ describe("materializeReadableRyubingLaunch", () => {
 
       expect(exitFailureMessage(exit)).toContain("resolved content path")
     })
+  })
+})
+
+describe("materializeReadableSteamLaunch", () => {
+  const steamContext = (stateRoot: string): ReadableResolvedLaunchContext => ({
+    playableId: "balatro",
+    itemId: "balatro",
+    releaseId: "steam",
+    system: "steam",
+    sourceId: "steam",
+    target: "steam://rungameid/2379780",
+    app: {
+      id: "steam",
+      kind: "steam",
+      command: "steam",
+      state: { root: stateRoot },
+    },
+    runtime: {
+      id: "proton-arm64",
+      kind: "tool",
+      path: "/compat/proton-arm64",
+      tool: "proton-arm64",
+    },
+    steam: {
+      state: { root: stateRoot },
+      extra: { args: ["-silent"] },
+      "launch-options": "gamescope -- %command%",
+    },
+  })
+
+  it("materializes Steam desired state and returns the applaunch spec", async () => {
+    const events: string[] = []
+    const writes: string[] = []
+    const files = new Map<string, string>()
+    const result = await runPromise(
+      materializeReadableSteamLaunch({
+        context: steamContext("/steam-home"),
+        fs: {
+          readText: async path => files.get(path),
+          writeTextAtomic: async (path, content) => {
+            writes.push(path)
+            files.set(path, content)
+          },
+          mkdirp: async () => {},
+        },
+        lifecycle: {
+          shutdown: async () => {
+            events.push("shutdown")
+          },
+          waitForShutdown: async () => {
+            events.push("wait-shutdown")
+          },
+          start: async input => {
+            events.push(`start:${input.args.join(" ")}`)
+          },
+          waitUntilReady: async () => {
+            events.push("ready")
+          },
+        },
+        lock: { withLock: async (_key, run) => run() },
+      }),
+    )
+
+    expect(result.spec).toEqual({
+      command: "steam",
+      args: ["-applaunch", "2379780"],
+    })
+    expect(result.artifacts?.root).toBe("/steam-home")
+    expect(writes.length).toBe(2)
+    expect(events).toEqual([
+      "shutdown",
+      "wait-shutdown",
+      "start:-silent",
+      "ready",
+    ])
+  })
+
+  it("fails before mutation when Steam state.root is missing", async () => {
+    const exit = await Effect.runPromiseExit(
+      materializeReadableSteamLaunch({
+        context: { ...steamContext("/steam-home"), steam: {} },
+        fs: {
+          readText: async () => undefined,
+          writeTextAtomic: async () => {},
+          mkdirp: async () => {},
+        },
+      }),
+    )
+
+    expect(exitFailureMessage(exit)).toContain("state.root")
   })
 })
 

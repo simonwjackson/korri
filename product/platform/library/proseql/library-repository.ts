@@ -10,6 +10,7 @@ import type { AppIntegrationKind } from "@platform/library/config/app-integratio
 import {
   materializeReadableRetroArchLaunch,
   materializeReadableRyubingLaunch,
+  materializeReadableSteamLaunch,
 } from "@platform/library/config/app-materializer"
 import {
   type ReadableConfigSnapshot,
@@ -33,6 +34,7 @@ import {
   type AppRecord,
   isRetroArchAppRecord,
   isRyubingAppRecord,
+  isSteamAppRecord,
 } from "@platform/library/config/records/app"
 import type { CollectionRecord } from "@platform/library/config/records/collection"
 import type { GameRecord } from "@platform/library/config/records/game"
@@ -302,9 +304,11 @@ export function createLibraryRepository(
                 ? Effect.succeed(canMaterializeRetroArchContext(context))
                 : isRyubingAppRecord(context.app)
                   ? Effect.succeed(canMaterializeRyubingContext(context))
-                  : composeReadableLaunchSpec(context.app, context).pipe(
-                      Effect.as(true),
-                    ),
+                  : isSteamAppRecord(context.app)
+                    ? Effect.succeed(canMaterializeSteamContext(context))
+                    : composeReadableLaunchSpec(context.app, context).pipe(
+                        Effect.as(true),
+                      ),
             ),
             Effect.match({
               onFailure: () => false,
@@ -339,9 +343,11 @@ export function createLibraryRepository(
               })
             : isRyubingAppRecord(context.app)
               ? materializeReadableRyubingLaunch({ context })
-              : composeReadableLaunchSpec(context.app, context).pipe(
-                  Effect.map(spec => ({ spec })),
-                )
+              : isSteamAppRecord(context.app)
+                ? materializeReadableSteamLaunch({ context })
+                : composeReadableLaunchSpec(context.app, context).pipe(
+                    Effect.map(spec => ({ spec })),
+                  )
         ).pipe(Effect.mapError(toLibraryConfigError))
         const spec = materialized.spec
         const entry = derivePlayableEntries([
@@ -361,7 +367,9 @@ export function createLibraryRepository(
               ? "retroarch"
               : isRyubingAppRecord(context.app)
                 ? "ryubing"
-                : "generic-process",
+                : isSteamAppRecord(context.app)
+                  ? "steam"
+                  : "generic-process",
           },
           ...(materialized.artifacts
             ? { artifacts: materialized.artifacts }
@@ -494,6 +502,15 @@ function canMaterializeRyubingContext(
   context: ReadableResolvedLaunchContext,
 ): boolean {
   return Boolean(context.content?.path && context.ryubing?.state?.root)
+}
+
+function canMaterializeSteamContext(
+  context: ReadableResolvedLaunchContext,
+): boolean {
+  return Boolean(
+    context.target.startsWith("steam://rungameid/") &&
+      context.steam?.state?.root,
+  )
 }
 
 function upsertSystemWithCoreRuntime(

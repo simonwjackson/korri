@@ -31,6 +31,7 @@ export type AppIntegrationKind =
   | "solarus"
   | "generic-process"
   | "ryubing"
+  | "steam"
 
 export interface AppDescriptor {
   readonly id: string
@@ -138,7 +139,9 @@ export const resolveAppDescriptor = (input: {
               ? "retroarch"
               : appRecordKind(appOverride) === "ryubing"
                 ? "ryubing"
-                : "generic-process",
+                : appRecordKind(appOverride) === "steam"
+                  ? "steam"
+                  : "generic-process",
           command: appOverride.command,
           args: appOverride.args ?? ["{contentPath}"],
           systems: appOverride.systems ?? [],
@@ -184,7 +187,9 @@ const mergeDescriptor = (
             ? "retroarch"
             : appRecordKind(appOverride) === "ryubing"
               ? "ryubing"
-              : base.integration,
+              : appRecordKind(appOverride) === "steam"
+                ? "steam"
+                : base.integration,
       }
     : {}),
   ...(appOverride?.command ? { command: appOverride.command } : {}),

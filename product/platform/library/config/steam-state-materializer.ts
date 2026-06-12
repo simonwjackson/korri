@@ -1,0 +1,393 @@
+import { randomUUID } from "node:crypto"
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
+import { dirname, join } from "node:path"
+import type { LaunchSpec } from "@platform/library/launcher"
+import {
+  type InvalidSteamLaunchOptions,
+  parseSteamAppId,
+  renderSteamLaunchSpec,
+  validateSteamLaunchOptions,
+} from "@platform/stream/steam-launch-spec"
+import { Data, Effect } from "effect"
+
+export class SteamStateMutationFailed extends Data.TaggedError(
+  "SteamStateMutationFailed",
+)<{
+  readonly path: string
+  readonly reason: string
+}> {}
+
+export class SteamRuntimeToolMissing extends Data.TaggedError(
+  "SteamRuntimeToolMissing",
+)<{
+  readonly runtimeId: string
+}> {}
+
+export class SteamReadinessTimeout extends Data.TaggedError(
+  "SteamReadinessTimeout",
+)<{
+  readonly stateRoot: string
+}> {}
+
+type SteamStateError =
+  | InvalidSteamLaunchOptions
+  | SteamStateMutationFailed
+  | SteamRuntimeToolMissing
+  | SteamReadinessTimeout
+
+export interface SteamRuntimeSelection {
+  readonly id: string
+  readonly path: string
+  readonly tool?: string
+}
+
+export interface SteamDesiredState {
+  readonly stateRoot: string
+  readonly command?: string
+  readonly target: string
+  readonly launchOptions?: string
+  readonly runtime?: SteamRuntimeSelection
+  readonly extraArgs?: readonly string[]
+}
+
+export interface SteamLifecycle {
+  readonly shutdown: (input: {
+    readonly command: string
+    readonly stateRoot: string
+  }) => Promise<void>
+  readonly waitForShutdown: (input: {
+    readonly stateRoot: string
+  }) => Promise<void>
+  readonly start: (input: {
+    readonly command: string
+    readonly stateRoot: string
+    readonly args: readonly string[]
+  }) => Promise<void>
+  readonly waitUntilReady: (input: {
+    readonly stateRoot: string
+  }) => Promise<void>
+}
+
+export interface SteamStateFileSystem {
+  readonly readText: (path: string) => Promise<string | undefined>
+  readonly writeTextAtomic: (path: string, content: string) => Promise<void>
+  readonly mkdirp: (path: string) => Promise<void>
+}
+
+export interface SteamStateLock {
+  readonly withLock: <A>(key: string, run: () => Promise<A>) => Promise<A>
+}
+
+export interface MaterializeSteamDesiredStateOptions {
+  readonly desired: SteamDesiredState
+  readonly fs?: SteamStateFileSystem
+  readonly lifecycle?: SteamLifecycle
+  readonly lock?: SteamStateLock
+}
+
+export interface MaterializedSteamDesiredState {
+  readonly spec: LaunchSpec
+  readonly paths: {
+    readonly localconfig: string
+    readonly config: string
+  }
+}
+
+type VdfObject = { [key: string]: string | VdfObject }
+
+const inMemoryLocks = new Map<string, Promise<unknown>>()
+
+export const defaultSteamStateLock: SteamStateLock = {
+  withLock: async (key, run) => {
+    const previous = inMemoryLocks.get(key) ?? Promise.resolve()
+    let release!: () => void
+    const current = new Promise<void>(resolve => {
+      release = resolve
+    })
+    const queued = previous.then(() => current)
+    inMemoryLocks.set(key, queued)
+    await previous
+    try {
+      return await run()
+    } finally {
+      release()
+      if (inMemoryLocks.get(key) === queued) inMemoryLocks.delete(key)
+    }
+  },
+}
+
+export const nodeSteamStateFileSystem: SteamStateFileSystem = {
+  readText: async path => {
+    try {
+      return await readFile(path, "utf8")
+    } catch (error) {
+      if (isNodeErrorCode(error, "ENOENT")) return undefined
+      throw error
+    }
+  },
+  writeTextAtomic: async (path, content) => {
+    await mkdir(dirname(path), { recursive: true, mode: 0o750 })
+    const tmp = `${path}.${randomUUID()}.tmp`
+    await writeFile(tmp, content, { mode: 0o640 })
+    await rename(tmp, path)
+  },
+  mkdirp: async path => {
+    await mkdir(path, { recursive: true, mode: 0o750 })
+  },
+}
+
+export const noopSteamLifecycle: SteamLifecycle = {
+  shutdown: async () => {},
+  waitForShutdown: async () => {},
+  start: async () => {},
+  waitUntilReady: async () => {},
+}
+
+export const materializeSteamDesiredState = (
+  options: MaterializeSteamDesiredStateOptions,
+): Effect.Effect<MaterializedSteamDesiredState, SteamStateError> =>
+  Effect.tryPromise({
+    try: () => materializeSteamDesiredStatePromise(options),
+    catch: error => toSteamStateError(options.desired.stateRoot, error),
+  })
+
+async function materializeSteamDesiredStatePromise(
+  options: MaterializeSteamDesiredStateOptions,
+): Promise<MaterializedSteamDesiredState> {
+  const desired = options.desired
+  const command = desired.command ?? "steam"
+  const parsedAppId = parseSteamAppId(desired.target)
+  if (parsedAppId._tag === "Left") throw parsedAppId.left
+  const steamAppId = parsedAppId.right
+  if (desired.launchOptions !== undefined) {
+    const validated = validateSteamLaunchOptions(desired.launchOptions)
+    if (validated._tag === "Left") throw validated.left
+  }
+  if (desired.runtime !== undefined && !desired.runtime.tool) {
+    throw new SteamRuntimeToolMissing({ runtimeId: desired.runtime.id })
+  }
+
+  const fs = options.fs ?? nodeSteamStateFileSystem
+  const lifecycle = options.lifecycle ?? noopSteamLifecycle
+  const lock = options.lock ?? defaultSteamStateLock
+  const localconfigPath = steamLocalConfigPath(desired.stateRoot)
+  const configPath = steamConfigPath(desired.stateRoot)
+
+  await lock.withLock(desired.stateRoot, async () => {
+    await lifecycle.shutdown({ command, stateRoot: desired.stateRoot })
+    await lifecycle.waitForShutdown({ stateRoot: desired.stateRoot })
+    await fs.mkdirp(dirname(localconfigPath))
+    await fs.mkdirp(dirname(configPath))
+
+    if (desired.launchOptions !== undefined) {
+      const localconfig = parseVdfOrEmpty(
+        await fs.readText(localconfigPath),
+        localconfigPath,
+      )
+      setVdfPath(
+        localconfig,
+        [
+          "UserLocalConfigStore",
+          "Software",
+          "Valve",
+          "Steam",
+          "apps",
+          steamAppId,
+          "LaunchOptions",
+        ],
+        desired.launchOptions,
+      )
+      await fs.writeTextAtomic(localconfigPath, renderVdf(localconfig))
+    }
+
+    if (desired.runtime?.tool !== undefined) {
+      const config = parseVdfOrEmpty(await fs.readText(configPath), configPath)
+      setVdfPath(
+        config,
+        [
+          "InstallConfigStore",
+          "Software",
+          "Valve",
+          "Steam",
+          "CompatToolMapping",
+          steamAppId,
+        ],
+        { name: desired.runtime.tool, config: "", priority: "250" },
+      )
+      await fs.writeTextAtomic(configPath, renderVdf(config))
+    }
+
+    await lifecycle.start({
+      command,
+      stateRoot: desired.stateRoot,
+      args: desired.extraArgs ?? [],
+    })
+    await lifecycle.waitUntilReady({ stateRoot: desired.stateRoot })
+  })
+
+  return {
+    spec: await Effect.runPromise(
+      renderSteamLaunchSpec({ command, target: desired.target }),
+    ),
+    paths: { localconfig: localconfigPath, config: configPath },
+  }
+}
+
+export const steamLocalConfigPath = (stateRoot: string): string =>
+  join(stateRoot, "userdata", "0", "config", "localconfig.vdf")
+
+export const steamConfigPath = (stateRoot: string): string =>
+  join(stateRoot, "config", "config.vdf")
+
+function parseVdfOrEmpty(content: string | undefined, path: string): VdfObject {
+  if (content === undefined || content.trim() === "") return {}
+  try {
+    return parseVdf(content)
+  } catch (error) {
+    throw new SteamStateMutationFailed({
+      path,
+      reason: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
+
+export function parseVdf(content: string): VdfObject {
+  const tokens = tokenizeVdf(content)
+  let index = 0
+
+  const parseObject = (untilBrace: boolean): VdfObject => {
+    const object: VdfObject = {}
+    while (index < tokens.length) {
+      const key = tokens[index++]
+      if (key === "}") {
+        if (untilBrace) return object
+        throw new Error("unexpected closing brace")
+      }
+      if (key === "{") throw new Error("unexpected opening brace")
+      const value = tokens[index++]
+      if (value === undefined) throw new Error(`missing value for ${key}`)
+      if (value === "{") {
+        object[key] = parseObject(true)
+      } else if (value === "}") {
+        throw new Error(`missing value for ${key}`)
+      } else {
+        object[key] = value
+      }
+    }
+    if (untilBrace) throw new Error("missing closing brace")
+    return object
+  }
+
+  return parseObject(false)
+}
+
+export function renderVdf(object: VdfObject): string {
+  return renderVdfObject(object, 0)
+}
+
+function tokenizeVdf(content: string): string[] {
+  const tokens: string[] = []
+  let index = 0
+  while (index < content.length) {
+    const char = content[index]
+    if (/\s/.test(char)) {
+      index += 1
+      continue
+    }
+    if (char === "/" && content[index + 1] === "/") {
+      while (index < content.length && content[index] !== "\n") index += 1
+      continue
+    }
+    if (char === "{" || char === "}") {
+      tokens.push(char)
+      index += 1
+      continue
+    }
+    if (char !== '"') throw new Error(`unexpected token at ${index}`)
+    index += 1
+    let value = ""
+    while (index < content.length) {
+      const next = content[index]
+      if (next === "\\") {
+        value += content[index + 1] ?? ""
+        index += 2
+        continue
+      }
+      if (next === '"') {
+        index += 1
+        tokens.push(value)
+        break
+      }
+      value += next
+      index += 1
+    }
+  }
+  return tokens
+}
+
+function renderVdfObject(object: VdfObject, indent: number): string {
+  const pad = "\t".repeat(indent)
+  let output = ""
+  for (const [key, value] of Object.entries(object)) {
+    if (typeof value === "string") {
+      output += `${pad}"${escapeVdf(key)}"\t\t"${escapeVdf(value)}"\n`
+    } else {
+      output += `${pad}"${escapeVdf(key)}"\n${pad}{\n${renderVdfObject(
+        value,
+        indent + 1,
+      )}${pad}}\n`
+    }
+  }
+  return output
+}
+
+function setVdfPath(
+  root: VdfObject,
+  path: readonly string[],
+  value: string | VdfObject,
+): void {
+  let current = root
+  for (const key of path.slice(0, -1)) {
+    const existing = current[key]
+    if (typeof existing !== "object" || existing === null) {
+      current[key] = {}
+    }
+    current = current[key] as VdfObject
+  }
+  current[path[path.length - 1] as string] = value
+}
+
+function escapeVdf(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+}
+
+function toSteamStateError(stateRoot: string, error: unknown): SteamStateError {
+  if (isTaggedSteamStateError(error)) return error
+  return new SteamStateMutationFailed({
+    path: stateRoot,
+    reason: error instanceof Error ? error.message : String(error),
+  })
+}
+
+function isTaggedSteamStateError(error: unknown): error is SteamStateError {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "_tag" in error &&
+    [
+      "InvalidSteamLaunchOptions",
+      "SteamStateMutationFailed",
+      "SteamRuntimeToolMissing",
+      "SteamReadinessTimeout",
+    ].includes(String(error._tag))
+  )
+}
+
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { readonly code?: unknown }).code === code
+  )
+}
