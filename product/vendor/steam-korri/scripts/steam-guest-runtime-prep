@@ -40,18 +40,56 @@ fi
 common="$STEAM_HOME/steamapps/common"
 [ -d "$common" ] || exit 0
 
+# Native ARM64 Steam starts this helper by basename. Expose the ARM64 runtime
+# copy in steamrtarm64/bin, which steam-guest-run prepends to PATH, when Valve's
+# payload contains it. Without this, Steam disables the runtime launcher service
+# and Proton's lsteamclient cannot initialize reliably for Windows games.
+launcher_service="$STEAM_HOME/steam-runtime-steamrt-arm64/bin/steam-runtime-launcher-service"
+if [ -x "$launcher_service" ]; then
+  install -d -m 0755 "$STEAM_HOME/steamrtarm64/bin"
+  ln -sfn "$launcher_service" "$STEAM_HOME/steamrtarm64/bin/steam-runtime-launcher-service"
+fi
+
+is_fex_wrapper() {
+  local file="$1"
+  [ -f "$file" ] && grep -q "FEX_ROOTFS\|/FEX\|exec FEX" "$file" 2>/dev/null
+}
+
 restore_fex_wrapper() {
-  local file="$1" backup suffix
+  local file="$1" candidate
   [ -f "$file" ] || return 0
-  for suffix in x86_64 x86; do
-    backup="$file.$suffix"
-    if [ -f "$backup" ] && grep -q "FEX_ROOTFS\|/FEX" "$file" 2>/dev/null; then
-      mv -f "$backup" "$file"
+  is_fex_wrapper "$file" || return 0
+
+  # Runtime prep may be re-run after an interrupted/live repair. Collapse any
+  # stacked wrapper backups (tool, tool.x86_64, tool.x86_64.x86_64, ...) back to
+  # the deepest non-wrapper executable so FEX is never nested under itself.
+  candidate="$file.x86_64"
+  while [ -f "$candidate" ]; do
+    if ! is_fex_wrapper "$candidate"; then
+      mv -f "$candidate" "$file"
       chmod a+rx "$file" 2>/dev/null || true
       return 0
     fi
+    candidate="$candidate.x86_64"
   done
+
+  candidate="$file.x86"
+  if [ -f "$candidate" ] && ! is_fex_wrapper "$candidate"; then
+    mv -f "$candidate" "$file"
+    chmod a+rx "$file" 2>/dev/null || true
+    return 0
+  fi
+
+  echo "steam-guest-runtime-prep: warning: no non-FEX backup found for $file; tool left as FEX wrapper" >&2
 }
+
+fex_bin="${FEX_BIN:-$(command -v FEX 2>/dev/null || true)}"
+if [ -z "$fex_bin" ] && [ -x /run/current-system/sw/bin/FEX ]; then
+  fex_bin=/run/current-system/sw/bin/FEX
+fi
+if [ -z "$fex_bin" ]; then
+  fex_bin=FEX
+fi
 
 wrap_fex_tool() {
   local file="$1" backup info
@@ -71,7 +109,9 @@ EOF
       ;;
   esac
 
-  if grep -q "FEX_ROOTFS\|/FEX" "$file" 2>/dev/null; then
+  restore_fex_wrapper "$file"
+
+  if is_fex_wrapper "$file"; then
     return 0
   fi
 
@@ -85,12 +125,12 @@ EOF
       if [ ! -e "$backup" ]; then
         mv -f "$file" "$backup"
       fi
-      cat > "$file" <<'EOF'
+      cat > "$file" <<EOF
 #!/bin/sh
-: "${FEX_ROOTFS:?FEX_ROOTFS must be set by the guest adapter before running wrapped Steam Runtime helpers}"
-PATH="/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
+: "\${FEX_ROOTFS:?FEX_ROOTFS must be set by the guest adapter before running wrapped Steam Runtime helpers}"
+PATH="/usr/bin:/bin:/usr/sbin:/sbin:\${PATH:-}"
 export FEX_ROOTFS PATH
-exec FEX "$0.x86_64" "$@"
+exec $fex_bin "\$0.x86_64" "\$@"
 EOF
       chmod 755 "$file"
       ;;
@@ -103,14 +143,14 @@ EOF
 # helper executables launched by the ARM64 Steam client.
 for dir in "$common"/Proton*/files/bin "$common"/Proton*/files/bin-wow64 "$common"/Proton*/files/lib/wine/*-unix; do
   [ -d "$dir" ] || continue
-  find "$dir" -maxdepth 1 -type f | while IFS= read -r file; do
+  find "$dir" -maxdepth 1 -type f ! -name '*.x86_64*' ! -name '*.x86' | while IFS= read -r file; do
     restore_fex_wrapper "$file"
   done
 done
 
 for pv in "$common"/SteamLinuxRuntime*/pressure-vessel "$STEAM_HOME"/steamrt64/pv-runtime/steam-runtime-steamrt/pressure-vessel; do
   [ -d "$pv" ] || continue
-  find "$pv" -type f -perm -0100 | while IFS= read -r file; do
+  find "$pv" -type f -perm -0100 ! -name '*.x86_64*' ! -name '*.x86' | while IFS= read -r file; do
     wrap_fex_tool "$file"
   done
 done

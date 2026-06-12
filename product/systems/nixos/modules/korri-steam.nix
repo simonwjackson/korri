@@ -85,6 +85,53 @@ let
     ${pkgs.coreutils}/bin/chmod 0660 /dev/uinput 2>/dev/null || true
   '';
 
+  fexRootfsPreparer = pkgs.writeShellScriptBin "korri-steam-prepare-fex-rootfs" ''
+    set -eu
+
+    steam_home=${lib.escapeShellArg cfg.home}
+    fex_rootfs=${lib.escapeShellArg cfg.fexRootfs}
+    rootfs_dir="$steam_home/fex-data/RootFS/ArchLinux"
+    sqsh="$steam_home/fex-data/RootFS/ArchLinux.sqsh"
+    url="https://rootfs.fex-emu.gg/ArchLinux/2026-01-08/ArchLinux.sqsh"
+
+    if [ -e "$fex_rootfs/usr/bin" ] || [ -e "$fex_rootfs/etc/os-release" ]; then
+      exit 0
+    fi
+
+    # tmpfiles may have created fexRootfs as an empty directory. Replace only an
+    # empty directory; never delete a populated custom rootfs.
+    if [ -d "$fex_rootfs" ] && [ ! -e "$fex_rootfs/etc/os-release" ]; then
+      rmdir "$fex_rootfs" 2>/dev/null || {
+        echo "korri-steam-prepare-fex-rootfs: refusing to replace non-empty $fex_rootfs" >&2
+        exit 1
+      }
+    fi
+
+    ${pkgs.coreutils}/bin/install -d -o ${runtime.user} -g ${runtime.group} -m 0750 "$steam_home/fex-data/RootFS"
+
+    if [ ! -s "$sqsh" ]; then
+      tmp="$sqsh.tmp"
+      rm -f "$tmp"
+      ${pkgs.sudo}/bin/sudo -u ${runtime.user} ${pkgs.curl}/bin/curl \
+        -fL --retry 5 --retry-delay 2 --connect-timeout 30 --max-time 3600 \
+        -o "$tmp" "$url"
+      ${pkgs.coreutils}/bin/mv -f "$tmp" "$sqsh"
+      ${pkgs.coreutils}/bin/chown ${runtime.user}:${runtime.group} "$sqsh"
+    fi
+
+    if [ ! -e "$rootfs_dir/etc/os-release" ]; then
+      rm -rf "$rootfs_dir.tmp"
+      ${pkgs.coreutils}/bin/install -d -o ${runtime.user} -g ${runtime.group} -m 0750 "$rootfs_dir.tmp"
+      ${pkgs.sudo}/bin/sudo -u ${runtime.user} ${pkgs.squashfsTools}/bin/unsquashfs -f -d "$rootfs_dir.tmp" "$sqsh"
+      rm -rf "$rootfs_dir"
+      ${pkgs.coreutils}/bin/mv "$rootfs_dir.tmp" "$rootfs_dir"
+      ${pkgs.coreutils}/bin/chown -R ${runtime.user}:${runtime.group} "$rootfs_dir"
+    fi
+
+    ln -sfn "$rootfs_dir" "$fex_rootfs"
+    ${pkgs.coreutils}/bin/chown -h ${runtime.user}:${runtime.group} "$fex_rootfs"
+  '';
+
   steamLauncher = pkgs.writeShellScriptBin "korri-steam-guest" ''
     set -e
 
@@ -202,13 +249,14 @@ in
       cfg.package
       steamLauncher
       steamUinputPrep
+      fexRootfsPreparer
     ];
 
     systemd.tmpfiles.rules = [
       "d ${cfg.home} 0750 ${runtime.user} ${runtime.group} -"
       "d ${cfg.gamesRoot} 0750 ${runtime.user} ${runtime.group} -"
       "d ${cfg.dotDir} 0700 ${runtime.user} ${runtime.group} -"
-      "d ${cfg.fexRootfs} 0750 ${runtime.user} ${runtime.group} -"
+      "d ${cfg.home}/fex-data/RootFS 0750 ${runtime.user} ${runtime.group} -"
     ];
 
     systemd.services.korri-steam-uinput = {
@@ -221,10 +269,23 @@ in
       };
     };
 
+    systemd.services.korri-steam-prepare-fex-rootfs = {
+      description = "Prepare the Korri Steam FEX rootfs";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${fexRootfsPreparer}/bin/korri-steam-prepare-fex-rootfs";
+        RemainAfterExit = true;
+        TimeoutStartSec = "infinity";
+      };
+    };
+
     systemd.services.korri-steam = {
       description = "Launch Korri guest-native Steam";
-      after = [ "korri-steam-uinput.service" ];
-      wants = [ "korri-steam-uinput.service" ];
+      after = [ "korri-steam-uinput.service" "korri-steam-prepare-fex-rootfs.service" ];
+      wants = [ "korri-steam-uinput.service" "korri-steam-prepare-fex-rootfs.service" ];
       environment = {
         HOME = runtime.home;
         USER = runtime.user;

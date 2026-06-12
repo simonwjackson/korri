@@ -23,3 +23,9 @@ through `services.korri.steam.*`.
 - The product launcher is `korri-steam-guest`; package-internal helper names
   (`steam-arm64-seed`, `steam-guest-run`, etc.) are preserved for reviewable
   upstream parity.
+- `steam-guest-run` provides the package-owned FHS Steam execution capsule for
+  the mutable ARM64 client payload.
+- `steam-guest-runtime-prep` performs package-owned Steam Runtime / pressure-vessel repair
+  for mutable Valve runtime trees before launch.
+- x86/FEX helper wrapping is an implementation detail for Valve runtime
+  compatibility, not a product compatibility surface.

@@ -22,7 +22,8 @@ fonts="$common/SteamLinuxRuntime_sniper/sniper_platform_0.20240101/files/share/f
 runtime_bin="$common/SteamLinuxRuntime_sniper/sniper_platform_0.20240101/files/bin"
 proton_dir="$common/Proton 11.0 (ARM64)"
 proton_bin="$proton_dir/files/bin"
-mkdir -p "$pv" "$fonts" "$runtime_bin" "$proton_dir" "$proton_bin"
+mkdir -p "$pv" "$fonts" "$runtime_bin" "$proton_dir" "$proton_bin" \
+  "$steam_home/steam-runtime-steamrt-arm64/bin" "$steam_home/steamrtarm64/bin"
 
 cat > "$pv/srt-bwrap" <<'EOS'
 #!/bin/sh
@@ -46,6 +47,26 @@ echo restored wine "$@"
 EOS
 chmod 755 "$proton_bin/wine" "$proton_bin/wine.x86_64"
 
+cat > "$proton_bin/wine64" <<'EOS'
+#!/bin/sh
+FEX_ROOTFS=/old exec FEX "$@"
+EOS
+cat > "$proton_bin/wine64.x86_64" <<'EOS'
+#!/bin/sh
+FEX_ROOTFS=/older exec FEX "$@"
+EOS
+cat > "$proton_bin/wine64.x86_64.x86_64" <<'EOS'
+#!/bin/sh
+echo deepest restored wine64 "$@"
+EOS
+chmod 755 "$proton_bin/wine64" "$proton_bin/wine64.x86_64" "$proton_bin/wine64.x86_64.x86_64"
+
+cat > "$steam_home/steam-runtime-steamrt-arm64/bin/steam-runtime-launcher-service" <<'EOS'
+#!/bin/sh
+echo launcher "$@"
+EOS
+chmod 755 "$steam_home/steam-runtime-steamrt-arm64/bin/steam-runtime-launcher-service"
+
 cat > "$runtime_bin/python3.11" <<'EOS'
 #!/bin/sh
 exit 0
@@ -62,6 +83,12 @@ grep -q 'exec bwrap "$@"' "$pv/srt-bwrap" \
   || fail "Proton python shebang was not repaired"
 grep -q 'restored wine' "$proton_bin/wine" \
   || fail "Proton/Wine FEX wrapper was not restored from backup"
+grep -q 'deepest restored wine64' "$proton_bin/wine64" \
+  || fail "stacked Proton/Wine FEX wrapper was not restored from deepest backup"
+[ -L "$steam_home/steamrtarm64/bin/steam-runtime-launcher-service" ] \
+  || fail "ARM64 launcher service symlink missing from Steam PATH"
+[ "$(readlink "$steam_home/steamrtarm64/bin/steam-runtime-launcher-service")" = "$steam_home/steam-runtime-steamrt-arm64/bin/steam-runtime-launcher-service" ] \
+  || fail "ARM64 launcher service symlink points at the wrong target"
 [ -L "$runtime_bin/python3" ] || fail "python3 symlink missing"
 [ -L "$runtime_bin/python" ] || fail "python symlink missing"
 [ "$(readlink "$runtime_bin/python3")" = 'python3.11' ] \
