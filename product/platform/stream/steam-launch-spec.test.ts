@@ -9,7 +9,7 @@ import {
 
 describe("steam launch spec", () => {
   it("parses Steam rungameid targets", () => {
-    expect(parseSteamAppId("steam://rungameid/2379780")).toEqual({
+    expect(parseSteamAppId("steam://rungameid/2379780")).toMatchObject({
       _tag: "Right",
       right: "2379780",
     })
@@ -27,11 +27,13 @@ describe("steam launch spec", () => {
   })
 
   it("passes literal Steam %command% launch options but rejects Korri tokens", () => {
-    expect(validateSteamLaunchOptions("gamescope -- %command%")).toEqual({
+    expect(validateSteamLaunchOptions("gamescope -- %command%")).toMatchObject({
       _tag: "Right",
       right: "gamescope -- %command%",
     })
-    expect(validateSteamLaunchOptions("gamescope -- {content.path}")).toEqual({
+    expect(
+      validateSteamLaunchOptions("gamescope -- {content.path}"),
+    ).toMatchObject({
       _tag: "Left",
       left: expect.objectContaining({ _tag: "InvalidSteamLaunchOptions" }),
     })

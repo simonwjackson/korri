@@ -120,6 +120,107 @@ describe("materializeSteamDesiredState", () => {
     )
   })
 
+  it("preserves existing VDF entries while patching the selected app", async () => {
+    const stateRoot = "/steam-home"
+    const localconfig = steamLocalConfigPath(stateRoot)
+    const config = steamConfigPath(stateRoot)
+    const { fs, files } = memoryFs({
+      [localconfig]: `"UserLocalConfigStore"
+{
+	"Software"
+	{
+		"Valve"
+		{
+			"Steam"
+			{
+				"apps"
+				{
+					"999"
+					{
+						"LaunchOptions"		"legacy options"
+					}
+				}
+			}
+		}
+	}
+}
+`,
+      [config]: `"InstallConfigStore"
+{
+	"Software"
+	{
+		"Valve"
+		{
+			"Steam"
+			{
+				"CompatToolMapping"
+				{
+					"999"
+					{
+						"name"		"proton-old"
+						"config"		""
+						"priority"		"250"
+					}
+				}
+			}
+		}
+	}
+}
+`,
+    })
+
+    await Effect.runPromise(
+      materializeSteamDesiredState({
+        desired: {
+          stateRoot,
+          target: "steam://rungameid/2379780",
+          launchOptions: "gamescope -- %command%",
+          runtime: {
+            id: "proton-arm64",
+            path: "/compat/proton-arm64",
+            tool: "proton-arm64",
+          },
+        },
+        fs,
+        lifecycle: lifecycle([]),
+        lock: inlineLock,
+      }),
+    )
+
+    expect(parseVdf(files.get(localconfig) ?? "")).toMatchObject({
+      UserLocalConfigStore: {
+        Software: {
+          Valve: {
+            Steam: {
+              apps: {
+                "999": { LaunchOptions: "legacy options" },
+                "2379780": { LaunchOptions: "gamescope -- %command%" },
+              },
+            },
+          },
+        },
+      },
+    })
+    expect(parseVdf(files.get(config) ?? "")).toMatchObject({
+      InstallConfigStore: {
+        Software: {
+          Valve: {
+            Steam: {
+              CompatToolMapping: {
+                "999": { name: "proton-old", config: "", priority: "250" },
+                "2379780": {
+                  name: "proton-arm64",
+                  config: "",
+                  priority: "250",
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+  })
+
   it("fails malformed VDF before clobbering persistent state", async () => {
     const stateRoot = "/steam-home"
     const localconfig = steamLocalConfigPath(stateRoot)
@@ -143,6 +244,54 @@ describe("materializeSteamDesiredState", () => {
     expect(error).toMatchObject({ _tag: "SteamStateMutationFailed" })
     expect(writes).toEqual([])
     expect(files.get(localconfig)).toBe('"broken"\n{\n')
+  })
+
+  it("fails unterminated VDF strings before clobbering persistent state", async () => {
+    const stateRoot = "/steam-home"
+    const localconfig = steamLocalConfigPath(stateRoot)
+    const content = '"UserLocalConfigStore" { "Software'
+    const { fs, files, writes } = memoryFs({ [localconfig]: content })
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        materializeSteamDesiredState({
+          desired: {
+            stateRoot,
+            target: "steam://rungameid/2379780",
+            launchOptions: "%command%",
+          },
+          fs,
+          lifecycle: lifecycle([]),
+          lock: inlineLock,
+        }),
+      ),
+    )
+
+    expect(error._tag).toBe("SteamStateMutationFailed")
+    expect("reason" in error ? error.reason : "").toContain(
+      "unterminated string",
+    )
+    expect(writes).toEqual([])
+    expect(files.get(localconfig)).toBe(content)
+  })
+
+  it("surfaces invalid Steam targets as typed errors", async () => {
+    const error = await Effect.runPromise(
+      Effect.flip(
+        materializeSteamDesiredState({
+          desired: {
+            stateRoot: "/steam-home",
+            target: "steam://rungameid/not-a-number",
+            launchOptions: "%command%",
+          },
+          fs: memoryFs().fs,
+          lifecycle: lifecycle([]),
+          lock: inlineLock,
+        }),
+      ),
+    )
+
+    expect(error).toMatchObject({ _tag: "InvalidSteamTarget" })
   })
 
   it("fails selected runtimes without a Steam tool name", async () => {

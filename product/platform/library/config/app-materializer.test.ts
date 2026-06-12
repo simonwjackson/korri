@@ -1118,6 +1118,46 @@ describe("materializeReadableSteamLaunch", () => {
     ])
   })
 
+  it("resolves Steam storage tokens in process arguments", async () => {
+    await withRoot(async root => {
+      const storageRoot = join(root, "steam-storage")
+      await mkdir(storageRoot)
+      const events: string[] = []
+      const files = new Map<string, string>()
+
+      await runPromise(
+        materializeReadableSteamLaunch({
+          context: {
+            ...steamContext("/steam-home"),
+            storage: { steam: { id: "steam", root: storageRoot } },
+            steam: {
+              ...steamContext("/steam-home").steam,
+              extra: { args: ["{storage:steam}/overlay", "-silent"] },
+            },
+          },
+          fs: {
+            readText: async path => files.get(path),
+            writeTextAtomic: async (path, content) => {
+              files.set(path, content)
+            },
+            mkdirp: async () => {},
+          },
+          lifecycle: {
+            shutdown: async () => {},
+            waitForShutdown: async () => {},
+            start: async input => {
+              events.push(`start:${input.args.join(" ")}`)
+            },
+            waitUntilReady: async () => {},
+          },
+          lock: { withLock: async (_key, run) => run() },
+        }),
+      )
+
+      expect(events).toEqual([`start:${storageRoot}/overlay -silent`])
+    })
+  })
+
   it("fails before mutation when Steam state.root is missing", async () => {
     const exit = await Effect.runPromiseExit(
       materializeReadableSteamLaunch({
@@ -1131,6 +1171,67 @@ describe("materializeReadableSteamLaunch", () => {
     )
 
     expect(exitFailureMessage(exit)).toContain("state.root")
+  })
+
+  it("rejects non-Steam apps at the materializer boundary", async () => {
+    const exit = await Effect.runPromiseExit(
+      materializeReadableSteamLaunch({
+        context: {
+          ...steamContext("/steam-home"),
+          app: { id: "retroarch", kind: "retroarch", command: "retroarch" },
+        },
+      }),
+    )
+
+    expect(exitFailureMessage(exit)).toContain("requires kind: steam")
+  })
+
+  it("fails before mutation when Steam storage tokens are unavailable", async () => {
+    const writes: string[] = []
+    const exit = await Effect.runPromiseExit(
+      materializeReadableSteamLaunch({
+        context: {
+          ...steamContext("{storage:steam}/Steam"),
+          storage: {},
+        },
+        fs: {
+          readText: async () => undefined,
+          writeTextAtomic: async path => {
+            writes.push(path)
+          },
+          mkdirp: async () => {},
+        },
+      }),
+    )
+
+    expect(exitFailureMessage(exit)).toContain("storage steam")
+    expect(writes).toEqual([])
+  })
+
+  it("fails before mutation when Steam extra args reference missing storage", async () => {
+    const writes: string[] = []
+    const exit = await Effect.runPromiseExit(
+      materializeReadableSteamLaunch({
+        context: {
+          ...steamContext("/steam-home"),
+          storage: {},
+          steam: {
+            ...steamContext("/steam-home").steam,
+            extra: { args: ["{storage:games}/overlay"] },
+          },
+        },
+        fs: {
+          readText: async () => undefined,
+          writeTextAtomic: async path => {
+            writes.push(path)
+          },
+          mkdirp: async () => {},
+        },
+      }),
+    )
+
+    expect(exitFailureMessage(exit)).toContain("storage games")
+    expect(writes).toEqual([])
   })
 })
 

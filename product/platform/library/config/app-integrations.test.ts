@@ -120,6 +120,26 @@ describe("resolveAppDescriptor", () => {
     expect(app.ryubing?.state?.root).toBe("/state/Ryujinx")
   })
 
+  it("resolves a first-class Steam app as a Steam integration", () => {
+    const app = run(
+      resolveAppDescriptor({
+        appId: "steam",
+        apps: appMap([
+          {
+            id: "steam",
+            kind: "steam",
+            command: "steam",
+            state: { root: "/steam-home" },
+          },
+        ]),
+        launchers: launcherMap(),
+      }),
+    )
+
+    expect(app.integration).toBe("steam")
+    expect(app.command).toBe("steam")
+  })
+
   it("resolves a custom process app with an explicit command", () => {
     const app = run(
       resolveAppDescriptor({

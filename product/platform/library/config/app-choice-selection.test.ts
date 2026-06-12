@@ -30,6 +30,32 @@ describe("app choice selection", () => {
     ).toEqual([{ id: "retroarch", inherit: false, argsAppend: ["release"] }])
   })
 
+  it("merges Steam app choice extras and launch options", () => {
+    expect(
+      resolveEffectiveAppChoices(
+        [
+          {
+            id: "steam",
+            extra: { args: ["-silent"] },
+            "launch-options": "gamescope -- %command%",
+          },
+        ],
+        [
+          {
+            id: "steam",
+            extra: { args: ["-forcedesktopscaling", "1.25"] },
+          },
+        ],
+      ),
+    ).toEqual([
+      {
+        id: "steam",
+        extra: { args: ["-silent", "-forcedesktopscaling", "1.25"] },
+        "launch-options": "gamescope -- %command%",
+      },
+    ])
+  })
+
   it("auto-selects one choice and requires appId for many choices", () => {
     expect(selectAppChoice([{ id: "retroarch" }])).toEqual({
       _tag: "SelectedAppChoice",

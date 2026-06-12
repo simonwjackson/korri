@@ -59,6 +59,7 @@ import type {
   PlayableReleaseEntry,
 } from "@platform/library/playable-library"
 import type { ArtifactRecord } from "@platform/protocol/artifact/artifact"
+import { parseSteamAppId } from "@platform/stream/steam-launch-spec"
 import { Effect } from "effect"
 import { type KorriLibraryDb, LOCAL_HOST_KEY } from "./library-db"
 
@@ -508,7 +509,7 @@ function canMaterializeSteamContext(
   context: ReadableResolvedLaunchContext,
 ): boolean {
   return Boolean(
-    context.target.startsWith("steam://rungameid/") &&
+    parseSteamAppId(context.target)._tag === "Right" &&
       context.steam?.state?.root,
   )
 }

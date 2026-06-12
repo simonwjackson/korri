@@ -178,9 +178,6 @@ const isTypedAppPayload = (payload: {
     return "Steam field launch-options requires kind: steam"
   }
   if (isRyubing) {
-    if (payload["launch-options"] !== undefined) {
-      return "Steam field launch-options is not valid on kind: ryubing"
-    }
     const misplacedKey = RETROARCH_APP_FIELD_KEYS.find(key => {
       if (payload[key] === undefined) return false
       const overlapMarkers = RETROARCH_OVERLAP_MARKERS[key]

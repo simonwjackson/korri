@@ -4,6 +4,7 @@ import { dirname, join } from "node:path"
 import type { LaunchSpec } from "@platform/library/launcher"
 import {
   type InvalidSteamLaunchOptions,
+  type InvalidSteamTarget,
   parseSteamAppId,
   renderSteamLaunchSpec,
   validateSteamLaunchOptions,
@@ -31,6 +32,7 @@ export class SteamReadinessTimeout extends Data.TaggedError(
 
 type SteamStateError =
   | InvalidSteamLaunchOptions
+  | InvalidSteamTarget
   | SteamStateMutationFailed
   | SteamRuntimeToolMissing
   | SteamReadinessTimeout
@@ -146,14 +148,21 @@ export const noopSteamLifecycle: SteamLifecycle = {
 export const materializeSteamDesiredState = (
   options: MaterializeSteamDesiredStateOptions,
 ): Effect.Effect<MaterializedSteamDesiredState, SteamStateError> =>
-  Effect.tryPromise({
-    try: () => materializeSteamDesiredStatePromise(options),
-    catch: error => toSteamStateError(options.desired.stateRoot, error),
+  Effect.gen(function* () {
+    const materialized = yield* Effect.tryPromise({
+      try: () => materializeSteamDesiredStatePromise(options),
+      catch: error => toSteamStateError(options.desired.stateRoot, error),
+    })
+    const spec = yield* renderSteamLaunchSpec({
+      command: options.desired.command ?? "steam",
+      target: options.desired.target,
+    })
+    return { ...materialized, spec }
   })
 
 async function materializeSteamDesiredStatePromise(
   options: MaterializeSteamDesiredStateOptions,
-): Promise<MaterializedSteamDesiredState> {
+): Promise<Omit<MaterializedSteamDesiredState, "spec">> {
   const desired = options.desired
   const command = desired.command ?? "steam"
   const parsedAppId = parseSteamAppId(desired.target)
@@ -226,9 +235,6 @@ async function materializeSteamDesiredStatePromise(
   })
 
   return {
-    spec: await Effect.runPromise(
-      renderSteamLaunchSpec({ command, target: desired.target }),
-    ),
     paths: { localconfig: localconfigPath, config: configPath },
   }
 }
@@ -306,6 +312,7 @@ function tokenizeVdf(content: string): string[] {
     if (char !== '"') throw new Error(`unexpected token at ${index}`)
     index += 1
     let value = ""
+    let closed = false
     while (index < content.length) {
       const next = content[index]
       if (next === "\\") {
@@ -316,11 +323,13 @@ function tokenizeVdf(content: string): string[] {
       if (next === '"') {
         index += 1
         tokens.push(value)
+        closed = true
         break
       }
       value += next
       index += 1
     }
+    if (!closed) throw new Error("unterminated string")
   }
   return tokens
 }
@@ -376,6 +385,7 @@ function isTaggedSteamStateError(error: unknown): error is SteamStateError {
     "_tag" in error &&
     [
       "InvalidSteamLaunchOptions",
+      "InvalidSteamTarget",
       "SteamStateMutationFailed",
       "SteamRuntimeToolMissing",
       "SteamReadinessTimeout",

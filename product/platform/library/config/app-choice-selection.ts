@@ -25,6 +25,29 @@ const mergeObject = <T extends object>(
   return { ...base, ...override }
 }
 
+const mergeSteamExtra = (
+  base: SteamPolicy["extra"] | undefined,
+  override: SteamPolicy["extra"] | undefined,
+): SteamPolicy["extra"] | undefined => {
+  if (base === undefined) return override
+  if (override === undefined) return base
+  return {
+    ...base,
+    ...override,
+    ...(base.args !== undefined || override.args !== undefined
+      ? { args: [...(base.args ?? []), ...(override.args ?? [])] }
+      : {}),
+  }
+}
+
+const spreadSteamExtra = (
+  base: SteamPolicy["extra"] | undefined,
+  override: SteamPolicy["extra"] | undefined,
+): { readonly extra?: SteamPolicy["extra"] } => {
+  const extra = mergeSteamExtra(base, override)
+  return extra === undefined ? {} : { extra }
+}
+
 const mergeChoice = (base: AppChoice, override: AppChoice): AppChoice => ({
   id: override.id,
   ...(override.inherit !== undefined ? { inherit: override.inherit } : {}),
@@ -55,9 +78,7 @@ const mergeChoice = (base: AppChoice, override: AppChoice): AppChoice => ({
         ) as RetroArchPolicy,
       }
     : {}),
-  ...(mergeObject(base.extra, override.extra) !== undefined
-    ? { extra: mergeObject(base.extra, override.extra) as SteamPolicy["extra"] }
-    : {}),
+  ...spreadSteamExtra(base.extra, override.extra),
   ...((override["launch-options"] ?? base["launch-options"])
     ? { "launch-options": override["launch-options"] ?? base["launch-options"] }
     : {}),

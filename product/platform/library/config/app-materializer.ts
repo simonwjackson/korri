@@ -542,6 +542,18 @@ const resolveSteamPolicyPaths = (
         root: resolveStorageTokens(policy.state.root, storage),
       }
     : undefined,
+  extra: policy.extra
+    ? {
+        ...policy.extra,
+        ...(policy.extra.args
+          ? {
+              args: policy.extra.args.map(arg =>
+                resolveStorageTokens(arg, storage),
+              ),
+            }
+          : {}),
+      }
+    : undefined,
 })
 
 const resolveRyubingPolicyPaths = (
@@ -644,7 +656,10 @@ const assertSteamStorageTokensAvailable = (
   storage: StorageRoots,
 ): Effect.Effect<void, ResolutionError> =>
   tryMaterialize(appId, async () => {
-    for (const storageId of storageTokensInValue(policy)) {
+    for (const storageId of storageTokensInValue({
+      state: policy.state,
+      extra: policy.extra,
+    })) {
       const root = storage[storageId]?.root
       if (!root) throw new Error(`storage ${storageId} is not configured`)
       let info: Awaited<ReturnType<typeof stat>>

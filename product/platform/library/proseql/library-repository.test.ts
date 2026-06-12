@@ -329,6 +329,10 @@ describe("createLibraryRepository — readable playable entries", () => {
         }),
       )
 
+      await expect(
+        Effect.runPromise(repo.canResolveLaunchForPlayable("downwell")),
+      ).resolves.toBe(true)
+
       const resolved = await Effect.runPromise(
         repo.resolveLaunchForPlayable("downwell"),
       )
@@ -339,6 +343,41 @@ describe("createLibraryRepository — readable playable entries", () => {
         args: ["-applaunch", "360740"],
       })
       expect(resolved.artifacts?.root).toBe(join(root, "steam-home"))
+    })
+  })
+
+  it("does not report first-class Steam releases launchable with non-rungameid targets", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      await Effect.runPromise(
+        repo.upsertApp({
+          id: "steam",
+          kind: "steam",
+          command: "steam",
+          state: { root: join(root, "steam-home") },
+        }),
+      )
+      await Effect.runPromise(
+        repo.upsertLibraryItem({
+          id: "steam-store-shortcut",
+          title: "Steam Store Shortcut",
+          source: "steam",
+          releases: [
+            {
+              id: "store-page",
+              system: "windows",
+              target: "steam://store/2379780",
+              apps: [{ id: "steam" }],
+            },
+          ],
+        }),
+      )
+
+      await expect(
+        Effect.runPromise(
+          repo.canResolveLaunchForPlayable("steam-store-shortcut"),
+        ),
+      ).resolves.toBe(false)
     })
   })
 
