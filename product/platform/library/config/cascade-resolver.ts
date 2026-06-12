@@ -30,6 +30,10 @@ import {
   getBuiltInAppDescriptor,
   resolveAppDescriptor,
 } from "./app-integrations"
+import {
+  resolveEffectiveAppChoices,
+  selectAppChoice,
+} from "./app-choice-selection"
 import type { EphemeralOverride } from "./ephemeral-override"
 import {
   AppNotFound,
@@ -1492,6 +1496,19 @@ export class RuntimeNotFound extends Data.TaggedError("RuntimeNotFound")<{
   readonly runtimeId: string
 }> {}
 
+export class AmbiguousAppChoice extends Data.TaggedError("AmbiguousAppChoice")<{
+  readonly playableId: string
+  readonly releaseId: string
+  readonly appIds: readonly string[]
+}> {}
+
+export class AppChoiceNotFound extends Data.TaggedError("AppChoiceNotFound")<{
+  readonly playableId: string
+  readonly releaseId: string
+  readonly appId: string
+  readonly appIds: readonly string[]
+}> {}
+
 export class MultiTargetUnsupported extends Data.TaggedError(
   "MultiTargetUnsupported",
 )<{
@@ -1515,6 +1532,7 @@ interface ReadableOverride {
 export interface ResolveReadableLaunchInputs {
   readonly playableId: string
   readonly releaseId?: string
+  readonly appId?: string
   readonly userId?: string
   readonly profileId?: string
   readonly override?: ReadableOverride
@@ -1858,10 +1876,11 @@ export const resolveReadableLaunchContext = (
       )
     }
 
+    const system = snapshot.systems.get(release.system)
     const baseLayers = [
       snapshot.host ?? {},
       readableViewOfUser(user),
-      readableViewOfSystem(snapshot.systems.get(release.system)),
+      readableViewOfSystem(system),
     ]
     const early = mergeReadableLayers(baseLayers)
     const sourceId = release.source ?? item.source
@@ -1874,14 +1893,42 @@ export const resolveReadableLaunchContext = (
       )
     }
     const source = snapshot.sources.get(sourceId)
-    const selected = mergeReadableLayers([
+    const legacySelected = mergeReadableLayers([
       early,
       readableViewOfSource(source),
       readableViewOfRelease(release),
       readableViewOfProfile(profile),
       inputs.override ?? {},
     ])
-    const appId = selected.app
+    const appChoiceSelection = selectAppChoice(
+      resolveEffectiveAppChoices(system?.apps, release.apps),
+      inputs.appId,
+    )
+    const selectedChoice =
+      appChoiceSelection._tag === "SelectedAppChoice"
+        ? appChoiceSelection.choice
+        : undefined
+    if (appChoiceSelection._tag === "AmbiguousAppChoice") {
+      return yield* Effect.fail(
+        new AmbiguousAppChoice({
+          playableId: inputs.playableId,
+          releaseId: release.id,
+          appIds: appChoiceSelection.appIds,
+        }),
+      )
+    }
+    if (appChoiceSelection._tag === "AppChoiceNotFound") {
+      return yield* Effect.fail(
+        new AppChoiceNotFound({
+          playableId: inputs.playableId,
+          releaseId: release.id,
+          appId: appChoiceSelection.appId,
+          appIds: appChoiceSelection.appIds,
+        }),
+      )
+    }
+
+    const appId = selectedChoice?.id ?? legacySelected.app
     if (appId === undefined) {
       return yield* Effect.fail(
         new LauncherUnresolvable({ gameId: inputs.playableId }),
@@ -1890,7 +1937,7 @@ export const resolveReadableLaunchContext = (
     const app = resolveReadableAppRecord(appId, snapshot.apps)
     if (app === undefined) return yield* Effect.fail(new AppNotFound({ appId }))
 
-    const runtimeId = selected.runtime
+    const runtimeId = selectedChoice?.runtime ?? legacySelected.runtime
     const runtime =
       runtimeId === undefined ? undefined : snapshot.runtimes.get(runtimeId)
     if (runtimeId !== undefined && runtime === undefined) {
@@ -1900,8 +1947,9 @@ export const resolveReadableLaunchContext = (
     const folded = mergeReadableLayers([
       snapshot.host ?? {},
       readableViewOfUser(user),
-      readableViewOfSystem(snapshot.systems.get(release.system)),
+      readableViewOfSystem(system),
       readableViewOfSource(source),
+      selectedChoice ?? {},
       readableViewOfApp(app),
       readableViewOfRuntime(runtime),
       readableViewOfLibraryItem(item),

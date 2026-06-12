@@ -365,6 +365,125 @@ describe("resolveReadableLaunchContext", () => {
     expect(context.env?.SCALE).toBe("override")
   })
 
+  it("selects a single inherited system app choice", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        {
+          ...snapshot(),
+          systems: new Map([
+            [
+              "genesis",
+              { ...system, apps: [{ id: "retroarch", runtime: "genesis-plus-gx" }] },
+            ],
+          ]),
+          sources: new Map([["roms", { ...source, app: undefined, runtime: undefined }]]),
+        },
+        { playableId: "sonic-the-hedgehog" },
+      ),
+    )
+
+    expect(context.app.id).toBe("retroarch")
+    expect(context.runtime?.id).toBe("genesis-plus-gx")
+  })
+
+  it("overlays release app choices and selects by appId", async () => {
+    const ryubing: AppRecord = {
+      id: "ryubing",
+      command: "ryubing",
+      args: ["{content.path}"],
+      systems: ["genesis"],
+    }
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        {
+          ...snapshot({
+            ...sonic,
+            releases: [
+              {
+                id: "genesis",
+                system: "genesis",
+                target: "genesis/Sonic.md",
+                apps: [{ id: "ryubing", argsAppend: ["release"] }],
+              },
+            ],
+          }),
+          systems: new Map([
+            [
+              "genesis",
+              {
+                ...system,
+                apps: [
+                  { id: "retroarch", runtime: "genesis-plus-gx" },
+                  { id: "ryubing", argsAppend: ["system"] },
+                ],
+              },
+            ],
+          ]),
+          sources: new Map([["roms", { ...source, app: undefined, runtime: undefined }]]),
+          apps: new Map([
+            ["retroarch", app],
+            ["ryubing", ryubing],
+          ]),
+        },
+        { playableId: "sonic-the-hedgehog", appId: "ryubing" },
+      ),
+    )
+
+    expect(context.app.id).toBe("ryubing")
+    expect(context.argsAppend).toEqual(["system", "release"])
+  })
+
+  it("rejects ambiguous and unknown app choice selections", async () => {
+    const base = {
+      ...snapshot(),
+      systems: new Map([
+        [
+          "genesis",
+          {
+            ...system,
+            apps: [{ id: "retroarch" }, { id: "ryubing" }],
+          },
+        ],
+      ]),
+      sources: new Map([["roms", { ...source, app: undefined, runtime: undefined }]]),
+    }
+
+    const ambiguous = await Effect.runPromise(
+      Effect.flip(
+        resolveReadableLaunchContext(base, { playableId: "sonic-the-hedgehog" }),
+      ),
+    )
+    expect(ambiguous).toMatchObject({
+      _tag: "AmbiguousAppChoice",
+      appIds: ["retroarch", "ryubing"],
+    })
+
+    const unknown = await Effect.runPromise(
+      Effect.flip(
+        resolveReadableLaunchContext(base, {
+          playableId: "sonic-the-hedgehog",
+          appId: "missing",
+        }),
+      ),
+    )
+    expect(unknown).toMatchObject({
+      _tag: "AppChoiceNotFound",
+      appId: "missing",
+      appIds: ["retroarch", "ryubing"],
+    })
+  })
+
+  it("falls back to legacy scalar app selection when no app choices exist", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(snapshot(), {
+        playableId: "sonic-the-hedgehog",
+      }),
+    )
+
+    expect(context.app.id).toBe("retroarch")
+    expect(context.runtime?.id).toBe("genesis-plus-gx")
+  })
+
   it("materializes built-in app overrides for readable launch composition", async () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(
