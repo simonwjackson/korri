@@ -2,6 +2,7 @@ import type {
   GamescopePolicy,
   MoonlightPolicy,
   RetroArchPolicy,
+  SteamPolicy,
 } from "./inheritable-fields"
 import type { AppChoice } from "./records/app-choice"
 
@@ -53,6 +54,12 @@ const mergeChoice = (base: AppChoice, override: AppChoice): AppChoice => ({
           override.retroarch,
         ) as RetroArchPolicy,
       }
+    : {}),
+  ...(mergeObject(base.extra, override.extra) !== undefined
+    ? { extra: mergeObject(base.extra, override.extra) as SteamPolicy["extra"] }
+    : {}),
+  ...((override["launch-options"] ?? base["launch-options"])
+    ? { "launch-options": override["launch-options"] ?? base["launch-options"] }
     : {}),
   ...(mergeObject(base.env, override.env) !== undefined
     ? { env: mergeObject(base.env, override.env) as Record<string, string> }

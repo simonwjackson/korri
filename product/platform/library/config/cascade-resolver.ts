@@ -46,6 +46,7 @@ import {
   normalizeGamescopePolicy,
   type RetroArchPolicy,
   type RyubingPolicy,
+  type SteamPolicy,
 } from "./inheritable-fields"
 import type { LaunchBlock, LaunchSettings } from "./launch-block"
 import { mergeLaunchSettings } from "./launch-block"
@@ -57,8 +58,10 @@ import {
 } from "./playable-id"
 import {
   type AppRecord,
+  appRecordKind,
   appRetroArchPolicyFromRecord,
   appRyubingPolicyFromRecord,
+  appSteamPolicyFromRecord,
 } from "./records/app"
 import type { CollectionRecord } from "./records/collection"
 import type { GameRecord } from "./records/game"
@@ -960,6 +963,36 @@ export const foldRyubing = (
   extra: RyubingPolicy,
 ): RyubingPolicy => mergeRyubingValue(base ?? {}, extra, []) as RyubingPolicy
 
+const mergeSteamValue = (
+  base: unknown,
+  extra: unknown,
+  path: readonly string[],
+): unknown => {
+  if (extra === undefined) return base
+  const key = path.join(".")
+  if (key === "extra.args") {
+    return Array.isArray(extra)
+      ? [...(Array.isArray(base) ? base : []), ...extra]
+      : extra
+  }
+  if (isPlainPolicyObject(base) && isPlainPolicyObject(extra)) {
+    const merged: Record<string, unknown> = { ...base }
+    for (const [childKey, childValue] of Object.entries(extra)) {
+      merged[childKey] = mergeSteamValue(merged[childKey], childValue, [
+        ...path,
+        childKey,
+      ])
+    }
+    return merged
+  }
+  return extra
+}
+
+export const foldSteam = (
+  base: SteamPolicy | undefined,
+  extra: SteamPolicy,
+): SteamPolicy => mergeSteamValue(base ?? {}, extra, []) as SteamPolicy
+
 const mergeMoonlightValue = (
   base: unknown,
   extra: unknown,
@@ -1184,6 +1217,14 @@ export class AppChoiceNotFound extends Data.TaggedError("AppChoiceNotFound")<{
   readonly appIds: readonly string[]
 }> {}
 
+export class InvalidAppChoiceForKind extends Data.TaggedError(
+  "InvalidAppChoiceForKind",
+)<{
+  readonly appId: string
+  readonly kind: string
+  readonly field: string
+}> {}
+
 export class MultiTargetUnsupported extends Data.TaggedError(
   "MultiTargetUnsupported",
 )<{
@@ -1196,6 +1237,7 @@ interface ReadableOverride {
   readonly moonlight?: MoonlightPolicy
   readonly retroarch?: RetroArchPolicy
   readonly ryubing?: RyubingPolicy
+  readonly steam?: SteamPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
@@ -1216,6 +1258,7 @@ interface ReadableLayerView {
   readonly moonlight?: MoonlightPolicy
   readonly retroarch?: RetroArchPolicy
   readonly ryubing?: RyubingPolicy
+  readonly steam?: SteamPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
@@ -1275,12 +1318,38 @@ const readableViewOfApp = (app: AppRecord | undefined): ReadableLayerView =>
         moonlight: app.moonlight,
         retroarch: appRetroArchPolicyFromRecord(app),
         ryubing: appRyubingPolicyFromRecord(app),
+        steam: appSteamPolicyFromRecord(app),
         env: app.env,
         cwd: app.cwd,
         argsAppend: app.argsAppend,
         patches: app.patches,
       }
     : {}
+
+const readableViewOfAppChoice = (
+  choice: ReadableLayerView & {
+    readonly "launch-options"?: string
+    readonly extra?: SteamPolicy["extra"]
+  },
+  app: AppRecord,
+): ReadableLayerView => ({
+  gamescope: choice.gamescope,
+  moonlight: choice.moonlight,
+  retroarch: choice.retroarch,
+  steam:
+    appRecordKind(app) === "steam"
+      ? {
+          ...(choice.extra !== undefined ? { extra: choice.extra } : {}),
+          ...(choice["launch-options"] !== undefined
+            ? { "launch-options": choice["launch-options"] }
+            : {}),
+        }
+      : undefined,
+  env: choice.env,
+  cwd: choice.cwd,
+  argsAppend: choice.argsAppend,
+  patches: choice.patches,
+})
 
 const readableBuiltInArgs = (
   appId: string,
@@ -1400,6 +1469,7 @@ const mergeReadableLayers = (
   let moonlight: MoonlightPolicy | undefined
   let retroarch: RetroArchPolicy | undefined
   let ryubing: RyubingPolicy | undefined
+  let steam: SteamPolicy | undefined
   let env: Record<string, string> | undefined
   let cwd: string | undefined
   let argsAppend: string[] | undefined
@@ -1418,6 +1488,9 @@ const mergeReadableLayers = (
     if (layer.ryubing !== undefined) {
       ryubing = foldRyubing(ryubing, layer.ryubing)
     }
+    if (layer.steam !== undefined) {
+      steam = foldSteam(steam, layer.steam)
+    }
     if (layer.env !== undefined) env = { ...(env ?? {}), ...layer.env }
     if (layer.cwd !== undefined) cwd = layer.cwd
     if (layer.argsAppend !== undefined) {
@@ -1433,6 +1506,7 @@ const mergeReadableLayers = (
     moonlight,
     retroarch,
     ryubing,
+    steam,
     env,
     cwd,
     argsAppend,
@@ -1578,8 +1652,26 @@ export const resolveReadableLaunchContext = (
     }
     const app = resolveReadableAppRecord(appId, snapshot.apps)
     if (app === undefined) return yield* Effect.fail(new AppNotFound({ appId }))
+    const appKind = appRecordKind(app)
+    if (appKind !== "steam") {
+      const invalidField =
+        selectedChoice?.["launch-options"] !== undefined
+          ? "launch-options"
+          : selectedChoice?.extra !== undefined
+            ? "extra"
+            : undefined
+      if (invalidField !== undefined) {
+        return yield* Effect.fail(
+          new InvalidAppChoiceForKind({
+            appId,
+            kind: appKind,
+            field: invalidField,
+          }),
+        )
+      }
+    }
 
-    const runtimeId = selectedChoice?.runtime
+    const runtimeId = selectedChoice?.runtime ?? app.runtime
     const runtime =
       runtimeId === undefined ? undefined : snapshot.runtimes.get(runtimeId)
     if (runtimeId !== undefined && runtime === undefined) {
@@ -1591,8 +1683,8 @@ export const resolveReadableLaunchContext = (
       readableViewOfUser(user),
       readableViewOfSystem(system),
       readableViewOfSource(source),
-      selectedChoice ?? {},
       readableViewOfApp(app),
+      selectedChoice ? readableViewOfAppChoice(selectedChoice, app) : {},
       readableViewOfRuntime(runtime),
       readableViewOfLibraryItem(item),
       readableViewOfContained(entry),
@@ -1640,6 +1732,7 @@ export const resolveReadableLaunchContext = (
       ...(folded.moonlight ? { moonlight: folded.moonlight } : {}),
       ...(folded.retroarch ? { retroarch: folded.retroarch } : {}),
       ...(folded.ryubing ? { ryubing: folded.ryubing } : {}),
+      ...(folded.steam ? { steam: folded.steam } : {}),
       storage: Object.fromEntries(snapshot.storage),
       ...(folded.env ? { env: folded.env } : {}),
       ...(folded.cwd !== undefined ? { cwd: folded.cwd } : {}),

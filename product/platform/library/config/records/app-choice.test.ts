@@ -26,6 +26,22 @@ describe("AppChoice", () => {
     })
   })
 
+  it("decodes Steam app-choice launch options without inline kind", () => {
+    expect(
+      decodeAppChoice({
+        id: "steam",
+        runtime: "proton-arm64",
+        "launch-options": "gamescope -- %command%",
+        extra: { args: ["-silent", "-gamepadui"] },
+      }),
+    ).toEqual({
+      id: "steam",
+      runtime: "proton-arm64",
+      "launch-options": "gamescope -- %command%",
+      extra: { args: ["-silent", "-gamepadui"] },
+    })
+  })
+
   it("rejects inline app kinds and unknown keys", () => {
     expect(() =>
       decodeAppChoice({ id: "retroarch", kind: "retroarch" }),

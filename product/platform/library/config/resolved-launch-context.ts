@@ -27,6 +27,7 @@ import {
   MoonlightPolicy,
   RetroArchPolicy,
   RyubingPolicy,
+  SteamPolicy,
 } from "./inheritable-fields"
 import { LaunchSettings } from "./launch-block"
 import { AppRecord } from "./records/app"
@@ -62,6 +63,7 @@ export const ResolvedLaunchContext = Schema.Struct({
   moonlight: Schema.optional(MoonlightPolicy),
   retroarch: Schema.optional(RetroArchPolicy),
   ryubing: Schema.optional(RyubingPolicy),
+  steam: Schema.optional(SteamPolicy),
   settings: Schema.optional(LaunchSettings),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   cwd: Schema.optional(Schema.String),
@@ -91,6 +93,7 @@ export const ReadableResolvedLaunchContext = Schema.Struct({
   moonlight: Schema.optional(MoonlightPolicy),
   retroarch: Schema.optional(RetroArchPolicy),
   ryubing: Schema.optional(RyubingPolicy),
+  steam: Schema.optional(SteamPolicy),
   storage: Schema.optional(Schema.Record(Schema.String, StorageRecord)),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   cwd: Schema.optional(Schema.String),

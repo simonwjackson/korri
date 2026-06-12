@@ -29,6 +29,8 @@
  *                         → list concat in inheritance order
  * - `ryubing`            → deep merge per nested key; `env`/`extra.config`
  *                         → map merge; `extra.args` concatenates
+ * - `steam`              → deep merge per nested key; `extra.args` concatenates;
+ *                         → `launch-options` last-wins
  * - `env`                → map merge per key; more-specific wins
  * - `cwd`                → scalar; most-specific path wins
  * - `argsAppend`         → list concat in inheritance order
@@ -923,7 +925,9 @@ const RyubingContentPolicy = Schema.Struct({
 const RyubingDisplayPolicy = Schema.Struct({
   fullscreen: Schema.optional(Schema.Boolean),
   "show-console": Schema.optional(Schema.Boolean),
-  "hide-cursor": Schema.optional(Schema.Literals(["never", "on-idle", "always"])),
+  "hide-cursor": Schema.optional(
+    Schema.Literals(["never", "on-idle", "always"]),
+  ),
   "focus-lost-action": Schema.optional(Schema.String),
   "confirm-exit": Schema.optional(Schema.Boolean),
   "remember-window-state": Schema.optional(Schema.Boolean),
@@ -1044,11 +1048,29 @@ export const RyubingPolicy = Schema.Struct({
 })
 export type RyubingPolicy = Schema.Schema.Type<typeof RyubingPolicy>
 
+const SteamStatePolicy = Schema.Struct({
+  root: NonEmptyString("state.root"),
+})
+
+const SteamExtraPolicy = Schema.Struct({
+  args: Schema.optional(Schema.Array(Schema.String)),
+})
+
+export const SteamPolicy = Schema.Struct({
+  state: Schema.optional(SteamStatePolicy),
+  extra: Schema.optional(SteamExtraPolicy),
+  "launch-options": Schema.optional(NonEmptyString("launch-options")),
+})
+export type SteamPolicy = Schema.Schema.Type<typeof SteamPolicy>
+
 export const decodeRetroArchPolicy = (input: unknown): RetroArchPolicy =>
   Schema.decodeUnknownSync(RetroArchPolicy)(input, STRICT)
 
 export const decodeRyubingPolicy = (input: unknown): RyubingPolicy =>
   Schema.decodeUnknownSync(RyubingPolicy)(input, STRICT)
+
+export const decodeSteamPolicy = (input: unknown): SteamPolicy =>
+  Schema.decodeUnknownSync(SteamPolicy)(input, STRICT)
 
 /**
  * Floor of the gamescope policy cascade. Production deployments run

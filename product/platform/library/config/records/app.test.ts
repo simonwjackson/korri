@@ -3,12 +3,13 @@ import { describe, expect, it } from "bun:test"
 import { RetroArchPolicy, RyubingPolicy } from "../inheritable-fields"
 import {
   type AppRecord,
-  RYUBING_APP_FIELD_KEYS,
-  RETROARCH_APP_FIELD_KEYS,
   appRetroArchPolicyFromRecord,
   appRyubingPolicyFromRecord,
+  appSteamPolicyFromRecord,
   decodeAppPayload,
   decodeAppRecord,
+  RETROARCH_APP_FIELD_KEYS,
+  RYUBING_APP_FIELD_KEYS,
 } from "./app"
 
 describe("AppPayload", () => {
@@ -101,6 +102,46 @@ describe("AppPayload", () => {
     )
   })
 
+  it("decodes a first-class Steam app and extracts policy", () => {
+    const record: AppRecord = {
+      id: "steam",
+      kind: "steam",
+      command: "steam",
+      runtime: "proton-arm64",
+      state: { root: "{storage:steam}/Steam" },
+      extra: { args: ["-silent", "-gamepadui"] },
+      "launch-options": "gamescope -- %command%",
+    }
+
+    expect(decodeAppRecord(record)).toMatchObject({
+      kind: "steam",
+      state: { root: "{storage:steam}/Steam" },
+      extra: { args: ["-silent", "-gamepadui"] },
+      "launch-options": "gamescope -- %command%",
+    })
+    expect(appSteamPolicyFromRecord(record)).toEqual({
+      state: { root: "{storage:steam}/Steam" },
+      extra: { args: ["-silent", "-gamepadui"] },
+      "launch-options": "gamescope -- %command%",
+    })
+  })
+
+  it("rejects Steam-only fields outside Steam apps", () => {
+    expect(() => decodeAppPayload({ kind: "steam", command: "steam" })).toThrow(
+      /state.root/,
+    )
+    expect(() =>
+      decodeAppPayload({
+        kind: "steam",
+        state: { root: "/steam" },
+        extra: { config: {} },
+      }),
+    ).toThrow(/config/)
+    expect(() =>
+      decodeAppPayload({ kind: "retroarch", "launch-options": "%command%" }),
+    ).toThrow(/kind: steam/)
+  })
+
   it("decodes a flat first-class Ryubing app and extracts policy", () => {
     const record: AppRecord = {
       id: "ryubing",
@@ -132,7 +173,9 @@ describe("AppPayload", () => {
       ),
     )
     expect(new Set<string>(RYUBING_APP_FIELD_KEYS)).toEqual(
-      new Set<string>(Object.keys(RyubingPolicy.fields).filter(key => key !== "env")),
+      new Set<string>(
+        Object.keys(RyubingPolicy.fields).filter(key => key !== "env"),
+      ),
     )
   })
 

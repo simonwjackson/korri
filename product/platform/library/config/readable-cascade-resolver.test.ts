@@ -572,6 +572,128 @@ describe("resolveReadableLaunchContext", () => {
     ])
   })
 
+  it("resolves Steam app choices through app defaults and choice overrides", async () => {
+    const steam: AppRecord = {
+      id: "steam",
+      kind: "steam",
+      command: "steam",
+      runtime: "proton-default",
+      state: { root: "{storage:steam}/Steam" },
+      extra: { args: ["-silent"] },
+      "launch-options": "%command%",
+    }
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        {
+          ...snapshot(),
+          apps: new Map([
+            ["retroarch", app],
+            ["steam", steam],
+          ]),
+          runtimes: new Map([
+            [
+              "proton-default",
+              {
+                id: "proton-default",
+                kind: "tool",
+                path: "/compat/default",
+                tool: "proton-default",
+              },
+            ],
+            [
+              "proton-experimental",
+              {
+                id: "proton-experimental",
+                kind: "tool",
+                path: "/compat/experimental",
+                tool: "proton-experimental",
+              },
+            ],
+          ]),
+          systems: new Map([
+            [
+              "steam",
+              {
+                id: "steam",
+                apps: [{ id: "steam", extra: { args: ["-gamepadui"] } }],
+              },
+            ],
+          ]),
+          sources: new Map([["steam", { id: "steam", kind: ["service"] }]]),
+          storage: new Map([["steam", { id: "steam", root: "/state" }]]),
+          library: new Map([
+            [
+              "balatro",
+              {
+                id: "balatro",
+                title: "Balatro",
+                releases: [
+                  {
+                    id: "steam",
+                    system: "steam",
+                    source: "steam",
+                    target: "steam://rungameid/2379780",
+                    apps: [
+                      {
+                        id: "steam",
+                        runtime: "proton-experimental",
+                        "launch-options": "gamescope -- %command%",
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          ]),
+        },
+        { playableId: "balatro" },
+      ),
+    )
+
+    expect(context.app.id).toBe("steam")
+    expect(context.runtime?.id).toBe("proton-experimental")
+    expect(context.steam).toEqual({
+      state: { root: "{storage:steam}/Steam" },
+      extra: { args: ["-silent", "-gamepadui"] },
+      "launch-options": "gamescope -- %command%",
+    })
+  })
+
+  it("rejects Steam launch-options when the selected app is not Steam", async () => {
+    const error = await Effect.runPromise(
+      Effect.flip(
+        resolveReadableLaunchContext(
+          {
+            ...snapshot(),
+            systems: new Map([
+              [
+                "genesis",
+                {
+                  ...system,
+                  apps: [
+                    {
+                      id: "retroarch",
+                      runtime: "genesis-plus-gx",
+                      "launch-options": "%command%",
+                    },
+                  ],
+                },
+              ],
+            ]),
+          },
+          { playableId: "sonic-the-hedgehog" },
+        ),
+      ),
+    )
+
+    expect(error).toMatchObject({
+      _tag: "InvalidAppChoiceForKind",
+      appId: "retroarch",
+      field: "launch-options",
+      kind: "retroarch",
+    })
+  })
+
   it("keeps app choice selection independent of profile app fields", async () => {
     const steam: AppRecord = {
       id: "steam",

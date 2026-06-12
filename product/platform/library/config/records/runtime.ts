@@ -35,6 +35,8 @@ export type RuntimeKind = Schema.Schema.Type<typeof RuntimeKind>
 export const RuntimePayload = Schema.Struct({
   kind: RuntimeKind,
   path: AbsolutePath,
+  title: Schema.optional(NonEmptyString),
+  tool: Schema.optional(NonEmptyString),
 
   gamescope: InheritableLayer.fields.gamescope,
   moonlight: InheritableLayer.fields.moonlight,
