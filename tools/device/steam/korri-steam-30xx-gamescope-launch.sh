@@ -343,10 +343,9 @@ launch_30xx() {
   # explicit before the real gamescope binary resolves libGL/libEGL.
   local gl_library_paths=()
   [[ -d /run/opengl-driver/lib ]] && gl_library_paths+=("/run/opengl-driver/lib")
-  [[ -e /usr/lib64/libGL.so.1 ]] && gl_library_paths+=("/usr/lib64")
   while IFS= read -r gl_path; do
     gl_library_paths+=("$gl_path")
-  done < <(cd / && find /nix/store -maxdepth 3 -type d -path '*/libglvnd-*/lib' 2>/dev/null | sort)
+  done < <(cd / && find /nix/store -maxdepth 4 -type d -path '*/libglvnd-*/lib' 2>/dev/null | sort)
   if [[ "${#gl_library_paths[@]}" -gt 0 ]]; then
     local joined_gl_paths
     joined_gl_paths="$(IFS=:; printf '%s' "${gl_library_paths[*]}")"
