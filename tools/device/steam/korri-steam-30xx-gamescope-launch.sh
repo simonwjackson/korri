@@ -309,13 +309,13 @@ launch_30xx() {
   gamescope_bin="${KORRI_GAMESCOPE_BIN:-$(command -v gamescope || true)}"
   mangohud_bin="${KORRI_MANGOHUD_BIN:-$(command -v mangohud || true)}"
   if [[ -z "$gamescope_bin" ]]; then
-    gamescope_bin="$(find /nix/store -maxdepth 3 -path '*/bin/gamescope' | grep gamescope-korri | sort | tail -1 || true)"
+    gamescope_bin="$(cd / && find /nix/store -maxdepth 3 -path '*/bin/gamescope' 2>/dev/null | grep gamescope-korri | sort | tail -1 || true)"
   fi
   if [[ -z "$gamescope_bin" ]]; then
-    gamescope_bin="$(find /nix/store -maxdepth 3 -path '*/bin/gamescope' | sort | tail -1 || true)"
+    gamescope_bin="$(cd / && find /nix/store -maxdepth 3 -path '*/bin/gamescope' 2>/dev/null | sort | tail -1 || true)"
   fi
   if [[ -z "$mangohud_bin" ]]; then
-    mangohud_bin="$(find /nix/store -maxdepth 3 -path '*/bin/mangohud' | sort | tail -1 || true)"
+    mangohud_bin="$(cd / && find /nix/store -maxdepth 3 -path '*/bin/mangohud' 2>/dev/null | sort | tail -1 || true)"
   fi
   if [[ -z "$gamescope_bin" || -z "$mangohud_bin" ]]; then
     log "Missing gamescope/mangohud: gamescope='$gamescope_bin' mangohud='$mangohud_bin'"
@@ -329,6 +329,9 @@ launch_30xx() {
 
   export MANGOHUD=1
   export MANGOHUD_CONFIG="${MANGOHUD_CONFIG:-position=top-left,font_size=24,fps,frametime,gpu_stats,cpu_stats,resolution}"
+  # gamescope --mangoapp spawns a sibling `mangoapp` process by name.
+  # Steam's launch environment does not include the MangoHud package in PATH.
+  export PATH="$(dirname "$mangohud_bin"):$PATH"
   exec "$mangohud_bin" "$gamescope_bin" -w 640 -h 360 -W 640 -H 360 --mangoapp -- "$@"
 }
 
