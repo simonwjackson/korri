@@ -1,25 +1,94 @@
 #!/usr/bin/env -S nix shell nixpkgs#bash nixpkgs#coreutils nixpkgs#gnugrep nixpkgs#gnused nixpkgs#procps nixpkgs#perl nixpkgs#gamescope nixpkgs#mangohud --command bash
-# Bare-minimum Korri-owned Steam LaunchOptions prototype for 30XX (Steam AppID 1029210).
+# Korri-owned Steam LaunchOptions wrapper for running Steam-expanded commands
+# under host Gamescope with the gamescope-managed MangoHud overlay.
 #
 # Modes:
-#   reconcile [wrapper-path]
-#     Close Steam, then write the 30XX LaunchOptions VDF entry to call this wrapper.
-#   launch --appid 1029210 -- <steam-expanded-command...>
-#     Run the Steam-expanded game command under MangoHud + Gamescope at 640x360.
-#   --appid 1029210 -- <steam-expanded-command...>
+#   reconcile --appid <steam-appid> [wrapper-path]
+#     Close Steam, then write the app's LaunchOptions VDF entry to call this wrapper.
+#   launch --appid <steam-appid> -- <steam-expanded-command...>
+#     Run the Steam-expanded command under MangoHud + Gamescope.
+#   --appid <steam-appid> -- <steam-expanded-command...>
 #     Same as launch; this is the form Steam invokes from LaunchOptions.
 #
 # Defaults:
 #   KORRI_STEAM_ROOT=/var/lib/korri/steam
 #   KORRI_STEAM_LOCALCONFIG explicitly overrides auto-detection
+#   KORRI_GAMESCOPE_WIDTH=640
+#   KORRI_GAMESCOPE_HEIGHT=360
+#   KORRI_GAMESCOPE_OUTPUT_WIDTH=$KORRI_GAMESCOPE_WIDTH
+#   KORRI_GAMESCOPE_OUTPUT_HEIGHT=$KORRI_GAMESCOPE_HEIGHT
 
 set -euo pipefail
 
-APPID="1029210"
-GAME_NAME="30XX"
 STEAM_ROOT="${KORRI_STEAM_ROOT:-/var/lib/korri/steam}"
+LOG_FILE="${KORRI_STEAM_WRAPPER_LOG:-}"
+
+usage() {
+  cat >&2 <<USAGE
+Usage:
+  $0 reconcile --appid <steam-appid> [wrapper-path]
+  $0 launch --appid <steam-appid> -- <steam-expanded-command...>
+  $0 --appid <steam-appid> -- <steam-expanded-command...>
+
+Environment:
+  KORRI_STEAM_ROOT                   Default: /var/lib/korri/steam
+  KORRI_STEAM_LOCALCONFIG            Override localconfig.vdf auto-detection
+  KORRI_STEAM_WRAPPER_LOG            Override wrapper log path
+  KORRI_GAMESCOPE_WIDTH              Default: 640
+  KORRI_GAMESCOPE_HEIGHT             Default: 360
+  KORRI_GAMESCOPE_OUTPUT_WIDTH       Default: KORRI_GAMESCOPE_WIDTH
+  KORRI_GAMESCOPE_OUTPUT_HEIGHT      Default: KORRI_GAMESCOPE_HEIGHT
+  KORRI_GAMESCOPE_BIN                Override gamescope binary
+  KORRI_MANGOHUD_BIN                 Override mangohud binary used to find mangoapp
+USAGE
+}
+
+validate_appid() {
+  local appid="$1"
+  if [[ -z "$appid" || ! "$appid" =~ ^[0-9]+$ ]]; then
+    printf 'Invalid Steam AppID: %s\n' "$appid" >&2
+    return 2
+  fi
+}
+
+choose_log_file() {
+  local appid="$1"
+  if [[ -n "${KORRI_STEAM_WRAPPER_LOG:-}" ]]; then
+    printf '%s\n' "$KORRI_STEAM_WRAPPER_LOG"
+    return 0
+  fi
+
+  local candidate
+  candidate="$STEAM_ROOT/logs/korri-steam-gamescope-launch-$appid.log"
+  if mkdir -p "$STEAM_ROOT/logs" 2>/dev/null && { : >> "$candidate"; } 2>/dev/null; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+
+  candidate="/tmp/korri-steam-gamescope-launch-$appid.$(id -u).log"
+  : >> "$candidate" 2>/dev/null || true
+  printf '%s\n' "$candidate"
+}
+
+set_log_file_for_appid() {
+  local appid="$1"
+  if [[ -z "$LOG_FILE" ]]; then
+    LOG_FILE="$(choose_log_file "$appid")"
+  fi
+}
+
+log() {
+  local line
+  line="$(date -Is) $*"
+  printf '%s\n' "$line" >&2
+  if [[ -n "${LOG_FILE:-}" ]]; then
+    mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+    printf '%s\n' "$line" >> "$LOG_FILE" 2>/dev/null || true
+  fi
+}
 
 find_steam_localconfig() {
+  local appid="$1"
   if [[ -n "${KORRI_STEAM_LOCALCONFIG:-}" ]]; then
     printf '%s\n' "$KORRI_STEAM_LOCALCONFIG"
     return 0
@@ -28,11 +97,11 @@ find_steam_localconfig() {
   local candidate
   # Steam normally uses the numeric account id under userdata/, not userdata/0.
   # Prefer a real account localconfig that already mentions the target AppID;
-  # userdata/0 is only a fallback skeleton and Steam ignored it on Bandai.
+  # userdata/0 is only a fallback skeleton and Steam can ignore it.
   for candidate in "$STEAM_ROOT"/userdata/*/config/localconfig.vdf; do
     [[ -f "$candidate" ]] || continue
     [[ "$candidate" == "$STEAM_ROOT/userdata/0/config/localconfig.vdf" ]] && continue
-    if grep -qF "\"$APPID\"" "$candidate"; then
+    if grep -qF "\"$appid\"" "$candidate"; then
       printf '%s\n' "$candidate"
       return 0
     fi
@@ -40,7 +109,7 @@ find_steam_localconfig() {
 
   for candidate in "$STEAM_ROOT"/userdata/*/config/localconfig.vdf; do
     [[ -f "$candidate" ]] || continue
-    if grep -qF "\"$APPID\"" "$candidate"; then
+    if grep -qF "\"$appid\"" "$candidate"; then
       printf '%s\n' "$candidate"
       return 0
     fi
@@ -48,43 +117,6 @@ find_steam_localconfig() {
 
   # Fallback for fresh/prototype setups.
   printf '%s\n' "$STEAM_ROOT/userdata/0/config/localconfig.vdf"
-}
-
-LOCALCONFIG="$(find_steam_localconfig)"
-
-choose_log_file() {
-  if [[ -n "${KORRI_STEAM_WRAPPER_LOG:-}" ]]; then
-    printf '%s\n' "$KORRI_STEAM_WRAPPER_LOG"
-    return 0
-  fi
-  if mkdir -p "$STEAM_ROOT/logs" 2>/dev/null && [[ -w "$STEAM_ROOT/logs" ]]; then
-    printf '%s\n' "$STEAM_ROOT/logs/korri-steam-30xx-gamescope-launch.log"
-    return 0
-  fi
-  printf '/tmp/korri-steam-30xx-gamescope-launch.%s.log\n' "$(id -u)"
-}
-
-LOG_FILE="$(choose_log_file)"
-
-log() {
-  local line
-  line="$(date -Is) $*"
-  printf '%s\n' "$line" >&2
-  mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
-  printf '%s\n' "$line" >> "$LOG_FILE" 2>/dev/null || true
-}
-
-usage() {
-  cat >&2 <<USAGE
-Usage:
-  $0 reconcile [wrapper-path]
-  $0 launch --appid 1029210 -- <steam-expanded-command...>
-  $0 --appid 1029210 -- <steam-expanded-command...>
-
-Environment:
-  KORRI_STEAM_ROOT          Default: /var/lib/korri/steam
-  KORRI_STEAM_LOCALCONFIG   Default: \$KORRI_STEAM_ROOT/userdata/0/config/localconfig.vdf
-USAGE
 }
 
 steam_pids() {
@@ -95,10 +127,11 @@ steam_pids() {
 }
 
 ensure_steam_closed_before_vdf_write() {
+  local localconfig="$1"
   local pids
   pids="$(steam_pids)"
   if [[ -z "$pids" ]]; then
-    log "Steam is already closed; safe to write $LOCALCONFIG"
+    log "Steam is already closed; safe to write $localconfig"
     return 0
   fi
 
@@ -112,7 +145,7 @@ ensure_steam_closed_before_vdf_write() {
     sleep 1
     pids="$(steam_pids)"
     if [[ -z "$pids" ]]; then
-      log "Steam closed; safe to write $LOCALCONFIG"
+      log "Steam closed; safe to write $localconfig"
       return 0
     fi
   done
@@ -125,8 +158,44 @@ realpath_portable() {
   readlink -f "$1"
 }
 
-reconcile_30xx_launch_options() {
-  local wrapper_path="${1:-$0}"
+reconcile_launch_options() {
+  local appid="${KORRI_STEAM_APPID:-}"
+  local wrapper_path=""
+
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --appid)
+        appid="${2:-}"
+        shift 2
+        ;;
+      --wrapper-path)
+        wrapper_path="${2:-}"
+        shift 2
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -h|--help|help)
+        usage
+        return 0
+        ;;
+      *)
+        if [[ -z "$wrapper_path" ]]; then
+          wrapper_path="$1"
+          shift
+        else
+          usage
+          return 2
+        fi
+        ;;
+    esac
+  done
+
+  validate_appid "$appid"
+  set_log_file_for_appid "$appid"
+
+  wrapper_path="${wrapper_path:-$0}"
   wrapper_path="$(realpath_portable "$wrapper_path")"
 
   if [[ "$wrapper_path" =~ [[:space:]] ]]; then
@@ -138,17 +207,19 @@ reconcile_30xx_launch_options() {
     return 1
   fi
 
-  ensure_steam_closed_before_vdf_write
+  local localconfig
+  localconfig="$(find_steam_localconfig "$appid")"
+  ensure_steam_closed_before_vdf_write "$localconfig"
 
   local desired_launch_options
   # Steam's app-launch environment is a FHS/container-ish shell where the nix
   # shebang is not reliable. Keep this file nix-runnable for admin/reconcile
   # use, but make Steam invoke it through the system bash explicitly.
-  desired_launch_options="/run/current-system/sw/bin/bash $wrapper_path --appid $APPID -- %command%"
-  log "Reconciling $GAME_NAME LaunchOptions for AppID $APPID"
+  desired_launch_options="/run/current-system/sw/bin/bash $wrapper_path --appid $appid -- %command%"
+  log "Reconciling Steam LaunchOptions for AppID $appid"
   log "Desired LaunchOptions: $desired_launch_options"
 
-  LOCALCONFIG="$LOCALCONFIG" APPID="$APPID" DESIRED_LAUNCH_OPTIONS="$desired_launch_options" perl <<'PL'
+  LOCALCONFIG="$localconfig" APPID="$appid" DESIRED_LAUNCH_OPTIONS="$desired_launch_options" perl <<'PL'
 use strict;
 use warnings;
 use File::Basename qw(dirname);
@@ -279,11 +350,11 @@ if ($text eq $rendered) {
 
 make_path(dirname($path));
 if (-e $path) {
-  my $backup = $path . ".korri-30xx." . time() . ".bak";
+  my $backup = $path . ".korri-gamescope-" . $appid . "." . time() . ".bak";
   copy($path, $backup) or die "backup $backup: $!";
   print "backup: $backup\n";
 }
-my $tmp = $path . ".korri-30xx.$$" . ".tmp";
+my $tmp = $path . ".korri-gamescope-" . $appid . ".$$" . ".tmp";
 open my $fh, ">", $tmp or die "write $tmp: $!";
 print {$fh} $rendered;
 close $fh or die "close $tmp: $!";
@@ -294,12 +365,21 @@ print "new LaunchOptions: '$desired'\n";
 PL
 }
 
-launch_30xx() {
-  if [[ "${1:-}" != "--appid" || "${2:-}" != "$APPID" || "${3:-}" != "--" ]]; then
+launch_app() {
+  local appid="${KORRI_STEAM_APPID:-}"
+  if [[ "${1:-}" == "--appid" ]]; then
+    appid="${2:-}"
+    shift 2
+  fi
+  if [[ "${1:-}" != "--" ]]; then
     usage
     return 2
   fi
-  shift 3
+  shift
+
+  validate_appid "$appid"
+  set_log_file_for_appid "$appid"
+
   if [[ "$#" -eq 0 ]]; then
     log "No Steam-expanded command received after --"
     return 2
@@ -338,7 +418,13 @@ launch_30xx() {
     return 127
   fi
 
-  log "Launching $GAME_NAME AppID $APPID through MangoHud + Gamescope 640x360"
+  local width height output_width output_height
+  width="${KORRI_GAMESCOPE_WIDTH:-640}"
+  height="${KORRI_GAMESCOPE_HEIGHT:-360}"
+  output_width="${KORRI_GAMESCOPE_OUTPUT_WIDTH:-$width}"
+  output_height="${KORRI_GAMESCOPE_OUTPUT_HEIGHT:-$height}"
+
+  log "Launching Steam AppID $appid through MangoHud + Gamescope ${width}x${height}"
   log "Using gamescope: $gamescope_bin"
   log "Using mangohud: $mangohud_bin"
   log "Steam-expanded command: $*"
@@ -365,21 +451,21 @@ launch_30xx() {
   # Steam's launch environment does not include the MangoHud package in PATH.
   export PATH="$(dirname "$mangohud_bin"):$PATH"
   log "Runtime env: XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-} LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-} stripped_LD_PRELOAD=${original_ld_preload:-}"
-  log "Exec: $gamescope_bin -w 640 -h 360 -W 640 -H 360 --mangoapp -- $*"
-  exec "$gamescope_bin" -w 640 -h 360 -W 640 -H 360 --mangoapp -- "$@" >>"$LOG_FILE" 2>&1
+  log "Exec: $gamescope_bin -w $width -h $height -W $output_width -H $output_height --mangoapp -- $*"
+  exec "$gamescope_bin" -w "$width" -h "$height" -W "$output_width" -H "$output_height" --mangoapp -- "$@" >>"$LOG_FILE" 2>&1
 }
 
 case "${1:-}" in
   reconcile)
     shift
-    reconcile_30xx_launch_options "${1:-$0}"
+    reconcile_launch_options "$@"
     ;;
   launch)
     shift
-    launch_30xx "$@"
+    launch_app "$@"
     ;;
   --appid)
-    launch_30xx "$@"
+    launch_app "$@"
     ;;
   -h|--help|help|"")
     usage
