@@ -51,12 +51,27 @@ find_steam_localconfig() {
 }
 
 LOCALCONFIG="$(find_steam_localconfig)"
-STATE_DIR="${XDG_STATE_HOME:-${HOME:-/tmp}/.local/state}/korri"
-LOG_FILE="$STATE_DIR/steam-30xx-gamescope-launch.log"
+
+choose_log_file() {
+  if [[ -n "${KORRI_STEAM_WRAPPER_LOG:-}" ]]; then
+    printf '%s\n' "$KORRI_STEAM_WRAPPER_LOG"
+    return 0
+  fi
+  if mkdir -p "$STEAM_ROOT/logs" 2>/dev/null && [[ -w "$STEAM_ROOT/logs" ]]; then
+    printf '%s\n' "$STEAM_ROOT/logs/korri-steam-30xx-gamescope-launch.log"
+    return 0
+  fi
+  printf '/tmp/korri-steam-30xx-gamescope-launch.%s.log\n' "$(id -u)"
+}
+
+LOG_FILE="$(choose_log_file)"
 
 log() {
-  mkdir -p "$STATE_DIR" 2>/dev/null || true
-  printf '%s %s\n' "$(date -Is)" "$*" | tee -a "$LOG_FILE" >&2
+  local line
+  line="$(date -Is) $*"
+  printf '%s\n' "$line" >&2
+  mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+  printf '%s\n' "$line" >> "$LOG_FILE" 2>/dev/null || true
 }
 
 usage() {
