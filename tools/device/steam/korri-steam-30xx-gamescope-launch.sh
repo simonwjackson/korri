@@ -126,7 +126,10 @@ reconcile_30xx_launch_options() {
   ensure_steam_closed_before_vdf_write
 
   local desired_launch_options
-  desired_launch_options="$wrapper_path --appid $APPID -- %command%"
+  # Steam's app-launch environment is a FHS/container-ish shell where the nix
+  # shebang is not reliable. Keep this file nix-runnable for admin/reconcile
+  # use, but make Steam invoke it through the system bash explicitly.
+  desired_launch_options="/run/current-system/sw/bin/bash $wrapper_path --appid $APPID -- %command%"
   log "Reconciling $GAME_NAME LaunchOptions for AppID $APPID"
   log "Desired LaunchOptions: $desired_launch_options"
 
@@ -287,12 +290,31 @@ launch_30xx() {
     return 2
   fi
 
+  local gamescope_bin mangohud_bin
+  gamescope_bin="${KORRI_GAMESCOPE_BIN:-$(command -v gamescope || true)}"
+  mangohud_bin="${KORRI_MANGOHUD_BIN:-$(command -v mangohud || true)}"
+  if [[ -z "$gamescope_bin" ]]; then
+    gamescope_bin="$(find /nix/store -maxdepth 3 -path '*/bin/gamescope' | grep gamescope-korri | sort | tail -1 || true)"
+  fi
+  if [[ -z "$gamescope_bin" ]]; then
+    gamescope_bin="$(find /nix/store -maxdepth 3 -path '*/bin/gamescope' | sort | tail -1 || true)"
+  fi
+  if [[ -z "$mangohud_bin" ]]; then
+    mangohud_bin="$(find /nix/store -maxdepth 3 -path '*/bin/mangohud' | sort | tail -1 || true)"
+  fi
+  if [[ -z "$gamescope_bin" || -z "$mangohud_bin" ]]; then
+    log "Missing gamescope/mangohud: gamescope='$gamescope_bin' mangohud='$mangohud_bin'"
+    return 127
+  fi
+
   log "Launching $GAME_NAME AppID $APPID through MangoHud + Gamescope 640x360"
+  log "Using gamescope: $gamescope_bin"
+  log "Using mangohud: $mangohud_bin"
   log "Steam-expanded command: $*"
 
   export MANGOHUD=1
   export MANGOHUD_CONFIG="${MANGOHUD_CONFIG:-position=top-left,font_size=24,fps,frametime,gpu_stats,cpu_stats,resolution}"
-  exec mangohud gamescope -w 640 -h 360 -W 640 -H 360 --mangoapp -- "$@"
+  exec "$mangohud_bin" "$gamescope_bin" -w 640 -h 360 -W 640 -H 360 --mangoapp -- "$@"
 }
 
 case "${1:-}" in
