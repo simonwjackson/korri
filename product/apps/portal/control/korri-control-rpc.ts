@@ -35,26 +35,26 @@ export function createKorriControlRpc(
     listGames: () =>
       runRpc(
         RpcClient.make(serverRpcGroup).pipe(
-          Effect.flatMap(client => client["app.library.list"]({})),
+          Effect.flatMap(client => client["app.catalog.snapshot"]({ scope: "fabric" })),
         ),
       ).pipe(
         Effect.match({
           onFailure: error => controlListGamesTransportFailure(error),
           onSuccess: response => ({
             _tag: "GamesListed" as const,
-            games: response.games,
+            games: response.entries,
           }),
         }),
       ),
     findGame: request =>
       runRpc(
         RpcClient.make(serverRpcGroup).pipe(
-          Effect.flatMap(client => client["app.library.list"]({})),
+          Effect.flatMap(client => client["app.catalog.snapshot"]({ scope: "fabric" })),
         ),
       ).pipe(
         Effect.match({
           onFailure: error => controlFindGameTransportFailure(error),
-          onSuccess: response => findPlayableEntry(response.games, request),
+          onSuccess: response => findPlayableEntry(response.entries, request),
         }),
       ),
     dryRunLaunch: request =>
