@@ -306,16 +306,25 @@ launch_30xx() {
   fi
 
   local gamescope_bin mangohud_bin
-  gamescope_bin="${KORRI_GAMESCOPE_BIN:-$(command -v gamescope || true)}"
-  mangohud_bin="${KORRI_MANGOHUD_BIN:-$(command -v mangohud || true)}"
+  gamescope_bin="${KORRI_GAMESCOPE_BIN:-}"
+  mangohud_bin="${KORRI_MANGOHUD_BIN:-}"
   if [[ -z "$gamescope_bin" ]]; then
+    # Prefer the host/current Nix closure over Steam's inherited PATH. Steam's
+    # FHS launch environment can expose older gamescope wrappers that miss the
+    # current host runtime library setup.
     gamescope_bin="$(cd / && find /nix/store -maxdepth 3 -path '*/bin/gamescope' 2>/dev/null | grep gamescope-korri | sort | tail -1 || true)"
   fi
   if [[ -z "$gamescope_bin" ]]; then
     gamescope_bin="$(cd / && find /nix/store -maxdepth 3 -path '*/bin/gamescope' 2>/dev/null | sort | tail -1 || true)"
   fi
+  if [[ -z "$gamescope_bin" ]]; then
+    gamescope_bin="$(command -v gamescope || true)"
+  fi
   if [[ -z "$mangohud_bin" ]]; then
     mangohud_bin="$(cd / && find /nix/store -maxdepth 3 -path '*/bin/mangohud' 2>/dev/null | sort | tail -1 || true)"
+  fi
+  if [[ -z "$mangohud_bin" ]]; then
+    mangohud_bin="$(command -v mangohud || true)"
   fi
   if [[ -z "$gamescope_bin" || -z "$mangohud_bin" ]]; then
     log "Missing gamescope/mangohud: gamescope='$gamescope_bin' mangohud='$mangohud_bin'"
@@ -337,7 +346,7 @@ launch_30xx() {
   [[ -e /usr/lib64/libGL.so.1 ]] && gl_library_paths+=("/usr/lib64")
   while IFS= read -r gl_path; do
     gl_library_paths+=("$gl_path")
-  done < <(cd / && find /nix/store -maxdepth 2 -path '*/libglvnd-*/lib' 2>/dev/null | sort)
+  done < <(cd / && find /nix/store -maxdepth 3 -type d -path '*/libglvnd-*/lib' 2>/dev/null | sort)
   if [[ "${#gl_library_paths[@]}" -gt 0 ]]; then
     local joined_gl_paths
     joined_gl_paths="$(IFS=:; printf '%s' "${gl_library_paths[*]}")"
