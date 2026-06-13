@@ -332,8 +332,16 @@ launch_30xx() {
   # Steam launches this from its ARM64 FHS/container environment. The Nix
   # gamescope wrapper does not carry the host OpenGL driver path, so make it
   # explicit before the real gamescope binary resolves libGL/libEGL.
-  if [[ -d /run/opengl-driver/lib ]]; then
-    export LD_LIBRARY_PATH="/run/opengl-driver/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  local gl_library_paths=()
+  [[ -d /run/opengl-driver/lib ]] && gl_library_paths+=("/run/opengl-driver/lib")
+  [[ -e /usr/lib64/libGL.so.1 ]] && gl_library_paths+=("/usr/lib64")
+  while IFS= read -r gl_path; do
+    gl_library_paths+=("$gl_path")
+  done < <(cd / && find /nix/store -maxdepth 2 -path '*/libglvnd-*/lib' 2>/dev/null | sort)
+  if [[ "${#gl_library_paths[@]}" -gt 0 ]]; then
+    local joined_gl_paths
+    joined_gl_paths="$(IFS=:; printf '%s' "${gl_library_paths[*]}")"
+    export LD_LIBRARY_PATH="$joined_gl_paths${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
   fi
   if [[ -z "${XDG_RUNTIME_DIR:-}" || ! -d "${XDG_RUNTIME_DIR:-}" || ! -w "${XDG_RUNTIME_DIR:-}" ]]; then
     export XDG_RUNTIME_DIR="/run/user/$(id -u)"
