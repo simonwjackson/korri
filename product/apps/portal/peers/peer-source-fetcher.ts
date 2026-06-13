@@ -41,6 +41,17 @@ export interface PeerSourceCatalogEntry {
   }
 }
 
+export type PeerCatalogFetchResult =
+  | {
+      readonly status: "ready"
+      readonly entries: readonly LibraryEntry[]
+    }
+  | {
+      readonly status: "failed"
+      readonly entries: readonly LibraryEntry[]
+      readonly error: string
+    }
+
 export interface PeerSourceFetcherService {
   /**
    * Fetch one peer's source catalog, tag entries with the peer's
@@ -50,6 +61,13 @@ export interface PeerSourceFetcherService {
   readonly fetchPeerCatalog: (
     peer: PeerRecord,
   ) => Effect.Effect<readonly LibraryEntry[], never>
+  /**
+   * Fetch one peer while preserving success/failure state for catalog
+   * snapshot diagnostics. Never fails the caller.
+   */
+  readonly fetchPeerCatalogResult: (
+    peer: PeerRecord,
+  ) => Effect.Effect<PeerCatalogFetchResult, never>
 }
 
 export class PeerSourceFetcher extends Context.Service<
@@ -79,7 +97,11 @@ export function makePeerSourceFetcherLive(
   const timeoutMs = options.timeoutMs ?? DEFAULT_PEER_TIMEOUT_MS
 
   return {
-    fetchPeerCatalog: peer => fetchOnePeer(peer, createClient, timeoutMs),
+    fetchPeerCatalog: peer =>
+      fetchOnePeer(peer, createClient, timeoutMs).pipe(
+        Effect.map(result => result.entries),
+      ),
+    fetchPeerCatalogResult: peer => fetchOnePeer(peer, createClient, timeoutMs),
   }
 }
 
@@ -94,7 +116,7 @@ function fetchOnePeer(
   peer: PeerRecord,
   createClient: (controlUrl: string) => PeerSourceClient,
   timeoutMs: number,
-): Effect.Effect<readonly LibraryEntry[], never> {
+): Effect.Effect<PeerCatalogFetchResult, never> {
   const fetchEffect = Effect.tryPromise({
     try: () => createClient(peer.controlUrl).listSourceGames(),
     catch: error => error,
@@ -106,23 +128,29 @@ function fetchOnePeer(
       : fetchEffect
 
   return withTimeout.pipe(
-    Effect.map(entries =>
-      entries.map(entry => peerCatalogEntryToLibraryEntry(entry, peer)),
-    ),
+    Effect.map(entries => ({
+      status: "ready" as const,
+      entries: entries.map(entry => peerCatalogEntryToLibraryEntry(entry, peer)),
+    })),
     // `Effect.catchCause` collapses BOTH the inner client failure (e.g.
     // ECONNREFUSED bubbled out of `tryPromise`'s `catch`) AND the
     // `Effect.timeout` failure into the partial-failure path.
     Effect.catchCause(cause =>
       Effect.sync(() => {
+        const error = String(cause)
         logger.warn(
           {
             peerHostId: peer.hostId,
             peerControlUrl: peer.controlUrl,
-            error: String(cause),
+            error,
           },
           "app.library.list: peer fan-out skipped (partial failure)",
         )
-        return [] as readonly LibraryEntry[]
+        return {
+          status: "failed" as const,
+          entries: [] as readonly LibraryEntry[],
+          error,
+        }
       }),
     ),
   )

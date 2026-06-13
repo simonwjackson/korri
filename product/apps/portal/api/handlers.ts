@@ -5,6 +5,7 @@ import { handleUnassignGameAsset } from "./game-assets/unassign.rpc-handler"
 import { handleGetHello } from "./hello/rpc-handler"
 import { handleLaunchLibrary } from "./library/launch.rpc-handler"
 import { handleListLibrary } from "./library/list.rpc-handler"
+import { handleLibrarySnapshot } from "./library/snapshot.rpc-handler"
 import { handleListSource } from "./source/list.rpc-handler"
 import { handleSourceStatus } from "./source/status.rpc-handler"
 import { handlePrepareStream } from "./stream/prepare.rpc-handler"
@@ -29,6 +30,7 @@ export const HandlersLive = appRpcGroup.toLayer(
     "app.game-assets.assign": handleAssignGameAsset,
     "app.game-assets.unassign": handleUnassignGameAsset,
     "app.library.list": handleListLibrary,
+    "app.library.snapshot": handleLibrarySnapshot,
     "app.library.launch": handleLaunchLibrary,
     "app.source.list": handleListSource,
     "app.source.status": handleSourceStatus,

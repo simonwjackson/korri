@@ -27,8 +27,12 @@ import { handleGetHello } from "../hello/rpc-handler"
 import { handleDryRunLaunch } from "../library/dry-run.rpc-handler"
 import { ForegroundSessionHostLive } from "../library/foreground-session-host-layer"
 import { handleLaunchLibrary } from "../library/launch.rpc-handler"
+import {
+  CatalogSnapshotLive,
+} from "../library/catalog-snapshot"
 import { handleListLibrary } from "../library/list.rpc-handler"
 import { RemoteStreamPrepareLive } from "../library/remote-stream-prepare"
+import { handleLibrarySnapshot } from "../library/snapshot.rpc-handler"
 import { handleSessionStatus } from "../session/status.rpc-handler"
 import { handleStopSession } from "../session/stop.rpc-handler"
 import { handleListSource } from "../source/list.rpc-handler"
@@ -74,14 +78,23 @@ const KorriControlInfrastructureLive = KorriControlLayerLive.pipe(
   Layer.provideMerge(Layer.mergeAll(LibrarySourceLayerLive, LauncherLayerLive)),
 )
 
+const CatalogDependenciesLive = Layer.mergeAll(
+  LibrarySourceLayerLive,
+  PeerDiscoveryConfigured,
+  PeerSourceFetcherLive,
+)
+
+const CatalogInfrastructureLive = CatalogSnapshotLive.pipe(
+  Layer.provideMerge(CatalogDependenciesLive),
+)
+
 const LibraryInfrastructureLive = Layer.mergeAll(
   KorriControlInfrastructureLive,
+  CatalogInfrastructureLive,
   GameAssetsLayerLive,
   ForegroundSessionHostLive,
   RemoteStreamPrepareLive,
   StreamControlLayerLive,
-  PeerDiscoveryConfigured,
-  PeerSourceFetcherLive,
   AcquisitionLayerLive,
 )
 
@@ -97,6 +110,7 @@ const ServerHandlersLive = serverRpcGroup.toLayer(
     "app.game-assets.assign": handleAssignGameAsset,
     "app.game-assets.unassign": handleUnassignGameAsset,
     "app.library.list": handleListLibrary,
+    "app.library.snapshot": handleLibrarySnapshot,
     "app.library.launch": handleLaunchLibrary,
     "app.library.launch.dry-run": handleDryRunLaunch,
     "app.source.list": handleListSource,

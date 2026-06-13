@@ -26,6 +26,10 @@ export class ListLibraryResponse extends Schema.Class<ListLibraryResponse>(
   "ListLibraryResponse",
 )({
   games: Schema.Array(LibraryEntry),
+  /** False when remote peer refreshes are still in flight. */
+  complete: Schema.optional(Schema.Boolean),
+  /** Catalog snapshot generation that produced this compatibility response. */
+  generation: Schema.optional(Schema.Number),
 }) {}
 
 export const ListLibraryRpc = Rpc.make("app.library.list", {

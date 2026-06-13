@@ -12,6 +12,7 @@ import { GetHelloRpc as appHelloGet } from "../hello/rpc"
 import { DryRunLaunchRpc as appLibraryLaunchDryRun } from "../library/dry-run.rpc"
 import { LaunchLibraryRpc as appLibraryLaunch } from "../library/launch.rpc"
 import { ListLibraryRpc as appLibraryList } from "../library/list.rpc"
+import { LibrarySnapshotRpc as appLibrarySnapshot } from "../library/snapshot.rpc"
 import { SessionStatusRpc as appSessionStatus } from "../session/status.rpc"
 import { StopSessionRpc as appSessionStop } from "../session/stop.rpc"
 import { ListSourceRpc as appSourceList } from "../source/list.rpc"
@@ -40,6 +41,7 @@ export const serverRpcGroup = RpcGroup.make(
   appGameAssetsAssign,
   appGameAssetsUnassign,
   appLibraryList,
+  appLibrarySnapshot,
   appLibraryLaunch,
   appLibraryLaunchDryRun,
   appSourceList,

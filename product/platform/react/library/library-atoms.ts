@@ -38,14 +38,16 @@ const foregroundSessionStatusRuntime = Atom.runtime(get =>
   get(foregroundSessionStatusLayerAtom),
 )
 
-export const libraryItemsAtom = libraryRuntime.atom(
-  Effect.gen(function* () {
-    const source = yield* LibrarySource
-    if (source.listPlayableEntries) return yield* source.listPlayableEntries()
-    const legacyGames = yield* source.list()
-    return legacyGames.map(playableEntryFromResolvedGame)
-  }),
-)
+export const libraryItemsAtom = libraryRuntime
+  .atom(
+    Effect.gen(function* () {
+      const source = yield* LibrarySource
+      if (source.listPlayableEntries) return yield* source.listPlayableEntries()
+      const legacyGames = yield* source.list()
+      return legacyGames.map(playableEntryFromResolvedGame)
+    }),
+  )
+  .pipe(Atom.withRefresh(Duration.seconds(1)))
 
 /**
  * Polls `app.server.status` at 1 Hz via `Atom.withRefresh`. The live layer

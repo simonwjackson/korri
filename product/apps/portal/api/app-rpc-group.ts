@@ -6,6 +6,7 @@ import { UnassignGameAssetRpc as appGameAssetsUnassign } from "./game-assets/una
 import { GetHelloRpc as appHelloGet } from "./hello/rpc"
 import { LaunchLibraryRpc as appLibraryLaunch } from "./library/launch.rpc"
 import { ListLibraryRpc as appLibraryList } from "./library/list.rpc"
+import { LibrarySnapshotRpc as appLibrarySnapshot } from "./library/snapshot.rpc"
 import { ListSourceRpc as appSourceList } from "./source/list.rpc"
 import { SourceStatusRpc as appSourceStatus } from "./source/status.rpc"
 import { PrepareStreamRpc as appStreamPrepare } from "./stream/prepare.rpc"
@@ -29,6 +30,7 @@ export const appRpcGroup = RpcGroup.make(
   appGameAssetsAssign,
   appGameAssetsUnassign,
   appLibraryList,
+  appLibrarySnapshot,
   appLibraryLaunch,
   appSourceList,
   appSourceStatus,

@@ -13,6 +13,7 @@ import * as HttpEffect from "effect/unstable/http/HttpEffect"
 import { RpcServer } from "effect/unstable/rpc"
 import { appRpcGroup } from "./app-rpc-group"
 import { HandlersLive } from "./handlers"
+import { CatalogSnapshotLive } from "./library/catalog-snapshot"
 import { ForegroundSessionHostLive } from "./library/foreground-session-host-layer"
 import { RemoteStreamPrepareLive } from "./library/remote-stream-prepare"
 import { StreamControlLayerLive } from "./stream-control/service"
@@ -30,15 +31,23 @@ const PeerDiscoveryConfigured =
             : {}),
       })
 
-const LibraryInfrastructureLive = Layer.mergeAll(
+const CatalogDependenciesLive = Layer.mergeAll(
   LibrarySourceLayerLive,
+  PeerDiscoveryConfigured,
+  PeerSourceFetcherLive,
+)
+
+const CatalogInfrastructureLive = CatalogSnapshotLive.pipe(
+  Layer.provideMerge(CatalogDependenciesLive),
+)
+
+const LibraryInfrastructureLive = Layer.mergeAll(
+  CatalogInfrastructureLive,
   LauncherLayerLive,
   GameAssetsLayerLive,
   ForegroundSessionHostLive,
   RemoteStreamPrepareLive,
   StreamControlLayerLive,
-  PeerDiscoveryConfigured,
-  PeerSourceFetcherLive,
 )
 
 const ServerLive = Layer.mergeAll(

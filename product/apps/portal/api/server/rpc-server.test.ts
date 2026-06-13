@@ -105,6 +105,7 @@ describe("headless server RPC group", () => {
       "app.library.launch",
       "app.library.launch.dry-run",
       "app.library.list",
+      "app.library.snapshot",
       "app.server.status",
       "app.server.stream.prepare",
       "app.session.status",

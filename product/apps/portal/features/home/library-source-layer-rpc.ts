@@ -9,32 +9,27 @@ import { RpcClient } from "effect/unstable/rpc"
 
 export const LibrarySourceLayerRpc = Layer.effect(LibrarySource)(
   RpcClient.make(appRpcGroup).pipe(
-    Effect.map(client => ({
-      list: () =>
-        client["app.library.list"]({}).pipe(
-          Effect.map(response => response.games.map(playableToCompatGame)),
-          Effect.catchCause(cause =>
-            isNoUpstreamCause(cause)
-              ? Effect.succeed([])
-              : Effect.fail(toLibraryError(cause)),
+    Effect.map(client => {
+      const readPlayableEntries = () =>
+        client["app.library.snapshot"]({}).pipe(
+          Effect.map(response => response.entries),
+          Effect.catchCause(cause => Effect.fail(toLibraryError(cause))),
+        )
+
+      return {
+        list: () =>
+          readPlayableEntries().pipe(
+            Effect.map(entries => entries.map(playableToCompatGame)),
           ),
-        ),
-      listPlayableEntries: () =>
-        client["app.library.list"]({}).pipe(
-          Effect.map(response => response.games),
-          Effect.catchCause(cause =>
-            isNoUpstreamCause(cause)
-              ? Effect.succeed([])
-              : Effect.fail(toLibraryError(cause)),
+        listPlayableEntries: () => readPlayableEntries(),
+        launchSpecFor: (id: string, releaseId?: string) =>
+          Effect.succeed(
+            opaqueLaunchSpecFor(releaseId ? `${id}#${releaseId}` : id),
           ),
-        ),
-      launchSpecFor: (id: string, releaseId?: string) =>
-        Effect.succeed(
-          opaqueLaunchSpecFor(releaseId ? `${id}#${releaseId}` : id),
-        ),
-      resolveLaunchForGame: (id: string) =>
-        Effect.succeed({ spec: opaqueLaunchSpecFor(id) }),
-    })),
+        resolveLaunchForGame: (id: string) =>
+          Effect.succeed({ spec: opaqueLaunchSpecFor(id) }),
+      }
+    }),
   ),
 ).pipe(Layer.provide(RpcClientLive))
 
@@ -43,11 +38,6 @@ function toLibraryError(error: unknown): LibraryError {
     reason: "unavailable",
     message: error instanceof Error ? error.message : String(error),
   })
-}
-
-function isNoUpstreamCause(cause: unknown): boolean {
-  const rendered = String(cause)
-  return rendered.includes("no upstream") || rendered.includes("503")
 }
 
 function opaqueLaunchSpecFor(id: string): LaunchSpec {

@@ -11,6 +11,7 @@ import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-l
 import { openKorriLibraryDb } from "@platform/library/proseql/library-db"
 import { createLibraryRepository } from "@platform/library/proseql/library-repository"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
+import { CatalogSnapshotLive } from "@product/apps/portal/api/library/catalog-snapshot"
 import {
   PeerDiscovery,
   PeerDiscoveryNoop,
@@ -27,10 +28,13 @@ import { mirrorLibraryAsConfigFragment } from "../../../../../tools/testing/libr
 
 // All list.rpc-handler tests share the same default federation layers:
 // no peers (Noop) + the real fetcher (irrelevant when there are no peers).
-const LocalLibraryLayer = Layer.mergeAll(
+const LocalCatalogDependencies = Layer.mergeAll(
   LibrarySourceLayerLive,
   PeerDiscoveryNoop,
   PeerSourceFetcherLive,
+)
+const LocalLibraryLayer = CatalogSnapshotLive.pipe(
+  Layer.provide(LocalCatalogDependencies),
 )
 
 import { handleListLibrary } from "./list.rpc-handler"
@@ -441,7 +445,11 @@ describe("app.library.list federation (fan-out across LAN peers)", () => {
     })
 
     const result = await Effect.runPromise(
-      handleListLibrary({}).pipe(Effect.provide(layer)),
+      Effect.gen(function* () {
+        yield* handleListLibrary({})
+        yield* Effect.sleep("10 millis")
+        return yield* handleListLibrary({})
+      }).pipe(Effect.provide(layer)),
     )
 
     expect(result.games).toHaveLength(3)
@@ -490,7 +498,11 @@ describe("app.library.list federation (fan-out across LAN peers)", () => {
     })
 
     const result = await Effect.runPromise(
-      handleListLibrary({}).pipe(Effect.provide(layer)),
+      Effect.gen(function* () {
+        yield* handleListLibrary({})
+        yield* Effect.sleep("10 millis")
+        return yield* handleListLibrary({})
+      }).pipe(Effect.provide(layer)),
     )
 
     expect(result.games).toHaveLength(2)
@@ -535,12 +547,62 @@ describe("app.library.list federation (fan-out across LAN peers)", () => {
     })
 
     const result = await Effect.runPromise(
-      handleListLibrary({}).pipe(Effect.provide(layer)),
+      Effect.gen(function* () {
+        yield* handleListLibrary({})
+        yield* Effect.sleep("10 millis")
+        return yield* handleListLibrary({})
+      }).pipe(Effect.provide(layer)),
     )
 
     expect(result.games).toHaveLength(1)
     expect(result.games[0]?.id).toBe("reachable/game")
     expect(result.games[0]?.source.hostId).toBe("reachable")
+  })
+
+  it("returns self entries immediately while a remote peer is still loading", async () => {
+    const lib = track(
+      await withTempProseqlLibrary({
+        games: [
+          {
+            id: "local/stray",
+            system: "steam",
+            contentPath: "/storage/steam/stray",
+            metadata: { name: "Stray" },
+          },
+        ],
+      }),
+    )
+    process.env.KORRI_LIBRARY_ROOT = lib.root
+    process.env.KORRI_CONFIG_ROOTS = lib.root
+
+    const slowPeer: PeerRecord = {
+      hostId: "slow-peer",
+      controlUrl: "http://slow-peer:3001",
+      displayName: "slow-peer",
+      caps: ["source"],
+    }
+    const layer = federationLayerWith({
+      peers: [slowPeer],
+      peerCatalogs: {
+        [slowPeer.controlUrl]: [
+          {
+            id: "remote/game",
+            displayName: "Remote Game",
+            streamable: true,
+          },
+        ],
+      },
+      peerCatalogDelaysMs: { [slowPeer.controlUrl]: 100 },
+    })
+
+    const result = await Effect.runPromise(
+      handleListLibrary({}).pipe(Effect.provide(layer)),
+    )
+
+    expect(result.games.map(game => game.id)).toEqual(["local/stray"])
+    expect(result.games[0]?.source.isLocal).toBe(true)
+    expect(result.complete).toBe(false)
+    expect(result.generation).toBeGreaterThan(0)
   })
 
   it("returns only local entries when no peers have been discovered", async () => {
@@ -583,6 +645,7 @@ function federationLayerWith(options: {
   readonly peerCatalogs: Readonly<
     Record<string, readonly PeerSourceCatalogEntry[]>
   >
+  readonly peerCatalogDelaysMs?: Readonly<Record<string, number>>
 }) {
   const PeersLayer = Layer.effect(PeerDiscovery)(
     Effect.gen(function* () {
@@ -598,6 +661,10 @@ function federationLayerWith(options: {
         const catalog = options.peerCatalogs[controlUrl]
         return {
           listSourceGames: async () => {
+            const delay = options.peerCatalogDelaysMs?.[controlUrl] ?? 0
+            if (delay > 0) {
+              await new Promise(resolve => setTimeout(resolve, delay))
+            }
             if (!catalog) {
               throw new Error(`unreachable peer: ${controlUrl}`)
             }
@@ -608,7 +675,8 @@ function federationLayerWith(options: {
       timeoutMs: 0,
     }),
   )
-  return Layer.mergeAll(LibrarySourceLayerLive, PeersLayer, fetcherLayer)
+  const dependencies = Layer.mergeAll(LibrarySourceLayerLive, PeersLayer, fetcherLayer)
+  return CatalogSnapshotLive.pipe(Layer.provide(dependencies))
 }
 
 type TempProseqlLibrary = {
