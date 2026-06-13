@@ -358,8 +358,8 @@ launch_30xx() {
   # Steam's launch environment does not include the MangoHud package in PATH.
   export PATH="$(dirname "$mangohud_bin"):$PATH"
   log "Runtime env: XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-} LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}"
-  log "Exec: $mangohud_bin $gamescope_bin -w 640 -h 360 -W 640 -H 360 --mangoapp -- $*"
-  exec "$mangohud_bin" "$gamescope_bin" -w 640 -h 360 -W 640 -H 360 --mangoapp -- "$@" >>"$LOG_FILE" 2>&1
+  log "Exec: $gamescope_bin -w 640 -h 360 -W 640 -H 360 --mangoapp -- $*"
+  exec "$gamescope_bin" -w 640 -h 360 -W 640 -H 360 --mangoapp -- "$@" >>"$LOG_FILE" 2>&1
 }
 
 case "${1:-}" in
