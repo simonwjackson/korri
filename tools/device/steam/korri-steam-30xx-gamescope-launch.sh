@@ -332,7 +332,8 @@ launch_30xx() {
   # gamescope --mangoapp spawns a sibling `mangoapp` process by name.
   # Steam's launch environment does not include the MangoHud package in PATH.
   export PATH="$(dirname "$mangohud_bin"):$PATH"
-  exec "$mangohud_bin" "$gamescope_bin" -w 640 -h 360 -W 640 -H 360 --mangoapp -- "$@"
+  log "Exec: $mangohud_bin $gamescope_bin -w 640 -h 360 -W 640 -H 360 --mangoapp -- $*"
+  exec "$mangohud_bin" "$gamescope_bin" -w 640 -h 360 -W 640 -H 360 --mangoapp -- "$@" >>"$LOG_FILE" 2>&1
 }
 
 case "${1:-}" in
