@@ -130,7 +130,14 @@ export function createLocalForegroundLaunchOwner(
         evidence: { surface: { status: "not-tracked" } },
       }),
       verifyReady: verifyLocalLaunchReady,
-      launched: ({ spawned }) => spawned.result,
+      teardown: async ({ prepared }) => {
+        await cleanupLocalLaunchArtifacts(prepared.artifacts)
+        return {
+          status: "ok",
+          value: { artifacts: "cleaned" },
+        }
+      },
+      launched: ({ spawned }) => launchResponseAfterManagedReadiness(spawned),
     },
   })
 }
@@ -139,11 +146,15 @@ export async function launchLocalForegroundSession(
   owner: LocalForegroundLaunchOwner,
   request: LocalForegroundLaunchRequest,
 ): Promise<LaunchLibraryResponse> {
+  let handedOffToOwnerTeardown = false
   try {
     const result = await owner.launch(request)
+    if (result._tag === "Launched") handedOffToOwnerTeardown = true
     return await launchResponseFromOwnerResult(result)
   } finally {
-    await cleanupLocalLaunchArtifacts(request.artifacts)
+    if (!handedOffToOwnerTeardown) {
+      await cleanupLocalLaunchArtifacts(request.artifacts)
+    }
   }
 }
 
@@ -151,6 +162,24 @@ async function cleanupLocalLaunchArtifacts(
   artifacts: LaunchArtifacts | undefined,
 ): Promise<void> {
   await Effect.runPromise(cleanupLaunchArtifacts(artifacts))
+}
+
+async function launchResponseAfterManagedReadiness(
+  spawned: SpawnedLocalLaunch,
+): Promise<LaunchLibraryResponse> {
+  const readiness = spawned.session.ready
+  if (!readiness) return await spawned.result
+
+  const result = await readiness
+  if (result.status === "ok") return { _tag: "Accepted", status: "launched" }
+
+  return {
+    _tag: "LaunchFailed",
+    status: "failed",
+    exitCode: launchFailureExitCode("command-failed"),
+    failureKind: "command-failed",
+    stderrTail: result.message,
+  }
 }
 
 async function verifyLocalLaunchReady(

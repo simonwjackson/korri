@@ -1,8 +1,9 @@
 import { describe, expect, it } from "bun:test"
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { makeInMemoryLauncherLayer } from "@platform/library/launcher-layer-memory"
+import type { ManagedLaunchResult } from "@platform/library/launcher"
 import {
   Launcher,
   type LauncherService,
@@ -50,6 +51,43 @@ function spawnWith(launcher: LauncherService) {
   const spawn = launcher.spawn
   if (!spawn) throw new Error("launcher missing managed spawn")
   return Effect.runPromise(spawn(spec))
+}
+
+function spawnReadyManaged(
+  control: ReturnType<typeof makeInMemoryLauncherLayer.createManagedControl>,
+): Promise<ManagedLaunchResult> {
+  const exit = (
+    control as typeof control & {
+      readonly exit: Promise<{ readonly exitCode: number; readonly stderrTail?: string }>
+    }
+  ).exit
+  const terminal = exit.then(result => ({ exitCode: result.exitCode }))
+  return Promise.resolve({
+    status: "started" as const,
+    result: exit.then(result =>
+      result.exitCode === 0
+        ? { status: "launched" as const }
+        : {
+            status: "failed" as const,
+            exitCode: result.exitCode,
+            ...(result.stderrTail ? { stderrTail: result.stderrTail } : {}),
+          },
+    ),
+    session: {
+      id: "ready-managed:999",
+      processId: 999,
+      exited: terminal,
+      ready: Promise.resolve({ status: "ok" as const }),
+      terminate: () => {
+        control.signals.push("SIGTERM")
+        control.resolveExit({ exitCode: 143 })
+      },
+      terminateNow: () => {
+        control.signals.push("SIGKILL")
+        control.resolveExit({ exitCode: 137 })
+      },
+    },
+  })
 }
 
 async function launcherFromLayer(
@@ -157,12 +195,9 @@ describe("local foreground launch adapter", () => {
     await owner.whenIdle()
   })
 
-  it("cleans launch artifacts when a local launch is stopped", async () => {
+  it("returns Accepted before a ready managed local child exits", async () => {
     await withArtifactRoot(async root => {
       const control = makeInMemoryLauncherLayer.createManagedControl()
-      const launcher = await launcherFromLayer(
-        makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
-      )
       const owner = createLocalForegroundLaunchOwner()
 
       const launch = launchLocalForegroundSession(owner, {
@@ -172,15 +207,40 @@ describe("local foreground launch adapter", () => {
           root,
           paths: { configPath: join(root, "retroarch.cfg") },
         },
-        spawn: () => spawnWith(launcher),
+        spawn: () => spawnReadyManaged(control),
         createRequestId: () => "local-launch-1",
       })
       await waitForOwnerState(owner, "Running")
 
-      await owner.terminateActiveSession()
-      const result = await launch
+      expect(await launch).toEqual({ _tag: "Accepted", status: "launched" })
+      await expect(access(root)).resolves.toBeNull()
 
-      expect(result.status).toBe("failed")
+      control.resolveExit({ exitCode: 0 })
+      await owner.whenIdle()
+      await expectArtifactRootRemoved(root)
+    })
+  })
+
+  it("cleans launch artifacts when an accepted ready local launch is stopped", async () => {
+    await withArtifactRoot(async root => {
+      const control = makeInMemoryLauncherLayer.createManagedControl()
+      const owner = createLocalForegroundLaunchOwner()
+
+      const launch = launchLocalForegroundSession(owner, {
+        id: "game",
+        spec,
+        artifacts: {
+          root,
+          paths: { configPath: join(root, "retroarch.cfg") },
+        },
+        spawn: () => spawnReadyManaged(control),
+        createRequestId: () => "local-launch-1",
+      })
+      await waitForOwnerState(owner, "Running")
+      expect(await launch).toEqual({ _tag: "Accepted", status: "launched" })
+
+      await owner.terminateActiveSession()
+
       expect(control.signals).toContain("SIGTERM")
       await owner.whenIdle()
       await expectArtifactRootRemoved(root)
