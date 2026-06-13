@@ -329,9 +329,19 @@ launch_30xx() {
 
   export MANGOHUD=1
   export MANGOHUD_CONFIG="${MANGOHUD_CONFIG:-position=top-left,font_size=24,fps,frametime,gpu_stats,cpu_stats,resolution}"
+  # Steam launches this from its ARM64 FHS/container environment. The Nix
+  # gamescope wrapper does not carry the host OpenGL driver path, so make it
+  # explicit before the real gamescope binary resolves libGL/libEGL.
+  if [[ -d /run/opengl-driver/lib ]]; then
+    export LD_LIBRARY_PATH="/run/opengl-driver/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  fi
+  if [[ -z "${XDG_RUNTIME_DIR:-}" || ! -d "${XDG_RUNTIME_DIR:-}" || ! -w "${XDG_RUNTIME_DIR:-}" ]]; then
+    export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+  fi
   # gamescope --mangoapp spawns a sibling `mangoapp` process by name.
   # Steam's launch environment does not include the MangoHud package in PATH.
   export PATH="$(dirname "$mangohud_bin"):$PATH"
+  log "Runtime env: XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-} LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}"
   log "Exec: $mangohud_bin $gamescope_bin -w 640 -h 360 -W 640 -H 360 --mangoapp -- $*"
   exec "$mangohud_bin" "$gamescope_bin" -w 640 -h 360 -W 640 -H 360 --mangoapp -- "$@" >>"$LOG_FILE" 2>&1
 }
