@@ -11,7 +11,7 @@
 #
 # Defaults:
 #   KORRI_STEAM_ROOT=/var/lib/korri/steam
-#   KORRI_STEAM_LOCALCONFIG=$KORRI_STEAM_ROOT/userdata/0/config/localconfig.vdf
+#   KORRI_STEAM_LOCALCONFIG explicitly overrides auto-detection
 
 set -euo pipefail
 
@@ -30,7 +30,7 @@ find_steam_localconfig() {
   # Prefer an existing localconfig that already mentions the target AppID.
   for candidate in "$STEAM_ROOT"/userdata/*/config/localconfig.vdf; do
     [[ -f "$candidate" ]] || continue
-    if grep -q '"'"$APPID"'"' "$candidate"; then
+    if grep -qF "\"$APPID\"" "$candidate"; then
       printf '%s\n' "$candidate"
       return 0
     fi
