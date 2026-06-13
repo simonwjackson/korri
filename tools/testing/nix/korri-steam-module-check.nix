@@ -133,9 +133,10 @@ let
       && runtimeOverride.services.korri.steam.gamesRoot == "/var/lib/korri-alt/content/games/steam"
       && runtimeOverride.services.korri.steam.dotDir == "/home/korri-alt/.steam"
     ))
-    (check "enabled module installs package, launcher, and uinput helper" (
+    (check "enabled module installs package, launchers, and uinput helper" (
       builtins.any (name: lib.hasInfix "fake-steam-korri" name) (systemPackageNames enabled)
       && builtins.any (name: lib.hasInfix "korri-steam-guest" name) (systemPackageNames enabled)
+      && builtins.any (name: lib.hasInfix "korri-steam-app" name) (systemPackageNames enabled)
       && builtins.any (name: lib.hasInfix "korri-steam-ensure-uinput" name) (systemPackageNames enabled)
     ))
     (check "uinput service is rendered and ordered for boot convergence" (

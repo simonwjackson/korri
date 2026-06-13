@@ -373,6 +373,169 @@ let
     cd "$STEAM_HOME"
     exec ${cfg.package}/bin/steam-arm64-fhs "$@"
   '';
+
+  steamAppLauncher = pkgs.writeShellScriptBin "korri-steam-app" ''
+    set -eu
+
+    usage() {
+      echo "usage: korri-steam-app <steam-appid>" >&2
+      exit 64
+    }
+
+    [ "$#" -eq 1 ] || usage
+    appid="$1"
+    case "$appid" in
+      ""|*[!0-9]*) usage ;;
+    esac
+
+    export HOME="''${HOME:-${runtime.home}}"
+    export USER="''${USER:-${runtime.user}}"
+    export XDG_RUNTIME_DIR="''${XDG_RUNTIME_DIR:-/run/user/${toString runtime.uid}}"
+    export WAYLAND_DISPLAY="''${WAYLAND_DISPLAY:-wayland-1}"
+    export DISPLAY="''${DISPLAY:-:0}"
+    export DBUS_SESSION_BUS_ADDRESS="''${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/${toString runtime.uid}/bus}"
+    export LANG="''${LANG:-C.UTF-8}"
+    export STEAM_HOME="''${STEAM_HOME:-${cfg.home}}"
+    export STEAM_GAMES_ROOT="''${STEAM_GAMES_ROOT:-${cfg.gamesRoot}}"
+    export STEAM_DOT="''${STEAM_DOT:-${cfg.dotDir}}"
+    export FEX_ROOTFS="''${FEX_ROOTFS:-${cfg.fexRootfs}}"
+
+    console_log="$STEAM_HOME/logs/console_log.txt"
+    launch_timeout="''${KORRI_STEAM_APP_LAUNCH_TIMEOUT:-180}"
+    service_name="''${KORRI_STEAM_SERVICE:-korri-steam.service}"
+
+    find_sway_sock() {
+      if [ -n "''${SWAYSOCK:-}" ] && [ -S "$SWAYSOCK" ]; then
+        printf '%s\n' "$SWAYSOCK"
+        return 0
+      fi
+      ${pkgs.findutils}/bin/find "$XDG_RUNTIME_DIR" -maxdepth 1 -type s -name 'sway-ipc.*.sock' -print -quit 2>/dev/null || true
+    }
+
+    sway() {
+      sock="$(find_sway_sock | ${pkgs.coreutils}/bin/head -n 1)"
+      [ -n "$sock" ] || return 0
+      SWAYSOCK="$sock" ${pkgs.sway}/bin/swaymsg "$@" >/dev/null 2>&1 || true
+    }
+
+    hide_steam_hat() {
+      sway '[class="steam" title="Steam Big Picture Mode"] move scratchpad'
+    }
+
+    show_steam_prompt() {
+      sway '[class="steam" title="Steam Big Picture Mode"] scratchpad show, focus, fullscreen enable'
+    }
+
+    focus_game() {
+      sway "[class=\"steam_app_$appid\"] focus, fullscreen enable"
+    }
+
+    ydotool_sock="$XDG_RUNTIME_DIR/korri-steam-ydotool.sock"
+
+    ensure_ydotoold() {
+      [ "''${KORRI_STEAM_APP_AUTO_CONFIRM:-1}" != "0" ] || return 1
+      if [ -S "$ydotool_sock" ]; then
+        return 0
+      fi
+      ${pkgs.coreutils}/bin/rm -f "$ydotool_sock"
+      ${pkgs.ydotool}/bin/ydotoold --socket-path="$ydotool_sock" --socket-perm=0600 >/dev/null 2>&1 &
+      i=0
+      while [ "$i" -lt 20 ]; do
+        [ -S "$ydotool_sock" ] && return 0
+        i=$((i + 1))
+        ${pkgs.coreutils}/bin/sleep 0.1
+      done
+      return 1
+    }
+
+    confirm_steam_prompt() {
+      [ "''${KORRI_STEAM_APP_AUTO_CONFIRM:-1}" != "0" ] || return 0
+      ensure_ydotoold || {
+        echo "korri-steam-app: warning: could not start ydotoold to confirm Steam prompt" >&2
+        return 0
+      }
+      # KEY_ENTER down/up. Keep the launch handoff deterministic, but never
+      # fail the game launch solely because input injection was unavailable.
+      YDOTOOL_SOCKET="$ydotool_sock" ${pkgs.ydotool}/bin/ydotool key 28:1 28:0 >/dev/null 2>&1 || \
+        echo "korri-steam-app: warning: could not confirm Steam prompt with ydotool" >&2
+    }
+
+    if ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
+      :
+    elif [ "$(${pkgs.coreutils}/bin/id -u)" -eq 0 ]; then
+      ${pkgs.systemd}/bin/systemctl start "$service_name"
+    else
+      echo "korri-steam-app: warning: $service_name is not active; assuming Steam is already reachable in the user session" >&2
+    fi
+
+    ${steamUinputPrep}/bin/korri-steam-ensure-uinput || true
+    ${pkgs.coreutils}/bin/mkdir -p "$STEAM_HOME/logs"
+    if [ -f "$console_log" ]; then
+      mark="$(${pkgs.coreutils}/bin/wc -c < "$console_log" | ${pkgs.coreutils}/bin/tr -d ' ')"
+    else
+      mark=0
+      : > "$console_log" 2>/dev/null || true
+    fi
+
+    # Steam's ARM64 client only reliably advances AppID launches while Big
+    # Picture is available to handle its launch/interstitial state machine.
+    # Surface it for the handoff, then move it away once launch proceeds or the
+    # game window is up so Korri does not remain a "hat on a hat" stack.
+    show_steam_prompt
+    ${steamLauncher}/bin/korri-steam-guest \
+      -steamdeck -gamepadui -forcedesktopscaling 1.5 -applaunch "$appid" \
+      >/dev/null
+
+    deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + launch_timeout ))
+    saw_added=0
+    saw_prompt=0
+    while [ "$(${pkgs.coreutils}/bin/date +%s)" -le "$deadline" ]; do
+      new_log=""
+      if [ -f "$console_log" ]; then
+        new_log="$(${pkgs.coreutils}/bin/tail -c +$((mark + 1)) "$console_log" 2>/dev/null || true)"
+      fi
+
+      if printf '%s\n' "$new_log" | ${pkgs.gnugrep}/bin/grep -a -q "LaunchApp waiting for user response to ShowInterstitials"; then
+        if [ "$saw_prompt" -eq 0 ]; then
+          saw_prompt=1
+          show_steam_prompt
+          ${pkgs.coreutils}/bin/sleep 0.5
+          confirm_steam_prompt
+        fi
+      fi
+
+      if printf '%s\n' "$new_log" | ${pkgs.gnugrep}/bin/grep -a -q "LaunchApp continues with user response \"ShowInterstitials\""; then
+        hide_steam_hat
+      fi
+
+      if printf '%s\n' "$new_log" | ${pkgs.gnugrep}/bin/grep -a -q "Game process added : AppID $appid"; then
+        saw_added=1
+        hide_steam_hat
+        focus_game
+      fi
+
+      if [ "$saw_added" -eq 1 ] && printf '%s\n' "$new_log" | ${pkgs.gnugrep}/bin/grep -a -q "Game process removed : AppID $appid"; then
+        hide_steam_hat
+        exit 0
+      fi
+
+      if [ "$saw_added" -eq 1 ]; then
+        if ! ${pkgs.procps}/bin/ps -eo args= | ${pkgs.gnugrep}/bin/grep -F "SteamLaunch AppId=$appid" | ${pkgs.gnugrep}/bin/grep -v -F "grep -F" >/dev/null; then
+          hide_steam_hat
+          exit 0
+        fi
+      fi
+
+      ${pkgs.coreutils}/bin/sleep 1
+    done
+
+    hide_steam_hat
+    if [ "$saw_added" -eq 1 ]; then
+      exit 0
+    fi
+    echo "korri-steam-app: timed out waiting for Steam AppID $appid to launch" >&2
+    exit 124
+  '';
 in
 {
   key = "korri-steam";
@@ -464,6 +627,7 @@ in
     environment.systemPackages = [
       cfg.package
       steamLauncher
+      steamAppLauncher
       steamUinputPrep
       fexRootfsPreparer
     ];
