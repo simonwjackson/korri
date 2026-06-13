@@ -12,8 +12,8 @@ import { Effect, Exit, Layer, Scope } from "effect"
 import * as HttpEffect from "effect/unstable/http/HttpEffect"
 import { RpcServer } from "effect/unstable/rpc"
 import { appRpcGroup } from "./app-rpc-group"
+import { CatalogSnapshotLive } from "./catalog/catalog-snapshot"
 import { HandlersLive } from "./handlers"
-import { CatalogSnapshotLive } from "./library/catalog-snapshot"
 import { ForegroundSessionHostLive } from "./library/foreground-session-host-layer"
 import { RemoteStreamPrepareLive } from "./library/remote-stream-prepare"
 import { StreamControlLayerLive } from "./stream-control/service"
@@ -68,6 +68,7 @@ const webHandler = HttpEffect.toWebHandlerLayerWith(ServerLive, {
 
 export const rpcHandler = (request: Request) => webHandler.handler(request)
 
+// fallow-ignore-next-line unused-exports
 export const rpcDispose = async () => {
   await webHandler.dispose()
   await Effect.runPromise(Scope.close(rpcScope, Exit.void))

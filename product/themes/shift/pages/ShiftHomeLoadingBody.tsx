@@ -1,8 +1,8 @@
-import { useLibraryListCase } from "@platform/react/library/library-list-state-root"
 import { Option } from "effect"
+import { useShiftCatalogCase } from "../catalog/ShiftCatalogStateRoot"
 
 export function ShiftHomeLoadingBody() {
-  const loading = useLibraryListCase("Loading")
+  const loading = useShiftCatalogCase("Loading")
 
   return Option.match(loading, {
     onNone: () => null,

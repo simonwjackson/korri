@@ -39,8 +39,8 @@ const DEFAULT_KORRID_RPC_TIMEOUT_MS = 15_000
 
 const READ_ONLY_COMMANDS = {
   status: { tag: "app.server.status", payload: {} },
-  library: { tag: "app.library.list", payload: {} },
-  sources: { tag: "app.source.list", payload: {} },
+  library: { tag: "app.catalog.snapshot", payload: { scope: "fabric" } },
+  sources: { tag: "app.catalog.snapshot", payload: { scope: "self" } },
   "source-status": { tag: "app.source.status", payload: {} },
   "session-status": { tag: "app.session.status", payload: {} },
   "stream-state": { tag: "app.stream-control.state.get", payload: {} },
@@ -292,7 +292,7 @@ function readOnlySpec(params: Record<string, unknown>): CommandSpec {
     }
     return {
       tag,
-      payload: params.payload ?? {},
+      payload: readOnlyRpcPayload(tag, params.payload),
       mutates: false,
       confirmed: true,
     }
@@ -302,6 +302,12 @@ function readOnlySpec(params: Record<string, unknown>): CommandSpec {
   }
   const spec = READ_ONLY_COMMANDS[command]
   return { ...spec, mutates: false, confirmed: true }
+}
+
+function readOnlyRpcPayload(tag: string, payload: unknown): unknown {
+  if (payload !== undefined) return payload
+  if (tag === "app.catalog.snapshot") return { scope: "fabric" }
+  return {}
 }
 
 function dryRunSpec(params: Record<string, unknown>): CommandSpec {
@@ -424,7 +430,7 @@ async function executeFindGame(
       {
         ok: false,
         rpcUrl,
-        tag: "app.library.list",
+        tag: "app.catalog.snapshot",
         result: { _tag: "MissingQuery" },
       },
       true,
@@ -434,7 +440,7 @@ async function executeFindGame(
   try {
     const response = await callKorridRpc(
       rpcUrl,
-      { tag: "app.library.list", payload: {} },
+      { tag: "app.catalog.snapshot", payload: { scope: "fabric" } },
       signal,
       fetchImpl,
     )
@@ -443,7 +449,7 @@ async function executeFindGame(
       {
         ok: result._tag === "GameFound",
         rpcUrl,
-        tag: "app.library.list",
+        tag: "app.catalog.snapshot",
         result,
       },
       result._tag !== "GameFound",
@@ -453,7 +459,7 @@ async function executeFindGame(
       {
         ok: false,
         rpcUrl,
-        tag: "app.library.list",
+        tag: "app.catalog.snapshot",
         error: error instanceof Error ? error.message : String(error),
       },
       true,
@@ -537,7 +543,9 @@ function hostToUrl(host: string): string {
 
 function findGameInList(response: unknown, query: string) {
   const games =
-    isRecord(response) && Array.isArray(response.games) ? response.games : []
+    isRecord(response) && Array.isArray(response.entries)
+      ? response.entries
+      : []
   const exact = games.find(game => isRecord(game) && game.id === query)
   if (isRecord(exact)) {
     return {
@@ -574,8 +582,8 @@ function findGameInList(response: unknown, query: string) {
 }
 
 function compactResult(tag: string, result: unknown): unknown {
-  if (tag === "app.library.list" && isRecord(result)) {
-    const games = Array.isArray(result.games) ? result.games : []
+  if (tag === "app.catalog.snapshot" && isRecord(result)) {
+    const games = Array.isArray(result.entries) ? result.entries : []
     return {
       count: games.length,
       games: games.map(game => {

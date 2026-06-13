@@ -31,11 +31,13 @@ export function createPortalPlatformBridge({
     library: {
       list: async () => {
         try {
-          const response = await appRpc("app.library.list", {})
-          if (!isLibraryListResponse(response)) {
-            throw new Error("app.library.list: unexpected response shape")
+          const response = await appRpc("app.catalog.snapshot", {
+            scope: "fabric",
+          })
+          if (!isCatalogSnapshotResponse(response)) {
+            throw new Error("app.catalog.snapshot: unexpected response shape")
           }
-          return response.games
+          return response.entries
         } catch (cause) {
           if (isNoUpstreamCause(cause)) return []
           throw cause
@@ -122,14 +124,14 @@ function callRpcMethod(
   >
 }
 
-function isLibraryListResponse(
+function isCatalogSnapshotResponse(
   value: unknown,
-): value is { readonly games: readonly unknown[] } {
+): value is { readonly entries: readonly unknown[] } {
   return (
     typeof value === "object" &&
     value !== null &&
-    "games" in value &&
-    Array.isArray(value.games)
+    "entries" in value &&
+    Array.isArray(value.entries)
   )
 }
 

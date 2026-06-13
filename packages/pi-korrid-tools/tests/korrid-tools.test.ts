@@ -74,15 +74,36 @@ describe("korrid-tools Pi package", () => {
 
     const result = await tool.execute("call-1", {
       command: "rpc",
-      tag: "app.source.list",
+      tag: "app.catalog.snapshot",
       payload: { compact: true },
       url: "http://bandai:3001",
     })
 
     expect(result).toMatchObject({ details: { ok: true } })
     expect(JSON.parse(body)).toMatchObject({
-      tag: "app.source.list",
+      tag: "app.catalog.snapshot",
       payload: { compact: true },
+    })
+  })
+
+  it("defaults raw catalog snapshot queries to fabric scope", async () => {
+    let body = ""
+    const tool = registeredTool(
+      "korrid_query",
+      recordingSuccessFetch(bodyText => {
+        body = bodyText
+      }),
+    )
+
+    await tool.execute("call-1", {
+      command: "rpc",
+      tag: "app.catalog.snapshot",
+      url: "http://bandai:3001",
+    })
+
+    expect(JSON.parse(body)).toMatchObject({
+      tag: "app.catalog.snapshot",
+      payload: { scope: "fabric" },
     })
   })
 
@@ -140,7 +161,7 @@ describe("korrid-tools Pi package", () => {
     expect(JSON.stringify(result)).not.toContain("verbose metadata")
   })
 
-  it("finds games by querying the library list RPC", async () => {
+  it("finds games by querying catalog facts", async () => {
     let body = ""
     const tool = registeredTool("korrid_find_game", (async (
       _input: string | URL | Request,
@@ -153,7 +174,7 @@ describe("korrid-tools Pi package", () => {
         exit: {
           _tag: "Success",
           value: {
-            games: [
+            entries: [
               { id: "snes/echo.smc", title: "Echo Runner" },
               { id: "nes/mario.nes", title: "Mario" },
             ],
@@ -176,7 +197,7 @@ describe("korrid-tools Pi package", () => {
         },
       },
     })
-    expect(JSON.parse(body)).toMatchObject({ tag: "app.library.list" })
+    expect(JSON.parse(body)).toMatchObject({ tag: "app.catalog.snapshot" })
   })
 
   it("finds exact ids before partial title matches", async () => {
@@ -487,8 +508,8 @@ function successFetch(value: unknown): typeof fetch {
     })) as typeof fetch
 }
 
-function libraryFetch(games: unknown[]): typeof fetch {
-  return successFetch({ games })
+function libraryFetch(entries: unknown[]): typeof fetch {
+  return successFetch({ entries })
 }
 
 function recordingSuccessFetch(

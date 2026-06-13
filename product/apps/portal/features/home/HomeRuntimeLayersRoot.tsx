@@ -4,11 +4,15 @@ import {
   useAtomRefresh,
 } from "@effect/atom-react"
 import {
+  catalogFactsSourceLayerAtom,
+  catalogSnapshotAtom,
+} from "@platform/react/catalog/catalog-atoms"
+import {
   foregroundSessionStatusLayerAtom,
   launcherLayerAtom,
-  libraryItemsAtom,
   librarySourceLayerAtom,
 } from "@platform/react/library/library-atoms"
+import { CatalogFactsSourceLayerRpc } from "@product/apps/portal/features/home/catalog-source-layer-rpc"
 import { ForegroundSessionStatusLayerFixture } from "@product/apps/portal/features/home/foreground-session-status-layer-fixture"
 import { ForegroundSessionStatusLayerLive } from "@product/apps/portal/features/home/foreground-session-status-layer-live"
 import { HomeLiveUsbArtifactNotice } from "@product/apps/portal/features/home/HomeLiveUsbArtifactNotice"
@@ -50,6 +54,7 @@ function HomeRuntimeLayersInner({
   const desktopInput = runtimeConfig.desktopInput
 
   useAtomInitialValues([
+    [catalogFactsSourceLayerAtom, CatalogFactsSourceLayerRpc],
     [librarySourceLayerAtom, LibrarySourceLayerRpc],
     [launcherLayerAtom, LauncherLayerRpc],
     [
@@ -81,10 +86,10 @@ function HomeRuntimeLayersInner({
  * catalog (client-side last-known-good).
  */
 function ConfigChangeRefreshBridge() {
-  const refreshLibraryItems = useAtomRefresh(libraryItemsAtom)
+  const refreshCatalogSnapshot = useAtomRefresh(catalogSnapshotAtom)
 
   useEffect(() => {
-    const timers = [window.setTimeout(() => refreshLibraryItems(), 0)]
+    const timers = [window.setTimeout(() => refreshCatalogSnapshot(), 0)]
 
     if (typeof EventSource === "undefined") {
       return () => {
@@ -93,12 +98,12 @@ function ConfigChangeRefreshBridge() {
     }
 
     const events = new EventSource("/api/config/events")
-    const refresh = () => refreshLibraryItems()
+    const refresh = () => refreshCatalogSnapshot()
     let sawReady = false
     const refreshOnceWhenReady = () => {
       if (sawReady) return
       sawReady = true
-      refreshLibraryItems()
+      refreshCatalogSnapshot()
     }
     events.addEventListener("config.ready", refreshOnceWhenReady)
     events.addEventListener("config.changed", refresh)
@@ -108,7 +113,7 @@ function ConfigChangeRefreshBridge() {
       events.removeEventListener("config.changed", refresh)
       events.close()
     }
-  }, [refreshLibraryItems])
+  }, [refreshCatalogSnapshot])
 
   return null
 }

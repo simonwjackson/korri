@@ -11,7 +11,7 @@ export const LibrarySourceLayerRpc = Layer.effect(LibrarySource)(
   RpcClient.make(appRpcGroup).pipe(
     Effect.map(client => {
       const readPlayableEntries = () =>
-        client["app.library.snapshot"]({}).pipe(
+        client["app.catalog.snapshot"]({ scope: "fabric" }).pipe(
           Effect.map(response => response.entries),
           Effect.catchCause(cause => Effect.fail(toLibraryError(cause))),
         )

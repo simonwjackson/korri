@@ -1,66 +1,50 @@
 /**
- * Per-peer source catalog fetcher.
+ * Per-peer catalog facts fetcher.
  *
- * The fan-out in `app.library.list` (U4) reads each LAN peer's
- * `app.source.list` and re-tags the entries with the peer's structural
- * source identity. This module owns that one operation in isolation
- * so:
- *
- *   1. The fan-out handler stays a small loop over `peers` and a
- *      single mapping step.
- *   2. Tests can inject a deterministic client factory instead of
- *      standing up a real HTTP server per peer.
- *
- * Per-peer failure handling is built in: timeouts, network errors,
- * and `host-control-disabled` responses all collapse to `[]` so the
- * fan-out's `Effect.all` never observes a peer-induced error. The
- * federated response degrades gracefully (R9 / AE2).
+ * Peer catalog federation reads each LAN peer's self-only
+ * `app.catalog.snapshot` facts and re-tags entries with the peer's
+ * structural source identity. This module owns that operation in isolation
+ * so the coordinator can degrade peer failures without failing self reads.
  */
 
 import { logger } from "@platform/logger/logger"
 import { createRemoteStreamControlClient } from "@product/apps/portal/stream/remote-stream-client"
 import { Context, Effect, Layer } from "effect"
-import type { LibraryEntry } from "../api/library/list.rpc"
+import type { CatalogEntry } from "../api/catalog/snapshot.rpc"
 import type { PeerRecord } from "./peer-discovery"
 
 export type { PeerRecord } from "./peer-discovery"
 
 /**
- * Minimal shape returned by a peer's `app.source.list`. Mirrors
- * `SourceCatalogGame` but kept structural (not class-bound) so test
- * stubs and the live client agree on the same wire shape.
+ * Minimal shape returned by a peer's self-only catalog snapshot. Kept
+ * structural (not class-bound) so test seams and the live client agree on
+ * the same wire shape.
  */
-export interface PeerSourceCatalogEntry {
-  readonly id: string
+export type PeerSourceCatalogEntry = CatalogEntry & {
   readonly displayName: string
   readonly streamable: boolean
-  readonly source?: {
-    readonly hostId: string
-    readonly controlUrl: string
-    readonly isLocal: boolean
-  }
 }
 
 export type PeerCatalogFetchResult =
   | {
       readonly status: "ready"
-      readonly entries: readonly LibraryEntry[]
+      readonly entries: readonly CatalogEntry[]
     }
   | {
       readonly status: "failed"
-      readonly entries: readonly LibraryEntry[]
+      readonly entries: readonly CatalogEntry[]
       readonly error: string
     }
 
 export interface PeerSourceFetcherService {
   /**
-   * Fetch one peer's source catalog, tag entries with the peer's
-   * structural source identity, and convert each into a `LibraryEntry`.
+   * Fetch one peer's self catalog, tag entries with the peer's
+   * structural source identity, and convert each into a `CatalogEntry`.
    * Returns `[]` on any failure (timeout, network, control-disabled).
    */
   readonly fetchPeerCatalog: (
     peer: PeerRecord,
-  ) => Effect.Effect<readonly LibraryEntry[], never>
+  ) => Effect.Effect<readonly CatalogEntry[], never>
   /**
    * Fetch one peer while preserving success/failure state for catalog
    * snapshot diagnostics. Never fails the caller.
@@ -82,8 +66,7 @@ interface PeerSourceClient {
 export interface PeerSourceFetcherLiveOptions {
   readonly createClient?: (controlUrl: string) => PeerSourceClient
   /**
-   * Per-peer timeout. Default 2 seconds — matches plan §"Fan-out
-   * policy in app.library.list". 0 disables (used by tests).
+   * Per-peer timeout. Default 2 seconds. 0 disables (used by tests).
    */
   readonly timeoutMs?: number
 }
@@ -130,11 +113,10 @@ function fetchOnePeer(
   return withTimeout.pipe(
     Effect.map(entries => ({
       status: "ready" as const,
-      entries: entries.map(entry => peerCatalogEntryToLibraryEntry(entry, peer)),
+      entries: entries.map(entry =>
+        peerCatalogEntryToCatalogEntry(entry, peer),
+      ),
     })),
-    // `Effect.catchCause` collapses BOTH the inner client failure (e.g.
-    // ECONNREFUSED bubbled out of `tryPromise`'s `catch`) AND the
-    // `Effect.timeout` failure into the partial-failure path.
     Effect.catchCause(cause =>
       Effect.sync(() => {
         const error = String(cause)
@@ -144,11 +126,11 @@ function fetchOnePeer(
             peerControlUrl: peer.controlUrl,
             error,
           },
-          "app.library.list: peer fan-out skipped (partial failure)",
+          "app.catalog.snapshot: peer federation skipped (partial failure)",
         )
         return {
           status: "failed" as const,
-          entries: [] as readonly LibraryEntry[],
+          entries: [] as readonly CatalogEntry[],
           error,
         }
       }),
@@ -157,35 +139,25 @@ function fetchOnePeer(
 }
 
 /**
- * Construct a federated `LibraryEntry` from a peer's
- * `SourceCatalogGame`. Many `GameRecord` fields (system, contentPath,
- * full metadata, media art) are not exposed by `app.source.list` —
- * minimal placeholders are used here; v1 UX explicitly defers richer
- * remote-entry rendering (see scope boundaries in the origin
- * requirements doc).
+ * Construct a federated `CatalogEntry` from a peer's self-only catalog
+ * entry. The peer's structural source identity is coordinator-relative from
+ * the requester, so remote launches route back to that peer.
  */
-function peerCatalogEntryToLibraryEntry(
+function peerCatalogEntryToCatalogEntry(
   entry: PeerSourceCatalogEntry,
   peer: PeerRecord,
-): LibraryEntry {
+): CatalogEntry {
+  const {
+    displayName: _displayName,
+    streamable: _streamable,
+    ...catalog
+  } = entry
   return {
-    id: entry.id,
-    itemId: entry.id,
-    title: entry.displayName,
-    system: "remote",
-    releases: [
-      {
-        id: "remote",
-        system: "remote",
-        launchable: entry.streamable,
-      },
-    ],
-    launchable: entry.streamable,
-    metadata: { name: entry.displayName },
+    ...catalog,
     source: {
       hostId: peer.hostId,
       controlUrl: peer.controlUrl,
       isLocal: false,
     },
-  } satisfies LibraryEntry
+  } satisfies CatalogEntry
 }

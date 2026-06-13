@@ -32,13 +32,7 @@ describe("source-aware games", () => {
       remoteHosts: [host],
       clientForHost: () =>
         remoteClient({
-          games: [
-            {
-              id: "gba/wario-land-4",
-              displayName: "Wario Land 4",
-              streamable: true,
-            },
-          ],
+          games: [remoteGame("gba/wario-land-4", "Wario Land 4")],
         }),
     })
 
@@ -83,13 +77,7 @@ describe("source-aware games", () => {
       remoteHosts: [host],
       clientForHost: () =>
         remoteClient({
-          games: [
-            {
-              id: "nixpkgs/neverball",
-              displayName: "Neverball",
-              streamable: true,
-            },
-          ],
+          games: [remoteGame("nixpkgs/neverball", "Neverball")],
         }),
     })
 
@@ -123,6 +111,35 @@ describe("source-aware games", () => {
     ])
   })
 })
+
+function remoteGame(
+  id: string,
+  displayName: string,
+): Awaited<ReturnType<RemoteStreamControlClient["listSourceGames"]>>[number] {
+  return {
+    id,
+    itemId: id,
+    title: displayName,
+    displayName,
+    streamable: true,
+    system: "remote",
+    releases: [
+      {
+        id: "remote",
+        system: "remote",
+        launchable: true,
+        apps: ["moonlight"],
+      },
+    ],
+    launchable: true,
+    metadata: { name: displayName },
+    source: {
+      hostId: "aka",
+      controlUrl: "http://aka.local:3001",
+      isLocal: true,
+    },
+  }
+}
 
 function localSource(games: readonly GameRecord[]): LibrarySourceService {
   return {

@@ -3,7 +3,7 @@
  *
  * Every korrid browses the LAN for other library-bearing servers
  * (`_korri-stream._tcp` with `caps: "source"` in TXT) and maintains an
- * in-memory peer set, used by `app.library.list` fan-out (U4) and the
+ * in-memory peer set, used by `app.catalog.snapshot` fan-out (U4) and the
  * launch router (U5).
  *
  * Filters:
@@ -39,6 +39,7 @@ export interface PeerRecord {
   readonly caps: readonly string[]
 }
 
+// fallow-ignore-next-line unused-types
 export interface PeerDiscoveryService {
   /**
    * SubscriptionRef of the current peer set keyed by `controlUrl`.

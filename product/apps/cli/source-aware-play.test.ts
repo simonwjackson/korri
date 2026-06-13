@@ -17,10 +17,30 @@ const localGame: GameRecord = {
   contentPath: "/storage/fixtures/nixpkgs/neverball.rom",
   metadata: { name: "Neverball" },
 }
-const remoteGame = {
+const remoteGame: Awaited<
+  ReturnType<RemoteStreamControlClient["listSourceGames"]>
+>[number] = {
   id: "gba/wario-land-4",
+  itemId: "gba/wario-land-4",
+  title: "Wario Land 4",
   displayName: "Wario Land 4",
   streamable: true,
+  system: "remote",
+  releases: [
+    {
+      id: "remote",
+      system: "remote",
+      launchable: true,
+      apps: ["moonlight"],
+    },
+  ],
+  launchable: true,
+  metadata: { name: "Wario Land 4" },
+  source: {
+    hostId: "aka",
+    controlUrl: "http://aka.local:3001",
+    isLocal: true,
+  },
 }
 const host: StreamHostCandidate = {
   id: "aka",

@@ -7,13 +7,13 @@ import {
 import type { LaunchController } from "@platform/library/launch-state"
 import { LaunchState } from "@platform/library/launch-state"
 import { foregroundSessionStatusLayerAtom } from "@platform/react/library/library-atoms"
-import { LibraryListStateRoot } from "@platform/react/library/library-list-state-root"
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
 import { ForegroundSessionStatusSource } from "@platform/stream/foreground-session-status-source"
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react"
 import { Effect, Layer } from "effect"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 import { type ReactNode, useLayoutEffect } from "react"
+import { ShiftCatalogStateRoot } from "../catalog/ShiftCatalogStateRoot"
 import { ShiftHomeReadyBody } from "./ShiftHomeReadyBody"
 
 const games = [
@@ -25,6 +25,11 @@ const games = [
     launchable: true,
     releases: [{ id: "fixture", system: "fixture", launchable: true }],
     metadata: { name: "Resume" },
+    source: {
+      hostId: "self",
+      controlUrl: "http://127.0.0.1:3001",
+      isLocal: true,
+    },
   },
   {
     id: "second",
@@ -34,6 +39,11 @@ const games = [
     launchable: true,
     releases: [{ id: "fixture", system: "fixture", launchable: true }],
     metadata: { name: "Second" },
+    source: {
+      hostId: "self",
+      controlUrl: "http://127.0.0.1:3001",
+      isLocal: true,
+    },
   },
 ]
 
@@ -61,7 +71,7 @@ describe("ShiftHomeReadyBody", () => {
 
     await waitFor(() => {
       expect(document.activeElement?.getAttribute("data-tile-id")).toBe(
-        "resume",
+        "self::resume",
       )
     })
 
@@ -99,7 +109,7 @@ describe("ShiftHomeReadyBody", () => {
 
     await waitFor(() => {
       expect(document.activeElement?.getAttribute("data-tile-id")).toBe(
-        "resume",
+        "self::resume",
       )
     })
 
@@ -122,7 +132,7 @@ describe("ShiftHomeReadyBody", () => {
 
     await waitFor(() => {
       expect(document.activeElement?.getAttribute("data-tile-id")).toBe(
-        "resume",
+        "self::resume",
       )
     })
 
@@ -163,9 +173,37 @@ function renderReadyBody(
 
   return render(
     <Wrapper>
-      <LibraryListStateRoot result={AsyncResult.success(games)}>
+      <ShiftCatalogStateRoot result={AsyncResult.success(snapshotWith(games))}>
         <ShiftHomeReadyBody launch={launch} />
-      </LibraryListStateRoot>
+      </ShiftCatalogStateRoot>
     </Wrapper>,
   )
+}
+
+function snapshotWith(entries: typeof games) {
+  return {
+    entries,
+    peers: [
+      {
+        hostId: "self",
+        displayName: "self",
+        controlUrl: "http://127.0.0.1:3001",
+        isLocal: true,
+        caps: ["source"],
+        status: "ready" as const,
+        entryCount: entries.length,
+        updatedAt: "2026-06-13T00:00:00.000Z",
+      },
+    ],
+    generation: 1,
+    updatedAt: "2026-06-13T00:00:00.000Z",
+    health: {
+      coordinatorReachable: true,
+      self: "ready" as const,
+      loadingPeers: 0,
+      readyPeers: 0,
+      failedPeers: 0,
+      generation: 1,
+    },
+  }
 }

@@ -1,33 +1,36 @@
 import { makeLocalEntrySource } from "@platform/api/rpc/entry-source"
-import { DataError } from "@platform/api/rpc/errors"
-import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import {
-  type LibraryError,
   LibrarySource,
   type LibrarySourceService,
 } from "@platform/library/library-services"
-import type { PlayableLibraryEntry } from "@platform/library/playable-library"
+import { playableEntryFromResolvedGame } from "@platform/library/playable-library"
 import { logger } from "@platform/logger/logger"
 import {
-  catalogPeerFromRecord,
   type CatalogPeerState,
+  catalogPeerFromRecord,
   makeSelfCatalogPeer,
 } from "@product/apps/portal/peers/catalog-peer-state"
-import { PeerDiscovery, type PeerRecord } from "@product/apps/portal/peers/peer-discovery"
+import {
+  PeerDiscovery,
+  type PeerRecord,
+} from "@product/apps/portal/peers/peer-discovery"
 import {
   PeerSourceFetcher,
   type PeerSourceFetcherService,
 } from "@product/apps/portal/peers/peer-source-fetcher"
 import { Context, Effect, Layer, Ref, Scope, SubscriptionRef } from "effect"
-import type { LibraryEntry } from "./list.rpc"
 import {
+  type CatalogEntry,
   CatalogHealthSummary,
   CatalogPeerSnapshot,
-  LibrarySnapshotResponse,
+  CatalogSnapshotResponse,
+  type CatalogSnapshotScope,
 } from "./snapshot.rpc"
 
-export interface CatalogSnapshotService {
-  readonly getSnapshot: () => Effect.Effect<LibrarySnapshotResponse, DataError>
+interface CatalogSnapshotService {
+  readonly getSnapshot: (
+    scope?: CatalogSnapshotScope,
+  ) => Effect.Effect<CatalogSnapshotResponse, never>
 }
 
 export class CatalogSnapshot extends Context.Service<
@@ -45,7 +48,7 @@ export const CatalogSnapshotLive: Layer.Layer<
     const peerDiscovery = yield* PeerDiscovery
     const peerFetcher = yield* PeerSourceFetcher
     const remoteEntries = yield* Ref.make<
-      ReadonlyMap<string, readonly LibraryEntry[]>
+      ReadonlyMap<string, readonly CatalogEntry[]>
     >(new Map())
     const remotePeerStates = yield* Ref.make<
       ReadonlyMap<string, CatalogPeerState>
@@ -56,10 +59,10 @@ export const CatalogSnapshotLive: Layer.Layer<
 
     const triggerRemoteRefresh = (peers: readonly PeerRecord[]) =>
       Effect.gen(function* () {
-        const alreadyRefreshing = yield* Ref.modify(refreshing, current => [
-          current,
-          true,
-        ] as const)
+        const alreadyRefreshing = yield* Ref.modify(
+          refreshing,
+          current => [current, true] as const,
+        )
         if (alreadyRefreshing) return
         yield* refreshRemotePeers({
           peers,
@@ -72,18 +75,56 @@ export const CatalogSnapshotLive: Layer.Layer<
       })
 
     return {
-      getSnapshot: () =>
+      getSnapshot: (scope = "fabric") =>
         Effect.gen(function* () {
-          const entries = yield* listLocalEntries(source).pipe(
-            Effect.mapError(toDataError),
-          )
-          const localSource = makeLocalEntrySource(process.env)
-          const localTagged: readonly LibraryEntry[] = entries.map(entry => ({
-            ...entry,
-            source: localSource,
-          }))
-
           const now = new Date().toISOString()
+          const localSource = makeLocalEntrySource(process.env)
+          const localResult = yield* listLocalEntries(source).pipe(
+            Effect.timeout("2000 millis"),
+            Effect.match({
+              onFailure: error => ({ _tag: "Failed" as const, error }),
+              onSuccess: entries => ({ _tag: "Ready" as const, entries }),
+            }),
+          )
+          const localTagged: readonly CatalogEntry[] =
+            localResult._tag === "Ready"
+              ? localResult.entries.map(entry => ({
+                  ...entry,
+                  source: localSource,
+                }))
+              : []
+          const selfPeer = makeSelfCatalogPeer({
+            env: process.env,
+            entryCount: localTagged.length,
+            updatedAt: now,
+            status: localResult._tag === "Ready" ? "ready" : "failed",
+            ...(localResult._tag === "Failed"
+              ? { error: sanitizeCatalogError(localResult.error) }
+              : {}),
+          })
+
+          if (localResult._tag === "Failed") {
+            logger.error(
+              { error: catalogErrorMessage(localResult.error) },
+              "app.catalog.snapshot: source rejected",
+            )
+          }
+
+          if (scope === "self") {
+            const currentGeneration = yield* Ref.updateAndGet(
+              generation,
+              value => value + 1,
+            )
+            const peers = [selfPeer]
+            return new CatalogSnapshotResponse({
+              entries: localTagged,
+              peers: peers.map(toPeerSnapshot),
+              generation: currentGeneration,
+              updatedAt: now,
+              health: toHealth(peers, currentGeneration),
+            })
+          }
+
           const peerSnapshot = yield* SubscriptionRef.get(peerDiscovery.peers)
           const peers = Array.from(peerSnapshot.values())
           const peerKeys = new Set(peers.map(peer => peer.controlUrl))
@@ -116,9 +157,6 @@ export const CatalogSnapshotLive: Layer.Layer<
 
           const remoteEntriesSnapshot = yield* Ref.get(remoteEntries)
           const remotePeerSnapshot = yield* Ref.get(remotePeerStates)
-          // Every emitted snapshot receives a fresh generation so renderers
-          // can safely reconcile local/self changes and peer disappearances,
-          // not just remote fetch completions.
           const currentGeneration = yield* Ref.updateAndGet(
             generation,
             value => value + 1,
@@ -126,24 +164,20 @@ export const CatalogSnapshotLive: Layer.Layer<
           const remoteTagged = peers.flatMap(
             peer => remoteEntriesSnapshot.get(peer.controlUrl) ?? [],
           )
-          const selfPeer = makeSelfCatalogPeer({
-            env: process.env,
-            entryCount: localTagged.length,
-            updatedAt: now,
-          })
           const peerStates = [
             selfPeer,
-            ...peers.map(peer =>
-              remotePeerSnapshot.get(peer.controlUrl) ??
-              catalogPeerFromRecord(peer, {
-                status: "loading",
-                entryCount: 0,
-                updatedAt: now,
-              }),
+            ...peers.map(
+              peer =>
+                remotePeerSnapshot.get(peer.controlUrl) ??
+                catalogPeerFromRecord(peer, {
+                  status: "loading",
+                  entryCount: 0,
+                  updatedAt: now,
+                }),
             ),
           ]
 
-          return new LibrarySnapshotResponse({
+          return new CatalogSnapshotResponse({
             entries: [...localTagged, ...remoteTagged],
             peers: peerStates.map(toPeerSnapshot),
             generation: currentGeneration,
@@ -158,7 +192,7 @@ export const CatalogSnapshotLive: Layer.Layer<
 function refreshRemotePeers(options: {
   readonly peers: readonly PeerRecord[]
   readonly peerFetcher: PeerSourceFetcherService
-  readonly remoteEntries: Ref.Ref<ReadonlyMap<string, readonly LibraryEntry[]>>
+  readonly remoteEntries: Ref.Ref<ReadonlyMap<string, readonly CatalogEntry[]>>
   readonly remotePeerStates: Ref.Ref<ReadonlyMap<string, CatalogPeerState>>
   readonly generation: Ref.Ref<number>
   readonly refreshing: Ref.Ref<boolean>
@@ -194,13 +228,13 @@ function refreshRemotePeers(options: {
         }),
       ),
     ),
-    { concurrency: "unbounded" },
+    { concurrency: 4 },
   ).pipe(
     Effect.catchCause(cause =>
       Effect.sync(() => {
         logger.warn(
           { error: String(cause) },
-          "app.library.snapshot: remote refresh failed",
+          "app.catalog.snapshot: remote refresh failed",
         )
       }),
     ),
@@ -211,37 +245,22 @@ function refreshRemotePeers(options: {
 function listLocalEntries(source: LibrarySourceService) {
   return source.listPlayableEntries
     ? source.listPlayableEntries()
-    : source.list().pipe(
-        Effect.map(games => games.map(gameToPlayableEntry)),
-      )
+    : source
+        .list()
+        .pipe(Effect.map(games => games.map(playableEntryFromResolvedGame)))
 }
 
-function gameToPlayableEntry(game: ResolvedGameRecord): PlayableLibraryEntry {
-  return {
-    id: game.id,
-    itemId: game.id,
-    title: game.metadata?.name ?? game.id,
-    releases: [
-      {
-        id: "default",
-        system: game.system,
-        launchable:
-          game.contentPath !== undefined || game.content !== undefined,
-        ...(game.contentPath !== undefined ? { target: game.contentPath } : {}),
-      },
-    ],
-    launchable: game.contentPath !== undefined || game.content !== undefined,
-    metadata: game.metadata,
+function catalogErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message || String(error)
+  if (typeof error === "object" && error !== null && "message" in error) {
+    return String(error.message ?? error)
   }
+  return String(error)
 }
 
-function toDataError(error: LibraryError): DataError {
-  const message = error.message ?? "library list failed"
-  logger.error({ error: message }, "app.library.snapshot: source.list() rejected")
-  return new DataError({
-    reason: "ReadFailed",
-    message,
-  })
+function sanitizeCatalogError(error: unknown): string {
+  const message = catalogErrorMessage(error)
+  return message.replace(/\/[\w./-]+/g, "[path]").slice(0, 240)
 }
 
 function toPeerSnapshot(peer: CatalogPeerState): CatalogPeerSnapshot {

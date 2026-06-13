@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { useAtomSet, useAtomValue } from "@effect/atom-react"
-import { LibraryListState } from "@platform/library/library-list-state"
-import { LibrarySource } from "@platform/library/library-services"
+import { CatalogFactsSource } from "@platform/catalog/catalog-facts-source"
 import type { PlayableLibraryEntry } from "@platform/library/playable-library"
 import {
-  libraryItemsAtom,
-  librarySourceLayerAtom,
-} from "@platform/react/library/library-atoms"
+  catalogFactsSourceLayerAtom,
+  catalogSnapshotAtom,
+} from "@platform/react/catalog/catalog-atoms"
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react"
 import { Effect, Layer } from "effect"
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 import { type ReactNode, useLayoutEffect } from "react"
 import { HomeRuntimeLayersRoot } from "./HomeRuntimeLayersRoot"
 
@@ -72,19 +72,12 @@ function WithMutableLibrary({
   readonly children: ReactNode
   readonly getEntries: () => readonly PlayableLibraryEntry[]
 }) {
-  const setSourceLayer = useAtomSet(librarySourceLayerAtom)
+  const setSourceLayer = useAtomSet(catalogFactsSourceLayerAtom)
 
   useLayoutEffect(() => {
     setSourceLayer(
-      Layer.succeed(LibrarySource)({
-        list: () => Effect.sync(() => []),
-        listPlayableEntries: () => Effect.sync(getEntries),
-        launchSpecFor: () => Effect.succeed(undefined),
-        resolveLaunchForGame: id =>
-          Effect.fail({
-            reason: "unavailable",
-            message: `unknown ${id}`,
-          } as never),
+      Layer.succeed(CatalogFactsSource)({
+        snapshot: () => Effect.sync(() => snapshotWith(getEntries())),
       }),
     )
   }, [getEntries, setSourceLayer])
@@ -93,16 +86,54 @@ function WithMutableLibrary({
 }
 
 function LibraryTitles() {
-  const result = useAtomValue(libraryItemsAtom)
-  const state = LibraryListState.fromResult(result)
-  if (state._tag !== "Ready") return <div>{state._tag}</div>
-  return (
-    <ul>
-      {state.games.map(game => (
-        <li key={game.id}>{game.title}</li>
-      ))}
-    </ul>
-  )
+  const result = useAtomValue(catalogSnapshotAtom)
+  return AsyncResult.matchWithWaiting(result, {
+    onWaiting: () => <div>Loading</div>,
+    onError: () => <div>LoadError</div>,
+    onDefect: () => <div>Defect</div>,
+    onSuccess: success => (
+      <ul>
+        {success.value.entries.map(game => (
+          <li key={game.id}>{game.title}</li>
+        ))}
+      </ul>
+    ),
+  })
+}
+
+function snapshotWith(entries: readonly PlayableLibraryEntry[]) {
+  return {
+    entries: entries.map(game => ({
+      ...game,
+      source: {
+        hostId: "self",
+        controlUrl: "http://127.0.0.1:3001",
+        isLocal: true,
+      },
+    })),
+    peers: [
+      {
+        hostId: "self",
+        displayName: "self",
+        controlUrl: "http://127.0.0.1:3001",
+        isLocal: true,
+        caps: ["source"],
+        status: "ready" as const,
+        entryCount: entries.length,
+        updatedAt: "2026-06-13T00:00:00.000Z",
+      },
+    ],
+    generation: 1,
+    updatedAt: "2026-06-13T00:00:00.000Z",
+    health: {
+      coordinatorReachable: true,
+      self: "ready" as const,
+      loadingPeers: 0,
+      readyPeers: 0,
+      failedPeers: 0,
+      generation: 1,
+    },
+  }
 }
 
 function entry(id: string, title: string): PlayableLibraryEntry {

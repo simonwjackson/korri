@@ -156,8 +156,26 @@ function client(options: {
     listSourceGames: async () =>
       options.games.map(game => ({
         id: game.id,
+        itemId: game.id,
+        title: game.metadata?.name ?? game.id,
         displayName: game.metadata?.name ?? game.id,
         streamable: true,
+        system: game.system,
+        releases: [
+          {
+            id: game.system,
+            system: game.system,
+            launchable: true,
+            apps: ["moonlight"],
+          },
+        ],
+        launchable: true,
+        metadata: game.metadata,
+        source: {
+          hostId: "aka",
+          controlUrl: "http://aka.local:3001",
+          isLocal: true,
+        },
       })),
     sourceStatus: async () => ({
       status: "available",

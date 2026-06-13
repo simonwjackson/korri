@@ -1,4 +1,7 @@
-import { makeLocalEntrySource, type EntrySource } from "@platform/api/rpc/entry-source"
+import {
+  type EntrySource,
+  makeLocalEntrySource,
+} from "@platform/api/rpc/entry-source"
 import type { PeerRecord } from "./peer-discovery"
 
 export type CatalogPeerStatus = "loading" | "ready" | "failed"

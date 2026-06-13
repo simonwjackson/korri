@@ -23,7 +23,7 @@ The package intentionally calls the daemon over HTTP RPC and does not import Kor
 ## Tools
 
 - `korrid_query`: read-only server, library, source, session lifecycle, and stream-control queries. `command: "rpc"` is available only for known read-only tags.
-- `korrid_find_game`: finds a playable id/title by querying `app.library.list` and applying the shared exact-id-then-fuzzy semantics locally.
+- `korrid_find_game`: finds a playable id/title by querying `app.catalog.snapshot` and applying the shared exact-id-then-fuzzy semantics locally.
 - `korrid_dry_run_launch`: resolves a launch through `app.library.launch.dry-run` without spawning or requiring confirmation.
 - `korrid_launch_game`: launches a playable id through `app.library.launch`; requires `confirmLaunch: true`.
 - `korrid_stop_session`: stops the active foreground session through `app.session.stop`; requires `confirmStop: true`; supports `force: true`.

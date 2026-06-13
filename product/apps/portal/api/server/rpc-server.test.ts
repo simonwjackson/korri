@@ -98,19 +98,17 @@ describe("headless server RPC group", () => {
       "app.acquisition.resolve-download",
       "app.acquisition.search",
       "app.acquisition.validate-sources",
+      "app.catalog.snapshot",
       "app.game-assets.assign",
       "app.game-assets.candidates.list",
       "app.game-assets.unassign",
       "app.hello.get",
       "app.library.launch",
       "app.library.launch.dry-run",
-      "app.library.list",
-      "app.library.snapshot",
       "app.server.status",
       "app.server.stream.prepare",
       "app.session.status",
       "app.session.stop",
-      "app.source.list",
       "app.source.status",
       "app.stream-control.config.get",
       "app.stream-control.gamescope-filter.set",
@@ -140,16 +138,16 @@ describe("headless server RPC group", () => {
     expect(response.status).toBe(415)
   })
 
-  it("exposes library methods on both surfaces so the desktop client can drive them via the system server", () => {
+  it("exposes catalog and launch methods on both surfaces so the desktop client can drive them via the system server", () => {
     const serverTags = Array.from(serverRpcGroup.requests.keys())
     const appTags = Array.from(appRpcGroup.requests.keys())
 
-    expect(appTags).toContain("app.library.list")
+    expect(appTags).toContain("app.catalog.snapshot")
     expect(appTags).toContain("app.library.launch")
     expect(appTags).toContain("app.game-assets.candidates.list")
     expect(appTags).toContain("app.game-assets.assign")
     expect(appTags).toContain("app.game-assets.unassign")
-    expect(serverTags).toContain("app.library.list")
+    expect(serverTags).toContain("app.catalog.snapshot")
     expect(serverTags).toContain("app.library.launch")
     expect(serverTags).toContain("app.library.launch.dry-run")
     expect(serverTags).toContain("app.game-assets.candidates.list")

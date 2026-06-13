@@ -43,7 +43,7 @@ const RAIL_GAP = "var(--shift-home-rail-gap)"
 
 /**
  * Rail entries are `GameRecord` plus an optional federation `source`
- * tag. The tag flows from `app.library.list`'s `LibraryEntry` shape;
+ * tag. The tag flows from `app.catalog.snapshot`'s `LibraryEntry` shape;
  * fixtures and stories that pre-date federation omit it and fall back
  * to bare-id keying.
  */

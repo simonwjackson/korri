@@ -1,7 +1,7 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react"
-import { libraryItemsAtom } from "@platform/react/library/library-atoms"
-import { LibraryListStateRoot } from "@platform/react/library/library-list-state-root"
+import { catalogSnapshotAtom } from "@platform/react/catalog/catalog-atoms"
 import { useLibraryLaunchController } from "@platform/react/library/use-library-launch-controller"
+import { ShiftCatalogStateRoot } from "../catalog/ShiftCatalogStateRoot"
 import { ShiftHomeDefectBody } from "./ShiftHomeDefectBody"
 import { ShiftHomeEmptyBody } from "./ShiftHomeEmptyBody"
 import { ShiftHomeLoadErrorBody } from "./ShiftHomeLoadErrorBody"
@@ -9,17 +9,17 @@ import { ShiftHomeLoadingBody } from "./ShiftHomeLoadingBody"
 import { ShiftHomeReadyBody } from "./ShiftHomeReadyBody"
 
 export function ShiftHomePage() {
-  const items = useAtomValue(libraryItemsAtom)
-  const refreshItems = useAtomRefresh(libraryItemsAtom)
+  const snapshot = useAtomValue(catalogSnapshotAtom)
+  const refreshSnapshot = useAtomRefresh(catalogSnapshotAtom)
   const launch = useLibraryLaunchController()
 
   return (
-    <LibraryListStateRoot result={items}>
+    <ShiftCatalogStateRoot result={snapshot}>
       <ShiftHomeLoadingBody />
-      <ShiftHomeLoadErrorBody onRetry={refreshItems} />
+      <ShiftHomeLoadErrorBody onRetry={refreshSnapshot} />
       <ShiftHomeDefectBody />
       <ShiftHomeEmptyBody />
       <ShiftHomeReadyBody launch={launch} />
-    </LibraryListStateRoot>
+    </ShiftCatalogStateRoot>
   )
 }

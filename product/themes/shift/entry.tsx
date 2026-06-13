@@ -3,18 +3,26 @@ import {
   useAtomInitialValues,
   useAtomRefresh,
 } from "@effect/atom-react"
+import {
+  CatalogFactsError,
+  CatalogFactsSource,
+  type CatalogSnapshotFacts,
+} from "@platform/catalog/catalog-facts-source"
 import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import type { LaunchSpec } from "@platform/library/launcher"
-import type { PlayableLibraryEntry } from "@platform/library/playable-library"
 import {
   Launcher,
   LibraryError,
   LibrarySource,
 } from "@platform/library/library-services"
+import type { PlayableLibraryEntry } from "@platform/library/playable-library"
+import {
+  catalogFactsSourceLayerAtom,
+  catalogSnapshotAtom,
+} from "@platform/react/catalog/catalog-atoms"
 import {
   foregroundSessionStatusLayerAtom,
   launcherLayerAtom,
-  libraryItemsAtom,
   librarySourceLayerAtom,
 } from "@platform/react/library/library-atoms"
 import { ForegroundSessionStatusSource } from "@platform/stream/foreground-session-status-source"
@@ -32,6 +40,10 @@ export const shiftTheme: KorriThemeEntrypoint = {
   mount(host, { bridge }) {
     const root = createRoot(host)
     const initialValues = [
+      [
+        catalogFactsSourceLayerAtom,
+        createBridgeCatalogFactsSourceLayer(bridge),
+      ],
       [librarySourceLayerAtom, createBridgeLibrarySourceLayer(bridge)],
       [launcherLayerAtom, createBridgeLauncherLayer(bridge)],
       [
@@ -68,19 +80,19 @@ function ShiftThemeRuntimeRoot({
 }
 
 function useLibraryRefreshOnRuntimeReady() {
-  const refreshLibraryItems = useAtomRefresh(libraryItemsAtom)
+  const refreshCatalogSnapshot = useAtomRefresh(catalogSnapshotAtom)
 
   useEffect(() => {
-    const timers = [window.setTimeout(() => refreshLibraryItems(), 0)]
+    const timers = [window.setTimeout(() => refreshCatalogSnapshot(), 0)]
 
     if (typeof EventSource !== "undefined") {
       const events = new EventSource("/api/config/events")
-      const refresh = () => refreshLibraryItems()
+      const refresh = () => refreshCatalogSnapshot()
       let sawReady = false
       const refreshOnceWhenReady = () => {
         if (sawReady) return
         sawReady = true
-        refreshLibraryItems()
+        refreshCatalogSnapshot()
       }
       events.addEventListener("config.ready", refreshOnceWhenReady)
       events.addEventListener("config.changed", refresh)
@@ -95,7 +107,41 @@ function useLibraryRefreshOnRuntimeReady() {
     return () => {
       for (const timer of timers) window.clearTimeout(timer)
     }
-  }, [refreshLibraryItems])
+  }, [refreshCatalogSnapshot])
+}
+
+function createBridgeCatalogFactsSourceLayer(bridge: KorriPlatformBridge) {
+  return Layer.succeed(CatalogFactsSource)({
+    snapshot: (scope = "fabric") =>
+      Effect.tryPromise({
+        try: async () =>
+          parseCatalogSnapshotFacts(
+            await bridge.api.rpc("app.catalog.snapshot", { scope }),
+          ),
+        catch: error =>
+          new CatalogFactsError({
+            reason: "unavailable",
+            message: error instanceof Error ? error.message : String(error),
+          }),
+      }),
+  })
+}
+
+function parseCatalogSnapshotFacts(value: unknown): CatalogSnapshotFacts {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("entries" in value) ||
+    !Array.isArray(value.entries) ||
+    !("peers" in value) ||
+    !Array.isArray(value.peers) ||
+    !("health" in value) ||
+    typeof value.health !== "object" ||
+    value.health === null
+  ) {
+    throw new Error("app.catalog.snapshot: unexpected response shape")
+  }
+  return value as CatalogSnapshotFacts
 }
 
 function createBridgeLibrarySourceLayer(bridge: KorriPlatformBridge) {

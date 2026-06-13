@@ -4,7 +4,7 @@
  * Wraps the Effect RPC client against a remote Korri host’s control
  * plane (`/api/rpc`) with the streaming-launch flow:
  *
- *   listSourceGames → sourceStatus → prepareGame(gameId)
+ *   catalogSnapshot(scope:self) → sourceStatus → prepareGame(gameId)
  *
  * `prepareGame` calls `app.server.stream.prepare` first and falls back
  * to the legacy `app.stream.prepare` so older hosts still work. On
@@ -24,6 +24,7 @@ import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
 import type { PlayableLibraryEntry } from "@platform/library/playable-library"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
+import type { CatalogEntry } from "@product/apps/portal/api/catalog/snapshot.rpc"
 import { serverRpcGroup } from "@product/apps/portal/api/server/rpc-group"
 import { Cause, Effect, Exit, type Layer, type Scope } from "effect"
 import { RpcClient } from "effect/unstable/rpc"
@@ -47,15 +48,9 @@ export type RemotePrepareResult =
       readonly message: string
     }
 
-export interface RemoteSourceGame {
-  readonly id: string
+export type RemoteSourceGame = CatalogEntry & {
   readonly displayName: string
   readonly streamable: boolean
-  readonly source?: {
-    readonly hostId: string
-    readonly controlUrl: string
-    readonly isLocal: boolean
-  }
 }
 
 type RemoteRunnerMode =
@@ -135,8 +130,10 @@ export function createRemoteStreamControlClient(
     listGames: async () =>
       await runRpc(
         RpcClient.make(appRpcGroup).pipe(
-          Effect.flatMap(client => client["app.library.list"]({})),
-          Effect.map(response => response.games.map(playableToCompatGame)),
+          Effect.flatMap(client =>
+            client["app.catalog.snapshot"]({ scope: "fabric" }),
+          ),
+          Effect.map(response => response.entries.map(playableToCompatGame)),
           Effect.mapError(toHostUnavailable),
         ),
       ),
@@ -144,8 +141,15 @@ export function createRemoteStreamControlClient(
     listSourceGames: async () =>
       await runRpc(
         RpcClient.make(serverRpcGroup).pipe(
-          Effect.flatMap(client => client["app.source.list"]({})),
-          Effect.map(response => response.games),
+          Effect.flatMap(client =>
+            client["app.catalog.snapshot"]({ scope: "self" }),
+          ),
+          Effect.flatMap(response =>
+            Effect.try({
+              try: () => remoteSourceGamesFromCatalogSnapshot(response),
+              catch: error => error,
+            }),
+          ),
           Effect.mapError(toHostUnavailable),
         ),
       ),
@@ -365,6 +369,36 @@ async function withTimeout<T>(
   } finally {
     if (timeout) clearTimeout(timeout)
   }
+}
+
+export function remoteSourceGamesFromCatalogSnapshot(response: {
+  readonly entries: readonly CatalogEntry[]
+  readonly peers: readonly {
+    readonly isLocal: boolean
+    readonly status: string
+    readonly error?: string
+  }[]
+  readonly health: { readonly self: string; readonly lastFailure?: string }
+}): readonly RemoteSourceGame[] {
+  const self = response.peers.find(peer => peer.isLocal)
+  if (response.health.self === "failed" || self?.status === "failed") {
+    throw new Error(
+      self?.error ?? response.health.lastFailure ?? "Peer catalog failed",
+    )
+  }
+  return response.entries.filter(isRemoteStreamable).map(entry => ({
+    ...entry,
+    displayName: entry.title ?? entry.id,
+    streamable: true,
+  }))
+}
+
+function isRemoteStreamable(entry: CatalogEntry): boolean {
+  return entry.releases.some(
+    release =>
+      release.launchable &&
+      (release.apps === undefined || release.apps.length > 0),
+  )
 }
 
 function playableToCompatGame(entry: PlayableLibraryEntry): ResolvedGameRecord {

@@ -82,7 +82,7 @@ describe("validateRpcEnvelope (pure)", () => {
         {
           _tag: "Request",
           id: "1",
-          tag: "app.library.list",
+          tag: "app.catalog.snapshot",
           payload: {},
           headers: [["x-feature-gates", "abc=1"]],
         },
@@ -96,7 +96,7 @@ describe("validateRpcEnvelope (pure)", () => {
         {
           _tag: "Request",
           id: "1",
-          tag: "app.library.list",
+          tag: "app.catalog.snapshot",
           payload: {},
         },
       ]),
@@ -119,7 +119,7 @@ describe("validateRpcEnvelope (pure)", () => {
       validateRpcEnvelope({
         _tag: "Request",
         id: "1",
-        tag: "app.library.list",
+        tag: "app.catalog.snapshot",
         payload: {},
         headers: [],
       }),

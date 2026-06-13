@@ -1,13 +1,13 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react"
+import { catalogSnapshotAtom } from "@platform/react/catalog/catalog-atoms"
 import type { DualScreenChannelFactory } from "@platform/react/display/dual-screen/DualScreenBroadcastSessionRoot"
 import { DualScreenBroadcastSessionRoot } from "@platform/react/display/dual-screen/DualScreenBroadcastSessionRoot"
 import { DualScreenSessionRoot } from "@platform/react/display/dual-screen/DualScreenSessionRoot"
-import { libraryItemsAtom } from "@platform/react/library/library-atoms"
-import {
-  LibraryListStateRoot,
-  useLibraryListCase,
-} from "@platform/react/library/library-list-state-root"
 import { useLibraryLaunchController } from "@platform/react/library/use-library-launch-controller"
+import {
+  ShiftCatalogStateRoot,
+  useShiftCatalogCase,
+} from "@product/themes/shift/catalog/ShiftCatalogStateRoot"
 import { ShiftCompanionScreen } from "@product/themes/shift/pages/ShiftCompanionScreen"
 import { ShiftHomeDefectBody } from "@product/themes/shift/pages/ShiftHomeDefectBody"
 import { ShiftHomeEmptyBody } from "@product/themes/shift/pages/ShiftHomeEmptyBody"
@@ -34,14 +34,14 @@ export function DualScreenRouteRoot({
   session = "broadcast",
   createChannel,
 }: DualScreenRouteRootProps) {
-  const items = useAtomValue(libraryItemsAtom)
-  const refreshItems = useAtomRefresh(libraryItemsAtom)
+  const snapshot = useAtomValue(catalogSnapshotAtom)
+  const refreshSnapshot = useAtomRefresh(catalogSnapshotAtom)
   const launch = useLibraryLaunchController()
 
   return (
-    <LibraryListStateRoot result={items}>
+    <ShiftCatalogStateRoot result={snapshot}>
       <ShiftHomeLoadingBody />
-      <ShiftHomeLoadErrorBody onRetry={refreshItems} />
+      <ShiftHomeLoadErrorBody onRetry={refreshSnapshot} />
       <ShiftHomeDefectBody />
       <ShiftHomeEmptyBody />
       <DualScreenReadySurface
@@ -50,7 +50,7 @@ export function DualScreenRouteRoot({
         createChannel={createChannel}
         launch={launch}
       />
-    </LibraryListStateRoot>
+    </ShiftCatalogStateRoot>
   )
 }
 
@@ -65,7 +65,7 @@ function DualScreenReadySurface({
   readonly createChannel?: DualScreenChannelFactory
   readonly launch: ReturnType<typeof useLibraryLaunchController>
 }) {
-  const ready = useLibraryListCase("Ready")
+  const ready = useShiftCatalogCase("Ready")
 
   return Option.match(ready, {
     onNone: () => null,

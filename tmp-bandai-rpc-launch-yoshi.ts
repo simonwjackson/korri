@@ -10,12 +10,23 @@ const program = Effect.scoped(
   RpcClient.make(appRpcGroup).pipe(
     Effect.flatMap(client =>
       Effect.gen(function* () {
-        const list = yield* client["app.library.list"]({})
-        console.log(JSON.stringify({
-          type: "list",
-          count: list.games.length,
-          games: list.games.map((g: any) => ({ id: g.id, title: g.title ?? g.metadata?.name })),
-        }, null, 2))
+        const snapshot = yield* client["app.catalog.snapshot"]({
+          scope: "fabric",
+        })
+        console.log(
+          JSON.stringify(
+            {
+              type: "catalog.snapshot",
+              count: snapshot.entries.length,
+              games: snapshot.entries.map(entry => ({
+                id: entry.id,
+                title: entry.title ?? entry.metadata?.name,
+              })),
+            },
+            null,
+            2,
+          ),
+        )
         const launch = yield* client["app.library.launch"]({ id })
         console.log(JSON.stringify({ type: "launch", launch }, null, 2))
       }),

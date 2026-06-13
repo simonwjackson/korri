@@ -9,10 +9,10 @@ import { asPlayableLibraryEntry } from "@platform/library/playable-library"
 import { getPlayableDisplayName } from "@platform/library/playable-library-ui"
 import { useInputAction } from "@platform/react/input/use-input-action"
 import { foregroundSessionGateStateAtom } from "@platform/react/library/library-atoms"
-import { useLibraryListCase } from "@platform/react/library/library-list-state-root"
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
 import { Option } from "effect"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
+import { useShiftCatalogCase } from "../catalog/ShiftCatalogStateRoot"
 import { ShiftForegroundSessionGateNotice } from "../molecules/ShiftForegroundSessionGateNotice"
 import { ShiftHomeCaption } from "../molecules/ShiftHomeCaption"
 import { ShiftLabsButton } from "../molecules/ShiftLabsButton"
@@ -37,7 +37,7 @@ export function ShiftHomeReadyBody({
 }: {
   readonly launch: LaunchController
 }) {
-  const ready = useLibraryListCase("Ready")
+  const ready = useShiftCatalogCase("Ready")
 
   return Option.match(ready, {
     onNone: () => null,

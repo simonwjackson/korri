@@ -12,7 +12,9 @@ describe("createPortalPlatformBridge", () => {
     const bus = createInputBus()
     const appRpc: PortalRpcRunner = async (method, payload) => {
       calls.push({ method, payload })
-      if (method === "app.library.list") return { games: [{ id: "hades" }] }
+      if (method === "app.catalog.snapshot") {
+        return { entries: [{ id: "hades" }] }
+      }
       return { ok: true }
     }
 
@@ -36,7 +38,7 @@ describe("createPortalPlatformBridge", () => {
     expect(seen).toEqual([{ type: "menu", source: "keyboard" }])
 
     expect(calls).toEqual([
-      { method: "app.library.list", payload: {} },
+      { method: "app.catalog.snapshot", payload: { scope: "fabric" } },
       { method: "app.library.launch", payload: { id: "hades" } },
       { method: "app.example", payload: { yes: true } },
     ])
@@ -57,7 +59,7 @@ describe("createPortalPlatformBridge", () => {
     await expect(
       createPortalPlatformBridge({
         inputBus: bus,
-        appRpc: async () => ({ entries: [] }),
+        appRpc: async () => ({ games: [] }),
       }).library.list(),
     ).rejects.toThrow("unexpected response shape")
   })
@@ -66,7 +68,7 @@ describe("createPortalPlatformBridge", () => {
     const bridge = createPortalPlatformBridge({
       inputBus: createInputBus(),
       desktopInput: true,
-      appRpc: async () => ({ games: [] }),
+      appRpc: async () => ({ entries: [] }),
       serverRpc: async () => ({
         serverId: "server-1",
         sessiond: { mode: "game" },

@@ -103,7 +103,7 @@ describe("game-assets end-to-end integration", () => {
     expect(await readFile(durablePath)).toEqual(validPng)
 
     const listed = await listLibrary(server.rpcUrl)
-    const listedGame = gameById(listed.games, gameWithAssetId)
+    const listedGame = gameById(listed.entries, gameWithAssetId)
     const resolvedMedia = listedGame.media?.[0]
     expect(resolvedMedia).toMatchObject({
       role: "tile",
@@ -119,7 +119,7 @@ describe("game-assets end-to-end integration", () => {
     expect(imageResponse.headers.get("content-type")).toBe("image/png")
     expect(Buffer.from(await imageResponse.arrayBuffer())).toEqual(validPng)
 
-    const plainGame = gameById(listed.games, gameWithoutAssetsId)
+    const plainGame = gameById(listed.entries, gameWithoutAssetsId)
     expect(plainGame.media).toBeUndefined()
     await expectAssetlessLaunchAndStreamFlows(server.rpcUrl, root)
 
@@ -139,7 +139,7 @@ describe("game-assets end-to-end integration", () => {
     expect(await readFile(durablePath)).toEqual(validPng)
 
     const listedAfterReopen = await listLibrary(server.rpcUrl)
-    const reopenedMedia = gameById(listedAfterReopen.games, gameWithAssetId)
+    const reopenedMedia = gameById(listedAfterReopen.entries, gameWithAssetId)
       .media?.[0]
     expect(reopenedMedia?.url).toBe(resolvedMedia?.url)
     const reopenedImageResponse = await fetch(reopenedMedia?.url ?? "")
@@ -153,7 +153,7 @@ describe("game-assets end-to-end integration", () => {
     expect(await readFile(durablePath)).toEqual(validPng)
     const listedAfterUnassign = await listLibrary(server.rpcUrl)
     expect(
-      gameById(listedAfterUnassign.games, gameWithAssetId).media,
+      gameById(listedAfterUnassign.entries, gameWithAssetId).media,
     ).toBeUndefined()
   })
 })
@@ -306,7 +306,9 @@ async function listLibrary(rpcUrl: string) {
   return await Effect.runPromise(
     Effect.scoped(
       RpcClient.make(appRpcGroup).pipe(
-        Effect.flatMap(client => client["app.library.list"]({})),
+        Effect.flatMap(client =>
+          client["app.catalog.snapshot"]({ scope: "fabric" }),
+        ),
         Effect.provide(rpcClientLayer(rpcUrl)),
       ),
     ),

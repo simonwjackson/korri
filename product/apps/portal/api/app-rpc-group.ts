@@ -1,13 +1,11 @@
 import { FeatureGatesMiddleware } from "@platform/gates/middleware"
 import { RpcGroup } from "effect/unstable/rpc"
+import { CatalogSnapshotRpc as appCatalogSnapshot } from "./catalog/snapshot.rpc"
 import { AssignGameAssetRpc as appGameAssetsAssign } from "./game-assets/assign.rpc"
 import { ListGameAssetCandidatesRpc as appGameAssetsCandidatesList } from "./game-assets/list-candidates.rpc"
 import { UnassignGameAssetRpc as appGameAssetsUnassign } from "./game-assets/unassign.rpc"
 import { GetHelloRpc as appHelloGet } from "./hello/rpc"
 import { LaunchLibraryRpc as appLibraryLaunch } from "./library/launch.rpc"
-import { ListLibraryRpc as appLibraryList } from "./library/list.rpc"
-import { LibrarySnapshotRpc as appLibrarySnapshot } from "./library/snapshot.rpc"
-import { ListSourceRpc as appSourceList } from "./source/list.rpc"
 import { SourceStatusRpc as appSourceStatus } from "./source/status.rpc"
 import { PrepareStreamRpc as appStreamPrepare } from "./stream/prepare.rpc"
 import { GetStreamControlConfigRpc as appStreamControlConfigGet } from "./stream-control/get-config.rpc"
@@ -29,10 +27,8 @@ export const appRpcGroup = RpcGroup.make(
   appGameAssetsCandidatesList,
   appGameAssetsAssign,
   appGameAssetsUnassign,
-  appLibraryList,
-  appLibrarySnapshot,
+  appCatalogSnapshot,
   appLibraryLaunch,
-  appSourceList,
   appSourceStatus,
   appStreamPrepare,
   appStreamControlConfigGet,
@@ -50,4 +46,5 @@ export const appRpcGroup = RpcGroup.make(
   appStreamControlLinkedResolutionSet,
 ).middleware(FeatureGatesMiddleware)
 
+// fallow-ignore-next-line unused-types
 export type AppRpcGroup = typeof appRpcGroup

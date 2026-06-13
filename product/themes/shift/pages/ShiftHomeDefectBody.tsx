@@ -1,8 +1,8 @@
-import { useLibraryListCase } from "@platform/react/library/library-list-state-root"
 import { Option } from "effect"
+import { useShiftCatalogCase } from "../catalog/ShiftCatalogStateRoot"
 
 export function ShiftHomeDefectBody() {
-  const defect = useLibraryListCase("Defect")
+  const defect = useShiftCatalogCase("Defect")
 
   return Option.match(defect, {
     onNone: () => null,

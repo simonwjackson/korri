@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test"
-import { catalogPeerFromRecord, makeSelfCatalogPeer } from "./catalog-peer-state"
+import {
+  catalogPeerFromRecord,
+  makeSelfCatalogPeer,
+} from "./catalog-peer-state"
 
 describe("catalog peer state", () => {
   it("represents self with the same catalog peer shape as remote peers", () => {

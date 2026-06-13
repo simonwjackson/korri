@@ -1,12 +1,12 @@
-import { useLibraryListCase } from "@platform/react/library/library-list-state-root"
 import { Option } from "effect"
+import { useShiftCatalogCase } from "../catalog/ShiftCatalogStateRoot"
 
 export function ShiftHomeLoadErrorBody({
   onRetry,
 }: {
   readonly onRetry: () => void
 }) {
-  const loadError = useLibraryListCase("LoadError")
+  const loadError = useShiftCatalogCase("LoadError")
 
   return Option.match(loadError, {
     onNone: () => null,

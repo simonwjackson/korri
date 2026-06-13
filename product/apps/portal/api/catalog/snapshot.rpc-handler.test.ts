@@ -1,16 +1,22 @@
 import { describe, expect, it } from "bun:test"
-import { makeInMemoryLibrarySourceLayer } from "@platform/library/library-source-layer-memory"
-import { CatalogSnapshotLive } from "@product/apps/portal/api/library/catalog-snapshot"
-import { PeerDiscovery, type PeerRecord } from "@product/apps/portal/peers/peer-discovery"
+import {
+  loadingForeverLibrarySourceLayer,
+  makeInMemoryLibrarySourceLayer,
+} from "@platform/library/library-source-layer-memory"
+import { CatalogSnapshotLive } from "@product/apps/portal/api/catalog/catalog-snapshot"
+import {
+  PeerDiscovery,
+  type PeerRecord,
+} from "@product/apps/portal/peers/peer-discovery"
 import {
   makePeerSourceFetcherLive,
   type PeerSourceCatalogEntry,
   PeerSourceFetcher,
 } from "@product/apps/portal/peers/peer-source-fetcher"
 import { Effect, Layer, SubscriptionRef } from "effect"
-import { handleLibrarySnapshot } from "./snapshot.rpc-handler"
+import { handleCatalogSnapshot } from "./snapshot.rpc-handler"
 
-describe("app.library.snapshot", () => {
+describe("app.catalog.snapshot", () => {
   it("returns self entries immediately with remote peers marked loading", async () => {
     const slowPeer: PeerRecord = {
       hostId: "aka",
@@ -21,15 +27,13 @@ describe("app.library.snapshot", () => {
     const layer = snapshotLayerWith({
       peers: [slowPeer],
       peerCatalogs: {
-        [slowPeer.controlUrl]: [
-          { id: "remote/game", displayName: "Remote Game", streamable: true },
-        ],
+        [slowPeer.controlUrl]: [peerEntry("remote/game", "Remote Game")],
       },
       peerCatalogDelaysMs: { [slowPeer.controlUrl]: 100 },
     })
 
     const snapshot = await Effect.runPromise(
-      handleLibrarySnapshot({}).pipe(Effect.provide(layer)),
+      handleCatalogSnapshot({ scope: "fabric" }).pipe(Effect.provide(layer)),
     )
 
     expect(snapshot.entries.map(entry => entry.id)).toEqual(["local/stray"])
@@ -45,6 +49,49 @@ describe("app.library.snapshot", () => {
     expect(snapshot.health.loadingPeers).toBe(1)
   })
 
+  it("bounds a hung self catalog as failed facts", async () => {
+    const layer = snapshotLayerWith({
+      peers: [],
+      peerCatalogs: {},
+      sourceLayer: loadingForeverLibrarySourceLayer,
+    })
+
+    const started = Date.now()
+    const snapshot = await Effect.runPromise(
+      handleCatalogSnapshot({ scope: "self" }).pipe(Effect.provide(layer)),
+    )
+
+    expect(Date.now() - started).toBeLessThan(2500)
+    expect(snapshot.health.self).toBe("failed")
+    expect(snapshot.peers[0]).toMatchObject({ isLocal: true, status: "failed" })
+  })
+
+  it("does not fan out remote peers for self-only snapshots", async () => {
+    const aka: PeerRecord = {
+      hostId: "aka",
+      displayName: "aka",
+      controlUrl: "http://aka:3001",
+      caps: ["source"],
+    }
+    let fetches = 0
+    const layer = snapshotLayerWith({
+      peers: [aka],
+      peerCatalogs: { [aka.controlUrl]: [] },
+      onFetch: () => {
+        fetches += 1
+      },
+    })
+
+    const snapshot = await Effect.runPromise(
+      handleCatalogSnapshot({ scope: "self" }).pipe(Effect.provide(layer)),
+    )
+
+    expect(fetches).toBe(0)
+    expect(snapshot.entries.map(entry => entry.id)).toEqual(["local/stray"])
+    expect(snapshot.peers).toHaveLength(1)
+    expect(snapshot.peers[0]).toMatchObject({ isLocal: true, status: "ready" })
+  })
+
   it("adds remote entries and health after peer refresh completes", async () => {
     const aka: PeerRecord = {
       hostId: "aka",
@@ -55,17 +102,15 @@ describe("app.library.snapshot", () => {
     const layer = snapshotLayerWith({
       peers: [aka],
       peerCatalogs: {
-        [aka.controlUrl]: [
-          { id: "remote/game", displayName: "Remote Game", streamable: true },
-        ],
+        [aka.controlUrl]: [peerEntry("remote/game", "Remote Game")],
       },
     })
 
     const snapshot = await Effect.runPromise(
       Effect.gen(function* () {
-        yield* handleLibrarySnapshot({})
+        yield* handleCatalogSnapshot({ scope: "fabric" })
         yield* Effect.sleep("10 millis")
-        return yield* handleLibrarySnapshot({})
+        return yield* handleCatalogSnapshot({ scope: "fabric" })
       }).pipe(Effect.provide(layer)),
     )
 
@@ -91,9 +136,9 @@ describe("app.library.snapshot", () => {
 
     const snapshot = await Effect.runPromise(
       Effect.gen(function* () {
-        yield* handleLibrarySnapshot({})
+        yield* handleCatalogSnapshot({ scope: "fabric" })
         yield* Effect.sleep("10 millis")
-        return yield* handleLibrarySnapshot({})
+        return yield* handleCatalogSnapshot({ scope: "fabric" })
       }).pipe(Effect.provide(layer)),
     )
 
@@ -107,23 +152,53 @@ describe("app.library.snapshot", () => {
   })
 })
 
+function peerEntry(id: string, title: string): PeerSourceCatalogEntry {
+  return {
+    id,
+    itemId: id,
+    title,
+    displayName: title,
+    streamable: true,
+    system: "remote",
+    releases: [
+      {
+        id: "remote",
+        system: "remote",
+        launchable: true,
+        apps: ["moonlight"],
+      },
+    ],
+    launchable: true,
+    metadata: { name: title },
+    source: {
+      hostId: "peer",
+      controlUrl: "http://peer:3001",
+      isLocal: true,
+    },
+  }
+}
+
 function snapshotLayerWith(options: {
   readonly peers: readonly PeerRecord[]
   readonly peerCatalogs: Readonly<
     Record<string, readonly PeerSourceCatalogEntry[]>
   >
   readonly peerCatalogDelaysMs?: Readonly<Record<string, number>>
+  readonly onFetch?: () => void
+  readonly sourceLayer?: ReturnType<typeof makeInMemoryLibrarySourceLayer>
 }) {
-  const sourceLayer = makeInMemoryLibrarySourceLayer({
-    games: [
-      {
-        id: "local/stray",
-        system: "steam",
-        contentPath: "/storage/steam/stray",
-        metadata: { name: "Stray" },
-      },
-    ],
-  })
+  const sourceLayer =
+    options.sourceLayer ??
+    makeInMemoryLibrarySourceLayer({
+      games: [
+        {
+          id: "local/stray",
+          system: "steam",
+          contentPath: "/storage/steam/stray",
+          metadata: { name: "Stray" },
+        },
+      ],
+    })
   const peersLayer = Layer.effect(PeerDiscovery)(
     Effect.gen(function* () {
       const peers = yield* SubscriptionRef.make<
@@ -136,6 +211,7 @@ function snapshotLayerWith(options: {
     makePeerSourceFetcherLive({
       createClient: controlUrl => ({
         listSourceGames: async () => {
+          options.onFetch?.()
           const delay = options.peerCatalogDelaysMs?.[controlUrl] ?? 0
           if (delay > 0) {
             await new Promise(resolve => setTimeout(resolve, delay))

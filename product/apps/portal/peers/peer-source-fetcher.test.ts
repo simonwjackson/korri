@@ -18,8 +18,26 @@ describe("PeerSourceFetcherLive", () => {
     const catalog: readonly PeerSourceCatalogEntry[] = [
       {
         id: "pico-8/celeste",
+        itemId: "pico-8/celeste",
+        title: "Celeste",
         displayName: "Celeste",
         streamable: true,
+        system: "pico-8",
+        releases: [
+          {
+            id: "pico8",
+            system: "pico-8",
+            launchable: true,
+            apps: ["moonlight"],
+          },
+        ],
+        launchable: true,
+        metadata: { name: "Celeste" },
+        source: {
+          hostId: "sobo",
+          controlUrl: "http://sobo.invalid:3001",
+          isLocal: true,
+        },
       },
     ]
 
@@ -36,7 +54,7 @@ describe("PeerSourceFetcherLive", () => {
     expect(entries).toHaveLength(1)
     expect(entries[0]).toMatchObject({
       id: "pico-8/celeste",
-      system: "remote",
+      system: "pico-8",
       source: {
         hostId: "sobo",
         controlUrl: "http://sobo.invalid:3001",

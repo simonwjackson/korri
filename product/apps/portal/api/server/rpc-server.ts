@@ -20,6 +20,8 @@ import { handleAcquisitionPlugins } from "../acquisition/plugins.rpc-handler"
 import { handleAcquisitionResolveDownload } from "../acquisition/resolve-download.rpc-handler"
 import { handleAcquisitionSearch } from "../acquisition/search.rpc-handler"
 import { handleAcquisitionValidateSources } from "../acquisition/validate-sources.rpc-handler"
+import { CatalogSnapshotLive } from "../catalog/catalog-snapshot"
+import { handleCatalogSnapshot } from "../catalog/snapshot.rpc-handler"
 import { handleAssignGameAsset } from "../game-assets/assign.rpc-handler"
 import { handleListGameAssetCandidates } from "../game-assets/list-candidates.rpc-handler"
 import { handleUnassignGameAsset } from "../game-assets/unassign.rpc-handler"
@@ -27,15 +29,9 @@ import { handleGetHello } from "../hello/rpc-handler"
 import { handleDryRunLaunch } from "../library/dry-run.rpc-handler"
 import { ForegroundSessionHostLive } from "../library/foreground-session-host-layer"
 import { handleLaunchLibrary } from "../library/launch.rpc-handler"
-import {
-  CatalogSnapshotLive,
-} from "../library/catalog-snapshot"
-import { handleListLibrary } from "../library/list.rpc-handler"
 import { RemoteStreamPrepareLive } from "../library/remote-stream-prepare"
-import { handleLibrarySnapshot } from "../library/snapshot.rpc-handler"
 import { handleSessionStatus } from "../session/status.rpc-handler"
 import { handleStopSession } from "../session/stop.rpc-handler"
-import { handleListSource } from "../source/list.rpc-handler"
 import { handleSourceStatus } from "../source/status.rpc-handler"
 import { handlePrepareStream } from "../stream/prepare.rpc-handler"
 import { handleGetStreamControlConfig } from "../stream-control/get-config.rpc-handler"
@@ -109,11 +105,9 @@ const ServerHandlersLive = serverRpcGroup.toLayer(
     "app.game-assets.candidates.list": handleListGameAssetCandidates,
     "app.game-assets.assign": handleAssignGameAsset,
     "app.game-assets.unassign": handleUnassignGameAsset,
-    "app.library.list": handleListLibrary,
-    "app.library.snapshot": handleLibrarySnapshot,
+    "app.catalog.snapshot": handleCatalogSnapshot,
     "app.library.launch": handleLaunchLibrary,
     "app.library.launch.dry-run": handleDryRunLaunch,
-    "app.source.list": handleListSource,
     "app.source.status": handleSourceStatus,
     "app.server.status": handleServerStatus,
     "app.session.status": handleSessionStatus,
@@ -151,6 +145,7 @@ const webHandler = HttpEffect.toWebHandlerLayerWith(ServerLive, {
 export const serverRpcHandler = (request: Request) =>
   webHandler.handler(request)
 
+// fallow-ignore-next-line unused-exports
 export const serverRpcDispose = async () => {
   await webHandler.dispose()
   await Effect.runPromise(Scope.close(rpcScope, Exit.void))

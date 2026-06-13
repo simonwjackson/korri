@@ -31,30 +31,40 @@ export function createKorriControlRpc(
       ) as Effect.Effect<T, unknown, never>,
     )
 
+  const readCatalogEntries = () =>
+    runRpc(
+      RpcClient.make(serverRpcGroup).pipe(
+        Effect.flatMap(client =>
+          client["app.catalog.snapshot"]({ scope: "fabric" }),
+        ),
+        Effect.flatMap(response =>
+          response.health.self === "failed"
+            ? Effect.fail(
+                new Error(
+                  response.health.lastFailure ?? "Catalog self read failed",
+                ),
+              )
+            : Effect.succeed(response.entries),
+        ),
+      ),
+    )
+
   return {
     listGames: () =>
-      runRpc(
-        RpcClient.make(serverRpcGroup).pipe(
-          Effect.flatMap(client => client["app.catalog.snapshot"]({ scope: "fabric" })),
-        ),
-      ).pipe(
+      readCatalogEntries().pipe(
         Effect.match({
           onFailure: error => controlListGamesTransportFailure(error),
-          onSuccess: response => ({
+          onSuccess: games => ({
             _tag: "GamesListed" as const,
-            games: response.entries,
+            games,
           }),
         }),
       ),
     findGame: request =>
-      runRpc(
-        RpcClient.make(serverRpcGroup).pipe(
-          Effect.flatMap(client => client["app.catalog.snapshot"]({ scope: "fabric" })),
-        ),
-      ).pipe(
+      readCatalogEntries().pipe(
         Effect.match({
           onFailure: error => controlFindGameTransportFailure(error),
-          onSuccess: response => findPlayableEntry(response.entries, request),
+          onSuccess: entries => findPlayableEntry(entries, request),
         }),
       ),
     dryRunLaunch: request =>

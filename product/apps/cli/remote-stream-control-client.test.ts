@@ -7,7 +7,10 @@ import { serverRpcHandler } from "@product/apps/portal/api/server/rpc-server"
 import { withRpcServer } from "../../../tools/testing/library/with-rpc-server"
 import { withTempProseqlLibrary } from "../../../tools/testing/library/with-temp-proseql-library"
 import { decodeLaunchIntent } from "../../services/device/game-stream-launch-intent"
-import { createRemoteStreamControlClient } from "./remote-stream-control-client"
+import {
+  createRemoteStreamControlClient,
+  remoteSourceGamesFromCatalogSnapshot,
+} from "./remote-stream-control-client"
 
 const originalLocation = {
   origin: window.location.origin,
@@ -38,6 +41,37 @@ afterEach(async () => {
 })
 
 describe("remote stream control client", () => {
+  it("filters remote source games from self-scoped catalog facts", () => {
+    const games = remoteSourceGamesFromCatalogSnapshot(
+      snapshotValue({
+        entries: [
+          catalogEntry("gba/wario-land-4", "Wario Land 4", {
+            apps: ["moonlight"],
+          }),
+          catalogEntry("gba/not-ready", "Not Ready", {
+            launchable: false,
+            apps: ["moonlight"],
+          }),
+          catalogEntry("gba/no-app", "No App", { apps: [] }),
+        ],
+      }),
+    )
+
+    expect(games.map(game => game.id)).toEqual(["gba/wario-land-4"])
+  })
+
+  it("surfaces failed self catalog facts as an unavailable source", () => {
+    expect(() =>
+      remoteSourceGamesFromCatalogSnapshot(
+        snapshotValue({
+          entries: [],
+          selfStatus: "failed",
+          selfError: "library unavailable",
+        }),
+      ),
+    ).toThrow("library unavailable")
+  })
+
   it("lists games, prepares known games, and reports disabled host control through the real RPC server", async () => {
     const { intentPath } = await setupRemoteLibrary({ enabled: true })
     await using server = await withRpcServer({
@@ -139,6 +173,66 @@ function pointWindowAt(baseUrl: string): void {
     hostname: url.hostname,
     pathname: "/",
   })
+}
+
+function snapshotValue(options: {
+  readonly entries: readonly ReturnType<typeof catalogEntry>[]
+  readonly selfStatus?: "ready" | "loading" | "failed"
+  readonly selfError?: string
+}) {
+  const status = options.selfStatus ?? "ready"
+  return {
+    entries: options.entries,
+    peers: [
+      {
+        hostId: "self",
+        displayName: "This Korri",
+        controlUrl: "local://self",
+        isLocal: true,
+        caps: ["source"],
+        status,
+        entryCount: options.entries.length,
+        ...(options.selfError ? { error: options.selfError } : {}),
+      },
+    ],
+    generation: 1,
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    health: {
+      self: status,
+      remote: "ready",
+      failedPeers: status === "failed" ? 1 : 0,
+      ...(options.selfError ? { lastFailure: options.selfError } : {}),
+    },
+  }
+}
+
+function catalogEntry(
+  id: string,
+  title: string,
+  options: { readonly launchable?: boolean; readonly apps?: readonly string[] },
+) {
+  const launchable = options.launchable ?? true
+  return {
+    id,
+    itemId: id,
+    title,
+    system: "gba",
+    releases: [
+      {
+        id: "gba",
+        system: "gba",
+        launchable,
+        apps: options.apps,
+      },
+    ],
+    launchable,
+    metadata: { name: title },
+    source: {
+      hostId: "self",
+      controlUrl: "local://self",
+      isLocal: true,
+    },
+  }
 }
 
 function setWindowLocation(location: typeof originalLocation): void {

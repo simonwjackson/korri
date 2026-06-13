@@ -6,7 +6,6 @@ import {
   LibrarySource,
 } from "@platform/library/library-services"
 import { loadingForeverLibrarySourceLayer } from "@platform/library/library-source-layer-memory"
-import { playableEntryFromResolvedGame } from "@platform/library/playable-library"
 import type { ForegroundSessionGateState } from "@platform/stream/foreground-session-gate-state"
 import { ForegroundSessionStatusSource } from "@platform/stream/foreground-session-status-source"
 import { Duration, Effect, Layer } from "effect"
@@ -37,17 +36,6 @@ export const libraryRuntime = Atom.runtime(get =>
 const foregroundSessionStatusRuntime = Atom.runtime(get =>
   get(foregroundSessionStatusLayerAtom),
 )
-
-export const libraryItemsAtom = libraryRuntime
-  .atom(
-    Effect.gen(function* () {
-      const source = yield* LibrarySource
-      if (source.listPlayableEntries) return yield* source.listPlayableEntries()
-      const legacyGames = yield* source.list()
-      return legacyGames.map(playableEntryFromResolvedGame)
-    }),
-  )
-  .pipe(Atom.withRefresh(Duration.seconds(1)))
 
 /**
  * Polls `app.server.status` at 1 Hz via `Atom.withRefresh`. The live layer

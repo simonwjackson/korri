@@ -1,6 +1,6 @@
 /**
  * Structural source-identity tag attached to every entry that flows
- * through `app.library.list` and `app.source.list`.
+ * through `app.catalog.snapshot` and `app.catalog.snapshot`.
  *
  * Federation routing reads this tag to decide whether an entry is the
  * local server's own (use the local launch path) or contributed by a
@@ -54,8 +54,8 @@ export interface MakeLocalEntrySourceOptions {
 /**
  * Build the `EntrySource` tag for entries served by THIS process.
  *
- * Centralized so the wire shape stays consistent across `app.library.list`,
- * `app.source.list`, and any future server-side surface that emits
+ * Centralized so the wire shape stays consistent across `app.catalog.snapshot`,
+ * `app.catalog.snapshot`, and any future server-side surface that emits
  * library entries. Read-once on entry production; do not cache across
  * env changes.
  *
