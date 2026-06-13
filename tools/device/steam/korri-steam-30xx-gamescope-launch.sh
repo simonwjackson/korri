@@ -27,7 +27,17 @@ find_steam_localconfig() {
 
   local candidate
   # Steam normally uses the numeric account id under userdata/, not userdata/0.
-  # Prefer an existing localconfig that already mentions the target AppID.
+  # Prefer a real account localconfig that already mentions the target AppID;
+  # userdata/0 is only a fallback skeleton and Steam ignored it on Bandai.
+  for candidate in "$STEAM_ROOT"/userdata/*/config/localconfig.vdf; do
+    [[ -f "$candidate" ]] || continue
+    [[ "$candidate" == "$STEAM_ROOT/userdata/0/config/localconfig.vdf" ]] && continue
+    if grep -qF "\"$APPID\"" "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
   for candidate in "$STEAM_ROOT"/userdata/*/config/localconfig.vdf; do
     [[ -f "$candidate" ]] || continue
     if grep -qF "\"$APPID\"" "$candidate"; then
