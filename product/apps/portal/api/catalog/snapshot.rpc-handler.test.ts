@@ -50,20 +50,33 @@ describe("app.catalog.snapshot", () => {
   })
 
   it("bounds a hung self catalog as failed facts", async () => {
-    const layer = snapshotLayerWith({
-      peers: [],
-      peerCatalogs: {},
-      sourceLayer: loadingForeverLibrarySourceLayer,
-    })
+    const originalTimeout = process.env.KORRI_CATALOG_SELF_TIMEOUT_MS
+    process.env.KORRI_CATALOG_SELF_TIMEOUT_MS = "50"
+    try {
+      const layer = snapshotLayerWith({
+        peers: [],
+        peerCatalogs: {},
+        sourceLayer: loadingForeverLibrarySourceLayer,
+      })
 
-    const started = Date.now()
-    const snapshot = await Effect.runPromise(
-      handleCatalogSnapshot({ scope: "self" }).pipe(Effect.provide(layer)),
-    )
+      const started = Date.now()
+      const snapshot = await Effect.runPromise(
+        handleCatalogSnapshot({ scope: "self" }).pipe(Effect.provide(layer)),
+      )
 
-    expect(Date.now() - started).toBeLessThan(2500)
-    expect(snapshot.health.self).toBe("failed")
-    expect(snapshot.peers[0]).toMatchObject({ isLocal: true, status: "failed" })
+      expect(Date.now() - started).toBeLessThan(500)
+      expect(snapshot.health.self).toBe("failed")
+      expect(snapshot.peers[0]).toMatchObject({
+        isLocal: true,
+        status: "failed",
+      })
+    } finally {
+      if (originalTimeout === undefined) {
+        delete process.env.KORRI_CATALOG_SELF_TIMEOUT_MS
+      } else {
+        process.env.KORRI_CATALOG_SELF_TIMEOUT_MS = originalTimeout
+      }
+    }
   })
 
   it("does not fan out remote peers for self-only snapshots", async () => {

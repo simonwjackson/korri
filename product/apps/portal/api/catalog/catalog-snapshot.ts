@@ -18,7 +18,15 @@ import {
   PeerSourceFetcher,
   type PeerSourceFetcherService,
 } from "@product/apps/portal/peers/peer-source-fetcher"
-import { Context, Effect, Layer, Ref, Scope, SubscriptionRef } from "effect"
+import {
+  Context,
+  Duration,
+  Effect,
+  Layer,
+  Ref,
+  Scope,
+  SubscriptionRef,
+} from "effect"
 import {
   type CatalogEntry,
   CatalogHealthSummary,
@@ -26,6 +34,8 @@ import {
   CatalogSnapshotResponse,
   type CatalogSnapshotScope,
 } from "./snapshot.rpc"
+
+const DEFAULT_LOCAL_CATALOG_TIMEOUT_MS = 15_000
 
 interface CatalogSnapshotService {
   readonly getSnapshot: (
@@ -80,7 +90,7 @@ export const CatalogSnapshotLive: Layer.Layer<
           const now = new Date().toISOString()
           const localSource = makeLocalEntrySource(process.env)
           const localResult = yield* listLocalEntries(source).pipe(
-            Effect.timeout("2000 millis"),
+            Effect.timeout(Duration.millis(localCatalogTimeoutMs())),
             Effect.match({
               onFailure: error => ({ _tag: "Failed" as const, error }),
               onSuccess: entries => ({ _tag: "Ready" as const, entries }),
@@ -248,6 +258,15 @@ function listLocalEntries(source: LibrarySourceService) {
     : source
         .list()
         .pipe(Effect.map(games => games.map(playableEntryFromResolvedGame)))
+}
+
+function localCatalogTimeoutMs(): number {
+  const raw = process.env.KORRI_CATALOG_SELF_TIMEOUT_MS
+  if (raw === undefined) return DEFAULT_LOCAL_CATALOG_TIMEOUT_MS
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_LOCAL_CATALOG_TIMEOUT_MS
 }
 
 function catalogErrorMessage(error: unknown): string {

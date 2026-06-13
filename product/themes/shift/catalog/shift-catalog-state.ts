@@ -26,8 +26,8 @@ export const ShiftCatalogState = {
   fromResult: (
     result: AsyncResult.AsyncResult<CatalogSnapshotFacts, CatalogFactsError>,
   ): ShiftCatalogState =>
-    AsyncResult.matchWithWaiting(result, {
-      onWaiting: () => ({ _tag: "Loading" }),
+    AsyncResult.matchWithError(result, {
+      onInitial: () => ({ _tag: "Loading" }),
       onError: error => ({ _tag: "LoadError", error }),
       onDefect: defect => ({ _tag: "Defect", defect }),
       onSuccess: success => fromSnapshot(success.value),

@@ -70,6 +70,24 @@ describe("ShiftCatalogState", () => {
     expect(state._tag).toBe("Empty")
   })
 
+  it("does not mask a completed failed snapshot just because refresh is waiting", () => {
+    const state = ShiftCatalogState.fromResult(
+      AsyncResult.success(
+        {
+          ...snapshotBase(),
+          peers: [peer("self", true, "failed", "read failed")],
+          health: { ...snapshotBase().health, self: "failed" },
+        },
+        { waiting: true },
+      ),
+    )
+
+    expect(state).toMatchObject({
+      _tag: "LoadError",
+      error: { message: "read failed" },
+    })
+  })
+
   it("renders load error when self failed", () => {
     const state = ShiftCatalogState.fromResult(
       AsyncResult.success({
