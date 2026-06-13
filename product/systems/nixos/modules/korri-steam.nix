@@ -427,6 +427,7 @@ let
     service_ready_timeout="''${KORRI_STEAM_APP_SERVICE_READY_TIMEOUT:-90}"
     service_name="''${KORRI_STEAM_SERVICE:-korri-steam.service}"
     target_output="''${KORRI_STEAM_APP_OUTPUT:-DSI-2}"
+    target_audio_sink="''${KORRI_STEAM_AUDIO_SINK:-${cfg.appAudioSinkName}}"
 
     find_sway_sock() {
       if [ -n "''${SWAYSOCK:-}" ] && [ -S "$SWAYSOCK" ]; then
@@ -482,6 +483,31 @@ let
         if sway_tree | ${pkgs.gnugrep}/bin/grep -a -F "\"class\": \"steam_app_$appid\"" >/dev/null 2>&1; then
           sway "[class=\"steam_app_$appid\"] scratchpad show"
           sway "[class=\"steam_app_$appid\"] floating disable, move to workspace 1, move to output $target_output, fullscreen enable, focus"
+          return 0
+        fi
+        i=$((i + 1))
+        ${pkgs.coreutils}/bin/sleep 1
+      done
+      return 0
+    }
+
+    repair_game_audio() {
+      [ -n "$target_audio_sink" ] || return 0
+      PIPEWIRE_RUNTIME_DIR="''${PIPEWIRE_RUNTIME_DIR:-$XDG_RUNTIME_DIR}"
+      export PIPEWIRE_RUNTIME_DIR
+      i=0
+      while [ "$i" -lt 15 ]; do
+        outputs="$(${pkgs.pipewire}/bin/pw-link -o 2>/dev/null || true)"
+        inputs="$(${pkgs.pipewire}/bin/pw-link -i 2>/dev/null || true)"
+        left_output="$(printf '%s\n' "$outputs" | ${pkgs.gnugrep}/bin/grep -E '(^|/)30XX\.exe:output_1$' | ${pkgs.coreutils}/bin/head -n 1 || true)"
+        right_output="$(printf '%s\n' "$outputs" | ${pkgs.gnugrep}/bin/grep -E '(^|/)30XX\.exe:output_2$' | ${pkgs.coreutils}/bin/head -n 1 || true)"
+        if [ -n "$left_output" ] && [ -n "$right_output" ] && printf '%s\n' "$inputs" | ${pkgs.gnugrep}/bin/grep -F "$target_audio_sink:playback_FL" >/dev/null 2>&1; then
+          ${pkgs.pipewire}/bin/pw-link "$left_output" "$target_audio_sink:playback_FL" >/dev/null 2>&1 || true
+          ${pkgs.pipewire}/bin/pw-link "$right_output" "$target_audio_sink:playback_FR" >/dev/null 2>&1 || true
+          namespace_left="$(printf '%s\n' "$inputs" | ${pkgs.gnugrep}/bin/grep -F 'device.audio_group:pw-audio-namespace.' | ${pkgs.gnugrep}/bin/grep -F ':playback_1' | ${pkgs.coreutils}/bin/head -n 1 || true)"
+          namespace_right="$(printf '%s\n' "$inputs" | ${pkgs.gnugrep}/bin/grep -F 'device.audio_group:pw-audio-namespace.' | ${pkgs.gnugrep}/bin/grep -F ':playback_2' | ${pkgs.coreutils}/bin/head -n 1 || true)"
+          [ -n "$namespace_left" ] && ${pkgs.pipewire}/bin/pw-link "$left_output" "$namespace_left" >/dev/null 2>&1 || true
+          [ -n "$namespace_right" ] && ${pkgs.pipewire}/bin/pw-link "$right_output" "$namespace_right" >/dev/null 2>&1 || true
           return 0
         fi
         i=$((i + 1))
@@ -680,6 +706,7 @@ let
         saw_added=1
         hide_steam_hat
         focus_game
+        repair_game_audio
       fi
 
       if [ "$saw_added" -eq 1 ] && log_has "$new_log" "Game process removed : AppID $appid"; then
@@ -754,6 +781,12 @@ in
       type = types.listOf types.str;
       default = defaultSteamArgs;
       description = "Default Steam client arguments supplied by the Korri guest adapter.";
+    };
+
+    appAudioSinkName = mkOption {
+      type = types.str;
+      default = "";
+      description = "Optional PipeWire sink node name used for bounded AppID audio-route repair.";
     };
   };
 

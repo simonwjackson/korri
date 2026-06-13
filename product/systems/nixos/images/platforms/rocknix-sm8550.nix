@@ -194,10 +194,15 @@ let
 
     if ${pkgs.pulseaudio}/bin/pactl list cards | ${pkgs.gnugrep}/bin/grep -Fq "$preferred_profile"; then
       ${pkgs.pulseaudio}/bin/pactl set-card-profile "$preferred_card" "$preferred_profile" >/dev/null 2>&1 || true
-      if ${pkgs.pulseaudio}/bin/pactl list short sinks | ${pkgs.gnugrep}/bin/grep -q "^.*[[:space:]]$preferred_sink[[:space:]]"; then
-        ${pkgs.pulseaudio}/bin/pactl set-default-sink "$preferred_sink" >/dev/null 2>&1 || true
-        exit 0
-      fi
+    fi
+
+    # Prefer the substrate-declared UCM sink whenever WirePlumber exposes it.
+    # On Thor this is the real speaker sink; the manual PCM fallback below is
+    # useful only when UCM did not create the declared route.
+    if ${pkgs.pulseaudio}/bin/pactl list short sinks | ${pkgs.gnugrep}/bin/grep -q "^.*[[:space:]]$preferred_sink[[:space:]]"; then
+      ${pkgs.pulseaudio}/bin/pactl set-default-sink "$preferred_sink" >/dev/null 2>&1 || true
+      ${pkgs.pulseaudio}/bin/pactl set-sink-volume "$preferred_sink" 70% >/dev/null 2>&1 || true
+      exit 0
     fi
 ''
   + lib.optionalString substrateAudioSinkHasPcm ''
@@ -373,6 +378,7 @@ in
     gamesRoot = "${runtime.gamesRoot}/steam";
     dotDir = "${runtime.home}/.steam";
     fexRootfs = "${runtime.stateRoot}/steam/fex-rootfs";
+    appAudioSinkName = "alsa_output.platform-sound.HiFi__Speaker__sink";
   };
 
   systemd.services.main-space-pipewire.enable = lib.mkForce false;
