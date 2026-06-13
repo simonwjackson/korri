@@ -161,8 +161,13 @@ install_client() {
 }
 
 install_links_and_metadata() {
-  run mkdir -p "$STEAM_GAMES_ROOT" "$STEAM_DOT" "$PROTON_DIR" "$STEAM_HOME/compatibilitytools.d"
-  run ln -sfn "$PROTON_DIR/" "$STEAM_HOME/compatibilitytools.d/Proton11ARM"
+  run mkdir -p "$STEAM_GAMES_ROOT" "$STEAM_DOT" "$STEAM_HOME/compatibilitytools.d"
+  if [ "${STEAM_ENABLE_PROTON11_ARM64:-0}" = 1 ]; then
+    run mkdir -p "$PROTON_DIR"
+    run ln -sfn "$PROTON_DIR/" "$STEAM_HOME/compatibilitytools.d/Proton11ARM"
+  else
+    run rm -f "$STEAM_HOME/compatibilitytools.d/Proton11ARM" "$STEAM_HOME/compatibilitytools.d/compatibilitytool.vdf"
+  fi
   STEAM_BETA="${STEAM_BETA:-publicbeta}" "$script_dir/steam-arm64-bootstrap" "--$mode"
 }
 

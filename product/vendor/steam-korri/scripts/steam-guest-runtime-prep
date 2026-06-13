@@ -173,10 +173,37 @@ EOF
         mv -f "$file" "$backup"
       fi
       cat > "$file" <<EOF
-#!/bin/sh
+#!/usr/bin/env bash
+set -euo pipefail
 : "\${FEX_ROOTFS:?FEX_ROOTFS must be set by the guest adapter before running wrapped Steam Runtime helpers}"
 PATH="/usr/bin:/bin:/usr/sbin:/sbin:\${PATH:-}"
 export FEX_ROOTFS PATH
+
+# KORRI_STEAM_OVERLAY_FILTER: Steam Deck UI can inject
+# gameoverlayrenderer.so into pressure-vessel launches even when the managed
+# client is only being used as an AppID broker. On the SM8550 kiosk path those
+# renderer surfaces can bleed through or flash over the real game. Filter only
+# overlay preload arguments before entering the x86_64 helper; preserve argv
+# exactly with a bash array so paths such as "Proton 10.0" remain separate.
+if [ "\${KORRI_STEAM_DISABLE_OVERLAY:-1}" = 1 ]; then
+  filtered_args=()
+  before_command=1
+  for arg in "\$@"; do
+    if [ "\$before_command" = 1 ]; then
+      if [ "\$arg" = "--" ]; then
+        before_command=0
+        filtered_args+=("\$arg")
+        continue
+      fi
+      case "\$arg" in
+        *gameoverlayrenderer.so*) continue ;;
+      esac
+    fi
+    filtered_args+=("\$arg")
+  done
+  exec $fex_wrapper_bin "\$0.x86_64" "\${filtered_args[@]}"
+fi
+
 exec $fex_wrapper_bin "\$0.x86_64" "\$@"
 EOF
       chmod 755 "$file"

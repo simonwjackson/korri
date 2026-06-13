@@ -22,8 +22,13 @@ let
   cfg = config.services.korri.steam;
 
   defaultSteamArgs = [
+    # Keep Steam in Deck-compatible mode for ARM64 AppID forwarding, but do not
+    # enable Big Picture/gamepad UI: its rootless Xwayland surface can bleed
+    # through over foreground Proton games on the Thor kiosk display.
     "-steamdeck"
-    "-gamepadui"
+    "-silent"
+    "-nochatui"
+    "-nofriendsui"
     "-forcedesktopscaling"
     "1.5"
     "-noverifyfiles"
@@ -419,7 +424,9 @@ let
 
     console_log="$STEAM_HOME/logs/console_log.txt"
     launch_timeout="''${KORRI_STEAM_APP_LAUNCH_TIMEOUT:-180}"
+    service_ready_timeout="''${KORRI_STEAM_APP_SERVICE_READY_TIMEOUT:-90}"
     service_name="''${KORRI_STEAM_SERVICE:-korri-steam.service}"
+    target_output="''${KORRI_STEAM_APP_OUTPUT:-DSI-2}"
 
     find_sway_sock() {
       if [ -n "''${SWAYSOCK:-}" ] && [ -S "$SWAYSOCK" ]; then
@@ -435,20 +442,57 @@ let
       SWAYSOCK="$sock" ${pkgs.sway}/bin/swaymsg "$@" >/dev/null 2>&1 || true
     }
 
+    sway_tree() {
+      sock="$(find_sway_sock | ${pkgs.coreutils}/bin/head -n 1)"
+      [ -n "$sock" ] || return 0
+      SWAYSOCK="$sock" ${pkgs.sway}/bin/swaymsg -t get_tree 2>/dev/null || true
+    }
+
+    focus_korri_output() {
+      sway "focus output $target_output"
+      sway '[class="ElectrobunKitchenSink-dev"] focus, fullscreen enable'
+    }
+
     hide_steam_hat() {
-      sway '[class="steam" title="Steam Big Picture Mode"] move scratchpad'
+      # Steam Big Picture can change title during startup and can leave a
+      # rootless Xwayland surface behind if it remains fullscreen while the game
+      # appears. Disable fullscreen first, then scratchpad every Steam client
+      # window class we can address through Sway.
+      sway '[class="steam"] fullscreen disable, floating enable, move scratchpad'
+      sway '[app_id="steam"] fullscreen disable, floating enable, move scratchpad'
+      sway '[title="Steam Big Picture Mode"] fullscreen disable, floating enable, move scratchpad'
+      focus_korri_output
     }
 
     show_steam_prompt() {
-      sway '[class="steam" title="Steam Big Picture Mode"] scratchpad show, focus, fullscreen enable'
+      sway "focus output $target_output"
+      sway '[class="steam"] scratchpad show, focus, fullscreen enable'
+      sway '[app_id="steam"] scratchpad show, focus, fullscreen enable'
+      sway '[title="Steam Big Picture Mode"] scratchpad show, focus, fullscreen enable'
     }
 
     focus_game() {
-      sway "[class=\"steam_app_$appid\"] focus, fullscreen enable"
+      # Steam logs "Game process added" before the Xwayland window is always
+      # mapped. Wait for the real game surface, then normalize it to a regular
+      # fullscreen tiled container on the kiosk output. Doing this once after
+      # map keeps Steam Input focused on the AppID; repeatedly replaying the
+      # Steam-hide policy can put the frontend back on top and drop controls.
+      i=0
+      while [ "$i" -lt 30 ]; do
+        if sway_tree | ${pkgs.gnugrep}/bin/grep -a -F "\"class\": \"steam_app_$appid\"" >/dev/null 2>&1; then
+          sway "[class=\"steam_app_$appid\"] scratchpad show"
+          sway "[class=\"steam_app_$appid\"] floating disable, move to workspace 1, move to output $target_output, fullscreen enable, focus"
+          return 0
+        fi
+        i=$((i + 1))
+        ${pkgs.coreutils}/bin/sleep 1
+      done
+      return 0
     }
 
     ydotool_sock="$XDG_RUNTIME_DIR/korri-steam-ydotool.sock"
     ydotoold_pid=""
+    direct_steam_pid=""
     cleanup_done=0
 
     control_steam_service() {
@@ -478,8 +522,14 @@ let
       fi
       ${pkgs.coreutils}/bin/rm -f "$ydotool_sock" 2>/dev/null || true
       if [ "''${KORRI_STEAM_APP_STOP_SERVICE_ON_EXIT:-1}" != "0" ]; then
-        control_steam_service stop >/dev/null 2>&1 || \
-          echo "korri-steam-app: warning: could not stop $service_name after launch" >&2
+        if [ -n "$direct_steam_pid" ]; then
+          ${pkgs.procps}/bin/kill "$direct_steam_pid" 2>/dev/null || true
+          ${pkgs.coreutils}/bin/sleep 1
+          ${pkgs.procps}/bin/kill -9 "$direct_steam_pid" 2>/dev/null || true
+        else
+          control_steam_service stop >/dev/null 2>&1 || \
+            echo "korri-steam-app: warning: could not stop $service_name after launch" >&2
+        fi
       fi
     }
 
@@ -516,15 +566,8 @@ let
         echo "korri-steam-app: warning: could not confirm Steam prompt with ydotool" >&2
     }
 
-    if ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
-      :
-    else
-      control_steam_service start || \
-        echo "korri-steam-app: warning: could not start $service_name; assuming Steam is already reachable in the user session" >&2
-    fi
-
     ${steamUinputPrep}/bin/korri-steam-ensure-uinput || true
-    ${pkgs.coreutils}/bin/mkdir -p "$STEAM_HOME/logs"
+    ${pkgs.coreutils}/bin/mkdir -p "$STEAM_HOME/logs" "$STEAM_HOME/package"
     if [ -f "$console_log" ]; then
       mark="$(${pkgs.coreutils}/bin/wc -c < "$console_log" | ${pkgs.coreutils}/bin/tr -d ' ')"
     else
@@ -532,44 +575,114 @@ let
       : > "$console_log" 2>/dev/null || true
     fi
 
-    # Steam's ARM64 client only reliably advances AppID launches while Big
-    # Picture is available to handle its launch/interstitial state machine.
-    # Surface it for the handoff, then move it away once launch proceeds or the
-    # game window is up so Korri does not remain a "hat on a hat" stack.
-    show_steam_prompt
+    steam_process_alive() {
+      if [ -n "$direct_steam_pid" ]; then
+        ${pkgs.procps}/bin/kill -0 "$direct_steam_pid" 2>/dev/null
+        return $?
+      fi
+      ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null
+    }
+
+    wait_for_steam_ready() {
+      ready_deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + service_ready_timeout ))
+      while [ "$(${pkgs.coreutils}/bin/date +%s)" -le "$ready_deadline" ]; do
+        ready_log=""
+        if [ -f "$console_log" ]; then
+          ready_log="$(${pkgs.coreutils}/bin/tail -c +$((mark + 1)) "$console_log" 2>/dev/null || true)"
+        fi
+        if printf '%s\n' "$ready_log" | ${pkgs.gnugrep}/bin/grep -a -E -q 'Console Log Start|Waiting for compat in post-logon|Loaded Config for Local Selection Path for App ID 769'; then
+          return 0
+        fi
+        if ! steam_process_alive; then
+          return 1
+        fi
+        ${pkgs.coreutils}/bin/sleep 1
+      done
+      return 1
+    }
+
+    started_steam=0
+    if ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
+      :
+    else
+      if control_steam_service start; then
+        started_steam=1
+      else
+        echo "korri-steam-app: warning: could not start $service_name; starting Steam directly without sudo" >&2
+        ${steamLauncher}/bin/korri-steam-guest \
+          -steamdeck -silent -nochatui -nofriendsui -forcedesktopscaling 1.5 \
+          -noverifyfiles -nobootstrapupdate -skipinitialbootstrap -norepairfiles \
+          >>"$STEAM_HOME/logs/korri-steam-app-guest.log" 2>&1 &
+        direct_steam_pid="$!"
+        started_steam=1
+      fi
+    fi
+
+    if ! steam_process_alive; then
+      echo "korri-steam-app: Steam is not active after start" >&2
+      exit 125
+    fi
+
+    if [ "$started_steam" -eq 1 ]; then
+      if ! wait_for_steam_ready; then
+        echo "korri-steam-app: timed out waiting for Steam readiness before AppID launch" >&2
+        exit 125
+      fi
+    fi
+
+    # Keep Steam hidden by default. Surface Big Picture only if Steam reports an
+    # interstitial that needs keyboard confirmation; otherwise the ARM64 client
+    # can remain a rootless-Xwayland "hat" over the game during loading.
+    focus_korri_output
+    hide_steam_hat
     ${steamLauncher}/bin/korri-steam-guest \
-      -steamdeck -gamepadui -forcedesktopscaling 1.5 -applaunch "$appid" \
+      -steamdeck -silent -nochatui -nofriendsui -forcedesktopscaling 1.5 -applaunch "$appid" \
       >/dev/null
+    hide_steam_hat
+
+    log_has() {
+      haystack="$1"
+      needle="$2"
+      ${pkgs.gnugrep}/bin/grep -a -F -q -- "$needle" <<< "$haystack"
+    }
 
     deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + launch_timeout ))
     saw_added=0
     saw_prompt=0
-    while [ "$(${pkgs.coreutils}/bin/date +%s)" -le "$deadline" ]; do
+    while true; do
       new_log=""
       if [ -f "$console_log" ]; then
-        new_log="$(${pkgs.coreutils}/bin/tail -c +$((mark + 1)) "$console_log" 2>/dev/null || true)"
+        current_mark="$(${pkgs.coreutils}/bin/wc -c < "$console_log" | ${pkgs.coreutils}/bin/tr -d ' ')"
+        if [ "$current_mark" -ge "$mark" ]; then
+          new_log="$(${pkgs.coreutils}/bin/tail -c +$((mark + 1)) "$console_log" 2>/dev/null || true)"
+        else
+          new_log="$(${pkgs.coreutils}/bin/cat "$console_log" 2>/dev/null || true)"
+        fi
+        mark="$current_mark"
       fi
 
-      if printf '%s\n' "$new_log" | ${pkgs.gnugrep}/bin/grep -a -q "LaunchApp waiting for user response to ShowInterstitials"; then
+      if log_has "$new_log" "LaunchApp waiting for user response to ShowInterstitials"; then
         if [ "$saw_prompt" -eq 0 ]; then
           saw_prompt=1
           show_steam_prompt
           ${pkgs.coreutils}/bin/sleep 0.5
           confirm_steam_prompt
+          ${pkgs.coreutils}/bin/sleep 0.2
+          hide_steam_hat
         fi
       fi
 
-      if printf '%s\n' "$new_log" | ${pkgs.gnugrep}/bin/grep -a -q "LaunchApp continues with user response \"ShowInterstitials\""; then
+      if log_has "$new_log" "LaunchApp continues with user response \"ShowInterstitials\""; then
         hide_steam_hat
       fi
 
-      if printf '%s\n' "$new_log" | ${pkgs.gnugrep}/bin/grep -a -q "Game process added : AppID $appid"; then
+      if [ "$saw_added" -eq 0 ] && log_has "$new_log" "Game process added : AppID $appid"; then
         saw_added=1
         hide_steam_hat
         focus_game
       fi
 
-      if [ "$saw_added" -eq 1 ] && printf '%s\n' "$new_log" | ${pkgs.gnugrep}/bin/grep -a -q "Game process removed : AppID $appid"; then
+      if [ "$saw_added" -eq 1 ] && log_has "$new_log" "Game process removed : AppID $appid"; then
         hide_steam_hat
         exit 0
       fi
@@ -579,17 +692,14 @@ let
           hide_steam_hat
           exit 0
         fi
+      elif [ "$(${pkgs.coreutils}/bin/date +%s)" -gt "$deadline" ]; then
+        hide_steam_hat
+        echo "korri-steam-app: timed out waiting for Steam AppID $appid to launch" >&2
+        exit 124
       fi
 
       ${pkgs.coreutils}/bin/sleep 1
     done
-
-    hide_steam_hat
-    if [ "$saw_added" -eq 1 ]; then
-      exit 0
-    fi
-    echo "korri-steam-app: timed out waiting for Steam AppID $appid to launch" >&2
-    exit 124
   '';
 in
 {

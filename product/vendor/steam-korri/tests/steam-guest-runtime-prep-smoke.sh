@@ -158,6 +158,8 @@ if [ "$expect_pv_wrap" = 1 ]; then
     || fail "pressure-vessel x86_64 backup was not preserved"
   grep -q 'exec /usr/bin/FEX "$0.x86_64"' "$pv/pressure-vessel-wrap" \
     || fail "pressure-vessel x86_64 binary should be replaced by a FHS-visible FEX trampoline"
+  grep -q 'KORRI_STEAM_OVERLAY_FILTER' "$pv/pressure-vessel-wrap" \
+    || fail "pressure-vessel wrapper should filter Steam overlay preload injection"
 fi
 [ -f "$fonts/.uuid" ] || fail "font .uuid marker missing"
 [ "$(head -n 1 "$proton_dir/proton")" = '#!/usr/bin/python3' ] \

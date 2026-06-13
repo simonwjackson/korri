@@ -102,9 +102,12 @@ say "client-cdn-base=https://client-update.steamstatic.com"
 run mkdir -p \
   "$STEAM_HOME/package" \
   "$STEAM_HOME/compatibilitytools.d" \
-  "$STEAM_HOME/steamapps/common/Proton 11.0 (ARM64)" \
   "$STEAM_GAMES_ROOT" \
   "$STEAM_DOT"
+
+if [ "${STEAM_ENABLE_PROTON11_ARM64:-0}" = 1 ]; then
+  run mkdir -p "$STEAM_HOME/steamapps/common/Proton 11.0 (ARM64)"
+fi
 
 # Keep the conventional ~/.steam layout pointing at the Korri-managed Steam
 # home. Proton/lsteamclient and Steam Runtime helpers still discover pieces via
@@ -118,8 +121,13 @@ run ln -sfn "$STEAM_HOME/linux64" "$STEAM_DOT/sdk64"
 run ln -sfn "$STEAM_HOME/linuxarm64" "$STEAM_DOT/sdkarm64"
 
 printf '%s\n' "$STEAM_BETA" | atomic_write "$STEAM_HOME/package/beta"
-atomic_copy "$resource_dir/compatibilitytool.vdf" "$STEAM_HOME/compatibilitytools.d/compatibilitytool.vdf"
-atomic_copy "$resource_dir/toolmanifest.vdf" "$STEAM_HOME/steamapps/common/Proton 11.0 (ARM64)/toolmanifest.vdf"
+if [ "${STEAM_ENABLE_PROTON11_ARM64:-0}" = 1 ]; then
+  atomic_copy "$resource_dir/compatibilitytool.vdf" "$STEAM_HOME/compatibilitytools.d/compatibilitytool.vdf"
+  atomic_copy "$resource_dir/toolmanifest.vdf" "$STEAM_HOME/steamapps/common/Proton 11.0 (ARM64)/toolmanifest.vdf"
+else
+  run rm -f "$STEAM_HOME/compatibilitytools.d/compatibilitytool.vdf"
+  run rm -f "$STEAM_HOME/compatibilitytools.d/Proton11ARM"
+fi
 atomic_copy "$resource_dir/registry.vdf" "$STEAM_DOT/registry.vdf"
 
 installed_file="$STEAM_HOME/package/steam_client_${STEAM_BETA}_linuxarm64.installed"
