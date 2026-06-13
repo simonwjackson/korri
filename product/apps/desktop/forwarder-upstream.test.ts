@@ -17,7 +17,7 @@ describe("ForwarderUpstream", () => {
     expect(picked).toBe("http://127.0.0.1:3001")
   })
 
-  it("falls back to the first mDNS peer with caps: source when loopback is dead", async () => {
+  it("does not fall back to an mDNS peer when loopback is dead by default", async () => {
     const bonjour = createBonjourWith([
       { name: "aka", address: "192.168.1.117", port: 3001, caps: "source" },
     ])
@@ -26,6 +26,23 @@ describe("ForwarderUpstream", () => {
       probeLoopback: async () => false,
       bonjourFactory: () => bonjour,
       cacheTtlMs: 0,
+    })
+
+    const picked = await upstream.pickUpstream()
+    await upstream.shutdown()
+    expect(picked).toBeUndefined()
+  })
+
+  it("falls back to the first mDNS peer with caps: source only when remote bootstrap is enabled", async () => {
+    const bonjour = createBonjourWith([
+      { name: "aka", address: "192.168.1.117", port: 3001, caps: "source" },
+    ])
+    const upstream = makeForwarderUpstream({
+      loopbackBaseUrl: "http://127.0.0.1:3001",
+      probeLoopback: async () => false,
+      bonjourFactory: () => bonjour,
+      cacheTtlMs: 0,
+      allowRemoteApiBootstrap: true,
     })
 
     const picked = await upstream.pickUpstream()

@@ -81,11 +81,14 @@ function registerProcessShutdown() {
 }
 
 async function main() {
-  // Federation v1: the forwarder upstream picker browses mDNS + probes
-  // loopback on demand (see forwarder-upstream.ts). The renderer treats
-  // `503 no upstream` as an empty rail (R3 / AE1).
+  // The desktop forwarder is bootstrap transport only: product/kiosk
+  // desktops use local loopback and leave LAN catalog federation to the
+  // local coordinator. Remote API bootstrap is an explicit development
+  // opt-in for lab workflows.
   const forwarderUpstream: ForwarderUpstream = makeForwarderUpstream({
     loopbackBaseUrl: process.env.KORRI_LOOPBACK_BASE_URL ?? undefined,
+    allowRemoteApiBootstrap:
+      process.env.KORRI_DESKTOP_ALLOW_REMOTE_API_BOOTSTRAP === "1",
   })
   const getUpstream = () => forwarderUpstream.pickUpstream()
   const invalidateUpstream = () => forwarderUpstream.invalidate()

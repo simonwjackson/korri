@@ -2,9 +2,10 @@
  * Forwarder upstream picker for the desktop bun.
  *
  * Replaces the single-connection state machine that the forwarder used
- * to consume. Federation v1 makes peers fungible from the forwarder's
- * perspective — any library-bearing server can satisfy `/api/*`
- * because each one federates its own snapshot via `app.library.list`.
+ * to consume. The desktop forwarder is bootstrap transport only: product
+ * desktops talk to the local coordinator, and catalog federation happens
+ * behind that coordinator instead of by selecting a remote renderer API
+ * upstream.
  *
  * Pick policy (top-down):
  *   1. Loopback fast-path. If a local korrid is running on
@@ -12,9 +13,11 @@
  *      on the local server side, which keeps the desktop bun a pure
  *      same-origin pass-through (per the
  *      `electrobun-desktop-wrapper-loopback` learning).
- *   2. mDNS fallback. Browse `_korri-stream._tcp`; pick the first
- *      result advertising `caps: "source"`. No preference logic in v1
- *      — peers are fungible because each federates its own catalog.
+ *   2. Optional development mDNS fallback. When explicitly enabled,
+ *      browse `_korri-stream._tcp`; pick the first result advertising
+ *      `caps: "source"`. This is not enabled for product/kiosk mode,
+ *      because a stale LAN peer must not become the renderer's only API
+ *      upstream.
  *   3. No upstream. The forwarder surfaces this as `503` to the
  *      renderer; the rail treats 503 as empty-state (per R3, AE1).
  *
@@ -48,6 +51,12 @@ export interface ForwarderUpstreamOptions {
   readonly browseWindowMs?: number
   /** Loopback probe timeout. Default 200ms. */
   readonly loopbackProbeTimeoutMs?: number
+  /**
+   * Enable remote mDNS API bootstrap for development/lab use. Product
+   * desktops default this off so stale LAN peers cannot become the
+   * renderer's only `/api/*` upstream.
+   */
+  readonly allowRemoteApiBootstrap?: boolean
 }
 
 export interface ForwarderUpstream {
@@ -79,11 +88,13 @@ export function makeForwarderUpstream(
     options.bonjourFactory ?? (() => new Bonjour() as unknown as BonjourLike)
   const cacheTtlMs = options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS
   const browseWindowMs = options.browseWindowMs ?? DEFAULT_BROWSE_WINDOW_MS
+  const allowRemoteApiBootstrap = options.allowRemoteApiBootstrap ?? false
 
   let cache: { url: string | undefined; expiresAt: number } | undefined
 
   const pick = async (): Promise<string | undefined> => {
     if (await probeLoopback(loopbackBaseUrl)) return loopbackBaseUrl
+    if (!allowRemoteApiBootstrap) return undefined
     return await pickFromMdns(bonjourFactory, browseWindowMs)
   }
 
