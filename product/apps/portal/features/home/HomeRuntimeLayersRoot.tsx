@@ -1,4 +1,8 @@
-import { useAtomInitialValues, useAtomRefresh } from "@effect/atom-react"
+import {
+  RegistryProvider,
+  useAtomInitialValues,
+  useAtomRefresh,
+} from "@effect/atom-react"
 import {
   foregroundSessionStatusLayerAtom,
   launcherLayerAtom,
@@ -26,6 +30,23 @@ export function HomeRuntimeLayersRoot({
   readonly children: ReactNode
 }) {
   const runtimeConfig = readRuntimeConfig(window)
+
+  return (
+    <RegistryProvider>
+      <HomeRuntimeLayersInner runtimeConfig={runtimeConfig}>
+        {children}
+      </HomeRuntimeLayersInner>
+    </RegistryProvider>
+  )
+}
+
+function HomeRuntimeLayersInner({
+  children,
+  runtimeConfig,
+}: {
+  readonly children: ReactNode
+  readonly runtimeConfig: ReturnType<typeof readRuntimeConfig>
+}) {
   const desktopInput = runtimeConfig.desktopInput
 
   useAtomInitialValues([
@@ -50,22 +71,41 @@ export function HomeRuntimeLayersRoot({
 
 /**
  * Refresh config-derived library atoms when KORRID's config graph changes.
- * Listening to `config.ready` as well as `config.changed` means a reconnecting
- * client also re-syncs. `config.invalid` is intentionally ignored so the GUI
- * keeps showing the last good catalog (client-side last-known-good).
+ * A one-shot mount refresh covers atom reads that began before route-local
+ * layers were seeded. The first `config.ready` is treated as an initial sync
+ * point because desktop startup can render before KORRID is reachable. Later
+ * `config.ready` events are
+ * ignored: desktop-forwarded SSE streams can reconnect, and treating every
+ * reconnect as a catalog mutation can keep the home rail in a refresh/loading
+ * loop. `config.invalid` is also ignored so the GUI keeps showing the last good
+ * catalog (client-side last-known-good).
  */
 function ConfigChangeRefreshBridge() {
   const refreshLibraryItems = useAtomRefresh(libraryItemsAtom)
 
   useEffect(() => {
-    if (typeof EventSource === "undefined") return
+    const timers = [window.setTimeout(() => refreshLibraryItems(), 0)]
+
+    if (typeof EventSource === "undefined") {
+      return () => {
+        for (const timer of timers) window.clearTimeout(timer)
+      }
+    }
+
     const events = new EventSource("/api/config/events")
     const refresh = () => refreshLibraryItems()
+    let sawReady = false
+    const refreshOnceWhenReady = () => {
+      if (sawReady) return
+      sawReady = true
+      refreshLibraryItems()
+    }
+    events.addEventListener("config.ready", refreshOnceWhenReady)
     events.addEventListener("config.changed", refresh)
-    events.addEventListener("config.ready", refresh)
     return () => {
+      for (const timer of timers) window.clearTimeout(timer)
+      events.removeEventListener("config.ready", refreshOnceWhenReady)
       events.removeEventListener("config.changed", refresh)
-      events.removeEventListener("config.ready", refresh)
       events.close()
     }
   }, [refreshLibraryItems])

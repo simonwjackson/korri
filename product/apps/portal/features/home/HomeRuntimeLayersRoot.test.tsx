@@ -42,6 +42,20 @@ describe("HomeRuntimeLayersRoot", () => {
     await waitFor(() => expect(screen.getByText("Before")).toBeTruthy())
     expect(FakeEventSource.instances[0]?.url).toBe("/api/config/events")
 
+    entries = [entry("ready", "Ready")]
+    act(() => {
+      FakeEventSource.instances[0]?.emit("config.ready")
+    })
+
+    await waitFor(() => expect(screen.getByText("Ready")).toBeTruthy())
+
+    entries = [entry("ready-ignored", "Ready Ignored")]
+    act(() => {
+      FakeEventSource.instances[0]?.emit("config.ready")
+    })
+
+    expect(screen.queryByText("Ready Ignored")).toBeNull()
+
     entries = [entry("after", "After")]
     act(() => {
       FakeEventSource.instances[0]?.emit("config.changed")

@@ -114,6 +114,12 @@ async function main() {
   server = Bun.serve({
     hostname: DESKTOP_HOST,
     port: 0,
+    // `/api/config/events` is an SSE stream forwarded through this desktop
+    // server. Bun's default 10s idle timeout forces WebKit to reconnect,
+    // which emits `config.ready` repeatedly and can make library refreshes feel
+    // stuck. Keep the local desktop server's idle window long enough for the
+    // config stream to stay stable during normal kiosk use.
+    idleTimeout: 255,
     fetch: app.fetch,
   })
 

@@ -50,6 +50,35 @@ let
   # the same effective roots as korrid after removable-media hotplug instead
   # of staying on stale static roots.
   daemonConfigRootsDir = daemonKorridEnv "KORRI_CONFIG_ROOTS_DIR";
+  userKorridUnitPresent = lib.hasAttrByPath [
+    "systemd"
+    "user"
+    "services"
+    "korrid"
+  ] config;
+
+  waitForKorridScript = pkgs.writeShellScript "korri-sessiond-wait-for-korrid" ''
+    set -eu
+    attempt=0
+    max=60
+    while [ "$attempt" -lt "$max" ]; do
+      if ${pkgs.curl}/bin/curl \
+          --silent \
+          --show-error \
+          --fail \
+          --connect-timeout 1 \
+          --max-time 2 \
+          http://127.0.0.1:3001/api/health > /dev/null; then
+        echo "korri-sessiond: korrid loopback ready after attempt $attempt" >&2
+        exit 0
+      fi
+      attempt=$((attempt + 1))
+      ${pkgs.coreutils}/bin/sleep 0.25
+    done
+
+    echo "korri-sessiond: timed out waiting for korrid loopback" >&2
+    exit 1
+  '';
 
   kioskEnabled = lib.attrByPath [ "services" "korri" "compositor" "kiosk" "enable" ] false config;
   streamingEnabled = lib.attrByPath [ "services" "korri" "daemon" "streaming" "enable" ] false config;
@@ -202,7 +231,8 @@ in
     systemd.user.services.korri-sessiond = {
       description = "Korri foreground-session supervisor (${cfg.role} role)";
       wantedBy = [ "korri-session.target" ];
-      after = [ "network.target" ];
+      wants = lib.optionals userKorridUnitPresent [ "korrid.service" ];
+      after = [ "network.target" ] ++ lib.optionals userKorridUnitPresent [ "korrid.service" ];
       path = cfg.path ++ [ pkgs.util-linux ];
       environment = {
         KORRI_SESSIOND_ROLE = cfg.role;
@@ -229,6 +259,9 @@ in
       // cfg.extraEnvironment;
       serviceConfig = {
         Type = "simple";
+        ExecStartPre = lib.optionals userKorridUnitPresent [
+          "${waitForKorridScript}"
+        ];
         ExecStart = "${cfg.package}/bin/korri-sessiond";
         ExecStartPost = "${controlStartScript}";
         Restart = "on-failure";
