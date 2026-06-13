@@ -97,6 +97,7 @@ let
   runtimePrepUnit = enabled.systemd.services.korri-steam-runtime-prep or { };
   runtimePrepPath = enabled.systemd.paths.korri-steam-runtime-prep or { };
   systemPackageNames = cfg: map (pkg: pkg.name or "") cfg.environment.systemPackages;
+  sudoCommands = lib.flatten (map (rule: map (command: command.command or "") (rule.commands or [ ])) (enabled.security.sudo.extraRules or [ ]));
   serviceExec =
     unit:
     let
@@ -137,7 +138,12 @@ let
       builtins.any (name: lib.hasInfix "fake-steam-korri" name) (systemPackageNames enabled)
       && builtins.any (name: lib.hasInfix "korri-steam-guest" name) (systemPackageNames enabled)
       && builtins.any (name: lib.hasInfix "korri-steam-app" name) (systemPackageNames enabled)
+      && builtins.any (name: lib.hasInfix "korri-steam-service-control" name) (systemPackageNames enabled)
       && builtins.any (name: lib.hasInfix "korri-steam-ensure-uinput" name) (systemPackageNames enabled)
+    ))
+    (check "Steam app launcher can bracket the managed system service" (
+      builtins.any (command: lib.hasInfix "korri-steam-service-control start" command) sudoCommands
+      && builtins.any (command: lib.hasInfix "korri-steam-service-control stop" command) sudoCommands
     ))
     (check "uinput service is rendered and ordered for boot convergence" (
       enabled.systemd.services ? korri-steam-uinput

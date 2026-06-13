@@ -374,6 +374,23 @@ let
     exec ${cfg.package}/bin/steam-arm64-fhs "$@"
   '';
 
+  steamServiceControl = pkgs.writeShellScriptBin "korri-steam-service-control" ''
+    set -eu
+
+    usage() {
+      echo "usage: korri-steam-service-control <start|stop>" >&2
+      exit 64
+    }
+
+    [ "$#" -eq 1 ] || usage
+    case "$1" in
+      start|stop) ;;
+      *) usage ;;
+    esac
+
+    exec ${pkgs.systemd}/bin/systemctl "$1" korri-steam.service
+  '';
+
   steamAppLauncher = pkgs.writeShellScriptBin "korri-steam-app" ''
     set -eu
 
@@ -431,6 +448,44 @@ let
     }
 
     ydotool_sock="$XDG_RUNTIME_DIR/korri-steam-ydotool.sock"
+    ydotoold_pid=""
+    cleanup_done=0
+
+    control_steam_service() {
+      action="$1"
+      if [ "$(${pkgs.coreutils}/bin/id -u)" -eq 0 ]; then
+        ${pkgs.systemd}/bin/systemctl "$action" "$service_name"
+        return $?
+      fi
+      if [ "$service_name" != "korri-steam.service" ]; then
+        echo "korri-steam-app: warning: cannot $action overridden service $service_name without root" >&2
+        return 1
+      fi
+      if [ -x /run/wrappers/bin/sudo ]; then
+        /run/wrappers/bin/sudo -n ${steamServiceControl}/bin/korri-steam-service-control "$action"
+        return $?
+      fi
+      echo "korri-steam-app: warning: sudo wrapper unavailable; cannot $action $service_name" >&2
+      return 1
+    }
+
+    cleanup() {
+      [ "$cleanup_done" -eq 0 ] || return 0
+      cleanup_done=1
+      hide_steam_hat || true
+      if [ -n "$ydotoold_pid" ]; then
+        ${pkgs.procps}/bin/kill "$ydotoold_pid" 2>/dev/null || true
+      fi
+      ${pkgs.coreutils}/bin/rm -f "$ydotool_sock" 2>/dev/null || true
+      if [ "''${KORRI_STEAM_APP_STOP_SERVICE_ON_EXIT:-1}" != "0" ]; then
+        control_steam_service stop >/dev/null 2>&1 || \
+          echo "korri-steam-app: warning: could not stop $service_name after launch" >&2
+      fi
+    }
+
+    trap cleanup EXIT
+    trap 'cleanup; exit 130' INT
+    trap 'cleanup; exit 143' TERM
 
     ensure_ydotoold() {
       [ "''${KORRI_STEAM_APP_AUTO_CONFIRM:-1}" != "0" ] || return 1
@@ -439,6 +494,7 @@ let
       fi
       ${pkgs.coreutils}/bin/rm -f "$ydotool_sock"
       ${pkgs.ydotool}/bin/ydotoold --socket-path="$ydotool_sock" --socket-perm=0600 >/dev/null 2>&1 &
+      ydotoold_pid="$!"
       i=0
       while [ "$i" -lt 20 ]; do
         [ -S "$ydotool_sock" ] && return 0
@@ -462,10 +518,9 @@ let
 
     if ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
       :
-    elif [ "$(${pkgs.coreutils}/bin/id -u)" -eq 0 ]; then
-      ${pkgs.systemd}/bin/systemctl start "$service_name"
     else
-      echo "korri-steam-app: warning: $service_name is not active; assuming Steam is already reachable in the user session" >&2
+      control_steam_service start || \
+        echo "korri-steam-app: warning: could not start $service_name; assuming Steam is already reachable in the user session" >&2
     fi
 
     ${steamUinputPrep}/bin/korri-steam-ensure-uinput || true
@@ -628,8 +683,25 @@ in
       cfg.package
       steamLauncher
       steamAppLauncher
+      steamServiceControl
       steamUinputPrep
       fexRootfsPreparer
+    ];
+
+    security.sudo.extraRules = [
+      {
+        users = [ runtime.user ];
+        commands = [
+          {
+            command = "${steamServiceControl}/bin/korri-steam-service-control start";
+            options = [ "NOPASSWD" ];
+          }
+          {
+            command = "${steamServiceControl}/bin/korri-steam-service-control stop";
+            options = [ "NOPASSWD" ];
+          }
+        ];
+      }
     ];
 
     systemd.tmpfiles.rules = [
