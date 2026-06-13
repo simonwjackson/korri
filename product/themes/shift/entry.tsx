@@ -1,6 +1,7 @@
-import { RegistryProvider } from "@effect/atom-react"
+import { RegistryProvider, useAtomInitialValues } from "@effect/atom-react"
 import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import type { LaunchSpec } from "@platform/library/launcher"
+import type { PlayableLibraryEntry } from "@platform/library/playable-library"
 import {
   Launcher,
   LibraryError,
@@ -34,9 +35,8 @@ export const shiftTheme: KorriThemeEntrypoint = {
     ] as const
 
     root.render(
-      <RegistryProvider initialValues={initialValues}>
-        <LiveUsbArtifactNotice />
-        <ShiftHomePage />
+      <RegistryProvider>
+        <ShiftThemeRuntimeRoot initialValues={initialValues} />
       </RegistryProvider>,
     )
 
@@ -46,18 +46,48 @@ export const shiftTheme: KorriThemeEntrypoint = {
 
 export default shiftTheme
 
+function ShiftThemeRuntimeRoot({
+  initialValues,
+}: {
+  readonly initialValues: Parameters<typeof useAtomInitialValues>[0]
+}) {
+  useAtomInitialValues(initialValues)
+  return (
+    <>
+      <LiveUsbArtifactNotice />
+      <ShiftHomePage />
+    </>
+  )
+}
+
 function createBridgeLibrarySourceLayer(bridge: KorriPlatformBridge) {
+  const listPlayableEntries = () =>
+    Effect.tryPromise({
+      try: () =>
+        bridge.library.list() as Promise<readonly PlayableLibraryEntry[]>,
+      catch: toLibraryError,
+    })
+
   return Layer.succeed(LibrarySource)({
     list: () =>
-      Effect.tryPromise({
-        try: () =>
-          bridge.library.list() as Promise<readonly ResolvedGameRecord[]>,
-        catch: toLibraryError,
-      }),
+      listPlayableEntries().pipe(
+        Effect.map(entries => entries.map(playableToCompatGame)),
+      ),
+    listPlayableEntries,
     launchSpecFor: (id: string) => Effect.succeed(opaqueLaunchSpecFor(id)),
     resolveLaunchForGame: (id: string) =>
       Effect.succeed({ spec: opaqueLaunchSpecFor(id) }),
   })
+}
+
+function playableToCompatGame(entry: PlayableLibraryEntry): ResolvedGameRecord {
+  const release = entry.releases[0]
+  return {
+    id: entry.id,
+    system: release?.system ?? entry.system ?? "unknown",
+    metadata: { name: entry.title ?? entry.id },
+    ...(entry.media ? { media: entry.media } : {}),
+  }
 }
 
 function createBridgeLauncherLayer(bridge: KorriPlatformBridge) {

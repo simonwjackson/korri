@@ -3,8 +3,9 @@ import { mkdtemp, readdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
+import { LibrarySource } from "@platform/library/library-services"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { withTempProseqlLibrary } from "../../../../../tools/testing/library/with-temp-proseql-library"
 import { handleListSource } from "./list.rpc-handler"
 
@@ -67,6 +68,51 @@ describe("app.source.list handler", () => {
     })
 
     delete process.env.KORRI_STREAM_ADVERTISE_HOST_ID
+  })
+
+  it("uses playable entries directly without per-game launch resolution", async () => {
+    let canResolveCalls = 0
+    const result = await Effect.runPromise(
+      handleListSource({}).pipe(
+        Effect.provide(
+          Layer.succeed(LibrarySource)({
+            list: () => Effect.die("legacy list should not be used"),
+            listPlayableEntries: () =>
+              Effect.succeed([
+                {
+                  id: "steam/thirty-xx",
+                  itemId: "steam/thirty-xx",
+                  title: "30XX",
+                  launchable: true,
+                  releases: [
+                    {
+                      id: "default",
+                      system: "steam",
+                      launchable: true,
+                      apps: ["steam"],
+                    },
+                  ],
+                },
+              ]),
+            launchSpecFor: () => Effect.die("launchSpecFor should not be used"),
+            canResolveLaunchForGame: () => {
+              canResolveCalls += 1
+              return Effect.succeed(true)
+            },
+            resolveLaunchForGame: () =>
+              Effect.die("resolveLaunchForGame should not be used"),
+          }),
+        ),
+      ),
+    )
+
+    expect(canResolveCalls).toBe(0)
+    expect(result.games).toHaveLength(1)
+    expect(result.games[0]).toMatchObject({
+      id: "steam/thirty-xx",
+      displayName: "30XX",
+      streamable: true,
+    })
   })
 
   it("marks patched games streamable without materializing or validating patch files", async () => {

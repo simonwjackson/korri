@@ -22,28 +22,58 @@ export const handleListSource = (_payload: typeof ListSourcePayload.Type) =>
     // callers whether a stream-prep is possible — federation peers that
     // can't stream contribute catalog regardless.
     const source = yield* LibrarySource
-    const games = yield* source.list().pipe(Effect.mapError(toDataError))
     const localSource = makeLocalEntrySource(process.env)
-    const sourceGames = yield* Effect.forEach(games, game =>
-      launchCapabilityFor(source, game.id).pipe(
-        Effect.matchEffect({
-          onSuccess: streamable =>
-            Effect.succeed(
-              streamable
-                ? new SourceCatalogGame({
-                    id: game.id,
-                    displayName: getGameDisplayName(game),
-                    streamable,
-                    source: localSource,
-                  })
-                : undefined,
+
+    if (source.listPlayableEntries) {
+      const entries = yield* source
+        .listPlayableEntries()
+        .pipe(Effect.mapError(toDataError))
+      return new ListSourceResponse({
+        games: entries
+          .filter(entry =>
+            entry.releases.some(
+              release =>
+                release.launchable &&
+                release.apps !== undefined &&
+                release.apps.length > 0,
             ),
-          onFailure: (error: LibraryError) =>
-            error.reason === "config"
-              ? Effect.succeed(undefined)
-              : Effect.fail(toDataError(error)),
-        }),
-      ),
+          )
+          .map(
+            entry =>
+              new SourceCatalogGame({
+                id: entry.id,
+                displayName: entry.title ?? entry.id,
+                streamable: true,
+                source: localSource,
+              }),
+          ),
+      })
+    }
+
+    const games = yield* source.list().pipe(Effect.mapError(toDataError))
+    const sourceGames = yield* Effect.forEach(
+      games,
+      game =>
+        launchCapabilityFor(source, game.id).pipe(
+          Effect.matchEffect({
+            onSuccess: streamable =>
+              Effect.succeed(
+                streamable
+                  ? new SourceCatalogGame({
+                      id: game.id,
+                      displayName: getGameDisplayName(game),
+                      streamable,
+                      source: localSource,
+                    })
+                  : undefined,
+              ),
+            onFailure: (error: LibraryError) =>
+              error.reason === "config"
+                ? Effect.succeed(undefined)
+                : Effect.fail(toDataError(error)),
+          }),
+        ),
+      { concurrency: "unbounded" },
     )
 
     return new ListSourceResponse({
