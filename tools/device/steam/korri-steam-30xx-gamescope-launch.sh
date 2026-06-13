@@ -18,7 +18,29 @@ set -euo pipefail
 APPID="1029210"
 GAME_NAME="30XX"
 STEAM_ROOT="${KORRI_STEAM_ROOT:-/var/lib/korri/steam}"
-LOCALCONFIG="${KORRI_STEAM_LOCALCONFIG:-$STEAM_ROOT/userdata/0/config/localconfig.vdf}"
+
+find_steam_localconfig() {
+  if [[ -n "${KORRI_STEAM_LOCALCONFIG:-}" ]]; then
+    printf '%s\n' "$KORRI_STEAM_LOCALCONFIG"
+    return 0
+  fi
+
+  local candidate
+  # Steam normally uses the numeric account id under userdata/, not userdata/0.
+  # Prefer an existing localconfig that already mentions the target AppID.
+  for candidate in "$STEAM_ROOT"/userdata/*/config/localconfig.vdf; do
+    [[ -f "$candidate" ]] || continue
+    if grep -q '"'"$APPID"'"' "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  # Fallback for fresh/prototype setups.
+  printf '%s\n' "$STEAM_ROOT/userdata/0/config/localconfig.vdf"
+}
+
+LOCALCONFIG="$(find_steam_localconfig)"
 STATE_DIR="${XDG_STATE_HOME:-${HOME:-/tmp}/.local/state}/korri"
 LOG_FILE="$STATE_DIR/steam-30xx-gamescope-launch.log"
 
