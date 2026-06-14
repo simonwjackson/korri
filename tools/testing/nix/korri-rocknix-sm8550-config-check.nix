@@ -45,6 +45,7 @@ let
       removableMedia = cfg.services.korri.removableMedia or { };
       steam = cfg.services.korri.steam or { };
       steamUnit = cfg.systemd.services.korri-steam or { };
+      steamWarmUnit = userServices.korri-steam-warm or { };
       steamUinputUnit = cfg.systemd.services.korri-steam-uinput or { };
       pipewireEnv = (userServices.pipewire or { }).environment or { };
       pipewirePulseEnv = (userServices.pipewire-pulse or { }).environment or { };
@@ -246,6 +247,7 @@ let
         && (steam.gamesRoot or null) == "/var/lib/korri/content/games/steam"
         && (steam.dotDir or null) == "/home/korri/.steam"
         && (steam.fexRootfs or null) == "/var/lib/korri/steam/fex-rootfs"
+        && (steam.keepWarm or false)
       ))
       (check "${name}: Korri Steam launch services are hardened" (
         cfg.systemd.services ? korri-steam-uinput
@@ -255,6 +257,13 @@ let
         && (steamUnit.serviceConfig.WorkingDirectory or null) == "/var/lib/korri/steam"
         && (steamUnit.serviceConfig.LimitNOFILE or null) == 524288
         && (steamUnit.environment.XDG_RUNTIME_DIR or null) == "/run/user/2000"
+      ))
+      (check "${name}: Korri Steam is warmed from the real user session" (
+        userServices ? korri-steam-warm
+        && builtins.elem "korri-session.target" (steamWarmUnit.wantedBy or [ ])
+        && builtins.elem "korri-compositor.service" (steamWarmUnit.after or [ ])
+        && (steamWarmUnit.serviceConfig.Type or null) == "oneshot"
+        && lib.hasInfix "korri-steam-warm" (steamWarmUnit.serviceConfig.ExecStart or "")
       ))
       (check "${name}: old substrate Steam launcher/service is absent" (
         !(cfg.systemd.services ? main-space-steam-uinput)

@@ -64,6 +64,13 @@ let
     services.korri.steam.enable = true;
   };
 
+  enabledKeepWarm = evaluateWith "aarch64-linux" {
+    services.korri.steam = {
+      enable = true;
+      keepWarm = true;
+    };
+  };
+
   runtimeOverride = evaluateWith "aarch64-linux" {
     services.korri.runtime = {
       stateRoot = "/var/lib/korri-alt";
@@ -91,6 +98,7 @@ let
     needle: cfg: builtins.any (a: lib.hasInfix needle a.message) (failedAssertions cfg);
 
   steamUnit = enabled.systemd.services.korri-steam or { };
+  steamWarmUnit = enabledKeepWarm.systemd.user.services.korri-steam-warm or { };
   uinputUnit = enabled.systemd.services.korri-steam-uinput or { };
   seedUnit = enabled.systemd.services.korri-steam-seed or { };
   fexRootfsUnit = enabled.systemd.services.korri-steam-prepare-fex-rootfs or { };
@@ -139,11 +147,23 @@ let
       && builtins.any (name: lib.hasInfix "korri-steam-guest" name) (systemPackageNames enabled)
       && builtins.any (name: lib.hasInfix "korri-steam-app" name) (systemPackageNames enabled)
       && builtins.any (name: lib.hasInfix "korri-steam-service-control" name) (systemPackageNames enabled)
+      && builtins.any (name: lib.hasInfix "korri-steam-warm" name) (systemPackageNames enabled)
       && builtins.any (name: lib.hasInfix "korri-steam-ensure-uinput" name) (systemPackageNames enabled)
     ))
     (check "Steam app launcher can bracket the managed system service" (
       builtins.any (command: lib.hasInfix "korri-steam-service-control start" command) sudoCommands
       && builtins.any (command: lib.hasInfix "korri-steam-service-control stop" command) sudoCommands
+    ))
+    (check "keepWarm defaults off for device-neutral Steam configs" (
+      enabled.services.korri.steam.keepWarm == false
+      && !(enabled.systemd.user.services ? korri-steam-warm)
+    ))
+    (check "keepWarm adds a user-session warmup unit" (
+      enabledKeepWarm.systemd.user.services ? korri-steam-warm
+      && builtins.elem "korri-session.target" (steamWarmUnit.wantedBy or [ ])
+      && builtins.elem "korri-compositor.service" (steamWarmUnit.after or [ ])
+      && (steamWarmUnit.serviceConfig.Type or null) == "oneshot"
+      && lib.hasInfix "korri-steam-warm" (serviceExec steamWarmUnit)
     ))
     (check "uinput service is rendered and ordered for boot convergence" (
       enabled.systemd.services ? korri-steam-uinput

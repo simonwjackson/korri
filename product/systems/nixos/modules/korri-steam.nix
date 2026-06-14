@@ -396,6 +396,38 @@ let
     exec ${pkgs.systemd}/bin/systemctl "$1" korri-steam.service
   '';
 
+  steamWarmup = pkgs.writeShellScriptBin "korri-steam-warm" ''
+    set -eu
+
+    runtime_dir=/run/user/${toString runtime.uid}
+    wayland_display=wayland-1
+    wayland_socket="$runtime_dir/$wayland_display"
+    bus_socket="$runtime_dir/bus"
+
+    # The Steam system service consumes the real kiosk user's Wayland and D-Bus
+    # session. Start it from korri-session.target, but wait for the compositor
+    # and bus sockets so boot/session ordering never falls back to direct Steam.
+    i=0
+    while [ "$i" -lt 120 ]; do
+      if [ -S "$wayland_socket" ] && [ -S "$bus_socket" ]; then
+        break
+      fi
+      i=$((i + 1))
+      ${pkgs.coreutils}/bin/sleep 1
+    done
+
+    if [ ! -S "$wayland_socket" ]; then
+      echo "korri-steam-warm: timed out waiting for $wayland_socket" >&2
+      exit 1
+    fi
+    if [ ! -S "$bus_socket" ]; then
+      echo "korri-steam-warm: timed out waiting for $bus_socket" >&2
+      exit 1
+    fi
+
+    exec /run/wrappers/bin/sudo -n ${steamServiceControl}/bin/korri-steam-service-control start
+  '';
+
   steamAppLauncher = pkgs.writeShellScriptBin "korri-steam-app" ''
     set -eu
 
@@ -783,6 +815,17 @@ in
       description = "Default Steam client arguments supplied by the Korri guest adapter.";
     };
 
+    keepWarm = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Start the managed Steam service from the Korri user session and keep it
+        resident so app launches can forward AppIDs to an already-warm Steam
+        client. The warmup waits for the kiosk Wayland and D-Bus sockets before
+        using the narrow sudo helper, avoiding ad-hoc direct Steam fallback.
+      '';
+    };
+
     appAudioSinkName = mkOption {
       type = types.str;
       default = "";
@@ -827,6 +870,7 @@ in
       steamLauncher
       steamAppLauncher
       steamServiceControl
+      steamWarmup
       steamUinputPrep
       fexRootfsPreparer
     ];
@@ -856,6 +900,17 @@ in
       "d ${cfg.home}/fex-data 0750 ${runtime.user} ${runtime.group} -"
       "d ${cfg.home}/fex-data/RootFS 0750 ${runtime.user} ${runtime.group} -"
     ];
+
+    systemd.user.services.korri-steam-warm = lib.mkIf cfg.keepWarm {
+      description = "Warm the Korri guest-native Steam client for AppID launches";
+      wantedBy = [ "korri-session.target" ];
+      after = [ "korri-compositor.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${steamWarmup}/bin/korri-steam-warm";
+        RemainAfterExit = true;
+      };
+    };
 
     systemd.services.korri-steam-uinput = {
       description = "Prepare the guest uinput device for Steam Input";
