@@ -812,12 +812,34 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     expect(launchedSpec).toEqual({ command: "/bin/game", args: ["rom"] })
   })
 
-  it("keeps app.library.launch pending while the managed local child is running", async () => {
-    const control = makeInMemoryLauncherLayer.createManagedControl()
+  it("returns accepted once a sessiond-managed local child is running", async () => {
+    let resolveExit!: (result: { readonly exitCode: number }) => void
+    const exit = new Promise<{ readonly exitCode: number }>(resolve => {
+      resolveExit = resolve
+    })
     const host = createForegroundSessionHost()
+    const launcherLayer = Layer.succeed(Launcher)({
+      run: () => Effect.succeed({ status: "launched" as const }),
+      spawn: () =>
+        Effect.succeed({
+          status: "started" as const,
+          result: exit.then(result =>
+            result.exitCode === 0
+              ? ({ status: "launched" as const })
+              : ({ status: "failed" as const, exitCode: result.exitCode }),
+          ),
+          session: {
+            id: "sessiond-launch-1",
+            exited: exit,
+            ready: Promise.resolve({ status: "ok" as const }),
+            terminate: () => {},
+            terminateNow: () => {},
+          },
+        }),
+    })
     const layer = Layer.mergeAll(
       localGameSourceLayer({ gamescope: { enable: false } }),
-      makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
+      launcherLayer,
       Layer.succeed(ForegroundSessionHost)(host),
       remoteStreamPrepareNeverCalledLayer,
     )
@@ -826,16 +848,11 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       handleLaunchLibrary({ id: "game" }).pipe(Effect.provide(layer)),
     )
     await waitForOwnerState(host, "Running")
-    let settled = false
-    void launch.then(() => {
-      settled = true
-    })
-    await Promise.resolve()
 
-    expect(settled).toBe(false)
-
-    control.resolveExit({ exitCode: 0 })
     expect(await launch).toEqual({ _tag: "Accepted", status: "launched" })
+    expect(host.owner.status().state._tag).toBe("Running")
+
+    resolveExit({ exitCode: 0 })
     await host.owner.whenIdle()
   })
 
@@ -868,7 +885,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     await host.owner.whenIdle()
   })
 
-  it("preserves terminal failure diagnostics after the managed local child exits", async () => {
+  it("preserves terminal failure diagnostics for managed children without readiness", async () => {
     const control = makeInMemoryLauncherLayer.createManagedControl()
     const host = createForegroundSessionHost()
     const layer = Layer.mergeAll(

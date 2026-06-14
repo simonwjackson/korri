@@ -170,16 +170,11 @@ async function launchResponseAfterManagedReadiness(
   const readiness = spawned.session.ready
   if (!readiness) return await spawned.result
 
-  const result = await readiness
-  if (result.status === "ok") return { _tag: "Accepted", status: "launched" }
-
-  return {
-    _tag: "LaunchFailed",
-    status: "failed",
-    exitCode: launchFailureExitCode("command-failed"),
-    failureKind: "command-failed",
-    stderrTail: result.message,
-  }
+  // `app.library.launch` is an acceptance API for sessiond-managed local
+  // launches. Once the foreground owner has prepared, spawned, and moved the
+  // session to Running, keep lifetime/terminal failure observation with
+  // sessiond instead of holding the HTTP/RPC request open for the game process.
+  return { _tag: "Accepted", status: "launched" }
 }
 
 async function verifyLocalLaunchReady(
