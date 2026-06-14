@@ -1,0 +1,2 @@
+[2026-06-14 14:39:02] AppID 584400 state changed : Fully Installed,App Running,
+[2026-06-14 14:39:35] AppID 584400 state changed : Fully Installed,

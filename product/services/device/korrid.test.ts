@@ -1,5 +1,43 @@
-import { describe, expect, it } from "bun:test"
+import { afterEach, describe, expect, it } from "bun:test"
 import { createKorrid, getKorridConfig } from "./korrid"
+import {
+  getInstalledSteamLogObserverStatus,
+  resetSteamLogObserverStatusForTests,
+  type SteamLogObserverHandle,
+} from "./steam-log-observer"
+
+function createRecordingSteamObserver(): SteamLogObserverHandle & {
+  readonly starts: () => number
+  readonly stops: () => number
+} {
+  let starts = 0
+  let stops = 0
+  return {
+    starts: () => starts,
+    stops: () => stops,
+    start: async () => {
+      starts += 1
+    },
+    stop: async () => {
+      stops += 1
+    },
+    ingestLine: () => {},
+    status: () => ({
+      health: {
+        state: starts > stops ? "running" : "stopped",
+        logDir: "/tmp/steam/logs",
+        watchedFiles: ["content_log.txt"],
+        activeFiles: [],
+        missingFiles: ["content_log.txt"],
+      },
+      recentEvidence: [],
+    }),
+  }
+}
+
+afterEach(() => {
+  resetSteamLogObserverStatusForTests()
+})
 
 describe("korrid", () => {
   it("reads conservative loopback defaults", () => {
@@ -40,6 +78,7 @@ describe("korrid", () => {
           },
         }
       },
+      steamObserver: createRecordingSteamObserver(),
     })
 
     await server.start()
@@ -56,6 +95,29 @@ describe("korrid", () => {
     expect(stopped).toBe(true)
   })
 
+  it("starts and stops the Steam observer status seam with the daemon", async () => {
+    const steamObserver = createRecordingSteamObserver()
+    const server = createKorrid({
+      config: {
+        host: "127.0.0.1",
+        port: 0,
+        advertise: false,
+        advertiseCapabilities: ["stream"],
+      },
+      steamObserver,
+    })
+
+    await server.start()
+    expect(steamObserver.starts()).toBe(1)
+    expect(getInstalledSteamLogObserverStatus().health.state).toBe("running")
+
+    await server.stop()
+    expect(steamObserver.stops()).toBe(1)
+    expect(getInstalledSteamLogObserverStatus().health.state).toBe(
+      "unavailable",
+    )
+  })
+
   it("closes the HTTP server when advertisement startup fails", async () => {
     const server = createKorrid({
       config: {
@@ -67,6 +129,7 @@ describe("korrid", () => {
       advertise: () => {
         throw new Error("mdns failed")
       },
+      steamObserver: createRecordingSteamObserver(),
     })
 
     await expect(server.start()).rejects.toThrow("mdns failed")

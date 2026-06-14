@@ -1,0 +1,3 @@
+[2026-06-14 14:38:14] AppID 360740 state changed : Fully Installed,
+[2026-06-14 14:41:27] AppID 360740 state changed : Fully Installed,App Running,
+[2026-06-14 14:41:57] AppID 360740 state changed : Fully Installed,

@@ -1,0 +1,24 @@
+[2026-06-14 14:38:14] AppID 360740 no longer tracking PID 114897, exit code -1
+[2026-06-14 14:38:14] AppID 360740 no longer tracking PID 114733, exit code -1
+[2026-06-14 14:38:14] AppID 360740 no longer tracking PID 114500, exit code -1
+[2026-06-14 14:38:14] AppID 360740 no longer tracking PID 114495, exit code -1
+[2026-06-14 14:38:14] AppID 360740 no longer tracking PID 114494, exit code -1
+[2026-06-14 14:38:14] AppID 360740 no longer tracking PID 114493, exit code -1
+[2026-06-14 14:38:14] AppID 360740 no longer tracking PID 114425, exit code -1
+[2026-06-14 14:38:14] AppID 360740 no longer tracking PID 114424, exit code 0
+[2026-06-14 14:41:27] AppID 360740 adding PID 204611 as a tracked process "/run/current-system/sw/bin/bash <korri-bin>/korri-steam-gamescope-launch --appid 360740 -- <steam-home>/linuxarm64/steam-launch-wrapper -- <steam-home>/steamrtarm64/reaper SteamLaunch AppId=360740 -- '<steam-home>/steamapps/common/SteamLinuxRuntime_4'/_v2-entry-point --verb=waitforexitandrun -- '<steam-home>/steamapps/common/Proton - Experimental'/proton waitforexitandrun  '<steam-home>/steamapps/common/Downwell/Downwell.exe'"
+[2026-06-14 14:41:28] AppID 360740 adding PID 204625 as a tracked process
+[2026-06-14 14:41:28] AppID 360740 adding PID 204699 as a tracked process
+[2026-06-14 14:41:28] AppID 360740 adding PID 204700 as a tracked process
+[2026-06-14 14:41:28] AppID 360740 adding PID 204702 as a tracked process
+[2026-06-14 14:41:28] AppID 360740 adding PID 204708 as a tracked process
+[2026-06-14 14:41:46] AppID 360740 adding PID 204990 as a tracked process
+[2026-06-14 14:41:47] AppID 360740 adding PID 205203 as a tracked process
+[2026-06-14 14:41:57] AppID 360740 no longer tracking PID 205203, exit code -1
+[2026-06-14 14:41:57] AppID 360740 no longer tracking PID 204990, exit code -1
+[2026-06-14 14:41:57] AppID 360740 no longer tracking PID 204708, exit code -1
+[2026-06-14 14:41:57] AppID 360740 no longer tracking PID 204702, exit code -1
+[2026-06-14 14:41:57] AppID 360740 no longer tracking PID 204700, exit code -1
+[2026-06-14 14:41:57] AppID 360740 no longer tracking PID 204699, exit code -1
+[2026-06-14 14:41:57] AppID 360740 no longer tracking PID 204625, exit code -1
+[2026-06-14 14:41:57] AppID 360740 no longer tracking PID 204611, exit code 0

@@ -110,6 +110,7 @@ describe("headless server RPC group", () => {
       "app.session.status",
       "app.session.stop",
       "app.source.status",
+      "app.steam.status",
       "app.stream-control.config.get",
       "app.stream-control.gamescope-filter.set",
       "app.stream-control.gamescope-fps.set",

@@ -15,6 +15,7 @@ import { LaunchLibraryRpc as appLibraryLaunch } from "../library/launch.rpc"
 import { SessionStatusRpc as appSessionStatus } from "../session/status.rpc"
 import { StopSessionRpc as appSessionStop } from "../session/stop.rpc"
 import { SourceStatusRpc as appSourceStatus } from "../source/status.rpc"
+import { SteamStatusRpc as appSteamStatus } from "../steam/status.rpc"
 import { PrepareStreamRpc as appStreamPrepare } from "../stream/prepare.rpc"
 import { GetStreamControlConfigRpc as appStreamControlConfigGet } from "../stream-control/get-config.rpc"
 import { GetStreamControlStateRpc as appStreamControlStateGet } from "../stream-control/get-state.rpc"
@@ -42,6 +43,7 @@ export const serverRpcGroup = RpcGroup.make(
   appLibraryLaunch,
   appLibraryLaunchDryRun,
   appSourceStatus,
+  appSteamStatus,
   appServerStatus,
   appSessionStatus,
   appSessionStop,

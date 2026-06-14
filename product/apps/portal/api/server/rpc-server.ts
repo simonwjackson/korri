@@ -33,6 +33,7 @@ import { RemoteStreamPrepareLive } from "../library/remote-stream-prepare"
 import { handleSessionStatus } from "../session/status.rpc-handler"
 import { handleStopSession } from "../session/stop.rpc-handler"
 import { handleSourceStatus } from "../source/status.rpc-handler"
+import { handleSteamStatus } from "../steam/status.rpc-handler"
 import { handlePrepareStream } from "../stream/prepare.rpc-handler"
 import { handleGetStreamControlConfig } from "../stream-control/get-config.rpc-handler"
 import { handleGetStreamControlState } from "../stream-control/get-state.rpc-handler"
@@ -109,6 +110,7 @@ const ServerHandlersLive = serverRpcGroup.toLayer(
     "app.library.launch": handleLaunchLibrary,
     "app.library.launch.dry-run": handleDryRunLaunch,
     "app.source.status": handleSourceStatus,
+    "app.steam.status": handleSteamStatus,
     "app.server.status": handleServerStatus,
     "app.session.status": handleSessionStatus,
     "app.session.stop": handleStopSession,

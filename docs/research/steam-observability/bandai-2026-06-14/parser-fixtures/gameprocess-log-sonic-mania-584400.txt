@@ -1,0 +1,16 @@
+[2026-06-14 14:39:02] AppID 584400 adding PID 196491 as a tracked process "/run/current-system/sw/bin/bash <korri-bin>/korri-steam-gamescope-launch --appid 584400 -- <steam-home>/linuxarm64/steam-launch-wrapper -- <steam-home>/steamrtarm64/reaper SteamLaunch AppId=584400 -- '<steam-home>/steamapps/common/SteamLinuxRuntime_4'/_v2-entry-point --verb=waitforexitandrun -- '<steam-home>/steamapps/common/Proton - Experimental'/proton waitforexitandrun  '<steam-home>/steamapps/common/Sonic Mania/SonicMania.exe'"
+[2026-06-14 14:39:03] AppID 584400 adding PID 196550 as a tracked process
+[2026-06-14 14:39:03] AppID 584400 adding PID 196634 as a tracked process
+[2026-06-14 14:39:03] AppID 584400 adding PID 196639 as a tracked process
+[2026-06-14 14:39:03] AppID 584400 adding PID 196646 as a tracked process
+[2026-06-14 14:39:03] AppID 584400 adding PID 196652 as a tracked process
+[2026-06-14 14:39:21] AppID 584400 adding PID 197021 as a tracked process
+[2026-06-14 14:39:22] AppID 584400 adding PID 197135 as a tracked process
+[2026-06-14 14:39:35] AppID 584400 no longer tracking PID 197135, exit code -1
+[2026-06-14 14:39:35] AppID 584400 no longer tracking PID 197021, exit code -1
+[2026-06-14 14:39:35] AppID 584400 no longer tracking PID 196652, exit code -1
+[2026-06-14 14:39:35] AppID 584400 no longer tracking PID 196646, exit code -1
+[2026-06-14 14:39:35] AppID 584400 no longer tracking PID 196639, exit code -1
+[2026-06-14 14:39:35] AppID 584400 no longer tracking PID 196634, exit code -1
+[2026-06-14 14:39:35] AppID 584400 no longer tracking PID 196550, exit code -1
+[2026-06-14 14:39:35] AppID 584400 no longer tracking PID 196491, exit code 0

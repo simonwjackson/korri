@@ -13,6 +13,11 @@ import {
   advertiseStreamHost,
   type StreamAdvertisement,
 } from "./lan-stream-advertise"
+import {
+  createSteamLogObserver,
+  installSteamLogObserverStatus,
+  type SteamLogObserverHandle,
+} from "./steam-log-observer"
 
 export interface KorridConfig {
   readonly host: string
@@ -36,6 +41,7 @@ export interface CreateKorridOptions {
     readonly port: number
     readonly capabilities: readonly string[]
   }) => StreamAdvertisement
+  readonly steamObserver?: SteamLogObserverHandle
 }
 
 export function getKorridConfig(
@@ -78,6 +84,9 @@ export function createKorrid(options: CreateKorridOptions = {}): KorridHandle {
   })
   const server = createAdaptorServer({ fetch: app.fetch })
   const advertise = options.advertise ?? advertiseStreamHost
+  const steamObserver = options.steamObserver ?? createSteamLogObserver()
+  const steamObserverOwner = Symbol("korrid-steam-observer")
+  let steamObserverInstall: { readonly uninstall: () => void } | undefined
   let advertisement: StreamAdvertisement | undefined
   let started = false
 
@@ -86,6 +95,11 @@ export function createKorrid(options: CreateKorridOptions = {}): KorridHandle {
       if (started) return
       await listen(server, config.port, config.host)
       started = true
+      steamObserverInstall = installSteamLogObserverStatus(
+        steamObserverOwner,
+        steamObserver.status,
+      )
+      await steamObserver.start()
       try {
         await configGraphController.initialize()
       } catch (error) {
@@ -117,6 +131,9 @@ export function createKorrid(options: CreateKorridOptions = {}): KorridHandle {
         await advertisement.stop()
         advertisement = undefined
       }
+      await steamObserver.stop()
+      steamObserverInstall?.uninstall()
+      steamObserverInstall = undefined
       await configGraphController.stop()
       if (started) {
         await closeServer(server)

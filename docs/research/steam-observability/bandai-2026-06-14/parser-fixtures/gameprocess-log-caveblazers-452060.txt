@@ -1,0 +1,16 @@
+[2026-06-14 14:40:07] AppID 452060 adding PID 200093 as a tracked process "/run/current-system/sw/bin/bash <korri-bin>/korri-steam-gamescope-launch --appid 452060 -- <steam-home>/linuxarm64/steam-launch-wrapper -- <steam-home>/steamrtarm64/reaper SteamLaunch AppId=452060 -- '<steam-home>/steamapps/common/SteamLinuxRuntime_4'/_v2-entry-point --verb=waitforexitandrun -- '<steam-home>/steamapps/common/Proton - Experimental'/proton waitforexitandrun  '<steam-home>/steamapps/common/Caveblazers/game.exe'"
+[2026-06-14 14:40:07] AppID 452060 adding PID 200147 as a tracked process
+[2026-06-14 14:40:07] AppID 452060 adding PID 200363 as a tracked process
+[2026-06-14 14:40:07] AppID 452060 adding PID 200376 as a tracked process
+[2026-06-14 14:40:07] AppID 452060 adding PID 200391 as a tracked process
+[2026-06-14 14:40:07] AppID 452060 adding PID 200401 as a tracked process
+[2026-06-14 14:40:24] AppID 452060 adding PID 200727 as a tracked process
+[2026-06-14 14:40:25] AppID 452060 adding PID 200962 as a tracked process
+[2026-06-14 14:40:35] AppID 452060 no longer tracking PID 200962, exit code -1
+[2026-06-14 14:40:35] AppID 452060 no longer tracking PID 200727, exit code -1
+[2026-06-14 14:40:35] AppID 452060 no longer tracking PID 200401, exit code -1
+[2026-06-14 14:40:35] AppID 452060 no longer tracking PID 200391, exit code -1
+[2026-06-14 14:40:35] AppID 452060 no longer tracking PID 200376, exit code -1
+[2026-06-14 14:40:35] AppID 452060 no longer tracking PID 200363, exit code -1
+[2026-06-14 14:40:35] AppID 452060 no longer tracking PID 200147, exit code -1
+[2026-06-14 14:40:35] AppID 452060 no longer tracking PID 200093, exit code 0

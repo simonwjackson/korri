@@ -1,0 +1,7 @@
+2026-06-14T14:38:14-04:00 [shader_log.txt] [2026-06-14 14:38:14] AppID 360740 exited.
+2026-06-14T14:39:02-04:00 [shader_log.txt] [2026-06-14 14:39:02] Setting MESA_GLSL_CACHE_DIR=<steam-home>/steamapps/shadercache/584400 MESA_DISK_CACHE_READ_ONLY_FOZ_DBS=steam_cache,steam_precompiled
+2026-06-14T14:39:35-04:00 [shader_log.txt] [2026-06-14 14:39:35] AppID 584400 exited.
+2026-06-14T14:40:07-04:00 [shader_log.txt] [2026-06-14 14:40:07] Setting MESA_GLSL_CACHE_DIR=<steam-home>/steamapps/shadercache/452060 MESA_DISK_CACHE_READ_ONLY_FOZ_DBS=steam_cache,steam_precompiled
+2026-06-14T14:40:35-04:00 [shader_log.txt] [2026-06-14 14:40:35] AppID 452060 exited.
+2026-06-14T14:41:27-04:00 [shader_log.txt] [2026-06-14 14:41:27] Setting MESA_GLSL_CACHE_DIR=<steam-home>/steamapps/shadercache/360740 MESA_DISK_CACHE_READ_ONLY_FOZ_DBS=steam_cache,steam_precompiled
+2026-06-14T14:41:57-04:00 [shader_log.txt] [2026-06-14 14:41:57] AppID 360740 exited.
