@@ -148,6 +148,7 @@ let
       && builtins.any (name: lib.hasInfix "korri-steam-app" name) (systemPackageNames enabled)
       && builtins.any (name: lib.hasInfix "korri-steam-service-control" name) (systemPackageNames enabled)
       && builtins.any (name: lib.hasInfix "korri-steam-warm" name) (systemPackageNames enabled)
+      && builtins.any (name: lib.hasInfix "korri-steam-launch-options" name) (systemPackageNames enabled)
       && builtins.any (name: lib.hasInfix "korri-steam-ensure-uinput" name) (systemPackageNames enabled)
     ))
     (check "Steam app launcher can bracket the managed system service" (

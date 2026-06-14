@@ -428,6 +428,118 @@ let
     exec /run/wrappers/bin/sudo -n ${steamServiceControl}/bin/korri-steam-service-control start
   '';
 
+  steamLaunchOptionsMaterializer = pkgs.writeShellScriptBin "korri-steam-launch-options" ''
+    set -eu
+    exec ${pkgs.python3}/bin/python3 - "$@" <<'PY'
+import sys
+from pathlib import Path
+
+if len(sys.argv) != 4:
+    print("usage: korri-steam-launch-options <localconfig.vdf> <appid> <launch-options>", file=sys.stderr)
+    raise SystemExit(64)
+
+path = Path(sys.argv[1])
+appid = sys.argv[2]
+desired = sys.argv[3]
+if not appid.isdigit():
+    print(f"invalid appid: {appid}", file=sys.stderr)
+    raise SystemExit(64)
+if not path.exists():
+    print(f"missing localconfig.vdf: {path}", file=sys.stderr)
+    raise SystemExit(66)
+
+lines = path.read_text(errors="replace").splitlines(keepends=True)
+
+apps_key_idx = None
+for i, line in enumerate(lines):
+    if line.strip() == '"apps"':
+        window = "".join(lines[max(0, i - 10):i + 10])
+        if '"EnableGameOverlay"' in window:
+            apps_key_idx = i
+            break
+if apps_key_idx is None:
+    print("could not find Steam apps section", file=sys.stderr)
+    raise SystemExit(65)
+
+apps_open_idx = apps_key_idx + 1
+if apps_open_idx >= len(lines) or lines[apps_open_idx].strip() != '{':
+    print("Steam apps section did not open with brace", file=sys.stderr)
+    raise SystemExit(65)
+
+depth = 0
+apps_close_idx = None
+for i in range(apps_open_idx, len(lines)):
+    stripped = lines[i].strip()
+    if stripped == '{':
+        depth += 1
+    elif stripped == '}':
+        depth -= 1
+        if depth == 0:
+            apps_close_idx = i
+            break
+if apps_close_idx is None:
+    print("could not find Steam apps section close", file=sys.stderr)
+    raise SystemExit(65)
+
+# Locate or create the direct per-app block under Software/Valve/Steam/apps.
+start = close = None
+i = apps_open_idx + 1
+while i < apps_close_idx:
+    if lines[i].strip() == f'"{appid}"' and i + 1 < apps_close_idx and lines[i + 1].strip() == '{':
+        d = 0
+        for j in range(i + 1, apps_close_idx):
+            sj = lines[j].strip()
+            if sj == '{':
+                d += 1
+            elif sj == '}':
+                d -= 1
+                if d == 0:
+                    start, close = i, j
+                    break
+        if close is None:
+            print(f"unclosed app block {appid}", file=sys.stderr)
+            raise SystemExit(65)
+        break
+    i += 1
+
+if start is None:
+    app_indent = lines[apps_open_idx + 1][:len(lines[apps_open_idx + 1]) - len(lines[apps_open_idx + 1].lstrip())] if apps_open_idx + 1 < len(lines) else "\t\t\t\t"
+    block = [
+        f'{app_indent}"{appid}"\n',
+        f'{app_indent}{{\n',
+        f'{app_indent}\t"LaunchOptions"\t\t"{desired}"\n',
+        f'{app_indent}}}\n',
+    ]
+    lines[apps_close_idx:apps_close_idx] = block
+    path.write_text("".join(lines))
+    print("created")
+    raise SystemExit(0)
+
+launch_idx = None
+scalar_indent = lines[start + 1][:len(lines[start + 1]) - len(lines[start + 1].lstrip())] + "\t"
+for j in range(start + 2, close):
+    stripped = lines[j].lstrip()
+    if stripped.startswith('"') and '\t\t"' in stripped:
+        scalar_indent = lines[j][:len(lines[j]) - len(stripped)]
+        if stripped.startswith('"LaunchOptions"'):
+            launch_idx = j
+            break
+
+line = f'{scalar_indent}"LaunchOptions"\t\t"{desired}"\n'
+if launch_idx is not None:
+    if lines[launch_idx] == line:
+        print("unchanged")
+    else:
+        lines[launch_idx] = line
+        path.write_text("".join(lines))
+        print("updated")
+else:
+    lines.insert(close, line)
+    path.write_text("".join(lines))
+    print("inserted")
+PY
+  '';
+
   steamAppLauncher = pkgs.writeShellScriptBin "korri-steam-app" ''
     set -eu
 
@@ -460,6 +572,9 @@ let
     service_name="''${KORRI_STEAM_SERVICE:-korri-steam.service}"
     target_output="''${KORRI_STEAM_APP_OUTPUT:-DSI-2}"
     target_audio_sink="''${KORRI_STEAM_AUDIO_SINK:-${cfg.appAudioSinkName}}"
+    stop_service_on_exit="''${KORRI_STEAM_APP_STOP_SERVICE_ON_EXIT:-${if cfg.keepWarm then "0" else "1"}}"
+    materialize_gamescope_launch_options="''${KORRI_STEAM_APP_MATERIALIZE_GAMESCOPE_LAUNCH_OPTIONS:-1}"
+    gamescope_launch_options="/run/current-system/sw/bin/bash /var/lib/korri/bin/korri-steam-gamescope-launch --appid $appid -- %command%"
 
     find_sway_sock() {
       if [ -n "''${SWAYSOCK:-}" ] && [ -S "$SWAYSOCK" ]; then
@@ -579,7 +694,7 @@ let
         ${pkgs.procps}/bin/kill "$ydotoold_pid" 2>/dev/null || true
       fi
       ${pkgs.coreutils}/bin/rm -f "$ydotool_sock" 2>/dev/null || true
-      if [ "''${KORRI_STEAM_APP_STOP_SERVICE_ON_EXIT:-1}" != "0" ]; then
+      if [ "$stop_service_on_exit" != "0" ]; then
         if [ -n "$direct_steam_pid" ]; then
           ${pkgs.procps}/bin/kill "$direct_steam_pid" 2>/dev/null || true
           ${pkgs.coreutils}/bin/sleep 1
@@ -641,6 +756,47 @@ let
       ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null
     }
 
+    localconfig_files() {
+      ${pkgs.findutils}/bin/find "$STEAM_HOME/userdata" -mindepth 3 -maxdepth 3 -path '*/config/localconfig.vdf' -type f -print 2>/dev/null || true
+    }
+
+    app_launch_options_present() {
+      found_file=0
+      while IFS= read -r localconfig; do
+        [ -n "$localconfig" ] || continue
+        found_file=1
+        if ! ${pkgs.gnugrep}/bin/grep -F '"LaunchOptions"' "$localconfig" | ${pkgs.gnugrep}/bin/grep -F -- "$gamescope_launch_options" >/dev/null 2>&1; then
+          return 1
+        fi
+      done <<EOF
+$(localconfig_files)
+EOF
+      [ "$found_file" -eq 1 ] || return 1
+      return 0
+    }
+
+    materialize_app_launch_options() {
+      [ "$materialize_gamescope_launch_options" != "0" ] || return 0
+      changed=0
+      found_file=0
+      while IFS= read -r localconfig; do
+        [ -n "$localconfig" ] || continue
+        found_file=1
+        result="$(${steamLaunchOptionsMaterializer}/bin/korri-steam-launch-options "$localconfig" "$appid" "$gamescope_launch_options")"
+        case "$result" in
+          unchanged) ;;
+          *) changed=1 ;;
+        esac
+      done <<EOF
+$(localconfig_files)
+EOF
+      if [ "$found_file" -eq 0 ]; then
+        echo "korri-steam-app: warning: no Steam localconfig.vdf files found under $STEAM_HOME/userdata" >&2
+        return 0
+      fi
+      return "$changed"
+    }
+
     wait_for_steam_ready() {
       ready_deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + service_ready_timeout ))
       while [ "$(${pkgs.coreutils}/bin/date +%s)" -le "$ready_deadline" ]; do
@@ -660,6 +816,19 @@ let
     }
 
     started_steam=0
+    if [ "$materialize_gamescope_launch_options" != "0" ] && ! app_launch_options_present; then
+      if steam_process_alive; then
+        control_steam_service stop >/dev/null 2>&1 || \
+          echo "korri-steam-app: warning: could not stop $service_name before LaunchOptions repair" >&2
+        ${pkgs.coreutils}/bin/sleep 2
+      fi
+      if materialize_app_launch_options; then
+        :
+      else
+        echo "korri-steam-app: repaired Gamescope LaunchOptions for AppID $appid" >&2
+      fi
+    fi
+
     if ${pkgs.systemd}/bin/systemctl is-active --quiet "$service_name" 2>/dev/null; then
       :
     else
@@ -871,6 +1040,7 @@ in
       steamAppLauncher
       steamServiceControl
       steamWarmup
+      steamLaunchOptionsMaterializer
       steamUinputPrep
       fexRootfsPreparer
     ];
