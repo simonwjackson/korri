@@ -429,7 +429,9 @@ launch_app() {
   log "Using mangohud: $mangohud_bin"
   log "Steam-expanded command: $*"
 
-  export MANGOHUD=1
+  # `gamescope --mangoapp` owns the overlay. Do not export MANGOHUD=1 here:
+  # that injects a second, inner MangoHud into the Proton/game process.
+  unset MANGOHUD
   export MANGOHUD_CONFIG="${MANGOHUD_CONFIG:-position=top-left,font_size=24,fps,frametime,gpu_stats,cpu_stats,resolution}"
   # Steam launches this from its ARM64 FHS/container environment. The Nix
   # gamescope wrapper does not carry the host OpenGL driver path, so make it
@@ -450,9 +452,37 @@ launch_app() {
   # gamescope --mangoapp spawns a sibling `mangoapp` process by name.
   # Steam's launch environment does not include the MangoHud package in PATH.
   export PATH="$(dirname "$mangohud_bin"):$PATH"
-  log "Runtime env: XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-} LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-} stripped_LD_PRELOAD=${original_ld_preload:-}"
-  log "Exec: $gamescope_bin -w $width -h $height -W $output_width -H $output_height --mangoapp -- $*"
-  exec "$gamescope_bin" -w "$width" -h "$height" -W "$output_width" -H "$output_height" --mangoapp -- "$@" >>"$LOG_FILE" 2>&1
+
+  local -a child_command gamescope_args
+  child_command=("$@")
+  if [[ -n "$original_ld_preload" ]]; then
+    local env_bin
+    env_bin="${KORRI_ENV_BIN:-}"
+    if [[ -z "$env_bin" && -x /run/current-system/sw/bin/env ]]; then
+      env_bin="/run/current-system/sw/bin/env"
+    fi
+    if [[ -z "$env_bin" ]]; then
+      env_bin="$(command -v env || true)"
+    fi
+    if [[ -n "$env_bin" ]]; then
+      child_command=("$env_bin" "LD_PRELOAD=$original_ld_preload" "${child_command[@]}")
+    else
+      log "Could not find env; launching child without restoring Steam LD_PRELOAD"
+    fi
+  fi
+
+  gamescope_args=()
+  if [[ -n "${KORRI_GAMESCOPE_EXTRA_ARGS:-}" ]]; then
+    # Intentionally shell-split for operator/debug overrides such as:
+    # KORRI_GAMESCOPE_EXTRA_ARGS='-f --force-windows-fullscreen'
+    # Production policy should graduate to structured launch config instead.
+    # shellcheck disable=SC2206
+    gamescope_args=(${KORRI_GAMESCOPE_EXTRA_ARGS})
+  fi
+
+  log "Runtime env: XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-} LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-} stripped_LD_PRELOAD=${original_ld_preload:-} child_restores_LD_PRELOAD=$([[ -n "$original_ld_preload" ]] && printf yes || printf no) MANGOHUD=${MANGOHUD:-} gamescope_extra_args=${KORRI_GAMESCOPE_EXTRA_ARGS:-}"
+  log "Exec: $gamescope_bin ${gamescope_args[*]} -w $width -h $height -W $output_width -H $output_height --mangoapp -- ${child_command[*]}"
+  exec "$gamescope_bin" "${gamescope_args[@]}" -w "$width" -h "$height" -W "$output_width" -H "$output_height" --mangoapp -- "${child_command[@]}" >>"$LOG_FILE" 2>&1
 }
 
 case "${1:-}" in

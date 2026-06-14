@@ -138,41 +138,9 @@ if [ -n "$fex_share" ] && [ -d "$fex_share" ]; then
   done
 fi
 
-wrap_fex_tool() {
-  local file="$1" backup info
-  [ -f "$file" ] || return 0
-  case "${file##*/}" in
-    srt-bwrap)
-      backup="$file.x86_64"
-      if [ ! -e "$backup" ]; then
-        mv -f "$file" "$backup"
-      fi
-      cat > "$file" <<'EOF'
-#!/bin/sh
-exec bwrap "$@"
-EOF
-      chmod 755 "$file"
-      return 0
-      ;;
-  esac
-
-  restore_fex_wrapper "$file"
-
-  if is_fex_wrapper "$file"; then
-    return 0
-  fi
-
-  info="$(file "$file" 2>/dev/null || true)"
-  case "$info" in
-    *"shared object"*)
-      return 0
-      ;;
-    *"executable"*"x86-64"*|*"x86-64"*"executable"*|*"executable"*"Intel 80386"*|*"Intel 80386"*"executable"*)
-      backup="$file.x86_64"
-      if [ ! -e "$backup" ]; then
-        mv -f "$file" "$backup"
-      fi
-      cat > "$file" <<EOF
+write_fex_tool_wrapper() {
+  local file="$1"
+  cat > "$file" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 : "\${FEX_ROOTFS:?FEX_ROOTFS must be set by the guest adapter before running wrapped Steam Runtime helpers}"
@@ -206,7 +174,52 @@ fi
 
 exec $fex_wrapper_bin "\$0.x86_64" "\$@"
 EOF
+  chmod 755 "$file"
+}
+
+wrap_fex_tool() {
+  local file="$1" backup info
+  [ -f "$file" ] || return 0
+  case "${file##*/}" in
+    srt-bwrap)
+      backup="$file.x86_64"
+      if [ ! -e "$backup" ]; then
+        mv -f "$file" "$backup"
+      fi
+      cat > "$file" <<'EOF'
+#!/bin/sh
+exec bwrap "$@"
+EOF
       chmod 755 "$file"
+      return 0
+      ;;
+  esac
+
+  restore_fex_wrapper "$file"
+
+  if is_fex_wrapper "$file"; then
+    return 0
+  fi
+
+  if [ ! -s "$file" ] && [ -f "$file.x86_64" ]; then
+    # Interrupted Steam/runtime writes can leave the ARM64-visible helper as a
+    # zero-byte executable while the preserved x86_64 payload still exists.
+    # Treat that as broken mutable runtime state and recreate the trampoline.
+    write_fex_tool_wrapper "$file"
+    return 0
+  fi
+
+  info="$(file "$file" 2>/dev/null || true)"
+  case "$info" in
+    *"shared object"*)
+      return 0
+      ;;
+    *"executable"*"x86-64"*|*"x86-64"*"executable"*|*"executable"*"Intel 80386"*|*"Intel 80386"*"executable"*)
+      backup="$file.x86_64"
+      if [ ! -e "$backup" ]; then
+        mv -f "$file" "$backup"
+      fi
+      write_fex_tool_wrapper "$file"
       ;;
   esac
 }

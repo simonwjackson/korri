@@ -45,6 +45,15 @@ if command -v file >/dev/null 2>&1 && file "$pv/pressure-vessel-wrap" | grep -q 
   expect_pv_wrap=1
 fi
 
+zero_byte_pv="$pv/libexec/steam-runtime-tools-0/pv-adverb"
+mkdir -p "$(dirname "$zero_byte_pv")"
+: > "$zero_byte_pv"
+cat > "$zero_byte_pv.x86_64" <<'EOS'
+#!/bin/sh
+echo real pv-adverb "$@"
+EOS
+chmod 755 "$zero_byte_pv" "$zero_byte_pv.x86_64"
+
 cat > "$proton_dir/proton" <<'EOS'
 #!/usr/bin/env python3
 import json
@@ -161,6 +170,10 @@ if [ "$expect_pv_wrap" = 1 ]; then
   grep -q 'KORRI_STEAM_OVERLAY_FILTER' "$pv/pressure-vessel-wrap" \
     || fail "pressure-vessel wrapper should filter Steam overlay preload injection"
 fi
+grep -q 'exec /usr/bin/FEX "$0.x86_64"' "$zero_byte_pv" \
+  || fail "zero-byte pressure-vessel helper should be repaired to a FEX trampoline"
+grep -q 'KORRI_STEAM_OVERLAY_FILTER' "$zero_byte_pv" \
+  || fail "zero-byte pressure-vessel helper repair should preserve overlay filtering"
 [ -f "$fonts/.uuid" ] || fail "font .uuid marker missing"
 [ "$(head -n 1 "$proton_dir/proton")" = '#!/usr/bin/python3' ] \
   || fail "Proton python shebang was not repaired"

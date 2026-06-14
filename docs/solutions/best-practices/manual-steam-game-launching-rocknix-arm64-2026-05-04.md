@@ -1,7 +1,7 @@
 ---
 title: Manually launch Steam games on ROCKNIX ARM64 without Steam GamepadUI
 date: 2026-05-04
-last_updated: 2026-05-27
+last_updated: 2026-06-13
 category: best-practices
 module: ROCKNIX Steam ARM64 manual game launching
 problem_type: best_practice
@@ -316,6 +316,7 @@ Manual Steam launching on ROCKNIX ARM64 is not equivalent to desktop Linux x86_6
 - **Prefix churn**: switching Proton 10, Proton 11, and GE-Proton against the same `compatdata/2379780` prefix can trigger prefix upgrades or invalid-version warnings. Back up or isolate prefixes before broad compatibility testing.
 - **Xalia**: Proton 10 enables Xalia by default in this environment; for Balatro, it can crash with `x11 not available` unless `PROTON_USE_XALIA=0` is set.
 - **Gamescope backend choice**: `--backend sdl` alone may run audio without a mapped Sway window. For this device/session, `SDL_VIDEODRIVER=x11` made the nested Gamescope window visible to Sway.
+- **Steam Input uinput access**: for controller-bearing Steam sessions, Steam seeing the physical controller is not sufficient. Steam must also be able to open `/dev/uinput` as the runtime user so it can create the virtual XInput device the game consumes. On Bandai, that means `/dev/uinput` must converge to `root:input 0660`.
 
 The nested SDL/X11 path has more overhead than DRM Gamescope because it adds another compositor and Xwayland layer. For Balatro, the overhead is likely negligible; for heavier games, prefer the native ROCKNIX DRM Gamescope lifecycle if GamepadUI is acceptable.
 
@@ -526,6 +527,13 @@ Check the manual launch log:
 tail -200 /storage/balatro-gamescope-runtime-proton.log
 ```
 
+For controller-bearing sessions, verify Steam can use uinput, not just that it detects the physical controller:
+
+```bash
+ls -l /dev/uinput
+# expect: crw-rw---- root input ... /dev/uinput
+```
+
 Inspect Sway windows:
 
 ```bash
@@ -541,4 +549,5 @@ swaymsg -s "$SWAYSOCK" -t get_tree
 - `/storage/bin/start_steam_desktop_ui.sh` — background Steam desktop context launcher; recreates the ARM64 manifest before startup.
 - `docs/solutions/runtime-errors/steam-desktop-ui-arm64-manifest-spinner-rocknix-2026-05-04.md` — prerequisite fix for making Steam desktop UI usable under Sway on ROCKNIX ARM64.
 - `docs/solutions/runtime-errors/steam-manual-launch-x86-eager-xwayland-dbus-readiness-2026-05-26.md` — x86/AKA sibling proving the same manual Steam Runtime -> Proton -> game shape works without ARM64-specific scaffolding, once Sway/Gamescope versions, eager Xwayland, and Steam readiness probing are fixed.
+- `docs/solutions/integration-issues/steam-uinput-permissions-block-virtual-xinput-2026-06-13.md` — Bandai/30XX controller fix showing that Steam Input needs `/dev/uinput` at `root:input 0660` to create its virtual XInput device.
 - `docs/solutions/best-practices/rocknix-sm8550-power-profiling-2026-05-04.md` — power and battery tuning for the same Thor/SM8550 Steam/Balatro workload.

@@ -67,7 +67,7 @@ The `tools/feature-map-explorer/` app (run with `just dev-feature-map`) is the c
 
 ## Institutional learnings
 
-`docs/solutions/` holds reusable patterns, post-mortems, and best-practice writeups. Read relevant entries before introducing or revising architecture in an already-documented area. Add or update solutions only when explicitly requested or as part of the compounding workflow.
+`docs/solutions/` holds documented solutions to past problems — bugs, reusable patterns, workflow learnings, and best-practice writeups — organized by category directories with YAML frontmatter (`module`, `tags`, `problem_type`) for search. Relevant when implementing, debugging, or making decisions in already-documented areas. Add or update solutions only when explicitly requested or as part of the compounding workflow.
 
 ## Tooling commands
 
