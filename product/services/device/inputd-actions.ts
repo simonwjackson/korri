@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises"
+import { readdir, readFile } from "node:fs/promises"
 import { logger as defaultLogger } from "@platform/logger"
 import {
   probeSessiondManagedLaunchStatus,
@@ -75,15 +75,31 @@ export interface InputdActionDispatcher {
   ) => Promise<void>
 }
 
+export interface InputdProcessInfo {
+  readonly pid: number
+  readonly uid?: number
+  readonly cmdline: readonly string[]
+}
+
+export type InputdProcessScanner = () => Promise<readonly InputdProcessInfo[]>
+export type InputdProcessSignaler = (
+  pid: number,
+  signal: NodeJS.Signals,
+) => void
+
 export interface InputdActionDispatcherOptions {
   readonly runner?: InputdActionRunner
   readonly logger?: InputdActionLogger
   readonly commands?: InputdActionCommands
   readonly defaultKillFilePath?: string
   readonly sessiond?: SessiondManagedLaunchClientOptions
+  readonly processScanner?: InputdProcessScanner
+  readonly signalProcess?: InputdProcessSignaler
+  readonly staleSteamKillGraceMs?: number
 }
 
 const FALLBACK_KILL_FILE_PATH = "/tmp/.process-kill-data"
+const DEFAULT_STALE_STEAM_KILL_GRACE_MS = 1500
 
 export function defaultKillFilePathFromEnv(env: NodeJS.ProcessEnv): string {
   return env.KORRI_INPUTD_KILL_FILE_PATH ?? FALLBACK_KILL_FILE_PATH
@@ -98,6 +114,10 @@ export function createInputdActionDispatcher(
   const defaultKillFilePath =
     options.defaultKillFilePath ?? defaultKillFilePathFromEnv(process.env)
   const sessiond = options.sessiond ?? { env: process.env }
+  const processScanner = options.processScanner ?? scanCurrentUserProcesses
+  const signalProcess = options.signalProcess ?? signalProcessByPid
+  const staleSteamKillGraceMs =
+    options.staleSteamKillGraceMs ?? DEFAULT_STALE_STEAM_KILL_GRACE_MS
 
   async function runNamedCommand(
     actionId: KorriInputdActionId,
@@ -126,7 +146,16 @@ export function createInputdActionDispatcher(
             await runNamedCommand(actionId, commands.killCurrentGame)
             return
           }
-          if (await dispatchSessiondTerminateActive({ logger, sessiond })) return
+          if (
+            await dispatchSessiondTerminateActive({
+              logger,
+              processScanner,
+              sessiond,
+              signalProcess,
+              staleSteamKillGraceMs,
+            })
+          )
+            return
           await dispatchKillCurrentGame({
             killFilePath: context.killFilePath ?? defaultKillFilePath,
             logger,
@@ -185,7 +214,10 @@ export function createInputdActionDispatcher(
 
 async function dispatchSessiondTerminateActive(options: {
   readonly logger: InputdActionLogger
+  readonly processScanner: InputdProcessScanner
   readonly sessiond: SessiondManagedLaunchClientOptions
+  readonly signalProcess: InputdProcessSignaler
+  readonly staleSteamKillGraceMs: number
 }): Promise<boolean> {
   const status = await probeSessiondManagedLaunchStatus(options.sessiond)
   if (status.kind === "not-configured") return false
@@ -201,9 +233,14 @@ async function dispatchSessiondTerminateActive(options: {
   if (!active) {
     options.logger.warn(
       { mode: status.status.mode },
-      "inputd kill-current-game skipped; no active sessiond launch",
+      "inputd kill-current-game found no active sessiond launch; checking stale Steam foreground processes",
     )
-    return true
+    return await dispatchStaleSteamForegroundKill({
+      logger: options.logger,
+      processScanner: options.processScanner,
+      signalProcess: options.signalProcess,
+      graceMs: options.staleSteamKillGraceMs,
+    })
   }
 
   const terminated = await terminateSessiondManagedLaunch(
@@ -223,6 +260,132 @@ async function dispatchSessiondTerminateActive(options: {
     "inputd terminated active sessiond launch",
   )
   return true
+}
+
+async function dispatchStaleSteamForegroundKill(options: {
+  readonly logger: InputdActionLogger
+  readonly processScanner: InputdProcessScanner
+  readonly signalProcess: InputdProcessSignaler
+  readonly graceMs: number
+}): Promise<boolean> {
+  const targets = (await options.processScanner()).filter(process =>
+    isStaleSteamForegroundProcess(process),
+  )
+  if (targets.length === 0) return false
+
+  const targetPids = new Set(targets.map(process => process.pid))
+  options.logger.info(
+    { targets: targets.map(process => formatProcessForLog(process)) },
+    "inputd killing stale Steam foreground processes",
+  )
+
+  for (const process of targets) {
+    signalProcessSafely(options.signalProcess, process.pid, "SIGTERM")
+  }
+
+  if (options.graceMs > 0) {
+    await new Promise(resolve => setTimeout(resolve, options.graceMs))
+  }
+
+  const residual = (await options.processScanner()).filter(
+    process =>
+      targetPids.has(process.pid) && isStaleSteamForegroundProcess(process),
+  )
+  for (const process of residual) {
+    signalProcessSafely(options.signalProcess, process.pid, "SIGKILL")
+  }
+
+  if (residual.length > 0) {
+    options.logger.warn(
+      { residual: residual.map(process => formatProcessForLog(process)) },
+      "inputd escalated stale Steam foreground kill",
+    )
+  }
+
+  return true
+}
+
+function isStaleSteamForegroundProcess(process: InputdProcessInfo): boolean {
+  const commandLine = process.cmdline.join(" ")
+  if (/\bSteamLaunch AppId=\d+\b/.test(commandLine)) return true
+  if (!commandLine.includes("/var/lib/korri/steam/steamapps/common/")) {
+    return false
+  }
+  return /\.exe(?:\s|$)/i.test(commandLine)
+}
+
+function formatProcessForLog(process: InputdProcessInfo) {
+  return {
+    pid: process.pid,
+    cmdline: process.cmdline.join(" ").slice(0, 500),
+  }
+}
+
+function signalProcessSafely(
+  signalProcess: InputdProcessSignaler,
+  pid: number,
+  signal: NodeJS.Signals,
+): void {
+  try {
+    signalProcess(pid, signal)
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === "ESRCH") return
+    throw error
+  }
+}
+
+async function scanCurrentUserProcesses(): Promise<
+  readonly InputdProcessInfo[]
+> {
+  let entries: readonly import("node:fs").Dirent[]
+  try {
+    entries = await readdir("/proc", { withFileTypes: true })
+  } catch {
+    return []
+  }
+
+  const currentUid =
+    typeof process.getuid === "function" ? process.getuid() : undefined
+  const processes: InputdProcessInfo[] = []
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !/^\d+$/.test(entry.name)) continue
+    const pid = Number(entry.name)
+    const [uid, cmdline] = await Promise.all([
+      readProcUid(pid),
+      readProcCmdline(pid),
+    ])
+    if (cmdline.length === 0) continue
+    if (currentUid !== undefined && uid !== undefined && uid !== currentUid) {
+      continue
+    }
+    processes.push({ pid, ...(uid !== undefined ? { uid } : {}), cmdline })
+  }
+  return processes
+}
+
+async function readProcUid(pid: number): Promise<number | undefined> {
+  try {
+    const status = await readFile(`/proc/${pid}/status`, "utf8")
+    const uidLine = status.split("\n").find(line => line.startsWith("Uid:"))
+    const realUid = uidLine?.trim().split(/\s+/)[1]
+    return realUid ? Number(realUid) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function readProcCmdline(pid: number): Promise<readonly string[]> {
+  try {
+    const raw = await readFile(`/proc/${pid}/cmdline`, "utf8")
+    return raw.split("\0").filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+function signalProcessByPid(pid: number, signal: NodeJS.Signals): void {
+  process.kill(pid, signal)
 }
 
 async function dispatchKillCurrentGame(options: {

@@ -109,6 +109,73 @@ describe("inputd actions", () => {
     })
   })
 
+  it("kills stale Steam foreground processes when sessiond has returned home", async () => {
+    const signals: Array<{ pid: number; signal: NodeJS.Signals }> = []
+    const { dispatcher, commands, warnings } = createHarness({
+      staleSteamKillGraceMs: 0,
+      processScanner: async () => [
+        {
+          pid: 42,
+          uid: 1000,
+          cmdline: [
+            "/nix/store/.../bin/gamescope",
+            "--mangoapp",
+            "--",
+            "/var/lib/korri/steam/steamrtarm64/reaper",
+            "SteamLaunch",
+            "AppId=584400",
+            "--",
+            "/var/lib/korri/steam/steamapps/common/Sonic Mania/SonicMania.exe",
+          ],
+        },
+        {
+          pid: 43,
+          uid: 1000,
+          cmdline: [
+            "/usr/bin/FEX",
+            "/var/lib/korri/steam/steamapps/common/Sonic Mania/SonicMania.exe",
+          ],
+        },
+        {
+          pid: 44,
+          uid: 1000,
+          cmdline: ["/var/lib/korri/steam/steamrtarm64/steam", "-silent"],
+        },
+      ],
+      signalProcess: (pid, signal) => signals.push({ pid, signal }),
+      sessiond: {
+        socketPath: "/run/user/1000/korri/sessiond.sock",
+        fetchImpl: async input => {
+          expect(String(input)).toBe(
+            "http://korri-sessiond/managed-launch/status",
+          )
+          return Response.json({
+            schemaVersion: 1,
+            mode: "home",
+            capabilities: {
+              managedLaunch: true,
+              lifecycleEvents: true,
+              perLaunchTermination: true,
+              sessionLifecycle: true,
+            },
+            restoreAttempts: 0,
+          })
+        },
+      },
+    })
+
+    await dispatcher.dispatch("kill-current-game")
+
+    expect(commands).toEqual([])
+    expect(warnings).toHaveLength(2)
+    expect(signals).toEqual([
+      { pid: 42, signal: "SIGTERM" },
+      { pid: 43, signal: "SIGTERM" },
+      { pid: 42, signal: "SIGKILL" },
+      { pid: 43, signal: "SIGKILL" },
+    ])
+  })
+
   it("can still fall back to the ROCKNIX process-kill-data file", async () => {
     const dir = await tempDir()
     const killFilePath = join(dir, "process-kill-data")
