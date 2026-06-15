@@ -1,0 +1,1057 @@
+/* vigie — developer mission-control cockpit.
+   A telemetry-instrument console: calm near-black surfaces, one cyan "live"
+   accent, strict status-color semantics. Sans carries structure; mono is
+   reserved for numerals, identifiers, and the raw log. */
+
+/* Root — owns the cockpit palette and retunes shadcn tokens so the vendored
+   shadcn-admin shell (sidebar, header, dropdowns) reads as one surface.
+   .vigie-portal carries the same tokens onto Radix portal content (dropdowns,
+   tooltips, sheets) which renders outside .vigie-root on document.body. */
+.vigie-root,
+.vigie-portal {
+	/* surfaces — canvas is darkest, cards lift a clear step above it */
+	--vigie-bg: #070809;
+	--vigie-surface: #14181f;
+	--vigie-raised: #1c212b;
+	--vigie-line: #262d38;
+	--vigie-line-soft: #1d2129;
+
+	/* text ramp */
+	--vigie-text: #eef2f7;
+	--vigie-dim: #95a1b1;
+	--vigie-faint: #5f6a78;
+
+	/* one signal accent + status semantics */
+	--vigie-accent: #38bdf8;
+	--vigie-nominal: #34d399;
+	--vigie-caution: #fbbf24;
+	--vigie-critical: #f87171;
+	--vigie-idle: #64748b;
+	--vigie-down: #64748b;
+	--vigie-degraded: #fbbf24;
+
+	--vigie-sans: "Geist Variable", system-ui, sans-serif;
+	--vigie-mono: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
+	--vigie-radius: 12px;
+
+	/* one spacing scale — every gutter, gap and pad references these */
+	--vigie-pad: 1rem; /* page gutter + card padding */
+	--vigie-gap: 1rem; /* between cards / major blocks */
+	--vigie-gap-sm: 0.75rem; /* tight internal */
+	--vigie-gap-xs: 0.5rem; /* very tight */
+
+	font-family: var(--vigie-sans);
+	color: var(--vigie-text);
+	-webkit-font-smoothing: antialiased;
+}
+
+/* shadcn token overrides → cockpit palette + cyan accent */
+.vigie-root.dark,
+.vigie-portal {
+	color-scheme: dark;
+	/* portaled content (mobile sidebar sheet, dropdowns) escapes .vigie-root,
+	   so it also needs the nominal spacing base, not the product fluid clamp */
+	--spacing: 0.25rem;
+	--background: #070809;
+	--foreground: #eef2f7;
+	--card: #14181f;
+	--card-foreground: #eef2f7;
+	--popover: #161b22;
+	--popover-foreground: #eef2f7;
+	--primary: #38bdf8;
+	--primary-foreground: #04141f;
+	--secondary: #1c212b;
+	--secondary-foreground: #eef2f7;
+	--muted: #1c212b;
+	--muted-foreground: #95a1b1;
+	--accent: #1c212b;
+	--accent-foreground: #eef2f7;
+	--border: #242b35;
+	--input: #2a3039;
+	--ring: #38bdf8;
+	--sidebar: #0d1016;
+	--sidebar-foreground: #c7d0db;
+	--sidebar-primary: #38bdf8;
+	--sidebar-primary-foreground: #04141f;
+	--sidebar-accent: #1c2230;
+	--sidebar-accent-foreground: #f3f6fa;
+	--sidebar-border: #232a35;
+	--sidebar-ring: #38bdf8;
+
+	/* Type scale — one standard for the whole theme. Absolute rem (not em),
+	   so nested sections never compound smaller. Pick a role, not a number:
+	   2xs = uppercase eyebrows · xs = captions/meta · sm = secondary/data
+	   base = body · lg = emphasized value · xl = metric number · hero = title. */
+	--vigie-text-2xs: 0.6875rem;
+	--vigie-text-xs: 0.75rem;
+	--vigie-text-sm: 0.8125rem;
+	--vigie-text-base: 0.875rem;
+	--vigie-text-lg: 1.0625rem;
+	--vigie-text-xl: 1.375rem;
+	--vigie-text-hero: 1.875rem;
+}
+
+.vigie-root {
+	/* This is a desktop cockpit: opt out of the product fluid `--spacing`
+	   clamp (which compresses to ~3.2px in this container) and use the nominal
+	   4px base, so the chrome breathes and Tailwind spacing matches the tokens. */
+	--spacing: 0.25rem;
+	font-size: var(--vigie-text-base);
+	line-height: 1.45;
+}
+.vigie-root *,
+.vigie-root *::before,
+.vigie-root *::after {
+	box-sizing: border-box;
+}
+
+/* sidebar rail: distinct surface, sectioned, with real breathing room.
+   :is() covers both the desktop rail (.vigie-root) and the portaled mobile
+   sheet (.vigie-portal), which renders on document.body. */
+:is(.vigie-root, .vigie-portal) [data-sidebar="header"] {
+	padding: 0.75rem;
+	border-bottom: 1px solid var(--sidebar-border);
+}
+:is(.vigie-root, .vigie-portal) [data-sidebar="content"] {
+	padding-block: 0.75rem;
+	padding-inline: 0.5rem;
+	gap: 0.5rem;
+}
+:is(.vigie-root, .vigie-portal) [data-sidebar="footer"] {
+	padding: 0.75rem;
+	border-top: 1px solid var(--sidebar-border);
+}
+:is(.vigie-root, .vigie-portal) [data-sidebar="group-label"] {
+	margin-bottom: 0.25rem;
+	padding-inline: 0.5rem;
+}
+:is(.vigie-root, .vigie-portal) [data-sidebar="menu"] {
+	gap: 0.25rem;
+}
+:is(.vigie-root, .vigie-portal) [data-sidebar="menu-button"] {
+	min-height: 2.4rem;
+	padding-inline: 0.65rem;
+	gap: 0.7rem;
+}
+
+@keyframes vigie-rise {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@keyframes vigie-pulse {
+	0%,
+	100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+	50% {
+		opacity: 0.35;
+		transform: scale(0.78);
+	}
+}
+
+.vigie-view > *:nth-child(2) {
+	animation-delay: 0.04s;
+}
+.vigie-view > *:nth-child(3) {
+	animation-delay: 0.08s;
+}
+.vigie-view > *:nth-child(4) {
+	animation-delay: 0.12s;
+}
+
+/* Panels use shadcn Card; status chips use shadcn Badge. One spacing contract
+   for every card so the rhythm is identical across the app. */
+.vigie-card {
+	gap: var(--vigie-gap-sm);
+	padding-block: var(--vigie-pad);
+}
+
+/* lift every card off the canvas: lighter surface + soft shadow + top highlight */
+.vigie-root [data-slot="card"] {
+	border-color: var(--vigie-line-soft);
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.035),
+		0 1px 2px rgba(0, 0, 0, 0.4),
+		0 14px 30px -18px rgba(0, 0, 0, 0.8);
+}
+.vigie-card > [data-slot="card-header"],
+.vigie-card > [data-slot="card-content"] {
+	padding-inline: var(--vigie-pad);
+}
+
+/* one section label, used by every CardTitle */
+.vigie-section-title {
+	font-size: var(--vigie-text-2xs);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.14em;
+	color: color-mix(in srgb, var(--vigie-text) 78%, transparent);
+}
+
+/* numeric data is always tabular mono */
+.vigie-instrument-value,
+.vigie-readout dd,
+.vigie-session-ident code,
+.vigie-log-line,
+.vigie-subsystem-detail {
+	font-family: var(--vigie-mono);
+	font-variant-numeric: tabular-nums;
+}
+
+/* Scrubber (dev-only segmented control) ------------------------------------- */
+
+.vigie-scrubber {
+	display: flex;
+	align-items: center;
+	gap: 0.55rem;
+	margin: 0;
+	padding: 0;
+	border: none;
+	min-inline-size: 0;
+}
+.vigie-scrubber-tag {
+	padding: 0;
+	font-size: var(--vigie-text-2xs);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.18em;
+	color: var(--vigie-faint);
+}
+.vigie-segment {
+	display: inline-flex;
+	padding: 3px;
+	gap: 2px;
+	background: var(--vigie-surface);
+	border: 1px solid var(--vigie-line-soft);
+	border-radius: 999px;
+}
+.vigie-segment-item {
+	padding: 0.28rem 0.8rem;
+	border: none;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--vigie-dim);
+	font: inherit;
+	font-size: var(--vigie-text-sm);
+	font-weight: 500;
+	cursor: pointer;
+	transition:
+		color 0.15s,
+		background 0.15s;
+}
+.vigie-segment-item:hover {
+	color: var(--vigie-text);
+}
+.vigie-segment-item[data-active="true"] {
+	background: var(--vigie-raised);
+	color: var(--vigie-text);
+	box-shadow: inset 0 0 0 1px var(--vigie-line);
+}
+
+/* Telemetry strip ----------------------------------------------------------- */
+
+.vigie-telemetry-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+	gap: 1px;
+	background: var(--vigie-line-soft);
+	border: 1px solid var(--vigie-line-soft);
+	border-radius: 10px;
+	overflow: hidden;
+}
+.vigie-instrument {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: var(--vigie-gap-xs);
+	padding: var(--vigie-gap-sm) var(--vigie-gap-sm) 0;
+	background: var(--vigie-surface);
+}
+.vigie-instrument::before {
+	content: "";
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: 2px;
+	background: var(--vigie-status, transparent);
+}
+.vigie-instrument[data-status="nominal"] {
+	--vigie-status: var(--vigie-nominal);
+}
+.vigie-instrument[data-status="caution"] {
+	--vigie-status: var(--vigie-caution);
+}
+.vigie-instrument[data-status="critical"] {
+	--vigie-status: var(--vigie-critical);
+}
+.vigie-instrument-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.5rem;
+}
+.vigie-instrument-label {
+	font-size: var(--vigie-text-2xs);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--vigie-faint);
+}
+.vigie-instrument-value {
+	font-size: var(--vigie-text-xl);
+	font-weight: 500;
+	letter-spacing: -0.02em;
+	line-height: 1;
+}
+.vigie-instrument[data-status="caution"] .vigie-instrument-value {
+	color: var(--vigie-caution);
+}
+.vigie-instrument[data-status="critical"] .vigie-instrument-value {
+	color: var(--vigie-critical);
+}
+.vigie-instrument-unit {
+	font-size: var(--vigie-text-xs);
+	color: var(--vigie-faint);
+	margin-left: 0.15rem;
+}
+.vigie-trace {
+	width: 100%;
+	height: 3rem;
+	display: block;
+}
+.vigie-trace-line {
+	stroke: var(--vigie-status, var(--vigie-accent));
+	stroke-width: 1.5;
+	stroke-linejoin: round;
+}
+.vigie-trace-fill {
+	fill: var(--vigie-status, var(--vigie-accent));
+	opacity: 0.12;
+}
+
+.vigie-governor {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--vigie-gap-xs);
+	text-transform: none;
+	letter-spacing: 0;
+	font-size: var(--vigie-text-xs);
+	font-weight: 500;
+	color: var(--vigie-dim);
+}
+.vigie-governor select {
+	font: inherit;
+	font-size: var(--vigie-text-sm);
+	background: var(--vigie-raised);
+	color: var(--vigie-text);
+	border: 1px solid var(--vigie-line);
+	border-radius: 7px;
+	padding: 0.25rem 0.5rem;
+	cursor: pointer;
+}
+
+/* Main row ------------------------------------------------------------------ */
+
+.vigie-main {
+	display: grid;
+	grid-template-columns: minmax(0, 1.7fr) minmax(15rem, 1fr);
+	align-items: start;
+	gap: var(--vigie-gap);
+	min-height: 0;
+}
+@media (max-width: 52rem) {
+	.vigie-main {
+		grid-template-columns: 1fr;
+	}
+}
+
+/* Session panel ------------------------------------------------------------- */
+
+/* themes the shadcn Badge with status semantics (no shadcn status variant) */
+.vigie-status-badge {
+	gap: 0.4rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--vigie-status);
+	background: color-mix(in srgb, var(--vigie-status) 14%, transparent);
+	border-color: color-mix(in srgb, var(--vigie-status) 35%, transparent);
+	--vigie-status: var(--vigie-idle);
+}
+.vigie-status-badge[data-health="active"] {
+	--vigie-status: var(--vigie-accent);
+}
+.vigie-status-badge[data-health="nominal"] {
+	--vigie-status: var(--vigie-nominal);
+}
+.vigie-status-badge[data-health="caution"] {
+	--vigie-status: var(--vigie-caution);
+}
+.vigie-status-badge[data-health="critical"] {
+	--vigie-status: var(--vigie-critical);
+}
+.vigie-state-pulse {
+	width: 0.5rem;
+	height: 0.5rem;
+	border-radius: 50%;
+	background: var(--vigie-status);
+}
+.vigie-status-badge[data-health="active"] .vigie-state-pulse,
+.vigie-status-badge[data-health="nominal"] .vigie-state-pulse {
+	animation: vigie-pulse 1.8s ease-in-out infinite;
+}
+
+.vigie-session-head {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+}
+.vigie-session-subtitle {
+	order: -1;
+	margin: 0;
+	font-size: var(--vigie-text-2xs);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--vigie-dim);
+}
+.vigie-session-title {
+	margin: 0;
+	font-size: var(--vigie-text-hero);
+	font-weight: 600;
+	letter-spacing: -0.02em;
+	line-height: 1.05;
+}
+[data-idle] .vigie-session-title {
+	color: var(--vigie-dim);
+}
+.vigie-session-ident {
+	display: flex;
+	gap: 0.4rem;
+	flex-wrap: wrap;
+	margin-top: 0.35rem;
+}
+.vigie-session-ident code {
+	font-size: var(--vigie-text-xs);
+	color: var(--vigie-dim);
+	background: var(--vigie-raised);
+	padding: 0.12rem 0.4rem;
+	border-radius: 5px;
+}
+
+.vigie-session-note {
+	display: block;
+	padding: 0.55rem 0.7rem;
+	border-radius: 8px;
+	border-left: 2px solid var(--vigie-critical);
+	background: color-mix(in srgb, var(--vigie-critical) 9%, transparent);
+	color: #fda4a4;
+	font-size: var(--vigie-text-sm);
+}
+
+/* Phase rail */
+
+.vigie-lane {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	grid-auto-flow: column;
+	grid-auto-columns: 1fr;
+	gap: 0;
+}
+.vigie-lane-step {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0.3rem;
+	padding: 0 0.4rem;
+}
+.vigie-lane-step::before {
+	content: "";
+	position: absolute;
+	top: 0.5rem;
+	left: 0;
+	right: 0;
+	height: 2px;
+	background: var(--vigie-line);
+	z-index: 0;
+}
+.vigie-lane-step:first-child::before {
+	left: 50%;
+}
+.vigie-lane-step:last-child::before {
+	right: 50%;
+}
+.vigie-lane-step[data-status="done"]::before {
+	background: var(--vigie-nominal);
+}
+.vigie-lane-marker {
+	position: relative;
+	z-index: 1;
+	display: grid;
+	place-items: center;
+	width: 1.05rem;
+	height: 1.05rem;
+	border-radius: 50%;
+	background: var(--vigie-raised);
+	box-shadow: inset 0 0 0 2px var(--vigie-line);
+	font-size: var(--vigie-text-2xs);
+	color: var(--vigie-faint);
+}
+.vigie-lane-step[data-status="done"] .vigie-lane-marker {
+	background: var(--vigie-nominal);
+	box-shadow: none;
+	color: #06281c;
+}
+.vigie-lane-step[data-status="active"] .vigie-lane-marker {
+	background: var(--vigie-accent);
+	box-shadow: 0 0 0 4px color-mix(in srgb, var(--vigie-accent) 22%, transparent);
+	color: #032030;
+	animation: vigie-pulse 2s ease-in-out infinite;
+}
+.vigie-lane-step[data-status="failed"] .vigie-lane-marker {
+	background: var(--vigie-critical);
+	box-shadow: none;
+	color: #2a0a0a;
+}
+.vigie-lane-label {
+	font-size: var(--vigie-text-sm);
+	font-weight: 500;
+}
+.vigie-lane-step[data-status="pending"] .vigie-lane-label {
+	color: var(--vigie-faint);
+}
+.vigie-lane-substate {
+	font-size: var(--vigie-text-xs);
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	color: var(--vigie-accent);
+}
+.vigie-lane-step[data-status="failed"] .vigie-lane-substate {
+	color: var(--vigie-critical);
+}
+
+/* Stream readouts */
+
+.vigie-readouts {
+	margin: 0;
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+	gap: var(--vigie-gap-sm);
+}
+.vigie-readout {
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+}
+.vigie-readout dt {
+	font-size: var(--vigie-text-2xs);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--vigie-faint);
+}
+.vigie-readout dd {
+	margin: 0;
+	font-size: var(--vigie-text-lg);
+}
+.vigie-readout[data-accent="nominal"] dd {
+	color: var(--vigie-nominal);
+}
+.vigie-readout[data-accent="caution"] dd {
+	color: var(--vigie-caution);
+}
+.vigie-readout[data-accent="critical"] dd {
+	color: var(--vigie-critical);
+}
+
+.vigie-actions {
+	display: flex;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+	margin-top: auto;
+	padding-top: 0.3rem;
+}
+
+/* Subsystems ---------------------------------------------------------------- */
+
+.vigie-subsystem-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--vigie-gap-xs);
+}
+.vigie-subsystem {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	padding: var(--vigie-gap-xs) var(--vigie-gap-sm);
+	background: var(--vigie-raised);
+	border-radius: 9px;
+}
+.vigie-subsystem-detail {
+	font-size: var(--vigie-text-xs);
+	color: var(--vigie-dim);
+	text-align: right;
+}
+
+/* Status pip ---------------------------------------------------------------- */
+
+.vigie-dot-row {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+.vigie-dot {
+	width: 0.5rem;
+	height: 0.5rem;
+	border-radius: 50%;
+	background: var(--vigie-idle);
+	flex: none;
+}
+.vigie-dot[data-status="nominal"] {
+	background: var(--vigie-nominal);
+	box-shadow: 0 0 0.5rem
+		color-mix(in srgb, var(--vigie-nominal) 60%, transparent);
+}
+.vigie-dot[data-status="caution"],
+.vigie-dot[data-status="degraded"] {
+	background: var(--vigie-caution);
+	box-shadow: 0 0 0.5rem
+		color-mix(in srgb, var(--vigie-caution) 55%, transparent);
+}
+.vigie-dot[data-status="critical"],
+.vigie-dot[data-status="down"] {
+	background: var(--vigie-critical);
+	box-shadow: 0 0 0.5rem
+		color-mix(in srgb, var(--vigie-critical) 55%, transparent);
+}
+.vigie-dot-label {
+	font-size: var(--vigie-text-base);
+	font-weight: 500;
+}
+
+/* Log (docked footer escape hatch) ------------------------------------------ */
+
+.vigie-log {
+	border: 1px solid var(--vigie-line-soft);
+	border-radius: 10px;
+	background: var(--vigie-surface);
+	overflow: hidden;
+}
+.vigie-log-toggle {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	gap: var(--vigie-gap-sm);
+	padding: var(--vigie-gap-xs) var(--vigie-pad);
+	background: transparent;
+	border: none;
+	color: var(--vigie-dim);
+	font: inherit;
+	font-size: var(--vigie-text-xs);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.14em;
+	cursor: pointer;
+}
+.vigie-log-toggle:hover {
+	color: var(--vigie-text);
+}
+.vigie-log-hint {
+	color: var(--vigie-faint);
+	text-transform: none;
+	letter-spacing: 0;
+	font-weight: 400;
+	margin-right: auto;
+}
+.vigie-log-lines {
+	list-style: none;
+	margin: 0;
+	padding: 0.5rem 0.85rem 0.75rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.1rem;
+	max-height: 14rem;
+	overflow: auto;
+	border-top: 1px solid var(--vigie-line-soft);
+	font-size: var(--vigie-text-sm);
+}
+.vigie-log-line {
+	display: grid;
+	grid-template-columns: 6.5rem 7rem 1fr;
+	gap: var(--vigie-gap-sm);
+	padding: 0.12rem 0;
+}
+.vigie-log-ts {
+	color: var(--vigie-faint);
+}
+.vigie-log-source {
+	color: var(--vigie-accent);
+}
+.vigie-log-message {
+	color: var(--vigie-dim);
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+.vigie-log-line[data-level="info"] .vigie-log-message {
+	color: var(--vigie-text);
+}
+.vigie-log-line[data-level="warn"] .vigie-log-message {
+	color: var(--vigie-caution);
+}
+.vigie-log-line[data-level="error"] .vigie-log-message {
+	color: var(--vigie-critical);
+}
+
+/* Page views (sessions / telemetry / inputs / logs) ------------------------- */
+
+.vigie-view {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: var(--vigie-pad);
+	display: flex;
+	flex-direction: column;
+	gap: var(--vigie-gap);
+	background:
+		radial-gradient(
+			120% 80% at 80% -10%,
+			rgba(56, 189, 248, 0.05),
+			transparent 55%
+		), var(--vigie-bg);
+}
+.vigie-view > * {
+	width: 100%;
+	max-width: 92rem;
+	margin-inline: auto;
+	animation: vigie-rise 0.4s ease both;
+}
+
+.vigie-stack {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vigie-gap);
+}
+
+.vigie-two-col {
+	display: grid;
+	grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+	gap: var(--vigie-gap);
+	align-items: start;
+}
+@media (max-width: 56rem) {
+	.vigie-two-col {
+		grid-template-columns: 1fr;
+	}
+}
+
+.vigie-empty {
+	margin: 0;
+	padding: var(--vigie-gap-xs) 0;
+	color: var(--vigie-faint);
+	font-size: var(--vigie-text-sm);
+}
+
+/* Telemetry charts */
+
+.vigie-chart-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+	gap: var(--vigie-gap);
+}
+.vigie-chart {
+	border-left: 2px solid var(--vigie-status, transparent);
+}
+.vigie-chart[data-status="nominal"] {
+	--vigie-status: var(--vigie-nominal);
+}
+.vigie-chart[data-status="caution"] {
+	--vigie-status: var(--vigie-caution);
+}
+.vigie-chart[data-status="critical"] {
+	--vigie-status: var(--vigie-critical);
+}
+.vigie-chart .vigie-trace {
+	height: 5rem;
+}
+.vigie-chart-stats {
+	margin: 0.7rem 0 0;
+	display: flex;
+	gap: 1.4rem;
+}
+.vigie-chart-stats div {
+	display: flex;
+	flex-direction: column;
+	gap: 0.1rem;
+}
+.vigie-chart-stats dt {
+	font-size: var(--vigie-text-2xs);
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	color: var(--vigie-faint);
+}
+.vigie-chart-stats dd {
+	margin: 0;
+	font-family: var(--vigie-mono);
+	font-size: var(--vigie-text-base);
+	color: var(--vigie-dim);
+}
+
+/* Lifecycle timeline */
+
+.vigie-timeline {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+}
+.vigie-timeline-item {
+	position: relative;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: var(--vigie-gap-sm);
+	padding: 0 0 0.85rem;
+}
+.vigie-timeline-item::before {
+	content: "";
+	position: absolute;
+	left: 0.32rem;
+	top: 0.95rem;
+	bottom: -0.1rem;
+	width: 1px;
+	background: var(--vigie-line);
+}
+.vigie-timeline-item:last-child::before {
+	display: none;
+}
+.vigie-timeline-dot {
+	margin-top: 0.35rem;
+	width: 0.65rem;
+	height: 0.65rem;
+	border-radius: 50%;
+	background: var(--vigie-accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--vigie-accent) 18%, transparent);
+	z-index: 1;
+}
+.vigie-timeline-item[data-level="warn"] .vigie-timeline-dot {
+	background: var(--vigie-caution);
+	box-shadow: 0 0 0 3px
+		color-mix(in srgb, var(--vigie-caution) 18%, transparent);
+}
+.vigie-timeline-item[data-level="error"] .vigie-timeline-dot {
+	background: var(--vigie-critical);
+}
+.vigie-timeline-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.5rem;
+}
+.vigie-timeline-phase {
+	font-size: var(--vigie-text-base);
+	font-weight: 600;
+}
+.vigie-timeline-ts {
+	font-family: var(--vigie-mono);
+	font-size: var(--vigie-text-xs);
+	color: var(--vigie-faint);
+}
+.vigie-timeline-detail {
+	margin: 0.1rem 0 0;
+	font-size: var(--vigie-text-sm);
+	color: var(--vigie-dim);
+}
+
+/* Session-history outcome badge */
+
+.vigie-outcome {
+	--vigie-status: var(--vigie-idle);
+	color: var(--vigie-status);
+	border-color: color-mix(in srgb, var(--vigie-status) 35%, transparent);
+	background: color-mix(in srgb, var(--vigie-status) 12%, transparent);
+}
+.vigie-outcome[data-outcome="running"] {
+	--vigie-status: var(--vigie-accent);
+}
+.vigie-outcome[data-outcome="ended"] {
+	--vigie-status: var(--vigie-nominal);
+}
+.vigie-outcome[data-outcome="failed"] {
+	--vigie-status: var(--vigie-critical);
+}
+.vigie-outcome[data-outcome="recovering"] {
+	--vigie-status: var(--vigie-caution);
+}
+
+/* Input monitor */
+
+.vigie-live-pip {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	font-size: var(--vigie-text-xs);
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	color: var(--vigie-accent);
+}
+.vigie-live-pip .vigie-state-pulse {
+	background: var(--vigie-accent);
+	animation: vigie-pulse 1.8s ease-in-out infinite;
+}
+.vigie-input-stream {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.15rem;
+	font-family: var(--vigie-mono);
+	font-size: var(--vigie-text-sm);
+}
+.vigie-input-event {
+	display: grid;
+	grid-template-columns: 6rem 4.5rem 1fr auto;
+	gap: var(--vigie-gap-sm);
+	align-items: center;
+	padding: 0.25rem 0.4rem;
+	border-radius: 6px;
+}
+.vigie-input-event[data-kind="semantic"] {
+	background: color-mix(in srgb, var(--vigie-accent) 8%, transparent);
+}
+.vigie-input-ts {
+	color: var(--vigie-faint);
+}
+.vigie-input-kind {
+	text-transform: uppercase;
+	font-size: var(--vigie-text-2xs);
+	letter-spacing: 0.08em;
+	color: var(--vigie-dim);
+}
+.vigie-input-event[data-kind="semantic"] .vigie-input-kind {
+	color: var(--vigie-accent);
+}
+.vigie-input-label {
+	color: var(--vigie-text);
+}
+.vigie-input-value {
+	color: var(--vigie-dim);
+	justify-self: end;
+}
+
+/* Logs page */
+
+.vigie-log-toolbar {
+	display: flex;
+	align-items: center;
+	gap: var(--vigie-gap-sm);
+	flex-wrap: wrap;
+}
+.vigie-log-search {
+	max-width: 18rem;
+	height: 2rem;
+}
+.vigie-log-lines--page {
+	max-height: none;
+	flex: 1;
+	min-height: 0;
+	border-top: none;
+	padding-left: 0;
+	padding-right: 0;
+}
+
+/* Focus states -------------------------------------------------------------- */
+
+.vigie-root :focus-visible {
+	outline: 2px solid var(--vigie-accent);
+	outline-offset: 2px;
+	border-radius: 6px;
+}
+
+/* Library --------------------------------------------------------------- */
+
+.vigie-library-toolbar {
+	display: grid;
+	grid-template-columns: minmax(14rem, 1fr) repeat(3, minmax(8rem, 0.35fr));
+	gap: var(--vigie-gap-sm);
+	align-items: end;
+}
+.vigie-library-search {
+	min-inline-size: 0;
+}
+.vigie-filter-field {
+	display: grid;
+	gap: 0.25rem;
+	min-inline-size: 0;
+	font-size: var(--vigie-text-xs);
+	color: var(--vigie-dim);
+}
+.vigie-filter-field span {
+	font-size: var(--vigie-text-2xs);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--vigie-faint);
+}
+.vigie-filter-field select {
+	min-block-size: 2.25rem;
+	padding-inline: 0.65rem;
+	border: 1px solid var(--vigie-line);
+	border-radius: 0.55rem;
+	background: var(--vigie-bg);
+	color: var(--vigie-text);
+	font: inherit;
+}
+.vigie-library-summary {
+	display: flex;
+	gap: var(--vigie-gap-sm);
+	font-family: var(--vigie-mono);
+	font-size: var(--vigie-text-xs);
+	color: var(--vigie-dim);
+}
+.vigie-library-table {
+	min-block-size: 0;
+	overflow: auto;
+	border: 1px solid var(--vigie-line-soft);
+	border-radius: 0.75rem;
+}
+.vigie-library-table [data-slot="table-head"],
+.vigie-library-table [data-slot="table-cell"] {
+	padding-inline: 0.85rem;
+}
+.vigie-library-game {
+	display: grid;
+	gap: 0.15rem;
+	min-inline-size: 14rem;
+}
+.vigie-library-game strong {
+	font-weight: 650;
+	color: var(--vigie-text);
+}
+.vigie-library-game code,
+.vigie-library-game span {
+	font-family: var(--vigie-mono);
+	font-size: var(--vigie-text-xs);
+	color: var(--vigie-dim);
+}
+
+@media (max-width: 980px) {
+	.vigie-library-toolbar {
+		grid-template-columns: 1fr 1fr;
+	}
+	.vigie-library-search {
+		grid-column: 1 / -1;
+	}
+}

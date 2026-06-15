@@ -14,6 +14,7 @@ import { PlatformBridgeProvider } from "./themes/platform-bridge-context"
 import "@platform/react/primitives/theme/styles.css"
 import "@product/themes/shift/shift.css"
 import "@product/themes/evier/evier.css"
+import "@product/themes/vigie/vigie.css"
 import "@fontsource-variable/geist"
 import "@fontsource-variable/nunito"
 
