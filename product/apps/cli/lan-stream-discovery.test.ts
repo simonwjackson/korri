@@ -49,7 +49,7 @@ describe("LAN stream discovery", () => {
     })
   })
 
-  it("derives mDNS control URL from service address and port", () => {
+  it("derives mDNS control URL from the advertised host name and port", () => {
     const candidate = candidateFromMdnsService({
       name: "Korri on aka",
       host: "aka.local",
@@ -66,11 +66,37 @@ describe("LAN stream discovery", () => {
     expect(candidate).toMatchObject({
       id: "aka",
       name: "Korri on aka",
-      controlUrl: "http://192.168.1.50:3010",
+      // resolvable device name, not the LAN IP, so the peer is reachable
+      // wherever the name resolves (LAN DNS/mDNS, Tailscale MagicDNS, ...)
+      controlUrl: "http://aka:3010",
       source: "mdns",
       capabilities: ["stream", "file-sharing"],
       identityVerified: false,
     })
+  })
+
+  it("falls back to the .local host when no hostId is advertised", () => {
+    expect(
+      candidateFromMdnsService({
+        name: "Korri on aka",
+        host: "aka.local.",
+        port: 3010,
+        addresses: ["192.168.1.50"],
+        txt: { proto: "1", caps: "source" },
+      }),
+    ).toMatchObject({ controlUrl: "http://aka.local:3010" })
+  })
+
+  it("falls back to the LAN address when the advertised name is not a usable hostname", () => {
+    expect(
+      candidateFromMdnsService({
+        name: "Korri Living Room",
+        host: "Korri Living Room.local",
+        port: 3010,
+        addresses: ["192.168.1.50"],
+        txt: { proto: "1", hostId: "Korri Living Room", caps: "source" },
+      }),
+    ).toMatchObject({ controlUrl: "http://192.168.1.50:3010" })
   })
 
   it("ignores non-local mDNS addresses", () => {

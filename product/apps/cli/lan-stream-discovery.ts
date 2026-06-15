@@ -187,8 +187,15 @@ export function candidateFromMdnsService(
   const protocol = txtValue(service.txt, "proto")
   if (protocol && protocol !== KORRI_STREAM_PROTOCOL_VERSION) return undefined
 
-  const url = new URL(`http://${hostForUrl(address)}:${service.port}`)
   const hostId = txtValue(service.txt, "hostId") ?? service.host ?? address
+  // Address peers by a resolvable name when one is advertised, falling back to
+  // the discovered LAN IP. A device name (e.g. "aka") keeps the controlUrl
+  // valid across networks: LAN DNS/mDNS at home, and an overlay resolver such
+  // as Tailscale MagicDNS when away. The LAN address found above is still
+  // required as a discovery gate, and is used as the host only when no usable
+  // name is advertised.
+  const host = resolvableHostName(service) ?? address
+  const url = new URL(`http://${hostForUrl(host)}:${service.port}`)
   return {
     id: hostId,
     name: service.name || hostId,
@@ -236,6 +243,33 @@ function txtValue(txt: unknown, key: string): string | undefined {
 
 function hostForUrl(address: string): string {
   return address.includes(":") ? `[${address}]` : address
+}
+
+/**
+ * Prefer the advertised device name (mDNS TXT `hostId`, then the `.local`
+ * SRV host) for the controlUrl host, but only when it is a usable URL
+ * hostname. Display-name-style ids with spaces fall through to the caller's
+ * IP fallback so we never produce an invalid URL.
+ */
+function resolvableHostName(
+  service: Pick<Service, "host" | "txt">,
+): string | undefined {
+  const candidates = [
+    txtValue(service.txt, "hostId"),
+    service.host?.replace(/\.$/, ""),
+  ]
+  for (const candidate of candidates) {
+    if (candidate && isUrlHostname(candidate)) return candidate
+  }
+  return undefined
+}
+
+function isUrlHostname(value: string): boolean {
+  try {
+    return new URL(`http://${hostForUrl(value)}`).hostname.length > 0
+  } catch {
+    return false
+  }
 }
 
 function isAllowedLanAddress(address: string): boolean {

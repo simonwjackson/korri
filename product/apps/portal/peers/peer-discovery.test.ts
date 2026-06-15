@@ -23,8 +23,9 @@ describe("PeerDiscovery", () => {
     })
 
     expect(peers.map(p => p.hostId).sort()).toEqual(["aka", "sobo"])
+    // peers are addressed by their resolvable device name, not the LAN IP
     expect(peers.find(p => p.hostId === "aka")?.controlUrl).toBe(
-      "http://192.168.1.117:3001",
+      "http://aka:3001",
     )
   })
 
