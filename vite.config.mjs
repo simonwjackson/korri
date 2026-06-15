@@ -16,7 +16,18 @@ export default defineConfig({
     host: true,
     allowedHosts: true,
     proxy: {
-      "/api": { target: apiProxyTarget, changeOrigin: true },
+      "/api": {
+        target: apiProxyTarget,
+        changeOrigin: true,
+        // The portal's own RPC-group source lives in `api/` under the Vite
+        // root, so it is served at `/api/*.ts`. Let Vite serve those modules
+        // instead of proxying them to the API server (which only handles
+        // runtime endpoints like /api/rpc and would 404 the source).
+        bypass: req =>
+          /\.(ts|tsx|js|jsx|mjs)(\?|$)/.test(req.url ?? "")
+            ? req.url
+            : undefined,
+      },
     },
     watch: {
       ignored: ["**/out/**", "**/node_modules/**", "**/.git/**"],
