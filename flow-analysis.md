@@ -1,169 +1,129 @@
-# Flow Analysis: Config Graph Migration (KORRI_LIBRARY_ROOT → KORRI_CONFIG_ROOTS)
+# Steam Observability Flow Analysis
 
-> **Scope:** Pre-implementation spec review for the migration from a singleton
-> `KORRI_LIBRARY_ROOT` / `services.korri.daemon.library.root` / `/api/library/events`
-> model to a ProseQL 0.14.0 `documentGraph`-backed config graph with
-> `KORRI_CONFIG_ROOTS` / `services.korri.config.roots` / `/api/config/events` and
-> KORRID last-known-good lifecycle.
->
-> **Date:** 2026-06-10  
-> **Branch:** trunk  
-> **Deferred out of scope:** generic removable-media roots; authoring/write-target semantics
-> (parking-lot items `01KTRYCA2EC1DBW6RJXPC4NJV4`, `01KTRYCK5XYMCSVYD55P7XWBDY`)
+**Date:** 2026-06-14  
+**Inputs analysed:**
+- `docs/handoffs/steam-observability-implementation-handoff-2026-06-14.md`
+- `work/items/parking-lot/01KV3KWT98Y6W6CNXP05ZPSHH7-capture-steam-launch-diagnostics-as-first-class-session-arti.md`
+- `docs/research/steam-observability/bandai-2026-06-14/` (full fixture directory)
+- `product/services/device/sessiond-state.ts`, `korrid.ts`, `product/apps/portal/api/server/status.rpc-handler.ts`
 
 ---
 
 ## User Flows
 
-### Flow 1 — Korrid startup
+### Flow 1 — Happy-path game launch observed end-to-end
 
 ```
-env: KORRI_CONFIG_ROOTS set?
-  │
-  ├─ YES: parse colon-separated list → filter empty strings → roots[]
-  │        (KORRI_CONFIG_ROOTS="" with nothing after filtering → roots = [])
-  │
-  └─ NO: XDG fallback (korriDataPath or korriConfigPath?) → roots = [xdgFallback]
-          (no HOME / XDG_DATA_HOME → ???)
-           │
-           └─ UNRESOLVED: does missing HOME produce empty-baseline or hard error?
-                          (currently: LibraryError; spec: empty is valid)
-
-roots[] → openDocumentGraph({ roots, optional: true, include: [...] })
-         → merge YAML fragments → validate schema
-         │
-         ├─ valid  → active snapshot; start per-present-root watchers
-         │           emit SSE: config.ready { roots: [...] }
-         │
-         └─ invalid → ??? startup-failed state not specified
-                       (no last-known-good exists yet)
+Korri requests -applaunch <appId>
+        │
+        ▼
+console_log: ExecCommandLine … -applaunch <appId>      ← launch window opens
+        │
+        ├─ console_log: GameAction LaunchApp changed task → CheckShaderDepotManifest
+        ├─ console_log: GameAction LaunchApp changed task → ProcessingInstallScript (or RunningInstallScript)
+        ├─ console_log: Running install script evaluator for AppID …
+        └─ [20+ seconds of Preparing]
+                │
+                ▼
+        console_log: GameAction LaunchApp changed task → SynchronizingCloud
+        console_log: GameAction LaunchApp changed task → SynchronizingStats
+        console_log: GameAction LaunchApp changed task → ShowInterstitials
+        console_log: LaunchApp waiting for user response to ShowInterstitials
+        console_log: LaunchApp continues with user response "ShowInterstitials"
+        console_log: GameAction LaunchApp changed task → SynchronizingControllerConfig
+        console_log: GameAction LaunchApp changed task → SiteLicenseSeatCheckout
+        console_log: GameAction LaunchApp changed task → DelayLaunch
+        console_log: GameAction LaunchApp changed task → CreatingProcess
+        console_log: LaunchApp waiting for user response to CreatingProcess
+        console_log: LaunchApp continues with user response "CreatingProcess"
+        console_log: [NUL-delimited exec line — /bin/sh\0-c\0…]
+        console_log: Game process added : AppID <id> "…", ProcID <p1>, IP 0.0.0.0:0
+        console_log: GameAction LaunchApp changed task → WaitingGameWindow
+        console_log: GameAction LaunchApp changed task → Completed
+                │
+                ▼ (same second as Completed on Sonic/Caveblazers; ~0s after on Downwell)
+        gameprocess_log: AppID <id> adding PID <p1> as a tracked process "…"
+        gameprocess_log: AppID <id> adding PID <p2..pN> as a tracked process   ← no command
+        gameprocess_log: SSGL: InternalUpdateClientGame …
+        gameprocess_log: SSGL: change [<id>] LCT <old>->0
+        content_log:    AppID <id> state changed : Fully Installed,App Running,  ← Running confirmed
+        shader_log:     Setting MESA_GLSL_CACHE_DIR=…/shadercache/<id>            ← same second as Running
+                │
+                ▼  [game runs; may see additional PID adds (wine process, etc.)]
+        gameprocess_log: AppID <id> adding PID <pN+1> as a tracked process
+        console_log:    Game process updated : AppID <id> "…", ProcID <pN+1>
+        console_log:    Game process updated : AppID <id> "…", ProcID <pN+2>     ← may repeat
+                │
+                ▼  [user or Korri stops game — all events in the same second]
+        gameprocess_log: AppID <id> no longer tracking PID <pN+2>, exit code -1  ← burst
+        gameprocess_log: AppID <id> no longer tracking PID <pN+1>, exit code -1
+        [... all inner PIDs exit -1 ...]
+        gameprocess_log: AppID <id> no longer tracking PID <p1>, exit code 0     ← wrapper exits 0
+        gameprocess_log: Remove <id> from running list                            ← unmentioned in handoff
+        console_log:    Game process removed: AppID <id> "…", ProcID <last>       ← only last PID
+        console_log:    ThreadGetProcessExitCode: no such process <pN+2>          ← burst
+        content_log:    AppID <id> state changed : Fully Installed,               ← Stopped confirmed
+        shader_log:     AppID <id> exited.                                        ← same second as Stopped
+        shader_log:     Finding Mesa SF caches … [shader flush lines follow]
+                │
+                ▼
+        State: Stopped (launch window closes)
 ```
 
-**Terminal states:** `active(snapshot)`, `startup-failed(error)` (state undefined by spec)
+### Flow 2 — Same AppID relaunched after previous session's stale lines
 
----
-
-### Flow 2 — Config file change at runtime
+Entry: tailer was running before game launch, so it captures preexisting lines already in the log file.
 
 ```
-watcher fires (any root) → debounce
-                         → documentGraph reactive reload
-                         → validate new merged graph
-                         │
-                         ├─ valid  → update active snapshot
-                         │           emit SSE: ??? (config.ready again? config.changed?)
-                         │
-                         └─ invalid → retain last-known-good
-                                      emit SSE: config.error { ??? }
+[tailer starts at EOF — pre-existing history is not replayed]
+        │
+        ▼  [observer has no active window for AppID 360740]
+gameprocess_log: AppID 360740 no longer tracking PID 114897, exit code -1  ← stale
+gameprocess_log: AppID 360740 no longer tracking PID … (×8)
+gameprocess_log: Remove 360740 from running list
+content_log:    AppID 360740 state changed : Fully Installed,               ← stale stop
+console_log:    Game process removed: AppID 360740 "…", ProcID 114897
+        │
+        ▼  [3+ minutes of silence for AppID 360740]
+        ▼  [new launch arrives — see Flow 1]
 ```
 
-**Decision point unspecified:** does a successful reload emit `config.ready` again, or a
-distinct `config.changed`? Both names appear in the research doc; the React bridge must
-listen to one of them to trigger the library refresh — but which one?
+**Critical:** without a preceding `App Running` in the active window, stale PID-removal and stale "stopped" lines must be ignored or classified as `Observed/hint` only. If the tailer starts cold (after a Korri restart) while the game is already running, the observer will see the PID adds and App Running in the live tail — those are the anchors.
 
----
+### Flow 3 — Korri/korrid restarts while game is already running
 
-### Flow 3 — React bridge SSE subscription
+Entry: korrid process was restarted; tailer starts at EOF of all log files.
 
 ```
-HomeRuntimeLayersRoot mounts
-  → new EventSource("/api/config/events")
-  → receives config.ready { roots: [] }      ← current bridge ignores this
-  → user edits YAML file                      ← what event fires? (see Flow 2 gap)
-  → bridge receives ??? event
-  → calls refreshLibraryItems()
-  → libraryItemsAtom re-fetches via RPC
+        │
+        ▼  [tailer sees live activity only from this point]
+        [no ExecCommandLine, no GameAction tasks, no PID adds seen]
+        [no App Running transition — it already happened]
+                │
+                ▼  [game stops normally]
+        gameprocess_log: AppID <id> no longer tracking PID …
+        gameprocess_log: Remove <id> from running list
+        content_log:    AppID <id> state changed : Fully Installed,
 ```
 
-**Reconnect path:**
+**Gap:** The observer never sees the launch start. `Stopped` arrives without a prior `Running`. The plan's acceptance criteria don't address this; the observer's snapshot will be empty or stale. Without supplemental proc-corroboration (`/proc/*/cmdline` scan for active `SteamLaunch AppId=`) the observer would report no known state even while the game is live.
+
+### Flow 4 — Observer sees only `Stopped` without prior `Running` (launch failed mid-stream)
+
+Example: `CheckShaderDepotManifest` times out, Steam drops the launch, and content_log never emits `App Running`.
 
 ```
-EventSource disconnects (network blip, korrid restart)
-  → auto-reconnects
-  → korrid emits config.ready { roots: [...] }
-  → bridge receives config.ready
-  → ??? (current bridge has no listener for config.ready)
-  → UI stays stale until next config file write
+console_log: GameAction LaunchApp changed task → CheckShaderDepotManifest
+        [silence — no further progress for N seconds]
+                │
+        Stuck state inferred
+                │
+        ▼  [Steam eventually cancels]
+content_log: AppID <id> state changed : Fully Installed,   ← appears WITHOUT prior App Running
+gameprocess_log: (possibly no PID lines at all)
 ```
 
----
-
-### Flow 4 — Desktop API forwarder (Electrobun)
-
-```
-Portal renders → EventSource("/api/config/events") → Electrobun intercepts /api/* 
-  → api-forwarder: buildUpstreamUrl preserves pathname verbatim
-  → upstream: korrid /api/config/events
-  → isEventStream() check: content-type: text/event-stream → streaming passthrough
-  → events flow through without buffering                  ← forwarder is path-agnostic;
-                                                             this already works
-```
-
-The forwarder body (`api-forwarder.ts`) needs **no code changes** — it forwards all
-`/api/*` paths generically and detects SSE via `content-type`. However, the test fixture
-at `api-forwarder.test.ts:114` hardcodes `"/api/library/events"` and must be updated to
-`"/api/config/events"` along with the event name `"library.ready"` → `"config.ready"`.
-
----
-
-### Flow 5 — Multi-root watcher management
-
-```
-roots at startup: ["/nix/store/abc-platform-defaults", "/var/lib/korri/library"]
-  → root-0 exists → watcher-0 started
-  → root-1 exists → watcher-1 started
-  → root-1 absent → not watched (ProseQL behavior: optional roots absent at startup
-                                  never get a watcher started later)
-
-Later: root-1 directory created externally
-  → NO watch event ever fires for this root
-  → config fragments written to root-1 are SILENTLY IGNORED until next restart
-```
-
----
-
-### Flow 6 — Nix deployment (SM8550)
-
-```
-korri-daemon.nix evaluates:
-  library.roots = [<nix-store-platform-defaults-dir>, "${stateRoot}/library"]
-  KORRI_CONFIG_ROOTS = "<store-path>:${stateRoot}/library"
-
-ExecStartPre:
-  current: install 00-korri-platform-defaults.yaml INTO ${library.root}
-  new:     platform defaults ARE the store path; no install step needed
-           BUT: ExecStartPre for user library dir creation still needed
-
-systemd.tmpfiles.rules:
-  "d ${stateRoot}/library 0700 ${user} ${group}"  ← needs to be per-root in new model
-
-ReadWritePaths:
-  current: [library.root, launchArtifactsDir]
-  new:     documentGraph is read-only — no write access to config roots needed
-           sidecar JSONs (where do they live?) still need write access
-```
-
----
-
-### Flow 7 — Import tools and write paths
-
-```
-rocknix importer / artifact-import-command:
-  reads KORRI_LIBRARY_ROOT → opens openKorriLibraryDb({ root })
-  → makeKorriLibraryDbConfig (today: documents source, outbox: writable)
-  → repository.upsertGame() → db.systems.upsert() → ProseQL write
-
-After migration:
-  makeKorriLibraryDbConfig → documentGraph (READ-ONLY)
-  → repository.upsertGame() → CollectionApi.create() → DocumentGraphSourceError
-  → HARD RUNTIME FAILURE
-
-Write-target is parked, but the code path hits this immediately on first
-import attempt. The spec needs an explicit guard or a clear statement that
-import tools continue using the legacy openKorriLibraryDb shape (documents
-source) pointed at a designated writable root, while the runtime read path
-uses the documentGraph shape. These cannot be the same db config.
-```
+**Gap:** The `Stopped` signal from `content_log` without a prior `App Running` in the current window is ambiguous between a launch failure and a stale/preexisting stop line. The handoff says "use active AppID state" but does not specify how the reducer distinguishes "stopped before it started" from "stale preexisting stop."
 
 ---
 
@@ -171,543 +131,434 @@ uses the documentGraph shape. These cannot be the same db config.
 
 ### Critical
 
-#### C1 — KORRID startup failure is unspecified (no last-known-good on first boot)
+#### C1 — `console_log.txt` contains a third undocumented signal set: `Game process added/updated/removed`
 
-**What's missing:** The last-known-good lifecycle is defined for the steady state
-(`active` → `reload failed` → `retain last-known-good`), but not for startup. When korrid
-starts and the initial documentGraph validation fails, there is no prior snapshot to fall
-back to. The spec does not say whether korrid should:
+The handoff assigns `gameprocess_log.txt` as the source for PID tracking. But `console_log.txt` **also** emits PID-related lines with a different format and different semantics:
 
-- (a) fail to start (systemd Restart kicks in),
-- (b) serve an empty config graph and emit `config.error`, or
-- (c) loop retrying validation until a valid config exists.
+```
+# gameprocess_log.txt (tracks ALL child PIDs)
+AppID 584400 adding PID 196491 as a tracked process "…"
+AppID 584400 adding PID 196550 as a tracked process
+AppID 584400 no longer tracking PID 197135, exit code -1
 
-**Why it matters:** Option (a) causes `config.ready` to never be emitted on a first-time
-deploy where the user hasn't yet written any YAML — but the spec says "empty baseline is
-valid", which implies option (b) for zero roots. Yet a non-empty but schema-invalid root is
-different from zero roots. The state machine has at least three distinct startup outcomes,
-and the SSE event(s) emitted for each differ. The React bridge and any monitoring tooling
-depend on this contract.
+# console_log.txt (tracks only the "representative" game process)
+Game process added : AppID 584400 "…", ProcID 196491, IP 0.0.0.0:0
+Game process updated : AppID 584400 "…", ProcID 197021, IP 0.0.0.0:0
+Game process updated : AppID 584400 "…", ProcID 197135, IP 0.0.0.0:0   ← same PID emitted twice
+Game process removed: AppID 584400 "…", ProcID 197135                   ← only last PID, no exit code
+```
 
-**Existing codebase note:** Today `withLibraryRepository` in `library-source-layer-live.ts`
-uses `Effect.scoped` per RPC call and simply fails the call with `LibraryError`. There is no
-idle-state snapshot concept; this entire pattern is new.
+Differences:
+- `console_log.txt`'s `Game process removed` only fires **once per stop** (the last updated ProcID), with no exit code. It is not the full set.
+- `console_log.txt`'s `Game process updated` fires for mid-session PID transitions (wine wrapper → game exe) and can repeat the same PID.
+- `gameprocess_log.txt`'s `no longer tracking` fires for every individual PID with an exit code, including all inner -1 exits.
 
-**Default assumption:** Empty roots (zero files found) → `config.ready { roots: [] }`.
-Schema-invalid files at startup → `config.error { ... }` + korrid serves empty frozen
-snapshot (not a crash restart). This matches "empty baseline valid" while still surfacing
-errors to the client.
+The handoff's parser and reducer treat these as the same signal. They are not. The parser unit tests and parser-fixtures must cover each format separately, and the reducer must not double-count the same PID removal from both sources.
 
----
+**Why it matters:** If the reducer uses both `console_log`'s `Game process removed` and `gameprocess_log`'s `no longer tracking PID <wrapper>, exit code 0` as independent "Stopped" triggers, the state machine will race between them. Worse, `Game process removed` only carries the last ProcID, not the wrapper PID, so the exit-code information is missing from the console_log signal.
 
-#### C2 — `config.ready` vs. `config.changed` event ambiguity after reload
+#### C2 — `LaunchApp waiting for user response` and `LaunchApp continues with user response` lines are not handled by the `launchTask` regex
 
-**What's missing:** The research doc lists two different behaviors for a successful
-config reload:
+Every game in the Bandai fixtures emits these interleaved with task changes:
 
-> "if new graph validates → updates active snapshot; emits `config.ready` again"
+```
+GameAction [AppID 360740, ActionID 4] : LaunchApp waiting for user response to ShowInterstitials ""
+GameAction [AppID 360740, ActionID 4] : LaunchApp continues with user response "ShowInterstitials"
+GameAction [AppID 360740, ActionID 4] : LaunchApp waiting for user response to CreatingProcess ""
+GameAction [AppID 360740, ActionID 4] : LaunchApp continues with user response "CreatingProcess"
+```
 
-But the React bridge is documented to listen for `config.changed` to trigger a library
-refresh:
+The handoff's `launchTask` regex matches only `LaunchApp changed task to <task>`. These `waiting`/`continues` lines will fall through as unrecognized. If the parser throws on unrecognized lines instead of returning `raw-log-line`, these lines will crash the parser.
 
-> "listens for `config.changed`"
+More importantly, `LaunchApp waiting for user response to CreatingProcess` and no subsequent `continues` is a plausible stuck vector — Steam may be blocked waiting for OS process creation. The handoff's Stuck detection doesn't flag this case.
 
-If reload fires `config.ready` (not `config.changed`), the React bridge never refreshes
-after a runtime config update. If reload fires `config.changed`, the initial mount
-readiness signal (`config.ready`) and the reload signal are different events requiring
-separate listeners. The spec does not resolve which event fires on which occasion.
+**Default assumption if unaddressed:** Parser treats them as raw lines and skips. But the Stuck detection threshold misses a meaningful signal.
 
-**Why it matters:** The `LibraryChangeRefreshBridge` in `HomeRuntimeLayersRoot.tsx`
-currently only listens to one event name (`library.changed`). Replacing it with the wrong
-event name means config changes are silent in the UI. Reconnect after a disconnect is the
-most likely path to observing stale UI in production.
+#### C3 — `gameprocess_log.txt` contains non-PID lines the parser regexes will not match
 
-**Default assumption:** Emit `config.ready { roots }` on startup (and after reconnect
-readiness is re-established), `config.changed { root, path }` on each file-level change
-(whether or not a reload triggers a snapshot update). React bridge listens to **both**:
-`config.ready` triggers a refresh (handles reconnect), `config.changed` triggers a refresh
-(handles live edits).
+The full `gameprocess_log.txt.tail` shows interleaved lines that neither parser regex covers:
 
----
+```
+AppID 360740 no longer tracking PID 114424, exit code 0
+Remove 360740 from running list        ← authoritative terminal signal; not in handoff
+SSGL: InternalUpdateClientGame indicates change to games list
+SSGL: persona state flags
+SSGL: change [584400] LCT 744828976->0
+```
 
-#### C3 — `documentGraph` read-only breaks write paths that must stay writable
+The `Remove <appId> from running list` line is a **definitive terminal signal** that appears after all PIDs untrack. It is more authoritative than waiting for all individual PID removals to accumulate. The handoff doesn't define it as a signal at all, so the reducer has no way to use it. If the parser emits `raw-log-line` and the reducer ignores it, the observer misses the cleanest stop confirmation in `gameprocess_log.txt`.
 
-**What's missing:** `makeKorriLibraryDbConfig` today creates a `documents` source with
-`outbox: "library.yaml"` — a writable store. Changing it to `documentGraph` (read-only)
-immediately breaks:
+**Why it matters:** If the wrapper PID (exit code 0) fails to produce its `no longer tracking` line due to a parsing edge case, the observer may wait indefinitely for a clean "all PIDs removed" confirmation. `Remove <id> from running list` would catch it regardless.
 
-1. `tools/importers/rocknix/cli.ts` → `rocknix-importer.ts` → `repository.upsertGame()`,
-   `repository.upsertStorage()`, etc. — all ProseQL write paths.
-2. `tools/library/launcher-config-cli.ts` — writes launchers, games via the repository.
-3. `withTempProseqlLibrary` in `tools/testing/library/` — uses `db.apps.upsert()`,
-   `db.users.upsert()`, `db.systems.upsert()`, etc. to seed test fixtures; these all
-   become `LegacyCollectionRemovedError`-equivalent failures on a read-only source.
-4. `product/apps/cli/artifacts/artifact-import-command.ts` — writes to the sidecar JSON
-   files that are co-located with the library root.
+#### C4 — `RunningInstallScript` task is a real preparation state but is absent from the handoff's task classification table
 
-**Why it matters:** If `openKorriLibraryDb` switches to `documentGraph`, **every test that
-seeds data via the db API breaks immediately**, not just import tools. The test helper
-`withTempProseqlLibrary` is used by 10+ test files. The migration plan treats this as
-covered by the parked "write-target semantics" item, but the seeding strategy for tests
-is an implementation blocker for the migration itself, not a follow-up concern.
+Caveblazers (452060) in `console_log.txt`:
 
-**Required clarification:** Two separate db-config factory functions are needed:
-- `makeKorriConfigDbConfig(roots)` → `documentGraph` (read-only, multi-root, for runtime)
-- `makeKorriWritableDbConfig(root)` → `documents` (single root, writable, for CLI tools and tests)
+```
+GameAction [AppID 452060, ActionID 3] : LaunchApp changed task to RunningInstallScript with ""
+```
 
-Or: the write seam is resolved by keeping the existing `documents`-backed db open for
-the designated writable root alongside the `documentGraph` read path.
+The handoff lists `ProcessingInstallScript` (used by Downwell and Sonic Mania) as a `Preparing` hint, but does NOT list `RunningInstallScript`. A parser following the handoff exactly would emit this as `raw-log-line` / unrecognized, losing a preparation signal. These are not the same task name; both appear in the Bandai fixtures.
 
----
+#### C5 — `parser-fixtures/*.txt` files mix log sources and cannot be used as source-specific test inputs
 
-#### C4 — `host:` singleton transform risks double-application with `documentGraph`
+`parser-fixtures/downwell-360740.txt` concatenates lines from three different log files:
+- `content_log.txt` state-change lines
+- `gameprocess_log.txt` PID add/remove lines  
+- `console_log.txt` task lines, `Game process added/removed` lines
 
-**What's missing:** `korriReadableYamlCodec.decode` calls `wrapPlainHostForProseql()`,
-converting `host: { ... }` → `host: { local: { ... } }`. In the current `documents`
-source this happens per-file during decode and is correct.
+The handoff proposes per-source parsers (`steam-log-signals.ts`) that each receive lines from a single file. Tests of those parsers using the mixed fixture will either silently skip most lines (if the parser is source-gated) or produce spurious matches (if the parser tries to match all formats on every line).
 
-The research doc also mentions a `korriReadableDocumentTransform` function to pass as the
-`transform` field in `DocumentGraphSourceConfig`. If this transform also calls
-`wrapPlainHostForProseql`, AND the codec is also registered via
-`makeNodePersistenceLayer(config, { codecs: [korriReadableYamlCodec] })`, then both the
-codec decode AND the document transform will apply the host-wrap to the same document,
-producing `host: { local: { local: { ... } } }` — double-wrapped.
-
-**Why it matters:** The `InvalidSingletonHostError` check will fire unexpectedly once
-deep-merge produces a `host` section with a `local` key pointing to another object with a
-`local` key. This is a silent correctness bug that will only surface when a YAML file
-contains a `host:` block.
-
-**Required clarification:** Decide exactly one application point for the host-singleton
-wrap: either the codec's `decode` function OR the `documentGraph` `transform` field, not
-both. The codec-based approach (already working today) is the lower-risk choice.
+The handoff notes these should be split but Unit 1 is listed as "optional prep." If Unit 2 begins without splitting the fixtures, the test inputs will be wrong and tests will pass for the wrong reasons.
 
 ---
 
 ### Important
 
-#### I1 — `KORRI_CONFIG_ROOTS=""` (empty string set) vs. unset must be distinguishable
+#### I1 — "Stopping" state is sub-second and likely unobservable at second-resolution timestamps
 
-**What's missing:** The spec says:
+In all three Bandai games, all PID removal events and the `content_log` "no longer App Running" transition happen within the **same logged second**:
 
-> "An empty `KORRI_CONFIG_ROOTS` with no XDG fallback → valid empty baseline (no error)"
-
-This implies that setting `KORRI_CONFIG_ROOTS=""` explicitly suppresses the XDG fallback.
-But `process.env.KORRI_CONFIG_ROOTS` is `undefined` when unset and `""` when set to empty
-— these must route differently:
-
-```ts
-KORRI_CONFIG_ROOTS=undefined  → apply XDG fallback
-KORRI_CONFIG_ROOTS=""         → valid empty baseline, no fallback
-KORRI_CONFIG_ROOTS=":::"      → empty-after-filter → same as "" semantics?
+```
+[14:41:57] AppID 360740 no longer tracking PID 205203, exit code -1   ← burst starts
+[14:41:57] AppID 360740 no longer tracking PID 204611, exit code 0    ← burst ends
+[14:41:57] Remove 360740 from running list
+[14:41:57] AppID 360740 state changed : Fully Installed,              ← same second
 ```
 
-The current `parseListEnv` helper (from `library-source-layer-live.ts`) returns
-`undefined` for both unset and empty-after-filter, which collapses these cases. A new
-`parseConfigRootsEnv` must handle the `undefined` vs. `""` distinction explicitly.
+With second-level log timestamps, there is no observable window where "PIDs are exiting AND App Running is still true." The plan's `Stopping` state exists in the model but has no observably distinct evidence in the fixture data. 
 
-**Why it matters:** A misconfigured deployment that accidentally clears `KORRI_CONFIG_ROOTS`
-should get the XDG fallback (library still visible), not silently become an empty baseline.
-Conversely, an operator who explicitly sets it to `""` to suppress all roots should get
-an empty baseline, not an XDG path they didn't ask for.
+**Why it matters:** The reducer will transition `Running → Stopped` atomically when it processes that second's burst. If the reducer waits for "all PIDs removed then check app state," it will work. But if it uses a "PID started removing → Stopping" trigger, it fires and clears within the same log-flush window with no UI-visible duration.
 
----
+**Recommendation:** Document that `Stopping` is an implementer-convenience intermediate used only to confirm the stop is in progress during the burst-processing loop, not a user-visible state with meaningful dwell time. Or eliminate it and go directly `Running → Stopped`.
 
-#### I2 — Persistent db scope: what Effect pattern replaces `Effect.scoped` per call?
+#### I2 — `App Running` and first PID add coincide in the same logged second for Sonic Mania and Caveblazers
 
-**What's missing:** The plan says korrid should open the documentGraph db once at server
-startup and hold it for the server lifetime ("Move `openKorriLibraryDb` out of
-`withLibraryRepository`… into the korrid startup path"). But the spec doesn't say what
-Effect construct manages this:
-
-- `Layer.scoped(ConfigGraphService, openDocumentGraphDb(...))` — scope tied to the
-  Layer's lifetime; finalizers run when the Layer is released
-- Explicit `Scope.make()` held in a `Ref`, released on SIGTERM/SIGINT
-- `Effect.acquireRelease` in a top-level daemon fiber
-
-Without specifying the pattern, different implementors will choose different approaches,
-each with different finalizer-on-restart semantics. The ProseQL reactive watch is attached
-to the persistent db handle — if the scope is released prematurely, watchers die silently.
-
-**Why it matters:** The `Effect.scoped` per-call model (current) means every RPC call opens
-and closes the db. The new model requires the db to outlive individual requests. If the
-scope strategy is wrong, hot-reload loses its watcher after the first request closes the
-scope.
-
-**Default assumption:** `Layer.scoped(ConfigGraphService, openDocumentGraphDb(...))` where
-`ConfigGraphService` exposes both `getSnapshot()` and `onReload(callback)`. The Layer is
-provided at server startup and released when the server process exits.
-
----
-
-#### I3 — Multi-root watcher failure isolation is unspecified
-
-**What's missing:** Currently, if the single-root watcher errors, `startController.error(error)`
-is called and the SSE stream terminates. With multiple roots, a single watcher error should
-ideally:
-
-- Log the error,
-- Stop watching the failing root,
-- Continue serving other roots' events,
-- Emit a `config.error { root, error }` event rather than terminating the whole stream.
-
-The spec doesn't say whether a multi-root watcher error is fatal to the stream or partial.
-If it's fatal, a flaky network filesystem for one root kills all config refresh for the
-whole portal, even for users whose config is in a healthy root.
-
----
-
-#### I4 — Platform defaults root should not be `optional: true`
-
-**What's missing:** The research doc proposes `optional: true` for ALL roots in the
-`documentGraph` config (to make "empty baseline valid"). But the platform defaults root is
-a Nix store path — it always exists by construction. If it is marked `optional: true` and
-the path is accidentally wrong (mistyped Nix expression), korrid silently ignores it and
-users see factory-reset behavior with no error.
-
-**Why it matters:** A missing platform defaults root indicates a deployment bug. It should
-be a hard `DocumentGraphSourceError`, not a silent skip. User config roots are the ones that
-should be optional (first-boot, SD card not inserted, etc.).
-
-**Recommendation:** `optional: false` for the Nix-store platform defaults root,
-`optional: true` for all user-provided roots in `KORRI_CONFIG_ROOTS`.
-
-This requires the `makeKorriLibraryDbConfig(roots)` factory to accept per-root metadata,
-not just a flat `string[]`:
-
-```ts
-type ConfigRootSpec = { root: string; optional: boolean }
-makeKorriConfigDbConfig(roots: readonly ConfigRootSpec[]): ...
+```
+[14:39:02] AppID 584400 state changed : Fully Installed,App Running,  (content_log)
+[14:39:02] AppID 584400 adding PID 196491 as a tracked process "…"    (gameprocess_log)
 ```
 
----
+When the reducer processes these events (arriving in file-tail order, interleaved across two log files), it may process them in either order depending on which file's inotify event fires first. The plan's correlation rules say `content_log` `App Running` is authoritative for `Running`, but does not specify the ordering rule for same-second events across files.
 
-#### I5 — `KORRI_LIBRARY_ROOT` hard-cut breaks three independent call sites simultaneously
+**Why it matters:** If `gameprocess_log` fires first, the reducer transitions `Launching → Launching` (or `Launching → Running` via PID-add heuristic). Then `content_log` confirms `Running`. The snapshot is correct. But if the reducer checks "PID first → infer Running" before `content_log` confirms, it emits `Running` with `confidence: inferred` and then re-emits with `confidence: confirmed`. Consumers may see two rapid state changes.
 
-**What's missing:** The spec says "no legacy support for `/api/library/events`." By
-analogy, the env var rename also appears to be a hard cut. But `KORRI_LIBRARY_ROOT` is
-read in at least five independent places with no shared helper:
+**Default assumption:** Process all events within a time window before advancing state. The handoff doesn't address flush/batch semantics for same-second interleaving.
 
-| File | Usage |
-|------|-------|
-| `library-source-layer-live.ts` | `buildLibraryRootFromEnv()` |
-| `portal/api/library/events.ts` | `resolveLibraryRoot()` |
-| `portal/api/http/game-asset-bytes.ts` | direct `env.KORRI_LIBRARY_ROOT` |
-| `platform/library/game-assets/game-assets-service.ts` | direct `env.KORRI_LIBRARY_ROOT` |
-| `apps/desktop/nix/wrap.nix` | `export KORRI_LIBRARY_ROOT=...` |
-| `services/device/sessiond-electrobun.ts` | propagated to session env |
-| NixOS modules (korri-daemon.nix, korri-sessiond.nix) | emitted as `serverEnv` |
+#### I3 — Shader log signals fire at the same second as `App Running`, not before it
 
-A hard cut without a transitional period means all existing `.envrc` files, NixOS configs,
-and deployed kiosk images break on first update. The research doc explicitly recommends
-keeping `KORRI_LIBRARY_ROOT` as a fallback for one transition cycle, but the spec doesn't
-require it.
+The handoff says: *"shader cache setup → Preparing hint if active launch not running yet"*
 
-**Why it matters:** The Bandai/SM8550 image is a deployed device. A hard cut requires
-coordinating the NixOS module update, the TypeScript server update, and the image rebuild
-in a single atomic deployment. Any partial deploy leaves the device unreachable.
-
-**Default assumption:** During this migration slice, `buildConfigRootsFromEnv()` checks
-`KORRI_CONFIG_ROOTS` first, then falls back to `KORRI_LIBRARY_ROOT` (treated as a
-single-element list), with a deprecation log. Hard removal of `KORRI_LIBRARY_ROOT`
-support is a follow-up commit after the image is updated.
-
----
-
-#### I6 — XDG fallback: DATA vs. CONFIG path is unresolved
-
-**What's missing:** The research doc offers two conflicting options for the XDG fallback:
-
-> "Fallback: `korriConfigPath(env, "library")` (i.e. `~/.config/korri/library`) when both
-> `KORRI_CONFIG_ROOTS` and an explicit root env are absent. (Or retain `korriDataPath`
-> fallback; align with whatever XDG base matches the chosen store semantics.)"
-
-`korriDataPath(env, "library")` → `$XDG_DATA_HOME/korri/library` (existing behavior)  
-`korriConfigPath(env, "library")` → `$XDG_CONFIG_HOME/korri/library` (new proposal)
-
-These resolve to **different directories** on a typical system. If the fallback switches
-from DATA to CONFIG, existing users' libraries at `~/.local/share/korri/library` become
-invisible on upgrade until they move the directory.
-
-**Why it matters:** Unintended data migration on upgrade. This must be decided before
-implementation to avoid baking the wrong path into test fixtures, Nix module defaults, and
-docs.
-
----
-
-#### I7 — `withTempProseqlLibrary` seeding strategy breaks under `documentGraph`
-
-**What's missing:** The test helper seeds data via `openKorriLibraryDb` → `db.users.upsert()`,
-`db.apps.upsert()`, `db.systems.upsert()`, etc. These are ProseQL write operations. If
-`openKorriLibraryDb` switches to a `documentGraph` source (read-only), all 10+ tests using
-this helper fail immediately with `LegacyCollectionRemovedError` or the documentGraph
-equivalent.
-
-**Required action (not optional):** A new `withTempConfigGraph` helper must write YAML
-files directly to temp directories (bypassing the db API for seeding), then open the db
-in read-only mode. The seeding API becomes:
-
-```ts
-// New seeding strategy: write YAML files, not ProseQL upserts
-async function withTempConfigGraph(roots: TempRootSpec[]): Promise<TempConfigGraph>
-
-type TempRootSpec = {
-  yaml: string          // raw YAML content to write
-  filename?: string     // default: "library.yaml"
-}
+But in the Bandai fixtures:
+```
+# shader_log
+[14:39:02] Setting MESA_GLSL_CACHE_DIR=…/shadercache/584400   ← Sonic Mania
+# content_log
+[14:39:02] AppID 584400 state changed : Fully Installed,App Running,
 ```
 
-This is a hard prerequisite for any test coverage of the multi-root behavior.
+Both fire at 14:39:02. The shader cache setup is **concurrent with** `App Running`, not a pre-cursor to it. Using the shader `MESA_GLSL_CACHE_DIR` line as a `Preparing` hint will produce a momentary flicker from `Launching → Preparing → Running` rather than the clean `Launching → Running`.
 
----
+Additionally, `shader_log` emits `AppID 360740 exited.` at 14:38:14 — which is the **previous** Downwell session terminating, 3 minutes before the new launch. If the reducer uses `AppID <id> exited.` as a "Stopped" signal for the active window, it would erroneously mark a non-existent session as Stopped.
 
-#### I8 — Debounce semantics across multiple roots are unspecified
+#### I4 — `ExecCommandLine` is the best launch window anchor, but it fires ~21 seconds before `App Running` for Downwell
 
-**What's missing:** The current SSE handler uses a single `debounce` timeout reset on any
-YAML file change. With multiple roots and separate watchers, the spec doesn't say whether:
+```
+[14:41:06] ExecCommandLine: "… -applaunch 360740"    ← launch window opens
+[14:41:27] AppID 360740 state changed : Fully Installed,App Running,
+```
 
-- Each root has its own independent debounce, or
-- All roots share a single debounce window (coalescing simultaneous multi-root writes).
+21 seconds of preparation. The Stuck threshold must be set well above 21 seconds or Downwell will falsely enter Stuck state on every normal launch. The handoff says "no progress for a threshold" but doesn't specify the value or whether it's configurable.
 
-A Nix deployment that atomically updates both the platform defaults root and the user root
-(e.g., via `nixos-rebuild switch`) will fire watchers on both roots nearly simultaneously.
-Independent debounces → two `config.changed` events; shared debounce → one. The React
-bridge triggers a library refresh on each event, so two events means two redundant
-re-fetches from the client.
+**Stakes:** Set too low → false Stuck on install-script-heavy launches. Set too high → real hangs are invisible for too long.
 
-**Default assumption:** A single shared debounce across all roots. This matches the current
-behavior (one debounce for all files within the one root) and avoids redundant refreshes.
+**Default assumption:** 60 seconds is a reasonable starting point based on the fixtures (21s is the longest observed preparation). Must be configurable.
+
+#### I5 — `ExecCommandLine` anchor is unreliable when the tailer starts mid-launch or after a korrid restart
+
+The tailer starts at EOF. If a game was already launching when korrid starts (or restarts), `ExecCommandLine` has already been written. The observer will miss the launch window anchor.
+
+The handoff lists three possible launch window anchors:
+1. Korri requests launch
+2. `ExecCommandLine … -applaunch <appid>` in console_log
+3. First `GameAction [AppID] LaunchApp` in console_log
+
+If the tailer starts after all three, `App Running` alone is the first signal seen. The observer would see `App Running` without any prior `Launching` phase, which is valid data but means the `Preparing → Launching → Running` progression is lost.
+
+**Gap:** No recovery path is specified. Should a cold-start observer check running processes via `/proc/*/cmdline` (mentioned in brief but not in handoff) to bootstrap state?
+
+#### I6 — ActionID is a monotonically increasing per-Steam-client counter, not stable across Korri restarts
+
+Bandai fixtures: Sonic Mania = ActionID 2, Caveblazers = ActionID 3, Downwell second launch = ActionID 4. After a Steam restart, ActionID resets. After a Korri restart with Steam already running, the next ActionID continues wherever Steam left off.
+
+The reducer snapshot uses `appId` as the correlation key. But if Steam launches AppID 360740 twice in a row (rapid re-launch), the second launch gets a new ActionID. The reducer's `evidence[]` would accumulate events from both ActionIDs under the same `appId` key unless a launch window boundary (or ActionID change) is detected.
+
+**Gap:** The plan does not specify what triggers a launch window close beyond "all PIDs removed + app state not running." If the game crashes and is immediately relaunched by Steam, does the observer correctly reset the window?
+
+#### I7 — `console_log.txt` is significantly noisier than the handoff implies; raw noise lines must not contaminate bounded evidence
+
+The real `console_log.txt` during a single launch (Sonic Mania) contains:
+- ~30 `Binding "CHANGE_PRESET" referenced invalid set #2/#3` warnings
+- `Controller slots reset`, `Created virtual controller`, `Destroyed virtual controller`
+- `Warning: failed to set thread priority`
+- `Loaded Config for Local Selection Path for App ID 584400, Controller…`
+- `ThreadGetProcessExitCode: no such process <pid>` (×8 on stop)
+- A NUL-delimited raw exec line: `[timestamp] /bin/sh\0-c\0/run/current-system/sw/bin/bash…`
+
+The handoff's `evidence: readonly SteamObservationEvent[]` in the snapshot does not specify a maximum cardinality. If `evidence` accumulates all `raw-log-line` noise from `console_log`, a 30-second game session generates hundreds of noise entries. The "bounded recent evidence" mentioned in the tailer requirements has no specified limit.
+
+**Stakes:** Memory growth; UI payload bloat if evidence is serialized in `app.steam.status` responses.
+
+#### I8 — `SynchronizingCloud` task is present in two games but absent from the handoff's Preparing task list
+
+Sonic Mania console_log:
+```
+GameAction [AppID 584400, ActionID 2] : LaunchApp changed task to SynchronizingCloud with ""
+```
+
+Caveblazers console_log:
+```
+GameAction [AppID 452060, ActionID 3] : LaunchApp changed task to SynchronizingCloud with ""
+```
+
+The handoff's preparation task list (`CheckShaderDepotManifest`, `ProcessingInstallScript`, `SynchronizingStats`, `ShowInterstitials`, `SynchronizingControllerConfig`, `SiteLicenseSeatCheckout`, `DelayLaunch`) omits `SynchronizingCloud` and `RunningInstallScript`. Both are present in the Bandai fixtures. A parser written to the handoff's list will emit these as `raw-log-line` rather than `Preparing` state signals.
+
+#### I9 — `app.steam.status` integration with existing `app.server.status` is unspecified
+
+The codebase already has a fully defined `app.server.status` RPC tag handled by `status.rpc-handler.ts` and consumed by `platform-bridge.ts`, `korri-control-rpc.ts`, and `remote-stream-client.ts`. Multiple consumers poll it for foreground session state.
+
+The handoff proposes a new `app.steam.status` tag but does not specify:
+- Which RPC group it belongs to (the server group already in `rpc-server.ts`?)
+- Whether it's a new first-class tag or a sub-field added to the existing `app.server.status` response
+- How it's registered, typed via Effect Schema, and version-gated for clients that don't know about it
+
+**Stakes:** If `app.steam.status` is a new separate tag, consumers must be updated. If it's a field added to `app.server.status`, the schema change may break existing consumers that validate the response shape. The handoff leaves this as "status/RPC surface" without anchoring it to the existing pattern.
+
+#### I10 — The NUL-delimited exec line in `console_log.txt` embeds `\0` characters as literal text
+
+Every game launch emits this in `console_log.txt`:
+```
+[timestamp] /bin/sh\0-c\0/run/current-system/sw/bin/bash /var/lib/korri/bin/korri-steam-gamescope-launch --appid 584400 …
+```
+
+The `\0` sequences are encoded as the two-character string `\0` in the log file (the log escapes the actual NUL). This line is multi-sentence — it contains the entire launch command. If the parser tries to extract an AppID or a task name from it, it needs to know this line exists and has a different structure. If the parser matches it by line format, it will not match any current regex and should fall through as raw.
+
+**Gap:** This line is not mentioned in the handoff at all. If the parser throws on unrecognized lines instead of gracefully returning `raw-log-line`, this line will crash the parser for every launch.
 
 ---
 
 ### Minor
 
-#### M1 — `KORRI_LIBRARY_EVENTS_DEBOUNCE_MS` name leaks library terminology into config model
+#### M1 — `Game process updated` in `console_log.txt` fires for the same ProcID twice for Sonic Mania
 
-The debounce env var name would either need renaming to `KORRI_CONFIG_EVENTS_DEBOUNCE_MS`
-or the old name must be documented as a deliberate alias. Neither the research doc nor the
-spec addresses this. Silently keeping the old name is fine for a transition period but
-should be called out as a known carryover, not an oversight.
+```
+[14:39:22] Game process updated : AppID 584400 "…", ProcID 197135, IP 0.0.0.0:0
+[14:39:22] Game process updated : AppID 584400 "…", ProcID 197135, IP 0.0.0.0:0  ← duplicate
+```
 
----
+A de-duplication check is needed if `Game process updated` drives any state transition or populates `trackedPids`.
 
-#### M2 — `config.changed` payload exposes absolute server paths to SSE clients
+#### M2 — Tailer outer timestamp vs. Steam inner log timestamp differ by up to 1 second
 
-The proposed shape `config.changed { root, path }` includes the absolute filesystem path
-of a config root as `root`. The current `library.changed` only includes the relative `path`
-within the root. Absolute paths expose server directory layout to any SSE subscriber
-(including remote federation peers). The React bridge never uses the `root` field — it
-only calls `refreshLibraryItems()` unconditionally. If the payload is advisory only, using
-basenames or root indices (`{ rootIndex: 0, path: "library.yaml" }`) is less leaky.
+The `*.tail` fixture files show that the tailer adds a wall-clock prefix:
+```
+2026-06-14T14:38:42-04:00 [console_log.txt] [2026-06-14 14:38:41] GameAction …
+```
 
----
+Outer: `14:38:42`, inner: `14:38:41`. When correlating events across `content_log`, `gameprocess_log`, and `console_log` using timestamps, the 1-second skew between tailer-read-time and Steam-log-time means events that Steam considers same-second may appear as different seconds in the tailer output. 
 
-#### M3 — `korri-sessiond-module-check.nix` hardcodes `daemon.library.root` stub
+The `observedAt` field in `SteamObservationEvent` should be defined to use the **inner Steam timestamp** for correlation, with the tailer's wall-clock time available only as metadata.
 
-`tools/testing/nix/korri-sessiond-module-check.nix:22` declares a stub option
-`daemon.library.root` to satisfy the sessiond module's dependency on the daemon module
-shape. After the migration adds `daemon.library.roots`, this stub will need an analogous
-entry or the eval check will fail at the NixOS option type boundary.
+#### M3 — `shader_log.txt` post-session flush is lengthy and may persist for seconds after `Stopped`
 
----
+After each game stops, `shader_log.txt` emits many lines about shader cache processing, FOZ cache crawling, and upload (varying from ~5 to ~25 lines depending on game). These arrive in the same second as `Stopped`. If `evidence` accumulates these, the "last signal at" timestamp stays current while the game is already stopped, which could make the Stuck detector fire incorrectly for a brief window after stop.
 
-#### M4 — Desktop wrapper silently produces empty library if `KORRI_CONFIG_ROOTS` is unset
+#### M4 — The `sequence` field in `SteamObservationEvent` is not specified
 
-`product/apps/desktop/nix/wrap.nix` currently sets `KORRI_LIBRARY_ROOT` explicitly. After
-migration, if the wrapper is not updated to set `KORRI_CONFIG_ROOTS`, and if the
-`KORRI_LIBRARY_ROOT` fallback is removed, the desktop app starts with zero config roots
-(empty baseline is valid per spec) and shows an empty library with no error. This is
-indistinguishable from "library not seeded yet" and will be confusing for desktop users who
-already have YAML files at the old path.
+The proposed event shape includes `sequence: number` but there is no specification for how it is assigned. Options include:
+- Global monotonically increasing counter (reset on korrid restart)
+- Per-file line counter
+- Wall-clock ordered sequence across all files
+
+Without a defined sequencing rule, the reducer cannot deterministically order same-timestamp events across files for playback or diagnostics.
+
+#### M5 — `notes.md` in the fixture directory is empty
+
+`docs/research/steam-observability/bandai-2026-06-14/notes.md` contains only blank table cells. The handoff says "fill the README summary" as Unit 1, but the `notes.md` has the same empty-table problem. If a future implementer reads the spike directory without the handoff, they will find no synthesized findings.
+
+#### M6 — Proton log and Steam Linux Runtime log fixtures do not exist
+
+The backlog acceptance criterion includes: *"Optionally detect Steam Linux Runtime / pressure-vessel logs … and attach discovered `slr-app<appid>-*.log` paths."* The Bandai fixture directory has no `slr-app*` or `steam-<appid>.log` samples. The parser and tailer for these sources have no evidence base for first-slice implementation.
+
+**Recommendation:** Explicitly defer these to a future slice; do not include them in Unit 2–4 acceptance criteria without first capturing fixtures.
 
 ---
 
 ## Questions
 
-**Q1 — What happens when korrid's initial config graph fails validation on startup?**
+**Q1 (Critical — blocks parser implementation):**  
+Should the `console_log.txt` parser handle `Game process added / Game process updated / Game process removed` as explicit signals (separate from `gameprocess_log.txt` equivalents), or should `console_log.txt` parsing be limited to `GameAction / ExecCommandLine / Running install script` lines and leave all PID lifecycle to `gameprocess_log.txt`?
 
-Stakes: Undefined behavior — some implementors will crash-loop (causing systemd restarts
-to hide the error from the UI), others will serve empty config (causing the portal to show
-an empty library with no diagnostic). The SSE contract for the client differs in each case.
+*Stakes:* If both sources are parsed for PID lifecycle, the reducer double-counts PID events and the "Stopped" trigger races. If `console_log.txt` PID lines are skipped, the `Game process updated` transition (which tracks which PID represents the live game) is lost entirely.
 
-Default assumption: Serve empty snapshot; emit `config.error { message, files? }` on SSE;
-do not crash. Log the error. Accept the empty baseline as the last-known-good until a
-valid config is written.
+*Default assumption:* Parse `console_log.txt` PID lines only for `Game process added` (to get the initial ProcID with command) and `Game process removed` (to cross-confirm stop, without exit code). Let `gameprocess_log.txt` own the full PID lifecycle. Emit both as distinct signals with different `signal` values so the reducer can weight them correctly.
 
 ---
 
-**Q2 — Does a successful config reload emit `config.ready` (again) or `config.changed`?**
+**Q2 (Critical — blocks reducer design):**  
+What is the Stuck detection threshold in seconds, and is it configurable via the service interface?
 
-Stakes: The React bridge must listen to the correct event name, or config changes are
-invisible in the UI after the initial mount. The reconnect case (SSE disconnect/reconnect)
-also depends on this: `config.ready` on reconnect must trigger a library refresh or the
-UI is stale until the next file write.
+*Stakes:* Downwell's install-script preparation takes 21 seconds between `ExecCommandLine` and `App Running`. A threshold ≤20s would falsely mark every Downwell launch as Stuck. A threshold too high (e.g. 300s) makes real freezes invisible for 5 minutes.
 
-Default assumption: `config.ready { roots }` fires on startup AND after every successful
-reload. `config.changed { rootIndex, path }` fires per file change event (whether or not
-the reload produces a valid new snapshot). React bridge listens to both: `config.ready` →
-refresh, `config.changed` → refresh. Stale-after-reconnect is handled by `config.ready`.
+*Default assumption:* 60 seconds, configurable. Reset the clock on every recognized signal (task change, PID add, app state change). Stuck fires only if no signal arrives within the threshold after the launch window opened.
 
 ---
 
-**Q3 — What write-db strategy do import tools and tests use during this migration?**
+**Q3 (Critical — blocks Unit 4 reducer):**  
+When the tailer starts (or restarts) while a game is already running, and the first signal seen is PID removals + `Stopped` without a prior `App Running`, what should the observer report?
 
-Stakes: If `openKorriLibraryDb` changes to `documentGraph`, every seeding call in
-`withTempProseqlLibrary` and every import tool call breaks. This is not a deferred
-concern — it blocks the migration's own test coverage.
+*Stakes:* If the observer reports `Stopped` from a cold start, it transitions `undefined → Stopped` with no prior `Running`. Is that a valid terminal state? Does it trigger any sessiond or UI behavior that expects a preceding `Running` transition?
 
-Default assumption: Keep a separate `openKorriWritableDb({ root })` function using the
-existing `documents` source for write-path callers (importers, test helpers). The runtime
-read path uses the new `openKorriConfigGraph({ roots })` function with `documentGraph`.
-Both coexist until the write-target parked item lands.
+*Default assumption:* Emit `Stopped` with `confidence: inferred` (no prior `Running` in this session) and include the raw stop evidence. Do not infer that a game had been running.
 
 ---
 
-**Q4 — Should `KORRI_CONFIG_ROOTS=""` (explicitly set to empty) suppress the XDG fallback?**
+**Q4 (Critical — blocks Unit 5 RPC surface):**  
+Should `app.steam.status` be a new independent RPC tag registered alongside the existing server group, or a new field (`steam?: SteamObservationSnapshot`) added to the existing `app.server.status` response?
 
-Stakes: Whether a user who clears the variable accidentally loses their library (empty
-baseline) or gets a safe XDG fallback (library still visible). The two behaviors are
-only distinguishable by checking for `undefined` vs. `""` — easy to get wrong.
+*Stakes:* A separate tag requires all clients to learn a new RPC endpoint, adds schema registration, and separates polling. A new optional field on `app.server.status` reaches existing pollers without changes, but adds payload to a high-frequency status response and may break clients with strict schema validation.
 
-Default assumption: `KORRI_CONFIG_ROOTS` set to any value (including empty string) →
-use parsed roots (possibly empty). `KORRI_CONFIG_ROOTS` absent (`undefined`) → apply XDG
-fallback. Document this distinction explicitly in the new `parseConfigRootsEnv` helper.
+*Default assumption:* Add as an optional `steam?` field in `app.server.status` for the first slice. Promotes to its own tag only if polling frequency or payload size becomes a problem.
 
 ---
 
-**Q5 — Which XDG base does the single-root fallback use: DATA or CONFIG?**
+**Q5 (Important — blocks parser tests):**  
+Should the parser-fixtures be split by log source before Unit 2 begins, or should the parser tests load from the existing mixed-source `parser-fixtures/downwell-360740.txt` files?
 
-Stakes: Changing from `$XDG_DATA_HOME/korri/library` to `$XDG_CONFIG_HOME/korri/library`
-breaks existing desktop users who have YAML files at the old path. This must be decided
-before implementation to avoid accidental silent data loss on upgrade.
+*Stakes:* Mixed-source fixtures test a format that doesn't exist in production (a single stream of all log types). Per-source fixtures correctly test each parser against only the lines it will actually receive.
 
-Default assumption: Retain `korriDataPath(env, "library")` to preserve backwards
-compatibility. Document that future XDG alignment (if desired) is a separate migration with
-an explicit directory move step.
+*Default assumption:* Split by source as part of Unit 1 before writing any Unit 2 parsers.
 
 ---
 
-**Q6 — Is the platform defaults root `optional: false` or `optional: true`?**
+**Q6 (Important — blocks reducer correctness):**  
+What is the authoritative ordering rule when `content_log` `App Running` and `gameprocess_log` first PID add arrive in the same logged second across different files?
 
-Stakes: `optional: true` silently ignores a misconfigured Nix store path (deployment bug
-looks like a factory reset). `optional: false` produces a hard error when the platform
-defaults root is missing, which is the correct signal for a deployment bug.
+*Stakes:* Without ordering, the reducer is non-deterministic when replaying fixtures, and the `sequence` field in events has no defined meaning across files.
 
-Default assumption: `optional: false` for Nix-store roots (platform defaults). Accept this
-as a configuration contract: if the platform path doesn't exist, korrid won't start until
-the image is fixed.
+*Default assumption:* Use the Steam-embedded log timestamp (`[YYYY-MM-DD HH:MM:SS]`) as the primary sort key. For same-timestamp events across files, process in fixed source priority order: `content_log` → `gameprocess_log` → `console_log` → `shader_log`. Document this as the reducer's tie-breaking rule.
 
 ---
 
-**Q7 — Should `KORRI_LIBRARY_ROOT` remain a fallback during this migration, or hard-cut?**
+**Q7 (Important — blocks Stuck implementation):**  
+Should `LaunchApp waiting for user response to CreatingProcess` with no subsequent `continues` be treated as a distinct Stuck signal, or should it fall through to the general silence-based Stuck detection?
 
-Stakes: A hard cut requires atomic coordination across the NixOS image, korrid binary, and
-the desktop wrapper. Any partial deploy (binary updated, image not yet rebuilt) leaves
-deployed Bandai kiosks with no config visible, no errors in familiar log locations, and no
-user-visible diagnostic.
+*Stakes:* `CreatingProcess` is the last task before the game process spawns. A hang here (OS-level fork failure, resource exhaustion) is meaningfully different from a shader cache hang. If the parser emits it as a recognized `steam-launch-task` signal, the Stuck detector sees activity until the hang starts. If it's emitted as `raw-log-line`, the detector sees silence from the last task change.
 
-Default assumption: `KORRI_LIBRARY_ROOT` is accepted as a single-entry fallback (with a
-logged deprecation warning) when `KORRI_CONFIG_ROOTS` is absent. Hard removal is a
-follow-up after the image is verified.
+*Default assumption:* Parse `LaunchApp waiting for user response` as a recognized signal (`steam-launch-task` or a new `steam-launch-task-waiting` signal type). This keeps the Stuck clock alive during the wait phase and produces a more specific Stuck message ("waiting for CreatingProcess" vs "no progress since CheckShaderDepotManifest").
 
 ---
 
-**Q8 — What Effect construct manages the persistent ProseQL db scope?**
+**Q8 (Important — affects memory and API payload):**  
+What is the maximum cardinality of `evidence[]` in the snapshot, and which event types are eligible for inclusion?
 
-Stakes: Wrong scope strategy either leaks the db handle (never released on shutdown) or
-releases it prematurely (watchers die after first RPC call, silent no-op config watch).
+*Stakes:* `console_log.txt` emits 30+ noise lines per launch (controller warnings, thread priority failures). Keeping all of them in `evidence[]` inflates the snapshot with zero-diagnostic-value data.
 
-Default assumption: `Layer.scoped(ConfigGraphService, makeConfigGraphEffect)` where
-`makeConfigGraphEffect` opens the db with `Effect.acquireRelease` — the ProseQL handle
-lives as long as the Layer, and the Layer is provided once at server startup.
+*Default assumption:* Keep at most 50 events per snapshot, biased toward lifecycle signals. Exclude `raw-log-line` events with known noise patterns (e.g., `Binding "CHANGE_PRESET"`, `ThreadGetProcessExitCode`) from `evidence[]`. They can increment a `noiseLinesSkipped` counter instead.
 
 ---
 
-**Q9 — Does a single watcher error terminate the entire SSE stream or only that root?**
+**Q9 (Minor — affects test design):**  
+Should `Remove <appId> from running list` in `gameprocess_log.txt` be promoted to a first-class signal (`steam-running-list-removed`), or treated as raw evidence?
 
-Stakes: A flaky NFS mount, temporarily missing SD card root, or permission error on one
-root should not kill the whole portal's live-update path. But the current
-`startController.error(error)` pattern terminates the stream.
+*Stakes:* This is the cleanest terminal signal from `gameprocess_log`. If treated as raw, the reducer must infer stop from "all PIDs removed." If it's first-class, the reducer has an explicit stop confirmation even if some PID removal lines are missed.
 
-Default assumption: Per-root watcher errors emit `config.error { root, error }` on SSE
-and stop watching that root, but the stream remains open for other roots. Re-watch on next
-server restart (or an explicit reconnect from the client).
+*Default assumption:* Promote to `steam-tracked-pid-list-removed` signal, confidence `confirmed`. It should be in the parser fixture split.
 
 ---
 
-**Q10 — What `ReadWritePaths` does the korrid systemd service need in the new model?**
+**Q10 (Minor — affects future generalization):**  
+Should the tailer watch the parent log directory (`/var/lib/korri/steam/logs`) and discover new files matching `korri-steam-gamescope-launch-*.log` automatically, or only watch a fixed named-file list?
 
-Stakes: `documentGraph` is read-only; the current `ReadWritePaths = [library.root, ...]`
-was needed for the `documents` outbox. If the write path is fully deferred, the service
-hardening can tighten (fewer writable paths = better security posture). But JSON sidecar
-files (`.korri-artifacts.json`, etc.) may still need a writable home.
+*Stakes:* AppID-specific wrapper logs appear only after a launch. The log directory already has 50+ files of varying relevance. A fixed list misses new AppID logs; a directory watch must filter by pattern.
 
-Default assumption: Remove `ReadWritePaths` for config roots. Add `ReadWritePaths` for
-wherever JSON sidecars are relocated (likely `launchArtifactsDir` or a dedicated sidecar
-dir). Verify in `korri-daemon-module-check.nix`.
+*Default assumption:* Use the fixed named-file list for the first slice. Add directory-pattern watching for `korri-steam-gamescope-launch-*.log` as a subsequent enhancement.
 
 ---
 
 ## Recommended Next Steps
 
-### Before any implementation begins
+These are ordered by the dependencies they unblock. Do not begin Unit 2 parsers without completing items 1 and 2.
 
-1. **Answer Q2 and Q3 together.** The event name contract (`config.ready` / `config.changed`)
-   and the write-db strategy (`openKorriConfigGraph` vs. `openKorriWritableDb`) are the
-   two decisions that block all other implementation. Both can be decided in a short
-   document or ADR without touching any code.
+**Before coding:**
 
-2. **Decide Q5 (XDG base) immediately.** This is a one-line choice that affects the Nix
-   module default, the desktop wrapper, and every test that exercises the XDG fallback path.
-   A wrong choice here is a silent data loss bug on upgrade.
+1. **Answer Q4 (RPC surface)** before writing any type signatures. If `app.steam.status` is a separate tag, the Effect Schema must be registered in `rpc-server.ts` from the start. If it's a field on `app.server.status`, the schema and handler change must coordinate with existing consumers.
 
-### Before the ProseQL db config change (`library-db.ts`)
+2. **Split the mixed parser-fixtures into per-source files** (Unit 1). The current `parser-fixtures/downwell-360740.txt` mixes three log sources. Run splits now:
+   - `parser-fixtures/content-log-downwell.txt` (state changed lines)
+   - `parser-fixtures/gameprocess-log-downwell.txt` (adding PID / no longer tracking / Remove from running list)
+   - `parser-fixtures/console-log-downwell.txt` (GameAction, ExecCommandLine, Game process added/updated/removed)
+   Similarly for Sonic Mania and Caveblazers.
 
-3. **Add a new `makeKorriConfigDbConfig(roots)` factory** alongside (not replacing)
-   `makeKorriLibraryDbConfig`. Keep the old function for write-path callers (import tools,
-   `withTempProseqlLibrary`). This eliminates the C3 blocker without touching write tools.
-   Verify with `just typecheck` + `just test-unit` before merging.
+3. **Answer Q1 (console_log PID signal scope)** before writing the `console_log` parser. This determines whether the parser must handle `Game process added/updated/removed` or skip them.
 
-4. **Define the `host:` transform application point** (C4). Update `korriReadableYamlCodec`
-   or add a `documentGraph`-specific transform, but not both. Add a unit test: a YAML file
-   with `host: { moonlight: {...} }` round-trips through the codec exactly once.
+4. **Answer Q2 (Stuck threshold)** before Unit 4. The reducer cannot be complete without a defined timeout.
 
-### Before the SSE handler replacement (`/api/config/events`)
+**During Unit 2 (parsers):**
 
-5. **Write the state machine for KORRID last-known-good** as a TypeScript discriminated
-   union before implementing it. Include all transitions: `Initializing`, `Active`,
-   `Reloading`, `StartupFailed`, `ActiveWithError`. Each state has a corresponding SSE
-   event shape. Test the ADT and its transitions in isolation before wiring to the db and
-   HTTP.
+5. Add these patterns to the `console_log` parser in addition to the handoff's `launchTask` and `installScript` regexes:
+   - `LaunchApp waiting for user response to <context>` — new signal `steam-launch-task-waiting`
+   - `LaunchApp continues with user response "<context>"` — new signal `steam-launch-task-continued`
+   - `Game process added : AppID <id> "…", ProcID <p>, IP <ip>` — if Q1 answer includes it
+   - `Game process updated : AppID <id> "…", ProcID <p>, IP <ip>` — if Q1 answer includes it
+   - `Game process removed: AppID <id> "…", ProcID <p>` — if Q1 answer includes it
+   - NUL-delimited exec line (`/bin/sh\0-c\0…`) — fall through as raw without throw
 
-6. **Create `withTempConfigGraph`** in `tools/testing/library/` using direct YAML writes
-   (not ProseQL upserts). Port at least `library-db.test.ts` to confirm the multi-root
-   merge behavior before the runtime path depends on it.
+6. Add these to the `gameprocess_log` parser:
+   - `Remove <appId> from running list` → `steam-tracked-pid-list-removed` (addresses Q9)
+   - `SSGL: …` lines → fall through as raw without throw
+   - `SSGL: change [<id>] LCT <old>-><new>` → fall through as raw without throw
 
-### Before the NixOS module changes
+7. Extend the task classification list to include `RunningInstallScript` and `SynchronizingCloud` as `Preparing` signals (addresses C4, I8).
 
-7. **Add `library.roots` as a `listOf str` option alongside `library.root`** (deprecate,
-   not remove). Emit `KORRI_CONFIG_ROOTS` from the roots list. Keep `KORRI_LIBRARY_ROOT`
-   as a backwards-compatible emission from `lib.elemAt cfg.library.roots 0` until the
-   transition is complete. Validate with `korri-daemon-module-check.nix`.
+**During Unit 4 (reducer):**
 
-8. **Move platform defaults to a dedicated first root** (a Nix store path directory, not
-   an installed file). Mark it `optional: false` in the config, `optional: true` for all
-   user roots. Update `korri-daemon-module-check.nix` and `korri-image-outputs-check.nix`
-   to assert the new root structure.
+8. Define the cross-source ordering rule for same-second events (addresses Q6). Codify it as a named constant or policy in the reducer module.
 
-### Before merging
+9. Define what `Stopping` means given sub-second observability (addresses I1). If it maps to "PID burst started but `App Running` not yet cleared," it should be emitted only if the reducer processes `gameprocess_log` PID removals before processing `content_log` state change in the same second. Document this explicitly.
 
-9. **Update `api-forwarder.test.ts`** to replace `/api/library/events` with
-   `/api/config/events` and `"library.ready"` with `"config.ready"`. This is the only
-   forwarder change needed (C4 is in the forwarder test, not the forwarder code).
+10. Define the `evidence[]` cardinality cap and filtering policy before writing the snapshot reducer (addresses Q8/I7).
 
-10. **Update `HomeRuntimeLayersRoot.test.tsx`** to assert the new `EventSource` URL
-    (`/api/config/events`), new event names, and the reconnect-refresh behavior. The
-    `FakeEventSource` harness already supports arbitrary event names; update the assertions.
+**During Unit 5 (RPC surface):**
 
-11. **Run the Nix-level SM8550 image eval checks** (`just sm8550-kiosk-toplevel-check`) and
-    the updated `korri-daemon-module-check.nix` before merging the NixOS module changes.
-    Add assertions for `KORRI_CONFIG_ROOTS` in the env and for the `ReadWritePaths`
-    reduction. Per the architectural-posture learning, put SM8550-specific root defaults
-    in `nix/images/headless.nix`, not in the module default.
+11. If `app.steam.status` is its own tag, add a test that verifies the handler returns a well-formed response when no game is running (empty/idle state) and when a game is running (active snapshot). Mirror the pattern in `status.rpc-handler.test.ts` for consistency with existing test coverage.
+
+12. Explicitly document that `shader_log` `MESA_GLSL_CACHE_DIR` fires simultaneously with `App Running`, not before it (corrects the handoff's "Preparing hint" framing). Update the reducer projection rules comment.
+
+---
+
+## Summary Table
+
+| # | Severity | Description | Blocks |
+|---|---|---|---|
+| C1 | Critical | `console_log` has `Game process added/updated/removed` — different format from `gameprocess_log`; plan treats them as same | Unit 2 parser + Unit 4 reducer |
+| C2 | Critical | `LaunchApp waiting/continues` lines unhandled; plausible Stuck vector at `CreatingProcess` | Unit 2 parser + Stuck detection |
+| C3 | Critical | `Remove <appId> from running list` in `gameprocess_log` is the cleanest stop signal but absent from handoff | Unit 4 reducer |
+| C4 | Critical | `RunningInstallScript` task present in Caveblazers fixtures but not in handoff's task list | Unit 2 parser correctness |
+| C5 | Critical | Mixed-source `parser-fixtures/*.txt` cannot correctly drive per-source parser unit tests | Unit 2 tests |
+| I1 | Important | `Stopping` state is sub-second; no observably distinct window in fixtures | Reducer state machine |
+| I2 | Important | `App Running` and first PID add are same-second across files; ordering undefined | Reducer cross-source ordering |
+| I3 | Important | `MESA_GLSL_CACHE_DIR` fires at same time as `App Running`, not before; handoff projection is wrong | Reducer projection rules |
+| I4 | Important | Stuck threshold unspecified; Downwell needs >21s | Unit 4 acceptance criteria |
+| I5 | Important | `ExecCommandLine` anchor missed if tailer starts mid-launch (Korri restart scenario) | Cold-start recovery |
+| I6 | Important | Same-AppID rapid relaunch reuses appId key without ActionID-boundary reset | Reducer window management |
+| I7 | Important | `console_log` noise volume not bounded in `evidence[]` | API payload size |
+| I8 | Important | `SynchronizingCloud` task missing from Preparing classification | Unit 2 parser |
+| I9 | Important | `app.steam.status` RPC surface not anchored to existing `rpc-server.ts` patterns | Unit 5 design |
+| I10 | Important | NUL-delimited exec line in `console_log` unmentioned; must not throw | Unit 2 parser robustness |
+| M1 | Minor | `Game process updated` emits duplicate ProcID for same PID in Sonic Mania | Dedup in reducer |
+| M2 | Minor | Tailer outer timestamp vs. Steam inner timestamp differ by 1s; `observedAt` source undefined | Correlation accuracy |
+| M3 | Minor | Shader flush lines after stop extend "last signal at" past actual stop | Stuck false-positive after stop |
+| M4 | Minor | `sequence` field assignment strategy not defined | Event ordering across files |
+| M5 | Minor | `notes.md` is empty; spike findings not synthesized | Future reference |
+| M6 | Minor | No Proton/SLR log fixtures captured; acceptance criteria include them | Should be deferred |

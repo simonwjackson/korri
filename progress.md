@@ -1,18 +1,16 @@
 # Progress
 
 ## Status
-Complete
+In Progress
 
 ## Tasks
-- [x] Initial searches launched
-- [x] Fetch Tailwind v4 docs on @theme / @theme inline
-- [x] Fetch shadcn/ui theming docs
-- [x] Fetch Style Dictionary / DTCG Tailwind v4 integration
-- [x] Compile brief → research-runtime-theming.md
+- [x] Research log viewer components
+- [x] Research state inspector components  
+- [x] Research real-time monitoring components
+- [ ] Compile findings document
 
 ## Files Changed
-- research-runtime-theming.md (created)
+- research-observability-components.md (creating)
 
 ## Notes
-Key findings documented. Critical caveat: @theme inline + calc(var()) is broken (issue #16396).
-Safe pattern: pre-compute calc() in :root, then reference with var() in @theme inline.
+Completed initial research pass. Rate limits hit, compiling findings from collected data and known component ecosystem.

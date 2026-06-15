@@ -1,11 +1,12 @@
-# Institutional Learnings Search Results
+# Institutional Learnings: Steam Launch Observability
 
-## Search Context
+## Institutional Learnings Search Results
 
-- **Feature/Task**: Korri config graph migration from library root to ProseQL documentGraph; KORRID config watching/events; Nix module runtime paths; rootless `/var/lib/korri` state; Bandai deployment.
-- **Keywords Used**: `proseql`, `documentGraph`, `library-root`, `config-graph`, `KORRID`, `config-watch`, `events`, `nixos-module`, `runtime-path`, `tmpfiles`, `rootless`, `var/lib/korri`, `storage/korri`, `serviceMode`, `rocknix`, `nix-on-rocks`, `deploy`, `bandai`, `cascade-policy`, `aarch64-bundle`
-- **Files Scanned**: 47 total files across 9 subdirectories
-- **Relevant Matches**: 6 files (strong or moderate relevance)
+### Search Context
+- **Feature/Task**: Build first-class Steam launch observability for Korri — a Steam-only parser / tailer / observer / status layer sourced from Bandai Steam log fixtures, preserving raw evidence and Steam facets (AppID, state transitions, Proton chain, readiness signals).
+- **Keywords Used**: steam, appid, launch, gamescope, sessiond, lifecycle, observer, observability, log, parse, tail, foreground, device, proton, wrapper, fixture, artifact, nix-ts boundary, runtime-error, sse, heartbeat
+- **Files Scanned**: 40 total files across all `docs/solutions/` subdirectories
+- **Relevant Matches**: 8 files (strong); 2 files (adjacent/moderate)
 
 ---
 
@@ -17,210 +18,231 @@
 
 ### Relevant Learnings
 
-#### 1. ProseQL library YAML should use canonical storage with key-derived IDs
-
-- **File**: `docs/solutions/best-practices/proseql-canonical-library-with-derived-yaml-ids-2026-05-06.md`
-- **Module**: `korri/shared/library/proseql` + `tools/importers/rocknix`
-- **Problem Type**: `best_practice`
-- **Severity**: medium
-- **Relevance**: This is the foundational decision for migrating the config graph to ProseQL `documentGraph`. It defines the canonical storage shape, the persistence payload vs. runtime contract split, the importer-only role of ROCKNIX, and the on-disk path convention (`/storage/korri/library`).
-
-**Key Insight**:
-ProseQL is the **single canonical runtime store**; external sources (ROCKNIX, etc.) are snapshot importers only and must never be on the live read path. The established flow is:
-
-```
-external source → importer → ProseQL YAML → LibrarySource → RPC/UI/Launcher
-```
-
-When migrating to `documentGraph`, carry this boundary forward:
-
-1. **Separate persistence payload schema from the runtime contract.** The `GamePayloadRecord` stored in YAML omits `id`; the repository layer hydrates `id` from the YAML object key via `{ kind: "derivedFromKey", field: "id" }` in `makeKorriLibraryDbConfig`. A `documentGraph` config equivalent should follow the same split — config payload on disk, full config record (with computed identity) in the runtime contract.
-
-2. **Importers fail fast when the target is not empty.** The ROCKNIX importer guards against partial-overwrite state corruption:
-   ```ts
-   if (existingGames.length > 0) throw new Error("reset target library before re-importing")
-   ```
-   Any migration path for config documents should adopt the same all-or-nothing posture rather than silently merging a partial import over live data.
-
-3. **ProseQL stays server-side.** Renderer/portal code touches config only through RPC and atoms — never imports ProseQL directly. This boundary must hold if `documentGraph` becomes the backing store for KORRID config.
-
-4. **`@proseql/node@0.12.0`** is the minimum version that supports `id: { kind: "derivedFromKey" }`. Earlier versions produce duplicated id fields in YAML.
-
-5. **Validated on Bandai (Thor/Sobo hardware).** The seam was proven live by re-importing ROCKNIX into `/storage/korri/library`, restarting the supervised session, and running `just check-odin-sessiond`. Use this as the template for validating the documentGraph migration on Bandai.
-
 ---
 
-#### 2. Boot-scoped NixOS control plane with session-scoped runner via shared private runtime dir
+#### 1. Steam `content_log.txt` is the canonical AppID launch/exit truth — not process tables
 
-- **File**: `docs/solutions/architecture-patterns/boot-scoped-control-plane-with-session-scoped-runner-2026-05-19.md`
-- **Module**: `nix/modules/korri-server`
-- **Problem Type**: `architecture_pattern`
-- **Severity**: medium
-- **Relevance**: Directly addresses Nix module runtime paths and rootless `/var/lib/korri` state. The pattern was developed because `%t` resolves differently under system vs. user managers, `%h` silently becomes `/root` in system mode, and non-root processes cannot create siblings of `/run/user`. These exact failure modes will recur when wiring KORRID config-watch paths in a NixOS module.
+- **File**: `docs/solutions/runtime-errors/steam-manual-launch-x86-eager-xwayland-dbus-readiness-2026-05-26.md`
+- **Module**: Korri manual Steam launcher and compositor (`tools/scripts/steam-manual-launch/`)
+- **Problem Type**: `runtime_error`
+- **Relevance**: The file documents what the team used as the *final acceptance bar* when building repeatable Steam launches — and it is directly the signal that a Steam observability parser should extract. `pgrep`-based readiness was proven wrong; Steam's own log is the ground truth.
+- **Key Insight**: Steam writes definitive AppID lifecycle events to `~/.local/share/Steam/logs/content_log.txt` in the form:
 
-**Key Insight**:
-
-Declare a single `serviceMode` option (`"user"` | `"system"`) and **derive every path from it**. Do not hardcode `/var/lib/korri` or `/run/korri` in host configs; let the module produce safe defaults per mode.
-
-```nix
-# serviceMode = "system" → /run/korri-game-stream  (absolute, tmpfiles-managed)
-# serviceMode = "user"   → %t/korri-game-stream    (%t safe only in user manager)
-runtimeDir = if isSystemMode then "/run/${runtimeDirName}" else "%t/${runtimeDirName}";
-```
-
-Critical rules for the rootless path:
-
-- **`ProtectHome = "read-only"` + `ProtectSystem = "strict"`** on the system unit. `/var/lib/korri` or a custom `StateDirectory` is the right home for durable state; `/run/<name>` for ephemeral runtime files. `RuntimeDirectoryPreserve = "yes"` keeps pending config state alive across restarts.
-- **`tmpfiles.settings`** must own boot-time directory creation for `/run/<name>` — a non-root `ExecStartPre` cannot `install -d` a top-level `/run/` sibling.
-- **Fail at `nix eval`, not at boot.** Add assertions for every combination that would silently corrupt paths:
-  ```nix
-  { assertion = !isSystemMode || !(hasPlaceholder runtimeDir);
-    message = ''runtimeDir uses %t or %h — invalid in system mode''; }
   ```
-- **`%h` is `/root` in system mode.** Derive `library.root` (and by extension any `configRoot`) from `config.users.users.${cfg.user}.home`, not from `%h`.
-- **The session runner needs the absolute path injected.** KORRID config-watch paths known to the system unit are unreachable via systemd metadata from a Sunshine/greetd/logind-spawned child. Pass them through explicit env vars (`KORRI_CONFIG_ROOT`, etc.) in the wrapper so the runtime and the Nix module agree on the same path.
+  AppID 2379780 state changed : Fully Installed,App Running,
+  AppID 2379780 state changed : Fully Installed,
+  ```
 
-Tests for this pattern run real `nix eval` against the module (not mocks): `tools/testing/nix/korri-server-module-eval.test.ts`. Add analogous eval tests for any KORRID config module options that derive filesystem paths.
+  The team validated four consecutive launch/exit cycles by tailing this file — it is the only signal that proved ground truth after pgrep, D-Bus, and process-tree inspection all proved insufficient. Two additional points:
+
+  - **`pgrep -x steam` is not a readiness signal.** It matches the Steam wrapper process before Steam's runtime-launcher service can service game launches. The real readiness gate is the D-Bus name `com.steampowered.PressureVessel.LaunchAlongsideSteam` being owned on the session bus (query via `gdbus call --session … org.freedesktop.DBus.NameHasOwner`).
+  - **Cleanup must target `gamescope-wl` and `gamescopereaper`, not just `gamescope`.** `pkill -x gamescope` misses the actual long-running worker processes; leftover processes from prior cycles contaminated later launch observations and made them misleadingly fail.
+
+- **Severity**: high
 
 ---
 
-#### 3. Architectural posture belongs in the image-level default, not the module-level default
+#### 2. Do not treat SSE / transport lifetime as launch lifetime — or a healthy game will be killed
 
-- **File**: `docs/solutions/architecture-patterns/architectural-posture-as-nix-image-default-2026-05-27.md`
-- **Module**: `nix/images` + `nix/modules`
+- **File**: `docs/solutions/runtime-errors/sessiond-sse-stream-killed-by-bun-idle-timeout-2026-05-27.md`
+- **Module**: `tools/device/sessiond` + `korri/shared/library/session-launcher`
+- **Problem Type**: `runtime_error`
+- **Relevance**: This is the most immediately dangerous failure mode for any new observability / log-tailer layer. If the observer interprets a closed log stream or a dropped SSE connection as a launch failure and responds by killing the supervised process, the user sees a healthy game die 15–24 seconds in with no error. This exact failure happened in production.
+- **Key Insight**: A supervisor (or observer) **must not infer the state of a supervised process from the liveness of a side-channel used to observe it.** The team's fix has three layers that a new observer must replicate:
+
+  1. **Server-side heartbeats**: emit SSE comment frames (`": hb\n\n"`) every ≤5 seconds so idle-accountants don't close the stream. Applies equally to a log-tailer's SSE/WebSocket or chunked transfer.
+  2. **Explicit `idleTimeout: 0`** on the Bun.serve instance that hosts the stream — safety net if a heartbeat is missed.
+  3. **Bounded reconnect loop on the consumer side**: treat stream-close as a transport event, not a domain event. Reconnect up to N times (default 5, 200ms apart) before escalating. Domain conclusions (game running / game exited) come only from domain messages (Steam state-change lines, sessiond lifecycle events), not from transport liveness.
+
+  The `si_pid` field in a `strace -e signal=SIGTERM` output was how the team identified the cascade — the signal originated from sessiond's own bun pid, not a driver crash. This is the debugging pattern if something similar happens again.
+
+- **Severity**: high
+
+---
+
+#### 3. Sessiond is the sole foreground lifecycle authority — any observability layer plugs in, not alongside
+
+- **File**: `docs/solutions/architecture-patterns/physical-host-foreground-lifecycle-truth-is-sessiond-2026-05-29.md`
+- **Module**: `korri/shared/stream` + `korri/products/app/api` + `tools/device/sessiond`
 - **Problem Type**: `architecture_pattern`
-- **Severity**: medium
-- **Relevance**: When the config graph migration introduces new Nix module options for KORRID config paths, watch mode, or documentGraph root, this pattern determines where to set the defaults that are correct for the Bandai/SM8550 image vs. what should be conservative at the bare module level.
+- **Relevance**: A Steam observability feature that tracks AppID lifecycle must not build a parallel foreground-session authority. The team closed the split-brain between `ForegroundSessionOwner` and sessiond explicitly; adding a new parallel source would re-open it.
+- **Key Insight**: The architectural rule is: **sessiond owns the truth about whether the host can launch, what is currently running, and whether the host is back to idle**. Everything else reads sessiond. Concrete rules for the observability feature:
 
-**Key Insight**:
+  - The observer reads sessiond's `/managed-launch/status` and `/managed-launch/events` — it does not maintain its own copy of "is the game running."
+  - `app.server.status` is the canonical *renderer-facing* proxy for sessiond state (polled at 1 Hz over `/api/rpc`). The renderer should not talk to sessiond directly.
+  - Launch rejections are discriminated by `_tag`: `Accepted | PreflightRejected | DaemonRejected | HostUnavailable | LaunchFailed`. `PreflightRejected` further carries `reason.source: 'owner-local' | 'sessiond'`. Do not collapse these into a single error string.
+  - **SEC-003**: sessiond's `failureReason` is redacted before it reaches the `app.server.status` wire (absolute paths replaced with `<path>`, clamped to 256 chars). The unredacted version lives in the sessiond-local journal. Build diagnostics against the journal, not the wire payload.
 
-The module default encodes "safest fallback for any consumer." The image default encodes "this is the deal when you build this image." Put the Bandai-correct defaults (`documentGraph.root`, `configWatchEnabled`, any path that assumes `/var/lib/korri`) at the **image layer** (`nix/images/headless.nix` or the SM8550 image), not at the module layer.
-
-```nix
-# Module keeps conservative defaults — no assumptions about /var/lib/korri
-services.korri.config.documentGraphRoot = lib.mkDefault null; # derive from user home
-
-# Image asserts the fleet-wide posture
-# nix/images/headless.nix (or korri-sm8550.nix):
-services.korri.config.documentGraphRoot = lib.mkDefault "/var/lib/korri/config";
-```
-
-The historical failure was Sobo coming up bound to `127.0.0.1` with federation disabled because the module defaults were still calibrated for a laptop. Any new KORRID option with a deployment-specific correct value carries the same risk. Fix it at the image layer; don't silently regress when a new device imports the module.
-
-Corresponding `nix check` assertions should live at the image-eval level:
-```nix
-(check "SM8550 image must have documentGraphRoot configured" (
-  sm8550Summary.korridConfigRoot != null
-))
-```
+- **Severity**: high
 
 ---
 
-#### 4. ROCKNIX nix-on-rocks deploys target the guest store; the host has no /nix
+#### 4. Sessiond operator map — managed-launch protocol, event sequences, role vocabulary
 
-- **File**: `docs/solutions/workflow-issues/rocknix-guest-only-nix-deploy-2026-05-27.md`
-- **Module**: `tools/scripts/deploy-sobo` + `nix-on-rocks`
-- **Problem Type**: `workflow_issue`
-- **Severity**: **high**
-- **Relevance**: The Bandai deployment uses nix-on-rocks with a ROCKNIX host (port 22) and a NixOS guest (port 2222). These two foot-guns cost real deploy time in the past and will recur if deploy scripts for the config graph migration are written without internalizing the two-store topology.
+- **File**: `docs/solutions/architecture-patterns/sessiond-operator-model-2026-05-29.md`
+- **Module**: `tools/device/sessiond` + `korri/shared/library` + `nix/modules` + `nix/images`
+- **Problem Type**: `architecture_pattern`
+- **Relevance**: The observability layer will consume sessiond's managed-launch protocol. This document is the consolidated operator map of its endpoints, event sequences, identity correlators, and role-specific idle vocabulary.
+- **Key Insight**: Critical details for the Steam observability implementation:
 
-**Key Insight**:
+  **Protocol endpoints:**
+  | Verb | Path | Purpose |
+  |---|---|---|
+  | `GET` | `/managed-launch/status` | Mode + capabilities + active-launch snapshot |
+  | `GET` | `/managed-launch/events` | SSE stream, filterable by `launchId` |
 
-Two hard rules with no exceptions:
+  **Expected foreground launch event sequence:**
+  ```
+  child-running → (game runs) → child-exited { exitCode, signal }
+    → restoring → home-ready | idle-ready
+  ```
 
-1. **Never `nix copy --to ssh-ng://root@${DEVICE_HOST}` (port 22, the host).** The ROCKNIX host has no usable `/nix/store`. The toplevel only needs to reach the guest via `nixos-rebuild --target-host root@sobo` (port 2222 / alias). The rocknix helpers (`rocknix-guest-generation-import`, `rocknix-guest-generation-switch`) `nsenter` into the guest namespace to read paths from the guest store.
+  **Identity correlator**: `launchId` appears on every event, on the status response, and on busy rejections (`preflightReason.currentSessionId`). Process identity (`processId`, `processGroupId`) is **daemon-private** — the observer correlates by `launchId`, not by PID.
 
-2. **Always `readlink -f` when resolving `/nix/var/nix/profiles/system`.** Bare `readlink` returns the relative `system-NNN-link` target, which breaks every subsequent `nix copy`/`nsenter`/`rocknix-guest-generation-*` step that expects an absolute store path.
+  **Role-specific idle vocabulary:**
+  - Kiosk role idle = `home`, terminal readiness event = `home-ready`
+  - Source-machine idle = `idle`, terminal readiness event = `idle-ready`
 
-Correct five-step sequence:
-```bash
-# 1. Build on builder, push closure into the GUEST store
-nixos-rebuild boot --flake .#korri-sm8550 --build-host ${BUILDER} --target-host root@bandai ...
+  **Failure stages** (`ForegroundSessionFailureStage`): `prepare | spawn | foreground | exit | teardown | readiness | restore | adapter` — use these exact values in status facets, not ad-hoc strings.
 
-# 2. Resolve absolute toplevel ON THE GUEST (-f is required)
-toplevel="$(ssh -F ssh_config bandai 'readlink -f /nix/var/nix/profiles/system')"
+  **Lifecycle vocabulary projection** lives at `korri/shared/library/sessiond-lifecycle-projections.ts` — the canonical place to update mappings from sessiond internal mode/phase to managed-launch status JSON and renderer snapshots. Extend here, not in per-feature switch tables.
 
-# 3. Host-side helpers nsenter into guest — never copy to host
-ssh root@${BANDAI_HOST_IP} bash -s "${toplevel}" <<'EOF'
-  rocknix-guest-generation-import --system "$1" --source config-graph-migration
-  rocknix-guest-generation-switch --to "$1" --no-restart
-EOF
-
-# 4. Warm-restart to activate
-ssh root@${BANDAI_HOST_IP} 'systemctl restart rocknix-guest.service'
-```
+- **Severity**: high
 
 ---
 
-#### 5. Shipping the KORRI API server to aarch64 via Bun single-file bundle
+#### 5. Steam AppID launch architecture on x86 — the `applaunch` path with Gamescope via `LaunchOptions`
 
-- **File**: `docs/solutions/best-practices/korri-api-on-aarch64-handheld-via-bun-bundle-2026-05-27.md`
-- **Module**: `api-server`
-- **Problem Type**: `best_practice`
-- **Severity**: medium
-- **Relevance**: If the ProseQL `documentGraph` migration changes the `@app/api/hono-app` import graph (adding new ProseQL collections, a config-watch pathway, or new KORRID services), the Bun single-file bundle for Bandai must be re-validated. This learning documents the exact bundler pitfalls that will resurface.
+- **File**: `docs/solutions/architecture-patterns/steam-applaunch-with-silent-steam-and-per-app-launchoptions-gamescope-wrap-aka-x86-2026-05-27.md`
+- **Module**: Korri Steam launch chain on x86 AKA (`tools/scripts/steam-manual-launch/`)
+- **Problem Type**: `architecture_pattern`
+- **Relevance**: Defines the actual process tree emitted by a Bandai/AKA Steam launch — exactly what a Steam log parser and process observer needs to understand. Also documents validated timing for each phase (Steam ready, `App Running`, game window visible), which sets expectations for observability thresholds and timeouts.
+- **Key Insight**: The verified runtime process tree after `steam -applaunch <appid>` with Gamescope in `LaunchOptions`:
 
-**Key Insight**:
+  ```
+  gamescope
+  └── steam-launch-wrapper
+      └── reaper SteamLaunch AppId=<appid>
+          └── _v2-entry-point --verb=waitforexitandrun
+              └── proton waitforexitandrun <GAME.exe>
+  ```
 
-Three mandatory `--external` flags for any bundle that includes `@proseql/core`:
+  The Sway tree node at this point is `class=steam_app_<appid>`. Steam itself has **no visible window** (`swaymsg -t get_tree | grep -i steam` returns nothing outside `steam_app_<id>` class).
 
-| Flag | Reason |
-|---|---|
-| `--external jsonc-parser` | `@proseql/core` has a default-import on a package whose ESM build has no default export. Bun hard-fails without this. |
-| `--external pino-pretty` | Pulls in `thread-stream` worker path resolution that embeds build-host absolute paths. |
-| `--external thread-stream` | Same: absolute path to `worker.js` is embedded at module-init time; crashes on device with `ModuleNotFound`. |
+  **Validated phase timings (warm Steam, AKA x86):**
+  | Phase | Elapsed |
+  |---|---|
+  | `App Running` event in `content_log.txt` after `applaunch` | 5–6 s |
+  | Game window appears in Sway tree | 8–10 s |
+  | Cold-Steam to game window worst case | ~14 s |
 
-And `--define process.env.NODE_ENV='"production"'` must be present to DCE the dev-only logger branch, otherwise the pino-pretty import survives tree-shaking.
+  **`localconfig.vdf` write window**: Steam reads `~/.local/share/Steam/userdata/<steam-id>/config/localconfig.vdf` **once at startup** and clobbers external edits on shutdown (ValveSoftware/steam-for-linux#6443). The safe write window is between `steam -shutdown` (wait for `steamwebhelper` to fully exit, not just the main `steam` process) and the next `steam` start. Mid-session edits are **silently lost**. Use a real VDF parser (Python `vdf` package) for atomic rewrites — not string substitution.
 
-After any dep change that touches ProseQL, pino, or thread-stream: **re-validate the externals list** before shipping to Bandai. The failure mode is a clean `ModuleNotFound` crash on startup, not a build error.
+  **Why env mirroring cannot replace a live Steam client**: `SteamAPI_Init` in Proton's `steam.exe` stub requires a live Steam client owned by the same UID, reachable over `~/.steam/steam.pipe`. No combination of environment variables can substitute. If the steam pipe is absent, Steamworks-heavy titles (Sonic Mania) die in ~2 seconds with a clean exit — no crash, no log error. IPC-light titles (Balatro) can survive without it.
 
-Runtime budget on aarch64 with the full KORRI stack including ProseQL: **~99 MB RSS** at idle. Adding `documentGraph`-backed config watchers or additional ProseQL collections will grow this — measure it before deploying to Bandai where the ceiling is ~970 MB shared with the compositor and portal renderer.
+- **Severity**: high
 
 ---
 
-#### 6. Prefer explicit cascade-folded policy fields over wrapper-side sniffing heuristics
+#### 6. Prefer explicit classification fields over env/argv sniffing heuristics in log parsers
 
 - **File**: `docs/solutions/design-patterns/explicit-cascade-folded-policy-over-incidental-signal-heuristics-2026-05-27.md`
 - **Module**: `korri/shared/library/config` + `tools/device/game-stream-fullscreen`
 - **Problem Type**: `design_pattern`
+- **Relevance**: When a log parser or observer needs to classify Steam launch state, it will be tempted to sniff process names, argv, env vars, or timing to infer what is happening. This pattern documents why that approach fails silently and what to do instead. It has burned Korri three times in different subsystems.
+- **Key Insight**: **Make intent explicit; don't sniff.** The pattern: a wrapper or consumer whose behavior depends on knowledge it doesn't own should receive that knowledge as a named, explicitly set field, not infer it from incidental signals.
+
+  Applied to Steam observability:
+  - **Don't classify launch state from process presence**: `pgrep`-based readiness is documented as unreliable (matches wrapper process before runtime-launcher service is up).
+  - **Don't classify game state from Gamescope window visibility**: a window can disappear or not appear yet while the game is healthy (audio runs, no frames rendered — this was a real failure mode).
+  - **Do parse the definitive sources**: Steam `content_log.txt` state transitions and sessiond managed-launch events are the ground truth. These are written by the systems that actually own the knowledge.
+  - **Do emit explicit `_tag` facets** on every status object the observer produces — never boolean forests (`isRunning`, `hasWindow`, `isReady`) that require callers to infer the composite state.
+
+  The recurring failure shape: heuristic guesses wrong → no error path → no log line → downstream symptoms observed in production (degraded performance, wrong renderer, wrong state). Explicit fields are inspectable, testable, and traceable to the source.
+
 - **Severity**: medium
-- **Relevance**: The KORRID config watching/events design will face this choice: detect config changes by sniffing filesystem signals heuristically (inotify rename vs. write, partial-write races) or by driving events through an explicit intent — a `ConfigChanged { path, kind, version }` event type that is named in the cascade and emitted by the writer, not inferred by the watcher. This pattern has bitten three separate Korri subsystems and the team has explicitly named it as a recurring trap.
 
-**Key Insight**:
+---
 
-The same anti-pattern that caused silent `exposeWayland` failures in gamescope, silent `source` inference failures in the input bus, and silent focus-style failures in Electrobun will occur in config watching if the watcher infers intent from filesystem event shape rather than receiving an explicit typed event from the writer:
+#### 7. Steam Input needs `/dev/uinput` as `root:input 0660` on Bandai before controller tests are valid
 
-> **A heuristic watching filesystem events cannot see the writer's intent. The writer knows what changed and why; encode that in the event.**
+- **File**: `docs/solutions/integration-issues/steam-uinput-permissions-block-virtual-xinput-2026-06-13.md`
+- **Module**: `korri-steam` (`product/systems/nixos/modules/korri-steam.nix`)
+- **Problem Type**: `integration_issue`
+- **Relevance**: If the observability feature includes integration tests using controller-bearing games on Bandai (e.g. 30XX), this is a mandatory precondition. 30XX launched with Vulkan/Freedreno but had non-functional controller input until this was fixed. Steam detecting the physical controller is *not* sufficient — it also needs to create the virtual XInput device via `/dev/uinput`.
+- **Key Insight**: Steam Input on Bandai is a two-part path:
+  ```
+  physical controller → InputPlumber / raw-gamepad hider / Steam detection
+    ↓
+  Steam opens /dev/uinput → creates virtual XInput → game consumes it
+  ```
+  Both parts must work. If `/dev/uinput` is `root:root` (the pre-fix state), `chmod 0660` alone is insufficient — the node must be in group `input` and the Korri/Steam user must be in that group. The durable fix is in `product/systems/nixos/modules/korri-steam.nix` (commit `ad343ec`).
 
-Applied to KORRID config watching:
+  **Validation checklist** before controller-bearing Steam tests:
+  ```sh
+  ls -l /dev/uinput
+  # expect: crw-rw---- root input ... /dev/uinput
+  nix build .#checks.x86_64-linux.korri-steam-module
+  ```
+  Then restart Steam so it reopens `/dev/uinput`, and confirm controls reach the game — not just that Steam detected the physical controller.
 
-- **The writer emits a typed event** (`ConfigDocumentUpdated { documentId, kind: "full-replace" | "field-patch", version }`) at the point it knows what changed. The watcher consumes the typed event; it does not re-derive `kind` from inotify flags.
-- **The event cascades through the same fold** as any other config-layer change. A `documentGraph` update to a game entry is a config-layer event at the `game` level; it should merge through the cascade resolver exactly as a YAML edit would, not bypass the fold via a direct-notification side-channel.
-- **Defaults at the floor of the cascade encode the correct-for-production behavior.** A watcher that has no opinion on a config field should receive the default from the cascade, not produce an empty/null observation.
-- **Delete old file-stat heuristics when explicit events land.** Leaving both creates two parallel channels that can disagree; the loser is silent.
+- **Severity**: high
+
+---
+
+#### 8. ARM64 Steam log signals and fixture shape (Bandai / ROCKNIX)
+
+- **File**: `docs/solutions/best-practices/manual-steam-game-launching-rocknix-arm64-2026-05-04.md`
+- **Module**: ROCKNIX Steam ARM64 manual game launching (last updated 2026-06-13)
+- **Problem Type**: `best_practice`
+- **Relevance**: Documents the ARM64-specific process tree, log signals, and observable facts that differ from x86. The observability parser/tailer needs to account for these when running on Bandai (SM8550 / ROCKNIX ARM64).
+- **Key Insight**: ARM64-specific facets for a fixture-backed parser:
+
+  **Verified process tree on ARM64 (ROCKNIX + Gamescope SDL/X11 path):**
+  ```
+  Sway desktop
+  ├── Steam desktop UI (steamwebhelper … -uimode=7 -buildid=<id>)
+  └── Gamescope (--backend sdl, or wayland) fullscreen window titled "Balatro"
+      └── SteamLinuxRuntime_sniper/_v2-entry-point
+          └── pressure-vessel-wrap / Box64/FEX path
+              └── Proton (10.0 or GE-Proton10-34) compatibility tool
+                  └── Balatro.exe (or Game.exe)
+  ```
+
+  **Canonical success signals** (same pattern as x86, confirm both appear):
+  ```
+  AppID 2379780 state changed : Fully Installed,App Running,
+  ```
+  followed later by:
+  ```
+  AppID 2379780 state changed : Fully Installed,
+  ```
+
+  **Noise vs. signal:**
+  - Box64 wrong-ELF-class warnings and `winegstreamer.so` symbol warnings: treat as suspicious but **not fatal** if `<Game>.exe` remains alive.
+  - `ntsync: up and running` in early Proton output: normal, not a launch-ready signal.
+  - `steamwebhelper … -buildid=0` at startup: ARM64 manifest problem (see `docs/solutions/runtime-errors/steam-desktop-ui-arm64-manifest-spinner-rocknix-2026-05-04.md`), blocks desktop UI from functioning.
+
+  **ARM64 caveat on `steam -applaunch`**: `steam -applaunch <appid>` and `steam://rungameid/<id>` were documented as **unreliable** on ROCKNIX ARM64 (desktop Steam stayed usable but did not consistently transition Balatro to `App Running`). The working manual path on ARM64 is the nested Gamescope + SteamLinuxRuntime + Proton command chain — not the `applaunch` URL method that works on x86. This is the reason the ARM64 path is excluded from the LaunchOptions/silent-Steam architecture (learning #5).
+
+- **Severity**: medium
 
 ---
 
 ### Recommendations
 
-**Config graph migration to ProseQL documentGraph**
+1. **Use `content_log.txt` as the primary parse target, not process observation.** Tail `~/.local/share/Steam/logs/content_log.txt` and parse `AppID <id> state changed : Fully Installed,App Running,` as the authoritative `Running` event and the absence of `App Running,` as the authoritative `Stopped` event. This is what the team used as the final acceptance bar across all Steam launch validation work.
 
-1. Follow the `makeKorriLibraryDbConfig` pattern: define a `documentGraph` config schema that separates the persistence payload (what is written to YAML) from the runtime config record (what `LibrarySource`, RPC, and UI see). Hydrate computed identity (document ID, resolved paths) from the YAML key at read time.
-2. Keep ProseQL server-side. The renderer touches config only through the existing RPC + atom layers. If `documentGraph` needs to be exposed to themes, expose it as a new RPC group, not as a direct ProseQL import.
-3. Validate the migration on Bandai with a real import + session restart cycle (mirror the `just check-odin-sessiond` pattern).
+2. **Plug into sessiond's managed-launch event stream; do not build a parallel lifecycle source.** The observer should map `content_log.txt` state transitions and process-tree evidence *into* the sessiond managed-launch event vocabulary (`child-running`, `child-exited`, etc.) — not expose a separate "is the game running" truth. Identity correlate by `launchId`, not by PID (PID is daemon-private by design).
 
-**KORRID config watching/events**
+3. **Implement heartbeats + `idleTimeout: 0` + bounded reconnect loop before the first production deployment.** The SSE idle-timeout failure (learning #2) was a production defect that killed healthy games. Any long-lived stream (SSE, chunked transfer, WebSocket) must have all three defenses. Treat transport-close as a transport event; escalate only after bounded reconnects fail.
 
-4. Make change events explicit and typed at the writer, not inferred at the watcher. Use an `Effect` `Queue` or `PubSub` carrying `ConfigDocumentUpdated` with an explicit `kind` field — not `chokidar` raw event shape or inotify flags. The watcher receives the typed event; it does not re-derive intent from filesystem signals.
-5. Route config-watch events through the cascade resolver so per-document and per-deployment overrides merge correctly rather than bypassing the fold.
+4. **Emit explicit `_tag` discriminated-union status objects from the observer.** Never expose `{ isRunning: boolean, hasError: boolean, … }` boolean forests. Follow the `ForegroundSessionFailureStage` vocabulary (`prepare | spawn | foreground | exit | teardown | readiness | restore | adapter`) for failure phases, and follow the `Accepted | PreflightRejected | DaemonRejected | HostUnavailable | LaunchFailed` vocabulary for launch outcomes. Extend `korri/shared/library/sessiond-lifecycle-projections.ts` for new mappings rather than adding switch tables in the observability layer.
 
-**Nix module runtime paths + rootless `/var/lib/korri`**
+5. **Classify from explicit sources; don't sniff processes or env.** The cascade-policy pattern (learning #6) has burned three separate subsystems. `pgrep`, argv inspection, and env-var sniffing all failed in production. Use `content_log.txt` state transitions and sessiond events as the authoritative inputs; annotate each status emission with the source that drove it.
 
-6. Add a `serviceMode` seam (or reuse the existing one) in any NixOS module that wires KORRID paths. Derive `configRoot`, `documentGraphRoot`, and watcher socket paths from the mode; do not hardcode them in host configs.
-7. Use `systemd.tmpfiles.settings` for boot-time directory ownership and `RuntimeDirectoryPreserve = "yes"` for files that must survive unit restarts. Add NixOS `assertions` that reject `%t`/`%h` placeholders in system-mode paths at eval time.
-8. Push the SM8550/Bandai-correct `documentGraphRoot` default into the image layer (`nix/images/headless.nix` or the SM8550 image), not into the module default. Add image-eval assertions to prove the path is set before shipping.
+6. **Verify `/dev/uinput` ownership before any Bandai controller-bearing fixture tests.** Run `ls -l /dev/uinput` (expect `root:input 0660`) and `nix build .#checks.x86_64-linux.korri-steam-module` before running observability tests against a controller-bearing title like 30XX on Bandai (learning #7).
 
-**Bandai deployment**
+7. **Account for ARM64 vs x86 fixture differences.** On ARM64 (Bandai/ROCKNIX), `steam -applaunch` is documented unreliable; the working path is the nested Gamescope + SteamLinuxRuntime chain. The `content_log.txt` state-transition signal is the same across architectures, but the process tree shape, the presence of Box64/FEX, and the `steamwebhelper -uimode=7` background session differ. When building fixture snapshots, capture both archs separately and label them.
 
-9. Use `readlink -f` (not bare `readlink`) when resolving the guest toplevel. Never `nix copy` to the ROCKNIX host store (port 22). Use the five-step sequence: `nixos-rebuild --target-host` to push the closure into the guest, then `rocknix-guest-generation-import` + `rocknix-guest-generation-switch` via the host, then `systemctl restart rocknix-guest.service`.
-10. After any dependency change that touches `@proseql/core`, pino, or thread-stream, re-validate the Bun bundle `--external` flags before deploying the updated API to Bandai. Check RSS under load — the ProseQL documentGraph additions will grow the memory footprint beyond the baseline 99 MB.
+8. **Guard Steam `localconfig.vdf` writes with the shutdown-write-restart sequence.** If the observability feature ever needs to set per-app `LaunchOptions` (e.g., to inject a tracing wrapper), it must write the VDF only while Steam is fully shut down (including `steamwebhelper` fully exited, not just the main `steam` process), use a real VDF parser for atomic rewrite, and then restart. Mid-session edits are silently clobbered on next Steam shutdown.

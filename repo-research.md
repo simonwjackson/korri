@@ -1,569 +1,506 @@
 # Repository Research Summary
 
-> **Scope:** Korri config-graph migration — replacing the singleton library-root model with a
-> multi-root config graph backed by ProseQL 0.14.0 `documentGraph`.  
-> **Branch:** trunk  
-> **Date:** 2026-06-10
+> Scoped for: Steam launch observability implementation  
+> Feature: `product/services/device/steam/` — parsers, tailer, observer, RPC surface  
+> Handoff: `docs/handoffs/steam-observability-implementation-handoff-2026-06-14.md`  
+> Backlog: `01KV3KWT98Y6W6CNXP05ZPSHH7`
 
 ---
 
 ## Technology & Infrastructure
 
-- **Languages / runtime:** TypeScript 74.6 %, TSX 10.6 %, Nix 11.3 %, Shell 0.8 %, HTML 0.6 %
-- **Runtime:** Bun (test runner + bundler + Node-compat server)
-- **Frameworks:** React 19, Effect v4 (atoms, layers, Schema, RPC), Hono (HTTP server), Vite (portal SPA), TanStack Router
-- **UI:** Tailwind CSS + Radix UI primitives + Framer Motion
-- **Linter/formatter:** Biome (`just lint` / `just format`)
-- **Type safety:** TypeScript strict mode; Biome for lint; `just typecheck` (whole-repo only due to path aliases)
-- **Deployment model:** NixOS modules (kiosk + headless server images), Nix flakes + direnv for local tooling
-- **API surface:** Hono HTTP (`/api/*`), Effect RPC over POST `/api/rpc`, SSE at `/api/library/events`
-- **Data layer:** ProseQL 0.14.0 (`@proseql/node`) — single `documents` source today; `documentGraph` source available and targeted
-- **Module aliases:** `@product/*` → `product/`, `@platform/*` → `product/platform/`
-- **Monorepo shape:** Single Bun workspace; `product/apps/`, `product/services/`, `product/platform/`, `product/systems/`, `tools/`
-- **Test harness split:** Bun test for all TypeScript; Nix `runCommand` / module-eval checks for Nix-owned contracts
+**Languages & Frameworks**
+- TypeScript 74%, TSX 10%, Nix 12%, Shell/BASH 2%
+- React 18 + TanStack Router for the portal SPA
+- Effect v4 for service contracts, schema, RPC (`effect`, `@effect/atom-react`)
+- Hono (`@hono/node-server`) for the HTTP/RPC server layer
+- Bun as the runtime and test runner
+- Storybook for visual harness
+- Biome 2.3.5 for lint/format (2-space indent, no semicolons except as needed, double quotes)
+- Vite for the web build; Nix flakes + direnv for reproducible tooling
+
+**Deployment Model**
+- Multi-service: `korrid` (main API daemon), `sessiond` (foreground session lifecycle), `inputd` (input broker), device-side systemd units
+- Device targets: SM8550/Bandai (arm64, NixOS), source-machine (LAN stream host), x86 live USB kiosk
+- Korri-owned Steam root: `/var/lib/korri/steam/`; logs at `/var/lib/korri/steam/logs/`
+
+**TypeScript Path Aliases**
+```
+@platform/*  →  product/platform/*   (shared runtime, schemas, services, protocols)
+@product/*   →  product/*            (portal apps, API, themes)
+```
+No other aliases exist. Shared modules under `@platform` must not import from `@product`.
+
+**Test runner**: `bun test` (just `test-unit`). Playwright for E2E/component.
+
+**Module structure** (relevant to Steam observability):
+```
+product/
+  platform/
+    api/rpc/         – RPC error types, serialization
+    control/         – KorriControl service + live layer
+    library/
+      launcher.ts                           – LaunchSpec schema
+      sessiond-managed-launch-protocol.ts   – SSE/HTTP wire schema (Effect Schema)
+      sessiond-lifecycle-projections.ts     – projection helpers
+    logger/                                 – pino-based shared logger
+    stream/
+      steam-launch-spec.ts                  – parseSteamAppId, renderSteamLaunchSpec
+  services/device/
+    sessiond.ts          – foreground session lifecycle HTTP server
+    sessiond-state.ts    – pure session state reducer
+    sessiond-gamescope-reaper.ts – process reaper (pattern model)
+    sessiond-status-sidecar.ts   – JSON sidecar writer
+    steam/               – (worktree only today; new home for Steam TS code)
+      steam-gamescope-launch-plan.ts
+      steam-gamescope-launch-planner-cli.ts
+  apps/portal/api/
+    server/
+      status.rpc.ts          – app.server.status (Effect Schema + Rpc.make)
+      status.rpc-handler.ts  – handler composition; sessiond probe + runner sidecar
+      rpc-group.ts           – all server RPCs registered here
+      rpc-server.ts          – Layer assembly + HTTP handler
+    session/
+      status.rpc.ts           – app.session.status
+      status.rpc-handler.ts
+    hello/
+      rpc.ts / rpc-handler.ts / rpc-handler.test.ts  – canonical minimal example
+```
 
 ---
 
 ## Architecture & Structure
 
-### Repository layout (relevant subtrees)
+### Service Layering
 
 ```
-product/
-  apps/
-    portal/
-      api/
-        hono-app.ts               ← Hono router; registers /api/library/events and /api/rpc
-        library/
-          events.ts               ← SSE handler; watches single KORRI_LIBRARY_ROOT
-          events.test.ts
-        server/                   ← serverRpcHandler (korrid surface)
-      features/home/
-        HomeRuntimeLayersRoot.tsx ← EventSource(/api/library/events) → refreshes libraryItemsAtom
-    desktop/
-      api-forwarder.ts            ← Forwards /api/* (including SSE) to upstream korrid
-  services/device/
-    korrid.ts                     ← Korri daemon: starts Hono + mDNS advertisement
-  platform/
-    config/
-      xdg-paths.ts                ← korriDataPath(), korriConfigPath(), korriStatePath()
-    library/
-      library-services.ts         ← LibrarySource, Launcher Context.Service declarations
-      library-source-layer-live.ts← buildLibraryRootFromEnv(); switches proseql ↔ rocknix
-      library-source-layer-live.test.ts
-      proseql/
-        library-db.ts             ← openKorriLibraryDb(); makeKorriLibraryDbConfig(); codec shims
-        library-db.test.ts        ← comprehensive ProseQL/YAML contract tests
-        library-repository.ts     ← createLibraryRepository(db); loadReadableSnapshot()
-      config/
-        records/                  ← Effect Schema: App, System, Library, Global, Host, etc.
-        cascade-resolver.ts       ← resolveReadableLaunchContext(); six-layer cascade
-    react/library/
-      library-atoms.ts            ← libraryItemsAtom, librarySourceLayerAtom, libraryRuntime
-product/systems/nixos/
-  modules/
-    korri-daemon.nix              ← services.korri.daemon; library.root, library.platformDefaults
-    korri-sessiond.nix            ← services.korri.sessiond; inherits library env from daemon
-    korri-runtime.nix             ← services.korri.runtime; user/group/stateRoot/gamesRoot
-  images/platforms/
-    rocknix-sm8550.nix            ← Sets services.korri.daemon.library.platformDefaults
-tools/testing/
-  library/
-    with-temp-proseql-library.ts  ← Test helper: temp root + seed + cleanup
-    with-temp-proseql-library.test.ts
-  nix/
-    korri-daemon-module-check.nix ← Pure module-eval assertions for korrid options
+Portal SPA (React/TanStack Router)
+    ↓  Effect RPC  (app.xxx.yyy)
+korrid (Hono/Effect server — product/services/device/korrid.ts)
+    ↓  HTTP fetch to socket
+sessiond (Bun.serve — product/services/device/sessiond.ts)
+    ↓  Bun.spawn
+  Game processes / Steam
 ```
 
-### Architectural decisions already in place
+**Key architectural rules (inferred from codebase):**
+- `sessiond` is the sole truth for foreground lifecycle. `korrid` proxies sessiond state through `app.server.status` and `app.session.status`.
+- `korrid` RPCs live in `product/apps/portal/api/{domain}/`. Each domain has `{action}.rpc.ts` (schema + `Rpc.make`), `{action}.rpc-handler.ts` (Effect handler), and a `rpc-handler.test.ts`.
+- Shared protocol schemas live in `product/platform/library/` and are imported by both server and client.
+- New domain RPCs must be added to `product/apps/portal/api/server/rpc-group.ts` and wired in `rpc-server.ts`.
+- Effect Schema (not hand-rolled types) is the source of truth for all wire types. Generated files are read-only.
 
-- **ProseQL is the canonical library store.** ROCKNIX is an import-only path; the live
-  ProseQL source is always used unless `KORRI_LIBRARY_SOURCE=rocknix` is set explicitly.
-- **`documents` source (single root, writable outbox).** Today `makeKorriLibraryDbConfig`
-  declares one `documents` source over a single `root` with `include: "**/*.yaml"` and
-  `outbox: "library.yaml"`.
-- **Platform defaults are a pre-installed YAML fragment.** The Nix module generates
-  `00-korri-platform-defaults.yaml` and installs it into the same `library.root` directory
-  via `ExecStartPre` before `korrid` starts. It is discovered by the glob alongside user YAML.
-- **Cascade resolver is already six-layer deep-merge.** `cascade-resolver.ts` reads
-  collections from a `ReadableConfigSnapshot` built from the ProseQL db and assembles
-  `global → user → system → launcher → game → preset → ephemeral`.
-- **Strict-mode schema validation.** YAML fragments that contain unknown keys or old
-  collection names (`games`, `launchers`, `modules`, `config`) fail loudly at decode time.
-- **Atoms own reactive refresh.** `libraryItemsAtom` is an Effect atom; `HomeRuntimeLayersRoot`
-  subscribes to SSE and calls `useAtomRefresh(libraryItemsAtom)` on `library.changed`.
+### sessiond Architecture
 
----
+`sessiond` is a Bun HTTP server that:
+1. Maintains `KorriSessionState` (pure state machine: `stopped → starting → home → launching → game → restoring → recovering`).
+2. Accepts `POST /managed-launch` to start a session.
+3. Streams lifecycle events via `GET /managed-launch/events` (SSE).
+4. Exposes `GET /managed-launch/status` for polling.
+5. Plugs in a `role` (kiosk or source-machine), a `launcher`, and an optional `reaper`/`gamescopeControlBridge`.
 
-## Current Singleton-Root Code Paths (the seams to replace)
+All components are injected as interface dependencies — no singletons. Tests build a `createKorriSessiondCore(...)` with harness objects; production `main()` builds from env.
 
-### 1. Environment variable: `KORRI_LIBRARY_ROOT`
+### GamescopeReaper — Pattern Model for Steam Observer
 
-| File | Usage |
-|------|-------|
-| `product/platform/library/library-source-layer-live.ts` | `buildLibraryRootFromEnv()` reads `process.env.KORRI_LIBRARY_ROOT`; falls back to `korriDataPath(env, "library")` |
-| `product/apps/portal/api/library/events.ts` | `resolveLibraryRoot()` reads `process.env.KORRI_LIBRARY_ROOT`; falls back same way |
-| `product/systems/nixos/modules/korri-daemon.nix` | `serverEnv.KORRI_LIBRARY_ROOT = cfg.library.root` |
-| `product/systems/nixos/modules/korri-sessiond.nix` | Re-exports `KORRI_LIBRARY_ROOT` from `daemonLibraryRoot` |
-| `product/services/device/sessiond-electrobun.ts` | Reads env for session context |
+`product/services/device/sessiond-gamescope-reaper.ts` is the closest existing analogue to the Steam log observer:
 
-### 2. Nix module options (korri-daemon.nix)
+- Exposes a `GamescopeReaper` function type: `(request: ReapRequest) => Promise<ReapOutcome>`.
+- Implementation `createGamescopeReaper(options)` takes injected `processList`, `signaler`, `logger`, `graceMs`, `retries`.
+- Helper `createProcfsProcessList()` reads `/proc`; `POSIX_PROCESS_SIGNALER` does real signals.
+- Production wiring: `createSystemGamescopeReaper(overrides)` — accepts partial overrides so tests inject cheap fakes.
+- Tests use inline fakes (`makeProcessList(processes)`, `makeSignaler()`) — never Mock/Stub/Fake class names.
 
-```nix
-services.korri.daemon.library = {
-  source  # enum ["proseql" "rocknix"]
-  root    # string; default "${stateRoot}/library"
-  platformDefaults  # attrset; rendered to 00-korri-platform-defaults.yaml in library.root
-}
+**Steam observer should follow the same dependency-injection + configurable-behavior pattern.**
+
+### Steam Code Today
+
+The steam code referenced in the handoff (`steam-gamescope-launch-plan.ts`, `steam-gamescope-launch-planner-cli.ts`) lives in a worktree branch `feat/steam-ts-planner-handoff`:
+
+```
+.worktrees/feat/steam-ts-planner-handoff/product/services/device/steam/
+  steam-gamescope-launch-plan.ts
+  steam-gamescope-launch-plan.test.ts
+  steam-gamescope-launch-planner-cli.ts
+  steam-gamescope-launch-planner-cli.test.ts
 ```
 
-- `platformDefaultsFileName = "00-korri-platform-defaults.yaml"` — lexically first so it
-  loads before user YAML in the single-root glob.
-- `platformDefaultsInstallCommands` — `install -D -m 600 ${file} ${cfg.library.root}/${name}`.
-- `ReadWritePaths` in systemd hardening includes `cfg.library.root`.
-- `systemd.tmpfiles.rules` creates `cfg.library.root` in system mode.
+These files do **not** yet exist on `trunk`. The handoff assumes they will land before or alongside the observability work. New Steam observability code belongs in `product/services/device/steam/`.
 
-### 3. ProseQL db config (library-db.ts)
-
-```ts
-export function makeKorriLibraryDbConfig(root: string) {
-  return {
-    collections: collectionsSchema,       // 10 canonical sections
-    sources: [{
-      id: "library",
-      kind: "documents",                  // ← single-root mutable documents source
-      root,                               // ← the one KORRI_LIBRARY_ROOT
-      include: "**/*.yaml",
-      format: "yaml",
-      collections: "all",
-      outbox: "library.yaml",             // ← writable output target
-    }],
-  } as const
-}
+The stable Steam code that already exists on `trunk`:
 ```
-
-### 4. SSE handler (events.ts → hono-app.ts)
-
-```ts
-// hono-app.ts
-app.get("/api/library/events", c => handleLibraryEvents(c))
-
-// events.ts
-function resolveLibraryRoot(env) {
-  const explicit = env.KORRI_LIBRARY_ROOT?.trim()
-  if (explicit) return { ok: true, root: explicit }
-  return { ok: true, root: korriDataPath(env, "library") }
-}
-// Watches ONE root directory with node:fs.watch
-// Emits: "library.ready" { root: basename } and "library.changed" { path }
-// Filter: isYamlFilename (only *.yaml / *.yml)
+product/platform/stream/steam-launch-spec.ts       – parseSteamAppId(), renderSteamLaunchSpec()
+product/platform/library/config/steam-state-materializer.ts  – VDF manipulation, lifecycle
+product/systems/nixos/modules/korri-steam.nix       – Nix module
 ```
-
-### 5. React refresh bridge (HomeRuntimeLayersRoot.tsx)
-
-```tsx
-const events = new EventSource("/api/library/events")
-events.addEventListener("library.changed", () => refreshLibraryItems())
-// Connects to /api/library/events. Name is hardcoded.
-```
-
----
-
-## ProseQL 0.14.0 `documentGraph` API
-
-This is the target source kind for the config-graph model.
-
-### Config shape
-
-```ts
-interface DocumentGraphSourceConfig {
-  id: string
-  kind: "documentGraph"
-  roots: ReadonlyArray<DocumentGraphRootConfig>  // ordered list of roots
-  collections?: SourceCollectionSelection        // defaults to all
-  include?: string | ReadonlyArray<string>       // glob applied to each root
-  exclude?: string | ReadonlyArray<string>
-  transform?: DocumentGraphTransform             // pure per-fragment decode hook
-}
-
-interface DocumentGraphRootConfig {
-  id?: string         // optional stable identifier
-  root: string        // directory path
-  optional?: boolean  // if true, missing root is silently skipped
-  include?: string | ReadonlyArray<string>
-  exclude?: string | ReadonlyArray<string>
-}
-```
-
-### Key behaviors
-
-- **Ordered roots.** Fragments are discovered per root in array order; within a root,
-  files are sorted lexically by relative path.
-- **Deep-merge semantics.** Later roots (and later files within a root) win.
-  `deepMergeAll`: plain objects merge recursively, arrays/scalars/null replace wholesale.
-- **Read-only collections.** `documentGraph` collections reject every mutation operation.
-  This means `outbox` / write semantics do not apply to graph-owned collections.
-- **Optional roots.** `optional: true` means a missing root is skipped; `optional: false`
-  (default) means a missing root is a hard `DocumentGraphSourceError`.
-- **Multi-format.** Extension-driven: `.yaml`, `.yml`, `.json`, `.toml`, etc. all supported
-  by the registered codec set. The `include` glob controls which files are picked up.
-- **Per-fragment transform.** The `transform` function is called per decoded document before
-  migration, allowing the host YAML shim (e.g. the `host:` singleton unwrap) to be applied.
-- **Watch behavior.** At startup, each present root gets its own watcher. Roots absent at
-  startup are not watched; a missing-optional root never triggers a watch attempt.
-- **Error surface.** `DocumentGraphSourceError` with `kind`:
-  `"missing-root"`, `"unsupported-extension"`, `"transform-error"`, `"validation-error"`,
-  `"duplicate-record"`.
-- **`LoadedDocumentGraph`** return shape includes `collections` (merged records per collection)
-  and `contributingPaths` (provenance map for error enrichment).
-
----
-
-## Platform Defaults Pattern (current + migration target)
-
-### Current behavior
-
-1. Nix generates `00-korri-platform-defaults.yaml` from `services.korri.daemon.library.platformDefaults`.
-2. ExecStartPre installs it into `${library.root}/00-korri-platform-defaults.yaml` before korrid starts.
-3. The `documents` source globs `**/*.yaml` and discovers both the platform file and user `library.yaml`.
-4. Because the `documents` source uses a single root with `outbox: library.yaml`, writes always
-   go to `library.yaml`; the platform file is never touched by korrid writes.
-5. The `library-db.test.ts` "platform-default collision guard" test verifies that if both the
-   platform fragment and user fragment declare the same app record, the db fails loudly.
-6. Lexical ordering (`00-korri-*` < `library.yaml`) means platform defaults load first and
-   user YAML overlays them — implementing "later roots/files win" by filename prefix convention.
-
-### Migration target
-
-- Platform defaults become a **separate, earlier root** in the `documentGraph` config.
-- The platform-generated root is an NixOS-owned store path (read-only by construction).
-- User config roots come after → user wins by array order.
-- No more filename-prefix tricks for ordering precedence.
-
----
-
-## Proposed New Config Contract
-
-### Environment variable: `KORRI_CONFIG_ROOTS`
-
-- Value: colon-separated ordered list of directory paths (like `PATH`).
-- Each directory is a config root; later directories win on merge.
-- Empty-string entries are ignored.
-- An empty `KORRI_CONFIG_ROOTS` with no XDG fallback → valid empty baseline (no error).
-- Fallback: `korriConfigPath(env, "library")` (i.e. `~/.config/korri/library`) when both
-  `KORRI_CONFIG_ROOTS` and an explicit root env are absent. (Or retain `korriDataPath`
-  fallback; align with whatever XDG base matches the chosen store semantics.)
-
-### Nix option: `services.korri.config.roots` (or extend `services.korri.daemon.library`)
-
-```nix
-# Sketch — final name TBD by the plan
-services.korri.daemon.library = {
-  roots = mkOption {
-    type = types.listOf types.str;
-    default = [ "${config.services.korri.runtime.stateRoot}/library" ];
-    description = "Ordered list of config root directories. Later roots win on deep-merge.";
-  };
-  # platformDefaults becomes the first generated root, not an installed file
-};
-```
-
-Exported to korrid env as:
-```nix
-KORRI_CONFIG_ROOTS = lib.concatStringsSep ":" cfg.library.roots;
-```
-
-### ProseQL source declaration (library-db.ts replacement sketch)
-
-```ts
-export function makeKorriLibraryDbConfig(roots: readonly string[]) {
-  return {
-    collections: collectionsSchema,
-    sources: [{
-      id: "config",
-      kind: "documentGraph" as const,
-      roots: roots.map((root, i) => ({
-        id: `root-${i}`,
-        root,
-        optional: true,                     // empty baseline is valid
-        include: ["**/*.yaml", "**/*.yml"],  // or broader: add json/toml when ready
-      })),
-      collections: "all" as const,
-      transform: korriReadableDocumentTransform,  // host-singleton unwrap + strict validation
-    }],
-  } as const
-}
-```
-
-Write target is separated from the read graph. The writable path (`outbox`) belongs to
-a standalone writeable root, not to the documentGraph source. KORRID owns last-known-good
-lifecycle by writing to an explicit designated root (separate concern from read config).
-
-### Glob pattern
-
-The plan specifies discovering `**/korri.<ext>` and `**/*.korri.<ext>`. Current code uses
-`**/*.yaml`. ProseQL `documentGraph` applies the `include` pattern as a glob relative to
-each root. A combined pattern would be:
-
-```ts
-include: ["**/korri.yaml", "**/korri.yml", "**/*.korri.yaml", "**/*.korri.yml",
-          "**/korri.json", "**/*.korri.json", "**/korri.toml", "**/*.korri.toml"]
-```
-
-All ProseQL-supported formats are handled by extension inference; the codec is chosen
-per-file automatically once the extension is registered. The current `korriReadableYamlCodec`
-shim only registers `yaml`/`yml`; new formats need their own shim or a bare codec.
-
-### Config events SSE: `/api/config/events`
-
-Replace `/api/library/events` with `/api/config/events`:
-
-```ts
-// New route in hono-app.ts
-app.get("/api/config/events", c => handleConfigEvents(c))
-
-// New handler reads KORRI_CONFIG_ROOTS (list), watches all present roots.
-// Emits: "config.ready" { roots: string[] } and "config.changed" { root, path }
-```
-
-The React bridge in `HomeRuntimeLayersRoot.tsx` updates its `EventSource` URL from
-`/api/library/events` to `/api/config/events` and listens for `config.changed`.
-
-**Backwards compatibility:** The plan says no legacy support for `/api/library/events`.
-The hono-app route registration and the desktop api-forwarder both need updating.
-
----
-
-## Event / API Route Inventory
-
-| Route | File | Current role | Migration action |
-|-------|------|-------------|-----------------|
-| `GET /api/library/events` | `hono-app.ts` + `events.ts` | SSE watcher on single `KORRI_LIBRARY_ROOT` | Replace with `/api/config/events`; delete old handler |
-| `POST /api/rpc` | `hono-app.ts` + `rpc-server.ts` | Effect RPC (library list, launch, etc.) | No route change; internal layer swap |
-| `GET /api/health` | `hono-app.ts` | Health check | No change |
-| `GET /api/game-assets/*` | `hono-app.ts` + `game-asset-bytes.ts` | Binary asset serving | No change |
-
----
-
-## Test Patterns to Follow
-
-### TypeScript unit test conventions
-
-```ts
-// Temp root creation (library-db.test.ts)
-async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
-  const root = await mkdtemp(join(tmpdir(), "korri-proseql-library-"))
-  try { return await fn(root) }
-  finally { await rm(root, { recursive: true, force: true }) }
-}
-
-// Effect-scoped db open
-await Effect.runPromise(
-  Effect.scoped(
-    Effect.gen(function* () {
-      const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
-      // ...
-    }),
-  ),
-)
-
-// Env cleanup (library-source-layer-live.test.ts)
-const originalEnv = { libraryRoot: process.env.KORRI_LIBRARY_ROOT }
-afterEach(() => setOptionalEnv("KORRI_LIBRARY_ROOT", originalEnv.libraryRoot))
-```
-
-### Test helper: `withTempProseqlLibrary`
-
-`tools/testing/library/with-temp-proseql-library.ts` — seeds a temp ProseQL root from
-a typed `TempProseqlLibrarySeed`. Will need a parallel `withTempConfigGraph` helper that
-accepts an array of roots with per-root seed YAML content.
-
-### Nix check conventions (korri-daemon-module-check.nix)
-
-```nix
-check = message: assertion: { inherit message assertion; };
-evaluateWith = overrides: (evalConfig { modules = [ korriDaemonModule baseModule overrides ]; }).config;
-checks = [
-  (check "user-mode library root defaults to Korri product state" (
-    defaultUserMode.services.korri.daemon.library.root == "/var/lib/korri/library"
-    && (env defaultUserMode).KORRI_LIBRARY_ROOT == "/var/lib/korri/library"
-  ))
-];
-```
-
-New checks to add:
-- `services.korri.daemon.library.roots` list defaults to `[stateRoot/library]`
-- `KORRI_CONFIG_ROOTS` env exported as colon-joined list
-- Platform defaults installed into first generated root (not user root)
-- `ReadWritePaths` in hardening updated to include all writable roots
-
----
-
-## KORRID Last-Known-Good Lifecycle
-
-The plan context assigns `/api/config/events` and last-known-good lifecycle to KORRID.
-Currently, `korrid.ts` simply starts `createHonoApp({ rpcSurface: "server" })` and mDNS.
-There is no caching or snapshot layer in korrid's current design; `withLibraryRepository`
-in `library-source-layer-live.ts` opens the ProseQL db on each RPC call via `Effect.scoped`.
-
-The last-known-good pattern implies:
-1. On startup, korrid opens the config graph and validates it.
-2. If validation passes → becomes the "active" graph snapshot; SSE emits `config.ready`.
-3. On `config.changed` (a file watcher fires) → reloads; if new graph validates → updates
-   active snapshot; emits `config.ready` again. If validation fails → keeps last-known-good;
-   emits a `config.error` event.
-4. All RPC calls use the active validated snapshot rather than opening ProseQL per-call.
-
-This is a new capability; `korrid.ts` and `library-source-layer-live.ts` will need a
-persistent ProseQL handle (not scoped per call) with the `documentGraph` reactive watch.
-
-ProseQL 0.14.0 already supports reactive watch: `documentGraph` sources watch each
-startup-present root and call `reloadDocumentGraph` on change. The watch machinery is
-internal to `createPersistentEffectDatabase`. Korri needs to wire the db open once at
-server startup (not per-request) and feed reloads into the SSE event bus.
 
 ---
 
 ## Implementation Patterns
 
-### Effect Service / Layer pattern (existing)
+### RPC Contract Pattern
 
+All RPCs follow this exact structure. `hello` is the canonical minimal example:
+
+**`{action}.rpc.ts`** — schema + RPC declaration:
 ```ts
-// Context.Service declaration (library-services.ts)
-export class LibrarySource extends Context.Service<LibrarySource, LibrarySourceService>()("LibrarySource") {}
+import { ApiError } from "@platform/api/rpc/errors"
+import { Schema } from "effect"
+import { Rpc } from "effect/unstable/rpc"
 
-// Live layer (library-source-layer-live.ts)
-export const LibrarySourceLayerLive = Layer.succeed(LibrarySource, createLiveLibrarySourceService())
+export class GetHelloPayload extends Schema.Class<GetHelloPayload>("GetHelloPayload")({
+  name: Schema.optional(Schema.String),
+}) {}
 
-// Test layer (library-source-layer-memory.ts)
-Layer.succeed(LibrarySource)({ list: () => Effect.succeed([]) })
+export class HelloResponse extends Schema.Class<HelloResponse>("HelloResponse")({
+  message: Schema.String,
+  timestamp: Schema.String,
+}) {}
+
+export const GetHelloRpc = Rpc.make("app.hello.get", {
+  payload: GetHelloPayload,
+  success: HelloResponse,
+  error: ApiError,
+})
 ```
 
-### Atom / reactive pattern (library-atoms.ts)
+**`{action}.rpc-handler.ts`** — pure Effect handler:
+```ts
+import { Effect } from "effect"
+import { type GetHelloPayload, HelloResponse } from "./rpc"
+
+export const handleGetHello = (payload: typeof GetHelloPayload.Type) =>
+  Effect.succeed(new HelloResponse({ … }))
+```
+
+**`{action}.rpc-handler.test.ts`**:
+```ts
+import { expect, it } from "bun:test"
+import { Effect } from "effect"
+import { handleGetHello } from "./rpc-handler"
+
+it("returns a starter greeting", async () => {
+  const response = await Effect.runPromise(handleGetHello({ name: "Simon" }))
+  expect(response.message).toBe("Hello, Simon. Effect RPC is ready.")
+})
+```
+
+**RPC tag naming**: `app.{domain}.{action}` — e.g., `app.hello.get`, `app.server.status`, `app.session.status`, `app.library.launch.dry-run`. For the Steam status surface, the handoff suggests `app.steam.status`.
+
+**Registering a new RPC**:
+1. Create `product/apps/portal/api/{domain}/status.rpc.ts` (schema + `Rpc.make`).
+2. Create `product/apps/portal/api/{domain}/status.rpc-handler.ts` (handler).
+3. Import and add to `serverRpcGroup` in `product/apps/portal/api/server/rpc-group.ts`.
+4. Add handler mapping in `serverRpcGroup.toLayer({...})` in `product/apps/portal/api/server/rpc-server.ts`.
+
+### Error Types
+
+Errors are `Data.TaggedError` or `Schema.TaggedErrorClass`:
+```ts
+export class SteamStateMutationFailed extends Data.TaggedError("SteamStateMutationFailed")<{
+  readonly path: string
+  readonly reason: string
+}> {}
+```
+- `_tag` is the discriminant.
+- API-layer errors must be in `ApiError = Schema.Union([DataError, NotFoundError, ValidationError])`.
+- Domain errors (below the API layer) use `Data.TaggedError`.
+
+### Pure Reducer / State Machine Pattern
+
+`sessiond-state.ts` is the canonical reducer model:
+- Pure exported functions: `startKorriSession`, `beginKorriLaunch`, `markKorriGameRunning`, etc.
+- State is a plain `interface` with `readonly` fields.
+- No classes, no mutation.
+- Tests import and call functions directly with initial/built states.
+
+**For the Steam observer**: the `SteamLaunchObservationSnapshot` reducer should follow this pattern — pure functions `applyContentLogSignal`, `applyGameProcessSignal`, etc., returning a new snapshot.
+
+### Dependency Injection / Configurable Behavior Pattern
+
+See `sessiond-gamescope-reaper.ts` for the exact idiom:
 
 ```ts
-export const librarySourceLayerAtom = Atom.make(loadingForeverLibrarySourceLayer)
-export const libraryRuntime = Atom.runtime(get => Layer.merge(get(librarySourceLayerAtom), ...))
-export const libraryItemsAtom = libraryRuntime.atom(
-  Effect.gen(function* () {
-    const source = yield* LibrarySource
-    return yield* source.listPlayableEntries()
+export interface GamescopeReaperOptions {
+  readonly processList: ProcessListQuery
+  readonly signaler: ProcessSignaler
+  readonly logger?: GamescopeReaperLogger
+  readonly graceMs?: number
+  readonly retries?: number
+}
+
+export function createGamescopeReaper(options: GamescopeReaperOptions): GamescopeReaper { … }
+
+// System defaults (production)
+export function createSystemGamescopeReaper(overrides = {}): GamescopeReaper {
+  return createGamescopeReaper({
+    processList: overrides.processList ?? createProcfsProcessList(),
+    signaler: overrides.signaler ?? POSIX_PROCESS_SIGNALER,
+    …
   })
-)
-```
-
-### ProseQL persistent db (current pattern, library-db.ts)
-
-```ts
-export function openKorriLibraryDb(options: KorriLibraryDbOptions) {
-  const config = makeKorriLibraryDbConfig(options.root)
-  const persistenceLayer = makeNodePersistenceLayer(config, { codecs: [korriReadableYamlCodec] })
-  return Effect.tryPromise({ try: () => mkdir(options.root, { recursive: true }), ... }).pipe(
-    Effect.flatMap(() =>
-      createPersistentEffectDatabase(config, undefined, { writeDebounce: options.writeDebounce ?? 10 })
-        .pipe(Effect.provide(persistenceLayer))
-    ),
-    // ... validation and sidecar wiring
-  )
 }
 ```
 
-New multi-root version: `makeKorriLibraryDbConfig(roots: readonly string[])` →
-`DocumentGraphSourceConfig` instead of `DocumentSourceConfig`.
-
-### RPC handler pattern (multi-action, AGENTS.md)
-
-```
-product/apps/portal/api/<concept>/
-  get.rpc.ts           ← Schema + router tag
-  get.rpc-handler.ts   ← Effect handler implementation
+Tests inject cheap inline fakes:
+```ts
+function makeProcessList(processes: readonly ProcessInfo[]) {
+  return { list: async () => processes }
+}
 ```
 
-New `/api/config/events` is HTTP SSE (not RPC), following the same Hono handler pattern
-as `events.ts`.
+**The Steam tailer must follow this**: `createSteamLogTailer(options)` with injected `watchFile`, `readLine`, logger, etc. `createSystemSteamLogTailer()` provides real filesystem defaults.
+
+### Testing Pattern
+
+All test files:
+- Use `bun:test` (`describe`, `it`, `expect`, `afterEach`).
+- Live next to the source: `foo.ts` / `foo.test.ts`.
+- Use real implementations with configurable behavior — not mocks/stubs/fakes.
+- Temp directories for filesystem tests via `mkdtemp`/`mkdir` in `out/tmp/<module>/`.
+- `afterEach` cleanup via a `cleanups` array.
+- Assertions on observable behavior, not private internals.
+
+**Test double naming**: never `MockFoo`, `StubFoo`, `FakeFoo`. Use `createHarness(…)` returning real objects with recorded side-effects (see `inputd-actions.test.ts`).
+
+Example harness pattern:
+```ts
+function createHarness(options = {}) {
+  const commands: InputdActionCommand[] = []
+  const warnings: unknown[] = []
+  const dispatcher = createInputdActionDispatcher({
+    ...options,
+    runner: async command => { commands.push(command) },
+    logger: { debug: () => {}, info: () => {}, warn: input => warnings.push(input), error: () => {} },
+  })
+  return { dispatcher, commands, warnings }
+}
+```
+
+### Logger Usage
+
+Import from `@platform/logger`, not `console.log`:
+```ts
+import { logger as defaultLogger } from "@platform/logger"
+// or
+import { createLogger } from "@platform/logger"
+const log = createLogger("steam-log-tailer")
+```
+
+Pino logger interface: `{ debug, info, warn, error }` each taking `(input: unknown, message?: string)`.
 
 ---
 
-## Key File Paths for the Implementation
+## Issue Conventions
 
-| Area | File | Action |
-|------|------|--------|
-| Env var resolution | `product/platform/library/library-source-layer-live.ts` | Replace `buildLibraryRootFromEnv()` with `buildConfigRootsFromEnv()` returning `string[]` |
-| ProseQL db config | `product/platform/library/proseql/library-db.ts` | Replace `documents` source with `documentGraph`; accept `roots: readonly string[]` |
-| SSE handler | `product/apps/portal/api/library/events.ts` | Replace with new `product/apps/portal/api/config/events.ts` (watch all roots) |
-| Hono router | `product/apps/portal/api/hono-app.ts` | Replace `/api/library/events` route with `/api/config/events` |
-| React bridge | `product/apps/portal/features/home/HomeRuntimeLayersRoot.tsx` | Update EventSource URL; update event name |
-| Nix daemon module | `product/systems/nixos/modules/korri-daemon.nix` | Add `roots` list option; emit `KORRI_CONFIG_ROOTS`; change platform defaults install path |
-| Nix sessiond module | `product/systems/nixos/modules/korri-sessiond.nix` | Re-export `KORRI_CONFIG_ROOTS` analogously to `KORRI_LIBRARY_ROOT` |
-| Platform defaults | `rocknix-sm8550.nix`, `rocknix-rk3566.nix` | Use dedicated read-only root instead of file install into user root |
-| Test helper | `tools/testing/library/with-temp-proseql-library.ts` | Add multi-root variant |
-| Nix checks | `tools/testing/nix/korri-daemon-module-check.nix` | Assert `KORRI_CONFIG_ROOTS` env and roots defaults |
-| Desktop forwarder | `product/apps/desktop/api-forwarder.ts` | Forward `/api/config/events` passthrough (SSE path check update) |
+No `.github/ISSUE_TEMPLATE/` found. Issues and backlog items use the `work/items/parking-lot/` markdown format:
+
+```yaml
+---
+id: 01KV3KWT98Y6W6CNXP05ZPSHH7
+slug: capture-steam-launch-diagnostics-as-first-class-session-arti
+title: Build first-class Steam launch observability
+origin: parked
+status: To Do
+priority: high
+labels:
+  - steam
+  - observability
+  - sessiond
+created: 2026-06-14
+source: user
+---
+```
 
 ---
 
-## Parked Items (from `work/items/parking-lot/`)
+## Documentation Insights
 
-Two items explicitly deferred from the config-roots scope:
+### Contribution Guidelines
 
-1. **`01KTRYCA2EC1DBW6RJXPC4NJV4`** — Design generic removable-media Korri config roots.
-   Defines device-neutral exposure of mounted media (SD cards, USB) as config roots.
-   Not in scope for this slice.
+No explicit CONTRIBUTING.md found. Standards are:
+1. `just typecheck` — whole-repo only (path aliases require it).
+2. `just test-unit` — unit tests.
+3. `just lint` / `just format` — Biome.
+4. `just fallow-audit` — if Fallow is configured.
+5. E2E (`just test-e2e`) when user-facing behavior changes.
 
-2. **`01KTRYCK5XYMCSVYD55P7XWBDY`** — Define Korri config authoring write-target semantics.
-   CLI/import flows need an explicit writable root. The config-graph treats reads as
-   an ordered graph; write target is a separate concern that authoring tools must address.
-   Not in scope for this slice.
+### Coding Standards
+
+- **Effect Schema** is source of truth for wire shapes. No hand-rolled parsers at protocol boundaries.
+- **No `any`**. Strict TypeScript throughout.
+- **No barrel exports** except documented module entrypoints (`@platform/logger`).
+- **Comments**: why, not what. Sparse doc comments.
+- **UTC methods** for ISO date strings.
+- **Additive protocol evolution**: new optional fields only. Schema updated before daemon emits.
+- **Sensitive data**: never in localStorage.
+
+### Architecture Decision Records
+
+Live in `docs/solutions/` (by category) and `docs/plans/`. Notable relevant ones:
+- `docs/solutions/architecture-patterns/steam-applaunch-with-silent-steam-and-per-app-launchoptions-gamescope-wrap-aka-x86-2026-05-27.md`
+- `docs/solutions/runtime-errors/steam-manual-launch-x86-eager-xwayland-dbus-readiness-2026-05-26.md`
+
+---
+
+## Templates Found
+
+No GitHub issue/PR templates in `.github/`.  
+Work items use the parking-lot markdown format (`work/items/parking-lot/*.md`).
+
+---
+
+## Bandai Fixture Summary
+
+The fixtures in `docs/research/steam-observability/bandai-2026-06-14/` are the ground truth for parser tests. The three confirmed AppIDs:
+
+| Game       | AppID  | content_log         | gameprocess_log | console_log |
+|-----------|--------|--------------------|--------------------|-------------|
+| Downwell   | 360740 | ✅ (stale stop + new launch) | ✅ (multi-PID) | ✅ (install script) |
+| Sonic Mania| 584400 | ✅ (clean start)   | ✅ (multi-PID)    | ✅ (cloud sync) |
+| Caveblazers| 452060 | ✅ (clean start)   | ✅ (multi-PID)    | available   |
+
+**Exact observed line formats from fixtures:**
+
+`content_log.txt`:
+```
+[2026-06-14 14:41:27] AppID 360740 state changed : Fully Installed,App Running,
+[2026-06-14 14:41:57] AppID 360740 state changed : Fully Installed,
+```
+
+`gameprocess_log.txt` (first PID has command; subsequent do not):
+```
+[2026-06-14 14:41:27] AppID 360740 adding PID 204611 as a tracked process "/run/current-system/sw/bin/bash /var/lib/korri/bin/korri-steam-gamescope-launch ..."
+[2026-06-14 14:41:28] AppID 360740 adding PID 204625 as a tracked process
+[2026-06-14 14:41:57] AppID 360740 no longer tracking PID 204625, exit code -1
+[2026-06-14 14:41:57] AppID 360740 no longer tracking PID 204611, exit code 0
+```
+
+`console_log.txt` (tasks and install-script evaluator):
+```
+[2026-06-14 14:41:06] ExecCommandLine: "'/var/lib/korri/steam/steamrtarm64/steam' ... '-applaunch' '360740'"
+[2026-06-14 14:41:06] GameAction [AppID 360740, ActionID 4] : LaunchApp changed task to CheckShaderDepotManifest with ""
+[2026-06-14 14:41:07] GameAction [AppID 360740, ActionID 4] : LaunchApp changed task to ProcessingInstallScript with ""
+[2026-06-14 14:41:07] Running install script evaluator for AppID 360740, 1 step(s)  ...
+[2026-06-14 14:41:27] GameAction [AppID 360740, ActionID 4] : LaunchApp changed task to CreatingProcess with ""
+[2026-06-14 14:41:27] GameAction [AppID 360740, ActionID 4] : LaunchApp changed task to WaitingGameWindow with ""
+[2026-06-14 14:41:27] GameAction [AppID 360740, ActionID 4] : LaunchApp changed task to Completed with ""
+```
+
+`shader_log.txt`:
+```
+[2026-06-14 14:38:14] AppID 360740 exited.
+[2026-06-14 14:39:02] Setting MESA_GLSL_CACHE_DIR=/var/lib/korri/steam/steamapps/shadercache/584400 ...
+```
+
+**Downwell stale-PID gotcha**: `gameprocess_log.txt` has 8 stale PID-removal lines from the *previous* Downwell run (at 14:38:14) before the new launch at 14:41:27. Parsers must use launch-window correlation (ignore pre-launch removals).
+
+**Wrapper PID always exits 0**: child PIDs exit -1; the root/wrapper PID exits 0. Do not treat `-1` as user-facing failure.
+
+`parser-fixtures/` directory has per-AppID combined files (`downwell-360740.txt`, `sonic-mania-584400.txt`, `caveblazers-452060.txt`) mixing sources — these need to be split into source-specific fixture files per handoff Unit 1.
 
 ---
 
 ## Recommendations
 
-1. **Start from `makeKorriLibraryDbConfig`.** The highest-leverage first change is swapping
-   the `documents` source for a `documentGraph` source inside `library-db.ts`. The rest
-   of the codebase (repository, cascade, RPC handlers) reads from the ProseQL db handle and
-   does not care which source kind produced the data. This isolates the change.
+### File Layout for New Steam Observability Code
 
-2. **Extend, don't replace, the Nix option namespace.** Add `services.korri.daemon.library.roots`
-   as a `types.listOf types.str` alongside (and eventually superseding) `library.root`.
-   Keep `library.root` as a deprecated single-value alias defaulting to `lib.elemAt roots 0`
-   until the option is fully removed to avoid breaking all existing NixOS configs at once.
+Following handoff and existing conventions:
 
-3. **Platform defaults become root-zero.** Instead of installing `00-korri-platform-defaults.yaml`
-   into the user root, generate a separate Nix-store directory containing only that file,
-   and prepend it to `library.roots`. The platform root is a store path — read-only by
-   construction, no ExecStartPre install step needed.
+```
+product/services/device/steam/
+  steam-log-signals.ts              # pure parsers (content_log, gameprocess, console, shader)
+  steam-log-signals.test.ts         # unit tests from fixtures
+  steam-log-tailer.ts               # tail-by-name watcher
+  steam-log-tailer.test.ts          # append/truncate/recreate/missing tests
+  steam-launch-observer.ts          # reducer + snapshot
+  steam-launch-observer.test.ts     # Bandai fixture replay sequences
 
-4. **Keep the korriReadableYamlCodec shim.** The custom YAML codec that unwraps/wraps the
-   `host:` singleton block must be registered for the `documentGraph` source in exactly the
-   same way it is today. The `makeNodePersistenceLayer(config, { codecs: [korriReadableYamlCodec] })`
-   call wires all roots through the same codec set.
+product/apps/portal/api/steam/
+  status.rpc.ts                     # app.steam.status schema + Rpc.make
+  status.rpc-handler.ts             # handler
+  status.rpc-handler.test.ts        # Effect.runPromise tests
+```
 
-5. **Add `KORRI_CONFIG_ROOTS` next to (not instead of) KORRI_LIBRARY_ROOT initially.**
-   `buildLibraryRootFromEnv()` and `resolveLibraryRoot()` can check `KORRI_CONFIG_ROOTS` first
-   (parse `:`) and fall back to `KORRI_LIBRARY_ROOT` for one transition cycle. This avoids
-   breaking the desktop wrapper and existing deployed configs simultaneously.
+Register `app.steam.status` in:
+- `product/apps/portal/api/server/rpc-group.ts` (add `SteamStatusRpc`)
+- `product/apps/portal/api/server/rpc-server.ts` (add `"app.steam.status": handleSteamStatus`)
 
-6. **Hono route rename is a hard cut.** The plan explicitly says no legacy `/api/library/events`
-   support. The React bridge, desktop forwarder test fixtures, and hono-app all name this path;
-   update them together in one commit with a typecheck pass.
+### Specific Implementation Notes
 
-7. **Korrid persistent db (last-known-good).** Move `openKorriLibraryDb` out of `withLibraryRepository`
-   (which opens per-call) into the korrid startup path, holding the db handle for the server
-   lifetime. Wire the ProseQL reactive watch to the SSE event bus. The `documentGraph` reactive
-   path in ProseQL already calls watchers per root; the host just needs to surface those events.
+1. **Parser functions should be pure** (no I/O, no side effects). They receive a string line and return a typed signal or `undefined` for unrecognized lines. Tested directly with fixture strings.
 
-8. **Nix checks follow the existing module-eval pattern.** `korri-daemon-module-check.nix`
-   and `korri-source-machine-image-check.nix` already assert `library.root` and
-   `KORRI_LIBRARY_ROOT`. Add parallel assertions for `library.roots` and `KORRI_CONFIG_ROOTS`.
-   Keep old assertions against the deprecated option until it is removed.
+2. **Tailer DI interface** modeled on reaper pattern:
+   ```ts
+   interface SteamLogTailerFs {
+     stat: (path: string) => Promise<{ size: number; ino: number }>
+     open: (path: string, position: number) => Promise<AsyncIterable<string>>
+     watch: (path: string) => AsyncIterable<"change" | "rename">
+   }
+   function createSteamLogTailer(options: { fs?: SteamLogTailerFs; ... }): SteamLogTailer
+   function createSystemSteamLogTailer(): SteamLogTailer   // real fs defaults
+   ```
 
-9. **Test isolation pattern.** New TypeScript tests should set and restore `KORRI_CONFIG_ROOTS`
-   in `afterEach`, parallel to the existing `KORRI_LIBRARY_ROOT` cleanup. The
-   `withTempRoot` helper should be duplicated or extended to support multi-root scenarios
-   with per-root YAML content.
+3. **Observer reducer signature** modeled on `sessiond-state.ts`:
+   ```ts
+   function applyObservationSignal(
+     snapshot: SteamLaunchObservationSnapshot,
+     signal: SteamObservationEvent,
+   ): SteamLaunchObservationSnapshot
+   ```
+   Initial state factory, pure reducer, tested with sequences from Bandai fixtures.
 
-10. **File format scope.** For the initial slice, `include: ["**/*.yaml", "**/*.yml"]` is
-    sufficient and matches current behavior. Expand to include `**/korri.json`, `**/*.korri.json`,
-    etc. in a follow-up once the multi-root model is proven. Do not introduce format discovery
-    beyond YAML in the same slice as the root-graph migration.
+4. **RPC response shape** must include `app.steam.status` in `ServerStatusResponse` schema as an optional field (additive-only per the protocol evolution rule in `sessiond-managed-launch-protocol.ts`), OR expose as a separate `app.steam.status` RPC. Separate RPC is simpler to test and iterate without touching the existing `app.server.status` shape. The handoff recommends the separate RPC.
+
+5. **Tailer output** is the canonical `SteamObservationEvent` stream that the observer reducer consumes. The observer is not coupled to the tailer's implementation — it accepts events from any source (replay, fixture injection in tests, live tailer in production).
+
+6. **Bounded evidence**: keep recent events bounded (≤N) in the observer snapshot as the handoff requires. 64 is the existing bound in `sessiond.ts` for lifecycle events.
+
+7. **Truncation/recreation detection**: watch for inode changes (rename signal) and restart tailing from offset 0 on recreation; track file size and restart from offset 0 on truncation (new size < previous). Node `fs.watch` emits `rename` for deletion/recreation on Linux; `change` for appends.
+
+8. **Log directory env var**: use `KORRI_STEAM_STATE_ROOT` or `KORRI_STEAM_LOG_DIR` (check existing env naming convention; current Steam code uses `KORRI_STEAM_STATE_ROOT` equivalent in the Nix module / `steam-state-materializer.ts`'s `stateRoot` pattern) defaulting to `/var/lib/korri/steam`.
+
+### Fixture Split (Unit 1 prep)
+
+Split `parser-fixtures/downwell-360740.txt` etc. into per-source fixtures:
+```
+docs/research/steam-observability/bandai-2026-06-14/parser-fixtures/
+  content-log-app-state.txt          # content_log lines only
+  gameprocess-log-tracked-pids.txt   # gameprocess_log lines only
+  console-log-launch-tasks.txt       # console_log lines only
+  shader-log-appid-evidence.txt      # shader_log lines only
+```
+
+The current `parser-fixtures/*.txt` files mix sources (content_log + gameprocess_log + console_log in a single file), which makes test assertions ambiguous when a parser for one source is fed lines from another.
+
+### RPC Tag for Steam Status
+
+Following the existing tag pattern (`app.{domain}.{sub-domain?}.{action}`):
+```
+app.steam.status
+```
+This is consistent with `app.server.status`, `app.session.status`, `app.source.status`.
+
+### Key Files to Read Before Implementation
+
+| File | Why |
+|------|-----|
+| `product/services/device/sessiond-gamescope-reaper.ts` | DI + configurable-behavior pattern to replicate |
+| `product/services/device/sessiond-state.ts` | Pure reducer pattern for observer snapshot |
+| `product/services/device/sessiond.ts` | Bounded event buffer (64), SSE lifecycle pattern |
+| `product/apps/portal/api/hello/rpc.ts` + `rpc-handler.ts` | Minimal RPC template |
+| `product/apps/portal/api/server/status.rpc.ts` | Complex response schema example |
+| `product/apps/portal/api/server/rpc-group.ts` | Where to register new RPC |
+| `product/apps/portal/api/server/rpc-server.ts` | Where to wire handler + layer |
+| `product/platform/library/sessiond-managed-launch-protocol.ts` | Protocol evolution rules comment |
+| `docs/handoffs/steam-observability-implementation-handoff-2026-06-14.md` | Full spec |
+| `docs/research/steam-observability/bandai-2026-06-14/` | Ground-truth fixtures |
+
+### Areas Needing Clarification
+
+1. **Steam log dir env variable name**: The handoff says `/var/lib/korri/steam/logs`. The Nix module and `steam-state-materializer.ts` use `stateRoot`. The tailer should read an env var; confirm the canonical name (`KORRI_STEAM_STATE_ROOT` appended with `/logs`, or `KORRI_STEAM_LOG_DIR` directly).
+
+2. **Observer service as Effect Service or plain function**: The tailer + observer could be a Context.Service (Effect) or a plain-object dependency like `GamescopeReaper`. Given that the status RPC handler will need to call it, an Effect Context.Service with a `LayerLive` would align with `KorriControl` and `StreamControlLayerLive` patterns. However, the tailer is long-running (file watching), which doesn't map cleanly to a request-scoped Effect. Plain async with `createSteamObserver()` returning a handle (like `startKorriSessiond` returning `KorriSessiondHandle`) is simpler for the first slice.
+
+3. **`steam/` directory on trunk**: The `product/services/device/steam/` directory does not exist on `trunk` yet (only in the `steam-ts-planner-handoff` worktree). Either merge the planner worktree first, or create the directory fresh when implementing observability.
+
+4. **Fixture README**: The `docs/research/steam-observability/bandai-2026-06-14/README.md` and `notes.md` are stubs. The handoff says to fill them as Unit 1 — should happen before or during Unit 2 implementation.
