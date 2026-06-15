@@ -1,7 +1,7 @@
 ---
 title: "feat: Remember discovered peers and gossip fleet membership"
 type: feat
-status: active
+status: completed
 date: 2026-06-14
 verify_command: "bun test product/apps/portal/peers product/apps/portal/api/peers"
 ---
@@ -328,102 +328,12 @@ outside tests.
 
 ---
 
-### U4. `app.peers.known` read-only RPC
+### Phase 2 units (U4, U5) — moved to backlog
 
-**Goal:** Expose a node's directly-known peer set (discovered + remembered) so
-other nodes can gossip from it.
-
-**Requirements:** R4, R6, R7
-
-**Dependencies:** U2
-
-**Files:**
-- Create: `product/apps/portal/api/peers/known.rpc.ts`
-- Create: `product/apps/portal/api/peers/known.rpc-handler.ts`
-- Create: `product/apps/portal/api/peers/known.rpc-handler.test.ts`
-- Modify: `product/apps/portal/api/app-rpc-group.ts` (register)
-- Modify: `product/apps/portal/api/handlers.ts` (wire handler)
-
-**Approach:**
-- Response is the node's directly-known peers (from the `PeerDiscovery` ref /
-  store): `{ hostId, displayName, controlUrl, caps, lastSeenAt }[]`. Exclude
-  self. Deliberately NOT the fanned-out catalog `peers` (avoid echo).
-- Read-only; reuse `@platform/api/rpc/*` helpers and typed errors per AGENTS.md.
-
-**Patterns to follow:**
-- `product/apps/portal/api/catalog/snapshot.rpc.ts` + `snapshot.rpc-handler.ts`
-  for shape, registration, and handler wiring.
-
-**Test scenarios:**
-- Happy path: handler returns the current known-peer set excluding self.
-- Edge case: empty peer set returns `[]`.
-- Edge case: self is never present in the response even if somehow in the ref.
-- Integration: a peer added to the ref (via mDNS or store) appears in a
-  subsequent `app.peers.known` response.
-
-**Verification:**
-- `app.peers.known` against a node returns exactly its directly-known peers,
-  self-excluded.
-
----
-
-### U5. Gossip merge (learn peers from peers)
-
-**Goal:** Periodically query known peers' `app.peers.known`, merge new
-candidates into the store + ref (provenance `gossip`), validated by the existing
-fan-out fetch.
-
-**Requirements:** R4, R5, R6, R7
-
-**Dependencies:** U3, U4
-
-**Files:**
-- Create: `product/apps/portal/peers/peer-gossip.ts`
-- Create: `product/apps/portal/peers/peer-gossip.test.ts`
-- Modify: `product/apps/portal/peers/peer-source-fetcher.ts` *(or a sibling
-  fetcher)* to add a "fetch a peer's known peers" call via
-  `createRemoteStreamControlClient`.
-- Modify: `product/apps/portal/stream/remote-stream-client.ts` (expose the
-  `app.peers.known` call on the remote client)
-- Modify: `product/apps/portal/api/rpc-server.ts` (+ services server) to fork the
-  gossip poller into the discovery scope.
-
-**Approach:**
-- Forked, scope-bound poller: for each currently-known peer, call its
-  `app.peers.known`; for each returned candidate, drop self, drop already-known
-  (by `hostId`), require a resolvable name, then `remember` it (source
-  `gossip`) and add to the ref.
-- No recursion / no chasing-of-chased: only query *directly-known* peers each
-  cycle; transitive reach emerges across cycles. Cap work per cycle and reuse
-  the per-peer timeout.
-- Candidates contribute catalog entries only when `PeerSourceFetcher` later
-  succeeds — gossip never injects entries directly (R5).
-
-**Execution note:** Implement the merge/guard logic test-first — the loop and
-self/dedup guards are the correctness core.
-
-**Patterns to follow:**
-- `refreshRemotePeers` concurrency/degrade pattern in `catalog-snapshot.ts`.
-- The forked-scope consumer pattern in `peer-discovery.ts`.
-
-**Test scenarios:**
-- Happy path: a peer reporting an unknown third peer causes that third peer to
-  be remembered and added to the ref with `source: "gossip"`.
-- Edge case: a gossiped candidate equal to `localHostId` is dropped (self).
-- Edge case: a gossiped candidate already known is a no-op (no duplicate, no
-  provenance downgrade from `mdns` to `gossip`).
-- Edge case: a candidate without a resolvable name is rejected.
-- Error path: a peer whose `app.peers.known` errors/times out is skipped without
-  failing the cycle or other peers.
-- Integration: gossiped peers do not contribute catalog entries until a fetch
-  against them succeeds (validate-by-fetch, R5).
-- Edge case (loop safety): node A knows B, B knows A — a cycle converges and
-  does not grow the set unbounded or oscillate provenance.
-
-**Verification:**
-- Starting from a single known peer, a node converges on the full reachable
-  fleet over a few poll cycles, with all learned peers marked `gossip` and only
-  reachable ones showing as `ready`.
+The gossip RPC (`app.peers.known`) and gossip-merge poller were lifted into a
+standalone backlog item — **01KV4TTPAWGJ0D3TA5DHK45R13** — after Phase 1 shipped.
+That item carries the full gossip design, requirements (R4, R5), file list, and
+test scenarios. R1–R3, R6, R7 are satisfied by the shipped Phase 1 units above.
 
 ---
 
@@ -464,13 +374,14 @@ self/dedup guards are the correctness core.
 
 ## Phased Delivery
 
-### Phase 1 — Remember (U1–U3)
+### Phase 1 — Remember (U1–U3) — shipped
 Durable peer memory: meet on the LAN once, federate by name everywhere after a
-restart. Self-contained and independently valuable; ship first.
+restart. Landed on trunk (`45131ed`, `ac2d587`, `41758da`).
 
-### Phase 2 — Gossip (U4–U5)
-Transitive membership: learn peers you never met directly through mutual peers.
-Builds on Phase 1's store and ref.
+### Phase 2 — Gossip — moved to backlog
+Transitive membership (learn peers through mutual peers) was lifted into a
+standalone backlog item, **01KV4TTPAWGJ0D3TA5DHK45R13**, so this plan now
+records the shipped Phase 1 only.
 
 ---
 
