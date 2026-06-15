@@ -161,11 +161,15 @@ export function createSteamLogTailer(
         scanAgain = true
         return scanInFlight
       }
-      scanInFlight = runCoalescedScan()
+      scanInFlight = scanOnceSerial()
       try {
         await scanInFlight
       } finally {
         scanInFlight = undefined
+        if (scanAgain && state !== "stopped") {
+          scanAgain = false
+          queueMicrotask(() => void handle.scanOnce().catch(setError))
+        }
       }
     },
     status: () => {
@@ -185,13 +189,6 @@ export function createSteamLogTailer(
         lastError,
       })
     },
-  }
-
-  async function runCoalescedScan(): Promise<void> {
-    do {
-      scanAgain = false
-      await scanOnceSerial()
-    } while (scanAgain && state !== "stopped")
   }
 
   async function scanOnceSerial(): Promise<void> {
