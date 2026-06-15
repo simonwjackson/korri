@@ -210,6 +210,46 @@ const snapshot = (item: LibraryItemRecord = sonic): ReadableConfigSnapshot => ({
   library: new Map([[item.id, item]]),
 })
 
+const steamApp = (overrides: Partial<AppRecord> = {}): AppRecord => ({
+  id: "steam",
+  kind: "steam",
+  state: { root: "{storage:steam}/Steam" },
+  ...overrides,
+})
+
+const steamReadableSnapshot = (
+  input: {
+    readonly app?: AppRecord
+    readonly users?: ReadonlyMap<string, UserRecord>
+  } = {},
+): ReadableConfigSnapshot => ({
+  host: null,
+  users: input.users ?? new Map(),
+  systems: new Map([["steam", { id: "steam", apps: [{ id: "steam" }] }]]),
+  sources: new Map([["steam", { id: "steam", kind: ["service"] }]]),
+  storage: new Map([["steam", { id: "steam", root: "/state" }]]),
+  apps: input.app ? new Map([[input.app.id, input.app]]) : new Map(),
+  runtimes: new Map(),
+  profiles: new Map(),
+  library: new Map([
+    [
+      "balatro",
+      {
+        id: "balatro",
+        title: "Balatro",
+        releases: [
+          {
+            id: "steam",
+            system: "steam",
+            source: "steam",
+            target: "steam://rungameid/2379780",
+          },
+        ],
+      },
+    ],
+  ]),
+})
+
 describe("resolveReadableLaunchContext", () => {
   it("resolves source, app, runtime, file content, and cascade order", async () => {
     const context = await Effect.runPromise(
@@ -657,6 +697,98 @@ describe("resolveReadableLaunchContext", () => {
       extra: { args: ["-silent", "-gamepadui"] },
       "launch-options": "gamescope -- %command%",
     })
+  })
+
+  it("defaults an active Steam integration to Gamescope through the readable cascade", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(steamReadableSnapshot({ app: steamApp() }), {
+        playableId: "balatro",
+      }),
+    )
+
+    expect(context.app).toMatchObject({
+      id: "steam",
+      kind: "steam",
+      command: "steam",
+      args: [],
+    })
+    const gamescope = context.gamescope
+    if (gamescope === undefined) throw new Error("expected Gamescope policy")
+    expect(gamescope).toMatchObject({
+      enable: true,
+      steam: { enableIntegration: true },
+    })
+    expect(gamescope.display).toBeUndefined()
+    expect(gamescope.scaling).toBeUndefined()
+    expect(gamescope.stats).toBeUndefined()
+    expect(context.steam).toEqual({
+      state: { root: "{storage:steam}/Steam" },
+    })
+  })
+
+  it("keeps Steam integration enabled when app-scoped Gamescope tuning is partial", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        steamReadableSnapshot({
+          app: steamApp({
+            gamescope: { display: { nested: { width: 854, height: 480 } } },
+          }),
+        }),
+        { playableId: "balatro" },
+      ),
+    )
+
+    const gamescope = context.gamescope
+    if (gamescope === undefined) throw new Error("expected Gamescope policy")
+    expect(gamescope).toMatchObject({
+      enable: true,
+      steam: { enableIntegration: true },
+      display: { nested: { width: 854, height: 480 } },
+    })
+  })
+
+  it("lets app-scoped Steam Gamescope config disable the integration baseline", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        steamReadableSnapshot({
+          app: steamApp({ gamescope: { enable: false } }),
+        }),
+        { playableId: "balatro" },
+      ),
+    )
+
+    expect(context.gamescope).toEqual({ enable: false })
+  })
+
+  it("does not let a generic user-level Gamescope disable override the Steam app baseline", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(
+        steamReadableSnapshot({
+          app: steamApp(),
+          users: new Map([
+            ["simon", { id: "simon", gamescope: { enable: false } }],
+          ]),
+        }),
+        { playableId: "balatro", userId: "simon" },
+      ),
+    )
+
+    const gamescope = context.gamescope
+    if (gamescope === undefined) throw new Error("expected Gamescope policy")
+    expect(gamescope.enable).toBe(true)
+    expect(gamescope.steam?.enableIntegration).toBe(true)
+  })
+
+  it("requires apps.steam before the Steam built-in baseline is active", async () => {
+    const error = await Effect.runPromise(
+      Effect.flip(
+        resolveReadableLaunchContext(steamReadableSnapshot(), {
+          playableId: "balatro",
+        }),
+      ),
+    )
+
+    expect(error).toMatchObject({ _tag: "AppNotFound", appId: "steam" })
   })
 
   it("rejects Steam launch-options when the selected app is not Steam", async () => {

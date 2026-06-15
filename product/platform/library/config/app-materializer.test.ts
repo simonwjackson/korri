@@ -1118,6 +1118,47 @@ describe("materializeReadableSteamLaunch", () => {
     ])
   })
 
+  it("keeps the Steam Gamescope baseline outside per-game LaunchOptions", async () => {
+    const writes: Array<{ path: string; content: string }> = []
+    const context = steamContext("/steam-home")
+    const result = await runPromise(
+      materializeReadableSteamLaunch({
+        context: {
+          ...context,
+          gamescope: {
+            enable: true,
+            steam: { enableIntegration: true },
+          },
+          steam: {
+            state: { root: "/steam-home" },
+          },
+          runtime: undefined,
+        },
+        fs: {
+          readText: async () => undefined,
+          writeTextAtomic: async (path, content) => {
+            writes.push({ path, content })
+          },
+          mkdirp: async () => {},
+        },
+        lifecycle: {
+          shutdown: async () => {},
+          waitForShutdown: async () => {},
+          start: async () => {},
+          waitUntilReady: async () => {},
+        },
+        lock: { withLock: async (_key, run) => run() },
+      }),
+    )
+
+    expect(result.spec).toEqual({
+      command: "steam",
+      args: ["-applaunch", "2379780"],
+    })
+    expect(writes).toEqual([])
+    expect(JSON.stringify(result)).not.toContain("korri-steam-gamescope-launch")
+  })
+
   it("resolves Steam storage tokens in process arguments", async () => {
     await withRoot(async root => {
       const storageRoot = join(root, "steam-storage")

@@ -30,7 +30,10 @@ import {
   resolveEffectiveAppChoices,
   selectAppChoice,
 } from "./app-choice-selection"
-import { getBuiltInAppDescriptor } from "./app-integrations"
+import {
+  getBuiltInAppDescriptor,
+  mergeBuiltInAppGamescopePolicy,
+} from "./app-integrations"
 import type { EphemeralOverride } from "./ephemeral-override"
 import {
   AppNotFound,
@@ -1369,20 +1372,32 @@ const resolveReadableAppRecord = (
   const override = apps.get(appId)
   const builtIn = getBuiltInAppDescriptor(appId)
   if (builtIn === undefined) return override
+  if (builtIn.id === "steam" && override === undefined) return undefined
   return {
     id: appId,
     kind: override?.kind ?? builtIn.kind,
     command: override?.command ?? builtIn.command,
+    runtime: override?.runtime,
     args: override?.args ?? readableBuiltInArgs(appId, builtIn.args),
     systems: override?.systems ?? builtIn.systems,
     policy: override?.policy ?? builtIn.policy,
     settings: override?.settings ?? builtIn.settings,
-    gamescope: override?.gamescope ?? builtIn.gamescope,
+    gamescope: mergeBuiltInAppGamescopePolicy(
+      builtIn.gamescope,
+      override?.gamescope,
+    ),
     moonlight: override?.moonlight ?? builtIn.moonlight,
     ...(override?.kind === "retroarch" || builtIn.kind === "retroarch"
       ? override !== undefined
         ? (appRetroArchPolicyFromRecord(override) ?? builtIn.retroarch)
         : builtIn.retroarch
+      : {}),
+    ...(override?.kind === "steam" || builtIn.kind === "steam"
+      ? {
+          state: override?.state,
+          extra: override?.extra,
+          "launch-options": override?.["launch-options"],
+        }
       : {}),
     env: override?.env ?? builtIn.env,
     cwd: override?.cwd ?? builtIn.cwd,

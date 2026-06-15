@@ -364,6 +364,27 @@ describe("composeGamescopeLaunchSpec", () => {
     ])
   })
 
+  it("wraps a Steam session with only the baseline integration flags", () => {
+    const spec = composeGamescopeLaunchSpec(
+      { command: "steam", args: ["-applaunch", "1332010"] },
+      { enable: true, steam: { enableIntegration: true } },
+    )
+
+    expect(spec.command).toBe("gamescope")
+    expect(gamescopeArgs(spec)).toEqual([
+      "--backend",
+      "wayland",
+      "-f",
+      "-b",
+      "--expose-wayland",
+      "-e",
+    ])
+    expect(gamescopeArgs(spec)).not.toContain("-w")
+    expect(gamescopeArgs(spec)).not.toContain("-F")
+    expect(gamescopeArgs(spec)).not.toContain("--mangoapp")
+    expect(innerArgs(spec)).toEqual(["steam", "-applaunch", "1332010"])
+  })
+
   it("appends extraArgs after typed flags and before the app separator", () => {
     const spec = composeGamescopeLaunchSpec(game, {
       enable: true,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import { Cause, Effect } from "effect"
 
 import {
+  getBuiltInAppDescriptor,
   resolveAppDescriptor,
   validateAppModuleCompatibility,
 } from "./app-integrations"
@@ -25,6 +26,12 @@ const launcherMap = (launchers: readonly LauncherRecord[] = []) =>
   new Map(launchers.map(launcher => [launcher.id, launcher]))
 
 describe("resolveAppDescriptor", () => {
+  it("declares Steam as a baseline-defaults built-in integration", () => {
+    expect(getBuiltInAppDescriptor("steam")?.capabilities).toEqual({
+      baselineDefaults: true,
+    })
+  })
+
   it("resolves built-in retroarch without an apps YAML record", () => {
     const app = run(
       resolveAppDescriptor({
@@ -120,7 +127,7 @@ describe("resolveAppDescriptor", () => {
     expect(app.ryubing?.state?.root).toBe("/state/Ryujinx")
   })
 
-  it("resolves a first-class Steam app as a Steam integration", () => {
+  it("resolves an active first-class Steam app from the built-in baseline", () => {
     const app = run(
       resolveAppDescriptor({
         appId: "steam",
@@ -128,7 +135,6 @@ describe("resolveAppDescriptor", () => {
           {
             id: "steam",
             kind: "steam",
-            command: "steam",
             state: { root: "/steam-home" },
           },
         ]),
@@ -138,6 +144,124 @@ describe("resolveAppDescriptor", () => {
 
     expect(app.integration).toBe("steam")
     expect(app.command).toBe("steam")
+    expect(app.args).toEqual([])
+    expect(app.gamescope).toEqual({
+      enable: true,
+      steam: { enableIntegration: true },
+    })
+    expect(app.capabilities).toEqual({ baselineDefaults: true })
+  })
+
+  it("merges partial app-scoped Steam Gamescope tuning with the built-in baseline", () => {
+    const app = run(
+      resolveAppDescriptor({
+        appId: "steam",
+        apps: appMap([
+          {
+            id: "steam",
+            kind: "steam",
+            gamescope: { display: { nested: { width: 854, height: 480 } } },
+            state: { root: "/steam-home" },
+          },
+        ]),
+        launchers: launcherMap(),
+      }),
+    )
+
+    expect(app.gamescope).toEqual({
+      enable: true,
+      steam: { enableIntegration: true },
+      display: { nested: { width: 854, height: 480 } },
+    })
+  })
+
+  it("lets app-scoped Steam overrides replace the built-in baseline", () => {
+    const app = run(
+      resolveAppDescriptor({
+        appId: "steam",
+        apps: appMap([
+          {
+            id: "steam",
+            kind: "steam",
+            command: "/usr/bin/steam-custom",
+            gamescope: { enable: false },
+            state: { root: "/steam-home" },
+          },
+        ]),
+        launchers: launcherMap(),
+      }),
+    )
+
+    expect(app.integration).toBe("steam")
+    expect(app.command).toBe("/usr/bin/steam-custom")
+    expect(app.gamescope).toEqual({ enable: false })
+  })
+
+  it("does not inherit legacy Steam Gamescope fields once app-scoped config exists", () => {
+    const app = run(
+      resolveAppDescriptor({
+        appId: "steam",
+        apps: appMap([
+          {
+            id: "steam",
+            kind: "steam",
+            gamescope: { display: { nested: { width: 854, height: 480 } } },
+            state: { root: "/steam-home" },
+          },
+        ]),
+        launchers: launcherMap([
+          {
+            id: "steam",
+            command: "steam",
+            args: [],
+            systems: [],
+            gamescope: { enable: false },
+          },
+        ]),
+      }),
+    )
+
+    expect(app.gamescope).toEqual({
+      enable: true,
+      steam: { enableIntegration: true },
+      display: { nested: { width: 854, height: 480 } },
+    })
+  })
+
+  it("merges legacy Steam launcher Gamescope tuning with the built-in baseline", () => {
+    const app = run(
+      resolveAppDescriptor({
+        appId: "steam",
+        apps: appMap(),
+        launchers: launcherMap([
+          {
+            id: "steam",
+            command: "steam",
+            args: [],
+            systems: [],
+            gamescope: { display: { nested: { width: 854, height: 480 } } },
+          },
+        ]),
+      }),
+    )
+
+    expect(app.gamescope).toEqual({
+      enable: true,
+      steam: { enableIntegration: true },
+      display: { nested: { width: 854, height: 480 } },
+    })
+  })
+
+  it("does not activate Steam without an apps.steam record", () => {
+    expect(
+      runErrTag(
+        resolveAppDescriptor({
+          appId: "steam",
+          apps: appMap(),
+          launchers: launcherMap(),
+        }),
+      ),
+    ).toBe("AppNotFound")
   })
 
   it("resolves a custom process app with an explicit command", () => {

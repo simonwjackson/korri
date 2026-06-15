@@ -37,6 +37,9 @@ export interface AppDescriptor {
   readonly id: string
   readonly kind?: AppKind
   readonly integration: AppIntegrationKind
+  readonly capabilities?: {
+    readonly baselineDefaults?: boolean
+  }
   readonly command: string
   readonly args: readonly string[]
   readonly systems: readonly string[]
@@ -104,11 +107,50 @@ const builtInApps: Readonly<Record<string, AppDescriptor>> = {
     policy: { allowedCommands: ["solarus-run"] },
     knownSettings: ["fullscreen"],
   },
+  steam: {
+    id: "steam",
+    kind: "steam",
+    integration: "steam",
+    capabilities: { baselineDefaults: true },
+    command: "steam",
+    args: [],
+    systems: [],
+    gamescope: {
+      enable: true,
+      steam: { enableIntegration: true },
+    },
+  },
 }
 
 export const getBuiltInAppDescriptor = (
   appId: string,
 ): AppDescriptor | undefined => builtInApps[appId]
+
+const isPlainPolicyObject = (
+  value: unknown,
+): value is Readonly<Record<string, unknown>> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+const mergePolicyDefaults = <T>(base: T, override: T): T => {
+  if (isPlainPolicyObject(base) && isPlainPolicyObject(override)) {
+    const merged: Record<string, unknown> = { ...base }
+    for (const [key, value] of Object.entries(override)) {
+      merged[key] =
+        key in merged ? mergePolicyDefaults(merged[key], value) : value
+    }
+    return merged as T
+  }
+  return override
+}
+
+export const mergeBuiltInAppGamescopePolicy = (
+  base: GamescopePolicy | undefined,
+  override: GamescopePolicy | undefined,
+): GamescopePolicy | undefined => {
+  if (override === undefined) return base
+  if (base === undefined || override.enable === false) return override
+  return mergePolicyDefaults(base, override)
+}
 
 export const resolveAppDescriptor = (input: {
   readonly appId: string
@@ -121,6 +163,9 @@ export const resolveAppDescriptor = (input: {
     const legacyLauncher = input.launchers.get(input.appId)
 
     if (builtIn) {
+      if (builtIn.id === "steam" && !appOverride && !legacyLauncher) {
+        return yield* Effect.fail(new AppNotFound({ appId: input.appId }))
+      }
       return mergeDescriptor(builtIn, appOverride, legacyLauncher)
     }
 
@@ -162,57 +207,64 @@ const mergeDescriptor = (
   base: AppDescriptor,
   appOverride: AppRecord | undefined,
   legacyLauncher: LauncherRecord | undefined,
-): AppDescriptor => ({
-  ...base,
-  ...(legacyLauncher
-    ? {
-        command: legacyLauncher.command,
-        args: legacyLauncher.args,
-        systems: legacyLauncher.systems,
-        policy: legacyLauncher.policy,
-        presets: legacyLauncher.presets ?? base.presets,
-        gamescope: legacyLauncher.gamescope ?? base.gamescope,
-        moonlight: legacyLauncher.moonlight ?? base.moonlight,
-        retroarch: legacyLauncher.retroarch ?? base.retroarch,
-        env: legacyLauncher.env ?? base.env,
-        cwd: legacyLauncher.cwd ?? base.cwd,
-        argsAppend: legacyLauncher.argsAppend ?? base.argsAppend,
-      }
-    : {}),
-  ...(appOverride?.kind ? { kind: appOverride.kind } : {}),
-  ...(appOverride
-    ? {
-        integration:
-          appRecordKind(appOverride) === "retroarch"
-            ? "retroarch"
-            : appRecordKind(appOverride) === "ryubing"
-              ? "ryubing"
-              : appRecordKind(appOverride) === "steam"
-                ? "steam"
-                : base.integration,
-      }
-    : {}),
-  ...(appOverride?.command ? { command: appOverride.command } : {}),
-  ...(appOverride?.args ? { args: appOverride.args } : {}),
-  ...(appOverride?.systems ? { systems: appOverride.systems } : {}),
-  ...(appOverride?.policy ? { policy: appOverride.policy } : {}),
-  ...(appOverride?.presets ? { presets: appOverride.presets } : {}),
-  ...(appOverride?.gamescope ? { gamescope: appOverride.gamescope } : {}),
-  ...(appOverride?.moonlight ? { moonlight: appOverride.moonlight } : {}),
-  ...(appOverride
-    ? {
-        retroarch:
-          appRetroArchPolicyFromRecord(appOverride) ??
-          legacyLauncher?.retroarch ??
-          base.retroarch,
-        ryubing: appRyubingPolicyFromRecord(appOverride) ?? base.ryubing,
-      }
-    : {}),
-  ...(appOverride?.env ? { env: appOverride.env } : {}),
-  ...(appOverride?.cwd !== undefined ? { cwd: appOverride.cwd } : {}),
-  ...(appOverride?.argsAppend ? { argsAppend: appOverride.argsAppend } : {}),
-  settings: mergeLaunchSettings(base.settings, appOverride?.settings),
-})
+): AppDescriptor => {
+  const gamescope =
+    appOverride?.gamescope !== undefined
+      ? mergeBuiltInAppGamescopePolicy(base.gamescope, appOverride.gamescope)
+      : mergeBuiltInAppGamescopePolicy(base.gamescope, legacyLauncher?.gamescope)
+  return {
+    ...base,
+    capabilities: base.capabilities,
+    ...(legacyLauncher
+      ? {
+          command: legacyLauncher.command,
+          args: legacyLauncher.args,
+          systems: legacyLauncher.systems,
+          policy: legacyLauncher.policy,
+          presets: legacyLauncher.presets ?? base.presets,
+          gamescope,
+          moonlight: legacyLauncher.moonlight ?? base.moonlight,
+          retroarch: legacyLauncher.retroarch ?? base.retroarch,
+          env: legacyLauncher.env ?? base.env,
+          cwd: legacyLauncher.cwd ?? base.cwd,
+          argsAppend: legacyLauncher.argsAppend ?? base.argsAppend,
+        }
+      : {}),
+    ...(appOverride?.kind ? { kind: appOverride.kind } : {}),
+    ...(appOverride
+      ? {
+          integration:
+            appRecordKind(appOverride) === "retroarch"
+              ? "retroarch"
+              : appRecordKind(appOverride) === "ryubing"
+                ? "ryubing"
+                : appRecordKind(appOverride) === "steam"
+                  ? "steam"
+                  : base.integration,
+        }
+      : {}),
+    ...(appOverride?.command ? { command: appOverride.command } : {}),
+    ...(appOverride?.args ? { args: appOverride.args } : {}),
+    ...(appOverride?.systems ? { systems: appOverride.systems } : {}),
+    ...(appOverride?.policy ? { policy: appOverride.policy } : {}),
+    ...(appOverride?.presets ? { presets: appOverride.presets } : {}),
+    ...(gamescope ? { gamescope } : {}),
+    ...(appOverride?.moonlight ? { moonlight: appOverride.moonlight } : {}),
+    ...(appOverride
+      ? {
+          retroarch:
+            appRetroArchPolicyFromRecord(appOverride) ??
+            legacyLauncher?.retroarch ??
+            base.retroarch,
+          ryubing: appRyubingPolicyFromRecord(appOverride) ?? base.ryubing,
+        }
+      : {}),
+    ...(appOverride?.env ? { env: appOverride.env } : {}),
+    ...(appOverride?.cwd !== undefined ? { cwd: appOverride.cwd } : {}),
+    ...(appOverride?.argsAppend ? { argsAppend: appOverride.argsAppend } : {}),
+    settings: mergeLaunchSettings(base.settings, appOverride?.settings),
+  }
+}
 
 const launcherToDescriptor = (launcher: LauncherRecord): AppDescriptor => ({
   id: launcher.id,
