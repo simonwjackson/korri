@@ -42,7 +42,39 @@ afterEach(async () => {
 
 describe("sessiond gamescope reaper", () => {
   it("exposes the canonical compositor process names", () => {
-    expect(GAMESCOPE_PROCESS_NAMES).toEqual(["gamescope-wl", "gamescopereaper"])
+    expect(GAMESCOPE_PROCESS_NAMES).toEqual([
+      "gamescope-wl",
+      "gamescopereaper",
+      "gamescope",
+    ])
+  })
+
+  it("reaps Bandai gamescope processes that use the gamescope comm name", async () => {
+    let pass = 0
+    const processList = {
+      list: async () => {
+        pass += 1
+        if (pass === 1) {
+          return [
+            { pid: 1000, pgid: 1000, ppid: 1, comm: "setsid" },
+            { pid: 1001, pgid: 1000, ppid: 1000, comm: "gamescope" },
+          ] satisfies readonly ProcessInfo[]
+        }
+        return [] satisfies readonly ProcessInfo[]
+      },
+    }
+    const { sent, signaler } = makeSignaler()
+    const reap = createGamescopeReaper({
+      processList,
+      signaler,
+      graceMs: 0,
+      retries: 1,
+    })
+
+    const outcome = await reap({ pgid: 1000 })
+
+    expect(sent[0]).toEqual({ target: "group", id: 1000, signal: "SIGTERM" })
+    expect(outcome).toEqual({ reaped: [1001], residual: [] })
   })
 
   it("signals the process group then verifies both gamescope processes are gone", async () => {

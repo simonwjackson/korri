@@ -1,11 +1,11 @@
 /**
- * Process-name-accurate reaper for `gamescope-wl` and `gamescopereaper`.
+ * Process-name-accurate reaper for `gamescope-wl`, `gamescopereaper`, and `gamescope`.
  *
  * Phase 4C teardown step. Sessiond invokes this during `restoring` with
  * the managed launch's process group id (pgid). The reaper:
  *
  * 1. Lists processes (PID, pgid, ppid, comm) via an injected query.
- * 2. Identifies any `gamescope-wl` / `gamescopereaper` whose pgid matches
+ * 2. Identifies any `gamescope-wl` / `gamescopereaper` / `gamescope` whose pgid matches
  *    the launch's pgid OR whose parent lineage chains back into that
  *    pgid (handles children that escaped the original group).
  * 3. Signals the process group with SIGTERM, waits the grace window,
@@ -21,6 +21,7 @@
 export const GAMESCOPE_PROCESS_NAMES = [
   "gamescope-wl",
   "gamescopereaper",
+  "gamescope",
 ] as const
 
 export type GamescopeProcessName = (typeof GAMESCOPE_PROCESS_NAMES)[number]

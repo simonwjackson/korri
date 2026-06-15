@@ -7,6 +7,10 @@ import {
 } from "@platform/library/sessiond-managed-launch-client"
 import { buildBottomKeyboardCommand } from "./bottom-keyboard"
 import { buildSwayShortcutCommand } from "./sway-actions"
+import {
+  collectSteamForegroundProcesses,
+  formatSteamForegroundProcessForLog,
+} from "./steam-foreground-processes"
 
 export const KORRI_INPUTD_ACTION_IDS = [
   "system-panel",
@@ -268,14 +272,12 @@ async function dispatchStaleSteamForegroundKill(options: {
   readonly signalProcess: InputdProcessSignaler
   readonly graceMs: number
 }): Promise<boolean> {
-  const targets = (await options.processScanner()).filter(process =>
-    isStaleSteamForegroundProcess(process),
-  )
+  const targets = collectSteamForegroundProcesses(await options.processScanner())
   if (targets.length === 0) return false
 
   const targetPids = new Set(targets.map(process => process.pid))
   options.logger.info(
-    { targets: targets.map(process => formatProcessForLog(process)) },
+    { targets: targets.map(process => formatSteamForegroundProcessForLog(process)) },
     "inputd killing stale Steam foreground processes",
   )
 
@@ -287,38 +289,21 @@ async function dispatchStaleSteamForegroundKill(options: {
     await new Promise(resolve => setTimeout(resolve, options.graceMs))
   }
 
-  const residual = (await options.processScanner()).filter(
-    process =>
-      targetPids.has(process.pid) && isStaleSteamForegroundProcess(process),
-  )
+  const residual = collectSteamForegroundProcesses(
+    await options.processScanner(),
+  ).filter(process => targetPids.has(process.pid))
   for (const process of residual) {
     signalProcessSafely(options.signalProcess, process.pid, "SIGKILL")
   }
 
   if (residual.length > 0) {
     options.logger.warn(
-      { residual: residual.map(process => formatProcessForLog(process)) },
+      { residual: residual.map(process => formatSteamForegroundProcessForLog(process)) },
       "inputd escalated stale Steam foreground kill",
     )
   }
 
   return true
-}
-
-function isStaleSteamForegroundProcess(process: InputdProcessInfo): boolean {
-  const commandLine = process.cmdline.join(" ")
-  if (/\bSteamLaunch AppId=\d+\b/.test(commandLine)) return true
-  if (!commandLine.includes("/var/lib/korri/steam/steamapps/common/")) {
-    return false
-  }
-  return /\.exe(?:\s|$)/i.test(commandLine)
-}
-
-function formatProcessForLog(process: InputdProcessInfo) {
-  return {
-    pid: process.pid,
-    cmdline: process.cmdline.join(" ").slice(0, 500),
-  }
 }
 
 function signalProcessSafely(
