@@ -1,4 +1,7 @@
-import { describe, expect, it } from "bun:test"
+import { afterEach, beforeEach, describe, expect, it } from "bun:test"
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import type {
   BonjourLike,
   BrowserLike,
@@ -7,6 +10,10 @@ import {
   makePeerDiscoveryLayer,
   PeerDiscovery,
 } from "@product/apps/portal/peers/peer-discovery"
+import {
+  makeFilePeerStore,
+  type PeerStore,
+} from "@product/apps/portal/peers/peer-store"
 import type { Service } from "bonjour-service"
 import { Effect, SubscriptionRef } from "effect"
 
@@ -110,6 +117,98 @@ describe("PeerDiscovery", () => {
   })
 })
 
+describe("PeerDiscovery durable memory", () => {
+  let dir: string
+  let store: PeerStore
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "korri-discovery-"))
+    store = makeFilePeerStore({ env: { XDG_STATE_HOME: dir } })
+  })
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  const remembered = (hostId: string, controlUrl: string) =>
+    store.remember({
+      hostId,
+      controlUrl,
+      displayName: hostId,
+      caps: ["source"],
+      source: "mdns",
+    })
+
+  it("seeds remembered peers before any mDNS event", async () => {
+    await remembered("aka", "http://aka:3001")
+
+    const peers = await runPeerDiscoveryThenCollect(
+      createControllableBonjour(),
+      { until: snapshot => snapshot.length === 1 },
+      { peerStore: store },
+    )
+
+    expect(peers.map(p => p.hostId)).toEqual(["aka"])
+    expect(peers[0]?.controlUrl).toBe("http://aka:3001")
+  })
+
+  it("writes mDNS appearances through to the store", async () => {
+    const bonjour = createControllableBonjour()
+    bonjour.emitUp(serviceWithCaps("aka", "192.168.1.117", 3001, "source"))
+
+    await runPeerDiscoveryThenCollect(
+      bonjour,
+      { until: snapshot => snapshot.length === 1 },
+      { peerStore: store },
+    )
+
+    const persisted = await waitForStore(store, p => p.length === 1)
+    expect(persisted[0]).toMatchObject({
+      hostId: "aka",
+      controlUrl: "http://aka:3001",
+      source: "mdns",
+    })
+  })
+
+  it("never seeds the local host from memory", async () => {
+    await remembered("self", "http://self:3001")
+
+    const peers = await runPeerDiscoveryThenCollect(
+      createControllableBonjour(),
+      { until: snapshot => snapshot.length > 0, timeoutMs: 100 },
+      { peerStore: store, localHostId: "self" },
+    )
+
+    expect(peers).toEqual([])
+  })
+
+  it("dedupes a remembered peer re-seen via mDNS", async () => {
+    await remembered("aka", "http://aka:3001")
+    const bonjour = createControllableBonjour()
+    bonjour.emitUp(serviceWithCaps("aka", "192.168.1.117", 3001, "source"))
+
+    const peers = await runPeerDiscoveryThenCollect(
+      bonjour,
+      { until: snapshot => snapshot.length === 1, timeoutMs: 150 },
+      { peerStore: store },
+    )
+
+    expect(peers).toHaveLength(1)
+  })
+})
+
+async function waitForStore(
+  store: PeerStore,
+  until: (peers: Awaited<ReturnType<PeerStore["load"]>>) => boolean,
+) {
+  const deadline = Date.now() + 500
+  while (true) {
+    const peers = await store.load()
+    if (until(peers) || Date.now() > deadline) return peers
+    await new Promise(resolve => setTimeout(resolve, 5))
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Test harness: build a real PeerDiscovery layer wired to the controllable
 // bonjour, then poll its peers SubscriptionRef until a predicate matches or a
@@ -124,6 +223,7 @@ interface CollectOptions {
 
 interface PeerDiscoveryLayerOptions {
   readonly localHostId?: string
+  readonly peerStore?: PeerStore
 }
 
 async function runPeerDiscoveryThenCollect(
@@ -149,6 +249,9 @@ async function runPeerDiscoveryThenCollect(
             bonjourFactory: () => bonjour,
             ...(layerOptions.localHostId !== undefined
               ? { localHostId: layerOptions.localHostId }
+              : {}),
+            ...(layerOptions.peerStore
+              ? { peerStore: layerOptions.peerStore }
               : {}),
           }),
         ),

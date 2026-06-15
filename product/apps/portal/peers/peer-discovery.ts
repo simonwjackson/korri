@@ -22,10 +22,12 @@
  */
 
 import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect"
+import type { StreamHostCandidate } from "../../../../product/apps/cli/lan-stream-discovery"
 import {
   type BonjourLike,
   watchStreamHosts,
 } from "../../../../product/apps/cli/lan-stream-discovery"
+import type { PeerStore, StoredPeer } from "./peer-store"
 
 export type {
   BonjourLike,
@@ -68,6 +70,12 @@ export interface PeerDiscoveryLayerOptions {
    * handles its own entries; including itself would double-count).
    */
   readonly localHostId?: string
+  /**
+   * Durable peer memory. When provided, remembered peers seed the peer set on
+   * boot and every mDNS appearance writes through to the store, so the node
+   * keeps federating with known peers across restarts and off the LAN.
+   */
+  readonly peerStore?: PeerStore
 }
 
 export function makePeerDiscoveryLayer(
@@ -83,13 +91,52 @@ export function makePeerDiscoveryLayer(
         ? { bonjourFactory: options.bonjourFactory }
         : {}
 
+      // Seed from durable memory before the live browser starts, so a node
+      // boots already knowing the peers it has met — even off the LAN.
+      const store = options.peerStore
+      if (store) {
+        const remembered = yield* Effect.promise(() =>
+          store.load().catch(() => [] as readonly StoredPeer[]),
+        )
+        if (remembered.length > 0) {
+          yield* SubscriptionRef.update(peersRef, prev =>
+            seedRemembered(prev, remembered, options.localHostId),
+          )
+        }
+      }
+
       // Forked, scope-bound consumer. When the layer scope closes
       // (server shutdown), the stream's bonjour browser is destroyed.
       yield* Effect.forkScoped(
         Stream.runForEach(watchStreamHosts(streamOptions), event =>
-          SubscriptionRef.update(peersRef, prev =>
-            applyEvent(prev, event, options.localHostId),
-          ),
+          Effect.gen(function* () {
+            yield* SubscriptionRef.update(peersRef, prev =>
+              applyEvent(prev, event, options.localHostId),
+            )
+            // Write-through: remember every federatable mDNS appearance so the
+            // peer survives a restart. Forked so a slow disk never stalls
+            // discovery; failures are swallowed (memory is best-effort).
+            if (
+              store &&
+              event.kind === "appear" &&
+              federatable(event.candidate, options.localHostId)
+            ) {
+              const c = event.candidate
+              yield* Effect.forkScoped(
+                Effect.promise(() =>
+                  store
+                    .remember({
+                      hostId: c.id,
+                      controlUrl: c.controlUrl,
+                      displayName: c.name,
+                      caps: c.capabilities,
+                      source: "mdns",
+                    })
+                    .catch(() => undefined),
+                ),
+              )
+            }
+          }),
         ),
       )
 
@@ -111,11 +158,10 @@ function applyEvent(
   }
 
   const c = event.candidate
-  // Self-filter: a server must never include its own advertisement.
-  if (localHostId && c.id === localHostId) return prev
-  // Capability filter: only library-bearing peers join the federation
-  // set. Stream-only servers (caps lacking "source") are excluded.
-  if (!c.capabilities.includes("source")) return prev
+  // Self-filter + capability filter: a server never includes its own
+  // advertisement, and only library-bearing peers (caps include "source")
+  // join the federation set.
+  if (!federatable(c, localHostId)) return prev
 
   const record: PeerRecord = {
     hostId: c.id,
@@ -145,6 +191,46 @@ export const PeerDiscoveryNoop: Layer.Layer<PeerDiscovery> = Layer.effect(
     return { peers }
   }),
 )
+
+/**
+ * A discovered candidate joins the federation set only when it is not this
+ * server and it advertises the `source` capability. Shared by live mDNS events
+ * and durable-memory seeding so both gate identically.
+ */
+function federatable(
+  candidate: Pick<StreamHostCandidate, "id" | "capabilities">,
+  localHostId: string | undefined,
+): boolean {
+  if (localHostId && candidate.id === localHostId) return false
+  return candidate.capabilities.includes("source")
+}
+
+/**
+ * Seed the peer set from durable memory, keyed by `controlUrl` to match live
+ * discovery, applying the same self/capability gate.
+ */
+function seedRemembered(
+  prev: ReadonlyMap<string, PeerRecord>,
+  remembered: readonly StoredPeer[],
+  localHostId: string | undefined,
+): ReadonlyMap<string, PeerRecord> {
+  const next = new Map(prev)
+  for (const peer of remembered) {
+    if (
+      !federatable({ id: peer.hostId, capabilities: peer.caps }, localHostId)
+    ) {
+      continue
+    }
+    if (next.has(peer.controlUrl)) continue
+    next.set(peer.controlUrl, {
+      hostId: peer.hostId,
+      controlUrl: peer.controlUrl,
+      displayName: peer.displayName,
+      caps: peer.caps,
+    })
+  }
+  return next
+}
 
 function peerRecordsEqual(a: PeerRecord | undefined, b: PeerRecord): boolean {
   if (!a) return false
