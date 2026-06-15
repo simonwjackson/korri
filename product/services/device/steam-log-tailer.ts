@@ -93,6 +93,8 @@ export function createSteamLogTailer(
   let watcher: FSWatcher | undefined
   let timer: ReturnType<typeof setInterval> | undefined
   let sequence = 0
+  let scanInFlight: Promise<void> | undefined
+  let scanAgain = false
 
   const setError = (error: unknown) => {
     lastError = sanitizeSteamEvidenceExcerpt(error, { maxLength: 240 })
@@ -155,16 +157,15 @@ export function createSteamLogTailer(
     },
     scanOnce: async () => {
       if (state === "stopped") return
-      await noteMissingLogDir()
-      for (const filename of Array.from(fileStates.keys())) {
-        await scanFile(filename)
+      if (scanInFlight) {
+        scanAgain = true
+        return scanInFlight
       }
-      const hasActiveFile = Array.from(fileStates.values()).some(
-        info => !info.missing,
-      )
-      if (hasActiveFile) {
-        lastError = undefined
-        state = "running"
+      scanInFlight = runCoalescedScan()
+      try {
+        await scanInFlight
+      } finally {
+        scanInFlight = undefined
       }
     },
     status: () => {
@@ -184,6 +185,28 @@ export function createSteamLogTailer(
         lastError,
       })
     },
+  }
+
+  async function runCoalescedScan(): Promise<void> {
+    do {
+      scanAgain = false
+      await scanOnceSerial()
+    } while (scanAgain && state !== "stopped")
+  }
+
+  async function scanOnceSerial(): Promise<void> {
+    if (state === "stopped") return
+    await noteMissingLogDir()
+    for (const filename of Array.from(fileStates.keys())) {
+      await scanFile(filename)
+    }
+    const hasActiveFile = Array.from(fileStates.values()).some(
+      info => !info.missing,
+    )
+    if (hasActiveFile) {
+      lastError = undefined
+      state = "running"
+    }
   }
 
   async function noteMissingLogDir(): Promise<void> {

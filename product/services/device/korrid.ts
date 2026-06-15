@@ -42,6 +42,7 @@ export interface CreateKorridOptions {
     readonly capabilities: readonly string[]
   }) => StreamAdvertisement
   readonly steamObserver?: SteamLogObserverHandle
+  readonly closeServerTimeoutMs?: number
 }
 
 export function getKorridConfig(
@@ -136,7 +137,9 @@ export function createKorrid(options: CreateKorridOptions = {}): KorridHandle {
       steamObserverInstall = undefined
       await configGraphController.stop()
       if (started) {
-        await closeServer(server)
+        await closeServer(server, {
+          timeoutMs: options.closeServerTimeoutMs ?? 1_500,
+        })
         started = false
       }
     },
@@ -181,19 +184,44 @@ function listen(
 
 function closeServer(
   server: ReturnType<typeof createAdaptorServer>,
+  options: { readonly timeoutMs?: number } = {},
 ): Promise<void> {
+  const closeableServer = server as ReturnType<typeof createAdaptorServer> & {
+    readonly closeAllConnections?: () => void
+    readonly closeIdleConnections?: () => void
+  }
   return new Promise<void>((resolve, reject) => {
+    let settled = false
+    const settle = (result: "resolve" | "reject", error?: unknown) => {
+      if (settled) return
+      settled = true
+      if (timer) clearTimeout(timer)
+      if (result === "reject") reject(error)
+      else resolve()
+    }
+    const timeoutMs = options.timeoutMs
+    const timer =
+      timeoutMs === undefined
+        ? undefined
+        : setTimeout(() => {
+            closeableServer.closeIdleConnections?.()
+            closeableServer.closeAllConnections?.()
+            settle("resolve")
+          }, timeoutMs)
+    if (timer && "unref" in timer && typeof timer.unref === "function")
+      timer.unref()
+
     server.close(error => {
       if (error) {
         const code = (error as NodeJS.ErrnoException).code
         if (code === "ERR_SERVER_NOT_RUNNING") {
-          resolve()
+          settle("resolve")
           return
         }
-        reject(error)
+        settle("reject", error)
         return
       }
-      resolve()
+      settle("resolve")
     })
   })
 }

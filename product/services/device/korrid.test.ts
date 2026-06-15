@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import { get, type IncomingMessage } from "node:http"
 import { createKorrid, getKorridConfig } from "./korrid"
 import {
   getInstalledSteamLogObserverStatus,
@@ -135,4 +136,55 @@ describe("korrid", () => {
     await expect(server.start()).rejects.toThrow("mdns failed")
     await server.stop()
   })
+
+  it("bounds shutdown when an HTTP client keeps an event stream open", async () => {
+    const port = await reservePort()
+    const server = createKorrid({
+      config: {
+        host: "127.0.0.1",
+        port,
+        advertise: false,
+        advertiseCapabilities: ["stream"],
+      },
+      steamObserver: createRecordingSteamObserver(),
+      closeServerTimeoutMs: 50,
+    })
+
+    await server.start()
+    const stream = await openEventStream(port)
+    expect(stream.statusCode).toBe(200)
+
+    try {
+      await expect(
+        Promise.race([
+          server.stop().then(() => "stopped" as const),
+          wait(1_000).then(() => "timeout" as const),
+        ]),
+      ).resolves.toBe("stopped")
+    } finally {
+      stream.destroy()
+    }
+  })
 })
+
+async function reservePort(): Promise<number> {
+  const server = Bun.serve({ port: 0, fetch: () => new Response("ok") })
+  const port = server.port ?? 0
+  server.stop(true)
+  await wait(10)
+  return port
+}
+
+function openEventStream(port: number): Promise<IncomingMessage> {
+  return new Promise((resolve, reject) => {
+    const request = get(`http://127.0.0.1:${port}/api/config/events`, response => {
+      response.pause()
+      resolve(response)
+    })
+    request.once("error", reject)
+  })
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}

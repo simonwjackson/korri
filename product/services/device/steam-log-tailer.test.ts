@@ -120,6 +120,32 @@ describe("Steam log tailer", () => {
     await tailer.stop()
   })
 
+  it("coalesces overlapping scans so appended ranges are emitted once", async () => {
+    const dir = await tempLogDir()
+    const file = join(dir, "shader_log.txt")
+    await writeFile(file, "old\n")
+    const lines: TailedSteamLogLine[] = []
+    const tailer = createSteamLogTailer({
+      logDir: dir,
+      files: ["shader_log.txt"],
+      onLine: line => lines.push(line),
+      watch: false,
+    })
+
+    await tailer.start()
+    const appended = Array.from(
+      { length: 5_000 },
+      (_, index) => `burst ${index}`,
+    )
+    await appendFile(file, `${appended.join("\n")}\n`)
+
+    await Promise.all(Array.from({ length: 8 }, () => tailer.scanOnce()))
+
+    expect(lines.map(line => line.line)).toEqual(appended)
+    expect(new Set(lines.map(line => line.line)).size).toBe(appended.length)
+    await tailer.stop()
+  })
+
   it("buffers partial lines across appends", async () => {
     const dir = await tempLogDir()
     await writeFile(join(dir, "compat_log.txt"), "")
