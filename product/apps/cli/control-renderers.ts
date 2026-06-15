@@ -153,6 +153,8 @@ export function sessionStopExitCode(result: ControlStopSessionResult): number {
     case "Stopped":
     case "NothingToStop":
       return 0
+    case "StopPending":
+      return 75
     case "HostUnavailable":
       return 124
     case "ConfirmationRequired":
@@ -168,6 +170,14 @@ export function renderStopSession(result: ControlStopSessionResult): string {
       return result.force
         ? `force stop requested for ${result.launchId}`
         : `stop requested for ${result.launchId}`
+    case "StopPending": {
+      const detail = result.phase
+        ? ` (${result.phase})`
+        : result.mode
+          ? ` (${result.mode})`
+          : ""
+      return `stop still pending for ${result.launchId}${detail}`
+    }
     case "NothingToStop":
       return "no active session to stop"
     case "SessiondNotConfigured":

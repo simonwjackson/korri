@@ -62,6 +62,33 @@ describe("app.session RPC handlers", () => {
     })
   })
 
+  it("passes pending stop results through from KorriControl", async () => {
+    const result = await Effect.runPromise(
+      handleStopSession({ confirmed: true }).pipe(
+        Effect.provide(
+          controlLayer({
+            stopSession: () =>
+              Effect.succeed({
+                _tag: "StopPending",
+                launchId: "launch-1",
+                force: false,
+                mode: "restoring",
+                phase: "restoring",
+              }),
+          }),
+        ),
+      ),
+    )
+
+    expect(result).toEqual({
+      _tag: "StopPending",
+      launchId: "launch-1",
+      force: false,
+      mode: "restoring",
+      phase: "restoring",
+    })
+  })
+
   it("surfaces missing confirmation as a structured no-mutation result", async () => {
     const result = await Effect.runPromise(
       handleStopSession({ force: true }).pipe(

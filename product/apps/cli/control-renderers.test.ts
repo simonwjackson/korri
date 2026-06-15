@@ -279,6 +279,14 @@ describe("control renderers", () => {
     expect(
       renderStopSession({ _tag: "Stopped", launchId: "launch-1", force: true }),
     ).toBe("force stop requested for launch-1")
+    expect(
+      renderStopSession({
+        _tag: "StopPending",
+        launchId: "launch-1",
+        force: false,
+        phase: "restoring",
+      }),
+    ).toBe("stop still pending for launch-1 (restoring)")
     expect(renderStopSession({ _tag: "NothingToStop" })).toBe(
       "no active session to stop",
     )
@@ -311,6 +319,13 @@ describe("control renderers", () => {
       }),
     ).toBe(0)
     expect(sessionStopExitCode({ _tag: "NothingToStop" })).toBe(0)
+    expect(
+      sessionStopExitCode({
+        _tag: "StopPending",
+        launchId: "launch-1",
+        force: false,
+      }),
+    ).toBe(75)
     expect(sessionStopExitCode({ _tag: "HostUnavailable" })).toBe(124)
     expect(
       sessionStopExitCode({

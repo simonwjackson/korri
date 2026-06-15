@@ -60,6 +60,13 @@ import {
   type StatusSidecar,
 } from "./sessiond-status-sidecar"
 import {
+  cleanupSteamForegroundProcesses,
+  scanCurrentUserProcesses as scanCurrentUserSteamProcesses,
+  signalProcessByPid as signalSteamProcessByPid,
+  type SteamForegroundProcessScanner,
+  type SteamForegroundProcessSignaler,
+} from "./steam-foreground-processes"
+import {
   createSwayController,
   type SwayCommandRunner,
   type SwayController,
@@ -124,6 +131,12 @@ export interface KorriSessiondOptions {
    * an explicit reap pass.
    */
   readonly reaper?: GamescopeReaper
+  /** Process scanner used to clean escaped Steam foreground AppID children. */
+  readonly steamForegroundProcessScanner?: SteamForegroundProcessScanner
+  /** Process signaler used to clean escaped Steam foreground AppID children. */
+  readonly steamForegroundProcessSignaler?: SteamForegroundProcessSignaler
+  /** Grace window before escaped Steam foreground cleanup escalates. */
+  readonly steamForegroundKillGraceMs?: number
   /**
    * Optional packaged Gamescope runtime-control bridge manager. When enabled,
    * sessiond starts the bridge after the primary managed child is spawned and
@@ -146,6 +159,8 @@ export interface KorriSessiondOptions {
    * healthy launch as a failure. Default: 5 seconds.
    */
   readonly heartbeatIntervalMs?: number
+  /** Grace window after graceful managed-launch termination before force escalation. */
+  readonly managedStopGraceMs?: number
   readonly logger?: KorriSessiondLogger
 }
 
@@ -170,6 +185,7 @@ export interface KorriSessiondCore {
 const DEFAULT_PORT = 3003
 const DEFAULT_HOSTNAME = "127.0.0.1"
 const RESTORE_RETRY_DELAY_MS = 250
+const DEFAULT_MANAGED_STOP_GRACE_MS = 1500
 
 export function createKorriSessiondCore(
   options: Omit<KorriSessiondOptions, "port" | "hostname">,
@@ -183,6 +199,11 @@ export function createKorriSessiondCore(
   const role: SessionRole =
     options.role ?? createKioskSessionRole({ renderer, sway, serviceManager })
   const reaper = options.reaper
+  const steamForegroundProcessScanner =
+    options.steamForegroundProcessScanner ?? scanCurrentUserSteamProcesses
+  const steamForegroundProcessSignaler =
+    options.steamForegroundProcessSignaler ?? signalSteamProcessByPid
+  const steamForegroundKillGraceMs = options.steamForegroundKillGraceMs ?? 1500
   const gamescopeControlBridge = resolveGamescopeControlBridge(
     options.gamescopeControlBridge,
   )
@@ -191,6 +212,8 @@ export function createKorriSessiondCore(
   let eventSequence = 0
   const lifecycleEvents: SessiondManagedLaunchEvent[] = []
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 5_000
+  const managedStopGraceMs =
+    options.managedStopGraceMs ?? DEFAULT_MANAGED_STOP_GRACE_MS
   const heartbeatPayload = new TextEncoder().encode(": hb\n\n")
   const lifecycleSubscribers = new Set<{
     readonly launchId: string
@@ -209,6 +232,7 @@ export function createKorriSessiondCore(
         // terminate). terminateManagedLaunchById calls this to wake
         // the dispatcher; resetting falls back to terminate/terminateNow.
         cancelAnchor?: () => void
+        cancelWaiter?: () => void
         gamescopeControlBridge?: KorriSessiondGamescopeControlBridgeHandle
       }
     | undefined
@@ -477,7 +501,7 @@ export function createKorriSessiondCore(
             }
           }
           if (!result) {
-            result = await spawned.result
+            result = await waitForSpawnedLaunchResult(launchId, spawned)
           }
         }
       } else {
@@ -576,6 +600,28 @@ export function createKorriSessiondCore(
           "sessiond: gamescope reaper threw during restore",
         )
       }
+    } else if (reaper && pgid === undefined) {
+      logger.warn(
+        { launchId },
+        "sessiond: gamescope reaper skipped because launch pgid is unavailable",
+      )
+    }
+
+    const steamAppId = steamAppIdFromLaunchSpec(spec)
+    if (steamAppId) {
+      const outcome = await cleanupSteamForegroundProcesses({
+        processScanner: steamForegroundProcessScanner,
+        signalProcess: steamForegroundProcessSignaler,
+        appId: steamAppId,
+        graceMs: steamForegroundKillGraceMs,
+        logger,
+      })
+      if (outcome.residual.length > 0) {
+        logger.warn(
+          { launchId, appId: steamAppId, residualPids: outcome.residual },
+          "sessiond: Steam foreground residuals remain after cleanup",
+        )
+      }
     }
 
     while (true) {
@@ -633,6 +679,56 @@ export function createKorriSessiondCore(
     }
 
     return result
+  }
+
+  async function waitForSpawnedLaunchResult(
+    launchId: string,
+    spawned: Extract<Awaited<ReturnType<NonNullable<KorriSessiondLauncher["spawn"]>>>, { status: "started" }>,
+  ): Promise<LaunchResult> {
+    const active =
+      activeManagedLaunch?.launchId === launchId ? activeManagedLaunch : undefined
+
+    if (!active || active.cancelRequested !== undefined) {
+      return await waitForSpawnedResultAfterCancel(spawned)
+    }
+
+    let clearWaiter = false
+    const cancel = new Promise<"cancelled">(resolve => {
+      active.cancelWaiter = () => resolve("cancelled")
+      clearWaiter = true
+    })
+    const completed = spawned.result.then(result => ({
+      status: "completed" as const,
+      result,
+    }))
+    const winner = await Promise.race([completed, cancel])
+    if (clearWaiter && active.cancelWaiter) active.cancelWaiter = undefined
+    if (winner !== "cancelled") return winner.result
+    return await waitForSpawnedResultAfterCancel(spawned)
+  }
+
+  async function waitForSpawnedResultAfterCancel(
+    spawned: Extract<Awaited<ReturnType<NonNullable<KorriSessiondLauncher["spawn"]>>>, { status: "started" }>,
+  ): Promise<LaunchResult> {
+    const gracefulResult = await Promise.race([
+      spawned.result.then(result => ({ status: "completed" as const, result })),
+      managedStopDeadline().then(() => ({ status: "timeout" as const })),
+    ])
+    if (gracefulResult.status === "completed") return gracefulResult.result
+    try {
+      spawned.session.terminateNow()
+    } catch (error) {
+      logger.warn({ err: error }, "sessiond: managed launch force terminate threw")
+    }
+    return await spawned.result
+  }
+
+  async function managedStopDeadline(): Promise<void> {
+    if (managedStopGraceMs <= 0) {
+      await Promise.resolve()
+      return
+    }
+    await delay(managedStopGraceMs)
   }
 
   /**
@@ -753,6 +849,16 @@ export function createKorriSessiondCore(
     return await started.result
   }
 
+  function steamAppIdFromLaunchSpec(spec: LaunchSpec): string | undefined {
+    const directApp = spec.args?.[0]
+    if (spec.command.includes("korri-steam-app") && /^\d+$/.test(directApp ?? "")) {
+      return directApp
+    }
+    const applaunchIndex = spec.args?.findIndex(arg => arg === "-applaunch") ?? -1
+    const appId = applaunchIndex >= 0 ? spec.args?.[applaunchIndex + 1] : undefined
+    return /^\d+$/.test(appId ?? "") ? appId : undefined
+  }
+
   function terminateManagedLaunchById(
     launchId: string,
     force = false,
@@ -780,6 +886,11 @@ export function createKorriSessiondCore(
       const resolveAnchor = activeManagedLaunch.cancelAnchor
       activeManagedLaunch.cancelAnchor = undefined
       resolveAnchor()
+    }
+    if (activeManagedLaunch.cancelWaiter) {
+      const resolveCancel = activeManagedLaunch.cancelWaiter
+      activeManagedLaunch.cancelWaiter = undefined
+      resolveCancel()
     }
     return { status: "accepted", launchId }
   }

@@ -1,4 +1,8 @@
 import { ApiError } from "@platform/api/rpc/errors"
+import {
+  SessiondManagedLaunchMode,
+  SessiondManagedLaunchPhase,
+} from "@platform/library/sessiond-managed-launch-protocol"
 import { Schema } from "effect"
 import { Rpc } from "effect/unstable/rpc"
 
@@ -13,6 +17,15 @@ const Stopped = Schema.Struct({
   _tag: Schema.Literal("Stopped"),
   launchId: Schema.String,
   force: Schema.Boolean,
+})
+
+const StopPending = Schema.Struct({
+  _tag: Schema.Literal("StopPending"),
+  launchId: Schema.String,
+  force: Schema.Boolean,
+  mode: Schema.optional(SessiondManagedLaunchMode),
+  phase: Schema.optional(SessiondManagedLaunchPhase),
+  message: Schema.optional(Schema.String),
 })
 
 const NothingToStop = Schema.Struct({
@@ -35,6 +48,7 @@ const ConfirmationRequired = Schema.Struct({
 
 const StopSessionResponse = Schema.Union([
   Stopped,
+  StopPending,
   NothingToStop,
   SessiondNotConfigured,
   HostUnavailable,

@@ -44,6 +44,8 @@ import {
 
 export interface KorriControlLiveOptions {
   readonly sessiond?: SessiondManagedLaunchClientOptions
+  readonly stopSessionSettlePolls?: number
+  readonly stopSessionSettlePollDelayMs?: number
 }
 
 export const KorriControlLayerLive = Layer.effect(KorriControl)(
@@ -58,8 +60,13 @@ export function makeKorriControlLive(options: {
   readonly librarySource: LibrarySourceService
   readonly launcher: LauncherService
   readonly sessiond?: SessiondManagedLaunchClientOptions
+  readonly stopSessionSettlePolls?: number
+  readonly stopSessionSettlePollDelayMs?: number
 }): KorriControlService {
   const { librarySource, launcher, sessiond } = options
+  const stopSessionSettlePolls = options.stopSessionSettlePolls ?? 10
+  const stopSessionSettlePollDelayMs =
+    options.stopSessionSettlePollDelayMs ?? 100
 
   const listGames = (): Effect.Effect<ControlListGamesResult, never> =>
     listPlayableEntries(librarySource).pipe(
@@ -114,7 +121,11 @@ export function makeKorriControlLive(options: {
         return controlLaunchResultFromLaunchResult(request, result)
       }),
     sessionStatus: () => sessionStatus(sessiond),
-    stopSession: request => stopSession(request, sessiond),
+    stopSession: request =>
+      stopSession(request, sessiond, {
+        pollCount: stopSessionSettlePolls,
+        pollDelayMs: stopSessionSettlePollDelayMs,
+      }),
     daemonStatus: () =>
       Effect.succeed({
         _tag: "DaemonAvailable" as const,
@@ -273,6 +284,7 @@ function sessionStatus(
 function stopSession(
   request: ControlStopSessionRequest,
   options: SessiondManagedLaunchClientOptions | undefined,
+  settle: { readonly pollCount: number; readonly pollDelayMs: number },
 ): Effect.Effect<ControlStopSessionResult, never> {
   const force = request.force === true
   if (request.confirmed !== true) {
@@ -308,13 +320,66 @@ function stopSession(
     if (terminatedTerminal) return terminatedTerminal
     if (terminated.kind !== "ok") return unexpectedSessiondProbe(terminated)
     if (terminated.response.status === "accepted") {
-      return {
-        _tag: "Stopped" as const,
+      return yield* waitForSessionStopCompletion({
         launchId: terminated.response.launchId,
         force,
-      }
+        options,
+        pollCount: settle.pollCount,
+        pollDelayMs: settle.pollDelayMs,
+      })
     }
     return { _tag: "NothingToStop" as const }
+  })
+}
+
+function waitForSessionStopCompletion(input: {
+  readonly launchId: string
+  readonly force: boolean
+  readonly options: SessiondManagedLaunchClientOptions | undefined
+  readonly pollCount: number
+  readonly pollDelayMs: number
+}): Effect.Effect<ControlStopSessionResult, never> {
+  return Effect.gen(function* () {
+    let lastStatus:
+      | Extract<SessiondManagedLaunchStatusResult, { readonly kind: "ok" }>
+      | undefined
+    for (let attempt = 0; attempt < Math.max(1, input.pollCount); attempt += 1) {
+      if (attempt > 0 && input.pollDelayMs > 0) {
+        yield* Effect.promise(() => delay(input.pollDelayMs))
+      }
+      const probe = yield* probeSessiond(input.options)
+      const terminal = sessiondTerminalFromFailure(probe)
+      if (terminal) {
+        return {
+          _tag: "StopPending" as const,
+          launchId: input.launchId,
+          force: input.force,
+          message:
+            terminal._tag === "HostUnavailable"
+              ? terminal.message ?? "sessiond unavailable after stop request"
+              : "sessiond not configured after stop request",
+        }
+      }
+      if (probe.kind !== "ok") continue
+      lastStatus = probe
+      const active = probe.status.active
+      if (!active || active.launchId !== input.launchId) {
+        return {
+          _tag: "Stopped" as const,
+          launchId: input.launchId,
+          force: input.force,
+        }
+      }
+    }
+
+    const active = lastStatus?.status.active
+    return {
+      _tag: "StopPending" as const,
+      launchId: input.launchId,
+      force: input.force,
+      ...(active?.mode ? { mode: active.mode } : {}),
+      ...(active?.phase ? { phase: active.phase } : {}),
+    }
   })
 }
 
@@ -397,6 +462,13 @@ function managedLaunchResult(
       }),
     ),
   )
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => {
+    const timer = setTimeout(resolve, ms)
+    if ("unref" in timer && typeof timer.unref === "function") timer.unref()
+  })
 }
 
 function errorMessage(error: unknown): string {

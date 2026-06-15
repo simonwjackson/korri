@@ -302,9 +302,61 @@ describe("KorriControl live implementation", () => {
     })
   })
 
+  it("returns StopPending when terminate is accepted but cleanup is still active", async () => {
+    const responses = [
+      {
+        schemaVersion: 1,
+        mode: "game",
+        capabilities: {
+          managedLaunch: true,
+          lifecycleEvents: true,
+          perLaunchTermination: true,
+        },
+        active: { launchId: "steam-launch", mode: "game", phase: "running" },
+        restoreAttempts: 0,
+      },
+      { status: "accepted", launchId: "steam-launch" },
+      {
+        schemaVersion: 1,
+        mode: "restoring",
+        capabilities: {
+          managedLaunch: true,
+          lifecycleEvents: true,
+          perLaunchTermination: true,
+        },
+        active: {
+          launchId: "steam-launch",
+          mode: "restoring",
+          phase: "restoring",
+        },
+        restoreAttempts: 0,
+      },
+    ]
+    const control = makeKorriControlLive({
+      librarySource: librarySource(),
+      launcher: launcher(),
+      sessiond: {
+        url: "http://sessiond",
+        fetchImpl: async () => Response.json(responses.shift()),
+      },
+      stopSessionSettlePolls: 1,
+    })
+
+    await expect(
+      Effect.runPromise(control.stopSession({ confirmed: true })),
+    ).resolves.toEqual({
+      _tag: "StopPending",
+      launchId: "steam-launch",
+      force: false,
+      mode: "restoring",
+      phase: "restoring",
+    })
+  })
+
   it("resolves the active session on the host before terminate", async () => {
     const requests: Array<{ readonly input: string; readonly body?: string }> =
       []
+    let statusPoll = 0
     const control = makeKorriControlLive({
       librarySource: librarySource(),
       launcher: launcher(),
@@ -313,15 +365,18 @@ describe("KorriControl live implementation", () => {
         fetchImpl: async (input, init) => {
           requests.push({ input, body: init?.body?.toString() })
           if (input.endsWith("/managed-launch/status")) {
+            statusPoll += 1
             return Response.json({
               schemaVersion: 1,
-              mode: "game",
+              mode: statusPoll === 1 ? "game" : "home",
               capabilities: {
                 managedLaunch: true,
                 lifecycleEvents: true,
                 perLaunchTermination: true,
               },
-              active: { launchId: "launch-1", mode: "game" },
+              ...(statusPoll === 1
+                ? { active: { launchId: "launch-1", mode: "game" } }
+                : {}),
               restoreAttempts: 0,
             })
           }
@@ -336,6 +391,7 @@ describe("KorriControl live implementation", () => {
     expect(requests.map(request => request.input)).toEqual([
       "http://sessiond/managed-launch/status",
       "http://sessiond/managed-launch/terminate",
+      "http://sessiond/managed-launch/status",
     ])
     expect(JSON.parse(requests[1].body ?? "{}")).toEqual({
       launchId: "launch-1",

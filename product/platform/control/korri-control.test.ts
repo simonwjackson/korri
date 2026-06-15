@@ -59,6 +59,14 @@ describe("KorriControl shared contracts", () => {
     ).toMatchObject({ cliOutcome: "usage", piIsError: true })
     expect(
       semanticsForControlResult({
+        _tag: "StopPending",
+        launchId: "launch-1",
+        force: false,
+        mode: "restoring",
+      }),
+    ).toMatchObject({ cliOutcome: "host-unavailable", piIsError: true })
+    expect(
+      semanticsForControlResult({
         _tag: "HostUnavailable",
         message: "no socket",
       }),

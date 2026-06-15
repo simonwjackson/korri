@@ -136,6 +136,14 @@ export type ControlStopSessionResult =
       readonly launchId: string
       readonly force: boolean
     }
+  | {
+      readonly _tag: "StopPending"
+      readonly launchId: string
+      readonly force: boolean
+      readonly mode?: SessiondManagedLaunchMode
+      readonly phase?: SessiondManagedLaunchPhase
+      readonly message?: string
+    }
   | { readonly _tag: "NothingToStop" }
   | { readonly _tag: "SessiondNotConfigured" }
   | { readonly _tag: "HostUnavailable"; readonly message?: string }
@@ -198,6 +206,7 @@ export function semanticsForControlResult(
       return failureSemantics("not-found")
     case "LaunchConfigFailed":
       return failureSemantics("configuration")
+    case "StopPending":
     case "HostUnavailable":
     case "ListGamesUnavailable":
     case "SessiondNotConfigured":

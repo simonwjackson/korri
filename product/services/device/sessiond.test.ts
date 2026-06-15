@@ -15,6 +15,7 @@ import type {
   ReapOutcome,
   ReapRequest,
 } from "./sessiond-gamescope-reaper"
+import type { SteamForegroundProcessInfo } from "./steam-foreground-processes"
 import type { SessionRole } from "./sessiond-role"
 import type { KorriWindowSnapshot } from "./sessiond-state"
 import type {
@@ -39,6 +40,15 @@ function startHarness(
       readonly processGroupId?: number
     }>
     readonly reaper?: GamescopeReaper
+    readonly managedStopGraceMs?: number
+    readonly steamForegroundProcessScanner?: () => Promise<
+      readonly SteamForegroundProcessInfo[]
+    >
+    readonly steamForegroundProcessSignaler?: (
+      pid: number,
+      signal: NodeJS.Signals,
+    ) => void
+    readonly steamForegroundKillGraceMs?: number
     readonly gamescopeControlBridge?:
       | KorriSessiondGamescopeControlBridge
       | false
@@ -122,6 +132,18 @@ function startHarness(
         : undefined,
     },
     reaper: options.reaper,
+    ...(options.managedStopGraceMs !== undefined
+      ? { managedStopGraceMs: options.managedStopGraceMs }
+      : {}),
+    ...(options.steamForegroundProcessScanner
+      ? { steamForegroundProcessScanner: options.steamForegroundProcessScanner }
+      : {}),
+    ...(options.steamForegroundProcessSignaler
+      ? { steamForegroundProcessSignaler: options.steamForegroundProcessSignaler }
+      : {}),
+    ...(options.steamForegroundKillGraceMs !== undefined
+      ? { steamForegroundKillGraceMs: options.steamForegroundKillGraceMs }
+      : {}),
     ...(options.gamescopeControlBridge !== undefined
       ? { gamescopeControlBridge: options.gamescopeControlBridge }
       : {}),
@@ -757,6 +779,134 @@ describe("korri sessiond", () => {
     await waitForSessionMode(core, "home")
     expect(events).toContain("terminate-game-now")
     expect(events).not.toContain("terminate-game")
+  })
+
+  it("escalates a managed Steam launch when graceful termination does not exit", async () => {
+    const control = deferred<LaunchResult>()
+    const { core, events } = startHarness({
+      managedStopGraceMs: 0,
+      steamForegroundKillGraceMs: 0,
+      steamForegroundProcessScanner: async () => [],
+      spawnLaunch: async () => ({
+        result: control.promise,
+        processGroupId: 584400,
+        terminate: () => {
+          events.push("terminate-game")
+        },
+        terminateNow: () => {
+          events.push("terminate-game-now")
+          control.resolve({ status: "failed", exitCode: 137 })
+        },
+      }),
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          launchId: "steam-launch",
+          spec: {
+            command: "/run/current-system/sw/bin/korri-steam-app",
+            args: ["584400"],
+          },
+        }),
+      }),
+    )
+
+    await request(
+      core,
+      "/managed-launch/terminate",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "steam-launch" }),
+      }),
+    )
+
+    await waitForSessionMode(core, "home")
+    expect(events).toContain("terminate-game")
+    expect(events).toContain("terminate-game-now")
+  })
+
+  it("kills AppID-scoped Steam foreground residuals before returning home", async () => {
+    const control = deferred<LaunchResult>()
+    const signals: Array<{ pid: number; signal: NodeJS.Signals }> = []
+    let scan = 0
+    const sonicRoot: SteamForegroundProcessInfo = {
+      pid: 420,
+      uid: 1000,
+      cmdline: [
+        "/var/lib/korri/steam/steamrtarm64/reaper",
+        "SteamLaunch",
+        "AppId=584400",
+      ],
+    }
+    const caveblazersRoot: SteamForegroundProcessInfo = {
+      pid: 421,
+      uid: 1000,
+      cmdline: [
+        "/var/lib/korri/steam/steamrtarm64/reaper",
+        "SteamLaunch",
+        "AppId=452060",
+      ],
+    }
+    const warmSteam: SteamForegroundProcessInfo = {
+      pid: 422,
+      uid: 1000,
+      cmdline: ["/var/lib/korri/steam/steamrtarm64/steam", "-silent"],
+    }
+    const { core } = startHarness({
+      managedStopGraceMs: 0,
+      steamForegroundKillGraceMs: 0,
+      steamForegroundProcessScanner: async () => {
+        scan += 1
+        if (scan <= 2) return [sonicRoot, caveblazersRoot, warmSteam]
+        return [caveblazersRoot, warmSteam]
+      },
+      steamForegroundProcessSignaler: (pid, signal) =>
+        signals.push({ pid, signal }),
+      spawnLaunch: async () => ({
+        result: control.promise,
+        processGroupId: 584400,
+        terminate: () => undefined,
+        terminateNow: () => control.resolve({ status: "failed", exitCode: 137 }),
+      }),
+    })
+    await request(core, "/control/start", authorized({ method: "POST" }))
+    await request(
+      core,
+      "/managed-launch",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          launchId: "sonic-steam-launch",
+          spec: {
+            command: "/run/current-system/sw/bin/korri-steam-app",
+            args: ["584400"],
+          },
+        }),
+      }),
+    )
+
+    await request(
+      core,
+      "/managed-launch/terminate",
+      authorized({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchId: "sonic-steam-launch" }),
+      }),
+    )
+
+    await waitForSessionMode(core, "home")
+    expect(signals).toEqual([
+      { pid: 420, signal: "SIGTERM" },
+      { pid: 420, signal: "SIGKILL" },
+    ])
   })
 
   it("force terminates the active managed launch identity", async () => {
