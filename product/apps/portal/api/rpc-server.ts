@@ -8,6 +8,7 @@ import {
   PeerDiscoveryNoop,
 } from "@product/apps/portal/peers/peer-discovery"
 import { PeerSourceFetcherLive } from "@product/apps/portal/peers/peer-source-fetcher"
+import { makeFilePeerStore } from "@product/apps/portal/peers/peer-store"
 import { Effect, Exit, Layer, Scope } from "effect"
 import * as HttpEffect from "effect/unstable/http/HttpEffect"
 import { RpcServer } from "effect/unstable/rpc"
@@ -20,15 +21,24 @@ import { StreamControlLayerLive } from "./stream-control/service"
 
 // See server/rpc-server.ts for the federation peer-discovery wiring
 // rationale. Tests get the noop layer; production browses the LAN.
+const peerDiscoveryLocalHostId =
+  process.env.KORRI_STREAM_ADVERTISE_HOST_ID ?? process.env.KORRI_DAEMON_ID
+
 const PeerDiscoveryConfigured =
   process.env.NODE_ENV === "test"
     ? PeerDiscoveryNoop
     : makePeerDiscoveryLayer({
-        ...(process.env.KORRI_STREAM_ADVERTISE_HOST_ID
-          ? { localHostId: process.env.KORRI_STREAM_ADVERTISE_HOST_ID }
-          : process.env.KORRI_DAEMON_ID
-            ? { localHostId: process.env.KORRI_DAEMON_ID }
+        ...(peerDiscoveryLocalHostId
+          ? { localHostId: peerDiscoveryLocalHostId }
+          : {}),
+        // Durable peer memory: remembered peers survive restarts and off-LAN
+        // reconnects, federating by name without any hand-maintained list.
+        peerStore: makeFilePeerStore({
+          env: process.env,
+          ...(peerDiscoveryLocalHostId
+            ? { localHostId: peerDiscoveryLocalHostId }
             : {}),
+        }),
       })
 
 const CatalogDependenciesLive = Layer.mergeAll(
