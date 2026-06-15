@@ -1,5 +1,6 @@
 import type { EntrySource } from "@platform/api/rpc/entry-source"
 import { ResolvedGameRecord } from "@platform/fixtures/games/game"
+import type { AppIntegrationKind } from "@platform/library/config/app-integrations"
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
 import type {
   GamescopePolicy,
@@ -70,6 +71,10 @@ export interface ResolvedLaunch {
   readonly gamescope?: GamescopePolicy
   readonly extras?: LaunchExtras
   readonly artifacts?: LaunchArtifacts
+  readonly app?: {
+    readonly id: string
+    readonly integration: AppIntegrationKind
+  }
   readonly playable?: {
     readonly id: string
     readonly itemId: string

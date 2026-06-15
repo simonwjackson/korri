@@ -372,6 +372,54 @@ describe("game stream runner", () => {
     })
   })
 
+  it("adds Gamescope Steam integration for resolved Steam launches", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
+    const controlled = createControlledChild(206)
+    const { spawner, specs } = createControlledSpawner(controlled.child)
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(
+        {
+          command: "/run/current-system/sw/bin/steam",
+          args: ["-applaunch", "1332010"],
+        },
+        {
+          gamescope: { enable: true },
+          appIntegration: "steam",
+        },
+      ),
+      spawner,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
+        pid: 10,
+        isProcessAlive: pid => pid === 10,
+      }),
+      processEnv: sessionEnv,
+      fullscreen: {
+        selector: { appIds: ["gamescope"] },
+        runner: treeAfterSnapshotRunner(),
+      },
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    controlled.exit(0)
+    await run
+
+    expect(specs[0]?.args).toEqual([
+      "--backend",
+      "wayland",
+      "-f",
+      "-b",
+      "--expose-wayland",
+      "-e",
+      "--",
+      "/run/current-system/sw/bin/steam",
+      "-applaunch",
+      "1332010",
+    ])
+  })
+
   it("preflights structural-only Gamescope policies as enabled", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
     const controlled = createControlledChild(205)

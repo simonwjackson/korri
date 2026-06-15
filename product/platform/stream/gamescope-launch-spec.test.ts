@@ -384,6 +384,24 @@ describe("composeGamescopeLaunchSpec", () => {
     expect(innerArgs(spec)).toEqual(["steam", "-applaunch", "1332010"])
   })
 
+  it("adds Gamescope Steam integration only for internal Steam sessions", () => {
+    const spec = composeGamescopeLaunchSpec(
+      { command: "steam", args: ["-applaunch", "1332010"] },
+      { enable: true },
+      { steamSession: true },
+    )
+
+    expect(gamescopeArgs(spec)).toEqual([
+      "--backend",
+      "wayland",
+      "-f",
+      "-b",
+      "--expose-wayland",
+      "-e",
+    ])
+    expect(innerArgs(spec)).toEqual(["steam", "-applaunch", "1332010"])
+  })
+
   it("appends extraArgs after typed flags and before the app separator", () => {
     const spec = composeGamescopeLaunchSpec(game, {
       enable: true,

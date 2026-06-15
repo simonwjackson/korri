@@ -9,6 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises"
 import { dirname, isAbsolute, join } from "node:path"
+import type { AppIntegrationKind } from "@platform/library/config/app-integrations"
 import {
   decodeGamescopePolicy,
   type GamescopePolicy,
@@ -17,6 +18,10 @@ import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import { decodeLaunchSpec, type LaunchSpec } from "@platform/library/launcher"
 
 export type GameStreamLaunchLifecycle = "foreground" | "session"
+export type GameStreamLaunchAppIntegration = Extract<
+  AppIntegrationKind,
+  "steam"
+>
 
 export interface GameStreamLaunchIntent {
   readonly version: 1
@@ -25,6 +30,7 @@ export interface GameStreamLaunchIntent {
   readonly lifecycle: GameStreamLaunchLifecycle
   readonly launch: LaunchSpec
   readonly gamescope?: GamescopePolicy
+  readonly appIntegration?: GameStreamLaunchAppIntegration
   readonly wait?: LaunchSpec
   readonly artifacts?: LaunchArtifacts
 }
@@ -61,6 +67,7 @@ export function createLaunchIntent(
   options: {
     readonly lifecycle?: GameStreamLaunchLifecycle
     readonly gamescope?: GamescopePolicy
+    readonly appIntegration?: GameStreamLaunchAppIntegration
     readonly wait?: LaunchSpec
     readonly artifacts?: LaunchArtifacts
   } = {},
@@ -80,6 +87,9 @@ export function createLaunchIntent(
     ...(hasGamescopeOpinion(options.gamescope)
       ? { gamescope: options.gamescope }
       : {}),
+    ...(options.appIntegration
+      ? { appIntegration: options.appIntegration }
+      : {}),
     ...(options.wait ? { wait: options.wait } : {}),
     ...(artifacts ? { artifacts } : {}),
   }
@@ -90,6 +100,7 @@ export function createStaticGameStreamLaunchIntentStore(
   options: {
     readonly lifecycle?: GameStreamLaunchLifecycle
     readonly gamescope?: GamescopePolicy
+    readonly appIntegration?: GameStreamLaunchAppIntegration
     readonly wait?: LaunchSpec
     readonly artifacts?: LaunchArtifacts
   } = {},
@@ -214,6 +225,7 @@ export function decodeLaunchIntent(value: unknown): GameStreamLaunchIntent {
     },
     {
       gamescope: decodeOptionalGamescopePolicy(record.gamescope),
+      appIntegration: decodeOptionalAppIntegration(record.appIntegration),
       wait,
       artifacts: decodeOptionalLaunchArtifacts(record.artifacts),
     },
@@ -228,6 +240,14 @@ function decodeOptionalGamescopePolicy(
   value: unknown,
 ): GamescopePolicy | undefined {
   return value === undefined ? undefined : decodeGamescopePolicy(value)
+}
+
+function decodeOptionalAppIntegration(
+  value: unknown,
+): GameStreamLaunchAppIntegration | undefined {
+  if (value === undefined) return undefined
+  if (value === "steam") return value
+  throw new Error("launch intent appIntegration must be steam when present")
 }
 
 function decodeOptionalLaunchArtifacts(
@@ -246,6 +266,7 @@ function withOptionalLaunchIntentFields(
   base: GameStreamLaunchIntent,
   optional: {
     readonly gamescope?: GamescopePolicy
+    readonly appIntegration?: GameStreamLaunchAppIntegration
     readonly wait?: LaunchSpec
     readonly artifacts?: LaunchArtifacts
   },
@@ -254,6 +275,9 @@ function withOptionalLaunchIntentFields(
     ...base,
     ...(hasGamescopeOpinion(optional.gamescope)
       ? { gamescope: optional.gamescope }
+      : {}),
+    ...(optional.appIntegration
+      ? { appIntegration: optional.appIntegration }
       : {}),
     ...(optional.wait ? { wait: optional.wait } : {}),
     ...(optional.artifacts ? { artifacts: optional.artifacts } : {}),

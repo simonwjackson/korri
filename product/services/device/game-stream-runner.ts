@@ -446,12 +446,16 @@ export function createGameStreamRunner(
 
         let spec: LaunchSpec
         try {
-          spec = composeGamescopeLaunchSpec(launchClaim.intent.launch, {
-            ...gamescope,
-            ...(resolvedGamescopeCommand.command !== undefined
-              ? { command: resolvedGamescopeCommand.command }
-              : {}),
-          })
+          spec = composeGamescopeLaunchSpec(
+            launchClaim.intent.launch,
+            {
+              ...gamescope,
+              ...(resolvedGamescopeCommand.command !== undefined
+                ? { command: resolvedGamescopeCommand.command }
+                : {}),
+            },
+            { steamSession: launchClaim.intent.appIntegration === "steam" },
+          )
         } catch (error) {
           await requeueLaunchClaim(launchClaim, "preflight failure")
           return await fail("preflight", errorMessage(error), 126)

@@ -97,7 +97,9 @@ export const handleLaunchLibrary = (
     )
     const specResult = yield* Effect.try({
       try: () =>
-        composeGamescopeLaunchSpec(resolvedResult.resolved.spec, gamescope),
+        composeGamescopeLaunchSpec(resolvedResult.resolved.spec, gamescope, {
+          steamSession: resolvedResult.resolved.app?.integration === "steam",
+        }),
       catch: error => error,
     }).pipe(
       Effect.match({

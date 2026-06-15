@@ -105,6 +105,16 @@ describe("game stream launch intent store", () => {
     })
   })
 
+  it("preserves resolved app integration metadata separately from Gamescope policy", () => {
+    const intent = createLaunchIntent(launch, {
+      gamescope: { enable: true },
+      appIntegration: "steam",
+    })
+
+    expect(intent.gamescope).toEqual({ enable: true })
+    expect(intent.appIntegration).toBe("steam")
+  })
+
   it("preserves an explicit enable-only Gamescope policy", () => {
     const intent = createLaunchIntent(launch, {
       gamescope: { enable: true },

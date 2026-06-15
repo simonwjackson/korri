@@ -10,9 +10,14 @@ type AppEnvironmentOverlay = NonNullable<
   NonNullable<GamescopePolicy["app"]>["environment"]
 >
 
+export interface ComposeGamescopeLaunchSpecOptions {
+  readonly steamSession?: boolean
+}
+
 export function composeGamescopeLaunchSpec(
   game: LaunchSpec,
   policy: GamescopePolicy,
+  options: ComposeGamescopeLaunchSpecOptions = {},
 ): LaunchSpec {
   if (policy.enable === false) return game
 
@@ -22,7 +27,7 @@ export function composeGamescopeLaunchSpec(
   return {
     command: normalized.command ?? DEFAULT_GAMESCOPE_COMMAND,
     args: [
-      ...renderGamescopeArgs(normalized),
+      ...renderGamescopeArgs(normalized, options),
       ...(normalized.extraArgs ?? []),
       "--",
       ...renderAppCommand(game, normalized.app?.environment),
@@ -32,7 +37,10 @@ export function composeGamescopeLaunchSpec(
   }
 }
 
-function renderGamescopeArgs(policy: GamescopePolicy): readonly string[] {
+function renderGamescopeArgs(
+  policy: GamescopePolicy,
+  options: ComposeGamescopeLaunchSpecOptions,
+): readonly string[] {
   const args: ArgList = []
 
   renderBackendArgs(args, policy.backend)
@@ -43,7 +51,7 @@ function renderGamescopeArgs(policy: GamescopePolicy): readonly string[] {
   renderInputArgs(args, policy.input)
   renderSchedulingArgs(args, policy.scheduling)
   renderStatsArgs(args, policy.stats)
-  renderSteamArgs(args, policy.steam)
+  renderSteamArgs(args, policy.steam, options)
   renderEmbeddedArgs(args, policy.embedded)
   renderHdrArgs(args, policy.hdr)
   renderVrArgs(args, policy.vr)
@@ -124,7 +132,12 @@ function renderStatsArgs(args: ArgList, stats: GamescopePolicy["stats"]) {
   pushValue(args, "-T", stats?.path)
 }
 
-function renderSteamArgs(args: ArgList, steam: GamescopePolicy["steam"]) {
+function renderSteamArgs(
+  args: ArgList,
+  steam: GamescopePolicy["steam"],
+  options: ComposeGamescopeLaunchSpecOptions,
+) {
+  pushBoolean(args, "-e", options.steamSession)
   pushBoolean(args, "--mangoapp", steam?.mangoapp)
 }
 
