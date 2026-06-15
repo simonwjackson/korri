@@ -117,7 +117,6 @@ const builtInApps: Readonly<Record<string, AppDescriptor>> = {
     systems: [],
     gamescope: {
       enable: true,
-      steam: { enableIntegration: true },
     },
   },
 }

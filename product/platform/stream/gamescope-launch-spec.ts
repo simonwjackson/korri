@@ -125,7 +125,6 @@ function renderStatsArgs(args: ArgList, stats: GamescopePolicy["stats"]) {
 }
 
 function renderSteamArgs(args: ArgList, steam: GamescopePolicy["steam"]) {
-  pushBoolean(args, "-e", steam?.enableIntegration)
   pushBoolean(args, "--mangoapp", steam?.mangoapp)
 }
 

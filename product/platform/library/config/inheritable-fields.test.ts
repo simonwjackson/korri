@@ -82,7 +82,6 @@ const representativeGamescopePolicy: GamescopePolicy = {
     path: "/tmp/gamescope.stats",
   },
   steam: {
-    enableIntegration: true,
     mangoapp: true,
   },
   embedded: {

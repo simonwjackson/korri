@@ -185,7 +185,7 @@ describe("composeGamescopeLaunchSpec", () => {
       input: { mouseSensitivity: 1.5, defaultTouchMode: 4 },
       scheduling: { realtime: true, readyFd: 3, keepAlive: true },
       stats: { path: "/tmp/gamescope.stats" },
-      steam: { enableIntegration: true, mangoapp: true },
+      steam: { mangoapp: true },
       embedded: {
         generateDrmMode: "cvt",
         immediateFlips: true,
@@ -300,7 +300,6 @@ describe("composeGamescopeLaunchSpec", () => {
       "--keep-alive",
       "-T",
       "/tmp/gamescope.stats",
-      "-e",
       "--mangoapp",
       "--generate-drm-mode",
       "cvt",
@@ -364,10 +363,10 @@ describe("composeGamescopeLaunchSpec", () => {
     ])
   })
 
-  it("wraps a Steam session with only the baseline integration flags", () => {
+  it("wraps a Steam session with only the generic baseline Gamescope flags", () => {
     const spec = composeGamescopeLaunchSpec(
       { command: "steam", args: ["-applaunch", "1332010"] },
-      { enable: true, steam: { enableIntegration: true } },
+      { enable: true },
     )
 
     expect(spec.command).toBe("gamescope")
@@ -377,11 +376,11 @@ describe("composeGamescopeLaunchSpec", () => {
       "-f",
       "-b",
       "--expose-wayland",
-      "-e",
     ])
     expect(gamescopeArgs(spec)).not.toContain("-w")
     expect(gamescopeArgs(spec)).not.toContain("-F")
     expect(gamescopeArgs(spec)).not.toContain("--mangoapp")
+    expect(gamescopeArgs(spec)).not.toContain("-e")
     expect(innerArgs(spec)).toEqual(["steam", "-applaunch", "1332010"])
   })
 

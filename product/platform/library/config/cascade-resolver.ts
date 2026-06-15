@@ -601,13 +601,8 @@ const mergeGamescopeSteam = (
   extra: GamescopePolicy["steam"],
 ): GamescopePolicy["steam"] => {
   if (extra === undefined) return base
-  const enableIntegration = lastDefined(
-    base?.enableIntegration,
-    extra.enableIntegration,
-  )
   const mangoapp = lastDefined(base?.mangoapp, extra.mangoapp)
   return {
-    ...(enableIntegration !== undefined ? { enableIntegration } : {}),
     ...(mangoapp !== undefined ? { mangoapp } : {}),
   }
 }

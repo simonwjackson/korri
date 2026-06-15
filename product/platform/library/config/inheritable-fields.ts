@@ -238,7 +238,6 @@ const GamescopeStatsPolicy = Schema.Struct({
 })
 
 const GamescopeSteamPolicy = Schema.Struct({
-  enableIntegration: Schema.optional(Schema.Boolean),
   mangoapp: Schema.optional(Schema.Boolean),
 })
 

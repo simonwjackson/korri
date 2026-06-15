@@ -716,7 +716,6 @@ describe("resolveReadableLaunchContext", () => {
     if (gamescope === undefined) throw new Error("expected Gamescope policy")
     expect(gamescope).toMatchObject({
       enable: true,
-      steam: { enableIntegration: true },
     })
     expect(gamescope.display).toBeUndefined()
     expect(gamescope.scaling).toBeUndefined()
@@ -726,7 +725,7 @@ describe("resolveReadableLaunchContext", () => {
     })
   })
 
-  it("keeps Steam integration enabled when app-scoped Gamescope tuning is partial", async () => {
+  it("keeps Steam Gamescope enabled when app-scoped Gamescope tuning is partial", async () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(
         steamReadableSnapshot({
@@ -742,7 +741,6 @@ describe("resolveReadableLaunchContext", () => {
     if (gamescope === undefined) throw new Error("expected Gamescope policy")
     expect(gamescope).toMatchObject({
       enable: true,
-      steam: { enableIntegration: true },
       display: { nested: { width: 854, height: 480 } },
     })
   })
@@ -776,7 +774,7 @@ describe("resolveReadableLaunchContext", () => {
     const gamescope = context.gamescope
     if (gamescope === undefined) throw new Error("expected Gamescope policy")
     expect(gamescope.enable).toBe(true)
-    expect(gamescope.steam?.enableIntegration).toBe(true)
+    expect(gamescope.steam).toBeUndefined()
   })
 
   it("requires apps.steam before the Steam built-in baseline is active", async () => {

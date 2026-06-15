@@ -56,8 +56,8 @@ Korri can already fold launch policy through the readable cascade, and it alread
 
 - `product/platform/library/config/app-integrations.ts` owns the built-in app descriptor registry and `resolveAppDescriptor` merge behavior. This is the natural Phase 1 seam for an internal built-in Steam integration baseline.
 - `product/platform/library/config/readable-cascade-resolver.ts` folds app-level Gamescope policy into `ReadableResolvedLaunchContext.gamescope`, then the existing runner wraps the resolved launch spec around that policy.
-- `product/platform/library/config/inheritable-fields.ts` already models `GamescopePolicy.steam.enableIntegration`; no public field needs to be invented.
-- `product/platform/stream/gamescope-launch-spec.ts` already renders Steam Gamescope integration from policy into Gamescope flags and wraps the child command after `--`.
+- `product/platform/library/config/inheritable-fields.ts` already models generic Gamescope enablement; no Steam-specific author-facing Gamescope field should be invented.
+- `product/platform/stream/gamescope-launch-spec.ts` wraps the child command after `--`; Steam-specific details stay out of authored Gamescope policy.
 - `product/platform/library/config/app-materializer.ts` materializes Steam to a normal Steam `-applaunch` spec and carries the resolved context separately; Gamescope wrapping remains outside Steam LaunchOptions.
 - `product/services/device/game-stream-runner.ts` consumes resolved launch intents and applies `composeGamescopeLaunchSpec` around the app command at execution time.
 - `tools/device/steam/korri-steam-gamescope-launch.sh` is parked/experimental and must stay out of the default path.
@@ -132,7 +132,7 @@ External research was skipped. The plan is anchored in existing Korri cascade co
 - Document through tests that the explicit Steam override path is app-scoped user/image config.
 
 **Test scenarios:**
-- Happy path: a Steam release using an active `apps.steam` app record resolves with Gamescope enabled and Steam integration enabled.
+- Happy path: a Steam release using an active `apps.steam` app record resolves with Gamescope enabled.
 - Minimum-default path: the resolved Steam Gamescope policy contains no default resolution, scaling filter, FSR, MangoHud, or detailed tuning from the integration baseline.
 - Override: `apps.steam` with Gamescope disabled resolves to disabled Gamescope for Steam.
 - Precedence: an app-scoped Steam Gamescope override wins over the integration baseline.

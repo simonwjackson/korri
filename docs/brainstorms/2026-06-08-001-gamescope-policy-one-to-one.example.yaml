@@ -94,7 +94,6 @@ apps:
         path: /tmp/gamescope.stats # -T, --stats-path
 
       steam:
-        enableIntegration: false # -e, --steam
         mangoapp: false # --mangoapp
 
       embedded:

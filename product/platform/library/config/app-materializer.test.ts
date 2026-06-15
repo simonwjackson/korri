@@ -1127,7 +1127,6 @@ describe("materializeReadableSteamLaunch", () => {
           ...context,
           gamescope: {
             enable: true,
-            steam: { enableIntegration: true },
           },
           steam: {
             state: { root: "/steam-home" },

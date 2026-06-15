@@ -147,7 +147,6 @@ describe("resolveAppDescriptor", () => {
     expect(app.args).toEqual([])
     expect(app.gamescope).toEqual({
       enable: true,
-      steam: { enableIntegration: true },
     })
     expect(app.capabilities).toEqual({ baselineDefaults: true })
   })
@@ -170,7 +169,6 @@ describe("resolveAppDescriptor", () => {
 
     expect(app.gamescope).toEqual({
       enable: true,
-      steam: { enableIntegration: true },
       display: { nested: { width: 854, height: 480 } },
     })
   })
@@ -223,7 +221,6 @@ describe("resolveAppDescriptor", () => {
 
     expect(app.gamescope).toEqual({
       enable: true,
-      steam: { enableIntegration: true },
       display: { nested: { width: 854, height: 480 } },
     })
   })
@@ -247,7 +244,6 @@ describe("resolveAppDescriptor", () => {
 
     expect(app.gamescope).toEqual({
       enable: true,
-      steam: { enableIntegration: true },
       display: { nested: { width: 854, height: 480 } },
     })
   })
