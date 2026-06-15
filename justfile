@@ -15,7 +15,7 @@ dev-web port="${PORTAL_PORT:-3000}" api_port="${API_PORT:-3001}":
 
 # Start the local API server.
 dev-api port="${API_PORT:-3001}":
-  PORT={{port}} NODE_ENV=development bun x tsx --tsconfig tsconfig.server.json product/services/server/http/server.ts
+  PORT={{port}} NODE_ENV=development bun product/services/server/http/server.ts
 
 # PROTOTYPE — throwaway pico theme viewer (standalone, no backend). Remove with prototypes/pico/.
 dev-pico port="3110":
