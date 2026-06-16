@@ -1,44 +1,22 @@
 import { describe, expect, it } from "bun:test"
-import { SourceCandidatePlayable } from "@platform/protocol/acquisition/candidate"
-import { Schema } from "effect"
-import { sourceCandidatePlayableToLibraryItem } from "./source-candidate-adapter"
+import type { ProviderClaim } from "@platform/protocol/acquisition/claim"
+import { providerClaimToDisplaySummary } from "./source-candidate-adapter"
 
-describe("sourceCandidatePlayableToLibraryItem", () => {
-  it("accepts release-shaped candidates that have a launchable target", () => {
-    const candidate = Schema.decodeUnknownSync(SourceCandidatePlayable)({
+describe("providerClaimToDisplaySummary", () => {
+  it("keeps provider claims display-only instead of authoring library items", () => {
+    const claim: ProviderClaim = {
+      _tag: "ProviderClaim",
+      providerId: "@korri:steam",
       id: "downwell",
       title: "Downwell",
-      source: "steam",
-      releases: [
-        {
-          id: "steam",
-          source: "steam",
-          system: "windows",
-          target: "steam://rungameid/360740",
-          apps: [{ id: "steam" }],
-        },
-      ],
+      url: "steam://rungameid/360740",
+    }
+
+    expect(providerClaimToDisplaySummary(claim)).toEqual({
+      providerId: "@korri:steam",
+      id: "downwell",
+      title: "Downwell",
+      url: "steam://rungameid/360740",
     })
-
-    expect(sourceCandidatePlayableToLibraryItem(candidate)).toEqual(candidate)
-  })
-
-  it("rejects metadata-only candidates when saving to the library", () => {
-    const metadataOnly = Schema.decodeUnknownSync(SourceCandidatePlayable)({
-      id: "unknown-pc-release",
-      title: "Unknown PC Release",
-      source: "pcgamingwiki",
-      releases: [
-        {
-          id: "pcgamingwiki",
-          source: "pcgamingwiki",
-          system: "windows",
-        },
-      ],
-    })
-
-    expect(() => sourceCandidatePlayableToLibraryItem(metadataOnly)).toThrow(
-      /at least one launchable release target/,
-    )
   })
 })

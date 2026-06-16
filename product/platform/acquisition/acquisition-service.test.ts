@@ -5,15 +5,15 @@ import {
   makeInMemoryAcquisitionLayer,
 } from "./acquisition-service"
 import { createAcquisitionPluginRegistry } from "./plugins/registry"
-import { validateKnownSourceName } from "./source-names"
+import { validateKnownProviderId } from "./provider-ids"
 
 const serviceLayer = makeInMemoryAcquisitionLayer({
   search: () =>
     Effect.succeed({
-      candidates: [
+      claims: [
         {
-          _tag: "SourceCandidate",
-          sourceName: "itchio",
+          _tag: "ProviderClaim",
+          providerId: "@korri:itchio",
           id: "game-1",
           title: "Game One",
           url: "https://example.com/game-1",
@@ -22,25 +22,25 @@ const serviceLayer = makeInMemoryAcquisitionLayer({
     }),
   details: () =>
     Effect.succeed({
-      _tag: "SourceDetails",
-      sourceName: "itchio",
+      _tag: "ProviderClaimDetails",
+      providerId: "@korri:itchio",
       id: "game-1",
       title: "Game One",
       url: "https://example.com/game-1",
     }),
   detailsByUrl: () =>
     Effect.succeed({
-      _tag: "SourceDetails",
-      sourceName: "itchio",
+      _tag: "ProviderClaimDetails",
+      providerId: "@korri:itchio",
       id: "game-1",
       title: "Game One",
       url: "https://example.com/game-1",
     }),
-  plugins: () =>
+  providers: () =>
     Effect.succeed({
-      plugins: [
+      providers: [
         {
-          sourceName: "itchio",
+          providerId: "@korri:itchio",
           displayName: "itch.io",
           module: "product/platform/acquisition/plugins/itchio",
           builtIn: true,
@@ -50,12 +50,12 @@ const serviceLayer = makeInMemoryAcquisitionLayer({
         },
       ],
     }),
-  validateSources: () =>
+  validateProviders: () =>
     Effect.succeed({
-      sources: [
+      providers: [
         {
-          _tag: "HealthySource",
-          sourceName: "itchio",
+          _tag: "HealthyProvider",
+          providerId: "@korri:itchio",
           checkedAt: "2026-06-04T00:00:00.000Z",
         },
       ],
@@ -63,7 +63,7 @@ const serviceLayer = makeInMemoryAcquisitionLayer({
   resolveDownload: () =>
     Effect.succeed({
       _tag: "FinalDownload",
-      sourceName: "itchio",
+      providerId: "@korri:itchio",
       url: "https://example.com/game.zip",
     }),
   acquireArtifact: () =>
@@ -85,20 +85,20 @@ describe("Acquisition service interface", () => {
       return {
         search: yield* acquisition.search({ query: "game" }),
         details: yield* acquisition.details({
-          sourceName: "itchio",
+          providerId: "@korri:itchio",
           id: "game-1",
         }),
         detailsByUrl: yield* acquisition.detailsByUrl(
           "https://example.com/game-1",
         ),
-        plugins: yield* acquisition.plugins(),
-        health: yield* acquisition.validateSources({}),
+        providers: yield* acquisition.providers(),
+        health: yield* acquisition.validateProviders({}),
         resolution: yield* acquisition.resolveDownload({
-          sourceName: "itchio",
+          providerId: "@korri:itchio",
           candidateUrl: "https://example.com/game-1",
         }),
         artifact: yield* acquisition.acquireArtifact({
-          sourceName: "itchio",
+          providerId: "@korri:itchio",
           id: "level-1",
         }),
       }
@@ -107,20 +107,20 @@ describe("Acquisition service interface", () => {
     const result = await Effect.runPromise(
       Effect.provide(program, serviceLayer),
     )
-    expect(result.search.candidates).toHaveLength(1)
+    expect(result.search.claims).toHaveLength(1)
     expect(result.details.title).toBe("Game One")
     expect(result.detailsByUrl.title).toBe("Game One")
-    expect(result.plugins.plugins[0]?.sourceName).toBe("itchio")
-    expect(result.health.sources[0]?._tag).toBe("HealthySource")
+    expect(result.providers.providers[0]?.providerId).toBe("@korri:itchio")
+    expect(result.health.providers[0]?._tag).toBe("HealthyProvider")
     expect(result.resolution._tag).toBe("FinalDownload")
     expect(result.artifact.format.id).toBe("smbr-level")
   })
 
-  it("canonicalizes and rejects unknown source names through the registry contract", () => {
+  it("canonicalizes and rejects unknown provider ids through the registry contract", () => {
     const registry = createAcquisitionPluginRegistry([
       {
         metadata: {
-          sourceName: "itchio",
+          providerId: "@korri:itchio",
           displayName: "itch.io",
           module: "product/platform/acquisition/plugins/itchio",
           builtIn: true,
@@ -131,15 +131,15 @@ describe("Acquisition service interface", () => {
       },
     ])
 
-    expect(validateKnownSourceName(" ItchIO ", registry.sourceNames)).toBe(
-      "itchio",
-    )
+    expect(
+      validateKnownProviderId(" @korri:itchio ", registry.providerIds),
+    ).toBe("@korri:itchio")
     expect(() =>
-      validateKnownSourceName("../itchio", registry.sourceNames),
+      validateKnownProviderId("itchio", registry.providerIds),
     ).toThrow()
-    expect(() => registry.get("missing-source")).toThrow()
+    expect(() => registry.get("@korri:missing-provider")).toThrow()
     expect(() =>
-      validateKnownSourceName("itchio-", registry.sourceNames),
+      validateKnownProviderId("@korri:itchio-", registry.providerIds),
     ).toThrow()
   })
 })

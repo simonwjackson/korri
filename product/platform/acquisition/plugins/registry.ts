@@ -4,21 +4,21 @@ import type {
 } from "@platform/protocol/acquisition/artifact-acquisition"
 import type {
   DetailsRequest,
-  SourceCandidate,
-  SourceDetails,
-} from "@platform/protocol/acquisition/candidate"
+  ProviderClaim,
+  ProviderClaimDetails,
+} from "@platform/protocol/acquisition/claim"
 import type {
   DownloadResolution,
   ResolveDownloadRequest,
 } from "@platform/protocol/acquisition/download-resolution"
 import type { PluginMetadata } from "@platform/protocol/acquisition/plugin"
-import type { SourceHealth } from "@platform/protocol/acquisition/source-health"
+import type { ProviderHealth } from "@platform/protocol/acquisition/source-health"
 import { Effect } from "effect"
 import { AcquisitionError } from "../errors"
 import type { AcquisitionPluginContext } from "../plugin-runtime"
-import { validateKnownSourceName } from "../source-names"
+import { validateKnownProviderId } from "../provider-ids"
 
-export interface SourceValidationContext extends AcquisitionPluginContext {
+export interface ProviderValidationContext extends AcquisitionPluginContext {
   readonly checkedAt: string
 }
 
@@ -27,15 +27,15 @@ export interface AcquisitionPluginDefinition {
   readonly search?: (
     context: AcquisitionPluginContext,
     request: { readonly query: string; readonly platforms?: readonly string[] },
-  ) => Effect.Effect<readonly SourceCandidate[], AcquisitionError>
+  ) => Effect.Effect<readonly ProviderClaim[], AcquisitionError>
   readonly parseCandidateUrl?: (url: string) => string | null
   readonly details?: (
     context: AcquisitionPluginContext,
     request: DetailsRequest,
-  ) => Effect.Effect<SourceDetails, AcquisitionError>
-  readonly validateSource?: (
-    context: SourceValidationContext,
-  ) => Effect.Effect<SourceHealth, AcquisitionError>
+  ) => Effect.Effect<ProviderClaimDetails, AcquisitionError>
+  readonly validateProvider?: (
+    context: ProviderValidationContext,
+  ) => Effect.Effect<ProviderHealth, AcquisitionError>
   readonly resolveDownload?: (
     context: AcquisitionPluginContext,
     request: ResolveDownloadRequest,
@@ -47,22 +47,22 @@ export interface AcquisitionPluginDefinition {
 }
 
 export interface AcquisitionPluginRegistry {
-  readonly plugins: readonly AcquisitionPluginDefinition[]
-  readonly sourceNames: ReadonlySet<string>
-  readonly get: (sourceName: string) => AcquisitionPluginDefinition
+  readonly providers: readonly AcquisitionPluginDefinition[]
+  readonly providerIds: ReadonlySet<string>
+  readonly get: (providerId: string) => AcquisitionPluginDefinition
 }
 
 export function selectAcquisitionPlugins(
   registry: AcquisitionPluginRegistry,
-  sourceNames?: readonly string[],
+  providerIds?: readonly string[],
 ): Effect.Effect<
-  readonly AcquisitionPluginRegistry["plugins"][number][],
+  readonly AcquisitionPluginRegistry["providers"][number][],
   AcquisitionError
 > {
   return Effect.try({
     try: () => {
-      if (!sourceNames || sourceNames.length === 0) return registry.plugins
-      return sourceNames.map(sourceName => registry.get(sourceName))
+      if (!providerIds || providerIds.length === 0) return registry.providers
+      return providerIds.map(providerId => registry.get(providerId))
     },
     catch: error =>
       error instanceof AcquisitionError
@@ -75,21 +75,21 @@ export function selectAcquisitionPlugins(
 }
 
 export function createAcquisitionPluginRegistry(
-  plugins: readonly AcquisitionPluginDefinition[],
+  providers: readonly AcquisitionPluginDefinition[],
 ): AcquisitionPluginRegistry {
-  const byName = new Map<string, AcquisitionPluginDefinition>()
-  for (const plugin of plugins) byName.set(plugin.metadata.sourceName, plugin)
+  const byId = new Map<string, AcquisitionPluginDefinition>()
+  for (const plugin of providers) byId.set(plugin.metadata.providerId, plugin)
   return {
-    plugins,
-    sourceNames: new Set(byName.keys()),
-    get: sourceName => {
-      const canonical = validateKnownSourceName(
-        sourceName,
-        new Set(byName.keys()),
+    providers,
+    providerIds: new Set(byId.keys()),
+    get: providerId => {
+      const canonical = validateKnownProviderId(
+        providerId,
+        new Set(byId.keys()),
       )
-      const plugin = byName.get(canonical)
+      const plugin = byId.get(canonical)
       if (plugin === undefined) {
-        throw new Error("validated acquisition source missing from registry")
+        throw new Error("validated acquisition provider missing from registry")
       }
       return plugin
     },

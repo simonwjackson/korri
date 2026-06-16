@@ -1,6 +1,6 @@
 export interface AcquisitionConfig {
   readonly stagingRoot: string
-  readonly enabledSourceNames?: readonly string[]
+  readonly enabledProviderIds?: readonly string[]
 }
 
 export const defaultAcquisitionConfig: AcquisitionConfig = {

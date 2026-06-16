@@ -49,20 +49,20 @@ export function acquireArtifact({
   stagingRoot,
 }: AcquireArtifactOptions): Effect.Effect<AcquiredArtifact, AcquisitionError> {
   return Effect.gen(function* () {
-    const plugin = yield* acquisitionTry(() => registry.get(request.sourceName))
+    const plugin = yield* acquisitionTry(() => registry.get(request.providerId))
     const pluginAcquireArtifact = plugin.acquireArtifact
     if (!pluginAcquireArtifact) {
       return yield* Effect.fail(
         new AcquisitionError({
-          reason: "defective-source",
-          message: `${plugin.metadata.sourceName} does not implement acquireArtifact`,
-          sourceName: plugin.metadata.sourceName,
+          reason: "defective-provider",
+          message: `${plugin.metadata.providerId} does not implement acquireArtifact`,
+          providerId: plugin.metadata.providerId,
         }),
       )
     }
 
     const output = yield* runPluginOperation({
-      sourceName: plugin.metadata.sourceName,
+      providerId: plugin.metadata.providerId,
       operation: "acquireArtifact",
       context,
       run: () => pluginAcquireArtifact(context, request),
@@ -71,7 +71,7 @@ export function acquireArtifact({
     return yield* stagePluginAcquireOutput({
       output,
       stagingRoot,
-      sourceName: plugin.metadata.sourceName,
+      providerId: plugin.metadata.providerId,
     })
   })
 }
@@ -79,11 +79,11 @@ export function acquireArtifact({
 function stagePluginAcquireOutput({
   output,
   stagingRoot,
-  sourceName,
+  providerId,
 }: {
   readonly output: PluginAcquireOutput
   readonly stagingRoot: string
-  readonly sourceName: string
+  readonly providerId: string
 }): Effect.Effect<AcquiredArtifact, AcquisitionError> {
   return Effect.tryPromise({
     try: async () => {
@@ -118,12 +118,12 @@ function stagePluginAcquireOutput({
         ? new AcquisitionError({
             reason: error.reason,
             message: error.message,
-            sourceName: error.sourceName ?? sourceName,
+            providerId: error.providerId ?? providerId,
           })
         : new AcquisitionError({
             reason: "infrastructure",
             message: `failed to stage acquired artifact: ${stringifyError(error)}`,
-            sourceName,
+            providerId,
           }),
   })
 }
@@ -168,14 +168,14 @@ function verifyExpectedDigests(
   for (const [algorithm, expected] of Object.entries(expectedDigests ?? {})) {
     if (!isSupportedDigestAlgorithm(algorithm)) {
       throw new AcquisitionError({
-        reason: "defective-source",
+        reason: "defective-provider",
         message: `unsupported expected digest algorithm: ${algorithm}`,
       })
     }
     const actual = createHash(algorithm).update(bytes).digest("hex")
     if (actual !== expected) {
       throw new AcquisitionError({
-        reason: "defective-source",
+        reason: "defective-provider",
         message: `expected ${algorithm} digest does not match acquired artifact bytes`,
       })
     }

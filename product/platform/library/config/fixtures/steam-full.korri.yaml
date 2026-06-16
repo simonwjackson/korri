@@ -8,14 +8,11 @@ storage:
   roms:
     root: /roms
 
-sources:
-  steam:
-    title: Steam library
-    kind: [service, metadata]
-  roms:
-    title: ROM library
-    kind: [files]
-    storage: roms
+providers:
+  "@korri:steam":
+    title: steam
+  "@korri:roms":
+    title: roms
 
 systems:
   steam:
@@ -74,7 +71,6 @@ runtimes:
 library:
   balatro:
     title: Balatro
-    source: steam
     releases:
       - id: steam-store
         system: steam
@@ -95,11 +91,13 @@ library:
 
   gba-choice-demo:
     title: GBA Choice Demo
-    source: roms
     releases:
       - id: gba
         system: gba
-        target: gba/choice-demo.gba
+        target:
+          kind: file
+          storage: roms
+          path: gba/choice-demo.gba
         apps:
           - id: retroarch
             runtime: mgba

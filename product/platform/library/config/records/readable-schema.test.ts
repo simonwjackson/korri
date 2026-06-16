@@ -25,7 +25,7 @@ describe("readable library schema records", () => {
       ),
     ) as {
       readonly storage: Record<string, unknown>
-      readonly sources: Record<string, unknown>
+      readonly providers: Record<string, unknown>
       readonly systems: Record<string, unknown>
       readonly apps: Record<string, unknown>
       readonly collections: Record<string, unknown>
@@ -35,9 +35,7 @@ describe("readable library schema records", () => {
     expect(decodeStoragePayload(fixture.storage["switch-card"]).root).toContain(
       "/run/media/korri/storage/",
     )
-    expect(decodeSourcePayload(fixture.sources["switch-card"]).kind).toEqual([
-      "files",
-    ])
+    expect(fixture.providers["@korri:switch-card"]).toBeDefined()
     expect(decodeSystemPayload(fixture.systems.switch).name).toBe(
       "Nintendo Switch",
     )
@@ -64,7 +62,7 @@ describe("readable library schema records", () => {
       ),
     ) as {
       readonly storage: Record<string, unknown>
-      readonly sources: Record<string, unknown>
+      readonly providers: Record<string, unknown>
       readonly systems: Record<string, unknown>
       readonly apps: Record<string, unknown>
       readonly runtimes: Record<string, unknown>
@@ -74,10 +72,7 @@ describe("readable library schema records", () => {
     expect(decodeStoragePayload(fixture.storage.steam).root).toBe(
       "/var/lib/korri/steam",
     )
-    expect(decodeSourcePayload(fixture.sources.steam).kind).toEqual([
-      "service",
-      "metadata",
-    ])
+    expect(fixture.providers["@korri:steam"]).toBeDefined()
     expect(decodeSystemPayload(fixture.systems.steam).apps).toEqual([
       { id: "steam" },
     ])
@@ -533,7 +528,6 @@ describe("readable library schema records", () => {
   it("requires ordered releases and rejects shortcut top-level launch fields", () => {
     const item = decodeLibraryItemPayload({
       title: "Downwell",
-      source: "steam",
       collections: ["steam", "handheld"],
       releases: [
         {
@@ -551,7 +545,6 @@ describe("readable library schema records", () => {
     expect(() =>
       decodeLibraryItemPayload({
         title: "Downwell",
-        source: "steam",
         releases: [
           {
             id: "windows",
@@ -565,7 +558,6 @@ describe("readable library schema records", () => {
     expect(() =>
       decodeLibraryItemPayload({
         title: "Downwell",
-        source: "steam",
         releases: [
           {
             id: "windows",
@@ -599,11 +591,10 @@ describe("readable library schema records", () => {
       releases: [
         {
           id: "genesis",
-          source: "roms",
           system: "genesis",
-          target: "genesis/Sonic.md",
+          target: { kind: "file", storage: "roms", path: "genesis/Sonic.md" },
         },
-        { id: "windows-known", source: "pcgamingwiki", system: "windows" },
+        { id: "windows-known", system: "windows" },
       ],
     })
 

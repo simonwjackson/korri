@@ -2,18 +2,18 @@ import { describe, expect, it } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { Schema } from "effect"
-import { SearchResponse, SourceCandidatePlayable } from "./candidate"
+import { ProviderClaimPlayableHint, SearchResponse } from "./candidate"
 import { DownloadResolution } from "./download-resolution"
 import { PluginMetadata } from "./plugin"
-import { SourceHealth } from "./source-health"
+import { ProviderHealth } from "./source-health"
 
 it("decodes representative acquisition protocol payloads", () => {
   expect(
     Schema.decodeUnknownSync(SearchResponse)({
-      candidates: [
+      claims: [
         {
-          _tag: "SourceCandidate",
-          sourceName: "itchio",
+          _tag: "ProviderClaim",
+          providerId: "@korri:itchio",
           id: "game-1",
           title: "Game One",
           url: "https://example.com/game-1",
@@ -26,23 +26,23 @@ it("decodes representative acquisition protocol payloads", () => {
           },
         },
         {
-          _tag: "SourceCandidate",
-          sourceName: "chip8archive",
+          _tag: "ProviderClaim",
+          providerId: "@korri:chip8archive",
           id: "octojam1title",
           title: "Octojam 1 Title",
           url: "https://johnearnest.github.io/chip8Archive/play.html?p=octojam1title",
           platform: "chip8",
         },
       ],
-    }).candidates[0]?.sourceName,
-  ).toBe("itchio")
+    }).claims[0]?.providerId,
+  ).toBe("@korri:itchio")
 
   expect(
     Schema.decodeUnknownSync(SearchResponse)({
-      candidates: [
+      claims: [
         {
-          _tag: "SourceCandidate",
-          sourceName: "levelsharesquare",
+          _tag: "ProviderClaim",
+          providerId: "@korri:levelsharesquare",
           id: "6a1797b85a07d826fd7a5bd0",
           title: "Tropical Island Adventure!",
           url: "https://levelsharesquare.com/levels/6a1797b85a07d826fd7a5bd0",
@@ -55,23 +55,23 @@ it("decodes representative acquisition protocol payloads", () => {
           },
         },
       ],
-    }).candidates[0]?.artifact?.format.id,
+    }).claims[0]?.artifact?.format.id,
   ).toBe("smbr-level")
 
   expect(
-    Schema.decodeUnknownSync(SourceHealth)({
-      _tag: "UnhealthySource",
-      sourceName: "itchio",
+    Schema.decodeUnknownSync(ProviderHealth)({
+      _tag: "UnhealthyProvider",
+      providerId: "@korri:itchio",
       checkedAt: "2026-06-04T00:00:00.000Z",
       reason: "credentials",
       message: "Token rejected",
     })._tag,
-  ).toBe("UnhealthySource")
+  ).toBe("UnhealthyProvider")
 
   expect(
     Schema.decodeUnknownSync(DownloadResolution)({
       _tag: "NonFinalDownload",
-      sourceName: "itchio",
+      providerId: "@korri:itchio",
       reason: "interstitial",
       url: "https://example.com/download",
     })._tag,
@@ -79,7 +79,7 @@ it("decodes representative acquisition protocol payloads", () => {
 
   expect(
     Schema.decodeUnknownSync(PluginMetadata)({
-      sourceName: "itchio",
+      providerId: "@korri:itchio",
       displayName: "itch.io",
       module: "product/platform/acquisition/plugins/itchio",
       builtIn: true,
@@ -91,23 +91,21 @@ it("decodes representative acquisition protocol payloads", () => {
 })
 
 describe("source candidate playable shape", () => {
-  it("decodes release-shaped service candidates with URI targets", () => {
+  it("decodes release-shaped service claims with URI targets", () => {
     const decoded = Schema.decodeUnknownSync(SearchResponse)({
-      candidates: [
+      claims: [
         {
-          _tag: "SourceCandidate",
-          sourceName: "steam",
+          _tag: "ProviderClaim",
+          providerId: "@korri:steam",
           id: "360740",
           title: "Downwell",
           url: "https://store.steampowered.com/app/360740",
           playable: {
             id: "downwell",
             title: "Downwell",
-            source: "steam",
             releases: [
               {
                 id: "steam",
-                source: "steam",
                 system: "windows",
                 target: "steam://rungameid/360740",
                 apps: [{ id: "steam" }],
@@ -118,20 +116,18 @@ describe("source candidate playable shape", () => {
       ],
     })
 
-    expect(decoded.candidates[0]?.playable?.releases[0]?.target).toBe(
+    expect(decoded.claims[0]?.playable?.releases[0]?.target).toBe(
       "steam://rungameid/360740",
     )
   })
 
-  it("represents metadata-only candidates", () => {
-    const metadataOnly = Schema.decodeUnknownSync(SourceCandidatePlayable)({
+  it("represents metadata-only claims", () => {
+    const metadataOnly = Schema.decodeUnknownSync(ProviderClaimPlayableHint)({
       id: "unknown-pc-release",
       title: "Unknown PC Release",
-      source: "pcgamingwiki",
       releases: [
         {
           id: "pcgamingwiki",
-          source: "pcgamingwiki",
           system: "windows",
         },
       ],

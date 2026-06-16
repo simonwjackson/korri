@@ -16,8 +16,14 @@ import {
 
 const STRICT = { onExcessProperty: "error" } as const
 
+const ProviderId = Schema.String.pipe(
+  Schema.check(
+    Schema.isPattern(/^@[a-z0-9][a-z0-9._-]*:[a-z0-9][a-z0-9._-]*$/),
+  ),
+)
+
 export const AcquireArtifactRequest = Schema.Struct({
-  sourceName: Schema.String,
+  providerId: ProviderId,
   id: Schema.String,
 })
 export type AcquireArtifactRequest = Schema.Schema.Type<

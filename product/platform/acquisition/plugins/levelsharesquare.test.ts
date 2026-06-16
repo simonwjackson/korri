@@ -134,25 +134,25 @@ describe("Level Share Square acquisition plugin", () => {
     ).toBeNull()
   })
 
-  it("validates the source when SMBR still advertises .lvl files", async () => {
+  it("validates the provider when SMBR still advertises .lvl files", async () => {
     const result = await Effect.runPromise(
-      plugin().validateSource?.({
+      plugin().validateProvider?.({
         ...createAcquisitionPluginContext(),
         checkedAt: "2026-06-04T00:00:00.000Z",
-      }) ?? Effect.die("missing validateSource"),
+      }) ?? Effect.die("missing validateProvider"),
     )
 
     expect(result).toEqual({
-      _tag: "HealthySource",
-      sourceName: "levelsharesquare",
+      _tag: "HealthyProvider",
+      providerId: "@korri:levelsharesquare",
       checkedAt: "2026-06-04T00:00:00.000Z",
     })
   })
 
-  it("reports a defective source when SMBR is absent from the games list", async () => {
+  it("reports a defective provider when SMBR is absent from the games list", async () => {
     const error = await Effect.runPromise(
       plugin({ games: { games: [] } })
-        .validateSource?.({
+        .validateProvider?.({
           ...createAcquisitionPluginContext(),
           checkedAt: "2026-06-04T00:00:00.000Z",
         })
@@ -161,12 +161,12 @@ describe("Level Share Square acquisition plugin", () => {
             onFailure: error => error,
             onSuccess: () => undefined,
           }),
-        ) ?? Effect.die("missing validateSource"),
+        ) ?? Effect.die("missing validateProvider"),
     )
 
     expect(error).toMatchObject({
-      reason: "defective-source",
-      sourceName: "levelsharesquare",
+      reason: "defective-provider",
+      providerId: "@korri:levelsharesquare",
     })
   })
 
@@ -179,8 +179,8 @@ describe("Level Share Square acquisition plugin", () => {
 
     expect(result).toHaveLength(1)
     expect(result[0]).toMatchObject({
-      _tag: "SourceCandidate",
-      sourceName: "levelsharesquare",
+      _tag: "ProviderClaim",
+      providerId: "@korri:levelsharesquare",
       id: LEVEL_ID,
       title: "Tropical Island Adventure!",
       url: LEVEL_URL,
@@ -193,11 +193,11 @@ describe("Level Share Square acquisition plugin", () => {
       },
       playable: {
         id: LEVEL_ID,
-        source: "levelsharesquare",
+        providerId: "@korri:levelsharesquare",
         releases: [
           {
             id: "smbr-level",
-            source: "levelsharesquare",
+            providerId: "@korri:levelsharesquare",
             system: "smbr",
             target: LEVEL_URL,
             apps: [{ id: "smbr" }],
@@ -207,7 +207,7 @@ describe("Level Share Square acquisition plugin", () => {
     })
   })
 
-  it("reports malformed search envelopes as defective source output", async () => {
+  it("reports malformed search envelopes as defective provider output", async () => {
     const error = await Effect.runPromise(
       plugin({ search: { unexpected: [] } })
         .search?.(createAcquisitionPluginContext(), { query: "tropical" })
@@ -220,22 +220,22 @@ describe("Level Share Square acquisition plugin", () => {
     )
 
     expect(error).toMatchObject({
-      reason: "defective-source",
-      sourceName: "levelsharesquare",
+      reason: "defective-provider",
+      providerId: "@korri:levelsharesquare",
     })
   })
 
   it("maps details into standardized facets", async () => {
     const result = await Effect.runPromise(
       plugin().details?.(createAcquisitionPluginContext(), {
-        sourceName: "levelsharesquare",
+        providerId: "@korri:levelsharesquare",
         id: LEVEL_ID,
       }) ?? Effect.die("missing details"),
     )
 
     expect(result).toMatchObject({
-      _tag: "SourceDetails",
-      sourceName: "levelsharesquare",
+      _tag: "ProviderClaimDetails",
+      providerId: "@korri:levelsharesquare",
       id: LEVEL_ID,
       title: "Tropical Island Adventure!",
       url: LEVEL_URL,
@@ -248,11 +248,11 @@ describe("Level Share Square acquisition plugin", () => {
       },
       playable: {
         id: LEVEL_ID,
-        source: "levelsharesquare",
+        providerId: "@korri:levelsharesquare",
         releases: [
           {
             id: "smbr-level",
-            source: "levelsharesquare",
+            providerId: "@korri:levelsharesquare",
             system: "smbr",
             target: LEVEL_URL,
             apps: [{ id: "smbr" }],
@@ -297,7 +297,7 @@ describe("Level Share Square acquisition plugin", () => {
             clock: { nowIso: () => "2026-06-04T00:00:00.000Z" },
           }),
           stagingRoot,
-          request: { sourceName: "levelsharesquare", id: LEVEL_ID },
+          request: { providerId: "@korri:levelsharesquare", id: LEVEL_ID },
         }),
       )
 
@@ -312,12 +312,12 @@ describe("Level Share Square acquisition plugin", () => {
       })
       expect(acquired.facets?.title?.text).toBe("Tropical Island Adventure!")
       expect(acquired.provenance).toEqual({
-        source: "levelsharesquare",
+        source: "@korri:levelsharesquare",
         acquiredAt: "2026-06-04T00:00:00.000Z",
         url: LEVEL_URL,
       })
       expect(acquired.externalIds).toEqual([
-        { namespace: "levelsharesquare", id: LEVEL_ID },
+        { namespace: "@korri:levelsharesquare", id: LEVEL_ID },
       ])
       expect(acquired.sourceData?.["levelsharesquare.v1"]).toMatchObject({
         levelId: LEVEL_ID,
@@ -332,11 +332,11 @@ describe("Level Share Square acquisition plugin", () => {
     })
   })
 
-  it("reports malformed detail envelopes as defective source output", async () => {
+  it("reports malformed detail envelopes as defective provider output", async () => {
     const error = await Effect.runPromise(
       plugin({ details: { level: null } })
         .details?.(createAcquisitionPluginContext(), {
-          sourceName: "levelsharesquare",
+          providerId: "@korri:levelsharesquare",
           id: LEVEL_ID,
         })
         .pipe(
@@ -348,8 +348,8 @@ describe("Level Share Square acquisition plugin", () => {
     )
 
     expect(error).toMatchObject({
-      reason: "defective-source",
-      sourceName: "levelsharesquare",
+      reason: "defective-provider",
+      providerId: "@korri:levelsharesquare",
     })
   })
 
@@ -358,7 +358,7 @@ describe("Level Share Square acquisition plugin", () => {
       plugin({
         details: { level: { ...tropicalLevel, author: undefined } },
       }).details?.(createAcquisitionPluginContext(), {
-        sourceName: "levelsharesquare",
+        providerId: "@korri:levelsharesquare",
         id: LEVEL_ID,
       }) ?? Effect.die("missing details"),
     )
@@ -366,7 +366,7 @@ describe("Level Share Square acquisition plugin", () => {
     expect(details.facets?.credits?.authors).toBeUndefined()
   })
 
-  it("rejects missing levelData byte arrays as defective source output", async () => {
+  it("rejects missing levelData byte arrays as defective provider output", async () => {
     const registry = createAcquisitionPluginRegistry([
       plugin({
         code: {
@@ -383,7 +383,7 @@ describe("Level Share Square acquisition plugin", () => {
           registry,
           context: createAcquisitionPluginContext(),
           stagingRoot,
-          request: { sourceName: "levelsharesquare", id: LEVEL_ID },
+          request: { providerId: "@korri:levelsharesquare", id: LEVEL_ID },
         }).pipe(
           Effect.match({
             onFailure: error => error,
@@ -393,13 +393,13 @@ describe("Level Share Square acquisition plugin", () => {
       )
 
       expect(error).toMatchObject({
-        reason: "defective-source",
-        sourceName: "levelsharesquare",
+        reason: "defective-provider",
+        providerId: "@korri:levelsharesquare",
       })
     })
   })
 
-  it("rejects structurally invalid SMBR level JSON as defective source output", async () => {
+  it("rejects structurally invalid SMBR level JSON as defective provider output", async () => {
     const registry = createAcquisitionPluginRegistry([
       plugin({
         code: {
@@ -419,7 +419,7 @@ describe("Level Share Square acquisition plugin", () => {
           registry,
           context: createAcquisitionPluginContext(),
           stagingRoot,
-          request: { sourceName: "levelsharesquare", id: LEVEL_ID },
+          request: { providerId: "@korri:levelsharesquare", id: LEVEL_ID },
         }).pipe(
           Effect.match({
             onFailure: error => error,
@@ -429,13 +429,13 @@ describe("Level Share Square acquisition plugin", () => {
       )
 
       expect(error).toMatchObject({
-        reason: "defective-source",
-        sourceName: "levelsharesquare",
+        reason: "defective-provider",
+        providerId: "@korri:levelsharesquare",
       })
     })
   })
 
-  it("rejects malformed levelData buffers as defective source output", async () => {
+  it("rejects malformed levelData buffers as defective provider output", async () => {
     const registry = createAcquisitionPluginRegistry([
       plugin({
         code: {
@@ -452,7 +452,7 @@ describe("Level Share Square acquisition plugin", () => {
           registry,
           context: createAcquisitionPluginContext(),
           stagingRoot,
-          request: { sourceName: "levelsharesquare", id: LEVEL_ID },
+          request: { providerId: "@korri:levelsharesquare", id: LEVEL_ID },
         }).pipe(
           Effect.match({
             onFailure: error => error,
@@ -462,8 +462,8 @@ describe("Level Share Square acquisition plugin", () => {
       )
 
       expect(error).toMatchObject({
-        reason: "defective-source",
-        sourceName: "levelsharesquare",
+        reason: "defective-provider",
+        providerId: "@korri:levelsharesquare",
       })
     })
   })
@@ -485,7 +485,7 @@ describe("Level Share Square acquisition plugin", () => {
           registry,
           context: createAcquisitionPluginContext(),
           stagingRoot,
-          request: { sourceName: "levelsharesquare", id: LEVEL_ID },
+          request: { providerId: "@korri:levelsharesquare", id: LEVEL_ID },
         }).pipe(
           Effect.match({
             onFailure: error => error,
@@ -495,8 +495,8 @@ describe("Level Share Square acquisition plugin", () => {
       )
 
       expect(error).toMatchObject({
-        reason: "defective-source",
-        sourceName: "levelsharesquare",
+        reason: "defective-provider",
+        providerId: "@korri:levelsharesquare",
       })
     })
   })
@@ -516,8 +516,8 @@ describe("Level Share Square acquisition plugin", () => {
     )
 
     expect(error).toMatchObject({
-      reason: "defective-source",
-      sourceName: "levelsharesquare",
+      reason: "defective-provider",
+      providerId: "@korri:levelsharesquare",
     })
   })
 })

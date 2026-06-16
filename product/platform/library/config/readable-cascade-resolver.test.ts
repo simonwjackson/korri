@@ -123,7 +123,12 @@ const app: AppRecord = {
   args: ["-L", "{runtime.path}", "{content.path}"],
   systems: ["genesis"],
   gamescope: { extraArgs: ["app"], backend: { allowDeferred: true } },
-  moonlight: { extraArgs: ["app"], logging: { verbose: true } },
+  moonlight: {
+    extraArgs: ["app"],
+    logging: { verbose: true },
+    platform: { name: "v4l2m2m" },
+  },
+  paths: { systemDirectory: "/bios", cacheDirectory: "/source/cache" },
   lifecycle: { saveOnExit: false },
   extraArgs: ["app"],
 }
@@ -161,14 +166,13 @@ const profile: ProfileRecord = {
 const storage: StorageRecord = { id: "roms", root: "/games" }
 const sonic: LibraryItemRecord = {
   id: "sonic-the-hedgehog",
-  source: "roms",
   gamescope: { extraArgs: ["item"] },
   moonlight: { extraArgs: ["item"] },
   releases: [
     {
       id: "genesis",
       system: "genesis",
-      target: "genesis/Sonic.md",
+      target: { kind: "file", storage: "roms", path: "genesis/Sonic.md" },
       gamescope: { extraArgs: ["release"] },
       moonlight: { extraArgs: ["release"] },
       retroarch: {
@@ -180,22 +184,30 @@ const sonic: LibraryItemRecord = {
 }
 const sonicMulti: LibraryItemRecord = {
   id: "sonic-the-hedgehog",
-  source: "roms",
   releases: [
-    { id: "genesis", system: "genesis", target: "genesis/Sonic.md" },
+    {
+      id: "genesis",
+      system: "genesis",
+      target: { kind: "file", storage: "roms", path: "genesis/Sonic.md" },
+    },
     { id: "steam", system: "windows", target: "steam://rungameid/71113" },
   ],
 }
 const gbaPackage: LibraryItemRecord = {
   id: "super-mario-advance-2",
-  source: "roms",
   contains: {
     "super-mario-world": {
       title: "Super Mario World",
       gamescope: { extraArgs: ["contained"] },
     },
   },
-  releases: [{ id: "gba", system: "genesis", target: "gba/sma2.gba" }],
+  releases: [
+    {
+      id: "gba",
+      system: "genesis",
+      target: { kind: "file", storage: "roms", path: "gba/sma2.gba" },
+    },
+  ],
 }
 
 const snapshot = (item: LibraryItemRecord = sonic): ReadableConfigSnapshot => ({
@@ -241,7 +253,6 @@ const steamReadableSnapshot = (
           {
             id: "steam",
             system: "steam",
-            source: "steam",
             target: "steam://rungameid/2379780",
           },
         ],
@@ -270,7 +281,6 @@ describe("resolveReadableLaunchContext", () => {
 
     expect(context.playableId).toBe("sonic-the-hedgehog")
     expect(context.releaseId).toBe("genesis")
-    expect(context.sourceId).toBe("roms")
     expect(context.app.id).toBe("retroarch")
     expect(context.runtime?.path).toBe("/cores/genesis_plus_gx.so")
     expect(context.target).toBe("genesis/Sonic.md")
@@ -285,7 +295,7 @@ describe("resolveReadableLaunchContext", () => {
     })
     expect(context.gamescope?.display).toEqual({
       output: { width: 640, height: 480 },
-      nested: { width: 320, height: 240 },
+      nested: { width: 320 },
     })
     expect(context.gamescope?.backend).toEqual({
       type: "wayland",
@@ -296,7 +306,6 @@ describe("resolveReadableLaunchContext", () => {
       "host",
       "user",
       "system",
-      "source",
       "app",
       "runtime",
       "item",
@@ -315,7 +324,6 @@ describe("resolveReadableLaunchContext", () => {
         "host",
         "user",
         "system",
-        "source",
         "app",
         "runtime",
         "item",
@@ -391,15 +399,7 @@ describe("resolveReadableLaunchContext", () => {
         buildbotAssetsUrl: "https://updates.example.invalid/assets",
       },
       extraSettings: { video_font_enable: false },
-      extraArgs: [
-        "host",
-        "system",
-        "source",
-        "app",
-        "runtime",
-        "release",
-        "profile",
-      ],
+      extraArgs: ["host", "system", "app", "runtime", "release", "profile"],
     })
     expect(context.env?.SCALE).toBe("override")
   })
@@ -446,7 +446,11 @@ describe("resolveReadableLaunchContext", () => {
               {
                 id: "genesis",
                 system: "genesis",
-                target: "genesis/Sonic.md",
+                target: {
+                  kind: "file",
+                  storage: "roms",
+                  path: "genesis/Sonic.md",
+                },
                 apps: [{ id: "ryubing", argsAppend: ["release"] }],
               },
             ],
@@ -671,7 +675,6 @@ describe("resolveReadableLaunchContext", () => {
                   {
                     id: "steam",
                     system: "steam",
-                    source: "steam",
                     target: "steam://rungameid/2379780",
                     apps: [
                       {
@@ -902,7 +905,6 @@ describe("resolveReadableLaunchContext", () => {
     }
     const switchItem: LibraryItemRecord = {
       id: "mario-kart-8-deluxe",
-      source: "switch-card",
       ryubing: {
         graphics: { "backend-threading": "auto" },
         extra: { args: ["item-arg"], config: { nested: { item: true } } },
@@ -911,7 +913,11 @@ describe("resolveReadableLaunchContext", () => {
         {
           id: "switch",
           system: "switch",
-          target: "roms/switch/Mario Kart 8 Deluxe.nsp",
+          target: {
+            kind: "file",
+            storage: "switch-card",
+            path: "roms/switch/Mario Kart 8 Deluxe.nsp",
+          },
           apps: [{ id: "ryubing" }],
           ryubing: {
             state: { root: "{storage:switch-card}/per-game/mk8d" },
@@ -1014,7 +1020,15 @@ describe("resolveReadableLaunchContext", () => {
           ...sonic,
           releases: [
             { id: "known", system: "windows" },
-            { id: "genesis", system: "genesis", target: "genesis/Sonic.md" },
+            {
+              id: "genesis",
+              system: "genesis",
+              target: {
+                kind: "file",
+                storage: "roms",
+                path: "genesis/Sonic.md",
+              },
+            },
           ],
         }),
         { playableId: "sonic-the-hedgehog", releaseId: "known" },

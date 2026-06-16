@@ -4,7 +4,7 @@ import { AcquisitionDetailsRpc as appAcquisitionDetails } from "../acquisition/d
 import { AcquisitionPluginsRpc as appAcquisitionPlugins } from "../acquisition/plugins.rpc"
 import { AcquisitionResolveDownloadRpc as appAcquisitionResolveDownload } from "../acquisition/resolve-download.rpc"
 import { AcquisitionSearchRpc as appAcquisitionSearch } from "../acquisition/search.rpc"
-import { AcquisitionValidateSourcesRpc as appAcquisitionValidateSources } from "../acquisition/validate-sources.rpc"
+import { AcquisitionValidateProvidersRpc as appAcquisitionValidateProviders } from "../acquisition/validate-providers.rpc"
 import { CatalogSnapshotRpc as appCatalogSnapshot } from "../catalog/snapshot.rpc"
 import { AssignGameAssetRpc as appGameAssetsAssign } from "../game-assets/assign.rpc"
 import { ListGameAssetCandidatesRpc as appGameAssetsCandidatesList } from "../game-assets/list-candidates.rpc"
@@ -33,7 +33,7 @@ export const serverRpcGroup = RpcGroup.make(
   appAcquisitionSearch,
   appAcquisitionDetails,
   appAcquisitionPlugins,
-  appAcquisitionValidateSources,
+  appAcquisitionValidateProviders,
   appAcquisitionResolveDownload,
   appHelloGet,
   appGameAssetsCandidatesList,

@@ -1,114 +1,96 @@
 import path from "node:path"
 import { Data, Effect } from "effect"
 
-import type { SourceRecord } from "./records/source"
+import type { LibraryReleasePayload } from "./records/library-item"
 import type { StorageRecord } from "./records/storage"
 
-export class SourceNotFound extends Data.TaggedError("SourceNotFound")<{
-  readonly sourceId: string
-}> {}
+type ReleaseTarget = NonNullable<LibraryReleasePayload["target"]>
+export type ReleaseTargetAtom = Exclude<ReleaseTarget, readonly unknown[]>
 
 export class StorageNotFound extends Data.TaggedError("StorageNotFound")<{
   readonly storageId: string
 }> {}
 
-export class SourceStorageMissing extends Data.TaggedError(
-  "SourceStorageMissing",
-)<{
-  readonly sourceId: string
-}> {}
-
 export class AbsoluteFileTarget extends Data.TaggedError("AbsoluteFileTarget")<{
-  readonly sourceId: string
+  readonly storageId: string
   readonly target: string
 }> {}
 
 export class FileTargetEscapesStorage extends Data.TaggedError(
   "FileTargetEscapesStorage",
 )<{
-  readonly sourceId: string
+  readonly storageId: string
   readonly target: string
 }> {}
 
-export class MetadataOnlySource extends Data.TaggedError("MetadataOnlySource")<{
-  readonly sourceId: string
-}> {}
-
-export type SourceTargetResolutionError =
-  | SourceNotFound
+export type TargetResolutionError =
   | StorageNotFound
-  | SourceStorageMissing
   | AbsoluteFileTarget
   | FileTargetEscapesStorage
-  | MetadataOnlySource
 
-export interface ResolvedSourceTarget {
-  readonly sourceId: string
+export interface ResolvedReleaseTarget {
   readonly target: string
   readonly content?: {
     readonly path: string
   }
 }
 
-export interface ResolveSourceTargetInput {
-  readonly sourceId: string
-  readonly target: string
-  readonly sources: ReadonlyMap<string, SourceRecord>
+export interface ResolveReleaseTargetInput {
+  readonly target: ReleaseTargetAtom
   readonly storage: ReadonlyMap<string, StorageRecord>
 }
 
-export const resolveSourceTarget = (
-  input: ResolveSourceTargetInput,
-): Effect.Effect<ResolvedSourceTarget, SourceTargetResolutionError> =>
+const isFileTarget = (
+  target: ReleaseTargetAtom,
+): target is Extract<ReleaseTargetAtom, { readonly kind: "file" }> =>
+  typeof target === "object" && target !== null && target.kind === "file"
+
+const isUriTarget = (
+  target: ReleaseTargetAtom,
+): target is Extract<ReleaseTargetAtom, { readonly kind: "uri" }> =>
+  typeof target === "object" && target !== null && target.kind === "uri"
+
+export const resolveReleaseTarget = (
+  input: ResolveReleaseTargetInput,
+): Effect.Effect<ResolvedReleaseTarget, TargetResolutionError> =>
   Effect.gen(function* () {
-    const source = input.sources.get(input.sourceId)
-    if (source === undefined) {
-      return yield* Effect.fail(
-        new SourceNotFound({ sourceId: input.sourceId }),
-      )
+    if (typeof input.target === "string") {
+      return { target: input.target }
     }
 
-    if (source.kind.includes("files")) {
-      if (path.posix.isAbsolute(input.target)) {
+    if (isUriTarget(input.target)) {
+      return { target: input.target.value }
+    }
+
+    if (isFileTarget(input.target)) {
+      if (path.posix.isAbsolute(input.target.path)) {
         return yield* Effect.fail(
           new AbsoluteFileTarget({
-            sourceId: input.sourceId,
-            target: input.target,
+            storageId: input.target.storage,
+            target: input.target.path,
           }),
         )
       }
-      const normalizedTarget = path.posix.normalize(input.target)
+      const normalizedTarget = path.posix.normalize(input.target.path)
       if (normalizedTarget === ".." || normalizedTarget.startsWith("../")) {
         return yield* Effect.fail(
           new FileTargetEscapesStorage({
-            sourceId: input.sourceId,
-            target: input.target,
+            storageId: input.target.storage,
+            target: input.target.path,
           }),
         )
       }
-      if (source.storage === undefined) {
-        return yield* Effect.fail(
-          new SourceStorageMissing({ sourceId: input.sourceId }),
-        )
-      }
-      const storage = input.storage.get(source.storage)
+      const storage = input.storage.get(input.target.storage)
       if (storage === undefined) {
         return yield* Effect.fail(
-          new StorageNotFound({ storageId: source.storage }),
+          new StorageNotFound({ storageId: input.target.storage }),
         )
       }
       return {
-        sourceId: input.sourceId,
-        target: input.target,
+        target: input.target.path,
         content: { path: path.posix.join(storage.root, normalizedTarget) },
       }
     }
 
-    if (source.kind.includes("service")) {
-      return { sourceId: input.sourceId, target: input.target }
-    }
-
-    return yield* Effect.fail(
-      new MetadataOnlySource({ sourceId: input.sourceId }),
-    )
+    return { target: String(input.target) }
   })

@@ -3,7 +3,6 @@ import { join, relative, sep } from "node:path"
 import type { AppRecord } from "@platform/library/config/records/app"
 import type { LibraryItemRecord } from "@platform/library/config/records/library-item"
 import type { RuntimeRecord } from "@platform/library/config/records/runtime"
-import type { SourceRecord } from "@platform/library/config/records/source"
 import type { StorageRecord } from "@platform/library/config/records/storage"
 import type { LibraryRepository } from "@platform/library/proseql/library-repository"
 import { logger } from "@platform/logger"
@@ -39,7 +38,6 @@ export interface RocknixImportSummary {
 }
 
 const FIRST_ROM_SOURCE_ID = "local-roms"
-const FIRST_ROM_SOURCE_TITLE = "Local ROMs"
 
 export async function importRocknixLibrary(
   config: RocknixImportConfig,
@@ -77,7 +75,7 @@ export async function importRocknixLibrary(
     const found = await scanGamelistRoot(root, warnings)
     if (found.length > 0) {
       await Effect.runPromise(
-        upsertRootSource(config.repository, { root, sourceId }),
+        upsertRootStorage(config.repository, { root, storageId: sourceId }),
       )
     }
     for (const { systemName, systemRoot, entries } of found) {
@@ -199,19 +197,11 @@ async function readTextFileSafe(path: string): Promise<string | null> {
   }
 }
 
-function upsertRootSource(
+function upsertRootStorage(
   repository: LibraryRepository,
-  args: { readonly root: string; readonly sourceId: string },
-): Effect.Effect<readonly [StorageRecord, SourceRecord], unknown> {
-  return Effect.all([
-    repository.upsertStorage({ id: args.sourceId, root: args.root }),
-    repository.upsertSource({
-      id: args.sourceId,
-      title: sourceTitle(args.sourceId),
-      kind: ["files"],
-      storage: args.sourceId,
-    }),
-  ])
+  args: { readonly root: string; readonly storageId: string },
+): Effect.Effect<StorageRecord, unknown> {
+  return repository.upsertStorage({ id: args.storageId, root: args.root })
 }
 
 function upsertSystemLaunch(
@@ -281,15 +271,17 @@ function composeLibraryItem(args: {
   })
   const item: LibraryItemRecord = {
     id: args.gameId,
-    source: args.sourceId,
     ...(args.entry.name ? { title: args.entry.name } : {}),
     ...(Object.keys(display).length > 0 ? { display } : {}),
     releases: [
       {
         id: args.system.name,
-        source: args.sourceId,
         system: args.system.name,
-        target: args.romTarget,
+        target: {
+          kind: "file",
+          storage: args.sourceId,
+          path: args.romTarget,
+        },
         apps: [
           {
             id: args.appId,
@@ -358,12 +350,6 @@ function sourceIdForRoot(index: number): string {
   return index === 0
     ? FIRST_ROM_SOURCE_ID
     : `${FIRST_ROM_SOURCE_ID}-${index + 1}`
-}
-
-function sourceTitle(sourceId: string): string {
-  return sourceId === FIRST_ROM_SOURCE_ID
-    ? FIRST_ROM_SOURCE_TITLE
-    : `${FIRST_ROM_SOURCE_TITLE} ${sourceId.replace(`${FIRST_ROM_SOURCE_ID}-`, "")}`
 }
 
 function sanitizeProfileIdPart(value: string): string {

@@ -19,9 +19,9 @@ async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
 
 const fixturePlugin: AcquisitionPluginDefinition = {
   metadata: {
-    sourceName: "fixture-source",
+    providerId: "@korri:fixture-provider",
     displayName: "Fixture Source",
-    module: "product/platform/acquisition/plugins/fixture-source",
+    module: "product/platform/acquisition/plugins/fixture-provider",
     builtIn: true,
     enabledByDefault: true,
     legalRisk: "low",
@@ -30,8 +30,8 @@ const fixturePlugin: AcquisitionPluginDefinition = {
   search: () =>
     Effect.succeed([
       {
-        _tag: "SourceCandidate",
-        sourceName: "fixture-source",
+        _tag: "ProviderClaim",
+        providerId: "@korri:fixture-provider",
         id: "game-1",
         title: "Game One",
         url: "https://example.com/game-1",
@@ -40,23 +40,23 @@ const fixturePlugin: AcquisitionPluginDefinition = {
     ]),
   details: () =>
     Effect.succeed({
-      _tag: "SourceDetails",
-      sourceName: "fixture-source",
+      _tag: "ProviderClaimDetails",
+      providerId: "@korri:fixture-provider",
       id: "game-1",
       title: "Game One",
       url: "https://example.com/game-1",
       description: "A fixture game.",
     }),
-  validateSource: ({ checkedAt }) =>
+  validateProvider: ({ checkedAt }) =>
     Effect.succeed({
-      _tag: "HealthySource",
-      sourceName: "fixture-source",
+      _tag: "HealthyProvider",
+      providerId: "@korri:fixture-provider",
       checkedAt,
     }),
   resolveDownload: () =>
     Effect.succeed({
       _tag: "FinalDownload",
-      sourceName: "fixture-source",
+      providerId: "@korri:fixture-provider",
       url: "https://example.com/game-1.zip",
       filename: "game-1.zip",
     }),
@@ -67,7 +67,7 @@ const fixturePlugin: AcquisitionPluginDefinition = {
       format: { id: "smbr-level" },
       file: { name: "level.lvl", extension: "lvl" },
       bytesBase64: Buffer.from('{"Info":{},"Levels":[]}').toString("base64"),
-      sourceData: { "fixture-source.v1": { id: "game-1" } },
+      sourceData: { "fixture-provider.v1": { id: "game-1" } },
     }),
 }
 
@@ -85,16 +85,16 @@ describe("live acquisition service", () => {
         return {
           search: yield* acquisition.search({ query: "game" }),
           details: yield* acquisition.details({
-            sourceName: "fixture-source",
+            providerId: "@korri:fixture-provider",
             id: "game-1",
           }),
-          health: yield* acquisition.validateSources({}),
+          health: yield* acquisition.validateProviders({}),
           download: yield* acquisition.resolveDownload({
-            sourceName: "fixture-source",
+            providerId: "@korri:fixture-provider",
             candidateUrl: "https://example.com/game-1",
           }),
           artifact: yield* acquisition.acquireArtifact({
-            sourceName: "fixture-source",
+            providerId: "@korri:fixture-provider",
             id: "game-1",
           }),
         }
@@ -102,10 +102,12 @@ describe("live acquisition service", () => {
 
       const result = await Effect.runPromise(Effect.provide(program, layer))
 
-      expect(result.search.candidates).toHaveLength(1)
-      expect(result.search.candidates[0]?.sourceName).toBe("fixture-source")
+      expect(result.search.claims).toHaveLength(1)
+      expect(result.search.claims[0]?.providerId).toBe(
+        "@korri:fixture-provider",
+      )
       expect(result.details.description).toBe("A fixture game.")
-      expect(result.health.sources[0]?._tag).toBe("HealthySource")
+      expect(result.health.providers[0]?._tag).toBe("HealthyProvider")
       expect(result.download._tag).toBe("FinalDownload")
       expect(result.artifact.format.id).toBe("smbr-level")
       expect(await readFile(result.artifact.stagedPath, "utf8")).toBe(
@@ -124,7 +126,7 @@ describe("live acquisition service", () => {
 
     const result = await Effect.runPromise(Effect.provide(program, layer))
 
-    expect(result.candidates).toHaveLength(1)
+    expect(result.claims).toHaveLength(1)
   })
 
   it("rejects unsafe download URLs before calling plugin code", async () => {
@@ -136,7 +138,7 @@ describe("live acquisition service", () => {
           called = true
           return Effect.succeed({
             _tag: "FinalDownload",
-            sourceName: "fixture-source",
+            providerId: "@korri:fixture-provider",
             url: "https://example.com/unreachable.zip",
           })
         },
@@ -146,7 +148,7 @@ describe("live acquisition service", () => {
     const program = Effect.gen(function* () {
       const acquisition = yield* Acquisition
       return yield* acquisition.resolveDownload({
-        sourceName: "fixture-source",
+        providerId: "@korri:fixture-provider",
         candidateUrl: "http://127.0.0.1/private.zip",
       })
     })
@@ -171,8 +173,8 @@ describe("live acquisition service", () => {
         search: () =>
           Effect.succeed(
             Array.from({ length: 201 }, (_, index) => ({
-              _tag: "SourceCandidate" as const,
-              sourceName: "fixture-source",
+              _tag: "ProviderClaim" as const,
+              providerId: "@korri:fixture-provider",
               id: `game-${index}`,
               title: `Game ${index}`,
               url: `https://example.com/game-${index}`,
@@ -196,12 +198,12 @@ describe("live acquisition service", () => {
     )
 
     expect(error).toMatchObject({
-      reason: "defective-source",
-      sourceName: "fixture-source",
+      reason: "defective-provider",
+      providerId: "@korri:fixture-provider",
     })
   })
 
-  it("returns malformed plugin output as a typed defective-source error", async () => {
+  it("returns malformed plugin output as a typed defective-provider error", async () => {
     const registry = createStaticAcquisitionPluginRegistry([
       {
         ...fixturePlugin,
@@ -224,8 +226,8 @@ describe("live acquisition service", () => {
     )
 
     expect(error).toMatchObject({
-      reason: "defective-source",
-      sourceName: "fixture-source",
+      reason: "defective-provider",
+      providerId: "@korri:fixture-provider",
     })
   })
 
@@ -233,24 +235,24 @@ describe("live acquisition service", () => {
     const registry = createStaticAcquisitionPluginRegistry(
       approvedTypeScriptPluginDefinitions,
     )
-    const sourceNames = [...registry.sourceNames].sort()
+    const providerIds = [...registry.providerIds].sort()
 
-    expect(sourceNames).toEqual([
-      "chip8archive",
-      "homebrewhub",
-      "itchio",
-      "levelsharesquare",
-      "pico8bbs",
-      "portmaster",
-      "puzzlescript",
-      "retrobrews",
-      "tic80gallery",
-      "wasm4gallery",
+    expect(providerIds).toEqual([
+      "@korri:chip8archive",
+      "@korri:homebrewhub",
+      "@korri:itchio",
+      "@korri:levelsharesquare",
+      "@korri:pico8bbs",
+      "@korri:portmaster",
+      "@korri:puzzlescript",
+      "@korri:retrobrews",
+      "@korri:tic80gallery",
+      "@korri:wasm4gallery",
     ])
-    expect(sourceNames).not.toContain("coolrom")
-    expect(sourceNames).not.toContain("retrostic")
-    expect(sourceNames).not.toContain("romhustler")
-    expect(sourceNames).not.toContain("steamgriddb")
-    expect(sourceNames).not.toContain("wowroms")
+    expect(providerIds).not.toContain("coolrom")
+    expect(providerIds).not.toContain("retrostic")
+    expect(providerIds).not.toContain("romhustler")
+    expect(providerIds).not.toContain("steamgriddb")
+    expect(providerIds).not.toContain("wowroms")
   })
 })

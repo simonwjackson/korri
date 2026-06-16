@@ -1,7 +1,7 @@
 import type {
   SearchRequest,
   SearchResponse,
-} from "@platform/protocol/acquisition/candidate"
+} from "@platform/protocol/acquisition/claim"
 import { Effect } from "effect"
 import type { AcquisitionError } from "./errors"
 import { validatePluginSearchOutput } from "./plugin-contract-codecs"
@@ -12,28 +12,28 @@ import {
   selectAcquisitionPlugins,
 } from "./plugins/registry"
 
-export interface SearchSourcesOptions {
+export interface SearchProvidersOptions {
   readonly registry: AcquisitionPluginRegistry
   readonly context: AcquisitionPluginContext
   readonly request: SearchRequest
 }
 
-export function searchSources({
+export function searchProviders({
   registry,
   context,
   request,
-}: SearchSourcesOptions): Effect.Effect<SearchResponse, AcquisitionError> {
+}: SearchProvidersOptions): Effect.Effect<SearchResponse, AcquisitionError> {
   return Effect.gen(function* () {
     const plugins = yield* selectAcquisitionPlugins(
       registry,
-      request.sourceNames,
+      request.providerIds,
     )
     const chunks = yield* Effect.all(
       plugins.map(plugin => {
         const search = plugin.search
         if (!search) return Effect.succeed([])
         return runPluginOperation({
-          sourceName: plugin.metadata.sourceName,
+          providerId: plugin.metadata.providerId,
           operation: "search",
           context,
           run: () =>
@@ -45,6 +45,6 @@ export function searchSources({
         })
       }),
     )
-    return { candidates: chunks.flat() }
+    return { claims: chunks.flat() }
   })
 }

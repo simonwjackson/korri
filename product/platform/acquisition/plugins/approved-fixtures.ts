@@ -1,6 +1,6 @@
 import type {
-  SourceCandidate,
-  SourceDetails,
+  ProviderClaim,
+  ProviderClaimDetails,
 } from "@platform/protocol/acquisition/candidate"
 import type { DownloadResolution } from "@platform/protocol/acquisition/download-resolution"
 import { Effect } from "effect"
@@ -8,7 +8,7 @@ import { AcquisitionError } from "../errors"
 import type { AcquisitionPluginDefinition } from "./registry"
 
 interface FixtureEntry {
-  readonly sourceName: string
+  readonly providerId: string
   readonly id: string
   readonly title: string
   readonly url: string
@@ -23,7 +23,7 @@ interface FixtureEntry {
 }
 
 interface FixturePluginOptions {
-  readonly sourceName: string
+  readonly providerId: string
   readonly displayName: string
   readonly legalRisk: "low" | "medium" | "high"
   readonly credentialRequired?: boolean
@@ -33,7 +33,7 @@ interface FixturePluginOptions {
 }
 
 function fixturePluginDefinition({
-  sourceName,
+  providerId,
   displayName,
   legalRisk,
   credentialRequired = false,
@@ -54,7 +54,7 @@ function fixturePluginDefinition({
 
   return {
     metadata: {
-      sourceName,
+      providerId,
       displayName,
       module: "product/platform/acquisition/plugins/approved-fixtures",
       builtIn: true,
@@ -73,13 +73,13 @@ function fixturePluginDefinition({
       ),
     details: (_context, request) => {
       const entry = findEntry(request.id)
-      if (!entry) return unknownEntry(sourceName, request.id)
+      if (!entry) return unknownEntry(providerId, request.id)
       return Effect.succeed(detailsFor(entry))
     },
-    validateSource: context =>
+    validateProvider: context =>
       Effect.succeed({
-        _tag: "HealthySource" as const,
-        sourceName,
+        _tag: "HealthyProvider" as const,
+        providerId,
         checkedAt: context.checkedAt,
       }),
     resolveDownload: (_context, request) => {
@@ -87,7 +87,7 @@ function fixturePluginDefinition({
       if (!id) {
         return Effect.succeed({
           _tag: "NonFinalDownload" as const,
-          sourceName,
+          providerId,
           reason: unsupportedDownloadReason,
           url: request.candidateUrl,
         } satisfies DownloadResolution)
@@ -97,7 +97,7 @@ function fixturePluginDefinition({
       if (!entry && entries.length === 0) {
         return Effect.succeed({
           _tag: "NonFinalDownload" as const,
-          sourceName,
+          providerId,
           reason: unsupportedDownloadReason,
           url: request.candidateUrl,
         } satisfies DownloadResolution)
@@ -105,16 +105,16 @@ function fixturePluginDefinition({
       if (!entry) {
         return Effect.succeed({
           _tag: "FailedDownload" as const,
-          sourceName,
+          providerId,
           reason: "not-found" as const,
-          message: unknownMessage(sourceName, id),
+          message: unknownMessage(providerId, id),
         } satisfies DownloadResolution)
       }
 
       if (entry.disabledMessage) {
         return Effect.succeed({
           _tag: "FailedDownload" as const,
-          sourceName,
+          providerId,
           reason: "not-found" as const,
           message: entry.disabledMessage,
         } satisfies DownloadResolution)
@@ -123,7 +123,7 @@ function fixturePluginDefinition({
       if (!entry.downloadUrl) {
         return Effect.succeed({
           _tag: "NonFinalDownload" as const,
-          sourceName,
+          providerId,
           reason: unsupportedDownloadReason,
           url: request.candidateUrl,
         } satisfies DownloadResolution)
@@ -131,7 +131,7 @@ function fixturePluginDefinition({
 
       return Effect.succeed({
         _tag: "FinalDownload" as const,
-        sourceName,
+        providerId,
         url: entry.downloadUrl,
         ...(entry.filename ? { filename: entry.filename } : {}),
         ...(entry.contentType ? { contentType: entry.contentType } : {}),
@@ -140,11 +140,12 @@ function fixturePluginDefinition({
   }
 }
 
-function candidateFor(entry: FixtureEntry): SourceCandidate {
+function candidateFor(entry: FixtureEntry): ProviderClaim {
   return {
-    _tag: "SourceCandidate",
-    sourceName: entry.sourceName,
+    _tag: "ProviderClaim",
+    providerId: entry.providerId,
     id: entry.id,
+    ref: { kind: "provider-item-id", value: entry.id },
     title: entry.title,
     url: entry.url,
     platform: entry.platform,
@@ -152,11 +153,12 @@ function candidateFor(entry: FixtureEntry): SourceCandidate {
   }
 }
 
-function detailsFor(entry: FixtureEntry): SourceDetails {
+function detailsFor(entry: FixtureEntry): ProviderClaimDetails {
   return {
-    _tag: "SourceDetails",
-    sourceName: entry.sourceName,
+    _tag: "ProviderClaimDetails",
+    providerId: entry.providerId,
     id: entry.id,
+    ref: { kind: "provider-item-id", value: entry.id },
     title: entry.title,
     url: entry.url,
     ...(entry.description ? { description: entry.description } : {}),
@@ -169,11 +171,11 @@ function playableFor(entry: FixtureEntry) {
   return {
     id: localPlayableId(entry.id),
     title: entry.title,
-    source: entry.sourceName,
+    providerId: entry.providerId,
     releases: [
       {
         id: localPlayableId(entry.platform),
-        source: entry.sourceName,
+        providerId: entry.providerId,
         system: entry.platform,
         ...(entry.downloadUrl ? { target: entry.downloadUrl } : {}),
       },
@@ -208,20 +210,20 @@ function matchesEntry(
 }
 
 function unknownEntry(
-  sourceName: string,
+  providerId: string,
   id: string,
 ): Effect.Effect<never, AcquisitionError> {
   return Effect.fail(
     new AcquisitionError({
       reason: "caller",
-      sourceName,
-      message: unknownMessage(sourceName, id),
+      providerId,
+      message: unknownMessage(providerId, id),
     }),
   )
 }
 
-function unknownMessage(sourceName: string, id: string) {
-  return `Unknown ${sourceName} candidate: ${id}`
+function unknownMessage(providerId: string, id: string) {
+  return `Unknown ${providerId} candidate: ${id}`
 }
 
 function parseUrl(input: string): URL | null {
@@ -346,7 +348,7 @@ function parseWasm4GalleryUrl(input: string): string | null {
 
 const homebrewHubEntries = [
   {
-    sourceName: "homebrewhub",
+    providerId: "@korri:homebrewhub",
     id: "2048gb",
     title: "2048gb",
     url: "https://hh3.gbdev.io/api/entry/2048gb.json",
@@ -359,7 +361,7 @@ const homebrewHubEntries = [
     searchText: "2048gb 2048 sanqui nintendo-gameboy zlib",
   },
   {
-    sourceName: "homebrewhub",
+    providerId: "@korri:homebrewhub",
     id: "basil-termini_2048-advance",
     title: "2048 Advance",
     url: "https://hh3.gbdev.io/api/entry/basil-termini_2048-advance.json",
@@ -373,7 +375,7 @@ const homebrewHubEntries = [
       "2048 advance basil termini nintendo-gameboy-advance mit cc-by-4.0",
   },
   {
-    sourceName: "homebrewhub",
+    providerId: "@korri:homebrewhub",
     id: "disabled-downloads",
     title: "Disabled Downloads",
     url: "https://hh3.gbdev.io/api/entry/disabled-downloads.json",
@@ -386,7 +388,7 @@ const homebrewHubEntries = [
 
 const pico8Entries = [
   {
-    sourceName: "pico8bbs",
+    providerId: "@korri:pico8bbs",
     id: "101",
     title: "Celeste Classic",
     url: "https://www.lexaloffle.com/bbs/?tid=101",
@@ -400,7 +402,7 @@ const pico8Entries = [
       "101 celeste classic maddy thorson pico8 p8.png cc-by-nc-sa-4.0",
   },
   {
-    sourceName: "pico8bbs",
+    providerId: "@korri:pico8bbs",
     id: "105",
     title: "No Cart Thread",
     url: "https://www.lexaloffle.com/bbs/?tid=105",
@@ -412,7 +414,7 @@ const pico8Entries = [
 
 const portmasterEntries = [
   {
-    sourceName: "portmaster",
+    providerId: "@korri:portmaster",
     id: "2048.zip",
     aliases: ["2048"],
     title: "2048",
@@ -426,7 +428,7 @@ const portmasterEntries = [
     searchText: "2048 christian haitian portmaster linux-port zip ready-to-run",
   },
   {
-    sourceName: "portmaster",
+    providerId: "@korri:portmaster",
     id: "akeyspath.zip",
     aliases: ["akeyspath"],
     title: "A Key(s) Path",
@@ -441,7 +443,7 @@ const portmasterEntries = [
       "a key keys path tabreturn puzzle platformer portmaster linux-port zip",
   },
   {
-    sourceName: "portmaster",
+    providerId: "@korri:portmaster",
     id: "absolutereflex.zip",
     aliases: ["absolutereflex"],
     title: "Absolute Reflex",
@@ -455,7 +457,7 @@ const portmasterEntries = [
 
 const puzzleScriptEntries = [
   {
-    sourceName: "puzzlescript",
+    providerId: "@korri:puzzlescript",
     id: "6994394",
     title: "Atlas Shrank",
     url: "https://www.puzzlescript.net/play.html?p=6994394",
@@ -469,7 +471,7 @@ const puzzleScriptEntries = [
       "atlas shrank james noeckel puzzlescript 6994394 freeware gallery attested",
   },
   {
-    sourceName: "puzzlescript",
+    providerId: "@korri:puzzlescript",
     id: "fcf4b43ee6c679ef9389",
     title: "Cake Monsters",
     url: "https://www.puzzlescript.net/play.html?p=fcf4b43ee6c679ef9389",
@@ -486,7 +488,7 @@ const puzzleScriptEntries = [
 
 const retrobrewsEntries = [
   {
-    sourceName: "retrobrews",
+    providerId: "@korri:retrobrews",
     id: "nes-games:ambushed.nes",
     title: "Ambushed",
     url: "https://github.com/retrobrews/nes-games/blob/master/ambushed.nes",
@@ -500,7 +502,7 @@ const retrobrewsEntries = [
       "ambushed slydog studios homebrew rom arcade nintendo-nes nes-games ambushed.nes",
   },
   {
-    sourceName: "retrobrews",
+    providerId: "@korri:retrobrews",
     id: "gba-games:anguna.gba",
     title: "Anguna",
     url: "https://github.com/retrobrews/gba-games/blob/master/anguna.gba",
@@ -522,7 +524,7 @@ const TIC80_HASH_TO_ID: Record<string, string> = {
 
 const tic80Entries = [
   {
-    sourceName: "tic80gallery",
+    providerId: "@korri:tic80gallery",
     id: "395",
     title: "2048 (TIC-80 Version)",
     url: "https://tic80.com/play?cart=395",
@@ -536,7 +538,7 @@ const tic80Entries = [
       "395 2048 tic-80 version games tic80 68d5e7881289837510df0e8c080bea73",
   },
   {
-    sourceName: "tic80gallery",
+    providerId: "@korri:tic80gallery",
     id: "2979",
     title: "Snake",
     url: "https://tic80.com/play?cart=2979",
@@ -549,7 +551,7 @@ const tic80Entries = [
     searchText: "2979 snake tic80 games 84d8c6a714233c6346a392f50fc1ae6b",
   },
   {
-    sourceName: "tic80gallery",
+    providerId: "@korri:tic80gallery",
     id: "4676",
     title: "Ladders & Dragons",
     url: "https://tic80.com/play?cart=4676",
@@ -561,7 +563,7 @@ const tic80Entries = [
 
 const wasm4Entries = [
   {
-    sourceName: "wasm4gallery",
+    providerId: "@korri:wasm4gallery",
     id: "snake",
     title: "Snake",
     url: "https://wasm4.org/play/snake",
@@ -574,7 +576,7 @@ const wasm4Entries = [
       "snake tomas tulka ttulka wasm4 classic snake & game cc-by-nc-sa-4.0",
   },
   {
-    sourceName: "wasm4gallery",
+    providerId: "@korri:wasm4gallery",
     id: "watris",
     title: "Watris",
     url: "https://wasm4.org/play/watris",
@@ -586,7 +588,7 @@ const wasm4Entries = [
     searchText: "watris bruno garcia aduros wasm4",
   },
   {
-    sourceName: "wasm4gallery",
+    providerId: "@korri:wasm4gallery",
     id: "co-op-robots",
     title: "Co-op Robots",
     url: "https://wasm4.org/play/co-op-robots",
@@ -601,14 +603,14 @@ const wasm4Entries = [
 
 export const approvedFixturePluginDefinitions = [
   fixturePluginDefinition({
-    sourceName: "homebrewhub",
+    providerId: "@korri:homebrewhub",
     displayName: "Homebrew Hub",
     legalRisk: "low",
     entries: homebrewHubEntries,
     parseCandidateUrl: parseHomebrewHubUrl,
   }),
   fixturePluginDefinition({
-    sourceName: "itchio",
+    providerId: "@korri:itchio",
     displayName: "itch.io",
     legalRisk: "medium",
     credentialRequired: true,
@@ -617,42 +619,42 @@ export const approvedFixturePluginDefinitions = [
     unsupportedDownloadReason: "requires-user-action",
   }),
   fixturePluginDefinition({
-    sourceName: "pico8bbs",
+    providerId: "@korri:pico8bbs",
     displayName: "PICO-8 BBS",
     legalRisk: "medium",
     entries: pico8Entries,
     parseCandidateUrl: parsePico8BbsUrl,
   }),
   fixturePluginDefinition({
-    sourceName: "portmaster",
+    providerId: "@korri:portmaster",
     displayName: "PortMaster",
     legalRisk: "low",
     entries: portmasterEntries,
     parseCandidateUrl: parsePortmasterUrl,
   }),
   fixturePluginDefinition({
-    sourceName: "puzzlescript",
+    providerId: "@korri:puzzlescript",
     displayName: "PuzzleScript",
     legalRisk: "low",
     entries: puzzleScriptEntries,
     parseCandidateUrl: parsePuzzleScriptUrl,
   }),
   fixturePluginDefinition({
-    sourceName: "retrobrews",
+    providerId: "@korri:retrobrews",
     displayName: "RetroBrews",
     legalRisk: "low",
     entries: retrobrewsEntries,
     parseCandidateUrl: parseRetrobrewsUrl,
   }),
   fixturePluginDefinition({
-    sourceName: "tic80gallery",
+    providerId: "@korri:tic80gallery",
     displayName: "TIC-80 Gallery",
     legalRisk: "low",
     entries: tic80Entries,
     parseCandidateUrl: parseTic80GalleryUrl,
   }),
   fixturePluginDefinition({
-    sourceName: "wasm4gallery",
+    providerId: "@korri:wasm4gallery",
     displayName: "WASM-4 Gallery",
     legalRisk: "low",
     entries: wasm4Entries,

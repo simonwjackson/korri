@@ -2,8 +2,8 @@
  * Korri's readable canonical library schema.
  *
  * Persisted YAML uses the human-curatable top-level sections
- * `host`, `storage`, `sources`, `systems`, `apps`, `runtimes`,
- * `profiles`, `collections`, `users`, and `library`. This is the
+ * `host`, `storage`, `providers`, `provider-links`, `systems`, `apps`,
+ * `runtimes`, `profiles`, `collections`, `users`, and `library`. This is the
  * application contract: old canonical collection names (`config`,
  * `games`, `launchers`, `modules`) are intentionally not declared.
  *
@@ -62,13 +62,18 @@ import {
   ProfileRecord,
 } from "@platform/library/config/records/profile"
 import {
+  ProviderPayload,
+  ProviderRecord,
+} from "@platform/library/config/records/provider"
+import {
+  ProviderLinkPayload,
+  ProviderLinkRecord,
+} from "@platform/library/config/records/provider-link"
+import {
   RuntimePayload,
   RuntimeRecord,
 } from "@platform/library/config/records/runtime"
-import {
-  SourcePayload,
-  SourceRecord,
-} from "@platform/library/config/records/source"
+import type { SourcePayload } from "@platform/library/config/records/source"
 import {
   StoragePayload,
   StorageRecord,
@@ -108,7 +113,8 @@ const keyedCollection = <TPayload extends Schema.Schema<unknown>>(
 export const collectionsSchema = {
   host: keyedCollection(HostPayload),
   storage: keyedCollection(StoragePayload),
-  sources: keyedCollection(SourcePayload),
+  providers: keyedCollection(ProviderPayload),
+  "provider-links": keyedCollection(ProviderLinkPayload),
   systems: keyedCollection(SystemPayload),
   apps: keyedCollection(AppPayload),
   runtimes: keyedCollection(RuntimePayload),
@@ -129,7 +135,8 @@ const cloneRecord = (value: Record<string, unknown>): Record<string, unknown> =>
 
 const strictMapPayloadSchemas = {
   storage: StoragePayload,
-  sources: SourcePayload,
+  providers: ProviderPayload,
+  "provider-links": ProviderLinkPayload,
   systems: SystemPayload,
   apps: AppPayload,
   runtimes: RuntimePayload,
@@ -266,8 +273,10 @@ export {
   ProfileRecord,
   RuntimePayload,
   RuntimeRecord,
-  SourcePayload,
-  SourceRecord,
+  ProviderPayload,
+  ProviderRecord,
+  ProviderLinkPayload,
+  ProviderLinkRecord,
   StoragePayload,
   StorageRecord,
   SystemPayload,
@@ -303,7 +312,12 @@ export type CollectionApi<TPayload> = {
 export interface KorriLibraryDb {
   readonly host: CollectionApi<Schema.Schema.Type<typeof HostPayload>>
   readonly storage: CollectionApi<Schema.Schema.Type<typeof StoragePayload>>
-  readonly sources: CollectionApi<Schema.Schema.Type<typeof SourcePayload>>
+  readonly providers: CollectionApi<Schema.Schema.Type<typeof ProviderPayload>>
+  readonly "provider-links": CollectionApi<
+    Schema.Schema.Type<typeof ProviderLinkPayload>
+  >
+  /** @deprecated legacy collection removed from canonical config. */
+  readonly sources: CollectionApi<SourcePayload>
   readonly systems: CollectionApi<Schema.Schema.Type<typeof SystemPayload>>
   readonly apps: CollectionApi<Schema.Schema.Type<typeof AppPayload>>
   readonly runtimes: CollectionApi<Schema.Schema.Type<typeof RuntimePayload>>
@@ -608,6 +622,7 @@ const withCanonicalCollectionGuards = (
 ): KorriLibraryDb => ({
   ...db,
   library: withValidatedLibraryCollection(db.library),
+  sources: removedLegacyCollection("sources"),
   config: removedLegacyCollection("config"),
   launchers: removedLegacyCollection("launchers"),
   modules: removedLegacyCollection("modules"),

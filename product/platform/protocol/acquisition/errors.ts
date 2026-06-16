@@ -1,30 +1,25 @@
 import { Schema } from "effect"
 
+const AcquisitionErrorReason = Schema.Literals([
+  "caller",
+  "configuration",
+  "infrastructure",
+  "unsafe-url",
+  "unsafe-path",
+  "defective-provider",
+])
+
 export class AcquisitionError extends Schema.TaggedErrorClass<AcquisitionError>()(
   "AcquisitionError",
   {
-    reason: Schema.Literals([
-      "caller",
-      "configuration",
-      "infrastructure",
-      "unsafe-url",
-      "unsafe-path",
-      "defective-source",
-    ]),
+    reason: AcquisitionErrorReason,
     message: Schema.String,
-    sourceName: Schema.optional(Schema.String),
+    providerId: Schema.optional(Schema.String),
   },
 ) {}
 
 export const SafeRpcAcquisitionError = Schema.Struct({
-  reason: Schema.Literals([
-    "caller",
-    "configuration",
-    "infrastructure",
-    "unsafe-url",
-    "unsafe-path",
-    "defective-source",
-  ]),
+  reason: AcquisitionErrorReason,
   message: Schema.String,
 })
 export type SafeRpcAcquisitionError = Schema.Schema.Type<

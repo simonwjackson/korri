@@ -4,5 +4,5 @@ import {
 } from "./plugins/registry"
 
 export const createStaticAcquisitionPluginRegistry = (
-  plugins: readonly AcquisitionPluginDefinition[],
-) => createAcquisitionPluginRegistry(plugins)
+  providers: readonly AcquisitionPluginDefinition[],
+) => createAcquisitionPluginRegistry(providers)

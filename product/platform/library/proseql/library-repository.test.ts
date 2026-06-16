@@ -21,7 +21,6 @@ async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
 const downwell: LibraryItemRecord = {
   id: "downwell",
   title: "Downwell",
-  source: "steam",
   releases: [
     {
       id: "windows",
@@ -35,24 +34,21 @@ const downwell: LibraryItemRecord = {
 const sonic: LibraryItemRecord = {
   id: "sonic-the-hedgehog",
   title: "Sonic the Hedgehog",
-  source: "roms",
   releases: [
     {
       id: "genesis",
       system: "genesis",
-      target: "genesis/Sonic.md",
+      target: { kind: "file", storage: "roms", path: "genesis/Sonic.md" },
       apps: [{ id: "retroarch", runtime: "genesis-plus-gx" }],
     },
     {
       id: "windows-known",
       system: "windows",
-      source: "pcgamingwiki",
       display: { aspect: "unrestricted" },
     },
     {
       id: "steam",
       system: "windows",
-      source: "steam",
       target: "steam://rungameid/71113",
       apps: [{ id: "steam" }],
     },
@@ -62,7 +58,6 @@ const sonic: LibraryItemRecord = {
 const marioPackage: LibraryItemRecord = {
   id: "super-mario-advance-2",
   title: "Super Mario Advance 2",
-  source: "roms",
   contains: {
     "super-mario-world": { title: "Super Mario World" },
   },
@@ -70,7 +65,11 @@ const marioPackage: LibraryItemRecord = {
     {
       id: "gba",
       system: "gba",
-      target: "gba/Super Mario Advance 2.gba",
+      target: {
+        kind: "file",
+        storage: "roms",
+        path: "gba/Super Mario Advance 2.gba",
+      },
       apps: [{ id: "retroarch", runtime: "mgba" }],
     },
   ],
@@ -91,21 +90,6 @@ async function seedReadableLibrary(root: string) {
           create: { id: "roms", root: "/games" },
           update: { id: "roms", root: "/games" },
         })
-        yield* db.sources.upsert({
-          where: { id: "roms" },
-          create: { id: "roms", kind: ["files"], storage: "roms" },
-          update: { id: "roms", kind: ["files"], storage: "roms" },
-        })
-        yield* db.sources.upsert({
-          where: { id: "steam" },
-          create: { id: "steam", kind: ["service", "metadata"], app: "steam" },
-          update: { id: "steam", kind: ["service", "metadata"], app: "steam" },
-        })
-        yield* db.sources.upsert({
-          where: { id: "pcgamingwiki" },
-          create: { id: "pcgamingwiki", kind: ["metadata"] },
-          update: { id: "pcgamingwiki", kind: ["metadata"] },
-        })
         yield* db.systems.upsert({
           where: { id: "genesis" },
           create: { id: "genesis", name: "Genesis" },
@@ -123,8 +107,18 @@ async function seedReadableLibrary(root: string) {
         })
         yield* db.apps.upsert({
           where: { id: "steam" },
-          create: { id: "steam", command: "steam", args: ["{target}"] },
-          update: { id: "steam", command: "steam", args: ["{target}"] },
+          create: {
+            id: "steam",
+            kind: "process",
+            command: "steam",
+            args: ["{target}"],
+          },
+          update: {
+            id: "steam",
+            kind: "process",
+            command: "steam",
+            args: ["{target}"],
+          },
         })
         yield* db.apps.upsert({
           where: { id: "retroarch" },
@@ -134,6 +128,7 @@ async function seedReadableLibrary(root: string) {
             command: "retroarch",
             configFile: { mode: "generated" },
             lifecycle: { saveOnExit: false },
+            paths: { systemDirectory: "/bios" },
             video: { fullscreen: true },
           },
           update: {
@@ -142,6 +137,7 @@ async function seedReadableLibrary(root: string) {
             command: "retroarch",
             configFile: { mode: "generated" },
             lifecycle: { saveOnExit: false },
+            paths: { systemDirectory: "/bios" },
             video: { fullscreen: true },
           },
         })
@@ -215,12 +211,15 @@ describe("createLibraryRepository — readable playable entries", () => {
         repo.upsertLibraryItem({
           id: "multi-app",
           title: "Multi App",
-          source: "roms",
           releases: [
             {
               id: "genesis",
               system: "genesis",
-              target: "genesis/Multi.md",
+              target: {
+                kind: "file",
+                storage: "roms",
+                path: "genesis/Multi.md",
+              },
               apps: [
                 { id: "retroarch", runtime: "genesis-plus-gx" },
                 { id: "steam" },
@@ -244,12 +243,15 @@ describe("createLibraryRepository — readable playable entries", () => {
         repo.upsertLibraryItem({
           id: "multi-app",
           title: "Multi App",
-          source: "roms",
           releases: [
             {
               id: "genesis",
               system: "genesis",
-              target: "genesis/Multi.md",
+              target: {
+                kind: "file",
+                storage: "roms",
+                path: "genesis/Multi.md",
+              },
               apps: [
                 { id: "retroarch", runtime: "genesis-plus-gx" },
                 { id: "steam" },
@@ -282,12 +284,15 @@ describe("createLibraryRepository — readable playable entries", () => {
         repo.upsertLibraryItem({
           id: "multi-app",
           title: "Multi App",
-          source: "roms",
           releases: [
             {
               id: "genesis",
               system: "genesis",
-              target: "genesis/Multi.md",
+              target: {
+                kind: "file",
+                storage: "roms",
+                path: "genesis/Multi.md",
+              },
               apps: [{ id: "retroarch" }, { id: "steam" }],
             },
           ],
@@ -361,7 +366,6 @@ describe("createLibraryRepository — readable playable entries", () => {
         repo.upsertLibraryItem({
           id: "steam-store-shortcut",
           title: "Steam Store Shortcut",
-          source: "steam",
           releases: [
             {
               id: "store-page",
@@ -463,12 +467,15 @@ describe("createLibraryRepository — readable playable entries", () => {
         repo.upsertLibraryItem({
           id: "coreless",
           title: "Coreless",
-          source: "roms",
           releases: [
             {
               id: "genesis",
               system: "genesis",
-              target: "genesis/Coreless.md",
+              target: {
+                kind: "file",
+                storage: "roms",
+                path: "genesis/Coreless.md",
+              },
               apps: [{ id: "retroarch" }],
             },
           ],
@@ -492,7 +499,6 @@ describe("createLibraryRepository — readable playable entries", () => {
         repo.upsertLibraryItem({
           id: "policy-only",
           title: "Policy Only",
-          source: "roms",
           releases: [
             {
               id: "genesis",
@@ -578,13 +584,6 @@ describe("createLibraryRepository — readable playable entries", () => {
         repo.upsertStorage({ id: "switch-card", root: cardRoot }),
       )
       await Effect.runPromise(
-        repo.upsertSource({
-          id: "switch-card",
-          kind: ["files"],
-          storage: "switch-card",
-        }),
-      )
-      await Effect.runPromise(
         repo.upsertSystem({ id: "switch", name: "Switch" }),
       )
       await Effect.runPromise(
@@ -603,13 +602,16 @@ describe("createLibraryRepository — readable playable entries", () => {
       await Effect.runPromise(
         repo.upsertLibraryItem({
           id: "mario-kart-8-deluxe",
-          source: "switch-card",
           releases: [
             {
               id: "switch",
               system: "switch",
               apps: [{ id: "ryubing" }],
-              target: "roms/switch/Mario Kart 8 Deluxe.nsp",
+              target: {
+                kind: "file",
+                storage: "switch-card",
+                path: "roms/switch/Mario Kart 8 Deluxe.nsp",
+              },
             },
           ],
         }),
@@ -650,13 +652,6 @@ describe("createLibraryRepository — readable playable entries", () => {
         repo.upsertStorage({ id: "switch-card", root: cardRoot }),
       )
       await Effect.runPromise(
-        repo.upsertSource({
-          id: "switch-card",
-          kind: ["files"],
-          storage: "switch-card",
-        }),
-      )
-      await Effect.runPromise(
         repo.upsertSystem({ id: "switch", name: "Switch" }),
       )
       await Effect.runPromise(
@@ -670,13 +665,16 @@ describe("createLibraryRepository — readable playable entries", () => {
       await Effect.runPromise(
         repo.upsertLibraryItem({
           id: "mario-kart-8-deluxe",
-          source: "switch-card",
           releases: [
             {
               id: "switch",
               system: "switch",
               apps: [{ id: "ryubing" }],
-              target: "roms/switch/Mario Kart 8 Deluxe.nsp",
+              target: {
+                kind: "file",
+                storage: "switch-card",
+                path: "roms/switch/Mario Kart 8 Deluxe.nsp",
+              },
             },
           ],
         }),

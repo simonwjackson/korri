@@ -87,11 +87,6 @@ describe("createProseqlLibrarySource", () => {
             const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
             const repo = createLibraryRepository(db)
             yield* repo.upsertStorage({ id: "roms", root: root })
-            yield* repo.upsertSource({
-              id: "local-roms",
-              kind: ["files"],
-              storage: "roms",
-            })
             yield* repo.upsertApp({
               id: "echo",
               command: "/bin/echo",
@@ -100,19 +95,22 @@ describe("createProseqlLibrarySource", () => {
             })
             yield* repo.upsertLibraryItem({
               id: "sonic",
-              source: "local-roms",
               releases: [
                 {
                   id: "genesis",
                   system: "genesis",
                   apps: [{ id: "echo" }],
-                  target: "sonic.md",
+                  target: { kind: "file", storage: "roms", path: "sonic.md" },
                 },
                 {
                   id: "steam",
                   system: "pc",
                   apps: [{ id: "echo" }],
-                  target: "sonic-steam.bin",
+                  target: {
+                    kind: "file",
+                    storage: "roms",
+                    path: "sonic-steam.bin",
+                  },
                 },
                 { id: "known-only", system: "pc", apps: [{ id: "echo" }] },
               ],

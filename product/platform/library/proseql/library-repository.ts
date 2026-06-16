@@ -44,6 +44,8 @@ import type { LauncherRecord } from "@platform/library/config/records/launcher"
 import type { LibraryItemRecord } from "@platform/library/config/records/library-item"
 import type { ModuleRecord } from "@platform/library/config/records/module"
 import type { ProfileRecord } from "@platform/library/config/records/profile"
+import type { ProviderRecord } from "@platform/library/config/records/provider"
+import type { ProviderLinkRecord } from "@platform/library/config/records/provider-link"
 import type { RuntimeRecord } from "@platform/library/config/records/runtime"
 import type { SourceRecord } from "@platform/library/config/records/source"
 import type { StorageRecord } from "@platform/library/config/records/storage"
@@ -162,6 +164,13 @@ export interface LibraryRepository {
   readonly upsertStorage: (
     storage: StorageRecord,
   ) => Effect.Effect<StorageRecord, LibraryError>
+  readonly upsertProvider: (
+    provider: ProviderRecord,
+  ) => Effect.Effect<ProviderRecord, LibraryError>
+  readonly upsertProviderLink: (
+    providerLink: ProviderLinkRecord,
+  ) => Effect.Effect<ProviderLinkRecord, LibraryError>
+  /** @deprecated source records were removed; use upsertProvider/provider-links. */
   readonly upsertSource: (
     source: SourceRecord,
   ) => Effect.Effect<SourceRecord, LibraryError>
@@ -271,7 +280,16 @@ export function createLibraryRepository(
 
     upsertLibraryItem: item => upsert(db.library, item),
     upsertStorage: storage => upsert(db.storage, storage),
-    upsertSource: source => upsert(db.sources, source),
+    upsertProvider: provider => upsert(db.providers, provider),
+    upsertProviderLink: providerLink =>
+      upsert(db["provider-links"], providerLink),
+    upsertSource: () =>
+      Effect.fail(
+        new LibraryError({
+          reason: "config",
+          message: "source records were removed; use providers/provider-links",
+        }),
+      ),
     upsertSystem: system => upsertSystemWithCoreRuntime(db, system),
     upsertApp: app => upsert(db.apps, app),
     upsertRuntime: runtime => upsert(db.runtimes, runtime),
@@ -406,7 +424,6 @@ export function createLibraryRepository(
             release ?? {
               id: context.releaseId,
               system: context.system,
-              source: context.sourceId,
               target: context.target,
             },
           ),
@@ -659,16 +676,20 @@ function adoptArtifactIntoReadableLibrary(
             id: "artifact-imports",
             root: artifactsRoot(env),
           })
-          yield* upsert(db.sources, {
-            id: "artifact-imports",
-            kind: ["files"],
-            storage: "artifact-imports",
-          })
           yield* upsert(db.library, {
             id,
             ...(input.library?.title ? { title: input.library.title } : {}),
-            source: "artifact-imports",
-            releases: [{ id: "default", system, target }],
+            releases: [
+              {
+                id: "default",
+                system,
+                target: {
+                  kind: "file",
+                  storage: "artifact-imports",
+                  path: target,
+                },
+              },
+            ],
           })
           yield* Effect.promise(() => db.flush())
         }),
@@ -697,11 +718,6 @@ function upsertLegacyGame(
 ): Effect.Effect<GameRecord, LibraryError> {
   return Effect.gen(function* () {
     yield* upsert(db.storage, { id: "legacy-files", root: "/" })
-    yield* upsert(db.sources, {
-      id: "legacy-files",
-      kind: ["files"],
-      storage: "legacy-files",
-    })
     if (game.core !== undefined) {
       yield* upsert(db.runtimes, {
         id: game.core,
@@ -721,7 +737,15 @@ function upsertLegacyGame(
     const release = {
       id: "default",
       system: game.system,
-      ...(target ? { target } : {}),
+      ...(target
+        ? {
+            target: {
+              kind: "file" as const,
+              storage: "legacy-files",
+              path: target,
+            },
+          }
+        : {}),
       ...(appId
         ? {
             apps: [{ id: appId, ...(runtimeId ? { runtime: runtimeId } : {}) }],
@@ -731,7 +755,6 @@ function upsertLegacyGame(
     const item: LibraryItemRecord = parsed.containedId
       ? {
           id: parsed.itemId,
-          source: "legacy-files",
           contains: {
             [parsed.containedId]: {
               ...(game.metadata?.name ? { title: game.metadata.name } : {}),
@@ -742,7 +765,6 @@ function upsertLegacyGame(
       : {
           id: parsed.itemId,
           ...(game.metadata?.name ? { title: game.metadata.name } : {}),
-          source: "legacy-files",
           releases: [release],
         }
     yield* upsert(db.library, item)
@@ -894,15 +916,14 @@ function toCompatGameRecord(entry: PlayableLibraryEntry): GameRecord {
 function toPlayableReleaseEntry(release: {
   readonly id: string
   readonly system: string
-  readonly source?: string
-  readonly target?: string | readonly string[]
+  readonly source?: unknown
+  readonly target?: PlayableReleaseEntry["target"]
   readonly apps?: readonly { readonly id: string }[]
   readonly display?: Readonly<Record<string, unknown>>
 }): PlayableReleaseEntry {
   return {
     id: release.id,
     system: release.system,
-    ...(release.source ? { source: release.source } : {}),
     ...(release.target !== undefined ? { target: release.target } : {}),
     ...(release.apps ? { apps: release.apps.map(app => app.id) } : {}),
     ...(release.display ? { display: release.display } : {}),
@@ -918,7 +939,8 @@ function loadReadableSnapshot(
       hostRows,
       users,
       systems,
-      sources,
+      providers,
+      providerLinks,
       storage,
       apps,
       runtimes,
@@ -929,7 +951,8 @@ function loadReadableSnapshot(
         readCollection(db.host),
         readCollection(db.users),
         readCollection(db.systems),
-        readCollection(db.sources),
+        readCollection(db.providers),
+        readCollection(db["provider-links"]),
         readCollection(db.storage),
         readCollection(db.apps),
         readCollection(db.runtimes),
@@ -948,7 +971,8 @@ function loadReadableSnapshot(
       host,
       users: new Map(users.map(record => [record.id, record])),
       systems: new Map(systems.map(record => [record.id, record])),
-      sources: new Map(sources.map(record => [record.id, record])),
+      providers: new Map(providers.map(record => [record.id, record])),
+      providerLinks: new Map(providerLinks.map(record => [record.id, record])),
       storage: new Map(storage.map(record => [record.id, record])),
       apps: new Map(apps.map(record => [record.id, record])),
       runtimes: new Map(runtimes.map(record => [record.id, record])),
@@ -973,7 +997,12 @@ function toLibraryConfigError(error: unknown): LibraryError {
     typeof error === "object" && error !== null && "_tag" in error
       ? String((error as { readonly _tag: unknown })._tag)
       : undefined
-  const message = error instanceof Error ? error.message : String(error)
+  const message =
+    typeof error === "object" && error !== null && "reason" in error
+      ? String((error as { readonly reason: unknown }).reason)
+      : error instanceof Error
+        ? error.message
+        : String(error)
   return new LibraryError({
     reason: "config",
     message: tag ? `${tag}: ${message}` : message,

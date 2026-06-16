@@ -20,7 +20,7 @@ import { handleAcquisitionDetails } from "../acquisition/details.rpc-handler"
 import { handleAcquisitionPlugins } from "../acquisition/plugins.rpc-handler"
 import { handleAcquisitionResolveDownload } from "../acquisition/resolve-download.rpc-handler"
 import { handleAcquisitionSearch } from "../acquisition/search.rpc-handler"
-import { handleAcquisitionValidateSources } from "../acquisition/validate-sources.rpc-handler"
+import { handleAcquisitionValidateProviders } from "../acquisition/validate-providers.rpc-handler"
 import { CatalogSnapshotLive } from "../catalog/catalog-snapshot"
 import { handleCatalogSnapshot } from "../catalog/snapshot.rpc-handler"
 import { handleAssignGameAsset } from "../game-assets/assign.rpc-handler"
@@ -109,8 +109,8 @@ const ServerHandlersLive = serverRpcGroup.toLayer(
   serverRpcGroup.of({
     "app.acquisition.search": handleAcquisitionSearch,
     "app.acquisition.details": handleAcquisitionDetails,
-    "app.acquisition.plugins": handleAcquisitionPlugins,
-    "app.acquisition.validate-sources": handleAcquisitionValidateSources,
+    "app.acquisition.providers": handleAcquisitionPlugins,
+    "app.acquisition.validate-providers": handleAcquisitionValidateProviders,
     "app.acquisition.resolve-download": handleAcquisitionResolveDownload,
     "app.hello.get": handleGetHello,
     "app.game-assets.candidates.list": handleListGameAssetCandidates,

@@ -1,10 +1,13 @@
-import type { SourceDetails } from "@platform/protocol/acquisition/candidate"
+import type {
+  ProviderClaim,
+  ProviderClaimDetails,
+} from "@platform/protocol/acquisition/candidate"
 import type { DownloadResolution } from "@platform/protocol/acquisition/download-resolution"
 import { Effect } from "effect"
 import { AcquisitionError } from "../errors"
 import type { AcquisitionPluginDefinition } from "./registry"
 
-const SOURCE_NAME = "chip8archive"
+const PROVIDER_ID = "@korri:chip8archive"
 const DISPLAY_NAME = "CHIP-8 Archive"
 const GALLERY_BASE = "https://johnearnest.github.io/chip8Archive"
 const RAW_BASE =
@@ -58,11 +61,12 @@ function romUrl(slug: string): string {
   return `${RAW_BASE}/roms/${encodeURIComponent(slug)}.ch8`
 }
 
-function candidateFor(slug: string, program: Chip8Program) {
+function candidateFor(slug: string, program: Chip8Program): ProviderClaim {
   return {
-    _tag: "SourceCandidate" as const,
-    sourceName: SOURCE_NAME,
+    _tag: "ProviderClaim" as const,
+    providerId: PROVIDER_ID,
     id: slug,
+    ref: { kind: "provider-item-id", value: slug },
     title: program.title,
     url: playUrl(slug),
     platform: program.platform ?? "chip8",
@@ -70,11 +74,12 @@ function candidateFor(slug: string, program: Chip8Program) {
   }
 }
 
-function detailsFor(slug: string, program: Chip8Program): SourceDetails {
+function detailsFor(slug: string, program: Chip8Program): ProviderClaimDetails {
   return {
-    _tag: "SourceDetails" as const,
-    sourceName: SOURCE_NAME,
+    _tag: "ProviderClaimDetails" as const,
+    providerId: PROVIDER_ID,
     id: slug,
+    ref: { kind: "provider-item-id", value: slug },
     title: program.title,
     url: playUrl(slug),
     ...(program.desc ? { description: program.desc } : {}),
@@ -87,11 +92,11 @@ function playableFor(slug: string, program: Chip8Program) {
   return {
     id: slug,
     title: program.title,
-    source: SOURCE_NAME,
+    providerId: PROVIDER_ID,
     releases: [
       {
         id: program.platform ?? "chip8",
-        source: SOURCE_NAME,
+        providerId: PROVIDER_ID,
         system: program.platform ?? "chip8",
         target: romUrl(slug),
       },
@@ -163,7 +168,7 @@ function resolveChip8ArchiveDownload(candidateUrl: string): DownloadResolution {
   if (!slug) {
     return {
       _tag: "NonFinalDownload" as const,
-      sourceName: SOURCE_NAME,
+      providerId: PROVIDER_ID,
       reason: "unsupported" as const,
       url: candidateUrl,
     }
@@ -171,14 +176,14 @@ function resolveChip8ArchiveDownload(candidateUrl: string): DownloadResolution {
   if (!PROGRAMS[slug]) {
     return {
       _tag: "FailedDownload" as const,
-      sourceName: SOURCE_NAME,
+      providerId: PROVIDER_ID,
       reason: "not-found" as const,
       message: `Unknown CHIP-8 Archive candidate: ${slug}`,
     }
   }
   return {
     _tag: "FinalDownload" as const,
-    sourceName: SOURCE_NAME,
+    providerId: PROVIDER_ID,
     url: romUrl(slug),
     filename: `${slug}.ch8`,
     contentType: "application/octet-stream",
@@ -194,14 +199,14 @@ function knownProgram(
     new AcquisitionError({
       reason: "caller",
       message: "Unknown CHIP-8 Archive candidate.",
-      sourceName: SOURCE_NAME,
+      providerId: PROVIDER_ID,
     }),
   )
 }
 
 export const chip8ArchivePluginDefinition = {
   metadata: {
-    sourceName: SOURCE_NAME,
+    providerId: PROVIDER_ID,
     displayName: DISPLAY_NAME,
     module: "product/platform/acquisition/plugins/chip8archive",
     builtIn: true,
@@ -223,10 +228,10 @@ export const chip8ArchivePluginDefinition = {
       const program = yield* knownProgram(request.id)
       return detailsFor(request.id, program)
     }),
-  validateSource: context =>
+  validateProvider: context =>
     Effect.succeed({
-      _tag: "HealthySource" as const,
-      sourceName: SOURCE_NAME,
+      _tag: "HealthyProvider" as const,
+      providerId: PROVIDER_ID,
       checkedAt: context.checkedAt,
     }),
   resolveDownload: (_context, request) =>

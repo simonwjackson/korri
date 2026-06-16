@@ -5,12 +5,28 @@ import {
 import { Schema } from "effect"
 
 const DisplayMetadata = Schema.Record(Schema.String, Schema.Unknown)
-const ReleaseTarget = Schema.Union([Schema.String, Schema.Array(Schema.String)])
+const FileReleaseTarget = Schema.Struct({
+  kind: Schema.Literal("file"),
+  storage: Schema.String,
+  path: Schema.String,
+})
+const UriReleaseTarget = Schema.Struct({
+  kind: Schema.Literal("uri"),
+  value: Schema.String,
+})
+const ReleaseTargetAtom = Schema.Union([
+  Schema.String,
+  UriReleaseTarget,
+  FileReleaseTarget,
+])
+const ReleaseTarget = Schema.Union([
+  ReleaseTargetAtom,
+  Schema.Array(ReleaseTargetAtom),
+])
 
 export const PlayableReleaseEntry = Schema.Struct({
   id: Schema.String,
   system: Schema.String,
-  source: Schema.optional(Schema.String),
   target: Schema.optional(ReleaseTarget),
   apps: Schema.optional(Schema.Array(Schema.String)),
   display: Schema.optional(DisplayMetadata),

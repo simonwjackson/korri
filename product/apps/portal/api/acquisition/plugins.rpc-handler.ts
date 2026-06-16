@@ -7,6 +7,6 @@ export const handleAcquisitionPlugins = (_payload: AcquisitionPluginsPayload) =>
   Effect.gen(function* () {
     const acquisition = yield* Acquisition
     return yield* acquisition
-      .plugins()
+      .providers()
       .pipe(Effect.mapError(toAcquisitionRpcError))
   })

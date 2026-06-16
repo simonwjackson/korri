@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test"
-import { SourceCandidate } from "@platform/protocol/acquisition/candidate"
+import { ProviderClaim } from "@platform/protocol/acquisition/candidate"
 import { Schema } from "effect"
 import { safeAcquisitionLogFields } from "./logger"
 import { resolveContainedArtifactPath } from "./path-policy"
+import { validateProviderId } from "./provider-ids"
 import { redactCredentialText } from "./security"
-import { validateSourceName } from "./source-names"
 
 describe("acquisition trust policies", () => {
   it("redacts credentials from logs and payload strings", () => {
@@ -49,16 +49,16 @@ describe("acquisition trust policies", () => {
     ).toThrow()
   })
 
-  it("canonicalizes bounded source names before use", () => {
-    expect(validateSourceName(" Itch_IO ")).toBe("itch-io")
-    expect(() => validateSourceName("../itchio")).toThrow()
+  it("canonicalizes bounded provider ids before use", () => {
+    expect(validateProviderId(" @korri:itchio ")).toBe("@korri:itchio")
+    expect(() => validateProviderId("itchio")).toThrow()
   })
 
   it("turns schema-violating plugin outputs into detectable defects", () => {
     expect(() =>
-      Schema.decodeUnknownSync(SourceCandidate)({
-        _tag: "SourceCandidate",
-        sourceName: "itchio",
+      Schema.decodeUnknownSync(ProviderClaim)({
+        _tag: "ProviderClaim",
+        providerId: "@korri:itchio",
         id: "game-1",
         url: "https://example.com/game",
       }),

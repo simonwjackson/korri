@@ -1,7 +1,13 @@
 import { Schema } from "effect"
 
+const ProviderId = Schema.String.pipe(
+  Schema.check(
+    Schema.isPattern(/^@[a-z0-9][a-z0-9._-]*:[a-z0-9][a-z0-9._-]*$/),
+  ),
+)
+
 export const ResolveDownloadRequest = Schema.Struct({
-  sourceName: Schema.String,
+  providerId: ProviderId,
   candidateUrl: Schema.String,
 })
 export type ResolveDownloadRequest = Schema.Schema.Type<
@@ -9,7 +15,7 @@ export type ResolveDownloadRequest = Schema.Schema.Type<
 >
 
 export const FinalDownloadResolution = Schema.TaggedStruct("FinalDownload", {
-  sourceName: Schema.String,
+  providerId: ProviderId,
   url: Schema.String,
   filename: Schema.optional(Schema.String),
   contentType: Schema.optional(Schema.String),
@@ -18,7 +24,7 @@ export const FinalDownloadResolution = Schema.TaggedStruct("FinalDownload", {
 export const NonFinalDownloadResolution = Schema.TaggedStruct(
   "NonFinalDownload",
   {
-    sourceName: Schema.String,
+    providerId: ProviderId,
     reason: Schema.Literals([
       "interstitial",
       "requires-user-action",
@@ -29,12 +35,12 @@ export const NonFinalDownloadResolution = Schema.TaggedStruct(
 )
 
 export const FailedDownloadResolution = Schema.TaggedStruct("FailedDownload", {
-  sourceName: Schema.String,
+  providerId: ProviderId,
   reason: Schema.Literals([
-    "source-error",
+    "provider-error",
     "configuration",
     "not-found",
-    "defective-source",
+    "defective-provider",
   ]),
   message: Schema.String,
 })

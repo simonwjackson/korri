@@ -23,24 +23,38 @@ const TargetString = NonEmptyString.pipe(
         ? {
             path: ["target"],
             issue:
-              "release target must be a service URI or a relative source path",
+              "release target URI/string values must not be absolute paths",
           }
         : undefined,
     ),
   ),
 )
 
+const FileTarget = Schema.Struct({
+  kind: Schema.Literal("file"),
+  storage: NonEmptyString,
+  path: TargetString,
+})
+
+const UriTarget = Schema.Struct({
+  kind: Schema.Literal("uri"),
+  value: TargetString,
+})
+
+const TargetAtom = Schema.Union([TargetString, UriTarget, FileTarget])
+
 const Target = Schema.Union([
-  TargetString,
-  Schema.Array(TargetString).pipe(
+  TargetAtom,
+  Schema.Array(TargetAtom).pipe(
     Schema.check(
-      Schema.makeFilter((targets: readonly string[]) =>
-        targets.length > 0
-          ? undefined
-          : {
-              path: ["target"],
-              issue: "release target array must not be empty",
-            },
+      Schema.makeFilter(
+        (targets: readonly Schema.Schema.Type<typeof TargetAtom>[]) =>
+          targets.length > 0
+            ? undefined
+            : {
+                path: ["target"],
+                issue: "release target array must not be empty",
+              },
       ),
     ),
   ),
@@ -48,7 +62,7 @@ const Target = Schema.Union([
 
 export const LibraryReleasePayload = Schema.Struct({
   id: LocalPlayableId,
-  source: Schema.optional(NonEmptyString),
+  source: Schema.optional(Schema.Unknown),
   system: NonEmptyString,
   target: Schema.optional(Target),
   app: Schema.optional(Schema.Unknown),
@@ -67,6 +81,12 @@ export const LibraryReleasePayload = Schema.Struct({
 }).pipe(
   Schema.check(
     Schema.makeFilter(release => {
+      if (release.source !== undefined) {
+        return {
+          path: ["source"],
+          issue: "release.source was removed; use provider-links[]",
+        }
+      }
       if (release.app !== undefined) {
         return {
           path: ["app"],
@@ -157,7 +177,7 @@ const ContainsMap = Schema.Record(
 
 export const LibraryItemPayload = Schema.Struct({
   title: Schema.optional(Schema.String),
-  source: Schema.optional(NonEmptyString),
+  source: Schema.optional(Schema.Unknown),
   "version-of": Schema.optional(PlayableId),
   relation: Schema.optional(NonEmptyString),
   collections: Schema.optional(Schema.Array(NonEmptyString)),
@@ -179,7 +199,18 @@ export type LibraryItemPayload = Schema.Schema.Type<typeof LibraryItemPayload>
 export const LibraryItemRecord = Schema.Struct({
   id: LocalPlayableId,
   ...LibraryItemPayload.fields,
-})
+}).pipe(
+  Schema.check(
+    Schema.makeFilter(item =>
+      item.source === undefined
+        ? undefined
+        : {
+            path: ["source"],
+            issue: "library item source was removed; use provider-links[]",
+          },
+    ),
+  ),
+)
 export type LibraryItemRecord = Schema.Schema.Type<typeof LibraryItemRecord>
 
 export const decodeLibraryItemPayload = (input: unknown): LibraryItemPayload =>

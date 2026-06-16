@@ -6,12 +6,12 @@ import { redactCredentialText } from "./security"
 export type AcquisitionPluginOperationName =
   | "search"
   | "details"
-  | "validateSource"
+  | "validateProvider"
   | "resolveDownload"
   | "acquireArtifact"
 
 export interface PluginOperationHarnessOptions<A> {
-  readonly sourceName: string
+  readonly providerId: string
   readonly operation: AcquisitionPluginOperationName
   readonly context: AcquisitionPluginContext
   readonly run: () => Effect.Effect<A, AcquisitionError>
@@ -19,7 +19,7 @@ export interface PluginOperationHarnessOptions<A> {
 }
 
 export function runPluginOperation<A>({
-  sourceName,
+  providerId,
   operation,
   run,
   validate,
@@ -27,20 +27,20 @@ export function runPluginOperation<A>({
   return Effect.gen(function* () {
     const operationEffect = yield* Effect.try({
       try: run,
-      catch: error => toAcquisitionError(sourceName, operation, error),
+      catch: error => toAcquisitionError(providerId, operation, error),
     })
     const value = yield* Effect.mapError(operationEffect, error =>
-      toAcquisitionError(sourceName, operation, error),
+      toAcquisitionError(providerId, operation, error),
     )
     return yield* Effect.try({
       try: () => validate(value),
-      catch: error => toAcquisitionError(sourceName, operation, error),
+      catch: error => toAcquisitionError(providerId, operation, error),
     })
   })
 }
 
 function toAcquisitionError(
-  sourceName: string,
+  providerId: string,
   operation: AcquisitionPluginOperationName,
   error: unknown,
 ): AcquisitionError {
@@ -48,14 +48,14 @@ function toAcquisitionError(
     return new AcquisitionError({
       reason: error.reason,
       message: redactCredentialText(error.message),
-      sourceName: error.sourceName ?? sourceName,
+      providerId: error.providerId ?? providerId,
     })
   }
   return new AcquisitionError({
-    reason: "defective-source",
-    message: `${operation} failed for ${sourceName}: ${redactCredentialText(
+    reason: "defective-provider",
+    message: `${operation} failed for ${providerId}: ${redactCredentialText(
       error instanceof Error ? error.message : String(error),
     )}`,
-    sourceName,
+    providerId,
   })
 }

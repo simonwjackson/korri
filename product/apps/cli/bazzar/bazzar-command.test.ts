@@ -69,7 +69,7 @@ function expectSourceFailureEnvelope(
   }
   expect(result.exitCode).toBe(11)
   expect(envelope.command).toBe("resolve-download")
-  expect(envelope.exitCategory).toBe("source_failure")
+  expect(envelope.exitCategory).toBe("provider_failure")
   expect(envelope.exitCode).toBe(11)
   expect(envelope.data.outcome).toMatchObject(expected)
 }
@@ -79,9 +79,9 @@ describe("korri bazzar command routing", () => {
     const result = await runCli(["bazzar", "--help"])
 
     expect(result.exitCode).toBe(0)
-    expect(result.stdout).toContain("Game Bazaar - Multi-source Game Search")
+    expect(result.stdout).toContain("Game Bazaar - Multi-provider Game Search")
     expect(result.stdout).toContain("search")
-    expect(result.stdout).toContain("validate-sources")
+    expect(result.stdout).toContain("validate-providers")
     expect(result.stderr).toBe("")
   })
 
@@ -89,7 +89,7 @@ describe("korri bazzar command routing", () => {
     "search",
     "details",
     "plugins",
-    "validate-sources",
+    "validate-providers",
     "resolve-download",
     "acquire",
   ]) {
@@ -108,7 +108,7 @@ describe("korri bazzar command routing", () => {
       [
         "--format",
         "--platforms",
-        "--sources",
+        "--providers",
         "--interactive",
         "--cache",
         "--cursor",
@@ -123,8 +123,8 @@ describe("korri bazzar command routing", () => {
     ["details", ["--format", "--cache", "--log-level", "--log-json"]],
     ["plugins", ["--format", "--log-level", "--log-json"]],
     [
-      "validate-sources",
-      ["--sources", "--timeout", "--log-level", "--log-json"],
+      "validate-providers",
+      ["--providers", "--timeout", "--log-level", "--log-json"],
     ],
     ["acquire", ["--log-level", "--log-json"]],
     [
@@ -151,13 +151,13 @@ describe("korri bazzar command routing", () => {
     })
   }
 
-  it("acquires a source-native artifact as staged JSON without library writes", async () => {
+  it("acquires a provider-native artifact as staged JSON without library writes", async () => {
     const layer = makeInMemoryAcquisitionLayer({
-      search: () => Effect.succeed({ candidates: [] }),
+      search: () => Effect.succeed({ claims: [] }),
       details: () => Effect.die("unused"),
       detailsByUrl: () => Effect.die("unused"),
-      plugins: () => Effect.succeed({ plugins: [] }),
-      validateSources: () => Effect.succeed({ sources: [] }),
+      providers: () => Effect.succeed({ providers: [] }),
+      validateProviders: () => Effect.succeed({ providers: [] }),
       resolveDownload: () => Effect.die("unused"),
       acquireArtifact: () =>
         Effect.succeed({
@@ -179,7 +179,7 @@ describe("korri bazzar command routing", () => {
       Effect.runPromise(
         Command.runWith(bazzarCommand, { version: "test" })([
           "acquire",
-          "fixture-source",
+          "@korri:fixture-source",
           "level-1",
         ]).pipe(Effect.provide(layer), Effect.provide(BunServices.layer)),
       ),
@@ -225,7 +225,7 @@ describe("korri bazzar command routing", () => {
       runKorriCli([
         "bazzar",
         "resolve-download",
-        "fixture-source",
+        "@korri:fixture-source",
         "https://example.com/game.zip",
       ]),
     )
@@ -247,26 +247,30 @@ describe("korri bazzar command routing", () => {
     expect(result.exitCode).toBe(0)
     expect(result.stderr).toBe("")
     expect(result.stdout).not.toContain("not wired yet")
-    const plugins = JSON.parse(result.stdout) as Array<{ sourceName: string }>
-    expect(plugins.map(plugin => plugin.sourceName)).toContain("chip8archive")
-    expect(plugins.map(plugin => plugin.sourceName)).not.toContain("coolrom")
-    expect(plugins.map(plugin => plugin.sourceName)).not.toContain("retrostic")
-    expect(plugins.map(plugin => plugin.sourceName)).not.toContain("romhustler")
-    expect(plugins.map(plugin => plugin.sourceName)).not.toContain(
+    const plugins = JSON.parse(result.stdout) as Array<{ providerId: string }>
+    expect(plugins.map(plugin => plugin.providerId)).toContain(
+      "@korri:chip8archive",
+    )
+    expect(plugins.map(plugin => plugin.providerId)).not.toContain("coolrom")
+    expect(plugins.map(plugin => plugin.providerId)).not.toContain("retrostic")
+    expect(plugins.map(plugin => plugin.providerId)).not.toContain("romhustler")
+    expect(plugins.map(plugin => plugin.providerId)).not.toContain(
       "steamgriddb",
     )
-    expect(plugins.map(plugin => plugin.sourceName)).not.toContain("wowroms")
+    expect(plugins.map(plugin => plugin.providerId)).not.toContain("wowroms")
   })
 
   it("supports Bazzar plugin jsonl and tsv output formats", async () => {
     const jsonl = await runCli(["bazzar", "plugins", "--format", "jsonl"])
     expect(jsonl.exitCode).toBe(0)
     const firstJsonlLine = jsonl.stdout.trimEnd().split("\n")[0]
-    expect(JSON.parse(firstJsonlLine ?? "{}").sourceName).toBe("chip8archive")
+    expect(JSON.parse(firstJsonlLine ?? "{}").providerId).toBe(
+      "@korri:chip8archive",
+    )
 
     const tsv = await runCli(["bazzar", "plugins", "--format", "tsv"])
     expect(tsv.exitCode).toBe(0)
-    expect(tsv.stdout.split("\n")[0]).toContain("sourceName\tpluginName")
+    expect(tsv.stdout.split("\n")[0]).toContain("providerId\tpluginName")
   })
 
   it("runs search through the acquisition service with Bazzar no-results output", async () => {
@@ -274,8 +278,8 @@ describe("korri bazzar command routing", () => {
       "bazzar",
       "search",
       "fixture-query",
-      "--sources",
-      "chip8archive",
+      "--providers",
+      "@korri:chip8archive",
     ])
 
     expect(result.exitCode).toBe(0)
@@ -283,13 +287,13 @@ describe("korri bazzar command routing", () => {
     expect(result.stderr).toBe("")
   })
 
-  it("filters source-backed search results by requested platform", async () => {
+  it("filters provider-backed search results by requested platform", async () => {
     const result = await runCli([
       "bazzar",
       "search",
       "2048",
-      "--sources",
-      "homebrewhub",
+      "--providers",
+      "@korri:homebrewhub",
       "--platforms",
       "pico8",
       "--format",
@@ -306,8 +310,8 @@ describe("korri bazzar command routing", () => {
       "bazzar",
       "search",
       "wonky",
-      "--sources",
-      "chip8archive",
+      "--providers",
+      "@korri:chip8archive",
       "--platforms",
       "nintendo-nes",
       "--format",
@@ -319,29 +323,29 @@ describe("korri bazzar command routing", () => {
     expect(result.stdout).toBe("No results found\n")
   })
 
-  it("returns source-backed search results from approved TypeScript providers", async () => {
+  it("returns provider-backed search results from approved TypeScript providers", async () => {
     const result = await runCli([
       "bazzar",
       "search",
       "wonky",
-      "--sources",
-      "chip8archive",
+      "--providers",
+      "@korri:chip8archive",
       "--format",
       "json",
     ])
 
     expect(result.exitCode).toBe(0)
     expect(result.stderr).toBe("")
-    const candidates = JSON.parse(result.stdout) as Array<{
-      sourceName: string
+    const claims = JSON.parse(result.stdout) as Array<{
+      providerId: string
       id: string
       title: string
       url: string
       platform: string
     }>
-    expect(candidates).toEqual([
+    expect(claims).toEqual([
       expect.objectContaining({
-        sourceName: "chip8archive",
+        providerId: "@korri:chip8archive",
         id: "wonkypong",
         title: "Wonky Pong",
         platform: "xochip",
@@ -351,84 +355,84 @@ describe("korri bazzar command routing", () => {
 
   const approvedProviderCases = [
     {
-      sourceName: "homebrewhub",
+      providerId: "@korri:homebrewhub",
       query: "basil termini",
       platform: "nintendo-gameboy-advance",
       id: "basil-termini_2048-advance",
       title: "2048 Advance",
-      locator: "homebrewhub:basil-termini_2048-advance",
+      locator: "@korri:homebrewhub:basil-termini_2048-advance",
       url: "https://hh3.gbdev.io/api/entry/basil-termini_2048-advance.json",
       filename: "2048 jam.gba",
       artifactUrl:
         "https://hh3.gbdev.io/static/database-gba/entries/basil-termini_2048-advance/files/2048%20jam.gba",
     },
     {
-      sourceName: "pico8bbs",
+      providerId: "@korri:pico8bbs",
       query: "celeste",
       platform: "pico8",
       id: "101",
       title: "Celeste Classic",
-      locator: "pico8bbs:101",
+      locator: "@korri:pico8bbs:101",
       url: "https://www.lexaloffle.com/bbs/?tid=101",
       filename: "celeste-classic.p8.png",
       artifactUrl:
         "https://www.lexaloffle.com/bbs/cposts/1/celeste-classic.p8.png",
     },
     {
-      sourceName: "portmaster",
+      providerId: "@korri:portmaster",
       query: "keys",
       platform: "linux-port",
       id: "akeyspath.zip",
       title: "A Key(s) Path",
-      locator: "portmaster:akeyspath",
+      locator: "@korri:portmaster:akeyspath",
       url: "https://portmaster.games/detail.html?name=akeyspath",
       filename: "akeyspath.zip",
       artifactUrl:
         "https://github.com/PortsMaster/PortMaster-Games/releases/download/2025-06-24_0854/akeyspath.zip",
     },
     {
-      sourceName: "puzzlescript",
+      providerId: "@korri:puzzlescript",
       query: "atlas",
       platform: "puzzlescript",
       id: "6994394",
       title: "Atlas Shrank",
-      locator: "puzzlescript:6994394",
+      locator: "@korri:puzzlescript:6994394",
       url: "https://www.puzzlescript.net/play.html?p=6994394",
       filename: "atlas-shrank.pz",
       artifactUrl:
         "https://gist.githubusercontent.com/anonymous/6994394/raw/e2ca4d17e93996a1e5ba576c29bdd9746cad1d1e/script.txt",
     },
     {
-      sourceName: "retrobrews",
+      providerId: "@korri:retrobrews",
       query: "ambushed",
       platform: "nintendo-nes",
       id: "nes-games:ambushed.nes",
       title: "Ambushed",
-      locator: "retrobrews:nes-games:ambushed.nes",
+      locator: "@korri:retrobrews:nes-games:ambushed.nes",
       url: "https://github.com/retrobrews/nes-games/blob/master/ambushed.nes",
       filename: "ambushed.nes",
       artifactUrl:
         "https://raw.githubusercontent.com/retrobrews/nes-games/master/ambushed.nes",
     },
     {
-      sourceName: "tic80gallery",
+      providerId: "@korri:tic80gallery",
       query: "2048",
       platform: "tic80",
       id: "395",
       title: "2048 (TIC-80 Version)",
-      locator: "tic80gallery:395",
+      locator: "@korri:tic80gallery:395",
       url: "https://tic80.com/play?cart=395",
       filename: "2048_tic_80_version.tic",
       artifactUrl:
         "https://tic80.com/cart/68d5e7881289837510df0e8c080bea73/2048_tic_80_version.tic",
     },
     {
-      sourceName: "wasm4gallery",
+      providerId: "@korri:wasm4gallery",
       query: "snake",
       platform: "wasm4",
       id: "snake",
       title: "Snake",
-      locator: "wasm4gallery:snake",
+      locator: "@korri:wasm4gallery:snake",
       url: "https://wasm4.org/play/snake",
       filename: "snake.wasm",
       artifactUrl: "https://wasm4.org/carts/snake.wasm",
@@ -436,13 +440,13 @@ describe("korri bazzar command routing", () => {
   ] as const
 
   for (const provider of approvedProviderCases) {
-    it(`returns source-backed ${provider.sourceName} search results`, async () => {
+    it(`returns provider-backed ${provider.providerId} search results`, async () => {
       const result = await runCli([
         "bazzar",
         "search",
         provider.query,
-        "--sources",
-        provider.sourceName,
+        "--providers",
+        provider.providerId,
         "--platforms",
         provider.platform,
         "--format",
@@ -451,15 +455,15 @@ describe("korri bazzar command routing", () => {
 
       expect(result.exitCode).toBe(0)
       expect(result.stderr).toBe("")
-      const candidates = JSON.parse(result.stdout) as Array<{
-        sourceName: string
+      const claims = JSON.parse(result.stdout) as Array<{
+        providerId: string
         id: string
         title: string
         platform: string
       }>
-      expect(candidates).toContainEqual(
+      expect(claims).toContainEqual(
         expect.objectContaining({
-          sourceName: provider.sourceName,
+          providerId: provider.providerId,
           id: provider.id,
           title: provider.title,
           platform: provider.platform,
@@ -467,30 +471,30 @@ describe("korri bazzar command routing", () => {
       )
     })
 
-    it(`returns source-backed ${provider.sourceName} details for locators and URLs`, async () => {
+    it(`returns provider-backed ${provider.providerId} details for locators and URLs`, async () => {
       for (const input of [provider.locator, provider.url]) {
         const result = await runCli(["bazzar", "details", input])
 
         expect(result.exitCode).toBe(0)
         expect(result.stderr).toBe("")
         const details = JSON.parse(result.stdout) as {
-          sourceName: string
+          providerId: string
           id: string
           title: string
         }
         expect(details).toMatchObject({
-          sourceName: provider.sourceName,
+          providerId: provider.providerId,
           id: provider.id,
           title: provider.title,
         })
       }
     })
 
-    it(`emits ${provider.sourceName} final downloads as exactly one contract JSON line`, async () => {
+    it(`emits ${provider.providerId} final downloads as exactly one contract JSON line`, async () => {
       const result = await runCli([
         "bazzar",
         "resolve-download",
-        provider.sourceName,
+        provider.providerId,
         provider.url,
         "--title",
         provider.title,
@@ -506,24 +510,30 @@ describe("korri bazzar command routing", () => {
   it("keeps credential-gated itch.io safe without credentials", async () => {
     const plugins = JSON.parse(
       (await runCli(["bazzar", "plugins", "--format", "json"])).stdout,
-    ) as Array<{ sourceName: string; credentialRequired: boolean }>
+    ) as Array<{ providerId: string; credentialRequired: boolean }>
     expect(plugins).toContainEqual(
       expect.objectContaining({
-        sourceName: "itchio",
+        providerId: "@korri:itchio",
         credentialRequired: true,
       }),
     )
 
-    const details = await runCli(["bazzar", "details", "itchio:creator/game"])
+    const details = await runCli([
+      "bazzar",
+      "details",
+      "@korri:itchio:creator/game",
+    ])
     expect(details.exitCode).toBe(21)
     expect(details.stdout).toBe("")
-    expect(details.stderr).toContain("Unknown itchio candidate")
+    expect(details.stderr).toContain(
+      "Unknown @korri:itchio candidate: creator/game",
+    )
     expect(details.stderr).not.toContain("not wired yet")
 
     const resolution = await runCli([
       "bazzar",
       "resolve-download",
-      "itchio",
+      "@korri:itchio",
       "https://creator.itch.io/game",
       "--title",
       "itch.io Game",
@@ -535,11 +545,11 @@ describe("korri bazzar command routing", () => {
     })
   })
 
-  it("emits source-backed not-found downloads as contract source failures", async () => {
+  it("emits provider-backed not-found downloads as contract source failures", async () => {
     const result = await runCli([
       "bazzar",
       "resolve-download",
-      "portmaster",
+      "@korri:portmaster",
       "https://portmaster.games/detail.html?name=no-such-game",
       "--title",
       "Missing Port",
@@ -547,7 +557,7 @@ describe("korri bazzar command routing", () => {
 
     expectSourceFailureEnvelope(result, {
       status: "blocked_unavailable",
-      reason: "Unknown portmaster candidate: no-such-game.zip",
+      reason: "Unknown @korri:portmaster candidate: no-such-game.zip",
     })
   })
 
@@ -555,7 +565,7 @@ describe("korri bazzar command routing", () => {
     const result = await runCli([
       "bazzar",
       "resolve-download",
-      "homebrewhub",
+      "@korri:homebrewhub",
       "https://unrelated.example.com/game.rom",
       "--title",
       "Unrelated Game",
@@ -568,11 +578,11 @@ describe("korri bazzar command routing", () => {
     })
   })
 
-  it("emits source-backed missing artifact links as non-final contract outcomes", async () => {
+  it("emits provider-backed missing artifact links as non-final contract outcomes", async () => {
     const result = await runCli([
       "bazzar",
       "resolve-download",
-      "tic80gallery",
+      "@korri:tic80gallery",
       "https://tic80.com/play?cart=4676",
       "--title",
       "Ladders & Dragons",
@@ -585,11 +595,11 @@ describe("korri bazzar command routing", () => {
     })
   })
 
-  it("emits source-backed blocked downloads as contract source failures", async () => {
+  it("emits provider-backed blocked downloads as contract source failures", async () => {
     const result = await runCli([
       "bazzar",
       "resolve-download",
-      "homebrewhub",
+      "@korri:homebrewhub",
       "https://hh3.gbdev.io/api/entry/disabled-downloads.json",
       "--title",
       "Disabled Downloads",
@@ -602,23 +612,23 @@ describe("korri bazzar command routing", () => {
   })
 
   for (const candidateUrl of [
-    "chip8archive:wonkypong",
+    "@korri:chip8archive:wonkypong",
     "https://johnearnest.github.io/chip8Archive/play.html?p=wonkypong",
     "https://raw.githubusercontent.com/JohnEarnest/chip8Archive/master/roms/wonkypong.ch8",
   ]) {
-    it(`returns source-backed details for Bazzar-compatible candidate URL ${candidateUrl}`, async () => {
+    it(`returns provider-backed details for Bazzar-compatible candidate URL ${candidateUrl}`, async () => {
       const result = await runCli(["bazzar", "details", candidateUrl])
 
       expect(result.exitCode).toBe(0)
       expect(result.stderr).toBe("")
       const details = JSON.parse(result.stdout) as {
-        sourceName: string
+        providerId: string
         id: string
         title: string
         description: string
       }
       expect(details).toMatchObject({
-        sourceName: "chip8archive",
+        providerId: "@korri:chip8archive",
         id: "wonkypong",
         title: "Wonky Pong",
         description: "Pong, but wonky. Made for Octojam IV.",
@@ -627,10 +637,10 @@ describe("korri bazzar command routing", () => {
   }
 
   for (const unknownChip8Input of [
-    "chip8archive:does-not-exist",
+    "@korri:chip8archive:does-not-exist",
     "https://johnearnest.github.io/chip8Archive/play.html?p=no-such-game",
   ]) {
-    it(`reports unknown source-backed CHIP-8 detail IDs for ${unknownChip8Input}`, async () => {
+    it(`reports unknown provider-backed CHIP-8 detail IDs for ${unknownChip8Input}`, async () => {
       const result = await runCli(["bazzar", "details", unknownChip8Input])
 
       expect(result.exitCode).toBe(21)
@@ -650,13 +660,13 @@ describe("korri bazzar command routing", () => {
     expect(result.exitCode).toBe(21)
     expect(result.stdout).toBe("")
     expect(result.stderr).toContain(
-      "No plugin found that can handle URL: https://example.com/game",
+      "No provider found that can handle URL: https://example.com/game",
     )
     expect(result.stderr).not.toContain("not wired yet")
   })
 
-  it("emits validate-sources as exactly one contract JSON line", async () => {
-    const result = await runCli(["bazzar", "validate-sources"])
+  it("emits validate-providers as exactly one contract JSON line", async () => {
+    const result = await runCli(["bazzar", "validate-providers"])
 
     expect(result.stderr).toBe("")
     const envelope = parseSingleJsonLine(result.stdout) as {
@@ -671,20 +681,20 @@ describe("korri bazzar command routing", () => {
       ["success", 0],
       ["partial_degradation", 10],
     ]).toContainEqual([envelope.exitCategory, envelope.exitCode])
-    expect(envelope.contractVersion).toBe("bazzar.source-adapter.v1")
-    expect(envelope.command).toBe("validate-sources")
+    expect(envelope.contractVersion).toBe("bazzar.provider-adapter.v1")
+    expect(envelope.command).toBe("validate-providers")
     expect(envelope.data.outcomes.length).toBeGreaterThan(0)
     expect(
       envelope.data.outcomes.map(outcome => outcome.source.plugin),
     ).not.toContain("coolrom")
   })
 
-  it("emits validate-sources success as exactly one contract JSON line", async () => {
+  it("emits validate-providers success as exactly one contract JSON line", async () => {
     const result = await runCli([
       "bazzar",
-      "validate-sources",
-      "--sources",
-      "chip8archive",
+      "validate-providers",
+      "--providers",
+      "@korri:chip8archive",
     ])
 
     expect(result.stderr).toBe("")
@@ -695,23 +705,23 @@ describe("korri bazzar command routing", () => {
       data: { outcomes: Array<{ source: { plugin: string }; status: string }> }
     }
     expect(result.exitCode).toBe(0)
-    expect(envelope.command).toBe("validate-sources")
+    expect(envelope.command).toBe("validate-providers")
     expect(envelope.exitCategory).toBe("success")
     expect(envelope.exitCode).toBe(0)
     expect(envelope.data.outcomes).toEqual([
       expect.objectContaining({
-        source: { plugin: "chip8archive", site: "chip8archive" },
+        source: { plugin: "@korri:chip8archive", site: "@korri:chip8archive" },
         status: "healthy",
       }),
     ])
   })
 
-  it("emits validate-sources caller errors as exactly one contract JSON line", async () => {
+  it("emits validate-providers caller errors as exactly one contract JSON line", async () => {
     const result = await runCli([
       "bazzar",
-      "validate-sources",
-      "--sources",
-      "missing-source",
+      "validate-providers",
+      "--providers",
+      "@korri:missing-source",
     ])
 
     expect(result.stderr).toBe("")
@@ -723,13 +733,16 @@ describe("korri bazzar command routing", () => {
       data: { outcomes: Array<{ source: { plugin: string }; status: string }> }
     }
     expect(result.exitCode).toBe(21)
-    expect(envelope.contractVersion).toBe("bazzar.source-adapter.v1")
-    expect(envelope.command).toBe("validate-sources")
+    expect(envelope.contractVersion).toBe("bazzar.provider-adapter.v1")
+    expect(envelope.command).toBe("validate-providers")
     expect(envelope.exitCategory).toBe("caller_error")
     expect(envelope.exitCode).toBe(21)
     expect(envelope.data.outcomes).toEqual([
       expect.objectContaining({
-        source: { plugin: "missing-source", site: "missing-source" },
+        source: {
+          plugin: "@korri:missing-source",
+          site: "@korri:missing-source",
+        },
         status: "caller_error",
       }),
     ])
@@ -739,7 +752,7 @@ describe("korri bazzar command routing", () => {
     const result = await runCli([
       "bazzar",
       "resolve-download",
-      "chip8archive",
+      "@korri:chip8archive",
       "https://johnearnest.github.io/chip8Archive/play.html?p=wonkypong",
       "--title",
       "Wonky Pong",
@@ -755,7 +768,7 @@ describe("korri bazzar command routing", () => {
     const result = await runCli([
       "bazzar",
       "resolve-download",
-      "chip8archive",
+      "@korri:chip8archive",
       "https://johnearnest.github.io/chip8Archive/play.html?p=no-such-game",
       "--title",
       "Missing CHIP-8 Game",
@@ -771,7 +784,7 @@ describe("korri bazzar command routing", () => {
     const result = await runCli([
       "bazzar",
       "resolve-download",
-      "chip8archive",
+      "@korri:chip8archive",
       "https://example.com/game.zip",
       "--title",
       "Fixture Game",
@@ -788,7 +801,7 @@ describe("korri bazzar command routing", () => {
     const result = await runCli([
       "bazzar",
       "resolve-download",
-      "missing-source",
+      "@korri:missing-source",
       "https://example.com/game.zip",
       "--title",
       "Fixture Game",
@@ -805,11 +818,11 @@ describe("korri bazzar command routing", () => {
       }
     }
     expect(result.exitCode).toBe(21)
-    expect(envelope.contractVersion).toBe("bazzar.source-adapter.v1")
+    expect(envelope.contractVersion).toBe("bazzar.provider-adapter.v1")
     expect(envelope.command).toBe("resolve-download")
     expect(envelope.exitCategory).toBe("caller_error")
     expect(envelope.exitCode).toBe(21)
-    expect(envelope.data.outcome.source.plugin).toBe("missing-source")
+    expect(envelope.data.outcome.source.plugin).toBe("@korri:missing-source")
     expect(envelope.data.outcome.status).toBe("caller_error")
     expect(envelope.data.outcome.reason).toContain("Unknown source")
   })

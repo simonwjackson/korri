@@ -1,7 +1,7 @@
 import type {
   DetailsRequest,
-  SourceDetails,
-} from "@platform/protocol/acquisition/candidate"
+  ProviderClaimDetails,
+} from "@platform/protocol/acquisition/claim"
 import { Effect } from "effect"
 import { acquisitionTry } from "./effect"
 import { AcquisitionError } from "./errors"
@@ -10,29 +10,29 @@ import { runPluginOperation } from "./plugin-operation-harness"
 import type { AcquisitionPluginContext } from "./plugin-runtime"
 import type { AcquisitionPluginRegistry } from "./plugins/registry"
 
-export interface GetSourceDetailsOptions {
+export interface GetProviderDetailsOptions {
   readonly registry: AcquisitionPluginRegistry
   readonly context: AcquisitionPluginContext
   readonly request: DetailsRequest
 }
 
-export function getSourceDetailsByUrl({
+export function getProviderDetailsByUrl({
   registry,
   context,
   url,
-}: Omit<GetSourceDetailsOptions, "request"> & {
+}: Omit<GetProviderDetailsOptions, "request"> & {
   readonly url: string
-}): Effect.Effect<SourceDetails, AcquisitionError> {
+}): Effect.Effect<ProviderClaimDetails, AcquisitionError> {
   return Effect.gen(function* () {
-    for (const plugin of registry.plugins) {
+    for (const plugin of registry.providers) {
       const id = yield* acquisitionTry(
         () => plugin.parseCandidateUrl?.(url) ?? null,
       )
       if (id) {
-        return yield* getSourceDetails({
+        return yield* getProviderDetails({
           registry,
           context,
-          request: { sourceName: plugin.metadata.sourceName, id },
+          request: { providerId: plugin.metadata.providerId, id },
         })
       }
     }
@@ -40,31 +40,34 @@ export function getSourceDetailsByUrl({
     return yield* Effect.fail(
       new AcquisitionError({
         reason: "caller",
-        message: `No plugin found that can handle URL: ${url}`,
+        message: `No provider found that can handle URL: ${url}`,
       }),
     )
   })
 }
 
-export function getSourceDetails({
+export function getProviderDetails({
   registry,
   context,
   request,
-}: GetSourceDetailsOptions): Effect.Effect<SourceDetails, AcquisitionError> {
+}: GetProviderDetailsOptions): Effect.Effect<
+  ProviderClaimDetails,
+  AcquisitionError
+> {
   return Effect.gen(function* () {
-    const plugin = yield* acquisitionTry(() => registry.get(request.sourceName))
+    const plugin = yield* acquisitionTry(() => registry.get(request.providerId))
     const details = plugin.details
     if (!details) {
       return yield* Effect.fail(
         new AcquisitionError({
-          reason: "defective-source",
-          message: `${plugin.metadata.sourceName} does not implement details`,
-          sourceName: plugin.metadata.sourceName,
+          reason: "defective-provider",
+          message: `${plugin.metadata.providerId} does not implement details`,
+          providerId: plugin.metadata.providerId,
         }),
       )
     }
     return yield* runPluginOperation({
-      sourceName: plugin.metadata.sourceName,
+      providerId: plugin.metadata.providerId,
       operation: "details",
       context,
       run: () => details(context, request),

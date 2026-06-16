@@ -336,7 +336,12 @@ const withConfigGraphReadOnlyGuards = (
     $documentGraph: db.$documentGraph,
     host: readOnlyCollection(db.host, "host"),
     storage: readOnlyCollection(db.storage, "storage"),
-    sources: readOnlyCollection(db.sources, "sources"),
+    providers: readOnlyCollection(db.providers, "providers"),
+    "provider-links": readOnlyCollection(
+      db["provider-links"],
+      "provider-links",
+    ),
+    sources: removedLegacyCollection("sources"),
     systems: readOnlyCollection(db.systems, "systems"),
     apps: readOnlyCollection(db.apps, "apps"),
     runtimes: readOnlyCollection(db.runtimes, "runtimes"),

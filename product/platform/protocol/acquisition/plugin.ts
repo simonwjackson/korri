@@ -1,10 +1,16 @@
 import { Schema } from "effect"
-import { SourceCandidate, SourceDetails } from "./candidate"
+import { ProviderClaim, ProviderClaimDetails } from "./claim"
 import { DownloadResolution } from "./download-resolution"
-import { SourceHealth } from "./source-health"
+import { ProviderHealth } from "./source-health"
+
+const ProviderId = Schema.String.pipe(
+  Schema.check(
+    Schema.isPattern(/^@[a-z0-9][a-z0-9._-]*:[a-z0-9][a-z0-9._-]*$/),
+  ),
+)
 
 export const PluginMetadata = Schema.Struct({
-  sourceName: Schema.String,
+  providerId: ProviderId,
   displayName: Schema.String,
   module: Schema.String,
   builtIn: Schema.Boolean,
@@ -15,14 +21,14 @@ export const PluginMetadata = Schema.Struct({
 export type PluginMetadata = Schema.Schema.Type<typeof PluginMetadata>
 
 export const PluginListResponse = Schema.Struct({
-  plugins: Schema.Array(PluginMetadata),
+  providers: Schema.Array(PluginMetadata),
 })
 export type PluginListResponse = Schema.Schema.Type<typeof PluginListResponse>
 
 export const PluginOperationOutput = Schema.Union([
-  Schema.Array(SourceCandidate),
-  SourceDetails,
-  SourceHealth,
+  Schema.Array(ProviderClaim),
+  ProviderClaimDetails,
+  ProviderHealth,
   DownloadResolution,
   PluginListResponse,
 ])

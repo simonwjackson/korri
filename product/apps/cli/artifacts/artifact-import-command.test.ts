@@ -192,18 +192,12 @@ describe("artifact import CLI", () => {
             const repo = createLibraryRepository(db)
             return {
               storage: yield* db.storage.findById("artifact-imports"),
-              source: yield* db.sources.findById("artifact-imports"),
               entries: yield* repo.listPlayableEntries(),
             }
           }),
         ),
       )
       expect(persisted.storage.root).toBe(join(root, "artifacts"))
-      expect(persisted.source).toMatchObject({
-        id: "artifact-imports",
-        kind: ["files"],
-        storage: "artifact-imports",
-      })
       expect(persisted.entries).toHaveLength(1)
       expect(persisted.entries[0]).toMatchObject({
         id: "snes-fzero",
@@ -216,9 +210,11 @@ describe("artifact import CLI", () => {
           },
         ],
       })
-      expect(persisted.entries[0]?.releases[0]?.target).toMatch(
-        /^blobs\/sha256\/[a-f0-9]{2}\/[a-f0-9]{64}\.sfc$/,
-      )
+      expect(persisted.entries[0]?.releases[0]?.target).toEqual({
+        kind: "file",
+        storage: "artifact-imports",
+        path: `blobs/sha256/68/${sha256(bytes)}.sfc`,
+      })
     })
   })
 

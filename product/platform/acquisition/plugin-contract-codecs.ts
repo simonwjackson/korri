@@ -3,16 +3,16 @@ import {
   type PluginAcquireOutput as PluginAcquireOutputType,
 } from "@platform/protocol/acquisition/artifact-acquisition"
 import {
+  ProviderClaimDetails,
+  type ProviderClaim as ProviderClaimType,
   SearchResponse,
-  type SourceCandidate,
-  SourceDetails,
-} from "@platform/protocol/acquisition/candidate"
+} from "@platform/protocol/acquisition/claim"
 import {
   DownloadResolution,
   type FinalDownloadResolution,
 } from "@platform/protocol/acquisition/download-resolution"
 import { PluginMetadata } from "@platform/protocol/acquisition/plugin"
-import { SourceHealth } from "@platform/protocol/acquisition/source-health"
+import { ProviderHealth } from "@platform/protocol/acquisition/source-health"
 import { Schema } from "effect"
 import { validateOutboundHttpUrl } from "./download-resolution/url-policy"
 import { AcquisitionError } from "./errors"
@@ -21,7 +21,7 @@ type FinalDownloadResolutionOutput = Schema.Schema.Type<
   typeof FinalDownloadResolution
 >
 
-const MAX_PLUGIN_SEARCH_CANDIDATES = 200
+const MAX_PLUGIN_SEARCH_CLAIMS = 200
 
 export function validatePluginMetadataOutput(value: unknown) {
   return decodePluginOutput(
@@ -31,33 +31,35 @@ export function validatePluginMetadataOutput(value: unknown) {
   )
 }
 
-export function validatePluginSearchOutput(value: unknown): SourceCandidate[] {
-  const candidates = Array.from(
+export function validatePluginSearchOutput(
+  value: unknown,
+): ProviderClaimType[] {
+  const claims = Array.from(
     decodePluginOutput("search", Schema.decodeUnknownSync(SearchResponse), {
-      candidates: value,
-    }).candidates,
+      claims: value,
+    }).claims,
   )
-  if (candidates.length > MAX_PLUGIN_SEARCH_CANDIDATES) {
+  if (claims.length > MAX_PLUGIN_SEARCH_CLAIMS) {
     throw defectiveOutput(
       "search",
-      `plugin returned ${candidates.length} candidates; limit is ${MAX_PLUGIN_SEARCH_CANDIDATES}`,
+      `plugin returned ${claims.length} claims; limit is ${MAX_PLUGIN_SEARCH_CLAIMS}`,
     )
   }
-  return candidates
+  return claims
 }
 
 export function validatePluginDetailsOutput(value: unknown) {
   return decodePluginOutput(
     "details",
-    Schema.decodeUnknownSync(SourceDetails),
+    Schema.decodeUnknownSync(ProviderClaimDetails),
     value,
   )
 }
 
-export function validatePluginSourceHealthOutput(value: unknown) {
+export function validatePluginProviderHealthOutput(value: unknown) {
   return decodePluginOutput(
-    "validateSource",
-    Schema.decodeUnknownSync(SourceHealth),
+    "validateProvider",
+    Schema.decodeUnknownSync(ProviderHealth),
     value,
   )
 }
@@ -103,7 +105,7 @@ function decodePluginOutput<A>(
 
 function defectiveOutput(operation: string, error: unknown): AcquisitionError {
   return new AcquisitionError({
-    reason: "defective-source",
+    reason: "defective-provider",
     message: `Acquisition plugin returned invalid ${operation} output: ${error instanceof Error ? error.message : String(error)}`,
   })
 }

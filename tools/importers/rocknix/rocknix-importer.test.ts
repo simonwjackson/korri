@@ -71,9 +71,6 @@ describe("importRocknixLibrary", () => {
               library: yield* Effect.promise(
                 () => db.library.query().runPromise,
               ),
-              sources: yield* Effect.promise(
-                () => db.sources.query().runPromise,
-              ),
               storage: yield* Effect.promise(
                 () => db.storage.query().runPromise,
               ),
@@ -93,29 +90,27 @@ describe("importRocknixLibrary", () => {
         [
           {
             id: "snes",
-            source: "local-roms",
             system: "snes",
-            target: "snes/new.smc",
+            target: {
+              kind: "file",
+              storage: "local-roms",
+              path: "snes/new.smc",
+            },
             apps: [{ id: "rocknix-retroarch", runtime: "snes9x" }],
           },
         ],
         [
           {
             id: "snes",
-            source: "local-roms",
             system: "snes",
-            target: "snes/old.smc",
+            target: {
+              kind: "file",
+              storage: "local-roms",
+              path: "snes/old.smc",
+            },
             apps: [{ id: "rocknix-retroarch", runtime: "snes9x" }],
           },
         ],
-      ])
-      expect(result.sources).toEqual([
-        {
-          id: "local-roms",
-          title: "Local ROMs",
-          kind: ["files"],
-          storage: "local-roms",
-        },
       ])
       expect(result.storage).toEqual([{ id: "local-roms", root: lib.rootDir }])
       expect(result.apps[0]).toMatchObject({
@@ -179,9 +174,6 @@ describe("importRocknixLibrary", () => {
               first,
               second,
               games: yield* repository.listPlayableEntries(),
-              sources: yield* Effect.promise(
-                () => db.sources.query().runPromise,
-              ),
               apps: yield* Effect.promise(() => db.apps.query().runPromise),
               systems: yield* Effect.promise(
                 () => db.systems.query().runPromise,
@@ -195,8 +187,11 @@ describe("importRocknixLibrary", () => {
       expect(result.second._tag).toBe("Failure")
       expect(result.games.map(game => game.id)).toEqual(["game-1"])
       expect(result.games[0]?.system).toBe("snes")
-      expect(result.games[0]?.releases[0]?.target).toBe("snes/echo.smc")
-      expect(result.sources[0]?.id).toBe("local-roms")
+      expect(result.games[0]?.releases[0]?.target).toEqual({
+        kind: "file",
+        storage: "local-roms",
+        path: "snes/echo.smc",
+      })
       expect(result.apps).toHaveLength(1)
       expect(result.apps[0]?.id).toBe("rocknix-retroarch")
       expect(

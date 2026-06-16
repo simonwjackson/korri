@@ -78,13 +78,17 @@ import type {
 import type { ModuleRecord } from "./records/module"
 import type { PresetPayload } from "./records/preset"
 import type { ProfileRecord } from "./records/profile"
+import type { ProviderRecord } from "./records/provider"
+import type { ProviderLinkRecord } from "./records/provider-link"
 import type { RuntimeRecord } from "./records/runtime"
-import type { SourceRecord } from "./records/source"
 import type { StorageRecord } from "./records/storage"
 import type { SystemRecord } from "./records/system"
 import type { UserRecord } from "./records/user"
 import type { ReadableResolvedLaunchContext } from "./resolved-launch-context"
-import { resolveSourceTarget } from "./source-target-resolution"
+import {
+  type ReleaseTargetAtom,
+  resolveReleaseTarget,
+} from "./source-target-resolution"
 
 // ────────────────────────────────────────────────────────────────────
 // Snapshot types
@@ -1152,7 +1156,7 @@ export const enumerateApplicablePresets = (
   })
 
 // ────────────────────────────────────────────────────────────────────
-// Readable schema cascade (host → user → system → source → app → runtime
+// Readable schema cascade (host → user → system → app → runtime
 // → library item → contained playable → release → profile → override)
 // ────────────────────────────────────────────────────────────────────
 
@@ -1160,7 +1164,10 @@ export interface ReadableConfigSnapshot {
   readonly host: HostRecord | null
   readonly users: ReadonlyMap<string, UserRecord>
   readonly systems: ReadonlyMap<string, SystemRecord>
-  readonly sources: ReadonlyMap<string, SourceRecord>
+  readonly providers?: ReadonlyMap<string, ProviderRecord>
+  readonly providerLinks?: ReadonlyMap<string, ProviderLinkRecord>
+  /** @deprecated old source records are ignored by readable launch resolution. */
+  readonly sources?: ReadonlyMap<string, unknown>
   readonly apps: ReadonlyMap<string, AppRecord>
   readonly runtimes: ReadonlyMap<string, RuntimeRecord>
   readonly profiles: ReadonlyMap<string, ProfileRecord>
@@ -1191,11 +1198,6 @@ export class NoLaunchableRelease extends Data.TaggedError(
 export class AmbiguousRelease extends Data.TaggedError("AmbiguousRelease")<{
   readonly playableId: string
   readonly releaseIds: readonly string[]
-}> {}
-
-export class SourceUnresolvable extends Data.TaggedError("SourceUnresolvable")<{
-  readonly playableId: string
-  readonly releaseId: string
 }> {}
 
 export class RuntimeNotFound extends Data.TaggedError("RuntimeNotFound")<{
@@ -1290,22 +1292,6 @@ const readableViewOfSystem = (
         cwd: system.cwd,
         argsAppend: system.argsAppend,
         patches: system.patches,
-      }
-    : {}
-
-const readableViewOfSource = (
-  source: SourceRecord | undefined,
-): ReadableLayerView =>
-  source
-    ? {
-        gamescope: source.gamescope,
-        moonlight: source.moonlight,
-        retroarch: source.retroarch,
-        ryubing: source.ryubing,
-        env: source.env,
-        cwd: source.cwd,
-        argsAppend: source.argsAppend,
-        patches: source.patches,
       }
     : {}
 
@@ -1616,16 +1602,6 @@ export const resolveReadableLaunchContext = (
     }
 
     const system = snapshot.systems.get(release.system)
-    const sourceId = release.source ?? item.source
-    if (sourceId === undefined) {
-      return yield* Effect.fail(
-        new SourceUnresolvable({
-          playableId: inputs.playableId,
-          releaseId: release.id,
-        }),
-      )
-    }
-    const source = snapshot.sources.get(sourceId)
     const appChoiceSelection = selectAppChoice(
       resolveEffectiveAppChoices(system?.apps, release.apps),
       inputs.appId,
@@ -1692,7 +1668,6 @@ export const resolveReadableLaunchContext = (
       snapshot.host ?? {},
       readableViewOfUser(user),
       readableViewOfSystem(system),
-      readableViewOfSource(source),
       readableViewOfApp(app),
       selectedChoice ? readableViewOfAppChoice(selectedChoice, app) : {},
       readableViewOfRuntime(runtime),
@@ -1704,7 +1679,7 @@ export const resolveReadableLaunchContext = (
     ])
 
     const target = release.target
-    if (typeof target !== "string" && target !== undefined) {
+    if (Array.isArray(target)) {
       return yield* Effect.fail(
         new MultiTargetUnsupported({
           playableId: inputs.playableId,
@@ -1718,10 +1693,8 @@ export const resolveReadableLaunchContext = (
       )
     }
 
-    const resolvedTarget = yield* resolveSourceTarget({
-      sourceId,
-      target,
-      sources: snapshot.sources,
+    const resolvedTarget = yield* resolveReleaseTarget({
+      target: target as ReleaseTargetAtom,
       storage: snapshot.storage,
     })
 
@@ -1733,7 +1706,6 @@ export const resolveReadableLaunchContext = (
         : {}),
       releaseId: release.id,
       system: release.system,
-      sourceId,
       target: resolvedTarget.target,
       app,
       ...(runtime ? { runtime } : {}),

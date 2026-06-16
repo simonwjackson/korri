@@ -40,7 +40,7 @@ const fixtureOutput: PluginAcquireOutput = {
 function fixturePlugin(output: unknown): AcquisitionPluginDefinition {
   return {
     metadata: {
-      sourceName: "fixture-source",
+      providerId: "@korri:fixture-source",
       displayName: "Fixture Source",
       module: "product/platform/acquisition/plugins/fixture-source",
       builtIn: true,
@@ -81,7 +81,7 @@ describe("artifact acquisition staging", () => {
           registry,
           context: createAcquisitionPluginContext(),
           stagingRoot: root,
-          request: { sourceName: "fixture-source", id: "level-1" },
+          request: { providerId: "@korri:fixture-source", id: "level-1" },
         }),
       )
 
@@ -115,7 +115,7 @@ describe("artifact acquisition staging", () => {
           registry,
           context: createAcquisitionPluginContext(),
           stagingRoot: root,
-          request: { sourceName: "fixture-source", id: "level-1" },
+          request: { providerId: "@korri:fixture-source", id: "level-1" },
         }).pipe(
           Effect.match({
             onFailure: error => error,
@@ -125,14 +125,14 @@ describe("artifact acquisition staging", () => {
       )
 
       expect(error).toMatchObject({
-        reason: "defective-source",
-        sourceName: "fixture-source",
+        reason: "defective-provider",
+        providerId: "@korri:fixture-source",
       })
       expect(await readdir(root)).toEqual([])
     })
   })
 
-  it("rejects unsupported expectedDigest algorithms as defective-source", async () => {
+  it("rejects unsupported expectedDigest algorithms as defective-provider", async () => {
     await withTempRoot(async root => {
       const registry = createAcquisitionPluginRegistry([
         fixturePlugin({
@@ -146,7 +146,7 @@ describe("artifact acquisition staging", () => {
           registry,
           context: createAcquisitionPluginContext(),
           stagingRoot: root,
-          request: { sourceName: "fixture-source", id: "level-1" },
+          request: { providerId: "@korri:fixture-source", id: "level-1" },
         }).pipe(
           Effect.match({
             onFailure: error => error,
@@ -156,14 +156,14 @@ describe("artifact acquisition staging", () => {
       )
 
       expect(error).toMatchObject({
-        reason: "defective-source",
-        sourceName: "fixture-source",
+        reason: "defective-provider",
+        providerId: "@korri:fixture-source",
       })
       expect(await readdir(root)).toEqual([])
     })
   })
 
-  it("rejects mismatched expectedDigest values as defective-source", async () => {
+  it("rejects mismatched expectedDigest values as defective-provider", async () => {
     await withTempRoot(async root => {
       const registry = createAcquisitionPluginRegistry([
         fixturePlugin({
@@ -177,7 +177,7 @@ describe("artifact acquisition staging", () => {
           registry,
           context: createAcquisitionPluginContext(),
           stagingRoot: root,
-          request: { sourceName: "fixture-source", id: "level-1" },
+          request: { providerId: "@korri:fixture-source", id: "level-1" },
         }).pipe(
           Effect.match({
             onFailure: error => error,
@@ -187,8 +187,8 @@ describe("artifact acquisition staging", () => {
       )
 
       expect(error).toMatchObject({
-        reason: "defective-source",
-        sourceName: "fixture-source",
+        reason: "defective-provider",
+        providerId: "@korri:fixture-source",
       })
       expect(await readdir(root)).toEqual([])
     })
@@ -198,7 +198,7 @@ describe("artifact acquisition staging", () => {
     const registry = createAcquisitionPluginRegistry([
       {
         metadata: {
-          sourceName: "fixture-source",
+          providerId: "@korri:fixture-source",
           displayName: "Fixture Source",
           module: "product/platform/acquisition/plugins/fixture-source",
           builtIn: true,
@@ -214,7 +214,7 @@ describe("artifact acquisition staging", () => {
         registry,
         context: createAcquisitionPluginContext(),
         stagingRoot: "/tmp/staging",
-        request: { sourceName: "fixture-source", id: "level-1" },
+        request: { providerId: "@korri:fixture-source", id: "level-1" },
       }).pipe(
         Effect.match({
           onFailure: error => error,
@@ -224,8 +224,8 @@ describe("artifact acquisition staging", () => {
     )
 
     expect(error).toMatchObject({
-      reason: "defective-source",
-      sourceName: "fixture-source",
+      reason: "defective-provider",
+      providerId: "@korri:fixture-source",
     })
   })
 })

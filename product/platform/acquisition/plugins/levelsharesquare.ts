@@ -1,8 +1,8 @@
 import type { PluginAcquireOutput } from "@platform/protocol/acquisition/artifact-acquisition"
 import type {
   ArtifactAcquisitionHint,
-  SourceCandidate,
-  SourceDetails,
+  ProviderClaim,
+  ProviderClaimDetails,
 } from "@platform/protocol/acquisition/candidate"
 import type { ArtifactFacets } from "@platform/protocol/artifact/artifact"
 import { Effect } from "effect"
@@ -10,7 +10,7 @@ import { AcquisitionError } from "../errors"
 import type { AcquisitionPluginContext } from "../plugin-runtime"
 import type { AcquisitionPluginDefinition } from "./registry"
 
-const SOURCE_NAME = "levelsharesquare"
+const PROVIDER_ID = "@korri:levelsharesquare"
 const DISPLAY_NAME = "Level Share Square"
 const DEFAULT_BASE_URL = "https://levelsharesquare.com"
 const SMBR_INTERNAL_GAME_ID = 5
@@ -86,7 +86,7 @@ export function createLevelShareSquarePluginDefinition(
   const runtime = createRuntime(options)
   return {
     metadata: {
-      sourceName: SOURCE_NAME,
+      providerId: PROVIDER_ID,
       displayName: DISPLAY_NAME,
       module: "product/platform/acquisition/plugins/levelsharesquare",
       builtIn: true,
@@ -112,11 +112,11 @@ export function createLevelShareSquarePluginDefinition(
         const level = yield* fetchLevelDetails(runtime, request.id)
         return yield* decodeLssShape(() => detailsFor(runtime, level))
       }),
-    validateSource: context =>
+    validateProvider: context =>
       fetchSmbrGame(runtime).pipe(
         Effect.map(() => ({
-          _tag: "HealthySource" as const,
-          sourceName: SOURCE_NAME,
+          _tag: "HealthyProvider" as const,
+          providerId: PROVIDER_ID,
           checkedAt: context.checkedAt,
         })),
       ),
@@ -163,7 +163,7 @@ function createRuntime({
   if (!fetchImpl) {
     throw new AcquisitionError({
       reason: "configuration",
-      sourceName: SOURCE_NAME,
+      providerId: PROVIDER_ID,
       message: "global fetch is not available for Level Share Square",
     })
   }
@@ -275,7 +275,7 @@ function fetchJson(
       if (!response.ok) {
         throw new AcquisitionError({
           reason: "infrastructure",
-          sourceName: SOURCE_NAME,
+          providerId: PROVIDER_ID,
           message: `Level Share Square request failed with HTTP ${response.status}`,
         })
       }
@@ -286,7 +286,7 @@ function fetchJson(
         ? error
         : new AcquisitionError({
             reason: "infrastructure",
-            sourceName: SOURCE_NAME,
+            providerId: PROVIDER_ID,
             message: `Level Share Square request failed: ${stringifyError(error)}`,
           }),
   })
@@ -295,12 +295,13 @@ function fetchJson(
 function candidateFor(
   runtime: LevelShareSquareRuntime,
   level: LssLevel,
-): SourceCandidate {
+): ProviderClaim {
   const id = requiredString(level._id ?? level.id, "level id")
   return {
-    _tag: "SourceCandidate",
-    sourceName: SOURCE_NAME,
+    _tag: "ProviderClaim",
+    providerId: PROVIDER_ID,
     id,
+    ref: { kind: "provider-item-id", value: id },
     title: requiredString(level.name ?? level.title, "level title"),
     url: levelUrl(runtime, id),
     platform: SMBR_SYSTEM,
@@ -315,13 +316,14 @@ function candidateFor(
 function detailsFor(
   runtime: LevelShareSquareRuntime,
   level: LssLevel,
-): SourceDetails {
+): ProviderClaimDetails {
   const id = requiredString(level._id ?? level.id, "level id")
   const description = stringValue(level.description)
   return withoutUndefined({
-    _tag: "SourceDetails" as const,
-    sourceName: SOURCE_NAME,
+    _tag: "ProviderClaimDetails" as const,
+    providerId: PROVIDER_ID,
     id,
+    ref: { kind: "provider-item-id", value: id },
     title: requiredString(level.name ?? level.title, "level title"),
     url: levelUrl(runtime, id),
     description,
@@ -339,11 +341,11 @@ function playableFor(runtime: LevelShareSquareRuntime, level: LssLevel) {
   return {
     id,
     title: requiredString(level.name ?? level.title, "level title"),
-    source: SOURCE_NAME,
+    providerId: PROVIDER_ID,
     releases: [
       {
         id: "smbr-level",
-        source: SOURCE_NAME,
+        providerId: PROVIDER_ID,
         system: SMBR_SYSTEM,
         target: levelUrl(runtime, id),
         apps: [{ id: "smbr" }],
@@ -379,11 +381,11 @@ function acquireOutputFor({
     bytesBase64: bytes.toString("base64"),
     facets: facetsFor(runtime, level),
     provenance: {
-      source: SOURCE_NAME,
+      source: PROVIDER_ID,
       acquiredAt: context.clock.nowIso(),
       url: levelUrl(runtime, id),
     },
-    externalIds: [{ namespace: SOURCE_NAME, id }],
+    externalIds: [{ namespace: PROVIDER_ID, id }],
     sourceData: {
       [SOURCE_DATA_NAMESPACE]: withoutUndefined({
         levelId: id,
@@ -594,8 +596,8 @@ function decodeLssShape<A>(
 
 function defective(message: string): AcquisitionError {
   return new AcquisitionError({
-    reason: "defective-source",
-    sourceName: SOURCE_NAME,
+    reason: "defective-provider",
+    providerId: PROVIDER_ID,
     message,
   })
 }

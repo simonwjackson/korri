@@ -1,36 +1,42 @@
 import { Schema } from "effect"
 
-export const ValidateSourcesRequest = Schema.Struct({
-  sourceNames: Schema.optional(Schema.Array(Schema.String)),
+const ProviderId = Schema.String.pipe(
+  Schema.check(
+    Schema.isPattern(/^@[a-z0-9][a-z0-9._-]*:[a-z0-9][a-z0-9._-]*$/),
+  ),
+)
+
+export const ValidateProvidersRequest = Schema.Struct({
+  providerIds: Schema.optional(Schema.Array(ProviderId)),
 })
-export type ValidateSourcesRequest = Schema.Schema.Type<
-  typeof ValidateSourcesRequest
+export type ValidateProvidersRequest = Schema.Schema.Type<
+  typeof ValidateProvidersRequest
 >
 
-export const HealthySource = Schema.TaggedStruct("HealthySource", {
-  sourceName: Schema.String,
+export const HealthyProvider = Schema.TaggedStruct("HealthyProvider", {
+  providerId: ProviderId,
   checkedAt: Schema.String,
 })
 
-export const UnhealthySource = Schema.TaggedStruct("UnhealthySource", {
-  sourceName: Schema.String,
+export const UnhealthyProvider = Schema.TaggedStruct("UnhealthyProvider", {
+  providerId: ProviderId,
   checkedAt: Schema.String,
   reason: Schema.Literals([
     "configuration",
     "credentials",
     "network",
-    "source-error",
-    "defective-source",
+    "provider-error",
+    "defective-provider",
   ]),
   message: Schema.String,
 })
 
-export const SourceHealth = Schema.Union([HealthySource, UnhealthySource])
-export type SourceHealth = Schema.Schema.Type<typeof SourceHealth>
+export const ProviderHealth = Schema.Union([HealthyProvider, UnhealthyProvider])
+export type ProviderHealth = Schema.Schema.Type<typeof ProviderHealth>
 
-export const ValidateSourcesResponse = Schema.Struct({
-  sources: Schema.Array(SourceHealth),
+export const ValidateProvidersResponse = Schema.Struct({
+  providers: Schema.Array(ProviderHealth),
 })
-export type ValidateSourcesResponse = Schema.Schema.Type<
-  typeof ValidateSourcesResponse
+export type ValidateProvidersResponse = Schema.Schema.Type<
+  typeof ValidateProvidersResponse
 >

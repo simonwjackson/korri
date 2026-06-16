@@ -138,7 +138,6 @@ const readableContext = (
   system: context.system,
   "playable.id": context.playableId,
   "release.id": context.releaseId,
-  "source.id": context.sourceId,
 })
 
 const substituteReadable = (

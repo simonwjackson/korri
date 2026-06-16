@@ -11,11 +11,9 @@ storage:
     # Exact media identity for this physical filesystem, not label/slot/kernel name.
     root: /run/media/korri/storage/fc1f2bfc-b6ea-42ca-8d6b-a1c8aac4f551
 
-sources:
-  switch-card:
-    title: Nintendo Switch SD card
-    kind: [files]
-    storage: switch-card
+providers:
+  "@korri:switch-card":
+    title: switch-card
 
 systems:
   switch:
@@ -261,11 +259,9 @@ collections:
 library:
   mario-kart-8-deluxe:
     title: Mario Kart 8 Deluxe
-    source: switch-card
     collections: [switch]
     releases:
       - id: switch-card
-        source: switch-card
         system: switch
         target: "roms/switch/Mario Kart 8 Deluxe[0100152000022000][US][v0].nsp"
         apps:
@@ -273,11 +269,9 @@ library:
 
   metroid-dread:
     title: Metroid Dread
-    source: switch-card
     collections: [switch]
     releases:
       - id: switch-card
-        source: switch-card
         system: switch
         target: "roms/switch/Metroid Dread [010093801237C000][v0][US].nsp"
         apps:
@@ -285,11 +279,9 @@ library:
 
   super-mario-odyssey:
     title: Super Mario Odyssey
-    source: switch-card
     collections: [switch]
     releases:
       - id: switch-card
-        source: switch-card
         system: switch
         target: "roms/switch/Super Mario Odyssey [0100000000010000][v0][US].nsp"
         apps:

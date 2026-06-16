@@ -267,7 +267,6 @@ describe("checked-in readable library example", () => {
       /\bmodules\b/i,
       /\bgames\b/i,
       /\bconfig\.global\b/i,
-      /\bprovider\b/i,
       /\bsettings\.appid\b/i,
       /\bcontentPath\b/,
       /\bmodulePath\b/,

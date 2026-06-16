@@ -27,18 +27,18 @@ export function resolveAcquisitionDownload({
 > {
   return Effect.gen(function* () {
     yield* acquisitionTry(() => validateOutboundHttpUrl(request.candidateUrl))
-    const plugin = yield* acquisitionTry(() => registry.get(request.sourceName))
+    const plugin = yield* acquisitionTry(() => registry.get(request.providerId))
     const resolveDownload = plugin.resolveDownload
     if (!resolveDownload) {
       return {
         _tag: "NonFinalDownload" as const,
-        sourceName: plugin.metadata.sourceName,
+        providerId: plugin.metadata.providerId,
         reason: "unsupported" as const,
         url: request.candidateUrl,
       }
     }
     return yield* runPluginOperation({
-      sourceName: plugin.metadata.sourceName,
+      providerId: plugin.metadata.providerId,
       operation: "resolveDownload",
       context,
       run: () => resolveDownload(context, request),

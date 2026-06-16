@@ -210,7 +210,10 @@ const mergeDescriptor = (
   const gamescope =
     appOverride?.gamescope !== undefined
       ? mergeBuiltInAppGamescopePolicy(base.gamescope, appOverride.gamescope)
-      : mergeBuiltInAppGamescopePolicy(base.gamescope, legacyLauncher?.gamescope)
+      : mergeBuiltInAppGamescopePolicy(
+          base.gamescope,
+          legacyLauncher?.gamescope,
+        )
   return {
     ...base,
     capabilities: base.capabilities,

@@ -94,10 +94,10 @@ describe("headless server RPC group", () => {
 
     expect(tags).toEqual([
       "app.acquisition.details",
-      "app.acquisition.plugins",
+      "app.acquisition.providers",
       "app.acquisition.resolve-download",
       "app.acquisition.search",
-      "app.acquisition.validate-sources",
+      "app.acquisition.validate-providers",
       "app.catalog.snapshot",
       "app.game-assets.assign",
       "app.game-assets.candidates.list",

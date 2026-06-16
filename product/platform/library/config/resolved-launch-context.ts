@@ -79,8 +79,9 @@ export const ReadableResolvedLaunchContext = Schema.Struct({
   itemId: Schema.String,
   containedId: Schema.optional(Schema.String),
   releaseId: Schema.String,
+  /** @deprecated source ids are removed from launch resolution. */
+  sourceId: Schema.optional(Schema.String),
   system: Schema.String,
-  sourceId: Schema.String,
   target: Schema.String,
   app: AppRecord,
   runtime: Schema.optional(RuntimeRecord),

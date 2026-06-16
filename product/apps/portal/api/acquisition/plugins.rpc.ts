@@ -8,7 +8,7 @@ export type AcquisitionPluginsPayload = Schema.Schema.Type<
   typeof AcquisitionPluginsPayload
 >
 
-export const AcquisitionPluginsRpc = Rpc.make("app.acquisition.plugins", {
+export const AcquisitionPluginsRpc = Rpc.make("app.acquisition.providers", {
   payload: AcquisitionPluginsPayload,
   success: PluginListResponse,
   error: ApiError,

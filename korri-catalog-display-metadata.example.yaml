@@ -45,20 +45,56 @@ storage:
   roms:
     root: /roms
 
-sources:
-  steam:
+providers:
+  "@korri:steam":
     title: Steam
-    kind: [service, metadata]
-    storage: steam
 
-  roms:
+  "@korri:roms":
     title: Local ROM library
-    kind: [files]
-    storage: roms
 
-  pcgamingwiki:
+  "@korri:pcgamingwiki":
     title: PCGamingWiki
-    kind: [metadata]
+
+provider-links:
+  downwell-steam:
+    provider: "@korri:steam"
+    playable: downwell
+    release: windows
+    ref:
+      kind: external-id
+      value: "360740"
+
+  sonic-roms:
+    provider: "@korri:roms"
+    playable: sonic-the-hedgehog
+    release: genesis
+    ref:
+      kind: provider-item-id
+      value: genesis/Sonic The Hedgehog.md
+
+  sonic-pcgamingwiki:
+    provider: "@korri:pcgamingwiki"
+    playable: sonic-the-hedgehog
+    release: windows-known
+    ref:
+      kind: external-id
+      value: sonic-the-hedgehog
+
+  sonic-steam:
+    provider: "@korri:steam"
+    playable: sonic-the-hedgehog
+    release: steam
+    ref:
+      kind: external-id
+      value: "71113"
+
+  super-mario-advance-2-roms:
+    provider: "@korri:roms"
+    playable: super-mario-advance-2
+    release: gba
+    ref:
+      kind: provider-item-id
+      value: gba/Super Mario Advance 2.gba
 
 systems:
   windows:
@@ -75,6 +111,7 @@ systems:
 
 apps:
   steam:
+    kind: process
     command: steam
     args: ["{target}"]
     systems: [windows, linux]
@@ -202,7 +239,6 @@ users:
 library:
   downwell:
     title: Downwell
-    source: steam
     collections: [steam, handheld]
     releases:
       - id: windows
@@ -221,9 +257,11 @@ library:
     collections: [sonic, handheld]
     releases:
       - id: genesis
-        source: roms
         system: genesis
-        target: genesis/Sonic The Hedgehog.md
+        target:
+          kind: file
+          storage: roms
+          path: genesis/Sonic The Hedgehog.md
         apps:
           - id: retroarch
             runtime: genesis-plus-gx
@@ -234,7 +272,6 @@ library:
             hardware: native
 
       - id: windows-known
-        source: pcgamingwiki
         system: windows
         display:
           aspect: unrestricted
@@ -242,7 +279,6 @@ library:
             pcgamingwiki: inferred
 
       - id: steam
-        source: steam
         system: windows
         target: steam://rungameid/71113
         apps:
@@ -254,7 +290,6 @@ library:
 
   super-mario-advance-2:
     title: "Super Mario Advance 2: Super Mario World"
-    source: roms
     collections: [handheld]
     contains:
       super-mario-world:
@@ -268,7 +303,10 @@ library:
     releases:
       - id: gba
         system: gba
-        target: gba/Super Mario Advance 2.gba
+        target:
+          kind: file
+          storage: roms
+          path: gba/Super Mario Advance 2.gba
         apps:
           - id: retroarch
             runtime: mgba

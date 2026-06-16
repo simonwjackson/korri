@@ -3,15 +3,15 @@ import type { AcquisitionError } from "@platform/acquisition/errors"
 import type { AcquiredArtifact } from "@platform/protocol/acquisition/artifact-acquisition"
 import type { DownloadResolution } from "@platform/protocol/acquisition/download-resolution"
 import type { PluginMetadata } from "@platform/protocol/acquisition/plugin"
-import type { SourceHealth } from "@platform/protocol/acquisition/source-health"
+import type { ProviderHealth } from "@platform/protocol/acquisition/source-health"
 import { Effect, Option } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
 
-const BAZZAR_CLI_CONTRACT_VERSION = "bazzar.source-adapter.v1"
+const BAZZAR_CLI_CONTRACT_VERSION = "bazzar.provider-adapter.v1"
 const BAZZAR_EXIT_CODES = {
   success: 0,
   partial_degradation: 10,
-  source_failure: 11,
+  provider_failure: 11,
   configuration_error: 20,
   caller_error: 21,
   contract_error: 70,
@@ -30,12 +30,12 @@ const logLevelFlag = Flag.optional(
 const logJsonFlag = Flag.optional(Flag.boolean("log-json"))
 const cacheFlag = Flag.boolean("cache").pipe(Flag.withDefault(true))
 const interactiveFlag = Flag.boolean("interactive").pipe(Flag.withDefault(true))
-const sourcesFlag = Flag.optional(Flag.string("sources"))
+const providersFlag = Flag.optional(Flag.string("providers"))
 const timeoutSecondsFlag = Flag.integer("timeout").pipe(Flag.withDefault(30))
 
 type Format = "json" | "jsonl" | "tsv"
 
-function parseSourceNames(value: Option.Option<string>): string[] | undefined {
+function parseProviderIds(value: Option.Option<string>): string[] | undefined {
   const raw = Option.getOrUndefined(value)
   if (!raw) return undefined
   const names = raw
@@ -88,7 +88,7 @@ function acquisitionErrorExitCategory(
 ): BazzarExitCategory {
   if (error.reason === "caller") return "caller_error"
   if (error.reason === "configuration") return "configuration_error"
-  return "source_failure"
+  return "provider_failure"
 }
 
 function toResult<A, E>(effect: Effect.Effect<A, E>) {
@@ -106,7 +106,7 @@ const searchCommand = Command.make(
     query: Argument.string("query"),
     format: formatFlag,
     platforms: Flag.optional(Flag.string("platforms")),
-    sources: sourcesFlag,
+    providers: providersFlag,
     interactive: interactiveFlag,
     cache: cacheFlag,
     cursor: Flag.optional(Flag.string("cursor")),
@@ -117,14 +117,14 @@ const searchCommand = Command.make(
     logLevel: logLevelFlag,
     logJson: logJsonFlag,
   },
-  ({ query, format, sources, platforms }) =>
+  ({ query, format, providers, platforms }) =>
     Effect.gen(function* () {
       const acquisition = yield* Acquisition
       const response = yield* acquisition
         .search({
           query,
-          sourceNames: parseSourceNames(sources),
-          platforms: parseSourceNames(platforms),
+          providerIds: parseProviderIds(providers),
+          platforms: parseProviderIds(platforms),
         })
         .pipe(toResult)
 
@@ -134,14 +134,14 @@ const searchCommand = Command.make(
         return
       }
 
-      if (response.right.candidates.length === 0) {
+      if (response.right.claims.length === 0) {
         printStdout("No results found")
         return
       }
 
-      printStdout(formatRows(response.right.candidates, format))
+      printStdout(formatRows(response.right.claims, format))
     }),
-).pipe(Command.withDescription("Search for source candidates"))
+).pipe(Command.withDescription("Search for provider claims"))
 
 const detailsCommand = Command.make(
   "details",
@@ -168,7 +168,7 @@ const detailsCommand = Command.make(
       printStdout(formatDetails(details.right, format))
     }),
 ).pipe(
-  Command.withDescription("Get detailed information about a source candidate"),
+  Command.withDescription("Get detailed information about a provider claim"),
 )
 
 const pluginsCommand = Command.make(
@@ -181,58 +181,58 @@ const pluginsCommand = Command.make(
   ({ format }) =>
     Effect.gen(function* () {
       const acquisition = yield* Acquisition
-      const plugins = yield* acquisition.plugins().pipe(toResult)
+      const plugins = yield* acquisition.providers().pipe(toResult)
       if (plugins._tag === "Left") {
         printStderr(safeErrorMessage(plugins.left))
         setExit(acquisitionErrorExitCategory(plugins.left))
         return
       }
-      printStdout(formatRows(plugins.right.plugins.map(pluginOutput), format))
+      printStdout(formatRows(plugins.right.providers.map(pluginOutput), format))
     }),
 ).pipe(Command.withDescription("List available plugins"))
 
-const validateSourcesCommand = Command.make(
-  "validate-sources",
+const validateProvidersCommand = Command.make(
+  "validate-providers",
   {
-    sources: sourcesFlag,
+    providers: providersFlag,
     timeout: Flag.integer("timeout").pipe(Flag.withDefault(5000)),
     logLevel: logLevelFlag,
     logJson: logJsonFlag,
   },
-  ({ sources }) =>
+  ({ providers }) =>
     Effect.gen(function* () {
       const acquisition = yield* Acquisition
       const checkedAt = nowIso()
       const response = yield* acquisition
-        .validateSources({ sourceNames: parseSourceNames(sources) })
+        .validateProviders({ providerIds: parseProviderIds(providers) })
         .pipe(toResult)
       const outcomes =
         response._tag === "Right"
-          ? response.right.sources.map(sourceHealthOutcome)
-          : [sourceHealthErrorOutcome(response.left, checkedAt)]
+          ? response.right.providers.map(providerHealthOutcome)
+          : [providerHealthErrorOutcome(response.left, checkedAt)]
       const envelope = validationEnvelope(outcomes, checkedAt)
       setExit(envelope.exitCategory)
       printStdout(JSON.stringify(envelope))
     }),
 ).pipe(
   Command.withDescription(
-    "Validate source adapter health and emit the stable JSON contract",
+    "Validate provider adapter health and emit the stable JSON contract",
   ),
 )
 
 const acquireCommand = Command.make(
   "acquire",
   {
-    source: Argument.string("source"),
+    provider: Argument.string("provider"),
     id: Argument.string("id"),
     logLevel: logLevelFlag,
     logJson: logJsonFlag,
   },
-  ({ source, id }) =>
+  ({ provider, id }) =>
     Effect.gen(function* () {
       const acquisition = yield* Acquisition
       const response = yield* acquisition
-        .acquireArtifact({ sourceName: source, id })
+        .acquireArtifact({ providerId: provider, id })
         .pipe(toResult)
       if (response._tag === "Left") {
         printStderr(safeErrorMessage(response.left))
@@ -245,14 +245,14 @@ const acquireCommand = Command.make(
     }),
 ).pipe(
   Command.withDescription(
-    "Acquire a source-native artifact into ephemeral staging",
+    "Acquire a provider-native artifact into ephemeral staging",
   ),
 )
 
 const resolveDownloadCommand = Command.make(
   "resolve-download",
   {
-    source: Argument.string("source"),
+    provider: Argument.string("provider"),
     candidateUrl: Argument.string("candidateUrl"),
     // Bazzar compatibility: resolve-download requires --title.
     title: Flag.string("title"),
@@ -263,12 +263,12 @@ const resolveDownloadCommand = Command.make(
     logLevel: logLevelFlag,
     logJson: logJsonFlag,
   },
-  ({ source, candidateUrl, title, site, fileName, size, artifactFormat }) =>
+  ({ provider, candidateUrl, title, site, fileName, size, artifactFormat }) =>
     Effect.gen(function* () {
       const acquisition = yield* Acquisition
       const checkedAt = nowIso()
       const response = yield* acquisition
-        .resolveDownload({ sourceName: source, candidateUrl })
+        .resolveDownload({ providerId: provider, candidateUrl })
         .pipe(toResult)
       const outcome =
         response._tag === "Right"
@@ -284,7 +284,7 @@ const resolveDownloadCommand = Command.make(
           : resolutionErrorOutcome({
               error: response.left,
               checkedAt,
-              source,
+              source: provider,
               title,
               site: Option.getOrUndefined(site),
             })
@@ -294,17 +294,17 @@ const resolveDownloadCommand = Command.make(
     }),
 ).pipe(
   Command.withDescription(
-    "Resolve a source-owned candidate URL and emit the stable JSON contract",
+    "Resolve a provider-owned claim URL and emit the stable JSON contract",
   ),
 )
 
 export const bazzarCommand = Command.make("bazzar").pipe(
-  Command.withDescription("Game Bazaar - Multi-source Game Search"),
+  Command.withDescription("Game Bazaar - Multi-provider Game Search"),
   Command.withSubcommands([
     searchCommand,
     detailsCommand,
     pluginsCommand,
-    validateSourcesCommand,
+    validateProvidersCommand,
     acquireCommand,
     resolveDownloadCommand,
   ]),
@@ -346,8 +346,8 @@ function acquireEnvelope(artifact: AcquiredArtifact) {
 
 function pluginOutput(plugin: PluginMetadata): Record<string, unknown> {
   return {
-    sourceName: plugin.sourceName,
-    pluginName: plugin.sourceName,
+    providerId: plugin.providerId,
+    pluginName: plugin.providerId,
     displayName: plugin.displayName,
     module: plugin.module,
     builtIn: plugin.builtIn,
@@ -359,31 +359,31 @@ function pluginOutput(plugin: PluginMetadata): Record<string, unknown> {
 
 function parseDetailsLocator(
   url: string,
-): { sourceName: string; id: string } | null {
+): { providerId: string; id: string } | null {
   if (url.includes("://")) return null
-  const match = /^([^:]+):(.+)$/.exec(url)
-  if (match) return { sourceName: match[1] ?? "", id: match[2] ?? "" }
+  const match = /^(@[^:]+:[^:]+):(.+)$/.exec(url)
+  if (match) return { providerId: match[1] ?? "", id: match[2] ?? "" }
   return null
 }
 
-function sourceIdentity(sourceName: string, site?: string) {
-  return { plugin: sourceName, site: site ?? sourceName }
+function sourceIdentity(providerId: string, site?: string) {
+  return { plugin: providerId, site: site ?? providerId }
 }
 
 function nowIso() {
   return new Date().toISOString()
 }
 
-type SourceHealthOutcome = Record<string, unknown> & {
+type ProviderHealthOutcome = Record<string, unknown> & {
   status: string
   source: { plugin: string; site: string }
 }
 
-function sourceHealthOutcome(source: SourceHealth): SourceHealthOutcome {
-  if (source._tag === "HealthySource") {
+function providerHealthOutcome(source: ProviderHealth): ProviderHealthOutcome {
+  if (source._tag === "HealthyProvider") {
     return {
       kind: "source_health",
-      source: sourceIdentity(source.sourceName),
+      source: sourceIdentity(source.providerId),
       status: "healthy",
       checkedAt: source.checkedAt,
       probe: {
@@ -397,12 +397,12 @@ function sourceHealthOutcome(source: SourceHealth): SourceHealthOutcome {
   const status =
     source.reason === "configuration" || source.reason === "credentials"
       ? "configuration_error"
-      : source.reason === "defective-source"
+      : source.reason === "defective-provider"
         ? "defective"
         : "unavailable"
   return {
     kind: "source_health",
-    source: sourceIdentity(source.sourceName),
+    source: sourceIdentity(source.providerId),
     status,
     checkedAt: source.checkedAt,
     probe: {
@@ -415,16 +415,16 @@ function sourceHealthOutcome(source: SourceHealth): SourceHealthOutcome {
   }
 }
 
-function sourceHealthErrorOutcome(
+function providerHealthErrorOutcome(
   error: AcquisitionError,
   checkedAt: string,
-): SourceHealthOutcome {
-  const sourceName = error.sourceName ?? "unknown"
+): ProviderHealthOutcome {
+  const providerId = error.providerId ?? "unknown"
   const status =
     error.reason === "configuration" ? "configuration_error" : "caller_error"
   return {
     kind: "source_health",
-    source: sourceIdentity(sourceName),
+    source: sourceIdentity(providerId),
     status,
     checkedAt,
     probe: {
@@ -437,13 +437,13 @@ function sourceHealthErrorOutcome(
 }
 
 function validationEnvelope(
-  outcomes: SourceHealthOutcome[],
+  outcomes: ProviderHealthOutcome[],
   checkedAt: string,
 ) {
   const exitCategory = validationExitCategory(outcomes)
   return {
     contractVersion: BAZZAR_CLI_CONTRACT_VERSION,
-    command: "validate-sources" as const,
+    command: "validate-providers" as const,
     exitCategory,
     exitCode: BAZZAR_EXIT_CODES[exitCategory],
     emittedAt: nowIso(),
@@ -452,7 +452,7 @@ function validationEnvelope(
 }
 
 function validationExitCategory(
-  outcomes: SourceHealthOutcome[],
+  outcomes: ProviderHealthOutcome[],
 ): BazzarExitCategory {
   if (outcomes.length === 0) return "caller_error"
   if (outcomes.some(outcome => outcome.status === "caller_error"))
@@ -502,7 +502,7 @@ function finalResolutionOutcome({
 }): ResolutionOutcome {
   return {
     kind: "download_resolution",
-    source: sourceIdentity(resolution.sourceName, site),
+    source: sourceIdentity(resolution.providerId, site),
     candidateTitle: title,
     checkedAt,
     status: "final_artifact",
@@ -529,7 +529,7 @@ function nonFinalResolutionOutcome({
 }): ResolutionOutcome {
   return {
     kind: "download_resolution",
-    source: sourceIdentity(resolution.sourceName, site),
+    source: sourceIdentity(resolution.providerId, site),
     candidateTitle: title,
     checkedAt,
     status: nonFinalStatus(resolution.reason),
@@ -554,7 +554,7 @@ function failedResolutionOutcome({
 }): ResolutionOutcome {
   return {
     kind: "download_resolution",
-    source: sourceIdentity(resolution.sourceName, site),
+    source: sourceIdentity(resolution.providerId, site),
     candidateTitle: title,
     checkedAt,
     status: failedResolutionStatus(resolution.reason),
@@ -586,7 +586,7 @@ function resolutionErrorOutcome({
     error.reason === "configuration" ? "configuration_error" : "caller_error"
   return {
     kind: "download_resolution",
-    source: sourceIdentity(error.sourceName ?? source, site),
+    source: sourceIdentity(error.providerId ?? source, site),
     candidateTitle: title,
     checkedAt,
     status,
@@ -621,6 +621,6 @@ function resolutionExitCategory(
     case "caller_error":
       return "caller_error"
     default:
-      return "source_failure"
+      return "provider_failure"
   }
 }

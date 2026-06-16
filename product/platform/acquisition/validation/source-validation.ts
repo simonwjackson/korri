@@ -1,11 +1,11 @@
 import type {
-  SourceHealth,
-  ValidateSourcesRequest,
-  ValidateSourcesResponse,
+  ProviderHealth,
+  ValidateProvidersRequest,
+  ValidateProvidersResponse,
 } from "@platform/protocol/acquisition/source-health"
 import { Effect } from "effect"
 import type { AcquisitionError } from "../errors"
-import { validatePluginSourceHealthOutput } from "../plugin-contract-codecs"
+import { validatePluginProviderHealthOutput } from "../plugin-contract-codecs"
 import { runPluginOperation } from "../plugin-operation-harness"
 import type { AcquisitionPluginContext } from "../plugin-runtime"
 import {
@@ -13,51 +13,51 @@ import {
   selectAcquisitionPlugins,
 } from "../plugins/registry"
 
-export interface ValidateAcquisitionSourcesOptions {
+export interface ValidateAcquisitionProvidersOptions {
   readonly registry: AcquisitionPluginRegistry
   readonly context: AcquisitionPluginContext
-  readonly request: ValidateSourcesRequest
+  readonly request: ValidateProvidersRequest
 }
 
-export function validateAcquisitionSources({
+export function validateAcquisitionProviders({
   registry,
   context,
   request,
-}: ValidateAcquisitionSourcesOptions): Effect.Effect<
-  ValidateSourcesResponse,
+}: ValidateAcquisitionProvidersOptions): Effect.Effect<
+  ValidateProvidersResponse,
   AcquisitionError
 > {
   return Effect.gen(function* () {
     const checkedAt = context.clock.nowIso()
     const plugins = yield* selectAcquisitionPlugins(
       registry,
-      request.sourceNames,
+      request.providerIds,
     )
-    const sources = yield* Effect.all(
+    const providers = yield* Effect.all(
       plugins.map(plugin => {
-        const validateSource = plugin.validateSource
-        if (!validateSource) {
-          return Effect.succeed<SourceHealth>({
-            _tag: "UnhealthySource",
-            sourceName: plugin.metadata.sourceName,
+        const validateProvider = plugin.validateProvider
+        if (!validateProvider) {
+          return Effect.succeed<ProviderHealth>({
+            _tag: "UnhealthyProvider",
+            providerId: plugin.metadata.providerId,
             checkedAt,
-            reason: "defective-source",
+            reason: "defective-provider",
             message: "No safe validation probe is configured.",
           })
         }
         return runPluginOperation({
-          sourceName: plugin.metadata.sourceName,
-          operation: "validateSource",
+          providerId: plugin.metadata.providerId,
+          operation: "validateProvider",
           context,
           run: () =>
-            validateSource({
+            validateProvider({
               ...context,
               checkedAt,
             }),
-          validate: validatePluginSourceHealthOutput,
+          validate: validatePluginProviderHealthOutput,
         })
       }),
     )
-    return { sources }
+    return { providers }
   })
 }

@@ -1,9 +1,19 @@
-import { LibraryItemRecord } from "@platform/library/config/records/library-item"
-import type { SourceCandidatePlayable } from "@platform/protocol/acquisition/candidate"
-import { Schema } from "effect"
+import type { ProviderClaim } from "@platform/protocol/acquisition/claim"
 
-export function sourceCandidatePlayableToLibraryItem(
-  playable: SourceCandidatePlayable,
-): LibraryItemRecord {
-  return Schema.decodeUnknownSync(LibraryItemRecord)(playable)
+export interface ProviderClaimDisplaySummary {
+  readonly providerId: string
+  readonly id: string
+  readonly title: string
+  readonly url: string
+}
+
+export function providerClaimToDisplaySummary(
+  claim: ProviderClaim,
+): ProviderClaimDisplaySummary {
+  return {
+    providerId: claim.providerId,
+    id: claim.id,
+    title: claim.title,
+    url: claim.url,
+  }
 }

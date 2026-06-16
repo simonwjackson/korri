@@ -30,8 +30,9 @@ describe("makeKorriLibraryDbConfig", () => {
       "host",
       "library",
       "profiles",
+      "provider-links",
+      "providers",
       "runtimes",
-      "sources",
       "storage",
       "systems",
       "users",
@@ -73,8 +74,11 @@ describe("openKorriLibraryDb — empty root", () => {
               storage: (yield* Effect.promise(
                 () => db.storage.query().runPromise,
               )).length,
-              sources: (yield* Effect.promise(
-                () => db.sources.query().runPromise,
+              providers: (yield* Effect.promise(
+                () => db.providers.query().runPromise,
+              )).length,
+              providerLinks: (yield* Effect.promise(
+                () => db["provider-links"].query().runPromise,
               )).length,
               systems: (yield* Effect.promise(
                 () => db.systems.query().runPromise,
@@ -102,7 +106,8 @@ describe("openKorriLibraryDb — empty root", () => {
       expect(counts).toEqual({
         host: 0,
         storage: 0,
-        sources: 0,
+        providers: 0,
+        providerLinks: 0,
         systems: 0,
         apps: 0,
         runtimes: 0,
@@ -128,11 +133,9 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
           "storage:",
           "  roms:",
           "    root: /games",
-          "sources:",
-          "  roms:",
+          "providers:",
+          '  "@korri:roms":',
           "    title: Local ROM library",
-          "    kind: [files]",
-          "    storage: roms",
           "systems:",
           "  genesis:",
           "    name: Sega Genesis",
@@ -157,12 +160,14 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
           "library:",
           "  sonic-the-hedgehog:",
           "    title: Sonic the Hedgehog",
-          "    source: roms",
           "    collections: [handheld]",
           "    releases:",
           "      - id: genesis",
           "        system: genesis",
-          "        target: genesis/Sonic The Hedgehog.md",
+          "        target:",
+          "          kind: file",
+          "          storage: roms",
+          "          path: genesis/Sonic The Hedgehog.md",
           "        apps:",
           "          - id: retroarch",
           "            runtime: genesis-plus-gx",
@@ -177,7 +182,7 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
             const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
             return {
               host: yield* db.host.findById(LOCAL_HOST_KEY),
-              source: yield* db.sources.findById("roms"),
+              provider: yield* db.providers.findById("@korri:roms"),
               runtime: yield* db.runtimes.findById("genesis-plus-gx"),
               item: yield* db.library.findById("sonic-the-hedgehog"),
             }
@@ -186,7 +191,7 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
       )
 
       expect(loaded.host.title).toBe("AKA desktop host")
-      expect(loaded.source.kind).toEqual(["files"])
+      expect(loaded.provider.title).toBe("Local ROM library")
       expect(loaded.runtime.path).toBe(
         "/etc/korri/cores/genesis_plus_gx_libretro.so",
       )
@@ -259,10 +264,9 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
           "storage:",
           "  roms:",
           "    root: /roms",
-          "sources:",
-          "  roms:",
-          "    kind: [files]",
-          "    storage: roms",
+          "providers:",
+          '  "@korri:roms":',
+          "    title: Local ROM library",
           "systems:",
           "  snes:",
           "    name: Super Nintendo",
@@ -280,11 +284,13 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
           "library:",
           "  zelda:",
           "    title: Zelda",
-          "    source: roms",
           "    releases:",
           "      - id: snes",
           "        system: snes",
-          "        target: snes/zelda.sfc",
+          "        target:",
+          "          kind: file",
+          "          storage: roms",
+          "          path: snes/zelda.sfc",
           "        apps:",
           "          - id: retroarch",
           "            runtime: snes9x",
@@ -341,10 +347,9 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
             const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
             yield* db.host.create({ id: LOCAL_HOST_KEY, title: "AKA" })
             yield* db.storage.create({ id: "roms", root: "/games" })
-            yield* db.sources.create({
-              id: "roms",
-              kind: ["files"],
-              storage: "roms",
+            yield* db.providers.create({
+              id: "@korri:roms",
+              title: "Local ROM library",
             })
             yield* db.library.create({
               id: "sonic-the-hedgehog",
@@ -353,7 +358,11 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
                 {
                   id: "genesis",
                   system: "genesis",
-                  target: "genesis/Sonic.md",
+                  target: {
+                    kind: "file",
+                    storage: "roms",
+                    path: "genesis/Sonic.md",
+                  },
                 },
               ],
             })
@@ -366,7 +375,7 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
       expect(outbox).toContain("host:\n  title: AKA")
       expect(outbox).not.toContain(`${LOCAL_HOST_KEY}:\n    title: AKA`)
       expect(outbox).toContain("storage:\n  roms:")
-      expect(outbox).toContain("sources:\n  roms:")
+      expect(outbox).toContain('providers:\n  "@korri:roms":')
       expect(outbox).toContain("library:\n  sonic-the-hedgehog:")
       expect(outbox).not.toContain("games:")
       expect(outbox).not.toContain("launchers:")
@@ -439,7 +448,10 @@ describe("openKorriLibraryDb — strict-mode rejections", () => {
           "    releases:",
           "      - id: gba",
           "        system: gba",
-          "        target: gba/cart.gba",
+          "        target:",
+          "          kind: file",
+          "          storage: roms",
+          "          path: gba/cart.gba",
           "",
         ].join("\n"),
         "utf8",
@@ -459,7 +471,17 @@ describe("openKorriLibraryDb — strict-mode rejections", () => {
             const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
             return yield* db.library.create({
               id: "super-mario-advance-2/super-mario-world",
-              releases: [{ id: "gba", system: "gba", target: "gba/cart.gba" }],
+              releases: [
+                {
+                  id: "gba",
+                  system: "gba",
+                  target: {
+                    kind: "file",
+                    storage: "roms",
+                    path: "gba/cart.gba",
+                  },
+                },
+              ],
             })
           }),
         ),

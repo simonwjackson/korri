@@ -13,23 +13,23 @@ import { handleAcquisitionDetails } from "./details.rpc-handler"
 import { handleAcquisitionPlugins } from "./plugins.rpc-handler"
 import { handleAcquisitionResolveDownload } from "./resolve-download.rpc-handler"
 import { handleAcquisitionSearch } from "./search.rpc-handler"
-import { handleAcquisitionValidateSources } from "./validate-sources.rpc-handler"
+import { handleAcquisitionValidateProviders } from "./validate-providers.rpc-handler"
 
 const acquisitionTags = [
   "app.acquisition.details",
-  "app.acquisition.plugins",
+  "app.acquisition.providers",
   "app.acquisition.resolve-download",
   "app.acquisition.search",
-  "app.acquisition.validate-sources",
+  "app.acquisition.validate-providers",
 ]
 
 const acquisitionService: AcquisitionService = {
   search: () =>
     Effect.succeed({
-      candidates: [
+      claims: [
         {
-          _tag: "SourceCandidate",
-          sourceName: "fixture-source",
+          _tag: "ProviderClaim",
+          providerId: "@korri:fixture-source",
           id: "game-1",
           title: "Game One",
           url: "https://example.com/game-1",
@@ -38,8 +38,8 @@ const acquisitionService: AcquisitionService = {
     }),
   details: () =>
     Effect.succeed({
-      _tag: "SourceDetails",
-      sourceName: "fixture-source",
+      _tag: "ProviderClaimDetails",
+      providerId: "@korri:fixture-source",
       id: "game-1",
       title: "Game One",
       url: "https://example.com/game-1",
@@ -47,19 +47,19 @@ const acquisitionService: AcquisitionService = {
     }),
   detailsByUrl: () =>
     Effect.succeed({
-      _tag: "SourceDetails",
-      sourceName: "fixture-source",
+      _tag: "ProviderClaimDetails",
+      providerId: "@korri:fixture-source",
       id: "game-1",
       title: "Game One",
       url: "https://example.com/game-1",
       description: "A fixture game.",
     }),
-  plugins: () =>
+  providers: () =>
     Effect.succeed({
-      plugins: [
+      providers: [
         {
-          sourceName: "fixture-source",
-          displayName: "Fixture Source",
+          providerId: "@korri:fixture-source",
+          displayName: "Fixture Provider",
           module: "product/platform/acquisition/plugins/fixture-source",
           builtIn: true,
           enabledByDefault: true,
@@ -68,12 +68,12 @@ const acquisitionService: AcquisitionService = {
         },
       ],
     }),
-  validateSources: () =>
+  validateProviders: () =>
     Effect.succeed({
-      sources: [
+      providers: [
         {
-          _tag: "HealthySource",
-          sourceName: "fixture-source",
+          _tag: "HealthyProvider",
+          providerId: "@korri:fixture-source",
           checkedAt: "2026-06-04T00:00:00.000Z",
         },
       ],
@@ -81,7 +81,7 @@ const acquisitionService: AcquisitionService = {
   resolveDownload: () =>
     Effect.succeed({
       _tag: "NonFinalDownload",
-      sourceName: "fixture-source",
+      providerId: "@korri:fixture-source",
       reason: "interstitial",
       url: "https://example.com/download",
     }),
@@ -105,13 +105,13 @@ describe("acquisition RPC handlers", () => {
       return {
         search: yield* handleAcquisitionSearch({ query: "game" }),
         details: yield* handleAcquisitionDetails({
-          sourceName: "fixture-source",
+          providerId: "@korri:fixture-source",
           id: "game-1",
         }),
-        plugins: yield* handleAcquisitionPlugins({}),
-        health: yield* handleAcquisitionValidateSources({}),
+        providers: yield* handleAcquisitionPlugins({}),
+        health: yield* handleAcquisitionValidateProviders({}),
         download: yield* handleAcquisitionResolveDownload({
-          sourceName: "fixture-source",
+          providerId: "@korri:fixture-source",
           candidateUrl: "https://example.com/game-1",
         }),
       }
@@ -121,10 +121,12 @@ describe("acquisition RPC handlers", () => {
       Effect.provide(program, acquisitionLayer),
     )
 
-    expect(result.search.candidates[0]?.sourceName).toBe("fixture-source")
+    expect(result.search.claims[0]?.providerId).toBe("@korri:fixture-source")
     expect(result.details.description).toBe("A fixture game.")
-    expect(result.plugins.plugins[0]?.sourceName).toBe("fixture-source")
-    expect(result.health.sources[0]?._tag).toBe("HealthySource")
+    expect(result.providers.providers[0]?.providerId).toBe(
+      "@korri:fixture-source",
+    )
+    expect(result.health.providers[0]?._tag).toBe("HealthyProvider")
     expect(result.download).toMatchObject({
       _tag: "NonFinalDownload",
       reason: "interstitial",
@@ -137,9 +139,9 @@ describe("acquisition RPC handlers", () => {
       search: () =>
         Effect.fail(
           new AcquisitionError({
-            reason: "defective-source",
+            reason: "defective-provider",
             message: "token=secret\nfull stack should not leak",
-            sourceName: "fixture-source",
+            providerId: "@korri:fixture-source",
           }),
         ),
     })
@@ -162,9 +164,9 @@ describe("acquisition RPC handlers", () => {
   it("maps acquisition errors to safe RPC errors", () => {
     const error = toAcquisitionRpcError(
       new AcquisitionError({
-        reason: "defective-source",
+        reason: "defective-provider",
         message: "token=secret\nfull stack should not leak",
-        sourceName: "fixture-source",
+        providerId: "@korri:fixture-source",
       }),
     )
 
