@@ -81,12 +81,6 @@ export const LibraryReleasePayload = Schema.Struct({
 }).pipe(
   Schema.check(
     Schema.makeFilter(release => {
-      if (release.source !== undefined) {
-        return {
-          path: ["source"],
-          issue: "release.source was removed; use provider-links[]",
-        }
-      }
       if (release.app !== undefined) {
         return {
           path: ["app"],
