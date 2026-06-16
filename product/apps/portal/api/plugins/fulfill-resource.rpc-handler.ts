@@ -1,8 +1,8 @@
 import { DataError, NotFoundError } from "@platform/api/rpc/errors"
 import type { PluginId } from "@platform/plugin"
-import { createFirstPartyPluginRegistryFromEnv } from "@product/plugins"
-import { createPluginResourceFulfillerFromEnv } from "@product/plugins/library-source-layer"
 import { Effect } from "effect"
+import { createFirstPartyPluginRegistryFromEnv } from "../../../../plugins"
+import { createPluginResourceFulfillerFromEnv } from "../../../../plugins/library-source-layer"
 import {
   type FulfillPluginResourcePayload,
   FulfillPluginResourceResponse,
