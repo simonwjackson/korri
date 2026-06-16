@@ -20,7 +20,8 @@
     return Number(raw)
   }
 
-  const launchSettings = (window.__YFS_LAUNCH_SETTINGS = Object.create(null))
+  window.__YFS_LAUNCH_SETTINGS = Object.create(null)
+  const launchSettings = window.__YFS_LAUNCH_SETTINGS
   const setIfPresent = (key, value) => {
     if (value !== null && value !== undefined) launchSettings[key] = value
   }
@@ -37,8 +38,7 @@
     key,
     defaultValue,
   ) {
-    if (Object.prototype.hasOwnProperty.call(launchSettings, key))
-      return launchSettings[key]
+    if (Object.hasOwn(launchSettings, key)) return launchSettings[key]
     if (defaultValue === undefined) return dictionary.ExpObject(key)
     return dictionary.ExpObject(key, defaultValue)
   }

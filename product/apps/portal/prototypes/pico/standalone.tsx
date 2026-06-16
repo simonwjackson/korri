@@ -8,7 +8,7 @@
  */
 import { useState } from "react"
 import { createRoot } from "react-dom/client"
-import { DeviceLab, type DeviceConfig, type ThemeKnob } from "./device-lab"
+import { type DeviceConfig, DeviceLab, type ThemeKnob } from "./device-lab"
 import { picoGames, picoRecent } from "./fixtures"
 import {
   PicoPrototypeSwitcher,

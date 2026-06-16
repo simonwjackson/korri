@@ -9,8 +9,8 @@
  * prototypes/pico/NOTES.md.
  */
 import {
-  DeviceLab,
   type DeviceConfig,
+  DeviceLab,
   type ThemeKnob,
 } from "@product/apps/portal/prototypes/pico/device-lab"
 import {
@@ -18,8 +18,8 @@ import {
   picoRecent,
 } from "@product/apps/portal/prototypes/pico/fixtures"
 import {
-  type PicoVariantDef,
   PicoPrototypeSwitcher,
+  type PicoVariantDef,
 } from "@product/apps/portal/prototypes/pico/PicoPrototypeSwitcher"
 import { VariantCartridgeShelf } from "@product/apps/portal/prototypes/pico/VariantCartridgeShelf"
 import { VariantGameDetail } from "@product/apps/portal/prototypes/pico/VariantGameDetail"

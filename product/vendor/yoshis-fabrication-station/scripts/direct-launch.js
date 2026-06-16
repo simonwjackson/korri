@@ -7,7 +7,7 @@
   }
   const debugEnabled = params.has("debug")
 
-  const state = (window.__YFS_DIRECT_LAUNCH = {
+  window.__YFS_DIRECT_LAUNCH = {
     enabled: false,
     status: "idle",
     attempts: 0,
@@ -17,7 +17,8 @@
     inputCount: 0,
     canvasFound: false,
     codeLength: 0,
-  })
+  }
+  const state = window.__YFS_DIRECT_LAUNCH
 
   let lastBootFrame = null
   let bootFrameCaptureTimer = null

@@ -5,8 +5,8 @@
  */
 import { useState } from "react"
 import type { PicoGame } from "./fixtures"
-import { PicoButtonBar, PicoStatusBar } from "./PicoStatusBar"
 import { PicoCart } from "./PicoCart"
+import { PicoButtonBar, PicoStatusBar } from "./PicoStatusBar"
 
 export function VariantCartridgeShelf({
   games,

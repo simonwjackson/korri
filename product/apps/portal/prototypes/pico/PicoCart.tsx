@@ -1,6 +1,7 @@
 /** PROTOTYPE — pico theme exploration. Throwaway. */
-import { ditherStyle, picoArt } from "./pico-art"
+
 import type { PicoGame } from "./fixtures"
+import { ditherStyle, picoArt } from "./pico-art"
 
 export function PicoCart({
   game,
