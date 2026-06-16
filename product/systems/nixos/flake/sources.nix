@@ -18,6 +18,7 @@ let
     };
   sharedRuntime = [
     ../../../../product/platform
+    ../../../../product/plugins
   ];
   deviceRuntime = [
     ../../../../product/apps/portal
