@@ -71,6 +71,13 @@ let
     };
   };
 
+  experimentalWrapper = evaluateWith "aarch64-linux" {
+    services.korri.steam = {
+      enable = true;
+      enableExperimentalPerGameGamescopeWrapper = true;
+    };
+  };
+
   runtimeOverride = evaluateWith "aarch64-linux" {
     services.korri.runtime = {
       stateRoot = "/var/lib/korri-alt";
@@ -158,6 +165,10 @@ let
     (check "keepWarm defaults off for device-neutral Steam configs" (
       enabled.services.korri.steam.keepWarm == false
       && !(enabled.systemd.user.services ? korri-steam-warm)
+    ))
+    (check "per-game Gamescope LaunchOptions wrapper is disabled by default" (
+      enabled.services.korri.steam.enableExperimentalPerGameGamescopeWrapper == false
+      && experimentalWrapper.services.korri.steam.enableExperimentalPerGameGamescopeWrapper == true
     ))
     (check "keepWarm adds a user-session warmup unit" (
       enabledKeepWarm.systemd.user.services ? korri-steam-warm

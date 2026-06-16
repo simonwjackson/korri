@@ -573,7 +573,7 @@ PY
     target_output="''${KORRI_STEAM_APP_OUTPUT:-DSI-2}"
     target_audio_sink="''${KORRI_STEAM_AUDIO_SINK:-${cfg.appAudioSinkName}}"
     stop_service_on_exit="''${KORRI_STEAM_APP_STOP_SERVICE_ON_EXIT:-${if cfg.keepWarm then "0" else "1"}}"
-    materialize_gamescope_launch_options="''${KORRI_STEAM_APP_MATERIALIZE_GAMESCOPE_LAUNCH_OPTIONS:-1}"
+    materialize_gamescope_launch_options="''${KORRI_STEAM_APP_MATERIALIZE_GAMESCOPE_LAUNCH_OPTIONS:-${if cfg.enableExperimentalPerGameGamescopeWrapper then "1" else "0"}}"
     gamescope_launch_options="/run/current-system/sw/bin/bash /var/lib/korri/bin/korri-steam-gamescope-launch --appid $appid -- %command%"
 
     find_sway_sock() {
@@ -992,6 +992,18 @@ in
         resident so app launches can forward AppIDs to an already-warm Steam
         client. The warmup waits for the kiosk Wayland and D-Bus sockets before
         using the narrow sudo helper, avoiding ad-hoc direct Steam fallback.
+      '';
+    };
+
+    enableExperimentalPerGameGamescopeWrapper = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Re-enable the parked per-game Steam LaunchOptions materializer that
+        rewrites an app's LaunchOptions to call korri-steam-gamescope-launch.
+        This stays disabled by default because Bandai validation showed
+        per-game Gamescope wrapping can break Steam Input for Stray; prefer
+        running Steam itself inside Gamescope for controller-sensitive games.
       '';
     };
 

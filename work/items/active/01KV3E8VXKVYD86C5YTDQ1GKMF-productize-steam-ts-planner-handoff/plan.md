@@ -2,6 +2,13 @@
 
 ## Status
 
+- **Mode:** parked / superseded as of 2026-06-15.
+- **Current decision:** Do not productize this per-game Gamescope LaunchOptions wrapper as a default path. Bandai validation showed the wrapper's Gamescope boundary breaks Stray/Steam Input; Steam-inside-Gamescope is the supported direction.
+- **Preservation:** Keep the design below as recoverable research only. Reactivation must be opt-in behind `services.korri.steam.enableExperimentalPerGameGamescopeWrapper` and must preserve native app LaunchOptions, EULA keys, and unknown per-app Steam state.
+- **Handoff:** `docs/handoffs/steam-launchoptions-wrapper-parked-2026-06-15.md`.
+
+## Original Status
+
 - **Mode:** `/se-plan`
 - **Scope:** Productize the already-validated mutable Bandai prototype where a typed TS/Bun planner computes the Steam Gamescope launch plan and a tiny Bash handoff performs the final `exec`.
 - **Out of scope:** Normalizing all foreground launch lifecycles under one supervisor; rewriting emulator/native/stream launch ownership; changing Korri catalog semantics; making Steam itself own the kiosk shell.

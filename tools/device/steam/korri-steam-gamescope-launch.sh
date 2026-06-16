@@ -1,4 +1,9 @@
 #!/usr/bin/env -S nix shell nixpkgs#bash nixpkgs#coreutils nixpkgs#gnugrep nixpkgs#gnused nixpkgs#procps nixpkgs#perl nixpkgs#gamescope nixpkgs#mangohud --command bash
+# EXPERIMENTAL / PARKED: do not wire this per-game wrapper into Steam
+# LaunchOptions by default. Bandai validation showed that running only the game
+# inside a nested/detached Gamescope boundary can break Steam Input for Stray.
+# Prefer running Steam itself inside Gamescope for controller-sensitive games.
+#
 # Korri-owned Steam LaunchOptions wrapper for running Steam-expanded commands
 # under host Gamescope with the gamescope-managed MangoHud overlay.
 #
