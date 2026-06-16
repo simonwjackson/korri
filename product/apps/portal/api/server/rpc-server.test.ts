@@ -105,6 +105,7 @@ describe("headless server RPC group", () => {
       "app.hello.get",
       "app.library.launch",
       "app.library.launch.dry-run",
+      "app.plugins.resource.fulfill",
       "app.server.status",
       "app.server.stream.prepare",
       "app.session.status",
@@ -164,6 +165,14 @@ describe("headless server RPC group", () => {
     expect(appTags).not.toContain("app.acquisition.plugins")
     expect(appTags).not.toContain("app.acquisition.validate-sources")
     expect(appTags).not.toContain("app.acquisition.resolve-download")
+  })
+
+  it("keeps mutating plugin resource fulfillment on the server surface only", () => {
+    const appTags = Array.from(appRpcGroup.requests.keys())
+    const serverTags = Array.from(serverRpcGroup.requests.keys())
+
+    expect(serverTags).toContain("app.plugins.resource.fulfill")
+    expect(appTags).not.toContain("app.plugins.resource.fulfill")
   })
 
   it("mounts narrow durable game-asset bytes instead of arbitrary media files", async () => {

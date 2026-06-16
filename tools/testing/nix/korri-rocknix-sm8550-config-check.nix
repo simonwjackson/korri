@@ -88,6 +88,12 @@ let
       (check "${name}: sessiond inherits the config-graph roots" (
         (sessiondEnv.KORRI_CONFIG_ROOTS or null) == (daemonEnv.KORRI_CONFIG_ROOTS or "")
       ))
+      (check "${name}: korrid enables first-party Neverball plugin resources" (
+        (daemonEnv.KORRI_ENABLED_PLUGINS or null) == "@korri:neverball"
+        && lib.hasPrefix "/" (daemonEnv.KORRI_NIX_COMMAND or "")
+        && lib.hasSuffix "/bin/nix" (daemonEnv.KORRI_NIX_COMMAND or "")
+        && (daemonEnv.KORRI_PLUGIN_RESOURCE_ROOT or null) == "/var/lib/korri/plugins/resources"
+      ))
       (check "${name}: korrid and sessiond share the dynamic config-roots dir" (
         (daemonEnv.KORRI_CONFIG_ROOTS_DIR or null) == "/run/korri/config-roots.d"
         && (sessiondEnv.KORRI_CONFIG_ROOTS_DIR or null) == (daemonEnv.KORRI_CONFIG_ROOTS_DIR or null)

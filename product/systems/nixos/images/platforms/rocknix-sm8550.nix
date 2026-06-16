@@ -522,7 +522,13 @@ in
 
   services.korri.daemon.library.platformDefaults = moonlightPlatformDefaults;
 
-  systemd.user.services.korrid.environment = gamescopeKorriControlEnvironment;
+  systemd.user.services.korrid.environment =
+    gamescopeKorriControlEnvironment
+    // {
+      KORRI_ENABLED_PLUGINS = "@korri:neverball";
+      KORRI_NIX_COMMAND = "${pkgs.nix}/bin/nix";
+      KORRI_PLUGIN_RESOURCE_ROOT = "${runtime.stateRoot}/plugins/resources";
+    };
 
   # NOTE: `rocknix.sm8550.moonlight.{enable,package}` is no longer set
   # here. Moonlight is a Korri product choice; the substrate should not

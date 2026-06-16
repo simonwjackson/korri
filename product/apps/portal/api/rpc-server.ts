@@ -2,13 +2,13 @@ import { BatchJsonSerializationLive } from "@platform/api/rpc/serialization"
 import { FeatureGatesMiddlewareLive } from "@platform/gates/middleware"
 import { GameAssetsLayerLive } from "@platform/library/game-assets/game-assets-service"
 import { LauncherLayerLive } from "@platform/library/launcher-layer-live"
-import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
 import {
   makePeerDiscoveryLayer,
   PeerDiscoveryNoop,
 } from "@product/apps/portal/peers/peer-discovery"
 import { PeerSourceFetcherLive } from "@product/apps/portal/peers/peer-source-fetcher"
 import { makeFilePeerStore } from "@product/apps/portal/peers/peer-store"
+import { PluginLibrarySourceLayerLive } from "@product/plugins/library-source-layer"
 import { Effect, Exit, Layer, Scope } from "effect"
 import * as HttpEffect from "effect/unstable/http/HttpEffect"
 import { RpcServer } from "effect/unstable/rpc"
@@ -42,7 +42,7 @@ const PeerDiscoveryConfigured =
       })
 
 const CatalogDependenciesLive = Layer.mergeAll(
-  LibrarySourceLayerLive,
+  PluginLibrarySourceLayerLive,
   PeerDiscoveryConfigured,
   PeerSourceFetcherLive,
 )

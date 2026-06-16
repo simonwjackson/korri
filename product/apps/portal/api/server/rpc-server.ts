@@ -6,13 +6,13 @@ import { KorriControlLayerLive } from "@platform/control/korri-control-live"
 import { FeatureGatesMiddlewareLive } from "@platform/gates/middleware"
 import { GameAssetsLayerLive } from "@platform/library/game-assets/game-assets-service"
 import { LauncherLayerLive } from "@platform/library/launcher-layer-live"
-import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
 import {
   makePeerDiscoveryLayer,
   PeerDiscoveryNoop,
 } from "@product/apps/portal/peers/peer-discovery"
 import { PeerSourceFetcherLive } from "@product/apps/portal/peers/peer-source-fetcher"
 import { makeFilePeerStore } from "@product/apps/portal/peers/peer-store"
+import { PluginLibrarySourceLayerLive } from "@product/plugins/library-source-layer"
 import { Effect, Exit, Layer, Scope } from "effect"
 import * as HttpEffect from "effect/unstable/http/HttpEffect"
 import { RpcServer } from "effect/unstable/rpc"
@@ -31,6 +31,7 @@ import { handleDryRunLaunch } from "../library/dry-run.rpc-handler"
 import { ForegroundSessionHostLive } from "../library/foreground-session-host-layer"
 import { handleLaunchLibrary } from "../library/launch.rpc-handler"
 import { RemoteStreamPrepareLive } from "../library/remote-stream-prepare"
+import { handleFulfillPluginResource } from "../plugins/fulfill-resource.rpc-handler"
 import { handleSessionStatus } from "../session/status.rpc-handler"
 import { handleStopSession } from "../session/stop.rpc-handler"
 import { handleSourceStatus } from "../source/status.rpc-handler"
@@ -82,11 +83,13 @@ const AcquisitionLayerLive = makeLiveAcquisitionLayer({
 })
 
 const KorriControlInfrastructureLive = KorriControlLayerLive.pipe(
-  Layer.provideMerge(Layer.mergeAll(LibrarySourceLayerLive, LauncherLayerLive)),
+  Layer.provideMerge(
+    Layer.mergeAll(PluginLibrarySourceLayerLive, LauncherLayerLive),
+  ),
 )
 
 const CatalogDependenciesLive = Layer.mergeAll(
-  LibrarySourceLayerLive,
+  PluginLibrarySourceLayerLive,
   PeerDiscoveryConfigured,
   PeerSourceFetcherLive,
 )
@@ -119,6 +122,7 @@ const ServerHandlersLive = serverRpcGroup.toLayer(
     "app.catalog.snapshot": handleCatalogSnapshot,
     "app.library.launch": handleLaunchLibrary,
     "app.library.launch.dry-run": handleDryRunLaunch,
+    "app.plugins.resource.fulfill": handleFulfillPluginResource,
     "app.source.status": handleSourceStatus,
     "app.steam.status": handleSteamStatus,
     "app.server.status": handleServerStatus,
