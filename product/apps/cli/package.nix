@@ -119,7 +119,7 @@ pkgs.stdenv.mkDerivation {
       exit 1
     fi
 
-    for command in search details plugins validate-sources resolve-download; do
+    for command in search details plugins validate-providers resolve-download; do
       if ! grep -q "$command" "$bazzar_help"; then
         echo "korri-cli smoke test failed: bazzar help missing $command" >&2
         cat "$bazzar_help" >&2
