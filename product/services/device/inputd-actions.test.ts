@@ -5,7 +5,6 @@ import {
   createInputdActionDispatcher,
   defaultKillFilePathFromEnv,
   type InputdActionCommand,
-  type InputdActionCommands,
   KORRI_INPUTD_ACTION_IDS,
 } from "./inputd-actions"
 

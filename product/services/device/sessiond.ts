@@ -60,18 +60,18 @@ import {
   type StatusSidecar,
 } from "./sessiond-status-sidecar"
 import {
-  cleanupSteamForegroundProcesses,
-  scanCurrentUserProcesses as scanCurrentUserSteamProcesses,
-  signalProcessByPid as signalSteamProcessByPid,
-  type SteamForegroundProcessScanner,
-  type SteamForegroundProcessSignaler,
-} from "./steam-foreground-processes"
-import {
   createSwayController,
   type SwayCommandRunner,
   type SwayController,
   type SwayWindowSelector,
 } from "./sessiond-sway"
+import {
+  cleanupSteamForegroundProcesses,
+  type SteamForegroundProcessScanner,
+  type SteamForegroundProcessSignaler,
+  scanCurrentUserProcesses as scanCurrentUserSteamProcesses,
+  signalProcessByPid as signalSteamProcessByPid,
+} from "./steam-foreground-processes"
 
 export interface KorriSessiondLogger {
   debug: (input: unknown, message?: string) => void
@@ -683,10 +683,15 @@ export function createKorriSessiondCore(
 
   async function waitForSpawnedLaunchResult(
     launchId: string,
-    spawned: Extract<Awaited<ReturnType<NonNullable<KorriSessiondLauncher["spawn"]>>>, { status: "started" }>,
+    spawned: Extract<
+      Awaited<ReturnType<NonNullable<KorriSessiondLauncher["spawn"]>>>,
+      { status: "started" }
+    >,
   ): Promise<LaunchResult> {
     const active =
-      activeManagedLaunch?.launchId === launchId ? activeManagedLaunch : undefined
+      activeManagedLaunch?.launchId === launchId
+        ? activeManagedLaunch
+        : undefined
 
     if (!active || active.cancelRequested !== undefined) {
       return await waitForSpawnedResultAfterCancel(spawned)
@@ -708,7 +713,10 @@ export function createKorriSessiondCore(
   }
 
   async function waitForSpawnedResultAfterCancel(
-    spawned: Extract<Awaited<ReturnType<NonNullable<KorriSessiondLauncher["spawn"]>>>, { status: "started" }>,
+    spawned: Extract<
+      Awaited<ReturnType<NonNullable<KorriSessiondLauncher["spawn"]>>>,
+      { status: "started" }
+    >,
   ): Promise<LaunchResult> {
     const gracefulResult = await Promise.race([
       spawned.result.then(result => ({ status: "completed" as const, result })),
@@ -718,7 +726,10 @@ export function createKorriSessiondCore(
     try {
       spawned.session.terminateNow()
     } catch (error) {
-      logger.warn({ err: error }, "sessiond: managed launch force terminate threw")
+      logger.warn(
+        { err: error },
+        "sessiond: managed launch force terminate threw",
+      )
     }
     return await spawned.result
   }
@@ -851,11 +862,15 @@ export function createKorriSessiondCore(
 
   function steamAppIdFromLaunchSpec(spec: LaunchSpec): string | undefined {
     const directApp = spec.args?.[0]
-    if (spec.command.includes("korri-steam-app") && /^\d+$/.test(directApp ?? "")) {
+    if (
+      spec.command.includes("korri-steam-app") &&
+      /^\d+$/.test(directApp ?? "")
+    ) {
       return directApp
     }
-    const applaunchIndex = spec.args?.findIndex(arg => arg === "-applaunch") ?? -1
-    const appId = applaunchIndex >= 0 ? spec.args?.[applaunchIndex + 1] : undefined
+    const applaunchIndex = spec.args?.indexOf("-applaunch") ?? -1
+    const appId =
+      applaunchIndex >= 0 ? spec.args?.[applaunchIndex + 1] : undefined
     return /^\d+$/.test(appId ?? "") ? appId : undefined
   }
 
@@ -1061,7 +1076,7 @@ export async function startKorriSessiond(
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
     })
   }
-  const server = Bun.serve({
+  const serveOptions = {
     ...(options.socketPath
       ? { unix: options.socketPath }
       : { port: options.port ?? DEFAULT_PORT, hostname }),
@@ -1072,8 +1087,9 @@ export async function startKorriSessiond(
     // explicit policy here is "this server does not time out idle
     // connections" -- heartbeats are correctness, this is safety net.
     idleTimeout: 0,
-    fetch: request => core.handleRequest(request),
-  })
+    fetch: (request: Request) => core.handleRequest(request),
+  }
+  const server = Bun.serve(serveOptions as Parameters<typeof Bun.serve>[0])
 
   const listenPort = options.socketPath
     ? undefined

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { mkdir, rm, writeFile } from "node:fs/promises"
+import { mkdir, rm } from "node:fs/promises"
 import { join } from "node:path"
 import type { LaunchSpec } from "./launcher"
 import {
@@ -18,7 +18,7 @@ afterEach(async () => {
   )
 })
 
-async function tempDir() {
+async function _tempDir() {
   const path = join(
     process.cwd(),
     "out/tmp/session-launcher",

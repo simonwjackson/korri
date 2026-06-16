@@ -825,8 +825,8 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
           status: "started" as const,
           result: exit.then(result =>
             result.exitCode === 0
-              ? ({ status: "launched" as const })
-              : ({ status: "failed" as const, exitCode: result.exitCode }),
+              ? { status: "launched" as const }
+              : { status: "failed" as const, exitCode: result.exitCode },
           ),
           session: {
             id: "sessiond-launch-1",

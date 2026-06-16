@@ -166,7 +166,7 @@ export function createSteamLogTailer(
         await scanInFlight
       } finally {
         scanInFlight = undefined
-        if (scanAgain && state !== "stopped") {
+        if (scanAgain && (state as SteamLogTailerState) !== "stopped") {
           scanAgain = false
           queueMicrotask(() => void handle.scanOnce().catch(setError))
         }

@@ -1,9 +1,16 @@
 import { describe, expect, it } from "bun:test"
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { makeInMemoryLauncherLayer } from "@platform/library/launcher-layer-memory"
 import type { ManagedLaunchResult } from "@platform/library/launcher"
+import { makeInMemoryLauncherLayer } from "@platform/library/launcher-layer-memory"
 import {
   Launcher,
   type LauncherService,
@@ -58,7 +65,10 @@ function spawnReadyManaged(
 ): Promise<ManagedLaunchResult> {
   const exit = (
     control as typeof control & {
-      readonly exit: Promise<{ readonly exitCode: number; readonly stderrTail?: string }>
+      readonly exit: Promise<{
+        readonly exitCode: number
+        readonly stderrTail?: string
+      }>
     }
   ).exit
   const terminal = exit.then(result => ({ exitCode: result.exitCode }))

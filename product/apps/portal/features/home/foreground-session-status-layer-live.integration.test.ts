@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { createAdaptorServer } from "@hono/node-server"
 import {
   foregroundSessionGateStateAtom,
   foregroundSessionStatusLayerAtom,
@@ -13,7 +12,6 @@ import { ForegroundSessionStatusLayerLive } from "@product/apps/portal/features/
 import { Effect } from "effect"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry"
-import { Hono } from "hono"
 import { withRpcServer } from "../../../../../tools/testing/library/with-rpc-server"
 
 // `ForegroundSessionStatusLayerLive` builds an `RpcClient` against
@@ -326,6 +324,7 @@ async function waitForAtomSuccess<A>(
 
 type SessiondSocketHarness = {
   url: string
+  socketPath: string
   requestCount: () => number
   dispose: () => Promise<void>
   [Symbol.asyncDispose]: () => Promise<void>
@@ -356,6 +355,7 @@ async function withSessiondSocket(options: {
     await rm(dir, { recursive: true, force: true })
   }
   return {
+    url: "http://korri-sessiond",
     socketPath,
     requestCount: () => count,
     dispose,

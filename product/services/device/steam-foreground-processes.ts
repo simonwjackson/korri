@@ -72,7 +72,11 @@ export async function cleanupSteamForegroundProcesses(
 
   const targetPids = new Set(targets.map(process => process.pid))
   options.logger?.info?.(
-    { targets: targets.map(process => formatSteamForegroundProcessForLog(process)) },
+    {
+      targets: targets.map(process =>
+        formatSteamForegroundProcessForLog(process),
+      ),
+    },
     "cleaning Steam foreground processes",
   )
 
@@ -115,7 +119,9 @@ export async function cleanupSteamForegroundProcesses(
 export function steamAppIdFromProcess(
   process: SteamForegroundProcessInfo,
 ): string | undefined {
-  const match = commandLineForMatch(process).match(/\bSteamLaunch AppId=(\d+)\b/)
+  const match = commandLineForMatch(process).match(
+    /\bSteamLaunch AppId=(\d+)\b/,
+  )
   return match?.[1]
 }
 

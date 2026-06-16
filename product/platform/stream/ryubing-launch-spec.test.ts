@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test"
 
 import {
   composeRyubingLaunchSpec,
-  renderRyubingConfig,
   RYUBING_CONFIG_VERSION,
+  renderRyubingConfig,
 } from "./ryubing-launch-spec"
 
 describe("typed Ryubing launch spec rendering", () => {

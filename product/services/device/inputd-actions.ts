@@ -1,16 +1,16 @@
 import { readdir, readFile } from "node:fs/promises"
-import { logger as defaultLogger } from "@platform/logger"
 import {
   probeSessiondManagedLaunchStatus,
-  terminateSessiondManagedLaunch,
   type SessiondManagedLaunchClientOptions,
+  terminateSessiondManagedLaunch,
 } from "@platform/library/sessiond-managed-launch-client"
+import { logger as defaultLogger } from "@platform/logger"
 import { buildBottomKeyboardCommand } from "./bottom-keyboard"
-import { buildSwayShortcutCommand } from "./sway-actions"
 import {
   collectSteamForegroundProcesses,
   formatSteamForegroundProcessForLog,
 } from "./steam-foreground-processes"
+import { buildSwayShortcutCommand } from "./sway-actions"
 
 export const KORRI_INPUTD_ACTION_IDS = [
   "system-panel",
@@ -272,12 +272,18 @@ async function dispatchStaleSteamForegroundKill(options: {
   readonly signalProcess: InputdProcessSignaler
   readonly graceMs: number
 }): Promise<boolean> {
-  const targets = collectSteamForegroundProcesses(await options.processScanner())
+  const targets = collectSteamForegroundProcesses(
+    await options.processScanner(),
+  )
   if (targets.length === 0) return false
 
   const targetPids = new Set(targets.map(process => process.pid))
   options.logger.info(
-    { targets: targets.map(process => formatSteamForegroundProcessForLog(process)) },
+    {
+      targets: targets.map(process =>
+        formatSteamForegroundProcessForLog(process),
+      ),
+    },
     "inputd killing stale Steam foreground processes",
   )
 
@@ -298,7 +304,11 @@ async function dispatchStaleSteamForegroundKill(options: {
 
   if (residual.length > 0) {
     options.logger.warn(
-      { residual: residual.map(process => formatSteamForegroundProcessForLog(process)) },
+      {
+        residual: residual.map(process =>
+          formatSteamForegroundProcessForLog(process),
+        ),
+      },
       "inputd escalated stale Steam foreground kill",
     )
   }

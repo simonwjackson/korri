@@ -177,10 +177,13 @@ async function reservePort(): Promise<number> {
 
 function openEventStream(port: number): Promise<IncomingMessage> {
   return new Promise((resolve, reject) => {
-    const request = get(`http://127.0.0.1:${port}/api/config/events`, response => {
-      response.pause()
-      resolve(response)
-    })
+    const request = get(
+      `http://127.0.0.1:${port}/api/config/events`,
+      response => {
+        response.pause()
+        resolve(response)
+      },
+    )
     request.once("error", reject)
   })
 }

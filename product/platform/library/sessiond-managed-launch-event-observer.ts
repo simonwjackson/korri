@@ -12,9 +12,13 @@ import {
   type TerminalReadinessEventType,
 } from "./sessiond-managed-launch-protocol"
 
+export type SessiondManagedLaunchEventRequestInit = RequestInit & {
+  readonly unix?: string
+}
+
 export type SessiondManagedLaunchEventFetch = (
   input: string,
-  init?: RequestInit,
+  init?: SessiondManagedLaunchEventRequestInit,
 ) => Promise<Response>
 
 export interface SessiondManagedLaunchEventObserverOptions {
@@ -22,6 +26,8 @@ export interface SessiondManagedLaunchEventObserverOptions {
   readonly url?: string
   readonly socketPath?: string
   readonly launchId: string
+  /** @deprecated tokens are ignored by the sessiond managed-launch SSE observer. */
+  readonly token?: string
   readonly requestTimeoutMs?: number
 }
 
@@ -227,7 +233,7 @@ async function* readSseEvents(
 async function fetchWithTimeout(
   fetchImpl: SessiondManagedLaunchEventFetch,
   input: string,
-  init: RequestInit,
+  init: SessiondManagedLaunchEventRequestInit,
   timeoutMs: number,
 ): Promise<Response> {
   const controller = new AbortController()

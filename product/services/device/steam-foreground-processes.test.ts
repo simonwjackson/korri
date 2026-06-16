@@ -63,9 +63,7 @@ describe("Steam foreground process classification", () => {
       {
         pid: 46,
         uid: 1000,
-        cmdline: [
-          "/var/lib/korri/steam/steamapps/common/Tools/readme.txt",
-        ],
+        cmdline: ["/var/lib/korri/steam/steamapps/common/Tools/readme.txt"],
       },
     ]
 

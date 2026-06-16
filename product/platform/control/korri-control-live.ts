@@ -343,7 +343,11 @@ function waitForSessionStopCompletion(input: {
     let lastStatus:
       | Extract<SessiondManagedLaunchStatusResult, { readonly kind: "ok" }>
       | undefined
-    for (let attempt = 0; attempt < Math.max(1, input.pollCount); attempt += 1) {
+    for (
+      let attempt = 0;
+      attempt < Math.max(1, input.pollCount);
+      attempt += 1
+    ) {
       if (attempt > 0 && input.pollDelayMs > 0) {
         yield* Effect.promise(() => delay(input.pollDelayMs))
       }
@@ -356,7 +360,7 @@ function waitForSessionStopCompletion(input: {
           force: input.force,
           message:
             terminal._tag === "HostUnavailable"
-              ? terminal.message ?? "sessiond unavailable after stop request"
+              ? (terminal.message ?? "sessiond unavailable after stop request")
               : "sessiond not configured after stop request",
         }
       }

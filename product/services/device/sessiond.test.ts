@@ -1,7 +1,7 @@
+import { describe, expect, it } from "bun:test"
 import { mkdtemp, rm, stat } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { describe, expect, it } from "bun:test"
 import type { LaunchResult, LaunchSpec } from "@platform/library/launcher"
 import type { SessiondManagedLaunchEvent } from "@platform/library/sessiond-managed-launch-protocol"
 import {
@@ -15,13 +15,13 @@ import type {
   ReapOutcome,
   ReapRequest,
 } from "./sessiond-gamescope-reaper"
-import type { SteamForegroundProcessInfo } from "./steam-foreground-processes"
 import type { SessionRole } from "./sessiond-role"
 import type { KorriWindowSnapshot } from "./sessiond-state"
 import type {
   SessiondLifecycleSnapshot,
   StatusSidecar,
 } from "./sessiond-status-sidecar"
+import type { SteamForegroundProcessInfo } from "./steam-foreground-processes"
 
 const spec: LaunchSpec = { command: "/bin/game", args: ["rom.smc"] }
 
@@ -139,7 +139,10 @@ function startHarness(
       ? { steamForegroundProcessScanner: options.steamForegroundProcessScanner }
       : {}),
     ...(options.steamForegroundProcessSignaler
-      ? { steamForegroundProcessSignaler: options.steamForegroundProcessSignaler }
+      ? {
+          steamForegroundProcessSignaler:
+            options.steamForegroundProcessSignaler,
+        }
       : {}),
     ...(options.steamForegroundKillGraceMs !== undefined
       ? { steamForegroundKillGraceMs: options.steamForegroundKillGraceMs }
@@ -872,7 +875,8 @@ describe("korri sessiond", () => {
         result: control.promise,
         processGroupId: 584400,
         terminate: () => undefined,
-        terminateNow: () => control.resolve({ status: "failed", exitCode: 137 }),
+        terminateNow: () =>
+          control.resolve({ status: "failed", exitCode: 137 }),
       }),
     })
     await request(core, "/control/start", authorized({ method: "POST" }))

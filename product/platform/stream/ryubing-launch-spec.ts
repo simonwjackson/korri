@@ -93,11 +93,7 @@ export function renderRyubingConfig(
   put(config, "aspect_ratio", kebabEnum(policy.graphics?.["aspect-ratio"]))
   put(config, "anti_aliasing", kebabEnum(policy.graphics?.["anti-aliasing"]))
   put(config, "scaling_filter", kebabEnum(policy.graphics?.["scaling-filter"]))
-  put(
-    config,
-    "scaling_filter_level",
-    policy.graphics?.["scaling-filter-level"],
-  )
+  put(config, "scaling_filter_level", policy.graphics?.["scaling-filter-level"])
   put(config, "enable_shader_cache", policy.graphics?.["shader-cache"])
   put(
     config,
@@ -175,7 +171,10 @@ function renderTypedHeadlessArgs(policy: RyubingPolicy): string[] {
     args.push("--graphics-backend", graphicsBackend(policy.graphics.backend))
   }
   if (policy.graphics?.["backend-threading"] !== undefined) {
-    args.push("--backend-threading", titleEnum(policy.graphics["backend-threading"]))
+    args.push(
+      "--backend-threading",
+      titleEnum(policy.graphics["backend-threading"]),
+    )
   }
   if (policy.graphics?.pptc === "disabled") args.push("--disable-ptc")
   if (policy.console?.mode === "handheld") args.push("--disable-docked-mode")
@@ -183,47 +182,51 @@ function renderTypedHeadlessArgs(policy: RyubingPolicy): string[] {
 }
 
 function renderInputConfig(
-  controllers: NonNullable<NonNullable<RyubingPolicy["input"]>["controllers"]> | undefined,
+  controllers:
+    | NonNullable<NonNullable<RyubingPolicy["input"]>["controllers"]>
+    | undefined,
 ): readonly Record<string, unknown>[] | undefined {
   if (!controllers || controllers.length === 0) return undefined
-  return controllers.map(controller => {
-    const mapping = controller.mapping ?? {}
-    return {
-      id: controller.id ?? "0",
-      name: controller.name ?? "Korri Controller",
-      input_backend: inputBackend(controller.backend),
-      player_index: playerIndex(controller.player),
-      controller_type: controllerType(controller.type),
-      left_deadzone: numberField(controller.deadzone, "left"),
-      right_deadzone: numberField(controller.deadzone, "right"),
-      left_range: numberField(controller.range, "left"),
-      right_range: numberField(controller.range, "right"),
-      trigger_threshold: controller["trigger-threshold"],
-      rumble: controller.rumble,
-      motion: controller.motion,
-      button_a: control(mapping.a),
-      button_b: control(mapping.b),
-      button_x: control(mapping.x),
-      button_y: control(mapping.y),
-      button_plus: control(mapping.plus),
-      button_minus: control(mapping.minus),
-      button_home: control(mapping.home),
-      button_l: control(mapping.l),
-      button_r: control(mapping.r),
-      button_zl: control(mapping.zl),
-      button_zr: control(mapping.zr),
-      button_left_stick: control(mapping["left-stick"]),
-      button_right_stick: control(mapping["right-stick"]),
-      dpad_up: control(mapping["dpad-up"]),
-      dpad_down: control(mapping["dpad-down"]),
-      dpad_left: control(mapping["dpad-left"]),
-      dpad_right: control(mapping["dpad-right"]),
-      left_stick_x: control(mapping["left-stick-x"]),
-      left_stick_y: control(mapping["left-stick-y"]),
-      right_stick_x: control(mapping["right-stick-x"]),
-      right_stick_y: control(mapping["right-stick-y"]),
-    }
-  }).map(removeUndefined)
+  return controllers
+    .map(controller => {
+      const mapping = controller.mapping ?? {}
+      return {
+        id: controller.id ?? "0",
+        name: controller.name ?? "Korri Controller",
+        input_backend: inputBackend(controller.backend),
+        player_index: playerIndex(controller.player),
+        controller_type: controllerType(controller.type),
+        left_deadzone: numberField(controller.deadzone, "left"),
+        right_deadzone: numberField(controller.deadzone, "right"),
+        left_range: numberField(controller.range, "left"),
+        right_range: numberField(controller.range, "right"),
+        trigger_threshold: controller["trigger-threshold"],
+        rumble: controller.rumble,
+        motion: controller.motion,
+        button_a: control(mapping.a),
+        button_b: control(mapping.b),
+        button_x: control(mapping.x),
+        button_y: control(mapping.y),
+        button_plus: control(mapping.plus),
+        button_minus: control(mapping.minus),
+        button_home: control(mapping.home),
+        button_l: control(mapping.l),
+        button_r: control(mapping.r),
+        button_zl: control(mapping.zl),
+        button_zr: control(mapping.zr),
+        button_left_stick: control(mapping["left-stick"]),
+        button_right_stick: control(mapping["right-stick"]),
+        dpad_up: control(mapping["dpad-up"]),
+        dpad_down: control(mapping["dpad-down"]),
+        dpad_left: control(mapping["dpad-left"]),
+        dpad_right: control(mapping["dpad-right"]),
+        left_stick_x: control(mapping["left-stick-x"]),
+        left_stick_y: control(mapping["left-stick-y"]),
+        right_stick_x: control(mapping["right-stick-x"]),
+        right_stick_y: control(mapping["right-stick-y"]),
+      }
+    })
+    .map(removeUndefined)
 }
 
 function put(target: Record<string, unknown>, key: string, value: unknown) {
@@ -271,11 +274,7 @@ function control(value: unknown): string | undefined {
 
 function kebabEnum(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined
-  return value
-    .split("-")
-    .filter(Boolean)
-    .map(titleEnum)
-    .join("")
+  return value.split("-").filter(Boolean).map(titleEnum).join("")
 }
 
 function titleEnum(value: string): string {
@@ -299,7 +298,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function deepMerge(base: unknown, extra: unknown): unknown {
-  if (!isRecord(base) || !isRecord(extra)) return extra === undefined ? base : extra
+  if (!isRecord(base) || !isRecord(extra))
+    return extra === undefined ? base : extra
   const merged: Record<string, unknown> = { ...base }
   for (const [key, value] of Object.entries(extra)) {
     merged[key] = deepMerge(merged[key], value)
