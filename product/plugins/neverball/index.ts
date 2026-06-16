@@ -16,9 +16,8 @@ export const neverballPlugin = plugin({
             id: "nixpkgs",
             title: "Neverball from nixpkgs",
             launch: {
-              kind: "native-executable",
-              executable: { resource: "neverball-executable" },
-              gamescope: { enable: true },
+              kind: "process",
+              executable: { resource: "neverball" },
             },
           },
         ],
@@ -26,7 +25,7 @@ export const neverballPlugin = plugin({
     ],
     resources: [
       {
-        id: "neverball-executable",
+        id: "neverball",
         kind: "executable",
         fulfill: {
           provider: "nix",

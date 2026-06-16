@@ -13,9 +13,9 @@ import { Effect } from "effect"
 
 import type {
   ExecutablePluginResource,
-  NativeExecutablePluginLaunch,
   PluginCatalogItem,
   PluginId,
+  ProcessPluginLaunch,
 } from "./index"
 import type { PluginRegistry } from "./registry"
 import type { PluginExecutableResourceResolver } from "./resources"
@@ -140,7 +140,7 @@ interface PluginReleaseContribution {
   readonly item: PluginCatalogItem
   readonly release: PluginCatalogItem["releases"][number]
   readonly resource: ExecutablePluginResource
-  readonly launch: NativeExecutablePluginLaunch
+  readonly launch: ProcessPluginLaunch
   readonly playableEntry: PlayableLibraryEntry
   readonly releaseEntry: PlayableReleaseEntry
 }
@@ -171,7 +171,7 @@ function findPluginRelease(
         `release ${releaseId ?? "<default>"} was not found`,
       )
     }
-    if (release.launch.kind !== "native-executable") {
+    if (release.launch.kind !== "process") {
       return invalidPluginRelease(
         contribution.pluginId,
         playableId,

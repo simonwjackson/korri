@@ -16,7 +16,7 @@ import {
 } from "./resources"
 
 const resource: ExecutablePluginResource = {
-  id: "neverball-executable",
+  id: "neverball",
   kind: "executable",
   fulfill: {
     provider: "nix",
@@ -30,12 +30,7 @@ describe("Nix out-link fulfillment", () => {
     const stateRoot = await mktemp()
 
     expect(outLinkPath(stateRoot, "@korri:a/b", resource.id)).toBe(
-      join(
-        stateRoot,
-        "x406b6f7272693a612f62",
-        "x6e6576657262616c6c2d65786563757461626c65",
-        "result",
-      ),
+      join(stateRoot, "x406b6f7272693a612f62", "x6e6576657262616c6c", "result"),
     )
     expect(outLinkPath(stateRoot, "@korri:a/b", resource.id)).not.toBe(
       outLinkPath(stateRoot, "@korri:a:b", resource.id),

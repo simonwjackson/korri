@@ -40,7 +40,7 @@ describe("PluginLibrarySourceLayerLive", () => {
         join(
           stateRoot,
           "x406b6f7272693a6e6576657262616c6c",
-          "x6e6576657262616c6c2d65786563757461626c65",
+          "x6e6576657262616c6c",
           "result",
           "bin",
           "neverball",
@@ -138,11 +138,7 @@ async function seedNeverballExecutable(stateRoot: string): Promise<void> {
   const executable = join(store, "bin", "neverball")
   await Bun.write(executable, "#!/bin/sh\n")
   await chmod(executable, 0o755)
-  const link = outLinkPath(
-    stateRoot,
-    "@korri:neverball",
-    "neverball-executable",
-  )
+  const link = outLinkPath(stateRoot, "@korri:neverball", "neverball")
   await mkdir(join(link, ".."), { recursive: true })
   await symlink(store, link)
 }

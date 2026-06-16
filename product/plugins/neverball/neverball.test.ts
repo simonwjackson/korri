@@ -8,7 +8,7 @@ describe("Neverball plugin descriptor", () => {
     expect(neverballPlugin.contributes.catalog).toHaveLength(1)
     expect(neverballPlugin.contributes.resources).toEqual([
       {
-        id: "neverball-executable",
+        id: "neverball",
         kind: "executable",
         fulfill: {
           provider: "nix",

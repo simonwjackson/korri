@@ -17,7 +17,7 @@ import {
 } from "./resources"
 
 const resource: ExecutablePluginResource = {
-  id: "neverball-executable",
+  id: "neverball",
   kind: "executable",
   fulfill: {
     provider: "nix",
@@ -40,7 +40,7 @@ const neverball = plugin({
           {
             id: "nixpkgs",
             launch: {
-              kind: "native-executable",
+              kind: "process",
               executable: { resource: resource.id },
               gamescope: { enable: true },
             },
@@ -84,7 +84,7 @@ describe("withPluginLibrarySource", () => {
     await expect(Effect.runPromise(source.list())).resolves.toEqual([])
   })
 
-  it("resolves a fulfilled native executable to an absolute launch spec with Gamescope policy", async () => {
+  it("resolves a fulfilled process to an absolute launch spec with Gamescope policy", async () => {
     const stateRoot = await mktemp()
     await seedExecutable(stateRoot)
     const source = withPluginLibrarySource(
@@ -103,7 +103,7 @@ describe("withPluginLibrarySource", () => {
       command: join(
         stateRoot,
         "x406b6f7272693a6e6576657262616c6c",
-        "x6e6576657262616c6c2d65786563757461626c65",
+        "x6e6576657262616c6c",
         "result",
         "bin",
         "neverball",
@@ -129,7 +129,7 @@ describe("withPluginLibrarySource", () => {
               {
                 id: "nixpkgs",
                 launch: {
-                  kind: "native-executable",
+                  kind: "process",
                   executable: { resource: "missing-resource" },
                 },
               },

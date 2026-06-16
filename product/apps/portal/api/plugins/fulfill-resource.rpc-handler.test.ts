@@ -46,18 +46,18 @@ ln -s "$store" "$out"
         handleFulfillPluginResource(
           new FulfillPluginResourcePayload({
             pluginId: "@korri:neverball",
-            resourceId: "neverball-executable",
+            resourceId: "neverball",
           }),
         ),
       )
 
       expect(response.pluginId).toBe("@korri:neverball")
-      expect(response.resourceId).toBe("neverball-executable")
+      expect(response.resourceId).toBe("neverball")
       expect(response.command).toBe(
         join(
           root,
           "x406b6f7272693a6e6576657262616c6c",
-          "x6e6576657262616c6c2d65786563757461626c65",
+          "x6e6576657262616c6c",
           "result",
           "bin",
           "neverball",
@@ -76,7 +76,7 @@ ln -s "$store" "$out"
         handleFulfillPluginResource(
           new FulfillPluginResourcePayload({
             pluginId: "@korri:neverball",
-            resourceId: "neverball-executable",
+            resourceId: "neverball",
           }),
         ),
       )
@@ -99,7 +99,7 @@ ln -s "$store" "$out"
         handleFulfillPluginResource(
           new FulfillPluginResourcePayload({
             pluginId: "@korri:neverball",
-            resourceId: "neverball-executable",
+            resourceId: "neverball",
           }),
         ),
       )

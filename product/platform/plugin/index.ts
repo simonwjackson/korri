@@ -33,10 +33,10 @@ export interface PluginCatalogRelease {
   readonly launch: PluginLaunch
 }
 
-export type PluginLaunch = NativeExecutablePluginLaunch
+export type PluginLaunch = ProcessPluginLaunch
 
-export interface NativeExecutablePluginLaunch {
-  readonly kind: "native-executable"
+export interface ProcessPluginLaunch {
+  readonly kind: "process"
   readonly executable: { readonly resource: string }
   readonly args?: readonly string[]
   readonly env?: Readonly<Record<string, string>>
