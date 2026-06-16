@@ -1,6 +1,6 @@
+import { spawn } from "node:child_process"
 import { mkdirSync } from "node:fs"
 import { dirname, resolve } from "node:path"
-import { spawn } from "node:child_process"
 
 const DEFAULT_DEVICE = "bandai"
 const DEFAULT_HOST = "bandai-guest-ip"
@@ -137,7 +137,8 @@ export function selectSwayOutput(
   if (requestedOutput === "largest") {
     return [...activeOutputs].sort(
       (left, right) =>
-        right.rect.width * right.rect.height - left.rect.width * left.rect.height,
+        right.rect.width * right.rect.height -
+        left.rect.width * left.rect.height,
     )[0]!
   }
 
@@ -214,13 +215,17 @@ export async function captureDeviceScreenshot(
 ): Promise<DeviceScreenshotResult> {
   const run = deps.run ?? runCommand
   const plan = buildDeviceScreenshotPlan(options)
-  const outputsResult = await run("ssh", ["-F", plan.sshConfig, plan.host, "bash -s"], {
-    input: [
-      "set -e",
-      'sock=$(ls -1 /run/user/2000/sway-ipc.*.sock 2>/dev/null | head -n1)',
-      'SWAYSOCK="$sock" swaymsg -t get_outputs',
-    ].join("\n"),
-  })
+  const outputsResult = await run(
+    "ssh",
+    ["-F", plan.sshConfig, plan.host, "bash -s"],
+    {
+      input: [
+        "set -e",
+        "sock=$(ls -1 /run/user/2000/sway-ipc.*.sock 2>/dev/null | head -n1)",
+        'SWAYSOCK="$sock" swaymsg -t get_outputs',
+      ].join("\n"),
+    },
+  )
   if (outputsResult.exitCode !== 0) {
     throw new DeviceScreenshotError(
       "SwayOutputsFailed",
@@ -241,7 +246,12 @@ export async function captureDeviceScreenshot(
     height: output.rect.height,
     remotePath,
     captureScript: "",
-    scpArgs: ["-F", plan.sshConfig, `${plan.host}:${remotePath}`, plan.localPath],
+    scpArgs: [
+      "-F",
+      plan.sshConfig,
+      `${plan.host}:${remotePath}`,
+      plan.localPath,
+    ],
   }
   const resolvedPlan: ResolvedDeviceScreenshotPlan = {
     ...resolvedPlanWithoutScript,
@@ -257,9 +267,13 @@ export async function captureDeviceScreenshot(
   }
 
   mkdirSync(dirname(plan.localPath), { recursive: true })
-  const captureResult = await run("ssh", ["-F", plan.sshConfig, plan.host, "bash -s"], {
-    input: resolvedPlan.captureScript,
-  })
+  const captureResult = await run(
+    "ssh",
+    ["-F", plan.sshConfig, plan.host, "bash -s"],
+    {
+      input: resolvedPlan.captureScript,
+    },
+  )
   if (captureResult.exitCode !== 0) {
     throw new DeviceScreenshotError(
       "CaptureFailed",
@@ -270,7 +284,10 @@ export async function captureDeviceScreenshot(
   const scpResult = await run("scp", resolvedPlan.scpArgs)
   await run("ssh", ["-F", plan.sshConfig, plan.host, "rm", "-f", remotePath])
   if (scpResult.exitCode !== 0) {
-    throw new DeviceScreenshotError("CopyFailed", scpResult.stderr || scpResult.stdout)
+    throw new DeviceScreenshotError(
+      "CopyFailed",
+      scpResult.stderr || scpResult.stdout,
+    )
   }
 
   return {
@@ -304,7 +321,10 @@ export function parseArgs(argv: readonly string[]): DeviceScreenshotOptions {
       continue
     }
     if (!arg.startsWith("--")) {
-      throw new DeviceScreenshotError("InvalidArgument", `Unexpected argument: ${arg}`)
+      throw new DeviceScreenshotError(
+        "InvalidArgument",
+        `Unexpected argument: ${arg}`,
+      )
     }
     const eq = arg.indexOf("=")
     if (eq !== -1) {
@@ -314,7 +334,10 @@ export function parseArgs(argv: readonly string[]): DeviceScreenshotOptions {
     const key = arg.slice(2)
     const value = argv[index + 1]
     if (!value || value.startsWith("--")) {
-      throw new DeviceScreenshotError("MissingArgument", `Missing value for --${key}`)
+      throw new DeviceScreenshotError(
+        "MissingArgument",
+        `Missing value for --${key}`,
+      )
     }
     options[key] = value
     index += 1
@@ -363,18 +386,18 @@ function runCommand(
     })
     let stdout = ""
     let stderr = ""
-    child.stdout.setEncoding("utf8")
-    child.stderr.setEncoding("utf8")
-    child.stdout.on("data", chunk => {
+    child.stdout?.setEncoding("utf8")
+    child.stderr?.setEncoding("utf8")
+    child.stdout?.on("data", chunk => {
       stdout += String(chunk)
     })
-    child.stderr.on("data", chunk => {
+    child.stderr?.on("data", chunk => {
       stderr += String(chunk)
     })
     child.on("error", error => {
       resolve({ exitCode: 127, stdout, stderr: stderr + error.message })
     })
-    if (options.input !== undefined) child.stdin.end(options.input)
+    if (options.input !== undefined) child.stdin?.end(options.input)
     child.on("close", code => {
       resolve({ exitCode: code ?? 1, stdout, stderr })
     })

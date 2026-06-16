@@ -48,19 +48,25 @@ describe("device screenshot tool", () => {
   })
 
   it("selects the largest active output by default", () => {
-    const selected = selectSwayOutput(parseSwayOutputs(swayOutputsJson), "largest")
+    const selected = selectSwayOutput(
+      parseSwayOutputs(swayOutputsJson),
+      "largest",
+    )
     expect(selected.name).toBe("DSI-2")
   })
 
   it("selects an explicit output", () => {
-    const selected = selectSwayOutput(parseSwayOutputs(swayOutputsJson), "DSI-1")
+    const selected = selectSwayOutput(
+      parseSwayOutputs(swayOutputsJson),
+      "DSI-1",
+    )
     expect(selected.name).toBe("DSI-1")
   })
 
   it("rejects missing outputs with a useful message", () => {
-    expect(() => selectSwayOutput(parseSwayOutputs(swayOutputsJson), "HDMI-A-1")).toThrow(
-      /Active outputs: DSI-1, DSI-2/,
-    )
+    expect(() =>
+      selectSwayOutput(parseSwayOutputs(swayOutputsJson), "HDMI-A-1"),
+    ).toThrow(/Active outputs: DSI-1, DSI-2/)
   })
 
   it("parses CLI arguments", () => {
@@ -82,7 +88,11 @@ describe("device screenshot tool", () => {
   })
 
   it("builds a dry-run capture plan without invoking grim or scp", async () => {
-    const calls: Array<{ command: string; args: readonly string[]; input?: string }> = []
+    const calls: Array<{
+      command: string
+      args: readonly string[]
+      input?: string
+    }> = []
     const result = await captureDeviceScreenshot(
       {
         output: "largest",
@@ -101,7 +111,9 @@ describe("device screenshot tool", () => {
 
     expect(result.plan.output).toBe("DSI-2")
     expect(result.plan.localPath).toBe("/tmp/screenshot.png")
-    expect(result.plan.remotePath).toBe("/tmp/korri-screenshot-456-123-DSI-2.png")
+    expect(result.plan.remotePath).toBe(
+      "/tmp/korri-screenshot-456-123-DSI-2.png",
+    )
     expect(result.plan.captureScript).toContain("grim")
     expect(result.plan.captureScript).toContain("-o DSI-2")
     expect(result.plan.scpArgs).toEqual([
