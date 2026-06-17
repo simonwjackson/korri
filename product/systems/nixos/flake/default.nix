@@ -274,6 +274,11 @@ flake-utils.lib.eachDefaultSystem (
     korriKioskLiveUsbRuntimeSystem = korriImages.mkLiveUsbKioskRuntimeSystem {
       platformModules = [ ../../../../product/systems/nixos/images/platforms/x86.nix ];
     };
+
+    firstPartyPluginComposition = import ./plugins.nix {
+      inherit pkgs gamescopeKorri korriGamescopeControlBridge;
+      enableGamescope = pkgs.stdenv.isLinux;
+    };
   in
   {
     packages = import ./packages.nix {
@@ -319,6 +324,7 @@ flake-utils.lib.eachDefaultSystem (
         korriKioskLiveUsbSystem
         korriKioskLiveUsbDeveloperSystem
         ;
+      pluginPackages = firstPartyPluginComposition.packages;
     };
 
     lib = import ./lib.nix {
@@ -370,6 +376,7 @@ flake-utils.lib.eachDefaultSystem (
         korriKioskLiveUsbSystem
         korriKioskLiveUsbDeveloperSystem
         ;
+      pluginApps = firstPartyPluginComposition.apps;
     };
 
     devShells = import ./dev-shells.nix {

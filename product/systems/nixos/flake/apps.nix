@@ -13,6 +13,7 @@
   korriKioskLiveUsbRuntimeSystem,
   korriKioskLiveUsbSystem,
   korriKioskLiveUsbDeveloperSystem,
+  pluginApps ? { },
   ...
 }:
 
@@ -29,18 +30,6 @@ pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
     type = "app";
     program = "${korriCli}/bin/korri";
   };
-  gamescope-control = {
-    type = "app";
-    program = "${korriGamescopeControlBridge}/bin/gamescope-control";
-  };
-  gamescope-control-bridge = {
-    type = "app";
-    program = "${korriGamescopeControlBridge}/bin/gamescope-control-bridge";
-  };
-  korri-stream-control-bench = {
-    type = "app";
-    program = "${korriGamescopeControlBridge}/bin/stream-control-bench";
-  };
   korrid = {
     type = "app";
     program = "${korrid}/bin/korrid";
@@ -54,6 +43,7 @@ pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
     program = "${korriHeadlessSource}/bin/korri-lan-stream-advertise";
   };
 }
+// pluginApps
 // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
   default = {
     type = "app";

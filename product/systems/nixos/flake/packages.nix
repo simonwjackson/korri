@@ -39,6 +39,7 @@
   korriSourceMachineSystem,
   korriKioskLiveUsbSystem,
   korriKioskLiveUsbDeveloperSystem,
+  pluginPackages ? { },
   ...
 }:
 
@@ -50,7 +51,6 @@
   korri-game-stream = korriGameStream;
   korri-sessiond = korriSessiond;
   korri-cli = korriCli;
-  korri-gamescope-control-bridge = korriGamescopeControlBridge;
   korrid = korrid;
   korri-headless-source = korriHeadlessSource;
   sunshine-korri = sunshineKorri;
@@ -58,11 +58,11 @@
   steam-korri = steamKorri;
   libretro-fake-08 = libretroFake08;
   libretro-wasm4 = libretroWasm4;
-  gamescope-korri = gamescopeKorri;
   smb-remastered = smbRemastered;
   super-mario-127 = superMario127;
   yoshis-fabrication-station = yoshisFabricationStation;
 }
+// pluginPackages
 // pkgs.lib.optionalAttrs isSupportedDesktopSystem {
   electrobun-cli = electrobunBinaries.cli;
   electrobun-core = electrobunBinaries.core;

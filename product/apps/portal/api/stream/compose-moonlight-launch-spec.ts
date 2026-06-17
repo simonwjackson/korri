@@ -7,7 +7,7 @@ import type {
 } from "@platform/library/config/inheritable-fields"
 import type { LaunchFailureKind, LaunchSpec } from "@platform/library/launcher"
 import { composeMoonlightGamescopeLaunchSpec } from "@platform/stream/moonlight-launch-spec"
-import { composeGamescopeLaunchSpec } from "@product/plugins/gamescope"
+import { composeGamescopeLaunchSpec } from "@product/plugins/gamescope/launch-companion"
 
 /**
  * Build a Moonlight `LaunchSpec` for `moonlight stream -app "Korri Stream" <host>`.

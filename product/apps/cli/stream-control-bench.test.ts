@@ -3,7 +3,7 @@ import type { MoonlightControlClient } from "@platform/stream/moonlight-control-
 import type {
   GamescopeControlClient,
   GamescopeControlCommandMethod,
-} from "@product/plugins/gamescope"
+} from "@product/plugins/gamescope/runtime-control"
 import {
   createStreamControlBenchApp,
   runStreamControlBenchCommand,

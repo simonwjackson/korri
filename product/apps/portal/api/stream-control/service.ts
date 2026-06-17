@@ -18,16 +18,18 @@ import {
   normalizeMoonlightState,
   rpcResult,
 } from "@platform/stream-control/state-normalizer"
-import type { GamescopeScalingFilter } from "@product/plugins/gamescope"
 import {
   connectGamescopeControl,
   type GamescopeControlClient,
+  type GamescopeScalingFilter,
   normalizeGamescopeState,
+} from "@product/plugins/gamescope/runtime-control"
+import {
   setGamescopeFilter,
   setGamescopeFps,
   setGamescopeMode,
   setGamescopeSharpness,
-} from "@product/plugins/gamescope"
+} from "@product/plugins/gamescope/stream-control"
 import { Context, Effect, Layer } from "effect"
 import {
   createDeviceControlService,

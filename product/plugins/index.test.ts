@@ -1,20 +1,23 @@
 import { describe, expect, it } from "bun:test"
+import { executableResources } from "@platform/plugin/registry"
 import { createFirstPartyPluginRegistryFromEnv, firstPartyPlugins } from "."
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
 
 describe("first-party plugins", () => {
-  it("registers Gamescope as a first-party launch companion plugin", () => {
+  it("registers Gamescope as a first-party handler/config plugin", () => {
     const gamescope = firstPartyPlugins.find(
       plugin => plugin.id === KORRI_GAMESCOPE_PLUGIN_ID,
     )
 
-    expect(gamescope?.contributes.launchCompanions).toEqual([
-      {
-        id: KORRI_GAMESCOPE_PLUGIN_ID,
-        role: "launch-wrapper",
-        supports: { systems: ["*"] },
-      },
-    ])
+    expect(
+      gamescope?.contributes.config.modules?.["launch-wrapper"],
+    ).toMatchObject({
+      kind: "launch-wrapper",
+      capabilities: ["launch.compose", "launch.wrapper"],
+    })
+    expect(
+      gamescope?.contributes.handlers?.map(handler => handler.operation),
+    ).toContain("launch.compose")
   })
 
   it("enables Gamescope infrastructure even when catalog plugins are disabled", () => {
@@ -23,10 +26,12 @@ describe("first-party plugins", () => {
     })
 
     expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(true)
-    expect(registry.launchCompanions.map(entry => entry.companion.id)).toEqual([
-      KORRI_GAMESCOPE_PLUGIN_ID,
-    ])
-    expect(registry.catalog).toEqual([])
+    expect(
+      registry.modules[`${KORRI_GAMESCOPE_PLUGIN_ID}/launch-wrapper`],
+    ).toMatchObject({
+      kind: "launch-wrapper",
+    })
+    expect(registry.catalog).toEqual({})
   })
 
   it("preserves env-enabled first-party catalog plugins", () => {
@@ -36,12 +41,16 @@ describe("first-party plugins", () => {
 
     expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(true)
     expect(registry.enabledPluginIds.has("@korri:neverball")).toBe(true)
-    expect(registry.launchCompanions.map(entry => entry.companion.id)).toEqual([
-      KORRI_GAMESCOPE_PLUGIN_ID,
+    expect(
+      registry.modules[`${KORRI_GAMESCOPE_PLUGIN_ID}/launch-wrapper`],
+    ).toMatchObject({
+      kind: "launch-wrapper",
+    })
+    expect(Object.keys(registry.catalog)).toEqual([
+      "@korri:neverball/neverball",
     ])
-    expect(registry.catalog.map(entry => entry.item.id)).toEqual(["neverball"])
-    expect(registry.resources.map(entry => entry.resource.id)).toEqual([
-      "neverball",
-    ])
+    expect(
+      executableResources(registry).map(entry => entry.resource.id),
+    ).toEqual(["neverball"])
   })
 })

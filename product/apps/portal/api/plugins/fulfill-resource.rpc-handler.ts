@@ -1,5 +1,6 @@
 import { DataError, NotFoundError } from "@platform/api/rpc/errors"
 import type { PluginId } from "@platform/plugin"
+import { executableResources } from "@platform/plugin/registry"
 import { Effect } from "effect"
 import { createFirstPartyPluginRegistryFromEnv } from "../../../../plugins"
 import { createPluginResourceFulfillerFromEnv } from "../../../../plugins/library-source-layer"
@@ -13,14 +14,13 @@ export const handleFulfillPluginResource = (
 ) =>
   Effect.gen(function* () {
     const registry = createFirstPartyPluginRegistryFromEnv(process.env)
-    const resource = registry.resources.find(
+    const resource = executableResources(registry).find(
       candidate =>
         candidate.pluginId === (payload.pluginId as PluginId) &&
-        candidate.resource.id === payload.resourceId &&
-        candidate.resource.kind === "executable",
+        candidate.resource.id === payload.resourceId,
     )
 
-    if (!resource || resource.resource.kind !== "executable") {
+    if (!resource) {
       return yield* Effect.fail(
         new NotFoundError({
           message: `Plugin resource ${payload.pluginId}/${payload.resourceId} is not enabled or does not exist`,

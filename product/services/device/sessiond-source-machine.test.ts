@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import type { LaunchSpec } from "@platform/library/launcher"
-import type { ProcessInfo } from "@product/plugins/gamescope"
+import type { ProcessInfo } from "@product/plugins/gamescope/session"
 import {
   formatSessionRoleReadyEvidence,
   sessionRoleReadyOutcome,

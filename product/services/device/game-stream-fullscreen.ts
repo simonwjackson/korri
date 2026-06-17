@@ -1,5 +1,5 @@
-export type { GamescopePolicy } from "@product/plugins/gamescope"
-export { composeGamescopeLaunchSpec } from "@product/plugins/gamescope"
+export type { GamescopePolicy } from "@product/plugins/gamescope/launch-companion"
+export { composeGamescopeLaunchSpec } from "@product/plugins/gamescope/launch-companion"
 
 import type {
   SwayCommandRunner,

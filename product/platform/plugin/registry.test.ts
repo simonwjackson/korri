@@ -5,6 +5,7 @@ import { plugin, runPluginHandler } from "."
 import {
   createPluginRegistry,
   DuplicatePluginId,
+  executableResources,
   parseEnabledPluginIds,
 } from "./registry"
 
@@ -13,24 +14,36 @@ const alpha = plugin({
   name: "alpha",
   title: "Alpha",
   contributes: {
-    catalog: [{ id: "one", title: "One", kind: "game", releases: [] }],
+    config: {
+      catalog: {
+        one: { id: "one", title: "One", kind: "game", releases: [] },
+      },
+    },
   },
 })
 
 const beta = plugin({ namespace: "@korri", name: "beta", title: "Beta" })
 
-const FAKE_COMPANION_ID = "@fake:wrapper" as const
-
-const launchWrapper = plugin({
+const wrapper = plugin({
   namespace: "@fake",
   name: "wrapper",
   title: "Wrapper",
   contributes: {
-    launchCompanions: [
+    config: {
+      modules: {
+        wrapper: {
+          id: "wrapper",
+          kind: "launch-wrapper",
+          supports: { systems: ["*"] },
+        },
+      },
+    },
+    handlers: [
       {
-        id: FAKE_COMPANION_ID,
-        role: "launch-wrapper",
-        supports: { systems: ["*"] },
+        id: "wrapper.compose",
+        operation: "launch.compose",
+        capabilities: ["launch.wrapper"],
+        run: context => ({ provider: context.provider, input: context.input }),
       },
     ],
   },
@@ -47,7 +60,8 @@ describe("createPluginRegistry", () => {
     expect(registry.enabledPlugins.map(plugin => plugin.id)).toEqual([
       "@korri:alpha",
     ])
-    expect(registry.catalog.map(entry => entry.item.id)).toEqual(["one"])
+    expect(Object.keys(registry.providers)).toEqual(["@korri:alpha"])
+    expect(Object.keys(registry.catalog)).toEqual(["@korri:alpha/one"])
   })
 
   it("rejects duplicate plugin ids", () => {
@@ -56,21 +70,52 @@ describe("createPluginRegistry", () => {
     )
   })
 
-  it("exposes enabled launch companion contributions", () => {
-    const registry = createPluginRegistry([launchWrapper], {
-      enabledPluginIds: [FAKE_COMPANION_ID],
+  it("exposes enabled handler and generic config contributions", () => {
+    const registry = createPluginRegistry([wrapper], {
+      enabledPluginIds: ["@fake:wrapper"],
     })
 
-    expect(registry.launchCompanions).toEqual([
-      {
-        pluginId: FAKE_COMPANION_ID,
-        companion: {
-          id: FAKE_COMPANION_ID,
-          role: "launch-wrapper",
-          supports: { systems: ["*"] },
-        },
-      },
+    expect(registry.modules["@fake:wrapper/wrapper"]).toEqual({
+      id: "wrapper",
+      kind: "launch-wrapper",
+      supports: { systems: ["*"] },
+    })
+    expect(registry.handlers.map(handler => handler.id)).toEqual([
+      "wrapper.compose",
     ])
+  })
+
+  it("projects executable resources from generic module config records", () => {
+    const resources = executableResources(
+      createPluginRegistry(
+        [
+          plugin({
+            namespace: "@korri",
+            name: "native",
+            contributes: {
+              config: {
+                modules: {
+                  app: {
+                    id: "app",
+                    kind: "executable",
+                    fulfill: {
+                      provider: "nix",
+                      installable: "nixpkgs#app",
+                      binary: "app",
+                    },
+                  },
+                },
+              },
+            },
+          }),
+        ],
+        { enabledPluginIds: ["@korri:native"] },
+      ),
+    )
+
+    expect(resources).toHaveLength(1)
+    expect(resources[0]?.recordId).toBe("@korri:native/app")
+    expect(resources[0]?.resource.fulfill.binary).toBe("app")
   })
 })
 
@@ -88,7 +133,7 @@ describe("runPluginHandler", () => {
       Effect.runPromise(
         runPluginHandler(
           { id: "plain", operation: "test", run: () => "plain" },
-          { pluginId: "@korri:alpha" },
+          { operation: "test", provider: "@korri:alpha" },
         ),
       ),
     ).resolves.toBe("plain")
@@ -101,7 +146,7 @@ describe("runPluginHandler", () => {
             operation: "test",
             run: () => Promise.resolve("promise"),
           },
-          { pluginId: "@korri:alpha" },
+          { operation: "test", provider: "@korri:alpha" },
         ),
       ),
     ).resolves.toBe("promise")
@@ -114,7 +159,7 @@ describe("runPluginHandler", () => {
             operation: "test",
             run: () => Effect.succeed("effect"),
           },
-          { pluginId: "@korri:alpha" },
+          { operation: "test", provider: "@korri:alpha" },
         ),
       ),
     ).resolves.toBe("effect")

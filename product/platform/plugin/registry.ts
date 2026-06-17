@@ -1,13 +1,15 @@
 import { Data } from "effect"
 
 import type {
+  ConfigRecord,
+  ConfigRecordMap,
   ExecutablePluginResource,
   KorriPlugin,
-  PluginCatalogItem,
+  PluginConfigContributions,
+  PluginHandler,
   PluginId,
-  PluginLaunchCompanionContribution,
-  PluginResource,
 } from "./index"
+import { parsePluginRecordId, pluginRecordId } from "./index"
 
 export class DuplicatePluginId extends Data.TaggedError("DuplicatePluginId")<{
   readonly pluginId: PluginId
@@ -22,29 +24,30 @@ export interface PluginRegistry {
   readonly enabledPlugins: readonly KorriPlugin[]
   readonly pluginIds: ReadonlySet<PluginId>
   readonly enabledPluginIds: ReadonlySet<PluginId>
-  readonly catalog: readonly PluginCatalogContribution[]
-  readonly resources: readonly PluginResourceContribution[]
-  readonly launchCompanions: readonly PluginLaunchCompanionRegistryContribution[]
+  readonly providers: ConfigRecordMap
+  readonly providerLinks: ConfigRecordMap
+  readonly storage: ConfigRecordMap
+  readonly systems: ConfigRecordMap
+  readonly apps: ConfigRecordMap
+  readonly modules: ConfigRecordMap
+  readonly runtimes: ConfigRecordMap
+  readonly profiles: ConfigRecordMap
+  readonly catalog: ConfigRecordMap
+  readonly handlers: readonly PluginHandler[]
   readonly get: (pluginId: PluginId) => KorriPlugin | undefined
 }
 
-export interface PluginCatalogContribution {
+export interface ConfigRecordContribution {
   readonly pluginId: PluginId
-  readonly item: PluginCatalogItem
-}
-
-export interface PluginResourceContribution {
-  readonly pluginId: PluginId
-  readonly resource: PluginResource
-}
-
-export interface PluginLaunchCompanionRegistryContribution {
-  readonly pluginId: PluginId
-  readonly companion: PluginLaunchCompanionContribution
+  readonly localId: string
+  readonly recordId: string
+  readonly record: ConfigRecord
 }
 
 export interface ExecutableResourceContribution {
   readonly pluginId: PluginId
+  readonly localId: string
+  readonly recordId: string
   readonly resource: ExecutablePluginResource
 }
 
@@ -70,35 +73,53 @@ export function createPluginRegistry(
     enabledPlugins,
     pluginIds: new Set(byId.keys()),
     enabledPluginIds,
-    catalog: enabledPlugins.flatMap(plugin =>
-      (plugin.contributes.catalog ?? []).map(item => ({
-        pluginId: plugin.id,
-        item,
-      })),
-    ),
-    resources: enabledPlugins.flatMap(plugin =>
-      (plugin.contributes.resources ?? []).map(resource => ({
-        pluginId: plugin.id,
-        resource,
-      })),
-    ),
-    launchCompanions: enabledPlugins.flatMap(plugin =>
-      (plugin.contributes.launchCompanions ?? []).map(companion => ({
-        pluginId: plugin.id,
-        companion,
-      })),
+    providers: mergeProviderMaps(enabledPlugins),
+    providerLinks: mergePluginConfigMaps(enabledPlugins, "providerLinks"),
+    storage: mergePluginConfigMaps(enabledPlugins, "storage"),
+    systems: mergePluginConfigMaps(enabledPlugins, "systems"),
+    apps: mergePluginConfigMaps(enabledPlugins, "apps"),
+    modules: mergePluginConfigMaps(enabledPlugins, "modules"),
+    runtimes: mergePluginConfigMaps(enabledPlugins, "runtimes"),
+    profiles: mergePluginConfigMaps(enabledPlugins, "profiles"),
+    catalog: mergePluginConfigMaps(enabledPlugins, "catalog"),
+    handlers: enabledPlugins.flatMap(
+      plugin => plugin.contributes.handlers ?? plugin.handlers,
     ),
     get: pluginId => byId.get(pluginId),
   }
 }
 
+export function configRecordContributions(
+  records: ConfigRecordMap,
+): readonly ConfigRecordContribution[] {
+  return Object.entries(records).flatMap(([recordId, record]) => {
+    const ref = parsePluginRecordId(recordId)
+    if (!ref) return []
+    return [
+      {
+        pluginId: ref.provider,
+        localId: ref.id,
+        recordId,
+        record,
+      },
+    ]
+  })
+}
+
 export function executableResources(
   registry: PluginRegistry,
 ): readonly ExecutableResourceContribution[] {
-  return registry.resources.filter(
-    (entry): entry is ExecutableResourceContribution =>
-      entry.resource.kind === "executable",
-  )
+  return configRecordContributions(registry.modules).flatMap(contribution => {
+    if (!isExecutablePluginResource(contribution.record)) return []
+    return [
+      {
+        pluginId: contribution.pluginId,
+        localId: contribution.localId,
+        recordId: contribution.recordId,
+        resource: contribution.record,
+      },
+    ]
+  })
 }
 
 export function parseEnabledPluginIds(
@@ -111,4 +132,50 @@ export function parseEnabledPluginIds(
     .filter(
       (item): item is PluginId => item.startsWith("@") && item.includes(":"),
     )
+}
+
+function mergeProviderMaps(plugins: readonly KorriPlugin[]): ConfigRecordMap {
+  return Object.assign(
+    {},
+    ...plugins.map(plugin => plugin.contributes.config.providers),
+  )
+}
+
+function mergePluginConfigMaps(
+  plugins: readonly KorriPlugin[],
+  key: Exclude<keyof PluginConfigContributions, "providers">,
+): ConfigRecordMap {
+  return Object.assign(
+    {},
+    ...plugins.map(plugin => namespaceConfig(plugin, key)),
+  )
+}
+
+function namespaceConfig(
+  plugin: KorriPlugin,
+  key: Exclude<keyof PluginConfigContributions, "providers">,
+): ConfigRecordMap {
+  const records = plugin.contributes.config[key] ?? {}
+  return Object.fromEntries(
+    Object.entries(records).map(([localId, record]) => [
+      pluginRecordId(plugin.id, localId),
+      record,
+    ]),
+  )
+}
+
+function isExecutablePluginResource(
+  record: ConfigRecord,
+): record is ConfigRecord & ExecutablePluginResource {
+  const candidate = record as Partial<ExecutablePluginResource>
+  const fulfill = candidate.fulfill as
+    | Partial<ExecutablePluginResource["fulfill"]>
+    | undefined
+  return (
+    candidate.kind === "executable" &&
+    typeof candidate.id === "string" &&
+    fulfill?.provider === "nix" &&
+    typeof fulfill.installable === "string" &&
+    typeof fulfill.binary === "string"
+  )
 }

@@ -16,7 +16,7 @@ import {
   composeMoonlightStreamLaunchSpec,
   validateMoonlightGamescopePolicy,
 } from "@platform/stream/moonlight-launch-spec"
-import { composeGamescopeLaunchSpec } from "@product/plugins/gamescope"
+import { composeGamescopeLaunchSpec } from "@product/plugins/gamescope/launch-companion"
 
 const DEFAULT_STARTUP_OBSERVE_MS = 750
 

@@ -1,4 +1,5 @@
 import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
+import { decodeGamescopePolicy } from "@platform/library/config/inheritable-fields"
 import type { LaunchSpec } from "@platform/library/launcher"
 import {
   LibraryError,
@@ -12,12 +13,14 @@ import type {
 import { Effect } from "effect"
 
 import type {
+  ConfigRecord,
   ExecutablePluginResource,
   PluginCatalogItem,
   PluginId,
   ProcessPluginLaunch,
 } from "./index"
 import type { PluginRegistry } from "./registry"
+import { configRecordContributions, executableResources } from "./registry"
 import type { PluginExecutableResourceResolver } from "./resources"
 
 export function withPluginLibrarySource(
@@ -25,9 +28,10 @@ export function withPluginLibrarySource(
   registry: PluginRegistry,
   resolver: PluginExecutableResourceResolver,
 ): LibrarySourceService {
-  const pluginEntries = registry.catalog.map(entry =>
-    playableEntryFromPluginCatalog(entry.pluginId, entry.item),
-  )
+  const pluginEntries = pluginCatalogContributions(registry).map(entry => ({
+    ...entry,
+    playableEntry: playableEntryFromPluginCatalog(entry.pluginId, entry.item),
+  }))
   return {
     ...base,
     list: () =>
@@ -36,12 +40,17 @@ export function withPluginLibrarySource(
         .pipe(
           Effect.map(games => [
             ...games,
-            ...pluginEntries.map(entry => compatGameFromPlayableEntry(entry)),
+            ...pluginEntries.map(entry =>
+              compatGameFromPlayableEntry(entry.playableEntry),
+            ),
           ]),
         ),
     listPlayableEntries: () =>
       listBasePlayableEntries(base).pipe(
-        Effect.map(entries => [...entries, ...pluginEntries]),
+        Effect.map(entries => [
+          ...entries,
+          ...pluginEntries.map(entry => entry.playableEntry),
+        ]),
       ),
     launchSpecFor: (id, releaseId) => {
       const lookup = findPluginRelease(registry, id, releaseId)
@@ -85,6 +94,27 @@ function listBasePlayableEntries(base: LibrarySourceService) {
   return base
     .list()
     .pipe(Effect.map(games => games.map(compatGameToPlayableEntry)))
+}
+
+interface PluginCatalogContribution {
+  readonly pluginId: PluginId
+  readonly localId: string
+  readonly item: PluginCatalogItem
+}
+
+function pluginCatalogContributions(
+  registry: PluginRegistry,
+): readonly PluginCatalogContribution[] {
+  return configRecordContributions(registry.catalog).flatMap(contribution => {
+    if (!isPluginCatalogItem(contribution.record)) return []
+    return [
+      {
+        pluginId: contribution.pluginId,
+        localId: contribution.localId,
+        item: contribution.record,
+      },
+    ]
+  })
 }
 
 function playableEntryFromPluginCatalog(
@@ -155,7 +185,7 @@ function findPluginRelease(
   playableId: string,
   releaseId: string | undefined,
 ): PluginReleaseLookup {
-  for (const contribution of registry.catalog) {
+  for (const contribution of pluginCatalogContributions(registry)) {
     const entry = playableEntryFromPluginCatalog(
       contribution.pluginId,
       contribution.item,
@@ -178,11 +208,10 @@ function findPluginRelease(
         `unsupported launch kind ${release.launch.kind}`,
       )
     }
-    const resource = registry.resources.find(
+    const resource = executableResources(registry).find(
       candidate =>
         candidate.pluginId === contribution.pluginId &&
-        candidate.resource.id === release.launch.executable.resource &&
-        candidate.resource.kind === "executable",
+        candidate.resource.id === release.launch.executable.resource,
     )?.resource
     if (!resource) {
       return invalidPluginRelease(
@@ -250,25 +279,94 @@ function resolvePluginLaunch(
             diagnostic: "path" in error ? error.path : error.message,
           }),
       ),
-      Effect.map(executable => {
-        const spec: LaunchSpec = {
-          command: executable.command,
-          args: contribution.launch.args ?? [],
-          ...(contribution.launch.env ? { env: contribution.launch.env } : {}),
-          ...(contribution.launch.cwd ? { cwd: contribution.launch.cwd } : {}),
-        }
-        return {
-          spec,
-          ...(contribution.launch.gamescope
-            ? { gamescope: contribution.launch.gamescope }
-            : {}),
-          playable: {
-            id: contribution.playableEntry.id,
-            itemId: contribution.playableEntry.itemId,
-            title: contribution.playableEntry.title,
+      Effect.flatMap(executable =>
+        Effect.try({
+          try: () => {
+            const spec: LaunchSpec = {
+              command: executable.command,
+              args: contribution.launch.args ?? [],
+              ...(contribution.launch.env
+                ? { env: contribution.launch.env }
+                : {}),
+              ...(contribution.launch.cwd
+                ? { cwd: contribution.launch.cwd }
+                : {}),
+            }
+            const gamescope = decodeOptionalGamescopeProviderPolicy(
+              contribution.launch.with,
+            )
+            return {
+              spec,
+              app: undefined,
+              release: contribution.releaseEntry,
+              playable: contribution.playableEntry,
+              ...(gamescope ? { gamescope } : {}),
+            }
           },
-          release: contribution.releaseEntry,
-        } satisfies ResolvedLaunch
-      }),
+          catch: error =>
+            new LibraryError({
+              reason: "config",
+              message: `Plugin playable ${contribution.playableEntry.id} from ${contribution.pluginId} has invalid launch provider options`,
+              diagnostic:
+                error instanceof Error ? error.message : String(error),
+            }),
+        }),
+      ),
     )
+}
+
+function isPluginCatalogItem(
+  record: ConfigRecord,
+): record is ConfigRecord & PluginCatalogItem {
+  const candidate = record as Partial<PluginCatalogItem>
+  return (
+    candidate.kind === "game" &&
+    typeof candidate.id === "string" &&
+    typeof candidate.title === "string" &&
+    Array.isArray(candidate.releases) &&
+    candidate.releases.every(isPluginCatalogRelease)
+  )
+}
+
+function decodeOptionalGamescopeProviderPolicy(
+  providers: ProcessPluginLaunch["with"],
+): ResolvedLaunch["gamescope"] | undefined {
+  if (!isRecord(providers)) return undefined
+  if (providers["@korri:gamescope"] === undefined) return undefined
+  return decodeGamescopePolicy(providers["@korri:gamescope"])
+}
+
+function isPluginCatalogRelease(
+  value: unknown,
+): value is PluginCatalogItem["releases"][number] {
+  const candidate = value as Partial<PluginCatalogItem["releases"][number]>
+  const launch = candidate.launch as Partial<ProcessPluginLaunch> | undefined
+  const executable = launch?.executable as
+    | { readonly resource?: unknown }
+    | undefined
+  return (
+    typeof candidate.id === "string" &&
+    (candidate.title === undefined || typeof candidate.title === "string") &&
+    launch?.kind === "process" &&
+    typeof executable?.resource === "string" &&
+    (launch.args === undefined ||
+      (Array.isArray(launch.args) &&
+        launch.args.every(item => typeof item === "string"))) &&
+    (launch.cwd === undefined || typeof launch.cwd === "string") &&
+    (launch.env === undefined || isStringRecord(launch.env)) &&
+    (launch.with === undefined || isRecord(launch.with))
+  )
+}
+
+function isStringRecord(
+  value: unknown,
+): value is Readonly<Record<string, string>> {
+  return (
+    isRecord(value) &&
+    Object.values(value).every(item => typeof item === "string")
+  )
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }

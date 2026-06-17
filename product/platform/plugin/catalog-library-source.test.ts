@@ -31,24 +31,25 @@ const neverball = plugin({
   name: "neverball",
   title: "Neverball",
   contributes: {
-    catalog: [
-      {
-        id: "neverball",
-        title: "Neverball",
-        kind: "game",
-        releases: [
-          {
-            id: "nixpkgs",
-            launch: {
-              kind: "process",
-              executable: { resource: resource.id },
-              gamescope: { enable: true },
+    config: {
+      catalog: {
+        neverball: {
+          id: "neverball",
+          title: "Neverball",
+          kind: "game",
+          releases: [
+            {
+              id: "nixpkgs",
+              launch: {
+                kind: "process",
+                executable: { resource: resource.id },
+              },
             },
-          },
-        ],
+          ],
+        },
       },
-    ],
-    resources: [resource],
+      modules: { neverball: resource },
+    },
   },
 })
 
@@ -84,7 +85,7 @@ describe("withPluginLibrarySource", () => {
     await expect(Effect.runPromise(source.list())).resolves.toEqual([])
   })
 
-  it("resolves a fulfilled process to an absolute launch spec with Gamescope policy", async () => {
+  it("resolves a fulfilled process to an absolute launch spec", async () => {
     const stateRoot = await mktemp()
     await seedExecutable(stateRoot)
     const source = withPluginLibrarySource(
@@ -110,8 +111,132 @@ describe("withPluginLibrarySource", () => {
       ),
       args: [],
     })
-    expect(resolved.gamescope).toEqual({ enable: true })
     expect(resolved.app).toBeUndefined()
+  })
+
+  it("maps provider launch options to the resolved Gamescope policy compatibility field", async () => {
+    const stateRoot = await mktemp()
+    await seedExecutable(stateRoot)
+    const withPolicy = plugin({
+      namespace: "@korri",
+      name: "neverball",
+      title: "Policy",
+      contributes: {
+        config: {
+          catalog: {
+            policy: {
+              id: "policy",
+              title: "Policy",
+              kind: "game",
+              releases: [
+                {
+                  id: "nixpkgs",
+                  launch: {
+                    kind: "process",
+                    executable: { resource: resource.id },
+                    with: { "@korri:gamescope": { enable: false } },
+                  },
+                },
+              ],
+            },
+          },
+          modules: { neverball: resource },
+        },
+      },
+    })
+    const source = withPluginLibrarySource(
+      emptySource(),
+      createPluginRegistry([withPolicy], {
+        enabledPluginIds: ["@korri:neverball"],
+      }),
+      createNixOutLinkResolver({ stateRoot }),
+    )
+
+    const resolved = await Effect.runPromise(
+      source.resolveLaunchForGame("@korri:neverball/policy"),
+    )
+
+    expect(resolved.gamescope).toEqual({ enable: false })
+  })
+
+  it("fails with a config diagnostic when launch provider options are malformed", async () => {
+    const stateRoot = await mktemp()
+    await seedExecutable(stateRoot)
+    const invalidPolicy = plugin({
+      namespace: "@korri",
+      name: "neverball",
+      title: "Policy",
+      contributes: {
+        config: {
+          catalog: {
+            policy: {
+              id: "policy",
+              title: "Policy",
+              kind: "game",
+              releases: [
+                {
+                  id: "nixpkgs",
+                  launch: {
+                    kind: "process",
+                    executable: { resource: resource.id },
+                    with: { "@korri:gamescope": { weirdKey: true } },
+                  },
+                },
+              ],
+            },
+          },
+          modules: { neverball: resource },
+        },
+      },
+    })
+    const source = withPluginLibrarySource(
+      emptySource(),
+      createPluginRegistry([invalidPolicy], {
+        enabledPluginIds: ["@korri:neverball"],
+      }),
+      createNixOutLinkResolver({ stateRoot }),
+    )
+
+    const error = await Effect.runPromise(
+      Effect.flip(source.resolveLaunchForGame("@korri:neverball/policy")),
+    )
+
+    expect(error).toBeInstanceOf(LibraryError)
+    expect(error.diagnostic).toContain("Unexpected key")
+  })
+
+  it("ignores malformed generic catalog records instead of treating them as plugin playables", async () => {
+    const malformed = plugin({
+      namespace: "@korri",
+      name: "malformed",
+      title: "Malformed",
+      contributes: {
+        config: {
+          catalog: {
+            broken: {
+              id: "broken",
+              title: "Broken",
+              kind: "game",
+              releases: [{ id: "bad", launch: { kind: "process" } }],
+            } as never,
+          },
+        },
+      },
+    })
+    const source = withPluginLibrarySource(
+      emptySource(),
+      createPluginRegistry([malformed], {
+        enabledPluginIds: ["@korri:malformed"],
+      }),
+      createNixOutLinkResolver({ stateRoot: await mktemp() }),
+    )
+
+    await expect(Effect.runPromise(source.list())).resolves.toEqual([])
+    const error = await Effect.runPromise(
+      Effect.flip(source.resolveLaunchForGame("@korri:malformed/broken")),
+    )
+    expect(error).toBeInstanceOf(LibraryError)
+    expect(error.message).toBe("missing @korri:malformed/broken")
   })
 
   it("fails closed when a matched plugin playable has an invalid descriptor", async () => {
@@ -120,22 +245,24 @@ describe("withPluginLibrarySource", () => {
       name: "broken",
       title: "Broken",
       contributes: {
-        catalog: [
-          {
-            id: "broken",
-            title: "Broken",
-            kind: "game",
-            releases: [
-              {
-                id: "nixpkgs",
-                launch: {
-                  kind: "process",
-                  executable: { resource: "missing-resource" },
+        config: {
+          catalog: {
+            broken: {
+              id: "broken",
+              title: "Broken",
+              kind: "game",
+              releases: [
+                {
+                  id: "nixpkgs",
+                  launch: {
+                    kind: "process",
+                    executable: { resource: "missing-resource" },
+                  },
                 },
-              },
-            ],
+              ],
+            },
           },
-        ],
+        },
       },
     })
     const source = withPluginLibrarySource(

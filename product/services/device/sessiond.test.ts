@@ -8,7 +8,7 @@ import type {
   GamescopeReaper,
   ReapOutcome,
   ReapRequest,
-} from "@product/plugins/gamescope"
+} from "@product/plugins/gamescope/session"
 import {
   createKorriSessiondCore,
   type KorriSessiondCore,
