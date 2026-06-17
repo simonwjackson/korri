@@ -39,6 +39,7 @@
  * - `byLauncher[L]`      → merged when the resolved launcher equals L
  */
 
+import { KORRI_GAMESCOPE_PLUGIN_ID } from "@platform/plugin/ids"
 import { Schema } from "effect"
 
 import {
@@ -359,7 +360,7 @@ export const GamescopePolicy = Schema.Struct({
 export type GamescopePolicy = Schema.Schema.Type<typeof GamescopePolicy>
 
 export const LaunchWithPolicy = Schema.Struct({
-  "@korri:gamescope": Schema.optional(GamescopePolicy),
+  [KORRI_GAMESCOPE_PLUGIN_ID]: Schema.optional(GamescopePolicy),
 })
 export type LaunchWithPolicy = Schema.Schema.Type<typeof LaunchWithPolicy>
 
@@ -370,7 +371,8 @@ export type LaunchPolicy = Schema.Schema.Type<typeof LaunchPolicy>
 
 export const gamescopePolicyFromLaunch = (layer: {
   readonly launch?: LaunchPolicy
-}): GamescopePolicy | undefined => layer.launch?.with?.["@korri:gamescope"]
+}): GamescopePolicy | undefined =>
+  layer.launch?.with?.[KORRI_GAMESCOPE_PLUGIN_ID]
 
 const NullablePositiveInteger = (label: string) =>
   Schema.NullOr(PositiveInteger(label))

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { KORRI_GAMESCOPE_PLUGIN_ID } from "@platform/plugin/ids"
 
 import {
   decodeByLauncherPayload,
@@ -864,7 +865,7 @@ describe("InheritableLayer", () => {
     const layer = decodeInheritableLayer({
       launch: {
         with: {
-          "@korri:gamescope": {
+          [KORRI_GAMESCOPE_PLUGIN_ID]: {
             enable: true,
             command: "/run/current-system/sw/bin/gamescope",
             scaling: { filter: "fsr" },
@@ -882,7 +883,7 @@ describe("InheritableLayer", () => {
       argsAppend: ["--fullscreen", "--verbose"],
       patches: ["/storage/patches/base.ips", "/storage/patches/qol.bps"],
     })
-    const gamescope = layer.launch?.with?.["@korri:gamescope"]
+    const gamescope = layer.launch?.with?.[KORRI_GAMESCOPE_PLUGIN_ID]
     expect(gamescope?.enable).toBe(true)
     expect(gamescope?.command).toBe("/run/current-system/sw/bin/gamescope")
     expect(gamescope?.scaling?.filter).toBe("fsr")
@@ -915,7 +916,19 @@ describe("InheritableLayer", () => {
       decodeInheritableLayer({
         launch: {
           with: {
-            "@korri:gamescope": { enable: true, weirdKey: "bad" },
+            [KORRI_GAMESCOPE_PLUGIN_ID]: { enable: true, weirdKey: "bad" },
+          },
+        },
+      }),
+    ).toThrow()
+  })
+
+  it("rejects unknown launch companion ids", () => {
+    expect(() =>
+      decodeInheritableLayer({
+        launch: {
+          with: {
+            "@korri:not-real": { enable: true },
           },
         },
       }),

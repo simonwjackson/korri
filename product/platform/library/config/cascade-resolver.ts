@@ -25,6 +25,7 @@
  * can pipe the error union into their own Effect chains.
  */
 
+import { KORRI_GAMESCOPE_PLUGIN_ID } from "@platform/plugin/ids"
 import { Data, Effect } from "effect"
 import {
   resolveEffectiveAppChoices,
@@ -1359,7 +1360,7 @@ const launchPolicyWithGamescope = (
 ): LaunchPolicy | undefined =>
   gamescope === undefined
     ? undefined
-    : { with: { "@korri:gamescope": gamescope } }
+    : { with: { [KORRI_GAMESCOPE_PLUGIN_ID]: gamescope } }
 
 const resolveReadableAppRecord = (
   appId: string,

@@ -1,3 +1,5 @@
+import { KORRI_GAMESCOPE_PLUGIN_ID } from "@platform/plugin/ids"
+
 import type {
   GamescopePolicy,
   LaunchPolicy,
@@ -86,13 +88,15 @@ const mergeLaunchPolicy = (
   if (base === undefined) return override
   if (override === undefined) return base
   const gamescope = mergeGamescopePolicy(
-    base.with?.["@korri:gamescope"],
-    override.with?.["@korri:gamescope"],
+    base.with?.[KORRI_GAMESCOPE_PLUGIN_ID],
+    override.with?.[KORRI_GAMESCOPE_PLUGIN_ID],
   )
   const withPolicy = {
     ...(base.with ?? {}),
     ...(override.with ?? {}),
-    ...(gamescope !== undefined ? { "@korri:gamescope": gamescope } : {}),
+    ...(gamescope !== undefined
+      ? { [KORRI_GAMESCOPE_PLUGIN_ID]: gamescope }
+      : {}),
   }
   return Object.keys(withPolicy).length > 0
     ? { ...base, ...override, with: withPolicy }

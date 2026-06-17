@@ -14,6 +14,7 @@
  * touching ProseQL.
  */
 
+import { KORRI_GAMESCOPE_PLUGIN_ID } from "@platform/plugin/ids"
 import { Schema } from "effect"
 
 import {
@@ -183,7 +184,7 @@ const GamescopeOverridePolicy = Schema.Struct({
 })
 
 const EphemeralLaunchWithPolicy = Schema.Struct({
-  "@korri:gamescope": Schema.optional(GamescopeOverridePolicy),
+  [KORRI_GAMESCOPE_PLUGIN_ID]: Schema.optional(GamescopeOverridePolicy),
 })
 
 const EphemeralLaunchBlock = Schema.Struct({

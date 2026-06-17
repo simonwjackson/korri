@@ -3,6 +3,7 @@ import { Effect } from "effect"
 
 export type PluginId = `@${string}:${string}`
 export type PluginNamespace = `@${string}`
+export type LaunchCompanionId = PluginId
 
 export interface PluginHandlerContext {
   readonly pluginId: PluginId
@@ -58,9 +59,18 @@ export interface ExecutablePluginResource {
 
 export type PluginResource = ExecutablePluginResource
 
+export interface PluginLaunchCompanionContribution {
+  readonly id: LaunchCompanionId
+  readonly role: "launch-wrapper"
+  readonly supports: {
+    readonly systems: readonly string[]
+  }
+}
+
 export interface PluginContributions {
   readonly catalog?: readonly PluginCatalogItem[]
   readonly resources?: readonly PluginResource[]
+  readonly launchCompanions?: readonly PluginLaunchCompanionContribution[]
 }
 
 export interface PluginDefinitionInput {

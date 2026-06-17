@@ -5,6 +5,7 @@ import type {
   KorriPlugin,
   PluginCatalogItem,
   PluginId,
+  PluginLaunchCompanionContribution,
   PluginResource,
 } from "./index"
 
@@ -23,6 +24,7 @@ export interface PluginRegistry {
   readonly enabledPluginIds: ReadonlySet<PluginId>
   readonly catalog: readonly PluginCatalogContribution[]
   readonly resources: readonly PluginResourceContribution[]
+  readonly launchCompanions: readonly PluginLaunchCompanionRegistryContribution[]
   readonly get: (pluginId: PluginId) => KorriPlugin | undefined
 }
 
@@ -34,6 +36,11 @@ export interface PluginCatalogContribution {
 export interface PluginResourceContribution {
   readonly pluginId: PluginId
   readonly resource: PluginResource
+}
+
+export interface PluginLaunchCompanionRegistryContribution {
+  readonly pluginId: PluginId
+  readonly companion: PluginLaunchCompanionContribution
 }
 
 export interface ExecutableResourceContribution {
@@ -73,6 +80,12 @@ export function createPluginRegistry(
       (plugin.contributes.resources ?? []).map(resource => ({
         pluginId: plugin.id,
         resource,
+      })),
+    ),
+    launchCompanions: enabledPlugins.flatMap(plugin =>
+      (plugin.contributes.launchCompanions ?? []).map(companion => ({
+        pluginId: plugin.id,
+        companion,
       })),
     ),
     get: pluginId => byId.get(pluginId),
