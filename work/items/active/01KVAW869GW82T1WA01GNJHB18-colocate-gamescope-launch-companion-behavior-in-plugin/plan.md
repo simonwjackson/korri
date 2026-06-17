@@ -1,12 +1,15 @@
 ---
 title: refactor: Move Gamescope implementation into plugin
 type: refactor
-status: active
+status: superseded
 date: 2026-06-17
 origin: work/items/active/01KVAW869GW82T1WA01GNJHB18-colocate-gamescope-launch-companion-behavior-in-plugin/item.md
+superseded_by: work/items/active/01KVBQ8J0F3E2B6Z9N2X4M5A7C-gamescope-plugin-decoupling/plan.md
 ---
 
 # refactor: Move Gamescope implementation into plugin
+
+> Superseded by `work/items/active/01KVBQ8J0F3E2B6Z9N2X4M5A7C-gamescope-plugin-decoupling/plan.md`. Do not execute this older plan; it predates the stricter zero-coupling decisions for platform/services/apps/themes/Nix.
 
 ## Summary
 
