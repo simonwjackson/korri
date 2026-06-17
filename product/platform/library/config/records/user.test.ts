@@ -17,21 +17,25 @@ describe("UserPayload", () => {
     const user = decodeUserPayload({
       displayName: "Simon",
       launcher: "retroarch",
-      gamescope: { enable: true },
+      launch: { with: { "@korri:gamescope": { enable: true } } },
       env: { LANG: "en_US.UTF-8" },
       patches: ["/patches/user.ips"],
       presets: {
         my: {
-          gamescope: { extraArgs: ["-F", "fsr"] },
+          launch: {
+            with: { "@korri:gamescope": { extraArgs: ["-F", "fsr"] } },
+          },
           patches: ["/patches/my.bps"],
         },
       },
       inherit: false,
     })
     expect(user.launcher).toBe("retroarch")
-    expect(user.gamescope?.enable).toBe(true)
+    expect(user.launch?.with?.["@korri:gamescope"]?.enable).toBe(true)
     expect(user.patches).toEqual(["/patches/user.ips"])
-    expect(user.presets?.my?.gamescope?.extraArgs).toEqual(["-F", "fsr"])
+    expect(
+      user.presets?.my?.launch?.with?.["@korri:gamescope"]?.extraArgs,
+    ).toEqual(["-F", "fsr"])
     expect(user.presets?.my?.patches).toEqual(["/patches/my.bps"])
   })
 

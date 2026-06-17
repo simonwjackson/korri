@@ -5,6 +5,7 @@ import {
   type ReadableConfigSnapshot,
   resolveReadableLaunchContext,
 } from "./cascade-resolver"
+import type { GamescopePolicy } from "./inheritable-fields"
 import type { AppRecord } from "./records/app"
 import type { HostRecord } from "./records/host"
 import type { LibraryItemRecord } from "./records/library-item"
@@ -15,14 +16,18 @@ import type { StorageRecord } from "./records/storage"
 import type { SystemRecord } from "./records/system"
 import type { UserRecord } from "./records/user"
 
+const gamescopeLaunch = (policy: GamescopePolicy) => ({
+  launch: { with: { "@korri:gamescope": policy } },
+})
+
 const host: HostRecord = {
   id: "local",
-  gamescope: {
+  ...gamescopeLaunch({
     enable: true,
     extraArgs: ["host"],
     environment: { OUTER_ONLY: "host", OUTER_UNSET: "1" },
     display: { output: { width: 640 } },
-  },
+  }),
   moonlight: {
     environment: { ML_KEEP: "host", ML_UNSET: "1" },
     input: { devices: ["/dev/input/event-host"] },
@@ -58,11 +63,11 @@ const host: HostRecord = {
 }
 const user: UserRecord = {
   id: "simon",
-  gamescope: {
+  ...gamescopeLaunch({
     extraArgs: ["user"],
     app: { environment: { WAYLAND_DISPLAY: "wayland-1" } },
     display: { output: { height: 480 } },
-  },
+  }),
   moonlight: {
     input: { devices: ["/dev/input/event-user"] },
     stream: { resolution: { height: 720 } },
@@ -101,7 +106,10 @@ const user: UserRecord = {
 const system: SystemRecord = {
   id: "genesis",
   apps: [{ id: "retroarch", runtime: "genesis-plus-gx" }],
-  gamescope: { extraArgs: ["system"], display: { nested: { width: 320 } } },
+  ...gamescopeLaunch({
+    extraArgs: ["system"],
+    display: { nested: { width: 320 } },
+  }),
   moonlight: { extraArgs: ["system"], window: { autoResize: true } },
   retroarch: { extraArgs: ["system"] },
 }
@@ -109,7 +117,10 @@ const source: SourceRecord = {
   id: "roms",
   kind: ["files"],
   storage: "roms",
-  gamescope: { extraArgs: ["source"], display: { nested: { height: 240 } } },
+  ...gamescopeLaunch({
+    extraArgs: ["source"],
+    display: { nested: { height: 240 } },
+  }),
   moonlight: { extraArgs: ["source"], platform: { name: "v4l2m2m" } },
   retroarch: {
     paths: { systemDirectory: "/bios", cacheDirectory: "/source/cache" },
@@ -122,7 +133,7 @@ const app: AppRecord = {
   command: "retroarch",
   args: ["-L", "{runtime.path}", "{content.path}"],
   systems: ["genesis"],
-  gamescope: { extraArgs: ["app"], backend: { allowDeferred: true } },
+  ...gamescopeLaunch({ extraArgs: ["app"], backend: { allowDeferred: true } }),
   moonlight: {
     extraArgs: ["app"],
     logging: { verbose: true },
@@ -136,7 +147,7 @@ const runtime: RuntimeRecord = {
   id: "genesis-plus-gx",
   kind: "libretro-core",
   path: "/cores/genesis_plus_gx.so",
-  gamescope: { extraArgs: ["runtime"], scaling: { filter: "fsr" } },
+  ...gamescopeLaunch({ extraArgs: ["runtime"], scaling: { filter: "fsr" } }),
   moonlight: { extraArgs: ["runtime"], stream: { fps: 60 } },
   retroarch: {
     core: { path: "/cores/runtime-override.so" },
@@ -145,10 +156,10 @@ const runtime: RuntimeRecord = {
 }
 const profile: ProfileRecord = {
   id: "handheld",
-  gamescope: {
+  ...gamescopeLaunch({
     extraArgs: ["profile"],
     app: { environment: { WAYLAND_DISPLAY: null } },
-  },
+  }),
   moonlight: {
     environment: { ML_UNSET: null },
     extraArgs: ["profile"],
@@ -166,14 +177,14 @@ const profile: ProfileRecord = {
 const storage: StorageRecord = { id: "roms", root: "/games" }
 const sonic: LibraryItemRecord = {
   id: "sonic-the-hedgehog",
-  gamescope: { extraArgs: ["item"] },
+  ...gamescopeLaunch({ extraArgs: ["item"] }),
   moonlight: { extraArgs: ["item"] },
   releases: [
     {
       id: "genesis",
       system: "genesis",
       target: { kind: "file", storage: "roms", path: "genesis/Sonic.md" },
-      gamescope: { extraArgs: ["release"] },
+      ...gamescopeLaunch({ extraArgs: ["release"] }),
       moonlight: { extraArgs: ["release"] },
       retroarch: {
         extraSettings: { video_font_enable: true },
@@ -198,7 +209,7 @@ const gbaPackage: LibraryItemRecord = {
   contains: {
     "super-mario-world": {
       title: "Super Mario World",
-      gamescope: { extraArgs: ["contained"] },
+      ...gamescopeLaunch({ extraArgs: ["contained"] }),
     },
   },
   releases: [
@@ -270,10 +281,10 @@ describe("resolveReadableLaunchContext", () => {
         profileId: "handheld",
         override: {
           env: { SCALE: "override" },
-          gamescope: {
+          ...gamescopeLaunch({
             extraArgs: ["override"],
             environment: { OUTER_UNSET: null },
-          },
+          }),
           moonlight: { stream: { fps: 30 } },
         },
       }),
@@ -590,14 +601,14 @@ describe("resolveReadableLaunchContext", () => {
               },
             ],
           ]),
-          apps: new Map([["retroarch", { ...app, gamescope: undefined }]]),
+          apps: new Map([["retroarch", { ...app, launch: undefined }]]),
           runtimes: new Map(),
           profiles: new Map([
             [
               "extra-args-only",
               {
                 id: "extra-args-only",
-                gamescope: { extraArgs: ["--fps-limit", "60"] },
+                ...gamescopeLaunch({ extraArgs: ["--fps-limit", "60"] }),
               },
             ],
           ]),
@@ -732,9 +743,11 @@ describe("resolveReadableLaunchContext", () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(
         steamReadableSnapshot({
-          app: steamApp({
-            gamescope: { display: { nested: { width: 854, height: 480 } } },
-          }),
+          app: steamApp(
+            gamescopeLaunch({
+              display: { nested: { width: 854, height: 480 } },
+            }),
+          ),
         }),
         { playableId: "balatro" },
       ),
@@ -752,7 +765,7 @@ describe("resolveReadableLaunchContext", () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(
         steamReadableSnapshot({
-          app: steamApp({ gamescope: { enable: false } }),
+          app: steamApp(gamescopeLaunch({ enable: false })),
         }),
         { playableId: "balatro" },
       ),
@@ -767,7 +780,7 @@ describe("resolveReadableLaunchContext", () => {
         steamReadableSnapshot({
           app: steamApp(),
           users: new Map([
-            ["simon", { id: "simon", gamescope: { enable: false } }],
+            ["simon", { id: "simon", ...gamescopeLaunch({ enable: false }) }],
           ]),
         }),
         { playableId: "balatro", userId: "simon" },

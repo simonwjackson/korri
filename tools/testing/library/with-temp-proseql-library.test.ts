@@ -7,7 +7,7 @@ import { withTempProseqlLibrary } from "./with-temp-proseql-library"
 describe("withTempProseqlLibrary", () => {
   it("seeds the six collections through real ProseQL + real disk", async () => {
     await using library = await withTempProseqlLibrary({
-      global: { gamescope: { enable: false } },
+      global: { launch: { with: { "@korri:gamescope": { enable: false } } } },
       systems: [
         {
           id: "snes",

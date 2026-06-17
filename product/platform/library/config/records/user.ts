@@ -7,7 +7,7 @@
  * surfaces as `UserNotFound`.
  *
  * Layer-bearing: a user can carry inheritable behavior fields (e.g.,
- * `gamescope.enable = true`) and presets that are always visible
+ * `launch.with."@korri:gamescope".enable = true`) and presets that are always visible
  * when the user is selected at launch time.
  *
  * Identity fields stay on `GamePayload`.
@@ -39,7 +39,6 @@ export const UserPayload = Schema.Struct({
   byLauncher: Schema.optional(ByLauncherPayload),
 
   // Inlined inheritable whitelist.
-  gamescope: InheritableLayer.fields.gamescope,
   moonlight: InheritableLayer.fields.moonlight,
   retroarch: InheritableLayer.fields.retroarch,
   ryubing: InheritableLayer.fields.ryubing,

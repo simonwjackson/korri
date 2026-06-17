@@ -422,7 +422,11 @@ describe("createLibraryRepository — readable playable entries", () => {
           id: "moonlight",
           command: "moonlight",
           args: ["stream"],
-          gamescope: { extraArgs: ["--expose-wayland"] },
+          launch: {
+            with: {
+              "@korri:gamescope": { extraArgs: ["--expose-wayland"] },
+            },
+          },
           moonlight: {
             platform: { name: "v4l2m2m" },
             input: { devices: ["/dev/input/event-app"] },

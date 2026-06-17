@@ -146,14 +146,16 @@ host:
   # Gamescope remains a separate launch wrapper policy. Moonlight policy does
   # not infer Gamescope intent by sniffing `platform.name`; if Wayland
   # Moonlight needs the nested compositor socket, say so explicitly here.
-  gamescope:
-    enable: true
-    backend:
-      type: wayland
-    window:
-      fullscreen: true
-      borderless: true
-      exposeWayland: true
+  launch:
+    with:
+      "@korri:gamescope":
+        enable: true
+        backend:
+          type: wayland
+        window:
+          fullscreen: true
+          borderless: true
+          exposeWayland: true
 
 profiles:
   sm8550-v4l2m2m-720p:

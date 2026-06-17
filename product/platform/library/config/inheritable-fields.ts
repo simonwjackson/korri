@@ -14,9 +14,10 @@
  *
  * Field-by-field merge rules (applied by the cascade resolver, not the
  * schema):
- * - `gamescope`          → deep merge per nested key; scalars last-wins
- * - `gamescope.extraArgs`→ list concat in inheritance order (least→most specific)
- * - `gamescope.command`  → scalar; more-specific wrapper command wins
+ * - `launch.with."@korri:gamescope"`
+ *                         → deep merge per nested key; scalars last-wins
+ * - Gamescope `extraArgs`→ list concat in inheritance order (least→most specific)
+ * - Gamescope `command`  → scalar; more-specific wrapper command wins
  * - `moonlight`          → deep merge per nested key; scalars last-wins
  * - `moonlight.input.devices` / `moonlight.extraArgs`
  *                         → list concat in inheritance order
@@ -40,7 +41,6 @@
 
 import { Schema } from "effect"
 
-import { LaunchSettingValue } from "./launch-block"
 import {
   isRetroArchConfigKey,
   isRetroArchPlaintextCredentialSettingKey,
@@ -48,6 +48,13 @@ import {
 } from "./retroarch-setting-policy"
 
 const STRICT = { onExcessProperty: "error" } as const
+
+export const LaunchSettingValue = Schema.Union([
+  Schema.String,
+  Schema.Number,
+  Schema.Boolean,
+])
+export type LaunchSettingValue = Schema.Schema.Type<typeof LaunchSettingValue>
 
 const finiteNumberRange = (min: number, max: number, label: string) =>
   Schema.makeFilter<number>(value =>
@@ -350,6 +357,20 @@ export const GamescopePolicy = Schema.Struct({
   extraArgs: Schema.optional(Schema.Array(Schema.String)),
 })
 export type GamescopePolicy = Schema.Schema.Type<typeof GamescopePolicy>
+
+export const LaunchWithPolicy = Schema.Struct({
+  "@korri:gamescope": Schema.optional(GamescopePolicy),
+})
+export type LaunchWithPolicy = Schema.Schema.Type<typeof LaunchWithPolicy>
+
+export const LaunchPolicy = Schema.Struct({
+  with: Schema.optional(LaunchWithPolicy),
+})
+export type LaunchPolicy = Schema.Schema.Type<typeof LaunchPolicy>
+
+export const gamescopePolicyFromLaunch = (layer: {
+  readonly launch?: LaunchPolicy
+}): GamescopePolicy | undefined => layer.launch?.with?.["@korri:gamescope"]
 
 const NullablePositiveInteger = (label: string) =>
   Schema.NullOr(PositiveInteger(label))
@@ -1120,7 +1141,7 @@ export const normalizeGamescopePolicy = (
  * cascade merge rules don't change.
  */
 export const InheritableLayer = Schema.Struct({
-  gamescope: Schema.optional(GamescopePolicy),
+  launch: Schema.optional(LaunchPolicy),
   moonlight: Schema.optional(MoonlightPolicy),
   retroarch: Schema.optional(RetroArchPolicy),
   ryubing: Schema.optional(RyubingPolicy),

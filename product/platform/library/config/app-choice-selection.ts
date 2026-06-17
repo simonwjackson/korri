@@ -1,5 +1,6 @@
 import type {
   GamescopePolicy,
+  LaunchPolicy,
   MoonlightPolicy,
   RetroArchPolicy,
   SteamPolicy,
@@ -40,6 +41,21 @@ const mergeSteamExtra = (
   }
 }
 
+const mergeLaunchPolicy = (
+  base: LaunchPolicy | undefined,
+  override: LaunchPolicy | undefined,
+): LaunchPolicy | undefined => {
+  if (base === undefined) return override
+  if (override === undefined) return base
+  const gamescope = mergeObject(
+    base.with?.["@korri:gamescope"],
+    override.with?.["@korri:gamescope"],
+  ) as GamescopePolicy | undefined
+  return gamescope === undefined
+    ? { ...base, ...override }
+    : { with: { "@korri:gamescope": gamescope } }
+}
+
 const spreadSteamExtra = (
   base: SteamPolicy["extra"] | undefined,
   override: SteamPolicy["extra"] | undefined,
@@ -54,13 +70,8 @@ const mergeChoice = (base: AppChoice, override: AppChoice): AppChoice => ({
   ...((override.runtime ?? base.runtime)
     ? { runtime: override.runtime ?? base.runtime }
     : {}),
-  ...(mergeObject(base.gamescope, override.gamescope) !== undefined
-    ? {
-        gamescope: mergeObject(
-          base.gamescope,
-          override.gamescope,
-        ) as GamescopePolicy,
-      }
+  ...(mergeLaunchPolicy(base.launch, override.launch) !== undefined
+    ? { launch: mergeLaunchPolicy(base.launch, override.launch) }
     : {}),
   ...(mergeObject(base.moonlight, override.moonlight) !== undefined
     ? {

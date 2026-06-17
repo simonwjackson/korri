@@ -17,15 +17,19 @@ describe("PresetPayload", () => {
     expect(preset.launcher).toBe("snes9x")
   })
 
-  it("decodes inheritable behavior fields (gamescope, env, cwd, argsAppend, patches)", () => {
+  it("decodes inheritable behavior fields (launch.with Gamescope, env, cwd, argsAppend, patches)", () => {
     const preset = decodePresetPayload({
-      gamescope: { enable: true, extraArgs: ["-F", "fsr"] },
+      launch: {
+        with: {
+          "@korri:gamescope": { enable: true, extraArgs: ["-F", "fsr"] },
+        },
+      },
       env: { SDL_VIDEODRIVER: "x11" },
       cwd: "/storage/roms",
       argsAppend: ["--fullscreen"],
       patches: ["/patches/color.ips"],
     })
-    expect(preset.gamescope?.enable).toBe(true)
+    expect(preset.launch?.with?.["@korri:gamescope"]?.enable).toBe(true)
     expect(preset.env?.SDL_VIDEODRIVER).toBe("x11")
     expect(preset.cwd).toBe("/storage/roms")
     expect(preset.argsAppend).toEqual(["--fullscreen"])

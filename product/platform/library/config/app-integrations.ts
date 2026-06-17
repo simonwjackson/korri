@@ -6,11 +6,12 @@ import {
   IncompatibleModule,
   type ResolutionError,
 } from "./errors"
-import type {
-  GamescopePolicy,
-  MoonlightPolicy,
-  RetroArchPolicy,
-  RyubingPolicy,
+import {
+  type GamescopePolicy,
+  gamescopePolicyFromLaunch,
+  type MoonlightPolicy,
+  type RetroArchPolicy,
+  type RyubingPolicy,
 } from "./inheritable-fields"
 import type { LaunchSettings } from "./launch-block"
 import { mergeLaunchSettings } from "./launch-block"
@@ -207,13 +208,16 @@ const mergeDescriptor = (
   appOverride: AppRecord | undefined,
   legacyLauncher: LauncherRecord | undefined,
 ): AppDescriptor => {
+  const appOverrideGamescope = appOverride
+    ? gamescopePolicyFromLaunch(appOverride)
+    : undefined
+  const legacyLauncherGamescope = legacyLauncher
+    ? gamescopePolicyFromLaunch(legacyLauncher)
+    : undefined
   const gamescope =
-    appOverride?.gamescope !== undefined
-      ? mergeBuiltInAppGamescopePolicy(base.gamescope, appOverride.gamescope)
-      : mergeBuiltInAppGamescopePolicy(
-          base.gamescope,
-          legacyLauncher?.gamescope,
-        )
+    appOverrideGamescope !== undefined
+      ? mergeBuiltInAppGamescopePolicy(base.gamescope, appOverrideGamescope)
+      : mergeBuiltInAppGamescopePolicy(base.gamescope, legacyLauncherGamescope)
   return {
     ...base,
     capabilities: base.capabilities,
@@ -275,7 +279,7 @@ const launcherToDescriptor = (launcher: LauncherRecord): AppDescriptor => ({
   args: launcher.args,
   systems: launcher.systems,
   policy: launcher.policy,
-  gamescope: launcher.gamescope,
+  gamescope: gamescopePolicyFromLaunch(launcher),
   moonlight: launcher.moonlight,
   retroarch: launcher.retroarch,
   ryubing: launcher.ryubing,

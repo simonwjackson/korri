@@ -20,7 +20,7 @@ export const AppChoice = Schema.Struct({
   "launch-options": SteamPolicy.fields["launch-options"],
   extra: SteamPolicy.fields.extra,
 
-  gamescope: InheritableLayer.fields.gamescope,
+  launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
   retroarch: InheritableLayer.fields.retroarch,
   env: InheritableLayer.fields.env,

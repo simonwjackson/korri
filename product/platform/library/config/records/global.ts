@@ -40,7 +40,6 @@ export const GlobalConfigPayload = Schema.Struct({
   byLauncher: Schema.optional(ByLauncherPayload),
 
   // Inlined inheritable whitelist.
-  gamescope: InheritableLayer.fields.gamescope,
   moonlight: InheritableLayer.fields.moonlight,
   retroarch: InheritableLayer.fields.retroarch,
   ryubing: InheritableLayer.fields.ryubing,

@@ -31,7 +31,6 @@ export const CollectionPayload = Schema.Struct({
   presets: Schema.optional(PresetMapPayload),
   byLauncher: Schema.optional(ByLauncherPayload),
 
-  gamescope: InheritableLayer.fields.gamescope,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,

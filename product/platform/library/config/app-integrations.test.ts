@@ -159,7 +159,13 @@ describe("resolveAppDescriptor", () => {
           {
             id: "steam",
             kind: "steam",
-            gamescope: { display: { nested: { width: 854, height: 480 } } },
+            launch: {
+              with: {
+                "@korri:gamescope": {
+                  display: { nested: { width: 854, height: 480 } },
+                },
+              },
+            },
             state: { root: "/steam-home" },
           },
         ]),
@@ -182,7 +188,7 @@ describe("resolveAppDescriptor", () => {
             id: "steam",
             kind: "steam",
             command: "/usr/bin/steam-custom",
-            gamescope: { enable: false },
+            launch: { with: { "@korri:gamescope": { enable: false } } },
             state: { root: "/steam-home" },
           },
         ]),
@@ -203,7 +209,13 @@ describe("resolveAppDescriptor", () => {
           {
             id: "steam",
             kind: "steam",
-            gamescope: { display: { nested: { width: 854, height: 480 } } },
+            launch: {
+              with: {
+                "@korri:gamescope": {
+                  display: { nested: { width: 854, height: 480 } },
+                },
+              },
+            },
             state: { root: "/steam-home" },
           },
         ]),
@@ -213,7 +225,7 @@ describe("resolveAppDescriptor", () => {
             command: "steam",
             args: [],
             systems: [],
-            gamescope: { enable: false },
+            launch: { with: { "@korri:gamescope": { enable: false } } },
           },
         ]),
       }),
@@ -236,7 +248,13 @@ describe("resolveAppDescriptor", () => {
             command: "steam",
             args: [],
             systems: [],
-            gamescope: { display: { nested: { width: 854, height: 480 } } },
+            launch: {
+              with: {
+                "@korri:gamescope": {
+                  display: { nested: { width: 854, height: 480 } },
+                },
+              },
+            },
           },
         ]),
       }),

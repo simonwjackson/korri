@@ -19,9 +19,13 @@ describe("CollectionPayload", () => {
   it("decodes optional layer-bearing fields (presets reserved for future)", () => {
     const collection = decodeCollectionPayload({
       title: "Classics",
-      presets: { feature: { gamescope: { enable: true } } },
+      presets: {
+        feature: { launch: { with: { "@korri:gamescope": { enable: true } } } },
+      },
     })
-    expect(collection.presets?.feature?.gamescope?.enable).toBe(true)
+    expect(
+      collection.presets?.feature?.launch?.with?.["@korri:gamescope"]?.enable,
+    ).toBe(true)
   })
 
   it("rejects identity-field bypass", () => {

@@ -92,17 +92,17 @@ describe("GamePayload", () => {
     expect(game.collections).toEqual(["classics-1990s", "racing"])
   })
 
-  it("decodes inheritable layer fields (gamescope, env, cwd, argsAppend, patches)", () => {
+  it("decodes inheritable layer fields (launch.with Gamescope, env, cwd, argsAppend, patches)", () => {
     const game = decodeGamePayload({
       system: "snes",
       contentPath: "/x.smc",
-      gamescope: { enable: true },
+      launch: { with: { "@korri:gamescope": { enable: true } } },
       env: { SDL_VIDEODRIVER: "x11" },
       cwd: "/storage/roms",
       argsAppend: ["--fullscreen"],
       patches: ["/patches/base.ips", "/patches/qol.bps"],
     })
-    expect(game.gamescope?.enable).toBe(true)
+    expect(game.launch?.with?.["@korri:gamescope"]?.enable).toBe(true)
     expect(game.env?.SDL_VIDEODRIVER).toBe("x11")
     expect(game.patches).toEqual(["/patches/base.ips", "/patches/qol.bps"])
   })
@@ -113,7 +113,11 @@ describe("GamePayload", () => {
       contentPath: "/x.smc",
       presets: {
         "max-quality": {
-          gamescope: { enable: true, extraArgs: ["-F", "fsr"] },
+          launch: {
+            with: {
+              "@korri:gamescope": { enable: true, extraArgs: ["-F", "fsr"] },
+            },
+          },
         },
       },
       byLauncher: {
@@ -123,7 +127,9 @@ describe("GamePayload", () => {
         },
       },
     })
-    expect(game.presets?.["max-quality"]?.gamescope?.enable).toBe(true)
+    expect(
+      game.presets?.["max-quality"]?.launch?.with?.["@korri:gamescope"]?.enable,
+    ).toBe(true)
     expect(game.byLauncher?.retroarch?.argsAppend).toEqual([
       "-L",
       "snes9x_libretro.so",

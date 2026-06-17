@@ -182,6 +182,19 @@ const GamescopeOverridePolicy = Schema.Struct({
   hdr: Schema.optional(GamescopeOverrideHdrPolicy),
 })
 
+const EphemeralLaunchWithPolicy = Schema.Struct({
+  "@korri:gamescope": Schema.optional(GamescopeOverridePolicy),
+})
+
+const EphemeralLaunchBlock = Schema.Struct({
+  ...LaunchBlock.fields,
+  with: Schema.optional(EphemeralLaunchWithPolicy),
+})
+
+const EphemeralLaunchPolicy = Schema.Struct({
+  with: Schema.optional(EphemeralLaunchWithPolicy),
+})
+
 const MoonlightOverrideResolutionPolicy = Schema.Struct({
   width: Schema.optional(PositiveInteger("stream.resolution.width")),
   height: Schema.optional(PositiveInteger("stream.resolution.height")),
@@ -258,7 +271,7 @@ const MoonlightOverridePolicy = Schema.Struct({
 })
 
 const EphemeralInheritableLayer = Schema.Struct({
-  gamescope: Schema.optional(GamescopeOverridePolicy),
+  launch: Schema.optional(EphemeralLaunchPolicy),
   moonlight: Schema.optional(MoonlightOverridePolicy),
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
@@ -272,7 +285,7 @@ const EphemeralByLauncherPayload = Schema.Record(
 )
 
 export const EphemeralOverride = Schema.Struct({
-  launch: Schema.optional(LaunchBlock),
+  launch: Schema.optional(EphemeralLaunchBlock),
   launcher: Schema.optional(Schema.String),
   inherit: Schema.optional(Schema.Boolean),
   byLauncher: Schema.optional(EphemeralByLauncherPayload),
@@ -282,7 +295,6 @@ export const EphemeralOverride = Schema.Struct({
   // app.library.launch is unauthenticated on trusted-LAN deployments, so
   // runtime overrides must not expose command/env/raw-argv/key storage/path
   // process surfaces.
-  gamescope: Schema.optional(GamescopeOverridePolicy),
   moonlight: Schema.optional(MoonlightOverridePolicy),
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,

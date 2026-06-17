@@ -1,13 +1,10 @@
 import { Schema } from "effect"
 
+import { LaunchSettingValue, LaunchWithPolicy } from "./inheritable-fields"
+
 const STRICT = { onExcessProperty: "error" } as const
 
-export const LaunchSettingValue = Schema.Union([
-  Schema.String,
-  Schema.Number,
-  Schema.Boolean,
-])
-export type LaunchSettingValue = Schema.Schema.Type<typeof LaunchSettingValue>
+export { LaunchSettingValue }
 
 export const LaunchSettings = Schema.Record(Schema.String, LaunchSettingValue)
 export type LaunchSettings = Schema.Schema.Type<typeof LaunchSettings>
@@ -16,6 +13,7 @@ export const LaunchBlock = Schema.Struct({
   app: Schema.optional(Schema.String),
   module: Schema.optional(Schema.String),
   settings: Schema.optional(LaunchSettings),
+  with: Schema.optional(LaunchWithPolicy),
   args: Schema.optional(Schema.Array(Schema.String)),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   cwd: Schema.optional(Schema.String),

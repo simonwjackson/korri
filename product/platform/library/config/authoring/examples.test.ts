@@ -280,6 +280,7 @@ describe("checked-in readable library example", () => {
       /\bcommands\s*:/,
       /\bruntimeSettings\s*:/,
       /\badaptationSpike\s*:/,
+      /^\s*gamescope\s*:/m,
     ]
 
     for (const pattern of forbidden) {
@@ -288,7 +289,7 @@ describe("checked-in readable library example", () => {
 
     const lines = example.split("\n")
     for (const [index, line] of lines.entries()) {
-      if (line.trim() !== "gamescope:") continue
+      if (line.trim() !== '"@korri:gamescope":') continue
       const baseIndent = line.length - line.trimStart().length
       let directChildIndent: number | undefined
       for (const nested of lines.slice(index + 1)) {

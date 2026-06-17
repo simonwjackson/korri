@@ -862,11 +862,15 @@ describe("InheritableLayer", () => {
 
   it("decodes a layer carrying every supported inheritable field", () => {
     const layer = decodeInheritableLayer({
-      gamescope: {
-        enable: true,
-        command: "/run/current-system/sw/bin/gamescope",
-        scaling: { filter: "fsr" },
-        extraArgs: ["--unmodelled-flag"],
+      launch: {
+        with: {
+          "@korri:gamescope": {
+            enable: true,
+            command: "/run/current-system/sw/bin/gamescope",
+            scaling: { filter: "fsr" },
+            extraArgs: ["--unmodelled-flag"],
+          },
+        },
       },
       moonlight: {
         command: "/run/current-system/sw/bin/moonlight",
@@ -878,12 +882,11 @@ describe("InheritableLayer", () => {
       argsAppend: ["--fullscreen", "--verbose"],
       patches: ["/storage/patches/base.ips", "/storage/patches/qol.bps"],
     })
-    expect(layer.gamescope?.enable).toBe(true)
-    expect(layer.gamescope?.command).toBe(
-      "/run/current-system/sw/bin/gamescope",
-    )
-    expect(layer.gamescope?.scaling?.filter).toBe("fsr")
-    expect(layer.gamescope?.extraArgs).toEqual(["--unmodelled-flag"])
+    const gamescope = layer.launch?.with?.["@korri:gamescope"]
+    expect(gamescope?.enable).toBe(true)
+    expect(gamescope?.command).toBe("/run/current-system/sw/bin/gamescope")
+    expect(gamescope?.scaling?.filter).toBe("fsr")
+    expect(gamescope?.extraArgs).toEqual(["--unmodelled-flag"])
     expect(layer.moonlight?.platform?.name).toBe("v4l2m2m")
     expect(layer.moonlight?.input?.devices).toEqual(["/dev/input/event10"])
     expect(layer.env?.LANG).toBe("en_US.UTF-8")
@@ -901,10 +904,20 @@ describe("InheritableLayer", () => {
     ).toThrow()
   })
 
-  it("rejects a gamescope sub-object with an unknown key", () => {
+  it("rejects the old top-level gamescope field", () => {
+    expect(() =>
+      decodeInheritableLayer({ gamescope: { enable: true } }),
+    ).toThrow()
+  })
+
+  it("rejects a launch companion gamescope sub-object with an unknown key", () => {
     expect(() =>
       decodeInheritableLayer({
-        gamescope: { enable: true, weirdKey: "bad" },
+        launch: {
+          with: {
+            "@korri:gamescope": { enable: true, weirdKey: "bad" },
+          },
+        },
       }),
     ).toThrow()
   })

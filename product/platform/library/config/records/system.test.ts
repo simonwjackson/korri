@@ -24,7 +24,7 @@ describe("SystemPayload", () => {
       /apps\[\]|system\.launcher/i,
     )
     expect(() => decodeSystemPayload({ launch: { app: "retroarch" } })).toThrow(
-      /apps\[\]|system\.launch/i,
+      /Unexpected key|launch/i,
     )
   })
 
@@ -54,12 +54,15 @@ describe("SystemPayload", () => {
   it("decodes inheritable layer + presets + byLauncher + inherit", () => {
     const system = decodeSystemPayload({
       cores: { retroarch: "snes9x_libretro.so" },
-      gamescope: { enable: false },
+      launch: { with: { "@korri:gamescope": { enable: false } } },
       env: { LANG: "C" },
       argsAppend: ["--snes"],
       patches: ["/patches/system.ips"],
       presets: {
-        perf: { gamescope: { enable: true }, patches: ["/patches/perf.bps"] },
+        perf: {
+          launch: { with: { "@korri:gamescope": { enable: true } } },
+          patches: ["/patches/perf.bps"],
+        },
       },
       byLauncher: {
         dolphin: {
@@ -69,9 +72,11 @@ describe("SystemPayload", () => {
       },
       inherit: false,
     })
-    expect(system.gamescope?.enable).toBe(false)
+    expect(system.launch?.with?.["@korri:gamescope"]?.enable).toBe(false)
     expect(system.patches).toEqual(["/patches/system.ips"])
-    expect(system.presets?.perf?.gamescope?.enable).toBe(true)
+    expect(
+      system.presets?.perf?.launch?.with?.["@korri:gamescope"]?.enable,
+    ).toBe(true)
     expect(system.presets?.perf?.patches).toEqual(["/patches/perf.bps"])
     expect(system.byLauncher?.dolphin?.argsAppend).toEqual(["--snes-mode"])
     expect(system.byLauncher?.dolphin?.patches).toEqual([

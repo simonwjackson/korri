@@ -32,7 +32,8 @@ export const SystemPayload = Schema.Struct({
   cores: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 
   // Legacy readable app selection fields are rejected; use apps[].
-  launch: Schema.optional(Schema.Unknown),
+  // launch.with remains the authored launch companion slot.
+  launch: InheritableLayer.fields.launch,
   launcher: Schema.optional(Schema.Unknown),
 
   // App choices available to releases in this system.
@@ -44,7 +45,6 @@ export const SystemPayload = Schema.Struct({
   byLauncher: Schema.optional(ByLauncherPayload),
 
   // Inlined inheritable whitelist.
-  gamescope: InheritableLayer.fields.gamescope,
   moonlight: InheritableLayer.fields.moonlight,
   retroarch: InheritableLayer.fields.retroarch,
   ryubing: InheritableLayer.fields.ryubing,
@@ -55,12 +55,6 @@ export const SystemPayload = Schema.Struct({
 }).pipe(
   Schema.check(
     Schema.makeFilter(system => {
-      if (system.launch !== undefined) {
-        return {
-          path: ["launch"],
-          issue: "system.launch was removed; use system.apps[] choices",
-        }
-      }
       if (system.launcher !== undefined) {
         return {
           path: ["launcher"],

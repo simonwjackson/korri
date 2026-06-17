@@ -128,8 +128,10 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
         [
           "host:",
           "  title: AKA desktop host",
-          "  gamescope:",
-          "    enable: true",
+          "  launch:",
+          "    with:",
+          '      "@korri:gamescope":',
+          "        enable: true",
           "storage:",
           "  roms:",
           "    root: /games",
@@ -250,10 +252,12 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
           "      mappingFile: /nix/store/moonlight/share/moonlight/gamecontrollerdb.txt",
           "    platform:",
           "      name: v4l2m2m",
-          "  gamescope:",
-          "    app:",
-          "      environment:",
-          "        WAYLAND_DISPLAY: null",
+          "  launch:",
+          "    with:",
+          '      "@korri:gamescope":',
+          "        app:",
+          "          environment:",
+          "            WAYLAND_DISPLAY: null",
           "",
         ].join("\n"),
         "utf8",
@@ -278,9 +282,11 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
           "  retroarch:",
           "    command: retroarch",
           '    args: ["-L", "{runtime.path}", "{content.path}"]',
-          "    gamescope:",
-          "      backend:",
-          "        type: drm",
+          "    launch:",
+          "      with:",
+          '        "@korri:gamescope":',
+          "          backend:",
+          "            type: drm",
           "library:",
           "  zelda:",
           "    title: Zelda",
@@ -317,8 +323,9 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
         ),
       )
 
-      expect(loaded.app.gamescope?.backend?.type).toBe("drm")
-      expect(loaded.app.gamescope?.app?.environment).toBeUndefined()
+      const appGamescope = loaded.app.launch?.with?.["@korri:gamescope"]
+      expect(appGamescope?.backend?.type).toBe("drm")
+      expect(appGamescope?.app?.environment).toBeUndefined()
       expect(loaded.launch.spec.command).toBe("retroarch")
       expect(loaded.launch.spec.args).toContain("/cores/snes9x_libretro.so")
       expect(loaded.launch.spec.args).toContain("/roms/snes/zelda.sfc")
@@ -393,10 +400,12 @@ describe("openKorriLibraryDb — platform-default collision guard", () => {
         [
           "apps:",
           "  retroarch:",
-          "    gamescope:",
-          "      app:",
-          "        environment:",
-          "          WAYLAND_DISPLAY: null",
+          "    launch:",
+          "      with:",
+          '        "@korri:gamescope":',
+          "          app:",
+          "            environment:",
+          "              WAYLAND_DISPLAY: null",
           "",
         ].join("\n"),
         "utf8",

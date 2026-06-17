@@ -70,7 +70,7 @@ export const LibraryReleasePayload = Schema.Struct({
   apps: Schema.optional(AppChoiceList),
   display: Schema.optional(DisplayMetadata),
 
-  gamescope: InheritableLayer.fields.gamescope,
+  launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
   retroarch: InheritableLayer.fields.retroarch,
   ryubing: InheritableLayer.fields.ryubing,
@@ -145,7 +145,7 @@ export const ContainedPlayablePayload = Schema.Struct({
   collections: Schema.optional(Schema.Array(NonEmptyString)),
   display: Schema.optional(DisplayMetadata),
 
-  gamescope: InheritableLayer.fields.gamescope,
+  launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
   retroarch: InheritableLayer.fields.retroarch,
   ryubing: InheritableLayer.fields.ryubing,
@@ -185,7 +185,7 @@ export const LibraryItemPayload = Schema.Struct({
   contains: Schema.optional(ContainsMap),
   releases: ReleaseList,
 
-  gamescope: InheritableLayer.fields.gamescope,
+  launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
   retroarch: InheritableLayer.fields.retroarch,
   ryubing: InheritableLayer.fields.ryubing,

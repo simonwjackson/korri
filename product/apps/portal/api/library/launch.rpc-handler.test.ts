@@ -1106,7 +1106,7 @@ async function withTempProseqlLibrary(
           const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
           const repository = createLibraryRepository(db)
           yield* repository.upsertGlobalConfig({
-            gamescope: { enable: false },
+            launch: { with: { "@korri:gamescope": { enable: false } } },
           })
           yield* repository.upsertGame({
             id: "snes/echo.smc",

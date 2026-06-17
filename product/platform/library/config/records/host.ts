@@ -9,7 +9,7 @@ export const HostPayload = Schema.Struct({
 
   // Host is the least-specific local machine layer. It is intentionally a
   // plain block: no role taxonomy, launch block, or nested profile defaults.
-  gamescope: InheritableLayer.fields.gamescope,
+  launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
   retroarch: InheritableLayer.fields.retroarch,
   ryubing: InheritableLayer.fields.ryubing,

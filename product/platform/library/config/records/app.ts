@@ -237,7 +237,7 @@ const AppPayloadBase = Schema.Struct({
   inherit: Schema.optional(Schema.Boolean),
   presets: Schema.optional(PresetMapPayload),
 
-  gamescope: InheritableLayer.fields.gamescope,
+  launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
   ...RetroArchPolicy.fields,
   ...RyubingFlatAppFields,

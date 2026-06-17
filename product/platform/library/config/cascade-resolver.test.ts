@@ -18,6 +18,7 @@ import {
   resolveLocalLauncherGamescopePolicy,
   resolveLocalLauncherPolicy,
 } from "./cascade-resolver"
+import type { GamescopePolicy } from "./inheritable-fields"
 import type { AppRecord } from "./records/app"
 import type { GameRecord } from "./records/game"
 import type { GlobalConfigRecord } from "./records/global"
@@ -25,6 +26,10 @@ import type { LauncherRecord } from "./records/launcher"
 import type { ModuleRecord } from "./records/module"
 import type { SystemRecord } from "./records/system"
 import type { UserRecord } from "./records/user"
+
+const gamescopeLaunch = (policy: GamescopePolicy) => ({
+  launch: { with: { "@korri:gamescope": policy } },
+})
 
 const game = (input: Partial<GameRecord> & { id: string }): GameRecord => ({
   system: "snes",
@@ -78,7 +83,7 @@ describe("resolveLocalLauncherGamescopePolicy", () => {
   it("resolves sibling local launcher Moonlight and Gamescope policies without a game id", () => {
     const snap = snapshotOf({
       global: globalConfig({
-        gamescope: { enable: false },
+        ...gamescopeLaunch({ enable: false }),
         moonlight: {
           environment: { FROM_GLOBAL: "1", UNSET_ME: "1" },
           input: { devices: ["/dev/input/event-global"] },
@@ -89,7 +94,7 @@ describe("resolveLocalLauncherGamescopePolicy", () => {
         launcher({
           id: "moonlight",
           systems: [],
-          gamescope: { extraArgs: ["--expose-wayland"] },
+          ...gamescopeLaunch({ extraArgs: ["--expose-wayland"] }),
           moonlight: {
             platform: { name: "v4l2m2m" },
             environment: { UNSET_ME: null },
@@ -103,7 +108,7 @@ describe("resolveLocalLauncherGamescopePolicy", () => {
 
     const policy = resolveLocalLauncherPolicy(snap, {
       launcherId: "moonlight",
-      override: { gamescope: { enable: true } },
+      override: gamescopeLaunch({ enable: true }),
     })
 
     expect(policy.gamescope.enable).toBe(true)
@@ -120,15 +125,15 @@ describe("resolveLocalLauncherGamescopePolicy", () => {
 
   it("resolves local launcher policy from global, launcher, and override without a game id", () => {
     const snap = snapshotOf({
-      global: globalConfig({ gamescope: { enable: false } }),
+      global: globalConfig(gamescopeLaunch({ enable: false })),
       launchers: [
         launcher({
           id: "moonlight",
           systems: [],
-          gamescope: {
+          ...gamescopeLaunch({
             command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
             extraArgs: ["--expose-wayland"],
-          },
+          }),
         }),
       ],
       games: [],
@@ -137,7 +142,7 @@ describe("resolveLocalLauncherGamescopePolicy", () => {
     expect(
       resolveLocalLauncherGamescopePolicy(snap, {
         launcherId: "moonlight",
-        override: { gamescope: { enable: true } },
+        override: gamescopeLaunch({ enable: true }),
       }),
     ).toEqual({
       enable: true,
@@ -183,7 +188,7 @@ describe("enumerateApplicablePresets", () => {
   it("collects always-visible presets from global/user/system/game", () => {
     const snap = snapshotOf({
       global: globalConfig({
-        presets: { "max-quality": { gamescope: { enable: true } } },
+        presets: { "max-quality": gamescopeLaunch({ enable: true }) },
       }),
       users: [
         user({
@@ -196,7 +201,7 @@ describe("enumerateApplicablePresets", () => {
           id: "snes",
           launcher: "retroarch",
           presets: {
-            "max-quality": { gamescope: { extraArgs: ["-W", "1920"] } },
+            "max-quality": gamescopeLaunch({ extraArgs: ["-W", "1920"] }),
           },
         }),
       ],
@@ -250,7 +255,7 @@ describe("enumerateApplicablePresets", () => {
   it("inherit:false on a preset link truncates less-specific links", () => {
     const snap = snapshotOf({
       global: globalConfig({
-        presets: { "max-quality": { gamescope: { enable: true } } },
+        presets: { "max-quality": gamescopeLaunch({ enable: true }) },
       }),
       systems: [
         system({
@@ -259,7 +264,7 @@ describe("enumerateApplicablePresets", () => {
           presets: {
             "max-quality": {
               inherit: false,
-              gamescope: { extraArgs: ["-W", "1920"] },
+              ...gamescopeLaunch({ extraArgs: ["-W", "1920"] }),
             },
           },
         }),

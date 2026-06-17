@@ -20,9 +20,10 @@ import {
 } from "@platform/library/config/cascade-resolver"
 import { composeReadableLaunchSpec } from "@platform/library/config/compose-launch-spec"
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
-import type {
-  GamescopePolicy,
-  MoonlightPolicy,
+import {
+  type GamescopePolicy,
+  gamescopePolicyFromLaunch,
+  type MoonlightPolicy,
 } from "@platform/library/config/inheritable-fields"
 import {
   listPlayableEntries as derivePlayableEntries,
@@ -583,7 +584,13 @@ function upsertLegacyLauncher(
     args: launcher.args.map(readablePlaceholderForLegacy),
     systems: launcher.systems,
     policy: launcher.policy ?? { allowedCommands: [launcher.command] },
-    ...(launcher.gamescope ? { gamescope: launcher.gamescope } : {}),
+    ...(gamescopePolicyFromLaunch(launcher)
+      ? {
+          launch: {
+            with: { "@korri:gamescope": gamescopePolicyFromLaunch(launcher) },
+          },
+        }
+      : {}),
     ...(launcher.env ? { env: launcher.env } : {}),
     ...(launcher.cwd ? { cwd: launcher.cwd } : {}),
     ...(launcher.argsAppend ? { argsAppend: launcher.argsAppend } : {}),

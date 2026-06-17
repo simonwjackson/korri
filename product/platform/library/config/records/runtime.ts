@@ -38,7 +38,7 @@ export const RuntimePayload = Schema.Struct({
   title: Schema.optional(NonEmptyString),
   tool: Schema.optional(NonEmptyString),
 
-  gamescope: InheritableLayer.fields.gamescope,
+  launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
   retroarch: InheritableLayer.fields.retroarch,
   ryubing: InheritableLayer.fields.ryubing,

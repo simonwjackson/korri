@@ -97,11 +97,15 @@ describe("readable library schema records", () => {
   it("decodes a plain host block without role/launch/profile nesting", () => {
     const host = decodeHostPayload({
       title: "AKA desktop host",
-      gamescope: { enable: true, backend: { type: "wayland" } },
+      launch: {
+        with: {
+          "@korri:gamescope": { enable: true, backend: { type: "wayland" } },
+        },
+      },
     })
 
     expect(host.title).toBe("AKA desktop host")
-    expect(host.gamescope?.enable).toBe(true)
+    expect(host.launch?.with?.["@korri:gamescope"]?.enable).toBe(true)
     expect(
       decodeHostPayload({
         moonlight: { platform: { name: "v4l2m2m" } },

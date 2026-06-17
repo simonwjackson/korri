@@ -17,12 +17,17 @@ describe("GlobalConfigPayload (singleton)", () => {
     expect(config.launcher).toBe("retroarch")
   })
 
-  it("decodes a global gamescope policy", () => {
+  it("decodes a global gamescope launch companion policy", () => {
     const config = decodeGlobalConfigPayload({
-      gamescope: { enable: false, extraArgs: ["-F", "fsr"] },
+      launch: {
+        with: {
+          "@korri:gamescope": { enable: false, extraArgs: ["-F", "fsr"] },
+        },
+      },
     })
-    expect(config.gamescope?.enable).toBe(false)
-    expect(config.gamescope?.extraArgs).toEqual(["-F", "fsr"])
+    const gamescope = config.launch?.with?.["@korri:gamescope"]
+    expect(gamescope?.enable).toBe(false)
+    expect(gamescope?.extraArgs).toEqual(["-F", "fsr"])
   })
 
   it("decodes global presets, byLauncher, env, cwd, argsAppend, patches", () => {
@@ -34,7 +39,7 @@ describe("GlobalConfigPayload (singleton)", () => {
       patches: ["/patches/global.ips"],
       presets: {
         "max-quality": {
-          gamescope: { enable: true },
+          launch: { with: { "@korri:gamescope": { enable: true } } },
           patches: ["/patches/max-quality.bps"],
         },
       },
@@ -46,7 +51,10 @@ describe("GlobalConfigPayload (singleton)", () => {
       },
     })
     expect(config.patches).toEqual(["/patches/global.ips"])
-    expect(config.presets?.["max-quality"]?.gamescope?.enable).toBe(true)
+    expect(
+      config.presets?.["max-quality"]?.launch?.with?.["@korri:gamescope"]
+        ?.enable,
+    ).toBe(true)
     expect(config.presets?.["max-quality"]?.patches).toEqual([
       "/patches/max-quality.bps",
     ])

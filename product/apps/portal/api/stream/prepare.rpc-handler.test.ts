@@ -208,7 +208,14 @@ async function withTempProseqlLibrary(): Promise<{
           yield* repository.upsertSystem({
             id: "snes",
             apps: [{ id: "rocknix-retroarch" }],
-            gamescope: { enable: true, extraArgs: ["--nested-refresh", "60"] },
+            launch: {
+              with: {
+                "@korri:gamescope": {
+                  enable: true,
+                  extraArgs: ["--nested-refresh", "60"],
+                },
+              },
+            },
           })
           yield* repository.upsertLauncher({
             id: "rocknix-retroarch",

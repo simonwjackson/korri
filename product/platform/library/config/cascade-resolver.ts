@@ -45,6 +45,8 @@ import {
 import {
   type ByLauncherPayload,
   type GamescopePolicy,
+  gamescopePolicyFromLaunch,
+  type LaunchPolicy,
   type MoonlightPolicy,
   normalizeGamescopePolicy,
   type RetroArchPolicy,
@@ -206,7 +208,7 @@ const viewOfGlobal = (g: GlobalConfigRecord | null): InheritableView =>
         launcher: g.launch?.app ?? g.launcher,
         module: g.launch?.module,
         settings: g.launch?.settings,
-        gamescope: g.gamescope,
+        gamescope: gamescopePolicyFromLaunch(g),
         moonlight: g.moonlight,
         retroarch: g.retroarch,
         ryubing: g.ryubing,
@@ -222,7 +224,7 @@ const viewOfLauncher = (l: LauncherRecord | undefined): InheritableView =>
   l
     ? {
         inherit: l.inherit,
-        gamescope: l.gamescope,
+        gamescope: gamescopePolicyFromLaunch(l),
         moonlight: l.moonlight,
         retroarch: l.retroarch,
         ryubing: l.ryubing,
@@ -240,7 +242,7 @@ const viewOfOverride = (o: EphemeralOverride): InheritableView => ({
   module: o.launch?.module,
   settings: o.launch?.settings,
   inherit: o.inherit,
-  gamescope: o.gamescope,
+  gamescope: gamescopePolicyFromLaunch(o),
   moonlight: o.moonlight,
   env: o.env,
   cwd: o.cwd,
@@ -306,8 +308,10 @@ const foldLayers = (
     if (merged.settings !== undefined) {
       settings = mergeLaunchSettings(settings, merged.settings)
     }
-    if (merged.gamescope !== undefined) {
-      gamescope = foldGamescope(gamescope, merged.gamescope)
+    const mergedGamescope =
+      merged.gamescope ?? gamescopePolicyFromLaunch(merged)
+    if (mergedGamescope !== undefined) {
+      gamescope = foldGamescope(gamescope, mergedGamescope)
     }
     if (merged.moonlight !== undefined) {
       moonlight = foldMoonlight(moonlight, merged.moonlight)
@@ -361,11 +365,14 @@ const mergeByLauncher = (
   extra: InheritableView | undefined,
 ): InheritableView => {
   if (!extra) return base
+  const baseGamescope = base.gamescope ?? gamescopePolicyFromLaunch(base)
+  const extraGamescope = extra.gamescope ?? gamescopePolicyFromLaunch(extra)
   return {
     ...base,
-    gamescope: extra.gamescope
-      ? foldGamescope(base.gamescope, extra.gamescope)
-      : base.gamescope,
+    gamescope:
+      extraGamescope !== undefined
+        ? foldGamescope(baseGamescope, extraGamescope)
+        : baseGamescope,
     moonlight: extra.moonlight
       ? foldMoonlight(base.moonlight, extra.moonlight)
       : base.moonlight,
@@ -1233,6 +1240,7 @@ export class MultiTargetUnsupported extends Data.TaggedError(
 }> {}
 
 interface ReadableOverride {
+  readonly launch?: LaunchPolicy
   readonly gamescope?: GamescopePolicy
   readonly moonlight?: MoonlightPolicy
   readonly retroarch?: RetroArchPolicy
@@ -1254,6 +1262,7 @@ export interface ResolveReadableLaunchInputs {
 }
 
 interface ReadableLayerView {
+  readonly launch?: LaunchPolicy
   readonly gamescope?: GamescopePolicy
   readonly moonlight?: MoonlightPolicy
   readonly retroarch?: RetroArchPolicy
@@ -1268,7 +1277,7 @@ interface ReadableLayerView {
 const readableViewOfUser = (user: UserRecord | undefined): ReadableLayerView =>
   user
     ? {
-        gamescope: user.gamescope,
+        gamescope: gamescopePolicyFromLaunch(user),
         moonlight: user.moonlight,
         retroarch: user.retroarch,
         ryubing: user.ryubing,
@@ -1284,7 +1293,7 @@ const readableViewOfSystem = (
 ): ReadableLayerView =>
   system
     ? {
-        gamescope: system.gamescope,
+        gamescope: gamescopePolicyFromLaunch(system),
         moonlight: system.moonlight,
         retroarch: system.retroarch,
         ryubing: system.ryubing,
@@ -1298,7 +1307,7 @@ const readableViewOfSystem = (
 const readableViewOfApp = (app: AppRecord | undefined): ReadableLayerView =>
   app
     ? {
-        gamescope: app.gamescope,
+        gamescope: gamescopePolicyFromLaunch(app),
         moonlight: app.moonlight,
         retroarch: appRetroArchPolicyFromRecord(app),
         ryubing: appRyubingPolicyFromRecord(app),
@@ -1317,7 +1326,7 @@ const readableViewOfAppChoice = (
   },
   app: AppRecord,
 ): ReadableLayerView => ({
-  gamescope: choice.gamescope,
+  gamescope: choice.gamescope ?? gamescopePolicyFromLaunch(choice),
   moonlight: choice.moonlight,
   retroarch: choice.retroarch,
   steam:
@@ -1346,6 +1355,13 @@ const readableBuiltInArgs = (
   return legacyArgs
 }
 
+const launchPolicyWithGamescope = (
+  gamescope: GamescopePolicy | undefined,
+): LaunchPolicy | undefined =>
+  gamescope === undefined
+    ? undefined
+    : { with: { "@korri:gamescope": gamescope } }
+
 const resolveReadableAppRecord = (
   appId: string,
   apps: ReadonlyMap<string, AppRecord>,
@@ -1354,6 +1370,10 @@ const resolveReadableAppRecord = (
   const builtIn = getBuiltInAppDescriptor(appId)
   if (builtIn === undefined) return override
   if (builtIn.id === "steam" && override === undefined) return undefined
+  const gamescope = mergeBuiltInAppGamescopePolicy(
+    builtIn.gamescope,
+    override ? gamescopePolicyFromLaunch(override) : undefined,
+  )
   return {
     id: appId,
     kind: override?.kind ?? builtIn.kind,
@@ -1363,10 +1383,7 @@ const resolveReadableAppRecord = (
     systems: override?.systems ?? builtIn.systems,
     policy: override?.policy ?? builtIn.policy,
     settings: override?.settings ?? builtIn.settings,
-    gamescope: mergeBuiltInAppGamescopePolicy(
-      builtIn.gamescope,
-      override?.gamescope,
-    ),
+    launch: launchPolicyWithGamescope(gamescope),
     moonlight: override?.moonlight ?? builtIn.moonlight,
     ...(override?.kind === "retroarch" || builtIn.kind === "retroarch"
       ? override !== undefined
@@ -1394,7 +1411,7 @@ const readableViewOfRuntime = (
 ): ReadableLayerView =>
   runtime
     ? {
-        gamescope: runtime.gamescope,
+        gamescope: gamescopePolicyFromLaunch(runtime),
         moonlight: runtime.moonlight,
         retroarch: runtime.retroarch,
         ryubing: runtime.ryubing,
@@ -1408,7 +1425,7 @@ const readableViewOfRuntime = (
 const readableViewOfLibraryItem = (
   item: LibraryItemRecord,
 ): ReadableLayerView => ({
-  gamescope: item.gamescope,
+  gamescope: gamescopePolicyFromLaunch(item),
   moonlight: item.moonlight,
   retroarch: item.retroarch,
   ryubing: item.ryubing,
@@ -1419,7 +1436,9 @@ const readableViewOfLibraryItem = (
 })
 
 const readableViewOfContained = (entry: PlayableEntry): ReadableLayerView => ({
-  gamescope: entry.contained?.gamescope,
+  gamescope: entry.contained
+    ? gamescopePolicyFromLaunch(entry.contained)
+    : undefined,
   moonlight: entry.contained?.moonlight,
   retroarch: entry.contained?.retroarch,
   ryubing: entry.contained?.ryubing,
@@ -1432,7 +1451,7 @@ const readableViewOfContained = (entry: PlayableEntry): ReadableLayerView => ({
 const readableViewOfRelease = (
   release: LibraryReleasePayload,
 ): ReadableLayerView => ({
-  gamescope: release.gamescope,
+  gamescope: gamescopePolicyFromLaunch(release),
   moonlight: release.moonlight,
   retroarch: release.retroarch,
   ryubing: release.ryubing,
@@ -1447,7 +1466,7 @@ const readableViewOfProfile = (
 ): ReadableLayerView =>
   profile
     ? {
-        gamescope: profile.gamescope,
+        gamescope: gamescopePolicyFromLaunch(profile),
         moonlight: profile.moonlight,
         retroarch: profile.retroarch,
         ryubing: profile.ryubing,
@@ -1472,8 +1491,9 @@ const mergeReadableLayers = (
   let patches: string[] | undefined
 
   for (const layer of layers) {
-    if (layer.gamescope !== undefined) {
-      gamescope = foldGamescope(gamescope, layer.gamescope)
+    const layerGamescope = layer.gamescope ?? gamescopePolicyFromLaunch(layer)
+    if (layerGamescope !== undefined) {
+      gamescope = foldGamescope(gamescope, layerGamescope)
     }
     if (layer.moonlight !== undefined) {
       moonlight = foldMoonlight(moonlight, layer.moonlight)

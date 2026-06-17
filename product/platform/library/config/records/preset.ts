@@ -32,7 +32,6 @@ export const PresetPayload = Schema.Struct({
   // Inline the inheritable behavior whitelist so the strict-mode check
   // sees every key on the same struct (Effect Schema's struct-extension
   // helpers don't flatten cleanly for excess-property checking).
-  gamescope: InheritableLayer.fields.gamescope,
   moonlight: InheritableLayer.fields.moonlight,
   retroarch: InheritableLayer.fields.retroarch,
   ryubing: InheritableLayer.fields.ryubing,

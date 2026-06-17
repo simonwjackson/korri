@@ -46,7 +46,7 @@ export const LauncherPayload = Schema.Struct({
   byLauncher: Schema.optional(ByLauncherPayload),
 
   // Inlined inheritable whitelist (see preset.ts for the rationale).
-  gamescope: InheritableLayer.fields.gamescope,
+  launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
   retroarch: InheritableLayer.fields.retroarch,
   ryubing: InheritableLayer.fields.ryubing,

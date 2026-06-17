@@ -15,11 +15,15 @@ describe("EphemeralOverride", () => {
 
   it("decodes inheritable behavior contributions", () => {
     const override = decodeEphemeralOverride({
-      gamescope: {
-        enable: true,
-        backend: { type: "wayland" },
-        scaling: { filter: "fsr" },
-        window: { exposeWayland: true },
+      launch: {
+        with: {
+          "@korri:gamescope": {
+            enable: true,
+            backend: { type: "wayland" },
+            scaling: { filter: "fsr" },
+            window: { exposeWayland: true },
+          },
+        },
       },
       moonlight: {
         stream: { fps: 60 },
@@ -31,7 +35,7 @@ describe("EphemeralOverride", () => {
       argsAppend: ["--debug"],
       patches: ["/patches/override.ips"],
     })
-    expect(override.gamescope?.enable).toBe(true)
+    expect(override.launch?.with?.["@korri:gamescope"]?.enable).toBe(true)
     expect(override.moonlight?.platform?.name).toBe("sdl")
     expect(override.env?.SDL_VIDEODRIVER).toBe("wayland")
     expect(override.patches).toEqual(["/patches/override.ips"])
@@ -41,17 +45,24 @@ describe("EphemeralOverride", () => {
     const override = decodeEphemeralOverride({
       byLauncher: {
         retroarch: {
-          gamescope: { enable: false, scaling: { filter: "nearest" } },
+          launch: {
+            with: {
+              "@korri:gamescope": {
+                enable: false,
+                scaling: { filter: "nearest" },
+              },
+            },
+          },
           argsAppend: ["-v"],
           patches: ["/patches/retroarch.ips"],
         },
       },
       inherit: false,
     })
-    expect(override.byLauncher?.retroarch?.gamescope?.enable).toBe(false)
-    expect(override.byLauncher?.retroarch?.gamescope?.scaling?.filter).toBe(
-      "nearest",
-    )
+    const gamescope =
+      override.byLauncher?.retroarch?.launch?.with?.["@korri:gamescope"]
+    expect(gamescope?.enable).toBe(false)
+    expect(gamescope?.scaling?.filter).toBe("nearest")
     expect(override.byLauncher?.retroarch?.argsAppend).toEqual(["-v"])
     expect(override.byLauncher?.retroarch?.patches).toEqual([
       "/patches/retroarch.ips",
@@ -92,6 +103,12 @@ describe("EphemeralOverride", () => {
     ).toThrow()
   })
 
+  it("rejects the old top-level Gamescope runtime override", () => {
+    expect(() =>
+      decodeEphemeralOverride({ gamescope: { enable: true } }),
+    ).toThrow()
+  })
+
   it("rejects Gamescope process, env, raw argv, and path surfaces in runtime overrides", () => {
     for (const gamescope of [
       { command: "/bin/gamescope" },
@@ -103,7 +120,11 @@ describe("EphemeralOverride", () => {
       { reshade: { effect: "/tmp/effect.fx" } },
       { scheduling: { readyFd: 3 } },
     ]) {
-      expect(() => decodeEphemeralOverride({ gamescope })).toThrow()
+      expect(() =>
+        decodeEphemeralOverride({
+          launch: { with: { "@korri:gamescope": gamescope } },
+        }),
+      ).toThrow()
     }
   })
 
@@ -111,7 +132,11 @@ describe("EphemeralOverride", () => {
     expect(() =>
       decodeEphemeralOverride({
         byLauncher: {
-          retroarch: { gamescope: { command: "/bin/gamescope" } },
+          retroarch: {
+            launch: {
+              with: { "@korri:gamescope": { command: "/bin/gamescope" } },
+            },
+          },
         },
       }),
     ).toThrow()

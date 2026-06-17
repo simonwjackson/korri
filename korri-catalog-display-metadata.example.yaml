@@ -28,12 +28,14 @@ host:
       enable: true
       authority: controller
     extraArgs: []
-  gamescope:
-    enable: true
-    backend:
-      type: wayland
-    window:
-      exposeWayland: true
+  launch:
+    with:
+      "@korri:gamescope":
+        enable: true
+        backend:
+          type: wayland
+        window:
+          exposeWayland: true
 
 storage:
   steam:
@@ -194,19 +196,23 @@ runtimes:
 profiles:
   handheld-640x480:
     title: Handheld 640x480
-    gamescope:
-      display:
-        output:
-          width: 640
-          height: 480
+    launch:
+      with:
+        "@korri:gamescope":
+          display:
+            output:
+              width: 640
+              height: 480
 
   tv-1080p:
     title: TV 1080p
-    gamescope:
-      display:
-        output:
-          width: 1920
-          height: 1080
+    launch:
+      with:
+        "@korri:gamescope":
+          display:
+            output:
+              width: 1920
+              height: 1080
 
 collections:
   handheld:
@@ -233,8 +239,10 @@ users:
       - super-mario-advance-2/super-mario-world
     hidden:
       - super-mario-advance-2/mario-bros
-    gamescope:
-      enable: true
+    launch:
+      with:
+        "@korri:gamescope":
+          enable: true
 
 library:
   downwell:

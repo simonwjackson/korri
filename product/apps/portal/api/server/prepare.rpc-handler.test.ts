@@ -93,7 +93,9 @@ async function setupRemoteLibrary() {
         system: "gba",
         contentPath: "/srv/games/wl4.gba",
         metadata: { name: "Wario Land 4" },
-        presets: { raw: { gamescope: { enable: false } } },
+        presets: {
+          raw: { launch: { with: { "@korri:gamescope": { enable: false } } } },
+        },
       },
     ],
   })
