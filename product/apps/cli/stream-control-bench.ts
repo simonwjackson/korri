@@ -4,7 +4,7 @@ import {
   type StreamControlApiOptions,
   streamControlApiOptionsFromEnv,
 } from "@platform/stream-control/stream-control-api-routes"
-import { connectGamescopeControl } from "@product/plugins/gamescope/runtime-control"
+import { connectGamescopeControl } from "@product/plugins/gamescope/src/runtime-control"
 import { Hono } from "hono"
 
 const DEFAULT_HOST = "0.0.0.0"

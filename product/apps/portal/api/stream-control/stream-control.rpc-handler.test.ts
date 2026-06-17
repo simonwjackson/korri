@@ -5,7 +5,7 @@ import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
 import type {
   GamescopeControlClient,
   GamescopeControlCommandMethod,
-} from "@product/plugins/gamescope/runtime-control"
+} from "@product/plugins/gamescope/src/runtime-control"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { handleGetStreamControlConfig } from "./get-config.rpc-handler"
 import { handleGetStreamControlControls } from "./get-controls.rpc-handler"

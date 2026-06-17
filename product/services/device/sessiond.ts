@@ -22,7 +22,7 @@ import {
   createProcfsProcessList,
   createSystemGamescopeReaper,
   type GamescopeReaper,
-} from "@product/plugins/gamescope/session"
+} from "@product/plugins/gamescope/src/session"
 import { findStreamSurfaceWindows } from "./game-stream-fullscreen"
 import {
   createElectrobunController,

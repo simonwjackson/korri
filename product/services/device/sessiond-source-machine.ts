@@ -20,7 +20,7 @@ import {
   GAMESCOPE_PROCESS_NAMES,
   type ProcessInfo,
   type ProcessListQuery,
-} from "@product/plugins/gamescope/session"
+} from "@product/plugins/gamescope/src/session"
 import {
   formatSessionRoleReadyEvidence,
   type SessionRole,
