@@ -72,7 +72,7 @@ let
         config.allowUnfree = true;
       };
 
-  gamescopeKorri = final.callPackage ../../../vendor/gamescope-korri/package.nix {
+  gamescopeKorri = final.callPackage ../../../plugins/gamescope/default.nix {
     gamescope = pinnedGamescopePkgs.gamescope;
   };
 

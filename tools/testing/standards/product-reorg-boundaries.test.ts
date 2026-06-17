@@ -216,7 +216,7 @@ describe("standards: product platform reorganization guardrails", () => {
     expect(existsSync(join(REPO_ROOT, "product", "themes", "evier"))).toBe(true)
   })
 
-  it("keeps carried upstream packages under product vendor", () => {
+  it("keeps carried upstream packages under product vendor unless a plugin owns them", () => {
     expect(existsSync(join(REPO_ROOT, "packages"))).toBe(false)
     expect(existsSync(join(REPO_ROOT, "product", "vendor"))).toBe(true)
     expect(
@@ -229,12 +229,44 @@ describe("standards: product platform reorganization guardrails", () => {
     ).toBe(true)
     expect(
       existsSync(join(REPO_ROOT, "product", "vendor", "gamescope-korri")),
+    ).toBe(false)
+    expect(
+      existsSync(
+        join(REPO_ROOT, "product", "plugins", "gamescope", "default.nix"),
+      ),
+    ).toBe(true)
+    expect(
+      existsSync(
+        join(REPO_ROOT, "product", "plugins", "gamescope", "flake.nix"),
+      ),
+    ).toBe(true)
+    expect(
+      existsSync(join(REPO_ROOT, "product", "plugins", "gamescope", "patches")),
     ).toBe(true)
     expect(
       existsSync(join(REPO_ROOT, "product", "vendor", "libretro-fake-08")),
     ).toBe(true)
     expect(
       existsSync(join(REPO_ROOT, "product", "vendor", "SDL2-mali-fbdev")),
+    ).toBe(true)
+  })
+
+  it("keeps Gamescope's downstream package lane under the Gamescope plugin", () => {
+    expect(
+      existsSync(join(REPO_ROOT, "product", "vendor", "gamescope-korri")),
+    ).toBe(false)
+    expect(
+      existsSync(
+        join(REPO_ROOT, "product", "plugins", "gamescope", "default.nix"),
+      ),
+    ).toBe(true)
+    expect(
+      existsSync(
+        join(REPO_ROOT, "product", "plugins", "gamescope", "flake.nix"),
+      ),
+    ).toBe(true)
+    expect(
+      existsSync(join(REPO_ROOT, "product", "plugins", "gamescope", "patches")),
     ).toBe(true)
   })
 

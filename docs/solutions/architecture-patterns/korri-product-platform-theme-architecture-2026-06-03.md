@@ -174,19 +174,21 @@ The root `flake.nix` can remain the repo entrypoint that wires those product uni
 
 ### `product/vendor/`
 
-Carried upstream or patched external/native code used by the product.
+Carried upstream or patched external/native code used by the product, unless a
+first-party plugin owns the integration and colocates its package lane.
 
 Examples:
 
 ```text
-product/vendor/gamescope-korri/
+product/plugins/gamescope/default.nix
+product/plugins/gamescope/patches/
 product/vendor/moonlight-embedded-korri/
 product/vendor/SDL2-mali-fbdev/
 product/vendor/sunshine-korri/
 product/vendor/libretro-fake-08/
 ```
 
-These are product dependencies, but not conceptually Korri-authored platform/app/theme code.
+These are product dependencies, but not conceptually Korri-authored platform/app/theme code. Plugin-owned vendor lanes live with the plugin that owns the integration.
 
 ### `tools/`
 
