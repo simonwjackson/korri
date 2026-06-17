@@ -20,23 +20,39 @@ describe("first-party plugins", () => {
     ).toContain("launch.compose")
   })
 
-  it("enables Gamescope infrastructure even when catalog plugins are disabled", () => {
+  it("does not enable Gamescope unless composition opts in", () => {
     const registry = createFirstPartyPluginRegistryFromEnv({
       KORRI_ENABLED_PLUGINS: undefined,
     })
 
-    expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(true)
+    expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(false)
     expect(
       registry.modules[`${KORRI_GAMESCOPE_PLUGIN_ID}/launch-wrapper`],
-    ).toMatchObject({
-      kind: "launch-wrapper",
-    })
+    ).toBeUndefined()
     expect(registry.catalog).toEqual({})
   })
 
-  it("preserves env-enabled first-party catalog plugins", () => {
+  it("preserves env-enabled first-party catalog plugins without implicitly adding Gamescope", () => {
     const registry = createFirstPartyPluginRegistryFromEnv({
       KORRI_ENABLED_PLUGINS: "@korri:neverball",
+    })
+
+    expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(false)
+    expect(registry.enabledPluginIds.has("@korri:neverball")).toBe(true)
+    expect(
+      registry.modules[`${KORRI_GAMESCOPE_PLUGIN_ID}/launch-wrapper`],
+    ).toBeUndefined()
+    expect(Object.keys(registry.catalog)).toEqual([
+      "@korri:neverball/neverball",
+    ])
+    expect(
+      executableResources(registry).map(entry => entry.resource.id),
+    ).toEqual(["neverball"])
+  })
+
+  it("enables Gamescope when composition explicitly opts in", () => {
+    const registry = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: "@korri:gamescope,@korri:neverball",
     })
 
     expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(true)
@@ -46,11 +62,5 @@ describe("first-party plugins", () => {
     ).toMatchObject({
       kind: "launch-wrapper",
     })
-    expect(Object.keys(registry.catalog)).toEqual([
-      "@korri:neverball/neverball",
-    ])
-    expect(
-      executableResources(registry).map(entry => entry.resource.id),
-    ).toEqual(["neverball"])
   })
 })

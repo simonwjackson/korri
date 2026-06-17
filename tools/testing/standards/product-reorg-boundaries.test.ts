@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
-import { existsSync, readFileSync } from "node:fs"
-import { dirname, join, normalize } from "node:path"
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
+import { dirname, extname, join, normalize } from "node:path"
 import {
   existingRoots,
   REPO_ROOT,
@@ -8,6 +8,226 @@ import {
   repoRelative,
   sourceFiles,
 } from "./source-files"
+
+const GENERIC_GAMESCOPE_SCAN_ROOTS = [
+  join(REPO_ROOT, "product", "platform"),
+  join(REPO_ROOT, "product", "services"),
+  join(REPO_ROOT, "product", "apps"),
+  join(REPO_ROOT, "product", "themes"),
+  join(REPO_ROOT, "product", "systems", "nixos"),
+]
+
+const GENERIC_IMPORT_SCAN_ROOTS = [
+  join(REPO_ROOT, "product", "platform"),
+  join(REPO_ROOT, "product", "services"),
+  join(REPO_ROOT, "product", "apps"),
+  join(REPO_ROOT, "product", "themes"),
+]
+
+const GAMESCOPE_SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".nix"])
+const IMPORT_SOURCE_EXTENSIONS = new Set([".ts", ".tsx"])
+
+const TEMPORARY_GENERIC_GAMESCOPE_STRING_ALLOWLIST = new Set<string>([
+  "product/platform/library/config/app-choice-selection.test.ts",
+  "product/platform/library/config/app-choice-selection.ts",
+  "product/platform/library/config/app-integrations.test.ts",
+  "product/platform/library/config/app-integrations.ts",
+  "product/platform/library/config/app-materializer.test.ts",
+  "product/platform/library/config/authoring/examples.test.ts",
+  "product/platform/library/config/cascade-resolver.test.ts",
+  "product/platform/library/config/cascade-resolver.ts",
+  "product/platform/library/config/compose-launch-spec.ts",
+  "product/platform/library/config/ephemeral-override.test.ts",
+  "product/platform/library/config/ephemeral-override.ts",
+  "product/platform/library/config/inheritable-fields.test.ts",
+  "product/platform/library/config/inheritable-fields.ts",
+  "product/platform/library/config/readable-cascade-resolver.test.ts",
+  "product/platform/library/config/records/app-choice.test.ts",
+  "product/platform/library/config/records/app.test.ts",
+  "product/platform/library/config/records/collection.test.ts",
+  "product/platform/library/config/records/game.test.ts",
+  "product/platform/library/config/records/global.test.ts",
+  "product/platform/library/config/records/launcher.test.ts",
+  "product/platform/library/config/records/preset.test.ts",
+  "product/platform/library/config/records/readable-schema.test.ts",
+  "product/platform/library/config/records/system.test.ts",
+  "product/platform/library/config/records/user.test.ts",
+  "product/platform/library/config/records/user.ts",
+  "product/platform/library/config/resolved-launch-context.ts",
+  "product/platform/library/config/steam-state-materializer.test.ts",
+  "product/platform/library/library-services.ts",
+  "product/platform/library/library-source.ts",
+  "product/platform/library/proseql/config-graph-db.test.ts",
+  "product/platform/library/proseql/library-db.test.ts",
+  "product/platform/library/proseql/library-repository.test.ts",
+  "product/platform/library/proseql/library-repository.ts",
+  "product/platform/library/rocknix/rocknix-source.test.ts",
+  "product/platform/library/rocknix/rocknix-source.ts",
+  "product/platform/plugin/catalog-library-source.test.ts",
+  "product/platform/plugin/catalog-library-source.ts",
+  "product/platform/plugin/ids.ts",
+  "product/platform/stream/foreground-session-owner.ts",
+  "product/platform/stream/moonlight-launch-spec.test.ts",
+  "product/platform/stream/moonlight-launch-spec.ts",
+  "product/platform/stream/steam-launch-spec.test.ts",
+  "product/platform/stream-control/control-contract.ts",
+  "product/platform/stream-control/control-surface.test.ts",
+  "product/platform/stream-control/control-surface.ts",
+  "product/platform/stream-control/runtime-support.ts",
+  "product/platform/stream-control/state-normalizer.ts",
+  "product/platform/stream-control/stream-control-api-routes.ts",
+  "product/platform/stream-control/stream-control-client.ts",
+  "product/services/device/game-stream-fullscreen.test.ts",
+  "product/services/device/game-stream-fullscreen.ts",
+  "product/services/device/game-stream-launch-intent.test.ts",
+  "product/services/device/game-stream-launch-intent.ts",
+  "product/services/device/game-stream-runner.test.ts",
+  "product/services/device/game-stream-runner.ts",
+  "product/services/device/inputd-actions.test.ts",
+  "product/services/device/sessiond-role.test.ts",
+  "product/services/device/sessiond-role.ts",
+  "product/services/device/sessiond-source-machine.test.ts",
+  "product/services/device/sessiond-source-machine.ts",
+  "product/services/device/sessiond.test.ts",
+  "product/services/device/sessiond.ts",
+  "product/services/device/steam-log-signals.test.ts",
+  "product/services/device/steam-log-tailer.ts",
+  "product/services/device/touch-bounds-coordinator.test.ts",
+  "product/services/device/touch-bounds-coordinator.ts",
+  "product/services/device/touch-bounds-geometry.test.ts",
+  "product/services/device/touch-bounds-geometry.ts",
+  "product/apps/cli/moonlight-launch-policy.ts",
+  "product/apps/cli/moonlight-launcher.test.ts",
+  "product/apps/cli/remote-stream-launch.test.ts",
+  "product/apps/cli/source-aware-play.test.ts",
+  "product/apps/cli/stream-control-bench.test.ts",
+  "product/apps/cli/stream-control-bench.ts",
+  "product/apps/cli/stream-launch.test.ts",
+  "product/apps/cli/stream-launch.ts",
+  "product/apps/portal/api/app-rpc-group.ts",
+  "product/apps/portal/api/game-assets/game-assets.integration.test.ts",
+  "product/apps/portal/api/handlers.ts",
+  "product/apps/portal/api/library/launch.rpc-handler.test.ts",
+  "product/apps/portal/api/library/launch.rpc-handler.ts",
+  "product/apps/portal/api/server/prepare.rpc-handler.test.ts",
+  "product/apps/portal/api/server/rpc-group.ts",
+  "product/apps/portal/api/server/rpc-server.test.ts",
+  "product/apps/portal/api/server/rpc-server.ts",
+  "product/apps/portal/api/stream/compose-moonlight-launch-spec.test.ts",
+  "product/apps/portal/api/stream/compose-moonlight-launch-spec.ts",
+  "product/apps/portal/api/stream/prepare.rpc-handler.test.ts",
+  "product/apps/portal/api/stream/prepare.rpc-handler.ts",
+  "product/apps/portal/api/stream-control/rpc-schemas.ts",
+  "product/apps/portal/api/stream-control/service.ts",
+  "product/apps/portal/api/stream-control/set-gamescope-filter.rpc-handler.ts",
+  "product/apps/portal/api/stream-control/set-gamescope-filter.rpc.ts",
+  "product/apps/portal/api/stream-control/set-gamescope-fps.rpc-handler.ts",
+  "product/apps/portal/api/stream-control/set-gamescope-fps.rpc.ts",
+  "product/apps/portal/api/stream-control/set-gamescope-mode.rpc-handler.ts",
+  "product/apps/portal/api/stream-control/set-gamescope-mode.rpc.ts",
+  "product/apps/portal/api/stream-control/set-gamescope-sharpness.rpc-handler.ts",
+  "product/apps/portal/api/stream-control/set-gamescope-sharpness.rpc.ts",
+  "product/apps/portal/api/stream-control/set-linked-fps.rpc.ts",
+  "product/apps/portal/api/stream-control/set-linked-resolution.rpc.ts",
+  "product/apps/portal/api/stream-control/stream-control.rpc-handler.test.ts",
+  "product/apps/portal/features/evier/stream-control-rpc-client.ts",
+  "product/apps/portal/features/home/library-rpc-layers.test.ts",
+  "product/apps/portal/stream/moonlight-launcher.ts",
+  "product/themes/evier/entry.tsx",
+  "product/themes/evier/pages/EvierStreamControlPage.test.tsx",
+  "product/themes/evier/pages/EvierStreamControlPage.tsx",
+  "product/themes/evier/pages/evier-control-catalog.ts",
+  "product/themes/evier/pages/evier-control-state.ts",
+  "product/themes/vigie/cockpit/live/VigieLiveCockpitData.test.ts",
+  "product/themes/vigie/cockpit/live/VigieLiveCockpitData.ts",
+  "product/themes/vigie/fixtures/cockpit-fixtures.ts",
+  "product/systems/nixos/flake/apps.nix",
+  "product/systems/nixos/flake/default.nix",
+  "product/systems/nixos/flake/modules.nix",
+  "product/systems/nixos/flake/overlays.nix",
+  "product/systems/nixos/flake/packages.nix",
+  "product/systems/nixos/flake/plugins.nix",
+  "product/systems/nixos/flake/plugins.test.ts",
+  "product/systems/nixos/images/common.nix",
+  "product/systems/nixos/images/desktop-lab.nix",
+  "product/systems/nixos/images/kiosk.nix",
+  "product/systems/nixos/images/platforms/rocknix-rk3566.nix",
+  "product/systems/nixos/images/platforms/rocknix-sm8550.nix",
+  "product/systems/nixos/images/platforms/x86.nix",
+  "product/systems/nixos/images/source-machine.nix",
+  "product/systems/nixos/modules/korri-compositor.nix",
+  "product/systems/nixos/modules/korri-daemon.nix",
+  "product/systems/nixos/modules/korri-game-stream.nix",
+  "product/systems/nixos/modules/korri-nixpkgs-overlay.nix",
+  "product/systems/nixos/modules/korri-steam.nix",
+  "product/systems/nixos/modules/korri-x86-compositor-overlay.nix",
+  "product/systems/nixos/overlays/korri-packages.nix",
+  "product/systems/nixos/overlays/korri-x86-compositor.nix",
+])
+
+const TEMPORARY_GENERIC_GAMESCOPE_IMPORT_ALLOWLIST = new Set<string>([
+  "product/services/device/game-stream-fullscreen.ts",
+  "product/services/device/sessiond-source-machine.test.ts",
+  "product/services/device/sessiond-source-machine.ts",
+  "product/services/device/sessiond.test.ts",
+  "product/services/device/sessiond.ts",
+  "product/apps/cli/stream-control-bench.test.ts",
+  "product/apps/cli/stream-control-bench.ts",
+  "product/apps/portal/api/stream/compose-moonlight-launch-spec.ts",
+  "product/apps/portal/api/stream-control/service.ts",
+  "product/apps/portal/api/stream-control/stream-control.rpc-handler.test.ts",
+  "product/apps/portal/stream/moonlight-launcher.ts",
+])
+
+function sourceFilesWithExtensions(
+  root: string,
+  extensions: ReadonlySet<string>,
+): readonly string[] {
+  if (!existsSync(root)) return []
+
+  const files: string[] = []
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir)) {
+      if ([".git", ".worktrees", "node_modules", "out"].includes(entry)) {
+        continue
+      }
+      const path = join(dir, entry)
+      const stat = statSync(path)
+      if (stat.isDirectory()) {
+        walk(path)
+        continue
+      }
+      if (extensions.has(extname(path))) files.push(path)
+    }
+  }
+  walk(root)
+  return files
+}
+
+function containsGamescopeName(source: string): boolean {
+  return source.toLowerCase().includes("gamescope")
+}
+
+function importsGamescopePlugin(source: string): boolean {
+  return importSpecifiers(source).some(specifier =>
+    /^(?:@product\/plugins\/gamescope(?:\/|$)|product\/plugins\/gamescope(?:\/|$))/.test(
+      specifier,
+    ),
+  )
+}
+
+function temporaryAllowlistDrift(
+  current: readonly string[],
+  allowlist: ReadonlySet<string>,
+): readonly string[] {
+  const currentSet = new Set(current)
+  return [
+    ...current.filter(file => !allowlist.has(file)),
+    ...[...allowlist]
+      .filter(file => !currentSet.has(file))
+      .map(file => `stale:${file}`),
+  ].sort()
+}
 
 const LEGACY_KORRI_ROOT = join(REPO_ROOT, "korri")
 const LEGACY_SHARED_THEME_ROOT = join(REPO_ROOT, "korri", "shared", "themes")
@@ -464,5 +684,35 @@ describe("standards: product platform reorganization guardrails", () => {
     for (const [alias, target] of Object.entries(FINAL_ALIAS_PATH_INVENTORY)) {
       expect(aliases[alias]).toEqual([target])
     }
+  })
+
+  it("tracks remaining generic Gamescope string coupling with a shrinking allowlist", () => {
+    const current = existingRoots(GENERIC_GAMESCOPE_SCAN_ROOTS).flatMap(root =>
+      sourceFilesWithExtensions(root, GAMESCOPE_SOURCE_EXTENSIONS)
+        .filter(file => containsGamescopeName(readSource(file)))
+        .map(repoRelative),
+    )
+
+    expect(
+      temporaryAllowlistDrift(
+        current,
+        TEMPORARY_GENERIC_GAMESCOPE_STRING_ALLOWLIST,
+      ),
+    ).toEqual([])
+  })
+
+  it("tracks remaining generic imports of the Gamescope plugin with a shrinking allowlist", () => {
+    const current = existingRoots(GENERIC_IMPORT_SCAN_ROOTS).flatMap(root =>
+      sourceFilesWithExtensions(root, IMPORT_SOURCE_EXTENSIONS)
+        .filter(file => importsGamescopePlugin(readSource(file)))
+        .map(repoRelative),
+    )
+
+    expect(
+      temporaryAllowlistDrift(
+        current,
+        TEMPORARY_GENERIC_GAMESCOPE_IMPORT_ALLOWLIST,
+      ),
+    ).toEqual([])
   })
 })

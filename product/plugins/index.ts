@@ -3,7 +3,7 @@ import {
   createPluginRegistry,
   parseEnabledPluginIds,
 } from "@platform/plugin/registry"
-import { gamescopePlugin, KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
+import { gamescopePlugin } from "./gamescope"
 import { neverballPlugin } from "./neverball"
 
 export const firstPartyPlugins = [gamescopePlugin, neverballPlugin] as const
@@ -18,9 +18,4 @@ export function createFirstPartyPluginRegistryFromEnv(
 
 const enabledFirstPartyPluginIds = (
   enabledPlugins: string | undefined,
-): readonly PluginId[] => [
-  ...new Set([
-    KORRI_GAMESCOPE_PLUGIN_ID,
-    ...parseEnabledPluginIds(enabledPlugins),
-  ]),
-]
+): readonly PluginId[] => [...new Set(parseEnabledPluginIds(enabledPlugins))]
