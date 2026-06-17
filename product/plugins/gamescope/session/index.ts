@@ -9,11 +9,11 @@ export type {
   ReapOutcome,
   ReapRequest,
   ReapSignal,
-} from "./src/session"
+} from "../src/session"
 export {
   createGamescopeReaper,
   createProcfsProcessList,
   createSystemGamescopeReaper,
   GAMESCOPE_PROCESS_NAMES,
   POSIX_PROCESS_SIGNALER,
-} from "./src/session"
+} from "../src/session"

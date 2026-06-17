@@ -8,11 +8,11 @@ export type {
   GamescopeScalerValue as GamescopeScaler,
   GamescopeTouchModeValue as GamescopeTouchMode,
   GamescopeVirtualConnectorStrategyValue as GamescopeVirtualConnectorStrategy,
-} from "./src/launch-companion"
+} from "../src/launch-companion"
 export {
   composeGamescopeLaunchSpec,
   DEFAULT_GAMESCOPE_POLICY,
   decodeGamescopePolicy,
   gamescopePolicyFromLaunch,
   normalizeGamescopePolicy,
-} from "./src/launch-companion"
+} from "../src/launch-companion"

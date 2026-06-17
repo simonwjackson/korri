@@ -24,7 +24,7 @@ export type {
   GamescopeModeRequest,
   GamescopeScalingFilter,
   ValidatedGamescopeModeRequest,
-} from "./src/runtime-control"
+} from "../src/runtime-control"
 export {
   connectGamescopeControl,
   createGamescopeHelloResult,
@@ -50,4 +50,4 @@ export {
   validateGamescopeMode,
   validateGamescopeSharpness,
   valueToGamescopeFilter,
-} from "./src/runtime-control"
+} from "../src/runtime-control"
