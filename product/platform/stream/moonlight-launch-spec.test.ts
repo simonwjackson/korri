@@ -1,4 +1,6 @@
 import { describe, expect, it } from "bun:test"
+import type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
+import type { LaunchSpec } from "@platform/library/launcher"
 import {
   composeMoonlightGamescopeLaunchSpec,
   composeMoonlightStreamLaunchSpec,
@@ -174,6 +176,7 @@ describe("composeMoonlightGamescopeLaunchSpec", () => {
     const spec = composeMoonlightGamescopeLaunchSpec({
       facts: { host: "aka.local" },
       gamescope: { enable: true, window: { exposeWayland: true } },
+      wrapGamescopeLaunchSpec: fakeGamescopeWrapper,
     })
 
     expect(spec.command).toBe("gamescope")
@@ -195,7 +198,17 @@ describe("composeMoonlightGamescopeLaunchSpec", () => {
         facts: { host: "aka.local" },
         policy: { platform: { name: "wayland" } },
         gamescope: { enable: true, window: { exposeWayland: false } },
+        wrapGamescopeLaunchSpec: fakeGamescopeWrapper,
       }),
     ).toThrow(/exposeWayland/)
   })
 })
+
+function fakeGamescopeWrapper(
+  spec: LaunchSpec,
+  policy: GamescopePolicy,
+): LaunchSpec {
+  return policy.enable === false
+    ? spec
+    : { command: "gamescope", args: ["--", spec.command, ...spec.args] }
+}

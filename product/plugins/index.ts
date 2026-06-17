@@ -1,10 +1,9 @@
-import { KORRI_GAMESCOPE_PLUGIN_ID } from "@platform/plugin/ids"
 import type { PluginId } from "@platform/plugin"
 import {
   createPluginRegistry,
   parseEnabledPluginIds,
 } from "@platform/plugin/registry"
-import { gamescopePlugin } from "./gamescope"
+import { gamescopePlugin, KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
 import { neverballPlugin } from "./neverball"
 
 export const firstPartyPlugins = [gamescopePlugin, neverballPlugin] as const

@@ -1,13 +1,16 @@
-import type { GamescopeScalingFilter } from "@platform/gamescope-control/gamescope-control-protocol"
-
-export const FPS_STEPS = [30, 40, 45, 60, 75, 90, 100, 120] as const
-
-// Gamescope's GAMESCOPE_FPS_LIMIT cardinal accepts 0..240; 0 disables the
-// compositor-side limiter entirely. Product surfaces expose a compact ladder
-// for controller/touch operation instead of a freeform numeric input.
 export const GAMESCOPE_FPS_STEPS = [
   0, 30, 45, 60, 75, 90, 120, 144, 165, 240,
 ] as const
+
+export const GAMESCOPE_SCALING_FILTERS = [
+  "linear",
+  "nearest",
+  "integer",
+  "fsr",
+  "nis",
+] as const
+
+export const FPS_STEPS = [30, 40, 45, 60, 75, 90, 100, 120] as const
 
 export const LINKED_FPS_STEPS = [30, 45, 60, 75, 90, 120] as const
 
@@ -20,14 +23,6 @@ export const RESOLUTION_STEPS = [
   { label: "900p", width: 1600, height: 900 },
   { label: "1080p", width: 1920, height: 1080 },
 ] as const
-
-export const GAMESCOPE_SCALING_FILTERS = [
-  "linear",
-  "nearest",
-  "integer",
-  "fsr",
-  "nis",
-] as const satisfies readonly GamescopeScalingFilter[]
 
 export type StreamControlSubsystem =
   | "moonlight"

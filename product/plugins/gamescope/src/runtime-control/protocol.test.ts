@@ -11,7 +11,7 @@ import {
   validateGamescopeFps,
   validateGamescopeMode,
   valueToGamescopeFilter,
-} from "./gamescope-control-protocol"
+} from "./protocol"
 
 describe("gamescope control protocol", () => {
   it("describes the v1 protocol and known Gamescope scaler values", () => {

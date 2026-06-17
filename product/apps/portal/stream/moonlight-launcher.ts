@@ -11,12 +11,12 @@ import type {
   MoonlightPolicy,
 } from "@platform/library/config/inheritable-fields"
 import { type LaunchSpec, launchEnvironment } from "@platform/library/launcher"
-import { composeGamescopeLaunchSpec } from "@platform/stream/gamescope-launch-spec"
 import {
   composeMoonlightGamescopeLaunchSpec,
   composeMoonlightStreamLaunchSpec,
   validateMoonlightGamescopePolicy,
 } from "@platform/stream/moonlight-launch-spec"
+import { composeGamescopeLaunchSpec } from "@product/plugins/gamescope"
 
 const DEFAULT_STARTUP_OBSERVE_MS = 750
 
@@ -107,6 +107,7 @@ export async function launchMoonlight(
     installedSpec = composeMoonlightGamescopeLaunchSpec({
       policy,
       gamescope: options.gamescope ?? { enable: true },
+      wrapGamescopeLaunchSpec: composeGamescopeLaunchSpec,
       facts: {
         host: options.host ?? "",
         ...(inputDevice.path ? { inputDevices: [inputDevice.path] } : {}),

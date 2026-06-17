@@ -15,7 +15,7 @@ import {
   type GamescopeControlSuccessResponse,
   type GamescopeModeRequest,
   type GamescopeScalingFilter,
-} from "./gamescope-control-protocol"
+} from "./protocol"
 
 export interface GamescopeControlClientOptions {
   readonly socketPath: string

@@ -1,7 +1,7 @@
 # gamescope-korri patches
 
 Korri's pinned package is Gamescope 3.16.23 plus the downstream patches listed
-in `product/plugins/gamescope/default.nix`:
+in `product/plugins/gamescope/packages/gamescope-korri/default.nix`:
 
 - `0001-rendervulkan-allow-render-only-vulkan-device.patch`
 - `0002-waylandbackend-optional-explicit-sync.patch`

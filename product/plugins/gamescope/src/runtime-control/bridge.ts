@@ -17,7 +17,7 @@ import {
   validateGamescopeFps,
   validateGamescopeMode,
   validateGamescopeSharpness,
-} from "./gamescope-control-protocol"
+} from "./protocol"
 
 export interface GamescopeControlBridgeOptions {
   readonly socketPath: string

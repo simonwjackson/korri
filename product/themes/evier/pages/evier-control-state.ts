@@ -1,6 +1,8 @@
-import type { GamescopeScalingFilter } from "@platform/gamescope-control/gamescope-control-protocol"
 import { StreamControlSurface } from "@platform/stream-control/control-surface"
-import { readGamescopeScalingFilter } from "@platform/stream-control/state-normalizer"
+import {
+  type GamescopeScalingFilter,
+  readGamescopeScalingFilter,
+} from "@platform/stream-control/state-normalizer"
 import type {
   StreamControlAction,
   StreamControlClient,

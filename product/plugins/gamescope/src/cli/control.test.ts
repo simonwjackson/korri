@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
-import { createGamescopeHelloResult } from "@platform/gamescope-control/gamescope-control-protocol"
-import { runGamescopeControlCommand } from "./gamescope-control"
+import { createGamescopeHelloResult } from "../runtime-control/protocol"
+import { runGamescopeControlCommand } from "./control"
 
 describe("gamescope-control cli", () => {
   it("sets mode through the control socket", async () => {

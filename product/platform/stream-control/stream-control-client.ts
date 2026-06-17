@@ -1,4 +1,4 @@
-import type { GamescopeScalingFilter } from "@platform/gamescope-control/gamescope-control-protocol"
+import type { GamescopeScalingFilter } from "@platform/stream-control/state-normalizer"
 
 export interface StreamControlClient {
   readonly getControls?: () => Promise<unknown>

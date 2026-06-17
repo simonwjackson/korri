@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises"
 import { dirname } from "node:path"
-import { startGamescopeControlBridge } from "@platform/gamescope-control/gamescope-control-bridge"
-import { createX11GamescopeControlBackend } from "@platform/gamescope-control/x11-gamescope-control-backend"
+import { startGamescopeControlBridge } from "../runtime-control/bridge"
+import { createX11GamescopeControlBackend } from "../runtime-control/x11-backend"
 
 export interface GamescopeControlBridgeCommandIo {
   readonly write?: (line: string) => void

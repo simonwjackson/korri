@@ -30,8 +30,8 @@ pkgs.stdenv.mkDerivation {
     cp -R "$src"/. .
     chmod -R u+w .
 
-    bun --config=/dev/null --no-install ${../../../../tools/nix/bun-production-deps.ts} package-json > package.json.production && mv package.json.production package.json
-    bun --config=/dev/null --no-install ${../../../../tools/nix/bun-production-deps.ts} bun-lock > bun.lock.production && mv bun.lock.production bun.lock
+    bun --config=/dev/null --no-install ${../../../../../tools/nix/bun-production-deps.ts} package-json > package.json.production && mv package.json.production package.json
+    bun --config=/dev/null --no-install ${../../../../../tools/nix/bun-production-deps.ts} bun-lock > bun.lock.production && mv bun.lock.production bun.lock
     ! grep -q '"devDependencies"' package.json
 
     runHook postUnpack
@@ -43,8 +43,8 @@ pkgs.stdenv.mkDerivation {
     export HOME="$TMPDIR/home"
     mkdir -p "$HOME"
 
-    bun build product/apps/cli/gamescope-control.ts --target=bun --outfile=gamescope-control.js
-    bun build product/apps/cli/gamescope-control-bridge.ts --target=bun --outfile=gamescope-control-bridge.js
+    bun build product/plugins/gamescope/src/cli/control.ts --target=bun --outfile=gamescope-control.js
+    bun build product/plugins/gamescope/src/cli/bridge.ts --target=bun --outfile=gamescope-control-bridge.js
     bun build product/apps/cli/stream-control-bench.ts --target=bun --outfile=stream-control-bench.js
 
     runHook postBuild

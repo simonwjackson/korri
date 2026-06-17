@@ -11,7 +11,7 @@ import {
   parseXrandrCurrentMode,
   validateGamescopeMode,
   valueToGamescopeFilter,
-} from "./gamescope-control-protocol"
+} from "./protocol"
 
 export interface CommandResult {
   readonly stdout: string

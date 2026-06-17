@@ -13,7 +13,7 @@
           inherit system;
           config.allowUnfree = true;
         };
-        gamescope-korri = pkgs.callPackage ./default.nix {
+        gamescope-korri = pkgs.callPackage ./packages/gamescope-korri/default.nix {
           gamescope = pkgs.gamescope;
         };
       in

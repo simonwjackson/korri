@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test"
-import type { GamescopeControlClient } from "@platform/gamescope-control/gamescope-control-client"
-import type { GamescopeControlCommandMethod } from "@platform/gamescope-control/gamescope-control-protocol"
 import type { MoonlightControlClient } from "@platform/stream/moonlight-control-client"
+import type {
+  GamescopeControlClient,
+  GamescopeControlCommandMethod,
+} from "@product/plugins/gamescope"
 import {
   createStreamControlBenchApp,
   runStreamControlBenchCommand,

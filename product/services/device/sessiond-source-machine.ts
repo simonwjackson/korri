@@ -20,7 +20,7 @@ import {
   GAMESCOPE_PROCESS_NAMES,
   type ProcessInfo,
   type ProcessListQuery,
-} from "./sessiond-gamescope-reaper"
+} from "@product/plugins/gamescope"
 import {
   formatSessionRoleReadyEvidence,
   type SessionRole,

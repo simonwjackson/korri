@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test"
-import { normalizeGamescopePolicy } from "@platform/library/config/inheritable-fields"
 import type { LaunchSpec } from "@platform/library/launcher"
+import { normalizeGamescopePolicy } from "./policy"
 
-import { composeGamescopeLaunchSpec } from "./gamescope-launch-spec"
+import { composeGamescopeLaunchSpec } from "./wrapper"
 
 const game: LaunchSpec = {
   command: "retroarch",

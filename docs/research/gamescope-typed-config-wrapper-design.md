@@ -291,7 +291,7 @@ This concentrates all upstream-coupling into one module. A grep for the old flag
 ### Vendor-pinning as the parity fence
 
 Korri pins `gamescope-korri` and controls vendor bumps intentionally through
-`product/plugins/gamescope/default.nix`. This is the correct architecture:
+`product/plugins/gamescope/packages/gamescope-korri/default.nix`. This is the correct architecture:
 
 - The schema and the flag-mapping module are updated **together** when bumping the vendor.
 - CI catches regressions at the Nix evaluation layer (if the binary changes behavior)

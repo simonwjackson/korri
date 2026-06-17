@@ -1,6 +1,6 @@
-import type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
-import { normalizeGamescopePolicy } from "@platform/library/config/inheritable-fields"
 import type { LaunchSpec } from "@platform/library/launcher"
+import type { GamescopePolicy } from "./policy"
+import { normalizeGamescopePolicy } from "./policy"
 
 const DEFAULT_GAMESCOPE_COMMAND = "gamescope"
 

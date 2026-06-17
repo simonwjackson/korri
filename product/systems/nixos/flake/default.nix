@@ -193,7 +193,7 @@ flake-utils.lib.eachDefaultSystem (
     };
 
     korriGamescopeControlBridge =
-      import ../../../../product/services/device/nix/gamescope-control-bridge.nix
+      import ../../../../product/plugins/gamescope/packages/control-bridge/default.nix
         {
           inherit pkgs;
           lib = pkgs.lib;

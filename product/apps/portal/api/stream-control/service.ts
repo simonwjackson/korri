@@ -1,11 +1,6 @@
 import { appendFile, mkdir } from "node:fs/promises"
 import { DataError, ValidationError } from "@platform/api/rpc/errors"
 import {
-  connectGamescopeControl,
-  type GamescopeControlClient,
-} from "@platform/gamescope-control/gamescope-control-client"
-import type { GamescopeScalingFilter } from "@platform/gamescope-control/gamescope-control-protocol"
-import {
   connectMoonlightControl,
   type MoonlightControlClient,
 } from "@platform/stream/moonlight-control-client"
@@ -20,10 +15,19 @@ import {
   recordStateSnapshot,
 } from "@platform/stream-control/runtime-support"
 import {
-  normalizeGamescopeState,
   normalizeMoonlightState,
   rpcResult,
 } from "@platform/stream-control/state-normalizer"
+import type { GamescopeScalingFilter } from "@product/plugins/gamescope"
+import {
+  connectGamescopeControl,
+  type GamescopeControlClient,
+  normalizeGamescopeState,
+  setGamescopeFilter,
+  setGamescopeFps,
+  setGamescopeMode,
+  setGamescopeSharpness,
+} from "@product/plugins/gamescope"
 import { Context, Effect, Layer } from "effect"
 import {
   createDeviceControlService,
@@ -227,7 +231,7 @@ export function createStreamControlService(
       gamescopeResolution(payload).pipe(
         Effect.flatMap(() =>
           runGamescope(runtime, "gamescope.mode", payload, client =>
-            client.setMode(payload),
+            setGamescopeMode(client, payload),
           ),
         ),
       ),
@@ -240,19 +244,19 @@ export function createStreamControlService(
       range("fps", payload.fps, 0, 240).pipe(
         Effect.flatMap(() =>
           runGamescope(runtime, "gamescope.fps", payload, client =>
-            client.requestCommand("fps.set", payload),
+            setGamescopeFps(client, payload),
           ),
         ),
       ),
     setGamescopeFilter: payload =>
       runGamescope(runtime, "gamescope.filter", payload, client =>
-        client.setFilter(payload),
+        setGamescopeFilter(client, payload),
       ),
     setGamescopeSharpness: payload =>
       range("sharpness", payload.sharpness, 0, 20).pipe(
         Effect.flatMap(() =>
           runGamescope(runtime, "gamescope.sharpness", payload, client =>
-            client.setSharpness(payload),
+            setGamescopeSharpness(client, payload),
           ),
         ),
       ),
@@ -370,9 +374,7 @@ function runLinkedFps(
     {
       key: "gamescope",
       run: () =>
-        runLinkedGamescope(runtime, client =>
-          client.requestCommand("fps.set", payload),
-        ),
+        runLinkedGamescope(runtime, client => setGamescopeFps(client, payload)),
     },
   ])
 }
@@ -387,7 +389,10 @@ function runLinkedResolution(
   return runLinkedAction(runtime, "linked.resolution", payload, [
     {
       key: "gamescope",
-      run: () => runLinkedGamescope(runtime, client => client.setMode(payload)),
+      run: () =>
+        runLinkedGamescope(runtime, client =>
+          setGamescopeMode(client, payload),
+        ),
     },
     {
       key: "moonlight",

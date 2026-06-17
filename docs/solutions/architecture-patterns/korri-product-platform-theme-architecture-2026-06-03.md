@@ -180,8 +180,8 @@ first-party plugin owns the integration and colocates its package lane.
 Examples:
 
 ```text
-product/plugins/gamescope/default.nix
-product/plugins/gamescope/patches/
+product/plugins/gamescope/packages/gamescope-korri/default.nix
+product/plugins/gamescope/packages/gamescope-korri/patches/
 product/vendor/moonlight-embedded-korri/
 product/vendor/SDL2-mali-fbdev/
 product/vendor/sunshine-korri/

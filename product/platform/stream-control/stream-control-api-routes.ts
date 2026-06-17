@@ -1,10 +1,5 @@
 import { appendFile, mkdir } from "node:fs/promises"
 import {
-  connectGamescopeControl,
-  type GamescopeControlClient,
-} from "@platform/gamescope-control/gamescope-control-client"
-import type { GamescopeScalingFilter } from "@platform/gamescope-control/gamescope-control-protocol"
-import {
   connectMoonlightControl,
   type MoonlightControlClient,
 } from "@platform/stream/moonlight-control-client"
@@ -17,12 +12,32 @@ import {
   recordStateSnapshot,
 } from "@platform/stream-control/runtime-support"
 import {
+  type GamescopeScalingFilter,
   normalizeGamescopeState,
   normalizeMoonlightState,
   readGamescopeScalingFilter,
 } from "@platform/stream-control/state-normalizer"
 import type { Context } from "hono"
 import { Hono } from "hono"
+
+export interface GamescopeControlClient {
+  readonly state: () => Promise<unknown>
+  readonly setMode: (payload: {
+    readonly width: number
+    readonly height: number
+  }) => Promise<unknown>
+  readonly setFilter: (payload: {
+    readonly filter: GamescopeScalingFilter
+  }) => Promise<unknown>
+  readonly setSharpness: (payload: {
+    readonly sharpness: number
+  }) => Promise<unknown>
+  readonly requestCommand: (
+    method: "fps.set",
+    payload?: unknown,
+  ) => Promise<unknown>
+  readonly close: () => void
+}
 
 export interface StreamControlApiOptions {
   readonly moonlightSocketPath?: string
@@ -176,7 +191,9 @@ function createRuntime(
       ((socketPath: string) => connectMoonlightControl({ socketPath })),
     connectGamescope:
       deps.connectGamescope ??
-      ((socketPath: string) => connectGamescopeControl({ socketPath })),
+      (() => {
+        throw new Error("gamescope connector dependency is required")
+      }),
     record: createStreamControlEventRecorder({
       artifactDir: options.artifactDir,
       mkdir: mkdirImpl,

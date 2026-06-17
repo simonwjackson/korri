@@ -1,5 +1,5 @@
-export type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
-export { composeGamescopeLaunchSpec } from "@platform/stream/gamescope-launch-spec"
+export type { GamescopePolicy } from "@product/plugins/gamescope"
+export { composeGamescopeLaunchSpec } from "@product/plugins/gamescope"
 
 import type {
   SwayCommandRunner,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { createX11GamescopeControlBackend } from "./x11-gamescope-control-backend"
+import { createX11GamescopeControlBackend } from "./x11-backend"
 
 describe("x11 gamescope control backend", () => {
   it("writes the Xwayland mode-control atom and returns applied readback", async () => {

@@ -9,7 +9,7 @@ import {
   GAMESCOPE_PROCESS_NAMES,
   POSIX_PROCESS_SIGNALER,
   type ProcessInfo,
-} from "./sessiond-gamescope-reaper"
+} from "./reaper"
 
 function makeProcessList(processes: readonly ProcessInfo[]) {
   return { list: async () => processes }

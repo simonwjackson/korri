@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test"
 import { Effect } from "effect"
 
 import { plugin, runPluginHandler } from "."
-import { KORRI_GAMESCOPE_PLUGIN_ID } from "./ids"
 import {
   createPluginRegistry,
   DuplicatePluginId,
@@ -20,14 +19,16 @@ const alpha = plugin({
 
 const beta = plugin({ namespace: "@korri", name: "beta", title: "Beta" })
 
+const FAKE_COMPANION_ID = "@fake:wrapper" as const
+
 const launchWrapper = plugin({
-  namespace: "@korri",
-  name: "gamescope",
-  title: "Gamescope",
+  namespace: "@fake",
+  name: "wrapper",
+  title: "Wrapper",
   contributes: {
     launchCompanions: [
       {
-        id: KORRI_GAMESCOPE_PLUGIN_ID,
+        id: FAKE_COMPANION_ID,
         role: "launch-wrapper",
         supports: { systems: ["*"] },
       },
@@ -57,14 +58,14 @@ describe("createPluginRegistry", () => {
 
   it("exposes enabled launch companion contributions", () => {
     const registry = createPluginRegistry([launchWrapper], {
-      enabledPluginIds: [KORRI_GAMESCOPE_PLUGIN_ID],
+      enabledPluginIds: [FAKE_COMPANION_ID],
     })
 
     expect(registry.launchCompanions).toEqual([
       {
-        pluginId: KORRI_GAMESCOPE_PLUGIN_ID,
+        pluginId: FAKE_COMPANION_ID,
         companion: {
-          id: KORRI_GAMESCOPE_PLUGIN_ID,
+          id: FAKE_COMPANION_ID,
           role: "launch-wrapper",
           supports: { systems: ["*"] },
         },

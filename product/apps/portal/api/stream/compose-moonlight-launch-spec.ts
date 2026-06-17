@@ -7,6 +7,7 @@ import type {
 } from "@platform/library/config/inheritable-fields"
 import type { LaunchFailureKind, LaunchSpec } from "@platform/library/launcher"
 import { composeMoonlightGamescopeLaunchSpec } from "@platform/stream/moonlight-launch-spec"
+import { composeGamescopeLaunchSpec } from "@product/plugins/gamescope"
 
 /**
  * Build a Moonlight `LaunchSpec` for `moonlight stream -app "Korri Stream" <host>`.
@@ -82,6 +83,7 @@ export function composeMoonlightLaunchSpec(
   return composeMoonlightGamescopeLaunchSpec({
     policy: options.moonlight,
     gamescope: options.gamescope ?? { enable: false },
+    wrapGamescopeLaunchSpec: composeGamescopeLaunchSpec,
     facts: {
       host: options.host,
       ...(options.inputDevices ? { inputDevices: options.inputDevices } : {}),

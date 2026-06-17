@@ -1,18 +1,103 @@
-import { plugin } from "@platform/plugin"
-import { KORRI_GAMESCOPE_PLUGIN_ID } from "@platform/plugin/ids"
-
-export const gamescopePlugin = plugin({
-  namespace: "@korri",
-  name: "gamescope",
-  title: "Gamescope",
-  description: "Declares Gamescope as Korri's first-party launch companion.",
-  contributes: {
-    launchCompanions: [
-      {
-        id: KORRI_GAMESCOPE_PLUGIN_ID,
-        role: "launch-wrapper",
-        supports: { systems: ["*"] },
-      },
-    ],
-  },
-})
+export type {
+  GamescopeBackendValue as GamescopeBackend,
+  GamescopeFilterValue as GamescopeFilter,
+  GamescopePolicyValue as GamescopePolicy,
+  GamescopeScalerValue as GamescopeScaler,
+} from "./src/launch-companion"
+export {
+  composeGamescopeLaunchSpec,
+  DEFAULT_GAMESCOPE_POLICY,
+  decodeGamescopePolicy,
+  gamescopePolicyFromLaunch,
+  normalizeGamescopePolicy,
+} from "./src/launch-companion"
+export {
+  gamescopePlugin,
+  KORRI_GAMESCOPE_PLUGIN_ID,
+} from "./src/plugin"
+export type {
+  GamescopeBackendStatus,
+  GamescopeControlBackend,
+  GamescopeControlClient,
+  GamescopeControlCommandMethod,
+  GamescopeControlCommandResult,
+  GamescopeControlCommandStatus,
+  GamescopeControlErrorResponse,
+  GamescopeControlEvent,
+  GamescopeControlEventEnvelope,
+  GamescopeControlEventsSubscribedResult,
+  GamescopeControlEventsUnsubscribedResult,
+  GamescopeControlEventType,
+  GamescopeControlHelloResult,
+  GamescopeControlMethod,
+  GamescopeControlRequest,
+  GamescopeControlRequestId,
+  GamescopeControlResponse,
+  GamescopeControlResponseResult,
+  GamescopeControlState,
+  GamescopeControlSuccessResponse,
+  GamescopeMode,
+  GamescopeModeRequest,
+  GamescopeScalingFilter,
+  ValidatedGamescopeModeRequest,
+} from "./src/runtime-control"
+export {
+  connectGamescopeControl,
+  createGamescopeHelloResult,
+  createUnsupportedGamescopeCommandResult,
+  createX11GamescopeControlBackend,
+  decodeGamescopeControlEventEnvelope,
+  decodeGamescopeControlRequest,
+  decodeGamescopeControlResponse,
+  filterToGamescopeValue,
+  GAMESCOPE_CONTROL_COMMANDS,
+  GAMESCOPE_CONTROL_EVENTS,
+  GAMESCOPE_CONTROL_PROTOCOL,
+  GAMESCOPE_CONTROL_PROTOCOL_LIMITS,
+  GAMESCOPE_CONTROL_PROTOCOL_METHODS,
+  isGamescopeControlCommandMethod,
+  normalizeGamescopeState,
+  parseGamescopeCardinalProperty,
+  parseXrandrCurrentMode,
+  readGamescopeScalingFilter,
+  startGamescopeControlBridge,
+  validateGamescopeFilter,
+  validateGamescopeFps,
+  validateGamescopeMode,
+  validateGamescopeSharpness,
+  valueToGamescopeFilter,
+} from "./src/runtime-control"
+export type {
+  GamescopeProcessName,
+  GamescopeReaper,
+  GamescopeReaperLogger,
+  GamescopeReaperOptions,
+  ProcessInfo,
+  ProcessListQuery,
+  ProcessSignaler,
+  ReapOutcome,
+  ReapRequest,
+  ReapSignal,
+} from "./src/session"
+export {
+  createGamescopeReaper,
+  createProcfsProcessList,
+  createSystemGamescopeReaper,
+  GAMESCOPE_PROCESS_NAMES,
+  POSIX_PROCESS_SIGNALER,
+} from "./src/session"
+export type {
+  GamescopeCommandClient,
+  GamescopeFilterPayload,
+  GamescopeFpsPayload,
+  GamescopeModePayload,
+  GamescopeSharpnessPayload,
+} from "./src/stream-control"
+export {
+  GAMESCOPE_FPS_STEPS,
+  GAMESCOPE_SCALING_FILTERS,
+  setGamescopeFilter,
+  setGamescopeFps,
+  setGamescopeMode,
+  setGamescopeSharpness,
+} from "./src/stream-control"

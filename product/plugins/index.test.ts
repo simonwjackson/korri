@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test"
-import { KORRI_GAMESCOPE_PLUGIN_ID } from "@platform/plugin/ids"
-
 import { createFirstPartyPluginRegistryFromEnv, firstPartyPlugins } from "."
+import { KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
 
 describe("first-party plugins", () => {
   it("registers Gamescope as a first-party launch companion plugin", () => {

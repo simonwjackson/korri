@@ -1,9 +1,11 @@
 import { describe, expect, it } from "bun:test"
 import { ValidationError } from "@platform/api/rpc/errors"
-import type { GamescopeControlClient } from "@platform/gamescope-control/gamescope-control-client"
-import type { GamescopeControlCommandMethod } from "@platform/gamescope-control/gamescope-control-protocol"
 import type { MoonlightControlClient } from "@platform/stream/moonlight-control-client"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
+import type {
+  GamescopeControlClient,
+  GamescopeControlCommandMethod,
+} from "@product/plugins/gamescope"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { handleGetStreamControlConfig } from "./get-config.rpc-handler"
 import { handleGetStreamControlControls } from "./get-controls.rpc-handler"

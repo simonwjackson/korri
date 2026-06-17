@@ -1,8 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import {
-  normalizeGamescopeState,
-  normalizeMoonlightState,
-} from "@platform/stream-control/state-normalizer"
+import { normalizeMoonlightState } from "./state-normalizer"
 
 describe("stream-control state normalizer", () => {
   it("prefers Moonlight runtime settings over stream quality fallbacks", () => {
@@ -47,33 +44,6 @@ describe("stream-control state normalizer", () => {
       bitrateKbps: 12_000,
       fps: 60,
       resolution: { width: 1920, height: 1080 },
-    })
-  })
-
-  it("normalizes GameScope state while dropping unknown filters", () => {
-    expect(
-      normalizeGamescopeState({
-        result: {
-          fps: 60,
-          xwaylandMode: { width: 1280, height: 720 },
-          sharpness: 8,
-          filter: "fsr",
-        },
-      }),
-    ).toEqual({
-      fps: 60,
-      resolution: { width: 1280, height: 720 },
-      sharpness: 8,
-      filter: "fsr",
-    })
-
-    expect(
-      normalizeGamescopeState({ result: { filter: "future-filter" } }),
-    ).toEqual({
-      fps: null,
-      resolution: null,
-      sharpness: null,
-      filter: null,
     })
   })
 })

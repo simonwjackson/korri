@@ -3,7 +3,6 @@ import type {
   MoonlightPolicy,
 } from "@platform/library/config/inheritable-fields"
 import type { LaunchSpec } from "@platform/library/launcher"
-import { composeGamescopeLaunchSpec } from "@platform/stream/gamescope-launch-spec"
 
 const DEFAULT_MOONLIGHT_COMMAND = "moonlight"
 const KORRI_STREAM_APP_NAME = "Korri Stream"
@@ -46,10 +45,14 @@ export function composeMoonlightStreamLaunchSpec(
 export function composeMoonlightGamescopeLaunchSpec(
   options: ComposeMoonlightStreamLaunchSpecOptions & {
     readonly gamescope?: GamescopePolicy
+    readonly wrapGamescopeLaunchSpec: (
+      spec: LaunchSpec,
+      policy: GamescopePolicy,
+    ) => LaunchSpec
   },
 ): LaunchSpec {
   validateMoonlightGamescopePolicy(options.policy, options.gamescope)
-  return composeGamescopeLaunchSpec(
+  return options.wrapGamescopeLaunchSpec(
     composeMoonlightStreamLaunchSpec(options),
     options.gamescope ?? { enable: false },
   )

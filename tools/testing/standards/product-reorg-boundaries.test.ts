@@ -81,7 +81,7 @@ function importsPrivateProductFromPlatform(
 ): boolean {
   return importSpecifiers(source).some(specifier => {
     if (
-      /^(?:@app\/|@product\/(?:apps|services|systems|themes)\/|product\/(?:apps|services|systems|themes)\/|@korri\/products\/app\/)/.test(
+      /^(?:@app\/|@product\/(?:apps|services|systems|themes|plugins)\/|product\/(?:apps|services|systems|themes|plugins)\/|@korri\/products\/app\/)/.test(
         specifier,
       )
     ) {
@@ -91,7 +91,7 @@ function importsPrivateProductFromPlatform(
     if (!specifier.startsWith(".")) return false
 
     const resolved = repoRelative(normalize(join(dirname(fromFile), specifier)))
-    return /^product\/(?:apps|services|systems|themes)\//.test(resolved)
+    return /^product\/(?:apps|services|systems|themes|plugins)\//.test(resolved)
   })
 }
 
@@ -127,7 +127,7 @@ function buildReferencedToolEntrypoints(): readonly string[] {
     "product/services/device/nix/sessiond.nix",
     "product/services/device/nix/inputd.nix",
     "product/services/device/nix/game-stream.nix",
-    "product/services/device/nix/gamescope-control-bridge.nix",
+    "product/plugins/gamescope/packages/control-bridge/default.nix",
     "product/apps/cli/package.nix",
   ]
   const references = new Set<string>()
@@ -232,7 +232,15 @@ describe("standards: product platform reorganization guardrails", () => {
     ).toBe(false)
     expect(
       existsSync(
-        join(REPO_ROOT, "product", "plugins", "gamescope", "default.nix"),
+        join(
+          REPO_ROOT,
+          "product",
+          "plugins",
+          "gamescope",
+          "packages",
+          "gamescope-korri",
+          "default.nix",
+        ),
       ),
     ).toBe(true)
     expect(
@@ -241,7 +249,17 @@ describe("standards: product platform reorganization guardrails", () => {
       ),
     ).toBe(true)
     expect(
-      existsSync(join(REPO_ROOT, "product", "plugins", "gamescope", "patches")),
+      existsSync(
+        join(
+          REPO_ROOT,
+          "product",
+          "plugins",
+          "gamescope",
+          "packages",
+          "gamescope-korri",
+          "patches",
+        ),
+      ),
     ).toBe(true)
     expect(
       existsSync(join(REPO_ROOT, "product", "vendor", "libretro-fake-08")),
@@ -257,7 +275,15 @@ describe("standards: product platform reorganization guardrails", () => {
     ).toBe(false)
     expect(
       existsSync(
-        join(REPO_ROOT, "product", "plugins", "gamescope", "default.nix"),
+        join(
+          REPO_ROOT,
+          "product",
+          "plugins",
+          "gamescope",
+          "packages",
+          "gamescope-korri",
+          "default.nix",
+        ),
       ),
     ).toBe(true)
     expect(
@@ -266,7 +292,17 @@ describe("standards: product platform reorganization guardrails", () => {
       ),
     ).toBe(true)
     expect(
-      existsSync(join(REPO_ROOT, "product", "plugins", "gamescope", "patches")),
+      existsSync(
+        join(
+          REPO_ROOT,
+          "product",
+          "plugins",
+          "gamescope",
+          "packages",
+          "gamescope-korri",
+          "patches",
+        ),
+      ),
     ).toBe(true)
   })
 
@@ -386,6 +422,11 @@ describe("standards: product platform reorganization guardrails", () => {
     ).toBe(true)
     expect(
       importsPrivateProductFromPlatform('import x from "@product/apps/portal"'),
+    ).toBe(true)
+    expect(
+      importsPrivateProductFromPlatform(
+        'import x from "@product/plugins/gamescope"',
+      ),
     ).toBe(true)
     expect(
       importsPrivateProductFromPlatform(

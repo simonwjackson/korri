@@ -18,16 +18,16 @@ import {
 } from "@platform/library/sessiond-managed-launch-protocol"
 import { createShellLauncher } from "@platform/library/shell-launcher"
 import { logger as defaultLogger } from "@platform/logger"
+import {
+  createProcfsProcessList,
+  createSystemGamescopeReaper,
+  type GamescopeReaper,
+} from "@product/plugins/gamescope"
 import { findStreamSurfaceWindows } from "./game-stream-fullscreen"
 import {
   createElectrobunController,
   realElectrobunRunner,
 } from "./sessiond-electrobun"
-import {
-  createProcfsProcessList,
-  createSystemGamescopeReaper,
-  type GamescopeReaper,
-} from "./sessiond-gamescope-reaper"
 import type {
   KorriRendererController,
   KorriRendererStatus,

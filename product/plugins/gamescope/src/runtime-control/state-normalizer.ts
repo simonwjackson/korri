@@ -1,23 +1,18 @@
-import { GAMESCOPE_SCALING_FILTERS } from "@platform/stream-control/control-contract"
+import { GAMESCOPE_SCALING_FILTERS } from "../stream-control/control-surface"
+import type { GamescopeScalingFilter } from "./protocol"
+
+export type { GamescopeScalingFilter } from "./protocol"
 
 export interface ResolutionReadback {
   readonly width: number
   readonly height: number
 }
 
-export type GamescopeScalingFilter = (typeof GAMESCOPE_SCALING_FILTERS)[number]
-
 export interface GamescopeStateReadback {
   readonly fps: number | null
   readonly resolution: ResolutionReadback | null
   readonly sharpness: number | null
   readonly filter: GamescopeScalingFilter | null
-}
-
-export interface MoonlightStateReadback {
-  readonly bitrateKbps: number | null
-  readonly fps: number | null
-  readonly resolution: ResolutionReadback | null
 }
 
 export function normalizeGamescopeState(
@@ -45,47 +40,6 @@ export function readGamescopeScalingFilter(
     : undefined
 }
 
-export function normalizeMoonlightState(
-  snapshot: unknown,
-): MoonlightStateReadback {
-  const result = rpcResult(snapshot)
-  const runtimeSettings = recordField(result, "runtimeSettings")
-  const streamQuality = recordField(result, "streamQuality")
-  return {
-    bitrateKbps: moonlightNumber(
-      runtimeSettings,
-      streamQuality,
-      "appliedBitrateKbps",
-      "bitrateKbps",
-    ),
-    fps: moonlightNumber(runtimeSettings, streamQuality, "appliedFps", "fps"),
-    resolution: moonlightResolutionReadback(runtimeSettings, streamQuality),
-  }
-}
-
-function moonlightNumber(
-  runtimeSettings: Record<string, unknown> | undefined,
-  streamQuality: Record<string, unknown> | undefined,
-  runtimeKey: string,
-  streamKey: string,
-): number | null {
-  return (
-    firstNumber(runtimeSettings?.[runtimeKey], streamQuality?.[streamKey]) ??
-    null
-  )
-}
-
-function moonlightResolutionReadback(
-  runtimeSettings: Record<string, unknown> | undefined,
-  streamQuality: Record<string, unknown> | undefined,
-) {
-  const runtimeResolution = recordField(runtimeSettings, "appliedResolution")
-  return resolutionReadback(
-    firstNumber(runtimeResolution?.width, streamQuality?.width),
-    firstNumber(runtimeResolution?.height, streamQuality?.height),
-  )
-}
-
 function resolutionReadback(
   width: number | undefined,
   height: number | undefined,
@@ -93,11 +47,9 @@ function resolutionReadback(
   return width === undefined || height === undefined ? null : { width, height }
 }
 
-export function rpcResult(
-  response: unknown,
-): Record<string, unknown> | undefined {
-  if (!isRecord(response)) return undefined
-  const result = response.result
+function rpcResult(snapshot: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(snapshot)) return undefined
+  const result = snapshot.result
   return isRecord(result) ? result : undefined
 }
 

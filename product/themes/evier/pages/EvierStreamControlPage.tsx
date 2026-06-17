@@ -1,10 +1,10 @@
-import type { GamescopeScalingFilter } from "@platform/gamescope-control/gamescope-control-protocol"
 import {
   FPS_STEPS,
   GAMESCOPE_FPS_STEPS,
   LINKED_FPS_STEPS,
   type StreamControlSurfaceState,
 } from "@platform/stream-control/control-surface"
+import type { GamescopeScalingFilter } from "@platform/stream-control/state-normalizer"
 import type { StreamControlClient } from "@platform/stream-control/stream-control-client"
 import { useState } from "react"
 import {

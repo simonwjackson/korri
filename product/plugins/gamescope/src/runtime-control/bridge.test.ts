@@ -3,9 +3,9 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { setTimeout as sleep } from "node:timers/promises"
-import { startGamescopeControlBridge } from "./gamescope-control-bridge"
-import { connectGamescopeControl } from "./gamescope-control-client"
-import type { GamescopeControlBackend } from "./gamescope-control-protocol"
+import { startGamescopeControlBridge } from "./bridge"
+import { connectGamescopeControl } from "./client"
+import type { GamescopeControlBackend } from "./protocol"
 
 describe("gamescope control bridge", () => {
   it("serves v1 JSON-RPC state and mode mutation over a Unix socket", async () => {

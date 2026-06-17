@@ -4,6 +4,7 @@ import {
   type StreamControlApiOptions,
   streamControlApiOptionsFromEnv,
 } from "@platform/stream-control/stream-control-api-routes"
+import { connectGamescopeControl } from "@product/plugins/gamescope"
 import { Hono } from "hono"
 
 const DEFAULT_HOST = "0.0.0.0"
@@ -23,7 +24,13 @@ export function createStreamControlBenchApp(
 ) {
   const app = new Hono()
   app.get("/", context => context.html(CONTROL_PANEL_HTML))
-  app.route("/api", createStreamControlApiRoutes(options, deps))
+  app.route(
+    "/api",
+    createStreamControlApiRoutes(options, {
+      connectGamescope: socketPath => connectGamescopeControl({ socketPath }),
+      ...deps,
+    }),
+  )
   return app
 }
 

@@ -4,17 +4,17 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { LaunchResult, LaunchSpec } from "@platform/library/launcher"
 import type { SessiondManagedLaunchEvent } from "@platform/library/sessiond-managed-launch-protocol"
+import type {
+  GamescopeReaper,
+  ReapOutcome,
+  ReapRequest,
+} from "@product/plugins/gamescope"
 import {
   createKorriSessiondCore,
   type KorriSessiondCore,
   type KorriSessiondGamescopeControlBridge,
   startKorriSessiond,
 } from "./sessiond"
-import type {
-  GamescopeReaper,
-  ReapOutcome,
-  ReapRequest,
-} from "./sessiond-gamescope-reaper"
 import type { SessionRole } from "./sessiond-role"
 import type { KorriWindowSnapshot } from "./sessiond-state"
 import type {
