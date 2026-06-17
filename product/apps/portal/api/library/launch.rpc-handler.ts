@@ -50,16 +50,6 @@ export const handleLaunchLibrary = (
     const source = yield* LibrarySource
     const launcher = yield* Launcher
     const foregroundSessionHost = yield* ForegroundSessionHost
-    const games = yield* source.list().pipe(Effect.mapError(toDataError))
-    if (!games.some(entry => entry.id === payload.id)) {
-      logger.warn(
-        { id: payload.id },
-        "app.library.launch: unknown id; nothing to spawn",
-      )
-      return yield* Effect.fail(
-        new NotFoundError({ message: `Unknown game id: ${payload.id}` }),
-      )
-    }
 
     const resolvedResult = yield* source
       .resolveLaunchForGame(payload.id, {
@@ -74,13 +64,25 @@ export const handleLaunchLibrary = (
         Effect.matchEffect({
           onSuccess: resolved =>
             Effect.succeed({ _tag: "resolved" as const, resolved }),
-          onFailure: (error: LibraryError) =>
-            error.reason === "config"
+          onFailure: (error: LibraryError) => {
+            if (isPlayableNotFound(error)) {
+              logger.warn(
+                { id: payload.id },
+                "app.library.launch: unknown id; nothing to spawn",
+              )
+              return Effect.fail(
+                new NotFoundError({
+                  message: `Unknown game id: ${payload.id}`,
+                }),
+              )
+            }
+            return error.reason === "config"
               ? Effect.succeed({
                   _tag: "failed" as const,
                   response: launchConfigurationFailure(error),
                 })
-              : Effect.fail(toDataError(error)),
+              : Effect.fail(toDataError(error))
+          },
         }),
       )
 
@@ -184,6 +186,13 @@ function unsupportedManagedSpawn(): ManagedLaunchResult {
       stderrTail: "configured launcher does not support managed spawn",
     },
   }
+}
+
+function isPlayableNotFound(error: LibraryError): boolean {
+  return (
+    error.reason === "config" &&
+    error.message?.startsWith("PlayableNotFound") === true
+  )
 }
 
 function launchConfigurationFailure(

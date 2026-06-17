@@ -548,6 +548,59 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     }
   })
 
+  it("launches a directly resolved local playable without enumerating the full library", async () => {
+    let listCalls = 0
+    let launchedSpec: unknown
+    const sourceLayer = Layer.succeed(LibrarySource)({
+      list: () => {
+        listCalls += 1
+        return Effect.fail(
+          new LibraryError({
+            reason: "io",
+            message: "list should not be on the launch critical path",
+          }),
+        )
+      },
+      launchSpecFor: () => Effect.fail(new LibraryError({ reason: "config" })),
+      resolveLaunchForGame: id =>
+        Effect.succeed({
+          spec: { command: "/bin/game", args: [id] },
+          gamescope: { enable: false },
+        }),
+    })
+    const launcherLayer = Layer.succeed(Launcher)({
+      run: spec => {
+        launchedSpec = spec
+        return Effect.succeed({ status: "launched" as const })
+      },
+      spawn: spec => {
+        launchedSpec = spec
+        return Effect.succeed({
+          status: "started" as const,
+          result: Promise.resolve({ status: "launched" as const }),
+          session: completedSessionHandle(),
+        })
+      },
+    })
+
+    const result = await Effect.runPromise(
+      handleLaunchLibrary({ id: "game" }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            sourceLayer,
+            launcherLayer,
+            Layer.succeed(ForegroundSessionHost)(createForegroundSessionHost()),
+            remoteStreamPrepareNeverCalledLayer,
+          ),
+        ),
+      ),
+    )
+
+    expect(result).toEqual({ _tag: "Accepted", status: "launched" })
+    expect(listCalls).toBe(0)
+    expect(launchedSpec).toEqual({ command: "/bin/game", args: ["game"] })
+  })
+
   it("wraps the resolved launch with Gamescope before invoking the launcher", async () => {
     let launchedSpec: unknown
     const sourceLayer = Layer.succeed(LibrarySource)({

@@ -70,7 +70,7 @@ function ShiftThemeRuntimeRoot({
   readonly initialValues: Parameters<typeof useAtomInitialValues>[0]
 }) {
   useAtomInitialValues(initialValues)
-  useLibraryRefreshOnRuntimeReady()
+  useLibraryRefreshOnConfigChanged()
   return (
     <>
       <LiveUsbArtifactNotice />
@@ -79,33 +79,18 @@ function ShiftThemeRuntimeRoot({
   )
 }
 
-function useLibraryRefreshOnRuntimeReady() {
+function useLibraryRefreshOnConfigChanged() {
   const refreshCatalogSnapshot = useAtomRefresh(catalogSnapshotAtom)
 
   useEffect(() => {
-    const timers = [window.setTimeout(() => refreshCatalogSnapshot(), 0)]
+    if (typeof EventSource === "undefined") return
 
-    if (typeof EventSource !== "undefined") {
-      const events = new EventSource("/api/config/events")
-      const refresh = () => refreshCatalogSnapshot()
-      let sawReady = false
-      const refreshOnceWhenReady = () => {
-        if (sawReady) return
-        sawReady = true
-        refreshCatalogSnapshot()
-      }
-      events.addEventListener("config.ready", refreshOnceWhenReady)
-      events.addEventListener("config.changed", refresh)
-      return () => {
-        for (const timer of timers) window.clearTimeout(timer)
-        events.removeEventListener("config.ready", refreshOnceWhenReady)
-        events.removeEventListener("config.changed", refresh)
-        events.close()
-      }
-    }
-
+    const events = new EventSource("/api/config/events")
+    const refresh = () => refreshCatalogSnapshot()
+    events.addEventListener("config.changed", refresh)
     return () => {
-      for (const timer of timers) window.clearTimeout(timer)
+      events.removeEventListener("config.changed", refresh)
+      events.close()
     }
   }, [refreshCatalogSnapshot])
 }
