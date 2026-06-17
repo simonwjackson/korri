@@ -1,7 +1,7 @@
 ---
 id: 01KVBE3W1NTB209YDWBPGC0DBV
 title: Align first-party plugin descriptors with retained sketch
-status: active
+status: completed
 created: 2026-06-17
 source: se-plan
 ---

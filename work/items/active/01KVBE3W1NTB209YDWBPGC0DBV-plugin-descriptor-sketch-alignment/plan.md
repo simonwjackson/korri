@@ -1,7 +1,7 @@
 ---
 title: refactor: Align first-party plugin descriptors with retained sketch
 type: refactor
-status: active
+status: completed
 date: 2026-06-17
 origin: work/items/active/01KV8NZRAAETDX69P5T73BRVY8-first-party-plugin-system-shape/requirements.md
 verify_command: "bun test product/platform/plugin/registry.test.ts product/platform/plugin/catalog-library-source.test.ts product/platform/plugin/resources.test.ts product/plugins/index.test.ts product/plugins/gamescope/src/plugin.test.ts product/plugins/neverball/neverball.test.ts product/apps/portal/api/library/launch.rpc-handler.test.ts product/apps/portal/api/stream-control/stream-control.rpc-handler.test.ts product/services/device/sessiond.test.ts tools/testing/standards/product-reorg-boundaries.test.ts --test-name-pattern 'plugin|Gamescope|Neverball|platform|stream-control|sessiond'"
