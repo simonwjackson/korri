@@ -26,6 +26,44 @@ const mergeObject = <T extends object>(
   return { ...base, ...override }
 }
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+const mergeGamescopeValue = (
+  base: unknown,
+  override: unknown,
+  path: readonly string[] = [],
+): unknown => {
+  if (override === undefined) return base
+  if (Array.isArray(override)) {
+    return path.join(".") === "extraArgs"
+      ? [...(Array.isArray(base) ? base : []), ...override]
+      : override
+  }
+  if (isPlainObject(base) && isPlainObject(override)) {
+    return [
+      ...new Set([...Object.keys(base), ...Object.keys(override)]),
+    ].reduce<Record<string, unknown>>((merged, key) => {
+      const value = mergeGamescopeValue(base[key], override[key], [
+        ...path,
+        key,
+      ])
+      if (value !== undefined) merged[key] = value
+      return merged
+    }, {})
+  }
+  return override
+}
+
+const mergeGamescopePolicy = (
+  base: GamescopePolicy | undefined,
+  override: GamescopePolicy | undefined,
+): GamescopePolicy | undefined => {
+  if (base === undefined) return override
+  if (override === undefined) return base
+  return mergeGamescopeValue(base, override) as GamescopePolicy
+}
+
 const mergeSteamExtra = (
   base: SteamPolicy["extra"] | undefined,
   override: SteamPolicy["extra"] | undefined,
@@ -47,13 +85,18 @@ const mergeLaunchPolicy = (
 ): LaunchPolicy | undefined => {
   if (base === undefined) return override
   if (override === undefined) return base
-  const gamescope = mergeObject(
+  const gamescope = mergeGamescopePolicy(
     base.with?.["@korri:gamescope"],
     override.with?.["@korri:gamescope"],
-  ) as GamescopePolicy | undefined
-  return gamescope === undefined
-    ? { ...base, ...override }
-    : { with: { "@korri:gamescope": gamescope } }
+  )
+  const withPolicy = {
+    ...(base.with ?? {}),
+    ...(override.with ?? {}),
+    ...(gamescope !== undefined ? { "@korri:gamescope": gamescope } : {}),
+  }
+  return Object.keys(withPolicy).length > 0
+    ? { ...base, ...override, with: withPolicy }
+    : { ...base, ...override }
 }
 
 const spreadSteamExtra = (

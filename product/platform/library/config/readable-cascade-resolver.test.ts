@@ -415,6 +415,21 @@ describe("resolveReadableLaunchContext", () => {
     expect(context.env?.SCALE).toBe("override")
   })
 
+  it("ignores stale top-level Gamescope readable overrides", async () => {
+    const context = await Effect.runPromise(
+      resolveReadableLaunchContext(snapshot(), {
+        playableId: "sonic-the-hedgehog",
+        override: {
+          gamescope: { enable: false },
+          ...gamescopeLaunch({ enable: true, extraArgs: ["override"] }),
+        } as never,
+      }),
+    )
+
+    expect(context.gamescope?.enable).toBe(true)
+    expect(context.gamescope?.extraArgs).toContain("override")
+  })
+
   it("selects a single inherited system app choice", async () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(

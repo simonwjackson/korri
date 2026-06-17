@@ -30,6 +30,54 @@ describe("app choice selection", () => {
     ).toEqual([{ id: "retroarch", inherit: false, argsAppend: ["release"] }])
   })
 
+  it("merges Gamescope launch companion policies by app choice id", () => {
+    expect(
+      resolveEffectiveAppChoices(
+        [
+          {
+            id: "retroarch",
+            launch: {
+              with: {
+                "@korri:gamescope": {
+                  backend: { type: "wayland" },
+                  display: { nested: { width: 854 } },
+                  extraArgs: ["--rt"],
+                },
+              },
+            },
+          },
+        ],
+        [
+          {
+            id: "retroarch",
+            launch: {
+              with: {
+                "@korri:gamescope": {
+                  backend: { allowDeferred: true },
+                  display: { nested: { height: 480 } },
+                  extraArgs: ["--hdr-enabled"],
+                },
+              },
+            },
+          },
+        ],
+      ),
+    ).toEqual([
+      {
+        id: "retroarch",
+        launch: {
+          with: {
+            "@korri:gamescope": {
+              backend: { type: "wayland", allowDeferred: true },
+              display: { nested: { width: 854, height: 480 } },
+              extraArgs: ["--rt", "--hdr-enabled"],
+            },
+          },
+        },
+      },
+    ])
+  })
+
   it("merges Steam app choice extras and launch options", () => {
     expect(
       resolveEffectiveAppChoices(

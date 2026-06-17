@@ -1241,7 +1241,6 @@ export class MultiTargetUnsupported extends Data.TaggedError(
 
 interface ReadableOverride {
   readonly launch?: LaunchPolicy
-  readonly gamescope?: GamescopePolicy
   readonly moonlight?: MoonlightPolicy
   readonly retroarch?: RetroArchPolicy
   readonly ryubing?: RyubingPolicy
@@ -1477,6 +1476,23 @@ const readableViewOfProfile = (
       }
     : {}
 
+const readableViewOfOverride = (
+  override: ReadableOverride | undefined,
+): ReadableLayerView =>
+  override
+    ? {
+        gamescope: gamescopePolicyFromLaunch(override),
+        moonlight: override.moonlight,
+        retroarch: override.retroarch,
+        ryubing: override.ryubing,
+        steam: override.steam,
+        env: override.env,
+        cwd: override.cwd,
+        argsAppend: override.argsAppend,
+        patches: override.patches,
+      }
+    : {}
+
 const mergeReadableLayers = (
   layers: readonly ReadableLayerView[],
 ): ReadableLayerView => {
@@ -1565,7 +1581,7 @@ export const resolveReadableLocalLauncherPolicy = (
   const folded = mergeReadableLayers([
     snapshot.host ?? {},
     readableViewOfApp(app),
-    inputs.override ?? {},
+    readableViewOfOverride(inputs.override),
   ])
   return {
     gamescope: normalizeGamescopePolicy(folded.gamescope),
@@ -1695,7 +1711,7 @@ export const resolveReadableLaunchContext = (
       readableViewOfContained(entry),
       readableViewOfRelease(release),
       readableViewOfProfile(profile),
-      inputs.override ?? {},
+      readableViewOfOverride(inputs.override),
     ])
 
     const target = release.target

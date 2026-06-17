@@ -157,6 +157,29 @@ describe("resolveLocalLauncherGamescopePolicy", () => {
     })
   })
 
+  it("merges launcher-specific Gamescope companions from byLauncher", () => {
+    const snap = snapshotOf({
+      global: globalConfig({
+        ...gamescopeLaunch({ display: { nested: { width: 854 } } }),
+        byLauncher: {
+          moonlight: gamescopeLaunch({
+            display: { nested: { height: 480 } },
+            extraArgs: ["--expose-wayland"],
+          }),
+        },
+      }),
+      launchers: [launcher({ id: "moonlight", systems: [] })],
+      games: [],
+    })
+
+    expect(
+      resolveLocalLauncherGamescopePolicy(snap, { launcherId: "moonlight" }),
+    ).toMatchObject({
+      display: { nested: { width: 854, height: 480 } },
+      extraArgs: ["--expose-wayland"],
+    })
+  })
+
   it("uses the product default when local launcher config is absent", () => {
     expect(
       resolveLocalLauncherGamescopePolicy(emptySnapshot(), {

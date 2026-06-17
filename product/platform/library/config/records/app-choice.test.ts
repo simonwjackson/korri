@@ -47,6 +47,9 @@ describe("AppChoice", () => {
       decodeAppChoice({ id: "retroarch", kind: "retroarch" }),
     ).toThrow(/kind.*top-level apps/i)
     expect(() => decodeAppChoice({ id: "retroarch", extra: true })).toThrow()
+    expect(() =>
+      decodeAppChoice({ id: "retroarch", gamescope: { enable: true } }),
+    ).toThrow()
   })
 
   it("rejects empty id and runtime values", () => {

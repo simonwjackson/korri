@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises"
 import { parse } from "yaml"
 
 import { decodeAppPayload, decodeAppRecord } from "./app"
+import { decodeCollectionPayload } from "./collection"
 import { decodeGamePayload } from "./game"
 import { decodeGlobalConfigPayload } from "./global"
 import { decodeHostPayload } from "./host"
@@ -123,6 +124,74 @@ describe("readable library schema records", () => {
     expect(() => decodeHostPayload({ role: "desktop" })).toThrow()
     expect(() => decodeHostPayload({ launch: { app: "steam" } })).toThrow()
     expect(() => decodeHostPayload({ profiles: { handheld: {} } })).toThrow()
+  })
+
+  it("rejects the retired top-level Gamescope key on readable cascade records", () => {
+    const retired = { gamescope: { enable: true } }
+    const cases: Array<readonly [string, () => unknown]> = [
+      ["global", () => decodeGlobalConfigPayload(retired)],
+      ["host", () => decodeHostPayload(retired)],
+      ["user", () => decodeUserPayload(retired)],
+      ["system", () => decodeSystemPayload(retired)],
+      [
+        "launcher",
+        () =>
+          decodeLauncherPayload({
+            command: "retroarch",
+            args: [],
+            systems: [],
+            ...retired,
+          }),
+      ],
+      ["preset", () => decodePresetPayload(retired)],
+      ["app", () => decodeAppPayload({ command: "retroarch", ...retired })],
+      [
+        "runtime",
+        () =>
+          decodeRuntimePayload({ kind: "tool", path: "/bin/tool", ...retired }),
+      ],
+      ["source", () => decodeSourcePayload({ kind: ["service"], ...retired })],
+      ["profile", () => decodeProfilePayload(retired)],
+      ["collection", () => decodeCollectionPayload(retired)],
+      [
+        "library-item",
+        () =>
+          decodeLibraryItemPayload({
+            ...retired,
+            releases: [{ id: "default", system: "stream", target: "peer" }],
+          }),
+      ],
+      [
+        "library-release",
+        () =>
+          decodeLibraryItemPayload({
+            releases: [
+              { id: "default", system: "stream", target: "peer", ...retired },
+            ],
+          }),
+      ],
+      [
+        "contained-playable",
+        () =>
+          decodeLibraryItemPayload({
+            contains: { child: retired },
+            releases: [{ id: "default", system: "stream", target: "peer" }],
+          }),
+      ],
+      [
+        "game",
+        () =>
+          decodeGamePayload({
+            system: "stream",
+            contentPath: "peer",
+            ...retired,
+          }),
+      ],
+    ]
+
+    for (const [, decode] of cases) {
+      expect(decode).toThrow()
+    }
   })
 
   it("decodes moonlight policy on every readable cascade record", () => {

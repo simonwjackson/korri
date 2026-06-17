@@ -164,7 +164,9 @@ apps:
 #
 # apps:
 #   retroarch:
-#     gamescope:
-#       app:
-#         environment:
-#           WAYLAND_DISPLAY: null
+#     launch:
+#       with:
+#         "@korri:gamescope":
+#           app:
+#             environment:
+#               WAYLAND_DISPLAY: null

@@ -414,6 +414,31 @@ describe("createLibraryRepository — readable playable entries", () => {
     })
   })
 
+  it("preserves Gamescope launch companions through legacy launcher upsert", async () => {
+    await withTempRoot(async root => {
+      const repo = await seedReadableLibrary(root)
+      await Effect.runPromise(
+        repo.upsertLauncher({
+          id: "moonlight",
+          command: "moonlight",
+          args: ["stream"],
+          systems: [],
+          launch: {
+            with: {
+              "@korri:gamescope": { extraArgs: ["--expose-wayland"] },
+            },
+          },
+        }),
+      )
+
+      const policy = await Effect.runPromise(
+        repo.resolveLocalLauncherPolicy("moonlight"),
+      )
+
+      expect(policy.gamescope.extraArgs).toEqual(["--expose-wayland"])
+    })
+  })
+
   it("resolves local launcher Moonlight and sibling Gamescope policy from readable host/app layers", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)
