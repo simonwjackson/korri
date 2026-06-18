@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { access, chmod, mkdir, symlink } from "node:fs/promises"
+import { access, chmod, mkdir, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { LibrarySource } from "@platform/library/library-services"
@@ -250,6 +250,53 @@ describe("PluginLibrarySourceLayerLive", () => {
     }
   })
 
+  it("exposes installed PortMaster entries when the PortMaster plugin is enabled", async () => {
+    const previous = snapshotEnv()
+    const installRoot = await mktemp()
+    await seedPortMasterManifest(installRoot)
+    process.env.KORRI_CONFIG_ROOTS = ""
+    process.env.KORRI_ENABLED_PLUGINS = "@korri:portmaster"
+    process.env.KORRI_PORTMASTER_INSTALL_ROOT = installRoot
+    process.env.KORRI_PORTMASTER_USE_BUBBLEWRAP = "false"
+    process.env.KORRI_PORTMASTER_SHELL_PATH = "/bin/bash"
+    try {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const source = yield* LibrarySource
+          const listPlayableEntries = source.listPlayableEntries
+          if (!listPlayableEntries)
+            throw new Error("expected playable list support")
+          const entries = yield* listPlayableEntries()
+          const resolved = yield* source.resolveLaunchForGame(
+            "@korri:portmaster/wordle",
+          )
+          return { entries, resolved }
+        }).pipe(Effect.provide(PluginLibrarySourceLayerLive)),
+      )
+
+      expect(result.entries).toMatchObject([
+        {
+          id: "@korri:portmaster/wordle",
+          title: "Wordle SDL",
+          system: "portmaster",
+          launchable: true,
+        },
+      ])
+      expect(result.resolved.spec).toMatchObject({
+        command: "/bin/bash",
+        args: [join(installRoot, "ports", "Wordle.sh")],
+        cwd: join(installRoot, "ports"),
+        env: {
+          XDG_DATA_HOME: installRoot,
+          KORRI_PORTMASTER_HOME: join(installRoot, "PortMaster"),
+          DEVICE_ARCH: "aarch64",
+        },
+      })
+    } finally {
+      restoreEnv(previous)
+    }
+  })
+
   it("keeps launch resolution read-only even when a Nix command is configured", async () => {
     const previous = snapshotEnv()
     const stateRoot = await mktemp()
@@ -315,6 +362,10 @@ function snapshotEnv() {
     KORRI_ENABLED_PLUGINS: process.env.KORRI_ENABLED_PLUGINS,
     KORRI_PLUGIN_RESOURCE_ROOT: process.env.KORRI_PLUGIN_RESOURCE_ROOT,
     KORRI_NIX_COMMAND: process.env.KORRI_NIX_COMMAND,
+    KORRI_PORTMASTER_INSTALL_ROOT: process.env.KORRI_PORTMASTER_INSTALL_ROOT,
+    KORRI_PORTMASTER_USE_BUBBLEWRAP:
+      process.env.KORRI_PORTMASTER_USE_BUBBLEWRAP,
+    KORRI_PORTMASTER_SHELL_PATH: process.env.KORRI_PORTMASTER_SHELL_PATH,
   }
 }
 
@@ -328,6 +379,58 @@ function restoreEnv(previous: ReturnType<typeof snapshotEnv>): void {
 async function mktemp(): Promise<string> {
   return await import("node:fs/promises").then(fs =>
     fs.mkdtemp(join(tmpdir(), "korri-plugin-live-")),
+  )
+}
+
+async function seedPortMasterManifest(installRoot: string): Promise<void> {
+  const manifest = {
+    schemaVersion: 1,
+    providerId: "@korri:portmaster",
+    id: "wordle.zip",
+    title: "Wordle SDL",
+    installedAt: "2026-06-18T00:00:00.000Z",
+    installRoot,
+    portsRoot: join(installRoot, "ports"),
+    manifestPath: join(installRoot, "manifests", "wordle.json"),
+    source: {
+      url: "https://example.invalid/wordle.zip",
+      sizeBytes: 1,
+      sha256: "fixture",
+    },
+    catalog: {
+      items: ["Wordle.sh", "wordle"],
+      arch: ["aarch64"],
+      runtime: [],
+      readyToRun: true,
+    },
+    extracted: {
+      files: [
+        { path: "Wordle.sh", sizeBytes: 24 },
+        { path: "wordle/wordle", sizeBytes: 64 },
+      ],
+      launchScripts: [{ path: "Wordle.sh", sizeBytes: 24 }],
+      binaries: [
+        {
+          path: "wordle/wordle",
+          sizeBytes: 64,
+          format: "elf",
+          elfClass: "64",
+          machine: "EM_AARCH64",
+          arch: "aarch64",
+        },
+      ],
+      nativeElfRepairs: [],
+      fexWrappers: [],
+      armhfQemuWrappers: [],
+      runtimeDetections: [],
+    },
+  }
+  await mkdir(join(installRoot, "manifests"), { recursive: true })
+  await mkdir(join(installRoot, "ports"), { recursive: true })
+  await writeFile(join(installRoot, "ports", "Wordle.sh"), "#!/bin/bash\n")
+  await writeFile(
+    manifest.manifestPath,
+    `${JSON.stringify(manifest, null, 2)}\n`,
   )
 }
 

@@ -9,6 +9,10 @@ import {
 } from "@platform/acquisition/acquisition-service"
 import { createStaticAcquisitionPluginRegistry } from "@platform/acquisition/plugin-loader"
 import { acquisitionPluginDefinitionsFromPluginRegistry } from "@platform/acquisition/product-plugin-adapter"
+import {
+  LibraryError,
+  type LibrarySourceService,
+} from "@platform/library/library-services"
 import { type PluginHandler, runPluginHandler } from "@platform/plugin"
 import {
   createPluginRegistry,
@@ -19,6 +23,7 @@ import {
   createPortMasterPlugin,
   KORRI_PORTMASTER_PLUGIN_ID,
   portmasterPlugin,
+  withPortMasterInstalledLibrarySource,
 } from ".."
 
 const catalogFixture = {
@@ -806,6 +811,141 @@ describe("PortMaster plugin", () => {
     }
   })
 
+  it("exposes installed PortMaster manifests as playable library entries", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-portmaster-library-"))
+    const zipBytes = makeZip({
+      "Wordle.sh": Buffer.from("#!/bin/bash\necho wordle\n"),
+      "wordle/wordle": fakeElf("aarch64"),
+    })
+    const catalog = {
+      ports: {
+        "wordle.zip": {
+          name: "wordle.zip",
+          items: ["Wordle.sh", "wordle"],
+          attr: {
+            title: "Wordle SDL",
+            desc: "A native PortMaster game.",
+            inst: "Ready to run.",
+            genres: ["puzzle"],
+            porter: ["PortMaster"],
+            rtr: true,
+            exp: false,
+            runtime: [],
+            reqs: [],
+            arch: ["aarch64"],
+            availability: "full",
+          },
+          source: {
+            md5: createHash("md5").update(zipBytes).digest("hex"),
+            size: zipBytes.length,
+            url: "https://example.invalid/wordle.zip",
+          },
+        },
+      },
+    }
+    const productPlugin = createPortMasterPlugin({
+      catalogPath: "/catalog/ports.json",
+      installRoot: root,
+      readFileText: async () => JSON.stringify(catalog),
+      fetchImpl: async () =>
+        new Response(zipBytes, {
+          status: 200,
+          headers: { "content-type": "application/zip" },
+        }),
+    })
+
+    try {
+      const install = productPlugin.handlers.find(
+        candidate => candidate.operation === "portmaster.install",
+      ) as PluginHandler | undefined
+      if (!install) throw new Error("missing portmaster.install handler")
+      await Effect.runPromise(
+        runPluginHandler(install, {
+          operation: "portmaster.install",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            id: "wordle.zip",
+            installedAt: "2026-06-18T00:00:00.000Z",
+          },
+        }),
+      )
+
+      const source = withPortMasterInstalledLibrarySource(emptySource(), {
+        installRoot: root,
+        env: { KORRI_PORTMASTER_USE_BUBBLEWRAP: "false" },
+        prepareLaunch: async input => ({
+          command: "/bin/bash",
+          args: [input.manifest?.extracted.launchScripts[0]?.path ?? "missing"],
+          cwd: input.manifest?.portsRoot ?? root,
+          env: {
+            KORRI_PORTMASTER_HOME: join(root, "PortMaster"),
+            DEVICE_ARCH: "aarch64",
+          },
+        }),
+      })
+      const listPlayableEntries = source.listPlayableEntries
+      if (!listPlayableEntries)
+        throw new Error("expected playable list support")
+
+      const entries = await Effect.runPromise(listPlayableEntries())
+      expect(entries).toMatchObject([
+        {
+          id: "@korri:portmaster/wordle",
+          title: "Wordle SDL",
+          system: "portmaster",
+          launchable: true,
+          userData: {
+            pluginId: KORRI_PORTMASTER_PLUGIN_ID,
+            portmasterId: "wordle.zip",
+          },
+          releases: [
+            {
+              id: "installed",
+              system: "portmaster",
+              launchable: true,
+              target: {
+                kind: "file",
+                storage: "portmaster",
+                path: join(root, "manifests", "wordle.json"),
+              },
+            },
+          ],
+        },
+      ])
+      await expect(Effect.runPromise(source.list())).resolves.toMatchObject([
+        {
+          id: "@korri:portmaster/wordle",
+          system: "portmaster",
+          metadata: { name: "Wordle SDL" },
+        },
+      ])
+      await expect(
+        Effect.runPromise(
+          source.canResolveLaunchForGame?.("@korri:portmaster/wordle") ??
+            Effect.succeed(false),
+        ),
+      ).resolves.toBe(true)
+      const resolved = await Effect.runPromise(
+        source.resolveLaunchForGame("@korri:portmaster/wordle"),
+      )
+      expect(resolved.spec).toEqual({
+        command: "/bin/bash",
+        args: ["Wordle.sh"],
+        cwd: join(root, "ports"),
+        env: {
+          KORRI_PORTMASTER_HOME: join(root, "PortMaster"),
+          DEVICE_ARCH: "aarch64",
+        },
+      })
+      expect(resolved.playable).toMatchObject({
+        id: "@korri:portmaster/wordle",
+        title: "Wordle SDL",
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it("wraps armhf PortMaster executables for qemu-arm", async () => {
     const root = await mkdtemp(join(tmpdir(), "korri-portmaster-armhf-"))
     const zipBytes = makeZip({
@@ -954,6 +1094,19 @@ describe("PortMaster plugin", () => {
     }
   })
 })
+
+function emptySource(): LibrarySourceService {
+  return {
+    list: () => Effect.succeed([]),
+    listPlayableEntries: () => Effect.succeed([]),
+    launchSpecFor: () => Effect.succeed(undefined),
+    canResolveLaunchForGame: () => Effect.succeed(false),
+    resolveLaunchForGame: id =>
+      Effect.fail(
+        new LibraryError({ reason: "config", message: `missing ${id}` }),
+      ),
+  }
+}
 
 function fakeElf(arch: "aarch64" | "x86_64" | "x86" | "armhf"): Buffer {
   const bytes = Buffer.alloc(64)

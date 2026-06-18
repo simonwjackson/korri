@@ -28,6 +28,11 @@ export type {
   PortMasterRuntimeDetection,
 } from "./src/installer"
 export { installPortMasterEntry } from "./src/installer"
+export type { PortMasterInstalledLibrarySourceOptions } from "./src/library-source"
+export {
+  defaultPortMasterInstallRoot,
+  withPortMasterInstalledLibrarySource,
+} from "./src/library-source"
 export {
   createPortMasterPlugin,
   KORRI_PORTMASTER_PLUGIN_ID,

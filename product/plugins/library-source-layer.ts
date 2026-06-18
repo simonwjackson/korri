@@ -12,6 +12,11 @@ import {
   createFirstPartyPluginRegistryFromEnv,
   firstPartyLaunchIntegrationsForRegistry,
 } from "."
+import {
+  defaultPortMasterInstallRoot,
+  KORRI_PORTMASTER_PLUGIN_ID,
+  withPortMasterInstalledLibrarySource,
+} from "./portmaster"
 
 const DEFAULT_PLUGIN_RESOURCE_ROOT = "/var/lib/korri/plugins/resources"
 
@@ -19,7 +24,7 @@ export const PluginLibrarySourceLayerLive = Layer.effect(
   LibrarySource,
   Effect.sync(() => {
     const registry = createFirstPartyPluginRegistryFromEnv(process.env)
-    return withPluginLibrarySource(
+    const source = withPluginLibrarySource(
       createLiveLibrarySourceService({
         repositoryOptions: {
           pluginRegistry: registry,
@@ -29,6 +34,12 @@ export const PluginLibrarySourceLayerLive = Layer.effect(
       registry,
       createNixOutLinkResolver({ stateRoot: pluginResourceRoot(process.env) }),
     )
+    return registry.enabledPluginIds.has(KORRI_PORTMASTER_PLUGIN_ID)
+      ? withPortMasterInstalledLibrarySource(source, {
+          installRoot: defaultPortMasterInstallRoot(process.env),
+          env: process.env,
+        })
+      : source
   }),
 )
 
