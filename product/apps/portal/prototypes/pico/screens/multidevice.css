@@ -1,0 +1,253 @@
+/* PROTOTYPE — pico theme. Throwaway. Gallery group MULTI-DEVICE (pcMd-). */
+
+/* Shared: offline badge + status dot ----------------------------------- */
+.pcMd-badge-off {
+	display: inline-flex;
+	align-items: center;
+	padding: 0.25em 0.6em;
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--pico-ink-dim);
+	background: var(--p8-slate);
+}
+.pcMd-dot {
+	width: 1.4cqw;
+	height: 1.4cqw;
+	background: var(--p8-lime);
+	box-shadow: 0 0 0 0.4cqw rgba(0, 228, 54, 0.25);
+}
+
+/* Dual — primary -------------------------------------------------------- */
+.pcMd-companion-tag {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-1);
+	align-self: flex-start;
+	padding: var(--pico-space-1) var(--pico-space-2);
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--p8-lime);
+	border: 0.3125cqw solid var(--p8-green);
+}
+.pcMd-primary {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: var(--pico-space-3);
+}
+.pcMd-rail {
+	display: flex;
+	align-items: flex-end;
+	gap: var(--pico-space-2);
+}
+.pcMd-rail-side {
+	opacity: 0.55;
+}
+.pcMd-primary-info {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+}
+.pcMd-launch-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--pico-space-2);
+	margin-top: var(--pico-space-1);
+}
+
+/* Dual — companion (full-bleed, visually distinct from primary) --------- */
+.pcMd-companion {
+	position: relative;
+	height: 100%;
+	display: grid;
+	place-items: center;
+	overflow: hidden;
+	background:
+		repeating-linear-gradient(45deg, #0a1226 0 6cqw, #060c1a 6cqw 12cqw),
+		radial-gradient(circle at 50% 42%, rgba(255, 163, 0, 0.22), transparent 62%);
+}
+.pcMd-companion-art {
+	display: grid;
+	place-items: center;
+}
+.pcMd-companion-art .pc-art {
+	height: min(70cqh, calc(var(--pico-base) * 16));
+}
+.pcMd-companion-overlay {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	padding: var(--pico-space-4) var(--pico-space-3) var(--pico-space-3);
+	background: linear-gradient(0deg, rgba(0, 0, 0, 0.85), transparent);
+}
+.pcMd-companion-dev {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--1);
+	color: var(--pico-accent);
+	letter-spacing: 0.1em;
+}
+
+/* Host discovery (scan) ------------------------------------------------- */
+.pcMd-scan {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	gap: var(--pico-space-2);
+}
+.pcMd-scan .pc-list {
+	width: min(78cqw, 100%);
+	margin-top: var(--pico-space-2);
+	text-align: left;
+}
+.pcMd-fade {
+	animation: pcMd-fadein 0.6s ease-out both;
+}
+.pcMd-fade.in-late {
+	animation-delay: 0.45s;
+	opacity: 0.6;
+}
+@keyframes pcMd-fadein {
+	from {
+		opacity: 0;
+		transform: translateY(0.6em);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+/* Host list ------------------------------------------------------------- */
+.pcMd-hosts {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: var(--pico-space-2);
+	align-content: start;
+}
+.pcMd-host {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+}
+.pcMd-host.sel {
+	border-color: var(--pico-focus);
+	box-shadow: 0 0 0 0.3125cqw var(--pico-focus);
+}
+.pcMd-host.off {
+	opacity: 0.5;
+}
+.pcMd-host-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--pico-space-1);
+}
+.pcMd-host-name {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--1);
+	color: var(--pico-ink);
+}
+.pcMd-host-meta {
+	display: flex;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: var(--pico-space-2);
+}
+.pcMd-host-addr {
+	font-size: var(--pico-text--1);
+	color: var(--pico-ink-dim);
+}
+.pcMd-host-cta {
+	display: flex;
+	justify-content: flex-end;
+	flex: 0 0 auto;
+}
+
+/* Connecting (stepper) -------------------------------------------------- */
+.pcMd-connect {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--pico-space-2);
+	width: min(78cqw, 100%);
+}
+.pcMd-steps {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: var(--pico-space-1) var(--pico-space-2);
+}
+.pcMd-step {
+	padding: var(--pico-space-1) var(--pico-space-2);
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--pico-ink-dim);
+	border: 0.3125cqw solid var(--p8-slate);
+}
+.pcMd-step.done {
+	color: var(--p8-black);
+	background: var(--p8-lime);
+	border-color: var(--p8-lime);
+}
+.pcMd-step.active {
+	color: var(--p8-black);
+	background: var(--pico-accent);
+	border-color: var(--pico-accent);
+}
+
+/* Seat manager ---------------------------------------------------------- */
+.pcMd-seat-meta {
+	display: inline-flex;
+	gap: var(--pico-space-2);
+}
+.pcMd-seat-kind {
+	color: var(--pico-ink-dim);
+}
+.pcMd-seat-batt {
+	color: var(--p8-lime);
+}
+.pcMd-seat-batt.off {
+	color: var(--p8-slate);
+}
+.pcMd-active {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--p8-slate);
+}
+.pcMd-active.on {
+	color: var(--p8-black);
+	padding: 0.25em 0.6em;
+	background: var(--p8-lime);
+}
+
+/* Pairing --------------------------------------------------------------- */
+.pcMd-pair {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--pico-space-2);
+}
+.pcMd-code {
+	font-family: var(--font-display);
+	font-size: var(--pico-text-3);
+	letter-spacing: 0.15em;
+	color: var(--pico-accent);
+	text-shadow: 0.625cqw 0.625cqw 0 #000;
+}
+.pcMd-pair-wait {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+}

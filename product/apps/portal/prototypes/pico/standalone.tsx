@@ -1,34 +1,23 @@
 /**
  * PROTOTYPE — standalone backend-free viewer. Throwaway.
  *
- * Mounts the three pico home-screen variants on the reusable device-lab
- * calibration desk, with no router / bridge / RPC / API. This is the reliable
- * way to view the prototype while the portal's full dev stack is unavailable:
+ * Mounts the max-out STATE GALLERY on the reusable device-lab calibration desk,
+ * with no router / bridge / RPC / API. This is the reliable way to view the
+ * prototype while the portal's full dev stack is unavailable:
  *   just dev-pico
  */
 import { useState } from "react"
 import { createRoot } from "react-dom/client"
 import { type DeviceConfig, DeviceLab, type ThemeKnob } from "./device-lab"
-import { picoGames, picoRecent } from "./fixtures"
+import { PicoGallery } from "./PicoGallery"
 import {
-  PicoPrototypeSwitcher,
-  type PicoVariantDef,
-} from "./PicoPrototypeSwitcher"
-import { VariantCartridgeShelf } from "./VariantCartridgeShelf"
-import { VariantGameDetail } from "./VariantGameDetail"
-import { VariantIconGrid } from "./VariantIconGrid"
-import { VariantInGame } from "./VariantInGame"
-import { VariantSettings } from "./VariantSettings"
+  findScreen,
+  PICO_FIRST_SCREEN,
+  PICO_GROUPS,
+  PICO_SCREENS,
+} from "./screen-catalog"
 import "./device-lab/device-lab.css"
 import "./pico-prototype.css"
-
-const VARIANTS: readonly PicoVariantDef[] = [
-  { key: "A", name: "Home" },
-  { key: "B", name: "Settings" },
-  { key: "C", name: "Browse" },
-  { key: "D", name: "Game Detail" },
-  { key: "E", name: "In-Game" },
-]
 
 // Calibrated seed exported from the device-lab desk. SCALE (px/mm) is
 // monitor-specific — recalibrate per monitor via the credit card. Device mm +
@@ -125,20 +114,9 @@ const PICO_KNOBS: readonly ThemeKnob[] = [
   },
 ]
 
-function renderVariant(variant: string) {
-  if (variant === "A") return <VariantCartridgeShelf games={picoGames} />
-  if (variant === "B") return <VariantSettings />
-  if (variant === "C") return <VariantIconGrid games={picoGames} />
-  if (variant === "D") return <VariantGameDetail games={picoGames} />
-  if (variant === "E") {
-    const hero = picoRecent[0] ?? picoGames[0]
-    return hero ? <VariantInGame game={hero} /> : null
-  }
-  return null
-}
-
 function PicoStandalone() {
-  const [variant, setVariant] = useState("A")
+  const [screenId, setScreenId] = useState(PICO_FIRST_SCREEN)
+  const screen = findScreen(screenId)
   return (
     <div data-pico>
       <DeviceLab
@@ -151,12 +129,13 @@ function PicoStandalone() {
         screensClassName="pico-screens"
         bezelClassName="pico-bezel"
         screenClassName="pico-screen"
-        render={() => renderVariant(variant)}
+        render={() => screen.render()}
       />
-      <PicoPrototypeSwitcher
-        variants={VARIANTS}
-        current={variant}
-        onSelect={setVariant}
+      <PicoGallery
+        screens={PICO_SCREENS}
+        groups={PICO_GROUPS}
+        current={screenId}
+        onSelect={setScreenId}
       />
     </div>
   )

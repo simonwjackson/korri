@@ -1,0 +1,466 @@
+/* PROTOTYPE — pico theme. Throwaway. Gallery group FUTURE (pcFut-). */
+
+/* Shared 8-bit pixel avatar block + presence dot, reused across screens. */
+.pcFut-ava {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 4.5cqw;
+	height: 4.5cqw;
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--p8-black);
+	background: var(--p8-slate);
+	border: 0.3125cqw solid var(--p8-black);
+}
+.pcFut-ava.on {
+	background: var(--p8-lime);
+}
+.pcFut-ava.away {
+	background: var(--p8-orange);
+}
+.pcFut-ava.off {
+	background: var(--p8-slate);
+}
+.pcFut-ava.you {
+	background: var(--pico-accent);
+}
+.pcFut-dot {
+	display: inline-block;
+	width: 1.6cqw;
+	height: 1.6cqw;
+	background: var(--p8-slate);
+}
+.pcFut-dot.on {
+	background: var(--p8-lime);
+}
+.pcFut-dot.away {
+	background: var(--p8-orange);
+}
+.pcFut-dot.off {
+	background: var(--p8-slate);
+}
+
+/* Group heading reused by friends + featured rails. */
+.pcFut-group-h {
+	flex: 0 0 auto;
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	letter-spacing: 0.0625em;
+	color: var(--pico-accent);
+}
+
+/* Friends -------------------------------------------------------------- */
+.pcFut-friends {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-2);
+}
+.pcFut-group {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+}
+
+/* Activity feed -------------------------------------------------------- */
+.pcFut-feed {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+}
+.pcFut-feed-row {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-1) var(--pico-space-2);
+	border-left: 0.625cqw solid transparent;
+}
+.pcFut-feed-row.fresh {
+	border-left-color: var(--pico-accent);
+	background: var(--pico-panel);
+}
+.pcFut-feed-text {
+	display: flex;
+	flex-direction: column;
+	gap: 0.15em;
+	min-width: 0;
+}
+.pcFut-feed-line {
+	font-size: var(--pico-text--1);
+	color: var(--pico-ink-dim);
+}
+.pcFut-feed-line b {
+	font-weight: normal;
+	font-family: var(--font-display);
+	font-size: var(--pico-text--2);
+	color: var(--pico-ink);
+}
+.pcFut-feed-line b.pcFut-you,
+.pcFut-you {
+	color: var(--pico-accent);
+}
+.pcFut-target {
+	color: var(--p8-blue);
+}
+.pcFut-when {
+	font-size: var(--pico-text--3);
+}
+
+/* Achievements --------------------------------------------------------- */
+.pcFut-ach-summary {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--pico-space-2);
+}
+.pcFut-ach-toast {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-1) var(--pico-space-2);
+	background: var(--p8-black);
+	border: 0.4cqw solid var(--pico-accent);
+}
+.pcFut-ach-toast-ico {
+	font-family: var(--font-display);
+	font-size: var(--pico-text-1);
+	color: var(--pico-accent);
+}
+.pcFut-ach-toast-text {
+	display: flex;
+	flex-direction: column;
+	gap: 0.15em;
+	min-width: 0;
+	font-size: var(--pico-text--2);
+	color: var(--pico-ink-dim);
+}
+.pcFut-ach-toast-text b {
+	font-weight: normal;
+	font-family: var(--font-display);
+	font-size: var(--pico-text--2);
+	color: var(--pico-ink);
+}
+.pcFut-ach-ico {
+	font-family: var(--font-display);
+	font-size: var(--pico-text-0);
+}
+.pcFut-ach-ico.got {
+	color: var(--pico-accent);
+}
+.pcFut-ach-ico.locked {
+	color: var(--p8-slate);
+}
+.pcFut-rarity {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--p8-silver);
+}
+.pcFut-rarity.r-common {
+	color: var(--p8-silver);
+}
+.pcFut-rarity.r-rare {
+	color: var(--p8-blue);
+}
+.pcFut-rarity.r-epic {
+	color: var(--p8-pink);
+}
+.pcFut-rarity.r-legendary {
+	color: var(--p8-orange);
+}
+
+/* Leaderboard ---------------------------------------------------------- */
+.pcFut-lb-head {
+	flex: 0 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+}
+.pcFut-lb {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+.pcFut-lb-row {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-1) var(--pico-space-2);
+	font-size: var(--pico-text-0);
+	color: var(--pico-ink-dim);
+}
+.pcFut-lb-row.head {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--pico-accent);
+	border-bottom: 0.3125cqw solid var(--p8-slate);
+}
+.pcFut-lb-row.you {
+	background: var(--pico-focus);
+	color: var(--p8-black);
+}
+.pcFut-lb-rank {
+	flex: 0 0 auto;
+	width: 6cqw;
+	font-family: var(--font-display);
+	font-size: var(--pico-text--2);
+	color: var(--pico-accent);
+}
+.pcFut-lb-row.you .pcFut-lb-rank {
+	color: var(--p8-black);
+}
+.pcFut-lb-name {
+	flex: 1 1 auto;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: var(--pico-ink);
+}
+.pcFut-lb-row.you .pcFut-lb-name {
+	color: var(--p8-black);
+}
+.pcFut-lb-score {
+	flex: 0 0 auto;
+	font-family: var(--font-display);
+	font-size: var(--pico-text--2);
+}
+
+/* Profile -------------------------------------------------------------- */
+.pcFut-prof-head {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-3);
+}
+.pcFut-prof-ava {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: min(20cqh, calc(var(--pico-base) * 5));
+	height: min(20cqh, calc(var(--pico-base) * 5));
+	font-family: var(--font-display);
+	font-size: var(--pico-text-1);
+	color: var(--p8-black);
+	background: var(--pico-accent);
+	border: 0.4cqw solid var(--p8-black);
+	box-shadow: 0.4688cqw 0.4688cqw 0 #000;
+}
+.pcFut-prof-id {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	min-width: 0;
+}
+.pcFut-prof-xp {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	font-size: var(--pico-text--2);
+}
+.pcFut-prof-stats {
+	flex: 0 0 auto;
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--pico-space-2) var(--pico-space-3);
+}
+.pcFut-prof-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--pico-space-1);
+}
+
+/* Cloud save conflict -------------------------------------------------- */
+.pcFut-conf-head {
+	flex: 0 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+}
+.pcFut-conf-note {
+	margin: 0;
+	max-width: 72cqw;
+	font-size: var(--pico-text--2);
+	line-height: 1.5;
+	color: var(--pico-ink-dim);
+}
+.pcFut-conf-grid {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: var(--pico-space-2);
+	min-height: 0;
+}
+.pcFut-conf-card {
+	gap: var(--pico-space-1);
+}
+.pcFut-conf-line {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--pico-space-2);
+	font-size: var(--pico-text--2);
+}
+.pcFut-conf-line b {
+	font-weight: normal;
+	font-family: var(--font-display);
+	font-size: var(--pico-text--2);
+	color: var(--pico-ink);
+}
+
+/* Store ---------------------------------------------------------------- */
+.pcFut-store-banner {
+	flex: 0 0 auto;
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+	padding: var(--pico-space-3);
+	background:
+		repeating-linear-gradient(135deg, #11203f 0 8cqw, #0c1730 8cqw 16cqw),
+		var(--pico-panel);
+	border: 0.4cqw solid var(--pico-accent);
+}
+.pcFut-store-banner-text {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	min-width: 0;
+}
+.pcFut-store-blurb {
+	margin: 0;
+	max-width: 60cqw;
+	font-size: var(--pico-text--2);
+	line-height: 1.5;
+	color: var(--pico-ink-dim);
+}
+.pcFut-store-banner-meta {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-1);
+}
+.pcFut-store-banner-tag {
+	position: absolute;
+	top: var(--pico-space-2);
+	right: var(--pico-space-2);
+	padding: var(--pico-space-1) var(--pico-space-2);
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--p8-black);
+	background: var(--p8-orange);
+	box-shadow: 0.4688cqw 0.4688cqw 0 #000;
+}
+.pcFut-store-grid {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: var(--pico-space-2);
+	min-height: 0;
+}
+.pcFut-store-tile {
+	flex-direction: row;
+	align-items: center;
+	gap: var(--pico-space-2);
+}
+.pcFut-store-tile.sel {
+	border-color: var(--pico-focus);
+	outline: 0.4688cqw solid var(--pico-focus);
+	outline-offset: 0.3125cqw;
+}
+.pcFut-store-tile-art {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: min(14cqh, calc(var(--pico-base) * 3.5));
+	height: min(14cqh, calc(var(--pico-base) * 3.5));
+	font-family: var(--font-display);
+	font-size: var(--pico-text-1);
+	color: var(--p8-black);
+	background: var(--pico-accent);
+	border: 0.3125cqw solid var(--p8-black);
+}
+.pcFut-store-tile-body {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	min-width: 0;
+}
+.pcFut-store-tile-title {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--pico-ink);
+}
+.pcFut-store-tile-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--pico-space-1);
+}
+
+/* Featured / game of the day ------------------------------------------- */
+.pcFut-feat {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-2);
+}
+.pcFut-feat-top {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-3);
+}
+.pcFut-feat-art {
+	box-shadow: 0.625cqw 0.625cqw 0 #000;
+}
+.pcFut-feat-info {
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+	min-width: 0;
+}
+.pcFut-feat-tags {
+	font-size: var(--pico-text--2);
+	letter-spacing: 0.0625em;
+	color: var(--pico-accent);
+}
+.pcFut-feat-blurb {
+	margin: 0;
+	max-width: 56cqw;
+	font-size: var(--pico-text--2);
+	line-height: 1.5;
+	color: var(--pico-ink-dim);
+}
+.pcFut-feat-why {
+	display: flex;
+	align-items: center;
+	gap: var(--pico-space-2);
+	font-size: var(--pico-text--2);
+}
+.pcFut-feat-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--pico-space-2);
+	margin-top: var(--pico-space-1);
+}
+.pcFut-feat-more {
+	flex: 0 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: var(--pico-space-1);
+}
+.pcFut-feat-rail {
+	display: flex;
+	gap: var(--pico-space-2);
+}
+.pcFut-feat-thumb {
+	opacity: 0.85;
+}
