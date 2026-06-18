@@ -1,0 +1,373 @@
+/* PROTOTYPE — pico theme. Throwaway. Gallery group PERSONALITY (pcPer-).
+ * Character experiments: mascot demo, launch ritual, attract mode, boot POST.
+ * All sizing bounded-intrinsic; motion via steps() (reduced-motion guard global). */
+
+/* Mascot demo sizes (sprite base styles live in pico-prototype.css). */
+.pcMascot-lg .pcMascot-svg {
+	width: min(12cqh, calc(var(--pico-base) * 4));
+	height: min(12cqh, calc(var(--pico-base) * 4));
+}
+.pcMascot-xl .pcMascot-svg {
+	width: min(34cqh, calc(var(--pico-base) * 9));
+	height: min(34cqh, calc(var(--pico-base) * 9));
+}
+.pcPer-moods {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: var(--pico-space-3);
+	margin-top: var(--pico-space-2);
+}
+.pcPer-mood {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--pico-space-1);
+}
+.pcPer-mood-label {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--3);
+	color: var(--pico-ink-dim);
+}
+
+/* ── Launch ritual: cartridge insert → CRT power-on (4s synced loop) ────── */
+.pcPer-ritual {
+	flex: 1 1 auto;
+	min-height: 0;
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.pcPer-tube {
+	position: relative;
+	aspect-ratio: 4 / 3;
+	height: min(60cqh, calc(var(--pico-base) * 15));
+	background: #04060f;
+	border: 0.5cqw solid var(--p8-slate);
+	overflow: hidden;
+	box-shadow: inset 0 0 4cqw rgba(0, 0, 0, 0.85);
+}
+.pcPer-slot {
+	position: absolute;
+	top: 7%;
+	left: 50%;
+	transform: translateX(-50%);
+	width: 36%;
+	height: 1.4cqh;
+	background: #000;
+	box-shadow: inset 0 0 0 0.3cqw var(--p8-slate);
+	z-index: 3;
+}
+.pcPer-cart {
+	position: absolute;
+	left: 50%;
+	top: 0;
+	width: 36%;
+	aspect-ratio: 3 / 4;
+	container-type: size;
+	z-index: 2;
+	transform: translate(-50%, -120%);
+	animation: pcPer-insert 4s steps(8) infinite;
+}
+.pcPer-cart .pico-cart {
+	width: 100%;
+	height: 100%;
+}
+.pcPer-cart .pico-cart-initials {
+	font-size: 30cqh;
+}
+.pcPer-power {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	display: grid;
+	place-items: center;
+}
+.pcPer-power-line {
+	position: absolute;
+	left: 8%;
+	right: 8%;
+	height: 0.7cqh;
+	background: var(--p8-white);
+	box-shadow: 0 0 2cqw var(--p8-white);
+	transform: scaleX(0);
+	animation: pcPer-line 4s steps(6) infinite;
+}
+.pcPer-power-game {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--pico-space-1);
+	text-align: center;
+	transform: scaleY(0);
+	opacity: 0;
+	transform-origin: center;
+	animation: pcPer-game 4s steps(6) infinite;
+}
+.pcPer-power-title {
+	font-family: var(--font-display);
+	font-size: var(--pico-text--2);
+	color: var(--pico-accent);
+}
+.pcPer-power-name {
+	font-family: var(--font-display);
+	font-size: var(--pico-text-0);
+	color: var(--pico-ink);
+}
+@keyframes pcPer-insert {
+	0% {
+		transform: translate(-50%, -120%);
+		opacity: 1;
+	}
+	18% {
+		transform: translate(-50%, -8%);
+		opacity: 1;
+	}
+	24% {
+		transform: translate(-50%, 3%);
+		opacity: 1;
+	}
+	28% {
+		transform: translate(-50%, -3%);
+		opacity: 1;
+	}
+	33% {
+		transform: translate(-50%, 9%);
+		opacity: 0;
+	}
+	34%,
+	100% {
+		transform: translate(-50%, -120%);
+		opacity: 0;
+	}
+}
+@keyframes pcPer-line {
+	0%,
+	30% {
+		transform: scaleX(0);
+		opacity: 0;
+	}
+	34% {
+		transform: scaleX(1);
+		opacity: 1;
+	}
+	42% {
+		transform: scaleX(1);
+		opacity: 1;
+	}
+	46%,
+	100% {
+		opacity: 0;
+	}
+}
+@keyframes pcPer-game {
+	0%,
+	40% {
+		transform: scaleY(0);
+		opacity: 0;
+		filter: brightness(3);
+	}
+	46% {
+		transform: scaleY(1);
+		opacity: 1;
+		filter: brightness(2.4);
+	}
+	52% {
+		filter: brightness(1);
+	}
+	82% {
+		transform: scaleY(1);
+		opacity: 1;
+	}
+	90% {
+		transform: scaleY(0.04);
+		opacity: 1;
+	}
+	93%,
+	100% {
+		transform: scaleY(0);
+		opacity: 0;
+	}
+}
+
+/* ── Attract mode: drifting stars + palette logo + marquee + hi-score ──── */
+.pcPer-attract {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+.pcPer-stars {
+	position: absolute;
+	inset: 0;
+	background:
+		radial-gradient(
+				0.25cqw 0.25cqw at 30% 30%,
+				var(--p8-white) 99%,
+				transparent 100%
+			)
+			0 0 / 7cqw 7cqw,
+		radial-gradient(
+				0.3cqw 0.3cqw at 70% 60%,
+				var(--p8-silver) 99%,
+				transparent 100%
+			)
+			0 0 / 11cqw 11cqw;
+	opacity: 0.85;
+	animation: pcPer-drift 6s linear infinite;
+}
+@keyframes pcPer-drift {
+	to {
+		background-position:
+			7cqw 7cqw,
+			-11cqw 11cqw;
+	}
+}
+.pcPer-attract-mid {
+	position: relative;
+	z-index: 1;
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--pico-space-3);
+}
+.pcPer-logo {
+	font-family: var(--font-display);
+	font-size: var(--pico-text-3);
+	letter-spacing: 0.15em;
+	text-shadow: 0.5cqw 0.5cqw 0 #000;
+	animation: pcPer-palette 1s steps(1) infinite;
+}
+@keyframes pcPer-palette {
+	0% {
+		color: var(--p8-red);
+	}
+	20% {
+		color: var(--p8-orange);
+	}
+	40% {
+		color: var(--p8-yellow);
+	}
+	60% {
+		color: var(--p8-lime);
+	}
+	80% {
+		color: var(--p8-blue);
+	}
+	100% {
+		color: var(--p8-pink);
+	}
+}
+.pcPer-attract-rail {
+	display: flex;
+	gap: 3cqw;
+	width: max-content;
+	animation: pcPer-marquee 9s steps(30) infinite;
+}
+.pcPer-attract-cart {
+	flex: 0 0 auto;
+	container-type: size;
+	aspect-ratio: 3 / 4;
+	height: min(26cqh, calc(var(--pico-base) * 7));
+}
+.pcPer-attract-cart .pico-cart {
+	width: 100%;
+	height: 100%;
+}
+.pcPer-attract-cart .pico-cart-initials {
+	font-size: 30cqh;
+}
+@keyframes pcPer-marquee {
+	from {
+		transform: translateX(0);
+	}
+	to {
+		transform: translateX(-50%);
+	}
+}
+.pcPer-hiscore {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	justify-content: space-between;
+	padding: var(--pico-space-2) var(--pico-space-3);
+	font-family: var(--font-display);
+	font-size: var(--pico-text--2);
+	color: var(--pico-accent);
+}
+.pcPer-press {
+	color: var(--pico-ink);
+	animation: pcPer-pressblink 0.8s steps(2) infinite;
+}
+@keyframes pcPer-pressblink {
+	0%,
+	55% {
+		opacity: 1;
+	}
+	55.01%,
+	100% {
+		opacity: 0;
+	}
+}
+
+/* ── Boot POST: voiced power-on self-test ──────────────────────────────── */
+.pcPer-post {
+	position: relative;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0.2em;
+	padding: var(--pico-space-3);
+	background: #02030a;
+}
+.pcPer-post-lines {
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.15em;
+	font-family: var(--font-term);
+	font-size: var(--pico-text-0);
+	color: var(--p8-lime);
+}
+.pcPer-post-line {
+	opacity: 0;
+	animation: pcPer-appear 0.2s steps(2) both;
+}
+@keyframes pcPer-appear {
+	from {
+		opacity: 0;
+		transform: translateX(-1ch);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+.pcPer-post-caret {
+	font-family: var(--font-term);
+	font-size: var(--pico-text-0);
+	color: var(--p8-lime);
+	animation: pcPer-caret 0.8s steps(2) infinite;
+}
+@keyframes pcPer-caret {
+	0%,
+	50% {
+		opacity: 1;
+	}
+	50.01%,
+	100% {
+		opacity: 0;
+	}
+}
+.pcPer-post-pixl {
+	position: absolute;
+	top: var(--pico-space-3);
+	right: var(--pico-space-3);
+}
