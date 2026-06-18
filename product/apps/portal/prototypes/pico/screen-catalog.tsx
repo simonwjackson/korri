@@ -24,6 +24,7 @@ import * as Future from "./screens/FutureScreens"
 import * as InGame from "./screens/InGameScreens"
 import * as Library from "./screens/LibraryScreens"
 import * as MultiDevice from "./screens/MultiDeviceScreens"
+import * as Personality from "./screens/PersonalityScreens"
 import * as Session from "./screens/SessionScreens"
 import * as Settings from "./screens/SettingsScreens"
 import * as Showcase from "./screens/ShowcaseScreens"
@@ -34,6 +35,7 @@ import "./screens/future.css"
 import "./screens/ingame.css"
 import "./screens/library.css"
 import "./screens/multidevice.css"
+import "./screens/personality.css"
 import "./screens/session.css"
 import "./screens/settings.css"
 import "./screens/showcase.css"
@@ -50,6 +52,7 @@ export interface PicoScreen {
 /** Display order of the groups in the gallery. */
 export const PICO_GROUPS: readonly string[] = [
   "Showcase",
+  "Personality",
   "Library",
   "Detail",
   "Acquire",
@@ -76,6 +79,36 @@ export const PICO_SCREENS: readonly PicoScreen[] = [
     name: "For You — Shelves (animated)",
     note: "Curated contextual rows; no system picker / A–Z",
     render: () => <Showcase.ForYouShelvesScreen />,
+  },
+
+  // ── Personality (character experiments — mascot, rituals, attract) ──────
+  {
+    id: "per-mascot",
+    group: "Personality",
+    name: "Mascot — Meet Pixl",
+    note: "The OS companion sprite + its moods",
+    render: () => <Personality.MascotScreen />,
+  },
+  {
+    id: "per-launch",
+    group: "Personality",
+    name: "Launch Ritual (CRT power-on)",
+    note: "Cartridge insert → CRT power-on loop",
+    render: () => <Personality.LaunchRitualScreen />,
+  },
+  {
+    id: "per-attract",
+    group: "Personality",
+    name: "Attract Mode",
+    note: "Idle arcade loop: stars, logo, marquee",
+    render: () => <Personality.AttractModeScreen />,
+  },
+  {
+    id: "per-boot",
+    group: "Personality",
+    name: "Boot POST (voice)",
+    note: "Voiced power-on self-test",
+    render: () => <Personality.BootPostScreen />,
   },
 
   // ── Library ────────────────────────────────────────────────────────────

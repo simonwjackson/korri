@@ -1619,3 +1619,111 @@
 		transition-duration: 0.001ms !important;
 	}
 }
+
+/* =====================================================================
+ * MASCOT — "Pixl", the OS companion sprite (PicoMascot.tsx). Sized in em so
+ * it tracks the token scale; lives small in the status bar, large on its demo.
+ * ===================================================================== */
+.pico-statusbar-lead {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.6em;
+}
+.pcMascot {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	line-height: 0;
+}
+.pcMascot-svg {
+	display: block;
+	width: 2.6em;
+	height: 2.6em;
+	shape-rendering: crispedges;
+	animation: pcMascot-bob 1.6s steps(2) infinite alternate;
+}
+.pcMascot-bar .pcMascot-svg {
+	width: 2.4em;
+	height: 2.4em;
+}
+.pcMascot-body rect {
+	fill: var(--pico-accent);
+}
+.pcMascot-eyes {
+	transform-box: fill-box;
+	transform-origin: center;
+	animation: pcMascot-blink 3.4s infinite;
+}
+.pcMascot-eyes rect {
+	fill: var(--p8-black);
+}
+.pcMascot-cheeks rect {
+	fill: var(--p8-pink);
+}
+.pcMascot-zzz {
+	position: absolute;
+	top: -0.35em;
+	right: -0.5em;
+	font-family: var(--font-display);
+	font-size: 0.7em;
+	color: var(--pico-ink-dim);
+	opacity: 0;
+}
+@keyframes pcMascot-bob {
+	from {
+		transform: translateY(0);
+	}
+	to {
+		transform: translateY(-7%);
+	}
+}
+@keyframes pcMascot-blink {
+	0%,
+	90%,
+	100% {
+		transform: scaleY(1);
+	}
+	93%,
+	97% {
+		transform: scaleY(0.1);
+	}
+}
+@keyframes pcMascot-zzz {
+	from {
+		opacity: 0.25;
+		transform: translateY(0);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(-0.35em);
+	}
+}
+
+/* Moods ----------------------------------------------------------------- */
+.pcMascot-happy .pcMascot-body rect {
+	fill: var(--p8-lime);
+}
+.pcMascot-happy .pcMascot-svg {
+	animation-duration: 0.7s;
+}
+.pcMascot-sleep .pcMascot-body rect {
+	fill: var(--p8-lilac);
+}
+.pcMascot-sleep .pcMascot-eyes {
+	transform: scaleY(0.12);
+	animation: none;
+}
+.pcMascot-sleep .pcMascot-svg {
+	animation-duration: 2.6s;
+}
+.pcMascot-sleep .pcMascot-zzz {
+	animation: pcMascot-zzz 1.5s steps(2) infinite alternate;
+}
+.pcMascot-peek .pcMascot-body rect {
+	fill: var(--p8-blue);
+}
+.pcMascot-peek .pcMascot-eyes rect:first-child {
+	transform-box: fill-box;
+	transform-origin: center;
+	transform: scaleY(0.12);
+}

@@ -1,8 +1,13 @@
 /** PROTOTYPE — pico theme exploration. Throwaway. */
+import { PicoMascot } from "./PicoMascot"
+
 export function PicoStatusBar({ label }: { readonly label: string }) {
   return (
     <div className="pico-statusbar">
-      <span>{label}</span>
+      <span className="pico-statusbar-lead">
+        <PicoMascot className="pcMascot-bar" />
+        {label}
+      </span>
       <span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
         <span>WIFI</span>
         <span className="pico-clock">10:24</span>
