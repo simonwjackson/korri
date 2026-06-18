@@ -7,7 +7,7 @@ import type {
 import type { DownloadResolution } from "@platform/protocol/acquisition/download-resolution"
 import type { ProviderHealth } from "@platform/protocol/acquisition/source-health"
 
-export const KORRI_PICO8_BBS_PLUGIN_ID = "@korri:pico8bbs" as const
+export const KORRI_PICO8_PLUGIN_ID = "@korri:pico8" as const
 
 interface Pico8BbsEntry {
   readonly id: string
@@ -48,12 +48,12 @@ const pico8BbsEntries: readonly Pico8BbsEntry[] = [
 
 const byId = new Map(pico8BbsEntries.map(entry => [entry.id, entry]))
 
-export const pico8BbsPlugin = plugin({
+export const pico8Plugin = plugin({
   namespace: "@korri",
-  name: "pico8bbs",
-  title: "PICO-8 BBS",
+  name: "pico8",
+  title: "PICO-8",
   description:
-    "Adds PICO-8 BBS provider claims, cart download resolution, and the fake-08 PICO-8 runtime package.",
+    "Adds PICO-8 BBS acquisition provider claims, cart download resolution, and the fake-08 PICO-8 runtime package.",
   contributes: {
     config: {
       systems: {
@@ -68,7 +68,7 @@ export const pico8BbsPlugin = plugin({
           id: "libretro-fake-08-package",
           kind: "nix-package",
           package: "libretro-fake-08",
-          path: "product/plugins/pico8-bbs/packages/libretro-fake-08",
+          path: "product/plugins/pico8/packages/libretro-fake-08",
           capabilities: ["package.expose", "launch.runtime", "pico8"],
           core: "fake08",
         },
@@ -83,9 +83,9 @@ export const pico8BbsPlugin = plugin({
     },
     handlers: [
       {
-        id: "pico8bbs.claims-search",
+        id: "pico8.claims-search",
         operation: "claims.search",
-        capabilities: ["claims.search", "pico8-bbs"],
+        capabilities: ["claims.search", "pico8"],
         run: context => {
           const input = readRecord(context.input)
           const query = typeof input.query === "string" ? input.query : ""
@@ -100,9 +100,9 @@ export const pico8BbsPlugin = plugin({
         },
       },
       {
-        id: "pico8bbs.claims-details",
+        id: "pico8.claims-details",
         operation: "claims.details",
-        capabilities: ["claims.details", "pico8-bbs"],
+        capabilities: ["claims.details", "pico8"],
         run: context => {
           const input = readRecord(context.input)
           const id = stringField(input, "id")
@@ -112,9 +112,9 @@ export const pico8BbsPlugin = plugin({
         },
       },
       {
-        id: "pico8bbs.claims-parse-url",
+        id: "pico8.claims-parse-url",
         operation: "claims.parse-url",
-        capabilities: ["claims.parse-url", "pico8-bbs"],
+        capabilities: ["claims.parse-url", "pico8"],
         run: context => {
           const input = readRecord(context.input)
           const url = typeof input.url === "string" ? input.url : ""
@@ -122,9 +122,9 @@ export const pico8BbsPlugin = plugin({
         },
       },
       {
-        id: "pico8bbs.provider-validate",
+        id: "pico8.provider-validate",
         operation: "provider.validate",
-        capabilities: ["provider.validate", "pico8-bbs"],
+        capabilities: ["provider.validate", "pico8"],
         run: context => {
           const input = readRecord(context.input)
           return {
@@ -138,9 +138,9 @@ export const pico8BbsPlugin = plugin({
         },
       },
       {
-        id: "pico8bbs.artifact-resolve-download",
+        id: "pico8.artifact-resolve-download",
         operation: "artifact.resolve-download",
-        capabilities: ["artifact.resolve-download", "pico8-bbs"],
+        capabilities: ["artifact.resolve-download", "pico8"],
         run: context => {
           const input = readRecord(context.input)
           const candidateUrl = stringField(input, "candidateUrl")
@@ -148,9 +148,9 @@ export const pico8BbsPlugin = plugin({
         },
       },
       {
-        id: "pico8bbs.diagnostics",
+        id: "pico8.diagnostics",
         operation: "diagnostics.collect",
-        capabilities: ["pico8-bbs"],
+        capabilities: ["pico8"],
         run: context => ({
           provider: context.provider,
           status: "ok",

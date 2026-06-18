@@ -10,7 +10,7 @@ import { megaManArenaPlugin } from "./mega-man-arena"
 import { megaManMakerPlugin } from "./mega-man-maker"
 import { midasMachinePlugin } from "./midas-machine"
 import { neverballPlugin } from "./neverball"
-import { pico8BbsPlugin } from "./pico8-bbs"
+import { pico8Plugin } from "./pico8"
 import { protonGeRuntimePlugin } from "./proton-ge-runtime"
 import { protonRuntimePlugin } from "./proton-runtime"
 import { psychoWaluigiPlugin } from "./psycho-waluigi"
@@ -35,7 +35,7 @@ export const firstPartyPlugins = [
   levelShareSquarePlugin,
   srb2Plugin,
   smbxGamePlugin,
-  pico8BbsPlugin,
+  pico8Plugin,
   psychoWaluigiPlugin,
   ryubingPlugin,
   superMarioBrosRemasteredPlugin,

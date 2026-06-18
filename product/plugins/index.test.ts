@@ -7,7 +7,7 @@ import { KORRI_LEVEL_SHARE_SQUARE_PLUGIN_ID } from "./levelsharesquare"
 import { KORRI_MEGA_MAN_ARENA_PLUGIN_ID } from "./mega-man-arena"
 import { KORRI_MEGA_MAN_MAKER_PLUGIN_ID } from "./mega-man-maker"
 import { KORRI_MIDAS_MACHINE_PLUGIN_ID } from "./midas-machine"
-import { KORRI_PICO8_BBS_PLUGIN_ID } from "./pico8-bbs"
+import { KORRI_PICO8_PLUGIN_ID } from "./pico8"
 import { KORRI_PROTON_GE_PLUGIN_ID } from "./proton-ge-runtime"
 import { KORRI_PROTON_PLUGIN_ID } from "./proton-runtime"
 import { KORRI_PSYCHO_WALUIGI_PLUGIN_ID } from "./psycho-waluigi"
@@ -58,7 +58,7 @@ describe("first-party plugins", () => {
     expect(registry.enabledPluginIds.has(KORRI_PROTON_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_PROTON_GE_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_SRB2_PLUGIN_ID)).toBe(false)
-    expect(registry.enabledPluginIds.has(KORRI_PICO8_BBS_PLUGIN_ID)).toBe(false)
+    expect(registry.enabledPluginIds.has(KORRI_PICO8_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_MEGA_MAN_MAKER_PLUGIN_ID)).toBe(
       false,
     )

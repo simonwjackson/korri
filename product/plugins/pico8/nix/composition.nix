@@ -10,14 +10,14 @@ let
     if fake-08-src != null then
       fake-08-src
     else
-      throw "pico8-bbs plugin composition requires fake-08-src when enabled";
+      throw "pico8 plugin composition requires fake-08-src when enabled";
   libretroFake08Package = pkgs.callPackage ../packages/libretro-fake-08/package.nix {
     fake-08-src = requiredFake08Src;
   };
   overlay = import ./overlay.nix { fake-08-src = requiredFake08Src; };
 in
 {
-  enabledPluginIds = lib.optional enable "@korri:pico8bbs";
+  enabledPluginIds = lib.optional enable "@korri:pico8";
   overlays = lib.optional enable overlay;
   nixosModules = lib.optional enable (import ./nixos-module.nix);
   packages = lib.optionalAttrs enable {

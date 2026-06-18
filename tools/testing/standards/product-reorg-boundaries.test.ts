@@ -72,7 +72,7 @@ function containsPluginOwnedContentPackageName(source: string): boolean {
 }
 
 function isInsideOwnedContentPlugin(file: string): boolean {
-  return /^(?:product\/plugins\/(?:super-mario-bros-remastered|super-mario-127|yoshis-fabrication-station)\/|product\/plugins\/index\.ts|product\/plugins\/index\.test\.ts)/.test(
+  return /^(?:product\/plugins\/(?:super-mario-bros-remastered|super-mario-127|yoshis-fabrication-station|levelsharesquare)\/|product\/plugins\/index\.ts|product\/plugins\/index\.test\.ts)/.test(
     file,
   )
 }
@@ -405,7 +405,7 @@ describe("standards: product platform reorganization guardrails", () => {
           REPO_ROOT,
           "product",
           "plugins",
-          "pico8-bbs",
+          "pico8",
           "packages",
           "libretro-fake-08",
           "package.nix",
@@ -454,7 +454,7 @@ describe("standards: product platform reorganization guardrails", () => {
     ).toBe(true)
   })
 
-  it("keeps fake-08's PICO-8 runtime package lane with the PICO-8 BBS plugin", () => {
+  it("keeps fake-08's PICO-8 runtime package lane with the PICO-8 plugin", () => {
     expect(
       existsSync(join(REPO_ROOT, "product", "vendor", "libretro-fake-08")),
     ).toBe(false)
@@ -464,7 +464,7 @@ describe("standards: product platform reorganization guardrails", () => {
           REPO_ROOT,
           "product",
           "plugins",
-          "pico8-bbs",
+          "pico8",
           "packages",
           "libretro-fake-08",
           "package.nix",
@@ -477,7 +477,7 @@ describe("standards: product platform reorganization guardrails", () => {
           REPO_ROOT,
           "product",
           "plugins",
-          "pico8-bbs",
+          "pico8",
           "nix",
           "composition.nix",
         ),
@@ -485,14 +485,7 @@ describe("standards: product platform reorganization guardrails", () => {
     ).toBe(true)
     expect(
       existsSync(
-        join(
-          REPO_ROOT,
-          "product",
-          "plugins",
-          "pico8-bbs",
-          "nix",
-          "overlay.nix",
-        ),
+        join(REPO_ROOT, "product", "plugins", "pico8", "nix", "overlay.nix"),
       ),
     ).toBe(true)
 

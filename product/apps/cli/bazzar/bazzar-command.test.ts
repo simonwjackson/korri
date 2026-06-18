@@ -371,12 +371,12 @@ describe("korri bazzar command routing", () => {
         "https://hh3.gbdev.io/static/database-gba/entries/basil-termini_2048-advance/files/2048%20jam.gba",
     },
     {
-      providerId: "@korri:pico8bbs",
+      providerId: "@korri:pico8",
       query: "celeste",
       platform: "pico8",
       id: "101",
       title: "Celeste Classic",
-      locator: "@korri:pico8bbs:101",
+      locator: "@korri:pico8:101",
       url: "https://www.lexaloffle.com/bbs/?tid=101",
       filename: "celeste-classic.p8.png",
       artifactUrl:
@@ -445,8 +445,8 @@ describe("korri bazzar command routing", () => {
 
   for (const provider of approvedProviderCases) {
     const env =
-      provider.providerId === "@korri:pico8bbs"
-        ? { KORRI_ENABLED_PLUGINS: "@korri:pico8bbs" }
+      provider.providerId === "@korri:pico8"
+        ? { KORRI_ENABLED_PLUGINS: "@korri:pico8" }
         : undefined
 
     it(`returns provider-backed ${provider.providerId} search results`, async () => {

@@ -52,7 +52,7 @@ describe("first-party Nix plugin composition", () => {
     expect(enabled.ids).toEqual(
       expect.arrayContaining([
         "@korri:gamescope",
-        "@korri:pico8bbs",
+        "@korri:pico8",
         "@korri:ryubing",
       ]),
     )
