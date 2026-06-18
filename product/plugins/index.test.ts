@@ -24,6 +24,8 @@ import {
   KORRI_RETROARCH_MESEN_RUNTIME_ID,
   KORRI_RETROARCH_MGBA_RUNTIME_ID,
   KORRI_RETROARCH_NES_SYSTEM_ID,
+  KORRI_RETROARCH_NP2KAI_RUNTIME_ID,
+  KORRI_RETROARCH_PC98_SYSTEM_ID,
   KORRI_RETROARCH_PCSX_REARMED_RUNTIME_ID,
   KORRI_RETROARCH_PPSSPP_RUNTIME_ID,
   KORRI_RETROARCH_PSP_SYSTEM_ID,
@@ -82,7 +84,7 @@ describe("first-party plugins", () => {
     })
   })
 
-  it("enables RetroArch-owned GBA, Genesis, NES, PSP, PSX, SNES, and core runtimes when requested", () => {
+  it("enables RetroArch-owned GBA, Genesis, NES, PC-98, PSP, PSX, SNES, and core runtimes when requested", () => {
     const registry = createFirstPartyPluginRegistryFromEnv({
       KORRI_ENABLED_PLUGINS: KORRI_RETROARCH_PLUGIN_ID,
     })
@@ -140,6 +142,25 @@ describe("first-party plugins", () => {
       kind: "libretro-core",
       path: "/etc/korri/cores/mesen_libretro.so",
       supports: { systems: [KORRI_RETROARCH_NES_SYSTEM_ID] },
+    })
+    expect(
+      registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/pc98`],
+    ).toMatchObject({
+      id: KORRI_RETROARCH_PC98_SYSTEM_ID,
+      apps: [
+        {
+          id: KORRI_RETROARCH_APP_ID,
+          runtime: KORRI_RETROARCH_NP2KAI_RUNTIME_ID,
+        },
+      ],
+    })
+    expect(
+      registry.runtimes[`${KORRI_RETROARCH_PLUGIN_ID}/np2kai`],
+    ).toMatchObject({
+      id: KORRI_RETROARCH_NP2KAI_RUNTIME_ID,
+      kind: "libretro-core",
+      path: "/etc/korri/cores/np2kai_libretro.so",
+      supports: { systems: [KORRI_RETROARCH_PC98_SYSTEM_ID] },
     })
     expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/psp`]).toMatchObject({
       id: KORRI_RETROARCH_PSP_SYSTEM_ID,
