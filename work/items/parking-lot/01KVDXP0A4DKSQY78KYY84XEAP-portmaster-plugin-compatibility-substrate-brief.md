@@ -278,6 +278,8 @@ Validation launch:
 
 ### Phase 10 — Library integration
 
+Status: **library-source substrate complete locally; UI install/search end-to-end still pending**.
+
 Goal: installed PortMaster games appear as normal Korri library entries.
 
 Plugin owns:
@@ -292,6 +294,14 @@ Validation launch:
 
 - Search/install/launch **Digger** or **Wordle SDL** entirely through Korri UI.
 - Success: Korri core remains unaware of PortMaster-specific mechanics.
+
+Result:
+
+- Added a PortMaster-owned installed library source overlay that scans `manifests/*.json` under the plugin install root and emits normal `PlayableLibraryEntry` records such as `@korri:portmaster/wordle`.
+- Launch resolution for those entries delegates to the existing PortMaster launch envelope, so script selection, `/roms/ports` compatibility, runtime detection, FEX/qemu wrappers, and environment policy stay plugin-owned.
+- The first-party `PluginLibrarySourceLayerLive` enables this overlay only when `@korri:portmaster` is enabled.
+- `canResolveLaunchForGame` remains read-only; launch-preparation file generation happens only during actual resolution.
+- Focused tests cover direct overlay behavior and live first-party layer wiring.
 
 ## End State
 
