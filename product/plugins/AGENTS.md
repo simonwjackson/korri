@@ -1,0 +1,271 @@
+# Product plugin authoring guide
+
+This directory contains Korri's first-party product plugins. Use this guide when adding or modifying plugins so descriptor shape, registration, tests, and package layout stay consistent.
+
+## Scope
+
+- Plugins here are **first-party product modules**, not third-party marketplace packages.
+- Stable identity comes from the plugin descriptor: `namespace` + `name` -> `@namespace:name`.
+- Do not derive identity from folder names, Nix package names, or display titles.
+- Public authored config should use stable provider/plugin ids when a plugin identity is exposed, e.g. `"@korri:gamescope"`.
+
+## Standard layout
+
+Minimal plugin:
+
+```text
+product/plugins/<plugin>/
+  index.ts
+  README.md
+  src/
+    plugin.ts
+    plugin.test.ts
+```
+
+Plugin with bundled Nix/build artifacts:
+
+```text
+product/plugins/<plugin>/
+  flake.nix
+  flake.lock
+  index.ts
+  README.md
+  packages/
+    <package>/default.nix
+    <package>/README.md
+  src/
+    plugin.ts
+    ...feature modules...
+```
+
+Rules:
+
+- `index.ts` should be a thin public export surface.
+- Put the actual descriptor in `src/plugin.ts`.
+- Keep feature code under `src/<feature>/` and re-export from local `index.ts` files when useful.
+- Put plugin-owned Nix packages under `packages/`; keep package docs beside the package.
+
+Example `index.ts`:
+
+```ts
+export { myPlugin, KORRI_MY_PLUGIN_ID } from "./src/plugin"
+```
+
+## Descriptor pattern
+
+Use `plugin(...)` from `@platform/plugin`.
+
+```ts
+import { plugin } from "@platform/plugin"
+
+export const KORRI_MY_PLUGIN_ID = "@korri:my-plugin" as const
+
+export const myPlugin = plugin({
+  namespace: "@korri",
+  name: "my-plugin",
+  title: "My Plugin",
+  description: "Short product description.",
+  contributes: {
+    config: {
+      modules: {
+        "some-module": {
+          id: "some-module",
+          kind: "example",
+          capabilities: ["diagnostics.collect"],
+        },
+      },
+    },
+    handlers: [
+      {
+        id: "my-plugin.diagnostics",
+        operation: "diagnostics.collect",
+        capabilities: ["diagnostics.collect"],
+        run: context => ({ provider: context.provider, input: context.input }),
+      },
+    ],
+  },
+})
+```
+
+The helper automatically contributes a provider record for the plugin id under `contributes.config.providers` with the plugin title/description. Add explicit provider fields only when needed.
+
+## Config contributions
+
+`contributes.config` may include:
+
+- `providers`
+- `providerLinks`
+- `storage`
+- `systems`
+- `apps`
+- `modules`
+- `runtimes`
+- `profiles`
+- `catalog`
+
+Registry namespacing behavior matters:
+
+- `providers` are merged as authored keys exactly as supplied. Use stable provider ids.
+- Other config maps are namespaced by the registry as `<plugin-id>/<local-id>`.
+  - Example local module `neverball` from `@korri:neverball` becomes `@korri:neverball/neverball`.
+
+Use config contributions for static, declarative records. Use handlers for callable behavior.
+
+## Catalog and executable resources
+
+A plugin-contributed game should contribute catalog plus a module/resource when launch needs a fulfilled executable.
+
+Example:
+
+```ts
+contributes: {
+  config: {
+    catalog: {
+      neverball: {
+        id: "neverball",
+        title: "Neverball",
+        kind: "game",
+        releases: [
+          {
+            id: "nixpkgs",
+            title: "Neverball from nixpkgs",
+            launch: {
+              kind: "process",
+              executable: { resource: "neverball" },
+            },
+          },
+        ],
+      },
+    },
+    modules: {
+      neverball: {
+        id: "neverball",
+        kind: "executable",
+        fulfill: {
+          provider: "nix",
+          installable: "nixpkgs#neverball",
+          binary: "neverball",
+        },
+      },
+    },
+  },
+}
+```
+
+Resource/fulfillment rules:
+
+- Do not mutate user Nix profiles.
+- Do not use `nix run` at launch time.
+- Fulfill resources explicitly before launch, e.g. through the server-only resource fulfillment path.
+- Launch resolution should use already fulfilled resources and fail closed if missing.
+- Nix must be an explicit host capability/absolute command, not assumed from `PATH`.
+
+## Launch companions and wrappers
+
+For launch-environment functionality like Gamescope:
+
+- Keep the public config participant id stable, e.g. `"@korri:gamescope"`.
+- Descriptor/config should declare generic capabilities such as `launch.compose` and `launch.wrapper`.
+- Callable wrapping behavior belongs behind a handler, commonly operation `launch.compose`.
+- Do not expose low-level implementation flags that are app-specific internals. For Steam/Gamescope, Steam-session behavior (`-e`) stays internal.
+- Temporary internal compatibility is allowed: resolver/runtime may continue normalizing to legacy internal fields while authored config uses `launch.with."@korri:gamescope"`.
+
+Gamescope is the reference implementation:
+
+```text
+product/plugins/gamescope/
+  index.ts
+  src/plugin.ts
+  src/launch-companion/
+  src/runtime-control/
+  src/stream-control/
+  src/session/
+  src/cli/
+  packages/
+```
+
+## Handlers
+
+Handler operations are app-agnostic and operation-scoped.
+
+Use the operation vocabulary from `@platform/plugin` when possible:
+
+- `catalog.list`
+- `launch.prepare`
+- `launch.compose`
+- `runtime.resolve`
+- `stream-control.apply`
+- `stream-control.describe`
+- `session.cleanup`
+- `package.expose`
+- `cli.expose`
+- `artifact.resolve-download`
+- `diagnostics.collect`
+
+Handler rules:
+
+- Validate `context.input` at the handler boundary.
+- Return plain values, promises, or `Effect`; the host normalizes them.
+- Keep handler ids stable and namespaced, e.g. `gamescope.launch-compose`.
+- Include `capabilities` on handlers when they implement declared capabilities.
+
+## Registration
+
+Register first-party plugins in:
+
+```text
+product/plugins/index.ts
+```
+
+Example:
+
+```ts
+import { gamescopePlugin, KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
+import { neverballPlugin } from "./neverball"
+
+export const firstPartyPlugins = [gamescopePlugin, neverballPlugin] as const
+```
+
+Enablement rules:
+
+- Catalog/content plugins may be gated by `KORRI_ENABLED_PLUGINS`.
+- Core infrastructure plugins that authored config depends on, such as `@korri:gamescope`, should be enabled by default unless the product explicitly supports disabling them.
+- If adding a default-enabled infrastructure plugin, update `enabledFirstPartyPluginIds(...)` and tests.
+
+## Tests
+
+Every plugin should have focused tests for:
+
+- stable plugin id;
+- descriptor config contributions;
+- handler operation list;
+- handler input validation;
+- registry exposure if adding new contribution surfaces;
+- launch/catalog/resource behavior if applicable.
+
+Recommended test locations:
+
+```text
+product/plugins/<plugin>/src/plugin.test.ts
+product/plugins/<plugin>/src/<feature>/*.test.ts
+product/platform/plugin/registry.test.ts
+```
+
+Run targeted tests before broader suites, for example:
+
+```sh
+bun test \
+  product/plugins/<plugin>/src/plugin.test.ts \
+  product/platform/plugin/registry.test.ts
+```
+
+If the plugin affects launch resolution, also run the relevant config/launch tests.
+
+## Do not do in a plugin slice unless explicitly scoped
+
+- Do not migrate unrelated authored config shapes.
+- Do not introduce marketplace or third-party loading semantics.
+- Do not add sandbox/trust-boundary claims for first-party plugins.
+- Do not add broad provider/app-instance modeling unless the task is specifically about that.
+- Do not assume a plugin's folder name is its identity.
+- Do not rely on `PATH` for host capabilities that must be deterministic.
