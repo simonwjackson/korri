@@ -59,16 +59,18 @@ export function acquisitionPluginDefinitionsFromPluginRegistry(
       return []
     }
 
+    const providerMetadata = acquisitionProviderMetadata(plugin)
+
     return [
       {
         metadata: {
           providerId: plugin.id,
           displayName: plugin.title,
-          module: `product/plugins/${plugin.name}`,
+          module: providerMetadata.module ?? `product/plugins/${plugin.name}`,
           builtIn: true,
-          enabledByDefault: false,
-          legalRisk: "medium",
-          credentialRequired: false,
+          enabledByDefault: providerMetadata.enabledByDefault ?? false,
+          legalRisk: providerMetadata.legalRisk ?? "medium",
+          credentialRequired: providerMetadata.credentialRequired ?? false,
         },
         ...(search
           ? {
@@ -139,6 +141,41 @@ export function acquisitionPluginDefinitionsFromPluginRegistry(
       },
     ]
   })
+}
+
+function acquisitionProviderMetadata(plugin: KorriPlugin): {
+  readonly module?: string
+  readonly enabledByDefault?: boolean
+  readonly legalRisk?: "low" | "medium" | "high"
+  readonly credentialRequired?: boolean
+} {
+  const providerRecord = plugin.contributes.config.providers[plugin.id]
+  return {
+    module: stringValue(providerRecord, "module"),
+    enabledByDefault: booleanValue(providerRecord, "enabledByDefault"),
+    legalRisk: legalRiskValue(providerRecord, "legalRisk"),
+    credentialRequired: booleanValue(providerRecord, "credentialRequired"),
+  }
+}
+
+function stringValue(record: object, key: string): string | undefined {
+  const value = (record as Record<string, unknown>)[key]
+  return typeof value === "string" ? value : undefined
+}
+
+function booleanValue(record: object, key: string): boolean | undefined {
+  const value = (record as Record<string, unknown>)[key]
+  return typeof value === "boolean" ? value : undefined
+}
+
+function legalRiskValue(
+  record: object,
+  key: string,
+): "low" | "medium" | "high" | undefined {
+  const value = stringValue(record, key)
+  return value === "low" || value === "medium" || value === "high"
+    ? value
+    : undefined
 }
 
 function runSyncParseCandidateUrlHandler(

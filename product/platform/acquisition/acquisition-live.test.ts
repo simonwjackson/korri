@@ -2,10 +2,10 @@ import { describe, expect, it } from "bun:test"
 import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "@product/plugins/acquisition"
 import { Effect } from "effect"
 import { Acquisition, makeLiveAcquisitionLayer } from "./acquisition-service"
 import { createStaticAcquisitionPluginRegistry } from "./plugin-loader"
-import { approvedTypeScriptPluginDefinitions } from "./plugins/approved"
 import type { AcquisitionPluginDefinition } from "./plugins/registry"
 
 async function withTempRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
@@ -231,9 +231,12 @@ describe("live acquisition service", () => {
     })
   })
 
-  it("keeps quarantined mjs providers out of active approved TypeScript metadata", () => {
+  it("keeps quarantined mjs providers out of active product plugin metadata", () => {
     const registry = createStaticAcquisitionPluginRegistry(
-      approvedTypeScriptPluginDefinitions,
+      createFirstPartyAcquisitionPluginDefinitionsFromEnv({
+        KORRI_ENABLED_PLUGINS:
+          "@korri:chip8archive,@korri:homebrewhub,@korri:itchio,@korri:portmaster,@korri:puzzlescript,@korri:retrobrews,@korri:tic80gallery,@korri:wasm4gallery",
+      }),
     )
     const providerIds = [...registry.providerIds].sort()
 

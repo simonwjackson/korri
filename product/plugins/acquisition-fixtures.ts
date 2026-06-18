@@ -1,11 +1,12 @@
+import { AcquisitionError } from "@platform/acquisition/errors"
+import type { ProviderId } from "@platform/plugin"
+import { plugin } from "@platform/plugin"
 import type {
   ProviderClaim,
   ProviderClaimDetails,
-} from "@platform/protocol/acquisition/candidate"
+} from "@platform/protocol/acquisition/claim"
 import type { DownloadResolution } from "@platform/protocol/acquisition/download-resolution"
 import { Effect } from "effect"
-import { AcquisitionError } from "../errors"
-import type { AcquisitionPluginDefinition } from "./registry"
 
 interface FixtureEntry {
   readonly providerId: string
@@ -30,9 +31,12 @@ interface FixturePluginOptions {
   readonly entries: readonly FixtureEntry[]
   readonly parseCandidateUrl: (url: string) => string | null
   readonly unsupportedDownloadReason?: "unsupported" | "requires-user-action"
+  readonly unknownDetailsMessage?: string
+  readonly unknownDownloadMessage?: (id: string) => string
+  readonly name?: string
 }
 
-function fixturePluginDefinition({
+function fixtureAcquisitionPlugin({
   providerId,
   displayName,
   legalRisk,
@@ -40,7 +44,10 @@ function fixturePluginDefinition({
   entries,
   parseCandidateUrl,
   unsupportedDownloadReason = "unsupported",
-}: FixturePluginOptions): AcquisitionPluginDefinition {
+  unknownDetailsMessage,
+  unknownDownloadMessage = id => unknownMessage(providerId, id),
+  name = providerId.split(":")[1] ?? providerId,
+}: FixturePluginOptions) {
   const byId = new Map(entries.map(entry => [entry.id, entry]))
   const byAlias = new Map(
     entries.flatMap(entry =>
@@ -52,130 +59,199 @@ function fixturePluginDefinition({
 
   const findEntry = (id: string) => byAlias.get(id) ?? byId.get(id)
 
-  return {
-    metadata: {
-      providerId,
-      displayName,
-      module: "product/platform/acquisition/plugins/approved-fixtures",
-      builtIn: true,
-      enabledByDefault: true,
-      legalRisk,
-      credentialRequired,
+  return plugin({
+    namespace: "@korri",
+    name,
+    title: displayName,
+    contributes: {
+      config: {
+        providers: {
+          [providerId]: {
+            legalRisk,
+            credentialRequired,
+            enabledByDefault: false,
+          },
+        },
+      },
+      handlers: [
+        {
+          id: `${name}.claims-search`,
+          operation: "claims.search",
+          capabilities: ["claims.search", name],
+          run: context => {
+            const input = readRecord(context.input)
+            const query = typeof input.query === "string" ? input.query : ""
+            const platforms = Array.isArray(input.platforms)
+              ? input.platforms.filter(
+                  (platform): platform is string =>
+                    typeof platform === "string",
+                )
+              : undefined
+            return entries
+              .filter(entry => matchesEntry(entry, query, platforms))
+              .map(entry => candidateFor(entry, context.provider))
+          },
+        },
+        {
+          id: `${name}.claims-details`,
+          operation: "claims.details",
+          capabilities: ["claims.details", name],
+          run: context => {
+            const input = readRecord(context.input)
+            const id = stringField(input, "id")
+            const entry = findEntry(id)
+            if (!entry) {
+              return unknownEntry(
+                context.provider,
+                id,
+                unknownDetailsMessage ?? unknownMessage(context.provider, id),
+              )
+            }
+            return detailsFor(entry, context.provider)
+          },
+        },
+        {
+          id: `${name}.claims-parse-url`,
+          operation: "claims.parse-url",
+          capabilities: ["claims.parse-url", name],
+          run: context => {
+            const input = readRecord(context.input)
+            return typeof input.url === "string"
+              ? parseCandidateUrl(input.url)
+              : null
+          },
+        },
+        {
+          id: `${name}.provider-validate`,
+          operation: "provider.validate",
+          capabilities: ["provider.validate", name],
+          run: context => {
+            const input = readRecord(context.input)
+            return {
+              _tag: "HealthyProvider" as const,
+              providerId: context.provider,
+              checkedAt:
+                typeof input.checkedAt === "string"
+                  ? input.checkedAt
+                  : new Date(0).toISOString(),
+            }
+          },
+        },
+        {
+          id: `${name}.artifact-resolve-download`,
+          operation: "artifact.resolve-download",
+          capabilities: ["artifact.resolve-download", name],
+          run: context => {
+            const input = readRecord(context.input)
+            const candidateUrl = stringField(input, "candidateUrl")
+            const id = parseCandidateUrl(candidateUrl)
+            if (!id) {
+              return {
+                _tag: "NonFinalDownload" as const,
+                providerId: context.provider,
+                reason: unsupportedDownloadReason,
+                url: candidateUrl,
+              } satisfies DownloadResolution
+            }
+
+            const entry = findEntry(id)
+            if (!entry && entries.length === 0) {
+              return {
+                _tag: "NonFinalDownload" as const,
+                providerId: context.provider,
+                reason: unsupportedDownloadReason,
+                url: candidateUrl,
+              } satisfies DownloadResolution
+            }
+            if (!entry) {
+              return {
+                _tag: "FailedDownload" as const,
+                providerId: context.provider,
+                reason: "not-found" as const,
+                message: unknownDownloadMessage(id),
+              } satisfies DownloadResolution
+            }
+
+            if (entry.disabledMessage) {
+              return {
+                _tag: "FailedDownload" as const,
+                providerId: context.provider,
+                reason: "not-found" as const,
+                message: entry.disabledMessage,
+              } satisfies DownloadResolution
+            }
+
+            if (!entry.downloadUrl) {
+              return {
+                _tag: "NonFinalDownload" as const,
+                providerId: context.provider,
+                reason: unsupportedDownloadReason,
+                url: candidateUrl,
+              } satisfies DownloadResolution
+            }
+
+            return {
+              _tag: "FinalDownload" as const,
+              providerId: context.provider,
+              url: entry.downloadUrl,
+              ...(entry.filename ? { filename: entry.filename } : {}),
+              ...(entry.contentType ? { contentType: entry.contentType } : {}),
+            } satisfies DownloadResolution
+          },
+        },
+        {
+          id: `${name}.diagnostics`,
+          operation: "diagnostics.collect",
+          capabilities: [name],
+          run: context => ({ provider: context.provider, status: "ok" }),
+        },
+      ],
     },
-    parseCandidateUrl,
-    search: (_context, request) =>
-      Effect.succeed(
-        entries
-          .filter(entry =>
-            matchesEntry(entry, request.query, request.platforms),
-          )
-          .map(candidateFor),
-      ),
-    details: (_context, request) => {
-      const entry = findEntry(request.id)
-      if (!entry) return unknownEntry(providerId, request.id)
-      return Effect.succeed(detailsFor(entry))
-    },
-    validateProvider: context =>
-      Effect.succeed({
-        _tag: "HealthyProvider" as const,
-        providerId,
-        checkedAt: context.checkedAt,
-      }),
-    resolveDownload: (_context, request) => {
-      const id = parseCandidateUrl(request.candidateUrl)
-      if (!id) {
-        return Effect.succeed({
-          _tag: "NonFinalDownload" as const,
-          providerId,
-          reason: unsupportedDownloadReason,
-          url: request.candidateUrl,
-        } satisfies DownloadResolution)
-      }
-
-      const entry = findEntry(id)
-      if (!entry && entries.length === 0) {
-        return Effect.succeed({
-          _tag: "NonFinalDownload" as const,
-          providerId,
-          reason: unsupportedDownloadReason,
-          url: request.candidateUrl,
-        } satisfies DownloadResolution)
-      }
-      if (!entry) {
-        return Effect.succeed({
-          _tag: "FailedDownload" as const,
-          providerId,
-          reason: "not-found" as const,
-          message: unknownMessage(providerId, id),
-        } satisfies DownloadResolution)
-      }
-
-      if (entry.disabledMessage) {
-        return Effect.succeed({
-          _tag: "FailedDownload" as const,
-          providerId,
-          reason: "not-found" as const,
-          message: entry.disabledMessage,
-        } satisfies DownloadResolution)
-      }
-
-      if (!entry.downloadUrl) {
-        return Effect.succeed({
-          _tag: "NonFinalDownload" as const,
-          providerId,
-          reason: unsupportedDownloadReason,
-          url: request.candidateUrl,
-        } satisfies DownloadResolution)
-      }
-
-      return Effect.succeed({
-        _tag: "FinalDownload" as const,
-        providerId,
-        url: entry.downloadUrl,
-        ...(entry.filename ? { filename: entry.filename } : {}),
-        ...(entry.contentType ? { contentType: entry.contentType } : {}),
-      } satisfies DownloadResolution)
-    },
-  }
+  })
 }
 
-function candidateFor(entry: FixtureEntry): ProviderClaim {
+function candidateFor(
+  entry: FixtureEntry,
+  providerId: ProviderId,
+): ProviderClaim {
   return {
     _tag: "ProviderClaim",
-    providerId: entry.providerId,
+    providerId,
     id: entry.id,
     ref: { kind: "provider-item-id", value: entry.id },
     title: entry.title,
     url: entry.url,
     platform: entry.platform,
-    playable: playableFor(entry),
+    playable: playableFor(entry, providerId),
   }
 }
 
-function detailsFor(entry: FixtureEntry): ProviderClaimDetails {
+function detailsFor(
+  entry: FixtureEntry,
+  providerId: ProviderId,
+): ProviderClaimDetails {
   return {
     _tag: "ProviderClaimDetails",
-    providerId: entry.providerId,
+    providerId,
     id: entry.id,
     ref: { kind: "provider-item-id", value: entry.id },
     title: entry.title,
     url: entry.url,
     ...(entry.description ? { description: entry.description } : {}),
     ...(entry.downloadUrl ? { downloadPageUrl: entry.downloadUrl } : {}),
-    playable: playableFor(entry),
+    playable: playableFor(entry, providerId),
   }
 }
 
-function playableFor(entry: FixtureEntry) {
+function playableFor(entry: FixtureEntry, providerId: ProviderId) {
   return {
     id: localPlayableId(entry.id),
     title: entry.title,
-    providerId: entry.providerId,
+    providerId,
     releases: [
       {
         id: localPlayableId(entry.platform),
-        providerId: entry.providerId,
+        providerId,
         system: entry.platform,
         ...(entry.downloadUrl ? { target: entry.downloadUrl } : {}),
       },
@@ -210,20 +286,39 @@ function matchesEntry(
 }
 
 function unknownEntry(
-  providerId: string,
+  providerId: ProviderId,
   id: string,
+  message = unknownMessage(providerId, id),
 ): Effect.Effect<never, AcquisitionError> {
   return Effect.fail(
     new AcquisitionError({
       reason: "caller",
       providerId,
-      message: unknownMessage(providerId, id),
+      message,
     }),
   )
 }
 
 function unknownMessage(providerId: string, id: string) {
   return `Unknown ${providerId} candidate: ${id}`
+}
+
+function readRecord(input: unknown): Readonly<Record<string, unknown>> {
+  if (typeof input === "object" && input !== null && !Array.isArray(input)) {
+    return input as Readonly<Record<string, unknown>>
+  }
+  return {}
+}
+
+function stringField(
+  input: Readonly<Record<string, unknown>>,
+  key: string,
+): string {
+  const value = input[key]
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${key} is required`)
+  }
+  return value
 }
 
 function parseUrl(input: string): URL | null {
@@ -338,6 +433,75 @@ function parseWasm4GalleryUrl(input: string): string | null {
   const cart = url.pathname.match(/^\/carts\/([^/]+)\.wasm$/)
   return decodeSegment(cart?.[1])
 }
+
+const CHIP8_GALLERY_BASE = "https://johnearnest.github.io/chip8Archive"
+const CHIP8_RAW_BASE =
+  "https://raw.githubusercontent.com/JohnEarnest/chip8Archive/master"
+
+function chip8PlayUrl(slug: string): string {
+  return `${CHIP8_GALLERY_BASE}/play.html?p=${encodeURIComponent(slug)}`
+}
+
+function chip8RomUrl(slug: string): string {
+  return `${CHIP8_RAW_BASE}/roms/${encodeURIComponent(slug)}.ch8`
+}
+
+function parseChip8ArchiveUrl(input: string): string | null {
+  const url = parseUrl(input)
+  if (!url) return null
+  if (
+    url.hostname === "johnearnest.github.io" &&
+    url.pathname === "/chip8Archive/play.html"
+  ) {
+    return url.searchParams.get("p")
+  }
+  if (url.hostname !== "raw.githubusercontent.com") return null
+  const match = url.pathname.match(
+    /^\/JohnEarnest\/chip8Archive\/master\/roms\/([^/]+)\.ch8$/,
+  )
+  return match?.[1] ? decodeURIComponent(match[1]) : null
+}
+
+const chip8ArchiveEntries = [
+  {
+    providerId: "@korri:chip8archive",
+    id: "octojam1title",
+    title: "Octojam 1 Title",
+    url: chip8PlayUrl("octojam1title"),
+    platform: "chip8",
+    description: "Greeting program for the Octo-ber 2014 Chip8 Game Jam.",
+    downloadUrl: chip8RomUrl("octojam1title"),
+    filename: "octojam1title.ch8",
+    contentType: "application/octet-stream",
+    searchText:
+      "octojam1title octojam 1 title johnearnest octojam1 2014-09-29 chip8",
+  },
+  {
+    providerId: "@korri:chip8archive",
+    id: "wonkypong",
+    title: "Wonky Pong",
+    url: chip8PlayUrl("wonkypong"),
+    platform: "xochip",
+    description: "Pong, but wonky. Made for Octojam IV.",
+    downloadUrl: chip8RomUrl("wonkypong"),
+    filename: "wonkypong.ch8",
+    contentType: "application/octet-stream",
+    searchText: "wonkypong wonky pong tomrintjema octojam4 2018-11-01 xochip",
+  },
+  {
+    providerId: "@korri:chip8archive",
+    id: "octopeg",
+    title: "Octopeg",
+    url: chip8PlayUrl("octopeg"),
+    platform: "schip",
+    description: "Peggle clone for Superchip",
+    downloadUrl: chip8RomUrl("octopeg"),
+    filename: "octopeg.ch8",
+    contentType: "application/octet-stream",
+    searchText:
+      "octopeg chromatophore peggle superchip octojam2 2015-10-29 schip",
+  },
+] as const satisfies readonly FixtureEntry[]
 
 const homebrewHubEntries = [
   {
@@ -568,56 +732,81 @@ const wasm4Entries = [
   },
 ] as const satisfies readonly FixtureEntry[]
 
-export const approvedFixturePluginDefinitions = [
-  fixturePluginDefinition({
-    providerId: "@korri:homebrewhub",
-    displayName: "Homebrew Hub",
-    legalRisk: "low",
-    entries: homebrewHubEntries,
-    parseCandidateUrl: parseHomebrewHubUrl,
-  }),
-  fixturePluginDefinition({
-    providerId: "@korri:itchio",
-    displayName: "itch.io",
-    legalRisk: "medium",
-    credentialRequired: true,
-    entries: [],
-    parseCandidateUrl: parseItchioUrl,
-    unsupportedDownloadReason: "requires-user-action",
-  }),
-  fixturePluginDefinition({
-    providerId: "@korri:portmaster",
-    displayName: "PortMaster",
-    legalRisk: "low",
-    entries: portmasterEntries,
-    parseCandidateUrl: parsePortmasterUrl,
-  }),
-  fixturePluginDefinition({
-    providerId: "@korri:puzzlescript",
-    displayName: "PuzzleScript",
-    legalRisk: "low",
-    entries: puzzleScriptEntries,
-    parseCandidateUrl: parsePuzzleScriptUrl,
-  }),
-  fixturePluginDefinition({
-    providerId: "@korri:retrobrews",
-    displayName: "RetroBrews",
-    legalRisk: "low",
-    entries: retrobrewsEntries,
-    parseCandidateUrl: parseRetrobrewsUrl,
-  }),
-  fixturePluginDefinition({
-    providerId: "@korri:tic80gallery",
-    displayName: "TIC-80 Gallery",
-    legalRisk: "low",
-    entries: tic80Entries,
-    parseCandidateUrl: parseTic80GalleryUrl,
-  }),
-  fixturePluginDefinition({
-    providerId: "@korri:wasm4gallery",
-    displayName: "WASM-4 Gallery",
-    legalRisk: "low",
-    entries: wasm4Entries,
-    parseCandidateUrl: parseWasm4GalleryUrl,
-  }),
-] as const satisfies readonly AcquisitionPluginDefinition[]
+export const chip8ArchiveFixturePlugin = fixtureAcquisitionPlugin({
+  providerId: "@korri:chip8archive",
+  displayName: "CHIP-8 Archive",
+  legalRisk: "low",
+  entries: chip8ArchiveEntries,
+  parseCandidateUrl: parseChip8ArchiveUrl,
+  unknownDetailsMessage: "Unknown CHIP-8 Archive candidate.",
+  unknownDownloadMessage: id => `Unknown CHIP-8 Archive candidate: ${id}`,
+})
+
+export const homebrewHubFixturePlugin = fixtureAcquisitionPlugin({
+  providerId: "@korri:homebrewhub",
+  displayName: "Homebrew Hub",
+  legalRisk: "low",
+  entries: homebrewHubEntries,
+  parseCandidateUrl: parseHomebrewHubUrl,
+})
+
+export const itchioFixturePlugin = fixtureAcquisitionPlugin({
+  providerId: "@korri:itchio",
+  displayName: "itch.io",
+  legalRisk: "medium",
+  credentialRequired: true,
+  entries: [],
+  parseCandidateUrl: parseItchioUrl,
+  unsupportedDownloadReason: "requires-user-action",
+})
+
+export const portmasterFixturePlugin = fixtureAcquisitionPlugin({
+  providerId: "@korri:portmaster",
+  displayName: "PortMaster",
+  legalRisk: "low",
+  entries: portmasterEntries,
+  parseCandidateUrl: parsePortmasterUrl,
+})
+
+export const puzzleScriptFixturePlugin = fixtureAcquisitionPlugin({
+  providerId: "@korri:puzzlescript",
+  displayName: "PuzzleScript",
+  legalRisk: "low",
+  entries: puzzleScriptEntries,
+  parseCandidateUrl: parsePuzzleScriptUrl,
+})
+
+export const retrobrewsFixturePlugin = fixtureAcquisitionPlugin({
+  providerId: "@korri:retrobrews",
+  displayName: "RetroBrews",
+  legalRisk: "low",
+  entries: retrobrewsEntries,
+  parseCandidateUrl: parseRetrobrewsUrl,
+})
+
+export const tic80GalleryFixturePlugin = fixtureAcquisitionPlugin({
+  providerId: "@korri:tic80gallery",
+  displayName: "TIC-80 Gallery",
+  legalRisk: "low",
+  entries: tic80Entries,
+  parseCandidateUrl: parseTic80GalleryUrl,
+})
+
+export const wasm4GalleryFixturePlugin = fixtureAcquisitionPlugin({
+  providerId: "@korri:wasm4gallery",
+  displayName: "WASM-4 Gallery",
+  legalRisk: "low",
+  entries: wasm4Entries,
+  parseCandidateUrl: parseWasm4GalleryUrl,
+})
+
+export const fixtureAcquisitionPlugins = [
+  chip8ArchiveFixturePlugin,
+  homebrewHubFixturePlugin,
+  itchioFixturePlugin,
+  portmasterFixturePlugin,
+  puzzleScriptFixturePlugin,
+  retrobrewsFixturePlugin,
+  tic80GalleryFixturePlugin,
+  wasm4GalleryFixturePlugin,
+] as const

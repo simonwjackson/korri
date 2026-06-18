@@ -3,6 +3,7 @@ import {
   createPluginRegistry,
   parseEnabledPluginIds,
 } from "@platform/plugin/registry"
+import { fixtureAcquisitionPlugins } from "./acquisition-fixtures"
 import { fexRuntimePlugin } from "./fex-runtime"
 import { gamescopePlugin } from "./gamescope"
 import { levelShareSquarePlugin } from "./levelsharesquare"
@@ -43,6 +44,7 @@ export const firstPartyPlugins = [
   superMarioBrosRemasteredPlugin,
   superMario127Plugin,
   yoshisFabricationStationPlugin,
+  ...fixtureAcquisitionPlugins,
 ] as const
 
 export function createFirstPartyPluginRegistryFromEnv(

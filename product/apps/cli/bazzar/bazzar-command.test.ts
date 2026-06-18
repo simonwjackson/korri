@@ -8,6 +8,17 @@ import { captureCliOutput } from "../test-helpers/capture-cli-output"
 import { bazzarCommand } from "./bazzar-command"
 
 const cliPath = new URL("../korri-cli.ts", import.meta.url).pathname
+const migratedAcquisitionPluginIds = [
+  "@korri:chip8archive",
+  "@korri:homebrewhub",
+  "@korri:itchio",
+  "@korri:portmaster",
+  "@korri:puzzlescript",
+  "@korri:retrobrews",
+  "@korri:tic80gallery",
+  "@korri:wasm4gallery",
+]
+const migratedAcquisitionPluginEnv = migratedAcquisitionPluginIds.join(",")
 
 async function runCli(
   args: readonly string[],
@@ -17,7 +28,12 @@ async function runCli(
     cwd: new URL("../../../..", import.meta.url).pathname,
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, ...options.env },
+    env: {
+      ...process.env,
+      KORRI_ENABLED_PLUGINS:
+        options.env?.KORRI_ENABLED_PLUGINS ?? migratedAcquisitionPluginEnv,
+      ...options.env,
+    },
   })
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(proc.stdout).text(),
@@ -327,7 +343,7 @@ describe("korri bazzar command routing", () => {
     expect(result.stdout).toBe("No results found\n")
   })
 
-  it("returns provider-backed search results from approved TypeScript providers", async () => {
+  it("returns provider-backed search results from product acquisition plugins", async () => {
     const result = await runCli([
       "bazzar",
       "search",
@@ -357,7 +373,7 @@ describe("korri bazzar command routing", () => {
     ])
   })
 
-  const approvedProviderCases = [
+  const productAcquisitionProviderCases = [
     {
       providerId: "@korri:homebrewhub",
       query: "basil termini",
@@ -443,7 +459,7 @@ describe("korri bazzar command routing", () => {
     },
   ] as const
 
-  for (const provider of approvedProviderCases) {
+  for (const provider of productAcquisitionProviderCases) {
     const env =
       provider.providerId === "@korri:pico8"
         ? { KORRI_ENABLED_PLUGINS: "@korri:pico8" }
