@@ -12,6 +12,7 @@ import { KORRI_PROTON_GE_PLUGIN_ID } from "./proton-ge-runtime"
 import { KORRI_PROTON_PLUGIN_ID } from "./proton-runtime"
 import { KORRI_PSYCHO_WALUIGI_PLUGIN_ID } from "./psycho-waluigi"
 import { KORRI_RYUBING_PLUGIN_ID } from "./ryubing"
+import { KORRI_SMBXGAME_PLUGIN_ID } from "./smbxgame"
 import { KORRI_SRB2_PLUGIN_ID } from "./srb2"
 import { KORRI_SUPER_MARIO_BROS_REMASTERED_PLUGIN_ID } from "./super-mario-bros-remastered"
 
@@ -64,6 +65,7 @@ describe("first-party plugins", () => {
     expect(
       registry.enabledPluginIds.has(KORRI_LEVEL_SHARE_SQUARE_PLUGIN_ID),
     ).toBe(false)
+    expect(registry.enabledPluginIds.has(KORRI_SMBXGAME_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_PSYCHO_WALUIGI_PLUGIN_ID)).toBe(
       false,
     )
@@ -179,7 +181,7 @@ describe("first-party plugins", () => {
   it("preserves env-enabled first-party catalog plugins", () => {
     const registry = createFirstPartyPluginRegistryFromEnv({
       KORRI_ENABLED_PLUGINS:
-        "@korri:neverball,@korri:mega-man-arena,@korri:srb2,@korri:psycho-waluigi,@korri:mega-man-maker,@korri:midas-machine",
+        "@korri:neverball,@korri:mega-man-arena,@korri:srb2,@korri:psycho-waluigi,@korri:mega-man-maker,@korri:midas-machine,@korri:smbxgame",
     })
 
     expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(false)
@@ -195,6 +197,7 @@ describe("first-party plugins", () => {
     expect(registry.enabledPluginIds.has(KORRI_MIDAS_MACHINE_PLUGIN_ID)).toBe(
       true,
     )
+    expect(registry.enabledPluginIds.has(KORRI_SMBXGAME_PLUGIN_ID)).toBe(true)
     expect(registry.enabledPluginIds.has(KORRI_PSYCHO_WALUIGI_PLUGIN_ID)).toBe(
       true,
     )
