@@ -131,8 +131,8 @@ describe("validateLauncherConfig", () => {
           status: "resolved",
           app: { id: KORRI_RETROARCH_APP_ID, integration: "retroarch" },
           module: {
-            id: "mgba",
-            path: "/run/current-system/sw/lib/libretro/mgba_libretro.so",
+            id: "@korri:retroarch/mgba",
+            path: "/etc/korri/cores/mgba_libretro.so",
           },
           spec: {
             command: "retroarch",
@@ -140,7 +140,7 @@ describe("validateLauncherConfig", () => {
               "-c",
               generatedConfigArg,
               "-L",
-              "/run/current-system/sw/lib/libretro/mgba_libretro.so",
+              "/etc/korri/cores/mgba_libretro.so",
               "/roms/gba/Super Mario Advance 2.gba",
             ],
           },

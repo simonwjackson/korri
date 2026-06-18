@@ -110,9 +110,6 @@ systems:
   genesis:
     name: Sega Genesis
 
-  gba:
-    name: Game Boy Advance
-
 apps:
   steam:
     kind: process
@@ -191,10 +188,6 @@ runtimes:
   genesis-plus-gx:
     kind: libretro-core
     path: /run/current-system/sw/lib/libretro/genesis_plus_gx_libretro.so
-
-  mgba:
-    kind: libretro-core
-    path: /run/current-system/sw/lib/libretro/mgba_libretro.so
 
 profiles:
   handheld-640x480:
@@ -320,4 +313,4 @@ library:
           path: gba/Super Mario Advance 2.gba
         apps:
           - id: "@korri:retroarch/retroarch"
-            runtime: mgba
+            runtime: "@korri:retroarch/mgba"

@@ -172,17 +172,17 @@ let
       == cfg.services.korri.liveUsbPersistence.label
     ))
     (check "debug SSH defaults to off without injected keys" (!cfg.services.openssh.enable))
-    # Kiosk RetroArch closure-shape: exactly one core (libretro-fake-08).
-    # Same constraint enforced for SM8550 and x86 kiosk; live USB inherits
-    # the same kiosk module, so the same assertion belongs here.
+    # Kiosk RetroArch closure-shape: exactly one RetroArch-owned core (mGBA).
+    # Additional plugin-owned cores expose stable /etc paths without appending
+    # duplicate RetroArch wrappers to PATH.
     (check "live USB compositor PATH must include exactly one retroarch-bare wrapper" (
       builtins.length retroarchWrappers == 1
     ))
     (check "live USB RetroArch closure must contain exactly one libretro core" (
       builtins.length retroarchCores == 1
     ))
-    (check "live USB RetroArch's single libretro core must be fake08" (
-      retroarchCores != [ ] && ((builtins.head retroarchCores).core or null) == "fake08"
+    (check "live USB RetroArch's single libretro core must be mgba" (
+      retroarchCores != [ ] && ((builtins.head retroarchCores).core or null) == "mgba"
     ))
     (check "live USB RetroArch must advertise XDelta patch support" (
       retroarchWrappers != [ ]

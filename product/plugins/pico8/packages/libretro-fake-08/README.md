@@ -50,7 +50,7 @@ The package conforms to the nixpkgs `mkLibretroCore` contract that
 - `passthru.core = "fake08"` — string identifier the wrapper's
   `longDescription` reads and the kiosk closure-shape check asserts on
 
-Korri's kiosk product module (`product/systems/nixos/images/kiosk.nix`) exposes this core at the stable runtime path `/etc/korri/cores/fake08_libretro.so` and joins it with `retroarch-bare` without using nixpkgs' flag-injecting RetroArch wrapper. Launch YAML should model it as a runtime owned by the PICO-8 plugin and hosted by the RetroArch plugin app:
+The PICO-8 plugin's NixOS module exposes this core at the stable runtime path `/etc/korri/cores/fake08_libretro.so`. The RetroArch plugin owns the flag-free `retroarch-bare` wrapper; PICO-8 only contributes the fake-08 runtime and requires explicit RetroArch enablement. Launch YAML should model fake-08 as a runtime owned by the PICO-8 plugin and hosted by the RetroArch plugin app:
 
 ```yaml
 apps:
@@ -75,26 +75,13 @@ systems:
         runtime: "@korri:pico8/fake08"
 ```
 
-Every kiosk image (Sobo, Thor, x86 kiosk, live USB) inherits the same minimal RetroArch closure.
+Every kiosk image (Sobo, Thor, x86 kiosk, live USB) inherits the RetroArch plugin's wrapper when RetroArch is enabled. fake-08 remains a plugin-owned runtime core exposed by this PICO-8 module; it is not appended to the RetroArch wrapper's default core list.
 
-## Single-core constraint
+## Runtime ownership constraint
 
-The kiosk RetroArch wrapper carries **exactly one** libretro core,
-`libretro-fake-08`. This is intentional and enforced at evaluation time
-by assertions in:
+The RetroArch plugin owns the RetroArch binary wrapper and Nix-provided default libretro cores such as mGBA. The PICO-8 plugin owns only fake-08: its package, its stable `/etc/korri/cores/fake08_libretro.so` path, and the `@korri:pico8/fake08` runtime record. This keeps RetroArch generic while still letting PICO-8 fail closed unless the RetroArch plugin is explicitly enabled.
 
-- `tools/testing/nix/korri-rocknix-sm8550-config-check.nix` (Thor + Sobo)
-- `tools/testing/nix/korri-live-usb-config-check.nix` (Product + Developer)
-- `tools/testing/nix/korri-image-outputs-check.nix` (x86 kiosk + both live USB)
-
-Each asserts the kiosk's compositor PATH contains exactly one
-`retroarch-bare` wrapper, that the wrapper's `passthru.cores` list has
-length 1, and that the single core's `passthru.core` is `"fake08"`.
-
-New libretro cores belong in **their own packages with their own
-opt-in**, not as additional entries appended to the kiosk wrapper. The
-no-other-cores guarantee is what lets every Korri kiosk image carry
-RetroArch without growing the per-image closure for every user.
+New libretro cores belong in the plugin that owns their user-facing system/runtime contract. Nix-provided generic emulator cores can live in the RetroArch plugin; licensed or domain-specific cores should remain in their own plugin/module opt-ins.
 
 ## Layout
 

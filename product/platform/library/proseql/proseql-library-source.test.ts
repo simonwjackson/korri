@@ -6,7 +6,9 @@ import { plugin } from "@platform/plugin"
 import { createPluginRegistry } from "@platform/plugin/registry"
 import {
   KORRI_RETROARCH_APP_ID,
+  KORRI_RETROARCH_MGBA_RUNTIME_ID,
   KORRI_RETROARCH_PLUGIN_ID,
+  retroarchPlugin,
   retroarchReadableLaunchIntegration,
 } from "@product/plugins/retroarch"
 import { Effect } from "effect"
@@ -104,6 +106,88 @@ describe("createProseqlLibrarySource", () => {
         command: "/bin/echo",
         args: ["game.rom"],
       })
+    })
+  })
+
+  it("resolves GBA launches through RetroArch plugin-provided mGBA records", async () => {
+    await withTempRoot(async root => {
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
+            yield* db.storage.upsert({
+              where: { id: "roms" },
+              create: { id: "roms", root },
+              update: { id: "roms", root },
+            })
+            yield* db.library.upsert({
+              where: { id: "super-mario-advance-2" },
+              create: {
+                id: "super-mario-advance-2",
+                releases: [
+                  {
+                    id: "gba",
+                    system: "gba",
+                    target: {
+                      kind: "file",
+                      storage: "roms",
+                      path: "gba/Super Mario Advance 2.gba",
+                    },
+                    apps: [
+                      {
+                        id: KORRI_RETROARCH_APP_ID,
+                        runtime: KORRI_RETROARCH_MGBA_RUNTIME_ID,
+                      },
+                    ],
+                  },
+                ],
+              },
+              update: {
+                id: "super-mario-advance-2",
+                releases: [
+                  {
+                    id: "gba",
+                    system: "gba",
+                    target: {
+                      kind: "file",
+                      storage: "roms",
+                      path: "gba/Super Mario Advance 2.gba",
+                    },
+                    apps: [
+                      {
+                        id: KORRI_RETROARCH_APP_ID,
+                        runtime: KORRI_RETROARCH_MGBA_RUNTIME_ID,
+                      },
+                    ],
+                  },
+                ],
+              },
+            })
+            const registry = createPluginRegistry([retroarchPlugin], {
+              enabledPluginIds: [KORRI_RETROARCH_PLUGIN_ID],
+            })
+            const source = createProseqlLibrarySource(
+              createLibraryRepository(db, {
+                env: { KORRI_LAUNCH_ARTIFACTS_DIR: join(root, "artifacts") },
+                launchIntegrations: [retroarchReadableLaunchIntegration],
+                pluginRegistry: registry,
+              }),
+            )
+            return yield* Effect.promise(() =>
+              source.resolveLaunchForGame("super-mario-advance-2"),
+            )
+          }),
+        ),
+      )
+
+      expect(result.spec.command).toBe("retroarch")
+      expect(result.spec.args).toEqual(
+        expect.arrayContaining([
+          "-L",
+          "/etc/korri/cores/mgba_libretro.so",
+          join(root, "gba/Super Mario Advance 2.gba"),
+        ]),
+      )
     })
   })
 

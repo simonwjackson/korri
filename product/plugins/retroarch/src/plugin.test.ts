@@ -3,6 +3,8 @@ import { decodeAppRecord } from "@platform/library/config/records/app"
 import { decodeRuntimeRecord } from "@platform/library/config/records/runtime"
 import {
   KORRI_RETROARCH_APP_ID,
+  KORRI_RETROARCH_GBA_SYSTEM_ID,
+  KORRI_RETROARCH_MGBA_RUNTIME_ID,
   KORRI_RETROARCH_PLUGIN_ID,
   retroarchPlugin,
 } from ".."
@@ -19,6 +21,28 @@ describe("RetroArch plugin", () => {
       kind: KORRI_RETROARCH_PLUGIN_ID,
       command: "retroarch",
       plugin: { [KORRI_RETROARCH_PLUGIN_ID]: {} },
+    })
+  })
+
+  it("contributes mGBA as a RetroArch-owned GBA runtime", () => {
+    expect(KORRI_RETROARCH_GBA_SYSTEM_ID).toBe("gba")
+    expect(KORRI_RETROARCH_MGBA_RUNTIME_ID).toBe("@korri:retroarch/mgba")
+    expect(retroarchPlugin.contributes.config.systems?.gba).toMatchObject({
+      id: KORRI_RETROARCH_GBA_SYSTEM_ID,
+      title: "Game Boy Advance",
+      apps: [
+        {
+          id: KORRI_RETROARCH_APP_ID,
+          runtime: KORRI_RETROARCH_MGBA_RUNTIME_ID,
+        },
+      ],
+    })
+    expect(retroarchPlugin.contributes.config.runtimes?.mgba).toMatchObject({
+      id: KORRI_RETROARCH_MGBA_RUNTIME_ID,
+      kind: "libretro-core",
+      app: KORRI_RETROARCH_APP_ID,
+      path: "/etc/korri/cores/mgba_libretro.so",
+      supports: { systems: [KORRI_RETROARCH_GBA_SYSTEM_ID] },
     })
   })
 

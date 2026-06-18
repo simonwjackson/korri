@@ -73,21 +73,8 @@ apps:
     plugin:
       "@korri:retroarch": {}
 
-runtimes:
-  mgba:
-    kind: libretro-core
-    app: "@korri:retroarch/retroarch"
-    path: /etc/korri/cores/mgba_libretro.so
-    supports:
-      systems: [gba]
-
-systems:
-  gba:
-    name: Game Boy Advance
-    apps:
-      - id: "@korri:retroarch/retroarch"
-        runtime: mgba
-
+# The RetroArch plugin contributes the `gba` system and the
+# `@korri:retroarch/mgba` runtime at /etc/korri/cores/mgba_libretro.so.
 library:
   yoshi-island:
     title: Super Mario Advance 3 - Yoshi's Island
@@ -100,6 +87,9 @@ library:
           path: gba/Super Mario Advance 3 - Yoshis Island (USA).gba
         patches:
           - /storage/patches/yoshi/SMA3 - Yoshis Island Colour Restoration (U).ips
+        apps:
+          - id: "@korri:retroarch/retroarch"
+            runtime: "@korri:retroarch/mgba"
         presets:
           color-and-voice:
             patches:

@@ -54,6 +54,7 @@ describe("first-party Nix plugin composition", () => {
         "@korri:gamescope",
         "@korri:pico8",
         "@korri:portmaster",
+        "@korri:retroarch",
         "@korri:ryubing",
       ]),
     )
@@ -71,7 +72,7 @@ describe("first-party Nix plugin composition", () => {
       "gamescope-control-bridge",
       "korri-stream-control-bench",
     ])
-    expect(enabled.moduleCount).toBeGreaterThan(1)
+    expect(enabled.moduleCount).toBeGreaterThan(2)
     expect(enabled.ids.length).toBeGreaterThan(1)
     expect(enabled.packages.length).toBeGreaterThan(2)
     expect(enabled.checks).toEqual(

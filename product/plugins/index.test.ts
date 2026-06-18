@@ -16,7 +16,12 @@ import { KORRI_PORTMASTER_PLUGIN_ID } from "./portmaster"
 import { KORRI_PROTON_GE_PLUGIN_ID } from "./proton-ge-runtime"
 import { KORRI_PROTON_PLUGIN_ID } from "./proton-runtime"
 import { KORRI_PSYCHO_WALUIGI_PLUGIN_ID } from "./psycho-waluigi"
-import { KORRI_RETROARCH_APP_ID, KORRI_RETROARCH_PLUGIN_ID } from "./retroarch"
+import {
+  KORRI_RETROARCH_APP_ID,
+  KORRI_RETROARCH_GBA_SYSTEM_ID,
+  KORRI_RETROARCH_MGBA_RUNTIME_ID,
+  KORRI_RETROARCH_PLUGIN_ID,
+} from "./retroarch"
 import { KORRI_RYUBING_PLUGIN_ID } from "./ryubing"
 import { KORRI_SMBXGAME_PLUGIN_ID } from "./smbxgame"
 import { KORRI_SMWCENTRAL_PLUGIN_ID } from "./smwcentral"
@@ -64,6 +69,31 @@ describe("first-party plugins", () => {
       package: "ryubing-korri",
       path: "product/plugins/ryubing/packages/ryubing-korri",
       capabilities: ["package.expose", "launch.runtime"],
+    })
+  })
+
+  it("enables RetroArch-owned GBA/mGBA records when RetroArch is requested", () => {
+    const registry = createFirstPartyPluginRegistryFromEnv({
+      KORRI_ENABLED_PLUGINS: KORRI_RETROARCH_PLUGIN_ID,
+    })
+
+    expect(registry.apps[KORRI_RETROARCH_APP_ID]).toBeDefined()
+    expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/gba`]).toMatchObject({
+      id: KORRI_RETROARCH_GBA_SYSTEM_ID,
+      apps: [
+        {
+          id: KORRI_RETROARCH_APP_ID,
+          runtime: KORRI_RETROARCH_MGBA_RUNTIME_ID,
+        },
+      ],
+    })
+    expect(
+      registry.runtimes[`${KORRI_RETROARCH_PLUGIN_ID}/mgba`],
+    ).toMatchObject({
+      id: KORRI_RETROARCH_MGBA_RUNTIME_ID,
+      kind: "libretro-core",
+      path: "/etc/korri/cores/mgba_libretro.so",
+      supports: { systems: [KORRI_RETROARCH_GBA_SYSTEM_ID] },
     })
   })
 
