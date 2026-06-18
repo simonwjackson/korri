@@ -109,7 +109,9 @@ describe("app choice selection", () => {
       _tag: "SelectedAppChoice",
       choice: { id: "retroarch" },
     })
-    expect(selectAppChoice([{ id: "retroarch" }, { id: "plugin-app" }])).toEqual({
+    expect(
+      selectAppChoice([{ id: "retroarch" }, { id: "plugin-app" }]),
+    ).toEqual({
       _tag: "AmbiguousAppChoice",
       appIds: ["retroarch", "plugin-app"],
     })
@@ -117,7 +119,10 @@ describe("app choice selection", () => {
 
   it("selects an explicit appId and reports unknown ids", () => {
     expect(
-      selectAppChoice([{ id: "retroarch" }, { id: "plugin-app" }], "plugin-app"),
+      selectAppChoice(
+        [{ id: "retroarch" }, { id: "plugin-app" }],
+        "plugin-app",
+      ),
     ).toEqual({ _tag: "SelectedAppChoice", choice: { id: "plugin-app" } })
     expect(selectAppChoice([{ id: "retroarch" }], "missing")).toEqual({
       _tag: "AppChoiceNotFound",
