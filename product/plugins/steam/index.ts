@@ -22,6 +22,7 @@ export {
   KORRI_STEAM_STORAGE_LOCAL_ID,
   type SteamPluginPolicy,
   steamPlugin,
+  steamRuntimePaths,
 } from "./src/plugin"
 export {
   cleanupSteamForegroundProcesses,

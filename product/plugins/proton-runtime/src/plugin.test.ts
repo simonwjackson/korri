@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { runPluginHandler } from "@platform/plugin"
 import { Effect } from "effect"
+import { steamRuntimePaths } from "../../steam/src/plugin"
 import {
   KORRI_PROTON_PLUGIN_ID,
   type ProtonRuntimeResolveOutput,
@@ -13,7 +14,7 @@ describe("Proton runtime plugin descriptor", () => {
     expect(protonRuntimePlugin.id).toBe(KORRI_PROTON_PLUGIN_ID)
   })
 
-  it("contributes the current Steam-installed Proton 10 runtime and package helper", () => {
+  it("contributes the current Steam-contract Proton 10 runtime and package helper", () => {
     expect(
       protonRuntimePlugin.contributes.config.runtimes?.["proton-10"],
     ).toMatchObject({
@@ -58,10 +59,9 @@ describe("Proton runtime plugin descriptor", () => {
       provider: KORRI_PROTON_PLUGIN_ID,
       runtime: "proton-10",
       status: "resolved",
-      protonRoot: "/var/lib/korri/steam/steamapps/common/Proton 10.0",
-      protonFiles: "/var/lib/korri/steam/steamapps/common/Proton 10.0/files",
-      wine64:
-        "/var/lib/korri/steam/steamapps/common/Proton 10.0/files/bin/wine64",
+      protonRoot: steamRuntimePaths.proton10Root,
+      protonFiles: `${steamRuntimePaths.proton10Root}/files`,
+      wine64: `${steamRuntimePaths.proton10Root}/files/bin/wine64`,
       env: {
         WINEPREFIX: "/var/lib/korri/content/games/mega-man-arena/4.20/.wine",
         WINEDLLOVERRIDES: "dxgi,d3d11=n,b",

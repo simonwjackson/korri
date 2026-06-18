@@ -10,6 +10,12 @@ export const KORRI_STEAM_STORAGE_LOCAL_ID = "steam" as const
 export const KORRI_STEAM_STORAGE_ID =
   `${KORRI_STEAM_PLUGIN_ID}/${KORRI_STEAM_STORAGE_LOCAL_ID}` as const
 
+export const steamRuntimePaths = {
+  stateRoot: "/var/lib/korri/steam",
+  fexRootfs: "/var/lib/korri/steam/fex-rootfs",
+  proton10Root: "/var/lib/korri/steam/steamapps/common/Proton 10.0",
+} as const
+
 export interface SteamPluginPolicy {
   readonly state: {
     readonly root: string
@@ -44,7 +50,7 @@ export const steamPlugin = plugin({
       storage: {
         [KORRI_STEAM_STORAGE_LOCAL_ID]: {
           id: KORRI_STEAM_STORAGE_LOCAL_ID,
-          root: "/var/lib/korri/steam",
+          root: steamRuntimePaths.stateRoot,
         },
       },
       systems: {
@@ -59,6 +65,19 @@ export const steamPlugin = plugin({
           id: "session-cleanup",
           kind: "session-hook",
           capabilities: ["session.cleanup"],
+        },
+        "steam-korri-package": {
+          id: "steam-korri-package",
+          kind: "nix-package",
+          package: "steam-korri",
+          path: "product/plugins/steam/packages/steam-korri",
+          capabilities: ["package.expose", "steam.runtime"],
+        },
+        "steam-nixos-module": {
+          id: "steam-nixos-module",
+          kind: "nixos-module",
+          path: "product/plugins/steam/nix/nixos-module.nix",
+          capabilities: ["system.service", "steam.runtime"],
         },
       },
       apps: {

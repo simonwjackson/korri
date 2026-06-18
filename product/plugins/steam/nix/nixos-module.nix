@@ -776,8 +776,8 @@ in
 
     package = mkOption {
       type = types.package;
-      default = pkgs.steam-korri;
-      defaultText = lib.literalExpression "pkgs.steam-korri";
+      default = pkgs.callPackage ../packages/steam-korri/package.nix { };
+      defaultText = lib.literalExpression "product/plugins/steam/packages/steam-korri";
       description = "Package-owned Steam runtime capsule consumed by the Korri guest adapter.";
     };
 

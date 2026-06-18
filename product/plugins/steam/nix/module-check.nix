@@ -60,36 +60,62 @@ let
       ];
     }).config;
 
-  enabled = evaluateWith "aarch64-linux" {
-    services.korri.steam.enable = true;
-  };
+  enabled = evaluateWith "aarch64-linux" (
+    { pkgs, ... }:
+    {
+      services.korri.steam = {
+        enable = true;
+        package = pkgs.steam-korri;
+      };
+    }
+  );
 
-  enabledKeepWarm = evaluateWith "aarch64-linux" {
-    services.korri.steam = {
-      enable = true;
-      keepWarm = true;
-    };
-  };
+  enabledKeepWarm = evaluateWith "aarch64-linux" (
+    { pkgs, ... }:
+    {
+      services.korri.steam = {
+        enable = true;
+        package = pkgs.steam-korri;
+        keepWarm = true;
+      };
+    }
+  );
 
-  runtimeOverride = evaluateWith "aarch64-linux" {
-    services.korri.runtime = {
-      stateRoot = "/var/lib/korri-alt";
-      gamesRoot = "/var/lib/korri-alt/content/games";
-      home = "/home/korri-alt";
-    };
-    services.korri.steam.enable = true;
-  };
+  runtimeOverride = evaluateWith "aarch64-linux" (
+    { pkgs, ... }:
+    {
+      services.korri.runtime = {
+        stateRoot = "/var/lib/korri-alt";
+        gamesRoot = "/var/lib/korri-alt/content/games";
+        home = "/home/korri-alt";
+      };
+      services.korri.steam = {
+        enable = true;
+        package = pkgs.steam-korri;
+      };
+    }
+  );
 
-  invalidPath = evaluateWith "aarch64-linux" {
-    services.korri.steam = {
-      enable = true;
-      home = "/storage/.local/share/Steam";
-    };
-  };
+  invalidPath = evaluateWith "aarch64-linux" (
+    { pkgs, ... }:
+    {
+      services.korri.steam = {
+        enable = true;
+        package = pkgs.steam-korri;
+        home = "/storage/.local/share/Steam";
+      };
+    }
+  );
 
-  x86Enabled = evaluateWith "x86_64-linux" {
-    services.korri.steam.enable = true;
-  };
+  x86Enabled = evaluateWith "x86_64-linux" (
+    { pkgs, ... }:
+    {
+      services.korri.steam = {
+        enable = true;
+        package = pkgs.steam-korri;
+      };
+    }
+  );
 
   disabled = evaluateWith "aarch64-linux" { };
 
@@ -105,7 +131,11 @@ let
   runtimePrepUnit = enabled.systemd.services.korri-steam-runtime-prep or { };
   runtimePrepPath = enabled.systemd.paths.korri-steam-runtime-prep or { };
   systemPackageNames = cfg: map (pkg: pkg.name or "") cfg.environment.systemPackages;
-  sudoCommands = lib.flatten (map (rule: map (command: command.command or "") (rule.commands or [ ])) (enabled.security.sudo.extraRules or [ ]));
+  sudoCommands = lib.flatten (
+    map (rule: map (command: command.command or "") (rule.commands or [ ])) (
+      enabled.security.sudo.extraRules or [ ]
+    )
+  );
   serviceExec =
     unit:
     let

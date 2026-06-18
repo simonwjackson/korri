@@ -33,7 +33,6 @@ in
     sunshine = prev.sunshine;
   };
   sunshine-korri = final.sunshine;
-  steam-korri = final.callPackage ../../../vendor/steam-korri/package.nix { };
   libretro-wasm4 = final.callPackage ../../../vendor/libretro-wasm4/package.nix {
     inherit wasm4-src;
   };

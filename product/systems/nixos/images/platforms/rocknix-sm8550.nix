@@ -19,7 +19,7 @@ let
   gamescopePackage = korri.packages.${targetSystem}.gamescope-korri;
   ryubingPackage = korri.packages.${targetSystem}.ryubing-korri;
   gamescopeControlEnvironment = gamescopeNix.controlEnvironment;
-  enabledFirstPartyPlugins = "@korri:gamescope,@korri:neverball,@korri:retroarch,@korri:ryubing";
+  enabledFirstPartyPlugins = "@korri:gamescope,@korri:neverball,@korri:retroarch,@korri:ryubing,@korri:steam";
   moonlightRuntimeSettingsEnvironment = {
     # Experimental downstream moonlight-embedded-korri runtime-settings hooks.
     # These are intentionally enumerated and preserved as Moonlight process env
@@ -371,7 +371,7 @@ in
 
   services.korri.steam = {
     enable = true;
-    package = pkgs.steam-korri;
+    package = korri.packages.${targetSystem}.steam-korri;
     home = "${runtime.stateRoot}/steam";
     gamesRoot = "${runtime.gamesRoot}/steam";
     dotDir = "${runtime.home}/.steam";

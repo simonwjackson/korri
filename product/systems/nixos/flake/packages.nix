@@ -20,7 +20,6 @@
   korriHeadlessSource,
   sunshineKorri,
   moonlightEmbeddedKorri,
-  steamKorri,
   libretroWasm4,
   electrobunBinaries,
   korriDesktopUnwrapped,
@@ -49,7 +48,6 @@
   korri-headless-source = korriHeadlessSource;
   sunshine-korri = sunshineKorri;
   moonlight-embedded-korri = moonlightEmbeddedKorri;
-  steam-korri = steamKorri;
   libretro-wasm4 = libretroWasm4;
 }
 // pluginPackages

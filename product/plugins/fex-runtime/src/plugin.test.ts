@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { runPluginHandler } from "@platform/plugin"
 import { Effect } from "effect"
+import { steamRuntimePaths } from "../../steam/src/plugin"
 import {
   type FexRuntimeResolveOutput,
   fexRuntimePlugin,
@@ -59,7 +60,7 @@ describe("FEX runtime plugin descriptor", () => {
       runtime: "linux-user",
       status: "resolved",
       env: {
-        FEX_ROOTFS: "/var/lib/korri/steam/fex-rootfs",
+        FEX_ROOTFS: steamRuntimePaths.fexRootfs,
         FEX_APP_CONFIG:
           "/var/lib/korri/content/games/mega-man-arena/4.20/fex-mega-man-arena.json",
         VK_ICD_FILENAMES: "/usr/share/vulkan/icd.d/freedreno_icd.x86_64.json",

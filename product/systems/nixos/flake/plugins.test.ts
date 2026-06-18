@@ -56,6 +56,7 @@ describe("first-party Nix plugin composition", () => {
         "@korri:portmaster",
         "@korri:retroarch",
         "@korri:ryubing",
+        "@korri:steam",
       ]),
     )
     expect(enabled.packages).toEqual(
@@ -65,6 +66,7 @@ describe("first-party Nix plugin composition", () => {
         "libretro-fake-08",
         "portmaster",
         "ryubing-korri",
+        "steam-korri",
       ]),
     )
     expect(enabled.apps).toEqual([
@@ -76,7 +78,12 @@ describe("first-party Nix plugin composition", () => {
     expect(enabled.ids.length).toBeGreaterThan(1)
     expect(enabled.packages.length).toBeGreaterThan(2)
     expect(enabled.checks).toEqual(
-      expect.arrayContaining(["libretro-fake-08-check", "portmaster-check"]),
+      expect.arrayContaining([
+        "korri-steam-module",
+        "libretro-fake-08-check",
+        "portmaster-check",
+        "steam-korri-check",
+      ]),
     )
     expect(enabled.checks.length).toBeGreaterThan(0)
     expect(enabled.overlayCount).toBeGreaterThan(0)

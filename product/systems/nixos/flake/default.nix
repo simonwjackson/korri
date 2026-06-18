@@ -221,7 +221,6 @@ flake-utils.lib.eachDefaultSystem (
       pluginNixosModules = firstPartyPluginComposition.nixosModules;
     };
 
-    steamKorri = pkgs.steam-korri;
     libretroWasm4 = pkgs.libretro-wasm4;
     # The named outputs match the overlay-substituted runtime package names
     # so downstream consumers can ask for either name and get the same
@@ -286,7 +285,6 @@ flake-utils.lib.eachDefaultSystem (
         korriHeadlessSource
         sunshineKorri
         moonlightEmbeddedKorri
-        steamKorri
         libretroWasm4
         electrobunBinaries
         korriDesktopUnwrapped

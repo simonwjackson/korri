@@ -57,12 +57,27 @@ describe("Steam plugin descriptor", () => {
     })
   })
 
-  it("contributes a typed session cleanup capability", () => {
+  it("contributes typed session cleanup and plugin-owned Nix surfaces", () => {
     expect(
       steamPlugin.contributes.config.modules?.["session-cleanup"],
     ).toMatchObject({
       kind: "session-hook",
       capabilities: ["session.cleanup"],
+    })
+    expect(
+      steamPlugin.contributes.config.modules?.["steam-korri-package"],
+    ).toMatchObject({
+      kind: "nix-package",
+      package: "steam-korri",
+      path: "product/plugins/steam/packages/steam-korri",
+      capabilities: ["package.expose", "steam.runtime"],
+    })
+    expect(
+      steamPlugin.contributes.config.modules?.["steam-nixos-module"],
+    ).toMatchObject({
+      kind: "nixos-module",
+      path: "product/plugins/steam/nix/nixos-module.nix",
+      capabilities: ["system.service", "steam.runtime"],
     })
     expect(steamPlugin.handlers).toContainEqual(
       expect.objectContaining({ operation: "session.cleanup" }),
