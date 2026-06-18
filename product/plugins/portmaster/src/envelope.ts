@@ -12,6 +12,26 @@ export interface PortMasterLaunchEnvelopeInput {
   readonly envPath?: string
   readonly useBubblewrap?: boolean
   readonly presentation?: PortMasterLaunchPresentationInput
+  readonly inputCompatibility?: PortMasterLaunchInputCompatibilityInput
+}
+
+export interface PortMasterLaunchInputCompatibilityInput {
+  readonly mode: "none" | "sdl-gamecontroller" | "gptokeyb"
+  readonly sdlGameControllerConfig?: string
+  readonly gptokeybPath?: string
+  readonly gptokeybLoaderPath?: string
+  readonly gptokeybLogPath?: string
+  readonly bindRealUinput?: boolean
+}
+
+export interface PortMasterLaunchInputCompatibility {
+  readonly mode: "none" | "sdl-gamecontroller" | "gptokeyb"
+  readonly sdlGameControllerConfig: string
+  readonly bindRealUinput: boolean
+  readonly gptokeybWrapperPath?: string
+  readonly gptokeybPath?: string
+  readonly gptokeybLoaderPath?: string
+  readonly gptokeybLogPath?: string
 }
 
 export interface PortMasterLaunchPresentationInput {
@@ -42,6 +62,7 @@ export interface PortMasterLaunchEnvelope {
   readonly tasksetterPath: string
   readonly fakeDeviceRoot?: string
   readonly presentation?: PortMasterLaunchPresentation
+  readonly inputCompatibility: PortMasterLaunchInputCompatibility
 }
 
 const DEFAULT_DEVICE_ARCH = "aarch64"
@@ -66,13 +87,31 @@ export async function preparePortMasterLaunchEnvelope(
   const useBubblewrap = input.useBubblewrap ?? false
   const fexWrapper = manifest.extracted.fexWrappers?.[0]
   const presentationInput = input.presentation
+  const inputCompatibility = normalizeInputCompatibility({
+    manifest,
+    controlRoot,
+    input: input.inputCompatibility,
+  })
   const env: Record<string, string> = {
     XDG_DATA_HOME: manifest.installRoot,
     KORRI_PORTMASTER_HOME: controlRoot,
     KORRI_PORTMASTER_DIRECTORY: stripLeadingSlash(manifest.installRoot),
     KORRI_PORTMASTER_PORTS_ROOT: manifest.portsRoot,
+    KORRI_PORTMASTER_INPUT_MODE: inputCompatibility.mode,
     DEVICE_ARCH: input.deviceArch ?? preferredDeviceArch(manifest),
-    SDL_GAMECONTROLLERCONFIG: "",
+    SDL_GAMECONTROLLERCONFIG: inputCompatibility.sdlGameControllerConfig,
+    ...(inputCompatibility.gptokeybPath
+      ? { KORRI_PORTMASTER_GPTOKEYB_TARGET: inputCompatibility.gptokeybPath }
+      : {}),
+    ...(inputCompatibility.gptokeybLoaderPath
+      ? {
+          KORRI_PORTMASTER_GPTOKEYB_LOADER:
+            inputCompatibility.gptokeybLoaderPath,
+        }
+      : {}),
+    ...(inputCompatibility.gptokeybLogPath
+      ? { KORRI_PORTMASTER_GPTOKEYB_LOG: inputCompatibility.gptokeybLogPath }
+      : {}),
     ...(fexWrapper
       ? {
           FEX_ROOTFS: fexWrapper.rootfs,
@@ -86,10 +125,15 @@ export async function preparePortMasterLaunchEnvelope(
   await mkdir(fakeDeviceRoot, { recursive: true })
   await writeFile(fakeTty, "")
   await writeFile(fakeUinput, "")
+  if (inputCompatibility.gptokeybWrapperPath) {
+    await writeGptokeybWrapper(inputCompatibility)
+  }
   const tasksetter = tasksetterText()
   const control = controlText({
+    controlRoot,
     directory: env.KORRI_PORTMASTER_DIRECTORY,
     deviceArch: env.DEVICE_ARCH,
+    inputCompatibility,
   })
   await writeFile(tasksetterPath, tasksetter)
   await writeFile(join(romsControlRoot, "tasksetter"), tasksetter)
@@ -107,6 +151,7 @@ export async function preparePortMasterLaunchEnvelope(
         controlPath,
         tasksetterPath,
         fakeDeviceRoot,
+        inputCompatibility,
       },
       manifest,
       presentation: presentationInput,
@@ -160,9 +205,7 @@ export async function preparePortMasterLaunchEnvelope(
         "--bind",
         fakeTty,
         "/dev/tty0",
-        "--bind",
-        fakeUinput,
-        "/dev/uinput",
+        ...fakeUinputBindArgs({ fakeUinput, inputCompatibility }),
         ...fexRootfsBind,
         "--chdir",
         dirname(launchScriptPath),
@@ -175,10 +218,111 @@ export async function preparePortMasterLaunchEnvelope(
       controlPath,
       tasksetterPath,
       fakeDeviceRoot,
+      inputCompatibility,
     },
     manifest,
     presentation: presentationInput,
   })
+}
+
+function normalizeInputCompatibility(input: {
+  readonly manifest: PortMasterInstalledManifest
+  readonly controlRoot: string
+  readonly input?: PortMasterLaunchInputCompatibilityInput
+}): PortMasterLaunchInputCompatibility {
+  const mode = input.input?.mode ?? "none"
+  const sdlGameControllerConfig = input.input?.sdlGameControllerConfig ?? ""
+  if (mode === "gptokeyb") {
+    const gptokeybLogPath =
+      input.input?.gptokeybLogPath ??
+      join(
+        input.manifest.installRoot,
+        "logs",
+        `${manifestSlug(input.manifest)}-gptokeyb.log`,
+      )
+    return {
+      mode,
+      sdlGameControllerConfig,
+      bindRealUinput: input.input?.bindRealUinput ?? true,
+      gptokeybWrapperPath: join(input.controlRoot, "gptokeyb"),
+      ...(input.input?.gptokeybPath
+        ? { gptokeybPath: input.input.gptokeybPath }
+        : {}),
+      ...(input.input?.gptokeybLoaderPath
+        ? { gptokeybLoaderPath: input.input.gptokeybLoaderPath }
+        : {}),
+      gptokeybLogPath,
+    }
+  }
+  return {
+    mode,
+    sdlGameControllerConfig,
+    bindRealUinput: input.input?.bindRealUinput ?? false,
+  }
+}
+
+async function writeGptokeybWrapper(
+  inputCompatibility: PortMasterLaunchInputCompatibility,
+): Promise<void> {
+  if (!inputCompatibility.gptokeybWrapperPath) return
+  await mkdir(dirname(inputCompatibility.gptokeybWrapperPath), {
+    recursive: true,
+  })
+  if (inputCompatibility.gptokeybLogPath) {
+    await mkdir(dirname(inputCompatibility.gptokeybLogPath), {
+      recursive: true,
+    })
+  }
+  await writeFile(
+    inputCompatibility.gptokeybWrapperPath,
+    gptokeybWrapperText(inputCompatibility),
+    { mode: 0o755 },
+  )
+  await chmod(inputCompatibility.gptokeybWrapperPath, 0o755).catch(
+    () => undefined,
+  )
+}
+
+function gptokeybWrapperText(
+  inputCompatibility: PortMasterLaunchInputCompatibility,
+): string {
+  const target = inputCompatibility.gptokeybPath ?? ""
+  const loader = inputCompatibility.gptokeybLoaderPath ?? ""
+  const logPath =
+    inputCompatibility.gptokeybLogPath ?? "/tmp/korri-portmaster-gptokeyb.log"
+  return `#!/usr/bin/env bash
+set -u
+log_path=\${KORRI_PORTMASTER_GPTOKEYB_LOG:-${shellQuote(logPath)}}
+target=\${KORRI_PORTMASTER_GPTOKEYB_TARGET:-${shellQuote(target)}}
+loader=\${KORRI_PORTMASTER_GPTOKEYB_LOADER:-${shellQuote(loader)}}
+mkdir -p "$(dirname "$log_path")"
+{
+  printf '[korri-portmaster] gptokeyb args:'
+  printf ' %q' "$@"
+  printf '\\n'
+} >> "$log_path" 2>&1
+if [ -z "$target" ]; then
+  printf '[korri-portmaster] no gptokeyb target configured; input helper disabled\\n' >> "$log_path" 2>&1
+  exit 0
+fi
+if [ -n "$loader" ]; then
+  "$loader" "$target" "$@" >> "$log_path" 2>&1
+else
+  "$target" "$@" >> "$log_path" 2>&1
+fi
+status=$?
+printf '[korri-portmaster] gptokeyb exited with status %s\\n' "$status" >> "$log_path" 2>&1
+exit 0
+`
+}
+
+function fakeUinputBindArgs(input: {
+  readonly fakeUinput: string
+  readonly inputCompatibility: PortMasterLaunchInputCompatibility
+}): readonly string[] {
+  return input.inputCompatibility.bindRealUinput
+    ? []
+    : ["--bind", input.fakeUinput, "/dev/uinput"]
 }
 
 async function withPresentation(input: {
@@ -329,10 +473,15 @@ function tasksetterText(): string {
 }
 
 function controlText(input: {
+  readonly controlRoot: string
   readonly directory: string
   readonly deviceArch: string
+  readonly inputCompatibility: PortMasterLaunchInputCompatibility
 }): string {
-  return `# Generated by @korri:portmaster.\nCFW_NAME="\${CFW_NAME:-korri}"\nDEVICE_ARCH="\${DEVICE_ARCH:-${input.deviceArch}}"\ndirectory="\${KORRI_PORTMASTER_DIRECTORY:-${input.directory}}"\nESUDO="\${ESUDO:-}"\nGPTOKEYB="\${GPTOKEYB:-true}"\nsdl_controllerconfig="\${SDL_GAMECONTROLLERCONFIG:-}"\nget_controls() {\n  export SDL_GAMECONTROLLERCONFIG="\${SDL_GAMECONTROLLERCONFIG:-$sdl_controllerconfig}"\n}\npm_platform_helper() { :; }\npm_finish() { :; }\n`
+  const gptokeybCommand = input.inputCompatibility.gptokeybWrapperPath ?? "true"
+  const sdlGameControllerConfig =
+    input.inputCompatibility.sdlGameControllerConfig
+  return `# Generated by @korri:portmaster.\nCFW_NAME="\${CFW_NAME:-korri}"\nDEVICE_ARCH="\${DEVICE_ARCH:-${input.deviceArch}}"\ncontrolfolder="\${KORRI_PORTMASTER_HOME:-${input.controlRoot}}"\ndirectory="\${KORRI_PORTMASTER_DIRECTORY:-${input.directory}}"\nESUDO="\${ESUDO:-}"\nGPTOKEYB="\${GPTOKEYB:-${gptokeybCommand}}"\nif [ -z "\${SDL_GAMECONTROLLERCONFIG:-}" ]; then\n  export SDL_GAMECONTROLLERCONFIG=${shellQuote(sdlGameControllerConfig)}\nfi\nsdl_controllerconfig="\${SDL_GAMECONTROLLERCONFIG:-}"\nget_controls() {\n  export SDL_GAMECONTROLLERCONFIG="\${SDL_GAMECONTROLLERCONFIG:-$sdl_controllerconfig}"\n}\npm_platform_helper() { :; }\npm_finish() { :; }\n`
 }
 
 export function launchScriptDisplayName(envelope: PortMasterLaunchEnvelope) {

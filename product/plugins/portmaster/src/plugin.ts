@@ -12,6 +12,7 @@ import type { ProviderHealth } from "@platform/protocol/acquisition/source-healt
 import { Effect } from "effect"
 import { KORRI_FEX_PLUGIN_ID } from "../../fex-runtime"
 import {
+  type PortMasterLaunchInputCompatibilityInput,
   type PortMasterLaunchPresentationInput,
   preparePortMasterLaunchEnvelope,
 } from "./envelope"
@@ -341,6 +342,9 @@ export function createPortMasterPlugin(options: PortMasterPluginOptions = {}) {
                   envPath: stringValue(input.envPath),
                   useBubblewrap: booleanValue(input.useBubblewrap),
                   presentation: presentationFromInput(input.presentation),
+                  inputCompatibility: inputCompatibilityFromInput(
+                    input.inputCompatibility,
+                  ),
                 }),
               catch: error =>
                 new AcquisitionError({
@@ -666,6 +670,29 @@ function nativeElfRepairFromInput(
     return undefined
   }
   return { arch, interpreter, patchelfPath, libraryPaths }
+}
+
+function inputCompatibilityFromInput(
+  value: unknown,
+): PortMasterLaunchInputCompatibilityInput | undefined {
+  const record = readRecord(value)
+  const mode = stringValue(record.mode)
+  if (mode !== "none" && mode !== "sdl-gamecontroller" && mode !== "gptokeyb") {
+    return undefined
+  }
+  const sdlGameControllerConfig = stringValue(record.sdlGameControllerConfig)
+  const gptokeybPath = stringValue(record.gptokeybPath)
+  const gptokeybLoaderPath = stringValue(record.gptokeybLoaderPath)
+  const gptokeybLogPath = stringValue(record.gptokeybLogPath)
+  const bindRealUinput = booleanValue(record.bindRealUinput)
+  return {
+    mode,
+    ...(sdlGameControllerConfig ? { sdlGameControllerConfig } : {}),
+    ...(gptokeybPath ? { gptokeybPath } : {}),
+    ...(gptokeybLoaderPath ? { gptokeybLoaderPath } : {}),
+    ...(gptokeybLogPath ? { gptokeybLogPath } : {}),
+    ...(bindRealUinput !== undefined ? { bindRealUinput } : {}),
+  }
 }
 
 function presentationFromInput(

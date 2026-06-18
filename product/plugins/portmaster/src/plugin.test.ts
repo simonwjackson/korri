@@ -507,6 +507,61 @@ describe("PortMaster plugin", () => {
       expect(envelope.args).toContain("--bind-try")
       expect(envelope.args).toContain("/var")
 
+      const inputEnvelope = await Effect.runPromise(
+        runPluginHandler(prepareLaunch, {
+          operation: "portmaster.prepare-launch",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            manifestPath: manifest.manifestPath,
+            shellPath: "/run/current-system/sw/bin/bash",
+            bwrapPath: "/nix/store/example-bubblewrap/bin/bwrap",
+            envPath: "/run/current-system/sw/bin/env",
+            useBubblewrap: true,
+            inputCompatibility: {
+              mode: "gptokeyb",
+              gptokeybPath: "/nix/store/portmaster/PortMaster/gptokeyb",
+              gptokeybLoaderPath: "/nix/store/glibc/lib/ld-linux-aarch64.so.1",
+              sdlGameControllerConfig:
+                "030000005e0400008e02000014010000,Xbox 360 Controller,a:b0,b:b1",
+            },
+          },
+        }),
+      )
+      expect(inputEnvelope.inputCompatibility).toMatchObject({
+        mode: "gptokeyb",
+        bindRealUinput: true,
+        gptokeybWrapperPath: join(root, "PortMaster", "gptokeyb"),
+        gptokeybPath: "/nix/store/portmaster/PortMaster/gptokeyb",
+        gptokeybLoaderPath: "/nix/store/glibc/lib/ld-linux-aarch64.so.1",
+      })
+      expect(inputEnvelope.env).toMatchObject({
+        KORRI_PORTMASTER_INPUT_MODE: "gptokeyb",
+        KORRI_PORTMASTER_GPTOKEYB_TARGET:
+          "/nix/store/portmaster/PortMaster/gptokeyb",
+        KORRI_PORTMASTER_GPTOKEYB_LOADER:
+          "/nix/store/glibc/lib/ld-linux-aarch64.so.1",
+        SDL_GAMECONTROLLERCONFIG:
+          "030000005e0400008e02000014010000,Xbox 360 Controller,a:b0,b:b1",
+      })
+      expect(inputEnvelope.args).not.toContain(
+        join(root, "compat", "dev", "uinput"),
+      )
+      const inputControl = await readFile(inputEnvelope.controlPath, "utf8")
+      expect(inputControl).toContain(
+        `GPTOKEYB="\${GPTOKEYB:-${join(root, "PortMaster", "gptokeyb")}}"`,
+      )
+      expect(inputControl).toContain("SDL_GAMECONTROLLERCONFIG=")
+      const gptokeybWrapper = await readFile(
+        join(root, "PortMaster", "gptokeyb"),
+        "utf8",
+      )
+      expect(gptokeybWrapper).toStartWith("#!/usr/bin/env bash")
+      expect(gptokeybWrapper).toContain("KORRI_PORTMASTER_GPTOKEYB_TARGET")
+      expect(gptokeybWrapper).toContain("KORRI_PORTMASTER_GPTOKEYB_LOADER")
+      expect(gptokeybWrapper).toContain(
+        "/nix/store/portmaster/PortMaster/gptokeyb",
+      )
+
       const directEnvelope = await Effect.runPromise(
         runPluginHandler(prepareLaunch, {
           operation: "portmaster.prepare-launch",

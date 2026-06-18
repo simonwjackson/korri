@@ -1,6 +1,8 @@
 export type {
   PortMasterLaunchEnvelope,
   PortMasterLaunchEnvelopeInput,
+  PortMasterLaunchInputCompatibility,
+  PortMasterLaunchInputCompatibilityInput,
   PortMasterLaunchPresentation,
   PortMasterLaunchPresentationInput,
 } from "./src/envelope"
