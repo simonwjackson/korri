@@ -667,6 +667,64 @@ describe("PortMaster plugin", () => {
       expect(launcher).toContain('[class="digger.x86_64"]')
       expect(launcher).toContain(join(root, "logs", "digger.log"))
       expect(launcher).toContain("DEVICE_ARCH='x86_64'")
+
+      const gamescopeEnvelope = await Effect.runPromise(
+        runPluginHandler(prepareLaunch, {
+          operation: "portmaster.prepare-launch",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            manifestPath: manifest.manifestPath,
+            shellPath: "/run/current-system/sw/bin/bash",
+            useBubblewrap: false,
+            presentation: {
+              mode: "gamescope",
+              gamescopePath: "/nix/store/gamescope-korri/bin/gamescope",
+              gamescopeWidth: 1920,
+              gamescopeHeight: 1080,
+              gamescopeNestedWidth: 1280,
+              gamescopeNestedHeight: 720,
+              swaymsgPath: "/run/current-system/sw/bin/swaymsg",
+              startupPollAttempts: 2,
+              startupPollDelayMs: 1,
+            },
+          },
+        }),
+      )
+      expect(gamescopeEnvelope).toMatchObject({
+        command: join(root, "PortMaster", "launch.sh"),
+        args: [],
+        presentation: {
+          mode: "gamescope",
+          launcherPath: join(root, "PortMaster", "launch.sh"),
+          logPath: join(root, "logs", "digger.log"),
+          windowMatcher: '[app_id="gamescope"]',
+          swaymsgPath: "/run/current-system/sw/bin/swaymsg",
+          gamescopePath: "/nix/store/gamescope-korri/bin/gamescope",
+          gamescopeArgs: [
+            "-W",
+            "1920",
+            "-H",
+            "1080",
+            "-w",
+            "1280",
+            "-h",
+            "720",
+            "-f",
+          ],
+        },
+      })
+      const gamescopeLauncher = await readFile(
+        gamescopeEnvelope.command,
+        "utf8",
+      )
+      expect(gamescopeLauncher).toContain(
+        "/nix/store/gamescope-korri/bin/gamescope",
+      )
+      expect(gamescopeLauncher).toContain("'--' 'env'")
+      expect(gamescopeLauncher).toContain("'WAYLAND_DISPLAY=gamescope-0'")
+      expect(gamescopeLauncher).toContain("'DISPLAY='")
+      expect(gamescopeLauncher).toContain("'SDL_VIDEODRIVER=wayland'")
+      expect(gamescopeLauncher).toContain('[app_id="gamescope"]')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

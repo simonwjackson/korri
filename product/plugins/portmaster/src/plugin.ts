@@ -860,13 +860,31 @@ function presentationFromInput(
 ): PortMasterLaunchPresentationInput | undefined {
   const record = readRecord(value)
   const mode = stringValue(record.mode)
-  if (mode !== "none" && mode !== "sway-fullscreen") return undefined
+  if (mode !== "none" && mode !== "sway-fullscreen" && mode !== "gamescope") {
+    return undefined
+  }
   const swaymsgPath = stringValue(record.swaymsgPath)
   const windowMatcher = stringValue(record.windowMatcher)
   const windowProbe = stringValue(record.windowProbe)
   const logPath = stringValue(record.logPath)
   const startupPollAttempts = positiveIntegerValue(record.startupPollAttempts)
   const startupPollDelayMs = positiveIntegerValue(record.startupPollDelayMs)
+  const gamescopePath = stringValue(record.gamescopePath)
+  const gamescopeArgs = stringArray(record.gamescopeArgs)
+  const gamescopeWidth = positiveIntegerValue(record.gamescopeWidth)
+  const gamescopeHeight = positiveIntegerValue(record.gamescopeHeight)
+  const gamescopeNestedWidth = positiveIntegerValue(record.gamescopeNestedWidth)
+  const gamescopeNestedHeight = positiveIntegerValue(
+    record.gamescopeNestedHeight,
+  )
+  const gamescopeFullscreen = booleanValue(record.gamescopeFullscreen)
+  const gamescopeChildWaylandDisplay = stringValue(
+    record.gamescopeChildWaylandDisplay,
+  )
+  const gamescopeChildDisplay = stringValue(record.gamescopeChildDisplay)
+  const gamescopeChildSdlVideoDriver = stringValue(
+    record.gamescopeChildSdlVideoDriver,
+  )
   return {
     mode,
     ...(swaymsgPath ? { swaymsgPath } : {}),
@@ -875,6 +893,16 @@ function presentationFromInput(
     ...(logPath ? { logPath } : {}),
     ...(startupPollAttempts !== undefined ? { startupPollAttempts } : {}),
     ...(startupPollDelayMs !== undefined ? { startupPollDelayMs } : {}),
+    ...(gamescopePath ? { gamescopePath } : {}),
+    ...(gamescopeArgs.length > 0 ? { gamescopeArgs } : {}),
+    ...(gamescopeWidth !== undefined ? { gamescopeWidth } : {}),
+    ...(gamescopeHeight !== undefined ? { gamescopeHeight } : {}),
+    ...(gamescopeNestedWidth !== undefined ? { gamescopeNestedWidth } : {}),
+    ...(gamescopeNestedHeight !== undefined ? { gamescopeNestedHeight } : {}),
+    ...(gamescopeFullscreen !== undefined ? { gamescopeFullscreen } : {}),
+    ...(gamescopeChildWaylandDisplay ? { gamescopeChildWaylandDisplay } : {}),
+    ...(gamescopeChildDisplay !== undefined ? { gamescopeChildDisplay } : {}),
+    ...(gamescopeChildSdlVideoDriver ? { gamescopeChildSdlVideoDriver } : {}),
   }
 }
 

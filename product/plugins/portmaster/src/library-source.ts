@@ -319,11 +319,15 @@ function resolveInstalledLaunch(
 function presentationFromEnv(
   env: Readonly<Record<string, string | undefined>>,
 ): PortMasterLaunchEnvelopeInput["presentation"] {
-  if (env.KORRI_PORTMASTER_PRESENTATION !== "sway-fullscreen") return undefined
+  const mode = env.KORRI_PORTMASTER_PRESENTATION
+  if (mode !== "sway-fullscreen" && mode !== "gamescope") return undefined
   return {
-    mode: "sway-fullscreen",
+    mode,
     ...(env.KORRI_PORTMASTER_SWAYMSG_PATH
       ? { swaymsgPath: env.KORRI_PORTMASTER_SWAYMSG_PATH }
+      : {}),
+    ...(env.KORRI_PORTMASTER_GAMESCOPE_PATH
+      ? { gamescopePath: env.KORRI_PORTMASTER_GAMESCOPE_PATH }
       : {}),
   }
 }

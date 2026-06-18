@@ -50,11 +50,13 @@ export interface PortMasterLaunchInputCompatibility {
 export type PortMasterLaunchPresentationInput = PortMasterPresentationProfile
 
 export interface PortMasterLaunchPresentation {
-  readonly mode: "sway-fullscreen"
+  readonly mode: "sway-fullscreen" | "gamescope"
   readonly launcherPath: string
   readonly logPath: string
   readonly windowMatcher: string
   readonly swaymsgPath: string
+  readonly gamescopePath?: string
+  readonly gamescopeArgs?: readonly string[]
 }
 
 export interface PortMasterLaunchEnvelope {
@@ -627,31 +629,59 @@ async function withPresentation(input: {
       `${manifestSlug(input.manifest)}.log`,
     )
   const windowMatcher =
-    input.presentation.windowMatcher ?? defaultWindowMatcher(input.manifest)
+    input.presentation.windowMatcher ??
+    (input.presentation.mode === "gamescope"
+      ? '[app_id="gamescope"]'
+      : defaultWindowMatcher(input.manifest))
   const windowProbe =
-    input.presentation.windowProbe ?? defaultWindowProbe(input.manifest)
+    input.presentation.windowProbe ??
+    (input.presentation.mode === "gamescope"
+      ? "gamescope"
+      : defaultWindowProbe(input.manifest))
   const swaymsgPath = input.presentation.swaymsgPath ?? "swaymsg"
+  const gamescopePath = input.presentation.gamescopePath ?? "gamescope"
+  const gamescopeArgs = gamescopeLaunchArgs(input.presentation)
   const presentation: PortMasterLaunchPresentation = {
-    mode: "sway-fullscreen",
+    mode: input.presentation.mode,
     launcherPath,
     logPath,
     windowMatcher,
     swaymsgPath,
+    ...(input.presentation.mode === "gamescope"
+      ? { gamescopePath, gamescopeArgs }
+      : {}),
   }
 
   await mkdir(dirname(launcherPath), { recursive: true })
   await mkdir(dirname(logPath), { recursive: true })
   await writeFile(
     launcherPath,
-    launcherText({
-      envelope: input.envelope,
-      logPath,
-      swaymsgPath,
-      windowMatcher,
-      windowProbe,
-      startupPollAttempts: input.presentation.startupPollAttempts ?? 30,
-      startupPollDelayMs: input.presentation.startupPollDelayMs ?? 200,
-    }),
+    input.presentation.mode === "gamescope"
+      ? gamescopeLauncherText({
+          envelope: input.envelope,
+          logPath,
+          swaymsgPath,
+          windowMatcher,
+          windowProbe,
+          startupPollAttempts: input.presentation.startupPollAttempts ?? 30,
+          startupPollDelayMs: input.presentation.startupPollDelayMs ?? 200,
+          gamescopePath,
+          gamescopeArgs,
+          childWaylandDisplay:
+            input.presentation.gamescopeChildWaylandDisplay ?? "gamescope-0",
+          childDisplay: input.presentation.gamescopeChildDisplay ?? "",
+          childSdlVideoDriver:
+            input.presentation.gamescopeChildSdlVideoDriver ?? "wayland",
+        })
+      : launcherText({
+          envelope: input.envelope,
+          logPath,
+          swaymsgPath,
+          windowMatcher,
+          windowProbe,
+          startupPollAttempts: input.presentation.startupPollAttempts ?? 30,
+          startupPollDelayMs: input.presentation.startupPollDelayMs ?? 200,
+        }),
     { mode: 0o755 },
   )
   await chmod(launcherPath, 0o755).catch(() => undefined)
@@ -678,6 +708,63 @@ function launcherText(input: {
     .map(([key, value]) => `export ${key}=${shellQuote(value)}`)
     .join("\n")
   const command = [input.envelope.command, ...input.envelope.args]
+    .map(shellQuote)
+    .join(" ")
+  return `#!/usr/bin/env bash\nset -euo pipefail\nset -m\n${exports}\nmkdir -p ${shellQuote(dirname(input.logPath))}\ncd ${shellQuote(input.envelope.cwd)}\nchild_pid=\ncleanup() {\n  if [ -n "\${child_pid:-}" ]; then\n    kill -- "-$child_pid" 2>/dev/null || kill "$child_pid" 2>/dev/null || true\n    sleep 1\n    kill -KILL -- "-$child_pid" 2>/dev/null || kill -KILL "$child_pid" 2>/dev/null || true\n    wait "$child_pid" 2>/dev/null || true\n  fi\n}\nterminate() {\n  cleanup\n  exit 143\n}\ntrap terminate INT TERM\ntrap cleanup EXIT\n${command} > ${shellQuote(input.logPath)} 2>&1 &\nchild_pid=$!\nfor ((attempt = 0; attempt < ${input.startupPollAttempts}; attempt += 1)); do\n  if ${shellQuote(input.swaymsgPath)} -t get_tree 2>/dev/null | grep -F ${shellQuote(input.windowProbe)} >/dev/null 2>&1; then\n    ${shellQuote(input.swaymsgPath)} ${shellQuote(input.windowMatcher)} focus >/dev/null 2>&1 || true\n    ${shellQuote(input.swaymsgPath)} ${shellQuote(input.windowMatcher)} fullscreen enable >/dev/null 2>&1 || true\n    break\n  fi\n  sleep ${input.startupPollDelayMs / 1000}\ndone\nset +e\nwait "$child_pid"\nstatus=$?\nset -e\ntrap - INT TERM EXIT\nexit "$status"\n`
+}
+
+function gamescopeLaunchArgs(
+  presentation: PortMasterLaunchPresentationInput,
+): readonly string[] {
+  if (presentation.gamescopeArgs && presentation.gamescopeArgs.length > 0) {
+    return presentation.gamescopeArgs
+  }
+  const width = `${presentation.gamescopeWidth ?? 1280}`
+  const height = `${presentation.gamescopeHeight ?? 720}`
+  const nestedWidth = `${presentation.gamescopeNestedWidth ?? presentation.gamescopeWidth ?? 1280}`
+  const nestedHeight = `${presentation.gamescopeNestedHeight ?? presentation.gamescopeHeight ?? 720}`
+  return [
+    "-W",
+    width,
+    "-H",
+    height,
+    "-w",
+    nestedWidth,
+    "-h",
+    nestedHeight,
+    ...(presentation.gamescopeFullscreen === false ? [] : ["-f"]),
+  ]
+}
+
+function gamescopeLauncherText(input: {
+  readonly envelope: PortMasterLaunchEnvelope
+  readonly logPath: string
+  readonly swaymsgPath: string
+  readonly windowMatcher: string
+  readonly windowProbe: string
+  readonly startupPollAttempts: number
+  readonly startupPollDelayMs: number
+  readonly gamescopePath: string
+  readonly gamescopeArgs: readonly string[]
+  readonly childWaylandDisplay: string
+  readonly childDisplay: string
+  readonly childSdlVideoDriver: string
+}): string {
+  const exports = Object.entries(input.envelope.env)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `export ${key}=${shellQuote(value)}`)
+    .join("\n")
+  const command = [
+    input.gamescopePath,
+    ...input.gamescopeArgs,
+    "--",
+    "env",
+    `WAYLAND_DISPLAY=${input.childWaylandDisplay}`,
+    `DISPLAY=${input.childDisplay}`,
+    `SDL_VIDEODRIVER=${input.childSdlVideoDriver}`,
+    input.envelope.command,
+    ...input.envelope.args,
+  ]
     .map(shellQuote)
     .join(" ")
   return `#!/usr/bin/env bash\nset -euo pipefail\nset -m\n${exports}\nmkdir -p ${shellQuote(dirname(input.logPath))}\ncd ${shellQuote(input.envelope.cwd)}\nchild_pid=\ncleanup() {\n  if [ -n "\${child_pid:-}" ]; then\n    kill -- "-$child_pid" 2>/dev/null || kill "$child_pid" 2>/dev/null || true\n    sleep 1\n    kill -KILL -- "-$child_pid" 2>/dev/null || kill -KILL "$child_pid" 2>/dev/null || true\n    wait "$child_pid" 2>/dev/null || true\n  fi\n}\nterminate() {\n  cleanup\n  exit 143\n}\ntrap terminate INT TERM\ntrap cleanup EXIT\n${command} > ${shellQuote(input.logPath)} 2>&1 &\nchild_pid=$!\nfor ((attempt = 0; attempt < ${input.startupPollAttempts}; attempt += 1)); do\n  if ${shellQuote(input.swaymsgPath)} -t get_tree 2>/dev/null | grep -F ${shellQuote(input.windowProbe)} >/dev/null 2>&1; then\n    ${shellQuote(input.swaymsgPath)} ${shellQuote(input.windowMatcher)} focus >/dev/null 2>&1 || true\n    ${shellQuote(input.swaymsgPath)} ${shellQuote(input.windowMatcher)} fullscreen enable >/dev/null 2>&1 || true\n    break\n  fi\n  sleep ${input.startupPollDelayMs / 1000}\ndone\nset +e\nwait "$child_pid"\nstatus=$?\nset -e\ntrap - INT TERM EXIT\nexit "$status"\n`

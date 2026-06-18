@@ -20,13 +20,23 @@ export interface PortMasterInputCompatibilityProfile {
 }
 
 export interface PortMasterPresentationProfile {
-  readonly mode: "none" | "sway-fullscreen"
+  readonly mode: "none" | "sway-fullscreen" | "gamescope"
   readonly swaymsgPath?: string
   readonly windowMatcher?: string
   readonly logPath?: string
   readonly windowProbe?: string
   readonly startupPollAttempts?: number
   readonly startupPollDelayMs?: number
+  readonly gamescopePath?: string
+  readonly gamescopeArgs?: readonly string[]
+  readonly gamescopeWidth?: number
+  readonly gamescopeHeight?: number
+  readonly gamescopeNestedWidth?: number
+  readonly gamescopeNestedHeight?: number
+  readonly gamescopeFullscreen?: boolean
+  readonly gamescopeChildWaylandDisplay?: string
+  readonly gamescopeChildDisplay?: string
+  readonly gamescopeChildSdlVideoDriver?: string
 }
 
 export interface PortMasterCompatibilityProfile {
