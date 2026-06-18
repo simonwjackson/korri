@@ -1,16 +1,8 @@
-import { afterEach, describe, expect, it } from "bun:test"
+import { describe, expect, it } from "bun:test"
 import { get, type IncomingMessage } from "node:http"
 import { createKorrid, getKorridConfig } from "./korrid"
-import {
-  getInstalledSteamLogObserverStatus,
-  resetSteamLogObserverStatusForTests,
-  type SteamLogObserverHandle,
-} from "./steam-log-observer"
 
-function createRecordingSteamObserver(): SteamLogObserverHandle & {
-  readonly starts: () => number
-  readonly stops: () => number
-} {
+function createRecordingPluginDaemon() {
   let starts = 0
   let stops = 0
   return {
@@ -22,23 +14,8 @@ function createRecordingSteamObserver(): SteamLogObserverHandle & {
     stop: async () => {
       stops += 1
     },
-    ingestLine: () => {},
-    status: () => ({
-      health: {
-        state: starts > stops ? "running" : "stopped",
-        logDir: "/tmp/steam/logs",
-        watchedFiles: ["content_log.txt"],
-        activeFiles: [],
-        missingFiles: ["content_log.txt"],
-      },
-      recentEvidence: [],
-    }),
   }
 }
-
-afterEach(() => {
-  resetSteamLogObserverStatusForTests()
-})
 
 describe("korrid", () => {
   it("reads conservative loopback defaults", () => {
@@ -79,7 +56,7 @@ describe("korrid", () => {
           },
         }
       },
-      steamObserver: createRecordingSteamObserver(),
+      pluginDaemons: [createRecordingPluginDaemon()],
     })
 
     await server.start()
@@ -96,8 +73,8 @@ describe("korrid", () => {
     expect(stopped).toBe(true)
   })
 
-  it("starts and stops the Steam observer status seam with the daemon", async () => {
-    const steamObserver = createRecordingSteamObserver()
+  it("starts and stops plugin daemons with the daemon", async () => {
+    const pluginDaemon = createRecordingPluginDaemon()
     const server = createKorrid({
       config: {
         host: "127.0.0.1",
@@ -105,18 +82,14 @@ describe("korrid", () => {
         advertise: false,
         advertiseCapabilities: ["stream"],
       },
-      steamObserver,
+      pluginDaemons: [pluginDaemon],
     })
 
     await server.start()
-    expect(steamObserver.starts()).toBe(1)
-    expect(getInstalledSteamLogObserverStatus().health.state).toBe("running")
+    expect(pluginDaemon.starts()).toBe(1)
 
     await server.stop()
-    expect(steamObserver.stops()).toBe(1)
-    expect(getInstalledSteamLogObserverStatus().health.state).toBe(
-      "unavailable",
-    )
+    expect(pluginDaemon.stops()).toBe(1)
   })
 
   it("closes the HTTP server when advertisement startup fails", async () => {
@@ -130,7 +103,7 @@ describe("korrid", () => {
       advertise: () => {
         throw new Error("mdns failed")
       },
-      steamObserver: createRecordingSteamObserver(),
+      pluginDaemons: [createRecordingPluginDaemon()],
     })
 
     await expect(server.start()).rejects.toThrow("mdns failed")
@@ -146,7 +119,7 @@ describe("korrid", () => {
         advertise: false,
         advertiseCapabilities: ["stream"],
       },
-      steamObserver: createRecordingSteamObserver(),
+      pluginDaemons: [createRecordingPluginDaemon()],
       closeServerTimeoutMs: 50,
     })
 

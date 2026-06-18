@@ -9,10 +9,7 @@ import {
 } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import {
-  createSteamLogTailer,
-  type TailedSteamLogLine,
-} from "./steam-log-tailer"
+import { createSteamLogTailer, type TailedSteamLogLine } from "./log-tailer"
 
 const tempDirs: string[] = []
 

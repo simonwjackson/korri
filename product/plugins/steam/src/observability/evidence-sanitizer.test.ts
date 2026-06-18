@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { sanitizeSteamEvidenceExcerpt } from "./steam-evidence-sanitizer"
+import { sanitizeSteamEvidenceExcerpt } from "./evidence-sanitizer"
 
 describe("Steam evidence sanitizer", () => {
   it("redacts sensitive paths, userdata ids, URI query strings, and secret-like keys", () => {

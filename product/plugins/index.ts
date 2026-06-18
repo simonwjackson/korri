@@ -33,6 +33,7 @@ import { smbxGamePlugin } from "./smbxgame"
 import { smwCentralPlugin } from "./smwcentral"
 import { srb2Plugin } from "./srb2"
 import {
+  createSteamLogObserverDaemon,
   createSteamSessionLifecycleHook,
   steamPlugin,
   steamReadableLaunchIntegration,
@@ -57,6 +58,16 @@ export function firstPartyLaunchIntegrationsForRegistry(
   )
 }
 
+export interface KorriPluginDaemonHandle {
+  readonly start: () => Promise<void>
+  readonly stop: () => Promise<void>
+}
+
+export interface KorriPluginDaemonFactory {
+  readonly pluginId: PluginId
+  readonly create: () => KorriPluginDaemonHandle
+}
+
 export const firstPartySessionLifecycleHookFactories = [
   {
     pluginId: gamescopePlugin.id,
@@ -67,6 +78,21 @@ export const firstPartySessionLifecycleHookFactories = [
     create: () => createSteamSessionLifecycleHook(),
   },
 ] satisfies readonly KorriSessionLifecycleHookFactory[]
+
+export const firstPartyPluginDaemonFactories = [
+  {
+    pluginId: steamPlugin.id,
+    create: createSteamLogObserverDaemon,
+  },
+] satisfies readonly KorriPluginDaemonFactory[]
+
+export function firstPartyPluginDaemonsForRegistry(
+  registry: Pick<PluginRegistry, "enabledPluginIds">,
+): readonly KorriPluginDaemonHandle[] {
+  return firstPartyPluginDaemonFactories
+    .filter(factory => registry.enabledPluginIds.has(factory.pluginId))
+    .map(factory => factory.create())
+}
 
 export function firstPartySessionLifecycleHooksForRegistry(
   registry: Pick<PluginRegistry, "enabledPluginIds">,

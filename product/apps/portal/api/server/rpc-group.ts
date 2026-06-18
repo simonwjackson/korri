@@ -12,11 +12,11 @@ import { UnassignGameAssetRpc as appGameAssetsUnassign } from "../game-assets/un
 import { GetHelloRpc as appHelloGet } from "../hello/rpc"
 import { DryRunLaunchRpc as appLibraryLaunchDryRun } from "../library/dry-run.rpc"
 import { LaunchLibraryRpc as appLibraryLaunch } from "../library/launch.rpc"
+import { CollectPluginDiagnosticsRpc as appPluginDiagnosticsCollect } from "../plugin-diagnostics/collect.rpc"
 import { FulfillPluginResourceRpc as appPluginResourceFulfill } from "../plugins/fulfill-resource.rpc"
 import { SessionStatusRpc as appSessionStatus } from "../session/status.rpc"
 import { StopSessionRpc as appSessionStop } from "../session/stop.rpc"
 import { SourceStatusRpc as appSourceStatus } from "../source/status.rpc"
-import { SteamStatusRpc as appSteamStatus } from "../steam/status.rpc"
 import { PrepareStreamRpc as appStreamPrepare } from "../stream/prepare.rpc"
 import { GetStreamControlConfigRpc as appStreamControlConfigGet } from "../stream-control/get-config.rpc"
 import { GetStreamControlControlsRpc as appStreamControlControlsGet } from "../stream-control/get-controls.rpc"
@@ -41,9 +41,9 @@ export const serverRpcGroup = RpcGroup.make(
   appCatalogSnapshot,
   appLibraryLaunch,
   appLibraryLaunchDryRun,
+  appPluginDiagnosticsCollect,
   appPluginResourceFulfill,
   appSourceStatus,
-  appSteamStatus,
   appServerStatus,
   appSessionStatus,
   appSessionStop,

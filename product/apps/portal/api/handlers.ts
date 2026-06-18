@@ -5,8 +5,8 @@ import { handleListGameAssetCandidates } from "./game-assets/list-candidates.rpc
 import { handleUnassignGameAsset } from "./game-assets/unassign.rpc-handler"
 import { handleGetHello } from "./hello/rpc-handler"
 import { handleLaunchLibrary } from "./library/launch.rpc-handler"
+import { handleCollectPluginDiagnostics } from "./plugin-diagnostics/collect.rpc-handler"
 import { handleSourceStatus } from "./source/status.rpc-handler"
-import { handleSteamStatus } from "./steam/status.rpc-handler"
 import { handlePrepareStream } from "./stream/prepare.rpc-handler"
 import { handleGetStreamControlConfig } from "./stream-control/get-config.rpc-handler"
 import { handleGetStreamControlControls } from "./stream-control/get-controls.rpc-handler"
@@ -25,8 +25,8 @@ export const HandlersLive = appRpcGroup.toLayer(
     "app.game-assets.unassign": handleUnassignGameAsset,
     "app.catalog.snapshot": handleCatalogSnapshot,
     "app.library.launch": handleLaunchLibrary,
+    "app.plugin.diagnostics.collect": handleCollectPluginDiagnostics,
     "app.source.status": handleSourceStatus,
-    "app.steam.status": handleSteamStatus,
     "app.stream.prepare": handlePrepareStream,
     "app.stream-control.config.get": handleGetStreamControlConfig,
     "app.stream-control.controls.get": handleGetStreamControlControls,

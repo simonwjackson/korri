@@ -6,8 +6,8 @@ import {
   projectSteamLaunchSnapshot,
   reduceSteamLogSignals,
   sortSteamLogSignalsForReplay,
-} from "./steam-launch-state"
-import { parseSteamLogText } from "./steam-log-signals"
+} from "./launch-state"
+import { parseSteamLogText } from "./log-signals"
 
 const fixtureRoot = join(
   process.cwd(),

@@ -1,4 +1,4 @@
-import { sanitizeSteamEvidenceExcerpt } from "./steam-evidence-sanitizer"
+import { sanitizeSteamEvidenceExcerpt } from "./evidence-sanitizer"
 
 export type SteamLogSource =
   | "content_log"

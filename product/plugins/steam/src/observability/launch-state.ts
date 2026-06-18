@@ -1,10 +1,10 @@
-import { clampSteamEvidenceArray } from "./steam-evidence-sanitizer"
+import { clampSteamEvidenceArray } from "./evidence-sanitizer"
 import type {
   SteamLogSignal,
   SteamLogSource,
   SteamSignalConfidence,
   SteamSignalEvidence,
-} from "./steam-log-signals"
+} from "./log-signals"
 
 export type SteamLaunchStatus =
   | { readonly _tag: "Preparing" }

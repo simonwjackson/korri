@@ -6,8 +6,8 @@ import { ListGameAssetCandidatesRpc as appGameAssetsCandidatesList } from "./gam
 import { UnassignGameAssetRpc as appGameAssetsUnassign } from "./game-assets/unassign.rpc"
 import { GetHelloRpc as appHelloGet } from "./hello/rpc"
 import { LaunchLibraryRpc as appLibraryLaunch } from "./library/launch.rpc"
+import { CollectPluginDiagnosticsRpc as appPluginDiagnosticsCollect } from "./plugin-diagnostics/collect.rpc"
 import { SourceStatusRpc as appSourceStatus } from "./source/status.rpc"
-import { SteamStatusRpc as appSteamStatus } from "./steam/status.rpc"
 import { PrepareStreamRpc as appStreamPrepare } from "./stream/prepare.rpc"
 import { GetStreamControlConfigRpc as appStreamControlConfigGet } from "./stream-control/get-config.rpc"
 import { GetStreamControlControlsRpc as appStreamControlControlsGet } from "./stream-control/get-controls.rpc"
@@ -25,8 +25,8 @@ export const appRpcGroup = RpcGroup.make(
   appGameAssetsUnassign,
   appCatalogSnapshot,
   appLibraryLaunch,
+  appPluginDiagnosticsCollect,
   appSourceStatus,
-  appSteamStatus,
   appStreamPrepare,
   appStreamControlConfigGet,
   appStreamControlControlsGet,

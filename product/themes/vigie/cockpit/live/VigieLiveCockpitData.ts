@@ -78,7 +78,7 @@ type SourceStatusResponse = {
   readonly catalog?: string
 }
 
-type SteamStatusResponse = {
+type SteamDiagnosticsResponse = {
   readonly [key: string]: unknown
   readonly observer: {
     readonly [key: string]: unknown
@@ -180,7 +180,7 @@ export interface VigieLiveSnapshot {
   readonly sessionError?: string
   readonly source?: SourceStatusResponse
   readonly sourceError?: string
-  readonly steam?: SteamStatusResponse
+  readonly steam?: SteamDiagnosticsResponse
   readonly steamError?: string
   readonly catalog?: CatalogSnapshotResponse
   readonly catalogError?: string

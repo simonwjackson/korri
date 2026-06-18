@@ -2,8 +2,8 @@ import { createReadStream, type FSWatcher, watch } from "node:fs"
 import { stat } from "node:fs/promises"
 import { join } from "node:path"
 import { StringDecoder } from "node:string_decoder"
-import { sanitizeSteamEvidenceExcerpt } from "./steam-evidence-sanitizer"
-import type { SteamLogSource } from "./steam-log-signals"
+import { sanitizeSteamEvidenceExcerpt } from "./evidence-sanitizer"
+import type { SteamLogSource } from "./log-signals"
 
 export interface TailedSteamLogLine {
   readonly source: SteamLogSource

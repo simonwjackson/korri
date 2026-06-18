@@ -32,11 +32,11 @@ import { handleDryRunLaunch } from "../library/dry-run.rpc-handler"
 import { ForegroundSessionHostLive } from "../library/foreground-session-host-layer"
 import { handleLaunchLibrary } from "../library/launch.rpc-handler"
 import { RemoteStreamPrepareLive } from "../library/remote-stream-prepare"
+import { handleCollectPluginDiagnostics } from "../plugin-diagnostics/collect.rpc-handler"
 import { handleFulfillPluginResource } from "../plugins/fulfill-resource.rpc-handler"
 import { handleSessionStatus } from "../session/status.rpc-handler"
 import { handleStopSession } from "../session/stop.rpc-handler"
 import { handleSourceStatus } from "../source/status.rpc-handler"
-import { handleSteamStatus } from "../steam/status.rpc-handler"
 import { handlePrepareStream } from "../stream/prepare.rpc-handler"
 import { handleGetStreamControlConfig } from "../stream-control/get-config.rpc-handler"
 import { handleGetStreamControlControls } from "../stream-control/get-controls.rpc-handler"
@@ -125,9 +125,9 @@ const ServerHandlersLive = serverRpcGroup.toLayer(
     "app.catalog.snapshot": handleCatalogSnapshot,
     "app.library.launch": handleLaunchLibrary,
     "app.library.launch.dry-run": handleDryRunLaunch,
+    "app.plugin.diagnostics.collect": handleCollectPluginDiagnostics,
     "app.plugins.resource.fulfill": handleFulfillPluginResource,
     "app.source.status": handleSourceStatus,
-    "app.steam.status": handleSteamStatus,
     "app.server.status": handleServerStatus,
     "app.session.status": handleSessionStatus,
     "app.session.stop": handleStopSession,

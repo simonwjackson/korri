@@ -19,6 +19,10 @@ import {
 
 const LIVE_REFRESH_MS = 1_500
 
+type PluginDiagnosticsEnvelope = {
+  readonly diagnostics?: unknown
+}
+
 export function VigieLiveCockpitRoot({
   bridge,
   fixture,
@@ -111,7 +115,11 @@ export async function fetchVigieLiveSnapshot(
     settle(bridge.api.rpc("app.server.status", {})),
     settle(bridge.api.rpc("app.session.status", {})),
     settle(bridge.api.rpc("app.source.status", {})),
-    settle(bridge.api.rpc("app.steam.status", {})),
+    settle(
+      bridge.api.rpc("app.plugin.diagnostics.collect", {
+        providerId: "@korri:steam",
+      }),
+    ),
     settle(bridge.api.rpc("app.catalog.snapshot", { scope: "fabric" })),
     settle(bridge.api.rpc("app.stream-control.config.get", {})),
     settle(bridge.api.rpc("app.stream-control.controls.get", {})),
@@ -125,7 +133,12 @@ export async function fetchVigieLiveSnapshot(
       ? { session: session.value }
       : { sessionError: session.error }),
     ...(source.ok ? { source: source.value } : { sourceError: source.error }),
-    ...(steam.ok ? { steam: steam.value } : { steamError: steam.error }),
+    ...(steam.ok
+      ? {
+          steam: (steam.value as PluginDiagnosticsEnvelope)
+            .diagnostics as VigieLiveSnapshot["steam"],
+        }
+      : { steamError: steam.error }),
     ...(catalog.ok
       ? { catalog: catalog.value }
       : { catalogError: catalog.error }),

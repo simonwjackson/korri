@@ -5,7 +5,7 @@ import {
   parseSteamLogLine,
   parseSteamLogText,
   type SteamLogSource,
-} from "./steam-log-signals"
+} from "./log-signals"
 
 const fixtureRoot = join(
   process.cwd(),

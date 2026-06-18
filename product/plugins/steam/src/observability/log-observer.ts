@@ -1,19 +1,19 @@
 import { logger } from "@platform/logger"
-import { sanitizeSteamEvidenceExcerpt } from "./steam-evidence-sanitizer"
+import { sanitizeSteamEvidenceExcerpt } from "./evidence-sanitizer"
 import {
   initialSteamLaunchObserverState,
   projectSteamLaunchSnapshot,
   reduceSteamLogSignal,
   type SteamLaunchObserverState,
   type SteamLaunchSnapshot,
-} from "./steam-launch-state"
-import { parseSteamLogLine, type SteamRawLogLine } from "./steam-log-signals"
+} from "./launch-state"
+import { parseSteamLogLine, type SteamRawLogLine } from "./log-signals"
 import {
   createSteamLogTailer,
   DEFAULT_STEAM_LOG_FILES,
   type SteamLogTailerStatus,
   type TailedSteamLogLine,
-} from "./steam-log-tailer"
+} from "./log-tailer"
 
 export interface SteamObserverHealth {
   readonly state:
@@ -64,6 +64,11 @@ export interface SteamLogObserverHandle {
   readonly ingestLine: (line: SteamRawLogLine) => void
 }
 
+export interface SteamLogObserverDaemonHandle {
+  readonly start: () => Promise<void>
+  readonly stop: () => Promise<void>
+}
+
 export interface CreateSteamLogObserverOptions {
   readonly logDir?: string
   readonly env?: NodeJS.ProcessEnv
@@ -87,6 +92,26 @@ export function resolveSteamLogDir(
   if (env.KORRI_STEAM_LOG_DIR) return env.KORRI_STEAM_LOG_DIR
   if (env.KORRI_STEAM_HOME) return `${env.KORRI_STEAM_HOME}/logs`
   return DEFAULT_LOG_DIR
+}
+
+export function createSteamLogObserverDaemon(
+  options: CreateSteamLogObserverOptions = {},
+): SteamLogObserverDaemonHandle {
+  const observer = createSteamLogObserver(options)
+  const owner = Symbol("steam-log-observer-daemon")
+  let install: { readonly uninstall: () => void } | undefined
+
+  return {
+    start: async () => {
+      install = installSteamLogObserverStatus(owner, observer.status)
+      await observer.start()
+    },
+    stop: async () => {
+      await observer.stop()
+      install?.uninstall()
+      install = undefined
+    },
+  }
 }
 
 export function createSteamLogObserver(

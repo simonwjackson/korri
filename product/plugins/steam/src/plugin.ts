@@ -1,5 +1,6 @@
 import { plugin } from "@platform/plugin"
 import { KORRI_GAMESCOPE_PLUGIN_ID } from "../../gamescope"
+import { collectSteamDiagnostics } from "./observability/diagnostics"
 
 export const KORRI_STEAM_PLUGIN_ID = "@korri:steam" as const
 export const KORRI_STEAM_APP_LOCAL_ID = "steam" as const
@@ -84,6 +85,12 @@ export const steamPlugin = plugin({
         operation: "session.cleanup",
         capabilities: ["session.cleanup"],
         run: context => ({ provider: context.provider, input: context.input }),
+      },
+      {
+        id: "steam.diagnostics.collect",
+        operation: "diagnostics.collect",
+        capabilities: ["diagnostics.collect"],
+        run: context => collectSteamDiagnostics(context.input),
       },
     ],
   },

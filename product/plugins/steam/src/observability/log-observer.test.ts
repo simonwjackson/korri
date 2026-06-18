@@ -5,8 +5,8 @@ import {
   installSteamLogObserverStatus,
   resetSteamLogObserverStatusForTests,
   type SteamObserverTailer,
-} from "./steam-log-observer"
-import type { TailedSteamLogLine } from "./steam-log-tailer"
+} from "./log-observer"
+import type { TailedSteamLogLine } from "./log-tailer"
 
 class ControllableTailer implements SteamObserverTailer {
   onLine?: (line: TailedSteamLogLine) => void

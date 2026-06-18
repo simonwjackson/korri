@@ -10,14 +10,14 @@ import { logger } from "@platform/logger"
 import { createHonoApp } from "@product/apps/portal/api/hono-app"
 import { serverRpcHandler } from "@product/apps/portal/api/server/rpc-server"
 import {
+  createFirstPartyPluginRegistryFromEnv,
+  firstPartyPluginDaemonsForRegistry,
+  type KorriPluginDaemonHandle,
+} from "@product/plugins"
+import {
   advertiseStreamHost,
   type StreamAdvertisement,
 } from "./lan-stream-advertise"
-import {
-  createSteamLogObserver,
-  installSteamLogObserverStatus,
-  type SteamLogObserverHandle,
-} from "./steam-log-observer"
 
 export interface KorridConfig {
   readonly host: string
@@ -41,7 +41,7 @@ export interface CreateKorridOptions {
     readonly port: number
     readonly capabilities: readonly string[]
   }) => StreamAdvertisement
-  readonly steamObserver?: SteamLogObserverHandle
+  readonly pluginDaemons?: readonly KorriPluginDaemonHandle[]
   readonly closeServerTimeoutMs?: number
 }
 
@@ -85,9 +85,9 @@ export function createKorrid(options: CreateKorridOptions = {}): KorridHandle {
   })
   const server = createAdaptorServer({ fetch: app.fetch })
   const advertise = options.advertise ?? advertiseStreamHost
-  const steamObserver = options.steamObserver ?? createSteamLogObserver()
-  const steamObserverOwner = Symbol("korrid-steam-observer")
-  let steamObserverInstall: { readonly uninstall: () => void } | undefined
+  const pluginDaemons =
+    options.pluginDaemons ??
+    firstPartyPluginDaemonsForRegistry(createFirstPartyPluginRegistryFromEnv())
   let advertisement: StreamAdvertisement | undefined
   let started = false
 
@@ -96,11 +96,7 @@ export function createKorrid(options: CreateKorridOptions = {}): KorridHandle {
       if (started) return
       await listen(server, config.port, config.host)
       started = true
-      steamObserverInstall = installSteamLogObserverStatus(
-        steamObserverOwner,
-        steamObserver.status,
-      )
-      await steamObserver.start()
+      for (const daemon of pluginDaemons) await daemon.start()
       try {
         await configGraphController.initialize()
       } catch (error) {
@@ -119,6 +115,8 @@ export function createKorrid(options: CreateKorridOptions = {}): KorridHandle {
           })
         }
       } catch (error) {
+        for (const daemon of [...pluginDaemons].reverse()) await daemon.stop()
+        await configGraphController.stop()
         await closeServer(server)
         started = false
         throw error
@@ -132,9 +130,7 @@ export function createKorrid(options: CreateKorridOptions = {}): KorridHandle {
         await advertisement.stop()
         advertisement = undefined
       }
-      await steamObserver.stop()
-      steamObserverInstall?.uninstall()
-      steamObserverInstall = undefined
+      for (const daemon of [...pluginDaemons].reverse()) await daemon.stop()
       await configGraphController.stop()
       if (started) {
         await closeServer(server, {

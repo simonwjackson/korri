@@ -3,6 +3,17 @@ export {
   steamReadableLaunchIntegration,
 } from "./src/materializer"
 export {
+  collectSteamDiagnostics,
+  type SteamDiagnosticsResponse,
+} from "./src/observability/diagnostics"
+export {
+  createSteamLogObserverDaemon,
+  getInstalledSteamLogObserverStatus,
+  resetSteamLogObserverStatusForTests,
+  type SteamLogObserverDaemonHandle,
+  type SteamLogObserverHandle,
+} from "./src/observability/log-observer"
+export {
   defaultSteamPluginPolicy,
   KORRI_STEAM_APP_ID,
   KORRI_STEAM_APP_LOCAL_ID,

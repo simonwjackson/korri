@@ -2,17 +2,16 @@ import { afterEach, describe, expect, it } from "bun:test"
 import {
   installSteamLogObserverStatus,
   resetSteamLogObserverStatusForTests,
-} from "@product/services/device/steam-log-observer"
-import { Effect } from "effect"
-import { handleSteamStatus } from "./status.rpc-handler"
+} from "@product/plugins/steam/src/observability/log-observer"
+import { collectSteamDiagnostics } from "./diagnostics"
 
 afterEach(() => {
   resetSteamLogObserverStatusForTests()
 })
 
-describe("app.steam.status handler", () => {
-  it("returns unavailable health when no observer is installed", async () => {
-    const result = await Effect.runPromise(handleSteamStatus({}))
+describe("Steam diagnostics collector", () => {
+  it("returns unavailable health when no observer is installed", () => {
+    const result = collectSteamDiagnostics()
 
     expect(result).toMatchObject({
       observer: { state: "unavailable" },
@@ -61,7 +60,7 @@ describe("app.steam.status handler", () => {
       recentEvidence: [],
     }))
 
-    const result = await Effect.runPromise(handleSteamStatus({}))
+    const result = collectSteamDiagnostics()
 
     expect(result.active).toMatchObject({
       appId: "584400",
@@ -106,7 +105,7 @@ describe("app.steam.status handler", () => {
       recentEvidence: [],
     }))
 
-    const result = await Effect.runPromise(handleSteamStatus({}))
+    const result = collectSteamDiagnostics()
 
     expect(result.active).toBeUndefined()
     expect(result.latest).toMatchObject({ appId: "584400", status: "Stopped" })
@@ -139,7 +138,7 @@ describe("app.steam.status handler", () => {
       ],
     }))
 
-    const result = await Effect.runPromise(handleSteamStatus({}))
+    const result = collectSteamDiagnostics()
 
     expect(result.observer.lastError).toContain("/home/<redacted>")
     expect(result.observer.lastError).not.toContain("secret")
