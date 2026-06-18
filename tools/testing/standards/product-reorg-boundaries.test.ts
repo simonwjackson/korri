@@ -25,16 +25,23 @@ const GENERIC_IMPORT_SCAN_ROOTS = [
 ]
 
 const GAMESCOPE_SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".nix"])
+const STEAM_SOURCE_EXTENSIONS = new Set([
+  ".ts",
+  ".tsx",
+  ".nix",
+  ".yaml",
+  ".yml",
+])
 const IMPORT_SOURCE_EXTENSIONS = new Set([".ts", ".tsx"])
 
 const GENERIC_GAMESCOPE_COMPOSITION_ALLOWLIST = new Map<string, string>([
   [
-    "product/services/device/sessiond-plugin-composition.ts",
-    "production sessiond composition installs plugin-owned lifecycle hooks from enabled plugin ids",
-  ],
-  [
     "product/services/device/sessiond-plugin-composition.test.ts",
     "composition test verifies enabled and disabled plugin lifecycle-hook wiring",
+  ],
+  [
+    "product/platform/library/proseql/library-repository.test.ts",
+    "provider launch-integration regression test exercises Gamescope companion selection",
   ],
   [
     "product/systems/nixos/flake/plugins.nix",
@@ -78,8 +85,61 @@ function isInsideOwnedContentPlugin(file: string): boolean {
 }
 
 const GENERIC_GAMESCOPE_IMPORT_ALLOWLIST = new Set<string>([
-  "product/services/device/sessiond-plugin-composition.ts",
   "product/services/device/sessiond-plugin-composition.test.ts",
+  "product/platform/library/proseql/library-repository.test.ts",
+])
+
+const PLATFORM_PRIVATE_PRODUCT_IMPORT_ALLOWLIST = new Map<string, string>([
+  [
+    "product/platform/acquisition/acquisition-live.test.ts",
+    "platform acquisition contract test uses registered first-party plugin definitions as real implementations",
+  ],
+  [
+    "product/platform/library/config/module-resolution.test.ts",
+    "platform config regression test uses first-party plugin ids as provider-qualified examples",
+  ],
+  [
+    "product/platform/library/proseql/config-graph-db.test.ts",
+    "repository contract test uses first-party launch integrations as real implementations",
+  ],
+  [
+    "product/platform/library/proseql/library-repository.test.ts",
+    "repository contract test uses first-party launch integrations as real implementations",
+  ],
+  [
+    "product/platform/library/proseql/proseql-library-source.test.ts",
+    "library-source contract test uses first-party launch integrations as real implementations",
+  ],
+])
+
+const GENERIC_STEAM_SCAN_ROOTS = [
+  join(REPO_ROOT, "product", "platform"),
+  join(REPO_ROOT, "product", "services"),
+  join(REPO_ROOT, "product", "apps", "portal", "api"),
+  join(REPO_ROOT, "product", "systems", "nixos"),
+]
+
+const GENERIC_STEAM_COMPOSITION_ALLOWLIST = new Map<string, string>([
+  [
+    "product/platform/library/config/records/app.ts",
+    "generic config rejects the retired unqualified Steam app kind without carrying launch implementation logic",
+  ],
+  [
+    "product/platform/library/config/fixtures/steam-full.korri.yaml",
+    "readable-config fixture documents provider-qualified Steam plugin authoring shape",
+  ],
+  [
+    "product/systems/nixos/flake/modules.nix",
+    "Nix module composition exposes the Steam plugin module as an explicit opt-in output",
+  ],
+  [
+    "product/systems/nixos/images/desktop-lab.nix",
+    "desktop lab image is explicit product composition for manual Steam validation",
+  ],
+  [
+    "product/systems/nixos/images/platforms/rocknix-sm8550.nix",
+    "SM8550 product image explicitly opts into the Steam plugin and module",
+  ],
 ])
 
 function sourceFilesWithExtensions(
@@ -124,6 +184,27 @@ function importsGamescopePlugin(source: string): boolean {
       specifier,
     ),
   )
+}
+
+function importsSteamPlugin(source: string): boolean {
+  return importSpecifiers(source).some(specifier =>
+    /^(?:@product\/plugins\/steam(?:\/|$)|product\/plugins\/steam(?:\/|$))/.test(
+      specifier,
+    ),
+  )
+}
+
+function containsSteamCoreName(source: string): boolean {
+  const sourceWithoutAllowedAssetProviders = source
+    .replace(/steamgriddb/gi, "")
+    .replace(/steamdeck/gi, "")
+  return /\bsteam\b|Steam|STEAM/.test(sourceWithoutAllowedAssetProviders)
+}
+
+function isAllowedGenericSteamReference(file: string): boolean {
+  if (GENERIC_STEAM_COMPOSITION_ALLOWLIST.has(file)) return true
+  if (/\.(?:test|spec)\.tsx?$/.test(file)) return true
+  return false
 }
 
 function allowlistDrift(
@@ -641,7 +722,22 @@ describe("standards: product platform reorganization guardrails", () => {
         .map(repoRelative),
     )
 
-    expect(violations).toEqual([])
+    expect(
+      violations.filter(
+        file => !PLATFORM_PRIVATE_PRODUCT_IMPORT_ALLOWLIST.has(file),
+      ),
+    ).toEqual([])
+    expect(
+      allowlistDrift(
+        violations.filter(file =>
+          PLATFORM_PRIVATE_PRODUCT_IMPORT_ALLOWLIST.has(file),
+        ),
+        new Set(PLATFORM_PRIVATE_PRODUCT_IMPORT_ALLOWLIST.keys()),
+      ),
+    ).toEqual([])
+    expect([
+      ...PLATFORM_PRIVATE_PRODUCT_IMPORT_ALLOWLIST.values(),
+    ]).not.toContain("")
   })
 
   it("allows React dependencies only in the platform React adapter", () => {
@@ -763,5 +859,36 @@ describe("standards: product platform reorganization guardrails", () => {
     expect(allowlistDrift(current, GENERIC_GAMESCOPE_IMPORT_ALLOWLIST)).toEqual(
       [],
     )
+  })
+
+  it("keeps Steam-specific names out of generic core implementation files", () => {
+    const current = existingRoots(GENERIC_STEAM_SCAN_ROOTS).flatMap(root =>
+      sourceFilesWithExtensions(root, STEAM_SOURCE_EXTENSIONS)
+        .filter(file => containsSteamCoreName(readSource(file)))
+        .map(repoRelative),
+    )
+
+    expect(
+      current.filter(file => !isAllowedGenericSteamReference(file)),
+    ).toEqual([])
+    expect(
+      allowlistDrift(
+        current.filter(file => GENERIC_STEAM_COMPOSITION_ALLOWLIST.has(file)),
+        new Set(GENERIC_STEAM_COMPOSITION_ALLOWLIST.keys()),
+      ),
+    ).toEqual([])
+    expect([...GENERIC_STEAM_COMPOSITION_ALLOWLIST.values()]).not.toContain("")
+  })
+
+  it("keeps generic imports of the Steam plugin out of implementation files", () => {
+    const current = existingRoots(GENERIC_STEAM_SCAN_ROOTS).flatMap(root =>
+      sourceFilesWithExtensions(root, IMPORT_SOURCE_EXTENSIONS)
+        .filter(file => importsSteamPlugin(readSource(file)))
+        .map(repoRelative),
+    )
+
+    expect(
+      current.filter(file => !/\.(?:test|spec)\.tsx?$/.test(file)),
+    ).toEqual([])
   })
 })

@@ -270,12 +270,11 @@ in
         RuntimeDirectoryMode = "0700";
         PrivateTmp = true;
         # Sessiond owns foreground app launches. Some launch adapters need to
-        # cross the system/user boundary through tightly-scoped helpers (for
-        # example korri-steam-app uses sudoers limited to
-        # korri-steam-service-control start|stop). NixOS' setuid sudo wrapper
-        # does not work inside ProtectSystem remounts, and NoNewPrivileges
-        # blocks setuid before those narrow policy rules can apply, so leave
-        # both disabled here and keep privilege boundaries on the helpers.
+        # cross the system/user boundary through tightly-scoped helpers. NixOS'
+        # setuid sudo wrapper does not work inside ProtectSystem remounts, and
+        # NoNewPrivileges blocks setuid before those narrow policy rules can
+        # apply, so leave both disabled here and keep privilege boundaries on
+        # the helpers.
         ProtectSystem = false;
         ReadWritePaths = [ launchArtifactsDir ];
         ProtectHome = false;

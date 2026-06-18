@@ -11,7 +11,8 @@ export const ProviderId = Schema.String.pipe(
         ? undefined
         : {
             path: [],
-            issue: "provider ids must be plugin-owned ids like '@korri:steam'",
+            issue:
+              "provider ids must be plugin-owned ids like '@korri:example'",
           },
     ),
   ),

@@ -562,8 +562,8 @@ in
           description = ''
             Add a persistent Sunshine Desktop app that attaches Moonlight to the
             already-running Korri compositor session without requiring a pending
-            Korri launch intent. This is the manual desktop/Steam lab entrypoint
-            for aka-style hosts.
+            Korri launch intent. This is the manual desktop lab entrypoint for
+            aka-style hosts.
           '';
         };
 

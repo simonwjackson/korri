@@ -150,11 +150,10 @@ let
 
     # Start Xwayland eagerly. `xwayland enable` (sway's default) is lazy:
     # sway itself holds the X11 listen socket and only forks Xwayland on the
-    # first client connect. That spawn races with Steam's 32-bit launcher,
-    # which issues libX11 calls during init and has been observed to segfault
-    # at libX11.so.6.4.0 when Xwayland isn't yet accepting connections.
-    # `xwayland force` starts the Xwayland process at sway startup so no
-    # client ever pays the cold-start cost.
+    # first client connect. Some X11 clients issue libX11 calls during init and
+    # have been observed to segfault when Xwayland isn't yet accepting
+    # connections. `xwayland force` starts the Xwayland process at sway startup
+    # so no client ever pays the cold-start cost.
     xwayland force
   '';
 
