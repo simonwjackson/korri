@@ -10,6 +10,8 @@ import {
   KORRI_RETROARCH_MGBA_RUNTIME_ID,
   KORRI_RETROARCH_NES_SYSTEM_ID,
   KORRI_RETROARCH_PCSX_REARMED_RUNTIME_ID,
+  KORRI_RETROARCH_PPSSPP_RUNTIME_ID,
+  KORRI_RETROARCH_PSP_SYSTEM_ID,
   KORRI_RETROARCH_PSX_SYSTEM_ID,
   KORRI_RETROARCH_PLUGIN_ID,
   KORRI_RETROARCH_SNES_SYSTEM_ID,
@@ -101,6 +103,30 @@ describe("RetroArch plugin", () => {
       app: KORRI_RETROARCH_APP_ID,
       path: "/etc/korri/cores/mesen_libretro.so",
       supports: { systems: [KORRI_RETROARCH_NES_SYSTEM_ID] },
+    })
+  })
+
+  it("contributes PPSSPP as a RetroArch-owned PSP runtime", () => {
+    expect(KORRI_RETROARCH_PSP_SYSTEM_ID).toBe("psp")
+    expect(KORRI_RETROARCH_PPSSPP_RUNTIME_ID).toBe(
+      "@korri:retroarch/ppsspp",
+    )
+    expect(retroarchPlugin.contributes.config.systems?.psp).toMatchObject({
+      id: KORRI_RETROARCH_PSP_SYSTEM_ID,
+      title: "Sony PlayStation Portable",
+      apps: [
+        {
+          id: KORRI_RETROARCH_APP_ID,
+          runtime: KORRI_RETROARCH_PPSSPP_RUNTIME_ID,
+        },
+      ],
+    })
+    expect(retroarchPlugin.contributes.config.runtimes?.ppsspp).toMatchObject({
+      id: KORRI_RETROARCH_PPSSPP_RUNTIME_ID,
+      kind: "libretro-core",
+      app: KORRI_RETROARCH_APP_ID,
+      path: "/etc/korri/cores/ppsspp_libretro.so",
+      supports: { systems: [KORRI_RETROARCH_PSP_SYSTEM_ID] },
     })
   })
 
