@@ -5,10 +5,10 @@ import { KorriControl } from "@platform/control/korri-control"
 import { KorriControlLayerLiveWithPlugins } from "@platform/control/korri-control-live"
 import { LauncherLayerLive } from "@platform/library/launcher-layer-live"
 import { Launcher, LibrarySource } from "@platform/library/library-services"
-import { LibrarySourceLayerLive } from "@platform/library/library-source-layer-live"
 import { createKorriControlRpc } from "@product/apps/portal/control/korri-control-rpc"
 import { createFirstPartyPluginRegistryFromEnv } from "@product/plugins"
 import { createFirstPartyAcquisitionPluginDefinitionsFromEnv } from "@product/plugins/acquisition"
+import { PluginLibrarySourceLayerLive } from "@product/plugins/library-source-layer"
 import { Effect, Layer, Option } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
 import {
@@ -276,7 +276,9 @@ const AcquisitionLayerLive = makeLiveAcquisitionLayer({
 const KorriControlInfrastructureLive = KorriControlLayerLiveWithPlugins(
   createFirstPartyPluginRegistryFromEnv(process.env),
 ).pipe(
-  Layer.provideMerge(Layer.mergeAll(LibrarySourceLayerLive, LauncherLayerLive)),
+  Layer.provideMerge(
+    Layer.mergeAll(PluginLibrarySourceLayerLive, LauncherLayerLive),
+  ),
 )
 
 const runtimeLayer = Layer.mergeAll(

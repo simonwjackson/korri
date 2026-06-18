@@ -1,13 +1,39 @@
 import { describe, expect, it } from "bun:test"
+import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import {
   KorriControl,
   type KorriControlService,
 } from "@platform/control/korri-control"
 import type { LaunchSpec } from "@platform/library/launcher"
 import type { PlayableLibraryEntry } from "@platform/library/playable-library"
+import { executablePath } from "@platform/plugin/resources"
+import { KORRI_SRB2_PLUGIN_ID } from "@product/plugins/srb2"
 import { Effect, Exit, Layer } from "effect"
 import { runKorriCli, runKorriCliWithLayer } from "./korri-cli"
 import { captureCliOutput } from "./test-helpers/capture-cli-output"
+
+const cliPath = new URL("./korri-cli.ts", import.meta.url).pathname
+const repoRoot = new URL("../../..", import.meta.url).pathname
+
+async function runCli(
+  args: readonly string[],
+  options: { readonly env?: Record<string, string | undefined> } = {},
+) {
+  const proc = Bun.spawn(["bun", cliPath, ...args], {
+    cwd: repoRoot,
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env, ...options.env },
+  })
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ])
+  return { stdout, stderr, exitCode }
+}
 
 describe("korri CLI", () => {
   it("renders help for the root command", async () => {
@@ -89,6 +115,38 @@ describe("korri CLI", () => {
       if (previousRuntimeDir === undefined) delete process.env.XDG_RUNTIME_DIR
       else process.env.XDG_RUNTIME_DIR = previousRuntimeDir
     }
+  })
+
+  it("lists and dry-runs enabled first-party plugin catalog games", async () => {
+    const stateRoot = await mkdtemp(join(tmpdir(), "korri-cli-plugin-"))
+    const srb2Executable = executablePath(
+      stateRoot,
+      KORRI_SRB2_PLUGIN_ID,
+      "srb2",
+      "srb2",
+    )
+    await mkdir(join(srb2Executable, ".."), { recursive: true })
+    await writeFile(srb2Executable, "#!/bin/sh\necho srb2\n")
+    await chmod(srb2Executable, 0o755)
+
+    const env = {
+      KORRI_CONFIG_ROOTS: "",
+      KORRI_ENABLED_PLUGINS: KORRI_SRB2_PLUGIN_ID,
+      KORRI_PLUGIN_RESOURCE_ROOT: stateRoot,
+    }
+
+    const list = await runCli(["games", "list"], { env })
+    expect(list.exitCode).toBe(0)
+    expect(list.stderr).toBe("")
+    expect(list.stdout).toContain("@korri:srb2/srb2\tSonic Robo Blast 2")
+
+    const dryRun = await runCli(["launch", "dry-run", "@korri:srb2/srb2"], {
+      env,
+    })
+    expect(dryRun.exitCode).toBe(0)
+    expect(dryRun.stderr).toBe("")
+    expect(dryRun.stdout).toContain("dry-run ok: @korri:srb2/srb2")
+    expect(dryRun.stdout).toContain(`command: ${srb2Executable}`)
   })
 
   it("lists and finds games through KorriControl", async () => {
