@@ -25,6 +25,7 @@ export type {
   PortMasterInstallInput,
   PortMasterNativeElfRepairOptions,
   PortMasterNativeElfRepairRecord,
+  PortMasterRuntimeDetection,
 } from "./src/installer"
 export { installPortMasterEntry } from "./src/installer"
 export {

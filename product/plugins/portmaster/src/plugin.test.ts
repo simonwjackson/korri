@@ -667,6 +667,145 @@ describe("PortMaster plugin", () => {
     }
   })
 
+  it("auto-detects RetroArch libretro ports from extracted scripts and cores", async () => {
+    const root = await mkdtemp(join(tmpdir(), "korri-portmaster-retro-"))
+    const deviceArch = "$" + "{DEVICE_ARCH}"
+    const zipBytes = makeZip({
+      "2048.sh": Buffer.from(
+        `#!/bin/bash\nsource "$XDG_DATA_HOME/PortMaster/control.txt"\nGAMEDIR="/$directory/ports/2048"\n/usr/bin/retroarch -L "$GAMEDIR/2048_libretro.so.${deviceArch}" "$GAMEDIR/2048.zip"\n`,
+      ),
+      "2048/2048_libretro.so.aarch64": fakeElf("aarch64"),
+      "2048/2048_libretro.so.armhf": fakeElf("armhf"),
+      "2048/2048.zip": Buffer.from("rom"),
+    })
+    const catalog = {
+      ports: {
+        "2048.zip": {
+          name: "2048.zip",
+          items: ["2048.sh", "2048"],
+          attr: {
+            title: "2048",
+            desc: "A libretro port with incomplete catalog metadata.",
+            inst: "Ready to run.",
+            genres: ["puzzle"],
+            porter: ["PortMaster"],
+            rtr: true,
+            exp: false,
+            runtime: [],
+            reqs: [],
+            arch: ["aarch64", "armhf"],
+            availability: "full",
+          },
+          source: {
+            md5: createHash("md5").update(zipBytes).digest("hex"),
+            size: zipBytes.length,
+            url: "https://example.invalid/2048.zip",
+          },
+        },
+      },
+    }
+    const productPlugin = createPortMasterPlugin({
+      catalogPath: "/catalog/ports.json",
+      installRoot: root,
+      readFileText: async () => JSON.stringify(catalog),
+      fetchImpl: async () =>
+        new Response(zipBytes, {
+          status: 200,
+          headers: { "content-type": "application/zip" },
+        }),
+    })
+
+    try {
+      const install = productPlugin.handlers.find(
+        candidate => candidate.operation === "portmaster.install",
+      ) as PluginHandler | undefined
+      if (!install) throw new Error("missing portmaster.install handler")
+      const manifest = await Effect.runPromise(
+        runPluginHandler(install, {
+          operation: "portmaster.install",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            id: "2048.zip",
+            installedAt: "2026-06-18T00:00:00.000Z",
+          },
+        }),
+      )
+
+      expect(manifest.catalog.runtime).toEqual([])
+      expect(manifest.extracted.runtimeDetections).toEqual([
+        {
+          kind: "retroarch-libretro",
+          launchScriptPaths: ["2048.sh"],
+          corePaths: [
+            "2048/2048_libretro.so.aarch64",
+            "2048/2048_libretro.so.armhf",
+          ],
+          evidence: [
+            "file:2048/2048_libretro.so.aarch64:libretro-core",
+            "file:2048/2048_libretro.so.armhf:libretro-core",
+            "script:2048.sh:-L",
+            "script:2048.sh:retroarch",
+          ],
+        },
+      ])
+
+      const prepareLaunch = productPlugin.handlers.find(
+        candidate => candidate.operation === "portmaster.prepare-launch",
+      ) as PluginHandler | undefined
+      if (!prepareLaunch) throw new Error("missing portmaster.prepare-launch")
+      const autoEnvelope = await Effect.runPromise(
+        runPluginHandler(prepareLaunch, {
+          operation: "portmaster.prepare-launch",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            manifestPath: manifest.manifestPath,
+            shellPath: "/run/current-system/sw/bin/bash",
+            bwrapPath: "/nix/store/example-bubblewrap/bin/bwrap",
+            envPath: "/run/current-system/sw/bin/env",
+            useBubblewrap: true,
+          },
+        }),
+      )
+
+      expect(autoEnvelope.runtimeCompatibility).toMatchObject({
+        mode: "retroarch-libretro",
+        retroarchWrapperPath: join(root, "PortMaster", "retroarch"),
+        retroarchLogPath: join(root, "logs", "2048-retroarch.log"),
+      })
+      expect(autoEnvelope.env).toMatchObject({
+        KORRI_PORTMASTER_RUNTIME_MODE: "retroarch-libretro",
+      })
+      expect(autoEnvelope.args).toContain(join(root, "PortMaster", "retroarch"))
+      expect(autoEnvelope.args).toContain("/usr/bin/retroarch")
+      const wrapper = await readFile(
+        join(root, "PortMaster", "retroarch"),
+        "utf8",
+      )
+      expect(wrapper).toMatch(
+        /target=\$\{KORRI_PORTMASTER_RETROARCH_TARGET:-'retroarch'\}/,
+      )
+
+      const disabledEnvelope = await Effect.runPromise(
+        runPluginHandler(prepareLaunch, {
+          operation: "portmaster.prepare-launch",
+          provider: KORRI_PORTMASTER_PLUGIN_ID,
+          input: {
+            manifestPath: manifest.manifestPath,
+            shellPath: "/run/current-system/sw/bin/bash",
+            useBubblewrap: false,
+            runtimeCompatibility: { mode: "none" },
+          },
+        }),
+      )
+      expect(disabledEnvelope.runtimeCompatibility).toEqual({ mode: "none" })
+      expect(disabledEnvelope.env).toMatchObject({
+        KORRI_PORTMASTER_RUNTIME_MODE: "none",
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it("wraps armhf PortMaster executables for qemu-arm", async () => {
     const root = await mkdtemp(join(tmpdir(), "korri-portmaster-armhf-"))
     const zipBytes = makeZip({

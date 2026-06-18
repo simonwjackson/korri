@@ -284,7 +284,7 @@ function normalizeRuntimeCompatibility(input: {
   readonly controlRoot: string
   readonly input?: PortMasterLaunchRuntimeCompatibilityInput
 }): PortMasterLaunchRuntimeCompatibility {
-  const mode = input.input?.mode ?? "none"
+  const mode = input.input?.mode ?? detectedRuntimeMode(input.manifest)
   if (mode === "retroarch-libretro") {
     const retroarchLogPath =
       input.input?.retroarchLogPath ??
@@ -303,6 +303,15 @@ function normalizeRuntimeCompatibility(input: {
     }
   }
   return { mode }
+}
+
+function detectedRuntimeMode(
+  manifest: PortMasterInstalledManifest,
+): PortMasterLaunchRuntimeCompatibilityInput["mode"] {
+  const detected = manifest.extracted.runtimeDetections?.some(
+    detection => detection.kind === "retroarch-libretro",
+  )
+  return detected ? "retroarch-libretro" : "none"
 }
 
 async function writeRetroarchWrapper(input: {

@@ -97,6 +97,13 @@ export interface PortMasterInstallInput {
   readonly installedAt?: string
 }
 
+export interface PortMasterRuntimeDetection {
+  readonly kind: "retroarch-libretro"
+  readonly launchScriptPaths: readonly string[]
+  readonly corePaths: readonly string[]
+  readonly evidence: readonly string[]
+}
+
 export interface PortMasterInstalledManifest {
   readonly schemaVersion: 1
   readonly providerId: ProviderId
@@ -125,6 +132,7 @@ export interface PortMasterInstalledManifest {
     readonly nativeElfRepairs: readonly PortMasterNativeElfRepairRecord[]
     readonly fexWrappers: readonly PortMasterFexWrapperRecord[]
     readonly armhfQemuWrappers: readonly PortMasterArmhfQemuWrapperRecord[]
+    readonly runtimeDetections: readonly PortMasterRuntimeDetection[]
   }
 }
 
@@ -213,6 +221,11 @@ export async function installPortMasterEntry(
   if (fexWrappers.length > 0 || armhfQemuWrappers.length > 0) {
     files = await inspectInstalledFiles(portsRoot, extracted)
   }
+  const runtimeDetections = await detectRuntimeCompatibility({
+    portsRoot,
+    files,
+    launchScripts,
+  })
 
   const manifest: PortMasterInstalledManifest = {
     schemaVersion: 1,
@@ -246,6 +259,7 @@ export async function installPortMasterEntry(
       nativeElfRepairs,
       fexWrappers,
       armhfQemuWrappers,
+      runtimeDetections,
     },
   }
 
@@ -392,6 +406,49 @@ async function installArmhfQemuWrappers(input: {
   }
 
   return wrappers
+}
+
+async function detectRuntimeCompatibility(input: {
+  readonly portsRoot: string
+  readonly files: readonly PortMasterInstalledFile[]
+  readonly launchScripts: readonly PortMasterInstalledFile[]
+}): Promise<readonly PortMasterRuntimeDetection[]> {
+  const corePaths = input.files
+    .map(file => file.path)
+    .filter(path => /(^|\/)[^/]+_libretro\.so(?:\.|$)/i.test(path))
+    .sort((left, right) => left.localeCompare(right))
+  const launchScriptPaths: string[] = []
+  const evidence = new Set<string>()
+
+  for (const script of input.launchScripts) {
+    const text = await readFile(join(input.portsRoot, script.path), "utf8")
+      .then(value => value.toLowerCase())
+      .catch(() => "")
+    if (!text) continue
+    const callsRetroarch = /(^|[^a-z0-9_-])retroarch([^a-z0-9_-]|$)/i.test(text)
+    const passesCore = /(^|\s)-l(\s|=)/i.test(text)
+    if (callsRetroarch || passesCore) {
+      launchScriptPaths.push(script.path)
+      if (callsRetroarch) evidence.add(`script:${script.path}:retroarch`)
+      if (passesCore) evidence.add(`script:${script.path}:-L`)
+    }
+  }
+
+  for (const path of corePaths) {
+    evidence.add(`file:${path}:libretro-core`)
+  }
+
+  if (corePaths.length === 0 && launchScriptPaths.length === 0) return []
+  return [
+    {
+      kind: "retroarch-libretro",
+      launchScriptPaths: launchScriptPaths.sort((left, right) =>
+        left.localeCompare(right),
+      ),
+      corePaths,
+      evidence: [...evidence].sort((left, right) => left.localeCompare(right)),
+    },
+  ]
 }
 
 function isExecutablePayload(path: string): boolean {
