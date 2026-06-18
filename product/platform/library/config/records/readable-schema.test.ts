@@ -39,17 +39,23 @@ describe("readable library schema records", () => {
       readonly library: Record<string, unknown>
     }
 
-    expect(decodeStoragePayload(fixture.storage.steam).root).toBe(
-      "/var/lib/korri/steam",
-    )
+    expect(
+      decodeStoragePayload(fixture.storage["@korri:steam/steam"]).root,
+    ).toBe("/var/lib/korri/steam")
     expect(fixture.providers["@korri:steam"]).toBeDefined()
     expect(decodeSystemPayload(fixture.systems.steam).apps).toEqual([
-      { id: "steam" },
+      { id: "@korri:steam/steam" },
     ])
-    const steam = decodeAppPayload(fixture.apps.steam)
-    expect(steam.kind).toBe("steam")
-    expect(steam.state?.root).toBe("{storage:steam}/Steam")
-    expect(steam["launch-options"]).toContain("%command%")
+    const steam = decodeAppPayload(fixture.apps["@korri:steam/steam"])
+    expect(steam.kind).toBe("@korri:steam")
+    expect(steam.plugin?.["@korri:steam"]).toMatchObject({
+      state: { root: "{storage:@korri:steam/steam}/Steam" },
+    })
+    expect(
+      (
+        steam.plugin?.["@korri:steam"] as { readonly "launch-options"?: string }
+      )?.["launch-options"],
+    ).toContain("%command%")
     expect(decodeRuntimePayload(fixture.runtimes["proton-arm64"]).tool).toBe(
       "proton-arm64",
     )
@@ -57,7 +63,7 @@ describe("readable library schema records", () => {
       decodeLibraryItemPayload(fixture.library.balatro).releases.map(
         release => release.apps?.map(choice => choice.id) ?? [],
       ),
-    ).toEqual([[], ["steam"], []])
+    ).toEqual([[], ["@korri:steam/steam"], []])
     expect(
       decodeLibraryItemPayload(fixture.library["gba-choice-demo"]).releases[0]
         ?.apps,
@@ -372,14 +378,14 @@ describe("readable library schema records", () => {
           id: "windows",
           system: "windows",
           target: "steam://rungameid/360740",
-          apps: [{ id: "steam" }],
+          apps: [{ id: "@korri:steam/steam" }],
         },
       ],
     })
 
     expect(item.releases.map(release => release.id)).toEqual(["windows"])
     expect(item.releases[0]?.target).toBe("steam://rungameid/360740")
-    expect(item.releases[0]?.apps).toEqual([{ id: "steam" }])
+    expect(item.releases[0]?.apps).toEqual([{ id: "@korri:steam/steam" }])
     expect(() =>
       decodeLibraryItemPayload({
         title: "Downwell",
@@ -388,7 +394,7 @@ describe("readable library schema records", () => {
             id: "windows",
             system: "windows",
             target: "steam://rungameid/360740",
-            app: "steam",
+            app: "@korri:steam/steam",
           },
         ],
       }),
@@ -411,7 +417,7 @@ describe("readable library schema records", () => {
         title: "Downwell",
         system: "windows",
         target: "steam://rungameid/360740",
-        apps: [{ id: "steam", runtime: "proton" }],
+        apps: [{ id: "@korri:steam/steam", runtime: "proton" }],
         releases: [
           {
             id: "windows",

@@ -7,7 +7,6 @@ import {
 } from "@platform/artifacts/artifact-import-service"
 import { artifactsRoot } from "@platform/artifacts/artifact-store"
 import type { AppIntegrationKind } from "@platform/library/config/app-integrations"
-import { materializeReadableSteamLaunch } from "@platform/library/config/app-materializer"
 import {
   type ReadableConfigSnapshot,
   type ResolvedLocalLauncherPolicy,
@@ -32,7 +31,6 @@ import {
   type AppRecord,
   appRecordKind,
   decodeAppRecord,
-  isSteamAppRecord,
 } from "@platform/library/config/records/app"
 import type { CollectionRecord } from "@platform/library/config/records/collection"
 import type { GameRecord } from "@platform/library/config/records/game"
@@ -70,7 +68,6 @@ import type {
 import type { ConfigRecordMap, PluginId } from "@platform/plugin"
 import type { PluginRegistry } from "@platform/plugin/registry"
 import type { ArtifactRecord } from "@platform/protocol/artifact/artifact"
-import { parseSteamAppId } from "@platform/stream/steam-launch-spec"
 import { Effect } from "effect"
 import { type KorriLibraryDb, LOCAL_HOST_KEY } from "./library-db"
 
@@ -361,11 +358,9 @@ export function createLibraryRepository(
               if (isProviderQualifiedReadableApp(context)) {
                 return Effect.succeed(false)
               }
-              return isSteamAppRecord(context.app)
-                ? Effect.succeed(canMaterializeSteamContext(context))
-                : composeReadableLaunchSpec(context.app, context).pipe(
-                    Effect.as(true),
-                  )
+              return composeReadableLaunchSpec(context.app, context).pipe(
+                Effect.as(true),
+              )
             }),
             Effect.match({
               onFailure: () => false,
@@ -405,11 +400,6 @@ export function createLibraryRepository(
                 reason: "config",
                 message: `no launch integration registered for provider-qualified app kind ${appRecordKind(context.app)}`,
               }),
-            )
-          }
-          if (isSteamAppRecord(context.app)) {
-            return yield* materializeReadableSteamLaunch({ context }).pipe(
-              Effect.mapError(toLibraryConfigError),
             )
           }
           return yield* composeReadableLaunchSpec(context.app, context).pipe(
@@ -569,17 +559,7 @@ function resolvedIntegration(
 ): AppIntegrationKind {
   const integration = findReadableLaunchIntegration(context, options)
   if (integration) return integration.integration
-  if (isSteamAppRecord(context.app)) return "steam"
   return "generic-process"
-}
-
-function canMaterializeSteamContext(
-  context: ReadableResolvedLaunchContext,
-): boolean {
-  return Boolean(
-    parseSteamAppId(context.target)._tag === "Right" &&
-      context.steam?.state?.root,
-  )
 }
 
 function upsertSystemWithCoreRuntime(

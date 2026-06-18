@@ -24,8 +24,6 @@
  *                         → map merge; `null` means executable env unset
  * - `plugin`            → provider-keyed map; object values deep merge,
  *                         → arrays concatenate in inheritance order
- * - `steam`              → deep merge per nested key; `extra.args` concatenates;
- *                         → `launch-options` last-wins
  * - `env`                → map merge per key; more-specific wins
  * - `cwd`                → scalar; most-specific path wins
  * - `argsAppend`         → list concat in inheritance order
@@ -45,25 +43,11 @@ export const LaunchSettingValue = Schema.Union([
 ])
 export type LaunchSettingValue = Schema.Schema.Type<typeof LaunchSettingValue>
 
-const finiteNumberRange = (min: number, max: number, label: string) =>
-  Schema.makeFilter<number>(value =>
-    Number.isFinite(value) && value >= min && value <= max
-      ? undefined
-      : `${label} between ${min} and ${max} required`,
-  )
-
 const positiveNumber = (label: string) =>
   Schema.makeFilter<number>(value =>
     Number.isFinite(value) && value > 0
       ? undefined
       : `${label} greater than 0 required`,
-  )
-
-const nonNegativeNumber = (label: string) =>
-  Schema.makeFilter<number>(value =>
-    Number.isFinite(value) && value >= 0
-      ? undefined
-      : `${label} greater than or equal to 0 required`,
   )
 
 const EnvironmentKey = Schema.String.check(
@@ -76,14 +60,8 @@ const EnvironmentOverlay = Schema.Record(
 )
 export type EnvironmentOverlay = Schema.Schema.Type<typeof EnvironmentOverlay>
 
-const PositiveNumber = (label: string) =>
-  Schema.Number.check(positiveNumber(label))
-const NonNegativeNumber = (label: string) =>
-  Schema.Number.check(nonNegativeNumber(label))
 const PositiveInteger = (label: string) =>
   Schema.Int.check(positiveNumber(label))
-const NonNegativeInteger = (label: string) =>
-  Schema.Int.check(nonNegativeNumber(label))
 
 const NonEmptyString = (label: string) =>
   Schema.String.pipe(
@@ -239,21 +217,6 @@ export const MoonlightPolicy = Schema.Struct({
 })
 export type MoonlightPolicy = Schema.Schema.Type<typeof MoonlightPolicy>
 
-const SteamStatePolicy = Schema.Struct({
-  root: NonEmptyString("state.root"),
-})
-
-const SteamExtraPolicy = Schema.Struct({
-  args: Schema.optional(Schema.Array(Schema.String)),
-})
-
-export const SteamPolicy = Schema.Struct({
-  state: Schema.optional(SteamStatePolicy),
-  extra: Schema.optional(SteamExtraPolicy),
-  "launch-options": Schema.optional(NonEmptyString("launch-options")),
-})
-export type SteamPolicy = Schema.Schema.Type<typeof SteamPolicy>
-
 export const InheritableLayer = Schema.Struct({
   launch: Schema.optional(LaunchPolicy),
   moonlight: Schema.optional(MoonlightPolicy),
@@ -267,9 +230,6 @@ export type InheritableLayer = Schema.Schema.Type<typeof InheritableLayer>
 
 export const ByLauncherPayload = Schema.Record(Schema.String, InheritableLayer)
 export type ByLauncherPayload = Schema.Schema.Type<typeof ByLauncherPayload>
-
-export const decodeSteamPolicy = (input: unknown): SteamPolicy =>
-  Schema.decodeUnknownSync(SteamPolicy)(input, STRICT)
 
 export const decodeMoonlightPolicy = (input: unknown): MoonlightPolicy =>
   Schema.decodeUnknownSync(MoonlightPolicy)(input, STRICT)

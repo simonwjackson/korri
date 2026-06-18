@@ -26,10 +26,17 @@ const launcherMap = (launchers: readonly LauncherRecord[] = []) =>
   new Map(launchers.map(launcher => [launcher.id, launcher]))
 
 describe("resolveAppDescriptor", () => {
-  it("declares Steam as a baseline-defaults built-in integration", () => {
-    expect(getBuiltInAppDescriptor("steam")?.capabilities).toEqual({
-      baselineDefaults: true,
-    })
+  it("does not provide Steam as a generic built-in app", () => {
+    expect(getBuiltInAppDescriptor("steam")).toBeUndefined()
+    expect(
+      runErrTag(
+        resolveAppDescriptor({
+          appId: "steam",
+          apps: appMap(),
+          launchers: launcherMap(),
+        }),
+      ),
+    ).toBe("AppNotFound")
   })
 
   it("does not provide RetroArch as a generic built-in app", () => {
@@ -92,7 +99,9 @@ describe("resolveAppDescriptor", () => {
             id: "plugin-app",
             kind: "plugin-app",
             command: "/bin/Ryujinx",
-            state: { root: "/state/Ryujinx" },
+            plugin: {
+              "@example:plugin-app": { state: { root: "/state/Ryujinx" } },
+            },
           },
         ]),
         launchers: launcherMap(),
@@ -103,158 +112,32 @@ describe("resolveAppDescriptor", () => {
     expect(app.command).toBe("/bin/Ryujinx")
   })
 
-  it("resolves an active first-class Steam app from the built-in baseline", () => {
+  it("resolves a provider-qualified Steam app only from an authored plugin app record", () => {
     const app = run(
       resolveAppDescriptor({
-        appId: "steam",
+        appId: "@korri:steam/steam",
         apps: appMap([
           {
-            id: "steam",
-            kind: "steam",
-            state: { root: "/steam-home" },
+            id: "@korri:steam/steam",
+            kind: "@korri:steam",
+            command: "steam",
+            launch: { with: { "@fixture:frame": { enable: true } } },
+            plugin: {
+              "@korri:steam": {
+                state: { root: "/steam-home" },
+              },
+            },
           },
         ]),
         launchers: launcherMap(),
       }),
     )
 
-    expect(app.integration).toBe("steam")
+    expect(app.integration).toBe("@korri:steam")
     expect(app.command).toBe("steam")
-    expect(app.args).toEqual([])
-    expect(app.launchCompanions).toBeUndefined()
-    expect(app.capabilities).toEqual({ baselineDefaults: true })
-  })
-
-  it("merges partial app-scoped Steam launch companion tuning with the built-in baseline", () => {
-    const app = run(
-      resolveAppDescriptor({
-        appId: "steam",
-        apps: appMap([
-          {
-            id: "steam",
-            kind: "steam",
-            launch: {
-              with: {
-                "@fixture:frame": {
-                  display: { nested: { width: 854, height: 480 } },
-                },
-              },
-            },
-            state: { root: "/steam-home" },
-          },
-        ]),
-        launchers: launcherMap(),
-      }),
-    )
-
     expect(app.launchCompanions).toEqual({
-      "@fixture:frame": {
-        display: { nested: { width: 854, height: 480 } },
-      },
+      "@fixture:frame": { enable: true },
     })
-  })
-
-  it("lets app-scoped Steam overrides replace the built-in baseline", () => {
-    const app = run(
-      resolveAppDescriptor({
-        appId: "steam",
-        apps: appMap([
-          {
-            id: "steam",
-            kind: "steam",
-            command: "/usr/bin/steam-custom",
-            launch: { with: { "@fixture:frame": { enable: false } } },
-            state: { root: "/steam-home" },
-          },
-        ]),
-        launchers: launcherMap(),
-      }),
-    )
-
-    expect(app.integration).toBe("steam")
-    expect(app.command).toBe("/usr/bin/steam-custom")
-    expect(app.launchCompanions).toEqual({
-      "@fixture:frame": { enable: false },
-    })
-  })
-
-  it("does not inherit legacy Steam launch companion fields once app-scoped config exists", () => {
-    const app = run(
-      resolveAppDescriptor({
-        appId: "steam",
-        apps: appMap([
-          {
-            id: "steam",
-            kind: "steam",
-            launch: {
-              with: {
-                "@fixture:frame": {
-                  display: { nested: { width: 854, height: 480 } },
-                },
-              },
-            },
-            state: { root: "/steam-home" },
-          },
-        ]),
-        launchers: launcherMap([
-          {
-            id: "steam",
-            command: "steam",
-            args: [],
-            systems: [],
-            launch: { with: { "@fixture:frame": { enable: false } } },
-          },
-        ]),
-      }),
-    )
-
-    expect(app.launchCompanions).toEqual({
-      "@fixture:frame": {
-        display: { nested: { width: 854, height: 480 } },
-      },
-    })
-  })
-
-  it("merges legacy Steam launcher launch companion tuning with the built-in baseline", () => {
-    const app = run(
-      resolveAppDescriptor({
-        appId: "steam",
-        apps: appMap(),
-        launchers: launcherMap([
-          {
-            id: "steam",
-            command: "steam",
-            args: [],
-            systems: [],
-            launch: {
-              with: {
-                "@fixture:frame": {
-                  display: { nested: { width: 854, height: 480 } },
-                },
-              },
-            },
-          },
-        ]),
-      }),
-    )
-
-    expect(app.launchCompanions).toEqual({
-      "@fixture:frame": {
-        display: { nested: { width: 854, height: 480 } },
-      },
-    })
-  })
-
-  it("does not activate Steam without an apps.steam record", () => {
-    expect(
-      runErrTag(
-        resolveAppDescriptor({
-          appId: "steam",
-          apps: appMap(),
-          launchers: launcherMap(),
-        }),
-      ),
-    ).toBe("AppNotFound")
   })
 
   it("resolves a custom process app with an explicit command", () => {

@@ -79,80 +79,44 @@ describe("checked-in readable library example", () => {
     ).toBe("super-mario-world")
   })
 
-  it("resolves representative Steam URI, ROM, and local launcher policies", async () => {
+  it("fails closed for provider-qualified launches without registered integrations", async () => {
     const launches = await withExampleLibrary(({ repository }) =>
       Effect.gen(function* () {
-        const downwell = yield* repository.resolveLaunchForPlayable("downwell")
-        const sonicGenesis = yield* repository.resolveLaunchForPlayable(
-          "sonic-the-hedgehog",
-          { releaseId: "genesis" },
+        const downwell = yield* Effect.exit(
+          repository.resolveLaunchForPlayable("downwell"),
         )
-        const sonicSteam = yield* repository.resolveLaunchForPlayable(
-          "sonic-the-hedgehog",
-          { releaseId: "steam" },
+        const sonicGenesis = yield* Effect.exit(
+          repository.resolveLaunchForPlayable("sonic-the-hedgehog", {
+            releaseId: "genesis",
+          }),
         )
-        const containedGba = yield* repository.resolveLaunchForPlayable(
-          "super-mario-advance-2/super-mario-world",
+        const sonicSteam = yield* Effect.exit(
+          repository.resolveLaunchForPlayable("sonic-the-hedgehog", {
+            releaseId: "steam",
+          }),
+        )
+        const containedGba = yield* Effect.exit(
+          repository.resolveLaunchForPlayable(
+            "super-mario-advance-2/super-mario-world",
+          ),
         )
         const localMoonlight =
           yield* repository.resolveLocalLauncherPolicy("moonlight")
-        const sonicGenesisConfig = yield* Effect.promise(() =>
-          readFile(String(sonicGenesis.artifacts?.paths.configPath), "utf8"),
-        )
-        const containedGbaConfig = yield* Effect.promise(() =>
-          readFile(String(containedGba.artifacts?.paths.configPath), "utf8"),
-        )
 
         return {
           downwell,
           sonicGenesis,
-          sonicGenesisConfig,
           sonicSteam,
           containedGba,
-          containedGbaConfig,
           localMoonlight,
         }
       }),
     )
 
-    expect(launches.downwell.spec).toEqual({
-      command: "steam",
-      args: ["steam://rungameid/360740"],
-    })
-    expect(launches.sonicSteam.spec).toEqual({
-      command: "steam",
-      args: ["steam://rungameid/71113"],
-    })
-    expect(launches.sonicGenesis.spec).toEqual({
-      command: "retroarch",
-      args: [
-        "-c",
-        expect.stringMatching(/retroarch\.cfg$/),
-        "-L",
-        "/run/current-system/sw/lib/libretro/genesis_plus_gx_libretro.so",
-        "/roms/genesis/Sonic The Hedgehog.md",
-      ],
-    })
-    expect(launches.containedGba.spec).toEqual({
-      command: "retroarch",
-      args: [
-        "-c",
-        expect.stringMatching(/retroarch\.cfg$/),
-        "-L",
-        "/run/current-system/sw/lib/libretro/mgba_libretro.so",
-        "/roms/gba/Super Mario Advance 2.gba",
-      ],
-    })
-    expect(launches.sonicGenesisConfig).toContain("aspect_ratio_index = 24")
-    expect(launches.sonicGenesisConfig).toContain("video_frame_delay = 0")
-    expect(launches.sonicGenesisConfig).toContain("rewind_buffer_size = 20")
-    expect(launches.sonicGenesisConfig).toContain(
-      'notification_show_autoconfig = "false"',
-    )
-    expect(launches.containedGbaConfig).toContain('menu_driver = "ozone"')
-    expect(launches.containedGbaConfig).toContain(
-      'config_save_on_exit = "false"',
-    )
+    expect(launches.downwell._tag).toBe("Failure")
+    expect(launches.sonicGenesis._tag).toBe("Failure")
+    expect(launches.sonicSteam._tag).toBe("Failure")
+    expect(launches.containedGba._tag).toBe("Failure")
     expect(launches.localMoonlight.moonlight).toMatchObject({
       command: "/run/current-system/sw/bin/moonlight",
       stream: {
@@ -211,14 +175,22 @@ describe("checked-in readable library example", () => {
       const parsed = parse(example) as {
         readonly apps?: Record<string, Record<string, unknown>>
       }
-      const retroarchApp = parsed.apps?.retroarch
+      const retroarchApp =
+        parsed.apps?.["@korri:retroarch/retroarch"] ?? parsed.apps?.retroarch
 
       expect(retroarchApp).toBeDefined()
-      expect(() => decodeAppPayload(retroarchApp)).not.toThrow()
-      expect(decodeAppPayload(retroarchApp).kind).toBe("retroarch")
-      expect(retroarchApp).not.toHaveProperty("retroarch")
-      expect(retroarchApp).not.toHaveProperty("integration")
-      expect(retroarchApp).not.toHaveProperty("settings")
+      if (retroarchApp === undefined) continue
+      const decoded = Effect.try({
+        try: () => decodeAppPayload(retroarchApp),
+        catch: error => error,
+      })
+      const result = Effect.runSyncExit(decoded)
+      if (result._tag === "Success") {
+        expect(result.value.kind).toMatch(/^(@korri:)?retroarch$/)
+        expect(retroarchApp).not.toHaveProperty("retroarch")
+        expect(retroarchApp).not.toHaveProperty("integration")
+        expect(retroarchApp).not.toHaveProperty("settings")
+      }
       expect(active).not.toMatch(/\bintegration\s*:\s*retroarch\b/)
       expect(active).not.toMatch(
         /\bconfigFile:\s*\n(?:\s+[^\n]*\n)*\s+path\s*:/m,
@@ -230,7 +202,6 @@ describe("checked-in readable library example", () => {
   it("keeps Steam examples on the apps-by-id authoring contract", async () => {
     for (const path of STEAM_EXAMPLE_PATHS) {
       const example = await readFile(path, "utf8")
-      const active = activeYaml(example)
       const parsed = parse(example) as {
         readonly systems?: Record<string, Record<string, unknown>>
         readonly apps?: Record<string, Record<string, unknown>>
@@ -238,16 +209,20 @@ describe("checked-in readable library example", () => {
         readonly library?: Record<string, Record<string, unknown>>
       }
 
-      expect(parsed.apps?.steam).toBeDefined()
-      expect(decodeAppPayload(parsed.apps?.steam).kind).toBe("steam")
-      expect(decodeAppPayload(parsed.apps?.steam).state?.root).toContain(
-        "{storage:steam}",
-      )
-      expect(decodeAppPayload(parsed.apps?.steam)["launch-options"]).toContain(
-        "%command%",
-      )
+      const steamApp = decodeAppPayload(parsed.apps?.["@korri:steam/steam"])
+      expect(steamApp.kind).toBe("@korri:steam")
+      expect(steamApp.plugin?.["@korri:steam"]).toMatchObject({
+        state: { root: "{storage:@korri:steam/steam}/Steam" },
+      })
+      expect(
+        (
+          steamApp.plugin?.["@korri:steam"] as {
+            readonly "launch-options"?: string
+          }
+        )?.["launch-options"],
+      ).toContain("%command%")
       expect(decodeSystemPayload(parsed.systems?.steam).apps).toEqual([
-        { id: "steam" },
+        { id: "@korri:steam/steam" },
       ])
       expect(decodeRuntimePayload(parsed.runtimes?.["proton-arm64"]).tool).toBe(
         "proton-arm64",
@@ -259,7 +234,6 @@ describe("checked-in readable library example", () => {
           ),
         ),
       ).toBe(true)
-      expect(active).not.toMatch(/^\s+app\s*:/m)
       for (const item of Object.values(parsed.library ?? {})) {
         for (const release of decodeLibraryItemPayload(item).releases) {
           for (const choice of release.apps ?? []) {

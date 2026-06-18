@@ -1,9 +1,10 @@
-# Executable fixture for first-class Steam readable-library app choices v1.
+# Executable fixture for first-party Steam plugin readable-library app choices v1.
 # Steam implementation details such as readiness probing, VDF paths, wrapper
-# provisioning, and daemon orchestration are owned by Korri, not YAML knobs.
+# provisioning, and daemon orchestration are owned by the @korri:steam plugin,
+# not generic app fields.
 
 storage:
-  steam:
+  "@korri:steam/steam":
     root: /var/lib/korri/steam
   roms:
     root: /roms
@@ -18,23 +19,29 @@ systems:
   steam:
     name: Steam
     apps:
-      - id: steam
+      - id: "@korri:steam/steam"
   gba:
     name: Game Boy Advance
 
 apps:
-  steam:
-    kind: steam
+  "@korri:steam/steam":
+    kind: "@korri:steam"
     command: steam
     systems: [steam]
     runtime: proton-arm64
-    state:
-      root: "{storage:steam}/Steam"
-    extra:
-      # Steam client startup args. Game args stay inside Steam LaunchOptions.
-      args: [-silent, -gamepadui]
-    # Literal Steam syntax; Korri does not substitute inside %command%.
-    launch-options: "gamescope --fullscreen -- %command%"
+    launch:
+      with:
+        "@korri:gamescope":
+          enable: true
+    plugin:
+      "@korri:steam":
+        state:
+          root: "{storage:@korri:steam/steam}/Steam"
+        extra:
+          # Steam client startup args. Game args stay inside Steam LaunchOptions.
+          args: [-silent, -gamepadui]
+        # Literal Steam syntax; Korri does not substitute inside %command%.
+        launch-options: "gamescope --fullscreen -- %command%"
 
   "@korri:retroarch/retroarch":
     kind: "@korri:retroarch"
@@ -79,15 +86,17 @@ library:
       - id: steam-store
         system: steam
         target: steam://rungameid/2379780
-        # Inherits systems.steam.apps[steam].
+        # Inherits systems.steam.apps[@korri:steam/steam].
 
       - id: steam-store-experimental
         system: steam
         target: steam://rungameid/2379780
         apps:
-          - id: steam
+          - id: "@korri:steam/steam"
             runtime: proton-experimental
-            launch-options: "MANGOHUD=1 %command%"
+            plugin:
+              "@korri:steam":
+                launch-options: "MANGOHUD=1 %command%"
 
       - id: store-page
         system: steam

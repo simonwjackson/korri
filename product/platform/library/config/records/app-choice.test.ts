@@ -2,6 +2,14 @@ import { describe, expect, it } from "bun:test"
 
 import { decodeAppChoice } from "./app-choice"
 
+const steamProvider = "@korri:steam"
+
+const steamPluginPolicy = {
+  state: { root: "{storage:@korri:steam/steam}/Steam" },
+  extra: { args: ["-silent", "-gamepadui"] },
+  "launch-options": "wrapper -- %command%",
+}
+
 describe("AppChoice", () => {
   it("decodes id-reference choices with optional runtime and policy fields", () => {
     expect(decodeAppChoice({ id: "retroarch" })).toEqual({ id: "retroarch" })
@@ -11,6 +19,7 @@ describe("AppChoice", () => {
         runtime: "mgba",
         inherit: false,
         launch: { with: { "@example:wrapper": { enable: false } } },
+        plugin: { "@korri:retroarch": { extraArgs: ["--verbose"] } },
         env: { LANG: "C" },
         argsAppend: ["--verbose"],
         patches: ["/patches/game.ips"],
@@ -20,33 +29,40 @@ describe("AppChoice", () => {
       runtime: "mgba",
       inherit: false,
       launch: { with: { "@example:wrapper": { enable: false } } },
+      plugin: { "@korri:retroarch": { extraArgs: ["--verbose"] } },
       env: { LANG: "C" },
       argsAppend: ["--verbose"],
       patches: ["/patches/game.ips"],
     })
   })
 
-  it("decodes Steam app-choice launch options without inline kind", () => {
+  it("decodes Steam app-choice overrides as plugin payload", () => {
     expect(
       decodeAppChoice({
-        id: "steam",
+        id: "@korri:steam/steam",
         runtime: "proton-arm64",
-        "launch-options": "wrapper -- %command%",
-        extra: { args: ["-silent", "-gamepadui"] },
+        plugin: { [steamProvider]: steamPluginPolicy },
       }),
     ).toEqual({
-      id: "steam",
+      id: "@korri:steam/steam",
       runtime: "proton-arm64",
-      "launch-options": "wrapper -- %command%",
-      extra: { args: ["-silent", "-gamepadui"] },
+      plugin: { [steamProvider]: steamPluginPolicy },
     })
   })
 
-  it("rejects inline app kinds and unknown keys", () => {
+  it("rejects inline app kinds and retired Steam top-level fields", () => {
     expect(() =>
       decodeAppChoice({ id: "retroarch", kind: "retroarch" }),
     ).toThrow(/kind.*top-level apps/i)
-    expect(() => decodeAppChoice({ id: "retroarch", extra: true })).toThrow()
+    expect(() =>
+      decodeAppChoice({ id: "@korri:steam/steam", extra: true }),
+    ).toThrow()
+    expect(() =>
+      decodeAppChoice({
+        id: "@korri:steam/steam",
+        "launch-options": "%command%",
+      }),
+    ).toThrow()
     expect(() =>
       decodeAppChoice({ id: "retroarch", wrapper: { enable: true } }),
     ).toThrow()

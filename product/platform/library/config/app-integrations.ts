@@ -23,7 +23,6 @@ export type AppIntegrationKind =
   | "solarus"
   | "generic-process"
   | (string & {})
-  | "steam"
 
 export interface AppDescriptor {
   readonly id: string
@@ -80,15 +79,6 @@ const builtInApps: Readonly<Record<string, AppDescriptor>> = {
     policy: { allowedCommands: ["solarus-run"] },
     knownSettings: ["fullscreen"],
   },
-  steam: {
-    id: "steam",
-    kind: "steam",
-    integration: "steam",
-    capabilities: { baselineDefaults: true },
-    command: "steam",
-    args: [],
-    systems: [],
-  },
 }
 
 export const getBuiltInAppDescriptor = (
@@ -132,9 +122,6 @@ export const resolveAppDescriptor = (input: {
     const legacyLauncher = input.launchers.get(input.appId)
 
     if (builtIn) {
-      if (builtIn.id === "steam" && !appOverride && !legacyLauncher) {
-        return yield* Effect.fail(new AppNotFound({ appId: input.appId }))
-      }
       return mergeDescriptor(builtIn, appOverride, legacyLauncher)
     }
 

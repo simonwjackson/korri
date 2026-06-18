@@ -108,7 +108,7 @@ describe("source candidate playable shape", () => {
                 id: "steam",
                 system: "windows",
                 target: "steam://rungameid/360740",
-                apps: [{ id: "steam" }],
+                apps: [{ id: "@korri:steam/steam" }],
               },
             ],
           },

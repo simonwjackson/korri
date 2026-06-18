@@ -2,7 +2,7 @@ import type {
   LaunchCompanionMap,
   LaunchPolicy,
   MoonlightPolicy,
-  SteamPolicy,
+  PluginPolicyMap,
 } from "./inheritable-fields"
 import type { AppChoice } from "./records/app-choice"
 
@@ -28,7 +28,7 @@ const mergeObject = <T extends object>(
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
-const mergeCompanionValue = (base: unknown, override: unknown): unknown => {
+const mergePolicyValue = (base: unknown, override: unknown): unknown => {
   if (override === undefined) return base
   if (Array.isArray(override)) {
     return [...(Array.isArray(base) ? base : []), ...override]
@@ -37,7 +37,7 @@ const mergeCompanionValue = (base: unknown, override: unknown): unknown => {
     return [
       ...new Set([...Object.keys(base), ...Object.keys(override)]),
     ].reduce<Record<string, unknown>>((merged, key) => {
-      const value = mergeCompanionValue(base[key], override[key])
+      const value = mergePolicyValue(base[key], override[key])
       if (value !== undefined) merged[key] = value
       return merged
     }, {})
@@ -56,7 +56,7 @@ const mergeLaunchCompanions = (
   return [...new Set([...Object.keys(base), ...Object.keys(override)])].reduce<
     Record<string, unknown>
   >((merged, providerId) => {
-    const value = mergeCompanionValue(
+    const value = mergePolicyValue(
       baseRecord[providerId],
       overrideRecord[providerId],
     )
@@ -65,19 +65,24 @@ const mergeLaunchCompanions = (
   }, {}) as LaunchCompanionMap
 }
 
-const mergeSteamExtra = (
-  base: SteamPolicy["extra"] | undefined,
-  override: SteamPolicy["extra"] | undefined,
-): SteamPolicy["extra"] | undefined => {
+const mergePluginPolicies = (
+  base: PluginPolicyMap | undefined,
+  override: PluginPolicyMap | undefined,
+): PluginPolicyMap | undefined => {
   if (base === undefined) return override
   if (override === undefined) return base
-  return {
-    ...base,
-    ...override,
-    ...(base.args !== undefined || override.args !== undefined
-      ? { args: [...(base.args ?? []), ...(override.args ?? [])] }
-      : {}),
-  }
+  const baseRecord = base as Readonly<Record<string, unknown>>
+  const overrideRecord = override as Readonly<Record<string, unknown>>
+  return [...new Set([...Object.keys(base), ...Object.keys(override)])].reduce<
+    Record<string, unknown>
+  >((merged, providerId) => {
+    const value = mergePolicyValue(
+      baseRecord[providerId],
+      overrideRecord[providerId],
+    )
+    if (value !== undefined) merged[providerId] = value
+    return merged
+  }, {}) as PluginPolicyMap
 }
 
 const mergeLaunchPolicy = (
@@ -90,14 +95,6 @@ const mergeLaunchPolicy = (
   return Object.keys(withPolicy).length > 0
     ? { ...base, ...override, with: withPolicy }
     : { ...base, ...override }
-}
-
-const spreadSteamExtra = (
-  base: SteamPolicy["extra"] | undefined,
-  override: SteamPolicy["extra"] | undefined,
-): { readonly extra?: SteamPolicy["extra"] } => {
-  const extra = mergeSteamExtra(base, override)
-  return extra === undefined ? {} : { extra }
 }
 
 const mergeChoice = (base: AppChoice, override: AppChoice): AppChoice => ({
@@ -117,9 +114,8 @@ const mergeChoice = (base: AppChoice, override: AppChoice): AppChoice => ({
         ) as MoonlightPolicy,
       }
     : {}),
-  ...spreadSteamExtra(base.extra, override.extra),
-  ...((override["launch-options"] ?? base["launch-options"])
-    ? { "launch-options": override["launch-options"] ?? base["launch-options"] }
+  ...(mergePluginPolicies(base.plugin, override.plugin) !== undefined
+    ? { plugin: mergePluginPolicies(base.plugin, override.plugin) }
     : {}),
   ...(mergeObject(base.env, override.env) !== undefined
     ? { env: mergeObject(base.env, override.env) as Record<string, string> }

@@ -11,9 +11,7 @@ import {
   PatchUnsupportedForApp,
   type ResolutionError,
 } from "./errors"
-import type { SteamPolicy } from "./inheritable-fields"
 import type { LaunchSettings, LaunchSettingValue } from "./launch-block"
-import { isSteamAppRecord } from "./records/app"
 import type { LauncherRecord } from "./records/launcher"
 import type {
   ReadableResolvedLaunchContext,
@@ -27,6 +25,7 @@ import {
 } from "./steam-state-materializer"
 
 const LAUNCH_ARTIFACTS_DIR_ENV = "KORRI_LAUNCH_ARTIFACTS_DIR" as const
+const KORRI_STEAM_PLUGIN_ID = "@korri:steam" as const
 const MATERIALIZER_PLACEHOLDER_PATTERN =
   /\{(?:configPath|configDir|userDir|modulePath)\}/
 export const STALE_ARTIFACT_RETENTION_MS = 24 * 60 * 60 * 1000
@@ -53,11 +52,11 @@ export const materializeReadableSteamLaunch = (input: {
   readonly lock?: SteamStateLock
 }): Effect.Effect<MaterializedReadableLaunch, ResolutionError> =>
   Effect.gen(function* () {
-    if (!isSteamAppRecord(input.context.app)) {
+    if (input.context.app.kind !== KORRI_STEAM_PLUGIN_ID) {
       return yield* Effect.fail(
         new AppMaterializationFailed({
           appId: input.context.app.id,
-          reason: "typed Steam materialization requires kind: steam",
+          reason: "typed Steam materialization requires kind: @korri:steam",
         }),
       )
     }
@@ -184,6 +183,16 @@ interface MaterializedReadableResources {
 
 const STORAGE_TOKEN_PATTERN = /\{storage:([^}]+)\}/g
 
+interface SteamPolicy {
+  readonly state?: {
+    readonly root: string
+  }
+  readonly extra?: {
+    readonly args?: readonly string[]
+  }
+  readonly "launch-options"?: string
+}
+
 interface MaterializedSteamResources extends MaterializedReadableResources {
   readonly stateRoot: string
 }
@@ -195,7 +204,10 @@ const materializeReadableSteamResources = (input: {
   readonly lock?: SteamStateLock
 }): Effect.Effect<MaterializedSteamResources, ResolutionError> =>
   Effect.gen(function* () {
-    const rawPolicy = input.context.steam ?? {}
+    const rawPolicy =
+      (input.context.plugin?.[KORRI_STEAM_PLUGIN_ID] as
+        | SteamPolicy
+        | undefined) ?? {}
     const storage = input.context.storage ?? {}
     yield* assertSteamStorageTokensAvailable(
       input.context.app.id,

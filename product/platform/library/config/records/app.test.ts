@@ -1,11 +1,14 @@
 import { describe, expect, it } from "bun:test"
 
-import {
-  type AppRecord,
-  appSteamPolicyFromRecord,
-  decodeAppPayload,
-  decodeAppRecord,
-} from "./app"
+import { decodeAppPayload, decodeAppRecord } from "./app"
+
+const steamProvider = "@korri:steam"
+
+const steamPluginPolicy = {
+  state: { root: "{storage:@korri:steam/steam}/Steam" },
+  extra: { args: ["-silent", "-gamepadui"] },
+  "launch-options": "wrapper -- %command%",
+}
 
 describe("AppPayload", () => {
   it("decodes apps.retroarch.settings without requiring command boilerplate", () => {
@@ -65,47 +68,52 @@ describe("AppPayload", () => {
     ).toThrow(/Unexpected key|drivers/)
   })
 
-  it("decodes a first-class Steam app and extracts policy", () => {
-    const record: AppRecord = {
-      id: "steam",
-      kind: "steam",
+  it("decodes a provider-qualified Steam app with plugin policy payload", () => {
+    expect(
+      decodeAppRecord({
+        id: "@korri:steam/steam",
+        kind: steamProvider,
+        command: "steam",
+        runtime: "proton-arm64",
+        plugin: { [steamProvider]: steamPluginPolicy },
+      }),
+    ).toMatchObject({
+      id: "@korri:steam/steam",
+      kind: steamProvider,
       command: "steam",
       runtime: "proton-arm64",
-      state: { root: "{storage:steam}/Steam" },
-      extra: { args: ["-silent", "-gamepadui"] },
-      "launch-options": "wrapper -- %command%",
-    }
-
-    expect(decodeAppRecord(record)).toMatchObject({
-      kind: "steam",
-      state: { root: "{storage:steam}/Steam" },
-      extra: { args: ["-silent", "-gamepadui"] },
-      "launch-options": "wrapper -- %command%",
-    })
-    expect(appSteamPolicyFromRecord(record)).toEqual({
-      state: { root: "{storage:steam}/Steam" },
-      extra: { args: ["-silent", "-gamepadui"] },
-      "launch-options": "wrapper -- %command%",
+      plugin: { [steamProvider]: steamPluginPolicy },
     })
   })
 
-  it("rejects Steam-only fields outside Steam apps", () => {
-    expect(() => decodeAppPayload({ kind: "steam", command: "steam" })).toThrow(
-      /state.root/,
-    )
+  it("rejects retired kind: steam", () => {
     expect(() =>
       decodeAppPayload({
         kind: "steam",
-        state: { root: "/steam" },
-        extra: { config: {} },
+        command: "steam",
       }),
-    ).toThrow(/config/)
+    ).toThrow(/kind: steam was retired/)
+  })
+
+  it("rejects retired top-level Steam policy fields as unknown app keys", () => {
     expect(() =>
       decodeAppPayload({
-        kind: "@korri:retroarch",
+        kind: steamProvider,
+        state: { root: "/steam" },
+      }),
+    ).toThrow(/Unexpected key|state/)
+    expect(() =>
+      decodeAppPayload({
+        kind: steamProvider,
+        extra: { args: ["-silent"] },
+      }),
+    ).toThrow(/Unexpected key|extra/)
+    expect(() =>
+      decodeAppPayload({
+        kind: steamProvider,
         "launch-options": "%command%",
       }),
-    ).toThrow(/kind: steam/)
+    ).toThrow(/Unexpected key|launch-options/)
   })
 
   it("rejects unknown app keys", () => {

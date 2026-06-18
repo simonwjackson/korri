@@ -18,6 +18,8 @@ import type { UserRecord } from "./records/user"
 
 const wrapperProvider = "@example:wrapper"
 const retroarchProvider = "@korri:retroarch"
+const steamProvider = "@korri:steam"
+const steamAppId = "@korri:steam/steam"
 const retiredWrapperKey = ["game", "scope"].join("")
 type WrapperPolicy = {
   readonly enable?: boolean
@@ -277,9 +279,13 @@ const snapshot = (item: LibraryItemRecord = sonic): ReadableConfigSnapshot => ({
 })
 
 const steamApp = (overrides: Partial<AppRecord> = {}): AppRecord => ({
-  id: "steam",
-  kind: "steam",
-  state: { root: "{storage:steam}/Steam" },
+  id: steamAppId,
+  kind: steamProvider,
+  command: "steam",
+  systems: ["steam"],
+  plugin: {
+    [steamProvider]: { state: { root: "{storage:@korri:steam/steam}/Steam" } },
+  },
   ...overrides,
 })
 
@@ -291,9 +297,9 @@ const steamReadableSnapshot = (
 ): ReadableConfigSnapshot => ({
   host: null,
   users: input.users ?? new Map(),
-  systems: new Map([["steam", { id: "steam", apps: [{ id: "steam" }] }]]),
+  systems: new Map([["steam", { id: "steam", apps: [{ id: steamAppId }] }]]),
   sources: new Map([["steam", { id: "steam", kind: ["service"] }]]),
-  storage: new Map([["steam", { id: "steam", root: "/state" }]]),
+  storage: new Map([[steamAppId, { id: steamAppId, root: "/state" }]]),
   apps: input.app ? new Map([[input.app.id, input.app]]) : new Map(),
   runtimes: new Map(),
   profiles: new Map(),
@@ -727,23 +733,24 @@ describe("resolveReadableLaunchContext", () => {
     ])
   })
 
-  it("resolves Steam app choices through app defaults and choice overrides", async () => {
-    const steam: AppRecord = {
-      id: "steam",
-      kind: "steam",
-      command: "steam",
+  it("resolves Steam app choices through plugin payload defaults and choice overrides", async () => {
+    const steam = steamApp({
       runtime: "proton-default",
-      state: { root: "{storage:steam}/Steam" },
-      extra: { args: ["-silent"] },
-      "launch-options": "%command%",
-    }
+      plugin: {
+        [steamProvider]: {
+          state: { root: "{storage:@korri:steam/steam}/Steam" },
+          extra: { args: ["-silent"] },
+          "launch-options": "%command%",
+        },
+      },
+    })
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(
         {
           ...snapshot(),
           apps: new Map([
             ["@korri:retroarch/retroarch", app],
-            ["steam", steam],
+            [steamAppId, steam],
           ]),
           runtimes: new Map([
             [
@@ -770,12 +777,19 @@ describe("resolveReadableLaunchContext", () => {
               "steam",
               {
                 id: "steam",
-                apps: [{ id: "steam", extra: { args: ["-gamepadui"] } }],
+                apps: [
+                  {
+                    id: steamAppId,
+                    plugin: {
+                      [steamProvider]: { extra: { args: ["-gamepadui"] } },
+                    },
+                  },
+                ],
               },
             ],
           ]),
           sources: new Map([["steam", { id: "steam", kind: ["service"] }]]),
-          storage: new Map([["steam", { id: "steam", root: "/state" }]]),
+          storage: new Map([[steamAppId, { id: steamAppId, root: "/state" }]]),
           library: new Map([
             [
               "balatro",
@@ -789,9 +803,13 @@ describe("resolveReadableLaunchContext", () => {
                     target: "steam://rungameid/2379780",
                     apps: [
                       {
-                        id: "steam",
+                        id: steamAppId,
                         runtime: "proton-experimental",
-                        "launch-options": "wrapper -- %command%",
+                        plugin: {
+                          [steamProvider]: {
+                            "launch-options": "wrapper -- %command%",
+                          },
+                        },
                       },
                     ],
                   },
@@ -804,10 +822,11 @@ describe("resolveReadableLaunchContext", () => {
       ),
     )
 
-    expect(context.app.id).toBe("steam")
+    expect(context.app.id).toBe(steamAppId)
     expect(context.runtime?.id).toBe("proton-experimental")
-    expect(context.steam).toEqual({
-      state: { root: "{storage:steam}/Steam" },
+    expect(context).not.toHaveProperty("steam")
+    expect(context.plugin?.[steamProvider]).toEqual({
+      state: { root: "{storage:@korri:steam/steam}/Steam" },
       extra: { args: ["-silent", "-gamepadui"] },
       "launch-options": "wrapper -- %command%",
     })
@@ -821,18 +840,18 @@ describe("resolveReadableLaunchContext", () => {
     )
 
     expect(context.app).toMatchObject({
-      id: "steam",
-      kind: "steam",
+      id: steamAppId,
+      kind: steamProvider,
       command: "steam",
-      args: [],
     })
     expect(wrapperPolicyFrom(context)).toBeUndefined()
     const policies = launchCompanionPoliciesFrom(context)
     expect(policies.every(policy => policy.display === undefined)).toBe(true)
     expect(policies.every(policy => policy.scaling === undefined)).toBe(true)
     expect(policies.every(policy => policy.stats === undefined)).toBe(true)
-    expect(context.steam).toEqual({
-      state: { root: "{storage:steam}/Steam" },
+    expect(context).not.toHaveProperty("steam")
+    expect(context.plugin?.[steamProvider]).toEqual({
+      state: { root: "{storage:@korri:steam/steam}/Steam" },
     })
   })
 
@@ -889,7 +908,7 @@ describe("resolveReadableLaunchContext", () => {
     expect(wrapperPolicy.steam).toBeUndefined()
   })
 
-  it("requires apps.steam before the Steam built-in baseline is active", async () => {
+  it("requires the plugin-qualified Steam app before Steam is active", async () => {
     const error = await Effect.runPromise(
       Effect.flip(
         resolveReadableLaunchContext(steamReadableSnapshot(), {
@@ -898,7 +917,7 @@ describe("resolveReadableLaunchContext", () => {
       ),
     )
 
-    expect(error).toMatchObject({ _tag: "AppNotFound", appId: "steam" })
+    expect(error).toMatchObject({ _tag: "AppNotFound", appId: steamAppId })
   })
 
   it("rejects runtime/app mismatches through shared launch compatibility", async () => {
@@ -912,7 +931,7 @@ describe("resolveReadableLaunchContext", () => {
                 "genesis-plus-gx",
                 {
                   ...runtime,
-                  app: "steam",
+                  app: steamAppId,
                 },
               ],
             ]),
@@ -959,47 +978,14 @@ describe("resolveReadableLaunchContext", () => {
     })
   })
 
-  it("rejects Steam launch-options when the selected app is not Steam", async () => {
-    const error = await Effect.runPromise(
-      Effect.flip(
-        resolveReadableLaunchContext(
-          {
-            ...snapshot(),
-            systems: new Map([
-              [
-                "genesis",
-                {
-                  ...system,
-                  apps: [
-                    {
-                      id: "@korri:retroarch/retroarch",
-                      runtime: "genesis-plus-gx",
-                      "launch-options": "%command%",
-                    },
-                  ],
-                },
-              ],
-            ]),
-          },
-          { playableId: "sonic-the-hedgehog" },
-        ),
-      ),
-    )
-
-    expect(error).toMatchObject({
-      _tag: "InvalidAppChoiceForKind",
-      appId: "@korri:retroarch/retroarch",
-      field: "launch-options",
-      kind: retroarchProvider,
-    })
-  })
-
   it("keeps app choice selection independent of profile app fields", async () => {
     const steam: AppRecord = {
-      id: "steam",
+      id: steamAppId,
+      kind: steamProvider,
       command: "steam",
       args: ["{target}"],
       systems: ["windows"],
+      plugin: { [steamProvider]: { state: { root: "/steam" } } },
     }
     const proton: RuntimeRecord = {
       id: "proton",
@@ -1012,7 +998,7 @@ describe("resolveReadableLaunchContext", () => {
           ...snapshot(),
           apps: new Map([
             ["@korri:retroarch/retroarch", app],
-            ["steam", steam],
+            [steamAppId, steam],
           ]),
           runtimes: new Map([
             ["genesis-plus-gx", runtime],
@@ -1028,13 +1014,13 @@ describe("resolveReadableLaunchContext", () => {
                     id: "@korri:retroarch/retroarch",
                     runtime: "genesis-plus-gx",
                   },
-                  { id: "steam", runtime: "proton" },
+                  { id: steamAppId, runtime: "proton" },
                 ],
               },
             ],
           ]),
           profiles: new Map([
-            ["handheld", { ...profile, app: "steam", runtime: "proton" }],
+            ["handheld", { ...profile, app: steamAppId, runtime: "proton" }],
           ]),
         },
         {

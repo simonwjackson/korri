@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 
-import { InheritableLayer, SteamPolicy } from "../inheritable-fields"
+import { InheritableLayer } from "../inheritable-fields"
 
 const STRICT = { onExcessProperty: "error" } as const
 
@@ -17,11 +17,10 @@ export const AppChoice = Schema.Struct({
   kind: Schema.optional(Schema.Unknown),
   inherit: Schema.optional(Schema.Boolean),
   runtime: Schema.optional(NonEmptyString),
-  "launch-options": SteamPolicy.fields["launch-options"],
-  extra: SteamPolicy.fields.extra,
 
   launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
+  plugin: InheritableLayer.fields.plugin,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
   argsAppend: InheritableLayer.fields.argsAppend,

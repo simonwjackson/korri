@@ -1,4 +1,4 @@
-# First-class Steam readable-library example (v1 grammar).
+# First-party Steam plugin readable-library example (v1 grammar).
 #
 # Authoring contract:
 # - systems/releases choose launch behavior with apps[] entries by id.
@@ -6,10 +6,10 @@
 # - Steam appid comes only from target: steam://rungameid/<appid>.
 # - Steam LaunchOptions are literal Steam syntax; %command% is not a Korri placeholder.
 # - Readiness probing, VDF/localconfig paths, wrapper provisioning, and daemon
-#   orchestration are implementation-owned details, not YAML configuration.
+#   orchestration are implementation-owned plugin details, not generic app fields.
 
 storage:
-  steam:
+  "@korri:steam/steam":
     root: /var/lib/korri/steam
 
 sources:
@@ -19,18 +19,24 @@ sources:
 systems:
   steam:
     apps:
-      - id: steam
+      - id: "@korri:steam/steam"
 
 apps:
-  steam:
-    kind: steam
+  "@korri:steam/steam":
+    kind: "@korri:steam"
     command: steam
     runtime: proton-arm64
-    state:
-      root: "{storage:steam}/Steam"
-    extra:
-      args: [-silent, -gamepadui]
-    launch-options: "gamescope --fullscreen -- %command%"
+    launch:
+      with:
+        "@korri:gamescope":
+          enable: true
+    plugin:
+      "@korri:steam":
+        state:
+          root: "{storage:@korri:steam/steam}/Steam"
+        extra:
+          args: [-silent, -gamepadui]
+        launch-options: "gamescope --fullscreen -- %command%"
 
 runtimes:
   proton-arm64:
@@ -42,7 +48,6 @@ runtimes:
 library:
   balatro:
     title: Balatro
-    source: steam
     releases:
       - id: steam-store
         system: steam
@@ -52,5 +57,7 @@ library:
         system: steam
         target: steam://rungameid/2379780
         apps:
-          - id: steam
-            launch-options: "MANGOHUD=1 %command%"
+          - id: "@korri:steam/steam"
+            plugin:
+              "@korri:steam":
+                launch-options: "MANGOHUD=1 %command%"

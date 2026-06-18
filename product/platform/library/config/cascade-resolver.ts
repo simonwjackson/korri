@@ -49,7 +49,6 @@ import {
   launchCompanionsFromLaunch,
   type MoonlightPolicy,
   type PluginPolicyMap,
-  type SteamPolicy,
 } from "./inheritable-fields"
 import type { LaunchBlock, LaunchSettings } from "./launch-block"
 import { mergeLaunchSettings } from "./launch-block"
@@ -59,11 +58,7 @@ import {
   selectLaunchableRelease,
   splitPlayableId,
 } from "./playable-id"
-import {
-  type AppRecord,
-  appRecordKind,
-  appSteamPolicyFromRecord,
-} from "./records/app"
+import type { AppRecord } from "./records/app"
 import type { CollectionRecord } from "./records/collection"
 import type { GameRecord } from "./records/game"
 import type { GlobalConfigRecord } from "./records/global"
@@ -462,36 +457,6 @@ export const foldPluginPolicies = (
 ): PluginPolicyMap =>
   mergePluginPolicyValue(base ?? {}, extra, []) as PluginPolicyMap
 
-const mergeSteamValue = (
-  base: unknown,
-  extra: unknown,
-  path: readonly string[],
-): unknown => {
-  if (extra === undefined) return base
-  const key = path.join(".")
-  if (key === "extra.args") {
-    return Array.isArray(extra)
-      ? [...(Array.isArray(base) ? base : []), ...extra]
-      : extra
-  }
-  if (isPlainPolicyObject(base) && isPlainPolicyObject(extra)) {
-    const merged: Record<string, unknown> = { ...base }
-    for (const [childKey, childValue] of Object.entries(extra)) {
-      merged[childKey] = mergeSteamValue(merged[childKey], childValue, [
-        ...path,
-        childKey,
-      ])
-    }
-    return merged
-  }
-  return extra
-}
-
-export const foldSteam = (
-  base: SteamPolicy | undefined,
-  extra: SteamPolicy,
-): SteamPolicy => mergeSteamValue(base ?? {}, extra, []) as SteamPolicy
-
 const mergeMoonlightValue = (
   base: unknown,
   extra: unknown,
@@ -743,7 +708,6 @@ interface ReadableOverride {
   readonly launch?: LaunchPolicy
   readonly moonlight?: MoonlightPolicy
   readonly plugin?: PluginPolicyMap
-  readonly steam?: SteamPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
@@ -764,7 +728,6 @@ interface ReadableLayerView {
   readonly launchCompanions?: LaunchCompanionMap
   readonly moonlight?: MoonlightPolicy
   readonly plugin?: PluginPolicyMap
-  readonly steam?: SteamPolicy
   readonly env?: Readonly<Record<string, string>>
   readonly cwd?: string
   readonly argsAppend?: readonly string[]
@@ -805,7 +768,6 @@ const readableViewOfApp = (app: AppRecord | undefined): ReadableLayerView =>
         launchCompanions: launchCompanionsFromLaunch(app),
         moonlight: app.moonlight,
         plugin: app.plugin,
-        steam: appSteamPolicyFromRecord(app),
         env: app.env,
         cwd: app.cwd,
         argsAppend: app.argsAppend,
@@ -814,24 +776,12 @@ const readableViewOfApp = (app: AppRecord | undefined): ReadableLayerView =>
     : {}
 
 const readableViewOfAppChoice = (
-  choice: ReadableLayerView & {
-    readonly "launch-options"?: string
-    readonly extra?: SteamPolicy["extra"]
-  },
-  app: AppRecord,
+  choice: ReadableLayerView,
 ): ReadableLayerView => ({
   launchCompanions:
     choice.launchCompanions ?? launchCompanionsFromLaunch(choice),
   moonlight: choice.moonlight,
-  steam:
-    appRecordKind(app) === "steam"
-      ? {
-          ...(choice.extra !== undefined ? { extra: choice.extra } : {}),
-          ...(choice["launch-options"] !== undefined
-            ? { "launch-options": choice["launch-options"] }
-            : {}),
-        }
-      : undefined,
+  plugin: choice.plugin,
   env: choice.env,
   cwd: choice.cwd,
   argsAppend: choice.argsAppend,
@@ -860,7 +810,6 @@ const resolveReadableAppRecord = (
   const override = apps.get(appId)
   const builtIn = getBuiltInAppDescriptor(appId)
   if (builtIn === undefined) return override
-  if (builtIn.id === "steam" && override === undefined) return undefined
   const launchCompanions = mergeAppLaunchCompanions(
     builtIn.launchCompanions,
     override ? launchCompanionsFromLaunch(override) : undefined,
@@ -876,13 +825,7 @@ const resolveReadableAppRecord = (
     settings: override?.settings ?? builtIn.settings,
     launch: launchPolicyWithCompanions(launchCompanions),
     moonlight: override?.moonlight ?? builtIn.moonlight,
-    ...(override?.kind === "steam" || builtIn.kind === "steam"
-      ? {
-          state: override?.state,
-          extra: override?.extra,
-          "launch-options": override?.["launch-options"],
-        }
-      : {}),
+    plugin: override?.plugin,
     env: override?.env ?? builtIn.env,
     cwd: override?.cwd ?? builtIn.cwd,
     argsAppend: override?.argsAppend ?? builtIn.argsAppend,
@@ -1017,7 +960,6 @@ const readableViewOfOverride = (
         launchCompanions: launchCompanionsFromLaunch(override),
         moonlight: override.moonlight,
         plugin: override.plugin,
-        steam: override.steam,
         env: override.env,
         cwd: override.cwd,
         argsAppend: override.argsAppend,
@@ -1031,7 +973,6 @@ const mergeReadableLayers = (
   let launchCompanions: LaunchCompanionMap | undefined
   let moonlight: MoonlightPolicy | undefined
   let plugin: PluginPolicyMap | undefined
-  let steam: SteamPolicy | undefined
   let env: Record<string, string> | undefined
   let cwd: string | undefined
   let argsAppend: string[] | undefined
@@ -1049,9 +990,6 @@ const mergeReadableLayers = (
     if (layer.plugin !== undefined) {
       plugin = foldPluginPolicies(plugin, layer.plugin)
     }
-    if (layer.steam !== undefined) {
-      steam = foldSteam(steam, layer.steam)
-    }
     if (layer.env !== undefined) env = { ...(env ?? {}), ...layer.env }
     if (layer.cwd !== undefined) cwd = layer.cwd
     if (layer.argsAppend !== undefined) {
@@ -1066,7 +1004,6 @@ const mergeReadableLayers = (
     launchCompanions,
     moonlight,
     plugin,
-    steam,
     env,
     cwd,
     argsAppend,
@@ -1202,25 +1139,6 @@ export const resolveReadableLaunchContext = (
     }
     const app = resolveReadableAppRecord(appId, snapshot.apps)
     if (app === undefined) return yield* Effect.fail(new AppNotFound({ appId }))
-    const appKind = appRecordKind(app)
-    if (appKind !== "steam") {
-      const invalidField =
-        selectedChoice?.["launch-options"] !== undefined
-          ? "launch-options"
-          : selectedChoice?.extra !== undefined
-            ? "extra"
-            : undefined
-      if (invalidField !== undefined) {
-        return yield* Effect.fail(
-          new InvalidAppChoiceForKind({
-            appId,
-            kind: appKind,
-            field: invalidField,
-          }),
-        )
-      }
-    }
-
     const runtimeId = selectedChoice?.runtime ?? app.runtime
     const runtime =
       runtimeId === undefined ? undefined : snapshot.runtimes.get(runtimeId)
@@ -1239,7 +1157,7 @@ export const resolveReadableLaunchContext = (
       readableViewOfUser(user),
       readableViewOfSystem(system),
       readableViewOfApp(app),
-      selectedChoice ? readableViewOfAppChoice(selectedChoice, app) : {},
+      selectedChoice ? readableViewOfAppChoice(selectedChoice) : {},
       readableViewOfRuntime(runtime),
       readableViewOfLibraryItem(item),
       readableViewOfContained(entry),
@@ -1283,7 +1201,6 @@ export const resolveReadableLaunchContext = (
       launchCompanions: folded.launchCompanions ?? {},
       ...(folded.moonlight ? { moonlight: folded.moonlight } : {}),
       ...(folded.plugin ? { plugin: folded.plugin } : {}),
-      ...(folded.steam ? { steam: folded.steam } : {}),
       storage: Object.fromEntries(snapshot.storage),
       ...(folded.env ? { env: folded.env } : {}),
       ...(folded.cwd !== undefined ? { cwd: folded.cwd } : {}),

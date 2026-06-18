@@ -1,14 +1,13 @@
 import { describe, expect, it } from "bun:test"
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { Effect } from "effect"
-
 import {
   KORRI_RETROARCH_APP_ID,
   KORRI_RETROARCH_PLUGIN_ID,
   retroarchReadableLaunchIntegration,
 } from "@product/plugins/retroarch"
+import { Effect } from "effect"
 import type { LibraryItemRecord } from "../config/records/library-item"
 import { LibraryError } from "../library-services"
 import { openKorriLibraryDb } from "./library-db"
@@ -330,7 +329,7 @@ describe("createLibraryRepository — readable playable entries", () => {
     })
   })
 
-  it("launches a first-class Steam app through Steam materialization", async () => {
+  it("fails closed for provider-qualified Steam apps without a registered integration", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)
       await mkdir(join(root, "steam-home"), { recursive: true })
@@ -345,41 +344,41 @@ describe("createLibraryRepository — readable playable entries", () => {
       await Effect.runPromise(
         repo.upsertApp({
           id: "steam",
-          kind: "steam",
+          kind: "@korri:steam",
           command: "steam",
           runtime: "proton-arm64",
-          state: { root: join(root, "steam-home") },
-          extra: { args: ["-silent"] },
-          "launch-options": "wrapper -- %command%",
+          plugin: {
+            "@korri:steam": {
+              state: { root: join(root, "steam-home") },
+              extra: { args: ["-silent"] },
+              "launch-options": "wrapper -- %command%",
+            },
+          },
         }),
       )
 
       await expect(
         Effect.runPromise(repo.canResolveLaunchForPlayable("downwell")),
-      ).resolves.toBe(true)
-
-      const resolved = await Effect.runPromise(
-        repo.resolveLaunchForPlayable("downwell"),
-      )
-
-      expect(resolved.app).toMatchObject({ id: "steam", integration: "steam" })
-      expect(resolved.spec).toEqual({
-        command: "steam",
-        args: ["-applaunch", "360740"],
-      })
-      expect(resolved.artifacts?.root).toBe(join(root, "steam-home"))
+      ).resolves.toBe(false)
+      await expect(
+        Effect.runPromise(repo.resolveLaunchForPlayable("downwell")),
+      ).rejects.toMatchObject({ _tag: "LibraryError", reason: "config" })
     })
   })
 
-  it("does not report first-class Steam releases launchable with non-rungameid targets", async () => {
+  it("does not report provider-qualified Steam releases launchable without an integration", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)
       await Effect.runPromise(
         repo.upsertApp({
           id: "steam",
-          kind: "steam",
+          kind: "@korri:steam",
           command: "steam",
-          state: { root: join(root, "steam-home") },
+          plugin: {
+            "@korri:steam": {
+              state: { root: join(root, "steam-home") },
+            },
+          },
         }),
       )
       await Effect.runPromise(

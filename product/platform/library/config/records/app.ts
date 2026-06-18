@@ -1,10 +1,6 @@
 import { Schema } from "effect"
 
-import {
-  decodeSteamPolicy,
-  InheritableLayer,
-  SteamPolicy,
-} from "../inheritable-fields"
+import { InheritableLayer } from "../inheritable-fields"
 import { LaunchSettings } from "../launch-block"
 import { PresetMapPayload } from "./preset"
 
@@ -18,54 +14,16 @@ const NonEmptyString = Schema.String.pipe(
   ),
 )
 
-export const AppKind = NonEmptyString
+export const AppKind = NonEmptyString.pipe(
+  Schema.check(
+    Schema.makeFilter(value =>
+      value === "steam"
+        ? "kind: steam was retired; use kind: @korri:steam"
+        : undefined,
+    ),
+  ),
+)
 export type AppKind = Schema.Schema.Type<typeof AppKind>
-
-export const STEAM_APP_FIELD_KEYS = [
-  "state",
-  "extra",
-  "launch-options",
-] as const
-
-const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-
-const steamPolicyPayloadFromRecord = (payload: {
-  readonly [key: string]: unknown
-}): Record<string, unknown> => {
-  const policy: Record<string, unknown> = {}
-  for (const key of STEAM_APP_FIELD_KEYS) {
-    if (payload[key] !== undefined) policy[key] = payload[key]
-  }
-  return policy
-}
-
-const isTypedAppPayload = (payload: {
-  readonly id?: string
-  readonly kind?: AppKind
-  readonly settings?: unknown
-  readonly [key: string]: unknown
-}): string | undefined => {
-  const kind = payload.kind
-  const isSteam = kind === "steam"
-  if (!isSteam && payload["launch-options"] !== undefined) {
-    return "Steam field launch-options requires kind: steam"
-  }
-  if (isSteam) {
-    if (
-      !isPlainRecord(payload.state) ||
-      typeof payload.state.root !== "string"
-    ) {
-      return "Steam apps require state.root"
-    }
-    try {
-      decodeSteamPolicy(steamPolicyPayloadFromRecord(payload))
-    } catch (error) {
-      return error instanceof Error ? error.message : String(error)
-    }
-  }
-  return undefined
-}
 
 const AppPayloadBase = Schema.Struct({
   settings: Schema.optional(LaunchSettings),
@@ -87,9 +45,6 @@ const AppPayloadBase = Schema.Struct({
 
   launch: InheritableLayer.fields.launch,
   moonlight: InheritableLayer.fields.moonlight,
-  state: SteamPolicy.fields.state,
-  extra: SteamPolicy.fields.extra,
-  "launch-options": SteamPolicy.fields["launch-options"],
   plugin: InheritableLayer.fields.plugin,
   env: InheritableLayer.fields.env,
   cwd: InheritableLayer.fields.cwd,
@@ -97,15 +52,13 @@ const AppPayloadBase = Schema.Struct({
   patches: InheritableLayer.fields.patches,
 })
 
-export const AppPayload = AppPayloadBase.check(
-  Schema.makeFilter(isTypedAppPayload),
-)
+export const AppPayload = AppPayloadBase
 export type AppPayload = Schema.Schema.Type<typeof AppPayload>
 
 export const AppRecord = Schema.Struct({
   id: NonEmptyString,
   ...AppPayloadBase.fields,
-}).check(Schema.makeFilter(isTypedAppPayload))
+})
 export type AppRecord = Schema.Schema.Type<typeof AppRecord>
 
 export const decodeAppPayload = (input: unknown): AppPayload =>
@@ -116,15 +69,3 @@ export const decodeAppRecord = (input: unknown): AppRecord =>
 
 export const appRecordKind = (app: Pick<AppRecord, "id" | "kind">): AppKind =>
   app.kind ?? "process"
-
-export const isSteamAppRecord = (
-  app: Pick<AppRecord, "id" | "kind">,
-): boolean => appRecordKind(app) === "steam"
-
-export const appSteamPolicyFromRecord = (
-  app: AppRecord,
-): SteamPolicy | undefined => {
-  if (!isSteamAppRecord(app)) return undefined
-  const policy = decodeSteamPolicy(steamPolicyPayloadFromRecord(app))
-  return Object.keys(policy).length > 0 ? policy : undefined
-}

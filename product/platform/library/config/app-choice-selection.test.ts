@@ -5,6 +5,9 @@ import {
   selectAppChoice,
 } from "./app-choice-selection"
 
+const steamProvider = "@korri:steam"
+const steamAppId = "@korri:steam/steam"
+
 describe("app choice selection", () => {
   it("overlays release choices onto system choices by id", () => {
     expect(
@@ -78,28 +81,42 @@ describe("app choice selection", () => {
     ])
   })
 
-  it("merges Steam app choice extras and launch options", () => {
+  it("merges provider plugin payloads by app choice id", () => {
     expect(
       resolveEffectiveAppChoices(
         [
           {
-            id: "steam",
-            extra: { args: ["-silent"] },
-            "launch-options": "wrapper -- %command%",
+            id: steamAppId,
+            plugin: {
+              [steamProvider]: {
+                state: { root: "{storage:@korri:steam/steam}/Steam" },
+                extra: { args: ["-silent"] },
+                "launch-options": "wrapper -- %command%",
+              },
+            },
           },
         ],
         [
           {
-            id: "steam",
-            extra: { args: ["-forcedesktopscaling", "1.25"] },
+            id: steamAppId,
+            plugin: {
+              [steamProvider]: {
+                extra: { args: ["-forcedesktopscaling", "1.25"] },
+              },
+            },
           },
         ],
       ),
     ).toEqual([
       {
-        id: "steam",
-        extra: { args: ["-silent", "-forcedesktopscaling", "1.25"] },
-        "launch-options": "wrapper -- %command%",
+        id: steamAppId,
+        plugin: {
+          [steamProvider]: {
+            state: { root: "{storage:@korri:steam/steam}/Steam" },
+            extra: { args: ["-silent", "-forcedesktopscaling", "1.25"] },
+            "launch-options": "wrapper -- %command%",
+          },
+        },
       },
     ])
   })
