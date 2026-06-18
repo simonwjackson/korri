@@ -836,7 +836,7 @@ describe("PortMaster plugin", () => {
             porter: ["PortMaster"],
             rtr: true,
             exp: false,
-            runtime: ["frt_3.3.4.squashfs"],
+            runtime: ["frt_3.3.4.squashfs", "gmtoolkit.squashfs"],
             reqs: [],
             arch: [],
             availability: "full",
@@ -887,10 +887,10 @@ describe("PortMaster plugin", () => {
       )
       expect(manifest.extracted.runtimeDetections).toContainEqual({
         kind: "portmaster-squashfs-runtime",
-        runtimeNames: ["frt_3.3.4"],
-        families: ["frt"],
+        runtimeNames: ["frt_3.3.4", "gmtoolkit"],
+        families: ["frt", "gmtoolkit"],
         launchScriptPaths: ["A Key.sh"],
-        evidence: ["catalog-runtime:frt_3.3.4"],
+        evidence: ["catalog-runtime:frt_3.3.4", "catalog-runtime:gmtoolkit"],
       })
 
       const prepareLaunch = productPlugin.handlers.find(
@@ -928,6 +928,7 @@ describe("PortMaster plugin", () => {
         "utf8",
       )
       expect(mountWrapper).toContain("frt_3.3.4.squashfs")
+      expect(mountWrapper).toContain("bind_mode=1")
       expect(mountWrapper).toContain(runtimeRoot)
     } finally {
       await rm(root, { recursive: true, force: true })

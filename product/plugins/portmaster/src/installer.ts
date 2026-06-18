@@ -480,8 +480,8 @@ function detectSquashfsRuntimes(input: {
   { readonly kind: "portmaster-squashfs-runtime" }
 > | null {
   const runtimeNames = input.catalogRuntime
+    .filter(isPortMasterRuntimePack)
     .map(runtime => runtime.replace(/\.squashfs$/i, ""))
-    .filter(runtime => runtimeFamily(runtime) !== undefined)
     .sort((left, right) => left.localeCompare(right))
   if (runtimeNames.length === 0) return null
   const uniqueRuntimeNames = [...new Set(runtimeNames)]
@@ -489,25 +489,36 @@ function detectSquashfsRuntimes(input: {
     kind: "portmaster-squashfs-runtime",
     runtimeNames: uniqueRuntimeNames,
     families: [
-      ...new Set(
-        uniqueRuntimeNames
-          .map(runtime => runtimeFamily(runtime))
-          .filter((family): family is string => family !== undefined),
-      ),
+      ...new Set(uniqueRuntimeNames.map(runtime => runtimeFamily(runtime))),
     ].sort((left, right) => left.localeCompare(right)),
     launchScriptPaths: input.launchScripts.map(script => script.path),
     evidence: uniqueRuntimeNames.map(runtime => `catalog-runtime:${runtime}`),
   }
 }
 
-function runtimeFamily(runtime: string): string | undefined {
-  const normalized = runtime.toLowerCase()
+function isPortMasterRuntimePack(runtime: string): boolean {
+  return (
+    runtime.toLowerCase().endsWith(".squashfs") ||
+    runtimeFamily(runtime) !== "other"
+  )
+}
+
+function runtimeFamily(runtime: string): string {
+  const normalized = runtime.toLowerCase().replace(/\.squashfs$/i, "")
   if (normalized.startsWith("frt_")) return "frt"
   if (normalized.startsWith("godot_") || normalized.startsWith("godot-")) {
     return "godot"
   }
   if (normalized.startsWith("weston_pkg_")) return "weston"
-  return undefined
+  if (normalized.startsWith("mono-")) return "mono"
+  if (normalized.startsWith("dotnet-")) return "dotnet"
+  if (normalized.startsWith("zulu")) return "java"
+  if (normalized.startsWith("renpy_")) return "renpy"
+  if (normalized.startsWith("pyxel_")) return "pyxel"
+  if (normalized.startsWith("gmtoolkit")) return "gmtoolkit"
+  if (normalized.startsWith("solarus-")) return "solarus"
+  if (normalized.startsWith("rlvm")) return "rlvm"
+  return "other"
 }
 
 function isExecutablePayload(path: string): boolean {

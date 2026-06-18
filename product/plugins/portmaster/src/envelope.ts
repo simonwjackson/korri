@@ -387,12 +387,22 @@ if [ "$#" -lt 2 ]; then
   echo "korri PortMaster runtime mount: expected source and target" >&2
   exit 64
 fi
+bind_mode=0
 source_path=""
 target_path=""
 for arg in "$@"; do
+  if [ "$arg" = "--bind" ]; then
+    bind_mode=1
+    continue
+  fi
   source_path="$target_path"
   target_path="$arg"
 done
+if [ "$bind_mode" = "1" ]; then
+  mkdir -p "$(dirname "$target_path")"
+  ln -sfn "$source_path" "$target_path"
+  exit 0
+fi
 runtime_name="$(basename "$source_path")"
 runtime_root=""
 case "$runtime_name" in
