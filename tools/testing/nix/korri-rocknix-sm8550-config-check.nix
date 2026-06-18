@@ -226,6 +226,11 @@ let
           cfg.environment.etc."korri/cores/mgba_libretro.so".source or ""
         )
       ))
+      (check "${name}: RetroArch Genesis Plus GX core is exposed at the stable launch path" (
+        lib.hasSuffix "/lib/retroarch/cores/genesis_plus_gx_libretro.so" (
+          cfg.environment.etc."korri/cores/genesis_plus_gx_libretro.so".source or ""
+        )
+      ))
       (check "${name}: RetroArch Mesen core is exposed at the stable launch path" (
         lib.hasSuffix "/lib/retroarch/cores/mesen_libretro.so" (
           cfg.environment.etc."korri/cores/mesen_libretro.so".source or ""
@@ -236,26 +241,28 @@ let
           cfg.environment.etc."korri/cores/bsnes_libretro.so".source or ""
         )
       ))
-      (check "${name}: compositor RetroArch closure contains mGBA, Mesen, and bsnes cores" (
+      (check "${name}: compositor RetroArch closure contains mGBA, Genesis Plus GX, Mesen, and bsnes cores" (
         let
           wrappers = findRetroarchWrappers compositor.path;
           cores = retroarchCoresFor compositor.path;
         in
         builtins.length wrappers == 1
-        && builtins.length cores == 3
+        && builtins.length cores == 4
         && hasCore "mgba" cores
+        && hasCore "genesis-plus-gx" cores
         && hasCore "mesen" cores
         && hasCore "bsnes" cores
       ))
-      (check "${name}: sessiond RetroArch closure contains mGBA, Mesen, and bsnes cores" (
+      (check "${name}: sessiond RetroArch closure contains mGBA, Genesis Plus GX, Mesen, and bsnes cores" (
         let
           sessiondPath = sessiondUnit.path or [ ];
           wrappers = findRetroarchWrappers sessiondPath;
           cores = retroarchCoresFor sessiondPath;
         in
         builtins.length wrappers == 1
-        && builtins.length cores == 3
+        && builtins.length cores == 4
         && hasCore "mgba" cores
+        && hasCore "genesis-plus-gx" cores
         && hasCore "mesen" cores
         && hasCore "bsnes" cores
       ))

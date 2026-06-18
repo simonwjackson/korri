@@ -352,28 +352,28 @@ let
       builtins.all (file: !(sourceContainsHardwareFact file)) hardwareFactSourceFiles
     ))
     # Kiosk RetroArch closure-shape: the RetroArch plugin owns the bare
-    # RetroArch binary wrapper and ships the first-party mGBA, Mesen, and bsnes
+    # RetroArch binary wrapper and ships the first-party mGBA, Genesis Plus GX, Mesen, and bsnes
     # libretro cores by default.
-    (check "x86 kiosk RetroArch closure must contain exactly three libretro cores" (
-      builtins.length (retroarchCoresFor kiosk) == 3
+    (check "x86 kiosk RetroArch closure must contain exactly four libretro cores" (
+      builtins.length (retroarchCoresFor kiosk) == 4
     ))
-    (check "x86 kiosk RetroArch closure must contain mGBA, Mesen, and bsnes" (
+    (check "x86 kiosk RetroArch closure must contain mGBA, Genesis Plus GX, Mesen, and bsnes" (
       let cores = retroarchCoresFor kiosk; in
-      hasRetroarchCore "mgba" cores && hasRetroarchCore "mesen" cores && hasRetroarchCore "bsnes" cores
+      hasRetroarchCore "mgba" cores && hasRetroarchCore "genesis-plus-gx" cores && hasRetroarchCore "mesen" cores && hasRetroarchCore "bsnes" cores
     ))
-    (check "Product live USB RetroArch closure must contain exactly three libretro cores" (
-      builtins.length (retroarchCoresFor liveUsb) == 3
+    (check "Product live USB RetroArch closure must contain exactly four libretro cores" (
+      builtins.length (retroarchCoresFor liveUsb) == 4
     ))
-    (check "Product live USB RetroArch closure must contain mGBA, Mesen, and bsnes" (
+    (check "Product live USB RetroArch closure must contain mGBA, Genesis Plus GX, Mesen, and bsnes" (
       let cores = retroarchCoresFor liveUsb; in
-      hasRetroarchCore "mgba" cores && hasRetroarchCore "mesen" cores && hasRetroarchCore "bsnes" cores
+      hasRetroarchCore "mgba" cores && hasRetroarchCore "genesis-plus-gx" cores && hasRetroarchCore "mesen" cores && hasRetroarchCore "bsnes" cores
     ))
-    (check "Developer live USB RetroArch closure must contain exactly three libretro cores" (
-      builtins.length (retroarchCoresFor liveUsbDeveloper) == 3
+    (check "Developer live USB RetroArch closure must contain exactly four libretro cores" (
+      builtins.length (retroarchCoresFor liveUsbDeveloper) == 4
     ))
-    (check "Developer live USB RetroArch closure must contain mGBA, Mesen, and bsnes" (
+    (check "Developer live USB RetroArch closure must contain mGBA, Genesis Plus GX, Mesen, and bsnes" (
       let cores = retroarchCoresFor liveUsbDeveloper; in
-      hasRetroarchCore "mgba" cores && hasRetroarchCore "mesen" cores && hasRetroarchCore "bsnes" cores
+      hasRetroarchCore "mgba" cores && hasRetroarchCore "genesis-plus-gx" cores && hasRetroarchCore "mesen" cores && hasRetroarchCore "bsnes" cores
     ))
   ];
   failures = builtins.filter (candidate: !candidate.assertion) checks;

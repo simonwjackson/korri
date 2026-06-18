@@ -19,6 +19,8 @@ import { KORRI_PSYCHO_WALUIGI_PLUGIN_ID } from "./psycho-waluigi"
 import {
   KORRI_RETROARCH_APP_ID,
   KORRI_RETROARCH_GBA_SYSTEM_ID,
+  KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
+  KORRI_RETROARCH_GENESIS_SYSTEM_ID,
   KORRI_RETROARCH_MESEN_RUNTIME_ID,
   KORRI_RETROARCH_MGBA_RUNTIME_ID,
   KORRI_RETROARCH_NES_SYSTEM_ID,
@@ -76,7 +78,7 @@ describe("first-party plugins", () => {
     })
   })
 
-  it("enables RetroArch-owned GBA, NES, SNES, and core runtimes when requested", () => {
+  it("enables RetroArch-owned GBA, Genesis, NES, SNES, and core runtimes when requested", () => {
     const registry = createFirstPartyPluginRegistryFromEnv({
       KORRI_ENABLED_PLUGINS: KORRI_RETROARCH_PLUGIN_ID,
     })
@@ -98,6 +100,25 @@ describe("first-party plugins", () => {
       kind: "libretro-core",
       path: "/etc/korri/cores/mgba_libretro.so",
       supports: { systems: [KORRI_RETROARCH_GBA_SYSTEM_ID] },
+    })
+    expect(
+      registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/genesis`],
+    ).toMatchObject({
+      id: KORRI_RETROARCH_GENESIS_SYSTEM_ID,
+      apps: [
+        {
+          id: KORRI_RETROARCH_APP_ID,
+          runtime: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
+        },
+      ],
+    })
+    expect(
+      registry.runtimes[`${KORRI_RETROARCH_PLUGIN_ID}/genesis-plus-gx`],
+    ).toMatchObject({
+      id: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
+      kind: "libretro-core",
+      path: "/etc/korri/cores/genesis_plus_gx_libretro.so",
+      supports: { systems: [KORRI_RETROARCH_GENESIS_SYSTEM_ID] },
     })
     expect(registry.systems[`${KORRI_RETROARCH_PLUGIN_ID}/nes`]).toMatchObject({
       id: KORRI_RETROARCH_NES_SYSTEM_ID,

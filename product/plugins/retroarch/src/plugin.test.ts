@@ -4,6 +4,8 @@ import { decodeRuntimeRecord } from "@platform/library/config/records/runtime"
 import {
   KORRI_RETROARCH_APP_ID,
   KORRI_RETROARCH_GBA_SYSTEM_ID,
+  KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
+  KORRI_RETROARCH_GENESIS_SYSTEM_ID,
   KORRI_RETROARCH_MESEN_RUNTIME_ID,
   KORRI_RETROARCH_MGBA_RUNTIME_ID,
   KORRI_RETROARCH_NES_SYSTEM_ID,
@@ -47,6 +49,32 @@ describe("RetroArch plugin", () => {
       app: KORRI_RETROARCH_APP_ID,
       path: "/etc/korri/cores/mgba_libretro.so",
       supports: { systems: [KORRI_RETROARCH_GBA_SYSTEM_ID] },
+    })
+  })
+
+  it("contributes Genesis Plus GX as a RetroArch-owned Genesis runtime", () => {
+    expect(KORRI_RETROARCH_GENESIS_SYSTEM_ID).toBe("genesis")
+    expect(KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID).toBe(
+      "@korri:retroarch/genesis-plus-gx",
+    )
+    expect(retroarchPlugin.contributes.config.systems?.genesis).toMatchObject({
+      id: KORRI_RETROARCH_GENESIS_SYSTEM_ID,
+      title: "Sega Genesis",
+      apps: [
+        {
+          id: KORRI_RETROARCH_APP_ID,
+          runtime: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
+        },
+      ],
+    })
+    expect(
+      retroarchPlugin.contributes.config.runtimes?.["genesis-plus-gx"],
+    ).toMatchObject({
+      id: KORRI_RETROARCH_GENESIS_PLUS_GX_RUNTIME_ID,
+      kind: "libretro-core",
+      app: KORRI_RETROARCH_APP_ID,
+      path: "/etc/korri/cores/genesis_plus_gx_libretro.so",
+      supports: { systems: [KORRI_RETROARCH_GENESIS_SYSTEM_ID] },
     })
   })
 
