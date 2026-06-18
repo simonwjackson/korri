@@ -53,6 +53,7 @@ describe("first-party Nix plugin composition", () => {
       expect.arrayContaining([
         "@korri:gamescope",
         "@korri:pico8",
+        "@korri:portmaster",
         "@korri:ryubing",
       ]),
     )
@@ -61,6 +62,7 @@ describe("first-party Nix plugin composition", () => {
         "gamescope-korri",
         "korri-gamescope-control-bridge",
         "libretro-fake-08",
+        "portmaster",
         "ryubing-korri",
       ]),
     )
@@ -73,7 +75,7 @@ describe("first-party Nix plugin composition", () => {
     expect(enabled.ids.length).toBeGreaterThan(1)
     expect(enabled.packages.length).toBeGreaterThan(2)
     expect(enabled.checks).toEqual(
-      expect.arrayContaining(["libretro-fake-08-check"]),
+      expect.arrayContaining(["libretro-fake-08-check", "portmaster-check"]),
     )
     expect(enabled.checks.length).toBeGreaterThan(0)
     expect(enabled.overlayCount).toBeGreaterThan(0)

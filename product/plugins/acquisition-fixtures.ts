@@ -1,5 +1,5 @@
 import { AcquisitionError } from "@platform/acquisition/errors"
-import type { ProviderId } from "@platform/plugin"
+import type { PluginConfigContributions, ProviderId } from "@platform/plugin"
 import { plugin } from "@platform/plugin"
 import type {
   ProviderClaim,
@@ -23,6 +23,8 @@ interface FixtureEntry {
   readonly aliases?: readonly string[]
 }
 
+export const KORRI_PORTMASTER_PLUGIN_ID = "@korri:portmaster" as const
+
 interface FixturePluginOptions {
   readonly providerId: string
   readonly displayName: string
@@ -34,6 +36,7 @@ interface FixturePluginOptions {
   readonly unknownDetailsMessage?: string
   readonly unknownDownloadMessage?: (id: string) => string
   readonly name?: string
+  readonly config?: Omit<PluginConfigContributions, "providers">
 }
 
 function fixtureAcquisitionPlugin({
@@ -47,6 +50,7 @@ function fixtureAcquisitionPlugin({
   unknownDetailsMessage,
   unknownDownloadMessage = id => unknownMessage(providerId, id),
   name = providerId.split(":")[1] ?? providerId,
+  config = {},
 }: FixturePluginOptions) {
   const byId = new Map(entries.map(entry => [entry.id, entry]))
   const byAlias = new Map(
@@ -65,6 +69,7 @@ function fixtureAcquisitionPlugin({
     title: displayName,
     contributes: {
       config: {
+        ...config,
         providers: {
           [providerId]: {
             legalRisk,
@@ -761,11 +766,24 @@ export const itchioFixturePlugin = fixtureAcquisitionPlugin({
 })
 
 export const portmasterFixturePlugin = fixtureAcquisitionPlugin({
-  providerId: "@korri:portmaster",
+  providerId: KORRI_PORTMASTER_PLUGIN_ID,
   displayName: "PortMaster",
   legalRisk: "low",
   entries: portmasterEntries,
   parseCandidateUrl: parsePortmasterUrl,
+  config: {
+    modules: {
+      portmaster: {
+        id: "portmaster",
+        kind: "executable",
+        fulfill: {
+          provider: "nix",
+          installable: ".#portmaster",
+          binary: "portmaster",
+        },
+      },
+    },
+  },
 })
 
 export const puzzleScriptFixturePlugin = fixtureAcquisitionPlugin({
