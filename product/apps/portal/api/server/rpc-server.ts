@@ -2,7 +2,7 @@ import { makeLiveAcquisitionLayer } from "@platform/acquisition/acquisition-serv
 import { createStaticAcquisitionPluginRegistry } from "@platform/acquisition/plugin-loader"
 import { approvedTypeScriptPluginDefinitions } from "@platform/acquisition/plugins/approved"
 import { BatchJsonSerializationLive } from "@platform/api/rpc/serialization"
-import { KorriControlLayerLive } from "@platform/control/korri-control-live"
+import { KorriControlLayerLiveWithPlugins } from "@platform/control/korri-control-live"
 import { FeatureGatesMiddlewareLive } from "@platform/gates/middleware"
 import { GameAssetsLayerLive } from "@platform/library/game-assets/game-assets-service"
 import { LauncherLayerLive } from "@platform/library/launcher-layer-live"
@@ -15,6 +15,7 @@ import { makeFilePeerStore } from "@product/apps/portal/peers/peer-store"
 import { Effect, Exit, Layer, Scope } from "effect"
 import * as HttpEffect from "effect/unstable/http/HttpEffect"
 import { RpcServer } from "effect/unstable/rpc"
+import { createFirstPartyPluginRegistryFromEnv } from "../../../../plugins"
 import { PluginLibrarySourceLayerLive } from "../../../../plugins/library-source-layer"
 import { handleAcquisitionDetails } from "../acquisition/details.rpc-handler"
 import { handleAcquisitionPlugins } from "../acquisition/plugins.rpc-handler"
@@ -38,12 +39,10 @@ import { handleSourceStatus } from "../source/status.rpc-handler"
 import { handleSteamStatus } from "../steam/status.rpc-handler"
 import { handlePrepareStream } from "../stream/prepare.rpc-handler"
 import { handleGetStreamControlConfig } from "../stream-control/get-config.rpc-handler"
+import { handleGetStreamControlControls } from "../stream-control/get-controls.rpc-handler"
 import { handleGetStreamControlState } from "../stream-control/get-state.rpc-handler"
-import { StreamControlLayerLive } from "../stream-control/service"
-import { handleSetGamescopeFilter } from "../stream-control/set-gamescope-filter.rpc-handler"
-import { handleSetGamescopeFps } from "../stream-control/set-gamescope-fps.rpc-handler"
-import { handleSetGamescopeMode } from "../stream-control/set-gamescope-mode.rpc-handler"
-import { handleSetGamescopeSharpness } from "../stream-control/set-gamescope-sharpness.rpc-handler"
+import { StreamControlLayerLiveWithPlugins } from "../stream-control/service"
+import { handleSetStreamControlAction } from "../stream-control/set-action.rpc-handler"
 import { handleSetMoonlightBitrate } from "../stream-control/set-moonlight-bitrate.rpc-handler"
 import { handleSetMoonlightFps } from "../stream-control/set-moonlight-fps.rpc-handler"
 import { handleSetMoonlightResolution } from "../stream-control/set-moonlight-resolution.rpc-handler"
@@ -82,7 +81,9 @@ const AcquisitionLayerLive = makeLiveAcquisitionLayer({
   ),
 })
 
-const KorriControlInfrastructureLive = KorriControlLayerLive.pipe(
+const KorriControlInfrastructureLive = KorriControlLayerLiveWithPlugins(
+  createFirstPartyPluginRegistryFromEnv(process.env),
+).pipe(
   Layer.provideMerge(
     Layer.mergeAll(PluginLibrarySourceLayerLive, LauncherLayerLive),
   ),
@@ -104,7 +105,9 @@ const LibraryInfrastructureLive = Layer.mergeAll(
   GameAssetsLayerLive,
   ForegroundSessionHostLive,
   RemoteStreamPrepareLive,
-  StreamControlLayerLive,
+  StreamControlLayerLiveWithPlugins(
+    createFirstPartyPluginRegistryFromEnv(process.env),
+  ),
   AcquisitionLayerLive,
 )
 
@@ -131,14 +134,12 @@ const ServerHandlersLive = serverRpcGroup.toLayer(
     "app.server.stream.prepare": handleServerPrepareStream,
     "app.stream.prepare": handlePrepareStream,
     "app.stream-control.config.get": handleGetStreamControlConfig,
+    "app.stream-control.controls.get": handleGetStreamControlControls,
     "app.stream-control.state.get": handleGetStreamControlState,
     "app.stream-control.moonlight-bitrate.set": handleSetMoonlightBitrate,
     "app.stream-control.moonlight-fps.set": handleSetMoonlightFps,
     "app.stream-control.moonlight-resolution.set": handleSetMoonlightResolution,
-    "app.stream-control.gamescope-mode.set": handleSetGamescopeMode,
-    "app.stream-control.gamescope-fps.set": handleSetGamescopeFps,
-    "app.stream-control.gamescope-filter.set": handleSetGamescopeFilter,
-    "app.stream-control.gamescope-sharpness.set": handleSetGamescopeSharpness,
+    "app.stream-control.action.set": handleSetStreamControlAction,
   }),
 )
 

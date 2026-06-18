@@ -20,6 +20,17 @@ export function createEvierStreamControlRpcClient(): StreamControlClient {
           Effect.flatMap(client => client["app.stream-control.state.get"]({})),
         ),
       ),
+    applyAction: payload =>
+      runAppRpc(
+        RpcClient.make(appRpcGroup).pipe(
+          Effect.flatMap(client =>
+            client["app.stream-control.action.set"]({
+              action: payload.action,
+              payload: payload.payload,
+            }),
+          ),
+        ),
+      ),
     setBrightness: payload =>
       runAppRpc(
         RpcClient.make(appRpcGroup).pipe(
@@ -58,66 +69,6 @@ export function createEvierStreamControlRpcClient(): StreamControlClient {
             client["app.stream-control.moonlight-resolution.set"]({
               width: payload.width,
               height: payload.height,
-            }),
-          ),
-        ),
-      ),
-    setLinkedFps: payload =>
-      runAppRpc(
-        RpcClient.make(appRpcGroup).pipe(
-          Effect.flatMap(client =>
-            client["app.stream-control.linked-fps.set"]({ fps: payload.fps }),
-          ),
-        ),
-      ),
-    setLinkedResolution: payload =>
-      runAppRpc(
-        RpcClient.make(appRpcGroup).pipe(
-          Effect.flatMap(client =>
-            client["app.stream-control.linked-resolution.set"]({
-              width: payload.width,
-              height: payload.height,
-            }),
-          ),
-        ),
-      ),
-    setGamescopeMode: payload =>
-      runAppRpc(
-        RpcClient.make(appRpcGroup).pipe(
-          Effect.flatMap(client =>
-            client["app.stream-control.gamescope-mode.set"]({
-              width: payload.width,
-              height: payload.height,
-            }),
-          ),
-        ),
-      ),
-    setGamescopeFps: payload =>
-      runAppRpc(
-        RpcClient.make(appRpcGroup).pipe(
-          Effect.flatMap(client =>
-            client["app.stream-control.gamescope-fps.set"]({
-              fps: payload.fps,
-            }),
-          ),
-        ),
-      ),
-    setGamescopeFilter: payload =>
-      runAppRpc(
-        RpcClient.make(appRpcGroup).pipe(
-          Effect.flatMap(client =>
-            client["app.stream-control.gamescope-filter.set"]({
-              filter: payload.filter,
-            }),
-          ),
-        ),
-      ),
-    setGamescopeSharpness: payload =>
-      runAppRpc(
-        RpcClient.make(appRpcGroup).pipe(
-          Effect.flatMap(client =>
-            client["app.stream-control.gamescope-sharpness.set"]({
-              sharpness: payload.sharpness,
             }),
           ),
         ),

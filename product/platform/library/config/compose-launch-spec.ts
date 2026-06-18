@@ -13,9 +13,9 @@
  * `MissingRequiredValue`. The `policy.allowedCommands` whitelist is
  * enforced - a command not on the list fails with `DisallowedCommand`.
  *
- * This is *not* where gamescope wrapping happens. The launch intent
- * carries the resolved gamescope policy separately, and the runner
- * applies it around the spec at execution time.
+ * This is *not* where launch companion wrapping happens. The launch intent
+ * carries the resolved companion map separately, and provider handlers apply
+ * companion behavior around the spec at execution time.
  *
  * Replaces the retired launcher-config substitution logic with Effect
  * error flow and consumes the new resolved-

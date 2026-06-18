@@ -22,6 +22,7 @@ const launch: LaunchSpec = {
   env: { KORRI_TEST: "1" },
   cwd: "/tmp",
 }
+const companionProvider = "@test:wrapper" as const
 
 describe("game stream launch intent store", () => {
   it("uses the runtime directory as the default intent path", () => {
@@ -91,58 +92,35 @@ describe("game stream launch intent store", () => {
     await claim?.complete()
   })
 
-  it("preserves the resolved Gamescope wrapper command", () => {
+  it("preserves resolved launch companion policy", () => {
+    const policy = {
+      enable: true,
+      command: "/run/current-system/sw/bin/korri-wrapper",
+    }
     const intent = createLaunchIntent(launch, {
-      gamescope: {
-        enable: true,
-        command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
-      },
+      launchCompanions: { [companionProvider]: policy },
     })
 
-    expect(intent.gamescope).toEqual({
-      enable: true,
-      command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
+    expect(intent.launchCompanions).toEqual({
+      [companionProvider]: policy,
     })
   })
 
-  it("preserves resolved app integration metadata separately from Gamescope policy", () => {
+  it("preserves resolved app integration metadata separately from launch companion policy", () => {
     const intent = createLaunchIntent(launch, {
-      gamescope: { enable: true },
+      launchCompanions: { [companionProvider]: { enable: true } },
       appIntegration: "steam",
     })
 
-    expect(intent.gamescope).toEqual({ enable: true })
+    expect(intent.launchCompanions).toEqual({
+      [companionProvider]: { enable: true },
+    })
     expect(intent.appIntegration).toBe("steam")
   })
 
-  it("preserves an explicit enable-only Gamescope policy", () => {
-    const intent = createLaunchIntent(launch, {
-      gamescope: { enable: true },
-    })
-
-    expect(intent.gamescope).toEqual({ enable: true })
-  })
-
-  it("preserves structural-only Gamescope policy opinions", () => {
-    const policies = [
-      { backend: { type: "sdl" as const } },
-      { scaling: { filter: "fsr" as const } },
-      { display: { nested: { width: 640, height: 480 } } },
-      { debug: { hud: true } },
-    ]
-
-    for (const gamescope of policies) {
-      const intent = createLaunchIntent(launch, { gamescope })
-      expect(intent.gamescope).toEqual(gamescope)
-    }
-  })
-
-  it("drops empty Gamescope policies without structural opinions", () => {
+  it("drops empty launch companion maps", () => {
     expect(
-      createLaunchIntent(launch, { gamescope: {} }).gamescope,
-    ).toBeUndefined()
-    expect(
-      createLaunchIntent(launch, { gamescope: { extraArgs: [] } }).gamescope,
+      createLaunchIntent(launch, { launchCompanions: {} }).launchCompanions,
     ).toBeUndefined()
   })
 
@@ -178,7 +156,7 @@ describe("game stream launch intent store", () => {
     await expect(store.claim()).resolves.toBeUndefined()
   })
 
-  it("rejects old flat Gamescope intent fields", async () => {
+  it("ignores stale retired launch companion fields", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-intent-"))
     const intentPath = join(dir, "next-launch.json")
     const store = createFileGameStreamLaunchIntentStore(intentPath)
@@ -186,12 +164,13 @@ describe("game stream launch intent store", () => {
       intentPath,
       JSON.stringify({
         ...createLaunchIntent(launch),
-        gamescope: { enabled: true },
+        retiredWrapper: { enabled: true },
       }),
       { mode: 0o600 },
     )
 
-    await expect(store.claim()).rejects.toThrow(/enabled/)
+    const claim = await store.claim()
+    expect(claim?.intent.launchCompanions).toBeUndefined()
   })
 
   it("rejects relative launch artifact metadata", async () => {

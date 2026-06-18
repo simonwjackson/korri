@@ -1,8 +1,4 @@
-import { RpcClientLive } from "@platform/api/rpc/client"
-import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
-import { serverRpcGroup } from "@product/apps/portal/api/server/rpc-group"
-import { Effect, type Scope } from "effect"
-import { RpcClient } from "effect/unstable/rpc"
+import type { KorriPlatformBridge } from "@platform/theme/bridge"
 import {
   type ReactNode,
   useCallback,
@@ -24,9 +20,11 @@ import {
 const LIVE_REFRESH_MS = 1_500
 
 export function VigieLiveCockpitRoot({
+  bridge,
   fixture,
   children,
 }: {
+  readonly bridge: KorriPlatformBridge
   readonly fixture: CockpitFixture
   readonly children: ReactNode
 }) {
@@ -43,7 +41,7 @@ export function VigieLiveCockpitRoot({
       if (refreshInFlight) return
       refreshInFlight = true
       try {
-        const next = await fetchVigieLiveSnapshot()
+        const next = await fetchVigieLiveSnapshot(bridge)
         if (!disposed) setSnapshot(next)
       } finally {
         refreshInFlight = false
@@ -56,7 +54,7 @@ export function VigieLiveCockpitRoot({
       disposed = true
       window.clearInterval(timer)
     }
-  }, [])
+  }, [bridge])
 
   const liveFixture = useMemo(
     () =>
@@ -70,24 +68,19 @@ export function VigieLiveCockpitRoot({
     if (!window.confirm("Stop the active Korri foreground session?")) return
     setSessionCommandStatus("pending")
     setSessionCommandMessage("Stopping active session…")
-    runServerRpc(
-      RpcClient.make(serverRpcGroup).pipe(
-        Effect.flatMap(client =>
-          client["app.session.stop"]({ force: false, confirmed: true }),
-        ),
-      ),
-    )
+    bridge.api
+      .rpc("app.session.stop", { force: false, confirmed: true })
       .then(response => {
         setSessionCommandStatus("applied")
         setSessionCommandMessage(stopSessionMessage(response))
-        return fetchVigieLiveSnapshot()
+        return fetchVigieLiveSnapshot(bridge)
       })
       .then(next => setSnapshot(next))
       .catch(error => {
         setSessionCommandStatus("failed")
         setSessionCommandMessage(errorMessage(error))
       })
-  }, [])
+  }, [bridge])
 
   return (
     <VigieCockpitRoot
@@ -101,7 +94,9 @@ export function VigieLiveCockpitRoot({
   )
 }
 
-export async function fetchVigieLiveSnapshot(): Promise<VigieLiveSnapshot> {
+export async function fetchVigieLiveSnapshot(
+  bridge: KorriPlatformBridge,
+): Promise<VigieLiveSnapshot> {
   const observedAt = new Date().toISOString()
   const [
     server,
@@ -113,66 +108,14 @@ export async function fetchVigieLiveSnapshot(): Promise<VigieLiveSnapshot> {
     streamControls,
     streamState,
   ] = await Promise.all([
-    settle(
-      runServerRpc(
-        RpcClient.make(serverRpcGroup).pipe(
-          Effect.flatMap(client => client["app.server.status"]({})),
-        ),
-      ),
-    ),
-    settle(
-      runServerRpc(
-        RpcClient.make(serverRpcGroup).pipe(
-          Effect.flatMap(client => client["app.session.status"]({})),
-        ),
-      ),
-    ),
-    settle(
-      runAppRpc(
-        RpcClient.make(appRpcGroup).pipe(
-          Effect.flatMap(client => client["app.source.status"]({})),
-        ),
-      ),
-    ),
-    settle(
-      runAppRpc(
-        RpcClient.make(appRpcGroup).pipe(
-          Effect.flatMap(client => client["app.steam.status"]({})),
-        ),
-      ),
-    ),
-    settle(
-      runAppRpc(
-        RpcClient.make(appRpcGroup).pipe(
-          Effect.flatMap(client =>
-            client["app.catalog.snapshot"]({ scope: "fabric" }),
-          ),
-        ),
-      ),
-    ),
-    settle(
-      runAppRpc(
-        RpcClient.make(appRpcGroup).pipe(
-          Effect.flatMap(client => client["app.stream-control.config.get"]({})),
-        ),
-      ),
-    ),
-    settle(
-      runAppRpc(
-        RpcClient.make(appRpcGroup).pipe(
-          Effect.flatMap(client =>
-            client["app.stream-control.controls.get"]({}),
-          ),
-        ),
-      ),
-    ),
-    settle(
-      runAppRpc(
-        RpcClient.make(appRpcGroup).pipe(
-          Effect.flatMap(client => client["app.stream-control.state.get"]({})),
-        ),
-      ),
-    ),
+    settle(bridge.api.rpc("app.server.status", {})),
+    settle(bridge.api.rpc("app.session.status", {})),
+    settle(bridge.api.rpc("app.source.status", {})),
+    settle(bridge.api.rpc("app.steam.status", {})),
+    settle(bridge.api.rpc("app.catalog.snapshot", { scope: "fabric" })),
+    settle(bridge.api.rpc("app.stream-control.config.get", {})),
+    settle(bridge.api.rpc("app.stream-control.controls.get", {})),
+    settle(bridge.api.rpc("app.stream-control.state.get", {})),
   ])
 
   return {
@@ -195,23 +138,7 @@ export async function fetchVigieLiveSnapshot(): Promise<VigieLiveSnapshot> {
     ...(streamState.ok
       ? { streamState: streamState.value }
       : { streamStateError: streamState.error }),
-  }
-}
-
-function runAppRpc<T>(
-  effect: Effect.Effect<T, unknown, Scope.Scope | RpcClient.Protocol>,
-): Promise<T> {
-  return Effect.runPromise(
-    Effect.scoped(effect.pipe(Effect.provide(RpcClientLive))),
-  )
-}
-
-function runServerRpc<T>(
-  effect: Effect.Effect<T, unknown, Scope.Scope | RpcClient.Protocol>,
-): Promise<T> {
-  return Effect.runPromise(
-    Effect.scoped(effect.pipe(Effect.provide(RpcClientLive))),
-  )
+  } as VigieLiveSnapshot
 }
 
 type Settled<T> =

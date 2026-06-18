@@ -12,6 +12,7 @@ export type {
 export {
   DEFAULT_GAMESCOPE_POLICY,
   decodeGamescopePolicy,
+  foldGamescopePolicy,
   GamescopeBackend,
   GamescopeFilter,
   GamescopeGenerateDrmMode,

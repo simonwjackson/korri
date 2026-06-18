@@ -7,8 +7,8 @@ import {
   type ResolutionError,
 } from "./errors"
 import {
-  type GamescopePolicy,
-  gamescopePolicyFromLaunch,
+  type LaunchCompanionMap,
+  launchCompanionsFromLaunch,
   type MoonlightPolicy,
   type RetroArchPolicy,
   type RyubingPolicy,
@@ -47,7 +47,7 @@ export interface AppDescriptor {
   readonly policy?: LauncherRecord["policy"]
   readonly settings?: LaunchSettings
   readonly knownSettings?: readonly string[]
-  readonly gamescope?: GamescopePolicy
+  readonly launchCompanions?: LaunchCompanionMap
   readonly moonlight?: MoonlightPolicy
   readonly retroarch?: RetroArchPolicy
   readonly ryubing?: RyubingPolicy
@@ -116,9 +116,6 @@ const builtInApps: Readonly<Record<string, AppDescriptor>> = {
     command: "steam",
     args: [],
     systems: [],
-    gamescope: {
-      enable: true,
-    },
   },
 }
 
@@ -143,12 +140,12 @@ const mergePolicyDefaults = <T>(base: T, override: T): T => {
   return override
 }
 
-export const mergeBuiltInAppGamescopePolicy = (
-  base: GamescopePolicy | undefined,
-  override: GamescopePolicy | undefined,
-): GamescopePolicy | undefined => {
+export const mergeAppLaunchCompanions = (
+  base: LaunchCompanionMap | undefined,
+  override: LaunchCompanionMap | undefined,
+): LaunchCompanionMap | undefined => {
   if (override === undefined) return base
-  if (base === undefined || override.enable === false) return override
+  if (base === undefined) return override
   return mergePolicyDefaults(base, override)
 }
 
@@ -208,16 +205,19 @@ const mergeDescriptor = (
   appOverride: AppRecord | undefined,
   legacyLauncher: LauncherRecord | undefined,
 ): AppDescriptor => {
-  const appOverrideGamescope = appOverride
-    ? gamescopePolicyFromLaunch(appOverride)
+  const appOverrideCompanions = appOverride
+    ? launchCompanionsFromLaunch(appOverride)
     : undefined
-  const legacyLauncherGamescope = legacyLauncher
-    ? gamescopePolicyFromLaunch(legacyLauncher)
+  const legacyLauncherCompanions = legacyLauncher
+    ? launchCompanionsFromLaunch(legacyLauncher)
     : undefined
-  const gamescope =
-    appOverrideGamescope !== undefined
-      ? mergeBuiltInAppGamescopePolicy(base.gamescope, appOverrideGamescope)
-      : mergeBuiltInAppGamescopePolicy(base.gamescope, legacyLauncherGamescope)
+  const launchCompanions =
+    appOverrideCompanions !== undefined
+      ? mergeAppLaunchCompanions(base.launchCompanions, appOverrideCompanions)
+      : mergeAppLaunchCompanions(
+          base.launchCompanions,
+          legacyLauncherCompanions,
+        )
   return {
     ...base,
     capabilities: base.capabilities,
@@ -228,7 +228,7 @@ const mergeDescriptor = (
           systems: legacyLauncher.systems,
           policy: legacyLauncher.policy,
           presets: legacyLauncher.presets ?? base.presets,
-          gamescope,
+          launchCompanions,
           moonlight: legacyLauncher.moonlight ?? base.moonlight,
           retroarch: legacyLauncher.retroarch ?? base.retroarch,
           env: legacyLauncher.env ?? base.env,
@@ -254,7 +254,7 @@ const mergeDescriptor = (
     ...(appOverride?.systems ? { systems: appOverride.systems } : {}),
     ...(appOverride?.policy ? { policy: appOverride.policy } : {}),
     ...(appOverride?.presets ? { presets: appOverride.presets } : {}),
-    ...(gamescope ? { gamescope } : {}),
+    ...(launchCompanions ? { launchCompanions } : {}),
     ...(appOverride?.moonlight ? { moonlight: appOverride.moonlight } : {}),
     ...(appOverride
       ? {
@@ -279,7 +279,7 @@ const launcherToDescriptor = (launcher: LauncherRecord): AppDescriptor => ({
   args: launcher.args,
   systems: launcher.systems,
   policy: launcher.policy,
-  gamescope: gamescopePolicyFromLaunch(launcher),
+  launchCompanions: launchCompanionsFromLaunch(launcher),
   moonlight: launcher.moonlight,
   retroarch: launcher.retroarch,
   ryubing: launcher.ryubing,

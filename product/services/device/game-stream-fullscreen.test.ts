@@ -1,8 +1,6 @@
 import { describe, expect, it } from "bun:test"
-import type { LaunchSpec } from "@platform/library/launcher"
 import {
   buildStreamSurfaceRepairCommands,
-  composeGamescopeLaunchSpec,
   findStreamSurfaceWindows,
   probeSwayTree,
   readCurrentStreamSurfaceGeometry,
@@ -12,15 +10,13 @@ import {
 } from "./game-stream-fullscreen"
 import type { SwayNode } from "./sessiond-sway"
 
-const game: LaunchSpec = {
-  command: "/nix/store/demo/bin/neverball",
-  args: ["--level", "one"],
-  env: { DEMO: "1" },
-  cwd: "/tmp",
-}
-
 const emptyTree: SwayNode = { id: 1, nodes: [] }
-const gamescopeTree: SwayNode = {
+const streamSurfaceSelector = {
+  appIds: ["stream-surface"],
+  titles: ["stream-surface"],
+  classes: ["stream-surface", "StreamSurface"],
+}
+const streamSurfaceTree: SwayNode = {
   id: 1,
   nodes: [
     {
@@ -28,13 +24,13 @@ const gamescopeTree: SwayNode = {
       nodes: [
         {
           id: 42,
-          app_id: "gamescope",
+          app_id: "stream-surface",
           focused: false,
           fullscreen_mode: 0,
-          name: "gamescope",
+          name: "stream-surface",
           window_properties: {
             title: "[weird]; title",
-            class: "Gamescope",
+            class: "StreamSurface",
           },
         },
       ],
@@ -42,102 +38,18 @@ const gamescopeTree: SwayNode = {
   ],
 }
 
-describe("gamescope launch composition", () => {
-  it("wraps a configured game in fullscreen borderless Gamescope", () => {
-    expect(
-      composeGamescopeLaunchSpec(game, {
-        enable: true,
-        command: "/nix/store/gamescope/bin/gamescope",
-      }),
-    ).toEqual({
-      command: "/nix/store/gamescope/bin/gamescope",
-      args: [
-        "--backend",
-        "wayland",
-        "-f",
-        "-b",
-        "--expose-wayland",
-        "--",
-        "/nix/store/demo/bin/neverball",
-        "--level",
-        "one",
-      ],
-      env: { DEMO: "1" },
-      cwd: "/tmp",
-    })
-  })
-
-  it("does not sniff the child env for Wayland intent", () => {
-    expect(
-      composeGamescopeLaunchSpec(
-        { ...game, env: { SDL_VIDEODRIVER: "wayland" } },
-        { enable: true, window: { exposeWayland: false } },
-      ).args,
-    ).toEqual([
-      "--backend",
-      "wayland",
-      "-f",
-      "-b",
-      "--",
-      "/nix/store/demo/bin/neverball",
-      "--level",
-      "one",
-    ])
-  })
-
-  it("leaves the game command unchanged when Gamescope is disabled", () => {
-    expect(composeGamescopeLaunchSpec(game, { enable: false })).toBe(game)
-  })
-
-  it("adds --expose-wayland when the policy opts in", () => {
-    expect(
-      composeGamescopeLaunchSpec(game, {
-        enable: true,
-        window: { exposeWayland: true },
-      }).args,
-    ).toEqual([
-      "--backend",
-      "wayland",
-      "-f",
-      "-b",
-      "--expose-wayland",
-      "--",
-      "/nix/store/demo/bin/neverball",
-      "--level",
-      "one",
-    ])
-  })
-
-  it("prepends an explicit --backend flag when the policy selects one", () => {
-    expect(
-      composeGamescopeLaunchSpec(game, {
-        enable: true,
-        backend: { type: "sdl" },
-      }).args,
-    ).toEqual([
-      "--backend",
-      "sdl",
-      "-f",
-      "-b",
-      "--expose-wayland",
-      "--",
-      "/nix/store/demo/bin/neverball",
-      "--level",
-      "one",
-    ])
-  })
-})
-
 describe("stream surface discovery and repair", () => {
-  it("finds Gamescope windows without interpolating title criteria", () => {
-    expect(findStreamSurfaceWindows(gamescopeTree)).toEqual([
+  it("finds stream surface windows without interpolating title criteria", () => {
+    expect(
+      findStreamSurfaceWindows(streamSurfaceTree, streamSurfaceSelector),
+    ).toEqual([
       {
         id: 42,
         focused: false,
         fullscreen: false,
-        appId: "gamescope",
+        appId: "stream-surface",
         title: "[weird]; title",
-        className: "Gamescope",
+        className: "StreamSurface",
       },
     ])
 
@@ -167,7 +79,7 @@ describe("stream surface discovery and repair", () => {
           nodes: [
             {
               id: 42,
-              app_id: "gamescope",
+              app_id: "stream-surface",
               focused: true,
               fullscreen_mode: 0,
               rect: { x: 960, y: 0, width: 960, height: 1080 },
@@ -177,7 +89,7 @@ describe("stream surface discovery and repair", () => {
       ],
     }
 
-    expect(findStreamSurfaceWindows(tree)).toEqual([
+    expect(findStreamSurfaceWindows(tree, streamSurfaceSelector)).toEqual([
       expect.objectContaining({
         id: 42,
         rect: { x: 960, y: 0, width: 960, height: 1080 },
@@ -202,7 +114,7 @@ describe("stream surface discovery and repair", () => {
           nodes: [
             {
               id: 42,
-              app_id: "gamescope",
+              app_id: "stream-surface",
               focused: true,
               fullscreen_mode: 0,
               rect: { x: 0, y: 0, width: 960, height: 1080 },
@@ -222,7 +134,7 @@ describe("stream surface discovery and repair", () => {
           nodes: [
             {
               id: 42,
-              app_id: "gamescope",
+              app_id: "stream-surface",
               focused: true,
               fullscreen_mode: 0,
               rect: { x: 960, y: 0, width: 960, height: 1080 },
@@ -239,11 +151,11 @@ describe("stream surface discovery and repair", () => {
 
     const first = await readCurrentStreamSurfaceGeometry({
       runner,
-      selector: { appIds: ["gamescope"] },
+      selector: { appIds: ["stream-surface"] },
     })
     const second = await readCurrentStreamSurfaceGeometry({
       runner,
-      selector: { appIds: ["gamescope"] },
+      selector: { appIds: ["stream-surface"] },
     })
 
     expect(first.status).toBe("available")
@@ -257,11 +169,11 @@ describe("stream surface discovery and repair", () => {
   it("waits for a stream surface before repairing it", async () => {
     const calls: readonly string[][] = []
     const mutableCalls: string[][] = calls as string[][]
-    const trees = [emptyTree, gamescopeTree]
+    const trees = [emptyTree, streamSurfaceTree]
     let time = 0
 
     const surface = await waitForStreamSurface({
-      selector: { appIds: ["gamescope"] },
+      selector: { appIds: ["stream-surface"] },
       timeoutMs: 1_000,
       pollMs: 100,
       now: () => time,
@@ -272,7 +184,7 @@ describe("stream surface discovery and repair", () => {
         run: async args => {
           mutableCalls.push([...args])
           if (args.includes("get_tree")) {
-            return JSON.stringify(trees.shift() ?? gamescopeTree)
+            return JSON.stringify(trees.shift() ?? streamSurfaceTree)
           }
           return ""
         },
@@ -286,11 +198,12 @@ describe("stream surface discovery and repair", () => {
   it("repairs the selected stream surface by con_id", async () => {
     const calls: string[][] = []
     const result = await repairStreamSurface({
-      selector: { appIds: ["gamescope"] },
+      selector: { appIds: ["stream-surface"] },
       runner: {
         run: async args => {
           calls.push([...args])
-          if (args.includes("get_tree")) return JSON.stringify(gamescopeTree)
+          if (args.includes("get_tree"))
+            return JSON.stringify(streamSurfaceTree)
           return ""
         },
       },
@@ -315,15 +228,25 @@ describe("stream surface discovery and repair", () => {
         {
           id: 2,
           nodes: [
-            { id: 42, app_id: "gamescope", focused: true, fullscreen_mode: 1 },
-            { id: 43, app_id: "gamescope", focused: false, fullscreen_mode: 0 },
+            {
+              id: 42,
+              app_id: "stream-surface",
+              focused: true,
+              fullscreen_mode: 1,
+            },
+            {
+              id: 43,
+              app_id: "stream-surface",
+              focused: false,
+              fullscreen_mode: 0,
+            },
           ],
         },
       ],
     }
 
     const result = await repairStreamSurface({
-      selector: { appIds: ["gamescope"] },
+      selector: { appIds: ["stream-surface"] },
       ignoredWindowIds: new Set([42]),
       runner: {
         run: async args => {
@@ -367,7 +290,7 @@ describe("stream surface discovery and repair", () => {
     expect(result.commands).toContain("[con_id=43] fullscreen enable")
   })
 
-  it("can repair nameless Gamescope surfaces observed on Sobo", async () => {
+  it("can repair nameless stream surface surfaces observed on Sobo", async () => {
     const soboTree: SwayNode = {
       id: 1,
       nodes: [
@@ -402,9 +325,24 @@ describe("stream surface discovery and repair", () => {
         {
           id: 2,
           nodes: [
-            { id: 42, app_id: "gamescope", focused: true, fullscreen_mode: 1 },
-            { id: 43, app_id: "gamescope", focused: false, fullscreen_mode: 1 },
-            { id: 44, app_id: "gamescope", focused: false, fullscreen_mode: 1 },
+            {
+              id: 42,
+              app_id: "stream-surface",
+              focused: true,
+              fullscreen_mode: 1,
+            },
+            {
+              id: 43,
+              app_id: "stream-surface",
+              focused: false,
+              fullscreen_mode: 1,
+            },
+            {
+              id: 44,
+              app_id: "stream-surface",
+              focused: false,
+              fullscreen_mode: 1,
+            },
           ],
         },
       ],
@@ -415,7 +353,12 @@ describe("stream surface discovery and repair", () => {
         {
           id: 2,
           nodes: [
-            { id: 42, app_id: "gamescope", focused: true, fullscreen_mode: 1 },
+            {
+              id: 42,
+              app_id: "stream-surface",
+              focused: true,
+              fullscreen_mode: 1,
+            },
           ],
         },
       ],
@@ -424,7 +367,7 @@ describe("stream surface discovery and repair", () => {
     let time = 0
 
     const result = await waitForStreamSurfaceAbsence({
-      selector: { appIds: ["gamescope"] },
+      selector: { appIds: ["stream-surface"] },
       ownedWindowIds: new Set([43, 44]),
       ignoredWindowIds: new Set([42]),
       timeoutMs: 1_000,
@@ -452,8 +395,18 @@ describe("stream surface discovery and repair", () => {
         {
           id: 2,
           nodes: [
-            { id: 42, app_id: "gamescope", focused: true, fullscreen_mode: 1 },
-            { id: 44, app_id: "gamescope", focused: false, fullscreen_mode: 1 },
+            {
+              id: 42,
+              app_id: "stream-surface",
+              focused: true,
+              fullscreen_mode: 1,
+            },
+            {
+              id: 44,
+              app_id: "stream-surface",
+              focused: false,
+              fullscreen_mode: 1,
+            },
           ],
         },
       ],
@@ -462,7 +415,7 @@ describe("stream surface discovery and repair", () => {
 
     await expect(
       waitForStreamSurfaceAbsence({
-        selector: { appIds: ["gamescope"] },
+        selector: { appIds: ["stream-surface"] },
         ownedWindowIds: new Set([43, 44]),
         ignoredWindowIds: new Set([42]),
         timeoutMs: 100,
@@ -487,7 +440,7 @@ describe("stream surface discovery and repair", () => {
     let polls = 0
 
     const result = await waitForStreamSurfaceAbsence({
-      selector: { appIds: ["gamescope"] },
+      selector: { appIds: ["stream-surface"] },
       ownedWindowIds: new Set([42]),
       signal: controller.signal,
       timeoutMs: 1_000,
@@ -500,7 +453,7 @@ describe("stream surface discovery and repair", () => {
       runner: {
         run: async () => {
           polls += 1
-          return JSON.stringify(gamescopeTree)
+          return JSON.stringify(streamSurfaceTree)
         },
       },
     })
@@ -511,9 +464,9 @@ describe("stream surface discovery and repair", () => {
 
   it("records empty owned stream surface absence deterministically", async () => {
     const result = await waitForStreamSurfaceAbsence({
-      selector: { appIds: ["gamescope"] },
+      selector: { appIds: ["stream-surface"] },
       ownedWindowIds: new Set(),
-      runner: { run: async () => JSON.stringify(gamescopeTree) },
+      runner: { run: async () => JSON.stringify(streamSurfaceTree) },
     })
 
     expect(result).toEqual({
@@ -526,7 +479,7 @@ describe("stream surface discovery and repair", () => {
   it("probes the Sway tree with structured success and failure evidence", async () => {
     await expect(
       probeSwayTree({
-        runner: { run: async () => JSON.stringify(gamescopeTree) },
+        runner: { run: async () => JSON.stringify(streamSurfaceTree) },
       }),
     ).resolves.toEqual({
       ok: true,
@@ -548,7 +501,7 @@ describe("stream surface discovery and repair", () => {
 
     await expect(
       waitForStreamSurface({
-        selector: { appIds: ["gamescope"] },
+        selector: { appIds: ["stream-surface"] },
         timeoutMs: 100,
         pollMs: 50,
         now: () => time,

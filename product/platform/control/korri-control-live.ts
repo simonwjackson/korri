@@ -21,6 +21,15 @@ import {
   terminateSessiondManagedLaunch,
 } from "@platform/library/sessiond-managed-launch-client"
 import { isLaunchReadyMode } from "@platform/library/sessiond-managed-launch-protocol"
+import {
+  composeLaunchCompanions,
+  type LaunchCompanionDiagnostic,
+  launchCompanionDiagnosticSummary,
+} from "@platform/plugin/launch-companion"
+import {
+  createPluginRegistry,
+  type PluginRegistry,
+} from "@platform/plugin/registry"
 import { Cause, Effect, Layer } from "effect"
 import type {
   ControlDryRunLaunchRequest,
@@ -46,15 +55,24 @@ export interface KorriControlLiveOptions {
   readonly sessiond?: SessiondManagedLaunchClientOptions
   readonly stopSessionSettlePolls?: number
   readonly stopSessionSettlePollDelayMs?: number
+  readonly pluginRegistry?: PluginRegistry
 }
 
-export const KorriControlLayerLive = Layer.effect(KorriControl)(
-  Effect.gen(function* () {
-    const librarySource = yield* LibrarySource
-    const launcher = yield* Launcher
-    return makeKorriControlLive({ librarySource, launcher })
-  }),
+export const KorriControlLayerLive = KorriControlLayerLiveWithPlugins(
+  createPluginRegistry([]),
 )
+
+export function KorriControlLayerLiveWithPlugins(
+  pluginRegistry: PluginRegistry,
+) {
+  return Layer.effect(KorriControl)(
+    Effect.gen(function* () {
+      const librarySource = yield* LibrarySource
+      const launcher = yield* Launcher
+      return makeKorriControlLive({ librarySource, launcher, pluginRegistry })
+    }),
+  )
+}
 
 export function makeKorriControlLive(options: {
   readonly librarySource: LibrarySourceService
@@ -62,8 +80,10 @@ export function makeKorriControlLive(options: {
   readonly sessiond?: SessiondManagedLaunchClientOptions
   readonly stopSessionSettlePolls?: number
   readonly stopSessionSettlePollDelayMs?: number
+  readonly pluginRegistry?: PluginRegistry
 }): KorriControlService {
   const { librarySource, launcher, sessiond } = options
+  const pluginRegistry = options.pluginRegistry ?? createPluginRegistry([])
   const stopSessionSettlePolls = options.stopSessionSettlePolls ?? 10
   const stopSessionSettlePollDelayMs =
     options.stopSessionSettlePollDelayMs ?? 100
@@ -99,16 +119,26 @@ export function makeKorriControlLive(options: {
       Effect.gen(function* () {
         const result = yield* resolveLaunch(librarySource, request)
         if (result._tag === "failed") return result.result
+        const composed = yield* composeResolvedLaunch(
+          result.resolved,
+          pluginRegistry,
+        )
+        if (composed._tag === "failed") {
+          return launchConfigFailedFromDiagnostics(
+            request,
+            composed.diagnostics,
+          )
+        }
         const readiness = yield* sessionReadiness(sessiond)
         return {
           _tag: "LaunchDryRunOk",
           selection: launchSelection(request),
-          spec: result.resolved.spec,
+          spec: composed.spec,
           readiness,
           caveats:
             request.source?.isLocal === false
               ? [
-                  "Remote-source dry-run resolves the local Moonlight policy only; it does not prepare the peer or write a launch intent.",
+                  "Remote-source dry-run resolves the local stream policy only; it does not prepare the peer or write a launch intent.",
                 ]
               : [],
         } satisfies ControlDryRunLaunchResult
@@ -117,7 +147,20 @@ export function makeKorriControlLive(options: {
       Effect.gen(function* () {
         const resolved = yield* resolveLaunch(librarySource, request)
         if (resolved._tag === "failed") return resolved.result
-        const result = yield* runResolvedLaunch(launcher, resolved.resolved)
+        const composed = yield* composeResolvedLaunch(
+          resolved.resolved,
+          pluginRegistry,
+        )
+        if (composed._tag === "failed") {
+          return launchConfigFailedFromDiagnostics(
+            request,
+            composed.diagnostics,
+          )
+        }
+        const result = yield* runResolvedLaunch(launcher, {
+          ...resolved.resolved,
+          spec: composed.spec,
+        })
         return controlLaunchResultFromLaunchResult(request, result)
       }),
     sessionStatus: () => sessionStatus(sessiond),
@@ -199,6 +242,43 @@ function resolveLaunch(
       onSuccess: resolved => ({ _tag: "resolved" as const, resolved }),
     }),
   )
+}
+
+function composeResolvedLaunch(
+  resolved: ResolvedLaunch,
+  registry: PluginRegistry,
+): Effect.Effect<
+  | { readonly _tag: "resolved"; readonly spec: ResolvedLaunch["spec"] }
+  | {
+      readonly _tag: "failed"
+      readonly diagnostics: readonly LaunchCompanionDiagnostic[]
+    },
+  never
+> {
+  return composeLaunchCompanions({
+    spec: resolved.spec,
+    launchCompanions: resolved.launchCompanions,
+    registry,
+    options: { appIntegration: resolved.app?.integration },
+  }).pipe(
+    Effect.map(result =>
+      result._tag === "LaunchCompanionsComposed"
+        ? { _tag: "resolved" as const, spec: result.spec }
+        : { _tag: "failed" as const, diagnostics: result.diagnostics },
+    ),
+  )
+}
+
+function launchConfigFailedFromDiagnostics(
+  request: ControlDryRunLaunchRequest | ControlLaunchRequest,
+  diagnostics: readonly LaunchCompanionDiagnostic[],
+): Extract<ControlDryRunLaunchResult, { readonly _tag: "LaunchConfigFailed" }> {
+  return {
+    _tag: "LaunchConfigFailed",
+    selection: launchSelection(request),
+    message: launchCompanionDiagnosticSummary(diagnostics),
+    diagnostics,
+  }
 }
 
 function launchInputs(

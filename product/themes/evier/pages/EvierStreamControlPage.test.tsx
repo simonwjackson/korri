@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import { type ProviderId, pluginRecordId } from "@platform/plugin"
 import {
   act,
   cleanup,
@@ -12,72 +13,41 @@ import {
   type StreamControlClient,
 } from "./EvierStreamControlPage"
 
+const provider = "@example:presentation" as ProviderId
+
 afterEach(() => {
   cleanup()
 })
 
 describe("EvierStreamControlPage", () => {
-  it("defaults to unified stream controls and unified display brightness", async () => {
+  it("renders stream, provider, and device controls from metadata", async () => {
     render(<EvierStreamControlPage controller={recordingController()} />)
 
     expect(
-      (
-        screen.getByRole("checkbox", {
-          name: "Unified stream controls",
-        }) as HTMLInputElement
-      ).checked,
-    ).toBe(true)
-    expect(
-      (
-        screen.getByRole("checkbox", {
-          name: "Unified display brightness",
-        }) as HTMLInputElement
-      ).checked,
-    ).toBe(true)
-    expect(
-      screen.getByRole("heading", { name: "Session controls" }),
+      screen.getByRole("heading", { name: "Stream controls" }),
     ).toBeTruthy()
-    expect(
-      screen.getByRole("heading", { name: "Device controls" }),
-    ).toBeTruthy()
-    expect(screen.getByRole("slider", { name: "Bitrate" })).toBeTruthy()
-    expect(screen.getByRole("slider", { name: "FPS" })).toBeTruthy()
-    expect(screen.getByRole("slider", { name: "Resolution" })).toBeTruthy()
-    expect(screen.getByRole("slider", { name: "Sharpness" })).toBeTruthy()
-    expect(screen.getByRole("radio", { name: "FSR" })).toBeTruthy()
-    expect(
-      screen.getByRole("slider", { name: "Display brightness" }),
-    ).toBeTruthy()
-    expect(screen.queryByText("Moonlight stream")).toBeNull()
-    expect(screen.queryByText("Gamescope presentation")).toBeNull()
-    expect(screen.getByLabelText("Battery status")).toBeTruthy()
-    await waitFor(() => expect(screen.getByText("74%")).toBeTruthy())
-  })
-
-  it("can split stream controls without affecting unified brightness", async () => {
-    render(<EvierStreamControlPage controller={recordingController()} />)
-    await waitFor(() => expect(screen.getByText("74%")).toBeTruthy())
-
-    fireEvent.click(
-      screen.getByRole("checkbox", { name: "Unified stream controls" }),
-    )
-
     expect(
       screen.getByRole("heading", { name: "Moonlight stream" }),
     ).toBeTruthy()
     expect(
-      screen.getByRole("heading", { name: "Gamescope presentation" }),
+      screen.getByRole("heading", { name: "Presentation controls" }),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("heading", { name: "Device controls" }),
     ).toBeTruthy()
     expect(screen.getByRole("slider", { name: "Moonlight FPS" })).toBeTruthy()
     expect(
-      screen.getByRole("slider", { name: "Gamescope FPS cap" }),
+      await screen.findByRole("slider", { name: "Presentation FPS" }),
     ).toBeTruthy()
+    expect(screen.getByRole("radio", { name: "soft" })).toBeTruthy()
     expect(
       screen.getByRole("slider", { name: "Display brightness" }),
     ).toBeTruthy()
+    expect(screen.getByLabelText("Battery status")).toBeTruthy()
+    await waitFor(() => expect(screen.getByText("74%")).toBeTruthy())
   })
 
-  it("splits display brightness per screen independently of stream mode", async () => {
+  it("splits display brightness per screen independently of provider controls", async () => {
     const calls: unknown[] = []
     render(<EvierStreamControlPage controller={recordingController(calls)} />)
     await waitFor(() => expect(screen.getByText(/panel-a/)).toBeTruthy())
@@ -92,8 +62,9 @@ describe("EvierStreamControlPage", () => {
     expect(
       screen.getByRole("slider", { name: "Display 2 brightness" }),
     ).toBeTruthy()
-    expect(screen.getByRole("slider", { name: "FPS" })).toBeTruthy()
-    expect(screen.queryByRole("slider", { name: "Moonlight FPS" })).toBeNull()
+    expect(
+      screen.getByRole("slider", { name: "Presentation FPS" }),
+    ).toBeTruthy()
 
     fireEvent.change(
       screen.getByRole("slider", { name: "Display 2 brightness" }),
@@ -109,26 +80,24 @@ describe("EvierStreamControlPage", () => {
     })
   })
 
-  it("limits unified FPS to the Moonlight and Gamescope intersection", async () => {
+  it("dispatches provider controls through generic applyAction", async () => {
     const calls: unknown[] = []
     render(<EvierStreamControlPage controller={recordingController(calls)} />)
     await waitFor(() => expect(screen.getByText("74%")).toBeTruthy())
 
-    const fps = screen.getByRole("slider", { name: "FPS" })
-    expect(fps.getAttribute("max")).toBe("5")
-
-    fireEvent.change(fps, { target: { value: "1" } })
+    fireEvent.change(screen.getByRole("slider", { name: "Presentation FPS" }), {
+      target: { value: "2" },
+    })
     await act(async () => {
       await Bun.sleep(650)
     })
 
     expect(calls).toContainEqual({
-      method: "setLinkedFps",
-      payload: { fps: 45 },
-    })
-    expect(calls).not.toContainEqual({
-      method: "setGamescopeFps",
-      payload: { fps: 40 },
+      method: "applyAction",
+      payload: {
+        action: pluginRecordId(provider, "fps.set"),
+        payload: { fps: 120 },
+      },
     })
   })
 
@@ -155,9 +124,12 @@ describe("EvierStreamControlPage", () => {
     await waitFor(() => expect(screen.getByText("12 Mbps")).toBeTruthy())
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }))
-    fireEvent.change(screen.getByRole("slider", { name: "Bitrate" }), {
-      target: { value: "6000" },
-    })
+    fireEvent.change(
+      screen.getByRole("slider", { name: "Moonlight bitrate" }),
+      {
+        target: { value: "6000" },
+      },
+    )
 
     await act(async () => {
       await Bun.sleep(650)
@@ -187,9 +159,12 @@ describe("EvierStreamControlPage", () => {
     render(<EvierStreamControlPage controller={readbackFailingController} />)
     await waitFor(() => expect(screen.getByText("12 Mbps")).toBeTruthy())
 
-    fireEvent.change(screen.getByRole("slider", { name: "Bitrate" }), {
-      target: { value: "6000" },
-    })
+    fireEvent.change(
+      screen.getByRole("slider", { name: "Moonlight bitrate" }),
+      {
+        target: { value: "6000" },
+      },
+    )
 
     await act(async () => {
       await Bun.sleep(650)
@@ -198,34 +173,6 @@ describe("EvierStreamControlPage", () => {
     await waitFor(() => expect(screen.getByText(/readbackError/)).toBeTruthy())
     expect(screen.getByText(/setMoonlightBitrate/)).toBeTruthy()
     expect(screen.queryByText(/"error"/)).toBeNull()
-  })
-
-  it("debounces slider mutations against the Evier RPC controller", async () => {
-    const calls: unknown[] = []
-    render(<EvierStreamControlPage controller={recordingController(calls)} />)
-    await waitFor(() => expect(screen.getByText(/panel-a/)).toBeTruthy())
-
-    fireEvent.change(screen.getByRole("slider", { name: "Bitrate" }), {
-      target: { value: "6000" },
-    })
-
-    await act(async () => {
-      await Bun.sleep(650)
-    })
-
-    expect(calls).toContainEqual({
-      method: "setMoonlightBitrate",
-      payload: { bitrateKbps: 6_000 },
-    })
-    expect(
-      calls.filter(
-        call =>
-          typeof call === "object" &&
-          call !== null &&
-          "method" in call &&
-          call.method === "setMoonlightBitrate",
-      ),
-    ).toHaveLength(1)
   })
 })
 
@@ -249,13 +196,13 @@ function stateSnapshot({
         resolution: { width, height },
       },
     },
-    gamescope: {
-      status: "ok",
-      readback: {
-        resolution: { width, height },
-        fps,
-        sharpness: 10,
-        filter: "fsr",
+    plugins: {
+      [provider]: {
+        status: "ok",
+        readback: {
+          fps,
+          filter: "soft",
+        },
       },
     },
     brightness: {
@@ -296,6 +243,37 @@ function stateSnapshot({
   }
 }
 
+function controlsPayload() {
+  return {
+    controls: [
+      {
+        id: pluginRecordId(provider, "fps"),
+        label: "Presentation FPS",
+        subsystem: "presentation",
+        provider,
+        access: "read-write",
+        status: "supported",
+        unavailableReason: null,
+        action: pluginRecordId(provider, "fps.set"),
+        readback: pluginRecordId(provider, "fps"),
+        value: { kind: "steps", values: [30, 60, 120] },
+      },
+      {
+        id: pluginRecordId(provider, "filter"),
+        label: "Scaling filter",
+        subsystem: "presentation",
+        provider,
+        access: "read-write",
+        status: "supported",
+        unavailableReason: null,
+        action: pluginRecordId(provider, "filter.set"),
+        readback: pluginRecordId(provider, "filter"),
+        value: { kind: "options", values: ["soft", "crisp"] },
+      },
+    ],
+  }
+}
+
 function recordingController(calls: unknown[] = []): StreamControlClient {
   const record = (method: string) => async (payload: unknown) => {
     calls.push({ method, payload })
@@ -309,21 +287,16 @@ function recordingController(calls: unknown[] = []): StreamControlClient {
   return {
     getControls: async () => {
       calls.push({ method: "getControls" })
-      return { controls: [] }
+      return controlsPayload()
     },
     getState: async () => {
       calls.push({ method: "getState" })
       return stateSnapshot()
     },
+    applyAction: record("applyAction"),
     setBrightness: record("setBrightness"),
     setMoonlightBitrate: record("setMoonlightBitrate"),
     setMoonlightFps: record("setMoonlightFps"),
     setMoonlightResolution: record("setMoonlightResolution"),
-    setLinkedFps: record("setLinkedFps"),
-    setLinkedResolution: record("setLinkedResolution"),
-    setGamescopeMode: record("setGamescopeMode"),
-    setGamescopeFps: record("setGamescopeFps"),
-    setGamescopeFilter: record("setGamescopeFilter"),
-    setGamescopeSharpness: record("setGamescopeSharpness"),
   }
 }

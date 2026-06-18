@@ -17,6 +17,12 @@ import { decodeStoragePayload } from "./storage"
 import { decodeSystemPayload } from "./system"
 import { decodeUserPayload } from "./user"
 
+const wrapperProvider = "@example:wrapper"
+const retiredWrapperKey = ["game", "scope"].join("")
+type WrapperPolicy = { readonly enable?: boolean }
+const wrapperPolicy = (value: unknown): WrapperPolicy | undefined =>
+  value as WrapperPolicy | undefined
+
 describe("readable library schema records", () => {
   it("decodes the full Ryubing readable fixture", async () => {
     const fixture = parse(
@@ -100,34 +106,38 @@ describe("readable library schema records", () => {
       title: "AKA desktop host",
       launch: {
         with: {
-          "@korri:gamescope": { enable: true, backend: { type: "wayland" } },
+          [wrapperProvider]: { enable: true, backend: { type: "wayland" } },
         },
       },
     })
 
     expect(host.title).toBe("AKA desktop host")
-    expect(host.launch?.with?.["@korri:gamescope"]?.enable).toBe(true)
+    expect(wrapperPolicy(host.launch?.with?.[wrapperProvider])?.enable).toBe(
+      true,
+    )
     expect(
       decodeHostPayload({
         moonlight: { platform: { name: "v4l2m2m" } },
       }).moonlight?.platform?.name,
     ).toBe("v4l2m2m")
-    for (const gamescope of [
+    for (const wrapper of [
       { enabled: true },
       { backend: "wayland" },
       { exposeWayland: true },
       { args: ["--nearest"] },
       { forceXwayland: true },
     ]) {
-      expect(() => decodeHostPayload({ gamescope })).toThrow()
+      expect(() =>
+        decodeHostPayload({ [retiredWrapperKey]: wrapper }),
+      ).toThrow()
     }
     expect(() => decodeHostPayload({ role: "desktop" })).toThrow()
     expect(() => decodeHostPayload({ launch: { app: "steam" } })).toThrow()
     expect(() => decodeHostPayload({ profiles: { handheld: {} } })).toThrow()
   })
 
-  it("rejects the retired top-level Gamescope key on readable cascade records", () => {
-    const retired = { gamescope: { enable: true } }
+  it("rejects the retired top-level wrapper key on readable cascade records", () => {
+    const retired = { [retiredWrapperKey]: { enable: true } }
     const cases: Array<readonly [string, () => unknown]> = [
       ["global", () => decodeGlobalConfigPayload(retired)],
       ["host", () => decodeHostPayload(retired)],

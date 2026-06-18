@@ -16,6 +16,10 @@ let
   targetSystem = pkgs.stdenv.hostPlatform.system;
   substratePackages = nix-on-rocks.packages.${targetSystem};
   inputplumberPackage = substratePackages.inputplumber;
+  gamescopeNix = import ../../../../plugins/gamescope/nix/platform-environments.nix { inherit pkgs; };
+  gamescopePackage = korri.packages.${targetSystem}.gamescope-korri;
+  gamescopeRuntimeEnvironment = gamescopeNix.rk3566RuntimeEnvironment;
+  enabledFirstPartyPlugins = "@korri:gamescope,@korri:neverball";
 
   panfrostEnvironment = {
     # RG353M/RK3566 exposes rockchip KMS on card0 and Mali-G52/Panfrost on the
@@ -33,25 +37,6 @@ let
     USER = "korri";
   };
 
-  # Runtime environment that the nested Gamescope (and the game launched under
-  # it) need on RK3566 / Mali-G52. These are device-mandatory: without them
-  # Gamescope cannot bring up the GPU, and the game deadlocks. Always-on for
-  # this product so it survives reboots and the supported launch path.
-  gamescopeRuntimeEnvironment = {
-    # PanVK (Bifrost v7) is the only Vulkan path on Mali-G52; it is
-    # experimental and gated behind this env, and reports apiVersion 1.0
-    # while Gamescope requires >= 1.2, so override the reported version.
-    PAN_I_WANT_A_BROKEN_VULKAN_DRIVER = "1";
-    MESA_VK_VERSION_OVERRIDE = "1.2";
-    VK_DRIVER_FILES = "${pkgs.mesa}/share/vulkan/icd.d/panfrost_icd.aarch64.json";
-    # PanVK's Bifrost-v7 shader compiler is slow enough that precompiling the
-    # full permutation set freezes the first frames for minutes; compile on
-    # demand instead.
-    GAMESCOPE_DISABLE_PIPELINE_PRECOMPILE = "1";
-    # PanVK's drm_syncobj timelines never signal, so the host discards every
-    # frame with explicit sync on; fall back to implicit dmabuf fences.
-    GAMESCOPE_DISABLE_EXPLICIT_SYNC = "1";
-  };
 in
 {
   imports = [
@@ -85,6 +70,7 @@ in
       fuzzel
       git
       sway
+      gamescopePackage
       pkgs.moonlight-embedded
       korri.packages.${targetSystem}.smb-remastered
     ];
@@ -111,12 +97,15 @@ in
 
   services.korri.sessiond = {
     path = [
+      gamescopePackage
       pkgs.moonlight-embedded
       korri.packages.${targetSystem}.smb-remastered
     ];
-    # Gamescope is spawned by sessiond and inherits this env, so the PanVK
+    # The plugin-owned foreground runtime inherits this env, so the PanVK
     # runtime knobs must live here alongside the Panfrost ones.
-    extraEnvironment = panfrostEnvironment // gamescopeRuntimeEnvironment;
+    extraEnvironment = panfrostEnvironment // gamescopeRuntimeEnvironment // {
+      KORRI_ENABLED_PLUGINS = enabledFirstPartyPlugins;
+    };
   };
 
   # RK3566/PanVK RetroArch is the known deadlock case, but platform defaults
@@ -127,7 +116,8 @@ in
   services.korri.daemon.library.platformDefaults.host.gamescope.app.environment.WAYLAND_DISPLAY =
     null;
 
-  
+  systemd.user.services.korrid.environment.KORRI_ENABLED_PLUGINS =
+    enabledFirstPartyPlugins;
 
   # Keep the nix-on-rocks boot-selected guest profile in sync after switches.
   system.activationScripts.korri-rocknix-guest-profile = {

@@ -72,7 +72,7 @@ export function steamLogSourceFromFile(filename: string): SteamLogSource {
   if (filename === "compat_log.txt") return "compat_log"
   if (filename === "appinfo_log.txt") return "appinfo_log"
   if (filename === "korri-steam-app-guest.log") return "guest_log"
-  if (/^korri-steam-gamescope-launch-.*\.log$/.test(filename))
+  if (/^korri-steam-launch-wrapper-.*\.log$/.test(filename))
     return "wrapper_log"
   return "auxiliary_log"
 }
@@ -124,10 +124,10 @@ export function createSteamLogTailer(
             const name = filename.toString()
             if (
               !fileStates.has(name) &&
-              /^korri-steam-gamescope-launch-.*\.log$/.test(name)
+              /^korri-steam-launch-wrapper-.*\.log$/.test(name)
             ) {
               const wrapperCount = Array.from(fileStates.keys()).filter(key =>
-                /^korri-steam-gamescope-launch-.*\.log$/.test(key),
+                /^korri-steam-launch-wrapper-.*\.log$/.test(key),
               ).length
               if (wrapperCount >= 50) return
               fileStates.set(name, {

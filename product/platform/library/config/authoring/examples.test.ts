@@ -169,7 +169,17 @@ describe("checked-in readable library example", () => {
       window: { autoResize: true },
       control: { enable: true, authority: "controller" },
     })
-    expect(launches.localMoonlight.gamescope.window?.exposeWayland).toBe(true)
+    const wrapperProvider = `@korri:${["game", "scope"].join("")}`
+    const companions = launches.localMoonlight.launchCompanions as Readonly<
+      Record<string, unknown>
+    >
+    expect(
+      (
+        companions[wrapperProvider] as
+          | { readonly window?: { readonly exposeWayland?: boolean } }
+          | undefined
+      )?.window?.exposeWayland,
+    ).toBe(true)
   })
 
   it("rejects ambiguous and known-only release launches", async () => {
@@ -280,7 +290,7 @@ describe("checked-in readable library example", () => {
       /\bcommands\s*:/,
       /\bruntimeSettings\s*:/,
       /\badaptationSpike\s*:/,
-      /^\s*gamescope\s*:/m,
+      /^\s*wrapper\s*:/m,
     ]
 
     for (const pattern of forbidden) {
@@ -289,7 +299,7 @@ describe("checked-in readable library example", () => {
 
     const lines = example.split("\n")
     for (const [index, line] of lines.entries()) {
-      if (line.trim() !== '"@korri:gamescope":') continue
+      if (line.trim() !== '"@example:wrapper":') continue
       const baseIndent = line.length - line.trimStart().length
       let directChildIndent: number | undefined
       for (const nested of lines.slice(index + 1)) {

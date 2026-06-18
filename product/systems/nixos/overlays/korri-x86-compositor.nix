@@ -1,13 +1,9 @@
 # Overlay that pins sway 1.12 from nixpkgs master for x86_64 compositor
 # hosts. Stock sway 1.11 segfaults deterministically at struct offset 0xb8 in
-# `sway[+5a000]` when gamescope nests an Xwayland that handles Wine/Proton
-# workloads (Balatro reproduces on aka). Sway 1.12 (released 2026-05-25)
-# ships several null-deref / use-after-free fixes around xdg_shell / view_init
-# / tiling_resize that pattern-match the crash class.
-#
-# Gamescope is intentionally not replaced here. The global Korri packages
-# overlay owns `pkgs.gamescope` and makes it `gamescope-korri` everywhere,
-# wrapping the same 3.16.23 base this file used to expose for x86.
+# `sway[+5a000]` when nested Xwayland Wine/Proton workloads are present
+# (Balatro reproduces on aka). Sway 1.12 (released 2026-05-25) ships several
+# null-deref / use-after-free fixes around xdg_shell / view_init /
+# tiling_resize that pattern-match the crash class.
 #
 # Acts as a no-op on aarch64 / other systems.
 #

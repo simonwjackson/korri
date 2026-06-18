@@ -21,8 +21,8 @@ import {
 import { composeReadableLaunchSpec } from "@platform/library/config/compose-launch-spec"
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
 import {
-  type GamescopePolicy,
-  gamescopePolicyFromLaunch,
+  type LaunchCompanionMap,
+  launchCompanionsFromLaunch,
   type MoonlightPolicy,
 } from "@platform/library/config/inheritable-fields"
 import {
@@ -78,7 +78,7 @@ export interface ResolveLaunchOptions {
 
 export interface ResolvedLaunchOutput {
   readonly spec: LaunchSpec
-  readonly gamescope?: GamescopePolicy
+  readonly launchCompanions?: LaunchCompanionMap
   readonly moonlight?: MoonlightPolicy
   readonly app: {
     readonly id: string
@@ -255,11 +255,10 @@ export interface LibraryRepository {
     launcherId: string,
     opts?: Pick<ResolveLaunchOptions, "override">,
   ) => Effect.Effect<ResolvedLocalLauncherPolicy, LibraryError>
-  /** @deprecated use resolveLocalLauncherPolicy. */
-  readonly resolveLocalLauncherGamescopePolicy: (
+  readonly resolveLocalLauncherCompanionPolicy: (
     launcherId: string,
     opts?: Pick<ResolveLaunchOptions, "override">,
-  ) => Effect.Effect<GamescopePolicy, LibraryError>
+  ) => Effect.Effect<LaunchCompanionMap, LibraryError>
 }
 
 export function createLibraryRepository(
@@ -379,7 +378,7 @@ export function createLibraryRepository(
 
         return {
           spec,
-          gamescope: context.gamescope,
+          launchCompanions: context.launchCompanions,
           ...(context.moonlight ? { moonlight: context.moonlight } : {}),
           app: {
             id: context.app.id,
@@ -486,10 +485,10 @@ export function createLibraryRepository(
         ),
         Effect.mapError(toLibraryConfigError),
       ),
-    resolveLocalLauncherGamescopePolicy: (launcherId, opts) =>
+    resolveLocalLauncherCompanionPolicy: (launcherId, opts) =>
       repository
         .resolveLocalLauncherPolicy(launcherId, opts)
-        .pipe(Effect.map(policy => policy.gamescope)),
+        .pipe(Effect.map(policy => policy.launchCompanions)),
   }
   return repository
 }
@@ -584,12 +583,8 @@ function upsertLegacyLauncher(
     args: launcher.args.map(readablePlaceholderForLegacy),
     systems: launcher.systems,
     policy: launcher.policy ?? { allowedCommands: [launcher.command] },
-    ...(gamescopePolicyFromLaunch(launcher)
-      ? {
-          launch: {
-            with: { "@korri:gamescope": gamescopePolicyFromLaunch(launcher) },
-          },
-        }
+    ...(launchCompanionsFromLaunch(launcher)
+      ? { launch: { with: launchCompanionsFromLaunch(launcher) } }
       : {}),
     ...(launcher.env ? { env: launcher.env } : {}),
     ...(launcher.cwd ? { cwd: launcher.cwd } : {}),

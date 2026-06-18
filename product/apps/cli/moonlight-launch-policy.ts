@@ -5,7 +5,10 @@ import type { MoonlightLaunchOptions } from "./moonlight-launcher"
 export type CliMoonlightLaunchPolicyResult =
   | {
       readonly status: "ok"
-      readonly options: Pick<MoonlightLaunchOptions, "gamescope" | "moonlight">
+      readonly options: Pick<
+        MoonlightLaunchOptions,
+        "launchCompanions" | "moonlight"
+      >
     }
   | { readonly status: "failed"; readonly message: string }
 
@@ -31,7 +34,7 @@ export async function resolveCliMoonlightLaunchPolicy(
   return {
     status: "ok",
     options: {
-      gamescope: exit.value.gamescope,
+      launchCompanions: exit.value.launchCompanions,
       ...(exit.value.moonlight ? { moonlight: exit.value.moonlight } : {}),
     },
   }

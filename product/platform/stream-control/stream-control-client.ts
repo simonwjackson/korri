@@ -1,8 +1,10 @@
-import type { GamescopeScalingFilter } from "@platform/stream-control/state-normalizer"
-
 export interface StreamControlClient {
   readonly getControls?: () => Promise<unknown>
   readonly getState: () => Promise<unknown>
+  readonly applyAction: (payload: {
+    readonly action: string
+    readonly payload: Record<string, unknown>
+  }) => Promise<unknown>
   readonly setBrightness: (payload: {
     readonly percent: number
     readonly device?: string
@@ -17,30 +19,9 @@ export interface StreamControlClient {
     readonly width: number
     readonly height: number
   }) => Promise<unknown>
-  readonly setLinkedFps: (payload: { readonly fps: number }) => Promise<unknown>
-  readonly setLinkedResolution: (payload: {
-    readonly width: number
-    readonly height: number
-  }) => Promise<unknown>
-  readonly setGamescopeMode: (payload: {
-    readonly width: number
-    readonly height: number
-  }) => Promise<unknown>
-  readonly setGamescopeFps: (payload: {
-    readonly fps: number
-  }) => Promise<unknown>
-  readonly setGamescopeFilter: (payload: {
-    readonly filter: GamescopeScalingFilter
-  }) => Promise<unknown>
-  readonly setGamescopeSharpness: (payload: {
-    readonly sharpness: number
-  }) => Promise<unknown>
 }
 
-export type StreamControlAction = Exclude<
-  keyof StreamControlClient,
-  "getControls" | "getState"
->
+export type StreamControlAction = string
 
 /** @deprecated Use StreamControlClient for product-accessible controls. */
 export type EvierStreamControlController = StreamControlClient

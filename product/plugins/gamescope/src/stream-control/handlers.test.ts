@@ -1,10 +1,12 @@
 import { describe, expect, it } from "bun:test"
 import type {
+  GamescopeControlClient,
   GamescopeControlCommandMethod,
   GamescopeControlCommandResult,
   GamescopeControlSuccessResponse,
 } from "../runtime-control"
 import {
+  applyGamescopeStreamControl,
   type GamescopeCommandClient,
   setGamescopeFilter,
   setGamescopeFps,
@@ -59,5 +61,34 @@ describe("gamescope stream-control handlers", () => {
       ["filter", { filter: "fsr" }],
       ["sharpness", { sharpness: 8 }],
     ])
+  })
+
+  it("rejects invalid resolution payloads at the plugin boundary", async () => {
+    const client = {
+      setMode: async (payload: unknown) => payload,
+      requestCommand: async (_method: unknown, payload: unknown) => payload,
+      setFilter: async (payload: unknown) => payload,
+      setSharpness: async (payload: unknown) => payload,
+      close: () => {},
+    } as GamescopeControlClient
+
+    for (const payload of [
+      { width: 0, height: 720 },
+      { width: -1, height: 720 },
+      { width: 1280.5, height: 720 },
+      { width: 1280, height: 16_385 },
+      { width: "1280", height: 720 },
+      { width: null, height: 720 },
+    ]) {
+      await expect(
+        applyGamescopeStreamControl({
+          provider: "@korri:gamescope",
+          action: "@korri:gamescope/resolution.set",
+          payload,
+          socketPath: "/tmp/control.sock",
+          connect: async () => client,
+        }),
+      ).rejects.toThrow(/width and height/)
+    }
   })
 })

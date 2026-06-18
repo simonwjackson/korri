@@ -316,6 +316,34 @@ export const DEFAULT_GAMESCOPE_POLICY: GamescopePolicy = {
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
+const mergeGamescopeValue = (
+  base: unknown,
+  extra: unknown,
+  path: readonly string[] = [],
+): unknown => {
+  if (extra === undefined) return base
+  if (Array.isArray(extra)) {
+    return path.join(".") === "extraArgs"
+      ? [...(Array.isArray(base) ? base : []), ...extra]
+      : extra
+  }
+  if (isPlainObject(base) && isPlainObject(extra)) {
+    return [...new Set([...Object.keys(base), ...Object.keys(extra)])].reduce<
+      Record<string, unknown>
+    >((merged, key) => {
+      const value = mergeGamescopeValue(base[key], extra[key], [...path, key])
+      if (value !== undefined) merged[key] = value
+      return merged
+    }, {})
+  }
+  return extra
+}
+
+export const foldGamescopePolicy = (
+  base: GamescopePolicy | undefined,
+  extra: GamescopePolicy,
+): GamescopePolicy => mergeGamescopeValue(base, extra) as GamescopePolicy
+
 const mergeDefaults = <T>(base: T, override: T | undefined): T => {
   if (override === undefined) return base
   if (isPlainObject(base) && isPlainObject(override)) {

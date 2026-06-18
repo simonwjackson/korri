@@ -1,3 +1,4 @@
+import type { KorriPlatformBridge } from "@platform/theme/bridge"
 import { VigieLiveCockpitRoot } from "../cockpit/live/VigieLiveCockpitRoot"
 import { VigieShell } from "../cockpit/shell/VigieShell"
 import type { CockpitFixture } from "../cockpit/VigieCockpit.context"
@@ -8,9 +9,11 @@ import { VigieSectionRouter } from "../cockpit/views/VigieSectionRouter"
 // chrome; the section router renders the active observability page.
 
 export function VigieCockpitPage({
+  bridge,
   fixture,
   live = false,
 }: {
+  readonly bridge?: KorriPlatformBridge
   readonly fixture: CockpitFixture
   readonly live?: boolean
 }) {
@@ -20,8 +23,10 @@ export function VigieCockpitPage({
     </VigieShell>
   )
 
-  return live ? (
-    <VigieLiveCockpitRoot fixture={fixture}>{content}</VigieLiveCockpitRoot>
+  return live && bridge ? (
+    <VigieLiveCockpitRoot bridge={bridge} fixture={fixture}>
+      {content}
+    </VigieLiveCockpitRoot>
   ) : (
     <VigieCockpitRoot fixture={fixture}>{content}</VigieCockpitRoot>
   )

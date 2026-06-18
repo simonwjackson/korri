@@ -2,6 +2,11 @@ import { describe, expect, it } from "bun:test"
 
 import { decodeSystemPayload } from "./system"
 
+const wrapperProvider = "@example:wrapper"
+type WrapperPolicy = { readonly enable?: boolean }
+const wrapperPolicy = (value: unknown): WrapperPolicy | undefined =>
+  value as WrapperPolicy | undefined
+
 describe("SystemPayload", () => {
   it("decodes a minimal system (every field optional)", () => {
     const system = decodeSystemPayload({})
@@ -54,13 +59,13 @@ describe("SystemPayload", () => {
   it("decodes inheritable layer + presets + byLauncher + inherit", () => {
     const system = decodeSystemPayload({
       cores: { retroarch: "snes9x_libretro.so" },
-      launch: { with: { "@korri:gamescope": { enable: false } } },
+      launch: { with: { [wrapperProvider]: { enable: false } } },
       env: { LANG: "C" },
       argsAppend: ["--snes"],
       patches: ["/patches/system.ips"],
       presets: {
         perf: {
-          launch: { with: { "@korri:gamescope": { enable: true } } },
+          launch: { with: { [wrapperProvider]: { enable: true } } },
           patches: ["/patches/perf.bps"],
         },
       },
@@ -72,10 +77,13 @@ describe("SystemPayload", () => {
       },
       inherit: false,
     })
-    expect(system.launch?.with?.["@korri:gamescope"]?.enable).toBe(false)
+    expect(wrapperPolicy(system.launch?.with?.[wrapperProvider])?.enable).toBe(
+      false,
+    )
     expect(system.patches).toEqual(["/patches/system.ips"])
     expect(
-      system.presets?.perf?.launch?.with?.["@korri:gamescope"]?.enable,
+      wrapperPolicy(system.presets?.perf?.launch?.with?.[wrapperProvider])
+        ?.enable,
     ).toBe(true)
     expect(system.presets?.perf?.patches).toEqual(["/patches/perf.bps"])
     expect(system.byLauncher?.dolphin?.argsAppend).toEqual(["--snes-mode"])

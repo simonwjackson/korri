@@ -1,16 +1,29 @@
 import { appendFile, mkdir } from "node:fs/promises"
 import { DataError, ValidationError } from "@platform/api/rpc/errors"
 import {
+  type KorriPlugin,
+  type PluginHandler,
+  type ProviderId,
+  parsePluginRecordId,
+  runPluginHandler,
+} from "@platform/plugin"
+import {
+  createPluginRegistry,
+  type PluginRegistry,
+} from "@platform/plugin/registry"
+import {
   connectMoonlightControl,
   type MoonlightControlClient,
 } from "@platform/stream/moonlight-control-client"
 import { MOONLIGHT_CONTROL_PROTOCOL_LIMITS } from "@platform/stream/moonlight-control-protocol"
-import { streamControlCapabilities } from "@platform/stream-control/control-contract"
+import {
+  type StreamControlCapability,
+  streamControlCapabilities,
+} from "@platform/stream-control/control-contract"
 import {
   closeClient,
   createStreamControlEventRecorder,
   errorMessage,
-  isRecord,
   readControlState,
   recordStateSnapshot,
 } from "@platform/stream-control/runtime-support"
@@ -18,18 +31,6 @@ import {
   normalizeMoonlightState,
   rpcResult,
 } from "@platform/stream-control/state-normalizer"
-import {
-  connectGamescopeControl,
-  type GamescopeControlClient,
-  type GamescopeScalingFilter,
-  normalizeGamescopeState,
-} from "@product/plugins/gamescope/src/runtime-control"
-import {
-  setGamescopeFilter,
-  setGamescopeFps,
-  setGamescopeMode,
-  setGamescopeSharpness,
-} from "@product/plugins/gamescope/src/stream-control"
 import { Context, Effect, Layer } from "effect"
 import {
   createDeviceControlService,
@@ -45,19 +46,16 @@ import type {
 
 export interface StreamControlOptions {
   readonly moonlightSocketPath?: string
-  readonly gamescopeSocketPath?: string
   readonly artifactDir?: string
   readonly backlightDir?: string
   readonly powerSupplyDir?: string
 }
 
 export interface StreamControlDependencies {
+  readonly pluginRegistry?: PluginRegistry
   readonly connectMoonlight?: (
     socketPath: string,
   ) => Promise<MoonlightControlClient>
-  readonly connectGamescope?: (
-    socketPath: string,
-  ) => Promise<GamescopeControlClient>
   readonly appendFile?: (path: string, content: string) => Promise<void>
   readonly mkdir?: (
     path: string,
@@ -73,6 +71,13 @@ export interface StreamControlService {
   readonly config: () => Effect.Effect<StreamControlConfigResponseData>
   readonly controls: () => Effect.Effect<StreamControlControlsResponseData>
   readonly state: () => Effect.Effect<StreamControlStateResponseData>
+  readonly applyAction: (payload: {
+    readonly action: string
+    readonly payload: StreamControlRequestedPayload
+  }) => Effect.Effect<
+    StreamControlCommandResponseData,
+    DataError | ValidationError
+  >
   readonly setBrightness: (payload: {
     readonly percent: number
     readonly device?: string
@@ -99,44 +104,6 @@ export interface StreamControlService {
     StreamControlCommandResponseData,
     DataError | ValidationError
   >
-  readonly setLinkedFps: (payload: {
-    readonly fps: number
-  }) => Effect.Effect<
-    StreamControlCommandResponseData,
-    DataError | ValidationError
-  >
-  readonly setLinkedResolution: (payload: {
-    readonly width: number
-    readonly height: number
-  }) => Effect.Effect<
-    StreamControlCommandResponseData,
-    DataError | ValidationError
-  >
-  readonly setGamescopeMode: (payload: {
-    readonly width: number
-    readonly height: number
-  }) => Effect.Effect<
-    StreamControlCommandResponseData,
-    DataError | ValidationError
-  >
-  readonly setGamescopeFps: (payload: {
-    readonly fps: number
-  }) => Effect.Effect<
-    StreamControlCommandResponseData,
-    DataError | ValidationError
-  >
-  readonly setGamescopeFilter: (payload: {
-    readonly filter: GamescopeScalingFilter
-  }) => Effect.Effect<
-    StreamControlCommandResponseData,
-    DataError | ValidationError
-  >
-  readonly setGamescopeSharpness: (payload: {
-    readonly sharpness: number
-  }) => Effect.Effect<
-    StreamControlCommandResponseData,
-    DataError | ValidationError
-  >
 }
 
 export class StreamControl extends Context.Service<
@@ -146,14 +113,18 @@ export class StreamControl extends Context.Service<
 
 interface Runtime {
   readonly options: StreamControlOptions
+  readonly pluginRegistry: PluginRegistry
   readonly connectMoonlight: (
     socketPath: string,
   ) => Promise<MoonlightControlClient>
-  readonly connectGamescope: (
-    socketPath: string,
-  ) => Promise<GamescopeControlClient>
   readonly record: (event: unknown) => Promise<void>
   readonly deviceControl: DeviceControlService
+}
+
+interface PluginStreamControlDescription {
+  readonly config?: { readonly enabled: boolean }
+  readonly controls?: readonly StreamControlCapability[]
+  readonly state?: unknown
 }
 
 function streamControlOptionsFromEnv(
@@ -161,7 +132,6 @@ function streamControlOptionsFromEnv(
 ): StreamControlOptions {
   return {
     moonlightSocketPath: env.MOONLIGHT_LOCAL_CONTROL_SOCKET,
-    gamescopeSocketPath: env.KORRI_GAMESCOPE_CONTROL_SOCKET,
     artifactDir:
       env.KORRI_EVIER_ARTIFACT_DIR ?? env.KORRI_CONTROL_BENCH_ARTIFACT_DIR,
     backlightDir: env.KORRI_BACKLIGHT_DIR ?? "/sys/class/backlight",
@@ -176,9 +146,11 @@ export function createStreamControlService(
   const runtime = createRuntime(options, deps)
 
   return {
-    config: () => Effect.succeed(configPayload(runtime.options)),
-    controls: () => Effect.succeed(controlsPayload(runtime.options)),
+    config: () => Effect.promise(() => configPayload(runtime)),
+    controls: () => Effect.promise(() => controlsPayload(runtime)),
     state: () => Effect.promise(() => readState(runtime)),
+    applyAction: payload =>
+      applyAction(runtime, payload.action, payload.payload),
     setBrightness: payload =>
       range("percent", payload.percent, 0, 100).pipe(
         Effect.flatMap(() => validateBacklightDeviceName(payload.device)),
@@ -221,53 +193,19 @@ export function createStreamControlService(
           ),
         ),
       ),
-    setLinkedFps: payload =>
-      range("fps", payload.fps, 30, 120).pipe(
-        Effect.flatMap(() => runLinkedFps(runtime, payload)),
-      ),
-    setLinkedResolution: payload =>
-      gamescopeResolution(payload).pipe(
-        Effect.flatMap(() => runLinkedResolution(runtime, payload)),
-      ),
-    setGamescopeMode: payload =>
-      gamescopeResolution(payload).pipe(
-        Effect.flatMap(() =>
-          runGamescope(runtime, "gamescope.mode", payload, client =>
-            setGamescopeMode(client, payload),
-          ),
-        ),
-      ),
-    setGamescopeFps: payload =>
-      // Gamescope's GAMESCOPE_FPS_LIMIT cardinal accepts 0..240 (0 disables
-      // the limiter). The Effect schema RuntimeGamescopeFps already rejects
-      // anything outside this range; the runtime range() guard exists so
-      // that direct service callers get a typed ValidationError instead of
-      // a Die.
-      range("fps", payload.fps, 0, 240).pipe(
-        Effect.flatMap(() =>
-          runGamescope(runtime, "gamescope.fps", payload, client =>
-            setGamescopeFps(client, payload),
-          ),
-        ),
-      ),
-    setGamescopeFilter: payload =>
-      runGamescope(runtime, "gamescope.filter", payload, client =>
-        setGamescopeFilter(client, payload),
-      ),
-    setGamescopeSharpness: payload =>
-      range("sharpness", payload.sharpness, 0, 20).pipe(
-        Effect.flatMap(() =>
-          runGamescope(runtime, "gamescope.sharpness", payload, client =>
-            setGamescopeSharpness(client, payload),
-          ),
-        ),
-      ),
   }
 }
 
 export const StreamControlLayerLive = Layer.sync(StreamControl)(() =>
   createStreamControlService(),
 )
+
+export const StreamControlLayerLiveWithPlugins = (
+  pluginRegistry: PluginRegistry,
+) =>
+  Layer.sync(StreamControl)(() =>
+    createStreamControlService(undefined, { pluginRegistry }),
+  )
 
 function createRuntime(
   options: StreamControlOptions,
@@ -290,12 +228,10 @@ function createRuntime(
 
   return {
     options,
+    pluginRegistry: deps.pluginRegistry ?? createPluginRegistry([]),
     connectMoonlight:
       deps.connectMoonlight ??
       ((socketPath: string) => connectMoonlightControl({ socketPath })),
-    connectGamescope:
-      deps.connectGamescope ??
-      ((socketPath: string) => connectGamescopeControl({ socketPath })),
     deviceControl,
     record: createStreamControlEventRecorder({
       artifactDir: options.artifactDir,
@@ -304,6 +240,103 @@ function createRuntime(
       now,
     }),
   }
+}
+
+function applyAction(
+  runtime: Runtime,
+  action: string,
+  requested: StreamControlRequestedPayload,
+): Effect.Effect<
+  StreamControlCommandResponseData,
+  DataError | ValidationError
+> {
+  if (action === "app.stream-control.brightness.set") {
+    return numericPayloadField(requested, "percent").pipe(
+      Effect.flatMap(percent =>
+        range("percent", percent, 0, 100).pipe(Effect.as(percent)),
+      ),
+      Effect.flatMap(percent =>
+        runBrightness(
+          runtime,
+          "brightness",
+          requested,
+          percent,
+          typeof requested.device === "string" ? requested.device : undefined,
+        ),
+      ),
+    )
+  }
+  if (action === "app.stream-control.moonlight-bitrate.set") {
+    return numericPayloadField(requested, "bitrateKbps").pipe(
+      Effect.flatMap(bitrateKbps =>
+        createStreamControlService(runtime.options, {
+          pluginRegistry: runtime.pluginRegistry,
+          connectMoonlight: runtime.connectMoonlight,
+        }).setMoonlightBitrate({ bitrateKbps }),
+      ),
+    )
+  }
+  if (action === "app.stream-control.moonlight-fps.set") {
+    return numericPayloadField(requested, "fps").pipe(
+      Effect.flatMap(fps =>
+        createStreamControlService(runtime.options, {
+          pluginRegistry: runtime.pluginRegistry,
+          connectMoonlight: runtime.connectMoonlight,
+        }).setMoonlightFps({ fps }),
+      ),
+    )
+  }
+  if (action === "app.stream-control.moonlight-resolution.set") {
+    return numericPayloadField(requested, "width").pipe(
+      Effect.bindTo("width"),
+      Effect.bind("height", () => numericPayloadField(requested, "height")),
+      Effect.flatMap(({ width, height }) =>
+        createStreamControlService(runtime.options, {
+          pluginRegistry: runtime.pluginRegistry,
+          connectMoonlight: runtime.connectMoonlight,
+        }).setMoonlightResolution({ width, height }),
+      ),
+    )
+  }
+
+  const ref = parsePluginRecordId(action)
+  if (!ref) {
+    return Effect.fail(
+      new DataError({ reason: "Unavailable", message: "unsupported action" }),
+    )
+  }
+
+  const plugin = runtime.pluginRegistry.get(ref.provider)
+  if (!plugin || !runtime.pluginRegistry.enabledPluginIds.has(ref.provider)) {
+    return Effect.fail(
+      new DataError({ reason: "Unavailable", message: "provider disabled" }),
+    )
+  }
+
+  const handler = streamControlHandler(plugin, "stream-control.apply")
+  if (!handler) {
+    return Effect.fail(
+      new DataError({ reason: "Unavailable", message: "action unsupported" }),
+    )
+  }
+
+  return runPluginHandler(handler, {
+    operation: "stream-control.apply",
+    provider: ref.provider,
+    input: { action, payload: requested },
+  }).pipe(
+    Effect.map(response =>
+      recordCommandOutcome(
+        { action, requested, record: runtime.record },
+        response,
+      ),
+    ),
+    Effect.flatMap(response => Effect.promise(() => response)),
+    Effect.mapError(
+      error =>
+        new DataError({ reason: "Unavailable", message: errorMessage(error) }),
+    ),
+  )
 }
 
 function runMoonlight(
@@ -316,23 +349,6 @@ function runMoonlight(
     socketPath: runtime.options.moonlightSocketPath,
     disabledError: "moonlight socket disabled",
     connect: runtime.connectMoonlight,
-    action,
-    requested,
-    record: runtime.record,
-    run,
-  })
-}
-
-function runGamescope(
-  runtime: Runtime,
-  action: string,
-  requested: StreamControlRequestedPayload,
-  run: (client: GamescopeControlClient) => Promise<unknown>,
-) {
-  return runSocketAction({
-    socketPath: runtime.options.gamescopeSocketPath,
-    disabledError: "gamescope socket disabled",
-    connect: runtime.connectGamescope,
     action,
     requested,
     record: runtime.record,
@@ -361,92 +377,9 @@ function runBrightness(
   })
 }
 
-function runLinkedFps(
-  runtime: Runtime,
-  payload: { readonly fps: number },
-): Effect.Effect<
-  StreamControlCommandResponseData,
-  DataError | ValidationError
-> {
-  return runLinkedAction(runtime, "linked.fps", payload, [
-    {
-      key: "moonlight",
-      run: () => runLinkedMoonlight(runtime, client => client.setFps(payload)),
-    },
-    {
-      key: "gamescope",
-      run: () =>
-        runLinkedGamescope(runtime, client => setGamescopeFps(client, payload)),
-    },
-  ])
-}
-
-function runLinkedResolution(
-  runtime: Runtime,
-  payload: { readonly width: number; readonly height: number },
-): Effect.Effect<
-  StreamControlCommandResponseData,
-  DataError | ValidationError
-> {
-  return runLinkedAction(runtime, "linked.resolution", payload, [
-    {
-      key: "gamescope",
-      run: () =>
-        runLinkedGamescope(runtime, client =>
-          setGamescopeMode(client, payload),
-        ),
-    },
-    {
-      key: "moonlight",
-      run: () =>
-        runLinkedMoonlight(runtime, client => client.setResolution(payload)),
-    },
-  ])
-}
-
-function runLinkedAction(
-  runtime: Runtime,
-  action: string,
-  requested: StreamControlRequestedPayload,
-  targets: readonly {
-    readonly key: "moonlight" | "gamescope"
-    readonly run: () => Promise<LinkedTargetOutcome>
-  }[],
-): Effect.Effect<
-  StreamControlCommandResponseData,
-  DataError | ValidationError
-> {
-  return Effect.tryPromise({
-    try: async () => {
-      const entries: Array<
-        readonly ["moonlight" | "gamescope", LinkedTargetOutcome]
-      > = []
-      for (const target of targets) {
-        entries.push([target.key, await target.run()] as const)
-      }
-      const byKey = Object.fromEntries(entries)
-      const response = {
-        status: linkedOverallStatus(entries.map(([, outcome]) => outcome)),
-        ...byKey,
-      }
-      return recordCommandOutcome(
-        { action, requested, record: runtime.record },
-        response,
-      )
-    },
-    catch: error =>
-      new DataError({ reason: "Unavailable", message: errorMessage(error) }),
-  })
-}
-
-type LinkedTargetOutcome =
+type CommandTargetOutcome =
   | { readonly status: "applied"; readonly response: unknown }
   | { readonly status: "pending"; readonly response: unknown }
-  | { readonly status: "failed"; readonly error: string }
-
-type CommandTargetOutcomeData =
-  | { readonly status: "applied" }
-  | { readonly status: "pending" }
   | { readonly status: "failed"; readonly error: string }
 
 type CommandOutcomeData =
@@ -457,56 +390,8 @@ type CommandOutcomeData =
       readonly status: "failed"
       readonly error: string
     }
-  | {
-      readonly kind: "linked"
-      readonly status: "applied" | "pending" | "partial" | "failed"
-      readonly moonlight: CommandTargetOutcomeData
-      readonly gamescope: CommandTargetOutcomeData
-    }
 
-async function runLinkedMoonlight(
-  runtime: Runtime,
-  run: (client: MoonlightControlClient) => Promise<unknown>,
-): Promise<LinkedTargetOutcome> {
-  return runLinkedSocketTarget(
-    runtime.options.moonlightSocketPath,
-    "moonlight socket disabled",
-    runtime.connectMoonlight,
-    run,
-  )
-}
-
-async function runLinkedGamescope(
-  runtime: Runtime,
-  run: (client: GamescopeControlClient) => Promise<unknown>,
-): Promise<LinkedTargetOutcome> {
-  return runLinkedSocketTarget(
-    runtime.options.gamescopeSocketPath,
-    "gamescope socket disabled",
-    runtime.connectGamescope,
-    run,
-  )
-}
-
-async function runLinkedSocketTarget<TClient>(
-  socketPath: string | undefined,
-  disabledError: string,
-  connect: (socketPath: string) => Promise<TClient>,
-  run: (client: TClient) => Promise<unknown>,
-): Promise<LinkedTargetOutcome> {
-  if (!socketPath) return { status: "failed", error: disabledError }
-  let client: TClient | undefined
-  try {
-    client = await connect(socketPath)
-    return commandTargetOutcome(await run(client))
-  } catch (error) {
-    return { status: "failed", error: errorMessage(error) }
-  } finally {
-    closeClient(client)
-  }
-}
-
-function commandTargetOutcome(response: unknown): LinkedTargetOutcome {
+function commandTargetOutcome(response: unknown): CommandTargetOutcome {
   const result = rpcResult(response)
   if (result?._tag === "command.accepted")
     return { status: "pending", response }
@@ -523,68 +408,11 @@ function commandFailureMessage(result: Record<string, unknown>): string {
   return reason ? `${status}: ${reason}` : status
 }
 
-function linkedOverallStatus(
-  outcomes: readonly LinkedTargetOutcome[],
-): "applied" | "pending" | "partial" | "failed" {
-  const failures = outcomes.filter(outcome => outcome.status === "failed")
-  if (failures.length === outcomes.length) return "failed"
-  if (failures.length > 0) return "partial"
-  return outcomes.some(outcome => outcome.status === "pending")
-    ? "pending"
-    : "applied"
-}
-
 function commandOutcome(response: unknown): CommandOutcomeData {
-  const linked = linkedCommandOutcome(response)
-  return linked ?? singleCommandOutcome(response)
-}
-
-function singleCommandOutcome(response: unknown): CommandOutcomeData {
   const target = commandTargetOutcome(response)
   return target.status === "failed"
     ? { kind: "single", status: "failed", error: target.error }
     : { kind: "single", status: target.status }
-}
-
-function linkedCommandOutcome(
-  response: unknown,
-): Extract<CommandOutcomeData, { readonly kind: "linked" }> | undefined {
-  if (!isRecord(response)) return undefined
-  const moonlight = targetOutcomeData(response.moonlight)
-  const gamescope = targetOutcomeData(response.gamescope)
-  if (!moonlight || !gamescope) return undefined
-  const status = response.status
-  return {
-    kind: "linked",
-    status:
-      status === "applied" ||
-      status === "pending" ||
-      status === "partial" ||
-      status === "failed"
-        ? status
-        : linkedOverallStatus([moonlight, gamescope]),
-    moonlight,
-    gamescope,
-  }
-}
-
-function targetOutcomeData(
-  value: unknown,
-): (CommandTargetOutcomeData & LinkedTargetOutcome) | undefined {
-  if (!isRecord(value)) return undefined
-  if (value.status === "failed") {
-    return {
-      status: "failed",
-      error: typeof value.error === "string" ? value.error : "failed",
-    }
-  }
-  if (value.status === "pending") {
-    return { status: "pending", response: value.response }
-  }
-  if (value.status === "applied") {
-    return { status: "applied", response: value.response }
-  }
-  return undefined
 }
 
 function runSocketAction<TClient>(input: {
@@ -649,23 +477,29 @@ async function recordCommandOutcome(
 async function readState(
   runtime: Runtime,
 ): Promise<StreamControlStateResponseData> {
-  const [moonlight, gamescope, brightness, battery] = await Promise.all([
-    readControlState(
-      runtime.options.moonlightSocketPath,
-      runtime.connectMoonlight,
-      client => client.state(),
-      normalizeMoonlightState,
-    ),
-    readControlState(
-      runtime.options.gamescopeSocketPath,
-      runtime.connectGamescope,
-      client => client.state(),
-      normalizeGamescopeState,
-    ),
-    readBrightnessState(runtime),
-    readBatteryState(runtime),
-  ])
-  const result = { moonlight, gamescope, brightness, battery }
+  const [moonlight, brightness, battery, pluginDescriptions] =
+    await Promise.all([
+      readControlState(
+        runtime.options.moonlightSocketPath,
+        runtime.connectMoonlight,
+        client => client.state(),
+        normalizeMoonlightState,
+      ),
+      readBrightnessState(runtime),
+      readBatteryState(runtime),
+      describePluginStreamControls(runtime),
+    ])
+  const result = {
+    moonlight,
+    brightness,
+    battery,
+    plugins: Object.fromEntries(
+      pluginDescriptions.map(description => [
+        description.provider,
+        description.description.state ?? { status: "disabled" },
+      ]),
+    ) as StreamControlStateResponseData["plugins"],
+  }
   await recordStateSnapshot(runtime.record, result)
   return result
 }
@@ -692,27 +526,88 @@ async function readBatteryState(runtime: Runtime) {
   }
 }
 
-function configPayload(
-  options: StreamControlOptions,
-): StreamControlConfigResponseData {
+async function configPayload(
+  runtime: Runtime,
+): Promise<StreamControlConfigResponseData> {
+  const pluginDescriptions = await describePluginStreamControls(runtime)
   return {
-    moonlight: { enabled: Boolean(options.moonlightSocketPath) },
-    gamescope: { enabled: Boolean(options.gamescopeSocketPath) },
+    moonlight: { enabled: Boolean(runtime.options.moonlightSocketPath) },
     brightness: { enabled: true },
     battery: { enabled: true },
-    artifactDir: options.artifactDir ?? null,
+    plugins: Object.fromEntries(
+      pluginDescriptions.map(description => [
+        description.provider,
+        description.description.config ?? { enabled: false },
+      ]),
+    ),
+    artifactDir: runtime.options.artifactDir ?? null,
   }
 }
 
-function controlsPayload(
-  options: StreamControlOptions,
-): StreamControlControlsResponseData {
-  return streamControlCapabilities({
-    moonlight: Boolean(options.moonlightSocketPath),
-    gamescope: Boolean(options.gamescopeSocketPath),
-    brightness: true,
-    battery: true,
-  })
+async function controlsPayload(
+  runtime: Runtime,
+): Promise<StreamControlControlsResponseData> {
+  const pluginControls = (await describePluginStreamControls(runtime)).flatMap(
+    description => description.description.controls ?? [],
+  )
+  return streamControlCapabilities(
+    {
+      moonlight: Boolean(runtime.options.moonlightSocketPath),
+      brightness: true,
+      battery: true,
+    },
+    pluginControls,
+  )
+}
+
+async function describePluginStreamControls(runtime: Runtime): Promise<
+  readonly {
+    readonly provider: ProviderId
+    readonly description: PluginStreamControlDescription
+  }[]
+> {
+  const descriptions = []
+  for (const plugin of runtime.pluginRegistry.enabledPlugins) {
+    const handler = streamControlHandler(plugin, "stream-control.describe")
+    if (!handler) continue
+    try {
+      const description = await Effect.runPromise(
+        runPluginHandler(handler, {
+          operation: "stream-control.describe",
+          provider: plugin.id,
+          input: {},
+        }) as Effect.Effect<PluginStreamControlDescription, unknown>,
+      )
+      descriptions.push({ provider: plugin.id, description })
+    } catch (error) {
+      descriptions.push({
+        provider: plugin.id,
+        description: {
+          config: { enabled: false },
+          state: { status: "error", error: errorMessage(error) },
+          controls: [],
+        },
+      })
+    }
+  }
+  return descriptions
+}
+
+function streamControlHandler(
+  plugin: KorriPlugin,
+  operation: "stream-control.describe" | "stream-control.apply",
+): PluginHandler | undefined {
+  return plugin.handlers.find(handler => handler.operation === operation)
+}
+
+function numericPayloadField(
+  payload: StreamControlRequestedPayload,
+  key: string,
+): Effect.Effect<number, ValidationError> {
+  const value = payload[key]
+  return typeof value === "number" && Number.isFinite(value)
+    ? Effect.succeed(value)
+    : Effect.fail(new ValidationError({ message: `${key} number required` }))
 }
 
 function range(
@@ -748,15 +643,6 @@ function moonlightResolution(payload: {
         MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.height.max,
       ),
     ),
-  )
-}
-
-function gamescopeResolution(payload: {
-  readonly width: number
-  readonly height: number
-}): Effect.Effect<void, ValidationError> {
-  return range("width", payload.width, 1, 16_384).pipe(
-    Effect.andThen(range("height", payload.height, 1, 16_384)),
   )
 }
 

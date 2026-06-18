@@ -14,17 +14,9 @@
  * touching ProseQL.
  */
 
-import { KORRI_GAMESCOPE_PLUGIN_ID } from "@platform/plugin/ids"
 import { Schema } from "effect"
 
 import {
-  GamescopeBackend,
-  GamescopeFilter,
-  GamescopeGenerateDrmMode,
-  GamescopeOrientation,
-  GamescopeScaler,
-  GamescopeTouchMode,
-  GamescopeVirtualConnectorStrategy,
   InheritableLayer,
   MoonlightCodec,
   MoonlightControlAuthority,
@@ -41,31 +33,8 @@ const positiveNumber = (label: string) =>
       : `${label} greater than 0 required`,
   )
 
-const nonNegativeNumber = (label: string) =>
-  Schema.makeFilter<number>(value =>
-    Number.isFinite(value) && value >= 0
-      ? undefined
-      : `${label} greater than or equal to 0 required`,
-  )
-
-const finiteNumberRange = (min: number, max: number, label: string) =>
-  Schema.makeFilter<number>(value =>
-    Number.isFinite(value) && value >= min && value <= max
-      ? undefined
-      : `${label} between ${min} and ${max} required`,
-  )
-
 const PositiveInteger = (label: string) =>
   Schema.Int.check(positiveNumber(label))
-
-const NonNegativeInteger = (label: string) =>
-  Schema.Int.check(nonNegativeNumber(label))
-
-const PositiveNumber = (label: string) =>
-  Schema.Number.check(positiveNumber(label))
-
-const NonNegativeNumber = (label: string) =>
-  Schema.Number.check(nonNegativeNumber(label))
 
 const NonEmptyString = (label: string) =>
   Schema.String.pipe(
@@ -79,113 +48,11 @@ const NonEmptyString = (label: string) =>
 const NullablePositiveInteger = (label: string) =>
   Schema.NullOr(PositiveInteger(label))
 
-const GamescopeOverrideBackendPolicy = Schema.Struct({
-  type: Schema.optional(GamescopeBackend),
-  allowDeferred: Schema.optional(Schema.Boolean),
-})
+const ProviderIdKey = Schema.String.check(
+  Schema.isPattern(/^@[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+$/),
+)
 
-const GamescopeOverrideWindowPolicy = Schema.Struct({
-  fullscreen: Schema.optional(Schema.Boolean),
-  borderless: Schema.optional(Schema.Boolean),
-  grabKeyboard: Schema.optional(Schema.Boolean),
-  forceGrabCursor: Schema.optional(Schema.Boolean),
-  displayIndex: Schema.optional(NonNegativeInteger("window.displayIndex")),
-  forceWindowsFullscreen: Schema.optional(Schema.Boolean),
-  exposeWayland: Schema.optional(Schema.Boolean),
-  xwaylandCount: Schema.optional(PositiveInteger("window.xwaylandCount")),
-  fadeOutDuration: Schema.optional(NonNegativeNumber("window.fadeOutDuration")),
-})
-
-const GamescopeOverrideDisplayPolicy = Schema.Struct({
-  output: Schema.optional(
-    Schema.Struct({
-      width: Schema.optional(PositiveNumber("display.output.width")),
-      height: Schema.optional(PositiveNumber("display.output.height")),
-      preferredConnectors: Schema.optional(
-        Schema.Array(NonEmptyString("display.output.preferredConnectors[]")),
-      ),
-    }),
-  ),
-  nested: Schema.optional(
-    Schema.Struct({
-      width: Schema.optional(PositiveNumber("display.nested.width")),
-      height: Schema.optional(PositiveNumber("display.nested.height")),
-      refresh: Schema.optional(PositiveNumber("display.nested.refresh")),
-      unfocusedRefresh: Schema.optional(
-        PositiveNumber("display.nested.unfocusedRefresh"),
-      ),
-    }),
-  ),
-  scale: Schema.optional(
-    Schema.Struct({
-      max: Schema.optional(PositiveNumber("display.scale.max")),
-    }),
-  ),
-  orientation: Schema.optional(GamescopeOrientation),
-  adaptiveSync: Schema.optional(Schema.Boolean),
-  framerateLimit: Schema.optional(NonNegativeNumber("display.framerateLimit")),
-})
-
-const GamescopeOverrideScalingPolicy = Schema.Struct({
-  scaler: Schema.optional(GamescopeScaler),
-  filter: Schema.optional(GamescopeFilter),
-  sharpness: Schema.optional(
-    Schema.Number.check(finiteNumberRange(0, 20, "scaling.sharpness")),
-  ),
-})
-
-const GamescopeOverrideCursorPolicy = Schema.Struct({
-  hideDelay: Schema.optional(NonNegativeNumber("cursor.hideDelay")),
-  scaleHeight: Schema.optional(PositiveNumber("cursor.scaleHeight")),
-})
-
-const GamescopeOverrideInputPolicy = Schema.Struct({
-  mouseSensitivity: Schema.optional(PositiveNumber("input.mouseSensitivity")),
-  defaultTouchMode: Schema.optional(GamescopeTouchMode),
-})
-
-const GamescopeOverrideEmbeddedPolicy = Schema.Struct({
-  generateDrmMode: Schema.optional(GamescopeGenerateDrmMode),
-  immediateFlips: Schema.optional(Schema.Boolean),
-  virtualConnectorStrategy: Schema.optional(GamescopeVirtualConnectorStrategy),
-})
-
-const GamescopeOverrideHdrPolicy = Schema.Struct({
-  enable: Schema.optional(Schema.Boolean),
-  sdrGamutWideness: Schema.optional(
-    Schema.Number.check(finiteNumberRange(0, 1, "hdr.sdrGamutWideness")),
-  ),
-  sdrContentNits: Schema.optional(
-    Schema.Number.check(finiteNumberRange(0, 10000, "hdr.sdrContentNits")),
-  ),
-  inverseToneMapping: Schema.optional(
-    Schema.Struct({
-      enable: Schema.optional(Schema.Boolean),
-      sdrNits: Schema.optional(
-        Schema.Number.check(finiteNumberRange(0, 1000, "hdr.itm.sdrNits")),
-      ),
-      targetNits: Schema.optional(
-        Schema.Number.check(finiteNumberRange(0, 10000, "hdr.itm.targetNits")),
-      ),
-    }),
-  ),
-})
-
-const GamescopeOverridePolicy = Schema.Struct({
-  enable: Schema.optional(Schema.Boolean),
-  backend: Schema.optional(GamescopeOverrideBackendPolicy),
-  window: Schema.optional(GamescopeOverrideWindowPolicy),
-  display: Schema.optional(GamescopeOverrideDisplayPolicy),
-  scaling: Schema.optional(GamescopeOverrideScalingPolicy),
-  cursor: Schema.optional(GamescopeOverrideCursorPolicy),
-  input: Schema.optional(GamescopeOverrideInputPolicy),
-  embedded: Schema.optional(GamescopeOverrideEmbeddedPolicy),
-  hdr: Schema.optional(GamescopeOverrideHdrPolicy),
-})
-
-const EphemeralLaunchWithPolicy = Schema.Struct({
-  [KORRI_GAMESCOPE_PLUGIN_ID]: Schema.optional(GamescopeOverridePolicy),
-})
+const EphemeralLaunchWithPolicy = Schema.Record(ProviderIdKey, Schema.Unknown)
 
 const EphemeralLaunchBlock = Schema.Struct({
   ...LaunchBlock.fields,
@@ -291,8 +158,8 @@ export const EphemeralOverride = Schema.Struct({
   inherit: Schema.optional(Schema.Boolean),
   byLauncher: Schema.optional(EphemeralByLauncherPayload),
 
-  // Inlined inheritable whitelist. Gamescope and Moonlight overrides
-  // intentionally use narrower schemas than persisted readable policy:
+  // Inlined inheritable whitelist. Runtime overrides intentionally use
+  // narrower schemas than persisted readable policy:
   // app.library.launch is unauthenticated on trusted-LAN deployments, so
   // runtime overrides must not expose command/env/raw-argv/key storage/path
   // process surfaces.

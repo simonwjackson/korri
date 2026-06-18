@@ -3,7 +3,7 @@ import { ResolvedGameRecord } from "@platform/fixtures/games/game"
 import type { AppIntegrationKind } from "@platform/library/config/app-integrations"
 import type { EphemeralOverride } from "@platform/library/config/ephemeral-override"
 import type {
-  GamescopePolicy,
+  LaunchCompanionMap,
   MoonlightPolicy,
 } from "@platform/library/config/inheritable-fields"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
@@ -62,13 +62,13 @@ export interface ResolveLaunchInputs {
 }
 
 export interface ResolvedLocalLauncherPolicy {
-  readonly gamescope: GamescopePolicy
+  readonly launchCompanions: LaunchCompanionMap
   readonly moonlight?: MoonlightPolicy
 }
 
 export interface ResolvedLaunch {
   readonly spec: LaunchSpec
-  readonly gamescope?: GamescopePolicy
+  readonly launchCompanions?: LaunchCompanionMap
   readonly extras?: LaunchExtras
   readonly artifacts?: LaunchArtifacts
   readonly app?: {

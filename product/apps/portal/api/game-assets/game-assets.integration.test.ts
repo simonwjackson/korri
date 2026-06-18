@@ -193,7 +193,7 @@ async function seedLibrary(root: string): Promise<void> {
         })
         const repository = createLibraryRepository(db)
         yield* repository.upsertGlobalConfig({
-          launch: { with: { "@korri:gamescope": { enable: false } } },
+          launch: { with: { "@example:wrapper": { enable: false } } },
         })
         yield* repository.upsertSystem({
           id: "snes",

@@ -1,10 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import type { GamescopePolicy } from "@platform/library/config/inheritable-fields"
-import type { LaunchSpec } from "@platform/library/launcher"
-import {
-  composeMoonlightGamescopeLaunchSpec,
-  composeMoonlightStreamLaunchSpec,
-} from "./moonlight-launch-spec"
+import { composeMoonlightStreamLaunchSpec } from "./moonlight-launch-spec"
 
 describe("composeMoonlightStreamLaunchSpec", () => {
   it("renders the invariant moonlight stream action, Korri Stream app, and launch-time host", () => {
@@ -170,45 +165,3 @@ describe("composeMoonlightStreamLaunchSpec", () => {
     ).toThrow(/width and height/)
   })
 })
-
-describe("composeMoonlightGamescopeLaunchSpec", () => {
-  it("wraps Moonlight with sibling Gamescope policy", () => {
-    const spec = composeMoonlightGamescopeLaunchSpec({
-      facts: { host: "aka.local" },
-      gamescope: { enable: true, window: { exposeWayland: true } },
-      wrapGamescopeLaunchSpec: fakeGamescopeWrapper,
-    })
-
-    expect(spec.command).toBe("gamescope")
-    const separatorIndex = spec.args.indexOf("--")
-    expect(separatorIndex).toBeGreaterThan(-1)
-    expect(spec.args.slice(separatorIndex)).toEqual([
-      "--",
-      "moonlight",
-      "stream",
-      "-app",
-      "Korri Stream",
-      "aka.local",
-    ])
-  })
-
-  it("fails before wrapping wayland Moonlight without sibling Gamescope Wayland exposure", () => {
-    expect(() =>
-      composeMoonlightGamescopeLaunchSpec({
-        facts: { host: "aka.local" },
-        policy: { platform: { name: "wayland" } },
-        gamescope: { enable: true, window: { exposeWayland: false } },
-        wrapGamescopeLaunchSpec: fakeGamescopeWrapper,
-      }),
-    ).toThrow(/exposeWayland/)
-  })
-})
-
-function fakeGamescopeWrapper(
-  spec: LaunchSpec,
-  policy: GamescopePolicy,
-): LaunchSpec {
-  return policy.enable === false
-    ? spec
-    : { command: "gamescope", args: ["--", spec.command, ...spec.args] }
-}

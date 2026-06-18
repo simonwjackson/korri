@@ -11,10 +11,8 @@
 }:
 
 rec {
-  # Power-user opt-in: a module that wires the Korri substrate-package
-  # overlay into `nixpkgs.overlays`. Importing this module replaces
-  # `pkgs.gamescope`, `pkgs.sunshine`, and `pkgs.moonlight-embedded`
-  # for the whole host.
+  # Power-user opt-in: a module that wires the Korri shared runtime package
+  # overlay into `nixpkgs.overlays` for the whole host.
   # Avoid in evaluations where `nixpkgs.pkgs` is set externally (e.g.
   # `pkgs.testers.runNixOSTest`), because that marks
   # `nixpkgs.overlays` read-only. Day-to-day consumers do NOT need
@@ -38,11 +36,9 @@ rec {
   };
 
   # Auto-attached sway pin for the x86 compositor runtime contract.
-  # Gamescope is owned by the global Korri package overlay so
-  # `pkgs.gamescope` remains `gamescope-korri`. Imported by
-  # korri-compositor below so downstream consumers inherit the
-  # known-good sway version without touching nixpkgs.overlays
-  # themselves. No-ops on non-x86 systems via the overlay itself.
+  # Imported by korri-compositor below so downstream consumers inherit the
+  # known-good sway version without touching nixpkgs.overlays themselves.
+  # No-ops on non-x86 systems via the overlay itself.
   korri-x86-compositor-overlay = import ../modules/korri-x86-compositor-overlay.nix {
     overlay = import ../overlays/korri-x86-compositor.nix;
   };

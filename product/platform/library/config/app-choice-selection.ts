@@ -1,7 +1,5 @@
-import { KORRI_GAMESCOPE_PLUGIN_ID } from "@platform/plugin/ids"
-
 import type {
-  GamescopePolicy,
+  LaunchCompanionMap,
   LaunchPolicy,
   MoonlightPolicy,
   RetroArchPolicy,
@@ -31,25 +29,16 @@ const mergeObject = <T extends object>(
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
-const mergeGamescopeValue = (
-  base: unknown,
-  override: unknown,
-  path: readonly string[] = [],
-): unknown => {
+const mergeCompanionValue = (base: unknown, override: unknown): unknown => {
   if (override === undefined) return base
   if (Array.isArray(override)) {
-    return path.join(".") === "extraArgs"
-      ? [...(Array.isArray(base) ? base : []), ...override]
-      : override
+    return [...(Array.isArray(base) ? base : []), ...override]
   }
   if (isPlainObject(base) && isPlainObject(override)) {
     return [
       ...new Set([...Object.keys(base), ...Object.keys(override)]),
     ].reduce<Record<string, unknown>>((merged, key) => {
-      const value = mergeGamescopeValue(base[key], override[key], [
-        ...path,
-        key,
-      ])
+      const value = mergeCompanionValue(base[key], override[key])
       if (value !== undefined) merged[key] = value
       return merged
     }, {})
@@ -57,13 +46,24 @@ const mergeGamescopeValue = (
   return override
 }
 
-const mergeGamescopePolicy = (
-  base: GamescopePolicy | undefined,
-  override: GamescopePolicy | undefined,
-): GamescopePolicy | undefined => {
+const mergeLaunchCompanions = (
+  base: LaunchCompanionMap | undefined,
+  override: LaunchCompanionMap | undefined,
+): LaunchCompanionMap | undefined => {
   if (base === undefined) return override
   if (override === undefined) return base
-  return mergeGamescopeValue(base, override) as GamescopePolicy
+  const baseRecord = base as Readonly<Record<string, unknown>>
+  const overrideRecord = override as Readonly<Record<string, unknown>>
+  return [...new Set([...Object.keys(base), ...Object.keys(override)])].reduce<
+    Record<string, unknown>
+  >((merged, providerId) => {
+    const value = mergeCompanionValue(
+      baseRecord[providerId],
+      overrideRecord[providerId],
+    )
+    if (value !== undefined) merged[providerId] = value
+    return merged
+  }, {}) as LaunchCompanionMap
 }
 
 const mergeSteamExtra = (
@@ -87,17 +87,7 @@ const mergeLaunchPolicy = (
 ): LaunchPolicy | undefined => {
   if (base === undefined) return override
   if (override === undefined) return base
-  const gamescope = mergeGamescopePolicy(
-    base.with?.[KORRI_GAMESCOPE_PLUGIN_ID],
-    override.with?.[KORRI_GAMESCOPE_PLUGIN_ID],
-  )
-  const withPolicy = {
-    ...(base.with ?? {}),
-    ...(override.with ?? {}),
-    ...(gamescope !== undefined
-      ? { [KORRI_GAMESCOPE_PLUGIN_ID]: gamescope }
-      : {}),
-  }
+  const withPolicy = mergeLaunchCompanions(base.with, override.with) ?? {}
   return Object.keys(withPolicy).length > 0
     ? { ...base, ...override, with: withPolicy }
     : { ...base, ...override }

@@ -110,19 +110,19 @@ describe("AppPayload", () => {
       runtime: "proton-arm64",
       state: { root: "{storage:steam}/Steam" },
       extra: { args: ["-silent", "-gamepadui"] },
-      "launch-options": "gamescope -- %command%",
+      "launch-options": "wrapper -- %command%",
     }
 
     expect(decodeAppRecord(record)).toMatchObject({
       kind: "steam",
       state: { root: "{storage:steam}/Steam" },
       extra: { args: ["-silent", "-gamepadui"] },
-      "launch-options": "gamescope -- %command%",
+      "launch-options": "wrapper -- %command%",
     })
     expect(appSteamPolicyFromRecord(record)).toEqual({
       state: { root: "{storage:steam}/Steam" },
       extra: { args: ["-silent", "-gamepadui"] },
-      "launch-options": "gamescope -- %command%",
+      "launch-options": "wrapper -- %command%",
     })
   })
 

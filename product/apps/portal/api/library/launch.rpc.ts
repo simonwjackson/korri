@@ -2,6 +2,7 @@ import { EntrySource } from "@platform/api/rpc/entry-source"
 import { ApiError } from "@platform/api/rpc/errors"
 import { EphemeralOverride } from "@platform/library/config/ephemeral-override"
 import { LaunchFailureKind } from "@platform/library/launcher"
+import { LaunchCompanionDiagnostic } from "@platform/plugin/launch-companion"
 import { Schema } from "effect"
 import { Rpc } from "effect/unstable/rpc"
 
@@ -108,6 +109,7 @@ const FailedResult = Schema.Struct({
   preflightReason: Schema.optional(PreflightRejectionReason),
   daemonReason: Schema.optional(DaemonRejectionReason),
   hostUnavailableReason: Schema.optional(HostUnavailableReason),
+  diagnostics: Schema.optional(Schema.Array(LaunchCompanionDiagnostic)),
 })
 
 export const LaunchLibraryResponse = Schema.Union([

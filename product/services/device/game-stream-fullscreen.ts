@@ -1,6 +1,3 @@
-export type { GamescopePolicy } from "@product/plugins/gamescope/src/launch-companion"
-export { composeGamescopeLaunchSpec } from "@product/plugins/gamescope/src/launch-companion"
-
 import type {
   SwayCommandRunner,
   SwayNode,
@@ -87,15 +84,9 @@ export class StreamSurfacePresenceTimeoutError extends Error {
 const DEFAULT_SURFACE_TIMEOUT_MS = 5_000
 const DEFAULT_SURFACE_POLL_MS = 100
 
-export const DEFAULT_GAMESCOPE_SELECTOR: SwayWindowSelector = {
-  appIds: ["gamescope"],
-  titles: ["gamescope"],
-  classes: ["gamescope", "Gamescope"],
-}
-
 export function findStreamSurfaceWindows(
   tree: SwayNode,
-  selector: SwayWindowSelector = DEFAULT_GAMESCOPE_SELECTOR,
+  selector: SwayWindowSelector,
 ): readonly StreamSurfaceSnapshot[] {
   const windows: StreamSurfaceSnapshot[] = []
   // fallow-ignore-next-line code-duplication

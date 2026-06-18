@@ -145,13 +145,11 @@ describe("resolveAppDescriptor", () => {
     expect(app.integration).toBe("steam")
     expect(app.command).toBe("steam")
     expect(app.args).toEqual([])
-    expect(app.gamescope).toEqual({
-      enable: true,
-    })
+    expect(app.launchCompanions).toBeUndefined()
     expect(app.capabilities).toEqual({ baselineDefaults: true })
   })
 
-  it("merges partial app-scoped Steam Gamescope tuning with the built-in baseline", () => {
+  it("merges partial app-scoped Steam launch companion tuning with the built-in baseline", () => {
     const app = run(
       resolveAppDescriptor({
         appId: "steam",
@@ -161,7 +159,7 @@ describe("resolveAppDescriptor", () => {
             kind: "steam",
             launch: {
               with: {
-                "@korri:gamescope": {
+                "@fixture:frame": {
                   display: { nested: { width: 854, height: 480 } },
                 },
               },
@@ -173,9 +171,10 @@ describe("resolveAppDescriptor", () => {
       }),
     )
 
-    expect(app.gamescope).toEqual({
-      enable: true,
-      display: { nested: { width: 854, height: 480 } },
+    expect(app.launchCompanions).toEqual({
+      "@fixture:frame": {
+        display: { nested: { width: 854, height: 480 } },
+      },
     })
   })
 
@@ -188,7 +187,7 @@ describe("resolveAppDescriptor", () => {
             id: "steam",
             kind: "steam",
             command: "/usr/bin/steam-custom",
-            launch: { with: { "@korri:gamescope": { enable: false } } },
+            launch: { with: { "@fixture:frame": { enable: false } } },
             state: { root: "/steam-home" },
           },
         ]),
@@ -198,10 +197,12 @@ describe("resolveAppDescriptor", () => {
 
     expect(app.integration).toBe("steam")
     expect(app.command).toBe("/usr/bin/steam-custom")
-    expect(app.gamescope).toEqual({ enable: false })
+    expect(app.launchCompanions).toEqual({
+      "@fixture:frame": { enable: false },
+    })
   })
 
-  it("does not inherit legacy Steam Gamescope fields once app-scoped config exists", () => {
+  it("does not inherit legacy Steam launch companion fields once app-scoped config exists", () => {
     const app = run(
       resolveAppDescriptor({
         appId: "steam",
@@ -211,7 +212,7 @@ describe("resolveAppDescriptor", () => {
             kind: "steam",
             launch: {
               with: {
-                "@korri:gamescope": {
+                "@fixture:frame": {
                   display: { nested: { width: 854, height: 480 } },
                 },
               },
@@ -225,19 +226,20 @@ describe("resolveAppDescriptor", () => {
             command: "steam",
             args: [],
             systems: [],
-            launch: { with: { "@korri:gamescope": { enable: false } } },
+            launch: { with: { "@fixture:frame": { enable: false } } },
           },
         ]),
       }),
     )
 
-    expect(app.gamescope).toEqual({
-      enable: true,
-      display: { nested: { width: 854, height: 480 } },
+    expect(app.launchCompanions).toEqual({
+      "@fixture:frame": {
+        display: { nested: { width: 854, height: 480 } },
+      },
     })
   })
 
-  it("merges legacy Steam launcher Gamescope tuning with the built-in baseline", () => {
+  it("merges legacy Steam launcher launch companion tuning with the built-in baseline", () => {
     const app = run(
       resolveAppDescriptor({
         appId: "steam",
@@ -250,7 +252,7 @@ describe("resolveAppDescriptor", () => {
             systems: [],
             launch: {
               with: {
-                "@korri:gamescope": {
+                "@fixture:frame": {
                   display: { nested: { width: 854, height: 480 } },
                 },
               },
@@ -260,9 +262,10 @@ describe("resolveAppDescriptor", () => {
       }),
     )
 
-    expect(app.gamescope).toEqual({
-      enable: true,
-      display: { nested: { width: 854, height: 480 } },
+    expect(app.launchCompanions).toEqual({
+      "@fixture:frame": {
+        display: { nested: { width: 854, height: 480 } },
+      },
     })
   })
 

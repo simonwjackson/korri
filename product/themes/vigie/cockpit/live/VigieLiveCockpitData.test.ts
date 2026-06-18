@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { type ProviderId, pluginRecordId } from "@platform/plugin"
 import { vigieCockpitFixture } from "../../fixtures/cockpit-fixtures"
 import {
   createVigieLiveFixture,
@@ -28,12 +29,19 @@ describe("Vigie live cockpit data", () => {
           id: "moonlight-bitrate",
           value: "12.0 Mbps",
         }),
-        expect.objectContaining({ id: "gamescope-filter", value: "fsr" }),
+        expect.objectContaining({
+          id: `${presentationProvider}/filter`,
+          value: "soft",
+        }),
         expect.objectContaining({ id: "battery", value: "82%" }),
       ]),
     )
     expect(fixture.metrics.map(metric => metric.id)).toEqual(
-      expect.arrayContaining(["moonlight-bitrate", "gamescope-fps", "battery"]),
+      expect.arrayContaining([
+        "moonlight-bitrate",
+        `${presentationProvider}/fps`,
+        "battery",
+      ]),
     )
     expect(fixture.library).toContainEqual(
       expect.objectContaining({
@@ -161,6 +169,8 @@ const multiPeerSnapshot = {
   },
 } satisfies VigieLiveSnapshot
 
+const presentationProvider = "@example:presentation" as ProviderId
+
 const liveSnapshot = {
   observedAt: "2026-06-14T19:40:00.000Z",
   server: {
@@ -264,22 +274,24 @@ const liveSnapshot = {
   },
   streamConfig: {
     moonlight: { enabled: true },
-    gamescope: { enabled: true },
     brightness: { enabled: true },
     battery: { enabled: true },
+    plugins: { [presentationProvider]: { enabled: true } },
     artifactDir: "/tmp/korri",
   },
   streamControls: {
     controls: [
       {
-        id: "gamescope.filter",
-        subsystem: "gamescope",
+        id: pluginRecordId(presentationProvider, "filter"),
+        label: "Filter",
+        subsystem: "presentation",
+        provider: presentationProvider,
         access: "read-write",
         status: "supported",
         unavailableReason: null,
-        action: "app.stream-control.gamescope-filter.set",
-        readback: "gamescope.filter",
-        value: { kind: "options", values: ["linear", "fsr"] },
+        action: pluginRecordId(presentationProvider, "filter.set"),
+        readback: pluginRecordId(presentationProvider, "filter"),
+        value: { kind: "options", values: ["soft", "crisp"] },
       },
     ],
   },
@@ -292,13 +304,15 @@ const liveSnapshot = {
         resolution: { width: 1920, height: 1080 },
       },
     },
-    gamescope: {
-      status: "ok",
-      readback: {
-        fps: 60,
-        resolution: { width: 1920, height: 1080 },
-        sharpness: 2,
-        filter: "fsr",
+    plugins: {
+      [presentationProvider]: {
+        status: "ok",
+        readback: {
+          fps: 60,
+          resolution: { width: 1920, height: 1080 },
+          sharpness: 2,
+          filter: "soft",
+        },
       },
     },
     brightness: {

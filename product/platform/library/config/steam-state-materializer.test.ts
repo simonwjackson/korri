@@ -56,7 +56,7 @@ describe("materializeSteamDesiredState", () => {
           stateRoot,
           command: "steam",
           target: "steam://rungameid/2379780",
-          launchOptions: "gamescope -- %command%",
+          launchOptions: "wrapper -- %command%",
           runtime: {
             id: "proton-arm64",
             path: "/compat/proton-arm64",
@@ -92,7 +92,7 @@ describe("materializeSteamDesiredState", () => {
           Valve: {
             Steam: {
               apps: {
-                "2379780": { LaunchOptions: "gamescope -- %command%" },
+                "2379780": { LaunchOptions: "wrapper -- %command%" },
               },
             },
           },
@@ -174,7 +174,7 @@ describe("materializeSteamDesiredState", () => {
         desired: {
           stateRoot,
           target: "steam://rungameid/2379780",
-          launchOptions: "gamescope -- %command%",
+          launchOptions: "wrapper -- %command%",
           runtime: {
             id: "proton-arm64",
             path: "/compat/proton-arm64",
@@ -194,7 +194,7 @@ describe("materializeSteamDesiredState", () => {
             Steam: {
               apps: {
                 "999": { LaunchOptions: "legacy options" },
-                "2379780": { LaunchOptions: "gamescope -- %command%" },
+                "2379780": { LaunchOptions: "wrapper -- %command%" },
               },
             },
           },

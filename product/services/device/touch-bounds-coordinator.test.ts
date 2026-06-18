@@ -16,7 +16,7 @@ function availableGeometry(x: number): CurrentStreamSurfaceGeometry {
       id: 42,
       focused: true,
       fullscreen: false,
-      appId: "gamescope",
+      appId: "frame-wrapper",
       rect: { x, y: 0, width: 960, height: 1080 },
       output,
     },

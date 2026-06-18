@@ -263,17 +263,8 @@ in
       default = with pkgs; [
         coreutils
         dbus
-        cfg.gamescope.package
       ];
       description = "Packages added to PATH for the compositor session service.";
-    };
-
-    gamescope = {
-      package = mkOption {
-        type = types.package;
-        default = pkgs.gamescope;
-        description = "Gamescope package available to foreground launches from the compositor session.";
-      };
     };
 
     sessionBus = {

@@ -13,3 +13,8 @@ supersedes:
 # Remove Gamescope conceptual coupling from Korri
 
 Fresh follow-up plan for making Gamescope a plugin-owned implementation detail while Korri platform/core/services/apps/themes/generic Nix surfaces remain conceptually agnostic.
+
+## Progress
+
+- 2026-06-17: U7 documentation/config-example pass completed. Added the durable architecture note for Gamescope as plugin-owned composition and updated readable examples to describe `launch.with."@korri:gamescope"` as plugin composition rather than a core or Moonlight field.
+- 2026-06-18: U8 local implementation completed and reviewed. Verified generic Korri layers are Gamescope-string-free outside explicit composition files, production entrypoints receive enabled plugin registries/hooks, and disabled/no-op launch companions do not trigger fullscreen repair.

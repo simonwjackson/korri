@@ -53,7 +53,7 @@ export const vigieCockpitFixture: CockpitFixture = {
         ],
         stream: [
           { id: "path", label: "Path", value: "Foreground (local)" },
-          { id: "runtime", label: "Runtime", value: "gamescope" },
+          { id: "runtime", label: "Runtime", value: "launch-wrapper" },
         ],
       },
     },
@@ -93,7 +93,7 @@ export const vigieCockpitFixture: CockpitFixture = {
         headline: "Recovering · Sonic Mania",
         gameId: "steam:1090630",
         requestId: "req_8f21",
-        note: "Failed at stage spawn-gamescope — mangoapp GLXBadFBConfig",
+        note: "Failed at stage spawn-launch-wrapper — mangoapp GLXBadFBConfig",
         phases: [
           PREPARE_DONE,
           { id: "run", label: "Run", status: "failed", substate: "Failed" },
@@ -184,7 +184,7 @@ export const vigieCockpitFixture: CockpitFixture = {
     {
       ts: "12:04:19.010",
       level: "debug",
-      source: "gamescope",
+      source: "launch-wrapper",
       message: "wlserver: started Xwayland on :1",
     },
     {
@@ -220,7 +220,7 @@ export const vigieCockpitFixture: CockpitFixture = {
     {
       ts: "12:04:26.300",
       level: "error",
-      source: "gamescope",
+      source: "launch-wrapper",
       message: "mangoapp: GLXBadFBConfig (recovered)",
     },
   ],
@@ -290,7 +290,7 @@ export const vigieCockpitFixture: CockpitFixture = {
     {
       ts: "12:04:18.244",
       phase: "Spawning",
-      detail: "gamescope + runtime spawn",
+      detail: "launch-wrapper + runtime spawn",
       level: "info",
     },
     {

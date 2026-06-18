@@ -51,10 +51,12 @@ const context: ResolvedLaunchContext = {
   moduleId: "fake08",
   modulePath: "/etc/korri/cores/fake08_libretro.so",
   core: "/etc/korri/cores/fake08_libretro.so",
-  gamescope: {
-    enable: true,
-    backend: { type: "wayland" },
-    window: { exposeWayland: true },
+  launchCompanions: {
+    "@example:wrapper": {
+      enable: true,
+      backend: { type: "wayland" },
+      window: { exposeWayland: true },
+    },
   },
   settings: { video_scale_integer: true, config_save_on_exit: false },
 }
@@ -537,7 +539,7 @@ describe("materializeReadableRetroArchLaunch", () => {
       path: "/cores/genesis_plus_gx.so",
     },
     content: { path: "/games/genesis/Sonic.md" },
-    gamescope: { enable: false },
+    launchCompanions: { "@example:wrapper": { enable: false } },
     retroarch: {
       configFile: { mode: "generated" },
       video: { fullscreen: true },
@@ -781,7 +783,7 @@ describe("materializeReadableRyubingLaunch", () => {
         require: { keys: ["prod.keys"] },
       },
     },
-    gamescope: { enable: false },
+    launchCompanions: { "@example:wrapper": { enable: false } },
     ryubing: {
       state: {
         root: "{storage:switch-card}/.config/Ryujinx",
@@ -1067,7 +1069,7 @@ describe("materializeReadableSteamLaunch", () => {
     steam: {
       state: { root: stateRoot },
       extra: { args: ["-silent"] },
-      "launch-options": "gamescope -- %command%",
+      "launch-options": "wrapper -- %command%",
     },
   })
 
@@ -1118,15 +1120,17 @@ describe("materializeReadableSteamLaunch", () => {
     ])
   })
 
-  it("keeps the Steam Gamescope baseline outside per-game LaunchOptions", async () => {
+  it("keeps the Steam wrapper baseline outside per-game LaunchOptions", async () => {
     const writes: Array<{ path: string; content: string }> = []
     const context = steamContext("/steam-home")
     const result = await runPromise(
       materializeReadableSteamLaunch({
         context: {
           ...context,
-          gamescope: {
-            enable: true,
+          launchCompanions: {
+            "@example:wrapper": {
+              enable: true,
+            },
           },
           steam: {
             state: { root: "/steam-home" },
@@ -1155,7 +1159,7 @@ describe("materializeReadableSteamLaunch", () => {
       args: ["-applaunch", "2379780"],
     })
     expect(writes).toEqual([])
-    expect(JSON.stringify(result)).not.toContain("korri-steam-gamescope-launch")
+    expect(JSON.stringify(result)).not.toContain("korri-steam-wrapper-launch")
   })
 
   it("resolves Steam storage tokens in process arguments", async () => {

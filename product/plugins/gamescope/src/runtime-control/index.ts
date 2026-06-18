@@ -1,5 +1,13 @@
-export type { GamescopeControlBridge } from "./bridge"
-export { startGamescopeControlBridge } from "./bridge"
+export type {
+  GamescopeControlBridge,
+  GamescopeControlBridgeProcessHandle,
+  GamescopeControlBridgeProcessManager,
+  GamescopeControlBridgeProcessStartRequest,
+} from "./bridge"
+export {
+  createProcessGamescopeControlBridge,
+  startGamescopeControlBridge,
+} from "./bridge"
 
 export type { GamescopeControlClient } from "./client"
 export { connectGamescopeControl } from "./client"

@@ -49,7 +49,6 @@ in
       bashInteractive
       coreutils
       dbus
-      gamescope
       procps
       sway
       xwayland
@@ -81,6 +80,7 @@ in
   # "source-machine" without needing the deploy-role aggregate.
   services.korri.sessiond = {
     enable = true;
+    path = [ pkgs.sway ];
     port = sessiondPort;
     socketPath = sessiondSocketPath;
     runtimeDir = sessiondRuntimeDir;
@@ -98,7 +98,6 @@ in
   };
 
   # Without this, korrid's Launcher falls through to the in-process
-  # shell launcher which spawns from the unit's bare systemd PATH and
-  # then explodes with ENOENT on gamescope. Mirrors product/systems/nixos/images/kiosk.nix.
+  # shell launcher instead of delegating to the foreground lifecycle service.
   services.korri.daemon.sessiond.socketPath = sessiondSocketPath;
 }

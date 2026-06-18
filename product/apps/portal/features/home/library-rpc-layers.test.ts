@@ -160,7 +160,7 @@ async function seedLibrary(
           const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
           const repository = createLibraryRepository(db)
           yield* repository.upsertGlobalConfig({
-            launch: { with: { "@korri:gamescope": { enable: false } } },
+            launch: { with: { "@example:wrapper": { enable: false } } },
           })
           yield* repository.upsertImportedGame({
             game: {

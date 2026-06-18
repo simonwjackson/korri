@@ -43,6 +43,7 @@ const localTestSource = new EntrySource({
 })
 const REPO_ROOT = resolve(import.meta.dir, "../../../../..")
 const FAKE_GAME = join(REPO_ROOT, "tools", "testing", "fake-game.sh")
+const wrapperProvider = "@example:wrapper"
 
 afterEach(async () => {
   setOptionalEnv("KORRI_LIBRARY_ROOT", originalLibraryRoot)
@@ -134,7 +135,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     expect(result).toEqual({ _tag: "Accepted", status: "launched" })
   })
 
-  it("dispatches a remote-source LaunchInput as a gamescope-wrapped Korri Stream moonlight launch", async () => {
+  it("dispatches a remote-source LaunchInput as a companion-ready Korri Stream moonlight launch", async () => {
     let dispatchedSpec:
       | { command: string; args: ReadonlyArray<string> }
       | undefined
@@ -173,13 +174,8 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       controlUrl: "http://aka.local:3001",
       gameId: "snes/echo.smc",
     })
-    expect(dispatchedSpec?.command).toBe("gamescope")
-    const args = dispatchedSpec?.args ?? []
-    const separatorIndex = args.indexOf("--")
-    expect(separatorIndex).toBeGreaterThan(-1)
-    expect(args.slice(separatorIndex)).toEqual([
-      "--",
-      "moonlight",
+    expect(dispatchedSpec?.command).toBe("moonlight")
+    expect(dispatchedSpec?.args).toEqual([
       "stream",
       "-app",
       "Korri Stream",
@@ -214,7 +210,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
               dispatchedSpec = spec
             },
             localPolicy: {
-              gamescope: { enable: true },
+              launchCompanions: {},
               moonlight: { input: { devices: ["/dev/input/event8"] } },
             },
           }),
@@ -222,11 +218,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       ),
     )
 
-    const args = dispatchedSpec?.args ?? []
-    const separatorIndex = args.indexOf("--")
-    expect(args.slice(separatorIndex)).toEqual([
-      "--",
-      "moonlight",
+    expect(dispatchedSpec?.args).toEqual([
       "stream",
       "-input",
       "/dev/input/event8",
@@ -271,7 +263,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
                 dispatchedSpec = spec
               },
               localPolicy: {
-                gamescope: { enable: false },
+                launchCompanions: {},
                 moonlight: {
                   environment: { OLD_ENV: null },
                   control: {
@@ -308,7 +300,10 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     expect(dispatchedSpec?.envUnset).toEqual(["OLD_ENV"])
   })
 
-  it("rejects wayland Moonlight remote-source policy without sibling Gamescope Wayland exposure", async () => {
+  it("passes wayland Moonlight remote-source policy through the generic launch path", async () => {
+    let dispatchedSpec:
+      | { command: string; args: ReadonlyArray<string> }
+      | undefined
     const remoteSource = new EntrySource({
       hostId: "aka",
       controlUrl: "http://aka.local:3001",
@@ -328,11 +323,11 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
                 gameId,
                 sessionId: "sess-wayland",
               }),
-            launchedSpec: () => {
-              throw new Error("launcher should not run for invalid policy")
+            launchedSpec: spec => {
+              dispatchedSpec = spec
             },
             localPolicy: {
-              gamescope: { enable: true, window: { exposeWayland: false } },
+              launchCompanions: {},
               moonlight: { platform: { name: "wayland" } },
             },
           }),
@@ -340,10 +335,8 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       ),
     )
 
-    expect(result.status).toBe("failed")
-    if (result.status === "failed") {
-      expect(result.stderrTail).toContain("exposeWayland")
-    }
+    expect(result).toEqual({ _tag: "Accepted", status: "launched" })
+    expect(dispatchedSpec?.args).toContain("wayland")
   })
 
   it("strips IPv6 brackets from the peer hostname when composing the moonlight spec", async () => {
@@ -499,7 +492,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       isLocal: false,
     })
     const layer = Layer.mergeAll(
-      localGameSourceLayer({ gamescope: { enable: false } }),
+      localGameSourceLayer({ launchCompanions: {} }),
       makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
       Layer.succeed(ForegroundSessionHost)(host),
       makeInMemoryRemoteStreamPrepareLayer(() =>
@@ -565,7 +558,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       resolveLaunchForGame: id =>
         Effect.succeed({
           spec: { command: "/bin/game", args: [id] },
-          gamescope: { enable: false },
+          launchCompanions: {},
         }),
     })
     const launcherLayer = Layer.succeed(Launcher)({
@@ -601,7 +594,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     expect(launchedSpec).toEqual({ command: "/bin/game", args: ["game"] })
   })
 
-  it("wraps the resolved launch with Gamescope before invoking the launcher", async () => {
+  it("returns launch companion diagnostics before invoking the launcher", async () => {
     let launchedSpec: unknown
     const sourceLayer = Layer.succeed(LibrarySource)({
       list: () =>
@@ -610,9 +603,8 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       resolveLaunchForGame: () =>
         Effect.succeed({
           spec: { command: "/bin/game", args: ["rom"] },
-          gamescope: {
-            enable: true,
-            app: { environment: { WAYLAND_DISPLAY: null } },
+          launchCompanions: {
+            [wrapperProvider]: { enable: true },
           },
         }),
     })
@@ -644,25 +636,13 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       ),
     )
 
-    expect(result).toEqual({ _tag: "Accepted", status: "launched" })
-    expect(launchedSpec).toEqual({
-      // A minimal { enable: true } policy resolves through the cascade
-      // default to wayland backend + exposed wayland socket.
-      command: "gamescope",
-      args: [
-        "--backend",
-        "wayland",
-        "-f",
-        "-b",
-        "--expose-wayland",
-        "--",
-        "env",
-        "-u",
-        "WAYLAND_DISPLAY",
-        "/bin/game",
-        "rom",
-      ],
+    expect(result).toMatchObject({
+      _tag: "LaunchFailed",
+      status: "failed",
+      exitCode: 124,
+      stderrTail: expect.stringContaining(wrapperProvider),
     })
+    expect(launchedSpec).toBeUndefined()
   })
 
   it("forwards launcher-anchor extras from ResolvedLaunch to the launcher (task-014 AC #2)", async () => {
@@ -762,7 +742,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     expect(capturedOptions).toBeUndefined()
   })
 
-  it("honors an explicit Gamescope backend override from the library cascade", async () => {
+  it("returns diagnostics for an unregistered launch companion provider", async () => {
     let launchedSpec: unknown
     const sourceLayer = Layer.succeed(LibrarySource)({
       list: () =>
@@ -771,10 +751,8 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       resolveLaunchForGame: () =>
         Effect.succeed({
           spec: { command: "/bin/game", args: ["rom"] },
-          gamescope: {
-            enable: true,
-            backend: { type: "sdl" as const },
-            window: { exposeWayland: false },
+          launchCompanions: {
+            [wrapperProvider]: { backend: { type: "sdl" as const } },
           },
         }),
     })
@@ -793,7 +771,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       },
     })
 
-    await Effect.runPromise(
+    const result = await Effect.runPromise(
       handleLaunchLibrary({ id: "game" }).pipe(
         Effect.provide(
           Layer.mergeAll(
@@ -806,10 +784,13 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
       ),
     )
 
-    expect(launchedSpec).toEqual({
-      command: "gamescope",
-      args: ["--backend", "sdl", "-f", "-b", "--", "/bin/game", "rom"],
+    expect(result).toMatchObject({
+      _tag: "LaunchFailed",
+      status: "failed",
+      exitCode: 124,
+      stderrTail: expect.stringContaining(wrapperProvider),
     })
+    expect(launchedSpec).toBeUndefined()
   })
 
   it("passes selected preset inputs and honors a direct-launch opt-out", async () => {
@@ -823,7 +804,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
         resolveInputs = inputs
         return Effect.succeed({
           spec: { command: "/bin/game", args: ["rom"] },
-          gamescope: { enable: false },
+          launchCompanions: {},
         })
       },
     })
@@ -891,7 +872,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
         }),
     })
     const layer = Layer.mergeAll(
-      localGameSourceLayer({ gamescope: { enable: false } }),
+      localGameSourceLayer({ launchCompanions: {} }),
       launcherLayer,
       Layer.succeed(ForegroundSessionHost)(host),
       remoteStreamPrepareNeverCalledLayer,
@@ -913,7 +894,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     const control = makeInMemoryLauncherLayer.createManagedControl()
     const host = createForegroundSessionHost()
     const layer = Layer.mergeAll(
-      localGameSourceLayer({ gamescope: { enable: false } }),
+      localGameSourceLayer({ launchCompanions: {} }),
       makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
       Layer.succeed(ForegroundSessionHost)(host),
       remoteStreamPrepareNeverCalledLayer,
@@ -942,7 +923,7 @@ describe("app.library.launch handler (configured-real launcher + fake-game.sh)",
     const control = makeInMemoryLauncherLayer.createManagedControl()
     const host = createForegroundSessionHost()
     const layer = Layer.mergeAll(
-      localGameSourceLayer({ gamescope: { enable: false } }),
+      localGameSourceLayer({ launchCompanions: {} }),
       makeInMemoryLauncherLayer({ behavior: { kind: "managed", control } }),
       Layer.succeed(ForegroundSessionHost)(host),
       remoteStreamPrepareNeverCalledLayer,
@@ -1059,11 +1040,7 @@ function remoteSourceTestLayer(options: {
     resolveLocalLauncherPolicy: () =>
       Effect.succeed(
         options.localPolicy ?? {
-          gamescope: {
-            enable: true,
-            backend: { type: "wayland" as const },
-            window: { fullscreen: true, borderless: true, exposeWayland: true },
-          },
+          launchCompanions: {},
         },
       ),
   })
@@ -1113,7 +1090,7 @@ function completedSessionHandle() {
 }
 
 function localGameSourceLayer(options: {
-  readonly gamescope: { readonly enable: boolean }
+  readonly launchCompanions: Readonly<Record<string, unknown>>
 }) {
   return Layer.succeed(LibrarySource)({
     list: () =>
@@ -1122,11 +1099,11 @@ function localGameSourceLayer(options: {
     resolveLaunchForGame: () =>
       Effect.succeed({
         spec: { command: "/bin/game", args: ["rom"] },
-        gamescope: options.gamescope,
+        launchCompanions: options.launchCompanions,
       }),
     resolveLocalLauncherPolicy: () =>
       Effect.succeed({
-        gamescope: options.gamescope,
+        launchCompanions: options.launchCompanions,
       }),
   })
 }
@@ -1159,7 +1136,7 @@ async function withTempProseqlLibrary(
           const db = yield* openKorriLibraryDb({ root, writeDebounce: 1 })
           const repository = createLibraryRepository(db)
           yield* repository.upsertGlobalConfig({
-            launch: { with: { "@korri:gamescope": { enable: false } } },
+            launch: { with: {} },
           })
           yield* repository.upsertGame({
             id: "snes/echo.smc",

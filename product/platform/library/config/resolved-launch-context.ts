@@ -1,7 +1,7 @@
 /**
  * Output of the cascade resolver — the fully-resolved set of fields
  * needed by `composeLaunchSpec` to produce a `LaunchSpec`, plus the
- * resolved `gamescope` policy that rides on the launch intent.
+ * resolved provider-keyed launch companion map that rides on the launch intent.
  *
  * This type is the boundary between Pass 2 (cascade fold) and Pass 3
  * (placeholder substitution). Keeping it explicit makes the split
@@ -9,8 +9,8 @@
  * decides *how the chosen launcher uses it*.
  *
  * Notes:
- * - `gamescope` is carried separately from `env`/`cwd`/`argsAppend`
- *   because the runner wraps it AROUND the launch spec at execution
+ * - `launchCompanions` is carried separately from `env`/`cwd`/`argsAppend`
+ *   because companion handlers wrap or annotate the launch spec at execution
  *   time. The launch intent file persists it next to (not inside)
  *   `LaunchSpec`.
  * - `core`, `system`, `emulator` are populated when the resolved
@@ -23,7 +23,7 @@ import { ArtifactId } from "@platform/protocol/artifact/artifact"
 import { Schema } from "effect"
 
 import {
-  GamescopePolicy,
+  LaunchCompanionMap,
   MoonlightPolicy,
   RetroArchPolicy,
   RyubingPolicy,
@@ -59,7 +59,7 @@ export const ResolvedLaunchContext = Schema.Struct({
   emulator: Schema.optional(Schema.String),
 
   // Resolved inheritable behavior fields (post-merge).
-  gamescope: Schema.optional(GamescopePolicy),
+  launchCompanions: Schema.optional(LaunchCompanionMap),
   moonlight: Schema.optional(MoonlightPolicy),
   retroarch: Schema.optional(RetroArchPolicy),
   ryubing: Schema.optional(RyubingPolicy),
@@ -90,7 +90,7 @@ export const ReadableResolvedLaunchContext = Schema.Struct({
       path: Schema.String,
     }),
   ),
-  gamescope: Schema.optional(GamescopePolicy),
+  launchCompanions: Schema.optional(LaunchCompanionMap),
   moonlight: Schema.optional(MoonlightPolicy),
   retroarch: Schema.optional(RetroArchPolicy),
   ryubing: Schema.optional(RyubingPolicy),

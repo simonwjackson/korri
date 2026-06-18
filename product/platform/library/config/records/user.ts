@@ -6,8 +6,8 @@
  * (cascade folds without a user layer). Named-but-missing userId
  * surfaces as `UserNotFound`.
  *
- * Layer-bearing: a user can carry inheritable behavior fields (e.g.,
- * `launch.with."@korri:gamescope".enable = true`) and presets that are always visible
+ * Layer-bearing: a user can carry inheritable behavior fields (for example,
+ * provider-keyed `launch.with` entries) and presets that are always visible
  * when the user is selected at launch time.
  *
  * Identity fields stay on `GamePayload`.

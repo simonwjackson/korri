@@ -5,7 +5,6 @@
   korriInputd,
   korriGameStream,
   korriCli,
-  korriGamescopeControlBridge,
   korrid,
   korriHeadlessSource,
   korriDesktop,

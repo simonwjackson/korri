@@ -1,26 +1,19 @@
 import { readFile } from "node:fs/promises"
 import { parseProcBusInputDevices } from "@platform/input/native/discover-devices"
 import { resolveInputPlumberVirtualGamepad } from "@platform/input/native/inputplumber-virtual-gamepad"
-import type {
-  GamescopePolicy,
-  MoonlightPolicy,
-} from "@platform/library/config/inheritable-fields"
+import type { MoonlightPolicy } from "@platform/library/config/inheritable-fields"
 import type { LaunchFailureKind, LaunchSpec } from "@platform/library/launcher"
-import { composeMoonlightGamescopeLaunchSpec } from "@platform/stream/moonlight-launch-spec"
-import { composeGamescopeLaunchSpec } from "@product/plugins/gamescope/src/launch-companion"
+import { composeMoonlightStreamLaunchSpec } from "@platform/stream/moonlight-launch-spec"
 
 /**
  * Build a Moonlight `LaunchSpec` for `moonlight stream -app "Korri Stream" <host>`.
- * Gamescope wrapping is driven by the sibling Gamescope policy, never by sniffing
- * Moonlight argv.
+ * Plugin wrapping is applied by the generic launch companion flow.
  */
 export interface ComposeMoonlightLaunchSpecOptions {
   /** Peer hostname or IP (IPv6 callers must strip brackets — see `moonlightHostFromControlUrl`). */
   readonly host: string
   /** Folded readable Moonlight policy. */
   readonly moonlight?: MoonlightPolicy
-  /** Folded sibling Gamescope policy. Defaults to disabled when omitted. */
-  readonly gamescope?: GamescopePolicy
   /** Resolved input devices from caller preflight. */
   readonly inputDevices?: readonly string[]
   /** Launch env allocated by caller preflight, for example local-control socket facts. */
@@ -80,10 +73,8 @@ export async function resolveMoonlightLaunchInputDevice(
 export function composeMoonlightLaunchSpec(
   options: ComposeMoonlightLaunchSpecOptions,
 ): LaunchSpec {
-  return composeMoonlightGamescopeLaunchSpec({
+  return composeMoonlightStreamLaunchSpec({
     policy: options.moonlight,
-    gamescope: options.gamescope ?? { enable: false },
-    wrapGamescopeLaunchSpec: composeGamescopeLaunchSpec,
     facts: {
       host: options.host,
       ...(options.inputDevices ? { inputDevices: options.inputDevices } : {}),

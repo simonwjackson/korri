@@ -1,5 +1,4 @@
 import { DataError, NotFoundError } from "@platform/api/rpc/errors"
-import { normalizeGamescopePolicy } from "@platform/library/config/inheritable-fields"
 import {
   type LaunchFailureKind,
   type LaunchSpec,
@@ -10,15 +9,21 @@ import {
   Launcher,
   LibraryError,
   LibrarySource,
+  type ResolvedLaunch,
 } from "@platform/library/library-services"
 import { logger } from "@platform/logger/logger"
+import {
+  composeLaunchCompanions,
+  type LaunchCompanionDiagnostic,
+  launchCompanionDiagnosticSummary,
+} from "@platform/plugin/launch-companion"
 import {
   moonlightControlEnvForHandle,
   moonlightControlHandleFromOptions,
 } from "@product/apps/portal/stream/moonlight-launcher"
 import type { RemotePrepareResult } from "@product/apps/portal/stream/remote-stream-client"
+import { createFirstPartyPluginRegistryFromEnv } from "@product/plugins"
 import { Effect } from "effect"
-import { composeGamescopeLaunchSpec } from "../../../../../product/services/device/game-stream-fullscreen"
 
 import {
   composeMoonlightLaunchSpec,
@@ -34,6 +39,10 @@ type FailedLaunchLibraryResponse = Extract<
   LaunchLibraryResponse,
   { readonly status: "failed" }
 >
+
+type LaunchResolutionResult =
+  | { readonly _tag: "resolved"; readonly resolved: ResolvedLaunch }
+  | { readonly _tag: "failed"; readonly response: FailedLaunchLibraryResponse }
 
 export const handleLaunchLibrary = (
   payload: typeof LaunchLibraryPayload.Type,
@@ -64,7 +73,12 @@ export const handleLaunchLibrary = (
         Effect.matchEffect({
           onSuccess: resolved =>
             Effect.succeed({ _tag: "resolved" as const, resolved }),
-          onFailure: (error: LibraryError) => {
+          onFailure: (
+            error: LibraryError,
+          ): Effect.Effect<
+            LaunchResolutionResult,
+            DataError | NotFoundError
+          > => {
             if (isPlayableNotFound(error)) {
               logger.warn(
                 { id: payload.id },
@@ -94,35 +108,21 @@ export const handleLaunchLibrary = (
       return resolvedResult.response
     }
 
-    const gamescope = normalizeGamescopePolicy(
-      resolvedResult.resolved.gamescope,
-    )
-    const specResult = yield* Effect.try({
-      try: () =>
-        composeGamescopeLaunchSpec(resolvedResult.resolved.spec, gamescope, {
-          steamSession: resolvedResult.resolved.app?.integration === "steam",
-        }),
-      catch: error => error,
-    }).pipe(
-      Effect.match({
-        onSuccess: spec => ({ _tag: "resolved" as const, spec }),
-        onFailure: error => ({
-          _tag: "failed" as const,
-          response: launchConfigurationFailure(
-            new LibraryError({
-              reason: "config",
-              message: errorMessage(error),
-            }),
-          ),
-        }),
-      }),
-    )
-    if (specResult._tag === "failed") {
-      logger.warn(
-        { id: payload.id, diagnostic: specResult.response.stderrTail },
-        "app.library.launch: launch configuration failed",
+    const specResult = yield* composeLaunchCompanions({
+      spec: resolvedResult.resolved.spec,
+      launchCompanions: resolvedResult.resolved.launchCompanions,
+      registry: createFirstPartyPluginRegistryFromEnv(process.env),
+      options: { appIntegration: resolvedResult.resolved.app?.integration },
+    })
+    if (specResult._tag === "LaunchCompanionDiagnostics") {
+      const response = launchConfigurationFailureFromDiagnostics(
+        specResult.diagnostics,
       )
-      return specResult.response
+      logger.warn(
+        { id: payload.id, diagnostics: specResult.diagnostics },
+        "app.library.launch: launch companion preflight failed",
+      )
+      return response
     }
     const spec = specResult.spec
 
@@ -207,6 +207,18 @@ function launchConfigurationFailure(
   }
 }
 
+function launchConfigurationFailureFromDiagnostics(
+  diagnostics: readonly LaunchCompanionDiagnostic[],
+): FailedLaunchLibraryResponse {
+  return {
+    _tag: "LaunchFailed",
+    status: "failed",
+    exitCode: LAUNCH_CONFIG_ERROR_EXIT_CODE,
+    stderrTail: launchCompanionDiagnosticSummary(diagnostics),
+    diagnostics: [...diagnostics],
+  }
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
@@ -239,7 +251,8 @@ function toDataError(error: LibraryError): DataError {
  * 1. Validate the peer `controlUrl` is non-empty.
  * 2. Call the peer's `app.server.stream.prepare` to register the launch
  *    intent on the source-machine.
- * 3. Compose a gamescope-wrapped `moonlight stream -app "Korri Stream" <host>` LaunchSpec.
+ * 3. Compose a `moonlight stream -app "Korri Stream" <host>` LaunchSpec and
+ *    apply generic launch companions from the local launcher policy.
  * 4. Dispatch through the same `launchLocalForegroundSession` seam that
  *    local launches use. The Launcher service routes to sessiond on kiosk
  *    images where `KORRI_SESSIOND_SOCKET` is set.
@@ -372,7 +385,7 @@ function handleRemoteSourceLaunch(
         ),
       catch: error => toDataError(toLibraryError(error)),
     })
-    const specResult = yield* Effect.try({
+    const moonlightSpecResult = yield* Effect.try({
       try: () =>
         composeMoonlightLaunchSpec({
           host,
@@ -381,7 +394,6 @@ function handleRemoteSourceLaunch(
           ...(moonlightControl
             ? { environment: moonlightControlEnvForHandle(moonlightControl) }
             : {}),
-          gamescope: normalizeGamescopePolicy(localPolicy.gamescope),
         }),
       catch: error => error,
     }).pipe(
@@ -398,7 +410,17 @@ function handleRemoteSourceLaunch(
         }),
       }),
     )
-    if (specResult._tag === "failed") return specResult.response
+    if (moonlightSpecResult._tag === "failed")
+      return moonlightSpecResult.response
+
+    const specResult = yield* composeLaunchCompanions({
+      spec: moonlightSpecResult.spec,
+      launchCompanions: localPolicy.launchCompanions,
+      registry: createFirstPartyPluginRegistryFromEnv(process.env),
+    })
+    if (specResult._tag === "LaunchCompanionDiagnostics") {
+      return launchConfigurationFailureFromDiagnostics(specResult.diagnostics)
+    }
     const spec: LaunchSpec = specResult.spec
 
     const result = yield* Effect.tryPromise({

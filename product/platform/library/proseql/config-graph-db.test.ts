@@ -199,7 +199,7 @@ describe("openKorriConfigGraph — ordered overlay", () => {
           "      systemDirectory: /bios",
           "    launch:",
           "      with:",
-          '        "@korri:gamescope":',
+          '        "@example:wrapper":',
           "          backend:",
           "            type: drm",
           "",
@@ -214,7 +214,7 @@ describe("openKorriConfigGraph — ordered overlay", () => {
           "    command: retroarch-override",
           "    launch:",
           "      with:",
-          '        "@korri:gamescope":',
+          '        "@example:wrapper":',
           "          app:",
           "            environment:",
           "              WAYLAND_DISPLAY: null",
@@ -235,9 +235,16 @@ describe("openKorriConfigGraph — ordered overlay", () => {
       )
 
       expect(app.command).toBe("retroarch-override")
-      const gamescope = app.launch?.with?.["@korri:gamescope"]
-      expect(gamescope?.backend?.type).toBe("drm")
-      expect(gamescope?.app?.environment).toEqual({ WAYLAND_DISPLAY: null })
+      const wrapper = app.launch?.with?.["@example:wrapper"] as
+        | {
+            readonly backend?: { readonly type?: string }
+            readonly app?: {
+              readonly environment?: Readonly<Record<string, string | null>>
+            }
+          }
+        | undefined
+      expect(wrapper?.backend?.type).toBe("drm")
+      expect(wrapper?.app?.environment).toEqual({ WAYLAND_DISPLAY: null })
     })
   })
 })

@@ -17,7 +17,7 @@ describe("EphemeralOverride", () => {
     const override = decodeEphemeralOverride({
       launch: {
         with: {
-          "@korri:gamescope": {
+          "@fixture:frame": {
             enable: true,
             backend: { type: "wayland" },
             scaling: { filter: "fsr" },
@@ -35,19 +35,25 @@ describe("EphemeralOverride", () => {
       argsAppend: ["--debug"],
       patches: ["/patches/override.ips"],
     })
-    expect(override.launch?.with?.["@korri:gamescope"]?.enable).toBe(true)
+    expect(
+      (
+        override.launch?.with?.["@fixture:frame"] as
+          | { readonly enable?: boolean }
+          | undefined
+      )?.enable,
+    ).toBe(true)
     expect(override.moonlight?.platform?.name).toBe("sdl")
     expect(override.env?.SDL_VIDEODRIVER).toBe("wayland")
     expect(override.patches).toEqual(["/patches/override.ips"])
   })
 
-  it("decodes byLauncher contributions + inherit including safe gamescope fields", () => {
+  it("decodes byLauncher contributions + inherit including safe provider fields", () => {
     const override = decodeEphemeralOverride({
       byLauncher: {
         retroarch: {
           launch: {
             with: {
-              "@korri:gamescope": {
+              "@fixture:frame": {
                 enable: false,
                 scaling: { filter: "nearest" },
               },
@@ -59,10 +65,16 @@ describe("EphemeralOverride", () => {
       },
       inherit: false,
     })
-    const gamescope =
-      override.byLauncher?.retroarch?.launch?.with?.["@korri:gamescope"]
-    expect(gamescope?.enable).toBe(false)
-    expect(gamescope?.scaling?.filter).toBe("nearest")
+    const provider = override.byLauncher?.retroarch?.launch?.with?.[
+      "@fixture:frame"
+    ] as
+      | {
+          readonly enable?: boolean
+          readonly scaling?: { readonly filter?: string }
+        }
+      | undefined
+    expect(provider?.enable).toBe(false)
+    expect(provider?.scaling?.filter).toBe("nearest")
     expect(override.byLauncher?.retroarch?.argsAppend).toEqual(["-v"])
     expect(override.byLauncher?.retroarch?.patches).toEqual([
       "/patches/retroarch.ips",
@@ -103,43 +115,32 @@ describe("EphemeralOverride", () => {
     ).toThrow()
   })
 
-  it("rejects the old top-level Gamescope runtime override", () => {
+  it("rejects the old top-level provider runtime override", () => {
     expect(() =>
-      decodeEphemeralOverride({ gamescope: { enable: true } }),
+      decodeEphemeralOverride({ provider: { enable: true } }),
     ).toThrow()
   })
 
-  it("rejects Gamescope process, env, raw argv, and path surfaces in runtime overrides", () => {
-    for (const gamescope of [
-      { command: "/bin/gamescope" },
-      { environment: { LD_PRELOAD: "/tmp/inject.so" } },
-      { app: { environment: { PATH: "/tmp" } } },
-      { extraArgs: ["--unsafe"] },
-      { stats: { path: "/tmp/stats" } },
-      { cursor: { image: "/tmp/cursor.png" } },
-      { reshade: { effect: "/tmp/effect.fx" } },
-      { scheduling: { readyFd: 3 } },
-    ]) {
-      expect(() =>
-        decodeEphemeralOverride({
-          launch: { with: { "@korri:gamescope": gamescope } },
-        }),
-      ).toThrow()
-    }
-  })
-
-  it("rejects unsafe Gamescope surfaces inside byLauncher overrides", () => {
-    expect(() =>
-      decodeEphemeralOverride({
-        byLauncher: {
-          retroarch: {
-            launch: {
-              with: { "@korri:gamescope": { command: "/bin/gamescope" } },
-            },
+  it("passes provider payload shape through for registry-aware validation", () => {
+    const override = decodeEphemeralOverride({
+      launch: {
+        with: {
+          "@fixture:frame": {
+            command: "/bin/provider-tool",
+            extraArgs: ["--configured"],
           },
+          "@fixture:telemetry": { sampleRate: 5 },
         },
-      }),
-    ).toThrow()
+      },
+    })
+
+    expect(override.launch?.with?.["@fixture:frame"]).toEqual({
+      command: "/bin/provider-tool",
+      extraArgs: ["--configured"],
+    })
+    expect(override.launch?.with?.["@fixture:telemetry"]).toEqual({
+      sampleRate: 5,
+    })
   })
 
   it("rejects Moonlight process and shell surfaces in runtime overrides", () => {

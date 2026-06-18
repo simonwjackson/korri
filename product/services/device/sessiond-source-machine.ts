@@ -3,13 +3,9 @@
  *
  * Source-machine hosts run Korri daemon + Sunshine + Sway but no Korri
  * GUI client. The role's idle target is "Sway alive, application units
- * inert" (not "compositor down" — that would trigger the documented
- * SIGSEGV restart-loop class). The role asserts the idle-blank invariant
- * via three checks at the restoring transition:
- *
- *   1. No Sway windows match the Gamescope selector.
- *   2. No live `gamescope-wl` / `gamescopereaper` PIDs.
- *   3. A bounded cooldown has elapsed since the last child exit.
+ * inert" (not "compositor down" — that would trigger compositor
+ * restart-loop failures). The role asserts the idle-blank invariant via
+ * generic foreground-window, residual-process, and cooldown checks.
  *
  * Plan: docs/plans/2026-05-27-002-feat-foreground-session-source-machine-phase4c-plan.md (U3)
  */
@@ -17,42 +13,48 @@
 import type { LaunchSpec } from "@platform/library/launcher"
 import type { TerminalReadinessEventType } from "@platform/library/sessiond-managed-launch-protocol"
 import {
-  GAMESCOPE_PROCESS_NAMES,
-  type ProcessInfo,
-  type ProcessListQuery,
-} from "@product/plugins/gamescope/src/session"
-import {
   formatSessionRoleReadyEvidence,
   type SessionRole,
   type SessionRoleReadyEvidence,
 } from "./sessiond-role"
 import type { KorriWindowSnapshot } from "./sessiond-state"
 
+export interface ProcessInfo {
+  readonly pid: number
+  readonly pgid: number
+  readonly ppid: number
+  readonly comm: string
+}
+
+export interface ProcessListQuery {
+  list: () => Promise<readonly ProcessInfo[]>
+}
+
 export interface SourceMachineSwayController {
   /**
-   * Returns the current set of Gamescope-selected windows in the live
+   * Returns the current set of foreground windows in the live
    * Sway tree. The production implementation runs `swaymsg -t get_tree`
-   * and filters via `DEFAULT_GAMESCOPE_SELECTOR`.
+   * and filters via the configured selector.
    */
-  getGamescopeWindows: () => Promise<readonly KorriWindowSnapshot[]>
+  getForegroundWindows: () => Promise<readonly KorriWindowSnapshot[]>
   /**
-   * Close the supplied Gamescope windows (Sway `[con_id=...] kill`).
+   * Close the supplied foreground windows (Sway `[con_id=...] kill`).
    * Tests inject a recording stub; production runs swaymsg.
    */
-  clearGamescopeWindows: (
+  clearForegroundWindows: (
     windows: readonly KorriWindowSnapshot[],
   ) => Promise<void>
 }
 
 export interface IdleBlankSnapshot {
-  readonly gamescopeWindows: readonly KorriWindowSnapshot[]
-  readonly gamescopeProcesses: readonly ProcessInfo[]
+  readonly foregroundWindows: readonly KorriWindowSnapshot[]
+  readonly residualProcesses: readonly ProcessInfo[]
   readonly cooldownElapsedMs: number
 }
 
 export interface IdleBlankChecks {
-  readonly gamescopeWindowsAbsent: boolean
-  readonly gamescopeProcessesAbsent: boolean
+  readonly foregroundWindowsAbsent: boolean
+  readonly residualProcessesAbsent: boolean
   readonly cooldownElapsed: boolean
 }
 
@@ -74,17 +76,17 @@ export function evaluateIdleBlank(
   snapshot: IdleBlankSnapshot,
   policy: IdleBlankPolicy,
 ): IdleBlankAssessment {
-  const gamescopeWindowsAbsent = snapshot.gamescopeWindows.length === 0
-  const gamescopeProcessesAbsent = snapshot.gamescopeProcesses.length === 0
+  const foregroundWindowsAbsent = snapshot.foregroundWindows.length === 0
+  const residualProcessesAbsent = snapshot.residualProcesses.length === 0
   const cooldownElapsed = snapshot.cooldownElapsedMs >= policy.cooldownMs
   const checks: IdleBlankChecks = {
-    gamescopeWindowsAbsent,
-    gamescopeProcessesAbsent,
+    foregroundWindowsAbsent,
+    residualProcessesAbsent,
     cooldownElapsed,
   }
   let status: IdleBlankAssessment["status"]
-  if (!gamescopeWindowsAbsent) status = "clear-foreground"
-  else if (!gamescopeProcessesAbsent) status = "clear-processes"
+  if (!foregroundWindowsAbsent) status = "clear-foreground"
+  else if (!residualProcessesAbsent) status = "clear-processes"
   else if (!cooldownElapsed) status = "waiting"
   else status = "ready"
   return { status, checks }
@@ -122,14 +124,18 @@ export interface SourceMachineSessionRoleDeps {
    * a no-op.
    */
   readonly surfaceRepair?: SourceMachineSurfaceRepair
+  readonly residualProcessNames?: readonly string[]
 }
 
 const DEFAULT_COOLDOWN_MS = 750
 const DEFAULT_POLL_INTERVAL_MS = 100
 const DEFAULT_MAX_READY_ATTEMPTS = 60
 
-function isGamescopeProcess(info: ProcessInfo): boolean {
-  return (GAMESCOPE_PROCESS_NAMES as readonly string[]).includes(info.comm)
+function isResidualProcess(
+  info: ProcessInfo,
+  residualProcessNames: readonly string[],
+): boolean {
+  return residualProcessNames.includes(info.comm)
 }
 
 const IDLE_READY_EVENT: TerminalReadinessEventType = "idle-ready"
@@ -148,23 +154,26 @@ export function createSourceMachineSessionRole(
   const cooldownMs = deps.cooldownMs ?? DEFAULT_COOLDOWN_MS
   const pollIntervalMs = deps.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
   const maxReadyAttempts = deps.maxReadyAttempts ?? DEFAULT_MAX_READY_ATTEMPTS
+  const residualProcessNames = deps.residualProcessNames ?? []
 
   let cooldownStartMs = clock()
   let latestChecks: IdleBlankChecks = {
-    gamescopeWindowsAbsent: true,
-    gamescopeProcessesAbsent: true,
+    foregroundWindowsAbsent: true,
+    residualProcessesAbsent: true,
     cooldownElapsed: true,
   }
 
   const snapshot = async (): Promise<IdleBlankSnapshot> => {
-    const [gamescopeWindows, allProcesses] = await Promise.all([
-      deps.sway.getGamescopeWindows(),
+    const [foregroundWindows, allProcesses] = await Promise.all([
+      deps.sway.getForegroundWindows(),
       deps.processList.list(),
     ])
-    const gamescopeProcesses = allProcesses.filter(isGamescopeProcess)
+    const residualProcesses = allProcesses.filter(info =>
+      isResidualProcess(info, residualProcessNames),
+    )
     return {
-      gamescopeWindows,
-      gamescopeProcesses,
+      foregroundWindows,
+      residualProcesses,
       cooldownElapsedMs: Math.max(0, clock() - cooldownStartMs),
     }
   }
@@ -180,20 +189,20 @@ export function createSourceMachineSessionRole(
       if (assessment.status === "ready") return
 
       if (assessment.status === "clear-foreground") {
-        await deps.sway.clearGamescopeWindows(snap.gamescopeWindows)
+        await deps.sway.clearForegroundWindows(snap.foregroundWindows)
       }
-      // "clear-processes" — sessiond's reaper runs before restoreIdle so
-      // this branch usually means the reaper has not finished yet; wait
-      // for the next snapshot. "waiting" — cooldown not elapsed; sleep.
+      // "clear-processes" means a cleanup hook or external process owner
+      // has not finished yet; wait for the next snapshot. "waiting" means
+      // cooldown has not elapsed; sleep.
 
       if (pollIntervalMs > 0) await delay(pollIntervalMs)
     }
 
     const reason =
       lastAssessment?.status === "clear-processes"
-        ? "gamescope processes lingered past idle-blank budget"
+        ? "residual processes lingered past idle-blank budget"
         : lastAssessment?.status === "clear-foreground"
-          ? "gamescope windows lingered past idle-blank budget"
+          ? "foreground windows lingered past idle-blank budget"
           : "idle-blank readiness budget exhausted"
     throw new Error(reason)
   }
@@ -213,8 +222,8 @@ export function createSourceMachineSessionRole(
     // Phase 4D / Track A U5. When the host wires a surfaceRepair
     // callback (production wires it to repairStreamSurface from
     // game-stream-fullscreen.ts), the source-machine role promotes
-    // the foreground Gamescope window here -- the same job the
-    // runner used to own inline before Track A.
+    // the foreground stream surface here -- the same job the runner
+    // used to own inline before Track A.
     afterChildRunning: async spec => {
       if (!deps.surfaceRepair) return
       await deps.surfaceRepair(spec)
@@ -228,7 +237,7 @@ export function createSourceMachineSessionRole(
       const assessment = evaluateIdleBlank(snap, { cooldownMs })
       latestChecks = assessment.checks
       if (assessment.status === "clear-foreground") {
-        await deps.sway.clearGamescopeWindows(snap.gamescopeWindows)
+        await deps.sway.clearForegroundWindows(snap.foregroundWindows)
       }
     },
     idleReadyOutcome: () => ({
@@ -246,8 +255,8 @@ function idleBlankReadyEvidence(
 ): Extract<SessionRoleReadyEvidence, { readonly kind: "idle-blank" }> {
   return {
     kind: "idle-blank",
-    gamescopeWindowsAbsent: checks.gamescopeWindowsAbsent,
-    gamescopeProcessesAbsent: checks.gamescopeProcessesAbsent,
+    foregroundWindowsAbsent: checks.foregroundWindowsAbsent,
+    residualProcessesAbsent: checks.residualProcessesAbsent,
     cooldownElapsed: checks.cooldownElapsed,
   }
 }

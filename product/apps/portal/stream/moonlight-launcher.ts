@@ -7,16 +7,18 @@ import {
   resolveInputPlumberVirtualGamepad,
 } from "@platform/input/native/inputplumber-virtual-gamepad"
 import type {
-  GamescopePolicy,
+  LaunchCompanionMap,
   MoonlightPolicy,
 } from "@platform/library/config/inheritable-fields"
 import { type LaunchSpec, launchEnvironment } from "@platform/library/launcher"
 import {
-  composeMoonlightGamescopeLaunchSpec,
-  composeMoonlightStreamLaunchSpec,
-  validateMoonlightGamescopePolicy,
-} from "@platform/stream/moonlight-launch-spec"
-import { composeGamescopeLaunchSpec } from "@product/plugins/gamescope/src/launch-companion"
+  composeLaunchCompanions,
+  launchCompanionDiagnosticSummary,
+} from "@platform/plugin/launch-companion"
+import type { PluginRegistry } from "@platform/plugin/registry"
+import { composeMoonlightStreamLaunchSpec } from "@platform/stream/moonlight-launch-spec"
+import { createFirstPartyPluginRegistryFromEnv } from "@product/plugins"
+import { Effect } from "effect"
 
 const DEFAULT_STARTUP_OBSERVE_MS = 750
 
@@ -80,7 +82,8 @@ export interface MoonlightLaunchOptions {
   readonly startupObserveMs?: number
   readonly inputDevice?: string
   readonly requireInputPlumberInput?: boolean
-  readonly gamescope?: GamescopePolicy
+  readonly launchCompanions?: LaunchCompanionMap
+  readonly pluginRegistry?: PluginRegistry
   readonly readProcDevices?: () => Promise<string>
   readonly runner?: CommandRunner
   readonly moonlightControl?: MoonlightControlLaunchOptions | false
@@ -102,21 +105,18 @@ export async function launchMoonlight(
     ? moonlightControlEnvForHandle(moonlightControl)
     : undefined
 
-  let installedSpec: LaunchSpec
-  try {
-    installedSpec = composeMoonlightGamescopeLaunchSpec({
+  const installedSpec = await composeMoonlightWithLaunchCompanions(
+    {
       policy,
-      gamescope: options.gamescope ?? { enable: true },
-      wrapGamescopeLaunchSpec: composeGamescopeLaunchSpec,
       facts: {
         host: options.host ?? "",
         ...(inputDevice.path ? { inputDevices: [inputDevice.path] } : {}),
         ...(environment ? { environment } : {}),
       },
-    })
-  } catch (error) {
-    return { status: "failed", message: errorMessage(error) }
-  }
+    },
+    options,
+  )
+  if (installedSpec._tag === "failed") return installedSpec
 
   const command = policy.command ?? "moonlight"
   const allowNixFallback = options.allowNixFallback ?? command === "moonlight"
@@ -154,7 +154,7 @@ export async function launchMoonlight(
       ...(environment ? { environment } : {}),
     },
   })
-  const fallbackSpec = composeGamescopeLaunchSpec(
+  const fallbackSpec = await composeLaunchSpecWithCompanions(
     {
       command: "nix",
       args: [
@@ -168,8 +168,9 @@ export async function launchMoonlight(
         ? { envUnset: bareFallbackMoonlight.envUnset }
         : {}),
     },
-    options.gamescope ?? { enable: true },
+    options,
   )
+  if (fallbackSpec._tag === "failed") return fallbackSpec
 
   const fallback = await runner.run(fallbackSpec.command, fallbackSpec.args, {
     startupObserveMs,
@@ -188,6 +189,51 @@ export async function launchMoonlight(
     status: "failed",
     message: `Could not start Moonlight. ${command}: ${installed.message}; nix fallback: ${fallback.message}`,
   }
+}
+
+type MoonlightSpecCompositionResult =
+  | (LaunchSpec & { readonly _tag?: undefined })
+  | {
+      readonly _tag: "failed"
+      readonly status: "failed"
+      readonly message: string
+    }
+
+async function composeMoonlightWithLaunchCompanions(
+  input: Parameters<typeof composeMoonlightStreamLaunchSpec>[0],
+  options: MoonlightLaunchOptions,
+): Promise<MoonlightSpecCompositionResult> {
+  try {
+    return await composeLaunchSpecWithCompanions(
+      composeMoonlightStreamLaunchSpec(input),
+      options,
+    )
+  } catch (error) {
+    return { _tag: "failed", status: "failed", message: errorMessage(error) }
+  }
+}
+
+async function composeLaunchSpecWithCompanions(
+  spec: LaunchSpec,
+  options: Pick<MoonlightLaunchOptions, "launchCompanions" | "pluginRegistry">,
+): Promise<MoonlightSpecCompositionResult> {
+  const result = await Effect.runPromise(
+    composeLaunchCompanions({
+      spec,
+      launchCompanions: options.launchCompanions,
+      registry:
+        options.pluginRegistry ??
+        createFirstPartyPluginRegistryFromEnv(process.env),
+    }),
+  )
+  if (result._tag === "LaunchCompanionDiagnostics") {
+    return {
+      _tag: "failed",
+      status: "failed",
+      message: launchCompanionDiagnosticSummary(result.diagnostics),
+    }
+  }
+  return result.spec
 }
 
 function startedMoonlightResult(input: {
@@ -385,5 +431,3 @@ async function observeEarlyExit(
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
-
-export { validateMoonlightGamescopePolicy }

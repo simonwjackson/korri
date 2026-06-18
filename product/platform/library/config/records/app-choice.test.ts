@@ -10,7 +10,7 @@ describe("AppChoice", () => {
         id: "retroarch",
         runtime: "mgba",
         inherit: false,
-        launch: { with: { "@korri:gamescope": { enable: false } } },
+        launch: { with: { "@example:wrapper": { enable: false } } },
         env: { LANG: "C" },
         argsAppend: ["--verbose"],
         patches: ["/patches/game.ips"],
@@ -19,7 +19,7 @@ describe("AppChoice", () => {
       id: "retroarch",
       runtime: "mgba",
       inherit: false,
-      launch: { with: { "@korri:gamescope": { enable: false } } },
+      launch: { with: { "@example:wrapper": { enable: false } } },
       env: { LANG: "C" },
       argsAppend: ["--verbose"],
       patches: ["/patches/game.ips"],
@@ -31,13 +31,13 @@ describe("AppChoice", () => {
       decodeAppChoice({
         id: "steam",
         runtime: "proton-arm64",
-        "launch-options": "gamescope -- %command%",
+        "launch-options": "wrapper -- %command%",
         extra: { args: ["-silent", "-gamepadui"] },
       }),
     ).toEqual({
       id: "steam",
       runtime: "proton-arm64",
-      "launch-options": "gamescope -- %command%",
+      "launch-options": "wrapper -- %command%",
       extra: { args: ["-silent", "-gamepadui"] },
     })
   })
@@ -48,7 +48,7 @@ describe("AppChoice", () => {
     ).toThrow(/kind.*top-level apps/i)
     expect(() => decodeAppChoice({ id: "retroarch", extra: true })).toThrow()
     expect(() =>
-      decodeAppChoice({ id: "retroarch", gamescope: { enable: true } }),
+      decodeAppChoice({ id: "retroarch", wrapper: { enable: true } }),
     ).toThrow()
   })
 

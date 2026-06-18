@@ -1,4 +1,4 @@
-import { chmod, mkdir, rm } from "node:fs/promises"
+import { chmod, mkdir, rm, stat } from "node:fs/promises"
 import { createServer, type Server, type Socket } from "node:net"
 import { dirname } from "node:path"
 import {
@@ -28,6 +28,26 @@ export interface GamescopeControlBridgeOptions {
 export interface GamescopeControlBridge {
   readonly socketPath: string
   readonly close: () => Promise<void>
+}
+
+export interface GamescopeControlBridgeProcessStartRequest {
+  readonly launchId: string
+  readonly runtimeDir: string
+  readonly socketPath: string
+  readonly display?: string
+  readonly xpropPath?: string
+  readonly xrandrPath?: string
+}
+
+export interface GamescopeControlBridgeProcessHandle {
+  readonly socketPath: string
+  readonly stop: () => Promise<void>
+}
+
+export interface GamescopeControlBridgeProcessManager {
+  readonly start: (
+    request: GamescopeControlBridgeProcessStartRequest,
+  ) => Promise<GamescopeControlBridgeProcessHandle>
 }
 
 interface BridgeContext {
@@ -292,6 +312,82 @@ function closeServer(server: Server): Promise<void> {
       if (error) reject(error)
       else resolve()
     })
+  })
+}
+
+export function createProcessGamescopeControlBridge(options: {
+  readonly command: string
+}): GamescopeControlBridgeProcessManager {
+  return {
+    start: async request => {
+      const args = ["--socket", request.socketPath]
+      if (request.display) args.push("--display", request.display)
+      if (request.xpropPath) args.push("--xprop", request.xpropPath)
+      if (request.xrandrPath) args.push("--xrandr", request.xrandrPath)
+      const proc = Bun.spawn([options.command, ...args], {
+        stdout: "inherit",
+        stderr: "inherit",
+      })
+      await waitForSocketPath(request.socketPath, proc.exited, 2000)
+      return {
+        socketPath: request.socketPath,
+        stop: async () => {
+          proc.kill("SIGTERM")
+          const exited = await Promise.race([
+            proc.exited.then(() => true),
+            delay(1_000).then(() => false),
+          ])
+          if (!exited) {
+            proc.kill("SIGKILL")
+            await proc.exited
+          }
+        },
+      }
+    },
+  }
+}
+
+async function waitForSocketPath(
+  socketPath: string,
+  exited: Promise<number>,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() <= deadline) {
+    try {
+      await stat(socketPath)
+      return
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== "ENOENT") throw error
+    }
+
+    const exitCode = await Promise.race([
+      exited.then(code => code),
+      delay(25).then(() => undefined),
+    ])
+    if (exitCode !== undefined) {
+      try {
+        await stat(socketPath)
+        return
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (code !== "ENOENT") throw error
+      }
+      throw new Error(
+        `Gamescope control bridge exited before socket was ready: ${exitCode}`,
+      )
+    }
+  }
+  throw new Error(
+    `Gamescope control bridge socket was not ready after ${timeoutMs}ms: ${socketPath}`,
+  )
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => {
+    const timer = setTimeout(resolve, ms)
+    if ("unref" in timer && typeof timer.unref === "function") timer.unref()
   })
 }
 

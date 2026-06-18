@@ -145,13 +145,8 @@ in
     name = lib.mkDefault "inputplumber";
   };
 
-  # Sessiond owns the foreground-session lifecycle on every kiosk image:
-  # default-gamescope launches, gamescope-wl reap on exit, and the
-  # role-specific idle restore. Without this enabled, korrid's
-  # app.library.launch falls through to the in-process shell launcher
-  # and explodes with ENOENT on gamescope because the daemon unit's bare
-  # systemd PATH does not include it (see docs/solutions/runtime-errors/
-  # korrid-launch-falls-through-to-bare-path-2026-05-27.md).
+  # Sessiond owns the foreground-session lifecycle on every kiosk image.
+  # Without this enabled, korrid has no lifecycle service to delegate to.
   #
   # Role is inferred from compositor.kiosk.enable = true above, so this
   # resolves to "kiosk".
@@ -162,7 +157,7 @@ in
     # Sessiond spawns the foreground app via the in-process shell
     # launcher (createShellLauncher inside product/services/device/sessiond.ts),
     # which inherits this unit's PATH when it spawns. Anything the
-    # default-gamescope launch path needs to find by name has to be
+    # foreground launch path needs to find by name has to be
     # listed here:
     #   - bashInteractive: the renderer-launch path's `resolve` step
     #     runs `Bun.spawn(["sh", "-lc", ...])` to look up the
@@ -175,8 +170,6 @@ in
     #     the renderer is already up. Without sway on PATH, every
     #     /control/start throws "Executable not found in $PATH:
     #     swaymsg" before the renderer-launch path runs.
-    #   - compositor.gamescope.package: any platform-level package
-    #     override flows through automatically.
     #   - retroarchKiosk: kiosk RetroArch wrapper so cascade-resolved
     #     `retroarch -L ... <cart>` launches resolve.
     #   - client.package: the renderer (Electrobun) binary that
@@ -184,11 +177,10 @@ in
     path = [
       pkgs.bashInteractive
       compositorCfg.sway.package
-      compositorCfg.gamescope.package
       retroarchKiosk
       config.services.korri.client.package
     ];
-    # Gamescope spawned by sessiond connects to the kiosk compositor's
+    # Foreground children spawned by sessiond connect to the kiosk compositor's
     # wayland socket at $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY. The compositor
     # publishes the socket under the korri user runtime directory (compositor.runtimeDir),
     # named "wayland-1" by sway's default-first allocation, mirroring
@@ -213,8 +205,8 @@ in
   # not inherit the compositor unit environment. Seed the real greetd/logind
   # user manager before kiosk services start so DBus activation sees the same
   # display/session identity as foreground children. Without this, local
-  # Gamescope/RetroArch launches can block on portal backends that start with
-  # an empty DISPLAY/WAYLAND_DISPLAY.
+  # foreground launches can block on portal backends that start with an empty
+  # DISPLAY/WAYLAND_DISPLAY.
   systemd.user.services.korri-kiosk-session-environment = {
     description = "Seed Korri kiosk user-manager session environment";
     wantedBy = [ "korri-session.target" ];

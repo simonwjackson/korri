@@ -143,9 +143,9 @@ host:
     # injected host argument. Production configs should prefer typed fields.
     extraArgs: []
 
-  # Gamescope remains a separate launch wrapper policy. Moonlight policy does
+  # Gamescope remains a separate plugin launch companion. Moonlight policy does
   # not infer Gamescope intent by sniffing `platform.name`; if Wayland
-  # Moonlight needs the nested compositor socket, say so explicitly here.
+  # Moonlight needs the nested compositor socket, compose the plugin explicitly.
   launch:
     with:
       "@korri:gamescope":

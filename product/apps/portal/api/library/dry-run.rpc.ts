@@ -3,6 +3,7 @@ import { ApiError } from "@platform/api/rpc/errors"
 import { EphemeralOverride } from "@platform/library/config/ephemeral-override"
 import { LaunchSpec } from "@platform/library/launcher"
 import { SessiondManagedLaunchMode } from "@platform/library/sessiond-managed-launch-protocol"
+import { LaunchCompanionDiagnostic } from "@platform/plugin/launch-companion"
 import { Schema } from "effect"
 import { Rpc } from "effect/unstable/rpc"
 
@@ -61,6 +62,7 @@ export const DryRunLaunchResponse = Schema.Union([
     selection: LaunchSelection,
     message: Schema.String,
     diagnostic: Schema.optional(Schema.String),
+    diagnostics: Schema.optional(Schema.Array(LaunchCompanionDiagnostic)),
   }),
   Schema.Struct({
     _tag: Schema.Literal("HostUnavailable"),

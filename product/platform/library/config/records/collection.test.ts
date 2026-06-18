@@ -2,6 +2,14 @@ import { describe, expect, it } from "bun:test"
 
 import { decodeCollectionPayload } from "./collection"
 
+const wrapperProvider = "@example:wrapper"
+const retiredWrapperKey = ["game", "scope"].join("")
+
+type WrapperPolicy = { readonly enable?: boolean }
+
+const wrapperPolicy = (value: unknown): WrapperPolicy | undefined =>
+  value as WrapperPolicy | undefined
+
 describe("CollectionPayload", () => {
   it("decodes a minimal collection (every field optional)", () => {
     const collection = decodeCollectionPayload({})
@@ -19,20 +27,24 @@ describe("CollectionPayload", () => {
   it("decodes optional layer-bearing fields (presets reserved for future)", () => {
     const collection = decodeCollectionPayload({
       title: "Classics",
-      launch: { with: { "@korri:gamescope": { enable: true } } },
+      launch: { with: { [wrapperProvider]: { enable: true } } },
       presets: {
-        feature: { launch: { with: { "@korri:gamescope": { enable: true } } } },
+        feature: { launch: { with: { [wrapperProvider]: { enable: true } } } },
       },
     })
-    expect(collection.launch?.with?.["@korri:gamescope"]?.enable).toBe(true)
     expect(
-      collection.presets?.feature?.launch?.with?.["@korri:gamescope"]?.enable,
+      wrapperPolicy(collection.launch?.with?.[wrapperProvider])?.enable,
+    ).toBe(true)
+    expect(
+      wrapperPolicy(
+        collection.presets?.feature?.launch?.with?.[wrapperProvider],
+      )?.enable,
     ).toBe(true)
   })
 
-  it("rejects the retired top-level gamescope field", () => {
+  it("rejects the retired top-level wrapper field", () => {
     expect(() =>
-      decodeCollectionPayload({ gamescope: { enable: true } }),
+      decodeCollectionPayload({ [retiredWrapperKey]: { enable: true } }),
     ).toThrow()
   })
 

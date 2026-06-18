@@ -114,7 +114,7 @@ describe("withPluginLibrarySource", () => {
     expect(resolved.app).toBeUndefined()
   })
 
-  it("maps provider launch options to the resolved Gamescope policy compatibility field", async () => {
+  it("maps provider launch options to the resolved companion map", async () => {
     const stateRoot = await mktemp()
     await seedExecutable(stateRoot)
     const withPolicy = plugin({
@@ -134,7 +134,7 @@ describe("withPluginLibrarySource", () => {
                   launch: {
                     kind: "process",
                     executable: { resource: resource.id },
-                    with: { "@korri:gamescope": { enable: false } },
+                    with: { "@fixture:frame": { enable: false } },
                   },
                 },
               ],
@@ -156,13 +156,15 @@ describe("withPluginLibrarySource", () => {
       source.resolveLaunchForGame("@korri:neverball/policy"),
     )
 
-    expect(resolved.gamescope).toEqual({ enable: false })
+    expect(resolved.launchCompanions).toEqual({
+      "@fixture:frame": { enable: false },
+    })
   })
 
-  it("fails with a config diagnostic when launch provider options are malformed", async () => {
+  it("preserves multiple provider launch option payload shapes", async () => {
     const stateRoot = await mktemp()
     await seedExecutable(stateRoot)
-    const invalidPolicy = plugin({
+    const multiPolicy = plugin({
       namespace: "@korri",
       name: "neverball",
       title: "Policy",
@@ -179,7 +181,10 @@ describe("withPluginLibrarySource", () => {
                   launch: {
                     kind: "process",
                     executable: { resource: resource.id },
-                    with: { "@korri:gamescope": { weirdKey: true } },
+                    with: {
+                      "@fixture:frame": { quality: "balanced" },
+                      "@fixture:telemetry": { sampleRate: 10 },
+                    },
                   },
                 },
               ],
@@ -191,18 +196,20 @@ describe("withPluginLibrarySource", () => {
     })
     const source = withPluginLibrarySource(
       emptySource(),
-      createPluginRegistry([invalidPolicy], {
+      createPluginRegistry([multiPolicy], {
         enabledPluginIds: ["@korri:neverball"],
       }),
       createNixOutLinkResolver({ stateRoot }),
     )
 
-    const error = await Effect.runPromise(
-      Effect.flip(source.resolveLaunchForGame("@korri:neverball/policy")),
+    const resolved = await Effect.runPromise(
+      source.resolveLaunchForGame("@korri:neverball/policy"),
     )
 
-    expect(error).toBeInstanceOf(LibraryError)
-    expect(error.diagnostic).toContain("Unexpected key")
+    expect(resolved.launchCompanions).toEqual({
+      "@fixture:frame": { quality: "balanced" },
+      "@fixture:telemetry": { sampleRate: 10 },
+    })
   })
 
   it("ignores malformed generic catalog records instead of treating them as plugin playables", async () => {

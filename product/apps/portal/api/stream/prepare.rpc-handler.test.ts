@@ -96,11 +96,13 @@ describe("app.stream.prepare handler", () => {
     expect(intent.lifecycle).toBe("foreground")
     expect(intent.launch.command).toBe(FAKE_GAME)
     expect(intent.launch.args).toContain("/storage/roms/snes/echo.smc")
-    expect(intent.gamescope).toEqual({
-      enable: true,
-      backend: { type: "wayland" },
-      window: { fullscreen: true, borderless: true, exposeWayland: true },
-      extraArgs: ["--nested-refresh", "60"],
+    expect(intent.launchCompanions).toEqual({
+      "@example:wrapper": {
+        enable: true,
+        backend: { type: "wayland" },
+        window: { fullscreen: true, borderless: true, exposeWayland: true },
+        extraArgs: ["--nested-refresh", "60"],
+      },
     })
   })
 
@@ -210,7 +212,7 @@ async function withTempProseqlLibrary(): Promise<{
             apps: [{ id: "rocknix-retroarch" }],
             launch: {
               with: {
-                "@korri:gamescope": {
+                "@example:wrapper": {
                   enable: true,
                   extraArgs: ["--nested-refresh", "60"],
                 },

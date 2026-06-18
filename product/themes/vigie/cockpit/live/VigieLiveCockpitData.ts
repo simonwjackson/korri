@@ -1,10 +1,3 @@
-import type { CatalogSnapshotResponse } from "@product/apps/portal/api/catalog/snapshot.rpc"
-import type { ServerStatusResponse } from "@product/apps/portal/api/server/status.rpc"
-import type { SourceStatusResponse } from "@product/apps/portal/api/source/status.rpc"
-import type { SteamStatusResponse } from "@product/apps/portal/api/steam/status.rpc"
-import type { GetStreamControlConfigResponse } from "@product/apps/portal/api/stream-control/get-config.rpc"
-import type { GetStreamControlControlsResponse } from "@product/apps/portal/api/stream-control/get-controls.rpc"
-import type { GetStreamControlStateResponse } from "@product/apps/portal/api/stream-control/get-state.rpc"
 import type {
   CockpitDevice,
   CockpitFixture,
@@ -20,6 +13,164 @@ import type {
   SessionReadout,
   Subsystem,
 } from "../VigieCockpit.context"
+
+type CatalogSnapshotResponse = {
+  readonly [key: string]: unknown
+  readonly peers: readonly {
+    readonly [key: string]: unknown
+    readonly hostId: string
+    readonly displayName: string
+    readonly isLocal: boolean
+    readonly caps: readonly string[]
+    readonly status: string
+  }[]
+  readonly entries: readonly {
+    readonly [key: string]: unknown
+    readonly id: string
+    readonly title?: string
+    readonly metadata?: { readonly name?: string }
+    readonly system?: string
+    readonly releases: readonly {
+      readonly [key: string]: unknown
+      readonly system?: string
+    }[]
+    readonly source: {
+      readonly [key: string]: unknown
+      readonly isLocal: boolean
+      readonly hostId: string
+    }
+    readonly launchable: boolean
+    readonly collections?: readonly string[]
+  }[]
+  readonly health: {
+    readonly [key: string]: unknown
+    readonly failedPeers: number
+    readonly self: string
+    readonly readyPeers: number
+  }
+  readonly generation: number
+}
+
+type ServerStatusResponse = {
+  readonly [key: string]: unknown
+  readonly serverId: string
+  readonly displayName: string
+  readonly capabilities: readonly string[]
+  readonly status: string
+  readonly message?: string
+  readonly sessiondUnavailable?: boolean
+  readonly sessiond?: {
+    readonly [key: string]: unknown
+    readonly mode: string
+    readonly failureReason?: string
+    readonly active?: {
+      readonly [key: string]: unknown
+      readonly launchId: string
+      readonly phase?: string
+    }
+  }
+}
+
+type SourceStatusResponse = {
+  readonly [key: string]: unknown
+  readonly status: string
+  readonly message?: string
+  readonly catalog?: string
+}
+
+type SteamStatusResponse = {
+  readonly [key: string]: unknown
+  readonly observer: {
+    readonly [key: string]: unknown
+    readonly state: string
+    readonly activeFiles: readonly string[]
+    readonly watchedFiles: readonly string[]
+    readonly lastError?: string
+  }
+  readonly active?: SteamSessionStatus
+  readonly latest?: SteamSessionStatus
+  readonly recentEvidence: readonly {
+    readonly [key: string]: unknown
+    readonly observedAt: string
+    readonly confidence: string
+    readonly source: string
+    readonly excerpt: string
+  }[]
+}
+
+type SteamSessionStatus = {
+  readonly [key: string]: unknown
+  readonly status: string
+  readonly appId: string
+  readonly firstObservedAt: string
+  readonly lastObservedAt: string
+  readonly confidence: string
+  readonly ownership: string
+  readonly steam: {
+    readonly [key: string]: unknown
+    readonly trackedPids: readonly number[]
+    readonly taskHistory: readonly string[]
+    readonly lastTask?: string
+    readonly commandExcerpt?: string
+  }
+}
+
+type StreamReadbackEntry =
+  | { readonly status: "ok"; readonly readback: Record<string, unknown> }
+  | { readonly status: "disabled" }
+  | { readonly status: "error"; readonly error: string }
+
+type GetStreamControlConfigResponse = {
+  readonly [key: string]: unknown
+  readonly artifactDir?: string
+}
+type GetStreamControlControlsResponse = {
+  readonly [key: string]: unknown
+  readonly controls: readonly {
+    readonly [key: string]: unknown
+    readonly status: string
+  }[]
+}
+type GetStreamControlStateResponse = {
+  readonly [key: string]: unknown
+  readonly moonlight:
+    | {
+        readonly status: "ok"
+        readonly readback: {
+          readonly [key: string]: unknown
+          readonly bitrateKbps: number | null
+          readonly fps: number | null
+          readonly resolution?: {
+            readonly width: number
+            readonly height: number
+          }
+        }
+      }
+    | { readonly status: "disabled" }
+    | { readonly status: "error"; readonly error: string }
+  readonly brightness:
+    | {
+        readonly status: "ok"
+        readonly readback: {
+          readonly [key: string]: unknown
+          readonly percent: number | null
+        }
+      }
+    | { readonly status: "disabled" }
+    | { readonly status: "error"; readonly error: string }
+  readonly battery:
+    | {
+        readonly status: "ok"
+        readonly readback: {
+          readonly [key: string]: unknown
+          readonly percent: number | null
+          readonly status?: string
+        }
+      }
+    | { readonly status: "disabled" }
+    | { readonly status: "error"; readonly error: string }
+  readonly plugins: Readonly<Record<string, StreamReadbackEntry>>
+}
 
 export interface VigieLiveSnapshot {
   readonly observedAt: string
@@ -195,35 +346,16 @@ function streamReadouts(snapshot: VigieLiveSnapshot): CockpitSession["stream"] {
       })
     }
   }
-  if (state?.gamescope.status === "ok") {
-    const gamescope = state.gamescope.readback
-    if (gamescope.fps !== null) {
+  for (const [provider, entry] of Object.entries(state?.plugins ?? {})) {
+    if (!isRecord(entry) || entry.status !== "ok") continue
+    const readback = isRecord(entry.readback) ? entry.readback : {}
+    for (const [key, value] of Object.entries(readback)) {
+      if (value === null || value === undefined) continue
       readouts.push({
-        id: "gamescope-fps",
-        label: "Gamescope FPS",
-        value: gamescope.fps === 0 ? "unlimited" : String(gamescope.fps),
+        id: `${provider}/${key}`,
+        label: labelize(key),
+        value: readoutValue(value),
         accent: "nominal",
-      })
-    }
-    if (gamescope.resolution) {
-      readouts.push({
-        id: "gamescope-resolution",
-        label: "Gamescope res",
-        value: resolution(gamescope.resolution),
-      })
-    }
-    if (gamescope.filter !== null) {
-      readouts.push({
-        id: "gamescope-filter",
-        label: "Scaling",
-        value: gamescope.filter,
-      })
-    }
-    if (gamescope.sharpness !== null) {
-      readouts.push({
-        id: "gamescope-sharpness",
-        label: "Sharpness",
-        value: String(gamescope.sharpness),
       })
     }
   }
@@ -366,27 +498,18 @@ function metricsFromLive(
       )
     }
   }
-  if (state.gamescope.status === "ok") {
-    const readback = state.gamescope.readback
-    if (readback.fps !== null) {
+  for (const [provider, entry] of Object.entries(state.plugins)) {
+    if (!isRecord(entry) || entry.status !== "ok") continue
+    const readback = isRecord(entry.readback) ? entry.readback : {}
+    for (const [key, value] of Object.entries(readback)) {
+      if (typeof value !== "number") continue
       metrics.push(
         metric(
-          "gamescope-fps",
-          "Gamescope",
-          readback.fps,
-          readback.fps === 0 ? " off" : " fps",
-          fpsStatus(readback.fps || 60),
-        ),
-      )
-    }
-    if (readback.sharpness !== null) {
-      metrics.push(
-        metric(
-          "gamescope-sharpness",
-          "Sharpness",
-          readback.sharpness,
-          "",
-          "nominal",
+          `${provider}/${key}`,
+          labelize(key),
+          value,
+          key.includes("fps") && value !== 0 ? " fps" : "",
+          key.includes("fps") ? fpsStatus(value || 60) : "nominal",
         ),
       )
     }
@@ -634,12 +757,7 @@ function addStreamStateSubsystems(
     status: snapshot.streamControlsError ? "degraded" : "nominal",
     detail: `${snapshot.streamControls?.controls.filter(control => control.status === "supported").length ?? 0} controls supported${config?.artifactDir ? ` · artifacts ${config.artifactDir}` : ""}`,
   })
-  for (const key of [
-    "moonlight",
-    "gamescope",
-    "brightness",
-    "battery",
-  ] as const) {
+  for (const key of ["moonlight", "brightness", "battery"] as const) {
     const entry = state[key]
     subsystems.push({
       id: key,
@@ -658,17 +776,31 @@ function addStreamStateSubsystems(
             : "disabled",
     })
   }
+  for (const [provider, entry] of Object.entries(state.plugins)) {
+    if (!isRecord(entry)) continue
+    subsystems.push({
+      id: provider,
+      label: provider,
+      status:
+        entry.status === "ok"
+          ? "nominal"
+          : entry.status === "disabled"
+            ? "down"
+            : "degraded",
+      detail:
+        entry.status === "ok"
+          ? readbackSummary(provider, entry.readback)
+          : entry.status === "error" && typeof entry.error === "string"
+            ? entry.error
+            : "disabled",
+    })
+  }
 }
 
 function addStreamStateLogs(logs: LogLine[], snapshot: VigieLiveSnapshot) {
   const state = snapshot.streamState
   if (!state) return
-  for (const key of [
-    "moonlight",
-    "gamescope",
-    "brightness",
-    "battery",
-  ] as const) {
+  for (const key of ["moonlight", "brightness", "battery"] as const) {
     const entry = state[key]
     if (entry.status === "error") {
       logs.push({
@@ -676,6 +808,16 @@ function addStreamStateLogs(logs: LogLine[], snapshot: VigieLiveSnapshot) {
         level: "warn",
         source: key,
         message: entry.error,
+      })
+    }
+  }
+  for (const [provider, entry] of Object.entries(state.plugins)) {
+    if (isRecord(entry) && entry.status === "error") {
+      logs.push({
+        ts: shortTime(snapshot.observedAt),
+        level: "warn",
+        source: provider,
+        message: typeof entry.error === "string" ? entry.error : "error",
       })
     }
   }
@@ -908,6 +1050,16 @@ function resolution(value: {
   return `${value.width}×${value.height}`
 }
 
+function readoutValue(value: unknown): string {
+  if (isRecord(value)) {
+    if (typeof value.width === "number" && typeof value.height === "number") {
+      return resolution({ width: value.width, height: value.height })
+    }
+    return JSON.stringify(value)
+  }
+  return String(value)
+}
+
 function labelize(value: string): string {
   return value
     .split(/[-_.\s]+/)
@@ -924,16 +1076,6 @@ function readbackSummary(key: string, readback: unknown): string {
           ? `${readback.bitrateKbps / 1000} Mbps`
           : undefined,
         typeof readback.fps === "number" ? `${readback.fps} fps` : undefined,
-      ]
-        .filter(Boolean)
-        .join(" · ") || "ok"
-    )
-  }
-  if (key === "gamescope" && isRecord(readback)) {
-    return (
-      [
-        typeof readback.fps === "number" ? `${readback.fps} fps` : undefined,
-        typeof readback.filter === "string" ? readback.filter : undefined,
       ]
         .filter(Boolean)
         .join(" · ") || "ok"

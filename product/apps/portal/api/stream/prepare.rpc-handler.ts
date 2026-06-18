@@ -99,7 +99,7 @@ export function prepareStreamLaunch(
     const intent = yield* Effect.try({
       try: () =>
         createLaunchIntent(resolved.spec, {
-          gamescope: resolved.gamescope,
+          launchCompanions: resolved.launchCompanions,
           appIntegration:
             resolved.app?.integration === "steam" ? "steam" : undefined,
           artifacts: resolved.artifacts,

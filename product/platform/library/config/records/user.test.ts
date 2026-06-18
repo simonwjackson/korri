@@ -2,6 +2,14 @@ import { describe, expect, it } from "bun:test"
 
 import { decodeUserPayload } from "./user"
 
+const wrapperProvider = "@example:wrapper"
+type WrapperPolicy = {
+  readonly enable?: boolean
+  readonly extraArgs?: readonly string[]
+}
+const wrapperPolicy = (value: unknown): WrapperPolicy | undefined =>
+  value as WrapperPolicy | undefined
+
 describe("UserPayload", () => {
   it("decodes a minimal user (every field optional — no display name required)", () => {
     const user = decodeUserPayload({})
@@ -17,13 +25,13 @@ describe("UserPayload", () => {
     const user = decodeUserPayload({
       displayName: "Simon",
       launcher: "retroarch",
-      launch: { with: { "@korri:gamescope": { enable: true } } },
+      launch: { with: { [wrapperProvider]: { enable: true } } },
       env: { LANG: "en_US.UTF-8" },
       patches: ["/patches/user.ips"],
       presets: {
         my: {
           launch: {
-            with: { "@korri:gamescope": { extraArgs: ["-F", "fsr"] } },
+            with: { [wrapperProvider]: { extraArgs: ["-F", "fsr"] } },
           },
           patches: ["/patches/my.bps"],
         },
@@ -31,10 +39,13 @@ describe("UserPayload", () => {
       inherit: false,
     })
     expect(user.launcher).toBe("retroarch")
-    expect(user.launch?.with?.["@korri:gamescope"]?.enable).toBe(true)
+    expect(wrapperPolicy(user.launch?.with?.[wrapperProvider])?.enable).toBe(
+      true,
+    )
     expect(user.patches).toEqual(["/patches/user.ips"])
     expect(
-      user.presets?.my?.launch?.with?.["@korri:gamescope"]?.extraArgs,
+      wrapperPolicy(user.presets?.my?.launch?.with?.[wrapperProvider])
+        ?.extraArgs,
     ).toEqual(["-F", "fsr"])
     expect(user.presets?.my?.patches).toEqual(["/patches/my.bps"])
   })

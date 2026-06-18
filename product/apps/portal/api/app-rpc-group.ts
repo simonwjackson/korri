@@ -12,13 +12,8 @@ import { PrepareStreamRpc as appStreamPrepare } from "./stream/prepare.rpc"
 import { GetStreamControlConfigRpc as appStreamControlConfigGet } from "./stream-control/get-config.rpc"
 import { GetStreamControlControlsRpc as appStreamControlControlsGet } from "./stream-control/get-controls.rpc"
 import { GetStreamControlStateRpc as appStreamControlStateGet } from "./stream-control/get-state.rpc"
+import { SetStreamControlActionRpc as appStreamControlActionSet } from "./stream-control/set-action.rpc"
 import { SetBrightnessRpc as appStreamControlBrightnessSet } from "./stream-control/set-brightness.rpc"
-import { SetGamescopeFilterRpc as appStreamControlGamescopeFilterSet } from "./stream-control/set-gamescope-filter.rpc"
-import { SetGamescopeFpsRpc as appStreamControlGamescopeFpsSet } from "./stream-control/set-gamescope-fps.rpc"
-import { SetGamescopeModeRpc as appStreamControlGamescopeModeSet } from "./stream-control/set-gamescope-mode.rpc"
-import { SetGamescopeSharpnessRpc as appStreamControlGamescopeSharpnessSet } from "./stream-control/set-gamescope-sharpness.rpc"
-import { SetLinkedFpsRpc as appStreamControlLinkedFpsSet } from "./stream-control/set-linked-fps.rpc"
-import { SetLinkedResolutionRpc as appStreamControlLinkedResolutionSet } from "./stream-control/set-linked-resolution.rpc"
 import { SetMoonlightBitrateRpc as appStreamControlMoonlightBitrateSet } from "./stream-control/set-moonlight-bitrate.rpc"
 import { SetMoonlightFpsRpc as appStreamControlMoonlightFpsSet } from "./stream-control/set-moonlight-fps.rpc"
 import { SetMoonlightResolutionRpc as appStreamControlMoonlightResolutionSet } from "./stream-control/set-moonlight-resolution.rpc"
@@ -40,12 +35,7 @@ export const appRpcGroup = RpcGroup.make(
   appStreamControlMoonlightBitrateSet,
   appStreamControlMoonlightFpsSet,
   appStreamControlMoonlightResolutionSet,
-  appStreamControlGamescopeModeSet,
-  appStreamControlGamescopeFpsSet,
-  appStreamControlGamescopeFilterSet,
-  appStreamControlGamescopeSharpnessSet,
-  appStreamControlLinkedFpsSet,
-  appStreamControlLinkedResolutionSet,
+  appStreamControlActionSet,
 ).middleware(FeatureGatesMiddleware)
 
 // fallow-ignore-next-line unused-types

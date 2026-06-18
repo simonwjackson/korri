@@ -39,12 +39,7 @@ export function createStreamControlEventRecorder({
 
 export async function recordStateSnapshot(
   record: (event: unknown) => Promise<void>,
-  result: {
-    readonly moonlight: unknown
-    readonly gamescope: unknown
-    readonly brightness: unknown
-    readonly battery: unknown
-  },
+  result: Record<string, unknown>,
 ): Promise<void> {
   try {
     await record({ action: "state.snapshot", ...result })

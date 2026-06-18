@@ -3,8 +3,6 @@
 # consumer — mountainous host config, korri image builds, bespoke
 # nixosSystem — automatically picks up the known-good Sway the Korri
 # compositor was validated against, without having to wire the pin themselves.
-# Gamescope is intentionally owned by the global Korri package overlay so
-# `pkgs.gamescope` stays `gamescope-korri`.
 #
 # The overlay (see product/systems/nixos/overlays/korri-x86-compositor.nix) is a no-op on
 # non-x86 systems, so this module is safe to include from

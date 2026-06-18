@@ -37,7 +37,6 @@ in
         dbus
         foot
         fuzzel
-        gamescope
         git
         procps
         sway

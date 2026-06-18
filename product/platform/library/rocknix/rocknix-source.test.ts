@@ -168,7 +168,7 @@ describe("createRocknixSource (real filesystem via withTempLibrary)", () => {
     }
   })
 
-  it("resolveLaunchForGame returns a fully-resolved spec with default Gamescope policy", async () => {
+  it("resolveLaunchForGame returns a fully-resolved spec without provider-specific launch companions", async () => {
     const lib = track(
       await withTempLibrary({
         systems: [
@@ -190,11 +190,7 @@ describe("createRocknixSource (real filesystem via withTempLibrary)", () => {
     await source.list()
     const resolved = await source.resolveLaunchForGame("snes/zelda.smc")
     expect(resolved.spec.command).toBe(lib.launchCommand)
-    expect(resolved.gamescope).toMatchObject({
-      enable: true,
-      backend: { type: "wayland" },
-      window: { fullscreen: true, borderless: true, exposeWayland: true },
-    })
+    expect(resolved.launchCompanions).toBeUndefined()
   })
 
   it("launchSpecFor returns undefined for unknown id", async () => {

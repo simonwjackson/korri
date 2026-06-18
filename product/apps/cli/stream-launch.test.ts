@@ -326,14 +326,16 @@ describe("prepareStreamLaunch", () => {
 })
 
 describe("prepareStreamLaunchForGame", () => {
-  it("writes a foreground launch intent with resolved Gamescope policy for a known game id", async () => {
+  it("writes a foreground launch intent with resolved wrapper policy for a known game id", async () => {
     const intentPath = await tempIntentPath()
     const result = await prepareStreamLaunchForGame({
       gameId: game.id,
       librarySource: librarySource({
         games: [game],
         launchSpecs: new Map([[game.id, launchSpec]]),
-        gamescope: new Map([[game.id, { enable: false }]]),
+        launchCompanions: new Map([
+          [game.id, { "@fixture:frame": { enable: false } }],
+        ]),
         artifacts: new Map([
           [
             game.id,
@@ -358,7 +360,9 @@ describe("prepareStreamLaunchForGame", () => {
     )
     expect(intent.lifecycle).toBe("foreground")
     expect(intent.launch).toEqual(launchSpec)
-    expect(intent.gamescope).toEqual({ enable: false })
+    expect(intent.launchCompanions).toEqual({
+      "@fixture:frame": { enable: false },
+    })
     expect(intent.artifacts).toEqual({
       root: "/tmp/korri-launch-artifacts/snes",
       paths: { contentPath: "/tmp/korri-launch-artifacts/snes/f-zero.smc" },
@@ -531,9 +535,9 @@ async function tempIntentPath(): Promise<string> {
 function librarySource(options: {
   readonly games: readonly GameRecord[]
   readonly launchSpecs: ReadonlyMap<string, LaunchSpec>
-  readonly gamescope?: ReadonlyMap<
+  readonly launchCompanions?: ReadonlyMap<
     string,
-    { readonly enable?: boolean; readonly extraArgs?: readonly string[] }
+    Readonly<Record<`@${string}:${string}`, unknown>>
   >
   readonly artifacts?: ReadonlyMap<string, LaunchArtifacts>
 }): LibrarySourceService {
@@ -542,12 +546,12 @@ function librarySource(options: {
     launchSpecFor: id => Effect.succeed(options.launchSpecs.get(id)),
     resolveLaunchForGame: id => {
       const spec = options.launchSpecs.get(id)
-      const gamescope = options.gamescope?.get(id)
+      const launchCompanions = options.launchCompanions?.get(id)
       const artifacts = options.artifacts?.get(id)
       return spec
         ? Effect.succeed({
             spec,
-            ...(gamescope ? { gamescope } : {}),
+            ...(launchCompanions ? { launchCompanions } : {}),
             ...(artifacts ? { artifacts } : {}),
           })
         : Effect.fail(

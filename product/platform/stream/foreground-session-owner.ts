@@ -68,7 +68,7 @@ export interface ForegroundManagedSessionHandle {
   /**
    * POSIX process group id of the managed launch when the launcher
    * wraps the spawn in a new session (e.g., `setsid -- <command>`).
-   * Sessiond's gamescope reaper uses this as the launch's scope boundary.
+   * Sessiond's launch-wrapper reaper uses this as the launch's scope boundary.
    */
   readonly processGroupId?: number
   readonly exited: Promise<{ readonly exitCode: number | null }>

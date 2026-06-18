@@ -4,15 +4,12 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { LaunchResult, LaunchSpec } from "@platform/library/launcher"
 import type { SessiondManagedLaunchEvent } from "@platform/library/sessiond-managed-launch-protocol"
-import type {
-  GamescopeReaper,
-  ReapOutcome,
-  ReapRequest,
-} from "@product/plugins/gamescope/src/session"
 import {
   createKorriSessiondCore,
   type KorriSessiondCore,
-  type KorriSessiondGamescopeControlBridge,
+  type KorriSessiondLifecycleHook,
+  type KorriSessiondLifecycleHookCleanupRequest,
+  type KorriSessiondLifecycleHookCleanupResult,
   startKorriSessiond,
 } from "./sessiond"
 import type { SessionRole } from "./sessiond-role"
@@ -39,7 +36,7 @@ function startHarness(
       readonly terminateNow: () => void
       readonly processGroupId?: number
     }>
-    readonly reaper?: GamescopeReaper
+    readonly sessionHooks?: readonly KorriSessiondLifecycleHook[]
     readonly managedStopGraceMs?: number
     readonly steamForegroundProcessScanner?: () => Promise<
       readonly SteamForegroundProcessInfo[]
@@ -49,9 +46,6 @@ function startHarness(
       signal: NodeJS.Signals,
     ) => void
     readonly steamForegroundKillGraceMs?: number
-    readonly gamescopeControlBridge?:
-      | KorriSessiondGamescopeControlBridge
-      | false
     readonly heartbeatIntervalMs?: number
   } = {},
 ) {
@@ -131,7 +125,7 @@ function startHarness(
           }
         : undefined,
     },
-    reaper: options.reaper,
+    sessionHooks: options.sessionHooks,
     ...(options.managedStopGraceMs !== undefined
       ? { managedStopGraceMs: options.managedStopGraceMs }
       : {}),
@@ -147,14 +141,29 @@ function startHarness(
     ...(options.steamForegroundKillGraceMs !== undefined
       ? { steamForegroundKillGraceMs: options.steamForegroundKillGraceMs }
       : {}),
-    ...(options.gamescopeControlBridge !== undefined
-      ? { gamescopeControlBridge: options.gamescopeControlBridge }
-      : {}),
     ...(options.heartbeatIntervalMs !== undefined
       ? { heartbeatIntervalMs: options.heartbeatIntervalMs }
       : {}),
   })
   return { core, events }
+}
+
+function cleanupHook(
+  cleanup: NonNullable<KorriSessiondLifecycleHook["cleanup"]>,
+): KorriSessiondLifecycleHook {
+  return { id: "test-cleanup", cleanup }
+}
+
+function afterChildHook(
+  afterChildRunning: NonNullable<
+    KorriSessiondLifecycleHook["afterChildRunning"]
+  >,
+): KorriSessiondLifecycleHook {
+  return {
+    id: "test-after-child",
+    failurePolicy: "fail-launch",
+    afterChildRunning,
+  }
 }
 
 function request(
@@ -842,7 +851,7 @@ describe("korri sessiond", () => {
       pid: 420,
       uid: 1000,
       cmdline: [
-        "/var/lib/korri/steam/steamrtarm64/reaper",
+        "/var/lib/korri/steam/steamrtarm64/cleanup",
         "SteamLaunch",
         "AppId=584400",
       ],
@@ -851,7 +860,7 @@ describe("korri sessiond", () => {
       pid: 421,
       uid: 1000,
       cmdline: [
-        "/var/lib/korri/steam/steamrtarm64/reaper",
+        "/var/lib/korri/steam/steamrtarm64/cleanup",
         "SteamLaunch",
         "AppId=452060",
       ],
@@ -1144,16 +1153,21 @@ describe("korri sessiond", () => {
     expect(events).toContain("stop-electrobun:101")
   })
 
-  it("invokes the gamescope reaper with the launch pgid at the restoring transition", async () => {
-    const reapCalls: ReapRequest[] = []
-    const reaper: GamescopeReaper = async request => {
-      reapCalls.push(request)
-      const outcome: ReapOutcome = { reaped: [], residual: [] }
+  it("invokes the cleanup with the launch processGroupId at the restoring transition", async () => {
+    const cleanupCalls: KorriSessiondLifecycleHookCleanupRequest[] = []
+    const cleanup: NonNullable<
+      KorriSessiondLifecycleHook["cleanup"]
+    > = async request => {
+      cleanupCalls.push(request)
+      const outcome: KorriSessiondLifecycleHookCleanupResult = {
+        cleaned: [],
+        residual: [],
+      }
       return outcome
     }
     const control = deferred<LaunchResult>()
     const { core } = startHarness({
-      reaper,
+      sessionHooks: [cleanupHook(cleanup)],
       spawnLaunch: async () => ({
         result: control.promise,
         terminate: () => control.resolve({ status: "launched" }),
@@ -1168,23 +1182,25 @@ describe("korri sessiond", () => {
       authorized({
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ launchId: "launch-reap", spec }),
+        body: JSON.stringify({ launchId: "launch-cleanup", spec }),
       }),
     )
 
     control.resolve({ status: "launched" })
     await waitForSessionMode(core, "home")
 
-    expect(reapCalls).toEqual([{ pgid: 99001 }])
+    expect(cleanupCalls).toEqual([
+      { launchId: "launch-cleanup", processGroupId: 99001 },
+    ])
 
     const stream = await request(
       core,
-      "/managed-launch/events?launchId=launch-reap",
+      "/managed-launch/events?launchId=launch-cleanup",
       authorized(),
     )
     const lifecycle = parseSseEvents(await stream.text())
     const types = lifecycle.map(event => event.type)
-    // child-exited must precede restoring; reaper runs during restoring,
+    // child-exited must precede restoring; cleanup runs during restoring,
     // home-ready terminal readiness must be last.
     const childExited = types.indexOf("child-exited")
     const restoring = types.indexOf("restoring")
@@ -1193,15 +1209,17 @@ describe("korri sessiond", () => {
     expect(restoring).toBeLessThan(homeReady)
   })
 
-  it("logs residual Gamescope pids reported by the reaper without blocking restore", async () => {
+  it("logs residual pids reported by the cleanup without blocking restore", async () => {
     const warnings: unknown[] = []
-    const reaper: GamescopeReaper = async () => ({
-      reaped: [1234],
+    const cleanup: NonNullable<
+      KorriSessiondLifecycleHook["cleanup"]
+    > = async () => ({
+      cleaned: [1234],
       residual: [9999],
     })
     const control = deferred<LaunchResult>()
     const { core } = startHarness({
-      reaper,
+      sessionHooks: [cleanupHook(cleanup)],
       spawnLaunch: async () => ({
         result: control.promise,
         terminate: () => control.resolve({ status: "launched" }),
@@ -1213,7 +1231,7 @@ describe("korri sessiond", () => {
     // the warning payload produced by the public restore path.
     const warningCore = createKorriSessiondCore({
       logger: { ...silentLogger, warn: input => warnings.push(input) },
-      reaper,
+      sessionHooks: [cleanupHook(cleanup)],
       renderer: {
         kind: "electrobun",
         launch: async () => ({ pid: 10, command: { command: "eb", args: [] } }),
@@ -1251,28 +1269,32 @@ describe("korri sessiond", () => {
       authorized({
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ launchId: "reaper-residual", spec }),
+        body: JSON.stringify({ launchId: "cleanup-residual", spec }),
       }),
     )
 
     control.resolve({ status: "launched" })
     await waitForSessionMode(warningCore, "home")
 
-    expect(warnings).toContainEqual({ pgid: 55, residualPids: [9999] })
+    expect(warnings).toContainEqual(
+      expect.objectContaining({ processGroupId: 55, residualPids: [9999] }),
+    )
     expect(warningCore.status().state.mode).toBe("home")
     // Keep the original harness referenced so the local helper remains
     // covered by this test's branch shape.
     expect(core.status().state.mode).toBe("stopped")
   })
 
-  it("logs and ignores reaper exceptions during restore", async () => {
+  it("logs and ignores cleanup exceptions during restore", async () => {
     const warnings: unknown[] = []
     const control = deferred<LaunchResult>()
     const warningCore = createKorriSessiondCore({
       logger: { ...silentLogger, warn: input => warnings.push(input) },
-      reaper: async () => {
-        throw new Error("procfs unavailable")
-      },
+      sessionHooks: [
+        cleanupHook(async () => {
+          throw new Error("procfs unavailable")
+        }),
+      ],
       renderer: {
         kind: "electrobun",
         launch: async () => ({ pid: 10, command: { command: "eb", args: [] } }),
@@ -1310,7 +1332,7 @@ describe("korri sessiond", () => {
       authorized({
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ launchId: "reaper-throw", spec }),
+        body: JSON.stringify({ launchId: "cleanup-throw", spec }),
       }),
     )
 
@@ -1321,14 +1343,16 @@ describe("korri sessiond", () => {
     expect(warningCore.status().state.mode).toBe("home")
   })
 
-  it("skips the reaper when the active launch has no process group", async () => {
-    const reapCalls: ReapRequest[] = []
-    const reaper: GamescopeReaper = async request => {
-      reapCalls.push(request)
-      return { reaped: [], residual: [] }
+  it("invokes cleanup with an undefined process group when the active launch has no process group", async () => {
+    const cleanupCalls: KorriSessiondLifecycleHookCleanupRequest[] = []
+    const cleanup: NonNullable<
+      KorriSessiondLifecycleHook["cleanup"]
+    > = async request => {
+      cleanupCalls.push(request)
+      return { cleaned: [], residual: [] }
     }
     const { core } = startHarness({
-      reaper,
+      sessionHooks: [cleanupHook(cleanup)],
       // runLaunch provides no processGroupId; this branch uses launcher.run
       // path which lacks a session handle entirely.
       launchResult: { status: "launched" },
@@ -1343,10 +1367,9 @@ describe("korri sessiond", () => {
         body: JSON.stringify({ spec }),
       }),
     )
-    // With no pgid, the reaper is still invoked but with pgid: undefined
-    // so it returns a no-op. Sessiond never calls the reaper at all on
-    // the blocking-launch path.
-    expect(reapCalls).toEqual([])
+    expect(cleanupCalls).toEqual([
+      { launchId: expect.any(String), processGroupId: undefined },
+    ])
   })
 
   it("writes status sidecar snapshots on every kiosk lifecycle transition", async () => {
@@ -1489,7 +1512,7 @@ describe("korri sessiond", () => {
     expect(calls).toContain("restoreIdleAfterLaunch")
   })
 
-  it("fails launch as host-unavailable when Gamescope control bridge start fails", async () => {
+  it("fails launch as host-unavailable when session lifecycle hook start fails", async () => {
     const order: string[] = []
     const terminated: string[] = []
     const { core } = startHarness({
@@ -1501,12 +1524,12 @@ describe("korri sessiond", () => {
         },
         terminateNow: () => undefined,
       }),
-      gamescopeControlBridge: {
-        start: async () => {
-          order.push("bridge-start")
-          throw new Error("bridge missing")
-        },
-      },
+      sessionHooks: [
+        afterChildHook(async () => {
+          order.push("hook-start")
+          throw new Error("hook missing")
+        }),
+      ],
     })
 
     await request(core, "/control/start", authorized({ method: "POST" }))
@@ -1516,17 +1539,17 @@ describe("korri sessiond", () => {
       authorized({
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ launchId: "launch-gs-fail", spec }),
+        body: JSON.stringify({ launchId: "launch-hook-fail", spec }),
       }),
     )
     const streamResponse = await request(
       core,
-      "/managed-launch/events?launchId=launch-gs-fail",
+      "/managed-launch/events?launchId=launch-hook-fail",
       authorized(),
     )
     const lifecycle = parseSseEvents(await streamResponse.text())
 
-    expect(order).toEqual(["bridge-start"])
+    expect(order).toEqual(["hook-start"])
     expect(terminated).toEqual(["graceful"])
     expect(lifecycle.map(event => event.type)).toContain("child-running")
     expect(
@@ -1534,11 +1557,11 @@ describe("korri sessiond", () => {
     ).toMatchObject({
       exitCode: 124,
       failureKind: "host-unavailable",
-      stderrTail: "Gamescope control bridge failed: bridge missing",
+      stderrTail: "Session lifecycle hook failed: hook missing",
     })
   })
 
-  it("continues to reap when Gamescope control bridge stop throws", async () => {
+  it("continues cleanup when a session lifecycle hook handle stop throws", async () => {
     const child = deferred<LaunchResult>()
     const order: string[] = []
     const { core } = startHarness({
@@ -1548,19 +1571,19 @@ describe("korri sessiond", () => {
         terminate: () => undefined,
         terminateNow: () => undefined,
       }),
-      gamescopeControlBridge: {
-        start: async request => ({
-          socketPath: request.socketPath,
-          stop: async () => {
-            order.push("bridge-stop")
+      sessionHooks: [
+        afterChildHook(async () => ({
+          resource: "test-control.sock",
+          stopBeforeCleanup: async () => {
+            order.push("hook-stop")
             throw new Error("stop failed")
           },
+        })),
+        cleanupHook(async () => {
+          order.push("cleanup")
+          return { cleaned: [], residual: [] }
         }),
-      },
-      reaper: async () => {
-        order.push("reaper")
-        return { reaped: [], residual: [] }
-      },
+      ],
     })
 
     await request(core, "/control/start", authorized({ method: "POST" }))
@@ -1570,12 +1593,12 @@ describe("korri sessiond", () => {
       authorized({
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ launchId: "launch-gs-stop-fail", spec }),
+        body: JSON.stringify({ launchId: "launch-hook-stop-fail", spec }),
       }),
     )
     const streamResponse = await request(
       core,
-      "/managed-launch/events?launchId=launch-gs-stop-fail",
+      "/managed-launch/events?launchId=launch-hook-stop-fail",
       authorized(),
     )
     const streamText = streamResponse.text()
@@ -1583,10 +1606,10 @@ describe("korri sessiond", () => {
     child.resolve({ status: "launched" })
     await streamText
 
-    expect(order).toEqual(["bridge-stop", "reaper"])
+    expect(order).toEqual(["hook-stop", "cleanup"])
   })
 
-  it("starts the Gamescope control bridge after child spawn and stops it before reaping", async () => {
+  it("starts a session lifecycle hook after child spawn and stops it before cleanup", async () => {
     const child = deferred<LaunchResult>()
     const order: string[] = []
     const { core } = startHarness({
@@ -1599,21 +1622,21 @@ describe("korri sessiond", () => {
           terminateNow: () => undefined,
         }
       },
-      gamescopeControlBridge: {
-        start: async request => {
-          order.push(`bridge-start:${request.socketPath}`)
+      sessionHooks: [
+        afterChildHook(async () => {
+          order.push("hook-start")
           return {
-            socketPath: request.socketPath,
-            stop: async () => {
-              order.push("bridge-stop")
+            resource: "test-control.sock",
+            stopBeforeCleanup: async () => {
+              order.push("hook-stop")
             },
           }
-        },
-      },
-      reaper: async () => {
-        order.push("reaper")
-        return { reaped: [], residual: [] }
-      },
+        }),
+        cleanupHook(async () => {
+          order.push("cleanup")
+          return { cleaned: [], residual: [] }
+        }),
+      ],
     })
 
     await request(core, "/control/start", authorized({ method: "POST" }))
@@ -1623,29 +1646,27 @@ describe("korri sessiond", () => {
       authorized({
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ launchId: "launch-gs", spec }),
+        body: JSON.stringify({ launchId: "launch-hook", spec }),
       }),
     )
     const streamResponse = await request(
       core,
-      "/managed-launch/events?launchId=launch-gs",
+      "/managed-launch/events?launchId=launch-hook",
       authorized(),
     )
     const streamText = streamResponse.text()
 
     await new Promise(resolve => setTimeout(resolve, 5))
-    expect(order[0]).toBe("child-spawned")
-    expect(order[1]).toContain("bridge-start:")
-    expect(order[1]).toContain("korri-gamescope-control/launch-gs/control.sock")
+    expect(order).toEqual(["child-spawned", "hook-start"])
 
     child.resolve({ status: "launched" })
     await streamText
 
     expect(order).toEqual([
       "child-spawned",
-      expect.stringContaining("bridge-start:"),
-      "bridge-stop",
-      "reaper",
+      "hook-start",
+      "hook-stop",
+      "cleanup",
     ])
   })
 
@@ -2463,7 +2484,7 @@ describe("korri sessiond", () => {
       restoreIdleAfterLaunch: async () => {},
       reconcileIdle: async () => {},
       afterChildRunning: async () => {
-        throw new Error("gamescope window never appeared")
+        throw new Error("stream surface never appeared")
       },
       idleReadyEvidence: () => "idle-blank",
       rendererStatus: () => ({ kind: "noop" }),
@@ -2510,7 +2531,7 @@ describe("korri sessiond", () => {
     const childExited = lifecycle.find(e => e.type === "child-exited")
     expect(childExited?.terminal?.failureKind).toBe("host-unavailable")
     expect(childExited?.terminal?.stderrTail).toContain(
-      "gamescope window never appeared",
+      "stream surface never appeared",
     )
   })
 })
@@ -2529,9 +2550,9 @@ async function waitForSessionMode(
   core: KorriSessiondCore,
   mode: ReturnType<KorriSessiondCore["status"]>["state"]["mode"],
 ) {
-  for (let index = 0; index < 20; index += 1) {
+  for (let index = 0; index < 50; index += 1) {
     if (core.status().state.mode === mode) return
-    await Promise.resolve()
+    await new Promise(resolve => setTimeout(resolve, 0))
   }
   expect(core.status().state.mode).toBe(mode)
 }

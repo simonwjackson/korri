@@ -2,6 +2,11 @@ import { describe, expect, it } from "bun:test"
 
 import { decodeGamePayload, decodeGameRecord } from "./game"
 
+const wrapperProvider = "@example:wrapper"
+type WrapperPolicy = { readonly enable?: boolean }
+const wrapperPolicy = (value: unknown): WrapperPolicy | undefined =>
+  value as WrapperPolicy | undefined
+
 describe("GamePayload", () => {
   it("decodes a minimal game (only the identity fields)", () => {
     const game = decodeGamePayload({
@@ -92,17 +97,19 @@ describe("GamePayload", () => {
     expect(game.collections).toEqual(["classics-1990s", "racing"])
   })
 
-  it("decodes inheritable layer fields (launch.with Gamescope, env, cwd, argsAppend, patches)", () => {
+  it("decodes inheritable layer fields (launch.with, env, cwd, argsAppend, patches)", () => {
     const game = decodeGamePayload({
       system: "snes",
       contentPath: "/x.smc",
-      launch: { with: { "@korri:gamescope": { enable: true } } },
+      launch: { with: { [wrapperProvider]: { enable: true } } },
       env: { SDL_VIDEODRIVER: "x11" },
       cwd: "/storage/roms",
       argsAppend: ["--fullscreen"],
       patches: ["/patches/base.ips", "/patches/qol.bps"],
     })
-    expect(game.launch?.with?.["@korri:gamescope"]?.enable).toBe(true)
+    expect(wrapperPolicy(game.launch?.with?.[wrapperProvider])?.enable).toBe(
+      true,
+    )
     expect(game.env?.SDL_VIDEODRIVER).toBe("x11")
     expect(game.patches).toEqual(["/patches/base.ips", "/patches/qol.bps"])
   })
@@ -115,7 +122,7 @@ describe("GamePayload", () => {
         "max-quality": {
           launch: {
             with: {
-              "@korri:gamescope": { enable: true, extraArgs: ["-F", "fsr"] },
+              [wrapperProvider]: { enable: true, extraArgs: ["-F", "fsr"] },
             },
           },
         },
@@ -128,7 +135,9 @@ describe("GamePayload", () => {
       },
     })
     expect(
-      game.presets?.["max-quality"]?.launch?.with?.["@korri:gamescope"]?.enable,
+      wrapperPolicy(
+        game.presets?.["max-quality"]?.launch?.with?.[wrapperProvider],
+      )?.enable,
     ).toBe(true)
     expect(game.byLauncher?.retroarch?.argsAppend).toEqual([
       "-L",

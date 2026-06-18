@@ -2,6 +2,11 @@ import { describe, expect, it } from "bun:test"
 
 import { decodePresetPayload } from "./preset"
 
+const wrapperProvider = "@example:wrapper"
+type WrapperPolicy = { readonly enable?: boolean }
+const wrapperPolicy = (value: unknown): WrapperPolicy | undefined =>
+  value as WrapperPolicy | undefined
+
 describe("PresetPayload", () => {
   it("decodes a minimal preset (every field optional)", () => {
     const preset = decodePresetPayload({})
@@ -17,11 +22,11 @@ describe("PresetPayload", () => {
     expect(preset.launcher).toBe("snes9x")
   })
 
-  it("decodes inheritable behavior fields (launch.with Gamescope, env, cwd, argsAppend, patches)", () => {
+  it("decodes inheritable behavior fields (launch.with, env, cwd, argsAppend, patches)", () => {
     const preset = decodePresetPayload({
       launch: {
         with: {
-          "@korri:gamescope": { enable: true, extraArgs: ["-F", "fsr"] },
+          [wrapperProvider]: { enable: true, extraArgs: ["-F", "fsr"] },
         },
       },
       env: { SDL_VIDEODRIVER: "x11" },
@@ -29,7 +34,9 @@ describe("PresetPayload", () => {
       argsAppend: ["--fullscreen"],
       patches: ["/patches/color.ips"],
     })
-    expect(preset.launch?.with?.["@korri:gamescope"]?.enable).toBe(true)
+    expect(wrapperPolicy(preset.launch?.with?.[wrapperProvider])?.enable).toBe(
+      true,
+    )
     expect(preset.env?.SDL_VIDEODRIVER).toBe("x11")
     expect(preset.cwd).toBe("/storage/roms")
     expect(preset.argsAppend).toEqual(["--fullscreen"])

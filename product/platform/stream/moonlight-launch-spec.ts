@@ -1,7 +1,4 @@
-import type {
-  GamescopePolicy,
-  MoonlightPolicy,
-} from "@platform/library/config/inheritable-fields"
+import type { MoonlightPolicy } from "@platform/library/config/inheritable-fields"
 import type { LaunchSpec } from "@platform/library/launcher"
 
 const DEFAULT_MOONLIGHT_COMMAND = "moonlight"
@@ -40,37 +37,6 @@ export function composeMoonlightStreamLaunchSpec(
   )
 
   return applyEnvironmentOverlay(base, options.facts.environment)
-}
-
-export function composeMoonlightGamescopeLaunchSpec(
-  options: ComposeMoonlightStreamLaunchSpecOptions & {
-    readonly gamescope?: GamescopePolicy
-    readonly wrapGamescopeLaunchSpec: (
-      spec: LaunchSpec,
-      policy: GamescopePolicy,
-    ) => LaunchSpec
-  },
-): LaunchSpec {
-  validateMoonlightGamescopePolicy(options.policy, options.gamescope)
-  return options.wrapGamescopeLaunchSpec(
-    composeMoonlightStreamLaunchSpec(options),
-    options.gamescope ?? { enable: false },
-  )
-}
-
-export function validateMoonlightGamescopePolicy(
-  moonlight: MoonlightPolicy | undefined,
-  gamescope: GamescopePolicy | undefined,
-): void {
-  if (
-    moonlight?.platform?.name === "wayland" &&
-    gamescope?.enable !== false &&
-    gamescope?.window?.exposeWayland !== true
-  ) {
-    throw new Error(
-      "moonlight.platform.name=wayland requires gamescope.window.exposeWayland=true when Gamescope is enabled",
-    )
-  }
 }
 
 function renderMoonlightArgs(

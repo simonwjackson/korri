@@ -1,29 +1,20 @@
+import type { StreamControlCapability } from "@platform/stream-control/control-contract"
 import {
   FPS_STEPS,
-  GAMESCOPE_FPS_STEPS,
-  LINKED_FPS_STEPS,
   type StreamControlSurfaceState,
 } from "@platform/stream-control/control-surface"
-import type { GamescopeScalingFilter } from "@platform/stream-control/state-normalizer"
 import type { StreamControlClient } from "@platform/stream-control/stream-control-client"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import {
   brightnessDeviceSpec,
   brightnessSpec,
-  gamescopeFpsSpec,
-  gamescopeResolutionSpec,
-  gamescopeSharpnessSpec,
   knownStepIndex,
-  knownUnifiedNumber,
   knownValue,
-  linkedFpsSpec,
-  linkedResolutionSpec,
   moonlightBitrateSpec,
   moonlightFpsSpec,
   moonlightResolutionSpec,
   type SliderSpec,
-  unifiedBitrateSpec,
-  unifiedSharpnessSpec,
+  sliderSpecFromCapability,
 } from "./evier-control-catalog"
 import {
   type ScheduledAction,
@@ -40,10 +31,20 @@ export function EvierStreamControlPage({
 }: {
   readonly controller: StreamControlClient
 }) {
-  const [linkedControls, setLinkedControls] = useState(true)
   const [unifiedBrightness, setUnifiedBrightness] = useState(true)
-  const { status, isRecovering, surface, refresh, recover, schedule } =
-    useEvierControlState(controller)
+  const {
+    status,
+    isRecovering,
+    surface,
+    controls,
+    refresh,
+    recover,
+    schedule,
+  } = useEvierControlState(controller)
+  const pluginControls = useMemo(
+    () => controls.filter(control => Boolean(control.provider)),
+    [controls],
+  )
 
   return (
     <main className="evier-shell">
@@ -51,119 +52,54 @@ export function EvierStreamControlPage({
         className="evier-card"
         aria-labelledby="evier-stream-mode-heading"
       >
-        <div className="evier-section-heading-row">
-          <h2 id="evier-stream-mode-heading">Stream controls</h2>
-          <label className="evier-toggle-pill">
-            <input
-              type="checkbox"
-              checked={linkedControls}
-              onChange={event => setLinkedControls(event.currentTarget.checked)}
-            />
-            Unified stream controls
-          </label>
-        </div>
+        <h2 id="evier-stream-mode-heading">Stream controls</h2>
         <p className="evier-hint">
-          {linkedControls
-            ? "One set of controls for bitrate, FPS, resolution, sharpness, and scaling."
-            : "Split mode exposes stream and presentation controls separately."}
+          Runtime controls are rendered from server metadata. Plugin controls
+          appear when product composition enables their provider.
         </p>
       </section>
 
-      {linkedControls ? (
-        <section className="evier-card" aria-labelledby="evier-session-heading">
-          <h2 id="evier-session-heading">Session controls</h2>
-          <div className="evier-grid">
-            <EvierSliderControl
-              spec={unifiedBitrateSpec}
-              schedule={schedule}
-              readbackValue={knownValue(surface.moonlight.bitrate)}
-            />
-            <EvierSliderControl
-              spec={linkedFpsSpec}
-              schedule={schedule}
-              readbackValue={knownStepIndex(
-                surface.linked.fps,
-                LINKED_FPS_STEPS,
-              )}
-            />
-            <EvierSliderControl
-              spec={linkedResolutionSpec}
-              schedule={schedule}
-              readbackValue={knownUnifiedNumber(surface.linked.resolution)}
-              wide
-            />
-            <EvierSliderControl
-              spec={unifiedSharpnessSpec}
-              schedule={schedule}
-              readbackValue={knownValue(surface.gamescope.sharpness)}
-            />
-            <ScalingFilterControl
-              schedule={schedule}
-              name="evier-unified-filter"
-              readbackValue={knownValue(surface.gamescope.filter)}
-            />
-          </div>
-        </section>
-      ) : (
-        <>
-          <section
-            className="evier-card"
-            aria-labelledby="evier-moonlight-heading"
-          >
-            <h2 id="evier-moonlight-heading">Moonlight stream</h2>
-            <div className="evier-grid">
-              <EvierSliderControl
-                spec={moonlightBitrateSpec}
-                schedule={schedule}
-                readbackValue={knownValue(surface.moonlight.bitrate)}
-              />
-              <EvierSliderControl
-                spec={moonlightFpsSpec}
-                schedule={schedule}
-                readbackValue={knownStepIndex(surface.moonlight.fps, FPS_STEPS)}
-              />
-              <EvierSliderControl
-                spec={moonlightResolutionSpec}
-                schedule={schedule}
-                readbackValue={knownValue(surface.moonlight.resolution)}
-                wide
-              />
-            </div>
-          </section>
+      <section className="evier-card" aria-labelledby="evier-moonlight-heading">
+        <h2 id="evier-moonlight-heading">Moonlight stream</h2>
+        <div className="evier-grid">
+          <EvierSliderControl
+            spec={moonlightBitrateSpec}
+            schedule={schedule}
+            readbackValue={knownValue(surface.moonlight.bitrate)}
+          />
+          <EvierSliderControl
+            spec={moonlightFpsSpec}
+            schedule={schedule}
+            readbackValue={knownStepIndex(surface.moonlight.fps, FPS_STEPS)}
+          />
+          <EvierSliderControl
+            spec={moonlightResolutionSpec}
+            schedule={schedule}
+            readbackValue={knownValue(surface.moonlight.resolution)}
+            wide
+          />
+        </div>
+      </section>
 
-          <section
-            className="evier-card"
-            aria-labelledby="evier-gamescope-heading"
-          >
-            <h2 id="evier-gamescope-heading">Gamescope presentation</h2>
-            <div className="evier-grid">
-              <EvierSliderControl
-                spec={gamescopeResolutionSpec}
+      <section className="evier-card" aria-labelledby="evier-plugin-heading">
+        <h2 id="evier-plugin-heading">Presentation controls</h2>
+        <div className="evier-grid">
+          {pluginControls.length === 0 ? (
+            <p className="evier-hint">
+              No presentation controls are available from enabled providers.
+            </p>
+          ) : (
+            pluginControls.map(control => (
+              <PluginControl
+                key={control.id}
+                control={control}
+                surface={surface}
                 schedule={schedule}
-                readbackValue={knownValue(surface.gamescope.resolution)}
               />
-              <EvierSliderControl
-                spec={gamescopeFpsSpec}
-                schedule={schedule}
-                readbackValue={knownStepIndex(
-                  surface.gamescope.fps,
-                  GAMESCOPE_FPS_STEPS,
-                )}
-              />
-              <EvierSliderControl
-                spec={gamescopeSharpnessSpec}
-                schedule={schedule}
-                readbackValue={knownValue(surface.gamescope.sharpness)}
-              />
-              <ScalingFilterControl
-                schedule={schedule}
-                name="evier-gamescope-filter"
-                readbackValue={knownValue(surface.gamescope.filter)}
-              />
-            </div>
-          </section>
-        </>
-      )}
+            ))
+          )}
+        </div>
+      </section>
 
       <section className="evier-card" aria-labelledby="evier-device-heading">
         <div className="evier-section-heading-row">
@@ -185,7 +121,7 @@ export function EvierStreamControlPage({
             <EvierSliderControl
               spec={brightnessSpec}
               schedule={schedule}
-              readbackValue={knownUnifiedNumber(surface.brightness.unified)}
+              readbackValue={knownValueOrMixed(surface.brightness.unified)}
             />
           ) : (
             surface.brightness.devices.map((device, index) => (
@@ -221,6 +157,56 @@ export function EvierStreamControlPage({
         <pre className="evier-status">{status}</pre>
       </section>
     </main>
+  )
+}
+
+function PluginControl({
+  control,
+  surface,
+  schedule,
+}: {
+  readonly control: StreamControlCapability
+  readonly surface: StreamControlSurfaceState
+  readonly schedule: (
+    id: string,
+    action: ScheduledAction,
+    body: Record<string, unknown>,
+  ) => void
+}) {
+  if (control.value.kind === "options") {
+    const optionControl = control as StreamControlCapability & {
+      readonly value: {
+        readonly kind: "options"
+        readonly values: readonly string[]
+      }
+    }
+    return (
+      <OptionControl
+        control={optionControl}
+        readbackValue={knownValue(surface.readControl(control))}
+        schedule={schedule}
+      />
+    )
+  }
+
+  const spec = sliderSpecFromCapability(control)
+  if (!spec) return null
+  const readback = surface.readControl(control)
+  const readbackValue =
+    control.value.kind === "steps"
+      ? typeof knownValue(readback) === "number"
+        ? control.value.values.indexOf(knownValue(readback) as number)
+        : undefined
+      : knownValue(readback)
+
+  return (
+    <EvierSliderControl
+      spec={spec}
+      schedule={schedule}
+      readbackValue={
+        typeof readbackValue === "number" ? readbackValue : undefined
+      }
+    />
   )
 }
 
@@ -299,46 +285,46 @@ function EvierSliderControl({
   )
 }
 
-function ScalingFilterControl({
-  schedule,
-  name,
+function OptionControl({
+  control,
   readbackValue,
+  schedule,
 }: {
+  readonly control: StreamControlCapability & {
+    readonly value: {
+      readonly kind: "options"
+      readonly values: readonly string[]
+    }
+  }
+  readonly readbackValue?: number | string
   readonly schedule: (
     id: string,
     action: ScheduledAction,
     body: Record<string, unknown>,
   ) => void
-  readonly name: string
-  readonly readbackValue?: GamescopeScalingFilter
 }) {
+  if (!control.action) return null
   return (
     <fieldset className="evier-fieldset">
-      <legend>Scaling filter</legend>
+      <legend>{control.label}</legend>
       <div className="evier-radio-row">
-        {[
-          ["linear", "Linear"],
-          ["fsr", "FSR"],
-          ["nearest", "Nearest"],
-          ["integer", "Integer"],
-          ["nis", "NIS"],
-        ].map(([value, label]) => (
+        {control.value.values.map(value => (
           <label className="evier-radio-pill" key={value}>
             <input
               type="radio"
-              name={name}
+              name={control.id}
               value={value}
               checked={readbackValue === value}
-              disabled={!readbackValue}
+              disabled={control.status !== "supported"}
               onChange={event => {
                 if (event.currentTarget.checked) {
-                  schedule("gamescope-filter", "setGamescopeFilter", {
-                    filter: event.currentTarget.value,
+                  schedule(control.id, control.action ?? "", {
+                    [optionPayloadKey(control)]: event.currentTarget.value,
                   })
                 }
               }}
             />
-            {label}
+            {value}
           </label>
         ))}
       </div>
@@ -362,6 +348,17 @@ function BatteryStatus({
       {battery.status ? <span>{battery.status}</span> : null}
     </output>
   )
+}
+
+function knownValueOrMixed(
+  readback: StreamControlSurfaceState["brightness"]["unified"],
+): number | undefined {
+  return readback._tag === "known" ? readback.value : undefined
+}
+
+function optionPayloadKey(control: StreamControlCapability): string {
+  const local = control.id.split("/").at(-1) ?? "value"
+  return local.includes("filter") ? "filter" : "value"
 }
 
 function clamp(value: number, min: number, max: number) {

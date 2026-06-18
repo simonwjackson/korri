@@ -117,7 +117,7 @@ describe("inputd actions", () => {
           pid: 42,
           uid: 1000,
           cmdline: [
-            "/nix/store/.../bin/gamescope",
+            "/nix/store/.../bin/frame-wrapper",
             "--mangoapp",
             "--",
             "/var/lib/korri/steam/steamrtarm64/reaper",

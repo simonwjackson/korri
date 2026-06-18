@@ -7,8 +7,8 @@
 	--evier-ink: #f7fbff;
 	--evier-muted: #a9b7c9;
 	--evier-moonlight: #6ea8ff;
-	--evier-gamescope: #5ee2a0;
-	--evier-linked: #c084fc;
+	--evier-plugin: #5ee2a0;
+	--evier-device: #c084fc;
 }
 
 .evier-shell {
@@ -41,7 +41,7 @@
 
 .evier-kicker {
 	margin: 0 0 0.35rem;
-	color: var(--evier-gamescope);
+	color: var(--evier-plugin);
 	font-size: 0.8rem;
 	font-weight: 900;
 	letter-spacing: 0.18em;
@@ -105,7 +105,7 @@
 .evier-toggle-pill input {
 	width: 1.35rem;
 	height: 1.35rem;
-	accent-color: var(--evier-linked);
+	accent-color: var(--evier-device);
 }
 
 .evier-grid {
@@ -134,7 +134,7 @@
 }
 
 .evier-device-status strong {
-	color: var(--evier-linked);
+	color: var(--evier-device);
 	font-size: 1.5rem;
 	font-weight: 1000;
 }
@@ -175,12 +175,13 @@
 	color: var(--evier-moonlight);
 }
 
-.evier-output-gamescope {
-	color: var(--evier-gamescope);
+.evier-output-plugin {
+	color: var(--evier-plugin);
 }
 
-.evier-output-linked {
-	color: var(--evier-linked);
+.evier-output-device,
+.evier-output-plugin {
+	color: var(--evier-device);
 }
 
 .evier-slider-row {
@@ -211,12 +212,9 @@
 	accent-color: var(--evier-moonlight);
 }
 
-.evier-control-gamescope input[type="range"] {
-	accent-color: var(--evier-gamescope);
-}
-
-.evier-control-linked input[type="range"] {
-	accent-color: var(--evier-linked);
+.evier-control-plugin input[type="range"],
+.evier-control-device input[type="range"] {
+	accent-color: var(--evier-device);
 }
 
 .evier-hint {
@@ -251,7 +249,7 @@
 .evier-radio-pill input {
 	width: 1.3rem;
 	height: 1.3rem;
-	accent-color: var(--evier-gamescope);
+	accent-color: var(--evier-plugin);
 }
 
 .evier-status-card {

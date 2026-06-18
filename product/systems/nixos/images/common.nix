@@ -14,6 +14,7 @@
   # the package options they own at the option level, which is the seam
   # that actually reaches those hosts.
   overlays ? [ ],
+  pluginNixosModules ? [ ],
 }:
 let
   evalConfig = import (nixpkgs.outPath + "/nixos/lib/eval-config.nix");
@@ -50,6 +51,7 @@ let
       korri.nixosModules.korri
       productModule
     ]
+    ++ pluginNixosModules
     ++ platformModules
     ++ modules;
 
@@ -89,11 +91,8 @@ rec {
     mkProductModules {
       productModule = ./kiosk.nix;
       inherit platformModules includeBase;
-      # Kiosk images run a foreground-session-bearing compositor; sessiond
-      # owns that lifecycle (default-gamescope launches, gamescope-wl
-      # reap, idle restore). Without this module included here, the kiosk
-      # image's korrid has no sessiond to delegate to and the
-      # in-process shell launcher fails with ENOENT on gamescope.
+      # Kiosk images run foreground sessions through sessiond. Without this
+      # module included here, korrid has no lifecycle service to delegate to.
       modules = [
         korri.nixosModules.korri-sessiond
       ]

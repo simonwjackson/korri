@@ -394,7 +394,7 @@ in
         default = { };
         example = lib.literalExpression ''
           {
-            apps.retroarch.gamescope.app.environment.WAYLAND_DISPLAY = null;
+            launch.with."@example:provider".enabled = true;
           }
         '';
         description = ''
@@ -403,9 +403,8 @@ in
 
           The value uses the same canonical readable sections as user-authored
           YAML (`host`, `apps`, `profiles`, etc.). It is loaded alongside
-          `library.yaml` by the ProseQL library source, so platform policy such
-          as app-side Gamescope environment overlays stays in the typed readable
-          contract instead of process-environment fallbacks.
+          `library.yaml` by the ProseQL library source, so platform policy stays
+          in the typed readable contract instead of process-environment fallbacks.
         '';
       };
     };

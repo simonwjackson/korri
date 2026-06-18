@@ -27,12 +27,12 @@ describe("steam launch spec", () => {
   })
 
   it("passes literal Steam %command% launch options but rejects Korri tokens", () => {
-    expect(validateSteamLaunchOptions("gamescope -- %command%")).toMatchObject({
+    expect(validateSteamLaunchOptions("wrapper -- %command%")).toMatchObject({
       _tag: "Right",
-      right: "gamescope -- %command%",
+      right: "wrapper -- %command%",
     })
     expect(
-      validateSteamLaunchOptions("gamescope -- {content.path}"),
+      validateSteamLaunchOptions("wrapper -- {content.path}"),
     ).toMatchObject({
       _tag: "Left",
       left: expect.objectContaining({ _tag: "InvalidSteamLaunchOptions" }),

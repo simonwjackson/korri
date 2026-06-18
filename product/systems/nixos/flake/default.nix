@@ -192,15 +192,6 @@ flake-utils.lib.eachDefaultSystem (
       inherit bunDeps;
     };
 
-    korriGamescopeControlBridge =
-      import ../../../../product/plugins/gamescope/packages/control-bridge/default.nix
-        {
-          inherit pkgs;
-          lib = pkgs.lib;
-          src = korriSources.cli;
-          inherit bunDeps;
-        };
-
     korrid = import ../../../../product/services/server/package.nix {
       inherit pkgs;
       lib = pkgs.lib;
@@ -222,10 +213,17 @@ flake-utils.lib.eachDefaultSystem (
     korriDesktopDevice = desktop.packages.device;
     korriDesktopX86Kiosk = desktop.packages.x86Kiosk;
 
+    firstPartyPluginComposition = import ./plugins.nix {
+      inherit pkgs bunDeps;
+      src = korriSources.cli;
+      enable = pkgs.stdenv.isLinux;
+    };
+
     korriImages = import ../../../../product/systems/nixos/images/common.nix {
       korri = self;
       inherit nixpkgs system;
-      overlays = [ korriPackagesOverlay ];
+      overlays = [ korriPackagesOverlay ] ++ firstPartyPluginComposition.overlays;
+      pluginNixosModules = firstPartyPluginComposition.nixosModules;
     };
 
     steamKorri = pkgs.steam-korri;
@@ -238,7 +236,6 @@ flake-utils.lib.eachDefaultSystem (
     # The named outputs match the overlay-substituted runtime package names
     # so downstream consumers can ask for either name and get the same
     # derivation.
-    gamescopeKorri = pkgs.gamescope;
     sunshineKorri = pkgs.sunshine;
     moonlightEmbeddedKorri = pkgs.moonlight-embedded;
 
@@ -274,11 +271,6 @@ flake-utils.lib.eachDefaultSystem (
     korriKioskLiveUsbRuntimeSystem = korriImages.mkLiveUsbKioskRuntimeSystem {
       platformModules = [ ../../../../product/systems/nixos/images/platforms/x86.nix ];
     };
-
-    firstPartyPluginComposition = import ./plugins.nix {
-      inherit pkgs gamescopeKorri korriGamescopeControlBridge;
-      enableGamescope = pkgs.stdenv.isLinux;
-    };
   in
   {
     packages = import ./packages.nix {
@@ -300,7 +292,6 @@ flake-utils.lib.eachDefaultSystem (
         korriGameStream
         korriSessiond
         korriCli
-        korriGamescopeControlBridge
         korrid
         korriHeadlessSource
         sunshineKorri
@@ -308,7 +299,6 @@ flake-utils.lib.eachDefaultSystem (
         steamKorri
         libretroFake08
         libretroWasm4
-        gamescopeKorri
         smbRemastered
         superMario127
         yoshisFabricationStation
@@ -367,7 +357,6 @@ flake-utils.lib.eachDefaultSystem (
         korriInputd
         korriGameStream
         korriCli
-        korriGamescopeControlBridge
         korrid
         korriHeadlessSource
         korriDesktop

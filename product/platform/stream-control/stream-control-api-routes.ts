@@ -4,54 +4,42 @@ import {
   type MoonlightControlClient,
 } from "@platform/stream/moonlight-control-client"
 import {
+  type StreamControlCapability,
+  streamControlCapabilities,
+} from "@platform/stream-control/control-contract"
+import {
   closeClient,
   createStreamControlEventRecorder,
   errorMessage,
-  isRecord,
   readControlState,
   recordStateSnapshot,
 } from "@platform/stream-control/runtime-support"
-import {
-  type GamescopeScalingFilter,
-  normalizeGamescopeState,
-  normalizeMoonlightState,
-  readGamescopeScalingFilter,
-} from "@platform/stream-control/state-normalizer"
+import { normalizeMoonlightState } from "@platform/stream-control/state-normalizer"
+import { isRecord } from "@platform/stream-control/utils"
 import type { Context } from "hono"
 import { Hono } from "hono"
 
-export interface GamescopeControlClient {
-  readonly state: () => Promise<unknown>
-  readonly setMode: (payload: {
-    readonly width: number
-    readonly height: number
-  }) => Promise<unknown>
-  readonly setFilter: (payload: {
-    readonly filter: GamescopeScalingFilter
-  }) => Promise<unknown>
-  readonly setSharpness: (payload: {
-    readonly sharpness: number
-  }) => Promise<unknown>
-  readonly requestCommand: (
-    method: "fps.set",
-    payload?: unknown,
-  ) => Promise<unknown>
-  readonly close: () => void
-}
-
 export interface StreamControlApiOptions {
   readonly moonlightSocketPath?: string
-  readonly gamescopeSocketPath?: string
   readonly artifactDir?: string
+}
+
+export interface GenericControlProvider {
+  readonly id: string
+  readonly enabled: boolean
+  readonly controls: readonly StreamControlCapability[]
+  readonly readState?: () => Promise<unknown>
+  readonly applyAction?: (
+    action: string,
+    payload: Record<string, unknown>,
+  ) => Promise<unknown>
 }
 
 export interface StreamControlApiDependencies {
   readonly connectMoonlight?: (
     socketPath: string,
   ) => Promise<MoonlightControlClient>
-  readonly connectGamescope?: (
-    socketPath: string,
-  ) => Promise<GamescopeControlClient>
+  readonly controlProviders?: readonly GenericControlProvider[]
   readonly appendFile?: (path: string, content: string) => Promise<void>
   readonly mkdir?: (
     path: string,
@@ -62,12 +50,10 @@ export interface StreamControlApiDependencies {
 
 interface StreamControlRuntime {
   readonly options: StreamControlApiOptions
+  readonly providers: readonly GenericControlProvider[]
   readonly connectMoonlight: (
     socketPath: string,
   ) => Promise<MoonlightControlClient>
-  readonly connectGamescope: (
-    socketPath: string,
-  ) => Promise<GamescopeControlClient>
   readonly record: (event: unknown) => Promise<void>
 }
 
@@ -80,7 +66,6 @@ export function streamControlApiOptionsFromEnv(
 ): StreamControlApiOptions {
   return {
     moonlightSocketPath: env.MOONLIGHT_LOCAL_CONTROL_SOCKET,
-    gamescopeSocketPath: env.KORRI_GAMESCOPE_CONTROL_SOCKET,
     artifactDir:
       env.KORRI_EVIER_ARTIFACT_DIR ?? env.KORRI_CONTROL_BENCH_ARTIFACT_DIR,
   }
@@ -93,7 +78,8 @@ export function createStreamControlApiRoutes(
   const app = new Hono()
   const runtime = createRuntime(options, deps)
 
-  app.get("/config", context => context.json(configPayload(options)))
+  app.get("/config", context => context.json(configPayload(runtime)))
+  app.get("/controls", context => context.json(controlsPayload(runtime)))
   app.get("/state", async context => context.json(await readState(runtime)))
 
   app.post(
@@ -129,50 +115,13 @@ export function createStreamControlApiRoutes(
       run: (client, data) => client.setResolution(data),
     }),
   )
-  app.post(
-    "/gamescope/mode",
-    controlMutation(runtime, {
-      socketPath: () => runtime.options.gamescopeSocketPath,
-      disabledError: "gamescope socket disabled",
-      connect: runtime.connectGamescope,
-      action: "gamescope.mode",
-      parse: parseResolution,
-      run: (client, data) => client.setMode(data),
-    }),
-  )
-  app.post(
-    "/gamescope/filter",
-    controlMutation(runtime, {
-      socketPath: () => runtime.options.gamescopeSocketPath,
-      disabledError: "gamescope socket disabled",
-      connect: runtime.connectGamescope,
-      action: "gamescope.filter",
-      parse: parseFilterPayload,
-      run: (client, data) => client.setFilter(data),
-    }),
-  )
-  app.post(
-    "/gamescope/sharpness",
-    controlMutation(runtime, {
-      socketPath: () => runtime.options.gamescopeSocketPath,
-      disabledError: "gamescope socket disabled",
-      connect: runtime.connectGamescope,
-      action: "gamescope.sharpness",
-      parse: parseSharpness,
-      run: (client, data) => client.setSharpness(data),
-    }),
-  )
-  app.post(
-    "/gamescope/fps",
-    controlMutation(runtime, {
-      socketPath: () => runtime.options.gamescopeSocketPath,
-      disabledError: "gamescope socket disabled",
-      connect: runtime.connectGamescope,
-      action: "gamescope.fps",
-      parse: parseGamescopeFps,
-      run: (client, data) => client.requestCommand("fps.set", data),
-    }),
-  )
+  app.post("/action", async context => {
+    const payload = parseGenericAction(await requestJson(context))
+    if (!payload.ok)
+      return context.json({ ok: false, error: payload.error }, 400)
+    const result = await applyGenericAction(runtime, payload.value)
+    return jsonOutcome(context, result)
+  })
 
   return app
 }
@@ -186,14 +135,10 @@ function createRuntime(
   const appendFileImpl = deps.appendFile ?? appendFile
   return {
     options,
+    providers: deps.controlProviders ?? [],
     connectMoonlight:
       deps.connectMoonlight ??
       ((socketPath: string) => connectMoonlightControl({ socketPath })),
-    connectGamescope:
-      deps.connectGamescope ??
-      (() => {
-        throw new Error("gamescope connector dependency is required")
-      }),
     record: createStreamControlEventRecorder({
       artifactDir: options.artifactDir,
       mkdir: mkdirImpl,
@@ -232,6 +177,22 @@ function controlMutation<TClient, TPayload>(
   }
 }
 
+async function applyGenericAction(
+  runtime: StreamControlRuntime,
+  input: { readonly action: string; readonly payload: Record<string, unknown> },
+): Promise<Record<string, unknown>> {
+  const provider = runtime.providers.find(candidate =>
+    candidate.controls.some(control => control.action === input.action),
+  )
+  if (!provider?.applyAction) {
+    return { ok: false, error: "unsupported action", httpStatus: 404 }
+  }
+  return await recordActionOutcome(
+    { action: input.action, requested: input.payload, record: runtime.record },
+    () => provider.applyAction?.(input.action, input.payload),
+  )
+}
+
 async function runSocketAction<TClient>(input: {
   readonly socketPath: string | undefined
   readonly disabledError: string
@@ -261,7 +222,7 @@ async function recordActionOutcome(
     readonly requested: unknown
     readonly record: (event: unknown) => Promise<void>
   },
-  run: () => Promise<unknown>,
+  run: () => Promise<unknown> | undefined,
 ): Promise<Record<string, unknown>> {
   try {
     const result = {
@@ -296,46 +257,86 @@ async function recordWithoutChangingOutcome(
 
 function jsonOutcome(context: Context, result: Record<string, unknown>) {
   const { httpStatus, ...body } = result
-  return context.json(body, httpStatus === 503 ? 503 : 200)
+  return context.json(
+    body,
+    httpStatus === 404 || httpStatus === 503 ? httpStatus : 200,
+  )
 }
 
 async function readState(runtime: StreamControlRuntime) {
-  const [moonlight, gamescope] = await Promise.all([
+  const [moonlight, providerEntries] = await Promise.all([
     readControlState(
       runtime.options.moonlightSocketPath,
       runtime.connectMoonlight,
       client => client.state(),
       normalizeMoonlightState,
     ),
-    readControlState(
-      runtime.options.gamescopeSocketPath,
-      runtime.connectGamescope,
-      client => client.state(),
-      normalizeGamescopeState,
+    Promise.all(
+      runtime.providers.map(
+        async provider =>
+          [
+            provider.id,
+            provider.readState
+              ? await provider.readState()
+              : { status: "disabled" },
+          ] as const,
+      ),
     ),
   ])
   const result = {
     moonlight,
-    gamescope,
     brightness: { status: "disabled" as const },
     battery: { status: "disabled" as const },
+    plugins: Object.fromEntries(providerEntries),
   }
   await recordStateSnapshot(runtime.record, result)
   return result
 }
 
-function configPayload(options: StreamControlApiOptions) {
+function configPayload(runtime: StreamControlRuntime) {
   return {
-    moonlight: { enabled: Boolean(options.moonlightSocketPath) },
-    gamescope: { enabled: Boolean(options.gamescopeSocketPath) },
+    moonlight: { enabled: Boolean(runtime.options.moonlightSocketPath) },
     brightness: { enabled: false },
     battery: { enabled: false },
-    artifactDir: options.artifactDir ?? null,
+    plugins: Object.fromEntries(
+      runtime.providers.map(provider => [
+        provider.id,
+        { enabled: provider.enabled },
+      ]),
+    ),
+    artifactDir: runtime.options.artifactDir ?? null,
   }
+}
+
+function controlsPayload(runtime: StreamControlRuntime) {
+  return streamControlCapabilities(
+    {
+      moonlight: Boolean(runtime.options.moonlightSocketPath),
+      brightness: false,
+      battery: false,
+    },
+    runtime.providers.flatMap(provider => provider.controls),
+  )
 }
 
 async function requestJson(context: Context): Promise<unknown> {
   return await context.req.json().catch(() => undefined)
+}
+
+function parseGenericAction(body: unknown): ParsedPayload<{
+  readonly action: string
+  readonly payload: Record<string, unknown>
+}> {
+  if (!isRecord(body) || typeof body.action !== "string") {
+    return { ok: false, error: "action required" }
+  }
+  return {
+    ok: true,
+    value: {
+      action: body.action,
+      payload: isRecord(body.payload) ? body.payload : {},
+    },
+  }
 }
 
 function parseBitrate(
@@ -359,19 +360,6 @@ function parseFps(body: unknown): ParsedPayload<{ readonly fps: number }> {
     : { ok: false, error: "fps between 30 and 120 required" }
 }
 
-// Gamescope's runtime fps limiter accepts 0 ("no limit") through 240. Keep
-// it separate from the Moonlight client's 30..120 contract so the routes can
-// surface the right error message and don't accidentally tighten Moonlight
-// when the gamescope range widens.
-function parseGamescopeFps(
-  body: unknown,
-): ParsedPayload<{ readonly fps: number }> {
-  const fps = readNumber(body, "fps")
-  return fps !== undefined && Number.isInteger(fps) && fps >= 0 && fps <= 240
-    ? { ok: true, value: { fps } }
-    : { ok: false, error: "fps between 0 and 240 (integer) required" }
-}
-
 function parseResolution(
   body: unknown,
 ): ParsedPayload<{ readonly width: number; readonly height: number }> {
@@ -380,24 +368,6 @@ function parseResolution(
   return width && height
     ? { ok: true, value: { width, height } }
     : { ok: false, error: "width and height required" }
-}
-
-function parseFilterPayload(
-  body: unknown,
-): ParsedPayload<{ readonly filter: GamescopeScalingFilter }> {
-  const filter = readFilter(body)
-  return filter
-    ? { ok: true, value: { filter } }
-    : { ok: false, error: "valid filter required" }
-}
-
-function parseSharpness(
-  body: unknown,
-): ParsedPayload<{ readonly sharpness: number }> {
-  const sharpness = readNumber(body, "sharpness")
-  return sharpness !== undefined && sharpness >= 0 && sharpness <= 20
-    ? { ok: true, value: { sharpness } }
-    : { ok: false, error: "sharpness between 0 and 20 required" }
 }
 
 function readPositiveNumber(body: unknown, key: string): number | undefined {
@@ -409,8 +379,4 @@ function readNumber(body: unknown, key: string): number | undefined {
   if (!isRecord(body)) return undefined
   const value = Number(body[key])
   return Number.isFinite(value) ? value : undefined
-}
-
-function readFilter(body: unknown): GamescopeScalingFilter | undefined {
-  return isRecord(body) ? readGamescopeScalingFilter(body.filter) : undefined
 }

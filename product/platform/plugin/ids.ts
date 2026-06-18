@@ -1,1 +1,4 @@
-export const KORRI_GAMESCOPE_PLUGIN_ID = "@korri:gamescope" as const
+import type { ProviderId } from "./index"
+
+export const isProviderId = (value: string): value is ProviderId =>
+  value.startsWith("@") && value.includes(":")

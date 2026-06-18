@@ -1,8 +1,8 @@
-# Sway/gamescope are pinned globally for x86 compositor hosts through
-# the korri-x86-compositor-overlay nixosModule (wired into
-# korri-compositor in flake.nix). That overlay reaches downstream
-# consumers (mountainous, bespoke nixosSystem) automatically, so this
-# platform module no longer needs its own pin.
+# Sway is pinned for x86 compositor hosts through the
+# korri-x86-compositor-overlay nixosModule (wired into korri-compositor in
+# flake.nix). That overlay reaches downstream consumers (mountainous, bespoke
+# nixosSystem) automatically, so this platform module no longer needs its own
+# pin.
 {
   config,
   lib,

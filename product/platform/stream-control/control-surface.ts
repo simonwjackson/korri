@@ -1,10 +1,11 @@
-import { RESOLUTION_STEPS } from "@platform/stream-control/control-contract"
-import type { GamescopeScalingFilter } from "@platform/stream-control/state-normalizer"
+import { parsePluginRecordId } from "@platform/plugin"
+import {
+  RESOLUTION_STEPS,
+  type StreamControlCapability,
+} from "@platform/stream-control/control-contract"
 
 export {
   FPS_STEPS,
-  GAMESCOPE_FPS_STEPS,
-  LINKED_FPS_STEPS,
   RESOLUTION_STEPS,
 } from "@platform/stream-control/control-contract"
 
@@ -16,27 +17,12 @@ export type ControlReadback<T> =
 export type UnifiedReadback<T> =
   | ControlReadback<T>
   | { readonly _tag: "mixed"; readonly values: readonly T[] }
-  | {
-      readonly _tag: "diverged"
-      readonly moonlight: T
-      readonly gamescope: T
-    }
 
 export interface StreamControlSurfaceState {
   readonly moonlight: {
     readonly bitrate: ControlReadback<number>
     readonly fps: ControlReadback<number>
     readonly resolution: ControlReadback<number>
-  }
-  readonly gamescope: {
-    readonly fps: ControlReadback<number>
-    readonly resolution: ControlReadback<number>
-    readonly sharpness: ControlReadback<number>
-    readonly filter: ControlReadback<GamescopeScalingFilter>
-  }
-  readonly linked: {
-    readonly fps: UnifiedReadback<number>
-    readonly resolution: UnifiedReadback<number>
   }
   readonly brightness: {
     readonly unified: UnifiedReadback<number>
@@ -46,6 +32,9 @@ export interface StreamControlSurfaceState {
     readonly percent: ControlReadback<number>
     readonly status: string | null
   }
+  readonly readControl: (
+    control: StreamControlCapability,
+  ) => ControlReadback<number | string>
 }
 
 export interface BrightnessDeviceReadback {
@@ -56,43 +45,24 @@ export interface BrightnessDeviceReadback {
 export const StreamControlSurface = {
   fromState(state: unknown): StreamControlSurfaceState {
     const moonlightStatus = subsystemStatus(state, "moonlight")
-    const gamescopeStatus = subsystemStatus(state, "gamescope")
 
-    const moonlightFps = ifAvailable(moonlightStatus, () =>
-      readMoonlightFps(state),
-    )
-    const gamescopeFps = ifAvailable(gamescopeStatus, () =>
-      readGamescopeFps(state),
-    )
-    const moonlightResolution = ifAvailable(moonlightStatus, () =>
-      readMoonlightResolution(state),
-    )
-    const gamescopeResolution = ifAvailable(gamescopeStatus, () =>
-      readGamescopeResolution(state),
-    )
-
-    return {
+    const surface = {
       moonlight: {
         bitrate: ifAvailable(moonlightStatus, () =>
           readMoonlightBitrate(state),
         ),
-        fps: moonlightFps,
-        resolution: moonlightResolution,
-      },
-      gamescope: {
-        fps: gamescopeFps,
-        resolution: gamescopeResolution,
-        sharpness: ifAvailable(gamescopeStatus, () =>
-          readGamescopeSharpness(state),
+        fps: ifAvailable(moonlightStatus, () => readMoonlightFps(state)),
+        resolution: ifAvailable(moonlightStatus, () =>
+          readMoonlightResolution(state),
         ),
-        filter: ifAvailable(gamescopeStatus, () => readGamescopeFilter(state)),
-      },
-      linked: {
-        fps: linkReadbacks(moonlightFps, gamescopeFps),
-        resolution: linkReadbacks(moonlightResolution, gamescopeResolution),
       },
       brightness: readBrightness(state),
       battery: readBattery(state),
+    }
+
+    return {
+      ...surface,
+      readControl: control => readControlValue(state, control, surface),
     }
   },
 }
@@ -114,23 +84,6 @@ function ifAvailable<T>(
   read: () => ControlReadback<T>,
 ): ControlReadback<T> {
   return status.unavailable ? unavailable(status.unavailable) : read()
-}
-
-function linkReadbacks(
-  moonlight: ControlReadback<number>,
-  gamescope: ControlReadback<number>,
-): UnifiedReadback<number> {
-  if (moonlight._tag === "unavailable") return moonlight
-  if (gamescope._tag === "unavailable") return gamescope
-  if (moonlight._tag !== "known" || gamescope._tag !== "known") {
-    return { _tag: "unknown" }
-  }
-  if (moonlight.value === gamescope.value) return known(moonlight.value)
-  return {
-    _tag: "diverged",
-    moonlight: moonlight.value,
-    gamescope: gamescope.value,
-  }
 }
 
 function subsystemStatus(
@@ -166,39 +119,6 @@ function readMoonlightResolution(state: unknown): ControlReadback<number> {
       numberField(resolution, "height"),
     ),
   )
-}
-
-function readGamescopeFps(state: unknown): ControlReadback<number> {
-  return numberReadback(numberField(okReadback(state, "gamescope"), "fps"))
-}
-
-function readGamescopeResolution(state: unknown): ControlReadback<number> {
-  const resolution = recordField(okReadback(state, "gamescope"), "resolution")
-  return numberReadback(
-    resolutionIndex(
-      numberField(resolution, "width"),
-      numberField(resolution, "height"),
-    ),
-  )
-}
-
-function readGamescopeSharpness(state: unknown): ControlReadback<number> {
-  return numberReadback(
-    numberField(okReadback(state, "gamescope"), "sharpness"),
-  )
-}
-
-function readGamescopeFilter(
-  state: unknown,
-): ControlReadback<GamescopeScalingFilter> {
-  const filter = okReadback(state, "gamescope")?.filter
-  return filter === "linear" ||
-    filter === "nearest" ||
-    filter === "integer" ||
-    filter === "fsr" ||
-    filter === "nis"
-    ? known(filter)
-    : unknown()
 }
 
 function readBrightness(
@@ -256,6 +176,57 @@ function readBattery(state: unknown): StreamControlSurfaceState["battery"] {
   }
 }
 
+function readControlValue(
+  state: unknown,
+  control: StreamControlCapability,
+  surface: Omit<StreamControlSurfaceState, "readControl">,
+): ControlReadback<number | string> {
+  if (control.status === "unsupported") {
+    return unavailable(control.unavailableReason ?? "unsupported")
+  }
+  if (control.readback === "moonlight.bitrate") return surface.moonlight.bitrate
+  if (control.readback === "moonlight.fps") return surface.moonlight.fps
+  if (control.readback === "moonlight.resolution") {
+    return surface.moonlight.resolution
+  }
+  if (control.readback === "brightness.unified") {
+    const unified = surface.brightness.unified
+    return unified._tag === "mixed" ? unknown() : unified
+  }
+  if (control.readback === "battery.percent") return surface.battery.percent
+
+  const pluginRef = parsePluginRecordId(control.readback)
+  if (!pluginRef) return unknown()
+  const pluginEntry = recordField(
+    recordField(state as object, "plugins"),
+    pluginRef.provider,
+  )
+  const status = pluginStateStatus(pluginEntry)
+  if (status.unavailable) return unavailable(status.unavailable)
+  const readback = recordField(pluginEntry, "readback")
+  const value = readback?.[pluginRef.id]
+  if (typeof value === "number" || typeof value === "string") {
+    return known(value)
+  }
+  const resolution = isRecord(value)
+    ? resolutionIndex(numberField(value, "width"), numberField(value, "height"))
+    : undefined
+  return numberReadback(resolution)
+}
+
+function pluginStateStatus(entry: Record<string, unknown> | undefined): {
+  unavailable?: string
+} {
+  if (!entry) return { unavailable: "missing" }
+  if (entry.status === "disabled") return { unavailable: "disabled" }
+  if (entry.status === "error") {
+    return {
+      unavailable: typeof entry.error === "string" ? entry.error : "error",
+    }
+  }
+  return {}
+}
+
 function numberReadback(value: number | undefined): ControlReadback<number> {
   return value === undefined ? unknown() : known(value)
 }
@@ -270,10 +241,10 @@ function okReadback(
 }
 
 function recordField(
-  record: Record<string, unknown> | undefined,
+  record: object | Record<string, unknown> | undefined,
   key: string,
 ): Record<string, unknown> | undefined {
-  const value = record?.[key]
+  const value = isRecord(record) ? record[key] : undefined
   return isRecord(value) ? value : undefined
 }
 

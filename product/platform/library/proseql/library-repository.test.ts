@@ -330,7 +330,7 @@ describe("createLibraryRepository — readable playable entries", () => {
           runtime: "proton-arm64",
           state: { root: join(root, "steam-home") },
           extra: { args: ["-silent"] },
-          "launch-options": "gamescope -- %command%",
+          "launch-options": "wrapper -- %command%",
         }),
       )
 
@@ -414,7 +414,7 @@ describe("createLibraryRepository — readable playable entries", () => {
     })
   })
 
-  it("preserves Gamescope launch companions through legacy launcher upsert", async () => {
+  it("preserves launch companions through legacy launcher upsert", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)
       await Effect.runPromise(
@@ -425,7 +425,7 @@ describe("createLibraryRepository — readable playable entries", () => {
           systems: [],
           launch: {
             with: {
-              "@korri:gamescope": { extraArgs: ["--expose-wayland"] },
+              "@example:wrapper": { extraArgs: ["--expose-wayland"] },
             },
           },
         }),
@@ -435,11 +435,17 @@ describe("createLibraryRepository — readable playable entries", () => {
         repo.resolveLocalLauncherPolicy("moonlight"),
       )
 
-      expect(policy.gamescope.extraArgs).toEqual(["--expose-wayland"])
+      expect(
+        (
+          policy.launchCompanions["@example:wrapper"] as
+            | { readonly extraArgs?: readonly string[] }
+            | undefined
+        )?.extraArgs,
+      ).toEqual(["--expose-wayland"])
     })
   })
 
-  it("resolves local launcher Moonlight and sibling Gamescope policy from readable host/app layers", async () => {
+  it("resolves local launcher Moonlight and sibling launch companion policy from readable host/app layers", async () => {
     await withTempRoot(async root => {
       const repo = await seedReadableLibrary(root)
       await Effect.runPromise(
@@ -449,7 +455,7 @@ describe("createLibraryRepository — readable playable entries", () => {
           args: ["stream"],
           launch: {
             with: {
-              "@korri:gamescope": { extraArgs: ["--expose-wayland"] },
+              "@example:wrapper": { extraArgs: ["--expose-wayland"] },
             },
           },
           moonlight: {
@@ -476,7 +482,13 @@ describe("createLibraryRepository — readable playable entries", () => {
         }),
       )
 
-      expect(policy.gamescope.extraArgs).toEqual(["--expose-wayland"])
+      expect(
+        (
+          policy.launchCompanions["@example:wrapper"] as
+            | { readonly extraArgs?: readonly string[] }
+            | undefined
+        )?.extraArgs,
+      ).toEqual(["--expose-wayland"])
       expect(policy.moonlight).toEqual({
         environment: { FROM_HOST: "1", UNSET_ME: "1" },
         platform: { name: "v4l2m2m" },

@@ -10,12 +10,11 @@ import {
 } from "node:fs/promises"
 import { dirname, isAbsolute, join } from "node:path"
 import type { AppIntegrationKind } from "@platform/library/config/app-integrations"
-import {
-  decodeGamescopePolicy,
-  type GamescopePolicy,
-} from "@platform/library/config/inheritable-fields"
+import type { LaunchCompanionMap } from "@platform/library/config/inheritable-fields"
 import type { LaunchArtifacts } from "@platform/library/launch-artifacts"
 import { decodeLaunchSpec, type LaunchSpec } from "@platform/library/launcher"
+import type { ProviderId } from "@platform/plugin"
+import { isProviderId } from "@platform/plugin/ids"
 
 export type GameStreamLaunchLifecycle = "foreground" | "session"
 export type GameStreamLaunchAppIntegration = Extract<
@@ -29,7 +28,7 @@ export interface GameStreamLaunchIntent {
   readonly createdAt: string
   readonly lifecycle: GameStreamLaunchLifecycle
   readonly launch: LaunchSpec
-  readonly gamescope?: GamescopePolicy
+  readonly launchCompanions?: LaunchCompanionMap
   readonly appIntegration?: GameStreamLaunchAppIntegration
   readonly wait?: LaunchSpec
   readonly artifacts?: LaunchArtifacts
@@ -66,7 +65,7 @@ export function createLaunchIntent(
   launch: LaunchSpec,
   options: {
     readonly lifecycle?: GameStreamLaunchLifecycle
-    readonly gamescope?: GamescopePolicy
+    readonly launchCompanions?: LaunchCompanionMap
     readonly appIntegration?: GameStreamLaunchAppIntegration
     readonly wait?: LaunchSpec
     readonly artifacts?: LaunchArtifacts
@@ -84,8 +83,8 @@ export function createLaunchIntent(
     createdAt: new Date().toISOString(),
     lifecycle: options.lifecycle ?? "foreground",
     launch,
-    ...(hasGamescopeOpinion(options.gamescope)
-      ? { gamescope: options.gamescope }
+    ...(hasLaunchCompanionEntries(options.launchCompanions)
+      ? { launchCompanions: options.launchCompanions }
       : {}),
     ...(options.appIntegration
       ? { appIntegration: options.appIntegration }
@@ -99,7 +98,7 @@ export function createStaticGameStreamLaunchIntentStore(
   launch: LaunchSpec,
   options: {
     readonly lifecycle?: GameStreamLaunchLifecycle
-    readonly gamescope?: GamescopePolicy
+    readonly launchCompanions?: LaunchCompanionMap
     readonly appIntegration?: GameStreamLaunchAppIntegration
     readonly wait?: LaunchSpec
     readonly artifacts?: LaunchArtifacts
@@ -224,7 +223,7 @@ export function decodeLaunchIntent(value: unknown): GameStreamLaunchIntent {
       launch,
     },
     {
-      gamescope: decodeOptionalGamescopePolicy(record.gamescope),
+      launchCompanions: decodeOptionalLaunchCompanions(record.launchCompanions),
       appIntegration: decodeOptionalAppIntegration(record.appIntegration),
       wait,
       artifacts: decodeOptionalLaunchArtifacts(record.artifacts),
@@ -236,10 +235,24 @@ function decodeOptionalLaunchSpec(value: unknown): LaunchSpec | undefined {
   return value === undefined ? undefined : decodeLaunchSpec(value)
 }
 
-function decodeOptionalGamescopePolicy(
+function decodeOptionalLaunchCompanions(
   value: unknown,
-): GamescopePolicy | undefined {
-  return value === undefined ? undefined : decodeGamescopePolicy(value)
+): LaunchCompanionMap | undefined {
+  if (value === undefined) return undefined
+  const record = decodeRecord(
+    value,
+    "launch intent launchCompanions must be an object",
+  )
+  const decoded: Record<ProviderId, unknown> = {}
+  for (const [provider, payload] of Object.entries(record)) {
+    if (!isProviderId(provider)) {
+      throw new Error(
+        `launch intent launchCompanions provider must be a provider id: ${provider}`,
+      )
+    }
+    decoded[provider] = payload
+  }
+  return decoded as LaunchCompanionMap
 }
 
 function decodeOptionalAppIntegration(
@@ -265,7 +278,7 @@ function decodeLaunchLifecycle(value: unknown): GameStreamLaunchLifecycle {
 function withOptionalLaunchIntentFields(
   base: GameStreamLaunchIntent,
   optional: {
-    readonly gamescope?: GamescopePolicy
+    readonly launchCompanions?: LaunchCompanionMap
     readonly appIntegration?: GameStreamLaunchAppIntegration
     readonly wait?: LaunchSpec
     readonly artifacts?: LaunchArtifacts
@@ -273,8 +286,8 @@ function withOptionalLaunchIntentFields(
 ): GameStreamLaunchIntent {
   return {
     ...base,
-    ...(hasGamescopeOpinion(optional.gamescope)
-      ? { gamescope: optional.gamescope }
+    ...(hasLaunchCompanionEntries(optional.launchCompanions)
+      ? { launchCompanions: optional.launchCompanions }
       : {}),
     ...(optional.appIntegration
       ? { appIntegration: optional.appIntegration }
@@ -331,17 +344,12 @@ function decodeAbsolutePath(value: unknown, message: string): string {
   throw new Error(message)
 }
 
-function hasGamescopeOpinion(
-  gamescope: GamescopePolicy | undefined,
-): gamescope is GamescopePolicy {
-  if (gamescope === undefined) return false
-  return Object.entries(gamescope).some(([key, value]) => {
-    if (value === undefined) return false
-    if (key === "extraArgs") {
-      return Array.isArray(value) && value.length > 0
-    }
-    return true
-  })
+function hasLaunchCompanionEntries(
+  launchCompanions: LaunchCompanionMap | undefined,
+): launchCompanions is LaunchCompanionMap {
+  return (
+    launchCompanions !== undefined && Object.keys(launchCompanions).length > 0
+  )
 }
 
 function assertAbsoluteLaunchSpec(spec: LaunchSpec): void {

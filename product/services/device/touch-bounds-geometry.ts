@@ -14,7 +14,7 @@ export interface TouchBounds {
   readonly h: number
 }
 
-export interface GamescopeModeFacts {
+export interface ContentModeFacts {
   readonly width: number
   readonly height: number
 }
@@ -33,7 +33,7 @@ export interface TouchBoundsGeometryInput {
   readonly surfaceRect: SwayRect
   readonly absRange: TouchAbsRange
   readonly scalingPolicy: TouchBoundsScalingPolicy
-  readonly gamescopeMode?: GamescopeModeFacts
+  readonly contentMode?: ContentModeFacts
 }
 
 export function computeTouchBoundsFromGeometry(
@@ -90,7 +90,7 @@ function activeGameSurface(
   if (input.scalingPolicy._tag === "stretchFill") return input.surfaceRect
   if (input.scalingPolicy._tag === "unknown") return undefined
 
-  const mode = input.gamescopeMode
+  const mode = input.contentMode
   if (!mode || mode.width <= 0 || mode.height <= 0) return undefined
 
   const modeAspect = mode.width / mode.height

@@ -7,7 +7,7 @@ import { withTempProseqlLibrary } from "./with-temp-proseql-library"
 describe("withTempProseqlLibrary", () => {
   it("seeds the six collections through real ProseQL + real disk", async () => {
     await using library = await withTempProseqlLibrary({
-      global: { launch: { with: { "@korri:gamescope": { enable: false } } } },
+      global: { launch: { with: { "@example:wrapper": { enable: false } } } },
       systems: [
         {
           id: "snes",
@@ -55,6 +55,12 @@ describe("withTempProseqlLibrary", () => {
       "/legacy-cores/snes9x_libretro.so",
       "/storage/roms/snes/game-1.smc",
     ])
-    expect(result.resolved.gamescope?.enable).toBe(false)
+    expect(
+      (
+        result.resolved.launchCompanions?.["@example:wrapper"] as
+          | { readonly enable?: boolean }
+          | undefined
+      )?.enable,
+    ).toBe(false)
   })
 })

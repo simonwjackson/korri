@@ -2,8 +2,8 @@ import type { MoonlightControlClient } from "@platform/stream/moonlight-control-
 import type { MoonlightControlTouchBounds } from "@platform/stream/moonlight-control-protocol"
 import type { CurrentStreamSurfaceGeometry } from "./game-stream-fullscreen"
 import {
+  type ContentModeFacts,
   computeTouchBoundsFromGeometry,
-  type GamescopeModeFacts,
   type TouchAbsRange,
   type TouchBounds,
   type TouchBoundsScalingPolicy,
@@ -31,7 +31,7 @@ export interface TouchBoundsCoordinatorHandle {
 export interface TouchBoundsCoordinatorOptions {
   readonly moonlight: MoonlightControlClient
   readonly readGeometry: () => Promise<CurrentStreamSurfaceGeometry>
-  readonly readGamescopeMode?: () => Promise<GamescopeModeFacts | undefined>
+  readonly readContentMode?: () => Promise<ContentModeFacts | undefined>
   readonly scalingPolicy?: TouchBoundsScalingPolicy
   readonly pollMs?: number | false
   readonly setInterval?: typeof globalThis.setInterval
@@ -117,13 +117,13 @@ export async function startTouchBoundsCoordinator(
       return undefined
     }
 
-    const gamescopeMode = await options.readGamescopeMode?.()
+    const contentMode = await options.readContentMode?.()
     const computed = computeTouchBoundsFromGeometry({
       outputRect: geometry.surface.output.rect,
       surfaceRect: geometry.surface.rect,
       absRange,
       scalingPolicy: options.scalingPolicy ?? { _tag: "stretchFill" },
-      gamescopeMode,
+      contentMode,
     })
     if (computed.status !== "valid") {
       lastFailure = { reason: "invalid-geometry", message: computed.reason }

@@ -31,8 +31,8 @@ export type SessionRoleReadyEvidence =
     }
   | {
       readonly kind: "idle-blank"
-      readonly gamescopeWindowsAbsent: boolean
-      readonly gamescopeProcessesAbsent: boolean
+      readonly foregroundWindowsAbsent: boolean
+      readonly residualProcessesAbsent: boolean
       readonly cooldownElapsed: boolean
     }
   | { readonly kind: "legacy"; readonly value: string }
@@ -60,8 +60,8 @@ export function formatSessionRoleReadyEvidence(
     case "idle-blank":
       return [
         "idle-blank",
-        `windows=${evidence.gamescopeWindowsAbsent ? "absent" : "present"}`,
-        `processes=${evidence.gamescopeProcessesAbsent ? "absent" : "present"}`,
+        `windows=${evidence.foregroundWindowsAbsent ? "absent" : "present"}`,
+        `processes=${evidence.residualProcessesAbsent ? "absent" : "present"}`,
         `cooldown=${evidence.cooldownElapsed ? "elapsed" : "pending"}`,
       ].join("|")
     case "legacy":
@@ -126,11 +126,9 @@ export interface SessionRole {
    * Phase 4D / Track A. Called exactly once per managed launch, after
    * the primary child is observed running and before the launch's
    * lifecycle proceeds past `child-running`. The role does any
-   * foreground-surface promotion here (e.g. source-machine repairs
-   * the Gamescope window via game-stream-fullscreen).
+   * foreground-surface promotion here.
    *
-   * Kiosk role: no-op -- Electrobun owns the renderer and Gamescope
-   * is not in the kiosk path.
+   * Kiosk role: no-op -- Electrobun owns the renderer.
    *
    * Throwing from this hook fails the managed launch; sessiond maps
    * the throw to a `child-exited` event with
@@ -249,9 +247,9 @@ export function createKioskSessionRole(
       rendererPid = undefined
     },
     // Kiosk has no foreground surface to promote -- Electrobun owns
-    // the renderer and Gamescope is not in the kiosk path. Source-
-    // machine implements this hook in U5; the interface declares it
-    // here so sessiond's dispatcher can call it role-agnostically.
+    // the renderer. Source-machine implements this hook in U5; the
+    // interface declares it here so sessiond's dispatcher can call it
+    // role-agnostically.
     afterChildRunning: async () => {},
     restoreIdleAfterLaunch: async () => {
       const launched = await deps.renderer.launch()

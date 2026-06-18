@@ -1,15 +1,12 @@
-# `nixpkgs.overlays` helper for installing Korri's global runtime package
-# substitutions. The goal is "compose the Korri overlay once, then use the
-# ordinary upstream package names everywhere": `pkgs.gamescope` resolves to
-# gamescope-korri, `pkgs.moonlight-embedded` resolves to
-# moonlight-embedded-korri, and `pkgs.sunshine` resolves to sunshine-korri.
+# `nixpkgs.overlays` helper for installing Korri's shared runtime package
+# substitutions. Plugin package overlays are composed at the product/image
+# plugin seam rather than through this generic module.
 #
 # Apply this module exactly once per system evaluation: applying the overlay
-# twice would re-derive `sunshine-korri` from itself and the version string
-# would end up suffixed `-korri-korri`. NixOS dedupes modules by referential
-# identity, so as long as every consumer reaches this file through the
-# `korriPackagesOverlayModule` value built in flake.nix (which is what every
-# published korri nixosModule does), the merge collapses to a single entry.
+# twice would re-derive substituted packages from themselves and the version
+# string would end up duplicated. NixOS dedupes modules by referential identity,
+# so as long as every consumer reaches this file through the published
+# nixosModule value, the merge collapses to a single entry.
 { overlay }:
 
 { lib, ... }:

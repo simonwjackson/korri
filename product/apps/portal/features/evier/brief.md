@@ -7,7 +7,7 @@ jobs: []
 
 # Evier Developer Control Surface
 
-Evier is a developer/operator theme for exercising runtime stream, presentation, and device controls. It renders controls for Moonlight stream settings, GameScope presentation settings, linked stream/session operations, display brightness, and battery readback.
+Evier is a developer/operator theme for exercising runtime stream, presentation, and device controls. It renders controls for Moonlight stream settings, plugin-provided presentation metadata/actions, display brightness, and battery readback.
 
 Evier does **not** own the product control contract. Product-accessible control semantics live in stream-control API/domain modules:
 

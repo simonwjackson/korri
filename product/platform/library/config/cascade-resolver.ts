@@ -25,7 +25,6 @@
  * can pipe the error union into their own Effect chains.
  */
 
-import { KORRI_GAMESCOPE_PLUGIN_ID } from "@platform/plugin/ids"
 import { Data, Effect } from "effect"
 import {
   resolveEffectiveAppChoices,
@@ -33,7 +32,7 @@ import {
 } from "./app-choice-selection"
 import {
   getBuiltInAppDescriptor,
-  mergeBuiltInAppGamescopePolicy,
+  mergeAppLaunchCompanions,
 } from "./app-integrations"
 import type { EphemeralOverride } from "./ephemeral-override"
 import {
@@ -45,11 +44,10 @@ import {
 } from "./errors"
 import {
   type ByLauncherPayload,
-  type GamescopePolicy,
-  gamescopePolicyFromLaunch,
+  type LaunchCompanionMap,
   type LaunchPolicy,
+  launchCompanionsFromLaunch,
   type MoonlightPolicy,
-  normalizeGamescopePolicy,
   type RetroArchPolicy,
   type RyubingPolicy,
   type SteamPolicy,
@@ -126,7 +124,7 @@ export interface ResolveInputs {
   readonly override?: EphemeralOverride
 }
 
-export interface ResolveLocalLauncherGamescopePolicyInputs {
+export interface ResolveLocalLauncherCompanionPolicyInputs {
   readonly launcherId: string
   readonly override?: EphemeralOverride
 }
@@ -137,7 +135,7 @@ export interface ResolveLocalLauncherPolicyInputs {
 }
 
 export interface ResolvedLocalLauncherPolicy {
-  readonly gamescope: GamescopePolicy
+  readonly launchCompanions: LaunchCompanionMap
   readonly moonlight?: MoonlightPolicy
 }
 
@@ -178,7 +176,7 @@ export type ApplicablePresets = ReadonlyMap<
  */
 interface InheritableView {
   readonly inherit?: boolean
-  readonly gamescope?: GamescopePolicy
+  readonly launchCompanions?: LaunchCompanionMap
   readonly moonlight?: MoonlightPolicy
   readonly retroarch?: RetroArchPolicy
   readonly ryubing?: RyubingPolicy
@@ -209,7 +207,7 @@ const viewOfGlobal = (g: GlobalConfigRecord | null): InheritableView =>
         launcher: g.launch?.app ?? g.launcher,
         module: g.launch?.module,
         settings: g.launch?.settings,
-        gamescope: gamescopePolicyFromLaunch(g),
+        launchCompanions: launchCompanionsFromLaunch(g),
         moonlight: g.moonlight,
         retroarch: g.retroarch,
         ryubing: g.ryubing,
@@ -225,7 +223,7 @@ const viewOfLauncher = (l: LauncherRecord | undefined): InheritableView =>
   l
     ? {
         inherit: l.inherit,
-        gamescope: gamescopePolicyFromLaunch(l),
+        launchCompanions: launchCompanionsFromLaunch(l),
         moonlight: l.moonlight,
         retroarch: l.retroarch,
         ryubing: l.ryubing,
@@ -243,7 +241,7 @@ const viewOfOverride = (o: EphemeralOverride): InheritableView => ({
   module: o.launch?.module,
   settings: o.launch?.settings,
   inherit: o.inherit,
-  gamescope: gamescopePolicyFromLaunch(o),
+  launchCompanions: launchCompanionsFromLaunch(o),
   moonlight: o.moonlight,
   env: o.env,
   cwd: o.cwd,
@@ -263,8 +261,8 @@ const viewOfOverride = (o: EphemeralOverride): InheritableView => ({
  * `byLauncher[L]` at each layer when `L` is provided.
  *
  * Folding rules:
- * - `gamescope`     → deep-merge per nested key; `extraArgs` concat;
- *   scalars last-wins; explicit `false` overrides inherited `true`.
+ * - `launch.with`   → provider-keyed companion map; objects deep-merge,
+ *   arrays concatenate, scalars last-win.
  * - `env`           → map merge per key, more-specific wins.
  * - `cwd`           → scalar, most-specific wins.
  * - `argsAppend`    → list concat in inheritance order.
@@ -285,7 +283,7 @@ const foldLayers = (
     }
   }
 
-  let gamescope: GamescopePolicy | undefined
+  let launchCompanions: LaunchCompanionMap | undefined
   let moonlight: MoonlightPolicy | undefined
   let retroarch: RetroArchPolicy | undefined
   let ryubing: RyubingPolicy | undefined
@@ -309,10 +307,13 @@ const foldLayers = (
     if (merged.settings !== undefined) {
       settings = mergeLaunchSettings(settings, merged.settings)
     }
-    const mergedGamescope =
-      merged.gamescope ?? gamescopePolicyFromLaunch(merged)
-    if (mergedGamescope !== undefined) {
-      gamescope = foldGamescope(gamescope, mergedGamescope)
+    const mergedCompanions =
+      merged.launchCompanions ?? launchCompanionsFromLaunch(merged)
+    if (mergedCompanions !== undefined) {
+      launchCompanions = foldLaunchCompanions(
+        launchCompanions,
+        mergedCompanions,
+      )
     }
     if (merged.moonlight !== undefined) {
       moonlight = foldMoonlight(moonlight, merged.moonlight)
@@ -346,7 +347,7 @@ const foldLayers = (
   for (const view of active) mergeView(view)
 
   return {
-    gamescope,
+    launchCompanions,
     moonlight,
     retroarch,
     ryubing,
@@ -366,14 +367,16 @@ const mergeByLauncher = (
   extra: InheritableView | undefined,
 ): InheritableView => {
   if (!extra) return base
-  const baseGamescope = base.gamescope ?? gamescopePolicyFromLaunch(base)
-  const extraGamescope = extra.gamescope ?? gamescopePolicyFromLaunch(extra)
+  const baseCompanions =
+    base.launchCompanions ?? launchCompanionsFromLaunch(base)
+  const extraCompanions =
+    extra.launchCompanions ?? launchCompanionsFromLaunch(extra)
   return {
     ...base,
-    gamescope:
-      extraGamescope !== undefined
-        ? foldGamescope(baseGamescope, extraGamescope)
-        : baseGamescope,
+    launchCompanions:
+      extraCompanions !== undefined
+        ? foldLaunchCompanions(baseCompanions, extraCompanions)
+        : baseCompanions,
     moonlight: extra.moonlight
       ? foldMoonlight(base.moonlight, extra.moonlight)
       : base.moonlight,
@@ -401,499 +404,44 @@ const mergeByLauncher = (
   }
 }
 
-const lastDefined = <Value>(
-  base: Value | undefined,
-  extra: Value | undefined,
-): Value | undefined => (extra !== undefined ? extra : base)
+const isPlainCompanionObject = (
+  value: unknown,
+): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
 
-const mergeEnvironmentOverlay = (
-  base: GamescopePolicy["environment"],
-  extra: GamescopePolicy["environment"],
-): GamescopePolicy["environment"] => {
+const foldCompanionValue = (base: unknown, extra: unknown): unknown => {
   if (extra === undefined) return base
-  return { ...(base ?? {}), ...extra }
-}
-
-const mergeGamescopeBackend = (
-  base: GamescopePolicy["backend"],
-  extra: GamescopePolicy["backend"],
-): GamescopePolicy["backend"] => {
-  if (extra === undefined) return base
-  const type = lastDefined(base?.type, extra.type)
-  const allowDeferred = lastDefined(base?.allowDeferred, extra.allowDeferred)
-  const preferVkDevice = lastDefined(base?.preferVkDevice, extra.preferVkDevice)
-  return {
-    ...(type !== undefined ? { type } : {}),
-    ...(allowDeferred !== undefined ? { allowDeferred } : {}),
-    ...(preferVkDevice !== undefined ? { preferVkDevice } : {}),
+  if (Array.isArray(extra)) {
+    return [...(Array.isArray(base) ? base : []), ...extra]
   }
-}
-
-const mergeGamescopeWindow = (
-  base: GamescopePolicy["window"],
-  extra: GamescopePolicy["window"],
-): GamescopePolicy["window"] => {
-  if (extra === undefined) return base
-  const fullscreen = lastDefined(base?.fullscreen, extra.fullscreen)
-  const borderless = lastDefined(base?.borderless, extra.borderless)
-  const grabKeyboard = lastDefined(base?.grabKeyboard, extra.grabKeyboard)
-  const forceGrabCursor = lastDefined(
-    base?.forceGrabCursor,
-    extra.forceGrabCursor,
-  )
-  const displayIndex = lastDefined(base?.displayIndex, extra.displayIndex)
-  const forceWindowsFullscreen = lastDefined(
-    base?.forceWindowsFullscreen,
-    extra.forceWindowsFullscreen,
-  )
-  const exposeWayland = lastDefined(base?.exposeWayland, extra.exposeWayland)
-  const xwaylandCount = lastDefined(base?.xwaylandCount, extra.xwaylandCount)
-  const fadeOutDuration = lastDefined(
-    base?.fadeOutDuration,
-    extra.fadeOutDuration,
-  )
-  return {
-    ...(fullscreen !== undefined ? { fullscreen } : {}),
-    ...(borderless !== undefined ? { borderless } : {}),
-    ...(grabKeyboard !== undefined ? { grabKeyboard } : {}),
-    ...(forceGrabCursor !== undefined ? { forceGrabCursor } : {}),
-    ...(displayIndex !== undefined ? { displayIndex } : {}),
-    ...(forceWindowsFullscreen !== undefined ? { forceWindowsFullscreen } : {}),
-    ...(exposeWayland !== undefined ? { exposeWayland } : {}),
-    ...(xwaylandCount !== undefined ? { xwaylandCount } : {}),
-    ...(fadeOutDuration !== undefined ? { fadeOutDuration } : {}),
+  if (isPlainCompanionObject(base) && isPlainCompanionObject(extra)) {
+    return [...new Set([...Object.keys(base), ...Object.keys(extra)])].reduce<
+      Record<string, unknown>
+    >((merged, key) => {
+      const value = foldCompanionValue(base[key], extra[key])
+      if (value !== undefined) merged[key] = value
+      return merged
+    }, {})
   }
+  return extra
 }
 
-const mergeGamescopeOutput = (
-  base: NonNullable<GamescopePolicy["display"]>["output"],
-  extra: NonNullable<GamescopePolicy["display"]>["output"],
-): NonNullable<GamescopePolicy["display"]>["output"] => {
-  if (extra === undefined) return base
-  const width = lastDefined(base?.width, extra.width)
-  const height = lastDefined(base?.height, extra.height)
-  const preferredConnectors = lastDefined(
-    base?.preferredConnectors,
-    extra.preferredConnectors,
-  )
-  return {
-    ...(width !== undefined ? { width } : {}),
-    ...(height !== undefined ? { height } : {}),
-    ...(preferredConnectors !== undefined ? { preferredConnectors } : {}),
-  }
-}
-
-const mergeGamescopeNested = (
-  base: NonNullable<GamescopePolicy["display"]>["nested"],
-  extra: NonNullable<GamescopePolicy["display"]>["nested"],
-): NonNullable<GamescopePolicy["display"]>["nested"] => {
-  if (extra === undefined) return base
-  const width = lastDefined(base?.width, extra.width)
-  const height = lastDefined(base?.height, extra.height)
-  const refresh = lastDefined(base?.refresh, extra.refresh)
-  const unfocusedRefresh = lastDefined(
-    base?.unfocusedRefresh,
-    extra.unfocusedRefresh,
-  )
-  return {
-    ...(width !== undefined ? { width } : {}),
-    ...(height !== undefined ? { height } : {}),
-    ...(refresh !== undefined ? { refresh } : {}),
-    ...(unfocusedRefresh !== undefined ? { unfocusedRefresh } : {}),
-  }
-}
-
-const mergeGamescopeScale = (
-  base: NonNullable<GamescopePolicy["display"]>["scale"],
-  extra: NonNullable<GamescopePolicy["display"]>["scale"],
-): NonNullable<GamescopePolicy["display"]>["scale"] => {
-  if (extra === undefined) return base
-  const max = lastDefined(base?.max, extra.max)
-  return { ...(max !== undefined ? { max } : {}) }
-}
-
-const mergeGamescopeDisplay = (
-  base: GamescopePolicy["display"],
-  extra: GamescopePolicy["display"],
-): GamescopePolicy["display"] => {
-  if (extra === undefined) return base
-  const output = mergeGamescopeOutput(base?.output, extra.output)
-  const nested = mergeGamescopeNested(base?.nested, extra.nested)
-  const scale = mergeGamescopeScale(base?.scale, extra.scale)
-  const orientation = lastDefined(base?.orientation, extra.orientation)
-  const adaptiveSync = lastDefined(base?.adaptiveSync, extra.adaptiveSync)
-  const framerateLimit = lastDefined(base?.framerateLimit, extra.framerateLimit)
-  return {
-    ...(output !== undefined ? { output } : {}),
-    ...(nested !== undefined ? { nested } : {}),
-    ...(scale !== undefined ? { scale } : {}),
-    ...(orientation !== undefined ? { orientation } : {}),
-    ...(adaptiveSync !== undefined ? { adaptiveSync } : {}),
-    ...(framerateLimit !== undefined ? { framerateLimit } : {}),
-  }
-}
-
-const mergeGamescopeScaling = (
-  base: GamescopePolicy["scaling"],
-  extra: GamescopePolicy["scaling"],
-): GamescopePolicy["scaling"] => {
-  if (extra === undefined) return base
-  const scaler = lastDefined(base?.scaler, extra.scaler)
-  const filter = lastDefined(base?.filter, extra.filter)
-  const sharpness = lastDefined(base?.sharpness, extra.sharpness)
-  return {
-    ...(scaler !== undefined ? { scaler } : {}),
-    ...(filter !== undefined ? { filter } : {}),
-    ...(sharpness !== undefined ? { sharpness } : {}),
-  }
-}
-
-const mergeGamescopeCursor = (
-  base: GamescopePolicy["cursor"],
-  extra: GamescopePolicy["cursor"],
-): GamescopePolicy["cursor"] => {
-  if (extra === undefined) return base
-  const image = lastDefined(base?.image, extra.image)
-  const hotspot = lastDefined(base?.hotspot, extra.hotspot)
-  const hideDelay = lastDefined(base?.hideDelay, extra.hideDelay)
-  const scaleHeight = lastDefined(base?.scaleHeight, extra.scaleHeight)
-  return {
-    ...(image !== undefined ? { image } : {}),
-    ...(hotspot !== undefined ? { hotspot } : {}),
-    ...(hideDelay !== undefined ? { hideDelay } : {}),
-    ...(scaleHeight !== undefined ? { scaleHeight } : {}),
-  }
-}
-
-const mergeGamescopeInput = (
-  base: GamescopePolicy["input"],
-  extra: GamescopePolicy["input"],
-): GamescopePolicy["input"] => {
-  if (extra === undefined) return base
-  const mouseSensitivity = lastDefined(
-    base?.mouseSensitivity,
-    extra.mouseSensitivity,
-  )
-  const defaultTouchMode = lastDefined(
-    base?.defaultTouchMode,
-    extra.defaultTouchMode,
-  )
-  return {
-    ...(mouseSensitivity !== undefined ? { mouseSensitivity } : {}),
-    ...(defaultTouchMode !== undefined ? { defaultTouchMode } : {}),
-  }
-}
-
-const mergeGamescopeScheduling = (
-  base: GamescopePolicy["scheduling"],
-  extra: GamescopePolicy["scheduling"],
-): GamescopePolicy["scheduling"] => {
-  if (extra === undefined) return base
-  const realtime = lastDefined(base?.realtime, extra.realtime)
-  const readyFd = lastDefined(base?.readyFd, extra.readyFd)
-  const keepAlive = lastDefined(base?.keepAlive, extra.keepAlive)
-  return {
-    ...(realtime !== undefined ? { realtime } : {}),
-    ...(readyFd !== undefined ? { readyFd } : {}),
-    ...(keepAlive !== undefined ? { keepAlive } : {}),
-  }
-}
-
-const mergeGamescopeStats = (
-  base: GamescopePolicy["stats"],
-  extra: GamescopePolicy["stats"],
-): GamescopePolicy["stats"] => {
-  if (extra === undefined) return base
-  const path = lastDefined(base?.path, extra.path)
-  return { ...(path !== undefined ? { path } : {}) }
-}
-
-const mergeGamescopeSteam = (
-  base: GamescopePolicy["steam"],
-  extra: GamescopePolicy["steam"],
-): GamescopePolicy["steam"] => {
-  if (extra === undefined) return base
-  const mangoapp = lastDefined(base?.mangoapp, extra.mangoapp)
-  return {
-    ...(mangoapp !== undefined ? { mangoapp } : {}),
-  }
-}
-
-const mergeGamescopeEmbedded = (
-  base: GamescopePolicy["embedded"],
-  extra: GamescopePolicy["embedded"],
-): GamescopePolicy["embedded"] => {
-  if (extra === undefined) return base
-  const generateDrmMode = lastDefined(
-    base?.generateDrmMode,
-    extra.generateDrmMode,
-  )
-  const immediateFlips = lastDefined(base?.immediateFlips, extra.immediateFlips)
-  const virtualConnectorStrategy = lastDefined(
-    base?.virtualConnectorStrategy,
-    extra.virtualConnectorStrategy,
-  )
-  return {
-    ...(generateDrmMode !== undefined ? { generateDrmMode } : {}),
-    ...(immediateFlips !== undefined ? { immediateFlips } : {}),
-    ...(virtualConnectorStrategy !== undefined
-      ? { virtualConnectorStrategy }
-      : {}),
-  }
-}
-
-const mergeGamescopeHdrInverseToneMapping = (
-  base: NonNullable<GamescopePolicy["hdr"]>["inverseToneMapping"],
-  extra: NonNullable<GamescopePolicy["hdr"]>["inverseToneMapping"],
-): NonNullable<GamescopePolicy["hdr"]>["inverseToneMapping"] => {
-  if (extra === undefined) return base
-  const enable = lastDefined(base?.enable, extra.enable)
-  const sdrNits = lastDefined(base?.sdrNits, extra.sdrNits)
-  const targetNits = lastDefined(base?.targetNits, extra.targetNits)
-  return {
-    ...(enable !== undefined ? { enable } : {}),
-    ...(sdrNits !== undefined ? { sdrNits } : {}),
-    ...(targetNits !== undefined ? { targetNits } : {}),
-  }
-}
-
-const mergeGamescopeHdrDebug = (
-  base: NonNullable<GamescopePolicy["hdr"]>["debug"],
-  extra: NonNullable<GamescopePolicy["hdr"]>["debug"],
-): NonNullable<GamescopePolicy["hdr"]>["debug"] => {
-  if (extra === undefined) return base
-  const forceSupport = lastDefined(base?.forceSupport, extra.forceSupport)
-  const forceOutput = lastDefined(base?.forceOutput, extra.forceOutput)
-  const heatmap = lastDefined(base?.heatmap, extra.heatmap)
-  return {
-    ...(forceSupport !== undefined ? { forceSupport } : {}),
-    ...(forceOutput !== undefined ? { forceOutput } : {}),
-    ...(heatmap !== undefined ? { heatmap } : {}),
-  }
-}
-
-const mergeGamescopeHdr = (
-  base: GamescopePolicy["hdr"],
-  extra: GamescopePolicy["hdr"],
-): GamescopePolicy["hdr"] => {
-  if (extra === undefined) return base
-  const enable = lastDefined(base?.enable, extra.enable)
-  const sdrGamutWideness = lastDefined(
-    base?.sdrGamutWideness,
-    extra.sdrGamutWideness,
-  )
-  const sdrContentNits = lastDefined(base?.sdrContentNits, extra.sdrContentNits)
-  const inverseToneMapping = mergeGamescopeHdrInverseToneMapping(
-    base?.inverseToneMapping,
-    extra.inverseToneMapping,
-  )
-  const debug = mergeGamescopeHdrDebug(base?.debug, extra.debug)
-  return {
-    ...(enable !== undefined ? { enable } : {}),
-    ...(sdrGamutWideness !== undefined ? { sdrGamutWideness } : {}),
-    ...(sdrContentNits !== undefined ? { sdrContentNits } : {}),
-    ...(inverseToneMapping !== undefined ? { inverseToneMapping } : {}),
-    ...(debug !== undefined ? { debug } : {}),
-  }
-}
-
-const mergeGamescopeVrControlBar = (
-  base: NonNullable<GamescopePolicy["vr"]>["controlBar"],
-  extra: NonNullable<GamescopePolicy["vr"]>["controlBar"],
-): NonNullable<GamescopePolicy["vr"]>["controlBar"] => {
-  if (extra === undefined) return base
-  const enable = lastDefined(base?.enable, extra.enable)
-  const keyboard = lastDefined(base?.keyboard, extra.keyboard)
-  const close = lastDefined(base?.close, extra.close)
-  return {
-    ...(enable !== undefined ? { enable } : {}),
-    ...(keyboard !== undefined ? { keyboard } : {}),
-    ...(close !== undefined ? { close } : {}),
-  }
-}
-
-const mergeGamescopeVr = (
-  base: GamescopePolicy["vr"],
-  extra: GamescopePolicy["vr"],
-): GamescopePolicy["vr"] => {
-  if (extra === undefined) return base
-  const overlayKey = lastDefined(base?.overlayKey, extra.overlayKey)
-  const appOverlayKey = lastDefined(base?.appOverlayKey, extra.appOverlayKey)
-  const explicitName = lastDefined(base?.explicitName, extra.explicitName)
-  const defaultName = lastDefined(base?.defaultName, extra.defaultName)
-  const icon = lastDefined(base?.icon, extra.icon)
-  const showImmediately = lastDefined(
-    base?.showImmediately,
-    extra.showImmediately,
-  )
-  const modal = lastDefined(base?.modal, extra.modal)
-  const physicalWidth = lastDefined(base?.physicalWidth, extra.physicalWidth)
-  const physicalCurvature = lastDefined(
-    base?.physicalCurvature,
-    extra.physicalCurvature,
-  )
-  const physicalPreCurvePitch = lastDefined(
-    base?.physicalPreCurvePitch,
-    extra.physicalPreCurvePitch,
-  )
-  const scrollSpeed = lastDefined(base?.scrollSpeed, extra.scrollSpeed)
-  const sessionManager = lastDefined(base?.sessionManager, extra.sessionManager)
-  const controlBar = mergeGamescopeVrControlBar(
-    base?.controlBar,
-    extra.controlBar,
-  )
-  const clickStabilization = lastDefined(
-    base?.clickStabilization,
-    extra.clickStabilization,
-  )
-  return {
-    ...(overlayKey !== undefined ? { overlayKey } : {}),
-    ...(appOverlayKey !== undefined ? { appOverlayKey } : {}),
-    ...(explicitName !== undefined ? { explicitName } : {}),
-    ...(defaultName !== undefined ? { defaultName } : {}),
-    ...(icon !== undefined ? { icon } : {}),
-    ...(showImmediately !== undefined ? { showImmediately } : {}),
-    ...(modal !== undefined ? { modal } : {}),
-    ...(physicalWidth !== undefined ? { physicalWidth } : {}),
-    ...(physicalCurvature !== undefined ? { physicalCurvature } : {}),
-    ...(physicalPreCurvePitch !== undefined ? { physicalPreCurvePitch } : {}),
-    ...(scrollSpeed !== undefined ? { scrollSpeed } : {}),
-    ...(sessionManager !== undefined ? { sessionManager } : {}),
-    ...(controlBar !== undefined ? { controlBar } : {}),
-    ...(clickStabilization !== undefined ? { clickStabilization } : {}),
-  }
-}
-
-const mergeGamescopeReshade = (
-  base: GamescopePolicy["reshade"],
-  extra: GamescopePolicy["reshade"],
-): GamescopePolicy["reshade"] => {
-  if (extra === undefined) return base
-  const effect = lastDefined(base?.effect, extra.effect)
-  const techniqueIndex = lastDefined(base?.techniqueIndex, extra.techniqueIndex)
-  return {
-    ...(effect !== undefined ? { effect } : {}),
-    ...(techniqueIndex !== undefined ? { techniqueIndex } : {}),
-  }
-}
-
-const mergeGamescopeSteamDeck = (
-  base: GamescopePolicy["steamDeck"],
-  extra: GamescopePolicy["steamDeck"],
-): GamescopePolicy["steamDeck"] => {
-  if (extra === undefined) return base
-  const muraMap = lastDefined(base?.muraMap, extra.muraMap)
-  return { ...(muraMap !== undefined ? { muraMap } : {}) }
-}
-
-const mergeGamescopeDebug = (
-  base: GamescopePolicy["debug"],
-  extra: GamescopePolicy["debug"],
-): GamescopePolicy["debug"] => {
-  if (extra === undefined) return base
-  const disableLayers = lastDefined(base?.disableLayers, extra.disableLayers)
-  const layers = lastDefined(base?.layers, extra.layers)
-  const focus = lastDefined(base?.focus, extra.focus)
-  const synchronousX11 = lastDefined(base?.synchronousX11, extra.synchronousX11)
-  const hud = lastDefined(base?.hud, extra.hud)
-  const events = lastDefined(base?.events, extra.events)
-  const forceComposition = lastDefined(
-    base?.forceComposition,
-    extra.forceComposition,
-  )
-  const compositeMarkers = lastDefined(
-    base?.compositeMarkers,
-    extra.compositeMarkers,
-  )
-  const disableColorManagement = lastDefined(
-    base?.disableColorManagement,
-    extra.disableColorManagement,
-  )
-  const disableXres = lastDefined(base?.disableXres, extra.disableXres)
-  return {
-    ...(disableLayers !== undefined ? { disableLayers } : {}),
-    ...(layers !== undefined ? { layers } : {}),
-    ...(focus !== undefined ? { focus } : {}),
-    ...(synchronousX11 !== undefined ? { synchronousX11 } : {}),
-    ...(hud !== undefined ? { hud } : {}),
-    ...(events !== undefined ? { events } : {}),
-    ...(forceComposition !== undefined ? { forceComposition } : {}),
-    ...(compositeMarkers !== undefined ? { compositeMarkers } : {}),
-    ...(disableColorManagement !== undefined ? { disableColorManagement } : {}),
-    ...(disableXres !== undefined ? { disableXres } : {}),
-  }
-}
-
-const mergeGamescopeApp = (
-  base: GamescopePolicy["app"],
-  extra: GamescopePolicy["app"],
-): GamescopePolicy["app"] => {
-  if (extra === undefined) return base
-  const environment = mergeEnvironmentOverlay(
-    base?.environment,
-    extra.environment,
-  )
-  return { ...(environment !== undefined ? { environment } : {}) }
-}
-
-/** Deep-merge two gamescope policies; `extraArgs` concat, scalars last-win. */
-const foldGamescope = (
-  base: GamescopePolicy | undefined,
-  extra: GamescopePolicy,
-): GamescopePolicy => {
-  const enable = lastDefined(base?.enable, extra.enable)
-  const command = lastDefined(base?.command, extra.command)
-  const environment = mergeEnvironmentOverlay(
-    base?.environment,
-    extra.environment,
-  )
-  const app = mergeGamescopeApp(base?.app, extra.app)
-  const backend = mergeGamescopeBackend(base?.backend, extra.backend)
-  const window = mergeGamescopeWindow(base?.window, extra.window)
-  const display = mergeGamescopeDisplay(base?.display, extra.display)
-  const scaling = mergeGamescopeScaling(base?.scaling, extra.scaling)
-  const cursor = mergeGamescopeCursor(base?.cursor, extra.cursor)
-  const input = mergeGamescopeInput(base?.input, extra.input)
-  const scheduling = mergeGamescopeScheduling(
-    base?.scheduling,
-    extra.scheduling,
-  )
-  const stats = mergeGamescopeStats(base?.stats, extra.stats)
-  const steam = mergeGamescopeSteam(base?.steam, extra.steam)
-  const embedded = mergeGamescopeEmbedded(base?.embedded, extra.embedded)
-  const hdr = mergeGamescopeHdr(base?.hdr, extra.hdr)
-  const vr = mergeGamescopeVr(base?.vr, extra.vr)
-  const reshade = mergeGamescopeReshade(base?.reshade, extra.reshade)
-  const steamDeck = mergeGamescopeSteamDeck(base?.steamDeck, extra.steamDeck)
-  const debug = mergeGamescopeDebug(base?.debug, extra.debug)
-  const extraArgs =
-    extra.extraArgs !== undefined
-      ? [...(base?.extraArgs ?? []), ...extra.extraArgs]
-      : base?.extraArgs
-
-  return {
-    ...(enable !== undefined ? { enable } : {}),
-    ...(command !== undefined ? { command } : {}),
-    ...(environment !== undefined ? { environment } : {}),
-    ...(app !== undefined ? { app } : {}),
-    ...(backend !== undefined ? { backend } : {}),
-    ...(window !== undefined ? { window } : {}),
-    ...(display !== undefined ? { display } : {}),
-    ...(scaling !== undefined ? { scaling } : {}),
-    ...(cursor !== undefined ? { cursor } : {}),
-    ...(input !== undefined ? { input } : {}),
-    ...(scheduling !== undefined ? { scheduling } : {}),
-    ...(stats !== undefined ? { stats } : {}),
-    ...(steam !== undefined ? { steam } : {}),
-    ...(embedded !== undefined ? { embedded } : {}),
-    ...(hdr !== undefined ? { hdr } : {}),
-    ...(vr !== undefined ? { vr } : {}),
-    ...(reshade !== undefined ? { reshade } : {}),
-    ...(steamDeck !== undefined ? { steamDeck } : {}),
-    ...(debug !== undefined ? { debug } : {}),
-    ...(extraArgs !== undefined ? { extraArgs } : {}),
-  }
-}
+const foldLaunchCompanions = (
+  base: LaunchCompanionMap | undefined,
+  extra: LaunchCompanionMap,
+): LaunchCompanionMap =>
+  [...new Set([...Object.keys(base ?? {}), ...Object.keys(extra)])].reduce<
+    Record<string, unknown>
+  >((merged, providerId) => {
+    const baseRecord = (base ?? {}) as Readonly<Record<string, unknown>>
+    const extraRecord = extra as Readonly<Record<string, unknown>>
+    const value = foldCompanionValue(
+      baseRecord[providerId],
+      extraRecord[providerId],
+    )
+    if (value !== undefined) merged[providerId] = value
+    return merged
+  }, {}) as LaunchCompanionMap
 
 const isPlainPolicyObject = (
   value: unknown,
@@ -1112,15 +660,16 @@ export const resolveLocalLauncherPolicy = (
 
   const folded = foldLayers(layers, inputs.launcherId)
   return {
-    gamescope: normalizeGamescopePolicy(folded.gamescope),
+    launchCompanions: folded.launchCompanions ?? {},
     ...(folded.moonlight ? { moonlight: folded.moonlight } : {}),
   }
 }
 
-export const resolveLocalLauncherGamescopePolicy = (
+export const resolveLocalLauncherCompanionPolicy = (
   snap: ConfigSnapshot,
-  inputs: ResolveLocalLauncherGamescopePolicyInputs,
-): GamescopePolicy => resolveLocalLauncherPolicy(snap, inputs).gamescope
+  inputs: ResolveLocalLauncherCompanionPolicyInputs,
+): LaunchCompanionMap =>
+  resolveLocalLauncherPolicy(snap, inputs).launchCompanions
 
 export const enumerateApplicablePresets = (
   snap: ConfigSnapshot,
@@ -1263,7 +812,7 @@ export interface ResolveReadableLaunchInputs {
 
 interface ReadableLayerView {
   readonly launch?: LaunchPolicy
-  readonly gamescope?: GamescopePolicy
+  readonly launchCompanions?: LaunchCompanionMap
   readonly moonlight?: MoonlightPolicy
   readonly retroarch?: RetroArchPolicy
   readonly ryubing?: RyubingPolicy
@@ -1277,7 +826,7 @@ interface ReadableLayerView {
 const readableViewOfUser = (user: UserRecord | undefined): ReadableLayerView =>
   user
     ? {
-        gamescope: gamescopePolicyFromLaunch(user),
+        launchCompanions: launchCompanionsFromLaunch(user),
         moonlight: user.moonlight,
         retroarch: user.retroarch,
         ryubing: user.ryubing,
@@ -1293,7 +842,7 @@ const readableViewOfSystem = (
 ): ReadableLayerView =>
   system
     ? {
-        gamescope: gamescopePolicyFromLaunch(system),
+        launchCompanions: launchCompanionsFromLaunch(system),
         moonlight: system.moonlight,
         retroarch: system.retroarch,
         ryubing: system.ryubing,
@@ -1307,7 +856,7 @@ const readableViewOfSystem = (
 const readableViewOfApp = (app: AppRecord | undefined): ReadableLayerView =>
   app
     ? {
-        gamescope: gamescopePolicyFromLaunch(app),
+        launchCompanions: launchCompanionsFromLaunch(app),
         moonlight: app.moonlight,
         retroarch: appRetroArchPolicyFromRecord(app),
         ryubing: appRyubingPolicyFromRecord(app),
@@ -1326,7 +875,8 @@ const readableViewOfAppChoice = (
   },
   app: AppRecord,
 ): ReadableLayerView => ({
-  gamescope: choice.gamescope ?? gamescopePolicyFromLaunch(choice),
+  launchCompanions:
+    choice.launchCompanions ?? launchCompanionsFromLaunch(choice),
   moonlight: choice.moonlight,
   retroarch: choice.retroarch,
   steam:
@@ -1355,12 +905,10 @@ const readableBuiltInArgs = (
   return legacyArgs
 }
 
-const launchPolicyWithGamescope = (
-  gamescope: GamescopePolicy | undefined,
+const launchPolicyWithCompanions = (
+  launchCompanions: LaunchCompanionMap | undefined,
 ): LaunchPolicy | undefined =>
-  gamescope === undefined
-    ? undefined
-    : { with: { [KORRI_GAMESCOPE_PLUGIN_ID]: gamescope } }
+  launchCompanions === undefined ? undefined : { with: launchCompanions }
 
 const resolveReadableAppRecord = (
   appId: string,
@@ -1370,9 +918,9 @@ const resolveReadableAppRecord = (
   const builtIn = getBuiltInAppDescriptor(appId)
   if (builtIn === undefined) return override
   if (builtIn.id === "steam" && override === undefined) return undefined
-  const gamescope = mergeBuiltInAppGamescopePolicy(
-    builtIn.gamescope,
-    override ? gamescopePolicyFromLaunch(override) : undefined,
+  const launchCompanions = mergeAppLaunchCompanions(
+    builtIn.launchCompanions,
+    override ? launchCompanionsFromLaunch(override) : undefined,
   )
   return {
     id: appId,
@@ -1383,7 +931,7 @@ const resolveReadableAppRecord = (
     systems: override?.systems ?? builtIn.systems,
     policy: override?.policy ?? builtIn.policy,
     settings: override?.settings ?? builtIn.settings,
-    launch: launchPolicyWithGamescope(gamescope),
+    launch: launchPolicyWithCompanions(launchCompanions),
     moonlight: override?.moonlight ?? builtIn.moonlight,
     ...(override?.kind === "retroarch" || builtIn.kind === "retroarch"
       ? override !== undefined
@@ -1411,7 +959,7 @@ const readableViewOfRuntime = (
 ): ReadableLayerView =>
   runtime
     ? {
-        gamescope: gamescopePolicyFromLaunch(runtime),
+        launchCompanions: launchCompanionsFromLaunch(runtime),
         moonlight: runtime.moonlight,
         retroarch: runtime.retroarch,
         ryubing: runtime.ryubing,
@@ -1425,7 +973,7 @@ const readableViewOfRuntime = (
 const readableViewOfLibraryItem = (
   item: LibraryItemRecord,
 ): ReadableLayerView => ({
-  gamescope: gamescopePolicyFromLaunch(item),
+  launchCompanions: launchCompanionsFromLaunch(item),
   moonlight: item.moonlight,
   retroarch: item.retroarch,
   ryubing: item.ryubing,
@@ -1436,8 +984,8 @@ const readableViewOfLibraryItem = (
 })
 
 const readableViewOfContained = (entry: PlayableEntry): ReadableLayerView => ({
-  gamescope: entry.contained
-    ? gamescopePolicyFromLaunch(entry.contained)
+  launchCompanions: entry.contained
+    ? launchCompanionsFromLaunch(entry.contained)
     : undefined,
   moonlight: entry.contained?.moonlight,
   retroarch: entry.contained?.retroarch,
@@ -1451,7 +999,7 @@ const readableViewOfContained = (entry: PlayableEntry): ReadableLayerView => ({
 const readableViewOfRelease = (
   release: LibraryReleasePayload,
 ): ReadableLayerView => ({
-  gamescope: gamescopePolicyFromLaunch(release),
+  launchCompanions: launchCompanionsFromLaunch(release),
   moonlight: release.moonlight,
   retroarch: release.retroarch,
   ryubing: release.ryubing,
@@ -1466,7 +1014,7 @@ const readableViewOfProfile = (
 ): ReadableLayerView =>
   profile
     ? {
-        gamescope: gamescopePolicyFromLaunch(profile),
+        launchCompanions: launchCompanionsFromLaunch(profile),
         moonlight: profile.moonlight,
         retroarch: profile.retroarch,
         ryubing: profile.ryubing,
@@ -1482,7 +1030,7 @@ const readableViewOfOverride = (
 ): ReadableLayerView =>
   override
     ? {
-        gamescope: gamescopePolicyFromLaunch(override),
+        launchCompanions: launchCompanionsFromLaunch(override),
         moonlight: override.moonlight,
         retroarch: override.retroarch,
         ryubing: override.ryubing,
@@ -1497,7 +1045,7 @@ const readableViewOfOverride = (
 const mergeReadableLayers = (
   layers: readonly ReadableLayerView[],
 ): ReadableLayerView => {
-  let gamescope: GamescopePolicy | undefined
+  let launchCompanions: LaunchCompanionMap | undefined
   let moonlight: MoonlightPolicy | undefined
   let retroarch: RetroArchPolicy | undefined
   let ryubing: RyubingPolicy | undefined
@@ -1508,9 +1056,10 @@ const mergeReadableLayers = (
   let patches: string[] | undefined
 
   for (const layer of layers) {
-    const layerGamescope = layer.gamescope ?? gamescopePolicyFromLaunch(layer)
-    if (layerGamescope !== undefined) {
-      gamescope = foldGamescope(gamescope, layerGamescope)
+    const layerCompanions =
+      layer.launchCompanions ?? launchCompanionsFromLaunch(layer)
+    if (layerCompanions !== undefined) {
+      launchCompanions = foldLaunchCompanions(launchCompanions, layerCompanions)
     }
     if (layer.moonlight !== undefined) {
       moonlight = foldMoonlight(moonlight, layer.moonlight)
@@ -1535,7 +1084,7 @@ const mergeReadableLayers = (
   }
 
   return {
-    gamescope,
+    launchCompanions,
     moonlight,
     retroarch,
     ryubing,
@@ -1585,7 +1134,7 @@ export const resolveReadableLocalLauncherPolicy = (
     readableViewOfOverride(inputs.override),
   ])
   return {
-    gamescope: normalizeGamescopePolicy(folded.gamescope),
+    launchCompanions: folded.launchCompanions ?? {},
     ...(folded.moonlight ? { moonlight: folded.moonlight } : {}),
   }
 }
@@ -1747,7 +1296,7 @@ export const resolveReadableLaunchContext = (
       app,
       ...(runtime ? { runtime } : {}),
       ...(resolvedTarget.content ? { content: resolvedTarget.content } : {}),
-      gamescope: normalizeGamescopePolicy(folded.gamescope),
+      launchCompanions: folded.launchCompanions ?? {},
       ...(folded.moonlight ? { moonlight: folded.moonlight } : {}),
       ...(folded.retroarch ? { retroarch: folded.retroarch } : {}),
       ...(folded.ryubing ? { ryubing: folded.ryubing } : {}),

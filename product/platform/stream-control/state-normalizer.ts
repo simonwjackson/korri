@@ -1,48 +1,12 @@
-import { GAMESCOPE_SCALING_FILTERS } from "@platform/stream-control/control-contract"
-
 export interface ResolutionReadback {
   readonly width: number
   readonly height: number
-}
-
-export type GamescopeScalingFilter = (typeof GAMESCOPE_SCALING_FILTERS)[number]
-
-export interface GamescopeStateReadback {
-  readonly fps: number | null
-  readonly resolution: ResolutionReadback | null
-  readonly sharpness: number | null
-  readonly filter: GamescopeScalingFilter | null
 }
 
 export interface MoonlightStateReadback {
   readonly bitrateKbps: number | null
   readonly fps: number | null
   readonly resolution: ResolutionReadback | null
-}
-
-export function normalizeGamescopeState(
-  snapshot: unknown,
-): GamescopeStateReadback {
-  const result = rpcResult(snapshot)
-  const mode = recordField(result, "xwaylandMode")
-  const filter = result?.filter
-  return {
-    fps: firstNumber(result?.fps) ?? null,
-    resolution: resolutionReadback(
-      firstNumber(mode?.width),
-      firstNumber(mode?.height),
-    ),
-    sharpness: firstNumber(result?.sharpness) ?? null,
-    filter: readGamescopeScalingFilter(filter) ?? null,
-  }
-}
-
-export function readGamescopeScalingFilter(
-  value: unknown,
-): GamescopeScalingFilter | undefined {
-  return GAMESCOPE_SCALING_FILTERS.includes(value as GamescopeScalingFilter)
-    ? (value as GamescopeScalingFilter)
-    : undefined
 }
 
 export function normalizeMoonlightState(

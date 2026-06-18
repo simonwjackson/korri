@@ -1,12 +1,13 @@
-# NixOS-module-style Gamescope policy shape for Korri readable config.
+# Gamescope plugin launch companion policy shape for Korri readable config.
 #
-# This example mirrors the Gamescope 3.16.23 launch-time option surface from
-# Korri's pinned gamescope-korri package source:
+# This example mirrors the Gamescope 3.16.23 launch-time option surface owned
+# by Korri's Gamescope plugin and pinned gamescope-korri package source:
 # - src/main.cpp: gamescope_options, usage text, enum parsers
 # - src/backend.h: VirtualConnectorStrategy string values
 #
-# Field names describe capability/intent. Rendering to argv/env belongs to the
-# Korri Gamescope launch renderer, not to readable config authors.
+# The `launch.with."@korri:gamescope"` key is plugin composition. Generic
+# Korri config decodes the provider map, and the Gamescope plugin owns the
+# payload fields and rendering to argv/env.
 
 apps:
   retroarch:

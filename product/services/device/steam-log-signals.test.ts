@@ -58,7 +58,7 @@ describe("Steam log signal parsing", () => {
     const addedWithCommand = parseSteamLogLine({
       source: "gameprocess_log",
       logFile: "gameprocess_log.txt",
-      line: '[2026-06-14 14:39:02] AppID 584400 adding PID 196491 as a tracked process "<korri-bin>/korri-steam-gamescope-launch --appid 584400"',
+      line: '[2026-06-14 14:39:02] AppID 584400 adding PID 196491 as a tracked process "<korri-bin>/korri-steam-launch-wrapper --appid 584400"',
       observedAt: "2026-06-14T18:39:02.000Z",
       sequence: 1,
     })
@@ -174,7 +174,7 @@ describe("Steam log signal parsing", () => {
 
   it("keeps unknown, noisy, and malformed lines observable without throwing", () => {
     for (const line of [
-      "[2026-06-14 14:39:02] /bin/sh\\0-c\\0<korri-bin>/korri-steam-gamescope-launch\\0",
+      "[2026-06-14 14:39:02] /bin/sh\\0-c\\0<korri-bin>/korri-steam-launch-wrapper\\0",
       "[2026-06-14 14:39:02] SSGL: noisy line",
       "thread priority warning",
       "[broken timestamp] AppID nope",

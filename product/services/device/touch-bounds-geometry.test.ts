@@ -89,7 +89,7 @@ describe("touch bounds geometry", () => {
         surfaceRect: { x: 0, y: 0, width: 1920, height: 1080 },
         absRange,
         scalingPolicy: { _tag: "fitLetterbox" },
-        gamescopeMode: { width: 1024, height: 768 },
+        contentMode: { width: 1024, height: 768 },
       }),
     ).toEqual({ status: "valid", bounds: { x: 240, y: 0, w: 1440, h: 1080 } })
   })
@@ -101,7 +101,7 @@ describe("touch bounds geometry", () => {
         surfaceRect: { x: 0, y: 0, width: 1920, height: 1080 },
         absRange,
         scalingPolicy: { _tag: "unknown" },
-        gamescopeMode: { width: 1024, height: 768 },
+        contentMode: { width: 1024, height: 768 },
       }).status,
     ).toBe("invalid")
   })

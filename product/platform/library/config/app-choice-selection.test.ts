@@ -30,7 +30,7 @@ describe("app choice selection", () => {
     ).toEqual([{ id: "retroarch", inherit: false, argsAppend: ["release"] }])
   })
 
-  it("merges Gamescope launch companion policies by app choice id", () => {
+  it("merges provider launch companion policies by app choice id", () => {
     expect(
       resolveEffectiveAppChoices(
         [
@@ -38,7 +38,7 @@ describe("app choice selection", () => {
             id: "retroarch",
             launch: {
               with: {
-                "@korri:gamescope": {
+                "@fixture:frame": {
                   backend: { type: "wayland" },
                   display: { nested: { width: 854 } },
                   extraArgs: ["--rt"],
@@ -52,7 +52,7 @@ describe("app choice selection", () => {
             id: "retroarch",
             launch: {
               with: {
-                "@korri:gamescope": {
+                "@fixture:frame": {
                   backend: { allowDeferred: true },
                   display: { nested: { height: 480 } },
                   extraArgs: ["--hdr-enabled"],
@@ -67,7 +67,7 @@ describe("app choice selection", () => {
         id: "retroarch",
         launch: {
           with: {
-            "@korri:gamescope": {
+            "@fixture:frame": {
               backend: { type: "wayland", allowDeferred: true },
               display: { nested: { width: 854, height: 480 } },
               extraArgs: ["--rt", "--hdr-enabled"],
@@ -85,7 +85,7 @@ describe("app choice selection", () => {
           {
             id: "steam",
             extra: { args: ["-silent"] },
-            "launch-options": "gamescope -- %command%",
+            "launch-options": "wrapper -- %command%",
           },
         ],
         [
@@ -99,7 +99,7 @@ describe("app choice selection", () => {
       {
         id: "steam",
         extra: { args: ["-silent", "-forcedesktopscaling", "1.25"] },
-        "launch-options": "gamescope -- %command%",
+        "launch-options": "wrapper -- %command%",
       },
     ])
   })

@@ -51,10 +51,12 @@ describe("app.server.stream.prepare handler", () => {
     )
     expect(intent.id).toBe(result.sessionId)
     expect(intent.launch.args).toContain("/srv/games/wl4.gba")
-    expect(intent.gamescope).toEqual({
-      enable: true,
-      backend: { type: "wayland" },
-      window: { fullscreen: true, borderless: true, exposeWayland: true },
+    expect(intent.launchCompanions).toEqual({
+      "@example:wrapper": {
+        enable: true,
+        backend: { type: "wayland" },
+        window: { fullscreen: true, borderless: true, exposeWayland: true },
+      },
     })
   })
 
@@ -72,7 +74,9 @@ describe("app.server.stream.prepare handler", () => {
     const intent = decodeLaunchIntent(
       JSON.parse(await readFile(intentPath, "utf8")),
     )
-    expect(intent.gamescope).toEqual({ enable: false })
+    expect(intent.launchCompanions).toEqual({
+      "@example:wrapper": { enable: false },
+    })
   })
 })
 
@@ -94,7 +98,7 @@ async function setupRemoteLibrary() {
         contentPath: "/srv/games/wl4.gba",
         metadata: { name: "Wario Land 4" },
         presets: {
-          raw: { launch: { with: { "@korri:gamescope": { enable: false } } } },
+          raw: { launch: { with: { "@example:wrapper": { enable: false } } } },
         },
       },
     ],

@@ -17,17 +17,19 @@ describe("GlobalConfigPayload (singleton)", () => {
     expect(config.launcher).toBe("retroarch")
   })
 
-  it("decodes a global gamescope launch companion policy", () => {
+  it("decodes a global wrapper launch companion policy", () => {
     const config = decodeGlobalConfigPayload({
       launch: {
         with: {
-          "@korri:gamescope": { enable: false, extraArgs: ["-F", "fsr"] },
+          "@example:wrapper": { enable: false, extraArgs: ["-F", "fsr"] },
         },
       },
     })
-    const gamescope = config.launch?.with?.["@korri:gamescope"]
-    expect(gamescope?.enable).toBe(false)
-    expect(gamescope?.extraArgs).toEqual(["-F", "fsr"])
+    const wrapper = config.launch?.with?.["@example:wrapper"] as
+      | { readonly enable?: boolean; readonly extraArgs?: readonly string[] }
+      | undefined
+    expect(wrapper?.enable).toBe(false)
+    expect(wrapper?.extraArgs).toEqual(["-F", "fsr"])
   })
 
   it("decodes global presets, byLauncher, env, cwd, argsAppend, patches", () => {
@@ -39,7 +41,7 @@ describe("GlobalConfigPayload (singleton)", () => {
       patches: ["/patches/global.ips"],
       presets: {
         "max-quality": {
-          launch: { with: { "@korri:gamescope": { enable: true } } },
+          launch: { with: { "@example:wrapper": { enable: true } } },
           patches: ["/patches/max-quality.bps"],
         },
       },
@@ -52,8 +54,11 @@ describe("GlobalConfigPayload (singleton)", () => {
     })
     expect(config.patches).toEqual(["/patches/global.ips"])
     expect(
-      config.presets?.["max-quality"]?.launch?.with?.["@korri:gamescope"]
-        ?.enable,
+      (
+        config.presets?.["max-quality"]?.launch?.with?.["@example:wrapper"] as
+          | { readonly enable?: boolean }
+          | undefined
+      )?.enable,
     ).toBe(true)
     expect(config.presets?.["max-quality"]?.patches).toEqual([
       "/patches/max-quality.bps",

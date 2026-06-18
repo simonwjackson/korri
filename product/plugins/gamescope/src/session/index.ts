@@ -1,3 +1,6 @@
+export type { GamescopeSessionLifecycleHookOptions } from "./lifecycle-hook"
+export { createGamescopeSessionLifecycleHook } from "./lifecycle-hook"
+
 export type {
   GamescopeProcessName,
   GamescopeReaper,

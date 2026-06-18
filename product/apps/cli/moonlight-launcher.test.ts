@@ -8,6 +8,9 @@ import {
 } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
+import type { LaunchSpec } from "@platform/library/launcher"
+import { plugin } from "@platform/plugin"
+import { createPluginRegistry } from "@platform/plugin/registry"
 import {
   type CommandRunner,
   launchMoonlight,
@@ -15,6 +18,60 @@ import {
 } from "./moonlight-launcher"
 
 const PROC_FIXTURES_DIR = join(process.cwd(), "tools/testing/fixtures/proc")
+const wrapperProvider = "@example:wrapper"
+const wrapperRegistry = createPluginRegistry(
+  [
+    plugin({
+      namespace: "@example",
+      name: "wrapper",
+      contributes: {
+        handlers: [
+          {
+            id: "example-wrapper-compose",
+            operation: "launch.compose",
+            capabilities: ["launch.compose"],
+            run: context => {
+              const input = context.input as {
+                readonly spec: LaunchSpec
+                readonly policy?: {
+                  readonly enable?: boolean
+                  readonly command?: string
+                  readonly args?: readonly string[]
+                }
+              }
+              if (input.policy?.enable === false) return input.spec
+              return {
+                command: input.policy?.command ?? "wrapper",
+                args: [
+                  ...(input.policy?.args ?? []),
+                  "--",
+                  input.spec.command,
+                  ...input.spec.args,
+                ],
+                ...(input.spec.env ? { env: input.spec.env } : {}),
+                ...(input.spec.envUnset
+                  ? { envUnset: input.spec.envUnset }
+                  : {}),
+              }
+            },
+          },
+        ],
+      },
+    }),
+  ],
+  { enabledPluginIds: [wrapperProvider] },
+)
+
+const wrapperOptions = (
+  policy: {
+    readonly enable?: boolean
+    readonly command?: string
+    readonly args?: readonly string[]
+  } = {},
+) => ({
+  launchCompanions: { [wrapperProvider]: policy },
+  pluginRegistry: wrapperRegistry,
+})
 
 describe("moonlight launcher", () => {
   it("propagates managed session handles returned by the command runner", async () => {
@@ -33,12 +90,12 @@ describe("moonlight launcher", () => {
 
     expect(result).toEqual({
       status: "started",
-      command: "gamescope",
+      command: "moonlight",
       session,
     })
   })
 
-  it("wraps typed Moonlight policy in default Gamescope", async () => {
+  it("launches typed Moonlight policy directly by default", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({
       host: "aka.local",
@@ -46,9 +103,9 @@ describe("moonlight launcher", () => {
       runner: recordingRunner(calls),
     })
 
-    expect(result).toEqual({ status: "started", command: "gamescope" })
+    expect(result).toEqual({ status: "started", command: "moonlight" })
     expect(calls).toEqual([
-      "gamescope --backend wayland -f -b --expose-wayland -- moonlight stream -autowindowresize -app Korri Stream aka.local",
+      "moonlight stream -autowindowresize -app Korri Stream aka.local",
     ])
   })
 
@@ -64,9 +121,12 @@ describe("moonlight launcher", () => {
         runner: recordingRunner(calls),
       })
 
-      expect(result).toEqual({ status: "started", command: "gamescope" })
+      expect(result).toEqual({
+        status: "started",
+        command: "/nix/store/moonlight/bin/moonlight",
+      })
       expect(calls).toEqual([
-        "gamescope --backend wayland -f -b --expose-wayland -- /nix/store/moonlight/bin/moonlight stream -app Korri Stream 192.168.1.117",
+        "/nix/store/moonlight/bin/moonlight stream -app Korri Stream 192.168.1.117",
       ])
     } finally {
       if (previous === undefined) delete Bun.env.KORRI_MOONLIGHT_COMMAND
@@ -74,31 +134,31 @@ describe("moonlight launcher", () => {
     }
   })
 
-  it("uses a configured Gamescope wrapper command", async () => {
+  it("uses a configured launch companion wrapper command", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({
       host: "aka.local",
-      gamescope: {
-        enable: true,
-        command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
-      },
+      ...wrapperOptions({
+        command: "/run/current-system/sw/bin/example-wrapper",
+        args: ["--mode", "nested"],
+      }),
       runner: recordingRunner(calls),
     })
 
     expect(result).toEqual({
       status: "started",
-      command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
+      command: "/run/current-system/sw/bin/example-wrapper",
     })
     expect(calls).toEqual([
-      "/run/current-system/sw/bin/korri-gamescope-no-portal --backend wayland -f -b --expose-wayland -- moonlight stream -app Korri Stream aka.local",
+      "/run/current-system/sw/bin/example-wrapper --mode nested -- moonlight stream -app Korri Stream aka.local",
     ])
   })
 
-  it("launches moonlight unwrapped when Gamescope is explicitly disabled", async () => {
+  it("launches moonlight unwrapped when a launch companion is explicitly disabled", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({
       host: "aka.local",
-      gamescope: { enable: false },
+      ...wrapperOptions({ enable: false }),
       runner: recordingRunner(calls),
     })
 
@@ -111,6 +171,7 @@ describe("moonlight launcher", () => {
     const result = await launchMoonlight({
       host: "aka.local",
       moonlight: { window: { autoResize: true } },
+      ...wrapperOptions(),
       runner: runner((command, args) => {
         calls.push([command, ...args].join(" "))
         return calls.length === 1
@@ -119,10 +180,10 @@ describe("moonlight launcher", () => {
       }),
     })
 
-    expect(result).toEqual({ status: "started", command: "gamescope" })
+    expect(result).toEqual({ status: "started", command: "wrapper" })
     expect(calls).toEqual([
-      "gamescope --backend wayland -f -b --expose-wayland -- moonlight stream -autowindowresize -app Korri Stream aka.local",
-      "gamescope --backend wayland -f -b --expose-wayland -- nix run nixpkgs#moonlight-embedded -- stream -autowindowresize -app Korri Stream aka.local",
+      "wrapper -- moonlight stream -autowindowresize -app Korri Stream aka.local",
+      "wrapper -- nix run nixpkgs#moonlight-embedded -- stream -autowindowresize -app Korri Stream aka.local",
     ])
   })
 
@@ -137,6 +198,7 @@ describe("moonlight launcher", () => {
         },
         window: { autoResize: true },
       },
+      ...wrapperOptions(),
       requireInputPlumberInput: true,
       readProcDevices: async () =>
         readFileSync(
@@ -146,9 +208,9 @@ describe("moonlight launcher", () => {
       runner: recordingRunner(calls),
     })
 
-    expect(result).toEqual({ status: "started", command: "gamescope" })
+    expect(result).toEqual({ status: "started", command: "wrapper" })
     expect(calls).toEqual([
-      "gamescope --backend wayland -f -b --expose-wayland -- moonlight stream -mapping /nix/store/moonlight/share/moonlight/gamecontrollerdb.txt -input /dev/input/event10 -autowindowresize -app Korri Stream 192.168.1.117",
+      "wrapper -- moonlight stream -mapping /nix/store/moonlight/share/moonlight/gamecontrollerdb.txt -input /dev/input/event10 -autowindowresize -app Korri Stream 192.168.1.117",
     ])
   })
 
@@ -232,26 +294,26 @@ describe("moonlight launcher", () => {
       },
     })
 
-    expect(result).toEqual({ status: "started", command: "gamescope" })
+    expect(result).toEqual({ status: "started", command: "moonlight" })
     expect(calls[0]?.args.join(" ")).toContain(
-      "moonlight stream -platform sdl -input /dev/input/event10 -absolutetouch -absolutetouchrequirebounds -absolutetouchbounds 0,0,1080,1920 -app Korri Stream 192.168.1.117",
+      "stream -platform sdl -input /dev/input/event10 -absolutetouch -absolutetouchrequirebounds -absolutetouchbounds 0,0,1080,1920 -app Korri Stream 192.168.1.117",
     )
     expect(calls[0]?.env).toEqual({ SDL_VIDEODRIVER: "wayland" })
     expect(calls[0]?.envUnset).toEqual(["OLD_ENV"])
   })
 
-  it("rejects wayland Moonlight without sibling Gamescope Wayland exposure", async () => {
+  it("reports launch companion diagnostics without spawning", async () => {
     const calls: string[] = []
     const result = await launchMoonlight({
       host: "192.168.1.117",
-      moonlight: { platform: { name: "wayland" } },
-      gamescope: { enable: true, window: { exposeWayland: false } },
+      launchCompanions: { [wrapperProvider]: { enable: true } },
       runner: recordingRunner(calls),
     })
 
     expect(result.status).toBe("failed")
-    if (result.status === "failed")
-      expect(result.message).toContain("exposeWayland")
+    if (result.status === "failed") {
+      expect(result.message).toContain(wrapperProvider)
+    }
     expect(calls).toEqual([])
   })
 
@@ -265,7 +327,6 @@ describe("moonlight launcher", () => {
         host: "aka.local",
         moonlight: { command },
         allowNixFallback: false,
-        gamescope: { enable: false },
         startupObserveMs: 250,
       })
       expect(result.status).toBe("failed")
@@ -301,7 +362,7 @@ describe("moonlight launcher", () => {
 
     expect(result).toEqual({
       status: "started",
-      command: "gamescope",
+      command: "moonlight",
       moonlightControl: {
         authority: "controller",
         runtimeDir: "/run/user/1000/korri-moonlight/session-1",
@@ -330,7 +391,7 @@ describe("moonlight launcher", () => {
 
     expect(result.status).toBe("failed")
     if (result.status === "failed") {
-      expect(result.message).toContain("gamescope missing")
+      expect(result.message).toContain("moonlight missing")
       expect(result.message).toContain("nix fallback")
     }
   })

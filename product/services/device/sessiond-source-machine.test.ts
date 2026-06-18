@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test"
 import type { LaunchSpec } from "@platform/library/launcher"
-import type { ProcessInfo } from "@product/plugins/gamescope/src/session"
 import {
   formatSessionRoleReadyEvidence,
   sessionRoleReadyOutcome,
@@ -8,6 +7,7 @@ import {
 import {
   createSourceMachineSessionRole,
   evaluateIdleBlank,
+  type ProcessInfo,
   type SourceMachineSwayController,
 } from "./sessiond-source-machine"
 
@@ -17,64 +17,64 @@ const SLEEP_PID: ProcessInfo = {
   ppid: 1,
   comm: "sleep",
 }
-const GAMESCOPE_PID: ProcessInfo = {
+const PLUGIN_PID: ProcessInfo = {
   pid: 1001,
   pgid: 1000,
   ppid: 1000,
-  comm: "gamescope-wl",
+  comm: "plugin-helper",
 }
 
 describe("evaluateIdleBlank", () => {
-  it("returns ready when no gamescope windows or processes are present and cooldown elapsed", () => {
+  it("returns ready when no plugin windows or processes are present and cooldown elapsed", () => {
     const assessment = evaluateIdleBlank(
       {
-        gamescopeWindows: [],
-        gamescopeProcesses: [],
+        foregroundWindows: [],
+        residualProcesses: [],
         cooldownElapsedMs: 500,
       },
       { cooldownMs: 200 },
     )
     expect(assessment.status).toBe("ready")
     expect(assessment.checks).toEqual({
-      gamescopeWindowsAbsent: true,
-      gamescopeProcessesAbsent: true,
+      foregroundWindowsAbsent: true,
+      residualProcessesAbsent: true,
       cooldownElapsed: true,
     })
   })
 
-  it("flags clear-foreground when a Gamescope window remains in the sway tree", () => {
+  it("flags clear-foreground when a plugin window remains in the sway tree", () => {
     const assessment = evaluateIdleBlank(
       {
-        gamescopeWindows: [
-          { id: 7, focused: false, fullscreen: true, appId: "gamescope" },
+        foregroundWindows: [
+          { id: 7, focused: false, fullscreen: true, appId: "plugin-surface" },
         ],
-        gamescopeProcesses: [],
+        residualProcesses: [],
         cooldownElapsedMs: 500,
       },
       { cooldownMs: 200 },
     )
     expect(assessment.status).toBe("clear-foreground")
-    expect(assessment.checks.gamescopeWindowsAbsent).toBe(false)
+    expect(assessment.checks.foregroundWindowsAbsent).toBe(false)
   })
 
-  it("flags clear-processes when gamescope-wl is still alive", () => {
+  it("flags clear-processes when plugin-helper is still alive", () => {
     const assessment = evaluateIdleBlank(
       {
-        gamescopeWindows: [],
-        gamescopeProcesses: [GAMESCOPE_PID],
+        foregroundWindows: [],
+        residualProcesses: [PLUGIN_PID],
         cooldownElapsedMs: 500,
       },
       { cooldownMs: 200 },
     )
     expect(assessment.status).toBe("clear-processes")
-    expect(assessment.checks.gamescopeProcessesAbsent).toBe(false)
+    expect(assessment.checks.residualProcessesAbsent).toBe(false)
   })
 
   it("flags waiting when invariants are satisfied but cooldown has not elapsed", () => {
     const assessment = evaluateIdleBlank(
       {
-        gamescopeWindows: [],
-        gamescopeProcesses: [],
+        foregroundWindows: [],
+        residualProcesses: [],
         cooldownElapsedMs: 100,
       },
       { cooldownMs: 500 },
@@ -83,12 +83,12 @@ describe("evaluateIdleBlank", () => {
     expect(assessment.checks.cooldownElapsed).toBe(false)
   })
 
-  it("ignores non-gamescope processes in the list", () => {
+  it("ignores non-plugin processes in the list", () => {
     const assessment = evaluateIdleBlank(
       {
-        gamescopeWindows: [],
-        gamescopeProcesses: [SLEEP_PID].filter(
-          p => p.comm === "gamescope-wl" || p.comm === "gamescopereaper",
+        foregroundWindows: [],
+        residualProcesses: [SLEEP_PID].filter(
+          p => p.comm === "plugin-helper" || p.comm === "plugin-reaper",
         ),
         cooldownElapsedMs: 500,
       },
@@ -113,13 +113,13 @@ function makeSway(
     events,
     state,
     sway: {
-      getGamescopeWindows: async () =>
+      getForegroundWindows: async () =>
         state.windows.map(w => ({
           id: w.id,
           focused: w.focused,
           fullscreen: true,
         })),
-      clearGamescopeWindows: async windows => {
+      clearForegroundWindows: async windows => {
         events.push(...windows.map(w => `clear:${w.id}`))
         state.windows = []
       },
@@ -184,7 +184,7 @@ describe("source-machine session role", () => {
     expect(events).toEqual([])
   })
 
-  it("restoreIdleAfterLaunch clears stale Gamescope windows and resolves once idle-blank", async () => {
+  it("restoreIdleAfterLaunch clears stale foreground windows and resolves once idle-blank", async () => {
     const { sway, events, state } = makeSway([{ id: 42, focused: true }])
     let now = 0
     const role = createSourceMachineSessionRole({
@@ -233,8 +233,8 @@ describe("source-machine session role", () => {
       status: "ok",
       evidence: {
         kind: "idle-blank",
-        gamescopeWindowsAbsent: true,
-        gamescopeProcessesAbsent: true,
+        foregroundWindowsAbsent: true,
+        residualProcessesAbsent: true,
         cooldownElapsed: true,
       },
     })
@@ -290,18 +290,18 @@ describe("source-machine session role", () => {
     expect(now).toBeGreaterThanOrEqual(75)
   })
 
-  it("restoreIdleAfterLaunch throws when ready attempts exceed the budget while gamescope processes linger", async () => {
+  it("restoreIdleAfterLaunch throws when ready attempts exceed the budget while residual processes linger", async () => {
     const { sway } = makeSway()
-    const lingeringGamescope: ProcessInfo = {
+    const lingeringPluginProcess: ProcessInfo = {
       pid: 5500,
       pgid: 5500,
       ppid: 1,
-      comm: "gamescope-wl",
+      comm: "plugin-helper",
     }
     let now = 0
     const role = createSourceMachineSessionRole({
       sway,
-      processList: makeProcessList([lingeringGamescope]),
+      processList: makeProcessList([lingeringPluginProcess]),
       clock: () => now,
       delay: async ms => {
         now += ms
@@ -309,6 +309,7 @@ describe("source-machine session role", () => {
       cooldownMs: 0,
       pollIntervalMs: 10,
       maxReadyAttempts: 3,
+      residualProcessNames: ["plugin-helper"],
     })
 
     await expect(role.restoreIdleAfterLaunch()).rejects.toThrow(/idle-blank/i)
@@ -318,7 +319,7 @@ describe("source-machine session role", () => {
   // "windows lingered" so an operator can disambiguate window-residue
   // failures from process-residue failures. The previous test covers
   // the clear-processes branch; this one covers clear-foreground.
-  it("restoreIdleAfterLaunch throws a windows-lingered error when gamescope windows outlive the budget", async () => {
+  it("restoreIdleAfterLaunch throws a windows-lingered error when foreground windows outlive the budget", async () => {
     const state = {
       windows: [{ id: 7, focused: true, fullscreen: true }] as {
         id: number
@@ -327,10 +328,10 @@ describe("source-machine session role", () => {
       }[],
     }
     const sway: SourceMachineSwayController = {
-      getGamescopeWindows: async () => state.windows,
+      getForegroundWindows: async () => state.windows,
       // No-op clear: windows persist across every attempt so the
       // role exhausts its budget on the clear-foreground branch.
-      clearGamescopeWindows: async () => {},
+      clearForegroundWindows: async () => {},
     }
     let now = 0
     const role = createSourceMachineSessionRole({
@@ -346,7 +347,7 @@ describe("source-machine session role", () => {
     })
 
     await expect(role.restoreIdleAfterLaunch()).rejects.toThrow(
-      /gamescope windows lingered past idle-blank budget/,
+      /foreground windows lingered past idle-blank budget/,
     )
   })
 
@@ -357,8 +358,8 @@ describe("source-machine session role", () => {
   it("uses a real setTimeout-backed delay when none is injected", async () => {
     const role = createSourceMachineSessionRole({
       sway: {
-        getGamescopeWindows: async () => [],
-        clearGamescopeWindows: async () => {},
+        getForegroundWindows: async () => [],
+        clearForegroundWindows: async () => {},
       },
       processList: makeProcessList([]),
       // No delay/clock injection — takes the production default.
@@ -381,10 +382,10 @@ describe("source-machine session role", () => {
   it("reconcileIdle surfaces a recovering-friendly error when sway query fails", async () => {
     const role = createSourceMachineSessionRole({
       sway: {
-        getGamescopeWindows: async () => {
+        getForegroundWindows: async () => {
           throw new Error("sway tree query failed")
         },
-        clearGamescopeWindows: async () => {},
+        clearForegroundWindows: async () => {},
       },
       processList: makeProcessList([]),
       clock: () => 0,

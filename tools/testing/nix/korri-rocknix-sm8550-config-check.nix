@@ -19,16 +19,26 @@ let
   sourceContainsHardwareFact =
     file: builtins.match ".*(SM8550|RockNix|Odin|Thor|DSI-1|DSI-2).*" (builtins.readFile file) != null;
 
-  stripComment = line: let i = builtins.match "([^#]*)#.*" line; in if i == null then line else builtins.head i;
-  lineSetsLiteral = value: line: builtins.match ".*[^!=][[:space:]]*=[[:space:]]*\"${value}\".*" (stripComment line) != null;
-  containsQuotedAssignment = value: file: builtins.any (line: lineSetsLiteral value line) (lib.splitString "\n" (builtins.readFile file));
+  stripComment =
+    line:
+    let
+      i = builtins.match "([^#]*)#.*" line;
+    in
+    if i == null then line else builtins.head i;
+  lineSetsLiteral =
+    value: line:
+    builtins.match ".*[^!=][[:space:]]*=[[:space:]]*\"${value}\".*" (stripComment line) != null;
+  containsQuotedAssignment =
+    value: file:
+    builtins.any (line: lineSetsLiteral value line) (lib.splitString "\n" (builtins.readFile file));
   sm8550PlatformAdapterFreeOfHardwareLiterals =
     !(containsQuotedAssignment "v4l2m2m" sm8550PlatformAdapterSourceFile)
     && !(containsQuotedAssignment "pulseaudio" sm8550PlatformAdapterSourceFile);
   sm8550PlatformAdapterFreeOfSubstrateSteam =
     !(lib.hasInfix "substratePackages.steam" (builtins.readFile sm8550PlatformAdapterSourceFile));
 
-  checkSystem = name: system:
+  checkSystem =
+    name: system:
     let
       cfg = system.config;
       runtime = cfg.services.korri.runtime;
@@ -51,19 +61,34 @@ let
       pipewirePulseEnv = (userServices.pipewire-pulse or { }).environment or { };
       wireplumberEnv = (userServices.wireplumber or { }).environment or { };
       audioBootstrapUnit = userServices.korri-sm8550-audio-bootstrap or { };
-      mainSpaceAudioDisabled = serviceName:
-        let service = cfg.systemd.services.${serviceName} or { enable = false; };
-        in (service.enable or true) == false;
+      mainSpaceAudioDisabled =
+        serviceName:
+        let
+          service = cfg.systemd.services.${serviceName} or { enable = false; };
+        in
+        (service.enable or true) == false;
       seatDeviceTrigger = cfg.systemd.services.korri-rocknix-seat-device-trigger or { };
       compositorUnit = userServices.korri-compositor or { };
       kioskEnvUnit = userServices."korri-kiosk-session-environment" or { };
       compositor = cfg.services.korri.compositor;
-      hasPackagePname = pname: packages:
-        builtins.any (pkg: (pkg.pname or "") == pname) packages;
-    in [
-      (check "${name}: eval has no assertion failures" (builtins.filter (a: !a.assertion) cfg.assertions == [ ]))
-      (check "${name}: runtime user is korri and non-root" (runtime.user == "korri" && (korriUser.uid or 0) != 0 && (korriUser.isNormalUser or false)))
-      (check "${name}: korri has appliance device groups" (builtins.all (g: builtins.elem g (korriUser.extraGroups or [ ])) [ "audio" "input" "render" "seat" "video" ]))
+      hasPackagePname = pname: packages: builtins.any (pkg: (pkg.pname or "") == pname) packages;
+    in
+    [
+      (check "${name}: eval has no assertion failures" (
+        builtins.filter (a: !a.assertion) cfg.assertions == [ ]
+      ))
+      (check "${name}: runtime user is korri and non-root" (
+        runtime.user == "korri" && (korriUser.uid or 0) != 0 && (korriUser.isNormalUser or false)
+      ))
+      (check "${name}: korri has appliance device groups" (
+        builtins.all (g: builtins.elem g (korriUser.extraGroups or [ ])) [
+          "audio"
+          "input"
+          "render"
+          "seat"
+          "video"
+        ]
+      ))
       (check "${name}: no lingering before login-created Korri sessions" (
         (cfg.users.users.root.linger or false) != true
         && ((korriUser.linger or false) != true)
@@ -82,14 +107,13 @@ let
         let
           roots = daemonEnv.KORRI_CONFIG_ROOTS or "";
         in
-        lib.hasInfix "korri-platform-config-root" roots
-        && lib.hasSuffix ":/var/lib/korri/config" roots
+        lib.hasInfix "korri-platform-config-root" roots && lib.hasSuffix ":/var/lib/korri/config" roots
       ))
       (check "${name}: sessiond inherits the config-graph roots" (
         (sessiondEnv.KORRI_CONFIG_ROOTS or null) == (daemonEnv.KORRI_CONFIG_ROOTS or "")
       ))
-      (check "${name}: korrid enables first-party Neverball plugin resources" (
-        (daemonEnv.KORRI_ENABLED_PLUGINS or null) == "@korri:neverball"
+      (check "${name}: korrid enables first-party plugin resources" (
+        lib.hasInfix "@korri:neverball" (daemonEnv.KORRI_ENABLED_PLUGINS or "")
         && lib.hasPrefix "/" (daemonEnv.KORRI_NIX_COMMAND or "")
         && lib.hasSuffix "/bin/nix" (daemonEnv.KORRI_NIX_COMMAND or "")
         && (daemonEnv.KORRI_PLUGIN_RESOURCE_ROOT or null) == "/var/lib/korri/plugins/resources"
@@ -99,34 +123,46 @@ let
         && (sessiondEnv.KORRI_CONFIG_ROOTS_DIR or null) == (daemonEnv.KORRI_CONFIG_ROOTS_DIR or null)
       ))
       (check "${name}: compositor/sessiond/inputd/korrid are user services" (
-        userServices ? "korri-compositor" && userServices ? korri-sessiond && userServices ? korri-inputd && userServices ? korrid
+        userServices ? "korri-compositor"
+        && userServices ? korri-sessiond
+        && userServices ? korri-inputd
+        && userServices ? korrid
       ))
       (check "${name}: no legacy system Korri daemons" (
-        !(cfg.systemd.services ? "korri-compositor") && !(cfg.systemd.services ? korri-sessiond) && !(cfg.systemd.services ? korri-inputd) && !(cfg.systemd.services ? korrid)
+        !(cfg.systemd.services ? "korri-compositor")
+        && !(cfg.systemd.services ? korri-sessiond)
+        && !(cfg.systemd.services ? korri-inputd)
+        && !(cfg.systemd.services ? korrid)
       ))
-      (check "${name}: greetd requires korri-setup" (builtins.elem "korri-setup.service" (cfg.systemd.services.greetd.requires or [ ])))
+      (check "${name}: greetd requires korri-setup" (
+        builtins.elem "korri-setup.service" (cfg.systemd.services.greetd.requires or [ ])
+      ))
       (check "${name}: compositor identity follows Korri runtime" (
         compositor.user == runtime.user
         && compositor.group == runtime.group
         && compositor.createUser == false
       ))
-      (check "${name}: compositor uses logind runtime" (compositor.runtimeDir == "%t" && compositor.home == "/home/korri"))
+      (check "${name}: compositor uses logind runtime" (
+        compositor.runtimeDir == "%t" && compositor.home == "/home/korri"
+      ))
       (check "${name}: SM8550 DRM is tagged for logind seats" (
         lib.hasInfix ''SUBSYSTEM=="drm", KERNEL=="card[0-9]*", TAG+="seat", TAG+="master-of-seat", ENV{ID_SEAT}="seat0"'' cfg.services.udev.extraRules
       ))
       (check "${name}: SM8550 evdev input is readable by Korri inputd" (
         lib.hasInfix ''SUBSYSTEM=="input", KERNEL=="event*", GROUP="input", MODE="0660", TAG+="uaccess"'' cfg.services.udev.extraRules
-        && lib.hasInfix ''setfacl -m u:korri:rw /dev/input/%k'' cfg.services.udev.extraRules
+        && lib.hasInfix "setfacl -m u:korri:rw /dev/input/%k" cfg.services.udev.extraRules
       ))
       (check "${name}: SM8550 DRM seat + input metadata is triggered before greetd" (
         cfg.systemd.services ? korri-rocknix-seat-device-trigger
         && builtins.elem "greetd.service" (seatDeviceTrigger.before or [ ])
-        && (let
-             raw = seatDeviceTrigger.serviceConfig.ExecStart or [ ];
-             execLines = lib.concatStringsSep "\n" (if builtins.isList raw then raw else [ raw ]);
-           in
-             lib.hasInfix "udevadm trigger --subsystem-match=drm --action=change" execLines
-             && lib.hasInfix "udevadm trigger --subsystem-match=input --action=change" execLines)
+        && (
+          let
+            raw = seatDeviceTrigger.serviceConfig.ExecStart or [ ];
+            execLines = lib.concatStringsSep "\n" (if builtins.isList raw then raw else [ raw ]);
+          in
+          lib.hasInfix "udevadm trigger --subsystem-match=drm --action=change" execLines
+          && lib.hasInfix "udevadm trigger --subsystem-match=input --action=change" execLines
+        )
       ))
       (check "${name}: compositor uses the greetd/logind user session bus" (
         compositor.sessionBus.mode == "existing"
@@ -135,7 +171,10 @@ let
         && (sessiondEnv.DBUS_SESSION_BUS_ADDRESS or null) == "unix:path=%t/bus"
       ))
       (check "${name}: compositor does not inherit child display env" (
-        builtins.all (name: builtins.elem name (compositorUnit.serviceConfig.UnsetEnvironment or [ ])) [ "DISPLAY" "WAYLAND_DISPLAY" ]
+        builtins.all (name: builtins.elem name (compositorUnit.serviceConfig.UnsetEnvironment or [ ])) [
+          "DISPLAY"
+          "WAYLAND_DISPLAY"
+        ]
       ))
       (check "${name}: kiosk seeds user-manager display environment" (
         builtins.hasAttr "korri-kiosk-session-environment" userServices
@@ -145,11 +184,17 @@ let
       (check "${name}: sessiond does not control root-owned essway" (
         (sessiondEnv.KORRI_SESSIOND_ESSWAY_CONTROL or null) == "0"
       ))
-      (check "${name}: sessiond socket env is %t path" (sessiondEnv.KORRI_SESSIOND_SOCKET or null == "%t/korri/sessiond.sock"))
-      (check "${name}: daemon socket env is %t path" (daemonEnv.KORRI_SESSIOND_SOCKET or null == "%t/korri/sessiond.sock"))
+      (check "${name}: sessiond socket env is %t path" (
+        sessiondEnv.KORRI_SESSIOND_SOCKET or null == "%t/korri/sessiond.sock"
+      ))
+      (check "${name}: daemon socket env is %t path" (
+        daemonEnv.KORRI_SESSIOND_SOCKET or null == "%t/korri/sessiond.sock"
+      ))
       (check "${name}: legacy sessiond URL/token env absent" (
-        !(sessiondEnv ? KORRI_SESSIOND_URL) && !(sessiondEnv ? KORRI_SESSIOND_TOKEN_FILE)
-        && !(daemonEnv ? KORRI_SESSIOND_URL) && !(daemonEnv ? KORRI_SESSIOND_TOKEN_FILE)
+        !(sessiondEnv ? KORRI_SESSIOND_URL)
+        && !(sessiondEnv ? KORRI_SESSIOND_TOKEN_FILE)
+        && !(daemonEnv ? KORRI_SESSIOND_URL)
+        && !(daemonEnv ? KORRI_SESSIOND_TOKEN_FILE)
       ))
       (check "${name}: Moonlight product launches require InputPlumber" (
         (sessiondEnv.KORRI_MOONLIGHT_REQUIRE_INPUTPLUMBER or null) == "1"
@@ -175,7 +220,9 @@ let
         && lib.hasSuffix "share/vulkan/icd.d/freedreno_icd.aarch64.json" icd
         && lib.versionAtLeast mesaVersion "26"
       ))
-      (check "${name}: inputd websocket is loopback" (inputdEnv.KORRI_INPUT_BRIDGE_HOSTNAME or null == "127.0.0.1"))
+      (check "${name}: inputd websocket is loopback" (
+        inputdEnv.KORRI_INPUT_BRIDGE_HOSTNAME or null == "127.0.0.1"
+      ))
       (check "${name}: root main-space audio graph is disabled for Korri rootless kiosk" (
         builtins.all mainSpaceAudioDisabled [
           "main-space-pipewire"
@@ -239,12 +286,16 @@ let
         # reference their own content by absolute path, so every Korri
         # device must mount media at the same prefix.
         && (removableMountUnit.environment.KORRI_REMOVABLE_MEDIA_ROOT or null) == "/run/media/korri"
-        && (removableMountUnit.environment.KORRI_REMOVABLE_CONTENT_ROOT or null) == "/var/lib/korri/content/removable/cards"
+        &&
+          (removableMountUnit.environment.KORRI_REMOVABLE_CONTENT_ROOT or null)
+          == "/var/lib/korri/content/removable/cards"
         && (removableUnmountUnit.environment.KORRI_REMOVABLE_MEDIA_ROOT or null) == "/run/media/korri"
         && builtins.elem "d /run/media/korri 0755 korri korri -" cfg.systemd.tmpfiles.rules
         && builtins.elem "L+ /var/lib/korri/content/removable/cards - - - - /run/media/korri" cfg.systemd.tmpfiles.rules
         && builtins.elem "multi-user.target" (removableColdplugUnit.wantedBy or [ ])
-        && lib.hasInfix "korri-removable-media-coldplug" (removableColdplugUnit.serviceConfig.ExecStart or "")
+        && lib.hasInfix "korri-removable-media-coldplug" (
+          removableColdplugUnit.serviceConfig.ExecStart or ""
+        )
       ))
       (check "${name}: Korri Steam owns the SM8550 Steam posture" (
         (steam.enable or false)
@@ -273,7 +324,9 @@ let
       ))
       (check "${name}: old substrate Steam launcher/service is absent" (
         !(cfg.systemd.services ? main-space-steam-uinput)
-        && !(builtins.any (pkg: lib.hasInfix "rocknix-steam-guest" (pkg.name or "")) cfg.environment.systemPackages)
+        && !(builtins.any (
+          pkg: lib.hasInfix "rocknix-steam-guest" (pkg.name or "")
+        ) cfg.environment.systemPackages)
       ))
       (check "${name}: Korri Steam tmpfiles create state under Korri roots" (
         builtins.elem "d /var/lib/korri/steam 0750 korri korri -" cfg.systemd.tmpfiles.rules
@@ -296,21 +349,28 @@ let
         # Games spawn under sessiond's ProtectSystem=strict sandbox; emulator
         # save data lives on the card, so mediaRoot must be in ReadWritePaths
         # (bandai 2026-06-11: LibHac save-indexer EROFS abort without it).
-        builtins.elem (removableMedia.mediaRoot or "")
-          (((userServices.korri-sessiond or { }).serviceConfig or { }).ReadWritePaths or [ ])
+        builtins.elem (removableMedia.mediaRoot or "") (
+          ((userServices.korri-sessiond or { }).serviceConfig or { }).ReadWritePaths or [ ]
+        )
       ))
-      (check "${name}: launcher artifacts use root setup path" (runtime.launchArtifactsDir == "/run/korri/launch-artifacts"))
+      (check "${name}: launcher artifacts use root setup path" (
+        runtime.launchArtifactsDir == "/run/korri/launch-artifacts"
+      ))
     ];
 
   checks = [
     (check "SM8550 adapter does not hard-code substrate literals" sm8550PlatformAdapterFreeOfHardwareLiterals)
     (check "SM8550 adapter does not explicitly install substrate Steam" sm8550PlatformAdapterFreeOfSubstrateSteam)
-  ] ++ (checkSystem "Odin 2 Portal" thorSystem) ++ (checkSystem "Sobo" soboSystem);
+  ]
+  ++ (checkSystem "Odin 2 Portal" thorSystem)
+  ++ (checkSystem "Sobo" soboSystem);
 
   failures = builtins.filter (candidate: !candidate.assertion) checks;
 in
 if failures != [ ] then
-  throw "Korri SM8550 kiosk config check failed:\n${lib.concatMapStringsSep "\n" (failure: "- ${failure.message}") failures}"
+  throw "Korri SM8550 kiosk config check failed:\n${
+    lib.concatMapStringsSep "\n" (failure: "- ${failure.message}") failures
+  }"
 else
   pkgs.runCommand "korri-rocknix-sm8550-config-check" { } ''
     echo "All ${toString (builtins.length checks)} SM8550 config checks passed."

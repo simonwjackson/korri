@@ -43,27 +43,10 @@ function createBridgeStreamControlClient({
         width: payload.width,
         height: payload.height,
       }),
-    setLinkedFps: payload =>
-      rpc(api, "app.stream-control.linked-fps.set", { fps: payload.fps }),
-    setLinkedResolution: payload =>
-      rpc(api, "app.stream-control.linked-resolution.set", {
-        width: payload.width,
-        height: payload.height,
-      }),
-    setGamescopeMode: payload =>
-      rpc(api, "app.stream-control.gamescope-mode.set", {
-        width: payload.width,
-        height: payload.height,
-      }),
-    setGamescopeFps: payload =>
-      rpc(api, "app.stream-control.gamescope-fps.set", { fps: payload.fps }),
-    setGamescopeFilter: payload =>
-      rpc(api, "app.stream-control.gamescope-filter.set", {
-        filter: payload.filter,
-      }),
-    setGamescopeSharpness: payload =>
-      rpc(api, "app.stream-control.gamescope-sharpness.set", {
-        sharpness: payload.sharpness,
+    applyAction: payload =>
+      rpc(api, "app.stream-control.action.set", {
+        action: payload.action,
+        payload: payload.payload,
       }),
   }
 }

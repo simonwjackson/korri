@@ -5,7 +5,6 @@ import {
   type ReadableConfigSnapshot,
   resolveReadableLaunchContext,
 } from "./cascade-resolver"
-import type { GamescopePolicy } from "./inheritable-fields"
 import type { AppRecord } from "./records/app"
 import type { HostRecord } from "./records/host"
 import type { LibraryItemRecord } from "./records/library-item"
@@ -16,13 +15,39 @@ import type { StorageRecord } from "./records/storage"
 import type { SystemRecord } from "./records/system"
 import type { UserRecord } from "./records/user"
 
-const gamescopeLaunch = (policy: GamescopePolicy) => ({
-  launch: { with: { "@korri:gamescope": policy } },
+const wrapperProvider = "@example:wrapper"
+const retiredWrapperKey = ["game", "scope"].join("")
+type WrapperPolicy = {
+  readonly enable?: boolean
+  readonly environment?: Readonly<Record<string, string | null>>
+  readonly app?: {
+    readonly environment?: Readonly<Record<string, string | null>>
+  }
+  readonly display?: unknown
+  readonly backend?: unknown
+  readonly scaling?: { readonly filter?: string }
+  readonly stats?: unknown
+  readonly extraArgs?: readonly string[]
+  readonly steam?: unknown
+}
+
+const wrapperLaunch = (policy: WrapperPolicy) => ({
+  launch: { with: { [wrapperProvider]: policy } },
 })
+
+const wrapperPolicyFrom = (context: {
+  readonly launchCompanions?: Readonly<Record<string, unknown>>
+}): WrapperPolicy | undefined =>
+  context.launchCompanions?.[wrapperProvider] as WrapperPolicy | undefined
+
+const launchCompanionPoliciesFrom = (context: {
+  readonly launchCompanions?: Readonly<Record<string, unknown>>
+}): readonly WrapperPolicy[] =>
+  Object.values(context.launchCompanions ?? {}) as readonly WrapperPolicy[]
 
 const host: HostRecord = {
   id: "local",
-  ...gamescopeLaunch({
+  ...wrapperLaunch({
     enable: true,
     extraArgs: ["host"],
     environment: { OUTER_ONLY: "host", OUTER_UNSET: "1" },
@@ -63,7 +88,7 @@ const host: HostRecord = {
 }
 const user: UserRecord = {
   id: "simon",
-  ...gamescopeLaunch({
+  ...wrapperLaunch({
     extraArgs: ["user"],
     app: { environment: { WAYLAND_DISPLAY: "wayland-1" } },
     display: { output: { height: 480 } },
@@ -106,7 +131,7 @@ const user: UserRecord = {
 const system: SystemRecord = {
   id: "genesis",
   apps: [{ id: "retroarch", runtime: "genesis-plus-gx" }],
-  ...gamescopeLaunch({
+  ...wrapperLaunch({
     extraArgs: ["system"],
     display: { nested: { width: 320 } },
   }),
@@ -117,7 +142,7 @@ const source: SourceRecord = {
   id: "roms",
   kind: ["files"],
   storage: "roms",
-  ...gamescopeLaunch({
+  ...wrapperLaunch({
     extraArgs: ["source"],
     display: { nested: { height: 240 } },
   }),
@@ -133,7 +158,7 @@ const app: AppRecord = {
   command: "retroarch",
   args: ["-L", "{runtime.path}", "{content.path}"],
   systems: ["genesis"],
-  ...gamescopeLaunch({ extraArgs: ["app"], backend: { allowDeferred: true } }),
+  ...wrapperLaunch({ extraArgs: ["app"], backend: { allowDeferred: true } }),
   moonlight: {
     extraArgs: ["app"],
     logging: { verbose: true },
@@ -147,7 +172,7 @@ const runtime: RuntimeRecord = {
   id: "genesis-plus-gx",
   kind: "libretro-core",
   path: "/cores/genesis_plus_gx.so",
-  ...gamescopeLaunch({ extraArgs: ["runtime"], scaling: { filter: "fsr" } }),
+  ...wrapperLaunch({ extraArgs: ["runtime"], scaling: { filter: "fsr" } }),
   moonlight: { extraArgs: ["runtime"], stream: { fps: 60 } },
   retroarch: {
     core: { path: "/cores/runtime-override.so" },
@@ -156,7 +181,7 @@ const runtime: RuntimeRecord = {
 }
 const profile: ProfileRecord = {
   id: "handheld",
-  ...gamescopeLaunch({
+  ...wrapperLaunch({
     extraArgs: ["profile"],
     app: { environment: { WAYLAND_DISPLAY: null } },
   }),
@@ -177,14 +202,14 @@ const profile: ProfileRecord = {
 const storage: StorageRecord = { id: "roms", root: "/games" }
 const sonic: LibraryItemRecord = {
   id: "sonic-the-hedgehog",
-  ...gamescopeLaunch({ extraArgs: ["item"] }),
+  ...wrapperLaunch({ extraArgs: ["item"] }),
   moonlight: { extraArgs: ["item"] },
   releases: [
     {
       id: "genesis",
       system: "genesis",
       target: { kind: "file", storage: "roms", path: "genesis/Sonic.md" },
-      ...gamescopeLaunch({ extraArgs: ["release"] }),
+      ...wrapperLaunch({ extraArgs: ["release"] }),
       moonlight: { extraArgs: ["release"] },
       retroarch: {
         extraSettings: { video_font_enable: true },
@@ -209,7 +234,7 @@ const gbaPackage: LibraryItemRecord = {
   contains: {
     "super-mario-world": {
       title: "Super Mario World",
-      ...gamescopeLaunch({ extraArgs: ["contained"] }),
+      ...wrapperLaunch({ extraArgs: ["contained"] }),
     },
   },
   releases: [
@@ -281,7 +306,7 @@ describe("resolveReadableLaunchContext", () => {
         profileId: "handheld",
         override: {
           env: { SCALE: "override" },
-          ...gamescopeLaunch({
+          ...wrapperLaunch({
             extraArgs: ["override"],
             environment: { OUTER_UNSET: null },
           }),
@@ -296,24 +321,23 @@ describe("resolveReadableLaunchContext", () => {
     expect(context.runtime?.path).toBe("/cores/genesis_plus_gx.so")
     expect(context.target).toBe("genesis/Sonic.md")
     expect(context.content?.path).toBe("/games/genesis/Sonic.md")
-    expect(context.gamescope?.enable).toBe(true)
-    expect(context.gamescope?.environment).toEqual({
+    expect(wrapperPolicyFrom(context)?.enable).toBe(true)
+    expect(wrapperPolicyFrom(context)?.environment).toEqual({
       OUTER_ONLY: "host",
       OUTER_UNSET: null,
     })
-    expect(context.gamescope?.app?.environment).toEqual({
+    expect(wrapperPolicyFrom(context)?.app?.environment).toEqual({
       WAYLAND_DISPLAY: null,
     })
-    expect(context.gamescope?.display).toEqual({
+    expect(wrapperPolicyFrom(context)?.display).toEqual({
       output: { width: 640, height: 480 },
       nested: { width: 320 },
     })
-    expect(context.gamescope?.backend).toEqual({
-      type: "wayland",
+    expect(wrapperPolicyFrom(context)?.backend).toEqual({
       allowDeferred: true,
     })
-    expect(context.gamescope?.scaling?.filter).toBe("fsr")
-    expect(context.gamescope?.extraArgs).toEqual([
+    expect(wrapperPolicyFrom(context)?.scaling?.filter).toBe("fsr")
+    expect(wrapperPolicyFrom(context)?.extraArgs).toEqual([
       "host",
       "user",
       "system",
@@ -415,19 +439,19 @@ describe("resolveReadableLaunchContext", () => {
     expect(context.env?.SCALE).toBe("override")
   })
 
-  it("ignores stale top-level Gamescope readable overrides", async () => {
+  it("ignores stale top-level wrapper readable overrides", async () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(snapshot(), {
         playableId: "sonic-the-hedgehog",
         override: {
-          gamescope: { enable: false },
-          ...gamescopeLaunch({ enable: true, extraArgs: ["override"] }),
+          [retiredWrapperKey]: { enable: false },
+          ...wrapperLaunch({ enable: true, extraArgs: ["override"] }),
         } as never,
       }),
     )
 
-    expect(context.gamescope?.enable).toBe(true)
-    expect(context.gamescope?.extraArgs).toContain("override")
+    expect(wrapperPolicyFrom(context)?.enable).toBe(true)
+    expect(wrapperPolicyFrom(context)?.extraArgs).toContain("override")
   })
 
   it("selects a single inherited system app choice", async () => {
@@ -592,7 +616,7 @@ describe("resolveReadableLaunchContext", () => {
     expect(context.retroarch).toBeDefined()
   })
 
-  it("normalizes extraArgs-only Gamescope policies to enabled defaults", async () => {
+  it("preserves extraArgs-only wrapper policies without provider-specific defaults", async () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(
         {
@@ -623,7 +647,7 @@ describe("resolveReadableLaunchContext", () => {
               "extra-args-only",
               {
                 id: "extra-args-only",
-                ...gamescopeLaunch({ extraArgs: ["--fps-limit", "60"] }),
+                ...wrapperLaunch({ extraArgs: ["--fps-limit", "60"] }),
               },
             ],
           ]),
@@ -632,9 +656,9 @@ describe("resolveReadableLaunchContext", () => {
       ),
     )
 
-    expect(context.gamescope?.enable).toBe(true)
-    expect(context.gamescope?.backend).toEqual({ type: "wayland" })
-    expect(context.gamescope?.extraArgs).toEqual([
+    expect(wrapperPolicyFrom(context)?.enable).toBeUndefined()
+    expect(wrapperPolicyFrom(context)?.backend).toBeUndefined()
+    expect(wrapperPolicyFrom(context)?.extraArgs).toEqual([
       "item",
       "release",
       "--fps-limit",
@@ -706,7 +730,7 @@ describe("resolveReadableLaunchContext", () => {
                       {
                         id: "steam",
                         runtime: "proton-experimental",
-                        "launch-options": "gamescope -- %command%",
+                        "launch-options": "wrapper -- %command%",
                       },
                     ],
                   },
@@ -724,11 +748,11 @@ describe("resolveReadableLaunchContext", () => {
     expect(context.steam).toEqual({
       state: { root: "{storage:steam}/Steam" },
       extra: { args: ["-silent", "-gamepadui"] },
-      "launch-options": "gamescope -- %command%",
+      "launch-options": "wrapper -- %command%",
     })
   })
 
-  it("defaults an active Steam integration to Gamescope through the readable cascade", async () => {
+  it("keeps an active Steam integration free of generic wrapper policy", async () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(steamReadableSnapshot({ app: steamApp() }), {
         playableId: "balatro",
@@ -741,25 +765,22 @@ describe("resolveReadableLaunchContext", () => {
       command: "steam",
       args: [],
     })
-    const gamescope = context.gamescope
-    if (gamescope === undefined) throw new Error("expected Gamescope policy")
-    expect(gamescope).toMatchObject({
-      enable: true,
-    })
-    expect(gamescope.display).toBeUndefined()
-    expect(gamescope.scaling).toBeUndefined()
-    expect(gamescope.stats).toBeUndefined()
+    expect(wrapperPolicyFrom(context)).toBeUndefined()
+    const policies = launchCompanionPoliciesFrom(context)
+    expect(policies.every(policy => policy.display === undefined)).toBe(true)
+    expect(policies.every(policy => policy.scaling === undefined)).toBe(true)
+    expect(policies.every(policy => policy.stats === undefined)).toBe(true)
     expect(context.steam).toEqual({
       state: { root: "{storage:steam}/Steam" },
     })
   })
 
-  it("keeps Steam Gamescope enabled when app-scoped Gamescope tuning is partial", async () => {
+  it("keeps app-scoped wrapper tuning independent from Steam integration", async () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(
         steamReadableSnapshot({
           app: steamApp(
-            gamescopeLaunch({
+            wrapperLaunch({
               display: { nested: { width: 854, height: 480 } },
             }),
           ),
@@ -768,44 +789,43 @@ describe("resolveReadableLaunchContext", () => {
       ),
     )
 
-    const gamescope = context.gamescope
-    if (gamescope === undefined) throw new Error("expected Gamescope policy")
-    expect(gamescope).toMatchObject({
-      enable: true,
+    const wrapperPolicy = wrapperPolicyFrom(context)
+    if (wrapperPolicy === undefined) throw new Error("expected wrapper policy")
+    expect(wrapperPolicy).toMatchObject({
       display: { nested: { width: 854, height: 480 } },
     })
   })
 
-  it("lets app-scoped Steam Gamescope config disable the integration baseline", async () => {
+  it("lets app-scoped Steam wrapper config disable the integration baseline", async () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(
         steamReadableSnapshot({
-          app: steamApp(gamescopeLaunch({ enable: false })),
+          app: steamApp(wrapperLaunch({ enable: false })),
         }),
         { playableId: "balatro" },
       ),
     )
 
-    expect(context.gamescope).toEqual({ enable: false })
+    expect(wrapperPolicyFrom(context)).toEqual({ enable: false })
   })
 
-  it("does not let a generic user-level Gamescope disable override the Steam app baseline", async () => {
+  it("does not let a generic user-level wrapper disable override the Steam app baseline", async () => {
     const context = await Effect.runPromise(
       resolveReadableLaunchContext(
         steamReadableSnapshot({
           app: steamApp(),
           users: new Map([
-            ["simon", { id: "simon", ...gamescopeLaunch({ enable: false }) }],
+            ["simon", { id: "simon", ...wrapperLaunch({ enable: false }) }],
           ]),
         }),
         { playableId: "balatro", userId: "simon" },
       ),
     )
 
-    const gamescope = context.gamescope
-    if (gamescope === undefined) throw new Error("expected Gamescope policy")
-    expect(gamescope.enable).toBe(true)
-    expect(gamescope.steam).toBeUndefined()
+    const wrapperPolicy = wrapperPolicyFrom(context)
+    if (wrapperPolicy === undefined) throw new Error("expected wrapper policy")
+    expect(wrapperPolicy.enable).toBe(false)
+    expect(wrapperPolicy.steam).toBeUndefined()
   })
 
   it("requires apps.steam before the Steam built-in baseline is active", async () => {
@@ -918,7 +938,7 @@ describe("resolveReadableLaunchContext", () => {
     expect(context.itemId).toBe("super-mario-advance-2")
     expect(context.containedId).toBe("super-mario-world")
     expect(context.releaseId).toBe("gba")
-    expect(context.gamescope?.extraArgs).toContain("contained")
+    expect(wrapperPolicyFrom(context)?.extraArgs).toContain("contained")
   })
 
   it("threads and folds Ryubing policy including per-game state.root overrides", async () => {

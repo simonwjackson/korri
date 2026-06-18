@@ -10,9 +10,11 @@ import { VigieCockpitPage } from "./pages/VigieCockpitPage"
 
 export const vigieTheme: KorriThemeEntrypoint = {
   id: "vigie",
-  mount(host) {
+  mount(host, { bridge }) {
     const root = createRoot(host)
-    root.render(<VigieCockpitPage fixture={vigieCockpitFixture} live />)
+    root.render(
+      <VigieCockpitPage bridge={bridge} fixture={vigieCockpitFixture} live />,
+    )
     return () => root.unmount()
   },
 }

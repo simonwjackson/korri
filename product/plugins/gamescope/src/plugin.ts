@@ -5,13 +5,22 @@ import {
   decodeGamescopePolicy,
   type GamescopePolicyValue,
 } from "./launch-companion"
+import {
+  applyGamescopeStreamControl,
+  describeGamescopeStreamControl,
+  type GamescopeStreamControlApplyInput,
+  type GamescopeStreamControlDescribeInput,
+} from "./stream-control"
 
 export const KORRI_GAMESCOPE_PLUGIN_ID = "@korri:gamescope" as const
 
 export interface GamescopeLaunchComposeInput {
   readonly spec: LaunchSpec
   readonly policy: GamescopePolicyValue
-  readonly options?: { readonly steamSession?: boolean }
+  readonly options?: {
+    readonly appIntegration?: string
+    readonly steamSession?: boolean
+  }
 }
 
 export interface GamescopePluginDiagnostic {
@@ -87,13 +96,31 @@ export const gamescopePlugin = plugin({
         id: "gamescope.stream-control-describe",
         operation: "stream-control.describe",
         capabilities: ["stream-control.describe"],
-        run: context => ({ provider: context.provider, input: context.input }),
+        run: context =>
+          describeGamescopeStreamControl({
+            provider: context.provider,
+            ...(isRecord(context.input) &&
+            typeof context.input.socketPath === "string"
+              ? {
+                  socketPath: context.input
+                    .socketPath as GamescopeStreamControlDescribeInput["socketPath"],
+                }
+              : {}),
+          }),
       },
       {
         id: "gamescope.stream-control-apply",
         operation: "stream-control.apply",
         capabilities: ["stream-control.apply"],
-        run: context => ({ provider: context.provider, input: context.input }),
+        run: context => {
+          const input = decodeStreamControlApplyInput(context.input)
+          return applyGamescopeStreamControl({
+            provider: context.provider,
+            action: input.action,
+            payload: input.payload,
+            ...(input.socketPath ? { socketPath: input.socketPath } : {}),
+          })
+        },
       },
       {
         id: "gamescope.session-cleanup",
@@ -126,6 +153,27 @@ export const gamescopePlugin = plugin({
   },
 })
 
+function decodeStreamControlApplyInput(
+  input: unknown,
+): GamescopeStreamControlApplyInput {
+  if (!isRecord(input)) {
+    throw new Error("Gamescope stream-control.apply input must be an object")
+  }
+  if (typeof input.action !== "string") {
+    throw new Error("Gamescope stream-control.apply input.action is required")
+  }
+  if (!isRecord(input.payload)) {
+    throw new Error("Gamescope stream-control.apply input.payload is required")
+  }
+  return {
+    action: input.action,
+    payload: input.payload,
+    ...(typeof input.socketPath === "string"
+      ? { socketPath: input.socketPath }
+      : {}),
+  }
+}
+
 function decodeLaunchComposeInput(input: unknown): GamescopeLaunchComposeInput {
   if (!isRecord(input)) {
     throw new Error("Gamescope launch.compose input must be an object")
@@ -135,7 +183,14 @@ function decodeLaunchComposeInput(input: unknown): GamescopeLaunchComposeInput {
     spec,
     policy: decodeGamescopePolicy(input.policy ?? {}),
     options: isRecord(input.options)
-      ? { steamSession: optionalBoolean(input.options.steamSession) }
+      ? {
+          steamSession:
+            optionalBoolean(input.options.steamSession) ??
+            input.options.appIntegration === "steam",
+          ...(typeof input.options.appIntegration === "string"
+            ? { appIntegration: input.options.appIntegration }
+            : {}),
+        }
       : undefined,
   }
 }

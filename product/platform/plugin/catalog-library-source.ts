@@ -1,5 +1,4 @@
 import type { ResolvedGameRecord } from "@platform/fixtures/games/game"
-import { decodeGamescopePolicy } from "@platform/library/config/inheritable-fields"
 import type { LaunchSpec } from "@platform/library/launcher"
 import {
   LibraryError,
@@ -292,15 +291,14 @@ function resolvePluginLaunch(
                 ? { cwd: contribution.launch.cwd }
                 : {}),
             }
-            const gamescope = decodeOptionalGamescopeProviderPolicy(
-              contribution.launch.with,
-            )
             return {
               spec,
               app: undefined,
               release: contribution.releaseEntry,
               playable: contribution.playableEntry,
-              ...(gamescope ? { gamescope } : {}),
+              ...(contribution.launch.with
+                ? { launchCompanions: contribution.launch.with }
+                : {}),
             }
           },
           catch: error =>
@@ -326,14 +324,6 @@ function isPluginCatalogItem(
     Array.isArray(candidate.releases) &&
     candidate.releases.every(isPluginCatalogRelease)
   )
-}
-
-function decodeOptionalGamescopeProviderPolicy(
-  providers: ProcessPluginLaunch["with"],
-): ResolvedLaunch["gamescope"] | undefined {
-  if (!isRecord(providers)) return undefined
-  if (providers["@korri:gamescope"] === undefined) return undefined
-  return decodeGamescopePolicy(providers["@korri:gamescope"])
 }
 
 function isPluginCatalogRelease(

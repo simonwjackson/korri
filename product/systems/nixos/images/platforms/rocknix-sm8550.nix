@@ -15,20 +15,10 @@
 let
   targetSystem = pkgs.stdenv.hostPlatform.system;
   substratePackages = nix-on-rocks.packages.${targetSystem};
-  # Gamescope >= 3.16.20 is required for the Moonlight v4l2m2m streaming
-  # path on SM8550 (see assertion below). `pkgs.gamescope` is globally
-  # replaced by the Korri package overlay with gamescope-korri wrapping the
-  # validated 3.16.23 base, so this platform module should not construct or
-  # force a separate Gamescope package.
-  gamescopeKorriControlEnvironment = {
-    # gamescope-korri v1 control/readback atoms. Keep these enabled on SM8550
-    # so every foreground Gamescope launched by sessiond exposes the expected
-    # control surface rather than silently behaving like stock Gamescope.
-    GAMESCOPE_XWAYLAND_MODE_CONTROL = "1";
-    GAMESCOPE_SCALING_FILTER = "3";
-    GAMESCOPE_SHARPNESS = "20";
-    GAMESCOPE_FSR_FEEDBACK = "1";
-  };
+  gamescopeNix = import ../../../../plugins/gamescope/nix/platform-environments.nix { inherit pkgs; };
+  gamescopePackage = korri.packages.${targetSystem}.gamescope-korri;
+  gamescopeControlEnvironment = gamescopeNix.controlEnvironment;
+  enabledFirstPartyPlugins = "@korri:gamescope,@korri:neverball";
   moonlightRuntimeSettingsEnvironment = {
     # Experimental downstream moonlight-embedded-korri runtime-settings hooks.
     # These are intentionally enumerated and preserved as Moonlight process env
@@ -77,13 +67,18 @@ let
   # + NM recovery; this script never touches them.
   korriFakesuspendToggle = pkgs.writeShellScript "korri-fakesuspend-toggle" ''
     set -u
-    export PATH=${lib.makeBinPath (with pkgs; [
-      coreutils
-      gawk
-      gnugrep
-      sway
-      systemd
-    ])}
+    export PATH=${
+      lib.makeBinPath (
+        with pkgs;
+        [
+          coreutils
+          gawk
+          gnugrep
+          sway
+          systemd
+        ]
+      )
+    }
 
     request_dir="${powerRequestDir}"
     runtime_dir="''${XDG_RUNTIME_DIR:-${korriRuntimeDir}}"
@@ -170,55 +165,55 @@ let
   substrateAudioSinkHasPcm = substrateAudioSink.pcm != null;
   korriSm8550AudioBootstrap = pkgs.writeShellScript "korri-sm8550-audio-bootstrap" (
     ''
-    set -u
+      set -u
 
-    fallback_sink=${lib.escapeShellArg substrateAudioSink.name}
+      fallback_sink=${lib.escapeShellArg substrateAudioSink.name}
 
-    for _ in $(${pkgs.coreutils}/bin/seq 1 60); do
-      if ${pkgs.pulseaudio}/bin/pactl info >/dev/null 2>&1; then
-        break
+      for _ in $(${pkgs.coreutils}/bin/seq 1 60); do
+        if ${pkgs.pulseaudio}/bin/pactl info >/dev/null 2>&1; then
+          break
+        fi
+        ${pkgs.coreutils}/bin/sleep 0.5
+      done
+
+      if ! ${pkgs.pulseaudio}/bin/pactl info >/dev/null 2>&1; then
+        echo "korri-sm8550-audio-bootstrap: PulseAudio socket unavailable at $PULSE_SERVER" >&2
+        exit 0
       fi
-      ${pkgs.coreutils}/bin/sleep 0.5
-    done
-
-    if ! ${pkgs.pulseaudio}/bin/pactl info >/dev/null 2>&1; then
-      echo "korri-sm8550-audio-bootstrap: PulseAudio socket unavailable at $PULSE_SERVER" >&2
-      exit 0
-    fi
-''
+    ''
     + lib.optionalString substrateAudioSinkHasUcm ''
 
-    preferred_card="alsa_card.platform-sound"
-    preferred_profile=${lib.escapeShellArg "${toString substrateAudioSink.ucmVerb} (Headphones, ${toString substrateAudioSink.ucmDevice})"}
-    preferred_sink="alsa_output.platform-sound.${toString substrateAudioSink.ucmVerb}__${toString substrateAudioSink.ucmDevice}__sink"
+      preferred_card="alsa_card.platform-sound"
+      preferred_profile=${lib.escapeShellArg "${toString substrateAudioSink.ucmVerb} (Headphones, ${toString substrateAudioSink.ucmDevice})"}
+      preferred_sink="alsa_output.platform-sound.${toString substrateAudioSink.ucmVerb}__${toString substrateAudioSink.ucmDevice}__sink"
 
-    if ${pkgs.pulseaudio}/bin/pactl list cards | ${pkgs.gnugrep}/bin/grep -Fq "$preferred_profile"; then
-      ${pkgs.pulseaudio}/bin/pactl set-card-profile "$preferred_card" "$preferred_profile" >/dev/null 2>&1 || true
-    fi
+      if ${pkgs.pulseaudio}/bin/pactl list cards | ${pkgs.gnugrep}/bin/grep -Fq "$preferred_profile"; then
+        ${pkgs.pulseaudio}/bin/pactl set-card-profile "$preferred_card" "$preferred_profile" >/dev/null 2>&1 || true
+      fi
 
-    # Prefer the substrate-declared UCM sink whenever WirePlumber exposes it.
-    # On Thor this is the real speaker sink; the manual PCM fallback below is
-    # useful only when UCM did not create the declared route.
-    if ${pkgs.pulseaudio}/bin/pactl list short sinks | ${pkgs.gnugrep}/bin/grep -q "^.*[[:space:]]$preferred_sink[[:space:]]"; then
-      ${pkgs.pulseaudio}/bin/pactl set-default-sink "$preferred_sink" >/dev/null 2>&1 || true
-      ${pkgs.pulseaudio}/bin/pactl set-sink-volume "$preferred_sink" 70% >/dev/null 2>&1 || true
-      exit 0
-    fi
-''
-  + lib.optionalString substrateAudioSinkHasPcm ''
+      # Prefer the substrate-declared UCM sink whenever WirePlumber exposes it.
+      # On Thor this is the real speaker sink; the manual PCM fallback below is
+      # useful only when UCM did not create the declared route.
+      if ${pkgs.pulseaudio}/bin/pactl list short sinks | ${pkgs.gnugrep}/bin/grep -q "^.*[[:space:]]$preferred_sink[[:space:]]"; then
+        ${pkgs.pulseaudio}/bin/pactl set-default-sink "$preferred_sink" >/dev/null 2>&1 || true
+        ${pkgs.pulseaudio}/bin/pactl set-sink-volume "$preferred_sink" 70% >/dev/null 2>&1 || true
+        exit 0
+      fi
+    ''
+    + lib.optionalString substrateAudioSinkHasPcm ''
 
-    # Fallback for kernels/profiles where WirePlumber exposes only Pro Audio:
-    # create the substrate-declared PCM sink directly and make it default.
-    if ! ${pkgs.pulseaudio}/bin/pactl list short sinks | ${pkgs.gnugrep}/bin/grep -q "^[0-9][0-9]*[[:space:]]$fallback_sink[[:space:]]"; then
-      ${pkgs.pulseaudio}/bin/pactl load-module module-alsa-sink \
-        device=${lib.escapeShellArg (toString substrateAudioSink.pcm)} \
-        sink_name="$fallback_sink" \
-        sink_properties=device.description=${lib.escapeShellArg substrateAudioSink.description} \
-        >/dev/null 2>&1 || true
-    fi
+      # Fallback for kernels/profiles where WirePlumber exposes only Pro Audio:
+      # create the substrate-declared PCM sink directly and make it default.
+      if ! ${pkgs.pulseaudio}/bin/pactl list short sinks | ${pkgs.gnugrep}/bin/grep -q "^[0-9][0-9]*[[:space:]]$fallback_sink[[:space:]]"; then
+        ${pkgs.pulseaudio}/bin/pactl load-module module-alsa-sink \
+          device=${lib.escapeShellArg (toString substrateAudioSink.pcm)} \
+          sink_name="$fallback_sink" \
+          sink_properties=device.description=${lib.escapeShellArg substrateAudioSink.description} \
+          >/dev/null 2>&1 || true
+      fi
 
-    ${pkgs.pulseaudio}/bin/pactl set-default-sink "$fallback_sink" >/dev/null 2>&1 || true
-''
+      ${pkgs.pulseaudio}/bin/pactl set-default-sink "$fallback_sink" >/dev/null 2>&1 || true
+    ''
   );
   inputplumberPackage =
     pkgs.runCommand "korri-rocknix-inputplumber-xb360"
@@ -283,21 +278,17 @@ in
 
   assertions = [
     {
-      assertion =
-        (config.services.korri.compositor.gamescope.package.pname or "") == "gamescope-korri"
-        && toString config.services.korri.compositor.gamescope.package == toString pkgs.gamescope;
-      message = "RockNix SM8550 compositors must use globally overlaid pkgs.gamescope (gamescope-korri).";
+      assertion = (gamescopePackage.pname or "") == "gamescope-korri";
+      message = "RockNix SM8550 compositors must use the plugin-owned gamescope-korri package.";
     }
     {
-      # Gamescope's pipewire-loop-lock fix is required whenever the
-      # substrate-declared video decode backend exercises the v4l2m2m
-      # zero-copy import path. Tying the assertion to the substrate
-      # capability keeps the reason for the version floor machine-checkable
-      # rather than buried in a hard-coded string.
+      # The plugin-owned package includes the pipewire-loop-lock fix required
+      # whenever the substrate-declared video decode backend exercises the
+      # v4l2m2m zero-copy import path.
       assertion =
         substrateVideoDecodeBackend != "v4l2m2m"
-        || lib.versionAtLeast (lib.getVersion config.services.korri.compositor.gamescope.package) "3.16.20";
-      message = "RockNix SM8550 compositors require Gamescope >= 3.16.20 when the substrate declares video.decodeBackend = v4l2m2m.";
+        || lib.versionAtLeast (lib.getVersion gamescopePackage) "3.16.20";
+      message = "RockNix SM8550 compositors require the plugin-owned runtime package at version >= 3.16.20 when the substrate declares video.decodeBackend = v4l2m2m.";
     }
   ];
 
@@ -369,7 +360,13 @@ in
   # legacy nix-on-rocks root main-space PipeWire graph under /run/user/0.
   # The substrate still supplies the neutral SM8550 audio facts (Pulse API and
   # AYN UCM package), but the product owns where the graph lives.
-  services.korri.runtime.extraGroups = [ "audio" "input" "render" "seat" "video" ];
+  services.korri.runtime.extraGroups = [
+    "audio"
+    "input"
+    "render"
+    "seat"
+    "video"
+  ];
 
   services.korri.steam = {
     enable = true;
@@ -410,9 +407,21 @@ in
   systemd.user.services.korri-sm8550-audio-bootstrap = {
     description = "Bootstrap Korri SM8550 user-session audio sink";
     wantedBy = [ "korri-session.target" ];
-    after = [ "pipewire.service" "pipewire-pulse.service" "wireplumber.service" ];
-    wants = [ "pipewire.service" "pipewire-pulse.service" "wireplumber.service" ];
-    before = [ "korri-compositor.service" "korri-sessiond.service" "korri-inputd.service" ];
+    after = [
+      "pipewire.service"
+      "pipewire-pulse.service"
+      "wireplumber.service"
+    ];
+    wants = [
+      "pipewire.service"
+      "pipewire-pulse.service"
+      "wireplumber.service"
+    ];
+    before = [
+      "korri-compositor.service"
+      "korri-sessiond.service"
+      "korri-inputd.service"
+    ];
     environment = {
       ALSA_CONFIG_UCM2 = substrateAudioUcmPath;
       PULSE_SERVER = korriPulseServer;
@@ -441,8 +450,6 @@ in
       address = lib.mkDefault "unix:path=%t/bus";
     };
 
-    gamescope.package = lib.mkDefault pkgs.gamescope;
-
     path = with pkgs; [
       coreutils
       dbus
@@ -453,18 +460,17 @@ in
       fuzzel
       git
       sway
-      config.services.korri.compositor.gamescope.package
+      gamescopePackage
       substratePackages.cemu
       pkgs.ryubing
       # `pkgs.moonlight-embedded` is globally replaced by
-      # `moonlight-embedded-korri` via the Korri package overlay, matching the
-      # `pkgs.gamescope` -> `gamescope-korri` substitution above.
+      # `moonlight-embedded-korri` via the Korri package overlay.
       pkgs.moonlight-embedded
     ];
 
     environment =
       moonlightCompositorEnvironment
-      // gamescopeKorriControlEnvironment
+      // gamescopeControlEnvironment
       // {
         XDG_CURRENT_DESKTOP = "sway";
         CEMU_BIOS_ROOT = "/storage/roms/bios/cemu";
@@ -511,24 +517,26 @@ in
   # when Sway spawned Moonlight children, but not after renderer/sessiond
   # lifecycle ownership moved out of the compositor process tree.
   services.korri.sessiond = {
-    path = [ pkgs.moonlight-embedded ];
+    path = [
+      gamescopePackage
+      pkgs.moonlight-embedded
+    ];
     extraEnvironment =
       moonlightSessiondEnvironment
-      // gamescopeKorriControlEnvironment
+      // gamescopeControlEnvironment
       // {
+        KORRI_ENABLED_PLUGINS = enabledFirstPartyPlugins;
         PULSE_SERVER = korriPulseServer;
       };
   };
 
   services.korri.daemon.library.platformDefaults = moonlightPlatformDefaults;
 
-  systemd.user.services.korrid.environment =
-    gamescopeKorriControlEnvironment
-    // {
-      KORRI_ENABLED_PLUGINS = "@korri:neverball";
-      KORRI_NIX_COMMAND = "${pkgs.nix}/bin/nix";
-      KORRI_PLUGIN_RESOURCE_ROOT = "${runtime.stateRoot}/plugins/resources";
-    };
+  systemd.user.services.korrid.environment = gamescopeControlEnvironment // {
+    KORRI_ENABLED_PLUGINS = enabledFirstPartyPlugins;
+    KORRI_NIX_COMMAND = "${pkgs.nix}/bin/nix";
+    KORRI_PLUGIN_RESOURCE_ROOT = "${runtime.stateRoot}/plugins/resources";
+  };
 
   # NOTE: `rocknix.sm8550.moonlight.{enable,package}` is no longer set
   # here. Moonlight is a Korri product choice; the substrate should not

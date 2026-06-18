@@ -11,37 +11,8 @@ import {
 const FIXTURES_DIR = join(process.cwd(), "tools/testing/fixtures/proc")
 
 describe("composeMoonlightLaunchSpec", () => {
-  it("wraps the stable Korri Stream moonlight app in gamescope when enabled", () => {
-    const spec = composeMoonlightLaunchSpec({
-      host: "192.168.1.10",
-      gamescope: { enable: true, window: { exposeWayland: true } },
-    })
-
-    expect(spec.command).toBe("gamescope")
-    expect(spec.args.slice(0, 6)).toEqual([
-      "--backend",
-      "wayland",
-      "-f",
-      "-b",
-      "--expose-wayland",
-      "--",
-    ])
-    const separatorIndex = spec.args.indexOf("--")
-    expect(spec.args.slice(separatorIndex)).toEqual([
-      "--",
-      "moonlight",
-      "stream",
-      "-app",
-      "Korri Stream",
-      "192.168.1.10",
-    ])
-  })
-
-  it("returns a bare moonlight LaunchSpec when gamescope is disabled", () => {
-    const spec = composeMoonlightLaunchSpec({
-      host: "aka.local",
-      gamescope: { enable: false },
-    })
+  it("returns a bare Moonlight LaunchSpec; companion wrapping happens through plugin dispatch", () => {
+    const spec = composeMoonlightLaunchSpec({ host: "aka.local" })
 
     expect(spec).toEqual({
       command: "moonlight",
@@ -131,16 +102,6 @@ describe("composeMoonlightLaunchSpec", () => {
 
   it("throws when host is empty", () => {
     expect(() => composeMoonlightLaunchSpec({ host: "" })).toThrow(/host/i)
-  })
-
-  it("rejects wayland Moonlight wrapped without sibling Gamescope Wayland exposure", () => {
-    expect(() =>
-      composeMoonlightLaunchSpec({
-        host: "aka.local",
-        moonlight: { platform: { name: "wayland" } },
-        gamescope: { enable: true, window: { exposeWayland: false } },
-      }),
-    ).toThrow(/exposeWayland/)
   })
 })
 

@@ -28,6 +28,8 @@ host:
       enable: true
       authority: controller
     extraArgs: []
+  # launch.with is plugin composition. Keys are provider ids; the selected
+  # plugin owns the payload below that key. This is not a Moonlight field.
   launch:
     with:
       "@korri:gamescope":

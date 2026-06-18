@@ -8,13 +8,6 @@ const numberRange = (min: number, max: number, label: string) =>
       : `${label} between ${min} and ${max} required`,
   )
 
-const positiveNumberRange = (min: number, max: number, label: string) =>
-  Schema.makeFilter<number>(value =>
-    Number.isFinite(value) && value > min && value <= max
-      ? undefined
-      : `${label} greater than ${min} and at most ${max} required`,
-  )
-
 export const RuntimeBitrateKbps = Schema.Number.check(
   numberRange(
     MOONLIGHT_CONTROL_PROTOCOL_LIMITS.bitrateKbps.min,
@@ -23,16 +16,6 @@ export const RuntimeBitrateKbps = Schema.Number.check(
   ),
 )
 export const RuntimeFps = Schema.Number.check(numberRange(30, 120, "fps"))
-// Gamescope runtime FPS limiter: 0 disables the limit, 240 is the upper sanity
-// bound. Accept integers only — the GAMESCOPE_LIMITER_FILE writer parses with
-// strtol and floats would round in ways the operator did not request.
-export const RuntimeGamescopeFps = Schema.Number.check(
-  Schema.makeFilter<number>(value =>
-    Number.isInteger(value) && value >= 0 && value <= 240
-      ? undefined
-      : "fps between 0 and 240 (integer) required",
-  ),
-)
 export const RuntimeMoonlightResolutionWidth = Schema.Number.check(
   numberRange(
     MOONLIGHT_CONTROL_PROTOCOL_LIMITS.resolution.width.min,
@@ -47,12 +30,6 @@ export const RuntimeMoonlightResolutionHeight = Schema.Number.check(
     "height",
   ),
 )
-export const RuntimeGamescopeResolutionDimension = Schema.Number.check(
-  positiveNumberRange(0, 16_384, "dimension"),
-)
-export const RuntimeSharpness = Schema.Number.check(
-  numberRange(0, 20, "sharpness"),
-)
 export const RuntimeBrightnessPercent = Schema.Number.check(
   Schema.makeFilter<number>(value =>
     Number.isInteger(value) && value >= 0 && value <= 100
@@ -61,21 +38,15 @@ export const RuntimeBrightnessPercent = Schema.Number.check(
   ),
 )
 
-export const GamescopeScalingFilter = Schema.Literals([
-  "linear",
-  "nearest",
-  "integer",
-  "fsr",
-  "nis",
-])
-
 export const EmptyPayloadFields = {}
+
+const PluginConfigEntry = Schema.Struct({ enabled: Schema.Boolean })
 
 export const StreamControlConfigResponseFields = {
   moonlight: Schema.Struct({ enabled: Schema.Boolean }),
-  gamescope: Schema.Struct({ enabled: Schema.Boolean }),
   brightness: Schema.Struct({ enabled: Schema.Boolean }),
   battery: Schema.Struct({ enabled: Schema.Boolean }),
+  plugins: Schema.Record(Schema.String, PluginConfigEntry),
   artifactDir: Schema.Union([Schema.String, Schema.Null]),
 }
 
@@ -116,13 +87,9 @@ const ControlValueSpec = Schema.Union([
 
 const StreamControlCapability = Schema.Struct({
   id: Schema.String,
-  subsystem: Schema.Literals([
-    "moonlight",
-    "gamescope",
-    "linked",
-    "brightness",
-    "battery",
-  ]),
+  label: Schema.String,
+  subsystem: Schema.String,
+  provider: Schema.optional(Schema.String),
   access: Schema.Literals(["read-write", "read-only"]),
   status: Schema.Literals(["supported", "unsupported"]),
   unavailableReason: Schema.Union([Schema.String, Schema.Null]),
@@ -151,13 +118,6 @@ const MoonlightStateReadback = Schema.Struct({
   bitrateKbps: Schema.Union([Schema.Number, Schema.Null]),
   fps: Schema.Union([Schema.Number, Schema.Null]),
   resolution: Schema.Union([ResolutionReadback, Schema.Null]),
-})
-
-const GamescopeStateReadback = Schema.Struct({
-  fps: Schema.Union([Schema.Number, Schema.Null]),
-  resolution: Schema.Union([ResolutionReadback, Schema.Null]),
-  sharpness: Schema.Union([Schema.Number, Schema.Null]),
-  filter: Schema.Union([GamescopeScalingFilter, Schema.Null]),
 })
 
 const BrightnessDeviceReadback = Schema.Struct({
@@ -195,6 +155,10 @@ const ErrorStateEntry = Schema.Struct({
   status: Schema.Literal("error"),
   error: Schema.String,
 })
+const UnknownOkStateEntry = Schema.Struct({
+  status: Schema.Literal("ok"),
+  readback: Schema.Record(Schema.String, Schema.Unknown),
+})
 
 export const StreamControlStateResponseFields = {
   moonlight: Schema.Union([
@@ -202,14 +166,6 @@ export const StreamControlStateResponseFields = {
     Schema.Struct({
       status: Schema.Literal("ok"),
       readback: MoonlightStateReadback,
-    }),
-    ErrorStateEntry,
-  ]),
-  gamescope: Schema.Union([
-    DisabledStateEntry,
-    Schema.Struct({
-      status: Schema.Literal("ok"),
-      readback: GamescopeStateReadback,
     }),
     ErrorStateEntry,
   ]),
@@ -229,6 +185,10 @@ export const StreamControlStateResponseFields = {
     }),
     ErrorStateEntry,
   ]),
+  plugins: Schema.Record(
+    Schema.String,
+    Schema.Union([DisabledStateEntry, UnknownOkStateEntry, ErrorStateEntry]),
+  ),
 }
 
 const StreamControlStateResponseSchema = Schema.Struct(
@@ -238,19 +198,13 @@ export type StreamControlStateResponseData = Schema.Schema.Type<
   typeof StreamControlStateResponseSchema
 >
 
-const StreamControlRequestedPayload = Schema.Record(
+export const StreamControlRequestedPayload = Schema.Record(
   Schema.String,
   Schema.Unknown,
 )
 export type StreamControlRequestedPayload = Schema.Schema.Type<
   typeof StreamControlRequestedPayload
 >
-
-const CommandTargetOutcome = Schema.Union([
-  Schema.Struct({ status: Schema.Literal("applied") }),
-  Schema.Struct({ status: Schema.Literal("pending") }),
-  Schema.Struct({ status: Schema.Literal("failed"), error: Schema.String }),
-])
 
 const StreamControlCommandOutcome = Schema.Union([
   Schema.Struct({
@@ -265,12 +219,6 @@ const StreamControlCommandOutcome = Schema.Union([
     kind: Schema.Literal("single"),
     status: Schema.Literal("failed"),
     error: Schema.String,
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("linked"),
-    status: Schema.Literals(["applied", "pending", "partial", "failed"]),
-    moonlight: CommandTargetOutcome,
-    gamescope: CommandTargetOutcome,
   }),
 ])
 

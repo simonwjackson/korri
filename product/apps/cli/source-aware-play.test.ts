@@ -51,6 +51,8 @@ const host: StreamHostCandidate = {
   identityVerified: false,
 }
 const spec: LaunchSpec = { command: "/bin/echo", args: ["ok"] }
+const wrapperProvider = "@example:wrapper"
+type WrapperPolicy = { readonly enable?: boolean }
 
 describe("source-aware play command", () => {
   it("launches a selected local entry without remote prepare or Moonlight", async () => {
@@ -110,7 +112,13 @@ describe("source-aware play command", () => {
       launchMoonlight: async moonlightOptions => {
         expect(moonlightOptions.host).toBe("aka")
         expect(moonlightOptions.moonlight?.platform?.name).toBe("sdl")
-        expect(moonlightOptions.gamescope?.enable).toBe(false)
+        expect(
+          (
+            moonlightOptions.launchCompanions?.[wrapperProvider] as
+              | WrapperPolicy
+              | undefined
+          )?.enable,
+        ).toBe(false)
         return { status: "started", command: "moonlight" }
       },
       output: line => lines.push(line),
@@ -189,7 +197,7 @@ function localSource(
           ),
     resolveLocalLauncherPolicy: () =>
       Effect.succeed({
-        gamescope: { enable: false },
+        launchCompanions: { [wrapperProvider]: { enable: false } },
         moonlight: { platform: { name: "sdl" } },
       }),
   }

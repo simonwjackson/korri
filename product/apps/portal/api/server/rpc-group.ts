@@ -19,11 +19,9 @@ import { SourceStatusRpc as appSourceStatus } from "../source/status.rpc"
 import { SteamStatusRpc as appSteamStatus } from "../steam/status.rpc"
 import { PrepareStreamRpc as appStreamPrepare } from "../stream/prepare.rpc"
 import { GetStreamControlConfigRpc as appStreamControlConfigGet } from "../stream-control/get-config.rpc"
+import { GetStreamControlControlsRpc as appStreamControlControlsGet } from "../stream-control/get-controls.rpc"
 import { GetStreamControlStateRpc as appStreamControlStateGet } from "../stream-control/get-state.rpc"
-import { SetGamescopeFilterRpc as appStreamControlGamescopeFilterSet } from "../stream-control/set-gamescope-filter.rpc"
-import { SetGamescopeFpsRpc as appStreamControlGamescopeFpsSet } from "../stream-control/set-gamescope-fps.rpc"
-import { SetGamescopeModeRpc as appStreamControlGamescopeModeSet } from "../stream-control/set-gamescope-mode.rpc"
-import { SetGamescopeSharpnessRpc as appStreamControlGamescopeSharpnessSet } from "../stream-control/set-gamescope-sharpness.rpc"
+import { SetStreamControlActionRpc as appStreamControlActionSet } from "../stream-control/set-action.rpc"
 import { SetMoonlightBitrateRpc as appStreamControlMoonlightBitrateSet } from "../stream-control/set-moonlight-bitrate.rpc"
 import { SetMoonlightFpsRpc as appStreamControlMoonlightFpsSet } from "../stream-control/set-moonlight-fps.rpc"
 import { SetMoonlightResolutionRpc as appStreamControlMoonlightResolutionSet } from "../stream-control/set-moonlight-resolution.rpc"
@@ -52,14 +50,12 @@ export const serverRpcGroup = RpcGroup.make(
   appServerStreamPrepare,
   appStreamPrepare,
   appStreamControlConfigGet,
+  appStreamControlControlsGet,
   appStreamControlStateGet,
   appStreamControlMoonlightBitrateSet,
   appStreamControlMoonlightFpsSet,
   appStreamControlMoonlightResolutionSet,
-  appStreamControlGamescopeModeSet,
-  appStreamControlGamescopeFpsSet,
-  appStreamControlGamescopeFilterSet,
-  appStreamControlGamescopeSharpnessSet,
+  appStreamControlActionSet,
 ).middleware(FeatureGatesMiddleware)
 
 // fallow-ignore-next-line unused-types

@@ -1,18 +1,20 @@
 import { describe, expect, it } from "bun:test"
 
-const PLUGIN_COMPOSITION_EXPR = (enableGamescope: boolean) => `
+const PLUGIN_COMPOSITION_EXPR = (enable: boolean) => `
 let
   pkgs = import <nixpkgs> {};
   composition = import ./product/systems/nixos/flake/plugins.nix {
     inherit pkgs;
-    enableGamescope = ${enableGamescope ? "true" : "false"};
-    gamescopeKorri = "gamescope-korri-package";
-    korriGamescopeControlBridge = "gamescope-control-bridge-package";
+    enable = ${enable ? "true" : "false"};
+    gamescopePackage = "gamescope-korri-package";
+    controlBridgePackage = "gamescope-control-bridge-package";
   };
 in {
   ids = composition.enabledPluginIds;
   packages = builtins.attrNames composition.packages;
   apps = builtins.attrNames composition.apps;
+  overlayCount = builtins.length composition.overlays;
+  moduleCount = builtins.length composition.nixosModules;
 }
 `
 
@@ -27,10 +29,18 @@ describe("first-party Nix plugin composition", () => {
         "gamescope-control-bridge",
         "korri-stream-control-bench",
       ],
+      overlayCount: 1,
+      moduleCount: 1,
     })
 
     const disabled = await nixEval(PLUGIN_COMPOSITION_EXPR(false))
-    expect(disabled).toEqual({ ids: [], packages: [], apps: [] })
+    expect(disabled).toEqual({
+      ids: [],
+      packages: [],
+      apps: [],
+      overlayCount: 0,
+      moduleCount: 0,
+    })
   })
 })
 

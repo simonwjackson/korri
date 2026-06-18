@@ -256,9 +256,8 @@ describe("kiosk session role", () => {
     })
 
     // No-op contract: the kiosk role has no foreground surface to
-    // promote because Electrobun owns the renderer and Gamescope is
-    // not in the kiosk path. Calling it must not touch the renderer,
-    // Sway, or the service manager.
+    // promote because Electrobun owns the renderer. Calling it must
+    // not touch the renderer, Sway, or the service manager.
     expect(rendererEvents).toEqual([])
     expect(swayEvents).toEqual([])
     expect(svcEvents).toEqual([])

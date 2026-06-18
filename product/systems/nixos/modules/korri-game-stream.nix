@@ -98,7 +98,6 @@ let
     ''}
 
     export KORRI_GAME_STREAM_SWAYMSG_COMMAND=${lib.escapeShellArg "${cfg.sway.package}/bin/swaymsg"}
-    export KORRI_GAME_STREAM_GAMESCOPE_COMMAND=${lib.escapeShellArg "${cfg.gamescope.package}/bin/gamescope"}
 
     # Discover Sway's IPC socket so the runner's Sway-repair preflight can
     # talk to the host compositor. Sway writes the socket as
@@ -335,15 +334,6 @@ in
       };
     };
 
-    gamescope = {
-      package = mkOption {
-        type = types.package;
-        default = pkgs.gamescope;
-        defaultText = lib.literalExpression "pkgs.gamescope";
-        description = "Gamescope package used by the runner wrapper.";
-      };
-    };
-
     sway = {
       package = mkOption {
         type = types.package;
@@ -442,7 +432,6 @@ in
 
     environment.systemPackages = [
       cfg.package
-      cfg.gamescope.package
       cfg.sway.package
     ]
     ++ cfg.path;

@@ -2,6 +2,11 @@ import { describe, expect, it } from "bun:test"
 
 import { decodeLauncherPayload } from "./launcher"
 
+const wrapperProvider = "@example:wrapper"
+type WrapperPolicy = { readonly extraArgs?: readonly string[] }
+const wrapperPolicy = (value: unknown): WrapperPolicy | undefined =>
+  value as WrapperPolicy | undefined
+
 describe("LauncherPayload", () => {
   it("decodes a minimal launcher (command, args, systems)", () => {
     const launcher = decodeLauncherPayload({
@@ -31,12 +36,12 @@ describe("LauncherPayload", () => {
       env: { LIBRETRO_LOG_LEVEL: "3" },
       argsAppend: ["--verbose"],
       patches: ["/patches/launcher.ips"],
-      launch: { with: { "@korri:gamescope": { enable: true } } },
+      launch: { with: { [wrapperProvider]: { enable: true } } },
       cwd: "/storage",
       presets: {
         "max-quality": {
           launch: {
-            with: { "@korri:gamescope": { extraArgs: ["-W", "1920"] } },
+            with: { [wrapperProvider]: { extraArgs: ["-W", "1920"] } },
           },
           patches: ["/patches/max-quality.bps"],
         },
@@ -47,8 +52,9 @@ describe("LauncherPayload", () => {
     expect(launcher.env?.LIBRETRO_LOG_LEVEL).toBe("3")
     expect(launcher.patches).toEqual(["/patches/launcher.ips"])
     expect(
-      launcher.presets?.["max-quality"]?.launch?.with?.["@korri:gamescope"]
-        ?.extraArgs,
+      wrapperPolicy(
+        launcher.presets?.["max-quality"]?.launch?.with?.[wrapperProvider],
+      )?.extraArgs,
     ).toEqual(["-W", "1920"])
     expect(launcher.presets?.["max-quality"]?.patches).toEqual([
       "/patches/max-quality.bps",

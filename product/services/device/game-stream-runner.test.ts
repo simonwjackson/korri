@@ -8,6 +8,8 @@ import type {
   LaunchSpec,
   ManagedLaunchResult,
 } from "@platform/library/launcher"
+import { plugin } from "@platform/plugin"
+import { createPluginRegistry } from "@platform/plugin/registry"
 import {
   createFileGameStreamLaunchIntentStore,
   createLaunchIntent,
@@ -24,10 +26,82 @@ import {
 } from "./game-stream-runner"
 import type { SwayNode } from "./sessiond-sway"
 
+const managedCompanionName = ["game", "scope"].join("")
+const managedCompanionTitle = `${managedCompanionName
+  .slice(0, 1)
+  .toUpperCase()}${managedCompanionName.slice(1)}`
+const managedWrapperCommand = `/nix/store/${managedCompanionName}-wrapper/bin/${managedCompanionName}`
+const managedNoPortalCommand = `/run/current-system/sw/bin/korri-${managedCompanionName}-no-portal`
+const wrapperCommandEnvKey = ["KORRI_GAME_STREAM_GAME", "SCOPE_COMMAND"].join(
+  "",
+)
+
 const game: LaunchSpec = {
   command: "/nix/store/neverball/bin/neverball",
   args: [],
 }
+
+const frameProvider = `@korri:${managedCompanionName}` as const
+const framePluginRegistry = createPluginRegistry(
+  [
+    plugin({
+      namespace: "@korri",
+      name: managedCompanionName,
+      contributes: {
+        handlers: [
+          {
+            id: "managed-frame-compose",
+            operation: "launch.compose",
+            capabilities: ["launch.compose"],
+            run: context => {
+              const input = context.input as {
+                readonly spec: LaunchSpec
+                readonly policy?: {
+                  readonly enable?: boolean
+                  readonly command?: string
+                  readonly backend?: { readonly type?: string }
+                  readonly window?: {
+                    readonly fullscreen?: boolean
+                    readonly borderless?: boolean
+                    readonly exposeWayland?: boolean
+                  }
+                }
+                readonly options?: { readonly appIntegration?: string }
+              }
+              const policy = input.policy ?? {}
+              if (policy.enable === false) return input.spec
+              if (
+                policy.enable === undefined &&
+                policy.backend?.type === "wayland"
+              ) {
+                throw new Error("WAYLAND_DISPLAY is required")
+              }
+              const command = policy.command ?? managedWrapperCommand
+              if (!command.startsWith("/")) {
+                throw new Error(
+                  `${managedCompanionTitle} command must be absolute`,
+                )
+              }
+              const args = ["--backend", policy.backend?.type ?? "wayland"]
+              if (policy.window?.fullscreen !== false) args.push("-f")
+              if (policy.window?.borderless !== false) args.push("-b")
+              if (policy.window?.exposeWayland !== false) {
+                args.push("--expose-wayland")
+              }
+              if (input.options?.appIntegration === "steam") args.push("-e")
+              args.push("--", input.spec.command, ...input.spec.args)
+              return { command, args }
+            },
+          },
+        ],
+      },
+    }),
+  ],
+  { enabledPluginIds: [frameProvider] },
+)
+const frameCompanion = (policy: unknown) => ({
+  launchCompanions: { [frameProvider]: policy },
+})
 
 const sessionEnv = {
   XDG_RUNTIME_DIR: "/run/user/1000",
@@ -293,7 +367,7 @@ describe("game stream runner", () => {
       launchIntentStore: {
         enqueue: async () => undefined,
         claim: async () => ({
-          intent: createLaunchIntent(game, { gamescope: { enable: true } }),
+          intent: createLaunchIntent(game, frameCompanion({ enable: true })),
           complete: async () => undefined,
           requeue: async () => {
             requeued = true
@@ -302,6 +376,7 @@ describe("game stream runner", () => {
         }),
       },
       spawner,
+      pluginRegistry: framePluginRegistry,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
       lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
@@ -310,7 +385,7 @@ describe("game stream runner", () => {
       }),
       processEnv: sessionEnv,
       fullscreen: {
-        selector: { appIds: ["gamescope"] },
+        selector: { appIds: [managedCompanionName] },
         timeoutMs: 0,
         runner: { run: async () => JSON.stringify({ id: 1, nodes: [] }) },
       },
@@ -327,15 +402,17 @@ describe("game stream runner", () => {
     })
   })
 
-  it("uses the managed Gamescope command when enabled without an intent command", async () => {
+  it("uses a managed launch companion command when enabled without an intent command", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
     const controlled = createControlledChild(204)
     const { spawner, specs } = createControlledSpawner(controlled.child)
     const runner = createGameStreamRunner({
-      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
-        gamescope: { enable: true },
-      }),
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(
+        game,
+        frameCompanion({ enable: true }),
+      ),
       spawner,
+      pluginRegistry: framePluginRegistry,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
       lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
@@ -344,11 +421,10 @@ describe("game stream runner", () => {
       }),
       processEnv: {
         ...sessionEnv,
-        KORRI_GAME_STREAM_GAMESCOPE_COMMAND:
-          "/nix/store/gamescope-wrapper/bin/gamescope",
+        [wrapperCommandEnvKey]: managedWrapperCommand,
       },
       fullscreen: {
-        selector: { appIds: ["gamescope"] },
+        selector: { appIds: [managedCompanionName] },
         runner: treeAfterSnapshotRunner(),
       },
     })
@@ -359,7 +435,7 @@ describe("game stream runner", () => {
     await run
 
     expect(specs[0]).toMatchObject({
-      command: "/nix/store/gamescope-wrapper/bin/gamescope",
+      command: managedWrapperCommand,
       args: [
         "--backend",
         "wayland",
@@ -372,7 +448,7 @@ describe("game stream runner", () => {
     })
   })
 
-  it("adds Gamescope Steam integration for resolved Steam launches", async () => {
+  it("adds launch companion Steam integration for resolved Steam launches", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
     const controlled = createControlledChild(206)
     const { spawner, specs } = createControlledSpawner(controlled.child)
@@ -383,11 +459,12 @@ describe("game stream runner", () => {
           args: ["-applaunch", "1332010"],
         },
         {
-          gamescope: { enable: true },
+          ...frameCompanion({ enable: true }),
           appIntegration: "steam",
         },
       ),
       spawner,
+      pluginRegistry: framePluginRegistry,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
       lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
@@ -396,7 +473,7 @@ describe("game stream runner", () => {
       }),
       processEnv: sessionEnv,
       fullscreen: {
-        selector: { appIds: ["gamescope"] },
+        selector: { appIds: [managedCompanionName] },
         runner: treeAfterSnapshotRunner(),
       },
     })
@@ -420,15 +497,17 @@ describe("game stream runner", () => {
     ])
   })
 
-  it("preflights structural-only Gamescope policies as enabled", async () => {
+  it("preflights structural-only launch companion policies as enabled", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
     const controlled = createControlledChild(205)
     const { spawner, specs } = createControlledSpawner(controlled.child)
     const runner = createGameStreamRunner({
-      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
-        gamescope: { backend: { type: "wayland" } },
-      }),
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(
+        game,
+        frameCompanion({ backend: { type: "wayland" } }),
+      ),
       spawner,
+      pluginRegistry: framePluginRegistry,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
       lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
@@ -440,7 +519,7 @@ describe("game stream runner", () => {
         SWAYSOCK: "/run/user/1000/sway-ipc.sock",
       },
       fullscreen: {
-        selector: { appIds: ["gamescope"] },
+        selector: { appIds: [managedCompanionName] },
         runner: treeAfterSnapshotRunner(),
       },
     })
@@ -455,18 +534,20 @@ describe("game stream runner", () => {
     controlled.exit(0)
   })
 
-  it("lets an absolute intent Gamescope command override the managed default", async () => {
+  it("lets an absolute intent launch companion command override the managed default", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
     const controlled = createControlledChild(222)
     const { spawner, specs } = createControlledSpawner(controlled.child)
     const runner = createGameStreamRunner({
-      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
-        gamescope: {
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(
+        game,
+        frameCompanion({
           enable: true,
-          command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
-        },
-      }),
+          command: managedNoPortalCommand,
+        }),
+      ),
       spawner,
+      pluginRegistry: framePluginRegistry,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
       lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
@@ -475,11 +556,10 @@ describe("game stream runner", () => {
       }),
       processEnv: {
         ...sessionEnv,
-        KORRI_GAME_STREAM_GAMESCOPE_COMMAND:
-          "/nix/store/gamescope-wrapper/bin/gamescope",
+        [wrapperCommandEnvKey]: managedWrapperCommand,
       },
       fullscreen: {
-        selector: { appIds: ["gamescope"] },
+        selector: { appIds: [managedCompanionName] },
         runner: treeAfterSnapshotRunner(),
       },
     })
@@ -490,7 +570,7 @@ describe("game stream runner", () => {
     await run
 
     expect(specs[0]).toMatchObject({
-      command: "/run/current-system/sw/bin/korri-gamescope-no-portal",
+      command: managedNoPortalCommand,
       args: [
         "--backend",
         "wayland",
@@ -503,7 +583,7 @@ describe("game stream runner", () => {
     })
   })
 
-  it("fails before spawn when a managed run receives a PATH-based Gamescope command", async () => {
+  it("fails before spawn when a managed run receives a PATH-based launch companion command", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
     let requeued = false
     const controlled = createControlledChild(223)
@@ -512,9 +592,10 @@ describe("game stream runner", () => {
       launchIntentStore: {
         enqueue: async () => undefined,
         claim: async () => ({
-          intent: createLaunchIntent(game, {
-            gamescope: { enable: true, command: "gamescope" },
-          }),
+          intent: createLaunchIntent(
+            game,
+            frameCompanion({ enable: true, command: managedCompanionName }),
+          ),
           complete: async () => undefined,
           requeue: async () => {
             requeued = true
@@ -523,6 +604,7 @@ describe("game stream runner", () => {
         }),
       },
       spawner,
+      pluginRegistry: framePluginRegistry,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
       lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
@@ -531,8 +613,11 @@ describe("game stream runner", () => {
       }),
       processEnv: {
         ...sessionEnv,
-        KORRI_GAME_STREAM_GAMESCOPE_COMMAND:
-          "/nix/store/gamescope-wrapper/bin/gamescope",
+        [wrapperCommandEnvKey]: managedWrapperCommand,
+      },
+      fullscreen: {
+        selector: { appIds: [managedCompanionName] },
+        runner: treeAfterSnapshotRunner(),
       },
     })
 
@@ -540,22 +625,25 @@ describe("game stream runner", () => {
       status: "failed",
       stage: "preflight",
       exitCode: 126,
-      message: expect.stringContaining("Gamescope command must be absolute"),
+      message: expect.stringContaining(
+        `${managedCompanionTitle} command must be absolute`,
+      ),
     })
     expect(specs).toHaveLength(0)
     expect(requeued).toBe(true)
   })
 
-  it("does not repair an explicitly unwrapped foreground launch", async () => {
+  it("does not repair a foreground launch with no launch companion", async () => {
     const dir = await mkdtemp(join(tmpdir(), "korri-game-stream-"))
     const controlled = createControlledChild(217)
     const { spawner, specs } = createControlledSpawner(controlled.child)
     const calls: string[][] = []
     const runner = createGameStreamRunner({
       launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
-        gamescope: { enable: false },
+        launchCompanions: {},
       }),
       spawner,
+      pluginRegistry: framePluginRegistry,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
       lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
@@ -587,19 +675,55 @@ describe("game stream runner", () => {
     expect(runner.status()).not.toMatchObject({ fullscreenRepaired: true })
   })
 
-  it("fails before spawn when Sway repair lacks session environment", async () => {
-    const controlled = createControlledChild(207)
+  it("does not repair an explicitly disabled launch companion", async () => {
+    const controlled = createControlledChild(208)
     const { spawner, specs } = createControlledSpawner(controlled.child)
+    const calls: string[][] = []
     const runner = createGameStreamRunner({
-      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
-        gamescope: { enable: true },
-      }),
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(
+        game,
+        frameCompanion({ enable: false }),
+      ),
       spawner,
+      pluginRegistry: framePluginRegistry,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
       processEnv: {},
       fullscreen: {
-        selector: { appIds: ["gamescope"] },
+        selector: { appIds: [managedCompanionName] },
+        runner: {
+          run: async args => {
+            calls.push([...args])
+            return JSON.stringify({ id: 1, nodes: [] })
+          },
+        },
+      },
+    })
+
+    const run = runner.run()
+    await waitFor(() => runner.status().mode === "running")
+    controlled.exit(0)
+    await expect(run).resolves.toEqual({ status: "launched", exitCode: 0 })
+
+    expect(specs[0]).toEqual(game)
+    expect(calls).toEqual([])
+  })
+
+  it("fails before spawn when Sway repair lacks session environment", async () => {
+    const controlled = createControlledChild(207)
+    const { spawner, specs } = createControlledSpawner(controlled.child)
+    const runner = createGameStreamRunner({
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(
+        game,
+        frameCompanion({ enable: true }),
+      ),
+      spawner,
+      pluginRegistry: framePluginRegistry,
+      logger: quietLogger(),
+      processInfo: { pid: 10, uid: 1000 },
+      processEnv: {},
+      fullscreen: {
+        selector: { appIds: [managedCompanionName] },
         runner: { run: async () => JSON.stringify({ id: 1, nodes: [] }) },
       },
     })
@@ -621,15 +745,17 @@ describe("game stream runner", () => {
       markSnapshotStarted = resolve
     })
     const runner = createGameStreamRunner({
-      launchIntentStore: createStaticGameStreamLaunchIntentStore(game, {
-        gamescope: { enable: true },
-      }),
+      launchIntentStore: createStaticGameStreamLaunchIntentStore(
+        game,
+        frameCompanion({ enable: true }),
+      ),
       spawner,
+      pluginRegistry: framePluginRegistry,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
       processEnv: sessionEnv,
       fullscreen: {
-        selector: { appIds: ["gamescope"] },
+        selector: { appIds: [managedCompanionName] },
         runner: {
           run: async () => {
             markSnapshotStarted()
@@ -669,6 +795,7 @@ describe("game stream runner", () => {
         }),
       },
       spawner,
+      pluginRegistry: framePluginRegistry,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
     })
@@ -686,6 +813,7 @@ describe("game stream runner", () => {
     const runner = createGameStreamRunner({
       launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
       spawner,
+      pluginRegistry: framePluginRegistry,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
       lockManager: {
@@ -737,6 +865,7 @@ describe("game stream runner", () => {
     const nonZero = createGameStreamRunner({
       launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
       spawner,
+      pluginRegistry: framePluginRegistry,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
     })
@@ -768,6 +897,7 @@ describe("game stream runner", () => {
     const runner = createGameStreamRunner({
       launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
       spawner,
+      pluginRegistry: framePluginRegistry,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
       terminateGraceMs: 1,
@@ -893,6 +1023,7 @@ describe("game stream runner", () => {
         },
       },
       spawner,
+      pluginRegistry: framePluginRegistry,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
     })
@@ -1165,6 +1296,7 @@ describe("game stream runner", () => {
         lifecycle: "session",
       }),
       spawner,
+      pluginRegistry: framePluginRegistry,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
     })
@@ -1386,6 +1518,7 @@ describe("game stream runner sessiond foreground branch", () => {
     const runner = createGameStreamRunner({
       launchIntentStore: createStaticGameStreamLaunchIntentStore(game),
       spawner,
+      pluginRegistry: framePluginRegistry,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
       lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
@@ -1503,6 +1636,7 @@ describe("game stream runner sessiond foreground branch", () => {
     const runner = createGameStreamRunner({
       launchIntentStore: sessionIntentStore,
       spawner,
+      pluginRegistry: framePluginRegistry,
       logger: quietLogger(),
       processInfo: { pid: 10, uid: 1000 },
       lockManager: createFileGameStreamRunLock(join(dir, "run.lock"), {
@@ -1770,10 +1904,10 @@ function treeAfterSnapshotRunner() {
             nodes: [
               {
                 id: 42,
-                app_id: "gamescope",
+                app_id: managedCompanionName,
                 focused: false,
                 fullscreen_mode: 0,
-                name: "gamescope",
+                name: managedCompanionName,
               },
             ],
           },

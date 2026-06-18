@@ -1,24 +1,23 @@
 import { describe, expect, it } from "bun:test"
 import { ValidationError } from "@platform/api/rpc/errors"
+import { plugin, pluginRecordId } from "@platform/plugin"
+import { createPluginRegistry } from "@platform/plugin/registry"
 import type { MoonlightControlClient } from "@platform/stream/moonlight-control-client"
 import { appRpcGroup } from "@product/apps/portal/api/app-rpc-group"
-import type {
-  GamescopeControlClient,
-  GamescopeControlCommandMethod,
-} from "@product/plugins/gamescope/src/runtime-control"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { handleGetStreamControlConfig } from "./get-config.rpc-handler"
 import { handleGetStreamControlControls } from "./get-controls.rpc-handler"
 import { handleGetStreamControlState } from "./get-state.rpc-handler"
 import { createStreamControlService, StreamControl } from "./service"
+import { handleSetStreamControlAction } from "./set-action.rpc-handler"
 import { handleSetBrightness } from "./set-brightness.rpc-handler"
-import { handleSetGamescopeFps } from "./set-gamescope-fps.rpc-handler"
-import { handleSetLinkedFps } from "./set-linked-fps.rpc-handler"
-import { handleSetLinkedResolution } from "./set-linked-resolution.rpc-handler"
 import { handleSetMoonlightBitrate } from "./set-moonlight-bitrate.rpc-handler"
 
+const providerOne = "@example:presentation" as const
+const providerTwo = "@example:audio" as const
+
 describe("app.stream-control RPC handlers", () => {
-  it("registers the Evier stream-control RPC tags on the app group", () => {
+  it("registers generic and built-in stream-control RPC tags on the app group", () => {
     const tags = Array.from(appRpcGroup.requests.keys()).sort()
 
     expect(tags).toContain("app.stream-control.config.get")
@@ -28,12 +27,8 @@ describe("app.stream-control RPC handlers", () => {
     expect(tags).toContain("app.stream-control.moonlight-bitrate.set")
     expect(tags).toContain("app.stream-control.moonlight-fps.set")
     expect(tags).toContain("app.stream-control.moonlight-resolution.set")
-    expect(tags).toContain("app.stream-control.gamescope-mode.set")
-    expect(tags).toContain("app.stream-control.gamescope-fps.set")
-    expect(tags).toContain("app.stream-control.gamescope-filter.set")
-    expect(tags).toContain("app.stream-control.gamescope-sharpness.set")
-    expect(tags).toContain("app.stream-control.linked-fps.set")
-    expect(tags).toContain("app.stream-control.linked-resolution.set")
+    expect(tags).toContain("app.stream-control.action.set")
+    expect(tags).not.toContain("app.stream-control.presentation-fps.set")
   })
 
   it("applies brightness to every backlight device by percent", async () => {
@@ -76,6 +71,44 @@ describe("app.stream-control RPC handlers", () => {
       { path: "/sys/class/backlight/panel-a/brightness", content: "128\n" },
       { path: "/sys/class/backlight/panel-b/brightness", content: "2048\n" },
     ])
+  })
+
+  it("rejects malformed built-in generic action payloads before device writes", async () => {
+    const writes: unknown[] = []
+    const files = new Map([
+      ["/sys/class/backlight/panel-a/max_brightness", "255\n"],
+      ["/sys/class/backlight/panel-a/brightness", "128\n"],
+    ])
+
+    const exit = await Effect.runPromiseExit(
+      handleSetStreamControlAction({
+        action: "app.stream-control.brightness.set",
+        payload: { percent: null },
+      }).pipe(
+        Effect.provide(
+          Layer.succeed(
+            StreamControl,
+            createStreamControlService(
+              {},
+              {
+                readdir: async () => ["panel-a"],
+                readFile: async path => files.get(path) ?? "0\n",
+                writeFile: async (path, content) => {
+                  writes.push({ path, content })
+                  files.set(path, content)
+                },
+              },
+            ),
+          ),
+        ),
+      ),
+    )
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) {
+      expect(Cause.squash(exit.cause)).toBeInstanceOf(ValidationError)
+    }
+    expect(writes).toEqual([])
   })
 
   it("applies Moonlight bitrate through the typed control service", async () => {
@@ -137,272 +170,103 @@ describe("app.stream-control RPC handlers", () => {
     expect(calls).toEqual([])
   })
 
-  it("keeps Gamescope controls separate from Moonlight controls", async () => {
-    const calls: unknown[] = []
-
-    const response = await Effect.runPromise(
-      handleSetGamescopeFps({ fps: 120 }).pipe(
+  it("reports product-accessible stream-control capabilities from fake providers", async () => {
+    const controls = await Effect.runPromise(
+      handleGetStreamControlControls({}).pipe(
         Effect.provide(
           Layer.succeed(
             StreamControl,
             createStreamControlService(
-              { gamescopeSocketPath: "/run/gamescope.sock" },
-              {
-                connectGamescope: async socketPath =>
-                  recordingGamescopeClient(calls, socketPath),
-              },
+              { moonlightSocketPath: "/run/moonlight.sock" },
+              { pluginRegistry: fakeRegistry() },
             ),
           ),
         ),
       ),
     )
 
-    expect(response).toMatchObject({
-      action: "gamescope.fps",
-      requested: { fps: 120 },
-      outcome: { kind: "single", status: "pending" },
+    expect(controls.controls).toContainEqual({
+      id: pluginRecordId(providerOne, "fps"),
+      label: "Presentation FPS",
+      subsystem: "presentation",
+      provider: providerOne,
+      access: "read-write",
+      status: "supported",
+      unavailableReason: null,
+      action: pluginRecordId(providerOne, "fps.set"),
+      readback: pluginRecordId(providerOne, "fps"),
+      value: { kind: "steps", values: [30, 60, 120] },
     })
-    expect(calls).toEqual([
-      { socketPath: "/run/gamescope.sock" },
-      { method: "requestCommand", command: "fps.set", params: { fps: 120 } },
-      { method: "close" },
-    ])
+    expect(controls.controls).toContainEqual({
+      id: pluginRecordId(providerTwo, "volume"),
+      label: "Volume",
+      subsystem: "audio",
+      provider: providerTwo,
+      access: "read-write",
+      status: "supported",
+      unavailableReason: null,
+      action: pluginRecordId(providerTwo, "volume.set"),
+      readback: pluginRecordId(providerTwo, "volume"),
+      value: { kind: "range", min: 0, max: 100, step: 5 },
+    })
+    expect(controls.controls).not.toContainEqual(
+      expect.objectContaining({ id: "coordinated.fps" }),
+    )
   })
 
-  it("reports product-accessible stream-control capabilities", async () => {
-    const controls = await Effect.runPromise(
-      handleGetStreamControlControls({}).pipe(
-        Effect.provide(
-          Layer.succeed(
-            StreamControl,
-            createStreamControlService({
-              moonlightSocketPath: "/run/moonlight.sock",
-              gamescopeSocketPath: "/run/gamescope.sock",
-            }),
-          ),
-        ),
-      ),
-    )
-
-    expect(controls.controls).toContainEqual({
-      id: "linked.fps",
-      subsystem: "linked",
-      access: "read-write",
-      status: "supported",
-      unavailableReason: null,
-      action: "app.stream-control.linked-fps.set",
-      readback: "linked.fps",
-      value: { kind: "steps", values: [30, 45, 60, 75, 90, 120] },
-    })
-    expect(controls.controls).toContainEqual({
-      id: "gamescope.fps",
-      subsystem: "gamescope",
-      access: "read-write",
-      status: "supported",
-      unavailableReason: null,
-      action: "app.stream-control.gamescope-fps.set",
-      readback: "gamescope.fps",
-      value: {
-        kind: "steps",
-        values: [0, 30, 45, 60, 75, 90, 120, 144, 165, 240],
+  it("reports generic config and state data", async () => {
+    const service = createStreamControlService(
+      { moonlightSocketPath: "/run/moonlight.sock", artifactDir: "/tmp/evier" },
+      {
+        pluginRegistry: fakeRegistry(),
+        readdir: async () => [],
+        connectMoonlight: async () =>
+          ({
+            state: async () => ({ result: { streamQuality: {} } }),
+            close: () => undefined,
+          }) as unknown as MoonlightControlClient,
       },
-    })
-    expect(controls.controls).toContainEqual({
-      id: "battery.percent",
-      subsystem: "battery",
-      access: "read-only",
-      status: "supported",
-      unavailableReason: null,
-      action: null,
-      readback: "battery.percent",
-      value: { kind: "read-only" },
-    })
-  })
-
-  it("reports linked controls as unsupported when a required subsystem is disabled", async () => {
-    const controls = await Effect.runPromise(
-      handleGetStreamControlControls({}).pipe(
-        Effect.provide(
-          Layer.succeed(
-            StreamControl,
-            createStreamControlService({
-              moonlightSocketPath: "/run/moonlight.sock",
-            }),
-          ),
-        ),
-      ),
     )
 
-    expect(controls.controls).toContainEqual(
-      expect.objectContaining({
-        id: "linked.resolution",
-        status: "unsupported",
-        unavailableReason: "gamescope disabled",
-      }),
-    )
-    expect(controls.controls).toContainEqual(
-      expect.objectContaining({
-        id: "gamescope.fps",
-        status: "unsupported",
-        unavailableReason: "gamescope disabled",
-      }),
-    )
-
-    const withoutMoonlight = await Effect.runPromise(
-      handleGetStreamControlControls({}).pipe(
-        Effect.provide(
-          Layer.succeed(
-            StreamControl,
-            createStreamControlService({
-              gamescopeSocketPath: "/run/gamescope.sock",
-            }),
-          ),
-        ),
-      ),
-    )
-
-    expect(withoutMoonlight.controls).toContainEqual(
-      expect.objectContaining({
-        id: "linked.fps",
-        status: "unsupported",
-        unavailableReason: "moonlight disabled",
-      }),
-    )
-  })
-
-  it("reports socket configuration through RPC config data", async () => {
     const config = await Effect.runPromise(
       handleGetStreamControlConfig({}).pipe(
-        Effect.provide(
-          Layer.succeed(
-            StreamControl,
-            createStreamControlService({
-              moonlightSocketPath: "/run/moonlight.sock",
-              gamescopeSocketPath: "/run/gamescope.sock",
-              artifactDir: "/tmp/evier",
-            }),
-          ),
-        ),
+        Effect.provide(Layer.succeed(StreamControl, service)),
+      ),
+    )
+    const state = await Effect.runPromise(
+      handleGetStreamControlState({}).pipe(
+        Effect.provide(Layer.succeed(StreamControl, service)),
       ),
     )
 
-    expect(config).toEqual({
+    expect(config).toMatchObject({
       moonlight: { enabled: true },
-      gamescope: { enabled: true },
       brightness: { enabled: true },
       battery: { enabled: true },
+      plugins: {
+        [providerOne]: { enabled: true },
+        [providerTwo]: { enabled: true },
+      },
       artifactDir: "/tmp/evier",
     })
-  })
-
-  it("reports disabled stream-control state through RPC data", async () => {
-    const state = await Effect.runPromise(
-      handleGetStreamControlState({}).pipe(
-        Effect.provide(
-          Layer.succeed(
-            StreamControl,
-            createStreamControlService({}, { readdir: async () => [] }),
-          ),
-        ),
-      ),
-    )
-
-    expect(state).toEqual({
-      moonlight: { status: "disabled" },
-      gamescope: { status: "disabled" },
-      brightness: {
-        status: "error",
-        error: "no backlight devices in /sys/class/backlight",
-      },
-      battery: {
-        status: "error",
-        error: "no power supplies in /sys/class/power_supply",
-      },
+    expect(state.plugins[providerOne]).toEqual({
+      status: "ok",
+      readback: { fps: 60, filter: "soft" },
     })
   })
 
-  it("reports typed live and failed socket state through RPC data", async () => {
-    const state = await Effect.runPromise(
-      handleGetStreamControlState({}).pipe(
-        Effect.provide(
-          Layer.succeed(
-            StreamControl,
-            createStreamControlService(
-              {
-                moonlightSocketPath: "/run/moonlight.sock",
-                gamescopeSocketPath: "/run/gamescope.sock",
-              },
-              {
-                readdir: async () => [],
-                connectMoonlight: async () =>
-                  ({
-                    state: async () => ({
-                      result: {
-                        streamQuality: {
-                          bitrateKbps: 12_000,
-                          fps: 60,
-                          width: 1920,
-                          height: 1080,
-                        },
-                        runtimeSettings: {
-                          appliedBitrateKbps: 10_000,
-                          appliedFps: 45,
-                          appliedResolution: { width: 1280, height: 720 },
-                        },
-                      },
-                    }),
-                    close: () => undefined,
-                  }) as unknown as MoonlightControlClient,
-                connectGamescope: async () => {
-                  throw new Error("gamescope offline")
-                },
-              },
-            ),
-          ),
-        ),
-      ),
-    )
-
-    expect(state).toEqual({
-      moonlight: {
-        status: "ok",
-        readback: {
-          bitrateKbps: 10_000,
-          fps: 45,
-          resolution: { width: 1280, height: 720 },
-        },
-      },
-      gamescope: { status: "error", error: "gamescope offline" },
-      brightness: {
-        status: "error",
-        error: "no backlight devices in /sys/class/backlight",
-      },
-      battery: {
-        status: "error",
-        error: "no power supplies in /sys/class/power_supply",
-      },
-    })
-  })
-
-  it("orchestrates linked FPS through the service instead of the React page", async () => {
+  it("dispatches provider actions through generic action RPC", async () => {
     const calls: unknown[] = []
+    const action = pluginRecordId(providerOne, "fps.set")
 
     const response = await Effect.runPromise(
-      handleSetLinkedFps({ fps: 60 }).pipe(
+      handleSetStreamControlAction({ action, payload: { fps: 120 } }).pipe(
         Effect.provide(
           Layer.succeed(
             StreamControl,
             createStreamControlService(
-              {
-                moonlightSocketPath: "/run/moonlight.sock",
-                gamescopeSocketPath: "/run/gamescope.sock",
-              },
-              {
-                connectMoonlight: async socketPath =>
-                  recordingMoonlightClient(calls, socketPath),
-                connectGamescope: async socketPath =>
-                  recordingGamescopeClient(calls, socketPath),
-              },
+              {},
+              { pluginRegistry: fakeRegistry(calls) },
             ),
           ),
         ),
@@ -410,197 +274,117 @@ describe("app.stream-control RPC handlers", () => {
     )
 
     expect(response).toMatchObject({
-      action: "linked.fps",
-      requested: { fps: 60 },
-      outcome: {
-        kind: "linked",
-        status: "pending",
-        moonlight: { status: "pending" },
-        gamescope: { status: "pending" },
-      },
-      response: { status: "pending" },
+      action,
+      requested: { fps: 120 },
+      outcome: { kind: "single", status: "applied" },
     })
     expect(calls).toEqual([
-      { socketPath: "/run/moonlight.sock" },
-      { method: "setFps", params: { fps: 60 } },
-      { method: "close" },
-      { socketPath: "/run/gamescope.sock" },
-      { method: "requestCommand", command: "fps.set", params: { fps: 60 } },
-      { method: "close" },
+      { provider: providerOne, action, payload: { fps: 120 } },
     ])
-  })
-
-  it("reports failed single-command outcomes when readback-backed commands fail", async () => {
-    const calls: unknown[] = []
-
-    const response = await Effect.runPromise(
-      handleSetGamescopeFps({ fps: 60 }).pipe(
-        Effect.provide(
-          Layer.succeed(
-            StreamControl,
-            createStreamControlService(
-              { gamescopeSocketPath: "/run/gamescope.sock" },
-              {
-                connectGamescope: async socketPath => {
-                  calls.push({ socketPath })
-                  return {
-                    requestCommand: (
-                      command: GamescopeControlCommandMethod,
-                      params?: unknown,
-                    ) => {
-                      calls.push({ method: "requestCommand", command, params })
-                      return commandResult(
-                        command,
-                        "readback-mismatch",
-                        "atom stayed at 60",
-                      )
-                    },
-                    close: () => calls.push({ method: "close" }),
-                  } as unknown as GamescopeControlClient
-                },
-              },
-            ),
-          ),
-        ),
-      ),
-    )
-
-    expect(response).toMatchObject({
-      action: "gamescope.fps",
-      requested: { fps: 60 },
-      outcome: {
-        kind: "single",
-        status: "failed",
-        error: "readback-mismatch: atom stayed at 60",
-      },
-    })
-  })
-
-  it("reports partial linked FPS outcomes when Gamescope readback fails", async () => {
-    const calls: unknown[] = []
-
-    const response = await Effect.runPromise(
-      handleSetLinkedFps({ fps: 60 }).pipe(
-        Effect.provide(
-          Layer.succeed(
-            StreamControl,
-            createStreamControlService(
-              {
-                moonlightSocketPath: "/run/moonlight.sock",
-                gamescopeSocketPath: "/run/gamescope.sock",
-              },
-              {
-                connectMoonlight: async socketPath =>
-                  recordingMoonlightClient(calls, socketPath),
-                connectGamescope: async socketPath => {
-                  calls.push({ socketPath })
-                  return {
-                    requestCommand: (
-                      command: GamescopeControlCommandMethod,
-                      params?: unknown,
-                    ) => {
-                      calls.push({ method: "requestCommand", command, params })
-                      return commandResult(
-                        command,
-                        "readback-mismatch",
-                        "atom stayed at 30",
-                      )
-                    },
-                    close: () => calls.push({ method: "close" }),
-                  } as unknown as GamescopeControlClient
-                },
-              },
-            ),
-          ),
-        ),
-      ),
-    )
-
-    expect(response).toMatchObject({
-      action: "linked.fps",
-      requested: { fps: 60 },
-      outcome: {
-        kind: "linked",
-        status: "partial",
-        moonlight: { status: "pending" },
-        gamescope: {
-          status: "failed",
-          error: "readback-mismatch: atom stayed at 30",
-        },
-      },
-      response: {
-        status: "partial",
-        moonlight: { status: "pending" },
-        gamescope: {
-          status: "failed",
-          error: "readback-mismatch: atom stayed at 30",
-        },
-      },
-    })
-  })
-
-  it("reports partial linked resolution outcomes when one subsystem fails", async () => {
-    const calls: unknown[] = []
-
-    const response = await Effect.runPromise(
-      handleSetLinkedResolution({ width: 1280, height: 720 }).pipe(
-        Effect.provide(
-          Layer.succeed(
-            StreamControl,
-            createStreamControlService(
-              {
-                moonlightSocketPath: "/run/moonlight.sock",
-                gamescopeSocketPath: "/run/gamescope.sock",
-              },
-              {
-                connectMoonlight: async socketPath =>
-                  recordingMoonlightClient(calls, socketPath),
-                connectGamescope: async () => {
-                  throw new Error("gamescope offline")
-                },
-              },
-            ),
-          ),
-        ),
-      ),
-    )
-
-    expect(response).toMatchObject({
-      action: "linked.resolution",
-      requested: { width: 1280, height: 720 },
-      outcome: {
-        kind: "linked",
-        status: "partial",
-        gamescope: { status: "failed", error: "gamescope offline" },
-        moonlight: { status: "pending" },
-      },
-      response: {
-        status: "partial",
-        gamescope: { status: "failed", error: "gamescope offline" },
-        moonlight: { status: "pending" },
-      },
-    })
   })
 })
 
-function commandResult(
-  command: string,
-  status: string,
-  reason?: string,
-): Promise<never> {
-  return Promise.resolve({
-    jsonrpc: "2.0" as const,
-    id: "test",
-    result: {
-      _tag: "command.result",
-      requestId: "request",
-      command,
-      status,
-      requested: {},
-      applied: {},
-      ...(reason ? { reason } : {}),
+function fakeRegistry(calls: unknown[] = []) {
+  return createPluginRegistry(
+    [fakePresentationPlugin(calls), fakeAudioPlugin()],
+    {
+      enabledPluginIds: [providerOne, providerTwo],
     },
-  } as never)
+  )
+}
+
+function fakePresentationPlugin(calls: unknown[]) {
+  return plugin({
+    namespace: "@example",
+    name: "presentation",
+    contributes: {
+      handlers: [
+        {
+          id: "fake.presentation.describe",
+          operation: "stream-control.describe",
+          run: context => ({
+            config: { enabled: true },
+            controls: [
+              {
+                id: pluginRecordId(context.provider, "fps"),
+                label: "Presentation FPS",
+                subsystem: "presentation",
+                provider: context.provider,
+                access: "read-write",
+                status: "supported",
+                unavailableReason: null,
+                action: pluginRecordId(context.provider, "fps.set"),
+                readback: pluginRecordId(context.provider, "fps"),
+                value: { kind: "steps", values: [30, 60, 120] },
+              },
+              {
+                id: pluginRecordId(context.provider, "filter"),
+                label: "Filter",
+                subsystem: "presentation",
+                provider: context.provider,
+                access: "read-write",
+                status: "supported",
+                unavailableReason: null,
+                action: pluginRecordId(context.provider, "filter.set"),
+                readback: pluginRecordId(context.provider, "filter"),
+                value: { kind: "options", values: ["soft", "crisp"] },
+              },
+            ],
+            state: { status: "ok", readback: { fps: 60, filter: "soft" } },
+          }),
+        },
+        {
+          id: "fake.presentation.apply",
+          operation: "stream-control.apply",
+          run: context => {
+            const input = context.input as {
+              readonly action: string
+              readonly payload: Record<string, unknown>
+            }
+            calls.push({
+              provider: context.provider,
+              action: input.action,
+              payload: input.payload,
+            })
+            return { result: { _tag: "command.result", status: "applied" } }
+          },
+        },
+      ],
+    },
+  })
+}
+
+function fakeAudioPlugin() {
+  return plugin({
+    namespace: "@example",
+    name: "audio",
+    contributes: {
+      handlers: [
+        {
+          id: "fake.audio.describe",
+          operation: "stream-control.describe",
+          run: context => ({
+            config: { enabled: true },
+            controls: [
+              {
+                id: pluginRecordId(context.provider, "volume"),
+                label: "Volume",
+                subsystem: "audio",
+                provider: context.provider,
+                access: "read-write",
+                status: "supported",
+                unavailableReason: null,
+                action: pluginRecordId(context.provider, "volume.set"),
+                readback: pluginRecordId(context.provider, "volume"),
+                value: { kind: "range", min: 0, max: 100, step: 5 },
+              },
+            ],
+            state: { status: "ok", readback: { volume: 80 } },
+          }),
+        },
+      ],
+    },
+  })
 }
 
 function commandAccepted(command: string): Promise<never> {
@@ -641,25 +425,4 @@ function recordingMoonlightClient(
     },
     close: () => calls.push({ method: "close" }),
   } as unknown as MoonlightControlClient
-}
-
-function recordingGamescopeClient(
-  calls: unknown[],
-  socketPath: string,
-): GamescopeControlClient {
-  calls.push({ socketPath })
-  return {
-    requestCommand: (
-      command: GamescopeControlCommandMethod,
-      params?: unknown,
-    ) => {
-      calls.push({ method: "requestCommand", command, params })
-      return commandAccepted(command)
-    },
-    setMode: (params: { readonly width: number; readonly height: number }) => {
-      calls.push({ method: "setMode", params })
-      return commandAccepted("mode.set")
-    },
-    close: () => calls.push({ method: "close" }),
-  } as unknown as GamescopeControlClient
 }

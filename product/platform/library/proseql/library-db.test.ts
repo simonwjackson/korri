@@ -130,7 +130,7 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
           "  title: AKA desktop host",
           "  launch:",
           "    with:",
-          '      "@korri:gamescope":',
+          '      "@example:wrapper":',
           "        enable: true",
           "storage:",
           "  roms:",
@@ -254,7 +254,7 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
           "      name: v4l2m2m",
           "  launch:",
           "    with:",
-          '      "@korri:gamescope":',
+          '      "@example:wrapper":',
           "        app:",
           "          environment:",
           "            WAYLAND_DISPLAY: null",
@@ -284,7 +284,7 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
           '    args: ["-L", "{runtime.path}", "{content.path}"]',
           "    launch:",
           "      with:",
-          '        "@korri:gamescope":',
+          '        "@example:wrapper":',
           "          backend:",
           "            type: drm",
           "library:",
@@ -323,16 +323,33 @@ describe("openKorriLibraryDb — readable YAML contract", () => {
         ),
       )
 
-      const appGamescope = loaded.app.launch?.with?.["@korri:gamescope"]
-      expect(appGamescope?.backend?.type).toBe("drm")
-      expect(appGamescope?.app?.environment).toBeUndefined()
+      const appWrapper = loaded.app.launch?.with?.["@example:wrapper"] as
+        | {
+            readonly backend?: { readonly type?: string }
+            readonly app?: {
+              readonly environment?: Readonly<Record<string, string | null>>
+            }
+          }
+        | undefined
+      expect(appWrapper?.backend?.type).toBe("drm")
+      expect(appWrapper?.app?.environment).toBeUndefined()
       expect(loaded.launch.spec.command).toBe("retroarch")
       expect(loaded.launch.spec.args).toContain("/cores/snes9x_libretro.so")
       expect(loaded.launch.spec.args).toContain("/roms/snes/zelda.sfc")
       expect(loaded.libraryYaml).toContain("library:\n  zelda:")
       expect(loaded.libraryYaml).not.toContain("00-korri-platform-defaults")
-      expect(loaded.launch.gamescope?.backend?.type).toBe("drm")
-      expect(loaded.launch.gamescope?.app?.environment).toEqual({
+      const launchWrapper = loaded.launch.launchCompanions?.[
+        "@example:wrapper"
+      ] as
+        | {
+            readonly backend?: { readonly type?: string }
+            readonly app?: {
+              readonly environment?: Readonly<Record<string, string | null>>
+            }
+          }
+        | undefined
+      expect(launchWrapper?.backend?.type).toBe("drm")
+      expect(launchWrapper?.app?.environment).toEqual({
         WAYLAND_DISPLAY: null,
       })
       expect(loaded.localMoonlight.moonlight).toMatchObject({
@@ -402,7 +419,7 @@ describe("openKorriLibraryDb — platform-default collision guard", () => {
           "  retroarch:",
           "    launch:",
           "      with:",
-          '        "@korri:gamescope":',
+          '        "@example:wrapper":',
           "          app:",
           "            environment:",
           "              WAYLAND_DISPLAY: null",
