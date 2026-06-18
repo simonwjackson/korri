@@ -29,6 +29,7 @@ describe("first-party Nix plugin composition", () => {
         "@korri:mega-man-arena",
         "@korri:proton-ge",
         "@korri:proton",
+        "@korri:srb2",
       ],
       packages: [
         "gamescope-korri",
@@ -37,13 +38,14 @@ describe("first-party Nix plugin composition", () => {
         "korri-proton-ge-runtime",
         "korri-proton-runtime",
         "mega-man-arena",
+        "srb2",
       ],
       apps: [
         "gamescope-control",
         "gamescope-control-bridge",
         "korri-stream-control-bench",
       ],
-      checks: ["mega-man-arena-check", "proton-ge-runtime-check"],
+      checks: ["mega-man-arena-check", "proton-ge-runtime-check", "srb2-check"],
       overlayCount: 1,
       moduleCount: 1,
     })

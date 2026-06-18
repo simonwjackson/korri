@@ -91,6 +91,45 @@ describe("PluginLibrarySourceLayerLive", () => {
     }
   })
 
+  it("exposes the enabled SRB2 plugin through fulfilled resources", async () => {
+    const previous = snapshotEnv()
+    const stateRoot = await mktemp()
+    await seedSrb2Executable(stateRoot)
+    process.env.KORRI_CONFIG_ROOTS = ""
+    process.env.KORRI_ENABLED_PLUGINS = "@korri:srb2"
+    process.env.KORRI_PLUGIN_RESOURCE_ROOT = stateRoot
+    try {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const source = yield* LibrarySource
+          const listPlayableEntries = source.listPlayableEntries
+          if (!listPlayableEntries)
+            throw new Error("expected playable list support")
+          const entries = yield* listPlayableEntries()
+          const resolved =
+            yield* source.resolveLaunchForGame("@korri:srb2/srb2")
+          return { entries, resolved }
+        }).pipe(Effect.provide(PluginLibrarySourceLayerLive)),
+      )
+
+      expect(result.entries.map(entry => entry.id)).toContain(
+        "@korri:srb2/srb2",
+      )
+      expect(result.resolved.spec.command).toBe(
+        join(
+          stateRoot,
+          "x406b6f7272693a73726232",
+          "x73726232",
+          "result",
+          "bin",
+          "srb2",
+        ),
+      )
+    } finally {
+      restoreEnv(previous)
+    }
+  })
+
   it("keeps launch resolution read-only even when a Nix command is configured", async () => {
     const previous = snapshotEnv()
     const stateRoot = await mktemp()
@@ -189,6 +228,16 @@ async function seedMegaManArenaExecutable(stateRoot: string): Promise<void> {
     resourceId: "mega-man-arena",
     binary: "mega-man-arena",
     storeName: "store-mega-man-arena",
+  })
+}
+
+async function seedSrb2Executable(stateRoot: string): Promise<void> {
+  await seedExecutableResource({
+    stateRoot,
+    pluginId: "@korri:srb2",
+    resourceId: "srb2",
+    binary: "srb2",
+    storeName: "store-srb2",
   })
 }
 

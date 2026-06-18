@@ -6,6 +6,7 @@ import { KORRI_GAMESCOPE_PLUGIN_ID } from "./gamescope"
 import { KORRI_MEGA_MAN_ARENA_PLUGIN_ID } from "./mega-man-arena"
 import { KORRI_PROTON_GE_PLUGIN_ID } from "./proton-ge-runtime"
 import { KORRI_PROTON_PLUGIN_ID } from "./proton-runtime"
+import { KORRI_SRB2_PLUGIN_ID } from "./srb2"
 
 describe("first-party plugins", () => {
   it("registers Gamescope as a first-party handler/config plugin", () => {
@@ -33,6 +34,7 @@ describe("first-party plugins", () => {
     expect(registry.enabledPluginIds.has(KORRI_FEX_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_PROTON_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has(KORRI_PROTON_GE_PLUGIN_ID)).toBe(false)
+    expect(registry.enabledPluginIds.has(KORRI_SRB2_PLUGIN_ID)).toBe(false)
     expect(
       registry.modules[`${KORRI_GAMESCOPE_PLUGIN_ID}/launch-wrapper`],
     ).toMatchObject({
@@ -89,7 +91,8 @@ describe("first-party plugins", () => {
 
   it("preserves env-enabled first-party catalog plugins", () => {
     const registry = createFirstPartyPluginRegistryFromEnv({
-      KORRI_ENABLED_PLUGINS: "@korri:neverball,@korri:mega-man-arena",
+      KORRI_ENABLED_PLUGINS:
+        "@korri:neverball,@korri:mega-man-arena,@korri:srb2",
     })
 
     expect(registry.enabledPluginIds.has(KORRI_GAMESCOPE_PLUGIN_ID)).toBe(true)
@@ -98,6 +101,7 @@ describe("first-party plugins", () => {
     expect(registry.enabledPluginIds.has(KORRI_PROTON_GE_PLUGIN_ID)).toBe(false)
     expect(registry.enabledPluginIds.has("@korri:neverball")).toBe(true)
     expect(registry.enabledPluginIds.has("@korri:mega-man-arena")).toBe(true)
+    expect(registry.enabledPluginIds.has(KORRI_SRB2_PLUGIN_ID)).toBe(true)
     expect(
       registry.modules[`${KORRI_GAMESCOPE_PLUGIN_ID}/launch-wrapper`],
     ).toMatchObject({
@@ -106,9 +110,10 @@ describe("first-party plugins", () => {
     expect(Object.keys(registry.catalog)).toEqual([
       "@korri:neverball/neverball",
       "@korri:mega-man-arena/mega-man-arena",
+      "@korri:srb2/srb2",
     ])
     expect(
       executableResources(registry).map(entry => entry.resource.id),
-    ).toEqual(["neverball", "mega-man-arena"])
+    ).toEqual(["neverball", "mega-man-arena", "srb2"])
   })
 })

@@ -9,6 +9,7 @@ import { megaManArenaPlugin } from "./mega-man-arena"
 import { neverballPlugin } from "./neverball"
 import { protonGeRuntimePlugin } from "./proton-ge-runtime"
 import { protonRuntimePlugin } from "./proton-runtime"
+import { srb2Plugin } from "./srb2"
 
 export const firstPartyPlugins = [
   gamescopePlugin,
@@ -17,6 +18,7 @@ export const firstPartyPlugins = [
   protonGeRuntimePlugin,
   neverballPlugin,
   megaManArenaPlugin,
+  srb2Plugin,
 ] as const
 
 export function createFirstPartyPluginRegistryFromEnv(
