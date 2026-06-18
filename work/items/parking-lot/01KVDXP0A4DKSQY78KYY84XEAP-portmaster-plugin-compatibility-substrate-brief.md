@@ -254,6 +254,8 @@ Result:
 
 ### Phase 9 — Compatibility database
 
+Status: **compatibility profile substrate complete locally**.
+
 Goal: weird ports don’t require code changes.
 
 Plugin owns declarative overrides:
@@ -273,6 +275,13 @@ Validation launch:
 
 - Pick one previously failing/noisy port and fix it with only metadata.
 - Success: no TypeScript/Nix code change needed for that port.
+
+Result:
+
+- Added plugin-owned `PortMasterCompatibilityProfile` metadata for launch-script, device-arch, env, runtime/input compatibility, and presentation defaults.
+- Profiles can be supplied inline to `createPortMasterPlugin`, passed per install, or loaded from `KORRI_PORTMASTER_COMPATIBILITY_PATH` JSON.
+- Install records the selected profile in the installed manifest; `prepare-launch` consumes manifest-stored compatibility defaults unless the caller explicitly overrides them.
+- Focused test verifies a Digger-style profile selecting an alternate launch script, forcing `DEVICE_ARCH=x86_64`, setting `SDL_VIDEODRIVER=x11`, and applying a fullscreen presentation matcher without PortMaster-specific core branching.
 
 ---
 
